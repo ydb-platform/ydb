@@ -77,23 +77,23 @@ Y_UNIT_TEST_SUITE(YSetTest) {
 
         TSet<int> const& crs = s;
         UNIT_ASSERT(!crs.contains(0));
- 
+
         s.insert(1);
         s.insert(42);
         s.insert(100);
         s.insert(2);
- 
+
         UNIT_ASSERT(s.contains(1));
         UNIT_ASSERT(s.contains(2));
         UNIT_ASSERT(s.contains(42));
         UNIT_ASSERT(s.contains(100));
     }
- 
+
     Y_UNIT_TEST(TestBounds) {
         int array1[] = {1, 3, 6, 7};
         TSet<int> s(array1, array1 + sizeof(array1) / sizeof(array1[0]));
         TSet<int> const& crs = s;
- 
+
         TSet<int>::iterator sit;
         TSet<int>::const_iterator scit;
         std::pair<TSet<int>::iterator, TSet<int>::iterator> pit;

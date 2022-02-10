@@ -141,7 +141,7 @@ private:
     //! Help option for modes.
     TString ModesHelpOption;
 
-    //! Wrappers around all modes. 
+    //! Wrappers around all modes.
     TVector<THolder<TMainClass>> Wrappers;
 
     //! Modes

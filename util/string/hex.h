@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/string.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/system/yassert.h>
 
 inline static char DigitToChar(unsigned char digit) {

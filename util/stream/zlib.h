@@ -37,9 +37,9 @@ namespace ZLib {
     };
 }
 
-/** 
+/**
  * Non-buffered ZLib decompressing stream.
- * 
+ *
  * Please don't use `TZLibDecompress` if you read text data from stream using
  * `ReadLine`, it is VERY slow (approx 10 times slower, according to synthetic
  * benchmark). For fast buffered ZLib stream reading use `TBufferedZLibDecompress`

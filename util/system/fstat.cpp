@@ -3,7 +3,7 @@
 
 #include <sys/stat.h>
 
-#include <util/folder/path.h> 
+#include <util/folder/path.h>
 
 #include <cerrno>
 
@@ -82,7 +82,7 @@ static bool GetStatByHandle(TSystemFStat& fs, FHANDLE f) {
 #endif
 }
 
-static bool GetStatByName(TSystemFStat& fs, const char* fileName, bool nofollow) { 
+static bool GetStatByName(TSystemFStat& fs, const char* fileName, bool nofollow) {
 #ifdef _win_
     TFileHandle h = NFsPrivate::CreateFileWithUtf8Name(fileName, FILE_READ_ATTRIBUTES | FILE_READ_EA, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                                        OPEN_EXISTING,
@@ -92,7 +92,7 @@ static bool GetStatByName(TSystemFStat& fs, const char* fileName, bool nofollow)
     }
     return GetStatByHandle(fs, h);
 #else
-    return !(nofollow ? lstat : stat)(fileName, &fs); 
+    return !(nofollow ? lstat : stat)(fileName, &fs);
 #endif
 }
 
@@ -111,27 +111,27 @@ TFileStat::TFileStat(FHANDLE f) {
     }
 }
 
-void TFileStat::MakeFromFileName(const char* fileName, bool nofollow) { 
+void TFileStat::MakeFromFileName(const char* fileName, bool nofollow) {
     TSystemFStat st;
-    if (GetStatByName(st, fileName, nofollow)) { 
+    if (GetStatByName(st, fileName, nofollow)) {
         MakeStat(*this, st);
     } else {
         *this = TFileStat();
     }
 }
 
-TFileStat::TFileStat(const TFsPath& fileName, bool nofollow) { 
+TFileStat::TFileStat(const TFsPath& fileName, bool nofollow) {
     MakeFromFileName(fileName.GetPath().data(), nofollow);
-} 
- 
+}
+
 TFileStat::TFileStat(const TString& fileName, bool nofollow) {
     MakeFromFileName(fileName.data(), nofollow);
-} 
- 
-TFileStat::TFileStat(const char* fileName, bool nofollow) { 
-    MakeFromFileName(fileName, nofollow); 
-} 
- 
+}
+
+TFileStat::TFileStat(const char* fileName, bool nofollow) {
+    MakeFromFileName(fileName, nofollow);
+}
+
 bool TFileStat::IsNull() const noexcept {
     return *this == TFileStat();
 }

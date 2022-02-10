@@ -123,7 +123,7 @@ public:
         return std::basic_string<TCharType, TCharTraits, Allocator>(Ptr(), Len());
     }
 
-    /** 
+    /**
      * @param                           Pointer to character inside the string, or nullptr.
      * @return                          Offset from string beginning (in chars), or npos on nullptr.
      */

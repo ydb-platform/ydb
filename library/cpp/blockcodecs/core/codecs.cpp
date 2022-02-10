@@ -64,9 +64,9 @@ namespace {
         TVector<TCodecPtr> Codecs;
         typedef THashMap<TStringBuf, ICodec*> TRegistry;
         TRegistry Registry;
- 
-        // SEARCH-8344: Global decompressed size limiter (to prevent remote DoS) 
-        size_t MaxPossibleDecompressedLength = Max<size_t>(); 
+
+        // SEARCH-8344: Global decompressed size limiter (to prevent remote DoS)
+        size_t MaxPossibleDecompressedLength = Max<size_t>();
     };
 }
 
@@ -94,25 +94,25 @@ void NBlockCodecs::RegisterAlias(TStringBuf from, TStringBuf to) {
     Singleton<TCodecFactory>()->Alias(from, to);
 }
 
-void NBlockCodecs::SetMaxPossibleDecompressedLength(size_t maxPossibleDecompressedLength) { 
-    Singleton<TCodecFactory>()->MaxPossibleDecompressedLength = maxPossibleDecompressedLength; 
-} 
- 
-size_t NBlockCodecs::GetMaxPossibleDecompressedLength() { 
-    return Singleton<TCodecFactory>()->MaxPossibleDecompressedLength; 
-} 
- 
-size_t ICodec::GetDecompressedLength(const TData& in) const { 
-    const size_t len = DecompressedLength(in); 
- 
-    Y_ENSURE( 
-        len <= NBlockCodecs::GetMaxPossibleDecompressedLength(), 
-        "Attempt to decompress the block that is larger than maximum possible decompressed length, " 
-        "see SEARCH-8344 for details. " 
-    ); 
-    return len; 
-} 
- 
+void NBlockCodecs::SetMaxPossibleDecompressedLength(size_t maxPossibleDecompressedLength) {
+    Singleton<TCodecFactory>()->MaxPossibleDecompressedLength = maxPossibleDecompressedLength;
+}
+
+size_t NBlockCodecs::GetMaxPossibleDecompressedLength() {
+    return Singleton<TCodecFactory>()->MaxPossibleDecompressedLength;
+}
+
+size_t ICodec::GetDecompressedLength(const TData& in) const {
+    const size_t len = DecompressedLength(in);
+
+    Y_ENSURE(
+        len <= NBlockCodecs::GetMaxPossibleDecompressedLength(),
+        "Attempt to decompress the block that is larger than maximum possible decompressed length, "
+        "see SEARCH-8344 for details. "
+    );
+    return len;
+}
+
 void ICodec::Encode(const TData& in, TBuffer& out) const {
     const size_t maxLen = MaxCompressedLength(in);
 
@@ -121,7 +121,7 @@ void ICodec::Encode(const TData& in, TBuffer& out) const {
 }
 
 void ICodec::Decode(const TData& in, TBuffer& out) const {
-    const size_t len = GetDecompressedLength(in); 
+    const size_t len = GetDecompressedLength(in);
 
     out.Reserve(len);
     out.Resize(Decompress(in, out.Data()));

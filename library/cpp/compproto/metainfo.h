@@ -1,17 +1,17 @@
 #pragma once
 
-#include <util/system/defaults.h> 
-#include <util/generic/yexception.h> 
-#include <util/generic/ptr.h> 
-#include <util/generic/refcount.h> 
-#include <util/stream/input.h> 
+#include <util/system/defaults.h>
+#include <util/generic/yexception.h>
+#include <util/generic/ptr.h>
+#include <util/generic/refcount.h>
+#include <util/stream/input.h>
 #include <util/stream/str.h>
- 
+
 #include "compressor.h"
 
-namespace NCompProto { 
+namespace NCompProto {
     const size_t MAX_ELEMENTS = 32;
- 
+
     struct TScalarDefaultValue {
         TScalarDefaultValue()
             : Type(None)
@@ -300,5 +300,5 @@ namespace NCompProto {
             }
         }
     };
- 
+
 }

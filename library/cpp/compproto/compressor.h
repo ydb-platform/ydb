@@ -1,11 +1,11 @@
 #pragma once
 
-#include <util/system/defaults.h> 
- 
-namespace NCompProto { 
+#include <util/system/defaults.h>
+
+namespace NCompProto {
     struct TEmpty {
     };
- 
+
     struct TTable {
         TTable() {
             for (size_t i = 0; i < 64; ++i) {
@@ -70,5 +70,5 @@ namespace NCompProto {
             return (((ui32)(code >> PrefLength[index])) & CodeMask[index]) + CodeBase[index];
         }
     };
- 
+
 }

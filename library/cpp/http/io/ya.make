@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
+OWNER(
     g:util
-    mvel 
-) 
+    mvel
+)
 
 PEERDIR(
     library/cpp/blockcodecs

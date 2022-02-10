@@ -3,14 +3,14 @@ RECURSE(
     arcdocidstrip
     archiver
     archiver/alignment_test
-    archiver/tests 
+    archiver/tests
     base64
     bigram_compiler
     blender
     bmdump
     bstr
     c++filt
-    calendar_extractor 
+    calendar_extractor
     check_formula_md5
     check_json
     check_yaml
@@ -35,7 +35,7 @@ RECURSE(
     dsindexer
     easyparser
     enforce_fsync
-    enum_parser 
+    enum_parser
     event2cpp
     fast_diff
     fastcksum
@@ -166,7 +166,7 @@ RECURSE(
     uc
     unpackrichtree
     unpackrrr
-    unpack_staff_cert 
+    unpack_staff_cert
     untranslit_test
     untranslit_test/tests
     url
@@ -186,4 +186,4 @@ IF (NOT OS_WINDOWS)
     RECURSE(
         netgdb
     )
-ENDIF() 
+ENDIF()

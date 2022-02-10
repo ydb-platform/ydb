@@ -200,7 +200,7 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         UNIT_ASSERT_VALUES_EQUAL(testP.GetPath(), "/db/BASE/primus121-025-1380131338/test");
 #endif
     }
- 
+
     Y_UNIT_TEST(TestSlashesAndBasenameWin) {
         TFsPath p("\\db\\BASE\\primus121-025-1380131338\\\\");
         TFsPath testP = p / "test";

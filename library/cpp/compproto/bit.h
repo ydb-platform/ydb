@@ -1,15 +1,15 @@
 #pragma once
- 
+
 #include <util/generic/array_ref.h>
 #include <util/generic/vector.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/stream/input.h>
- 
+
 #include "huff.h"
 #include "compressor.h"
 #include "metainfo.h"
 
-namespace NCompProto { 
+namespace NCompProto {
     struct TBitBuffer {
         TVector<ui8> Out;
         ui64 Position;
@@ -18,7 +18,7 @@ namespace NCompProto {
         TBitBuffer() {
             Clear();
         }
- 
+
         static ui64 Read(const ui8* out, ui64 position, size_t size) {
             const ui8* dst = out + (size_t(position >> 3));
             ui64 outCode = *reinterpret_cast<const ui64*>(dst);

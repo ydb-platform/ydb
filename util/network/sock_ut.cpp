@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TSocketTest) {
         cliSock.CheckSock();
         servSock.CheckSock();
         newSock.CheckSock();
- 
+
         // server
         int yes = 1;
         CheckedSetSockOpt(servSock, SOL_SOCKET, SO_REUSEADDR, yes, "servSock, SO_REUSEADDR");

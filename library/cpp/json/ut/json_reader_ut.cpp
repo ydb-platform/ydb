@@ -372,17 +372,17 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
             UNIT_ASSERT_EXCEPTION(ReadJsonTree(&in, &value, true), TJsonException);
         }
     }
- 
+
     Y_UNIT_TEST(TJsonMemoryLeakTest) {
-        // after https://clubs.at.yandex-team.ru/stackoverflow/3691 
+        // after https://clubs.at.yandex-team.ru/stackoverflow/3691
         TString s = ".";
-        NJson::TJsonValue json; 
-        try { 
-            TStringInput in(s); 
-            NJson::ReadJsonTree(&in, &json, true); 
-        } catch (...) { 
-        } 
-    } // TJsonMemoryLeakTest 
+        NJson::TJsonValue json;
+        try {
+            TStringInput in(s);
+            NJson::ReadJsonTree(&in, &json, true);
+        } catch (...) {
+        }
+    } // TJsonMemoryLeakTest
 
     Y_UNIT_TEST(TJsonDuplicateKeysWithNullValuesTest) {
         const TString json = "{\"\":null,\"\":\"\"}";

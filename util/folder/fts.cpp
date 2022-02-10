@@ -62,7 +62,7 @@
 
 #ifndef _win_
 
-static const dird invalidDirD = -1; 
+static const dird invalidDirD = -1;
 
 dird get_cwdd() {
     return open(".", O_RDONLY, 0);
@@ -88,7 +88,7 @@ int cmp_dird(dird fd1, dird fd2) {
     return fd1 - fd2;
 }
 
-#else // ndef _win_ 
+#else // ndef _win_
 
 int stat64UTF(const char* path, struct _stat64* _Stat) {
     int len_converted = MultiByteToWideChar(CP_UTF8, 0, path, -1, 0, 0);
@@ -164,7 +164,7 @@ dird get_dird(char* path) {
     return ret;
 }
 
-#endif // ndef _win_ 
+#endif // ndef _win_
 
 #ifdef _win_
     #define S_ISDIR(st_mode) ((st_mode & _S_IFMT) == _S_IFDIR)
@@ -873,8 +873,8 @@ fts_build(FTS* sp, int type)
             dirp = nullptr;
 #ifdef _win_
             close_dird(dirpd);
-            dirpd = invalidDirD; 
-#else 
+            dirpd = invalidDirD;
+#else
             Y_UNUSED(invalidDirD);
 #endif
         } else {

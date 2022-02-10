@@ -434,19 +434,19 @@ public:
     }
 
 public: // string subsequences
-    /// Cut last @c shift characters (or less if length is less than @c shift) 
+    /// Cut last @c shift characters (or less if length is less than @c shift)
     inline TdSelf& Chop(size_t shift) noexcept {
         this->remove_suffix(std::min(shift, size()));
         return *this;
     }
 
-    /// Cut first @c shift characters (or less if length is less than @c shift) 
+    /// Cut first @c shift characters (or less if length is less than @c shift)
     inline TdSelf& Skip(size_t shift) noexcept {
         this->remove_prefix(std::min(shift, size()));
         return *this;
     }
 
-    /// Sets the start pointer to a position relative to the end 
+    /// Sets the start pointer to a position relative to the end
     inline TdSelf& RSeek(size_t tailSize) noexcept {
         if (size() > tailSize) {
             //WARN: removing TStringView:: will lead to an infinite recursion

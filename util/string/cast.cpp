@@ -308,7 +308,7 @@ namespace {
             TUnsigned result;
             EParseStatus error = TBasicIntParser<TUnsigned, base, TChar>::Parse(&pos, end, max, &result);
             if (error != PS_OK) {
-                *ppos = pos; 
+                *ppos = pos;
                 return error;
             }
 
@@ -484,38 +484,38 @@ size_t ToStringImpl<bool>(bool t, char* buf, size_t len) {
  */
 
 template <>
-bool TryFromStringImpl<bool>(const char* data, size_t len, bool& result) { 
+bool TryFromStringImpl<bool>(const char* data, size_t len, bool& result) {
     if (len == 1) {
         if (data[0] == '0') {
-            result = false; 
-            return true; 
+            result = false;
+            return true;
         } else if (data[0] == '1') {
-            result = true; 
+            result = true;
             return true;
         }
     }
     TStringBuf buf(data, len);
-    if (IsTrue(buf)) { 
-        result = true; 
+    if (IsTrue(buf)) {
+        result = true;
         return true;
-    } else if (IsFalse(buf)) { 
-        result = false; 
-        return true; 
+    } else if (IsFalse(buf)) {
+        result = false;
+        return true;
     }
-    return false; 
+    return false;
 }
 
-template <> 
-bool FromStringImpl<bool>(const char* data, size_t len) { 
-    bool result; 
+template <>
+bool FromStringImpl<bool>(const char* data, size_t len) {
+    bool result;
 
     if (!TryFromStringImpl<bool>(data, len, result)) {
         ythrow TFromStringException() << TStringBuf("Cannot parse bool(") << TStringBuf(data, len) << TStringBuf("). ");
     }
 
-    return result; 
-} 
- 
+    return result;
+}
+
 template <>
 TString FromStringImpl<TString>(const char* data, size_t len) {
     return TString(data, len);
@@ -541,8 +541,8 @@ TWtringBuf FromStringImpl<TWtringBuf>(const wchar16* data, size_t len) {
     return TWtringBuf(data, len);
 }
 
-// Try-versions 
-template <> 
+// Try-versions
+template <>
 bool TryFromStringImpl<TStringBuf>(const char* data, size_t len, TStringBuf& result) {
     result = {data, len};
     return true;
@@ -551,10 +551,10 @@ bool TryFromStringImpl<TStringBuf>(const char* data, size_t len, TStringBuf& res
 template <>
 bool TryFromStringImpl<TString>(const char* data, size_t len, TString& result) {
     result = TString(data, len);
-    return true; 
-} 
- 
-template <> 
+    return true;
+}
+
+template <>
 bool TryFromStringImpl<std::string>(const char* data, size_t len, std::string& result) {
     result.assign(data, len);
     return true;
@@ -569,9 +569,9 @@ bool TryFromStringImpl<TWtringBuf>(const wchar16* data, size_t len, TWtringBuf& 
 template <>
 bool TryFromStringImpl<TUtf16String>(const wchar16* data, size_t len, TUtf16String& result) {
     result = TUtf16String(data, len);
-    return true; 
-} 
- 
+    return true;
+}
+
 #define DEF_INT_SPEC_III(CHAR, TYPE, ITYPE, BOUNDS, BASE)                      \
     template <>                                                                \
     TYPE IntFromString<TYPE, BASE>(const CHAR* data, size_t len) {             \
@@ -641,48 +641,48 @@ DEF_FLT_SPEC(long double)
 #undef DEF_FLT_SPEC
 
 // Using StrToD for float and double because it is faster than sscanf.
-// Exception-free, specialized for float types 
+// Exception-free, specialized for float types
 template <>
-bool TryFromStringImpl<double>(const char* data, size_t len, double& result) { 
-    if (!len) { 
-        return false; 
-    } 
- 
+bool TryFromStringImpl<double>(const char* data, size_t len, double& result) {
+    if (!len) {
+        return false;
+    }
+
     char* se = nullptr;
-    double d = StrToD(data, data + len, &se); 
- 
-    if (se != data + len) { 
-        return false; 
-    } 
-    result = d; 
-    return true; 
-} 
- 
-template <> 
-bool TryFromStringImpl<float>(const char* data, size_t len, float& result) { 
-    double d; 
-    if (TryFromStringImpl<double>(data, len, d)) { 
-        result = static_cast<float>(d); 
-        return true; 
-    } 
-    return false; 
-} 
- 
-template <> 
-bool TryFromStringImpl<long double>(const char* data, size_t len, long double& result) { 
-    double d; 
-    if (TryFromStringImpl<double>(data, len, d)) { 
-        result = static_cast<long double>(d); 
-        return true; 
-    } 
-    return false; 
-} 
- 
-// Exception-throwing, specialized for float types 
-template <> 
+    double d = StrToD(data, data + len, &se);
+
+    if (se != data + len) {
+        return false;
+    }
+    result = d;
+    return true;
+}
+
+template <>
+bool TryFromStringImpl<float>(const char* data, size_t len, float& result) {
+    double d;
+    if (TryFromStringImpl<double>(data, len, d)) {
+        result = static_cast<float>(d);
+        return true;
+    }
+    return false;
+}
+
+template <>
+bool TryFromStringImpl<long double>(const char* data, size_t len, long double& result) {
+    double d;
+    if (TryFromStringImpl<double>(data, len, d)) {
+        result = static_cast<long double>(d);
+        return true;
+    }
+    return false;
+}
+
+// Exception-throwing, specialized for float types
+template <>
 double FromStringImpl<double>(const char* data, size_t len) {
-    double d = 0.0; 
-    if (!TryFromStringImpl(data, len, d)) { 
+    double d = 0.0;
+    if (!TryFromStringImpl(data, len, d)) {
         ythrow TFromStringException() << TStringBuf("cannot parse float(") << TStringBuf(data, len) << TStringBuf(")");
     }
     return d;
@@ -690,7 +690,7 @@ double FromStringImpl<double>(const char* data, size_t len) {
 
 template <>
 float FromStringImpl<float>(const char* data, size_t len) {
-    return static_cast<float>(FromStringImpl<double>(data, len)); 
+    return static_cast<float>(FromStringImpl<double>(data, len));
 }
 
 double StrToD(const char* b, const char* e, char** se) {

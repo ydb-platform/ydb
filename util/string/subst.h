@@ -3,7 +3,7 @@
 #include <util/generic/fwd.h>
 
 #include <stlfwd>
- 
+
 /* Replace all occurences of substring `what` with string `with` starting from position `from`.
  *
  * @param text      String to modify.
@@ -18,7 +18,7 @@ size_t SubstGlobal(std::string& text, TStringBuf what, TStringBuf with, size_t f
 size_t SubstGlobal(TUtf16String& text, TWtringBuf what, TWtringBuf with, size_t from = 0);
 size_t SubstGlobal(std::u16string& text, TWtringBuf what, TWtringBuf with, size_t from = 0);
 size_t SubstGlobal(TUtf32String& text, TUtf32StringBuf what, TUtf32StringBuf with, size_t from = 0);
- 
+
 /* Replace all occurences of character `what` with character `with` starting from position `from`.
  *
  * @param text      String to modify.

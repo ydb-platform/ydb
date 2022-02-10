@@ -1,8 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/generic/string.h>
 #include "env.h"
- 
+
 Y_UNIT_TEST_SUITE(EnvTest) {
     Y_UNIT_TEST(GetSetEnvTest) {
         TString key = "util_GETENV_TestVar";
@@ -28,4 +28,4 @@ Y_UNIT_TEST_SUITE(EnvTest) {
         SetEnv(longKey, TString());
         UNIT_ASSERT_VALUES_EQUAL(GetEnv(longKey), TString());
     }
-} 
+}

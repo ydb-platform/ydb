@@ -21,7 +21,7 @@ public:
     TCgiParameters() = default;
 
     explicit TCgiParameters(const TStringBuf cgiParamStr) {
-        Scan(cgiParamStr); 
+        Scan(cgiParamStr);
     }
 
     TCgiParameters(std::initializer_list<std::pair<TString, TString>> il);
@@ -75,9 +75,9 @@ public:
 
     Y_PURE_FUNCTION
     bool Has(const TStringBuf name) const noexcept {
-        const auto pair = equal_range(name); 
-        return pair.first != pair.second; 
-    } 
+        const auto pair = equal_range(name);
+        return pair.first != pair.second;
+    }
     /// Returns value by name
     /**
      * @note The returned value is CGI-unescaped.

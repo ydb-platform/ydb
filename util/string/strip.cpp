@@ -8,10 +8,10 @@ bool Collapse(const TString& from, TString& to, size_t maxLen) {
 }
 
 void CollapseText(const TString& from, TString& to, size_t maxLen) {
-    Collapse(from, to, maxLen); 
+    Collapse(from, to, maxLen);
     StripInPlace(to);
     if (to.size() >= maxLen) {
-        to.remove(maxLen - 5); // " ..." 
+        to.remove(maxLen - 5); // " ..."
         ReverseInPlace(to);
         size_t pos = to.find_first_of(" .,;");
         if (pos != TString::npos && pos < 32) {

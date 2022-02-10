@@ -8,7 +8,7 @@
 #include <util/generic/intrlist.h>
 #include <util/generic/yexception.h>
 #include <util/network/address.h>
-#include <util/network/socket.h> 
+#include <util/network/socket.h>
 #include <util/network/poller.h>
 #include <util/system/atomic.h>
 #include <util/system/compat.h> // stricmp, strnicmp, strlwr, strupr, stpcpy
@@ -64,7 +64,7 @@ public:
 public:
     TSocket Socket_;
     NAddr::IRemoteAddrRef ListenerSockAddrRef_;
-    THttpServer::TImpl* HttpServ_ = nullptr; 
+    THttpServer::TImpl* HttpServ_ = nullptr;
     bool Reject_ = false;
     TInstant LastUsed;
     TInstant AcceptMoment;
@@ -131,7 +131,7 @@ public:
     public:
         TMutex Mutex_;
         TIntrusiveListWithAutoDelete<TClientConnection, TDelete> Conns_;
-        TSocketPoller* Poller_ = nullptr; 
+        TSocketPoller* Poller_ = nullptr;
         const THttpServerOptions& Options;
     };
 
@@ -184,7 +184,7 @@ public:
         Poller.Reset(new TSocketPoller());
         Connections.Reset(new TConnections(Poller.Get(), Options_));
 
-        // Start the listener thread 
+        // Start the listener thread
         ListenerRunningOK = false;
 
         // throws on error
@@ -204,7 +204,7 @@ public:
             return false;
         }
 
-        // Wait until the thread has completely started and return the success indicator 
+        // Wait until the thread has completely started and return the success indicator
         ListenStartEvent.Wait();
 
         return ListenerRunningOK;
@@ -271,15 +271,15 @@ public:
             }
         }
     }
- 
+
     size_t GetRequestQueueSize() const {
         return Requests->Size();
     }
- 
+
     size_t GetFailQueueSize() const {
         return FailRequests->Size();
     }
- 
+
     const IThreadPool& GetRequestQueue() const {
         return *Requests;
     }
@@ -316,7 +316,7 @@ public:
 
     private:
         TSocket S_;
-        TImpl* Server_ = nullptr; 
+        TImpl* Server_ = nullptr;
         NAddr::IRemoteAddrRef SockAddrRef_;
     };
 
@@ -407,7 +407,7 @@ public:
     }
 
     TImpl(THttpServer* parent, ICallBack* cb, const TOptions& options, IThreadFactory* factory)
-        : TImpl( 
+        : TImpl(
               parent,
               cb,
               MakeThreadPool<TSimpleThreadPool>(factory, options.UseElasticQueues, cb, options.RequestsThreadName),
@@ -448,14 +448,14 @@ public:
     TSystemEvent ListenStartEvent;
     TMtpQueueRef Requests;
     TMtpQueueRef FailRequests;
-    TAtomic ConnectionCount = 0; 
+    TAtomic ConnectionCount = 0;
     THolder<TSocketPoller> Poller;
     THolder<TConnections> Connections;
-    bool ListenerRunningOK = false; 
+    bool ListenerRunningOK = false;
     int ErrorCode = 0;
     TOptions Options_;
-    ICallBack* Cb_ = nullptr; 
-    THttpServer* Parent_ = nullptr; 
+    ICallBack* Cb_ = nullptr;
+    THttpServer* Parent_ = nullptr;
     TWakeupPollAble WakeupPollAble;
     TMutex StopMutex;
 
@@ -630,7 +630,7 @@ bool TClientRequest::Reply(void* /*ThreadSpecificResource*/) {
 }
 
 bool TClientRequest::IsLocal() const {
-    return HasLocalAddress(Socket()); 
+    return HasLocalAddress(Socket());
 }
 
 bool TClientRequest::CheckLoopback() {

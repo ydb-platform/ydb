@@ -287,7 +287,7 @@ _YandexAbort();
     #endif
 
 #else
- 
+
     #if defined(thread_sanitizer_enabled) || defined(__SANITIZE_THREAD__)
         #define _tsan_enabled_
     #endif

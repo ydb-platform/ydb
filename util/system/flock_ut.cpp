@@ -1,6 +1,6 @@
 #include "flock.h"
-#include "file_lock.h" 
-#include "guard.h" 
+#include "file_lock.h"
+#include "guard.h"
 #include "tempfile.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -14,15 +14,15 @@ Y_UNIT_TEST_SUITE(TFileLockTest) {
     }
 
     Y_UNIT_TEST(TestFileLocker) {
-        TTempFileHandle tmp("./file.locker"); 
+        TTempFileHandle tmp("./file.locker");
         TFileLock fileLockExclusive1("./file.locker");
         TFileLock fileLockExclusive2("./file.locker");
         TFileLock fileLockShared1("./file.locker", EFileLockType::Shared);
         TFileLock fileLockShared2("./file.locker", EFileLockType::Shared);
         TFileLock fileLockShared3("./file.locker", EFileLockType::Shared);
-        { 
+        {
             TGuard<TFileLock> guard(fileLockExclusive1);
-        } 
+        }
         {
             TTryGuard<TFileLock> tryGuard(fileLockExclusive1);
             UNIT_ASSERT(tryGuard.WasAcquired());
@@ -53,5 +53,5 @@ Y_UNIT_TEST_SUITE(TFileLockTest) {
             UNIT_ASSERT(!guard2.WasAcquired());
             UNIT_ASSERT(guard3.WasAcquired());
         }
-    } 
-} 
+    }
+}

@@ -61,14 +61,14 @@ Y_UNIT_TEST_SUITE(TAsciiTest) {
             UNIT_ASSERT(!IsAsciiPunct(i));
         }
     }
- 
+
     Y_UNIT_TEST(CompareTest) {
-        UNIT_ASSERT(AsciiEqualsIgnoreCase("qqq", "qQq")); 
+        UNIT_ASSERT(AsciiEqualsIgnoreCase("qqq", "qQq"));
         UNIT_ASSERT(AsciiEqualsIgnoreCase("qqq", TStringBuf("qQq")));
         TString qq = "qq";
         TString qQ = "qQ";
-        UNIT_ASSERT(AsciiEqualsIgnoreCase(qq, qQ)); 
- 
+        UNIT_ASSERT(AsciiEqualsIgnoreCase(qq, qQ));
+
         TString x = "qqqA";
         TString y = "qQqB";
         TString z = "qQnB";
@@ -77,13 +77,13 @@ Y_UNIT_TEST_SUITE(TAsciiTest) {
         TStringBuf xs = TStringBuf(x.data(), 3);
         TStringBuf ys = TStringBuf(y.data(), 3);
         TStringBuf zs = TStringBuf(z.data(), 3);
-        UNIT_ASSERT(AsciiCompareIgnoreCase(xs, ys) == 0); 
-        UNIT_ASSERT(AsciiCompareIgnoreCase(xs, zs) > 0); 
-        UNIT_ASSERT(AsciiCompareIgnoreCase(xs, zz) < 0); 
-        UNIT_ASSERT(AsciiCompareIgnoreCase(zzz, zz) > 0); 
- 
-        UNIT_ASSERT(AsciiCompareIgnoreCase("qqQ", "qq") > 0); 
-        UNIT_ASSERT(AsciiCompareIgnoreCase("qq", "qq") == 0); 
+        UNIT_ASSERT(AsciiCompareIgnoreCase(xs, ys) == 0);
+        UNIT_ASSERT(AsciiCompareIgnoreCase(xs, zs) > 0);
+        UNIT_ASSERT(AsciiCompareIgnoreCase(xs, zz) < 0);
+        UNIT_ASSERT(AsciiCompareIgnoreCase(zzz, zz) > 0);
+
+        UNIT_ASSERT(AsciiCompareIgnoreCase("qqQ", "qq") > 0);
+        UNIT_ASSERT(AsciiCompareIgnoreCase("qq", "qq") == 0);
 
         UNIT_ASSERT_EQUAL(AsciiHasPrefix("qweasd", "qwe"), true);
         UNIT_ASSERT_EQUAL(AsciiHasPrefix("qweasd", "qWe"), false);
@@ -94,5 +94,5 @@ Y_UNIT_TEST_SUITE(TAsciiTest) {
 
         UNIT_ASSERT_EQUAL(AsciiHasSuffixIgnoreCase("qweasd", "asD"), true);
         UNIT_ASSERT_EQUAL(AsciiHasSuffixIgnoreCase("qweasd", "ast"), false);
-    } 
+    }
 }

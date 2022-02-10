@@ -15,84 +15,84 @@
 #include <util/stream/null.h>
 
 Y_UNIT_TEST_SUITE(THttpStreamTest) {
-    class TTestHttpServer: public THttpServer::ICallBack { 
-        class TRequest: public THttpClientRequestEx { 
-        public: 
-            inline TRequest(TTestHttpServer* parent) 
-                : Parent_(parent) 
-            { 
-            } 
- 
+    class TTestHttpServer: public THttpServer::ICallBack {
+        class TRequest: public THttpClientRequestEx {
+        public:
+            inline TRequest(TTestHttpServer* parent)
+                : Parent_(parent)
+            {
+            }
+
             bool Reply(void* /*tsr*/) override {
-                if (!ProcessHeaders()) { 
+                if (!ProcessHeaders()) {
                     return true;
-                } 
+                }
 
                 // Check that function will not hang on
                 Input().ReadAll();
 
-                // "lo" is for "local" 
-                if (RD.ServerName() == "yandex.lo") { 
-                    // do redirect 
+                // "lo" is for "local"
+                if (RD.ServerName() == "yandex.lo") {
+                    // do redirect
                     Output() << "HTTP/1.1 301 Moved permanently\r\n"
                                 "Location: http://www.yandex.lo\r\n"
                                 "\r\n";
-                } else if (RD.ServerName() == "www.yandex.lo") { 
+                } else if (RD.ServerName() == "www.yandex.lo") {
                     Output() << "HTTP/1.1 200 Ok\r\n"
                                 "\r\n";
-                } else { 
-                    Output() << "HTTP/1.1 200 Ok\r\n\r\n"; 
+                } else {
+                    Output() << "HTTP/1.1 200 Ok\r\n\r\n";
                     if (Buf.Size()) {
                         Output().Write(Buf.AsCharPtr(), Buf.Size());
-                    } else { 
-                        Output() << Parent_->Res_; 
-                    } 
-                } 
-                Output().Finish(); 
- 
+                    } else {
+                        Output() << Parent_->Res_;
+                    }
+                }
+                Output().Finish();
+
                 Parent_->LastRequestSentSize_ = Output().SentSize();
 
-                return true; 
-            } 
- 
-        private: 
-            TTestHttpServer* Parent_ = nullptr; 
-        }; 
- 
-    public: 
+                return true;
+            }
+
+        private:
+            TTestHttpServer* Parent_ = nullptr;
+        };
+
+    public:
         inline TTestHttpServer(const TString& res)
-            : Res_(res) 
-        { 
-        } 
- 
+            : Res_(res)
+        {
+        }
+
         TClientRequest* CreateClient() override {
-            return new TRequest(this); 
-        } 
- 
+            return new TRequest(this);
+        }
+
         size_t LastRequestSentSize() const {
             return LastRequestSentSize_;
         }
 
-    private: 
+    private:
         TString Res_;
         size_t LastRequestSentSize_ = 0;
-    }; 
- 
+    };
+
     Y_UNIT_TEST(TestCodings1) {
         UNIT_ASSERT(SupportedCodings().size() > 0);
     }
- 
+
     Y_UNIT_TEST(TestHttpInput) {
         TString res = "I'm a teapot";
         TPortManager pm;
         const ui16 port = pm.GetPort();
- 
-        TTestHttpServer serverImpl(res); 
-        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true)); 
- 
-        UNIT_ASSERT(server.Start()); 
- 
-        TNetworkAddress addr("localhost", port); 
+
+        TTestHttpServer serverImpl(res);
+        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true));
+
+        UNIT_ASSERT(server.Start());
+
+        TNetworkAddress addr("localhost", port);
         TSocket s(addr);
 
         //TDebugOutput dbg;
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
             TString r;
             r += "GET / HTTP/1.1";
             r += "\r\n";
-            r += "Host: yandex.lo"; 
+            r += "Host: yandex.lo";
             r += "\r\n";
             r += "\r\n";
 
@@ -125,8 +125,8 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
             TransferData(&input, &dbg);
         }
-        server.Stop(); 
-    } 
+        server.Stop();
+    }
 
     Y_UNIT_TEST(TestHttpInputDelete) {
         TString res = "I'm a teapot";
@@ -240,26 +240,26 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         TString res = "qqqqqq";
         TPortManager pm;
         const ui16 port = pm.GetPort();
- 
-        TTestHttpServer serverImpl(res); 
-        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true)); 
- 
-        UNIT_ASSERT(server.Start()); 
- 
-        TNetworkAddress addr("localhost", port); 
- 
+
+        TTestHttpServer serverImpl(res);
+        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true));
+
+        UNIT_ASSERT(server.Start());
+
+        TNetworkAddress addr("localhost", port);
+
         TSocket s(addr);
         TNullOutput dbg;
 
-        SendMinimalHttpRequest(s, "www.yandex.lo", "/"); 
+        SendMinimalHttpRequest(s, "www.yandex.lo", "/");
 
         TSocketInput si(s);
         THttpInput input(&si);
-        unsigned httpCode = ParseHttpRetCode(input.FirstLine()); 
+        unsigned httpCode = ParseHttpRetCode(input.FirstLine());
         UNIT_ASSERT_VALUES_EQUAL(httpCode, 200u);
 
         TransferData(&input, &dbg);
-        server.Stop(); 
+        server.Stop();
     }
 
     Y_UNIT_TEST(TestResponseWithBlanks) {

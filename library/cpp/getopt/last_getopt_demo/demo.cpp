@@ -51,9 +51,9 @@ protected:
         // Built-in options.
         opts.AddHelpOption('h');
         opts.AddCompletionOption("last_getopt_demo");
- 
+
         // Custom options.
- 
+
         opts.AddLongOption('V', "version")
             .Help("print version and exit")
             .IfPresentDisableCompletion()
@@ -62,11 +62,11 @@ protected:
                 Cerr << "last_getopt_demo 1.0.0" << Endl;
                 exit(0);
             });
- 
+
         opts.AddLongOption('b', "background")
             .Help("go to background immediately after startup")
             .StoreTrue(&Background_);
- 
+
         opts.AddLongOption("timeout")
             .RequiredArgument("timeout")
             .DefaultValue("60000")
@@ -110,7 +110,7 @@ protected:
             .Handler0([this]() {
                 ImplicitMethod_ = "POST";
             });
- 
+
         opts.AddLongOption("post-file")
             .RequiredArgument("file")
             .Help("use POST method and send contents of the specified file in the request body (cannot be used with --post-data)")

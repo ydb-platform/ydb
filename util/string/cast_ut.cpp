@@ -3,16 +3,16 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/charset/wide.h>
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 
 #include <limits>
 
-// positive test (return true or no exception) 
+// positive test (return true or no exception)
 #define test1(t, v)       \
     F<t>().CheckTryOK(v); \
     F<t>().CheckOK(v)
 
-// negative test (return false or exception) 
+// negative test (return false or exception)
 #define test2(t, v)         \
     F<t>().CheckTryFail(v); \
     F<t>().CheckExc(v)
@@ -22,7 +22,7 @@
 #define HEX_MACROS_MAP(mac, type, val) mac(type, val, 2) mac(type, val, 8) mac(type, val, 10) mac(type, val, 16)
 
 #define OK_HEX_CHECK(type, val, base) UNIT_ASSERT_EQUAL((IntFromStringForCheck<base>(IntToString<base>(val))), val);
-#define EXC_HEX_CHECK(type, val, base) UNIT_ASSERT_EXCEPTION((IntFromString<type, base>(IntToString<base>(val))), yexception); 
+#define EXC_HEX_CHECK(type, val, base) UNIT_ASSERT_EXCEPTION((IntFromString<type, base>(IntToString<base>(val))), yexception);
 
 #define TRY_HEX_MACROS_MAP(mac, type, val, result, def) \
     mac(type, val, result, def, 2)                      \
@@ -53,33 +53,33 @@ struct TRet {
     }
 
     template <class B>
-    inline void CheckOK(B v) { 
+    inline void CheckOK(B v) {
         UNIT_ASSERT_VALUES_EQUAL(FromString<A>(ToString(v)), v); // char
         UNIT_ASSERT_VALUES_EQUAL(FromString<A>(ToWtring(v)), v); // wide char
-        HEX_MACROS_MAP(OK_HEX_CHECK, A, v); 
+        HEX_MACROS_MAP(OK_HEX_CHECK, A, v);
     }
 
     template <class B>
-    inline void CheckExc(B v) { 
-        UNIT_ASSERT_EXCEPTION(FromString<A>(ToString(v)), yexception); // char 
-        UNIT_ASSERT_EXCEPTION(FromString<A>(ToWtring(v)), yexception); // wide char 
-        HEX_MACROS_MAP(EXC_HEX_CHECK, A, v); 
+    inline void CheckExc(B v) {
+        UNIT_ASSERT_EXCEPTION(FromString<A>(ToString(v)), yexception); // char
+        UNIT_ASSERT_EXCEPTION(FromString<A>(ToWtring(v)), yexception); // wide char
+        HEX_MACROS_MAP(EXC_HEX_CHECK, A, v);
     }
- 
-    template <class B> 
-    inline void CheckTryOK(B v) { 
+
+    template <class B>
+    inline void CheckTryOK(B v) {
         static const A defaultV = 42;
-        A convV; 
+        A convV;
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<A>(ToString(v), convV), true); // char
         UNIT_ASSERT_VALUES_EQUAL(v, convV);
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<A>(ToWtring(v), convV), true); // wide char
         UNIT_ASSERT_VALUES_EQUAL(v, convV);
- 
+
         TRY_HEX_MACROS_MAP(TRY_OK_HEX_CHECK, A, v, convV, defaultV);
-    } 
- 
-    template <class B> 
-    inline void CheckTryFail(B v) { 
+    }
+
+    template <class B>
+    inline void CheckTryFail(B v) {
         static const A defaultV = 42;
         A convV = defaultV;                                                    // to check that original value is not trashed on bad cast
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<A>(ToString(v), convV), false); // char
@@ -88,35 +88,35 @@ struct TRet {
         UNIT_ASSERT_VALUES_EQUAL(defaultV, convV);
 
         TRY_HEX_MACROS_MAP(TRY_FAIL_HEX_CHECK, A, v, convV, defaultV);
-    } 
+    }
 };
 
 template <>
 struct TRet<bool> {
     template <class B>
-    inline void CheckOK(B v) { 
+    inline void CheckOK(B v) {
         UNIT_ASSERT_VALUES_EQUAL(FromString<bool>(ToString(v)), v);
     }
 
     template <class B>
-    inline void CheckTryOK(B v) { 
-        B convV; 
+    inline void CheckTryOK(B v) {
+        B convV;
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<bool>(ToString(v), convV), true);
         UNIT_ASSERT_VALUES_EQUAL(v, convV);
-    } 
- 
-    template <class B> 
-    inline void CheckExc(B v) { 
+    }
+
+    template <class B>
+    inline void CheckExc(B v) {
         UNIT_ASSERT_EXCEPTION(FromString<bool>(ToString(v)), yexception);
     }
- 
-    template <class B> 
-    inline void CheckTryFail(B v) { 
+
+    template <class B>
+    inline void CheckTryFail(B v) {
         static const bool defaultV = false;
         bool convV = defaultV;
         UNIT_ASSERT_VALUES_EQUAL(TryFromString<bool>(ToString(v), convV), false);
         UNIT_ASSERT_VALUES_EQUAL(defaultV, convV);
-    } 
+    }
 };
 
 template <class A>
@@ -125,30 +125,30 @@ inline TRet<A> F() {
 };
 
 #if 0
-template <class T> 
+template <class T>
 inline void CheckConvertToBuffer(const T& value, const size_t size, const TString& canonValue) {
-    const size_t maxSize = 256; 
-    char buffer[maxSize]; 
-    const char magic = 0x7F; 
-    memset(buffer, magic, maxSize); 
-    size_t length = 0; 
-    if (canonValue.size() > size) { // overflow will occur 
-        UNIT_ASSERT_EXCEPTION(length = ToString(value, buffer, size), yexception); 
-        // check that no bytes after size was trashed 
-        for (size_t i = size; i < maxSize; ++i) 
+    const size_t maxSize = 256;
+    char buffer[maxSize];
+    const char magic = 0x7F;
+    memset(buffer, magic, maxSize);
+    size_t length = 0;
+    if (canonValue.size() > size) { // overflow will occur
+        UNIT_ASSERT_EXCEPTION(length = ToString(value, buffer, size), yexception);
+        // check that no bytes after size was trashed
+        for (size_t i = size; i < maxSize; ++i)
             UNIT_ASSERT_VALUES_EQUAL(buffer[i], magic);
-    } else { 
-        length = ToString(value, buffer, size); 
-        UNIT_ASSERT(length < maxSize); 
-        // check that no bytes after length was trashed 
-        for (size_t i = length; i < maxSize; ++i) 
+    } else {
+        length = ToString(value, buffer, size);
+        UNIT_ASSERT(length < maxSize);
+        // check that no bytes after length was trashed
+        for (size_t i = length; i < maxSize; ++i)
             UNIT_ASSERT_VALUES_EQUAL(buffer[i], magic);
-        TStringBuf result(buffer, length); 
+        TStringBuf result(buffer, length);
         UNIT_ASSERT_VALUES_EQUAL(result, TStringBuf(canonValue));
-    } 
-} 
+    }
+}
 #endif
- 
+
 Y_UNIT_TEST_SUITE(TCastTest) {
     template <class A>
     inline TRet<A> F() {
@@ -332,14 +332,14 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         CheckConvertToBuffer<float>(1.f, 5, "1");
         CheckConvertToBuffer<float>(1.005f, 3, "1.005");
         CheckConvertToBuffer<float>(1.00000000f, 3, "1");
- 
+
         CheckConvertToBuffer<double>(1.f, 5, "1");
         CheckConvertToBuffer<double>(1.005f, 3, "1.005");
         CheckConvertToBuffer<double>(1.00000000f, 3, "1");
- 
+
         CheckConvertToBuffer<int>(2, 5, "2");
         CheckConvertToBuffer<int>(1005, 3, "1005");
- 
+
         CheckConvertToBuffer<size_t>(2, 5, "2");
         CheckConvertToBuffer<ui64>(1005000000000000ull, 32, "1005000000000000");
         CheckConvertToBuffer<ui64>(1005000000000000ull, 3, "1005000000000000");
@@ -348,29 +348,29 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         // UNIT_ASSERT_EXCEPTION(FromString<double>(longNumber), yexception);
     }
 #endif
- 
+
     Y_UNIT_TEST(TestWide) {
         TUtf16String iw = u"-100500";
         int iv = 0;
         UNIT_ASSERT_VALUES_EQUAL(TryFromString(iw, iv), true);
         UNIT_ASSERT_VALUES_EQUAL(iv, -100500);
- 
+
         ui64 uv = 0;
         TUtf16String uw = u"21474836470";
         UNIT_ASSERT_VALUES_EQUAL(TryFromString(uw, uv), true);
         UNIT_ASSERT_VALUES_EQUAL(uv, 21474836470ull);
- 
+
         TWtringBuf bw(uw.data(), uw.size());
         uv = 0;
         UNIT_ASSERT_VALUES_EQUAL(TryFromString(uw, uv), true);
         UNIT_ASSERT_VALUES_EQUAL(uv, 21474836470ull);
- 
+
         const wchar16* beg = uw.data();
         uv = 0;
         UNIT_ASSERT_VALUES_EQUAL(TryFromString(beg, uw.size(), uv), true);
         UNIT_ASSERT_VALUES_EQUAL(uv, 21474836470ull);
     }
- 
+
     Y_UNIT_TEST(TestDefault) {
         size_t res = 0;
         const size_t def1 = 42;
@@ -438,17 +438,17 @@ Y_UNIT_TEST_SUITE(TCastTest) {
     }
 
     Y_UNIT_TEST(TestBool) {
-        // True cases 
-        UNIT_ASSERT_VALUES_EQUAL(FromString<bool>("yes"), true); 
-        UNIT_ASSERT_VALUES_EQUAL(FromString<bool>("1"), true); 
-        // False cases 
-        UNIT_ASSERT_VALUES_EQUAL(FromString<bool>("no"), false); 
-        UNIT_ASSERT_VALUES_EQUAL(FromString<bool>("0"), false); 
-        // Strange cases 
-        UNIT_ASSERT_EXCEPTION(FromString<bool>(""), yexception); 
-        UNIT_ASSERT_EXCEPTION(FromString<bool>("something"), yexception); 
-    } 
- 
+        // True cases
+        UNIT_ASSERT_VALUES_EQUAL(FromString<bool>("yes"), true);
+        UNIT_ASSERT_VALUES_EQUAL(FromString<bool>("1"), true);
+        // False cases
+        UNIT_ASSERT_VALUES_EQUAL(FromString<bool>("no"), false);
+        UNIT_ASSERT_VALUES_EQUAL(FromString<bool>("0"), false);
+        // Strange cases
+        UNIT_ASSERT_EXCEPTION(FromString<bool>(""), yexception);
+        UNIT_ASSERT_EXCEPTION(FromString<bool>("something"), yexception);
+    }
+
     Y_UNIT_TEST(TestAutoDetectType) {
         UNIT_ASSERT_DOUBLES_EQUAL((float)FromString("0.0001"), 0.0001, EPS);
         UNIT_ASSERT_DOUBLES_EQUAL((double)FromString("0.0015", sizeof("0.0015") - 2), 0.001, EPS);
@@ -463,52 +463,52 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         ui16 wideCharacterCode = FromString(u"125");
         UNIT_ASSERT_VALUES_EQUAL(integer, wideCharacterCode);
     }
- 
+
     static void CheckMessage(TFromStringException& exc, const TString& phrase) {
         TString message = exc.what();
-        if (!message.Contains(phrase)) { 
-            Cerr << message << Endl; 
-            UNIT_ASSERT(false); 
-        } 
-    } 
- 
+        if (!message.Contains(phrase)) {
+            Cerr << message << Endl;
+            UNIT_ASSERT(false);
+        }
+    }
+
     Y_UNIT_TEST(ErrorMessages) {
-        try { 
-            FromString<ui32>(""); 
-            UNIT_ASSERT(false); 
+        try {
+            FromString<ui32>("");
+            UNIT_ASSERT(false);
         } catch (TFromStringException& e) {
-            CheckMessage(e, "empty string as number"); 
-        } 
- 
-        try { 
-            FromString<ui32>("-"); 
-            UNIT_ASSERT(false); 
+            CheckMessage(e, "empty string as number");
+        }
+
+        try {
+            FromString<ui32>("-");
+            UNIT_ASSERT(false);
         } catch (TFromStringException& e) {
-            // Unsigned should have no sign at all, so - is not expected 
-            CheckMessage(e, "Unexpected symbol \"-\" at pos 0 in string \"-\""); 
-        } 
- 
-        try { 
-            FromString<i32>("-"); 
-            UNIT_ASSERT(false); 
+            // Unsigned should have no sign at all, so - is not expected
+            CheckMessage(e, "Unexpected symbol \"-\" at pos 0 in string \"-\"");
+        }
+
+        try {
+            FromString<i32>("-");
+            UNIT_ASSERT(false);
         } catch (TFromStringException& e) {
-            CheckMessage(e, "Cannot parse string \"-\" as number"); 
-        } 
- 
-        try { 
-            FromString<i32>("+"); 
-            UNIT_ASSERT(false); 
+            CheckMessage(e, "Cannot parse string \"-\" as number");
+        }
+
+        try {
+            FromString<i32>("+");
+            UNIT_ASSERT(false);
         } catch (TFromStringException& e) {
-            CheckMessage(e, "Cannot parse string \"+\" as number"); 
-        } 
- 
-        try { 
-            FromString<ui32>("0.328413745072"); 
-            UNIT_ASSERT(false); 
+            CheckMessage(e, "Cannot parse string \"+\" as number");
+        }
+
+        try {
+            FromString<ui32>("0.328413745072");
+            UNIT_ASSERT(false);
         } catch (TFromStringException& e) {
-            CheckMessage(e, "Unexpected symbol \".\" at pos 1 in string \"0.328413745072\""); 
-        } 
-    } 
+            CheckMessage(e, "Unexpected symbol \".\" at pos 1 in string \"0.328413745072\"");
+        }
+    }
 
     Y_UNIT_TEST(TryStringBuf) {
         {

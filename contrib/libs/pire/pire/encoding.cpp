@@ -11,7 +11,7 @@
  * it under the terms of the GNU Lesser Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
  * (at your option) any later version.
- * 
+ *
  * Pire is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -39,8 +39,8 @@ namespace {
 
 	class Latin1: public Encoding {
 	public:
-		Latin1() : Encoding() {} 
- 
+		Latin1() : Encoding() {}
+
 		wchar32 FromLocal(const char*& begin, const char* end) const
 		{
 			if (begin == end)
@@ -61,7 +61,7 @@ namespace {
 
 		void AppendDot(Fsm& fsm) const { fsm.AppendDot(); }
 	};
- 
+
 	namespace UtfRanges {
 
 		static const size_t MaxLen = 4;
@@ -74,11 +74,11 @@ namespace {
 		static const size_t Next[2] = {0x80, 0xC0};
 	}
 
- 
+
 	class Utf8: public Encoding {
 	public:
-		Utf8() : Encoding() {} 
- 
+		Utf8() : Encoding() {}
+
 		wchar32 FromLocal(const char*& begin, const char* end) const
 		{
 			wchar32 rune;
@@ -117,16 +117,16 @@ namespace {
 
 namespace Encodings {
 
-	const Encoding& Utf8() 
+	const Encoding& Utf8()
 	{
 		static const Pire::Utf8 utf8;
-		return utf8; 
+		return utf8;
 	}
 
-	const Encoding& Latin1() 
+	const Encoding& Latin1()
 	{
-		static const Pire::Latin1 latin1; 
-		return latin1; 
+		static const Pire::Latin1 latin1;
+		return latin1;
 	}
 
 }

@@ -145,8 +145,8 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_VALUES_EQUAL("/etc", r.GetOrElse("to", "trash"));
         UNIT_ASSERT(r.Has("from"));
         UNIT_ASSERT(r.Has("to"));
- 
-        UNIT_ASSERT_EXCEPTION(r.Get("left"), TException); 
+
+        UNIT_ASSERT_EXCEPTION(r.Get("left"), TException);
     }
 
     Y_UNIT_TEST(TestCharOptions) {
@@ -160,30 +160,30 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT(!r.Has('h'));
 
         UNIT_ASSERT_VALUES_EQUAL(2u, r.GetFreeArgs().size());
-        UNIT_ASSERT_VALUES_EQUAL(2u, r.GetFreeArgCount()); 
+        UNIT_ASSERT_VALUES_EQUAL(2u, r.GetFreeArgCount());
         UNIT_ASSERT_VALUES_EQUAL("/etc", r.GetFreeArgs()[0]);
         UNIT_ASSERT_VALUES_EQUAL("/tmp/etc", r.GetFreeArgs()[1]);
     }
 
     Y_UNIT_TEST(TestFreeArgs) {
-        TOptsNoDefault opts; 
-        opts.SetFreeArgsNum(1, 3); 
+        TOptsNoDefault opts;
+        opts.SetFreeArgsNum(1, 3);
         TOptsParseResultTestWrapper r11(&opts, V({"cp", "/etc"}));
         TOptsParseResultTestWrapper r12(&opts, V({"cp", "/etc", "/tmp/etc"}));
         TOptsParseResultTestWrapper r13(&opts, V({"cp", "/etc", "/tmp/etc", "verbose"}));
- 
-        UNIT_ASSERT_EXCEPTION( 
+
+        UNIT_ASSERT_EXCEPTION(
             TOptsParseResultTestWrapper(&opts, V({"cp", "/etc", "/tmp/etc", "verbose", "nosymlink"})),
             yexception);
- 
-        UNIT_ASSERT_EXCEPTION( 
+
+        UNIT_ASSERT_EXCEPTION(
             TOptsParseResultTestWrapper(&opts, V({"cp"})),
             yexception);
- 
-        opts.SetFreeArgsNum(2); 
+
+        opts.SetFreeArgsNum(2);
         TOptsParseResultTestWrapper r22(&opts, V({"cp", "/etc", "/var/tmp"}));
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestCharOptionsRequiredOptional) {
         TOptsNoDefault opts;
         opts.AddCharOption('d', REQUIRED_ARGUMENT);
@@ -350,19 +350,19 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         // this test is broken, cause UNIT_ASSERT(false) always throws
         return;
 
-        bool exception = false; 
-        try { 
-            TOpts opts; 
-            opts.AddLongOption('x', "one"); 
-            opts.AddLongOption('x', "two"); 
-            UNIT_ASSERT(false); 
+        bool exception = false;
+        try {
+            TOpts opts;
+            opts.AddLongOption('x', "one");
+            opts.AddLongOption('x', "two");
+            UNIT_ASSERT(false);
         } catch (...) {
-            // we should go here, duplicating options are forbidden 
-            exception = true; 
-        } 
-        UNIT_ASSERT(exception); 
-    } 
- 
+            // we should go here, duplicating options are forbidden
+            exception = true;
+        }
+        UNIT_ASSERT(exception);
+    }
+
     Y_UNIT_TEST(TestPositionWhenNoArgs) {
         TOptsParserTester tester;
 
@@ -527,7 +527,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
 
         // test 'required'
         opt_d.Required();
-        UNIT_ASSERT_EXCEPTION( 
+        UNIT_ASSERT_EXCEPTION(
             TOptsParseResultTestWrapper(&opts, V({"cmd"})),
             TUsageException);
 
@@ -563,7 +563,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
             opts.AddLongOption("flag2").RequiredArgument().StoreResultT<int>(&uval);
             opts.AddLongOption("flag3").RequiredArgument().StoreMappedResult(&fval, (double (*)(double))fabs);
             opts.AddLongOption("flag4").RequiredArgument().StoreMappedResult(&fval, (double (*)(double))sqrt);
-            UNIT_ASSERT_EXCEPTION( 
+            UNIT_ASSERT_EXCEPTION(
                 TOptsParseResultTestWrapper(&opts, V({"cmd", "--flag3", "-2.0", "--flag1", "-1"})),
                 yexception);
             UNIT_ASSERT_VALUES_EQUAL(uval, 5u);
@@ -575,21 +575,21 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     }
 
     Y_UNIT_TEST(TestTitleAndPrintUsage) {
-        TOpts opts; 
-        const char* prog = "my_program"; 
+        TOpts opts;
+        const char* prog = "my_program";
         TString title = TString("Sample ") + TString(prog).Quote() + " application";
-        opts.SetTitle(title); 
-        int argc = 2; 
+        opts.SetTitle(title);
+        int argc = 2;
         const char* cmd[] = {prog};
-        TOptsParser parser(&opts, argc, cmd); 
-        TStringStream out; 
-        parser.PrintUsage(out); 
-        // find title 
+        TOptsParser parser(&opts, argc, cmd);
+        TStringStream out;
+        parser.PrintUsage(out);
+        // find title
         UNIT_ASSERT(out.Str().find(title) != TString::npos);
-        // find usage 
+        // find usage
         UNIT_ASSERT(out.Str().find(" " + TString(prog) + " ") != TString::npos);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestCustomCmdLineDescr) {
         TOpts opts;
         const char* prog = "my_program";
@@ -756,7 +756,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         }
 
         {
-            UNIT_ASSERT_EXCEPTION( 
+            UNIT_ASSERT_EXCEPTION(
                 TOptsParseResultTestWrapper(&opts, V({"cmd", "--true"})),
                 TUsageException);
         }

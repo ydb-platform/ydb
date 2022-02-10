@@ -1,6 +1,6 @@
 #include "join.h"
 #include "subst.h"
-#include <string> 
+#include <string>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(TStringSubst) {
         SubstGlobal(s, 'a', 'b', 1);
         UNIT_ASSERT_EQUAL(s, TString("abb"));
     }
- 
+
     Y_UNIT_TEST(TestSubstCharGlobalRet) {
         const TUtf16String w1 = u"abcdabcd";
         const TUtf16String w2 = SubstGlobalCopy(w1, wchar16('b'), wchar16('B'), 3);
@@ -181,10 +181,10 @@ Y_UNIT_TEST_SUITE(TStringSubst) {
     }
 
     Y_UNIT_TEST(TestSubstStdString) {
-        std::string s = "aaa"; 
-        SubstGlobal(s, "a", "b", 1); 
-        UNIT_ASSERT_EQUAL(s, "abb"); 
-    } 
+        std::string s = "aaa";
+        SubstGlobal(s, "a", "b", 1);
+        UNIT_ASSERT_EQUAL(s, "abb");
+    }
 
     Y_UNIT_TEST(TestSubstStdStringRet) {
         const std::string s1 = "aaa";

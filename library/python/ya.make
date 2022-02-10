@@ -114,7 +114,7 @@ RECURSE(
     luigi/data
     luigi/example
     luigi/luigid_static
-    maths 
+    maths
     messagebus
     metrics_framework
     mime_types

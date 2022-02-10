@@ -6,7 +6,7 @@
 #include <util/system/compat.h>
 #include <util/memory/tempbuf.h>
 #include <util/generic/string.h>
-#include <util/generic/strbuf.h> 
+#include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
 
 TString Strftime(const char* format, const struct tm* tm) {
@@ -23,14 +23,14 @@ TString Strftime(const char* format, const struct tm* tm) {
 
 template <>
 TDuration FromStringImpl<TDuration, char>(const char* s, size_t len) {
-    return TDuration::Parse(TStringBuf(s, len)); 
+    return TDuration::Parse(TStringBuf(s, len));
 }
 
 template <>
-bool TryFromStringImpl<TDuration, char>(const char* s, size_t len, TDuration& result) { 
-    return TDuration::TryParse(TStringBuf(s, len), result); 
-} 
- 
+bool TryFromStringImpl<TDuration, char>(const char* s, size_t len, TDuration& result) {
+    return TDuration::TryParse(TStringBuf(s, len), result);
+}
+
 namespace {
     template <size_t N>
     struct TPad {

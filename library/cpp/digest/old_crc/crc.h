@@ -53,9 +53,9 @@ inline ui64 crc64(const void* buf, size_t buflen, ui64 crcinit = CRC64INIT) {
     const unsigned char* ptr = (const unsigned char*)buf;
     extern const ui64* crctab64;
 
-    while (buflen--) { 
+    while (buflen--) {
         crcinit = crctab64[((crcinit >> 56) ^ *ptr++)] ^ (crcinit << 8);
-    } 
+    }
     return crcinit;
 }
 

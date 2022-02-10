@@ -4,15 +4,15 @@
 
 #include <util/str_stl.h>
 
-/** 
- * UUID generation 
- * 
- * NOTE: It is not a real GUID (RFC 4122), as described in 
- * https://en.wikipedia.org/wiki/Universally_unique_identifier 
- * https://en.wikipedia.org/wiki/Globally_unique_identifier 
- * 
- * See https://clubs.at.yandex-team.ru/stackoverflow/10238/10240 
- * and https://st.yandex-team.ru/IGNIETFERRO-768 for details. 
+/**
+ * UUID generation
+ *
+ * NOTE: It is not a real GUID (RFC 4122), as described in
+ * https://en.wikipedia.org/wiki/Universally_unique_identifier
+ * https://en.wikipedia.org/wiki/Globally_unique_identifier
+ *
+ * See https://clubs.at.yandex-team.ru/stackoverflow/10238/10240
+ * and https://st.yandex-team.ru/IGNIETFERRO-768 for details.
  */
 struct TGUID {
     ui32 dw[4] = {};

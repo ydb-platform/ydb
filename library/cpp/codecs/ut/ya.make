@@ -1,9 +1,9 @@
 UNITTEST()
 
-OWNER( 
+OWNER(
     g:base
-    velavokr 
-) 
+    velavokr
+)
 
 PEERDIR(
     library/cpp/string_utils/base64

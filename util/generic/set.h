@@ -19,7 +19,7 @@ public:
         return !this->empty();
     }
 
-    template <class TheKey> 
+    template <class TheKey>
     inline bool contains(const TheKey& key) const {
         return this->find(key) != this->end();
     }

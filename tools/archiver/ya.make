@@ -1,9 +1,9 @@
 PROGRAM()
 
-OWNER( 
-    pg 
-    mvel 
-) 
+OWNER(
+    pg
+    mvel
+)
 
 PEERDIR(
     library/cpp/archive

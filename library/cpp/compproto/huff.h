@@ -1,14 +1,14 @@
 #pragma once
 
-#include <util/system/defaults.h> 
-#include <util/generic/yexception.h> 
-#include <util/generic/ptr.h> 
-#include <util/generic/vector.h> 
-#include <util/generic/algorithm.h> 
+#include <util/system/defaults.h>
+#include <util/generic/yexception.h>
+#include <util/generic/ptr.h>
+#include <util/generic/vector.h>
+#include <util/generic/algorithm.h>
 #include <utility>
- 
+
 #include <queue>
- 
+
 #include "compressor.h"
 
 namespace NCompProto {

@@ -14,13 +14,13 @@
 
 using namespace std::chrono_literals;
 
-struct TTestTime { 
-    const time_t T_ = 987654321; 
-    const char* Date_ = "Thu Apr 19 04:25:21 2001\n"; 
-    const char* SprintDate_ = "20010419"; 
-    const long SprintSecs_ = 15921; 
-    struct tm Tm_; 
-    TTestTime() { 
+struct TTestTime {
+    const time_t T_ = 987654321;
+    const char* Date_ = "Thu Apr 19 04:25:21 2001\n";
+    const char* SprintDate_ = "20010419";
+    const long SprintSecs_ = 15921;
+    struct tm Tm_;
+    TTestTime() {
         Tm_.tm_sec = 21;
         Tm_.tm_min = 25;
         Tm_.tm_hour = 4;
@@ -30,7 +30,7 @@ struct TTestTime {
         Tm_.tm_wday = 4;
         Tm_.tm_yday = 108;
     }
-}; 
+};
 
 namespace {
     inline void OldDate8601(char* buf, time_t when) {
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
             a.tm_wday == b.tm_wday &&
             a.tm_yday == b.tm_yday);
     }
- 
+
     static inline TString Str(const struct tm& a) {
         return TStringBuilder() << "("
                                 << a.tm_sec << ", "
@@ -303,13 +303,13 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
         return t0 && t1 &&
                CompareTM(*t0, *t1) &&
                (t0->tm_isdst == t1->tm_isdst)
-#ifndef _win_ 
+#ifndef _win_
                && (t0->tm_gmtoff == t1->tm_gmtoff) &&
                TimeZoneEq(t0->tm_zone, t1->tm_zone)
-#endif // _win_ 
+#endif // _win_
                && true;
     }
- 
+
     Y_UNIT_TEST(TestGmTimeR) {
         time_t starttime = static_cast<time_t>(Max<i64>(-12244089600LL, Min<time_t>())); // 1-Jan-1582
         time_t finishtime = static_cast<time_t>(Min<i64>(0xFFFFFFFF * 20, Max<time_t>()));
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
         static const struct T {
             const char* const Str;
             const TDuration::TValue MicroSeconds;
-            const bool Parseable; 
+            const bool Parseable;
         } tests[] = {
             {"0", 0, true},
             {"1", 1000000, true},
@@ -385,21 +385,21 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
         };
 
         for (const T* t = tests; t != std::end(tests); ++t) {
-            // FromString 
-            bool parsed = false; 
-            try { 
-                TDuration time = FromString<TDuration>(t->Str); 
-                parsed = true; 
-                UNIT_ASSERT_EQUAL(t->MicroSeconds, time.MicroSeconds()); 
-            } catch (const yexception&) { 
-                UNIT_ASSERT_VALUES_EQUAL(parsed, t->Parseable); 
-            } 
-            // TryFromString 
-            TDuration tryTime; 
-            UNIT_ASSERT_VALUES_EQUAL(TryFromString<TDuration>(t->Str, tryTime), t->Parseable); 
-            if (t->Parseable) { 
-                UNIT_ASSERT_EQUAL(t->MicroSeconds, tryTime.MicroSeconds()); 
-            } 
+            // FromString
+            bool parsed = false;
+            try {
+                TDuration time = FromString<TDuration>(t->Str);
+                parsed = true;
+                UNIT_ASSERT_EQUAL(t->MicroSeconds, time.MicroSeconds());
+            } catch (const yexception&) {
+                UNIT_ASSERT_VALUES_EQUAL(parsed, t->Parseable);
+            }
+            // TryFromString
+            TDuration tryTime;
+            UNIT_ASSERT_VALUES_EQUAL(TryFromString<TDuration>(t->Str, tryTime), t->Parseable);
+            if (t->Parseable) {
+                UNIT_ASSERT_EQUAL(t->MicroSeconds, tryTime.MicroSeconds());
+            }
         }
     }
 
@@ -430,22 +430,22 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
     }
 
     Y_UNIT_TEST(TestDurationMath) {
-        TDuration empty; 
-        UNIT_ASSERT(!empty); 
-        // ensure that this compiles too 
-        if (empty) { 
-            UNIT_ASSERT(false); 
-        } 
-        TDuration nonEmpty = TDuration::MicroSeconds(1); 
-        UNIT_ASSERT(nonEmpty); 
- 
+        TDuration empty;
+        UNIT_ASSERT(!empty);
+        // ensure that this compiles too
+        if (empty) {
+            UNIT_ASSERT(false);
+        }
+        TDuration nonEmpty = TDuration::MicroSeconds(1);
+        UNIT_ASSERT(nonEmpty);
+
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(110), TDuration::Seconds(77) + TDuration::Seconds(33));
         // overflow
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Max(), TDuration::Max() - TDuration::Seconds(1) + TDuration::Seconds(10));
         // underflow
         UNIT_ASSERT_VALUES_EQUAL(TDuration::Zero(), TDuration::Seconds(20) - TDuration::Seconds(200));
-        // division 
-        UNIT_ASSERT_DOUBLES_EQUAL(TDuration::Minutes(1) / TDuration::Seconds(10), 6.0, 1e-9); 
+        // division
+        UNIT_ASSERT_DOUBLES_EQUAL(TDuration::Minutes(1) / TDuration::Seconds(10), 6.0, 1e-9);
     }
 
     Y_UNIT_TEST(TestDurationGetters) {

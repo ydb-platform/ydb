@@ -2,8 +2,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/vector.h> 
-#include <util/generic/ptr.h> 
+#include <util/generic/vector.h>
+#include <util/generic/ptr.h>
 #include <util/system/atomic.h>
 #include <util/thread/pool.h>
 
@@ -124,10 +124,10 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
     Y_UNIT_TEST(TestSimpleEnqueueDequeue) {
         TLockFreeQueue<int> queue;
 
-        int i = -1; 
+        int i = -1;
 
         UNIT_ASSERT(!queue.Dequeue(&i));
-        UNIT_ASSERT_VALUES_EQUAL(i, -1); 
+        UNIT_ASSERT_VALUES_EQUAL(i, -1);
 
         queue.Enqueue(10);
         queue.Enqueue(11);
@@ -156,10 +156,10 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueTests) {
     Y_UNIT_TEST(TestSimpleEnqueueAllDequeue) {
         TLockFreeQueue<int> queue;
 
-        int i = -1; 
+        int i = -1;
 
         UNIT_ASSERT(!queue.Dequeue(&i));
-        UNIT_ASSERT_VALUES_EQUAL(i, -1); 
+        UNIT_ASSERT_VALUES_EQUAL(i, -1);
 
         TVector<int> v;
         v.push_back(20);

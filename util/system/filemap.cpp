@@ -74,7 +74,7 @@ namespace {
 TString TMemoryMapCommon::UnknownFileName() {
     return "Unknown_file_name";
 }
- 
+
 static inline i64 DownToGranularity(i64 offset) noexcept {
     return offset & ~((i64)(GRANULARITY - 1));
 }

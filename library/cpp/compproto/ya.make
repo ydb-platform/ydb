@@ -1,7 +1,7 @@
 LIBRARY()
 
-OWNER(ironpeter) 
- 
+OWNER(ironpeter)
+
 SRCS(
     bit.h
     compressor.h

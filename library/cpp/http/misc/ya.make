@@ -1,9 +1,9 @@
 LIBRARY()
 
-OWNER( 
+OWNER(
     g:util
-    mvel 
-) 
+    mvel
+)
 
 GENERATE_ENUM_SERIALIZATION(httpcodes.h)
 

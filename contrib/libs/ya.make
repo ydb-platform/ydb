@@ -107,7 +107,7 @@ RECURSE(
     hwloc
     hyperscan
     i18n
-    i18n/ut 
+    i18n/ut
     icu
     ImageMagick
     inja

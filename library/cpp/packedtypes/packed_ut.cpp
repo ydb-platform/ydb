@@ -2,51 +2,51 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/system/defaults.h> 
-#include <util/generic/ylimits.h> 
+#include <util/system/defaults.h>
+#include <util/generic/ylimits.h>
 #include <util/generic/buffer.h>
 #include <util/stream/mem.h>
 #include <util/stream/buffer.h>
 
-namespace NPrivate { 
+namespace NPrivate {
 #if 0
-static ui64 gSeed = 42; 
- 
-template<typename T> 
-static T PseudoRandom(T max = Max<T>()) { 
+static ui64 gSeed = 42;
+
+template<typename T>
+static T PseudoRandom(T max = Max<T>()) {
     Y_ASSERT(max != 0);
-    // stupid and non-threadsafe, but very predictable chaos generator 
-    gSeed += 1; 
-    gSeed *= 419; 
-    gSeed = gSeed ^ (ui64(max) << 17u); 
-    return gSeed % max; 
-}; 
+    // stupid and non-threadsafe, but very predictable chaos generator
+    gSeed += 1;
+    gSeed *= 419;
+    gSeed = gSeed ^ (ui64(max) << 17u);
+    return gSeed % max;
+};
 #endif
 }
- 
+
 Y_UNIT_TEST_SUITE(TPackedTest) {
     void TestPackUi32Sub(ui32 v, const TVector<char>& p) {
         TBufferOutput out;
         PackUI32(out, v);
         const TBuffer& buf = out.Buffer();
-        UNIT_ASSERT_VALUES_EQUAL(buf.Size(), p.size()); 
+        UNIT_ASSERT_VALUES_EQUAL(buf.Size(), p.size());
         UNIT_ASSERT(!memcmp(buf.Data(), &p[0], buf.Size()));
 
         {
             TBufferInput in(buf);
             ui32 v2;
             UnPackUI32(in, v2);
-            UNIT_ASSERT_VALUES_EQUAL(v, v2); 
+            UNIT_ASSERT_VALUES_EQUAL(v, v2);
         }
 
         {
             TZCMemoryInput in(buf.Data(), buf.Size());
             ui32 v2;
             UnPackUI32(in, v2);
-            UNIT_ASSERT_VALUES_EQUAL(v, v2); 
+            UNIT_ASSERT_VALUES_EQUAL(v, v2);
         }
     }
- 
+
     Y_UNIT_TEST(TestPackUi32) {
         ui32 v;
         TVector<char> pv;
@@ -87,44 +87,44 @@ Y_UNIT_TEST_SUITE(TPackedTest) {
 #endif
         TestPackUi32Sub(v, pv);
     }
- 
-#if 0 
+
+#if 0
     Y_UNIT_TEST(ReadWrite32) {
-        TBuffer buffer(65536); 
- 
-        char* writePtr = buffer.Data(); 
+        TBuffer buffer(65536);
+
+        char* writePtr = buffer.Data();
         TVector<ui32> correctNumbers;
-        for (size_t i = 0; i < 1000; ++i) { 
-            ui32 randNum = NPrivate::PseudoRandom<ui32>(); 
-            correctNumbers.push_back(randNum); 
-            writePtr = Pack32(randNum, writePtr); 
-        } 
- 
-        const char* readPtr = buffer.Data(); 
-        for (size_t i = 0; i < correctNumbers.size(); ++i) { 
-            ui32 value = 0xCCCCCCCC; 
-            readPtr = Unpack32(value, readPtr); 
-            UNIT_ASSERT_VALUES_EQUAL(value, correctNumbers[i]); 
-        } 
-    } 
- 
+        for (size_t i = 0; i < 1000; ++i) {
+            ui32 randNum = NPrivate::PseudoRandom<ui32>();
+            correctNumbers.push_back(randNum);
+            writePtr = Pack32(randNum, writePtr);
+        }
+
+        const char* readPtr = buffer.Data();
+        for (size_t i = 0; i < correctNumbers.size(); ++i) {
+            ui32 value = 0xCCCCCCCC;
+            readPtr = Unpack32(value, readPtr);
+            UNIT_ASSERT_VALUES_EQUAL(value, correctNumbers[i]);
+        }
+    }
+
     Y_UNIT_TEST(ReadWrite64) {
-        TBuffer buffer(65536); 
- 
-        char* writePtr = buffer.Data(); 
+        TBuffer buffer(65536);
+
+        char* writePtr = buffer.Data();
         TVector<ui64> correctNumbers;
-        for (size_t i = 0; i < 1000; ++i) { 
-            ui64 randNum = NPrivate::PseudoRandom<ui64>(); 
-            correctNumbers.push_back(randNum); 
-            writePtr = Pack64(randNum, writePtr); 
-        } 
- 
-        const char* readPtr = buffer.Data(); 
-        for (size_t i = 0; i < correctNumbers.size(); ++i) { 
-            ui64 value = 0xDEADBEEF; 
-            readPtr = Unpack64(value, readPtr); 
-            UNIT_ASSERT_VALUES_EQUAL(value, correctNumbers[i]); 
-        } 
-    } 
-#endif 
+        for (size_t i = 0; i < 1000; ++i) {
+            ui64 randNum = NPrivate::PseudoRandom<ui64>();
+            correctNumbers.push_back(randNum);
+            writePtr = Pack64(randNum, writePtr);
+        }
+
+        const char* readPtr = buffer.Data();
+        for (size_t i = 0; i < correctNumbers.size(); ++i) {
+            ui64 value = 0xDEADBEEF;
+            readPtr = Unpack64(value, readPtr);
+            UNIT_ASSERT_VALUES_EQUAL(value, correctNumbers[i]);
+        }
+    }
+#endif
 };

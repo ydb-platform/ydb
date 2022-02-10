@@ -14,7 +14,7 @@
 #include <util/string/escape.h>
 #include <util/string/hex.h>
 #include <util/string/subst.h>
-#include <util/system/filemap.h> 
+#include <util/system/filemap.h>
 
 #include <cstring>
 
@@ -54,7 +54,7 @@ namespace {
     class THexOutput: public IOutputStream {
     public:
         inline THexOutput(IOutputStream* slave)
-            : Slave_(slave) 
+            : Slave_(slave)
         {
         }
 
@@ -62,13 +62,13 @@ namespace {
         }
 
         inline IOutputStream* Slave() const noexcept {
-            return Slave_; 
+            return Slave_;
         }
 
     private:
         void DoFinish() override {
-            Slave_->Write('\n'); 
-            Slave_->Flush(); 
+            Slave_->Write('\n');
+            Slave_->Flush();
         }
 
         void DoWrite(const void* data, size_t len) override {
@@ -79,14 +79,14 @@ namespace {
                 char buf[12];
                 char* tmp = buf;
 
-                if (Count_ % Columns == 0) { 
+                if (Count_ % Columns == 0) {
                     *tmp++ = ' ';
                     *tmp++ = ' ';
                     *tmp++ = ' ';
                     *tmp++ = ' ';
                 }
 
-                if (Count_ && Count_ % Columns != 0) { 
+                if (Count_ && Count_ % Columns != 0) {
                     *tmp++ = ',';
                     *tmp++ = ' ';
                 }
@@ -95,41 +95,41 @@ namespace {
                 *tmp++ = 'x';
                 tmp = HexEncode(&c, 1, tmp);
 
-                if ((Count_ % Columns) == (Columns - 1)) { 
+                if ((Count_ % Columns) == (Columns - 1)) {
                     *tmp++ = ',';
                     *tmp++ = '\n';
                 }
 
-                Slave_->Write(buf, tmp - buf); 
+                Slave_->Write(buf, tmp - buf);
 
                 --len;
                 ++b;
-                ++Count_; 
+                ++Count_;
             }
         }
 
     private:
         // width in source chars
-        static const size_t Columns = 10; 
-        ui64 Count_ = 0; 
+        static const size_t Columns = 10;
+        ui64 Count_ = 0;
         IOutputStream* Slave_ = nullptr;
     };
 
     struct TYasmOutput: public IOutputStream {
         inline TYasmOutput(IOutputStream* out, const TString& base)
-            : Out_(out) 
-            , Base_(base) 
+            : Out_(out)
+            , Base_(base)
         {
-            *Out_ << "global " << Base_ << "\n"; 
-            *Out_ << "global " << Base_ << "Size\n\nSECTION .rodata\n\n"; 
-            *Out_ << Base_ << ":\n"; 
+            *Out_ << "global " << Base_ << "\n";
+            *Out_ << "global " << Base_ << "Size\n\nSECTION .rodata\n\n";
+            *Out_ << Base_ << ":\n";
         }
 
         ~TYasmOutput() override {
         }
 
         void DoFinish() override {
-            *Out_ << Base_ << "Size:\ndd " << Count_ << '\n'; 
+            *Out_ << Base_ << "Size:\ndd " << Count_ << '\n';
 
             *Out_ << "%ifidn __OUTPUT_FORMAT__,elf64\n";
             *Out_ << "size " << Base_ << " " << Count_ << "\n";
@@ -138,20 +138,20 @@ namespace {
         }
 
         void DoWrite(const void* data, size_t len) override {
-            Count_ += len; 
+            Count_ += len;
 
             const unsigned char* p = (const unsigned char*)data;
 
             while (len) {
                 const size_t step = Min<size_t>(len, 100);
 
-                *Out_ << "db " << (int)*p++; 
+                *Out_ << "db " << (int)*p++;
 
                 for (size_t i = 1; i < step; ++i) {
-                    *Out_ << ',' << (int)*p++; 
+                    *Out_ << ',' << (int)*p++;
                 }
 
-                *Out_ << '\n'; 
+                *Out_ << '\n';
 
                 len -= step;
             }
@@ -159,7 +159,7 @@ namespace {
 
         IOutputStream* Out_ = nullptr;
         const TString Base_;
-        ui64 Count_ = 0; 
+        ui64 Count_ = 0;
     };
 
     struct TCOutput: public THexOutput {
@@ -331,9 +331,9 @@ static bool Quiet = false;
 static inline void Append(IOutputStream& w, const TString& fname, const TString& rname) {
     TMappedFileInput in(fname);
 
-    if (!Quiet) { 
+    if (!Quiet) {
         Cerr << "--> " << rname << Endl;
-    } 
+    }
 
     TransferData((IInputStream*)&in, &w);
 }
@@ -343,9 +343,9 @@ static inline void Append(TDuplicatesMap& w, const TString& fname, const TString
 }
 
 static inline void Append(TDeduplicationArchiveWriter& w, const TString& fname, const TString& rname) {
-    if (!Quiet) { 
+    if (!Quiet) {
         Cerr << "--> " << rname << Endl;
-    } 
+    }
 
     if (const TString* rootRecordName = w.DuplicatesMap.Synonyms.FindPtr(rname)) {
         w.Writer.AddSynonym(*rootRecordName, rname);
@@ -357,12 +357,12 @@ static inline void Append(TDeduplicationArchiveWriter& w, const TString& fname, 
 
 namespace {
     struct TRec {
-        bool Recursive = false; 
+        bool Recursive = false;
         TString Key;
         TString Path;
         TString Prefix;
 
-        TRec() = default; 
+        TRec() = default;
 
         inline void Fix() {
             ::Fix(Path);
@@ -422,29 +422,29 @@ static TString CutFirstSlash(const TString& fileName) {
     }
 }
 
-struct TMappingReader { 
-    TMemoryMap Map; 
-    TBlob Blob; 
-    TArchiveReader Reader; 
- 
+struct TMappingReader {
+    TMemoryMap Map;
+    TBlob Blob;
+    TArchiveReader Reader;
+
     TMappingReader(const TString& archive)
-        : Map(archive) 
-        , Blob(TBlob::FromMemoryMapSingleThreaded(Map, 0, Map.Length())) 
-        , Reader(Blob) 
-    { 
-    } 
-}; 
- 
+        : Map(archive)
+        , Blob(TBlob::FromMemoryMapSingleThreaded(Map, 0, Map.Length()))
+        , Reader(Blob)
+    {
+    }
+};
+
 static void UnpackArchive(const TString& archive, const TFsPath& dir = TFsPath()) {
-    TMappingReader mappingReader(archive); 
-    const TArchiveReader& reader = mappingReader.Reader; 
+    TMappingReader mappingReader(archive);
+    const TArchiveReader& reader = mappingReader.Reader;
     const size_t count = reader.Count();
     for (size_t i = 0; i < count; ++i) {
         const TString key = reader.KeyByIndex(i);
         const TString fileName = CutFirstSlash(key);
-        if (!Quiet) { 
+        if (!Quiet) {
             Cerr << archive << " --> " << fileName << Endl;
-        } 
+        }
         const TFsPath path(dir / fileName);
         path.Parent().MkDirs();
         TAutoPtr<IInputStream> in = reader.ObjectByKey(key);
@@ -455,8 +455,8 @@ static void UnpackArchive(const TString& archive, const TFsPath& dir = TFsPath()
 }
 
 static void ListArchive(const TString& archive, bool cutSlash) {
-    TMappingReader mappingReader(archive); 
-    const TArchiveReader& reader = mappingReader.Reader; 
+    TMappingReader mappingReader(archive);
+    const TArchiveReader& reader = mappingReader.Reader;
     const size_t count = reader.Count();
     for (size_t i = 0; i < count; ++i) {
         const TString key = reader.KeyByIndex(i);
@@ -469,8 +469,8 @@ static void ListArchive(const TString& archive, bool cutSlash) {
 }
 
 static void ListArchiveMd5(const TString& archive, bool cutSlash) {
-    TMappingReader mappingReader(archive); 
-    const TArchiveReader& reader = mappingReader.Reader; 
+    TMappingReader mappingReader(archive);
+    const TArchiveReader& reader = mappingReader.Reader;
     const size_t count = reader.Count();
     for (size_t i = 0; i < count; ++i) {
         const TString key = reader.KeyByIndex(i);
@@ -484,125 +484,125 @@ static void ListArchiveMd5(const TString& archive, bool cutSlash) {
 }
 
 int main(int argc, char** argv) {
-    NLastGetopt::TOpts opts; 
-    opts.AddHelpOption('?'); 
-    opts.SetTitle( 
-        "Archiver\n" 
+    NLastGetopt::TOpts opts;
+    opts.AddHelpOption('?');
+    opts.SetTitle(
+        "Archiver\n"
         "Docs: https://wiki.yandex-team.ru/Development/Poisk/arcadia/tools/archiver"
-    ); 
+    );
 
-    bool hexdump = false; 
-    opts.AddLongOption('x', "hexdump", "Produce hexdump") 
-        .NoArgument() 
-        .Optional() 
-        .StoreValue(&hexdump, true); 
- 
-    size_t stride = 0; 
-    opts.AddLongOption('s', "segments", "Produce segmented C strings array of given size") 
-        .RequiredArgument("<size>") 
-        .Optional() 
-        .DefaultValue("0") 
-        .StoreResult(&stride); 
- 
-    bool cat = false; 
-    opts.AddLongOption('c', "cat", "Do not store keys (file names), just cat uncompressed files") 
-        .NoArgument() 
-        .Optional() 
-        .StoreValue(&cat, true); 
- 
-    bool doNotZip = false; 
-    opts.AddLongOption('p', "plain", "Do not use compression") 
-        .NoArgument() 
-        .Optional() 
-        .StoreValue(&doNotZip, true); 
- 
+    bool hexdump = false;
+    opts.AddLongOption('x', "hexdump", "Produce hexdump")
+        .NoArgument()
+        .Optional()
+        .StoreValue(&hexdump, true);
+
+    size_t stride = 0;
+    opts.AddLongOption('s', "segments", "Produce segmented C strings array of given size")
+        .RequiredArgument("<size>")
+        .Optional()
+        .DefaultValue("0")
+        .StoreResult(&stride);
+
+    bool cat = false;
+    opts.AddLongOption('c', "cat", "Do not store keys (file names), just cat uncompressed files")
+        .NoArgument()
+        .Optional()
+        .StoreValue(&cat, true);
+
+    bool doNotZip = false;
+    opts.AddLongOption('p', "plain", "Do not use compression")
+        .NoArgument()
+        .Optional()
+        .StoreValue(&doNotZip, true);
+
     bool deduplicate = false;
     opts.AddLongOption("deduplicate", "Turn on file-wise deduplication")
         .NoArgument()
         .Optional()
         .StoreValue(&deduplicate, true);
 
-    bool unpack = false; 
-    opts.AddLongOption('u', "unpack", "Unpack archive into current directory") 
-        .NoArgument() 
-        .Optional() 
-        .StoreValue(&unpack, true); 
- 
-    bool list = false; 
-    opts.AddLongOption('l', "list", "List files in archive") 
-        .NoArgument() 
-        .Optional() 
-        .StoreValue(&list, true); 
- 
+    bool unpack = false;
+    opts.AddLongOption('u', "unpack", "Unpack archive into current directory")
+        .NoArgument()
+        .Optional()
+        .StoreValue(&unpack, true);
+
+    bool list = false;
+    opts.AddLongOption('l', "list", "List files in archive")
+        .NoArgument()
+        .Optional()
+        .StoreValue(&list, true);
+
     bool cutSlash = true;
     opts.AddLongOption("as-is", "somewhy slash is cutted by default in list; with this option key will be shown as-is")
         .NoArgument()
         .Optional()
         .StoreValue(&cutSlash, false);
 
-    bool listMd5 = false; 
-    opts.AddLongOption('m', "md5", "List files in archive with MD5 sums") 
-        .NoArgument() 
-        .Optional() 
-        .StoreValue(&listMd5, true); 
- 
-    bool recursive = false; 
-    opts.AddLongOption('r', "recursive", "Read all files under each directory, recursively") 
-        .NoArgument() 
-        .Optional() 
-        .StoreValue(&recursive, true); 
- 
-    Quiet = false; 
-    opts.AddLongOption('q', "quiet", "Do not output progress to stderr") 
-        .NoArgument() 
-        .Optional() 
-        .StoreValue(&Quiet, true); 
- 
+    bool listMd5 = false;
+    opts.AddLongOption('m', "md5", "List files in archive with MD5 sums")
+        .NoArgument()
+        .Optional()
+        .StoreValue(&listMd5, true);
+
+    bool recursive = false;
+    opts.AddLongOption('r', "recursive", "Read all files under each directory, recursively")
+        .NoArgument()
+        .Optional()
+        .StoreValue(&recursive, true);
+
+    Quiet = false;
+    opts.AddLongOption('q', "quiet", "Do not output progress to stderr")
+        .NoArgument()
+        .Optional()
+        .StoreValue(&Quiet, true);
+
     TString prepend;
-    opts.AddLongOption('z', "prepend", "Prepend string to output") 
-        .RequiredArgument("<prefix>") 
-        .StoreResult(&prepend); 
- 
+    opts.AddLongOption('z', "prepend", "Prepend string to output")
+        .RequiredArgument("<prefix>")
+        .StoreResult(&prepend);
+
     TString append;
-    opts.AddLongOption('a', "append", "Append string to output") 
-        .RequiredArgument("<suffix>") 
-        .StoreResult(&append); 
- 
+    opts.AddLongOption('a', "append", "Append string to output")
+        .RequiredArgument("<suffix>")
+        .StoreResult(&append);
+
     TString outputf;
-    opts.AddLongOption('o', "output", "Output to file instead stdout") 
-        .RequiredArgument("<file>") 
-        .StoreResult(&outputf); 
- 
+    opts.AddLongOption('o', "output", "Output to file instead stdout")
+        .RequiredArgument("<file>")
+        .StoreResult(&outputf);
+
     TString unpackDir;
-    opts.AddLongOption('d', "unpackdir", "Unpack destination directory") 
-        .RequiredArgument("<dir>") 
-        .DefaultValue(".") 
-        .StoreResult(&unpackDir); 
- 
+    opts.AddLongOption('d', "unpackdir", "Unpack destination directory")
+        .RequiredArgument("<dir>")
+        .DefaultValue(".")
+        .StoreResult(&unpackDir);
+
     TString yasmBase;
-    opts.AddLongOption('A', "yasm", "Output dump is yasm format") 
-        .RequiredArgument("<base>") 
-        .StoreResult(&yasmBase); 
- 
+    opts.AddLongOption('A', "yasm", "Output dump is yasm format")
+        .RequiredArgument("<base>")
+        .StoreResult(&yasmBase);
+
     TString cppBase;
-    opts.AddLongOption('C', "cpp", "Output dump is C/C++ format") 
-        .RequiredArgument("<base>") 
-        .StoreResult(&cppBase); 
- 
+    opts.AddLongOption('C', "cpp", "Output dump is C/C++ format")
+        .RequiredArgument("<base>")
+        .StoreResult(&cppBase);
+
     TString forceKeys;
     opts.AddLongOption('k', "keys", "Set explicit list of keys for elements")
         .RequiredArgument("<keys>")
         .StoreResult(&forceKeys);
 
-    opts.SetFreeArgDefaultTitle("<file>"); 
-    opts.SetFreeArgsMin(1); 
-    NLastGetopt::TOptsParseResult optsRes(&opts, argc, argv); 
- 
+    opts.SetFreeArgDefaultTitle("<file>");
+    opts.SetFreeArgsMin(1);
+    NLastGetopt::TOptsParseResult optsRes(&opts, argc, argv);
+
     SubstGlobal(append, "\\n", "\n");
     SubstGlobal(prepend, "\\n", "\n");
 
     TVector<TRec> recs;
-    const auto& files = optsRes.GetFreeArgs(); 
+    const auto& files = optsRes.GetFreeArgs();
 
     TVector<TStringBuf> keys;
     if (forceKeys.size())

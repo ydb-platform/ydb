@@ -790,11 +790,11 @@ TDuration TDurationParser::GetResult(TDuration defaultValue) const {
 
 bool TDuration::TryParse(const TStringBuf input, TDuration& result) {
     TDuration r = ::Parse<TDurationParser, TDuration>(input.data(), input.size(), TDuration::Max());
-    if (r == TDuration::Max()) 
-        return false; 
-    result = r; 
-    return true; 
-} 
+    if (r == TDuration::Max())
+        return false;
+    result = r;
+    return true;
+}
 
 TDuration TDuration::Parse(const TStringBuf input) {
     return ParseUnsafe<TDurationParser, TDuration>(input.data(), input.size());

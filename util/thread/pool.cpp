@@ -67,7 +67,7 @@ TThreadFactoryHolder::TThreadFactoryHolder() noexcept
 
 class TThreadPool::TImpl: public TIntrusiveListItem<TImpl>, public IThreadFactory::IThreadAble {
     using TTsr = IThreadPool::TTsr;
-    using TJobQueue = TFastQueue<IObjectInQueue*>; 
+    using TJobQueue = TFastQueue<IObjectInQueue*>;
     using TThreadRef = THolder<IThreadFactory::IThread>;
 
 public:
@@ -643,20 +643,20 @@ size_t TSimpleThreadPool::Size() const noexcept {
 
 namespace {
     class TOwnedObjectInQueue: public IObjectInQueue {
-    private: 
-        THolder<IObjectInQueue> Owned; 
- 
-    public: 
+    private:
+        THolder<IObjectInQueue> Owned;
+
+    public:
         TOwnedObjectInQueue(THolder<IObjectInQueue> owned)
             : Owned(std::move(owned))
-        { 
-        } 
- 
+        {
+        }
+
         void Process(void* data) override {
-            THolder<TOwnedObjectInQueue> self(this); 
-            Owned->Process(data); 
-        } 
-    }; 
+            THolder<TOwnedObjectInQueue> self(this);
+            Owned->Process(data);
+        }
+    };
 }
 
 void IThreadPool::SafeAdd(IObjectInQueue* obj) {
@@ -665,17 +665,17 @@ void IThreadPool::SafeAdd(IObjectInQueue* obj) {
 
 void IThreadPool::SafeAddAndOwn(THolder<IObjectInQueue> obj) {
     Y_ENSURE_EX(AddAndOwn(std::move(obj)), TThreadPoolException() << TStringBuf("can not add to queue and own"));
-} 
- 
+}
+
 bool IThreadPool::AddAndOwn(THolder<IObjectInQueue> obj) {
     auto owner = MakeHolder<TOwnedObjectInQueue>(std::move(obj));
-    bool added = Add(owner.Get()); 
-    if (added) { 
+    bool added = Add(owner.Get());
+    if (added) {
         Y_UNUSED(owner.Release());
-    } 
-    return added; 
-} 
- 
+    }
+    return added;
+}
+
 using IThread = IThreadFactory::IThread;
 using IThreadAble = IThreadFactory::IThreadAble;
 
@@ -721,7 +721,7 @@ namespace {
             TSystemEvent StartEvent_;
         };
 
-        using TThreadImplRef = TIntrusivePtr<TThreadImpl>; 
+        using TThreadImplRef = TIntrusivePtr<TThreadImpl>;
 
     public:
         inline TPoolThread(IThreadPool* parent)

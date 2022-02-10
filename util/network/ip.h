@@ -9,10 +9,10 @@
 #include <util/generic/yexception.h>
 
 /// IPv4 address in network format
-using TIpHost = ui32; 
+using TIpHost = ui32;
 
 /// Port number in host format
-using TIpPort = ui16; 
+using TIpPort = ui16;
 
 /*
  * ipStr is in 'ddd.ddd.ddd.ddd' format

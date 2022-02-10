@@ -40,15 +40,15 @@ class TStringBase {
     using TStringViewWithTraits = std::basic_string_view<TCharType, TTraitsType>;
 
 public:
-    using TChar = TCharType; 
-    using TTraits = TTraitsType; 
-    using TSelf = TStringBase<TDerived, TChar, TTraits>; 
+    using TChar = TCharType;
+    using TTraits = TTraitsType;
+    using TSelf = TStringBase<TDerived, TChar, TTraits>;
 
-    using size_type = size_t; 
+    using size_type = size_t;
     using difference_type = ptrdiff_t;
     static constexpr size_t npos = size_t(-1);
 
-    using const_iterator = const TCharType*; 
+    using const_iterator = const TCharType*;
     using const_reference = const TCharType&;
 
     template <typename TBase>
@@ -579,7 +579,7 @@ public:
     }
 
 private:
-    using GenericFinder = const TCharType* (*)(const TCharType*, size_t, const TCharType*, size_t); 
+    using GenericFinder = const TCharType* (*)(const TCharType*, size_t, const TCharType*, size_t);
 
     TStringViewWithTraits AsStringView() const {
         return static_cast<TStringViewWithTraits>(*this);

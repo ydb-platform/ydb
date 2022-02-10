@@ -30,7 +30,7 @@ class TFixedSizeAllocator {
     };
 
 public:
-    using IGrowPolicy = TMemoryPool::IGrowPolicy; 
+    using IGrowPolicy = TMemoryPool::IGrowPolicy;
 
     TFixedSizeAllocator(size_t allocSize, IAllocator* alloc)
         : TFixedSizeAllocator(allocSize, alignof(TAlloc), TMemoryPool::TExpGrow::Instance(), alloc)
@@ -80,7 +80,7 @@ private:
 template <class T>
 class TSmallObjAllocator {
 public:
-    using IGrowPolicy = TFixedSizeAllocator::IGrowPolicy; 
+    using IGrowPolicy = TFixedSizeAllocator::IGrowPolicy;
 
     inline TSmallObjAllocator(IAllocator* alloc)
         : Alloc_(sizeof(T), alignof(T), alloc)

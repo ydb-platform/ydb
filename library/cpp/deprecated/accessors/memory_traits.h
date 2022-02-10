@@ -21,7 +21,7 @@ struct TMemoryTraits {
         OwnsMemory = SimpleMemory,
     };
 
-    using TElementType = T; 
+    using TElementType = T;
 };
 
 template <typename T, size_t n>
@@ -32,7 +32,7 @@ struct TMemoryTraits<T[n]> {
         OwnsMemory = SimpleMemory,
     };
 
-    using TElementType = T; 
+    using TElementType = T;
 };
 
 template <typename T, size_t n>
@@ -43,7 +43,7 @@ struct TMemoryTraits<std::array<T, n>> {
         OwnsMemory = SimpleMemory,
     };
 
-    using TElementType = T; 
+    using TElementType = T;
 };
 
 template <typename A, typename B>
@@ -65,7 +65,7 @@ struct TMemoryTraits<TBuffer> {
         OwnsMemory = true,
     };
 
-    using TElementType = char; 
+    using TElementType = char;
 };
 
 template <>
@@ -76,7 +76,7 @@ struct TMemoryTraits<TTempBuf> {
         OwnsMemory = true,
     };
 
-    using TElementType = char; 
+    using TElementType = char;
 };
 
 template <>
@@ -87,7 +87,7 @@ struct TMemoryTraits< ::TBlob> {
         OwnsMemory = true,
     };
 
-    using TElementType = char; 
+    using TElementType = char;
 };
 
 template <typename T>
@@ -97,7 +97,7 @@ struct TElementDependentMemoryTraits {
         ContinuousMemory = TMemoryTraits<T>::SimpleMemory,
     };
 
-    using TElementType = T; 
+    using TElementType = T;
 };
 
 template <typename T, typename TAlloc>

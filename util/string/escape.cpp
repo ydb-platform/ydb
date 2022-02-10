@@ -150,7 +150,7 @@ namespace {
 
 template <class TChar>
 TBasicString<TChar>& EscapeCImpl(const TChar* str, size_t len, TBasicString<TChar>& r) {
-    using TEscapeUtil = ::TEscapeUtil<TChar>; 
+    using TEscapeUtil = ::TEscapeUtil<TChar>;
 
     TChar buffer[TEscapeUtil::ESCAPE_C_BUFFER_SIZE];
 

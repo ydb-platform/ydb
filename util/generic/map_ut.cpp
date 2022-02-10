@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
         }
 
         using mmap = TMultiMap<int, char, TLess<int>>;
-        using pair_type = mmap::value_type; 
+        using pair_type = mmap::value_type;
 
         pair_type p1(3, 'c');
         pair_type p2(6, 'f');
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
     Y_UNIT_TEST(TestTemplateMethods) {
         {
             using Container = TMap<TKey, int, TKeyCmp>;
-            using value = Container::value_type; 
+            using value = Container::value_type;
 
             Container cont;
 
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
 
         {
             using Container = TMap<TKey*, int, TKeyCmpPtr>;
-            using value = Container::value_type; 
+            using value = Container::value_type;
 
             Container cont;
 
@@ -334,7 +334,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
 
         {
             using Container = TMultiMap<TKey, int, TKeyCmp>;
-            using value = Container::value_type; 
+            using value = Container::value_type;
 
             Container cont;
 
@@ -362,7 +362,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
 
         {
             using Container = TMultiMap<TKey const volatile*, int, TKeyCmpPtr>;
-            using value = Container::value_type; 
+            using value = Container::value_type;
 
             Container cont;
 

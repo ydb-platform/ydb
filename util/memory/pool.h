@@ -25,7 +25,7 @@
  */
 class TMemoryPool {
 private:
-    using TBlock = IAllocator::TBlock; 
+    using TBlock = IAllocator::TBlock;
 
     class TChunk: public TIntrusiveListItem<TChunk> {
     public:
@@ -95,7 +95,7 @@ private:
         size_t Left_;
     };
 
-    using TChunkList = TIntrusiveList<TChunk>; 
+    using TChunkList = TIntrusiveList<TChunk>;
 
 public:
     class IGrowPolicy {
@@ -353,13 +353,13 @@ private:
 template <class T, class TPool>
 class TPoolAllocBase {
 public:
-    using pointer = T*; 
-    using const_pointer = const T*; 
-    using reference = T&; 
-    using const_reference = const T&; 
-    using size_type = size_t; 
-    using difference_type = ptrdiff_t; 
-    using value_type = T; 
+    using pointer = T*;
+    using const_pointer = const T*;
+    using reference = T&;
+    using const_reference = const T&;
+    using size_type = size_t;
+    using difference_type = ptrdiff_t;
+    using value_type = T;
 
     inline TPoolAllocBase(TPool* pool)
         : Pool_(pool)
@@ -381,7 +381,7 @@ public:
 
     template <class T1>
     struct rebind {
-        using other = TPoolAllocBase<T1, TPool>; 
+        using other = TPoolAllocBase<T1, TPool>;
     };
 
     inline size_type max_size() const noexcept {

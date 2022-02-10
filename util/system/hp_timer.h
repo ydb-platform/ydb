@@ -3,7 +3,7 @@
 #include "defaults.h"
 
 namespace NHPTimer {
-    using STime = i64; 
+    using STime = i64;
     // May delay for ~50ms to compute frequency
     double GetSeconds(const STime& a) noexcept;
     // Returns the current time

@@ -23,7 +23,7 @@ namespace {
 
     class TGenericTlsBase {
     public:
-        using TSmallKey = size_t; 
+        using TSmallKey = size_t;
 
         class TPerThreadStorage {
         public:
@@ -158,7 +158,7 @@ namespace {
         pthread_key_t Key_;
     };
 
-    using TKeyDescriptor = TMasterTls::TPerThreadStorage::TKey; 
+    using TKeyDescriptor = TMasterTls::TPerThreadStorage::TKey;
 }
 
 class TKey::TImpl: public TKeyDescriptor {

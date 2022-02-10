@@ -113,33 +113,33 @@ static inline bool TestNan(const T&) {
 void TLimitTest::TestLimits() {
     UNIT_ASSERT(TestIntegralLimits(bool()));
     UNIT_ASSERT(TestIntegralLimits(char()));
-    using signed_char = signed char; 
+    using signed_char = signed char;
     UNIT_ASSERT(TestSignedIntegralLimits(signed_char()));
-    using unsigned_char = unsigned char; 
+    using unsigned_char = unsigned char;
     UNIT_ASSERT(TestUnsignedIntegralLimits(unsigned_char()));
     UNIT_ASSERT(TestSignedIntegralLimits(short()));
-    using unsigned_short = unsigned short; 
+    using unsigned_short = unsigned short;
     UNIT_ASSERT(TestUnsignedIntegralLimits(unsigned_short()));
     UNIT_ASSERT(TestSignedIntegralLimits(int()));
-    using unsigned_int = unsigned int; 
+    using unsigned_int = unsigned int;
     UNIT_ASSERT(TestUnsignedIntegralLimits(unsigned_int()));
     UNIT_ASSERT(TestSignedIntegralLimits(long()));
-    using unsigned_long = unsigned long; 
+    using unsigned_long = unsigned long;
     UNIT_ASSERT(TestUnsignedIntegralLimits(unsigned_long()));
-    using long_long = long long; 
+    using long_long = long long;
     UNIT_ASSERT(TestSignedIntegralLimits(long_long()));
-    using unsigned_long_long = unsigned long long; 
+    using unsigned_long_long = unsigned long long;
     UNIT_ASSERT(TestUnsignedIntegralLimits(unsigned_long_long()));
     UNIT_ASSERT(TestFloatLimits(float()));
     UNIT_ASSERT(TestFloatLimits(double()));
-    using long_double = long double; 
+    using long_double = long double;
     UNIT_ASSERT(RUNNING_ON_VALGRIND || TestFloatLimits(long_double()));
 }
 
 void TLimitTest::TestNan() {
     UNIT_ASSERT(::TestNan(float()));
     UNIT_ASSERT(::TestNan(double()));
-    using long_double = long double; 
+    using long_double = long double;
     UNIT_ASSERT(::TestNan(long_double()));
 }
 

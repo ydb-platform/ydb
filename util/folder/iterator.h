@@ -25,7 +25,7 @@ public:
         }
     };
 
-    using TCompare = int (*)(const FTSENT**, const FTSENT**); 
+    using TCompare = int (*)(const FTSENT**, const FTSENT**);
 
     struct TOptions {
         inline TOptions() {

@@ -1,15 +1,15 @@
-#pragma once 
- 
+#pragma once
+
 #include "utils.h"
 
 #include <library/cpp/retry/protos/retry_options.pb.h>
 
-#include <util/datetime/base.h> 
-#include <util/generic/maybe.h> 
-#include <util/generic/typetraits.h> 
-#include <util/generic/yexception.h> 
+#include <util/datetime/base.h>
+#include <util/generic/maybe.h>
+#include <util/generic/typetraits.h>
+#include <util/generic/yexception.h>
 #include <functional>
- 
+
 struct TRetryOptions {
     ui32 RetryCount;
 
@@ -18,7 +18,7 @@ struct TRetryOptions {
     TDuration SleepRandomDelta;
     TDuration SleepIncrement;
     TDuration SleepExponentialMultiplier;
- 
+
     std::function<void(TDuration)> SleepFunction;
 
     TRetryOptions(ui32 retryCount = 3, TDuration sleepDuration = TDuration::Seconds(1), TDuration sleepRandomDelta = TDuration::Zero(),
@@ -32,17 +32,17 @@ struct TRetryOptions {
         , SleepFunction(sleepFunction)
     {
     }
- 
+
     TRetryOptions& WithCount(ui32 retryCount) {
         RetryCount = retryCount;
         return *this;
     }
- 
+
     TRetryOptions& WithSleep(TDuration sleepDuration) {
         SleepDuration = sleepDuration;
         return *this;
     }
- 
+
     TRetryOptions& WithRandomDelta(TDuration sleepRandomDelta) {
         SleepRandomDelta = sleepRandomDelta;
         return *this;
@@ -71,16 +71,16 @@ struct TRetryOptions {
     static TRetryOptions Count(ui32 retryCount) {
         return TRetryOptions(retryCount);
     }
- 
+
     static TRetryOptions Default() {
         return TRetryOptions();
-    } 
- 
+    }
+
     static TRetryOptions NoRetry() {
         return TRetryOptions(0);
-    } 
+    }
 };
- 
+
 template <typename TResult, typename TException = yexception>
 TMaybe<TResult> DoWithRetry(std::function<TResult()> func, std::function<void(const TException&)> onFail, TRetryOptions retryOptions, bool throwLast) {
     for (ui32 attempt = 0; attempt <= retryOptions.RetryCount; ++attempt) {
@@ -91,16 +91,16 @@ TMaybe<TResult> DoWithRetry(std::function<TResult()> func, std::function<void(co
             if (attempt == retryOptions.RetryCount) {
                 if (throwLast) {
                     throw;
-                } 
+                }
             } else {
                 auto sleep = retryOptions.SleepFunction;
                 sleep(retryOptions.GetTimeToSleep(attempt));
-            } 
-        } 
-    } 
+            }
+        }
+    }
     return Nothing();
 }
- 
+
 template <typename TResult, typename TException = yexception>
 TMaybe<TResult> DoWithRetry(std::function<TResult()> func, TRetryOptions retryOptions, bool throwLast) {
     return DoWithRetry<TResult, TException>(func, [](const TException&){}, retryOptions, throwLast);
@@ -123,9 +123,9 @@ bool DoWithRetry(std::function<void()> func, TRetryOptions retryOptions, bool th
     };
     return DoWithRetry<void*, TException>(f, [](const TException&){}, retryOptions, throwLast).Defined();
 }
- 
+
 void DoWithRetry(std::function<void()> func, TRetryOptions retryOptions);
- 
+
 bool DoWithRetryOnRetCode(std::function<bool()> func, TRetryOptions retryOptions);
 
 Y_DECLARE_PODTYPE(TRetryOptions);

@@ -38,8 +38,8 @@ bool SetHighestThreadPriority() {
 }
 
 namespace {
-    using TParams = TThread::TParams; 
-    using TId = TThread::TId; 
+    using TParams = TThread::TParams;
+    using TId = TThread::TId;
 
     inline void SetThrName(const TParams& p) {
         try {
@@ -71,7 +71,7 @@ namespace {
             void* Result;
         };
 
-        using TParamsRef = TIntrusivePtr<TMyParams>; 
+        using TParamsRef = TIntrusivePtr<TMyParams>;
 
     public:
         inline TWinThread(const TParams& params)
@@ -147,7 +147,7 @@ namespace {
     #endif
     };
 
-    using TThreadBase = TWinThread; 
+    using TThreadBase = TWinThread;
 #else
     //unix
 
@@ -230,7 +230,7 @@ namespace {
 
     #undef PCHECK
 
-    using TThreadBase = TPosixThread; 
+    using TThreadBase = TPosixThread;
 #endif
 
     template <class T>

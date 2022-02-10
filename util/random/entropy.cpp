@@ -103,8 +103,8 @@ namespace {
 
     //not thread-safe
     class TMersenneInput: public IInputStream {
-        using TKey = ui64; 
-        using TRnd = TMersenne<TKey>; 
+        using TKey = ui64;
+        using TRnd = TMersenne<TKey>;
 
     public:
         inline explicit TMersenneInput(const TBuffer& rnd)

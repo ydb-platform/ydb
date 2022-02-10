@@ -2,8 +2,8 @@
 
 #include "defaults.h"
 
-using TAtExitFunc = void (*)(void*); 
-using TTraditionalAtExitFunc = void (*)(); 
+using TAtExitFunc = void (*)(void*);
+using TTraditionalAtExitFunc = void (*)();
 
 void AtExit(TAtExitFunc func, void* ctx);
 void AtExit(TAtExitFunc func, void* ctx, size_t priority);

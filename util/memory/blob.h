@@ -56,9 +56,9 @@ private:
 
 public:
     using value_type = ui8;
-    using const_reference = const value_type&; 
-    using const_pointer = const value_type*; 
-    using const_iterator = const_pointer; 
+    using const_reference = const value_type&;
+    using const_pointer = const value_type*;
+    using const_iterator = const_pointer;
 
     /**
      * Constructs a null blob (data array points to nullptr).

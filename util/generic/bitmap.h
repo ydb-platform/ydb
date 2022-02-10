@@ -152,7 +152,7 @@ namespace NBitMapPrivate {
 
     template <size_t BitCount, typename TChunkType>
     struct TFixedStorage {
-        using TChunk = TChunkType; 
+        using TChunk = TChunkType;
 
         static constexpr size_t Size = (BitCount + 8 * sizeof(TChunk) - 1) / (8 * sizeof(TChunk));
 
@@ -202,7 +202,7 @@ namespace NBitMapPrivate {
     // It uses "on stack" realization with no allocation for one chunk spaces
     template <typename TChunkType>
     struct TDynamicStorage {
-        using TChunk = TChunkType; 
+        using TChunk = TChunkType;
 
         size_t Size;
         TChunk StackData;
@@ -298,21 +298,21 @@ namespace NBitMapPrivate {
 
 template <size_t BitCount, typename TChunkType>
 struct TFixedBitMapTraits {
-    using TChunk = TChunkType; 
-    using TStorage = NBitMapPrivate::TFixedStorage<BitCount, TChunkType>; 
+    using TChunk = TChunkType;
+    using TStorage = NBitMapPrivate::TFixedStorage<BitCount, TChunkType>;
 };
 
 template <typename TChunkType>
 struct TDynamicBitMapTraits {
-    using TChunk = TChunkType; 
-    using TStorage = NBitMapPrivate::TDynamicStorage<TChunkType>; 
+    using TChunk = TChunkType;
+    using TStorage = NBitMapPrivate::TDynamicStorage<TChunkType>;
 };
 
 template <class TTraits>
 class TBitMapOps {
 public:
-    using TChunk = typename TTraits::TChunk; 
-    using TThis = TBitMapOps<TTraits>; 
+    using TChunk = typename TTraits::TChunk;
+    using TThis = TBitMapOps<TTraits>;
 
 private:
     static_assert(std::is_unsigned<TChunk>::value, "expect std::is_unsigned<TChunk>::value");
@@ -325,7 +325,7 @@ private:
     template <class>
     friend class TBitMapOps;
 
-    using TStorage = typename TTraits::TStorage; 
+    using TStorage = typename TTraits::TStorage;
 
     // The smallest unsigned type, which can be used in bit ops
     using TIntType = std::conditional_t<sizeof(TChunk) < sizeof(unsigned int), unsigned int, TChunk>;
@@ -1080,7 +1080,7 @@ inline TBitMapOps<X> operator~(const TBitMapOps<X>& x) {
 template <size_t BitCount, typename TChunkType /*= ui64*/>
 class TBitMap: public TBitMapOps<TFixedBitMapTraits<BitCount, TChunkType>> {
 private:
-    using TBase = TBitMapOps<TFixedBitMapTraits<BitCount, TChunkType>>; 
+    using TBase = TBitMapOps<TFixedBitMapTraits<BitCount, TChunkType>>;
 
 public:
     TBitMap()
@@ -1102,7 +1102,7 @@ public:
     }
 };
 
-using TDynBitMap = TBitMapOps<TDynamicBitMapTraits<ui64>>; 
+using TDynBitMap = TBitMapOps<TDynamicBitMapTraits<ui64>>;
 
 #define Y_FOR_EACH_BIT(var, bitmap) for (size_t var = (bitmap).FirstNonZeroBit(); var != (bitmap).Size(); var = (bitmap).NextNonZeroBit(var))
 

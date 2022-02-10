@@ -178,19 +178,19 @@ namespace NCodepagePrivate {
 
     template <class TCharType>
     struct TCharTypeSwitch<TCharType, 2> {
-        using TRealCharType = wchar16; 
+        using TRealCharType = wchar16;
     };
 
     template <class TCharType>
     struct TCharTypeSwitch<TCharType, 4> {
-        using TRealCharType = wchar32; 
+        using TRealCharType = wchar32;
     };
 
     template <class TCharType>
     inline RECODE_RESULT _recodeUnicodeToUTF8(const TCharType* in, char* out, size_t in_size, size_t out_size, size_t& in_readed, size_t& out_writed) {
         static_assert(sizeof(TCharType) > 1, "expect some wide type");
 
-        using TRealCharType = typename TCharTypeSwitch<TCharType>::TRealCharType; 
+        using TRealCharType = typename TCharTypeSwitch<TCharType>::TRealCharType;
 
         return _recodeUnicodeToUTF8Impl(reinterpret_cast<const TRealCharType*>(in), out, in_size, out_size, in_readed, out_writed);
     }

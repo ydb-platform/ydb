@@ -118,9 +118,9 @@ void TPathSplitStore::AppendComponent(const TStringBuf comp) {
 }
 
 TStringBuf TPathSplitStore::Extension() const {
-    return size() > 0 ? CutExtension(back()) : TStringBuf(); 
-} 
- 
+    return size() > 0 ? CutExtension(back()) : TStringBuf();
+}
+
 template <>
 void Out<TPathSplit>(IOutputStream& o, const TPathSplit& ps) {
     o << ps.Reconstruct();
@@ -133,19 +133,19 @@ TString JoinPaths(const TPathSplit& p1, const TPathSplit& p2) {
 
     return TPathSplit(p1).AppendMany(p2.begin(), p2.end()).Reconstruct();
 }
- 
+
 TStringBuf CutExtension(const TStringBuf fileName) {
     if (fileName.empty()) {
-        return fileName; 
-    } 
- 
-    TStringBuf name; 
-    TStringBuf extension; 
-    fileName.RSplit('.', name, extension); 
+        return fileName;
+    }
+
+    TStringBuf name;
+    TStringBuf extension;
+    fileName.RSplit('.', name, extension);
     if (name.empty()) {
-        // dot at a start or not found 
-        return name; 
-    } else { 
-        return extension; 
-    } 
-} 
+        // dot at a start or not found
+        return name;
+    } else {
+        return extension;
+    }
+}

@@ -126,16 +126,16 @@ private:
     template <class TListItem, class TNode>
     class TIteratorBase {
     public:
-        using TItem = TListItem; 
-        using TReference = TNode&; 
-        using TPointer = TNode*; 
+        using TItem = TListItem;
+        using TReference = TNode&;
+        using TPointer = TNode*;
 
         using iterator_category = std::bidirectional_iterator_tag;
-        using difference_type = ptrdiff_t; 
+        using difference_type = ptrdiff_t;
 
-        using value_type = TNode; 
-        using reference = TReference; 
-        using pointer = TPointer; 
+        using value_type = TNode;
+        using reference = TReference;
+        using pointer = TPointer;
 
         inline TIteratorBase() noexcept
             : Item_(nullptr)
@@ -218,16 +218,16 @@ private:
     template <class TIterator>
     class TReverseIteratorBase {
     public:
-        using TItem = typename TIterator::TItem; 
-        using TReference = typename TIterator::TReference; 
-        using TPointer = typename TIterator::TPointer; 
+        using TItem = typename TIterator::TItem;
+        using TReference = typename TIterator::TReference;
+        using TPointer = typename TIterator::TPointer;
 
-        using iterator_category = typename TIterator::iterator_category; 
-        using difference_type = typename TIterator::difference_type; 
+        using iterator_category = typename TIterator::iterator_category;
+        using difference_type = typename TIterator::difference_type;
 
-        using value_type = typename TIterator::value_type; 
-        using reference = typename TIterator::reference; 
-        using pointer = typename TIterator::pointer; 
+        using value_type = typename TIterator::value_type;
+        using reference = typename TIterator::reference;
+        using pointer = typename TIterator::pointer;
 
         inline TReverseIteratorBase() noexcept = default;
 
@@ -315,17 +315,17 @@ private:
     };
 
 public:
-    using TIterator = TIteratorBase<TListItem, T>; 
-    using TConstIterator = TIteratorBase<const TListItem, const T>; 
+    using TIterator = TIteratorBase<TListItem, T>;
+    using TConstIterator = TIteratorBase<const TListItem, const T>;
 
-    using TReverseIterator = TReverseIteratorBase<TIterator>; 
-    using TConstReverseIterator = TReverseIteratorBase<TConstIterator>; 
+    using TReverseIterator = TReverseIteratorBase<TIterator>;
+    using TConstReverseIterator = TReverseIteratorBase<TConstIterator>;
 
-    using iterator = TIterator; 
-    using const_iterator = TConstIterator; 
+    using iterator = TIterator;
+    using const_iterator = TConstIterator;
 
-    using reverse_iterator = TReverseIterator; 
-    using const_reverse_iterator = TConstReverseIterator; 
+    using reverse_iterator = TReverseIterator;
+    using const_reverse_iterator = TConstReverseIterator;
 
 public:
     inline void Swap(TIntrusiveList& right) noexcept {
@@ -593,11 +593,11 @@ public:
     using TReverseIterator = typename TIntrusiveList<T, Tag>::TReverseIterator;
     using TConstReverseIterator = typename TIntrusiveList<T, Tag>::TConstReverseIterator;
 
-    using iterator = TIterator; 
-    using const_iterator = TConstIterator; 
+    using iterator = TIterator;
+    using const_iterator = TConstIterator;
 
-    using reverse_iterator = TReverseIterator; 
-    using const_reverse_iterator = TConstReverseIterator; 
+    using reverse_iterator = TReverseIterator;
+    using const_reverse_iterator = TConstReverseIterator;
 
 public:
     inline TIntrusiveListWithAutoDelete() noexcept = default;
@@ -741,11 +741,11 @@ public:
     };
 
 public:
-    using TIterator = TIteratorBase<TListItem, T>; 
-    using TConstIterator = TIteratorBase<const TListItem, const T>; 
+    using TIterator = TIteratorBase<TListItem, T>;
+    using TConstIterator = TIteratorBase<const TListItem, const T>;
 
-    using iterator = TIterator; 
-    using const_iterator = TConstIterator; 
+    using iterator = TIterator;
+    using const_iterator = TConstIterator;
 
 public:
     inline TIntrusiveSList() noexcept

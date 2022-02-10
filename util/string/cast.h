@@ -21,7 +21,7 @@ size_t ToStringImpl(T t, char* buf, size_t len);
  */
 template <class T>
 inline size_t ToString(const T& t, char* buf, size_t len) {
-    using TParam = typename TTypeTraits<T>::TFuncParam; 
+    using TParam = typename TTypeTraits<T>::TFuncParam;
 
     return ToStringImpl<TParam>(t, buf, len);
 }

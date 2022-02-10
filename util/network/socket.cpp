@@ -574,7 +574,7 @@ void TSocketHolder::Close() noexcept {
 }
 
 class TSocket::TImpl: public TAtomicRefCount<TImpl> {
-    using TOps = TSocket::TOps; 
+    using TOps = TSocket::TOps;
 
 public:
     inline TImpl(SOCKET fd, TOps* ops)
@@ -721,7 +721,7 @@ static inline ssize_t DoSendV(SOCKET fd, const struct iovec* iov, size_t count) 
 
 template <bool isCompat>
 struct TSender {
-    using TPart = TSocket::TPart; 
+    using TPart = TSocket::TPart;
 
     static inline ssize_t SendV(SOCKET fd, const TPart* parts, size_t count) {
         return DoSendV(fd, (const iovec*)parts, count);
@@ -730,7 +730,7 @@ struct TSender {
 
 template <>
 struct TSender<false> {
-    using TPart = TSocket::TPart; 
+    using TPart = TSocket::TPart;
 
     static inline ssize_t SendV(SOCKET fd, const TPart* parts, size_t count) {
         TTempBuf tempbuf(sizeof(struct iovec) * count);
@@ -749,7 +749,7 @@ struct TSender<false> {
 };
 
 class TCommonSockOps: public TSocket::TOps {
-    using TPart = TSocket::TPart; 
+    using TPart = TSocket::TPart;
 
 public:
     inline TCommonSockOps() noexcept {

@@ -164,8 +164,8 @@ TString TFsPath::GetName() const {
 
 TString TFsPath::GetExtension() const {
     return TString(GetSplit().Extension());
-} 
- 
+}
+
 bool TFsPath::IsAbsolute() const {
     return GetSplit().IsAbsolute;
 }

@@ -14,26 +14,26 @@ private:
     using ht = THashTable<Value, Value, HashFcn, ::TIdentity, EqualKey, Alloc>;
     ht rep;
 
-    using mutable_iterator = typename ht::iterator; 
+    using mutable_iterator = typename ht::iterator;
 
 public:
-    using key_type = typename ht::key_type; 
-    using value_type = typename ht::value_type; 
-    using hasher = typename ht::hasher; 
-    using key_equal = typename ht::key_equal; 
+    using key_type = typename ht::key_type;
+    using value_type = typename ht::value_type;
+    using hasher = typename ht::hasher;
+    using key_equal = typename ht::key_equal;
     using allocator_type = typename ht::allocator_type;
-    using node_allocator_type = typename ht::node_allocator_type; 
+    using node_allocator_type = typename ht::node_allocator_type;
 
-    using size_type = typename ht::size_type; 
-    using difference_type = typename ht::difference_type; 
-    using pointer = typename ht::const_pointer; 
-    using const_pointer = typename ht::const_pointer; 
-    using reference = typename ht::const_reference; 
-    using const_reference = typename ht::const_reference; 
+    using size_type = typename ht::size_type;
+    using difference_type = typename ht::difference_type;
+    using pointer = typename ht::const_pointer;
+    using const_pointer = typename ht::const_pointer;
+    using reference = typename ht::const_reference;
+    using const_reference = typename ht::const_reference;
 
-    using iterator = typename ht::const_iterator; 
-    using const_iterator = typename ht::const_iterator; 
-    using insert_ctx = typename ht::insert_ctx; 
+    using iterator = typename ht::const_iterator;
+    using const_iterator = typename ht::const_iterator;
+    using insert_ctx = typename ht::insert_ctx;
 
     hasher hash_function() const {
         return rep.hash_function();
@@ -285,22 +285,22 @@ private:
     ht rep;
 
 public:
-    using key_type = typename ht::key_type; 
-    using value_type = typename ht::value_type; 
-    using hasher = typename ht::hasher; 
-    using key_equal = typename ht::key_equal; 
+    using key_type = typename ht::key_type;
+    using value_type = typename ht::value_type;
+    using hasher = typename ht::hasher;
+    using key_equal = typename ht::key_equal;
     using allocator_type = typename ht::allocator_type;
-    using node_allocator_type = typename ht::node_allocator_type; 
+    using node_allocator_type = typename ht::node_allocator_type;
 
-    using size_type = typename ht::size_type; 
-    using difference_type = typename ht::difference_type; 
-    using pointer = typename ht::const_pointer; 
-    using const_pointer = typename ht::const_pointer; 
-    using reference = typename ht::const_reference; 
-    using const_reference = typename ht::const_reference; 
+    using size_type = typename ht::size_type;
+    using difference_type = typename ht::difference_type;
+    using pointer = typename ht::const_pointer;
+    using const_pointer = typename ht::const_pointer;
+    using reference = typename ht::const_reference;
+    using const_reference = typename ht::const_reference;
 
-    using iterator = typename ht::const_iterator; 
-    using const_iterator = typename ht::const_iterator; 
+    using iterator = typename ht::const_iterator;
+    using const_iterator = typename ht::const_iterator;
 
     hasher hash_function() const {
         return rep.hash_function();

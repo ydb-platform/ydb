@@ -606,7 +606,7 @@ void THashTest::TestHMSetEmplace() {
 
 void THashTest::TestInsertErase() {
     using hmap = THashMap<TString, size_t, THash<TString>, TEqualTo<TString>>;
-    using val_type = hmap::value_type; 
+    using val_type = hmap::value_type;
 
     {
         hmap values;
@@ -645,7 +645,7 @@ namespace {
         }
     };
 
-    using TItemPtr = TIntrusivePtr<TItem>; 
+    using TItemPtr = TIntrusivePtr<TItem>;
 
     struct TSelectKey {
         const TString& operator()(const TItemPtr& item) const {
@@ -783,7 +783,7 @@ class TCountingAllocator: public std::allocator<T> {
     using base_type = std::allocator<T>;
 
 public:
-    using size_type = typename base_type::size_type; 
+    using size_type = typename base_type::size_type;
 
     template <class Other>
     struct rebind {

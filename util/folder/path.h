@@ -78,13 +78,13 @@ public:
     /// last component of path, or "/" if root
     TString GetName() const;
 
-    /** 
-     * "a.b.tmp" -> "tmp" 
-     * "a.tmp"   -> "tmp" 
-     * ".tmp"    -> "" 
-     */ 
+    /**
+     * "a.b.tmp" -> "tmp"
+     * "a.tmp"   -> "tmp"
+     * ".tmp"    -> ""
+     */
     TString GetExtension() const;
- 
+
     bool IsAbsolute() const;
     bool IsRelative() const;
 

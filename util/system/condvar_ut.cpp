@@ -40,7 +40,7 @@ class TCondVarTest: public TTestBase {
 
     class TThreadTask: public IObjectInQueue {
     public:
-        using PFunc = void (TThreadTask::*)(void); 
+        using PFunc = void (TThreadTask::*)(void);
 
         TThreadTask(PFunc func, size_t id, size_t totalIds, TSharedData& data)
             : Func_(func)

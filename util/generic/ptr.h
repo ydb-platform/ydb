@@ -778,11 +778,11 @@ typename TSimpleIntrusiveOps<T, Ops>::TFunc TSimpleIntrusiveOps<T, Ops>::Ref_ = 
 template <class T, class Ops>
 typename TSimpleIntrusiveOps<T, Ops>::TFunc TSimpleIntrusiveOps<T, Ops>::UnRef_ = nullptr;
 
-template <typename T, class Ops = TDefaultIntrusivePtrOps<T>, typename... Args> 
+template <typename T, class Ops = TDefaultIntrusivePtrOps<T>, typename... Args>
 [[nodiscard]] TIntrusivePtr<T, Ops> MakeIntrusive(Args&&... args) {
     return new T{std::forward<Args>(args)...};
-} 
- 
+}
+
 template <typename T, class Ops = TDefaultIntrusivePtrOps<T>, typename... Args>
 [[nodiscard]] TIntrusiveConstPtr<T, Ops> MakeIntrusiveConst(Args&&... args) {
     return new T{std::forward<Args>(args)...};

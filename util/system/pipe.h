@@ -11,7 +11,7 @@
 #include <util/network/pair.h>
 #include <util/generic/noncopyable.h>
 
-using PIPEHANDLE = SOCKET; 
+using PIPEHANDLE = SOCKET;
 #define INVALID_PIPEHANDLE INVALID_SOCKET
 
 /// Pipe-like object: pipe on POSIX and socket on windows
@@ -81,7 +81,7 @@ public:
 
 private:
     class TImpl;
-    using TImplRef = TSimpleIntrusivePtr<TImpl>; 
+    using TImplRef = TSimpleIntrusivePtr<TImpl>;
     TImplRef Impl_;
 };
 

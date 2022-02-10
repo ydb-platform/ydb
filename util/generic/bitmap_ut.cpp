@@ -551,21 +551,21 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
 
     Y_UNIT_TEST(TestSetResetRange) {
         // Single chunk
-        using TBitMap1Chunk = TBitMap<64>; 
+        using TBitMap1Chunk = TBitMap<64>;
         UNIT_ASSERT_EQUAL(TBitMap1Chunk().Flip().Reset(10, 50), TBitMap1Chunk().Set(0, 10).Set(50, 64));
         UNIT_ASSERT_EQUAL(TBitMap1Chunk().Flip().Reset(0, 10), TBitMap1Chunk().Set(10, 64));
         UNIT_ASSERT_EQUAL(TBitMap1Chunk().Flip().Reset(50, 64), TBitMap1Chunk().Set(0, 50));
         UNIT_ASSERT_EQUAL(TBitMap1Chunk().Flip().Reset(0, 10).Reset(50, 64), TBitMap1Chunk().Set(10, 50));
 
         // Two chunks
-        using TBitMap2Chunks = TBitMap<64, ui32>; 
+        using TBitMap2Chunks = TBitMap<64, ui32>;
         UNIT_ASSERT_EQUAL(TBitMap2Chunks().Flip().Reset(10, 50), TBitMap2Chunks().Set(0, 10).Set(50, 64));
         UNIT_ASSERT_EQUAL(TBitMap2Chunks().Flip().Reset(0, 10), TBitMap2Chunks().Set(10, 64));
         UNIT_ASSERT_EQUAL(TBitMap2Chunks().Flip().Reset(50, 64), TBitMap2Chunks().Set(0, 50));
         UNIT_ASSERT_EQUAL(TBitMap2Chunks().Flip().Reset(0, 10).Reset(50, 64), TBitMap2Chunks().Set(10, 50));
 
         // Many chunks
-        using TBitMap4Chunks = TBitMap<64, ui16>; 
+        using TBitMap4Chunks = TBitMap<64, ui16>;
         UNIT_ASSERT_EQUAL(TBitMap4Chunks().Flip().Reset(10, 50), TBitMap4Chunks().Set(0, 10).Set(50, 64));
         UNIT_ASSERT_EQUAL(TBitMap4Chunks().Flip().Reset(0, 10), TBitMap4Chunks().Set(10, 64));
         UNIT_ASSERT_EQUAL(TBitMap4Chunks().Flip().Reset(50, 64), TBitMap4Chunks().Set(0, 50));

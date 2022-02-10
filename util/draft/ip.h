@@ -21,7 +21,7 @@
 #endif
 
 // Network (big-endian) byte order
-using TIp4 = TIpHost; 
+using TIp4 = TIpHost;
 
 // Network (big-endian) byte order
 struct TIp6 {

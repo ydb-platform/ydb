@@ -7,7 +7,7 @@
 //some equivalent boost::asio::ip::endpoint (easy for using pair ip:port)
 class TEndpoint {
 public:
-    using TAddrRef = NAddr::IRemoteAddrRef; 
+    using TAddrRef = NAddr::IRemoteAddrRef;
 
     TEndpoint(const TAddrRef& addr);
     TEndpoint();

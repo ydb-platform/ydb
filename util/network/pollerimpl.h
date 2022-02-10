@@ -69,7 +69,7 @@ static inline int MicroToMilli(int timeout) noexcept {
 }
 
 struct TWithoutLocking {
-    using TMyMutex = TFakeMutex; 
+    using TMyMutex = TFakeMutex;
 };
 
 #if defined(HAVE_KQUEUE_POLLER)
@@ -87,7 +87,7 @@ static inline int Kevent(int kq, struct kevent* changelist, int nchanges,
 template <class TLockPolicy>
 class TKqueuePoller {
 public:
-    typedef struct ::kevent TEvent; 
+    typedef struct ::kevent TEvent;
 
     inline TKqueuePoller()
         : Fd_(kqueue())
@@ -407,7 +407,7 @@ struct TSelectPollerNoTemplate {
 
 template <class TLockPolicy>
 class TSelectPoller: public TSelectPollerNoTemplate {
-    using TMyMutex = typename TLockPolicy::TMyMutex; 
+    using TMyMutex = typename TLockPolicy::TMyMutex;
 
 public:
     inline TSelectPoller()
@@ -657,7 +657,7 @@ class TGenericPoller: public TBase {
 public:
     using TBase::TBase;
 
-    using TEvent = typename TBase::TEvent; 
+    using TEvent = typename TBase::TEvent;
 
     inline void Set(void* data, SOCKET fd, int what) {
         if (what) {

@@ -41,8 +41,8 @@ struct TNumPair {
     }
 };
 
-using TSizeTRegion = TNumPair<size_t>; 
-using TUi32Region = TNumPair<ui32>; 
+using TSizeTRegion = TNumPair<size_t>;
+using TUi32Region = TNumPair<ui32>;
 
 template <>
 inline TString ToString(const TUi32Region& r) {
@@ -103,7 +103,7 @@ private:
     const TSplitDelimiters& Delimiters;
 
 public:
-    using TIterator = TSplitIterator<TDelimitersSplit>; 
+    using TIterator = TSplitIterator<TDelimitersSplit>;
     friend class TSplitIterator<TDelimitersSplit>;
 
     TDelimitersSplit(const char* str, size_t length, const TSplitDelimiters& delimiters);
@@ -124,7 +124,7 @@ private:
     const TSplitDelimiters& Delimiters;
 
 public:
-    using TIterator = TSplitIterator<TDelimitersStrictSplit>; 
+    using TIterator = TSplitIterator<TDelimitersStrictSplit>;
     friend class TSplitIterator<TDelimitersStrictSplit>;
 
     TDelimitersStrictSplit(const char* str, size_t length, const TSplitDelimiters& delimiters);
@@ -146,7 +146,7 @@ private:
     const TSplitDelimiters& Screens;
 
 public:
-    using TIterator = TSplitIterator<TScreenedDelimitersSplit>; 
+    using TIterator = TSplitIterator<TScreenedDelimitersSplit>;
     friend class TSplitIterator<TScreenedDelimitersSplit>;
 
     TScreenedDelimitersSplit(const char*, size_t, const TSplitDelimiters& delimiters, const TSplitDelimiters& screens);
@@ -169,7 +169,7 @@ private:
     size_t SkipDelimiters(size_t pos) const;
 
 public:
-    using TIterator = TSplitIterator<TDelimitersSplitWithoutTags>; 
+    using TIterator = TSplitIterator<TDelimitersSplitWithoutTags>;
     friend class TSplitIterator<TDelimitersSplitWithoutTags>;
 
     TDelimitersSplitWithoutTags(const char* str, size_t length, const TSplitDelimiters& delimiters);
@@ -187,7 +187,7 @@ private:
 
 class TCharSplit: public TSplitBase {
 public:
-    using TIterator = TSplitIterator<TCharSplit>; 
+    using TIterator = TSplitIterator<TCharSplit>;
     friend class TSplitIterator<TCharSplit>;
 
     TCharSplit(const char* str, size_t length);
@@ -211,7 +211,7 @@ private:
     size_t SkipDelimiters(size_t pos) const;
 
 public:
-    using TIterator = TSplitIterator<TCharSplitWithoutTags>; 
+    using TIterator = TSplitIterator<TCharSplitWithoutTags>;
     friend class TSplitIterator<TCharSplitWithoutTags>;
 
     TCharSplitWithoutTags(const char* str, size_t length);
@@ -238,7 +238,7 @@ private:
     const TSubstringSplitDelimiter& Delimiter;
 
 public:
-    using TIterator = TSplitIterator<TSubstringSplit>; 
+    using TIterator = TSplitIterator<TSubstringSplit>;
     friend class TSplitIterator<TSubstringSplit>;
 
     TSubstringSplit(const char* str, size_t length, const TSubstringSplitDelimiter& delimiter);

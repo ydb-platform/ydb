@@ -36,11 +36,11 @@ ui32 GetFileMode(DWORD fileAttributes) {
     #define S_ISREG(st_mode) (st_mode & _S_IFREG)
     #define S_ISLNK(st_mode) (st_mode & _S_IFLNK)
 
-using TSystemFStat = BY_HANDLE_FILE_INFORMATION; 
+using TSystemFStat = BY_HANDLE_FILE_INFORMATION;
 
 #else
 
-using TSystemFStat = struct stat; 
+using TSystemFStat = struct stat;
 
 #endif
 

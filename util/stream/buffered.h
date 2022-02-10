@@ -182,8 +182,8 @@ namespace NPrivate {
  */
 template <class TSlave>
 class TBuffered: private TEmbedPolicy<TSlave>, public ::NPrivate::TBufferedStreamFor<TSlave>::TResult {
-    using TSlaveBase = TEmbedPolicy<TSlave>; 
-    using TBufferedBase = typename ::NPrivate::TBufferedStreamFor<TSlave>::TResult; 
+    using TSlaveBase = TEmbedPolicy<TSlave>;
+    using TBufferedBase = typename ::NPrivate::TBufferedStreamFor<TSlave>::TResult;
 
 public:
     template <typename... Args>
@@ -216,7 +216,7 @@ public:
  */
 template <class TSlave>
 class TAdaptivelyBuffered: private TEmbedPolicy<TSlave>, public TAdaptiveBufferedOutput {
-    using TSlaveBase = TEmbedPolicy<TSlave>; 
+    using TSlaveBase = TEmbedPolicy<TSlave>;
 
 public:
     template <typename... Args>

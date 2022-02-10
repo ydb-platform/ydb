@@ -170,10 +170,10 @@ public:
     using reference = TBasicCharRef<TBasicString>;
 #endif
     using char_type = TCharType; // TODO: DROP
-    using value_type = TCharType; 
-    using traits_type = TTraits; 
+    using value_type = TCharType;
+    using traits_type = TTraits;
 
-    using iterator = TCharType*; 
+    using iterator = TCharType*;
     using reverse_iterator = typename TBase::template TReverseIteratorBase<iterator>;
     using typename TBase::const_iterator;
     using typename TBase::const_reference;

@@ -96,7 +96,7 @@ TString YearToString(time_t when);
 template <class S>
 class TTimeBase {
 public:
-    using TValue = ui64; 
+    using TValue = ui64;
 
 protected:
     constexpr TTimeBase(const TValue& value) noexcept
@@ -178,22 +178,22 @@ protected:
 namespace NDateTimeHelpers {
     template <typename T>
     struct TPrecisionHelper {
-        using THighPrecision = ui64; 
+        using THighPrecision = ui64;
     };
 
     template <>
     struct TPrecisionHelper<float> {
-        using THighPrecision = double; 
+        using THighPrecision = double;
     };
 
     template <>
     struct TPrecisionHelper<double> {
-        using THighPrecision = double; 
+        using THighPrecision = double;
     };
 }
 
 class TDuration: public TTimeBase<TDuration> {
-    using TBase = TTimeBase<TDuration>; 
+    using TBase = TTimeBase<TDuration>;
 
 private:
     /**
@@ -348,7 +348,7 @@ struct THash<TDuration> {
 
 /// TInstant and TDuration are guaranteed to have same precision
 class TInstant: public TTimeBase<TInstant> {
-    using TBase = TTimeBase<TInstant>; 
+    using TBase = TTimeBase<TInstant>;
 
 private:
     /**
@@ -411,11 +411,11 @@ public:
         return Seconds(m * 60);
     }
 
-    /// hours since epoch 
+    /// hours since epoch
     static constexpr TInstant Hours(ui64 h) noexcept {
-        return Minutes(h * 60); 
-    } 
- 
+        return Minutes(h * 60);
+    }
+
     /// days since epoch
     static constexpr TInstant Days(ui64 d) noexcept {
         return Hours(d * 24);

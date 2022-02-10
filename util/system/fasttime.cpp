@@ -25,10 +25,10 @@ ui64 InterpolatedMicroSeconds() {
     #endif
 
 namespace {
-    using TTime = ui64; 
+    using TTime = ui64;
 
     struct TSymbols {
-        using TFunc = int (*)(struct timeval*, struct timezone*); 
+        using TFunc = int (*)(struct timeval*, struct timezone*);
 
         inline TSymbols()
             : Func(nullptr)

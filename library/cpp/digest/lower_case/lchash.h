@@ -7,7 +7,7 @@
 
 template <class T>
 static inline T FnvCaseLess(const char* b, size_t l, T t = 0) noexcept {
-    using TIter = TLowerCaseIterator<const char>; 
+    using TIter = TLowerCaseIterator<const char>;
 
     return FnvHash(TIter(b), TIter(b + l), t);
 }

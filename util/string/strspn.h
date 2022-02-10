@@ -62,4 +62,4 @@ private:
     TSetType S_;
 };
 
-using TCompactStrSpn = TStrSpnImpl<TBitMap<256>>; 
+using TCompactStrSpn = TStrSpnImpl<TBitMap<256>>;

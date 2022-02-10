@@ -29,7 +29,7 @@ static inline void DoSplit0(C* res, const TBasicStringBuf<TChr> str, TDelim& d, 
         return;
     }
 
-    using TConsumer = TContainerConsumer<C>; 
+    using TConsumer = TContainerConsumer<C>;
     TConsumer cc(res);
 
     if (maxFields) {

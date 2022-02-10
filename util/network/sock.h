@@ -339,12 +339,12 @@ struct TSockAddrInet6: public sockaddr_in6, public ISockAddr {
     }
 };
 
-using TSockAddrLocalStream = TSockAddrLocal; 
-using TSockAddrLocalDgram = TSockAddrLocal; 
-using TSockAddrInetStream = TSockAddrInet; 
-using TSockAddrInetDgram = TSockAddrInet; 
-using TSockAddrInet6Stream = TSockAddrInet6; 
-using TSockAddrInet6Dgram = TSockAddrInet6; 
+using TSockAddrLocalStream = TSockAddrLocal;
+using TSockAddrLocalDgram = TSockAddrLocal;
+using TSockAddrInetStream = TSockAddrInet;
+using TSockAddrInetDgram = TSockAddrInet;
+using TSockAddrInet6Stream = TSockAddrInet6;
+using TSockAddrInet6Dgram = TSockAddrInet6;
 
 class TBaseSocket: public TSocketHolder {
 protected:

@@ -1,10 +1,10 @@
-#include "retry.h" 
- 
-#include <util/stream/output.h> 
- 
+#include "retry.h"
+
+#include <util/stream/output.h>
+
 void DoWithRetry(std::function<void()> func, TRetryOptions retryOptions) {
-    DoWithRetry(func, retryOptions, true); 
-} 
+    DoWithRetry(func, retryOptions, true);
+}
 
 bool DoWithRetryOnRetCode(std::function<bool()> func, TRetryOptions retryOptions) {
     for (ui32 attempt = 0; attempt <= retryOptions.RetryCount; ++attempt) {

@@ -34,5 +34,5 @@ namespace NNonCopyable { // protection from unintended ADL
     };
 }
 
-using TNonCopyable = NNonCopyable::TNonCopyable; 
+using TNonCopyable = NNonCopyable::TNonCopyable;
 using TMoveOnly = NNonCopyable::TMoveOnly;

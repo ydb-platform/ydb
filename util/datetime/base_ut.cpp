@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
         // division
         UNIT_ASSERT_DOUBLES_EQUAL(TDuration::Minutes(1) / TDuration::Seconds(10), 6.0, 1e-9);
     }
- 
+
     Y_UNIT_TEST(TestDurationGetters) {
         const TDuration value = TDuration::MicroSeconds(1234567);
         UNIT_ASSERT_VALUES_EQUAL(value.Seconds(), 1);
@@ -466,23 +466,23 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
         T onlyHours = T::MicroSeconds(1249570800000000L);
         T onlyDays = T::MicroSeconds(1249516800000000L);
         ui64 minutes = 20826199;
-        ui64 hours = 347103; 
+        ui64 hours = 347103;
         ui64 days = 14462;
 
         UNIT_ASSERT_VALUES_EQUAL(withTime.Minutes(), minutes);
         UNIT_ASSERT_VALUES_EQUAL(onlyMinutes, T::Minutes(minutes));
         UNIT_ASSERT_VALUES_EQUAL(onlyMinutes.Minutes(), minutes);
 
-        UNIT_ASSERT_VALUES_EQUAL(withTime.Hours(), hours); 
+        UNIT_ASSERT_VALUES_EQUAL(withTime.Hours(), hours);
         UNIT_ASSERT_VALUES_EQUAL(onlyMinutes.Hours(), hours);
         UNIT_ASSERT_VALUES_EQUAL(onlyHours, T::Hours(hours));
-        UNIT_ASSERT_VALUES_EQUAL(onlyHours.Hours(), hours); 
+        UNIT_ASSERT_VALUES_EQUAL(onlyHours.Hours(), hours);
 
         UNIT_ASSERT_VALUES_EQUAL(withTime.Days(), days);
         UNIT_ASSERT_VALUES_EQUAL(onlyHours.Days(), days);
         UNIT_ASSERT_VALUES_EQUAL(onlyDays, T::Days(days));
         UNIT_ASSERT_VALUES_EQUAL(onlyDays.Days(), days);
-    } 
+    }
 
     Y_UNIT_TEST(TestInstantUnits) {
         TestTimeUnits<TInstant>();

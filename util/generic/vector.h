@@ -13,7 +13,7 @@ class TVector: public std::vector<T, TReboundAllocator<A, T>> {
 public:
     using TBase = std::vector<T, TReboundAllocator<A, T>>;
     using TSelf = TVector<T, A>;
-    using size_type = typename TBase::size_type; 
+    using size_type = typename TBase::size_type;
 
     inline TVector()
         : TBase()

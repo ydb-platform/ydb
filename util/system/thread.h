@@ -18,8 +18,8 @@ class TThread {
     struct TPrivateCtor {};
 
 public:
-    using TThreadProc = void* (*)(void*); 
-    using TId = size_t; 
+    using TThreadProc = void* (*)(void*);
+    using TId = size_t;
 
     struct TParams {
         TThreadProc Proc;

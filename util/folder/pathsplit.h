@@ -91,7 +91,7 @@ public:
 
         return *this;
     }
- 
+
     template <class It>
     inline TPathSplitBase& AppendMany(It b, It e) {
         this->AppendHint(e - b);
@@ -109,5 +109,5 @@ using TPathSplitUnix = TPathSplitBase<TPathSplitTraitsUnix>;
 using TPathSplitWindows = TPathSplitBase<TPathSplitTraitsWindows>;
 
 TString JoinPaths(const TPathSplit& p1, const TPathSplit& p2);
- 
+
 TStringBuf CutExtension(const TStringBuf fileName);

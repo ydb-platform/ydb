@@ -87,7 +87,7 @@ public:
     using TBase::at;
     using TBase::back;
     using TBase::begin;
-    using TBase::capacity; 
+    using TBase::capacity;
     using TBase::empty;
     using TBase::end;
     using TBase::front;

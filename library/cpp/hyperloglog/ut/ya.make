@@ -1,7 +1,7 @@
 UNITTEST_FOR(library/cpp/hyperloglog)
 
 OWNER(
-    anskor 
+    anskor
     g:images-followers g:images-robot g:images-search-quality g:images-nonsearch-quality
 )
 

@@ -1,15 +1,15 @@
 UNITTEST_FOR(library/cpp/digest/argonish)
-
-OWNER(e-sidorov)
-
+ 
+OWNER(e-sidorov) 
+ 
 PEERDIR(
     library/cpp/digest/argonish
 )
-
-SRCS(
-    ut.cpp
-)
-
+ 
+SRCS( 
+    ut.cpp 
+) 
+ 
 TAG(
     sb:intel_e5_2660v4
     ya:fat
@@ -17,5 +17,5 @@ TAG(
 )
 
 SIZE(LARGE)
-
-END()
+ 
+END() 

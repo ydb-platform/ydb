@@ -1,7 +1,7 @@
-RECURSE(
-    proxies
-    argon2
-    blake2b
-    blamka
-    rotations
-)
+RECURSE( 
+    proxies 
+    argon2 
+    blake2b 
+    blamka 
+    rotations 
+) 

@@ -474,9 +474,9 @@
         },
         "license_analyzer": {
             "description": "Run devtools license analyzer"
-        }, 
-        "eductl": { 
-            "description": "eductl is a toolchain of Yandex Education" 
+        },
+        "eductl": {
+            "description": "eductl is a toolchain of Yandex Education"
         },
         "bigb_request": {
             "description": "utility to get user info"
@@ -5699,28 +5699,28 @@
                 "objcopy": "$(GCC)/bin/arm-none-eabi-objcopy",
                 "gcc_version": "10.2.1"
             }
-        }, 
-        "eductl": { 
-            "tools": { 
-                "eductl": { 
-                    "bottle": "eductl", 
-                    "executable": "eductl" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
+        },
+        "eductl": {
+            "tools": {
+                "eductl": {
+                    "bottle": "eductl",
+                    "executable": "eductl"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
         }
     },
     "bottles": {
@@ -7955,17 +7955,17 @@
                     "arm-none-eabi-strip"
                 ]
             }
-        }, 
-        "eductl": { 
-            "formula": { 
+        },
+        "eductl": {
+            "formula": {
                 "sandbox_id": 1198463788,
-                "match": "eductl" 
-            }, 
-            "executable": { 
-                "eductl": [ 
-                    "eductl" 
-                ] 
-            } 
+                "match": "eductl"
+            },
+            "executable": {
+                "eductl": [
+                    "eductl"
+                ]
+            }
         },
         "bigb_request": {
             "formula": {

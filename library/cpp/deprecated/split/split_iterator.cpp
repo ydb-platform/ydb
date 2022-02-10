@@ -107,13 +107,13 @@ TScreenedDelimitersSplit::TScreenedDelimitersSplit(const TString& s, const TSpli
 {
 }
 
-TScreenedDelimitersSplit::TScreenedDelimitersSplit(const char* str, size_t length, const TSplitDelimiters& delimiters, const TSplitDelimiters& screens)
-    : TSplitBase(str, length)
-    , Delimiters(delimiters)
-    , Screens(screens)
-{
-}
-
+TScreenedDelimitersSplit::TScreenedDelimitersSplit(const char* str, size_t length, const TSplitDelimiters& delimiters, const TSplitDelimiters& screens) 
+    : TSplitBase(str, length) 
+    , Delimiters(delimiters) 
+    , Screens(screens) 
+{ 
+} 
+ 
 TScreenedDelimitersSplit::TIterator TScreenedDelimitersSplit::Iterator() const {
     return TIterator(*this);
 }

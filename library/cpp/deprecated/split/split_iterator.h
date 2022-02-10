@@ -149,7 +149,7 @@ public:
     using TIterator = TSplitIterator<TScreenedDelimitersSplit>;
     friend class TSplitIterator<TScreenedDelimitersSplit>;
 
-    TScreenedDelimitersSplit(const char*, size_t, const TSplitDelimiters& delimiters, const TSplitDelimiters& screens);
+    TScreenedDelimitersSplit(const char*, size_t, const TSplitDelimiters& delimiters, const TSplitDelimiters& screens); 
     TScreenedDelimitersSplit(const TString& s, const TSplitDelimiters& delimiters, const TSplitDelimiters& screens);
     TIterator Iterator() const;
     TSizeTRegion Next(size_t& pos) const;

@@ -240,7 +240,7 @@ public:
                                    (Mode_ & oAccessMask) == oRdOnly ? FILE_MAP_READ : (Mode_ & oAccessMask) == oCopyOnWr ? FILE_MAP_COPY
                                                                                                                          : FILE_MAP_WRITE,
                                    Hi32(base), Lo32(base), size);
-#else
+#else 
     #if defined(_unix_)
         if (Mode_ & oNotGreedy) {
     #endif
@@ -272,7 +272,7 @@ public:
     inline bool Unmap(void* ptr, size_t) {
         return ::UnmapViewOfFile(ptr) != FALSE;
     }
-#else
+#else 
     inline bool Unmap(void* ptr, size_t size) {
     #if defined(_unix_)
         if (Mode_ & oNotGreedy) {

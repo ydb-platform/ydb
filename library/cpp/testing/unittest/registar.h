@@ -981,7 +981,7 @@ public:                       \
         UNIT_TEST_SUITE_REGISTRATION(TCurrentTest)                                                                      \
     }                                                                                                                   \
     namespace NTestSuite##N
-
+ 
 #define Y_UNIT_TEST_SUITE_IMPL(N, T) Y_UNIT_TEST_SUITE_IMPL_F(N, T, ::NUnitTest::TBaseTestCase)
 #define Y_UNIT_TEST_SUITE(N) Y_UNIT_TEST_SUITE_IMPL(N, TTestBase)
 #define Y_UNIT_TEST_SUITE_F(N, F) Y_UNIT_TEST_SUITE_IMPL_F(N, TTestBase, F)
@@ -1006,7 +1006,7 @@ public:                       \
         }                                                   \
     };                                                      \
     static const TTestRegistration##N testRegistration##N;
-
+ 
 #define Y_UNIT_TEST_IMPL(N, FF, F)      \
     Y_UNIT_TEST_IMPL_REGISTER(N, FF, F) \
     void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)

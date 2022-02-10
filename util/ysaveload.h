@@ -398,16 +398,16 @@ template <class T, size_t N>
 class TSerializer<std::array<T, N>>: public TStdArraySerializer<std::array<T, N>> {
 };
 
-template <class A, class B>
+template <class A, class B> 
 class TSerializer<std::pair<A, B>> {
     using TPair = std::pair<A, B>;
-
+ 
 public:
     static inline void Save(IOutputStream* rh, const TPair& p) {
         ::Save(rh, p.first);
         ::Save(rh, p.second);
     }
-
+ 
     static inline void Load(IInputStream* rh, TPair& p) {
         ::Load(rh, p.first);
         ::Load(rh, p.second);
@@ -418,8 +418,8 @@ public:
         ::Load(rh, p.first, pool);
         ::Load(rh, p.second, pool);
     }
-};
-
+}; 
+ 
 template <class T>
 struct TTupleSerializer {
     template <class F, class Tuple, size_t... Indices>

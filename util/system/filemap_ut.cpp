@@ -1,8 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#ifdef _unix_
+#ifdef _unix_ 
     #include <sys/resource.h>
-#endif
+#endif 
 
 #include "filemap.h"
 
@@ -135,82 +135,82 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         unsigned page[4096 / sizeof(unsigned)];
 
     #if defined(_unix_)
-        // Temporary limit allowed virtual memory size to 1Gb
-        struct rlimit rlim;
+        // Temporary limit allowed virtual memory size to 1Gb 
+        struct rlimit rlim; 
 
         if (getrlimit(RLIMIT_AS, &rlim)) {
-            throw TSystemError() << "Cannot get rlimit for virtual memory";
+            throw TSystemError() << "Cannot get rlimit for virtual memory"; 
         }
 
         rlim_t Limit = 1 * 1024 * 1024 * 1024;
 
-        if (rlim.rlim_cur > Limit) {
-            rlim.rlim_cur = Limit;
+        if (rlim.rlim_cur > Limit) { 
+            rlim.rlim_cur = Limit; 
 
             if (setrlimit(RLIMIT_AS, &rlim)) {
-                throw TSystemError() << "Cannot set rlimit for virtual memory to 1Gb";
+                throw TSystemError() << "Cannot set rlimit for virtual memory to 1Gb"; 
             }
-        }
+        } 
     #endif
-        // Make a 128M test file
-        try {
-            TFile file(FileName_, CreateAlways | WrOnly);
+        // Make a 128M test file 
+        try { 
+            TFile file(FileName_, CreateAlways | WrOnly); 
 
             for (unsigned pages = 128 * 1024 * 1024 / sizeof(page), i = 0; pages--; i++) {
                 std::fill(page, page + sizeof(page) / sizeof(*page), i);
-                file.Write(page, sizeof(page));
-            }
+                file.Write(page, sizeof(page)); 
+            } 
 
-            file.Close();
+            file.Close(); 
 
-            // Make 16 maps of our file, which would require 16*128M = 2Gb and exceed our 1Gb limit
+            // Make 16 maps of our file, which would require 16*128M = 2Gb and exceed our 1Gb limit 
             TVector<THolder<TFileMap>> maps;
 
-            for (int i = 0; i < 16; ++i) {
+            for (int i = 0; i < 16; ++i) { 
                 maps.emplace_back(MakeHolder<TFileMap>(FileName_, TMemoryMapCommon::oRdOnly | TMemoryMapCommon::oNotGreedy));
-                maps.back()->Map(i * sizeof(page), sizeof(page));
-            }
+                maps.back()->Map(i * sizeof(page), sizeof(page)); 
+            } 
 
-            // Oh, good, we're not dead yet
-            for (int i = 0; i < 16; ++i) {
-                TFileMap& map = *maps[i];
+            // Oh, good, we're not dead yet 
+            for (int i = 0; i < 16; ++i) { 
+                TFileMap& map = *maps[i]; 
 
                 UNIT_ASSERT_EQUAL(map.Length(), 128 * 1024 * 1024);
-                UNIT_ASSERT_EQUAL(map.MappedSize(), sizeof(page));
+                UNIT_ASSERT_EQUAL(map.MappedSize(), sizeof(page)); 
 
                 const int* mappedPage = (const int*)map.Ptr();
 
                 for (size_t j = 0; j < sizeof(page) / sizeof(*page); ++j) {
-                    UNIT_ASSERT_EQUAL(mappedPage[j], i);
+                    UNIT_ASSERT_EQUAL(mappedPage[j], i); 
                 }
-            }
+            } 
 
     #if defined(_unix_)
-            // Restore limits and cleanup
-            rlim.rlim_cur = rlim.rlim_max;
+            // Restore limits and cleanup 
+            rlim.rlim_cur = rlim.rlim_max; 
 
             if (setrlimit(RLIMIT_AS, &rlim)) {
-                throw TSystemError() << "Cannot restore rlimit for virtual memory";
+                throw TSystemError() << "Cannot restore rlimit for virtual memory"; 
             }
     #endif
-            maps.clear();
+            maps.clear(); 
             NFs::Remove(FileName_);
         } catch (...) {
     // TODO: RAII'ize all this stuff
     #if defined(_unix_)
-            rlim.rlim_cur = rlim.rlim_max;
+            rlim.rlim_cur = rlim.rlim_max; 
 
             if (setrlimit(RLIMIT_AS, &rlim)) {
-                throw TSystemError() << "Cannot restore rlimit for virtual memory";
+                throw TSystemError() << "Cannot restore rlimit for virtual memory"; 
             }
     #endif
             NFs::Remove(FileName_);
 
-            throw;
-        }
-    }
+            throw; 
+        } 
+    } 
 #endif
-
+ 
     Y_UNIT_TEST(TestFileMappedArray) {
         {
             TFileMappedArray<ui32> mappedArray;

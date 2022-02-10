@@ -98,12 +98,12 @@ public:
     size_t get_segment_size() const {
         return segment_size;
     }
-    bool contains(const T* ptr) const {
-        for (seg_const_iterator i = segs.begin(), ie = segs.end(); i != ie; ++i)
+    bool contains(const T* ptr) const { 
+        for (seg_const_iterator i = segs.begin(), ie = segs.end(); i != ie; ++i) 
             if ((char*)ptr >= (char*)i->data && (char*)ptr < (char*)i->data + i->freepos)
-                return true;
-        return false;
-    }
+                return true; 
+        return false; 
+    } 
     size_t size() const {
         size_t r = 0;
         for (seg_const_iterator i = segs.begin(); i != segs.end(); ++i)

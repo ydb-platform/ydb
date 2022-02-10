@@ -321,15 +321,15 @@ def process(fetched_file, file_name, args, remove=True):
         hardlink_or_copy(fetched_file, args.copy_to)
         if not args.outputs:
             args.outputs = [args.copy_to]
-
+ 
     if args.rename_to:
         args.rename.append(fetched_file)
         if not args.outputs:
             args.outputs = [args.rename_to]
-
+ 
     if args.copy_to_dir:
         hardlink_or_copy(fetched_file, os.path.join(args.copy_to_dir, file_name))
-
+ 
     if args.untar_to:
         ensure_dir(args.untar_to)
         # Extract only requested files

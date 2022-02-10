@@ -1,30 +1,30 @@
-/*
- *
+/* 
+ * 
  * Copyright 2015 gRPC authors.
- *
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- */
-
-#ifndef GRPC_CORE_LIB_IOMGR_EXECUTOR_H
-#define GRPC_CORE_LIB_IOMGR_EXECUTOR_H
-
+ * 
+ */ 
+ 
+#ifndef GRPC_CORE_LIB_IOMGR_EXECUTOR_H 
+#define GRPC_CORE_LIB_IOMGR_EXECUTOR_H 
+ 
 #include <grpc/support/port_platform.h>
 
 #include "src/core/lib/gpr/spinlock.h"
 #include "src/core/lib/gprpp/thd.h"
-#include "src/core/lib/iomgr/closure.h"
-
+#include "src/core/lib/iomgr/closure.h" 
+ 
 namespace grpc_core {
 
 struct ThreadState {
@@ -38,14 +38,14 @@ struct ThreadState {
   bool queued_long_job;
   grpc_core::Thread thd;
 };
-
+ 
 enum class ExecutorType {
   DEFAULT = 0,
   RESOLVER,
-
+ 
   NUM_EXECUTORS  // Add new values above this
 };
-
+ 
 enum class ExecutorJobType {
   SHORT = 0,
   LONG,
@@ -122,4 +122,4 @@ void grpc_executor_global_init();
 
 }  // namespace grpc_core
 
-#endif /* GRPC_CORE_LIB_IOMGR_EXECUTOR_H */
+#endif /* GRPC_CORE_LIB_IOMGR_EXECUTOR_H */ 

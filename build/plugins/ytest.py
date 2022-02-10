@@ -1,9 +1,9 @@
 import os
 import re
 import sys
-import json
+import json 
 import copy
-import base64
+import base64 
 import shlex
 import _common
 import lib._metric_resolvers as mr
@@ -348,7 +348,7 @@ def count_entries(x):
 
 
 def get_values_list(unit, key):
-    res = map(str.strip, (unit.get(key) or '').replace('$' + key, '').strip().split())
+    res = map(str.strip, (unit.get(key) or '').replace('$' + key, '').strip().split()) 
     return [r for r in res if r and r not in ['""', "''"]]
 
 
@@ -416,7 +416,7 @@ def get_project_tidy_config(unit):
 def onadd_ytest(unit, *args):
     keywords = {"DEPENDS": -1, "DATA": -1, "TIMEOUT": 1, "FORK_MODE": 1, "SPLIT_FACTOR": 1,
                 "FORK_SUBTESTS": 0, "FORK_TESTS": 0}
-    flat_args, spec_args = _common.sort_by_keywords(keywords, args)
+    flat_args, spec_args = _common.sort_by_keywords(keywords, args) 
 
     test_data = sorted(_common.filter_out_by_keyword(spec_args.get('DATA', []) + get_norm_paths(unit, 'TEST_DATA_VALUE'), 'AUTOUPDATED'))
 
@@ -547,7 +547,7 @@ def onadd_check(unit, *args):
     if unit.get("TIDY") == "yes":
         # graph changed for clang_tidy tests
         return
-    flat_args, spec_args = _common.sort_by_keywords({"DEPENDS": -1, "TIMEOUT": 1, "DATA": -1, "TAG": -1, "REQUIREMENTS": -1, "FORK_MODE": 1,
+    flat_args, spec_args = _common.sort_by_keywords({"DEPENDS": -1, "TIMEOUT": 1, "DATA": -1, "TAG": -1, "REQUIREMENTS": -1, "FORK_MODE": 1, 
                                                      "SPLIT_FACTOR": 1, "FORK_SUBTESTS": 0, "FORK_TESTS": 0, "SIZE": 1}, args)
     check_type = flat_args[0]
     test_dir = get_norm_unit_path(unit)
@@ -770,40 +770,40 @@ def add_test_to_dart(unit, test_type, binary_path=None, runner_bin=None):
     _dump_test(unit, test_type, test_files, timeout, get_norm_unit_path(unit), custom_deps, test_data, python_paths, split_factor, fork_mode, test_size, tags, requirements, binary_path, test_cwd=test_cwd, runner_bin=runner_bin, yt_spec=yt_spec, data_files=data_files)
 
 
-def extract_java_system_properties(unit, args):
-    if len(args) % 2:
+def extract_java_system_properties(unit, args): 
+    if len(args) % 2: 
         return [], 'Wrong use of SYSTEM_PROPERTIES in {}: odd number of arguments'.format(unit.path())
-
+ 
     props = []
-    for x, y in zip(args[::2], args[1::2]):
-        if x == 'FILE':
-            if y.startswith('${BINDIR}') or y.startswith('${ARCADIA_BUILD_ROOT}') or y.startswith('/'):
+    for x, y in zip(args[::2], args[1::2]): 
+        if x == 'FILE': 
+            if y.startswith('${BINDIR}') or y.startswith('${ARCADIA_BUILD_ROOT}') or y.startswith('/'): 
                 return [], 'Wrong use of SYSTEM_PROPERTIES in {}: absolute/build file path {}'.format(unit.path(), y)
-
-            y = _common.rootrel_arc_src(y, unit)
-            if not os.path.exists(unit.resolve('$S/' + y)):
+ 
+            y = _common.rootrel_arc_src(y, unit) 
+            if not os.path.exists(unit.resolve('$S/' + y)): 
                 return [], 'Wrong use of SYSTEM_PROPERTIES in {}: can\'t resolve {}'.format(unit.path(), y)
-
-            y = '${ARCADIA_ROOT}/' + y
-            props.append({'type': 'file', 'path': y})
-        else:
-            props.append({'type': 'inline', 'key': x, 'value': y})
-
+ 
+            y = '${ARCADIA_ROOT}/' + y 
+            props.append({'type': 'file', 'path': y}) 
+        else: 
+            props.append({'type': 'inline', 'key': x, 'value': y}) 
+ 
     return props, None
-
-
-def onjava_test(unit, *args):
+ 
+ 
+def onjava_test(unit, *args): 
     if unit.get("TIDY") == "yes":
         # graph changed for clang_tidy tests
         return
 
-    assert unit.get('MODULE_TYPE') is not None
-
-    if unit.get('MODULE_TYPE') == 'JTEST_FOR':
-        if not unit.get('UNITTEST_DIR'):
+    assert unit.get('MODULE_TYPE') is not None 
+ 
+    if unit.get('MODULE_TYPE') == 'JTEST_FOR': 
+        if not unit.get('UNITTEST_DIR'): 
             ymake.report_configure_error('skip JTEST_FOR in {}: no args provided'.format(unit.path()))
             return
-
+ 
     java_cp_arg_type = unit.get('JAVA_CLASSPATH_CMD_TYPE_VALUE') or 'MANIFEST'
     if java_cp_arg_type not in ('MANIFEST', 'COMMAND_FILE', 'LIST'):
         ymake.report_configure_error('{}: TEST_JAVA_CLASSPATH_CMD_TYPE({}) are invalid. Choose argument from MANIFEST, COMMAND_FILE or LIST)'.format(unit.path(), java_cp_arg_type))
@@ -811,11 +811,11 @@ def onjava_test(unit, *args):
 
     unit_path = unit.path()
     path = _common.strip_roots(unit_path)
-
+ 
     test_data = get_norm_paths(unit, 'TEST_DATA_VALUE')
     test_data.append('arcadia/build/scripts/run_junit.py')
     test_data.append('arcadia/build/scripts/unpacking_jtest_runner.py')
-
+ 
     data, data_files = get_canonical_test_resources(unit)
     test_data += data
 
@@ -823,49 +823,49 @@ def onjava_test(unit, *args):
     if error_mgs:
         ymake.report_configure_error(error_mgs)
         return
-    for prop in props:
-        if prop['type'] == 'file':
-            test_data.append(prop['path'].replace('${ARCADIA_ROOT}', 'arcadia'))
-
-    props = base64.b64encode(json.dumps(props, encoding='utf-8'))
-
-    test_cwd = unit.get('TEST_CWD_VALUE') or ''  # TODO: validate test_cwd value
-
+    for prop in props: 
+        if prop['type'] == 'file': 
+            test_data.append(prop['path'].replace('${ARCADIA_ROOT}', 'arcadia')) 
+ 
+    props = base64.b64encode(json.dumps(props, encoding='utf-8')) 
+ 
+    test_cwd = unit.get('TEST_CWD_VALUE') or ''  # TODO: validate test_cwd value 
+ 
     if unit.get('MODULE_TYPE') == 'JUNIT5':
         script_rel_path = 'junit5.test'
     else:
         script_rel_path = 'junit.test'
 
     ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
-    test_record = {
-        'SOURCE-FOLDER-PATH': path,
-        'TEST-NAME': '-'.join([os.path.basename(os.path.dirname(path)), os.path.basename(path)]),
+    test_record = { 
+        'SOURCE-FOLDER-PATH': path, 
+        'TEST-NAME': '-'.join([os.path.basename(os.path.dirname(path)), os.path.basename(path)]), 
         'SCRIPT-REL-PATH': script_rel_path,
         'TEST-TIMEOUT': unit.get('TEST_TIMEOUT') or '',
         'TESTED-PROJECT-NAME': path,
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
         #  'TEST-PRESERVE-ENV': 'da',
         'TEST-DATA': serialize_list(sorted(_common.filter_out_by_keyword(test_data, 'AUTOUPDATED'))),
-        'FORK-MODE': unit.get('TEST_FORK_MODE') or '',
-        'SPLIT-FACTOR': unit.get('TEST_SPLIT_FACTOR') or '',
-        'CUSTOM-DEPENDENCIES': ' '.join(get_values_list(unit, 'TEST_DEPENDS_VALUE')),
+        'FORK-MODE': unit.get('TEST_FORK_MODE') or '', 
+        'SPLIT-FACTOR': unit.get('TEST_SPLIT_FACTOR') or '', 
+        'CUSTOM-DEPENDENCIES': ' '.join(get_values_list(unit, 'TEST_DEPENDS_VALUE')), 
         'TAG': serialize_list(_get_test_tags(unit)),
-        'SIZE': unit.get('TEST_SIZE_NAME') or '',
+        'SIZE': unit.get('TEST_SIZE_NAME') or '', 
         'REQUIREMENTS': serialize_list(get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')),
         'TEST-RECIPES': prepare_recipes(unit.get("TEST_RECIPES_VALUE")),
-
-        # JTEST/JTEST_FOR only
-        'MODULE_TYPE': unit.get('MODULE_TYPE'),
-        'UNITTEST_DIR': unit.get('UNITTEST_DIR') or '',
-        'JVM_ARGS': serialize_list(get_values_list(unit, 'JVM_ARGS_VALUE')),
-        'SYSTEM_PROPERTIES': props,
-        'TEST-CWD': test_cwd,
+ 
+        # JTEST/JTEST_FOR only 
+        'MODULE_TYPE': unit.get('MODULE_TYPE'), 
+        'UNITTEST_DIR': unit.get('UNITTEST_DIR') or '', 
+        'JVM_ARGS': serialize_list(get_values_list(unit, 'JVM_ARGS_VALUE')), 
+        'SYSTEM_PROPERTIES': props, 
+        'TEST-CWD': test_cwd, 
         'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
         'JAVA_CLASSPATH_CMD_TYPE': java_cp_arg_type,
         'NO_JBUILD': 'yes' if ymake_java_test else 'no',
         'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT'),
         'JDK_FOR_TESTS': 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT') + '_FOR_TESTS',
-    }
+    } 
     test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
     if test_classpath_origins:
         test_record['TEST_CLASSPATH_ORIGINS'] = test_classpath_origins
@@ -877,12 +877,12 @@ def onjava_test(unit, *args):
             test_record['TEST_JAR'] = '${UNITTEST_MOD}'
         else:
             test_record['TEST_JAR'] = '{}/{}.jar'.format(unit.get('MODDIR'), unit.get('REALPRJNAME'))
-
+ 
     data = dump_test(unit, test_record)
     if data:
         unit.set_property(['DART_DATA', data])
-
-
+ 
+ 
 def onjava_test_deps(unit, *args):
     if unit.get("TIDY") == "yes":
         # graph changed for clang_tidy tests

@@ -334,7 +334,7 @@ RECURSE(
     elasticsearch
     elasticsearch-dsl
     email-validator
-    emoji
+    emoji 
     entrypoints
     enum34
     environ-config
@@ -362,7 +362,7 @@ RECURSE(
     fastapi
     fastapi-utils
     fastdtw
-    fasteners
+    fasteners 
     fastjsonschema
     fastsnmp
     faulthandler
@@ -471,7 +471,7 @@ RECURSE(
     h11
     h2
     h3
-    h5py
+    h5py 
     hammock
     hexdump
     hijri-converter
@@ -630,8 +630,8 @@ RECURSE(
     MongoDBProxy
     mongoengine
     mongolock
-    mongomock
-    monotonic
+    mongomock 
+    monotonic 
     more-itertools
     moto
     moto/standalone
@@ -814,7 +814,7 @@ RECURSE(
     pyelftools/readelf
     pyfakefs
     pyflakes
-    pyfst
+    pyfst 
     pygit2
     PyGithub
     Pygments
@@ -913,7 +913,7 @@ RECURSE(
     python-rapidjson
     python-saml
     python-slugify
-    python-telegram-bot
+    python-telegram-bot 
     python-utils
     python3-saml
     pytils
@@ -986,7 +986,7 @@ RECURSE(
     semantic-version
     semver
     Send2Trash
-    sentinels
+    sentinels 
     sentry-sdk
     service-identity
     setproctitle

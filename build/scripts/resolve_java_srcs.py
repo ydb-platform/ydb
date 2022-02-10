@@ -14,8 +14,8 @@ def list_all_files(directory, prefix='/', hidden_files=False):
     return result
 
 
-def pattern_to_regexp(p):
-    return '^' + \
+def pattern_to_regexp(p): 
+    return '^' + \ 
            ('/' if not p.startswith('**') else '') + \
            re.escape(p).replace(
                r'\*\*\/', '[_DIR_]'
@@ -26,8 +26,8 @@ def pattern_to_regexp(p):
            ).replace(
                '[_FILE_]', '([^/]*)'
            ) + '$'
-
-
+ 
+ 
 def resolve_java_srcs(srcdir, include_patterns, exclude_patterns, all_resources, resolve_kotlin=False, resolve_groovy=False):
     result = {'java': [], 'not_java': [], 'kotlin': [], 'groovy': []}
     include_patterns_normal, include_patterns_hidden, exclude_patterns_normal, exclude_patterns_hidden = [], [], [], []
@@ -43,22 +43,22 @@ def resolve_java_srcs(srcdir, include_patterns, exclude_patterns, all_resources,
         else:
             re_patterns = [re.compile(i) for i in re_patterns]
         vis[:], hid[:] = re_patterns[:len(vis)], re_patterns[len(vis):]
-
+ 
     for inc_patterns, exc_patterns, with_hidden_files in (
         (include_patterns_normal, exclude_patterns_normal, False),
         (include_patterns_hidden, exclude_patterns_hidden, True),
     ):
         for f in list_all_files(srcdir, hidden_files=with_hidden_files):
             excluded = False
-
+ 
             for exc_re in exc_patterns:
                 if exc_re.match(f):
                     excluded = True
                     break
-
+ 
             if excluded:
                 continue
-
+ 
             for inc_re in inc_patterns:
                 if inc_re.match(f):
                     s = os.path.normpath(f[1:])
@@ -73,7 +73,7 @@ def resolve_java_srcs(srcdir, include_patterns, exclude_patterns, all_resources,
                     else:
                         result['not_java'].append(s)
                     break
-
+ 
     return sorted(result['java']), sorted(result['not_java']), sorted(result['kotlin']), sorted(result['groovy'])
 
 
@@ -99,8 +99,8 @@ if __name__ == '__main__':
     parser.add_argument('--all-resources',  action='store_true', default=False)
     parser.add_argument('--resolve-kotlin',  action='store_true', default=False)
     parser.add_argument('--resolve-groovy', action='store_true', default=False)
-    parser.add_argument('--include-patterns', nargs='*', default=[])
-    parser.add_argument('--exclude-patterns', nargs='*', default=[])
+    parser.add_argument('--include-patterns', nargs='*', default=[]) 
+    parser.add_argument('--exclude-patterns', nargs='*', default=[]) 
     args = parser.parse_args()
 
     do_it(**vars(args))

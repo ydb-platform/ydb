@@ -1,20 +1,20 @@
 # Copyright 2015 gRPC authors.
-#
+# 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+# 
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
+# 
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
+ 
+ 
 cdef class CallCredentials:
-
+ 
   cdef grpc_call_credentials *c(self) except *
 
   # TODO(https://github.com/grpc/grpc/issues/12531): remove.
@@ -49,44 +49,44 @@ cdef class CompositeCallCredentials(CallCredentials):
   cdef grpc_call_credentials *c(self) except *
 
 
-cdef class ChannelCredentials:
-
+cdef class ChannelCredentials: 
+ 
   cdef grpc_channel_credentials *c(self) except *
 
-
+ 
 cdef class SSLSessionCacheLRU:
 
   cdef grpc_ssl_session_cache *_cache
 
 
 cdef class SSLChannelCredentials(ChannelCredentials):
-
+ 
   cdef readonly object _pem_root_certificates
   cdef readonly object _private_key
   cdef readonly object _certificate_chain
-
+ 
   cdef grpc_channel_credentials *c(self) except *
-
-
+ 
+ 
 cdef class CompositeChannelCredentials(ChannelCredentials):
-
+ 
   cdef readonly tuple _call_credentialses
   cdef readonly ChannelCredentials _channel_credentials
-
+ 
   cdef grpc_channel_credentials *c(self) except *
-
-
+ 
+ 
 cdef class ServerCertificateConfig:
-
+ 
   cdef grpc_ssl_server_certificate_config *c_cert_config
   cdef const char *c_pem_root_certs
   cdef grpc_ssl_pem_key_cert_pair *c_ssl_pem_key_cert_pairs
   cdef size_t c_ssl_pem_key_cert_pairs_count
   cdef list references
-
-
+ 
+ 
 cdef class ServerCredentials:
-
+ 
   cdef grpc_server_credentials *c_credentials
   cdef grpc_ssl_pem_key_cert_pair *c_ssl_pem_key_cert_pairs
   cdef size_t c_ssl_pem_key_cert_pairs_count

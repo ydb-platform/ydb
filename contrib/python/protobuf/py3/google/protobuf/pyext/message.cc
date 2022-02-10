@@ -822,7 +822,7 @@ PyObject* ToStringObject(const FieldDescriptor* descriptor,
   }
   return result;
 #else
-  return PyBytes_FromStringAndSize(value.c_str(), value.length());
+  return PyBytes_FromStringAndSize(value.c_str(), value.length()); 
 #endif
 }
 

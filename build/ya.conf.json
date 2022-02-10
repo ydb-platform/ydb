@@ -1074,14 +1074,14 @@
                 }
             ]
         },
-        "maven_import_sandbox_uploader": {
-            "tools": {
+        "maven_import_sandbox_uploader": { 
+            "tools": { 
                 "maven_import_sandbox_uploader": {
                     "bottle": "maven_import_sandbox_uploader",
                     "executable": "maven_import_sandbox_uploader"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -1107,8 +1107,8 @@
                     },
                     "default": true
                 }
-            ]
-        },
+            ] 
+        }, 
         "arc": {
             "tools": {
                 "arc": {
@@ -5784,17 +5784,17 @@
                 ]
             }
         },
-        "maven_import_sandbox_uploader": {
-            "formula": {
+        "maven_import_sandbox_uploader": { 
+            "formula": { 
                 "sandbox_id": 1031028343,
-                "match": "uploader"
-            },
-            "executable": {
+                "match": "uploader" 
+            }, 
+            "executable": { 
                 "maven_import_sandbox_uploader": [
                     "uploader"
                 ]
-            }
-        },
+            } 
+        }, 
         "arc": {
             "formula": {
                 "sandbox_id": [

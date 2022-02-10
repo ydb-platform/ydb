@@ -1,6 +1,6 @@
 OWNER(g:yql)
 
-PROTO_LIBRARY()
+PROTO_LIBRARY() 
 
 SRCS(
     gateways_config.proto

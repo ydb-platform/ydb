@@ -1,18 +1,18 @@
 # Copyright 2015 gRPC authors.
-#
+# 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+# 
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
+# 
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
+ 
+ 
 _INTERNAL_CALL_ERROR_MESSAGE_FORMAT = (
     'Internal gRPC call error %d. ' +
     'Please report to https://github.com/grpc/grpc/issues')
@@ -438,8 +438,8 @@ cdef _calls_drained(_ChannelState state):
   return not (state.integrated_call_states or state.segregated_call_states or
               state.connectivity_due)
 
-cdef class Channel:
-
+cdef class Channel: 
+ 
   def __cinit__(
       self, bytes target, object arguments,
       ChannelCredentials channel_credentials):
@@ -452,15 +452,15 @@ cdef class Channel:
         grpc_completion_queue_create_for_next(NULL))
     self._arguments = arguments
     cdef _ChannelArgs channel_args = _ChannelArgs(arguments)
-    if channel_credentials is None:
+    if channel_credentials is None: 
       self._state.c_channel = grpc_insecure_channel_create(
           <char *>target, channel_args.c_args(), NULL)
-    else:
+    else: 
       c_channel_credentials = channel_credentials.c()
       self._state.c_channel = grpc_secure_channel_create(
           c_channel_credentials, <char *>target, channel_args.c_args(), NULL)
       grpc_channel_credentials_release(c_channel_credentials)
-
+ 
   def target(self):
     cdef char *c_target
     with self._state.condition:
@@ -468,7 +468,7 @@ cdef class Channel:
       target = <bytes>c_target
       gpr_free(c_target)
       return target
-
+ 
   def integrated_call(
       self, int flags, method, host, object deadline, object metadata,
       CallCredentials credentials, operationses_and_tags,
@@ -499,18 +499,18 @@ cdef class Channel:
         self._state, flags, method, host, deadline, metadata, credentials,
         operationses_and_tags, context)
 
-  def check_connectivity_state(self, bint try_to_connect):
+  def check_connectivity_state(self, bint try_to_connect): 
     with self._state.condition:
       if self._state.open:
         return grpc_channel_check_connectivity_state(
             self._state.c_channel, try_to_connect)
       else:
         raise ValueError('Cannot invoke RPC: %s' % self._state.closed_reason)
-
-  def watch_connectivity_state(
+ 
+  def watch_connectivity_state( 
       self, grpc_connectivity_state last_observed_state, object deadline):
     return _watch_connectivity_state(self._state, last_observed_state, deadline)
-
+ 
   def close(self, code, details):
     _close(self, code, details, False)
 

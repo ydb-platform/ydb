@@ -1,18 +1,18 @@
 # Copyright 2015 gRPC authors.
-#
+# 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+# 
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
+# 
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
+ 
+ 
 def _spawn_callback_in_thread(cb_func, args):
   t = ForkManagedThread(target=cb_func, args=args)
   t.setDaemon(True)
@@ -29,11 +29,11 @@ def _spawn_callback_async(callback, args):
 
 
 cdef class CallCredentials:
-
+ 
   cdef grpc_call_credentials *c(self) except *:
     raise NotImplementedError()
-
-
+ 
+ 
 cdef int _get_metadata(void *state,
                        grpc_auth_metadata_context context,
                        grpc_credentials_plugin_metadata_cb cb,
@@ -54,19 +54,19 @@ cdef int _get_metadata(void *state,
   args = context.service_url, context.method_name, callback,
   _spawn_callback_async(<object>state, args)
   return 0  # Asynchronous return
-
-
+ 
+ 
 cdef void _destroy(void *state) except * with gil:
   cpython.Py_DECREF(<object>state)
   grpc_shutdown_blocking()
-
-
+ 
+ 
 cdef class MetadataPluginCallCredentials(CallCredentials):
-
+ 
   def __cinit__(self, metadata_plugin, name):
     self._metadata_plugin = metadata_plugin
     self._name = name
-
+ 
   cdef grpc_call_credentials *c(self) except *:
     cdef grpc_metadata_credentials_plugin c_metadata_plugin
     c_metadata_plugin.get_metadata = _get_metadata
@@ -78,8 +78,8 @@ cdef class MetadataPluginCallCredentials(CallCredentials):
     # TODO(yihuazhang): Expose min_security_level via the Python API so that
     # applications can decide what minimum security level their plugins require.
     return grpc_metadata_credentials_create_from_plugin(c_metadata_plugin, GRPC_PRIVACY_AND_INTEGRITY, NULL)
-
-
+ 
+ 
 cdef grpc_call_credentials *_composition(call_credentialses):
   call_credentials_iterator = iter(call_credentialses)
   cdef CallCredentials composition = next(call_credentials_iterator)
@@ -95,23 +95,23 @@ cdef grpc_call_credentials *_composition(call_credentialses):
     grpc_call_credentials_release(c_additional_call_credentials)
     c_composition = c_next_composition
   return c_composition
-
-
+ 
+ 
 cdef class CompositeCallCredentials(CallCredentials):
-
+ 
   def __cinit__(self, call_credentialses):
     self._call_credentialses = call_credentialses
-
+ 
   cdef grpc_call_credentials *c(self) except *:
     return _composition(self._call_credentialses)
-
-
+ 
+ 
 cdef class ChannelCredentials:
-
+ 
   cdef grpc_channel_credentials *c(self) except *:
     raise NotImplementedError()
-
-
+ 
+ 
 cdef class SSLSessionCacheLRU:
 
   def __cinit__(self, capacity):
@@ -128,14 +128,14 @@ cdef class SSLSessionCacheLRU:
 
 
 cdef class SSLChannelCredentials(ChannelCredentials):
-
+ 
   def __cinit__(self, pem_root_certificates, private_key, certificate_chain):
     if pem_root_certificates is not None and not isinstance(pem_root_certificates, bytes):
       raise TypeError('expected certificate to be bytes, got %s' % (type(pem_root_certificates)))
     self._pem_root_certificates = pem_root_certificates
     self._private_key = private_key
     self._certificate_chain = certificate_chain
-
+ 
   cdef grpc_channel_credentials *c(self) except *:
     cdef const char *c_pem_root_certificates
     cdef grpc_ssl_pem_key_cert_pair c_pem_key_certificate_pair
@@ -157,14 +157,14 @@ cdef class SSLChannelCredentials(ChannelCredentials):
         c_pem_key_certificate_pair.certificate_chain = NULL
       return grpc_ssl_credentials_create(
           c_pem_root_certificates, &c_pem_key_certificate_pair, NULL, NULL)
-
-
+ 
+ 
 cdef class CompositeChannelCredentials(ChannelCredentials):
-
+ 
   def __cinit__(self, call_credentialses, channel_credentials):
     self._call_credentialses = call_credentialses
     self._channel_credentials = channel_credentials
-
+ 
   cdef grpc_channel_credentials *c(self) except *:
     cdef grpc_channel_credentials *c_channel_credentials
     c_channel_credentials = self._channel_credentials.c()
@@ -176,25 +176,25 @@ cdef class CompositeChannelCredentials(ChannelCredentials):
     grpc_channel_credentials_release(c_channel_credentials)
     grpc_call_credentials_release(c_call_credentials_composition)
     return c_composition
-
-
+ 
+ 
 cdef class ServerCertificateConfig:
-
+ 
   def __cinit__(self):
     fork_handlers_and_grpc_init()
     self.c_cert_config = NULL
     self.c_pem_root_certs = NULL
     self.c_ssl_pem_key_cert_pairs = NULL
     self.references = []
-
+ 
   def __dealloc__(self):
     grpc_ssl_server_certificate_config_destroy(self.c_cert_config)
     gpr_free(self.c_ssl_pem_key_cert_pairs)
     grpc_shutdown_blocking()
-
-
+ 
+ 
 cdef class ServerCredentials:
-
+ 
   def __cinit__(self):
     fork_handlers_and_grpc_init()
     self.c_credentials = NULL
@@ -202,12 +202,12 @@ cdef class ServerCredentials:
     self.initial_cert_config = None
     self.cert_config_fetcher = None
     self.initial_cert_config_fetched = False
-
+ 
   def __dealloc__(self):
     if self.c_credentials != NULL:
       grpc_server_credentials_release(self.c_credentials)
     grpc_shutdown_blocking()
-
+ 
 cdef const char* _get_c_pem_root_certs(pem_root_certs):
   if pem_root_certs is None:
     return NULL
@@ -222,7 +222,7 @@ cdef grpc_ssl_pem_key_cert_pair* _create_c_ssl_pem_key_cert_pairs(pem_key_cert_p
                       "SslPemKeyCertPair")
   cdef size_t c_ssl_pem_key_cert_pairs_count = len(pem_key_cert_pairs)
   cdef grpc_ssl_pem_key_cert_pair* c_ssl_pem_key_cert_pairs = NULL
-  with nogil:
+  with nogil: 
     c_ssl_pem_key_cert_pairs = (
       <grpc_ssl_pem_key_cert_pair *>gpr_malloc(
         sizeof(grpc_ssl_pem_key_cert_pair) * c_ssl_pem_key_cert_pairs_count))
@@ -230,16 +230,16 @@ cdef grpc_ssl_pem_key_cert_pair* _create_c_ssl_pem_key_cert_pairs(pem_key_cert_p
     c_ssl_pem_key_cert_pairs[i] = (
       (<SslPemKeyCertPair>pem_key_cert_pairs[i]).c_pair)
   return c_ssl_pem_key_cert_pairs
-
-def server_credentials_ssl(pem_root_certs, pem_key_cert_pairs,
-                           bint force_client_auth):
-  pem_root_certs = str_to_bytes(pem_root_certs)
-  pem_key_cert_pairs = list(pem_key_cert_pairs)
-  cdef ServerCredentials credentials = ServerCredentials()
+ 
+def server_credentials_ssl(pem_root_certs, pem_key_cert_pairs, 
+                           bint force_client_auth): 
+  pem_root_certs = str_to_bytes(pem_root_certs) 
+  pem_key_cert_pairs = list(pem_key_cert_pairs) 
+  cdef ServerCredentials credentials = ServerCredentials() 
   credentials.references.append(pem_root_certs)
-  credentials.references.append(pem_key_cert_pairs)
+  credentials.references.append(pem_key_cert_pairs) 
   cdef const char * c_pem_root_certs = _get_c_pem_root_certs(pem_root_certs)
-  credentials.c_ssl_pem_key_cert_pairs_count = len(pem_key_cert_pairs)
+  credentials.c_ssl_pem_key_cert_pairs_count = len(pem_key_cert_pairs) 
   credentials.c_ssl_pem_key_cert_pairs = _create_c_ssl_pem_key_cert_pairs(pem_key_cert_pairs)
   cdef grpc_ssl_server_certificate_config *c_cert_config = NULL
   c_cert_config = grpc_ssl_server_certificate_config_create(
@@ -254,8 +254,8 @@ def server_credentials_ssl(pem_root_certs, pem_key_cert_pairs,
     c_cert_config)
   # C-core assumes ownership of c_options
   credentials.c_credentials = grpc_ssl_server_credentials_create_with_options(c_options)
-  return credentials
-
+  return credentials 
+ 
 def server_certificate_config_ssl(pem_root_certs, pem_key_cert_pairs):
   pem_root_certs = str_to_bytes(pem_root_certs)
   pem_key_cert_pairs = list(pem_key_cert_pairs)

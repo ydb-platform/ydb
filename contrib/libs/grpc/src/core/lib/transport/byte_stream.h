@@ -1,43 +1,43 @@
-/*
- *
+/* 
+ * 
  * Copyright 2015 gRPC authors.
- *
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- */
-
-#ifndef GRPC_CORE_LIB_TRANSPORT_BYTE_STREAM_H
-#define GRPC_CORE_LIB_TRANSPORT_BYTE_STREAM_H
-
+ * 
+ */ 
+ 
+#ifndef GRPC_CORE_LIB_TRANSPORT_BYTE_STREAM_H 
+#define GRPC_CORE_LIB_TRANSPORT_BYTE_STREAM_H 
+ 
 #include <grpc/support/port_platform.h>
 
-#include <grpc/slice_buffer.h>
+#include <grpc/slice_buffer.h> 
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/iomgr/closure.h"
-
-/** Internal bit flag for grpc_begin_message's \a flags signaling the use of
+ 
+/** Internal bit flag for grpc_begin_message's \a flags signaling the use of 
  * compression for the message. (Does not apply for stream compression.) */
-#define GRPC_WRITE_INTERNAL_COMPRESS (0x80000000u)
+#define GRPC_WRITE_INTERNAL_COMPRESS (0x80000000u) 
 /** Internal bit flag for determining whether the message was compressed and had
  * to be decompressed by the message_decompress filter. (Does not apply for
  * stream compression.) */
 #define GRPC_WRITE_INTERNAL_TEST_ONLY_WAS_COMPRESSED (0x40000000u)
-/** Mask of all valid internal flags. */
+/** Mask of all valid internal flags. */ 
 #define GRPC_WRITE_INTERNAL_USED_MASK \
   (GRPC_WRITE_INTERNAL_COMPRESS | GRPC_WRITE_INTERNAL_TEST_ONLY_WAS_COMPRESSED)
-
+ 
 namespace grpc_core {
-
+ 
 class ByteStream : public Orphanable {
  public:
   virtual ~ByteStream() {}
@@ -79,23 +79,23 @@ class ByteStream : public Orphanable {
  private:
   const uint32_t length_;
   uint32_t flags_;
-};
-
+}; 
+ 
 //
 // SliceBufferByteStream
 //
 // A ByteStream that wraps a slice buffer.
 //
-
+ 
 class SliceBufferByteStream : public ByteStream {
  public:
   // Removes all slices in slice_buffer, leaving it empty.
   SliceBufferByteStream(grpc_slice_buffer* slice_buffer, uint32_t flags);
-
+ 
   ~SliceBufferByteStream();
-
+ 
   void Orphan() override;
-
+ 
   bool Next(size_t max_size_hint, grpc_closure* on_complete) override;
   grpc_error* Pull(grpc_slice* slice) override;
   void Shutdown(grpc_error* error) override;
@@ -162,4 +162,4 @@ class ByteStreamCache {
 
 }  // namespace grpc_core
 
-#endif /* GRPC_CORE_LIB_TRANSPORT_BYTE_STREAM_H */
+#endif /* GRPC_CORE_LIB_TRANSPORT_BYTE_STREAM_H */ 

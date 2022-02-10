@@ -1,61 +1,61 @@
-/*
- *
+/* 
+ * 
  * Copyright 2015 gRPC authors.
- *
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- */
-
+ * 
+ */ 
+ 
 #include <grpcpp/impl/codegen/server_context.h>
-
+ 
 #include <algorithm>
 #include <utility>
-
-#include <grpc/compression.h>
-#include <grpc/grpc.h>
+ 
+#include <grpc/compression.h> 
+#include <grpc/grpc.h> 
 #include <grpc/load_reporting.h>
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
+#include <grpc/support/alloc.h> 
+#include <grpc/support/log.h> 
 #include <grpcpp/impl/call.h>
 #include <grpcpp/impl/codegen/completion_queue.h>
 #include <grpcpp/support/server_callback.h>
 #include <grpcpp/support/time.h>
-
+ 
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/sync.h"
-#include "src/core/lib/surface/call.h"
-
+#include "src/core/lib/surface/call.h" 
+ 
 namespace grpc {
-
-// CompletionOp
-
+ 
+// CompletionOp 
+ 
 class ServerContextBase::CompletionOp final
     : public internal::CallOpSetInterface {
- public:
-  // initial refs: one in the server context, one in the cq
+ public: 
+  // initial refs: one in the server context, one in the cq 
   // must ref the call before calling constructor and after deleting this
   CompletionOp(internal::Call* call,
                ::grpc::internal::ServerCallbackCall* callback_controller)
       : call_(*call),
         callback_controller_(callback_controller),
         has_tag_(false),
-        tag_(nullptr),
+        tag_(nullptr), 
         core_cq_tag_(this),
-        refs_(2),
-        finalized_(false),
+        refs_(2), 
+        finalized_(false), 
         cancelled_(0),
         done_intercepting_(false) {}
-
+ 
   // CompletionOp isn't copyable or movable
   CompletionOp(const CompletionOp&) = delete;
   CompletionOp& operator=(const CompletionOp&) = delete;
@@ -87,25 +87,25 @@ class ServerContextBase::CompletionOp final
   // there are no tests catching the compiler warning.
   static void operator delete(void*, void*) { assert(0); }
 
-  bool FinalizeResult(void** tag, bool* status) override;
-
-  bool CheckCancelled(CompletionQueue* cq) {
-    cq->TryPluck(this);
-    return CheckCancelledNoPluck();
-  }
-  bool CheckCancelledAsync() { return CheckCancelledNoPluck(); }
-
-  void set_tag(void* tag) {
-    has_tag_ = true;
-    tag_ = tag;
-  }
-
+  bool FinalizeResult(void** tag, bool* status) override; 
+ 
+  bool CheckCancelled(CompletionQueue* cq) { 
+    cq->TryPluck(this); 
+    return CheckCancelledNoPluck(); 
+  } 
+  bool CheckCancelledAsync() { return CheckCancelledNoPluck(); } 
+ 
+  void set_tag(void* tag) { 
+    has_tag_ = true; 
+    tag_ = tag; 
+  } 
+ 
   void set_core_cq_tag(void* core_cq_tag) { core_cq_tag_ = core_cq_tag; }
 
   void* core_cq_tag() override { return core_cq_tag_; }
 
-  void Unref();
-
+  void Unref(); 
+ 
   // This will be called while interceptors are run if the RPC is a hijacked
   // RPC. This should set hijacking state for each of the ops.
   void SetHijackingState() override {
@@ -130,33 +130,33 @@ class ServerContextBase::CompletionOp final
                                      nullptr) == GRPC_CALL_OK);
   }
 
- private:
-  bool CheckCancelledNoPluck() {
+ private: 
+  bool CheckCancelledNoPluck() { 
     grpc_core::MutexLock lock(&mu_);
-    return finalized_ ? (cancelled_ != 0) : false;
-  }
-
+    return finalized_ ? (cancelled_ != 0) : false; 
+  } 
+ 
   internal::Call call_;
   ::grpc::internal::ServerCallbackCall* const callback_controller_;
-  bool has_tag_;
-  void* tag_;
+  bool has_tag_; 
+  void* tag_; 
   void* core_cq_tag_;
   grpc_core::RefCount refs_;
   grpc_core::Mutex mu_;
-  bool finalized_;
+  bool finalized_; 
   int cancelled_;  // This is an int (not bool) because it is passed to core
   bool done_intercepting_;
   internal::InterceptorBatchMethodsImpl interceptor_methods_;
-};
-
+}; 
+ 
 void ServerContextBase::CompletionOp::Unref() {
   if (refs_.Unref()) {
     grpc_call* call = call_.call();
-    delete this;
+    delete this; 
     grpc_call_unref(call);
-  }
-}
-
+  } 
+} 
+ 
 void ServerContextBase::CompletionOp::FillOps(internal::Call* call) {
   grpc_op ops;
   ops.op = GRPC_OP_RECV_CLOSE_ON_SERVER;
@@ -171,8 +171,8 @@ void ServerContextBase::CompletionOp::FillOps(internal::Call* call) {
   GPR_ASSERT(grpc_call_start_batch(call->call(), &ops, 1, core_cq_tag_,
                                    nullptr) == GRPC_CALL_OK);
   /* No interceptors to run here */
-}
-
+} 
+ 
 bool ServerContextBase::CompletionOp::FinalizeResult(void** tag, bool* status) {
   // Decide whether to call the cancel callback within the lock
   bool call_cancel;
@@ -199,11 +199,11 @@ bool ServerContextBase::CompletionOp::FinalizeResult(void** tag, bool* status) {
 
     call_cancel = (cancelled_ != 0);
     // Release the lock since we may call a callback and interceptors.
-  }
+  } 
 
   if (call_cancel && callback_controller_ != nullptr) {
     callback_controller_->MaybeCallOnCancel();
-  }
+  } 
   /* Add interception point and run through interceptors */
   interceptor_methods_.AddInterceptionHookPoint(
       experimental::InterceptionHookPoints::POST_RECV_CLOSE);
@@ -218,19 +218,19 @@ bool ServerContextBase::CompletionOp::FinalizeResult(void** tag, bool* status) {
   }
   // There are interceptors to be run. Return false for now.
   return false;
-}
-
+} 
+ 
 // ServerContextBase body
-
+ 
 ServerContextBase::ServerContextBase()
     : deadline_(gpr_inf_future(GPR_CLOCK_REALTIME)) {}
-
+ 
 ServerContextBase::ServerContextBase(gpr_timespec deadline,
                                      grpc_metadata_array* arr)
     : deadline_(deadline) {
   std::swap(*client_metadata_.arr(), *arr);
-}
-
+} 
+ 
 void ServerContextBase::BindDeadlineAndMetadata(gpr_timespec deadline,
                                                 grpc_metadata_array* arr) {
   deadline_ = deadline;
@@ -238,17 +238,17 @@ void ServerContextBase::BindDeadlineAndMetadata(gpr_timespec deadline,
 }
 
 ServerContextBase::~ServerContextBase() {
-  if (completion_op_) {
-    completion_op_->Unref();
-  }
+  if (completion_op_) { 
+    completion_op_->Unref(); 
+  } 
   if (rpc_info_) {
     rpc_info_->Unref();
   }
   if (default_reactor_used_.load(std::memory_order_relaxed)) {
     reinterpret_cast<Reactor*>(&default_reactor_)->~Reactor();
   }
-}
-
+} 
+ 
 ServerContextBase::CallWrapper::~CallWrapper() {
   if (call) {
     // If the ServerContext is part of the call's arena, this could free the
@@ -260,7 +260,7 @@ ServerContextBase::CallWrapper::~CallWrapper() {
 void ServerContextBase::BeginCompletionOp(
     internal::Call* call, std::function<void(bool)> callback,
     ::grpc::internal::ServerCallbackCall* callback_controller) {
-  GPR_ASSERT(!completion_op_);
+  GPR_ASSERT(!completion_op_); 
   if (rpc_info_) {
     rpc_info_->Ref();
   }
@@ -274,25 +274,25 @@ void ServerContextBase::BeginCompletionOp(
     completion_op_->set_core_cq_tag(&completion_tag_);
     completion_op_->set_tag(completion_op_);
   } else if (has_notify_when_done_tag_) {
-    completion_op_->set_tag(async_notify_when_done_tag_);
-  }
-  call->PerformOps(completion_op_);
-}
-
+    completion_op_->set_tag(async_notify_when_done_tag_); 
+  } 
+  call->PerformOps(completion_op_); 
+} 
+ 
 internal::CompletionQueueTag* ServerContextBase::GetCompletionOpTag() {
   return static_cast<internal::CompletionQueueTag*>(completion_op_);
 }
 
 void ServerContextBase::AddInitialMetadata(const TString& key,
                                            const TString& value) {
-  initial_metadata_.insert(std::make_pair(key, value));
-}
-
+  initial_metadata_.insert(std::make_pair(key, value)); 
+} 
+ 
 void ServerContextBase::AddTrailingMetadata(const TString& key,
                                             const TString& value) {
-  trailing_metadata_.insert(std::make_pair(key, value));
-}
-
+  trailing_metadata_.insert(std::make_pair(key, value)); 
+} 
+ 
 void ServerContextBase::TryCancel() const {
   internal::CancelInterceptorBatchMethods cancel_methods;
   if (rpc_info_) {
@@ -303,53 +303,53 @@ void ServerContextBase::TryCancel() const {
   grpc_call_error err =
       grpc_call_cancel_with_status(call_.call, GRPC_STATUS_CANCELLED,
                                    "Cancelled on the server side", nullptr);
-  if (err != GRPC_CALL_OK) {
-    gpr_log(GPR_ERROR, "TryCancel failed with: %d", err);
-  }
-}
-
+  if (err != GRPC_CALL_OK) { 
+    gpr_log(GPR_ERROR, "TryCancel failed with: %d", err); 
+  } 
+} 
+ 
 bool ServerContextBase::IsCancelled() const {
   if (completion_tag_) {
     // When using callback API, this result is always valid.
     return completion_op_->CheckCancelledAsync();
   } else if (has_notify_when_done_tag_) {
     // When using async API, the result is only valid
-    // if the tag has already been delivered at the completion queue
-    return completion_op_ && completion_op_->CheckCancelledAsync();
-  } else {
+    // if the tag has already been delivered at the completion queue 
+    return completion_op_ && completion_op_->CheckCancelledAsync(); 
+  } else { 
     // when using sync API, the result is always valid
-    return completion_op_ && completion_op_->CheckCancelled(cq_);
-  }
-}
-
+    return completion_op_ && completion_op_->CheckCancelled(cq_); 
+  } 
+} 
+ 
 void ServerContextBase::set_compression_algorithm(
-    grpc_compression_algorithm algorithm) {
+    grpc_compression_algorithm algorithm) { 
   compression_algorithm_ = algorithm;
   const char* algorithm_name = nullptr;
-  if (!grpc_compression_algorithm_name(algorithm, &algorithm_name)) {
-    gpr_log(GPR_ERROR, "Name for compression algorithm '%d' unknown.",
-            algorithm);
-    abort();
-  }
+  if (!grpc_compression_algorithm_name(algorithm, &algorithm_name)) { 
+    gpr_log(GPR_ERROR, "Name for compression algorithm '%d' unknown.", 
+            algorithm); 
+    abort(); 
+  } 
   GPR_ASSERT(algorithm_name != nullptr);
-  AddInitialMetadata(GRPC_COMPRESSION_REQUEST_ALGORITHM_MD_KEY, algorithm_name);
-}
-
+  AddInitialMetadata(GRPC_COMPRESSION_REQUEST_ALGORITHM_MD_KEY, algorithm_name); 
+} 
+ 
 TString ServerContextBase::peer() const {
   TString peer;
   if (call_.call) {
     char* c_peer = grpc_call_get_peer(call_.call);
-    peer = c_peer;
-    gpr_free(c_peer);
-  }
-  return peer;
-}
-
+    peer = c_peer; 
+    gpr_free(c_peer); 
+  } 
+  return peer; 
+} 
+ 
 const struct census_context* ServerContextBase::census_context() const {
   return call_.call == nullptr ? nullptr
                                : grpc_census_call_get_context(call_.call);
-}
-
+} 
+ 
 void ServerContextBase::SetLoadReportingCosts(
     const std::vector<TString>& cost_data) {
   if (call_.call == nullptr) return;

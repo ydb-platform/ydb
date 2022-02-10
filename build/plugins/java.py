@@ -1,43 +1,43 @@
-import _common as common
+import _common as common 
 import ymake
-import json
+import json 
 import os
-import base64
-
-
-DELIM = '================================'
-
-
-def split_args(s):  # TODO quotes, escapes
-    return filter(None, s.split())
-
-
-def extract_macro_calls(unit, macro_value_name, macro_calls_delim):
-    if not unit.get(macro_value_name):
-        return []
-
-    return filter(None, map(split_args, unit.get(macro_value_name).replace('$' + macro_value_name, '').split(macro_calls_delim)))
-
-
-def extract_macro_calls2(unit, macro_value_name):
-    if not unit.get(macro_value_name):
-        return []
-
-    calls = []
-    for call_encoded_args in unit.get(macro_value_name).strip().split():
-        call_args = json.loads(base64.b64decode(call_encoded_args), encoding='utf-8')
-        calls.append(call_args)
-
-    return calls
-
-
+import base64 
+ 
+ 
+DELIM = '================================' 
+ 
+ 
+def split_args(s):  # TODO quotes, escapes 
+    return filter(None, s.split()) 
+ 
+ 
+def extract_macro_calls(unit, macro_value_name, macro_calls_delim): 
+    if not unit.get(macro_value_name): 
+        return [] 
+ 
+    return filter(None, map(split_args, unit.get(macro_value_name).replace('$' + macro_value_name, '').split(macro_calls_delim))) 
+ 
+ 
+def extract_macro_calls2(unit, macro_value_name): 
+    if not unit.get(macro_value_name): 
+        return [] 
+ 
+    calls = [] 
+    for call_encoded_args in unit.get(macro_value_name).strip().split(): 
+        call_args = json.loads(base64.b64decode(call_encoded_args), encoding='utf-8') 
+        calls.append(call_args) 
+ 
+    return calls 
+ 
+ 
 def on_run_jbuild_program(unit, *args):
     args = list(args)
     """
     Custom code generation
     @link: https://wiki.yandex-team.ru/yatool/java/#kodogeneracijarunjavaprogram
     """
-
+ 
     flat, kv = common.sort_by_keywords({'IN': -1, 'IN_DIR': -1, 'OUT': -1, 'OUT_DIR': -1, 'CWD': 1, 'CLASSPATH': -1, 'CP_USE_COMMAND_FILE': 1, 'ADD_SRCS_TO_CLASSPATH': 0}, args)
     depends = kv.get('CLASSPATH', []) + kv.get('JAR', [])
     fake_out = None
@@ -45,18 +45,18 @@ def on_run_jbuild_program(unit, *args):
         # XXX: hack to force ymake to build dependencies
         fake_out = "fake.out.{}".format(hash(tuple(args)))
         unit.on_run_java(['TOOL'] + depends + ["OUT", fake_out])
-
+ 
     if not kv.get('CP_USE_COMMAND_FILE'):
        args += ['CP_USE_COMMAND_FILE', unit.get(['JAVA_PROGRAM_CP_USE_COMMAND_FILE']) or 'yes']
 
     if fake_out is not None:
         args += ['FAKE_OUT', fake_out]
 
-    prev = unit.get(['RUN_JAVA_PROGRAM_VALUE']) or ''
-    new_val = (prev + ' ' + base64.b64encode(json.dumps(list(args), encoding='utf-8'))).strip()
-    unit.set(['RUN_JAVA_PROGRAM_VALUE', new_val])
-
-
+    prev = unit.get(['RUN_JAVA_PROGRAM_VALUE']) or '' 
+    new_val = (prev + ' ' + base64.b64encode(json.dumps(list(args), encoding='utf-8'))).strip() 
+    unit.set(['RUN_JAVA_PROGRAM_VALUE', new_val]) 
+ 
+ 
 def ongenerate_script(unit, *args):
     """
     heretic@ promised to make tutorial here
@@ -74,48 +74,48 @@ def ongenerate_script(unit, *args):
     unit.set(['GENERATE_SCRIPT_VALUE', new_val])
 
 
-def onjava_module(unit, *args):
-    args_delim = unit.get('ARGS_DELIM')
+def onjava_module(unit, *args): 
+    args_delim = unit.get('ARGS_DELIM') 
     idea_only = True if 'IDEA_ONLY' in args else False
-
+ 
     if idea_only:
         if unit.get('YA_IDE_IDEA') != 'yes':
             return
         if unit.get('YMAKE_JAVA_MODULES') != 'yes':
             return
 
-    data = {
+    data = { 
         'BUNDLE_NAME': unit.name(),
-        'PATH': unit.path(),
+        'PATH': unit.path(), 
         'IDEA_ONLY': 'yes' if idea_only else 'no',
-        'MODULE_TYPE': unit.get('MODULE_TYPE'),
-        'MODULE_ARGS': unit.get('MODULE_ARGS'),
+        'MODULE_TYPE': unit.get('MODULE_TYPE'), 
+        'MODULE_ARGS': unit.get('MODULE_ARGS'), 
         'MANAGED_PEERS': '${MANAGED_PEERS}',
         'MANAGED_PEERS_CLOSURE': '${MANAGED_PEERS_CLOSURE}',
         'NON_NAMAGEABLE_PEERS': '${NON_NAMAGEABLE_PEERS}',
         'TEST_CLASSPATH_MANAGED': '${TEST_CLASSPATH_MANAGED}',
-        'EXCLUDE': extract_macro_calls(unit, 'EXCLUDE_VALUE', args_delim),
-        'JAVA_SRCS': extract_macro_calls(unit, 'JAVA_SRCS_VALUE', args_delim),
-        'JAVAC_FLAGS': extract_macro_calls(unit, 'JAVAC_FLAGS_VALUE', args_delim),
-        'ANNOTATION_PROCESSOR': extract_macro_calls(unit, 'ANNOTATION_PROCESSOR_VALUE', args_delim),
-        'EXTERNAL_JAR': extract_macro_calls(unit, 'EXTERNAL_JAR_VALUE', args_delim),
-        'RUN_JAVA_PROGRAM': extract_macro_calls2(unit, 'RUN_JAVA_PROGRAM_VALUE'),
+        'EXCLUDE': extract_macro_calls(unit, 'EXCLUDE_VALUE', args_delim), 
+        'JAVA_SRCS': extract_macro_calls(unit, 'JAVA_SRCS_VALUE', args_delim), 
+        'JAVAC_FLAGS': extract_macro_calls(unit, 'JAVAC_FLAGS_VALUE', args_delim), 
+        'ANNOTATION_PROCESSOR': extract_macro_calls(unit, 'ANNOTATION_PROCESSOR_VALUE', args_delim), 
+        'EXTERNAL_JAR': extract_macro_calls(unit, 'EXTERNAL_JAR_VALUE', args_delim), 
+        'RUN_JAVA_PROGRAM': extract_macro_calls2(unit, 'RUN_JAVA_PROGRAM_VALUE'), 
         'RUN_JAVA_PROGRAM_MANAGED': '${RUN_JAVA_PROGRAM_MANAGED}',
         'MAVEN_GROUP_ID': extract_macro_calls(unit, 'MAVEN_GROUP_ID_VALUE', args_delim),
         'JAR_INCLUDE_FILTER': extract_macro_calls(unit, 'JAR_INCLUDE_FILTER_VALUE', args_delim),
         'JAR_EXCLUDE_FILTER': extract_macro_calls(unit, 'JAR_EXCLUDE_FILTER_VALUE', args_delim),
-
-        # TODO remove when java test dart is in prod
-        'UNITTEST_DIR': unit.get('UNITTEST_DIR'),
-        'SYSTEM_PROPERTIES': extract_macro_calls(unit, 'SYSTEM_PROPERTIES_VALUE', args_delim),
-        'JVM_ARGS': extract_macro_calls(unit, 'JVM_ARGS_VALUE', args_delim),
-        'TEST_CWD': extract_macro_calls(unit, 'TEST_CWD_VALUE', args_delim),
-        'TEST_DATA': extract_macro_calls(unit, '__test_data', args_delim),
-        'TEST_FORK_MODE': extract_macro_calls(unit, 'TEST_FORK_MODE', args_delim),
-        'SPLIT_FACTOR': extract_macro_calls(unit, 'TEST_SPLIT_FACTOR', args_delim),
-        'TIMEOUT': extract_macro_calls(unit, 'TEST_TIMEOUT', args_delim),
-        'TAG': extract_macro_calls(unit, 'TEST_TAGS_VALUE', args_delim),
-        'SIZE': extract_macro_calls(unit, 'TEST_SIZE_NAME', args_delim),
+ 
+        # TODO remove when java test dart is in prod 
+        'UNITTEST_DIR': unit.get('UNITTEST_DIR'), 
+        'SYSTEM_PROPERTIES': extract_macro_calls(unit, 'SYSTEM_PROPERTIES_VALUE', args_delim), 
+        'JVM_ARGS': extract_macro_calls(unit, 'JVM_ARGS_VALUE', args_delim), 
+        'TEST_CWD': extract_macro_calls(unit, 'TEST_CWD_VALUE', args_delim), 
+        'TEST_DATA': extract_macro_calls(unit, '__test_data', args_delim), 
+        'TEST_FORK_MODE': extract_macro_calls(unit, 'TEST_FORK_MODE', args_delim), 
+        'SPLIT_FACTOR': extract_macro_calls(unit, 'TEST_SPLIT_FACTOR', args_delim), 
+        'TIMEOUT': extract_macro_calls(unit, 'TEST_TIMEOUT', args_delim), 
+        'TAG': extract_macro_calls(unit, 'TEST_TAGS_VALUE', args_delim), 
+        'SIZE': extract_macro_calls(unit, 'TEST_SIZE_NAME', args_delim), 
         'DEPENDS': extract_macro_calls(unit, 'TEST_DEPENDS_VALUE', args_delim),
         'IDEA_EXCLUDE': extract_macro_calls(unit, 'IDEA_EXCLUDE_DIRS_VALUE', args_delim),
         'IDEA_RESOURCE': extract_macro_calls(unit, 'IDEA_RESOURCE_DIRS_VALUE', args_delim),
@@ -125,17 +125,17 @@ def onjava_module(unit, *args):
         'TEST_DATA': extract_macro_calls(unit, 'TEST_DATA_VALUE', args_delim),
         'JAVA_FORBIDDEN_LIBRARIES': extract_macro_calls(unit, 'JAVA_FORBIDDEN_LIBRARIES_VALUE', args_delim),
         'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT')
-    }
+    } 
     if unit.get('ENABLE_PREVIEW_VALUE') == 'yes' and unit.get('JDK_VERSION') in ('15', '16', '17'):
         data['ENABLE_PREVIEW'] = extract_macro_calls(unit, 'ENABLE_PREVIEW_VALUE', args_delim)
 
     if unit.get('SAVE_JAVAC_GENERATED_SRCS_DIR') and unit.get('SAVE_JAVAC_GENERATED_SRCS_TAR'):
         data['SAVE_JAVAC_GENERATED_SRCS_DIR'] = extract_macro_calls(unit, 'SAVE_JAVAC_GENERATED_SRCS_DIR', args_delim)
         data['SAVE_JAVAC_GENERATED_SRCS_TAR'] = extract_macro_calls(unit, 'SAVE_JAVAC_GENERATED_SRCS_TAR', args_delim)
-
+ 
     if unit.get('JAVA_ADD_DLLS_VALUE') == 'yes':
         data['ADD_DLLS_FROM_DEPENDS'] = extract_macro_calls(unit, 'JAVA_ADD_DLLS_VALUE', args_delim)
-
+ 
     if unit.get('ERROR_PRONE_VALUE') == 'yes':
         data['ERROR_PRONE'] = extract_macro_calls(unit, 'ERROR_PRONE_VALUE', args_delim)
 
@@ -189,36 +189,36 @@ def onjava_module(unit, *args):
         if macro_str and macro_str == 'yes':
             data['VCS_INFO_DISABLE_CACHE__NO_UID__'] = macro_val
 
-    for java_srcs_args in data['JAVA_SRCS']:
-        external = None
-
-        for i in xrange(len(java_srcs_args)):
-            arg = java_srcs_args[i]
-
-            if arg == 'EXTERNAL':
-                if not i + 1 < len(java_srcs_args):
-                    continue  # TODO configure error
-
-                ex = java_srcs_args[i + 1]
-
-                if ex in ('EXTERNAL', 'SRCDIR', 'PACKAGE_PREFIX', 'EXCLUDE'):
-                    continue  # TODO configure error
-
-                if external is not None:
-                    continue  # TODO configure error
-
-                external = ex
-
-        if external:
-            unit.onpeerdir(external)
-
-    for k, v in data.items():
-        if not v:
-            data.pop(k)
-
-    dart = 'JAVA_DART: ' + base64.b64encode(json.dumps(data)) + '\n' + DELIM + '\n'
-
-    unit.set_property(['JAVA_DART_DATA', dart])
+    for java_srcs_args in data['JAVA_SRCS']: 
+        external = None 
+ 
+        for i in xrange(len(java_srcs_args)): 
+            arg = java_srcs_args[i] 
+ 
+            if arg == 'EXTERNAL': 
+                if not i + 1 < len(java_srcs_args): 
+                    continue  # TODO configure error 
+ 
+                ex = java_srcs_args[i + 1] 
+ 
+                if ex in ('EXTERNAL', 'SRCDIR', 'PACKAGE_PREFIX', 'EXCLUDE'): 
+                    continue  # TODO configure error 
+ 
+                if external is not None: 
+                    continue  # TODO configure error 
+ 
+                external = ex 
+ 
+        if external: 
+            unit.onpeerdir(external) 
+ 
+    for k, v in data.items(): 
+        if not v: 
+            data.pop(k) 
+ 
+    dart = 'JAVA_DART: ' + base64.b64encode(json.dumps(data)) + '\n' + DELIM + '\n' 
+ 
+    unit.set_property(['JAVA_DART_DATA', dart]) 
     if not idea_only and unit.get('MODULE_TYPE') in ('JAVA_PROGRAM', 'JAVA_LIBRARY', 'JTEST', 'TESTNG', 'JUNIT5') and not unit.path().startswith('$S/contrib/java'):
         unit.on_add_classpath_clash_check()
         if unit.get('LINT_LEVEL_VALUE') != "none":

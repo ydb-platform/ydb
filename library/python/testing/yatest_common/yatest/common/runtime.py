@@ -77,15 +77,15 @@ def build_path(path=None):
     return _join_path(_get_ya_plugin_instance().build_root, path)
 
 
-def java_path():
-    """
+def java_path(): 
+    """ 
     [DEPRECATED] Get path to java
-    :return: absolute path to java
-    """
+    :return: absolute path to java 
+    """ 
     from . import runtime_java
-    return runtime_java.get_java_path(binary_path(os.path.join('contrib', 'tools', 'jdk')))
-
-
+    return runtime_java.get_java_path(binary_path(os.path.join('contrib', 'tools', 'jdk'))) 
+ 
+ 
 def java_home():
     """
     Get jdk directory path

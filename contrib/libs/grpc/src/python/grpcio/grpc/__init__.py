@@ -1,28 +1,28 @@
 # Copyright 2015-2016 gRPC authors.
-#
+# 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-#
+# 
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
+# 
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""gRPC's Python API."""
-
-import abc
+"""gRPC's Python API.""" 
+ 
+import abc 
 import contextlib
-import enum
+import enum 
 import logging
-import sys
-import six
-
-from grpc._cython import cygrpc as _cygrpc
+import sys 
+import six 
+ 
+from grpc._cython import cygrpc as _cygrpc 
 from grpc import _compression
-
+ 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 try:
@@ -30,30 +30,30 @@ try:
 except ImportError:
     __version__ = "dev0"
 
-############################## Future Interface  ###############################
-
-
-class FutureTimeoutError(Exception):
-    """Indicates that a method call on a Future timed out."""
-
-
-class FutureCancelledError(Exception):
-    """Indicates that the computation underlying a Future was cancelled."""
-
-
-class Future(six.with_metaclass(abc.ABCMeta)):
-    """A representation of a computation in another control flow.
-
+############################## Future Interface  ############################### 
+ 
+ 
+class FutureTimeoutError(Exception): 
+    """Indicates that a method call on a Future timed out.""" 
+ 
+ 
+class FutureCancelledError(Exception): 
+    """Indicates that the computation underlying a Future was cancelled.""" 
+ 
+ 
+class Future(six.with_metaclass(abc.ABCMeta)): 
+    """A representation of a computation in another control flow. 
+ 
     Computations represented by a Future may be yet to be begun,
     may be ongoing, or may have already completed.
     """
-
-    @abc.abstractmethod
-    def cancel(self):
-        """Attempts to cancel the computation.
-
+ 
+    @abc.abstractmethod 
+    def cancel(self): 
+        """Attempts to cancel the computation. 
+ 
         This method does not block.
-
+ 
         Returns:
             bool:
             Returns True if the computation was canceled.
@@ -65,14 +65,14 @@ class Future(six.with_metaclass(abc.ABCMeta)):
             3. computation is scheduled for execution and it is impossible
                 to determine its state without blocking.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def cancelled(self):
-        """Describes whether the computation was cancelled.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def cancelled(self): 
+        """Describes whether the computation was cancelled. 
+ 
         This method does not block.
-
+ 
         Returns:
             bool:
             Returns True if the computation was cancelled before its result became
@@ -83,28 +83,28 @@ class Future(six.with_metaclass(abc.ABCMeta)):
             1. computation was not cancelled.
             2. computation's result is available.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def running(self):
-        """Describes whether the computation is taking place.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def running(self): 
+        """Describes whether the computation is taking place. 
+ 
         This method does not block.
-
+ 
         Returns:
             Returns True if the computation is scheduled for execution or
             currently executing.
 
             Returns False if the computation already executed or was cancelled.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def done(self):
-        """Describes whether the computation has taken place.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def done(self): 
+        """Describes whether the computation has taken place. 
+ 
         This method does not block.
-
+ 
         Returns:
             bool:
             Returns True if the computation already executed or was cancelled.
@@ -112,22 +112,22 @@ class Future(six.with_metaclass(abc.ABCMeta)):
             currently executing.
             This is exactly opposite of the running() method's result.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def result(self, timeout=None):
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def result(self, timeout=None): 
         """Returns the result of the computation or raises its exception.
-
+ 
         This method may return immediately or may block.
-
+ 
         Args:
           timeout: The length of time in seconds to wait for the computation to
             finish or be cancelled. If None, the call will block until the
             computations's termination.
-
+ 
         Returns:
           The return value of the computation.
-
+ 
         Raises:
           FutureTimeoutError: If a timeout value is passed and the computation
             does not terminate within the allotted time.
@@ -135,79 +135,79 @@ class Future(six.with_metaclass(abc.ABCMeta)):
           Exception: If the computation raised an exception, this call will
             raise the same exception.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def exception(self, timeout=None):
-        """Return the exception raised by the computation.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def exception(self, timeout=None): 
+        """Return the exception raised by the computation. 
+ 
         This method may return immediately or may block.
-
+ 
         Args:
           timeout: The length of time in seconds to wait for the computation to
             terminate or be cancelled. If None, the call will block until the
             computations's termination.
-
+ 
         Returns:
             The exception raised by the computation, or None if the computation
             did not raise an exception.
-
+ 
         Raises:
           FutureTimeoutError: If a timeout value is passed and the computation
             does not terminate within the allotted time.
           FutureCancelledError: If the computation was cancelled.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def traceback(self, timeout=None):
-        """Access the traceback of the exception raised by the computation.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def traceback(self, timeout=None): 
+        """Access the traceback of the exception raised by the computation. 
+ 
         This method may return immediately or may block.
-
+ 
         Args:
           timeout: The length of time in seconds to wait for the computation
             to terminate or be cancelled. If None, the call will block until
             the computation's termination.
-
+ 
         Returns:
             The traceback of the exception raised by the computation, or None
             if the computation did not raise an exception.
-
+ 
         Raises:
           FutureTimeoutError: If a timeout value is passed and the computation
             does not terminate within the allotted time.
           FutureCancelledError: If the computation was cancelled.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def add_done_callback(self, fn):
-        """Adds a function to be called at completion of the computation.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def add_done_callback(self, fn): 
+        """Adds a function to be called at completion of the computation. 
+ 
         The callback will be passed this Future object describing the outcome
         of the computation.  Callbacks will be invoked after the future is
         terminated, whether successfully or not.
-
+ 
         If the computation has already completed, the callback will be called
         immediately.
-
+ 
         Exceptions raised in the callback will be logged at ERROR level, but
         will not terminate any threads of execution.
 
         Args:
           fn: A callable taking this Future object as its single parameter.
         """
-        raise NotImplementedError()
-
-
-################################  gRPC Enums  ##################################
-
-
-@enum.unique
-class ChannelConnectivity(enum.Enum):
-    """Mirrors grpc_connectivity_state in the gRPC Core.
-
+        raise NotImplementedError() 
+ 
+ 
+################################  gRPC Enums  ################################## 
+ 
+ 
+@enum.unique 
+class ChannelConnectivity(enum.Enum): 
+    """Mirrors grpc_connectivity_state in the gRPC Core. 
+ 
     Attributes:
       IDLE: The channel is idle.
       CONNECTING: The channel is connecting.
@@ -216,16 +216,16 @@ class ChannelConnectivity(enum.Enum):
         to recover.
       SHUTDOWN: The channel has seen a failure from which it cannot recover.
     """
-    IDLE = (_cygrpc.ConnectivityState.idle, 'idle')
-    CONNECTING = (_cygrpc.ConnectivityState.connecting, 'connecting')
-    READY = (_cygrpc.ConnectivityState.ready, 'ready')
-    TRANSIENT_FAILURE = (_cygrpc.ConnectivityState.transient_failure,
-                         'transient failure')
-    SHUTDOWN = (_cygrpc.ConnectivityState.shutdown, 'shutdown')
-
-
-@enum.unique
-class StatusCode(enum.Enum):
+    IDLE = (_cygrpc.ConnectivityState.idle, 'idle') 
+    CONNECTING = (_cygrpc.ConnectivityState.connecting, 'connecting') 
+    READY = (_cygrpc.ConnectivityState.ready, 'ready') 
+    TRANSIENT_FAILURE = (_cygrpc.ConnectivityState.transient_failure, 
+                         'transient failure') 
+    SHUTDOWN = (_cygrpc.ConnectivityState.shutdown, 'shutdown') 
+ 
+ 
+@enum.unique 
+class StatusCode(enum.Enum): 
     """Mirrors grpc_status_code in the gRPC Core.
 
     Attributes:
@@ -253,29 +253,29 @@ class StatusCode(enum.Enum):
       UNAVAILABLE: The service is currently unavailable.
       DATA_LOSS: Unrecoverable data loss or corruption.
     """
-    OK = (_cygrpc.StatusCode.ok, 'ok')
-    CANCELLED = (_cygrpc.StatusCode.cancelled, 'cancelled')
-    UNKNOWN = (_cygrpc.StatusCode.unknown, 'unknown')
-    INVALID_ARGUMENT = (_cygrpc.StatusCode.invalid_argument, 'invalid argument')
-    DEADLINE_EXCEEDED = (_cygrpc.StatusCode.deadline_exceeded,
-                         'deadline exceeded')
-    NOT_FOUND = (_cygrpc.StatusCode.not_found, 'not found')
-    ALREADY_EXISTS = (_cygrpc.StatusCode.already_exists, 'already exists')
-    PERMISSION_DENIED = (_cygrpc.StatusCode.permission_denied,
-                         'permission denied')
-    RESOURCE_EXHAUSTED = (_cygrpc.StatusCode.resource_exhausted,
-                          'resource exhausted')
-    FAILED_PRECONDITION = (_cygrpc.StatusCode.failed_precondition,
-                           'failed precondition')
-    ABORTED = (_cygrpc.StatusCode.aborted, 'aborted')
-    OUT_OF_RANGE = (_cygrpc.StatusCode.out_of_range, 'out of range')
-    UNIMPLEMENTED = (_cygrpc.StatusCode.unimplemented, 'unimplemented')
-    INTERNAL = (_cygrpc.StatusCode.internal, 'internal')
-    UNAVAILABLE = (_cygrpc.StatusCode.unavailable, 'unavailable')
-    DATA_LOSS = (_cygrpc.StatusCode.data_loss, 'data loss')
-    UNAUTHENTICATED = (_cygrpc.StatusCode.unauthenticated, 'unauthenticated')
-
-
+    OK = (_cygrpc.StatusCode.ok, 'ok') 
+    CANCELLED = (_cygrpc.StatusCode.cancelled, 'cancelled') 
+    UNKNOWN = (_cygrpc.StatusCode.unknown, 'unknown') 
+    INVALID_ARGUMENT = (_cygrpc.StatusCode.invalid_argument, 'invalid argument') 
+    DEADLINE_EXCEEDED = (_cygrpc.StatusCode.deadline_exceeded, 
+                         'deadline exceeded') 
+    NOT_FOUND = (_cygrpc.StatusCode.not_found, 'not found') 
+    ALREADY_EXISTS = (_cygrpc.StatusCode.already_exists, 'already exists') 
+    PERMISSION_DENIED = (_cygrpc.StatusCode.permission_denied, 
+                         'permission denied') 
+    RESOURCE_EXHAUSTED = (_cygrpc.StatusCode.resource_exhausted, 
+                          'resource exhausted') 
+    FAILED_PRECONDITION = (_cygrpc.StatusCode.failed_precondition, 
+                           'failed precondition') 
+    ABORTED = (_cygrpc.StatusCode.aborted, 'aborted') 
+    OUT_OF_RANGE = (_cygrpc.StatusCode.out_of_range, 'out of range') 
+    UNIMPLEMENTED = (_cygrpc.StatusCode.unimplemented, 'unimplemented') 
+    INTERNAL = (_cygrpc.StatusCode.internal, 'internal') 
+    UNAVAILABLE = (_cygrpc.StatusCode.unavailable, 'unavailable') 
+    DATA_LOSS = (_cygrpc.StatusCode.data_loss, 'data loss') 
+    UNAUTHENTICATED = (_cygrpc.StatusCode.unauthenticated, 'unauthenticated') 
+ 
+ 
 #############################  gRPC Status  ################################
 
 
@@ -292,108 +292,108 @@ class Status(six.with_metaclass(abc.ABCMeta)):
     """
 
 
-#############################  gRPC Exceptions  ################################
-
-
-class RpcError(Exception):
-    """Raised by the gRPC library to indicate non-OK-status RPC termination."""
-
-
-##############################  Shared Context  ################################
-
-
-class RpcContext(six.with_metaclass(abc.ABCMeta)):
-    """Provides RPC-related information and action."""
-
-    @abc.abstractmethod
-    def is_active(self):
+#############################  gRPC Exceptions  ################################ 
+ 
+ 
+class RpcError(Exception): 
+    """Raised by the gRPC library to indicate non-OK-status RPC termination.""" 
+ 
+ 
+##############################  Shared Context  ################################ 
+ 
+ 
+class RpcContext(six.with_metaclass(abc.ABCMeta)): 
+    """Provides RPC-related information and action.""" 
+ 
+    @abc.abstractmethod 
+    def is_active(self): 
         """Describes whether the RPC is active or has terminated.
 
         Returns:
           bool:
           True if RPC is active, False otherwise.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def time_remaining(self):
-        """Describes the length of allowed time remaining for the RPC.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def time_remaining(self): 
+        """Describes the length of allowed time remaining for the RPC. 
+ 
         Returns:
           A nonnegative float indicating the length of allowed time in seconds
           remaining for the RPC to complete before it is considered to have
           timed out, or None if no deadline was specified for the RPC.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def cancel(self):
-        """Cancels the RPC.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def cancel(self): 
+        """Cancels the RPC. 
+ 
         Idempotent and has no effect if the RPC has already terminated.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def add_callback(self, callback):
-        """Registers a callback to be called on RPC termination.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def add_callback(self, callback): 
+        """Registers a callback to be called on RPC termination. 
+ 
         Args:
           callback: A no-parameter callable to be called on RPC termination.
-
+ 
         Returns:
           True if the callback was added and will be called later; False if
             the callback was not added and will not be called (because the RPC
             already terminated or some other reason).
         """
-        raise NotImplementedError()
-
-
-#########################  Invocation-Side Context  ############################
-
-
-class Call(six.with_metaclass(abc.ABCMeta, RpcContext)):
-    """Invocation-side utility object for an RPC."""
-
-    @abc.abstractmethod
-    def initial_metadata(self):
+        raise NotImplementedError() 
+ 
+ 
+#########################  Invocation-Side Context  ############################ 
+ 
+ 
+class Call(six.with_metaclass(abc.ABCMeta, RpcContext)): 
+    """Invocation-side utility object for an RPC.""" 
+ 
+    @abc.abstractmethod 
+    def initial_metadata(self): 
         """Accesses the initial metadata sent by the server.
-
+ 
         This method blocks until the value is available.
-
+ 
         Returns:
           The initial :term:`metadata`.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def trailing_metadata(self):
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def trailing_metadata(self): 
         """Accesses the trailing metadata sent by the server.
-
+ 
         This method blocks until the value is available.
-
+ 
         Returns:
           The trailing :term:`metadata`.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def code(self):
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def code(self): 
         """Accesses the status code sent by the server.
-
+ 
         This method blocks until the value is available.
-
+ 
         Returns:
           The StatusCode value for the RPC.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def details(self):
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def details(self): 
         """Accesses the details sent by the server.
-
+ 
         This method blocks until the value is available.
-
+ 
         Returns:
           The details string of the RPC.
         """
@@ -418,7 +418,7 @@ class ClientCallDetails(six.with_metaclass(abc.ABCMeta)):
             flag to enable :term:`wait_for_ready` mechanism.
       compression: An element of grpc.compression, e.g.
         grpc.compression.Gzip. This is an EXPERIMENTAL option.
-    """
+    """ 
 
 
 class UnaryUnaryClientInterceptor(six.with_metaclass(abc.ABCMeta)):
@@ -455,9 +455,9 @@ class UnaryUnaryClientInterceptor(six.with_metaclass(abc.ABCMeta)):
             Should the event terminate with non-OK status, the returned
             Call-Future's exception value will be an RpcError.
         """
-        raise NotImplementedError()
-
-
+        raise NotImplementedError() 
+ 
+ 
 class UnaryStreamClientInterceptor(six.with_metaclass(abc.ABCMeta)):
     """Affords intercepting unary-stream invocations.
 
@@ -567,89 +567,89 @@ class StreamStreamClientInterceptor(six.with_metaclass(abc.ABCMeta)):
         raise NotImplementedError()
 
 
-############  Authentication & Authorization Interfaces & Classes  #############
-
-
-class ChannelCredentials(object):
+############  Authentication & Authorization Interfaces & Classes  ############# 
+ 
+ 
+class ChannelCredentials(object): 
     """An encapsulation of the data required to create a secure Channel.
-
+ 
     This class has no supported interface - it exists to define the type of its
     instances and its instances exist to be passed to other functions. For
     example, ssl_channel_credentials returns an instance of this class and
     secure_channel requires an instance of this class.
     """
-
-    def __init__(self, credentials):
-        self._credentials = credentials
-
-
-class CallCredentials(object):
+ 
+    def __init__(self, credentials): 
+        self._credentials = credentials 
+ 
+ 
+class CallCredentials(object): 
     """An encapsulation of the data required to assert an identity over a call.
-
+ 
     A CallCredentials has to be used with secure Channel, otherwise the
     metadata will not be transmitted to the server.
 
     A CallCredentials may be composed with ChannelCredentials to always assert
     identity for every call over that Channel.
-
+ 
     This class has no supported interface - it exists to define the type of its
     instances and its instances exist to be passed to other functions.
     """
-
-    def __init__(self, credentials):
-        self._credentials = credentials
-
-
-class AuthMetadataContext(six.with_metaclass(abc.ABCMeta)):
-    """Provides information to call credentials metadata plugins.
-
+ 
+    def __init__(self, credentials): 
+        self._credentials = credentials 
+ 
+ 
+class AuthMetadataContext(six.with_metaclass(abc.ABCMeta)): 
+    """Provides information to call credentials metadata plugins. 
+ 
     Attributes:
       service_url: A string URL of the service being called into.
       method_name: A string of the fully qualified method name being called.
     """
-
-
-class AuthMetadataPluginCallback(six.with_metaclass(abc.ABCMeta)):
-    """Callback object received by a metadata plugin."""
-
-    def __call__(self, metadata, error):
+ 
+ 
+class AuthMetadataPluginCallback(six.with_metaclass(abc.ABCMeta)): 
+    """Callback object received by a metadata plugin.""" 
+ 
+    def __call__(self, metadata, error): 
         """Passes to the gRPC runtime authentication metadata for an RPC.
-
+ 
         Args:
           metadata: The :term:`metadata` used to construct the CallCredentials.
           error: An Exception to indicate error or None to indicate success.
         """
-        raise NotImplementedError()
-
-
-class AuthMetadataPlugin(six.with_metaclass(abc.ABCMeta)):
-    """A specification for custom authentication."""
-
-    def __call__(self, context, callback):
-        """Implements authentication by passing metadata to a callback.
-
+        raise NotImplementedError() 
+ 
+ 
+class AuthMetadataPlugin(six.with_metaclass(abc.ABCMeta)): 
+    """A specification for custom authentication.""" 
+ 
+    def __call__(self, context, callback): 
+        """Implements authentication by passing metadata to a callback. 
+ 
         This method will be invoked asynchronously in a separate thread.
-
+ 
         Args:
           context: An AuthMetadataContext providing information on the RPC that
             the plugin is being called to authenticate.
           callback: An AuthMetadataPluginCallback to be invoked either
             synchronously or asynchronously.
         """
-        raise NotImplementedError()
-
-
-class ServerCredentials(object):
+        raise NotImplementedError() 
+ 
+ 
+class ServerCredentials(object): 
     """An encapsulation of the data required to open a secure port on a Server.
-
+ 
     This class has no supported interface - it exists to define the type of its
     instances and its instances exist to be passed to other functions.
     """
-
-    def __init__(self, credentials):
-        self._credentials = credentials
-
-
+ 
+    def __init__(self, credentials): 
+        self._credentials = credentials 
+ 
+ 
 class ServerCertificateConfiguration(object):
     """A certificate configuration for use with an SSL-enabled Server.
 
@@ -665,13 +665,13 @@ class ServerCertificateConfiguration(object):
         self._certificate_configuration = certificate_configuration
 
 
-########################  Multi-Callable Interfaces  ###########################
-
-
-class UnaryUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
+########################  Multi-Callable Interfaces  ########################### 
+ 
+ 
+class UnaryUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)): 
     """Affords invoking a unary-unary RPC from client-side."""
-
-    @abc.abstractmethod
+ 
+    @abc.abstractmethod 
     def __call__(self,
                  request,
                  timeout=None,
@@ -679,8 +679,8 @@ class UnaryUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
                  credentials=None,
                  wait_for_ready=None,
                  compression=None):
-        """Synchronously invokes the underlying RPC.
-
+        """Synchronously invokes the underlying RPC. 
+ 
         Args:
           request: The request value for the RPC.
           timeout: An optional duration of time in seconds to allow
@@ -693,18 +693,18 @@ class UnaryUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
             flag to enable :term:`wait_for_ready` mechanism.
           compression: An element of grpc.compression, e.g.
             grpc.compression.Gzip. This is an EXPERIMENTAL option.
-
+ 
         Returns:
           The response value for the RPC.
-
+ 
         Raises:
           RpcError: Indicating that the RPC terminated with non-OK status. The
             raised RpcError will also be a Call for the RPC affording the RPC's
             metadata, status code, and details.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
     def with_call(self,
                   request,
                   timeout=None,
@@ -712,8 +712,8 @@ class UnaryUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
                   credentials=None,
                   wait_for_ready=None,
                   compression=None):
-        """Synchronously invokes the underlying RPC.
-
+        """Synchronously invokes the underlying RPC. 
+ 
         Args:
           request: The request value for the RPC.
           timeout: An optional durating of time in seconds to allow for
@@ -726,18 +726,18 @@ class UnaryUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
             flag to enable :term:`wait_for_ready` mechanism.
           compression: An element of grpc.compression, e.g.
             grpc.compression.Gzip. This is an EXPERIMENTAL option.
-
+ 
         Returns:
           The response value for the RPC and a Call value for the RPC.
-
+ 
         Raises:
           RpcError: Indicating that the RPC terminated with non-OK status. The
             raised RpcError will also be a Call for the RPC affording the RPC's
             metadata, status code, and details.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
     def future(self,
                request,
                timeout=None,
@@ -745,8 +745,8 @@ class UnaryUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
                credentials=None,
                wait_for_ready=None,
                compression=None):
-        """Asynchronously invokes the underlying RPC.
-
+        """Asynchronously invokes the underlying RPC. 
+ 
         Args:
           request: The request value for the RPC.
           timeout: An optional duration of time in seconds to allow for
@@ -759,7 +759,7 @@ class UnaryUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
             flag to enable :term:`wait_for_ready` mechanism.
           compression: An element of grpc.compression, e.g.
             grpc.compression.Gzip. This is an EXPERIMENTAL option.
-
+ 
         Returns:
             An object that is both a Call for the RPC and a Future.
             In the event of RPC completion, the return Call-Future's result
@@ -767,13 +767,13 @@ class UnaryUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
             Should the event terminate with non-OK status,
             the returned Call-Future's exception value will be an RpcError.
         """
-        raise NotImplementedError()
-
-
-class UnaryStreamMultiCallable(six.with_metaclass(abc.ABCMeta)):
+        raise NotImplementedError() 
+ 
+ 
+class UnaryStreamMultiCallable(six.with_metaclass(abc.ABCMeta)): 
     """Affords invoking a unary-stream RPC from client-side."""
-
-    @abc.abstractmethod
+ 
+    @abc.abstractmethod 
     def __call__(self,
                  request,
                  timeout=None,
@@ -781,8 +781,8 @@ class UnaryStreamMultiCallable(six.with_metaclass(abc.ABCMeta)):
                  credentials=None,
                  wait_for_ready=None,
                  compression=None):
-        """Invokes the underlying RPC.
-
+        """Invokes the underlying RPC. 
+ 
         Args:
           request: The request value for the RPC.
           timeout: An optional duration of time in seconds to allow for
@@ -795,29 +795,29 @@ class UnaryStreamMultiCallable(six.with_metaclass(abc.ABCMeta)):
             flag to enable :term:`wait_for_ready` mechanism.
           compression: An element of grpc.compression, e.g.
             grpc.compression.Gzip. This is an EXPERIMENTAL option.
-
+ 
         Returns:
             An object that is both a Call for the RPC and an iterator of
             response values. Drawing response values from the returned
             Call-iterator may raise RpcError indicating termination of the
             RPC with non-OK status.
         """
-        raise NotImplementedError()
-
-
-class StreamUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
+        raise NotImplementedError() 
+ 
+ 
+class StreamUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)): 
     """Affords invoking a stream-unary RPC from client-side."""
-
-    @abc.abstractmethod
-    def __call__(self,
-                 request_iterator,
-                 timeout=None,
-                 metadata=None,
+ 
+    @abc.abstractmethod 
+    def __call__(self, 
+                 request_iterator, 
+                 timeout=None, 
+                 metadata=None, 
                  credentials=None,
                  wait_for_ready=None,
                  compression=None):
-        """Synchronously invokes the underlying RPC.
-
+        """Synchronously invokes the underlying RPC. 
+ 
         Args:
           request_iterator: An iterator that yields request values for
             the RPC.
@@ -831,27 +831,27 @@ class StreamUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
             flag to enable :term:`wait_for_ready` mechanism.
           compression: An element of grpc.compression, e.g.
             grpc.compression.Gzip. This is an EXPERIMENTAL option.
-
+ 
         Returns:
           The response value for the RPC.
-
+ 
         Raises:
           RpcError: Indicating that the RPC terminated with non-OK status. The
             raised RpcError will also implement grpc.Call, affording methods
             such as metadata, code, and details.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def with_call(self,
-                  request_iterator,
-                  timeout=None,
-                  metadata=None,
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def with_call(self, 
+                  request_iterator, 
+                  timeout=None, 
+                  metadata=None, 
                   credentials=None,
                   wait_for_ready=None,
                   compression=None):
         """Synchronously invokes the underlying RPC on the client.
-
+ 
         Args:
           request_iterator: An iterator that yields request values for
             the RPC.
@@ -865,27 +865,27 @@ class StreamUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
             flag to enable :term:`wait_for_ready` mechanism.
           compression: An element of grpc.compression, e.g.
             grpc.compression.Gzip. This is an EXPERIMENTAL option.
-
+ 
         Returns:
           The response value for the RPC and a Call object for the RPC.
-
+ 
         Raises:
           RpcError: Indicating that the RPC terminated with non-OK status. The
             raised RpcError will also be a Call for the RPC affording the RPC's
             metadata, status code, and details.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def future(self,
-               request_iterator,
-               timeout=None,
-               metadata=None,
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def future(self, 
+               request_iterator, 
+               timeout=None, 
+               metadata=None, 
                credentials=None,
                wait_for_ready=None,
                compression=None):
         """Asynchronously invokes the underlying RPC on the client.
-
+ 
         Args:
           request_iterator: An iterator that yields request values for the RPC.
           timeout: An optional duration of time in seconds to allow for
@@ -898,7 +898,7 @@ class StreamUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
             flag to enable :term:`wait_for_ready` mechanism.
           compression: An element of grpc.compression, e.g.
             grpc.compression.Gzip. This is an EXPERIMENTAL option.
-
+ 
         Returns:
             An object that is both a Call for the RPC and a Future.
             In the event of RPC completion, the return Call-Future's result value
@@ -906,22 +906,22 @@ class StreamUnaryMultiCallable(six.with_metaclass(abc.ABCMeta)):
             with non-OK status, the returned Call-Future's exception value will
             be an RpcError.
         """
-        raise NotImplementedError()
-
-
-class StreamStreamMultiCallable(six.with_metaclass(abc.ABCMeta)):
+        raise NotImplementedError() 
+ 
+ 
+class StreamStreamMultiCallable(six.with_metaclass(abc.ABCMeta)): 
     """Affords invoking a stream-stream RPC on client-side."""
-
-    @abc.abstractmethod
-    def __call__(self,
-                 request_iterator,
-                 timeout=None,
-                 metadata=None,
+ 
+    @abc.abstractmethod 
+    def __call__(self, 
+                 request_iterator, 
+                 timeout=None, 
+                 metadata=None, 
                  credentials=None,
                  wait_for_ready=None,
                  compression=None):
         """Invokes the underlying RPC on the client.
-
+ 
         Args:
           request_iterator: An iterator that yields request values for the RPC.
           timeout: An optional duration of time in seconds to allow for
@@ -934,30 +934,30 @@ class StreamStreamMultiCallable(six.with_metaclass(abc.ABCMeta)):
             flag to enable :term:`wait_for_ready` mechanism.
           compression: An element of grpc.compression, e.g.
             grpc.compression.Gzip. This is an EXPERIMENTAL option.
-
+ 
         Returns:
             An object that is both a Call for the RPC and an iterator of
             response values. Drawing response values from the returned
             Call-iterator may raise RpcError indicating termination of the
             RPC with non-OK status.
         """
-        raise NotImplementedError()
-
-
-#############################  Channel Interface  ##############################
-
-
-class Channel(six.with_metaclass(abc.ABCMeta)):
+        raise NotImplementedError() 
+ 
+ 
+#############################  Channel Interface  ############################## 
+ 
+ 
+class Channel(six.with_metaclass(abc.ABCMeta)): 
     """Affords RPC invocation via generic methods on client-side.
-
+ 
     Channel objects implement the Context Manager type, although they need not
     support being entered and exited multiple times.
     """
 
-    @abc.abstractmethod
-    def subscribe(self, callback, try_to_connect=False):
+    @abc.abstractmethod 
+    def subscribe(self, callback, try_to_connect=False): 
         """Subscribe to this Channel's connectivity state machine.
-
+ 
         A Channel may be in any of the states described by ChannelConnectivity.
         This method allows application to monitor the state transitions.
         The typical use case is to debug or gain better visibility into gRPC
@@ -973,25 +973,25 @@ class Channel(six.with_metaclass(abc.ABCMeta)):
             should attempt to connect immediately. If set to False, gRPC
             runtime decides when to connect.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def unsubscribe(self, callback):
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def unsubscribe(self, callback): 
         """Unsubscribes a subscribed callback from this Channel's connectivity.
-
+ 
         Args:
           callback: A callable previously registered with this Channel from
           having been passed to its "subscribe" method.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def unary_unary(self,
-                    method,
-                    request_serializer=None,
-                    response_deserializer=None):
-        """Creates a UnaryUnaryMultiCallable for a unary-unary method.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def unary_unary(self, 
+                    method, 
+                    request_serializer=None, 
+                    response_deserializer=None): 
+        """Creates a UnaryUnaryMultiCallable for a unary-unary method. 
+ 
         Args:
           method: The name of the RPC method.
           request_serializer: Optional :term:`serializer` for serializing the request
@@ -999,19 +999,19 @@ class Channel(six.with_metaclass(abc.ABCMeta)):
           response_deserializer: Optional :term:`deserializer` for deserializing the
             response message. Response goes undeserialized in case None
             is passed.
-
+ 
         Returns:
           A UnaryUnaryMultiCallable value for the named unary-unary method.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def unary_stream(self,
-                     method,
-                     request_serializer=None,
-                     response_deserializer=None):
-        """Creates a UnaryStreamMultiCallable for a unary-stream method.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def unary_stream(self, 
+                     method, 
+                     request_serializer=None, 
+                     response_deserializer=None): 
+        """Creates a UnaryStreamMultiCallable for a unary-stream method. 
+ 
         Args:
           method: The name of the RPC method.
           request_serializer: Optional :term:`serializer` for serializing the request
@@ -1019,19 +1019,19 @@ class Channel(six.with_metaclass(abc.ABCMeta)):
           response_deserializer: Optional :term:`deserializer` for deserializing the
             response message. Response goes undeserialized in case None is
             passed.
-
+ 
         Returns:
           A UnaryStreamMultiCallable value for the name unary-stream method.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def stream_unary(self,
-                     method,
-                     request_serializer=None,
-                     response_deserializer=None):
-        """Creates a StreamUnaryMultiCallable for a stream-unary method.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def stream_unary(self, 
+                     method, 
+                     request_serializer=None, 
+                     response_deserializer=None): 
+        """Creates a StreamUnaryMultiCallable for a stream-unary method. 
+ 
         Args:
           method: The name of the RPC method.
           request_serializer: Optional :term:`serializer` for serializing the request
@@ -1039,19 +1039,19 @@ class Channel(six.with_metaclass(abc.ABCMeta)):
           response_deserializer: Optional :term:`deserializer` for deserializing the
             response message. Response goes undeserialized in case None is
             passed.
-
+ 
         Returns:
           A StreamUnaryMultiCallable value for the named stream-unary method.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def stream_stream(self,
-                      method,
-                      request_serializer=None,
-                      response_deserializer=None):
-        """Creates a StreamStreamMultiCallable for a stream-stream method.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def stream_stream(self, 
+                      method, 
+                      request_serializer=None, 
+                      response_deserializer=None): 
+        """Creates a StreamStreamMultiCallable for a stream-stream method. 
+ 
         Args:
           method: The name of the RPC method.
           request_serializer: Optional :term:`serializer` for serializing the request
@@ -1059,16 +1059,16 @@ class Channel(six.with_metaclass(abc.ABCMeta)):
           response_deserializer: Optional :term:`deserializer` for deserializing the
             response message. Response goes undeserialized in case None
             is passed.
-
+ 
         Returns:
           A StreamStreamMultiCallable value for the named stream-stream method.
         """
-        raise NotImplementedError()
-
+        raise NotImplementedError() 
+ 
     @abc.abstractmethod
     def close(self):
         """Closes this Channel and releases all resources held by it.
-
+ 
         Closing the Channel will immediately terminate all RPCs active with the
         Channel and it is not valid to invoke new RPCs with the Channel.
 
@@ -1085,32 +1085,32 @@ class Channel(six.with_metaclass(abc.ABCMeta)):
         raise NotImplementedError()
 
 
-##########################  Service-Side Context  ##############################
-
-
-class ServicerContext(six.with_metaclass(abc.ABCMeta, RpcContext)):
-    """A context object passed to method implementations."""
-
-    @abc.abstractmethod
-    def invocation_metadata(self):
+##########################  Service-Side Context  ############################## 
+ 
+ 
+class ServicerContext(six.with_metaclass(abc.ABCMeta, RpcContext)): 
+    """A context object passed to method implementations.""" 
+ 
+    @abc.abstractmethod 
+    def invocation_metadata(self): 
         """Accesses the metadata from the sent by the client.
-
+ 
         Returns:
           The invocation :term:`metadata`.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def peer(self):
-        """Identifies the peer that invoked the RPC being serviced.
-
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def peer(self): 
+        """Identifies the peer that invoked the RPC being serviced. 
+ 
         Returns:
           A string identifying the peer that invoked the RPC being serviced.
           The string format is determined by gRPC runtime.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
     def peer_identities(self):
         """Gets one or more peer identity(s).
 
@@ -1157,21 +1157,21 @@ class ServicerContext(six.with_metaclass(abc.ABCMeta, RpcContext)):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def send_initial_metadata(self, initial_metadata):
+    def send_initial_metadata(self, initial_metadata): 
         """Sends the initial metadata value to the client.
-
+ 
         This method need not be called by implementations if they have no
         metadata to add to what the gRPC runtime will transmit.
-
+ 
         Args:
           initial_metadata: The initial :term:`metadata`.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def set_trailing_metadata(self, trailing_metadata):
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def set_trailing_metadata(self, trailing_metadata): 
         """Sets the trailing metadata for the RPC.
-
+ 
         Sets the trailing metadata to be sent upon completion of the RPC.
 
         If this method is invoked multiple times throughout the lifetime of an
@@ -1180,13 +1180,13 @@ class ServicerContext(six.with_metaclass(abc.ABCMeta, RpcContext)):
 
         This method need not be called by implementations if they have no
         metadata to add to what the gRPC runtime will transmit.
-
+ 
         Args:
           trailing_metadata: The trailing :term:`metadata`.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
     def abort(self, code, details):
         """Raises an exception to terminate the RPC with a non-OK status.
 
@@ -1225,33 +1225,33 @@ class ServicerContext(six.with_metaclass(abc.ABCMeta, RpcContext)):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def set_code(self, code):
+    def set_code(self, code): 
         """Sets the value to be used as status code upon RPC completion.
-
+ 
         This method need not be called by method implementations if they wish
         the gRPC runtime to determine the status code of the RPC.
-
+ 
         Args:
           code: A StatusCode object to be sent to the client.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def set_details(self, details):
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def set_details(self, details): 
         """Sets the value to be used as detail string upon RPC completion.
-
+ 
         This method need not be called by method implementations if they have
         no details to transmit.
-
+ 
         Args:
           details: A UTF-8-encodable string to be sent to the client upon
             termination of the RPC.
         """
-        raise NotImplementedError()
-
+        raise NotImplementedError() 
+ 
     def disable_next_message_compression(self):
         """Disables compression for the next response message.
-
+ 
         This is an EXPERIMENTAL method.
 
         This method will override any compression configuration set during
@@ -1260,12 +1260,12 @@ class ServicerContext(six.with_metaclass(abc.ABCMeta, RpcContext)):
         raise NotImplementedError()
 
 
-#####################  Service-Side Handler Interfaces  ########################
-
-
-class RpcMethodHandler(six.with_metaclass(abc.ABCMeta)):
-    """An implementation of a single RPC method.
-
+#####################  Service-Side Handler Interfaces  ######################## 
+ 
+ 
+class RpcMethodHandler(six.with_metaclass(abc.ABCMeta)): 
+    """An implementation of a single RPC method. 
+ 
     Attributes:
       request_streaming: Whether the RPC supports exactly one request message
         or any arbitrary number of request messages.
@@ -1297,48 +1297,48 @@ class RpcMethodHandler(six.with_metaclass(abc.ABCMeta)):
         Only non-None if request_streaming and response_streaming are both
         True.
     """
-
-
-class HandlerCallDetails(six.with_metaclass(abc.ABCMeta)):
-    """Describes an RPC that has just arrived for service.
+ 
+ 
+class HandlerCallDetails(six.with_metaclass(abc.ABCMeta)): 
+    """Describes an RPC that has just arrived for service. 
 
     Attributes:
       method: The method name of the RPC.
       invocation_metadata: The :term:`metadata` sent by the client.
     """
-
-
-class GenericRpcHandler(six.with_metaclass(abc.ABCMeta)):
-    """An implementation of arbitrarily many RPC methods."""
-
-    @abc.abstractmethod
-    def service(self, handler_call_details):
+ 
+ 
+class GenericRpcHandler(six.with_metaclass(abc.ABCMeta)): 
+    """An implementation of arbitrarily many RPC methods.""" 
+ 
+    @abc.abstractmethod 
+    def service(self, handler_call_details): 
         """Returns the handler for servicing the RPC.
-
+ 
         Args:
           handler_call_details: A HandlerCallDetails describing the RPC.
-
+ 
         Returns:
           An RpcMethodHandler with which the RPC may be serviced if the
           implementation chooses to service this RPC, or None otherwise.
         """
-        raise NotImplementedError()
-
-
-class ServiceRpcHandler(six.with_metaclass(abc.ABCMeta, GenericRpcHandler)):
-    """An implementation of RPC methods belonging to a service.
-
+        raise NotImplementedError() 
+ 
+ 
+class ServiceRpcHandler(six.with_metaclass(abc.ABCMeta, GenericRpcHandler)): 
+    """An implementation of RPC methods belonging to a service. 
+ 
     A service handles RPC methods with structured names of the form
     '/Service.Name/Service.Method', where 'Service.Name' is the value
     returned by service_name(), and 'Service.Method' is the method
     name.  A service can have multiple method names, but only a single
     service name.
     """
-
-    @abc.abstractmethod
-    def service_name(self):
+ 
+    @abc.abstractmethod 
+    def service_name(self): 
         """Returns this service's name.
-
+ 
         Returns:
           The service name.
         """
@@ -1352,7 +1352,7 @@ class ServerInterceptor(six.with_metaclass(abc.ABCMeta)):
     """Affords intercepting incoming RPCs on the service-side.
 
     This is an EXPERIMENTAL API.
-    """
+    """ 
 
     @abc.abstractmethod
     def intercept_service(self, continuation, handler_call_details):
@@ -1370,71 +1370,71 @@ class ServerInterceptor(six.with_metaclass(abc.ABCMeta)):
           An RpcMethodHandler with which the RPC may be serviced if the
           interceptor chooses to service this RPC, or None otherwise.
         """
-        raise NotImplementedError()
-
-
-#############################  Server Interface  ###############################
-
-
-class Server(six.with_metaclass(abc.ABCMeta)):
-    """Services RPCs."""
-
-    @abc.abstractmethod
-    def add_generic_rpc_handlers(self, generic_rpc_handlers):
-        """Registers GenericRpcHandlers with this Server.
-
+        raise NotImplementedError() 
+ 
+ 
+#############################  Server Interface  ############################### 
+ 
+ 
+class Server(six.with_metaclass(abc.ABCMeta)): 
+    """Services RPCs.""" 
+ 
+    @abc.abstractmethod 
+    def add_generic_rpc_handlers(self, generic_rpc_handlers): 
+        """Registers GenericRpcHandlers with this Server. 
+ 
         This method is only safe to call before the server is started.
-
+ 
         Args:
           generic_rpc_handlers: An iterable of GenericRpcHandlers that will be
           used to service RPCs.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def add_insecure_port(self, address):
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def add_insecure_port(self, address): 
         """Opens an insecure port for accepting RPCs.
-
+ 
         This method may only be called before starting the server.
-
+ 
         Args:
           address: The address for which to open a port. If the port is 0,
             or not specified in the address, then gRPC runtime will choose a port.
-
+ 
         Returns:
           An integer port on which server will accept RPC requests.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def add_secure_port(self, address, server_credentials):
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def add_secure_port(self, address, server_credentials): 
         """Opens a secure port for accepting RPCs.
-
+ 
         This method may only be called before starting the server.
-
+ 
         Args:
           address: The address for which to open a port.
             if the port is 0, or not specified in the address, then gRPC
             runtime will choose a port.
           server_credentials: A ServerCredentials object.
-
+ 
         Returns:
           An integer port on which server will accept RPC requests.
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def start(self):
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def start(self): 
         """Starts this Server.
-
+ 
         This method may only be called once. (i.e. it is not idempotent).
         """
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def stop(self, grace):
+        raise NotImplementedError() 
+ 
+    @abc.abstractmethod 
+    def stop(self, grace): 
         """Stops this Server.
-
+ 
         This method immediately stop service of new RPCs in all cases.
 
         If a grace period is specified, this method returns immediately
@@ -1442,7 +1442,7 @@ class Server(six.with_metaclass(abc.ABCMeta)):
         If a grace period is not specified (by passing None for `grace`),
         all existing RPCs are aborted immediately and this method
         blocks until the last RPC handler terminates.
-
+ 
         This method is idempotent and may be called at any time.
         Passing a smaller grace value in a subsequent call will have
         the effect of stopping the Server sooner (passing None will
@@ -1450,20 +1450,20 @@ class Server(six.with_metaclass(abc.ABCMeta)):
         a larger grace value in a subsequent call *will not* have the
         effect of stopping the server later (i.e. the most restrictive
         grace value is used).
-
+ 
         Args:
           grace: A duration of time in seconds or None.
-
+ 
         Returns:
           A threading.Event that will be set when this Server has completely
           stopped, i.e. when running RPCs either complete or are aborted and
           all handlers have terminated.
         """
-        raise NotImplementedError()
-
+        raise NotImplementedError() 
+ 
     def wait_for_termination(self, timeout=None):
         """Block current thread until the server stops.
-
+ 
         This is an EXPERIMENTAL API.
 
         The wait will not consume computational resources during blocking, and
@@ -1485,111 +1485,111 @@ class Server(six.with_metaclass(abc.ABCMeta)):
         raise NotImplementedError()
 
 
-#################################  Functions    ################################
-
-
-def unary_unary_rpc_method_handler(behavior,
-                                   request_deserializer=None,
-                                   response_serializer=None):
-    """Creates an RpcMethodHandler for a unary-unary RPC method.
-
+#################################  Functions    ################################ 
+ 
+ 
+def unary_unary_rpc_method_handler(behavior, 
+                                   request_deserializer=None, 
+                                   response_serializer=None): 
+    """Creates an RpcMethodHandler for a unary-unary RPC method. 
+ 
     Args:
       behavior: The implementation of an RPC that accepts one request
         and returns one response.
       request_deserializer: An optional :term:`deserializer` for request deserialization.
       response_serializer: An optional :term:`serializer` for response serialization.
-
+ 
     Returns:
       An RpcMethodHandler object that is typically used by grpc.Server.
     """
     from grpc import _utilities  # pylint: disable=cyclic-import
-    return _utilities.RpcMethodHandler(False, False, request_deserializer,
-                                       response_serializer, behavior, None,
-                                       None, None)
-
-
-def unary_stream_rpc_method_handler(behavior,
-                                    request_deserializer=None,
-                                    response_serializer=None):
-    """Creates an RpcMethodHandler for a unary-stream RPC method.
-
+    return _utilities.RpcMethodHandler(False, False, request_deserializer, 
+                                       response_serializer, behavior, None, 
+                                       None, None) 
+ 
+ 
+def unary_stream_rpc_method_handler(behavior, 
+                                    request_deserializer=None, 
+                                    response_serializer=None): 
+    """Creates an RpcMethodHandler for a unary-stream RPC method. 
+ 
     Args:
       behavior: The implementation of an RPC that accepts one request
         and returns an iterator of response values.
       request_deserializer: An optional :term:`deserializer` for request deserialization.
       response_serializer: An optional :term:`serializer` for response serialization.
-
+ 
     Returns:
       An RpcMethodHandler object that is typically used by grpc.Server.
     """
     from grpc import _utilities  # pylint: disable=cyclic-import
-    return _utilities.RpcMethodHandler(False, True, request_deserializer,
-                                       response_serializer, None, behavior,
-                                       None, None)
-
-
-def stream_unary_rpc_method_handler(behavior,
-                                    request_deserializer=None,
-                                    response_serializer=None):
-    """Creates an RpcMethodHandler for a stream-unary RPC method.
-
+    return _utilities.RpcMethodHandler(False, True, request_deserializer, 
+                                       response_serializer, None, behavior, 
+                                       None, None) 
+ 
+ 
+def stream_unary_rpc_method_handler(behavior, 
+                                    request_deserializer=None, 
+                                    response_serializer=None): 
+    """Creates an RpcMethodHandler for a stream-unary RPC method. 
+ 
     Args:
       behavior: The implementation of an RPC that accepts an iterator of
         request values and returns a single response value.
       request_deserializer: An optional :term:`deserializer` for request deserialization.
       response_serializer: An optional :term:`serializer` for response serialization.
-
+ 
     Returns:
       An RpcMethodHandler object that is typically used by grpc.Server.
     """
     from grpc import _utilities  # pylint: disable=cyclic-import
-    return _utilities.RpcMethodHandler(True, False, request_deserializer,
-                                       response_serializer, None, None,
-                                       behavior, None)
-
-
-def stream_stream_rpc_method_handler(behavior,
-                                     request_deserializer=None,
-                                     response_serializer=None):
-    """Creates an RpcMethodHandler for a stream-stream RPC method.
-
+    return _utilities.RpcMethodHandler(True, False, request_deserializer, 
+                                       response_serializer, None, None, 
+                                       behavior, None) 
+ 
+ 
+def stream_stream_rpc_method_handler(behavior, 
+                                     request_deserializer=None, 
+                                     response_serializer=None): 
+    """Creates an RpcMethodHandler for a stream-stream RPC method. 
+ 
     Args:
       behavior: The implementation of an RPC that accepts an iterator of
         request values and returns an iterator of response values.
       request_deserializer: An optional :term:`deserializer` for request deserialization.
       response_serializer: An optional :term:`serializer` for response serialization.
-
+ 
     Returns:
       An RpcMethodHandler object that is typically used by grpc.Server.
     """
     from grpc import _utilities  # pylint: disable=cyclic-import
-    return _utilities.RpcMethodHandler(True, True, request_deserializer,
-                                       response_serializer, None, None, None,
-                                       behavior)
-
-
-def method_handlers_generic_handler(service, method_handlers):
+    return _utilities.RpcMethodHandler(True, True, request_deserializer, 
+                                       response_serializer, None, None, None, 
+                                       behavior) 
+ 
+ 
+def method_handlers_generic_handler(service, method_handlers): 
     """Creates a GenericRpcHandler from RpcMethodHandlers.
-
+ 
     Args:
       service: The name of the service that is implemented by the
         method_handlers.
       method_handlers: A dictionary that maps method names to corresponding
         RpcMethodHandler.
-
+ 
     Returns:
       A GenericRpcHandler. This is typically added to the grpc.Server object
       with add_generic_rpc_handlers() before starting the server.
     """
     from grpc import _utilities  # pylint: disable=cyclic-import
-    return _utilities.DictionaryGenericHandler(service, method_handlers)
-
-
-def ssl_channel_credentials(root_certificates=None,
-                            private_key=None,
-                            certificate_chain=None):
-    """Creates a ChannelCredentials for use with an SSL-enabled Channel.
-
+    return _utilities.DictionaryGenericHandler(service, method_handlers) 
+ 
+ 
+def ssl_channel_credentials(root_certificates=None, 
+                            private_key=None, 
+                            certificate_chain=None): 
+    """Creates a ChannelCredentials for use with an SSL-enabled Channel. 
+ 
     Args:
       root_certificates: The PEM-encoded root certificates as a byte string,
         or None to retrieve them from a default location chosen by gRPC
@@ -1598,38 +1598,38 @@ def ssl_channel_credentials(root_certificates=None,
         private key should be used.
       certificate_chain: The PEM-encoded certificate chain as a byte string
         to use or None if no certificate chain should be used.
-
+ 
     Returns:
       A ChannelCredentials for use with an SSL-enabled Channel.
     """
-    return ChannelCredentials(
+    return ChannelCredentials( 
         _cygrpc.SSLChannelCredentials(root_certificates, private_key,
                                       certificate_chain))
-
-
-def metadata_call_credentials(metadata_plugin, name=None):
-    """Construct CallCredentials from an AuthMetadataPlugin.
-
+ 
+ 
+def metadata_call_credentials(metadata_plugin, name=None): 
+    """Construct CallCredentials from an AuthMetadataPlugin. 
+ 
     Args:
       metadata_plugin: An AuthMetadataPlugin to use for authentication.
       name: An optional name for the plugin.
-
+ 
     Returns:
       A CallCredentials.
     """
     from grpc import _plugin_wrapping  # pylint: disable=cyclic-import
     return _plugin_wrapping.metadata_plugin_call_credentials(
         metadata_plugin, name)
-
-
-def access_token_call_credentials(access_token):
-    """Construct CallCredentials from an access token.
-
+ 
+ 
+def access_token_call_credentials(access_token): 
+    """Construct CallCredentials from an access token. 
+ 
     Args:
       access_token: A string to place directly in the http request
         authorization header, for example
         "authorization: Bearer <access_token>".
-
+ 
     Returns:
       A CallCredentials.
     """
@@ -1637,46 +1637,46 @@ def access_token_call_credentials(access_token):
     from grpc import _plugin_wrapping  # pylint: disable=cyclic-import
     return _plugin_wrapping.metadata_plugin_call_credentials(
         _auth.AccessTokenAuthMetadataPlugin(access_token), None)
-
-
-def composite_call_credentials(*call_credentials):
-    """Compose multiple CallCredentials to make a new CallCredentials.
-
+ 
+ 
+def composite_call_credentials(*call_credentials): 
+    """Compose multiple CallCredentials to make a new CallCredentials. 
+ 
     Args:
       *call_credentials: At least two CallCredentials objects.
-
+ 
     Returns:
       A CallCredentials object composed of the given CallCredentials objects.
     """
-    return CallCredentials(
+    return CallCredentials( 
         _cygrpc.CompositeCallCredentials(
             tuple(single_call_credentials._credentials
                   for single_call_credentials in call_credentials)))
-
-
-def composite_channel_credentials(channel_credentials, *call_credentials):
-    """Compose a ChannelCredentials and one or more CallCredentials objects.
-
+ 
+ 
+def composite_channel_credentials(channel_credentials, *call_credentials): 
+    """Compose a ChannelCredentials and one or more CallCredentials objects. 
+ 
     Args:
       channel_credentials: A ChannelCredentials object.
       *call_credentials: One or more CallCredentials objects.
-
+ 
     Returns:
       A ChannelCredentials composed of the given ChannelCredentials and
         CallCredentials objects.
     """
-    return ChannelCredentials(
+    return ChannelCredentials( 
         _cygrpc.CompositeChannelCredentials(
             tuple(single_call_credentials._credentials
                   for single_call_credentials in call_credentials),
             channel_credentials._credentials))
-
-
-def ssl_server_credentials(private_key_certificate_chain_pairs,
-                           root_certificates=None,
-                           require_client_auth=False):
-    """Creates a ServerCredentials for use with an SSL-enabled Server.
-
+ 
+ 
+def ssl_server_credentials(private_key_certificate_chain_pairs, 
+                           root_certificates=None, 
+                           require_client_auth=False): 
+    """Creates a ServerCredentials for use with an SSL-enabled Server. 
+ 
     Args:
       private_key_certificate_chain_pairs: A list of pairs of the form
         [PEM-encoded private key, PEM-encoded certificate chain].
@@ -1686,26 +1686,26 @@ def ssl_server_credentials(private_key_certificate_chain_pairs,
       require_client_auth: A boolean indicating whether or not to require
         clients to be authenticated. May only be True if root_certificates
         is not None.
-
+ 
     Returns:
       A ServerCredentials for use with an SSL-enabled Server. Typically, this
       object is an argument to add_secure_port() method during server setup.
     """
     if not private_key_certificate_chain_pairs:
-        raise ValueError(
-            'At least one private key-certificate chain pair is required!')
-    elif require_client_auth and root_certificates is None:
-        raise ValueError(
-            'Illegal to require client auth without providing root certificates!'
-        )
-    else:
-        return ServerCredentials(
-            _cygrpc.server_credentials_ssl(root_certificates, [
-                _cygrpc.SslPemKeyCertPair(key, pem)
-                for key, pem in private_key_certificate_chain_pairs
-            ], require_client_auth))
-
-
+        raise ValueError( 
+            'At least one private key-certificate chain pair is required!') 
+    elif require_client_auth and root_certificates is None: 
+        raise ValueError( 
+            'Illegal to require client auth without providing root certificates!' 
+        ) 
+    else: 
+        return ServerCredentials( 
+            _cygrpc.server_credentials_ssl(root_certificates, [ 
+                _cygrpc.SslPemKeyCertPair(key, pem) 
+                for key, pem in private_key_certificate_chain_pairs 
+            ], require_client_auth)) 
+ 
+ 
 def ssl_server_certificate_configuration(private_key_certificate_chain_pairs,
                                          root_certificates=None):
     """Creates a ServerCertificateConfiguration for use with a Server.
@@ -1885,26 +1885,26 @@ def compute_engine_channel_credentials(call_credentials):
             call_credentials._credentials))
 
 
-def channel_ready_future(channel):
+def channel_ready_future(channel): 
     """Creates a Future that tracks when a Channel is ready.
-
+ 
     Cancelling the Future does not affect the channel's state machine.
     It merely decouples the Future from channel state machine.
-
+ 
     Args:
       channel: A Channel object.
-
+ 
     Returns:
       A Future object that matures when the channel connectivity is
-      ChannelConnectivity.READY.
+      ChannelConnectivity.READY. 
     """
     from grpc import _utilities  # pylint: disable=cyclic-import
-    return _utilities.channel_ready_future(channel)
-
-
+    return _utilities.channel_ready_future(channel) 
+ 
+ 
 def insecure_channel(target, options=None, compression=None):
-    """Creates an insecure Channel to a server.
-
+    """Creates an insecure Channel to a server. 
+ 
     The returned Channel is thread-safe.
 
     Args:
@@ -1913,18 +1913,18 @@ def insecure_channel(target, options=None, compression=None):
         in gRPC Core runtime) to configure the channel.
       compression: An optional value indicating the compression method to be
         used over the lifetime of the channel. This is an EXPERIMENTAL option.
-
+ 
     Returns:
       A Channel.
     """
     from grpc import _channel  # pylint: disable=cyclic-import
     return _channel.Channel(target, () if options is None else options, None,
                             compression)
-
-
+ 
+ 
 def secure_channel(target, credentials, options=None, compression=None):
-    """Creates a secure Channel to a server.
-
+    """Creates a secure Channel to a server. 
+ 
     The returned Channel is thread-safe.
 
     Args:
@@ -1934,7 +1934,7 @@ def secure_channel(target, credentials, options=None, compression=None):
         in gRPC Core runtime) to configure the channel.
       compression: An optional value indicating the compression method to be
         used over the lifetime of the channel. This is an EXPERIMENTAL option.
-
+ 
     Returns:
       A Channel.
     """
@@ -1944,10 +1944,10 @@ def secure_channel(target, credentials, options=None, compression=None):
         raise ValueError(
             "secure_channel cannot be called with insecure credentials." +
             " Call insecure_channel instead.")
-    return _channel.Channel(target, () if options is None else options,
+    return _channel.Channel(target, () if options is None else options, 
                             credentials._credentials, compression)
-
-
+ 
+ 
 def intercept_channel(channel, *interceptors):
     """Intercepts a channel through a set of interceptors.
 
@@ -1982,8 +1982,8 @@ def server(thread_pool,
            options=None,
            maximum_concurrent_rpcs=None,
            compression=None):
-    """Creates a Server with which RPCs can be serviced.
-
+    """Creates a Server with which RPCs can be serviced. 
+ 
     Args:
       thread_pool: A futures.ThreadPoolExecutor to be used by the Server
         to execute RPC handlers.
@@ -2002,7 +2002,7 @@ def server(thread_pool,
       compression: An element of grpc.compression, e.g.
         grpc.compression.Gzip. This compression algorithm will be used for the
         lifetime of the server unless overridden. This is an EXPERIMENTAL option.
-
+ 
     Returns:
       A Server object.
     """
@@ -2012,8 +2012,8 @@ def server(thread_pool,
                                  () if interceptors is None else interceptors,
                                  () if options is None else options,
                                  maximum_concurrent_rpcs, compression)
-
-
+ 
+ 
 @contextlib.contextmanager
 def _create_servicer_context(rpc_event, state, request_deserializer):
     from grpc import _server  # pylint: disable=cyclic-import
@@ -2040,8 +2040,8 @@ class Compression(enum.IntEnum):
 
 from grpc._runtime_protos import protos, services, protos_and_services  # pylint: disable=wrong-import-position
 
-###################################  __all__  #################################
-
+###################################  __all__  ################################# 
+ 
 __all__ = (
     'FutureTimeoutError',
     'FutureCancelledError',
@@ -2104,25 +2104,25 @@ __all__ = (
     'services',
     'protos_and_services',
 )
-
-############################### Extension Shims ################################
-
-# Here to maintain backwards compatibility; avoid using these in new code!
-try:
-    import grpc_tools
-    sys.modules.update({'grpc.tools': grpc_tools})
-except ImportError:
-    pass
-try:
-    import grpc_health
-    sys.modules.update({'grpc.health': grpc_health})
-except ImportError:
-    pass
-try:
-    import grpc_reflection
-    sys.modules.update({'grpc.reflection': grpc_reflection})
-except ImportError:
-    pass
+ 
+############################### Extension Shims ################################ 
+ 
+# Here to maintain backwards compatibility; avoid using these in new code! 
+try: 
+    import grpc_tools 
+    sys.modules.update({'grpc.tools': grpc_tools}) 
+except ImportError: 
+    pass 
+try: 
+    import grpc_health 
+    sys.modules.update({'grpc.health': grpc_health}) 
+except ImportError: 
+    pass 
+try: 
+    import grpc_reflection 
+    sys.modules.update({'grpc.reflection': grpc_reflection}) 
+except ImportError: 
+    pass 
 
 # Prevents import order issue in the case of renamed path.
 if sys.version_info >= (3, 6) and __name__ == "grpc":

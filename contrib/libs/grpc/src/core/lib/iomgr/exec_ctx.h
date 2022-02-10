@@ -1,24 +1,24 @@
-/*
- *
+/* 
+ * 
  * Copyright 2015 gRPC authors.
- *
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- */
-
-#ifndef GRPC_CORE_LIB_IOMGR_EXEC_CTX_H
-#define GRPC_CORE_LIB_IOMGR_EXEC_CTX_H
-
+ * 
+ */ 
+ 
+#ifndef GRPC_CORE_LIB_IOMGR_EXEC_CTX_H 
+#define GRPC_CORE_LIB_IOMGR_EXEC_CTX_H 
+ 
 #include <grpc/support/port_platform.h>
 
 #include <limits>
@@ -32,17 +32,17 @@
 #include "src/core/lib/gpr/tls.h"
 #include "src/core/lib/gprpp/debug_location.h"
 #include "src/core/lib/gprpp/fork.h"
-#include "src/core/lib/iomgr/closure.h"
-
+#include "src/core/lib/iomgr/closure.h" 
+ 
 typedef int64_t grpc_millis;
-
+ 
 #define GRPC_MILLIS_INF_FUTURE INT64_MAX
 #define GRPC_MILLIS_INF_PAST INT64_MIN
 
 /** A combiner represents a list of work to be executed later.
     Forward declared here to avoid a circular dependency with combiner.h. */
-typedef struct grpc_combiner grpc_combiner;
-
+typedef struct grpc_combiner grpc_combiner; 
+ 
 /* This exec_ctx is ready to return: either pre-populated, or cached as soon as
    the finish_check returns true */
 #define GRPC_EXEC_CTX_FLAG_IS_FINISHED 1
@@ -65,11 +65,11 @@ grpc_millis grpc_cycle_counter_to_millis_round_up(gpr_cycle_counter cycles);
 
 namespace grpc_core {
 class Combiner;
-/** Execution context.
- *  A bag of data that collects information along a callstack.
+/** Execution context. 
+ *  A bag of data that collects information along a callstack. 
  *  It is created on the stack at core entry points (public API or iomgr), and
  *  stored internally as a thread-local variable.
- *
+ * 
  *  Generally, to create an exec_ctx instance, add the following line at the top
  *  of the public API entry point or at the start of a thread's work function :
  *
@@ -78,17 +78,17 @@ class Combiner;
  *  Access the created ExecCtx instance using :
  *  grpc_core::ExecCtx::Get()
  *
- *  Specific responsibilities (this may grow in the future):
+ *  Specific responsibilities (this may grow in the future): 
  *  - track a list of core work that needs to be delayed until the base of the
- *    call stack (this provides a convenient mechanism to run callbacks
- *    without worrying about locking issues)
+ *    call stack (this provides a convenient mechanism to run callbacks 
+ *    without worrying about locking issues) 
  *  - provide a decision maker (via IsReadyToFinish) that provides a
- *    signal as to whether a borrowed thread should continue to do work or
- *    should actively try to finish up and get this thread back to its owner
- *
- *  CONVENTIONS:
- *  - Instance of this must ALWAYS be constructed on the stack, never
- *    heap allocated.
+ *    signal as to whether a borrowed thread should continue to do work or 
+ *    should actively try to finish up and get this thread back to its owner 
+ * 
+ *  CONVENTIONS: 
+ *  - Instance of this must ALWAYS be constructed on the stack, never 
+ *    heap allocated. 
  *  - Do not pass exec_ctx as a parameter to a function. Always access it using
  *    grpc_core::ExecCtx::Get().
  *  - NOTE: In the future, the convention is likely to change to allow only one
@@ -102,16 +102,16 @@ class Combiner;
  *                Stage 2: Assert if a 2nd one is ever created on the stack
  *                since that implies a core re-entry outside of application
  *                callbacks.
- */
+ */ 
 class ExecCtx {
  public:
   /** Default Constructor */
-
+ 
   ExecCtx() : flags_(GRPC_EXEC_CTX_FLAG_IS_FINISHED) {
     grpc_core::Fork::IncExecCtxCount();
     Set(this);
   }
-
+ 
   /** Parameterised Constructor */
   ExecCtx(uintptr_t fl) : flags_(fl) {
     if (!(GRPC_EXEC_CTX_FLAG_IS_INTERNAL_THREAD & flags_)) {
@@ -119,7 +119,7 @@ class ExecCtx {
     }
     Set(this);
   }
-
+ 
   /** Destructor */
   virtual ~ExecCtx() {
     flags_ |= GRPC_EXEC_CTX_FLAG_IS_FINISHED;
@@ -129,25 +129,25 @@ class ExecCtx {
       grpc_core::Fork::DecExecCtxCount();
     }
   }
-
+ 
   /** Disallow copy and assignment operators */
   ExecCtx(const ExecCtx&) = delete;
   ExecCtx& operator=(const ExecCtx&) = delete;
-
+ 
   unsigned starting_cpu() {
     if (starting_cpu_ == std::numeric_limits<unsigned>::max()) {
       starting_cpu_ = gpr_cpu_current_cpu();
     }
     return starting_cpu_;
   }
-
+ 
   struct CombinerData {
     /* currently active combiner: updated only via combiner.c */
     Combiner* active_combiner;
     /* last active combiner in the active combiner list */
     Combiner* last_combiner;
   };
-
+ 
   /** Only to be used by grpc-combiner code */
   CombinerData* combiner_data() { return &combiner_data_; }
 
@@ -379,4 +379,4 @@ class ApplicationCallbackExecCtx {
 };
 }  // namespace grpc_core
 
-#endif /* GRPC_CORE_LIB_IOMGR_EXEC_CTX_H */
+#endif /* GRPC_CORE_LIB_IOMGR_EXEC_CTX_H */ 

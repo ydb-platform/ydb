@@ -7,7 +7,7 @@ OWNER(
 
 PEERDIR(
     contrib/libs/antlr3_cpp_runtime
-    contrib/libs/protobuf
+    contrib/libs/protobuf 
 )
 
 SRCS(
@@ -16,7 +16,7 @@ SRCS(
 
 END()
 
-RECURSE(
-    gen
+RECURSE( 
+    gen 
     collect_issues
-)
+) 

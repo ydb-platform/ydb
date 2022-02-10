@@ -51,7 +51,7 @@ RECURSE(
     protoc-c
     protozero
     range-v3
-    rnnoise
+    rnnoise 
     rubberband
     spdlog
     thrift

@@ -18,19 +18,19 @@ MDS_PREFIX = 'http://storage-int.mds.yandex.net/get-sandbox/'
 TEMPORARY_ERROR_CODES = (429, 500, 503, 504)
 
 
-def parse_args():
+def parse_args(): 
     parser = argparse.ArgumentParser()
     fetch_from.add_common_arguments(parser)
     parser.add_argument('--resource-id', type=int, required=True)
     parser.add_argument('--custom-fetcher')
     parser.add_argument('--resource-file')
     return parser.parse_args()
-
-
-class ResourceInfoError(Exception):
-    pass
-
-
+ 
+ 
+class ResourceInfoError(Exception): 
+    pass 
+ 
+ 
 class UnsupportedProtocolException(Exception):
     pass
 
@@ -75,37 +75,37 @@ def download_by_skynet(resource_info, file_name):
 
 
 def _urlopen(url, data=None, headers=None):
-    n = 10
+    n = 10 
     tout = 30
     started = time.time()
     reqid = uuid.uuid4()
-
+ 
     request = urllib2.Request(url, data=data, headers=headers or {})
     request.add_header('X-Request-Timeout', str(tout))
     request.add_header('X-Request-Id', str(reqid))
     request.add_header('User-Agent', 'fetch_from_sandbox.py')
-    for i in xrange(n):
+    for i in xrange(n): 
         retry_after = i
-        try:
+        try: 
             request.add_header('X-Request-Duration', str(int(time.time() - started)))
             return urllib2.urlopen(request, timeout=tout).read()
-
-        except urllib2.HTTPError as e:
+ 
+        except urllib2.HTTPError as e: 
             logging.warning('failed to fetch URL %s with HTTP code %d: %s', url, e.code, e)
             retry_after = int(e.headers.get('Retry-After', str(retry_after)))
-
+ 
             if e.code not in TEMPORARY_ERROR_CODES:
-                raise
-
-        except Exception as e:
+                raise 
+ 
+        except Exception as e: 
             logging.warning('failed to fetch URL %s: %s', url, e)
-
-        if i + 1 == n:
-            raise e
-
+ 
+        if i + 1 == n: 
+            raise e 
+ 
         time.sleep(retry_after)
-
-
+ 
+ 
 def _query(url):
     return json.loads(_urlopen(url))
 
@@ -133,19 +133,19 @@ def fetch_via_script(script, resource_id):
 
 
 def fetch(resource_id, custom_fetcher):
-    try:
+    try: 
         resource_info = get_resource_info(resource_id, touch=True, no_links=True)
-    except Exception as e:
+    except Exception as e: 
         sys.stderr.write(
             "Failed to fetch resource {}: {}\n".format(resource_id, str(e))
         )
         raise
-
+ 
     if resource_info.get('state', 'DELETED') != 'READY':
         raise ResourceInfoError("Resource {} is not READY".format(resource_id))
 
-    logging.info('Resource %s info %s', str(resource_id), json.dumps(resource_info))
-
+    logging.info('Resource %s info %s', str(resource_id), json.dumps(resource_info)) 
+ 
     resource_file_name = os.path.basename(resource_info["file_name"])
     expected_md5 = resource_info.get('md5')
 
@@ -183,9 +183,9 @@ def fetch(resource_id, custom_fetcher):
         if mds_link is not None:
             yield lambda: fetch_from.fetch_url(mds_link, True, resource_file_name, expected_md5)
 
-    if resource_info.get('attributes', {}).get('ttl') != 'inf':
-        sys.stderr.write('WARNING: resource {} ttl is not "inf".\n'.format(resource_id))
-
+    if resource_info.get('attributes', {}).get('ttl') != 'inf': 
+        sys.stderr.write('WARNING: resource {} ttl is not "inf".\n'.format(resource_id)) 
+ 
     exc_info = None
     for i, action in enumerate(itertools.islice(iter_tries(), 0, 10)):
         try:
@@ -210,10 +210,10 @@ def fetch(resource_id, custom_fetcher):
             raise exc_info[0], exc_info[1], exc_info[2]
         else:
             raise Exception("No available protocol and/or server to fetch resource")
-
+ 
     return fetched_file, resource_info['file_name']
 
-
+ 
 def _get_resource_info_from_file(resource_file):
     if resource_file is None or not os.path.exists(resource_file):
         return None
@@ -242,7 +242,7 @@ def _get_resource_info_from_file(resource_file):
 
 def main(args):
     custom_fetcher = os.environ.get('YA_CUSTOM_FETCHER')
-
+ 
     resource_info = _get_resource_info_from_file(args.resource_file)
     if resource_info:
         fetched_file = args.resource_file
@@ -250,14 +250,14 @@ def main(args):
     else:
         # This code should be merged to ya and removed.
         fetched_file, file_name = fetch(args.resource_id, custom_fetcher)
-
+ 
     fetch_from.process(fetched_file, file_name, args, remove=not custom_fetcher and not resource_info)
 
 
 if __name__ == '__main__':
     args = parse_args()
     fetch_from.setup_logging(args, os.path.basename(__file__))
-
+ 
     try:
         main(args)
     except Exception as e:

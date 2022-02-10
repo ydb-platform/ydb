@@ -1,29 +1,29 @@
-/*
- *
+/* 
+ * 
  * Copyright 2015 gRPC authors.
- *
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- *
- */
-
-#ifndef GRPC_CORE_LIB_TRANSPORT_CONNECTIVITY_STATE_H
-#define GRPC_CORE_LIB_TRANSPORT_CONNECTIVITY_STATE_H
-
+ * 
+ */ 
+ 
+#ifndef GRPC_CORE_LIB_TRANSPORT_CONNECTIVITY_STATE_H 
+#define GRPC_CORE_LIB_TRANSPORT_CONNECTIVITY_STATE_H 
+ 
 #include <grpc/support/port_platform.h>
 
 #include "y_absl/status/status.h"
 
-#include <grpc/grpc.h>
+#include <grpc/grpc.h> 
 
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gprpp/atomic.h"
@@ -32,14 +32,14 @@
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/work_serializer.h"
-
+ 
 namespace grpc_core {
-
+ 
 extern TraceFlag grpc_connectivity_state_trace;
-
+ 
 // Enum to string conversion.
 const char* ConnectivityStateName(grpc_connectivity_state state);
-
+ 
 // Interface for watching connectivity state.
 // Subclasses must implement the Notify() method.
 //
@@ -49,14 +49,14 @@ class ConnectivityStateWatcherInterface
     : public InternallyRefCounted<ConnectivityStateWatcherInterface> {
  public:
   virtual ~ConnectivityStateWatcherInterface() = default;
-
+ 
   // Notifies the watcher that the state has changed to new_state.
   virtual void Notify(grpc_connectivity_state new_state,
                       const y_absl::Status& status) = 0;
-
+ 
   void Orphan() override { Unref(); }
 };
-
+ 
 // An alternative watcher interface that performs notifications via an
 // asynchronous callback scheduled on the ExecCtx.
 // Subclasses must implement the OnConnectivityStateChange() method.
@@ -64,12 +64,12 @@ class AsyncConnectivityStateWatcherInterface
     : public ConnectivityStateWatcherInterface {
  public:
   virtual ~AsyncConnectivityStateWatcherInterface() = default;
-
+ 
   // Schedules a closure on the ExecCtx to invoke
   // OnConnectivityStateChange() asynchronously.
   void Notify(grpc_connectivity_state new_state,
               const y_absl::Status& status) override final;
-
+ 
  protected:
   class Notifier;
 
@@ -78,7 +78,7 @@ class AsyncConnectivityStateWatcherInterface
   explicit AsyncConnectivityStateWatcherInterface(
       std::shared_ptr<WorkSerializer> work_serializer = nullptr)
       : work_serializer_(std::move(work_serializer)) {}
-
+ 
   // Invoked asynchronously when Notify() is called.
   virtual void OnConnectivityStateChange(grpc_connectivity_state new_state,
                                          const y_absl::Status& status) = 0;
@@ -140,4 +140,4 @@ class ConnectivityStateTracker {
 
 }  // namespace grpc_core
 
-#endif /* GRPC_CORE_LIB_TRANSPORT_CONNECTIVITY_STATE_H */
+#endif /* GRPC_CORE_LIB_TRANSPORT_CONNECTIVITY_STATE_H */ 

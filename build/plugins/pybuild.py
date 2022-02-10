@@ -498,7 +498,7 @@ def onpy_srcs(unit, *args):
             unit.onpeerdir(py_runtime_path)
 
         unit.onpeerdir(unit.get("PY_PROTO_DEPS").split())
-
+ 
         proto_paths = [path for path, mod in protos]
         unit.on_generate_py_protos_internal(proto_paths)
         unit.onpy_srcs([
@@ -506,7 +506,7 @@ def onpy_srcs(unit, *args):
             for path, mod in protos
             for py_suf in unit.get("PY_PROTO_SUFFIXES").split()
         ])
-
+ 
         if optimize_proto and need_gazetteer_peerdir:
             unit.onpeerdir(['kernel/gazetteer/proto'])
 

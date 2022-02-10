@@ -1,5 +1,5 @@
 RECURSE(
-    acceleo
+    acceleo 
     arcdocidstrip
     archiver
     archiver/alignment_test

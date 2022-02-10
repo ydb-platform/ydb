@@ -38,11 +38,11 @@ CFLAGS(
     -DHAVE_PTHREAD=1
     -DHAVE_ZLIB=1
 )
-
+ 
 IF (OS_ANDROID)
     EXTRALIBS(log)
 ENDIF()
-
+ 
 SRCS(
     GLOBAL src/google/protobuf/generated_message_util.cc
     src/google/protobuf/any.cc

@@ -12,7 +12,7 @@ OWNER(
 PEERDIR(
     contrib/libs/cctz
 )
- 
+
 INCLUDE(ya.make.resources)
 
 SRCS(

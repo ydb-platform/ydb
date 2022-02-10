@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT(!IsNumber("1234567890a"));
         UNIT_ASSERT(!IsNumber("12345xx67890a"));
         UNIT_ASSERT(!IsNumber("foobar"));
-        UNIT_ASSERT(!IsNumber("")); 
+        UNIT_ASSERT(!IsNumber(""));
 
         UNIT_ASSERT(IsNumber(u"0"));
         UNIT_ASSERT(IsNumber(u"12345678901234567890"));

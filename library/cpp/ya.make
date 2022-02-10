@@ -166,8 +166,8 @@ RECURSE(
     int128/ut
     introspection
     ipmath
-    ipreg 
-    ipreg/ut 
+    ipreg
+    ipreg/ut
     ipv6_address
     ipv6_address/ut
     iterator

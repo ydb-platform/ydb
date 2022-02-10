@@ -8,13 +8,13 @@
 #include <util/charset/utf8.h>
 #include <util/charset/wide.h>
 
-#if defined(_android_)
+#if defined(_android_) 
     #include <util/system/dynlib.h>
     #include <util/system/guard.h>
     #include <util/system/mutex.h>
     #include <android/log.h>
-#endif
-
+#endif 
+ 
 #include <cerrno>
 #include <string>
 #include <string_view>
@@ -243,102 +243,102 @@ void Out<TNullPtr>(IOutputStream& o, TTypeTraits<TNullPtr>::TFuncParam) {
     o << TStringBuf("nullptr");
 }
 
-#if defined(_android_)
+#if defined(_android_) 
 namespace {
-    class TAndroidStdIOStreams {
-    public:
-        TAndroidStdIOStreams()
-            : LogLibrary("liblog.so")
-            , LogFuncPtr((TLogFuncPtr)LogLibrary.Sym("__android_log_write"))
-            , Out(LogFuncPtr)
-            , Err(LogFuncPtr)
+    class TAndroidStdIOStreams { 
+    public: 
+        TAndroidStdIOStreams() 
+            : LogLibrary("liblog.so") 
+            , LogFuncPtr((TLogFuncPtr)LogLibrary.Sym("__android_log_write")) 
+            , Out(LogFuncPtr) 
+            , Err(LogFuncPtr) 
         {
         }
-
-    public:
+ 
+    public: 
         using TLogFuncPtr = void (*)(int, const char*, const char*);
-
+ 
         class TAndroidStdOutput: public IOutputStream {
-        public:
+        public: 
             inline TAndroidStdOutput(TLogFuncPtr logFuncPtr) noexcept
                 : Buffer()
                 , LogFuncPtr(logFuncPtr)
             {
             }
-
+ 
             virtual ~TAndroidStdOutput() {
             }
-
-        private:
-            virtual void DoWrite(const void* buf, size_t len) override {
+ 
+        private: 
+            virtual void DoWrite(const void* buf, size_t len) override { 
                 with_lock (BufferMutex) {
                     Buffer.Write(buf, len);
                 }
-            }
-
-            virtual void DoFlush() override {
+            } 
+ 
+            virtual void DoFlush() override { 
                 with_lock (BufferMutex) {
                     LogFuncPtr(ANDROID_LOG_DEBUG, GetTag(), Buffer.Data());
                     Buffer.Clear();
                 }
-            }
-
-            virtual const char* GetTag() const = 0;
-
-        private:
+            } 
+ 
+            virtual const char* GetTag() const = 0; 
+ 
+        private: 
             TMutex BufferMutex;
-            TStringStream Buffer;
-            TLogFuncPtr LogFuncPtr;
-        };
-
+            TStringStream Buffer; 
+            TLogFuncPtr LogFuncPtr; 
+        }; 
+ 
         class TStdErr: public TAndroidStdOutput {
-        public:
-            TStdErr(TLogFuncPtr logFuncPtr)
-                : TAndroidStdOutput(logFuncPtr)
+        public: 
+            TStdErr(TLogFuncPtr logFuncPtr) 
+                : TAndroidStdOutput(logFuncPtr) 
             {
             }
-
+ 
             virtual ~TStdErr() {
             }
-
-        private:
-            virtual const char* GetTag() const override {
-                return "stderr";
-            }
-        };
-
+ 
+        private: 
+            virtual const char* GetTag() const override { 
+                return "stderr"; 
+            } 
+        }; 
+ 
         class TStdOut: public TAndroidStdOutput {
-        public:
-            TStdOut(TLogFuncPtr logFuncPtr)
-                : TAndroidStdOutput(logFuncPtr)
+        public: 
+            TStdOut(TLogFuncPtr logFuncPtr) 
+                : TAndroidStdOutput(logFuncPtr) 
             {
             }
-
+ 
             virtual ~TStdOut() {
             }
-
-        private:
-            virtual const char* GetTag() const override {
-                return "stdout";
-            }
-        };
-
-        static bool Enabled;
-        TDynamicLibrary LogLibrary; // field order is important, see constructor
-        TLogFuncPtr LogFuncPtr;
-        TStdOut Out;
-        TStdErr Err;
-
-        static inline TAndroidStdIOStreams& Instance() {
-            return *SingletonWithPriority<TAndroidStdIOStreams, 4>();
-        }
-    };
-
-    bool TAndroidStdIOStreams::Enabled = false;
-}
-#endif // _android_
-
-namespace {
+ 
+        private: 
+            virtual const char* GetTag() const override { 
+                return "stdout"; 
+            } 
+        }; 
+ 
+        static bool Enabled; 
+        TDynamicLibrary LogLibrary; // field order is important, see constructor 
+        TLogFuncPtr LogFuncPtr; 
+        TStdOut Out; 
+        TStdErr Err; 
+ 
+        static inline TAndroidStdIOStreams& Instance() { 
+            return *SingletonWithPriority<TAndroidStdIOStreams, 4>(); 
+        } 
+    }; 
+ 
+    bool TAndroidStdIOStreams::Enabled = false; 
+} 
+#endif // _android_ 
+ 
+namespace { 
     class TStdOutput: public IOutputStream {
     public:
         inline TStdOutput(FILE* f) noexcept
@@ -402,27 +402,27 @@ namespace {
 }
 
 IOutputStream& NPrivate::StdErrStream() noexcept {
-#if defined(_android_)
-    if (TAndroidStdIOStreams::Enabled) {
-        return TAndroidStdIOStreams::Instance().Err;
-    }
-#endif
+#if defined(_android_) 
+    if (TAndroidStdIOStreams::Enabled) { 
+        return TAndroidStdIOStreams::Instance().Err; 
+    } 
+#endif 
     return TStdIOStreams::Instance().Err;
 }
 
 IOutputStream& NPrivate::StdOutStream() noexcept {
-#if defined(_android_)
-    if (TAndroidStdIOStreams::Enabled) {
-        return TAndroidStdIOStreams::Instance().Out;
-    }
-#endif
+#if defined(_android_) 
+    if (TAndroidStdIOStreams::Enabled) { 
+        return TAndroidStdIOStreams::Instance().Out; 
+    } 
+#endif 
     return TStdIOStreams::Instance().Out;
 }
-
-void RedirectStdioToAndroidLog(bool redirect) {
-#if defined(_android_)
-    TAndroidStdIOStreams::Enabled = redirect;
-#else
+ 
+void RedirectStdioToAndroidLog(bool redirect) { 
+#if defined(_android_) 
+    TAndroidStdIOStreams::Enabled = redirect; 
+#else 
     Y_UNUSED(redirect);
-#endif
-}
+#endif 
+} 

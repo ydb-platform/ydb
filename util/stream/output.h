@@ -299,6 +299,6 @@ static inline void Flush(IOutputStream& o) {
 
 #include "debug.h"
 
-void RedirectStdioToAndroidLog(bool redirect);
-
+void RedirectStdioToAndroidLog(bool redirect); 
+ 
 /** @} */

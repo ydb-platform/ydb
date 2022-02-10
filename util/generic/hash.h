@@ -1976,12 +1976,12 @@ public:
         rep.release_nodes();
     }
 
-    // if (stHash != NULL) bucket_count() must be equal to stHash->bucket_count()
-    template <class KeySaver>
+    // if (stHash != NULL) bucket_count() must be equal to stHash->bucket_count() 
+    template <class KeySaver> 
     int save_for_st(IOutputStream* stream, KeySaver& ks, sthash<int, int, THash<int>, TEqualTo<int>, typename KeySaver::TSizeType>* stHash = nullptr) const {
-        return rep.template save_for_st<KeySaver>(stream, ks, stHash);
-    }
-
+        return rep.template save_for_st<KeySaver>(stream, ks, stHash); 
+    } 
+ 
 public:
     void reserve(size_type hint) {
         rep.reserve(hint);

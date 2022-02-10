@@ -55,13 +55,13 @@ namespace Tests {
     const ui64 Hive = 0xA001;
 
     struct TServerSetup {
-        TString IpAddress; 
+        TString IpAddress;
         ui16 Port = 0;
 
         TServerSetup()
         {}
 
-        TServerSetup(const TString& ipAddress, ui16 port) 
+        TServerSetup(const TString& ipAddress, ui16 port)
             : IpAddress(ipAddress)
             , Port(port)
         {}
@@ -263,7 +263,7 @@ namespace Tests {
     class TClient {
     public:
         struct TFlatQueryOptions {
-            TString Params; 
+            TString Params;
             bool IsQueryCompiled = false;
             bool CollectStats = false;
         };
@@ -339,7 +339,7 @@ namespace Tests {
         void InitRootScheme(const TString& root);
 
         void ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path = TString());
-        TString StartTrace(const TString &path); 
+        TString StartTrace(const TString &path);
         void StopTrace();
 
         // Flat DB operations
@@ -382,29 +382,29 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus CreateSolomon(const TString& parent, const TString& name, ui32 parts = 4, ui32 channelProfile = 0);
         NMsgBusProxy::EResponseStatus StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task);
         NMsgBusProxy::EResponseStatus DeleteTopic(const TString& parent, const TString& name);
-        TAutoPtr<NMsgBusProxy::TBusResponse> TryDropPersQueueGroup(const TString& parent, const TString& name); 
-        TAutoPtr<NMsgBusProxy::TBusResponse> Ls(const TString& path); 
+        TAutoPtr<NMsgBusProxy::TBusResponse> TryDropPersQueueGroup(const TString& parent, const TString& name);
+        TAutoPtr<NMsgBusProxy::TBusResponse> Ls(const TString& path);
         static TPathVersion ExtractPathVersion(const TAutoPtr<NMsgBusProxy::TBusResponse>& describe);
         static TVector<ui64> ExtractTableShards(const TAutoPtr<NMsgBusProxy::TBusResponse>& resp);
-        bool FlatQuery(const TString& mkql, NKikimrMiniKQL::TResult& result); 
-        bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result, 
+        bool FlatQuery(const TString& mkql, NKikimrMiniKQL::TResult& result);
+        bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
                        const NKikimrClient::TResponse& expectedResponse);
         bool FlatQuery(const TString& mkql, TFlatQueryOptions& opts, NKikimrMiniKQL::TResult& result,
                        ui32 expectedStatus = NMsgBusProxy::MSTATUS_OK);
-        bool FlatQueryParams(const TString &query, const TString &params, bool queryCompiled, NKikimrMiniKQL::TResult &result); 
+        bool FlatQueryParams(const TString &query, const TString &params, bool queryCompiled, NKikimrMiniKQL::TResult &result);
 
         // returns NMsgBusProxy::MSTATUS_* and the raw response
         ui32 FlatQueryRaw(const TString &query, TFlatQueryOptions& opts, NKikimrClient::TResponse& response, int retryCnt = 10);
 
-        bool Compile(const TString &mkql, TString &compiled); 
-        bool LocalQuery(ui64 tabletId, const TString &pgmText, NKikimrMiniKQL::TResult& result); 
+        bool Compile(const TString &mkql, TString &compiled);
+        bool LocalQuery(ui64 tabletId, const TString &pgmText, NKikimrMiniKQL::TResult& result);
         bool LocalSchemeTx(const ui64 tabletId, const NTabletFlatScheme::TSchemeChanges& schemeChanges, bool dryRun,
-                           NTabletFlatScheme::TSchemeChanges& scheme, TString& err); 
-        bool LocalSchemeTx(const ui64 tabletId, const TString& schemeChanges, bool dryRun, 
-                           NTabletFlatScheme::TSchemeChanges& scheme, TString& err); 
-        void SetSecurityToken(const TString& token) { SecurityToken = token; } 
+                           NTabletFlatScheme::TSchemeChanges& scheme, TString& err);
+        bool LocalSchemeTx(const ui64 tabletId, const TString& schemeChanges, bool dryRun,
+                           NTabletFlatScheme::TSchemeChanges& scheme, TString& err);
+        void SetSecurityToken(const TString& token) { SecurityToken = token; }
         void ModifyOwner(const TString& parent, const TString& name, const TString& owner);
-        void ModifyACL(const TString& parent, const TString& name, const TString& acl); 
+        void ModifyACL(const TString& parent, const TString& name, const TString& acl);
         TString CreateStoragePool(const TString& poolKind, const TString& partOfName, ui32 groups = 1);
         NKikimrBlobStorage::TDefineStoragePool DescribeStoragePool(const TString& name);
         void RemoveStoragePool(const TString& name);
@@ -415,9 +415,9 @@ namespace Tests {
 
 
         // Helper functions
-        TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query); 
-        TString MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up); 
-        TString KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx); 
+        TString SendTabletMonQuery(TTestActorRuntime* runtime, ui64 tabletId, TString query);
+        TString MarkNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx, bool up);
+        TString KickNodeInHive(TTestActorRuntime* runtime, ui32 nodeIdx);
         bool WaitForTabletAlive(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout);
         bool WaitForTabletDown(TTestActorRuntime* runtime, ui64 tabletId, bool leader, TDuration timeout);
         ui32 GetLeaderNode(TTestActorRuntime* runtime, ui64 tabletId);
@@ -441,9 +441,9 @@ namespace Tests {
 
     protected:
         template <class TMsg>
-        TString PrintResult(NBus::TBusMessage* msg, size_t maxSz = 1000) { 
+        TString PrintResult(NBus::TBusMessage* msg, size_t maxSz = 1000) {
             auto res = dynamic_cast<TMsg*>(msg);
-            TString s; 
+            TString s;
             ::google::protobuf::TextFormat::PrintToString(res->Record, &s);
             if (s.size() > maxSz) {
                 s.resize(maxSz);
@@ -508,7 +508,7 @@ namespace Tests {
         using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds;
 
         const ui32 Domain;
-        const TString DomainName; 
+        const TString DomainName;
         const bool SupportsRedirect;
         const TStoragePoolKinds StoragePoolTypes;
         NScheme::TKikimrTypeRegistry TypeRegistry;
@@ -518,15 +518,15 @@ namespace Tests {
         TMaybe<ui64> TypesEtag;
         NScheme::TTypeMetadataRegistry LoadedTypeMetadataRegistry;
         TIntrusivePtr<NMiniKQL::IFunctionRegistry> LoadedFunctionRegistry;
-        TString SecurityToken; 
+        TString SecurityToken;
     };
 
     struct TTenants {
     private:
         Tests::TServer::TPtr Server;
 
-        TVector<ui32> VacantNodes; 
-        TMap<TString, TVector<ui32>> Tenants; 
+        TVector<ui32> VacantNodes;
+        TMap<TString, TVector<ui32>> Tenants;
 
     public:
         TTenants(Tests::TServer::TPtr server);
@@ -543,14 +543,14 @@ namespace Tests {
         void FreeNode(const TString &name, ui32 nodeIdx);
 
         bool IsStaticNode(ui32 nodeIdx) const;
-        const TVector<ui32>& List(const TString &name) const; 
+        const TVector<ui32>& List(const TString &name) const;
         ui32 Size(const TString &name) const;
         ui32 Size() const;
         ui32 Availabe() const;
         ui32 Capacity() const;
 
     private:
-        TVector<ui32>& Nodes(const TString &name); 
+        TVector<ui32>& Nodes(const TString &name);
         void StopNode(const TString /*name*/, ui32 nodeIdx);
         void RunNode(const TString &name, ui32 nodeIdx);
         void StopPaticularNode(const TString &name, ui32 nodeIdx);

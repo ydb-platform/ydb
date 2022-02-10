@@ -125,11 +125,11 @@ void TCoroTest::TestException() {
     UNIT_ASSERT(!unc);
 }
 
-static int i0; 
+static int i0;
 
 static void CoRun(TCont* c, void* /*run*/) {
-    while (i0 < 100000) { 
-        ++i0; 
+    while (i0 < 100000) {
+        ++i0;
         UNIT_ASSERT(RunningCont() == c);
         c->Yield();
         UNIT_ASSERT(RunningCont() == c);
@@ -137,7 +137,7 @@ static void CoRun(TCont* c, void* /*run*/) {
 }
 
 static void CoMain(TCont* c, void* /*arg*/) {
-    for (volatile size_t i2 = 0; i2 < 10; ++i2) { 
+    for (volatile size_t i2 = 0; i2 < 10; ++i2) {
         UNIT_ASSERT(RunningCont() == c);
         c->Executor()->Create(CoRun, nullptr, "run");
         UNIT_ASSERT(RunningCont() == c);
@@ -192,7 +192,7 @@ public:
 };
 
 void TCoroTest::TestMemFun() {
-    i0 = 0; 
+    i0 = 0;
     TContExecutor e(32000);
     TTestObject obj;
     e.Create<TTestObject, &TTestObject::RunTask1>(&obj, "test1");
@@ -203,25 +203,25 @@ void TCoroTest::TestMemFun() {
 
 void TCoroTest::TestSimpleX2() {
     {
-        i0 = 0; 
+        i0 = 0;
 
         {
             TContExecutor e(32000);
             e.Execute(CoMain);
         }
 
-        UNIT_ASSERT_EQUAL(i0, 100000); 
+        UNIT_ASSERT_EQUAL(i0, 100000);
     }
 
     {
-        i0 = 0; 
+        i0 = 0;
 
         {
             TContExecutor e(32000);
             e.Execute(CoMain);
         }
 
-        UNIT_ASSERT_EQUAL(i0, 100000); 
+        UNIT_ASSERT_EQUAL(i0, 100000);
     }
 }
 
@@ -243,7 +243,7 @@ void TCoroTest::TestSimpleX3() {
     TContExecutor e(32000);
     TRunner runner;
 
-    for (volatile size_t i3 = 0; i3 < 1000; ++i3) { 
+    for (volatile size_t i3 = 0; i3 < 1000; ++i3) {
         e.Create(runner, "runner");
     }
 
@@ -252,7 +252,7 @@ void TCoroTest::TestSimpleX3() {
     UNIT_ASSERT_EQUAL(runner.Runs, 1000);
 }
 
-static TString res; 
+static TString res;
 static TContMutex mutex;
 
 static void CoMutex(TCont* c, void* /*run*/) {
@@ -289,7 +289,7 @@ static TContMutex m1;
 static TContCondVar c1;
 
 static void CoCondVar(TCont* c, void* /*run*/) {
-    for (size_t i4 = 0; i4 < 3; ++i4) { 
+    for (size_t i4 = 0; i4 < 3; ++i4) {
         UNIT_ASSERT_EQUAL(m1.LockI(c), 0);
         UNIT_ASSERT_EQUAL(c1.WaitI(c, &m1), 0);
         res += c->Name();
@@ -311,8 +311,8 @@ static void CoCondVarTest(TCont* c, void* /*run*/) {
     c->Executor()->Create(CoCondVar, nullptr, "6");
     c->Yield();
 
-    for (size_t i5 = 0; i5 < 3; ++i5) { 
-        res += ToString((size_t)i5) + "^"; 
+    for (size_t i5 = 0; i5 < 3; ++i5) {
+        res += ToString((size_t)i5) + "^";
         c1.BroadCast();
         c->Yield();
     }

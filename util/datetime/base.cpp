@@ -5,17 +5,17 @@
 #include <util/stream/mem.h>
 #include <util/system/compat.h>
 #include <util/memory/tempbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
 
-TString Strftime(const char* format, const struct tm* tm) { 
+TString Strftime(const char* format, const struct tm* tm) {
     size_t size = Max<size_t>(strlen(format) * 2 + 1, 107);
     for (;;) {
         TTempBuf buf(size);
         int r = strftime(buf.Data(), buf.Size(), format, tm);
         if (r != 0) {
-            return TString(buf.Data(), r); 
+            return TString(buf.Data(), r);
         }
         size *= 2;
     }
@@ -173,11 +173,11 @@ void Out<::NPrivate::TPrintableLocalTime<true, true>>(IOutputStream& os, TTypeTr
     WritePrintableLocalTimeToStream(os, localTime);
 }
 
-TString TDuration::ToString() const { 
+TString TDuration::ToString() const {
     return ::ToString(*this);
 }
 
-TString TInstant::ToString() const { 
+TString TInstant::ToString() const {
     return ::ToString(*this);
 }
 
@@ -185,20 +185,20 @@ TString TInstant::ToRfc822String() const {
     return FormatGmTime("%a, %d %b %Y %H:%M:%S GMT");
 }
 
-TString TInstant::ToStringUpToSeconds() const { 
+TString TInstant::ToStringUpToSeconds() const {
     char buf[64];
     auto len = FormatDate8601(buf, sizeof(buf), TimeT());
     if (!len) {
         ythrow yexception() << "TInstant::ToStringUpToSeconds: year does not fit into an integer";
     }
-    return TString(buf, len); 
+    return TString(buf, len);
 }
 
 TString TInstant::ToIsoStringLocal() const {
     return ::ToString(FormatIsoLocal(*this));
 }
 
-TString TInstant::ToStringLocal() const { 
+TString TInstant::ToStringLocal() const {
     return ::ToString(FormatLocal(*this));
 }
 
@@ -210,7 +210,7 @@ TString TInstant::ToIsoStringLocalUpToSeconds() const {
     return ::ToString(FormatIsoLocalUpToSeconds(*this));
 }
 
-TString TInstant::ToStringLocalUpToSeconds() const { 
+TString TInstant::ToStringLocalUpToSeconds() const {
     return ::ToString(FormatLocalUpToSeconds(*this));
 }
 

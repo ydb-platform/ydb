@@ -36,7 +36,7 @@ void TIndexMonPage::Output(IMonHttpRequest& request) {
                 break;
             }
             size_t slash = pathTmp.find_last_of('/');
-            Y_VERIFY(slash != TString::npos); 
+            Y_VERIFY(slash != TString::npos);
             pathTmp = pathTmp.substr(0, slash);
             if (!pathTmp) {
                 break;
@@ -56,7 +56,7 @@ void TIndexMonPage::OutputIndex(IOutputStream& out, bool pathEndsWithSlash) {
     for (auto& Page : Pages) {
         IMonPage* page = Page.Get();
         if (page->IsInIndex()) {
-            TString pathToDir = ""; 
+            TString pathToDir = "";
             if (!pathEndsWithSlash) {
                 pathToDir = this->GetPath() + "/";
             }
@@ -94,7 +94,7 @@ TIndexMonPage* TIndexMonPage::RegisterIndexPage(const TString& path, const TStri
     return VerifyDynamicCast<TIndexMonPage*>(page);
 }
 
-IMonPage* TIndexMonPage::FindPage(const TString& relativePath) { 
+IMonPage* TIndexMonPage::FindPage(const TString& relativePath) {
     TGuard<TMutex> g(Mtx);
 
     Y_VERIFY(!relativePath.StartsWith('/'));
@@ -106,7 +106,7 @@ IMonPage* TIndexMonPage::FindPage(const TString& relativePath) {
     }
 }
 
-TIndexMonPage* TIndexMonPage::FindIndexPage(const TString& relativePath) { 
+TIndexMonPage* TIndexMonPage::FindIndexPage(const TString& relativePath) {
     return VerifyDynamicCast<TIndexMonPage*>(FindPage(relativePath));
 }
 

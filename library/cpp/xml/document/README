@@ -16,9 +16,9 @@ The standard way to use it is as follows:
         using namespace NXml;
         TConstNode& node = nodes[i];
         // query node
-        TString name = node.Name(); 
-        TString lang = node.Attr<TString>("lang"); 
-        TString text = node.Value<TString>(); 
+        TString name = node.Name();
+        TString lang = node.Attr<TString>("lang");
+        TString text = node.Value<TString>();
         TConstNode child = node.GetFirstChild("");
         // edit node
         TNode node = child.ConstCast();
@@ -34,9 +34,9 @@ The standard way to use it is as follows:
     // copy node's subtree from one document to another
     place.AddChild(xml.Root());
     // save (render) single element
-    TString modifiedNode = place.ToString(); 
+    TString modifiedNode = place.ToString();
     // save whole document with optional encoding
-    TString modifiedDoc  = xml2.ToString("ISO-8559-1"); 
+    TString modifiedDoc  = xml2.ToString("ISO-8559-1");
 
 
 See xml-document_ut.cpp for more examples.

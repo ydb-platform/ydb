@@ -147,7 +147,7 @@ private:
     void InitFrom(const sockaddr_in6& Addr);
     void InitFrom(const sockaddr_in& Addr);
 
-    ui128 Ip{}; 
+    ui128 Ip{};
     TIpType Type_ = LAST;
     ui32 ScopeId_ = 0;
 };
@@ -189,7 +189,7 @@ IOutputStream& operator<<(IOutputStream& Out, const THostAddressAndPort& HostAdd
 ///
 /// Returns
 ///   1. either valid THostAddressAndPort
-///   2. or TString with hostname (which you should resolve) and TIpPort with port 
+///   2. or TString with hostname (which you should resolve) and TIpPort with port
 ///   3. or error, if Ok == false
 ///
 /// Supported RawStrs are
@@ -203,13 +203,13 @@ std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromStrin
                                                                                   TIpPort DefaultPort,
                                                                                   bool& Ok) noexcept;
 
-using TIpv6AddressesSet = THashSet<TIpv6Address>; 
+using TIpv6AddressesSet = THashSet<TIpv6Address>;
 
 template <>
 struct THash<TIpv6Address> {
     inline size_t operator()(const TIpv6Address& ip) const {
-        const ui128& Tmp = static_cast<ui128>(ip); 
-        return CombineHashes(THash<ui128>()(Tmp), THash<ui8>()(static_cast<ui8>(ip.Type()))); 
+        const ui128& Tmp = static_cast<ui128>(ip);
+        return CombineHashes(THash<ui128>()(Tmp), THash<ui8>()(static_cast<ui8>(ip.Type())));
     }
 };
 template <>

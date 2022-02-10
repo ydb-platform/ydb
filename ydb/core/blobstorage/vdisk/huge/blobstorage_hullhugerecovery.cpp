@@ -34,7 +34,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        TString THullHugeRecoveryLogPos::ToString() const { 
+        TString THullHugeRecoveryLogPos::ToString() const {
             TStringStream str;
             str << "{ChunkAllocationLsn# " << ChunkAllocationLsn
                 << " ChunkFreeingLsn# " << ChunkFreeingLsn
@@ -46,7 +46,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        TString THullHugeRecoveryLogPos::Serialize() const { 
+        TString THullHugeRecoveryLogPos::Serialize() const {
             TStringStream str;
             str.Write(&ChunkAllocationLsn, sizeof(ui64));
             str.Write(&ChunkFreeingLsn, sizeof(ui64));
@@ -58,7 +58,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void THullHugeRecoveryLogPos::ParseFromString(const TString &serialized) { 
+        void THullHugeRecoveryLogPos::ParseFromString(const TString &serialized) {
             const char *cur = serialized.data();
             ChunkAllocationLsn = *(const ui64 *)cur;
             cur += sizeof(ui64);
@@ -76,7 +76,7 @@ namespace NKikimr {
             cur += sizeof(ui64);
         }
 
-        bool THullHugeRecoveryLogPos::CheckEntryPoint(const TString &serialized) { 
+        bool THullHugeRecoveryLogPos::CheckEntryPoint(const TString &serialized) {
             return serialized.size() == SerializedSize;
         }
 
@@ -164,7 +164,7 @@ namespace NKikimr {
                                                            const ui32 overhead,
                                                            const ui32 freeChunksReservation,
                                                            const bool oldMapCompatible,
-                                                           std::function<void(const TString&)> logFunc) 
+                                                           std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
             , CommittedLogPos(LogPos)
@@ -190,8 +190,8 @@ namespace NKikimr {
                                                            const ui32 freeChunksReservation,
                                                            const bool oldMapCompatible,
                                                            const ui64 entryPointLsn,
-                                                           const TString &entryPointData, 
-                                                           std::function<void(const TString&)> logFunc) 
+                                                           const TString &entryPointData,
+                                                           std::function<void(const TString&)> logFunc)
             : VCtx(std::move(vctx))
             , LogPos(THullHugeRecoveryLogPos::Default())
             , CommittedLogPos(LogPos)
@@ -213,18 +213,18 @@ namespace NKikimr {
         THullHugeKeeperPersState::~THullHugeKeeperPersState() {
         }
 
-        TString THullHugeKeeperPersState::Serialize() const { 
+        TString THullHugeKeeperPersState::Serialize() const {
             TStringStream str;
             // signature
             str.Write(&Signature, sizeof(ui32));
 
             // log pos
-            TString serializedLogPos = LogPos.Serialize(); 
+            TString serializedLogPos = LogPos.Serialize();
             Y_VERIFY_DEBUG(serializedLogPos.size() == THullHugeRecoveryLogPos::SerializedSize);
             str.Write(serializedLogPos.data(), THullHugeRecoveryLogPos::SerializedSize);
 
             // heap
-            TString serializedHeap = Heap->Serialize(); 
+            TString serializedHeap = Heap->Serialize();
             ui32 heapSize = serializedHeap.size();
             str.Write(&heapSize, sizeof(ui32));
             str.Write(serializedHeap.data(), heapSize);
@@ -246,20 +246,20 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void THullHugeKeeperPersState::ParseFromString(const TString &data) { 
+        void THullHugeKeeperPersState::ParseFromString(const TString &data) {
             AllocatedSlots.clear();
 
             const char *cur = data.data();
             cur += sizeof(ui32); // signature
 
             // log pos
-            LogPos.ParseFromString(TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize)); 
+            LogPos.ParseFromString(TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize));
             cur += THullHugeRecoveryLogPos::SerializedSize; // log pos
 
             // heap
             ui32 heapSize = ReadUnaligned<ui32>(cur);
             cur += sizeof(ui32); // heap size
-            Heap->ParseFromString(TString(cur, cur + heapSize)); 
+            Heap->ParseFromString(TString(cur, cur + heapSize));
             cur += heapSize;
 
             // chunks to free
@@ -286,7 +286,7 @@ namespace NKikimr {
             return TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize);
         }
 
-        bool THullHugeKeeperPersState::CheckEntryPoint(const TString &data) { 
+        bool THullHugeKeeperPersState::CheckEntryPoint(const TString &data) {
             const char *cur = data.data();
             const char *end = cur + data.size();
 
@@ -300,7 +300,7 @@ namespace NKikimr {
                 return false;
 
             // log pos
-            if (!THullHugeRecoveryLogPos::CheckEntryPoint(TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize))) 
+            if (!THullHugeRecoveryLogPos::CheckEntryPoint(TString(cur, cur + THullHugeRecoveryLogPos::SerializedSize)))
                 return false;
             cur += THullHugeRecoveryLogPos::SerializedSize; // log pos
 
@@ -309,7 +309,7 @@ namespace NKikimr {
             cur += sizeof(ui32); // heap size
             if (size_t(end - cur) < heapSize)
                 return false;
-            if (!NHuge::THeap::CheckEntryPoint(TString(cur, cur + heapSize))) 
+            if (!NHuge::THeap::CheckEntryPoint(TString(cur, cur + heapSize)))
                 return false;
             cur += heapSize;
 
@@ -333,7 +333,7 @@ namespace NKikimr {
             return true;
         }
 
-        TString THullHugeKeeperPersState::ToString() const { 
+        TString THullHugeKeeperPersState::ToString() const {
             TStringStream str;
             str << "LogPos: " << LogPos.ToString();
             str << " AllocatedSlots:";
@@ -594,7 +594,7 @@ namespace NKikimr {
                 VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 ") finished", Guid));
         }
 
-        void THullHugeKeeperPersState::GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
+        void THullHugeKeeperPersState::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             Heap->GetOwnedChunks(chunks);
         }
 

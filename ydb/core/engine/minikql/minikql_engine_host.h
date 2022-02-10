@@ -99,7 +99,7 @@ public:
     const TScheme::TTableInfo* GetTableInfo(const TTableId& tableId) const override;
     bool IsReadonly() const override;
     bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override;
-    ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const override; 
+    ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const override;
     ui64 CalculateResultSize(const TKeyDesc& key) const override;
     void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) override;
 

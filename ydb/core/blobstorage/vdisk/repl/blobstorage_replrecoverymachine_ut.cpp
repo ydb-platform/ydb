@@ -9,17 +9,17 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TBlobStorageReplRecoveryMachine) {
 
-        TMap<TLogoBlobID, TVector<TString>> GenerateData(ui32 numBlobs, 
+        TMap<TLogoBlobID, TVector<TString>> GenerateData(ui32 numBlobs,
                                                         ui32 maxLen,
                                                         const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-                                                        const TVector<TVDiskID>& vdisks) { 
-            TMap<TLogoBlobID, TVector<TString>> rv; 
+                                                        const TVector<TVDiskID>& vdisks) {
+            TMap<TLogoBlobID, TVector<TString>> rv;
             TReallyFastRng32 rng(1);
             ui32 step = 1;
 
             while (numBlobs--) {
                 ui32 len = 1 + rng() % maxLen;
-                TString data; 
+                TString data;
                 data.reserve(len);
                 for (ui32 i = 0; i < len; ++i) {
                     data.push_back(rng());
@@ -35,7 +35,7 @@ namespace NKikimr {
                 TDataPartSet parts;
                 info->Type.SplitData((TErasureType::ECrcMode)id.CrcMode(), data, parts);
 
-                TVector<TString> diskvec(vdisks.size()); 
+                TVector<TString> diskvec(vdisks.size());
 
                 for (ui32 i = 0; i < info->Type.TotalPartCount(); ++i) {
                     for (ui32 k = 0; k < vdisks.size(); ++k) {
@@ -88,7 +88,7 @@ namespace NKikimr {
             auto info = MakeIntrusive<TEvReplFinished::TInfo>();
             TBlobIdQueuePtr unreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
             NRepl::TRecoveryMachine m(replCtx, info, unreplicatedBlobsPtr);
-            TMap<TLogoBlobID, TVector<TString>> data = GenerateData(10000, 1024, groupInfo, vdisks); 
+            TMap<TLogoBlobID, TVector<TString>> data = GenerateData(10000, 1024, groupInfo, vdisks);
             for (const auto& pair : data) {
                 const TLogoBlobID& id = pair.first;
 
@@ -124,7 +124,7 @@ namespace NKikimr {
             }
             for (const auto& pair : data) {
                 const TLogoBlobID& id = pair.first;
-                const TVector<TString>& v = pair.second; 
+                const TVector<TString>& v = pair.second;
                 if (v[0].empty()) {
                     continue; // nothing to recover on this disk
                 }

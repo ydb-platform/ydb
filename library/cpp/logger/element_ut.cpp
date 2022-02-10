@@ -2,7 +2,7 @@
 #include "element.h"
 #include "stream.h"
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/stream/str.h>
 #include <util/generic/ptr.h>
 #include <utility>
@@ -26,7 +26,7 @@ void TLogElementTest::TestMoveCtor() {
 
     THolder<TLogElement> src = MakeHolder<TLogElement>(&log);
 
-    TString message = "Hello, World!"; 
+    TString message = "Hello, World!";
     (*src) << message;
 
     THolder<TLogElement> dst = MakeHolder<TLogElement>(std::move(*src));

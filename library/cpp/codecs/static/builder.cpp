@@ -9,7 +9,7 @@
 #include <util/string/subst.h>
 
 namespace NCodecs {
-    TStaticCodecInfo BuildStaticCodec(const TVector<TString>& trainingData, const TCodecBuildInfo& info) { 
+    TStaticCodecInfo BuildStaticCodec(const TVector<TString>& trainingData, const TCodecBuildInfo& info) {
         TStaticCodecInfo result;
         TCodecPtr codec = ICodec::GetInstance(info.CodecName);
         Y_ENSURE_EX(codec, TCodecException() << "empty codec is not allowed");
@@ -31,8 +31,8 @@ namespace NCodecs {
         return result;
     }
 
-    TString GetStandardFileName(const TStaticCodecInfo& info) { 
-        TString cName = info.GetDebugInfo().GetCodecName(); 
+    TString GetStandardFileName(const TStaticCodecInfo& info) {
+        TString cName = info.GetDebugInfo().GetCodecName();
         SubstGlobal(cName, ':', '.');
         return TStringBuilder() << cName << "." << info.GetDebugInfo().GetTimestamp() << ".codec_info";
     }

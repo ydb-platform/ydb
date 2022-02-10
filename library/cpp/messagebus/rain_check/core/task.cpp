@@ -207,7 +207,7 @@ ITaskBase* TTaskRunnerBase::CurrentTaskImpl() {
     return CurrentTask()->GetImplBase();
 }
 
-TString TTaskRunnerBase::GetStatusSingleLine() { 
+TString TTaskRunnerBase::GetStatusSingleLine() {
     return TypeName(*Impl);
 }
 

@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 Y_UNIT_TEST_SUITE(TestLengthIO) {
     Y_UNIT_TEST(TestLengthLimitedInput) {
@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TestLengthIO) {
         TStringStream s1("abc\ndef\n");
         TCountingInput l1(&s1);
 
-        TString s; 
+        TString s;
         l1.ReadLine(s);
         UNIT_ASSERT_VALUES_EQUAL(l1.Counter(), 4);
 
@@ -41,10 +41,10 @@ Y_UNIT_TEST_SUITE(TestLengthIO) {
         l1.Write('1');
         UNIT_ASSERT_VALUES_EQUAL(l1.Counter(), 1);
 
-        l1.Write(TString("abcd")); 
+        l1.Write(TString("abcd"));
         UNIT_ASSERT_VALUES_EQUAL(l1.Counter(), 5);
 
-        TString buf("aaa"); 
+        TString buf("aaa");
         IOutputStream::TPart parts[] = {{buf.data(), buf.size()}, {buf.data(), buf.size()}, {buf.data(), buf.size()}};
         l1.Write(parts, 3);
         UNIT_ASSERT_VALUES_EQUAL(l1.Counter(), 14);

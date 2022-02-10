@@ -28,16 +28,16 @@ TCandidate::TCandidate(TFailDomain failDomain, ui8 beginLevel, ui8 lastLevel, ui
 
 struct TGrouper {
     struct TCandidateSet {
-        typedef TVector<const TCandidate*> TGroupFailDomain; 
+        typedef TVector<const TCandidate*> TGroupFailDomain;
         struct TGroup {
-            TVector<TGroupFailDomain> Domains; 
+            TVector<TGroupFailDomain> Domains;
             ui32 FullDomainCount;
 
             TGroup()
                 : FullDomainCount(0)
             {}
         };
-        typedef TMap<TFailDomain, TGroup> TGroupMap; 
+        typedef TMap<TFailDomain, TGroup> TGroupMap;
 
         TGroupMap CandidatesMap;
         TGroup *LastGroup;
@@ -91,7 +91,7 @@ struct TGrouper {
         }
 
         void GetLastGroup(ui32 domainCount, ui32 candidatePerDomainCount,
-                TVector<TVector<const TCandidate*>> &outGroup) { 
+                TVector<TVector<const TCandidate*>> &outGroup) {
             outGroup.resize(domainCount);
             size_t writeDomainIdx = 0;
             for (size_t domainIdx = 0; domainIdx < LastGroup->Domains.size(); ++domainIdx) {
@@ -104,13 +104,13 @@ struct TGrouper {
         }
     };
 
-    TMap<TFailDomain::TLevelIds, TCandidateSet> Maps; 
-    TVector<TMap<TFailDomain::TLevelIds, TCandidateSet>::iterator> SetsToPopulate; 
+    TMap<TFailDomain::TLevelIds, TCandidateSet> Maps;
+    TVector<TMap<TFailDomain::TLevelIds, TCandidateSet>::iterator> SetsToPopulate;
     ui32 DomainCount;
     ui32 CandidatePerDomainCount;
     bool IsBingo;
 
-    TVector<TVector<const TCandidate*>> *BestGroup; 
+    TVector<TVector<const TCandidate*>> *BestGroup;
 
     TGrouper(ui32 domainCount, ui32 candidatesPerDomainCount)
         : DomainCount(domainCount)
@@ -119,7 +119,7 @@ struct TGrouper {
         , BestGroup(nullptr)
     {}
 
-    bool Populate(TMap<TFailDomain::TLevelIds, TCandidateSet>::iterator it, const TCandidate *candidate) { 
+    bool Populate(TMap<TFailDomain::TLevelIds, TCandidateSet>::iterator it, const TCandidate *candidate) {
         // TODO: Calculate isEmpty and isKeyEqual without creating the intersection.
         TFailDomain::TLevelIds intersection = candidate->InfixFailDomain.Intersect(it->first);
         if (intersection.IsEmpty()) {
@@ -139,7 +139,7 @@ struct TGrouper {
     void AddToMaps(const TCandidate *candidate) {
         // Add candidate to all existing sets, while checking for exact match of the keys.
         bool isEqualKeyPresent = false;
-        for (TMap<TFailDomain::TLevelIds, TCandidateSet>::iterator it = Maps.begin(); it != Maps.end(); ++it) { 
+        for (TMap<TFailDomain::TLevelIds, TCandidateSet>::iterator it = Maps.begin(); it != Maps.end(); ++it) {
             bool isKeyEqual = Populate(it, candidate);
             if (IsBingo) {
                 return;
@@ -148,9 +148,9 @@ struct TGrouper {
         }
         // If there is no such key in the map, generate all intersections.
         if (!isEqualKeyPresent) {
-            TVector<TFailDomain::TLevelIds> newIds; 
+            TVector<TFailDomain::TLevelIds> newIds;
             newIds.reserve(Maps.size());
-            for (TMap<TFailDomain::TLevelIds, TCandidateSet>::iterator it = Maps.begin(); it != Maps.end(); ++it) { 
+            for (TMap<TFailDomain::TLevelIds, TCandidateSet>::iterator it = Maps.begin(); it != Maps.end(); ++it) {
                 newIds.push_back(candidate->InfixFailDomain.Intersect(it->first));
             }
             TFailDomain::TLevelIds idToInsert = candidate->InfixFailDomain.MakeIds();
@@ -159,7 +159,7 @@ struct TGrouper {
                 Maps[newIds[i]];
             }
             // List all empty sets in SetsToPopulate.
-            for (TMap<TFailDomain::TLevelIds, TCandidateSet>::iterator it = Maps.begin(); it != Maps.end(); ++it) { 
+            for (TMap<TFailDomain::TLevelIds, TCandidateSet>::iterator it = Maps.begin(); it != Maps.end(); ++it) {
                 if (it->second.IsEmpty()) {
                     SetsToPopulate.push_back(it);
                 }
@@ -177,7 +177,7 @@ struct TGrouper {
         }
     }
 
-    bool SelectCandidates(const TVector<TCandidate> &candidates, TVector<TVector<const TCandidate*>> &outBestGroup) { 
+    bool SelectCandidates(const TVector<TCandidate> &candidates, TVector<TVector<const TCandidate*>> &outBestGroup) {
         IsBingo = false;
         BestGroup = &outBestGroup;
 
@@ -185,7 +185,7 @@ struct TGrouper {
         SetsToPopulate.clear();
 
         // TODO: Candidates may be required to have a specific prefix.
-        TVector<const TCandidate*> sortedCandidates(candidates.size()); 
+        TVector<const TCandidate*> sortedCandidates(candidates.size());
         for (size_t i = 0; i < candidates.size(); ++i) {
             sortedCandidates[i] = &candidates[i];
         }
@@ -212,7 +212,7 @@ struct TGrouper {
         return false;
     }
 
-    bool VerifyGroup(const TVector<TVector<const TCandidate*>> &group) const { 
+    bool VerifyGroup(const TVector<TVector<const TCandidate*>> &group) const {
         if (group.size() != DomainCount) {
             Cout << "a" << Endl;
             return false;
@@ -252,23 +252,23 @@ struct TGrouper {
     }
 };
 
-bool GroupFromCandidates(TVector<TCandidate> &candidates, ui32 domainCount, ui32 candidatesPerDomainCount, 
-        TVector<TVector<const TCandidate*>> &outBestGroup) { 
+bool GroupFromCandidates(TVector<TCandidate> &candidates, ui32 domainCount, ui32 candidatesPerDomainCount,
+        TVector<TVector<const TCandidate*>> &outBestGroup) {
     TGrouper grouper(domainCount, candidatesPerDomainCount);
     return grouper.SelectCandidates(candidates, outBestGroup);
 }
 
-bool VerifyGroup(const TVector<TVector<const TCandidate*>> &group, ui32 domainCount, ui32 candidatesPerDomainCount) { 
+bool VerifyGroup(const TVector<TVector<const TCandidate*>> &group, ui32 domainCount, ui32 candidatesPerDomainCount) {
     TGrouper grouper(domainCount, candidatesPerDomainCount);
     return grouper.VerifyGroup(group);
 }
 
-bool CreateGroupWithRings(const TVector<TCandidate>& candidates, ui32 numRings, ui32 numFailDomainsPerRing, 
+bool CreateGroupWithRings(const TVector<TCandidate>& candidates, ui32 numRings, ui32 numFailDomainsPerRing,
         ui32 numDisksPerFailDomain, ui32 firstRingDxLevel, ui32 lastRingDxLevel,
-        TVector<TVector<TVector<const TCandidate*>>>& bestGroup) { 
+        TVector<TVector<TVector<const TCandidate*>>>& bestGroup) {
     // calculate per-ring map of candidates
-    TVector<TString> keys; 
-    TMultiMap<TString, const TCandidate*> perRingMap; 
+    TVector<TString> keys;
+    TMultiMap<TString, const TCandidate*> perRingMap;
     for (const TCandidate& candidate : candidates) {
         // calculate infix according to ring distinction rules
         TFailDomain infix;
@@ -288,8 +288,8 @@ bool CreateGroupWithRings(const TVector<TCandidate>& candidates, ui32 numRings, 
     }
 
     // traverse through all rings and create groups for these rings
-    TVector<const TCandidate*> candptr; 
-    TVector<TCandidate> ringCandidates; 
+    TVector<const TCandidate*> candptr;
+    TVector<TCandidate> ringCandidates;
     bestGroup.reserve(bestGroup.size() + keys.size());
     for (const TString& key : keys) {
         // get candidates for this ring
@@ -304,7 +304,7 @@ bool CreateGroupWithRings(const TVector<TCandidate>& candidates, ui32 numRings, 
         }
 
         // generate group
-        TVector<TVector<const TCandidate*>> failDomain; 
+        TVector<TVector<const TCandidate*>> failDomain;
         if (!GroupFromCandidates(ringCandidates, numFailDomainsPerRing, numDisksPerFailDomain, failDomain)) {
             return false;
         }
@@ -333,7 +333,7 @@ bool CreateGroupWithRings(const TVector<TCandidate>& candidates, ui32 numRings, 
     }
 
     // calculate overall badness of all fail domains and delete the worst ones
-    TVector<ui32> badness; 
+    TVector<ui32> badness;
     badness.reserve(bestGroup.size());
     for (const auto& ring : bestGroup) {
         ui32 sum = 0;

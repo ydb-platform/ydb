@@ -89,7 +89,7 @@ namespace NKikimr {
 
         bool TSyncerJobTask::CheckFragmentFormat(const TString &data) {
             NSyncLog::TFragmentReader fragment(data);
-            TString errorString; 
+            TString errorString;
             bool good = fragment.Check(errorString);
             if (!good) {
                 Ctx->SyncerCtx->VCtx->Logger(NActors::NLog::PRI_ERROR, BS_SYNCER,
@@ -179,7 +179,7 @@ namespace NKikimr {
                 const TActorId &parentId)
         {
             const NKikimrBlobStorage::TEvVSyncResult &record = ev->Get()->Record;
-            const TString &data = record.GetData(); 
+            const TString &data = record.GetData();
             if (!CheckFragmentFormat(data)) {
                 return ReplyAndDie(TSyncStatusVal::ProtocolError);
             }
@@ -300,7 +300,7 @@ namespace NKikimr {
                 const TActorId &parentId)
         {
             const NKikimrBlobStorage::TEvVSyncFullResult &record = ev->Get()->Record;
-            const TString &data = record.GetData(); 
+            const TString &data = record.GetData();
             if (!CheckFragmentFormat(data)) {
                 return ReplyAndDie(TSyncStatusVal::ProtocolError);
             }

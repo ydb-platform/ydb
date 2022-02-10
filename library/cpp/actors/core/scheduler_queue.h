@@ -108,11 +108,11 @@ namespace NActors {
             }
         };
 
-        struct TQueueType { 
+        struct TQueueType {
             TReader Reader;
             TWriter Writer;
 
-            TQueueType() { 
+            TQueueType() {
                 Writer.Init(Reader);
             }
         };

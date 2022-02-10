@@ -7,7 +7,7 @@
 #include <util/generic/buffer.h>
 #include <util/generic/ptr.h>
 #include <util/generic/singleton.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/memory/alloc.h>
 #include <util/stream/mem.h>
 #include <util/stream/output.h>

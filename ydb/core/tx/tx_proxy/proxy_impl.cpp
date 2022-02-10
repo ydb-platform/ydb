@@ -34,12 +34,12 @@ struct TDelayedQueue {
         }
     };
     typedef TAutoPtr<TRequest> TRequestPtr;
-    typedef TOneOneQueueInplace<TRequest*, 64> TQueueType; 
-    typedef TAutoPtr<TQueueType, typename TQueueType::TPtrCleanDestructor> TSafeQueue; 
+    typedef TOneOneQueueInplace<TRequest*, 64> TQueueType;
+    typedef TAutoPtr<TQueueType, typename TQueueType::TPtrCleanDestructor> TSafeQueue;
     TSafeQueue Queue;
 
     TDelayedQueue()
-        : Queue(new TQueueType()) 
+        : Queue(new TQueueType())
     {}
 };
 
@@ -490,7 +490,7 @@ const TDuration TTxProxy::TimeoutDelayedRequest = TDuration::Seconds(15);
 
 }
 
-IActor* CreateTxProxy(const TVector<ui64> &allocators) { 
+IActor* CreateTxProxy(const TVector<ui64> &allocators) {
     return new NTxProxy::TTxProxy(allocators);
 }
 

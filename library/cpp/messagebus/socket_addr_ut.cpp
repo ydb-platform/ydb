@@ -10,6 +10,6 @@ using namespace NBus::NPrivate;
 
 Y_UNIT_TEST_SUITE(TBusSocketAddr) {
     Y_UNIT_TEST(Simple) {
-        UNIT_ASSERT_VALUES_EQUAL(TString("127.0.0.1:80"), ToString(TBusSocketAddr("127.0.0.1", 80))); 
+        UNIT_ASSERT_VALUES_EQUAL(TString("127.0.0.1:80"), ToString(TBusSocketAddr("127.0.0.1", 80)));
     }
 }

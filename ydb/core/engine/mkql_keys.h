@@ -37,12 +37,12 @@ struct TTableStrings {
     const TInternName UpdateRow;
     const TInternName EraseRow;
 
-    THashSet<TInternName> All; 
-    THashSet<TInternName> DbWrites; 
+    THashSet<TInternName> All;
+    THashSet<TInternName> DbWrites;
 };
 
 THolder<TKeyDesc> ExtractTableKey(TCallable& callable, const TTableStrings& strings, const TTypeEnvironment& env);
-TVector<THolder<TKeyDesc>> ExtractTableKeys(TExploringNodeVisitor& explorer, const TTypeEnvironment& env); 
+TVector<THolder<TKeyDesc>> ExtractTableKeys(TExploringNodeVisitor& explorer, const TTypeEnvironment& env);
 TTableId ExtractTableId(const TRuntimeNode& node);
 TCell MakeCell(NUdf::TDataTypeId typeId, const NUdf::TUnboxedValuePod& value, const TTypeEnvironment& env, bool copy = true);
 void FillKeyTupleValue(const NUdf::TUnboxedValue& row, const TVector<ui32>& rowIndices,

@@ -12,7 +12,7 @@ public:
     TEndpoint(const TAddrRef& addr);
     TEndpoint();
 
-    inline const TAddrRef& Addr() const noexcept { 
+    inline const TAddrRef& Addr() const noexcept {
         return Addr_;
     }
     inline const sockaddr* SockAddr() const {
@@ -32,12 +32,12 @@ public:
         return Addr_->Addr()->sa_family == AF_UNIX;
     }
 
-    inline TString IpToString() const { 
+    inline TString IpToString() const {
         return NAddr::PrintHost(*Addr_);
     }
 
     void SetPort(ui16 port);
-    ui16 Port() const noexcept; 
+    ui16 Port() const noexcept;
 
     size_t Hash() const;
 

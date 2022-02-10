@@ -119,8 +119,8 @@ namespace NYsonPull {
         }
 
         template <>
-        inline TString ReadScalar<TString>(TReader& reader) { 
-            return TString(ReadScalar<TStringBuf>(reader)); 
+        inline TString ReadScalar<TString>(TReader& reader) {
+            return TString(ReadScalar<TStringBuf>(reader));
         }
 
         template <>

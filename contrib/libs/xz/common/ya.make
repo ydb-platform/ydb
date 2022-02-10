@@ -1,7 +1,7 @@
 OWNER(
     thegeorg
     g:contrib
-    g:cpp-contrib 
+    g:cpp-contrib
 )
 
 # This is a part of xz utils package. Source can be downloaded from

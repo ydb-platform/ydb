@@ -2,7 +2,7 @@
 
 // Author: smikler@yandex-team.ru
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 /* Converts pcre regular expression to pire compatible format:
  *   - replaces "\\#" with "#"
@@ -16,4 +16,4 @@
  * NOTE:
  *   - Not fully tested!
  */
-TString Pcre2Pire(const TString& src); 
+TString Pcre2Pire(const TString& src);

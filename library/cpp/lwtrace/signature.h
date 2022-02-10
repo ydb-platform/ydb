@@ -5,7 +5,7 @@
 #include <library/cpp/lwtrace/protos/lwtrace.pb.h>
 
 #include <util/generic/cast.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/typetraits.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>

@@ -58,7 +58,7 @@ struct TParserCtx {
         if (!token) {
             Hndl.OnError(off, reason);
         } else {
-            Hndl.OnError(off, TString::Join(reason, " at token: '", token, "'")); 
+            Hndl.OnError(off, TString::Join(reason, " at token: '", token, "'"));
         }
 
         return false;

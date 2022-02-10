@@ -33,26 +33,26 @@ namespace NKikimr {
             TIngress::Merge(res, i2.CopyWithoutLocal(groupInfo.Type));
             TIngress::Merge(res, i3);
 
-            TVectorType vec = res.PartsWeKnowAbout(groupInfo.Type); 
-            UNIT_ASSERT(vec == TVectorType(0xE0, 3)); 
+            TVectorType vec = res.PartsWeKnowAbout(groupInfo.Type);
+            UNIT_ASSERT(vec == TVectorType(0xE0, 3));
 
-            TVectorType parts(0, 3); 
+            TVectorType parts(0, 3);
             ////
             parts = res.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk10, lb1) - res.LocalParts(groupInfo.Type);
-            UNIT_ASSERT(parts == TVectorType(0, 3)); 
+            UNIT_ASSERT(parts == TVectorType(0, 3));
             ////
             parts = res.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk21, lb1) - res.LocalParts(groupInfo.Type);
-            UNIT_ASSERT(parts == TVectorType(0x40, 3)); 
+            UNIT_ASSERT(parts == TVectorType(0x40, 3));
 
             // hand off with data
             TIngress i4 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdisk01, TLogoBlobID(lb1, 2));
             parts = i4.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk01, lb1) - i4.LocalParts(groupInfo.Type);
-            UNIT_ASSERT(parts == TVectorType(0x0, 3)); 
+            UNIT_ASSERT(parts == TVectorType(0x0, 3));
 
             // hand off without data
             TIngress i5(i4.CopyWithoutLocal(groupInfo.Type));
             parts = i5.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk01, lb1) - i5.LocalParts(groupInfo.Type);
-            UNIT_ASSERT(parts == TVectorType(0x40, 3)); 
+            UNIT_ASSERT(parts == TVectorType(0x40, 3));
         }
 
         Y_UNIT_TEST(IngressPartsWeMustHaveLocally) {
@@ -90,13 +90,13 @@ namespace NKikimr {
             printLocalParts(i6, vdisk30);
 
             // main
-            UNIT_ASSERT(i1.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk01, lb1) == TVectorType(0b10000000, 3)); 
-            UNIT_ASSERT(i2.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk10, lb1) == TVectorType(0b01000000, 3)); 
-            UNIT_ASSERT(i3.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk21, lb1) == TVectorType(0b00100000, 3)); 
+            UNIT_ASSERT(i1.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk01, lb1) == TVectorType(0b10000000, 3));
+            UNIT_ASSERT(i2.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk10, lb1) == TVectorType(0b01000000, 3));
+            UNIT_ASSERT(i3.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk21, lb1) == TVectorType(0b00100000, 3));
             // handoff
-            UNIT_ASSERT(i4.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk30, lb1) == TVectorType(0b00100000, 3)); 
-            UNIT_ASSERT(i5.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk30, lb1) == TVectorType(0b10000000, 3)); 
-            UNIT_ASSERT(i6.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk30, lb1) == TVectorType(0b10100000, 3)); 
+            UNIT_ASSERT(i4.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk30, lb1) == TVectorType(0b00100000, 3));
+            UNIT_ASSERT(i5.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk30, lb1) == TVectorType(0b10000000, 3));
+            UNIT_ASSERT(i6.PartsWeMustHaveLocally(&groupInfo.GetTopology(), vdisk30, lb1) == TVectorType(0b10100000, 3));
         }
 
         Y_UNIT_TEST(IngressLocalParts) {
@@ -118,8 +118,8 @@ namespace NKikimr {
             // for main disk 0
             TIngress i1 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdiskM1, TLogoBlobID(lb1, 1));
             {
-                TVectorType vec = i1.LocalParts(groupInfo.Type); 
-                TVectorType canon(0, 3); 
+                TVectorType vec = i1.LocalParts(groupInfo.Type);
+                TVectorType canon(0, 3);
                 canon.Set(0);
                 UNIT_ASSERT(vec == canon);
             }
@@ -127,8 +127,8 @@ namespace NKikimr {
             // for main disk 1
             TIngress i2 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdiskM2, TLogoBlobID(lb1, 2));
             {
-                TVectorType vec = i2.LocalParts(groupInfo.Type); 
-                TVectorType canon(0, 3); 
+                TVectorType vec = i2.LocalParts(groupInfo.Type);
+                TVectorType canon(0, 3);
                 canon.Set(1);
                 UNIT_ASSERT(vec == canon);
             }
@@ -140,8 +140,8 @@ namespace NKikimr {
                 TIngress res;
                 TIngress::Merge(res, i3);
                 TIngress::Merge(res, i4);
-                TVectorType vec = res.LocalParts(groupInfo.Type); 
-                TVectorType canon(0, 3); 
+                TVectorType vec = res.LocalParts(groupInfo.Type);
+                TVectorType canon(0, 3);
                 canon.Set(0);
                 canon.Set(2);
                 UNIT_ASSERT(vec == canon);
@@ -159,7 +159,7 @@ namespace NKikimr {
 
             for (ui32 vdisk = 0; vdisk < subgroup; ++vdisk) {
                 for (ui32 mask = 1; mask < (1U << totalParts); ++mask) {
-                    NMatrix::TVectorType parts(0, totalParts); 
+                    NMatrix::TVectorType parts(0, totalParts);
                     for (ui8 i = 0; i < totalParts; ++i) {
                         if (mask >> i & 1) {
                             parts.Set(i);
@@ -230,7 +230,7 @@ namespace NKikimr {
             // main3
             // handoff
 
-            TVectorType emptyVec(0, 3); 
+            TVectorType emptyVec(0, 3);
 
             // for main disk 0
             TIngress i1 = *TIngress::CreateIngressWithLocal(&groupInfo.GetTopology(), vdiskM1, TLogoBlobID(lb1, 1));
@@ -255,9 +255,9 @@ namespace NKikimr {
             i5.Merge(i4);
             TIngress::TPairOfVectors res3 = i5.HandoffParts(&groupInfo.GetTopology(), vdisk00, lb1);
             {
-                TVectorType moveVec(0, 3); 
+                TVectorType moveVec(0, 3);
                 moveVec.Set(2);
-                TVectorType delVec(0, 3); 
+                TVectorType delVec(0, 3);
                 delVec.Set(1);
                 UNIT_ASSERT(res3 == TIngress::TPairOfVectors(moveVec, delVec));
             }
@@ -265,9 +265,9 @@ namespace NKikimr {
             i5.DeleteHandoff(&groupInfo.GetTopology(), vdisk00, TLogoBlobID(lb1, 2));
             TIngress::TPairOfVectors res4 = i5.HandoffParts(&groupInfo.GetTopology(), vdisk00, lb1);
             {
-                TVectorType moveVec(0, 3); 
+                TVectorType moveVec(0, 3);
                 moveVec.Set(2);
-                TVectorType delVec(0, 3); 
+                TVectorType delVec(0, 3);
                 UNIT_ASSERT(res4 == TIngress::TPairOfVectors(moveVec, delVec));
             }
 
@@ -278,8 +278,8 @@ namespace NKikimr {
             i5.Merge(i6woLocal);
             TIngress::TPairOfVectors res5 = i5.HandoffParts(&groupInfo.GetTopology(), vdisk00, lb1);
             {
-                TVectorType moveVec(0, 3); 
-                TVectorType delVec(0, 3); 
+                TVectorType moveVec(0, 3);
+                TVectorType delVec(0, 3);
                 delVec.Set(2);
                 UNIT_ASSERT(res5 == TIngress::TPairOfVectors(moveVec, delVec));
             }

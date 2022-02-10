@@ -5,7 +5,7 @@
 #include "reader.h"
 
 template <typename T>
-static inline void ReadAux(const char* data, T* aux, T count, TVector<const char*>* result) { 
+static inline void ReadAux(const char* data, T* aux, T count, TVector<const char*>* result) {
     result->resize(count);
     for (size_t i = 0; i < count; ++i) {
         (*result)[i] = data + ReadUnaligned<T>(aux + i);

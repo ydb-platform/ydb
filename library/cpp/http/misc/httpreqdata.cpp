@@ -74,7 +74,7 @@ const char* TBaseServerRequestData::HeaderIn(TStringBuf key) const {
     return it->second.data();
 }
 
-TString TBaseServerRequestData::HeaderByIndex(size_t n) const noexcept { 
+TString TBaseServerRequestData::HeaderByIndex(size_t n) const noexcept {
     if (n >= HeadersCount()) {
         return nullptr;
     }
@@ -179,7 +179,7 @@ bool TBaseServerRequestData::Parse(const char* origReq) {
     return true;
 }
 
-void TBaseServerRequestData::AddHeader(const TString& name, const TString& value) { 
+void TBaseServerRequestData::AddHeader(const TString& name, const TString& value) {
     HeadersIn_[name] = value;
 
     if (stricmp(name.data(), "Host") == 0) {
@@ -190,7 +190,7 @@ void TBaseServerRequestData::AddHeader(const TString& name, const TString& value
     }
 }
 
-void TBaseServerRequestData::SetPath(const TString& path) { 
+void TBaseServerRequestData::SetPath(const TString& path) {
     PathStorage = TBuffer(path.data(), path.size() + 1);
     Path = PathStorage.Data();
 }

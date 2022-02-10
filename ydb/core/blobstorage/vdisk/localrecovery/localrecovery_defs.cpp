@@ -72,9 +72,9 @@ namespace NKikimr {
 
 
     void TLocalRecoveryInfo::OutputCounters(IOutputStream &str,
-                                            const TString &prefix, 
-                                            const TString &suffix, 
-                                            const TString &hr) const { 
+                                            const TString &prefix,
+                                            const TString &suffix,
+                                            const TString &hr) const {
         auto boolToStr = [] (bool x) { return x ? "true" : "false"; };
         str << "RecoveredLogStartLsn# " << RecoveredLogStartLsn << suffix
             << prefix << "SuccessfulRecovery# " << boolToStr(SuccessfulRecovery) << suffix
@@ -202,7 +202,7 @@ namespace NKikimr {
         str << "\n";
     }
 
-    TString TLocalRecoveryInfo::ToString() const { 
+    TString TLocalRecoveryInfo::ToString() const {
         TStringStream str;
         Output(str);
         return str.Str();

@@ -1,5 +1,5 @@
-#include <util/generic/string.h> 
-#include <util/generic/vector.h> 
+#include <util/generic/string.h>
+#include <util/generic/vector.h>
 #include <util/stream/str.h>
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -10,12 +10,12 @@ private:
     int* Ptr_;
 
 public:
-    TIncrementOnDestroy(int* ptr) noexcept 
+    TIncrementOnDestroy(int* ptr) noexcept
         : Ptr_(ptr)
     {
     }
 
-    ~TIncrementOnDestroy() { 
+    ~TIncrementOnDestroy() {
         ++*Ptr_;
     }
 };
@@ -42,13 +42,13 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     Y_UNIT_TEST(TestWarning) {
         TMaybe<size_t> x;
         TStringStream ss;
-        TString line; 
+        TString line;
 
         while (ss.ReadLine(line)) {
             x = line.size();
         }
 
-        if (x == 5u) { 
+        if (x == 5u) {
             ss << "5\n";
         }
     }
@@ -221,575 +221,575 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
         UNIT_ASSERT(longMaybe.Defined());
         UNIT_ASSERT_VALUES_EQUAL(34, longMaybe.GetRef());
     }
- 
+
     Y_UNIT_TEST(TestGetOr) {
-        UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>().GetOrElse("xxx"), TString("xxx")); 
-        UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>("yyy").GetOrElse("xxx"), TString("yyy")); 
+        UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>().GetOrElse("xxx"), TString("xxx"));
+        UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>("yyy").GetOrElse("xxx"), TString("yyy"));
 
         {
-            TString xxx = "xxx"; 
-            UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>().GetOrElse(xxx).append('x'), TString("xxxx")); 
+            TString xxx = "xxx";
+            UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>().GetOrElse(xxx).append('x'), TString("xxxx"));
             UNIT_ASSERT_VALUES_EQUAL(xxx, "xxxx");
         }
 
         {
-            TString xxx = "xxx"; 
-            UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>("yyy").GetOrElse(xxx).append('x'), TString("yyyx")); 
+            TString xxx = "xxx";
+            UNIT_ASSERT_VALUES_EQUAL(TMaybe<TString>("yyy").GetOrElse(xxx).append('x'), TString("yyyx"));
             UNIT_ASSERT_VALUES_EQUAL(xxx, "xxx");
         }
     }
 
     /*
-  == 
-  != 
-  < 
-  <= 
-  > 
-  >= 
-*/ 
- 
+  ==
+  !=
+  <
+  <=
+  >
+  >=
+*/
+
     Y_UNIT_TEST(TestCompareEqualEmpty) {
-        TMaybe<int> m1; 
-        TMaybe<int> m2; 
- 
-        UNIT_ASSERT(m1 == m2); 
-        UNIT_ASSERT(!(m1 != m2)); 
-        UNIT_ASSERT(!(m1 < m2)); 
-        UNIT_ASSERT(m1 <= m2); 
-        UNIT_ASSERT(!(m1 > m2)); 
-        UNIT_ASSERT(m1 >= m2); 
-    } 
- 
+        TMaybe<int> m1;
+        TMaybe<int> m2;
+
+        UNIT_ASSERT(m1 == m2);
+        UNIT_ASSERT(!(m1 != m2));
+        UNIT_ASSERT(!(m1 < m2));
+        UNIT_ASSERT(m1 <= m2);
+        UNIT_ASSERT(!(m1 > m2));
+        UNIT_ASSERT(m1 >= m2);
+    }
+
     Y_UNIT_TEST(TestCompareEqualNonEmpty) {
         TMaybe<int> m1{1};
         TMaybe<int> m2{1};
- 
-        UNIT_ASSERT(m1 == m2); 
-        UNIT_ASSERT(!(m1 != m2)); 
-        UNIT_ASSERT(!(m1 < m2)); 
-        UNIT_ASSERT(m1 <= m2); 
-        UNIT_ASSERT(!(m1 > m2)); 
-        UNIT_ASSERT(m1 >= m2); 
-    } 
- 
+
+        UNIT_ASSERT(m1 == m2);
+        UNIT_ASSERT(!(m1 != m2));
+        UNIT_ASSERT(!(m1 < m2));
+        UNIT_ASSERT(m1 <= m2);
+        UNIT_ASSERT(!(m1 > m2));
+        UNIT_ASSERT(m1 >= m2);
+    }
+
     Y_UNIT_TEST(TestCompareOneLessThanOther) {
         TMaybe<int> m1{1};
         TMaybe<int> m2{2};
- 
-        UNIT_ASSERT(!(m1 == m2)); 
-        UNIT_ASSERT(m1 != m2); 
-        UNIT_ASSERT(m1 < m2); 
-        UNIT_ASSERT(m1 <= m2); 
-        UNIT_ASSERT(!(m1 > m2)); 
-        UNIT_ASSERT(!(m1 >= m2)); 
-    } 
- 
+
+        UNIT_ASSERT(!(m1 == m2));
+        UNIT_ASSERT(m1 != m2);
+        UNIT_ASSERT(m1 < m2);
+        UNIT_ASSERT(m1 <= m2);
+        UNIT_ASSERT(!(m1 > m2));
+        UNIT_ASSERT(!(m1 >= m2));
+    }
+
     Y_UNIT_TEST(TestCompareTMaybeAndT_Equal) {
         TMaybe<int> m{1};
         int v{1};
- 
-        UNIT_ASSERT(m == v); 
-        UNIT_ASSERT(!(m != v)); 
-        UNIT_ASSERT(!(m < v)); 
-        UNIT_ASSERT(m <= v); 
-        UNIT_ASSERT(!(m > v)); 
-        UNIT_ASSERT(m >= v); 
- 
-        UNIT_ASSERT(v == m); 
-        UNIT_ASSERT(!(v != m)); 
-        UNIT_ASSERT(!(v < m)); 
-        UNIT_ASSERT(v <= m); 
-        UNIT_ASSERT(!(v > m)); 
-        UNIT_ASSERT(v >= m); 
-    } 
- 
+
+        UNIT_ASSERT(m == v);
+        UNIT_ASSERT(!(m != v));
+        UNIT_ASSERT(!(m < v));
+        UNIT_ASSERT(m <= v);
+        UNIT_ASSERT(!(m > v));
+        UNIT_ASSERT(m >= v);
+
+        UNIT_ASSERT(v == m);
+        UNIT_ASSERT(!(v != m));
+        UNIT_ASSERT(!(v < m));
+        UNIT_ASSERT(v <= m);
+        UNIT_ASSERT(!(v > m));
+        UNIT_ASSERT(v >= m);
+    }
+
     Y_UNIT_TEST(TestCompareTMaybeAndT_TMaybeLessThanT) {
         TMaybe<int> m{1};
         int v{2};
- 
-        UNIT_ASSERT(!(m == v)); 
-        UNIT_ASSERT(m != v); 
-        UNIT_ASSERT(m < v); 
-        UNIT_ASSERT(m <= v); 
-        UNIT_ASSERT(!(m > v)); 
-        UNIT_ASSERT(!(m >= v)); 
- 
-        UNIT_ASSERT(!(v == m)); 
-        UNIT_ASSERT(v != m); 
-        UNIT_ASSERT(!(v < m)); 
-        UNIT_ASSERT(!(v <= m)); 
-        UNIT_ASSERT(v > m); 
-        UNIT_ASSERT(v >= m); 
-    } 
- 
+
+        UNIT_ASSERT(!(m == v));
+        UNIT_ASSERT(m != v);
+        UNIT_ASSERT(m < v);
+        UNIT_ASSERT(m <= v);
+        UNIT_ASSERT(!(m > v));
+        UNIT_ASSERT(!(m >= v));
+
+        UNIT_ASSERT(!(v == m));
+        UNIT_ASSERT(v != m);
+        UNIT_ASSERT(!(v < m));
+        UNIT_ASSERT(!(v <= m));
+        UNIT_ASSERT(v > m);
+        UNIT_ASSERT(v >= m);
+    }
+
     Y_UNIT_TEST(TestCompareTMaybeAndT_TMaybeGreaterThanT) {
         TMaybe<int> m{2};
         int v{1};
- 
-        UNIT_ASSERT(!(m == v)); 
-        UNIT_ASSERT(m != v); 
-        UNIT_ASSERT(!(m < v)); 
-        UNIT_ASSERT(!(m <= v)); 
-        UNIT_ASSERT(m > v); 
-        UNIT_ASSERT(m >= v); 
- 
-        UNIT_ASSERT(!(v == m)); 
-        UNIT_ASSERT(v != m); 
-        UNIT_ASSERT(v < m); 
-        UNIT_ASSERT(v <= m); 
-        UNIT_ASSERT(!(v > m)); 
-        UNIT_ASSERT(!(v >= m)); 
-    } 
- 
+
+        UNIT_ASSERT(!(m == v));
+        UNIT_ASSERT(m != v);
+        UNIT_ASSERT(!(m < v));
+        UNIT_ASSERT(!(m <= v));
+        UNIT_ASSERT(m > v);
+        UNIT_ASSERT(m >= v);
+
+        UNIT_ASSERT(!(v == m));
+        UNIT_ASSERT(v != m);
+        UNIT_ASSERT(v < m);
+        UNIT_ASSERT(v <= m);
+        UNIT_ASSERT(!(v > m));
+        UNIT_ASSERT(!(v >= m));
+    }
+
     Y_UNIT_TEST(TestCompareEmptyTMaybeAndT) {
-        TMaybe<int> m; 
+        TMaybe<int> m;
         int v{1};
- 
-        UNIT_ASSERT(!(m == v)); 
-        UNIT_ASSERT(m != v); 
-        UNIT_ASSERT(m < v); 
-        UNIT_ASSERT(m <= v); 
-        UNIT_ASSERT(!(m > v)); 
-        UNIT_ASSERT(!(m >= v)); 
- 
-        UNIT_ASSERT(!(v == m)); 
-        UNIT_ASSERT(v != m); 
-        UNIT_ASSERT(!(v < m)); 
-        UNIT_ASSERT(!(v <= m)); 
-        UNIT_ASSERT(v > m); 
-        UNIT_ASSERT(v >= m); 
-    } 
- 
+
+        UNIT_ASSERT(!(m == v));
+        UNIT_ASSERT(m != v);
+        UNIT_ASSERT(m < v);
+        UNIT_ASSERT(m <= v);
+        UNIT_ASSERT(!(m > v));
+        UNIT_ASSERT(!(m >= v));
+
+        UNIT_ASSERT(!(v == m));
+        UNIT_ASSERT(v != m);
+        UNIT_ASSERT(!(v < m));
+        UNIT_ASSERT(!(v <= m));
+        UNIT_ASSERT(v > m);
+        UNIT_ASSERT(v >= m);
+    }
+
     Y_UNIT_TEST(TestCompareEmptyTMaybeAndNothing) {
-        TMaybe<int> m; 
-        auto n = Nothing(); 
- 
-        UNIT_ASSERT(m == n); 
-        UNIT_ASSERT(!(m != n)); 
-        UNIT_ASSERT(!(m < n)); 
-        UNIT_ASSERT(m <= n); 
-        UNIT_ASSERT(!(m > n)); 
-        UNIT_ASSERT(m >= n); 
- 
-        UNIT_ASSERT(n == m); 
-        UNIT_ASSERT(!(n != m)); 
-        UNIT_ASSERT(!(n < m)); 
-        UNIT_ASSERT(n <= m); 
-        UNIT_ASSERT(!(n > m)); 
-        UNIT_ASSERT(n >= m); 
-    } 
- 
+        TMaybe<int> m;
+        auto n = Nothing();
+
+        UNIT_ASSERT(m == n);
+        UNIT_ASSERT(!(m != n));
+        UNIT_ASSERT(!(m < n));
+        UNIT_ASSERT(m <= n);
+        UNIT_ASSERT(!(m > n));
+        UNIT_ASSERT(m >= n);
+
+        UNIT_ASSERT(n == m);
+        UNIT_ASSERT(!(n != m));
+        UNIT_ASSERT(!(n < m));
+        UNIT_ASSERT(n <= m);
+        UNIT_ASSERT(!(n > m));
+        UNIT_ASSERT(n >= m);
+    }
+
     Y_UNIT_TEST(TestCompareNonEmptyTMaybeAndNothing) {
         TMaybe<int> m{1};
-        auto n = Nothing(); 
- 
-        UNIT_ASSERT(!(m == n)); 
-        UNIT_ASSERT(m != n); 
-        UNIT_ASSERT(!(m < n)); 
-        UNIT_ASSERT(!(m <= n)); 
-        UNIT_ASSERT(m > n); 
-        UNIT_ASSERT(m >= n); 
- 
-        UNIT_ASSERT(!(n == m)); 
-        UNIT_ASSERT(n != m); 
-        UNIT_ASSERT(n < m); 
-        UNIT_ASSERT(n <= m); 
-        UNIT_ASSERT(!(n > m)); 
-        UNIT_ASSERT(!(n >= m)); 
-    } 
- 
+        auto n = Nothing();
+
+        UNIT_ASSERT(!(m == n));
+        UNIT_ASSERT(m != n);
+        UNIT_ASSERT(!(m < n));
+        UNIT_ASSERT(!(m <= n));
+        UNIT_ASSERT(m > n);
+        UNIT_ASSERT(m >= n);
+
+        UNIT_ASSERT(!(n == m));
+        UNIT_ASSERT(n != m);
+        UNIT_ASSERT(n < m);
+        UNIT_ASSERT(n <= m);
+        UNIT_ASSERT(!(n > m));
+        UNIT_ASSERT(!(n >= m));
+    }
+
     Y_UNIT_TEST(TestCompareTMaybeAndConvertibleT_Equal) {
         TMaybe<size_t> m{1};
         unsigned int v{1};
- 
-        UNIT_ASSERT(m == v); 
-        UNIT_ASSERT(!(m != v)); 
-        UNIT_ASSERT(!(m < v)); 
-        UNIT_ASSERT(m <= v); 
-        UNIT_ASSERT(!(m > v)); 
-        UNIT_ASSERT(m >= v); 
- 
-        UNIT_ASSERT(v == m); 
-        UNIT_ASSERT(!(v != m)); 
-        UNIT_ASSERT(!(v < m)); 
-        UNIT_ASSERT(v <= m); 
-        UNIT_ASSERT(!(v > m)); 
-        UNIT_ASSERT(v >= m); 
-    } 
- 
+
+        UNIT_ASSERT(m == v);
+        UNIT_ASSERT(!(m != v));
+        UNIT_ASSERT(!(m < v));
+        UNIT_ASSERT(m <= v);
+        UNIT_ASSERT(!(m > v));
+        UNIT_ASSERT(m >= v);
+
+        UNIT_ASSERT(v == m);
+        UNIT_ASSERT(!(v != m));
+        UNIT_ASSERT(!(v < m));
+        UNIT_ASSERT(v <= m);
+        UNIT_ASSERT(!(v > m));
+        UNIT_ASSERT(v >= m);
+    }
+
     Y_UNIT_TEST(TestCompareTMaybeAndConvertibleT_TMaybeLessThanT) {
         TMaybe<size_t> m{1};
         unsigned int v{2};
- 
-        UNIT_ASSERT(!(m == v)); 
-        UNIT_ASSERT(m != v); 
-        UNIT_ASSERT(m < v); 
-        UNIT_ASSERT(m <= v); 
-        UNIT_ASSERT(!(m > v)); 
-        UNIT_ASSERT(!(m >= v)); 
- 
-        UNIT_ASSERT(!(v == m)); 
-        UNIT_ASSERT(v != m); 
-        UNIT_ASSERT(!(v < m)); 
-        UNIT_ASSERT(!(v <= m)); 
-        UNIT_ASSERT(v > m); 
-        UNIT_ASSERT(v >= m); 
-    } 
- 
+
+        UNIT_ASSERT(!(m == v));
+        UNIT_ASSERT(m != v);
+        UNIT_ASSERT(m < v);
+        UNIT_ASSERT(m <= v);
+        UNIT_ASSERT(!(m > v));
+        UNIT_ASSERT(!(m >= v));
+
+        UNIT_ASSERT(!(v == m));
+        UNIT_ASSERT(v != m);
+        UNIT_ASSERT(!(v < m));
+        UNIT_ASSERT(!(v <= m));
+        UNIT_ASSERT(v > m);
+        UNIT_ASSERT(v >= m);
+    }
+
     Y_UNIT_TEST(TestCompareTMaybeAndConvertibleT_TMaybeGreaterThanT) {
         TMaybe<size_t> m{2};
         unsigned int v{1};
- 
-        UNIT_ASSERT(!(m == v)); 
-        UNIT_ASSERT(m != v); 
-        UNIT_ASSERT(!(m < v)); 
-        UNIT_ASSERT(!(m <= v)); 
-        UNIT_ASSERT(m > v); 
-        UNIT_ASSERT(m >= v); 
- 
-        UNIT_ASSERT(!(v == m)); 
-        UNIT_ASSERT(v != m); 
-        UNIT_ASSERT(v < m); 
-        UNIT_ASSERT(v <= m); 
-        UNIT_ASSERT(!(v > m)); 
-        UNIT_ASSERT(!(v >= m)); 
-    } 
- 
+
+        UNIT_ASSERT(!(m == v));
+        UNIT_ASSERT(m != v);
+        UNIT_ASSERT(!(m < v));
+        UNIT_ASSERT(!(m <= v));
+        UNIT_ASSERT(m > v);
+        UNIT_ASSERT(m >= v);
+
+        UNIT_ASSERT(!(v == m));
+        UNIT_ASSERT(v != m);
+        UNIT_ASSERT(v < m);
+        UNIT_ASSERT(v <= m);
+        UNIT_ASSERT(!(v > m));
+        UNIT_ASSERT(!(v >= m));
+    }
+
     Y_UNIT_TEST(TestCompareEmptyTMaybeAndConvertibleT) {
-        TMaybe<size_t> m; 
+        TMaybe<size_t> m;
         unsigned int v{1};
- 
-        UNIT_ASSERT(!(m == v)); 
-        UNIT_ASSERT(m != v); 
-        UNIT_ASSERT(m < v); 
-        UNIT_ASSERT(m <= v); 
-        UNIT_ASSERT(!(m > v)); 
-        UNIT_ASSERT(!(m >= v)); 
- 
-        UNIT_ASSERT(!(v == m)); 
-        UNIT_ASSERT(v != m); 
-        UNIT_ASSERT(!(v < m)); 
-        UNIT_ASSERT(!(v <= m)); 
-        UNIT_ASSERT(v > m); 
-        UNIT_ASSERT(v >= m); 
-    } 
- 
+
+        UNIT_ASSERT(!(m == v));
+        UNIT_ASSERT(m != v);
+        UNIT_ASSERT(m < v);
+        UNIT_ASSERT(m <= v);
+        UNIT_ASSERT(!(m > v));
+        UNIT_ASSERT(!(m >= v));
+
+        UNIT_ASSERT(!(v == m));
+        UNIT_ASSERT(v != m);
+        UNIT_ASSERT(!(v < m));
+        UNIT_ASSERT(!(v <= m));
+        UNIT_ASSERT(v > m);
+        UNIT_ASSERT(v >= m);
+    }
+
     Y_UNIT_TEST(TestMakeMaybe) {
-        { 
-            auto m1 = MakeMaybe<int>(1); 
-            UNIT_ASSERT(*m1 == 1); 
-        } 
- 
-        { 
-            struct TMockClass { 
-                TMockClass(int i) 
-                    : I_(i) 
-                { 
-                } 
- 
-                TMockClass(const TMockClass& other) 
-                    : I_(other.I_) 
-                { 
-                    IsCopyConstructorCalled_ = true; 
-                } 
- 
-                TMockClass& operator=(const TMockClass& other) { 
-                    if (this != &other) { 
-                        I_ = other.I_; 
-                        IsCopyAssignmentOperatorCalled_ = true; 
-                    } 
- 
-                    return *this; 
-                } 
- 
-                TMockClass(TMockClass&& other) 
-                    : I_(other.I_) 
-                { 
-                    IsMoveConstructorCalled_ = true; 
-                } 
- 
-                TMockClass& operator=(TMockClass&& other) { 
-                    if (this != &other) { 
-                        I_ = other.I_; 
-                        IsMoveAssignmentOperatorCalled_ = true; 
-                    } 
- 
-                    return *this; 
-                } 
- 
-                int I_; 
+        {
+            auto m1 = MakeMaybe<int>(1);
+            UNIT_ASSERT(*m1 == 1);
+        }
+
+        {
+            struct TMockClass {
+                TMockClass(int i)
+                    : I_(i)
+                {
+                }
+
+                TMockClass(const TMockClass& other)
+                    : I_(other.I_)
+                {
+                    IsCopyConstructorCalled_ = true;
+                }
+
+                TMockClass& operator=(const TMockClass& other) {
+                    if (this != &other) {
+                        I_ = other.I_;
+                        IsCopyAssignmentOperatorCalled_ = true;
+                    }
+
+                    return *this;
+                }
+
+                TMockClass(TMockClass&& other)
+                    : I_(other.I_)
+                {
+                    IsMoveConstructorCalled_ = true;
+                }
+
+                TMockClass& operator=(TMockClass&& other) {
+                    if (this != &other) {
+                        I_ = other.I_;
+                        IsMoveAssignmentOperatorCalled_ = true;
+                    }
+
+                    return *this;
+                }
+
+                int I_;
                 bool IsCopyConstructorCalled_{false};
                 bool IsMoveConstructorCalled_{false};
                 bool IsCopyAssignmentOperatorCalled_{false};
                 bool IsMoveAssignmentOperatorCalled_{false};
-            }; 
- 
-            auto m2 = MakeMaybe<TMockClass>(1); 
-            UNIT_ASSERT(m2->I_ == 1); 
-            UNIT_ASSERT(!m2->IsCopyConstructorCalled_); 
-            UNIT_ASSERT(!m2->IsMoveConstructorCalled_); 
-            UNIT_ASSERT(!m2->IsCopyAssignmentOperatorCalled_); 
-            UNIT_ASSERT(!m2->IsMoveAssignmentOperatorCalled_); 
-        } 
- 
-        { 
-            auto m3 = MakeMaybe<TVector<int>>({1, 2, 3, 4, 5}); 
-            UNIT_ASSERT(m3->size() == 5); 
-            UNIT_ASSERT(m3->at(0) == 1); 
-            UNIT_ASSERT(m3->at(1) == 2); 
-            UNIT_ASSERT(m3->at(2) == 3); 
-            UNIT_ASSERT(m3->at(3) == 4); 
-            UNIT_ASSERT(m3->at(4) == 5); 
-        } 
- 
-        { 
-            struct TMockStruct4 { 
-                TMockStruct4(int a, int b, int c) 
-                    : A_(a) 
-                    , B_(b) 
-                    , C_(c) 
-                { 
-                } 
- 
-                int A_; 
-                int B_; 
-                int C_; 
-            }; 
- 
-            auto m4 = MakeMaybe<TMockStruct4>(1, 2, 3); 
-            UNIT_ASSERT(m4->A_ == 1); 
-            UNIT_ASSERT(m4->B_ == 2); 
-            UNIT_ASSERT(m4->C_ == 3); 
-        } 
- 
-        { 
-            struct TMockStruct5 { 
-                TMockStruct5(const TVector<int>& vec, bool someFlag) 
-                    : Vec_(vec) 
-                    , SomeFlag_(someFlag) 
-                { 
-                } 
- 
-                TVector<int> Vec_; 
-                bool SomeFlag_; 
-            }; 
- 
+            };
+
+            auto m2 = MakeMaybe<TMockClass>(1);
+            UNIT_ASSERT(m2->I_ == 1);
+            UNIT_ASSERT(!m2->IsCopyConstructorCalled_);
+            UNIT_ASSERT(!m2->IsMoveConstructorCalled_);
+            UNIT_ASSERT(!m2->IsCopyAssignmentOperatorCalled_);
+            UNIT_ASSERT(!m2->IsMoveAssignmentOperatorCalled_);
+        }
+
+        {
+            auto m3 = MakeMaybe<TVector<int>>({1, 2, 3, 4, 5});
+            UNIT_ASSERT(m3->size() == 5);
+            UNIT_ASSERT(m3->at(0) == 1);
+            UNIT_ASSERT(m3->at(1) == 2);
+            UNIT_ASSERT(m3->at(2) == 3);
+            UNIT_ASSERT(m3->at(3) == 4);
+            UNIT_ASSERT(m3->at(4) == 5);
+        }
+
+        {
+            struct TMockStruct4 {
+                TMockStruct4(int a, int b, int c)
+                    : A_(a)
+                    , B_(b)
+                    , C_(c)
+                {
+                }
+
+                int A_;
+                int B_;
+                int C_;
+            };
+
+            auto m4 = MakeMaybe<TMockStruct4>(1, 2, 3);
+            UNIT_ASSERT(m4->A_ == 1);
+            UNIT_ASSERT(m4->B_ == 2);
+            UNIT_ASSERT(m4->C_ == 3);
+        }
+
+        {
+            struct TMockStruct5 {
+                TMockStruct5(const TVector<int>& vec, bool someFlag)
+                    : Vec_(vec)
+                    , SomeFlag_(someFlag)
+                {
+                }
+
+                TVector<int> Vec_;
+                bool SomeFlag_;
+            };
+
             auto m5 = MakeMaybe<TMockStruct5>({1, 2, 3}, true);
-            UNIT_ASSERT(m5->Vec_.size() == 3); 
-            UNIT_ASSERT(m5->Vec_[0] == 1); 
-            UNIT_ASSERT(m5->Vec_[1] == 2); 
-            UNIT_ASSERT(m5->Vec_[2] == 3); 
-            UNIT_ASSERT(m5->SomeFlag_); 
-        } 
-    } 
- 
+            UNIT_ASSERT(m5->Vec_.size() == 3);
+            UNIT_ASSERT(m5->Vec_[0] == 1);
+            UNIT_ASSERT(m5->Vec_[1] == 2);
+            UNIT_ASSERT(m5->Vec_[2] == 3);
+            UNIT_ASSERT(m5->SomeFlag_);
+        }
+    }
+
     Y_UNIT_TEST(TestSwappingUsingMemberSwap) {
-        { 
-            TMaybe<int> m1 = 1; 
-            TMaybe<int> m2 = 2; 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(*m2 == 2); 
- 
-            m1.Swap(m2); 
- 
-            UNIT_ASSERT(*m1 == 2); 
-            UNIT_ASSERT(*m2 == 1); 
-        } 
- 
-        { 
-            TMaybe<int> m1 = 1; 
-            TMaybe<int> m2 = Nothing(); 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(m2 == Nothing()); 
- 
-            m1.Swap(m2); 
- 
-            UNIT_ASSERT(m1 == Nothing()); 
-            UNIT_ASSERT(*m2 == 1); 
-        } 
- 
-        { 
-            TMaybe<int> m1 = Nothing(); 
-            TMaybe<int> m2 = 1; 
- 
-            UNIT_ASSERT(m1 == Nothing()); 
-            UNIT_ASSERT(*m2 == 1); 
- 
-            m1.Swap(m2); 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(m2 == Nothing()); 
-        } 
-    } 
- 
+        {
+            TMaybe<int> m1 = 1;
+            TMaybe<int> m2 = 2;
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(*m2 == 2);
+
+            m1.Swap(m2);
+
+            UNIT_ASSERT(*m1 == 2);
+            UNIT_ASSERT(*m2 == 1);
+        }
+
+        {
+            TMaybe<int> m1 = 1;
+            TMaybe<int> m2 = Nothing();
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(m2 == Nothing());
+
+            m1.Swap(m2);
+
+            UNIT_ASSERT(m1 == Nothing());
+            UNIT_ASSERT(*m2 == 1);
+        }
+
+        {
+            TMaybe<int> m1 = Nothing();
+            TMaybe<int> m2 = 1;
+
+            UNIT_ASSERT(m1 == Nothing());
+            UNIT_ASSERT(*m2 == 1);
+
+            m1.Swap(m2);
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(m2 == Nothing());
+        }
+    }
+
     Y_UNIT_TEST(TestSwappingUsingMemberLittleSwap) {
-        { 
-            TMaybe<int> m1 = 1; 
-            TMaybe<int> m2 = 2; 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(*m2 == 2); 
- 
-            m1.swap(m2); 
- 
-            UNIT_ASSERT(*m1 == 2); 
-            UNIT_ASSERT(*m2 == 1); 
-        } 
- 
-        { 
-            TMaybe<int> m1 = 1; 
-            TMaybe<int> m2 = Nothing(); 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(m2 == Nothing()); 
- 
-            m1.swap(m2); 
- 
-            UNIT_ASSERT(m1 == Nothing()); 
-            UNIT_ASSERT(*m2 == 1); 
-        } 
- 
-        { 
-            TMaybe<int> m1 = Nothing(); 
-            TMaybe<int> m2 = 1; 
- 
-            UNIT_ASSERT(m1 == Nothing()); 
-            UNIT_ASSERT(*m2 == 1); 
- 
-            m1.swap(m2); 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(m2 == Nothing()); 
-        } 
-    } 
- 
+        {
+            TMaybe<int> m1 = 1;
+            TMaybe<int> m2 = 2;
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(*m2 == 2);
+
+            m1.swap(m2);
+
+            UNIT_ASSERT(*m1 == 2);
+            UNIT_ASSERT(*m2 == 1);
+        }
+
+        {
+            TMaybe<int> m1 = 1;
+            TMaybe<int> m2 = Nothing();
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(m2 == Nothing());
+
+            m1.swap(m2);
+
+            UNIT_ASSERT(m1 == Nothing());
+            UNIT_ASSERT(*m2 == 1);
+        }
+
+        {
+            TMaybe<int> m1 = Nothing();
+            TMaybe<int> m2 = 1;
+
+            UNIT_ASSERT(m1 == Nothing());
+            UNIT_ASSERT(*m2 == 1);
+
+            m1.swap(m2);
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(m2 == Nothing());
+        }
+    }
+
     Y_UNIT_TEST(TestSwappingUsingGlobalSwap) {
-        { 
-            TMaybe<int> m1 = 1; 
-            TMaybe<int> m2 = 2; 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(*m2 == 2); 
- 
-            ::Swap(m1, m2); 
- 
-            UNIT_ASSERT(*m1 == 2); 
-            UNIT_ASSERT(*m2 == 1); 
-        } 
- 
-        { 
-            TMaybe<int> m1 = 1; 
-            TMaybe<int> m2 = Nothing(); 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(m2 == Nothing()); 
- 
-            ::Swap(m1, m2); 
- 
-            UNIT_ASSERT(m1 == Nothing()); 
-            UNIT_ASSERT(*m2 == 1); 
-        } 
- 
-        { 
-            TMaybe<int> m1 = Nothing(); 
-            TMaybe<int> m2 = 1; 
- 
-            UNIT_ASSERT(m1 == Nothing()); 
-            UNIT_ASSERT(*m2 == 1); 
- 
-            ::Swap(m1, m2); 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(m2 == Nothing()); 
-        } 
-    } 
- 
+        {
+            TMaybe<int> m1 = 1;
+            TMaybe<int> m2 = 2;
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(*m2 == 2);
+
+            ::Swap(m1, m2);
+
+            UNIT_ASSERT(*m1 == 2);
+            UNIT_ASSERT(*m2 == 1);
+        }
+
+        {
+            TMaybe<int> m1 = 1;
+            TMaybe<int> m2 = Nothing();
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(m2 == Nothing());
+
+            ::Swap(m1, m2);
+
+            UNIT_ASSERT(m1 == Nothing());
+            UNIT_ASSERT(*m2 == 1);
+        }
+
+        {
+            TMaybe<int> m1 = Nothing();
+            TMaybe<int> m2 = 1;
+
+            UNIT_ASSERT(m1 == Nothing());
+            UNIT_ASSERT(*m2 == 1);
+
+            ::Swap(m1, m2);
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(m2 == Nothing());
+        }
+    }
+
     Y_UNIT_TEST(TestSwappingUsingGlobalDoSwap) {
-        { 
-            TMaybe<int> m1 = 1; 
-            TMaybe<int> m2 = 2; 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(*m2 == 2); 
- 
-            ::DoSwap(m1, m2); 
- 
-            UNIT_ASSERT(*m1 == 2); 
-            UNIT_ASSERT(*m2 == 1); 
-        } 
- 
-        { 
-            TMaybe<int> m1 = 1; 
-            TMaybe<int> m2 = Nothing(); 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(m2 == Nothing()); 
- 
-            ::DoSwap(m1, m2); 
- 
-            UNIT_ASSERT(m1 == Nothing()); 
-            UNIT_ASSERT(*m2 == 1); 
-        } 
- 
-        { 
-            TMaybe<int> m1 = Nothing(); 
-            TMaybe<int> m2 = 1; 
- 
-            UNIT_ASSERT(m1 == Nothing()); 
-            UNIT_ASSERT(*m2 == 1); 
- 
-            ::DoSwap(m1, m2); 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(m2 == Nothing()); 
-        } 
-    } 
- 
+        {
+            TMaybe<int> m1 = 1;
+            TMaybe<int> m2 = 2;
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(*m2 == 2);
+
+            ::DoSwap(m1, m2);
+
+            UNIT_ASSERT(*m1 == 2);
+            UNIT_ASSERT(*m2 == 1);
+        }
+
+        {
+            TMaybe<int> m1 = 1;
+            TMaybe<int> m2 = Nothing();
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(m2 == Nothing());
+
+            ::DoSwap(m1, m2);
+
+            UNIT_ASSERT(m1 == Nothing());
+            UNIT_ASSERT(*m2 == 1);
+        }
+
+        {
+            TMaybe<int> m1 = Nothing();
+            TMaybe<int> m2 = 1;
+
+            UNIT_ASSERT(m1 == Nothing());
+            UNIT_ASSERT(*m2 == 1);
+
+            ::DoSwap(m1, m2);
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(m2 == Nothing());
+        }
+    }
+
     Y_UNIT_TEST(TestSwappingUsingStdSwap) {
-        { 
-            TMaybe<int> m1 = 1; 
-            TMaybe<int> m2 = 2; 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(*m2 == 2); 
- 
-            ::std::swap(m1, m2); 
- 
-            UNIT_ASSERT(*m1 == 2); 
-            UNIT_ASSERT(*m2 == 1); 
-        } 
- 
-        { 
-            TMaybe<int> m1 = 1; 
-            TMaybe<int> m2 = Nothing(); 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(m2 == Nothing()); 
- 
-            ::std::swap(m1, m2); 
- 
-            UNIT_ASSERT(m1 == Nothing()); 
-            UNIT_ASSERT(*m2 == 1); 
-        } 
- 
-        { 
-            TMaybe<int> m1 = Nothing(); 
-            TMaybe<int> m2 = 1; 
- 
-            UNIT_ASSERT(m1 == Nothing()); 
-            UNIT_ASSERT(*m2 == 1); 
- 
-            ::std::swap(m1, m2); 
- 
-            UNIT_ASSERT(*m1 == 1); 
-            UNIT_ASSERT(m2 == Nothing()); 
-        } 
-    } 
+        {
+            TMaybe<int> m1 = 1;
+            TMaybe<int> m2 = 2;
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(*m2 == 2);
+
+            ::std::swap(m1, m2);
+
+            UNIT_ASSERT(*m1 == 2);
+            UNIT_ASSERT(*m2 == 1);
+        }
+
+        {
+            TMaybe<int> m1 = 1;
+            TMaybe<int> m2 = Nothing();
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(m2 == Nothing());
+
+            ::std::swap(m1, m2);
+
+            UNIT_ASSERT(m1 == Nothing());
+            UNIT_ASSERT(*m2 == 1);
+        }
+
+        {
+            TMaybe<int> m1 = Nothing();
+            TMaybe<int> m2 = 1;
+
+            UNIT_ASSERT(m1 == Nothing());
+            UNIT_ASSERT(*m2 == 1);
+
+            ::std::swap(m1, m2);
+
+            UNIT_ASSERT(*m1 == 1);
+            UNIT_ASSERT(m2 == Nothing());
+        }
+    }
 
     Y_UNIT_TEST(TestOutputStreamEmptyMaybe) {
-        TString s; 
+        TString s;
         TStringOutput output(s);
         output << TMaybe<int>();
         UNIT_ASSERT_EQUAL("(empty maybe)", s);
@@ -803,7 +803,7 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     }
 
     Y_UNIT_TEST(TestOutputStreamDefinedMaybe) {
-        TString s; 
+        TString s;
         TStringOutput output(s);
         output << TMaybe<int>(42);
         UNIT_ASSERT_EQUAL("42", s);

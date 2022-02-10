@@ -41,7 +41,7 @@ public:
 
     struct TShardData {
         ui64 ShardId;
-        TString Program; 
+        TString Program;
         bool HasWrites;
         bool HasOnlineReads;
         bool Immediate;
@@ -53,7 +53,7 @@ public:
             , Immediate(false)
         {}
 
-        TShardData(ui64 shardId, const TString& program) 
+        TShardData(ui64 shardId, const TString& program)
             : ShardId(shardId)
             , Program(program)
             , HasWrites(false)
@@ -66,7 +66,7 @@ public:
         ui64 TargetShardId;
         ui64 OriginShardId;
         TRuntimeNode Root;
-        TString Body; 
+        TString Body;
 
         TReadSet()
         {}
@@ -77,7 +77,7 @@ public:
             , Root(root)
         {}
 
-        TReadSet(ui64 targetShardId, ui64 originShardId, const TString& body) 
+        TReadSet(ui64 targetShardId, ui64 originShardId, const TString& body)
             : TargetShardId(targetShardId)
             , OriginShardId(originShardId)
             , Body(body)
@@ -143,7 +143,7 @@ public:
         std::unique_ptr<TKeyDesc> Key;
         bool IsWrite;
         bool IsResultPart;
-        THashSet<ui64> TargetShards; 
+        THashSet<ui64> TargetShards;
 
         TValidatedKey(THolder<TKeyDesc>&& key, bool isWrite)
             : Key(key.Release())
@@ -158,7 +158,7 @@ public:
     };
 
     struct TValidationInfo {
-        TVector<TValidatedKey> Keys; 
+        TVector<TValidatedKey> Keys;
         ui32 ReadsCount;
         ui32 WritesCount;
         ui32 DynKeysCount;
@@ -188,7 +188,7 @@ public:
     };
 
     //-- error reporting
-    virtual TString GetErrors() const noexcept = 0; 
+    virtual TString GetErrors() const noexcept = 0;
 
     //-- proxy/shard interface
     virtual void SetStepTxId(const std::pair<ui64, ui64>& stepTxId) noexcept = 0;
@@ -230,7 +230,7 @@ public:
     virtual EResult Cancel() = 0;
     virtual EResult PinPages(ui64 pageFaultCount = 0) = 0;
     virtual EResult Execute() = 0;
-    virtual TString GetShardReply(ui64 origin) const noexcept = 0; 
+    virtual TString GetShardReply(ui64 origin) const noexcept = 0;
 
     virtual size_t GetMemoryUsed() const noexcept = 0;
     virtual size_t GetMemoryAllocated() const noexcept = 0;

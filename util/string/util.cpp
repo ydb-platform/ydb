@@ -6,7 +6,7 @@
 #include <cstdarg>
 #include <cstdlib>
 
-int a2i(const TString& s) { 
+int a2i(const TString& s) {
     return atoi(s.c_str());
 }
 
@@ -49,20 +49,20 @@ Tr::Tr(const char* from, const char* to) {
     }
 }
 
-size_t Tr::FindFirstChangePosition(const TString& str) const { 
+size_t Tr::FindFirstChangePosition(const TString& str) const {
     for (auto it = str.begin(); it != str.end(); ++it) {
         if (ConvertChar(*it) != *it) {
             return it - str.begin();
         }
     }
 
-    return TString::npos; 
+    return TString::npos;
 }
 
-void Tr::Do(TString& str) const { 
+void Tr::Do(TString& str) const {
     const size_t changePosition = FindFirstChangePosition(str);
 
-    if (changePosition == TString::npos) { 
+    if (changePosition == TString::npos) {
         return;
     }
 

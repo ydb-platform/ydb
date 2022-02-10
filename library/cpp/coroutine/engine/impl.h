@@ -160,7 +160,7 @@ public:
         NCoro::ITime* time = nullptr
     );
 
-    ~TContExecutor(); 
+    ~TContExecutor();
 
     // if we already have a coroutine to run
     void Execute() noexcept;

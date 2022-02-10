@@ -48,7 +48,7 @@ namespace Pire {
 			typedef Partition<char, ImplementationSpecific2> LettersTbl;
 
 			/// A container used for storing map of states to thier indices.
-			typedef TMap<State, size_t> InvStates; 
+			typedef TMap<State, size_t> InvStates;
 
 			/// Should return used letters' partition.
 			const LettersTbl& Letters() const;
@@ -63,7 +63,7 @@ namespace Pire {
 			bool IsRequired(const State& /*state*/) const { return true; }
 
 			/// Called when the set of new states is closed.
-			void AcceptStates(const TVector<State>& newstates); 
+			void AcceptStates(const TVector<State>& newstates);
 
 			/// Called for each transition from one new state to another.
 			void Connect(size_t from, size_t to, Char letter);
@@ -94,12 +94,12 @@ namespace Pire {
 		{
 			typedef typename Task::State State;
 			typedef typename Task::InvStates InvStates;
-			typedef TDeque< TVector<size_t> > TransitionTable; 
+			typedef TDeque< TVector<size_t> > TransitionTable;
 
-			TVector<State> states; 
+			TVector<State> states;
 			InvStates invstates;
 			TransitionTable transitions;
-			TVector<size_t> stateIndices; 
+			TVector<size_t> stateIndices;
 
 			states.push_back(task.Initial());
 			invstates.insert(typename InvStates::value_type(states[0], 0));
@@ -123,14 +123,14 @@ namespace Pire {
 				stateIndices.push_back(stateIdx);
 			}
 
-			TVector<Char> invletters(task.Letters().Size()); 
+			TVector<Char> invletters(task.Letters().Size());
 			for (auto&& letter : task.Letters())
 				invletters[letter.second.first] = letter.first;
 
 			task.AcceptStates(states);
 			size_t from = 0;
 			for (TransitionTable::iterator i = transitions.begin(), ie = transitions.end(); i != ie; ++i, ++from) {
-				TVector<Char>::iterator l = invletters.begin(); 
+				TVector<Char>::iterator l = invletters.begin();
 				for (TransitionTable::value_type::iterator j = i->begin(), je = i->end(); j != je; ++j, ++l)
 					task.Connect(stateIndices[from], *j, *l);
 			}

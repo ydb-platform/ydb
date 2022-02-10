@@ -208,7 +208,7 @@ public:
         const TFrameInfo* frames = TBase::GetFrames();
         size_t framesCount = TBase::GetFramesCount();
 
-        TVector<const TFrameInfo*> stacks; 
+        TVector<const TFrameInfo*> stacks;
         for (size_t i = 0; i < framesCount; ++i) {
             if (frames[i].Stats.Allocs) {
                 stacks.push_back(&frames[i]);

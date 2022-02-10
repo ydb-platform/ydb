@@ -105,7 +105,7 @@ void TMessageBusTracerService::StateFunc(TAutoPtr<IEventHandle> &ev, const TActo
 void TMessageBusTracerService::HandleStartTrace(TEvMessageBusTracer::TEvStartTrace::TPtr &ev, const TActorContext &ctx) {
     const TEvMessageBusTracer::TEvStartTrace *event = ev->Get();
     Path = event->Path;
-    Stream = new TFileOutput(Path); 
+    Stream = new TFileOutput(Path);
     LOG_NOTICE_S(ctx, NKikimrServices::MSGBUS_TRACER, "MessageBus tracing started, file '"
         << Path << "' "
         << ctx.SelfID.ToString());
@@ -135,12 +135,12 @@ void TMessageBusTracerService::HandleTraceEvent(TEvMessageBusTracer::TEvTraceEve
     }
 }
 
-TEvMessageBusTracer::TEvStartTrace::TEvStartTrace(const TString &path) 
+TEvMessageBusTracer::TEvStartTrace::TEvStartTrace(const TString &path)
     : Path(path)
 {
 }
 
-TEvMessageBusTracer::TEvTraceStatus::TEvTraceStatus(bool traceActive, const TString &path) 
+TEvMessageBusTracer::TEvTraceStatus::TEvTraceStatus(bool traceActive, const TString &path)
     : TraceActive(traceActive)
     , Path(path)
 {
@@ -200,9 +200,9 @@ public:
 };
 
 class TMessageBusTracerStartTrace: public TMessageBusTraceSimpleActor<TMessageBusTracerStartTrace> {
-    TString Path; 
+    TString Path;
 public:
-    TMessageBusTracerStartTrace(NMsgBusProxy::TBusMessageContext &msg, const TString& path) 
+    TMessageBusTracerStartTrace(NMsgBusProxy::TBusMessageContext &msg, const TString& path)
         : TMessageBusTraceSimpleActor<TMessageBusTracerStartTrace>(msg)
         , Path(path)
     {
@@ -214,7 +214,7 @@ public:
     }
 };
 
-IActor* CreateMessageBusTracerStartTrace(NMsgBusProxy::TBusMessageContext &msg, const TString& path) { 
+IActor* CreateMessageBusTracerStartTrace(NMsgBusProxy::TBusMessageContext &msg, const TString& path) {
     return new TMessageBusTracerStartTrace(msg, path);
 }
 

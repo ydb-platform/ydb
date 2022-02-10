@@ -30,7 +30,7 @@ SRCS(
     system/backtrace_ut.cpp
     system/byteorder_ut.cpp
     system/compat_ut.cpp
-    system/compiler_ut.cpp 
+    system/compiler_ut.cpp
     system/context_ut.cpp
     system/condvar_ut.cpp
     system/cpu_id_ut.cpp
@@ -66,7 +66,7 @@ SRCS(
     system/spinlock_ut.cpp
     system/src_root_ut.cpp
     system/src_location_ut.cpp
-    system/shmat_ut.cpp 
+    system/shmat_ut.cpp
     system/tempfile_ut.cpp
     system/thread_ut.cpp
     system/tls_ut.cpp

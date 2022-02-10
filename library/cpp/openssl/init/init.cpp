@@ -40,7 +40,7 @@ namespace {
                 }
             }
 
-            TVector<TAutoPtr<TMutex>> Mutexes; 
+            TVector<TAutoPtr<TMutex>> Mutexes;
         };
 
         inline TInitSsl() {

@@ -165,7 +165,7 @@ namespace NEscJ {
     }
 
     template <bool quote, bool tounicode>
-    inline void EscapeJ(TStringBuf in, TString& out, TStringBuf safe = TStringBuf(), TStringBuf unsafe = TStringBuf()) { 
+    inline void EscapeJ(TStringBuf in, TString& out, TStringBuf safe = TStringBuf(), TStringBuf unsafe = TStringBuf()) {
         TTempBuf b(SuggestBuffer(in.size()) + 2);
 
         if (quote)
@@ -180,8 +180,8 @@ namespace NEscJ {
     }
 
     template <bool quote, bool tounicode>
-    inline TString EscapeJ(TStringBuf in, TStringBuf safe = TStringBuf(), TStringBuf unsafe = TStringBuf()) { 
-        TString s; 
+    inline TString EscapeJ(TStringBuf in, TStringBuf safe = TStringBuf(), TStringBuf unsafe = TStringBuf()) {
+        TString s;
         EscapeJ<quote, tounicode>(in, s, safe, unsafe);
         return s;
     }
@@ -197,12 +197,12 @@ namespace NEscJ {
     }
 
     template <bool quote>
-    inline void EscapeJ(TStringBuf in, TString& out, TStringBuf safe = TStringBuf(), TStringBuf unsafe = TStringBuf()) { 
+    inline void EscapeJ(TStringBuf in, TString& out, TStringBuf safe = TStringBuf(), TStringBuf unsafe = TStringBuf()) {
         EscapeJ<quote, false>(in, out, safe, unsafe);
     }
 
     template <bool quote>
-    inline TString EscapeJ(TStringBuf in, TStringBuf safe = TStringBuf(), TStringBuf unsafe = TStringBuf()) { 
+    inline TString EscapeJ(TStringBuf in, TStringBuf safe = TStringBuf(), TStringBuf unsafe = TStringBuf()) {
         return EscapeJ<quote, false>(in, safe, unsafe);
     }
 }

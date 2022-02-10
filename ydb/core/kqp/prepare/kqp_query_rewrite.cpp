@@ -138,7 +138,7 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
         return true;
     };
 
-    THashSet<const TExprNode*> innerNodes; 
+    THashSet<const TExprNode*> innerNodes;
     innerNodes.insert(lambda.Args().Arg(0).Raw());
     VisitExpr(exprRootsTuple.Ptr(),
         [&innerNodes, &isSameScope, &analyzeResults] (const TExprNode::TPtr& node) {
@@ -155,7 +155,7 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
             return true;
         });
 
-    THashMap<const TExprNode*, TExprBase> jointsMap; 
+    THashMap<const TExprNode*, TExprBase> jointsMap;
     for (TExprBase root : execRoots) {
         jointsMap.insert(std::make_pair(root.Raw(), root));
     }
@@ -201,7 +201,7 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
             return true;
         });
 
-    TVector<TExprBase> jointNodes; 
+    TVector<TExprBase> jointNodes;
     jointNodes.reserve(jointsMap.size());
     for (auto& pair : jointsMap) {
         jointNodes.push_back(pair.second);
@@ -248,7 +248,7 @@ TExprBase SplitMap(TExprBase input, TCoLambda lambda, TExprContext& ctx, const T
         .Done();
 }
 
-TExprNode::TPtr SplitMap(TExprBase mapNode, TExprContext& ctx, const TVector<TExprBase>& execRoots, 
+TExprNode::TPtr SplitMap(TExprBase mapNode, TExprContext& ctx, const TVector<TExprBase>& execRoots,
     const TKqpAnalyzeResults& analyzeResults)
 {
     YQL_ENSURE(mapNode.Ptr()->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List);

@@ -10,7 +10,7 @@
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
 #include <util/generic/deque.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/buffer.h>
 #include <util/generic/hash_set.h>
@@ -52,11 +52,11 @@ class TSaveLoadTest: public TTestBase {
             ::SaveLoad(s, Str);
         }
 
-        TString Str; 
+        TString Str;
     };
 
     struct TNewNewStyleHelper {
-        TString Str; 
+        TString Str;
         ui32 Int;
 
         Y_SAVELOAD_DEFINE(Str, Int)
@@ -64,7 +64,7 @@ class TSaveLoadTest: public TTestBase {
 
 private:
     inline void TestNewNewStyle() {
-        TString ss; 
+        TString ss;
 
         {
             TNewNewStyleHelper h;
@@ -89,7 +89,7 @@ private:
     }
 
     inline void TestNewStyle() {
-        TString ss; 
+        TString ss;
 
         {
             TNewStyleSaveHelper sh;
@@ -119,7 +119,7 @@ private:
         }
 
         {
-            TVector<ui16> vec; 
+            TVector<ui16> vec;
 
             vec.push_back((ui16)1);
             vec.push_back((ui16)2);
@@ -129,7 +129,7 @@ private:
         }
 
         {
-            TMap<ui16, ui32> map; 
+            TMap<ui16, ui32> map;
 
             map[(ui16)1] = 2;
             map[(ui16)2] = 3;
@@ -139,7 +139,7 @@ private:
         }
 
         {
-            TMultiMap<ui16, ui32> multimap; 
+            TMultiMap<ui16, ui32> multimap;
 
             multimap.emplace((ui16)1, 2);
             multimap.emplace((ui16)2, 3);
@@ -157,7 +157,7 @@ private:
         }
 
         {
-            TString val("123456"); 
+            TString val("123456");
 
             Save(&S_, val);
         }
@@ -170,7 +170,7 @@ private:
         }
 
         {
-            TVector<const char*> vec; 
+            TVector<const char*> vec;
 
             vec.push_back("1");
             vec.push_back("123");
@@ -180,7 +180,7 @@ private:
         }
 
         {
-            TDeque<ui16> deq; 
+            TDeque<ui16> deq;
 
             deq.push_back(1);
             deq.push_back(2);
@@ -211,7 +211,7 @@ private:
         }
 
         {
-            THashMultiMap<TString, int> mm; 
+            THashMultiMap<TString, int> mm;
 
             mm.insert({"one", 1});
             mm.insert({"two", 2});
@@ -250,7 +250,7 @@ private:
         }
 
         {
-            TVector<ui16> vec; 
+            TVector<ui16> vec;
 
             Load(&S_, vec);
             UNIT_ASSERT_EQUAL(vec.size(), 3);
@@ -260,7 +260,7 @@ private:
         }
 
         {
-            TMap<ui16, ui32> map; 
+            TMap<ui16, ui32> map;
 
             Load(&S_, map);
             UNIT_ASSERT_EQUAL(map.size(), 3);
@@ -270,14 +270,14 @@ private:
         }
 
         {
-            TMultiMap<ui16, ui32> multimap; 
+            TMultiMap<ui16, ui32> multimap;
 
             Load(&S_, multimap);
             UNIT_ASSERT_EQUAL(multimap.size(), 5);
             UNIT_ASSERT_EQUAL(multimap.find((ui16)1)->second, 2);
             UNIT_ASSERT_EQUAL(multimap.find((ui16)3)->second, 6);
 
-            THashSet<ui32> values; 
+            THashSet<ui32> values;
             auto range = multimap.equal_range((ui16)2);
             for (auto i = range.first; i != range.second; ++i) {
                 values.insert(i->second);
@@ -296,7 +296,7 @@ private:
         }
 
         {
-            TString val; 
+            TString val;
 
             Load(&S_, val);
             UNIT_ASSERT_EQUAL(val, "123456");
@@ -311,19 +311,19 @@ private:
         }
 
         {
-            TVector<const char*> vec; 
+            TVector<const char*> vec;
             TMemoryPool pool(1024);
 
             Load(&S_, vec, pool);
 
             UNIT_ASSERT_EQUAL(vec.size(), 3);
-            UNIT_ASSERT_EQUAL(vec[0], TString("1")); 
-            UNIT_ASSERT_EQUAL(vec[1], TString("123")); 
-            UNIT_ASSERT_EQUAL(vec[2], TString("4567")); 
+            UNIT_ASSERT_EQUAL(vec[0], TString("1"));
+            UNIT_ASSERT_EQUAL(vec[1], TString("123"));
+            UNIT_ASSERT_EQUAL(vec[2], TString("4567"));
         }
 
         {
-            TDeque<ui16> deq; 
+            TDeque<ui16> deq;
 
             Load(&S_, deq);
 
@@ -361,7 +361,7 @@ private:
         }
 
         {
-            THashMultiMap<TString, int> mm; 
+            THashMultiMap<TString, int> mm;
 
             Load(&S_, mm);
 
@@ -379,7 +379,7 @@ private:
     void TestList() {
         TBufferStream s;
 
-        TList<int> list = {0, 1, 10}; 
+        TList<int> list = {0, 1, 10};
         Save(&s, list);
 
         list.clear();
@@ -421,7 +421,7 @@ private:
         TestVariantImpl(v, 42);
         TestVariantImpl(v, true);
         TestVariantImpl(v, TString("foo"));
-        TestVariantImpl(v, TVector<char>{'b', 'a', 'r'}); 
+        TestVariantImpl(v, TVector<char>{'b', 'a', 'r'});
 
         v = TString("baz");
         TBufferStream s;

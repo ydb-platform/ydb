@@ -174,7 +174,7 @@ public:
         return Y("AsList", Y("Uint32", Q("0")));
     }
 
-    bool AddGroupKey(TContext& ctx, const TString& column) override { 
+    bool AddGroupKey(TContext& ctx, const TString& column) override {
         Y_UNUSED(column);
         ctx.Error(Pos) << "Source does not allow grouping";
         return false;
@@ -186,7 +186,7 @@ public:
         return false;
     }
 
-    bool IsGroupByColumn(const TString& column) const override { 
+    bool IsGroupByColumn(const TString& column) const override {
         Y_UNUSED(column);
         return false;
     }
@@ -198,7 +198,7 @@ public:
         return nullptr;
     }
 
-    TNodePtr BuildAggregation(const TString& label) override { 
+    TNodePtr BuildAggregation(const TString& label) override {
         Y_UNUSED(label);
         return nullptr;
     }
@@ -301,7 +301,7 @@ protected:
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
         Y_VERIFY_DEBUG(Source);
-        const TString label(Source->GetLabel()); 
+        const TString label(Source->GetLabel());
         Source->SetLabel(Label);
         const auto ret = Source->AddColumn(ctx, column);
         Source->SetLabel(label);
@@ -376,7 +376,7 @@ protected:
         return true;
     }
 
-    TMaybe<TString> FindColumnMistype(const TString& name) const override { 
+    TMaybe<TString> FindColumnMistype(const TString& name) const override {
         auto result = FindMistypeIn(Columns.Real, name);
         if (!result) {
             auto result = FindMistypeIn(Columns.Artificial, name);
@@ -597,7 +597,7 @@ public:
             TNodePtr samplingRate,
             TNodePtr samplingSeed) override {
         Y_UNUSED(pos);
-        TString modeName; 
+        TString modeName;
         if (!samplingSeed) {
             samplingSeed = Y("Int32", Q("0"));
         }
@@ -659,7 +659,7 @@ TSourcePtr BuildTableSource(TPosition pos, const TTableRef& table, bool stream, 
 
 class TInnerSource: public IProxySource {
 public:
-    TInnerSource(TPosition pos, TNodePtr node, const TString& label) 
+    TInnerSource(TPosition pos, TNodePtr node, const TString& label)
         : IProxySource(pos, nullptr)
         , Node(node)
     {
@@ -719,7 +719,7 @@ protected:
     TSourcePtr NewSource;
 };
 
-TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& label) { 
+TSourcePtr BuildInnerSource(TPosition pos, TNodePtr node, const TString& label) {
     return new TInnerSource(pos, node, label);
 }
 
@@ -892,9 +892,9 @@ public:
 private:
     ReduceMode Mode;
     TSourcePtr Source;
-    TVector<TSortSpecificationPtr> OrderBy; 
-    TVector<TNodePtr> Keys; 
-    TVector<TNodePtr> Args; 
+    TVector<TSortSpecificationPtr> OrderBy;
+    TVector<TNodePtr> Keys;
+    TVector<TNodePtr> Args;
     TNodePtr Udf;
     TNodePtr Having;
     const TWriteSettings Settings;
@@ -926,7 +926,7 @@ public:
         YQL_ENSURE(Source);
     }
 
-    void SetSubselects(TVector<TSourcePtr>&& subselects, TSet<TString>&& groupingCols) { 
+    void SetSubselects(TVector<TSourcePtr>&& subselects, TSet<TString>&& groupingCols) {
         Subselects = std::move(subselects);
         GroupingCols = std::move(groupingCols);
         Y_VERIFY_DEBUG(Subselects.size() > 1);
@@ -1027,14 +1027,14 @@ public:
 
     TNodePtr DoClone() const final {
         auto newSource = MakeIntrusive<TCompositeSelect>(Pos, Source->CloneSource(), Settings);
-        newSource->SetSubselects(CloneContainer(Subselects), TSet<TString>(GroupingCols)); 
+        newSource->SetSubselects(CloneContainer(Subselects), TSet<TString>(GroupingCols));
         return newSource;
     }
 private:
     TSourcePtr Source;
     const TWriteSettings Settings;
-    TVector<TSourcePtr> Subselects; 
-    TSet<TString> GroupingCols; 
+    TVector<TSourcePtr> Subselects;
+    TSet<TString> GroupingCols;
     TNodePtr FiltersGround;
 };
 
@@ -1044,15 +1044,15 @@ public:
     TSelectCore(
         TPosition pos,
         TSourcePtr source,
-        const TVector<TNodePtr>& groupByExpr, 
-        const TVector<TNodePtr>& groupBy, 
-        const TVector<TSortSpecificationPtr>& orderBy, 
+        const TVector<TNodePtr>& groupByExpr,
+        const TVector<TNodePtr>& groupBy,
+        const TVector<TSortSpecificationPtr>& orderBy,
         TNodePtr having,
         TWinSpecs& winSpecs,
         THoppingWindowSpecPtr hoppingWindowSpec,
-        const TVector<TNodePtr>& terms, 
+        const TVector<TNodePtr>& terms,
         bool distinct,
-        const TVector<TNodePtr>& without, 
+        const TVector<TNodePtr>& without,
         bool stream,
         const TWriteSettings& settings
     )
@@ -1628,9 +1628,9 @@ private:
 
 private:
     TSourcePtr Source;
-    TVector<TNodePtr> GroupByExpr; 
-    TVector<TNodePtr> GroupBy; 
-    TVector<TSortSpecificationPtr> OrderBy; 
+    TVector<TNodePtr> GroupByExpr;
+    TVector<TNodePtr> GroupBy;
+    TVector<TSortSpecificationPtr> OrderBy;
     TNodePtr Having;
     TWinSpecs WinSpecs;
     TNodePtr Flatten;
@@ -1645,8 +1645,8 @@ private:
     TNodePtr OrderByGround;
     TNodePtr WinSpecsPartitionByGround;
     TNodePtr WinSpecsOrderByGround;
-    TVector<TNodePtr> Terms; 
-    TVector<TNodePtr> Without; 
+    TVector<TNodePtr> Terms;
+    TVector<TNodePtr> Without;
     const bool Distinct;
     bool OrderByInit = false;
     THoppingWindowSpecPtr HoppingWindowSpec;
@@ -1875,14 +1875,14 @@ TSourcePtr BuildProcess(
 
 class TNestedProxySource: public IProxySource {
 public:
-    TNestedProxySource(TPosition pos, const TVector<TNodePtr>& groupBy, TSourcePtr source) 
+    TNestedProxySource(TPosition pos, const TVector<TNodePtr>& groupBy, TSourcePtr source)
         : IProxySource(pos, source.Get())
         , CompositeSelect(nullptr)
         , Holder(std::move(source))
         , GroupBy(groupBy)
     {}
 
-    TNestedProxySource(TCompositeSelect* compositeSelect, const TVector<TNodePtr>& groupBy) 
+    TNestedProxySource(TCompositeSelect* compositeSelect, const TVector<TNodePtr>& groupBy)
         : IProxySource(compositeSelect->GetPos(), compositeSelect->RealSource())
         , CompositeSelect(compositeSelect)
         , GroupBy(groupBy)
@@ -1912,7 +1912,7 @@ public:
         return CompositeSelect;
     }
 
-    bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const override { 
+    bool CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const override {
         Y_UNUSED(ctx);
         hint = 0;
         if (GroupByColumns.empty()) {
@@ -1947,23 +1947,23 @@ public:
 private:
     TCompositeSelect* CompositeSelect;
     TSourcePtr Holder;
-    TVector<TNodePtr> GroupBy; 
-    mutable TSet<TString> GroupByColumns; 
+    TVector<TNodePtr> GroupBy;
+    mutable TSet<TString> GroupByColumns;
 };
 
 TSourcePtr BuildSelectCore(
     TContext& ctx,
     TPosition pos,
     TSourcePtr source,
-    const TVector<TNodePtr>& groupByExpr, 
-    const TVector<TNodePtr>& groupBy, 
-    const TVector<TSortSpecificationPtr>& orderBy, 
+    const TVector<TNodePtr>& groupByExpr,
+    const TVector<TNodePtr>& groupBy,
+    const TVector<TSortSpecificationPtr>& orderBy,
     TNodePtr having,
     TWinSpecs&& winSpecs,
     THoppingWindowSpecPtr hoppingWindowSpec,
-    TVector<TNodePtr>&& terms, 
+    TVector<TNodePtr>&& terms,
     bool distinct,
-    TVector<TNodePtr>&& without, 
+    TVector<TNodePtr>&& without,
     bool stream,
     const TWriteSettings& settings
 ) {
@@ -1980,11 +1980,11 @@ TSourcePtr BuildSelectCore(
     /// \todo some smart merge logic, generalize common part of grouping (expr, flatten, etc)?
     TIntrusivePtr<TCompositeSelect> compositeSelect = new TCompositeSelect(pos, std::move(source), settings);
     size_t totalGroups = 0;
-    TVector<TSourcePtr> subselects; 
-    TSet<TString> groupingCols; 
+    TVector<TSourcePtr> subselects;
+    TSet<TString> groupingCols;
     for (auto& grouping: groupBy) {
         auto contentPtr = grouping->ContentListPtr();
-        TVector<TNodePtr> cache(1, nullptr); 
+        TVector<TNodePtr> cache(1, nullptr);
         if (!contentPtr) {
             cache[0] = grouping;
             contentPtr = &cache;
@@ -1998,7 +1998,7 @@ TSourcePtr BuildSelectCore(
         TSourcePtr proxySource = new TNestedProxySource(compositeSelect.Get(), *contentPtr);
         if (!subselects.empty()) {
             /// clone terms for others usage
-            TVector<TNodePtr> termsCopy; 
+            TVector<TNodePtr> termsCopy;
             for (const auto& term: terms) {
                 termsCopy.emplace_back(term->Clone());
             }
@@ -2019,7 +2019,7 @@ TSourcePtr BuildSelectCore(
 
 class TUnionAll: public IRealSource {
 public:
-    TUnionAll(TPosition pos, TVector<TSourcePtr>&& sources) 
+    TUnionAll(TPosition pos, TVector<TSourcePtr>&& sources)
         : IRealSource(pos)
         , Sources(std::move(sources))
     {
@@ -2077,16 +2077,16 @@ public:
     }
 
 private:
-    TVector<TSourcePtr> Sources; 
+    TVector<TSourcePtr> Sources;
 };
 
-TSourcePtr BuildUnionAll(TPosition pos, TVector<TSourcePtr>&& sources) { 
+TSourcePtr BuildUnionAll(TPosition pos, TVector<TSourcePtr>&& sources) {
     return new TUnionAll(pos, std::move(sources));
 }
 
 class TOverWindowSource: public IProxySource {
 public:
-    TOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource) 
+    TOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource)
         : IProxySource(pos, origSource)
         , WindowName(windowName)
     {
@@ -2138,10 +2138,10 @@ public:
     }
 
 private:
-    const TString WindowName; 
+    const TString WindowName;
 };
 
-TSourcePtr BuildOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource) { 
+TSourcePtr BuildOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource) {
     return new TOverWindowSource(pos, windowName, origSource);
 }
 
@@ -2274,7 +2274,7 @@ public:
             return false;
         }
 
-        TSet<TString> clusters; 
+        TSet<TString> clusters;
         for (auto& it: tableList) {
             clusters.insert(it.Cluster);
         }

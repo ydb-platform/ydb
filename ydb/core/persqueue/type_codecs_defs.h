@@ -191,7 +191,7 @@ public:
 };
 
 /***************************************************************************//**
- * TDataRef can either share the data (TString) or keep a reference (TStringBuf). 
+ * TDataRef can either share the data (TString) or keep a reference (TStringBuf).
  * It uses short string optimization (SSO) to store small data (<= 16b).
  * TODO: Move to ydb/core/util
  ******************************************************************************/
@@ -228,13 +228,13 @@ public:
         }
     }
 
-    /// Ownership of the TString is taken with zero-copy. 
-    TDataRef(const TString& data) 
+    /// Ownership of the TString is taken with zero-copy.
+    TDataRef(const TString& data)
         : TDataRef(data, data.data(), data.size())
     { }
 
-    /// Ownership of the TString is taken with zero-copy. 
-    TDataRef(const TString& data, const char* begin, size_t size) 
+    /// Ownership of the TString is taken with zero-copy.
+    TDataRef(const TString& data, const char* begin, size_t size)
         : SharedData_(data)
         , Data_(begin)
         , Size_(size)
@@ -242,8 +242,8 @@ public:
         , IsNull_(0)
     { }
 
-    /// Ownership of the TString is taken with zero-copy. 
-    TDataRef(const TString& data, size_t begin, size_t size) 
+    /// Ownership of the TString is taken with zero-copy.
+    TDataRef(const TString& data, size_t begin, size_t size)
         : TDataRef(data, data.data() + begin, size)
     { }
 
@@ -284,18 +284,18 @@ public:
     }
 
     static inline TDataRef CopyLong(const char* data, size_t size) {
-        return TDataRef(TString(data, size)); 
+        return TDataRef(TString(data, size));
     }
 
     static inline TDataRef Copy(const char* data, size_t size) {
-        return size <= INTRUSIVE_SIZE ? TDataRef(data, size, true) : TDataRef(TString(data, size)); 
+        return size <= INTRUSIVE_SIZE ? TDataRef(data, size, true) : TDataRef(TString(data, size));
     }
 
 private:
     static const size_t INTRUSIVE_SIZE = 16;
     static const ui8 LONG_SIZE = 0x1F;
 
-    TString SharedData_; // FIXME: It's a bottleneck (slows down a document traverse). 
+    TString SharedData_; // FIXME: It's a bottleneck (slows down a document traverse).
 
     union {
         char IntrusiveData_[INTRUSIVE_SIZE];
@@ -371,7 +371,7 @@ public:
     }
 
 private:
-    using TIdToCodec = THashMap<ui16, const ICodec*>; 
+    using TIdToCodec = THashMap<ui16, const ICodec*>;
     TIdToCodec Codecs;
 
     const ICodec* DefaultNullable;

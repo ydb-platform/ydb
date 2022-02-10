@@ -7,7 +7,7 @@
 #include <util/system/thread.h>
 #include <time.h>
 
-inline void SetCurrentThreadName(const TString& name, 
+inline void SetCurrentThreadName(const TString& name,
                                  const ui32 maxCharsFromProcessName = 8) {
 #if defined(_linux_)
     // linux limits threadname by 15 + \0

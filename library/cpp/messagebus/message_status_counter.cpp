@@ -21,7 +21,7 @@ TMessageStatusCounter& TMessageStatusCounter::operator+=(const TMessageStatusCou
     return *this;
 }
 
-TString TMessageStatusCounter::PrintToString() const { 
+TString TMessageStatusCounter::PrintToString() const {
     TStringStream ss;
     TKeyValuePrinter p;
     bool hasNonZeros = false;

@@ -6,10 +6,10 @@
 #include <util/stream/output.h>
 
 struct TCustomData {
-    TVector<int> Ints; 
+    TVector<int> Ints;
 };
 
-TString ToString(const TCustomData& d) { 
+TString ToString(const TCustomData& d) {
     return JoinSeq("__", d.Ints);
 }
 
@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
     Y_UNIT_TEST(ScalarItems) {
         UNIT_ASSERT_EQUAL(Join(',', 10, 11.1, "foobar"), "10,11.1,foobar");
         UNIT_ASSERT_EQUAL(Join(", ", 10, 11.1, "foobar"), "10, 11.1, foobar");
-        UNIT_ASSERT_EQUAL(Join(", ", 10, 11.1, TString("foobar")), "10, 11.1, foobar"); 
+        UNIT_ASSERT_EQUAL(Join(", ", 10, 11.1, TString("foobar")), "10, 11.1, foobar");
 
         UNIT_ASSERT_EQUAL(Join('#', 0, "a", "foobar", -1.4, TStringBuf("aaa")), "0#a#foobar#-1.4#aaa");
         UNIT_ASSERT_EQUAL(Join("", "", ""), "");
@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
 
     Y_UNIT_TEST(IntContainerItems) {
         int v[] = {1, 2, 3};
-        TVector<int> vv(v, v + 3); 
+        TVector<int> vv(v, v + 3);
         UNIT_ASSERT_EQUAL(JoinSeq(" ", vv), "1 2 3");
         UNIT_ASSERT_EQUAL(JoinSeq(" ", vv), JoinRange(" ", vv.begin(), vv.end()));
         UNIT_ASSERT_EQUAL(JoinRange(" ", v, v + 2), "1 2");
@@ -42,9 +42,9 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
         // try various overloads and template type arguments
         static const char* const result = "1 22 333";
         static const char* const v[] = {"1", "22", "333"};
-        TVector<const char*> vchar(v, v + sizeof(v) / sizeof(v[0])); 
-        TVector<TStringBuf> vbuf(v, v + sizeof(v) / sizeof(v[0])); 
-        TVector<TString> vstring(v, v + sizeof(v) / sizeof(v[0])); 
+        TVector<const char*> vchar(v, v + sizeof(v) / sizeof(v[0]));
+        TVector<TStringBuf> vbuf(v, v + sizeof(v) / sizeof(v[0]));
+        TVector<TString> vstring(v, v + sizeof(v) / sizeof(v[0]));
 
         // ranges
         UNIT_ASSERT_EQUAL(JoinRange(" ", v, v + 3), result);

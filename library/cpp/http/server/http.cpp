@@ -31,7 +31,7 @@ using namespace NAddr;
 namespace {
     class IPollAble {
     public:
-        inline IPollAble() noexcept { 
+        inline IPollAble() noexcept {
         }
 
         virtual ~IPollAble() {
@@ -53,7 +53,7 @@ namespace {
 class TClientConnection: public IPollAble, public TIntrusiveListItem<TClientConnection> {
 public:
     TClientConnection(const TSocket& s, THttpServer::TImpl* serv, NAddr::IRemoteAddrRef listenerSockAddrRef);
-    ~TClientConnection() override; 
+    ~TClientConnection() override;
 
     void OnPollEvent(TInstant now) override;
 
@@ -81,10 +81,10 @@ public:
         {
         }
 
-        inline ~TConnections() { 
+        inline ~TConnections() {
         }
 
-        inline void Add(TClientConnection* c) noexcept { 
+        inline void Add(TClientConnection* c) noexcept {
             TGuard<TMutex> g(Mutex_);
 
             Conns_.PushBack(c);
@@ -99,7 +99,7 @@ public:
             }
         }
 
-        inline void Clear() noexcept { 
+        inline void Clear() noexcept {
             TGuard<TMutex> g(Mutex_);
 
             Conns_.Clear();
@@ -297,7 +297,7 @@ public:
         {
         }
 
-        ~TListenSocket() override { 
+        ~TListenSocket() override {
         }
 
         void OnPollEvent(TInstant) override {
@@ -310,7 +310,7 @@ public:
             Server_->AddRequestFromSocket(s, TInstant::Now(), SockAddrRef_);
         }
 
-        SOCKET GetSocket() const noexcept { 
+        SOCKET GetSocket() const noexcept {
             return S_;
         }
 
@@ -345,7 +345,7 @@ public:
         ListenerRunningOK = true;
         ListenStartEvent.Signal();
 
-        TVector<void*> events; 
+        TVector<void*> events;
         events.resize(1);
 
         TInstant now = TInstant::Now();
@@ -422,15 +422,15 @@ public:
         }
     }
 
-    inline const TOptions& Options() const noexcept { 
+    inline const TOptions& Options() const noexcept {
         return Options_;
     }
 
-    inline void DecreaseConnections() noexcept { 
+    inline void DecreaseConnections() noexcept {
         AtomicDecrement(ConnectionCount);
     }
 
-    inline void IncreaseConnections() noexcept { 
+    inline void IncreaseConnections() noexcept {
         AtomicIncrement(ConnectionCount);
     }
 
@@ -527,7 +527,7 @@ void THttpServer::RestartRequestThreads(ui32 n, ui32 queue) {
     Impl_->RestartRequestThreads(n, queue);
 }
 
-const THttpServer::TOptions& THttpServer::Options() const noexcept { 
+const THttpServer::TOptions& THttpServer::Options() const noexcept {
     return Impl_->Options();
 }
 
@@ -566,7 +566,7 @@ TClientConnection::TClientConnection(const TSocket& s, THttpServer::TImpl* serv,
     HttpServ_->IncreaseConnections();
 }
 
-TClientConnection::~TClientConnection() { 
+TClientConnection::~TClientConnection() {
     HttpServ_->DecreaseConnections();
 }
 
@@ -730,7 +730,7 @@ void TClientRequest::ProcessFailRequest(int failstate) {
                 "\r\n"
                 "Service Unavailable\r\n";
 
-    TString url; 
+    TString url;
 
     if (!strnicmp(RequestString.data(), "GET ", 4)) {
         // Trying to extract url...
@@ -764,11 +764,11 @@ void TClientRequest::ProcessFailRequest(int failstate) {
     Output().Flush();
 }
 
-THttpServer* TClientRequest::HttpServ() const noexcept { 
+THttpServer* TClientRequest::HttpServ() const noexcept {
     return Conn_->HttpServ_->Parent_;
 }
 
-const TSocket& TClientRequest::Socket() const noexcept { 
+const TSocket& TClientRequest::Socket() const noexcept {
     return Conn_->Socket_;
 }
 

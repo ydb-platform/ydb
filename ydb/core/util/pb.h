@@ -11,7 +11,7 @@ namespace NKikimr {
 template<typename T>
 bool ParsePBFromFile(const TString &path, T *pb, bool allowUnknown = false) {
     TAutoPtr<TMappedFileInput> fileInput(new TMappedFileInput(path));
-    const TString content = fileInput->ReadAll(); 
+    const TString content = fileInput->ReadAll();
     if (!allowUnknown)
         return ::google::protobuf::TextFormat::ParseFromString(content, pb);
     
@@ -21,9 +21,9 @@ bool ParsePBFromFile(const TString &path, T *pb, bool allowUnknown = false) {
 }
 
 template<typename T>
-bool ParseBinPBFromFile(const TString &path, T *pb) { 
+bool ParseBinPBFromFile(const TString &path, T *pb) {
     TAutoPtr<TMappedFileInput> fileInput(new TMappedFileInput(path));
-    const TString content = fileInput->ReadAll(); 
+    const TString content = fileInput->ReadAll();
     const bool ok = pb->ParseFromString(content);
     return ok;
 }

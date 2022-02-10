@@ -116,7 +116,7 @@ T GetRawData(TStringBuf& buf) {
 
 namespace {
 #ifndef MKQL_DISABLE_CODEGEN
-    TString MakeName(const TStringBuf& common, const TType* type) { 
+    TString MakeName(const TStringBuf& common, const TType* type) {
         TStringStream out;
         out << common << intptr_t(type);
         return out.Str();
@@ -239,7 +239,7 @@ namespace {
                 const auto choise = SwitchInst::Create(index, exit, size, block);
 
                 for (ui32 i = 0; i < size; ++i) {
-                    const auto var = BasicBlock::Create(context, (TString("case_") += ToString(i)).c_str(), pack); 
+                    const auto var = BasicBlock::Create(context, (TString("case_") += ToString(i)).c_str(), pack);
                     choise->addCase(ConstantInt::get(Type::getInt32Ty(context), i), var);
                     const auto done = CreatePackBlock(typeGetter(i), useTopLength, module, context, pack, var, variant, buffer, mask);
                     BranchInst::Create(exit, done);

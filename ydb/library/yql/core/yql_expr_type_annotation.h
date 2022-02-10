@@ -45,7 +45,7 @@ T FromString(const TExprNode& node, NKikimr::NUdf::EDataSlot slot) {
     }
 
     const auto typeName = NKikimr::NUdf::GetDataTypeInfo(slot).Name;
-    ythrow TNodeException(node) << "Bad atom format for type: " << typeName << ", value: " << TString(node.Content()).Quote(); 
+    ythrow TNodeException(node) << "Bad atom format for type: " << typeName << ", value: " << TString(node.Content()).Quote();
 }
 
 IGraphTransformer::TStatus CheckWholeProgramType(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
@@ -245,16 +245,16 @@ EDataSlot GetNumericDataTypeByLevel(ui32 level);
 ui32 GetDateTypeLevel(EDataSlot dataSlot);
 EDataSlot GetDateTypeByLevel(ui32 level);
 bool IsPureIsolatedLambda(const TExprNode& lambdaBody);
-TString GetIntegralAtomValue(ui64 value, bool hasSign); 
+TString GetIntegralAtomValue(ui64 value, bool hasSign);
 bool AllowIntegralConversion(NNodes::TCoIntegralCtor node, bool negate, EDataSlot toType,
-    TString* atomValue = nullptr); 
+    TString* atomValue = nullptr);
 void ExtractIntegralValue(const TExprNode& constructor, bool negate, bool& hasSign, bool& isSigned, ui64& value);
 bool IsDataTypeString(EDataSlot dataSlot);
 bool EnsureComparableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
 bool EnsureEquatableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
 bool EnsureHashableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
 TMaybe<TIssue> NormalizeName(TPosition position, TString& name);
-TString NormalizeName(const TStringBuf& name); 
+TString NormalizeName(const TStringBuf& name);
 
 bool HasError(const TTypeAnnotationNode* type, TExprContext& ctx);
 bool HasError(const TTypeAnnotationNode* type, TIssue& errIssue);

@@ -17,7 +17,7 @@
 #include <util/string/cast.h>
 #include <util/string/strip.h>
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/utility.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
@@ -131,7 +131,7 @@ namespace {
 }
 
 class THttpInput::TImpl {
-    typedef THashSet<TString> TAcceptCodings; 
+    typedef THashSet<TString> TAcceptCodings;
 
 public:
     inline TImpl(IInputStream* slave)
@@ -157,7 +157,7 @@ public:
         return s;
     }
 
-    inline ~TImpl() { 
+    inline ~TImpl() {
     }
 
     inline size_t Read(void* buf, size_t len) {
@@ -168,11 +168,11 @@ public:
         return Perform(len, [this](size_t toSkip) { return Input_->Skip(toSkip); });
     }
 
-    inline const TString& FirstLine() const noexcept { 
+    inline const TString& FirstLine() const noexcept {
         return FirstLine_;
     }
 
-    inline const THttpHeaders& Headers() const noexcept { 
+    inline const THttpHeaders& Headers() const noexcept {
         return Headers_;
     }
 
@@ -180,15 +180,15 @@ public:
         return Trailers_;
     }
 
-    inline bool IsKeepAlive() const noexcept { 
+    inline bool IsKeepAlive() const noexcept {
         return KeepAlive_;
     }
 
-    inline bool AcceptEncoding(const TString& s) const { 
+    inline bool AcceptEncoding(const TString& s) const {
         return Codings_.find(to_lower(s)) != Codings_.end();
     }
 
-    inline bool GetContentLength(ui64& value) const noexcept { 
+    inline bool GetContentLength(ui64& value) const noexcept {
         if (HasContentLength_) {
             value = ContentLength_;
             return true;
@@ -196,7 +196,7 @@ public:
         return false;
     }
 
-    inline bool ContentEncoded() const noexcept { 
+    inline bool ContentEncoded() const noexcept {
         return ContentEncoded_;
     }
 
@@ -252,7 +252,7 @@ private:
     };
 
     template <class Functor>
-    inline void ForEach(TString in, Functor& f) { 
+    inline void ForEach(TString in, Functor& f) {
         in.to_lower();
 
         const char* b = in.begin();
@@ -287,7 +287,7 @@ private:
 
         size_t pos = FirstLine_.rfind(' ');
         // In HTTP/1.1 Keep-Alive is turned on by default
-        if (pos != TString::npos && strcmp(FirstLine_.c_str() + pos + 1, "HTTP/1.1") == 0) { 
+        if (pos != TString::npos && strcmp(FirstLine_.c_str() + pos + 1, "HTTP/1.1") == 0) {
             p.KeepAlive = true; //request
         } else if (strnicmp(FirstLine_.data(), "HTTP/1.1", 8) == 0) {
             p.KeepAlive = true; //reply
@@ -375,7 +375,7 @@ private:
      */
     IInputStream* Input_;
 
-    TString FirstLine_; 
+    TString FirstLine_;
     THttpHeaders Headers_;
     TMaybe<THttpHeaders> Trailers_;
     bool KeepAlive_;
@@ -396,7 +396,7 @@ THttpInput::THttpInput(IInputStream* slave)
 
 THttpInput::THttpInput(THttpInput&& httpInput) = default;
 
-THttpInput::~THttpInput() { 
+THttpInput::~THttpInput() {
 }
 
 size_t THttpInput::DoRead(void* buf, size_t len) {
@@ -407,7 +407,7 @@ size_t THttpInput::DoSkip(size_t len) {
     return Impl_->Skip(len);
 }
 
-const THttpHeaders& THttpInput::Headers() const noexcept { 
+const THttpHeaders& THttpInput::Headers() const noexcept {
     return Impl_->Headers();
 }
 
@@ -415,15 +415,15 @@ const TMaybe<THttpHeaders>& THttpInput::Trailers() const noexcept {
     return Impl_->Trailers();
 }
 
-const TString& THttpInput::FirstLine() const noexcept { 
+const TString& THttpInput::FirstLine() const noexcept {
     return Impl_->FirstLine();
 }
 
-bool THttpInput::IsKeepAlive() const noexcept { 
+bool THttpInput::IsKeepAlive() const noexcept {
     return Impl_->IsKeepAlive();
 }
 
-bool THttpInput::AcceptEncoding(const TString& coding) const { 
+bool THttpInput::AcceptEncoding(const TString& coding) const {
     return Impl_->AcceptEncoding(coding);
 }
 
@@ -440,11 +440,11 @@ TString THttpInput::BestCompressionScheme() const {
     return BestCompressionScheme(TCompressionCodecFactory::Instance().GetBestCodecs());
 }
 
-bool THttpInput::GetContentLength(ui64& value) const noexcept { 
+bool THttpInput::GetContentLength(ui64& value) const noexcept {
     return Impl_->GetContentLength(value);
 }
 
-bool THttpInput::ContentEncoded() const noexcept { 
+bool THttpInput::ContentEncoded() const noexcept {
     return Impl_->ContentEncoded();
 }
 
@@ -459,17 +459,17 @@ bool THttpInput::HasExpect100Continue() const noexcept {
 class THttpOutput::TImpl {
     class TSizeCalculator: public IOutputStream {
     public:
-        inline TSizeCalculator() noexcept { 
+        inline TSizeCalculator() noexcept {
         }
 
-        ~TSizeCalculator() override { 
+        ~TSizeCalculator() override {
         }
 
         void DoWrite(const void* /*buf*/, size_t len) override {
             Length_ += len;
         }
 
-        inline size_t Length() const noexcept { 
+        inline size_t Length() const noexcept {
             return Length_;
         }
 
@@ -509,7 +509,7 @@ public:
     {
     }
 
-    inline ~TImpl() { 
+    inline ~TImpl() {
     }
 
     inline void SendContinue() {
@@ -579,7 +579,7 @@ public:
         Finished_ = true;
     }
 
-    inline const THttpHeaders& SentHeaders() const noexcept { 
+    inline const THttpHeaders& SentHeaders() const noexcept {
         return Headers_;
     }
 
@@ -599,11 +599,11 @@ public:
         CompressionHeaderEnabled_ = enable;
     }
 
-    inline bool IsCompressionEnabled() const noexcept { 
+    inline bool IsCompressionEnabled() const noexcept {
         return !ComprSchemas_.empty();
     }
 
-    inline bool IsKeepAliveEnabled() const noexcept { 
+    inline bool IsKeepAliveEnabled() const noexcept {
         return KeepAliveEnabled_;
     }
 
@@ -615,7 +615,7 @@ public:
         return CompressionHeaderEnabled_;
     }
 
-    inline bool CanBeKeepAlive() const noexcept { 
+    inline bool CanBeKeepAlive() const noexcept {
         return SupportChunkedTransfer() && IsKeepAliveEnabled() && (Request_ ? Request_->IsKeepAlive() : true);
     }
 
@@ -628,15 +628,15 @@ public:
     }
 
 private:
-    static inline bool IsResponse(const TString& s) noexcept { 
+    static inline bool IsResponse(const TString& s) noexcept {
         return strnicmp(s.data(), "HTTP/", 5) == 0;
     }
 
-    static inline bool IsRequest(const TString& s) noexcept { 
+    static inline bool IsRequest(const TString& s) noexcept {
         return !IsResponse(s);
     }
 
-    inline bool IsHttpRequest() const noexcept { 
+    inline bool IsHttpRequest() const noexcept {
         return IsRequest(FirstLine_);
     }
 
@@ -651,16 +651,16 @@ private:
         return false;
     }
 
-    inline bool IsHttpResponse() const noexcept { 
+    inline bool IsHttpResponse() const noexcept {
         return IsResponse(FirstLine_);
     }
 
-    inline bool HasRequestBody() const noexcept { 
+    inline bool HasRequestBody() const noexcept {
         return strnicmp(FirstLine_.data(), "POST", 4) == 0 ||
                strnicmp(FirstLine_.data(), "PATCH", 5) == 0 ||
                strnicmp(FirstLine_.data(), "PUT", 3) == 0;
     }
-    static inline size_t ParseHttpVersion(const TString& s) { 
+    static inline size_t ParseHttpVersion(const TString& s) {
         if (s.empty()) {
             ythrow THttpParseException() << "malformed http stream";
         }
@@ -709,7 +709,7 @@ private:
         Version_ = parsed_version;
     }
 
-    inline void Process(const TString& s) { 
+    inline void Process(const TString& s) {
         Y_ASSERT(State_ != HeadersSent);
 
         if (State_ == Begin) {
@@ -760,7 +760,7 @@ private:
         }
     }
 
-    inline bool SupportChunkedTransfer() const noexcept { 
+    inline bool SupportChunkedTransfer() const noexcept {
         return Version_ >= 1100;
     }
 
@@ -791,8 +791,8 @@ private:
         }
     }
 
-    inline TString BuildAcceptEncoding() const { 
-        TString ret; 
+    inline TString BuildAcceptEncoding() const {
+        TString ret;
 
         for (const auto& coding : ComprSchemas_) {
             if (ret) {
@@ -813,7 +813,7 @@ private:
 
         for (THttpHeaders::TConstIterator h = Headers_.Begin(); h != Headers_.End(); ++h) {
             const THttpInputHeader& header = *h;
-            const TString hl = to_lower(header.Name()); 
+            const TString hl = to_lower(header.Name());
 
             if (hl == TStringBuf("connection")) {
                 keepAlive = to_lower(header.Value()) == TStringBuf("keep-alive");
@@ -850,7 +850,7 @@ private:
         Headers_.AddOrReplaceHeader(hdr);
     }
 
-    inline void RemoveHeader(const TString& hdr) { 
+    inline void RemoveHeader(const TString& hdr) {
         Headers_.RemoveHeader(hdr);
     }
 
@@ -859,8 +859,8 @@ private:
     TState State_;
     IOutputStream* Output_;
     TStreams<IOutputStream, 8> Streams_;
-    TString Line_; 
-    TString FirstLine_; 
+    TString Line_;
+    TString FirstLine_;
     THttpHeaders Headers_;
     THttpInput* Request_;
     size_t Version_;
@@ -886,7 +886,7 @@ THttpOutput::THttpOutput(IOutputStream* slave, THttpInput* request)
 {
 }
 
-THttpOutput::~THttpOutput() { 
+THttpOutput::~THttpOutput() {
     try {
         Finish();
     } catch (...) {
@@ -905,7 +905,7 @@ void THttpOutput::DoFinish() {
     Impl_->Finish();
 }
 
-const THttpHeaders& THttpOutput::SentHeaders() const noexcept { 
+const THttpHeaders& THttpOutput::SentHeaders() const noexcept {
     return Impl_->SentHeaders();
 }
 
@@ -934,7 +934,7 @@ void THttpOutput::EnableCompressionHeader(bool enable) {
     Impl_->EnableCompressionHeader(enable);
 }
 
-bool THttpOutput::IsKeepAliveEnabled() const noexcept { 
+bool THttpOutput::IsKeepAliveEnabled() const noexcept {
     return Impl_->IsKeepAliveEnabled();
 }
 
@@ -942,7 +942,7 @@ bool THttpOutput::IsBodyEncodingEnabled() const noexcept {
     return Impl_->IsBodyEncodingEnabled();
 }
 
-bool THttpOutput::IsCompressionEnabled() const noexcept { 
+bool THttpOutput::IsCompressionEnabled() const noexcept {
     return Impl_->IsCompressionEnabled();
 }
 
@@ -950,7 +950,7 @@ bool THttpOutput::IsCompressionHeaderEnabled() const noexcept {
     return Impl_->IsCompressionHeaderEnabled();
 }
 
-bool THttpOutput::CanBeKeepAlive() const noexcept { 
+bool THttpOutput::CanBeKeepAlive() const noexcept {
     return Impl_->CanBeKeepAlive();
 }
 

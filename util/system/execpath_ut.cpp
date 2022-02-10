@@ -7,7 +7,7 @@
 
 Y_UNIT_TEST_SUITE(TExecPathTest) {
     Y_UNIT_TEST(TestIt) {
-        TString execPath = GetExecPath(); 
+        TString execPath = GetExecPath();
         TString persistentExecPath = GetPersistentExecPath();
 
         try {

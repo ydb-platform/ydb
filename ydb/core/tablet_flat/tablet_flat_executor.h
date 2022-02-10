@@ -309,7 +309,7 @@ struct TExecutorStats {
     bool IsAnyChannelYellowStop = false;
     ui64 TxInFly = 0;
     ui64 TxPending = 0;
-    const THashMap<TLogoBlobID, TCompactedPartLoans>* CompactedPartLoans = nullptr; 
+    const THashMap<TLogoBlobID, TCompactedPartLoans>* CompactedPartLoans = nullptr;
     const bool* HasSharedBlobs = nullptr;
 
     TVector<ui32> YellowMoveChannels;
@@ -503,7 +503,7 @@ namespace NFlatExecutorSetup {
             3. [-inf, +inf), the complete set, is encoded as ({ }, { }).
             4. May return empty blob on lack of some vital pages in cache.
          */
-        virtual TString BorrowSnapshot(ui32 tableId, const TTableSnapshotContext&, TRawVals from, TRawVals to, ui64 loaner) const = 0; 
+        virtual TString BorrowSnapshot(ui32 tableId, const TTableSnapshotContext&, TRawVals from, TRawVals to, ui64 loaner) const = 0;
         // Prepare snapshot which can later be used for scan task.
         virtual ui64 MakeScanSnapshot(ui32 table) = 0;
         virtual void DropScanSnapshot(ui64 snapId) = 0;

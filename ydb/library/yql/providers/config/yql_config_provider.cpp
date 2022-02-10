@@ -121,7 +121,7 @@ namespace {
     class TConfigProvider : public TDataProviderBase {
     public:
         struct TFunctions {
-            THashSet<TStringBuf> Names; 
+            THashSet<TStringBuf> Names;
 
             TFunctions() {
                 Names.insert(ConfReadName);
@@ -312,7 +312,7 @@ namespace {
 
                         auto stringAnnotation = ctx.MakeType<TDataExprType>(EDataSlot::String);
                         auto listOfString = ctx.MakeType<TListExprType>(stringAnnotation);
-                        TTypeAnnotationNode::TListType children; 
+                        TTypeAnnotationNode::TListType children;
                         children.push_back(input->Child(0)->GetTypeAnn());
                         if (tag == "data_sources" || tag == "data_sinks") {
                             children.push_back(listOfString);
@@ -344,7 +344,7 @@ namespace {
 
         TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
             auto read = node->Child(0);
-            TString newName; 
+            TString newName;
             if (read->Content() == ReadName) {
                 newName = ConfReadName;
             }
@@ -390,7 +390,7 @@ namespace {
             return *CallableExecutionTransformer;
         }
 
-        bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override { 
+        bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
             Y_UNUSED(compact);
             if (CanExecute(node)) {
                 children.push_back(node.ChildPtr(0));
@@ -406,7 +406,7 @@ namespace {
             writer.OnStringScalar(node.Child(0)->Content());
         }
 
-        TString GetProviderPath(const TExprNode& node) override { 
+        TString GetProviderPath(const TExprNode& node) override {
             Y_UNUSED(node);
             return "config";
         }
@@ -1004,7 +1004,7 @@ TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types,
     return new TConfigProvider(types, config, policy);
 }
 
-const THashSet<TStringBuf>& ConfigProviderFunctions() { 
+const THashSet<TStringBuf>& ConfigProviderFunctions() {
     return Singleton<TConfigProvider::TFunctions>()->Names;
 }
 

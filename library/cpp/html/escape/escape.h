@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 namespace NHtml {
     TString EscapeAttributeValue(const TString& value);

@@ -130,35 +130,35 @@ namespace {
         {
         }
 
-        inline void Add(const A& a, const B& b) noexcept { 
+        inline void Add(const A& a, const B& b) noexcept {
             Add(TSample(a, b));
         }
 
-        inline void Add(const TSample& s) noexcept { 
+        inline void Add(const TSample& s) noexcept {
             S_[(C_++) % N] = s;
             if (C_ > 1) {
                 ReCalc();
             }
         }
 
-        inline B Predict(A a) const noexcept { 
+        inline B Predict(A a) const noexcept {
             return A_ + a * B_;
         }
 
-        inline size_t Size() const noexcept { 
+        inline size_t Size() const noexcept {
             return C_;
         }
 
-        inline bool Enough() const noexcept { 
+        inline bool Enough() const noexcept {
             return Size() >= N;
         }
 
-        inline A LastX() const noexcept { 
+        inline A LastX() const noexcept {
             return S_[(C_ - 1) % N].first;
         }
 
     private:
-        inline void ReCalc() noexcept { 
+        inline void ReCalc() noexcept {
             const size_t n = Min(N, C_);
 
             double sx = 0;

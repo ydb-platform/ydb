@@ -76,9 +76,9 @@ namespace NActors {
         TLogHistogram EventDeliveryTimeHistogram;
         TLogHistogram EventProcessingCountHistogram;
         TLogHistogram EventProcessingTimeHistogram;
-        TVector<NHPTimer::STime> ElapsedTicksByActivity; 
-        TVector<ui64> ReceivedEventsByActivity; 
-        TVector<i64> ActorsAliveByActivity; // the sum should be positive, but per-thread might be negative 
+        TVector<NHPTimer::STime> ElapsedTicksByActivity;
+        TVector<ui64> ReceivedEventsByActivity;
+        TVector<i64> ActorsAliveByActivity; // the sum should be positive, but per-thread might be negative
         TVector<ui64> ScheduledEventsByActivity;
         ui64 PoolActorRegistrations = 0;
         ui64 PoolDestroyedActors = 0;
@@ -95,7 +95,7 @@ namespace NActors {
         {}
 
         template <typename T>
-        static void AggregateOne(TVector<T>& self, const TVector<T>& other) { 
+        static void AggregateOne(TVector<T>& self, const TVector<T>& other) {
             const size_t selfSize = self.size();
             const size_t otherSize = other.size();
             if (selfSize < otherSize)

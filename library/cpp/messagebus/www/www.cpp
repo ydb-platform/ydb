@@ -48,7 +48,7 @@ namespace {
             return TValuePtr();
         }
 
-        TString FindNameByPtr(TValuePtr value) { 
+        TString FindNameByPtr(TValuePtr value) {
             Y_VERIFY(!!value);
 
             for (unsigned i = 0; i < Entries.size(); ++i) {
@@ -80,11 +80,11 @@ namespace {
             }
 
             for (unsigned i = 1;; ++i) {
-                TString prefix = p->GetNameInternal(); 
+                TString prefix = p->GetNameInternal();
                 if (!prefix) {
                     prefix = "unnamed";
                 }
-                TString name = ConcatStrings(prefix, "-", i); 
+                TString name = ConcatStrings(prefix, "-", i);
 
                 TValuePtr current = FindByName(name);
 
@@ -108,8 +108,8 @@ namespace {
     struct TSessionValues: public TNamedValues<TSessionPtr> {
         typedef TNamedValues<TSessionPtr> TBase;
 
-        TVector<TString> GetNamesForQueue(TBusMessageQueue* queue) { 
-            TVector<TString> r; 
+        TVector<TString> GetNamesForQueue(TBusMessageQueue* queue) {
+            TVector<TString> r;
             for (unsigned i = 0; i < TBase::size(); ++i) {
                 if (TBase::Entries[i].second->GetQueue() == queue) {
                     r.push_back(TBase::Entries[i].first);
@@ -211,14 +211,14 @@ struct TBusWww::TImpl {
         TGuard<TMutex> g(Mutex);
 
         {
-            TVector<TBusClientSessionPtr> clientSessions = module->GetInternal()->GetClientSessionsInternal(); 
+            TVector<TBusClientSessionPtr> clientSessions = module->GetInternal()->GetClientSessionsInternal();
             for (unsigned i = 0; i < clientSessions.size(); ++i) {
                 RegisterClientSession(clientSessions[i]);
             }
         }
 
         {
-            TVector<TBusServerSessionPtr> serverSessions = module->GetInternal()->GetServerSessionsInternal(); 
+            TVector<TBusServerSessionPtr> serverSessions = module->GetInternal()->GetServerSessionsInternal();
             for (unsigned i = 0; i < serverSessions.size(); ++i) {
                 RegisterServerSession(serverSessions[i]);
             }
@@ -228,7 +228,7 @@ struct TBusWww::TImpl {
         Modules.Add(module->GetInternal());
     }
 
-    TString FindQueueNameBySessionName(TStringBuf sessionName, bool client) { 
+    TString FindQueueNameBySessionName(TStringBuf sessionName, bool client) {
         TIntrusivePtr<TBusClientSession> clientSession;
         TIntrusivePtr<TBusServerSession> serverSession;
         TBusSession* session;
@@ -288,7 +288,7 @@ struct TBusWww::TImpl {
         }
 
         void BreadcrumbSession(TStringBuf sessionName, bool client) {
-            TString queueName = Outer->FindQueueNameBySessionName(sessionName, client); 
+            TString queueName = Outer->FindQueueNameBySessionName(sessionName, client);
             TStringBuf whatSession = client ? "client session" : "server session";
 
             TTagGuard ol("ol", "breadcrumb");
@@ -299,9 +299,9 @@ struct TBusWww::TImpl {
         }
 
         void ServeSessionsOfQueue(TBusMessageQueuePtr queue, bool includeQueue) {
-            TVector<TString> clientNames = Outer->ClientSessions.GetNamesForQueue(queue.Get()); 
-            TVector<TString> serverNames = Outer->ServerSessions.GetNamesForQueue(queue.Get()); 
-            TVector<TString> moduleNames = Outer->Modules.GetNamesForQueue(queue.Get()); 
+            TVector<TString> clientNames = Outer->ClientSessions.GetNamesForQueue(queue.Get());
+            TVector<TString> serverNames = Outer->ServerSessions.GetNamesForQueue(queue.Get());
+            TVector<TString> moduleNames = Outer->Modules.GetNamesForQueue(queue.Get());
 
             TTagGuard table("table", "table table-condensed table-bordered");
 
@@ -320,7 +320,7 @@ struct TBusWww::TImpl {
             }
 
             if (includeQueue) {
-                TTagGuard tr1("tr"); 
+                TTagGuard tr1("tr");
                 Td("queue");
 
                 {
@@ -329,7 +329,7 @@ struct TBusWww::TImpl {
                 }
 
                 {
-                    TTagGuard tr2("td"); 
+                    TTagGuard tr2("td");
                     Pre(queue->GetStatusSingleLine());
                 }
             }
@@ -385,7 +385,7 @@ struct TBusWww::TImpl {
             }
         }
 
-        void ServeQueue(const TString& name) { 
+        void ServeQueue(const TString& name) {
             TBusMessageQueuePtr queue = Outer->Queues.FindByName(name);
 
             if (!queue) {
@@ -518,7 +518,7 @@ struct TBusWww::TImpl {
             TSessionDumpStatus dumpStatus = session->GetStatusRecordInternal();
 
             TBusMessageQueuePtr queue = session->GetQueue();
-            TString queueName = Outer->Queues.FindNameByPtr(session->GetQueue()); 
+            TString queueName = Outer->Queues.FindNameByPtr(session->GetQueue());
 
             BreadcrumbSession(name, client);
 
@@ -585,7 +585,7 @@ struct TBusWww::TImpl {
                     NJsonWriter::TBuf buf(NJsonWriter::HEM_ESCAPE_HTML);
                     buf.BeginList();
                     for (unsigned i = 0; i < h.Times.size(); ++i) {
-                        TString label = TDurationHistogram::LabelBefore(i); 
+                        TString label = TDurationHistogram::LabelBefore(i);
                         buf.BeginList();
                         buf.WriteString(label);
                         buf.WriteLongLong(h.Times[i]);
@@ -612,7 +612,7 @@ struct TBusWww::TImpl {
             H1("MessageBus queues");
 
             for (unsigned i = 0; i < Outer->Queues.size(); ++i) {
-                TString queueName = Outer->Queues.Entries[i].first; 
+                TString queueName = Outer->Queues.Entries[i].first;
                 TBusMessageQueuePtr queue = Outer->Queues.Entries[i].second;
 
                 HnWithSmall(3, queueName, "(queue)");
@@ -680,7 +680,7 @@ struct TBusWww::TImpl {
                                        status.ConnectionStatusSummary.ReaderStatus.Incremental.MessageCounter);
         }
 
-        void ServeSolomonJson(const TString& q, const TString& cs, const TString& ss) { 
+        void ServeSolomonJson(const TString& q, const TString& cs, const TString& ss) {
             Y_UNUSED(q);
             Y_UNUSED(cs);
             Y_UNUSED(ss);
@@ -692,15 +692,15 @@ struct TBusWww::TImpl {
             sj.OpenMetrics();
 
             for (unsigned i = 0; i < Outer->Queues.size(); ++i) {
-                TString queueName = Outer->Queues.Entries[i].first; 
+                TString queueName = Outer->Queues.Entries[i].first;
                 TBusMessageQueuePtr queue = Outer->Queues.Entries[i].second;
                 if (all || q == queueName) {
                     WriteQueueSensors(sj, queueName, &*queue);
                 }
 
-                TVector<TString> clientNames = Outer->ClientSessions.GetNamesForQueue(queue.Get()); 
-                TVector<TString> serverNames = Outer->ServerSessions.GetNamesForQueue(queue.Get()); 
-                TVector<TString> moduleNames = Outer->Modules.GetNamesForQueue(queue.Get()); 
+                TVector<TString> clientNames = Outer->ClientSessions.GetNamesForQueue(queue.Get());
+                TVector<TString> serverNames = Outer->ServerSessions.GetNamesForQueue(queue.Get());
+                TVector<TString> moduleNames = Outer->Modules.GetNamesForQueue(queue.Get());
                 for (auto& sessionName : clientNames) {
                     if (all || cs == sessionName) {
                         auto session = Outer->ClientSessions.FindByName(sessionName);
@@ -728,7 +728,7 @@ struct TBusWww::TImpl {
             } else {
                 os << HTTP_OK_BIN;
             }
-            TBlob blob = Singleton<TWwwStaticLoader>()->ObjectBlobByKey(TString("/") + TString(path)); 
+            TBlob blob = Singleton<TWwwStaticLoader>()->ObjectBlobByKey(TString("/") + TString(path));
             os.Write(blob.Data(), blob.Size());
         }
 
@@ -766,9 +766,9 @@ struct TBusWww::TImpl {
             if (solomonJson) {
                 Os << HTTP_OK_JSON;
 
-                TString qp = q != CgiParams.end() ? q->first : ""; 
-                TString csp = cs != CgiParams.end() ? cs->first : ""; 
-                TString ssp = ss != CgiParams.end() ? ss->first : ""; 
+                TString qp = q != CgiParams.end() ? q->first : "";
+                TString csp = cs != CgiParams.end() ? cs->first : "";
+                TString ssp = ss != CgiParams.end() ? ss->first : "";
                 ServeSolomonJson(qp, csp, ssp);
             } else {
                 Os << HTTP_OK_HTML;
@@ -870,7 +870,7 @@ struct TBusWwwHttpServer::TImpl: public THttpServer::ICallBack {
         }
     };
 
-    TString MakeSimpleResponse(unsigned code, TString text, TString content = "") { 
+    TString MakeSimpleResponse(unsigned code, TString text, TString content = "") {
         if (!content) {
             TStringStream contentSs;
             contentSs << code << " " << text;

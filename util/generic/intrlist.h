@@ -16,13 +16,13 @@ private:
     using TListItem = TIntrusiveListItem<T, Tag>;
 
 public:
-    inline TIntrusiveListItem() noexcept 
+    inline TIntrusiveListItem() noexcept
         : Next_(this)
         , Prev_(Next_)
     {
     }
 
-    inline ~TIntrusiveListItem() { 
+    inline ~TIntrusiveListItem() {
         Unlink();
     }
 
@@ -31,7 +31,7 @@ public:
         return (Prev_ == this) && (Next_ == this);
     }
 
-    inline void Unlink() noexcept { 
+    inline void Unlink() noexcept {
         if (Empty()) {
             return;
         }
@@ -42,12 +42,12 @@ public:
         SetEnd();
     }
 
-    inline void LinkBefore(TListItem* before) noexcept { 
+    inline void LinkBefore(TListItem* before) noexcept {
         Unlink();
         LinkBeforeNoUnlink(before);
     }
 
-    inline void LinkBeforeNoUnlink(TListItem* before) noexcept { 
+    inline void LinkBeforeNoUnlink(TListItem* before) noexcept {
         TListItem* const after = before->Prev();
 
         after->SetNext(this);
@@ -56,56 +56,56 @@ public:
         before->SetPrev(this);
     }
 
-    inline void LinkBefore(TListItem& before) noexcept { 
+    inline void LinkBefore(TListItem& before) noexcept {
         LinkBefore(&before);
     }
 
-    inline void LinkAfter(TListItem* after) noexcept { 
+    inline void LinkAfter(TListItem* after) noexcept {
         Unlink();
         LinkBeforeNoUnlink(after->Next());
     }
 
-    inline void LinkAfter(TListItem& after) noexcept { 
+    inline void LinkAfter(TListItem& after) noexcept {
         LinkAfter(&after);
     }
 
 public:
-    inline TListItem* Prev() noexcept { 
+    inline TListItem* Prev() noexcept {
         return Prev_;
     }
 
-    inline const TListItem* Prev() const noexcept { 
+    inline const TListItem* Prev() const noexcept {
         return Prev_;
     }
 
-    inline TListItem* Next() noexcept { 
+    inline TListItem* Next() noexcept {
         return Next_;
     }
 
-    inline const TListItem* Next() const noexcept { 
+    inline const TListItem* Next() const noexcept {
         return Next_;
     }
 
 public:
-    inline void SetEnd() noexcept { 
+    inline void SetEnd() noexcept {
         Prev_ = this;
         Next_ = Prev_;
     }
 
-    inline void SetNext(TListItem* item) noexcept { 
+    inline void SetNext(TListItem* item) noexcept {
         Next_ = item;
     }
 
-    inline void SetPrev(TListItem* item) noexcept { 
+    inline void SetPrev(TListItem* item) noexcept {
         Prev_ = item;
     }
 
 public:
-    inline T* Node() noexcept { 
+    inline T* Node() noexcept {
         return static_cast<T*>(this);
     }
 
-    inline const T* Node() const noexcept { 
+    inline const T* Node() const noexcept {
         return static_cast<const T*>(this);
     }
 
@@ -137,51 +137,51 @@ private:
         using reference = TReference;
         using pointer = TPointer;
 
-        inline TIteratorBase() noexcept 
+        inline TIteratorBase() noexcept
             : Item_(nullptr)
         {
         }
 
         template <class TListItem_, class TNode_>
-        inline TIteratorBase(const TIteratorBase<TListItem_, TNode_>& right) noexcept 
+        inline TIteratorBase(const TIteratorBase<TListItem_, TNode_>& right) noexcept
             : Item_(right.Item())
         {
         }
 
-        inline TIteratorBase(TItem* item) noexcept 
+        inline TIteratorBase(TItem* item) noexcept
             : Item_(item)
         {
         }
 
-        inline TItem* Item() const noexcept { 
+        inline TItem* Item() const noexcept {
             return Item_;
         }
 
-        inline void Next() noexcept { 
+        inline void Next() noexcept {
             Item_ = Item_->Next();
         }
 
-        inline void Prev() noexcept { 
+        inline void Prev() noexcept {
             Item_ = Item_->Prev();
         }
 
         template <class TListItem_, class TNode_>
-        inline bool operator==(const TIteratorBase<TListItem_, TNode_>& right) const noexcept { 
+        inline bool operator==(const TIteratorBase<TListItem_, TNode_>& right) const noexcept {
             return Item() == right.Item();
         }
 
         template <class TListItem_, class TNode_>
-        inline bool operator!=(const TIteratorBase<TListItem_, TNode_>& right) const noexcept { 
+        inline bool operator!=(const TIteratorBase<TListItem_, TNode_>& right) const noexcept {
             return Item() != right.Item();
         }
 
-        inline TIteratorBase& operator++() noexcept { 
+        inline TIteratorBase& operator++() noexcept {
             Next();
 
             return *this;
         }
 
-        inline TIteratorBase operator++(int) noexcept { 
+        inline TIteratorBase operator++(int) noexcept {
             TIteratorBase ret(*this);
 
             Next();
@@ -189,13 +189,13 @@ private:
             return ret;
         }
 
-        inline TIteratorBase& operator--() noexcept { 
+        inline TIteratorBase& operator--() noexcept {
             Prev();
 
             return *this;
         }
 
-        inline TIteratorBase operator--(int) noexcept { 
+        inline TIteratorBase operator--(int) noexcept {
             TIteratorBase ret(*this);
 
             Prev();
@@ -203,11 +203,11 @@ private:
             return ret;
         }
 
-        inline TReference operator*() const noexcept { 
+        inline TReference operator*() const noexcept {
             return *Item_->Node();
         }
 
-        inline TPointer operator->() const noexcept { 
+        inline TPointer operator->() const noexcept {
             return Item_->Node();
         }
 
@@ -232,51 +232,51 @@ private:
         inline TReverseIteratorBase() noexcept = default;
 
         template <class TIterator_>
-        inline TReverseIteratorBase(const TReverseIteratorBase<TIterator_>& right) noexcept 
+        inline TReverseIteratorBase(const TReverseIteratorBase<TIterator_>& right) noexcept
             : Current_(right.Base())
         {
         }
 
-        inline explicit TReverseIteratorBase(TIterator item) noexcept 
+        inline explicit TReverseIteratorBase(TIterator item) noexcept
             : Current_(item)
         {
         }
 
-        inline TIterator Base() const noexcept { 
+        inline TIterator Base() const noexcept {
             return Current_;
         }
 
-        inline TItem* Item() const noexcept { 
+        inline TItem* Item() const noexcept {
             TIterator ret = Current_;
 
             return (--ret).Item();
         }
 
-        inline void Next() noexcept { 
+        inline void Next() noexcept {
             Current_.Prev();
         }
 
-        inline void Prev() noexcept { 
+        inline void Prev() noexcept {
             Current_.Next();
         }
 
         template <class TIterator_>
-        inline bool operator==(const TReverseIteratorBase<TIterator_>& right) const noexcept { 
+        inline bool operator==(const TReverseIteratorBase<TIterator_>& right) const noexcept {
             return Base() == right.Base();
         }
 
         template <class TIterator_>
-        inline bool operator!=(const TReverseIteratorBase<TIterator_>& right) const noexcept { 
+        inline bool operator!=(const TReverseIteratorBase<TIterator_>& right) const noexcept {
             return Base() != right.Base();
         }
 
-        inline TReverseIteratorBase& operator++() noexcept { 
+        inline TReverseIteratorBase& operator++() noexcept {
             Next();
 
             return *this;
         }
 
-        inline TReverseIteratorBase operator++(int) noexcept { 
+        inline TReverseIteratorBase operator++(int) noexcept {
             TReverseIteratorBase ret(*this);
 
             Next();
@@ -284,13 +284,13 @@ private:
             return ret;
         }
 
-        inline TReverseIteratorBase& operator--() noexcept { 
+        inline TReverseIteratorBase& operator--() noexcept {
             Prev();
 
             return *this;
         }
 
-        inline TReverseIteratorBase operator--(int) noexcept { 
+        inline TReverseIteratorBase operator--(int) noexcept {
             TReverseIteratorBase ret(*this);
 
             Prev();
@@ -298,13 +298,13 @@ private:
             return ret;
         }
 
-        inline TReference operator*() const noexcept { 
+        inline TReference operator*() const noexcept {
             TIterator ret = Current_;
 
             return *--ret;
         }
 
-        inline TPointer operator->() const noexcept { 
+        inline TPointer operator->() const noexcept {
             TIterator ret = Current_;
 
             return &*--ret;
@@ -328,7 +328,7 @@ public:
     using const_reverse_iterator = TConstReverseIterator;
 
 public:
-    inline void Swap(TIntrusiveList& right) noexcept { 
+    inline void Swap(TIntrusiveList& right) noexcept {
         TIntrusiveList temp;
 
         temp.Append(right);
@@ -344,7 +344,7 @@ public:
 
     inline ~TIntrusiveList() = default;
 
-    inline TIntrusiveList(TIntrusiveList&& right) noexcept { 
+    inline TIntrusiveList(TIntrusiveList&& right) noexcept {
         this->Swap(right);
     }
 
@@ -353,7 +353,7 @@ public:
         return *this;
     }
 
-    inline explicit operator bool() const noexcept { 
+    inline explicit operator bool() const noexcept {
         return !Empty();
     }
 
@@ -361,7 +361,7 @@ public:
         return End_.Empty();
     }
 
-    inline size_t Size() const noexcept { 
+    inline size_t Size() const noexcept {
         return std::distance(Begin(), End());
     }
 
@@ -369,126 +369,126 @@ public:
         item->Unlink();
     }
 
-    inline void Clear() noexcept { 
+    inline void Clear() noexcept {
         End_.Unlink();
     }
 
 public:
-    inline TIterator Begin() noexcept { 
+    inline TIterator Begin() noexcept {
         return ++End();
     }
 
-    inline TIterator End() noexcept { 
+    inline TIterator End() noexcept {
         return TIterator(&End_);
     }
 
-    inline TConstIterator Begin() const noexcept { 
+    inline TConstIterator Begin() const noexcept {
         return ++End();
     }
 
-    inline TConstIterator End() const noexcept { 
+    inline TConstIterator End() const noexcept {
         return TConstIterator(&End_);
     }
 
-    inline TReverseIterator RBegin() noexcept { 
+    inline TReverseIterator RBegin() noexcept {
         return TReverseIterator(End());
     }
 
-    inline TReverseIterator REnd() noexcept { 
+    inline TReverseIterator REnd() noexcept {
         return TReverseIterator(Begin());
     }
 
-    inline TConstReverseIterator RBegin() const noexcept { 
+    inline TConstReverseIterator RBegin() const noexcept {
         return TConstReverseIterator(End());
     }
 
-    inline TConstReverseIterator REnd() const noexcept { 
+    inline TConstReverseIterator REnd() const noexcept {
         return TConstReverseIterator(Begin());
     }
 
-    inline TConstIterator CBegin() const noexcept { 
+    inline TConstIterator CBegin() const noexcept {
         return Begin();
     }
 
-    inline TConstIterator CEnd() const noexcept { 
+    inline TConstIterator CEnd() const noexcept {
         return End();
     }
 
-    inline TConstReverseIterator CRBegin() const noexcept { 
+    inline TConstReverseIterator CRBegin() const noexcept {
         return RBegin();
     }
 
-    inline TConstReverseIterator CREnd() const noexcept { 
+    inline TConstReverseIterator CREnd() const noexcept {
         return REnd();
     }
 
 public:
-    inline iterator begin() noexcept { 
+    inline iterator begin() noexcept {
         return Begin();
     }
 
-    inline iterator end() noexcept { 
+    inline iterator end() noexcept {
         return End();
     }
 
-    inline const_iterator begin() const noexcept { 
+    inline const_iterator begin() const noexcept {
         return Begin();
     }
 
-    inline const_iterator end() const noexcept { 
+    inline const_iterator end() const noexcept {
         return End();
     }
 
-    inline reverse_iterator rbegin() noexcept { 
+    inline reverse_iterator rbegin() noexcept {
         return RBegin();
     }
 
-    inline reverse_iterator rend() noexcept { 
+    inline reverse_iterator rend() noexcept {
         return REnd();
     }
 
-    inline const_iterator cbegin() const noexcept { 
+    inline const_iterator cbegin() const noexcept {
         return CBegin();
     }
 
-    inline const_iterator cend() const noexcept { 
+    inline const_iterator cend() const noexcept {
         return CEnd();
     }
 
-    inline const_reverse_iterator crbegin() const noexcept { 
+    inline const_reverse_iterator crbegin() const noexcept {
         return CRBegin();
     }
 
-    inline const_reverse_iterator crend() const noexcept { 
+    inline const_reverse_iterator crend() const noexcept {
         return CREnd();
     }
 
 public:
-    inline T* Back() noexcept { 
+    inline T* Back() noexcept {
         return End_.Prev()->Node();
     }
 
-    inline T* Front() noexcept { 
+    inline T* Front() noexcept {
         return End_.Next()->Node();
     }
 
-    inline const T* Back() const noexcept { 
+    inline const T* Back() const noexcept {
         return End_.Prev()->Node();
     }
 
-    inline const T* Front() const noexcept { 
+    inline const T* Front() const noexcept {
         return End_.Next()->Node();
     }
 
-    inline void PushBack(TListItem* item) noexcept { 
+    inline void PushBack(TListItem* item) noexcept {
         item->LinkBefore(End_);
     }
 
-    inline void PushFront(TListItem* item) noexcept { 
+    inline void PushFront(TListItem* item) noexcept {
         item->LinkAfter(End_);
     }
 
-    inline T* PopBack() noexcept { 
+    inline T* PopBack() noexcept {
         TListItem* const ret = End_.Prev();
 
         ret->Unlink();
@@ -496,7 +496,7 @@ public:
         return ret->Node();
     }
 
-    inline T* PopFront() noexcept { 
+    inline T* PopFront() noexcept {
         TListItem* const ret = End_.Next();
 
         ret->Unlink();
@@ -504,11 +504,11 @@ public:
         return ret->Node();
     }
 
-    inline void Append(TIntrusiveList& list) noexcept { 
+    inline void Append(TIntrusiveList& list) noexcept {
         Cut(list.Begin(), list.End(), End());
     }
 
-    inline static void Cut(TIterator begin, TIterator end, TIterator pasteBefore) noexcept { 
+    inline static void Cut(TIterator begin, TIterator end, TIterator pasteBefore) noexcept {
         if (begin == end) {
             return;
         }
@@ -602,12 +602,12 @@ public:
 public:
     inline TIntrusiveListWithAutoDelete() noexcept = default;
 
-    inline TIntrusiveListWithAutoDelete(TIntrusiveListWithAutoDelete&& right) noexcept 
+    inline TIntrusiveListWithAutoDelete(TIntrusiveListWithAutoDelete&& right) noexcept
         : TIntrusiveList<T, Tag>(std::move(right))
     {
     }
 
-    inline ~TIntrusiveListWithAutoDelete() { 
+    inline ~TIntrusiveListWithAutoDelete() {
         this->Clear();
     }
 
@@ -617,18 +617,18 @@ public:
     }
 
 public:
-    inline void Clear() noexcept { 
+    inline void Clear() noexcept {
         this->ForEach([](auto* item) {
             D::Destroy(item);
         });
     }
 
-    inline static void Cut(TIterator begin, TIterator end) noexcept { 
+    inline static void Cut(TIterator begin, TIterator end) noexcept {
         TIntrusiveListWithAutoDelete<T, D, Tag> temp;
         Cut(begin, end, temp.End());
     }
 
-    inline static void Cut(TIterator begin, TIterator end, TIterator pasteBefore) noexcept { 
+    inline static void Cut(TIterator begin, TIterator end, TIterator pasteBefore) noexcept {
         TIntrusiveList<T, Tag>::Cut(begin, end, pasteBefore);
     }
 };
@@ -642,35 +642,35 @@ private:
     using TListItem = TIntrusiveSListItem<T, Tag>;
 
 public:
-    inline TIntrusiveSListItem() noexcept 
+    inline TIntrusiveSListItem() noexcept
         : Next_(nullptr)
     {
     }
 
     inline ~TIntrusiveSListItem() = default;
 
-    inline bool IsEnd() const noexcept { 
+    inline bool IsEnd() const noexcept {
         return Next_ == nullptr;
     }
 
-    inline TListItem* Next() noexcept { 
+    inline TListItem* Next() noexcept {
         return Next_;
     }
 
-    inline const TListItem* Next() const noexcept { 
+    inline const TListItem* Next() const noexcept {
         return Next_;
     }
 
-    inline void SetNext(TListItem* item) noexcept { 
+    inline void SetNext(TListItem* item) noexcept {
         Next_ = item;
     }
 
 public:
-    inline T* Node() noexcept { 
+    inline T* Node() noexcept {
         return static_cast<T*>(this);
     }
 
-    inline const T* Node() const noexcept { 
+    inline const T* Node() const noexcept {
         return static_cast<const T*>(this);
     }
 
@@ -697,30 +697,30 @@ public:
         using reference = TReference;
         using iterator_category = std::forward_iterator_tag;
 
-        inline TIteratorBase(TListItem* item) noexcept 
+        inline TIteratorBase(TListItem* item) noexcept
             : Item_(item)
         {
         }
 
-        inline void Next() noexcept { 
+        inline void Next() noexcept {
             Item_ = Item_->Next();
         }
 
-        inline bool operator==(const TIteratorBase& right) const noexcept { 
+        inline bool operator==(const TIteratorBase& right) const noexcept {
             return Item_ == right.Item_;
         }
 
-        inline bool operator!=(const TIteratorBase& right) const noexcept { 
+        inline bool operator!=(const TIteratorBase& right) const noexcept {
             return Item_ != right.Item_;
         }
 
-        inline TIteratorBase& operator++() noexcept { 
+        inline TIteratorBase& operator++() noexcept {
             Next();
 
             return *this;
         }
 
-        inline TIteratorBase operator++(int) noexcept { 
+        inline TIteratorBase operator++(int) noexcept {
             TIteratorBase ret(*this);
 
             Next();
@@ -728,11 +728,11 @@ public:
             return ret;
         }
 
-        inline TNode& operator*() noexcept { 
+        inline TNode& operator*() noexcept {
             return *Item_->Node();
         }
 
-        inline TNode* operator->() noexcept { 
+        inline TNode* operator->() noexcept {
             return Item_->Node();
         }
 
@@ -748,16 +748,16 @@ public:
     using const_iterator = TConstIterator;
 
 public:
-    inline TIntrusiveSList() noexcept 
+    inline TIntrusiveSList() noexcept
         : Begin_(nullptr)
     {
     }
 
-    inline void Swap(TIntrusiveSList& right) noexcept { 
+    inline void Swap(TIntrusiveSList& right) noexcept {
         DoSwap(Begin_, right.Begin_);
     }
 
-    inline explicit operator bool() const noexcept { 
+    inline explicit operator bool() const noexcept {
         return !Empty();
     }
 
@@ -765,79 +765,79 @@ public:
         return Begin_ == nullptr;
     }
 
-    inline size_t Size() const noexcept { 
+    inline size_t Size() const noexcept {
         return std::distance(Begin(), End());
     }
 
-    inline void Clear() noexcept { 
+    inline void Clear() noexcept {
         Begin_ = nullptr;
     }
 
-    inline TIterator Begin() noexcept { 
+    inline TIterator Begin() noexcept {
         return TIterator(Begin_);
     }
 
-    inline TIterator End() noexcept { 
+    inline TIterator End() noexcept {
         return TIterator(nullptr);
     }
 
-    inline TConstIterator Begin() const noexcept { 
+    inline TConstIterator Begin() const noexcept {
         return TConstIterator(Begin_);
     }
 
-    inline TConstIterator End() const noexcept { 
+    inline TConstIterator End() const noexcept {
         return TConstIterator(nullptr);
     }
 
-    inline TConstIterator CBegin() const noexcept { 
+    inline TConstIterator CBegin() const noexcept {
         return Begin();
     }
 
-    inline TConstIterator CEnd() const noexcept { 
+    inline TConstIterator CEnd() const noexcept {
         return End();
     }
 
     //compat methods
-    inline iterator begin() noexcept { 
+    inline iterator begin() noexcept {
         return Begin();
     }
 
-    inline iterator end() noexcept { 
+    inline iterator end() noexcept {
         return End();
     }
 
-    inline const_iterator begin() const noexcept { 
+    inline const_iterator begin() const noexcept {
         return Begin();
     }
 
-    inline const_iterator end() const noexcept { 
+    inline const_iterator end() const noexcept {
         return End();
     }
 
-    inline const_iterator cbegin() const noexcept { 
+    inline const_iterator cbegin() const noexcept {
         return CBegin();
     }
 
-    inline const_iterator cend() const noexcept { 
+    inline const_iterator cend() const noexcept {
         return CEnd();
     }
 
-    inline T* Front() noexcept { 
+    inline T* Front() noexcept {
         Y_ASSERT(Begin_);
         return Begin_->Node();
     }
 
-    inline const T* Front() const noexcept { 
+    inline const T* Front() const noexcept {
         Y_ASSERT(Begin_);
         return Begin_->Node();
     }
 
-    inline void PushFront(TListItem* item) noexcept { 
+    inline void PushFront(TListItem* item) noexcept {
         item->SetNext(Begin_);
         Begin_ = item;
     }
 
-    inline T* PopFront() noexcept { 
+    inline T* PopFront() noexcept {
         Y_ASSERT(Begin_);
 
         TListItem* const ret = Begin_;
@@ -846,7 +846,7 @@ public:
         return ret->Node();
     }
 
-    inline void Reverse() noexcept { 
+    inline void Reverse() noexcept {
         TIntrusiveSList temp;
 
         while (!Empty()) {

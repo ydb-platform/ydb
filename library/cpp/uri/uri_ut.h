@@ -22,7 +22,7 @@ namespace NUri {
 }
 
 #define URL_MSG(url1, url2, cmp) \
-    (TString("[") + url1.PrintS() + ("] " cmp " [") + url2.PrintS() + "]") 
+    (TString("[") + url1.PrintS() + ("] " cmp " [") + url2.PrintS() + "]")
 #define URL_EQ(url1, url2) \
     UNIT_ASSERT_EQUAL_C(url, url2, URL_MSG(url1, url2, "!="))
 #define URL_NEQ(url1, url2) \

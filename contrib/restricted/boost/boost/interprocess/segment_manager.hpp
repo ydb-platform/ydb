@@ -50,11 +50,11 @@
 #include <exception>
 #endif
 
-#include <util/system/compiler.h> 
- 
-Y_PRAGMA_DIAGNOSTIC_PUSH 
-Y_PRAGMA_NO_WSHADOW 
- 
+#include <util/system/compiler.h>
+
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA_NO_WSHADOW
+
 //!\file
 //!Describes the object placed in a memory segment that provides
 //!named object allocation capabilities for single-segment and
@@ -1061,7 +1061,7 @@ class segment_manager
    template<class CharT>
    void * priv_generic_named_construct
       (unsigned char type, const CharT *name, size_type num, bool try2find,
-      bool dothrow, ipcdetail::in_place_interface &table, 
+      bool dothrow, ipcdetail::in_place_interface &table,
       IndexType<ipcdetail::index_config<CharT, MemoryAlgorithm> > &index, ipcdetail::true_ is_intrusive)
    {
       (void)is_intrusive;
@@ -1186,7 +1186,7 @@ class segment_manager
    template<class CharT>
    void * priv_generic_named_construct
       (unsigned char type, const CharT *name, size_type num, bool try2find, bool dothrow,
-      ipcdetail::in_place_interface &table, 
+      ipcdetail::in_place_interface &table,
       IndexType<ipcdetail::index_config<CharT, MemoryAlgorithm> > &index, ipcdetail::false_ is_intrusive)
    {
       (void)is_intrusive;
@@ -1342,8 +1342,8 @@ class segment_manager
 
 }} //namespace boost { namespace interprocess
 
-Y_PRAGMA_DIAGNOSTIC_POP 
- 
+Y_PRAGMA_DIAGNOSTIC_POP
+
 #include <boost/interprocess/detail/config_end.hpp>
 
 #endif //#ifndef BOOST_INTERPROCESS_SEGMENT_MANAGER_HPP

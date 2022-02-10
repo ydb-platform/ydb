@@ -19,7 +19,7 @@ namespace {
             }
         }
 
-        TVector<T> Examples; 
+        TVector<T> Examples;
     };
 }
 

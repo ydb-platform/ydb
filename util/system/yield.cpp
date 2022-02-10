@@ -8,7 +8,7 @@
     #include <sched.h>
 #endif
 
-void SchedYield() noexcept { 
+void SchedYield() noexcept {
 #if defined(_unix_)
     sched_yield();
 #else
@@ -16,7 +16,7 @@ void SchedYield() noexcept {
 #endif
 }
 
-void ThreadYield() noexcept { 
+void ThreadYield() noexcept {
 #if defined(_freebsd_)
     pthread_yield();
 #else

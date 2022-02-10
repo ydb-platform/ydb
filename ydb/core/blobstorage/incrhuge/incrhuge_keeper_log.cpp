@@ -79,14 +79,14 @@ namespace NKikimr {
             return record;
         }
 
-        TString TChunkRecordMerger::Serialize(const NKikimrVDiskData::TIncrHugeChunks& record) { 
-            TString data; 
+        TString TChunkRecordMerger::Serialize(const NKikimrVDiskData::TIncrHugeChunks& record) {
+            TString data;
             bool status = record.SerializeToString(&data);
             Y_VERIFY(status);
             return data;
         }
 
-        TString TChunkRecordMerger::Serialize(const TChunkAllocation& record) { 
+        TString TChunkRecordMerger::Serialize(const TChunkAllocation& record) {
             NKikimrVDiskData::TIncrHugeChunks protobuf;
             for (size_t i = 0; i < record.NewChunkIds.size(); ++i) {
                 auto *c = protobuf.AddChunks();
@@ -98,13 +98,13 @@ namespace NKikimr {
             return Serialize(protobuf);
         }
 
-        TString TChunkRecordMerger::Serialize(const TChunkDeletion& record) { 
+        TString TChunkRecordMerger::Serialize(const TChunkDeletion& record) {
             NKikimrVDiskData::TIncrHugeChunks protobuf;
             protobuf.AddDeletedChunks(record.ChunkIdx);
             return Serialize(protobuf);
         }
 
-        TString TChunkRecordMerger::Serialize(const TCompleteChunk& record) { 
+        TString TChunkRecordMerger::Serialize(const TCompleteChunk& record) {
             NKikimrVDiskData::TIncrHugeChunks protobuf;
             auto *c = protobuf.AddChunks();
             c->SetChunkIdx(record.ChunkIdx);
@@ -145,7 +145,7 @@ namespace NKikimr {
             // second, serialize into string
             TStringStream stream;
             deletedItems.Save(&stream);
-            TString bits = stream.Str(); 
+            TString bits = stream.Str();
 
             // choose the best
             if (bits.size() < (size_t)items.ByteSize()) {
@@ -269,14 +269,14 @@ namespace NKikimr {
             return record;
         }
 
-        TString TDeleteRecordMerger::Serialize(const NKikimrVDiskData::TIncrHugeDelete& record) { 
-            TString data; 
+        TString TDeleteRecordMerger::Serialize(const NKikimrVDiskData::TIncrHugeDelete& record) {
+            TString data;
             bool status = record.SerializeToString(&data);
             Y_VERIFY(status);
             return data;
         }
 
-        TString TDeleteRecordMerger::Serialize(const TBlobDeletes& record) { 
+        TString TDeleteRecordMerger::Serialize(const TBlobDeletes& record) {
             NKikimrVDiskData::TIncrHugeDelete protobuf;
             if (record.Owner) {
                 auto *owner = protobuf.AddOwners();
@@ -301,7 +301,7 @@ namespace NKikimr {
             return Serialize(protobuf);
         }
 
-        TString TDeleteRecordMerger::Serialize(const TDeleteChunk& /*record*/) { 
+        TString TDeleteRecordMerger::Serialize(const TDeleteChunk& /*record*/) {
             Y_FAIL("this function should never be called");
         }
 
@@ -329,10 +329,10 @@ namespace NKikimr {
                 TChunkRecordMerger::TCompleteChunk, NKikimrVDiskData::TIncrHugeChunks> Content;
 
             // commit chunks
-            TVector<TChunkIdx> CommitChunks; 
+            TVector<TChunkIdx> CommitChunks;
 
             // delete chunks
-            TVector<TChunkIdx> DeleteChunks; 
+            TVector<TChunkIdx> DeleteChunks;
 
             // callback to invoke upon completion
             std::unique_ptr<IEventCallback> Callback;
@@ -371,9 +371,9 @@ namespace NKikimr {
         // CHUNKS HANDLING LOGIC
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        void TLogger::LogChunkAllocation(TVector<TChunkIdx>&& newChunkIds, TChunkSerNum baseSerNum, 
+        void TLogger::LogChunkAllocation(TVector<TChunkIdx>&& newChunkIds, TChunkSerNum baseSerNum,
                 std::unique_ptr<IEventCallback>&& callback, const TActorContext& ctx) {
-            TVector<TChunkIdx> commitChunks(newChunkIds); 
+            TVector<TChunkIdx> commitChunks(newChunkIds);
             ProcessChunkQueueItem(TChunkQueueItem{
                     TChunkRecordMerger::TChunkAllocation{std::move(newChunkIds), baseSerNum, Keeper.State.CurrentSerNum},
                     std::move(commitChunks),
@@ -390,7 +390,7 @@ namespace NKikimr {
             ProcessChunkQueueItem(TChunkQueueItem{
                     TChunkRecordMerger::TChunkDeletion{chunkIdx, chunkSerNum, numItems},
                     {},
-                    TVector<TChunkIdx>{chunkIdx}, 
+                    TVector<TChunkIdx>{chunkIdx},
                     std::move(callback),
                     IssueChunksStartingPoint,
                     {},
@@ -530,7 +530,7 @@ namespace NKikimr {
         // DELETE RECORDS PROCESSING LOGIC
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        void TLogger::LogBlobDeletes(ui8 owner, ui64 seqNo, TVector<TBlobDeleteLocator>&& deleteLocators, 
+        void TLogger::LogBlobDeletes(ui8 owner, ui64 seqNo, TVector<TBlobDeleteLocator>&& deleteLocators,
                 std::unique_ptr<IEventCallback>&& callback, const TActorContext& ctx) {
             // check that locators are sorted and do not repeat
             Y_VERIFY(std::is_sorted(deleteLocators.begin(), deleteLocators.end()));
@@ -568,7 +568,7 @@ namespace NKikimr {
             }
         }
 
-        void TLogger::LogVirtualBlobDeletes(TVector<TBlobDeleteLocator>&& deleteLocators, const TActorContext& ctx) { 
+        void TLogger::LogVirtualBlobDeletes(TVector<TBlobDeleteLocator>&& deleteLocators, const TActorContext& ctx) {
             // check that locators are sorted and do not repeat
             Y_VERIFY(std::is_sorted(deleteLocators.begin(), deleteLocators.end()));
             Y_VERIFY(std::adjacent_find(deleteLocators.begin(), deleteLocators.end()) == deleteLocators.end());

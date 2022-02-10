@@ -60,7 +60,7 @@ class TLogReader : public TLogReaderBase {
 
     THolder<TDoubleBuffer> Sector;
 
-    THolder<TMap<ui32, TChunkState>> ChunkOwnerMap; 
+    THolder<TMap<ui32, TChunkState>> ChunkOwnerMap;
     ELogReaderState State;
     std::atomic<bool> IsReplied;
 
@@ -82,7 +82,7 @@ class TLogReader : public TLogReaderBase {
     ui64 ResultSize;
     TLogRecordHeader LastRecordHeader;
     ui64 LastRecordHeaderNonce;
-    TString LastRecordData; 
+    TString LastRecordData;
     ui32 LastRecordDataWritePosition;
     ui64 MaxCompleteLsnCyclic;
     ui64 EndSectorIdx;
@@ -93,7 +93,7 @@ class TLogReader : public TLogReaderBase {
     TReqId ReqId;
     TVector<TChunkIdx> ChunksToRead;
     TVector<TChunkIdx>::iterator CurrentChunkToRead;
-    TVector<ui64> BadOffsets; 
+    TVector<ui64> BadOffsets;
     TMutex ExecMutex;
 
     ui32 ErasurePartCount;

@@ -8,7 +8,7 @@ void TKeyValueDelimStringIter::ReadKeyAndValue() {
     TStringBuf currentToken(*DelimIter);
 
     size_t pos = currentToken.find('=');
-    if (pos == TString::npos) { 
+    if (pos == TString::npos) {
         ChunkValue.Clear();
         ChunkKey = currentToken;
     } else {

@@ -2,12 +2,12 @@
 
 #include "range_ops.h"
 
-#include <util/generic/array_ref.h> 
+#include <util/generic/array_ref.h>
 #include <util/system/defaults.h> /* For alloca. */
 
 namespace NStackArray {
     /**
-     * A stack-allocated array. Should be used instead of � variable length 
+     * A stack-allocated array. Should be used instead of � variable length
      * arrays that are not part of C++ standard.
      *
      * Example usage:
@@ -31,7 +31,7 @@ namespace NStackArray {
             NRangeOps::InitializeRange(this->begin(), this->end());
         }
 
-        inline ~TStackArray() { 
+        inline ~TStackArray() {
             NRangeOps::DestroyRange(this->begin(), this->end());
         }
     };

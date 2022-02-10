@@ -179,8 +179,8 @@ private:
     }
 
     TExprNode::TPtr CurNode;
-    TExprNode::TListType::const_iterator CurIt; 
-    TExprNode::TListType::const_iterator EndIt; 
+    TExprNode::TListType::const_iterator CurIt;
+    TExprNode::TListType::const_iterator EndIt;
 };
 
 template<typename TItem>
@@ -427,7 +427,7 @@ protected:
         : TNodeBuilderBase(ctx, pos, getArgFunc)
         , BuildFunc(buildFunc) {}
 
-    TVector<TExprBase> Items; 
+    TVector<TExprBase> Items;
     BuildFuncType BuildFunc;
 
 public:
@@ -479,21 +479,21 @@ public:
 
     template <typename T, typename = std::enable_if_t<!std::is_same<T, TExprBase>::value
         && std::is_same<T, TItem>::value>>
-    TNodeBuilder<TParent, TDerived>& Add(const TVector<T>& list) { 
+    TNodeBuilder<TParent, TDerived>& Add(const TVector<T>& list) {
         for (auto item : list) {
             Items.push_back(item);
         }
         return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
     }
 
-    TNodeBuilder<TParent, TDerived>& Add(const TVector<TExprBase>& list) { 
+    TNodeBuilder<TParent, TDerived>& Add(const TVector<TExprBase>& list) {
         for (auto item : list) {
             Items.push_back(item);
         }
         return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
     }
 
-    TNodeBuilder<TParent, TDerived>& Add(const TExprNode::TListType& list) { 
+    TNodeBuilder<TParent, TDerived>& Add(const TExprNode::TListType& list) {
         for (auto item : list) {
             Items.push_back(TExprBase(item));
         }
@@ -501,20 +501,20 @@ public:
     }
 
     TNodeBuilder<TParent, TDerived>& Add(std::initializer_list<TExprBase> list) {
-        return Add(TVector<TExprBase>(list)); 
+        return Add(TVector<TExprBase>(list));
     }
 };
 
 template<typename TParent>
-class TNodeBuilder<TParent, TVector<TExprBase>> : public TListBuilderBase<TParent, TVector<TExprBase>, TExprBase> { 
+class TNodeBuilder<TParent, TVector<TExprBase>> : public TListBuilderBase<TParent, TVector<TExprBase>, TExprBase> {
 public:
-    typedef std::function<TParent& (const TVector<TExprBase>&)> BuildFuncType; 
+    typedef std::function<TParent& (const TVector<TExprBase>&)> BuildFuncType;
 
     TNodeBuilder<TParent, TVector<TExprBase>>(TExprContext& ctx, TPositionHandle pos, BuildFuncType buildFunc,
         TNodeBuilderBase::GetArgFuncType getArgFunc)
-        : TListBuilderBase<TParent, TVector<TExprBase>, TExprBase>(ctx, pos, buildFunc, getArgFunc) {} 
+        : TListBuilderBase<TParent, TVector<TExprBase>, TExprBase>(ctx, pos, buildFunc, getArgFunc) {}
 
-    TVector<TExprBase> DoBuild() { 
+    TVector<TExprBase> DoBuild() {
         return this->Items;
     }
 };
@@ -525,12 +525,12 @@ protected:
     TFreeArgCallableBuilderBase(TExprContext& ctx, TPositionHandle pos, GetArgFuncType getArgFunc)
         : TNodeBuilderBase(ctx, pos, getArgFunc) {}
 
-    TVector<TExprBase> FreeArgsHolder; 
+    TVector<TExprBase> FreeArgsHolder;
 
 public:
-    TNodeBuilder<TNodeBuilder<TParent, TDerived>, TVector<TExprBase>> FreeArgs() { 
-        return TNodeBuilder<TNodeBuilder<TParent, TDerived>, TVector<TExprBase>>(this->Ctx, this->Pos, 
-            [this] (const TVector<TExprBase>& freeArgs) mutable -> TNodeBuilder<TParent, TDerived>& { 
+    TNodeBuilder<TNodeBuilder<TParent, TDerived>, TVector<TExprBase>> FreeArgs() {
+        return TNodeBuilder<TNodeBuilder<TParent, TDerived>, TVector<TExprBase>>(this->Ctx, this->Pos,
+            [this] (const TVector<TExprBase>& freeArgs) mutable -> TNodeBuilder<TParent, TDerived>& {
                 FreeArgsHolder = freeArgs;
                 return *static_cast<TNodeBuilder<TParent, TDerived>*>(this);
             }, GetArgFunc);

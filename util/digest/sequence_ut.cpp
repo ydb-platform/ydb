@@ -16,18 +16,18 @@ class TRangeHashTest: public TTestBase {
 private:
     inline void TestStrokaInt() {
         const size_t canonicalHash = static_cast<size_t>(ULL(12727184940294366172));
-        UNIT_ASSERT_EQUAL(canonicalHash, TRangeHash<>()(TString("12345"))); 
+        UNIT_ASSERT_EQUAL(canonicalHash, TRangeHash<>()(TString("12345")));
     }
 
     inline void TestIntVector() {
         const size_t canonicalHash = static_cast<size_t>(ULL(1351128487744230578));
-        TVector<int> testVec = {1, 2, 4, 3}; 
+        TVector<int> testVec = {1, 2, 4, 3};
         UNIT_ASSERT_EQUAL(canonicalHash, TRangeHash<>()(testVec));
     }
 
     inline void TestOneElement() {
         const int testVal = 42;
-        TVector<int> testVec = {testVal}; 
+        TVector<int> testVec = {testVal};
         UNIT_ASSERT_UNEQUAL(THash<int>()(testVal), TRangeHash<>()(testVec));
     }
 
@@ -38,8 +38,8 @@ private:
     }
 
     inline void TestCollectionIndependancy() {
-        TVector<char> testVec = {'a', 'b', 'c'}; 
-        TString testStroka = "abc"; 
+        TVector<char> testVec = {'a', 'b', 'c'};
+        TString testStroka = "abc";
         UNIT_ASSERT_EQUAL(TRangeHash<>()(testVec), TRangeHash<>()(testStroka));
     }
 };

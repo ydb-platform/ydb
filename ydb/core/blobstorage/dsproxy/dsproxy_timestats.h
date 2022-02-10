@@ -24,7 +24,7 @@ class TBlobStorageGroupProxyTimeStats {
         };
 
         TDuration& AggrTime;
-        TDeque<TQueueItem> Queue; 
+        TDeque<TQueueItem> Queue;
 
     public:
         TTimeSeries(TDuration& aggrTime)
@@ -44,14 +44,14 @@ class TBlobStorageGroupProxyTimeStats {
 
         void MergeIn(TTimeSeries&& other) {
             if (!other.Queue.empty()) {
-                TDeque<TQueueItem> res; 
+                TDeque<TQueueItem> res;
                 std::set_union(Queue.begin(), Queue.end(), other.Queue.begin(), other.Queue.end(),
                         std::back_inserter(res), TCompare());
                 Queue.swap(res);
             }
         }
 
-        const TDeque<TQueueItem>& GetVector() const { 
+        const TDeque<TQueueItem>& GetVector() const {
             return Queue;
         }
     };
@@ -79,8 +79,8 @@ private:
     TDuration AggrTime;
     double Percentile;
     bool Enabled;
-    TVector<std::pair<ui32, TTimeSeries<TPutInfo>>> Puts; 
-    TVector<std::pair<ui32, TTimeSeries<THugePutInfo>>> HugePuts; 
+    TVector<std::pair<ui32, TTimeSeries<TPutInfo>>> Puts;
+    TVector<std::pair<ui32, TTimeSeries<THugePutInfo>>> HugePuts;
 
 public:
     TBlobStorageGroupProxyTimeStats(TDuration aggrTime = TDuration::Seconds(5))
@@ -97,17 +97,17 @@ public:
     }
 
     void ApplyPut(ui32 size, const NKikimrBlobStorage::TExecTimeStats& execTimeStats) {
-        TInstant submitTimestamp = TInstant::MicroSeconds(execTimeStats.GetSubmitTimestamp()); 
+        TInstant submitTimestamp = TInstant::MicroSeconds(execTimeStats.GetSubmitTimestamp());
         TInstant now = TAppData::TimeProvider->Now();
         TDuration rtt = now - submitTimestamp;
 
         THugePutInfo info;
-        info.InSenderQueue = TDuration::MicroSeconds(execTimeStats.GetInSenderQueue()); 
-        info.Total = TDuration::MicroSeconds(execTimeStats.GetTotal()); 
-        info.InQueue = TDuration::MicroSeconds(execTimeStats.GetInQueue()); 
-        info.Execution = TDuration::MicroSeconds(execTimeStats.GetExecution()); 
+        info.InSenderQueue = TDuration::MicroSeconds(execTimeStats.GetInSenderQueue());
+        info.Total = TDuration::MicroSeconds(execTimeStats.GetTotal());
+        info.InQueue = TDuration::MicroSeconds(execTimeStats.GetInQueue());
+        info.Execution = TDuration::MicroSeconds(execTimeStats.GetExecution());
         info.RTT = rtt;
-        info.HugeWriteTime = TDuration::MicroSeconds(execTimeStats.GetHugeWriteTime()); 
+        info.HugeWriteTime = TDuration::MicroSeconds(execTimeStats.GetHugeWriteTime());
 
         if (execTimeStats.HasHugeWriteTime()) {
             auto it = std::upper_bound(HugePuts.begin(), HugePuts.end(), size, TCompareTimeSeries<TTimeSeries<THugePutInfo>>());
@@ -145,7 +145,7 @@ public:
                         series.Update(now); \
                         const auto& v = series.GetVector(); \
                         using T = decltype(std::declval<std::decay<decltype(v)>::type::value_type::second_type>().NAME); \
-                        TVector<T> values; \ 
+                        TVector<T> values; \
                         values.reserve(v.size()); \
                         for (const auto& item : v) { \
                             values.push_back(item.second.NAME); \
@@ -265,7 +265,7 @@ public:
     void Submit(const TCgiParameters& cgi) {
         Enabled = cgi.Has("enabled");
         if (cgi.Has("aggrTime")) {
-            TString param = cgi.Get("aggrTime"); 
+            TString param = cgi.Get("aggrTime");
             TDurationParser parser;
             if (parser.ParsePart(param.data(), param.size())) {
                 AggrTime = parser.GetResult(AggrTime);

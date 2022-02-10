@@ -56,7 +56,7 @@ private:
     inline void TestRe() {
         for (const auto& regTest : REGTEST_DATA) {
             memset(Matches, 0, sizeof(Matches));
-            TString result; 
+            TString result;
 
             TRegExBase re(regTest.Regexp, regTest.CompileOptions);
             if (re.Exec(regTest.Data, Matches, regTest.RunOptions) == 0) {
@@ -78,13 +78,13 @@ private:
         for (const auto& substTest : SUBSTTEST_DATA) {
             TRegExSubst subst(substTest.Regexp, substTest.CompileOptions);
             subst.ParseReplacement(substTest.Replacement);
-            TString result = subst.Replace(substTest.Data, substTest.RunOptions); 
+            TString result = subst.Replace(substTest.Data, substTest.RunOptions);
             UNIT_ASSERT_VALUES_EQUAL(result, substTest.Result);
             TRegExSubst substCopy = subst;
             subst.ParseReplacement(substTest.Replacement2);
-            TString newResult = subst.Replace(substTest.Data, substTest.RunOptions); 
+            TString newResult = subst.Replace(substTest.Data, substTest.RunOptions);
             UNIT_ASSERT_VALUES_UNEQUAL(newResult.c_str(), result.c_str());
-            TString copyResult = substCopy.Replace(substTest.Data, substTest.RunOptions); 
+            TString copyResult = substCopy.Replace(substTest.Data, substTest.RunOptions);
             UNIT_ASSERT_VALUES_EQUAL(copyResult, result);
             substCopy = subst;
             copyResult = substCopy.Replace(substTest.Data, substTest.RunOptions);

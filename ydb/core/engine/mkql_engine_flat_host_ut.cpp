@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
                 UNIT_ASSERT(row.IsReady());
                 UNIT_ASSERT(row.IsValid());
                 ui64 value = row.GetValue<Schema::TestTable::Value>();
-                TString name = row.GetValue<Schema::TestTable::Name>(); 
+                TString name = row.GetValue<Schema::TestTable::Name>();
                 bool boolValue = row.GetValue<Schema::TestTable::BoolValue>();
                 UNIT_ASSERT(value == i);
                 UNIT_ASSERT(ToString(value) == name);

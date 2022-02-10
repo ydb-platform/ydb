@@ -14,7 +14,7 @@ namespace NBitOps {
     namespace NPrivate {
         template <unsigned N, typename T>
         struct TClp2Helper {
-            static Y_FORCE_INLINE T Calc(T t) noexcept { 
+            static Y_FORCE_INLINE T Calc(T t) noexcept {
                 const T prev = TClp2Helper<N / 2, T>::Calc(t);
 
                 return prev | (prev >> N);
@@ -23,7 +23,7 @@ namespace NBitOps {
 
         template <typename T>
         struct TClp2Helper<0u, T> {
-            static Y_FORCE_INLINE T Calc(T t) noexcept { 
+            static Y_FORCE_INLINE T Calc(T t) noexcept {
                 return t - 1;
             }
         };
@@ -58,24 +58,24 @@ namespace NBitOps {
         }
 
 #if defined(__GNUC__)
-        inline unsigned GetValueBitCountImpl(unsigned int value) noexcept { 
+        inline unsigned GetValueBitCountImpl(unsigned int value) noexcept {
             Y_ASSERT(value); // because __builtin_clz* have undefined result for zero.
             return std::numeric_limits<unsigned int>::digits - __builtin_clz(value);
         }
 
-        inline unsigned GetValueBitCountImpl(unsigned long value) noexcept { 
+        inline unsigned GetValueBitCountImpl(unsigned long value) noexcept {
             Y_ASSERT(value); // because __builtin_clz* have undefined result for zero.
             return std::numeric_limits<unsigned long>::digits - __builtin_clzl(value);
         }
 
-        inline unsigned GetValueBitCountImpl(unsigned long long value) noexcept { 
+        inline unsigned GetValueBitCountImpl(unsigned long long value) noexcept {
             Y_ASSERT(value); // because __builtin_clz* have undefined result for zero.
             return std::numeric_limits<unsigned long long>::digits - __builtin_clzll(value);
         }
 #else
         /// Stupid realization for non-GCC. Can use BSR from x86 instructions set.
         template <typename T>
-        inline unsigned GetValueBitCountImpl(T value) noexcept { 
+        inline unsigned GetValueBitCountImpl(T value) noexcept {
             Y_ASSERT(value);     // because __builtin_clz* have undefined result for zero.
             unsigned result = 1; // result == 0 - impossible value, see Y_ASSERT().
             value >>= 1;
@@ -89,24 +89,24 @@ namespace NBitOps {
 #endif
 
 #if defined(__GNUC__)
-        inline unsigned CountTrailingZeroBitsImpl(unsigned int value) noexcept { 
+        inline unsigned CountTrailingZeroBitsImpl(unsigned int value) noexcept {
             Y_ASSERT(value); // because __builtin_ctz* have undefined result for zero.
             return __builtin_ctz(value);
         }
 
-        inline unsigned CountTrailingZeroBitsImpl(unsigned long value) noexcept { 
+        inline unsigned CountTrailingZeroBitsImpl(unsigned long value) noexcept {
             Y_ASSERT(value); // because __builtin_ctz* have undefined result for zero.
             return __builtin_ctzl(value);
         }
 
-        inline unsigned CountTrailingZeroBitsImpl(unsigned long long value) noexcept { 
+        inline unsigned CountTrailingZeroBitsImpl(unsigned long long value) noexcept {
             Y_ASSERT(value); // because __builtin_ctz* have undefined result for zero.
             return __builtin_ctzll(value);
         }
 #else
         /// Stupid realization for non-GCC. Can use BSF from x86 instructions set.
         template <typename T>
-        inline unsigned CountTrailingZeroBitsImpl(T value) noexcept { 
+        inline unsigned CountTrailingZeroBitsImpl(T value) noexcept {
             Y_ASSERT(value); // because __builtin_ctz* have undefined result for zero.
             unsigned result = 0;
             while (!(value & 1)) {
@@ -206,7 +206,7 @@ namespace NBitOps {
  * Result is undefined for `t == 0`.
  */
 template <typename T>
-static inline T FastClp2(T t) noexcept { 
+static inline T FastClp2(T t) noexcept {
     Y_ASSERT(t > 0);
     using TCvt = typename ::TUnsignedInts::template TSelectBy<TSizeOfPredicate<sizeof(T)>::template TResult>::type;
     return 1 + ::NBitOps::NPrivate::TClp2Helper<sizeof(TCvt) * 4, T>::Calc(static_cast<TCvt>(t));
@@ -224,7 +224,7 @@ Y_CONST_FUNCTION constexpr bool IsPowerOf2(T v) noexcept {
  * Returns the number of leading 0-bits in `value`, starting at the most significant bit position.
  */
 template <typename T>
-static inline unsigned GetValueBitCount(T value) noexcept { 
+static inline unsigned GetValueBitCount(T value) noexcept {
     Y_ASSERT(value > 0);
     using TCvt = typename ::TUnsignedInts::template TSelectBy<TSizeOfPredicate<sizeof(T)>::template TResult>::type;
     return ::NBitOps::NPrivate::GetValueBitCountImpl(static_cast<TCvt>(value));
@@ -234,7 +234,7 @@ static inline unsigned GetValueBitCount(T value) noexcept {
  * Returns the number of trailing 0-bits in `value`, starting at the least significant bit position
  */
 template <typename T>
-static inline unsigned CountTrailingZeroBits(T value) noexcept { 
+static inline unsigned CountTrailingZeroBits(T value) noexcept {
     Y_ASSERT(value > 0);
     using TCvt = typename ::TUnsignedInts::template TSelectBy<TSizeOfPredicate<sizeof(T)>::template TResult>::type;
     return ::NBitOps::NPrivate::CountTrailingZeroBitsImpl(static_cast<TCvt>(value));

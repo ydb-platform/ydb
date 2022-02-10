@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 
 template <class TChar>
@@ -49,18 +49,18 @@ static inline TBasicString<TChar> EscapeC(const TChar* str) {
     return EscapeC(str, std::char_traits<TChar>::length(str));
 }
 
-TString& EscapeC(const TStringBuf str, TString& res); 
-TUtf16String& EscapeC(const TWtringBuf str, TUtf16String& res); 
+TString& EscapeC(const TStringBuf str, TString& res);
+TUtf16String& EscapeC(const TWtringBuf str, TUtf16String& res);
 
 // these two need to be methods, because of TBasicString::Quote implementation
-TString EscapeC(const TString& str); 
-TUtf16String EscapeC(const TUtf16String& str); 
+TString EscapeC(const TString& str);
+TUtf16String EscapeC(const TUtf16String& str);
 
-TString& UnescapeC(const TStringBuf str, TString& res); 
-TUtf16String& UnescapeC(const TWtringBuf str, TUtf16String& res); 
+TString& UnescapeC(const TStringBuf str, TString& res);
+TUtf16String& UnescapeC(const TWtringBuf str, TUtf16String& res);
 
-TString UnescapeC(const TStringBuf str); 
-TUtf16String UnescapeC(const TWtringBuf wtr); 
+TString UnescapeC(const TStringBuf str);
+TUtf16String UnescapeC(const TWtringBuf wtr);
 
 /// Returns number of chars in escape sequence.
 ///   - 0, if begin >= end

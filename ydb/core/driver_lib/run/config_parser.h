@@ -31,10 +31,10 @@ protected:
         ui32 LogLevel; // log settings
         ui32 LogSamplingLevel; // log settings
         ui32 LogSamplingRate; // log settings
-        TString LogFormat;// log settings 
-        TString ClusterName; // log settings 
-        TString UDFsDir;  // directory to recurcively load UDFs from 
-        TVector<TString> UDFsPaths; // fine tunned UDFs list to load 
+        TString LogFormat;// log settings
+        TString ClusterName; // log settings
+        TString UDFsDir;  // directory to recurcively load UDFs from
+        TVector<TString> UDFsPaths; // fine tunned UDFs list to load
 
         TGlobalOpts();
     };
@@ -45,13 +45,13 @@ protected:
         ui32 BusProxyPort;
         NBus::TBusQueueConfig ProxyBusQueueConfig;
         NBus::TBusServerSessionConfig ProxyBusSessionConfig;
-        TVector<ui64> ProxyBindToProxy; 
+        TVector<ui64> ProxyBindToProxy;
         ui32 MonitoringPort;
         TString MonitoringAddress;
         ui32 MonitoringThreads;
-        TString RestartsCountFile; 
+        TString RestartsCountFile;
         bool StartTracingBusProxy;
-        TString TracePath; 
+        TString TracePath;
         size_t CompileInflightLimit; // MiniKQLCompileService
 
         TRunOpts();

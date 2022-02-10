@@ -61,7 +61,7 @@ struct TRowResultInfo {
     TStructType* RowType;
     TSmallVec<ItemInfo> ItemInfos;
 
-    TRowResultInfo(const TStructLiteral* columnIds, const THashMap<ui32, TSysTables::TTableColumnInfo>& columns, 
+    TRowResultInfo(const TStructLiteral* columnIds, const THashMap<ui32, TSysTables::TTableColumnInfo>& columns,
                    TOptionalType* returnType)
     {
         ResultType = AS_TYPE(TOptionalType, returnType);
@@ -79,7 +79,7 @@ struct TRowResultInfo {
         }
     }
 
-    NUdf::TUnboxedValue CreateResult(TVector<TCell>&& inRow, const THolderFactory& holderFactory) const { 
+    NUdf::TUnboxedValue CreateResult(TVector<TCell>&& inRow, const THolderFactory& holderFactory) const {
         if (inRow.empty()) {
             return NUdf::TUnboxedValuePod();
         }
@@ -106,16 +106,16 @@ struct TRangeResultInfo {
     TSmallVec<ItemInfo> ItemInfos;
     mutable ui64 Bytes = 0;
     TDefaultListRepresentation Rows;
-    TString FirstKey; 
+    TString FirstKey;
 
     // optimisation: reuse vectors
-    TVector<TCell> TmpRow; 
-    TVector<NScheme::TTypeId> TmpTypes; 
+    TVector<TCell> TmpRow;
+    TVector<NScheme::TTypeId> TmpTypes;
 
     TListType* RowsListType() const { return AS_TYPE(TListType, ResultType->GetMemberType(0)); }
     TDataType* TruncType() const { return AS_TYPE(TDataType, ResultType->GetMemberType(1)); }
 
-    TRangeResultInfo(const TStructLiteral* columnIds, const THashMap<ui32, TSysTables::TTableColumnInfo>& columns, 
+    TRangeResultInfo(const TStructLiteral* columnIds, const THashMap<ui32, TSysTables::TTableColumnInfo>& columns,
                      TStructType* returnType)
     {
         ResultType = AS_TYPE(TStructType, returnType);
@@ -137,18 +137,18 @@ struct TRangeResultInfo {
         }
     }
 
-    static TString Serialize(const TVector<TCell>& row, const TVector<NScheme::TTypeId>& types) { 
+    static TString Serialize(const TVector<TCell>& row, const TVector<NScheme::TTypeId>& types) {
         Y_VERIFY(row.size() == types.size());
 
         ui32 count = row.size();
-        TString str((const char*)&count, sizeof(ui32)); 
+        TString str((const char*)&count, sizeof(ui32));
         str.append((const char*)&types[0], count * sizeof(NScheme::TTypeId));
 
         TConstArrayRef<TCell> array(&row[0], row.size());
         return str + TSerializedCellVec::Serialize(array);
     }
 
-    void AppendRow(const TVector<TCell>& inRow, const THolderFactory& holderFactory) { 
+    void AppendRow(const TVector<TCell>& inRow, const THolderFactory& holderFactory) {
         if (inRow.empty())
             return;
 
@@ -248,8 +248,8 @@ public:
 private:
     const TTableId TableId;
     TDataShard* Self;
-    THashMap<ui32, TSysTables::TTableColumnInfo> Columns; 
-    TVector<ui32> KeyTypes; 
+    THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
+    TVector<ui32> KeyTypes;
 };
 
 
@@ -611,7 +611,7 @@ TEngineBay::TSizes TEngineBay::CalcSizes(bool needsTotalKeysSize) const {
     Y_VERIFY(EngineHost);
 
     TSizes outSizes;
-    TVector<const TKeyDesc*> readKeys; 
+    TVector<const TKeyDesc*> readKeys;
     readKeys.reserve(Info.ReadsCount);
     for (const TValidatedKey& validKey : Info.Keys) {
         if (validKey.IsWrite)

@@ -21,7 +21,7 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
 
     const TActorId Owner;
     TIntrusivePtr<TTabletStorageInfo> TabletStorageInfo;
-    TVector<TRequestInfo> Requests; 
+    TVector<TRequestInfo> Requests;
     ui32 FinishedRequests;
     ui32 ErrorCount;
     ui32 Generation;
@@ -42,7 +42,7 @@ class TTabletReqDelete : public TActorBootstrapped<TTabletReqDelete> {
     }
 
     void GenerateRequests() {
-        THashSet<std::pair<ui32, ui32>> groupChannels; 
+        THashSet<std::pair<ui32, ui32>> groupChannels;
         for (const TTabletChannelInfo& channelInfo : TabletStorageInfo->Channels) {
             for (const TTabletChannelInfo::THistoryEntry& historyInfo : channelInfo.History) {
                 if (groupChannels.emplace(historyInfo.GroupID, channelInfo.Channel).second) {

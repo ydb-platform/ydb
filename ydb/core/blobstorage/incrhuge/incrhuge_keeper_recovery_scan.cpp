@@ -42,7 +42,7 @@ namespace NKikimr {
                         State.PDiskParams->OwnerRound, ChunkIdx, offset, size, NPriRead::HullLoad, nullptr));
             }
 
-            void SendReplyAndDie(NKikimrProto::EReplyStatus status, TVector<TBlobIndexRecord>&& index, bool indexValid, 
+            void SendReplyAndDie(NKikimrProto::EReplyStatus status, TVector<TBlobIndexRecord>&& index, bool indexValid,
                     const TActorContext& ctx) {
                 auto result = std::make_unique<TEvIncrHugeScanResult>();
                 result->Status = status;
@@ -73,7 +73,7 @@ namespace NKikimr {
 
             bool ParseIndex(NPDisk::TEvChunkReadResult& msg, const TActorContext& ctx) {
                 // try to get index
-                TVector<TBlobIndexRecord> index; 
+                TVector<TBlobIndexRecord> index;
                 if (!GetIndex(msg.Data, 0, index)) {
                     return false;
                 }
@@ -83,7 +83,7 @@ namespace NKikimr {
                 return true;
             }
 
-            bool GetIndex(TBufferWithGaps& data, ui32 offset, TVector<TBlobIndexRecord>& index) { 
+            bool GetIndex(TBufferWithGaps& data, ui32 offset, TVector<TBlobIndexRecord>& index) {
                 // check that we can read header
                 if (!data.IsReadable(offset, sizeof(TBlobIndexHeader))) {
                     return false;
@@ -112,7 +112,7 @@ namespace NKikimr {
             }
 
             bool ParseWholeChunk(NPDisk::TEvChunkReadResult& msg, const TActorContext& ctx) {
-                TVector<TBlobIndexRecord> index; 
+                TVector<TBlobIndexRecord> index;
 
                 for (ui32 block = 0; block < State.BlocksInDataSection; ) {
                     ui32 offset = block * State.BlockSize;
@@ -146,7 +146,7 @@ namespace NKikimr {
                 }
 
                 // try to get stored index and check if it the same as computed one
-                TVector<TBlobIndexRecord> storedIndex; 
+                TVector<TBlobIndexRecord> storedIndex;
                 const bool indexValid = GetIndex(msg.Data, State.BlocksInDataSection * State.BlockSize, storedIndex) &&
                     index == storedIndex;
 

@@ -44,7 +44,7 @@ public:
     void OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActorContext &ctx);                 // notification about log commit - could send GC to blob storage
     void OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);             // notification on any garbage collection results
     void ApplyLogEntry(TGCLogEntry &entry);                                                      // apply one log entry, used during recovery and also from WriteToLog
-    void ApplyLogSnapshot(TGCLogEntry &snapshot, const  TVector<std::pair<ui32, ui64>> &barriers); 
+    void ApplyLogSnapshot(TGCLogEntry &snapshot, const  TVector<std::pair<ui32, ui64>> &barriers);
     void HoldBarrier(ui32 step);                                // holds GC on no more than this step for channels specified
     void ReleaseBarrier(ui32 step);
     ui32 GetActiveGcBarrier();
@@ -80,7 +80,7 @@ protected:
     NPageCollection::TSlicer Slicer;
 
     struct TChannelInfo {
-        TMap<TGCTime, TGCBlobDelta> CommittedDelta; // we don't really need per-step map, what we really need is distinction b/w sent and not-yet-sent idsets 
+        TMap<TGCTime, TGCBlobDelta> CommittedDelta; // we don't really need per-step map, what we really need is distinction b/w sent and not-yet-sent idsets
         TGCTime CollectSent;
         TGCTime KnownGcBarrier;
         TGCTime CommitedGcBarrier;
@@ -90,7 +90,7 @@ protected:
         inline TChannelInfo();
         void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
         void SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& executor);
-        void SendCollectGarbageEntry(const TActorContext &ctx, TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&notKeep, ui64 tabletid, ui32 channel, ui32 bsgroup, ui32 generation); 
+        void SendCollectGarbageEntry(const TActorContext &ctx, TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&notKeep, ui64 tabletid, ui32 channel, ui32 bsgroup, ui32 generation);
         void OnCollectGarbageSuccess();
         void OnCollectGarbageFailure();
     };
@@ -98,7 +98,7 @@ protected:
     ui32 SnapshotStep;
     ui32 PrevSnapshotStep;
     ui32 ConfirmedOnSendStep;
-    THashMap<ui32, TChannelInfo> ChannelInfo; 
+    THashMap<ui32, TChannelInfo> ChannelInfo;
     TMap<TGCTime, TGCLogEntry> UncommittedDeltaLog;
     TSet<TGCTime> HoldBarriersSet;
 
@@ -106,12 +106,12 @@ protected:
 
     void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
     void SendCollectGarbage(const TActorContext& executor);
-    static inline void MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source); 
-    static inline void MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source); 
-    static inline TVector<TLogoBlobID>* CreateVector(const TVector<TLogoBlobID>& source); 
+    static inline void MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source);
+    static inline void MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source);
+    static inline TVector<TLogoBlobID>* CreateVector(const TVector<TLogoBlobID>& source);
 };
 
-void DeduplicateGCKeepVectors(TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, ui32 barrierGen, ui32 barrierStep); 
+void DeduplicateGCKeepVectors(TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, ui32 barrierGen, ui32 barrierStep);
 
 }
 }

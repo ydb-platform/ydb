@@ -2,9 +2,9 @@
 
 #include <util/stream/str.h>
 
-TString IndentText(TStringBuf text, TStringBuf indent) { 
+TString IndentText(TStringBuf text, TStringBuf indent) {
     if (text.empty())
-        return TString(); 
+        return TString();
 
     TStringStream ss;
     ss.Reserve(text.size() + 20);

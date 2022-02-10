@@ -28,7 +28,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
 
     TAutoPtr<TEvBlobStorage::TEvRangeResult> Reply;
 
-    TMap<TLogoBlobID, TBlobStatusTracker> BlobStatus; 
+    TMap<TLogoBlobID, TBlobStatusTracker> BlobStatus;
     TBlobStorageGroupInfo::TGroupVDisks FailedDisks;
 
     ui32 NumVGetsPending = 0;
@@ -42,7 +42,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
             , RequiredToBePresent(requiredToBePresent)
         {}
     };
-    TVector<TBlobQueryItem> BlobsToGet; 
+    TVector<TBlobQueryItem> BlobsToGet;
 
     template<typename TPtr>
     void SendReply(TPtr& reply) {
@@ -259,7 +259,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         Become(&TThis::StateGet);
     }
 
-    TString DumpBlobsToGet() const { 
+    TString DumpBlobsToGet() const {
         TStringStream str("[");
         for (ui32 i = 0; i < BlobsToGet.size(); ++i) {
             str << (i ? " " : "")

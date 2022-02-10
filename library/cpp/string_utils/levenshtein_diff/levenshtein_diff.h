@@ -39,7 +39,7 @@ namespace NLevenshtein {
         }
     }
 
-    using TEditChain = TVector<EEditMoveType>; 
+    using TEditChain = TVector<EEditMoveType>;
 
     template <typename TArgType>
     struct TWeightOneUnaryGetter {
@@ -139,7 +139,7 @@ namespace NLevenshtein {
         }
     }
 
-    template <class TStringType> 
+    template <class TStringType>
     size_t Distance(const TStringType& str1, const TStringType& str2) {
         TEditChain editChain;
         GetEditChain(str1, str2, editChain);
@@ -170,8 +170,8 @@ namespace NLevenshtein {
         }
     };
 
-    template <class TStringType> 
-    void GetStringReplacements(const TStringType& str1, const TStringType& str2, TVector<TReplacement>& res) { 
+    template <class TStringType>
+    void GetStringReplacements(const TStringType& str1, const TStringType& str2, TVector<TReplacement>& res) {
         TEditChain editChain;
         GetEditChain(str1, str2, editChain);
         editChain.push_back(EMT_SPECIAL);

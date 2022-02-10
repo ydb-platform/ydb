@@ -16,10 +16,10 @@ struct TAppParsedOpts {
 public:
     const size_t Size;
 protected:
-    TVector<TString> NamesStrings; 
-    TVector<const char*> Names; 
-    TVector<TVector<TTabletPercentileCounter::TRangeDef>> Ranges; 
-    TVector<TTabletPercentileCounter::TRangeDef> AppGlobalRanges; 
+    TVector<TString> NamesStrings;
+    TVector<const char*> Names;
+    TVector<TVector<TTabletPercentileCounter::TRangeDef>> Ranges;
+    TVector<TTabletPercentileCounter::TRangeDef> AppGlobalRanges;
     TVector<bool> Integral;
 public:
     explicit TAppParsedOpts(const size_t diff = 0)
@@ -57,7 +57,7 @@ public:
         }
 
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
-        for (const TString& s : NamesStrings) { 
+        for (const TString& s : NamesStrings) {
             Names.push_back(s.empty() ? nullptr : s.c_str());
         }
 
@@ -72,7 +72,7 @@ public:
         return Names.begin();
     }
 
-    virtual const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const 
+    virtual const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const
     {
         Y_VERIFY(idx < Size);
         if (!Ranges[idx].empty()) {
@@ -90,17 +90,17 @@ public:
     }
 
 protected:
-    TString GetFilePrefix(const NProtoBuf::FileDescriptor* desc) { 
+    TString GetFilePrefix(const NProtoBuf::FileDescriptor* desc) {
         if (desc->options().HasExtension(TabletTypeName)) {
             return desc->options().GetExtension(TabletTypeName) + "/";
         } else {
-            return TString(); 
+            return TString();
         }
     }
 
-    TVector<TTabletPercentileCounter::TRangeDef> ParseRanges(const TCounterOptions& co) 
+    TVector<TTabletPercentileCounter::TRangeDef> ParseRanges(const TCounterOptions& co)
     {
-        TVector<TTabletPercentileCounter::TRangeDef> ranges; 
+        TVector<TTabletPercentileCounter::TRangeDef> ranges;
         ranges.reserve(co.RangesSize());
         for (size_t j = 0; j < co.RangesSize(); j++) {
             const TRange& r = co.GetRanges(j);
@@ -126,7 +126,7 @@ private:
     using TBase::Ranges;
     using TBase::Integral;
     using TBase::AppGlobalRanges;
-    TVector<TTabletPercentileCounter::TRangeDef> TxGlobalRanges; 
+    TVector<TTabletPercentileCounter::TRangeDef> TxGlobalRanges;
 public:
     TParsedOpts()
         : TAppParsedOpts<AppCountersDesc>(TxCountersDesc()->value_count() * TxTypesDesc()->value_count())
@@ -146,7 +146,7 @@ public:
             Y_VERIFY(tt->options().HasExtension(TxTypeOpts), "tx type '%s' number (%d) is missing TxTypeOpts",
                     tt->full_name().c_str(), txType);
             const TTxTypeOptions& tto = tt->options().GetExtension(TxTypeOpts);
-            TString txPrefix = tto.GetName() + "/"; 
+            TString txPrefix = tto.GetName() + "/";
             for (int i = 0; i < txDesc->value_count(); i++) {
                 const NProtoBuf::EnumValueDescriptor* v = txDesc->value(i);
                 Y_VERIFY(v->number() == v->index(), "counter '%s' number (%d) != index (%d)",
@@ -160,7 +160,7 @@ public:
                 const TCounterOptions& co = v->options().GetExtension(CounterOpts);
                 Y_VERIFY(!co.GetName().empty(), "counter '%s' number (%d) has an empty name",
                         v->full_name().c_str(), v->number());
-                TVector<TTabletPercentileCounter::TRangeDef> ranges = TBase::ParseRanges(co); 
+                TVector<TTabletPercentileCounter::TRangeDef> ranges = TBase::ParseRanges(co);
                 NamesStrings.push_back(TBase::GetFilePrefix(typesDesc->file()) + txPrefix + co.GetName());
                 Ranges.push_back(TBase::ParseRanges(co));
                 Integral.push_back(co.GetIntegral());
@@ -179,7 +179,7 @@ public:
     virtual ~TParsedOpts()
     {}
 
-    virtual const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const 
+    virtual const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const
     {
         Y_VERIFY(idx < Size);
         if (!Ranges[idx].empty()) {
@@ -207,7 +207,7 @@ struct TParsedOptsPair {
 private:
     T1 Opts1;
     T2 Opts2;
-    TVector<const char*> Names; 
+    TVector<const char*> Names;
 public:
     const size_t Size;
 public:
@@ -230,7 +230,7 @@ public:
         return Names.begin();
     }
 
-    const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const 
+    const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const
     {
         Y_VERIFY(idx < Size);
         if (idx < Opts1.Size)
@@ -267,12 +267,12 @@ struct TLabeledCounterParsedOpts {
 public:
     const size_t Size;
 protected:
-    TVector<TString> NamesStrings; 
-    TVector<const char*> Names; 
-    TVector<ui8> AggregateFuncs; 
-    TVector<ui8> Types; 
-    TVector<TString> GroupNamesStrings; 
-    TVector<const char*> GroupNames; 
+    TVector<TString> NamesStrings;
+    TVector<const char*> Names;
+    TVector<ui8> AggregateFuncs;
+    TVector<ui8> Types;
+    TVector<TString> GroupNamesStrings;
+    TVector<const char*> GroupNames;
 public:
     explicit TLabeledCounterParsedOpts()
         : Size(LabeledCountersDesc()->value_count())
@@ -296,7 +296,7 @@ public:
         }
 
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase
-        for (const TString& s : NamesStrings) { 
+        for (const TString& s : NamesStrings) {
             Names.push_back(s.data());
         }
 
@@ -309,7 +309,7 @@ public:
             GroupNamesStrings.push_back(gn.GetNames(i));
         }
 
-        for (const TString& s : GroupNamesStrings) { 
+        for (const TString& s : GroupNamesStrings) {
             GroupNames.push_back(s.data());
         }
     }
@@ -342,11 +342,11 @@ public:
     }
 
 protected:
-    TString GetFilePrefix(const NProtoBuf::FileDescriptor* desc) { 
+    TString GetFilePrefix(const NProtoBuf::FileDescriptor* desc) {
         if (desc->options().HasExtension(TabletTypeName)) {
             return desc->options().GetExtension(TabletTypeName) + "/";
         } else {
-            return TString(); 
+            return TString();
         }
     }
 };
@@ -623,12 +623,12 @@ public:
         return NAux::GetLabeledCounterOpts<SimpleDesc>();
     }
 
-    TProtobufTabletLabeledCounters(const TString& group, const ui64 id) 
+    TProtobufTabletLabeledCounters(const TString& group, const ui64 id)
         : TTabletLabeledCountersBase(
               SimpleOpts()->Size, SimpleOpts()->GetNames(), SimpleOpts()->GetCounterTypes(),
               SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id)
     {
-        TVector<TString> groups; 
+        TVector<TString> groups;
         StringSplitter(group).Split('/').SkipEmpty().Collect(&groups); //TODO: change here to "|"
         Y_VERIFY(SimpleOpts()->GetGroupNamesSize() == groups.size());
     }

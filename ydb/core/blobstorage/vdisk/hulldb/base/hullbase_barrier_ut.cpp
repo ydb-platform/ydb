@@ -8,7 +8,7 @@ namespace NKikimr {
         Y_UNIT_TEST(ParseTest) {
             TKeyBarrier id;
             TKeyBarrier expected;
-            TString explanation; 
+            TString explanation;
             bool res = false;
 
             res = TKeyBarrier::Parse(id, "[ 0:0:34:15]", explanation);

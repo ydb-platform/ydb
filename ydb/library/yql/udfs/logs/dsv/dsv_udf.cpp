@@ -150,7 +150,7 @@ case TDataType<type>::Id: part += ToString(member.Get<type>()); break;
 class TDsvSerialize: public TBoxedValue
 {
 public:
-    explicit TDsvSerialize(const TVector<TDataTypeId>& typeIds, TStructTypeInspector* structInspector) 
+    explicit TDsvSerialize(const TVector<TDataTypeId>& typeIds, TStructTypeInspector* structInspector)
         : TypeIds(typeIds)
         , StructInspector(structInspector)
     {}
@@ -190,7 +190,7 @@ private:
         UdfTerminate(e.what());
     }
 
-    const TVector<TDataTypeId> TypeIds; 
+    const TVector<TDataTypeId> TypeIds;
     THolder<TStructTypeInspector> StructInspector;
 };
 

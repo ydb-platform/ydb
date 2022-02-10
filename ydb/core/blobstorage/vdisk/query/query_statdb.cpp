@@ -101,7 +101,7 @@ namespace NKikimr {
             }
 
         private:
-            TVector<TChannelInfo> Channels; 
+            TVector<TChannelInfo> Channels;
 
             void Finish(IOutputStream &str,
                         std::function<void (IOutputStream &)> t,
@@ -152,7 +152,7 @@ namespace NKikimr {
         ///////////////////////////////////////////////////////////////////////////////
         class TAllTablets {
         private:
-            using THash = THashMap<ui64, TTabletInfoPtr>; // tabletID -> TTabletInfoPtr 
+            using THash = THashMap<ui64, TTabletInfoPtr>; // tabletID -> TTabletInfoPtr
             THash Hash;
             TAllChannels AllChannels;
 
@@ -336,9 +336,9 @@ namespace NKikimr {
                 ui32 BlockedGeneration = 0;
             };
 
-            using TMapType = TMap<ui64, TValue>; // TabletId -> TValue 
+            using TMapType = TMap<ui64, TValue>; // TabletId -> TValue
 
-            TMapType Map; 
+            TMapType Map;
             IOutputStream &Str;
             bool Pretty;
         };
@@ -437,9 +437,9 @@ namespace NKikimr {
 
             using TBarrierKind = bool; // hard=true or soft=false
             using TKey = std::tuple<ui64, ui32, TBarrierKind>;
-            using TMapType = TMap<TKey, TValue>; // TKey -> TValue 
+            using TMapType = TMap<TKey, TValue>; // TKey -> TValue
 
-            TMapType Map; 
+            TMapType Map;
             IOutputStream &Str;
             bool Pretty;
         };

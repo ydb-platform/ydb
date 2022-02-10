@@ -52,12 +52,12 @@ namespace NLoggingImpl {
         return string.RNextTok(LOCSLASH_C);
     }
 
-    TString GetSystemResources() { 
+    TString GetSystemResources() {
         NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
         return PrintSystemResources(mi);
     }
 
-    TString PrintSystemResources(const NMemInfo::TMemInfo& mi) { 
+    TString PrintSystemResources(const NMemInfo::TMemInfo& mi) {
         return Sprintf(" rss=%0.3fMb, vms=%0.3fMb", mi.RSS * 1.0 / (1024 * 1024), mi.VMS * 1.0 / (1024 * 1024));
     }
 }

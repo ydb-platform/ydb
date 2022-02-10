@@ -60,7 +60,7 @@ EMessageStatus TRemoteClientSession::SendMessageOneWay(TBusMessage* pMes, const 
     return SendMessageImpl(pMes, addr, wait, true);
 }
 
-int TRemoteClientSession::GetInFlight() const noexcept { 
+int TRemoteClientSession::GetInFlight() const noexcept {
     return ClientRemoteInFlight.GetCurrent();
 }
 

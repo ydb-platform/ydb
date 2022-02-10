@@ -43,7 +43,7 @@
 #include <util/folder/tempdir.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/yexception.h>
 #include <util/random/mersenne.h>
 #include <util/random/random.h>
@@ -110,7 +110,7 @@ static bool IsProfilerEnabled = true;
 TString TestData2(
         "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
 
-static TString StatusToString(const NKikimrProto::EReplyStatus status) { 
+static TString StatusToString(const NKikimrProto::EReplyStatus status) {
     return NKikimrProto::EReplyStatus_Name(status);
 }
 
@@ -230,10 +230,10 @@ protected:
         };
         EMessage Message;
         NKikimrProto::EReplyStatus Status;
-        TVector<TString> Data; 
-        TVector<NKikimrProto::EReplyStatus> ItemStatus; 
+        TVector<TString> Data;
+        TVector<NKikimrProto::EReplyStatus> ItemStatus;
         TVector<TLogoBlobID> ItemIds;
-        TString Profile; 
+        TString Profile;
         ui32 BlockedGeneration;
         bool LogoBlobsCompacted;
         TStorageStatusFlags StatusFlags;
@@ -934,7 +934,7 @@ class TTestBlobStorageProxyBlock : public TTestBlobStorageProxy {
                 TEST_RESPONSE(MessagePutResult, BLOCKED, 0, "");
 
                 VERBOSE_COUT(" Sending TEvPut");
-                TString data = "aaa"; 
+                TString data = "aaa";
                 TLogoBlobID logoblobid(1, 1, 0, 0, data.size(), 0);
                 ctx.Send(Proxy, new TEvBlobStorage::TEvPut(logoblobid, data, TInstant::Max()));
                 break;
@@ -971,7 +971,7 @@ class TTestBlobStorageProxyBlock : public TTestBlobStorageProxy {
                 break;
             case 80:
             {
-                TString data = "aaa"; 
+                TString data = "aaa";
                 UNIT_ASSERT_EQUAL_C(LastResponse.Message, TResponseData::MessageDiscoverResult,
                         "Unexpected message " << (int)LastResponse.Message);
                 UNIT_ASSERT_EQUAL_C(LastResponse.Status, NKikimrProto::OK, "Unexpected status "
@@ -1008,7 +1008,7 @@ public:
 class TTestBlobStorageProxyPut : public TTestBlobStorageProxy {
     void TestFSM(const TActorContext &ctx) {
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
-        TString testData2( 
+        TString testData2(
             "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
         switch (TestStep) {
             case 0:
@@ -1083,7 +1083,7 @@ public:
 class TTestBlobStorageProxyPutFail : public TTestBlobStorageProxy {
     void TestFSM(const TActorContext &ctx) {
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
-        TString testData2( 
+        TString testData2(
             "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
         switch (TestStep) {
             case 0:
@@ -1118,7 +1118,7 @@ public:
 class TTestBlobStorageProxyGet : public TTestBlobStorageProxy {
     void TestFSM(const TActorContext &ctx) {
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
-        TString testData2( 
+        TString testData2(
             "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
         switch (TestStep) {
             case 0:
@@ -1223,8 +1223,8 @@ public:
 };
 
 class TTestBlobStorageProxyPutGetMany: public TTestBlobStorageProxy {
-    TString Prepare(ui64 idx, ui64 size) { 
-        TString data; 
+    TString Prepare(ui64 idx, ui64 size) {
+        TString data;
         data.resize(size);
         ui8 *d = (ui8*)const_cast<char*>(data.data());
         for (ui64 i = 0; i < size; ++i) {
@@ -1256,7 +1256,7 @@ class TTestBlobStorageProxyPutGetMany: public TTestBlobStorageProxy {
         if (TestStep < int(count)) {
             VERBOSE_COUT(" Sending TEvPut");
             ui64 idx = TestStep;
-            TString data = Prepare(idx, size); 
+            TString data = Prepare(idx, size);
             TLogoBlobID id(1, 2, 3, 4, size, idx);
             ctx.Send(Proxy, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
         } else {
@@ -1278,8 +1278,8 @@ public:
 };
 
 class TTestBlobStorageProxyPutGetStatus: public TTestBlobStorageProxy {
-    TString Prepare(ui64 idx, ui64 size) { 
-        TString data; 
+    TString Prepare(ui64 idx, ui64 size) {
+        TString data;
         data.resize(size);
         ui8 *d = (ui8*)const_cast<char*>(data.data());
         for (ui64 i = 0; i < size; ++i) {
@@ -1354,7 +1354,7 @@ class TTestBlobStorageProxyPutGetStatus: public TTestBlobStorageProxy {
         if (TestStep < int(count)) {
             VERBOSE_COUT(" Sending TEvPut");
             ui64 idx = TestStep;
-            TString data = Prepare(idx, size); 
+            TString data = Prepare(idx, size);
             TLogoBlobID id(1, 2, 3, 4, size, idx);
             ctx.Send(Proxy, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
         } else {
@@ -1374,7 +1374,7 @@ template <int vDiskIdx>
 class TTestBlobStorageProxyVPutVGet : public TTestBlobStorageProxy {
     void TestFSM(const TActorContext &ctx) {
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
-        TString testData2( 
+        TString testData2(
             "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
         TLogoBlobID blobId(1, 0, 0, 0, testData2.size(), 0);
         TString encryptedTestData2;
@@ -1444,7 +1444,7 @@ class TTestBlobStorageProxyVPutVGetLimit : public TTestBlobStorageProxy {
     int Iteration;
     void TestFSM(const TActorContext &ctx) {
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
-        TString testData2( 
+        TString testData2(
             "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
         switch (TestStep) {
             case 0:
@@ -1654,7 +1654,7 @@ template <int vDiskIdx, int partId, bool &isNoData>
 class TTestBlobStorageProxyVGet : public TTestBlobStorageProxy {
     void TestFSM(const TActorContext &ctx) {
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
-        TString testData2( 
+        TString testData2(
             "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
 
         TLogoBlobID id(1, 0, 0, 0, testData2.size(), 0, partId);
@@ -1824,7 +1824,7 @@ public:
 class TTestBlobStorageProxyVBlockVPutVGet : public TTestBlobStorageProxy {
     void TestFSM(const TActorContext &ctx) {
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
-        TString testData("xxx"); 
+        TString testData("xxx");
         TVDiskID vDiskId(0, 1, 0, 0, 0);
 
         switch (TestStep) {
@@ -2238,8 +2238,8 @@ public:
 };
 
 class TTestBlobStorageProxyGarbageCollectAfterLargeData : public TTestBlobStorageProxy {
-    TString Prepare(ui64 idx, ui64 size) { 
-        TString data; 
+    TString Prepare(ui64 idx, ui64 size) {
+        TString data;
         data.resize(size);
         ui8 *d = (ui8*)const_cast<char*>(data.data());
         for (ui64 i = 0; i < size; ++i) {
@@ -2260,7 +2260,7 @@ class TTestBlobStorageProxyGarbageCollectAfterLargeData : public TTestBlobStorag
             case 10:
             {
                 TEST_RESPONSE(MessagePutResult, OK, 0, "");
-                TString largeData = Prepare(0, 32 << 20); 
+                TString largeData = Prepare(0, 32 << 20);
 
                 VERBOSE_COUT(" Sending TEvPut");
                 TLogoBlobID logoblobid(1, 0, 1, 0, largeData.size(), 0);
@@ -2308,9 +2308,9 @@ public:
 
 class TTestBlobStorageProxySimpleDiscover : public TTestBlobStorageProxy {
     void TestFSM(const TActorContext &ctx) {
-        TString testData( 
+        TString testData(
             "Server is a man with drinks, a click is a sound produced with fingers, a notebook is made of paper.");
-        TString testData2( 
+        TString testData2(
             "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
         switch (TestStep) {
@@ -2366,7 +2366,7 @@ public:
 
 class TTestBlobStorageProxyDiscover : public TTestBlobStorageProxy {
     void TestFSM(const TActorContext &ctx) {
-        TString testData2( 
+        TString testData2(
             "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
         switch (TestStep) {
@@ -2551,11 +2551,11 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
     }
 
     void TestFSM(const TActorContext &ctx) {
-        TString testData( 
+        TString testData(
             "Server is a man with drinks, a click is a sound produced with fingers, a notebook is made of paper.");
-        TString testData2( 
+        TString testData2(
             "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
-        TString testData3( 
+        TString testData3(
             "Test data for direct VDisk put operations 1234567890.");
         VERBOSE_COUT("Test step# " << TestStep << " Iteration# " << Iteration << " Line " << __LINE__);
         bool isFirstFallthrough = false;
@@ -2685,11 +2685,11 @@ public:
 
 class TTestBlobStorageProxyLongTailDiscover : public TTestBlobStorageProxy {
     void TestFSM(const TActorContext &ctx) {
-        TString testData( 
+        TString testData(
             "Server is a man with drinks, a click is a sound produced with fingers, a notebook is made of paper.");
-        TString testData2( 
+        TString testData2(
             "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
-        TString testData3( 
+        TString testData3(
             "Test data for direct VDisk put operations 1234567890.");
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
         switch (TestStep) {
@@ -2728,7 +2728,7 @@ public:
 
 class TTestBlobStorageProxyPartialGet : public TTestBlobStorageProxy {
     void TestFSM(const TActorContext &ctx) {
-        TString testData( 
+        TString testData(
             "Server is a man with drinks, a click is a sound produced with fingers, a notebook is made of paper.");
         TLogoBlobID logoblobid(1, 0, 0, 0, testData.size(), 0);
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
@@ -2748,21 +2748,21 @@ class TTestBlobStorageProxyPartialGet : public TTestBlobStorageProxy {
                             NKikimrBlobStorage::EGetHandleClass::FastRead));
                 break;
             case 20:
-                TEST_RESPONSE(MessageGetResult, OK, 1, TString(testData, 7, 11)); 
+                TEST_RESPONSE(MessageGetResult, OK, 1, TString(testData, 7, 11));
 
                 VERBOSE_COUT(" Sending TEvGet shift 0 size 11");
                 ctx.Send(Proxy, new TEvBlobStorage::TEvGet(logoblobid, 0, 11, TInstant::Max(),
                             NKikimrBlobStorage::EGetHandleClass::FastRead));
                 break;
             case 30:
-                TEST_RESPONSE(MessageGetResult, OK, 1, TString(testData, 0, 11)); 
+                TEST_RESPONSE(MessageGetResult, OK, 1, TString(testData, 0, 11));
 
                 VERBOSE_COUT(" Sending TEvGet shift 7 size 0");
                 ctx.Send(Proxy, new TEvBlobStorage::TEvGet(logoblobid, 7, 0, TInstant::Max(),
                             NKikimrBlobStorage::EGetHandleClass::FastRead));
                 break;
             case 40:
-                TEST_RESPONSE(MessageGetResult, OK, 1, TString(testData, 7, testData.size() - 7)); 
+                TEST_RESPONSE(MessageGetResult, OK, 1, TString(testData, 7, testData.size() - 7));
 
                 VERBOSE_COUT("Done");
                 Env->DoneEvent.Signal();
@@ -2817,9 +2817,9 @@ public:
 
 class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
     void TestFSM(const TActorContext &ctx) {
-        TString testData( 
+        TString testData(
             "Server is a man with drinks, a click is a sound produced with fingers, a notebook is made of paper.");
-        TString testData2( 
+        TString testData2(
             "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
         bool isFirstFallthrough = false;
@@ -3050,7 +3050,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
             case 210:
             {
                 if (!Env->ShouldBeUnwritable) {
-                    TEST_RESPONSE(MessageGetResult, OK, 1, TString(testData, 7, 11)); 
+                    TEST_RESPONSE(MessageGetResult, OK, 1, TString(testData, 7, 11));
                 }
                 // Put.
                 TLogoBlobID logoblobid(1, 10/*generation*/, 0, 0, testData2.size(), 0);
@@ -3120,7 +3120,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                     TEST_RESPONSE(MessageDiscoverResult, NODATA, 0, "");
                 }
                 VERBOSE_COUT(" Sending TEvPut");
-                TString putData = TString::Uninitialized(1 << 18); 
+                TString putData = TString::Uninitialized(1 << 18);
                 memset(const_cast<char*>(putData.data()), 1, putData.size());
 
                 TLogoBlobID logoblobid(1, 11, 0, 0, putData.size(), 0);
@@ -3164,7 +3164,7 @@ public:
 class TTestGetMultipart : public TTestBlobStorageProxy {
     void TestFSM(const TActorContext &ctx) {
         VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
-        TString testData2( 
+        TString testData2(
             "But I must explain to you how all this mistaken idea of denouncing pleasure and praising pain was born..");
         switch (TestStep) {
             case 0:
@@ -3805,8 +3805,8 @@ public:
         SectorMapByPath.clear();
     }
 
-    void RemoveVDiskData(ui32 vDiskIdx, TString directory) { 
-        TString databaseDirectory = Sprintf("%s/vdisk_%d", directory.c_str(), vDiskIdx); 
+    void RemoveVDiskData(ui32 vDiskIdx, TString directory) {
+        TString databaseDirectory = Sprintf("%s/vdisk_%d", directory.c_str(), vDiskIdx);
         auto it = SectorMapByPath.begin();
         while (it != SectorMapByPath.end()) {
             auto next = it;
@@ -4166,8 +4166,8 @@ public:
 
         TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
         TPortManager pm;
-        nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001)); 
-        nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002)); 
+        nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001));
+        nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002));
 
         TIntrusivePtr<TBlobStorageGroupInfo> bsInfo(new TBlobStorageGroupInfo(args.ErasureSpecies,
                 env->DrivesPerFailDomain, env->FailDomainCount, 1, &env->VDisks));
@@ -4203,7 +4203,7 @@ public:
                 if (!args.StartBadDisks && isBad) {
                     continue;
                 }
-                TString databaseDirectory = Sprintf(isBad ? "%s/vdisk_bad_%d" : "%s/vdisk_%d", 
+                TString databaseDirectory = Sprintf(isBad ? "%s/vdisk_bad_%d" : "%s/vdisk_%d",
                     (dir ? dir : tempDir().c_str()), i);
                 MakeDirIfNotExist(databaseDirectory.c_str());
 
@@ -4213,7 +4213,7 @@ public:
                 ui64 diskSizeBytes = 32ull << 30ull;
                 ui64 pDiskCategory = 0;
                 TActorId pdiskId = env->PDisks[i];
-                TString filePath = databaseDirectory + "/pdisk.dat"; 
+                TString filePath = databaseDirectory + "/pdisk.dat";
                 if (!SectorMapByPath[filePath]) {
                     SectorMapByPath[filePath].Reset(new NPDisk::TSectorMap(diskSizeBytes));
                     FormatPDisk(filePath, diskSizeBytes, 4 << 10, chunkSize, pDiskGuid,

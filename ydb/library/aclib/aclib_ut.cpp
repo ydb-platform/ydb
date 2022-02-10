@@ -5,12 +5,12 @@
 using namespace NACLib;
 
 Y_UNIT_TEST_SUITE(ACLib) {
-    static const TString James = "james@bookstore"; 
-    static const TVector<TString> JamesGroups = {"Humans", "Administrators"}; 
-    static const TString Cat = "cat@bookstore"; 
-    static const TVector<TString> CatGroups = {"Animals", "Cats", "Readers"}; 
-    static const TString Dog = "dog@bookstore"; 
-    static const TVector<TString> DogGroups = {"Animals", "Dogs", "Writers"}; 
+    static const TString James = "james@bookstore";
+    static const TVector<TString> JamesGroups = {"Humans", "Administrators"};
+    static const TString Cat = "cat@bookstore";
+    static const TVector<TString> CatGroups = {"Animals", "Cats", "Readers"};
+    static const TString Dog = "dog@bookstore";
+    static const TVector<TString> DogGroups = {"Animals", "Dogs", "Writers"};
 
     Y_UNIT_TEST(TestUsers) {
         TSecurityObject rootACL(James, true);
@@ -18,9 +18,9 @@ Y_UNIT_TEST_SUITE(ACLib) {
         rootACL.AddAccess(EAccessType::Allow, EAccessRights::GenericRead, Cat, EInheritanceType::InheritContainer);
         rootACL.AddAccess(EAccessType::Allow, EAccessRights::GenericFull, Dog, EInheritanceType::InheritContainer);
 
-        TUserToken jamesToken(James, TVector<TSID>()); 
-        TUserToken catToken(Cat, TVector<TSID>()); 
-        TUserToken dogToken(Dog, TVector<TSID>()); 
+        TUserToken jamesToken(James, TVector<TSID>());
+        TUserToken catToken(Cat, TVector<TSID>());
+        TUserToken dogToken(Dog, TVector<TSID>());
 
         UNIT_ASSERT(rootACL.CheckAccess(EAccessRights::SelectRow, jamesToken) == true);
         UNIT_ASSERT(rootACL.CheckAccess(EAccessRights::SelectRow, catToken) == true);

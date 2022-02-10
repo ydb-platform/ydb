@@ -19,7 +19,7 @@ struct TSchOotGenCfg {
 };
 
 struct TSchOotGenCfgSet {
-    TDeque<TSchOotGenCfg> Cfg; 
+    TDeque<TSchOotGenCfg> Cfg;
 
     bool IsValid;
     TString ErrorDetails;

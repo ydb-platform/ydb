@@ -131,7 +131,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         TLogoBlobID MetaId;
         TSet<TActorId> Owners;
         TPageMap<TIntrusivePtr<TPage>> PageMap;
-        TMap<ui32, TExpectant> Expectants; 
+        TMap<ui32, TExpectant> Expectants;
         TDeque<ui32> DroppedPages;
     };
 
@@ -146,7 +146,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
 
         struct TByActorRequest {
             TIntrusiveList<TPagesToRequest> Listed;
-            THashMap<TLogoBlobID, TDeque<TPagesToRequest>> Index; 
+            THashMap<TLogoBlobID, TDeque<TPagesToRequest>> Index;
         };
 
         TMap<TActorId, TByActorRequest> Requests;
@@ -161,7 +161,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
 
     TActorId Owner;
     TAutoPtr<NUtil::ILogger> Logger;
-    THashMap<TLogoBlobID, TCollection> Collections; 
+    THashMap<TLogoBlobID, TCollection> Collections;
     THashMap<TActorId, TCollectionsOwner> CollectionsOwners;
 
     TRequestQueue AsyncRequests;
@@ -248,7 +248,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
 
         TBlocks readyBlocks;
         readyBlocks.reserve(msg->Fetch->Pages.size());
-        TVector<ui32> pagesToWait; 
+        TVector<ui32> pagesToWait;
         if (logsat)
             pagesToWait.reserve(msg->Fetch->Pages.size());
 
@@ -327,8 +327,8 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         waitingRequest->ReadyBlocks = std::move(readyBlocks);
 
         if (pendingPages) {
-            TVector<ui32> pagesToKeep; 
-            TVector<ui32> pagesToRequest; 
+            TVector<ui32> pagesToKeep;
+            TVector<ui32> pagesToRequest;
             ui64 pagesToRequestBytes = 0;
             pagesToRequest.reserve(pagesToLoad);
             if (logsat)
@@ -467,7 +467,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
 
                 if (nthToRequest != 0) {
                     if (nthToLoad != 0) {
-                        TVector<ui32> toLoad; 
+                        TVector<ui32> toLoad;
                         toLoad.reserve(nthToLoad);
                         for (ui32 pageId : wa.PagesToRequest) {
                             auto* page = collection->PageMap[pageId].Get();
@@ -797,7 +797,7 @@ class TSharedPageCache : public TActor<TSharedPageCache> {
         StatBioReqs += 1;
     }
 
-    void DropCollection(THashMap<TLogoBlobID, TCollection>::iterator collectionIt, NKikimrProto::EReplyStatus blobStorageError) { 
+    void DropCollection(THashMap<TLogoBlobID, TCollection>::iterator collectionIt, NKikimrProto::EReplyStatus blobStorageError) {
         // decline all pending requests
         TCollection &collection = collectionIt->second;
         const TLogoBlobID &pageCollectionId = collectionIt->first;
@@ -1045,7 +1045,7 @@ IActor* CreateSharedPageCache(TSharedPageCacheConfig *config) {
 }
 
 template<> inline
-void Out<TVector<ui32>>(IOutputStream& o, const TVector<ui32> &vec) { 
+void Out<TVector<ui32>>(IOutputStream& o, const TVector<ui32> &vec) {
     o << "[ ";
     for (const auto &x : vec)
         o << x << ' ';

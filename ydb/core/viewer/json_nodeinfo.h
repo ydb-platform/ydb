@@ -14,7 +14,7 @@ template <>
 struct TWhiteboardInfo<TEvWhiteboard::TEvNodeStateResponse> {
     using TResponseType = TEvWhiteboard::TEvNodeStateResponse;
     using TElementType = NKikimrWhiteboard::TNodeStateInfo;
-    using TElementKeyType = TString; 
+    using TElementKeyType = TString;
 
     static constexpr bool StaticNodesOnly = false;
 
@@ -22,7 +22,7 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvNodeStateResponse> {
         return response->Record.MutableNodeStateInfo();
     }
 
-    static const TString& GetElementKey(const TElementType& type) { 
+    static const TString& GetElementKey(const TElementType& type) {
         return type.GetPeerName();
     }
 
@@ -46,14 +46,14 @@ using TJsonNodeInfo = TJsonWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest,
 
 template <>
 struct TJsonRequestSummary<TJsonNodeInfo> {
-    static TString GetSummary() { 
+    static TString GetSummary() {
         return "\"Interconnect information\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonNodeInfo> {
-    static TString GetDescription() { 
+    static TString GetDescription() {
         return "\"Returns information about node connections\"";
     }
 };

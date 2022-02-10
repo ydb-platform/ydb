@@ -430,7 +430,7 @@ private:
     TSortedOps ActivePlannedOps;
     TSortedOps::iterator ActivePlannedOpsLogicallyCompleteEnd;
     TSortedOps::iterator ActivePlannedOpsLogicallyIncompleteEnd;
-    THashMap<ui64, TValidatedDataTx::TPtr> DataTxCache; 
+    THashMap<ui64, TValidatedDataTx::TPtr> DataTxCache;
     TMap<TStepOrder, THolder<IEventHandle>> DelayedAcks;
     TStepOrder LastPlannedTx;
     TStepOrder LastCompleteTx;

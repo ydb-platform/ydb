@@ -239,7 +239,7 @@ public:
     }
 
 protected:
-    using TListType = TIntrusiveList<TPageListItem>; 
+    using TListType = TIntrusiveList<TPageListItem>;
     struct TUsedPages {
         TUsedPages() = default;
         TUsedPages(const TUsedPages&) = delete;
@@ -266,9 +266,9 @@ protected:
         size_t PrintStat(const TStringBuf& header, IOutputStream& out) const;
         TString DebugInfo() const;
 
-        std::array<TListType, MAX_SMALL_LIST_SIZE - 1> SmallPages; // 2-16 sizes 
-        std::array<TListType, MAX_MEDIUM_LIST_INDEX> MediumPages; // 32,64,128,...,16384. Indexed by pow2 
-        TListType FullPages; 
+        std::array<TListType, MAX_SMALL_LIST_SIZE - 1> SmallPages; // 2-16 sizes
+        std::array<TListType, MAX_MEDIUM_LIST_INDEX> MediumPages; // 32,64,128,...,16384. Indexed by pow2
+        TListType FullPages;
     };
 
 public:
@@ -557,7 +557,7 @@ private:
     template <size_t PoolNdx, typename T>
     TListHeader* GetSmallListPage(size_t size) {
         Y_ASSERT(size > 1 && size <= MAX_SMALL_LIST_SIZE);
-        TListType& pages = Pools[PoolNdx].SmallPages[size - 2]; 
+        TListType& pages = Pools[PoolNdx].SmallPages[size - 2];
         if (!pages.Empty()) {
             return pages.Front()->As<TListHeader>();
         }
@@ -573,7 +573,7 @@ private:
         Y_ASSERT(size > MAX_SMALL_LIST_SIZE && size <= TListPoolBase::GetMaxListSize<T>());
         size_t index = MostSignificantBit((size - 1) >> MostSignificantBitCT(MAX_SMALL_LIST_SIZE));
         Y_ASSERT(index < Pools[PoolNdx].MediumPages.size());
-        TListType& pages = Pools[PoolNdx].MediumPages[index]; 
+        TListType& pages = Pools[PoolNdx].MediumPages[index];
         if (!pages.Empty()) {
             return pages.Front()->As<TListHeader>();
         }

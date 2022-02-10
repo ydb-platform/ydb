@@ -411,9 +411,9 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
     }
 
     Y_UNIT_TEST(TestInstantToString) {
-        UNIT_ASSERT_VALUES_EQUAL(TString("2009-08-06T15:19:06.023455Z"), ToString(TInstant::Seconds(1249571946) + TDuration::MicroSeconds(23455))); 
-        UNIT_ASSERT_VALUES_EQUAL(TString("2009-08-06T15:19:06.023455Z"), (TInstant::Seconds(1249571946) + TDuration::MicroSeconds(23455)).ToString()); 
-        UNIT_ASSERT_VALUES_EQUAL(TString("2009-08-06T15:19:06Z"), (TInstant::Seconds(1249571946) + TDuration::MicroSeconds(23455)).ToStringUpToSeconds()); 
+        UNIT_ASSERT_VALUES_EQUAL(TString("2009-08-06T15:19:06.023455Z"), ToString(TInstant::Seconds(1249571946) + TDuration::MicroSeconds(23455)));
+        UNIT_ASSERT_VALUES_EQUAL(TString("2009-08-06T15:19:06.023455Z"), (TInstant::Seconds(1249571946) + TDuration::MicroSeconds(23455)).ToString());
+        UNIT_ASSERT_VALUES_EQUAL(TString("2009-08-06T15:19:06Z"), (TInstant::Seconds(1249571946) + TDuration::MicroSeconds(23455)).ToStringUpToSeconds());
     }
 
     Y_UNIT_TEST(TestInstantToRfc822String) {
@@ -461,10 +461,10 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
 
     template <class T>
     void TestTimeUnits() {
-        T withTime = T::MicroSeconds(1249571946000000L); 
-        T onlyMinutes = T::MicroSeconds(1249571940000000L); 
-        T onlyHours = T::MicroSeconds(1249570800000000L); 
-        T onlyDays = T::MicroSeconds(1249516800000000L); 
+        T withTime = T::MicroSeconds(1249571946000000L);
+        T onlyMinutes = T::MicroSeconds(1249571940000000L);
+        T onlyHours = T::MicroSeconds(1249570800000000L);
+        T onlyDays = T::MicroSeconds(1249516800000000L);
         ui64 minutes = 20826199;
         ui64 hours = 347103;
         ui64 days = 14462;
@@ -496,22 +496,22 @@ Y_UNIT_TEST_SUITE(DateTimeTest) {
         UNIT_ASSERT_EXCEPTION(TDuration::MilliSeconds(FromString(TStringBuf("not a number"))), yexception);
         UNIT_ASSERT_EXCEPTION(TDuration::Seconds(FromString(TStringBuf("not a number"))), yexception);
     }
- 
+
     Y_UNIT_TEST(TestFromValueForTDuration) {
-        // check that FromValue creates the same TDuration 
-        TDuration d1 = TDuration::MicroSeconds(12345); 
-        TDuration d2 = TDuration::FromValue(d1.GetValue()); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(d1, d2); 
-    } 
- 
+        // check that FromValue creates the same TDuration
+        TDuration d1 = TDuration::MicroSeconds(12345);
+        TDuration d2 = TDuration::FromValue(d1.GetValue());
+
+        UNIT_ASSERT_VALUES_EQUAL(d1, d2);
+    }
+
     Y_UNIT_TEST(TestFromValueForTInstant) {
-        // check that FromValue creates the same TInstant 
-        TInstant i1 = TInstant::MicroSeconds(12345); 
-        TInstant i2 = TInstant::FromValue(i1.GetValue()); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(i1, i2); 
-    } 
+        // check that FromValue creates the same TInstant
+        TInstant i1 = TInstant::MicroSeconds(12345);
+        TInstant i2 = TInstant::FromValue(i1.GetValue());
+
+        UNIT_ASSERT_VALUES_EQUAL(i1, i2);
+    }
 
     Y_UNIT_TEST(TestTimeGmDateConversion) {
         tm time{};

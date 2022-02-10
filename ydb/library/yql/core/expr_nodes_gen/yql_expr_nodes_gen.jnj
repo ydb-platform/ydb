@@ -67,7 +67,7 @@ public:
         {% elif node.Match.Type == "NodeType" %}
         return node->Type() == TExprNode::{{ node.Match.TypeName }};
         {% elif node.Match.Type == "CallableBase" %}
-        static THashSet<TStringBuf> namesToMatch = { 
+        static THashSet<TStringBuf> namesToMatch = {
             {%- for name in node.aux.namesToMatch %}
             TStringBuf("{{ name }}"),
             {%- endfor %}
@@ -322,7 +322,7 @@ class UnknownBuilder {
         {% endif %}
     {{ node.Name }} DoBuild() {
         {%- if node.Match and (node.Match.Type == "Callable" or node.Match.Type == "CallableBase") %}
-        TExprNode::TListType argsList; 
+        TExprNode::TListType argsList;
             {%- if node.Builder.Kind == "List" %}
         for (auto child : this->Items) {
             argsList.push_back(child.Ptr());
@@ -349,7 +349,7 @@ class UnknownBuilder {
             {%- endif %}
         return {{ node.Name }}(node);
         {%- elif node.Match and node.Match.Type == "Tuple"%}
-        TExprNode::TListType tupleItems; 
+        TExprNode::TListType tupleItems;
             {%- for child in node.aux.allChildren %}
         if (this->{{ child.aux.holderName }}) {
             YQL_ENSURE(tupleItems.size() == {{ child.Index }});
@@ -359,7 +359,7 @@ class UnknownBuilder {
         auto node = this->Ctx.NewList(this->Pos, std::move(tupleItems));
         return {{ node.Name }}(node);
         {%- elif node.ListBase and node.Builder.Kind == "List"%}
-        TExprNode::TListType nodeChildren; 
+        TExprNode::TListType nodeChildren;
         for (auto child : this->Items) {
             nodeChildren.push_back(child.Ptr());
         }

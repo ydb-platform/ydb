@@ -29,14 +29,14 @@ private:
 
     class TChunk: public TIntrusiveListItem<TChunk> {
     public:
-        inline TChunk(size_t len = 0) noexcept 
+        inline TChunk(size_t len = 0) noexcept
             : Cur_((char*)(this + 1))
             , Left_(len)
         {
             Y_ASSERT((((size_t)Cur_) % PLATFORM_DATA_ALIGN) == 0);
         }
 
-        inline void* Allocate(size_t len) noexcept { 
+        inline void* Allocate(size_t len) noexcept {
             if (Left_ >= len) {
                 char* ret = Cur_;
 
@@ -49,7 +49,7 @@ private:
             return nullptr;
         }
 
-        inline void* Allocate(size_t len, size_t align) noexcept { 
+        inline void* Allocate(size_t len, size_t align) noexcept {
             size_t pad = AlignUp(Cur_, align) - Cur_;
 
             void* ret = Allocate(pad + len);
@@ -60,31 +60,31 @@ private:
             return nullptr;
         }
 
-        inline size_t BlockLength() const noexcept { 
+        inline size_t BlockLength() const noexcept {
             return (Cur_ + Left_) - (char*)this;
         }
 
-        inline size_t Used() const noexcept { 
+        inline size_t Used() const noexcept {
             return Cur_ - (const char*)this;
         }
 
-        inline size_t Left() const noexcept { 
+        inline size_t Left() const noexcept {
             return Left_;
         }
 
-        inline const char* Data() const noexcept { 
+        inline const char* Data() const noexcept {
             return (const char*)(this + 1);
         }
 
-        inline char* Data() noexcept { 
+        inline char* Data() noexcept {
             return (char*)(this + 1);
         }
 
-        inline size_t DataSize() const noexcept { 
+        inline size_t DataSize() const noexcept {
             return Cur_ - Data();
         }
 
-        inline void ResetChunk() noexcept { 
+        inline void ResetChunk() noexcept {
             size_t total = DataSize() + Left();
             Cur_ = Data();
             Left_ = total;
@@ -102,25 +102,25 @@ public:
     public:
         virtual ~IGrowPolicy() = default;
 
-        virtual size_t Next(size_t prev) const noexcept = 0; 
+        virtual size_t Next(size_t prev) const noexcept = 0;
     };
 
     class TLinearGrow: public IGrowPolicy {
     public:
-        size_t Next(size_t prev) const noexcept override { 
+        size_t Next(size_t prev) const noexcept override {
             return prev;
         }
 
-        static IGrowPolicy* Instance() noexcept; 
+        static IGrowPolicy* Instance() noexcept;
     };
 
     class TExpGrow: public IGrowPolicy {
     public:
-        size_t Next(size_t prev) const noexcept override { 
+        size_t Next(size_t prev) const noexcept override {
             return prev * 2;
         }
 
-        static IGrowPolicy* Instance() noexcept; 
+        static IGrowPolicy* Instance() noexcept;
     };
 
     struct TOptions {
@@ -143,7 +143,7 @@ public:
     {
     }
 
-    inline ~TMemoryPool() { 
+    inline ~TMemoryPool() {
         Clear();
     }
 
@@ -232,28 +232,28 @@ public:
         return TBasicStringBuf<TChar>(ret, buf.size());
     }
 
-    inline size_t Available() const noexcept { 
+    inline size_t Available() const noexcept {
         return Current_->Left();
     }
 
-    inline void Clear() noexcept { 
+    inline void Clear() noexcept {
         DoClear(false);
     }
 
-    inline void ClearKeepFirstChunk() noexcept { 
+    inline void ClearKeepFirstChunk() noexcept {
         DoClear(true);
     }
 
-    inline size_t MemoryAllocated() const noexcept { 
+    inline size_t MemoryAllocated() const noexcept {
         return MemoryAllocatedBeforeCurrent_ + (Current_ != &Empty_ ? Current_->Used() : 0);
     }
 
-    inline size_t MemoryWaste() const noexcept { 
+    inline size_t MemoryWaste() const noexcept {
         return MemoryWasteBeforeCurrent_ + (Current_ != &Empty_ ? Current_->Left() : 0);
     }
 
     template <class TOp>
-    inline void Traverse(TOp& op) const noexcept { 
+    inline void Traverse(TOp& op) const noexcept {
         for (TChunkList::TConstIterator i = Chunks_.Begin(); i != Chunks_.End(); ++i) {
             op(i->Data(), i->DataSize());
         }
@@ -316,10 +316,10 @@ struct TPoolableBase {
         return pool.Allocate(bytes, (size_t)align);
     }
 
-    inline void operator delete(void*, size_t) noexcept { 
+    inline void operator delete(void*, size_t) noexcept {
     }
 
-    inline void operator delete(void*, TPool&) noexcept { 
+    inline void operator delete(void*, TPool&) noexcept {
     }
 
 private:
@@ -384,7 +384,7 @@ public:
         using other = TPoolAllocBase<T1, TPool>;
     };
 
-    inline size_type max_size() const noexcept { 
+    inline size_type max_size() const noexcept {
         return size_type(-1) / sizeof(T);
     }
 
@@ -393,7 +393,7 @@ public:
         new (p) T(std::forward<Args>(args)...);
     }
 
-    inline void destroy(pointer p) noexcept { 
+    inline void destroy(pointer p) noexcept {
         (void)p; /* Make MSVC happy. */
         p->~T();
     }
@@ -421,11 +421,11 @@ using TPoolAlloc = TPoolAllocBase<T, TMemoryPool>;
 using TPoolAllocator = TPoolAlloc<int>;
 
 template <class T>
-inline bool operator==(const TPoolAlloc<T>&, const TPoolAlloc<T>&) noexcept { 
+inline bool operator==(const TPoolAlloc<T>&, const TPoolAlloc<T>&) noexcept {
     return true;
 }
 
 template <class T>
-inline bool operator!=(const TPoolAlloc<T>&, const TPoolAlloc<T>&) noexcept { 
+inline bool operator!=(const TPoolAlloc<T>&, const TPoolAlloc<T>&) noexcept {
     return false;
 }

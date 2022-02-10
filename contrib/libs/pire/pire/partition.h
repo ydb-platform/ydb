@@ -37,7 +37,7 @@ namespace Pire {
 template<class T, class Eq>
 class Partition {
 private:
-	typedef TMap< T, ypair< size_t, TVector<T> > > Set; 
+	typedef TMap< T, ypair< size_t, TVector<T> > > Set;
 
 public:
 	Partition(const Eq& eq)
@@ -103,7 +103,7 @@ public:
 	}
 	/// Returns the whole equivalence class of @p t (i.e. item @p i
 	/// is returned iff representative(i) == representative(t)).
-	const TVector<T>& Klass(const T& t) const 
+	const TVector<T>& Klass(const T& t) const
 	{
 		auto it = m_inv.find(t);
 		if (it == m_inv.end())
@@ -143,7 +143,7 @@ public:
 private:
 	Eq m_eq;
 	Set m_set;
-	TMap<T, T> m_inv; 
+	TMap<T, T> m_inv;
 	size_t m_maxidx;
 
 	void DoAppend(Set& set, const T& t)
@@ -159,7 +159,7 @@ private:
 
 		if (it == end) {
 			// Begin new set
-			TVector<T> v(1, t); 
+			TVector<T> v(1, t);
 			set.insert(ymake_pair(t, ymake_pair(m_maxidx++, v)));
 			m_inv[t] = t;
 		}

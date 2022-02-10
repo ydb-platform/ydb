@@ -24,7 +24,7 @@ public:
             }
         };
 
-        using TContainer = TVector<TRec>; 
+        using TContainer = TVector<TRec>;
         using TTop = ::TTop<TRec, 8, TContainer, TLess>;
 
         TInstant Start;

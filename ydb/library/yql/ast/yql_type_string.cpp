@@ -95,7 +95,7 @@ bool IsTypeKeyword(int token)
 
 EToken TokenTypeFromStr(TStringBuf str)
 {
-    static const THashMap<TStringBuf, EToken> map = { 
+    static const THashMap<TStringBuf, EToken> map = {
         { TStringBuf("String"), TOKEN_STRING },
         { TStringBuf("Bool"), TOKEN_BOOL },
         { TStringBuf("Int32"), TOKEN_INT32 },
@@ -305,7 +305,7 @@ private:
             if (Identifier.empty()) {
                 return AddError("Expected type");
             }
-            return AddError(TString("Unknown type: '") + Identifier + "\'"); 
+            return AddError(TString("Unknown type: '") + Identifier + "\'");
         }
 
         if (type) {
@@ -532,7 +532,7 @@ private:
                 if (Identifier == TStringBuf("AutoMap")) {
                     argFlags |= TArgumentFlags::AutoMap;
                 } else {
-                    AddError(TString("Unknown flag name: ") + Identifier); 
+                    AddError(TString("Unknown flag name: ") + Identifier);
                     return false;
                 }
                 GetNextToken(); // eat flag name
@@ -711,7 +711,7 @@ private:
     }
 
     TAstNode* ParseStructTypeImpl() {
-        TMap<TString, TAstNode*> members; 
+        TMap<TString, TAstNode*> members;
         if (Token != '>') {
             for (;;) {
                 TString name;
@@ -888,7 +888,7 @@ private:
         return MakeList(items.data(), items.size());
     }
 
-    TAstNode* MakeStructType(const TMap<TString, TAstNode*>& members) { 
+    TAstNode* MakeStructType(const TMap<TString, TAstNode*>& members) {
         TSmallVec<TAstNode*> items;
         items.push_back(MakeLiteralAtom(TStringBuf("StructType")));
 
@@ -1078,7 +1078,7 @@ private:
         }
     }
 
-    TAstNode* AddError(const TString& message) { 
+    TAstNode* AddError(const TString& message) {
         Issues.AddIssue(TIssue(TokenBegin, message));
         return nullptr;
     }
@@ -1089,7 +1089,7 @@ private:
     TPosition TokenBegin, Position;
     size_t Index;
     int Token;
-    TString UnescapedIdentifier; 
+    TString UnescapedIdentifier;
     TStringBuf Identifier;
     TMemoryPool& Pool;
 };
@@ -1359,7 +1359,7 @@ TAstNode* ParseType(TStringBuf str, TMemoryPool& pool, TIssues& issues,
     return parser.ParseTopLevelType();
 }
 
-TString FormatType(const TTypeAnnotationNode* typeNode) 
+TString FormatType(const TTypeAnnotationNode* typeNode)
 {
     TStringStream ss;
     TTypePrinter printer(ss);

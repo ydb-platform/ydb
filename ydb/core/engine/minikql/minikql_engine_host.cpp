@@ -119,7 +119,7 @@ bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTi
     return true;
 }
 
-ui64 TEngineHost::CalculateReadSize(const TVector<const TKeyDesc*>& keys) const { 
+ui64 TEngineHost::CalculateReadSize(const TVector<const TKeyDesc*>& keys) const {
     NTable::TSizeEnv env;
 
     for (const TKeyDesc* ki : keys) {
@@ -690,7 +690,7 @@ public:
             GetListIterator().Skip();
         }
 
-        TString key = FirstKey ? *FirstKey : TString(); 
+        TString key = FirstKey ? *FirstKey : TString();
         return MakeString(key);
     }
 
@@ -720,7 +720,7 @@ private:
     bool Reverse;
 
     mutable TMaybe<bool> Truncated;
-    mutable TMaybe<TString> FirstKey; 
+    mutable TMaybe<TString> FirstKey;
     mutable TMaybe<ui64> SizeBytes;
     TEngineHost& EngineHost;
     IKeyAccessSampler::TPtr KeyAccessSampler;

@@ -26,11 +26,11 @@ private:
     bool Next();
 
 public:
-    TPrefixIterator(const TTrie& trie, const TSymbol* aKey, size_t aKeylen) 
+    TPrefixIterator(const TTrie& trie, const TSymbol* aKey, size_t aKeylen)
         : Trie(trie)
-        , key(aKey) 
-        , keylen(aKeylen) 
-        , keyend(aKey + aKeylen) 
+        , key(aKey)
+        , keylen(aKeylen)
+        , keyend(aKey + aKeylen)
         , prefixLen(0)
         , valuepos(nullptr)
         , datapos(trie.DataHolder.AsCharPtr())

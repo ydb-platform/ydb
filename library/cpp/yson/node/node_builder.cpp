@@ -61,7 +61,7 @@ void TNodeBuilder::OnBeginMap()
 
 void TNodeBuilder::OnKeyedItem(TStringBuf key)
 {
-    Stack_.push(&(*Stack_.top())[TString(key)]); 
+    Stack_.push(&(*Stack_.top())[TString(key)]);
 }
 
 void TNodeBuilder::OnEndMap()

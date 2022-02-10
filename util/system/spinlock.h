@@ -14,7 +14,7 @@ public:
         return AtomicGet(Val_);
     }
 
-    inline bool TryAcquire() noexcept { 
+    inline bool TryAcquire() noexcept {
         return AtomicTryLock(&Val_);
     }
 
@@ -56,11 +56,11 @@ class TSpinLock: public TSpinLockBase {
 public:
     using TSpinLockBase::TSpinLockBase;
 
-    inline void Release() noexcept { 
+    inline void Release() noexcept {
         ReleaseSpinLock(&Val_);
     }
 
-    inline void Acquire() noexcept { 
+    inline void Acquire() noexcept {
         AcquireSpinLock(&Val_);
     }
 
@@ -91,11 +91,11 @@ class TAdaptiveLock: public TSpinLockBase {
 public:
     using TSpinLockBase::TSpinLockBase;
 
-    inline void Release() noexcept { 
+    inline void Release() noexcept {
         ReleaseAdaptiveLock(&Val_);
     }
 
-    inline void Acquire() noexcept { 
+    inline void Acquire() noexcept {
         AcquireAdaptiveLock(&Val_);
     }
 
@@ -112,15 +112,15 @@ public:
 
 template <>
 struct TCommonLockOps<TAtomic> {
-    static inline void Acquire(TAtomic* v) noexcept { 
+    static inline void Acquire(TAtomic* v) noexcept {
         AcquireAdaptiveLock(v);
     }
 
-    static inline bool TryAcquire(TAtomic* v) noexcept { 
+    static inline bool TryAcquire(TAtomic* v) noexcept {
         return AtomicTryLock(v);
     }
 
-    static inline void Release(TAtomic* v) noexcept { 
+    static inline void Release(TAtomic* v) noexcept {
         ReleaseAdaptiveLock(v);
     }
 };

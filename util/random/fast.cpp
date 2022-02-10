@@ -2,7 +2,7 @@
 
 #include <util/stream/input.h>
 
-static inline ui32 FixSeq(ui32 seq1, ui32 seq2) noexcept { 
+static inline ui32 FixSeq(ui32 seq1, ui32 seq2) noexcept {
     const ui32 mask = (~(ui32)(0)) >> 1;
 
     if ((seq1 & mask) == (seq2 & mask)) {
@@ -12,13 +12,13 @@ static inline ui32 FixSeq(ui32 seq1, ui32 seq2) noexcept {
     return seq2;
 }
 
-TFastRng64::TFastRng64(ui64 seed1, ui32 seq1, ui64 seed2, ui32 seq2) noexcept 
+TFastRng64::TFastRng64(ui64 seed1, ui32 seq1, ui64 seed2, ui32 seq2) noexcept
     : R1_(seed1, seq1)
     , R2_(seed2, FixSeq(seq1, seq2))
 {
 }
 
-TFastRng64::TArgs::TArgs(ui64 seed) noexcept { 
+TFastRng64::TArgs::TArgs(ui64 seed) noexcept {
     TReallyFastRng32 rng(seed);
 
     Seed1 = rng.GenRand64();

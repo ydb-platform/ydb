@@ -4,8 +4,8 @@
 
 Y_UNIT_TEST_SUITE(TYListSuite) {
     Y_UNIT_TEST(TestInitializerList) {
-        TList<int> l = {3, 42, 6}; 
-        TList<int> expected; 
+        TList<int> l = {3, 42, 6};
+        TList<int> expected;
         expected.push_back(3);
         expected.push_back(42);
         expected.push_back(6);

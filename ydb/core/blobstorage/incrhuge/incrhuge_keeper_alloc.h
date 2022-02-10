@@ -25,7 +25,7 @@ namespace NKikimr {
 
             // callback function that is invoked on chunk reservation success/failure; this function is called by keeper
             // on TEvChunkWriteResult event reception
-            void ApplyAllocate(NKikimrProto::EReplyStatus status, TVector<TChunkIdx>&& chunks, const TActorContext& ctx); 
+            void ApplyAllocate(NKikimrProto::EReplyStatus status, TVector<TChunkIdx>&& chunks, const TActorContext& ctx);
         };
 
     } // NIncrHuge

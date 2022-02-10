@@ -50,9 +50,9 @@ namespace NSorted {
     // Sorted vector, which is order by the key. The key is extracted from the value by the provided key-extractor
     template <typename TValueType, typename TKeyType = TValueType, class TKeyExtractor = TIdentity,
               class TPredicate = TLess<TKeyType>, class A = std::allocator<TValueType>>
-    class TSortedVector: public TVector<TValueType, A> { 
+    class TSortedVector: public TVector<TValueType, A> {
     private:
-        typedef TVector<TValueType, A> TBase; 
+        typedef TVector<TValueType, A> TBase;
         typedef NPrivate::TKeyCompare<TValueType, TPredicate, TKeyExtractor> TKeyCompare;
         typedef NPrivate::TEqual<TKeyCompare> TValueEqual;
         typedef NPrivate::TEqual<TPredicate> TKeyEqual;
@@ -364,7 +364,7 @@ namespace NSorted {
         inline TValueType& Get(const TKeyType& key) {
             typename TBase::iterator i = TBase::LowerBound(key);
             if (i == TBase::end() || key != i->first)
-                return TVector<std::pair<TKeyType, TValueType>, A>::insert(i, std::make_pair(key, TValueType()))->second; 
+                return TVector<std::pair<TKeyType, TValueType>, A>::insert(i, std::make_pair(key, TValueType()))->second;
             else
                 return i->second;
         }
@@ -437,7 +437,7 @@ namespace NSorted {
         inline TValueType& Get(const TKeyType& key) {
             typename TBase::iterator i = TBase::LowerBound(key);
             if (i == TBase::end() || !TKeyEqual()(TKeyExtractor()(*i), key))
-                i = TVector<TValueType, A>::insert(i, TValueType(key)); 
+                i = TVector<TValueType, A>::insert(i, TValueType(key));
             return *i;
         }
 

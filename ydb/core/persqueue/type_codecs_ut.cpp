@@ -18,7 +18,7 @@ using TDataRef = NScheme::TDataRef;
 
 Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
 
-    void Metrics(const TVector<TDataRef>& values, const ICodec* codec) { 
+    void Metrics(const TVector<TDataRef>& values, const ICodec* codec) {
         TAutoPtr<TFlatBlobDataOutputStream> output(new TFlatBlobDataOutputStream());
         auto chunk = codec->MakeChunk(output.Get());
 
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         Cerr << "Iterate: " << TInstant::Now() - start << Endl;
     }
 
-    void TestImpl(const TVector<TDataRef>& values, const ICodec* codec) { 
+    void TestImpl(const TVector<TDataRef>& values, const ICodec* codec) {
         TAutoPtr<TFlatBlobDataOutputStream> output(new TFlatBlobDataOutputStream());
         auto chunk = codec->MakeChunk(output.Get());
         for (const auto& value : values) {
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
 
         THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TBool::TypeId));
 
-        TVector<TDataRef> values(1000, TDataRef((const char*)&VALUE_FALSE, sizeof(VALUE_FALSE))); 
+        TVector<TDataRef> values(1000, TDataRef((const char*)&VALUE_FALSE, sizeof(VALUE_FALSE)));
         for (int i = 0; i < 100; ++i) {
             values[i * 2] = TDataRef((const char*)&VALUE_TRUE, sizeof(VALUE_TRUE));
             values[500 + i] = TDataRef((const char*)&VALUE_TRUE, sizeof(VALUE_TRUE));
@@ -109,7 +109,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     Y_UNIT_TEST(TestFixedLenCodec) {
         THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TInt32::TypeId));
 
-        TVector<TDataRef> values; 
+        TVector<TDataRef> values;
         for (int i = 0; i < 1000; ++i) {
             int data = i;
             values.push_back(TDataRef((const char*)&data, sizeof(data), true));
@@ -133,9 +133,9 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
 
         TReallyFastRng32 rand(100500);
 
-        TVector<TDataRef> values; 
+        TVector<TDataRef> values;
         for (int i = 0; i < 1000; ++i) {
-            TVector<char> value(rand.Uniform(10)); 
+            TVector<char> value(rand.Uniform(10));
             for (char& c : value)
                 c = 'a' + rand.Uniform(26);
             values.push_back(TDataRef(value.data(), value.size(), true));
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
 
         TReallyFastRng32 rand(100500);
 
-        TVector<TDataRef> values; 
+        TVector<TDataRef> values;
         for (int i = 0; i < 1000; ++i) {
             ui32 value = rand.Uniform(100500);
             values.push_back(TDataRef((const char*)&value, sizeof(value), true));
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
 
         TReallyFastRng32 rand(100500);
 
-        TVector<TDataRef> values; 
+        TVector<TDataRef> values;
         for (int i = 0; i < 1000; ++i) {
             i32 value = rand.Uniform(100500);
             if (i & 1)
@@ -203,7 +203,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
 
         TReallyFastRng32 rand(100500);
 
-        TVector<TDataRef> values; 
+        TVector<TDataRef> values;
         ui32 value = 2000000;
         for (int i = 0; i < 1000; ++i) {
             if (rev)
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
 
         TReallyFastRng32 rand(100500);
 
-        TVector<TDataRef> values; 
+        TVector<TDataRef> values;
         ui32 value = -17;
         for (int i = 0; i < 1000; ++i) {
             value += rand.Uniform(1000);

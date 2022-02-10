@@ -2,7 +2,7 @@
 
 #include <util/memory/alloc.h>
 #include <util/digest/numeric.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/string_hash.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/typetraits.h>
@@ -33,7 +33,7 @@ namespace std {
 namespace NHashPrivate {
     template <class T, bool needNumericHashing>
     struct THashHelper {
-        inline size_t operator()(const T& t) const noexcept { 
+        inline size_t operator()(const T& t) const noexcept {
             return (size_t)t; // If you have a compilation error here, look at explanation below:
             // Probably error is caused by undefined template specialization of THash<T>
             // You can find examples of specialization in this file
@@ -42,7 +42,7 @@ namespace NHashPrivate {
 
     template <class T>
     struct THashHelper<T, true> {
-        inline size_t operator()(const T& t) const noexcept { 
+        inline size_t operator()(const T& t) const noexcept {
             return NumericHash(t);
         }
     };
@@ -63,7 +63,7 @@ struct hash: public NHashPrivate::THashHelper<T, std::is_scalar<T>::value && !st
 
 template <typename T>
 struct hash<const T*> {
-    inline size_t operator()(const T* t) const noexcept { 
+    inline size_t operator()(const T* t) const noexcept {
         return NumericHash(t);
     }
 };
@@ -185,12 +185,12 @@ struct TEqualTo: public std::equal_to<T> {
 };
 
 template <>
-struct TEqualTo<TString>: public TEqualTo<TStringBuf> { 
+struct TEqualTo<TString>: public TEqualTo<TStringBuf> {
     using is_transparent = void;
 };
 
 template <>
-struct TEqualTo<TUtf16String>: public TEqualTo<TWtringBuf> { 
+struct TEqualTo<TUtf16String>: public TEqualTo<TWtringBuf> {
     using is_transparent = void;
 };
 
@@ -227,8 +227,8 @@ struct TCIEqualTo<TStringBuf> {
 };
 
 template <>
-struct TCIEqualTo<TString> { 
-    inline bool operator()(const TString& a, const TString& b) const { 
+struct TCIEqualTo<TString> {
+    inline bool operator()(const TString& a, const TString& b) const {
         return a.size() == b.size() && strnicmp(a.data(), b.data(), a.size()) == 0;
     }
 };
@@ -238,12 +238,12 @@ struct TLess: public std::less<T> {
 };
 
 template <>
-struct TLess<TString>: public TLess<TStringBuf> { 
+struct TLess<TString>: public TLess<TStringBuf> {
     using is_transparent = void;
 };
 
 template <>
-struct TLess<TUtf16String>: public TLess<TWtringBuf> { 
+struct TLess<TUtf16String>: public TLess<TWtringBuf> {
     using is_transparent = void;
 };
 
@@ -257,12 +257,12 @@ struct TGreater: public std::greater<T> {
 };
 
 template <>
-struct TGreater<TString>: public TGreater<TStringBuf> { 
+struct TGreater<TString>: public TGreater<TStringBuf> {
     using is_transparent = void;
 };
 
 template <>
-struct TGreater<TUtf16String>: public TGreater<TWtringBuf> { 
+struct TGreater<TUtf16String>: public TGreater<TWtringBuf> {
     using is_transparent = void;
 };
 

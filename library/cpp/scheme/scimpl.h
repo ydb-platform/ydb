@@ -849,7 +849,7 @@ namespace NSc {
     LIBRARY_SCHEME_DECLARE_TVALUE_OPS(double, CompareFloat)
 
     LIBRARY_SCHEME_DECLARE_TVALUE_OPS(TStringBuf, CompareStr)
-    LIBRARY_SCHEME_DECLARE_TVALUE_OPS(const TString&, CompareStr) 
+    LIBRARY_SCHEME_DECLARE_TVALUE_OPS(const TString&, CompareStr)
     LIBRARY_SCHEME_DECLARE_TVALUE_OPS(const char* const, CompareStr)
 
 #undef LIBRARY_SCHEME_DECLARE_TVALUE_OPS

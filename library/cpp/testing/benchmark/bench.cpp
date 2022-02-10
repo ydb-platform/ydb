@@ -100,7 +100,7 @@ namespace {
     }
 
     struct THiPerfTimer: public THPTimer {
-        static inline TString FmtTime(double t) { 
+        static inline TString FmtTime(double t) {
             return DoFmtTime(t);
         }
     };
@@ -110,7 +110,7 @@ namespace {
             return (TInstant::Now() - N).MicroSeconds() / 1000000.0;
         }
 
-        static inline TString FmtTime(double t) { 
+        static inline TString FmtTime(double t) {
             return DoFmtTime(t);
         }
 
@@ -122,12 +122,12 @@ namespace {
             return GetCycleCount() - N;
         }
 
-        static inline TString FmtTime(double t) { 
+        static inline TString FmtTime(double t) {
             if (t < 0.5) {
                 t = 0.0;
             }
 
-            TString hr; 
+            TString hr;
             if (t > 10 * 1000) {
                 hr = " (" + ToString(HumanReadableSize(t, ESizeFormat::SF_QUANTITY)) + ")";
             }
@@ -162,7 +162,7 @@ namespace {
     };
 
     using TSample = std::pair<size_t, double>;
-    using TSamples = TVector<TSample>; 
+    using TSamples = TVector<TSample>;
 
     struct TLinFunc {
         double A;
@@ -203,7 +203,7 @@ namespace {
         };
 
         using TSampleWithError = std::pair<const TSample*, double>;
-        TVector<TSampleWithError> v; 
+        TVector<TSampleWithError> v;
 
         v.reserve(s.size());
 
@@ -384,7 +384,7 @@ namespace {
 
     private:
         TAdaptiveLock ResultsLock_;
-        TVector<TResult> Results_; 
+        TVector<TResult> Results_;
     };
 
     class TOrderedReporter: public IReporter {
@@ -544,7 +544,7 @@ namespace {
 
         bool ListTests = false;
         double TimeBudget = -1.0;
-        TVector<THolder<RE2>> Filters; 
+        TVector<THolder<RE2>> Filters;
         size_t Threads = 0;
         EOutFormat OutFormat;
     };
@@ -553,7 +553,7 @@ namespace {
 int NBench::Main(int argc, char** argv) {
     const TProgOpts opts(argc, argv);
 
-    TVector<ITestRunner*> tests; 
+    TVector<ITestRunner*> tests;
 
     for (auto&& it : Tests()) {
         if (opts.MatchFilters(it.Name())) {

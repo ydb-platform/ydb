@@ -42,7 +42,7 @@ namespace NActors {
 
     namespace NSchedulerQueue {
         class TReader;
-        struct TQueueType; 
+        struct TQueueType;
     }
 
     class IExecutorPool : TNonCopyable {
@@ -110,7 +110,7 @@ namespace NActors {
         virtual void Shutdown() = 0;
         virtual bool Cleanup() = 0;
 
-        virtual void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const { 
+        virtual void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
             // TODO: make pure virtual and override everywhere
             Y_UNUSED(poolStats);
             Y_UNUSED(statsCopy);
@@ -173,7 +173,7 @@ namespace NActors {
     using TProxyWrapperFactory = std::function<TActorId(TActorSystem*, ui32)>;
 
     struct TInterconnectSetup {
-        TVector<TActorSetupCmd> ProxyActors; 
+        TVector<TActorSetupCmd> ProxyActors;
         TProxyWrapperFactory ProxyWrapperFactory;
     };
 
@@ -229,7 +229,7 @@ namespace NActors {
         volatile ui64 CurrentMonotonic;
         volatile ui64 CurrentIDCounter;
 
-        THolder<NSchedulerQueue::TQueueType> ScheduleQueue; 
+        THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
         mutable TTicketLock ScheduleLock;
 
         friend class TExecutorThread;

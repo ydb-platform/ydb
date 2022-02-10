@@ -30,7 +30,7 @@ namespace NKikimr {
                 buf.Append(zero, len);
             }
 
-            static void Append(TString &buf, const char *zero, size_t len) { 
+            static void Append(TString &buf, const char *zero, size_t len) {
                 buf.append(zero, len);
             }
 

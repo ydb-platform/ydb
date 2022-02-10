@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         public:
             TMyActor(TMutex *syncMutex)
                 : TActor(&TMyActor::StateFunc)
-                , CurrentTime(TInstant::MicroSeconds(0)) 
+                , CurrentTime(TInstant::MicroSeconds(0))
                 , SyncMutex(syncMutex)
             {
             }
@@ -296,7 +296,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         public:
             TMyActor()
                 : TActor(&TThis::StateInit)
-                , CurrentTime(TInstant::MicroSeconds(0)) 
+                , CurrentTime(TInstant::MicroSeconds(0))
             {
             }
 
@@ -441,7 +441,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             TActorId sender = runtime.AllocateEdgeActor();
             ui32 count = 1000;
             ui32 consumersCount = 4;
-            TVector<TConsumerActor*> consumers; 
+            TVector<TConsumerActor*> consumers;
             TVector<TActorId> consumerIds;
             for (ui32 i = 0; i < consumersCount; ++i) {
                 auto consumerActor = new TConsumerActor(count);

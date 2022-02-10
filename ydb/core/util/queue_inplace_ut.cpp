@@ -28,8 +28,8 @@ Y_UNIT_TEST_SUITE(TQueueInplaceTests) {
     };
 
     Y_UNIT_TEST(TestSimpleInplace) {
-        using TQueueType = TQueueInplace<TStruct, 32>; // 3 values per chunk 
-        TQueueType queue; 
+        using TQueueType = TQueueInplace<TStruct, 32>; // 3 values per chunk
+        TQueueType queue;
 
         UNIT_ASSERT(queue.Head() == nullptr);
 
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TQueueInplaceTests) {
         UNIT_ASSERT_VALUES_EQUAL(1u, p.use_count());
 
         {
-            TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> queue(new TQueueType()); 
+            TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> queue(new TQueueType());
             queue->Push(new std::shared_ptr<bool>(p));
             queue->Push(new std::shared_ptr<bool>(p));
             queue->Push(new std::shared_ptr<bool>(p));

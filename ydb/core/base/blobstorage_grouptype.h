@@ -3,7 +3,7 @@
 #include <ydb/core/erasure/erasure.h>
 #include <ydb/core/base/logoblob.h>
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
 
 #include <util/generic/list.h>
@@ -32,7 +32,7 @@ struct TBlobStorageGroupType : public TErasureType {
             , SlowVDiskMask(0)
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TPartLayout ";
             str << " Sessions {";
@@ -82,7 +82,7 @@ struct TBlobStorageGroupType : public TErasureType {
                 , PartIdx(partIdx)
             {}
 
-            TString ToString() const { 
+            TString ToString() const {
                 TStringStream str;
                 str << "{TVDiskPart VDiskIdx# " << (ui32)VDiskIdx;
                 str << " PartIdx# " << (ui32)PartIdx;
@@ -93,7 +93,7 @@ struct TBlobStorageGroupType : public TErasureType {
 
         TStackVec<TVDiskPart, 8> Records;
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TPartPlacement Size# " << Records.size();
             str << "{";
@@ -107,13 +107,13 @@ struct TBlobStorageGroupType : public TErasureType {
 
     struct TResult {
         const ui32 PartCount = 0;
-        const TString Error; 
+        const TString Error;
 
         TResult(ui32 partCount)
             : PartCount(partCount)
         {}
 
-        TResult(const TString &error) 
+        TResult(const TString &error)
             : Error(error)
         {}
 
@@ -121,7 +121,7 @@ struct TBlobStorageGroupType : public TErasureType {
             return Error.empty();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             if (Good()) {
                 str << PartCount;

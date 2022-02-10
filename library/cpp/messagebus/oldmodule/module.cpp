@@ -769,7 +769,7 @@ void TBusModuleImpl::AddJob(TJobRunner* jobRunner) {
 }
 
 void TBusModuleImpl::DestroyJob(TJobRunner* job) {
-    Y_ASSERT(job->JobStorageIterator != TList<TJobRunner*>::iterator()); 
+    Y_ASSERT(job->JobStorageIterator != TList<TJobRunner*>::iterator());
 
     {
         TWhatThreadDoesAcquireGuard<TMutex> G(Lock, "modules: acquiring lock for DestroyJob");
@@ -784,7 +784,7 @@ void TBusModuleImpl::DestroyJob(TJobRunner* job) {
         }
     }
 
-    job->JobStorageIterator = TList<TJobRunner*>::iterator(); 
+    job->JobStorageIterator = TList<TJobRunner*>::iterator();
 }
 
 void TBusModuleImpl::OnMessageReceived(TAutoPtr<TBusMessage> msg0, TOnMessageContext& context) {

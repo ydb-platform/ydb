@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TEventSerialization) {
             TMockEvent event;
             event.msg = &bm;
             chunker.SetSerializingEvent(&event);
-            char buf1[87]; 
+            char buf1[87];
             TString bmChunkedSerialized;
             while (!chunker.IsComplete()) {
                 auto range = chunker.FeedBuf(&buf1[0], sizeof(buf1));

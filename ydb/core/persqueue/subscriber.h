@@ -18,7 +18,7 @@ struct TReadAnswer {
 };
 
 struct TReadInfo {
-    TString User; 
+    TString User;
     TString ClientDC;
     ui64 Offset;
     ui16 PartNo;
@@ -31,9 +31,9 @@ struct TReadInfo {
 
     bool IsSubscription;
 
-    TVector<TRequestedBlob> Blobs; //offset, count, value 
+    TVector<TRequestedBlob> Blobs; //offset, count, value
     ui64 CachedOffset; //offset of head can be bigger than last databody offset
-    TVector<TClientBlob> Cached; //records from head 
+    TVector<TClientBlob> Cached; //records from head
 
     TReadInfo() = delete;
     TReadInfo(
@@ -79,7 +79,7 @@ struct TReadInfo {
         const ui64 dst,
         const ui64 sizeLag
     ) {
-        TEvPQ::TEvBlobResponse response(0, TVector<TRequestedBlob>()); 
+        TEvPQ::TEvBlobResponse response(0, TVector<TRequestedBlob>());
         return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag);
     }
 };
@@ -101,9 +101,9 @@ public:
     TMaybe<TReadInfo> ForgetSubscription(const ui64 cookie);
 
     //form TReadInfo::Cached with new data and return ready reads
-    TVector<std::pair<TReadInfo, ui64>> CompleteSubscriptions(const ui64 endOffset); 
+    TVector<std::pair<TReadInfo, ui64>> CompleteSubscriptions(const ui64 endOffset);
 private:
-    THashMap<ui64, TReadInfo> ReadInfo;    // cookie -> {...} 
+    THashMap<ui64, TReadInfo> ReadInfo;    // cookie -> {...}
     std::deque<TOffsetCookie> WaitingReads;
 };
 
@@ -119,7 +119,7 @@ public:
     TMaybe<TReadInfo> OnTimeout(TEvPQ::TEvReadTimeout::TPtr& ev);
 
     //get completed subscriptions
-    TVector<std::pair<TReadInfo, ui64>> GetReads(const ui64 endOffsets); 
+    TVector<std::pair<TReadInfo, ui64>> GetReads(const ui64 endOffsets);
 
 private:
     TSubscriberLogic Subscriber;

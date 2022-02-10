@@ -56,7 +56,7 @@ namespace {
             return memoization->second;
         }
 
-        TExprNode::TListType newChildren; 
+        TExprNode::TListType newChildren;
         bool hasRemaps = false;
         for (const auto& child : node->Children()) {
             auto newChild = ApplyRemaps(child, ctx);
@@ -148,7 +148,7 @@ namespace {
                 }
             }
         } else {
-            TExprNode::TListType newChildren; 
+            TExprNode::TListType newChildren;
             newChildren.reserve(current->ChildrenSize());
             bool hasRenames = false;
             for (auto& child : current->Children()) {
@@ -260,7 +260,7 @@ namespace {
                 }
             }
         } else {
-            TExprNode::TListType newChildren; 
+            TExprNode::TListType newChildren;
             newChildren.reserve(node->ChildrenSize());
             bool hasRenames = false;
 
@@ -651,7 +651,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
                 }
 
                 ui32 flags = 0U;
-                TString content; 
+                TString content;
                 for (const auto& child : node->Children()) {
                     if (!EnsureAtom(*child, ctx)) {
                         return nullptr;
@@ -822,8 +822,8 @@ TExprNode::TPtr ApplySyncListToWorld(const TExprNode::TPtr& main, const TSyncMap
     }
 
     using TPair = std::pair<TExprNode::TPtr, ui64>;
-    TVector<TPair> sortedList(syncList.cbegin(), syncList.cend()); 
-    TExprNode::TListType syncChildren; 
+    TVector<TPair> sortedList(syncList.cbegin(), syncList.cend());
+    TExprNode::TListType syncChildren;
     syncChildren.push_back(main);
     Sort(sortedList, [](const TPair& x, const TPair& y) { return x.second < y.second; });
     for (auto x : sortedList) {

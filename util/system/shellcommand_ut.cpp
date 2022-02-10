@@ -33,11 +33,11 @@ public:
         Stream_.Reserve(100);
     }
 
-    TString Str() const { 
+    TString Str() const {
         with_lock (Lock_) {
             return Stream_.Str();
         }
-        return TString(); // line for compiler 
+        return TString(); // line for compiler
     }
 
 protected:
@@ -61,7 +61,7 @@ private:
 
 Y_UNIT_TEST_SUITE(TShellQuoteTest) {
     Y_UNIT_TEST(TestQuoteArg) {
-        TString cmd; 
+        TString cmd;
         ShellQuoteArg(cmd, "/pr f/krev/prev.exe");
         ShellQuoteArgSp(cmd, "-DVal=\"W Quotes\"");
         ShellQuoteArgSp(cmd, "-DVal=W Space");
@@ -170,8 +170,8 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
     }
     Y_UNIT_TEST(TestQuotes) {
         TShellCommandOptions options;
-        TString input = TString("a\"a a"); 
-        TString output; 
+        TString input = TString("a\"a a");
+        TString output;
         TStringOutput outputStream(output);
         options.SetOutputStream(&outputStream);
         TShellCommand cmd("echo", options);
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
     // 'type con' and 'copy con con' want real console, not stdin, use sort
     Y_UNIT_TEST(TestInput) {
         TShellCommandOptions options;
-        TString input = (TString("a") * 2000).append(NL) * textSize; 
+        TString input = (TString("a") * 2000).append(NL) * textSize;
         TStringInput inputStream(input);
         options.SetInputStream(&inputStream);
         TShellCommand cmd(catCommand, options);
@@ -212,10 +212,10 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
     }
     Y_UNIT_TEST(TestOutput) {
         TShellCommandOptions options;
-        TString input = (TString("a") * 2000).append(NL) * textSize; 
+        TString input = (TString("a") * 2000).append(NL) * textSize;
         TStringInput inputStream(input);
         options.SetInputStream(&inputStream);
-        TString output; 
+        TString output;
         TStringOutput outputStream(output);
         options.SetOutputStream(&outputStream);
         TShellCommand cmd(catCommand, options);
@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
 #if !defined(_win_)
     // this ut is unix-only, port to win using %TEMP%
     Y_UNIT_TEST(TestInterrupt) {
-        TString tmpfile = TString("shellcommand_ut.interrupt.") + ToString(RandomNumber<ui32>()); 
+        TString tmpfile = TString("shellcommand_ut.interrupt.") + ToString(RandomNumber<ui32>());
 
         TShellCommandOptions options;
         options.SetAsync(true);
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         rc = SigProcMask(SIG_SETMASK, &newmask, &oldmask);
         UNIT_ASSERT(rc == 0);
 
-        TString tmpfile = TString("shellcommand_ut.interrupt.") + ToString(RandomNumber<ui32>()); 
+        TString tmpfile = TString("shellcommand_ut.interrupt.") + ToString(RandomNumber<ui32>());
 
         TShellCommandOptions options;
         options.SetAsync(true);
@@ -381,7 +381,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
     }
 #endif
     Y_UNIT_TEST(TestInternalError) {
-        TString input = (TString("a") * 2000).append("\n"); 
+        TString input = (TString("a") * 2000).append("\n");
         TStringInput inputStream(input);
         TMemoryOutput outputStream(nullptr, 0);
         TShellCommandOptions options;

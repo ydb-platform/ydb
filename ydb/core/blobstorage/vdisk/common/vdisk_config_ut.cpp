@@ -19,7 +19,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(Basic) {
-            TString prototext = R"___( 
+            TString prototext = R"___(
             VDiskKinds {
                 Kind: Test1
                 BaseKind: Default
@@ -43,7 +43,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(RtmrProblem1) {
-            TString prototext = R"___( 
+            TString prototext = R"___(
             VDiskKinds {
             Kind: Log
                 Config {
@@ -61,7 +61,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(RtmrProblem2) {
-            TString prototext = R"___( 
+            TString prototext = R"___(
             VDiskKinds {
             Kind: Log
                 Config {
@@ -87,7 +87,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(ThreeLevels) {
-            TString prototext = R"___( 
+            TString prototext = R"___(
             VDiskKinds {
                 Kind: Test1
                 BaseKind: Default
@@ -119,7 +119,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(NoMoneyNoHoney) {
-            TString prototext; 
+            TString prototext;
             TAllVDiskKinds kinds(prototext);
             TIntrusivePtr<TVDiskConfig> cfg;
             cfg = kinds.MakeVDiskConfig(GetDefaultBaseInfo(NKikimrBlobStorage::TVDiskKind::Default));

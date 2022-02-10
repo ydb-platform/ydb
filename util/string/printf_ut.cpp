@@ -4,19 +4,19 @@
 
 Y_UNIT_TEST_SUITE(TStringPrintf) {
     Y_UNIT_TEST(TestSprintf) {
-        TString s; 
+        TString s;
         int len = sprintf(s, "Hello %s", "world");
-        UNIT_ASSERT_EQUAL(s, TString("Hello world")); 
+        UNIT_ASSERT_EQUAL(s, TString("Hello world"));
         UNIT_ASSERT_EQUAL(len, 11);
     }
 
     Y_UNIT_TEST(TestFcat) {
-        TString s; 
+        TString s;
         int len = sprintf(s, "Hello %s", "world");
-        UNIT_ASSERT_EQUAL(s, TString("Hello world")); 
+        UNIT_ASSERT_EQUAL(s, TString("Hello world"));
         UNIT_ASSERT_EQUAL(len, 11);
         len = fcat(s, " qwqw%s", "as");
-        UNIT_ASSERT_EQUAL(s, TString("Hello world qwqwas")); 
+        UNIT_ASSERT_EQUAL(s, TString("Hello world qwqwas"));
         UNIT_ASSERT_EQUAL(len, 7);
     }
 

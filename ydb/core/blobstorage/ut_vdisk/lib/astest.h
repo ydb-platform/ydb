@@ -48,8 +48,8 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     Counters = TIntrusivePtr<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
     TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
     TPortManager pm;
-    nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001)); 
-    nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002)); 
+    nameserverTable->StaticNodeTable[1] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12001));
+    nameserverTable->StaticNodeTable[2] = std::pair<TString, ui32>("127.0.0.1", pm.GetPort(12002));
 
     auto setup1 = MakeHolder<TActorSystemSetup>();
     setup1->NodeId = 1;
@@ -81,7 +81,7 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
         NKikimrServices::EServiceKikimr_MAX,
         NKikimrServices::EServiceKikimr_Name
     );
-    TString explanation; 
+    TString explanation;
     //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_SKELETON, explanation);
     //logSettings->SetLevel(NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, explan
     NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(logSettings,

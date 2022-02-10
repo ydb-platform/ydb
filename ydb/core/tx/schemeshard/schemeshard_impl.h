@@ -146,10 +146,10 @@ public:
 
     TVector<TString> RootPathElemets;
 
-    THashMap<TPathId, TPathElement::TPtr> PathsById; 
+    THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
 
-    THashMap<TPathId, TTableInfo::TPtr> Tables; 
+    THashMap<TPathId, TTableInfo::TPtr> Tables;
     THashMap<TPathId, TTableInfo::TPtr> TTLEnabledTables;
 
     THashMap<TPathId, TTableIndexInfo::TPtr> Indexes;
@@ -163,7 +163,7 @@ public:
 
     THashMap<TPathId, TTxId> LockedPaths;
 
-    THashMap<TPathId, TPersQueueGroupInfo::TPtr> PersQueueGroups; 
+    THashMap<TPathId, TPersQueueGroupInfo::TPtr> PersQueueGroups;
     THashMap<TPathId, TRtmrVolumeInfo::TPtr> RtmrVolumes;
     THashMap<TPathId, TSolomonVolumeInfo::TPtr> SolomonVolumes;
     THashMap<TPathId, TSubDomainInfo::TPtr> SubDomains;
@@ -719,11 +719,11 @@ public:
         bool rangeBeginInclusive, bool rangeEndInclusive,
         bool newTable = false);
     void FillTableDescription(TPathId tableId, ui32 partitionIdx, ui64 schemaVersion, NKikimrSchemeOp::TTableDescription* tableDescr);
-    static bool FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 keySize, NScheme::TTypeId firstKeyColType, 
-                                        ui32 partitionCount, const NScheme::TTypeRegistry* typeRegistry, TString& errStr); 
-    static bool FillSplitPartitioning(TVector<TString>& rangeEnds, const TConstArrayRef<NScheme::TTypeId>& keyColTypes, 
+    static bool FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 keySize, NScheme::TTypeId firstKeyColType,
+                                        ui32 partitionCount, const NScheme::TTypeRegistry* typeRegistry, TString& errStr);
+    static bool FillSplitPartitioning(TVector<TString>& rangeEnds, const TConstArrayRef<NScheme::TTypeId>& keyColTypes,
                                       const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries,
-                                      TString& errStr); 
+                                      TString& errStr);
 
     TString FillAlterTableTxBody(TPathId tableId, TShardIdx shardIdx, TMessageSeqNo seqNo) const;
     TString FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, ui32 shardNum, TMessageSeqNo seqNo) const;

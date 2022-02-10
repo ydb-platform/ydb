@@ -42,7 +42,7 @@ namespace NKikimr {
                 KeepItemsDbgStream << "}";
             }
 
-            TString ToString() const { 
+            TString ToString() const {
                 TStringStream str;
                 str << "{Total# " << ItemsTotal << " IndexKeep# " << ItemsKeepIndex << " DataKeep# " << ItemsKeepData;
                 str << " " << KeepItemsDbgStream.Str() << "}";

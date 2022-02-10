@@ -16,10 +16,10 @@ namespace NKikimr {
         // second -- updates to all windows as result of global recalculation (TWindowStatusVec)
         ////////////////////////////////////////////////////////////////////////////
         template <class TClientId>
-        struct TFeedback : public std::pair<const TWindowStatus<TClientId>&, const TVector<TWindowStatus<TClientId>> &> { 
-            using TBase = std::pair<const TWindowStatus<TClientId>&, const TVector<TWindowStatus<TClientId>> &>; 
+        struct TFeedback : public std::pair<const TWindowStatus<TClientId>&, const TVector<TWindowStatus<TClientId>> &> {
+            using TBase = std::pair<const TWindowStatus<TClientId>&, const TVector<TWindowStatus<TClientId>> &>;
 
-            TFeedback(const TWindowStatus<TClientId> &op, const TVector<TWindowStatus<TClientId>> &other) 
+            TFeedback(const TWindowStatus<TClientId> &op, const TVector<TWindowStatus<TClientId>> &other)
                 : TBase(op, other)
             {}
 
@@ -276,7 +276,7 @@ namespace NKikimr {
 
             typedef TIntrusivePtr<TWindow> TWindowPtr;
             typedef THashMap<TActorId, TWindowPtr> TAllWindows;
-            typedef TVector<TWindowPtr> TWindowPtrVec; 
+            typedef TVector<TWindowPtr> TWindowPtrVec;
 
             const bool CheckMsgId;
             const ui64 MaxCost;
@@ -291,7 +291,7 @@ namespace NKikimr {
             TWindowPtrVec ActiveWindowsCache;
             TWindowStatus StatusCache;
             TWindowStatus RecalculateStatusCache;
-            TVector<TWindowStatus> OtherWindowsStatusVecCache; 
+            TVector<TWindowStatus> OtherWindowsStatusVecCache;
             TStatPtr GlobalStatPtr;
             TDuration WindowTimeout;
 

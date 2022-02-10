@@ -2798,7 +2798,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 123;
 
-        TString tableConfig = "Name: \"NilNoviSubLuna\"" 
+        TString tableConfig = "Name: \"NilNoviSubLuna\""
             "Columns { Name: \"key\"        Type: \"Uint64\"}"
             "Columns { Name: \"value\"      Type: \"Uint64\"}"
             "KeyColumnNames: [\"key\"]"
@@ -3167,7 +3167,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT_VALUES_EQUAL(*(const ui32*)cells.GetCells()[0].Data(), val);
         };
 
-        TVector<ui32> expectedBoundaries = {200, 4000}; 
+        TVector<ui32> expectedBoundaries = {200, 4000};
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/NewTable", true),
                            {NLs::PartitionCount(expectedBoundaries.size()+1),
@@ -3765,9 +3765,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TSet<TString> cols = {"key1", "key2", "value"}; 
+        TSet<TString> cols = {"key1", "key2", "value"};
         TSet<TString> keyCol = {"key1", "key2"};
-        TSet<TString> dropCols; 
+        TSet<TString> dropCols;
 
         TestCreateTable(runtime, ++txId, "/MyRoot",
                 R"(Name: "Table"
@@ -4063,9 +4063,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        TSet<TString> cols = {"key1", "key2", "value"}; 
+        TSet<TString> cols = {"key1", "key2", "value"};
         TSet<TString> keyCol = {"key1", "key2"};
-        TSet<TString> dropCols; 
+        TSet<TString> dropCols;
 
         TestCreateTable(runtime, ++txId, "/MyRoot",
                 R"(Name: "Table"
@@ -6241,12 +6241,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 1000;
 
-        TString tcfg1 = "Name: \"Table\"" 
+        TString tcfg1 = "Name: \"Table\""
             "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
             "Columns { Name: \"Value\"      Type: \"Utf8\"}"
             "KeyColumnNames: [\"RowId\"]";
 
-        TString tcfg2 = "Name: \"PartTable\"" 
+        TString tcfg2 = "Name: \"PartTable\""
                     "Columns { Name: \"key1\"       Type: \"Uint32\"}"
                     "Columns { Name: \"key2\"       Type: \"Utf8\"}"
                     "Columns { Name: \"key3\"       Type: \"Uint64\"}"
@@ -6303,7 +6303,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 1000;
 
-        TString tcfg = "Name: \"Table\"" 
+        TString tcfg = "Name: \"Table\""
             "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
             "Columns { Name: \"Value\"      Type: \"Utf8\"}"
             "KeyColumnNames: [\"RowId\"]";
@@ -6333,22 +6333,22 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 1000;
 
-        TString tableConfig = "Name: \"DropMeBaby\"" 
+        TString tableConfig = "Name: \"DropMeBaby\""
             "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
             "Columns { Name: \"Value\"      Type: \"Utf8\"}"
             "KeyColumnNames: [\"RowId\"]";
 
-        TString pqGroupConfig = "Name: \"DropMeBaby\"" 
+        TString pqGroupConfig = "Name: \"DropMeBaby\""
             "TotalGroupCount: 100 "
             "PartitionPerTablet: 10 "
             "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
 
-        TString pqGroupConfig1 = "Name: \"DropMeBaby\"" 
+        TString pqGroupConfig1 = "Name: \"DropMeBaby\""
             "TotalGroupCount: 2 "
             "PartitionPerTablet: 1 "
             "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
 
-        TString pqGroupAlter = "Name: \"DropMeBaby\"" 
+        TString pqGroupAlter = "Name: \"DropMeBaby\""
                 "TotalGroupCount: 3 ";
 
         TestMkDir(runtime, ++txId, "/MyRoot", "Ops");
@@ -6455,12 +6455,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 1000;
 
-        TString pqGroupConfig = "Name: \"Isolda\"" 
+        TString pqGroupConfig = "Name: \"Isolda\""
             "TotalGroupCount: 40 "
             "PartitionPerTablet: 10 "
             "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
 
-        TString pqGroupAlter = "Name: \"Isolda\"" 
+        TString pqGroupAlter = "Name: \"Isolda\""
             "TotalGroupCount: 100 ";
 
         Cdbg << "Create + Drop + Create" << Endl;
@@ -6608,17 +6608,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         const TString basePath = "/MyRoot/A/B/C/D/I/F";
         const TString pqPath = basePath + "/Isolda";
 
-        TString pqGroupConfig = "Name: \"Isolda\"" 
+        TString pqGroupConfig = "Name: \"Isolda\""
             "TotalGroupCount: 1 "
             "PartitionPerTablet: 10 "
             "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
 
-        TString pqGroupBigConfig = "Name: \"Isolda\"" 
+        TString pqGroupBigConfig = "Name: \"Isolda\""
             "TotalGroupCount: 1000 "
             "PartitionPerTablet: 10 "
             "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}";
 
-        TString pqGroupBigAlter = "Name: \"Isolda\"" 
+        TString pqGroupBigAlter = "Name: \"Isolda\""
             "TotalGroupCount: 1000 ";
 
         AsyncMkDir(runtime, ++txId, "/MyRoot", "A");
@@ -6970,7 +6970,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         ui64 num = 500;
         ui64 txId = 123;
-        TSet<ui64> ids; 
+        TSet<ui64> ids;
 
         for (ui32 id = 0; id < num; ++id) {
             AsyncMkDir(runtime, ++txId, "/MyRoot", Sprintf("Dir_%u", id));
@@ -7002,7 +7002,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TSchemeLimits limits;
 
         TString path = "/MyRoot";
-        TSet<ui64> ids; 
+        TSet<ui64> ids;
         for (ui32 i = 1; i < limits.MaxDepth; ++i) {
             TString name = Sprintf("%u", i);
             TestMkDir(runtime, ++txId, path, name);
@@ -7022,14 +7022,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(a.IsNull(), b.IsNull(), "NULL/not-NULL mismatch");
         UNIT_ASSERT_VALUES_EQUAL_C(a.Size(), b.Size(), "size mismatch");
         if (!a.IsNull()) {
-            TString aVal(a.Data(), a.Size()); 
-            TString bVal(b.Data(), b.Size()); 
+            TString aVal(a.Data(), a.Size());
+            TString bVal(b.Data(), b.Size());
 //            Cdbg << aVal << Endl;
             UNIT_ASSERT_VALUES_EQUAL_C(aVal, bVal, "data mismatch");
         }
     }
 
-    void TestSerializedCellVec(TVector<TCell>& cells) { 
+    void TestSerializedCellVec(TVector<TCell>& cells) {
         TString serialized = TSerializedCellVec::Serialize(TArrayRef<const TCell>(cells));
         UNIT_ASSERT_VALUES_EQUAL_C(cells.empty(), serialized.empty(), "Empty/non-empty mismatch");
         TSerializedCellVec deserialized(serialized);
@@ -7040,7 +7040,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(SerializedCellVec) { //+
-        TVector<TCell> cells; 
+        TVector<TCell> cells;
         TestSerializedCellVec(cells);
 
         for (size_t i = 0; i < 100; ++i) {

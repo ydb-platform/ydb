@@ -121,8 +121,8 @@ namespace NHyperscan {
     TDatabase Compile(const TStringBuf& regex, unsigned int flags, TCPUFeatures cpuFeatures);
 
     TDatabase CompileMulti(
-        const TVector<const char*>& regexs, 
-        const TVector<unsigned int>& flags, 
+        const TVector<const char*>& regexs,
+        const TVector<unsigned int>& flags,
         const TVector<unsigned int>& ids,
         const TVector<const hs_expr_ext_t*>* extendedParameters = nullptr);
 
@@ -154,7 +154,7 @@ namespace NHyperscan {
         const TScratch& scratch,
         const TStringBuf& text);
 
-    TString Serialize(const TDatabase& db); 
+    TString Serialize(const TDatabase& db);
 
     TDatabase Deserialize(const TStringBuf& serialization);
 }

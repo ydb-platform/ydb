@@ -38,7 +38,7 @@ namespace {
 
 char* MD5::File(const char* filename, char* buf) {
     try {
-        TUnbufferedFileInput fi(filename); 
+        TUnbufferedFileInput fi(filename);
 
         return Stream(&fi, buf);
     } catch (...) {
@@ -47,7 +47,7 @@ char* MD5::File(const char* filename, char* buf) {
     return nullptr;
 }
 
-TString MD5::File(const TString& filename) { 
+TString MD5::File(const TString& filename) {
     TString buf;
     buf.ReserveAndResize(MD5_HEX_DIGEST_LENGTH);
     auto result = MD5::File(filename.data(), buf.begin());
@@ -225,7 +225,7 @@ TString MD5::CalcRaw(TStringBuf data) {
 }
 
 TString MD5::CalcRaw(const TArrayRef<const ui8>& data) {
-    TString result; 
+    TString result;
     result.ReserveAndResize(16);
     MD5().Update(data).Final(reinterpret_cast<ui8*>(result.begin()));
     return result;

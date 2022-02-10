@@ -876,8 +876,8 @@ public:
 
         using Table = Schema::Box;
 
-        using TUserIds = TSet<Schema::BoxUser::TKey::Type>; 
-        using THosts = TMap<THostKey, THostInfo>; 
+        using TUserIds = TSet<Schema::BoxUser::TKey::Type>;
+        using THosts = TMap<THostKey, THostInfo>;
 
         Table::Name::Type Name;
         TMaybe<Table::Generation::Type> Generation;
@@ -1084,8 +1084,8 @@ public:
             return res;
         }
 
-        using TUserIds = TSet<Schema::BoxStoragePoolUser::TKey::Type>; 
-        using TPDiskFilters = TSet<TPDiskFilter>; 
+        using TUserIds = TSet<Schema::BoxStoragePoolUser::TKey::Type>;
+        using TPDiskFilters = TSet<TPDiskFilter>;
 
         TUserIds UserIds;
         TPDiskFilters PDiskFilters;
@@ -1477,8 +1477,8 @@ private:
     }
 
     //TGroupStatusTracker GroupStatusTracker;
-    TDeque<TAutoPtr<IEventHandle>> InitQueue; 
-    THashMap<Schema::Group::Owner::Type, Schema::Group::ID::Type> OwnerIdIdxToGroup; 
+    TDeque<TAutoPtr<IEventHandle>> InitQueue;
+    THashMap<Schema::Group::Owner::Type, Schema::Group::ID::Type> OwnerIdIdxToGroup;
 
     void ReadGroups(TSet<ui32>& groupIDsToRead, bool discard, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result);
 

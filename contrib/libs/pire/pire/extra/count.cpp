@@ -766,15 +766,15 @@ CountingScanner::CountingScanner(const Fsm& re, const Fsm& sep)
 	// Make a full Cartesian product of two sep_res
 	sep_re.Determine();
 	sep_re.Unsparse();
-	TSet<size_t> dead = sep_re.DeadStates(); 
+	TSet<size_t> dead = sep_re.DeadStates();
 
 	PIRE_IFDEBUG(Cdbg << "=== Original FSM ===" << Endl << sep_re << ">>> " << sep_re.Size() << " states, dead: [" << Join(dead.begin(), dead.end(), ", ") << "]" << Endl);
 
 	Fsm sq;
 
 	typedef ypair<size_t, size_t> NewState;
-	TVector<NewState> states; 
-	TMap<NewState, size_t> invstates; 
+	TVector<NewState> states;
+	TMap<NewState, size_t> invstates;
 
 	states.push_back(NewState(sep_re.Initial(), sep_re.Initial()));
 	invstates.insert(ymake_pair(states.back(), states.size() - 1));
@@ -815,7 +815,7 @@ CountingScanner::CountingScanner(const Fsm& re, const Fsm& sep)
 
 			PIRE_IFDEBUG(if (ns != savedNs) Cdbg << "Diverted transition to (" << savedNs.first << ", " << savedNs.second << ") on " << (char) letter << " to (" << ns.first << ", " << ns.second << ")" << dbgout << Endl);
 
-			TMap<NewState, size_t>::iterator nsi = invstates.find(ns); 
+			TMap<NewState, size_t>::iterator nsi = invstates.find(ns);
 			if (nsi == invstates.end()) {
 				PIRE_IFDEBUG(Cdbg << "New state " << states.size() << " = (" << ns.first << ", " << ns.second << ")" << Endl);
 				states.push_back(ns);
@@ -823,7 +823,7 @@ CountingScanner::CountingScanner(const Fsm& re, const Fsm& sep)
 				sq.Resize(states.size());
 			}
 
-			for (TVector<Char>::const_iterator li = lit->second.second.begin(), le = lit->second.second.end(); li != le; ++li) 
+			for (TVector<Char>::const_iterator li = lit->second.second.begin(), le = lit->second.second.end(); li != le; ++li)
 			sq.Connect(curstate, nsi->second, *li);
 			if (outputs)
 				sq.SetOutput(curstate, nsi->second, outputs);
@@ -885,14 +885,14 @@ public:
 	using typename ScannerGlueCommon<Scanner>::State;
 	using TAction = typename Scanner::Action;
 	using InternalState = typename Scanner::InternalState;
-	typedef TMap<State, size_t> InvStates; 
+	typedef TMap<State, size_t> InvStates;
 
 	CountingScannerGlueTask(const Scanner& lhs, const Scanner& rhs)
 		: ScannerGlueCommon<Scanner>(lhs, rhs, LettersEquality<Scanner>(lhs.m_letters, rhs.m_letters))
 	{
 	}
 
-	void AcceptStates(const TVector<State>& states) 
+	void AcceptStates(const TVector<State>& states)
 	{
 		States = states;
 		this->SetSc(THolder<Scanner>(new Scanner));
@@ -909,7 +909,7 @@ public:
 	}
 
 protected:
-	TVector<State> States; 
+	TVector<State> States;
 	TAction Action(const Scanner& sc, InternalState state, Char letter) const
 	{
 		size_t state_index = sc.StateIdx(state);

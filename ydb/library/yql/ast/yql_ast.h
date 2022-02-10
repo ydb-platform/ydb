@@ -5,7 +5,7 @@
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
 #include <util/stream/str.h>
@@ -39,13 +39,13 @@ struct TAstNode {
     void PrintTo(IOutputStream& out) const;
     void PrettyPrintTo(IOutputStream& out, ui32 prettyFlags) const;
 
-    inline TString ToString() const { 
+    inline TString ToString() const {
         TStringStream str;
         PrintTo(str);
         return str.Str();
     }
 
-    inline TString ToString(ui32 prettyFlags) const { 
+    inline TString ToString(ui32 prettyFlags) const {
         TStringStream str;
         PrettyPrintTo(str, prettyFlags);
         return str.Str();
@@ -219,7 +219,7 @@ private:
         ui32 Flags;
     };
 
-    struct TListType { 
+    struct TListType {
         TAstNode** Children;
     };
 
@@ -229,7 +229,7 @@ private:
 
     union {
         TAtom A;
-        TListType L; 
+        TListType L;
         TSmallList S;
     } Data;
 };

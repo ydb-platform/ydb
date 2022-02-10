@@ -55,7 +55,7 @@ struct TTrackLogRefs {
         operator const NLWTrace::TLogItem&() const { return *Ptr; }
     };
 
-    using TItems = TVector<TItem>; 
+    using TItems = TVector<TItem>;
     TItems Items;
 
     TTrackLogRefs() {}
@@ -278,10 +278,10 @@ private:
         }
     };
 
-    TString Text; 
-    TString Provider; 
-    TString Probe; 
-    TString ParamName; 
+    TString Text;
+    TString Provider;
+    TString Probe;
+    TString ParamName;
     ESpecialParam SpecialParam = NotSpecial;
     i64 Index = 0;
     double TimeUnitSec = 1.0;
@@ -292,7 +292,7 @@ private:
 public:
     TLogQuery() {}
 
-    explicit TLogQuery(const TString& text) 
+    explicit TLogQuery(const TString& text)
         : Text(text)
     {
         try {
@@ -350,7 +350,7 @@ private:
         return NLWTrace::TTypedParam(sec / TimeUnitSec);
     }
 
-    void ParseQuery(const TString& s) 
+    void ParseQuery(const TString& s)
     {
         auto parts = SplitString(s, ".");
         WWW_CHECK(parts.size() <= 3, "too many name specifiers");
@@ -363,26 +363,26 @@ private:
         }
     }
 
-    void ParseParamSelector(const TString& s) 
+    void ParseParamSelector(const TString& s)
     {
         size_t bracket = s.find('[');
-        if (bracket == TString::npos) { 
+        if (bracket == TString::npos) {
             ParseParamName(s);
             Index = 0;
         } else {
             ParseParamName(s.substr(0, bracket));
             size_t bracket2 = s.find(']', bracket);
-            WWW_CHECK(bracket2 != TString::npos, "closing braket ']' is missing"); 
+            WWW_CHECK(bracket2 != TString::npos, "closing braket ']' is missing");
             Index = FromString<i64>(s.substr(bracket + 1, bracket2 - bracket - 1));
         }
     }
 
-    void ParseParamName(const TString& s) 
+    void ParseParamName(const TString& s)
     {
         ParamName = s;
-        TString paramName = s; 
+        TString paramName = s;
 
-        const static TVector<std::pair<TString, ESpecialParam>> specials = { 
+        const static TVector<std::pair<TString, ESpecialParam>> specials = {
             { "_track", TrackDuration },
             { "_begin", TrackBeginTime },
             { "_end", TrackEndTime },
@@ -405,7 +405,7 @@ private:
             return;
         }
 
-        const static TVector<std::pair<TString, double>> timeUnits = { 
+        const static TVector<std::pair<TString, double>> timeUnits = {
             { "Ms", 1e-3 },
             { "Us", 1e-6 },
             { "Ns", 1e-9 },
@@ -428,7 +428,7 @@ private:
                 SpecialParam == TrackEndTime)
         {
             // Parse time zero for special instant params
-            const TVector<std::pair<TString, i64>> timeZeros = { 
+            const TVector<std::pair<TString, i64>> timeZeros = {
                 { "RTime", RTimeZeroTs },
                 { "NTime", NTimeZeroTs },
                 { "Time", 0ll }
@@ -447,23 +447,23 @@ private:
         WWW_CHECK(paramName.empty(), "wrong special param name: %s", s.data());
     }
 
-    void ParseProbeSelector(const TString& s) 
+    void ParseProbeSelector(const TString& s)
     {
         Probe = s;
     }
 
-    void ParseProviderSelector(const TString& s) 
+    void ParseProviderSelector(const TString& s)
     {
         Provider = s;
     }
 };
 
-using TVariants = TVector<std::pair<TString, TString>>; 
-using TTags = TSet<TString>; 
+using TVariants = TVector<std::pair<TString, TString>>;
+using TTags = TSet<TString>;
 
-TString GetProbeName(const NLWTrace::TProbe* probe, const char* sep = ".") 
+TString GetProbeName(const NLWTrace::TProbe* probe, const char* sep = ".")
 {
-    return TString(probe->Event.GetProvider()) + sep + probe->Event.Name; 
+    return TString(probe->Event.GetProvider()) + sep + probe->Event.Name;
 }
 
 struct TAdHocTraceConfig {
@@ -485,7 +485,7 @@ struct TAdHocTraceConfig {
         }
     }
 
-    TAdHocTraceConfig(const TString& provider, const TString& probe, ui16 logSize = 0, ui64 logDurationUs = 0, bool logShuttle = false) 
+    TAdHocTraceConfig(const TString& provider, const TString& probe, ui16 logSize = 0, ui64 logDurationUs = 0, bool logShuttle = false)
         : TAdHocTraceConfig(logSize, logDurationUs, logShuttle)
     {
         auto block = Cfg.MutableBlocks(0);
@@ -494,7 +494,7 @@ struct TAdHocTraceConfig {
         pdesc->SetName(probe);
     }
 
-    explicit TAdHocTraceConfig(const TString& group, ui16 logSize = 0, ui64 logDurationUs = 0, bool logShuttle = false) 
+    explicit TAdHocTraceConfig(const TString& group, ui16 logSize = 0, ui64 logDurationUs = 0, bool logShuttle = false)
         : TAdHocTraceConfig(logSize, logDurationUs, logShuttle)
     {
         auto block = Cfg.MutableBlocks(0);
@@ -502,7 +502,7 @@ struct TAdHocTraceConfig {
         pdesc->SetGroup(group);
     }
 
-    TString Id() const 
+    TString Id() const
     {
         TStringStream ss;
         for (size_t blockIdx = 0; blockIdx < Cfg.BlocksSize(); blockIdx++) {
@@ -572,7 +572,7 @@ struct TAdHocTraceConfig {
         return Cfg;
     }
 
-    bool ParseId(const TString& id) 
+    bool ParseId(const TString& id)
     {
         if (IsAdHocId(id)) {
             for (const TString& block : SplitString(id, "/")) {
@@ -592,7 +592,7 @@ struct TAdHocTraceConfig {
                 }
                 bool defaultAction = true;
                 for (auto i = parts.begin() + 2, e = parts.end(); i != e; ++i) {
-                    const TString& part = *i; 
+                    const TString& part = *i;
                     if (part.empty()) {
                         continue;
                     }
@@ -614,12 +614,12 @@ struct TAdHocTraceConfig {
         return false;
     }
 private:
-    static bool IsAdHocId(const TString& id) 
+    static bool IsAdHocId(const TString& id)
     {
         return !id.empty() && id[0] == '.';
     }
 
-    void ParsePredicate(NLWTrace::TOperator* op, const TString& p) 
+    void ParsePredicate(NLWTrace::TOperator* op, const TString& p)
     {
         size_t sign = p.find_first_of("=!><");
         WWW_CHECK(sign != TString::npos, "wrong predicate format in adhoc trace: %s", p.data());
@@ -661,7 +661,7 @@ private:
         op->AddArgument()->SetValue(p.substr(value));
     }
 
-    void ParseAction(NLWTrace::TAction* action, const TString& a) 
+    void ParseAction(NLWTrace::TAction* action, const TString& a)
     {
         // NOTE: checks for longer action names should go first, your captain.
         if (a.substr(0, 3) == "lsr") {
@@ -704,7 +704,7 @@ private:
         }
     }
 
-    static ui64 ParseDuration(const TString& s) 
+    static ui64 ParseDuration(const TString& s)
     {
         if (s.substr(s.length() - 2) == "us")
             return FromString<ui64>(s.substr(0, s.length() - 2));
@@ -727,7 +727,7 @@ private:
 
     TMutex Mtx;
     TCondVar WakeCondVar;
-    THashMap<TString, TInstant> Deadlines; 
+    THashMap<TString, TInstant> Deadlines;
     volatile bool ThreadIsRunning = false;
     THolder<TThread> Thread;
 public:
@@ -743,7 +743,7 @@ public:
     }
 
     // Returns deadline for specified trace id or zero
-    TInstant GetDeadline(const TString& id) const 
+    TInstant GetDeadline(const TString& id) const
     {
         TGuard<TMutex> g(Mtx);
         auto iter = Deadlines.find(id);
@@ -751,7 +751,7 @@ public:
     }
 
     // Postpone deletion of specified trace for specified timeout
-    void Postpone(const TString& id, TDuration timeout, bool allowLowering) 
+    void Postpone(const TString& id, TDuration timeout, bool allowLowering)
     {
         TGuard<TMutex> g(Mtx);
         TInstant newDeadline = TInstant::Now() + timeout;
@@ -770,7 +770,7 @@ public:
     }
 
     // Forget about specified trace deletion
-    void Forget(const TString& id) 
+    void Forget(const TString& id)
     {
         TGuard<TMutex> g(Mtx);
         Deadlines.erase(id);
@@ -786,7 +786,7 @@ private:
             TInstant now = TInstant::Now();
             TInstant nextDeadline = TInstant::Max();
             for (auto i = Deadlines.begin(), e = Deadlines.end(); i != e;) {
-                const TString& id = i->first; 
+                const TString& id = i->first;
                 TInstant deadline = i->second;
                 if (deadline < now) {
                     try {
@@ -814,7 +814,7 @@ private:
 
     static void* ThreadProc(void* _this)
     {
-        TString name = "LWTraceCleaner"; 
+        TString name = "LWTraceCleaner";
         // Copy-pasted from kikimr/core/util/thread.h
 #if defined(_linux_)
         TStringStream linuxName;
@@ -830,18 +830,18 @@ private:
 
 class TChromeTrace {
 private:
-    TMultiMap<double, TString> TraceEvents; 
-    THashMap<TThread::TId, TString> Tids; 
+    TMultiMap<double, TString> TraceEvents;
+    THashMap<TThread::TId, TString> Tids;
 public:
-    void Add(TThread::TId tid, ui64 tsCycles, const TString& ph, const TString& cat, 
+    void Add(TThread::TId tid, ui64 tsCycles, const TString& ph, const TString& cat,
              const NLWTrace::TLogItem* argsItem = nullptr,
-             const TString& name = TString(), const TString& id = TString()) 
+             const TString& name = TString(), const TString& id = TString())
     {
         auto tidIter = Tids.find(tid);
         if (tidIter == Tids.end()) {
             tidIter = Tids.emplace(tid, ToString(Tids.size() + 1)).first;
         }
-        const TString& shortId = tidIter->second; 
+        const TString& shortId = tidIter->second;
         double ts = Timestamp(tsCycles);
         TraceEvents.emplace(ts, Event(shortId, ts, ph, cat, argsItem, name, id));
     }
@@ -861,9 +861,9 @@ public:
     }
 
 private:
-    static TString Event(const TString& tid, double ts, const TString& ph, const TString& cat, 
+    static TString Event(const TString& tid, double ts, const TString& ph, const TString& cat,
                         const NLWTrace::TLogItem* argsItem,
-                        const TString& name, const TString& id) 
+                        const TString& name, const TString& id)
     {
         TStringStream ss;
         pid_t pid = 1;
@@ -880,14 +880,14 @@ private:
         }
         if (argsItem && argsItem->SavedParamsCount > 0) {
             ss << ",\"args\":{";
-            TString paramValues[LWTRACE_MAX_PARAMS]; 
+            TString paramValues[LWTRACE_MAX_PARAMS];
             argsItem->Probe->Event.Signature.SerializeParams(argsItem->Params, paramValues);
             bool first = true;
             for (size_t pi = 0; pi < argsItem->SavedParamsCount; pi++, first = false) {
                 if (!first) {
                     ss << ",";
                 }
-                ss << "\"" << TString(argsItem->Probe->Event.Signature.ParamNames[pi]) << "\":" 
+                ss << "\"" << TString(argsItem->Probe->Event.Signature.ParamNames[pi]) << "\":"
                       "\"" << paramValues[pi] << "\"";
             }
             ss << "}";
@@ -919,7 +919,7 @@ TString MakeUrl(const TCgiParameters& e, const THashMap<TString, TString>& value
     return ss.Str();
 }
 
-TString MakeUrl(const TCgiParameters& e, const TString& key, const TString& value, bool keep = false) 
+TString MakeUrl(const TCgiParameters& e, const TString& key, const TString& value, bool keep = false)
 {
     TStringStream ss;
     bool first = true;
@@ -933,7 +933,7 @@ TString MakeUrl(const TCgiParameters& e, const TString& key, const TString& valu
     return ss.Str();
 }
 
-TString MakeUrlAdd(const TCgiParameters& e, const TString& key, const TString& value) 
+TString MakeUrlAdd(const TCgiParameters& e, const TString& key, const TString& value)
 {
     TStringStream ss;
     bool first = true;
@@ -945,7 +945,7 @@ TString MakeUrlAdd(const TCgiParameters& e, const TString& key, const TString& v
     return ss.Str();
 }
 
-TString MakeUrlReplace(const TCgiParameters& e, const TString& key, const TString& oldValue, const TString& newValue) 
+TString MakeUrlReplace(const TCgiParameters& e, const TString& key, const TString& oldValue, const TString& newValue)
 {
     TStringStream ss;
     bool first = true;
@@ -968,7 +968,7 @@ TString MakeUrlReplace(const TCgiParameters& e, const TString& key, const TStrin
     return ss.Str();
 }
 
-TString MakeUrlErase(const TCgiParameters& e, const TString& key, const TString& value) 
+TString MakeUrlErase(const TCgiParameters& e, const TString& key, const TString& value)
 {
     TStringStream ss;
     bool first = true;
@@ -981,9 +981,9 @@ TString MakeUrlErase(const TCgiParameters& e, const TString& key, const TString&
     return ss.Str();
 }
 
-TString EscapeSubvalue(const TString& s) 
+TString EscapeSubvalue(const TString& s)
 {
-    TString ret; 
+    TString ret;
     ret.reserve(s.size());
     for (size_t i = 0; i < s.size(); i++) {
         char c = s[i];
@@ -998,9 +998,9 @@ TString EscapeSubvalue(const TString& s)
     return ret;
 }
 
-TString UnescapeSubvalue(const TString& s) 
+TString UnescapeSubvalue(const TString& s)
 {
-    TString ret; 
+    TString ret;
     ret.reserve(s.size());
     for (size_t i = 0; i < s.size(); i++) {
         char c = s[i];
@@ -1021,12 +1021,12 @@ TString UnescapeSubvalue(const TString& s)
     return ret;
 }
 
-TVector<TString> Subvalues(const TCgiParameters& e, const TString& key) 
+TVector<TString> Subvalues(const TCgiParameters& e, const TString& key)
 {
     if (!e.Has(key)) {
-        return TVector<TString>(); 
+        return TVector<TString>();
     } else {
-        TVector<TString> ret; 
+        TVector<TString> ret;
         for (const TString& s : SplitString(e.Get(key), ":", 0, KEEP_EMPTY_TOKENS)) {
             ret.push_back(UnescapeSubvalue(s));
         }
@@ -1037,44 +1037,44 @@ TVector<TString> Subvalues(const TCgiParameters& e, const TString& key)
     }
 }
 
-TString ParseTagsOut(const TString& taggedStr, TTags& tags) 
+TString ParseTagsOut(const TString& taggedStr, TTags& tags)
 {
     auto vec = SplitString(taggedStr, "-");
     if (vec.empty()) {
         return "";
     }
     auto iter = vec.begin();
-    TString value = *iter++; 
+    TString value = *iter++;
     for (;iter != vec.end(); ++iter) {
         tags.insert(*iter);
     }
     return value;
 }
 
-TString JoinTags(TTags tags) { 
-    return JoinStrings(TVector<TString>(tags.begin(), tags.end()), "-"); 
+TString JoinTags(TTags tags) {
+    return JoinStrings(TVector<TString>(tags.begin(), tags.end()), "-");
 }
 
-TString MakeValue(const TVector<TString>& subvalues) 
+TString MakeValue(const TVector<TString>& subvalues)
 {
-    TVector<TString> subvaluesEsc; 
-    for (const TString& s : subvalues) { 
+    TVector<TString> subvaluesEsc;
+    for (const TString& s : subvalues) {
         subvaluesEsc.push_back(EscapeSubvalue(s));
     }
-    return JoinStrings(subvaluesEsc, ":"); 
+    return JoinStrings(subvaluesEsc, ":");
 }
 
-TString MakeUrlAddSub(const TCgiParameters& e, const TString& key, const TString& subvalue) 
+TString MakeUrlAddSub(const TCgiParameters& e, const TString& key, const TString& subvalue)
 {
-    const TString& value = e.Get(key); 
+    const TString& value = e.Get(key);
     auto subvalues = Subvalues(e, key);
     subvalues.push_back(subvalue);
     return MakeUrlReplace(e, key, value, MakeValue(subvalues));
 }
 
-TString MakeUrlReplaceSub(const TCgiParameters& e, const TString& key, const TString& oldSubvalue, const TString& newSubvalue) 
+TString MakeUrlReplaceSub(const TCgiParameters& e, const TString& key, const TString& oldSubvalue, const TString& newSubvalue)
 {
-    const TString& value = e.Get(key); 
+    const TString& value = e.Get(key);
     auto subvalues = Subvalues(e, key);
     auto iter = std::find(subvalues.begin(), subvalues.end(), oldSubvalue);
     if (iter != subvalues.end()) {
@@ -1085,9 +1085,9 @@ TString MakeUrlReplaceSub(const TCgiParameters& e, const TString& key, const TSt
     return MakeUrlReplace(e, key, value, MakeValue(subvalues));
 }
 
-TString MakeUrlEraseSub(const TCgiParameters& e, const TString& key, const TString& subvalue) 
+TString MakeUrlEraseSub(const TCgiParameters& e, const TString& key, const TString& subvalue)
 {
-    const TString& value = e.Get(key); 
+    const TString& value = e.Get(key);
     auto subvalues = Subvalues(e, key);
     auto iter = std::find(subvalues.begin(), subvalues.end(), subvalue);
     if (iter != subvalues.end()) {
@@ -1100,27 +1100,27 @@ TString MakeUrlEraseSub(const TCgiParameters& e, const TString& key, const TStri
     }
 }
 
-template <bool sub> TString UrlAdd(const TCgiParameters& e, const TString& key, const TString& value); 
-template <> TString UrlAdd<false>(const TCgiParameters& e, const TString& key, const TString& value) { 
+template <bool sub> TString UrlAdd(const TCgiParameters& e, const TString& key, const TString& value);
+template <> TString UrlAdd<false>(const TCgiParameters& e, const TString& key, const TString& value) {
     return MakeUrlAdd(e, key, value);
 }
-template <> TString UrlAdd<true>(const TCgiParameters& e, const TString& key, const TString& value) { 
+template <> TString UrlAdd<true>(const TCgiParameters& e, const TString& key, const TString& value) {
     return MakeUrlAddSub(e, key, value);
 }
 
-template <bool sub> TString UrlReplace(const TCgiParameters& e, const TString& key, const TString& oldValue, const TString& newValue); 
-template <> TString UrlReplace<false>(const TCgiParameters& e, const TString& key, const TString& oldValue, const TString& newValue) { 
+template <bool sub> TString UrlReplace(const TCgiParameters& e, const TString& key, const TString& oldValue, const TString& newValue);
+template <> TString UrlReplace<false>(const TCgiParameters& e, const TString& key, const TString& oldValue, const TString& newValue) {
     return MakeUrlReplace(e, key, oldValue, newValue);
 }
-template <> TString UrlReplace<true>(const TCgiParameters& e, const TString& key, const TString& oldValue, const TString& newValue) { 
+template <> TString UrlReplace<true>(const TCgiParameters& e, const TString& key, const TString& oldValue, const TString& newValue) {
     return MakeUrlReplaceSub(e, key, oldValue, newValue);
 }
 
-template <bool sub> TString UrlErase(const TCgiParameters& e, const TString& key, const TString& value); 
-template <> TString UrlErase<false>(const TCgiParameters& e, const TString& key, const TString& value) { 
+template <bool sub> TString UrlErase(const TCgiParameters& e, const TString& key, const TString& value);
+template <> TString UrlErase<false>(const TCgiParameters& e, const TString& key, const TString& value) {
     return MakeUrlErase(e, key, value);
 }
-template <> TString UrlErase<true>(const TCgiParameters& e, const TString& key, const TString& value) { 
+template <> TString UrlErase<true>(const TCgiParameters& e, const TString& key, const TString& value) {
     return MakeUrlEraseSub(e, key, value);
 }
 
@@ -1157,7 +1157,7 @@ struct TScopedHtmlInner {
     IOutputStream &Str;
 };
 
-TString NavbarHeader() 
+TString NavbarHeader()
 {
     return "<div class=\"navbar-header\">"
              "<a class=\"navbar-brand\" href=\"?mode=\">LWTrace</a>"
@@ -1203,8 +1203,8 @@ class TPageGenBase: public std::exception {};
 template <class TContainer = TNullContainer>
 class TPageGen: public TPageGenBase {
 private:
-    TString Content; 
-    TString HttpResponse; 
+    TString Content;
+    TString HttpResponse;
 public:
     void BuildResponse()
     {
@@ -1216,19 +1216,19 @@ public:
         HttpResponse = ss.Str();
     }
 
-    explicit TPageGen(const TString& content = TString()) 
+    explicit TPageGen(const TString& content = TString())
         : Content(content)
     {
         BuildResponse();
     }
 
-    void Append(const TString& moreContent) 
+    void Append(const TString& moreContent)
     {
         Content.append(moreContent);
         BuildResponse();
     }
 
-    void Prepend(const TString& moreContent) 
+    void Prepend(const TString& moreContent)
     {
         Content.prepend(moreContent);
         BuildResponse();
@@ -1264,7 +1264,7 @@ enum EStyleFlags {
 };
 
 template <ui64 flags>
-TString BtnClass() { 
+TString BtnClass() {
     if ((flags & SizeMask) == Large) {
         return "btn btn-lg";
     } else if ((flags & SizeMask) == Small) {
@@ -1317,17 +1317,17 @@ void DropdownItem(IOutputStream& os, const TString& text, const TString& href, b
     os << "<li><a href=\"" << href << "\">" << text << "</a></li>";
 }
 
-TString SuggestSelection() 
+TString SuggestSelection()
 {
     return "--- ";
 }
 
-TString RemoveSelection() 
+TString RemoveSelection()
 {
     return "Remove";
 }
 
-TString GetDescription(const TString& value, const TVariants& variants) 
+TString GetDescription(const TString& value, const TVariants& variants)
 {
     for (const auto& var : variants) {
         if (value == var.first) {
@@ -1342,7 +1342,7 @@ TString GetDescription(const TString& value, const TVariants& variants)
 
 template <ui64 flags, bool sub = false>
 void DropdownSelector(IOutputStream& os, const TCgiParameters& e, const TString& param, const TString& value,
-                      const TString& text, const TVariants& variants, const TString& realValue = TString()) 
+                      const TString& text, const TVariants& variants, const TString& realValue = TString())
 {
     HTML(os) {
         SelectorTitle(os, text);
@@ -1373,25 +1373,25 @@ void DropdownSelector(IOutputStream& os, const TCgiParameters& e, const TString&
     }
 }
 
-void RequireSelection(TStringStream& ss, const TCgiParameters& e, const TString& param, 
-                   const TString& text, const TVariants& variants) 
+void RequireSelection(TStringStream& ss, const TCgiParameters& e, const TString& param,
+                   const TString& text, const TVariants& variants)
 {
-    const TString& value = e.Get(param); 
+    const TString& value = e.Get(param);
     DropdownSelector<Link>(ss, e, param, value, text, variants);
     if (!value) {
         throw TPageGen<TSelectorsContainer>(ss.Str());
     }
 }
 
-void RequireMultipleSelection(TStringStream& ss, const TCgiParameters& e, const TString& param, 
-                              const TString& text, const TVariants& variants) 
+void RequireMultipleSelection(TStringStream& ss, const TCgiParameters& e, const TString& param,
+                              const TString& text, const TVariants& variants)
 {
     SelectorTitle(ss, text);
-    TSet<TString> selectedValues; 
-    for (const TString& subvalue : Subvalues(e, param)) { 
+    TSet<TString> selectedValues;
+    for (const TString& subvalue : Subvalues(e, param)) {
         selectedValues.insert(subvalue);
     }
-    for (const TString& subvalue : Subvalues(e, param)) { 
+    for (const TString& subvalue : Subvalues(e, param)) {
         DropdownSelector<Erasable, true>(ss, e, param, subvalue, "", variants);
     }
     if (selectedValues.contains("")) {
@@ -1422,17 +1422,17 @@ void OptionalSelection(TStringStream& ss, const TCgiParameters& e, const TString
     }
 }
 
-void OptionalMultipleSelection(TStringStream& ss, const TCgiParameters& e, const TString& param, 
-                              const TString& text, const TVariants& variants) 
+void OptionalMultipleSelection(TStringStream& ss, const TCgiParameters& e, const TString& param,
+                              const TString& text, const TVariants& variants)
 {
-    TSet<TString> selectedValues; 
-    for (const TString& subvalue : Subvalues(e, param)) { 
+    TSet<TString> selectedValues;
+    for (const TString& subvalue : Subvalues(e, param)) {
         selectedValues.insert(subvalue);
     }
     if (!selectedValues.empty()) {
         SelectorTitle(ss, text);
     }
-    for (const TString& subvalue : Subvalues(e, param)) { 
+    for (const TString& subvalue : Subvalues(e, param)) {
         DropdownSelector<Erasable, true>(ss, e, param, subvalue, "", variants);
     }
     if (selectedValues.contains("")) {
@@ -1444,7 +1444,7 @@ void OptionalMultipleSelection(TStringStream& ss, const TCgiParameters& e, const
 
 TVariants ListColumns(const NAnalytics::TTable& table)
 {
-    TSet<TString> cols; 
+    TSet<TString> cols;
 //    bool addSpecialCols = false;
 //    if (addSpecialCols) {
 //        cols.insert("_count");
@@ -1461,7 +1461,7 @@ TVariants ListColumns(const NAnalytics::TTable& table)
     return result;
 }
 
-TString TaggedValue(const TString& value, const TString& tag) 
+TString TaggedValue(const TString& value, const TString& tag)
 {
     if (!tag) {
         return value;
@@ -1469,7 +1469,7 @@ TString TaggedValue(const TString& value, const TString& tag)
     return value + "-" + tag;
 }
 
-TVariants ValueVars(const TVariants& values, const TString& tag) 
+TVariants ValueVars(const TVariants& values, const TString& tag)
 {
     TVariants ret;
     for (auto& p : values) {
@@ -1478,7 +1478,7 @@ TVariants ValueVars(const TVariants& values, const TString& tag)
     return ret;
 }
 
-TVariants TagVars(const TString& value, const TVariants& tags) 
+TVariants TagVars(const TString& value, const TVariants& tags)
 {
     TVariants ret;
     for (auto& p : tags) {
@@ -1496,10 +1496,10 @@ TVariants SeriesTags()
 }
 
 void SeriesSelectors(TStringStream& ss, const TCgiParameters& e,
-                     const TString& xparam, const TString& yparam, const NAnalytics::TTable& data) 
+                     const TString& xparam, const TString& yparam, const NAnalytics::TTable& data)
 {
     TTags xtags;
-    TString xn = ParseTagsOut(e.Get(xparam), xtags); 
+    TString xn = ParseTagsOut(e.Get(xparam), xtags);
     DropdownSelector<Erasable, true>(ss, e, xparam, e.Get(xparam), "with Ox:",
                                  ValueVars(ListColumns(data), JoinTags(xtags)));
     if (xn) {
@@ -1507,13 +1507,13 @@ void SeriesSelectors(TStringStream& ss, const TCgiParameters& e,
                                      TagVars(xn, SeriesTags()));
     }
 
-    TString yns = e.Get(yparam); 
+    TString yns = e.Get(yparam);
     SelectorTitle(ss, "and Oy:");
     bool first = true;
     bool hasEmpty = false;
     for (auto& subvalue : Subvalues(e, yparam)) {
         TTags ytags;
-        TString yn = ParseTagsOut(subvalue, ytags); 
+        TString yn = ParseTagsOut(subvalue, ytags);
         DropdownSelector<Erasable, true>(ss, e, yparam, subvalue, first? "": ", ",
                                          ValueVars(ListColumns(data), JoinTags(ytags)));
         if (yn) {
@@ -1539,7 +1539,7 @@ void SeriesSelectors(TStringStream& ss, const TCgiParameters& e,
 
 class TProbesHtmlPrinter {
 private:
-    TVector<TVector<TString>> TableData; 
+    TVector<TVector<TString>> TableData;
     static constexpr int TimeoutSec = 15 * 60; // default timeout
 public:
     void Push(const NLWTrace::TProbe* probe)
@@ -1548,19 +1548,19 @@ public:
         auto& row = TableData.back();
 
         row.emplace_back();
-        TString& groups = row.back(); 
+        TString& groups = row.back();
         bool first = true;
         for (const char* const* i = probe->Event.Groups; *i != nullptr; ++i, first = false) {
-            groups.append(TString(first? "": ", ") + GroupHtml(*i)); 
+            groups.append(TString(first? "": ", ") + GroupHtml(*i));
         }
 
         row.push_back(ProbeHtml(probe->Event.GetProvider(), probe->Event.Name));
 
         row.emplace_back();
-        TString& params = row.back(); 
+        TString& params = row.back();
         first = true;
         for (size_t i = 0; i < probe->Event.Signature.ParamCount; i++, first = false) {
-            params.append(TString(first? "": ", ") + probe->Event.Signature.ParamTypes[i] 
+            params.append(TString(first? "": ", ") + probe->Event.Signature.ParamTypes[i]
                           + " " + probe->Event.Signature.ParamNames[i]);
         }
 
@@ -1580,7 +1580,7 @@ public:
                 TABLEBODY() {
                     for (auto& row : TableData) {
                         TABLER() {
-                            for (TString& cell : row) { 
+                            for (TString& cell : row) {
                                 TABLED() { os << cell; }
                             }
                         }
@@ -1590,7 +1590,7 @@ public:
         }
     }
 private:
-    TString GroupHtml(const TString& group) 
+    TString GroupHtml(const TString& group)
     {
         TStringStream ss;
         ss << "<div class=\"dropdown\" style=\"display:inline-block\">"
@@ -1619,7 +1619,7 @@ private:
         return ss.Str();
     }
 
-    TString ProbeHtml(const TString& provider, const TString& probe) 
+    TString ProbeHtml(const TString& provider, const TString& probe)
     {
         TStringStream ss;
         ss << "<div class=\"dropdown\">"
@@ -1701,7 +1701,7 @@ void TDashboardRegistry::Output(TStringStream& ss) {
 class ILogSource {
 public:
     virtual ~ILogSource() {}
-    virtual TString GetId() = 0; 
+    virtual TString GetId() = 0;
     virtual TInstant GetStartTime() = 0;
     virtual TDuration GetTimeout(TInstant now) = 0;
     virtual ui64 GetEventsCount() = 0;
@@ -1710,7 +1710,7 @@ public:
 
 class TTraceLogSource : public ILogSource {
 private:
-    TString Id; 
+    TString Id;
     const TTraceCleaner& Cleaner;
     const NLWTrace::TSession* Trace;
 public:
@@ -1720,7 +1720,7 @@ public:
         , Trace(trace)
     {}
 
-    TString GetId() override 
+    TString GetId() override
     {
         return Id;
     }
@@ -1755,19 +1755,19 @@ public:
 
 class TSnapshotLogSource : public ILogSource {
 private:
-    TString Sid; 
+    TString Sid;
     // Log should be used for read-only purpose, because it can be accessed from multiple threads
     // Atomic pointer is used to avoid thread-safety issues with snapshot deletion
     // (I hope protobuf const-implementation doesn't use any mutable non-thread-safe stuff inside)
     TAtomicSharedPtr<NLWTrace::TLogPb> Log;
 public:
     // Constructor should be called under SnapshotsMtx lock
-    TSnapshotLogSource(const TString& sid, const TAtomicSharedPtr<NLWTrace::TLogPb>& log) 
+    TSnapshotLogSource(const TString& sid, const TAtomicSharedPtr<NLWTrace::TLogPb>& log)
         : Sid(sid)
         , Log(log)
     {}
 
-    TString GetId() override 
+    TString GetId() override
     {
         return Sid + "~";
     }
@@ -1799,14 +1799,14 @@ private:
     TTraceCleaner& Cleaner;
     TInstant Now;
     using TLogSourcePtr = std::unique_ptr<ILogSource>;
-    TMap<TString, TLogSourcePtr> LogSources; 
+    TMap<TString, TLogSourcePtr> LogSources;
 public:
     explicit TLogSources(TTraceCleaner& cleaner, TInstant now = TInstant::Now())
         : Cleaner(cleaner)
         , Now(now)
     {}
 
-    void Push(const TString& sid, const TAtomicSharedPtr<NLWTrace::TLogPb>& log) 
+    void Push(const TString& sid, const TAtomicSharedPtr<NLWTrace::TLogPb>& log)
     {
         TLogSourcePtr ls(new TSnapshotLogSource(sid, log));
         LogSources.emplace(ls->GetId(), std::move(ls));
@@ -1847,7 +1847,7 @@ public:
 
     void Push(ILogSource* src)
     {
-        TString id = src->GetId(); 
+        TString id = src->GetId();
         Os << "<tr>";
         Os << "<td>";
         try {
@@ -1884,7 +1884,7 @@ public:
            << "</tr>\n";
     }
 private:
-    static TString TimeoutToString(TDuration d) 
+    static TString TimeoutToString(TDuration d)
     {
         TStringStream ss;
         if (d == TDuration::Zero()) {
@@ -1941,7 +1941,7 @@ TVariants ListTraces(const TLogSources& srcs)
 
 class TTimestampCutter {
 private:
-    THashMap<TThread::TId, std::pair<ui64, TInstant>> CutTsForThread; // tid -> time of first item 
+    THashMap<TThread::TId, std::pair<ui64, TInstant>> CutTsForThread; // tid -> time of first item
     mutable ui64 CutTsMax = 0;
     mutable TInstant CutInstantMax;
     bool Enabled;
@@ -2007,14 +2007,14 @@ private:
 class TLogFilter {
 private:
     struct TFilter {
-        TString ParamName; 
-        TString ParamValue; 
+        TString ParamName;
+        TString ParamValue;
         bool Parsed;
 
         TLogQuery Query;
         NLWTrace::TLiteral Value;
 
-        explicit TFilter(const TString& text) 
+        explicit TFilter(const TString& text)
         {
             if (!text) { // Neither ParamName nor ParamValue is selected
                 ParamName.clear();
@@ -2023,7 +2023,7 @@ private:
                 return;
             }
             size_t pos = text.find('=');
-            if (pos == TString::npos) { // Only ParamName has been selected 
+            if (pos == TString::npos) { // Only ParamName has been selected
                 ParamName = text;
                 ParamValue.clear();
                 Parsed = false;
@@ -2038,14 +2038,14 @@ private:
             Value = NLWTrace::TLiteral(ParamValue);
         }
     };
-    TVector<TFilter> Filters; 
-    THashSet<const NLWTrace::TSignature*> Signatures; // Just to list param names 
+    TVector<TFilter> Filters;
+    THashSet<const NLWTrace::TSignature*> Signatures; // Just to list param names
     TVariants ParamNames;
-    THashMap<TString, THashSet<TString>> FilteredParamValues; // paramName -> { paramValue } 
+    THashMap<TString, THashSet<TString>> FilteredParamValues; // paramName -> { paramValue }
 public:
-    explicit TLogFilter(const TVector<TString>& filters) 
+    explicit TLogFilter(const TVector<TString>& filters)
     {
-        for (const TString& subvalue : filters) { 
+        for (const TString& subvalue : filters) {
             TFilter filter(subvalue);
             FilteredParamValues[filter.ParamName]; // just create empty set to gather values later
             if (filter.Parsed) {
@@ -2068,11 +2068,11 @@ public:
         return true;
     }
 
-    void FilterSelectors(TStringStream& ss, const TCgiParameters& e, const TString& fparam) 
+    void FilterSelectors(TStringStream& ss, const TCgiParameters& e, const TString& fparam)
     {
         bool first = true;
         bool allParsed = true;
-        for (const TString& subvalue : Subvalues(e, fparam)) { 
+        for (const TString& subvalue : Subvalues(e, fparam)) {
             TFilter filter(subvalue);
             allParsed = allParsed && filter.Parsed;
             if (first) {
@@ -2101,7 +2101,7 @@ public:
     const TVariants& ListParamNames()
     {
         if (ParamNames.empty()) {
-            THashSet<TString> paramNames; 
+            THashSet<TString> paramNames;
             for (const NLWTrace::TSignature* sgn: Signatures) {
                 for (size_t pi = 0; pi < sgn->ParamCount; pi++) {
                     paramNames.insert(sgn->ParamNames[pi]);
@@ -2114,7 +2114,7 @@ public:
         return ParamNames;
     }
 
-    bool IsFiltered(const TString& paramName) const 
+    bool IsFiltered(const TString& paramName) const
     {
         return FilteredParamValues.contains(paramName);
     }
@@ -2125,7 +2125,7 @@ private:
     {
         Signatures.insert(&item.Probe->Event.Signature);
         if (!FilteredParamValues.empty() && item.SavedParamsCount > 0) {
-            TString paramValues[LWTRACE_MAX_PARAMS]; 
+            TString paramValues[LWTRACE_MAX_PARAMS];
             item.Probe->Event.Signature.SerializeParams(item.Params, paramValues);
             for (size_t pi = 0; pi < item.SavedParamsCount; pi++) {
                 auto iter = FilteredParamValues.find(item.Probe->Event.Signature.ParamNames[pi]);
@@ -2143,12 +2143,12 @@ private:
         }
     }
 
-    TVariants ListParamValues(const TString& paramName) const 
+    TVariants ListParamValues(const TString& paramName) const
     {
         TVariants result;
         auto iter = FilteredParamValues.find(paramName);
         if (iter != FilteredParamValues.end()) {
-            for (const TString& paramValue : iter->second) { 
+            for (const TString& paramValue : iter->second) {
                 result.emplace_back(paramName + "=" + paramValue, paramValue);
             }
         }
@@ -2231,7 +2231,7 @@ public:
               ", {"
               ;
         if (item.SavedParamsCount > 0) {
-            TString ParamValues[LWTRACE_MAX_PARAMS]; 
+            TString ParamValues[LWTRACE_MAX_PARAMS];
             item.Probe->Event.Signature.SerializeParams(item.Params, ParamValues);
             bool first = true;
             for (size_t i = 0; i < item.SavedParamsCount; i++, first = false) {
@@ -2490,19 +2490,19 @@ private:
 
 class TLogAnalyzer: public TLogFilter {
 private:
-    TMultiMap<ui64, std::pair<TThread::TId, NLWTrace::TLogItem>> Items; 
-    TVector<NLWTrace::TTrackLog> Depot; 
-    THashMap<TString, TTrackLogRefs> Groups; 
+    TMultiMap<ui64, std::pair<TThread::TId, NLWTrace::TLogItem>> Items;
+    TVector<NLWTrace::TTrackLog> Depot;
+    THashMap<TString, TTrackLogRefs> Groups;
     NAnalytics::TTable Table;
     bool TableCreated = false;
-    TVector<TString> GroupBy; 
+    TVector<TString> GroupBy;
     TTimestampCutter CutTs;
 public:
-    TLogAnalyzer(const TVector<TString>& filters, const TVector<TString>& groupBy, bool cutTs) 
+    TLogAnalyzer(const TVector<TString>& filters, const TVector<TString>& groupBy, bool cutTs)
         : TLogFilter(filters)
         , CutTs(cutTs)
     {
-        for (const TString& groupParam : groupBy) { 
+        for (const TString& groupParam : groupBy) {
             GroupBy.push_back(groupParam);
         }
     }
@@ -2544,7 +2544,7 @@ private:
     void FillRow(NAnalytics::TRow& row, const NLWTrace::TLogItem& item)
     {
         if (item.SavedParamsCount > 0) {
-            TString paramValues[LWTRACE_MAX_PARAMS]; 
+            TString paramValues[LWTRACE_MAX_PARAMS];
             item.Probe->Event.Signature.SerializeParams(item.Params, paramValues);
             for (size_t i = 0; i < item.SavedParamsCount; i++) {
                 double value = FromString<double>(paramValues[i].data(), paramValues[i].size(), NAN);
@@ -2558,21 +2558,21 @@ private:
         }
     }
 
-    TString GetParam(const NLWTrace::TLogItem& item, TString* paramValues, const TString& paramName) 
+    TString GetParam(const NLWTrace::TLogItem& item, TString* paramValues, const TString& paramName)
     {
         for (size_t pi = 0; pi < item.SavedParamsCount; pi++) {
             if (paramName == item.Probe->Event.Signature.ParamNames[pi]) {
                 return paramValues[pi];
             }
         }
-        return TString(); 
+        return TString();
     }
 
-    TString GetGroup(const NLWTrace::TLogItem& item, TString* paramValues) 
+    TString GetGroup(const NLWTrace::TLogItem& item, TString* paramValues)
     {
         TStringStream ss;
         bool first = true;
-        for (const TString& groupParam : GroupBy) { 
+        for (const TString& groupParam : GroupBy) {
             ss << (first? "": "|") << GetParam(item, paramValues, groupParam);
             first = false;
         }
@@ -2602,7 +2602,7 @@ private:
     void Map(TThread::TId tid, const NLWTrace::TLogItem& item)
     {
         if (item.SavedParamsCount > 0 && !CutTs.Skip(item)) {
-            TString paramValues[LWTRACE_MAX_PARAMS]; 
+            TString paramValues[LWTRACE_MAX_PARAMS];
             item.Probe->Event.Signature.SerializeParams(item.Params, paramValues);
             TTrackLogRefs& tl = Groups[GetGroup(item, paramValues)];
             tl.Items.emplace_back(tid, item);
@@ -2612,7 +2612,7 @@ private:
     void Reduce()
     {
         for (auto& v : Groups) {
-            const TString& group = v.first; 
+            const TString& group = v.first;
             const TTrackLogRefs& tl = v.second;
             Table.emplace_back();
             NAnalytics::TRow& row = Table.back();
@@ -2650,7 +2650,7 @@ class TPatternTree;
 struct TPatternNode;
 
 struct TTrack : public TTrackLogRefs {
-    TString TrackId; 
+    TString TrackId;
     TPatternNode* LastNode = nullptr;
 };
 
@@ -2685,7 +2685,7 @@ public:
 
 // Track classification tree node
 struct TPatternNode {
-    TString Name; 
+    TString Name;
     TPatternNode* Parent = nullptr;
     THolder<TClassifier> Classifier;
     struct TDesc {
@@ -2694,8 +2694,8 @@ struct TPatternNode {
         const NLWTrace::TProbe* Probe = nullptr;
         // NT_PARAM
         size_t Rollbacks = 0;
-        TString ParamName; 
-        TString ParamValue; 
+        TString ParamName;
+        TString ParamValue;
     } Desc;
 
     ui64 TrackCount = 0;
@@ -2711,20 +2711,20 @@ struct TPatternNode {
         {}
     };
 
-    TVector<TTrackEntry> Tracks; 
+    TVector<TTrackEntry> Tracks;
 
     ui64 ResTotalSum = 0;
     ui64 ResTotalMax = 0;
-    TVector<ui64> ResTotalAll; 
+    TVector<ui64> ResTotalAll;
 
     ui64 ResLastSum = 0;
     ui64 ResLastMax = 0;
-    TVector<ui64> ResLastAll; 
+    TVector<ui64> ResLastAll;
 
-    TVector<ui64> TimelineSum; 
+    TVector<ui64> TimelineSum;
     NAnalytics::TTable Slices;
 
-    TString GetPath() const 
+    TString GetPath() const
     {
         if (Parent) {
             return Parent->GetPath() + Name;
@@ -2798,9 +2798,9 @@ public:
     // Per-node classifier by probe name
     class TClassifyByProbe : public TClassifier {
     private:
-        using TChildren = THashMap<NLWTrace::TProbe*, TPatternNode>; 
+        using TChildren = THashMap<NLWTrace::TProbe*, TPatternNode>;
         TChildren Children;
-        TVector<TChildren::value_type*> SortedChildren; 
+        TVector<TChildren::value_type*> SortedChildren;
     public:
         explicit TClassifyByProbe(TPatternNode* node)
             : TClassifier(node, NT_PROBE)
@@ -2846,12 +2846,12 @@ public:
     class TClassifyByParam : public TClassifier {
     private:
         size_t Rollbacks; // How many items should we look back in track to locate probe
-        TString ParamName; 
-        using TChildren = THashMap<TString, TPatternNode>; 
+        TString ParamName;
+        using TChildren = THashMap<TString, TPatternNode>;
         TChildren Children;
-        TVector<TChildren::value_type*> SortedChildren; 
+        TVector<TChildren::value_type*> SortedChildren;
     public:
-        TClassifyByParam(TPatternNode* node, size_t rollbacks, const TString& paramName) 
+        TClassifyByParam(TPatternNode* node, size_t rollbacks, const TString& paramName)
             : TClassifier(node, NT_PARAM, true)
             , Rollbacks(rollbacks)
             , ParamName(paramName)
@@ -2864,8 +2864,8 @@ public:
             const NLWTrace::TLogItem& item = *(cur - Rollbacks);
             WWW_CHECK(item.SavedParamsCount > 0, "classify by params on probe w/o param loggging in node '%s'",
                       Node->GetPath().data());
-            TString paramValues[LWTRACE_MAX_PARAMS]; 
-            TString* paramValue = nullptr; 
+            TString paramValues[LWTRACE_MAX_PARAMS];
+            TString* paramValue = nullptr;
             item.Probe->Event.Signature.SerializeParams(item.Params, paramValues);
             for (size_t pi = 0; pi < item.SavedParamsCount; pi++) {
                 if (item.Probe->Event.Signature.ParamNames[pi] == ParamName) {
@@ -2906,18 +2906,18 @@ public:
     };
 private:
     TPatternNode Root;
-    THashMap<TString, std::pair<size_t, TString>> ParamClassifiers; // path -> (rollbacks, param) 
-    TString SelectedPattern; 
+    THashMap<TString, std::pair<size_t, TString>> ParamClassifiers; // path -> (rollbacks, param)
+    TString SelectedPattern;
     TPatternNode* SelectedNode = nullptr;
-    TVector<ui64> Timeline; // Just to avoid reallocations 
+    TVector<ui64> Timeline; // Just to avoid reallocations
 public:
     TPatternTree(const TCgiParameters& e)
     {
-        for (const TString& cl : Subvalues(e, "classify")) { 
+        for (const TString& cl : Subvalues(e, "classify")) {
             size_t at = cl.find_last_of('@');
-            if (at != TString::npos) { 
+            if (at != TString::npos) {
                 size_t dot = cl.find('.', at + 1);
-                if (dot != TString::npos) { 
+                if (dot != TString::npos) {
                     size_t rollbacks = FromString<size_t>(cl.substr(at + 1, dot - at - 1));
                     ParamClassifiers[cl.substr(0, at)] = std::make_pair(rollbacks, cl.substr(dot + 1));
                 }
@@ -2950,7 +2950,7 @@ public:
     }
 
     // Register track in given node
-    void AddTrackToNode(TPatternNode* node, TTrack& track, ui64 resTotal, TVector<ui64>& timeline) 
+    void AddTrackToNode(TPatternNode* node, TTrack& track, ui64 resTotal, TVector<ui64>& timeline)
     {
         if (!SelectedNode) {
             if (node->GetPath() == SelectedPattern) {
@@ -3012,7 +3012,7 @@ public:
 
 #define WWW_CHECK_PATTERN(str) if (!CheckPattern(pi, pe, (str))) { return false; }
 
-    bool MatchTrack(const TTrack& track, const TString& patternStr) 
+    bool MatchTrack(const TTrack& track, const TString& patternStr)
     {
         const char* pi = patternStr.data();
         const char* pe = pi + patternStr.size();
@@ -3065,8 +3065,8 @@ public:
                     if (mitem.SavedParamsCount == 0) {
                         return false;
                     }
-                    TString paramValues[LWTRACE_MAX_PARAMS]; 
-                    TString* paramValue = nullptr; 
+                    TString paramValues[LWTRACE_MAX_PARAMS];
+                    TString* paramValue = nullptr;
                     mitem.Probe->Event.Signature.SerializeParams(mitem.Params, paramValues);
                     for (size_t pi = 0; pi < mitem.SavedParamsCount; pi++) {
                         if (mitem.Probe->Event.Signature.ParamNames[pi] == paramName) {
@@ -3175,25 +3175,25 @@ private:
 class TLogTrackExtractor: public TLogFilter {
 private:
     // Data storage
-    TMultiMap<ui64, std::pair<TThread::TId, NLWTrace::TLogItem>> Items; 
-    TVector<NLWTrace::TTrackLog> Depot; 
+    TMultiMap<ui64, std::pair<TThread::TId, NLWTrace::TLogItem>> Items;
+    TVector<NLWTrace::TTrackLog> Depot;
 
     // Data refs organized in tracks
-    THashMap<TString, TTrack> Tracks; 
-    TVector<TTrack> TracksFromDepot; 
+    THashMap<TString, TTrack> Tracks;
+    TVector<TTrack> TracksFromDepot;
 
     // Analysis
-    TVector<TString> GroupBy; 
-    THashSet<TString> TrackIds; // The same content as in GroupBy 
+    TVector<TString> GroupBy;
+    THashSet<TString> TrackIds; // The same content as in GroupBy
     TTimestampCutter CutTs;
     TPatternTree Tree;
 public:
-    TLogTrackExtractor(const TCgiParameters& e, const TVector<TString>& filters, const TVector<TString>& groupBy) 
+    TLogTrackExtractor(const TCgiParameters& e, const TVector<TString>& filters, const TVector<TString>& groupBy)
         : TLogFilter(filters)
         , CutTs(true) // Always cut input data for tracks
         , Tree(e)
     {
-        for (const TString& groupParam : groupBy) { 
+        for (const TString& groupParam : groupBy) {
             GroupBy.push_back(groupParam);
             TrackIds.insert(groupParam);
         }
@@ -3305,7 +3305,7 @@ public:
         WWW_CHECK(percentile >= 0.0 && percentile <= 100.0, "wrong percentile: %lf", percentile);
 
         ui64 row = 0;
-        TVector<ui64> chain; 
+        TVector<ui64> chain;
         HTML(os) {
             TABLE_CLASS("tracks-tree") {
                 TABLEHEAD() {
@@ -3333,11 +3333,11 @@ public:
                         return;
                     }
                     Tree.Traverse([&] (TPatternNode* node) {
-                        TString parentClass; 
+                        TString parentClass;
                         if (!chain.empty()) {
                             parentClass = " treegrid-parent-" + ToString(chain.back());
                         }
-                        TString selectedClass; 
+                        TString selectedClass;
                         if (e.Get("pattern") == node->GetPath()) {
                             selectedClass = " danger";
                         }
@@ -3399,7 +3399,7 @@ public:
             auto first = TTrackTr::begin(*track);
             auto last = TTrackTr::rbegin(*track);
 
-            TString name = track->LastNode->GetPath(); 
+            TString name = track->LastNode->GetPath();
 
             const NLWTrace::TLogItem& firstItem = *first;
             TThread::TId firstTid = first->ThreadId;
@@ -3410,7 +3410,7 @@ public:
 
                 tr.Add(cur->ThreadId, item.TimestampCycles, "i", "event", &item, GetProbeName(item.Probe));
 
-                TString sliceName = GetProbeName(item.Probe); 
+                TString sliceName = GetProbeName(item.Probe);
 
                 auto next = cur + 1;
                 if (next != end) {
@@ -3498,8 +3498,8 @@ private:
     void OutputPattern(IOutputStream& os, const TCgiParameters& e, TPatternNode* node)
     {
         // Fill pattern name
-        TString patternName; 
-        TString patternTitle; 
+        TString patternName;
+        TString patternTitle;
         switch (node->Desc.Type) {
         case NT_ROOT:
             patternName = "All Tracks";
@@ -3549,7 +3549,7 @@ private:
                     os << "<li class=\"dropdown-header\">" << GetProbeName(probe) << "</li>";
                     const NLWTrace::TSignature* sgn = &probe->Event.Signature;
                     for (size_t pi = 0; pi < sgn->ParamCount; pi++) {
-                        TString param = sgn->ParamNames[pi]; 
+                        TString param = sgn->ParamNames[pi];
                         if (TrackIds.contains(param) || IsFiltered(param)) {
                             continue;
                         }
@@ -3589,7 +3589,7 @@ private:
               "</div>";
     }
 
-    using TTimeline = TVector<std::pair<TPatternNode*, double>>; 
+    using TTimeline = TVector<std::pair<TPatternNode*, double>>;
 
     TTimeline MakeTimeline(TPatternNode* node)
     {
@@ -3648,14 +3648,14 @@ private:
         os << "</div>";
     }
 
-    TString FormatTimelineTooltip(double time, double prevTime, TPatternNode* node) 
+    TString FormatTimelineTooltip(double time, double prevTime, TPatternNode* node)
     {
         return FormatCycles(time - prevTime) + ": "
                 + FormatCycles(prevTime) + " -> " + FormatCycles(time)
                 + "(" + node->Name + ")";
     }
 
-    TString FormatFloat(double value) 
+    TString FormatFloat(double value)
     {
         if (value == 0.0) {
             return "0";
@@ -3695,7 +3695,7 @@ private:
         }
     }
 
-    TString FormatCycles(double timeCycles) 
+    TString FormatCycles(double timeCycles)
     {
         double timeSec = timeCycles / NHPTimer::GetClockRate();
         if (timeSec > 1.0) {
@@ -3733,21 +3733,21 @@ private:
         }
     }
 
-    TString GetParam(const NLWTrace::TLogItem& item, TString* paramValues, const TString& paramName) 
+    TString GetParam(const NLWTrace::TLogItem& item, TString* paramValues, const TString& paramName)
     {
         for (size_t pi = 0; pi < item.SavedParamsCount; pi++) {
             if (paramName == item.Probe->Event.Signature.ParamNames[pi]) {
                 return paramValues[pi];
             }
         }
-        return TString(); 
+        return TString();
     }
 
-    TString GetGroup(const NLWTrace::TLogItem& item, TString* paramValues) 
+    TString GetGroup(const NLWTrace::TLogItem& item, TString* paramValues)
     {
         TStringStream ss;
         bool first = true;
-        for (const TString& groupParam : GroupBy) { 
+        for (const TString& groupParam : GroupBy) {
             ss << (first? "": "|") << GetParam(item, paramValues, groupParam);
             first = false;
         }
@@ -3759,7 +3759,7 @@ private:
         // Ensure cyclic per thread lwtrace logs wont drop *inner* items of a track
         // (note that some *starting* items can be dropped)
         if (item.SavedParamsCount > 0 && !CutTs.Skip(item)) {
-            TString paramValues[LWTRACE_MAX_PARAMS]; 
+            TString paramValues[LWTRACE_MAX_PARAMS];
             item.Probe->Event.Signature.SerializeParams(item.Params, paramValues);
             Tracks[GetGroup(item, paramValues)].Items.emplace_back(tid, item);
         }
@@ -3767,7 +3767,7 @@ private:
 };
 
 NLWTrace::TProbeRegistry g_Probes;
-TString g_sanitizerTest("TString g_sanitizerTest"); 
+TString g_sanitizerTest("TString g_sanitizerTest");
 NLWTrace::TManager g_SafeManager(g_Probes, false);
 NLWTrace::TManager g_UnsafeManager(g_Probes, true);
 TDashboardRegistry g_DashboardRegistry;
@@ -3775,10 +3775,10 @@ TDashboardRegistry g_DashboardRegistry;
 class TLWTraceMonPage : public NMonitoring::IMonPage {
 private:
     NLWTrace::TManager* TraceMngr;
-    TString StartTime; 
+    TString StartTime;
     TTraceCleaner Cleaner;
     TMutex SnapshotsMtx;
-    THashMap<TString, TAtomicSharedPtr<NLWTrace::TLogPb>> Snapshots; 
+    THashMap<TString, TAtomicSharedPtr<NLWTrace::TLogPb>> Snapshots;
 public:
     explicit TLWTraceMonPage(bool allowUnsafe = false)
         : NMonitoring::IMonPage("trace", "Tracing")
@@ -3842,7 +3842,7 @@ public:
 private:
     void OutputNavbar(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
-        TString active = " class=\"active\""; 
+        TString active = " class=\"active\"";
         out <<
             "<nav class=\"navbar navbar-default\"><div class=\"container-fluid\">"
               << NavbarHeader() <<
@@ -4057,9 +4057,9 @@ private:
         if (request.GetParams().NumOfValues("id") == 0) {
             ythrow yexception() << "Cgi-parameter 'id' is not specified";
         } else {
-            TString id = request.GetParams().Get("id"); 
+            TString id = request.GetParams().Get("id");
             const NLWTrace::TQuery& query = TraceMngr->GetTrace(id)->GetQuery();
-            TString queryStr = query.DebugString(); 
+            TString queryStr = query.DebugString();
             WWW_HTML(out) {
                 out << "<h2>Trace Query: " << id << "</h2><pre>" << queryStr;
             }
@@ -4112,7 +4112,7 @@ private:
                 Subvalues(request.GetParams(), "f"),
                 Subvalues(request.GetParams(), "g")
             ));
-            for (const TString& id : Subvalues(request.GetParams(), "id")) { 
+            for (const TString& id : Subvalues(request.GetParams(), "id")) {
                 CheckAdHocTrace(id, TDuration::Minutes(1));
                 TraceMngr->ReadLog(id, *logTracks);
                 TraceMngr->ReadDepot(id, *logTracks);
@@ -4123,7 +4123,7 @@ private:
                 Subvalues(request.GetParams(), "g"),
                 request.GetParams().Get("cutts") == "y"
             ));
-            for (const TString& id : Subvalues(request.GetParams(), "id")) { 
+            for (const TString& id : Subvalues(request.GetParams(), "id")) {
                 CheckAdHocTrace(id, TDuration::Minutes(1));
                 TraceMngr->ReadLog(id, *logAnalyzer);
                 TraceMngr->ReadDepot(id, *logAnalyzer);
@@ -4148,7 +4148,7 @@ private:
             DropdownSelector<Link>(out, e, "reverse", e.Get("reverse"), "", variants);
         }
 
-        TString aggr = e.Get("aggr"); 
+        TString aggr = e.Get("aggr");
         TVariants variants1; // MSVS2013 doesn't understand complex initializer lists
         variants1.emplace_back("", "without aggregation");
         variants1.emplace_back("hist", "as histogram");
@@ -4173,8 +4173,8 @@ private:
             DropdownSelector<Link>(out, e, "ile", e.Get("ile"), "and show", ileVars);
             out << "%-ile. ";
             TString patternAnalyzer;
-            TString distBy; 
-            TString distType; 
+            TString distBy;
+            TString distType;
             if (e.Get("pattern")) {
                 TVariants analyzePatternVars;
                 analyzePatternVars.emplace_back("resTotal", "distribution by total");
@@ -4229,7 +4229,7 @@ private:
                 }
             }
 
-            TString selectors = out.Str(); 
+            TString selectors = out.Str();
             out.Clear();
             out << NMonitoring::HTTPOKHTML;
             out << "<!DOCTYPE html>" << Endl;
@@ -4320,7 +4320,7 @@ private:
             } else if (aggr == "hist") {
                 RequireSelection(out, e, "bn", "by", logFilter->ListParamNames());
                 const NAnalytics::TTable& inputTable = logAnalyzer->GetTable();
-                TString bn = e.Get("bn"); 
+                TString bn = e.Get("bn");
                 double b1 = e.Get("b1")? FromString<double>(e.Get("b1")): MinValue(bn, inputTable);
                 double b2 = e.Get("b2")? FromString<double>(e.Get("b2")): MaxValue(bn, inputTable);
                 if (isfinite(b1) && isfinite(b2)) {
@@ -4332,9 +4332,9 @@ private:
                 }
             }
 
-            TString xn = e.Get("xn"); 
+            TString xn = e.Get("xn");
 
-            TString outFormat = e.Get("out"); 
+            TString outFormat = e.Get("out");
             TVariants variants2;
             variants2.emplace_back("html", "table");
             variants2.emplace_back("flot", "chart");
@@ -4345,12 +4345,12 @@ private:
 
             RequireSelection(out, e, "out", "and show", variants2);
             if (outFormat == "csv") {
-                TString sep = e.Get("sep")? e.Get("sep"): TString("\t"); 
+                TString sep = e.Get("sep")? e.Get("sep"): TString("\t");
                 out.Clear();
                 out << NMonitoring::HTTPOKTEXT;
                 out << ToCsv(data, sep, e.Get("head") != "n");
             } else if (outFormat == "html") {
-                TString selectors = out.Str(); 
+                TString selectors = out.Str();
                 out.Clear();
                 WWW_HTML(out) {
                     // Wrap selectors with navbar
@@ -4366,7 +4366,7 @@ private:
                 out << ToJsonFlot(data, xn, SplitString(e.Get("yns"), ":"));
             } else if (outFormat == "flot") {
                 SeriesSelectors(out, e, "xn", "yns", data);
-                TString selectors = out.Str(); 
+                TString selectors = out.Str();
 
                 TVector<TString> ynos = SplitString(e.Get("yns"), ":");
                 out.Clear();
@@ -4525,12 +4525,12 @@ private:
     void PostNew(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         WWW_CHECK(request.GetPostParams().Has("id"), "POST parameter 'id' is not specified");
-        const TString& id = request.GetPostParams().Get("id"); 
+        const TString& id = request.GetPostParams().Get("id");
         bool ui = (request.GetParams().Get("ui") == "y");
         TDuration timeout = GetGetTimeout(request);
         if (!CheckAdHocTrace(id, timeout)) {
             NLWTrace::TQuery query;
-            TString queryStr = request.GetPostParams().Get("query"); 
+            TString queryStr = request.GetPostParams().Get("query");
             if (!ui) {
                 queryStr = Base64Decode(queryStr); // Needed for trace.sh (historically)
             }
@@ -4565,7 +4565,7 @@ private:
     void PostDelete(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         WWW_CHECK(request.GetPostParams().Has("id"), "POST parameter 'id' is not specified");
-        const TString& id = request.GetPostParams().Get("id"); 
+        const TString& id = request.GetPostParams().Get("id");
         bool ui = (request.GetParams().Get("ui") == "y");
         TraceMngr->Delete(id);
         Cleaner.Forget(id);
@@ -4592,14 +4592,14 @@ private:
     void PostSnapshot(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         WWW_CHECK(request.GetPostParams().Has("id"), "POST parameter 'id' is not specified");
-        const TString& id = request.GetPostParams().Get("id"); 
+        const TString& id = request.GetPostParams().Get("id");
         bool ui = (request.GetParams().Get("ui") == "y");
         TInstant now = TInstant::Now();
 
         TGuard<TMutex> g(SnapshotsMtx);
         const NLWTrace::TSession* trace = TraceMngr->GetTrace(id);
         struct tm tm0;
-        TString sid = id + Strftime("_%Y%m%d-%H%M%S", now.GmTime(&tm0)); 
+        TString sid = id + Strftime("_%Y%m%d-%H%M%S", now.GmTime(&tm0));
         TAtomicSharedPtr<NLWTrace::TLogPb>& pbPtr = Snapshots[sid];
         pbPtr.Reset(new NLWTrace::TLogPb());
         trace->ToProtobuf(*pbPtr);
@@ -4627,7 +4627,7 @@ private:
     void PostSetTimeout(const NMonitoring::IMonHttpRequest& request, IOutputStream& out)
     {
         WWW_CHECK(request.GetPostParams().Has("id"), "POST parameter 'id' is not specified");
-        const TString& id = request.GetPostParams().Get("id"); 
+        const TString& id = request.GetPostParams().Get("id");
         TDuration timeout = GetGetTimeout(request);
         bool ui = (request.GetParams().Get("ui") == "y");
         Cleaner.Postpone(id, timeout, true);
@@ -4657,7 +4657,7 @@ private:
 
 private:
     // Returns true iff trace is ad-hoc and ensures trace is created
-    bool CheckAdHocTrace(const TString& id, TDuration timeout) 
+    bool CheckAdHocTrace(const TString& id, TDuration timeout)
     {
         TAdHocTraceConfig cfg;
         if (cfg.ParseId(id)) {

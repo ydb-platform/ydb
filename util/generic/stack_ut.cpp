@@ -4,7 +4,7 @@
 
 Y_UNIT_TEST_SUITE(TYStackTest) {
     Y_UNIT_TEST(ExplicitBool) {
-        TStack<int> s; 
+        TStack<int> s;
 
         UNIT_ASSERT(!s);
         UNIT_ASSERT(s.empty());

@@ -44,7 +44,7 @@ void SetupLogging(TTestActorRuntime& runtime)
     runtime.SetLogPriority(NKikimrServices::NODE_BROKER, priority);
 }
 
-THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> NodeWardenConfigs; 
+THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> NodeWardenConfigs;
 
 void SetupServices(TTestActorRuntime &runtime,
                    ui32 maxDynNodes,
@@ -561,7 +561,7 @@ void CheckNameserverNodesList(TTestActorRuntime &runtime,
                               TActorId sender,
                               size_t count)
 {
-    THashMap<ui32, TEvInterconnect::TNodeInfo> nodes; 
+    THashMap<ui32, TEvInterconnect::TNodeInfo> nodes;
     GetNameserverNodesList(runtime, sender, nodes, true);
     UNIT_ASSERT_VALUES_EQUAL(nodes.size(), count);
 }
@@ -611,7 +611,7 @@ void CheckNameserverDynamicNodesList(TTestActorRuntime &runtime,
                                      size_t count,
                                      Ts... args)
 {
-    THashMap<ui32, TEvInterconnect::TNodeInfo> nodes; 
+    THashMap<ui32, TEvInterconnect::TNodeInfo> nodes;
     GetNameserverNodesList(runtime, sender, nodes, false);
     UNIT_ASSERT_VALUES_EQUAL(nodes.size(), count);
     CheckNameserverDynamicNodesList(nodes, args...);

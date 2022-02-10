@@ -107,7 +107,7 @@ void THttpHeaderParserTestSuite::TestSplitRequestHeader() {
 
     for (size_t n1 = 0; n1 < rlen; n1++) {
         for (size_t n2 = n1; n2 < rlen; n2++) {
-            TString s1{request, 0, n1}; 
+            TString s1{request, 0, n1};
             TString s2{request, n1, n2 - n1};
             TString s3{request, n2, rlen - n2};
             UNIT_ASSERT_EQUAL(s1 + s2 + s3, request);
@@ -144,7 +144,7 @@ void THttpHeaderParserTestSuite::TestTrailingData() {
     UNIT_ASSERT_EQUAL(httpRequestHeader.http_method, HTTP_METHOD_GET);
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.host, "www.google.ru:8080"), 0);
     UNIT_ASSERT_EQUAL(httpRequestHeader.request_uri, "/search?q=hi");
-    UNIT_ASSERT_EQUAL(TString(httpHeaderParser->lastchar + 1), "high.ru"); 
+    UNIT_ASSERT_EQUAL(TString(httpHeaderParser->lastchar + 1), "high.ru");
     UNIT_ASSERT_EQUAL(httpRequestHeader.http_minor, 1);
     UNIT_ASSERT_EQUAL(httpRequestHeader.transfer_chunked, -1);
     UNIT_ASSERT_EQUAL(httpRequestHeader.content_length, -1);
@@ -495,20 +495,20 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
         return parser;
     }
 
-    static THttpChunkParser parseByteByByte(const TStringBuf& blob, const TVector<int>& states) { 
+    static THttpChunkParser parseByteByByte(const TStringBuf& blob, const TVector<int>& states) {
         UNIT_ASSERT(states.size() <= blob.size());
         THttpChunkParser parser{initParser()};
         for (size_t n = 0; n < states.size(); n++) {
             const TStringBuf d{blob, n, 1};
             int code = parser.Execute(d.data(), d.size());
-            Cout << TString(d).Quote() << " " << code << Endl; 
+            Cout << TString(d).Quote() << " " << code << Endl;
             UNIT_ASSERT_EQUAL(code, states[n]);
         }
         return parser;
     }
 
     static THttpChunkParser parseBytesWithLastState(const TStringBuf& blob, const int last_state) {
-        TVector<int> states(blob.size() - 1, 1); 
+        TVector<int> states(blob.size() - 1, 1);
         states.push_back(last_state);
         return parseByteByByte(blob, states);
     }
@@ -517,7 +517,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
         const TStringBuf blob{
             "4\r\n"
             "____\r\n"};
-        TVector<int> states{ 
+        TVector<int> states{
             -1, /* 1, -1,
             1, -1,  1, -1, 1, -1 */};
         // as soon as error happens parser state should be considered
@@ -540,7 +540,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
         const TStringBuf blob{
             "\r\n"
             "-1"};
-        TVector<int> states{ 
+        TVector<int> states{
             1, 1,
             -1,
             /* 1 */};
@@ -570,7 +570,7 @@ Y_UNIT_TEST_SUITE(TestHttpChunkParser) {
             "4\r\n"
             "_" // first byte of the chunk
         };
-        TVector<int> states{ 
+        TVector<int> states{
             1, 1,
             1, 1, 2,
             -1};

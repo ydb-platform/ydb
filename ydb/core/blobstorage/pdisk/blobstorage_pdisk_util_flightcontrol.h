@@ -16,7 +16,7 @@ class TFlightControl {
     ui64 EndIdx;
     ui64 MaxSize;
     ui64 Mask;
-    TVector<bool> IsCompleteLoop; 
+    TVector<bool> IsCompleteLoop;
     TMutex ScheduleMutex;
     TCondVar ScheduleCondVar;
 

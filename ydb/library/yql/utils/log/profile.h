@@ -45,7 +45,7 @@ namespace NLog {
 class TProfilingScope {
 public:
     TProfilingScope(const char* name, ELevel level, const char* file, int line,
-                    TString logCtxPath = TString()) 
+                    TString logCtxPath = TString())
         : Name_(name)
         , Level_(level)
         , File_(file)
@@ -67,7 +67,7 @@ private:
     const char* File_;
     int Line_;
     ui64 StartedAt_;
-    TString LogCtxPath_; 
+    TString LogCtxPath_;
 };
 
 } // namspace NLog

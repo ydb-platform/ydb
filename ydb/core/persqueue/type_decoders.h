@@ -443,7 +443,7 @@ private:
         TValueDecoder ValueDecoder;
     };
 
-    using TCache = TDeque<TType>; 
+    using TCache = TDeque<TType>;
 
 private:
     TDataRef Data;

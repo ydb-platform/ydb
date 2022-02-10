@@ -207,7 +207,7 @@ namespace NKikimr {
                     str << "[" << (Changed ? "true" : "false") << ", " << Weight << "]";
                 }
 
-                TString ToString() const { 
+                TString ToString() const {
                     TStringStream str;
                     Output(str);
                     return str.Str();

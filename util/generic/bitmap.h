@@ -25,7 +25,7 @@ namespace NBitMapPrivate {
 
     // better than intrinsics without -mpopcnt
     template <typename T>
-    static unsigned CountBitsPrivate(T v) noexcept { 
+    static unsigned CountBitsPrivate(T v) noexcept {
         return static_cast<unsigned>(ByteSums(v) >> 56);
     }
 

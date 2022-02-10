@@ -1,6 +1,6 @@
 #include "regexp.h"
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/string/ascii.h>
 #include <util/system/defaults.h>
 
@@ -135,7 +135,7 @@ class TRegExBaseImpl: public TAtomicRefCount<TRegExBaseImpl> {
 
 protected:
     int CompileOptions;
-    TString RegExpr; 
+    TString RegExpr;
     regex_t Preg;
 
 public:
@@ -145,7 +145,7 @@ public:
         memset(&Preg, 0, sizeof(Preg));
     }
 
-    TRegExBaseImpl(const TString& re, int cflags) 
+    TRegExBaseImpl(const TString& re, int cflags)
         : CompileOptions(cflags)
         , RegExpr(re)
     {
@@ -188,7 +188,7 @@ public:
     }
 
 private:
-    TString Error; 
+    TString Error;
 };
 
 bool TRegExBase::IsCompiled() const {
@@ -201,14 +201,14 @@ TRegExBase::TRegExBase(const char* re, int cflags) {
     }
 }
 
-TRegExBase::TRegExBase(const TString& re, int cflags) { 
+TRegExBase::TRegExBase(const TString& re, int cflags) {
     Compile(re, cflags);
 }
 
 TRegExBase::~TRegExBase() {
 }
 
-void TRegExBase::Compile(const TString& re, int cflags) { 
+void TRegExBase::Compile(const TString& re, int cflags) {
     Impl = new TRegExBaseImpl(re, cflags);
 }
 
@@ -224,7 +224,7 @@ int TRegExBase::GetCompileOptions() const {
     return Impl->CompileOptions;
 }
 
-TString TRegExBase::GetRegExpr() const { 
+TString TRegExBase::GetRegExpr() const {
     if (!Impl)
         ythrow yexception() << "!Regular expression is not compiled";
     return Impl->RegExpr;
@@ -235,7 +235,7 @@ TRegExMatch::TRegExMatch(const char* re, int cflags)
 {
 }
 
-TRegExMatch::TRegExMatch(const TString& re, int cflags) 
+TRegExMatch::TRegExMatch(const TString& re, int cflags)
     : TRegExBase(re, cflags)
 {
 }
@@ -251,17 +251,17 @@ TRegExSubst::TRegExSubst(const char* re, int cflags)
     memset(Brfs, 0, sizeof(TBackReferences) * NMATCHES);
 }
 
-TString TRegExSubst::Replace(const char* str, int eflags) { 
-    TString s; 
+TString TRegExSubst::Replace(const char* str, int eflags) {
+    TString s;
     if (BrfsCount) {
         if (Exec(str, PMatch, eflags) == 0) {
             int i;
             for (i = 0; i < BrfsCount; i++) {
-                s += TString(Replacement, Brfs[i].Beg, Brfs[i].End - Brfs[i].Beg); 
+                s += TString(Replacement, Brfs[i].Beg, Brfs[i].End - Brfs[i].Beg);
                 if (Brfs[i].Refer >= 0 && Brfs[i].Refer < NMATCHES)
-                    s += TString(str, PMatch[Brfs[i].Refer].rm_so, int(PMatch[Brfs[i].Refer].rm_eo - PMatch[Brfs[i].Refer].rm_so)); 
+                    s += TString(str, PMatch[Brfs[i].Refer].rm_so, int(PMatch[Brfs[i].Refer].rm_eo - PMatch[Brfs[i].Refer].rm_so));
             }
-            s += TString(Replacement, Brfs[i].Beg, Brfs[i].End - Brfs[i].Beg); 
+            s += TString(Replacement, Brfs[i].Beg, Brfs[i].End - Brfs[i].Beg);
         }
     } else {
         s = Replacement;

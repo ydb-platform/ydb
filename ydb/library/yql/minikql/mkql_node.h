@@ -108,7 +108,7 @@ public:
 
     void Accept(INodeVisitor& visitor);
     bool Equals(const TNode& nodeToCompare) const;
-    void UpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void UpdateLinks(const THashMap<TNode*, TNode*>& links);
     // replace map stored in cookies
     TNode* CloneOnCallableWrite(const TTypeEnvironment& env) const;
     void Freeze(const TTypeEnvironment& env);
@@ -173,7 +173,7 @@ public:
     bool IsSameType(const TType& typeToCompare) const;
     bool IsConvertableTo(const TType& typeToCompare, bool ignoreTagged = false) const;
     void Accept(INodeVisitor& visitor);
-    void UpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void UpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* CloneOnCallableWrite(const TTypeEnvironment& env) const;
     void Freeze(const TTypeEnvironment& env);
 
@@ -205,7 +205,7 @@ private:
     {
     }
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -228,7 +228,7 @@ private:
         : TType(SingularKind, type)
     {}
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -473,7 +473,7 @@ private:
     TScopedAlloc& Alloc;
     mutable TPagedArena Arena;
     mutable std::stack<NUdf::TStringValue> Strings;
-    mutable THashSet<TStringBuf> NamesPool; 
+    mutable THashSet<TStringBuf> NamesPool;
     mutable std::vector<TNode*> Stack;
 
     TTypeType* TypeOfType;
@@ -535,7 +535,7 @@ public:
 protected:
     TDataType(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env);
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -579,7 +579,7 @@ private:
     using TNode::Equals;
     bool Equals(const TDataLiteral& nodeToCompare) const;
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 };
@@ -610,7 +610,7 @@ struct TStructMember {
 class TStructType : public TType {
 friend class TType;
 public:
-    static TStructType* Create(const std::pair<TString, TType*>* members, ui32 membersCount, const TTypeEnvironment& env); 
+    static TStructType* Create(const std::pair<TString, TType*>* members, ui32 membersCount, const TTypeEnvironment& env);
     static TStructType* Create(ui32 membersCount, const TStructMember* members, const TTypeEnvironment& env);
 
     using TType::IsSameType;
@@ -644,7 +644,7 @@ public:
 private:
     TStructType(ui32 membersCount, std::pair<TInternName, TType*>* members, const TTypeEnvironment& env, bool validate = true);
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -675,7 +675,7 @@ private:
     using TNode::Equals;
     bool Equals(const TStructLiteral& nodeToCompare) const;
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -705,7 +705,7 @@ public:
 private:
     TListType(TType* itemType, const TTypeEnvironment& env, bool validate = true);
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -736,7 +736,7 @@ private:
     using TNode::Equals;
     bool Equals(const TListLiteral& nodeToCompare) const;
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -763,7 +763,7 @@ public:
 private:
     TStreamType(TType* itemType, const TTypeEnvironment& env, bool validate = true);
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -815,7 +815,7 @@ public:
 private:
     TOptionalType(TType* itemType, const TTypeEnvironment& env, bool validate = true);
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -848,7 +848,7 @@ private:
     using TNode::Equals;
     bool Equals(const TOptionalLiteral& nodeToCompare) const;
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -880,7 +880,7 @@ public:
 private:
     TDictType(TType* keyType, TType* payloadType, const TTypeEnvironment& env, bool validate = true);
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -911,7 +911,7 @@ private:
     using TNode::Equals;
     bool Equals(const TDictLiteral& nodeToCompare) const;
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -923,7 +923,7 @@ private:
 class TCallableType : public TType {
 friend class TType;
 public:
-    static TCallableType* Create(const TString& name, TType* returnType, ui32 argumentsCount, 
+    static TCallableType* Create(const TString& name, TType* returnType, ui32 argumentsCount,
         TType** arguments, TNode* payload, const TTypeEnvironment& env);
     static TCallableType* Create(TType* returnType, const TStringBuf& name, ui32 argumentsCount,
         TType** arguments, TNode* payload, const TTypeEnvironment& env);
@@ -975,7 +975,7 @@ private:
     TCallableType(const TInternName& name, TType* returnType, ui32 argumentsCount, TType** arguments,
         TNode* payload, const TTypeEnvironment& env);
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -1031,7 +1031,7 @@ private:
     using TNode::Equals;
     bool Equals(const TCallable& nodeToCompare) const;
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -1139,7 +1139,7 @@ public:
 private:
     TTupleType(ui32 elemntsCount, TType** elements, const TTypeEnvironment& env, bool validate = true);
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -1170,7 +1170,7 @@ private:
     using TNode::Equals;
     bool Equals(const TTupleLiteral& nodeToCompare) const;
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -1204,7 +1204,7 @@ private:
         , Tag(tag)
     {}
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -1282,7 +1282,7 @@ public:
 private:
     TVariantType(TType* underlyingType, const TTypeEnvironment& env, bool validate = true);
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 
@@ -1312,7 +1312,7 @@ private:
     using TNode::Equals;
     bool Equals(const TVariantLiteral& nodeToCompare) const;
 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
     TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
     void DoFreeze(const TTypeEnvironment& env);
 

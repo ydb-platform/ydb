@@ -220,7 +220,7 @@ bool TExecutorBorrowLogic::BundleCompacted(
 
 void TExecutorBorrowLogic::BorrowBundle(
     const TLogoBlobID &bundleId,
-    const TSet<ui64> &loaners, 
+    const TSet<ui64> &loaners,
     TLogCommit *commit)
 {
     auto storedInfoItPair = BorrowedInfo.insert(std::make_pair(bundleId, TBorrowedPartInfo()));
@@ -298,7 +298,7 @@ void TExecutorBorrowLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, TL
     Garbage.clear();
 }
 
-const THashMap<TLogoBlobID, TCompactedPartLoans>* TExecutorBorrowLogic::GetCompactedLoansList() { 
+const THashMap<TLogoBlobID, TCompactedPartLoans>* TExecutorBorrowLogic::GetCompactedLoansList() {
     return &CompactedPartLoans;
 }
 
@@ -372,13 +372,13 @@ void TExecutorBorrowLogic::UpdateBorrow(
 
         smthChanged = true;
         if (storedInfo.BorrowInfo.FullBorrow.size() == 1) {
-            TVector<ui64>().swap(storedInfo.BorrowInfo.FullBorrow); 
+            TVector<ui64>().swap(storedInfo.BorrowInfo.FullBorrow);
             if (storedInfo.BorrowInfo.Keep) {
                 commit->GcDelta.Deleted.insert(
                     commit->GcDelta.Deleted.end(),
                     storedInfo.BorrowInfo.Keep.begin(),
                     storedInfo.BorrowInfo.Keep.end());
-                TVector<TLogoBlobID>().swap(storedInfo.BorrowInfo.Keep); 
+                TVector<TLogoBlobID>().swap(storedInfo.BorrowInfo.Keep);
                 KeepBytes += storedInfo.BorrowInfo.UpdateKeepBytes();
             }
         } else {

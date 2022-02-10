@@ -28,7 +28,7 @@ namespace {
             xmlNewCharEncodingHandler("windows-1251", CharEncodingInput, nullptr);
         }
 
-        inline ~TLibXml2() { 
+        inline ~TLibXml2() {
             xmlCleanupParser();
         }
     };

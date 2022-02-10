@@ -86,7 +86,7 @@ public:
         Start(thrnum, maxqueue);
     }
 
-    inline ~TImpl() override { 
+    inline ~TImpl() override {
         try {
             Stop();
         } catch (...) {
@@ -129,17 +129,17 @@ public:
         return true;
     }
 
-    inline size_t Size() const noexcept { 
+    inline size_t Size() const noexcept {
         auto guard = Guard(QueueMutex);
 
         return Queue.Size();
     }
 
-    inline size_t GetMaxQueueSize() const noexcept { 
+    inline size_t GetMaxQueueSize() const noexcept {
         return MaxQueueSize;
     }
 
-    inline size_t GetThreadCountExpected() const noexcept { 
+    inline size_t GetThreadCountExpected() const noexcept {
         return ThreadCountExpected;
     }
 
@@ -151,7 +151,7 @@ public:
         Forked = true;
     }
 
-    inline bool NeedRestart() const noexcept { 
+    inline bool NeedRestart() const noexcept {
         return Forked;
     }
 
@@ -189,7 +189,7 @@ private:
         MaxQueueSize = 0;
     }
 
-    inline void WaitForComplete() noexcept { 
+    inline void WaitForComplete() noexcept {
         with_lock (StopMutex) {
             while (ThreadCountReal) {
                 with_lock (QueueMutex) {
@@ -245,7 +245,7 @@ private:
         FinishOneThread();
     }
 
-    inline void FinishOneThread() noexcept { 
+    inline void FinishOneThread() noexcept {
         auto guard = Guard(StopMutex);
 
         --ThreadCountReal;
@@ -263,7 +263,7 @@ private:
     TCondVar QueuePopCond;
     TCondVar StopCond;
     TJobQueue Queue;
-    TVector<TThreadRef> Tharr; 
+    TVector<TThreadRef> Tharr;
     TAtomic ShouldTerminate;
     size_t MaxQueueSize;
     size_t ThreadCountExpected;
@@ -379,12 +379,12 @@ public:
         {
         }
 
-        inline ~TThread() override { 
+        inline ~TThread() override {
             Impl_->DecThreadCount();
         }
 
     private:
-        void DoExecute() noexcept override { 
+        void DoExecute() noexcept override {
             THolder<TThread> This(this);
 
             if (Impl_->Namer) {
@@ -431,7 +431,7 @@ public:
         sprintf(Name_, "[mtp queue %ld]", (long)AtomicAdd(mtp_queue_counter, 1));
     }
 
-    inline ~TImpl() { 
+    inline ~TImpl() {
         Stop();
     }
 
@@ -439,7 +439,7 @@ public:
         IdleTime_ = idleTime;
     }
 
-    inline const char* Name() const noexcept { 
+    inline const char* Name() const noexcept {
         return Name_;
     }
 
@@ -471,16 +471,16 @@ public:
         }
     }
 
-    inline size_t Size() const noexcept { 
+    inline size_t Size() const noexcept {
         return (size_t)ThrCount_;
     }
 
 private:
-    inline void IncThreadCount() noexcept { 
+    inline void IncThreadCount() noexcept {
         AtomicAdd(ThrCount_, 1);
     }
 
-    inline void DecThreadCount() noexcept { 
+    inline void DecThreadCount() noexcept {
         AtomicAdd(ThrCount_, -1);
     }
 
@@ -496,7 +496,7 @@ private:
         }
     }
 
-    inline void Stop() noexcept { 
+    inline void Stop() noexcept {
         Mutex_.Acquire();
 
         AllDone_ = true;
@@ -510,7 +510,7 @@ private:
         Mutex_.Release();
     }
 
-    inline IObjectInQueue* WaitForJob() noexcept { 
+    inline IObjectInQueue* WaitForJob() noexcept {
         Mutex_.Acquire();
 
         ++Free_;
@@ -690,11 +690,11 @@ namespace {
 
             ~TThreadImpl() override = default;
 
-            inline void WaitForStart() noexcept { 
+            inline void WaitForStart() noexcept {
                 StartEvent_.Wait();
             }
 
-            inline void WaitForComplete() noexcept { 
+            inline void WaitForComplete() noexcept {
                 CompleteEvent_.Wait();
             }
 
@@ -729,7 +729,7 @@ namespace {
         {
         }
 
-        ~TPoolThread() override { 
+        ~TPoolThread() override {
             if (Impl_) {
                 Impl_->WaitForStart();
             }
@@ -743,7 +743,7 @@ namespace {
             Impl_.Swap(impl);
         }
 
-        void DoJoin() noexcept override { 
+        void DoJoin() noexcept override {
             if (Impl_) {
                 Impl_->WaitForComplete();
                 Impl_ = nullptr;

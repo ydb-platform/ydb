@@ -5,13 +5,13 @@ public:
     struct TBlobInfo {
         TLogoBlobID LogoBlobId;
         ui64 Lsn;
-        TString Data; 
+        TString Data;
         TIncrHugeBlobId Id;
     };
 
     struct TTestActorState {
         // a set of blobs that were written and confirmed
-        TMap<ui64, TBlobInfo> ConfirmedState; 
+        TMap<ui64, TBlobInfo> ConfirmedState;
         TMaybe<TIncrHugeBlobId> DeleteRequest;
         TMaybe<TBlobInfo> WriteRequest;
         ui64 Lsn = 0;
@@ -146,7 +146,7 @@ public:
         }
         if (option < writeScore) {
             ui32 len = Rng() % (MaxLen - MinLen + 1) + MinLen;
-            TString data; 
+            TString data;
             data.resize(len);
             ui32 pattern = Rng();
             ui32 i;

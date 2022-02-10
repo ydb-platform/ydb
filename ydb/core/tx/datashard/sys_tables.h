@@ -73,7 +73,7 @@ struct TSysTables {
             static bool IsBroken(ui64 counter) { return (counter == ErrorBroken); }
 
             TVector<TCell> MakeRow(bool v2) const {
-                TVector<TCell> row; 
+                TVector<TCell> row;
                 MakeRow(row, v2);
                 return row;
             }

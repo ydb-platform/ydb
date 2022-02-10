@@ -8,17 +8,17 @@
 class TSemaphore {
 public:
     TSemaphore(const char* name, ui32 maxFreeCount);
-    ~TSemaphore(); 
+    ~TSemaphore();
 
     //Increase the semaphore counter.
-    void Release() noexcept; 
+    void Release() noexcept;
 
     //Keep a thread held while the semaphore counter is equal 0.
-    void Acquire() noexcept; 
+    void Acquire() noexcept;
 
     //Try to enter the semaphore gate. A non-blocking variant of Acquire.
     //Returns 'true' if the semaphore counter decreased
-    bool TryAcquire() noexcept; 
+    bool TryAcquire() noexcept;
 
 private:
     class TImpl;
@@ -29,11 +29,11 @@ private:
 class TFastSemaphore {
 public:
     TFastSemaphore(ui32 maxFreeCount);
-    ~TFastSemaphore(); 
+    ~TFastSemaphore();
 
-    void Release() noexcept; 
-    void Acquire() noexcept; 
-    bool TryAcquire() noexcept; 
+    void Release() noexcept;
+    void Acquire() noexcept;
+    bool TryAcquire() noexcept;
 
 private:
     class TImpl;

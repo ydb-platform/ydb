@@ -12,14 +12,14 @@ TSimpleDbFlat::TSimpleDbFlat(NTable::TDatabase &db)
     : Db(db)
 {}
 
-void TSimpleDbFlat::Erase(const TString &key, const TActorContext &ctx) { 
+void TSimpleDbFlat::Erase(const TString &key, const TActorContext &ctx) {
     Y_UNUSED(ctx);
     const auto keyStr = NScheme::TSmallBoundedString::TInstance(key);
     const TRawTypeValue rawTypeValue = (TRawTypeValue)keyStr;
     Db.Update(TABLE_ID, NTable::ERowOp::Erase, {&rawTypeValue, 1}, { });
 }
 
-void TSimpleDbFlat::Update(const TString &key, const TString &value, const TActorContext &ctx) { 
+void TSimpleDbFlat::Update(const TString &key, const TString &value, const TActorContext &ctx) {
     Y_UNUSED(ctx);
     const auto keyStr = NScheme::TSmallBoundedString::TInstance(key);
     const TRawTypeValue rawTypeValue = (TRawTypeValue)keyStr;

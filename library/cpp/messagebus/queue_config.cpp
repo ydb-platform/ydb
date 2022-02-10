@@ -15,7 +15,7 @@ void TBusQueueConfig::ConfigureLastGetopt(
         .StoreResult(&NumWorkers);
 }
 
-TString TBusQueueConfig::PrintToString() const { 
+TString TBusQueueConfig::PrintToString() const {
     TStringStream ss;
     ss << "NumWorkers=" << NumWorkers << "\n";
     return ss.Str();

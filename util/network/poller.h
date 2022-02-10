@@ -8,7 +8,7 @@
 class TSocketPoller {
 public:
     TSocketPoller();
-    ~TSocketPoller(); 
+    ~TSocketPoller();
 
     void WaitRead(SOCKET sock, void* cookie);
     void WaitWrite(SOCKET sock, void* cookie);

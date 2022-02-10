@@ -375,20 +375,20 @@ protected:
     using TBase = TActorBootstrapped<TBrowseTabletsCommon>;
     TActorId Owner;
     THashMap<TTabletId, TActorId> PipeClients;
-    TSet<TString> Consumers; 
-    TVector<ui64> Tablets; 
+    TSet<TString> Consumers;
+    TVector<ui64> Tablets;
     ui32 Requests = 0;
     ui32 Responses = 0;
     THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     TString Path;
     IViewer::TBrowseContext BrowseContext;
-    TMap<TTabletId, THolder<TEvTablet::TEvGetCountersResponse>> TabletCountersResults; 
-    THashMap<ui32, THolder<NKikimrBlobStorage::TEvResponseBSControllerInfo::TBSGroupInfo>> GroupInfo; 
-    THashSet<ui32> ErasureSpecies; 
-    THashSet<ui64> PDiskCategories; 
-    THashSet<ui64> VDiskCategories; 
-    THashSet<TNodeId> Nodes; 
-    THashSet<ui32> PDisks; 
+    TMap<TTabletId, THolder<TEvTablet::TEvGetCountersResponse>> TabletCountersResults;
+    THashMap<ui32, THolder<NKikimrBlobStorage::TEvResponseBSControllerInfo::TBSGroupInfo>> GroupInfo;
+    THashSet<ui32> ErasureSpecies;
+    THashSet<ui64> PDiskCategories;
+    THashSet<ui64> VDiskCategories;
+    THashSet<TNodeId> Nodes;
+    THashSet<ui32> PDisks;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

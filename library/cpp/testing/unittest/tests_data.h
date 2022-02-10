@@ -4,7 +4,7 @@
 
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/network/sock.h>
 
 class TInet6StreamSocket;

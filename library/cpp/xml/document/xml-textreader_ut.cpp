@@ -10,10 +10,10 @@ namespace {
     /**
      * Simple wrapper around the xmlTextReader wrapper
      */
-    void ParseXml(const TString& xmlData, 
+    void ParseXml(const TString& xmlData,
                   std::function<void(NXml::TConstNode)> nodeHandlerFunc,
-                  const TString& localName, 
-                  const TString& namespaceUri = TString()) { 
+                  const TString& localName,
+                  const TString& namespaceUri = TString()) {
         TStringInput in(xmlData);
         NXml::TTextReader reader(in);
 
@@ -31,7 +31,7 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TestXmlTextReader) {
     Y_UNIT_TEST(BasicExample) {
-        const TString xml = "<?xml version=\"1.0\"?>\n" 
+        const TString xml = "<?xml version=\"1.0\"?>\n"
                             "<example toto=\"1\">\n"
                             "  <examplechild id=\"1\">\n"
                             "    <child_of_child/>\n"
@@ -49,21 +49,21 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
         struct TItem {
             int Depth;
             ENT Type;
-            TString Name; 
-            TString Attrs; 
-            TString Value; 
+            TString Name;
+            TString Attrs;
+            TString Value;
         };
 
-        TVector<TItem> found; 
-        TVector<TString> msgs; 
+        TVector<TItem> found;
+        TVector<TString> msgs;
 
         while (reader.Read()) {
             // dump attributes as "k1: v1, k2: v2, ..."
-            TVector<TString> kv; 
+            TVector<TString> kv;
             if (reader.HasAttributes()) {
                 reader.MoveToFirstAttribute();
                 do {
-                    kv.push_back(TString::Join(reader.GetName(), ": ", reader.GetValue())); 
+                    kv.push_back(TString::Join(reader.GetName(), ": ", reader.GetValue()));
                 } while (reader.MoveToNextAttribute());
                 reader.MoveToElement();
             }
@@ -71,13 +71,13 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
             found.push_back(TItem{
                 reader.GetDepth(),
                 reader.GetNodeType(),
-                TString(reader.GetName()), 
+                TString(reader.GetName()),
                 JoinSeq(", ", kv),
-                reader.HasValue() ? TString(reader.GetValue()) : TString(), 
+                reader.HasValue() ? TString(reader.GetValue()) : TString(),
             });
         }
 
-        const TVector<TItem> expected = { 
+        const TVector<TItem> expected = {
             TItem{0, ENT::Element, "example", "toto: 1", ""},
             TItem{1, ENT::SignificantWhitespace, "#text", "", "\n  "},
             TItem{1, ENT::Element, "examplechild", "id: 1", ""},
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
         }
     }
 
-    const TString GEODATA = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" 
+    const TString GEODATA = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
                             "<root>"
                             ""
                             "  <country id=\"225\">"
@@ -136,22 +136,22 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
 
     Y_UNIT_TEST(ParseXmlSimple) {
         struct TCountry {
-            TString Name; 
-            TVector<TString> Cities; 
+            TString Name;
+            TVector<TString> Cities;
         };
 
-        THashMap<int, TCountry> data; 
+        THashMap<int, TCountry> data;
 
         auto handler = [&data](NXml::TConstNode node) {
             const int id = node.Attr<int>("id");
 
             TCountry& c = data[id];
 
-            c.Name = node.FirstChild("name").Value<TString>(); 
+            c.Name = node.FirstChild("name").Value<TString>();
 
             const NXml::TConstNodes cityNodes = node.Nodes("cities/city");
             for (auto cityNode : cityNodes) {
-                c.Cities.push_back(cityNode.Value<TString>()); 
+                c.Cities.push_back(cityNode.Value<TString>());
             }
         };
 
@@ -180,10 +180,10 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
     }
 
     Y_UNIT_TEST(ParseXmlDeepLevel) {
-        TVector<TString> cities; 
+        TVector<TString> cities;
 
         auto handler = [&cities](NXml::TConstNode node) {
-            cities.push_back(node.Value<TString>()); 
+            cities.push_back(node.Value<TString>());
         };
 
         ParseXml(GEODATA, handler, "city");
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
         UNIT_ASSERT_EXCEPTION(ParseXml("<root><a id=\"1\"></a><a id=\"2></a></root>", handler, "a"), yexception);
     }
 
-    const TString BACKA = // UTF-8 encoding is used implicitly 
+    const TString BACKA = // UTF-8 encoding is used implicitly
         "<Companies"
         "    xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\""
         "    xmlns=\"http://maps.yandex.ru/backa/1.x\""
@@ -259,18 +259,18 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
             TNS{"xal", "urn:oasis:names:tc:ciq:xsdschema:xAL:2.0"}};
 
         int count = 0;
-        THashMap<TString, TString> positions; 
-        THashMap<TString, TString> addresses; 
+        THashMap<TString, TString> positions;
+        THashMap<TString, TString> addresses;
 
         auto handler = [&](NXml::TConstNode node) {
             count++;
-            const auto id = node.Attr<TString>("id"); 
+            const auto id = node.Attr<TString>("id");
 
             NXml::TXPathContextPtr ctxt = node.CreateXPathContext(ns);
 
             const NXml::TConstNode location = node.Node("b:Geo/b:Location", false, *ctxt);
-            positions[id] = location.Node("gml:pos", false, *ctxt).Value<TString>(); 
-            addresses[id] = node.Node("b:Geo/xal:AddressDetails/xal:Country/xal:AddressLine", false, *ctxt).Value<TString>(); 
+            positions[id] = location.Node("gml:pos", false, *ctxt).Value<TString>();
+            addresses[id] = node.Node("b:Geo/xal:AddressDetails/xal:Country/xal:AddressLine", false, *ctxt).Value<TString>();
         };
 
         ParseXml(BACKA, handler, "Company");

@@ -589,10 +589,10 @@ static TServices MakeServices(const NKikimrCms::TAction &action) {
     return services;
 }
 
-TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &action, 
+TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &action,
                                                     const TActorContext *ctx)
 {
-    TSet<TLockableItem *> res; 
+    TSet<TLockableItem *> res;
 
     if (ActionRequiresHost(action) && !HasNode(action.GetHost())) {
         if (ctx)
@@ -644,8 +644,8 @@ TSet<TLockableItem *> TClusterInfo::FindLockedItems(const NKikimrCms::TAction &a
 ui64 TClusterInfo::AddLocks(const TPermissionInfo &permission, const TActorContext *ctx)
 {
     TInstant deadline(permission.Deadline);
-    TDuration duration = TDuration::MicroSeconds(permission.Action.GetDuration()); 
-    Y_UNUSED(duration); 
+    TDuration duration = TDuration::MicroSeconds(permission.Action.GetDuration());
+    Y_UNUSED(duration);
     auto items = FindLockedItems(permission.Action, ctx);
     ui64 locks = 0;
 

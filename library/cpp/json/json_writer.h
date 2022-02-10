@@ -8,7 +8,7 @@
 
 #include <util/stream/output.h>
 #include <util/generic/hash.h>
-#include <util/generic/maybe.h> 
+#include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>
 
 namespace NJson {
@@ -154,8 +154,8 @@ namespace NJson {
 
         void WriteOptional(const TStringBuf&, const TNothing&) {
             // nothing to do
-        } 
- 
+        }
+
         void WriteKey(const TStringBuf key) {
             Buf.WriteKey(key);
         }
@@ -179,7 +179,7 @@ namespace NJson {
         NJsonWriter::TBufState State() const {
             return Buf.State();
         }
- 
+
         void Reset(const NJsonWriter::TBufState& from) {
             return Buf.Reset(from);
         }

@@ -18,16 +18,16 @@ namespace NKikimr {
 
         class TFailureInjectionManager {
             struct TFailureQueueItem {
-                TString Name; 
+                TString Name;
                 TMaybe<TParams> Params;
                 ui32 HitCount;
             };
-            TDeque<TFailureQueueItem> FailureQ; 
+            TDeque<TFailureQueueItem> FailureQ;
             TMutex Mutex;
             volatile bool Committed = false;
 
         public:
-            void Inject(const TString& name, const TParams& params) { 
+            void Inject(const TString& name, const TParams& params) {
                 if (Committed) {
                     with_lock (Mutex) {
                         if (FailureQ) {
@@ -43,7 +43,7 @@ namespace NKikimr {
                 }
             }
 
-            void EnqueueFailureItem(const TString& name, const TMaybe<TParams>& params, ui32 hitCount = 1) { 
+            void EnqueueFailureItem(const TString& name, const TMaybe<TParams>& params, ui32 hitCount = 1) {
                 with_lock (Mutex) {
                     FailureQ.push_back(TFailureQueueItem{name, params, hitCount});
                 }
@@ -96,10 +96,10 @@ namespace NKikimr {
 
         class TTraceActionExecutor : public TCustomActionExecutor {
             TFailureInjectionManager *Manager = nullptr;
-            TString Name; 
+            TString Name;
 
         public:
-            TTraceActionExecutor(TProbe *probe, TFailureInjectionManager *manager, TString name) 
+            TTraceActionExecutor(TProbe *probe, TFailureInjectionManager *manager, TString name)
                 : TCustomActionExecutor(probe, true /*destructive*/)
                 , Manager(manager)
                 , Name(std::move(name))
@@ -114,7 +114,7 @@ namespace NKikimr {
 
         class TFailureInjectionActor : public TActorBootstrapped<TFailureInjectionActor> {
             TManager TraceManager;
-            TVector<TString> Probes; 
+            TVector<TString> Probes;
             TFailureInjectionManager Manager;
             bool Enabled = false;
 
@@ -129,9 +129,9 @@ namespace NKikimr {
 
             void Bootstrap(const TActorContext& /*ctx*/) {
                 struct TCallback {
-                    TVector<TString>& Probes; 
+                    TVector<TString>& Probes;
 
-                    TCallback(TVector<TString>& probes) 
+                    TCallback(TVector<TString>& probes)
                         : Probes(probes)
                     {}
 
@@ -151,8 +151,8 @@ namespace NKikimr {
             void Enable() {
                 if (!Enabled) {
                     TQuery query;
-                    for (const TString& name : Probes) { 
-                        TString actionName = "FailureInjection_" + name; 
+                    for (const TString& name : Probes) {
+                        TString actionName = "FailureInjection_" + name;
 
                         auto& block = *query.AddBlocks();
                         auto& desc = *block.MutableProbeDesc();
@@ -184,16 +184,16 @@ namespace NKikimr {
 
                 const auto& params = ev->Get()->Request.GetParams();
                 if (params.Has("queue")) {
-                    TString queue = params.Get("queue"); 
+                    TString queue = params.Get("queue");
                     if (queue) {
                         ProcessQueue(str, queue);
                     }
                 }
                 if (params.Has("probe")) {
-                    TString probe = params.Get("probe"); 
+                    TString probe = params.Get("probe");
                     if (probe) {
                         try {
-                            TString hc = params.Has("hitcount") ? params.Get("hitcount") : TString(); 
+                            TString hc = params.Has("hitcount") ? params.Get("hitcount") : TString();
                             ui32 hitCount = hc ? FromString<ui32>(hc) : 1;
                             Manager.EnqueueFailureItem(probe, {}, hitCount);
                         } catch (const yexception& ex) {
@@ -221,7 +221,7 @@ namespace NKikimr {
                             }
                             DIV_CLASS("controls") {
                                 str << "<select id=\"probe\" name=\"probe\">";
-                                for (const TString& probe : Probes) { 
+                                for (const TString& probe : Probes) {
                                     str << "<option value=\"" << probe << "\">" << probe << "</option>";
                                 }
                                 str << "</select>";
@@ -252,12 +252,12 @@ namespace NKikimr {
             }
 
             void ProcessQueue(IOutputStream& str, const TString& queue) {
-                TVector<std::tuple<TString, TMaybe<TParams>, ui32>> items; 
+                TVector<std::tuple<TString, TMaybe<TParams>, ui32>> items;
 
                 HTML(str) {
                     size_t pos = 0;
                     for (;;) {
-                        TString probe; 
+                        TString probe;
                         for (; pos < queue.size() && queue[pos] != ';' && queue[pos] != '#'; ++pos) {
                             probe.append(queue[pos]);
                         }

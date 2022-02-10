@@ -15,7 +15,7 @@ public:
     bool IsVerbose;
     bool LockDevice;
     ui64 MainKey;
-    TString Path; 
+    TString Path;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
@@ -103,13 +103,13 @@ public:
         : TClientCommand("format", {}, "Format local disk")
     {}
 
-    TString Path; 
+    TString Path;
     NSize::TSize DiskSize;
     NSize::TSize ChunkSize;
     NSize::TSize SectorSize;
     ui64 Guid;
     ui64 MainKey;
-    TString TextMessage; 
+    TString TextMessage;
     bool IsErasureEncode;
 
     virtual void Config(TConfig& config) override {

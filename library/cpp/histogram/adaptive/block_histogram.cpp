@@ -16,12 +16,12 @@ namespace {
 
     class TSmartHeap {
     private:
-        TVector<ui32> A; 
-        TVector<ui32> Pos; 
-        const TVector<double>& Weights; 
+        TVector<ui32> A;
+        TVector<ui32> Pos;
+        const TVector<double>& Weights;
 
     public:
-        TSmartHeap(const TVector<double>& weights) 
+        TSmartHeap(const TVector<double>& weights)
             : A(weights.size())
             , Pos(weights.size())
             , Weights(weights)
@@ -182,7 +182,7 @@ namespace NKiwiAggr {
         }
     }
 
-    void TBlockHistogram::Merge(const TVector<THistogram>& histogramsToMerge) { 
+    void TBlockHistogram::Merge(const TVector<THistogram>& histogramsToMerge) {
         for (size_t i = 0; i < histogramsToMerge.size(); ++i) {
             Merge(histogramsToMerge[i], 1.0);
         }
@@ -190,7 +190,7 @@ namespace NKiwiAggr {
 
     void TBlockHistogram::Merge(TVector<IHistogramPtr> histogramsToMerge) {
         Y_UNUSED(histogramsToMerge);
-        ythrow yexception() << "IHistogram::Merge(TVector<IHistogramPtr>) is not defined for TBlockHistogram"; 
+        ythrow yexception() << "IHistogram::Merge(TVector<IHistogramPtr>) is not defined for TBlockHistogram";
     }
 
     void TBlockHistogram::Multiply(double factor) {
@@ -198,7 +198,7 @@ namespace NKiwiAggr {
             ythrow yexception() << "Not valid factor in IHistogram::Multiply(): " << factor;
         }
         Sum *= factor;
-        for (TVector<TWeightedValue>::iterator it = Bins.begin(); it != Bins.end(); ++it) { 
+        for (TVector<TWeightedValue>::iterator it = Bins.begin(); it != Bins.end(); ++it) {
             it->second *= factor;
         }
     }
@@ -255,7 +255,7 @@ namespace NKiwiAggr {
         SortAndShrink(Intervals, true);
         histo.SetMinValue(MinValue);
         histo.SetMaxValue(MaxValue);
-        for (TVector<TWeightedValue>::const_iterator it = Bins.begin(); it != Bins.end(); ++it) { 
+        for (TVector<TWeightedValue>::const_iterator it = Bins.begin(); it != Bins.end(); ++it) {
             histo.AddFreq(it->second);
             histo.AddPosition(it->first);
         }
@@ -311,7 +311,7 @@ namespace NKiwiAggr {
     void TBlockHistogram::SortBins() {
         Sort(Bins.begin() + PrevSize, Bins.end());
         if (PrevSize != 0) {
-            TVector<TWeightedValue> temp(Bins.begin(), Bins.begin() + PrevSize); 
+            TVector<TWeightedValue> temp(Bins.begin(), Bins.begin() + PrevSize);
             std::merge(temp.begin(), temp.end(), Bins.begin() + PrevSize, Bins.end(), Bins.begin());
         }
     }
@@ -367,7 +367,7 @@ namespace NKiwiAggr {
             bins[i].LinkAfter(&bins[i - 1]);
         }
 
-        TVector<double> pairWeights(n); 
+        TVector<double> pairWeights(n);
 
         for (ui32 i = 0; i < n; ++i) {
             pairWeights[i] = CalcQuality(Bins[i], Bins[i + 1]).first;
@@ -548,12 +548,12 @@ namespace NKiwiAggr {
             cumulatives.push_back(cumulative);
         }
 
-        TVector<TCumulatives::const_iterator> splits; 
+        TVector<TCumulatives::const_iterator> splits;
         splits.reserve(intervals + 1);
         splits.push_back(cumulatives.begin());
         splits.push_back(cumulatives.end() - 1);
 
-        TPriorityQueue<TSplitInfo> candidates; 
+        TPriorityQueue<TSplitInfo> candidates;
 
         // explicitly add first split
         TSplitInfo newSplitInfo;

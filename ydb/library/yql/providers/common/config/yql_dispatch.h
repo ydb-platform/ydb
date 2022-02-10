@@ -64,9 +64,9 @@ TParser<TInstant> GetDefaultParser<TInstant>();
     XX(TDuration)
 
 #define YQL_CONTAINER_SETTING_PARSER_TYPES(XX)  \
-    XX(TVector<TString>)                        \ 
-    XX(TSet<TString>)                           \ 
-    XX(THashSet<TString>) 
+    XX(TVector<TString>)                        \
+    XX(TSet<TString>)                           \
+    XX(THashSet<TString>)
 
 #define YQL_DECLARE_SETTING_PARSER(type)    \
     template<>                              \
@@ -203,7 +203,7 @@ public:
 
         template <class TContainer>
         TSettingHandlerImpl& Enum(const TContainer& container) {
-            THashSet<TType> allowed(container.cbegin(), container.cend()); 
+            THashSet<TType> allowed(container.cbegin(), container.cend());
             Validators_.push_back([allowed = std::move(allowed)](const TString&, TType value) {
                 if (!allowed.has(value)) {
                     throw yexception() << "Value " << value << " is not in set of allowed values: " << JoinSeq(TStringBuf(","), allowed);
@@ -213,7 +213,7 @@ public:
         }
 
         TSettingHandlerImpl& Enum(std::initializer_list<TType> list) {
-            THashSet<TType> allowed(list); 
+            THashSet<TType> allowed(list);
             Validators_.push_back([allowed = std::move(allowed)](const TString&, TType value) {
                 if (!allowed.contains(value)) {
                     throw yexception() << "Value " << value << " is not in set of allowed values: " << JoinSeq(TStringBuf(","), allowed);
@@ -295,7 +295,7 @@ public:
         TMaybe<TConfSetting<TType, RUNTIME>> Defaul_;
         ::NYql::NPrivate::TParser<TType> Parser_;
         TValueCallback ValueSetter_;
-        TVector<TValueCallback> Validators_; 
+        TVector<TValueCallback> Validators_;
     };
 
     TSettingDispatcher() = default;
@@ -358,8 +358,8 @@ protected:
     static bool Allow(const TActivation& activation, const TString& userName);
 
 protected:
-    THashSet<TString> ValidClusters; 
-    THashMap<TString, TSettingHandler::TPtr> Handlers; 
+    THashSet<TString> ValidClusters;
+    THashMap<TString, TSettingHandler::TPtr> Handlers;
 };
 
 } // namespace NCommon

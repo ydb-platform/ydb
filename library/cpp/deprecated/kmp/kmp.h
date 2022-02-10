@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/ptr.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
@@ -32,13 +32,13 @@ void ComputePrefixFunction(const T* begin, const T* end, ssize_t** result) {
 class TKMPMatcher {
 private:
     TArrayHolder<ssize_t> PrefixFunction;
-    TString Pattern; 
+    TString Pattern;
 
     void ComputePrefixFunction();
 
 public:
     TKMPMatcher(const char* patternBegin, const char* patternEnd);
-    TKMPMatcher(const TString& pattern); 
+    TKMPMatcher(const TString& pattern);
 
     bool SubStr(const char* begin, const char* end, const char*& result) const {
         Y_ASSERT(begin <= end);
@@ -70,7 +70,7 @@ public:
 private:
     ICallback* Callback;
     TArrayHolder<ssize_t> PrefixFunction;
-    using TTVector = TVector<T>; 
+    using TTVector = TVector<T>;
     TTVector Pattern;
     ssize_t State;
     TTVector Candidate;

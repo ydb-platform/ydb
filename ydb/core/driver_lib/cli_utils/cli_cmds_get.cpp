@@ -27,8 +27,8 @@ public:
 
         if (config.ParseResult->Has("extreme")) {
             TLogoBlobID id;
-            TString errorExplanation; 
-            const TString& blob = config.ParseResult->Get("extreme"); 
+            TString errorExplanation;
+            const TString& blob = config.ParseResult->Get("extreme");
             if (!TLogoBlobID::Parse(id, blob, errorExplanation)) {
                 ythrow yexception() << "Failed to parse LogoBlobId '" << blob << "': " << errorExplanation;
             }

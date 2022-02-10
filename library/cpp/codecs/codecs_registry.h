@@ -13,7 +13,7 @@ namespace NCodecs {
     struct ICodecFactory : TAtomicRefCount<ICodecFactory> {
         virtual ~ICodecFactory() = default;
         virtual TCodecPtr MakeCodec(TStringBuf name) const = 0;
-        virtual TVector<TString> ListNames() const = 0; 
+        virtual TVector<TString> ListNames() const = 0;
     };
 
     typedef TIntrusivePtr<ICodecFactory> TCodecFactoryPtr;
@@ -25,15 +25,15 @@ namespace NCodecs {
                 return new TCodec;
             }
 
-            TVector<TString> ListNames() const override { 
-                TVector<TString> vs; 
+            TVector<TString> ListNames() const override {
+                TVector<TString> vs;
                 vs.push_back(ToString(TCodec::MyName()));
                 return vs;
             }
         };
 
         class TCodecRegistry {
-            using TRegistry = THashMap<TString, TIntrusivePtr<ICodecFactory>>; 
+            using TRegistry = THashMap<TString, TIntrusivePtr<ICodecFactory>>;
             TRegistry Registry;
 
         public:
@@ -45,7 +45,7 @@ namespace NCodecs {
 
             TCodecPtr GetCodec(TStringBuf name) const;
 
-            TVector<TString> GetCodecsList() const; 
+            TVector<TString> GetCodecsList() const;
         };
 
     }

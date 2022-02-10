@@ -9,7 +9,7 @@
 #include <util/generic/algorithm.h>
 #include <util/random/mersenne.h>
 
-static TString JoinWithNewline(const TVector<TString>& strings) { 
+static TString JoinWithNewline(const TVector<TString>& strings) {
     TStringStream ss;
     for (const auto& string : strings) {
         ss << string << "\n";
@@ -30,19 +30,19 @@ private:
     class TDirHier {
     public:
         struct TPath {
-            TString Path; 
+            TString Path;
             int Type;
         };
 
-        inline void AddFile(const TString& path) { 
+        inline void AddFile(const TString& path) {
             Add(path, 0);
         }
 
-        inline void AddDir(const TString& path) { 
+        inline void AddDir(const TString& path) {
             Add(path, 1);
         }
 
-        inline void Add(const TString& path, int type) { 
+        inline void Add(const TString& path, int type) {
             const TPath p = {
                 path, type};
 
@@ -67,15 +67,15 @@ private:
             Srch_[path.Path] = path;
         }
 
-        inline int Type(const TString& path) { 
-            THashMap<TString, TPath>::const_iterator it = Srch_.find(path); 
+        inline int Type(const TString& path) {
+            THashMap<TString, TPath>::const_iterator it = Srch_.find(path);
 
             UNIT_ASSERT(it != Srch_.end());
 
             return it->second.Type;
         }
 
-        inline bool Have(const TString& path, int type) { 
+        inline bool Have(const TString& path, int type) {
             return Type(path) == type;
         }
 
@@ -86,12 +86,12 @@ private:
         }
 
     private:
-        TVector<TPath> Paths_; 
-        THashMap<TString, TPath> Srch_; 
+        TVector<TPath> Paths_;
+        THashMap<TString, TPath> Srch_;
     };
 
     inline void TestLocal() {
-        TString dirname("." LOCSLASH_S); 
+        TString dirname("." LOCSLASH_S);
         TDirIterator d(dirname, FTS_NOCHDIR);
         for (auto it = d.begin(); it != d.end(); ++it) {
         }
@@ -100,26 +100,26 @@ private:
     inline void TestIt() {
         TDirHier hier;
 
-        const TString dir = "tmpdir"; 
+        const TString dir = "tmpdir";
         const TDirHier::TPath path = {dir, 1};
 
         hier.Add(path);
 
         for (size_t i = 0; i < 10; ++i) {
-            const TString dir1 = dir + LOCSLASH_C + ToString(i); 
+            const TString dir1 = dir + LOCSLASH_C + ToString(i);
             const TDirHier::TPath path1 = {dir1, 1};
 
             hier.Add(path1);
 
             for (size_t j = 0; j < 10; ++j) {
-                const TString subdir2 = ToString(j); 
-                const TString dir2 = dir1 + LOCSLASH_C + subdir2; 
+                const TString subdir2 = ToString(j);
+                const TString dir2 = dir1 + LOCSLASH_C + subdir2;
                 const TDirHier::TPath path2 = {dir2, 1};
 
                 hier.Add(path2);
 
                 for (size_t k = 0; k < 3; ++k) {
-                    const TString file = dir2 + LOCSLASH_C + "file" + ToString(k); 
+                    const TString file = dir2 + LOCSLASH_C + "file" + ToString(k);
                     const TDirHier::TPath fpath = {file, 0};
 
                     hier.Add(fpath);
@@ -175,24 +175,24 @@ private:
 
     inline void TestSort() {
         TDirHier dh;
-        const TString dir("tmpdir"); 
+        const TString dir("tmpdir");
 
         //prepare fs
         {
             TMersenne<ui32> rnd;
-            const TString prefixes[] = { 
+            const TString prefixes[] = {
                 "a", "b", "xxx", "111", ""};
 
             dh.AddDir(dir);
 
             for (size_t i = 0; i < 100; ++i) {
-                const TString fname = dir + LOCSLASH_C + prefixes[i % Y_ARRAY_SIZE(prefixes)] + ToString(rnd.GenRand()); 
+                const TString fname = dir + LOCSLASH_C + prefixes[i % Y_ARRAY_SIZE(prefixes)] + ToString(rnd.GenRand());
 
                 dh.AddFile(fname);
             }
         }
 
-        TVector<TString> fnames; 
+        TVector<TString> fnames;
 
         {
             TDirIterator d(dir, TDirIterator::TOptions().SetSortByName());
@@ -204,7 +204,7 @@ private:
             }
         }
 
-        TVector<TString> sorted(fnames); 
+        TVector<TString> sorted(fnames);
         Sort(sorted.begin(), sorted.end());
 
         UNIT_ASSERT_VALUES_EQUAL(JoinWithNewline(fnames), JoinWithNewline(sorted));

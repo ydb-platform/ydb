@@ -21,7 +21,7 @@ TSplitBase::TSplitBase(const char* str, size_t length)
 {
 }
 
-TSplitBase::TSplitBase(const TString& s) 
+TSplitBase::TSplitBase(const TString& s)
     : Str(s.data())
     , Len(s.size())
 {
@@ -35,7 +35,7 @@ TDelimitersSplit::TDelimitersSplit(const char* str, size_t length, const TSplitD
 {
 }
 
-TDelimitersSplit::TDelimitersSplit(const TString& s, const TSplitDelimiters& delimiters) 
+TDelimitersSplit::TDelimitersSplit(const TString& s, const TSplitDelimiters& delimiters)
     : TSplitBase(s)
     , Delimiters(delimiters)
 {
@@ -72,7 +72,7 @@ TDelimitersStrictSplit::TDelimitersStrictSplit(const char* str, size_t length, c
 {
 }
 
-TDelimitersStrictSplit::TDelimitersStrictSplit(const TString& s, const TSplitDelimiters& delimiters) 
+TDelimitersStrictSplit::TDelimitersStrictSplit(const TString& s, const TSplitDelimiters& delimiters)
     : TSplitBase(s)
     , Delimiters(delimiters)
 {
@@ -100,7 +100,7 @@ size_t TDelimitersStrictSplit::Begin() const {
 
 /****************** TScreenedDelimitersSplit ******************/
 
-TScreenedDelimitersSplit::TScreenedDelimitersSplit(const TString& s, const TSplitDelimiters& delimiters, const TSplitDelimiters& screens) 
+TScreenedDelimitersSplit::TScreenedDelimitersSplit(const TString& s, const TSplitDelimiters& delimiters, const TSplitDelimiters& screens)
     : TSplitBase(s)
     , Delimiters(delimiters)
     , Screens(screens)
@@ -148,7 +148,7 @@ TDelimitersSplitWithoutTags::TDelimitersSplitWithoutTags(const char* str, size_t
 {
 }
 
-TDelimitersSplitWithoutTags::TDelimitersSplitWithoutTags(const TString& s, const TSplitDelimiters& delimiters) 
+TDelimitersSplitWithoutTags::TDelimitersSplitWithoutTags(const TString& s, const TSplitDelimiters& delimiters)
     : TSplitBase(s)
     , Delimiters(delimiters)
 {
@@ -204,7 +204,7 @@ TCharSplit::TCharSplit(const char* str, size_t length)
 {
 }
 
-TCharSplit::TCharSplit(const TString& s) 
+TCharSplit::TCharSplit(const TString& s)
     : TSplitBase(s)
 {
 }
@@ -230,7 +230,7 @@ TCharSplitWithoutTags::TCharSplitWithoutTags(const char* str, size_t length)
 {
 }
 
-TCharSplitWithoutTags::TCharSplitWithoutTags(const TString& s) 
+TCharSplitWithoutTags::TCharSplitWithoutTags(const TString& s)
     : TSplitBase(s)
 {
 }
@@ -274,7 +274,7 @@ TCharSplitWithoutTags::TIterator TCharSplitWithoutTags::Iterator() const {
     return TIterator(*this);
 }
 
-TSubstringSplitDelimiter::TSubstringSplitDelimiter(const TString& s) 
+TSubstringSplitDelimiter::TSubstringSplitDelimiter(const TString& s)
     : Matcher(s)
     , Len(s.size())
 {
@@ -288,7 +288,7 @@ TSubstringSplit::TSubstringSplit(const char* str, size_t length, const TSubstrin
 {
 }
 
-TSubstringSplit::TSubstringSplit(const TString& str, const TSubstringSplitDelimiter& delimiter) 
+TSubstringSplit::TSubstringSplit(const TString& str, const TSubstringSplitDelimiter& delimiter)
     : TSplitBase(str)
     , Delimiter(delimiter)
 {

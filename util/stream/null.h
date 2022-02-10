@@ -13,8 +13,8 @@
  */
 class TNullInput: public IZeroCopyInput {
 public:
-    TNullInput() noexcept; 
-    ~TNullInput() override; 
+    TNullInput() noexcept;
+    ~TNullInput() override;
 
 private:
     size_t DoRead(void* buf, size_t len) override;
@@ -27,12 +27,12 @@ private:
  */
 class TNullOutput: public IOutputStream {
 public:
-    TNullOutput() noexcept; 
-    ~TNullOutput() override; 
+    TNullOutput() noexcept;
+    ~TNullOutput() override;
 
-    TNullOutput(TNullOutput&&) noexcept = default; 
-    TNullOutput& operator=(TNullOutput&&) noexcept = default; 
- 
+    TNullOutput(TNullOutput&&) noexcept = default;
+    TNullOutput& operator=(TNullOutput&&) noexcept = default;
+
 private:
     void DoWrite(const void* buf, size_t len) override;
 };
@@ -45,12 +45,12 @@ private:
  */
 class TNullIO: public TNullInput, public TNullOutput {
 public:
-    TNullIO() noexcept; 
-    ~TNullIO() override; 
+    TNullIO() noexcept;
+    ~TNullIO() override;
 };
 
 namespace NPrivate {
-    TNullIO& StdNullStream() noexcept; 
+    TNullIO& StdNullStream() noexcept;
 }
 
 /**

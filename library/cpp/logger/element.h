@@ -13,10 +13,10 @@ class TLogElement: public TTempBufOutput {
 public:
     TLogElement(const TLog* parent);
     TLogElement(const TLog* parent, ELogPriority priority);
- 
+
     TLogElement(TLogElement&&) noexcept = default;
     TLogElement& operator=(TLogElement&&) noexcept = default;
- 
+
     ~TLogElement() override;
 
     template <class T>

@@ -8,7 +8,7 @@
 
 #include <cstdlib>
 
-// vector that is 8 bytes when empty (TVector is 24 bytes) 
+// vector that is 8 bytes when empty (TVector is 24 bytes)
 
 template <typename T>
 class TCompactVector {

@@ -563,7 +563,7 @@ Y_UNIT_TEST(TestSeveralOwners) {
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
         TString s{32, 'c'};
         ui32 pp = 4 + 8 + 1 + 9;
@@ -595,7 +595,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
         TString s{32, 'c'};
         ui32 pp = 4 + 8 + 1 + 9;
@@ -691,7 +691,7 @@ Y_UNIT_TEST(TestReserveBytes) {
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
         TString s{32, 'c'};
         ui32 pp = 4 + 8 + 1 + 9;
@@ -744,7 +744,7 @@ Y_UNIT_TEST(TestMessageNo) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
@@ -752,9 +752,9 @@ Y_UNIT_TEST(TestMessageNo) {
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
-        TString s{32, 'c'}; 
+        TString s{32, 'c'};
         ui32 pp = 4 + 8 + 1 + 9;
         data.push_back({1, s.substr(pp)});
         data.push_back({2, s.substr(pp)});
@@ -796,7 +796,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
@@ -804,18 +804,18 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
 
         PQTabletPrepare(20000000, 200 * 1024 * 1024, 0, {{"user1", true}}, tc); //one important client, never delete
 
-        TString ss{50*1024*1024, '_'}; 
+        TString ss{50*1024*1024, '_'};
         char k = 0;
-        TString s = ""; 
+        TString s = "";
         s += k;
         s += ss;
         s += char((1) % 256);
         ++k;
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
         data.push_back({1, s});
 
-        TVector<TString> parts; 
+        TVector<TString> parts;
         ui32 size = 400*1024;
         ui32 diff = 50;
         for (ui32 pos = 0; pos < s.size();) {
@@ -940,7 +940,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
 
             //check very big msg
             cookie = CmdSetOwner(0, tc).first;
-            WritePartData(0, "sourceidY", 13, 1, 0, 5, s.size(), TString{10*1024*1024, 'a'}, tc, cookie, 0); 
+            WritePartData(0, "sourceidY", 13, 1, 0, 5, s.size(), TString{10*1024*1024, 'a'}, tc, cookie, 0);
 
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(handle);
 
@@ -956,7 +956,7 @@ Y_UNIT_TEST(TestAlreadyWritten) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
@@ -964,9 +964,9 @@ Y_UNIT_TEST(TestAlreadyWritten) {
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
         activeZone = true;
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
-        TString s{32, 'c'}; 
+        TString s{32, 'c'};
         ui32 pp = 4 + 8 + 1 + 9;
         data.push_back({2, s.substr(pp)});
         data.push_back({1, s.substr(pp)});
@@ -1008,7 +1008,7 @@ Y_UNIT_TEST(TestWritePQCompact) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
@@ -1017,12 +1017,12 @@ Y_UNIT_TEST(TestWritePQCompact) {
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 8 * 1024 * 1024 - 512 * 1024);
                 //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
-        TString ss{1024*1024 - 100, '_'}; 
-        TString s1{131072, 'a'}; 
-        TString s2{2048, 'b'}; 
-        TString s3{32, 'c'}; 
+        TString ss{1024*1024 - 100, '_'};
+        TString s1{131072, 'a'};
+        TString s2{2048, 'b'};
+        TString s3{32, 'c'};
         ui32 pp = 4 + 8 + 2 + 9;
         for (ui32 i = 0; i < 8; ++i) {
             data.push_back({i + 1, ss.substr(pp)});
@@ -1065,7 +1065,7 @@ Y_UNIT_TEST(TestWritePQBigMessage) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
@@ -1074,13 +1074,13 @@ Y_UNIT_TEST(TestWritePQBigMessage) {
         PQTabletPrepare(20000000, 1000 * 1024 * 1024, 0, {{"user1", true}}, tc, 2, 8 * 1024 * 1024 - 512 * 1024); //nothing dropped
                 //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
-        TString ss{50*1024*1024 - 100 - 2, '_'}; 
-        TString s1{400*1024 - 2, 'a'}; 
+        TString ss{50*1024*1024 - 100 - 2, '_'};
+        TString s1{400*1024 - 2, 'a'};
         ui32 pp = 4 + 8 + 2 + 9;
         char k = 0;
-        TString s = ""; 
+        TString s = "";
         s += k;
         s += ss.substr(pp);
         s += char((1) % 256);
@@ -1088,7 +1088,7 @@ Y_UNIT_TEST(TestWritePQBigMessage) {
         data.push_back({1, s});
 
         for (ui32 i = 0; i < 25;++i) {
-            TString s = ""; 
+            TString s = "";
             s += k;
             s += s1.substr(pp);
             s += char((i + 2) % 256);
@@ -1118,23 +1118,23 @@ Y_UNIT_TEST(TestWritePQ) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(100);
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user", true}}, tc); //important client, lifetimeseconds=0 - never delete
 
-        TVector<std::pair<ui64, TString>> data, data1, data2; 
+        TVector<std::pair<ui64, TString>> data, data1, data2;
         activeZone = PlainOrSoSlow(true, false);
 
-        TString ss{1024*1024, '_'}; 
-        TString s1{131072, 'a'}; 
-        TString s2{2048, 'b'}; 
-        TString s3{32, 'c'}; 
+        TString ss{1024*1024, '_'};
+        TString s1{131072, 'a'};
+        TString s2{2048, 'b'};
+        TString s3{32, 'c'};
         ui32 pp = 4 + 8 + 2 + 9;
 
-        TString sb{15*1024*1024 + 512*1024, '_'}; 
+        TString sb{15*1024*1024 + 512*1024, '_'};
         data.push_back({1, sb.substr(pp)});
         CmdWrite(0,"sourceid0", data, tc, false, {}, true, "", -1, 100);
         activeZone = false;
@@ -1154,8 +1154,8 @@ Y_UNIT_TEST(TestWritePQ) {
         data.push_back({2, ss.substr(pp)});
         CmdWrite(0,"sourceid4", data, tc);
 
-        TString a1{8*1024*1024 - 1024, '_'}; 
-        TString a2{2*1024, '_'}; 
+        TString a1{8*1024*1024 - 1024, '_'};
+        TString a2{2*1024, '_'};
         data.clear();
         data.push_back({1, a1.substr(pp)});
         data1.clear();
@@ -1189,7 +1189,7 @@ Y_UNIT_TEST(TestWritePQ) {
         CmdWrite(1,"sourceId9", data1, tc, false, {}, false, "", -1, 2000); //to other partition
 
         data1.clear();
-        data1.push_back({1, TString{200, 'a'}}); 
+        data1.push_back({1, TString{200, 'a'}});
         for (ui32 i = 1; i <= NUM_WRITES; ++i) {
             data1.front().first = i;
             CmdWrite(1, "sourceidx", data1, tc, false, {}, false, "", -1);
@@ -1209,17 +1209,17 @@ Y_UNIT_TEST(TestSourceIdDropByUserWrites) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc); //no important client, lifetimeseconds=0 - delete right now
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
         activeZone = true;
 
-        TString ss{32, '_'}; 
+        TString ss{32, '_'};
 
         data.push_back({1, ss});
         CmdWrite(0,"sourceid0", data, tc, false, {}, false, "", -1, 100);
@@ -1289,7 +1289,7 @@ Y_UNIT_TEST(TestWriteOffsetWithBigMessage) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
@@ -1298,15 +1298,15 @@ Y_UNIT_TEST(TestWriteOffsetWithBigMessage) {
 
         activeZone = false;
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
-        data.push_back({1, TString{10*1024*1024, 'a'}}); 
+        data.push_back({1, TString{10*1024*1024, 'a'}});
         CmdWrite(1, "sourceIdx", data, tc, false, {}, false, "", -1, 80000);
         data.front().first = 2;
         CmdWrite(1, "sourceIdx", data, tc, false, {}, false, "", -1, 160000);
 
         data.clear();
-        data.push_back({1, TString{100*1024, 'a'}}); 
+        data.push_back({1, TString{100*1024, 'a'}});
         for (ui32 i = 0; i < 100; ++i) {
             data.push_back(data.front());
             data.back().first = i + 2;
@@ -1324,7 +1324,7 @@ Y_UNIT_TEST(TestWriteSplit) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
@@ -1333,7 +1333,7 @@ Y_UNIT_TEST(TestWriteSplit) {
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user1", true}}, tc); //never delete
         const ui32 size  = PlainOrSoSlow(2*1024*1024, 1*1024*1024);
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
         data.push_back({1, TString{size, 'b'}});
         data.push_back({2, TString{size, 'a'}});
         activeZone = PlainOrSoSlow(true, false);
@@ -1349,18 +1349,18 @@ Y_UNIT_TEST(TestLowWatermark) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(200);
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 2 * 1024 * 1024); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
         ui32 pp = 4 + 8 + 2 + 9;
 
-        TString ss{1024*1024, '_'}; 
+        TString ss{1024*1024, '_'};
         data.push_back({1, ss.substr(pp)});
         data.push_back({2, ss.substr(pp)});
         data.push_back({3, ss.substr(pp)});
@@ -1385,7 +1385,7 @@ Y_UNIT_TEST(TestWriteToFullPartition) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         activeZone = false;
         tc.Prepare(dispatchName, setup, activeZone);
@@ -1394,10 +1394,10 @@ Y_UNIT_TEST(TestWriteToFullPartition) {
 
         PQTabletPrepare(11, 100 * 1024 * 1024, 0, {}, tc);
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
         activeZone = PlainOrSoSlow(true, false);
 
-        TString s{32, 'c'}; 
+        TString s{32, 'c'};
         ui32 pp = 8 + 4 + 2 + 9;
         for (ui32 i = 0; i < 10; ++i) {
             data.push_back({i + 1, s.substr(pp)});
@@ -1429,7 +1429,7 @@ Y_UNIT_TEST(TestPQPartialRead) {
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc); //important client - never delete
 
         activeZone = false;
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
         ui32 pp =  4 + 8 + 2 + 9 + 100 + 40; //pp is for size of meta
         TString tmp{1024*1024 - pp - 2, '-'};
@@ -1453,7 +1453,7 @@ Y_UNIT_TEST(TestPQRead) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
 
@@ -1462,13 +1462,13 @@ Y_UNIT_TEST(TestPQRead) {
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc); //important client - never delete
 
         activeZone = false;
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
         ui32 pp =  4 + 8 + 2 + 9 + 100 + 40; //pp is for size of meta
-        TString tmp{1024*1024 - pp - 2, '-'}; 
+        TString tmp{1024*1024 - pp - 2, '-'};
         char k = 0;
         for (ui32 i = 0; i < 26 * 1024 * 1024;) { //3 full blobs and 2 in head
-            TString ss = ""; 
+            TString ss = "";
             ss += k;
             ss += tmp;
             ss += char((i + 1) % 256);
@@ -1505,7 +1505,7 @@ Y_UNIT_TEST(TestPQSmallRead) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
 
@@ -1514,24 +1514,24 @@ Y_UNIT_TEST(TestPQSmallRead) {
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc); //important client - never delete
 
         activeZone = false;
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
         ui32 pp =  4 + 8 + 2 + 9 ; //5 is for 8 blobs for header
-        TString tmp{32 - pp - 2, '-'}; 
+        TString tmp{32 - pp - 2, '-'};
         char k = 0;
-        TString ss = ""; 
+        TString ss = "";
         ss += k;
         ss += tmp;
         ss += char(1);
         data.push_back({1, ss});
         CmdWrite(0, "sourceid0", data, tc, false, {}, true);
-        ++k; data[0].second = TString(1, k) + tmp + char(1); 
+        ++k; data[0].second = TString(1, k) + tmp + char(1);
         CmdWrite(0, "sourceid1", data, tc, false, {}, false);
-        ++k; data[0].second = TString(1, k) + tmp + char(1); 
+        ++k; data[0].second = TString(1, k) + tmp + char(1);
         CmdWrite(0, "sourceid2", data, tc, false, {}, false);
-        ++k; data[0].second = TString(1, k) + tmp + char(1); 
+        ++k; data[0].second = TString(1, k) + tmp + char(1);
         CmdWrite(0, "sourceid3", data, tc, false, {}, false);
-        ++k; data[0].second = TString(1, k) + tmp + char(1); 
+        ++k; data[0].second = TString(1, k) + tmp + char(1);
         CmdWrite(0, "sourceid4", data, tc, false, {}, false);
         PQGetPartInfo(0, 5, tc);
 
@@ -1546,7 +1546,7 @@ Y_UNIT_TEST(TestPQReadAhead) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
@@ -1555,14 +1555,14 @@ Y_UNIT_TEST(TestPQReadAhead) {
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc); //important client - never delete
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
         ui32 pp = 8 + 4 + 2 + 9;
-        TString tmp{1024*1024 - pp - 2, '-'}; 
-        TString tmp0{32 - pp - 2, '-'}; 
+        TString tmp{1024*1024 - pp - 2, '-'};
+        TString tmp0{32 - pp - 2, '-'};
         char k = 0;
         for (ui32 i = 0; i < 5; ++i) {
-            TString ss = ""; 
+            TString ss = "";
             ss += k;
             ss += tmp0;
             ss += char((i + 1) % 256);
@@ -1570,7 +1570,7 @@ Y_UNIT_TEST(TestPQReadAhead) {
             data.push_back({i + 1, ss});
         }
         for (ui32 i = 0; i < 17 * 1024 * 1024;) { //3 full blobs and 2 in head
-            TString ss = ""; 
+            TString ss = "";
             ss += k;
             ss += tmp;
             ss += char((i + 10) % 256);
@@ -1593,7 +1593,7 @@ Y_UNIT_TEST(TestOwnership) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
 
@@ -1601,7 +1601,7 @@ Y_UNIT_TEST(TestOwnership) {
 
         PQTabletPrepare(10, 100 * 1024 * 1024, 0, {}, tc);
 
-        TString cookie, cookie2; 
+        TString cookie, cookie2;
         cookie = CmdSetOwner(0, tc).first;
         UNIT_ASSERT(!cookie.empty());
         cookie2 = CmdSetOwner(0, tc).first;
@@ -1614,7 +1614,7 @@ Y_UNIT_TEST(TestSetClientOffset) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(50);
@@ -1623,7 +1623,7 @@ Y_UNIT_TEST(TestSetClientOffset) {
 
         activeZone = true;
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
         CmdSetOffset(0, "user1", 100, false, tc); //must be true , error
         CmdGetOffset(0, "user1", 0, tc); // must be -1
@@ -1653,7 +1653,7 @@ Y_UNIT_TEST(TestReadSessions) {
 
         activeZone = true;
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
         CmdCreateSession(0, "user1", "session1", tc);
         CmdSetOffset(0, "user1", 0, false, tc, "session1"); //all ok - session is set
         CmdSetOffset(0, "user1", 0, true, tc, "other_session"); //fails - session1 is active
@@ -1683,7 +1683,7 @@ Y_UNIT_TEST(TestGetTimestamps) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(50);
@@ -1693,11 +1693,11 @@ Y_UNIT_TEST(TestGetTimestamps) {
 
         PQTabletPrepare(10, 100 * 1024 * 1024, 0, {{"user1", false}}, tc);
 
-        TVector<std::pair<ui64, TString>> data; 
-        data.push_back({1, TString(1024, 'a')}); 
-        data.push_back({2, TString(1024, 'a')}); 
-        data.push_back({3, TString(1024, 'a')}); 
-        data.push_back({4, TString(1024, 'a')}); 
+        TVector<std::pair<ui64, TString>> data;
+        data.push_back({1, TString(1024, 'a')});
+        data.push_back({2, TString(1024, 'a')});
+        data.push_back({3, TString(1024, 'a')});
+        data.push_back({4, TString(1024, 'a')});
 
         CmdWrite(0, "sourceid0", data, tc, false, {}, true, "", -1, 1);
         CmdGetOffset(0, "user1", 0, tc, -1);
@@ -1736,20 +1736,20 @@ Y_UNIT_TEST(TestChangeConfig) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         activeZone = false;
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
         tc.Runtime->SetScheduledLimit(50);
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
         ui32 pp = 8 + 4 + 2 + 9;
-        TString tmp0{32 - pp - 2, '-'}; 
+        TString tmp0{32 - pp - 2, '-'};
         char k = 0;
         for (ui32 i = 0; i < 5; ++i) {
-            TString ss = ""; 
+            TString ss = "";
             ss += k;
             ss += tmp0;
             ss += char((i + 1) % 256);
@@ -1771,20 +1771,20 @@ Y_UNIT_TEST(TestReadSubscription) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
         tc.Runtime->SetScheduledLimit(600);
         tc.Runtime->SetScheduledEventFilter(&tc.ImmediateLogFlushAndRequestTimeoutFilter);
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
         ui32 pp = 8 + 4 + 2 + 9;
-        TString tmp0{32 - pp - 2, '-'}; 
+        TString tmp0{32 - pp - 2, '-'};
         char k = 0;
         for (ui32 i = 0; i < 5; ++i) {
-            TString ss = ""; 
+            TString ss = "";
             ss += k;
             ss += tmp0;
             ss += char((i + 1) % 256);
@@ -1869,7 +1869,7 @@ Y_UNIT_TEST(TestPQCacheSizeManagement) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
 
@@ -1878,13 +1878,13 @@ Y_UNIT_TEST(TestPQCacheSizeManagement) {
         activeZone = false;
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc); //important client - never delete
 
-        TVector<std::pair<ui64, TString>> data; 
+        TVector<std::pair<ui64, TString>> data;
 
         ui32 pp =  4 + 8 + 2 + 9 + 100;
-        TString tmp{1024*1024 - pp - 2, '-'}; 
+        TString tmp{1024*1024 - pp - 2, '-'};
         char k = 0;
         for (ui32 i = 0; i < 26 * 1024 * 1024;) {
-            TString ss = ""; 
+            TString ss = "";
             ss += k;
             ss += tmp;
             ss += char((i + 1) % 256);

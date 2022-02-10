@@ -21,8 +21,8 @@ class TJsonTabletCounters : public TActorBootstrapped<TJsonTabletCounters> {
     IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     TVector<TActorId> PipeClients;
-    TVector<ui64> Tablets; 
-    TMap<TTabletId, THolder<TEvTablet::TEvGetCountersResponse>> Results; 
+    TVector<ui64> Tablets;
+    TMap<TTabletId, THolder<TEvTablet::TEvGetCountersResponse>> Results;
     THolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
@@ -169,7 +169,7 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonTabletCounters> {
-    static TString GetSchema() { 
+    static TString GetSchema() {
         TStringStream stream;
         TProtoToJson::ProtoToJsonSchema<TEvTablet::TEvGetCountersResponse::ProtoRecordType>(stream);
         return stream.Str();
@@ -178,7 +178,7 @@ struct TJsonRequestSchema<TJsonTabletCounters> {
 
 template <>
 struct TJsonRequestParameters<TJsonTabletCounters> {
-    static TString GetParameters() { 
+    static TString GetParameters() {
         return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
                       {"name":"tablet_id","in":"query","description":"tablet identifier","required":false,"type":"integer"},
                       {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
@@ -190,14 +190,14 @@ struct TJsonRequestParameters<TJsonTabletCounters> {
 
 template <>
 struct TJsonRequestSummary<TJsonTabletCounters> {
-    static TString GetSummary() { 
+    static TString GetSummary() {
         return "\"Tablet counters information\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonTabletCounters> {
-    static TString GetDescription() { 
+    static TString GetDescription() {
         return "\"Returns information about tablet counters\"";
     }
 };

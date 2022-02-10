@@ -9,7 +9,7 @@
 #include <util/generic/array_ref.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/system/defaults.h>
 #include <util/system/type_name.h>
 #include <util/system/yassert.h>

@@ -37,13 +37,13 @@ public:
 
     TBufferOutput(TBufferOutput&&) noexcept;
     TBufferOutput& operator=(TBufferOutput&&) noexcept;
- 
-    ~TBufferOutput() override; 
+
+    ~TBufferOutput() override;
 
     /**
      * @returns                         Buffer that this stream writes into.
      */
-    TBuffer& Buffer() const noexcept; 
+    TBuffer& Buffer() const noexcept;
 
 private:
     size_t DoNext(void** ptr) override;
@@ -69,11 +69,11 @@ public:
      */
     TBufferInput(const TBuffer& buffer);
 
-    ~TBufferInput() override; 
+    ~TBufferInput() override;
 
-    const TBuffer& Buffer() const noexcept; 
+    const TBuffer& Buffer() const noexcept;
 
-    void Rewind() noexcept; 
+    void Rewind() noexcept;
 
 protected:
     size_t DoNext(const void** ptr, size_t len) override;

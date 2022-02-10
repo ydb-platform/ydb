@@ -3,7 +3,7 @@
 #include "zerocopy.h"
 #include "zerocopy_output.h"
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/store_policy.h>
 
@@ -29,19 +29,19 @@ public:
      *
      * @param s                         String to read from.
      */
-    inline TStringInput(const TString& s) noexcept 
+    inline TStringInput(const TString& s) noexcept
         : S_(&s)
         , Pos_(0)
     {
     }
 
-    TStringInput(const TString&&) = delete; 
+    TStringInput(const TString&&) = delete;
 
-    ~TStringInput() override; 
+    ~TStringInput() override;
 
-    TStringInput(TStringInput&&) noexcept = default; 
-    TStringInput& operator=(TStringInput&&) noexcept = default; 
- 
+    TStringInput(TStringInput&&) noexcept = default;
+    TStringInput& operator=(TStringInput&&) noexcept = default;
+
     inline void Swap(TStringInput& s) noexcept {
         DoSwap(S_, s.S_);
         DoSwap(Pos_, s.Pos_);
@@ -73,14 +73,14 @@ public:
      *
      * @param s                         String to append to.
      */
-    inline TStringOutput(TString& s) noexcept 
+    inline TStringOutput(TString& s) noexcept
         : S_(&s)
     {
     }
 
     TStringOutput(TStringOutput&& s) noexcept = default;
 
-    ~TStringOutput() override; 
+    ~TStringOutput() override;
 
     /**
      * @param size                      Number of additional characters to
@@ -107,7 +107,7 @@ private:
 /**
  * String input/output stream, similar to `std::stringstream`.
  */
-class TStringStream: private TEmbedPolicy<TString>, public TStringInput, public TStringOutput { 
+class TStringStream: private TEmbedPolicy<TString>, public TStringInput, public TStringOutput {
     using TEmbeddedString = TEmbedPolicy<TString>;
 
 public:
@@ -118,7 +118,7 @@ public:
     {
     }
 
-    inline TStringStream(const TString& string) 
+    inline TStringStream(const TString& string)
         : TEmbeddedString(string)
         , TStringInput(*TEmbeddedString::Ptr())
         , TStringOutput(*TEmbeddedString::Ptr())
@@ -140,7 +140,7 @@ public:
         return *this;
     }
 
-    ~TStringStream() override; 
+    ~TStringStream() override;
 
     /**
      * @returns                         Whether @c this contains any data
@@ -152,14 +152,14 @@ public:
     /**
      * @returns                         String that this stream is writing into.
      */
-    inline TString& Str() noexcept { 
+    inline TString& Str() noexcept {
         return *Ptr();
     }
 
     /**
      * @returns                         String that this stream is writing into.
      */
-    inline const TString& Str() const noexcept { 
+    inline const TString& Str() const noexcept {
         return *Ptr();
     }
 
@@ -168,7 +168,7 @@ public:
      *                                  in this stream. The data is guaranteed
      *                                  to be null-terminated.
      */
-    inline const char* Data() const noexcept { 
+    inline const char* Data() const noexcept {
         return Ptr()->data();
     }
 
@@ -178,7 +178,7 @@ public:
      *                                  as the total number of characters
      *                                  available for reading.
      */
-    inline size_t Size() const noexcept { 
+    inline size_t Size() const noexcept {
         return Ptr()->size();
     }
 

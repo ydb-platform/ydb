@@ -1,8 +1,8 @@
 RECURSE(
-    argonish 
-    argonish/benchmark 
-    argonish/ut_fat 
-    argonish/ut 
+    argonish
+    argonish/benchmark
+    argonish/ut_fat
+    argonish/ut
     benchmark
     fast
     lower_case

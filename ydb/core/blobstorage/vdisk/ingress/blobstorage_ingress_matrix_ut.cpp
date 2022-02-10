@@ -12,7 +12,7 @@ namespace NKikimr {
     Y_UNIT_TEST_SUITE(TBlobStorageIngressMatrix) {
 
         Y_UNIT_TEST(VectorTest) {
-            TVectorType vec(0, 7); 
+            TVectorType vec(0, 7);
             vec.Set(0);
             vec.Set(4);
             vec.Set(6);
@@ -28,25 +28,25 @@ namespace NKikimr {
             vec.Clear(6);
             UNIT_ASSERT(!vec.Get(6));
 
-            TVectorType vec1_1(0xA6, 8); 
-            TVectorType vec1_2(0x8C, 8); 
-            TVectorType vec2_1(0xA6, 8); 
-            TVectorType vec2_2(0x8C, 8); 
+            TVectorType vec1_1(0xA6, 8);
+            TVectorType vec1_2(0x8C, 8);
+            TVectorType vec2_1(0xA6, 8);
+            TVectorType vec2_2(0x8C, 8);
             vec1_1 |= vec1_2;
             vec2_2 |= vec2_1;
             UNIT_ASSERT(vec1_1 == vec2_2);
-            TVectorType expectedResult(0xAE, 8); 
+            TVectorType expectedResult(0xAE, 8);
             UNIT_ASSERT(vec1_1 == expectedResult);
 
-            UNIT_ASSERT(TVectorType(0, 1).Empty()); 
-            UNIT_ASSERT(!TVectorType(0x80, 1).Empty()); 
+            UNIT_ASSERT(TVectorType(0, 1).Empty());
+            UNIT_ASSERT(!TVectorType(0x80, 1).Empty());
 
-            UNIT_ASSERT(TVectorType(0x07, 5).Empty()); 
-            UNIT_ASSERT(!TVectorType(0x37, 5).Empty()); 
+            UNIT_ASSERT(TVectorType(0x07, 5).Empty());
+            UNIT_ASSERT(!TVectorType(0x37, 5).Empty());
         }
 
         Y_UNIT_TEST(VectorTestEmpty) {
-            TVectorType vec(0, 7); 
+            TVectorType vec(0, 7);
             UNIT_ASSERT(vec.Empty());
             vec.Set(0);
             UNIT_ASSERT(!vec.Empty());
@@ -60,42 +60,42 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(VectorTestMinus) {
-            TVectorType vec1(0, 7); 
+            TVectorType vec1(0, 7);
             vec1.Set(0);
             vec1.Set(4);
             vec1.Set(6);
 
-            TVectorType vec2(0, 7); 
+            TVectorType vec2(0, 7);
             vec2.Set(1);
             vec2.Set(5);
             vec2.Set(6);
 
-            TVectorType res(0, 7); 
+            TVectorType res(0, 7);
             res.Set(0);
             res.Set(4);
             UNIT_ASSERT(vec1 - vec2 == res);
         }
 
         Y_UNIT_TEST(VectorTestBitwiseAnd) {
-            TVectorType vec1(0, 7); 
+            TVectorType vec1(0, 7);
             vec1.Set(0);
             vec1.Set(4);
             vec1.Set(6);
 
-            TVectorType vec2(0, 7); 
+            TVectorType vec2(0, 7);
             vec2.Set(1);
             vec2.Set(5);
             vec2.Set(6);
 
-            TVectorType res(0, 7); 
+            TVectorType res(0, 7);
             res.Set(6);
             UNIT_ASSERT((vec1 & vec2) == res);
         }
 
         Y_UNIT_TEST(VectorTestBitwiseComplement1) {
-            TVectorType vec1(0, 4); 
-            TVectorType vec2(~vec1); 
-            TVectorType vec3(0, 4); 
+            TVectorType vec1(0, 4);
+            TVectorType vec2(~vec1);
+            TVectorType vec3(0, 4);
             vec3.Set(0);
             vec3.Set(1);
             vec3.Set(2);
@@ -105,11 +105,11 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(VectorTestBitwiseComplement2) {
-            TVectorType vec1(0, 5); 
+            TVectorType vec1(0, 5);
             vec1.Set(2);
             vec1.Set(4);
-            TVectorType vec2(~vec1); 
-            TVectorType vec3(0, 5); 
+            TVectorType vec2(~vec1);
+            TVectorType vec3(0, 5);
             vec3.Set(0);
             vec3.Set(1);
             vec3.Set(3);
@@ -118,16 +118,16 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(VectorTestBitsBefore1) {
-            TVectorType vec1(0, 7); 
+            TVectorType vec1(0, 7);
             vec1.Set(0);
             vec1.Set(4);
             vec1.Set(6);
 
-            TVector<ui8> res; 
+            TVector<ui8> res;
             for (unsigned i = 0; i < vec1.GetSize(); i++)
                 res.push_back(vec1.BitsBefore(i));
 
-            TVector<ui8> canon; 
+            TVector<ui8> canon;
             canon.push_back(0);
             canon.push_back(1);
             canon.push_back(1);
@@ -140,15 +140,15 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(VectorTestBitsBefore2) {
-            TVectorType vec1(0, 4); 
+            TVectorType vec1(0, 4);
             vec1.Set(1);
             vec1.Set(2);
 
-            TVector<ui8> res; 
+            TVector<ui8> res;
             for (unsigned i = 0; i < vec1.GetSize(); i++)
                 res.push_back(vec1.BitsBefore(i));
 
-            TVector<ui8> canon; 
+            TVector<ui8> canon;
             canon.push_back(0);
             canon.push_back(0);
             canon.push_back(1);
@@ -158,17 +158,17 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(VectorTestIterator1) {
-            TVectorType vec1(0, 7); 
+            TVectorType vec1(0, 7);
             vec1.Set(1);
             vec1.Set(4);
             vec1.Set(6);
 
-            TVector<ui8> res; 
+            TVector<ui8> res;
             for (ui8 i = vec1.FirstPosition(); i != vec1.GetSize(); i = vec1.NextPosition(i)) {
                 res.push_back(i);
             }
 
-            TVector<ui8> canon; 
+            TVector<ui8> canon;
             canon.push_back(1);
             canon.push_back(4);
             canon.push_back(6);
@@ -176,16 +176,16 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(VectorTestIterator2) {
-            TVectorType vec1(0, 7); 
+            TVectorType vec1(0, 7);
             vec1.Set(0);
             vec1.Set(1);
             vec1.Set(5);
 
-            TVector<ui8> res; 
+            TVector<ui8> res;
             for (ui8 i = vec1.FirstPosition(); i != vec1.GetSize(); i = vec1.NextPosition(i))
                 res.push_back(i);
 
-            TVector<ui8> canon; 
+            TVector<ui8> canon;
             canon.push_back(0);
             canon.push_back(1);
             canon.push_back(5);
@@ -193,15 +193,15 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(VectorTestIterator3) {
-            TVectorType vec1(0, 6); 
+            TVectorType vec1(0, 6);
             vec1.Set(0);
 
-            TVector<ui8> res; 
+            TVector<ui8> res;
             for (ui8 i = vec1.FirstPosition(); i != vec1.GetSize(); i = vec1.NextPosition(i)) {
                 res.push_back(i);
             }
 
-            TVector<ui8> canon; 
+            TVector<ui8> canon;
             canon.push_back(0);
             UNIT_ASSERT(res == canon);
         }
@@ -231,27 +231,27 @@ namespace NKikimr {
             UNIT_ASSERT(m.Get(6, 6));
             UNIT_ASSERT(m.Get(7, 2));
 
-            TVectorType vecRows = m.OrRows(); 
-            TVectorType vecRowsExpected(0xFE, 7); 
+            TVectorType vecRows = m.OrRows();
+            TVectorType vecRowsExpected(0xFE, 7);
             UNIT_ASSERT(vecRows == vecRowsExpected);
 
-            TVectorType vecColumns = m.OrColumns(); 
-            TVectorType vecColumnsExpected(0xDF, 8); 
+            TVectorType vecColumns = m.OrColumns();
+            TVectorType vecColumnsExpected(0xDF, 8);
             UNIT_ASSERT(vecColumns == vecColumnsExpected);
 
             //m.DebugPrint();
 
-            UNIT_ASSERT(m.GetRow(0) == TVectorType(0x80, 7)); 
-            UNIT_ASSERT(m.GetRow(1) == TVectorType(0x40, 7)); 
-            UNIT_ASSERT(m.GetRow(2) == TVectorType(0, 7)); 
-            UNIT_ASSERT(m.GetRow(3) == TVectorType(0x10, 7)); 
-            UNIT_ASSERT(m.GetRow(4) == TVectorType(0x8, 7)); 
-            UNIT_ASSERT(m.GetRow(5) == TVectorType(0x4, 7)); 
-            UNIT_ASSERT(m.GetRow(6) == TVectorType(0x2, 7)); 
-            UNIT_ASSERT(m.GetRow(7) == TVectorType(0x20, 7)); 
+            UNIT_ASSERT(m.GetRow(0) == TVectorType(0x80, 7));
+            UNIT_ASSERT(m.GetRow(1) == TVectorType(0x40, 7));
+            UNIT_ASSERT(m.GetRow(2) == TVectorType(0, 7));
+            UNIT_ASSERT(m.GetRow(3) == TVectorType(0x10, 7));
+            UNIT_ASSERT(m.GetRow(4) == TVectorType(0x8, 7));
+            UNIT_ASSERT(m.GetRow(5) == TVectorType(0x4, 7));
+            UNIT_ASSERT(m.GetRow(6) == TVectorType(0x2, 7));
+            UNIT_ASSERT(m.GetRow(7) == TVectorType(0x20, 7));
 
-            UNIT_ASSERT(m.GetColumn(0) == TVectorType(0x80, 8)); 
-            UNIT_ASSERT(m.GetColumn(2) == TVectorType(0x01, 8)); 
+            UNIT_ASSERT(m.GetColumn(0) == TVectorType(0x80, 8));
+            UNIT_ASSERT(m.GetColumn(2) == TVectorType(0x01, 8));
         }
 
         void DebugPrint(const TVector<std::pair<TVDiskID, TActorId> > &vec) {
@@ -323,7 +323,7 @@ namespace NKikimr {
             vec.Set(2);
             vec.Set(4);
             vec.Set(5);
-            UNIT_ASSERT(vec.ToVector() == TVectorType(0xAC, 7)); 
+            UNIT_ASSERT(vec.ToVector() == TVectorType(0xAC, 7));
         }
 
         Y_UNIT_TEST(ShiftedHandoffBitVec) {
@@ -333,10 +333,10 @@ namespace NKikimr {
             vec.Set(2);
             vec.Set(4);
             vec.Set(5);
-            UNIT_ASSERT(vec.ToVector() == TVectorType(0xAC, 7)); 
+            UNIT_ASSERT(vec.ToVector() == TVectorType(0xAC, 7));
             vec.Delete(2);
             vec.Delete(5);
-            UNIT_ASSERT(vec.ToVector() == TVectorType(0x88, 7)); 
+            UNIT_ASSERT(vec.ToVector() == TVectorType(0x88, 7));
         }
     }
 

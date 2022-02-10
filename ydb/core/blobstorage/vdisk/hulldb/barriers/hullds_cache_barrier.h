@@ -24,7 +24,7 @@ namespace NKikimr {
                 return std::make_tuple(Gen, Step);
             }
 
-            TString ToString() const { 
+            TString ToString() const {
                 TStringStream str;
                 str << "{Gen# " << Gen << " Step# " << Step << "}";
                 return str.Str();
@@ -35,7 +35,7 @@ namespace NKikimr {
             TMaybe<TCollectBarrier> Soft;
             TMaybe<TCollectBarrier> Hard;
 
-            TString ToString() const { 
+            TString ToString() const {
                 TStringStream str;
                 str << "{Soft# " << (Soft ? Soft->ToString() : "<not set>")
                     << " Hard# " << (Hard ? Hard->ToString() : "<not set>")
@@ -44,7 +44,7 @@ namespace NKikimr {
             }
         };
 
-        THashMap<TKey, TValue> Cache; 
+        THashMap<TKey, TValue> Cache;
 
     public:
         void Build(const THullDs *hullDs) {
@@ -82,7 +82,7 @@ namespace NKikimr {
             }
         }
 
-        bool Keep(const TLogoBlobID& id, bool keepByIngress, TString *explanation = nullptr) const { 
+        bool Keep(const TLogoBlobID& id, bool keepByIngress, TString *explanation = nullptr) const {
             const TKey key(id.TabletID(), id.Channel());
             auto it = Cache.find(key);
             if (it == Cache.end()) {

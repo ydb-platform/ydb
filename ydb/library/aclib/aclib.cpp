@@ -62,7 +62,7 @@ TUserToken::TUserToken(NACLibProto::TUserToken&& token) {
     Swap(&token);
 }
 
-TUserToken::TUserToken(const TString& token) { 
+TUserToken::TUserToken(const TString& token) {
     Y_VERIFY(ParseFromString(token));
 }
 
@@ -85,8 +85,8 @@ TSID TUserToken::GetUserSID() const {
     return NACLibProto::TUserToken::GetUserSID();
 }
 
-TVector<TSID> TUserToken::GetGroupSIDs() const { 
-    TVector<TSID> groupSIDs; 
+TVector<TSID> TUserToken::GetGroupSIDs() const {
+    TVector<TSID> groupSIDs;
     for (const auto& bucket : NACLibProto::TUserToken::GetGroupSIDs().GetBuckets()) {
         for (const TString& value : bucket.GetValues()) {
             groupSIDs.emplace_back(value);
@@ -99,7 +99,7 @@ TString TUserToken::GetOriginalUserToken() const {
     return NACLibProto::TUserToken::GetOriginalUserToken();
 }
 
-TString TUserToken::SerializeAsString() const { 
+TString TUserToken::SerializeAsString() const {
     return NACLibProto::TUserToken::SerializeAsString();
 }
 
@@ -361,7 +361,7 @@ void TACL::SortACL() {
     Sort(*(MutableACE()), [](const NACLibProto::TACE& a, const NACLibProto::TACE& b) -> bool { return a.GetAccessType() < b.GetAccessType(); });
 }
 
-TACL::TACL(const TString& string) { 
+TACL::TACL(const TString& string) {
     Y_VERIFY(ParseFromString(string));
 }
 
@@ -391,7 +391,7 @@ NACLibProto::TACL TACL::GetImmediateACL() const {
     return immediateACL;
 }
 
-TString TACL::ToString(const NACLibProto::TACE& ace) { 
+TString TACL::ToString(const NACLibProto::TACE& ace) {
     TStringStream str;
     switch (static_cast<EAccessType>(ace.GetAccessType())) {
         case EAccessType::Allow:
@@ -422,7 +422,7 @@ TString TACL::ToString(const NACLibProto::TACE& ace) {
             str << 'U';
             break;
         default: {
-            TVector<TStringBuf> rights; 
+            TVector<TStringBuf> rights;
             if (ar & EAccessRights::SelectRow)
                 rights.emplace_back("SR");
             if (ar & EAccessRights::UpdateRow)
@@ -483,7 +483,7 @@ TString TACL::ToString(const NACLibProto::TACE& ace) {
     return str.Str();
 }
 
-TString TACL::ToString() const { 
+TString TACL::ToString() const {
     TStringStream str;
     bool inherited = false;
     const auto& acl = GetACE();
@@ -547,7 +547,7 @@ ui32 TACL::SpecialRightsFromString(const TString& string) {
     return result;
 }
 
-void TACL::FromString(NACLibProto::TACE& ace, const TString& string) { 
+void TACL::FromString(NACLibProto::TACE& ace, const TString& string) {
     auto it = string.begin();
     switch (*it) {
         case '+':
@@ -607,7 +607,7 @@ void TACL::FromString(NACLibProto::TACE& ace, const TString& string) {
     }
     auto start_pos = it - string.begin();
     auto end_pos = string.find(':', start_pos);
-    ace.SetSID(string.substr(start_pos, end_pos == TString::npos ? end_pos : end_pos - start_pos)); 
+    ace.SetSID(string.substr(start_pos, end_pos == TString::npos ? end_pos : end_pos - start_pos));
     if (end_pos == TString::npos) {
         ace.SetInheritanceType(EInheritanceType::InheritContainer | EInheritanceType::InheritObject);
         return;
@@ -636,21 +636,21 @@ void TACL::FromString(NACLibProto::TACE& ace, const TString& string) {
     }
 }
 
-void TACL::FromString(const TString& string) { 
+void TACL::FromString(const TString& string) {
     auto& acl = *MutableACE();
     acl.Clear();
     for (auto it = string.begin(); it != string.end(); ++it) {
         auto& ace = *acl.Add();
         auto start_pos = it - string.begin();
         auto end_pos = string.find(';', start_pos);
-        FromString(ace, string.substr(start_pos, end_pos == TString::npos ? end_pos : end_pos - start_pos)); 
-        if (end_pos == TString::npos) 
+        FromString(ace, string.substr(start_pos, end_pos == TString::npos ? end_pos : end_pos - start_pos));
+        if (end_pos == TString::npos)
             break;
         it = string.begin() + end_pos;
     }
 }
 
-TDiffACL::TDiffACL(const TString& string) { 
+TDiffACL::TDiffACL(const TString& string) {
     Y_VERIFY(ParseFromString(string));
 }
 
@@ -707,7 +707,7 @@ TString AccessRightsToString(ui32 accessRights) {
     case EAccessRights::GenericManage: return "Manage";
     case EAccessRights::GenericUse: return "Use";
     }
-    TVector<TStringBuf> rights; 
+    TVector<TStringBuf> rights;
     if (accessRights & EAccessRights::SelectRow)
         rights.emplace_back("SelectRow");
     if (accessRights & EAccessRights::UpdateRow)

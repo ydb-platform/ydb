@@ -112,7 +112,7 @@ void TNodeVisitor::VisitBool(const TNode& node)
     Consumer_->OnBooleanScalar(node.AsBool());
 }
 
-void TNodeVisitor::VisitList(const TNode::TListType& nodeList) 
+void TNodeVisitor::VisitList(const TNode::TListType& nodeList)
 {
     Consumer_->OnBeginList();
     size_t index = 0;
@@ -128,7 +128,7 @@ void TNodeVisitor::VisitList(const TNode::TListType& nodeList)
     Consumer_->OnEndList();
 }
 
-void TNodeVisitor::VisitMap(const TNode::TMapType& nodeMap) 
+void TNodeVisitor::VisitMap(const TNode::TMapType& nodeMap)
 {
     Consumer_->OnBeginMap();
     Iterate(nodeMap, SortMapKeys_, [&](const std::pair<TString, TNode>& item) {

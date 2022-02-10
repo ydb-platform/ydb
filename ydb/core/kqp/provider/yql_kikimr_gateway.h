@@ -19,7 +19,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/flags.h>
 #include <util/generic/map.h>
-#include <util/generic/maybe.h> 
+#include <util/generic/maybe.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/string/join.h>
@@ -178,9 +178,9 @@ struct TTableSettings {
 };
 
 struct TKikimrColumnMetadata {
-    TString Name; 
+    TString Name;
     ui32 Id = 0;
-    TString Type; 
+    TString Type;
     bool NotNull = false;
     ui32 TypeId = 0;
     TVector<TString> Families;
@@ -272,8 +272,8 @@ enum class EKikimrTableKind : ui32 {
 
 struct TKikimrTableMetadata : public TThrRefBase {
     bool DoesExist = false;
-    TString Cluster; 
-    TString Name; 
+    TString Cluster;
+    TString Name;
     TKikimrPathId PathId;
     TString SysView;
     ui64 SchemaVersion = 0;
@@ -288,8 +288,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TInstant LastAccessTime;
     TInstant LastUpdateTime;
 
-    TMap<TString, TKikimrColumnMetadata> Columns; 
-    TVector<TString> KeyColumnNames; 
+    TMap<TString, TKikimrColumnMetadata> Columns;
+    TVector<TString> KeyColumnNames;
     TVector<TString> ColumnOrder;
 
     // Indexes and SecondaryGlobalIndexMetadata must be in same order
@@ -299,7 +299,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
 
-    TKikimrTableMetadata(const TString& cluster, const TString& table) 
+    TKikimrTableMetadata(const TString& cluster, const TString& table)
         : Cluster(cluster)
         , Name(table)
         , PathId(std::make_pair(0, 0)) {}
@@ -459,12 +459,12 @@ struct TDropGroupSettings {
 };
 
 struct TKikimrListPathItem {
-    TKikimrListPathItem(TString name, bool isDirectory) { 
+    TKikimrListPathItem(TString name, bool isDirectory) {
         Name = name;
         IsDirectory = isDirectory;
     }
 
-    TString Name; 
+    TString Name;
     bool IsDirectory;
 };
 
@@ -474,16 +474,16 @@ class TKikimrClusterMapping {
 public:
     TKikimrClusterMapping(const TKikimrGatewayConfig& config);
 
-    void GetAllClusterNames(TVector<TString>& names) const; 
-    const TKikimrClusterConfig& GetClusterConfig(const TString& name) const; 
-    TMaybe<TString> GetClusterSetting(const TString& cluster, const TString& name) const; 
-    TString GetDefaultClusterName() const; 
+    void GetAllClusterNames(TVector<TString>& names) const;
+    const TKikimrClusterConfig& GetClusterConfig(const TString& name) const;
+    TMaybe<TString> GetClusterSetting(const TString& cluster, const TString& name) const;
+    TString GetDefaultClusterName() const;
     bool HasCluster(const TString& cluster) const;
 
 private:
-    THashMap<TString, TKikimrClusterConfig> Clusters; 
-    THashMap<TString, THashMap<TString, TString>> ClusterSettings; 
-    TString DefaultClusterName; 
+    THashMap<TString, TKikimrClusterConfig> Clusters;
+    THashMap<TString, THashMap<TString, TString>> ClusterSettings;
+    TString DefaultClusterName;
 };
 
 template<typename TResult>
@@ -533,8 +533,8 @@ public:
     };
 
     struct TListPathResult : public TGenericResult {
-        TString Path; 
-        TVector<TKikimrListPathItem> Items; 
+        TString Path;
+        TVector<TKikimrListPathItem> Items;
     };
 
     struct TTableMetadataResult : public TGenericResult {
@@ -542,7 +542,7 @@ public:
     };
 
     struct TQueryResult : public TGenericResult {
-        TString SessionId; 
+        TString SessionId;
         TVector<NKikimrMiniKQL::TResult*> Results;
         TMaybe<NKikimrKqp::TQueryProfile> Profile; // TODO: Deprecate.
         NKqpProto::TKqpStatsQuery QueryStats;
@@ -583,14 +583,14 @@ public:
 
 public:
     virtual bool HasCluster(const TString& cluster) = 0;
-    virtual TVector<TString> GetClusters() = 0; 
+    virtual TVector<TString> GetClusters() = 0;
     virtual TString GetDefaultCluster() = 0;
     virtual TMaybe<TKikimrClusterConfig> GetClusterConfig(const TString& cluster) = 0;
-    virtual TMaybe<TString> GetSetting(const TString& cluster, const TString& name) = 0; 
+    virtual TMaybe<TString> GetSetting(const TString& cluster, const TString& name) = 0;
 
     virtual void SetToken(const TString& cluster, const TString& token) = 0;
 
-    virtual NThreading::TFuture<TListPathResult> ListPath(const TString& cluster, const TString& path) = 0; 
+    virtual NThreading::TFuture<TListPathResult> ListPath(const TString& cluster, const TString& path) = 0;
 
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
@@ -601,7 +601,7 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> RenameTable(const TString& src, const TString& dst, const TString& cluster) = 0;
 
-    virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) = 0; 
+    virtual NThreading::TFuture<TGenericResult> DropTable(const TString& cluster, const TString& table) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateUser(const TString& cluster, const TCreateUserSettings& settings) = 0;
 
@@ -618,9 +618,9 @@ public:
     virtual TVector<TString> GetCollectedSchemeData() = 0;
 
 public:
-    using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>; 
+    using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;
 
-    static TString CanonizePath(const TString& path); 
+    static TString CanonizePath(const TString& path);
 
     template <typename TIter>
     static TString CombinePath(TIter begin, TIter end, bool canonize = true) {
@@ -630,11 +630,11 @@ public:
             : path;
     }
 
-    static TVector<TString> SplitPath(const TString& path); 
+    static TVector<TString> SplitPath(const TString& path);
 
     static bool TrySplitTablePath(const TString& path, std::pair<TString, TString>& result, TString& error);
 
-    static NThreading::TFuture<TGenericResult> CreatePath(const TString& path, TCreateDirFunc createDir); 
+    static NThreading::TFuture<TGenericResult> CreatePath(const TString& path, TCreateDirFunc createDir);
 
     static TString CreateIndexTablePath(const TString& tableName, const TString& indexName);
 

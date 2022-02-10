@@ -15,6 +15,6 @@ void TDefaultAllocator::Release(const TBlock& block) {
     y_deallocate(block.Data);
 }
 
-IAllocator* TDefaultAllocator::Instance() noexcept { 
+IAllocator* TDefaultAllocator::Instance() noexcept {
     return SingletonWithPriority<TDefaultAllocator, 0>();
 }

@@ -196,7 +196,7 @@ bool httpDigestHandler::processHeader(const THttpAuthHeader* header,
         out << ", opaque=\"" << header->opaque << "\"";
     out << "\r\n";
 
-    TString s_out = out.Str(); 
+    TString s_out = out.Str();
     HeaderInstruction_ = strdup(s_out.c_str());
 
     return true;

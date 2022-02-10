@@ -11,9 +11,9 @@ TIMEOUT(60)
 
 SRC(ut.cpp)
 
-PEERDIR( 
+PEERDIR(
     library/cpp/string_utils/quote
     ydb/library/backup
-) 
- 
+)
+
 END()

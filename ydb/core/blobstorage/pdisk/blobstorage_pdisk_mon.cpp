@@ -100,7 +100,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
     // scheduler subgroup
     ForsetiCbsNotFound = SchedulerGroup->GetCounter("ForsetiCbsNotFound");
 
-    TVector<float> percentiles; 
+    TVector<float> percentiles;
     percentiles.push_back(0.50f);
     percentiles.push_back(0.90f);
     percentiles.push_back(0.99f);
@@ -218,7 +218,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
     CompletionThreadCPU = PDiskGroup->GetCounter("CompletionThreadCPU", true);
 }
 
-NMonitoring::TDynamicCounters::TCounterPtr TPDiskMon::GetBusyPeriod(const TString& owner, const TString& queue) { 
+NMonitoring::TDynamicCounters::TCounterPtr TPDiskMon::GetBusyPeriod(const TString& owner, const TString& queue) {
     return SchedulerGroup->GetCounter("SchedulerBusyPeriod_" + owner + "_" + queue, true);
 }
 

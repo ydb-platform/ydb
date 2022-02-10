@@ -44,15 +44,15 @@ namespace {
     };
 
     struct TSslDestroy {
-        static inline void Destroy(ssl_ctx_st* ctx) noexcept { 
+        static inline void Destroy(ssl_ctx_st* ctx) noexcept {
             SSL_CTX_free(ctx);
         }
 
-        static inline void Destroy(ssl_st* ssl) noexcept { 
+        static inline void Destroy(ssl_st* ssl) noexcept {
             SSL_free(ssl);
         }
 
-        static inline void Destroy(bio_st* bio) noexcept { 
+        static inline void Destroy(bio_st* bio) noexcept {
             BIO_free(bio);
         }
 

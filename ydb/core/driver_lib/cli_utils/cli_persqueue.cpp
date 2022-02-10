@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NDriverClient {
 
 struct TCmdPersQueueStressConfig : public TCliCmdConfig {
-    TString Proto; //for config 
+    TString Proto; //for config
     TCmdPersQueueStressConfig();
 
     void Parse(int argc, char **argv);
@@ -39,7 +39,7 @@ TCmdPersQueueStressConfig::TCmdPersQueueStressConfig()
 void TCmdPersQueueStressConfig::Parse(int argc, char **argv) {
     using namespace NLastGetopt;
 
-    TString fileName; 
+    TString fileName;
 
     TOpts opts = TOpts::Default();
     opts.AddLongOption("protobuf", "string representation of the request protobuf").Optional().StoreResult(&Proto);
@@ -52,7 +52,7 @@ void TCmdPersQueueStressConfig::Parse(int argc, char **argv) {
         exit(1);
     }
     if (fileName) {
-        Proto = TUnbufferedFileInput(fileName).ReadAll(); 
+        Proto = TUnbufferedFileInput(fileName).ReadAll();
     }
     ConfigureMsgBusLastGetopt(res, argc, argv);
 }

@@ -5,19 +5,19 @@
 #include <util/string/builder.h>
 
 Y_UNIT_TEST_SUITE(TSimpleTMTest) {
-    TString PrintMarker(const TString& test, int line) { 
+    TString PrintMarker(const TString& test, int line) {
         return TStringBuilder() << "test " << test << " at line " << line;
     }
 
-    TString JoinMarker(const TString& marker, time_t t) { 
+    TString JoinMarker(const TString& marker, time_t t) {
         return TStringBuilder() << marker << " (tstamp=" << t << ")";
     }
 
-    TString PrintMarker(const TString& test, int line, time_t t) { 
+    TString PrintMarker(const TString& test, int line, time_t t) {
         return JoinMarker(PrintMarker(test, line), t);
     }
 
-    void AssertStructTmEqual(const TString& marker, const struct tm& tmt, const NDatetime::TSimpleTM& tms) { 
+    void AssertStructTmEqual(const TString& marker, const struct tm& tmt, const NDatetime::TSimpleTM& tms) {
         UNIT_ASSERT_VALUES_EQUAL_C((int)tms.Sec, tmt.tm_sec, marker);
         UNIT_ASSERT_VALUES_EQUAL_C((int)tms.Min, tmt.tm_min, marker);
         UNIT_ASSERT_VALUES_EQUAL_C((int)tms.Hour, tmt.tm_hour, marker);
@@ -32,10 +32,10 @@ Y_UNIT_TEST_SUITE(TSimpleTMTest) {
 #endif
     }
 
-    void AssertSimpleTM(const TString& mark, 
+    void AssertSimpleTM(const TString& mark,
                         const NDatetime::TSimpleTM& tms,
                         time_t tstamp, ui32 year, ui32 mon, ui32 mday, ui32 hour, ui32 minu, ui32 sec) {
-        TString marker = JoinMarker(mark, tstamp); 
+        TString marker = JoinMarker(mark, tstamp);
         struct tm tmt;
         Zero(tmt);
         GmTimeR(&tstamp, &tmt);

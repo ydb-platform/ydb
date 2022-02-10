@@ -8,7 +8,7 @@ namespace NKikimr {
 namespace NDriverClient {
 
 struct TCmdSchemeInitShardConfig : public TCliCmdConfig {
-    TString TagName; 
+    TString TagName;
 
     TAutoPtr<NKikimrTxScheme::TConfig> GlobalConfig;
 
@@ -65,8 +65,8 @@ TCmdSchemeInitShardConfig::TCmdSchemeInitShardConfig()
 void TCmdSchemeInitShardConfig::Parse(int argc, char **argv) {
     using namespace NLastGetopt;
 
-    TString configPb; 
-    TString configPbFile; 
+    TString configPb;
+    TString configPbFile;
 
     TOpts opts = TOpts::Default();
     opts.AddLongOption('n', "name", "domain name").Required().RequiredArgument("STR").StoreResult(&TagName);

@@ -22,7 +22,7 @@ public:
 
     ~TLengthLimitedInput() override = default;
 
-    inline ui64 Left() const noexcept { 
+    inline ui64 Left() const noexcept {
         return Length_;
     }
 
@@ -52,14 +52,14 @@ public:
      * \returns                         The total number of characters read from
      *                                  this stream.
      */
-    inline ui64 Counter() const noexcept { 
+    inline ui64 Counter() const noexcept {
         return Count_;
     }
 
 private:
     size_t DoRead(void* buf, size_t len) override;
     size_t DoSkip(size_t len) override;
-    size_t DoReadTo(TString& st, char ch) override; 
+    size_t DoReadTo(TString& st, char ch) override;
     ui64 DoReadAll(IOutputStream& out) override;
 
 private:
@@ -80,14 +80,14 @@ public:
 
     ~TCountingOutput() override = default;
 
-    TCountingOutput(TCountingOutput&&) noexcept = default; 
-    TCountingOutput& operator=(TCountingOutput&&) noexcept = default; 
- 
+    TCountingOutput(TCountingOutput&&) noexcept = default;
+    TCountingOutput& operator=(TCountingOutput&&) noexcept = default;
+
     /**
      * \returns                         The total number of characters written
      *                                  into this stream.
      */
-    inline ui64 Counter() const noexcept { 
+    inline ui64 Counter() const noexcept {
         return Count_;
     }
 

@@ -92,7 +92,7 @@ namespace NKikimr {
                 return left.AsTuple() < right.AsTuple();
             }
 
-            TString ToString() const { 
+            TString ToString() const {
                 return Sprintf("{ChunkIdx# %" PRIu32 " OffsetInBlocks# %" PRIu32 " PayloadSize# %" PRIu32
                         " IndexInsideChunk# %" PRIu32 " Owner# %" PRIu32 " DeleteInProgress# %" PRIu32 "}", ChunkIdx,
                         OffsetInBlocks, PayloadSize, IndexInsideChunk, Owner, DeleteInProgress);
@@ -119,7 +119,7 @@ namespace NKikimr {
                 return left.AsTuple() < right.AsTuple();
             }
 
-            TString ToString() const { 
+            TString ToString() const {
                 return Sprintf("{ChunkIdx# %" PRIu32 " ChunkSerNum# %s Id# %016" PRIx64 " IndexInsideChunk# %"
                     PRIu32 " SizeInBlocks# %" PRIu32 "}", ChunkIdx, ChunkSerNum.ToString().data(), Id, IndexInsideChunk,
                     SizeInBlocks);
@@ -162,7 +162,7 @@ namespace NKikimr {
             ///////////////
 
             // list of all chunks (including current one)
-            THashMap<TChunkIdx, TChunkInfo> Chunks; 
+            THashMap<TChunkIdx, TChunkInfo> Chunks;
 
             /////////////////////////
             // Writer shared state //
@@ -174,7 +174,7 @@ namespace NKikimr {
             // write intent queue; contains a list of chunks we are going to fill in the near future; these all chunks
             // are confirmed, that is they have correspoding TCommitRecord successfully logged; each entry has
             // corresponding item in Chunks
-            TQueue<TChunkIdx> WriteIntentQueue; 
+            TQueue<TChunkIdx> WriteIntentQueue;
 
             // is blob keeper ready?
             bool Ready = false;
@@ -183,7 +183,7 @@ namespace NKikimr {
             ui32 InFlightWrites = 0;
 
             // set of defragmenter items being written right now
-            THashMap<TIncrHugeBlobId, bool> DefragWriteInProgress; 
+            THashMap<TIncrHugeBlobId, bool> DefragWriteInProgress;
 
             // set of spawned children actors
             THashSet<TActorId> ChildActors;
@@ -269,7 +269,7 @@ namespace NKikimr {
             TKeeper& Keeper;
 
             // log prefix
-            TString LogPrefix; 
+            TString LogPrefix;
 
         public:
             TKeeperComponentBase(TKeeper& keeper, const char *name);
@@ -298,7 +298,7 @@ namespace NKikimr {
             : public TEventLocal<TEvIncrHugeScanResult, TEvBlobStorage::EvIncrHugeScanResult>
         {
             NKikimrProto::EReplyStatus Status;
-            TVector<TBlobIndexRecord> Index; 
+            TVector<TBlobIndexRecord> Index;
             TChunkIdx ChunkIdx;
             bool IndexOnly;
             TChunkSerNum ChunkSerNum;

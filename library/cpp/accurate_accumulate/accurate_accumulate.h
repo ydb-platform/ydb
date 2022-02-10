@@ -184,7 +184,7 @@ static inline double FastAccumulate(It begin, It end) {
 }
 
 template <typename T>
-static inline double FastAccumulate(const TVector<T>& sequence) { 
+static inline double FastAccumulate(const TVector<T>& sequence) {
     return FastAccumulate(sequence.begin(), sequence.end());
 }
 
@@ -194,7 +194,7 @@ static inline double FastKahanAccumulate(It begin, It end) {
 }
 
 template <typename T>
-static inline double FastKahanAccumulate(const TVector<T>& sequence) { 
+static inline double FastKahanAccumulate(const TVector<T>& sequence) {
     return FastKahanAccumulate(sequence.begin(), sequence.end());
 }
 
@@ -204,7 +204,7 @@ static inline double FastInnerProduct(It1 begin1, It1 end1, It2 begin2) {
 }
 
 template <typename T>
-static inline double FastInnerProduct(const TVector<T>& lhs, const TVector<T>& rhs) { 
+static inline double FastInnerProduct(const TVector<T>& lhs, const TVector<T>& rhs) {
     Y_ASSERT(lhs.size() == rhs.size());
     return FastInnerProduct(lhs.begin(), lhs.end(), rhs.begin());
 }
@@ -215,7 +215,7 @@ static inline double FastKahanInnerProduct(It1 begin1, It1 end1, It2 begin2) {
 }
 
 template <typename T>
-static inline double FastKahanInnerProduct(const TVector<T>& lhs, const TVector<T>& rhs) { 
+static inline double FastKahanInnerProduct(const TVector<T>& lhs, const TVector<T>& rhs) {
     Y_ASSERT(lhs.size() == rhs.size());
     return FastKahanInnerProduct(lhs.begin(), lhs.end(), rhs.begin());
 }

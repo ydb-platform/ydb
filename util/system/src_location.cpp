@@ -7,7 +7,7 @@
 template <>
 void Out<TSourceLocation>(IOutputStream& o, const TSourceLocation& t) {
 #if defined(_win_)
-    TString file(t.File); 
+    TString file(t.File);
     std::replace(file.begin(), file.vend(), '\\', '/');
     o << file;
 #else

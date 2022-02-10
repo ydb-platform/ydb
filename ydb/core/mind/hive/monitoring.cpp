@@ -32,8 +32,8 @@ public:
 
     const TActorId Source;
 
-    TMap<ui64, TTabletInfo> TabletInfo; 
-    TMap<ui32, TNodeInfo> NodeInfo; 
+    TMap<ui64, TTabletInfo> TabletInfo;
+    TMap<ui32, TNodeInfo> NodeInfo;
 
     TTxMonEvent_DbState(const TActorId &source, TSelf *hive)
         : TBase(hive)
@@ -427,7 +427,7 @@ public:
 };
 
 
-TString GetDurationString(TDuration duration) { 
+TString GetDurationString(TDuration duration) {
     int seconds = duration.Seconds();
     if (seconds < 60)
         return Sprintf("%ds", seconds);
@@ -462,7 +462,7 @@ public:
     }
 
     void RenderHTMLPage(IOutputStream& out, const TActorContext&) {
-        TVector<ui64> tabletIdIndex; 
+        TVector<ui64> tabletIdIndex;
         tabletIdIndex.reserve(Self->Tablets.size());
         for (const auto &tabletPair : Self->Tablets) {
             TTabletId tabletId = tabletPair.first;
@@ -1057,7 +1057,7 @@ public:
         Y_UNUSED(ctx);
     }
 
-    static TString GetTabletType(TTabletTypes::EType type) { 
+    static TString GetTabletType(TTabletTypes::EType type) {
         switch(type) {
         case TTabletTypes::SchemeShard:
             return "SS";
@@ -1104,8 +1104,8 @@ public:
         ui64 tablets = 0;
         ui64 runningTablets = 0;
         ui64 aliveNodes = 0;
-        THashMap<ui32, TMap<TString, ui32>> tabletsByNodeByType; 
-        THashMap<TTabletTypes::EType, ui32> tabletTypesToChannels; 
+        THashMap<ui32, TMap<TString, ui32>> tabletsByNodeByType;
+        THashMap<TTabletTypes::EType, ui32> tabletTypesToChannels;
 
         for (const auto& pr : Self->Tablets) {
             if (pr.second.IsRunning()) {
@@ -1748,7 +1748,7 @@ public:
         ui64 tablets = 0;
         ui64 runningTablets = 0;
         ui64 aliveNodes = 0;
-        THashMap<ui32, TMap<TString, ui32>> tabletsByNodeByType; 
+        THashMap<ui32, TMap<TString, ui32>> tabletsByNodeByType;
 
         for (const auto& pr : Self->Tablets) {
             if (pr.second.IsRunning()) {
@@ -1838,7 +1838,7 @@ public:
             jsonNode["Starting"] = node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_STARTING].size();
             jsonNode["Running"] = node.Tablets[TTabletInfo::EVolatileState::TABLET_VOLATILE_STATE_RUNNING].size();
             {
-                TString types; 
+                TString types;
                 auto nodeTabletTypes = tabletsByNodeByType.find(node.Id);
                 if (nodeTabletTypes != tabletsByNodeByType.end()) {
                     for (auto it = nodeTabletTypes->second.begin(); it != nodeTabletTypes->second.end(); ++it) {
@@ -1864,7 +1864,7 @@ public:
     const TActorId Source;
     const TNodeId NodeId;
     const bool Down;
-    TString Response; 
+    TString Response;
 
     TTxMonEvent_SetDown(const TActorId& source, TNodeId nodeId, bool down, TSelf* hive)
         : TBase(hive)
@@ -1899,7 +1899,7 @@ public:
     const TActorId Source;
     const TNodeId NodeId;
     const bool Freeze;
-    TString Response; 
+    TString Response;
 
     TTxMonEvent_SetFreeze(const TActorId& source, TNodeId nodeId, bool freeze, TSelf* hive)
         : TBase(hive)
@@ -1933,7 +1933,7 @@ class TTxMonEvent_KickNode : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     const TNodeId NodeId;
-    TString Response; 
+    TString Response;
 
     TTxMonEvent_KickNode(const TActorId& source, TNodeId nodeId, TSelf* hive)
         : TBase(hive)
@@ -2115,7 +2115,7 @@ public:
     const TActorId Source;
     TTabletId TabletId = 0;
     TTabletTypes::EType TabletType = TTabletTypes::TYPE_INVALID;
-    TVector<ui32> TabletChannels; 
+    TVector<ui32> TabletChannels;
     ui32 GroupId = 0;
     TVector<ui32> ForcedGroupIds;
     int TabletPercent = 100;
@@ -2194,7 +2194,7 @@ public:
             Self->SubActors.emplace_back(waitActor);
         }
         for (TLeaderTabletInfo* tablet : tablets) {
-            TVector<ui32> channels; 
+            TVector<ui32> channels;
             TVector<ui32> forcedGroupIds;
             bool skip = false;
             if (GroupId != 0) {
@@ -3333,7 +3333,7 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
     }
     NMon::TEvRemoteHttpInfo* httpInfo = ev->Get();
     TCgiParameters cgi(httpInfo->Cgi());
-    TString page = cgi.Has("page") ? cgi.Get("page") : ""; 
+    TString page = cgi.Has("page") ? cgi.Get("page") : "";
     if (page == "MemStateTablets")
         return Execute(new TTxMonEvent_MemStateTablets(ev->Sender, ev, this), ctx);
     if (page == "MemStateNodes")

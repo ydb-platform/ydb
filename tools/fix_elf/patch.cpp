@@ -10,8 +10,8 @@
 
 namespace NElf {
 
-bool IsElf(const TString& path) { 
-    TUnbufferedFileInput in(path); 
+bool IsElf(const TString& path) {
+    TUnbufferedFileInput in(path);
     char buffer[EI_NIDENT];
     size_t nread = in.Load(buffer, sizeof(buffer));
 
@@ -82,8 +82,8 @@ int NumericStrCmp(TStringBuf s1, TStringBuf s2) {
             }
         }
 
-        s1.Skip(1); 
-        s2.Skip(1); 
+        s1.Skip(1);
+        s2.Skip(1);
     }
 
     return 0;
@@ -121,7 +121,7 @@ void Patch(const TString& path, const TString& library, IOutputStream& verboseOu
     TStringBuf skipFrom("GLIBC_2.14");
     TStringBuf patchFrom("GLIBC_2.2.5");
 
-    TVector<Elf64_Vernaux*> patchAux; 
+    TVector<Elf64_Vernaux*> patchAux;
 
     Elf64_Vernaux* patchFromAux = nullptr;
 
@@ -235,7 +235,7 @@ int main(int argc, char* argv[]) {
     opts.SetFreeArgTitle(0, "<file>", "File");
 
     TOptsParseResult res(&opts, argc, argv);
-    TVector<TString> files = res.GetFreeArgs(); 
+    TVector<TString> files = res.GetFreeArgs();
 
     IOutputStream& verboseOut = verbose ? Cout : Cnull;
 

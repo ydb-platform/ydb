@@ -33,7 +33,7 @@ public:
                 }
             }
 
-            inline ~T() { 
+            inline ~T() {
                 int result = pthread_mutexattr_destroy(&Attr);
                 Y_VERIFY(result == 0, "mutexattr destroy(%s)", LastSystemErrorText(result));
             }
@@ -46,7 +46,7 @@ public:
 #endif
     }
 
-    inline ~TImpl() { 
+    inline ~TImpl() {
 #if defined(_win_)
         DeleteCriticalSection(&Obj);
 #else
@@ -55,7 +55,7 @@ public:
 #endif
     }
 
-    inline void Acquire() noexcept { 
+    inline void Acquire() noexcept {
 #if defined(_win_)
         EnterCriticalSection(&Obj);
 #else
@@ -87,7 +87,7 @@ public:
     }
 #endif // _win_
 
-    inline bool TryAcquire() noexcept { 
+    inline bool TryAcquire() noexcept {
 #if defined(_win_)
         return TryEnterCriticalSectionInt(&Obj);
 #else
@@ -99,7 +99,7 @@ public:
 #endif
     }
 
-    inline void Release() noexcept { 
+    inline void Release() noexcept {
 #if defined(_win_)
         LeaveCriticalSection(&Obj);
 #else
@@ -108,7 +108,7 @@ public:
 #endif
     }
 
-    inline void* Handle() const noexcept { 
+    inline void* Handle() const noexcept {
         return (void*)&Obj;
     }
 

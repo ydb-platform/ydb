@@ -6,7 +6,7 @@
 namespace NKikimr {
 
     template <class TSubsIterator, class TDbIterator>
-    TString MergeIteratorWithWholeDbDefaultCrashReport(const TString &logPrefix, const TSubsIterator &subsIt, const TDbIterator &dbIt) { 
+    TString MergeIteratorWithWholeDbDefaultCrashReport(const TString &logPrefix, const TSubsIterator &subsIt, const TDbIterator &dbIt) {
         TStringStream str;
         str << logPrefix << "SubsIt:  ";
         if (subsIt.Valid())

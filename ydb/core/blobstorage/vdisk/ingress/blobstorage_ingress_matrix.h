@@ -34,23 +34,23 @@ namespace NKikimr {
 
 
         //////////////////////////////////////////////////////////////////////////////////
-        // TVectorType 
+        // TVectorType
         //////////////////////////////////////////////////////////////////////////////////
-        class TVectorType { 
+        class TVectorType {
         public:
-            TVectorType() 
+            TVectorType()
                 : Vec(0)
                 , Size(0)
             {}
 
-            TVectorType(ui8 vec, ui8 size) 
+            TVectorType(ui8 vec, ui8 size)
                 : Vec(vec & EmptyMask[size])
                 , Size(size)
             {
                 Y_VERIFY_DEBUG(size <= 8);
             }
 
-            TVectorType(const TVectorType &v) 
+            TVectorType(const TVectorType &v)
                 : Vec(v.Vec)
                 , Size(v.Size)
             {}
@@ -109,45 +109,45 @@ namespace NKikimr {
                 return Vec == 0;
             }
 
-            bool IsSupersetOf(NMatrix::TVectorType v) const { 
+            bool IsSupersetOf(NMatrix::TVectorType v) const {
                 Y_VERIFY_DEBUG(Size == v.Size);
                 return (Vec & v.Vec) == v.Vec;
             }
 
-            TVectorType &operator =(const TVectorType &v) { 
+            TVectorType &operator =(const TVectorType &v) {
                 Y_VERIFY_DEBUG(Size == 0 || Size == v.Size || v.Size == 0);
                 Size = v.Size;
                 Vec = v.Vec;
                 return *this;
             }
 
-            TVectorType &operator |=(const TVectorType &v) { 
+            TVectorType &operator |=(const TVectorType &v) {
                 Y_VERIFY_DEBUG(Size == v.Size);
                 Vec |= v.Vec;
                 return *this;
             }
 
-            TVectorType &operator &=(const TVectorType &v) { 
+            TVectorType &operator &=(const TVectorType &v) {
                 Y_VERIFY_DEBUG(Size == v.Size);
                 Vec &= v.Vec;
                 return *this;
             }
 
-            TVectorType operator ~() const { 
+            TVectorType operator ~() const {
                 ui8 v = ~Vec;
-                return TVectorType(v, Size); 
+                return TVectorType(v, Size);
             }
 
-            bool operator ==(const TVectorType &v) const { 
+            bool operator ==(const TVectorType &v) const {
                 Y_VERIFY_DEBUG(v.Size == Size);
                 return Vec == v.Vec;
             }
 
-            bool operator !=(const TVectorType &v) const { 
+            bool operator !=(const TVectorType &v) const {
                 return !operator ==(v);
             }
 
-            TString ToString() const { 
+            TString ToString() const {
                 TStringStream s;
                 s << (Get(0) ? "1" : "0");
                 for (ui8 i = 1; i < Size; i++)
@@ -163,13 +163,13 @@ namespace NKikimr {
                 return Size;
             }
 
-            void Swap(TVectorType &v) { 
+            void Swap(TVectorType &v) {
                 DoSwap(Vec, v.Vec);
                 DoSwap(Size, v.Size);
             }
 
-            static TVectorType MakeOneHot(ui8 pos, ui8 size) { 
-                TVectorType res(0, size); 
+            static TVectorType MakeOneHot(ui8 pos, ui8 size) {
+                TVectorType res(0, size);
                 res.Set(pos);
                 return res;
             }
@@ -180,9 +180,9 @@ namespace NKikimr {
 
             const static ui8 EmptyMask[];
 
-            friend TVectorType operator -(const TVectorType &v1, const TVectorType &v2); 
-            friend TVectorType operator &(const TVectorType &v1, const TVectorType &v2); 
-            friend TVectorType operator |(const TVectorType &v1, const TVectorType &v2); 
+            friend TVectorType operator -(const TVectorType &v1, const TVectorType &v2);
+            friend TVectorType operator &(const TVectorType &v1, const TVectorType &v2);
+            friend TVectorType operator |(const TVectorType &v1, const TVectorType &v2);
 
             ui8 FirstSetBit(ui8 vec) const {
                 const static unsigned shift = std::numeric_limits<unsigned int>::digits - std::numeric_limits<ui8>::digits;
@@ -193,19 +193,19 @@ namespace NKikimr {
             }
         };
 
-        inline TVectorType operator -(const TVectorType &v1, const TVectorType &v2) { 
+        inline TVectorType operator -(const TVectorType &v1, const TVectorType &v2) {
             Y_VERIFY_DEBUG(v1.Size == v2.Size);
-            return TVectorType(v1.Vec ^ (v1.Vec & v2.Vec), v1.Size); 
+            return TVectorType(v1.Vec ^ (v1.Vec & v2.Vec), v1.Size);
         }
 
-        inline TVectorType operator &(const TVectorType &v1, const TVectorType &v2) { 
+        inline TVectorType operator &(const TVectorType &v1, const TVectorType &v2) {
             Y_VERIFY_DEBUG(v1.Size == v2.Size);
-            return TVectorType(v1.Vec & v2.Vec, v1.Size); 
+            return TVectorType(v1.Vec & v2.Vec, v1.Size);
         }
 
-        inline TVectorType operator |(const TVectorType &v1, const TVectorType &v2) { 
+        inline TVectorType operator |(const TVectorType &v1, const TVectorType &v2) {
             Y_VERIFY_DEBUG(v1.Size == v2.Size);
-            return TVectorType(v1.Vec | v2.Vec, v1.Size); 
+            return TVectorType(v1.Vec | v2.Vec, v1.Size);
         }
 
 
@@ -328,7 +328,7 @@ namespace NKikimr {
                 return TShiftedBitVecBase::Get(i);
             }
 
-            TVectorType ToVector() const { 
+            TVectorType ToVector() const {
                 Y_VERIFY_DEBUG(End - Beg <= 8);
                 ui8 vec = 0;
                 TIterator it = Begin();
@@ -338,7 +338,7 @@ namespace NKikimr {
                     it.Next();
                 }
                 vec <<= 8 - (End - Beg);
-                return TVectorType(vec, End - Beg); 
+                return TVectorType(vec, End - Beg);
             }
         };
 
@@ -389,7 +389,7 @@ namespace NKikimr {
                 return res;
             }
 
-            TVectorType ToVector() const { 
+            TVectorType ToVector() const {
                 Y_VERIFY_DEBUG(End - Beg <= 2 * 8);
                 ui8 vec = 0;
                 TIterator it = Begin();
@@ -403,7 +403,7 @@ namespace NKikimr {
                     vec |= ui8(!firstBit && secondBit);
                 }
                 vec <<= 8 - ((End - Beg) >> 1);
-                return TVectorType(vec, (End - Beg) >> 1); 
+                return TVectorType(vec, (End - Beg) >> 1);
             }
         };
 
@@ -432,8 +432,8 @@ namespace NKikimr {
             }
 
 
-            TVectorType GetRow(ui8 row) const { 
-                TVectorType vec(0, Columns); 
+            TVectorType GetRow(ui8 row) const {
+                TVectorType vec(0, Columns);
                 for (ui8 i = 0; i < Columns; i++) {
                     if (Get(row, i))
                         vec.Set(i);
@@ -441,8 +441,8 @@ namespace NKikimr {
                 return vec;
             }
 
-            TVectorType GetColumn(ui8 column) const { 
-                TVectorType vec(0, Rows); 
+            TVectorType GetColumn(ui8 column) const {
+                TVectorType vec(0, Rows);
                 for (ui8 i = 0; i < Rows; i++) {
                     if (Get(i, column))
                         vec.Set(i);
@@ -465,16 +465,16 @@ namespace NKikimr {
                 Ptr[pos.Byte] &= ~pos.Mask;
             }
 
-            TVectorType OrRows() const { 
-                TVectorType vec(0, Columns); 
+            TVectorType OrRows() const {
+                TVectorType vec(0, Columns);
                 for (ui8 i = 0; i < Rows; i++) {
                     vec |= GetRow(i);
                 }
                 return vec;
             }
 
-            TVectorType OrColumns() const { 
-                TVectorType vec(0, Rows); 
+            TVectorType OrColumns() const {
+                TVectorType vec(0, Rows);
                 for (ui8 i = 0; i < Columns; i++) {
                     vec |= GetColumn(i);
                 }

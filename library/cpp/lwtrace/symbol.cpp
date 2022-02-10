@@ -5,11 +5,11 @@
 
 template <>
 NLWTrace::TSymbol FromStringImpl(const char*, size_t) {
-    static TString err("ERROR_dynamic_symbol"); 
+    static TString err("ERROR_dynamic_symbol");
     return NLWTrace::TSymbol(&err);
 }
 
 template <>
 void Out<NLWTrace::TSymbol>(IOutputStream& o, TTypeTraits<NLWTrace::TSymbol>::TFuncParam t) {
-    Out<TString>(o, *t.Str); 
+    Out<TString>(o, *t.Str);
 }

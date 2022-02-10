@@ -7,7 +7,7 @@
 #include <google/protobuf/message.h>
 
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 namespace NProtobufJson {
     struct TProto2JsonConfig;

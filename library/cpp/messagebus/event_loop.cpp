@@ -70,7 +70,7 @@ public:
     TChannelPtr Register(TSocket socket, TEventHandlerPtr eventHandler, void* cookie);
     void Unregister(SOCKET socket);
 
-    typedef THashMap<SOCKET, TChannelPtr> TData; 
+    typedef THashMap<SOCKET, TChannelPtr> TData;
 
     void AddToPoller(SOCKET socket, void* cookie, int flags);
 

@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TStatsRegistryTest) {
     }
 
     Y_UNIT_TEST(DuplicateKeys) {
-        TString error; 
+        TString error;
         try {
             static TStatKey key("my_key", false), sameKey("my_key", false);
             // avoid variables elimitation

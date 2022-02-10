@@ -54,7 +54,7 @@ namespace NKikimr {
                 out << "Set(" << Lsn << ")";
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             Output(str);
             return str.Str();

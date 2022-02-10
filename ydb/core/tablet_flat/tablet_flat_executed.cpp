@@ -171,7 +171,7 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
     LOG_NOTICE_S(ctx, NKikimrServices::TABLET_EXECUTOR, "RenderHtmlPage for tablet " << TabletID());
     auto cgi = ev->Get()->Cgi();
     auto path = ev->Get()->PathInfo();
-    TString queryString = cgi.Print(); 
+    TString queryString = cgi.Print();
 
     if (path == "/app") {
         OnRenderAppHtmlPage(ev, ctx);

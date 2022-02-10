@@ -30,10 +30,10 @@ class TDigest {
         }
     };
 
-    TVector<TCentroid> Centroids; 
-    TVector<TCentroid> Unmerged; 
-    TVector<TCentroid> Merged; 
-    typedef TVector<TCentroid>::iterator iter_t; 
+    TVector<TCentroid> Centroids;
+    TVector<TCentroid> Unmerged;
+    TVector<TCentroid> Merged;
+    typedef TVector<TCentroid>::iterator iter_t;
     double N;
     double Delta;
     double K;
@@ -42,7 +42,7 @@ class TDigest {
     void AddCentroid(const TCentroid& centroid);
     double GetThreshold(double q);
 
-    void MergeCentroid(TVector<TCentroid>& merged, double& sum, const TCentroid& centroid); 
+    void MergeCentroid(TVector<TCentroid>& merged, double& sum, const TCentroid& centroid);
 
 protected:
     void Update(double x, double w = 1.0);
@@ -52,7 +52,7 @@ public:
     TDigest(double delta, double k, double firstValue);
     TDigest(const TString& serializedDigest);
     TDigest(const TDigest* digest1, const TDigest* digest2); // merge
-    TString Serialize(); 
+    TString Serialize();
     TDigest operator+(const TDigest& other);
     TDigest& operator+=(const TDigest& other);
     void AddValue(double value);

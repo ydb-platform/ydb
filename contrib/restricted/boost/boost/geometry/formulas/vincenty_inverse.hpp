@@ -27,11 +27,11 @@
 #include <boost/geometry/formulas/flattening.hpp>
 #include <boost/geometry/formulas/result_inverse.hpp>
 
-#include <util/system/compiler.h> 
+#include <util/system/compiler.h>
 
-Y_PRAGMA_DIAGNOSTIC_PUSH 
-Y_PRAGMA_NO_WSHADOW 
- 
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA_NO_WSHADOW
+
 #ifndef BOOST_GEOMETRY_DETAIL_VINCENTY_MAX_STEPS
 #define BOOST_GEOMETRY_DETAIL_VINCENTY_MAX_STEPS 1000
 #endif
@@ -163,7 +163,7 @@ public:
         } while ( geometry::math::abs(previous_lambda - lambda) > c_e_12
                && geometry::math::abs(lambda) < pi
                && counter < BOOST_GEOMETRY_DETAIL_VINCENTY_MAX_STEPS ); // robustness
- 
+
         if ( BOOST_GEOMETRY_CONDITION(EnableDistance) )
         {
             // Oops getting hard here
@@ -192,7 +192,7 @@ public:
 
             result.distance = radius_b * A * (sigma - delta_sigma); // (19)
         }
- 
+
         if ( BOOST_GEOMETRY_CONDITION(CalcAzimuths) )
         {
             if (BOOST_GEOMETRY_CONDITION(CalcFwdAzimuth))
@@ -221,6 +221,6 @@ public:
 
 }}} // namespace boost::geometry::formula
 
-Y_PRAGMA_DIAGNOSTIC_POP 
+Y_PRAGMA_DIAGNOSTIC_POP
 
 #endif // BOOST_GEOMETRY_FORMULAS_VINCENTY_INVERSE_HPP

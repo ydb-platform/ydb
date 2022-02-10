@@ -5,12 +5,12 @@
 template <typename T>
 class TNonDestroyingHolder: public THolder<T> {
 public:
-    TNonDestroyingHolder(T* t = nullptr) noexcept 
+    TNonDestroyingHolder(T* t = nullptr) noexcept
         : THolder<T>(t)
     {
     }
 
-    TNonDestroyingHolder(TAutoPtr<T> t) noexcept 
+    TNonDestroyingHolder(TAutoPtr<T> t) noexcept
         : THolder<T>(t)
     {
     }
@@ -23,17 +23,17 @@ public:
 template <class T>
 class TNonDestroyingAutoPtr: public TAutoPtr<T> {
 public:
-    inline TNonDestroyingAutoPtr(T* t = 0) noexcept 
+    inline TNonDestroyingAutoPtr(T* t = 0) noexcept
         : TAutoPtr<T>(t)
     {
     }
 
-    inline TNonDestroyingAutoPtr(const TAutoPtr<T>& t) noexcept 
+    inline TNonDestroyingAutoPtr(const TAutoPtr<T>& t) noexcept
         : TAutoPtr<T>(t.Release())
     {
     }
 
-    inline ~TNonDestroyingAutoPtr() { 
+    inline ~TNonDestroyingAutoPtr() {
         Y_VERIFY(!*this, "stored object must be explicitly released");
     }
 };

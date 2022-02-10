@@ -6,7 +6,7 @@
 
 class THangingServer {
 private:
-    std::pair<unsigned, TVector<NBus::TBindResult>> BindResult; 
+    std::pair<unsigned, TVector<NBus::TBindResult>> BindResult;
 
 public:
     // listen on given port, and nothing else

@@ -108,7 +108,7 @@ struct TRange {
 class TIssue;
 using TIssuePtr = TIntrusivePtr<TIssue>;
 class TIssue: public TThrRefBase {
-    TVector<TIntrusivePtr<TIssue>> Children_; 
+    TVector<TIntrusivePtr<TIssue>> Children_;
 public:
     TPosition Position;
     TPosition EndPosition;
@@ -183,7 +183,7 @@ public:
         return *this;
     }
 
-    const TVector<TIntrusivePtr<TIssue>>& GetSubIssues() const { 
+    const TVector<TIntrusivePtr<TIssue>>& GetSubIssues() const {
         return Children_;
     }
 
@@ -205,7 +205,7 @@ class TIssues {
 public:
     TIssues() = default;
 
-    inline TIssues(const TVector<TIssue>& issues) 
+    inline TIssues(const TVector<TIssue>& issues)
         : Issues_(issues)
     {
     }
@@ -303,7 +303,7 @@ public:
     }
 
 private:
-    TVector<TIssue> Issues_; 
+    TVector<TIssue> Issues_;
 };
 
 class TErrorException : public yexception {

@@ -16,7 +16,7 @@ namespace NKikimr {
 
 template <class T, T* T::*N, ui64 (*H)(const T&), bool (*E)(const T&, const T&)>
 class TIntrusiveFixedHashSet {
-    TVector<T*> Table; 
+    TVector<T*> Table;
 public:
     TIntrusiveFixedHashSet(ui64 size) {
         Table.resize(size, nullptr);

@@ -65,15 +65,15 @@ Y_UNIT_TEST_SUITE(TAsciiTest) {
     Y_UNIT_TEST(CompareTest) {
         UNIT_ASSERT(AsciiEqualsIgnoreCase("qqq", "qQq"));
         UNIT_ASSERT(AsciiEqualsIgnoreCase("qqq", TStringBuf("qQq")));
-        TString qq = "qq"; 
-        TString qQ = "qQ"; 
+        TString qq = "qq";
+        TString qQ = "qQ";
         UNIT_ASSERT(AsciiEqualsIgnoreCase(qq, qQ));
 
-        TString x = "qqqA"; 
-        TString y = "qQqB"; 
-        TString z = "qQnB"; 
-        TString zz = "qQqq"; 
-        TString zzz = "qQqqq"; 
+        TString x = "qqqA";
+        TString y = "qQqB";
+        TString z = "qQnB";
+        TString zz = "qQqq";
+        TString zzz = "qQqqq";
         TStringBuf xs = TStringBuf(x.data(), 3);
         TStringBuf ys = TStringBuf(y.data(), 3);
         TStringBuf zs = TStringBuf(z.data(), 3);

@@ -93,7 +93,7 @@ public:
         return Arg;
     }
 
-    TVector<TString> GetFreeArgs() const { 
+    TVector<TString> GetFreeArgs() const {
         return NLastGetopt::TOptsParseResult(&*Opts_, GetArgC(), GetArgV()).GetFreeArgs();
     }
 

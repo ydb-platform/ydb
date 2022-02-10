@@ -18,12 +18,12 @@ public:
 
     TTempBuf();
     TTempBuf(size_t len);
-    TTempBuf(const TTempBuf& b) noexcept; 
-    TTempBuf(TTempBuf&& b) noexcept; 
-    ~TTempBuf(); 
+    TTempBuf(const TTempBuf& b) noexcept;
+    TTempBuf(TTempBuf&& b) noexcept;
+    ~TTempBuf();
 
-    TTempBuf& operator=(const TTempBuf& b) noexcept; 
-    TTempBuf& operator=(TTempBuf&& b) noexcept; 
+    TTempBuf& operator=(const TTempBuf& b) noexcept;
+    TTempBuf& operator=(TTempBuf&& b) noexcept;
 
     Y_PURE_FUNCTION char* Data() noexcept;
 
@@ -39,7 +39,7 @@ public:
 
     Y_PURE_FUNCTION size_t Left() const noexcept;
 
-    void Reset() noexcept; 
+    void Reset() noexcept;
     void SetPos(size_t off);
     char* Proceed(size_t off);
     void Append(const void* data, size_t len);
@@ -53,10 +53,10 @@ private:
 template <typename T>
 class TTempArray: private TTempBuf {
 private:
-    static T* TypedPointer(char* pointer) noexcept { 
+    static T* TypedPointer(char* pointer) noexcept {
         return reinterpret_cast<T*>(pointer);
     }
-    static const T* TypedPointer(const char* pointer) noexcept { 
+    static const T* TypedPointer(const char* pointer) noexcept {
         return reinterpret_cast<const T*>(pointer);
     }
     static constexpr size_t RawSize(const size_t size) noexcept {
@@ -74,26 +74,26 @@ public:
     {
     }
 
-    T* Data() noexcept { 
+    T* Data() noexcept {
         return TypedPointer(TTempBuf::Data());
     }
 
-    const T* Data() const noexcept { 
+    const T* Data() const noexcept {
         return TypedPointer(TTempBuf::Data());
     }
 
-    T* Current() noexcept { 
+    T* Current() noexcept {
         return TypedPointer(TTempBuf::Current());
     }
 
-    const T* Current() const noexcept { 
+    const T* Current() const noexcept {
         return TypedPointer(TTempBuf::Current());
     }
 
-    size_t Size() const noexcept { 
+    size_t Size() const noexcept {
         return TypedSize(TTempBuf::Size());
     }
-    size_t Filled() const noexcept { 
+    size_t Filled() const noexcept {
         return TypedSize(TTempBuf::Filled());
     }
 

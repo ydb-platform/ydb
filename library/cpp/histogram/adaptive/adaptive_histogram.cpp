@@ -113,15 +113,15 @@ namespace NKiwiAggr {
         }
     }
 
-    void TAdaptiveHistogram::Merge(const TVector<THistogram>& histogramsToMerge) { 
+    void TAdaptiveHistogram::Merge(const TVector<THistogram>& histogramsToMerge) {
         for (size_t i = 0; i < histogramsToMerge.size(); ++i) {
             Merge(histogramsToMerge[i], 1.0);
         }
     }
 
-    void TAdaptiveHistogram::Merge(TVector<IHistogramPtr> histogramsToMerge) { 
-        TVector<IHistogramPtr> histogramsToMergeRepacked(0); 
-        TVector<TAdaptiveHistogram*> histograms(0); 
+    void TAdaptiveHistogram::Merge(TVector<IHistogramPtr> histogramsToMerge) {
+        TVector<IHistogramPtr> histogramsToMergeRepacked(0);
+        TVector<TAdaptiveHistogram*> histograms(0);
         for (size_t i = 0; i < histogramsToMerge.size(); ++i) {
             if (!histogramsToMerge[i] || histogramsToMerge[i]->Empty()) {
                 continue;

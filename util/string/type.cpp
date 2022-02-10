@@ -3,7 +3,7 @@
 
 #include <array>
 
-bool IsSpace(const char* s, size_t len) noexcept { 
+bool IsSpace(const char* s, size_t len) noexcept {
     if (len == 0) {
         return false;
     }

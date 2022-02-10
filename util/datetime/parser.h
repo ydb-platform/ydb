@@ -28,7 +28,7 @@ struct TDateTimeFields {
         Year = year;
     }
 
-    bool IsOk() const noexcept { 
+    bool IsOk() const noexcept {
         if (Year < 1970)
             return false;
         if (Month < 1 || Month > 12)

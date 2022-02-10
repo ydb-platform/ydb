@@ -136,7 +136,7 @@ public:
 
     class TPartProtoKeyEnum {
     public:
-        TPartProtoKeyEnum(const TVector<const FieldDescriptor*>& fields) 
+        TPartProtoKeyEnum(const TVector<const FieldDescriptor*>& fields)
         {
             for (const FieldDescriptor* field : fields) {
                 const EnumDescriptor* enumDescriptor = field->enum_type();
@@ -159,13 +159,13 @@ public:
             return false;
         }
 
-        TVector<const EnumDescriptor*> Fields; 
-        TVector<const EnumValueDescriptor*> Values; 
+        TVector<const EnumDescriptor*> Fields;
+        TVector<const EnumValueDescriptor*> Values;
     };
 
     class TPartProtoKey {
     public:
-        TPartProtoKey(TElementType& element, const TVector<const FieldDescriptor*>& fields) 
+        TPartProtoKey(TElementType& element, const TVector<const FieldDescriptor*>& fields)
             : Element(element)
             , Fields(fields)
         {}
@@ -230,10 +230,10 @@ public:
 
     protected:
         TElementType& Element;
-        const TVector<const FieldDescriptor*>& Fields; 
+        const TVector<const FieldDescriptor*>& Fields;
     };
 
-    static bool IsEnum(const TVector<const FieldDescriptor*>& fields) { 
+    static bool IsEnum(const TVector<const FieldDescriptor*>& fields) {
         for (const FieldDescriptor* field : fields) {
             if (field->cpp_type() != FieldDescriptor::CPPTYPE_ENUM) {
                 return false;
@@ -242,12 +242,12 @@ public:
         return true;
     }
 
-    static THolder<ResponseType> GroupResponse(THolder<TResponseType>& source, const TVector<const FieldDescriptor*>& groupFields, bool allEnums = false) { 
+    static THolder<ResponseType> GroupResponse(THolder<TResponseType>& source, const TVector<const FieldDescriptor*>& groupFields, bool allEnums = false) {
         THolder<TResponseType> result = MakeHolder<TResponseType>();
         TElementsFieldType* field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
         bool allKeys = allEnums && IsEnum(groupFields);
-        TMap<TPartProtoKey, ui32> counters; 
-        TMap<TPartProtoKey, TElementType*> elements; 
+        TMap<TPartProtoKey, ui32> counters;
+        TMap<TPartProtoKey, TElementType*> elements;
         if (allKeys) {
             TPartProtoKeyEnum keyEnum(groupFields);
             do {
@@ -280,12 +280,12 @@ public:
         return result;
     }
 
-    static TVector<const FieldDescriptor*> GetProtoFields(const TString& fields) { 
+    static TVector<const FieldDescriptor*> GetProtoFields(const TString& fields) {
         const Descriptor& descriptor = *TElementType::descriptor();
-        TVector<TString> requestedFields; 
-        TVector<const FieldDescriptor*> foundFields; 
+        TVector<TString> requestedFields;
+        TVector<const FieldDescriptor*> foundFields;
         StringSplitter(fields).Split(',').SkipEmpty().Collect(&requestedFields);
-        for (const TString& str : requestedFields) { 
+        for (const TString& str : requestedFields) {
             const FieldDescriptor* fieldDescriptor = descriptor.FindFieldByName(str);
             if (fieldDescriptor != nullptr) {
                 foundFields.push_back(fieldDescriptor);
@@ -298,8 +298,8 @@ public:
 };
 
 template <typename ResponseType>
-THolder<ResponseType> GroupWhiteboardResponses(THolder<ResponseType>& response, const TString& fields, bool allEnums = false) { 
-    TVector<const FieldDescriptor*> groupFields = TWhiteboardGrouper<ResponseType>::GetProtoFields(fields); 
+THolder<ResponseType> GroupWhiteboardResponses(THolder<ResponseType>& response, const TString& fields, bool allEnums = false) {
+    TVector<const FieldDescriptor*> groupFields = TWhiteboardGrouper<ResponseType>::GetProtoFields(fields);
     return TWhiteboardGrouper<ResponseType>::GroupResponse(response, groupFields, allEnums);
 }
 

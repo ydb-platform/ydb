@@ -12,7 +12,7 @@ TMiniKQLCompileResult::TMiniKQLCompileResult(const TIssues& errors)
 {
 }
 
-TMiniKQLCompileResult::TMiniKQLCompileResult(const TString& compiledProgram) 
+TMiniKQLCompileResult::TMiniKQLCompileResult(const TString& compiledProgram)
     : CompiledProgram(compiledProgram)
 {
 }

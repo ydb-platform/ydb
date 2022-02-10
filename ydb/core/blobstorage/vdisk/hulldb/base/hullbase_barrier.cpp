@@ -19,7 +19,7 @@ return false; \
 str = endptr + 1;
 
 
-    bool TKeyBarrier::Parse(TKeyBarrier &out, const TString &buf, TString &errorExplanation) { 
+    bool TKeyBarrier::Parse(TKeyBarrier &out, const TString &buf, TString &errorExplanation) {
         const char *str = buf.data();
         char *endptr = nullptr;
 

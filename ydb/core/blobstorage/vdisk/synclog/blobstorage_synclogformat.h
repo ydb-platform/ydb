@@ -33,7 +33,7 @@ namespace NKikimr {
                 return TLogoBlobID(Raw);
             }
 
-            TString ToString() const { 
+            TString ToString() const {
                 return Sprintf("[%s %" PRIu64 "]", LogoBlobID().ToString().data(), Ingress.Raw());
             }
         };
@@ -47,7 +47,7 @@ namespace NKikimr {
                 , Generation(gen)
             {}
 
-            TString ToString() const { 
+            TString ToString() const {
                 return Sprintf("[TabletId# %" PRIu64 " Generation# %" PRIu32 "]", TabletId, Generation);
             }
         };
@@ -93,7 +93,7 @@ namespace NKikimr {
                 , Ingress(ingressRaw)
             {}
 
-            TString ToString() const { 
+            TString ToString() const {
                 return Sprintf("[TabletId# %" PRIu64 " Channel# %" PRIu32 " %s]", TabletId, Channel, Hard ? "hard" : "soft");
             }
         };
@@ -159,11 +159,11 @@ namespace NKikimr {
                 return (const TBlockRecV2 *)(this + 1);
             }
 
-            TString ToString() const { 
+            TString ToString() const {
                 return Sprintf("{Lsn# %" PRIu64 " Rec# %s %s}", Lsn, RecTypeToStr(RecType), ValueToString().data());
             }
 
-            TString ValueToString() const { 
+            TString ValueToString() const {
                 switch (RecType) {
                     case RecLogoBlob:   return GetLogoBlob()->ToString();
                     case RecBlock:      return GetBlock()->ToString();
@@ -216,8 +216,8 @@ namespace NKikimr {
             static ui32 SetGC(const TBlobStorageGroupType &gtype,
                               char *buf,
                               ui64 lsn,
-                              const TDeque<TLogoBlobID>& phantoms); 
-            static bool CheckData(const TString &data, TString &errorString); 
+                              const TDeque<TLogoBlobID>& phantoms);
+            static bool CheckData(const TString &data, TString &errorString);
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -247,9 +247,9 @@ namespace NKikimr {
                        const TBarrierIngress &ingress);
             void SetGC(const TBlobStorageGroupType &gtype,
                        ui64 lsn,
-                       const TDeque<TLogoBlobID>& phantoms); 
+                       const TDeque<TLogoBlobID>& phantoms);
             void Output(IOutputStream &str) const;
-            TString ToString() const; 
+            TString ToString() const;
 
             const char *GetData() const {
                 return HeapBuf.empty() ? Buf : &(HeapBuf[0]);
@@ -266,7 +266,7 @@ namespace NKikimr {
             char Buf[NSyncLog::MaxRecFullSize];
             // Size in bytes
             ui32 Size = 0;
-            TVector<char> HeapBuf; 
+            TVector<char> HeapBuf;
         };
 
         ////////////////////////////////////////////////////////////////////////////

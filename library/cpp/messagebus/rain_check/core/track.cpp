@@ -7,7 +7,7 @@ void TTaskTrackerReceipt::SetDone() {
     TaskTracker->GetQueue<TTaskTrackerReceipt*>()->EnqueueAndSchedule(this);
 }
 
-TString TTaskTrackerReceipt::GetStatusSingleLine() { 
+TString TTaskTrackerReceipt::GetStatusSingleLine() {
     return Task->GetStatusSingleLine();
 }
 

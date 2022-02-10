@@ -2,13 +2,13 @@
 
 #include <util/generic/yexception.h>
 
-TMemoryInput::TMemoryInput() noexcept 
+TMemoryInput::TMemoryInput() noexcept
     : Buf_(nullptr)
     , Len_(0)
 {
 }
 
-TMemoryInput::TMemoryInput(const void* buf, size_t len) noexcept 
+TMemoryInput::TMemoryInput(const void* buf, size_t len) noexcept
     : Buf_((const char*)buf)
     , Len_(len)
 {

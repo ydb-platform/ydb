@@ -29,7 +29,7 @@ namespace NMonitoring {
                         out << "HTTP/1.1 400 Invalid url\r\nConnection: Close\r\n\r\n";
                         return;
                     }
-                    TString path = GetPath(); 
+                    TString path = GetPath();
                     if (!path.StartsWith('/')) {
                         out << "HTTP/1.1 400 Bad request\r\nConnection: Close\r\n\r\n";
                         return;
@@ -133,7 +133,7 @@ namespace NMonitoring {
         const TCoHttpServer& Parent;
     };
 
-    TCoHttpServer::TCoHttpServer(TContExecutor& executor, const TString& bindAddr, TIpPort port, THandler handler) 
+    TCoHttpServer::TCoHttpServer(TContExecutor& executor, const TString& bindAddr, TIpPort port, THandler handler)
         : Executor(executor)
         , Listener(this, &executor)
         , Handler(std::move(handler))

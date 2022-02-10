@@ -13,9 +13,9 @@ Y_UNIT_TEST_SUITE(TPosixGetoptTest) {
         NLastGetopt::optreset = 1;
         UNIT_ASSERT_VALUES_EQUAL('b', NLastGetopt::getopt(argc, argv, "bf:"));
         UNIT_ASSERT_VALUES_EQUAL('f', NLastGetopt::getopt(argc, argv, "bf:"));
-        UNIT_ASSERT_VALUES_EQUAL(NLastGetopt::optarg, TString("1")); 
+        UNIT_ASSERT_VALUES_EQUAL(NLastGetopt::optarg, TString("1"));
         UNIT_ASSERT_VALUES_EQUAL('f', NLastGetopt::getopt(argc, argv, "bf:"));
-        UNIT_ASSERT_VALUES_EQUAL(NLastGetopt::optarg, TString("2")); 
+        UNIT_ASSERT_VALUES_EQUAL(NLastGetopt::optarg, TString("2"));
         UNIT_ASSERT_VALUES_EQUAL(-1, NLastGetopt::getopt(argc, argv, "bf:"));
 
         UNIT_ASSERT_VALUES_EQUAL(5, NLastGetopt::optind);

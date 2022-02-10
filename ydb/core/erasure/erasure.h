@@ -6,7 +6,7 @@
 #include <ydb/core/util/yverify_stream.h>
 
 #include <util/stream/str.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/bt_exception.h>
 #include <util/string/builder.h>
 
@@ -281,12 +281,12 @@ struct TErasureType {
         return ErasureSpecies;
     }
 
-    TString ToString() const { 
+    TString ToString() const {
         Y_VERIFY((ui64)ErasureSpecies < ErasureSpeciesCount);
         return ErasureName[ErasureSpecies];
     }
 
-    static TString ErasureSpeciesName(ui32 erasureSpecies) { 
+    static TString ErasureSpeciesName(ui32 erasureSpecies) {
         if (erasureSpecies < ErasureSpeciesCount) {
             return ErasureName[erasureSpecies];
         }
@@ -295,7 +295,7 @@ struct TErasureType {
         return str.Str();
     }
 
-    static EErasureSpecies ErasureSpeciesByName(TString name) { 
+    static EErasureSpecies ErasureSpeciesByName(TString name) {
         for (ui32 species = 0; species < TErasureType::ErasureSpeciesCount; ++species) {
             if (TErasureType::ErasureName[species] == name) {
                 return TErasureType::EErasureSpecies(species);
@@ -342,7 +342,7 @@ struct TErasureType {
     ui32 BlockSplitPartIndex(ui64 offset, ui64 dataSize, ui64 &outPartOffset) const;
     ui64 BlockSplitWholeOffset(ui64 dataSize, ui64 partIdx, ui64 offset) const;
 
-    static const std::array<TString, ErasureSpeciesCount> ErasureName; 
+    static const std::array<TString, ErasureSpeciesCount> ErasureName;
 protected:
     EErasureSpecies ErasureSpecies;
 

@@ -95,7 +95,7 @@ public:
         Detach(ctx);
     }
 
-    void Notify(const TActorContext &ctx, const TString& html) { 
+    void Notify(const TActorContext &ctx, const TString& html) {
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(html));
     }
 
@@ -114,7 +114,7 @@ private:
     const ui64 TargetTablet;
     const bool ForceFollower;
     const TActorId Sender;
-    const TString Query; 
+    const TString Query;
     TActorId PipeClient;
     const HTTP_METHOD Method;
 };

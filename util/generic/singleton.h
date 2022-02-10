@@ -14,8 +14,8 @@ struct TSingletonTraits {
 namespace NPrivate {
     void FillWithTrash(void* ptr, size_t len);
 
-    void LockRecursive(TAtomic& lock) noexcept; 
-    void UnlockRecursive(TAtomic& lock) noexcept; 
+    void LockRecursive(TAtomic& lock) noexcept;
+    void UnlockRecursive(TAtomic& lock) noexcept;
 
     template <class T>
     void Destroyer(void* ptr) {
@@ -80,7 +80,7 @@ namespace NPrivate {
         {
         }
 
-        inline const T* Get() const noexcept { 
+        inline const T* Get() const noexcept {
             return &T_;
         }
 
@@ -96,7 +96,7 @@ namespace NPrivate {
         {
         }
 
-        inline ~THeapStore() { 
+        inline ~THeapStore() {
             delete D;
         }
 

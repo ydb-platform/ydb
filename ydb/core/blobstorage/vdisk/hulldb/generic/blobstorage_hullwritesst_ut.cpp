@@ -41,18 +41,18 @@ namespace NKikimr {
                     , Step(step)
                 {}
 
-                TString ToString() const { 
+                TString ToString() const {
                     return Sprintf("%s step: %u", WriterConclusion.ToString().data(), Step);
                 }
             };
 
             struct TAllStat {
-                TVector<TSstStat> Stat; 
+                TVector<TSstStat> Stat;
                 void Push(const TIndexWriterConclusion<TKey, TMemRec> &writerStat, ui32 step) {
                     Stat.push_back(TSstStat(writerStat, step));
                 }
 
-                TString ToString() const { 
+                TString ToString() const {
                     TStringStream s;
                     bool space = false;
                     for (const auto &stat : Stat) {
@@ -82,7 +82,7 @@ namespace NKikimr {
                     ReservedChunks.push_back(i);
             }
 
-            void Test(ui32 maxStep, const TString &data); 
+            void Test(ui32 maxStep, const TString &data);
             void TestOutbound(ui32 maxStep);
             void Test(ui32 maxGen);
 
@@ -107,7 +107,7 @@ namespace NKikimr {
             const ui32 WriteBlockSize;
 
             std::unique_ptr<TWriter> WriterPtr;
-            TDeque<ui32> ReservedChunks; 
+            TDeque<ui32> ReservedChunks;
             TAllStat Stat;
             THashMap<ui32, TMap<ui32, ui32>> WriteSpan;
 
@@ -152,7 +152,7 @@ namespace NKikimr {
 
 
         template <>
-        void TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob>::Test(ui32 maxStep, const TString &data) { 
+        void TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob>::Test(ui32 maxStep, const TString &data) {
             TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3);
 
             for (ui32 step = 0; step < maxStep; step++) {
@@ -163,7 +163,7 @@ namespace NKikimr {
                 TIngress ingress(ingressMagic);
                 TMemRecLogoBlob memRec(ingress);
 
-                TString blobBuf; 
+                TString blobBuf;
                 TDiskBlob::Create(blobBuf, data.size(), 1, data);
                 memRec.SetDiskBlob(TDiskPart(0, 0, blobBuf.size()));
                 merger.Clear();
@@ -271,11 +271,11 @@ namespace NKikimr {
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
-            TString data("Hello, world!"); 
+            TString data("Hello, world!");
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(10000, data);
 
-            TString res("{SST {Addr: {ChunkIdx: 1 Offset: 200000 Size: 440096} " 
+            TString res("{SST {Addr: {ChunkIdx: 1 Offset: 200000 Size: 440096} "
                             "IndexParts: 1 {UsedChunks: 1}} step: 10000}");
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
@@ -319,11 +319,11 @@ namespace NKikimr {
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
-            TString data("X"); 
+            TString data("X");
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(50000, data);
 
-            TString res("{SST {Addr: {ChunkIdx: 3 Offset: 0 Size: 502972} " 
+            TString res("{SST {Addr: {ChunkIdx: 3 Offset: 0 Size: 502972} "
                             "IndexParts: 3 {UsedChunks: 1 2 3}} step: 50000}");
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
@@ -337,10 +337,10 @@ namespace NKikimr {
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
-            TString data("Hello, world!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"); 
+            TString data("Hello, world!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(50000, data);
-            TString res("{SST {Addr: {ChunkIdx: 2 Offset: 125776 Size: 922776} " 
+            TString res("{SST {Addr: {ChunkIdx: 2 Offset: 125776 Size: 922776} "
                             "IndexParts: 1 {UsedChunks: 1 2}} step: 20970} "
                        "{SST {Addr: {ChunkIdx: 4 Offset: 125776 Size: 922776} "
                             "IndexParts: 1 {UsedChunks: 3 4}} step: 41940} "
@@ -358,10 +358,10 @@ namespace NKikimr {
             ui32 chunkSize = 1u << 20u;
             ui32 appendBlockSize = 4u << 10u;
             ui32 writeBlockSize = 16u << 10u;
-            TString data("X"); 
+            TString data("X");
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(1000000, data);
-            TString res("{SST {Addr: {ChunkIdx: 4 Offset: 0 Size: 1048572} " 
+            TString res("{SST {Addr: {ChunkIdx: 4 Offset: 0 Size: 1048572} "
                             "IndexParts: 4 {UsedChunks: 1 2 3 4}} step: 80657} "
                        "{SST {Addr: {ChunkIdx: 8 Offset: 0 Size: 1048572} "
                             "IndexParts: 4 {UsedChunks: 5 6 7 8}} step: 161314} "
@@ -405,7 +405,7 @@ namespace NKikimr {
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.TestOutbound(10000);
 
-            TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 680096} " 
+            TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 680096} "
                             "IndexParts: 1 OutboundItems: 20000 {UsedChunks: 1}} step: 10000}");
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
@@ -422,7 +422,7 @@ namespace NKikimr {
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.TestOutbound(50000);
 
-            TString res("{SST {Addr: {ChunkIdx: 4 Offset: 0 Size: 254412} " 
+            TString res("{SST {Addr: {ChunkIdx: 4 Offset: 0 Size: 254412} "
                             "IndexParts: 4 OutboundItems: 100000 {UsedChunks: 1 2 3 4}} step: 50000}");
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
@@ -439,7 +439,7 @@ namespace NKikimr {
             ui32 writeBlockSize = 16u << 10u;
             TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.TestOutbound(20000);
-            TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 1048520} " 
+            TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 1048520} "
                             "IndexParts: 1 OutboundItems: 30836 {UsedChunks: 1}} step: 15418} "
                        "{SST {Addr: {ChunkIdx: 2 Offset: 0 Size: 311672} "
                             "IndexParts: 1 OutboundItems: 9164 {UsedChunks: 2}} step: 20000}");
@@ -462,7 +462,7 @@ namespace NKikimr {
             TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(5000);
 
-            TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 60096} " 
+            TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 60096} "
                        "IndexParts: 1 {UsedChunks: 1}} step: 5000}");
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
@@ -479,7 +479,7 @@ namespace NKikimr {
             TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(150000);
 
-            TString res("{SST {Addr: {ChunkIdx: 2 Offset: 0 Size: 751536} " 
+            TString res("{SST {Addr: {ChunkIdx: 2 Offset: 0 Size: 751536} "
                             "IndexParts: 2 {UsedChunks: 1 2}} step: 150000}");
             STR << res << "\n";
             STR << test.GetStat().ToString() << "\n";
@@ -496,7 +496,7 @@ namespace NKikimr {
             TTest<TKeyBlock, TMemRecBlock, TWriterBlock> test(chunksToUse, owner, ownerRound, chunkSize, appendBlockSize, writeBlockSize);
             test.Test(150000);
 
-            TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 1048572} " 
+            TString res("{SST {Addr: {ChunkIdx: 1 Offset: 0 Size: 1048572} "
                             "IndexParts: 1 {UsedChunks: 1}} step: 87373} "
                        "{SST {Addr: {ChunkIdx: 2 Offset: 0 Size: 751620} "
                             "IndexParts: 1 {UsedChunks: 2}} step: 150000}");

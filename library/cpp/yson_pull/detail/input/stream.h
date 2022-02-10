@@ -57,10 +57,10 @@ namespace NYsonPull {
                 }
             };
 
-            class TFHandle: public TOwned<TFileInput> { 
+            class TFHandle: public TOwned<TFileInput> {
             public:
                 TFHandle(int fd, size_t buffer_size)
-                    : TOwned<TFileInput>(Duplicate(fd), buffer_size) 
+                    : TOwned<TFileInput>(Duplicate(fd), buffer_size)
                 {
                 }
             };

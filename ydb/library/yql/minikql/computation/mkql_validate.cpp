@@ -10,7 +10,7 @@ namespace NMiniKQL {
 
 namespace {
 
-static const TString VERIFY_DELIMITER = "\n - "; 
+static const TString VERIFY_DELIMITER = "\n - ";
 
 using namespace NUdf;
 

@@ -64,7 +64,7 @@ namespace NProfiling {
         return TStringAtoms::Instance().MakeTag(s);
     }
 
-    ui32 MakeTags(const TVector<const char*>& ss) { 
+    ui32 MakeTags(const TVector<const char*>& ss) {
         return TStringAtoms::Instance().MakeTags(ss);
     }
 

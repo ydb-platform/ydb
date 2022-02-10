@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
     }
 
     Y_UNIT_TEST(TestScan2) {
-        const TString parsee("=000&aaa=bbb&ag0=&ccc=ddd"); 
+        const TString parsee("=000&aaa=bbb&ag0=&ccc=ddd");
         TCgiParameters c;
         c.Scan(parsee);
 
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
     }
 
     Y_UNIT_TEST(TestScan3) {
-        const TString parsee("aaa=bbb&ag0=&ccc=ddd"); 
+        const TString parsee("aaa=bbb&ag0=&ccc=ddd");
         TCgiParameters c;
         c.Scan(parsee);
 

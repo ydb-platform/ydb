@@ -33,8 +33,8 @@ namespace NTable {
                 return TNullsType::Make(Types, Cells);
             }
 
-            TVector<TType> Types; 
-            TVector<TCell> Cells; 
+            TVector<TType> Types;
+            TVector<TCell> Cells;
         };
 
         TRowScheme(
@@ -57,7 +57,7 @@ namespace NTable {
         {
             size_t keyCount = 0;
             TSet<ui32> familySet;
-            TMap<ui32, const TColumn*> cols; /* order by tag */ 
+            TMap<ui32, const TColumn*> cols; /* order by tag */
 
             for (auto &it : cols_) {
                 auto &meta = TGet::Do(it);
@@ -69,7 +69,7 @@ namespace NTable {
             TNullsCook<TKeyNulls, NScheme::TTypeIdOrder> keys(keyCount);
             TNullsCook<TRowNulls, NScheme::TTypeId> vals(cols.size());
 
-            TVector<TColInfo> info; 
+            TVector<TColInfo> info;
             info.reserve(cols.size());
 
             TVector<ui32> families(familySet.begin(), familySet.end());
@@ -150,13 +150,13 @@ namespace NTable {
         }
 
     public:
-        const TVector<TColInfo> Cols; 
+        const TVector<TColInfo> Cols;
         const TIntrusiveConstPtr<TKeyNulls> Keys;
         const TIntrusiveConstPtr<TRowNulls> Nulls;
         const TVector<ui32> Families; // per-group families
 
     private:
-        THashMap<TTag, NTable::TPos> ByTag; 
+        THashMap<TTag, NTable::TPos> ByTag;
     };
 
 }}

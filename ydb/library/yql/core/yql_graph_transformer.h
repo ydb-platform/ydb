@@ -79,7 +79,7 @@ public:
         ui32 Repeats;
         ui32 Restarts;
 
-        TVector<std::pair<TString, TStatistics>> Stages; 
+        TVector<std::pair<TString, TStatistics>> Stages;
 
         TStatistics()
             : TransformDuration(TDuration::Zero())
@@ -217,7 +217,7 @@ private:
     const TAutoPtr<IGraphTransformer> Transformer;
 };
 
-TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes); 
+TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes);
 TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformerWithNoArgChecks(const TVector<TTransformStage>& stages, bool useIssueScopes);
 
 TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer(

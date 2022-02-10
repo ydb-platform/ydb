@@ -162,12 +162,12 @@ public:
         return *reinterpret_cast<const TActorId*>(Data());
     }
 
-    operator TString() const { 
+    operator TString() const {
         Y_VERIFY(Type() == NScheme::NTypeIds::Utf8
                || Type() == NScheme::NTypeIds::String
                || Type() == NScheme::NTypeIds::String2m
                || Type() == NScheme::NTypeIds::String4k, "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
-        return TString(reinterpret_cast<const char*>(Data()), Size()); 
+        return TString(reinterpret_cast<const char*>(Data()), Size());
     }
 
     operator TBuffer() const {
@@ -188,18 +188,18 @@ public:
     }
 
     template <typename ElementType>
-    operator TVector<ElementType>() const { 
+    operator TVector<ElementType>() const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
         Y_VERIFY(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
         Y_VERIFY(Size() % sizeof(ElementType) == 0);
         std::size_t count = Size() / sizeof(ElementType);
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
         const ElementType *end = begin + count;
-        return TVector<ElementType>(begin, end); 
+        return TVector<ElementType>(begin, end);
     }
 
     template <typename ElementType>
-    void ExtractArray(THashSet<ElementType> &container) const { 
+    void ExtractArray(THashSet<ElementType> &container) const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
         Y_VERIFY(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
         Y_VERIFY(Size() % sizeof(ElementType) == 0);
@@ -266,7 +266,7 @@ public:
     }
 
     template <typename ElementType>
-    static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TVector<ElementType>& value) { 
+    static typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type ConvertFrom(const TVector<ElementType>& value) {
         return static_cast<typename NSchemeTypeMapper<NScheme::NTypeIds::String>::Type>(
             TString(
                 reinterpret_cast<const char*>(value.data()), value.size() * sizeof(ElementType)
@@ -647,7 +647,7 @@ struct Schema {
             constexpr static bool IsNotNull = _IsNotNull;
             using Type = typename NSchemeTypeMapper<_ColumnType>::Type;
 
-            static TString GetColumnName(const TString& typeName) { 
+            static TString GetColumnName(const TString& typeName) {
                 return typeName.substr(typeName.rfind(':') + 1);
             }
         };
@@ -661,11 +661,11 @@ struct Schema {
             using TupleType = std::tuple<typename T::Type>;
             using RealTupleType = std::tuple<typename NSchemeTypeMapper<T::ColumnType>::Type>;
 
-            static TString GetColumnName() { 
+            static TString GetColumnName() {
                 return GetColumnName(TypeName<T>());
             }
 
-            static TString GetColumnName(const TString& typeName) { 
+            static TString GetColumnName(const TString& typeName) {
                 return T::GetColumnName(typeName);
             }
 
@@ -1827,7 +1827,7 @@ struct Schema {
     template <TDuration::TValue Period = 0>
     struct ExecutorLogFlushPeriod {
         static void Materialize(TToughDb& database) {
-            database.Alter().SetExecutorLogFlushPeriod(TDuration::MicroSeconds(Period)); 
+            database.Alter().SetExecutorLogFlushPeriod(TDuration::MicroSeconds(Period));
         }
     };
 
@@ -1868,7 +1868,7 @@ struct Schema {
 
     template <typename Type>
     struct SchemaTables<Type> {
-        static TString GetTableName(const TString& typeName) { 
+        static TString GetTableName(const TString& typeName) {
             return typeName.substr(typeName.rfind(':') + 1);
         }
 

@@ -25,7 +25,7 @@ PEERDIR(
 ADDINCL(
     contrib/libs/xxhash
 )
- 
+
 NO_RUNTIME()
 
 SRCS(

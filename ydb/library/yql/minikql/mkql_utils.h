@@ -15,10 +15,10 @@ public:
 
     inline static TStatus Error(const TStringBuf& error) {
         Y_VERIFY_DEBUG(!error.empty());
-        return TStatus(TString(error)); 
+        return TStatus(TString(error));
     }
 
-    inline static TStatus Error(TString&& error) { 
+    inline static TStatus Error(TString&& error) {
         Y_VERIFY_DEBUG(!error.empty());
         return TStatus(std::move(error));
     }
@@ -37,20 +37,20 @@ public:
         return Error_.empty();
     }
 
-    inline const TString& GetError() const { 
+    inline const TString& GetError() const {
         return Error_;
     }
 
 private:
     inline TStatus() = default;
 
-    inline TStatus(TString&& error) 
+    inline TStatus(TString&& error)
         : Error_(std::move(error))
     {
     }
 
 private:
-    TString Error_; 
+    TString Error_;
 };
 
 } // namespace NMiniKQL

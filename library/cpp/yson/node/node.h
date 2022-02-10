@@ -45,8 +45,8 @@ public:
         Null = 8    /*"null"*/,
     };
 
-    using TListType = TVector<TNode>; 
-    using TMapType = THashMap<TString, TNode>; 
+    using TListType = TVector<TNode>;
+    using TMapType = THashMap<TString, TNode>;
 
 private:
     struct TNull {
@@ -62,9 +62,9 @@ private:
         i64,
         ui64,
         double,
-        TString, 
-        TListType, 
-        TMapType, 
+        TString,
+        TListType,
+        TMapType,
         TNull,
         TUndefined
         >;
@@ -76,7 +76,7 @@ public:
     TNode(TStringBuf s);
     explicit TNode(std::string_view s);
     explicit TNode(const std::string& s);
-    TNode(TString s); 
+    TNode(TString s);
     TNode(int i);
 
     //this case made speccially for prevent mess cast of EType into TNode through TNode(int) constructor
@@ -139,25 +139,25 @@ public:
 
     EType GetType() const;
 
-    const TString& AsString() const; 
+    const TString& AsString() const;
     i64 AsInt64() const;
     ui64 AsUint64() const;
     double AsDouble() const;
     bool AsBool() const;
-    const TListType& AsList() const; 
-    const TMapType& AsMap() const; 
-    TListType& AsList(); 
-    TMapType& AsMap(); 
+    const TListType& AsList() const;
+    const TMapType& AsMap() const;
+    TListType& AsList();
+    TMapType& AsMap();
 
     const TString& UncheckedAsString() const noexcept;
     i64 UncheckedAsInt64() const noexcept;
     ui64 UncheckedAsUint64() const noexcept;
     double UncheckedAsDouble() const noexcept;
     bool UncheckedAsBool() const noexcept;
-    const TListType& UncheckedAsList() const noexcept; 
-    const TMapType& UncheckedAsMap() const noexcept; 
-    TListType& UncheckedAsList() noexcept; 
-    TMapType& UncheckedAsMap() noexcept; 
+    const TListType& UncheckedAsList() const noexcept;
+    const TMapType& UncheckedAsMap() const noexcept;
+    TListType& UncheckedAsList() noexcept;
+    TMapType& UncheckedAsMap() noexcept;
 
     // integer types cast
     // makes overflow checks

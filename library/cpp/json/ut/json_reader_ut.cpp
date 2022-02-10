@@ -68,9 +68,9 @@ public:
 
 Y_UNIT_TEST_SUITE(TJsonReaderTest) {
     Y_UNIT_TEST(JsonReformatTest) {
-        TString data = "{\"null value\": null, \"intkey\": 10, \"double key\": 11.11, \"string key\": \"string\", \"array\": [1,2,3,\"TString\"], \"bool key\": true}"; 
+        TString data = "{\"null value\": null, \"intkey\": 10, \"double key\": 11.11, \"string key\": \"string\", \"array\": [1,2,3,\"TString\"], \"bool key\": true}";
 
-        TString result1, result2; 
+        TString result1, result2;
         {
             TStringStream in;
             in << data;
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
     }
 
     Y_UNIT_TEST(TJsonTreeTest) {
-        TString data = "{\"intkey\": 10, \"double key\": 11.11, \"null value\":null, \"string key\": \"string\", \"array\": [1,2,3,\"TString\"], \"bool key\": true}"; 
+        TString data = "{\"intkey\": 10, \"double key\": 11.11, \"null value\":null, \"string key\": \"string\", \"array\": [1,2,3,\"TString\"], \"bool key\": true}";
         TStringStream in;
         in << data;
         TJsonValue value;
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         UNIT_ASSERT_DOUBLES_EQUAL(value["double key"].GetDouble(), 11.11, 0.001);
         UNIT_ASSERT_VALUES_EQUAL(value["bool key"].GetBoolean(), true);
         UNIT_ASSERT_VALUES_EQUAL(value["absent string key"].GetString(), TString(""));
-        UNIT_ASSERT_VALUES_EQUAL(value["string key"].GetString(), TString("string")); 
+        UNIT_ASSERT_VALUES_EQUAL(value["string key"].GetString(), TString("string"));
         UNIT_ASSERT_VALUES_EQUAL(value["array"][0].GetInteger(), 1);
         UNIT_ASSERT_VALUES_EQUAL(value["array"][1].GetInteger(), 2);
         UNIT_ASSERT_VALUES_EQUAL(value["array"][2].GetInteger(), 3);
@@ -155,19 +155,19 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
     }
 
     Y_UNIT_TEST(TJsonRomaTest) {
-        TString data = "{\"test\": [ {\"name\": \"A\"} ]}"; 
+        TString data = "{\"test\": [ {\"name\": \"A\"} ]}";
 
         TStringStream in;
         in << data;
         TJsonValue value;
         ReadJsonTree(&in, &value);
 
-        UNIT_ASSERT_VALUES_EQUAL(value["test"][0]["name"].GetString(), TString("A")); 
+        UNIT_ASSERT_VALUES_EQUAL(value["test"][0]["name"].GetString(), TString("A"));
     }
 
     Y_UNIT_TEST(TJsonReadTreeWithComments) {
         {
-            TString leadingCommentData = "{ // \"test\" : 1 \n}"; 
+            TString leadingCommentData = "{ // \"test\" : 1 \n}";
             {
                 // No comments allowed
                 TStringStream in;
@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         }
 
         {
-            TString trailingCommentData = "{ \"test1\" : 1 // \"test2\" : 2 \n }"; 
+            TString trailingCommentData = "{ \"test1\" : 1 // \"test2\" : 2 \n }";
             {
                 // No comments allowed
                 TStringStream in;
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
 
     Y_UNIT_TEST(TJsonMemoryLeakTest) {
         // after https://clubs.at.yandex-team.ru/stackoverflow/3691
-        TString s = "."; 
+        TString s = ".";
         NJson::TJsonValue json;
         try {
             TStringInput in(s);

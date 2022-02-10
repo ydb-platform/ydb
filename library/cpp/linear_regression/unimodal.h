@@ -21,7 +21,7 @@ struct TOptimizationParams {
 
     TOptimizationParams() = default;
 
-    static TOptimizationParams Default(const TVector<double>& values) { 
+    static TOptimizationParams Default(const TVector<double>& values) {
         TOptimizationParams optimizationParams;
 
         optimizationParams.ModeParams.LowerBound = 0;
@@ -35,7 +35,7 @@ struct TOptimizationParams {
         return optimizationParams;
     }
 
-    static TOptimizationParams Default(const TVector<double>& values, const TVector<double>& arguments) { 
+    static TOptimizationParams Default(const TVector<double>& values, const TVector<double>& arguments) {
         Y_ASSERT(values.size() == arguments.size());
 
         TOptimizationParams optimizationParams;
@@ -52,8 +52,8 @@ struct TOptimizationParams {
     }
 };
 
-double MakeUnimodal(TVector<double>& values, const TOptimizationParams& optimizationParams); 
-double MakeUnimodal(TVector<double>& values); 
+double MakeUnimodal(TVector<double>& values, const TOptimizationParams& optimizationParams);
+double MakeUnimodal(TVector<double>& values);
 
-double MakeUnimodal(TVector<double>& values, const TVector<double>& arguments, const TOptimizationParams& optimizationParams); 
-double MakeUnimodal(TVector<double>& values, const TVector<double>& arguments); 
+double MakeUnimodal(TVector<double>& values, const TVector<double>& arguments, const TOptimizationParams& optimizationParams);
+double MakeUnimodal(TVector<double>& values, const TVector<double>& arguments);

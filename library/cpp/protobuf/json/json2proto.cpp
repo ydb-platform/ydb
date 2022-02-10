@@ -34,7 +34,7 @@
         break;                                                                      \
     }
 
-static TString GetFieldName(const google::protobuf::FieldDescriptor& field, 
+static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
                             const NProtobufJson::TJson2ProtoConfig& config) {
     if (config.NameGenerator) {
         return config.NameGenerator(field);
@@ -50,7 +50,7 @@ static TString GetFieldName(const google::protobuf::FieldDescriptor& field,
         return name;
     }
 
-    TString name = field.name(); 
+    TString name = field.name();
     switch (config.FieldNameMode) {
         case NProtobufJson::TJson2ProtoConfig::FieldNameOriginalCase:
             break;
@@ -318,7 +318,7 @@ Json2RepeatedField(const NJson::TJsonValue& json,
                    const NProtobufJson::TJson2ProtoConfig& config) {
     using namespace google::protobuf;
 
-    TString name = GetFieldName(field, config); 
+    TString name = GetFieldName(field, config);
     if (!json.Has(name))
         return;
 

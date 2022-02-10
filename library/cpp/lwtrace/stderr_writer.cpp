@@ -5,7 +5,7 @@
 using namespace NLWTrace;
 
 bool TStderrActionExecutor::DoExecute(TOrbit&, const TParams& params) {
-    TString ParamValues[LWTRACE_MAX_PARAMS]; 
+    TString ParamValues[LWTRACE_MAX_PARAMS];
     Probe->Event.Signature.SerializeParams(params, ParamValues);
 
     TStringStream ss;

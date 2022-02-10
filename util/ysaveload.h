@@ -2,7 +2,7 @@
 
 #include <util/generic/fwd.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/yexception.h>
 #include <util/generic/typetraits.h>
 #include <util/generic/algorithm.h>
@@ -347,7 +347,7 @@ public:
 };
 
 template <class T, class A>
-class TSerializer<TVector<T, A>>: public TVectorSerializer<TVector<T, A>> { 
+class TSerializer<TVector<T, A>>: public TVectorSerializer<TVector<T, A>> {
 };
 
 template <class T, class A>
@@ -355,7 +355,7 @@ class TSerializer<std::vector<T, A>>: public TVectorSerializer<std::vector<T, A>
 };
 
 template <class T, class A>
-class TSerializer<TList<T, A>>: public TVectorSerializer<TList<T, A>> { 
+class TSerializer<TList<T, A>>: public TVectorSerializer<TList<T, A>> {
 };
 
 template <class T, class A>
@@ -363,11 +363,11 @@ class TSerializer<std::list<T, A>>: public TVectorSerializer<std::list<T, A>> {
 };
 
 template <>
-class TSerializer<TString>: public TVectorSerializer<TString> { 
+class TSerializer<TString>: public TVectorSerializer<TString> {
 };
 
 template <>
-class TSerializer<TUtf16String>: public TVectorSerializer<TUtf16String> { 
+class TSerializer<TUtf16String>: public TVectorSerializer<TUtf16String> {
 };
 
 template <class TChar>
@@ -375,7 +375,7 @@ class TSerializer<std::basic_string<TChar>>: public TVectorSerializer<std::basic
 };
 
 template <class T, class A>
-class TSerializer<TDeque<T, A>>: public TVectorSerializer<TDeque<T, A>> { 
+class TSerializer<TDeque<T, A>>: public TVectorSerializer<TDeque<T, A>> {
 };
 
 template <class T, class A>
@@ -482,12 +482,12 @@ public:
     }
 };
 
-template <class TSetType, class TValue> 
-class TSetSerializerInserter<TSetType, TValue, true>: public TSetSerializerInserterBase<TSetType, TValue> { 
-    using TBase = TSetSerializerInserterBase<TSetType, TValue>; 
+template <class TSetType, class TValue>
+class TSetSerializerInserter<TSetType, TValue, true>: public TSetSerializerInserterBase<TSetType, TValue> {
+    using TBase = TSetSerializerInserterBase<TSetType, TValue>;
 
 public:
-    inline TSetSerializerInserter(TSetType& s, size_t cnt) 
+    inline TSetSerializerInserter(TSetType& s, size_t cnt)
         : TBase(s)
     {
         Y_UNUSED(cnt);
@@ -499,16 +499,16 @@ public:
     }
 
 private:
-    typename TSetType::iterator P_; 
+    typename TSetType::iterator P_;
 };
 
 template <class T1, class T2, class T3, class T4, class T5, class TValue>
-class TSetSerializerInserter<THashMap<T1, T2, T3, T4, T5>, TValue, false>: public TSetSerializerInserterBase<THashMap<T1, T2, T3, T4, T5>, TValue> { 
-    using TMapType = THashMap<T1, T2, T3, T4, T5>; 
-    using TBase = TSetSerializerInserterBase<TMapType, TValue>; 
+class TSetSerializerInserter<THashMap<T1, T2, T3, T4, T5>, TValue, false>: public TSetSerializerInserterBase<THashMap<T1, T2, T3, T4, T5>, TValue> {
+    using TMapType = THashMap<T1, T2, T3, T4, T5>;
+    using TBase = TSetSerializerInserterBase<TMapType, TValue>;
 
 public:
-    inline TSetSerializerInserter(TMapType& m, size_t cnt) 
+    inline TSetSerializerInserter(TMapType& m, size_t cnt)
         : TBase(m)
     {
         m.reserve(cnt);
@@ -516,12 +516,12 @@ public:
 };
 
 template <class T1, class T2, class T3, class T4, class T5, class TValue>
-class TSetSerializerInserter<THashMultiMap<T1, T2, T3, T4, T5>, TValue, false>: public TSetSerializerInserterBase<THashMultiMap<T1, T2, T3, T4, T5>, TValue> { 
-    using TMapType = THashMultiMap<T1, T2, T3, T4, T5>; 
-    using TBase = TSetSerializerInserterBase<TMapType, TValue>; 
+class TSetSerializerInserter<THashMultiMap<T1, T2, T3, T4, T5>, TValue, false>: public TSetSerializerInserterBase<THashMultiMap<T1, T2, T3, T4, T5>, TValue> {
+    using TMapType = THashMultiMap<T1, T2, T3, T4, T5>;
+    using TBase = TSetSerializerInserterBase<TMapType, TValue>;
 
 public:
-    inline TSetSerializerInserter(TMapType& m, size_t cnt) 
+    inline TSetSerializerInserter(TMapType& m, size_t cnt)
         : TBase(m)
     {
         m.reserve(cnt);
@@ -529,29 +529,29 @@ public:
 };
 
 template <class T1, class T2, class T3, class T4, class TValue>
-class TSetSerializerInserter<THashSet<T1, T2, T3, T4>, TValue, false>: public TSetSerializerInserterBase<THashSet<T1, T2, T3, T4>, TValue> { 
-    using TSetType = THashSet<T1, T2, T3, T4>; 
-    using TBase = TSetSerializerInserterBase<TSetType, TValue>; 
+class TSetSerializerInserter<THashSet<T1, T2, T3, T4>, TValue, false>: public TSetSerializerInserterBase<THashSet<T1, T2, T3, T4>, TValue> {
+    using TSetType = THashSet<T1, T2, T3, T4>;
+    using TBase = TSetSerializerInserterBase<TSetType, TValue>;
 
 public:
-    inline TSetSerializerInserter(TSetType& s, size_t cnt) 
+    inline TSetSerializerInserter(TSetType& s, size_t cnt)
         : TBase(s)
     {
         s.reserve(cnt);
     }
 };
 
-template <class TSetType, class TValue, bool sorted> 
+template <class TSetType, class TValue, bool sorted>
 class TSetSerializerBase {
 public:
-    static inline void Save(IOutputStream* rh, const TSetType& s) { 
+    static inline void Save(IOutputStream* rh, const TSetType& s) {
         ::SaveSize(rh, s.size());
         ::SaveRange(rh, s.begin(), s.end());
     }
 
-    static inline void Load(IInputStream* rh, TSetType& s) { 
+    static inline void Load(IInputStream* rh, TSetType& s) {
         const size_t cnt = ::LoadSize(rh);
-        TSetSerializerInserter<TSetType, TValue, sorted> ins(s, cnt); 
+        TSetSerializerInserter<TSetType, TValue, sorted> ins(s, cnt);
 
         TValue v;
         for (size_t i = 0; i != cnt; ++i) {
@@ -561,9 +561,9 @@ public:
     }
 
     template <class TStorage>
-    static inline void Load(IInputStream* rh, TSetType& s, TStorage& pool) { 
+    static inline void Load(IInputStream* rh, TSetType& s, TStorage& pool) {
         const size_t cnt = ::LoadSize(rh);
-        TSetSerializerInserter<TSetType, TValue, sorted> ins(s, cnt); 
+        TSetSerializerInserter<TSetType, TValue, sorted> ins(s, cnt);
 
         TValue v;
         for (size_t i = 0; i != cnt; ++i) {
@@ -573,16 +573,16 @@ public:
     }
 };
 
-template <class TMapType, bool sorted = false> 
-struct TMapSerializer: public TSetSerializerBase<TMapType, std::pair<typename TMapType::key_type, typename TMapType::mapped_type>, sorted> { 
+template <class TMapType, bool sorted = false>
+struct TMapSerializer: public TSetSerializerBase<TMapType, std::pair<typename TMapType::key_type, typename TMapType::mapped_type>, sorted> {
 };
 
-template <class TSetType, bool sorted = false> 
-struct TSetSerializer: public TSetSerializerBase<TSetType, typename TSetType::value_type, sorted> { 
+template <class TSetType, bool sorted = false>
+struct TSetSerializer: public TSetSerializerBase<TSetType, typename TSetType::value_type, sorted> {
 };
 
 template <class T1, class T2, class T3, class T4>
-class TSerializer<TMap<T1, T2, T3, T4>>: public TMapSerializer<TMap<T1, T2, T3, T4>, true> { 
+class TSerializer<TMap<T1, T2, T3, T4>>: public TMapSerializer<TMap<T1, T2, T3, T4>, true> {
 };
 
 template <class K, class T, class C, class A>
@@ -590,7 +590,7 @@ class TSerializer<std::map<K, T, C, A>>: public TMapSerializer<std::map<K, T, C,
 };
 
 template <class T1, class T2, class T3, class T4>
-class TSerializer<TMultiMap<T1, T2, T3, T4>>: public TMapSerializer<TMultiMap<T1, T2, T3, T4>, true> { 
+class TSerializer<TMultiMap<T1, T2, T3, T4>>: public TMapSerializer<TMultiMap<T1, T2, T3, T4>, true> {
 };
 
 template <class K, class T, class C, class A>
@@ -598,15 +598,15 @@ class TSerializer<std::multimap<K, T, C, A>>: public TMapSerializer<std::multima
 };
 
 template <class T1, class T2, class T3, class T4, class T5>
-class TSerializer<THashMap<T1, T2, T3, T4, T5>>: public TMapSerializer<THashMap<T1, T2, T3, T4, T5>, false> { 
+class TSerializer<THashMap<T1, T2, T3, T4, T5>>: public TMapSerializer<THashMap<T1, T2, T3, T4, T5>, false> {
 };
 
 template <class T1, class T2, class T3, class T4, class T5>
-class TSerializer<THashMultiMap<T1, T2, T3, T4, T5>>: public TMapSerializer<THashMultiMap<T1, T2, T3, T4, T5>, false> { 
+class TSerializer<THashMultiMap<T1, T2, T3, T4, T5>>: public TMapSerializer<THashMultiMap<T1, T2, T3, T4, T5>, false> {
 };
 
 template <class K, class C, class A>
-class TSerializer<TSet<K, C, A>>: public TSetSerializer<TSet<K, C, A>, true> { 
+class TSerializer<TSet<K, C, A>>: public TSetSerializer<TSet<K, C, A>, true> {
 };
 
 template <class K, class C, class A>
@@ -614,27 +614,27 @@ class TSerializer<std::set<K, C, A>>: public TSetSerializer<std::set<K, C, A>, t
 };
 
 template <class T1, class T2, class T3, class T4>
-class TSerializer<THashSet<T1, T2, T3, T4>>: public TSetSerializer<THashSet<T1, T2, T3, T4>, false> { 
+class TSerializer<THashSet<T1, T2, T3, T4>>: public TSetSerializer<THashSet<T1, T2, T3, T4>, false> {
 };
 
 template <class T1, class T2>
-class TSerializer<TQueue<T1, T2>> { 
+class TSerializer<TQueue<T1, T2>> {
 public:
-    static inline void Save(IOutputStream* rh, const TQueue<T1, T2>& v) { 
+    static inline void Save(IOutputStream* rh, const TQueue<T1, T2>& v) {
         ::Save(rh, v.Container());
     }
-    static inline void Load(IInputStream* in, TQueue<T1, T2>& t) { 
+    static inline void Load(IInputStream* in, TQueue<T1, T2>& t) {
         ::Load(in, t.Container());
     }
 };
 
 template <class T1, class T2, class T3>
-class TSerializer<TPriorityQueue<T1, T2, T3>> { 
+class TSerializer<TPriorityQueue<T1, T2, T3>> {
 public:
-    static inline void Save(IOutputStream* rh, const TPriorityQueue<T1, T2, T3>& v) { 
+    static inline void Save(IOutputStream* rh, const TPriorityQueue<T1, T2, T3>& v) {
         ::Save(rh, v.Container());
     }
-    static inline void Load(IInputStream* in, TPriorityQueue<T1, T2, T3>& t) { 
+    static inline void Load(IInputStream* in, TPriorityQueue<T1, T2, T3>& t) {
         ::Load(in, t.Container());
     }
 };

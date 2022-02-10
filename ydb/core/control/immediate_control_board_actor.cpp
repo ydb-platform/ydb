@@ -34,7 +34,7 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
 
     TMutex Mtx;
     TIntrusivePtr<TControlBoard> Board;
-    TVector<TLogRecord> HistoryLog; 
+    TVector<TLogRecord> HistoryLog;
 
     NMonitoring::TDynamicCounters::TCounterPtr HasChanged;
     NMonitoring::TDynamicCounters::TCounterPtr ChangedCount;

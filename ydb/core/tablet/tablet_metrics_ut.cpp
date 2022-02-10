@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
     Y_UNIT_TEST(TimeSeriesKV) {
         TTimeSeriesValue<i64> value;
         TInstant time = TInstant::Now();
-        TVector<i64> values = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,7476717,0,529363,-1065564}; 
+        TVector<i64> values = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,7476717,0,529363,-1065564};
         time -= TDuration::Days(1);
         for (i64 val : values) {
             value.Increment(val, time);
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
     Y_UNIT_TEST(TimeSeriesKV2) {
         TTimeSeriesValue<i64> value;
         TInstant time = TInstant::Now();
-        TVector<i64> values = {0,0,0,0,1502,0,-64006,-100840,-151185,-4088398,-169038,-167227,-74841,-111563,-107191,-146359,-107399,-195925,-140440,-173191,-30211,-128287,-185191,-140449}; 
+        TVector<i64> values = {0,0,0,0,1502,0,-64006,-100840,-151185,-4088398,-169038,-167227,-74841,-111563,-107191,-146359,-107399,-195925,-140440,-173191,-30211,-128287,-185191,-140449};
         time -= TDuration::Days(1);
         for (i64 val : values) {
             value.Increment(val, time);

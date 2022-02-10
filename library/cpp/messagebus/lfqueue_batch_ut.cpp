@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueBatch) {
             q.EnqueueAll(v);
         }
 
-        TVector<unsigned> r; 
+        TVector<unsigned> r;
         q.DequeueAllSingleConsumer(&r);
 
         UNIT_ASSERT_VALUES_EQUAL(2u, r.size());
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TLockFreeQueueBatch) {
             q.EnqueueAll(v);
         }
 
-        TVector<unsigned> r; 
+        TVector<unsigned> r;
         q.DequeueAllSingleConsumer(&r);
 
         UNIT_ASSERT_VALUES_EQUAL(5u, r.size());

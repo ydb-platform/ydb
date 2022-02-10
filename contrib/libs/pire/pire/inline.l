@@ -37,7 +37,7 @@
 
 ystring filename = "";
 int line = 1;
-TVector<ystring> args; 
+TVector<ystring> args;
 
 #ifdef _WIN32
 #if _MCS_VER >= 1600

@@ -42,9 +42,9 @@ struct TTxCoordinator::TTxMediatorConfirmations : public TTransactionBase<TTxCoo
                 continue;
             }
 
-            THashSet<TTabletId>& mediatorAffectedSet = txit->second.UnconfirmedAffectedSet[mediatorId]; 
+            THashSet<TTabletId>& mediatorAffectedSet = txit->second.UnconfirmedAffectedSet[mediatorId];
             for (const TTabletId affected : txidsx.second) {
-                THashSet<TTabletId>::size_type result = mediatorAffectedSet.erase(affected); 
+                THashSet<TTabletId>::size_type result = mediatorAffectedSet.erase(affected);
                 db.Table<Schema::AffectedSet>().Key(mediatorId, txid, affected).Delete();
                 FLOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR,
                              "at tablet# " << Self->TabletID()

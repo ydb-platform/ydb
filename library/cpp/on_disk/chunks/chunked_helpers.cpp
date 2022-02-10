@@ -29,7 +29,7 @@ TNamedChunkedDataReader::TNamedChunkedDataReader(const TBlob& blob)
     Load(&input, Names);
 
     size_t index = 0;
-    for (TVector<TString>::const_iterator it = Names.begin(); it != Names.end(); ++it, ++index) { 
+    for (TVector<TString>::const_iterator it = Names.begin(); it != Names.end(); ++it, ++index) {
         if (!it->empty())
             NameToIndex[*it] = index;
     }
@@ -42,14 +42,14 @@ TNamedChunkedDataWriter::TNamedChunkedDataWriter(IOutputStream& slave)
 {
 }
 
-TNamedChunkedDataWriter::~TNamedChunkedDataWriter() { 
+TNamedChunkedDataWriter::~TNamedChunkedDataWriter() {
 }
 
 void TNamedChunkedDataWriter::NewBlock() {
     NewBlock("");
 }
 
-void TNamedChunkedDataWriter::NewBlock(const TString& name) { 
+void TNamedChunkedDataWriter::NewBlock(const TString& name) {
     if (!name.empty()) {
         if (NameToIndex.count(name) != 0)
             throw yexception() << "Block name is not unique";

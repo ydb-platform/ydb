@@ -2,8 +2,8 @@ LIBRARY()
 
 OWNER(g:solomon)
 
-NO_WSHADOW() 
- 
+NO_WSHADOW()
+
 SRCS(
     diag_mon_page.cpp
     html_mon_page.cpp

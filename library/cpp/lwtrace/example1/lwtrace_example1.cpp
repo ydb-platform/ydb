@@ -26,7 +26,7 @@ long double Fact(int n) {
 void FactorialCalculator() {
     i32 n;
     Cout << "Enter a number: ";
-    TString str; 
+    TString str;
     Cin >> n;
     double factN = Fact(n);
     Cout << n << "! = " << factN << Endl << Endl;

@@ -91,7 +91,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
     // keep index of main handler or Max if this handler is the main one
     std::vector<ui32> handlersMapping(self.Handlers().Size(), Max<ui32>());
     TNodeMap<ui32> nonDistinctHandlers; // map trait->handler index
-    THashMap<std::pair<TStringBuf, const TExprNode*>, ui32> distinctHandlers; // map column name+trait->handler index 
+    THashMap<std::pair<TStringBuf, const TExprNode*>, ui32> distinctHandlers; // map column name+trait->handler index
     ui32 duplicatesCount = 0;
     for (ui32 index = 0; index < self.Handlers().Size(); ++index) {
         auto& handler = self.Handlers().Item(index).Ref();
@@ -122,7 +122,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
         return node;
     }
 
-    TExprNode::TListType filteredHandlers; 
+    TExprNode::TListType filteredHandlers;
     filteredHandlers.reserve(handlersMapping.size() - duplicatesCount);
     for (ui32 index = 0; index < handlersMapping.size(); ++index) {
         if (handlersMapping[index] == Max<ui32>()) {
@@ -208,7 +208,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
 }
 
 TExprNode::TPtr SimplifySync(const TExprNode::TPtr& node, TExprContext& ctx) {
-    TExprNode::TListType ordered; 
+    TExprNode::TListType ordered;
     TNodeOnNodeOwnedMap realWorlds;
     bool flatten = false;
     for (auto child : node->Children()) {

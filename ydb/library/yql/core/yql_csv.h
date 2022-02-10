@@ -14,8 +14,8 @@ class TCsvInputStream {
 public:
     TCsvInputStream(IInputStream& slave, char delimiter = ';');
 
-    TVector<TString> ReadLine(); 
-    TVector<TString> ReadLineWithEscaping(); 
+    TVector<TString> ReadLine();
+    TVector<TString> ReadLineWithEscaping();
 
 private:
     IInputStream& Slave_;
@@ -30,8 +30,8 @@ class TCsvInputBuffer {
 public:
     TCsvInputBuffer(const TStringBuf& buffer, char delimiter = ';');
 
-    TVector<TString> ReadLine(); 
-    TVector<TString> ReadLineWithEscaping(); 
+    TVector<TString> ReadLine();
+    TVector<TString> ReadLineWithEscaping();
 
 private:
     TStringBuf Buffer_;
@@ -47,7 +47,7 @@ public:
     TCsvOutputStream(IOutputStream& slave, char delimiter = ';', bool quoteItems = true);
 
     // hack for output empty values
-    inline TCsvOutputStream& operator<<(const TString& value) { 
+    inline TCsvOutputStream& operator<<(const TString& value) {
         DoWrite(value.data(), value.size());
         return *this;
     }
@@ -58,8 +58,8 @@ public:
         return *this;
     }
 
-    inline TCsvOutputStream& operator<<(const TVector<TString>& values) { 
-        for(const TString& value: values) { 
+    inline TCsvOutputStream& operator<<(const TVector<TString>& values) {
+        for(const TString& value: values) {
             (*this) << value;
         }
         (*this) << Endl;

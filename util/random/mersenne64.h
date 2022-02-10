@@ -15,7 +15,7 @@ namespace NPrivate {
             InitGenRand(s);
         }
 
-        inline TMersenne64(const ui64* keys, size_t len) noexcept 
+        inline TMersenne64(const ui64* keys, size_t len) noexcept
             : mti(NN + 1)
         {
             InitByArray(keys, len);
@@ -23,7 +23,7 @@ namespace NPrivate {
 
         TMersenne64(IInputStream& input);
 
-        inline ui64 GenRand() noexcept { 
+        inline ui64 GenRand() noexcept {
             if (mti >= NN) {
                 InitNext();
             }
@@ -39,9 +39,9 @@ namespace NPrivate {
         }
 
     private:
-        void InitNext() noexcept; 
-        void InitGenRand(ui64 seed) noexcept; 
-        void InitByArray(const ui64* init_key, size_t key_length) noexcept; 
+        void InitNext() noexcept;
+        void InitGenRand(ui64 seed) noexcept;
+        void InitByArray(const ui64* init_key, size_t key_length) noexcept;
 
     private:
         ui64 mt[NN];

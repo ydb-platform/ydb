@@ -19,22 +19,22 @@ namespace {
     };
 
     class TOptsParseResultTestWrapper: public TOptsParseResultException {
-        TVector<const char*> Argv_; 
+        TVector<const char*> Argv_;
 
     public:
-        TOptsParseResultTestWrapper(const TOpts* opts, TVector<const char*> argv) 
+        TOptsParseResultTestWrapper(const TOpts* opts, TVector<const char*> argv)
             : Argv_(argv)
         {
             Init(opts, (int)Argv_.size(), Argv_.data());
         }
     };
 
-    using V = TVector<const char*>; 
+    using V = TVector<const char*>;
 }
 
 struct TOptsParserTester {
     TOptsNoDefault Opts_;
-    TVector<const char*> Argv_; 
+    TVector<const char*> Argv_;
 
     THolder<TOptsParser> Parser_;
 
@@ -58,13 +58,13 @@ struct TOptsParserTester {
         UNIT_ASSERT(Parser_->CurOpt()->CharIs(c));
     }
 
-    void AcceptOption(const TString& optName) { 
+    void AcceptOption(const TString& optName) {
         AcceptOption();
         UNIT_ASSERT(Parser_->CurOpt()->NameIs(optName));
     }
 
     template <typename TOpt>
-    void AcceptOptionWithValue(TOpt optName, const TString& value) { 
+    void AcceptOptionWithValue(TOpt optName, const TString& value) {
         AcceptOption(optName);
         UNIT_ASSERT_VALUES_EQUAL_C(value, Parser_->CurValStr(), "; option " << optName);
     }
@@ -75,7 +75,7 @@ struct TOptsParserTester {
         UNIT_ASSERT_C(!Parser_->CurVal(), ": opt " << optName << " must have no param");
     }
 
-    void AcceptFreeArgInOrder(const TString& expected) { 
+    void AcceptFreeArgInOrder(const TString& expected) {
         Accept();
         UNIT_ASSERT(!Parser_->CurOpt());
         UNIT_ASSERT_VALUES_EQUAL(expected, Parser_->CurValStr());
@@ -114,7 +114,7 @@ struct TOptsParserTester {
         UNIT_ASSERT_VALUES_EQUAL(sop, Parser_->Sop_);
     }
 
-    void AcceptFreeArg(const TString& expected) { 
+    void AcceptFreeArg(const TString& expected) {
         UNIT_ASSERT(Pos_ < Parser_->Argc_);
         UNIT_ASSERT_VALUES_EQUAL(expected, Parser_->Argv_[Pos_]);
         ++Pos_;
@@ -417,7 +417,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
 
     Y_UNIT_TEST(TestStoreResult) {
         TOptsNoDefault opts;
-        TString data; 
+        TString data;
         int number;
         TMaybe<TString> optionalString0, optionalString1;
         TMaybe<int> optionalNumber0, optionalNumber1;
@@ -483,10 +483,10 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
 
     Y_UNIT_TEST(TestSplitValue) {
         TOptsNoDefault opts;
-        TVector<TString> vals; 
+        TVector<TString> vals;
         opts.AddLongOption('s', "split").SplitHandler(&vals, ',');
         TOptsParseResultTestWrapper r(&opts, V({"prog", "--split=a,b,c"}));
-        UNIT_ASSERT_EQUAL(vals.size(), 3); 
+        UNIT_ASSERT_EQUAL(vals.size(), 3);
         UNIT_ASSERT_EQUAL(vals[0], "a");
         UNIT_ASSERT_EQUAL(vals[1], "b");
         UNIT_ASSERT_EQUAL(vals[2], "c");
@@ -494,10 +494,10 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
 
     Y_UNIT_TEST(TestRangeSplitValue) {
         TOptsNoDefault opts;
-        TVector<ui32> vals; 
+        TVector<ui32> vals;
         opts.AddLongOption('s', "split").RangeSplitHandler(&vals, ',', '-');
         TOptsParseResultTestWrapper r(&opts, V({"prog", "--split=1,8-10", "--split=12-14"}));
-        UNIT_ASSERT_EQUAL(vals.size(), 7); 
+        UNIT_ASSERT_EQUAL(vals.size(), 7);
         UNIT_ASSERT_EQUAL(vals[0], 1);
         UNIT_ASSERT_EQUAL(vals[1], 8);
         UNIT_ASSERT_EQUAL(vals[2], 9);
@@ -577,7 +577,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     Y_UNIT_TEST(TestTitleAndPrintUsage) {
         TOpts opts;
         const char* prog = "my_program";
-        TString title = TString("Sample ") + TString(prog).Quote() + " application"; 
+        TString title = TString("Sample ") + TString(prog).Quote() + " application";
         opts.SetTitle(title);
         int argc = 2;
         const char* cmd[] = {prog};
@@ -585,15 +585,15 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         TStringStream out;
         parser.PrintUsage(out);
         // find title
-        UNIT_ASSERT(out.Str().find(title) != TString::npos); 
+        UNIT_ASSERT(out.Str().find(title) != TString::npos);
         // find usage
-        UNIT_ASSERT(out.Str().find(" " + TString(prog) + " ") != TString::npos); 
+        UNIT_ASSERT(out.Str().find(" " + TString(prog) + " ") != TString::npos);
     }
 
     Y_UNIT_TEST(TestCustomCmdLineDescr) {
         TOpts opts;
         const char* prog = "my_program";
-        TString customDescr = "<FILE|TABLE> USER [OPTIONS]"; 
+        TString customDescr = "<FILE|TABLE> USER [OPTIONS]";
         int argc = 2;
         const char* cmd[] = {prog};
         opts.SetCmdLineDescr(customDescr);
@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         TStringStream out;
         parser.PrintUsage(out);
         // find custom usage
-        UNIT_ASSERT(out.Str().find(customDescr) != TString::npos); 
+        UNIT_ASSERT(out.Str().find(customDescr) != TString::npos);
     }
 
     Y_UNIT_TEST(TestColorPrint) {
@@ -622,28 +622,28 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         parser.PrintUsage(out, colors);
 
         // find options and green color
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "--long_option" << colors.OldColor()) != TString::npos); 
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "--other" << colors.OldColor()) != TString::npos); 
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "-o" << colors.OldColor()) != TString::npos); 
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "-d" << colors.OldColor()) != TString::npos); 
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "-s" << colors.OldColor()) != TString::npos); 
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "--long_option" << colors.OldColor()) != TString::npos);
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "--other" << colors.OldColor()) != TString::npos);
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "-o" << colors.OldColor()) != TString::npos);
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "-d" << colors.OldColor()) != TString::npos);
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "-s" << colors.OldColor()) != TString::npos);
 
         // find default values
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.CyanColor() << "42" << colors.OldColor()) != TString::npos); 
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.CyanColor() << "\"str_default\"" << colors.OldColor()) != TString::npos); 
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.CyanColor() << "42" << colors.OldColor()) != TString::npos);
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.CyanColor() << "\"str_default\"" << colors.OldColor()) != TString::npos);
 
         // find free args
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "123" << colors.OldColor()) != TString::npos); 
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "456" << colors.OldColor()) != TString::npos); 
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "first_free_arg" << colors.OldColor()) != TString::npos); 
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "123" << colors.OldColor()) != TString::npos);
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "456" << colors.OldColor()) != TString::npos);
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "first_free_arg" << colors.OldColor()) != TString::npos);
         // free args without help not rendered even if they have custom title
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "second_free_arg" << colors.OldColor()) == TString::npos);
 
         // find signatures
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Usage" << colors.OldColor()) != TString::npos); 
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Required parameters" << colors.OldColor()) != TString::npos); 
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Optional parameters" << colors.OldColor()) != TString::npos); 
-        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Free args" << colors.OldColor()) != TString::npos); 
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Usage" << colors.OldColor()) != TString::npos);
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Required parameters" << colors.OldColor()) != TString::npos);
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Optional parameters" << colors.OldColor()) != TString::npos);
+        UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Free args" << colors.OldColor()) != TString::npos);
 
         // find sections
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Section" << colors.OldColor() << ":") != TString::npos);
@@ -652,10 +652,10 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         // print without colors
         TStringStream out2;
         opts.PrintUsage(prog, out2);
-        UNIT_ASSERT(out2.Str().find(colors.GreenColor()) == TString::npos); 
-        UNIT_ASSERT(out2.Str().find(colors.CyanColor()) == TString::npos); 
-        UNIT_ASSERT(out2.Str().find(colors.BoldColor()) == TString::npos); 
-        UNIT_ASSERT(out2.Str().find(colors.OldColor()) == TString::npos); 
+        UNIT_ASSERT(out2.Str().find(colors.GreenColor()) == TString::npos);
+        UNIT_ASSERT(out2.Str().find(colors.CyanColor()) == TString::npos);
+        UNIT_ASSERT(out2.Str().find(colors.BoldColor()) == TString::npos);
+        UNIT_ASSERT(out2.Str().find(colors.OldColor()) == TString::npos);
     }
 
     Y_UNIT_TEST(TestPadding) {
@@ -675,21 +675,21 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
             NColorizer::TColors colors(withColors);
             parser.PrintUsage(out, colors);
 
-            TString printed = out.Str(); 
+            TString printed = out.Str();
             if (withColors) {
                 // remove not printable characters
-                SubstGlobal(printed, TString(colors.BoldColor()), ""); 
-                SubstGlobal(printed, TString(colors.GreenColor()), ""); 
-                SubstGlobal(printed, TString(colors.CyanColor()), ""); 
-                SubstGlobal(printed, TString(colors.OldColor()), ""); 
+                SubstGlobal(printed, TString(colors.BoldColor()), "");
+                SubstGlobal(printed, TString(colors.GreenColor()), "");
+                SubstGlobal(printed, TString(colors.CyanColor()), "");
+                SubstGlobal(printed, TString(colors.OldColor()), "");
             }
-            TVector<TString> lines; 
+            TVector<TString> lines;
             StringSplitter(printed).Split('\n').SkipEmpty().Collect(&lines);
             UNIT_ASSERT(!lines.empty());
-            TVector<size_t> indents; 
-            for (const TString& line : lines) { 
+            TVector<size_t> indents;
+            for (const TString& line : lines) {
                 const size_t indent = line.find("description ");
-                if (indent != TString::npos) 
+                if (indent != TString::npos)
                     indents.push_back(indent);
             }
             UNIT_ASSERT_VALUES_EQUAL(indents.size(), 7);
@@ -701,7 +701,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     }
 
     Y_UNIT_TEST(TestAppendTo) {
-        TVector<int> ints; 
+        TVector<int> ints;
 
         TOptsNoDefault opts;
         opts.AddLongOption("size").AppendTo(&ints);

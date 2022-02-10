@@ -177,7 +177,7 @@ private:
     TInstant CreationTime;
     THashSet<TPathId> AffectedTables;
     TVector<TPointKey> Points;
-    TVector<TRangeKey> Ranges; 
+    TVector<TRangeKey> Ranges;
     bool ShardLock = false;
 
     std::optional<TRowVersion> BreakVersion;
@@ -228,7 +228,7 @@ public:
 
 private:
     const TPathId TableId;
-    TVector<NScheme::TTypeId> KeyColumnTypes; 
+    TVector<NScheme::TTypeId> KeyColumnTypes;
     TRangeTreap<TLockInfo*> Ranges;
 };
 
@@ -330,10 +330,10 @@ public:
 
 private:
     THolder<TLocksDataShard> Self;
-    THashMap<ui64, TLockInfo::TPtr> Locks; // key is LockId 
+    THashMap<ui64, TLockInfo::TPtr> Locks; // key is LockId
     THashMap<TPathId, TTableLocks::TPtr> Tables;
-    THashSet<ui64> ShardLocks; 
-    TVector<ui64> BrokenLocks; // LockIds of broken locks (optimisation) 
+    THashSet<ui64> ShardLocks;
+    TVector<ui64> BrokenLocks; // LockIds of broken locks (optimisation)
     TVector<ui64> CleanupPending; // LockIds of broken locks with pending cleanup
     TPriorityQueue<TVersionedLockId> BrokenCandidates;
     TPriorityQueue<TVersionedLockId> CleanupCandidates;
@@ -356,11 +356,11 @@ private:
 /// A portion of locks update
 struct TLocksUpdate {
     ui64 LockTxId = 0;
-    TVector<TPointKey> PointLocks; 
-    TVector<TRangeKey> RangeLocks; 
-    TVector<TPointKey> PointBreaks; 
+    TVector<TPointKey> PointLocks;
+    TVector<TRangeKey> RangeLocks;
+    TVector<TPointKey> PointBreaks;
     THashSet<TPathId> AllBreaks;
-    TVector<ui64> Erases; 
+    TVector<ui64> Erases;
     bool ShardLock = false;
     bool ShardBreak = false;
     THashSet<TPathId> AffectedTables;

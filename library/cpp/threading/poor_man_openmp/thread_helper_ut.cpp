@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/yexception.h>
 
 Y_UNIT_TEST_SUITE(TestMP) {
@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(TestMP) {
             }
         };
 
-        TString s; 
+        TString s;
 
         try {
             NYmp::ParallelForStaticAutoChunk(0, 10, f);

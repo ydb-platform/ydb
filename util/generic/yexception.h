@@ -2,7 +2,7 @@
 
 #include "bt_exception.h"
 #include "strbuf.h"
-#include "string.h" 
+#include "string.h"
 #include "utility.h"
 #include "va_args.h"
 #include <utility>
@@ -46,8 +46,8 @@ namespace NPrivateException {
         yexception& operator=(const yexception&) = default;
         yexception& operator=(yexception&&) = default;
 
-        const char* what() const noexcept override; 
-        virtual const TBackTrace* BackTrace() const noexcept; 
+        const char* what() const noexcept override;
+        virtual const TBackTrace* BackTrace() const noexcept;
 
         template <class T>
         inline void Append(const T& t) {
@@ -154,7 +154,7 @@ namespace NPrivate {
 
 void fputs(const std::exception& e, FILE* f = stderr);
 
-TString CurrentExceptionMessage(); 
+TString CurrentExceptionMessage();
 
 /*
  * A neat method that detects wrether stack unwinding is in progress.
@@ -169,7 +169,7 @@ TString CurrentExceptionMessage();
  *
  * DO NOT USE THIS METHOD IN DESTRUCTORS.
  */
-bool UncaughtException() noexcept; 
+bool UncaughtException() noexcept;
 
 std::string CurrentExceptionTypeName();
 

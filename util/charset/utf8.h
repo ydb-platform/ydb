@@ -3,7 +3,7 @@
 #include "recode_result.h"
 
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/yexception.h>
 #include <util/system/defaults.h>
 #include <util/system/yassert.h>
@@ -134,7 +134,7 @@ inline bool GetNumberOfUTF8Chars(const char* text, size_t len, size_t& number) {
 inline size_t GetNumberOfUTF8Chars(TStringBuf text) {
     size_t number;
     if (!GetNumberOfUTF8Chars(text.data(), text.size(), number)) {
-        ythrow yexception() << "GetNumberOfUTF8Chars failed on invalid utf-8 " << TString(text.substr(0, 50)).Quote(); 
+        ythrow yexception() << "GetNumberOfUTF8Chars failed on invalid utf-8 " << TString(text.substr(0, 50)).Quote();
     }
     return number;
 }
@@ -369,11 +369,11 @@ inline bool IsUtf(const TStringBuf input) {
 
 //! returns true, if result is not the same as input, and put it in newString
 //! returns false, if result is unmodified
-bool ToLowerUTF8Impl(const char* beg, size_t n, TString& newString); 
+bool ToLowerUTF8Impl(const char* beg, size_t n, TString& newString);
 
-TString ToLowerUTF8(const TString& s); 
-TString ToLowerUTF8(TStringBuf s); 
-TString ToLowerUTF8(const char* s); 
+TString ToLowerUTF8(const TString& s);
+TString ToLowerUTF8(TStringBuf s);
+TString ToLowerUTF8(const char* s);
 
 inline TString ToLowerUTF8(const std::string& s) {
     return ToLowerUTF8(TStringBuf(s));

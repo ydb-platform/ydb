@@ -26,7 +26,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    TFixedBufferFileOutput out(argv[1]); 
+    TFixedBufferFileOutput out(argv[1]);
 
     argv = argv + 2;
     out << "#include <library/cpp/resource/registry.h>\n\n";

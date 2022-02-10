@@ -90,12 +90,12 @@ namespace {
     struct TContext {
         struct TFrame {
             THashMap<TString, TExprNode::TListType> Bindings;
-            THashMap<TString, TString> Imports; 
+            THashMap<TString, TString> Imports;
             TExprNode::TListType Return;
         };
 
         TExprContext& Expr;
-        TVector<TFrame> Frames; 
+        TVector<TFrame> Frames;
         TLibraryCohesion Cohesion;
 
         TNodeOnNodeOwnedMap DeepClones;
@@ -111,7 +111,7 @@ namespace {
         {
         }
 
-        void AddError(const TAstNode& node, const TString& message) { 
+        void AddError(const TAstNode& node, const TString& message) {
             Expr.AddError(TIssue(node.GetPosition(), message));
         }
 
@@ -141,14 +141,14 @@ namespace {
             return {};
         }
 
-        TString FindImport(const TStringBuf& name) const { 
+        TString FindImport(const TStringBuf& name) const {
             for (auto it = Frames.crbegin(); it != Frames.crend(); ++it) {
                 const auto r = it->Imports.find(name);
                 if (it->Imports.cend() != r)
                     return r->second;
             }
 
-            return TString(); 
+            return TString();
         }
 
         const TTypeAnnotationNode* CompileTypeAnnotation(const TAstNode& node) {
@@ -253,7 +253,7 @@ namespace {
 
                     return Expr.MakeType<TStreamExprType>(r);
                 } else if (content == TStringBuf("Struct")) {
-                    TVector<const TItemExprType*> children; 
+                    TVector<const TItemExprType*> children;
                     for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
                         auto r = CompileTypeAnnotationNode(*node.GetChild(index));
                         if (!r)
@@ -290,7 +290,7 @@ namespace {
 
                     return ann;
                 } else if (content == TStringBuf("Tuple")) {
-                    TTypeAnnotationNode::TListType children; 
+                    TTypeAnnotationNode::TListType children;
                     for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
                         auto r = CompileTypeAnnotationNode(*node.GetChild(index));
                         if (!r)
@@ -315,7 +315,7 @@ namespace {
                     if (!r)
                         return nullptr;
 
-                    return Expr.MakeType<TItemExprType>(TString(node.GetChild(1)->GetContent()), r); 
+                    return Expr.MakeType<TItemExprType>(TString(node.GetChild(1)->GetContent()), r);
                 } else if (content == TStringBuf("Optional")) {
                     if (node.GetChildrenCount() != 2) {
                         AddError(node, "Bad optional type annotation");
@@ -366,9 +366,9 @@ namespace {
                         return nullptr;
                     }
 
-                    TVector<TCallableExprType::TArgumentInfo> args; 
+                    TVector<TCallableExprType::TArgumentInfo> args;
                     size_t optCount = 0;
-                    TString payload; 
+                    TString payload;
                     if (!node.GetChild(1)->IsList()) {
                         AddError(node, "Bad callable annotation - expected list");
                         return nullptr;
@@ -465,7 +465,7 @@ namespace {
                         return nullptr;
                     }
 
-                    return Expr.MakeType<TResourceExprType>(TString(node.GetChild(1)->GetContent())); 
+                    return Expr.MakeType<TResourceExprType>(TString(node.GetChild(1)->GetContent()));
                 } else if (content == TStringBuf("Tagged")) {
                     if (node.GetChildrenCount() != 3 || !node.GetChild(2)->IsAtom()) {
                         AddError(node, "Bad tagged type annotation");
@@ -476,7 +476,7 @@ namespace {
                     if (!type)
                         return nullptr;
 
-                    TString tag(node.GetChild(2)->GetContent()); 
+                    TString tag(node.GetChild(2)->GetContent());
                     auto ann = Expr.MakeType<TTaggedExprType>(type, tag);
                     if (!ann->Validate(node.GetPosition(), Expr)) {
                         return nullptr;
@@ -817,9 +817,9 @@ namespace {
 
     TExprNode::TPtr CompileQuote(const TAstNode& node, TContext& ctx) {
         if (node.IsAtom()) {
-            return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), TString(node.GetContent()), node.GetFlags())); 
+            return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), TString(node.GetContent()), node.GetFlags()));
         } else {
-            TExprNode::TListType children; 
+            TExprNode::TListType children;
             children.reserve(node.GetChildrenCount());
             for (ui32 index = 0; index < node.GetChildrenCount(); ++index) {
                 auto r = Compile(*node.GetChild(index), ctx);
@@ -855,10 +855,10 @@ namespace {
         }
 
         ctx.PushFrame();
-        TExprNode::TListType argNodes; 
+        TExprNode::TListType argNodes;
         for (ui32 index = 0; index < params->GetChildrenCount(); ++index) {
             auto arg = params->GetChild(index);
-            auto lambdaArg = ctx.ProcessNode(*arg, ctx.Expr.NewArgument(arg->GetPosition(), TString(arg->GetContent()))); 
+            auto lambdaArg = ctx.ProcessNode(*arg, ctx.Expr.NewArgument(arg->GetPosition(), TString(arg->GetContent())));
             argNodes.push_back(lambdaArg);
             auto& binding = ctx.Frames.back().Bindings[arg->GetContent()];
             if (!binding.empty()) {
@@ -967,7 +967,7 @@ namespace {
         } else {
             const auto stub = ctx.Expr.NewAtom(node.GetPosition(), "stub");
             ctx.Frames.back().Bindings[name->GetContent()] = {stub};
-            ctx.Cohesion.Imports[stub.Get()] = std::make_pair(import, TString(aliasValue)); 
+            ctx.Cohesion.Imports[stub.Get()] = std::make_pair(import, TString(aliasValue));
             return stub;
         }
     }
@@ -1371,7 +1371,7 @@ namespace {
             return CompileFunction(*quotedList->GetChild(1), ctx);
         }
 
-        TExprNode::TListType children; 
+        TExprNode::TListType children;
         children.reserve(node.GetChildrenCount() - 1U);
         for (auto index = 1U; index < node.GetChildrenCount(); ++index) {
             auto r = Compile(*node.GetChild(index), ctx);
@@ -1389,7 +1389,7 @@ namespace {
         size_t Parent = 0;
         std::map<size_t, const TExprNode*> Nodes;
         std::vector<const TExprNode*> TopoSortedNodes;
-        TNodeMap<TString> Bindings; 
+        TNodeMap<TString> Bindings;
     };
 
     struct TVisitNodeContext {
@@ -1412,14 +1412,14 @@ namespace {
 
         TNodeMap<TCounters> References;
 
-        const TString& FindBinding(const TExprNode* node) const { 
+        const TString& FindBinding(const TExprNode* node) const {
             for (const auto* frame = CurrentFrame; frame; frame = frame->Index > 0 ? &Frames[frame->Parent] : nullptr) {
                 const auto it = frame->Bindings.find(node);
                 if (frame->Bindings.cend() != it)
                     return it->second;
             }
 
-            static const TString stub; 
+            static const TString stub;
             return stub;
         }
 
@@ -2170,7 +2170,7 @@ TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMa
                 }
 
                 const auto& args = start->Head();
-                TExprNode::TListType newArgsList; 
+                TExprNode::TListType newArgsList;
                 newArgsList.reserve(args.ChildrenSize());
                 args.ForEachChild([&](const TExprNode& arg) {
                     const auto argIt = newReplaces.find(&arg);
@@ -2192,7 +2192,7 @@ TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMa
                 return target;
             } else {
                 bool replaced = false;
-                TExprNode::TListType newChildren; 
+                TExprNode::TListType newChildren;
                 newChildren.reserve(start->ChildrenSize());
                 for (const auto& child : start->Children()) {
                     auto newChild = DoReplace<KeepTypeAnns>(child, replaces, localReplaces, changes, processed, ctx);
@@ -2308,7 +2308,7 @@ TExprNode::TPtr TExprContext::ReplaceNode(TExprNode::TPtr&& start, const TExprNo
         }
 
         if (argIndex) {
-            TExprNode::TListType newArgNodes; 
+            TExprNode::TListType newArgNodes;
             newArgNodes.reserve(args.ChildrenSize());
             TNodeOnNodeOwnedMap replaces(args.ChildrenSize());
 
@@ -2420,7 +2420,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, u
     return ConvertToAst(root, exprContext, settings);
 }
 
-TString TExprNode::Dump() const { 
+TString TExprNode::Dump() const {
     TNodeSet visited;
     TStringStream out;
     DumpNode(*this, out, 0, visited);
@@ -2444,7 +2444,7 @@ TExprNode::TPtr TExprContext::ShallowCopy(const TExprNode& node) {
     return newNode;
 }
 
-TExprNode::TPtr TExprContext::ChangeChildren(const TExprNode& node, TExprNode::TListType&& children) { 
+TExprNode::TPtr TExprContext::ChangeChildren(const TExprNode& node, TExprNode::TListType&& children) {
     const auto newNode = node.ChangeChildren(AllocateNextUniqueId(), std::move(children));
     ExprNodes.emplace_back(newNode.Get());
     return newNode;
@@ -2456,7 +2456,7 @@ TExprNode::TPtr TExprContext::ChangeChild(const TExprNode& node, ui32 index, TEx
     return newNode;
 }
 
-TExprNode::TPtr TExprContext::ExactChangeChildren(const TExprNode& node, TExprNode::TListType&& children) { 
+TExprNode::TPtr TExprContext::ExactChangeChildren(const TExprNode& node, TExprNode::TListType&& children) {
     const auto newNode = node.ChangeChildren(AllocateNextUniqueId(), std::move(children));
     newNode->SetTypeAnn(node.GetTypeAnn());
     newNode->CopyConstraints(node);
@@ -2513,7 +2513,7 @@ TExprNode::TPtr TExprContext::DeepCopyLambda(const TExprNode& node, TExprNode::T
 
     TNodeOnNodeOwnedMap replaces(prevArgs.ChildrenSize());
 
-    TExprNode::TListType newArgNodes; 
+    TExprNode::TListType newArgNodes;
     newArgNodes.reserve(prevArgs.ChildrenSize());
     prevArgs.ForEachChild([&](const TExprNode& arg) {
         auto newArg = ShallowCopy(arg);
@@ -2724,7 +2724,7 @@ bool TStructExprType::Validate(TPosition position, TExprContext& ctx) const {
         return false;
     }
 
-    TString lastName; 
+    TString lastName;
     for (auto& item : Items) {
         if (!item->Validate(position, ctx)) {
             return false;
@@ -3064,14 +3064,14 @@ const TDataExprParamsType* TMakeTypeImpl<TDataExprParamsType>::Make(TExprContext
 }
 
 const TCallableExprType* TMakeTypeImpl<TCallableExprType>::Make(
-    TExprContext& ctx, const TTypeAnnotationNode* returnType, const TVector<TCallableExprType::TArgumentInfo>& arguments, 
+    TExprContext& ctx, const TTypeAnnotationNode* returnType, const TVector<TCallableExprType::TArgumentInfo>& arguments,
     size_t optionalArgumentsCount, const TStringBuf& payload) {
     const auto hash = TCallableExprType::MakeHash(returnType, arguments, optionalArgumentsCount, payload);
     TCallableExprType sample(hash, returnType, arguments, optionalArgumentsCount, payload);
     if (const auto found = FindType(sample, ctx))
         return found;
 
-    TVector<TCallableExprType::TArgumentInfo> newArgs; 
+    TVector<TCallableExprType::TArgumentInfo> newArgs;
     newArgs.reserve(arguments.size());
     for (const auto& x : arguments) {
         TCallableExprType::TArgumentInfo arg;
@@ -3104,7 +3104,7 @@ const TTaggedExprType* TMakeTypeImpl<TTaggedExprType>::Make(
 }
 
 const TStructExprType* TMakeTypeImpl<TStructExprType>::Make(
-    TExprContext& ctx, const TVector<const TItemExprType*>& items) { 
+    TExprContext& ctx, const TVector<const TItemExprType*>& items) {
     if (items.empty())
         return MakeSinglethonType<TStructExprType>(ctx, items);
 
@@ -3130,7 +3130,7 @@ const TMultiExprType* TMakeTypeImpl<TMultiExprType>::Make(TExprContext& ctx, con
     return AddType<TMultiExprType>(ctx, hash, items);
 }
 
-const TTupleExprType* TMakeTypeImpl<TTupleExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode::TListType& items) { 
+const TTupleExprType* TMakeTypeImpl<TTupleExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode::TListType& items) {
     if (items.empty())
         return MakeSinglethonType<TTupleExprType>(ctx, items);
 

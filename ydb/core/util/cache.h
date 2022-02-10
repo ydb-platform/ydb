@@ -401,9 +401,9 @@ private:
 };
 
 template <typename TKey, typename TValue, typename TStatisticsPolicy = TDefaultStatisticsPolicy>
-class TUnboundedCacheOnMap : public TUnboundedCacheBase<TKey, TValue, TMap<TKey, TValue>, TStatisticsPolicy> { 
+class TUnboundedCacheOnMap : public TUnboundedCacheBase<TKey, TValue, TMap<TKey, TValue>, TStatisticsPolicy> {
 public:
-    using TBase = TUnboundedCacheBase<TKey, TValue, TMap<TKey, TValue>, TStatisticsPolicy>; 
+    using TBase = TUnboundedCacheBase<TKey, TValue, TMap<TKey, TValue>, TStatisticsPolicy>;
     using TMeasureCallback = typename TBase::TMeasureCallback;
     TUnboundedCacheOnMap()
     {}
@@ -414,9 +414,9 @@ public:
 };
 
 template <typename TKey, typename TValue, typename TKeyHash = ::THash<TKey>, typename TStatisticsPolicy = TDefaultStatisticsPolicy>
-class TUnboundedCacheOnHash : public TUnboundedCacheBase<TKey, TValue, THashMap<TKey, TValue, TKeyHash>, TStatisticsPolicy> { 
+class TUnboundedCacheOnHash : public TUnboundedCacheBase<TKey, TValue, THashMap<TKey, TValue, TKeyHash>, TStatisticsPolicy> {
 public:
-    using TBase = TUnboundedCacheBase<TKey, TValue, THashMap<TKey, TValue, TKeyHash>, TStatisticsPolicy>; 
+    using TBase = TUnboundedCacheBase<TKey, TValue, THashMap<TKey, TValue, TKeyHash>, TStatisticsPolicy>;
     using TMeasureCallback = typename TBase::TMeasureCallback;
     TUnboundedCacheOnHash()
     {}
@@ -493,8 +493,8 @@ public:
         };
     };
 
-    typedef TIntrusiveList<TItem> TListType; 
-    typedef THashSet<TItem, typename TItem::THash> TIndex; 
+    typedef TIntrusiveList<TItem> TListType;
+    typedef THashSet<TItem, typename TItem::THash> TIndex;
 
     bool DoFind(const TKey& key, TValue*& value) {
         TItem tmpItem(key);
@@ -570,7 +570,7 @@ private:
     }
 
 private:
-    TListType List; 
+    TListType List;
     TIndex Index;
 };
 
@@ -592,7 +592,7 @@ public:
     typedef T2QCache<TKey, TValue, TKeyHash, TStatisticsPolicy> TSelf;
     typedef typename TBase::TMeasureCallback TMeasureCallback;
     typedef typename TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>::TItem TItem;
-    typedef typename TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>::TListType TListType; 
+    typedef typename TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>::TListType TListType;
     typedef typename TLruCache<TKey, TValue, TKeyHash, TStatisticsPolicy>::TIndex TIndex;
 
     struct TItemKey : public TIntrusiveListItem <TItemKey> {
@@ -623,7 +623,7 @@ public:
     };
 
     typedef TIntrusiveList<TItemKey> TKeyList;
-    typedef THashSet<TItemKey, typename TItemKey::THash> TKeyIndex; 
+    typedef THashSet<TItemKey, typename TItemKey::THash> TKeyIndex;
 
     explicit T2QCache(const TIntrusivePtr<T2QCacheConfig>& config)
         : T2QCache(config, &TBase::DefaultMeasureCallback)
@@ -797,9 +797,9 @@ private:
 private:
     const TIntrusivePtr<T2QCacheConfig> Config;
     TIndex MainIndex;
-    TListType MainList; 
+    TListType MainList;
     TIndex InIndex;
-    TListType InList; 
+    TListType InList;
     ui64 InSize;
     TKeyIndex OutIndex;
     TKeyList OutList;

@@ -44,20 +44,20 @@ struct TMiniKQLCompileActorEvents {
     };
     static_assert(End < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect End < EventSpaceEnd(TEvents::ES_PRIVATE)");
     struct TEvCompileResult : public NActors::TEventBase<TEvCompileResult, CompileResult> {
-        explicit TEvCompileResult(const TMiniKQLCompileResult& result, THashMap<TString, ui64> &&resolveCookies); 
+        explicit TEvCompileResult(const TMiniKQLCompileResult& result, THashMap<TString, ui64> &&resolveCookies);
         DEFINE_SIMPLE_LOCAL_EVENT(TEvCompileResult, "EvCompileResult");
 
         TMiniKQLCompileResult Result;
-        THashMap<TString, ui64> CompileResolveCookies; 
+        THashMap<TString, ui64> CompileResolveCookies;
     };
 };
 
 NActors::IActor*
-CreateCompileActor(const TString& program, 
+CreateCompileActor(const TString& program,
                    const NKikimr::NMiniKQL::TTypeEnvironment* typeEnv,
                    IDbSchemeResolver* dbSchemeResolver,
                    NActors::TActorId responseTo,
-                   THashMap<TString, ui64> &&resolveRefreshCookies, 
+                   THashMap<TString, ui64> &&resolveRefreshCookies,
                    bool forceCacheRefresh); // TEvCompileResult.
 
 } // namespace NYql

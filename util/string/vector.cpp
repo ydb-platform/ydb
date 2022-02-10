@@ -22,7 +22,7 @@ static inline void DoSplit1(TConsumer& cc, TDelim& d, const TBasicStringBuf<TChr
 
 template <class C, class TDelim, typename TChr>
 static inline void DoSplit0(C* res, const TBasicStringBuf<TChr> str, TDelim& d, size_t maxFields, int options) {
-    using TStringType = std::conditional_t<std::is_same<TChr, wchar16>::value, TUtf16String, TString>; 
+    using TStringType = std::conditional_t<std::is_same<TChr, wchar16>::value, TUtf16String, TString>;
     res->clear();
 
     if (!str.data()) {
@@ -79,13 +79,13 @@ void ::NPrivate::SplitStringImpl(TVector<TUtf16String>* res, const wchar16* ptr,
     return SplitStringImplT<wchar16>(res, TWtringBuf(ptr, len), delimiter, maxFields, options);
 }
 
-TUtf16String JoinStrings(const TVector<TUtf16String>& v, const TWtringBuf delim) { 
-    return JoinStrings(v.begin(), v.end(), delim); 
+TUtf16String JoinStrings(const TVector<TUtf16String>& v, const TWtringBuf delim) {
+    return JoinStrings(v.begin(), v.end(), delim);
 }
 
-TUtf16String JoinStrings(const TVector<TUtf16String>& v, size_t index, size_t count, const TWtringBuf delim) { 
+TUtf16String JoinStrings(const TVector<TUtf16String>& v, size_t index, size_t count, const TWtringBuf delim) {
     const size_t f = Min(index, v.size());
     const size_t l = f + Min(count, v.size() - f);
 
-    return JoinStrings(v.begin() + f, v.begin() + l, delim); 
+    return JoinStrings(v.begin() + f, v.begin() + l, delim);
 }

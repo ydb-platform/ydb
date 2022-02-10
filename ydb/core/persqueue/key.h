@@ -117,7 +117,7 @@ public:
     {
     }
 
-    TKey(const TString& data) 
+    TKey(const TString& data)
     {
         Assign(data.data(), data.size());
         Y_VERIFY(data.size() == KeySize() + IsHead());
@@ -140,8 +140,8 @@ public:
     virtual ~TKey()
     {}
 
-    TString ToString() const { 
-        return TString(Data(), Size()); 
+    TString ToString() const {
+        return TString(Data(), Size());
     }
 
     void SetHead(const bool isHead) {

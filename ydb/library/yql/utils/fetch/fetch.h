@@ -5,7 +5,7 @@
 #include <library/cpp/http/io/stream.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/ptr.h>
 
 namespace NYql {

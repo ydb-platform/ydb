@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         SetupTabletServices(runtime);
 
         TActorId sender = runtime.AllocateEdgeActor();
-        TVector<ui64> tabletIds; 
+        TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
         auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
@@ -721,7 +721,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
 
         TActorId sender = runtime.AllocateEdgeActor();
 
-        TVector<ui64> tabletIds; 
+        TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
         auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
@@ -878,7 +878,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
         TActorId sender = runtime.AllocateEdgeActor();
-        TVector<ui64> tabletIds; 
+        TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
         auto scheduledEventsGuard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender);
@@ -988,7 +988,7 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
         TActorId sender1 = runtime.AllocateEdgeActor(0);
         TActorId sender2 = runtime.AllocateEdgeActor(1);
 
-        TVector<ui64> tabletIds; 
+        TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
         auto guard = CreateTabletScheduledEventsGuard(tabletIds, runtime, sender1);

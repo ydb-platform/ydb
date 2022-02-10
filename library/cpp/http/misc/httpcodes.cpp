@@ -1,6 +1,6 @@
 #include "httpcodes.h"
 
-TStringBuf HttpCodeStrEx(int code) noexcept { 
+TStringBuf HttpCodeStrEx(int code) noexcept {
     switch (code) {
         case HTTP_CONTINUE:
             return TStringBuf("100 Continue");

@@ -36,7 +36,7 @@ public:
         };
 
         for (const T* t = tests; t != std::end(tests); ++t) {
-            TString str(t->Str); 
+            TString str(t->Str);
             RemoveAll(str, t->Ch);
             UNIT_ASSERT_EQUAL(t->Result, str);
         }

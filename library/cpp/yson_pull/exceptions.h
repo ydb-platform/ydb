@@ -2,7 +2,7 @@
 
 #include "position_info.h"
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #include <stdexcept>
 #include <string>
@@ -10,13 +10,13 @@
 namespace NYsonPull {
     namespace NException {
         class TBadStream: public std::exception {
-            TString Message_; 
+            TString Message_;
             TPositionInfo Position_;
-            mutable TString FormattedMessage_; 
+            mutable TString FormattedMessage_;
 
         public:
             TBadStream(
-                TString message, 
+                TString message,
                 const TPositionInfo& position)
                 : Message_(std::move(message))
                 , Position_(position)

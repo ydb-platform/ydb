@@ -39,7 +39,7 @@ public:
     void WriteData(const TLogRecord& rec) override;
     void ReopenLog() override;
 
-    virtual TString GetIdent() const { 
+    virtual TString GetIdent() const {
         return Ident;
     }
 
@@ -54,7 +54,7 @@ public:
 protected:
     int ELogPriority2SyslogPriority(ELogPriority priority);
 
-    TString Ident; 
+    TString Ident;
     EFacility Facility;
     int Flags;
 };

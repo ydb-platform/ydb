@@ -13,7 +13,7 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/yexception.h>
 #include <util/generic/variant.h>
 
@@ -31,7 +31,7 @@ namespace NKikimr {
 TDuration ParseDuration(const TStringBuf& str);
 
 // all modes use common argument format
-const TString ArgFormatDescription(); 
+const TString ArgFormatDescription();
 
 struct TCommandConfig {
     TMaybe<std::variant<NMsgBusProxy::TMsgBusClientConfig, NGRpcProxy::TGRpcClientConfig>> ClientConfig;
@@ -78,14 +78,14 @@ template<> struct TCliCommands<MODES_ENUM> {\
 \
     TCliCommands(): Mode( (DEFAULT_VALUE) ) {}\
 \
-    static TString CommandsCsv() {\ 
+    static TString CommandsCsv() {\
         TStringStream commandsList;\
         bool first = true;\
         MODES_MAP(APPEND_ENUM);\
         return commandsList.Str();\
     }\
 \
-    static TString CommandsDescription(const TString& toolName) {\ 
+    static TString CommandsDescription(const TString& toolName) {\
         TStringStream helpStream;\
         helpStream << "[global options...] <command> [command options...] [mbus] [messagebus options...]";\
         helpStream << "\n\nAvailable commands are:\n";\

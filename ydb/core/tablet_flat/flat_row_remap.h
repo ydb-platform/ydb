@@ -30,7 +30,7 @@ namespace NTable {
 
         static TRemap Full(const TRowScheme& scheme)
         {
-            TVector<ui32> tags(scheme.Cols.size()); 
+            TVector<ui32> tags(scheme.Cols.size());
             for (auto &col: scheme.Cols)
                 tags[col.Pos] = col.Tag;
 
@@ -92,7 +92,7 @@ namespace NTable {
         TSmallVec<TPin> KeyPins_;
         TSmallVec<NScheme::TTypeId> Types_;
         TSmallVec<TCell> Nulls_;
-        THashMap<TTag, TPos> Tag2Pos; 
+        THashMap<TTag, TPos> Tag2Pos;
     };
 
 }}

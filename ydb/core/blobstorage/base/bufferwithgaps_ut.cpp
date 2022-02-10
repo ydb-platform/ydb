@@ -7,16 +7,16 @@ Y_UNIT_TEST_SUITE(BufferWithGaps) {
 
     Y_UNIT_TEST(Basic) {
         TBufferWithGaps buffer(0);
-        TString data = "Hello!"; 
-        buffer.SetData(TString(data)); 
+        TString data = "Hello!";
+        buffer.SetData(TString(data));
         UNIT_ASSERT_STRINGS_EQUAL(data, buffer.Substr(0, buffer.Size()));
     }
 
     Y_UNIT_TEST(IsReadable) {
         TBufferWithGaps buffer(0);
-        TString data = "Hello! How are you? I'm fine, and you? Me too, thanks!"; 
-        TString gaps = "G           GGGG           GG              GGG G     G"; 
-        buffer.SetData(TString(data)); 
+        TString data = "Hello! How are you? I'm fine, and you? Me too, thanks!";
+        TString gaps = "G           GGGG           GG              GGG G     G";
+        buffer.SetData(TString(data));
         for (size_t k = 0; k < gaps.size(); ++k) {
             if (gaps[k] != ' ') {
                 buffer.AddGap(k, k + 1);

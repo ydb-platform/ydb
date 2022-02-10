@@ -22,7 +22,7 @@ using NYql::EnsureDynamicCast;
 namespace {
 
 class THashedMultiMapAccumulator {
-    using TMapType = std::unordered_map< 
+    using TMapType = std::unordered_map<
         NUdf::TUnboxedValue,
         TUnboxedValueVector,
         NYql::TVaryingHash<NUdf::TUnboxedValue, TValueHasher>,
@@ -35,7 +35,7 @@ class THashedMultiMapAccumulator {
     bool IsTuple;
     std::optional<TValuePacker> Packer;
 
-    TMapType Map; 
+    TMapType Map;
 
 public:
     THashedMultiMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
@@ -86,7 +86,7 @@ public:
 };
 
 class THashedMapAccumulator {
-    using TMapType = TValuesDictHashMap; 
+    using TMapType = TValuesDictHashMap;
 
     TComputationContext& Ctx;
     TType* KeyType;
@@ -94,7 +94,7 @@ class THashedMapAccumulator {
     const bool IsTuple;
     std::optional<TValuePacker> Packer;
 
-    TMapType Map; 
+    TMapType Map;
 
 public:
     THashedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
@@ -119,7 +119,7 @@ public:
 
     NUdf::TUnboxedValue Build()
     {
-        const auto filler = [this](TMapType& targetMap) { 
+        const auto filler = [this](TMapType& targetMap) {
             targetMap = std::move(Map);
         };
 
@@ -129,7 +129,7 @@ public:
 
 template<typename T>
 class THashedSingleFixedMultiMapAccumulator {
-    using TMapType = std::unordered_map< 
+    using TMapType = std::unordered_map<
         T,
         TUnboxedValueVector,
         NYql::TVaryingHash<T, TMyHash<T>>,
@@ -138,7 +138,7 @@ class THashedSingleFixedMultiMapAccumulator {
 
     TComputationContext& Ctx;
     const TKeyTypes& KeyTypes;
-    TMapType Map; 
+    TMapType Map;
 
 public:
     THashedSingleFixedMultiMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
@@ -186,10 +186,10 @@ public:
 
 template<typename T>
 class THashedSingleFixedMapAccumulator {
-    using TMapType = TValuesDictHashSingleFixedMap<T>; 
+    using TMapType = TValuesDictHashSingleFixedMap<T>;
 
     TComputationContext& Ctx;
-    TMapType Map; 
+    TMapType Map;
 
 public:
     THashedSingleFixedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
@@ -215,14 +215,14 @@ public:
 };
 
 class THashedSetAccumulator {
-    using TSetType = TValuesDictHashSet; 
+    using TSetType = TValuesDictHashSet;
 
     TComputationContext& Ctx;
     TType* KeyType;
     const TKeyTypes& KeyTypes;
     bool IsTuple;
     std::optional<TValuePacker> Packer;
-    TSetType Set; 
+    TSetType Set;
 
 public:
     THashedSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
@@ -246,7 +246,7 @@ public:
 
     NUdf::TUnboxedValue Build()
     {
-        const auto filler = [this](TSetType& targetSet) { 
+        const auto filler = [this](TSetType& targetSet) {
             targetSet = std::move(Set);
         };
 
@@ -256,10 +256,10 @@ public:
 
 template <typename T>
 class THashedSingleFixedSetAccumulator {
-    using TSetType = TValuesDictHashSingleFixedSet<T>; 
+    using TSetType = TValuesDictHashSingleFixedSet<T>;
 
     TComputationContext& Ctx;
-    TSetType Set; 
+    TSetType Set;
 
 public:
     THashedSingleFixedSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
@@ -285,11 +285,11 @@ public:
 
 template <typename T>
 class THashedSingleFixedCompactSetAccumulator {
-    using TSetType = TValuesDictHashSingleFixedCompactSet<T>; 
+    using TSetType = TValuesDictHashSingleFixedCompactSet<T>;
 
     TComputationContext& Ctx;
     TPagedArena Pool;
-    TSetType Set; 
+    TSetType Set;
 
 public:
     THashedSingleFixedCompactSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded, TComputationContext& ctx, ui64 itemsCountHint)
@@ -314,11 +314,11 @@ public:
 };
 
 class THashedCompactSetAccumulator {
-    using TSetType = TValuesDictHashCompactSet; 
+    using TSetType = TValuesDictHashCompactSet;
 
     TComputationContext& Ctx;
     TPagedArena Pool;
-    TSetType Set; 
+    TSetType Set;
     TType *KeyType;
     TValuePacker KeyPacker;
 
@@ -349,11 +349,11 @@ class THashedCompactMapAccumulator;
 
 template <>
 class THashedCompactMapAccumulator<false> {
-    using TMapType = TValuesDictHashCompactMap; 
+    using TMapType = TValuesDictHashCompactMap;
 
     TComputationContext& Ctx;
     TPagedArena Pool;
-    TMapType Map; 
+    TMapType Map;
     TType *KeyType, *PayloadType;
     TValuePacker KeyPacker, PayloadPacker;
 
@@ -381,11 +381,11 @@ public:
 
 template <>
 class THashedCompactMapAccumulator<true> {
-    using TMapType = TValuesDictHashCompactMultiMap; 
+    using TMapType = TValuesDictHashCompactMultiMap;
 
     TComputationContext& Ctx;
     TPagedArena Pool;
-    TMapType Map; 
+    TMapType Map;
     TType *KeyType, *PayloadType;
     TValuePacker KeyPacker, PayloadPacker;
 
@@ -416,11 +416,11 @@ class THashedSingleFixedCompactMapAccumulator;
 
 template <typename T>
 class THashedSingleFixedCompactMapAccumulator<T, false> {
-    using TMapType = TValuesDictHashSingleFixedCompactMap<T>; 
+    using TMapType = TValuesDictHashSingleFixedCompactMap<T>;
 
     TComputationContext& Ctx;
     TPagedArena Pool;
-    TMapType Map; 
+    TMapType Map;
     TType *PayloadType;
     TValuePacker PayloadPacker;
 
@@ -449,11 +449,11 @@ public:
 
 template <typename T>
 class THashedSingleFixedCompactMapAccumulator<T, true> {
-    using TMapType = TValuesDictHashSingleFixedCompactMultiMap<T>; 
+    using TMapType = TValuesDictHashSingleFixedCompactMultiMap<T>;
 
     TComputationContext& Ctx;
     TPagedArena Pool;
-    TMapType Map; 
+    TMapType Map;
     TType *PayloadType;
     TValuePacker PayloadPacker;
 

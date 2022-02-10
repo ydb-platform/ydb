@@ -9,13 +9,13 @@ namespace NPrivate {
         static constexpr int N = 624;
 
     public:
-        inline TMersenne32(ui32 s = 19650218UL) noexcept 
+        inline TMersenne32(ui32 s = 19650218UL) noexcept
             : mti(N + 1)
         {
             InitGenRand(s);
         }
 
-        inline TMersenne32(const ui32* init_key, size_t key_length) noexcept 
+        inline TMersenne32(const ui32* init_key, size_t key_length) noexcept
             : mti(N + 1)
         {
             InitByArray(init_key, key_length);
@@ -23,7 +23,7 @@ namespace NPrivate {
 
         TMersenne32(IInputStream& input);
 
-        inline ui32 GenRand() noexcept { 
+        inline ui32 GenRand() noexcept {
             if (mti >= N) {
                 InitNext();
             }
@@ -39,9 +39,9 @@ namespace NPrivate {
         }
 
     private:
-        void InitNext() noexcept; 
-        void InitGenRand(ui32 s) noexcept; 
-        void InitByArray(const ui32* init_key, size_t key_length) noexcept; 
+        void InitNext() noexcept;
+        void InitGenRand(ui32 s) noexcept;
+        void InitByArray(const ui32* init_key, size_t key_length) noexcept;
 
     private:
         ui32 mt[N];

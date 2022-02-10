@@ -10,7 +10,7 @@
 #include <library/cpp/build_info/build_info.h>
 
 namespace NLastGetoptPrivate {
-    TString InitVersionString() { 
+    TString InitVersionString() {
         TString ts = GetProgramSvnVersion();
         ts += "\n";
         ts += GetBuildInfo();
@@ -27,7 +27,7 @@ namespace NLastGetoptPrivate {
         return ts;
     }
 
-    TString& VersionString(); 
+    TString& VersionString();
     TString& ShortVersionString();
 
     struct TInit {

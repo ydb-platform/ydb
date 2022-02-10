@@ -244,7 +244,7 @@ public:
 
         const auto& analyzeResults = TransformCtx->AnalyzeResults;
 
-        TVector<TExprBase> results; 
+        TVector<TExprBase> results;
         for (auto& root : analyzeResults.ExecutionRoots) {
             if (root.Scope) {
                 ctx.AddError(TIssue(ctx.GetPosition(root.Node.Pos()), TStringBuilder()
@@ -377,7 +377,7 @@ public:
 
 private:
     TIntrusivePtr<IKqpGateway> Gateway;
-    TString Cluster; 
+    TString Cluster;
     TIntrusivePtr<TKqpTransactionState> TxState;
     TIntrusivePtr<TKqlTransformContext> TransformCtx;
     TMkqlExecuteResult MkqlExecuteResult;
@@ -795,8 +795,8 @@ void LogMkqlResult(const NKikimrMiniKQL::TResult& result, TExprContext& ctx) {
     Y_UNUSED(ctx);
 
     if (YQL_CLOG_ACTIVE(TRACE, ProviderKqp)) {
-        TString resultType; 
-        TString resultValue; 
+        TString resultType;
+        TString resultValue;
 
         NProtoBuf::TextFormat::PrintToString(result.GetType(), &resultType);
         NProtoBuf::TextFormat::PrintToString(result.GetValue(), &resultValue);

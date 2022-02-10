@@ -312,8 +312,8 @@ rel_canonical = "link"i def '<' url ">;"i lws "rel"i lws '=' lws "\"canonical\""
 ################# hreflang ###############
 action set_hreflang {
     bool first = (hreflangpos == hd->hreflangs);
-    size_t len2 = (first ? 0 : 1) + langlen + 1 + buflen; 
-    if (langlen && len2 < hreflangspace) { 
+    size_t len2 = (first ? 0 : 1) + langlen + 1 + buflen;
+    if (langlen && len2 < hreflangspace) {
         if (!first) {
             *(hreflangpos++) = '\t';
         }
@@ -323,7 +323,7 @@ action set_hreflang {
         memcpy(hreflangpos, buf, buflen);
         hreflangpos += buflen;
         *(hreflangpos) = 0;
-        hreflangspace -= len2; 
+        hreflangspace -= len2;
     }
 }
 

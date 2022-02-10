@@ -1,7 +1,7 @@
 #include "opt.h"
 #include "ygetopt.h"
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
@@ -67,7 +67,7 @@ private:
     const char* Arg_;
 };
 
-TGetOpt::TIterator::TIterator() noexcept 
+TGetOpt::TIterator::TIterator() noexcept
     : Impl_(nullptr)
 {
 }
@@ -82,11 +82,11 @@ void TGetOpt::TIterator::Next() {
     Impl_->Next();
 }
 
-char TGetOpt::TIterator::Key() const noexcept { 
+char TGetOpt::TIterator::Key() const noexcept {
     return Impl_->Key();
 }
 
-bool TGetOpt::TIterator::AtEnd() const noexcept { 
+bool TGetOpt::TIterator::AtEnd() const noexcept {
     if (Impl_.Get()) {
         return Impl_->AtEnd();
     }
@@ -94,7 +94,7 @@ bool TGetOpt::TIterator::AtEnd() const noexcept {
     return true;
 }
 
-const char* TGetOpt::TIterator::Arg() const noexcept { 
+const char* TGetOpt::TIterator::Arg() const noexcept {
     if (Impl_.Get()) {
         return Impl_->Arg();
     }
@@ -102,7 +102,7 @@ const char* TGetOpt::TIterator::Arg() const noexcept {
     return nullptr;
 }
 
-TGetOpt::TGetOpt(int argc, const char* const* argv, const TString& format) 
+TGetOpt::TGetOpt(int argc, const char* const* argv, const TString& format)
     : Impl_(new TImpl(argc, argv, format))
 {
 }

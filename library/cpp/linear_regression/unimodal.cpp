@@ -22,7 +22,7 @@ namespace {
 
         double SSE = 0.;
 
-        TOptimizationState(const TVector<double>& values) { 
+        TOptimizationState(const TVector<double>& values) {
             SSE = InnerProduct(values, values);
         }
 
@@ -44,7 +44,7 @@ double TGreedyParams::Point(const size_t step) const {
     return LowerBound * (1 - alpha) + UpperBound * alpha;
 }
 
-double MakeUnimodal(TVector<double>& values, const TOptimizationParams& optimizationParams) { 
+double MakeUnimodal(TVector<double>& values, const TOptimizationParams& optimizationParams) {
     TOptimizationState state(values);
     TOptimizationState bestState = state;
 
@@ -80,19 +80,19 @@ double MakeUnimodal(TVector<double>& values, const TOptimizationParams& optimiza
     return determination;
 }
 
-double MakeUnimodal(TVector<double>& values) { 
+double MakeUnimodal(TVector<double>& values) {
     return MakeUnimodal(values, TOptimizationParams::Default(values));
 }
 
-double MakeUnimodal(TVector<double>& values, const TVector<double>& arguments, const TOptimizationParams& optimizationParams) { 
+double MakeUnimodal(TVector<double>& values, const TVector<double>& arguments, const TOptimizationParams& optimizationParams) {
     Y_ASSERT(values.size() == arguments.size());
 
-    TMap<double, double> mapping; 
+    TMap<double, double> mapping;
     for (size_t i = 0; i < values.size(); ++i) {
         mapping[arguments[i]] = values[i];
     }
 
-    TVector<double> preparedValues; 
+    TVector<double> preparedValues;
     preparedValues.reserve(mapping.size());
 
     for (auto&& argWithValue : mapping) {
@@ -113,6 +113,6 @@ double MakeUnimodal(TVector<double>& values, const TVector<double>& arguments, c
     return result;
 }
 
-double MakeUnimodal(TVector<double>& values, const TVector<double>& arguments) { 
+double MakeUnimodal(TVector<double>& values, const TVector<double>& arguments) {
     return MakeUnimodal(values, arguments, TOptimizationParams::Default(values, arguments));
 }

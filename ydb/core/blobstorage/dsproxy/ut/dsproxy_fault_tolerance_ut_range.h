@@ -18,14 +18,14 @@ public:
         // Cerr << (TStringBuilder() << "]] " << disks.ToString() << Endl);
         for (ui32 generation = 1; generation <= 4; ++generation) {
             NKikimrProto::EReplyStatus expectedStatus = defaultExpectedStatus;
-            TVector<TEvBlobStorage::TEvRangeResult::TResponse> expectedResponse; 
+            TVector<TEvBlobStorage::TEvRangeResult::TResponse> expectedResponse;
 
             ui32 statusMap = generation - 1;
 
             CTEST << "tabletId# " << tabletId << " generation# " << generation << " statusMap#";
 
             for (ui32 step = 1; step <= 2; ++step) {
-                TString buffer = Sprintf("%256s/%" PRIu64 "/%" PRIu32 "/%" PRIu32, "kikimr", tabletId, generation, step); 
+                TString buffer = Sprintf("%256s/%" PRIu64 "/%" PRIu32 "/%" PRIu32, "kikimr", tabletId, generation, step);
                 TStringBuilder b;
                 for (int i = 0; i < 1024; ++i) {
                     b << 'a';

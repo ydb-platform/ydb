@@ -39,7 +39,7 @@ class TExceptionTest: public TTestBase {
     UNIT_TEST_SUITE(TExceptionTest);
     UNIT_TEST_EXCEPTION(TestException, yexception)
     UNIT_TEST_EXCEPTION(TestLineInfo, yexception)
-    UNIT_TEST(TestCurrentExceptionMessageWhenThereisNoException) 
+    UNIT_TEST(TestCurrentExceptionMessageWhenThereisNoException)
     UNIT_TEST(TestFormat1)
     UNIT_TEST(TestRaise1)
     UNIT_TEST(TestVirtuality)
@@ -70,15 +70,15 @@ private:
         }
     }
 
-    inline void TestCurrentExceptionMessageWhenThereisNoException() { 
-        UNIT_ASSERT(CurrentExceptionMessage() == "(NO EXCEPTION)"); 
-    } 
- 
+    inline void TestCurrentExceptionMessageWhenThereisNoException() {
+        UNIT_ASSERT(CurrentExceptionMessage() == "(NO EXCEPTION)");
+    }
+
     inline void TestBackTrace() {
         try {
             ythrow TWithBackTrace<TIoSystemError>() << "test";
         } catch (...) {
-            UNIT_ASSERT(CurrentExceptionMessage().find('\n') != TString::npos); 
+            UNIT_ASSERT(CurrentExceptionMessage().find('\n') != TString::npos);
 
             return;
         }
@@ -212,14 +212,14 @@ private:
             throw yexception() << 1 << " qw " << 12.1;
             UNIT_ASSERT(false);
         } catch (...) {
-            const TString err = CurrentExceptionMessage(); 
+            const TString err = CurrentExceptionMessage();
 
             UNIT_ASSERT(err.Contains("1 qw 12.1"));
         }
     }
 
     static inline void CheckCurrentExceptionContains(const char* message) {
-        TString err = CurrentExceptionMessage(); 
+        TString err = CurrentExceptionMessage();
         SubstGlobal(err, '\\', '/'); // remove backslashes from path in message
         UNIT_ASSERT(err.Contains(message));
     }

@@ -37,7 +37,7 @@ namespace NTable {
 
         bool Valid = false;
         ESeek Relation = ESeek::Exact;
-        TVector<ui32> Tags; 
+        TVector<ui32> Tags;
         TSerializedCellVec Key;
         TSerializedCellVec StopKey;
         bool StopKeyInclusive = true;

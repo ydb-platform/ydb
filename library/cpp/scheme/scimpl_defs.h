@@ -10,7 +10,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <functional>
 #include <util/string/vector.h>
@@ -43,7 +43,7 @@ namespace NSc {
         };
     }
 
-    using TStringBufs = TVector<TStringBuf>; 
+    using TStringBufs = TVector<TStringBuf>;
 
     class TSchemeException : public yexception {
     };
@@ -51,12 +51,12 @@ namespace NSc {
     class TSchemeParseException : public TSchemeException {
     public:
         size_t Offset = 0;
-        TString Reason; 
+        TString Reason;
 
     public:
         TSchemeParseException() = default;
 
-        TSchemeParseException(size_t off, const TString& reason) 
+        TSchemeParseException(size_t off, const TString& reason)
             : Offset(off)
             , Reason(reason)
         {

@@ -186,7 +186,7 @@ namespace NKikimr {
                     Y_VERIFY(memRec.GetType() == TBlobType::HugeBlob);
                     TDiskDataExtractor extr;
                     memRec.GetDiskData(&extr, nullptr);
-                    const NMatrix::TVectorType v = memRec.GetLocalParts(GType); 
+                    const NMatrix::TVectorType v = memRec.GetLocalParts(GType);
                     DataMerger.AddHugeBlob(extr.Begin, extr.End, v, lsn);
                 }
             }
@@ -327,7 +327,7 @@ namespace NKikimr {
         }
 
         // add read small blob content; they should come in order as returned from GetSmallBlobDiskParts by index merger
-        void AddReadSmallBlob(TString data) { 
+        void AddReadSmallBlob(TString data) {
             Y_VERIFY(ProducingSmallBlob);
             ReadSmallBlobs.push_back(std::move(data));
         }
@@ -341,7 +341,7 @@ namespace NKikimr {
             Y_VERIFY(count == +MemRecs, "count# %zu +MemRecs# %zu", count, +MemRecs);
             for (size_t i = 0; i < count; ++i) {
                 const TMemRec& memRec = MemRecs[i]->GetMemRec();
-                const TString& buffer = ReadSmallBlobs[i]; 
+                const TString& buffer = ReadSmallBlobs[i];
                 Y_VERIFY(buffer.size() == memRec.DataSize());
                 DataMerger.AddBlob(TDiskBlob(buffer.data(), buffer.size(), memRec.GetLocalParts(GType)));
             }
@@ -360,7 +360,7 @@ namespace NKikimr {
         }
 
     private:
-        TVector<TString> ReadSmallBlobs; 
+        TVector<TString> ReadSmallBlobs;
     };
 
 
@@ -421,7 +421,7 @@ namespace NKikimr {
                     const TDiskPart *dataPtr = extr.Begin;
                     ui8 i = v.FirstPosition();
                     while (i != v.GetSize() && dataPtr != extr.End) {
-                        NMatrix::TVectorType onePart(0, v.GetSize()); 
+                        NMatrix::TVectorType onePart(0, v.GetSize());
                         onePart.Set(i);
                         // deduplicate every huge blob
                         LastWriteWinsMerger.Add(*dataPtr, onePart, circaLsn);

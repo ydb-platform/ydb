@@ -6,7 +6,7 @@
 #include <stack>
 
 template <class T, class S>
-class TStack: public std::stack<T, S> { 
+class TStack: public std::stack<T, S> {
     using TBase = std::stack<T, S>;
 
 public:

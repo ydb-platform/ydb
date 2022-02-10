@@ -4,7 +4,7 @@
 #include "blobstorage_synclogformat.h"
 #include "blobstorage_synclogmsgimpl.h"
 #include <util/generic/buffer.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/list.h>
 
 namespace NKikimr {
@@ -14,7 +14,7 @@ namespace NKikimr {
         // TNaiveFragmentWriter
         ////////////////////////////////////////////////////////////////////////////
         class TNaiveFragmentWriter {
-            TList<TBuffer> Chain; 
+            TList<TBuffer> Chain;
             size_t DataSize;
 
         public:
@@ -48,7 +48,7 @@ namespace NKikimr {
                 }
             }
 
-            void Finish(TString *respData); 
+            void Finish(TString *respData);
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -60,7 +60,7 @@ namespace NKikimr {
                 : TNaiveFragmentWriter()
             {}
 
-            void Finish(TString *respData); 
+            void Finish(TString *respData);
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -123,7 +123,7 @@ namespace NKikimr {
                 : TBaseOrderedWriter()
             {}
 
-            void Finish(TString *respData); 
+            void Finish(TString *respData);
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -135,7 +135,7 @@ namespace NKikimr {
                 : TBaseOrderedWriter()
             {}
 
-            void Finish(TString *respData); 
+            void Finish(TString *respData);
         };
 
     } // NSyncLog

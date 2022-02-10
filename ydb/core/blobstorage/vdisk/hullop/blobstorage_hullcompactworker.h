@@ -125,7 +125,7 @@ namespace NKikimr {
         ui32 ChunksToUse;
 
         // chunks currently reserved and not used
-        TDeque<TChunkIdx> ReservedChunks; 
+        TDeque<TChunkIdx> ReservedChunks;
 
         // all reserved chunks during the compaction
         TDeque<TChunkIdx> AllocatedChunks;
@@ -161,10 +161,10 @@ namespace NKikimr {
         TDiskPartVec FreedHugeBlobs;
 
         // generated level segments
-        TVector<TIntrusivePtr<TLevelSegment>> LevelSegments; 
+        TVector<TIntrusivePtr<TLevelSegment>> LevelSegments;
 
         // generated chunks
-        TVector<TChunkIdx> CommitChunks; 
+        TVector<TChunkIdx> CommitChunks;
 
         // pointer to an atomic variable contaning number of in flight reads
         TAtomic *ReadsInFlight;
@@ -174,7 +174,7 @@ namespace NKikimr {
 
         struct TBatcherPayload {
             ui64 Id = 0;
-            NMatrix::TVectorType LocalParts; // a bit vector of local parts we are going to read from this disk blob 
+            NMatrix::TVectorType LocalParts; // a bit vector of local parts we are going to read from this disk blob
             TLogoBlobID BlobId;
             TDiskPart Location;
 
@@ -225,7 +225,7 @@ namespace NKikimr {
                 , FinishTime()
             {}
 
-            TString ToString() const { 
+            TString ToString() const {
                 TStringStream str;
                 str << "{WaitTime# " << (StartTime - CreationTime).ToString()
                     << " GetNextItemTime# " << (FinishTime - StartTime).ToString()
@@ -486,7 +486,7 @@ namespace NKikimr {
             ui64 serial;
             TBatcherPayload payload;
             NKikimrProto::EReplyStatus status;
-            TString buffer; 
+            TString buffer;
             while (ReadBatcher.GetResultItem(&serial, &payload, &status, &buffer)) {
                 if (status == NKikimrProto::CORRUPTED) {
                     ExpectingBlobRestoration = true;
@@ -516,14 +516,14 @@ namespace NKikimr {
             AllocatedChunks.insert(AllocatedChunks.end(), msg->ChunkIds.begin(), msg->ChunkIds.end());
         }
 
-        const TVector<TIntrusivePtr<TLevelSegment>>& GetLevelSegments() { return LevelSegments; } 
-        const TVector<TChunkIdx>& GetCommitChunks() const { return CommitChunks; } 
+        const TVector<TIntrusivePtr<TLevelSegment>>& GetLevelSegments() { return LevelSegments; }
+        const TVector<TChunkIdx>& GetCommitChunks() const { return CommitChunks; }
         const TDiskPartVec& GetFreedHugeBlobs() const { return FreedHugeBlobs; }
-        const TDeque<TChunkIdx>& GetReservedChunks() const { return ReservedChunks; } 
+        const TDeque<TChunkIdx>& GetReservedChunks() const { return ReservedChunks; }
         const TDeque<TChunkIdx>& GetAllocatedChunks() const { return AllocatedChunks; }
 
     private:
-        void CollectRemovedHugeBlobs(const TVector<TDiskPart> &hugeBlobs) { 
+        void CollectRemovedHugeBlobs(const TVector<TDiskPart> &hugeBlobs) {
             for (const TDiskPart& p : hugeBlobs) {
                 if (!p.Empty()) {
                     FreedHugeBlobs.PushBack(p);
@@ -599,7 +599,7 @@ namespace NKikimr {
             // parts stored in this record; if inplacedDataSize is zero, then we do not store any data inside SSTable,
             // otherwise we store DiskBlob and have to assemble it at data pass
             ui32 inplacedDataSize = 0;
-            const NMatrix::TVectorType partsToStore = TransformedItem->MemRec->GetLocalParts(GType); 
+            const NMatrix::TVectorType partsToStore = TransformedItem->MemRec->GetLocalParts(GType);
             if (TransformedItem->DataMerger->GetType() == TBlobType::DiskBlob && !partsToStore.Empty()) {
                 inplacedDataSize = TDiskBlob::CalculateBlobSize(GType, TransformedItem->Key.LogoBlobID(), partsToStore);
             }
@@ -624,7 +624,7 @@ namespace NKikimr {
                         TDiskPart location = extr.SwearOne();
 
                         // get its vector of local parts stored in that location
-                        NMatrix::TVectorType parts = memRec.GetLocalParts(GType); 
+                        NMatrix::TVectorType parts = memRec.GetLocalParts(GType);
 
                         // enqueue read
                         ReadBatcher.AddReadItem(location.ChunkIdx, location.Offset, location.Size,

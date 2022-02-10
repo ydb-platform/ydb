@@ -63,11 +63,11 @@ namespace NKikimr {
         static constexpr size_t NodeCacheMaxSize = 64;
         ui64 SeqWriteId = 0;
 
-        TString ErrorReport(ui64 wId, ui64 lsn) const { 
+        TString ErrorReport(ui64 wId, ui64 lsn) const {
             return TStringBuilder() << "wId# " << wId << " lsn# " << lsn << " Fifo# " << FifoToString();
         }
 
-        TString FifoToString() const { 
+        TString FifoToString() const {
             TStringStream str;
             str << "{SeqWriteId# " << SeqWriteId << " data# ";
             if (Fifo.empty())
@@ -95,7 +95,7 @@ namespace NKikimr {
             : ChunkId(chunkId)
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{ChunkId# " << ChunkId << "}";
             return str.Str();
@@ -118,7 +118,7 @@ namespace NKikimr {
             : EntryPointLsn(entryPointLsn)
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{EntryPointLsn# " << EntryPointLsn << "}";
             return str.Str();
@@ -136,7 +136,7 @@ namespace NKikimr {
             : HugeSlot(hugeSlot)
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             return HugeSlot.ToString();
         }
     };
@@ -279,7 +279,7 @@ namespace NKikimr {
 
             // prepare log record
             NHuge::TAllocChunkRecoveryLogRec logRec(ChunkId);
-            TString data = logRec.Serialize(); 
+            TString data = logRec.Serialize();
 
             LOG_INFO(ctx, NKikimrServices::BS_SKELETON,
                     VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
@@ -337,7 +337,7 @@ namespace NKikimr {
     class THullHugeBlobChunkDestroyer : public TActorBootstrapped<THullHugeBlobChunkDestroyer> {
         std::shared_ptr<THugeKeeperCtx> HugeKeeperCtx;
         const TActorId NotifyID;
-        TVector<ui32> ChunksToFree; 
+        TVector<ui32> ChunksToFree;
         const ui64 Lsn;
 
         friend class TActorBootstrapped<THullHugeBlobChunkDestroyer>;
@@ -346,7 +346,7 @@ namespace NKikimr {
             // prepare log record
             Y_VERIFY_DEBUG(!ChunksToFree.empty());
             NHuge::TFreeChunkRecoveryLogRec logRec(ChunksToFree);
-            TString data = logRec.Serialize(); 
+            TString data = logRec.Serialize();
 
             LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "ChunkDestroyer: bootstrap:"
                 " chunks# %s Lsn# %" PRIu64, FormatList(ChunksToFree).data(), Lsn));
@@ -412,7 +412,7 @@ namespace NKikimr {
         std::shared_ptr<THugeKeeperCtx> HugeKeeperCtx;
         const TActorId NotifyID;
         const ui64 EntryPointLsn;
-        const TString Serialized; 
+        const TString Serialized;
 
         friend class TActorBootstrapped<THullHugeBlobEntryPointSaver>;
 
@@ -722,7 +722,7 @@ namespace NKikimr {
             State.Pers->InitiateNewEntryPointCommit(lsn, inFlightWrites);
             State.Committing = true;
             // serialize log record into string
-            TString serialized = State.Pers->Serialize(); 
+            TString serialized = State.Pers->Serialize();
 
             // run committer
             LOG_DEBUG(ctx, BS_HULLHUGE,

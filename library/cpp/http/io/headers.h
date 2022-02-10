@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
@@ -21,12 +21,12 @@ public:
     THttpInputHeader(TString name, TString value);
 
     /// Возвращает имя параметра.
-    inline const TString& Name() const noexcept { 
+    inline const TString& Name() const noexcept {
         return Name_;
     }
 
     /// Возвращает значение параметра.
-    inline const TString& Value() const noexcept { 
+    inline const TString& Value() const noexcept {
         return Value_;
     }
 
@@ -34,13 +34,13 @@ public:
     void OutTo(IOutputStream* stream) const;
 
     /// Возвращает строку "имя параметра: значение".
-    inline TString ToString() const { 
+    inline TString ToString() const {
         return Name_ + TStringBuf(": ") + Value_;
     }
 
 private:
-    TString Name_; 
-    TString Value_; 
+    TString Name_;
+    TString Value_;
 };
 
 /// Контейнер для хранения HTTP-заголовков
@@ -56,7 +56,7 @@ public:
     THttpHeaders(IInputStream* stream);
 
     /// Стандартный итератор.
-    inline TConstIterator Begin() const noexcept { 
+    inline TConstIterator Begin() const noexcept {
         return Headers_.begin();
     }
     inline TConstIterator begin() const noexcept {
@@ -64,7 +64,7 @@ public:
     }
 
     /// Стандартный итератор.
-    inline TConstIterator End() const noexcept { 
+    inline TConstIterator End() const noexcept {
         return Headers_.end();
     }
     inline TConstIterator end() const noexcept {
@@ -72,12 +72,12 @@ public:
     }
 
     /// Возвращает количество заголовков в контейнере.
-    inline size_t Count() const noexcept { 
+    inline size_t Count() const noexcept {
         return Headers_.size();
     }
 
     /// Проверяет, содержит ли контейнер хотя бы один заголовок.
-    inline bool Empty() const noexcept { 
+    inline bool Empty() const noexcept {
         return Headers_.empty();
     }
 
@@ -114,7 +114,7 @@ public:
     void OutTo(IOutputStream* stream) const;
 
     /// Обменивает наборы заголовков двух контейнеров.
-    void Swap(THttpHeaders& headers) noexcept { 
+    void Swap(THttpHeaders& headers) noexcept {
         Headers_.swap(headers.Headers_);
     }
 

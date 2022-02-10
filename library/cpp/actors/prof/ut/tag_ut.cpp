@@ -54,7 +54,7 @@ void TAtomTagsTest::Test_MakeAndGetTag() {
 }
 
 void TAtomTagsTest::Test_MakeVector() {
-    TVector<const char*> strs = { 
+    TVector<const char*> strs = {
         "vector tag 0",
         "vector tag 1",
         "vector tag 3",

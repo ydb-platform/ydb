@@ -8,7 +8,7 @@
 
 namespace NPrivate {
     template <typename T>
-    T LcgAdvance(T seed, T lcgBase, T lcgAddend, T delta) noexcept; 
+    T LcgAdvance(T seed, T lcgBase, T lcgAddend, T delta) noexcept;
 };
 
 template <typename T, T A, T C>
@@ -19,23 +19,23 @@ struct TFastLcgIterator {
         return x * A + C;
     }
 
-    static inline T IterateMultiple(T x, T delta) noexcept { 
+    static inline T IterateMultiple(T x, T delta) noexcept {
         return ::NPrivate::LcgAdvance(x, A, C, delta);
     }
 };
 
 template <typename T, T A>
 struct TLcgIterator {
-    inline TLcgIterator(T seq) noexcept 
+    inline TLcgIterator(T seq) noexcept
         : C((seq << 1u) | (T)1) // C must be odd
     {
     }
 
-    inline T Iterate(T x) noexcept { 
+    inline T Iterate(T x) noexcept {
         return x * A + C;
     }
 
-    inline T IterateMultiple(T x, T delta) noexcept { 
+    inline T IterateMultiple(T x, T delta) noexcept {
         return ::NPrivate::LcgAdvance(x, A, C, delta);
     }
 
@@ -44,8 +44,8 @@ struct TLcgIterator {
 
 template <class TIterator, class TMixer>
 struct TLcgRngBase: public TIterator, public TMixer {
-    using TStateType = decltype(std::declval<TIterator>().Iterate(0)); 
-    using TResultType = decltype(std::declval<TMixer>().Mix(TStateType())); 
+    using TStateType = decltype(std::declval<TIterator>().Iterate(0));
+    using TResultType = decltype(std::declval<TMixer>().Mix(TStateType()));
 
     template <typename... Args>
     inline TLcgRngBase(TStateType seed, Args&&... args)
@@ -54,11 +54,11 @@ struct TLcgRngBase: public TIterator, public TMixer {
     {
     }
 
-    inline TResultType GenRand() noexcept { 
+    inline TResultType GenRand() noexcept {
         return this->Mix(X = this->Iterate(X));
     }
 
-    inline void Advance(TStateType delta) noexcept { 
+    inline void Advance(TStateType delta) noexcept {
         X = this->IterateMultiple(X, delta);
     }
 

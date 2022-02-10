@@ -98,7 +98,7 @@ namespace NPageCollection {
         const ui32 Block = Max<ui32>();
         const ui8 Channel = Max<ui8>();
     private:
-        TString Buffer; 
+        TString Buffer;
         TCookieAllocator &CookieAllocator;
         TVector<TGlob> Blobs;
         NPageCollection::TRecord Record;

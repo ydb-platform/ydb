@@ -8,8 +8,8 @@ using namespace NCompTable;
 
 template <bool HQ>
 void DoTest(const TCompressorTable& table, const TVector<TString>& lines) {
-    TVector<char> compressed; 
-    TVector<char> decompressed; 
+    TVector<char> compressed;
+    TVector<char> decompressed;
 
     TChunkCompressor compressor(HQ, table);
     TStringStream tmp;
@@ -42,10 +42,10 @@ void DoTest(const TCompressorTable& table, const TVector<TString>& lines) {
 Y_UNIT_TEST_SUITE(TestComptable) {
     Y_UNIT_TEST(TestComptableCompressDecompress) {
         TReallyFastRng32 rr(17);
-        TVector<TString> lines; 
+        TVector<TString> lines;
         for (size_t i = 0; i < 1000000; ++i) {
             size_t size = rr.Uniform(32);
-            TString res = "www.yandex.ru/yandsearch?text="; 
+            TString res = "www.yandex.ru/yandsearch?text=";
             for (size_t j = 0; j < size; ++j) {
                 res += "qwer"[rr.Uniform(4)];
             }

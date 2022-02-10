@@ -135,7 +135,7 @@ namespace NKikimr {
                     const NSyncer::TPeerSyncState &peerState,
                     const std::shared_ptr<TSjCtx> &ctx);
             void Output(IOutputStream &str) const;
-            TString ToString() const; 
+            TString ToString() const;
             TSjOutcome NextRequest();
             TSjOutcome Handle(TEvBlobStorage::TEvVSyncResult::TPtr &ev, const TActorId &parentId);
             TSjOutcome Handle(TEvBlobStorage::TEvVSyncFullResult::TPtr &ev, const TActorId &parentId);
@@ -160,7 +160,7 @@ namespace NKikimr {
             // Private functions
             ////////////////////////////////////////////////////////////////////////
             void HandleStatusFlags(const NKikimrBlobStorage::TEvVSyncResult &record);
-            bool CheckFragmentFormat(const TString &data); 
+            bool CheckFragmentFormat(const TString &data);
             void PrepareToFullRecovery(const TSyncState &syncState);
             TSjOutcome ContinueInFullRecoveryMode();
             TSjOutcome ReplyAndDie(ESyncStatus status);

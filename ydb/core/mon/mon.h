@@ -33,7 +33,7 @@ namespace NActors {
         void Stop();
 
         void Register(NMonitoring::IMonPage *page);
-        NMonitoring::TIndexMonPage *RegisterIndexPage(const TString &path, const TString &title); 
+        NMonitoring::TIndexMonPage *RegisterIndexPage(const TString &path, const TString &title);
 
         struct TRegisterActorPageFields {
             TString Title;
@@ -47,11 +47,11 @@ namespace NActors {
         };
 
         NMonitoring::IMonPage* RegisterActorPage(TRegisterActorPageFields fields);
-        NMonitoring::IMonPage *RegisterActorPage(NMonitoring::TIndexMonPage *index, const TString &relPath, 
+        NMonitoring::IMonPage *RegisterActorPage(NMonitoring::TIndexMonPage *index, const TString &relPath,
             const TString &title, bool preTag, TActorSystem *actorSystem, const TActorId &actorId, bool useAuth = true);
-        NMonitoring::IMonPage *RegisterCountersPage(const TString &path, const TString &title, TIntrusivePtr<NMonitoring::TDynamicCounters> counters); 
-        NMonitoring::IMonPage *FindPage(const TString &relPath); 
-        NMonitoring::TIndexMonPage *FindIndexPage(const TString &relPath); 
+        NMonitoring::IMonPage *RegisterCountersPage(const TString &path, const TString &title, TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+        NMonitoring::IMonPage *FindPage(const TString &relPath);
+        NMonitoring::TIndexMonPage *FindIndexPage(const TString &relPath);
         void OutputIndexPage(IOutputStream& out) override;
         void SetAllowedSIDs(const TVector<TString>& sids); // sets allowed users/groups for this web interface
         ui16 GetListenPort();

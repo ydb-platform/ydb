@@ -18,7 +18,7 @@ using namespace NNodeWhiteboard;
 class TMessageBusTabletStateRequest : public TActorBootstrapped<TMessageBusTabletStateRequest>, public TMessageBusSessionIdentHolder {
 protected:
     TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
-    TMap<ui64, TAutoPtr<TEvWhiteboard::TEvTabletStateResponse>> PerNodeTabletInfo; 
+    TMap<ui64, TAutoPtr<TEvWhiteboard::TEvTabletStateResponse>> PerNodeTabletInfo;
     size_t NodesRequested;
     size_t NodesReceived;
     const NKikimrClient::TTabletStateRequest Record;

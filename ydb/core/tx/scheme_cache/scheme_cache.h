@@ -24,7 +24,7 @@ struct TSchemeCacheConfig : public TThrRefBase {
     struct TTagEntry {
         ui32 Tag = 0;
         ui64 RootSchemeShard = 0;
-        TString Name; 
+        TString Name;
 
         explicit TTagEntry(ui32 tag, ui64 rootSchemeShard, const TString& name)
             : Tag(tag)
@@ -36,7 +36,7 @@ struct TSchemeCacheConfig : public TThrRefBase {
     TSchemeCacheConfig() = default;
     explicit TSchemeCacheConfig(const TAppData* appData, NMonitoring::TDynamicCounterPtr counters);
 
-    TVector<TTagEntry> Roots; 
+    TVector<TTagEntry> Roots;
     NMonitoring::TDynamicCounterPtr Counters;
 };
 
@@ -229,7 +229,7 @@ struct TSchemeCacheNavigate {
 
         // table specific
         THashMap<TString, TString> Attributes;
-        THashMap<ui32, TSysTables::TTableColumnInfo> Columns; 
+        THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
@@ -250,7 +250,7 @@ struct TSchemeCacheNavigate {
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
     };
 
-    using TResultSet = TVector<TEntry>; 
+    using TResultSet = TVector<TEntry>;
 
     TResultSet ResultSet;
     TAutoPtr<const NACLib::TUserToken> UserToken;
@@ -321,7 +321,7 @@ struct TSchemeCacheRequest {
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;
     };
 
-    using TResultSet = TVector<TEntry>; 
+    using TResultSet = TVector<TEntry>;
 
     TResultSet ResultSet;
     TAutoPtr<const NACLib::TUserToken> UserToken;

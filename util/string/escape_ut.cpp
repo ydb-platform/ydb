@@ -2,15 +2,15 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/charset/wide.h>
 
 using namespace std::string_view_literals;
 
 namespace {
     struct TExample {
-        TString Expected; 
-        TString Source; 
+        TString Expected;
+        TString Source;
 
         TExample(const TStringBuf expected, const TStringBuf source)
             : Expected{expected}
@@ -49,42 +49,42 @@ static const TExample CommonTestData[] = {
 Y_UNIT_TEST_SUITE(TEscapeCTest) {
     Y_UNIT_TEST(TestStrokaEscapeC) {
         for (const auto& e : CommonTestData) {
-            TString expected(e.Expected); 
-            TString source(e.Source); 
-            TString actual(EscapeC(e.Source)); 
-            TString actual2(UnescapeC(e.Expected)); 
+            TString expected(e.Expected);
+            TString source(e.Source);
+            TString actual(EscapeC(e.Source));
+            TString actual2(UnescapeC(e.Expected));
 
             UNIT_ASSERT_VALUES_EQUAL(e.Expected, actual);
             UNIT_ASSERT_VALUES_EQUAL(e.Source, actual2);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL("http://ya.ru/\\x17\\n\\xAB", EscapeC(TString("http://ya.ru/\x17\n\xab"))); 
-        UNIT_ASSERT_VALUES_EQUAL("http://ya.ru/\x17\n\xab", UnescapeC(TString("http://ya.ru/\\x17\\n\\xAB"))); 
+        UNIT_ASSERT_VALUES_EQUAL("http://ya.ru/\\x17\\n\\xAB", EscapeC(TString("http://ya.ru/\x17\n\xab")));
+        UNIT_ASSERT_VALUES_EQUAL("http://ya.ru/\x17\n\xab", UnescapeC(TString("http://ya.ru/\\x17\\n\\xAB")));
         UNIT_ASSERT_VALUES_EQUAL("h", EscapeC('h'));
-        UNIT_ASSERT_VALUES_EQUAL("h", UnescapeC(TString("h"))); 
+        UNIT_ASSERT_VALUES_EQUAL("h", UnescapeC(TString("h")));
         UNIT_ASSERT_VALUES_EQUAL("\\xFF", EscapeC('\xFF'));
-        UNIT_ASSERT_VALUES_EQUAL("\xFF", UnescapeC(TString("\\xFF"))); 
+        UNIT_ASSERT_VALUES_EQUAL("\xFF", UnescapeC(TString("\\xFF")));
 
-        UNIT_ASSERT_VALUES_EQUAL("\\377f", EscapeC(TString("\xff" 
+        UNIT_ASSERT_VALUES_EQUAL("\\377f", EscapeC(TString("\xff"
                                                            "f")));
         UNIT_ASSERT_VALUES_EQUAL("\xff"
                                  "f",
-                                 UnescapeC(TString("\\377f"))); 
-        UNIT_ASSERT_VALUES_EQUAL("\\xFFg", EscapeC(TString("\xff" 
+                                 UnescapeC(TString("\\377f")));
+        UNIT_ASSERT_VALUES_EQUAL("\\xFFg", EscapeC(TString("\xff"
                                                            "g")));
         UNIT_ASSERT_VALUES_EQUAL("\xff"
                                  "g",
-                                 UnescapeC(TString("\\xFFg"))); 
-        UNIT_ASSERT_VALUES_EQUAL("\xEA\x9A\x96", UnescapeC(TString("\\uA696"))); 
-        UNIT_ASSERT_VALUES_EQUAL("Странный компроматтест", UnescapeC(TString("\\u0421\\u0442\\u0440\\u0430\\u043d\\u043d\\u044b\\u0439 \\u043a\\u043e\\u043c\\u043f\\u0440\\u043e\\u043c\\u0430\\u0442тест"))); 
+                                 UnescapeC(TString("\\xFFg")));
+        UNIT_ASSERT_VALUES_EQUAL("\xEA\x9A\x96", UnescapeC(TString("\\uA696")));
+        UNIT_ASSERT_VALUES_EQUAL("Странный компроматтест", UnescapeC(TString("\\u0421\\u0442\\u0440\\u0430\\u043d\\u043d\\u044b\\u0439 \\u043a\\u043e\\u043c\\u043f\\u0440\\u043e\\u043c\\u0430\\u0442тест")));
     }
 
     Y_UNIT_TEST(TestWtrokaEscapeC) {
         for (const auto& e : CommonTestData) {
-            TUtf16String expected(UTF8ToWide(e.Expected)); 
-            TUtf16String source(UTF8ToWide(e.Source)); 
-            TUtf16String actual(EscapeC(source)); 
-            TUtf16String actual2(UnescapeC(expected)); 
+            TUtf16String expected(UTF8ToWide(e.Expected));
+            TUtf16String source(UTF8ToWide(e.Source));
+            TUtf16String actual(EscapeC(source));
+            TUtf16String actual2(UnescapeC(expected));
 
             UNIT_ASSERT_VALUES_EQUAL(expected, actual);
             UNIT_ASSERT_VALUES_EQUAL(source, actual2);
@@ -96,12 +96,12 @@ Y_UNIT_TEST_SUITE(TEscapeCTest) {
     }
 
     Y_UNIT_TEST(TestEscapeTrigraphs) {
-        UNIT_ASSERT_VALUES_EQUAL("?", EscapeC(TString("?"))); 
-        UNIT_ASSERT_VALUES_EQUAL("\\x3F?", EscapeC(TString("??"))); 
-        UNIT_ASSERT_VALUES_EQUAL("\\x3F\\x3F?", EscapeC(TString("???"))); 
+        UNIT_ASSERT_VALUES_EQUAL("?", EscapeC(TString("?")));
+        UNIT_ASSERT_VALUES_EQUAL("\\x3F?", EscapeC(TString("??")));
+        UNIT_ASSERT_VALUES_EQUAL("\\x3F\\x3F?", EscapeC(TString("???")));
         // ok but may cause warning about trigraphs
-        // UNIT_ASSERT_VALUES_EQUAL("[x]?z", EscapeC(TString("??(x??)?z"))); 
-        UNIT_ASSERT_VALUES_EQUAL("\\x3F?x\\x3F\\x3F?z", EscapeC(TString("??x???z"))); 
+        // UNIT_ASSERT_VALUES_EQUAL("[x]?z", EscapeC(TString("??(x??)?z")));
+        UNIT_ASSERT_VALUES_EQUAL("\\x3F?x\\x3F\\x3F?z", EscapeC(TString("??x???z")));
     }
 
     Y_UNIT_TEST(TestUnescapeCCharLen) {

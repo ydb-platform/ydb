@@ -15,7 +15,7 @@ namespace NAddr {
 class TContListener {
 public:
     struct TOptions {
-        inline TOptions() noexcept 
+        inline TOptions() noexcept
             : ListenQueue(Max<size_t>())
             , SendBufSize(0)
             , RecvBufSize(0)
@@ -24,31 +24,31 @@ public:
         {
         }
 
-        inline TOptions& SetListenQueue(size_t len) noexcept { 
+        inline TOptions& SetListenQueue(size_t len) noexcept {
             ListenQueue = len;
 
             return *this;
         }
 
-        inline TOptions& SetDeferAccept(bool enable) noexcept { 
+        inline TOptions& SetDeferAccept(bool enable) noexcept {
             EnableDeferAccept = enable;
 
             return *this;
         }
 
-        inline TOptions& SetSendBufSize(unsigned size) noexcept { 
+        inline TOptions& SetSendBufSize(unsigned size) noexcept {
             SendBufSize = size;
 
             return *this;
         }
 
-        inline TOptions& SetRecvBufSize(unsigned size) noexcept { 
+        inline TOptions& SetRecvBufSize(unsigned size) noexcept {
             RecvBufSize = size;
 
             return *this;
         }
 
-        inline TOptions& SetReusePort(bool reusePort) noexcept { 
+        inline TOptions& SetReusePort(bool reusePort) noexcept {
             ReusePort = reusePort;
 
             return *this;
@@ -93,7 +93,7 @@ public:
     };
 
     TContListener(ICallBack* cb, TContExecutor* e, const TOptions& opts = TOptions());
-    ~TContListener(); 
+    ~TContListener();
 
     /// start listener threads
     void Listen();
@@ -107,7 +107,7 @@ public:
     void Bind(const TIpAddress& addr);
     void Bind(const TNetworkAddress& addr);
 
-    void Stop() noexcept; 
+    void Stop() noexcept;
 
     void StopListenAddr(const NAddr::IRemoteAddr& addr);
     void StopListenAddr(const TIpAddress& addr);

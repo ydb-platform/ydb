@@ -15,9 +15,9 @@ namespace NKikimr {
     struct TEvAnubisVGet
         : public TEventLocal<TEvAnubisVGet, TEvBlobStorage::EvAnubisVGet>
     {
-        TVector<TLogoBlobID> Candidates; 
+        TVector<TLogoBlobID> Candidates;
 
-        TEvAnubisVGet(TVector<TLogoBlobID> &&c) 
+        TEvAnubisVGet(TVector<TLogoBlobID> &&c)
             : Candidates(std::move(c))
         {}
     };

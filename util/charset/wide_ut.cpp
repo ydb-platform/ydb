@@ -53,7 +53,7 @@ namespace {
         {0x01C5, 0x10428, 0x10429, 0x10447, 0x10441, 0x1C03, 0x00A0, 0x10428, 0x1043D, 0x10437}, // title
     };
 
-    TUtf16String CreateUnicodeText() { 
+    TUtf16String CreateUnicodeText() {
         const int len = 256;
         wchar16 text[len] = {
             0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x00 - 0x0F
@@ -77,10 +77,10 @@ namespace {
                 text[i] = static_cast<wchar16>(i + 0x0350); // 0x0410 - 0x044F
             }
         }
-        return TUtf16String(text, len); 
+        return TUtf16String(text, len);
     }
 
-    TString CreateUTF8Text() { 
+    TString CreateUTF8Text() {
         char text[] = {
             '\x00', '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\x07', '\x08', '\x09', '\x0a', '\x0b', '\x0c', '\x0d', '\x0e', '\x0f',
             '\x10', '\x11', '\x12', '\x13', '\x14', '\x15', '\x16', '\x17', '\x18', '\x19', '\x1a', '\x1b', '\x1c', '\x1d', '\x1e', '\x1f',
@@ -107,12 +107,12 @@ namespace {
             '\xd0', '\xbf', '\xd1', '\x80', '\xd1', '\x81', '\xd1', '\x82', '\xd1', '\x83', '\xd1', '\x84', '\xd1', '\x85', '\xd1', '\x86',
             '\xd1', '\x87', '\xd1', '\x88', '\xd1', '\x89', '\xd1', '\x8a', '\xd1', '\x8b', '\xd1', '\x8c', '\xd1', '\x8d', '\xd1', '\x8e',
             '\xd1', '\x8f'};
-        return TString(text, Y_ARRAY_SIZE(text)); 
+        return TString(text, Y_ARRAY_SIZE(text));
     }
 
     //! use this function to dump UTF8 text into a file in case of any changes
     //    void DumpUTF8Text() {
-    //        TString s = WideToUTF8(UnicodeText); 
+    //        TString s = WideToUTF8(UnicodeText);
     //        std::ofstream f("utf8.txt");
     //        f << std::hex;
     //        for (int i = 0; i < (int)s.size(); ++i) {
@@ -455,12 +455,12 @@ void TConversionTest::TestWriteUTF8Char() {
 }
 
 static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize) {
-    TUtf16String w = UTF8ToWide(str); 
+    TUtf16String w = UTF8ToWide(str);
 
     UNIT_ASSERT(w.size() == wideSize);
     UNIT_ASSERT(!memcmp(w.c_str(), wide, wideSize));
 
-    TString s = WideToUTF8(w); 
+    TString s = WideToUTF8(w);
 
     UNIT_ASSERT(s == str);
 }
@@ -511,7 +511,7 @@ void TConversionTest::TestUTF8ToWide() {
 
     UNIT_ASSERT_VALUES_EQUAL(WideToUTF8(UTF8ToWide(WideToUTF8(UTF8ToWide<true>(
                                  "m\xFB\xB2\xA5\xAA\xAFyeuse.sexwebcamz.com")))),
-                             TString( 
+                             TString(
                                  "m\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBD\xEF\xBF\xBDyeuse.sexwebcamz.com"));
 }
 
@@ -571,7 +571,7 @@ void TConversionTest::TestUnicodeCase() {
 }
 
 void TConversionTest::TestUnicodeDetails() {
-    TUtf16String temp; 
+    TUtf16String temp;
     for (wchar32 i = 0; i != NUnicode::UnicodeInstancesLimit(); ++i) {
         temp.clear();
         WriteSymbol(i, temp);
@@ -604,12 +604,12 @@ class TWideUtilTest: public TTestBase {
 
 public:
     void TestCollapse() {
-        TUtf16String s; 
+        TUtf16String s;
         s.append(ws, Y_ARRAY_SIZE(ws)).append(3, 'a').append(ws, Y_ARRAY_SIZE(ws)).append(3, 'b').append(ws, Y_ARRAY_SIZE(ws));
         Collapse(s);
         UNIT_ASSERT(s == ASCIIToWide(" aaa bbb "));
         {
-            const TUtf16String w(ASCIIToWide(" a b c ")); 
+            const TUtf16String w(ASCIIToWide(" a b c "));
             s = w;
             Collapse(s);
             UNIT_ASSERT(s == w);
@@ -637,7 +637,7 @@ public:
         Collapse(s);
         UNIT_ASSERT(s == ASCIIToWide("1 23 "));
         {
-            const TUtf16String w = ASCIIToWide(" "); 
+            const TUtf16String w = ASCIIToWide(" ");
             s = w;
             Collapse(s);
             UNIT_ASSERT(s == w);
@@ -659,11 +659,11 @@ public:
 
         s.clear();
         Collapse(s);
-        UNIT_ASSERT(s == TUtf16String()); 
+        UNIT_ASSERT(s == TUtf16String());
     }
 
     void TestCollapseBuffer() {
-        TUtf16String s; 
+        TUtf16String s;
         s.append(ws, Y_ARRAY_SIZE(ws)).append(3, 'a').append(ws, Y_ARRAY_SIZE(ws)).append(3, 'b').append(ws, Y_ARRAY_SIZE(ws));
         size_t n = Collapse(s.begin(), s.size());
         s.resize(n);
@@ -727,14 +727,14 @@ public:
         s.clear();
         n = Collapse(s.begin(), s.size());
         UNIT_ASSERT(n == 0);
-        UNIT_ASSERT(s == TUtf16String()); 
+        UNIT_ASSERT(s == TUtf16String());
     }
 
     void TestStrip() {
-        TUtf16String s; 
+        TUtf16String s;
 
         Strip(s);
-        UNIT_ASSERT(s == TUtf16String()); 
+        UNIT_ASSERT(s == TUtf16String());
         StripLeft(s);
         UNIT_ASSERT(s == TUtf16String());
         StripRight(s);
@@ -742,7 +742,7 @@ public:
 
         s = ASCIIToWide(" \t\r\n");
         Strip(s);
-        UNIT_ASSERT(s == TUtf16String()); 
+        UNIT_ASSERT(s == TUtf16String());
         s = ASCIIToWide(" \t\r\n");
         StripLeft(s);
         UNIT_ASSERT(s == TUtf16String());
@@ -770,7 +770,7 @@ public:
         StripRight(s);
         UNIT_ASSERT(s == ASCIIToWide("\r\na\r\nb\t\tc"));
 
-        const TUtf16String w(ASCIIToWide("a  b")); 
+        const TUtf16String w(ASCIIToWide("a  b"));
         s = w;
         Strip(s);
         UNIT_ASSERT(s == w);
@@ -792,25 +792,25 @@ public:
     }
 
     void TestIsSpace() {
-        UNIT_ASSERT(!IsSpace(TUtf16String())); 
+        UNIT_ASSERT(!IsSpace(TUtf16String()));
 
         UNIT_ASSERT(IsSpace(ws, Y_ARRAY_SIZE(ws)));
 
-        TUtf16String w; 
-        w.assign(ws, Y_ARRAY_SIZE(ws)).append(TUtf16String(1, '!')); 
+        TUtf16String w;
+        w.assign(ws, Y_ARRAY_SIZE(ws)).append(TUtf16String(1, '!'));
         UNIT_ASSERT(!IsSpace(w.c_str(), w.size()));
 
-        w.assign(TUtf16String(1, '_')).append(ws, Y_ARRAY_SIZE(ws)); 
+        w.assign(TUtf16String(1, '_')).append(ws, Y_ARRAY_SIZE(ws));
         UNIT_ASSERT(!IsSpace(w.c_str(), w.size()));
 
-        w.assign(ws, Y_ARRAY_SIZE(ws)).append(TUtf16String(1, '$')).append(ws, Y_ARRAY_SIZE(ws)); 
+        w.assign(ws, Y_ARRAY_SIZE(ws)).append(TUtf16String(1, '$')).append(ws, Y_ARRAY_SIZE(ws));
         UNIT_ASSERT(!IsSpace(w.c_str(), w.size()));
     }
 
     void TestEscapeHtmlChars() {
         // characters from the first half of the ASCII table
         for (wchar16 c = 1; c < 0x7F; ++c) {
-            TUtf16String w(1, c); 
+            TUtf16String w(1, c);
             EscapeHtmlChars<false>(w);
 
             switch (c) {
@@ -827,13 +827,13 @@ public:
                     UNIT_ASSERT(w == ASCIIToWide("&quot;"));
                     break;
                 default:
-                    UNIT_ASSERT(w == TUtf16String(1, c)); 
+                    UNIT_ASSERT(w == TUtf16String(1, c));
                     break;
             }
         }
 
         for (wchar16 c = 1; c < 0x7F; ++c) {
-            TUtf16String w(1, c); 
+            TUtf16String w(1, c);
             EscapeHtmlChars<true>(w);
 
             switch (c) {
@@ -854,7 +854,7 @@ public:
                     UNIT_ASSERT(w == ASCIIToWide("<BR>"));
                     break;
                 default:
-                    UNIT_ASSERT(w == TUtf16String(1, c)); 
+                    UNIT_ASSERT(w == TUtf16String(1, c));
                     break;
             }
         }
@@ -877,11 +877,11 @@ public:
     }
 
     void TestWideString() {
-        const TUtf16String original = UTF32ToWide(WideStringTestData[0], CaseTestDataSize); 
-        const TUtf16String lower = UTF32ToWide(WideStringTestData[1], CaseTestDataSize); 
-        const TUtf16String upper = UTF32ToWide(WideStringTestData[2], CaseTestDataSize); 
-        const TUtf16String title = UTF32ToWide(WideStringTestData[3], CaseTestDataSize); 
-        TUtf16String temp; 
+        const TUtf16String original = UTF32ToWide(WideStringTestData[0], CaseTestDataSize);
+        const TUtf16String lower = UTF32ToWide(WideStringTestData[1], CaseTestDataSize);
+        const TUtf16String upper = UTF32ToWide(WideStringTestData[2], CaseTestDataSize);
+        const TUtf16String title = UTF32ToWide(WideStringTestData[3], CaseTestDataSize);
+        TUtf16String temp;
 
         temp = original;
         temp.to_lower();
@@ -907,7 +907,7 @@ public:
         ToTitle(temp.begin(), temp.size());
         UNIT_ASSERT(temp == title);
 
-        TVector<wchar32> buffer(WideStringTestData[0], WideStringTestData[0] + CaseTestDataSize); 
+        TVector<wchar32> buffer(WideStringTestData[0], WideStringTestData[0] + CaseTestDataSize);
         std::reverse(buffer.begin(), buffer.end());
         const TUtf16String reversed = UTF32ToWide(buffer.data(), buffer.size());
 
@@ -918,7 +918,7 @@ public:
 
     void TestCountWideChars() {
         UNIT_ASSERT_EQUAL(CountWideChars(UTF8ToWide("привет!")), 7);
-        TUtf16String wideStr = UTF8ToWide("\xf0\x9f\x92\xb8привет!"); 
+        TUtf16String wideStr = UTF8ToWide("\xf0\x9f\x92\xb8привет!");
         UNIT_ASSERT_EQUAL(wideStr.size(), 9);
         UNIT_ASSERT_EQUAL(CountWideChars(wideStr), 8);
     }

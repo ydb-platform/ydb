@@ -158,7 +158,7 @@ struct TEvTxUserProxy {
             return static_cast<EStatus>(Record.GetStatus());
         }
 
-        TString ToString() const; 
+        TString ToString() const;
     };
 
     struct TEvInvalidateTable : public TEventPB<TEvInvalidateTable, NKikimrTxUserProxy::TEvInvalidateTable, EvInvalidateTable> {
@@ -310,7 +310,7 @@ namespace NTxProxy {
     IActor* CreateTxProxyCommitWritesReq(const TTxProxyServices &services, const ui64 txid, TEvTxUserProxy::TEvProposeTransaction::TPtr&& ev, const TIntrusivePtr<TTxProxyMon>& mon);
 }
 
-IActor* CreateTxProxy(const TVector<ui64> &allocators); 
+IActor* CreateTxProxy(const TVector<ui64> &allocators);
 TActorId MakeTxProxyID();
 
 }

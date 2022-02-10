@@ -4,5 +4,5 @@ OWNER(
     somov
     elantsev
     g:contrib
-    g:cpp-contrib 
+    g:cpp-contrib
 )

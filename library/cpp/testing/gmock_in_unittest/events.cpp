@@ -3,13 +3,13 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/string/builder.h>
 
 void TGMockTestEventListener::OnTestPartResult(const testing::TestPartResult& result) {
     if (result.failed()) {
-        const TString message = result.message(); 
-        const TString summary = result.summary(); 
+        const TString message = result.message();
+        const TString summary = result.summary();
         TStringBuilder msg;
         if (result.file_name())
             msg << result.file_name() << TStringBuf(":");

@@ -12,7 +12,7 @@ namespace NKikimr {
         struct TItem {
             ui64 OrderId;
         };
-        typedef TDeque<TItem> TQueueType; 
+        typedef TDeque<TItem> TQueueType;
 
         const TActorId SkeletonId;
         const TActorId NotifyId;

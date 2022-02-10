@@ -323,7 +323,7 @@ void TPartition::ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst
 
 
 static void RequestRange(const TActorContext& ctx, const TActorId& dst, ui32 partition,
-                         TKeyPrefix::EType c, bool includeData = false, const TString& key = "", bool dropTmp = false) 
+                         TKeyPrefix::EType c, bool includeData = false, const TString& key = "", bool dropTmp = false)
 {
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
     auto read = request->Record.AddCmdReadRange();
@@ -523,8 +523,8 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
 
 void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx)
 {
-    TVector<TString> res; 
-    TString str; 
+    TVector<TString> res;
+    TString str;
     if (CurrentStateFunc() == &TThis::StateInit) {
         str = "State is StateInit";
     } else if (CurrentStateFunc() == &TThis::StateIdle) {
@@ -1376,7 +1376,7 @@ void TPartition::HandleInfoRangeRead(const NKikimrClient::TKeyValueResponse::TRe
 {
     //megaqc check here all results
     Y_VERIFY(range.HasStatus());
-    const TString *key = nullptr; 
+    const TString *key = nullptr;
     switch (range.GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
@@ -1463,7 +1463,7 @@ void TPartition::FormHeadAndProceed(const TActorContext& ctx)
 {
     Head.Offset = EndOffset;
     Head.PartNo = 0;
-    TVector<TString> keys; 
+    TVector<TString> keys;
     while (DataKeysBody.size() > 0 && DataKeysBody.back().Key.IsHead()) {
         Y_VERIFY(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() == Head.Offset); //no gaps in head allowed
         HeadKeys.push_front(DataKeysBody.back());
@@ -1650,10 +1650,10 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         ss << "SYNC INIT sourceId " << s.first << " seqNo " << s.second.SeqNo << " offset " << s.second.Offset << "\n";
     }
     for (const auto& h : DataKeysBody) {
-        ss << "SYNC INIT DATA KEY: " << TString(h.Key.Data(), h.Key.Size()) << " size " << h.Size << "\n"; 
+        ss << "SYNC INIT DATA KEY: " << TString(h.Key.Data(), h.Key.Size()) << " size " << h.Size << "\n";
     }
     for (const auto& h : HeadKeys) {
-        ss << "SYNC INIT HEAD KEY: " << TString(h.Key.Data(), h.Key.Size()) << " size " << h.Size << "\n"; 
+        ss << "SYNC INIT HEAD KEY: " << TString(h.Key.Data(), h.Key.Size()) << " size " << h.Size << "\n";
     }
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, ss);
 
@@ -1753,7 +1753,7 @@ THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THas
 
 
 void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
-    TSet<TString> important; 
+    TSet<TString> important;
     for (const auto& importantUser : Config.GetPartitionConfig().GetImportantClientId()) {
         important.insert(importantUser);
         TUserInfo* userInfo = UsersInfoStorage.GetIfExists(importantUser);
@@ -2142,7 +2142,7 @@ void TPartition::Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorCo
 
 
 void TPartition::Handle(TEvPQ::TEvSetClientInfo::TPtr& ev, const TActorContext& ctx) {
-    const TString& user = ev->Get()->ClientId; 
+    const TString& user = ev->Get()->ClientId;
     auto& userInfo = UsersInfoStorage.GetOrCreate(user, ctx);
 
     if (userInfo.UserActs.size() > MAX_USER_ACTS) {
@@ -2315,7 +2315,7 @@ TReadAnswer TReadInfo::FormAnswer(
 
     ui32 cnt = 0, pcnt = 0;
     ui32 size = 0, psize = 0;
-    const TVector<TRequestedBlob>& blobs = response->GetBlobs(); 
+    const TVector<TRequestedBlob>& blobs = response->GetBlobs();
 
     Y_VERIFY(blobs.size() == Blobs.size());
     response->Check();
@@ -2328,7 +2328,7 @@ TReadAnswer TReadInfo::FormAnswer(
         ui32 count = blobs[pos].Count;
         ui16 partNo = blobs[pos].PartNo;
         ui16 internalPartsCount = blobs[pos].InternalPartsCount;
-        const TString& blobValue = blobs[pos].Value; 
+        const TString& blobValue = blobs[pos].Value;
 
         if (blobValue.empty()) { // this is ok. Means that someone requested too much data
             LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE, "Not full answer here!");
@@ -2478,7 +2478,7 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(const ui64 startOffse
     ui32& count = *rcount;
     ui32& size = *rsize;
     count = size = 0;
-    TVector<TRequestedBlob> blobs; 
+    TVector<TRequestedBlob> blobs;
     if (!DataKeysBody.empty() && (Head.Offset > startOffset || Head.Offset == startOffset && Head.PartNo > partNo)) { //will read smth from body
         auto it = std::upper_bound(DataKeysBody.begin(), DataKeysBody.end(), std::make_pair(startOffset, partNo),
             [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
@@ -2524,7 +2524,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(const ui64 startOffset, 
 {
     ui32& count = *rcount;
     ui32& size = *rsize;
-    TVector<TClientBlob> res; 
+    TVector<TClientBlob> res;
     std::optional<ui64> firstAddedBlobOffset{};
     ui32 pos = 0;
     if (startOffset > Head.Offset || startOffset == Head.Offset && partNo > Head.PartNo) {
@@ -2534,7 +2534,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(const ui64 startOffset, 
     for (;pos < Head.Batches.size(); ++pos)
     {
 
-        TVector<TClientBlob> blobs; 
+        TVector<TClientBlob> blobs;
         Head.Batches[pos].UnpackTo(&blobs);
         ui32 i = 0;
         ui64 offset = Head.Batches[pos].GetOffset();
@@ -2914,7 +2914,7 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
     ReadingForOffset = 0;
     ReadingForUserReadRuleGeneration = 0;
     while (!ReadingTimestamp && !UpdateUserInfoTimestamp.empty()) {
-        TString user = UpdateUserInfoTimestamp.front(); 
+        TString user = UpdateUserInfoTimestamp.front();
         UpdateUserInfoTimestamp.pop_front();
         auto userInfo = UsersInfoStorage.GetIfExists(user);
         if (!userInfo || !userInfo->ReadScheduled)
@@ -3378,7 +3378,7 @@ void TPartition::HandleSetOffsetResponse(NKikimrClient::TResponse& response, con
     ui64 cookie = response.GetCookie();
     auto it = CookieToUser.find(cookie);
     Y_VERIFY(it != CookieToUser.end());
-    TString user = it->second; 
+    TString user = it->second;
     CookieToUser.erase(it);
 
     TUserInfo* userInfo = UsersInfoStorage.GetIfExists(user);
@@ -3535,7 +3535,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     SyncMemoryStateWithKVState(ctx);
 
     //if EndOffset changed there could be subscriptions witch could be completed
-    TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(EndOffset); 
+    TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(EndOffset);
     for (auto& read : reads) {
         Y_VERIFY(EndOffset > read.first.Offset);
         ProcessRead(ctx, std::move(read.first), read.second, true);
@@ -4120,7 +4120,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Topic '" << TopicName << "' partition " << Partition
                     << " part blob processing sourceId '" << EscapeC(p.Msg.SourceId) <<
                     "' seqNo " << p.Msg.SeqNo << " partNo " << p.Msg.PartNo);
-        TString s; 
+        TString s;
         if (!PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
             //this must not be happen - client sends gaps, fail this client till the end
             CancelAllWritesOnWrite(ctx, request, s, p, sourceIdWriter);
@@ -4159,7 +4159,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
         bool lastBlobPart = blob.IsLastPart();
 
         //will return compacted tmp blob
-        std::pair<TKey, TString> newWrite = PartitionedBlob.Add(std::move(blob)); 
+        std::pair<TKey, TString> newWrite = PartitionedBlob.Add(std::move(blob));
 
         if (!newWrite.second.empty()) {
             auto write = request->Record.AddCmdWrite();
@@ -4190,7 +4190,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 TKey key(request->Record.GetCmdWrite(i).GetKey());
                 if (key.GetType() == TKeyPrefix::TypeTmpData) {
                     key.SetType(TKeyPrefix::TypeData);
-                    request->Record.MutableCmdWrite(i)->SetKey(TString(key.Data(), key.Size())); 
+                    request->Record.MutableCmdWrite(i)->SetKey(TString(key.Data(), key.Size()));
                     ++curWrites;
                 }
             }
@@ -4201,9 +4201,9 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                 if (i + curWrites < formedBlobs.size()) { //this KV pair is already writed, rename needed
                     auto rename = request->Record.AddCmdRename();
                     TKey key = x.first;
-                    rename->SetOldKey(TString(key.Data(), key.Size())); 
+                    rename->SetOldKey(TString(key.Data(), key.Size()));
                     key.SetType(TKeyPrefix::TypeData);
-                    rename->SetNewKey(TString(key.Data(), key.Size())); 
+                    rename->SetNewKey(TString(key.Data(), key.Size()));
                 }
                 if (!DataKeysBody.empty() && CompactedKeys.empty()) {
                     Y_VERIFY(DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount() <= x.first.GetOffset(),
@@ -4225,7 +4225,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             ui32 countOfLastParts = 0;
             for (auto& x : PartitionedBlob.GetClientBlobs()) {
                 if (NewHead.Batches.empty() || NewHead.Batches.back().Packed) {
-                    NewHead.Batches.emplace_back(curOffset, x.GetPartNo(), TVector<TClientBlob>()); 
+                    NewHead.Batches.emplace_back(curOffset, x.GetPartNo(), TVector<TClientBlob>());
                     NewHead.PackedSize += GetMaxHeaderSize(); //upper bound for packed size
                 }
                 if (x.IsLastPart()) {
@@ -4259,7 +4259,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             ++curOffset;
             PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
         }
-        TString().swap(p.Msg.Data); 
+        TString().swap(p.Msg.Data);
         pp.QuotedTime = WriteQuota.GetQuotedTime() - pp.QuotedTime; //change to duration
         pp.QueueTime = ctx.Now().MilliSeconds() - pp.QueueTime;
         pp.WriteTime = ctx.Now().MilliSeconds();
@@ -4326,7 +4326,7 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared)
 void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx) {
     const auto& key = res.first;
 
-    TString valueD; 
+    TString valueD;
     valueD.reserve(res.second);
     ui32 pp = Head.FindPos(key.GetOffset(), key.GetPartNo());
     if (pp < Max<ui32>() && key.GetOffset() < EndOffset) { //this batch trully contains this offset

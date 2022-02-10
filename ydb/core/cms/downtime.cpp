@@ -58,7 +58,7 @@ void TDowntime::AddDowntime(const TLockableItem &item, TInstant now)
         AddDowntime(item.Timestamp, now, "known downtime");
 
     if (item.Lock.Defined()) {
-        auto end = Min(now + TDuration::MicroSeconds(item.Lock->Action.GetDuration()), 
+        auto end = Min(now + TDuration::MicroSeconds(item.Lock->Action.GetDuration()),
                        item.Lock->ActionDeadline);
         AddDowntime(now, end, item.Lock->PermissionId);
     }

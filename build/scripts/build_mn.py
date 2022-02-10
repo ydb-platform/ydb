@@ -113,12 +113,12 @@ class BuildMns(BuildMnBase):
         self.mnrankingSuffix = mnrankingSuffix
         self.mnlistname = listname + mnrankingSuffix
         self.mnlistelem = "const NMatrixnet::TMnSsePtr*"
-        mnlisttype = "TMap< TString, {0} >".format(self.mnlistelem) 
+        mnlisttype = "TMap< TString, {0} >".format(self.mnlistelem)
         self.mnlist = "const {0} {1}".format(mnlisttype, self.mnlistname)
 
         self.mnmultilistname = "{0}{1}Multi".format(listname, self.mnrankingSuffix)
         self.mnmultilistelem = "const NMatrixnet::TMnMultiCategPtr*"
-        mnmultilisttype = "TMap< TString, {0} >".format(self.mnmultilistelem) 
+        mnmultilisttype = "TMap< TString, {0} >".format(self.mnmultilistelem)
         self.mnmultilist = "const {0} {1}".format(mnmultilisttype, self.mnmultilistname)
 
     def InitForAll(self, argv):
@@ -264,10 +264,10 @@ class BuildMns(BuildMnBase):
 
         if mnnames:
             mndata = self.mnlistname + "_data"
-            tmpSrcFile.write("static const std::pair< TString, {0} > {1}[] = {{\n".format(self.mnlistelem, mndata)) 
+            tmpSrcFile.write("static const std::pair< TString, {0} > {1}[] = {{\n".format(self.mnlistelem, mndata))
             for item in mnnames:
                 mnname = re.sub("[^-a-zA-Z0-9_]", "_", item)
-                tmpSrcFile.write("    std::make_pair(TString(\"{0}\"), &staticMn{1}{2}Ptr),\n".format(item, self.mnrankingSuffix, mnname)) 
+                tmpSrcFile.write("    std::make_pair(TString(\"{0}\"), &staticMn{1}{2}Ptr),\n".format(item, self.mnrankingSuffix, mnname))
             tmpSrcFile.write("};\n")
             tmpSrcFile.write("{0}({1},{1} + sizeof({1}) / sizeof({1}[0]));\n\n".format(self.mnlist, mndata))
         else:
@@ -275,10 +275,10 @@ class BuildMns(BuildMnBase):
 
         if mnmultinames:
             mnmultidata = self.mnmultilistname + "_data"
-            tmpSrcFile.write("static const std::pair< TString, {0} > {1}[] = {{\n".format(self.mnmultilistelem, mnmultidata)) 
+            tmpSrcFile.write("static const std::pair< TString, {0} > {1}[] = {{\n".format(self.mnmultilistelem, mnmultidata))
             for item in mnmultinames:
                 mnname = re.sub("[^-a-zA-Z0-9_]", "_", item)
-                tmpSrcFile.write("    std::make_pair(TString(\"{0}\"), &staticMnMulti{1}{2}Ptr),\n".format(item, self.mnrankingSuffix, mnname)) 
+                tmpSrcFile.write("    std::make_pair(TString(\"{0}\"), &staticMnMulti{1}{2}Ptr),\n".format(item, self.mnrankingSuffix, mnname))
             tmpSrcFile.write("};\n")
             tmpSrcFile.write("{0}({1},{1} + sizeof({1}) / sizeof({1}[0]));\n".format(self.mnmultilist, mnmultidata))
         else:

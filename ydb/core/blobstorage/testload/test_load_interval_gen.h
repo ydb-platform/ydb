@@ -24,7 +24,7 @@ namespace NKikimr {
 
             TDuration Generate() const {
                 TDuration range = Max - Min;
-                return Min + TDuration::MicroSeconds(TAppData::RandomProvider->GenRand64() % (range.GetValue() + 1)); 
+                return Min + TDuration::MicroSeconds(TAppData::RandomProvider->GenRand64() % (range.GetValue() + 1));
             }
         };
 

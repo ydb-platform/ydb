@@ -11,18 +11,18 @@ class IOutputStream;
 
 class THttpResponse {
 public:
-    THttpResponse() noexcept 
+    THttpResponse() noexcept
         : Code(HTTP_OK)
     {
     }
 
-    explicit THttpResponse(HttpCodes code) noexcept 
+    explicit THttpResponse(HttpCodes code) noexcept
         : Code(code)
     {
     }
 
     template <typename ValueType>
-    THttpResponse& AddHeader(const TString& name, const ValueType& value) { 
+    THttpResponse& AddHeader(const TString& name, const ValueType& value) {
         return AddHeader(THttpInputHeader(name, ToString(value)));
     }
 
@@ -45,7 +45,7 @@ public:
      * "Content-Length" header during output to IOutputStream.
      * @see IOutputStream& operator << (IOutputStream&, const THttpResponse&)
      */
-    THttpResponse& SetContent(const TString& content) { 
+    THttpResponse& SetContent(const TString& content) {
         Content = content;
 
         return *this;
@@ -60,7 +60,7 @@ public:
      * "Content-Length" header during output to IOutputStream.
      * @see IOutputStream& operator << (IOutputStream&, const THttpResponse&)
      */
-    THttpResponse& SetContent(const TString& content, const TStringBuf& contentType) { 
+    THttpResponse& SetContent(const TString& content, const TStringBuf& contentType) {
         return SetContent(content).SetContentType(contentType);
     }
 
@@ -78,5 +78,5 @@ public:
 private:
     HttpCodes Code;
     THttpHeaders Headers;
-    TString Content; 
+    TString Content;
 };

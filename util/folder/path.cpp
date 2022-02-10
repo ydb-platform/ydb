@@ -89,7 +89,7 @@ TFsPath TFsPath::RelativePath(const TFsPath& root) const {
     if (cnt == 0 && !absboth) {
         ythrow TIoException() << "No common parts in " << *this << " and " << root;
     }
-    TString r; 
+    TString r;
     for (size_t i = 0; i < rsplit.size() - cnt; i++) {
         r += i == 0 ? ".." : "/..";
     }
@@ -139,16 +139,16 @@ TFsPath& TFsPath::Fix() {
     return *this;
 }
 
-TString TFsPath::GetName() const { 
+TString TFsPath::GetName() const {
     if (!IsDefined()) {
-        return TString(); 
+        return TString();
     }
 
     const TSplit& split = GetSplit();
 
     if (split.size() > 0) {
         if (split.back() != "..") {
-            return TString(split.back()); 
+            return TString(split.back());
         } else {
             // cannot just drop last component, because path itself may be a symlink
             return RealPath().GetName();
@@ -162,8 +162,8 @@ TString TFsPath::GetName() const {
     }
 }
 
-TString TFsPath::GetExtension() const { 
-    return TString(GetSplit().Extension()); 
+TString TFsPath::GetExtension() const {
+    return TString(GetSplit().Extension());
 }
 
 bool TFsPath::IsAbsolute() const {
@@ -193,7 +193,7 @@ static Y_FORCE_INLINE void VerifyPath(const TStringBuf path) {
 TFsPath::TFsPath() {
 }
 
-TFsPath::TFsPath(const TString& path) 
+TFsPath::TFsPath(const TString& path)
     : Path_(path)
 {
     VerifyPath(Path_);
@@ -210,7 +210,7 @@ TFsPath::TFsPath(const char* path)
 {
 }
 
-TFsPath TFsPath::Child(const TString& name) const { 
+TFsPath TFsPath::Child(const TString& name) const {
     if (!name) {
         ythrow TIoException() << "child name must not be empty";
     }
@@ -228,7 +228,7 @@ struct TClosedir {
     }
 };
 
-void TFsPath::ListNames(TVector<TString>& children) const { 
+void TFsPath::ListNames(TVector<TString>& children) const {
     CheckDefined();
     THolder<DIR, TClosedir> dir(opendir(this->c_str()));
     if (!dir) {
@@ -250,7 +250,7 @@ void TFsPath::ListNames(TVector<TString>& children) const {
         if (ok == nullptr) {
             return;
         }
-        TString name(de.d_name); 
+        TString name(de.d_name);
         if (name == "." || name == "..") {
             continue;
         }
@@ -275,15 +275,15 @@ bool TFsPath::Contains(const TString& component) const {
     return false;
 }
 
-void TFsPath::List(TVector<TFsPath>& files) const { 
-    TVector<TString> names; 
+void TFsPath::List(TVector<TFsPath>& files) const {
+    TVector<TString> names;
     ListNames(names);
     for (auto& name : names) {
         files.push_back(Child(name));
     }
 }
 
-void TFsPath::RenameTo(const TString& newPath) const { 
+void TFsPath::RenameTo(const TString& newPath) const {
     CheckDefined();
     if (!newPath) {
         ythrow TIoException() << "bad new file name";
@@ -294,7 +294,7 @@ void TFsPath::RenameTo(const TString& newPath) const {
 }
 
 void TFsPath::RenameTo(const char* newPath) const {
-    RenameTo(TString(newPath)); 
+    RenameTo(TString(newPath));
 }
 
 void TFsPath::RenameTo(const TFsPath& newPath) const {
@@ -407,7 +407,7 @@ void TFsPath::ForceDelete() const {
 
     ClearLastSystemError();
     if (stat.IsDir()) {
-        TVector<TFsPath> children; 
+        TVector<TFsPath> children;
         List(children);
         for (auto& i : children) {
             i.ForceDelete();
@@ -422,14 +422,14 @@ void TFsPath::ForceDelete() const {
     }
 }
 
-void TFsPath::CopyTo(const TString& newPath, bool force) const { 
+void TFsPath::CopyTo(const TString& newPath, bool force) const {
     if (IsDirectory()) {
         if (force) {
             TFsPath(newPath).MkDirs();
         } else if (!TFsPath(newPath).IsDirectory()) {
             ythrow TIoException() << "Target path is not a directory " << newPath;
         }
-        TVector<TFsPath> children; 
+        TVector<TFsPath> children;
         List(children);
         for (auto&& i : children) {
             i.CopyTo(newPath + "/" + i.GetName(), force);
@@ -449,7 +449,7 @@ void TFsPath::CopyTo(const TString& newPath, bool force) const {
     }
 }
 
-void TFsPath::ForceRenameTo(const TString& newPath) const { 
+void TFsPath::ForceRenameTo(const TString& newPath) const {
     try {
         RenameTo(newPath);
     } catch (const TIoSystemError& /* error */) {

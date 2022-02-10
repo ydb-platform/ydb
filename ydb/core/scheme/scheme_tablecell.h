@@ -394,7 +394,7 @@ private:
 // When loading from a buffer the cells will point to the buffer contents
 class TSerializedCellVec {
 public:
-    explicit TSerializedCellVec(TString buf) 
+    explicit TSerializedCellVec(TString buf)
     {
         Parse(buf);
     }
@@ -444,7 +444,7 @@ public:
         return ok;
     }
 
-    void Parse(const TString &buf) { 
+    void Parse(const TString &buf) {
         Y_VERIFY(TryParse(buf, *this));
     }
 
@@ -454,14 +454,14 @@ public:
 
     static TString Serialize(const TConstArrayRef<TCell>& cells) {
         if (cells.empty())
-            return TString(); 
+            return TString();
 
         size_t sz = sizeof(ui16);
         for (auto& c : cells) {
             sz += sizeof(TValue) + c.Size();
         }
 
-        TString res; 
+        TString res;
         res.reserve(sz);
         ui16 cnt = cells.size();
         res.append((const char*)&cnt, sizeof(ui16));
@@ -519,12 +519,12 @@ private:
     }
 
 private:
-    TString Buf; 
-    TVector<TCell> Cells; 
+    TString Buf;
+    TVector<TCell> Cells;
 };
 
 void DbgPrintValue(TString&, const TCell&, ui32 type);
-TString DbgPrintCell(const TCell& r, NScheme::TTypeId typeId, const NScheme::TTypeRegistry& typeRegistry); 
-TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry); 
+TString DbgPrintCell(const TCell& r, NScheme::TTypeId typeId, const NScheme::TTypeRegistry& typeRegistry);
+TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry);
 
 }

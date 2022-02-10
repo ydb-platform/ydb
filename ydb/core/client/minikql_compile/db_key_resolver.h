@@ -9,7 +9,7 @@
 
 #include <util/generic/map.h>
 #include <util/generic/set.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 
 #include <library/cpp/threading/future/future.h>
@@ -22,8 +22,8 @@ using NKikimr::TTagDetails;
 class IDbSchemeResolver {
 public:
     struct TTable {
-        TString TableName; 
-        TSet<TString> ColumnNames; 
+        TString TableName;
+        TSet<TString> ColumnNames;
         ui64 RefreshAgainst = 0;
     };
 
@@ -34,7 +34,7 @@ public:
             LookupError = 2
         };
 
-        TTableResult(EStatus status, const TString& reason = TString()) 
+        TTableResult(EStatus status, const TString& reason = TString())
             : Status(status)
             , Reason(reason)
         {}
@@ -47,20 +47,20 @@ public:
         };
 
         EStatus Status;
-        TString Reason; 
+        TString Reason;
         TTable Table;
         TAutoPtr<NKikimr::TTableId> TableId;
         ui32 KeyColumnCount = 0;
-        TMap<TString, TColumn> Columns; 
+        TMap<TString, TColumn> Columns;
         ui64 CacheGeneration = 0;
     };
 
-    using TTableResults = TVector<TTableResult>; 
+    using TTableResults = TVector<TTableResult>;
 
     virtual ~IDbSchemeResolver() {}
 
     // Future-based API.
-    virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) = 0; 
+    virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) = 0;
 
     // MessagePassing-based API.
     struct TEvents {

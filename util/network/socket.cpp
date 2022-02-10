@@ -103,7 +103,7 @@ static const evpair evpairs_to_unix[] = {
 
 static const size_t nevpairs_to_unix = sizeof(evpairs_to_unix) / sizeof(evpairs_to_unix[0]);
 
-static int convert_events(int events, const evpair* evpairs, size_t nevpairs, bool ignoreUnknown) noexcept { 
+static int convert_events(int events, const evpair* evpairs, size_t nevpairs, bool ignoreUnknown) noexcept {
     int result = 0;
     for (size_t i = 0; i < nevpairs; ++i) {
         int event = evpairs[i].event;
@@ -127,21 +127,21 @@ private:
     HANDLE Event;
 
 public:
-    inline TWSAEventHolder(HANDLE event) noexcept 
+    inline TWSAEventHolder(HANDLE event) noexcept
         : Event(event)
     {
     }
 
-    inline ~TWSAEventHolder() { 
+    inline ~TWSAEventHolder() {
         WSACloseEvent(Event);
     }
 
-    inline HANDLE Get() noexcept { 
+    inline HANDLE Get() noexcept {
         return Event;
     }
 };
 
-int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept { 
+int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept {
     HANDLE rawEvent = WSACreateEvent();
     if (rawEvent == WSA_INVALID_EVENT) {
         errno = EIO;
@@ -553,7 +553,7 @@ static ssize_t DoSendMsg(SOCKET sock, const struct iovec* iov, int iovcnt) {
 }
 #endif
 
-void TSocketHolder::Close() noexcept { 
+void TSocketHolder::Close() noexcept {
     if (Fd_ != INVALID_SOCKET) {
         bool ok = (closesocket(Fd_) == 0);
         if (!ok) {
@@ -585,7 +585,7 @@ public:
 
     inline ~TImpl() = default;
 
-    inline SOCKET Fd() const noexcept { 
+    inline SOCKET Fd() const noexcept {
         return Fd_;
     }
 
@@ -752,7 +752,7 @@ class TCommonSockOps: public TSocket::TOps {
     using TPart = TSocket::TPart;
 
 public:
-    inline TCommonSockOps() noexcept { 
+    inline TCommonSockOps() noexcept {
     }
 
     ~TCommonSockOps() override = default;
@@ -832,7 +832,7 @@ ssize_t TCommonSockOps::SendVPartial(SOCKET fd, const TPart* constParts, size_t 
     return written;
 }
 
-static inline TSocket::TOps* GetCommonSockOps() noexcept { 
+static inline TSocket::TOps* GetCommonSockOps() noexcept {
     return Singleton<TCommonSockOps>();
 }
 
@@ -868,7 +868,7 @@ TSocket::TSocket(const TNetworkAddress& addr, const TInstant& deadLine)
 
 TSocket::~TSocket() = default;
 
-SOCKET TSocket::Fd() const noexcept { 
+SOCKET TSocket::Fd() const noexcept {
     return Impl_->Fd();
 }
 
@@ -888,7 +888,7 @@ void TSocket::Close() {
     Impl_->Close();
 }
 
-TSocketInput::TSocketInput(const TSocket& s) noexcept 
+TSocketInput::TSocketInput(const TSocket& s) noexcept
     : S_(s)
 {
 }
@@ -905,12 +905,12 @@ size_t TSocketInput::DoRead(void* buf, size_t len) {
     ythrow TSystemError(-(int)ret) << "can not read from socket input stream";
 }
 
-TSocketOutput::TSocketOutput(const TSocket& s) noexcept 
+TSocketOutput::TSocketOutput(const TSocket& s) noexcept
     : S_(s)
 {
 }
 
-TSocketOutput::~TSocketOutput() { 
+TSocketOutput::~TSocketOutput() {
     try {
         Finish();
     } catch (...) {
@@ -947,7 +947,7 @@ void TSocketOutput::DoWriteV(const TPart* parts, size_t count) {
 namespace {
     //https://bugzilla.mozilla.org/attachment.cgi?id=503263&action=diff
 
-    struct TLocalNames: public THashSet<TStringBuf> { 
+    struct TLocalNames: public THashSet<TStringBuf> {
         inline TLocalNames() {
             insert("localhost");
             insert("localhost.localdomain");
@@ -1004,7 +1004,7 @@ public:
     inline TImpl(const char* host, ui16 port, int flags)
         : Info_(nullptr, TAddrInfoDeleter{})
     {
-        const TString port_st(ToString(port)); 
+        const TString port_st(ToString(port));
         struct addrinfo hints;
 
         memset(&hints, 0, sizeof(hints));
@@ -1054,7 +1054,7 @@ public:
         Info_.reset(hints.release());
     }
 
-    inline struct addrinfo* Info() const noexcept { 
+    inline struct addrinfo* Info() const noexcept {
         return Info_.get();
     }
 
@@ -1069,12 +1069,12 @@ TNetworkAddress::TNetworkAddress(const TUnixSocketPath& unixSocketPath, int flag
 {
 }
 
-TNetworkAddress::TNetworkAddress(const TString& host, ui16 port, int flags) 
+TNetworkAddress::TNetworkAddress(const TString& host, ui16 port, int flags)
     : Impl_(new TImpl(host.data(), port, flags))
 {
 }
 
-TNetworkAddress::TNetworkAddress(const TString& host, ui16 port) 
+TNetworkAddress::TNetworkAddress(const TString& host, ui16 port)
     : Impl_(new TImpl(host.data(), port, 0))
 {
 }
@@ -1086,7 +1086,7 @@ TNetworkAddress::TNetworkAddress(ui16 port)
 
 TNetworkAddress::~TNetworkAddress() = default;
 
-struct addrinfo* TNetworkAddress::Info() const noexcept { 
+struct addrinfo* TNetworkAddress::Info() const noexcept {
     return Impl_->Info();
 }
 
@@ -1227,7 +1227,7 @@ void SetDeferAccept(SOCKET s) {
 #endif
 }
 
-ssize_t PollD(struct pollfd fds[], nfds_t nfds, const TInstant& deadLine) noexcept { 
+ssize_t PollD(struct pollfd fds[], nfds_t nfds, const TInstant& deadLine) noexcept {
     TInstant now = TInstant::Now();
 
     do {

@@ -48,15 +48,15 @@ protected:
     using TThis = TBrowseCommon;
     using TBase = TBrowseTabletsCommon;
     const TString PQ_ROOT_PATH;
-    TSet<TString> Consumers; 
+    TSet<TString> Consumers;
     struct TTopicInfo : NKikimrViewer::TMetaTopicInfo {
-        TMap<i32, THolder<TEvPersQueue::TEvPartitionClientInfoResponse>> PartitionResults; 
-        TMap<i32, NKikimrViewer::TMetaTopicPartitionInfo> PartitionInfo; 
+        TMap<i32, THolder<TEvPersQueue::TEvPartitionClientInfoResponse>> PartitionResults;
+        TMap<i32, NKikimrViewer::TMetaTopicPartitionInfo> PartitionInfo;
     };
-    TMap<TString, TTopicInfo> Topics; 
-    TMultiMap<TTabletId, i32> TabletPartitions; 
-    TMap<TTabletId, TTopicInfo*> TabletTopic; 
-    THashMap<TString, NKikimrViewer::TMetaTopicConsumerInfo> ConsumerInfo; 
+    TMap<TString, TTopicInfo> Topics;
+    TMultiMap<TTabletId, i32> TabletPartitions;
+    TMap<TTabletId, TTopicInfo*> TabletTopic;
+    THashMap<TString, NKikimrViewer::TMetaTopicConsumerInfo> ConsumerInfo;
     TString FilterTopic;
     TString FilterConsumer;
     TActorId TxProxy = MakeTxProxyID();
@@ -75,7 +75,7 @@ public:
         if (pbRecord.GetStatus() == NKikimrScheme::EStatus::StatusSuccess) {
             if (pbRecord.HasPathDescription()) {
                 const auto& pbPathDescription(pbRecord.GetPathDescription());
-                TVector<ui64> tablets; 
+                TVector<ui64> tablets;
                 if (pbPathDescription.HasPersQueueGroup()) {
                     const auto& pbPersQueueGroup = pbPathDescription.GetPersQueueGroup();
                     TTopicInfo* topicInfo = &Topics[GetTopicName(pbRecord.GetPath())];
@@ -127,7 +127,7 @@ public:
         }
     }
 
-    void SendTabletRequests(const TVector<TTabletId>& tablets, const TActorContext& ctx) { 
+    void SendTabletRequests(const TVector<TTabletId>& tablets, const TActorContext& ctx) {
         TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();
         for (auto tabletId : tablets) {
             TActorId pipeClient = GetTabletPipe(tabletId, ctx);

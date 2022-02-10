@@ -33,7 +33,7 @@ public:
     struct TSizes {
         ui64 ReadSize = 0;
         ui64 ReplySize = 0;
-        THashMap<ui64, ui64> OutReadSetSize; 
+        THashMap<ui64, ui64> OutReadSetSize;
         ui64 TotalKeysSize = 0;
     };
 

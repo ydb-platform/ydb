@@ -15,7 +15,7 @@ namespace NKiwiAggr {
         static const size_t DEFAULT_INTERVALS = 100;
 
     private:
-        using TPairSet = TSet<TWeightedValue>; 
+        using TPairSet = TSet<TWeightedValue>;
 
         struct TFastBin {
             // these names are for compatibility with TWeightedValue
@@ -47,7 +47,7 @@ namespace NKiwiAggr {
         TPairSet BinsByQuality;
         TQualityFunction CalcQuality;
 
-        TVector<TFastBin> PrecomputedBins; 
+        TVector<TFastBin> PrecomputedBins;
 
     public:
         TAdaptiveHistogram(size_t intervals, ui64 id = 0, TQualityFunction qualityFunc = CalcWeightQuality);

@@ -17,7 +17,7 @@ namespace NKikimr {
             TLogoBlobID Id;
             TRope Data;
             bool IsHugeBlob;
-            NMatrix::TVectorType LocalParts; 
+            NMatrix::TVectorType LocalParts;
 
             TRecoveredBlobInfo(const TLogoBlobID& id, TRope&& data, bool isHugeBlob, NMatrix::TVectorType localParts)
                 : Id(id)
@@ -259,7 +259,7 @@ namespace NKikimr {
             Y_VERIFY(!WritesInFlight);
             Y_VERIFY(FlushFinished);
             const auto& conclusion = Writer->GetConclusion();
-            TVector<ui32> usedChunks = conclusion.UsedChunks; 
+            TVector<ui32> usedChunks = conclusion.UsedChunks;
             PendingCommitMsg = std::make_unique<TEvAddBulkSst>(TVector<ui32>(ReservedChunks.begin(), ReservedChunks.end()),
                     std::move(usedChunks), TLogoBlobsSstPtr(conclusion.LevelSegment), NumRecoveredBlobs);
             Writer.reset();
@@ -274,7 +274,7 @@ namespace NKikimr {
         EOutputState OutputState;
         std::unique_ptr<IEventBase> PendingPDiskMsg;
         std::unique_ptr<TEvAddBulkSst> PendingCommitMsg;
-        TDeque<ui32> ReservedChunks; 
+        TDeque<ui32> ReservedChunks;
         ui32 MinReservedChunksCount;
         std::unique_ptr<TWriter> Writer;
         TDataMerger Merger;

@@ -2,7 +2,7 @@
 
 #include <util/stream/output.h>
 #include <util/stream/input.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/datetime/constants.h>
 
 #include <ctime>
@@ -28,9 +28,9 @@ public:
     }
 
     TDate(const char* yyyymmdd);
-    TDate(const TString& yyyymmdd); 
+    TDate(const TString& yyyymmdd);
     TDate(unsigned year, unsigned month, unsigned monthDay); // month from 01, monthDay from 01
-    TDate(const TString& date, const TString& format); 
+    TDate(const TString& date, const TString& format);
 
     explicit TDate(time_t t);
 
@@ -40,7 +40,7 @@ public:
 
     time_t GetStartUTC() const;
 
-    TString ToStroka(const char* format = "%Y%m%d") const; 
+    TString ToStroka(const char* format = "%Y%m%d") const;
 
     TDate& operator++() {
         Timestamp = GetDateStart(Timestamp + 3 * (SECONDS_IN_DAY / 2));
@@ -117,7 +117,7 @@ inline int operator-(const TDate& left, const TDate& right) {
 }
 
 inline IInputStream& operator>>(IInputStream& left, TDate& right) {
-    TString stroka; 
+    TString stroka;
     left >> stroka;
     TDate date(stroka.c_str());
     right = date;

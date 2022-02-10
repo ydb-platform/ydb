@@ -270,7 +270,7 @@ namespace NXml {
         return TNode();
     }
 
-    TString TNode::Name() const { 
+    TString TNode::Name() const {
         if (IsNull())
             THROW(XmlException, "Node is null");
 

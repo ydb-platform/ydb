@@ -49,13 +49,13 @@ private:
     }
 
 private:
-    TVector<i64> Values_; 
+    TVector<i64> Values_;
 };
 
 /**
  * Key names set to prevent keys accidental duplication.
  */
-class TKeyNames: private THashSet<TStringBuf> { 
+class TKeyNames: private THashSet<TStringBuf> {
 public:
     bool AddIfNotExists(TStringBuf name) {
         return insert(name).second;

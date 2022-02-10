@@ -51,7 +51,7 @@ public:
             NKikimrServices::EServiceKikimr_MAX,
             NKikimrServices::EServiceKikimr_Name
         );
-//        TString explanation; 
+//        TString explanation;
 //        logSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_PROXY_GET, explanation);
 //        logSettings->SetLevel(NLog::PRI_DEBUG, NActorsServices::TEST, explanation);
 

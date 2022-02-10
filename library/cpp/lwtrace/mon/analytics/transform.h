@@ -6,14 +6,14 @@ namespace NAnalytics {
 
 template <class TSkip, class TX, class TY>
 inline TTable Histogram(const TTable& in, TSkip skip,
-                 const TString& xn_out, TX x_in, 
-                 const TString& yn_out, TY y_in, 
+                 const TString& xn_out, TX x_in,
+                 const TString& yn_out, TY y_in,
                  double x1, double x2, double dx)
 {
     long buckets = (x2 - x1) / dx;
     TTable out;
-    TString yn_sum = yn_out + "_sum"; 
-    TString yn_share = yn_out + "_share"; 
+    TString yn_sum = yn_out + "_sum";
+    TString yn_share = yn_out + "_share";
     double ysum = 0.0;
     out.resize(buckets);
     for (size_t i = 0; i < out.size(); i++) {
@@ -46,14 +46,14 @@ inline TTable Histogram(const TTable& in, TSkip skip,
     return out;
 }
 
-inline TTable HistogramAll(const TTable& in, const TString& xn, double x1, double x2, double dx) 
+inline TTable HistogramAll(const TTable& in, const TString& xn, double x1, double x2, double dx)
 {
     long buckets = (dx == 0.0? 1: (x2 - x1) / dx);
     TTable out;
-    THashMap<TString, double> colSum; 
+    THashMap<TString, double> colSum;
     out.resize(buckets);
 
-    TSet<TString> cols; 
+    TSet<TString> cols;
     for (auto& row : in) {
         for (auto& kv : row) {
             cols.insert(kv.first);
@@ -62,7 +62,7 @@ inline TTable HistogramAll(const TTable& in, const TString& xn, double x1, doubl
     cols.insert("_count");
     cols.erase(xn);
 
-    for (const TString& col : cols) { 
+    for (const TString& col : cols) {
         colSum[col] = 0.0;
     }
 
@@ -72,7 +72,7 @@ inline TTable HistogramAll(const TTable& in, const TString& xn, double x1, doubl
         TRow& row = out[i];
         row.Name = "[" + ToString(lb) + ";" + ToString(ub) + (ub==x2? "]": ")");
         row[xn] = (lb + ub) / 2;
-        for (const TString& col : cols) { 
+        for (const TString& col : cols) {
             row[col + "_sum"] = 0.0;
         }
     }
@@ -86,7 +86,7 @@ inline TTable HistogramAll(const TTable& in, const TString& xn, double x1, doubl
             i--;
         }
         for (const auto& kv : row_in) {
-            const TString& yn = kv.first; 
+            const TString& yn = kv.first;
             if (yn == xn) {
                 continue;
             }
@@ -116,7 +116,7 @@ inline TTable HistogramAll(const TTable& in, const TString& xn, double x1, doubl
         }
     }
     for (TRow& row : out) {
-        for (const TString& col : cols) { 
+        for (const TString& col : cols) {
             double ysum = colSum[col];
             if (col != "_count") {
                 if (row.GetOrDefault(col + "_cnt") != 0.0) {
@@ -133,7 +133,7 @@ inline TTable HistogramAll(const TTable& in, const TString& xn, double x1, doubl
 
 inline TMatrix CovarianceMatrix(const TTable& in)
 {
-    TSet<TString> cols; 
+    TSet<TString> cols;
     for (auto& row : in) {
         for (auto& kv : row) {
             cols.insert(kv.first);
@@ -147,7 +147,7 @@ inline TMatrix CovarianceMatrix(const TTable& in)
         double Mean = 0;
     };
 
-    THashMap<TString, TAggregate> colAggr; 
+    THashMap<TString, TAggregate> colAggr;
 
     size_t colCount = 0;
     for (const TString& col : cols) {

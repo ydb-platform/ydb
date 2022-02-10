@@ -38,8 +38,8 @@
 #include <boost/static_assert.hpp>
 #include <boost/assert.hpp>
 
-#include <util/system/compiler.h> 
- 
+#include <util/system/compiler.h>
+
 #ifdef BOOST_NO_CXX11_RVALUE_REFERENCES
 #define BOOST_GRAPH_MOVE_IF_POSSIBLE(x) (x)
 #else
@@ -269,7 +269,7 @@ namespace boost {
         : Base(static_cast< Base const& >(x)), m_property(const_cast<self&>(x).m_property) { }
       self& operator=(const self& x) {
         // NOTE: avoid 'Base::operator=(x);' broken on SGI MIPSpro (bug 55771 of Mozilla).
-        static_cast<Base&>(*this) = static_cast< Base const& >(x); 
+        static_cast<Base&>(*this) = static_cast< Base const& >(x);
         m_property = const_cast<self&>(x).m_property;
         return *this;
       }
@@ -279,7 +279,7 @@ namespace boost {
         : Base(static_cast< Base&& >(x)), m_property(std::move(x.m_property)) { }
       self& operator=(self&& x) {
         // NOTE: avoid 'Base::operator=(x);' broken on SGI MIPSpro (bug 55771 of Mozilla).
-        static_cast<Base&>(*this) = static_cast< Base&& >(x); 
+        static_cast<Base&>(*this) = static_cast< Base&& >(x);
         m_property = std::move(x.m_property);
         return *this;
       }
@@ -1258,9 +1258,9 @@ namespace boost {
         typedef typename Config::global_edgelist_selector EdgeListS;
         BOOST_STATIC_ASSERT((!is_same<EdgeListS, vecS>::value));
 
-        Y_PRAGMA_DIAGNOSTIC_PUSH 
-        Y_PRAGMA_NO_WSHADOW 
- 
+        Y_PRAGMA_DIAGNOSTIC_PUSH
+        Y_PRAGMA_NO_WSHADOW
+
         typedef typename Config::graph_type graph_type;
         graph_type& g = static_cast<graph_type&>(*this);
         typename Config::edge_descriptor e = *iter;
@@ -1271,8 +1271,8 @@ namespace boost {
         detail::remove_directed_edge_dispatch(*iter, iel, p);
         g.m_edges.erase(iter.base()->get_iter());
         oel.erase(iter.base());
- 
-        Y_PRAGMA_DIAGNOSTIC_POP 
+
+        Y_PRAGMA_DIAGNOSTIC_POP
       }
     };
 

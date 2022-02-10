@@ -39,7 +39,7 @@ namespace {
         struct TEvReply : public TEventLocal<TEvReply, EvReply> {
             EResponseStatus Status;
             TEvTxUserProxy::TResultStatus::EStatus ProxyStatus;
-            TString Message; 
+            TString Message;
             NKikimrTxUserProxy::TEvProposeTransactionStatus Result;
 
             TEvReply(EResponseStatus status, TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message)
@@ -69,7 +69,7 @@ public:
         , Request(static_cast<RequestType*>(msg.ReleaseMessage()))
     {}
 
-    void ReplyWithErrorToInterface(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message, const TActorContext&) { 
+    void ReplyWithErrorToInterface(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message, const TActorContext&) {
         TAutoPtr<TBusResponse> response(new TBusResponseStatus(status, message));
         if (proxyStatus != TEvTxUserProxy::TResultStatus::Unknown)
             response->Record.SetProxyErrorCode(proxyStatus);
@@ -173,7 +173,7 @@ public:
         : HostActor(hostActor)
     {}
 
-    void ReplyWithErrorToInterface(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message, const TActorContext& ctx) { 
+    void ReplyWithErrorToInterface(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message, const TActorContext& ctx) {
         ctx.Send(HostActor, new TEvPrivate::TEvReply(status, proxyStatus, message));
     }
 
@@ -199,7 +199,7 @@ protected:
     TAutoPtr<NSchemeCache::TSchemeCacheNavigate> CacheNavigate;
     NJson::TJsonValue JSON;
     THPTimer StartTime;
-    TString Table; 
+    TString Table;
     TString SecurityToken; // raw input
     TString UserToken; // built and serialized
     ui32 Requests = 0;
@@ -219,7 +219,7 @@ protected:
         CompleteRequest(ctx);
     }
 
-    void ReplyWithError(EResponseStatus status, const TString& message, const TActorContext& ctx) { 
+    void ReplyWithError(EResponseStatus status, const TString& message, const TActorContext& ctx) {
         ReplyWithError(status, TEvTxUserProxy::TResultStatus::Unknown, message, ctx);
     }
 
@@ -326,7 +326,7 @@ public:
         }
     }
 
-    void ResolveTable(const TString& table, const NActors::TActorContext& ctx) { 
+    void ResolveTable(const TString& table, const NActors::TActorContext& ctx) {
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = SplitPath(table);
@@ -381,9 +381,9 @@ public:
     }
 
     void BuildProgram(const NJson::TJsonValue& json, NMiniKQL::TRuntimeNode& pgmReturn, NMiniKQL::TKikimrProgramBuilder& pgmBuilder, const NSchemeCache::TSchemeCacheNavigate::TEntry& tableInfo,
-                      const TVector<const NTxProxy::TTableColumnInfo*>& keys, const THashMap<TString, const NTxProxy::TTableColumnInfo*>& columnByName, TVector<NMiniKQL::TRuntimeNode>& result) { 
-        TVector<NMiniKQL::TRuntimeNode> keyColumns; 
-        TVector<ui32> keyTypes; 
+                      const TVector<const NTxProxy::TTableColumnInfo*>& keys, const THashMap<TString, const NTxProxy::TTableColumnInfo*>& columnByName, TVector<NMiniKQL::TRuntimeNode>& result) {
+        TVector<NMiniKQL::TRuntimeNode> keyColumns;
+        TVector<ui32> keyTypes;
         keyTypes.reserve(keys.size());
         for (const NTxProxy::TTableColumnInfo* key : keys) {
             Y_VERIFY(key != nullptr);
@@ -419,7 +419,7 @@ public:
 
         NJson::TJsonValue jsonSelect;
         if (json.GetValue("Select", &jsonSelect)) {
-            TVector<NMiniKQL::TSelectColumn> columnsToRead; 
+            TVector<NMiniKQL::TSelectColumn> columnsToRead;
             if (jsonSelect.IsArray()) {
                 const NJson::TJsonValue::TArray& array = jsonSelect.GetArray();
                 columnsToRead.reserve(array.size());
@@ -445,7 +445,7 @@ public:
                 result.emplace_back(pgmBuilder.SelectRow(tableInfo.TableId, keyTypes, columnsToRead, keyColumns, readTarget));
             } else {
                 NMiniKQL::TTableRangeOptions tableRangeOptions = pgmBuilder.GetDefaultTableRangeOptions();
-                TVector<NMiniKQL::TRuntimeNode> keyFromColumns = keyColumns; 
+                TVector<NMiniKQL::TRuntimeNode> keyFromColumns = keyColumns;
                 for (size_t i = keyColumns.size(); i < keyTypes.size(); ++i) {
                     keyFromColumns.emplace_back(pgmBuilder.NewEmptyOptionalDataLiteral(keyTypes[i]));
                 }
@@ -458,7 +458,7 @@ public:
 
         NJson::TJsonValue jsonUpdate;
         if (json.GetValue("Update", &jsonUpdate)) {
-            const NJson::TJsonValue::TMapType& jsonMap = jsonUpdate.GetMap(); 
+            const NJson::TJsonValue::TMapType& jsonMap = jsonUpdate.GetMap();
             for (auto itVal = jsonMap.begin(); itVal != jsonMap.end(); ++itVal) {
                 auto itCol = columnByName.find(itVal->first);
                 if (itCol != columnByName.end()) {
@@ -497,9 +497,9 @@ public:
             NMiniKQL::TKikimrProgramBuilder pgmBuilder(env, functionRegistry);
             NMiniKQL::TRuntimeNode pgmReturn = pgmBuilder.NewEmptyListOfVoid();
             const NSchemeCache::TSchemeCacheNavigate::TEntry& tableInfo = CacheNavigate->ResultSet.front();
-            TVector<const NTxProxy::TTableColumnInfo*> keys; 
-            THashMap<TString, const NTxProxy::TTableColumnInfo*> columnByName; 
-            TVector<NMiniKQL::TRuntimeNode> result; 
+            TVector<const NTxProxy::TTableColumnInfo*> keys;
+            THashMap<TString, const NTxProxy::TTableColumnInfo*> columnByName;
+            TVector<NMiniKQL::TRuntimeNode> result;
 
             // reordering key columns
             for (auto itCol = tableInfo.Columns.begin(); itCol != tableInfo.Columns.end(); ++itCol) {
@@ -521,7 +521,7 @@ public:
             }
 
             NMiniKQL::TRuntimeNode node = pgmBuilder.Build(pgmReturn);
-            TString bin = NMiniKQL::SerializeRuntimeNode(node, env); 
+            TString bin = NMiniKQL::SerializeRuntimeNode(node, env);
 
             DbOperationsCounters->RequestPrepareTimeHistogram.Add(StartTime.Passed() * 1000/*ms*/);
 
@@ -597,7 +597,7 @@ protected:
     TIntrusivePtr<TMessageBusDbOpsCounters> DbOperationsCounters;
     NJson::TJsonValue JSON;
     THashMap<TTabletId, TActorId> Pipes;
-    TDeque<TAutoPtr<TEvTxUserProxy::TEvProposeTransaction>> Requests; 
+    TDeque<TAutoPtr<TEvTxUserProxy::TEvProposeTransaction>> Requests;
     THPTimer StartTime;
     TString SecurityToken;
     TString UserToken; // built and serialized
@@ -609,12 +609,12 @@ protected:
         Die(ctx);
     }
 
-    void ReplyWithError(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message, const TActorContext& ctx) { 
+    void ReplyWithError(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message, const TActorContext& ctx) {
         InterfaceBase::ReplyWithErrorToInterface(status, proxyStatus, message, ctx);
         CompleteRequest(ctx);
     }
 
-    void ReplyWithError(EResponseStatus status, const TString& message, const TActorContext& ctx) { 
+    void ReplyWithError(EResponseStatus status, const TString& message, const TActorContext& ctx) {
         ReplyWithError(status, TEvTxUserProxy::TResultStatus::Unknown, message, ctx);
     }
 
@@ -770,7 +770,7 @@ public:
     }
 
     void BuildRequests(const TActorContext& ctx) {
-        TString path; 
+        TString path;
         NJson::TJsonValue jsonPath;
         if (JSON.GetValue("Path", &jsonPath)) {
             path = jsonPath.GetString();
@@ -824,7 +824,7 @@ public:
 
         NJson::TJsonValue jsonCreateTable;
         if (JSON.GetValue("CreateTable", &jsonCreateTable)) {
-            const NJson::TJsonValue::TMapType& jsonTables = jsonCreateTable.GetMap(); 
+            const NJson::TJsonValue::TMapType& jsonTables = jsonCreateTable.GetMap();
             for (auto itTable = jsonTables.begin(); itTable != jsonTables.end(); ++itTable) {
                 TAutoPtr<TEvTxUserProxy::TEvProposeTransaction> Proposal(new TEvTxUserProxy::TEvProposeTransaction());
                 NKikimrSchemeOp::TModifyScheme& modifyScheme(*Proposal->Record.MutableTransaction()->MutableModifyScheme());
@@ -835,7 +835,7 @@ public:
                 // parsing CreateTable/<name>/Columns
                 NJson::TJsonValue jsonColumn;
                 if (itTable->second.GetValue("Columns", &jsonColumn)) {
-                    const NJson::TJsonValue::TMapType& jsonColumns = jsonColumn.GetMap(); 
+                    const NJson::TJsonValue::TMapType& jsonColumns = jsonColumn.GetMap();
                     for (auto itColumn = jsonColumns.begin(); itColumn != jsonColumns.end(); ++itColumn) {
                         NKikimrSchemeOp::TColumnDescription& column(*createTable.AddColumns());
                         column.SetName(itColumn->first);
@@ -914,8 +914,8 @@ protected:
     TActorId SchemeCache;
     TIntrusivePtr<TMessageBusDbOpsCounters> DbOperationsCounters;
     NJson::TJsonValue JSON;
-    TDeque<TAutoPtr<IActor>> Operations; 
-    TDeque<TAutoPtr<TEvPrivate::TEvReply>> Replies; 
+    TDeque<TAutoPtr<IActor>> Operations;
+    TDeque<TAutoPtr<TEvPrivate::TEvReply>> Replies;
     int MaxInFlight;
     int CurrentInFlight;
     TString SecurityToken;
@@ -924,12 +924,12 @@ protected:
         TBase::Die(ctx);
     }
 
-    void ReplyWithError(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message, const TActorContext& ctx) { 
+    void ReplyWithError(EResponseStatus status,  TEvTxUserProxy::TResultStatus::EStatus proxyStatus, const TString& message, const TActorContext& ctx) {
         InterfaceBase::ReplyWithErrorToInterface(status, proxyStatus, message, ctx);
         CompleteRequest(ctx);
     }
 
-    void ReplyWithError(EResponseStatus status, const TString& message, const TActorContext& ctx) { 
+    void ReplyWithError(EResponseStatus status, const TString& message, const TActorContext& ctx) {
         ReplyWithError(status, TEvTxUserProxy::TResultStatus::Unknown, message, ctx);
     }
 
@@ -964,7 +964,7 @@ protected:
         if (CurrentInFlight == 0) {
             NKikimrTxUserProxy::TEvProposeTransactionStatus mergedResult;
             EResponseStatus status = MSTATUS_OK;
-            TString message; 
+            TString message;
             for (const TAutoPtr<TEvPrivate::TEvReply>& reply : Replies) {
                 if (status == MSTATUS_OK && reply->Status != MSTATUS_OK) {
                     status = reply->Status;

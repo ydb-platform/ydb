@@ -2006,7 +2006,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                              << ", at schemeshard: " << Self->TabletID());
 
             TPathId prevTableId;
-            TVector<TTableShardInfo> partitions; 
+            TVector<TTableShardInfo> partitions;
 
             const auto now = ctx.Now();
             for (auto& rec: tablePartitions) {

@@ -10,7 +10,7 @@ class TTopKeeper {
 private:
     class TVectorWithMin {
     private:
-        TVector<T, Alloc> Internal; 
+        TVector<T, Alloc> Internal;
         size_t HalfMaxSize;
         TComparator Comparer;
         size_t MinElementIndex;

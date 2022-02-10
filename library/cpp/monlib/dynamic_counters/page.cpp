@@ -56,7 +56,7 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     for (const auto& escaped : parts) {
         const auto part = CGIUnescapeRet(escaped);
 
-        TVector<TString> labels; 
+        TVector<TString> labels;
         StringSplitter(part).Split('=').SkipEmpty().Collect(&labels);
 
         if (labels.size() != 2U)

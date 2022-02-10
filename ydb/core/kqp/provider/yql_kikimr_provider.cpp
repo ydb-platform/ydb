@@ -18,11 +18,11 @@ const TStringBuf CommitModeRollback = "rollback";
 const TStringBuf CommitModeScheme = "scheme";
 
 struct TKikimrData {
-    THashSet<TStringBuf> DataSourceNames; 
-    THashSet<TStringBuf> DataSinkNames; 
-    THashSet<TStringBuf> KqlNames; 
+    THashSet<TStringBuf> DataSourceNames;
+    THashSet<TStringBuf> DataSinkNames;
+    THashSet<TStringBuf> KqlNames;
 
-    THashSet<TStringBuf> CommitModes; 
+    THashSet<TStringBuf> CommitModes;
     THashSet<TStringBuf> SupportedEffects;
 
     TYdbOperations SchemeOps;
@@ -148,7 +148,7 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
     return Tables[std::make_pair(cluster, table)];
 }
 
-TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) { 
+TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) {
     auto desc = Tables.FindPtr(std::make_pair(cluster, table));
     YQL_ENSURE(desc, "Unexpected empty metadata, cluster '" << cluster << "', table '" << table << "'");
 
@@ -168,7 +168,7 @@ const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf
 bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
     ColumnTypes.clear();
 
-    TVector<const TItemExprType*> items; 
+    TVector<const TItemExprType*> items;
     for (auto pair : Metadata->Columns) {
         auto& column = pair.second;
 
@@ -208,14 +208,14 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
     return true;
 }
 
-TMaybe<ui32> TKikimrTableDescription::GetKeyColumnIndex(const TString& name) const { 
+TMaybe<ui32> TKikimrTableDescription::GetKeyColumnIndex(const TString& name) const {
     auto it = std::find(Metadata->KeyColumnNames.begin(), Metadata->KeyColumnNames.end(), name);
     return it == Metadata->KeyColumnNames.end()
         ? TMaybe<ui32>()
         : it - Metadata->KeyColumnNames.begin();
 }
 
-const TTypeAnnotationNode* TKikimrTableDescription::GetColumnType(const TString& name) const { 
+const TTypeAnnotationNode* TKikimrTableDescription::GetColumnType(const TString& name) const {
     auto* type = ColumnTypes.FindPtr(name);
     if (!type) {
         return nullptr;
@@ -285,7 +285,7 @@ void TKikimrTableDescription::ToYson(NYson::TYsonWriter& writer) const {
             writer.OnKeyedItem("Type");
             NCommon::WriteTypeToYson(writer, item->GetItemType());
 
-            TMaybe<ui32> keyIndex = GetKeyColumnIndex(TString(name)); 
+            TMaybe<ui32> keyIndex = GetKeyColumnIndex(TString(name));
 
             writer.OnKeyedItem("ClusterSortOrder");
             writer.OnBeginList();
@@ -398,7 +398,7 @@ NNodes::TCoAtomList BuildColumnsList(
     TExprContext& ctx,
     bool withSystemColumns
 ) {
-    TVector<TExprBase> columnsToSelect; 
+    TVector<TExprBase> columnsToSelect;
     for (const auto& pair : table.Metadata->Columns) {
         auto atom = Build<TCoAtom>(ctx, pos)
             .Value(pair.second.Name)
@@ -660,15 +660,15 @@ bool TKikimrTransactionContextBase::ApplyTableOperations(const TVector<NKqpProto
     return true;
 }
 
-const THashSet<TStringBuf>& KikimrDataSourceFunctions() { 
+const THashSet<TStringBuf>& KikimrDataSourceFunctions() {
     return Singleton<TKikimrData>()->DataSourceNames;
 }
 
-const THashSet<TStringBuf>& KikimrDataSinkFunctions() { 
+const THashSet<TStringBuf>& KikimrDataSinkFunctions() {
     return Singleton<TKikimrData>()->DataSinkNames;
 }
 
-const THashSet<TStringBuf>& KikimrKqlFunctions() { 
+const THashSet<TStringBuf>& KikimrKqlFunctions() {
     return Singleton<TKikimrData>()->KqlNames;
 }
 
@@ -676,7 +676,7 @@ const THashSet<TStringBuf>& KikimrSupportedEffects() {
     return Singleton<TKikimrData>()->SupportedEffects;
 }
 
-const THashSet<TStringBuf>& KikimrCommitModes() { 
+const THashSet<TStringBuf>& KikimrCommitModes() {
     return Singleton<TKikimrData>()->CommitModes;
 }
 

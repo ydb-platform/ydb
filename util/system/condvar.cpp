@@ -27,11 +27,11 @@ namespace {
         using TWaitEvents = TIntrusiveList<TWaitEvent>;
 
     public:
-        inline ~TCondVarImpl() { 
+        inline ~TCondVarImpl() {
             Y_ASSERT(Events_.Empty());
         }
 
-        inline void Signal() noexcept { 
+        inline void Signal() noexcept {
             with_lock (Lock_) {
                 if (!Events_.Empty()) {
                     Events_.PopFront()->Signal();
@@ -39,7 +39,7 @@ namespace {
             }
         }
 
-        inline void BroadCast() noexcept { 
+        inline void BroadCast() noexcept {
             with_lock (Lock_) {
                 //TODO
                 while (!Events_.Empty()) {
@@ -48,7 +48,7 @@ namespace {
             }
         }
 
-        inline bool WaitD(TMutex& m, TInstant deadLine) noexcept { 
+        inline bool WaitD(TMutex& m, TInstant deadLine) noexcept {
             TWaitEvent event;
 
             with_lock (Lock_) {
@@ -86,17 +86,17 @@ public:
         }
     }
 
-    inline ~TImpl() { 
+    inline ~TImpl() {
         int ret = pthread_cond_destroy(&Cond_);
         Y_VERIFY(ret == 0, "pthread_cond_destroy failed: %s", LastSystemErrorText(ret));
     }
 
-    inline void Signal() noexcept { 
+    inline void Signal() noexcept {
         int ret = pthread_cond_signal(&Cond_);
         Y_VERIFY(ret == 0, "pthread_cond_signal failed: %s", LastSystemErrorText(ret));
     }
 
-    inline bool WaitD(TMutex& lock, TInstant deadLine) noexcept { 
+    inline bool WaitD(TMutex& lock, TInstant deadLine) noexcept {
         if (deadLine == TInstant::Max()) {
             int ret = pthread_cond_wait(&Cond_, (pthread_mutex_t*)lock.Handle());
             Y_VERIFY(ret == 0, "pthread_cond_wait failed: %s", LastSystemErrorText(ret));
@@ -117,7 +117,7 @@ public:
         }
     }
 
-    inline void BroadCast() noexcept { 
+    inline void BroadCast() noexcept {
         int ret = pthread_cond_broadcast(&Cond_);
         Y_VERIFY(ret == 0, "pthread_cond_broadcast failed: %s", LastSystemErrorText(ret));
     }
@@ -134,14 +134,14 @@ TCondVar::TCondVar()
 
 TCondVar::~TCondVar() = default;
 
-void TCondVar::BroadCast() noexcept { 
+void TCondVar::BroadCast() noexcept {
     Impl_->BroadCast();
 }
 
-void TCondVar::Signal() noexcept { 
+void TCondVar::Signal() noexcept {
     Impl_->Signal();
 }
 
-bool TCondVar::WaitD(TMutex& mutex, TInstant deadLine) noexcept { 
+bool TCondVar::WaitD(TMutex& mutex, TInstant deadLine) noexcept {
     return Impl_->WaitD(mutex, deadLine);
 }

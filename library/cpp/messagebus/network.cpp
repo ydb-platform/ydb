@@ -94,7 +94,7 @@ namespace {
 }
 
 std::pair<unsigned, TVector<TBindResult>> NBus::BindOnPort(int port, bool reusePort) {
-    std::pair<unsigned, TVector<TBindResult>> r; 
+    std::pair<unsigned, TVector<TBindResult>> r;
     r.second.reserve(2);
 
     if (port != 0) {

@@ -275,7 +275,7 @@ TString THttpRequest::GetRequestPathPart(TStringBuf path, size_t partIdx) const 
         path.SkipPrefix(PRIVATE_REQUEST_PATH_PREFIX);
     }
 
-    TVector<TStringBuf> items; 
+    TVector<TStringBuf> items;
     StringSplitter(path).Split('/').AddTo(&items);
     if (items.size() > partIdx) {
         return TString(items[partIdx]);

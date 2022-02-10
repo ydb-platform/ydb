@@ -58,11 +58,11 @@ namespace NKiwiAggr {
             HistogramImpl->Merge(histo, multiplier);
         }
 
-        virtual void Merge(const TVector<THistogram>& histogramsToMerge) { 
+        virtual void Merge(const TVector<THistogram>& histogramsToMerge) {
             HistogramImpl->Merge(histogramsToMerge);
         }
 
-        virtual void Merge(TVector<IHistogramPtr> histogramsToMerge) { 
+        virtual void Merge(TVector<IHistogramPtr> histogramsToMerge) {
             HistogramImpl->Merge(histogramsToMerge);
         }
 

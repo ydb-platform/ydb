@@ -5,7 +5,7 @@
 
 #include <util/system/error.h>
 #include <util/system/byteorder.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/yexception.h>
 
 /// IPv4 address in network format
@@ -36,15 +36,15 @@ static inline char* IpToString(TIpHost ip, char* buf, size_t len) {
     return buf;
 }
 
-static inline TString IpToString(TIpHost ip) { 
+static inline TString IpToString(TIpHost ip) {
     char buf[INET_ADDRSTRLEN];
 
-    return TString(IpToString(ip, buf, sizeof(buf))); 
+    return TString(IpToString(ip, buf, sizeof(buf)));
 }
 
 static inline TIpHost ResolveHost(const char* data, size_t len) {
     TIpHost ret;
-    const TString s(data, len); 
+    const TString s(data, len);
 
     if (NResolver::GetHostIP(s.data(), &ret) != 0) {
         ythrow TSystemError(NResolver::GetDnsError()) << "can not resolve(" << s << ")";
@@ -55,17 +55,17 @@ static inline TIpHost ResolveHost(const char* data, size_t len) {
 
 /// socket address
 struct TIpAddress: public sockaddr_in {
-    inline TIpAddress() noexcept { 
+    inline TIpAddress() noexcept {
         Clear();
     }
 
-    inline TIpAddress(const sockaddr_in& addr) noexcept 
+    inline TIpAddress(const sockaddr_in& addr) noexcept
         : sockaddr_in(addr)
         , tmp(0)
     {
     }
 
-    inline TIpAddress(TIpHost ip, TIpPort port) noexcept { 
+    inline TIpAddress(TIpHost ip, TIpPort port) noexcept {
         Set(ip, port);
     }
 
@@ -77,27 +77,27 @@ struct TIpAddress: public sockaddr_in {
         Set(ResolveHost(ip, strlen(ip)), port);
     }
 
-    inline operator sockaddr*() const noexcept { 
+    inline operator sockaddr*() const noexcept {
         return (sockaddr*)(sockaddr_in*)this;
     }
 
-    inline operator socklen_t*() const noexcept { 
+    inline operator socklen_t*() const noexcept {
         tmp = sizeof(sockaddr_in);
 
         return (socklen_t*)&tmp;
     }
 
-    inline operator socklen_t() const noexcept { 
+    inline operator socklen_t() const noexcept {
         tmp = sizeof(sockaddr_in);
 
         return tmp;
     }
 
-    inline void Clear() noexcept { 
+    inline void Clear() noexcept {
         Zero((sockaddr_in&)(*this));
     }
 
-    inline void Set(TIpHost ip, TIpPort port) noexcept { 
+    inline void Set(TIpHost ip, TIpPort port) noexcept {
         Clear();
 
         sin_family = AF_INET;
@@ -105,11 +105,11 @@ struct TIpAddress: public sockaddr_in {
         sin_port = HostToInet(port);
     }
 
-    inline TIpHost Host() const noexcept { 
+    inline TIpHost Host() const noexcept {
         return sin_addr.s_addr;
     }
 
-    inline TIpPort Port() const noexcept { 
+    inline TIpPort Port() const noexcept {
         return InetToHost(sin_port);
     }
 

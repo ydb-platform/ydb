@@ -68,14 +68,14 @@ public:
     static const TType JsonDocument;
     static const TType Timestamp;
 
-    const TString& GetName() const; 
+    const TString& GetName() const;
     ui16 GetId() const;
 
-    TType(const TString& typeName, ui16 typeId); 
+    TType(const TString& typeName, ui16 typeId);
     TType(ui16 typeId);
 
 protected:
-    TString TypeName; 
+    TString TypeName;
     ui16 TypeId;
 };
 
@@ -88,35 +88,35 @@ public:
     ui32 Partitions;
 
     // generic column of a table, used in schema operations
-    TColumn(const TString& name, const TType& type); 
+    TColumn(const TString& name, const TType& type);
 
 protected:
-    TColumn(const TString& name, const TType& type, bool key, ui32 partitions); 
+    TColumn(const TString& name, const TType& type, bool key, ui32 partitions);
 };
 
 class TKeyColumn : public TColumn {
 public:
     // column which automatically will be added to table key
-    TKeyColumn(const TString& name, const TType& type); 
+    TKeyColumn(const TString& name, const TType& type);
 
 protected:
-    TKeyColumn(const TString& name, const TType& type, ui32 partitions); 
+    TKeyColumn(const TString& name, const TType& type, ui32 partitions);
 };
 
 class TKeyPartitioningColumn : public TKeyColumn {
 public:
     // uniform partitioning column, the type should be either Uint64 or Uint32
     // the column should be first in a create table's list
-    TKeyPartitioningColumn(const TString& name, const TType& type, ui32 partitions); 
+    TKeyPartitioningColumn(const TString& name, const TType& type, ui32 partitions);
 };
 
 template <typename MemberType>
 class TStructMemberValue {
 public:
-    TString Name; 
+    TString Name;
     MemberType Value;
 
-    explicit TStructMemberValue(const TString& name, MemberType value) 
+    explicit TStructMemberValue(const TString& name, MemberType value)
         : Name(name)
         , Value(value)
     {}
@@ -207,7 +207,7 @@ public:
 template <typename ParameterType, NScheme::TTypeId SchemeType = SchemeMapper<ParameterType>::SchemeType>
 class TParameterValue : public TStructMemberValue<TDataValue<ParameterType, SchemeType>> {
 public:
-    TParameterValue(const TString& name, ParameterType parameter) 
+    TParameterValue(const TString& name, ParameterType parameter)
         : TStructMemberValue<TDataValue<ParameterType, SchemeType>>(name, TDataValue<ParameterType, SchemeType>(parameter))
     {}
 };
@@ -218,7 +218,7 @@ TDataValue<DataType> TData(DataType value) {
 }
 
 template <typename MemberType>
-TStructMemberValue<MemberType> TStructMember(const TString& name, MemberType value) { 
+TStructMemberValue<MemberType> TStructMember(const TString& name, MemberType value) {
     return TStructMemberValue<MemberType>(name, value);
 }
 
@@ -241,17 +241,17 @@ TOptionalValue<ValueType, false> TEmptyOptional(ValueType value = ValueType()) {
 // TParameter(name, value) = TStructMemberValue(name, TDataValue(value))
 
 template <typename ParameterType>
-TParameterValue<ParameterType, SchemeMapper<ParameterType>::SchemeType> TParameter(const TString& name, ParameterType value) { 
+TParameterValue<ParameterType, SchemeMapper<ParameterType>::SchemeType> TParameter(const TString& name, ParameterType value) {
     return TParameterValue<ParameterType, SchemeMapper<ParameterType>::SchemeType>(name, value);
 }
 
 template <typename... MemberTypes>
-TStructMemberValue<TStructValue<MemberTypes...>> TParameter(const TString& name, TStructValue<MemberTypes...> value) { 
+TStructMemberValue<TStructValue<MemberTypes...>> TParameter(const TString& name, TStructValue<MemberTypes...> value) {
     return TStructMemberValue<TStructValue<MemberTypes...>>(name, value);
 }
 
 template <typename ValueType, bool HaveValue>
-TStructMemberValue<TOptionalValue<ValueType, HaveValue>> TParameter(const TString& name, TOptionalValue<ValueType, HaveValue> value) { 
+TStructMemberValue<TOptionalValue<ValueType, HaveValue>> TParameter(const TString& name, TOptionalValue<ValueType, HaveValue> value) {
     return TStructMemberValue<TOptionalValue<ValueType, HaveValue>>(name, value);
 }
 
@@ -285,8 +285,8 @@ public:
     bool Temporary() const { return !Permanent(); }
     bool Timeout() const;
     bool Rejected() const;
-    TString GetCode() const; 
-    TString GetMessage() const; 
+    TString GetCode() const;
+    TString GetMessage() const;
     void Throw() const;
     EFacility GetFacility() const;
     // Returns YDB status
@@ -296,7 +296,7 @@ protected:
     TError(const TResult& result);
     NMsgBusProxy::EResponseStatus GetMsgBusProxyStatus() const;
 
-    TString Message; 
+    TString Message;
     EFacility Facility;
     ui16 Code;
     Ydb::StatusIds::StatusCode YdbStatus;
@@ -480,8 +480,8 @@ public:
         return AsyncExecute((const NKikimrMiniKQL::TParams&)parameters);
     }
 
-    TQueryResult SyncExecute(const TString& parameters) const; 
-    NThreading::TFuture<TQueryResult> AsyncExecute(const TString& parameters) const; 
+    TQueryResult SyncExecute(const TString& parameters) const;
+    NThreading::TFuture<TQueryResult> AsyncExecute(const TString& parameters) const;
 
     TQueryResult SyncExecute(const NKikimrMiniKQL::TParams& parameters) const;
     NThreading::TFuture<TQueryResult> AsyncExecute(const NKikimrMiniKQL::TParams& parameters) const;
@@ -489,7 +489,7 @@ public:
 protected:
     TTextQuery(TKikimr& kikimr, const TString& program);
 
-    TString TextProgram; 
+    TString TextProgram;
 };
 
 class TUnbindedQuery {
@@ -502,9 +502,9 @@ public:
     TUnbindedQuery& operator = (const TUnbindedQuery&) = delete;
 
 protected:
-    TUnbindedQuery(const TString& program); 
+    TUnbindedQuery(const TString& program);
 
-    TString CompiledProgram; 
+    TString CompiledProgram;
 };
 
 class TPreparedQuery : public TQuery {
@@ -541,8 +541,8 @@ public:
         return AsyncExecute((const NKikimrMiniKQL::TParams&)parameters);
     }
 
-    TQueryResult SyncExecute(const TString& parameters) const; 
-    NThreading::TFuture<TQueryResult> AsyncExecute(const TString& parameters) const; 
+    TQueryResult SyncExecute(const TString& parameters) const;
+    NThreading::TFuture<TQueryResult> AsyncExecute(const TString& parameters) const;
 
     TQueryResult SyncExecute(const NKikimrMiniKQL::TParams& parameters) const;
     NThreading::TFuture<TQueryResult> AsyncExecute(const NKikimrMiniKQL::TParams& parameters) const;
@@ -550,9 +550,9 @@ public:
     TUnbindedQuery Unbind() const;
 
 protected:
-    TPreparedQuery(const TQuery& textQuery, const TString& program); 
+    TPreparedQuery(const TQuery& textQuery, const TString& program);
 
-    TString CompiledProgram; 
+    TString CompiledProgram;
 };
 
 struct TSchemaObjectStats {
@@ -586,15 +586,15 @@ public:
 
     void Drop();
     void ModifySchema(const TModifyScheme& schema);
-    TSchemaObject MakeDirectory(const TString& name); 
-    TSchemaObject CreateTable(const TString& name, const TVector<TColumn>& columns); 
-    TSchemaObject CreateTable(const TString& name, const TVector<TColumn>& columns, 
+    TSchemaObject MakeDirectory(const TString& name);
+    TSchemaObject CreateTable(const TString& name, const TVector<TColumn>& columns);
+    TSchemaObject CreateTable(const TString& name, const TVector<TColumn>& columns,
                               const TTablePartitionConfig& partitionConfig);
-    TSchemaObject GetChild(const TString& name) const; 
-    TString GetName() const; 
-    TString GetPath() const; 
-    TVector<TSchemaObject> GetChildren() const; 
-    TVector<TColumn> GetColumns() const; 
+    TSchemaObject GetChild(const TString& name) const;
+    TString GetName() const;
+    TString GetPath() const;
+    TVector<TSchemaObject> GetChildren() const;
+    TVector<TColumn> GetColumns() const;
     TSchemaObjectStats GetStats() const;
 
     EPathType GetPathType() const { return PathType; }
@@ -606,12 +606,12 @@ protected:
     TSchemaObject(TKikimr& kikimr, const TString& path, const TString& name, ui64 pathId = 0,
                   EPathType pathType = EPathType::Unknown);
 
-    TSchemaObject DoCreateTable(const TString& name, const TVector<TColumn>& columns, 
+    TSchemaObject DoCreateTable(const TString& name, const TVector<TColumn>& columns,
                                 const TTablePartitionConfig* partitionConfig);
 
     TKikimr& Kikimr;
-    TString Path; 
-    TString Name; 
+    TString Path;
+    TString Name;
     ui64 PathId;
     EPathType PathType;
 };
@@ -656,7 +656,7 @@ class TTableStream {
 public:
     NThreading::TFuture<TResult> AsyncRead(const TString &path, bool ordered,
                                            std::function<void(NClient::TReadTableResult)> processPart,
-                                           const TVector<TString> &columns = TVector<TString>(), 
+                                           const TVector<TString> &columns = TVector<TString>(),
                                            const NKikimrTxUserProxy::TKeyRange &range = NKikimrTxUserProxy::TKeyRange(),
                                            ui64 limit = 0);
 
@@ -756,12 +756,12 @@ public:
     TKikimr(TKikimr&& kikimr);
     ~TKikimr();
 
-    TSchemaObject GetSchemaRoot(const TString& name = TString()); 
-    TSchemaObject GetSchemaObject(const TString& name); 
-    TTextQuery Query(const TString& program); 
+    TSchemaObject GetSchemaRoot(const TString& name = TString());
+    TSchemaObject GetSchemaObject(const TString& name);
+    TTextQuery Query(const TString& program);
     TPreparedQuery Query(const TUnbindedQuery& query);
     // sets security token
-    void SetSecurityToken(const TString& securityToken); 
+    void SetSecurityToken(const TString& securityToken);
     TString GetCurrentLocation() const;
 
     TNodeRegistrant GetNodeRegistrant();
@@ -780,14 +780,14 @@ public:
 
 protected:
     NThreading::TFuture<TQueryResult> ExecuteQuery(const TTextQuery& query, const NKikimrMiniKQL::TParams& parameters);
-    NThreading::TFuture<TQueryResult> ExecuteQuery(const TTextQuery& query, const TString& parameters); 
+    NThreading::TFuture<TQueryResult> ExecuteQuery(const TTextQuery& query, const TString& parameters);
     NThreading::TFuture<TQueryResult> ExecuteQuery(const TPreparedQuery& query, const NKikimrMiniKQL::TParams& parameters);
-    NThreading::TFuture<TQueryResult> ExecuteQuery(const TPreparedQuery& query, const TString& parameters); 
+    NThreading::TFuture<TQueryResult> ExecuteQuery(const TPreparedQuery& query, const TString& parameters);
     NThreading::TFuture<TPrepareResult> PrepareQuery(const TTextQuery& query);
     NThreading::TFuture<TResult> DescribeObject(const TSchemaObject& object);
     NThreading::TFuture<TResult> ModifySchema(const TModifyScheme& schema);
-    NThreading::TFuture<TResult> MakeDirectory(const TSchemaObject& object, const TString& name); 
-    NThreading::TFuture<TResult> CreateTable(TSchemaObject& object, const TString& name, const TVector<TColumn>& columns, 
+    NThreading::TFuture<TResult> MakeDirectory(const TSchemaObject& object, const TString& name);
+    NThreading::TFuture<TResult> CreateTable(TSchemaObject& object, const TString& name, const TVector<TColumn>& columns,
                                              const TTablePartitionConfig* partitionConfig);
     NBus::EMessageStatus ExecuteRequestInternal(NThreading::TPromise<TResult> promise, TAutoPtr<NBus::TBusMessage> request);
     NThreading::TFuture<TResult> RegisterNode(const TString& domainPath, const TString& host, ui16 port,
@@ -803,7 +803,7 @@ protected:
 
     template <typename T> static void DumpRequest(const T& pb) {
         if (DUMP_REQUESTS) {
-            TString res; 
+            TString res;
             ::google::protobuf::TextFormat::PrintToString(pb, &res);
             Cerr << "<-- " << TypeName<T>() << Endl << res << Endl;
         }
@@ -811,7 +811,7 @@ protected:
 
     template <typename T> static void DumpResponse(const T& pb) {
         if (DUMP_REQUESTS) {
-            TString res; 
+            TString res;
             ::google::protobuf::TextFormat::PrintToString(pb, &res);
             Cerr << "--> " << TypeName<T>() << Endl << res << Endl;
         }
@@ -868,7 +868,7 @@ protected:
         }
     }
 
-    TString SecurityToken; 
+    TString SecurityToken;
     THolder<TImpl> Impl;
 };
 

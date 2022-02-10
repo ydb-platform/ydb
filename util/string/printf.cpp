@@ -3,13 +3,13 @@
 #include <util/stream/printf.h>
 #include <util/stream/str.h>
 
-int vsprintf(TString& s, const char* c, va_list params) { 
+int vsprintf(TString& s, const char* c, va_list params) {
     TStringOutput so(s.remove());
 
     return Printf(so, c, params);
 }
 
-int sprintf(TString& s, const char* c, ...) { 
+int sprintf(TString& s, const char* c, ...) {
     va_list params;
     va_start(params, c);
     const int k = vsprintf(s, c, params);
@@ -17,8 +17,8 @@ int sprintf(TString& s, const char* c, ...) {
     return k;
 }
 
-TString Sprintf(const char* c, ...) { 
-    TString s; 
+TString Sprintf(const char* c, ...) {
+    TString s;
     va_list params;
     va_start(params, c);
     vsprintf(s, c, params);
@@ -26,7 +26,7 @@ TString Sprintf(const char* c, ...) {
     return s;
 }
 
-int fcat(TString& s, const char* c, ...) { 
+int fcat(TString& s, const char* c, ...) {
     TStringOutput so(s);
 
     va_list params;

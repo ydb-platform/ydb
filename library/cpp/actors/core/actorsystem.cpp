@@ -160,7 +160,7 @@ namespace NActors {
 
         // get high 32 bits as seconds from epoch
         // it could wrap every century, but we don't expect any actor-reference to live this long so such wrap will do no harm
-        const ui64 timeFromEpoch = TInstant::MicroSeconds(RelaxedLoad(&CurrentTimestamp)).Seconds(); 
+        const ui64 timeFromEpoch = TInstant::MicroSeconds(RelaxedLoad(&CurrentTimestamp)).Seconds();
 
         // get low 32 bits as counter value
         ui32 lowPartEnd = (ui32)(AtomicAdd(CurrentIDCounter, count));
@@ -208,7 +208,7 @@ namespace NActors {
         StartExecuted = true;
 
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
-        TVector<NSchedulerQueue::TReader*> scheduleReaders; 
+        TVector<NSchedulerQueue::TReader*> scheduleReaders;
         scheduleReaders.push_back(&ScheduleQueue->Reader);
         CpuManager->PrepareStart(scheduleReaders, this);
         Scheduler->Prepare(this, &CurrentTimestamp, &CurrentMonotonic);

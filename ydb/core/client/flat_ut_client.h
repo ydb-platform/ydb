@@ -84,12 +84,12 @@ public:
         runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())));
     }
 
-    TVector<ui64> GetTablePartitions(const TString& tablePath) { 
+    TVector<ui64> GetTablePartitions(const TString& tablePath) {
         TAutoPtr<NMsgBusProxy::TBusResponse> msg = Ls(tablePath);
         const NKikimrClient::TResponse &response = msg->Record;
         UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
         const auto& descr = response.GetPathDescription();
-        TVector<ui64> partitions; 
+        TVector<ui64> partitions;
         for (ui32 i = 0; i < descr.TablePartitionsSize(); ++i) {
             partitions.push_back(descr.GetTablePartitions(i).GetDatashardId());
             // Cerr << partitions.back() << Endl;

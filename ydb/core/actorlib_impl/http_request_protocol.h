@@ -25,9 +25,9 @@ public:
     void HTTPRequest(
             TOrigActor* orig,
             const TActorContext& ctx,
-            TString host, 
-            TString url, 
-            TString headers = TString(), 
+            TString host,
+            TString url,
+            TString headers = TString(),
             ui16 port = 80) noexcept
     {
         OriginalActor = orig;
@@ -88,7 +88,7 @@ public:
     void HTTPExpectReply(
             TOrigActor* orig,
             const TActorContext& ctx,
-            TVector<char> buf = TVector<char>()) noexcept 
+            TVector<char> buf = TVector<char>()) noexcept
     {
         ReadHTTPReply<TOrigActor>(orig, ctx, Socket, buf);
     }
@@ -96,7 +96,7 @@ public:
     virtual void CatchHTTPRequestError(TString error) noexcept = 0;
 
     virtual void CatchHTTPContent(
-        const TActorContext& ctx, TVector<char> buf) noexcept = 0; 
+        const TActorContext& ctx, TVector<char> buf) noexcept = 0;
 
     virtual void CatchHTTPWriteComplete(const TActorContext&) noexcept {}
 
@@ -132,7 +132,7 @@ public:
 
 
     void CatchResolveError(
-            const TActorContext& ctx, TString error) noexcept override 
+            const TActorContext& ctx, TString error) noexcept override
     {
         if (NumberOfTriesLeft && --NumberOfTriesLeft > 0) {
             MemLogPrintF("%s"
@@ -161,7 +161,7 @@ public:
 
 
     void CatchConnectError(
-            const TActorContext& ctx, TString error) noexcept override 
+            const TActorContext& ctx, TString error) noexcept override
     {
         if (--NumberOfTriesLeft > 0) {
             ctx.Schedule(TDuration::Seconds(1), new TEvHTTPProtocolRetry);
@@ -248,12 +248,12 @@ private:
 
     TOrigActor* OriginalActor;
     IActor::TReceiveFunc DefaultStateFunc;
-    TString Host; 
-    TString Url; 
+    TString Host;
+    TString Url;
     ui16 Port;
-    TString HttpRequestMessage; 
+    TString HttpRequestMessage;
 
-    TVector<char> ReadBuffer; 
+    TVector<char> ReadBuffer;
     size_t Filled;
     bool ReadChunks;
 

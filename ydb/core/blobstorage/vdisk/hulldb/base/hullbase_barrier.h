@@ -66,7 +66,7 @@ namespace NKikimr {
             , GenCounter(proto.GetPerGenerationCounter())
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             return Sprintf("[%16" PRIu64 " %" PRIu32 " %" PRIu32 " %" PRIu32 " %s]",
                            TabletId, Channel, Gen, GenCounter, Hard ? "hard" : "soft");
         }
@@ -100,7 +100,7 @@ namespace NKikimr {
             return TKeyBarrier(Max<ui64>(), Max<ui32>(), Max<ui32>(), Max<ui32>(), true);
         }
 
-        static bool Parse(TKeyBarrier &out, const TString &buf, TString &errorExplanation); 
+        static bool Parse(TKeyBarrier &out, const TString &buf, TString &errorExplanation);
 
         auto ConvertToTuple() const {
             return std::make_tuple(TabletId, Channel, Hard, Gen, GenCounter);
@@ -189,7 +189,7 @@ namespace NKikimr {
         }
 
         NMatrix::TVectorType GetLocalParts(TBlobStorageGroupType) const {
-            return NMatrix::TVectorType(); 
+            return NMatrix::TVectorType();
         }
 
         void ClearLocalParts(TBlobStorageGroupType)
@@ -199,7 +199,7 @@ namespace NKikimr {
             return TBlobType::DiskBlob;
         }
 
-        TString ToString(const TIngressCache *cache, const TDiskPart *outbound = nullptr) const { 
+        TString ToString(const TIngressCache *cache, const TDiskPart *outbound = nullptr) const {
             Y_UNUSED(outbound);
 
             return Sprintf("{CollectGen: %" PRIu32 " CollectStep: %" PRIu32 " Ingress: %s}",

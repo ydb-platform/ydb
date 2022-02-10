@@ -95,7 +95,7 @@ TYqlLog::TYqlLog()
     , ProcId_()
     , WriteTruncMsg_(0) {}
 
-TYqlLog::TYqlLog(const TString& logType, const TComponentLevels& levels) 
+TYqlLog::TYqlLog(const TString& logType, const TComponentLevels& levels)
     : TLog(logType)
     , ProcName_(GetProgramName())
     , ProcId_(GetPID())
@@ -117,7 +117,7 @@ TYqlLog::TYqlLog(TAutoPtr<TLogBackend> backend, const TComponentLevels& levels)
     }
 }
 
-void TYqlLog::UpdateProcInfo(const TString& procName) { 
+void TYqlLog::UpdateProcInfo(const TString& procName) {
     ProcName_ = procName;
     ProcId_ = GetPID();
 }
@@ -163,7 +163,7 @@ void TYqlLog::SetMaxLogLimit(ui64 limit) {
     TLog::ResetBackend(THolder(new TLimitedLogBackend(backend, WriteTruncMsg_, limit)));
 }
 
-void InitLogger(const TString& logType, bool startAsDaemon) { 
+void InitLogger(const TString& logType, bool startAsDaemon) {
     with_lock(g_InitLoggerMutex) {
         ++g_LoggerInitialized;
         if (g_LoggerInitialized > 1) {

@@ -48,14 +48,14 @@ bool ReplaceNodes(TExprNode& node, const TNodeOnNodeOwnedMap& replaces, bool& ha
     return ReplaceNodes(node, replaces, hasChanges, visited, parents);
 }
 
-TString Load(const TString& path) 
+TString Load(const TString& path)
 {
     TFile file(path, EOpenModeFlag::RdOnly);
     if (file.GetLength() <= 0)
-        return TString(); 
-    std::vector<TString::value_type> buffer(file.GetLength()); 
+        return TString();
+    std::vector<TString::value_type> buffer(file.GetLength());
     file.Load(buffer.data(), buffer.size());
-    return TString(buffer.data(), buffer.size()); 
+    return TString(buffer.data(), buffer.size());
 }
 
 }
@@ -190,10 +190,10 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 
 bool CompileLibraries(const TUserDataTable& userData, TExprContext& ctx, TModulesTable& modules, bool optimize)
 {
-    THashMap<TString, TLibraryCohesion> libs; 
+    THashMap<TString, TLibraryCohesion> libs;
     for (const auto& data : userData) {
         if (data.first.IsFile() && data.second.Usage.Test(EUserDataBlockUsage::Library)) {
-            TString libraryData; 
+            TString libraryData;
             const TString& alias = data.first.Alias();
             if (data.second.Type == EUserDataType::PATH) {
                 libraryData = Load(data.second.Data);

@@ -21,10 +21,10 @@ class TJsonCounters : public TActorBootstrapped<TJsonCounters> {
     ui32 Requested;
     ui32 Received;
     THolder<TEvInterconnect::TEvNodesInfo> NodesInfo;
-    TMap<ui32, THolder<TEvWhiteboard::TEvVDiskStateResponse>> VDiskInfo; 
-    TMap<ui32, THolder<TEvWhiteboard::TEvPDiskStateResponse>> PDiskInfo; 
-    TMap<ui32, THolder<TEvWhiteboard::TEvTabletStateResponse>> TabletInfo; 
-    TMap<ui32, THolder<TEvWhiteboard::TEvBSGroupStateResponse>> BSGroupInfo; 
+    TMap<ui32, THolder<TEvWhiteboard::TEvVDiskStateResponse>> VDiskInfo;
+    TMap<ui32, THolder<TEvWhiteboard::TEvPDiskStateResponse>> PDiskInfo;
+    TMap<ui32, THolder<TEvWhiteboard::TEvTabletStateResponse>> TabletInfo;
+    TMap<ui32, THolder<TEvWhiteboard::TEvBSGroupStateResponse>> BSGroupInfo;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -174,14 +174,14 @@ public:
     void RenderStats(TStringStream& json,
                      THolder<ResponseType>& response,
                      const TEvInterconnect::TNodeInfo& nodeInfo,
-                     const TString& subsystem, 
-                     const TVector<const FieldDescriptor*>& groupFields) { 
+                     const TString& subsystem,
+                     const TVector<const FieldDescriptor*>& groupFields) {
 
         THolder<ResponseType> groupedResponse = TWhiteboardGrouper<ResponseType>::GroupResponse(response, groupFields, true);
         auto* stateInfo = TWhiteboardInfo<ResponseType>::GetElementsField(groupedResponse.Get());
         TStringBuf host(nodeInfo.Host);
         size_t pos = host.find('.');
-        if (pos != TString::npos) { 
+        if (pos != TString::npos) {
             host = host.substr(0, pos);
         }
         for (typename TWhiteboardInfo<ResponseType>::TElementType& info : *stateInfo) {
@@ -209,7 +209,7 @@ public:
                      const TEvInterconnect::TNodeInfo& nodeInfo) {
         if (response == nullptr)
             return;
-        static TVector<const FieldDescriptor*> groupFields 
+        static TVector<const FieldDescriptor*> groupFields
                 = TWhiteboardGrouper<TEvWhiteboard::TEvVDiskStateResponse>::GetProtoFields("VDiskState");
         RenderStats(json, response, nodeInfo, "VDisk", groupFields);
     }
@@ -219,7 +219,7 @@ public:
                      const TEvInterconnect::TNodeInfo& nodeInfo) {
         if (response == nullptr)
             return;
-        static TVector<const FieldDescriptor*> groupFields 
+        static TVector<const FieldDescriptor*> groupFields
                 = TWhiteboardGrouper<TEvWhiteboard::TEvPDiskStateResponse>::GetProtoFields("State");
         RenderStats(json, response, nodeInfo, "PDisk", groupFields);
     }
@@ -229,7 +229,7 @@ public:
                      const TEvInterconnect::TNodeInfo& nodeInfo) {
         if (response == nullptr)
             return;
-        static TVector<const FieldDescriptor*> groupFields 
+        static TVector<const FieldDescriptor*> groupFields
                 = TWhiteboardGrouper<TEvWhiteboard::TEvTabletStateResponse>::GetProtoFields("State");
         RenderStats(json, response, nodeInfo, "Tablet", groupFields);
     }

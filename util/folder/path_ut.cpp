@@ -26,23 +26,23 @@ namespace {
         TFsPath Path_;
 
     public:
-        TTestDirectory(const TString& name); 
+        TTestDirectory(const TString& name);
         ~TTestDirectory();
 
         TFsPath GetFsPath() const {
             return Path_;
         }
 
-        TFsPath Child(const TString& name) const { 
+        TFsPath Child(const TString& name) const {
             return Path_.Child(name);
         }
     };
 
-    TTestDirectory::TTestDirectory(const TString& name) { 
+    TTestDirectory::TTestDirectory(const TString& name) {
         Y_VERIFY(name.length() > 0, "have to specify name");
-        Y_VERIFY(name.find('.') == TString::npos, "must be simple name"); 
-        Y_VERIFY(name.find('/') == TString::npos, "must be simple name"); 
-        Y_VERIFY(name.find('\\') == TString::npos, "must be simple name"); 
+        Y_VERIFY(name.find('.') == TString::npos, "must be simple name");
+        Y_VERIFY(name.find('/') == TString::npos, "must be simple name");
+        Y_VERIFY(name.find('\\') == TString::npos, "must be simple name");
         Path_ = TFsPath(name);
 
         Path_.ForceDelete();
@@ -119,13 +119,13 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
 
     Y_UNIT_TEST(GetName) {
         TTestDirectory d("GetName");
-        UNIT_ASSERT_VALUES_EQUAL(TString("dfgh"), d.Child("dfgh").GetName()); 
+        UNIT_ASSERT_VALUES_EQUAL(TString("dfgh"), d.Child("dfgh").GetName());
 
         // check does not fail
         TFsPath(".").GetName();
 
 #ifdef _unix_
-        UNIT_ASSERT_VALUES_EQUAL(TString("/"), TFsPath("/").GetName()); 
+        UNIT_ASSERT_VALUES_EQUAL(TString("/"), TFsPath("/").GetName());
 #endif
     }
 
@@ -235,11 +235,11 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         dir.Child("c").MkDir();
         dir.Child("d").Touch();
 
-        TVector<TString> children; 
+        TVector<TString> children;
         dir.ListNames(children);
         std::sort(children.begin(), children.end());
 
-        TVector<TString> expected; 
+        TVector<TString> expected;
         expected.push_back("a");
         expected.push_back("b");
         expected.push_back("c");
@@ -430,16 +430,16 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         TTempDir tempDir;
         TFsPath tempDirPath(tempDir());
 
-        const TString originDir = tempDirPath.Child("origin"); 
+        const TString originDir = tempDirPath.Child("origin");
         MakePathIfNotExist(originDir.c_str());
 
-        const TString originFile = TFsPath(originDir).Child("data"); 
+        const TString originFile = TFsPath(originDir).Child("data");
         {
-            TFixedBufferFileOutput out(originFile); 
+            TFixedBufferFileOutput out(originFile);
             out << "data111!!!";
         }
 
-        const TString link = tempDirPath.Child("origin_symlink"); 
+        const TString link = tempDirPath.Child("origin_symlink");
         NFs::SymLink(originDir, link);
 
         TFsPath(link).ForceDelete();
@@ -453,16 +453,16 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         TTempDir tempDir;
         TFsPath tempDirPath(tempDir());
 
-        const TString originDir = tempDirPath.Child("origin"); 
+        const TString originDir = tempDirPath.Child("origin");
         MakePathIfNotExist(originDir.c_str());
 
-        const TString originFile = TFsPath(originDir).Child("data"); 
+        const TString originFile = TFsPath(originDir).Child("data");
         {
-            TFixedBufferFileOutput out(originFile); 
+            TFixedBufferFileOutput out(originFile);
             out << "data111!!!";
         }
 
-        const TString link = tempDirPath.Child("origin_symlink"); 
+        const TString link = tempDirPath.Child("origin_symlink");
         NFs::SymLink(originFile, link);
 
         TFsPath(link).ForceDelete();
@@ -476,19 +476,19 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         TTempDir tempDir;
         TFsPath tempDirPath(tempDir());
 
-        const TString symlinkedDir = tempDirPath.Child("to_remove"); 
+        const TString symlinkedDir = tempDirPath.Child("to_remove");
         MakePathIfNotExist(symlinkedDir.c_str());
 
-        const TString originDir = tempDirPath.Child("origin"); 
+        const TString originDir = tempDirPath.Child("origin");
         MakePathIfNotExist(originDir.c_str());
 
-        const TString originFile = TFsPath(originDir).Child("data"); 
+        const TString originFile = TFsPath(originDir).Child("data");
         {
-            TFixedBufferFileOutput out(originFile); 
+            TFixedBufferFileOutput out(originFile);
             out << "data111!!!";
         }
 
-        const TString symlinkedFile = TFsPath(symlinkedDir).Child("origin_symlink"); 
+        const TString symlinkedFile = TFsPath(symlinkedDir).Child("origin_symlink");
         NFs::SymLink(originDir, symlinkedFile);
 
         TFsPath(symlinkedDir).ForceDelete();
@@ -503,19 +503,19 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         TTempDir tempDir;
         TFsPath tempDirPath(tempDir());
 
-        const TString symlinkedDir = tempDirPath.Child("to_remove"); 
+        const TString symlinkedDir = tempDirPath.Child("to_remove");
         MakePathIfNotExist(symlinkedDir.c_str());
 
-        const TString originDir = tempDirPath.Child("origin"); 
+        const TString originDir = tempDirPath.Child("origin");
         MakePathIfNotExist(originDir.c_str());
 
-        const TString originFile = TFsPath(originDir).Child("data"); 
+        const TString originFile = TFsPath(originDir).Child("data");
         {
-            TFixedBufferFileOutput out(originFile); 
+            TFixedBufferFileOutput out(originFile);
             out << "data111!!!";
         }
 
-        const TString symlinkedFile = TFsPath(symlinkedDir).Child("origin_symlink"); 
+        const TString symlinkedFile = TFsPath(symlinkedDir).Child("origin_symlink");
         NFs::SymLink(originFile, symlinkedFile);
 
         TFsPath(symlinkedDir).ForceDelete();

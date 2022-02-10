@@ -10,9 +10,9 @@ namespace NDriverClient {
 struct TCmdKeyValueConfig : public TCliCmdConfig {
     bool IsReadToFile;
     bool IsWriteFromFile;
-    TString ReadToPath; 
-    TString WriteFromPath; 
-    TString Proto; 
+    TString ReadToPath;
+    TString WriteFromPath;
+    TString Proto;
 
     TCmdKeyValueConfig();
 
@@ -52,7 +52,7 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
     TCmdKeyValueConfig requestConfig;
     requestConfig.Parse(argc, argv);
 
-    TVector<NKikimrClient::TKeyValueRequest> records; 
+    TVector<NKikimrClient::TKeyValueRequest> records;
     NKikimrClient::TKeyValueRequest& record = *records.emplace(records.end());
 
     const bool isOk = ::google::protobuf::TextFormat::ParseFromString(requestConfig.Proto, &record);
@@ -63,7 +63,7 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
     const ui32 maxReadBlockSize = 20 << 20;
     const ui32 maxWriteBlockSize = 16 << 20;
 
-    TString readBuffer; 
+    TString readBuffer;
     if (requestConfig.IsReadToFile) {
         Y_VERIFY(record.CmdReadSize() == 1);
         auto& cmdRead = *record.MutableCmdRead(0);
@@ -74,13 +74,13 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
         Y_VERIFY(record.CmdWriteSize() == 1);
         Y_VERIFY(record.GetCmdWrite(0).HasKey());
         Y_VERIFY(!record.GetCmdWrite(0).HasValue());
-        TString data = TUnbufferedFileInput(requestConfig.WriteFromPath).ReadAll(); 
+        TString data = TUnbufferedFileInput(requestConfig.WriteFromPath).ReadAll();
         if (data.size() <= maxWriteBlockSize) {
             record.MutableCmdWrite(0)->SetValue(data);
         } else {
             const auto& originalCmdWrite = record.GetCmdWrite(0);
-            TString key = originalCmdWrite.GetKey(); 
-            TVector<TString> parts; 
+            TString key = originalCmdWrite.GetKey();
+            TVector<TString> parts;
 
             ui64 tabletId = record.GetTabletId();
 
@@ -117,7 +117,7 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
             NKikimrClient::TKeyValueRequest& last = *records.emplace(records.end());
             last.SetTabletId(tabletId);
             auto& cmdConcat = *last.AddCmdConcat();
-            for (const TString& part : parts) { 
+            for (const TString& part : parts) {
                 cmdConcat.AddInputKeys(part);
             }
             cmdConcat.SetOutputKey(key);
@@ -139,7 +139,7 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
             Y_VERIFY(response.GetReadResult(0).HasStatus());
             Y_VERIFY(response.GetReadResult(0).GetStatus() == NKikimrProto::OK);
             Y_VERIFY(response.GetReadResult(0).HasValue());
-            TString data = response.GetReadResult(0).GetValue(); 
+            TString data = response.GetReadResult(0).GetValue();
             readBuffer += data;
 
             if (data.size() == maxReadBlockSize) {
@@ -159,7 +159,7 @@ int KeyValueRequest(TCommandConfig &cmdConf, int argc, char **argv) {
                 Y_FAIL("unexpected case");
             }
         } else {
-            TString str; 
+            TString str;
             const bool isOk = ::google::protobuf::TextFormat::PrintToString(response, &str);
             if (!isOk) {
                 ythrow TWithBackTrace<yexception>() << "Error printing response to string!";

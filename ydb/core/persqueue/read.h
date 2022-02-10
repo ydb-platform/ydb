@@ -70,9 +70,9 @@ namespace NPQ {
             return false;
         }
 
-        TVector<TKvRequest> RemoveFromProgress(const TActorContext& ctx, const TKvRequest& blocker) 
+        TVector<TKvRequest> RemoveFromProgress(const TActorContext& ctx, const TKvRequest& blocker)
         {
-            TVector<TKvRequest> unblocked; 
+            TVector<TKvRequest> unblocked;
             for (const TRequestedBlob& reqBlob : blocker.Blobs) {
                 TBlobId blob(blocker.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
                 ReadsInProgress.erase(blob);
@@ -163,7 +163,7 @@ namespace NPQ {
         void OnKvReadResult(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx, TKvRequest& kvReq)
         {
             auto resp = ev->Get()->Record;
-            TVector<TRequestedBlob>& outBlobs = kvReq.Blobs; 
+            TVector<TRequestedBlob>& outBlobs = kvReq.Blobs;
 
             ui32 cachedCount = std::accumulate(outBlobs.begin(), outBlobs.end(), 0u, [](ui32 sum, const TRequestedBlob& blob) {
                                                                                     return sum + (blob.Value.empty() ? 0 : 1);
@@ -182,7 +182,7 @@ namespace NPQ {
                     "Unexpected KV read result size %" PRIu64 " for cached %" PRIu32 "/%" PRIu64 " blobs, proto %s",
                     resp.ReadResultSize(), cachedCount, outBlobs.size(), ev->Get()->ToString().data());
 
-                TVector<bool> kvBlobs(outBlobs.size(), false); 
+                TVector<bool> kvBlobs(outBlobs.size(), false);
                 ui32 pos = 0;
                 for (ui32 i = 0; i < resp.ReadResultSize(); ++i, ++pos) {
                     auto r = resp.MutableReadResult(i);
@@ -216,7 +216,7 @@ namespace NPQ {
                 Cache.SavePrefetchBlobs(ctx, kvReq, kvBlobs);
             }
 
-            TVector<TKvRequest> unblockedReads = RemoveFromProgress(ctx, kvReq); // before kvReq.MakePQResponse() 
+            TVector<TKvRequest> unblockedReads = RemoveFromProgress(ctx, kvReq); // before kvReq.MakePQResponse()
 
             THolder<TEvPQ::TEvBlobResponse> response = kvReq.MakePQResponse(ctx, error);
             response->Check();
@@ -268,12 +268,12 @@ namespace NPQ {
             for (ui32 i = 0; i < srcRequest.CmdWriteSize(); ++i) {
                 auto cmd = srcRequest.GetCmdWrite(i);
                 if (cmd.HasKeyToCache()) {
-                    TString strKey = cmd.GetKeyToCache(); 
+                    TString strKey = cmd.GetKeyToCache();
                     TKey key = TKey(strKey);
                     Y_VERIFY(!key.IsHead());
 
                     Y_VERIFY(strKey.size() == TKey::KeySize(), "Unexpected key size: %" PRIu64, strKey.size());
-                    TString value = cmd.GetValue(); 
+                    TString value = cmd.GetValue();
                     kvReq.Partition = key.GetPartition();
                     TRequestedBlob blob(key.GetOffset(), key.GetPartNo(), key.GetCount(), key.GetInternalPartsCount(), value.size(), value);
                     kvReq.Blobs.push_back(blob);
@@ -343,7 +343,7 @@ namespace NPQ {
                     }
                 }
             }
-            ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(Max<ui32>(), TVector<TString>(), out.Str())); 
+            ctx.Send(ev->Sender, new TEvPQ::TEvMonResponse(Max<ui32>(), TVector<TString>(), out.Str()));
         }
 
         void UpdateCounters(const TActorContext& ctx)
@@ -379,12 +379,12 @@ namespace NPQ {
         }
 
         TActorId Tablet;
-        TString TopicName; 
+        TString TopicName;
         ui64 Cookie;
         // any TKvRequest would be placed into KvRequests or into BlockedReads depending on ReadsInProgress content
-        THashMap<ui64, TKvRequest> KvRequests; 
-        THashMap<TBlobId, TVector<TKvRequest>> BlockedReads; 
-        THashSet<TBlobId> ReadsInProgress; 
+        THashMap<ui64, TKvRequest> KvRequests;
+        THashMap<TBlobId, TVector<TKvRequest>> BlockedReads;
+        THashSet<TBlobId> ReadsInProgress;
         TIntabletCache Cache;
         TInstant CountersUpdateTime;
     };

@@ -16,7 +16,7 @@
 #include <util/string/join.h>
 #include <util/string/subst.h>
 #include <util/generic/map.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
@@ -31,23 +31,23 @@ void WriteHeader(const TString& headerName, IOutputStream& out, IOutputStream* h
     out << "#include <tools/enum_parser/enum_parser/stdlib_deps.h>\n\n";
     out << "#include <util/generic/typetraits.h>\n";
     out << "#include <util/generic/singleton.h>\n";
-    out << "#include <util/generic/string.h>\n"; 
+    out << "#include <util/generic/string.h>\n";
     out << "#include <util/generic/vector.h>\n";
     out << "#include <util/generic/map.h>\n";
     out << "#include <util/generic/serialized_enum.h>\n";
     out << "#include <util/string/cast.h>\n";
     out << "#include <util/stream/output.h>\n\n";
- 
-    if (headerOutPtr) { 
-        auto& outHeader = *headerOutPtr; 
-        outHeader << "// This file was auto-generated. Do not edit!!!\n"; 
-        outHeader << "#pragma once\n\n"; 
-        outHeader << "#include <util/generic/serialized_enum.h>\n"; 
-        outHeader << "#include " << headerName << "\n"; 
-    } 
+
+    if (headerOutPtr) {
+        auto& outHeader = *headerOutPtr;
+        outHeader << "// This file was auto-generated. Do not edit!!!\n";
+        outHeader << "#pragma once\n\n";
+        outHeader << "#include <util/generic/serialized_enum.h>\n";
+        outHeader << "#include " << headerName << "\n";
+    }
 }
 
-static inline void JsonEscape(TString& s) { 
+static inline void JsonEscape(TString& s) {
     SubstGlobal(s, "\\", "\\\\");
     SubstGlobal(s, "\"", "\\\"");
     SubstGlobal(s, "\r", "\\r");
@@ -55,8 +55,8 @@ static inline void JsonEscape(TString& s) {
     SubstGlobal(s, "\t", "\\t");
 }
 
-static inline TString JsonQuote(const TString& s) { 
-    TString quoted = s; 
+static inline TString JsonQuote(const TString& s) {
+    TString quoted = s;
     JsonEscape(quoted);
     return "\"" + quoted + "\""; // do not use .Quote() here, it performs escaping!
 }
@@ -65,7 +65,7 @@ static inline TString JsonQuote(const TString& s) {
 /// Simplifed JSON map encoder for generic types
 template<typename T>
 void OutKey(IOutputStream& out, const TString& key, const T& value, bool escape = true) {
-    TString quoted = ToString(value); 
+    TString quoted = ToString(value);
     if (escape) {
         quoted = JsonQuote(quoted);
     }
@@ -74,7 +74,7 @@ void OutKey(IOutputStream& out, const TString& key, const T& value, bool escape 
 
 /// Simplifed JSON map encoder for TMaybe
 void OutKey(IOutputStream& out, const TString& key, const TMaybe<TString>& value) {
-    TString quoted; 
+    TString quoted;
     if (value) {
         quoted = JsonQuote(ToString(*value));
     } else {
@@ -93,7 +93,7 @@ void OutKey(IOutputStream& out, const TString& key, const bool& value) {
 /// Simplifed JSON map encoder for array items
 template<typename T>
 void OutItem(IOutputStream& out, const T& value, bool escape = true) {
-    TString quoted = ToString(value); 
+    TString quoted = ToString(value);
     if (escape) {
         quoted = JsonQuote(quoted);
     }
@@ -102,7 +102,7 @@ void OutItem(IOutputStream& out, const T& value, bool escape = true) {
 
 /// Cut trailing ",\n" or ","
 static inline void FinishItems(TStringStream& out) {
-    TString& s = out.Str(); 
+    TString& s = out.Str();
     if (s.EndsWith(",\n")) {
         s.remove(s.size() - 2, 2);
     }
@@ -143,7 +143,7 @@ void GenerateEnum(
 
     size_t count = en.Items.size();
     OutKey(jEnum, "count", count);
-    const TString name = TEnumParser::ScopeStr(en.Scope) + en.CppName; 
+    const TString name = TEnumParser::ScopeStr(en.Scope) + en.CppName;
     OutKey(jEnum, "full_name", name);
     OutKey(jEnum, "cpp_name", en.CppName);
     TStringStream scopeJson;
@@ -162,20 +162,20 @@ void GenerateEnum(
         outerScope.push_back(en.CppName);
     }
 
-    TString outerScopeStr = TEnumParser::ScopeStr(outerScope); 
+    TString outerScopeStr = TEnumParser::ScopeStr(outerScope);
 
-    TString cName = name; 
+    TString cName = name;
     SubstGlobal(cName, "::", "");
 
     out << "// I/O for " << name << "\n";
 
-    TString nsName = "N" + cName + "Private"; 
+    TString nsName = "N" + cName + "Private";
 
     out << "namespace { namespace " << nsName << " {\n";
 
-    TVector<TString> nameInitializerPairs; 
-    TVector<TString> valueInitializerPairs; 
-    TVector<TString> cppNamesInitializer; 
+    TVector<TString> nameInitializerPairs;
+    TVector<TString> valueInitializerPairs;
+    TVector<TString> cppNamesInitializer;
 
     TStringStream jItems;
     OpenArray(jItems);
@@ -191,7 +191,7 @@ void GenerateEnum(
         TStringStream jAliases;
         OpenArray(jAliases);
 
-        TString strValue = it.CppName; 
+        TString strValue = it.CppName;
         if (it.Aliases) {
             // first alias is main
             strValue = it.Aliases[0];
@@ -280,7 +280,7 @@ void GenerateEnum(
     if (headerOutPtr) {
         (*headerOutPtr) << "const TString& ToString(" << name << ");\n";
     }
-    out << "const TString& ToString(" << name << " x) {\n"; 
+    out << "const TString& ToString(" << name << " x) {\n";
     out << "    const " << nsName << "::TNameBufs& names = " << nsName << "::TNameBufs::Instance();\n";
     out << "    return names.ToString(x);\n";
     out << "}\n\n";
@@ -289,7 +289,7 @@ void GenerateEnum(
     if (headerOutPtr) {
         (*headerOutPtr) << "bool FromString(const TString& name, " << name << "& ret);\n";
     }
-    out << "bool FromString(const TString& name, " << name << "& ret) {\n"; 
+    out << "bool FromString(const TString& name, " << name << "& ret) {\n";
     out << "    const " << nsName << "::TNameBufs& names = " << nsName << "::TNameBufs::Instance();\n";
     out << "    return names.FromString(name, ret);\n";
     out << "}\n\n";
@@ -355,14 +355,14 @@ void GenerateEnum(
 
     out << "}\n\n";
 
-    if (headerOutPtr) { 
-        // <EnumType>Count 
-        auto& outHeader = *headerOutPtr; 
-        outHeader << "template <>\n"; 
-        outHeader << "constexpr size_t GetEnumItemsCount<" << name << ">() {\n"; 
-        outHeader << "    return " << en.Items.size() << ";\n"; 
-        outHeader << "}\n"; 
-    } 
+    if (headerOutPtr) {
+        // <EnumType>Count
+        auto& outHeader = *headerOutPtr;
+        outHeader << "template <>\n";
+        outHeader << "constexpr size_t GetEnumItemsCount<" << name << ">() {\n";
+        outHeader << "    return " << en.Items.size() << ";\n";
+        outHeader << "}\n";
+    }
 
     FinishItems(jEnum);
     jEnum << "}\n";
@@ -378,20 +378,20 @@ int main(int argc, char** argv) {
         TOpts opts = NLastGetopt::TOpts::Default();
         opts.AddHelpOption();
 
-        TString outputFileName; 
-        TString outputHeaderFileName; 
-        TString outputJsonFileName; 
-        TString includePath; 
+        TString outputFileName;
+        TString outputHeaderFileName;
+        TString outputJsonFileName;
+        TString includePath;
         opts.AddLongOption('o', "output").OptionalArgument("<output-file>").StoreResult(&outputFileName)
             .Help(
                 "Output generated code to specified file.\n"
                 "When not set, standard output is used."
             );
-        opts.AddLongOption('h', "header").OptionalArgument("<output-header>").StoreResult(&outputHeaderFileName) 
-            .Help( 
-                "Generate appropriate header to specified file.\n" 
-                "Works only if output file specified." 
-            ); 
+        opts.AddLongOption('h', "header").OptionalArgument("<output-header>").StoreResult(&outputHeaderFileName)
+            .Help(
+                "Generate appropriate header to specified file.\n"
+                "Works only if output file specified."
+            );
         opts.AddLongOption("include-path").OptionalArgument("<header-path>").StoreResult(&includePath)
             .Help(
                 "Include input header using this path in angle brackets.\n"
@@ -408,35 +408,35 @@ int main(int argc, char** argv) {
 
         TOptsParseResult res(&opts, argc, argv);
 
-        TVector<TString> freeArgs = res.GetFreeArgs(); 
-        TString inputFileName = freeArgs[0]; 
+        TVector<TString> freeArgs = res.GetFreeArgs();
+        TString inputFileName = freeArgs[0];
 
         THolder<IOutputStream> hOut;
         IOutputStream* out = &Cout;
 
         THolder<IOutputStream> headerOut;
- 
+
         THolder<IOutputStream> jsonOut;
 
 
         if (outputFileName) {
             NFs::Remove(outputFileName);
-            hOut.Reset(new TFileOutput(outputFileName)); 
+            hOut.Reset(new TFileOutput(outputFileName));
             out = hOut.Get();
- 
-            if (outputHeaderFileName) { 
-                headerOut.Reset(new TFileOutput(outputHeaderFileName)); 
-            } 
+
+            if (outputHeaderFileName) {
+                headerOut.Reset(new TFileOutput(outputHeaderFileName));
+            }
 
             if (outputJsonFileName) {
-                jsonOut.Reset(new TFileOutput(outputJsonFileName)); 
+                jsonOut.Reset(new TFileOutput(outputJsonFileName));
             }
         }
 
         if (!includePath) {
-            includePath = TString() + '"' + TFsPath(inputFileName).Basename() + '"'; 
+            includePath = TString() + '"' + TFsPath(inputFileName).Basename() + '"';
         } else {
-            includePath = TString() + '<' + includePath + '>'; 
+            includePath = TString() + '<' + includePath + '>';
         }
 
         TEnumParser parser(inputFileName);

@@ -4,7 +4,7 @@
 
 #include <util/generic/fwd.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 //smart pointers
 template <class T, class D>
@@ -91,7 +91,7 @@ struct TDumper<std::pair<A, B>> {
 
 //sequences
 template <class T, class A>
-struct TDumper<TVector<T, A>>: public TSeqDumper { 
+struct TDumper<TVector<T, A>>: public TSeqDumper {
 };
 
 template <class T, class A>
@@ -107,49 +107,49 @@ struct TDumper<std::array<T, N>>: public TSeqDumper {
 };
 
 template <class T, class A>
-struct TDumper<TDeque<T, A>>: public TSeqDumper { 
+struct TDumper<TDeque<T, A>>: public TSeqDumper {
 };
 
 template <class T, class A>
-struct TDumper<TList<T, A>>: public TSeqDumper { 
+struct TDumper<TList<T, A>>: public TSeqDumper {
 };
 
 //associatives
 template <class K, class V, class P, class A>
-struct TDumper<TMap<K, V, P, A>>: public TAssocDumper { 
+struct TDumper<TMap<K, V, P, A>>: public TAssocDumper {
 };
 
 template <class K, class V, class P, class A>
-struct TDumper<TMultiMap<K, V, P, A>>: public TAssocDumper { 
+struct TDumper<TMultiMap<K, V, P, A>>: public TAssocDumper {
 };
 
 template <class T, class P, class A>
-struct TDumper<TSet<T, P, A>>: public TAssocDumper { 
+struct TDumper<TSet<T, P, A>>: public TAssocDumper {
 };
 
 template <class T, class P, class A>
-struct TDumper<TMultiSet<T, P, A>>: public TAssocDumper { 
+struct TDumper<TMultiSet<T, P, A>>: public TAssocDumper {
 };
 
 template <class K, class V, class H, class P, class A>
-struct TDumper<THashMap<K, V, H, P, A>>: public TAssocDumper { 
+struct TDumper<THashMap<K, V, H, P, A>>: public TAssocDumper {
 };
 
 template <class K, class V, class H, class P, class A>
-struct TDumper<THashMultiMap<K, V, H, P, A>>: public TAssocDumper { 
+struct TDumper<THashMultiMap<K, V, H, P, A>>: public TAssocDumper {
 };
 
 template <class T, class H, class P, class A>
-struct TDumper<THashSet<T, H, P, A>>: public TAssocDumper { 
+struct TDumper<THashSet<T, H, P, A>>: public TAssocDumper {
 };
 
 template <class T, class H, class P, class A>
-struct TDumper<THashMultiSet<T, H, P, A>>: public TAssocDumper { 
+struct TDumper<THashMultiSet<T, H, P, A>>: public TAssocDumper {
 };
 
 //strings
 template <>
-struct TDumper<TString>: public TStrDumper { 
+struct TDumper<TString>: public TStrDumper {
 };
 
 template <>
@@ -157,7 +157,7 @@ struct TDumper<const char*>: public TStrDumper {
 };
 
 template <>
-struct TDumper<TUtf16String>: public TStrDumper { 
+struct TDumper<TUtf16String>: public TStrDumper {
 };
 
 template <>

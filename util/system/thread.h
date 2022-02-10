@@ -5,7 +5,7 @@
 /// @see SystemThreadFactory()
 
 #include <util/generic/ptr.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #include "defaults.h"
 #include "progname.h"
@@ -53,19 +53,19 @@ public:
         {
         }
 
-        inline TParams& SetName(const TString& name) noexcept { 
+        inline TParams& SetName(const TString& name) noexcept {
             Name = name;
 
             return *this;
         }
 
-        inline TParams& SetStackSize(size_t size) noexcept { 
+        inline TParams& SetStackSize(size_t size) noexcept {
             StackSize = size;
 
             return *this;
         }
 
-        inline TParams& SetStackPointer(void* ptr) noexcept { 
+        inline TParams& SetStackPointer(void* ptr) noexcept {
             StackPointer = ptr;
 
             return *this;
@@ -92,17 +92,17 @@ public:
     {
     }
 
-    ~TThread(); 
+    ~TThread();
 
     void Start();
 
     void* Join();
     void Detach();
-    bool Running() const noexcept; 
-    TId Id() const noexcept; 
+    bool Running() const noexcept;
+    TId Id() const noexcept;
 
-    static TId ImpossibleThreadId() noexcept; 
-    static TId CurrentThreadId() noexcept; 
+    static TId ImpossibleThreadId() noexcept;
+    static TId CurrentThreadId() noexcept;
 
     /*
      * Returns numeric thread id, as visible in e. g. htop.

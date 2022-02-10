@@ -316,7 +316,7 @@ namespace NTest {
 
         TPartCook& Add(const TRow &tagged, ERowOp rop = ERowOp::Upsert)
         {
-            TVector<TCell> key(Scheme->Keys->Types.size()); 
+            TVector<TCell> key(Scheme->Keys->Types.size());
             TRowState row(Remap.size());
             row.Touch(rop);
 
@@ -374,7 +374,7 @@ namespace NTest {
     private:
         TIntrusiveConstPtr<TRowScheme> Scheme;
         TWriterBundle Pages;
-        TMap<TTag, TPos> Remap; 
+        TMap<TTag, TPos> Remap;
         TAutoPtr<TPartWriter> Writer;
         TOwnedCellVec LastKey;
         TRowVersion NextVersion = TRowVersion::Min();

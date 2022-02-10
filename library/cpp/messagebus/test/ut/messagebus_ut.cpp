@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         TSystemEvent MessageReceivedEvent; // 1 wait for 1 message
         TBusServerSessionPtr Session;
         TMutex Lock_;
-        TDeque<TAutoPtr<TOnMessageContext>> DelayedMessages; 
+        TDeque<TAutoPtr<TOnMessageContext>> DelayedMessages;
 
         TDelayReplyServer()
             : MessageReceivedEvent(TEventResetType::rAuto)

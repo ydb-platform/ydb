@@ -34,7 +34,7 @@ namespace NKikimr {
             TBlobMetadata Meta;
 
             // data to write
-            TString Data; 
+            TString Data;
 
             // event payload which will be moved to response
             TWritePayloadPtr Payload;
@@ -406,7 +406,7 @@ namespace NKikimr {
             return obsolete;
         }
 
-        void TWriter::SetUpCurrentChunk(ui32 offsetInBlocks, TVector<TBlobIndexRecord>&& index) { 
+        void TWriter::SetUpCurrentChunk(ui32 offsetInBlocks, TVector<TBlobIndexRecord>&& index) {
             CurrentChunkOffsetInBlocks = offsetInBlocks;
             CurrentChunkIndex = std::move(index);
         }
@@ -589,9 +589,9 @@ namespace NKikimr {
             return false;
         }
 
-        TVector<TEvIncrHugeInitResult::TItem> TWriter::EnumerateItems(ui8 owner, ui64 firstLsn) { 
-            TVector<TEvIncrHugeInitResult::TItem> res; 
-            auto scanChunk = [&](TChunkIdx chunkIdx, const TVector<TBlobIndexRecord>& index) { 
+        TVector<TEvIncrHugeInitResult::TItem> TWriter::EnumerateItems(ui8 owner, ui64 firstLsn) {
+            TVector<TEvIncrHugeInitResult::TItem> res;
+            auto scanChunk = [&](TChunkIdx chunkIdx, const TVector<TBlobIndexRecord>& index) {
                 auto it = Keeper.State.Chunks.find(chunkIdx);
                 Y_VERIFY(it != Keeper.State.Chunks.end());
                 TChunkInfo& chunk = it->second;

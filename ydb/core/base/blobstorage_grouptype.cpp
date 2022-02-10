@@ -12,7 +12,7 @@
 #   define VERBOSE_COUT(a) \
        Cerr << a
 
-static TString DebugFormatBits(ui64 value) { 
+static TString DebugFormatBits(ui64 value) {
     TStringStream s;
     for (size_t i = 7; i >=4; --i) {
         s << ((value >> i) & 1);

@@ -6,7 +6,7 @@ TTempFileHandle::TTempFileHandle()
 {
 }
 
-TTempFileHandle::TTempFileHandle(const TString& fname) 
+TTempFileHandle::TTempFileHandle(const TString& fname)
     : TTempFile(fname)
     , TFile(CreateFile())
 {

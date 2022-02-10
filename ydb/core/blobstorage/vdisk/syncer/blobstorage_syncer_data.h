@@ -54,7 +54,7 @@ namespace NKikimr {
             void ParseFromArcadiaStream(IInputStream &str);
             void Serialize(NKikimrVDiskData::TSyncerVDiskEntry &pb) const;
             void Parse(const NKikimrVDiskData::TSyncerVDiskEntry &pb);
-            TString ToString() const; 
+            TString ToString() const;
             void OutputHtml(IOutputStream &str) const;
 
             static bool Good(ESyncStatus status) {
@@ -73,7 +73,7 @@ namespace NKikimr {
 
             void Serialize(NKikimrVDiskData::TSyncerVDiskEntry &pb) const;
             void Parse(const NKikimrVDiskData::TSyncerVDiskEntry &pb);
-            TString ToString() const; 
+            TString ToString() const;
             void OutputHtml(IOutputStream &str) const;
         };
 
@@ -91,7 +91,7 @@ namespace NKikimr {
             void ParseFromArcadiaStream(IInputStream &str);
             void Serialize(NKikimrVDiskData::TSyncerVDiskEntry &pb) const;
             void Parse(const NKikimrVDiskData::TSyncerVDiskEntry &pb);
-            TString ToString() const; 
+            TString ToString() const;
             void OutputHtml(IOutputStream &str) const;
         };
 
@@ -115,13 +115,13 @@ namespace NKikimr {
         ui64 DbBirthLsn = 0; // FIXME: remove after switching to the new sync
 
     private:
-        const TString LogPrefix; 
+        const TString LogPrefix;
         const TActorId NotifyId;
         TNeighbors Neighbors;
         NSync::TQuorumTracker QuorumTracker;
 
     public:
-        TSyncNeighbors(const TString &logPrefix, 
+        TSyncNeighbors(const TString &logPrefix,
                        const TActorId &notifyId,
                        const TVDiskIdShort &self,
                        std::shared_ptr<TBlobStorageGroupInfo::TTopology> top);
@@ -136,8 +136,8 @@ namespace NKikimr {
         template <class TPrinter>
         void OutputHtml(IOutputStream &str,
                         TPrinter &printer,
-                        const TString &name, 
-                        const TString &divClass) const { 
+                        const TString &name,
+                        const TString &divClass) const {
             Neighbors.OutputHtml<TPrinter>(str, printer, name, divClass);
         }
 
@@ -152,11 +152,11 @@ namespace NKikimr {
         class TDes;
         void OldSerialize(IOutputStream &str, const TBlobStorageGroupInfo *info) const;
         void OldParse(IInputStream &str);
-        void OldParse(const TString &data); 
+        void OldParse(const TString &data);
         void Serialize(IOutputStream &str, const TBlobStorageGroupInfo *info) const;
         void Serialize(NKikimrVDiskData::TSyncerEntryPoint *pb, const TBlobStorageGroupInfo *info) const;
         void Parse(IInputStream &str);
-        void Parse(const TString &data); 
+        void Parse(const TString &data);
         void Parse(const NKikimrVDiskData::TSyncerEntryPoint &pb);
         void ApplyChanges(const TActorContext &ctx,
                           const NSyncer::TSyncerJobTask *task,
@@ -178,7 +178,7 @@ namespace NKikimr {
     public:
         friend struct TSyncerData;
         friend class TProtoState;
-        TString Serialize() const; 
+        TString Serialize() const;
     };
 
 
@@ -190,33 +190,33 @@ namespace NKikimr {
         NSyncer::TLocalSyncerState LocalSyncerState;
         const TActorId NotifyId;
 
-        TSyncerData(const TString &logPrefix, 
+        TSyncerData(const TString &logPrefix,
                     const TActorId &notifyId,
                     const TVDiskIdShort &selfVDisk,
                     std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                    const TString &entryPoint = TString()); 
+                    const TString &entryPoint = TString());
 
         // we call this func during local recovery to apply last changes from recovery log
         // FIXME: looks like we MUST NOT call this function!!!!!!!!!!!!!!!!!!!!!!!!
         void PutFromRecoveryLog(const TVDiskIdShort &vdisk, const TSyncState &syncState);
-        TString Serialize(const TBlobStorageGroupInfo *info) const; 
+        TString Serialize(const TBlobStorageGroupInfo *info) const;
         void Serialize(TSyncerDataSerializer &s, const TBlobStorageGroupInfo *info) const;
 
         // check and cut signature
-        static TString WithoutSignature(const TString &entryPoint); 
-        static bool CheckEntryPoint(const TString &logPrefix, 
+        static TString WithoutSignature(const TString &entryPoint);
+        static bool CheckEntryPoint(const TString &logPrefix,
                                     const TActorId &notifyId,
                                     const TVDiskIdShort &selfVDisk,
                                     std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                                    const TString &entryPoint); 
+                                    const TString &entryPoint);
         // Convert from old entry point format to protobuf format
         // TODO: we can remove this function after migrating to the protobuf format
-        static TString Convert(const TVDiskIdShort &selfVDisk, 
+        static TString Convert(const TVDiskIdShort &selfVDisk,
                               std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
-                              const TString &entryPoint); 
+                              const TString &entryPoint);
 
     private:
-        void ParseWOSignature(const TString &serProto); 
+        void ParseWOSignature(const TString &serProto);
     };
 
 } // NKikimr

@@ -46,11 +46,11 @@ TCell MakeCell(const NUdf::TUnboxedValuePod& value) {
 }
 
 THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
-    const TVector<TKeyDesc::TColumnOp>& columns, 
+    const TVector<TKeyDesc::TColumnOp>& columns,
     TKeyDesc::ERowOperation rowOperation, bool requireStaticKey, const TTypeEnvironment& env) {
-    TVector<ui32> keyColumnTypes(tuple->GetValuesCount()); 
-    TVector<TCell> fromValues(tuple->GetValuesCount()); 
-    TVector<TCell> toValues(tuple->GetValuesCount()); 
+    TVector<ui32> keyColumnTypes(tuple->GetValuesCount());
+    TVector<TCell> fromValues(tuple->GetValuesCount());
+    TVector<TCell> toValues(tuple->GetValuesCount());
     bool inclusiveFrom = true;
     bool inclusiveTo = true;
     bool point = true;
@@ -83,7 +83,7 @@ THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
     return MakeHolder<TKeyDesc>(tableId, range, rowOperation, keyColumnTypes, columns);
 }
 
-void ExtractReadColumns(TStructType* columnsType, TStructLiteral* tags, TVector<TKeyDesc::TColumnOp>& columns) { 
+void ExtractReadColumns(TStructType* columnsType, TStructLiteral* tags, TVector<TKeyDesc::TColumnOp>& columns) {
     MKQL_ENSURE(columnsType->GetMembersCount() == tags->GetValuesCount(), "Mismatch count of tags");
     for (ui32 i = 0; i < columnsType->GetMembersCount(); ++i) {
         auto memberName = columnsType->GetMemberName(i);
@@ -105,7 +105,7 @@ THolder<TKeyDesc> ExtractSelectRow(TCallable& callable, const TTypeEnvironment& 
     MKQL_ENSURE(columnsNode.IsImmediate() && columnsNode.GetNode()->GetType()->IsType(), "Expected struct type");
     auto columnsType = AS_TYPE(TStructType, static_cast<TType*>(columnsNode.GetNode()));
     auto tags = AS_VALUE(TStructLiteral, callable.GetInput(2));
-    TVector<TKeyDesc::TColumnOp> columns(columnsType->GetMembersCount()); 
+    TVector<TKeyDesc::TColumnOp> columns(columnsType->GetMembersCount());
     ExtractReadColumns(columnsType, tags, columns);
     auto tuple = AS_VALUE(TTupleLiteral, callable.GetInput(3));
     THolder<TKeyDesc> desc = ExtractKeyTuple(tableId, tuple, columns, TKeyDesc::ERowOperation::Read, true, env);
@@ -119,7 +119,7 @@ THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment
     auto columnsNode = callable.GetInput(1);
     MKQL_ENSURE(columnsNode.IsImmediate() && columnsNode.GetNode()->GetType()->IsType(), "Expected struct type");
     auto columnsType = AS_TYPE(TStructType, static_cast<TType*>(columnsNode.GetNode()));
-    TVector<TKeyDesc::TColumnOp> columns(columnsType->GetMembersCount()); 
+    TVector<TKeyDesc::TColumnOp> columns(columnsType->GetMembersCount());
     auto tags = AS_VALUE(TStructLiteral, callable.GetInput(2));
     ExtractReadColumns(columnsType, tags, columns);
     auto fromTuple = AS_VALUE(TTupleLiteral, callable.GetInput(3));
@@ -131,9 +131,9 @@ THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment
     ui64 itemsLimit = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui64>();
     ui64 bytesLimit = AS_VALUE(TDataLiteral, callable.GetInput(7))->AsValue().Get<ui64>();
 
-    TVector<ui32> keyColumnTypes(Max(fromTuple->GetValuesCount(), toTuple->GetValuesCount())); 
-    TVector<TCell> fromValues(keyColumnTypes.size()); // padded with NULLs 
-    TVector<TCell> toValues(toTuple->GetValuesCount()); 
+    TVector<ui32> keyColumnTypes(Max(fromTuple->GetValuesCount(), toTuple->GetValuesCount()));
+    TVector<TCell> fromValues(keyColumnTypes.size()); // padded with NULLs
+    TVector<TCell> toValues(toTuple->GetValuesCount());
     bool inclusiveFrom = !(flags & TReadRangeOptions::TFlags::ExcludeInitValue);
     bool inclusiveTo = !(flags & TReadRangeOptions::TFlags::ExcludeTermValue);
     bool point = false;
@@ -179,7 +179,7 @@ THolder<TKeyDesc> ExtractUpdateRow(TCallable& callable, const TTypeEnvironment& 
     auto tableId = ExtractTableId(callable.GetInput(0));
     auto updateNode = callable.GetInput(2);
     auto update = AS_VALUE(TStructLiteral, updateNode);
-    TVector<TKeyDesc::TColumnOp> columns(update->GetValuesCount()); 
+    TVector<TKeyDesc::TColumnOp> columns(update->GetValuesCount());
     for (ui32 i = 0; i < update->GetValuesCount(); ++i) {
         auto memberName = update->GetType()->GetMemberName(i);
         ui32 columnId = 0;
@@ -236,7 +236,7 @@ THolder<TKeyDesc> ExtractEraseRow(TCallable& callable, const TTypeEnvironment& e
     auto tableId = ExtractTableId(callable.GetInput(0));
     auto tuple = AS_VALUE(TTupleLiteral, callable.GetInput(1));
     THolder<TKeyDesc> desc;
-    return ExtractKeyTuple(tableId, tuple, TVector<TKeyDesc::TColumnOp>(), TKeyDesc::ERowOperation::Erase, false, env); 
+    return ExtractKeyTuple(tableId, tuple, TVector<TKeyDesc::TColumnOp>(), TKeyDesc::ERowOperation::Erase, false, env);
 }
 
 }
@@ -303,8 +303,8 @@ THolder<TKeyDesc> ExtractTableKey(TCallable& callable, const TTableStrings& stri
     return nullptr;
 }
 
-TVector<THolder<TKeyDesc>> ExtractTableKeys(TExploringNodeVisitor& explorer, const TTypeEnvironment& env) { 
-    TVector<THolder<TKeyDesc>> descList; 
+TVector<THolder<TKeyDesc>> ExtractTableKeys(TExploringNodeVisitor& explorer, const TTypeEnvironment& env) {
+    TVector<THolder<TKeyDesc>> descList;
     TTableStrings strings(env);
     for (auto node : explorer.GetNodes()) {
         if (node->GetType()->GetKind() != TType::EKind::Callable)

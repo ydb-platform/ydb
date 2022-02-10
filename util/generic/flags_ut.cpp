@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(TFlagsTest) {
     Y_UNIT_TEST(TestHash) {
         ETest1 value0 = nullptr, value1 = Test1;
 
-        THashMap<ETest1, int> hash; 
+        THashMap<ETest1, int> hash;
         hash[value0] = 0;
         hash[value1] = 1;
 

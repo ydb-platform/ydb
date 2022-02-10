@@ -247,7 +247,7 @@ protected:
     };
 
     TKeyValueState State;
-    TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue; 
+    TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
     TActorId CollectorActorId;
 
     void OnDetach(const TActorContext &ctx) override {

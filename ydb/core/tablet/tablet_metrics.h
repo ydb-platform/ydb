@@ -74,8 +74,8 @@ protected:
     ui32 LevelNetwork = 0;
     ui32 LevelStorage = 0;
     ui32 LevelIops = 0;
-    THashMap<std::pair<TChannel, TGroupId>, ui32> LevelReadThroughput; 
-    THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteThroughput; 
+    THashMap<std::pair<TChannel, TGroupId>, ui32> LevelReadThroughput;
+    THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteThroughput;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelReadIops;
     THashMap<std::pair<TChannel, TGroupId>, ui32> LevelWriteIops;
     TInstant LastUpdate;

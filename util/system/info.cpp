@@ -176,7 +176,7 @@ size_t NSystemInfo::CachedNumberOfCpus() {
     return NCpus;
 }
 
-size_t NSystemInfo::GetPageSize() noexcept { 
+size_t NSystemInfo::GetPageSize() noexcept {
 #if defined(_win_)
     SYSTEM_INFO sysInfo;
     GetSystemInfo(&sysInfo);

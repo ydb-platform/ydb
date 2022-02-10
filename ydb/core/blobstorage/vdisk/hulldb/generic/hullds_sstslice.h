@@ -106,7 +106,7 @@ namespace NKikimr {
             return TSatisfactionRank::MkRatio(Segs->CurSstsNum(), MaxSstsAtOnce);
         }
 
-        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
+        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             Segs->GetOwnedChunks(chunks);
         }
     };
@@ -159,7 +159,7 @@ namespace NKikimr {
             return Segs->ObsoleteLastCompactedLsn();
         }
 
-        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
+        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             Segs->GetOwnedChunks(chunks);
         }
 
@@ -181,7 +181,7 @@ namespace NKikimr {
         typedef typename TLevelSegment::TLevelSstPtr TLevelSstPtr;
         typedef ::NKikimr::TLevel0<TKey, TMemRec> TLevel0;
         typedef ::NKikimr::TSortedLevel<TKey, TMemRec> TSortedLevel;
-        typedef TVector<TSortedLevel> TSortedLevels; 
+        typedef TVector<TSortedLevel> TSortedLevels;
 
         TLevel0 Level0;
         TSortedLevels SortedLevels;
@@ -192,7 +192,7 @@ namespace NKikimr {
         TActorId CommitterId;
         // In ChunksToDelete we store chunks that are old and subject for deletion,
         // but previous snapshot can still use them
-        TVector<ui32> ChunksToDelete; 
+        TVector<ui32> ChunksToDelete;
         // Bulk-formed segments description; they contain only these bulk-formed SST references, which are required
         // to recover SyncLog in case of failure
         TBulkFormedSstInfoSet BulkFormedSegments;
@@ -310,7 +310,7 @@ namespace NKikimr {
             return true;
         }
 
-        TString ToString(const TString &prefix = "") const { 
+        TString ToString(const TString &prefix = "") const {
             TStringStream str;
             TSstIterator it(this, Level0CurSstsNum());
             it.SeekToFirst();
@@ -357,7 +357,7 @@ namespace NKikimr {
             return Level0.GetSatisfactionRank();
         }
 
-        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
+        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             // we include deleted chunks
             for (TChunkIdx chunkIdx : ChunksToDelete) {
                 const bool inserted = chunks.insert(chunkIdx).second;

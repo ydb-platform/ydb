@@ -72,8 +72,8 @@ namespace NTest{
         }
 
     private:
-        TVector<NTable::TColumn> Cols; 
-        TVector<NTable::TTag> Tags_; 
+        TVector<NTable::TColumn> Cols;
+        TVector<NTable::TTag> Tags_;
         TIntrusiveConstPtr<TRowScheme> Scheme;
     };
 }

@@ -9,7 +9,7 @@
 class TLzmaCompress: public IOutputStream {
 public:
     TLzmaCompress(IOutputStream* slave, size_t level = 7);
-    ~TLzmaCompress() override; 
+    ~TLzmaCompress() override;
 
 private:
     void DoWrite(const void* buf, size_t len) override;
@@ -24,7 +24,7 @@ class TLzmaDecompress: public IInputStream {
 public:
     TLzmaDecompress(IInputStream* slave);
     TLzmaDecompress(IZeroCopyInput* input);
-    ~TLzmaDecompress() override; 
+    ~TLzmaDecompress() override;
 
 private:
     size_t DoRead(void* buf, size_t len) override;

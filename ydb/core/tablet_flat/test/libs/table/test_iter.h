@@ -120,8 +120,8 @@ namespace NTest {
             return erased ? Is(EReady::Gone) : Is(row, true, ERowOp::Erase);
         }
 
-        template<typename TListType> 
-        TChecker& IsTheSame(const TListType &list) 
+        template<typename TListType>
+        TChecker& IsTheSame(const TListType &list)
         {
             Seek({ } , ESeek::Lower);
 

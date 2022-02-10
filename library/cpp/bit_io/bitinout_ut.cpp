@@ -19,8 +19,8 @@ namespace NBitIO {
         return bytes << 3ULL;
     }
 
-    inline TString PrintBits(const char* a, const char* b, bool reverse = false) { 
-        TString s; 
+    inline TString PrintBits(const char* a, const char* b, bool reverse = false) {
+        TString s;
         TStringOutput out(s);
         for (const char* it = a; it != b; ++it) {
             if (it != a)
@@ -40,7 +40,7 @@ namespace NBitIO {
     }
 
     template <typename T>
-    inline TString PrintBits(T t, ui32 bits = Bits(sizeof(T))) { 
+    inline TString PrintBits(T t, ui32 bits = Bits(sizeof(T))) {
         return PrintBits((char*)&t, ((char*)&t) + BytesUp(bits));
     }
 }
@@ -52,9 +52,9 @@ class TBitIOTest: public TTestBase {
 
 private:
     using TBi = NBitIO::TBitInput;
-    using TVec = TVector<char>; 
+    using TVec = TVector<char>;
 
-    void static CheckBits(const TVec& v, const TString& ref, const TString& rem) { 
+    void static CheckBits(const TVec& v, const TString& ref, const TString& rem) {
         UNIT_ASSERT_VALUES_EQUAL_C(NBitIO::PrintBits(v.begin(), v.end()), ref, rem);
     }
 
@@ -80,7 +80,7 @@ private:
     }
 
     template <typename TBo>
-    void DoWrite1(TBo& out, const TString& rem) { 
+    void DoWrite1(TBo& out, const TString& rem) {
         out.Write(0x0C, 3);
         UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 1u, (rem + ", " + ToString(__LINE__)));
         out.Write(0x18, 4);
@@ -94,7 +94,7 @@ private:
     }
 
     template <typename TBo>
-    void DoWrite2(TBo& out, const TString& rem) { 
+    void DoWrite2(TBo& out, const TString& rem) {
         out.Write(0x0C, 3);
         UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 8u, (rem + ", " + ToString(__LINE__)));
 
@@ -120,7 +120,7 @@ private:
         UNIT_ASSERT_VALUES_EQUAL_C(out.GetOffset(), 41u, (rem + ", " + ToString(__LINE__)));
     }
 
-    void DoBitOutput(NBitIO::TBitOutputYVector& out, const TString& rem) { 
+    void DoBitOutput(NBitIO::TBitOutputYVector& out, const TString& rem) {
         DoWrite1(out, rem);
 
         out.WriteWords<8>(0xabcdef);
@@ -129,7 +129,7 @@ private:
         DoWrite2(out, rem);
     }
 
-    void DoBitOutput(NBitIO::TBitOutputArray& out, const TString& rem) { 
+    void DoBitOutput(NBitIO::TBitOutputArray& out, const TString& rem) {
         DoWrite1(out, rem);
 
         out.WriteWords<8>(0xabcdef);
@@ -138,7 +138,7 @@ private:
         DoWrite2(out, rem);
     }
 
-    void DoBitInput(TBi& in, const TString& rem) { 
+    void DoBitInput(TBi& in, const TString& rem) {
         UNIT_ASSERT(!in.Eof());
 
         {

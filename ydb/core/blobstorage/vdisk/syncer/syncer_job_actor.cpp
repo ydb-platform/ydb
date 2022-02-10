@@ -137,7 +137,7 @@ namespace NKikimr {
         }
 
         // use it for debug purposes
-        void HeavyDump(const TActorContext &ctx, const TString &data) const { 
+        void HeavyDump(const TActorContext &ctx, const TString &data) const {
             // record handlers
             auto blobHandler = [&] (const NSyncLog::TLogoBlobRec *rec) {
                 LOG_ERROR(ctx, BS_SYNCER,

@@ -115,7 +115,7 @@ public:
 
 private:
     TExprContext* Ctx;
-    TVector<NNodes::TMaybeNode<NNodes::TExprBase>> Values; 
+    TVector<NNodes::TMaybeNode<NNodes::TExprBase>> Values;
     bool From;
     bool Inclusive;
 };
@@ -135,7 +135,7 @@ public:
         return ColumnRanges[index];
     }
 
-    const TVector<TColumnRange>& GetColumnRanges() const { 
+    const TVector<TColumnRange>& GetColumnRanges() const {
         return ColumnRanges;
     }
 
@@ -171,7 +171,7 @@ public:
 
 private:
     TExprContext* Ctx;
-    TVector<TColumnRange> ColumnRanges; 
+    TVector<TColumnRange> ColumnRanges;
     NNodes::TMaybeNode<NNodes::TExprBase> ResidualPredicate;
     bool EquiRange;
     size_t NumDefined;
@@ -206,15 +206,15 @@ public:
     typedef std::function<bool(NNodes::TExprBase)> TCanCompareFunc;
     typedef std::function<TCompareResult(NNodes::TExprBase, NNodes::TExprBase)> TCompareFunc;
 
-    TTableLookup(const TVector<TString>& keyColumns, const TVector<TKeyRange>& keyRanges) 
+    TTableLookup(const TVector<TString>& keyColumns, const TVector<TKeyRange>& keyRanges)
         : KeyColumns(keyColumns)
         , KeyRanges(keyRanges) {}
 
-    const TVector<TString>& GetKeyColumns() const { 
+    const TVector<TString>& GetKeyColumns() const {
         return KeyColumns;
     }
 
-    const TVector<TKeyRange>& GetKeyRanges() const { 
+    const TVector<TKeyRange>& GetKeyRanges() const {
         return KeyRanges;
     }
 
@@ -229,14 +229,14 @@ public:
     void Print(IOutputStream& output) const;
 
 private:
-    TVector<TString> KeyColumns; 
-    TVector<TKeyRange> KeyRanges; 
+    TVector<TString> KeyColumns;
+    TVector<TKeyRange> KeyRanges;
 };
 
 TTableLookup ExtractTableLookup(
     NNodes::TExprBase row,
     NNodes::TExprBase predicate,
-    const TVector<TString>& keyColumns, 
+    const TVector<TString>& keyColumns,
     TTableLookup::TGetValueFunc getValueFunc,
     TTableLookup::TCanCompareFunc canCompareFunc,
     TTableLookup::TCompareFunc compareFunc,

@@ -320,7 +320,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void TestCopyTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId,
-                       const TString& dstPath, const TString& dstName, const TString& srcFullName, 
+                       const TString& dstPath, const TString& dstName, const TString& srcFullName,
                        TEvSchemeShard::EStatus expectedResult) {
         AsyncCopyTable(runtime, schemeShardId, txId, dstPath, dstName, srcFullName);
         TestModificationResult(runtime, txId, expectedResult);
@@ -332,7 +332,7 @@ namespace NSchemeShardUT_Private {
         TestCopyTable(runtime, TTestTxConfig::SchemeShard, txId, dstPath, dstName, srcFullName, expectedResult);
     }
 
-    TString TestDescribe(TTestActorRuntime& runtime, const TString& path) { 
+    TString TestDescribe(TTestActorRuntime& runtime, const TString& path) {
         return TestLs(runtime, path, true);
     }
 
@@ -1146,7 +1146,7 @@ namespace NSchemeShardUT_Private {
     }
 
     NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId, const TString& schemeChangesStr, bool dryRun,
-                       NTabletFlatScheme::TSchemeChanges& scheme, TString& err) { 
+                       NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
         TActorId sender = runtime.AllocateEdgeActor();
 
         auto evTx = new TEvTablet::TEvLocalSchemeTx;

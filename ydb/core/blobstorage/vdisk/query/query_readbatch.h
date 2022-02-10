@@ -62,7 +62,7 @@ namespace NKikimr {
             std::vector<TDiskPart> ExtraDiskItems;
 
         public:
-            TString ToString() const { 
+            TString ToString() const {
                 TStringStream str;
                 str << "{Type# ";
                 switch (Type) {
@@ -355,7 +355,7 @@ namespace NKikimr {
 
         NReadBatcher::TGlueRead *AddGlueRead(NReadBatcher::TDataItem *item);
         void PrepareReadPlan();
-        TString DiskDataItemsToString() const; 
+        TString DiskDataItemsToString() const;
         bool CheckDiskDataItemsOrdering(bool printOnFail = false) const;
 
         void ClearTmpItems() {

@@ -32,7 +32,7 @@ namespace NKikimr {
         TWhatsNextOutcome WhatsNext(ui64 syncedLsn,
                                     ui64 dbBirthLsn,
                                     const NSyncLog::TLogEssence *e,
-                                    std::function<TString()> reportInternals) { 
+                                    std::function<TString()> reportInternals) {
             // NOTE: we use dbBirthLsn to handle read requests, below I describe why.
             //       After lost data recovery, we would like syncer to start with DbBirthLsn,
             //       because there is no need to sync previous records (they are obtained during

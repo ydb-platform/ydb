@@ -23,5 +23,5 @@ public:
     TBlock Allocate(size_t len) override;
     void Release(const TBlock& block) override;
 
-    static IAllocator* Instance() noexcept; 
+    static IAllocator* Instance() noexcept;
 };

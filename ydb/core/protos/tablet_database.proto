@@ -55,12 +55,12 @@ message TExecutorSettings {
 }
 
 message TCompactionBroker {
-    message TQueueType { 
+    message TQueueType {
         optional uint32 QueueID = 1;
         optional uint32 Quota = 2;
     }
 
-    repeated TQueueType Queue = 1; 
+    repeated TQueueType Queue = 1;
 }
 
 message TEvSetCompactionBrokerConfig {

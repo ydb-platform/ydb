@@ -110,12 +110,12 @@ namespace NPageCollection {
         const ui32 Group = TLargeGlobId::InvalidGroup;
 
     private:
-        TVector<TBlobId> Blobs; 
-        TVector<TEntry> Index; 
-        TVector<TExtra> Extra; 
+        TVector<TBlobId> Blobs;
+        TVector<TEntry> Index;
+        TVector<TExtra> Extra;
 
         ui64 Offset = 0;
-        TString Inbound; 
+        TString Inbound;
     };
 }
 }

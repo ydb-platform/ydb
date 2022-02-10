@@ -102,7 +102,7 @@ public:
 
     TAutoPtr<NPageCollection::TFetch> DataPages() const noexcept
     {
-        TVector<TPageId> pages; 
+        TVector<TPageId> pages;
 
         pages.reserve(Index->End() - Index->Begin());
 

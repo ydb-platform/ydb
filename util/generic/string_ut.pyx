@@ -1,7 +1,7 @@
 # cython: c_string_type=str, c_string_encoding=utf8
 
 from libcpp.string cimport string as std_string
-from util.generic.string cimport TString, npos 
+from util.generic.string cimport TString, npos
 
 import pytest
 import unittest
@@ -16,39 +16,39 @@ class TestStroka(unittest.TestCase):
 
 
     def test_ctor1(self):
-        cdef TString tmp = TString() 
-        cdef TString tmp2 = TString(tmp) 
+        cdef TString tmp = TString()
+        cdef TString tmp2 = TString(tmp)
         self.assertEquals(tmp2, "")
 
     def test_ctor2(self):
         cdef std_string tmp = b"hello"
-        cdef TString tmp2 = TString(tmp) 
+        cdef TString tmp2 = TString(tmp)
         self.assertEquals(tmp2, "hello")
 
     def test_ctor3(self):
         cdef TString tmp = b"hello"
-        cdef TString tmp2 = TString(tmp, 0, 4) 
+        cdef TString tmp2 = TString(tmp, 0, 4)
         self.assertEquals(tmp2, "hell")
 
     def test_ctor4(self):
-        cdef TString tmp = TString(<char*>b"hello") 
+        cdef TString tmp = TString(<char*>b"hello")
         self.assertEquals(tmp, "hello")
 
     def test_ctor5(self):
-        cdef TString tmp = TString(<char*>b"hello", 4) 
+        cdef TString tmp = TString(<char*>b"hello", 4)
         self.assertEquals(tmp, "hell")
 
     def test_ctor6(self):
-        cdef TString tmp = TString(<char*>b"hello", 1, 3) 
+        cdef TString tmp = TString(<char*>b"hello", 1, 3)
         self.assertEquals(tmp, "ell")
 
     def test_ctor7(self):
-        cdef TString tmp = TString(3, <char>'x') 
+        cdef TString tmp = TString(3, <char>'x')
         self.assertEquals(tmp, "xxx")
 
     def test_ctor8(self):
         cdef bytes tmp = b"hello"
-        cdef TString tmp2 = TString(<char*>tmp, <char*>tmp + 4) 
+        cdef TString tmp2 = TString(<char*>tmp, <char*>tmp + 4)
         self.assertEquals(tmp2, "hell")
 
     def test_compare(self):
@@ -71,7 +71,7 @@ class TestStroka(unittest.TestCase):
 
     def test_operator_assign(self):
         cdef TString tmp = b"hello"
-        cdef TString tmp2 = tmp 
+        cdef TString tmp2 = tmp
         self.assertEquals(tmp2, "hello")
 
     def test_operator_plus(self):
@@ -98,12 +98,12 @@ class TestStroka(unittest.TestCase):
         self.assertEquals(<bytes>tmp[4], b'o')
         self.assertEquals(<bytes>tmp.at(4), b'o')
 
-        # Actually, TString::at() is noexcept 
+        # Actually, TString::at() is noexcept
         # with pytest.raises(IndexError):
         #     tmp.at(100)
 
     def test_append(self):
-        cdef TString tmp 
+        cdef TString tmp
         cdef TString tmp2 = b"fuu"
 
         tmp.append(tmp2)
@@ -125,7 +125,7 @@ class TestStroka(unittest.TestCase):
         self.assertEquals(tmp, "fuuuull of gooz")
 
     def test_assign(self):
-        cdef TString tmp 
+        cdef TString tmp
 
         tmp.assign(b"one")
         self.assertEquals(tmp, "one")
@@ -140,7 +140,7 @@ class TestStroka(unittest.TestCase):
         self.assertEquals(tmp, "three")
 
     def test_insert(self):
-        cdef TString tmp 
+        cdef TString tmp
 
         tmp = b"xx"
         tmp.insert(1, b"foo")

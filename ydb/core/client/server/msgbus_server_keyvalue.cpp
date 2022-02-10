@@ -38,7 +38,7 @@ public:
     }
 
      NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx,
-            const TString& text = TString()) override { 
+            const TString& text = TString()) override {
         LOG_WARN_S(ctx, NKikimrServices::MSGBUS_REQUEST, "TMessageBusKeyValue TabletId# " << TabletId
             << " status# " << status << " text# \"" << text << "\" Marker# MBKV2" << Endl);
 

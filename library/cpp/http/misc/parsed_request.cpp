@@ -4,7 +4,7 @@
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>
 
-static inline TStringBuf StripLeft(const TStringBuf& s) noexcept { 
+static inline TStringBuf StripLeft(const TStringBuf& s) noexcept {
     const char* b = s.begin();
     const char* e = s.end();
 

@@ -37,7 +37,7 @@ namespace NKikimr {
                 }
             }
 
-            const TVector<TSyncLogPageSnap> &GetSnapPages() const { 
+            const TVector<TSyncLogPageSnap> &GetSnapPages() const {
                 return Pages;
             }
 
@@ -53,7 +53,7 @@ namespace NKikimr {
 
         private:
             const ui32 PageSize;
-            TVector<TSyncLogPageSnap> Pages; 
+            TVector<TSyncLogPageSnap> Pages;
             std::vector<TDataRef> Refs;
         };
 

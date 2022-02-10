@@ -827,7 +827,7 @@ void TReadSessionActor::SetupCounters()
     BytesInflight = subGroup->GetExpiringCounter("BytesInflight", false);
 
     PartsPerSession = NKikimr::NPQ::TPercentileCounter(subGroup->GetSubgroup("sensor", "PartsPerSession"), {}, {}, "Count",
-                                            TVector<std::pair<ui64, TString>>{{1, "1"}, {2, "2"}, {5, "5"}, 
+                                            TVector<std::pair<ui64, TString>>{{1, "1"}, {2, "2"}, {5, "5"},
                                                                               {10, "10"}, {20, "20"}, {50, "50"}, {70, "70"},
                                                                               {100, "100"}, {150, "150"}, {300,"300"}, {99999999, "99999999"}}, false);
 

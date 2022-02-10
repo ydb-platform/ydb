@@ -10,10 +10,10 @@ namespace NJson {
             MAP_KEY
         };
     }
-    template <class TStringType> 
+    template <class TStringType>
     struct TPathElemImpl {
         NImpl::EType Type;
-        TStringType Key; 
+        TStringType Key;
         int ArrayCounter;
 
         TPathElemImpl(NImpl::EType type)
@@ -36,5 +36,5 @@ namespace NJson {
         }
     };
 
-    typedef TPathElemImpl<TString> TPathElem; 
+    typedef TPathElemImpl<TString> TPathElem;
 }

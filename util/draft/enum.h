@@ -37,8 +37,8 @@ const V* FindEnumFromStringImpl(const char* key, const std::pair<const char*, V>
 }
 
 template <class K, class V>
-TString PrintEnumItemsImpl(const std::pair<K, V>* entries, size_t arraySize) { 
-    TString result; 
+TString PrintEnumItemsImpl(const std::pair<K, V>* entries, size_t arraySize) {
+    TString result;
     TStringOutput out(result);
     for (size_t i = 0; i < arraySize; i++)
         out << (i ? ", " : "") << "'" << entries[i].first << "'";
@@ -47,8 +47,8 @@ TString PrintEnumItemsImpl(const std::pair<K, V>* entries, size_t arraySize) {
 
 // special version for const char*
 template <class V>
-TString PrintEnumItemsImpl(const std::pair<const char*, V>* entries, size_t arraySize) { 
-    TString result; 
+TString PrintEnumItemsImpl(const std::pair<const char*, V>* entries, size_t arraySize) {
+    TString result;
     TStringOutput out(result);
     for (size_t i = 0; i < arraySize; i++)
         out << (i ? ", " : "") << "'" << (entries[i].first ? entries[i].first : "<null>") << "'";

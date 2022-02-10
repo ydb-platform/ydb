@@ -33,7 +33,7 @@ namespace NKikimr {
             Y_VERIFY(!(State == TSyncVal::Final && Guid == TVDiskEternalGuid()));
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             Output(str);
             return str.Str();

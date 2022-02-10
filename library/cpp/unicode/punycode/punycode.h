@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/yexception.h>
 
@@ -9,17 +9,17 @@
 // Raw strings encoder/decoder: does not prepend with ACE prefix ("xn--"),
 // does not limit input length. Throws TPunycodeError on any internal error.
 // Returned strbuf points to @out data.
-TStringBuf WideToPunycode(const TWtringBuf& in, TString& out); 
-TWtringBuf PunycodeToWide(const TStringBuf& in, TUtf16String& out); 
+TStringBuf WideToPunycode(const TWtringBuf& in, TString& out);
+TWtringBuf PunycodeToWide(const TStringBuf& in, TUtf16String& out);
 
-inline TString WideToPunycode(const TWtringBuf& in) { 
-    TString out; 
+inline TString WideToPunycode(const TWtringBuf& in) {
+    TString out;
     WideToPunycode(in, out);
     return out;
 }
 
-inline TUtf16String PunycodeToWide(const TStringBuf& in) { 
-    TUtf16String out; 
+inline TUtf16String PunycodeToWide(const TStringBuf& in) {
+    TUtf16String out;
     PunycodeToWide(in, out);
     return out;
 }
@@ -29,12 +29,12 @@ inline TUtf16String PunycodeToWide(const TStringBuf& in) {
 // Labels containing non-ASCII characters are prefixed with ACE prefix ("xn--").
 // Limits maximal encoded domain label length to IDNA_LABEL_MAX_LENGTH (255 by default).
 // Throws TPunycodeError on failure.
-TString HostNameToPunycode(const TWtringBuf& unicodeHost); 
-TUtf16String PunycodeToHostName(const TStringBuf& punycodeHost); 
+TString HostNameToPunycode(const TWtringBuf& unicodeHost);
+TUtf16String PunycodeToHostName(const TStringBuf& punycodeHost);
 
 // Robust versions: on failure return original input, converted to/from UTF8
-TString ForceHostNameToPunycode(const TWtringBuf& unicodeHost); 
-TUtf16String ForcePunycodeToHostName(const TStringBuf& punycodeHost); 
+TString ForceHostNameToPunycode(const TWtringBuf& unicodeHost);
+TUtf16String ForcePunycodeToHostName(const TStringBuf& punycodeHost);
 
 // True if @host looks like punycode domain label sequence,
 // containing at least one ACE-prefixed label.

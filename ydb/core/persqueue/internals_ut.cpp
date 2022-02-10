@@ -19,7 +19,7 @@ Y_UNIT_TEST(TestPartitionedBlobSimpleTest) {
     TPartitionedBlob blob(0, 0, "sourceId", 1, 1, 10, head, newHead, false, false, 8 << 20);
     TClientBlob clientBlob("sourceId", 1, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123");
     UNIT_ASSERT(blob.IsInited());
-    TString error; 
+    TString error;
     UNIT_ASSERT(blob.IsNextPart("sourceId", 1, 0, &error));
 
     blob.Add(std::move(clientBlob));
@@ -30,12 +30,12 @@ Y_UNIT_TEST(TestPartitionedBlobSimpleTest) {
 
 void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
 {
-    TVector<TClientBlob> all; 
+    TVector<TClientBlob> all;
 
     THead head;
     head.Offset = 100;
-    TString value(102400, 'a'); 
-    head.Batches.push_back(TBatch(head.Offset, 0, TVector<TClientBlob>())); 
+    TString value(102400, 'a');
+    head.Batches.push_back(TBatch(head.Offset, 0, TVector<TClientBlob>()));
     for (ui32 i = 0; i < 50; ++i) {
         head.Batches.back().AddBlob(TClientBlob(
             "sourceId" + TString(1,'a' + rand() % 26), i + 1, value, TMaybe<TPartData>(),
@@ -48,7 +48,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     UNIT_ASSERT(head.Batches.back().Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
     head.Batches.back().Unpack();
     head.Batches.back().Pack();
-    TString str = head.Batches.back().Serialize(); 
+    TString str = head.Batches.back().Serialize();
     auto header = ExtractHeader(str.c_str(), str.size());
     TBatch batch(header, str.c_str() + header.ByteSize() + sizeof(ui16));
     batch.Unpack();
@@ -57,7 +57,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     UNIT_ASSERT(head.Batches.back().GetUnpackedSize() + GetMaxHeaderSize() >= head.Batches.back().GetPackedSize());
     THead newHead;
     newHead.Offset = head.GetNextOffset();
-    newHead.Batches.push_back(TBatch(newHead.Offset, 0, TVector<TClientBlob>())); 
+    newHead.Batches.push_back(TBatch(newHead.Offset, 0, TVector<TClientBlob>()));
     for (ui32 i = 0; i < 10; ++i) {
         newHead.Batches.back().AddBlob(TClientBlob(
             "sourceId2", i + 1, value, TMaybe<TPartData>(),
@@ -66,13 +66,13 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
         all.push_back(newHead.Batches.back().Blobs.back()); //newHead always glued
     }
     newHead.PackedSize = newHead.Batches.back().GetUnpackedSize();
-    TString value2(partSize, 'b'); 
+    TString value2(partSize, 'b');
     ui32 maxBlobSize = 8 << 20;
     TPartitionedBlob blob(0, newHead.GetNextOffset(), "sourceId3", 1, parts, parts * value2.size(), head, newHead, headCompacted, false, maxBlobSize);
 
-    TVector<std::pair<TKey, TString>> formed; 
+    TVector<std::pair<TKey, TString>> formed;
 
-    TString error; 
+    TString error;
     for (ui32 i = 0; i < parts; ++i) {
         UNIT_ASSERT(!blob.IsComplete());
         UNIT_ASSERT(blob.IsNextPart("sourceId3", 1, i, &error));
@@ -94,7 +94,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
         UNIT_ASSERT(formed[i].second.size() <= 8 * 1024 * 1024);
         UNIT_ASSERT(formed[i].second.size() > 6 * 1024 * 1024);
     }
-    TVector<TClientBlob> real; 
+    TVector<TClientBlob> real;
     ui32 nextOffset = headCompacted ? newHead.Offset : head.Offset;
     for (auto& p : formed) {
         const char* data = p.second.c_str();
@@ -168,7 +168,7 @@ Y_UNIT_TEST(TestPartitionedBigTest) {
 }
 
 Y_UNIT_TEST(TestBatchPacking) {
-    TString value(10, 'a'); 
+    TString value(10, 'a');
     TBatch batch;
     for (ui32 i = 0; i < 100; ++i) {
         batch.AddBlob(TClientBlob(
@@ -177,12 +177,12 @@ Y_UNIT_TEST(TestBatchPacking) {
         ));
     }
     batch.Pack();
-    TString s = batch.PackedData; 
+    TString s = batch.PackedData;
     UNIT_ASSERT(batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
     batch.Unpack();
     batch.Pack();
     UNIT_ASSERT(batch.PackedData == s);
-    TString str = batch.Serialize(); 
+    TString str = batch.Serialize();
     auto header = ExtractHeader(str.c_str(), str.size());
     TBatch batch2(header, str.c_str() + header.ByteSize() + sizeof(ui16));
     batch2.Unpack();

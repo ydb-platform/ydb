@@ -4,7 +4,7 @@
 template <typename TValue>
 void TestPacker() {
     TValue values[] = {1, 2, 3, 42};
-    TString buffer; 
+    TString buffer;
 
     TRegionPacker<TValue> p;
 

@@ -3,7 +3,7 @@
 #include <util/charset/recode_result.h>
 #include <util/charset/utf8.h>
 #include <util/generic/ptr.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/system/defaults.h>
 
 #include "codepage.h"

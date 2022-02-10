@@ -6,18 +6,18 @@ Y_UNIT_TEST_SUITE(TPcdata) {
     Y_UNIT_TEST(TestStress) {
         {
             ui64 key = 0x000017C0B76C4E87ull;
-            TString res = EncodeHtmlPcdata(TStringBuf((const char*)&key, sizeof(key))); 
+            TString res = EncodeHtmlPcdata(TStringBuf((const char*)&key, sizeof(key)));
         }
 
         for (size_t i = 0; i < 1000; ++i) {
-            const TString s = NUnitTest::RandomString(i, i); 
+            const TString s = NUnitTest::RandomString(i, i);
 
             UNIT_ASSERT_VALUES_EQUAL(DecodeHtmlPcdata(EncodeHtmlPcdata(s)), s);
         }
     }
 
     Y_UNIT_TEST(Test1) {
-        const TString tests[] = { 
+        const TString tests[] = {
             "qw&qw",
             "&<",
             ">&qw",
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TPcdata) {
     }
 
     Y_UNIT_TEST(TestEncodeHtmlPcdataAppend) {
-        TString s; 
+        TString s;
         EncodeHtmlPcdataAppend("m&m", s);
         EncodeHtmlPcdataAppend("'s", s);
         UNIT_ASSERT_VALUES_EQUAL(EncodeHtmlPcdata("m&m's"), s);

@@ -59,12 +59,12 @@ namespace NCompTriePrivate {
 
     template <>
     struct TStringForChar<char> {
-        typedef TString TResult; 
+        typedef TString TResult;
     };
 
     template <>
     struct TStringForChar<wchar16> {
-        typedef TUtf16String TResult; 
+        typedef TUtf16String TResult;
     };
 
     template <>

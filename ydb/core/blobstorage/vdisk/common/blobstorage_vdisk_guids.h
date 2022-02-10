@@ -30,7 +30,7 @@ namespace NKikimr {
             str << Guid;
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             Output(str);
             return str.Str();
@@ -71,7 +71,7 @@ namespace NKikimr {
             str << Guid;
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             Output(str);
             return str.Str();

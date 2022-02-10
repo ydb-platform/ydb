@@ -104,7 +104,7 @@ private:
 
     TIntrusiveConstPtr<TKeyNulls> KeyColumns;
     THolderVector<TScreenedPartIndexIterator> Iterators;
-    TPriorityQueue<TScreenedPartIndexIterator*, TSmallVec<TScreenedPartIndexIterator*>, TIterKeyGreater> Heap; 
+    TPriorityQueue<TScreenedPartIndexIterator*, TSmallVec<TScreenedPartIndexIterator*>, TIterKeyGreater> Heap;
     TSerializedCellVec CurrentKey;
     ui64 RowCount = 0;
     ui64 DataSize = 0;
@@ -118,7 +118,7 @@ struct TBucket {
     ui64 Value;
 };
 
-using THistogram = TVector<TBucket>; 
+using THistogram = TVector<TBucket>;
 
 struct TStats {
     ui64 RowCount = 0;

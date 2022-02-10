@@ -10,7 +10,7 @@
 #include <util/generic/bt_exception.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/yexception.h>
 #include <util/system/atomic.h>
 #include <util/system/align.h>

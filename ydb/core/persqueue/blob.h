@@ -12,7 +12,7 @@ namespace NKikimr {
 namespace NPQ {
 
 
-void CheckBlob(const TKey& key, const TString& blob); 
+void CheckBlob(const TKey& key, const TString& blob);
 
 struct TPartData {
     ui16 PartNo;
@@ -34,9 +34,9 @@ struct TClientBlob {
     static const ui8 HAS_US = 8;
     static const ui8 HAS_KINESIS = 16;
 
-    TString SourceId; 
+    TString SourceId;
     ui64 SeqNo;
-    TString Data; 
+    TString Data;
     TMaybe<TPartData> PartData;
     TInstant WriteTimestamp;
     TInstant CreateTimestamp;
@@ -98,7 +98,7 @@ struct TClientBlob {
 };
 
 
-//TBatch represents several clientBlobs. Can be in unpacked state(TVector<TClientBlob> blobs) 
+//TBatch represents several clientBlobs. Can be in unpacked state(TVector<TClientBlob> blobs)
 //or packed(PackedData)
 //on disk representation:
 //<ui16 size><serialized proto header><payload>
@@ -109,15 +109,15 @@ struct TClientBlob {
 
 struct TBatch {
     bool Packed;
-    TVector<TClientBlob> Blobs; 
-    TVector<ui32> InternalPartsPos; 
+    TVector<TClientBlob> Blobs;
+    TVector<ui32> InternalPartsPos;
     NKikimrPQ::TBatchHeader Header;
-    TString PackedData; 
+    TString PackedData;
     TBatch()
         : Packed(false)
     {}
 
-    TBatch(const ui64 offset, const ui16 partNo, const TVector<TClientBlob>& blobs) 
+    TBatch(const ui64 offset, const ui16 partNo, const TVector<TClientBlob>& blobs)
         : Packed(false)
     {
         Header.SetOffset(offset);
@@ -185,11 +185,11 @@ struct TBatch {
     ui32 GetPackedSize() const { Y_VERIFY(Packed); return sizeof(ui16) + PackedData.size() + Header.ByteSize(); }
     void Pack();
     void Unpack();
-    void UnpackTo(TVector<TClientBlob> *result); 
-    void UnpackToType0(TVector<TClientBlob> *result); 
-    void UnpackToType1(TVector<TClientBlob> *result); 
+    void UnpackTo(TVector<TClientBlob> *result);
+    void UnpackToType0(TVector<TClientBlob> *result);
+    void UnpackToType1(TVector<TClientBlob> *result);
 
-    TString Serialize(); 
+    TString Serialize();
 
     ui32 FindPos(const ui64 offset, const ui16 partNo) const;
 
@@ -197,7 +197,7 @@ struct TBatch {
 
 class TBlobIterator {
 public:
-    TBlobIterator(const TKey& key, const TString& blob); 
+    TBlobIterator(const TKey& key, const TString& blob);
     //return true is there is batch
     bool IsValid();
     //get next batch and return false if there is no next batch
@@ -257,11 +257,11 @@ public:
 
     TPartitionedBlob(const TPartitionedBlob& x);
 
-    TPartitionedBlob(const ui32 partition, const ui64 offset, const TString& sourceId, const ui64 seqNo, 
+    TPartitionedBlob(const ui32 partition, const ui64 offset, const TString& sourceId, const ui64 seqNo,
                      const ui16 totalParts, const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize);
 
 
-    std::pair<TKey, TString> Add(TClientBlob&& blob); 
+    std::pair<TKey, TString> Add(TClientBlob&& blob);
 
     bool IsInited() const { return !SourceId.empty(); }
 
@@ -272,13 +272,13 @@ public:
     ui64 GetOffset() const { return Offset; }
     ui16 GetHeadPartNo() const { return HeadPartNo; }
 
-    bool IsNextPart(const TString& sourceId, const ui64 seqNo, const ui16 partNo, TString *reason) const; 
+    bool IsNextPart(const TString& sourceId, const ui64 seqNo, const ui16 partNo, TString *reason) const;
 
     const std::deque<TClientBlob>& GetClientBlobs() const { return Blobs; }
     const std::deque<std::pair<TKey, ui32>> GetFormedBlobs() const { return FormedBlobs; }
 
 private:
-    TString CompactHead(bool glueHead, THead& head, bool glueNewHead, THead& newHead, ui32 estimatedSize); 
+    TString CompactHead(bool glueHead, THead& head, bool glueNewHead, THead& newHead, ui32 estimatedSize);
 
 private:
     ui32 Partition;
@@ -286,7 +286,7 @@ private:
     ui16 InternalPartsCount;
     ui64 StartOffset;
     ui16 StartPartNo;
-    TString SourceId; 
+    TString SourceId;
     ui64 SeqNo;
     ui16 TotalParts;
     ui32 TotalSize;

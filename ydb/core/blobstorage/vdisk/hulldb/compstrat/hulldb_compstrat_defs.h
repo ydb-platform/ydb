@@ -324,7 +324,7 @@ namespace NKikimr {
                 return GetPtr()->CollectDeletedSsts();
             }
 
-            TString ToString() const { 
+            TString ToString() const {
                 TStringStream str;
                 str << "{" << ActionToStr(Action);
                 if (auto *ptr = GetPtr()) {
@@ -367,7 +367,7 @@ namespace NKikimr {
             }
 
         private:
-            TVector<ui32> BoundaryPerLevel; 
+            TVector<ui32> BoundaryPerLevel;
         };
 
         using TBoundariesConstPtr = TIntrusiveConstPtr<TBoundaries>;

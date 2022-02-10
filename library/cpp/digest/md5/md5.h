@@ -46,7 +46,7 @@ public:
      * Return nullptr / empty string if the file does not exist.
      */
     static char* File(const char* filename, char* buf);
-    static TString File(const TString& filename); 
+    static TString File(const TString& filename);
 
     static char* Data(const void* data, size_t len, char* buf);
     static char* Data(const TArrayRef<const ui8>& data, char* buf);

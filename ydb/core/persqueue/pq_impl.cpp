@@ -22,7 +22,7 @@
 namespace NKikimr {
 namespace NPQ {
 
-const TString TMP_REQUEST_MARKER = "__TMP__REQUEST__MARKER__"; 
+const TString TMP_REQUEST_MARKER = "__TMP__REQUEST__MARKER__";
 const ui32 CACHE_SIZE = 100 << 20; //100mb per tablet by default
 const ui32 MAX_BYTES = 25 * 1024 * 1024;
 const TDuration TOTAL_TIMEOUT = TDuration::Seconds(120);
@@ -50,7 +50,7 @@ struct TPartitionInfo {
     TMaybe<TPartitionKeyRange> KeyRange;
     bool InitDone;
     TTabletCountersBase Baseline;
-    THashMap<TString, TTabletLabeledCountersBase> LabeledCounters; 
+    THashMap<TString, TTabletLabeledCountersBase> LabeledCounters;
 };
 
 struct TChangeNotification {
@@ -293,12 +293,12 @@ public:
 
     const TActorId Sender;
     const TActorId Tablet;
-    const TString TopicName; 
+    const TString TopicName;
     const ui32 Partition;
     const ui64 MessageNo;
     ui32 CounterId;
     ui32 Waiting;
-    const TString ReqId; 
+    const TString ReqId;
     THolder<TEvPersQueue::TEvResponse> Response;
     TInstant Timestamp;
     bool WasSplit;
@@ -387,7 +387,7 @@ private:
     ui64 TabletId;
     TActorId Sender;
     ui32 Waiting;
-    TVector<typename T2::TPartResult> Result; 
+    TVector<typename T2::TPartResult> Result;
 };
 
 
@@ -521,14 +521,14 @@ private:
     }
 
     TActorId Sender;
-    TString Query; 
-    TMap<ui32, TVector<TString>> Results; 
-    TVector<TString> Str; 
+    TString Query;
+    TMap<ui32, TVector<TString>> Results;
+    TVector<TString> Str;
     TMap<ui32, TActorId> Partitions;
     TActorId Cache;
     ui32 TotalRequests;
     ui32 TotalResponses;
-    TString TopicName; 
+    TString TopicName;
     ui64 TabletID;
     ui32 Inflight;
 };
@@ -562,7 +562,7 @@ void TPersQueue::FillMeteringParams(const TActorContext& ctx)
 
 void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
 {
-    THashSet<ui32> was; 
+    THashSet<ui32> was;
     if (NewConfig.PartitionsSize()) {
         for (const auto& partition : NewConfig.GetPartitions()) {
             was.insert(partition.GetPartitionId());
@@ -876,7 +876,7 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
 }
 
 
-void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext& ctx) 
+void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext& ctx)
 {
     if (CounterEventsInflight[group].RefCount() <= 1) {
         if (CounterEventsInflight[group].RefCount() == 0) {
@@ -907,7 +907,7 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TAct
 {
     auto it = Partitions.find(ev->Get()->Partition);
     Y_VERIFY(it != Partitions.end());
-    const TString& group = ev->Get()->LabeledCounters.GetGroup(); 
+    const TString& group = ev->Get()->LabeledCounters.GetGroup();
     it->second.LabeledCounters[group] = ev->Get()->LabeledCounters;
     Y_UNUSED(ctx);
 //  if uncommented, all changes will be reported immediatly
@@ -980,7 +980,7 @@ void TPersQueue::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
 }
 
 
-void TPersQueue::FinishResponse(THashMap<ui64, TAutoPtr<TResponseBuilder>>::iterator it) 
+void TPersQueue::FinishResponse(THashMap<ui64, TAutoPtr<TResponseBuilder>>::iterator it)
 {
     //            ctx.Send(Tablet, new TEvPQ::TEvCompleteResponse(Sender, CounterId, , Response.Release()));
     Counters->Percentile()[it->second->CounterId].IncrementFor((TAppData::TimeProvider->Now() - it->second->Timestamp).MilliSeconds());
@@ -1133,7 +1133,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
                 << " Config update version " << cfg.GetVersion() << "(current " << Config.GetVersion() << ") received from actor " << sender
                 << " txId " << record.GetTxId() << " config:\n" << cfg.DebugString());
 
-    TString str; 
+    TString str;
 
     Y_VERIFY(CheckPersQueueConfig(cfg, true, &str), "%s", str.c_str());
 
@@ -1190,7 +1190,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorConte
 
     NKikimrPQ::TTabletState stateProto;
     stateProto.SetState(record.GetRequestedState());
-    TString strState; 
+    TString strState;
     bool ok = stateProto.SerializeToString(&strState);
     Y_VERIFY(ok);
 
@@ -1299,7 +1299,7 @@ void TPersQueue::HandleGetMaxSeqNoRequest(const ui64 responseCookie, const TActo
     Y_VERIFY(req.HasCmdGetMaxSeqNo());
     InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_GET_MAX_SEQ_NO);
     const auto& cmd = req.GetCmdGetMaxSeqNo();
-    TVector<TString> ids; 
+    TVector<TString> ids;
     ids.reserve(cmd.SourceIdSize());
     for (ui32 i = 0; i < cmd.SourceIdSize(); ++i)
         ids.push_back(cmd.GetSourceId(i));
@@ -1411,7 +1411,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
         CurrentPutUnitsQuantity += req.GetPutUnitsSize();
     }
 
-    TVector <TEvPQ::TEvWrite::TMsg> msgs; 
+    TVector <TEvPQ::TEvWrite::TMsg> msgs;
 
     bool mirroredPartition = Config.GetPartitionConfig().HasMirrorFrom();
 
@@ -1456,7 +1456,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 it->second.Inc(cmd.ByteSize());
         }
 
-        TString errorStr = ""; 
+        TString errorStr = "";
         if (!cmd.HasSeqNo() && !req.GetIsDirectWrite()) {
             errorStr = "no SeqNo";
         } else if (!cmd.HasData() || cmd.GetData().empty()){
@@ -1521,7 +1521,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             }
             Y_VERIFY(!cmd.HasTotalParts(), "too big part"); //change this verify for errorStr, when LB will be ready
             while (pos < totalSize) {
-                TString data = cmd.GetData().substr(pos, mSize - diff); 
+                TString data = cmd.GetData().substr(pos, mSize - diff);
                 pos += mSize - diff;
                 diff = 0;
                 msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), partNo,
@@ -1790,7 +1790,7 @@ void TPersQueue::HandleSplitMessageGroupRequest(ui64 responseCookie, const TActo
 void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext& ctx)
 {
     NKikimrClient::TPersQueueRequest& request = ev->Get()->Record;
-    TString s = request.HasRequestId() ? request.GetRequestId() : "<none>"; 
+    TString s = request.HasRequestId() ? request.GetRequestId() : "<none>";
     ui32 p = request.HasPartitionRequest() && request.GetPartitionRequest().HasPartition() ? request.GetPartitionRequest().GetPartition() : 0;
     ui64 m = request.HasPartitionRequest() && request.GetPartitionRequest().HasMessageNo() ? request.GetPartitionRequest().GetMessageNo() : 0;
     TMaybe<ui64> c;
@@ -2025,7 +2025,7 @@ void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorCont
 }
 
 void TPersQueue::HandleWakeup(const TActorContext& ctx) {
-    THashSet<TString> groups; 
+    THashSet<TString> groups;
     for (auto& p : Partitions) {
         for (auto& m : p.second.LabeledCounters) {
             groups.insert(m.first);

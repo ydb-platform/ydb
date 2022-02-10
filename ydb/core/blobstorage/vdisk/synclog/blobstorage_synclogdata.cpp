@@ -101,7 +101,7 @@ namespace NKikimr {
             e->LastDiskLsn = (e->DiskLogEmpty ? 0 : DiskSnapPtr->GetLastLsn());
         }
 
-        TString TSyncLogSnapshot::BoundariesToString() const { 
+        TString TSyncLogSnapshot::BoundariesToString() const {
             return Sprintf("{LogStartLsn: %" PRIu64 " %s %s}", LogStartLsn,
                            MemSnapPtr->BoundariesToString().data(), DiskSnapPtr->BoundariesToString().data());
         }
@@ -260,7 +260,7 @@ namespace NKikimr {
             return LastEntryPointDbgInfo;
         }
 
-        TString TSyncLog::BoundariesToString() const { 
+        TString TSyncLog::BoundariesToString() const {
             return Sprintf("{LogStartLsn: %" PRIu64 " LastLsnOfIndexRecord: %" PRIu64
                            " %s %s}", LogStartLsn, LastLsnOfIndexRecord,
                            MemRecLog.BoundariesToString().data(), DiskRecLog.BoundariesToString().data());
@@ -389,7 +389,7 @@ namespace NKikimr {
             return DiskRecLog.ChunkSize;
         }
 
-        void TSyncLog::GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
+        void TSyncLog::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             DiskRecLog.GetOwnedChunks(chunks);
         }
 

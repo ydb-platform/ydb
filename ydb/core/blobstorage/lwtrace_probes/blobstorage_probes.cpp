@@ -8,7 +8,7 @@ LWTRACE_DEFINE_PROVIDER(FAIL_INJECTION_PROVIDER);
 namespace NKikimr { namespace NPDisk {
 
 
-void TRequestTypeField::ToString(ui32 value, TString *out) { 
+void TRequestTypeField::ToString(ui32 value, TString *out) {
     switch(ERequestType(value)) {
     case ERequestType::RequestLogRead:      *out = "LogRead"; break;
     case ERequestType::RequestLogWrite:     *out = "LogWrite"; break;

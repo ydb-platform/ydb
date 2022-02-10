@@ -14,17 +14,17 @@
 class TRWMutex::TImpl {
 public:
     TImpl();
-    ~TImpl(); 
+    ~TImpl();
 
-    void AcquireRead() noexcept; 
-    bool TryAcquireRead() noexcept; 
-    void ReleaseRead() noexcept; 
+    void AcquireRead() noexcept;
+    bool TryAcquireRead() noexcept;
+    void ReleaseRead() noexcept;
 
-    void AcquireWrite() noexcept; 
-    bool TryAcquireWrite() noexcept; 
-    void ReleaseWrite() noexcept; 
+    void AcquireWrite() noexcept;
+    bool TryAcquireWrite() noexcept;
+    void ReleaseWrite() noexcept;
 
-    void Release() noexcept; 
+    void Release() noexcept;
 
 private:
     TMutex Lock_;
@@ -40,12 +40,12 @@ TRWMutex::TImpl::TImpl()
 {
 }
 
-TRWMutex::TImpl::~TImpl() { 
+TRWMutex::TImpl::~TImpl() {
     Y_VERIFY(State_ == 0, "failure, State_ != 0");
     Y_VERIFY(BlockedWriters_ == 0, "failure, BlockedWriters_ != 0");
 }
 
-void TRWMutex::TImpl::AcquireRead() noexcept { 
+void TRWMutex::TImpl::AcquireRead() noexcept {
     with_lock (Lock_) {
         while (BlockedWriters_ || State_ < 0) {
             ReadCond_.Wait(Lock_);
@@ -57,7 +57,7 @@ void TRWMutex::TImpl::AcquireRead() noexcept {
     ReadCond_.Signal();
 }
 
-bool TRWMutex::TImpl::TryAcquireRead() noexcept { 
+bool TRWMutex::TImpl::TryAcquireRead() noexcept {
     with_lock (Lock_) {
         if (BlockedWriters_ || State_ < 0) {
             return false;
@@ -69,7 +69,7 @@ bool TRWMutex::TImpl::TryAcquireRead() noexcept {
     return true;
 }
 
-void TRWMutex::TImpl::ReleaseRead() noexcept { 
+void TRWMutex::TImpl::ReleaseRead() noexcept {
     Lock_.Acquire();
 
     if (--State_ > 0) {
@@ -82,7 +82,7 @@ void TRWMutex::TImpl::ReleaseRead() noexcept {
     }
 }
 
-void TRWMutex::TImpl::AcquireWrite() noexcept { 
+void TRWMutex::TImpl::AcquireWrite() noexcept {
     with_lock (Lock_) {
         while (State_ != 0) {
             ++BlockedWriters_;
@@ -94,7 +94,7 @@ void TRWMutex::TImpl::AcquireWrite() noexcept {
     }
 }
 
-bool TRWMutex::TImpl::TryAcquireWrite() noexcept { 
+bool TRWMutex::TImpl::TryAcquireWrite() noexcept {
     with_lock (Lock_) {
         if (State_ != 0) {
             return false;
@@ -106,7 +106,7 @@ bool TRWMutex::TImpl::TryAcquireWrite() noexcept {
     return true;
 }
 
-void TRWMutex::TImpl::ReleaseWrite() noexcept { 
+void TRWMutex::TImpl::ReleaseWrite() noexcept {
     Lock_.Acquire();
     State_ = 0;
 
@@ -119,7 +119,7 @@ void TRWMutex::TImpl::ReleaseWrite() noexcept {
     }
 }
 
-void TRWMutex::TImpl::Release() noexcept { 
+void TRWMutex::TImpl::Release() noexcept {
     Lock_.Acquire();
 
     if (State_ > 0) {
@@ -147,17 +147,17 @@ void TRWMutex::TImpl::Release() noexcept {
 class TRWMutex::TImpl {
 public:
     TImpl();
-    ~TImpl(); 
+    ~TImpl();
 
-    void AcquireRead() noexcept; 
-    bool TryAcquireRead() noexcept; 
-    void ReleaseRead() noexcept; 
+    void AcquireRead() noexcept;
+    bool TryAcquireRead() noexcept;
+    void ReleaseRead() noexcept;
 
-    void AcquireWrite() noexcept; 
-    bool TryAcquireWrite() noexcept; 
-    void ReleaseWrite() noexcept; 
+    void AcquireWrite() noexcept;
+    bool TryAcquireWrite() noexcept;
+    void ReleaseWrite() noexcept;
 
-    void Release() noexcept; 
+    void Release() noexcept;
 
 private:
     pthread_rwlock_t Lock_;
@@ -170,44 +170,44 @@ TRWMutex::TImpl::TImpl() {
     }
 }
 
-TRWMutex::TImpl::~TImpl() { 
+TRWMutex::TImpl::~TImpl() {
     const int result = pthread_rwlock_destroy(&Lock_);
     Y_VERIFY(result == 0, "rwlock destroy failed (%s)", LastSystemErrorText(result));
 }
 
-void TRWMutex::TImpl::AcquireRead() noexcept { 
+void TRWMutex::TImpl::AcquireRead() noexcept {
     const int result = pthread_rwlock_rdlock(&Lock_);
     Y_VERIFY(result == 0, "rwlock rdlock failed (%s)", LastSystemErrorText(result));
 }
 
-bool TRWMutex::TImpl::TryAcquireRead() noexcept { 
+bool TRWMutex::TImpl::TryAcquireRead() noexcept {
     const int result = pthread_rwlock_tryrdlock(&Lock_);
     Y_VERIFY(result == 0 || result == EBUSY, "rwlock tryrdlock failed (%s)", LastSystemErrorText(result));
     return result == 0;
 }
 
-void TRWMutex::TImpl::ReleaseRead() noexcept { 
+void TRWMutex::TImpl::ReleaseRead() noexcept {
     const int result = pthread_rwlock_unlock(&Lock_);
     Y_VERIFY(result == 0, "rwlock (read) unlock failed (%s)", LastSystemErrorText(result));
 }
 
-void TRWMutex::TImpl::AcquireWrite() noexcept { 
+void TRWMutex::TImpl::AcquireWrite() noexcept {
     const int result = pthread_rwlock_wrlock(&Lock_);
     Y_VERIFY(result == 0, "rwlock wrlock failed (%s)", LastSystemErrorText(result));
 }
 
-bool TRWMutex::TImpl::TryAcquireWrite() noexcept { 
+bool TRWMutex::TImpl::TryAcquireWrite() noexcept {
     const int result = pthread_rwlock_trywrlock(&Lock_);
     Y_VERIFY(result == 0 || result == EBUSY, "rwlock trywrlock failed (%s)", LastSystemErrorText(result));
     return result == 0;
 }
 
-void TRWMutex::TImpl::ReleaseWrite() noexcept { 
+void TRWMutex::TImpl::ReleaseWrite() noexcept {
     const int result = pthread_rwlock_unlock(&Lock_);
     Y_VERIFY(result == 0, "rwlock (write) unlock failed (%s)", LastSystemErrorText(result));
 }
 
-void TRWMutex::TImpl::Release() noexcept { 
+void TRWMutex::TImpl::Release() noexcept {
     const int result = pthread_rwlock_unlock(&Lock_);
     Y_VERIFY(result == 0, "rwlock unlock failed (%s)", LastSystemErrorText(result));
 }
@@ -221,30 +221,30 @@ TRWMutex::TRWMutex()
 
 TRWMutex::~TRWMutex() = default;
 
-void TRWMutex::AcquireRead() noexcept { 
+void TRWMutex::AcquireRead() noexcept {
     Impl_->AcquireRead();
 }
 
-bool TRWMutex::TryAcquireRead() noexcept { 
+bool TRWMutex::TryAcquireRead() noexcept {
     return Impl_->TryAcquireRead();
 }
 
-void TRWMutex::ReleaseRead() noexcept { 
+void TRWMutex::ReleaseRead() noexcept {
     Impl_->ReleaseRead();
 }
 
-void TRWMutex::AcquireWrite() noexcept { 
+void TRWMutex::AcquireWrite() noexcept {
     Impl_->AcquireWrite();
 }
 
-bool TRWMutex::TryAcquireWrite() noexcept { 
+bool TRWMutex::TryAcquireWrite() noexcept {
     return Impl_->TryAcquireWrite();
 }
 
-void TRWMutex::ReleaseWrite() noexcept { 
+void TRWMutex::ReleaseWrite() noexcept {
     Impl_->ReleaseWrite();
 }
 
-void TRWMutex::Release() noexcept { 
+void TRWMutex::Release() noexcept {
     Impl_->Release();
 }

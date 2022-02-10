@@ -19,7 +19,7 @@
 #include <util/generic/map.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/algorithm.h>
-#include <util/generic/vector.h> 
+#include <util/generic/vector.h>
 #include <util/stream/file.h>
 #include <util/string/util.h>
 #include <util/system/datetime.h>

@@ -26,8 +26,8 @@ class TFakeVDisk
         TLogSignature Signature;
         ui32 DataLen;
         ui32 Checksum;
-        TVector<TChunkIdx> CommitChunks; 
-        TVector<TChunkIdx> DeleteChunks; 
+        TVector<TChunkIdx> CommitChunks;
+        TVector<TChunkIdx> DeleteChunks;
 
         friend bool operator <(const TLogRecord& x, const TLogRecord& y) {
             return x.Lsn < y.Lsn;
@@ -38,7 +38,7 @@ class TFakeVDisk
         TChunkIdx ChunkIdx;
         ui32 OffsetInBlocks;
         ui32 SizeInBlocks;
-        TVector<ui32> Checksums; 
+        TVector<ui32> Checksums;
         void *Cookie;
     };
 
@@ -53,7 +53,7 @@ class TFakeVDisk
     struct TState {
         class TChunkInfo {
             TDynBitMap UsedBlocks;
-            TVector<ui32> Checksums; 
+            TVector<ui32> Checksums;
             ECommitState CommitState = ECommitState::RESERVED;
 
         public:
@@ -84,7 +84,7 @@ class TFakeVDisk
                 CommitState = static_cast<ECommitState>(pb.GetCommitState());
             }
 
-            void SetChecksums(ui32 index, const TVector<ui32>& checksums) { 
+            void SetChecksums(ui32 index, const TVector<ui32>& checksums) {
                 const ui32 num = checksums.size();
                 Y_VERIFY(index + num <= Checksums.size() && index + num <= UsedBlocks.Size());
                 UsedBlocks.Set(index, index + num);
@@ -125,14 +125,14 @@ class TFakeVDisk
             }
         };
 
-        TSet<TLogRecord> Confirmed; 
-        TSet<TLogRecord> InFlight; 
+        TSet<TLogRecord> Confirmed;
+        TSet<TLogRecord> InFlight;
         ui64 FirstLsnToKeep = 0;
-        TMap<TChunkIdx, TChunkInfo> Chunks; 
-        TList<TWriteRecord> WritesInFlight; 
+        TMap<TChunkIdx, TChunkInfo> Chunks;
+        TList<TWriteRecord> WritesInFlight;
         ui32 BlocksInChunk = 0;
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{Confirmed# [";
             bool first = true;
@@ -299,7 +299,7 @@ public:
     TState DeserializeRecoveredState() {
         TState recovered;
 
-        if (TString state = GetState()) { 
+        if (TString state = GetState()) {
             NPDiskFIT::TFakeVDiskState pb;
             bool status = pb.ParseFromString(state);
             Y_VERIFY(status);
@@ -499,7 +499,7 @@ public:
 
     void IssueLogMessage(TLogSignature signature, const TActorContext& ctx) {
         ui32 size = Params.SizeMin + RandomNumber<ui32>(Params.SizeMax - Params.SizeMin + 1);
-        TString data = GenerateRandomDataBuffer(size); 
+        TString data = GenerateRandomDataBuffer(size);
 
         auto *info = new TLogRecord;
         info->Signature = signature;
@@ -659,7 +659,7 @@ public:
 
     void IssueWriteRequest(const TActorContext& ctx) {
         // generate list of possible ranges we can select
-        TMap<TChunkIdx, TDynBitMap> maps; 
+        TMap<TChunkIdx, TDynBitMap> maps;
         for (const auto& pair : State.Chunks) {
             if (pair.second.GetCommitState() != ECommitState::DELETE_IN_PROGRESS) {
                 TDynBitMap bm;
@@ -681,7 +681,7 @@ public:
         }
 
         // generate set of ranges suitable for writing
-        TMultiMap<TChunkIdx, std::pair<ui32, ui32>> ranges; 
+        TMultiMap<TChunkIdx, std::pair<ui32, ui32>> ranges;
         for (const auto& p : maps) {
             bool valid = false;
             for (ui32 i = 0, begin; i <= State.BlocksInChunk; ++i) {
@@ -718,10 +718,10 @@ public:
         const ui32 offsetInBlocks = rangeOffset + RandomNumber(rangeSize - numBlocks + 1);
 
         // create data buffer
-        TString data = GenerateRandomDataBuffer(numBlocks * PDiskParams->AppendBlockSize); 
+        TString data = GenerateRandomDataBuffer(numBlocks * PDiskParams->AppendBlockSize);
 
         // calculate checksums for written blocks
-        TVector<ui32> checksums; 
+        TVector<ui32> checksums;
         for (ui32 i = 0; i < numBlocks; ++i) {
             const char *ptr = data.data() + i * PDiskParams->AppendBlockSize;
             checksums.push_back(Crc32c(ptr, PDiskParams->AppendBlockSize));
@@ -856,21 +856,21 @@ public:
         CheckReadMsgPending(ctx);
     }
 
-    TString SerializeState() override { 
+    TString SerializeState() override {
         NPDiskFIT::TFakeVDiskState pb;
 //        TStringStream str;
 //        str << "VDiskId# " << VDiskId.ToString() << " Owner# " << (PDiskParams ? (int)PDiskParams->Owner : 0)
 //            << " StateVerified# " << (StateVerified ? "true" : "false") << Endl;
 //        Cerr << str.Str();
         (StateVerified ? State : Recovered).SerializeToProto(pb);
-        TString data; 
+        TString data;
         bool status = pb.SerializeToString(&data);
         Y_VERIFY(status);
         return data;
     }
 
-    TString GenerateRandomDataBuffer(size_t len) { 
-        TString data(len, ' '); 
+    TString GenerateRandomDataBuffer(size_t len) {
+        TString data(len, ' ');
         char *mutableData = data.Detach();
         ui64 pattern = RandomNumber<ui64>();
         if (!pattern) {

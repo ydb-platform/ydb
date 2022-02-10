@@ -32,7 +32,7 @@ public:
     explicit TFileStat(const TFile& f);
     explicit TFileStat(FHANDLE f);
     TFileStat(const TFsPath& fileName, bool nofollow = false);
-    TFileStat(const TString& fileName, bool nofollow = false); 
+    TFileStat(const TString& fileName, bool nofollow = false);
     TFileStat(const char* fileName, bool nofollow = false);
 
     friend bool operator==(const TFileStat& l, const TFileStat& r) noexcept;
@@ -44,4 +44,4 @@ private:
 
 i64 GetFileLength(FHANDLE fd);
 i64 GetFileLength(const char* name);
-i64 GetFileLength(const TString& name); 
+i64 GetFileLength(const TString& name);

@@ -78,7 +78,7 @@ struct TEvSchemeShard {
             Record.SetTabletId(tabletId);
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TEvModifySchemeTransaction";
             if (Record.HasTxId()) {
@@ -154,7 +154,7 @@ struct TEvSchemeShard {
             }
         }
 
-        void SetError(EStatus status, const TString& errStr) { 
+        void SetError(EStatus status, const TString& errStr) {
             Record.SetStatus(status);
             Record.SetReason(errStr);
         }
@@ -163,7 +163,7 @@ struct TEvSchemeShard {
         void SetPathDropTxId(ui64 txId) { Record.SetPathDropTxId(txId); }
         void SetPathId(ui64 pathId) { Record.SetPathId(pathId); }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TEvModifySchemeTransactionResult";
             if (Record.HasStatus()) {
@@ -222,7 +222,7 @@ struct TEvSchemeShard {
             Record.CopyFrom(describePath);
         }
 
-        TEvDescribeScheme(const TString& path) 
+        TEvDescribeScheme(const TString& path)
         {
             Record.SetPath(path);
         }

@@ -168,7 +168,7 @@ namespace NKikimr {
     // 1. All vdisk kinds config parsing
     // 2. Creates a corresponding VDisk config given its kind and specific parameters
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    TAllVDiskKinds::TAllVDiskKinds(const TString &prototext) 
+    TAllVDiskKinds::TAllVDiskKinds(const TString &prototext)
         : AllKindsConfig()
         , VDiskMegaBaseConfig(TVDiskConfig::TBaseInfo())
         , KindsMap()
@@ -181,7 +181,7 @@ namespace NKikimr {
 
     TIntrusivePtr<TVDiskConfig> TAllVDiskKinds::MakeVDiskConfig(const TVDiskConfig::TBaseInfo &baseInfo) {
         EKind k = baseInfo.Kind;
-        TVector<const TKind *> merge; 
+        TVector<const TKind *> merge;
         int levels = 0;
         while (k != NKikimrBlobStorage::TVDiskKind::Default) {
             const auto it = KindsMap.find(k);

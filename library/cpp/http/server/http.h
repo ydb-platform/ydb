@@ -23,7 +23,7 @@ public:
     public:
         struct TFailLogData {
             int failstate;
-            TString url; 
+            TString url;
         };
 
         virtual ~ICallBack() {
@@ -80,7 +80,7 @@ public:
     int GetErrorCode();
     const char* GetError();
     void RestartRequestThreads(ui32 nTh, ui32 maxQS);
-    const TOptions& Options() const noexcept; 
+    const TOptions& Options() const noexcept;
     i64 GetClientCount() const;
 
     class TImpl;
@@ -109,16 +109,16 @@ public:
     TClientRequest();
     ~TClientRequest() override;
 
-    inline THttpInput& Input() noexcept { 
+    inline THttpInput& Input() noexcept {
         return *HttpConn_->Input();
     }
 
-    inline THttpOutput& Output() noexcept { 
+    inline THttpOutput& Output() noexcept {
         return *HttpConn_->Output();
     }
 
-    THttpServer* HttpServ() const noexcept; 
-    const TSocket& Socket() const noexcept; 
+    THttpServer* HttpServ() const noexcept;
+    const TSocket& Socket() const noexcept;
     NAddr::IRemoteAddrRef GetListenerSockAddrRef() const noexcept;
     TInstant AcceptMoment() const noexcept;
 
@@ -140,8 +140,8 @@ private:
     void Process(void* ThreadSpecificResource) override;
 
 public:
-    TVector<std::pair<TString, TString>> ParsedHeaders; 
-    TString RequestString; 
+    TVector<std::pair<TString, TString>> ParsedHeaders;
+    TString RequestString;
 
 private:
     THolder<TClientConnection> Conn_;

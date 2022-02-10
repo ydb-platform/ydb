@@ -12,7 +12,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     const TActorId Owner;
     const TLogoBlobID LogEntryID;
     TAutoPtr<NKikimrTabletBase::TTabletLogEntry> LogEntry;
-    TVector<TEvTablet::TLogEntryReference> References; 
+    TVector<TEvTablet::TLogEntryReference> References;
     const TEvBlobStorage::TEvPut::ETactic CommitTactic;
 
     TIntrusivePtr<TTabletStorageInfo> Info;
@@ -85,7 +85,7 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
         Die(ctx);
     }
 
-    void SendToBS(const TLogoBlobID &id, const TString &buffer, const TActorContext &ctx, 
+    void SendToBS(const TLogoBlobID &id, const TString &buffer, const TActorContext &ctx,
                   const NKikimrBlobStorage::EPutHandleClass handleClass) {
         Y_VERIFY(id.TabletID() == Info->TabletID);
         const TTabletChannelInfo *channelInfo = Info->ChannelInfo(id.Channel());
@@ -117,7 +117,7 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        TString logEntryBuffer = LogEntry->SerializeAsString(); 
+        TString logEntryBuffer = LogEntry->SerializeAsString();
 
         // todo: adaptive save-with-retry and timeouts
         // todo: cancelation

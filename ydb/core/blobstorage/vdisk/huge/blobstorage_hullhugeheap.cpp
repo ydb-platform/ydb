@@ -268,7 +268,7 @@ namespace NKikimr {
             return AllocatedSlots != 0 || !FreeSpace.empty();
         }
 
-        TString TChain::ToString() const { 
+        TString TChain::ToString() const {
             TStringStream str;
             auto output = [&str] (const TFreeSpace &c) {
                 for (const auto &x : c) {
@@ -548,7 +548,7 @@ namespace NKikimr {
             }
         }
 
-        TString TAllChains::ToString() const { 
+        TString TAllChains::ToString() const {
             TStringStream str;
             str << "{ChunkSize# " << ChunkSize << " AppendBlockSize# " << AppendBlockSize
                 << " MinHugeBlobInBytes# " << MinHugeBlobInBytes << " MaxBlobInBytes# " << MaxBlobInBytes;
@@ -875,7 +875,7 @@ namespace NKikimr {
             str << "\n";
         }
 
-        TString THeap::ToString() const { 
+        TString THeap::ToString() const {
             TStringStream str;
             str << "FreeChunks: ";
             str << FormatList(FreeChunks);

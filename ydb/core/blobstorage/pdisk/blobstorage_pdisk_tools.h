@@ -15,14 +15,14 @@ struct TPDiskInfo {
     ui32 SectorSizeBytes;
     ui32 UserAccessibleChunkSizeBytes;
     ui64 DiskGuid;
-    TString TextMessage; 
+    TString TextMessage;
     ui32 RawChunkSizeBytes;
     ui32 SysLogSectorCount;
     ui32 SystemChunkCount;
     TInstant Timestamp;
-    TString FormatFlags; 
+    TString FormatFlags;
 
-    TString ErrorReason;  // Actually not a part of the format info, contains human-readable error description 
+    TString ErrorReason;  // Actually not a part of the format info, contains human-readable error description
 
     struct TSectorInfo {
         ui64 Nonce;
@@ -34,13 +34,13 @@ struct TPDiskInfo {
             , IsCrcOk(isCrcOk)
         {}
     };
-    TVector<TSectorInfo> SectorInfo; 
+    TVector<TSectorInfo> SectorInfo;
 };
 
 // Throws TFileError in case of errors
 void ObliterateDisk(TString path);
 
-void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes, 
+void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 userAccessibleChunkSizeBytes,
     const ui64 &diskGuid, const NPDisk::TKey &chunkKey, const NPDisk::TKey &logKey,
     const NPDisk::TKey &sysLogKey, const NPDisk::TKey &mainKey, TString textMessage,
     const bool isErasureEncodeUserLog = false, const bool trimEntireDevice = false,

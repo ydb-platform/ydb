@@ -139,7 +139,7 @@ public:
 #endif
     }
 
-    void Add(const TString& s, const T& value) { 
+    void Add(const TString& s, const T& value) {
         ui64 intValue = 0;
         memcpy(&intValue, &value, sizeof(T));
         Builder.Add(s.data(), s.size(), intValue);
@@ -180,8 +180,8 @@ public:
 template <typename T>
 class TTrieSortedMapWriter {
 private:
-    typedef std::pair<TString, T> TValue; 
-    typedef TVector<TValue> TValues; 
+    typedef std::pair<TString, T> TValue;
+    typedef TVector<TValue> TValues;
     TValues Values;
 
 public:

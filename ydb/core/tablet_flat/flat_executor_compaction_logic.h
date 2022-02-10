@@ -85,7 +85,7 @@ struct TCompactionLogicState {
 
         THolder<NTable::ICompactionStrategy> Strategy;
 
-        TDeque<TSnapRequest> SnapRequests; 
+        TDeque<TSnapRequest> SnapRequests;
 
         TIntrusiveConstPtr<TCompactionPolicy> Policy;
 
@@ -125,7 +125,7 @@ struct TCompactionLogicState {
         NKikimrSchemeOp::ECompactionStrategy Strategy = NKikimrSchemeOp::CompactionStrategyGenerational;
     };
 
-    TMap<ui32, TTableInfo> Tables; 
+    TMap<ui32, TTableInfo> Tables;
     THashMap<ui32, TSnapshotState> Snapshots;
 };
 
@@ -134,7 +134,7 @@ class TFlatTableScan;
 struct TTableCompactionResult {
     NTable::TCompactionChanges Changes;
     NKikimrSchemeOp::ECompactionStrategy Strategy;
-    TVector<TIntrusivePtr<TTableSnapshotContext>> CompleteSnapshots; 
+    TVector<TIntrusivePtr<TTableSnapshotContext>> CompleteSnapshots;
     bool MemCompacted = false;
 };
 

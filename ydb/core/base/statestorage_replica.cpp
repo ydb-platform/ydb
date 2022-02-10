@@ -66,7 +66,7 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
         {}
     };
 
-    typedef TMap<ui64, TEntry> TTablets; 
+    typedef TMap<ui64, TEntry> TTablets;
     TTablets Tablets;
 
     TMap<ui32, std::map<ui64, ui64>> FollowerIndex; // node, tablet, refcounter

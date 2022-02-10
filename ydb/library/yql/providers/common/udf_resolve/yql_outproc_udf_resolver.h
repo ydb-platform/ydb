@@ -6,14 +6,14 @@
 #include <ydb/library/yql/providers/common/proto/udf_resolver.pb.h>
 
 #include <util/generic/map.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 namespace NYql {
 namespace NCommon {
 
 void LoadSystemModulePaths(
-        const TString& resolverPath, 
-        const TString& dir, 
+        const TString& resolverPath,
+        const TString& dir,
         NKikimr::NMiniKQL::TUdfModulePathsMap* paths);
 
 IUdfResolver::TPtr CreateOutProcUdfResolver(

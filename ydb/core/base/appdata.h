@@ -71,7 +71,7 @@ struct TAppData {
     const ui32 UserPoolId;
     const ui32 IOPoolId;
     const ui32 BatchPoolId;
-    TMap<TString, ui32> ServicePools; 
+    TMap<TString, ui32> ServicePools;
 
     const NScheme::TTypeRegistry* TypeRegistry = nullptr;
     const NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
@@ -173,7 +173,7 @@ struct TAppData {
 
     TAppData(
             ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,
-            TMap<TString, ui32> servicePools, 
+            TMap<TString, ui32> servicePools,
             const NScheme::TTypeRegistry* typeRegistry,
             const NMiniKQL::IFunctionRegistry* functionRegistry,
             const TFormatFactory* formatFactory,

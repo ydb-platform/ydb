@@ -211,8 +211,8 @@ struct TCmsConfig {
 
     void Deserialize(const NKikimrCms::TCmsConfig &config)
     {
-        DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime()); 
-        DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration()); 
+        DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime());
+        DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration());
         InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout());
         TenantLimits.CopyFrom(config.GetTenantLimits());
         ClusterLimits.CopyFrom(config.GetClusterLimits());

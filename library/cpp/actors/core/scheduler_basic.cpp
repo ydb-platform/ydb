@@ -94,7 +94,7 @@ namespace NActors {
                 while (!!activeSec && !activeSec->empty()) {
                     TMomentMap::iterator it = activeSec->begin();
                     if (it->first <= throttledMonotonic) {
-                        if (NSchedulerQueue::TQueueType* q = it->second.Get()) { 
+                        if (NSchedulerQueue::TQueueType* q = it->second.Get()) {
                             while (NSchedulerQueue::TEntry* x = q->Reader.Pop()) {
                                 somethingDone = true;
                                 Y_VERIFY_DEBUG(x->InstantMicroseconds <= activeTick);
@@ -151,18 +151,18 @@ namespace NActors {
                     if (instant <= activeTick) {
                         if (!activeSec)
                             activeSec.Reset(new TMomentMap());
-                        TAutoPtr<NSchedulerQueue::TQueueType>& queue = (*activeSec)[instant]; 
+                        TAutoPtr<NSchedulerQueue::TQueueType>& queue = (*activeSec)[instant];
                         if (!queue)
-                            queue.Reset(new NSchedulerQueue::TQueueType()); 
+                            queue.Reset(new NSchedulerQueue::TQueueType());
                         queue->Writer.Push(instant, ev, cookie);
                     } else {
                         const ui64 intrasecond = AlignUp<ui64>(instant, IntrasecondThreshold);
                         TAutoPtr<TMomentMap>& msec = ScheduleMap[intrasecond];
                         if (!msec)
                             msec.Reset(new TMomentMap());
-                        TAutoPtr<NSchedulerQueue::TQueueType>& queue = (*msec)[instant]; 
+                        TAutoPtr<NSchedulerQueue::TQueueType>& queue = (*msec)[instant];
                         if (!queue)
-                            queue.Reset(new NSchedulerQueue::TQueueType()); 
+                            queue.Reset(new NSchedulerQueue::TQueueType());
                         queue->Writer.Push(instant, ev, cookie);
                     }
 

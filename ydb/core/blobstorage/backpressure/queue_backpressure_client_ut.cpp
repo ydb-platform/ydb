@@ -124,7 +124,7 @@ class TQueueTestRuntime {
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     std::unique_ptr<TActorSystem> ActorSystem;
-    TString Path; 
+    TString Path;
     ui64 DiskSize;
     ui32 ChunkSize;
     ui64 PDiskGuid;
@@ -231,7 +231,7 @@ public:
             NKikimrServices::EServiceKikimr_Name
         );
 
-        TString explanation; 
+        TString explanation;
         logSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_QUEUE, explanation);
 
         NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor{logSettings, NActors::CreateStderrBackend(),
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageQueueTest) {
         // without proper interconnect notification; local messages can't be just lost while VDisk is operational
         return; // TODO(alexvru)
 
-        TVector<std::pair<ui64, ui64>> sequence; 
+        TVector<std::pair<ui64, ui64>> sequence;
         auto filterFunc = [&](IEventHandle& ev, const TActorContext& /*ctx*/) {
             if (ev.GetTypeRewrite() == TEvBlobStorage::TEvVGet::EventType) {
                 TEventHandle<TEvBlobStorage::TEvVGet>& evv = reinterpret_cast<TEventHandle<TEvBlobStorage::TEvVGet>&>(ev);
@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageQueueTest) {
         }
         runtime.WaitCompleted();
         runtime.Stop();
-        UNIT_ASSERT_VALUES_EQUAL(sequence, (TVector<std::pair<ui64, ui64>>{{1, 0}, {1, 1}, {1, 2}, {2, 1}, {2, 2}})); 
+        UNIT_ASSERT_VALUES_EQUAL(sequence, (TVector<std::pair<ui64, ui64>>{{1, 0}, {1, 1}, {1, 2}, {2, 1}, {2, 2}}));
     }
 
 }

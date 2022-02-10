@@ -85,8 +85,8 @@ namespace NKikimr {
         void PutLogoBlobWithData(ui64 lsn, const TKey &key, ui8 partId, const TIngress &ingress, TRope buffer);
         const TRope& GetLogoBlobData(const TMemPart& memPart) const;
         void Put(ui64 lsn, const TKey &key, const TMemRec &memRec);
-        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const; 
-        void GetHugeBlobs(TSet<TDiskPart> &hugeBlobs) const; 
+        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
+        void GetHugeBlobs(TSet<TDiskPart> &hugeBlobs) const;
 
         class TBaseIterator;
         class TForwardIterator;

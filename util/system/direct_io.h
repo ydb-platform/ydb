@@ -11,7 +11,7 @@
 // - Supports writing odd sized files by turning off direct IO for the last chunk.
 class TDirectIOBufferedFile {
 public:
-    TDirectIOBufferedFile(const TString& path, EOpenMode oMode, size_t buflen = 1 << 17); 
+    TDirectIOBufferedFile(const TString& path, EOpenMode oMode, size_t buflen = 1 << 17);
     ~TDirectIOBufferedFile();
 
     void FlushData();

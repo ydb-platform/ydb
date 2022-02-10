@@ -18,11 +18,11 @@ namespace NKikimr {
                 ui64 FirstLsn;
                 TActorId Sender;
                 ui64 Cookie;
-                TQueue<std::pair<TChunkIdx, TChunkInfo *>> ScanQueue; 
-                THashMap<TChunkIdx, TDynBitMap> DeletedItemsMap; 
-                TVector<TEvIncrHugeInitResult::TItem> Items; 
+                TQueue<std::pair<TChunkIdx, TChunkInfo *>> ScanQueue;
+                THashMap<TChunkIdx, TDynBitMap> DeletedItemsMap;
+                TVector<TEvIncrHugeInitResult::TItem> Items;
             };
-            using TInitQueue = TList<TInitQueueItem>; 
+            using TInitQueue = TList<TInitQueueItem>;
             TInitQueue InitQueue;
 
             struct TScanQueueItem {
@@ -34,27 +34,27 @@ namespace NKikimr {
                     return left.ChunkIdx < right.ChunkIdx;
                 }
             };
-            using TScanQueue = TQueue<TScanQueueItem>; 
+            using TScanQueue = TQueue<TScanQueueItem>;
             TScanQueue ScanQueue;
             ui32 ScanBytesInFlight = 0;
-            THashMap<TChunkIdx, TDynBitMap> IntentChunksDeletedItems; 
+            THashMap<TChunkIdx, TDynBitMap> IntentChunksDeletedItems;
 
             struct TScanResult {
                 NKikimrProto::EReplyStatus Status;
                 TChunkIdx ChunkIdx;
                 bool IndexOnly;
                 bool IndexValid;
-                TVector<TBlobIndexRecord> Index; 
+                TVector<TBlobIndexRecord> Index;
             };
-            TQueue<TChunkSerNum> ChunkSerNumQueue; 
-            THashMap<TChunkSerNum, TScanResult> PendingResults; 
+            TQueue<TChunkSerNum> ChunkSerNumQueue;
+            THashMap<TChunkSerNum, TScanResult> PendingResults;
 
             struct TIncompleteChunk {
                 TChunkIdx ChunkIdx;
                 ui32 OffsetInBlocks;
-                TVector<TBlobIndexRecord> Index; 
+                TVector<TBlobIndexRecord> Index;
             };
-            TMap<TChunkSerNum, TIncompleteChunk> IncompleteChunks; 
+            TMap<TChunkSerNum, TIncompleteChunk> IncompleteChunks;
 
             struct TScanInfo {
                 TInitQueue::iterator It;

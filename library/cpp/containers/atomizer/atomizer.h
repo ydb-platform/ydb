@@ -17,7 +17,7 @@ class super_atomizer;
 template <class HashFcn, class EqualTo>
 class atomizer: public string_hash<ui32, HashFcn, EqualTo> {
 private:
-    TVector<const char*> order; 
+    TVector<const char*> order;
 
 public:
     using iterator = typename string_hash<ui32, HashFcn, EqualTo>::iterator;
@@ -48,7 +48,7 @@ public:
         std::pair<iterator, bool> ins = insert_copy(key, ui32(size() + 1));
         if (ins.second) {                  // new?
             if (pool.Begin() != old_begin) // repoint?
-                for (TVector<const char*>::iterator ptr = order.begin(); ptr != order.end(); ++ptr) 
+                for (TVector<const char*>::iterator ptr = order.begin(); ptr != order.end(); ++ptr)
                     if (old_begin <= *ptr && *ptr < old_end) // from old pool?
                         *ptr += pool.Begin() - old_begin;
             order.push_back((*ins.first).first); // copy of 'key'
@@ -108,7 +108,7 @@ public:
 template <class T, class HashFcn, class EqualTo>
 class super_atomizer: public string_hash<ui32, HashFcn, EqualTo> {
 private:
-    using TOrder = TVector<std::pair<const char*, T>>; 
+    using TOrder = TVector<std::pair<const char*, T>>;
     TOrder order;
 
 public:

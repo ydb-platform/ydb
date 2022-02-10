@@ -65,7 +65,7 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
         TString Subject; // login
         TEvTicketParser::TError Error;
         TIntrusivePtr<NACLib::TUserToken> Token;
-        TString SerializedToken; 
+        TString SerializedToken;
         TDeque<THolder<TEventHandle<TEvTicketParser::TEvAuthorizeTicket>>> AuthorizeRequests;
         ui64 ResponsesLeft = 0;
         TInstant InitTime;
@@ -111,7 +111,7 @@ class TTicketParser : public TActorBootstrapped<TTicketParser> {
         }
     };
 
-    THashMap<TString, TTokenRecord> UserTokens; 
+    THashMap<TString, TTokenRecord> UserTokens;
     TPriorityQueue<TTokenRefreshRecord> RefreshQueue;
     std::unordered_map<TString, NLogin::TLoginProvider> LoginProviders;
     bool UseLoginProvider = false;

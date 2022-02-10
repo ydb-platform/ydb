@@ -42,7 +42,7 @@ public:
         return true;
     }
 
-    const TString* GetTableName() const override { 
+    const TString* GetTableName() const override {
         return Name.GetLiteral() ? &Full : nullptr;
     }
 
@@ -80,8 +80,8 @@ private:
     TString Service;
     TDeferredAtom Cluster;
     TDeferredAtom Name;
-    TString View; 
-    TString Full; 
+    TString View;
+    TString Full;
 };
 
 TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster,
@@ -168,7 +168,7 @@ public:
             return nullptr;
         }
 
-        TCiString func(Func); 
+        TCiString func(Func);
         if (func != "object") {
             for (auto& arg: Args) {
                 if (arg.Expr->GetLabel()) {
@@ -449,8 +449,8 @@ public:
 private:
     TString Service;
     TDeferredAtom Cluster;
-    TString Func; 
-    TVector<TTableArg> Args; 
+    TString Func;
+    TVector<TTableArg> Args;
 };
 
 TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAtom& cluster,
@@ -583,7 +583,7 @@ public:
             || !Params.Indexes.empty()
             || !Params.Changefeeds.empty())
         {
-            THashSet<TString> columnsSet; 
+            THashSet<TString> columnsSet;
             for (auto& col : Params.Columns) {
                 columnsSet.insert(col.Name);
             }
@@ -1382,7 +1382,7 @@ TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAt
     return new TDropRoles(pos, service, cluster, toDrop, isUser, force, scoped);
 }
 
-static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR { 
+static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR {
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "append"},
     {EWriteColumnMode::Renew, "renew"}
@@ -1392,7 +1392,7 @@ static const TMap<EWriteColumnMode, TString> columnModeToStrMapStat {
     {EWriteColumnMode::Upsert, "upsert"}
 };
 
-static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr { 
+static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr {
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "insert_abort"},
     {EWriteColumnMode::InsertOrAbort, "insert_abort"},
@@ -1408,7 +1408,7 @@ static const TMap<EWriteColumnMode, TString> columnModeToStrMapKikimr {
 
 class TWriteTableNode final: public TAstListNode {
 public:
-    TWriteTableNode(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, 
+    TWriteTableNode(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode,
         TNodePtr options, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Label(label)
@@ -1426,7 +1426,7 @@ public:
             return false;
         }
 
-        auto getModesMap = [] (const TString& serviceName) -> const TMap<EWriteColumnMode, TString>& { 
+        auto getModesMap = [] (const TString& serviceName) -> const TMap<EWriteColumnMode, TString>& {
             if (serviceName == KikimrProviderName || serviceName == YdbProviderName) {
                 return columnModeToStrMapKikimr;
             } else if (serviceName == StatProviderName) {
@@ -1464,7 +1464,7 @@ public:
         return {};
     }
 private:
-    TString Label; 
+    TString Label;
     TTableRef Table;
     EWriteColumnMode Mode;
     TNodePtr Options;
@@ -1548,7 +1548,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         auto block(Y(
-            Y("let", "result_sink", Y("DataSink", Q(TString(ResultProviderName)))), 
+            Y("let", "result_sink", Y("DataSink", Q(TString(ResultProviderName)))),
             Y("let", "world", Y(TString(WriteName), "world", "result_sink", Y("Key"), Label, Q(Settings)))
         ));
         if (ctx.PragmaAutoCommit) {
@@ -1564,7 +1564,7 @@ public:
         return {};
     }
 private:
-    TString Label; 
+    TString Label;
     TNodePtr Settings;
     TNodePtr CommitClusters;
 };
@@ -1769,7 +1769,7 @@ public:
         return {};
     }
 private:
-    TVector<TNodePtr> Blocks; 
+    TVector<TNodePtr> Blocks;
     const bool TopLevel;
     TScopedStatePtr Scoped;
 };
@@ -1906,12 +1906,12 @@ public:
     }
 
 private:
-    TVector<TString> Args; 
-    TVector<TNodePtr> ExprSeq; 
+    TVector<TString> Args;
+    TVector<TNodePtr> ExprSeq;
     TSourcePtr FakeSource;
 };
 
-TNodePtr BuildSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq) { 
+TNodePtr BuildSqlLambda(TPosition pos, TVector<TString>&& args, TVector<TNodePtr>&& exprSeq) {
     return new TSqlLambda(pos, std::move(args), std::move(exprSeq));
 }
 

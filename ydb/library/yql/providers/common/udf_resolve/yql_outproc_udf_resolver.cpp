@@ -160,7 +160,7 @@ public:
         }
 
         TResolve request;
-        THashMap<TString, TImport*> importMap; 
+        THashMap<TString, TImport*> importMap;
         THoldingFileStorage holdingFileStorage(FileStorage_);
         THolder<TFilesBox> filesBox = CreateFilesBoxOverFileStorageTemp();
 
@@ -380,8 +380,8 @@ private:
 };
 
 void LoadSystemModulePaths(
-        const TString& resolverPath, 
-        const TString& dir, 
+        const TString& resolverPath,
+        const TString& dir,
         TUdfModulePathsMap* paths)
 {
     const TList<TString> args = { TString("--list"), dir };

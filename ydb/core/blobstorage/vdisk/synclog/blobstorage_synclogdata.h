@@ -94,7 +94,7 @@ namespace NKikimr {
         class TSyncLogSnapshot : public TThrRefBase {
         public:
             void FillInLogEssence(TLogEssence *e) const;
-            TString BoundariesToString() const; 
+            TString BoundariesToString() const;
             void CheckSnapshotConsistency() const;
             // returns number of index records
             ui32 SerializeToProto(NKikimrVDiskData::TSyncLogEntryPoint &pb, const TDeltaToDiskRecLog &delta);
@@ -174,7 +174,7 @@ namespace NKikimr {
             TString FirstLsnToKeepDecomposed() const;
             // just a reference to last entry point dbg info
             const TEntryPointDbgInfo &GetLastEntryPointDbgInfo() const;
-            TString BoundariesToString() const; 
+            TString BoundariesToString() const;
             // create snaphsot of SyncLog (can be worked with asynchronously)
             TSyncLogSnapshotPtr GetSnapshot() const;
             // check that MemRecLog and DiskRecLog don't intersect by lsns,
@@ -236,7 +236,7 @@ namespace NKikimr {
             // size of the chunk
             ui32 GetChunkSize() const;
             // returns chunks owned by DiskRecLog
-            void GetOwnedChunks(TSet<TChunkIdx>& chunks) const; 
+            void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
 
         private:
             // part of the log on disk

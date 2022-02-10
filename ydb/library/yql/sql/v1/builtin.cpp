@@ -53,7 +53,7 @@ TMaybe<TString> MakeTypeConfig(const TString& ns, const TVector<TNodePtr>& udfAr
 
 class TGroupingNode final: public TAstListNode {
 public:
-    TGroupingNode(TPosition pos, const TVector<TNodePtr>& args) 
+    TGroupingNode(TPosition pos, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
         , Args(args)
     {}
@@ -63,7 +63,7 @@ public:
             ctx.Error(Pos) << "Grouping function should have source";
             return false;
         }
-        TVector<TString> columns; 
+        TVector<TString> columns;
         columns.reserve(Args.size());
         const bool isJoin = src->GetJoin();
         ISource* composite = src->GetCompositeSource();
@@ -101,19 +101,19 @@ public:
     }
 
 private:
-    const TVector<TNodePtr> Args; 
+    const TVector<TNodePtr> Args;
 };
 
 class TBasicAggrFunc final: public TAstListNode {
 public:
-    TBasicAggrFunc(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args) 
+    TBasicAggrFunc(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
         : TAstListNode(pos)
         , Name(name)
         , Aggr(aggr)
         , Args(args)
     {}
 
-    TCiString GetName() const { 
+    TCiString GetName() const {
         return Name;
     }
 
@@ -190,9 +190,9 @@ private:
 
     TNodePtr PreaggregateExpr;
 protected:
-    const TString Name; 
+    const TString Name;
     TAggregationPtr Aggr;
-    TVector<TNodePtr> Args; 
+    TVector<TNodePtr> Args;
 };
 
 class TBasicAggrFactory final : public TAstListNode {
@@ -261,7 +261,7 @@ typedef THolder<TBasicAggrFunc> TAggrFuncPtr;
 
 class TLiteralStringAtom: public INode {
 public:
-    TLiteralStringAtom(TPosition pos, TNodePtr node, const TString& info) 
+    TLiteralStringAtom(TPosition pos, TNodePtr node, const TString& info)
         : INode(pos)
         , Node(node)
         , Info(info)
@@ -312,12 +312,12 @@ public:
 private:
     TNodePtr Node;
     TNodePtr Atom;
-    TString Info; 
+    TString Info;
 };
 
 class TYqlAsAtom: public TLiteralStringAtom {
 public:
-    TYqlAsAtom(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlAsAtom(TPosition pos, const TVector<TNodePtr>& args)
         : TLiteralStringAtom(pos, args.size() == 1 ? args[0] : nullptr, "Literal string is required as argument")
     {
     }
@@ -325,7 +325,7 @@ public:
 
 class TYqlData: public TCallNode {
 public:
-    TYqlData(TPosition pos, const TString& type, const TVector<TNodePtr>& args) 
+    TYqlData(TPosition pos, const TString& type, const TVector<TNodePtr>& args)
         : TCallNode(pos, type, 1, 1, args)
     {
     }
@@ -512,7 +512,7 @@ private:
 
 class TYqlParseType final : public INode {
 public:
-    TYqlParseType(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlParseType(TPosition pos, const TVector<TNodePtr>& args)
         : INode(pos)
         , Args(args)
     {}
@@ -546,7 +546,7 @@ public:
         State.Set(ENodeState::Const);
     }
 private:
-    TVector<TNodePtr> Args; 
+    TVector<TNodePtr> Args;
 };
 
 class TYqlAddTimezone: public TCallNode {
@@ -650,7 +650,7 @@ public:
 
 class TFromBytes final : public TCallNode {
 public:
-    TFromBytes(TPosition pos, const TVector<TNodePtr>& args) 
+    TFromBytes(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "FromBytes", 2, 2, args)
     {}
 
@@ -674,7 +674,7 @@ public:
 
 class TYqlTaggedBase : public TCallNode {
 public:
-    TYqlTaggedBase(TPosition pos, const TString& opName, const TVector<TNodePtr>& args) 
+    TYqlTaggedBase(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
         : TCallNode(pos, opName, 2, 2, args)
     {}
 
@@ -694,7 +694,7 @@ public:
 
 class TYqlAsTagged final : public TYqlTaggedBase {
 public:
-    TYqlAsTagged(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlAsTagged(TPosition pos, const TVector<TNodePtr>& args)
         : TYqlTaggedBase(pos, "AsTagged", args)
     {}
 
@@ -705,7 +705,7 @@ public:
 
 class TYqlUntag final : public TYqlTaggedBase {
 public:
-    TYqlUntag(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlUntag(TPosition pos, const TVector<TNodePtr>& args)
         : TYqlTaggedBase(pos, "Untag", args)
     {}
 
@@ -716,7 +716,7 @@ public:
 
 class TYqlVariant final : public TCallNode {
 public:
-    TYqlVariant(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlVariant(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "Variant", 3, 3, args)
     {}
 
@@ -994,11 +994,11 @@ static const TSet<TString> AvailableDataTypes = {"Bool", "String", "Uint32", "Ui
     "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal", "DyNumber"};
 TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, TString* outTypeStrPtr = nullptr) {
     auto errMsgFunc = [&node, argNum]() {
-        static std::array<TString, 2> numToName = {{"first", "second"}}; 
+        static std::array<TString, 2> numToName = {{"first", "second"}};
         TStringBuilder sb;
         sb << "At " << numToName.at(argNum) << " argument of " << node.GetOpName() << " expected type string, available one of: "
             << JoinRange(", ", AvailableDataTypes.begin(), AvailableDataTypes.end()) << ";";
-        return TString(sb); 
+        return TString(sb);
     };
     auto typeStringNode = node.GetArgs().at(argNum);
     auto typeStringPtr = typeStringNode->GetLiteral("String");
@@ -1022,7 +1022,7 @@ TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, 
 
 class TYqlParseFileOp final: public TCallNode {
 public:
-    TYqlParseFileOp(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlParseFileOp(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "ParseFile", 2, 2, args)
     {}
 
@@ -1047,7 +1047,7 @@ public:
         return TCallNode::DoInit(ctx, src);
     }
 
-    TString GetOpName() const override { 
+    TString GetOpName() const override {
         return "ParseFile";
     }
 
@@ -1058,7 +1058,7 @@ public:
 
 class TYqlDataType final : public TCallNode {
 public:
-    TYqlDataType(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlDataType(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "DataType", 1, 3, args)
     {
         FakeSource = BuildFakeSource(pos);
@@ -1090,7 +1090,7 @@ private:
 
 class TYqlResourceType final : public TCallNode {
 public:
-    TYqlResourceType(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlResourceType(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "ResourceType", 1, 1, args)
     {}
 
@@ -1114,7 +1114,7 @@ public:
 
 class TYqlTaggedType final : public TCallNode {
 public:
-    TYqlTaggedType(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlTaggedType(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "TaggedType", 2, 2, args)
     {}
 
@@ -1138,7 +1138,7 @@ public:
 
 class TYqlCallableType final : public TCallNode {
 public:
-    TYqlCallableType(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlCallableType(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "CallableType", 2, -1, args)
     {}
 
@@ -1177,7 +1177,7 @@ public:
 
 class TYqlTupleElementType final : public TCallNode {
 public:
-    TYqlTupleElementType(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlTupleElementType(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "TupleElementType", 2, 2, args)
     {}
 
@@ -1201,7 +1201,7 @@ public:
 
 class TYqlStructMemberType final : public TCallNode {
 public:
-    TYqlStructMemberType(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlStructMemberType(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "StructMemberType", 2, 2, args)
     {}
 
@@ -1225,7 +1225,7 @@ public:
 
 class TYqlCallableArgumentType final : public TCallNode {
 public:
-    TYqlCallableArgumentType(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlCallableArgumentType(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "CallableArgumentType", 2, 2, args)
     {}
 
@@ -1251,7 +1251,7 @@ public:
 
 class TStructTypeNode : public TAstListNode {
 public:
-    TStructTypeNode(TPosition pos, const TVector<TNodePtr>& exprs) 
+    TStructTypeNode(TPosition pos, const TVector<TNodePtr>& exprs)
         : TAstListNode(pos)
         , Exprs(exprs)
     {}
@@ -1274,13 +1274,13 @@ public:
     }
 
 private:
-    const TVector<TNodePtr> Exprs; 
+    const TVector<TNodePtr> Exprs;
 };
 
 template <bool IsStrict>
 class TYqlIf final: public TCallNode {
 public:
-    TYqlIf(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlIf(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, IsStrict ? "IfStrict" : "If", 2, 3, args)
     {}
 
@@ -1323,7 +1323,7 @@ private:
 
 class TYqlIn final: public TCallNode {
 public:
-    TYqlIn(TPosition pos, const TVector<TNodePtr>& args) 
+    TYqlIn(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "IN", 3, 3, args)
     {}
 
@@ -1419,8 +1419,8 @@ protected:
     {}
 
 private:
-    static TVector<TNodePtr> UdfArgs(TPosition pos, const TString& name, const TVector<TNodePtr>* args = nullptr) { 
-        TVector<TNodePtr> res = { BuildQuotedAtom(pos, name) }; 
+    static TVector<TNodePtr> UdfArgs(TPosition pos, const TString& name, const TVector<TNodePtr>* args = nullptr) {
+        TVector<TNodePtr> res = { BuildQuotedAtom(pos, name) };
         if (args) {
             res.insert(res.end(), args->begin(), args->end());
         }
@@ -1492,7 +1492,7 @@ private:
 
 class TWeakFieldOp final: public TCallNode {
 public:
-    TWeakFieldOp(TPosition pos, const TVector<TNodePtr>& args) 
+    TWeakFieldOp(TPosition pos, const TVector<TNodePtr>& args)
         : TCallNode(pos, "WeakField", 2, 3, args)
     {}
 
@@ -1523,7 +1523,7 @@ public:
         PrecacheState();
 
         const auto memberPos = Args[0]->GetPos();
-        TVector<TNodePtr> repackArgs = {BuildAtom(memberPos, "row", NYql::TNodeFlags::Default)}; 
+        TVector<TNodePtr> repackArgs = {BuildAtom(memberPos, "row", NYql::TNodeFlags::Default)};
         if (auto literal = Args[1]->GetLiteral("String")) {
             TString targetType;
             if (!GetDataTypeStringNode(ctx, *this, 1, &targetType)) {
@@ -1535,7 +1535,7 @@ public:
             repackArgs.push_back(Args[1]);
         }
 
-        TVector<TNodePtr> column; 
+        TVector<TNodePtr> column;
         auto namePtr = Args[0]->GetColumnName();
         if (!namePtr || !*namePtr) {
             ctx.Error(Pos) << GetCallExplain() << " expects column name as first argument";
@@ -1575,7 +1575,7 @@ public:
 template <bool Join>
 class TTableRow final : public INode {
 public:
-    TTableRow(TPosition pos, const TVector<TNodePtr>& args) 
+    TTableRow(TPosition pos, const TVector<TNodePtr>& args)
         : TTableRow(pos, args.size())
     {}
 
@@ -1889,13 +1889,13 @@ private:
 };
 
 
-TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr customUserType) { 
-    TVector<TNodePtr> argsTypeItems; 
+TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr customUserType) {
+    TVector<TNodePtr> argsTypeItems;
     for (auto& arg : args) {
-        argsTypeItems.push_back(new TCallNodeImpl(pos, "TypeOf", TVector<TNodePtr>(1, arg))); 
+        argsTypeItems.push_back(new TCallNodeImpl(pos, "TypeOf", TVector<TNodePtr>(1, arg)));
     }
 
-    TVector<TNodePtr> userTypeItems; 
+    TVector<TNodePtr> userTypeItems;
     userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", argsTypeItems));
     userTypeItems.push_back(new TCallNodeImpl(pos, "StructType", {}));
     if (customUserType) {
@@ -1908,7 +1908,7 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNode
 }
 
 TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType) {
-    TVector<TNodePtr> userTypeItems; 
+    TVector<TNodePtr> userTypeItems;
     userTypeItems.reserve(3);
     userTypeItems.push_back(positionalArgs->Y("TypeOf", positionalArgs));
     userTypeItems.push_back(positionalArgs->Y("TypeOf", namedArgs));
@@ -1921,12 +1921,12 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr na
     return new TCallNodeImpl(pos, "TupleType", userTypeItems);
 }
 
-TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector<TNodePtr>& args, 
+TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector<TNodePtr>& args,
         TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, TMaybe<TString> typeConfig) {
     if (!ctx.Settings.EnableGenericUdfs) {
         return {};
     }
-    TVector<TNodePtr> udfArgs; 
+    TVector<TNodePtr> udfArgs;
     udfArgs.push_back(new TAstListNodeImpl(pos));
     udfArgs[0]->Add(new TAstAtomNodeImpl(pos, "Void", 0));
     if (namedArgs) {
@@ -2086,9 +2086,9 @@ public:
         Node->VisitTree(func, visited);
     }
 private:
-    TCiString Module; 
-    TString Name; 
-    TVector<TNodePtr> Args; 
+    TCiString Module;
+    TString Name;
+    TVector<TNodePtr> Args;
     TNodePtr Node;
     const bool ForReduce;
 };
@@ -2097,7 +2097,7 @@ TNodePtr BuildCallable(TPosition pos, const TString& module, const TString& name
     return new TCallableNode(pos, module, name, args, forReduce);
 }
 
-TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args) { 
+TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args) {
     if (to_lower(module) == "@yql") {
         return BuildCallable(pos, module, name, args);
     }
@@ -2114,7 +2114,7 @@ TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TSt
 
 class TScriptUdf final: public INode {
 public:
-    TScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args) 
+    TScriptUdf(TPosition pos, const TString& moduleName, const TString& funcName, const TVector<TNodePtr>& args)
         : INode(pos)
         , ModuleName(moduleName)
         , FuncName(funcName)
@@ -2185,16 +2185,16 @@ public:
         Node->VisitTree(func, visited);
     }
 private:
-    TString ModuleName; 
-    TString FuncName; 
-    TVector<TNodePtr> Args; 
+    TString ModuleName;
+    TString FuncName;
+    TVector<TNodePtr> Args;
     TNodePtr Node;
 };
 
 template <bool Sorted>
 class TYqlToDict final: public TCallNode {
 public:
-    TYqlToDict(TPosition pos, const TString& mode, const TVector<TNodePtr>& args) 
+    TYqlToDict(TPosition pos, const TString& mode, const TVector<TNodePtr>& args)
         : TCallNode(pos, "ToDict", 4, 4, args)
         , Mode(mode)
     {}
@@ -2215,7 +2215,7 @@ private:
         return TCallNode::DoInit(ctx, src);
     }
 private:
-    TString Mode; 
+    TString Mode;
 };
 
 template <bool IsStart>
@@ -2261,7 +2261,7 @@ private:
 
 class TInvalidBuiltin final: public INode {
 public:
-    TInvalidBuiltin(TPosition pos, const TString& info) 
+    TInvalidBuiltin(TPosition pos, const TString& info)
         : INode(pos)
         , Info(info)
     {
@@ -2280,7 +2280,7 @@ public:
         return {};
     }
 private:
-    TString Info; 
+    TString Info;
 };
 
 enum EAggrFuncTypeCallback {
@@ -2307,19 +2307,19 @@ struct TCoreFuncInfo {
 };
 
 using TAggrFuncFactoryCallback = std::function<INode::TPtr(TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory)>;
-using TAggrFuncFactoryCallbackMap = std::unordered_map<TString, TAggrFuncFactoryCallback, THash<TString>>; 
-using TBuiltinFactoryCallback = std::function<TNodePtr(TPosition pos, const TVector<TNodePtr>& args)>; 
-using TBuiltinFactoryCallbackMap = std::unordered_map<TString, TBuiltinFactoryCallback, THash<TString>>; 
+using TAggrFuncFactoryCallbackMap = std::unordered_map<TString, TAggrFuncFactoryCallback, THash<TString>>;
+using TBuiltinFactoryCallback = std::function<TNodePtr(TPosition pos, const TVector<TNodePtr>& args)>;
+using TBuiltinFactoryCallbackMap = std::unordered_map<TString, TBuiltinFactoryCallback, THash<TString>>;
 using TCoreFuncMap = std::unordered_map<TString, TCoreFuncInfo, THash<TString>>;
 
 TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
-        const TString& functionName, 
-        const TString& factoryName, 
+        const TString& functionName,
+        const TString& factoryName,
         EAggrFuncTypeCallback type = NORMAL,
         const TString& functionNameOverride = TString(),
         const TVector<EAggregateMode>& validModes = {}) {
 
-    const TString realFunctionName = functionNameOverride.empty() ? functionName : functionNameOverride; 
+    const TString realFunctionName = functionNameOverride.empty() ? functionName : functionNameOverride;
     return [functionName, realFunctionName, factoryName, type, validModes] (TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory) -> INode::TPtr {
         if (!validModes.empty()) {
             if (!IsIn(validModes, aggMode)) {
@@ -2400,54 +2400,54 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
 
 template<typename TType>
 TBuiltinFactoryCallback BuildSimpleBuiltinFactoryCallback() {
-    return [] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr { 
+    return [] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, args);
     };
 }
 
 template<typename TType>
-TBuiltinFactoryCallback BuildNamedBuiltinFactoryCallback(const TString& name) { 
-    return [name] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr { 
+TBuiltinFactoryCallback BuildNamedBuiltinFactoryCallback(const TString& name) {
+    return [name] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, name, args);
     };
 }
 
 template<typename TType>
 TBuiltinFactoryCallback BuildArgcBuiltinFactoryCallback(i32 minArgs, i32 maxArgs) {
-    return [minArgs, maxArgs] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr { 
+    return [minArgs, maxArgs] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, minArgs, maxArgs, args);
     };
 }
 
 template<typename TType>
-TBuiltinFactoryCallback BuildNamedArgcBuiltinFactoryCallback(const TString& name, i32 minArgs, i32 maxArgs) { 
-    return [name, minArgs, maxArgs] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr { 
+TBuiltinFactoryCallback BuildNamedArgcBuiltinFactoryCallback(const TString& name, i32 minArgs, i32 maxArgs) {
+    return [name, minArgs, maxArgs] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, name, minArgs, maxArgs, args);
     };
 }
 
 template<typename TType>
-TBuiltinFactoryCallback BuildNamedDepsArgcBuiltinFactoryCallback(ui32 reqArgsCount, const TString& name, i32 minArgs, i32 maxArgs) { 
-    return [reqArgsCount, name, minArgs, maxArgs](TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr { 
+TBuiltinFactoryCallback BuildNamedDepsArgcBuiltinFactoryCallback(ui32 reqArgsCount, const TString& name, i32 minArgs, i32 maxArgs) {
+    return [reqArgsCount, name, minArgs, maxArgs](TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(reqArgsCount, pos, name, minArgs, maxArgs, args);
     };
 }
 
 template<typename TType>
 TBuiltinFactoryCallback BuildBoolBuiltinFactoryCallback(bool arg) {
-    return [arg] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr { 
+    return [arg] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, args, arg);
     };
 }
 
 template<typename TType>
-TBuiltinFactoryCallback BuildFoldBuiltinFactoryCallback(const TString& name, const TString& defaultValue) { 
-    return [name, defaultValue] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr { 
+TBuiltinFactoryCallback BuildFoldBuiltinFactoryCallback(const TString& name, const TString& defaultValue) {
+    return [name, defaultValue] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, name, "Bool", defaultValue, 1, args);
     };
 }
 
-TNodePtr MakePair(TPosition pos, const TVector<TNodePtr>& args) { 
+TNodePtr MakePair(TPosition pos, const TVector<TNodePtr>& args) {
     TNodePtr list = new TAstListNodeImpl(pos, {
         args[0],
         args.size() > 1 ? args[1] : new TAstListNodeImpl(pos,{ new TAstAtomNodeImpl(pos, "Null", TNodeFlags::Default) })
@@ -2884,7 +2884,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         }
     }
 
-    TString normalizedName(name); 
+    TString normalizedName(name);
     TString nameSpace(originalNameSpace);
     TString ns = to_lower(nameSpace);
     if (ns.empty()) {
@@ -2956,7 +2956,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         }
     } else if (moduleResource) {
         auto exportName = ns == "core" ? name : "$" + name;
-        TVector<TNodePtr> applyArgs = { 
+        TVector<TNodePtr> applyArgs = {
            new TCallNodeImpl(pos, "bind", {
                BuildAtom(pos, ns + "_module", 0), BuildQuotedAtom(pos, exportName)
            })
@@ -2964,7 +2964,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         applyArgs.insert(applyArgs.end(), args.begin(), args.end());
         return new TCallNodeImpl(pos, "Apply", applyArgs);
     } else if (ns == "hyperscan" || ns == "pcre" || ns == "pire" || ns.StartsWith("re2")) {
-        TString moduleName(nameSpace); 
+        TString moduleName(nameSpace);
         moduleName.to_title();
         if ((args.size() == 1 || args.size() == 2) && (name.StartsWith("Multi") || (ns.StartsWith("re2") && name == "Capture"))) {
             TVector<TNodePtr> multiArgs{

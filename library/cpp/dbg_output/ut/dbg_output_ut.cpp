@@ -34,14 +34,14 @@ DEFINE_DUMPER(TMyNS::TMyStruct, A, B)
 Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
     Y_UNIT_TEST(TestVectorInt) {
         TStringStream out;
-        out << DbgDump(TVector<int>({1, 2, 3, 4, 5})); 
+        out << DbgDump(TVector<int>({1, 2, 3, 4, 5}));
         UNIT_ASSERT_STRINGS_EQUAL(out.Str(), "[1, 2, 3, 4, 5]");
     }
 
     Y_UNIT_TEST(TestMapCharToCharArray) {
         TStringStream out;
 
-        TMap<char, const char*> m; 
+        TMap<char, const char*> m;
 
         m['a'] = "SMALL LETTER A";
         m['b'] = nullptr;
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
 
     Y_UNIT_TEST(TestVectorOfVectors) {
         TStringStream out;
-        TVector<TVector<wchar16>> vec(2); 
+        TVector<TVector<wchar16>> vec(2);
         vec[0].push_back(0);
         vec[1] = {wchar16('a')};
         out << DbgDump(vec);
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TContainerPrintersTest) {
     }
 
     Y_UNIT_TEST(TestColors) {
-        using TComplex = TMap<TString, TMap<int, char>>; 
+        using TComplex = TMap<TString, TMap<int, char>>;
         TComplex test;
         test["a"][1] = '7';
         test["b"][2] = '6';

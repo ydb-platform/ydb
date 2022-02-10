@@ -16,7 +16,7 @@ namespace NKikimr {
         TBlobsToRemove(TBlobsToRemove &&) = default;
         TBlobsToRemove &operator =(TBlobsToRemove &&) = default;
 
-        TBlobsToRemove(TVector<TLogoBlobID> &&blobs) 
+        TBlobsToRemove(TVector<TLogoBlobID> &&blobs)
             : Blobs(std::move(blobs))
             , It(Blobs.end())
         {}
@@ -38,8 +38,8 @@ namespace NKikimr {
         }
 
     private:
-        TVector<TLogoBlobID> Blobs; 
-        TVector<TLogoBlobID>::const_iterator It; 
+        TVector<TLogoBlobID> Blobs;
+        TVector<TLogoBlobID>::const_iterator It;
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -48,22 +48,22 @@ namespace NKikimr {
     class TBlobsStatusMngr {
     public:
         TBlobsStatusMngr(const TBlobStorageGroupInfo::TTopology *top);
-        void SetupCandidates(TVector<TLogoBlobID> &&candidates); 
-        TVector<TLogoBlobID> GetLogoBlobIdsToCheck(const TVDiskIdShort &vd) const; 
+        void SetupCandidates(TVector<TLogoBlobID> &&candidates);
+        TVector<TLogoBlobID> GetLogoBlobIdsToCheck(const TVDiskIdShort &vd) const;
         void UpdateStatusForVDisk(const TVDiskIdShort &vd,
                                   const NKikimrBlobStorage::TEvVGetResult &record);
         // returns LogoBlobIDs to remove
-        TVector<TLogoBlobID> BlobsToRemove() const; 
+        TVector<TLogoBlobID> BlobsToRemove() const;
 
     private:
         const TBlobStorageGroupInfo::TTopology *Top = nullptr;
         // LogoBlobIDs we got from Finder; we check these ones for removing
-        TVector<TLogoBlobID> Candidates; 
+        TVector<TLogoBlobID> Candidates;
         // This structure maps every TLogoBlobID from Candidates field to
         // TSubgroupVDisks object. TSubgroupVDisks contains bit mask of
         // VDisks that definitely have NODATA for this TLogoBlobID. We set
         // this object via communication with peers.
-        THashMap<TLogoBlobID, TBlobStorageGroupInfo::TSubgroupVDisks> BlobsStatus; 
+        THashMap<TLogoBlobID, TBlobStorageGroupInfo::TSubgroupVDisks> BlobsStatus;
     };
 
 } // NKikimr

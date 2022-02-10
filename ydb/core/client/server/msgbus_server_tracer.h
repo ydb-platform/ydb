@@ -28,7 +28,7 @@ public:
 protected:
     TActorId MessageBusTracerActorID;
     bool TraceActive;
-    TString TracePath; 
+    TString TracePath;
     void OnMessage(NBus::TOnMessageContext &msg) override;
     void OnMessageDied(NBus::TBusKey id) override;
     void OnMessageReplied(NBus::TBusKey id, NBus::TBusMessage *response) override;
@@ -58,9 +58,9 @@ struct TEvMessageBusTracer {
 
     class TEvStartTrace : public TEventLocal<TEvStartTrace, TEvMessageBusTracer::EvStartTrace> {
     public:
-        TString Path; 
+        TString Path;
 
-        TEvStartTrace(const TString &path); 
+        TEvStartTrace(const TString &path);
     };
 
     class TEvStopTrace : public TEventLocal<TEvStopTrace, TEvMessageBusTracer::EvStopTrace> {
@@ -71,9 +71,9 @@ struct TEvMessageBusTracer {
     class TEvTraceStatus : public TEventLocal<TEvTraceStatus, TEvMessageBusTracer::EvTraceStatus> {
     public:
         bool TraceActive;
-        TString Path; 
+        TString Path;
 
-        TEvTraceStatus(bool traceActive, const TString &path); 
+        TEvTraceStatus(bool traceActive, const TString &path);
     };
 
 };
@@ -95,7 +95,7 @@ private:
     void HandleTraceEvent(TEvMessageBusTracer::TEvTraceEvent::TPtr &ev, const TActorContext &);
 
     TAutoPtr<IOutputStream> Stream;
-    TString Path; 
+    TString Path;
 };
 
 inline TActorId MakeMessageBusTraceServiceID(ui32 node = 0) {
@@ -103,7 +103,7 @@ inline TActorId MakeMessageBusTraceServiceID(ui32 node = 0) {
     return TActorId(node, TStringBuf(x, 12));
 }
 
-IActor* CreateMessageBusTracerStartTrace(NMsgBusProxy::TBusMessageContext &msg, const TString &path); 
+IActor* CreateMessageBusTracerStartTrace(NMsgBusProxy::TBusMessageContext &msg, const TString &path);
 IActor* CreateMessageBusTracerStopTrace(NMsgBusProxy::TBusMessageContext &msg);
 
 }

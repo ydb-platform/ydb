@@ -23,7 +23,7 @@ namespace NKikimr {
                         until.ToString().data());
                 }
             };
-            THashMap<TDiskId, TInfo> DiskData; 
+            THashMap<TDiskId, TInfo> DiskData;
         };
 
         using TPerDiskStatsPtr = TIntrusivePtr<TPerDiskStats>;
@@ -41,7 +41,7 @@ namespace NKikimr {
 
         const ui32 MaxItems;
         const TDuration Window;
-        THashMap<TDiskId, TDeque<TItem>> PerDiskQ; 
+        THashMap<TDiskId, TDeque<TItem>> PerDiskQ;
 
     public:
         TDiskResponsivenessTracker(ui32 maxItems, TDuration window)
@@ -69,7 +69,7 @@ namespace NKikimr {
                 auto &q = diskIt->second;
 
                 // find the 90-th percentile for this disk
-                TVector<TDuration> values; 
+                TVector<TDuration> values;
                 values.reserve(q.size());
                 for (const TItem &item : q) {
                     values.push_back(item.Value);

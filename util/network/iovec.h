@@ -14,7 +14,7 @@ public:
     {
     }
 
-    inline void Proceed(size_t len) noexcept { 
+    inline void Proceed(size_t len) noexcept {
         while (Count_) {
             if (len < Parts_->len) {
                 Parts_->len -= len;
@@ -33,15 +33,15 @@ public:
         }
     }
 
-    inline const TPart* Parts() const noexcept { 
+    inline const TPart* Parts() const noexcept {
         return Parts_;
     }
 
-    inline size_t Count() const noexcept { 
+    inline size_t Count() const noexcept {
         return Count_;
     }
 
-    static inline size_t Bytes(const TPart* parts, size_t count) noexcept { 
+    static inline size_t Bytes(const TPart* parts, size_t count) noexcept {
         size_t ret = 0;
 
         for (size_t i = 0; i < count; ++i) {
@@ -51,11 +51,11 @@ public:
         return ret;
     }
 
-    inline size_t Bytes() const noexcept { 
+    inline size_t Bytes() const noexcept {
         return Bytes(Parts_, Count_);
     }
 
-    inline bool Complete() const noexcept { 
+    inline bool Complete() const noexcept {
         return !Count();
     }
 

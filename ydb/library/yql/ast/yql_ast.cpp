@@ -146,7 +146,7 @@ namespace {
         }
 
     private:
-        inline void AddError(const TString& message) { 
+        inline void AddError(const TString& message) {
             Issues_.AddIssue(Ctx_.Position(), message);
         }
 
@@ -292,7 +292,7 @@ namespace {
                             continue;
                         }
 
-                        TString token; 
+                        TString token;
                         if (!TryParseMultilineToken(token)) {
                             return nullptr;
                         }
@@ -381,7 +381,7 @@ namespace {
             return TAstNode::NewAtom(resPosition, Ctx_.GetToken(atomStart, Ctx_.Offset()), Ctx_.Pool());
         }
 
-        bool TryParseMultilineToken(TString& token) { 
+        bool TryParseMultilineToken(TString& token) {
             Ctx_.Next(); // skip second '@'
 
             ui32 start = Ctx_.Offset();
@@ -444,7 +444,7 @@ namespace {
     void MultilineAtomPrint(IOutputStream& out, const TStringBuf& str) {
         out << TStringBuf("@@");
         size_t idx = str.find('@');
-        if (idx == TString::npos) { 
+        if (idx == TString::npos) {
             out << str;
         } else {
             const char* begin = str.data();
@@ -463,7 +463,7 @@ namespace {
                     }
                 }
                 idx = str.find('@', idx);
-            } while (idx != TString::npos); 
+            } while (idx != TString::npos);
             out.Write(begin, str.end() - begin);
         }
         out << TStringBuf("@@");

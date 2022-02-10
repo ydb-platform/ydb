@@ -12,7 +12,7 @@ virtual void Scenario(const TActorContext &ctx) {
     TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(0);
 
     // prepare gc command
-    TAutoPtr<TVector<TLogoBlobID>> Keep(new TVector<TLogoBlobID>); 
+    TAutoPtr<TVector<TLogoBlobID>> Keep(new TVector<TLogoBlobID>);
     Keep->push_back(generic);
     ui64 tabletID = 0;
     ui32 recGen = 1;
@@ -94,8 +94,8 @@ virtual void Scenario(const TActorContext &ctx) {
                                                                   10);
         ctx.Send(instance.ActorID, req.release());
 
-        TString pppp("pppp"); 
-        TString qqqqq("qqqqq"); 
+        TString pppp("pppp");
+        TString qqqqq("qqqqq");
         ExpectedSet.Put(TLogoBlobID(0, 1, 471, 0, pppp.size(), 0), NKikimrProto::OK, {});
         ExpectedSet.Put(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0), NKikimrProto::OK, {});
     };
@@ -162,8 +162,8 @@ SYNC_TEST_BEGIN(TGCPutBarrier, TSyncTestWithSmallCommonDataset)
                                                                       10);
             ctx.Send(instance.ActorID, req.release());
 
-            TString pppp("pppp"); 
-            TString qqqqq("qqqqq"); 
+            TString pppp("pppp");
+            TString qqqqq("qqqqq");
             ExpectedSet.Put(TLogoBlobID(0, 1, 471, 0, pppp.size(), 0), NKikimrProto::OK, {});
             ExpectedSet.Put(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0), NKikimrProto::OK, {});
         };
@@ -187,8 +187,8 @@ virtual void Scenario(const TActorContext &ctx) {
     bool collect = true;
     ui32 collectGen = 1;
     ui32 collectStep = 1000;
-    TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep(new TVector<NKikimr::TLogoBlobID>()); 
-    TString qqqqq("qqqqq"); 
+    TAutoPtr<TVector<NKikimr::TLogoBlobID>> keep(new TVector<NKikimr::TLogoBlobID>());
+    TString qqqqq("qqqqq");
     keep->push_back(TLogoBlobID(0, 1, 909, 0, qqqqq.size(), 0));
     TAutoPtr<IActor> gcCommand(PutGCToCorrespondingVDisks(SyncRunner->NotifyID(), Conf, tabletID, recGen, recGenCounter,
                                                           channel, collect, collectGen, collectStep, keep, nullptr));

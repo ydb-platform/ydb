@@ -1,7 +1,7 @@
 #include "protect.h"
 
 #include <util/generic/yexception.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/stream/output.h>
 
 #include "yassert.h"
@@ -15,7 +15,7 @@
 #endif
 
 static TString ModeToString(const EProtectMemory mode) {
-    TString strMode; 
+    TString strMode;
     if (mode == PM_NONE) {
         return "PM_NONE";
     }

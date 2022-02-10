@@ -64,11 +64,11 @@ namespace NKikimr {
             ui32 TEvVPutsSent = 0;
             ui64 InFlightPutBytes = 0;
             ui64 BytesWritten = 0;
-            TMap<ui64, ui32> InFlightRequests; 
+            TMap<ui64, ui32> InFlightRequests;
             ui64 PutCookie = 1;
             bool EvTryToIssuePutsScheduled = false;
 
-            TDeque<TLogoBlobID> WrittenBlobs; 
+            TDeque<TLogoBlobID> WrittenBlobs;
 
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -184,7 +184,7 @@ namespace NKikimr {
             }
 
             void IssuePutRequest(const TLogoBlobID& logoBlobId, ui64 cookie, const TActorContext& ctx) {
-                TString whole(logoBlobId.BlobSize(), 'X'); 
+                TString whole(logoBlobId.BlobSize(), 'X');
                 TDataPartSet parts;
                 GType.SplitData((TErasureType::ECrcMode)logoBlobId.CrcMode(), whole, parts);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(logoBlobId,

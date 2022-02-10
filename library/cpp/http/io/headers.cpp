@@ -8,14 +8,14 @@
 #include <util/string/cast.h>
 #include <util/string/strip.h>
 
-static inline TStringBuf Trim(const char* b, const char* e) noexcept { 
+static inline TStringBuf Trim(const char* b, const char* e) noexcept {
     return StripString(TStringBuf(b, e));
 }
 
 THttpInputHeader::THttpInputHeader(const TStringBuf header) {
     size_t pos = header.find(':');
 
-    if (pos == TString::npos) { 
+    if (pos == TString::npos) {
         ythrow THttpParseException() << "can not parse http header(" << TString{header}.Quote() << ")";
     }
 
@@ -43,8 +43,8 @@ void THttpInputHeader::OutTo(IOutputStream* stream) const {
 }
 
 THttpHeaders::THttpHeaders(IInputStream* stream) {
-    TString header; 
-    TString line; 
+    TString header;
+    TString line;
 
     bool rdOk = stream->ReadLine(header);
     while (rdOk && !header.empty()) {

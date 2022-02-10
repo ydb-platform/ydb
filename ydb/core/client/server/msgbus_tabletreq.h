@@ -60,7 +60,7 @@ protected:
     }
 
     virtual NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx,
-            const TString& text = TString()) { 
+            const TString& text = TString()) {
         LOG_ERROR_S(ctx, NKikimrServices::MSGBUS_REQUEST, "TabletRequest TabletId# " << TabletId
             << " status# " << status << " text# \"" << text << "\"" << Endl);
         return new TBusResponseStatus(status, text);

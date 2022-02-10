@@ -16,7 +16,7 @@ public:
     {}
 
 protected:
-    static TString GenerateUniqueName() { 
+    static TString GenerateUniqueName() {
         ui64 number = TInstant::Now().MicroSeconds();
         return Sprintf("darwin-sem-%" PRIu64, number);
     }
@@ -81,7 +81,7 @@ public:
     }
 
 protected:
-    THashSet<TType> InFlight; 
+    THashSet<TType> InFlight;
     TMutex InFlightLock;
     TCondVar InFlightFinished;
     TAutoSemaphore MaxInFlight;
@@ -92,13 +92,13 @@ TMsgBusPlayer::TMsgBusPlayer(TMsgBusPlayer::TMsgBusClient &msgBusClient)
     : MsgBusClient(msgBusClient)
 {}
 
-TString DumpMessageHeader(const NBus::TBusHeader& messageHeader) { 
-    return Sprintf("Message Id=%lx,Time=%s,Size=%d,Type=%x", messageHeader.Id, TInstant::MicroSeconds(messageHeader.SendTime).ToString().c_str(), messageHeader.Size, messageHeader.Type); 
+TString DumpMessageHeader(const NBus::TBusHeader& messageHeader) {
+    return Sprintf("Message Id=%lx,Time=%s,Size=%d,Type=%x", messageHeader.Id, TInstant::MicroSeconds(messageHeader.SendTime).ToString().c_str(), messageHeader.Size, messageHeader.Type);
 }
 
-ui32 TMsgBusPlayer::PlayTrace(const TString &traceFile, ui32 maxInFlight, std::function<void(int)> progressReporter) { 
+ui32 TMsgBusPlayer::PlayTrace(const TString &traceFile, ui32 maxInFlight, std::function<void(int)> progressReporter) {
     using NBus::TBusKey;
-    TAutoPtr<IInputStream> stream = new TUnbufferedFileInput(traceFile); 
+    TAutoPtr<IInputStream> stream = new TUnbufferedFileInput(traceFile);
     i64 fileLength = GetFileLength(traceFile);
     i64 filePos = 0;
     int lastPercent = -1;

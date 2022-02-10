@@ -366,7 +366,7 @@ static int HandleRead(int argc, const char* argv[]) {
              << resp.GetError().GetMessage() << Endl;
         return 1;
     } else if (resp.MessagesSize()) {
-        TVector<TString> receipts; 
+        TVector<TString> receipts;
 
         for (size_t i = 0; i < resp.MessagesSize(); ++i) {
             const auto& msg = resp.GetMessages(i);

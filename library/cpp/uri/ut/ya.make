@@ -4,7 +4,7 @@ OWNER(leo)
 
 NO_OPTIMIZE()
 
-NO_WSHADOW() 
+NO_WSHADOW()
 
 PEERDIR(
     library/cpp/html/entity

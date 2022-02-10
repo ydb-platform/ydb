@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TUtilityTest) {
         UNIT_ASSERT_EQUAL(Mean(1, 2), 1.5);
         UNIT_ASSERT(Abs(Mean(1., 2., 7.5) - 3.5) < std::numeric_limits<double>::epsilon());
     }
- 
+
     Y_UNIT_TEST(TestZeroInitWithDefaultZeros) {
         struct TStructWithPaddingBytes: public TZeroInit<TStructWithPaddingBytes> {
             TStructWithPaddingBytes()
@@ -84,17 +84,17 @@ Y_UNIT_TEST_SUITE(TUtilityTest) {
             // here between Field1_ and Field2_ will be padding bytes
             i64 Field2_ = 0;
         };
- 
+
         TStructWithPaddingBytes foo{};
- 
+
         // all bytes must be zeroes, and MSAN will not complain about reading from padding bytes
         const char* const fooPtr = (char*)&foo;
         for (size_t i = 0; i < sizeof(TStructWithPaddingBytes); ++i) {
             const char byte = fooPtr[i];
             UNIT_ASSERT_EQUAL(byte, 0);
         }
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestZeroInitWithDefaultNonZeros) {
         struct TStructWithPaddingBytes: public TZeroInit<TStructWithPaddingBytes> {
             TStructWithPaddingBytes()
@@ -104,20 +104,20 @@ Y_UNIT_TEST_SUITE(TUtilityTest) {
             // here between Field1_ and Field2_ will be padding bytes
             i64 Field2_ = 100500;
         };
- 
+
         TStructWithPaddingBytes foo{};
- 
+
         // check that default values are set correctly
         UNIT_ASSERT_EQUAL(foo.Field1_, true);
         UNIT_ASSERT_EQUAL(foo.Field2_, 100500);
- 
+
         const char* const fooPtr = (char*)&foo;
         // just reading all bytes, and MSAN must not complain about reading padding bytes
         for (size_t i = 0; i < sizeof(TStructWithPaddingBytes); ++i) {
             const char byte = fooPtr[i];
             UNIT_ASSERT_EQUAL(byte, byte);
         }
-    } 
+    }
 
     Y_UNIT_TEST(TestClampValNoClamp) {
         double val = 2;
@@ -145,36 +145,36 @@ Y_UNIT_TEST_SUITE(TUtilityTest) {
         UNIT_ASSERT_EQUAL(clamped, hi);
         UNIT_ASSERT_EQUAL(&clamped, &hi);
     }
- 
+
     Y_UNIT_TEST(TestSecureZero) {
         constexpr size_t checkSize = 128;
         char test[checkSize];
- 
+
         // fill with garbage
         for (size_t i = 0; i < checkSize; ++i) {
             test[i] = i;
         }
- 
+
         SecureZero(test, checkSize);
- 
+
         for (size_t i = 0; i < checkSize; ++i) {
             UNIT_ASSERT_EQUAL(test[i], 0);
         }
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestSecureZeroTemplate) {
         constexpr size_t checkSize = 128;
         char test[checkSize];
- 
+
         // fill with garbage
         for (size_t i = 0; i < checkSize; ++i) {
             test[i] = i;
         }
- 
+
         SecureZero(test);
- 
+
         for (size_t i = 0; i < checkSize; ++i) {
             UNIT_ASSERT_EQUAL(test[i], 0);
         }
-    } 
+    }
 };

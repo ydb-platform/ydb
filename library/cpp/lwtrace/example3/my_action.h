@@ -8,7 +8,7 @@
 class TMyFile: public NLWTrace::IResource {
 private:
     TMutex Mutex;
-    THolder<TUnbufferedFileOutput> File; 
+    THolder<TUnbufferedFileOutput> File;
 
 public:
     // Note that this class must have default ctor (it's declared here just for clearness)
@@ -27,7 +27,7 @@ public:
             // if the same file was specified in Opts
             return;
         }
-        File.Reset(new TUnbufferedFileOutput(path)); 
+        File.Reset(new TUnbufferedFileOutput(path));
     }
 
     // Outputs a line to opened file
@@ -63,7 +63,7 @@ public:
 private:
     virtual bool DoExecute(NLWTrace::TOrbit&, const NLWTrace::TParams& params) {
         // Serialize param values to strings
-        TString paramValues[LWTRACE_MAX_PARAMS]; 
+        TString paramValues[LWTRACE_MAX_PARAMS];
         Probe->Event.Signature.SerializeParams(params, paramValues);
 
         // Generate output line

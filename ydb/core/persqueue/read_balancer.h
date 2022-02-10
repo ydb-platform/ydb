@@ -147,7 +147,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     struct TTxWrite : public ITransaction {
         TPersQueueReadBalancer * const Self;
-        TVector<ui32> DeletedPartitions; 
+        TVector<ui32> DeletedPartitions;
         TVector<std::pair<ui32, TPartInfo>> NewPartitions;
         TVector<std::pair<ui64, TTabletInfo>> NewTablets;
         TVector<std::pair<ui32, ui32>> NewGroups;
@@ -377,7 +377,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
         bool WakeupScheduled = false;
     };
 
-    THashMap<ui32, TPartitionInfo> PartitionsInfo; 
+    THashMap<ui32, TPartitionInfo> PartitionsInfo;
     THashMap<ui32, TVector<ui32>> GroupsInfo;
 
     THashMap<ui64, TTabletInfo> TabletsInfo;
@@ -418,7 +418,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>, public TTa
 
     THashMap<ui64, TActorId> TabletPipes;
 
-    THashSet<ui64> WaitingForStat; 
+    THashSet<ui64> WaitingForStat;
     bool WaitingForACL;
     ui64 TotalAvgSpeedSec;
     ui64 MaxAvgSpeedSec;

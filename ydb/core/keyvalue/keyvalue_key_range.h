@@ -6,10 +6,10 @@ namespace NKeyValue {
 
 struct TKeyRange {
     bool HasFrom;
-    TString KeyFrom; 
+    TString KeyFrom;
     bool IncludeFrom;
     bool HasTo;
-    TString KeyTo; 
+    TString KeyTo;
     bool IncludeTo;
 
     static TKeyRange WholeDatabase() {

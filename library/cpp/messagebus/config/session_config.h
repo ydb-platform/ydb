@@ -5,7 +5,7 @@
 
 #include <library/cpp/getopt/last_getopt.h>
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 namespace NBus {
 #define BUS_SESSION_CONFIG_MAP(XX, comma)                                                  \

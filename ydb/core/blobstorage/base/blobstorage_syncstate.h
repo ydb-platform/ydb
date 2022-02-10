@@ -54,7 +54,7 @@ namespace NKikimr {
             str << "[" << Guid << " " << SyncedLsn << "]";
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             Output(str);
             return str.Str();

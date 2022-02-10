@@ -113,10 +113,10 @@ Y_NO_INLINE void Indent(IOutputStream& out, ui32 indentation) {
 
 void ProgramLinesWithErrors(
         const TString& programText,
-        const TVector<TIssue>& errors, 
-        TMap<ui32, TStringBuf>& lines) 
+        const TVector<TIssue>& errors,
+        TMap<ui32, TStringBuf>& lines)
 {
-    TVector<ui32> rows; 
+    TVector<ui32> rows;
     for (const auto& topIssue: errors) {
         WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 /*level*/) {
             for (ui32 row = issue.Position.Row; row <= issue.EndPosition.Row; row++) {
@@ -185,7 +185,7 @@ void TIssues::PrintWithProgramTo(
 {
     using namespace NColorizer;
 
-    TMap<ui32, TStringBuf> lines; 
+    TMap<ui32, TStringBuf> lines;
     ProgramLinesWithErrors(programText, Issues_, lines);
 
     for (const TIssue& topIssue: Issues_) {

@@ -17,8 +17,8 @@ namespace NSQLTranslationV0 {
 class TListBuiltin: public TCallNode {
 public:
     TListBuiltin(TPosition pos,
-                     const TString& opName, 
-                     const TVector<TNodePtr>& args) 
+                     const TString& opName,
+                     const TVector<TNodePtr>& args)
         : TCallNode(pos, opName, args.size(), args.size(), args)
         , OpName(opName)
         , Args(args)
@@ -29,8 +29,8 @@ public:
     TAstNode* Translate(TContext& ctx) const override;
 
 protected:
-    const TString OpName; 
-    TVector<TNodePtr> Args; 
+    const TString OpName;
+    TVector<TNodePtr> Args;
     TNodePtr Node;
 
     inline TNodePtr GetIdentityLambda();
@@ -44,7 +44,7 @@ protected:
 
 class TListSortBuiltin final: public TListBuiltin {
 public:
-    TListSortBuiltin(TPosition pos, const TVector<TNodePtr>& args, bool asc) 
+    TListSortBuiltin(TPosition pos, const TVector<TNodePtr>& args, bool asc)
         : TListBuiltin(pos, "Sort", args)
         , Asc(asc)
     {}
@@ -61,7 +61,7 @@ private:
 
 class TListExtractBuiltin final: public TListBuiltin {
 public:
-    TListExtractBuiltin(TPosition pos, const TVector<TNodePtr>& args) 
+    TListExtractBuiltin(TPosition pos, const TVector<TNodePtr>& args)
         : TListBuiltin(pos, "OrderedExtract", args)
     {}
 
@@ -75,8 +75,8 @@ public:
 class TListProcessBuiltin: public TListBuiltin {
 protected:
     TListProcessBuiltin(TPosition pos,
-                 const TString& opName, 
-                 const TVector<TNodePtr>& args) 
+                 const TString& opName,
+                 const TVector<TNodePtr>& args)
         : TListBuiltin(pos, opName, args)
         , OpLiteral(nullptr)
     {}
@@ -85,13 +85,13 @@ protected:
 
     TNodePtr PrepareResult();
 
-    const TString* OpLiteral; 
+    const TString* OpLiteral;
 };
 
 class TListMapBuiltin final: public TListProcessBuiltin {
 public:
     TListMapBuiltin(TPosition pos,
-                    const TVector<TNodePtr>& args, 
+                    const TVector<TNodePtr>& args,
                     bool flat)
         : TListProcessBuiltin(pos, flat ? "OrderedFlatMap" : "OrderedMap", args)
         , Flat(flat)
@@ -111,7 +111,7 @@ private:
 class TListFilterBuiltin final: public TListProcessBuiltin {
 public:
     TListFilterBuiltin(TPosition pos,
-                       const TVector<TNodePtr>& args) 
+                       const TVector<TNodePtr>& args)
         : TListProcessBuiltin(pos, "OrderedFilter", args)
     {}
 
@@ -128,11 +128,11 @@ protected:
 class TListFoldBuiltin: public TListBuiltin {
 public:
     TListFoldBuiltin(TPosition pos,
-                     const TString& opName, 
-                     const TString& stateType, 
-                     const TString& stateValue, 
+                     const TString& opName,
+                     const TString& stateType,
+                     const TString& stateValue,
                      const ui32 argCount,
-                     const TVector<TNodePtr>& args) 
+                     const TVector<TNodePtr>& args)
         : TListBuiltin(pos, opName, args)
         , StateType(stateType)
         , StateValue(stateValue)
@@ -142,8 +142,8 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override;
 protected:
-    const TString StateType; 
-    const TString StateValue; 
+    const TString StateType;
+    const TString StateValue;
     const ui32 ArgCount;
 
     virtual TNodePtr GetInitialState();
@@ -153,8 +153,8 @@ protected:
 
 class TListFoldBuiltinImpl final: public TListFoldBuiltin {
 public:
-    TListFoldBuiltinImpl(TPosition pos, const TString& opName, const TString& stateType, const TString& stateValue, 
-                     const ui32 argCount, const TVector<TNodePtr>& args) 
+    TListFoldBuiltinImpl(TPosition pos, const TString& opName, const TString& stateType, const TString& stateValue,
+                     const ui32 argCount, const TVector<TNodePtr>& args)
         : TListFoldBuiltin(pos, opName, stateType, stateValue, argCount, args)
     {}
 
@@ -165,7 +165,7 @@ public:
 
 class TListCountBuiltin final: public TListFoldBuiltin {
 public:
-    TListCountBuiltin(TPosition pos, const TVector<TNodePtr>& args) 
+    TListCountBuiltin(TPosition pos, const TVector<TNodePtr>& args)
         : TListFoldBuiltin(pos, "Inc", "Uint64", "0", 1, args)
     {}
 
@@ -178,7 +178,7 @@ private:
 
 class TListAvgBuiltin final: public TListFoldBuiltin {
 public:
-    TListAvgBuiltin(TPosition pos, const TVector<TNodePtr>& args) 
+    TListAvgBuiltin(TPosition pos, const TVector<TNodePtr>& args)
         : TListFoldBuiltin(pos, "Avg", "", "", 1, args)
     {
     }
@@ -196,7 +196,7 @@ private:
 
 class TListHasBuiltin final: public TListFoldBuiltin {
 public:
-    TListHasBuiltin(TPosition pos, const TVector<TNodePtr>& args) 
+    TListHasBuiltin(TPosition pos, const TVector<TNodePtr>& args)
         : TListFoldBuiltin(pos, "==", "Bool", "false", 2, args)
     {
     }
@@ -222,8 +222,8 @@ private:
 class TListFold1Builtin final: public TListBuiltin {
 public:
     TListFold1Builtin(TPosition pos,
-                     const TString& opName, 
-                     const TVector<TNodePtr>& args) 
+                     const TString& opName,
+                     const TVector<TNodePtr>& args)
         : TListBuiltin(pos, opName, args)
     {
     }
@@ -244,7 +244,7 @@ protected:
 class TListUniqBuiltin final: public TListBuiltin {
 public:
     TListUniqBuiltin(TPosition pos,
-                     const TVector<TNodePtr>& args) 
+                     const TVector<TNodePtr>& args)
         : TListBuiltin(pos, "ListUniq", args)
     {}
 
@@ -258,7 +258,7 @@ public:
 class TListCreateBuiltin final: public TListBuiltin {
 public:
     TListCreateBuiltin(TPosition pos,
-                     const TVector<TNodePtr>& args) 
+                     const TVector<TNodePtr>& args)
         : TListBuiltin(pos, "ListCreate", args)
     {}
 

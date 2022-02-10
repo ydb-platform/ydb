@@ -6,7 +6,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/intrlist.h>
 #include <util/generic/singleton.h>
-#include <util/generic/vector.h> 
+#include <util/generic/vector.h>
 
 #if defined(_unix_)
     #include <pthread.h>
@@ -46,17 +46,17 @@ namespace {
                 {
                 }
 
-                inline ~TStoredValue() { 
+                inline ~TStoredValue() {
                     if (Dtor_ && Data_) {
                         Dtor_(Data_);
                     }
                 }
 
-                inline void Set(void* ptr) noexcept { 
+                inline void Set(void* ptr) noexcept {
                     Data_ = ptr;
                 }
 
-                inline void* Get() const noexcept { 
+                inline void* Get() const noexcept {
                     return Data_;
                 }
 
@@ -92,8 +92,8 @@ namespace {
             }
 
         private:
-            TVector<TStoredValue*> Values_; 
-            THashMap<size_t, TStoredValue*> FarValues_; 
+            TVector<TStoredValue*> Values_;
+            THashMap<size_t, TStoredValue*> FarValues_;
             TIntrusiveListWithAutoDelete<TStoredValue, TDelete> Storage_;
         };
 
@@ -126,7 +126,7 @@ namespace {
             Y_VERIFY(!pthread_key_create(&Key_, Dtor), "pthread_key_create failed");
         }
 
-        inline ~TMasterTls() override { 
+        inline ~TMasterTls() override {
             //explicitly call dtor for main thread
             Dtor(pthread_getspecific(Key_));
 
@@ -197,7 +197,7 @@ namespace {
             }
         }
 
-        inline void Cleanup() noexcept { 
+        inline void Cleanup() noexcept {
             with_lock (Lock_) {
                 Datas_.erase(TThread::CurrentThreadId());
             }
@@ -210,7 +210,7 @@ namespace {
     private:
         using TPTSRef = THolder<TPerThreadStorage>;
         TMutex Lock_;
-        THashMap<TThread::TId, TPTSRef> Datas_; 
+        THashMap<TThread::TId, TPTSRef> Datas_;
     };
 }
 
@@ -255,6 +255,6 @@ void TKey::Set(void* ptr) const {
     Impl_->Set(ptr);
 }
 
-void TKey::Cleanup() noexcept { 
+void TKey::Cleanup() noexcept {
     TImpl::Cleanup();
 }

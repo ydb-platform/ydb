@@ -7,9 +7,9 @@
 
 namespace NAnalytics {
 
-inline TString ToCsv(const TTable& in, TString sep = TString("\t"), bool head = true) 
+inline TString ToCsv(const TTable& in, TString sep = TString("\t"), bool head = true)
 {
-    TSet<TString> cols; 
+    TSet<TString> cols;
     bool hasName = false;
     for (const TRow& row : in) {
         hasName = hasName || !row.Name.empty();
@@ -22,11 +22,11 @@ inline TString ToCsv(const TTable& in, TString sep = TString("\t"), bool head = 
     if (head) {
         bool first = true;
         if (hasName) {
-            ss << (first? TString(): sep) << "Name"; 
+            ss << (first? TString(): sep) << "Name";
             first = false;
         }
-        for (const TString& c : cols) { 
-            ss << (first? TString(): sep) << c; 
+        for (const TString& c : cols) {
+            ss << (first? TString(): sep) << c;
             first = false;
         }
         ss << Endl;
@@ -35,11 +35,11 @@ inline TString ToCsv(const TTable& in, TString sep = TString("\t"), bool head = 
     for (const TRow& row : in) {
         bool first = true;
         if (hasName) {
-            ss << (first? TString(): sep) << row.Name; 
+            ss << (first? TString(): sep) << row.Name;
             first = false;
         }
-        for (const TString& c : cols) { 
-            ss << (first? TString(): sep); 
+        for (const TString& c : cols) {
+            ss << (first? TString(): sep);
             first = false;
             TString value;
             ss << (row.GetAsString(c, value) ? value : TString("-"));

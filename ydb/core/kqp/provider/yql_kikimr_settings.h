@@ -108,7 +108,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     void Init(const TProtoConfig& config)
     {
         TMaybe<TString> defaultCluster;
-        TVector<TString> clusters(Reserve(config.ClusterMappingSize())); 
+        TVector<TString> clusters(Reserve(config.ClusterMappingSize()));
         for (auto& cluster: config.GetClusterMapping()) {
             clusters.push_back(cluster.GetName());
             if (cluster.HasDefault() && cluster.GetDefault()) {
@@ -134,7 +134,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     void Init(const TDefultSettingsContainer& defaultSettings, const TString& cluster,
         const TSettingsContainer& settings, bool freezeDefaults)
     {
-        this->SetValidClusters(TVector<TString>{cluster}); 
+        this->SetValidClusters(TVector<TString>{cluster});
 
         this->Dispatch(NCommon::ALL_CLUSTERS, "_DefaultCluster", cluster, EStage::CONFIG);
         this->Dispatch(defaultSettings);

@@ -2,7 +2,7 @@
 
 #include "writer.h"
 
-static inline void WriteAux(IOutputStream* out, const TVector<ui64>& data) { 
+static inline void WriteAux(IOutputStream* out, const TVector<ui64>& data) {
     ::SavePodArray(out, data.data(), data.size());
 }
 
@@ -14,7 +14,7 @@ TChunkedDataWriter::TChunkedDataWriter(IOutputStream& slave)
 {
 }
 
-TChunkedDataWriter::~TChunkedDataWriter() { 
+TChunkedDataWriter::~TChunkedDataWriter() {
 }
 
 void TChunkedDataWriter::NewBlock() {

@@ -10,7 +10,7 @@
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <functional>
 #include <util/stream/input.h>
 #include <util/stream/str.h>
@@ -91,21 +91,21 @@ namespace NXml {
          * @return A string containing the XML content, or an empty string
          *         if the current node is neither an element nor attribute, or has no child nodes
          */
-        TString ReadInnerXml() const; 
+        TString ReadInnerXml() const;
 
         /**
          * Reads the current node and its contents, including child nodes and markup.
          * @return A string containing the XML content, or an empty string
          *         if the current node is neither an element nor attribute
          */
-        TString ReadOuterXml() const; 
+        TString ReadOuterXml() const;
 
         /**
          * Reads the contents of an element or a text node as a string.
          * @return A string containing the contents of the Element or Text node,
          *         or an empty string if the reader is positioned on any other type of node
          */
-        TString ReadString() const; 
+        TString ReadString() const;
 
         /**
          * Parses an attribute value into one or more Text and EntityReference nodes.
@@ -216,7 +216,7 @@ namespace NXml {
          * Provides the value of the attribute with the specified index relative to the containing element.
          * @param number the zero-based index of the attribute relative to the containing element
          */
-        TString GetAttribute(int number) const; 
+        TString GetAttribute(int number) const;
 
         /**
          * Provides the value of the attribute with the specified qualified name.
@@ -309,8 +309,8 @@ namespace NXml {
         char CharResult(int value) const;
         TStringBuf ConstStringResult(const xmlChar* value) const;
         TStringBuf ConstStringOrEmptyResult(const xmlChar* value) const;
-        TString TempStringResult(TCharPtr value) const; 
-        TString TempStringOrEmptyResult(TCharPtr value) const; 
+        TString TempStringResult(TCharPtr value) const;
+        TString TempStringOrEmptyResult(TCharPtr value) const;
 
     private:
         IInputStream& Stream;

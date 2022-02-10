@@ -45,6 +45,6 @@ IOutputStream& StdDbgStream() noexcept {
     return *(Singleton<TDbgSelector>()->Out);
 }
 
-int StdDbgLevel() noexcept { 
+int StdDbgLevel() noexcept {
     return Singleton<TDbgSelector>()->Level;
 }

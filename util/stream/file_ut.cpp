@@ -13,32 +13,32 @@ Y_UNIT_TEST_SUITE(TFileTest) {
         TTempFile tmp(TmpFileName);
 
         {
-            TUnbufferedFileOutput output(TmpFileName); 
+            TUnbufferedFileOutput output(TmpFileName);
             output.Write(TmpFileContents, strlen(TmpFileContents));
         }
 
         {
-            TUnbufferedFileInput input(TmpFileName); 
-            TString s = input.ReadAll(); 
+            TUnbufferedFileInput input(TmpFileName);
+            TString s = input.ReadAll();
             UNIT_ASSERT_VALUES_EQUAL(s, TmpFileContents);
         }
 
         {
-            TUnbufferedFileInput input(TmpFileName); 
+            TUnbufferedFileInput input(TmpFileName);
             input.Skip(TmpFileSubstring - TmpFileContents);
-            TString s = input.ReadAll(); 
+            TString s = input.ReadAll();
             UNIT_ASSERT_VALUES_EQUAL(s, "chivalrous plan");
         }
 
         {
-            TUnbufferedFileOutput output(TFile::ForAppend(TmpFileName)); 
+            TUnbufferedFileOutput output(TFile::ForAppend(TmpFileName));
             output.Write(TmpFileContents, strlen(TmpFileContents));
         }
 
         {
-            TUnbufferedFileInput input(TmpFileName); 
-            TString s = input.ReadAll(); 
-            UNIT_ASSERT_VALUES_EQUAL(s, TString::Join(TmpFileContents, TmpFileContents)); 
+            TUnbufferedFileInput input(TmpFileName);
+            TString s = input.ReadAll();
+            UNIT_ASSERT_VALUES_EQUAL(s, TString::Join(TmpFileContents, TmpFileContents));
         }
     }
 
@@ -46,13 +46,13 @@ Y_UNIT_TEST_SUITE(TFileTest) {
         TTempFile tmp(TmpFileName);
 
         {
-            TUnbufferedFileOutput output(TmpFileName); 
+            TUnbufferedFileOutput output(TmpFileName);
             /* Write nothing. */
         }
 
         {
             TMappedFileInput input(TmpFileName);
-            TString s = input.ReadAll(); 
+            TString s = input.ReadAll();
             UNIT_ASSERT(s.empty());
         }
     }

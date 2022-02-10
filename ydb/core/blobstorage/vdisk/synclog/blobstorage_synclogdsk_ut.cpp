@@ -112,7 +112,7 @@ namespace NKikimr {
             TFillIn1Context ctx {1, 1};
             for (int i = 0; i < 5; i++) {
                 TSyncLogPagePtr page = CreateSyncLogPage(10, pageSize, ctx);
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 pages.push_back(page);
 
                 TStringStream s;
@@ -126,7 +126,7 @@ namespace NKikimr {
                 uc.UpdateIndexWithCheck(dsk.get(), delta);
             }
 
-            TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 1} {FirstLsn# 21 OffsInPages# 1 PagesNum# 1} " 
+            TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 1} {FirstLsn# 21 OffsInPages# 1 PagesNum# 1} "
                             "{FirstLsn# 41 OffsInPages# 2 PagesNum# 1} {FirstLsn# 61 OffsInPages# 3 PagesNum# 1} "
                             "{FirstLsn# 81 OffsInPages# 4 PagesNum# 1} LastRealLsn# 99}}";
             UNIT_ASSERT(dsk->ToString() == result);
@@ -156,7 +156,7 @@ namespace NKikimr {
             TFillIn1Context ctx {1, 1};
             // add first portion
             {
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 for (int i = 0; i < 5; i++) {
                     TSyncLogPagePtr page = CreateSyncLogPage(10, pageSize, ctx);
                     pages.push_back(page);
@@ -172,13 +172,13 @@ namespace NKikimr {
                 dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
-            TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 4} {FirstLsn# 81 OffsInPages# 4 PagesNum# 1} " 
+            TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 4} {FirstLsn# 81 OffsInPages# 4 PagesNum# 1} "
                             "LastRealLsn# 99}}";
             UNIT_ASSERT(dsk->ToString() == result);
 
             // add second portion
             {
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 for (int i = 0; i < 5; i++) {
                     TSyncLogPagePtr page = CreateSyncLogPage(10, pageSize, ctx);
                     pages.push_back(page);
@@ -213,7 +213,7 @@ namespace NKikimr {
 
             TFillIn1Context ctx {1, 1};
             for (int k = 0; k < 4; k++) {
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 for (int i = 0; i < 2; i++) {
                     TSyncLogPagePtr page = CreateSyncLogPage(10, pageSize, ctx);
                     pages.push_back(page);
@@ -229,7 +229,7 @@ namespace NKikimr {
                 TString serialized = s.Str();
                 dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
-            TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 2} {FirstLsn# 41 OffsInPages# 2 PagesNum# 2} " 
+            TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 2} {FirstLsn# 41 OffsInPages# 2 PagesNum# 2} "
                             "LastRealLsn# 79}} {1 {{FirstLsn# 81 OffsInPages# 0 PagesNum# 2} "
                             "{FirstLsn# 121 OffsInPages# 2 PagesNum# 2} LastRealLsn# 159}}";
             UNIT_ASSERT(dsk->ToString() == result);
@@ -247,7 +247,7 @@ namespace NKikimr {
             TFillIn1Context ctx {1, 1};
             for (int i = 0; i < 2; i++) {
                 TSyncLogPagePtr page = CreateSyncLogPage(10, pageSize, ctx);
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 pages.push_back(page);
 
                 // update
@@ -264,7 +264,7 @@ namespace NKikimr {
             // create a page
             TSyncLogPagePtr page = CreateSyncLogPage(10, pageSize, ctx);
             {
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 pages.push_back(page);
 
                 // update
@@ -282,7 +282,7 @@ namespace NKikimr {
             // append to the page
             page = AppendToSyncLogPage(page, 4, pageSize, ctx);
             {
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 pages.push_back(page);
 
                 // update
@@ -296,7 +296,7 @@ namespace NKikimr {
                 dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
-            TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 1} {FirstLsn# 21 OffsInPages# 1 PagesNum# 1} " 
+            TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 1} {FirstLsn# 21 OffsInPages# 1 PagesNum# 1} "
                             "{FirstLsn# 41 OffsInPages# 3 PagesNum# 1} LastRealLsn# 67}}";
             UNIT_ASSERT(dsk->ToString() == result);
             UNIT_ASSERT(dsk->LastChunkIdx() == 0);
@@ -313,7 +313,7 @@ namespace NKikimr {
             TFillIn1Context ctx {1, 1};
             for (int i = 0; i < 2; i++) {
                 TSyncLogPagePtr page = CreateSyncLogPage(10, pageSize, ctx);
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 pages.push_back(page);
 
                 // update
@@ -331,7 +331,7 @@ namespace NKikimr {
             TSyncLogPagePtr page0 = CreateSyncLogPage(10, pageSize, ctx);
             TSyncLogPagePtr page = CreateSyncLogPage(10, pageSize, ctx);
             {
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 pages.push_back(page0);
                 pages.push_back(page);
 
@@ -349,7 +349,7 @@ namespace NKikimr {
             // append to the page
             page = AppendToSyncLogPage(page, 4, pageSize, ctx);
             {
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 pages.push_back(page);
 
                 // update
@@ -363,7 +363,7 @@ namespace NKikimr {
                 dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
-            TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 1} {FirstLsn# 21 OffsInPages# 1 PagesNum# 1} " 
+            TString result = "{0 {{FirstLsn# 1 OffsInPages# 0 PagesNum# 1} {FirstLsn# 21 OffsInPages# 1 PagesNum# 1} "
                             "{FirstLsn# 41 OffsInPages# 2 PagesNum# 1} {FirstLsn# 61 OffsInPages# 4 PagesNum# 1} "
                             "LastRealLsn# 87}}";
             UNIT_ASSERT(dsk->ToString() == result);
@@ -383,7 +383,7 @@ namespace NKikimr {
             TSyncLogPagePtr lastPage;
             {
                 // CASE: start from empty dsk
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 for (int i = 0; i < 5; ++i) {
                     lastPage = CreateSyncLogPage(10, pageSize, ctx);
                     pages.push_back(lastPage);
@@ -401,7 +401,7 @@ namespace NKikimr {
 
                 // prepare delta
                 TDeltaToDiskRecLog delta(indexBulk);
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 pages.push_back(lastPage);
                 delta.Append(0, pages);
                 // one more page
@@ -425,7 +425,7 @@ namespace NKikimr {
 
             TFillIn1Context ctx {1, 1};
             for (int k = 0; k < 8; k++) {
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 for (int i = 0; i < 2; i++) {
                     TSyncLogPagePtr page = CreateSyncLogPage(10, pageSize, ctx);
                     pages.push_back(page);
@@ -441,7 +441,7 @@ namespace NKikimr {
                 dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
-            TVector<ui32> chunks; 
+            TVector<ui32> chunks;
             ui32 num = 0;
 
             chunks.clear();
@@ -469,7 +469,7 @@ namespace NKikimr {
 
             TFillIn1Context ctx {1, 1};
             for (int k = 0; k < 8; k++) {
-                TVector<TSyncLogPageSnap> pages; 
+                TVector<TSyncLogPageSnap> pages;
                 for (int i = 0; i < 2; i++) {
                     TSyncLogPagePtr page = CreateSyncLogPage(10, pageSize, ctx);
                     pages.push_back(page);
@@ -485,7 +485,7 @@ namespace NKikimr {
                 dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
-            TVector<ui32> chunks; 
+            TVector<ui32> chunks;
             ui64 lsn = 0;
 
             chunks.clear();

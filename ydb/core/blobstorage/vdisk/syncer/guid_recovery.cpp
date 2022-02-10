@@ -114,7 +114,7 @@ namespace NKikimr {
         TDecision::TDecision(EDecision d,
                              EFirstRunStep f,
                              TVDiskEternalGuid guid,
-                             const TString &e, 
+                             const TString &e,
                              bool a)
             : Decision(d)
             , FirstRunStep(f)
@@ -124,33 +124,33 @@ namespace NKikimr {
         {}
 
         TDecision TDecision::FirstRun(EFirstRunStep step, TVDiskEternalGuid guid) {
-            return TDecision(EDecision::FirstRun, step, guid, TString(), false); 
+            return TDecision(EDecision::FirstRun, step, guid, TString(), false);
         }
 
-        TDecision TDecision::Inconsistency(const TString &expl) { 
+        TDecision TDecision::Inconsistency(const TString &expl) {
             return TDecision(EDecision::Inconsistency, EFirstRunStep::STATE__Terminated,
                              0, expl, false);
         }
 
         TDecision TDecision::LostData(TVDiskEternalGuid guid, bool subsequentFailure) {
             return TDecision(EDecision::LostData, EFirstRunStep::STATE__Terminated,
-                             guid, TString(), subsequentFailure); 
+                             guid, TString(), subsequentFailure);
         }
 
         TDecision TDecision::LostData(EFirstRunStep step,
                                       TVDiskEternalGuid guid,
                                       bool subsequentFailure) {
-            return TDecision(EDecision::LostData, step, guid, TString(), subsequentFailure); 
+            return TDecision(EDecision::LostData, step, guid, TString(), subsequentFailure);
         }
 
         TDecision TDecision::Good(TVDiskEternalGuid guid) {
             return TDecision(EDecision::Good, EFirstRunStep::STATE__Terminated,
-                             guid, TString(), false); 
+                             guid, TString(), false);
         }
 
         // We got Good decision, but need to pass additional step of FirstRun phase
         TDecision TDecision::Good(EFirstRunStep step, TVDiskEternalGuid guid) {
-            return TDecision(EDecision::Good, step, guid, TString(), false); 
+            return TDecision(EDecision::Good, step, guid, TString(), false);
         }
 
         void TDecision::Output(IOutputStream &str) const {
@@ -173,7 +173,7 @@ namespace NKikimr {
             str << "]";
         }
 
-        TString TDecision::ToString() const { 
+        TString TDecision::ToString() const {
             TStringStream str;
             Output(str);
             return str.Str();
@@ -195,7 +195,7 @@ namespace NKikimr {
             str << "]";
         }
 
-        TString TOutcome::ToString() const { 
+        TString TOutcome::ToString() const {
             TStringStream str;
             Output(str);
             return str.Str();
@@ -248,14 +248,14 @@ namespace NKikimr {
                 const ESyncState State = TSyncVal::Empty;
                 const TVDiskEternalGuid Guid = 0;
                 const EFirstRunStep FirstRunStep = EFirstRunStep::STATE__Uninitialized;
-                const TString Explanation; 
+                const TString Explanation;
 
             private:
                 TVDiskQuorumDecision(bool i,
                                      ESyncState s,
                                      TVDiskEternalGuid guid,
                                      EFirstRunStep f,
-                                     const TString &e) 
+                                     const TString &e)
                     : IsInconsistent(i)
                     , State(s)
                     , Guid(guid)
@@ -264,7 +264,7 @@ namespace NKikimr {
                 {}
 
             public:
-                static TVDiskQuorumDecision Inconsistent(const TString &exp) { 
+                static TVDiskQuorumDecision Inconsistent(const TString &exp) {
                     return TVDiskQuorumDecision(true, TSyncVal::Empty, 0,
                         EFirstRunStep::STATE__Uninitialized, exp);
                 }
@@ -394,8 +394,8 @@ namespace NKikimr {
                 // analyze obtained results
                 // via finalQuorum we calculate if we got quorum of fail domains of Final State
                 TQuorumTracker finalQuorum(Self, Top, true); // include my faildomain
-                TMap<TVDiskEternalGuid, ui32> finalGuidMap;      // Guid -> HowManyVDisksHasThisGuid 
-                TMap<TVDiskEternalGuid, ui32> inProgressGuidMap; // Guid -> HowManyVDisksHasThisGuid 
+                TMap<TVDiskEternalGuid, ui32> finalGuidMap;      // Guid -> HowManyVDisksHasThisGuid
+                TMap<TVDiskEternalGuid, ui32> inProgressGuidMap; // Guid -> HowManyVDisksHasThisGuid
                 ui32 emptyCounter = 0;
                 ui32 noAnswer = 0;
                 for (const auto &x : Neighbors) {

@@ -10,8 +10,8 @@ namespace NKeyValue {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 struct TGroupCollector {
-    TDeque<TLogoBlobID> Keep; 
-    TDeque<TLogoBlobID> DoNotKeep; 
+    TDeque<TLogoBlobID> Keep;
+    TDeque<TLogoBlobID> DoNotKeep;
 };
 
 class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
@@ -24,7 +24,7 @@ class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
     ui64 CollectorErrors;
     bool IsSpringCleanup;
 
-    TMap<ui32, TMap<ui32, TGroupCollector>> CollectorForGroupForChannel; 
+    TMap<ui32, TMap<ui32, TGroupCollector>> CollectorForGroupForChannel;
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
@@ -153,10 +153,10 @@ public:
         return;
     }
 
-    void PrepareVector(const TDeque<TLogoBlobID> &in, THolder<TVector<TLogoBlobID>> &out) { 
+    void PrepareVector(const TDeque<TLogoBlobID> &in, THolder<TVector<TLogoBlobID>> &out) {
         ui64 size = in.size();
         if (size) {
-            out.Reset(new TVector<TLogoBlobID>(size)); 
+            out.Reset(new TVector<TLogoBlobID>(size));
             ui64 outIdx = 0;
             for (const auto &blob: in) {
                 (*out)[outIdx] = blob;
@@ -167,8 +167,8 @@ public:
     }
 
     void SendTheRequest(const TActorContext &ctx) {
-        THolder<TVector<TLogoBlobID>> keep; 
-        THolder<TVector<TLogoBlobID>> doNotKeep; 
+        THolder<TVector<TLogoBlobID>> keep;
+        THolder<TVector<TLogoBlobID>> doNotKeep;
         PrepareVector(CollectorForGroupForChannel.begin()->second.begin()->second.Keep, keep);
         PrepareVector(CollectorForGroupForChannel.begin()->second.begin()->second.DoNotKeep, doNotKeep);
         ui32 channelIdx = CollectorForGroupForChannel.begin()->first;

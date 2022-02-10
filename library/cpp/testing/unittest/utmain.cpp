@@ -14,7 +14,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/yexception.h>
 
 #include <util/network/init.h>
@@ -58,16 +58,16 @@ public:
     inline TTraceWriterProcessor(const char* traceFilePath, EOpenMode mode)
         : PrevTime(TInstant::Now())
     {
-        TraceFile = new TUnbufferedFileOutput(TFile(traceFilePath, mode | WrOnly | Seq)); 
+        TraceFile = new TUnbufferedFileOutput(TFile(traceFilePath, mode | WrOnly | Seq));
     }
 
 private:
-    TAutoPtr<TUnbufferedFileOutput> TraceFile; 
-    TString TraceFilePath; 
+    TAutoPtr<TUnbufferedFileOutput> TraceFile;
+    TString TraceFilePath;
     TInstant PrevTime;
-    TVector<TString> ErrorMessages; 
+    TVector<TString> ErrorMessages;
 
-    inline void Trace(const TString eventName, const NJson::TJsonValue eventValue) { 
+    inline void Trace(const TString eventName, const NJson::TJsonValue eventValue) {
         NJsonWriter::TBuf json(NJsonWriter::HEM_UNSAFE);
         json.BeginObject();
 
@@ -81,7 +81,7 @@ private:
         *TraceFile << "\n";
     }
 
-    inline void TraceSubtestFinished(const char* className, const char* subtestName, const char* status, const TString comment, const TTestContext* context) { 
+    inline void TraceSubtestFinished(const char* className, const char* subtestName, const char* status, const TString comment, const TTestContext* context) {
         const TInstant now = TInstant::Now();
         NJson::TJsonValue event;
         event.InsertValue("class", className);
@@ -97,7 +97,7 @@ private:
         Trace("subtest-finished", event);
 
         PrevTime = now;
-        TString marker = Join("", "\n###subtest-finished:", className, "::", subtestName, "\n"); 
+        TString marker = Join("", "\n###subtest-finished:", className, "::", subtestName, "\n");
         Cout << marker;
         Cout.Flush();
         Cerr << comment;
@@ -105,7 +105,7 @@ private:
         Cerr.Flush();
     }
 
-    virtual TString BuildComment(const char* message, const char* backTrace) { 
+    virtual TString BuildComment(const char* message, const char* backTrace) {
         return NUnitTest::GetFormatTag("bad") +
                TString(message).substr(0, MAX_COMMENT_MESSAGE_LENGTH) +
                NUnitTest::GetResetTag() +
@@ -120,7 +120,7 @@ private:
         event.InsertValue("class", test->unit->name);
         event.InsertValue("subtest", test->name);
         Trace("subtest-started", event);
-        TString marker = Join("", "\n###subtest-started:", test->unit->name, "::", test->name, "\n"); 
+        TString marker = Join("", "\n###subtest-started:", test->unit->name, "::", test->name, "\n");
         Cout << marker;
         Cout.Flush();
         Cerr << marker;
@@ -149,7 +149,7 @@ private:
             TraceSubtestFinished(descr->test->unit->name.data(), descr->test->name, "good", "", descr->Context);
         } else {
             TStringBuilder msgs;
-            for (const TString& m : ErrorMessages) { 
+            for (const TString& m : ErrorMessages) {
                 if (msgs) {
                     msgs << TStringBuf("\n");
                 }
@@ -166,7 +166,7 @@ private:
 
 class TColoredProcessor: public ITestSuiteProcessor, public NColorizer::TColors {
 public:
-    inline TColoredProcessor(const TString& appName) 
+    inline TColoredProcessor(const TString& appName)
         : PrintBeforeSuite_(true)
         , PrintBeforeTest_(true)
         , PrintAfterTest_(true)
@@ -186,30 +186,30 @@ public:
     {
     }
 
-    ~TColoredProcessor() override { 
+    ~TColoredProcessor() override {
     }
 
     inline void Disable(const char* name) {
-        size_t colon = TString(name).find("::"); 
-        if (colon == TString::npos) { 
+        size_t colon = TString(name).find("::");
+        if (colon == TString::npos) {
             DisabledSuites_.insert(name);
         } else {
-            TString suite = TString(name).substr(0, colon); 
+            TString suite = TString(name).substr(0, colon);
             DisabledTests_.insert(name);
         }
     }
 
     inline void Enable(const char* name) {
-        size_t colon = TString(name).rfind("::"); 
-        if (colon == TString::npos) { 
+        size_t colon = TString(name).rfind("::");
+        if (colon == TString::npos) {
             EnabledSuites_.insert(name);
-            EnabledTests_.insert(TString() + name + "::*"); 
+            EnabledTests_.insert(TString() + name + "::*");
         } else {
-            TString suite = TString(name).substr(0, colon); 
+            TString suite = TString(name).substr(0, colon);
             EnabledSuites_.insert(suite);
             EnabledSuites_.insert(name);
             EnabledTests_.insert(name);
-            EnabledTests_.insert(TString() + name + "::*"); 
+            EnabledTests_.insert(TString() + name + "::*");
         }
     }
 
@@ -425,7 +425,7 @@ private:
         }
     }
 
-    bool CheckAccess(TString name, size_t num) override { 
+    bool CheckAccess(TString name, size_t num) override {
         if (num < Start) {
             return false;
         }
@@ -445,8 +445,8 @@ private:
         return EnabledSuites_.find(name.data()) != EnabledSuites_.end();
     }
 
-    bool CheckAccessTest(TString suite, const char* test) override { 
-        TString name = suite + "::" + test; 
+    bool CheckAccessTest(TString suite, const char* test) override {
+        TString name = suite + "::" + test;
         if (DisabledTests_.find(name) != DisabledTests_.end()) {
             return false;
         }
@@ -455,7 +455,7 @@ private:
             return true;
         }
 
-        if (EnabledTests_.find(TString() + suite + "::*") != EnabledTests_.end()) { 
+        if (EnabledTests_.find(TString() + suite + "::*") != EnabledTests_.end()) {
             return true;
         }
 
@@ -467,7 +467,7 @@ private:
             return f();
         }
 
-        TList<TString> args(1, "--is-forked-internal"); 
+        TList<TString> args(1, "--is-forked-internal");
         args.push_back(Sprintf("+%s::%s", suite.data(), name));
 
         // stdin is ignored - unittest should not need them...
@@ -475,12 +475,12 @@ private:
                           TShellCommandOptions().SetUseShell(false).SetCloseAllFdsOnExec(true).SetAsync(false).SetLatency(1));
         cmd.Run();
 
-        const TString& err = cmd.GetError(); 
+        const TString& err = cmd.GetError();
         const size_t msgIndex = err.find(ForkCorrectExitMsg);
 
         // everything is printed by parent process except test's result output ("good" or "fail")
         // which is printed by child. If there was no output - parent process prints default message.
-        ForkExitedCorrectly = msgIndex != TString::npos; 
+        ForkExitedCorrectly = msgIndex != TString::npos;
 
         // TODO: stderr output is always printed after stdout
         Cout.Write(cmd.GetOutput());
@@ -517,16 +517,16 @@ private:
     bool PrintAfterSuite_;
     bool PrintTimes_;
     bool PrintSummary_;
-    THashSet<TString> DisabledSuites_; 
-    THashSet<TString> EnabledSuites_; 
-    THashSet<TString> DisabledTests_; 
-    THashSet<TString> EnabledTests_; 
+    THashSet<TString> DisabledSuites_;
+    THashSet<TString> EnabledSuites_;
+    THashSet<TString> DisabledTests_;
+    THashSet<TString> EnabledTests_;
     TInstant PrevTime_;
     bool ShowFails;
-    TVector<TString> Fails; 
+    TVector<TString> Fails;
     size_t Start;
     size_t End;
-    TString AppName; 
+    TString AppName;
     bool ForkTests;
     bool IsForked;
     bool Loop;
@@ -545,10 +545,10 @@ public:
     {
     }
 
-    ~TEnumeratingProcessor() override { 
+    ~TEnumeratingProcessor() override {
     }
 
-    bool CheckAccess(TString name, size_t /*num*/) override { 
+    bool CheckAccess(TString name, size_t /*num*/) override {
         if (Verbose_) {
             return true;
         } else {
@@ -557,7 +557,7 @@ public:
         }
     }
 
-    bool CheckAccessTest(TString suite, const char* name) override { 
+    bool CheckAccessTest(TString suite, const char* name) override {
         Stream_ << suite << "::" << name << "\n";
         return false;
     }
@@ -732,7 +732,7 @@ int NUnitTest::RunMain(int argc, char** argv) {
                     TString param(argv[i]);
                     size_t assign = param.find('=');
                     Singleton<::NPrivate::TTestEnv>()->AddTestParam(param.substr(0, assign), param.substr(assign + 1));
-                } else if (TString(name).StartsWith("--")) { 
+                } else if (TString(name).StartsWith("--")) {
                     return DoUsage(argv[0]), 1;
                 } else if (*name == '-') {
                     processor.Disable(name + 1);

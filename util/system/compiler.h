@@ -24,7 +24,7 @@
  * int main() {
  *    Hi();         // void Hi()
  *    Do<int>();    // void Do() [T = int]
- *    Do<TString>(); // void Do() [T = TString] 
+ *    Do<TString>(); // void Do() [T = TString]
  * }
  * @endcode
  */
@@ -216,8 +216,8 @@ constexpr Y_FORCE_INLINE int Y_UNUSED(Types&&...) {
  *
  * // we know that xs and ys are non-negative from domain knowledge,
  * // but we can't change the types of xs and ys because of API constrains
- * int Foo(const TVector<int>& xs, const TVector<int>& ys) { 
- *     TVector<int> avgs; 
+ * int Foo(const TVector<int>& xs, const TVector<int>& ys) {
+ *     TVector<int> avgs;
  *     avgs.resize(xs.size());
  *     for (size_t i = 0; i < xs.size(); ++i) {
  *         auto x = xs[i];
@@ -313,12 +313,12 @@ _YandexAbort();
 #else
     #define Y_WEAK
 #endif
- 
+
 #if defined(__CUDACC_VER_MAJOR__)
     #define Y_CUDA_AT_LEAST(x, y) (__CUDACC_VER_MAJOR__ > x || (__CUDACC_VER_MAJOR__ == x && __CUDACC_VER_MINOR__ >= y))
 #else
     #define Y_CUDA_AT_LEAST(x, y) 0
-#endif 
+#endif
 
 // NVidia CUDA C++ Compiler did not know about noexcept keyword until version 9.0
 #if !Y_CUDA_AT_LEAST(9, 0)
@@ -336,145 +336,145 @@ _YandexAbort();
     #define Y_LEAF
     #define Y_WRAPPER
 #endif
- 
-/** 
- * @def Y_PRAGMA 
- * 
- * Macro for use in other macros to define compiler pragma 
- * See below for other usage examples 
- * 
- * @code 
- * #if defined(__clang__) || defined(__GNUC__) 
- * #define Y_PRAGMA_NO_WSHADOW \ 
- *     Y_PRAGMA("GCC diagnostic ignored \"-Wshadow\"") 
- * #elif defined(_MSC_VER) 
- * #define Y_PRAGMA_NO_WSHADOW \ 
- *     Y_PRAGMA("warning(disable:4456 4457") 
- * #else 
- * #define Y_PRAGMA_NO_WSHADOW 
- * #endif 
- * @endcode 
- */ 
-#if defined(__clang__) || defined(__GNUC__) 
+
+/**
+ * @def Y_PRAGMA
+ *
+ * Macro for use in other macros to define compiler pragma
+ * See below for other usage examples
+ *
+ * @code
+ * #if defined(__clang__) || defined(__GNUC__)
+ * #define Y_PRAGMA_NO_WSHADOW \
+ *     Y_PRAGMA("GCC diagnostic ignored \"-Wshadow\"")
+ * #elif defined(_MSC_VER)
+ * #define Y_PRAGMA_NO_WSHADOW \
+ *     Y_PRAGMA("warning(disable:4456 4457")
+ * #else
+ * #define Y_PRAGMA_NO_WSHADOW
+ * #endif
+ * @endcode
+ */
+#if defined(__clang__) || defined(__GNUC__)
     #define Y_PRAGMA(x) _Pragma(x)
 #elif defined(_MSC_VER)
     #define Y_PRAGMA(x) __pragma(x)
-#else 
+#else
     #define Y_PRAGMA(x)
-#endif 
- 
-/** 
- * @def Y_PRAGMA_DIAGNOSTIC_PUSH 
- * 
- * Cross-compiler pragma to save diagnostic settings 
- * 
- * @see 
- *     GCC: https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Pragmas.html 
- *     MSVC: https://msdn.microsoft.com/en-us/library/2c8f766e.aspx 
- *     Clang: https://clang.llvm.org/docs/UsersManual.html#controlling-diagnostics-via-pragmas 
- * 
- * @code 
- * Y_PRAGMA_DIAGNOSTIC_PUSH 
- * @endcode 
- */ 
-#if defined(__clang__) || defined(__GNUC__) 
+#endif
+
+/**
+ * @def Y_PRAGMA_DIAGNOSTIC_PUSH
+ *
+ * Cross-compiler pragma to save diagnostic settings
+ *
+ * @see
+ *     GCC: https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Pragmas.html
+ *     MSVC: https://msdn.microsoft.com/en-us/library/2c8f766e.aspx
+ *     Clang: https://clang.llvm.org/docs/UsersManual.html#controlling-diagnostics-via-pragmas
+ *
+ * @code
+ * Y_PRAGMA_DIAGNOSTIC_PUSH
+ * @endcode
+ */
+#if defined(__clang__) || defined(__GNUC__)
     #define Y_PRAGMA_DIAGNOSTIC_PUSH \
         Y_PRAGMA("GCC diagnostic push")
-#elif defined(_MSC_VER) 
+#elif defined(_MSC_VER)
     #define Y_PRAGMA_DIAGNOSTIC_PUSH \
         Y_PRAGMA(warning(push))
-#else 
+#else
     #define Y_PRAGMA_DIAGNOSTIC_PUSH
-#endif 
- 
-/** 
- * @def Y_PRAGMA_DIAGNOSTIC_POP 
- * 
- * Cross-compiler pragma to restore diagnostic settings 
- * 
- * @see 
- *     GCC: https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Pragmas.html 
- *     MSVC: https://msdn.microsoft.com/en-us/library/2c8f766e.aspx 
- *     Clang: https://clang.llvm.org/docs/UsersManual.html#controlling-diagnostics-via-pragmas 
- * 
- * @code 
- * Y_PRAGMA_DIAGNOSTIC_POP 
- * @endcode 
- */ 
-#if defined(__clang__) || defined(__GNUC__) 
+#endif
+
+/**
+ * @def Y_PRAGMA_DIAGNOSTIC_POP
+ *
+ * Cross-compiler pragma to restore diagnostic settings
+ *
+ * @see
+ *     GCC: https://gcc.gnu.org/onlinedocs/gcc/Diagnostic-Pragmas.html
+ *     MSVC: https://msdn.microsoft.com/en-us/library/2c8f766e.aspx
+ *     Clang: https://clang.llvm.org/docs/UsersManual.html#controlling-diagnostics-via-pragmas
+ *
+ * @code
+ * Y_PRAGMA_DIAGNOSTIC_POP
+ * @endcode
+ */
+#if defined(__clang__) || defined(__GNUC__)
     #define Y_PRAGMA_DIAGNOSTIC_POP \
         Y_PRAGMA("GCC diagnostic pop")
-#elif defined(_MSC_VER) 
+#elif defined(_MSC_VER)
     #define Y_PRAGMA_DIAGNOSTIC_POP \
         Y_PRAGMA(warning(pop))
-#else 
+#else
     #define Y_PRAGMA_DIAGNOSTIC_POP
-#endif 
- 
-/** 
- * @def Y_PRAGMA_NO_WSHADOW 
- * 
- * Cross-compiler pragma to disable warnings about shadowing variables 
- * 
- * @code 
- * Y_PRAGMA_DIAGNOSTIC_PUSH 
- * Y_PRAGMA_NO_WSHADOW 
- * 
- * // some code which use variable shadowing, e.g.: 
- * 
- * for (int i = 0; i < 100; ++i) { 
- *   Use(i); 
- * 
- *   for (int i = 42; i < 100500; ++i) { // this i is shadowing previous i 
- *       AnotherUse(i); 
- *    } 
- * } 
- * 
- * Y_PRAGMA_DIAGNOSTIC_POP 
- * @endcode 
- */ 
-#if defined(__clang__) || defined(__GNUC__) 
+#endif
+
+/**
+ * @def Y_PRAGMA_NO_WSHADOW
+ *
+ * Cross-compiler pragma to disable warnings about shadowing variables
+ *
+ * @code
+ * Y_PRAGMA_DIAGNOSTIC_PUSH
+ * Y_PRAGMA_NO_WSHADOW
+ *
+ * // some code which use variable shadowing, e.g.:
+ *
+ * for (int i = 0; i < 100; ++i) {
+ *   Use(i);
+ *
+ *   for (int i = 42; i < 100500; ++i) { // this i is shadowing previous i
+ *       AnotherUse(i);
+ *    }
+ * }
+ *
+ * Y_PRAGMA_DIAGNOSTIC_POP
+ * @endcode
+ */
+#if defined(__clang__) || defined(__GNUC__)
     #define Y_PRAGMA_NO_WSHADOW \
         Y_PRAGMA("GCC diagnostic ignored \"-Wshadow\"")
-#elif defined(_MSC_VER) 
+#elif defined(_MSC_VER)
     #define Y_PRAGMA_NO_WSHADOW \
         Y_PRAGMA(warning(disable : 4456 4457))
-#else 
+#else
     #define Y_PRAGMA_NO_WSHADOW
-#endif 
- 
-/** 
- * @ def Y_PRAGMA_NO_UNUSED_FUNCTION 
- * 
- * Cross-compiler pragma to disable warnings about unused functions 
- * 
- * @see 
- *     GCC: https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html 
- *     Clang: https://clang.llvm.org/docs/DiagnosticsReference.html#wunused-function 
- *     MSVC: there is no such warning 
- * 
- * @code 
- * Y_PRAGMA_DIAGNOSTIC_PUSH 
- * Y_PRAGMA_NO_UNUSED_FUNCTION 
- * 
- * // some code which introduces a function which later will not be used, e.g.: 
- * 
- * void Foo() { 
- * } 
- * 
- * int main() { 
- *     return 0; // Foo() never called 
- * } 
- * 
- * Y_PRAGMA_DIAGNOSTIC_POP 
- * @endcode 
- */ 
-#if defined(__clang__) || defined(__GNUC__) 
+#endif
+
+/**
+ * @ def Y_PRAGMA_NO_UNUSED_FUNCTION
+ *
+ * Cross-compiler pragma to disable warnings about unused functions
+ *
+ * @see
+ *     GCC: https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html
+ *     Clang: https://clang.llvm.org/docs/DiagnosticsReference.html#wunused-function
+ *     MSVC: there is no such warning
+ *
+ * @code
+ * Y_PRAGMA_DIAGNOSTIC_PUSH
+ * Y_PRAGMA_NO_UNUSED_FUNCTION
+ *
+ * // some code which introduces a function which later will not be used, e.g.:
+ *
+ * void Foo() {
+ * }
+ *
+ * int main() {
+ *     return 0; // Foo() never called
+ * }
+ *
+ * Y_PRAGMA_DIAGNOSTIC_POP
+ * @endcode
+ */
+#if defined(__clang__) || defined(__GNUC__)
     #define Y_PRAGMA_NO_UNUSED_FUNCTION \
         Y_PRAGMA("GCC diagnostic ignored \"-Wunused-function\"")
-#else 
+#else
     #define Y_PRAGMA_NO_UNUSED_FUNCTION
-#endif 
+#endif
 
 /**
  * @ def Y_PRAGMA_NO_UNUSED_PARAMETER
@@ -514,42 +514,42 @@ _YandexAbort();
     #define Y_PRAGMA_NO_UNUSED_PARAMETER
 #endif
 
-/** 
- * @def Y_PRAGMA_NO_DEPRECATED 
- * 
- * Cross compiler pragma to disable warnings and errors about deprecated 
- * 
- * @see 
- *     GCC: https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html 
- *     Clang: https://clang.llvm.org/docs/DiagnosticsReference.html#wdeprecated 
- *     MSVC: https://docs.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warning-level-3-c4996?view=vs-2017 
- * 
- * @code 
- * Y_PRAGMA_DIAGNOSTIC_PUSH 
- * Y_PRAGMA_NO_DEPRECATED 
- * 
- * [deprecated] void foo() { 
- *     // ... 
- * } 
- * 
- * int main() { 
- *     foo(); 
- *     return 0; 
- * } 
- * 
- * Y_PRAGMA_DIAGNOSTIC_POP 
- * @endcode 
- */ 
+/**
+ * @def Y_PRAGMA_NO_DEPRECATED
+ *
+ * Cross compiler pragma to disable warnings and errors about deprecated
+ *
+ * @see
+ *     GCC: https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html
+ *     Clang: https://clang.llvm.org/docs/DiagnosticsReference.html#wdeprecated
+ *     MSVC: https://docs.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warning-level-3-c4996?view=vs-2017
+ *
+ * @code
+ * Y_PRAGMA_DIAGNOSTIC_PUSH
+ * Y_PRAGMA_NO_DEPRECATED
+ *
+ * [deprecated] void foo() {
+ *     // ...
+ * }
+ *
+ * int main() {
+ *     foo();
+ *     return 0;
+ * }
+ *
+ * Y_PRAGMA_DIAGNOSTIC_POP
+ * @endcode
+ */
 #if defined(__clang__) || defined(__GNUC__)
     #define Y_PRAGMA_NO_DEPRECATED \
         Y_PRAGMA("GCC diagnostic ignored \"-Wdeprecated\"")
-#elif defined(_MSC_VER) 
+#elif defined(_MSC_VER)
     #define Y_PRAGMA_NO_DEPRECATED \
         Y_PRAGMA(warning(disable : 4996))
-#else 
+#else
     #define Y_PRAGMA_NO_DEPRECATED
-#endif 
- 
+#endif
+
 // Memory sanitizer sometimes doesn't correctly set parameter shadow of constant functions.
 #if (defined(__clang__) || defined(__GNUC__)) && !defined(_msan_enabled_)
     /**
@@ -584,23 +584,23 @@ _YandexAbort();
 #if !defined(Y_PURE_FUNCTION)
     #define Y_PURE_FUNCTION
 #endif
- 
-/** 
- * @ def Y_HAVE_INT128 
- * 
- * Defined when the compiler supports __int128 extension 
- * 
- * @code 
- * 
- * #if defined(Y_HAVE_INT128) 
- *     __int128 myVeryBigInt = 12345678901234567890; 
- * #endif 
- * 
- * @endcode 
- */ 
-#if defined(__SIZEOF_INT128__) 
+
+/**
+ * @ def Y_HAVE_INT128
+ *
+ * Defined when the compiler supports __int128 extension
+ *
+ * @code
+ *
+ * #if defined(Y_HAVE_INT128)
+ *     __int128 myVeryBigInt = 12345678901234567890;
+ * #endif
+ *
+ * @endcode
+ */
+#if defined(__SIZEOF_INT128__)
     #define Y_HAVE_INT128 1
-#endif 
+#endif
 
 /**
  * XRAY macro must be passed to compiler if XRay is enabled.

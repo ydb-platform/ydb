@@ -78,7 +78,7 @@ void TMonService2::OutputIndexBody(IOutputStream& out) {
 }
 
 void TMonService2::ServeRequest(IOutputStream& out, const NMonitoring::IHttpRequest& request) {
-    TString path = request.GetPath(); 
+    TString path = request.GetPath();
     Y_VERIFY(path.StartsWith('/'));
 
     if (AuthProvider_) {
@@ -112,15 +112,15 @@ void TMonService2::Register(TMonPagePtr page) {
     IndexMonPage->Register(std::move(page));
 }
 
-TIndexMonPage* TMonService2::RegisterIndexPage(const TString& path, const TString& title) { 
+TIndexMonPage* TMonService2::RegisterIndexPage(const TString& path, const TString& title) {
     return IndexMonPage->RegisterIndexPage(path, title);
 }
 
-IMonPage* TMonService2::FindPage(const TString& relativePath) { 
+IMonPage* TMonService2::FindPage(const TString& relativePath) {
     return IndexMonPage->FindPage(relativePath);
 }
 
-TIndexMonPage* TMonService2::FindIndexPage(const TString& relativePath) { 
+TIndexMonPage* TMonService2::FindIndexPage(const TString& relativePath) {
     return IndexMonPage->FindIndexPage(relativePath);
 }
 

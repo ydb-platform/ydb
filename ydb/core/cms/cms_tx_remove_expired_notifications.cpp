@@ -20,7 +20,7 @@ public:
         TInstant now = ctx.Now();
         for (auto entry = Self->State->Notifications.begin(); entry != Self->State->Notifications.end();) {
             auto &info = entry->second;
-            TInstant time = TInstant::MicroSeconds(info.Notification.GetTime()); 
+            TInstant time = TInstant::MicroSeconds(info.Notification.GetTime());
             bool modified = false;
 
             auto next = entry;
@@ -28,7 +28,7 @@ public:
 
             auto *actions = info.Notification.MutableActions();
             for (auto i = actions->begin(); i != actions->end(); ) {
-                TInstant deadline = time + TDuration::MicroSeconds(i->GetDuration()); 
+                TInstant deadline = time + TDuration::MicroSeconds(i->GetDuration());
 
                 if (deadline <= now) {
                     LOG_INFO(ctx, NKikimrServices::CMS, "Removing expired action from notification %s: %s",

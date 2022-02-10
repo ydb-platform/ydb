@@ -217,7 +217,7 @@ namespace NInterconnect {
                 // put item into timeout queue
                 PutTimeoutQueueItem(ctx, id);
 
-                const TDuration duration = TDuration::MicroSeconds(Params.IntervalMin.GetValue() + 
+                const TDuration duration = TDuration::MicroSeconds(Params.IntervalMin.GetValue() +
                     RandomNumber(Params.IntervalMax.GetValue() - Params.IntervalMin.GetValue() + 1));
                 if (Params.SoftLoad) {
                     NextMessageTimestamp += duration;

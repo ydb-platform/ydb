@@ -103,7 +103,7 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonHiveInfo> {
-    static TString GetSchema() { 
+    static TString GetSchema() {
         TStringStream stream;
         TProtoToJson::ProtoToJsonSchema<TEvHive::TEvResponseHiveInfo::ProtoRecordType>(stream);
         return stream.Str();
@@ -112,7 +112,7 @@ struct TJsonRequestSchema<TJsonHiveInfo> {
 
 template <>
 struct TJsonRequestParameters<TJsonHiveInfo> {
-    static TString GetParameters() { 
+    static TString GetParameters() {
         return R"___([{"name":"hive_id","in":"query","description":"hive identifier (tablet id)","required":true,"type":"string"},
                       {"name":"tablet_id","in":"query","description":"tablet id filter","required":false,"type":"string"},
                       {"name":"tablet_type","in":"query","description":"tablet type filter","required":false,"type":"string"},
@@ -126,14 +126,14 @@ struct TJsonRequestParameters<TJsonHiveInfo> {
 
 template <>
 struct TJsonRequestSummary<TJsonHiveInfo> {
-    static TString GetSummary() { 
+    static TString GetSummary() {
         return "\"Hive information\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonHiveInfo> {
-    static TString GetDescription() { 
+    static TString GetDescription() {
         return "\"Returns information about tablets from Hive\"";
     }
 };

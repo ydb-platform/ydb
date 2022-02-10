@@ -67,7 +67,7 @@ double TDigest::GetThreshold(double q) {
     return 4 * N * Delta * q * (1 - q);
 }
 
-void TDigest::MergeCentroid(TVector<TCentroid>& merged, double& sum, const TCentroid& centroid) { 
+void TDigest::MergeCentroid(TVector<TCentroid>& merged, double& sum, const TCentroid& centroid) {
     if (merged.empty()) {
         merged.push_back(centroid);
         sum += centroid.Count;
@@ -155,7 +155,7 @@ double TDigest::GetPercentile(double percentile) {
     return Centroids.back().Mean;
 }
 
-TString TDigest::Serialize() { 
+TString TDigest::Serialize() {
     Compress();
     NTDigest::TDigest digest;
     digest.SetDelta(Delta);

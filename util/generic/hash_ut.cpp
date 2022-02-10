@@ -61,7 +61,7 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestTupleHash);
     UNIT_TEST_SUITE_END();
 
-    using hmset = THashMultiSet<char, hash<char>, TEqualTo<char>>; 
+    using hmset = THashMultiSet<char, hash<char>, TEqualTo<char>>;
 
 protected:
     void TestHMapConstructorsAndAssignments();
@@ -115,7 +115,7 @@ protected:
 UNIT_TEST_SUITE_REGISTRATION(THashTest);
 
 void THashTest::TestHMapConstructorsAndAssignments() {
-    using container = THashMap<TString, int>; 
+    using container = THashMap<TString, int>;
 
     container c1;
     c1["one"] = 1;
@@ -166,7 +166,7 @@ void THashTest::TestHMapConstructorsAndAssignments() {
 }
 
 void THashTest::TestHMap1() {
-    using maptype = THashMap<char, TString, THash<char>, TEqualTo<char>>; 
+    using maptype = THashMap<char, TString, THash<char>, TEqualTo<char>>;
     maptype m;
     // Store mappings between roman numerals and decimals.
     m['l'] = "50";
@@ -182,11 +182,11 @@ void THashTest::TestHMap1() {
     UNIT_ASSERT(m.contains('z'));
 
     UNIT_ASSERT(m.count('z') == 1);
-    auto p = m.insert(std::pair<const char, TString>('c', TString("100"))); 
+    auto p = m.insert(std::pair<const char, TString>('c', TString("100")));
 
     UNIT_ASSERT(p.second);
 
-    p = m.insert(std::pair<const char, TString>('c', TString("100"))); 
+    p = m.insert(std::pair<const char, TString>('c', TString("100")));
     UNIT_ASSERT(!p.second);
 
     //Some iterators compare check, really compile time checks
@@ -203,7 +203,7 @@ void THashTest::TestHMap1() {
 }
 
 void THashTest::TestHMapEqualityOperator() {
-    using container = THashMap<TString, int>; 
+    using container = THashMap<TString, int>;
 
     container base;
     base["one"] = 1;
@@ -226,7 +226,7 @@ void THashTest::TestHMapEqualityOperator() {
 }
 
 void THashTest::TestHMMapEqualityOperator() {
-    using container = THashMultiMap<TString, int>; 
+    using container = THashMultiMap<TString, int>;
     using value = container::value_type;
 
     container base;
@@ -261,7 +261,7 @@ void THashTest::TestHMMapEqualityOperator() {
 }
 
 void THashTest::TestHMMapConstructorsAndAssignments() {
-    using container = THashMultiMap<TString, int>; 
+    using container = THashMultiMap<TString, int>;
 
     container c1;
     c1.insert(container::value_type("one", 1));
@@ -291,7 +291,7 @@ void THashTest::TestHMMapConstructorsAndAssignments() {
 }
 
 void THashTest::TestHMMap1() {
-    using mmap = THashMultiMap<char, int, THash<char>, TEqualTo<char>>; 
+    using mmap = THashMultiMap<char, int, THash<char>, TEqualTo<char>>;
     mmap m;
 
     UNIT_ASSERT(m.count('X') == 0);
@@ -329,7 +329,7 @@ void THashTest::TestHMMap1() {
     UNIT_ASSERT(cite == (mmap::const_iterator)ite);
     UNIT_ASSERT(!(cite != (mmap::const_iterator)ite));
 
-    using HMapType = THashMultiMap<size_t, size_t>; 
+    using HMapType = THashMultiMap<size_t, size_t>;
     HMapType hmap;
 
     //We fill the map to implicitely start a rehash.
@@ -356,7 +356,7 @@ void THashTest::TestHMMap1() {
 }
 
 void THashTest::TestHMMapHas() {
-    using mmap = THashMultiMap<char, int, THash<char>, TEqualTo<char>>; 
+    using mmap = THashMultiMap<char, int, THash<char>, TEqualTo<char>>;
     mmap m;
     m.insert(std::pair<const char, int>('X', 10));
     m.insert(std::pair<const char, int>('X', 20));
@@ -367,7 +367,7 @@ void THashTest::TestHMMapHas() {
 }
 
 void THashTest::TestHSetConstructorsAndAssignments() {
-    using container = THashSet<int>; 
+    using container = THashSet<int>;
 
     container c1;
     c1.insert(100);
@@ -408,7 +408,7 @@ void THashTest::TestHSetConstructorsAndAssignments() {
 }
 
 void THashTest::TestHSetSize() {
-    using container = THashSet<int>; 
+    using container = THashSet<int>;
 
     container c;
     c.insert(100);
@@ -422,7 +422,7 @@ void THashTest::TestHSetSize() {
 }
 
 void THashTest::TestHSet2() {
-    THashSet<int, THash<int>, TEqualTo<int>> s; 
+    THashSet<int, THash<int>, TEqualTo<int>> s;
     auto p = s.insert(42);
     UNIT_ASSERT(p.second);
     UNIT_ASSERT(*(p.first) == 42);
@@ -432,7 +432,7 @@ void THashTest::TestHSet2() {
 }
 
 void THashTest::TestHSetEqualityOperator() {
-    using container = THashSet<int>; 
+    using container = THashSet<int>;
 
     container base;
     base.insert(1);
@@ -458,7 +458,7 @@ void THashTest::TestHSetEqualityOperator() {
 }
 
 void THashTest::TestHMSetConstructorsAndAssignments() {
-    using container = THashMultiSet<int>; 
+    using container = THashMultiSet<int>;
 
     container c1;
     c1.insert(100);
@@ -493,7 +493,7 @@ void THashTest::TestHMSetConstructorsAndAssignments() {
 }
 
 void THashTest::TestHMSetSize() {
-    using container = THashMultiSet<int>; 
+    using container = THashMultiSet<int>;
 
     container c;
     c.insert(100);
@@ -523,7 +523,7 @@ void THashTest::TestHMSet1() {
 }
 
 void THashTest::TestHMSetEqualityOperator() {
-    using container = THashMultiSet<int>; 
+    using container = THashMultiSet<int>;
 
     container base;
     base.insert(1);
@@ -605,7 +605,7 @@ void THashTest::TestHMSetEmplace() {
 }
 
 void THashTest::TestInsertErase() {
-    using hmap = THashMap<TString, size_t, THash<TString>, TEqualTo<TString>>; 
+    using hmap = THashMap<TString, size_t, THash<TString>, TEqualTo<TString>>;
     using val_type = hmap::value_type;
 
     {
@@ -635,10 +635,10 @@ void THashTest::TestInsertErase() {
 
 namespace {
     struct TItem: public TSimpleRefCount<TItem> {
-        const TString Key; 
-        const TString Value; 
+        const TString Key;
+        const TString Value;
 
-        TItem(const TString& key, const TString& value) 
+        TItem(const TString& key, const TString& value)
             : Key(key)
             , Value(value)
         {
@@ -648,26 +648,26 @@ namespace {
     using TItemPtr = TIntrusivePtr<TItem>;
 
     struct TSelectKey {
-        const TString& operator()(const TItemPtr& item) const { 
+        const TString& operator()(const TItemPtr& item) const {
             return item->Key;
         }
     };
 
-    using TItemMapBase = THashTable< 
+    using TItemMapBase = THashTable<
         TItemPtr,
-        TString, 
-        THash<TString>, 
+        TString,
+        THash<TString>,
         TSelectKey,
-        TEqualTo<TString>, 
+        TEqualTo<TString>,
         std::allocator<TItemPtr>>;
 
     struct TItemMap: public TItemMapBase {
         TItemMap()
-            : TItemMapBase(1, THash<TString>(), TEqualTo<TString>()) 
+            : TItemMapBase(1, THash<TString>(), TEqualTo<TString>())
         {
         }
 
-        TItem& Add(const TString& key, const TString& value) { 
+        TItem& Add(const TString& key, const TString& value) {
             insert_ctx ins;
             iterator it = find_i(key, ins);
             if (it == end()) {
@@ -701,13 +701,13 @@ static void EmptyAndInsertTest(typename T::value_type v) {
 }
 
 void THashTest::TestEmpty() {
-    EmptyAndInsertTest<THashSet<int>>(1); 
-    EmptyAndInsertTest<THashMap<int, int>>(std::pair<int, int>(1, 2)); 
-    EmptyAndInsertTest<THashMultiMap<int, int>>(std::pair<int, int>(1, 2)); 
+    EmptyAndInsertTest<THashSet<int>>(1);
+    EmptyAndInsertTest<THashMap<int, int>>(std::pair<int, int>(1, 2));
+    EmptyAndInsertTest<THashMultiMap<int, int>>(std::pair<int, int>(1, 2));
 }
 
 void THashTest::TestDefaultConstructor() {
-    THashSet<int> set; 
+    THashSet<int> set;
 
     UNIT_ASSERT(set.begin() == set.end());
 
@@ -719,18 +719,18 @@ void THashTest::TestDefaultConstructor() {
 
 void THashTest::TestSizeOf() {
     /* This test checks that we don't waste memory when all functors passed to
-     * THashTable are empty. It does rely on knowledge of THashTable internals, 
+     * THashTable are empty. It does rely on knowledge of THashTable internals,
      * so if those change, the test will have to be adjusted accordingly. */
 
     size_t expectedSize = sizeof(uintptr_t) + 3 * sizeof(size_t);
 
-    UNIT_ASSERT_VALUES_EQUAL(sizeof(THashMap<int, int>), expectedSize); 
-    UNIT_ASSERT_VALUES_EQUAL(sizeof(THashMap<std::pair<int, int>, std::pair<int, int>>), expectedSize); 
+    UNIT_ASSERT_VALUES_EQUAL(sizeof(THashMap<int, int>), expectedSize);
+    UNIT_ASSERT_VALUES_EQUAL(sizeof(THashMap<std::pair<int, int>, std::pair<int, int>>), expectedSize);
 }
 
 void THashTest::TestInvariants() {
     std::set<int> reference_set;
-    THashSet<int> set; 
+    THashSet<int> set;
 
     for (int i = 0; i < 1000; i++) {
         set.insert(i);
@@ -775,7 +775,7 @@ struct TAllocatorCounters {
 
     size_t Allocations;
     size_t Deallocations;
-    TSet<std::pair<void*, size_t>> Chunks; 
+    TSet<std::pair<void*, size_t>> Chunks;
 };
 
 template <class T>
@@ -834,7 +834,7 @@ private:
 void THashTest::TestAllocation() {
     TAllocatorCounters counters;
 
-    using int_set = THashSet<int, THash<int>, TEqualTo<int>, TCountingAllocator<int>>; 
+    using int_set = THashSet<int, THash<int>, TEqualTo<int>, TCountingAllocator<int>>;
 
     {
         int_set set0(&counters);
@@ -881,14 +881,14 @@ public:
 };
 
 void THashTest::TestInsertCopy() {
-    THashMap<int, int> hash; 
+    THashMap<int, int> hash;
 
     /* Insertion should not make copies of the provided key. */
     hash[TNonCopyableInt<0>(0)] = 0;
 }
 
 void THashTest::TestEmplace() {
-    using hash_t = THashMap<int, TNonCopyableInt<0>>; 
+    using hash_t = THashMap<int, TNonCopyableInt<0>>;
     hash_t hash;
     hash.emplace(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0));
     auto it = hash.find(1);
@@ -896,7 +896,7 @@ void THashTest::TestEmplace() {
 }
 
 void THashTest::TestEmplaceNoresize() {
-    using hash_t = THashMap<int, TNonCopyableInt<0>>; 
+    using hash_t = THashMap<int, TNonCopyableInt<0>>;
     hash_t hash;
     hash.reserve(1);
     hash.emplace_noresize(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0));
@@ -905,7 +905,7 @@ void THashTest::TestEmplaceNoresize() {
 }
 
 void THashTest::TestEmplaceDirect() {
-    using hash_t = THashMap<int, TNonCopyableInt<0>>; 
+    using hash_t = THashMap<int, TNonCopyableInt<0>>;
     hash_t hash;
     hash_t::insert_ctx ins;
     hash.find(1, ins);
@@ -981,7 +981,7 @@ void THashTest::TestTryEmplaceCopyKey() {
 }
 
 void THashTest::TestHMMapEmplace() {
-    using hash_t = THashMultiMap<int, TNonCopyableInt<0>>; 
+    using hash_t = THashMultiMap<int, TNonCopyableInt<0>>;
     hash_t hash;
     hash.emplace(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0));
     auto it = hash.find(1);
@@ -989,7 +989,7 @@ void THashTest::TestHMMapEmplace() {
 }
 
 void THashTest::TestHMMapEmplaceNoresize() {
-    using hash_t = THashMultiMap<int, TNonCopyableInt<0>>; 
+    using hash_t = THashMultiMap<int, TNonCopyableInt<0>>;
     hash_t hash;
     hash.reserve(1);
     hash.emplace_noresize(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(0));
@@ -998,7 +998,7 @@ void THashTest::TestHMMapEmplaceNoresize() {
 }
 
 void THashTest::TestHMMapEmplaceDirect() {
-    using hash_t = THashMultiMap<int, TNonCopyableInt<0>>; 
+    using hash_t = THashMultiMap<int, TNonCopyableInt<0>>;
     hash_t hash;
     hash_t::insert_ctx ins;
     hash.find(1, ins);
@@ -1008,7 +1008,7 @@ void THashTest::TestHMMapEmplaceDirect() {
 }
 
 void THashTest::TestHSetEmplace() {
-    using hash_t = THashSet<TNonCopyableInt<0>, THash<int>, TEqualTo<int>>; 
+    using hash_t = THashSet<TNonCopyableInt<0>, THash<int>, TEqualTo<int>>;
     hash_t hash;
     UNIT_ASSERT(!hash.contains(0));
     hash.emplace(0);
@@ -1017,7 +1017,7 @@ void THashTest::TestHSetEmplace() {
 }
 
 void THashTest::TestHSetEmplaceNoresize() {
-    using hash_t = THashSet<TNonCopyableInt<0>, THash<int>, TEqualTo<int>>; 
+    using hash_t = THashSet<TNonCopyableInt<0>, THash<int>, TEqualTo<int>>;
     hash_t hash;
     hash.reserve(1);
     UNIT_ASSERT(!hash.contains(0));
@@ -1027,7 +1027,7 @@ void THashTest::TestHSetEmplaceNoresize() {
 }
 
 void THashTest::TestHSetEmplaceDirect() {
-    using hash_t = THashSet<TNonCopyableInt<0>, THash<int>, TEqualTo<int>>; 
+    using hash_t = THashSet<TNonCopyableInt<0>, THash<int>, TEqualTo<int>>;
     hash_t hash;
     UNIT_ASSERT(!hash.contains(0));
     hash_t::insert_ctx ins;
@@ -1049,7 +1049,7 @@ void THashTest::TestNonCopyable() {
         }
     };
 
-    THashMap<int, TValue> hash; 
+    THashMap<int, TValue> hash;
     hash.emplace(std::piecewise_construct, std::forward_as_tuple(1), std::forward_as_tuple(5));
     auto&& value = hash[1];
     UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(value), 5);
@@ -1058,7 +1058,7 @@ void THashTest::TestNonCopyable() {
 }
 
 void THashTest::TestValueInitialization() {
-    THashMap<int, int> hash; 
+    THashMap<int, int> hash;
 
     int& value = hash[0];
 
@@ -1070,21 +1070,21 @@ void THashTest::TestAssignmentClear() {
     /* This one tests that assigning an empty hash resets the buckets array.
      * See operator= for details. */
 
-    THashMap<int, int> hash; 
+    THashMap<int, int> hash;
     size_t emptyBucketCount = hash.bucket_count();
 
     for (int i = 0; i < 100; i++) {
         hash[i] = i;
     }
 
-    hash = THashMap<int, int>(); 
+    hash = THashMap<int, int>();
 
     UNIT_ASSERT_VALUES_EQUAL(hash.bucket_count(), emptyBucketCount);
 }
 
 void THashTest::TestReleaseNodes() {
     TAllocatorCounters counters;
-    using TIntSet = THashSet<int, THash<int>, TEqualTo<int>, TCountingAllocator<int>>; 
+    using TIntSet = THashSet<int, THash<int>, TEqualTo<int>, TCountingAllocator<int>>;
 
     TIntSet set(&counters);
     for (int i = 0; i < 3; i++) {
@@ -1127,10 +1127,10 @@ void THashTest::TestAt() {
         }                                                                                                                                                  \
     }
 
-    TEST_AT_THROWN_EXCEPTION(TString, TString, TString, "111", "111"); 
-    TEST_AT_THROWN_EXCEPTION(TString, TString, const TString, "111", "111"); 
-    TEST_AT_THROWN_EXCEPTION(TString, TString, TStringBuf, "111", "111"); 
-    TEST_AT_THROWN_EXCEPTION(TString, TString, const TStringBuf, "111", "111"); 
+    TEST_AT_THROWN_EXCEPTION(TString, TString, TString, "111", "111");
+    TEST_AT_THROWN_EXCEPTION(TString, TString, const TString, "111", "111");
+    TEST_AT_THROWN_EXCEPTION(TString, TString, TStringBuf, "111", "111");
+    TEST_AT_THROWN_EXCEPTION(TString, TString, const TStringBuf, "111", "111");
     TEST_AT_THROWN_EXCEPTION(TStringBuf, TStringBuf, const char*, "111", "111");
     TEST_AT_THROWN_EXCEPTION(int, int, short, 11, "11");
     TEST_AT_THROWN_EXCEPTION(int, int, int, -1, "-1");
@@ -1142,36 +1142,36 @@ void THashTest::TestAt() {
     TEST_AT_THROWN_EXCEPTION(int, int, unsigned long long, 1000000000000ll, "1000000000000");
 
     char key[] = {11, 12, 0, 1, 2, 11, 0};
-    TEST_AT_THROWN_EXCEPTION(TString, TString, char*, key, "\\x0B\\x0C"); 
+    TEST_AT_THROWN_EXCEPTION(TString, TString, char*, key, "\\x0B\\x0C");
     TEST_AT_THROWN_EXCEPTION(TString, TString, TStringBuf, TStringBuf(key, sizeof(key) - 1), "\\x0B\\x0C\\0\\1\\2\\x0B");
 
 #undef TEST_AT_THROWN_EXCEPTION
 }
 
 void THashTest::TestHMapInitializerList() {
-    THashMap<TString, TString> h1 = {{"foo", "bar"}, {"bar", "baz"}, {"baz", "qux"}}; 
-    THashMap<TString, TString> h2; 
-    h2.insert(std::pair<TString, TString>("foo", "bar")); 
-    h2.insert(std::pair<TString, TString>("bar", "baz")); 
-    h2.insert(std::pair<TString, TString>("baz", "qux")); 
+    THashMap<TString, TString> h1 = {{"foo", "bar"}, {"bar", "baz"}, {"baz", "qux"}};
+    THashMap<TString, TString> h2;
+    h2.insert(std::pair<TString, TString>("foo", "bar"));
+    h2.insert(std::pair<TString, TString>("bar", "baz"));
+    h2.insert(std::pair<TString, TString>("baz", "qux"));
     UNIT_ASSERT_EQUAL(h1, h2);
 }
 
 void THashTest::TestHMMapInitializerList() {
-    THashMultiMap<TString, TString> h1 = { 
+    THashMultiMap<TString, TString> h1 = {
         {"foo", "bar"},
         {"foo", "baz"},
         {"baz", "qux"}};
-    THashMultiMap<TString, TString> h2; 
-    h2.insert(std::pair<TString, TString>("foo", "bar")); 
-    h2.insert(std::pair<TString, TString>("foo", "baz")); 
-    h2.insert(std::pair<TString, TString>("baz", "qux")); 
+    THashMultiMap<TString, TString> h2;
+    h2.insert(std::pair<TString, TString>("foo", "bar"));
+    h2.insert(std::pair<TString, TString>("foo", "baz"));
+    h2.insert(std::pair<TString, TString>("baz", "qux"));
     UNIT_ASSERT_EQUAL(h1, h2);
 }
 
 void THashTest::TestHSetInitializerList() {
-    THashSet<TString> h1 = {"foo", "bar", "baz"}; 
-    THashSet<TString> h2; 
+    THashSet<TString> h1 = {"foo", "bar", "baz"};
+    THashSet<TString> h2;
     h2.insert("foo");
     h2.insert("bar");
     h2.insert("baz");
@@ -1179,8 +1179,8 @@ void THashTest::TestHSetInitializerList() {
 }
 
 void THashTest::TestHMSetInitializerList() {
-    THashMultiSet<TString> h1 = {"foo", "foo", "bar", "baz"}; 
-    THashMultiSet<TString> h2; 
+    THashMultiSet<TString> h1 = {"foo", "foo", "bar", "baz"};
+    THashMultiSet<TString> h2;
     h2.insert("foo");
     h2.insert("foo");
     h2.insert("bar");
@@ -1213,20 +1213,20 @@ void Out<TFoo>(IOutputStream& o, const TFoo& v) {
 
 void THashTest::TestHSetInsertInitializerList() {
     {
-        const THashSet<int> x = {1}; 
-        THashSet<int> y; 
+        const THashSet<int> x = {1};
+        THashSet<int> y;
         y.insert({1});
         UNIT_ASSERT_VALUES_EQUAL(x, y);
     }
     {
-        const THashSet<int> x = {1, 2}; 
-        THashSet<int> y; 
+        const THashSet<int> x = {1, 2};
+        THashSet<int> y;
         y.insert({1, 2});
         UNIT_ASSERT_VALUES_EQUAL(x, y);
     }
     {
-        const THashSet<int> x = {1, 2, 3, 4, 5}; 
-        THashSet<int> y; 
+        const THashSet<int> x = {1, 2, 3, 4, 5};
+        THashSet<int> y;
         y.insert({
             1,
             2,
@@ -1237,14 +1237,14 @@ void THashTest::TestHSetInsertInitializerList() {
         UNIT_ASSERT_VALUES_EQUAL(x, y);
     }
     {
-        const THashSet<TFoo> x = {{1, 2}}; 
-        THashSet<TFoo> y; 
+        const THashSet<TFoo> x = {{1, 2}};
+        THashSet<TFoo> y;
         y.insert({{1, 2}});
         UNIT_ASSERT_VALUES_EQUAL(x, y);
     }
     {
-        const THashSet<TFoo> x = {{1, 2}, {3, 4}}; 
-        THashSet<TFoo> y; 
+        const THashSet<TFoo> x = {{1, 2}, {3, 4}};
+        THashSet<TFoo> y;
         y.insert({{1, 2}, {3, 4}});
         UNIT_ASSERT_VALUES_EQUAL(x, y);
     }

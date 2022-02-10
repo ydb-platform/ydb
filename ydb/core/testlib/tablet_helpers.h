@@ -44,15 +44,15 @@ namespace NKikimr {
     i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val);
     bool SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow);
 
-    const TString INITIAL_TEST_DISPATCH_NAME = "Trace"; 
+    const TString INITIAL_TEST_DISPATCH_NAME = "Trace";
 
-    void RunTestWithReboots(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory, 
-        std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc, 
+    void RunTestWithReboots(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory,
+        std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc,
         ui32 selectedReboot = Max<ui32>(), ui64 selectedTablet = Max<ui64>(), ui32 bucket = 0, ui32 totalBuckets = 0, bool killOnCommit = false);
 
     // Resets pipe when receiving client events
     void RunTestWithPipeResets(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory,
-        std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc, 
+        std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc,
         ui32 selectedReboot = Max<ui32>(), ui32 bucket = 0, ui32 totalBuckets = 0);
 
     struct TRunWithDelaysConfig {
@@ -67,8 +67,8 @@ namespace NKikimr {
         {}
     };
 
-    void RunTestWithDelays(const TRunWithDelaysConfig& config, const TVector<ui64>& tabletIds, 
-        std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc); 
+    void RunTestWithDelays(const TRunWithDelaysConfig& config, const TVector<ui64>& tabletIds,
+        std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc);
 
     class ITabletScheduledEventsGuard {
     public:
@@ -129,8 +129,8 @@ namespace NKikimr {
     };
 
     struct TFakeHiveState : TThrRefBase {
-        TMap<std::pair<ui64, ui64>, TFakeHiveTabletInfo> Tablets; 
-        TMap<ui64, std::pair<ui64, ui64>> TabletIdToOwner; 
+        TMap<std::pair<ui64, ui64>, TFakeHiveTabletInfo> Tablets;
+        TMap<ui64, std::pair<ui64, ui64>> TabletIdToOwner;
         TMap<ui64, ui64> TabletIdToHive;
         ui64 NextTabletId;
         ui64 NextHiveNextTabletId;

@@ -181,7 +181,7 @@ void SetupServices(TTestActorRuntime &runtime) {
         str << "        }" << Endl;
         str << "    }" << Endl;
         str << "}";
-        TString staticConfig(str.Str()); 
+        TString staticConfig(str.Str());
 
         SubstGlobal(staticConfig, "$Node1", Sprintf("%" PRIu32, runtime.GetNodeId(0)));
 
@@ -198,7 +198,7 @@ void SetupServices(TTestActorRuntime &runtime) {
 
         if (nodeIndex == 0) {
             static TTempDir tempDir;
-            TString pDiskPath = tempDir() + "/pdisk0.dat"; 
+            TString pDiskPath = tempDir() + "/pdisk0.dat";
             nodeWardenConfig->ServiceSet.MutablePDisks(0)->SetPath(pDiskPath);
 
             ui64 pDiskGuid = 1;

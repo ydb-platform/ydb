@@ -75,7 +75,7 @@ TExecTransformerBase::TPrerequisite TExecTransformerBase::RequireFirst() {
 }
 
 TExecTransformerBase::TPrerequisite TExecTransformerBase::RequireAllOf(std::initializer_list<size_t> children) {
-    return [required = TVector<size_t>(children)] (const TExprNode::TPtr& input) { 
+    return [required = TVector<size_t>(children)] (const TExprNode::TPtr& input) {
         TStatus combinedStatus = TStatus::Ok;
         for (size_t i: required) {
             YQL_ENSURE(i < input->ChildrenSize());
@@ -86,7 +86,7 @@ TExecTransformerBase::TPrerequisite TExecTransformerBase::RequireAllOf(std::init
 }
 
 TExecTransformerBase::TPrerequisite TExecTransformerBase::RequireSequenceOf(std::initializer_list<size_t> children) {
-    return [required = TVector<size_t>(children)] (const TExprNode::TPtr& input) -> TStatus { 
+    return [required = TVector<size_t>(children)] (const TExprNode::TPtr& input) -> TStatus {
         for (size_t i: required) {
             YQL_ENSURE(i < input->ChildrenSize());
             auto status = RequireChild(*input, (ui32)i);

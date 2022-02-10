@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
         {
         }
 
-        const TString& GetData() const { 
+        const TString& GetData() const {
             return *Data_;
         }
 

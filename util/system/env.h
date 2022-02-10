@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 /**
  * Search the environment list provided by the host environment for associated variable.
@@ -16,7 +16,7 @@
  * @note        Calls to `GetEnv` and `SetEnv` from different threads must be synchronized.
  * @see         SetEnv
  */
-TString GetEnv(const TString& key, const TString& def = TString()); 
+TString GetEnv(const TString& key, const TString& def = TString());
 
 /**
  * Add or change environment variable provided by the host environment.
@@ -29,4 +29,4 @@ TString GetEnv(const TString& key, const TString& def = TString());
  * @note        Calls to `GetEnv` and `SetEnv` from different threads must be synchronized.
  * @see         GetEnv
  */
-void SetEnv(const TString& key, const TString& value); 
+void SetEnv(const TString& key, const TString& value);

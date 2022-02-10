@@ -25,7 +25,7 @@ static T PseudoRandom(T max = Max<T>()) {
 }
 
 Y_UNIT_TEST_SUITE(TPackedTest) {
-    void TestPackUi32Sub(ui32 v, const TVector<char>& p) { 
+    void TestPackUi32Sub(ui32 v, const TVector<char>& p) {
         TBufferOutput out;
         PackUI32(out, v);
         const TBuffer& buf = out.Buffer();
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TPackedTest) {
 
     Y_UNIT_TEST(TestPackUi32) {
         ui32 v;
-        TVector<char> pv; 
+        TVector<char> pv;
 
         v = 0;
         pv.resize(1);
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(TPackedTest) {
         TBuffer buffer(65536);
 
         char* writePtr = buffer.Data();
-        TVector<ui32> correctNumbers; 
+        TVector<ui32> correctNumbers;
         for (size_t i = 0; i < 1000; ++i) {
             ui32 randNum = NPrivate::PseudoRandom<ui32>();
             correctNumbers.push_back(randNum);
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(TPackedTest) {
         TBuffer buffer(65536);
 
         char* writePtr = buffer.Data();
-        TVector<ui64> correctNumbers; 
+        TVector<ui64> correctNumbers;
         for (size_t i = 0; i < 1000; ++i) {
             ui64 randNum = NPrivate::PseudoRandom<ui64>();
             correctNumbers.push_back(randNum);

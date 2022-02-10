@@ -20,10 +20,10 @@
 #include "strbuf.h"
 #include "string_hash.h"
 
-#if defined(address_sanitizer_enabled) || defined(thread_sanitizer_enabled) 
+#if defined(address_sanitizer_enabled) || defined(thread_sanitizer_enabled)
     #include "hide_ptr.h"
-#endif 
- 
+#endif
+
 template <class TCharType, class TCharTraits, class TAllocator>
 void ResizeUninitialized(std::basic_string<TCharType, TCharTraits, TAllocator>& s, size_t len) {
 #if defined(_YNDX_LIBCXX_ENABLE_STRING_RESIZE_UNINITIALIZED)
@@ -103,12 +103,12 @@ private:
     }
 };
 
-template <class TStringType> 
+template <class TStringType>
 class TBasicCharRef {
 public:
-    using TChar = typename TStringType::TChar; 
+    using TChar = typename TStringType::TChar;
 
-    TBasicCharRef(TStringType& s, size_t pos) 
+    TBasicCharRef(TStringType& s, size_t pos)
         : S_(s)
         , Pos_(pos)
     {
@@ -150,7 +150,7 @@ public:
     TBasicCharRef(const TBasicCharRef&) = default;
 
 private:
-    TStringType& S_; 
+    TStringType& S_;
     size_t Pos_;
 };
 #endif
@@ -294,11 +294,11 @@ public:
 #endif
     }
 
-    inline size_t length() const noexcept { 
+    inline size_t length() const noexcept {
         return ConstRef().length();
     }
 
-    inline const TCharType* data() const noexcept { 
+    inline const TCharType* data() const noexcept {
         return ConstRef().data();
     }
 
@@ -541,7 +541,7 @@ private:
         return 1 + SumLength(r...);
     }
 
-    static constexpr size_t SumLength() noexcept { 
+    static constexpr size_t SumLength() noexcept {
         return 0;
     }
 
@@ -557,11 +557,11 @@ private:
         CopyAll(p + 1, r...);
     }
 
-    static void CopyAll(TCharType*) noexcept { 
+    static void CopyAll(TCharType*) noexcept {
     }
 
 public:
-    inline void clear() noexcept { 
+    inline void clear() noexcept {
 #ifdef TSTRING_IS_STD_STRING
         Storage_.clear();
 #else
@@ -623,7 +623,7 @@ public:
     }
 
     TBasicString& assign(const TCharType* first, const TCharType* last) {
-        return assign(first, last - first); 
+        return assign(first, last - first);
     }
 
     TBasicString& assign(const TCharType* pc, size_t pos, size_t n) {

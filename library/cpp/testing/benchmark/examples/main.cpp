@@ -7,7 +7,7 @@
 #include <util/generic/bt_exception.h>
 
 Y_CPU_BENCHMARK(F, iface) {
-    TVector<size_t> x; 
+    TVector<size_t> x;
 
     x.reserve(iface.Iterations());
 
@@ -23,7 +23,7 @@ Y_CPU_BENCHMARK(EmptyF, iface) {
 Y_CPU_BENCHMARK(AlmostEmptyF, iface) {
     (void)iface;
 
-    TVector<size_t> x; 
+    TVector<size_t> x;
     x.resize(1);
 }
 

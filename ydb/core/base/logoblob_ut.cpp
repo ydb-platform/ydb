@@ -8,7 +8,7 @@ namespace NKikimr {
 
         Y_UNIT_TEST(LogoBlobParse) {
             TLogoBlobID id;
-            TString explanation; 
+            TString explanation;
             bool res = false;
 
             res = TLogoBlobID::Parse(id, "[               0:1:2:0:0:0:0]", explanation);
@@ -74,7 +74,7 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(LogoBlobSort) {
-            TVector<TLogoBlobID> vec; 
+            TVector<TLogoBlobID> vec;
             vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 110, 20));
             vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 109, 21));
             vec.emplace_back(TLogoBlobID(66, 1, 0, 0, 108, 22));
@@ -96,7 +96,7 @@ namespace NKikimr {
             }
 
             // sorted by: TabletId, Channel, Generation, Step, Cookie, BlobSize
-            TString result = 
+            TString result =
             "[42:1:1:0:15:100:0]\n"
             "[42:1:2:0:19:100:0]\n"
             "[42:1:3:0:16:100:0]\n"

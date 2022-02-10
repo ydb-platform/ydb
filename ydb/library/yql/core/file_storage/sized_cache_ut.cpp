@@ -5,7 +5,7 @@
 using namespace NYql;
 
 struct TTestCacheObj: public TSizedCache::ICacheObj {
-    TTestCacheObj(const TString& name, ui64 size) 
+    TTestCacheObj(const TString& name, ui64 size)
         : Name(name)
         , Size(size)
         , Dismissed(false)
@@ -22,7 +22,7 @@ struct TTestCacheObj: public TSizedCache::ICacheObj {
         Dismissed = true;
     }
 
-    TString Name; 
+    TString Name;
     ui64 Size;
     bool Dismissed;
 };

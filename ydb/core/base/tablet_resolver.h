@@ -116,7 +116,7 @@ struct TEvTabletResolver {
             , Actor(actor)
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{EvForward TabletID: " << TabletID;
             str << " Ev: " << (Ev ? Ev->GetBase()->ToString().data() : "nullptr");
@@ -144,7 +144,7 @@ struct TEvTabletResolver {
             , TabletActor(tabletActor)
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{EvTabletProblem TabletID: " << TabletID;
             str << " TabletActor: " << TabletActor.ToString();
@@ -192,7 +192,7 @@ struct TEvTabletResolver {
             , CacheEpoch(cacheEpoch)
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{EvForwardResult Status: " << (ui32)Status;
             str << " TabletID: " << TabletID;

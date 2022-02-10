@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/array_size.h>
 #include <util/system/env.h>
 
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TDirectIOTests) {
 
         // filling file
         // TEMPLATE|TEMPLATE|TEMPLATE|...
-        const auto fileName = TString("test.file"); 
+        const auto fileName = TString("test.file");
         auto&& directIOBuffer = TDirectIOBufferedFile{fileName, RdWr | CreateAlways | mode};
         {
             auto&& output = TRandomAccessFileOutput{directIOBuffer};

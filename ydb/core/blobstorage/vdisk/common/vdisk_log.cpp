@@ -8,7 +8,7 @@ namespace  NKikimr {
     // Log Prefix
     ////////////////////////////////////////////////////////////////////////////
     TString AppendVDiskLogPrefix(const TIntrusivePtr<TVDiskContext> &vctx, const char *c, ...) {
-        TString formatted; 
+        TString formatted;
         va_list params;
         va_start(params, c);
         vsprintf(formatted, c, params);
@@ -16,8 +16,8 @@ namespace  NKikimr {
         return vctx->VDiskLogPrefix + formatted;
     }
 
-    TString AppendVDiskLogPrefix(const TString &prefix, const char *c, ...) { 
-        TString formatted; 
+    TString AppendVDiskLogPrefix(const TString &prefix, const char *c, ...) {
+        TString formatted;
         va_list params;
         va_start(params, c);
         vsprintf(formatted, c, params);

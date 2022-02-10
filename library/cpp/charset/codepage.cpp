@@ -1,4 +1,4 @@
-#include "ci_string.h" 
+#include "ci_string.h"
 #include "wide.h"
 #include "recyr.hh"
 #include "codepage.h"
@@ -9,7 +9,7 @@
 #include <util/system/hi_lo.h>
 #include <util/system/yassert.h>
 #include <util/generic/hash.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/singleton.h>
@@ -128,13 +128,13 @@ const NCodepagePrivate::TCodepagesMap& NCodepagePrivate::TCodepagesMap::Instance
 
 class TCodePageHash {
 private:
-    using TData = THashMap<TStringBuf, ECharset, ci_hash, ci_equal_to>; 
+    using TData = THashMap<TStringBuf, ECharset, ci_hash, ci_equal_to>;
 
     TData Data;
     TMemoryPool Pool;
 
 private:
-    inline void AddNameWithCheck(const TString& name, ECharset code) { 
+    inline void AddNameWithCheck(const TString& name, ECharset code) {
         if (Data.find(name.c_str()) == Data.end()) {
             Data.insert(TData::value_type(Pool.Append(name.data(), name.size() + 1), code));
         } else {
@@ -142,10 +142,10 @@ private:
         }
     }
 
-    inline void AddName(const TString& name, ECharset code) { 
+    inline void AddName(const TString& name, ECharset code) {
         AddNameWithCheck(name, code);
 
-        TString temp = name; 
+        TString temp = name;
         RemoveAll(temp, '-');
         RemoveAll(temp, '_');
         AddNameWithCheck(temp, code);
@@ -163,7 +163,7 @@ public:
     inline TCodePageHash()
         : Pool(20 * 1024) /* Currently used: 17KB. */
     {
-        TString xPrefix = "x-"; 
+        TString xPrefix = "x-";
         const char* name;
 
         for (size_t i = 0; i != CODES_MAX; ++i) {
@@ -285,7 +285,7 @@ void DoDecodeUnknownPlane(TxChar* str, TxChar*& ee, const ECharset enc) {
         TxChar* s = str;
         TxChar* d = str;
 
-        TVector<char> buf; 
+        TVector<char> buf;
 
         size_t read = 0;
         size_t written = 0;
@@ -319,19 +319,19 @@ void DecodeUnknownPlane(wchar32* str, wchar32*& ee, const ECharset enc) {
 }
 
 namespace {
-    class THashSetType: public THashSet<TString> { 
+    class THashSetType: public THashSet<TString> {
     public:
-        inline void Add(const TString& s) { 
+        inline void Add(const TString& s) {
             insert(s);
         }
 
-        inline bool Has(const TString& s) const noexcept { 
+        inline bool Has(const TString& s) const noexcept {
             return find(s) != end();
         }
     };
 }
 
-class TWindowsPrefixesHashSet: public THashSetType { 
+class TWindowsPrefixesHashSet: public THashSetType {
 public:
     inline TWindowsPrefixesHashSet() {
         Add("win");
@@ -345,7 +345,7 @@ public:
     }
 };
 
-class TCpPrefixesHashSet: public THashSetType { 
+class TCpPrefixesHashSet: public THashSetType {
 public:
     inline TCpPrefixesHashSet() {
         Add("microsoft");
@@ -354,7 +354,7 @@ public:
     }
 };
 
-class TIsoPrefixesHashSet: public THashSetType { 
+class TIsoPrefixesHashSet: public THashSetType {
 public:
     inline TIsoPrefixesHashSet() {
         Add("iso");
@@ -363,7 +363,7 @@ public:
     }
 };
 
-class TLatinToIsoHash: public THashMap<const char*, TString, ci_hash, ci_equal_to> { 
+class TLatinToIsoHash: public THashMap<const char*, TString, ci_hash, ci_equal_to> {
 public:
     inline TLatinToIsoHash() {
         insert(value_type("latin1", "iso-8859-1"));
@@ -379,12 +379,12 @@ public:
     }
 };
 
-static inline void NormalizeEncodingPrefixes(TString& enc) { 
+static inline void NormalizeEncodingPrefixes(TString& enc) {
     size_t preflen = enc.find_first_of("0123456789");
-    if (preflen == TString::npos) 
+    if (preflen == TString::npos)
         return;
 
-    TString prefix = enc.substr(0, preflen); 
+    TString prefix = enc.substr(0, preflen);
     for (size_t i = 0; i < prefix.length(); ++i) {
         if (prefix[i] == '-') {
             prefix.remove(i--);
@@ -410,7 +410,7 @@ static inline void NormalizeEncodingPrefixes(TString& enc) {
 
     if (Singleton<TIsoPrefixesHashSet>()->Has(prefix)) {
         if (enc.length() == preflen + 1 || enc.length() == preflen + 2) {
-            TString enccopy = enc.substr(preflen); 
+            TString enccopy = enc.substr(preflen);
             enccopy.prepend("latin");
             const TLatinToIsoHash* latinhash = Singleton<TLatinToIsoHash>();
             TLatinToIsoHash::const_iterator it = latinhash->find(enccopy.data());
@@ -425,7 +425,7 @@ static inline void NormalizeEncodingPrefixes(TString& enc) {
     }
 }
 
-class TEncodingNamesHashSet: public THashSetType { 
+class TEncodingNamesHashSet: public THashSetType {
 public:
     TEncodingNamesHashSet() {
         Add("iso-8859-1");
@@ -492,7 +492,7 @@ ECharset EncodingHintByName(const char* encname) {
         --lastpos;
 
     // Do some normalization
-    TString enc(encname, lastpos - encname + 1); 
+    TString enc(encname, lastpos - encname + 1);
     enc.to_lower();
     for (char* p = enc.begin(); p != enc.end(); ++p) {
         if (*p == ' ' || *p == '=' || *p == '_')

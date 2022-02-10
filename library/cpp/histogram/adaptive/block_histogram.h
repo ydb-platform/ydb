@@ -45,7 +45,7 @@ namespace NKiwiAggr {
         double MinValue;
         double MaxValue;
 
-        TVector<TWeightedValue> Bins; 
+        TVector<TWeightedValue> Bins;
 
     public:
         TBlockHistogram(EHistogramType type, TQualityFunction calcQuality,
@@ -60,7 +60,7 @@ namespace NKiwiAggr {
         virtual void Add(const THistoRec& histoRec);
 
         virtual void Merge(const THistogram& histo, double multiplier);
-        virtual void Merge(const TVector<THistogram>& histogramsToMerge); 
+        virtual void Merge(const TVector<THistogram>& histogramsToMerge);
         virtual void Merge(TVector<IHistogramPtr> histogramsToMerge); // not implemented
 
         virtual void Multiply(double factor);
@@ -123,7 +123,7 @@ namespace NKiwiAggr {
 
     private:
         using TCumulative = std::pair<double, double>; // cumulative sum of (weights, weighted centers)
-        using TCumulatives = TVector<TCumulative>; 
+        using TCumulatives = TVector<TCumulative>;
 
         struct TSplitInfo {
             double profit;

@@ -320,7 +320,7 @@ class TChooseProxyActor : public TActorBootstrapped<TChooseProxyActor>, public N
 
     using TBase = TActorBootstrapped<TChooseProxyActor>;
     THolder<NMsgBusProxy::TBusChooseProxy> Request;
-    THashMap<ui32, TString> NodeNames; 
+    THashMap<ui32, TString> NodeNames;
     THashMap<ui32, TString> NodeDataCenter;
     THashMap<ui32, std::shared_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse>> PerNodeResponse;
 

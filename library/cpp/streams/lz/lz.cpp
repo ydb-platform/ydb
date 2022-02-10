@@ -15,11 +15,11 @@
 #include <contrib/libs/quicklz/quicklz.h>
 #include <contrib/libs/minilzo/minilzo.h>
 
-static inline ui8 HostToLittle(ui8 t) noexcept { 
+static inline ui8 HostToLittle(ui8 t) noexcept {
     return t;
 }
 
-static inline ui8 LittleToHost(ui8 t) noexcept { 
+static inline ui8 LittleToHost(ui8 t) noexcept {
     return t;
 }
 
@@ -53,7 +53,7 @@ public:
         this->Save(BlockSize());
     }
 
-    inline ~TCompressorBase() { 
+    inline ~TCompressorBase() {
     }
 
     inline void Write(const char* buf, size_t len) {
@@ -88,11 +88,11 @@ public:
     }
 
 private:
-    inline void* Block() const noexcept { 
+    inline void* Block() const noexcept {
         return this->AdditionalData();
     }
 
-    inline ui16 BlockSize() const noexcept { 
+    inline ui16 BlockSize() const noexcept {
         return BlockSize_;
     }
 
@@ -200,7 +200,7 @@ public:
         this->InitFromStream(Slave_);
     }
 
-    inline ~TDecompressorBaseImpl() { 
+    inline ~TDecompressorBaseImpl() {
     }
 
     inline size_t Read(void* buf, size_t len) {
@@ -284,7 +284,7 @@ public:
     {
     }
 
-    inline ~TDecompressorBase() { 
+    inline ~TDecompressorBase() {
     }
 };
 
@@ -373,16 +373,16 @@ public:
         Singleton<TInit>();
     }
 
-    inline ~TMiniLzo() { 
+    inline ~TMiniLzo() {
     }
 
-    static inline size_t Hint(size_t len) noexcept { 
+    static inline size_t Hint(size_t len) noexcept {
         // see SEARCH-2043 and, e.g. examples at
         // http://stackoverflow.com/questions/4235019/how-to-get-lzo-to-work-with-a-file-stream
         return len + (len / 16) + 64 + 3;
     }
 
-    static inline bool SaveIncompressibleChunks() noexcept { 
+    static inline bool SaveIncompressibleChunks() noexcept {
         return false;
     }
 };
@@ -392,7 +392,7 @@ const char TMiniLzo::signature[] = "YLZO";
 template <size_t N>
 class TFixedArray {
 public:
-    inline TFixedArray() noexcept { 
+    inline TFixedArray() noexcept {
         memset(WorkMem_, 0, sizeof(WorkMem_));
     }
 
@@ -434,7 +434,7 @@ class TFastLZ {
 public:
     static const char signature[];
 
-    static inline size_t Hint(size_t len) noexcept { 
+    static inline size_t Hint(size_t len) noexcept {
         return Max<size_t>((size_t)(len * 1.06), 100);
     }
 
@@ -449,7 +449,7 @@ public:
     inline void InitFromStream(IInputStream*) const noexcept {
     }
 
-    static inline bool SaveIncompressibleChunks() noexcept { 
+    static inline bool SaveIncompressibleChunks() noexcept {
         return false;
     }
 };
@@ -466,7 +466,7 @@ class TLZ4 {
 public:
     static const char signature[];
 
-    static inline size_t Hint(size_t len) noexcept { 
+    static inline size_t Hint(size_t len) noexcept {
         return Max<size_t>((size_t)(len * 1.06), 100);
     }
 
@@ -484,7 +484,7 @@ public:
     inline void InitFromStream(IInputStream*) const noexcept {
     }
 
-    static inline bool SaveIncompressibleChunks() noexcept { 
+    static inline bool SaveIncompressibleChunks() noexcept {
         return false;
     }
 };
@@ -501,7 +501,7 @@ class TSnappy {
 public:
     static const char signature[];
 
-    static inline size_t Hint(size_t len) noexcept { 
+    static inline size_t Hint(size_t len) noexcept {
         return Max<size_t>(snappy::MaxCompressedLength(len), 100);
     }
 
@@ -521,7 +521,7 @@ public:
     inline void InitFromStream(IInputStream*) const noexcept {
     }
 
-    static inline bool SaveIncompressibleChunks() noexcept { 
+    static inline bool SaveIncompressibleChunks() noexcept {
         return false;
     }
 };
@@ -538,7 +538,7 @@ class TQuickLZBase {
 public:
     static const char signature[];
 
-    static inline size_t Hint(size_t len) noexcept { 
+    static inline size_t Hint(size_t len) noexcept {
         return len + 500;
     }
 
@@ -560,7 +560,7 @@ public:
         memset(Mem_.Get(), 0, size);
     }
 
-    inline bool SaveIncompressibleChunks() const noexcept { 
+    inline bool SaveIncompressibleChunks() const noexcept {
         // we must save incompressible chunks "as is"
         // after compressor run in streaming mode
         return Table_->Setting(3);
@@ -621,14 +621,14 @@ DEF_DECOMPRESSOR(TLzqDecompress, TQuickLZDecompress)
 namespace {
     template <class T>
     struct TInputHolder {
-        static inline T Set(T t) noexcept { 
+        static inline T Set(T t) noexcept {
             return t;
         }
     };
 
     template <class T>
     struct TInputHolder<TAutoPtr<T>> {
-        inline T* Set(TAutoPtr<T> v) noexcept { 
+        inline T* Set(TAutoPtr<T> v) noexcept {
             V_ = v;
 
             return V_.Get();

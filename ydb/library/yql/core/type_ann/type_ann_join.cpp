@@ -111,7 +111,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        TTypeAnnotationNode::TListType tupleItems(2); 
+        TTypeAnnotationNode::TListType tupleItems(2);
         tupleItems[0] = leftItemType;
         tupleItems[1] = rightItemType;
         if (joinKind == "Right" || joinKind == "Full") {

@@ -31,7 +31,7 @@ void SomeMethod() {
     return;
 #endif
 
-    UNIT_ASSERT(out.Empty() || out.Str().find("SomeMethod") != TString::npos); 
+    UNIT_ASSERT(out.Empty() || out.Str().find("SomeMethod") != TString::npos);
 }
 
 class TBackTraceTest: public TTestBase {

@@ -23,9 +23,9 @@ struct TRequestStat {
     ui64 Writes;
     ui64 GetStatuses;
     ui64 EnqueuedAs;
-    TDeque<ui64> GetLatencies; 
-    TDeque<ui64> PutLatencies; 
-    TDeque<ui64> GetStatusLatencies; 
+    TDeque<ui64> GetLatencies;
+    TDeque<ui64> PutLatencies;
+    TDeque<ui64> GetStatusLatencies;
     TInstant KeyvalueStorageRequestSentAt;
     TInstant LocalBaseTxCreatedAt;
     TInstant IntermediateCreatedAt;

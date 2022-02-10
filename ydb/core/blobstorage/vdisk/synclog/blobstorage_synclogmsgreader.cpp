@@ -11,7 +11,7 @@ namespace NKikimr {
             ForEach(Data, fblob, fblock, fbar, fblock2);
         }
 
-        void TNaiveFragmentReader::ForEach(const TString &d, TReadLogoBlobRec fblob, TReadBlockRec fblock, 
+        void TNaiveFragmentReader::ForEach(const TString &d, TReadLogoBlobRec fblob, TReadBlockRec fblock,
                                            TReadBarrierRec fbar, TReadBlockRecV2 fblock2) {
             const TRecordHdr *begin = (const TRecordHdr *)(d.data());
             const TRecordHdr *end = (const TRecordHdr *)(d.data() + d.size());
@@ -124,7 +124,7 @@ namespace NKikimr {
         bool TOrderedLz4FragmentReader::Decompress() {
             if (!Decompressed) {
                 // remove header from original string
-                TString uncompressed; 
+                TString uncompressed;
                 size_t hdrSize = GetOrderedLz4HeaderSize();
                 TStringBuf d(Data.data() + hdrSize, Data.size() - hdrSize);
                 GetLz4Codec()->Decode(d, uncompressed);
@@ -161,7 +161,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TFragmentReader
         ////////////////////////////////////////////////////////////////////////////
-        TFragmentReader::TFragmentReader(const TString &data) { 
+        TFragmentReader::TFragmentReader(const TString &data) {
             ECodec codec = FragmentCodecDetector(data);
             switch (codec) {
                 case ECodec::Naive:

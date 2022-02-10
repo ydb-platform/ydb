@@ -9,8 +9,8 @@ namespace {
         return new TBlobStorageGroupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 5, numDomains, numFailRealms);
     }
 
-    TVector<TVDiskID> GetVDisks(const TIntrusivePtr<TBlobStorageGroupInfo>& info) { 
-        TVector<TVDiskID> ret; 
+    TVector<TVDiskID> GetVDisks(const TIntrusivePtr<TBlobStorageGroupInfo>& info) {
+        TVector<TVDiskID> ret;
         for (const auto& x : info->GetVDisks()) {
             auto vd = info->GetVDiskId(x.OrderNumber);
             ret.push_back(vd);
@@ -75,11 +75,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
     Y_UNIT_TEST(IterateOverAllDisks) {
         const ui32 numDomains = 8;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
-        TVector<TVDiskID> vdisks = GetVDisks(info); 
+        TVector<TVDiskID> vdisks = GetVDisks(info);
         const TVDiskID& self = vdisks[0];
         TVDiskNeighbors<TPayload> neighbors(self, info->PickTopology());
 
-        THashSet<TVDiskID> temp(vdisks.begin(), vdisks.end()); 
+        THashSet<TVDiskID> temp(vdisks.begin(), vdisks.end());
         for (const auto& item : neighbors) {
             const size_t count = temp.erase(TVDiskID(info->GroupID, info->GroupGeneration, item.VDiskIdShort));
             UNIT_ASSERT_VALUES_EQUAL(count, 1);
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
     Y_UNIT_TEST(CheckRevLookup) {
         const ui32 numDomains = 8;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
-        TVector<TVDiskID> vdisks = GetVDisks(info); 
+        TVector<TVDiskID> vdisks = GetVDisks(info);
         const TVDiskID& self = vdisks[0];
         TVDiskNeighbors<TPayload> neighbors(self, info->PickTopology());
 
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
     Y_UNIT_TEST(CheckIsMyDomain) {
         const ui32 numDomains = 8;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
-        TVector<TVDiskID> vdisks = GetVDisks(info); 
+        TVector<TVDiskID> vdisks = GetVDisks(info);
         const TVDiskID& self = vdisks[0];
         TVDiskNeighbors<TPayload> neighbors(self, info->PickTopology());
 
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncNeighborsTest) {
     Y_UNIT_TEST(SerDes) {
         const ui32 numDomains = 8;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroup(numDomains, 2);
-        TVector<TVDiskID> vdisks = GetVDisks(info); 
+        TVector<TVDiskID> vdisks = GetVDisks(info);
         const TVDiskID& self = vdisks[0];
         TVDiskNeighborsSerializable<TPayload> neighbors(self, info->PickTopology());
 

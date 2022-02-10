@@ -35,7 +35,7 @@ class TMemoryUsageInfo : public TThrRefBase
 {
     struct TAllocationInfo {
         ui64 Size;
-        TString Location; 
+        TString Location;
         bool IsDeleted;
     };
 public:
@@ -175,7 +175,7 @@ public:
     }
 
 private:
-    const TString Title_; 
+    const TString Title_;
     ui64 Allocated_;
     ui64 Freed_;
     ui64 Peak_;

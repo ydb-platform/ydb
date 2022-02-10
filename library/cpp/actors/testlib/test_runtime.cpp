@@ -38,7 +38,7 @@ namespace NActors {
     void PrintEvent(TAutoPtr<IEventHandle>& ev, const TTestActorRuntimeBase* runtime) {
         Cerr << "mailbox: " << ev->GetRecipientRewrite().Hint() << ", type: " << Sprintf("%08x", ev->GetTypeRewrite())
             << ", from " << ev->Sender.LocalId();
-        TString name = runtime->GetActorName(ev->Sender); 
+        TString name = runtime->GetActorName(ev->Sender);
         if (!name.empty())
             Cerr << " \"" << name << "\"";
         Cerr << ", to " << ev->GetRecipientRewrite().LocalId();
@@ -473,7 +473,7 @@ namespace NActors {
         , ShouldContinue()
         , CurrentTimestamp(0)
         , DispatchTimeout(DEFAULT_DISPATCH_TIMEOUT)
-        , ReschedulingDelay(TDuration::MicroSeconds(0)) 
+        , ReschedulingDelay(TDuration::MicroSeconds(0))
         , ObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc)
         , ScheduledEventsSelectorFunc(&CollapsedTimeScheduledEventsSelector)
         , EventFilterFunc(&TTestActorRuntimeBase::DefaultFilterFunc)
@@ -588,16 +588,16 @@ namespace NActors {
 
     class TScheduledTreeItem {
     public:
-        TString Name; 
+        TString Name;
         ui64 Count;
-        TVector<TScheduledTreeItem> Children; 
+        TVector<TScheduledTreeItem> Children;
 
-        TScheduledTreeItem(const TString& name) 
+        TScheduledTreeItem(const TString& name)
             : Name(name)
             , Count(0)
         {}
 
-        TScheduledTreeItem* GetItem(const TString& name) { 
+        TScheduledTreeItem* GetItem(const TString& name) {
             TScheduledTreeItem* item = nullptr;
             for (TScheduledTreeItem& i : Children) {
                 if (i.Name == name) {
@@ -621,8 +621,8 @@ namespace NActors {
         void Print(IOutputStream& stream, const TString& prefix) {
             for (auto it = Children.begin(); it != Children.end(); ++it) {
                 bool lastChild = (std::next(it) == Children.end());
-                TString connectionPrefix = lastChild ? "└─ " : "├─ "; 
-                TString subChildPrefix = lastChild ? "   " : "│  "; 
+                TString connectionPrefix = lastChild ? "└─ " : "├─ ";
+                TString subChildPrefix = lastChild ? "   " : "│  ";
                 stream << prefix << connectionPrefix << it->Name << " (" << it->Count << ")\n";
                 it->Print(stream, prefix + subChildPrefix);
             }
@@ -630,7 +630,7 @@ namespace NActors {
 
         void Print(IOutputStream& stream) {
             stream << Name << " (" << Count << ")\n";
-            Print(stream, TString()); 
+            Print(stream, TString());
         }
     };
 
@@ -647,7 +647,7 @@ namespace NActors {
             runtime.ScheduledCount++;
             if (runtime.ScheduledCount > runtime.ScheduledLimit) {
 //                TScheduledTreeItem root("Root");
-//                TVector<TString> path; 
+//                TVector<TString> path;
 //                for (const auto& pr : eventTypes) {
 //                    path.clear();
 //                    path.push_back(runtime.GetActorName(pr.first.first));
@@ -658,7 +658,7 @@ namespace NActors {
 //                    ui64 count = pr.second;
 //                    TScheduledTreeItem* item = &root;
 //                    item->Count += count;
-//                    for (TString name : path) { 
+//                    for (TString name : path) {
 //                        item = item->GetItem(name);
 //                        item->Count += count;
 //                    }
@@ -783,7 +783,7 @@ namespace NActors {
         TGuard<TMutex> guard(Mutex);
         for (ui32 nodeIndex = 0; nodeIndex < NodeCount; ++nodeIndex) {
             TNodeDataBase* node = Nodes[FirstNodeId + nodeIndex].Get();
-            TString explanation; 
+            TString explanation;
             auto status = node->LogSettings->SetLevel(priority, component, explanation);
             if (status) {
                 Y_FAIL("SetLogPriority failed: %s", explanation.c_str());
@@ -1063,7 +1063,7 @@ namespace NActors {
             TTestActorRuntimeBase& Runtime;
         } DispatchContextSetter(*this, localContext);
 
-        TInstant dispatchTime = TInstant::MicroSeconds(0); 
+        TInstant dispatchTime = TInstant::MicroSeconds(0);
         TInstant deadline = dispatchTime + DispatchTimeout;
         const TDuration scheduledEventsInspectInterval = TDuration::MilliSeconds(10);
         TInstant inspectScheduledEventsAt = dispatchTime + scheduledEventsInspectInterval;
@@ -1152,7 +1152,7 @@ namespace NActors {
 
                     isEmpty = true;
                     auto mboxIt = startWithMboxIt;
-                    TDeque<TEventMailboxId> suspectedBoxes; 
+                    TDeque<TEventMailboxId> suspectedBoxes;
                     while (true) {
                         auto& mbox = *mboxIt;
                         bool isIgnored = true;
@@ -1741,12 +1741,12 @@ namespace NActors {
 
     struct TStrandingActorDecoratorContext : public TThrRefBase {
         TStrandingActorDecoratorContext()
-            : Queue(new TQueueType) 
+            : Queue(new TQueueType)
         {
         }
 
-        typedef TOneOneQueueInplace<IEventHandle*, 32> TQueueType; 
-        TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> Queue; 
+        typedef TOneOneQueueInplace<IEventHandle*, 32> TQueueType;
+        TAutoPtr<TQueueType, TQueueType::TPtrCleanDestructor> Queue;
     };
 
     class TStrandingActorDecorator : public TActorBootstrapped<TStrandingActorDecorator> {

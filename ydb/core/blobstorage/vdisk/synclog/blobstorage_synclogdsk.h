@@ -46,18 +46,18 @@ namespace NKikimr {
                 }
             };
 
-            TString ToString() const { 
+            TString ToString() const {
                 return Sprintf("{FirstLsn# %" PRIu64 " OffsInPages# %" PRIu32 " PagesNum# %" PRIu32 "}",
                                FirstLsn, OffsetInPages, PagesNum);
             }
 
-            TString ToShortString() const { 
+            TString ToShortString() const {
                 return Sprintf("{%" PRIu64 " %" PRIu32 " %" PRIu32 "}", FirstLsn, OffsetInPages, PagesNum);
             }
         };
 #pragma pack(pop)
 
-        typedef TVector<TDiskIndexRecord> TDiskIndexRecs; 
+        typedef TVector<TDiskIndexRecord> TDiskIndexRecs;
 
 
         ////////////////////////////////////////////////////////////////////////////
@@ -69,7 +69,7 @@ namespace NKikimr {
         struct TDeltaToDiskRecLog {
             // One write (append) we make to the chunk when swaping mem data to disk
             struct TOneAppend {
-                TOneAppend(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages) 
+                TOneAppend(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages)
                     : ChunkIdx(chunkIdx)
                     , Pages(pages)
                 {}
@@ -78,11 +78,11 @@ namespace NKikimr {
                 void Output(IOutputStream &str) const;
 
                 ui32 ChunkIdx = 0;
-                TVector<TSyncLogPageSnap> Pages; 
+                TVector<TSyncLogPageSnap> Pages;
             };
 
             const ui32 IndexBulk;
-            TVector<TOneAppend> AllAppends; 
+            TVector<TOneAppend> AllAppends;
 
             TDeltaToDiskRecLog(ui32 indexBulk)
                 : IndexBulk(indexBulk)
@@ -128,11 +128,11 @@ namespace NKikimr {
                 Serialize(s);
             }
 
-            TString ToString() const { 
+            TString ToString() const {
                 return Sprintf("%" PRIu32, ChunkIdx);
             }
 
-            void GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
+            void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
                 const bool inserted = chunks.insert(ChunkIdx).second;
                 Y_VERIFY(inserted);
             }
@@ -152,7 +152,7 @@ namespace NKikimr {
 
         class TOneChunkIndex : public TThrRefBase {
         public:
-            TOneChunkIndex(const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk) { 
+            TOneChunkIndex(const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk) {
                 AppendPages(pages, indexBulk, 0);
             }
 
@@ -177,7 +177,7 @@ namespace NKikimr {
                 }
             }
 
-            TString ToString() const { 
+            TString ToString() const {
                 TStringStream s;
                 s << "{";
                 for (const auto &rec: Index) {
@@ -191,7 +191,7 @@ namespace NKikimr {
                 return new TOneChunkIndex(*this);
             }
 
-            void UpdateIndex(const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk); 
+            void UpdateIndex(const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk);
             void OutputHtml(IOutputStream &str) const;
             // returns number of index records
             ui32 Serialize(IOutputStream &s) const;
@@ -208,7 +208,7 @@ namespace NKikimr {
 
             TOneChunkIndex(const TOneChunkIndex &) = default;
             TOneChunkIndex(ui64 lastRealLsn, TDiskIndexRecs &index);
-            void AppendPages(const TVector<TSyncLogPageSnap> &pages, 
+            void AppendPages(const TVector<TSyncLogPageSnap> &pages,
                              ui32 indexBulk,
                              ui32 freePagePos);
         };
@@ -293,7 +293,7 @@ namespace NKikimr {
 
         class TIndexedChunk : public TThrRefBase {
         public:
-            TIndexedChunk(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk) 
+            TIndexedChunk(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk)
                 : ChunkPtr(new TOneChunk(chunkIdx))
                 , IndexPtr(new TOneChunkIndex(pages, indexBulk))
             {}
@@ -323,7 +323,7 @@ namespace NKikimr {
                 return IndexPtr->FreePagePos();
             }
 
-            void UpdateIndex(const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk) { 
+            void UpdateIndex(const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk) {
                 IndexPtr->UpdateIndex(pages, indexBulk);
             }
 
@@ -346,13 +346,13 @@ namespace NKikimr {
 
             void OutputHtml(IOutputStream &str) const;
             static std::pair<TIndexedChunkPtr, const char *> Construct(const char *serialized);
-            TString ToString() const { 
+            TString ToString() const {
                 TStringStream s;
                 s << "{" << ChunkPtr->ToString() << " " << IndexPtr->ToString() << "}";
                 return s.Str();
             }
 
-            void GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
+            void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
                 ChunkPtr->GetOwnedChunks(chunks);
             }
 
@@ -365,7 +365,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TManyIdxChunks
         ////////////////////////////////////////////////////////////////////////////
-        typedef TDeque<TIndexedChunkPtr> TManyIndexedChunks; 
+        typedef TDeque<TIndexedChunkPtr> TManyIndexedChunks;
 
         ////////////////////////////////////////////////////////////////////////////
         // TDiskRecLogSnapshot
@@ -387,7 +387,7 @@ namespace NKikimr {
             }
 
             void OutputHtml(IOutputStream &str) const;
-            TString BoundariesToString() const; 
+            TString BoundariesToString() const;
             ui32 Serialize(IOutputStream &s, const TDeltaToDiskRecLog &delta) const;
             ui32 LastChunkIdx() const;
             ui32 LastChunkFreePagesNum() const;
@@ -570,15 +570,15 @@ namespace NKikimr {
             // returns new LogStartLsn
             ui64 DeleteChunks(ui32 nchunks,
                               std::shared_ptr<IActorNotify> notifier,
-                              TVector<ui32> &chunks); 
-            void UpdateIndex(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages); 
+                              TVector<ui32> &chunks);
+            void UpdateIndex(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages);
             void UpdateIndex(const TDeltaToDiskRecLog &delta);
             // returns number of index records
             ui32 Serialize(IOutputStream &s) const;
             static bool CheckEntryPoint(const char *beg, const char *end);
-            TString BoundariesToString() const; 
-            TString ToString() const; 
-            void GetOwnedChunks(TSet<TChunkIdx>& chunks) const; 
+            TString BoundariesToString() const;
+            TString ToString() const;
+            void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
             // calculate how many chunks adds this memory snapshot to current state
             ui32 HowManyChunksAdds(const TMemRecLogSnapshotPtr &swapSnap) const;
 
@@ -606,7 +606,7 @@ namespace NKikimr {
                 Y_VERIFY_DEBUG(!PrivateEmpty());
                 return ManyIdxChunks.back()->GetLastLsn();
             }
-            void PrivateUpdateIndex(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages); 
+            void PrivateUpdateIndex(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages);
         };
 
     } // NSyncLog

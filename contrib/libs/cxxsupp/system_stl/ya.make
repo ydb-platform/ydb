@@ -4,11 +4,11 @@ WITHOUT_LICENSE_TEXTS()
 
 LICENSE(YandexOpen)
 
-OWNER( 
+OWNER(
     g:contrib
     g:cpp-contrib
     somov
-) 
+)
 
 NO_PLATFORM()
 

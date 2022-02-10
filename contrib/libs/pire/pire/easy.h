@@ -196,7 +196,7 @@ private:
 	
 	void Init(ypair<const char*, const char*> rawPattern, Options options)
 	{
-		TVector<wchar32> pattern; 
+		TVector<wchar32> pattern;
 		options.Encoding().FromLocal(rawPattern.first, rawPattern.second, std::back_inserter(pattern));
 		
 		Lexer lexer(pattern);
@@ -216,7 +216,7 @@ private:
 	static bool BeginsWithCircumflex(const Fsm& fsm)
 	{
 		typedef Fsm::StatesSet Set;
-		TDeque<size_t> queue; 
+		TDeque<size_t> queue;
 		BitSet handled(fsm.Size());
 		
 		queue.push_back(fsm.Initial());
@@ -231,7 +231,7 @@ private:
 				}
 			}
 			
-			TSet<Char> lets = fsm.OutgoingLetters(queue.front()); 
+			TSet<Char> lets = fsm.OutgoingLetters(queue.front());
 			lets.erase(SpecialChar::Epsilon);
 			lets.erase(SpecialChar::BeginMark);
 			if (!lets.empty())

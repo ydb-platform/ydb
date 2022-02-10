@@ -28,10 +28,10 @@ protected:
     ui32 LogLevel; // log settings
     ui32 LogSamplingLevel; // log settings
     ui32 LogSamplingRate; // log settings
-    TString LogFormat;// log settings 
+    TString LogFormat;// log settings
     TString SysLogServiceTag; //unique tags for sys logs
     TString LogFileName; // log file name to initialize file log backend
-    TString ClusterName; // log settings 
+    TString ClusterName; // log settings
 
     ui32 NodeId;
     TString NodeIdValue;
@@ -39,15 +39,15 @@ protected:
     ui32 BusProxyPort;
     NBus::TBusQueueConfig ProxyBusQueueConfig;
     NBus::TBusServerSessionConfig ProxyBusSessionConfig;
-    TVector<ui64> ProxyBindToProxy; 
+    TVector<ui64> ProxyBindToProxy;
     ui32 MonitoringPort;
     TString MonitoringAddress;
     ui32 MonitoringThreads;
-    TString RestartsCountFile; 
-    TString TracePath; 
+    TString RestartsCountFile;
+    TString TracePath;
     size_t CompileInflightLimit; // MiniKQLCompileService
-    TString UDFsDir; 
-    TVector<TString> UDFsPaths; 
+    TString UDFsDir;
+    TVector<TString> UDFsPaths;
     TString HostLabelOverride;
     TString TenantName;
     TString TenantDomain;

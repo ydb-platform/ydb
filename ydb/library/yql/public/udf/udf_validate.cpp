@@ -8,7 +8,7 @@ namespace NUdf {
 #define SWITCH_ENUM_TYPE_TO_STR(name, val) \
     case val: return TStringBuf(#name);
 
-TString ValidateModeAvailables() { 
+TString ValidateModeAvailables() {
     return Join(", ",
         ValidateModeAsStr(EValidateMode::None),
         ValidateModeAsStr(EValidateMode::Lazy),
@@ -24,10 +24,10 @@ TStringBuf ValidateModeAsStr(EValidateMode validateMode) {
     return TStringBuf("unknown");
 }
 
-EValidateMode ValidateModeByStr(const TString& validateModeStr) { 
-    const TString lowerValidateModeStr = to_lower(validateModeStr); 
+EValidateMode ValidateModeByStr(const TString& validateModeStr) {
+    const TString lowerValidateModeStr = to_lower(validateModeStr);
     for (auto val = EValidateMode::None; val < EValidateMode::Max; val = static_cast<EValidateMode>(static_cast<ui8>(val) + 1)) {
-        if (lowerValidateModeStr == to_lower(TString(ValidateModeAsStr(val)))) { 
+        if (lowerValidateModeStr == to_lower(TString(ValidateModeAsStr(val)))) {
             return val;
         }
     }
@@ -42,10 +42,10 @@ TStringBuf ValidatePolicyAsStr(EValidatePolicy validatePolicy) {
     return TStringBuf("unknown");
 }
 
-EValidatePolicy ValidatePolicyByStr(const TString& validatePolicyStr) { 
-    const TString lowerValidatePolicyStr = to_lower(validatePolicyStr); 
+EValidatePolicy ValidatePolicyByStr(const TString& validatePolicyStr) {
+    const TString lowerValidatePolicyStr = to_lower(validatePolicyStr);
     for (auto val = EValidatePolicy::Fail; val < EValidatePolicy::Max; val = static_cast<EValidatePolicy>(static_cast<ui8>(val) + 1)) {
-        if (lowerValidatePolicyStr == to_lower(TString(ValidatePolicyAsStr(val)))) { 
+        if (lowerValidatePolicyStr == to_lower(TString(ValidatePolicyAsStr(val)))) {
             return val;
         }
     }

@@ -89,7 +89,7 @@ namespace NKikimr {
             return HugeBlobMerger;
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{DiskBlobMerger# " << DiskBlobMerger.ToString();
             str << " HugeBlobMerger# " << HugeBlobMerger.ToString() << "}";

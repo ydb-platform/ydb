@@ -3,7 +3,7 @@
 #include <util/generic/yexception.h>
 
 TString Pcre2Pire(const TString& src) {
-    TVector<char> result; 
+    TVector<char> result;
     result.reserve(src.size() + 1);
 
     enum EState {

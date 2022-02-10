@@ -7,8 +7,8 @@ SRCS(
     split_iterator.cpp
 )
 
-PEERDIR( 
+PEERDIR(
     library/cpp/deprecated/kmp
-) 
- 
+)
+
 END()

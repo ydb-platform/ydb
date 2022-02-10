@@ -46,7 +46,7 @@ TSysLogBackend::TSysLogBackend(const char* ident, EFacility facility, int flags)
 #endif
 }
 
-TSysLogBackend::~TSysLogBackend() { 
+TSysLogBackend::~TSysLogBackend() {
 #if defined(_unix_)
     closelog();
 #endif

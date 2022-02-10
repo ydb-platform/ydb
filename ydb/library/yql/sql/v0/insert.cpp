@@ -7,7 +7,7 @@ using namespace NYql;
 
 namespace NSQLTranslationV0 {
 
-static const TMap<ESQLWriteColumnMode, EWriteColumnMode> sqlIntoMode2WriteColumn = { 
+static const TMap<ESQLWriteColumnMode, EWriteColumnMode> sqlIntoMode2WriteColumn = {
     {ESQLWriteColumnMode::InsertInto, EWriteColumnMode::Insert},
     {ESQLWriteColumnMode::InsertOrAbortInto, EWriteColumnMode::InsertOrAbort},
     {ESQLWriteColumnMode::InsertOrIgnoreInto, EWriteColumnMode::InsertOrIgnore},
@@ -21,7 +21,7 @@ static const TMap<ESQLWriteColumnMode, EWriteColumnMode> sqlIntoMode2WriteColumn
 
 class TModifySourceBase: public ISource {
 public:
-    TModifySourceBase(TPosition pos, const TVector<TString>& columnsHint) 
+    TModifySourceBase(TPosition pos, const TVector<TString>& columnsHint)
         : ISource(pos)
         , ColumnsHint(columnsHint)
     {
@@ -33,7 +33,7 @@ public:
         return false;
     }
 
-    bool AddGroupKey(TContext& ctx, const TString& column) override { 
+    bool AddGroupKey(TContext& ctx, const TString& column) override {
         Y_UNUSED(column);
         ctx.Error(Pos) << "Source does not allow grouping";
         return false;
@@ -52,19 +52,19 @@ public:
         return nullptr;
     }
 
-    TNodePtr BuildAggregation(const TString& label) override { 
+    TNodePtr BuildAggregation(const TString& label) override {
         Y_UNUSED(label);
         return nullptr;
     }
 
 protected:
-    TVector<TString> ColumnsHint; 
-    TString OperationHumanName; 
+    TVector<TString> ColumnsHint;
+    TString OperationHumanName;
 };
 
 class TUpdateByValues: public TModifySourceBase {
 public:
-    TUpdateByValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values) 
+    TUpdateByValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values)
         : TModifySourceBase(pos, columnsHint)
         , OperationHumanName(operationHumanName)
         , Values(values)
@@ -89,7 +89,7 @@ public:
 
         auto structObj = Y("AsStruct");
         for (size_t i = 0; i < Values.size(); ++i) {
-            TString column = ColumnsHint[i]; 
+            TString column = ColumnsHint[i];
             TNodePtr value = Values[i];
 
             structObj = L(structObj, Q(Y(Q(column), value)));
@@ -103,15 +103,15 @@ public:
         return new TUpdateByValues(Pos, OperationHumanName, ColumnsHint, CloneContainer(Values));
     }
 private:
-    TString OperationHumanName; 
+    TString OperationHumanName;
 
 protected:
-    TVector<TNodePtr> Values; 
+    TVector<TNodePtr> Values;
 };
 
 class TModifyByValues: public TModifySourceBase {
 public:
-    TModifyByValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values) 
+    TModifyByValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values)
         : TModifySourceBase(pos, columnsHint)
         , OperationHumanName(operationHumanName)
         , Values(values)
@@ -159,7 +159,7 @@ public:
     }
 
     TNodePtr DoClone() const final {
-        TVector<TVector<TNodePtr>> clonedValues; 
+        TVector<TVector<TNodePtr>> clonedValues;
         clonedValues.reserve(Values.size());
         for (auto cur: Values) {
             clonedValues.push_back(CloneContainer(cur));
@@ -168,14 +168,14 @@ public:
     }
 
 private:
-    TString OperationHumanName; 
-    TVector<TVector<TNodePtr>> Values; 
+    TString OperationHumanName;
+    TVector<TVector<TNodePtr>> Values;
     TSourcePtr FakeSource;
 };
 
 class TModifyBySource: public TModifySourceBase {
 public:
-    TModifyBySource(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source) 
+    TModifyBySource(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source)
         : TModifySourceBase(pos, columnsHint)
         , OperationHumanName(operationHumanName)
         , Source(std::move(source))
@@ -246,23 +246,23 @@ public:
     }
 
 private:
-    TString OperationHumanName; 
+    TString OperationHumanName;
     TSourcePtr Source;
 };
 
-TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values) { 
+TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values) {
     return new TModifyByValues(pos, operationHumanName, columnsHint, values);
 }
 
-TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values) { 
+TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values) {
     return new TModifyByValues(pos, operationHumanName, columnsHint, {values});
 }
 
-TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source) { 
+TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source) {
     return new TModifyBySource(pos, operationHumanName, columnsHint, std::move(source));
 }
 
-TSourcePtr BuildUpdateValues(TPosition pos, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values) { 
+TSourcePtr BuildUpdateValues(TPosition pos, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values) {
     return new TUpdateByValues(pos, "UPDATE", columnsHint, values);
 }
 

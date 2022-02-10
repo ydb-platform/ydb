@@ -18,8 +18,8 @@ public:
     {
     }
 
-    TString DebugState = "?"; 
-    TString DebugId = ""; 
+    TString DebugState = "?";
+    TString DebugId = "";
 private:
     void* ThreadProc() noexcept override {
         Scheduler_.WorkerFunc(this);
@@ -150,7 +150,7 @@ bool TTaskScheduler::Add(IRepeatedTaskRef task, TDuration period) {
 
 const bool debugOutput = false;
 
-void TTaskScheduler::ChangeDebugState(TWorkerThread* thread, const TString& state) { 
+void TTaskScheduler::ChangeDebugState(TWorkerThread* thread, const TString& state) {
     if (!debugOutput) {
         Y_UNUSED(thread);
         Y_UNUSED(state);

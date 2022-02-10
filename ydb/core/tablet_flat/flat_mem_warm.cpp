@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NTable {
 
-TString PrintRow(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry) { 
+TString PrintRow(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry) {
     return DbgPrintTuple(row, typeRegistry);
 }
 
@@ -43,7 +43,7 @@ void TMemTable::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& type
     for (it.SeekFirst(); it.IsValid(); it.Next()) {
         TDbTupleRef key(types.data(), it.GetKey(), types.size());
 
-        TString keyStr = PrintRow(key, typeRegistry) + " -> "; 
+        TString keyStr = PrintRow(key, typeRegistry) + " -> ";
         const auto *row = it.GetValue();
         while (row) {
             str << keyStr

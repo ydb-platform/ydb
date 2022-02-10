@@ -60,19 +60,19 @@ public:
     using TCommand = NKikimrKeyValue::ExecuteTransactionRequest::Command;
 
     class TIncrementalKeySet {
-        TMap<TString, TIndexRecord>& Index; 
-        TSet<TString>                AddedKeys; 
-        TSet<TString>                DeletedKeys; 
+        TMap<TString, TIndexRecord>& Index;
+        TSet<TString>                AddedKeys;
+        TSet<TString>                DeletedKeys;
 
         class TIterator {
             TIncrementalKeySet&                  KeySet;
-            TMap<TString, TIndexRecord>::iterator IndexIterator; 
-            TSet<TString>::iterator               AddedKeysIterator; 
-            TSet<TString>::iterator               DeletedKeysIterator; 
+            TMap<TString, TIndexRecord>::iterator IndexIterator;
+            TSet<TString>::iterator               AddedKeysIterator;
+            TSet<TString>::iterator               DeletedKeysIterator;
 
         public:
-            TIterator(TIncrementalKeySet& keySet, TMap<TString, TIndexRecord>::iterator indexIterator, 
-                    TSet<TString>::iterator addedKeysIterator, TSet<TString>::iterator deletedKeysIterator) 
+            TIterator(TIncrementalKeySet& keySet, TMap<TString, TIndexRecord>::iterator indexIterator,
+                    TSet<TString>::iterator addedKeysIterator, TSet<TString>::iterator deletedKeysIterator)
                 : KeySet(keySet)
                 , IndexIterator(indexIterator)
                 , AddedKeysIterator(addedKeysIterator)
@@ -90,7 +90,7 @@ public:
                 return *this;
             }
 
-            const TString& operator*() const { 
+            const TString& operator*() const {
                 if (IndexIterator != KeySet.Index.end() && AddedKeysIterator != KeySet.AddedKeys.end()) {
                     return std::min(IndexIterator->first, *AddedKeysIterator);
                 } else if (IndexIterator != KeySet.Index.end()) {
@@ -102,7 +102,7 @@ public:
                 }
             }
 
-            const TString *operator->() const { 
+            const TString *operator->() const {
                 return &**this;
             }
 
@@ -118,7 +118,7 @@ public:
                         DeletedKeysIterator = KeySet.DeletedKeys.end();
                         break;
                     } else {
-                        const TString& currentKey = **this; 
+                        const TString& currentKey = **this;
                         while (DeletedKeysIterator != KeySet.DeletedKeys.end() && *DeletedKeysIterator < currentKey) {
                             ++DeletedKeysIterator; // FIXME: optimize
                         }
@@ -133,7 +133,7 @@ public:
 
             void MoveNext() {
                 if (IndexIterator != KeySet.Index.end() && AddedKeysIterator != KeySet.AddedKeys.end()) {
-                    const TString& key = std::min(IndexIterator->first, *AddedKeysIterator); 
+                    const TString& key = std::min(IndexIterator->first, *AddedKeysIterator);
                     if (IndexIterator->first == key) {
                         ++IndexIterator;
                     }
@@ -164,7 +164,7 @@ public:
         using iterator = TIterator;
 
     public:
-        TIncrementalKeySet(TMap<TString, TIndexRecord>& index) 
+        TIncrementalKeySet(TMap<TString, TIndexRecord>& index)
             : Index(index)
         {}
 
@@ -173,19 +173,19 @@ public:
             AddedKeys.insert(first, last);
             if (last != first) {
                 --last;
-                TSet<TString>::iterator begin = DeletedKeys.lower_bound(*first); 
-                TSet<TString>::iterator end = DeletedKeys.upper_bound(*last); 
+                TSet<TString>::iterator begin = DeletedKeys.lower_bound(*first);
+                TSet<TString>::iterator end = DeletedKeys.upper_bound(*last);
                 DeletedKeys.erase(begin, end);
             }
         }
 
-        void insert(const TString& key) { 
+        void insert(const TString& key) {
             AddedKeys.insert(key);
             DeletedKeys.erase(key);
         }
 
         void erase(const iterator& iter) {
-            const TString& key = *iter; 
+            const TString& key = *iter;
             DeletedKeys.insert(key);
             AddedKeys.erase(key);
         }
@@ -199,14 +199,14 @@ public:
             }
         }
 
-        iterator find(const TString& key) { 
-            TSet<TString>::iterator deleted = DeletedKeys.lower_bound(key); 
+        iterator find(const TString& key) {
+            TSet<TString>::iterator deleted = DeletedKeys.lower_bound(key);
             if (deleted != DeletedKeys.end() && *deleted == key) {
                 return end();
             }
 
-            TMap<TString, TIndexRecord>::iterator index = Index.lower_bound(key); 
-            TSet<TString>::iterator added = AddedKeys.lower_bound(key); 
+            TMap<TString, TIndexRecord>::iterator index = Index.lower_bound(key);
+            TSet<TString>::iterator added = AddedKeys.lower_bound(key);
 
             if ((index != Index.end() && index->first == key) || (added != AddedKeys.end() && *added == key)) {
                 return TIterator{*this, index, added, deleted};
@@ -223,11 +223,11 @@ public:
             return TIterator{*this, Index.end(), AddedKeys.end(), DeletedKeys.end()};
         }
 
-        iterator lower_bound(const TString& key) { 
+        iterator lower_bound(const TString& key) {
             return TIterator{*this, Index.lower_bound(key), AddedKeys.lower_bound(key), DeletedKeys.lower_bound(key)};
         }
 
-        iterator upper_bound(const TString& key) { 
+        iterator upper_bound(const TString& key) {
             return TIterator{*this, Index.upper_bound(key), AddedKeys.upper_bound(key), DeletedKeys.upper_bound(key)};
         }
     };
@@ -245,9 +245,9 @@ protected:
 
     TVector<TRangeSet> ChannelRangeSets;
     TIndex Index;
-    THashMap<TLogoBlobID, ui32> RefCounts; 
-    TSet<TLogoBlobID> Trash; 
-    TMap<ui64, ui64> InFlightForStep; 
+    THashMap<TLogoBlobID, ui32> RefCounts;
+    TSet<TLogoBlobID> Trash;
+    TMap<ui64, ui64> InFlightForStep;
     THashMap<ui64, TInstant> RequestInputTime;
     ui64 NextRequestUid = 0;
     TIntrusivePtr<TCollectOperation> CollectOperation;
@@ -268,7 +268,7 @@ protected:
     TActorId ChannelBalancerActorId;
     ui64 InitialCollectsSent = 0;
 
-    TDeque<TAutoPtr<TIntermediate>> Queue; 
+    TDeque<TAutoPtr<TIntermediate>> Queue;
     ui64 IntermediatesInFlight;
     ui64 IntermediatesInFlightLimit;
     ui64 RoInlineIntermediatesInFlight;
@@ -410,7 +410,7 @@ public:
     }
 
     void Dereference(const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx);
-    void UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx); 
+    void UpdateKeyValue(const TString& key, const TIndexRecord& record, ISimpleDb& db, const TActorContext& ctx);
     void Dereference(const TLogoBlobID& id, ISimpleDb& db, const TActorContext& ctx, bool initial);
 
     ui32 GetPerGenerationCounter() {
@@ -533,7 +533,7 @@ public:
         THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info, const TActorContext &ctx);
     TPrepareResult InitGetStatusCommand(TIntermediate::TGetStatus &cmd,
         NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info);
-    void ReplyError(const TActorContext &ctx, TString errorDescription, 
+    void ReplyError(const TActorContext &ctx, TString errorDescription,
         NMsgBusProxy::EResponseStatus status, THolder<TIntermediate> &intermediate,
         const TTabletStorageInfo *info = nullptr);
 
@@ -713,7 +713,7 @@ public:
     }
 
 public: // For testing
-    TString Dump() const; 
+    TString Dump() const;
     void VerifyEqualIndex(const TKeyValueState& state) const;
 };
 

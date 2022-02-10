@@ -13,7 +13,7 @@ namespace {
         struct TRequestResult {
             TLogoBlobID LogoBlobId;
             NKikimrProto::EReplyStatus Status;
-            TString Buffer; 
+            TString Buffer;
             TString DebugInfo;
             TVector<TEvBlobStorage::TEvGetResult::TPartMapItem> PartMap;
         };
@@ -77,7 +77,7 @@ namespace {
         TActorSystem *ActorSystem;
 
     public:
-        TMonGetBlobPage(const TString& path, TActorSystem *actorSystem) 
+        TMonGetBlobPage(const TString& path, TActorSystem *actorSystem)
             : IMonPage(path)
             , ActorSystem(actorSystem)
         {}
@@ -88,7 +88,7 @@ namespace {
             // parse HTTP request
             const TCgiParameters& params = request.GetParams();
 
-            auto generateError = [&](const TString& msg) { 
+            auto generateError = [&](const TString& msg) {
                 out << "HTTP/1.1 400 Bad Request\r\n"
                     << "Content-Type: text/plain\r\n"
                     << "Connection: close\r\n"
@@ -104,7 +104,7 @@ namespace {
             }
 
             TLogoBlobID logoBlobId;
-            TString errorExplanation; 
+            TString errorExplanation;
             if (!params.Has("blob")) {
                 return generateError("Missing blob parameter");
             } else if (!TLogoBlobID::Parse(logoBlobId, params.Get("blob"), errorExplanation)) {
@@ -324,7 +324,7 @@ namespace {
 
 } // anon
 
-NMonitoring::IMonPage *CreateMonGetBlobPage(const TString& path, TActorSystem *actorSystem) { 
+NMonitoring::IMonPage *CreateMonGetBlobPage(const TString& path, TActorSystem *actorSystem) {
     return new TMonGetBlobPage(path, actorSystem);
 }
 

@@ -26,7 +26,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
                 TTxId txId = rowset.GetValue<Schema::Transaction::ID>();
                 TTransaction& transaction = transactions[txId];
                 transaction.PlanOnStep = rowset.GetValue<Schema::Transaction::Plan>();
-                TVector<TTabletId> affectedSet = rowset.GetValue<Schema::Transaction::AffectedSet>(); 
+                TVector<TTabletId> affectedSet = rowset.GetValue<Schema::Transaction::AffectedSet>();
                 transaction.AffectedSet.reserve(affectedSet.size());
                 for (TTabletId id : affectedSet)
                     transaction.AffectedSet.insert(id);
@@ -61,8 +61,8 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
             if (errors > 0) {
                 // DB is corrupt. Make a dump and stop
                 const NScheme::TTypeRegistry& tr = *AppData(ctx)->TypeRegistry;
-                TString dbDumpFile = Sprintf("/tmp/coordinator_db_dump_%" PRIu64 ".%" PRIi32, Self->TabletID(), getpid()); 
-                TFixedBufferFileOutput out(dbDumpFile); 
+                TString dbDumpFile = Sprintf("/tmp/coordinator_db_dump_%" PRIu64 ".%" PRIi32, Self->TabletID(), getpid());
+                TFixedBufferFileOutput out(dbDumpFile);
                 txc.DB.DebugDump(out, tr);
                 out.Finish();
                 Cerr << "Coordinator DB dumped to " << dbDumpFile;

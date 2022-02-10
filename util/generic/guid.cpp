@@ -1,6 +1,6 @@
 #include "guid.h"
 #include "ylimits.h"
-#include "string.h" 
+#include "string.h"
 
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
@@ -65,11 +65,11 @@ TGUID TGUID::CreateTimebased() {
     return result;
 }
 
-TString GetGuidAsString(const TGUID& g) { 
+TString GetGuidAsString(const TGUID& g) {
     return g.AsGuidString();
 }
 
-TString CreateGuidAsString() { 
+TString CreateGuidAsString() {
     return TGUID::Create().AsGuidString();
 }
 

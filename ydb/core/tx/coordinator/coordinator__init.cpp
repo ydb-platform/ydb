@@ -8,7 +8,7 @@ namespace NFlatTxCoordinator {
 
 struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
     ui64 Version = 0;
-    TVector<TTabletId> Mediators; 
+    TVector<TTabletId> Mediators;
     TVector<TTabletId> Coordinators;
     ui64 PlanResolution;
     ui64 LastPlanned = 0;
@@ -39,7 +39,7 @@ struct TTxCoordinator::TTxInit : public TTransactionBase<TTxCoordinator> {
 
         while (!rowset.EndOfSet()) {
             const ui64 ver = rowset.GetValue<Schema::DomainConfiguration::Version>();
-            TVector<TTabletId> mediators = rowset.GetValue<Schema::DomainConfiguration::Mediators>(); 
+            TVector<TTabletId> mediators = rowset.GetValue<Schema::DomainConfiguration::Mediators>();
             ui64 resolution = rowset.GetValue<Schema::DomainConfiguration::Resolution>();
 
             if (ver >= Version) {

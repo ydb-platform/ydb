@@ -12,7 +12,7 @@ namespace NColorizer {
         const TColors* C;
         TColorFunc F;
 
-        inline TColorHandle(const TColors* c, TColorFunc f) noexcept 
+        inline TColorHandle(const TColors* c, TColorFunc f) noexcept
             : C(c)
             , F(f)
         {

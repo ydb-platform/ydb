@@ -6,7 +6,7 @@ namespace NFlatTxCoordinator {
 
 struct TTxCoordinator::TTxMonitoring : public TTxCoordinator::TTxConsistencyCheck {
     TActorId ActorToRespond;
-    TString CheckResult; 
+    TString CheckResult;
 
     TTxMonitoring(TSelf* self, const TActorId& actorToRespond)
         : TTxCoordinator::TTxConsistencyCheck(self)

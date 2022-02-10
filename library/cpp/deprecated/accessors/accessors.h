@@ -8,7 +8,7 @@ namespace NAccessors {
  *
  * i.e. this will work:
  *
- * TString t; 
+ * TString t;
  * const char* beg = NAccessors::Begin(t); // t.begin()
  * const char* end = NAccessors::End(t); // t.end()
  * size_t sz = NAccessors::Size(t); // t.size()

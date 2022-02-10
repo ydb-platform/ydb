@@ -10,7 +10,7 @@ namespace NDataShard {
 // Find and return parts that are no longer needed on the target datashard
 class TDataShard::TTxInitiateBorrowedPartsReturn : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
-    THashMap<TLogoBlobID, NTabletFlatExecutor::TCompactedPartLoans> PartsToReturn; 
+    THashMap<TLogoBlobID, NTabletFlatExecutor::TCompactedPartLoans> PartsToReturn;
 
 public:
     TTxInitiateBorrowedPartsReturn(TDataShard* ds)
@@ -29,7 +29,7 @@ public:
 
     void Complete(const TActorContext &ctx) override {
         // group parts by owner tablet
-        THashMap<ui64, TVector<TLogoBlobID>> perTabletParts; 
+        THashMap<ui64, TVector<TLogoBlobID>> perTabletParts;
         for (const auto& p : PartsToReturn) {
             ui64 ownerTabletId = p.second.Lender;
             TLogoBlobID partMeta = p.second.MetaInfoId;
@@ -59,7 +59,7 @@ void TDataShard::CompletedLoansChanged(const TActorContext &ctx) {
 class TDataShard::TTxReturnBorrowedPart : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvReturnBorrowedPart::TPtr Ev;
-    TVector<TLogoBlobID> PartMetaVec; 
+    TVector<TLogoBlobID> PartMetaVec;
     ui64 FromTabletId;
 public:
     TTxReturnBorrowedPart(TDataShard* ds, TEvDataShard::TEvReturnBorrowedPart::TPtr& ev)
@@ -98,7 +98,7 @@ public:
 class TDataShard::TTxReturnBorrowedPartAck : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvDataShard::TEvReturnBorrowedPartAck::TPtr Ev;
-    TVector<TLogoBlobID> PartMetaVec; 
+    TVector<TLogoBlobID> PartMetaVec;
 
 public:
     TTxReturnBorrowedPartAck(TDataShard* ds, TEvDataShard::TEvReturnBorrowedPartAck::TPtr& ev)

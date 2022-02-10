@@ -276,13 +276,13 @@ message TListQueuesRequest {
 }
 
 message TListQueuesResponse {
-    message TQueueType { 
+    message TQueueType {
         optional string QueueName = 1;
         optional string QueueUrl = 2;
     }
     optional TError Error = 1;
     optional string RequestId = 2;
-    repeated TQueueType Queues = 3; 
+    repeated TQueueType Queues = 3;
 }
 
 message TListUsersRequest {

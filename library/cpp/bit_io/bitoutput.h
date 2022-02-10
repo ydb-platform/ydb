@@ -169,7 +169,7 @@ namespace NBitIO {
         }
     };
 
-    using TBitOutputYVector = TBitOutputVector<TVector<char>>; 
+    using TBitOutputYVector = TBitOutputVector<TVector<char>>;
 
     class TBitOutputStreamImpl {
         IOutputStream* Out;

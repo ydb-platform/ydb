@@ -217,7 +217,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             ui64 tableId = rowset.GetValue<Schema::UserTables::Tid>();
             ui32 localTid = rowset.GetValue<Schema::UserTables::LocalTid>();
             ui32 shadowTid = rowset.GetValueOrDefault<Schema::UserTables::ShadowTid>();
-            TString schema = rowset.GetValue<Schema::UserTables::Schema>(); 
+            TString schema = rowset.GetValue<Schema::UserTables::Schema>();
             NKikimrSchemeOp::TTableDescription descr;
             bool parseOk = ParseFromStringNoSizeLimit(descr, schema);
             Y_VERIFY(parseOk);
@@ -253,7 +253,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
 
         while (!rowset.EndOfSet()) {
             ui64 dstTablet = rowset.GetValue<Schema::SplitSrcSnapshots::DstTabletId>();
-            TString snapBody = rowset.GetValue<Schema::SplitSrcSnapshots::SnapshotMeta>(); 
+            TString snapBody = rowset.GetValue<Schema::SplitSrcSnapshots::SnapshotMeta>();
 
             TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot> snapshot = new NKikimrTxDataShard::TEvSplitTransferSnapshot;
             bool parseOk = ParseFromStringNoSizeLimit(*snapshot, snapBody);
@@ -285,7 +285,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     // Split/Merge description on DST
     LOAD_SYS_UI64(db, Schema::Sys_DstSplitOpId, Self->DstSplitOpId);
     {
-        TString splitDescr; 
+        TString splitDescr;
         LOAD_SYS_BYTES(db, Schema::Sys_DstSplitDescription, splitDescr);
         if (!splitDescr.empty()) {
             Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();
@@ -339,7 +339,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
     // Split/Merge description on SRC
     LOAD_SYS_UI64(db, Schema::Sys_SrcSplitOpId, Self->SrcSplitOpId);
     {
-        TString splitDescr; 
+        TString splitDescr;
         LOAD_SYS_BYTES(db, Schema::Sys_SrcSplitDescription, splitDescr);
         if (!splitDescr.empty()) {
             Self->SrcSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>();

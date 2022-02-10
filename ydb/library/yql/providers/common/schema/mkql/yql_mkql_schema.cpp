@@ -287,7 +287,7 @@ struct TRuntimeTypeLoader {
     TMaybe<TType> LoadVariantType(TType underlyingType, ui32 /*level*/) {
         return Builder.NewVariantType(underlyingType);
     }
-    void Error(const TString& info) { 
+    void Error(const TString& info) {
         Err << info;
     }
 };

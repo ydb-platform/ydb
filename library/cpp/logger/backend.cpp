@@ -7,7 +7,7 @@
 namespace {
     class TGlobalLogsStorage {
     private:
-        TVector<TLogBackend*> Backends; 
+        TVector<TLogBackend*> Backends;
         TMutex Mutex;
 
     public:
@@ -50,11 +50,11 @@ ELogPriority TLogBackend::FiltrationLevel() const {
     return LOG_MAX_PRIORITY;
 }
 
-TLogBackend::TLogBackend() noexcept { 
+TLogBackend::TLogBackend() noexcept {
     Singleton<TGlobalLogsStorage>()->Register(this);
 }
 
-TLogBackend::~TLogBackend() { 
+TLogBackend::~TLogBackend() {
     Singleton<TGlobalLogsStorage>()->UnRegister(this);
 }
 

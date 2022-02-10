@@ -1020,7 +1020,7 @@ private:
     }
 
 public:
-    TString DebugString() const { 
+    TString DebugString() const {
         return TypeName<TDerived>();
     }
 

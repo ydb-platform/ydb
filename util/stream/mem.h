@@ -15,7 +15,7 @@
  */
 class TMemoryInput: public IZeroCopyInputFastReadTo {
 public:
-    TMemoryInput() noexcept; 
+    TMemoryInput() noexcept;
 
     /**
      * Constructs a stream that reads from the provided memory block. It's up
@@ -25,29 +25,29 @@ public:
      * @param buf                       Memory block to use.
      * @param len                       Size of the memory block.
      */
-    TMemoryInput(const void* buf, size_t len) noexcept; 
+    TMemoryInput(const void* buf, size_t len) noexcept;
     explicit TMemoryInput(const TStringBuf buf) noexcept;
-    ~TMemoryInput() override; 
+    ~TMemoryInput() override;
 
-    TMemoryInput(const TMemoryInput& other) noexcept 
+    TMemoryInput(const TMemoryInput& other) noexcept
         : IZeroCopyInputFastReadTo()
-        , Buf_(other.Buf_) 
-        , Len_(other.Len_) 
-    { 
-    } 
- 
-    TMemoryInput& operator=(const TMemoryInput& other) noexcept { 
-        if (this != &other) { 
-            Buf_ = other.Buf_; 
-            Len_ = other.Len_; 
-        } 
- 
-        return *this; 
-    } 
- 
-    TMemoryInput(TMemoryInput&&) noexcept = default; 
-    TMemoryInput& operator=(TMemoryInput&&) noexcept = default; 
- 
+        , Buf_(other.Buf_)
+        , Len_(other.Len_)
+    {
+    }
+
+    TMemoryInput& operator=(const TMemoryInput& other) noexcept {
+        if (this != &other) {
+            Buf_ = other.Buf_;
+            Len_ = other.Len_;
+        }
+
+        return *this;
+    }
+
+    TMemoryInput(TMemoryInput&&) noexcept = default;
+    TMemoryInput& operator=(TMemoryInput&&) noexcept = default;
+
     /**
      * Initializes this stream with a new memory block. It's up to the
      * user to make sure that the memory block doesn't get freed while this
@@ -56,7 +56,7 @@ public:
      * @param buf                       New memory block to use.
      * @param len                       Size of the new memory block.
      */
-    void Reset(const void* buf, size_t len) noexcept { 
+    void Reset(const void* buf, size_t len) noexcept {
         Buf_ = (const char*)buf;
         Len_ = len;
     }
@@ -64,14 +64,14 @@ public:
     /**
      * @returns                         Whether there is more data in the stream.
      */
-    bool Exhausted() const noexcept { 
+    bool Exhausted() const noexcept {
         return !Avail();
     }
 
     /**
      * @returns                         Number of bytes available in the stream.
      */
-    size_t Avail() const noexcept { 
+    size_t Avail() const noexcept {
         return Len_;
     }
 
@@ -79,7 +79,7 @@ public:
      * @returns                         Current read position in the memory block
      *                                  used by this stream.
      */
-    const char* Buf() const noexcept { 
+    const char* Buf() const noexcept {
         return Buf_;
     }
 
@@ -118,16 +118,16 @@ public:
      * @param buf                       Memory block to use.
      * @param len                       Size of the memory block.
      */
-    TMemoryOutput(void* buf, size_t len) noexcept 
+    TMemoryOutput(void* buf, size_t len) noexcept
         : Buf_(static_cast<char*>(buf))
         , End_(Buf_ + len)
     {
     }
-    ~TMemoryOutput() override; 
+    ~TMemoryOutput() override;
 
-    TMemoryOutput(TMemoryOutput&&) noexcept = default; 
-    TMemoryOutput& operator=(TMemoryOutput&&) noexcept = default; 
- 
+    TMemoryOutput(TMemoryOutput&&) noexcept = default;
+    TMemoryOutput& operator=(TMemoryOutput&&) noexcept = default;
+
     /**
      * Initializes this stream with a new memory block. It's up to the
      * user to make sure that the memory block doesn't get freed while this
@@ -136,7 +136,7 @@ public:
      * @param buf                       New memory block to use.
      * @param len                       Size of the new memory block.
      */
-    inline void Reset(void* buf, size_t len) noexcept { 
+    inline void Reset(void* buf, size_t len) noexcept {
         Buf_ = static_cast<char*>(buf);
         End_ = Buf_ + len;
     }
@@ -145,7 +145,7 @@ public:
      * @returns                         Whether there is more space in the
      *                                  stream for writing.
      */
-    inline bool Exhausted() const noexcept { 
+    inline bool Exhausted() const noexcept {
         return !Avail();
     }
 
@@ -153,7 +153,7 @@ public:
      * @returns                         Number of bytes available for writing
      *                                  in the stream.
      */
-    inline size_t Avail() const noexcept { 
+    inline size_t Avail() const noexcept {
         return End_ - Buf_;
     }
 
@@ -161,7 +161,7 @@ public:
      * @returns                         Current write position in the memory block
      *                                  used by this stream.
      */
-    inline char* Buf() const noexcept { 
+    inline char* Buf() const noexcept {
         return Buf_;
     }
 

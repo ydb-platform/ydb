@@ -27,7 +27,7 @@ class TDescribeReq : public TActor<TDescribeReq> {
 
     TAutoPtr<const NACLib::TUserToken> UserToken;
 
-    TString TextPath; 
+    TString TextPath;
 
     void Die(const TActorContext &ctx) override {
         --*TxProxyMon->NavigateReqInFly;

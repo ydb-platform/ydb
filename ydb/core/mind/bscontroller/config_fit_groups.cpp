@@ -166,7 +166,7 @@ namespace NKikimr {
                 };
 
                 // a set of preserved slots (which are not changed during this transaction)
-                TMap<TVDiskID, TVSlotId> preservedSlots; 
+                TMap<TVDiskID, TVSlotId> preservedSlots;
 
                 // mapping for audit log
                 TMap<TVDiskIdShort, TVSlotId> replacedSlots;

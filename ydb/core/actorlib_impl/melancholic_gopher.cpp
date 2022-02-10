@@ -41,7 +41,7 @@ public:
 };
 
 class TGopherMother : public TActorBootstrapped<TGopherMother> {
-    const TVector<std::pair<ui32, double>> LineProfile; 
+    const TVector<std::pair<ui32, double>> LineProfile;
     const ui32 Lines;
     const ui32 ShotsInRound;
     TVector<TActorId> HeadGophers;
@@ -71,7 +71,7 @@ public:
         return ACTORLIB_COMMON;
     }
 
-    TGopherMother(const TVector<std::pair<ui32, double>> &lineProfile, ui32 lines, ui32 shotsInRound) 
+    TGopherMother(const TVector<std::pair<ui32, double>> &lineProfile, ui32 lines, ui32 shotsInRound)
         : LineProfile(lineProfile)
         , Lines(lines)
         , ShotsInRound(shotsInRound)
@@ -106,7 +106,7 @@ IActor* CreateMelancholicGopher(double surveyForSeconds, const TActorId &reportT
 }
 
 
-IActor* CreateGopherMother(const TVector<std::pair<ui32, double>> &lineProfile, ui32 lines, ui32 shotsInRound) { 
+IActor* CreateGopherMother(const TVector<std::pair<ui32, double>> &lineProfile, ui32 lines, ui32 shotsInRound) {
     return new TGopherMother(lineProfile, lines, shotsInRound);
 }
 

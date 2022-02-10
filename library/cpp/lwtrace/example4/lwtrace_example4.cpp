@@ -34,7 +34,7 @@ void FactorialCalculator() {
     MY_BACKTRACK();
     i32 n;
     Cout << "Enter a number: ";
-    TString str; 
+    TString str;
     Cin >> n;
     double factN = Fact(n);
     Cout << n << "! = " << factN << Endl << Endl;

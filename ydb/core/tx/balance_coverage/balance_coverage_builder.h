@@ -15,7 +15,7 @@ namespace NKikimr {
         struct TNode {
             const ui64 Tablet;
             bool HasResult;
-            TVector<TAutoPtr<TNode>> Children; 
+            TVector<TAutoPtr<TNode>> Children;
 
             TNode(ui64 tablet)
                 : Tablet(tablet)

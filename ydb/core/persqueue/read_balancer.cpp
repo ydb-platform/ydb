@@ -471,7 +471,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     TotalGroups = record.HasTotalGroupCount() ? record.GetTotalGroupCount() : 0;
     ui32 prevNextPartitionId = NextPartitionId;
     NextPartitionId = record.HasNextPartitionId() ? record.GetNextPartitionId() : 0;
-    THashMap<ui32, TPartitionInfo> partitionsInfo; 
+    THashMap<ui32, TPartitionInfo> partitionsInfo;
 
     Consumers.clear();
     for (const auto& rr : TabletConfig.GetReadRules()) {
@@ -479,7 +479,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     }
 
     TVector<std::pair<ui32, TPartInfo>> newPartitions;
-    TVector<ui32> deletedPartitions; 
+    TVector<ui32> deletedPartitions;
     TVector<std::pair<ui64, TTabletInfo>> newTablets;
     TVector<std::pair<ui32, ui32>> newGroups;
 

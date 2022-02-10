@@ -45,7 +45,7 @@ UNIT_TEST_SUITE_REGISTRATION(TListTest);
 
 class TInt: public TIntrusiveListItem<TInt> {
 public:
-    inline TInt(int value) noexcept 
+    inline TInt(int value) noexcept
         : Value_(value)
     {
     }
@@ -62,11 +62,11 @@ public:
         return *this;
     }
 
-    inline operator int&() noexcept { 
+    inline operator int&() noexcept {
         return Value_;
     }
 
-    inline operator const int&() const noexcept { 
+    inline operator const int&() const noexcept {
         return Value_;
     }
 
@@ -88,7 +88,7 @@ public:
     //operator=(const TMyList& rhs) = default;
     TMyList& operator=(TMyList&& rhs) noexcept = default;
 
-    inline ~TMyList() { 
+    inline ~TMyList() {
         while (!Empty()) {
             delete PopBack();
         }
@@ -96,7 +96,7 @@ public:
 };
 
 struct TIntGreater: private TGreater<int> {
-    inline bool operator()(const TInt& l, const TInt& r) const noexcept { 
+    inline bool operator()(const TInt& l, const TInt& r) const noexcept {
         return TGreater<int>::operator()(l, r);
     }
 };
@@ -154,7 +154,7 @@ public:
     {
     }
 
-    inline void operator()(const TInt* v) noexcept { 
+    inline void operator()(const TInt* v) noexcept {
         Sum_ += *v;
     }
 
@@ -169,7 +169,7 @@ public:
     {
     }
 
-    inline void operator()(TInt* v) noexcept { 
+    inline void operator()(TInt* v) noexcept {
         if (*v % 2) {
             Sum_ += *v;
         } else {
@@ -393,10 +393,10 @@ struct TSelfCountingIntDelete {
 };
 
 void TListTest::TestListWithAutoDelete() {
-    using TListType = TIntrusiveListWithAutoDelete<TSelfCountingInt, TSelfCountingIntDelete>; 
+    using TListType = TIntrusiveListWithAutoDelete<TSelfCountingInt, TSelfCountingIntDelete>;
     int counter{0};
     {
-        TListType lst; 
+        TListType lst;
         UNIT_ASSERT(lst.Empty());
         lst.PushFront(new TSelfCountingInt(counter, 2));
         UNIT_ASSERT_EQUAL(lst.Size(), 1);
@@ -411,17 +411,17 @@ void TListTest::TestListWithAutoDelete() {
 }
 
 void TListTest::TestListWithAutoDeleteMoveCtor() {
-    using TListType = TIntrusiveListWithAutoDelete<TSelfCountingInt, TSelfCountingIntDelete>; 
+    using TListType = TIntrusiveListWithAutoDelete<TSelfCountingInt, TSelfCountingIntDelete>;
     int counter{0};
     {
-        TListType lst; 
+        TListType lst;
         lst.PushFront(new TSelfCountingInt(counter, 2));
         lst.PushFront(new TSelfCountingInt(counter, 1));
         UNIT_ASSERT_EQUAL(lst.Size(), 2);
         UNIT_ASSERT_EQUAL(counter, 2);
         CheckList(lst);
 
-        TListType nextList(std::move(lst)); 
+        TListType nextList(std::move(lst));
         UNIT_ASSERT_EQUAL(nextList.Size(), 2);
         CheckList(nextList);
         UNIT_ASSERT_EQUAL(counter, 2);
@@ -431,17 +431,17 @@ void TListTest::TestListWithAutoDeleteMoveCtor() {
 }
 
 void TListTest::TestListWithAutoDeleteMoveOpEq() {
-    using TListType = TIntrusiveListWithAutoDelete<TSelfCountingInt, TSelfCountingIntDelete>; 
+    using TListType = TIntrusiveListWithAutoDelete<TSelfCountingInt, TSelfCountingIntDelete>;
     int counter{0};
     {
-        TListType lst; 
+        TListType lst;
         lst.PushFront(new TSelfCountingInt(counter, 2));
         lst.PushFront(new TSelfCountingInt(counter, 1));
         UNIT_ASSERT_EQUAL(lst.Size(), 2);
         UNIT_ASSERT_EQUAL(counter, 2);
         CheckList(lst);
 
-        TListType nextList; 
+        TListType nextList;
         UNIT_ASSERT(nextList.Empty());
         nextList = std::move(lst);
         UNIT_ASSERT_EQUAL(nextList.Size(), 2);
@@ -453,10 +453,10 @@ void TListTest::TestListWithAutoDeleteMoveOpEq() {
 }
 
 void TListTest::TestListWithAutoDeleteClear() {
-    using TListType = TIntrusiveListWithAutoDelete<TSelfCountingInt, TSelfCountingIntDelete>; 
+    using TListType = TIntrusiveListWithAutoDelete<TSelfCountingInt, TSelfCountingIntDelete>;
     int counter{0};
     {
-        TListType lst; 
+        TListType lst;
         UNIT_ASSERT(lst.Empty());
         lst.PushFront(new TSelfCountingInt(counter, 2));
         UNIT_ASSERT_EQUAL(lst.Size(), 1);

@@ -144,7 +144,7 @@ namespace NRainCheck {
         bool SetDoneCalled;
 
         // Subtasks currently executed.
-        TVector<TSubtaskCompletion*> Pending; 
+        TVector<TSubtaskCompletion*> Pending;
 
         void Act(NActor::TDefaultTag);
 
@@ -158,7 +158,7 @@ namespace NRainCheck {
         static TTaskRunnerBase* CurrentTask();
         static ITaskBase* CurrentTaskImpl();
 
-        TString GetStatusSingleLine(); 
+        TString GetStatusSingleLine();
 
     protected:
         //void RetainRef();

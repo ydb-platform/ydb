@@ -34,7 +34,7 @@ template <typename T, const char* Name>
 struct TNamedArg { using ItemType = T; };
 
 template <typename T>
-struct TListType { using ItemType = T; }; 
+struct TListType { using ItemType = T; };
 
 template <typename TKey, typename TValue>
 struct TDict {
@@ -763,7 +763,7 @@ struct TTypeBuilderHelper<TResource<Tag>> {
 };
 
 template <typename T>
-struct TTypeBuilderHelper<TListType<T>> { 
+struct TTypeBuilderHelper<TListType<T>> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
         return builder.List()->
                 Item(TTypeBuilderHelper<T>::Build(builder))

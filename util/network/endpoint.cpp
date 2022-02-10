@@ -32,7 +32,7 @@ void TEndpoint::SetPort(ui16 port) {
     }
 }
 
-ui16 TEndpoint::Port() const noexcept { 
+ui16 TEndpoint::Port() const noexcept {
     if (Addr_->Addr()->sa_family == AF_UNIX) {
         return 0;
     }

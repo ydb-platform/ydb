@@ -2,7 +2,7 @@
 
 #include <util/generic/strbuf.h>
 
-// can be used for caseless hashes like: THashMap<TStringBuf, T, TCIOps, TCIOps> 
+// can be used for caseless hashes like: THashMap<TStringBuf, T, TCIOps, TCIOps>
 
 struct TCIOps {
     size_t operator()(const char* s) const noexcept;

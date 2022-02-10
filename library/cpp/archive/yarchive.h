@@ -17,7 +17,7 @@ static constexpr size_t ArchiveWriterDefaultDataAlignment = 16;
 class TArchiveWriter {
 public:
     explicit TArchiveWriter(IOutputStream* out, bool compress = true);
-    ~TArchiveWriter(); 
+    ~TArchiveWriter();
 
     void Flush();
     void Finish();

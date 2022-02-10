@@ -22,11 +22,11 @@ struct TAllPDisksConfiguration {
     const ui32 PDisksNum;
     const ui32 ChunkSize;
     const ui64 DiskSize;
-    const TString Dir; 
-    const TString Device; 
+    const TString Dir;
+    const TString Device;
     const TString DeviceType;
 
-    static TAllPDisksConfiguration MkDevice(const TString &devicePath, ui32 chunkSize, 
+    static TAllPDisksConfiguration MkDevice(const TString &devicePath, ui32 chunkSize,
                                             TString deviceType);
     static TAllPDisksConfiguration MkOneTmp(ui32 chunkSize, ui64 diskSize,
                                             TString deviceType);
@@ -48,11 +48,11 @@ struct TOnePDisk {
     NActors::TActorId PDiskActorID;
     const ui32 PDiskID = 0;
     ui64 PDiskGuid = 0;
-    const TString Filename; 
+    const TString Filename;
     const ui32 ChunkSize;
     const ui64 DiskSize;
 
-    TOnePDisk(ui32 pDiskId, ui64 pDiskGuid, const TString &filename, 
+    TOnePDisk(ui32 pDiskId, ui64 pDiskGuid, const TString &filename,
               ui32 chunkSize, ui64 diskSize);
     void FormatDisk(bool force = false);
     void EraseDisk(ui64 newGuid);
@@ -75,7 +75,7 @@ public:
 
 private:
     TAllPDisksConfiguration Cfg;
-    TVector<TOnePDisk> PDisks; 
+    TVector<TOnePDisk> PDisks;
     std::shared_ptr<TTempDir> TempDir;
 };
 
@@ -105,8 +105,8 @@ public:
         return VDisks.size();
     }
 
-    TVector<NKikimr::TVDiskID> GetVDiskIds() const { 
-        TVector<NKikimr::TVDiskID> vdisks; 
+    TVector<NKikimr::TVDiskID> GetVDiskIds() const {
+        TVector<NKikimr::TVDiskID> vdisks;
         for (const auto &x : VDisks) {
             vdisks.push_back(x.VDiskID);
         }
@@ -116,7 +116,7 @@ public:
 private:
     ui32 DomainsNum;
     ui32 DisksInDomain;
-    TVector<TVDiskInstance> VDisks; 
+    TVector<TVDiskInstance> VDisks;
 };
 
 struct IVDiskSetup {
@@ -166,7 +166,7 @@ struct TConfiguration {
     TSystemEvent DoneEvent { TSystemEvent::rAuto };
     TSystemEvent DbInitEvent { TSystemEvent::rAuto };
 
-    using TTimeoutCallbackList = TList<std::function<void ()>>; 
+    using TTimeoutCallbackList = TList<std::function<void ()>>;
     using TTimeoutCallbackId = TTimeoutCallbackList::iterator;
     TTimeoutCallbackList TimeoutCallbacks;
     TMutex TimeoutCallbacksLock;

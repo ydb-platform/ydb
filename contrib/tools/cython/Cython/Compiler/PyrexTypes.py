@@ -3496,7 +3496,7 @@ builtin_cpp_conversions = {
     "std::complex":       1,
     # arcadia_cpp_conversions
     "TMaybe":             1,
-    "TVector":            1, 
+    "TVector":            1,
     "THashMap":           2,
     "TMap":               2,
 }

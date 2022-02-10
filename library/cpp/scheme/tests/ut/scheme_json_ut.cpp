@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TSchemeJsonTest) {
     }
 
     Y_UNIT_TEST(TestSafeJson) {
-        TString ss; 
+        TString ss;
         ss.reserve(256);
 
         for (int i = 0; i < 256; ++i) {
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TSchemeJsonTest) {
 
         {
             NSc::TValue value;
-            TString articleName{"\xC2\xC2\xCF"}; 
+            TString articleName{"\xC2\xC2\xCF"};
             value["text"] = articleName;
             UNIT_ASSERT_VALUES_EQUAL(value.ToJson(), "{\"text\":\"\xC2\xC2\xCF\"}");
             UNIT_ASSERT_VALUES_EQUAL(value.ToJsonSafe(), "{\"text\":null}");

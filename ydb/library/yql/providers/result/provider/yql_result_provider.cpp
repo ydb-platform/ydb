@@ -145,10 +145,10 @@ namespace {
         }
 
         auto structType = itemType->Cast<TStructExprType>();
-        TSet<TString> usedFields; 
-        TExprNode::TListType orderedFields; 
+        TSet<TString> usedFields;
+        TExprNode::TListType orderedFields;
         for (auto& child : columns->Children()) {
-            TVector<TStringBuf> names; 
+            TVector<TStringBuf> names;
             if (child->IsAtom()) {
                 orderedFields.push_back(child);
                 if (!structType->FindItem(child->Content())) {
@@ -157,7 +157,7 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                if (!usedFields.insert(TString(child->Content())).second) { 
+                if (!usedFields.insert(TString(child->Content())).second) {
                     ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() <<
                         "Duplicate field in hint: " << child->Content()));
                     return IGraphTransformer::TStatus::Error;
@@ -167,7 +167,7 @@ namespace {
                 for (auto& x : structType->GetItems()) {
                     if (x->GetName().StartsWith(prefix)) {
                         orderedFields.push_back(ctx.NewAtom(child->Pos(), x->GetName()));
-                        if (!usedFields.insert(TString(x->GetName())).second) { 
+                        if (!usedFields.insert(TString(x->GetName())).second) {
                             ctx.AddError(TIssue(ctx.GetPosition(child->Pos()), TStringBuilder() <<
                                 "Duplicate field in hint: " << x->GetName()));
                             return IGraphTransformer::TStatus::Error;
@@ -862,7 +862,7 @@ namespace {
     class TResultProvider : public TDataProviderBase {
     public:
         struct TFunctions {
-            THashSet<TStringBuf> Names; 
+            THashSet<TStringBuf> Names;
 
             TFunctions() {
                 Names.insert(TResWrite::CallableName());
@@ -1387,7 +1387,7 @@ namespace {
             Config->CommittedResults.clear();
         }
 
-        bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override { 
+        bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
             if (CanExecute(node)) {
                 children.push_back(node.ChildPtr(0));
                 if (auto resPull = TMaybeNode<TResPull>(&node)) {
@@ -1422,14 +1422,14 @@ namespace {
             }
         }
 
-        TString GetProviderPath(const TExprNode& node) override { 
+        TString GetProviderPath(const TExprNode& node) override {
             Y_UNUSED(node);
             return "result";
         }
 
-        TString GetOperationDisplayName(const TExprNode& node) override { 
+        TString GetOperationDisplayName(const TExprNode& node) override {
             if (node.Content() == CommitName) {
-                return TString::Join(node.Content(), " on result"); 
+                return TString::Join(node.Content(), " on result");
             }
 
             if (auto maybeResFor = TMaybeNode<TResFor>(&node)) {
@@ -1445,7 +1445,7 @@ namespace {
                 return res;
             }
 
-            return TString(node.Content()); 
+            return TString(node.Content());
         }
 
         ITrackableNodeProcessor& GetTrackableNodeProcessor() override {
@@ -1469,7 +1469,7 @@ TIntrusivePtr<IDataProvider> CreateResultProvider(const TIntrusivePtr<TResultPro
     return new TResultProvider(config);
 }
 
-const THashSet<TStringBuf>& ResultProviderFunctions() { 
+const THashSet<TStringBuf>& ResultProviderFunctions() {
     return Singleton<TResultProvider::TFunctions>()->Names;
 }
 

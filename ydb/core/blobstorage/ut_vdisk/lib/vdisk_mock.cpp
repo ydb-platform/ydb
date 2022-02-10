@@ -14,8 +14,8 @@ class TVDiskMockActor : public TActorBootstrapped<TVDiskMockActor> {
     const std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
     TVDiskContextPtr VCtx;
     TMap<TLogoBlobID, std::optional<TString>> LogoBlobs;
-    TMap<std::tuple<ui64, ui8, ui32, ui32, bool>, std::tuple<ui32, ui32>> Barriers; 
-    TMap<ui64, ui32> Blocks; 
+    TMap<std::tuple<ui64, ui8, ui32, ui32, bool>, std::tuple<ui32, ui32>> Barriers;
+    TMap<ui64, ui32> Blocks;
     bool ErrorMode = false;
     bool LostMode = false;
 

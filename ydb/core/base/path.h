@@ -6,8 +6,8 @@
 
 namespace NKikimr {
 
-TVector<TString> SplitPath(TString path); 
-TString JoinPath(const TVector<TString>& path); 
+TVector<TString> SplitPath(TString path);
+TString JoinPath(const TVector<TString>& path);
 TString CanonizePath(const TString &path);
 TString CanonizePath(const TVector<TString>& path);
 ui32 CanonizedPathLen(const TVector<TString>& path);

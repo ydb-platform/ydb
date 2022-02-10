@@ -63,7 +63,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         TInstant From;
 
         TTabletEntry()
-            : From(TInstant::MicroSeconds(0)) 
+            : From(TInstant::MicroSeconds(0))
         {}
     };
 
@@ -78,7 +78,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
 
     const TActorId Owner;
     const ui64 HiveId;
-    TVector<TSubDomainKey> ServicedDomains; 
+    TVector<TSubDomainKey> ServicedDomains;
 
     TActorId HivePipeClient;
     bool Connected;
@@ -403,7 +403,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         LOG_DEBUG_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: Handle TEvLocal::TEvBootTablet tabletType:"
                     << tabletType << " tabletId:" << tabletId << " suggestedGen:" << suggestedGen);
 
-        TMap<TTabletTypes::EType, TLocalConfig::TTabletClassInfo>::const_iterator it = Config->TabletClassInfo.find(tabletType); 
+        TMap<TTabletTypes::EType, TLocalConfig::TTabletClassInfo>::const_iterator it = Config->TabletClassInfo.find(tabletType);
         if (it == Config->TabletClassInfo.end()) {
             LOG_ERROR_S(ctx, NKikimrServices::LOCAL,
                        "TLocalNodeRegistrar: boot-tablet unknown tablet type: "

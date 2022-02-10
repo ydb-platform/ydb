@@ -9,10 +9,10 @@ WITHOUT_LICENSE_TEXTS()
 
 VERSION(2015-07-01-5a546a834c36070648158d19dd564762d59f8eb8)
 
-OWNER( 
+OWNER(
     g:contrib
     g:cpp-contrib
-) 
+)
 
 NO_RUNTIME()
 

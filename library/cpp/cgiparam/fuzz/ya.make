@@ -9,8 +9,8 @@ SRCS(
     main.cpp
 )
 
-PEERDIR( 
+PEERDIR(
     library/cpp/cgiparam
-) 
- 
+)
+
 END()

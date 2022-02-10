@@ -87,12 +87,12 @@ class TPDiskReaderTestLoadActor : public TActorBootstrapped<TPDiskReaderTestLoad
     NPDisk::TOwnerRound OwnerRound;
     ui64 PDiskGuid;
     TIntrusivePtr<TPDiskParams> PDiskParams;
-    TVector<TChunkInfo> Chunks; 
+    TVector<TChunkInfo> Chunks;
     TReallyFastRng32 Rng;
     TString DataBuffer;
     ui64 Lsn = 1;
-    TMultiMap<TInstant, TRequestStat> TimeSeries; 
-    TVector<TChunkIdx> DeleteChunks; 
+    TMultiMap<TInstant, TRequestStat> TimeSeries;
+    TVector<TChunkIdx> DeleteChunks;
     bool Sequential;
     bool Harakiri = false;
     bool IsWardenlessTest;
@@ -497,7 +497,7 @@ public:
         TABLED() { str << NAME; } \
         TABLED() { str << VALUE; } \
     }
-        TMap<ui32, TVector<TDuration>> latmap; 
+        TMap<ui32, TVector<TDuration>> latmap;
         for (const auto& pair : TimeSeries) {
             const TRequestStat& stat = pair.second;
             latmap[stat.Size].push_back(stat.Latency);
@@ -544,7 +544,7 @@ public:
 
                     for (auto& pair : latmap) {
                         str << "<br/>";
-                        TVector<TDuration>& latencies = pair.second; 
+                        TVector<TDuration>& latencies = pair.second;
                         std::sort(latencies.begin(), latencies.end());
                         for (double percentile : {0.5, 0.9, 0.95, 0.99, 0.999, 1.0}) {
                             TDuration value = latencies[size_t(percentile * (latencies.size() - 1))];

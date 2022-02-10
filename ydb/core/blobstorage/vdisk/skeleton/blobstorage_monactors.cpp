@@ -16,7 +16,7 @@ namespace NKikimr {
     class TMonErrorActor : public TActorBootstrapped<TMonErrorActor> {
         const TActorId NotifyId;
         NMon::TEvHttpInfo::TPtr Ev;
-        const TString Explanation; 
+        const TString Explanation;
 
         friend class TActorBootstrapped<TMonErrorActor>;
 
@@ -33,7 +33,7 @@ namespace NKikimr {
 
         TMonErrorActor(const TActorId &notifyId,
                        NMon::TEvHttpInfo::TPtr &ev,
-                       const TString &explanation) 
+                       const TString &explanation)
             : TActorBootstrapped<TMonErrorActor>()
             , NotifyId(notifyId)
             , Ev(ev)
@@ -51,16 +51,16 @@ namespace NKikimr {
         const TActorId LocalRecovActorID;
         unsigned Counter;
 
-        TString SkeletonState; 
-        TString HullInfo; 
-        TString SyncerInfo; 
-        TString SyncLogInfo; 
-        TString ReplInfo; 
-        TString LogCutterInfo; 
-        TString HugeKeeperInfo; 
-        TString HandoffInfo; 
-        TString DskSpaceTrackerInfo; 
-        TString LocalRecovInfo; 
+        TString SkeletonState;
+        TString HullInfo;
+        TString SyncerInfo;
+        TString SyncLogInfo;
+        TString ReplInfo;
+        TString LogCutterInfo;
+        TString HugeKeeperInfo;
+        TString HandoffInfo;
+        TString DskSpaceTrackerInfo;
+        TString LocalRecovInfo;
         TString AnubisRunnerInfo;
         TString DelayedHugeBlobDeleterInfo;
         TString ScrubInfo;
@@ -247,7 +247,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     class TMonQueryBaseActor {
     protected:
-        TString BuildForm(const TString &dbnameParam, const TString &itemName, const TString &placeholder, bool index) { 
+        TString BuildForm(const TString &dbnameParam, const TString &itemName, const TString &placeholder, bool index) {
             TStringStream str;
 
             HTML(str) {
@@ -312,8 +312,8 @@ namespace NKikimr {
 
         friend class TActorBootstrapped<TSkeletonFrontMonLogoBlobsQueryActor>;
 
-        void OutputForm(const TActorContext &ctx, const TString &dbnameParam) { 
-            TString html = BuildForm(dbnameParam, "LogoBlob", 
+        void OutputForm(const TActorContext &ctx, const TString &dbnameParam) {
+            TString html = BuildForm(dbnameParam, "LogoBlob",
                                     "[tablet:gen:step:channel:cookie:hashtype:part:hash]", true);
             Finish(ctx, new NMon::TEvHttpInfoRes(html));
         }
@@ -321,16 +321,16 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             const TCgiParameters& cgi = Ev->Get()->Request.GetParams();
 
-            TString dbnameParam = cgi.Get("dbname"); 
-            TString formParam = cgi.Get("form"); 
-            TString fromParam = cgi.Get("from"); 
-            TString toParam = cgi.Get("to"); 
+            TString dbnameParam = cgi.Get("dbname");
+            TString formParam = cgi.Get("form");
+            TString fromParam = cgi.Get("from");
+            TString toParam = cgi.Get("to");
             IndexOnly = cgi.Has("IndexOnly");
             ShowInternals = cgi.Has("Internals");
             bool submitButton = cgi.Has("submit");
             bool allButton = cgi.Has("all");
 
-            if (formParam != TString()) { 
+            if (formParam != TString()) {
                 OutputForm(ctx, dbnameParam);
                 return;
             }
@@ -348,7 +348,7 @@ namespace NKikimr {
                 }
 
                 // parse 'from' field
-                TString errorExplanation; 
+                TString errorExplanation;
                 bool good = TLogoBlobID::Parse(From, fromParam, errorExplanation);
                 if (!good) {
                     Finish(ctx, NMonUtil::PrepareError("Failed to parse 'from' field: " + errorExplanation));
@@ -517,23 +517,23 @@ namespace NKikimr {
 
         friend class TActorBootstrapped<TSkeletonFrontMonBarriersQueryActor>;
 
-        void OutputForm(const TActorContext &ctx, const TString &dbnameParam) { 
-            TString html = BuildForm(dbnameParam, "Barrier", "[tablet:channel:gen:gencounter]", false); 
+        void OutputForm(const TActorContext &ctx, const TString &dbnameParam) {
+            TString html = BuildForm(dbnameParam, "Barrier", "[tablet:channel:gen:gencounter]", false);
             Finish(ctx, new NMon::TEvHttpInfoRes(html));
         }
 
         void Bootstrap(const TActorContext &ctx) {
             const TCgiParameters& cgi = Ev->Get()->Request.GetParams();
 
-            TString dbnameParam = cgi.Get("dbname"); 
-            TString formParam = cgi.Get("form"); 
-            TString fromParam = cgi.Get("from"); 
-            TString toParam = cgi.Get("to"); 
+            TString dbnameParam = cgi.Get("dbname");
+            TString formParam = cgi.Get("form");
+            TString fromParam = cgi.Get("from");
+            TString toParam = cgi.Get("to");
             bool showInternals = cgi.Has("Internals");
             bool submitButton = cgi.Has("submit");
             bool allButton = cgi.Has("all");
 
-            if (formParam != TString()) { 
+            if (formParam != TString()) {
                 OutputForm(ctx, dbnameParam);
                 return;
             }
@@ -548,7 +548,7 @@ namespace NKikimr {
                 }
 
                 // parse 'from' field
-                TString errorExplanation; 
+                TString errorExplanation;
                 bool good = TKeyBarrier::Parse(From, fromParam, errorExplanation);
                 if (!good) {
                     Finish(ctx, NMonUtil::PrepareError("Failed to parse 'from' field: " + errorExplanation));
@@ -699,7 +699,7 @@ namespace NKikimr {
         const TActorId SkeletonFrontID;
         NMon::TEvHttpInfo::TPtr Ev;
         const NKikimrBlobStorage::EDbStatAction Action;
-        const TString Dbname; 
+        const TString Dbname;
 
         friend class TActorBootstrapped<TSkeletonFrontMonDbStatActor>;
 
@@ -879,7 +879,7 @@ namespace NKikimr {
                                      const TActorId &skeletonFrontID,
                                      NMon::TEvHttpInfo::TPtr &ev,
                                      NKikimrBlobStorage::EDbStatAction action,
-                                     const TString &dbname) 
+                                     const TString &dbname)
             : TActorBootstrapped<TSkeletonFrontMonDbStatActor>()
             , SelfVDiskId(selfVDiskId)
             , Cfg(cfg)
@@ -898,8 +898,8 @@ namespace NKikimr {
         const TActorId NotifyId;
         const TActorId SkeletonID;
         NMon::TEvHttpInfo::TPtr Ev;
-        TString SkeletonFrontAnswer; 
-        TString SkeletonAnswer; 
+        TString SkeletonFrontAnswer;
+        TString SkeletonAnswer;
 
 
         friend class TActorBootstrapped<TSkeletonFrontMonMainPageActor>;
@@ -963,7 +963,7 @@ namespace NKikimr {
         TSkeletonFrontMonMainPageActor(const TActorId &notifyId,
                                        const TActorId &skeletonID,
                                        NMon::TEvHttpInfo::TPtr &ev,
-                                       const TString &frontHtml) 
+                                       const TString &frontHtml)
             : TActorBootstrapped<TSkeletonFrontMonMainPageActor>()
             , NotifyId(notifyId)
             , SkeletonID(skeletonID)
@@ -982,12 +982,12 @@ namespace NKikimr {
                                                  TIntrusivePtr<TVDiskConfig> cfg,
                                                  const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                                  NMon::TEvHttpInfo::TPtr &ev,
-                                                 const TString &frontHtml) { 
+                                                 const TString &frontHtml) {
         const TCgiParameters& cgi = ev->Get()->Request.GetParams();
 
-        const TString &type = cgi.Get("type"); 
-        const TString &dbname = cgi.Get("dbname"); 
-        if (type == TString()) { 
+        const TString &type = cgi.Get("type");
+        const TString &dbname = cgi.Get("dbname");
+        if (type == TString()) {
             return new TSkeletonFrontMonMainPageActor(notifyId, skeletonID, ev, frontHtml);
         } else if (type == "query") {
             if (dbname == "LogoBlobs") {

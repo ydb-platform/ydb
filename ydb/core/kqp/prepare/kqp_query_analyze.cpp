@@ -460,7 +460,7 @@ void AnalyzeNodes(const TVector<TExprBase>& nodes, TAnalyzeTxContext& ctx) {
 
 bool Analyze(const TExprNode::TPtr& exprRoot, TKqpAnalyzeResults& results, ECommitSafety commitSafety) {
     TAnalyzeTxContext analyzeCtx;
-    TVector<TExprBase> nodes; 
+    TVector<TExprBase> nodes;
 
     GatherNodeScopes(TExprBase(exprRoot), analyzeCtx);
 

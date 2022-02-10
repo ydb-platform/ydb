@@ -62,7 +62,7 @@ struct TIndentScope {
         ++(D->IndentLevel);
     }
 
-    inline ~TIndentScope() { 
+    inline ~TIndentScope() {
         --(D->IndentLevel);
     }
 
@@ -80,7 +80,7 @@ static inline TRawLiteral<TChar> DumpRaw(const TBasicStringBuf<TChar>& s) noexce
 }
 
 template <class TChar>
-static inline TRawLiteral<TChar> DumpRaw(const TChar* s) noexcept { 
+static inline TRawLiteral<TChar> DumpRaw(const TChar* s) noexcept {
     return {s};
 }
 
@@ -95,7 +95,7 @@ struct TDumper<TRawLiteral<C>> {
 struct TIndentNewLine {
 };
 
-static inline TIndentNewLine IndentNewLine() noexcept { 
+static inline TIndentNewLine IndentNewLine() noexcept {
     return {};
 }
 

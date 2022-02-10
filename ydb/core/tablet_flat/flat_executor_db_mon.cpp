@@ -63,7 +63,7 @@ public:
                            <label for='exact-checkbox' style='padding-left:5px'>Exact</label>
                            </form>
                            )___";
-                    TVector<ui32> columns; 
+                    TVector<ui32> columns;
                     for (const auto& pr : tableInfo->Columns) {
                         columns.push_back(pr.first);
                     }

@@ -31,7 +31,7 @@ void TLocatorRegisterUniqTest::TestRegister() {
     /// YBUS_KEYMIN YBUS_KEYMAX range
     UNIT_ASSERT(keys.size() == 1);
 
-    TVector<NBus::TNetAddr> hosts; 
+    TVector<NBus::TNetAddr> hosts;
     UNIT_ASSERT(locator.LocateAll(serviceName, NBus::YBUS_KEYMIN, hosts) == 1);
 
     locator.Register(serviceName, hostName, port);

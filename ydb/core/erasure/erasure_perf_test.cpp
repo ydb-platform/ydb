@@ -47,7 +47,7 @@ TString GenerateData(ui32 dataSize) {
     return testString;
 }
 
-std::pair<double, double> CalcAvgSd(TVector<double> &times) { 
+std::pair<double, double> CalcAvgSd(TVector<double> &times) {
     double avg = 0;
     double sd = 0;
     auto min = std::min_element(times.begin(), times.end());
@@ -69,13 +69,13 @@ std::pair<double, double> CalcAvgSd(TVector<double> &times) {
 }
 
 template <bool measureSplit, bool measureRestore>
-std::pair<double, double> MeasureTime(TErasureType &type, TVector<ui32> &missedParts, ui32 dataSize, 
+std::pair<double, double> MeasureTime(TErasureType &type, TVector<ui32> &missedParts, ui32 dataSize,
                                     bool isRestoreParts, bool isRestoreFullData) {
 
     const size_t attempts = dataSize < 10000 ? ATTEMPTS : 10;
 
     THPTimer timer;
-    TVector<double> times; 
+    TVector<double> times;
     ui32 partMask = ~(ui32)0;
     for (const ui32 &part : missedParts) {
         partMask &= ~(ui32)(1ul << part);
@@ -144,7 +144,7 @@ std::pair<double, double> MeasureTime(TErasureType &type, TVector<ui32> &missedP
     return CalcAvgSd(times);
 }
 
-TVector<TVector<ui32>> ChooseCombinationCase(TErasureType &type) { 
+TVector<TVector<ui32>> ChooseCombinationCase(TErasureType &type) {
     if (type.GetErasure() == TErasureType::EErasureSpecies::Erasure4Plus2Stripe ||
             type.GetErasure() == TErasureType::EErasureSpecies::Erasure4Plus2Block ) {
         return { {0, 1}
@@ -161,11 +161,11 @@ const char *Bool2str(bool val) {
 
 void MeasureRestoreTime(TErasureType &type) {
     Cout << "EErasureType = " << type.ToString() << "  Measuring restore time, time in milliseconds" << Endl;
-    TVector<TVector<ui32>> testCombin = ChooseCombinationCase(type); 
+    TVector<TVector<ui32>> testCombin = ChooseCombinationCase(type);
     TVector<ui64> dataSizes {100, 4*1024, 4111, 8*1024, 8207, 4062305, 4*1024*1024};
     for (const ui64 &size : dataSizes) {
     Cout << "    size=" << size << Endl;
-        for (TVector<ui32> &combination : testCombin) { 
+        for (TVector<ui32> &combination : testCombin) {
             for (ui32 variant = 1; variant < 2; ++variant) {
                 bool isRestoreParts = false;
                 bool isRestoreFullData = false;
@@ -198,7 +198,7 @@ void MeasureRestoreTime(TErasureType &type) {
 
 void MeasureSplitTime(TErasureType &type) {
     Cout << "EErasureType = " << type.ToString() << Endl;
-    TVector<ui32> combination {0, 1}; 
+    TVector<ui32> combination {0, 1};
     //TVector<ui64> dataSizes {100, 4012, 4*1024, 4111, 8*1024, 8207, 4062305, 4*1024*1024};
     TVector<ui64> dataSizes {100, 4012, 4*1024, 4111};
     for (const ui64 &size : dataSizes) {

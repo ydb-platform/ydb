@@ -40,7 +40,7 @@ struct TEvTxProcessing {
             Record.SetTabletID(tablet);
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TEvPlanStep step# " << Record.GetStep();
             str << " MediatorId# " << Record.GetMediatorID();
@@ -74,7 +74,7 @@ struct TEvTxProcessing {
             }
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TEvPlanStepAck TabletId# " << Record.GetTabletId();
             str << " step# " << Record.GetStep();
@@ -96,7 +96,7 @@ struct TEvTxProcessing {
             Record.SetStep(step);
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TEvPlanStepAccepted TabletId# " << Record.GetTabletId();
             str << " step# " << Record.GetStep();
@@ -109,7 +109,7 @@ struct TEvTxProcessing {
         TEvReadSet()
         {}
 
-        TEvReadSet(ui64 step, ui64 orderId, ui64 tabletSource, ui64 tabletDest, ui64 tabletProducer, const TString &readSet, ui64 seqno = 0) 
+        TEvReadSet(ui64 step, ui64 orderId, ui64 tabletSource, ui64 tabletDest, ui64 tabletProducer, const TString &readSet, ui64 seqno = 0)
         {
             Record.SetStep(step);
             Record.SetTxId(orderId);
@@ -120,7 +120,7 @@ struct TEvTxProcessing {
             Record.SetSeqno(seqno);
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TEvReadSet step# " << Record.GetStep();
             str << " txid# " << Record.GetTxId();
@@ -161,7 +161,7 @@ struct TEvTxProcessing {
             Record.SetSeqno(evReadSet.Record.GetSeqno());
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TEvReadSet step# " << Record.GetStep();
             str << " txid# " << Record.GetTxId();

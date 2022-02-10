@@ -4,7 +4,7 @@
 #include "socket.h"
 
 #include <util/generic/ptr.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 namespace NAddr {
     class IRemoteAddr {
@@ -22,8 +22,8 @@ namespace NAddr {
     IRemoteAddrPtr GetPeerAddr(SOCKET s);
     void PrintHost(IOutputStream& out, const IRemoteAddr& addr);
 
-    TString PrintHost(const IRemoteAddr& addr); 
-    TString PrintHostAndPort(const IRemoteAddr& addr); 
+    TString PrintHost(const IRemoteAddr& addr);
+    TString PrintHostAndPort(const IRemoteAddr& addr);
 
     bool IsLoopback(const IRemoteAddr& addr);
     bool IsSame(const IRemoteAddr& lhs, const IRemoteAddr& rhs);
@@ -33,13 +33,13 @@ namespace NAddr {
     //for accept, recvfrom - see LenPtr()
     class TOpaqueAddr: public IRemoteAddr {
     public:
-        inline TOpaqueAddr() noexcept 
+        inline TOpaqueAddr() noexcept
             : L_(sizeof(S_))
         {
             Zero(S_);
         }
 
-        inline TOpaqueAddr(const IRemoteAddr* addr) noexcept { 
+        inline TOpaqueAddr(const IRemoteAddr* addr) noexcept {
             Assign(addr->Addr(), addr->Len());
         }
 
@@ -55,16 +55,16 @@ namespace NAddr {
             return L_;
         }
 
-        inline sockaddr* MutableAddr() const noexcept { 
+        inline sockaddr* MutableAddr() const noexcept {
             return (sockaddr*)&S_;
         }
 
-        inline socklen_t* LenPtr() noexcept { 
+        inline socklen_t* LenPtr() noexcept {
             return &L_;
         }
 
     private:
-        inline void Assign(const sockaddr* addr, socklen_t len) noexcept { 
+        inline void Assign(const sockaddr* addr, socklen_t len) noexcept {
             L_ = len;
             memcpy(MutableAddr(), addr, L_);
         }
@@ -77,7 +77,7 @@ namespace NAddr {
     //for TNetworkAddress
     class TAddrInfo: public IRemoteAddr {
     public:
-        inline TAddrInfo(const addrinfo* ai) noexcept 
+        inline TAddrInfo(const addrinfo* ai) noexcept
             : AI_(ai)
         {
         }
@@ -97,7 +97,7 @@ namespace NAddr {
     //compat, for TIpAddress
     class TIPv4Addr: public IRemoteAddr {
     public:
-        inline TIPv4Addr(const TIpAddress& addr) noexcept 
+        inline TIPv4Addr(const TIpAddress& addr) noexcept
             : A_(addr)
         {
         }
@@ -117,7 +117,7 @@ namespace NAddr {
     //same, for ipv6 addresses
     class TIPv6Addr: public IRemoteAddr {
     public:
-        inline TIPv6Addr(const sockaddr_in6& a) noexcept 
+        inline TIPv6Addr(const sockaddr_in6& a) noexcept
             : A_(a)
         {
         }

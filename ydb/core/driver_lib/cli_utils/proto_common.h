@@ -3,7 +3,7 @@
 namespace NKikimr {
     namespace NDriverClient {
 
-        inline TString GetProtobufEnumOptions(const google::protobuf::EnumDescriptor *desc) { 
+        inline TString GetProtobufEnumOptions(const google::protobuf::EnumDescriptor *desc) {
             TStringStream options;
             options << "{";
             for (int i = 0; i < desc->value_count(); ++i) {
@@ -13,7 +13,7 @@ namespace NKikimr {
             return options.Str();
         }
 
-        inline int GetProtobufOption(const google::protobuf::EnumDescriptor *desc, const char *option, const TString& optval) { 
+        inline int GetProtobufOption(const google::protobuf::EnumDescriptor *desc, const char *option, const TString& optval) {
             const google::protobuf::EnumValueDescriptor *value = desc->FindValueByName(optval);
             if (!value) {
                 int num;

@@ -40,10 +40,10 @@ private:
         TWorkerThread* WaitingWorker = nullptr;
     };
 
-    using TQueueType = TMultiMap<TInstant, TTaskHolder>; 
-    using TQueueIterator = TQueueType::iterator; 
+    using TQueueType = TMultiMap<TInstant, TTaskHolder>;
+    using TQueueIterator = TQueueType::iterator;
 private:
-    void ChangeDebugState(TWorkerThread* thread, const TString& state); 
+    void ChangeDebugState(TWorkerThread* thread, const TString& state);
     void ChooseFromQueue(TQueueIterator& toWait);
     bool Wait(TWorkerThread* thread, TQueueIterator& toWait);
 
@@ -52,12 +52,12 @@ private:
     bool IsStopped_ = false;
 
     TAtomic TaskCounter_ = 0;
-    TQueueType Queue_; 
+    TQueueType Queue_;
 
     TCondVar CondVar_;
     TMutex Lock_;
 
-    TVector<TAutoPtr<TWorkerThread>> Workers_; 
+    TVector<TAutoPtr<TWorkerThread>> Workers_;
 
     const size_t MaxTaskCount_;
 };

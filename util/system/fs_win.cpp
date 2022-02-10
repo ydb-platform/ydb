@@ -9,7 +9,7 @@
 #include <winioctl.h>
 
 namespace NFsPrivate {
-    static LPCWSTR UTF8ToWCHAR(const TStringBuf str, TUtf16String& wstr) { 
+    static LPCWSTR UTF8ToWCHAR(const TStringBuf str, TUtf16String& wstr) {
         wstr.resize(str.size());
         size_t written = 0;
         if (!UTF8ToWide(str.data(), str.size(), wstr.begin(), written))
@@ -19,14 +19,14 @@ namespace NFsPrivate {
         return (const WCHAR*)wstr.data();
     }
 
-    static TString WCHARToUTF8(const LPWSTR wstr, size_t len) { 
+    static TString WCHARToUTF8(const LPWSTR wstr, size_t len) {
         static_assert(sizeof(WCHAR) == sizeof(wchar16), "expect sizeof(WCHAR) == sizeof(wchar16)");
 
         return WideToUTF8((wchar16*)wstr, len);
     }
 
     HANDLE CreateFileWithUtf8Name(const TStringBuf fName, ui32 accessMode, ui32 shareMode, ui32 createMode, ui32 attributes, bool inheritHandle) {
-        TUtf16String wstr; 
+        TUtf16String wstr;
         LPCWSTR wname = UTF8ToWCHAR(fName, wstr);
         if (!wname) {
             ::SetLastError(ERROR_INVALID_NAME);
@@ -39,8 +39,8 @@ namespace NFsPrivate {
         return ::CreateFileW(wname, accessMode, shareMode, &secAttrs, createMode, attributes, nullptr);
     }
 
-    bool WinRename(const TString& oldPath, const TString& newPath) { 
-        TUtf16String op, np; 
+    bool WinRename(const TString& oldPath, const TString& newPath) {
+        TUtf16String op, np;
         LPCWSTR opPtr = UTF8ToWCHAR(oldPath, op);
         LPCWSTR npPtr = UTF8ToWCHAR(newPath, np);
         if (!opPtr || !npPtr) {
@@ -51,8 +51,8 @@ namespace NFsPrivate {
         return MoveFileExW(opPtr, npPtr, MOVEFILE_REPLACE_EXISTING) != 0;
     }
 
-    bool WinRemove(const TString& path) { 
-        TUtf16String wstr; 
+    bool WinRemove(const TString& path) {
+        TUtf16String wstr;
         LPCWSTR wname = UTF8ToWCHAR(path, wstr);
         if (!wname) {
             ::SetLastError(ERROR_INVALID_NAME);
@@ -68,16 +68,16 @@ namespace NFsPrivate {
         return false;
     }
 
-    bool WinSymLink(const TString& targetName, const TString& linkName) { 
-        TString tName(targetName); 
+    bool WinSymLink(const TString& targetName, const TString& linkName) {
+        TString tName(targetName);
         {
             size_t pos;
-            while ((pos = tName.find('/')) != TString::npos) 
+            while ((pos = tName.find('/')) != TString::npos)
                 tName.replace(pos, 1, LOCSLASH_S);
         }
-        TUtf16String tstr; 
+        TUtf16String tstr;
         LPCWSTR wname = UTF8ToWCHAR(tName, tstr);
-        TUtf16String lstr; 
+        TUtf16String lstr;
         LPCWSTR lname = UTF8ToWCHAR(linkName, lstr);
 
         // we can't create a dangling link to a dir in this way
@@ -85,14 +85,14 @@ namespace NFsPrivate {
         if (attr == INVALID_FILE_ATTRIBUTES) {
             TTempBuf result;
             if (GetFullPathNameW(lname, result.Size(), (LPWSTR)result.Data(), 0) != 0) {
-                TString fullPath = WideToUTF8(TWtringBuf((const wchar16*)result.Data())); 
+                TString fullPath = WideToUTF8(TWtringBuf((const wchar16*)result.Data()));
                 TStringBuf linkDir(fullPath);
                 linkDir.RNextTok('\\');
 
                 if (linkDir) {
-                    TString fullTarget(tName); 
+                    TString fullTarget(tName);
                     resolvepath(fullTarget, TString{linkDir});
-                    TUtf16String fullTargetW; 
+                    TUtf16String fullTargetW;
                     LPCWSTR ptrFullTarget = UTF8ToWCHAR(fullTarget, fullTargetW);
                     attr = ::GetFileAttributesW(ptrFullTarget);
                 }
@@ -101,8 +101,8 @@ namespace NFsPrivate {
         return 0 != CreateSymbolicLinkW(lname, wname, attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0);
     }
 
-    bool WinHardLink(const TString& existingPath, const TString& newPath) { 
-        TUtf16String ep, np; 
+    bool WinHardLink(const TString& existingPath, const TString& newPath) {
+        TUtf16String ep, np;
         LPCWSTR epPtr = UTF8ToWCHAR(existingPath, ep);
         LPCWSTR npPtr = UTF8ToWCHAR(newPath, np);
         if (!epPtr || !npPtr) {
@@ -113,13 +113,13 @@ namespace NFsPrivate {
         return (CreateHardLinkW(npPtr, epPtr, nullptr) != 0);
     }
 
-    bool WinExists(const TString& path) { 
-        TUtf16String buf; 
+    bool WinExists(const TString& path) {
+        TUtf16String buf;
         LPCWSTR ptr = UTF8ToWCHAR(path, buf);
         return ::GetFileAttributesW(ptr) != INVALID_FILE_ATTRIBUTES;
     }
 
-    TString WinCurrentWorkingDirectory() { 
+    TString WinCurrentWorkingDirectory() {
         TTempBuf result;
         LPWSTR buf = reinterpret_cast<LPWSTR>(result.Data());
         int r = GetCurrentDirectoryW(result.Size() / sizeof(WCHAR), buf);
@@ -128,8 +128,8 @@ namespace NFsPrivate {
         return WCHARToUTF8(buf, r);
     }
 
-    bool WinSetCurrentWorkingDirectory(const TString& path) { 
-        TUtf16String wstr; 
+    bool WinSetCurrentWorkingDirectory(const TString& path) {
+        TUtf16String wstr;
         LPCWSTR wname = UTF8ToWCHAR(path, wstr);
         if (!wname) {
             ::SetLastError(ERROR_INVALID_NAME);
@@ -138,8 +138,8 @@ namespace NFsPrivate {
         return SetCurrentDirectoryW(wname);
     }
 
-    bool WinMakeDirectory(const TString path) { 
-        TUtf16String buf; 
+    bool WinMakeDirectory(const TString path) {
+        TUtf16String buf;
         LPCWSTR ptr = UTF8ToWCHAR(path, buf);
         return CreateDirectoryW(ptr, (LPSECURITY_ATTRIBUTES) nullptr);
     }
@@ -180,7 +180,7 @@ namespace NFsPrivate {
 
     // the end of edited part of <Ntifs.h>
 
-    TString WinReadLink(const TString& name) { 
+    TString WinReadLink(const TString& name) {
         TFileHandle h = CreateFileWithUtf8Name(name, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING,
                                                FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, true);
         TTempBuf buf;
@@ -199,7 +199,7 @@ namespace NFsPrivate {
                     return WideToUTF8(str, len);
                 }
                 //this reparse point is unsupported in arcadia
-                return TString(); 
+                return TString();
             } else {
                 if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
                     buf = TTempBuf(buf.Size() * 2);

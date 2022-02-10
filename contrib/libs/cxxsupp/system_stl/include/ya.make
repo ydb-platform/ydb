@@ -1,4 +1,4 @@
-OWNER( 
-    g:contrib 
-    g:cpp-contrib 
-) 
+OWNER(
+    g:contrib
+    g:cpp-contrib
+)

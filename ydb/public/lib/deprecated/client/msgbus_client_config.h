@@ -11,14 +11,14 @@ struct TMsgBusClientConfig {
     NBus::TBusQueueConfig BusQueueConfig;
     NBus::TBusClientSessionConfig BusSessionConfig;
 
-    TString Ip; 
+    TString Ip;
     ui32 Port;
     bool UseCompression;
 
     TMsgBusClientConfig();
 
-    void ConfigureLastGetopt(NLastGetopt::TOpts &opts, const TString& prefix = TString()); 
-    static void CrackAddress(const TString& address, TString& hostname, ui32& port); 
+    void ConfigureLastGetopt(NLastGetopt::TOpts &opts, const TString& prefix = TString());
+    static void CrackAddress(const TString& address, TString& hostname, ui32& port);
 };
 
 }}

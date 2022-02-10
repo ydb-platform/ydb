@@ -175,7 +175,7 @@ namespace NFwd {
         ui64 OnHold = 0;
         ui64 OnFetch = 0;
         ui32 Offset = 0;
-        TDeque<TPage> Pages; 
+        TDeque<TPage> Pages;
     };
 }
 }

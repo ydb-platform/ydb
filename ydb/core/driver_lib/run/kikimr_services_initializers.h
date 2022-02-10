@@ -169,7 +169,7 @@ public:
 
 class TRestartsCountPublisher : public IKikimrServicesInitializer {
     static void PublishRestartsCount(const NMonitoring::TDynamicCounters::TCounterPtr& counter,
-                                     const TString& restartsCountFile); 
+                                     const TString& restartsCountFile);
 
 public:
     TRestartsCountPublisher(const TKikimrRunConfig& runConfig);
@@ -203,7 +203,7 @@ public:
 };
 
 class TTxProxyInitializer : public IKikimrServicesInitializer {
-    TVector<ui64> CollectAllAllocatorsFromAllDomains(const NKikimr::TAppData* appData); 
+    TVector<ui64> CollectAllAllocatorsFromAllDomains(const NKikimr::TAppData* appData);
 
 public:
     TTxProxyInitializer(const TKikimrRunConfig& runConfig);

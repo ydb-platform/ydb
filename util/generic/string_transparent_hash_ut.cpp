@@ -1,4 +1,4 @@
-#include "string.h" 
+#include "string.h"
 #include "vector.h"
 #include "strbuf.h"
 

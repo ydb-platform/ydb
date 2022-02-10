@@ -37,12 +37,12 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
                 }
             };
 
-            TVector<TItem> Counters; 
+            TVector<TItem> Counters;
 
             TCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> mon) {
                 auto group = mon->GetSubgroup("subsystem", "logrecs");
                 Counters.reserve(static_cast<size_t>(TLogSignature::Max));
-                TString prefix("Log"); 
+                TString prefix("Log");
 
                 for (int i = static_cast<int>(TLogSignature::First);
                      i < static_cast<int>(TLogSignature::Max); i++) {
@@ -83,14 +83,14 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             };
         };
 
-        typedef TPriorityQueue<TQueueItem, TVector<TQueueItem>, TQueueItem::TGreater> TQueueType; 
+        typedef TPriorityQueue<TQueueItem, TVector<TQueueItem>, TQueueItem::TGreater> TQueueType;
 
         const TActorId YardID;
         const TActorId SkeletonID;
         const NPDisk::TOwner Owner;
         const NPDisk::TOwnerRound OwnerRound;
         ui64 CurSentLsn = 0;
-        TQueueType Queue; 
+        TQueueType Queue;
         NMonitoring::TDynamicCounters::TCounterPtr LsmLogBytesWritten;
         TCounters Counters;
 

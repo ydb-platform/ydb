@@ -47,8 +47,8 @@ namespace {
     };
 
     struct TRegexpGroups {
-        TVector<TString> Names; 
-        TVector<ui32> Indexes; 
+        TVector<TString> Names;
+        TVector<ui32> Indexes;
     };
 
     class TRe2Udf: public TBoxedValue {

@@ -16,11 +16,11 @@ inline TOptional TTuple::GetElement<TOptional>(size_t index) const {
 }
 
 template <>
-inline TListType TTuple::GetElement<TListType>(size_t index) const { 
+inline TListType TTuple::GetElement<TListType>(size_t index) const {
     Y_ENSURE(CheckIndex(index), "Tuple element index" << index << " is out of bounds.");
     const auto& elementType = RootType.GetTuple().GetElement(index);
     const auto& element = RootValue.GetTuple(index);
-    return TListType(element, elementType); 
+    return TListType(element, elementType);
 }
 
 template <>

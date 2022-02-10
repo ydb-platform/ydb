@@ -794,7 +794,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
 
         const ui32 erasedPDiskID = 4;
 
-        TVector<NKikimr::TVDiskID> vdisks; 
+        TVector<NKikimr::TVDiskID> vdisks;
         for (ui32 i = 0; i < Conf.VDisks->GetSize(); ++i) {
             auto& vDisk = Conf.VDisks->Get(i);
             if (vDisk.Cfg->BaseInfo.PDiskId == erasedPDiskID) {

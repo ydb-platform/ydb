@@ -150,7 +150,7 @@ public:
     TDuration GetAverage() const;
 
 private:
-    TVector<TDuration> Values; 
+    TVector<TDuration> Values;
     size_t Current;
     TDuration Total;
 };
@@ -244,7 +244,7 @@ private:
 public:
     TString Name;
     ui32 Weight;
-    TSet<TTaskPtr, TTaskEarlier> Tasks; 
+    TSet<TTaskPtr, TTaskEarlier> Tasks;
     TResourceLimit QueueLimit;
     TResourceLimitPtr TotalLimit;
     double RealResourceUsage;
@@ -388,8 +388,8 @@ private:
     TTaskConfig &TaskConfig(const TString &type);
 
     TInstant Now;
-    THashMap<TString, TTaskQueuePtr> Queues; 
-    THashMap<TString, TTaskConfig> TaskConfigs; 
+    THashMap<TString, TTaskQueuePtr> Queues;
+    THashMap<TString, TTaskConfig> TaskConfigs;
     TResourceLimitPtr ResourceLimit;
     THashMap<std::pair<TActorId, ui64>, TTaskPtr> Tasks;
     const NMonitoring::TDynamicCounterPtr Counters;

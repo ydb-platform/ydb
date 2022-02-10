@@ -17,7 +17,7 @@ namespace NKikimr {
         static constexpr unsigned MaxCandidates = 1000u;
 
         TLogoBlobID Pos;                    // we stopped at this position
-        TVector<TLogoBlobID> Candidates;    // suspected logoblobs 
+        TVector<TLogoBlobID> Candidates;    // suspected logoblobs
 
         // Statistics
         TInstant StartTime;

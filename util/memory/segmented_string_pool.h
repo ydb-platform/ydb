@@ -35,7 +35,7 @@ protected:
         {
         }
     };
-    using seg_container = TVector<seg_inf>; 
+    using seg_container = TVector<seg_inf>;
     using seg_iterator = typename seg_container::iterator;
     using seg_const_iterator = typename seg_container::const_iterator;
     const size_t segment_size; // default size of a memory chunk in sizeof(T)-units

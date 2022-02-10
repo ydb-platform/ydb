@@ -51,7 +51,7 @@ namespace {
         }
     }
 
-    inline size_t StackSize(const TParams& p) noexcept { 
+    inline size_t StackSize(const TParams& p) noexcept {
         if (p.StackSize) {
             return FastClp2(p.StackSize);
         }
@@ -83,11 +83,11 @@ namespace {
         {
         }
 
-        inline bool Running() const noexcept { 
+        inline bool Running() const noexcept {
             return Handle != 0;
         }
 
-        inline TId SystemThreadId() const noexcept { 
+        inline TId SystemThreadId() const noexcept {
     #if _WIN32_WINNT < 0x0502
             return (TId)ThreadId;
     #else
@@ -168,7 +168,7 @@ namespace {
             static_assert(sizeof(H_) == sizeof(TId), "expect sizeof(H_) == sizeof(TId)");
         }
 
-        inline TId SystemThreadId() const noexcept { 
+        inline TId SystemThreadId() const noexcept {
             return (TId)H_;
         }
 
@@ -183,7 +183,7 @@ namespace {
             PCHECK(pthread_detach(H_), "can not detach thread");
         }
 
-        inline bool Running() const noexcept { 
+        inline bool Running() const noexcept {
             return (bool)H_;
         }
 
@@ -257,7 +257,7 @@ public:
     {
     }
 
-    inline TId Id() const noexcept { 
+    inline TId Id() const noexcept {
         return ThreadIdHashFunction(SystemThreadId());
     }
 
@@ -285,7 +285,7 @@ TThread::TThread(TPrivateCtor, THolder<TCallableBase> callable)
 {
 }
 
-TThread::~TThread() { 
+TThread::~TThread() {
     Join();
 }
 
@@ -312,11 +312,11 @@ void TThread::Detach() {
     }
 }
 
-bool TThread::Running() const noexcept { 
+bool TThread::Running() const noexcept {
     return Impl_ && Impl_->Running();
 }
 
-TThread::TId TThread::Id() const noexcept { 
+TThread::TId TThread::Id() const noexcept {
     if (Running()) {
         return Impl_->Id();
     }
@@ -324,7 +324,7 @@ TThread::TId TThread::Id() const noexcept {
     return ImpossibleThreadId();
 }
 
-TThread::TId TThread::CurrentThreadId() noexcept { 
+TThread::TId TThread::CurrentThreadId() noexcept {
     return SystemCurrentThreadId();
 }
 
@@ -352,7 +352,7 @@ TThread::TId TThread::CurrentThreadNumericId() noexcept {
 #endif
 }
 
-TThread::TId TThread::ImpossibleThreadId() noexcept { 
+TThread::TId TThread::ImpossibleThreadId() noexcept {
     return Max<TThread::TId>();
 }
 

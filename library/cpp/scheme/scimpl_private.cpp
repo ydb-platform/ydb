@@ -22,7 +22,7 @@ namespace NSc {
         };
 
         template <typename TAction, typename TElement, typename TColl>
-        static inline void PutToVector(TVector<TElement>& vector, TColl& coll) { 
+        static inline void PutToVector(TVector<TElement>& vector, TColl& coll) {
             size_t i = vector.size();
             vector.resize(vector.size() + coll.size());
 
@@ -61,7 +61,7 @@ namespace NSc {
                     Y_FAIL("REFERENCE LOOP DETECTED");
                     break;
                 case EMode::Stderr:
-                    Cerr << "REFERENCE LOOP DETECTED: " << JoinStrings(Vector.begin(), Vector.end(), ", ") 
+                    Cerr << "REFERENCE LOOP DETECTED: " << JoinStrings(Vector.begin(), Vector.end(), ", ")
                          << " AND " << ToString((const void*)&self) << Endl;
                     break;
                 }

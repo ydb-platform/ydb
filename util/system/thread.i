@@ -24,7 +24,7 @@
 
 #include <util/digest/numeric.h>
 
-static inline size_t SystemCurrentThreadIdImpl() noexcept { 
+static inline size_t SystemCurrentThreadIdImpl() noexcept {
     #if defined(_unix_)
         return (size_t)pthread_self();
     #elif defined(_win_)
@@ -35,7 +35,7 @@ static inline size_t SystemCurrentThreadIdImpl() noexcept {
 }
 
 template <class T>
-static inline T ThreadIdHashFunction(T t) noexcept { 
+static inline T ThreadIdHashFunction(T t) noexcept {
     /*
      * we must permute threadid bits, because some strange platforms(such Linux)
      * have strange threadid numeric properties
@@ -47,6 +47,6 @@ static inline T ThreadIdHashFunction(T t) noexcept {
     return IntHash(t);
 }
 
-static inline size_t SystemCurrentThreadId() noexcept { 
+static inline size_t SystemCurrentThreadId() noexcept {
     return ThreadIdHashFunction(SystemCurrentThreadIdImpl());
 }

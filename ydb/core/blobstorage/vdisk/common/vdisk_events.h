@@ -465,7 +465,7 @@ namespace NKikimr {
                 TDuration execution = TDuration::Seconds(ExecutionTimer.Passed());
                 stats->SetExecution(execution.GetValue());
                 if (stats->HasReceivedTimestamp()) {
-                    TInstant started = TInstant::MicroSeconds(stats->GetReceivedTimestamp()); 
+                    TInstant started = TInstant::MicroSeconds(stats->GetReceivedTimestamp());
                     TInstant now = TAppData::TimeProvider->Now();
                     TDuration total = now - started;
                     stats->SetTotal(total.GetValue());
@@ -592,7 +592,7 @@ namespace NKikimr {
             return false;
         }
 
-        TString ToString() const override { 
+        TString ToString() const override {
             return ToString(Record);
         }
 
@@ -663,10 +663,10 @@ namespace NKikimr {
             str << "}";
         }
 
-        static TString ToString(const NKikimrBlobStorage::TEvVPut &record) { 
+        static TString ToString(const NKikimrBlobStorage::TEvVPut &record) {
             TStringStream str;
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetBlobID());
-            const TString &data = record.GetBuffer(); 
+            const TString &data = record.GetBuffer();
             str << "{ID# " << id.ToString() << " FDS# " << record.GetFullDataSize();
             if (record.GetIgnoreBlock()) {
                 str << " IgnoreBlock";
@@ -682,7 +682,7 @@ namespace NKikimr {
             if (data.size() > 16) {
                 str << " Data# <too_large>";
             } else {
-                TString encoded; 
+                TString encoded;
                 Base64Encode(data, encoded);
                 str << " Data# " << encoded;
             }
@@ -708,7 +708,7 @@ namespace NKikimr {
                 const ui64 bufferSizeBytes, NWilson::TTraceId traceId, ui64 incarnationGuid,
                 const TString& errorReason);
 
-        TString ToString() const override { 
+        TString ToString() const override {
             return ToString(Record);
         }
 
@@ -716,7 +716,7 @@ namespace NKikimr {
             Record.SetStatus(status);
         }
 
-        static TString ToString(const NKikimrBlobStorage::TEvVPutResult &record) { 
+        static TString ToString(const NKikimrBlobStorage::TEvVPutResult &record) {
             TStringStream str;
             TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetBlobID());
             str << "{EvVPutResult Status# " << NKikimrProto::EReplyStatus_Name(record.GetStatus()).data();
@@ -1134,11 +1134,11 @@ namespace NKikimr {
             return false;
         }
 
-        TString ToString() const override { 
+        TString ToString() const override {
             return ToString(Record);
         }
 
-        static TString ToString(const NKikimrBlobStorage::TEvVGet &record) { 
+        static TString ToString(const NKikimrBlobStorage::TEvVGet &record) {
             TStringStream str;
             if (record.HasRangeQuery()) {
                 const NKikimrBlobStorage::TRangeQuery &query = record.GetRangeQuery();
@@ -1303,7 +1303,7 @@ namespace NKikimr {
             }
         }
 
-        TString ToString() const override { 
+        TString ToString() const override {
             TStringStream str;
             str << "{EvVGetResult QueryResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
             for (const auto& result : Record.GetResult()) {
@@ -1325,7 +1325,7 @@ namespace NKikimr {
                     if (data.size() > 16) {
                         str << " Data# <too_large>";
                     } else {
-                        TString encoded; 
+                        TString encoded;
                         Base64Encode(data, encoded);
                         str << " Data# " << encoded;
                     }
@@ -1733,7 +1733,7 @@ namespace NKikimr {
             Record.SetGeneration(actualGen);
         }
 
-        TString ToString() const override { 
+        TString ToString() const override {
             TStringStream str;
             str << "{EvVBlockResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
             if (Record.HasTabletId()) {
@@ -2108,7 +2108,7 @@ namespace NKikimr {
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
         }
 
-        TString ToString() const override { 
+        TString ToString() const override {
             TStringStream str;
             str << "{EvVGetBlockResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
             if (Record.HasTabletId()) {
@@ -2147,7 +2147,7 @@ namespace NKikimr {
         explicit
         TEvVCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel, bool collect,
             ui32 collectGeneration, ui32 collectStep, bool hard,
-            const TVector<TLogoBlobID> *keep, const TVector<TLogoBlobID> *doNotKeep, 
+            const TVector<TLogoBlobID> *keep, const TVector<TLogoBlobID> *doNotKeep,
             const TVDiskID &vdisk, TInstant deadline)
         {
             Record.SetTabletId(tabletId);
@@ -2176,7 +2176,7 @@ namespace NKikimr {
             Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::PutTabletLog);
         }
 
-        TString ToString() const override { 
+        TString ToString() const override {
             TStringStream str;
             str << "{TEvVCollectGarbage for [tablet:gen:cnt:channel]=[" << Record.GetTabletId() << ":"
                 << Record.GetRecordGeneration() << ":" << Record.GetPerGenerationCounter() << ":"
@@ -2229,7 +2229,7 @@ namespace NKikimr {
             Record.SetStatus(status);
         }
 
-        TString ToString() const override { 
+        TString ToString() const override {
             TStringStream str;
             str << "{EvVCollectGarbageResult Status# " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
             if (Record.HasTabletId()) {
@@ -2283,7 +2283,7 @@ namespace NKikimr {
             Record.MutableMsgQoS()->SetExtQueueId(NKikimrBlobStorage::EVDiskQueueId::GetFastRead);
         }
 
-        TString ToString() const override { 
+        TString ToString() const override {
             TStringStream str;
             str << "{From# " << TKeyBarrier(Record.GetFrom()).ToString()
                 << " To# " << TKeyBarrier(Record.GetTo()).ToString();
@@ -2489,7 +2489,7 @@ namespace NKikimr {
             Record.SetStatus(NKikimrProto::ERROR);
         }
 
-        void SetResult(const TString &data) { 
+        void SetResult(const TString &data) {
             Record.SetData(data);
         }
     };
@@ -2570,7 +2570,7 @@ namespace NKikimr {
             str << " VDiskId# " << vd.ToString() << "}";
         }
 
-        TString ToString() const override { 
+        TString ToString() const override {
             TStringStream str;
             Output(str);
             return str.Str();
@@ -2623,7 +2623,7 @@ namespace NKikimr {
             Record.SetStatusFlags(flags);
         }
 
-        TString ToString() const override { 
+        TString ToString() const override {
             TStringStream str;
             str << "{Status:" << Record.GetStatus()
                 << " NewSyncState# " << SyncStateFromSyncState(Record.GetNewSyncState())
@@ -2688,7 +2688,7 @@ namespace NKikimr {
             Record.SetCookie(cookie);
         }
 
-        TString ToString() const override { 
+        TString ToString() const override {
             TStringStream str;
             str << "{Status:" << Record.GetStatus()
                 << " SyncState# " << SyncStateFromSyncState(Record.GetSyncState())
@@ -2741,7 +2741,7 @@ namespace NKikimr {
             return new TEvVGenerationChange(NewVDiskId, NewInfo);
         }
 
-        TString ToString() const override { 
+        TString ToString() const override {
             return TStringBuilder() << "{TEvVGenerationChange NewVDiskId# " << NewVDiskId << " NewInfo# "
                 << NewInfo->ToString() << "}" ;
         }
@@ -2758,7 +2758,7 @@ namespace NKikimr {
             , StoragePoolCounters(std::move(storagePoolCounters))
         {}
 
-        TString ToString() const override { 
+        TString ToString() const override {
             TStringStream str;
             str << "{TEvConfigureProxy Info# ";
             if (Info) {

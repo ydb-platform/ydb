@@ -34,7 +34,7 @@ size_t GetHttpPrefixSize(const TStringBuf url, bool ignorehttps = false) noexcep
 Y_PURE_FUNCTION
 size_t GetHttpPrefixSize(const TWtringBuf url, bool ignorehttps = false) noexcept;
 
-/** BEWARE of TStringBuf! You can not use operator ~ or c_str() like in TString 
+/** BEWARE of TStringBuf! You can not use operator ~ or c_str() like in TString
     !!!!!!!!!!!! */
 Y_PURE_FUNCTION
 size_t GetSchemePrefixSize(const TStringBuf url) noexcept;
@@ -61,7 +61,7 @@ TStringBuf CutSchemePrefix(const TStringBuf url) noexcept;
 TString AddSchemePrefix(const TString& url, const TStringBuf scheme);
 
 //! Same as `AddSchemePrefix(url, "http")`.
-TString AddSchemePrefix(const TString& url); 
+TString AddSchemePrefix(const TString& url);
 
 Y_PURE_FUNCTION
 TStringBuf GetHost(const TStringBuf url) noexcept;

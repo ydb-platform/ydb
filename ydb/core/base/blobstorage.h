@@ -64,7 +64,7 @@ struct TStorageStatusFlags {
         return (Raw & ui32(NKikimrBlobStorage::StatusIsValid)) && (Raw & ui32(statusToCheck));
     }
 
-    TString ToString() const { 
+    TString ToString() const {
         TStringStream str;
         Output(str);
         return str.Str();
@@ -117,7 +117,7 @@ struct TGroupID {
         return old;
     }
 
-    TString ToString() const; 
+    TString ToString() const;
 private:
     union {
         struct {
@@ -165,7 +165,7 @@ struct TPDiskID {
     ui32 GetRaw() const { return Raw.X; }
     bool operator==(const TPDiskID &x) const { return GetRaw() == x.GetRaw(); }
 
-    TString ToString() const; 
+    TString ToString() const;
 private:
     union {
         struct {
@@ -212,7 +212,7 @@ struct TTabletChannelInfo {
             }
         };
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{FromGeneration# " << FromGeneration;
             str << " GroupID# " << GroupID;
@@ -292,7 +292,7 @@ struct TTabletChannelInfo {
             return nullptr;
     }
 
-    TString ToString() const { 
+    TString ToString() const {
         TStringStream str;
         str << "{Channel# " << Channel;
         str << " Type# " << Type.ToString();
@@ -343,7 +343,7 @@ public:
             return Max<ui32>();
     }
 
-    TString ToString() const { 
+    TString ToString() const {
         TStringStream str;
         str << "{Version# " << Version;
         str << " TabletID# " << TabletID;
@@ -385,7 +385,7 @@ public:
 
     //
     ui64 TabletID;
-    TVector<TTabletChannelInfo> Channels; 
+    TVector<TTabletChannelInfo> Channels;
     TTabletTypes::EType TabletType;
     ui32 Version;
     TPathId TenantPathId;
@@ -879,14 +879,14 @@ struct TEvBlobStorage {
         };
 
         const TLogoBlobID Id;
-        const TString Buffer; 
+        const TString Buffer;
         const TInstant Deadline;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
         const ETactic Tactic;
         mutable NLWTrace::TOrbit Orbit;
         ui32 RestartCounter = 0;
 
-        TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline, 
+        TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault)
             : Id(id)
@@ -909,7 +909,7 @@ struct TEvBlobStorage {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&tactic, sizeof(tactic));
         }
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             TStringStream str;
             str << "TEvPut {Id# " << Id.ToString();
             str << " Size# " << Buffer.size();
@@ -923,7 +923,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
 
@@ -953,7 +953,7 @@ struct TEvBlobStorage {
             , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
         {}
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvPutResult {Id# " << Id.ToString();
@@ -967,7 +967,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
     };
@@ -994,7 +994,7 @@ struct TEvBlobStorage {
                     (ui32)id.BlobSize(), (ui32)sh);
             }
 
-            TString ToString() const { 
+            TString ToString() const {
                 TStringStream str;
                 str << "TQuery {Id# " << Id.ToString();
                 str << " Shift# " << Shift;
@@ -1066,7 +1066,7 @@ struct TEvBlobStorage {
                     id.ToString().c_str(), (ui32)id.BlobSize(), (ui32)shift);
         }
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvGet {MustRestoreFirst# " << (MustRestoreFirst ? "true" : "false");
@@ -1091,7 +1091,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
 
@@ -1126,7 +1126,7 @@ struct TEvBlobStorage {
             TLogoBlobID Id;
             ui32 Shift;
             ui32 RequestedSize;
-            TString Buffer; 
+            TString Buffer;
             TVector<TPartMapItem> PartMap;
 
             TResponse()
@@ -1157,7 +1157,7 @@ struct TEvBlobStorage {
             , GroupId(groupId)
         {}
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             TStringStream str;
             str << "TEvGetResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             str << " ResponseSz# " << ResponseSz;
@@ -1187,7 +1187,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
 
@@ -1221,7 +1221,7 @@ struct TEvBlobStorage {
             , IssuerGuid(issuerGuid)
         {}
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvBlock {TabletId# " << TabletId
@@ -1232,7 +1232,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
 
@@ -1252,7 +1252,7 @@ struct TEvBlobStorage {
             : Status(status)
         {}
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvBlockResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
@@ -1263,7 +1263,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
     };
@@ -1575,7 +1575,7 @@ struct TEvBlobStorage {
             , ForceBlockedGeneration(forceBlockedGeneration)
         {}
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvDiscover {TabletId# " << TabletId;
@@ -1587,7 +1587,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
 
@@ -1604,7 +1604,7 @@ struct TEvBlobStorage {
 
         TLogoBlobID Id;
         ui32 MinGeneration;
-        TString Buffer; 
+        TString Buffer;
         ui32 BlockedGeneration;
         TString ErrorReason;
 
@@ -1616,7 +1616,7 @@ struct TEvBlobStorage {
             Y_VERIFY_DEBUG(status != NKikimrProto::OK);
         }
 
-        TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer) 
+        TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer)
             : Status(NKikimrProto::OK)
             , Id(id)
             , MinGeneration(minGeneration)
@@ -1624,7 +1624,7 @@ struct TEvBlobStorage {
             , BlockedGeneration(0)
         {}
 
-        TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer, ui32 blockedGeneration) 
+        TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer, ui32 blockedGeneration)
             : Status(NKikimrProto::OK)
             , Id(id)
             , MinGeneration(minGeneration)
@@ -1632,7 +1632,7 @@ struct TEvBlobStorage {
             , BlockedGeneration(blockedGeneration)
         {}
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             TStringStream str;
             str << "TEvDiscoverResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             str << " BlockedGeneration# " << BlockedGeneration;
@@ -1649,7 +1649,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
     };
@@ -1675,7 +1675,7 @@ struct TEvBlobStorage {
             , ForceBlockedGeneration(forceBlockedGeneration)
         {}
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvRange {TabletId# " << TabletId;
@@ -1689,7 +1689,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
 
@@ -1704,12 +1704,12 @@ struct TEvBlobStorage {
     struct TEvRangeResult : public TEventLocal<TEvRangeResult, EvRangeResult> {
         struct TResponse {
             TLogoBlobID Id;
-            TString Buffer; 
+            TString Buffer;
 
             TResponse()
             {}
 
-            TResponse(const TLogoBlobID &id, const TString &x) 
+            TResponse(const TLogoBlobID &id, const TString &x)
                 : Id(id)
                 , Buffer(x)
             {}
@@ -1719,7 +1719,7 @@ struct TEvBlobStorage {
         TLogoBlobID From;
         TLogoBlobID To;
 
-        TVector<TResponse> Responses; 
+        TVector<TResponse> Responses;
         const ui32 GroupId;
         TString ErrorReason;
 
@@ -1730,7 +1730,7 @@ struct TEvBlobStorage {
             , GroupId(groupId)
         {}
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             TStringStream str;
             str << "TEvRangeResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             str << " From# " << From.ToString();
@@ -1752,7 +1752,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
     };
@@ -1763,8 +1763,8 @@ struct TEvBlobStorage {
         ui32 PerGenerationCounter; // monotone increasing cmd counter for RecordGeneration
         ui32 Channel;
 
-        THolder<TVector<TLogoBlobID> > Keep; 
-        THolder<TVector<TLogoBlobID> > DoNotKeep; 
+        THolder<TVector<TLogoBlobID> > Keep;
+        THolder<TVector<TLogoBlobID> > DoNotKeep;
         TInstant Deadline;
 
         ui32 CollectGeneration;
@@ -1783,7 +1783,7 @@ struct TEvBlobStorage {
 
         TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel,
                 bool collect, ui32 collectGeneration,
-                ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline, 
+                ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline,
                 bool isMultiCollectAllowed, bool hard = false)
             : TabletId(tabletId)
             , RecordGeneration(recordGeneration)
@@ -1800,7 +1800,7 @@ struct TEvBlobStorage {
         {}
 
         TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 channel, bool collect, ui32 collectGeneration,
-                ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline) 
+                ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline)
             : TabletId(tabletId)
             , RecordGeneration(recordGeneration)
             , PerGenerationCounter(0)
@@ -1822,7 +1822,7 @@ struct TEvBlobStorage {
                     deadline, false /*isMultiCollectAllowed*/, true /*hard*/);
         }
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvCollectGarbage {TabletId# " << TabletId;
@@ -1856,11 +1856,11 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
 
-        static ui64 PerGenerationCounterStepSize(TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep) { 
+        static ui64 PerGenerationCounterStepSize(TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep) {
             ui64 keepCount = keep ? keep->size() : 0;
             ui64 doNotKeepCount = doNotKeep ? doNotKeep->size() : 0;
             ui64 totalFlags = keepCount + doNotKeepCount;
@@ -1899,7 +1899,7 @@ struct TEvBlobStorage {
             , Channel(channel)
         {}
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvCollectGarbageResult {TabletId# " << TabletId;
@@ -1914,7 +1914,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
     };
@@ -1927,7 +1927,7 @@ struct TEvBlobStorage {
             : Deadline(deadline)
         {}
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvStatus {Deadline# " << Deadline.MilliSeconds()
@@ -1935,7 +1935,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
 
@@ -1957,7 +1957,7 @@ struct TEvBlobStorage {
             , StatusFlags(statusFlags)
         {}
 
-        TString Print(bool isFull) const { 
+        TString Print(bool isFull) const {
             Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvStatusResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
@@ -1970,7 +1970,7 @@ struct TEvBlobStorage {
             return str.Str();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Print(false);
         }
     };

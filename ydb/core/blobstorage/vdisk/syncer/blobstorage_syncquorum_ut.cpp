@@ -11,8 +11,8 @@ namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TQuorumTrackerTests) {
 
-        TVector<TVDiskID> GetDisks(TBlobStorageGroupInfo *groupInfo) { 
-            TVector<TVDiskID> vdisks; 
+        TVector<TVDiskID> GetDisks(TBlobStorageGroupInfo *groupInfo) {
+            TVector<TVDiskID> vdisks;
             for (const auto &x : groupInfo->GetVDisks()) {
                 auto vd = groupInfo->GetVDiskId(x.OrderNumber);
                 vdisks.push_back(vd);
@@ -21,8 +21,8 @@ namespace NKikimr {
         }
 
         void Check(TQuorumTracker tracker,              // quorum tracker
-                   const TVector<TVDiskID> &vdisks,     // array of vdisks 
-                   const TVector<int> &notYetQuorum,    // array of vdisks pos to apply before achieving quorum 
+                   const TVector<TVDiskID> &vdisks,     // array of vdisks
+                   const TVector<int> &notYetQuorum,    // array of vdisks pos to apply before achieving quorum
                    int q)                               // last vdisk pos that leads to quorum
         {
             for (const auto &x : notYetQuorum) {
@@ -89,7 +89,7 @@ namespace NKikimr {
             const TVDiskID& self = vdisks[0];
 
             TQuorumTracker tracker(self, groupInfo.PickTopology(), true);
-            TVector<int> notYetQuorum = {0, 1, 2, 3, 4, 7}; 
+            TVector<int> notYetQuorum = {0, 1, 2, 3, 4, 7};
             Check(tracker, vdisks, notYetQuorum, 6);
         }
 
@@ -99,7 +99,7 @@ namespace NKikimr {
             const TVDiskID& self = vdisks[0];
 
             TQuorumTracker tracker(self, groupInfo.PickTopology(), true);
-            TVector<int> notYetQuorum = {0, 1, 3, 4, 5, 6, 8, 9}; 
+            TVector<int> notYetQuorum = {0, 1, 3, 4, 5, 6, 8, 9};
             Check(tracker, vdisks, notYetQuorum, 2);
         }
     }

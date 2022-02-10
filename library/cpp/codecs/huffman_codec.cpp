@@ -496,10 +496,10 @@ namespace NCodecs {
         : Original(codec)
     {
         CacheEntries.resize(1 << CACHE_BITS_COUNT);
-        DecodeCache.reserve(CacheEntries.size() * 2); 
+        DecodeCache.reserve(CacheEntries.size() * 2);
         char buffer[2];
         TBuffer decoded;
-        for (size_t i = 0; i < CacheEntries.size(); i++) { 
+        for (size_t i = 0; i < CacheEntries.size(); i++) {
             buffer[1] = i >> 8;
             buffer[0] = i;
             NBitIO::TBitInput bin(buffer, buffer + sizeof(buffer));

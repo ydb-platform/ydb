@@ -64,7 +64,7 @@ protected:
         TPrerequisite Prerequisite;
         THandler Handler;
     };
-    THashMap<TStringBuf, THandlerInfo> Handlers; 
+    THashMap<TStringBuf, THandlerInfo> Handlers;
 };
 
 } // NYql

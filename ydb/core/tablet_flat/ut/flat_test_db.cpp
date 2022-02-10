@@ -12,7 +12,7 @@ namespace NKikimr {
 namespace NTable {
 
 struct TFakeKey {
-    TVector<TFakeTableCell> Columns; 
+    TVector<TFakeTableCell> Columns;
 };
 
 struct TFakeKeyComparator {
@@ -36,7 +36,7 @@ struct TFakeKeyComparator {
 
 struct TFakeVal {
     bool IsDeleted;
-    TMap<TTag, TFakeTableCell> Columns; 
+    TMap<TTag, TFakeTableCell> Columns;
 
     void ApplyUpdate(const TFakeVal& other)
     {
@@ -67,20 +67,20 @@ struct TFakeVal {
     }
 };
 
-typedef TMap<TFakeKey, TFakeVal, TFakeKeyComparator> TFakeTable; 
+typedef TMap<TFakeKey, TFakeVal, TFakeKeyComparator> TFakeTable;
 
 
 class TFakeDbIterator : public ITestIterator {
-    TVector<ui32> ValueTags; 
+    TVector<ui32> ValueTags;
     TVector<const TColumn*> Cols;
     TFakeTable::const_iterator RowIt;
     TFakeTable::const_iterator RowEnd;
 
-    TVector<NScheme::TTypeId> KeyTypes; 
-    TVector<TCell> KeyCells; 
+    TVector<NScheme::TTypeId> KeyTypes;
+    TVector<TCell> KeyCells;
 
-    TVector<NScheme::TTypeId> ValueTypes; 
-    TVector<TCell> ValueCells; 
+    TVector<NScheme::TTypeId> ValueTypes;
+    TVector<TCell> ValueCells;
     bool First = true;
 
 public:
@@ -179,7 +179,7 @@ private:
     }
 };
 
-// Simple test implementation of a DB using TMap<> 
+// Simple test implementation of a DB using TMap<>
 class TFakeDb : public ITestDb {
 private:
     TAutoPtr<TScheme> Scheme;
@@ -227,7 +227,7 @@ public:
         }
         TxChanges.clear();
         SchemeChanges.Flush();
-        return TString(); 
+        return TString();
     }
 
     void Update(ui32 root, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops) override
@@ -325,8 +325,8 @@ private:
     }
 
 private:
-    THashMap<ui32, TFakeTable> Tables; 
-    THashMap<ui32, TFakeTable> TxChanges; 
+    THashMap<ui32, TFakeTable> Tables;
+    THashMap<ui32, TFakeTable> TxChanges;
     TAlter SchemeChanges;
 };
 

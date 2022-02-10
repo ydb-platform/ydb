@@ -81,7 +81,7 @@ const NYql::TPosition& TContext::Pos() const {
     return Position;
 }
 
-TString TContext::MakeName(const TString& name) { 
+TString TContext::MakeName(const TString& name) {
     auto iter = GenIndexes.find(name);
     if (iter == GenIndexes.end()) {
         iter = GenIndexes.emplace(name, 0).first;
@@ -145,7 +145,7 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
     return *IssueMsgHolder;
 }
 
-bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) { 
+bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     if (arg.Defined()) {
         if (*arg == YtProviderName
             || *arg == KikimrProviderName
@@ -190,7 +190,7 @@ TNodePtr TContext::GetPrefixedPath(const TString& cluster, const TDeferredAtom& 
     }
 }
 
-TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) { 
+TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) {
     auto alias = MakeName(baseName);
     UniversalAliases.emplace(alias, node);
     return BuildAtom(node->GetPos(), alias, TNodeFlags::Default);
@@ -274,7 +274,7 @@ bool TContext::DeclareVariable(const TString& varName, const TNodePtr& typeNode)
     return true;
 }
 
-bool TContext::AddExports(const TVector<TString>& symbols) { 
+bool TContext::AddExports(const TVector<TString>& symbols) {
     for (const auto& symbol: symbols) {
         if (Exports.contains(symbol)) {
             Error() << "Duplicate export symbol: " << symbol;
@@ -289,7 +289,7 @@ bool TContext::AddExports(const TVector<TString>& symbols) {
     return true;
 }
 
-TString TContext::AddImport(const TVector<TString>& modulePath) { 
+TString TContext::AddImport(const TVector<TString>& modulePath) {
     YQL_ENSURE(!modulePath.empty());
     const TString path = JoinRange("/", modulePath.cbegin(), modulePath.cend());
     auto iter = ImportModuleAliases.find(path);
@@ -350,7 +350,7 @@ IOutputStream& TTranslation::Error() {
     return Ctx.Error();
 }
 
-TNodePtr TTranslation::GetNamedNode(const TString& name) { 
+TNodePtr TTranslation::GetNamedNode(const TString& name) {
     auto mapIt = Ctx.NamedNodes.find(name);
     if (mapIt == Ctx.NamedNodes.end()) {
         Ctx.Error() << "Unknown name: " << name;
@@ -360,11 +360,11 @@ TNodePtr TTranslation::GetNamedNode(const TString& name) {
     return mapIt->second.top()->Clone();
 }
 
-void TTranslation::PushNamedNode(const TString& name, TNodePtr node) { 
+void TTranslation::PushNamedNode(const TString& name, TNodePtr node) {
     Y_VERIFY_DEBUG(node);
     auto mapIt = Ctx.NamedNodes.find(name);
     if (mapIt == Ctx.NamedNodes.end()) {
-        auto result = Ctx.NamedNodes.insert(std::make_pair(name, TStack<TNodePtr>())); 
+        auto result = Ctx.NamedNodes.insert(std::make_pair(name, TStack<TNodePtr>()));
         Y_VERIFY_DEBUG(result.second);
         mapIt = result.first;
     }
@@ -372,7 +372,7 @@ void TTranslation::PushNamedNode(const TString& name, TNodePtr node) {
     mapIt->second.push(node);
 }
 
-void TTranslation::PopNamedNode(const TString& name) { 
+void TTranslation::PopNamedNode(const TString& name) {
     auto mapIt = Ctx.NamedNodes.find(name);
     Y_VERIFY_DEBUG(mapIt != Ctx.NamedNodes.end());
     Y_VERIFY_DEBUG(mapIt->second.size() > 0);
@@ -382,16 +382,16 @@ void TTranslation::PopNamedNode(const TString& name) {
     }
 }
 
-TString GetDescription(const google::protobuf::Message& node, const google::protobuf::FieldDescriptor* d) { 
+TString GetDescription(const google::protobuf::Message& node, const google::protobuf::FieldDescriptor* d) {
     const auto& field = node.GetReflection()->GetMessage(node, d);
     return field.GetReflection()->GetString(field, d->message_type()->FindFieldByName("Descr"));
 }
 
-TString TTranslation::AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const { 
+TString TTranslation::AltDescription(const google::protobuf::Message& node, ui32 altCase, const google::protobuf::Descriptor* descr) const {
     return GetDescription(node, descr->FindFieldByNumber(altCase));
 }
 
-void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr) { 
+void TTranslation::AltNotImplemented(const TString& ruleName, ui32 altCase, const google::protobuf::Message& node, const google::protobuf::Descriptor* descr) {
     Error() << ruleName << ": alternative is not implemented yet: " << GetDescription(node, descr->FindFieldByNumber(altCase));
 }
 

@@ -30,11 +30,11 @@ const char* SetBackTraceCallbackName = "SetBackTraceCallback";
 class TMutableFunctionRegistry: public IMutableFunctionRegistry
 {
     struct TUdfModule {
-        TString LibraryPath; 
+        TString LibraryPath;
         std::shared_ptr<NUdf::IUdfModule> Impl;
     };
 
-    using TUdfModulesMap = THashMap<TString, TUdfModule>; 
+    using TUdfModulesMap = THashMap<TString, TUdfModule>;
 
     struct TUdfLibrary: public TThrRefBase {
         ui32 AbiVersion = 0;
@@ -49,7 +49,7 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
     public:
         TUdfModuleLoader(
                 TUdfModulesMap& modulesMap,
-                const TString& libraryPath, 
+                const TString& libraryPath,
                 const TUdfModuleRemappings& remappings,
                 ui32 abiVersion)
             : ModulesMap(modulesMap)
@@ -71,8 +71,8 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
                 m.Impl.reset(module.Release());
 
                 auto it = Remappings.find(name);
-                const TString& newName = (it == Remappings.end()) 
-                        ? TString(name) 
+                const TString& newName = (it == Remappings.end())
+                        ? TString(name)
                         : it->second;
 
                 auto i = ModulesMap.insert({ newName, std::move(m) });
@@ -87,15 +87,15 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
             }
         }
 
-        const TString& GetError() const { return Error; } 
+        const TString& GetError() const { return Error; }
         bool HasError() const { return !Error.empty(); }
 
     private:
         TUdfModulesMap& ModulesMap;
-        const TString LibraryPath; 
+        const TString LibraryPath;
         const TUdfModuleRemappings& Remappings;
-        const TString AbiVersion; 
-        TString Error; 
+        const TString AbiVersion;
+        TString Error;
     };
 
 public:
@@ -119,7 +119,7 @@ public:
     }
 
     void LoadUdfs(
-            const TString& libraryPath, 
+            const TString& libraryPath,
             const TUdfModuleRemappings& remmapings,
             ui32 flags /* = 0 */) override
     {
@@ -191,7 +191,7 @@ public:
             const TStringBuf& moduleName,
             NUdf::TUniquePtr<NUdf::IUdfModule> module) override
     {
-        TString libraryPathStr(libraryPath); 
+        TString libraryPathStr(libraryPath);
         auto inserted = LoadedLibraries_.insert({ libraryPathStr, nullptr });
         if (!inserted.second) {
             return;
@@ -278,12 +278,12 @@ public:
                 << "But get " << name;
     }
 
-    TMaybe<TString> FindUdfPath(const TStringBuf& moduleName) const override { 
+    TMaybe<TString> FindUdfPath(const TStringBuf& moduleName) const override {
         if (const TUdfModule* udf = UdfModules_.FindPtr(moduleName)) {
             return udf->LibraryPath;
         }
 
-        if (const TString* path = SystemModulePaths_.FindPtr(moduleName)) { 
+        if (const TString* path = SystemModulePaths_.FindPtr(moduleName)) {
             return *path;
         }
 
@@ -294,8 +294,8 @@ public:
         return UdfModules_.contains(moduleName);
     }
 
-    THashSet<TString> GetAllModuleNames() const override { 
-        THashSet<TString> names; 
+    THashSet<TString> GetAllModuleNames() const override {
+        THashSet<TString> names;
         names.reserve(UdfModules_.size());
         for (const auto& module: UdfModules_) {
             names.insert(module.first);
@@ -359,7 +359,7 @@ public:
 private:
     const IBuiltinFunctionRegistry::TPtr Builtins_;
 
-    THashMap<TString, TUdfLibraryPtr> LoadedLibraries_; 
+    THashMap<TString, TUdfLibraryPtr> LoadedLibraries_;
     TUdfModulesMap UdfModules_;
     THolder<TMemoryUsageInfo> UdfMemoryInfo_;
     TUdfModulePathsMap SystemModulePaths_;
@@ -410,7 +410,7 @@ public:
         return TStatus::Error(TStringBuf("Unsupported access to builtins registry"));
     }
 
-    TMaybe<TString> FindUdfPath( 
+    TMaybe<TString> FindUdfPath(
             const TStringBuf& /* moduleName */) const override
     {
         return{};
@@ -420,7 +420,7 @@ public:
         return false;
     }
 
-    THashSet<TString> GetAllModuleNames() const override { 
+    THashSet<TString> GetAllModuleNames() const override {
         return {};
     }
 
@@ -452,7 +452,7 @@ private:
 namespace NKikimr {
 namespace NMiniKQL {
 
-void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths) 
+void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths)
 {
     static const TStringBuf libPrefix = TStringBuf(MKQL_UDF_LIB_PREFIX);
     static const TStringBuf libSuffix = TStringBuf(MKQL_UDF_LIB_SUFFIX);
@@ -498,9 +498,9 @@ bool SplitModuleAndFuncName(const TStringBuf& name, TStringBuf& module, TStringB
     return name.TrySplit(MODULE_NAME_DELIMITER, module, func);
 }
 
-TString FullName(const TStringBuf& module, const TStringBuf& func) 
+TString FullName(const TStringBuf& module, const TStringBuf& func)
 {
-    TString fullName; 
+    TString fullName;
     fullName.reserve(module.size() + func.size() + 1);
     fullName.append(module);
     fullName.append(MODULE_NAME_DELIMITER);
@@ -528,7 +528,7 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
 
     // system UDFs loaded with default names
     TUdfModuleRemappings remappings;
-    for (const TString& udfPath: udfsPaths) { 
+    for (const TString& udfPath: udfsPaths) {
         registry->LoadUdfs(udfPath, remappings, flags);
     }
 

@@ -24,9 +24,9 @@ struct TNodeInfo {
     const TExprNode* const Node;
     IDataProvider* Provider;
     bool IsVisible;
-    TExprNode::TListType Dependencies; 
-    TVector<TPinAttrs> Inputs; 
-    TVector<TPinAttrs> Outputs; 
+    TExprNode::TListType Dependencies;
+    TVector<TPinAttrs> Inputs;
+    TVector<TPinAttrs> Outputs;
     ui32 InputsCount = 0;
     ui32 OutputsCount = 0;
 
@@ -48,7 +48,7 @@ struct TBasicNode {
         Output
     };
 
-    TString DisplayName; 
+    TString DisplayName;
     EType Type = EType::Unknown;
 };
 
@@ -84,8 +84,8 @@ struct TBasicLink {
 
 struct TLevelContext {
     TBasicNode* const Node;
-    TVector<ui64> Inputs; 
-    TVector<ui64> Outputs; 
+    TVector<ui64> Inputs;
+    TVector<ui64> Outputs;
 
     TLevelContext()
         : Node(nullptr)
@@ -110,7 +110,7 @@ struct TProviderInfo {
     {}
 };
 
-using TProviderInfoMap = TMap<TString, TProviderInfo>; 
+using TProviderInfoMap = TMap<TString, TProviderInfo>;
 
 void WriteProviders(const TString& tag, const TProviderInfoMap& providers, NYson::TYsonWriter& writer) {
     writer.OnKeyedItem(tag);
@@ -141,7 +141,7 @@ void WriteProviders(const TString& tag, const TProviderInfoMap& providers, NYson
     writer.OnEndList();
 }
 
-ui32 FillLevels(THashMap<ui32, TLevelContext>& basicNodesMap, ui32 current, THashSet<ui32>& visited) { 
+ui32 FillLevels(THashMap<ui32, TLevelContext>& basicNodesMap, ui32 current, THashSet<ui32>& visited) {
     if (visited.contains(current)) {
         return 0;
     }
@@ -190,7 +190,7 @@ public:
         }
 
         TNodeMap<TNodeInfo> nodes;
-        TExprNode::TListType order; 
+        TExprNode::TListType order;
         TProviderInfoMap providers;
 
         writer.OnBeginMap();
@@ -200,9 +200,9 @@ public:
         writer.OnBeginList();
         VisitNode(root, nodes, order);
         ui32 lastId = 0;
-        TVector<TBasicNode> basicNodes; 
-        TVector<TBasicLink> basicLinks; 
-        TMap<TString, ui32> opStats; 
+        TVector<TBasicNode> basicNodes;
+        TVector<TBasicLink> basicLinks;
+        TMap<TString, ui32> opStats;
         for (auto node : order) {
             auto& info = nodes.find(node.Get())->second;
             if (!info.IsVisible) {
@@ -218,8 +218,8 @@ public:
             writer.OnStringScalar(node->Content());
             opStats[TString(node->Content())] += 1;
             if (info.Provider) {
-                TVector<TPinInfo> inputs; 
-                TVector<TPinInfo> outputs; 
+                TVector<TPinInfo> inputs;
+                TVector<TPinInfo> outputs;
                 info.Provider->GetPlanFormatter().GetInputs(*node, inputs);
                 info.Provider->GetPlanFormatter().GetOutputs(*node, outputs);
                 if (inputs.size()) {
@@ -247,7 +247,7 @@ public:
                 info.Provider->GetPlanFormatter().WritePlanDetails(*info.Node, writer);
             }
 
-            TSet<ui64> dependsOn; 
+            TSet<ui64> dependsOn;
             for (auto child : info.Dependencies) {
                 GatherDependencies(*child, nodes, dependsOn);
             }
@@ -330,7 +330,7 @@ public:
         writer.OnEndMap();
     }
 
-    void VisitCallable(const TExprNode::TPtr& node, TNodeMap<TNodeInfo>& nodes, TExprNode::TListType& order) { 
+    void VisitCallable(const TExprNode::TPtr& node, TNodeMap<TNodeInfo>& nodes, TExprNode::TListType& order) {
         if (nodes.cend() != nodes.find(node.Get())) {
             return;
         }
@@ -341,7 +341,7 @@ public:
         }
 
         auto& info = nodes.emplace(node.Get(), TNodeInfo(translatedId, node.Get())).first->second;
-        TExprNode::TListType& dependencies = info.Dependencies; 
+        TExprNode::TListType& dependencies = info.Dependencies;
         if (node->Content() == CommitName) {
             dependencies.push_back(node->Child(0));
             auto dataSinkName = node->Child(1)->Child(0)->Content();
@@ -387,7 +387,7 @@ public:
     }
 
     void VisitNode(const TExprNode::TPtr& node, TNodeMap<TNodeInfo>& nodes,
-        TExprNode::TListType& order) { 
+        TExprNode::TListType& order) {
         switch (node->Type()) {
         case TExprNode::Atom:
         case TExprNode::List:
@@ -403,7 +403,7 @@ public:
     }
 
     void GatherDependencies(const TExprNode& node,
-        const TNodeMap<TNodeInfo>& nodes, TSet<ui64>& dependsOn) { 
+        const TNodeMap<TNodeInfo>& nodes, TSet<ui64>& dependsOn) {
         const auto info = nodes.find(&node);
         if (nodes.cend() == info)
             return;
@@ -419,10 +419,10 @@ public:
     }
 
     void BuildBasicGraph(
-        const TNodeMap<TNodeInfo>& nodes, const TExprNode::TListType& order, 
-        ui32 root, TVector<TBasicNode>& basicNodes, TVector<TBasicLink>& basicLinks) { 
-        THashMap<TPinKey, ui32, TPinKey::THash> allInputs; 
-        THashMap<TPinKey, ui32, TPinKey::THash> allOutputs; 
+        const TNodeMap<TNodeInfo>& nodes, const TExprNode::TListType& order,
+        ui32 root, TVector<TBasicNode>& basicNodes, TVector<TBasicLink>& basicLinks) {
+        THashMap<TPinKey, ui32, TPinKey::THash> allInputs;
+        THashMap<TPinKey, ui32, TPinKey::THash> allOutputs;
         for (auto node : order) {
             auto& info = nodes.find(node.Get())->second;
             if (!info.IsVisible) {
@@ -519,7 +519,7 @@ public:
                 }
             }
 
-            TSet<ui64> dependsOn; 
+            TSet<ui64> dependsOn;
             for (auto child : info.Dependencies) {
                 GatherDependencies(*child, nodes, dependsOn);
             }
@@ -529,7 +529,7 @@ public:
             }
         }
 
-        THashMap<ui32, TLevelContext> basicNodesMap; 
+        THashMap<ui32, TLevelContext> basicNodesMap;
         for (auto& node : basicNodes) {
             basicNodesMap.insert({ node.Id, TLevelContext(&node) });
         }
@@ -544,7 +544,7 @@ public:
         }
 
         if (root) {
-            THashSet<ui32> visited; 
+            THashSet<ui32> visited;
             FillLevels(basicNodesMap, root, visited);
         }
     }
@@ -566,7 +566,7 @@ public:
         providers.insert(std::make_pair(path, TProviderInfo(providerId, node, provider)));
     }
 
-    void UpdateProviders(TProviderInfoMap& providers, const TVector<TPinInfo>& pins) { 
+    void UpdateProviders(TProviderInfoMap& providers, const TVector<TPinInfo>& pins) {
         for (auto& pin : pins) {
             if (pin.DataSource) {
                 auto providerName = pin.DataSource->Child(0)->Content();
@@ -625,7 +625,7 @@ public:
     }
 
     void WritePins(const TString& tag, const TVector<TPinInfo>& pins, NYson::TYsonWriter& writer,
-        TVector<TPinAttrs>& pinAttrs, TProviderInfoMap& providers) { 
+        TVector<TPinAttrs>& pinAttrs, TProviderInfoMap& providers) {
         if (!pins.empty()) {
             UpdateProviders(providers, pins);
             writer.OnKeyedItem(tag);
@@ -666,8 +666,8 @@ public:
 
 private:
     TTypeAnnotationContext& Types_;
-    THashMap<TPinKey, ui32, TPinKey::THash> PinMap_; 
-    TMap<TString, ui32> ProviderIds_; 
+    THashMap<TPinKey, ui32, TPinKey::THash> PinMap_;
+    TMap<TString, ui32> ProviderIds_;
     ui32 NextId_ = 0;
 };
 

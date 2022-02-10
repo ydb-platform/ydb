@@ -158,12 +158,12 @@ namespace NTls {
     public:
         TKey(TDtor dtor);
         TKey(TKey&&) noexcept;
-        ~TKey(); 
+        ~TKey();
 
         void* Get() const;
         void Set(void* ptr) const;
 
-        static void Cleanup() noexcept; 
+        static void Cleanup() noexcept;
 
     private:
         class TImpl;
@@ -171,7 +171,7 @@ namespace NTls {
     };
 
     struct TCleaner {
-        inline ~TCleaner() { 
+        inline ~TCleaner() {
             TKey::Cleanup();
         }
     };
@@ -292,16 +292,16 @@ namespace NTls {
 }
 
 template <class T>
-static inline T& TlsRef(NTls::TValue<T>& v) noexcept { 
+static inline T& TlsRef(NTls::TValue<T>& v) noexcept {
     return v;
 }
 
 template <class T>
-static inline const T& TlsRef(const NTls::TValue<T>& v) noexcept { 
+static inline const T& TlsRef(const NTls::TValue<T>& v) noexcept {
     return v;
 }
 
 template <class T>
-static inline T& TlsRef(T& v) noexcept { 
+static inline T& TlsRef(T& v) noexcept {
     return v;
 }

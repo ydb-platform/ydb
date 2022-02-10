@@ -8,7 +8,7 @@
 void CreateYvector(const size_t size, const size_t count) {
     for (size_t i = 0; i < count; ++i) {
         NBench::Clobber();
-        TVector<ui8> v(size); 
+        TVector<ui8> v(size);
         NBench::Escape(v.data());
         NBench::Clobber();
     }

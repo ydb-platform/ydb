@@ -31,7 +31,7 @@ namespace NKikimr {
         }
 
         TDeltaToDiskRecLog &TDeltaToDiskRecLog::Append(ui32 chunkIdx,
-                                                       const TVector<TSyncLogPageSnap> &pages) { 
+                                                       const TVector<TSyncLogPageSnap> &pages) {
             Y_VERIFY(AllAppends.empty() || AllAppends.back().ChunkIdx != chunkIdx);
             AllAppends.emplace_back(chunkIdx, pages);
             return *this;
@@ -61,7 +61,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TOneChunkIndex
         ////////////////////////////////////////////////////////////////////////////
-        void TOneChunkIndex::UpdateIndex(const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk) { 
+        void TOneChunkIndex::UpdateIndex(const TVector<TSyncLogPageSnap> &pages, ui32 indexBulk) {
             Y_VERIFY_DEBUG(!Index.empty() && !pages.empty());
             TSyncLogPageSnap firstPage = pages.front();
             ui64 firstPageFirstLsn = firstPage.GetFirstLsn();
@@ -86,7 +86,7 @@ namespace NKikimr {
             AppendPages(pages, indexBulk, freePagePos);
         }
 
-        void TOneChunkIndex::AppendPages(const TVector<TSyncLogPageSnap> &pages, 
+        void TOneChunkIndex::AppendPages(const TVector<TSyncLogPageSnap> &pages,
                                          ui32 indexBulk,
                                          ui32 freePagePos) {
             ui32 s = pages.size();
@@ -243,7 +243,7 @@ namespace NKikimr {
             }
         }
 
-        TString TDiskRecLogSnapshot::BoundariesToString() const { 
+        TString TDiskRecLogSnapshot::BoundariesToString() const {
             if (Empty())
                 return Sprintf("{Dsk: empty}");
             else
@@ -368,7 +368,7 @@ namespace NKikimr {
         // force to delete nchunks (if we don't have space for instance)
         ui64 TDiskRecLog::DeleteChunks(ui32 nchunks,
                                        std::shared_ptr<IActorNotify> notifier,
-                                       TVector<ui32> &chunks) { 
+                                       TVector<ui32> &chunks) {
             auto m = Guard(Lock);
             const ui32 curChunks = ManyIdxChunks.size();
             const ui32 numChunksToDelete = Min(nchunks, curChunks);
@@ -386,7 +386,7 @@ namespace NKikimr {
             return newLogStartLsn;
         }
 
-        void TDiskRecLog::UpdateIndex(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages) { 
+        void TDiskRecLog::UpdateIndex(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages) {
             auto m = Guard(Lock);
             PrivateUpdateIndex(chunkIdx, pages);
         }
@@ -435,7 +435,7 @@ namespace NKikimr {
             return (pos == end);
         }
 
-        TString TDiskRecLog::BoundariesToString() const { 
+        TString TDiskRecLog::BoundariesToString() const {
             auto m = Guard(Lock);
             if (PrivateEmpty())
                 return Sprintf("{Dsk: empty}");
@@ -443,7 +443,7 @@ namespace NKikimr {
                 return Sprintf("{Dsk: [%" PRIu64 ", %" PRIu64 "]}", PrivateGetFirstLsn(), PrivateGetLastLsn());
         }
 
-        TString TDiskRecLog::ToString() const { 
+        TString TDiskRecLog::ToString() const {
             auto m = Guard(Lock);
             TStringStream s;
             if (PrivateEmpty())
@@ -461,7 +461,7 @@ namespace NKikimr {
             return s.Str();
         }
 
-        void TDiskRecLog::GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
+        void TDiskRecLog::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (const TIndexedChunkPtr& chunk : ManyIdxChunks) {
                 chunk->GetOwnedChunks(chunks);
             }
@@ -510,7 +510,7 @@ namespace NKikimr {
         }
 
         void TDiskRecLog::PrivateUpdateIndex(ui32 chunkIdx,
-                                             const TVector<TSyncLogPageSnap> &pages) { 
+                                             const TVector<TSyncLogPageSnap> &pages) {
             if (!PrivateEmpty() && PrivateLastChunkIdx() == chunkIdx) {
                 // update last chunk
                 Y_VERIFY_DEBUG(pages.size() <= PrivateLastChunkFreePagesNum());

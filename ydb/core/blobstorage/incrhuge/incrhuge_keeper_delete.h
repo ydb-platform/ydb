@@ -16,9 +16,9 @@ namespace NKikimr {
             std::array<ui64, 256> OwnerToSeqNo;
 
             struct TDeleteQueueItem;
-            using TDeleteQueue = TList<TDeleteQueueItem>; 
+            using TDeleteQueue = TList<TDeleteQueueItem>;
             TDeleteQueue DeleteQueue;
-            THashMap<TIncrHugeBlobId, TDeleteQueue::iterator> WriteInProgress; 
+            THashMap<TIncrHugeBlobId, TDeleteQueue::iterator> WriteInProgress;
 
         public:
             TDeleter(TKeeper& keeper);
@@ -28,7 +28,7 @@ namespace NKikimr {
             void HandleDelete(TEvIncrHugeDelete::TPtr& ev, const TActorContext& ctx);
 
             // delete some locators generated while defragmenting
-            void DeleteDefrag(TVector<TBlobDeleteLocator>&& deleteLocators, const TActorContext& ctx); 
+            void DeleteDefrag(TVector<TBlobDeleteLocator>&& deleteLocators, const TActorContext& ctx);
 
             // issue chunk deletion request after it is completely freed
             void IssueLogChunkDelete(TChunkIdx chunkIdx, const TActorContext& ctx);
@@ -42,7 +42,7 @@ namespace NKikimr {
             void ProcessDeleteItem(TDeleteQueue::iterator it, const TActorContext& ctx);
 
             // post-log part of delete process (when log finished successfully)
-            void ProcessDeletedLocators(const TVector<TBlobDeleteLocator>& deleteLocators, bool deleteFromLookup, 
+            void ProcessDeletedLocators(const TVector<TBlobDeleteLocator>& deleteLocators, bool deleteFromLookup,
                     const TActorContext& ctx);
         };
 

@@ -3,14 +3,14 @@
 
 #include <util/system/file.h>
 #include <util/system/rwlock.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 /*
  * file log
  */
 class TFileLogBackend::TImpl {
 public:
-    inline TImpl(const TString& path) 
+    inline TImpl(const TString& path)
         : File_(OpenFile(path))
     {
     }
@@ -30,7 +30,7 @@ public:
     }
 
 private:
-    static inline TFile OpenFile(const TString& path) { 
+    static inline TFile OpenFile(const TString& path) {
         return TFile(path, OpenAlways | WrOnly | ForAppend | Seq | NoReuse);
     }
 
@@ -39,12 +39,12 @@ private:
     TFile File_;
 };
 
-TFileLogBackend::TFileLogBackend(const TString& path) 
+TFileLogBackend::TFileLogBackend(const TString& path)
     : Impl_(new TImpl(path))
 {
 }
 
-TFileLogBackend::~TFileLogBackend() { 
+TFileLogBackend::~TFileLogBackend() {
 }
 
 void TFileLogBackend::WriteData(const TLogRecord& rec) {

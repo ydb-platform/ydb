@@ -67,7 +67,7 @@ namespace NKikimr {
         }
 
         void Handle(NPDisk::TEvChunkReadResult::TPtr &ev, const TActorContext &ctx) {
-            TString message; 
+            TString message;
             const NKikimrProto::EReplyStatus status = ev->Get()->Status;
             if (status != NKikimrProto::OK) {
                 TStringStream str;

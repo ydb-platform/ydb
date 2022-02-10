@@ -253,7 +253,7 @@ void TCodepageTest::TestUTFFromUnknownPlane() {
 
     // test TChar version
     // bytebuffer of len writtenbytes contains sampletext of len samplelen chars in utf8
-    TUtf16String wtr = CharToWide(TStringBuf(bytebuffer, writtenbytes), CODES_UNKNOWNPLANE); 
+    TUtf16String wtr = CharToWide(TStringBuf(bytebuffer, writtenbytes), CODES_UNKNOWNPLANE);
     TChar* strend = wtr.begin() + wtr.size();
     DecodeUnknownPlane(wtr.begin(), strend, CODES_UTF8);
     wtr.resize(strend - wtr.data(), 'Q');

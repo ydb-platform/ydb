@@ -90,11 +90,11 @@ public:
                                    TPodTraits<std::remove_cv_t<std::remove_all_extents_t<T>>>::IsPod);
 };
 
-namespace NPrivate { 
-    template <class T> 
+namespace NPrivate {
+    template <class T>
     struct TIsSmall: std::integral_constant<bool, (sizeof(T) <= sizeof(void*))> {};
-} 
- 
+}
+
 template <class T>
 class TTypeTraits: public TTypeTraitsBase<T> {
     using TBase = TTypeTraitsBase<T>;
@@ -102,10 +102,10 @@ class TTypeTraits: public TTypeTraitsBase<T> {
     /*
      * can be effectively passed to function as value
      */
-    static constexpr bool IsValueType = std::is_scalar<T>::value || 
-                                        std::is_array<T>::value || 
-                                        std::is_reference<T>::value || 
-                                        (TBase::IsPod && 
+    static constexpr bool IsValueType = std::is_scalar<T>::value ||
+                                        std::is_array<T>::value ||
+                                        std::is_reference<T>::value ||
+                                        (TBase::IsPod &&
                                          std::conditional_t<
                                              std::is_function<T>::value,
                                              std::false_type,
@@ -222,8 +222,8 @@ class TTypeTraits<void>: public TTypeTraitsBase<void> {};
  *     std::false_type,
  * >;
  *
- * static_assert(TIsAssocCont<TVector<int>>::value == false, ""); 
- * static_assert(TIsAssocCont<THashMap<int>>::value == true, ""); 
+ * static_assert(TIsAssocCont<TVector<int>>::value == false, "");
+ * static_assert(TIsAssocCont<THashMap<int>>::value == true, "");
  * @endcode
  */
 #define Y_HAS_SUBTYPE(...) Y_PASS_VA_ARGS(Y_MACRO_IMPL_DISPATCHER_2(__VA_ARGS__, Y_HAS_SUBTYPE_IMPL_2, Y_HAS_SUBTYPE_IMPL_1)(__VA_ARGS__))

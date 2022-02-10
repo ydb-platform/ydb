@@ -2,7 +2,7 @@
 
 #include <util/system/defaults.h>
 #include <util/system/compat.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 // ctype.h-like functions, locale-independent:
 //      IsAscii{Upper,Lower,Digit,Alpha,Alnum,Space} and

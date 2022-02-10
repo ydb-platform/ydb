@@ -18,7 +18,7 @@ public:
         const ui32 numStepsPerGeneration = 3;
         for (ui32 i = 0; i < numGenerations; ++i) {
             for (ui32 j = 0; j < numStepsPerGeneration; ++j) {
-                TString data = Sprintf("%" PRIu32 "/%" PRIu32, i + 1, j + 1); 
+                TString data = Sprintf("%" PRIu32 "/%" PRIu32, i + 1, j + 1);
                 TLogoBlobID id(tabletId, i + 1, j + 1, 0, data.size(), 0);
                 Put(id, data);
                 lastBlobId = id;
@@ -26,7 +26,7 @@ public:
         }
 
         // find the location of last blob
-        THashSet<TVDiskID> vdisksWithLastBlob; 
+        THashSet<TVDiskID> vdisksWithLastBlob;
         for (const auto& pair : Runtime.VDisks) {
             auto ev = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(pair.first, TInstant::Max(), NKikimrBlobStorage::FastRead,
                     TEvBlobStorage::TEvVGet::EFlags::None, {}, {lastBlobId});

@@ -2,7 +2,7 @@
 
 #include "fwd.h"
 #include "path.h"
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 class TTempDir {
 public:
@@ -10,18 +10,18 @@ public:
     TTempDir();
 
     /// Create new directory with this fixed name. If it already exists, clear it.
-    TTempDir(const TString& tempDir); 
+    TTempDir(const TString& tempDir);
 
     ~TTempDir();
 
     /// Create new directory in given folder.
     static TTempDir NewTempDir(const TString& root);
 
-    const TString& operator()() const { 
+    const TString& operator()() const {
         return Name();
     }
 
-    const TString& Name() const { 
+    const TString& Name() const {
         return TempDir.GetPath();
     }
 

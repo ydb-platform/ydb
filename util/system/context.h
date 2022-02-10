@@ -78,10 +78,10 @@ public:
         makecontext(&Ctx_, (ucontext_func_t)ContextTrampoLine, 1, c.TrampoLine);
     }
 
-    inline ~TContMachineContext() { 
+    inline ~TContMachineContext() {
     }
 
-    inline void SwitchTo(TContMachineContext* next) noexcept { 
+    inline void SwitchTo(TContMachineContext* next) noexcept {
         swapcontext(&Ctx_, &next->Ctx_);
     }
 
@@ -98,9 +98,9 @@ public:
     TContMachineContext();
     TContMachineContext(const TContClosure& c);
 
-    ~TContMachineContext(); 
+    ~TContMachineContext();
 
-    void SwitchTo(TContMachineContext* next) noexcept; 
+    void SwitchTo(TContMachineContext* next) noexcept;
 
 private:
     THolder<TImpl> Impl_;
@@ -112,9 +112,9 @@ class TContMachineContext {
 public:
     TContMachineContext();
     TContMachineContext(const TContClosure& c);
-    ~TContMachineContext(); 
+    ~TContMachineContext();
 
-    void SwitchTo(TContMachineContext* next) noexcept; 
+    void SwitchTo(TContMachineContext* next) noexcept;
 
 private:
     void* Fiber_;
@@ -133,7 +133,7 @@ public:
 
     inline ~TContMachineContext() = default;
 
-    void SwitchTo(TContMachineContext* next) noexcept; 
+    void SwitchTo(TContMachineContext* next) noexcept;
 
 private:
     __myjmp_buf Buf_;
@@ -153,7 +153,7 @@ private:
 };
 #endif
 
-static inline size_t MachineContextSize() noexcept { 
+static inline size_t MachineContextSize() noexcept {
     return sizeof(TContMachineContext);
 }
 

@@ -6,19 +6,19 @@
 
 #include "ut_helpers.h"
 
-template <typename TQueueType> 
+template <typename TQueueType>
 class TTestUnorderedQueue: public TTestBase {
 private:
     using TLink = TIntrusiveLink;
 
-    UNIT_TEST_SUITE_DEMANGLE(TTestUnorderedQueue<TQueueType>); 
+    UNIT_TEST_SUITE_DEMANGLE(TTestUnorderedQueue<TQueueType>);
     UNIT_TEST(Push1M_Pop1M_Unordered)
     UNIT_TEST_SUITE_END();
 
 public:
     void Push1M_Pop1M_Unordered() {
         constexpr int REPEAT = 1000000;
-        TQueueType queue; 
+        TQueueType queue;
         TLink msg[REPEAT];
 
         auto pmsg = queue.Pop();
@@ -28,7 +28,7 @@ public:
             queue.Push(&msg[i]);
         }
 
-        TVector<TLink*> popped; 
+        TVector<TLink*> popped;
         popped.reserve(REPEAT);
         for (int i = 0; i < REPEAT; ++i) {
             popped.push_back((TLink*)queue.Pop());
@@ -44,17 +44,17 @@ public:
     }
 };
 
-template <typename TQueueType> 
+template <typename TQueueType>
 class TTestWeakQueue: public TTestBase {
 private:
-    UNIT_TEST_SUITE_DEMANGLE(TTestWeakQueue<TQueueType>); 
+    UNIT_TEST_SUITE_DEMANGLE(TTestWeakQueue<TQueueType>);
     UNIT_TEST(Threads8_Rnd_Exchange)
     UNIT_TEST_SUITE_END();
 
 public:
     template <ui16 COUNT = 48, ui32 MSG_COUNT = 10000>
     void ManyThreadsRndExchange() {
-        TQueueType queues[COUNT]; 
+        TQueueType queues[COUNT];
 
         class TWorker: public ISimpleThread {
         public:
@@ -68,9 +68,9 @@ public:
             {
             }
 
-            TQueueType* Queues; 
+            TQueueType* Queues;
             ui16 MineQueue;
-            TVector<uintptr_t> Received; 
+            TVector<uintptr_t> Received;
             TAtomic* PushDone;
 
             void* ThreadProc() override {
@@ -120,7 +120,7 @@ public:
             }
         };
 
-        TVector<TAutoPtr<TWorker>> workers; 
+        TVector<TAutoPtr<TWorker>> workers;
         TAtomic pushDone = 0;
 
         for (ui32 i = 0; i < COUNT; ++i) {
@@ -128,7 +128,7 @@ public:
             workers.back()->Start();
         }
 
-        TVector<uintptr_t> all; 
+        TVector<uintptr_t> all;
         for (ui32 i = 0; i < COUNT; ++i) {
             workers[i]->Join();
             all.insert(all.begin(),

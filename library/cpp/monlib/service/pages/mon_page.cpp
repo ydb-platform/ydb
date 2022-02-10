@@ -2,7 +2,7 @@
 
 using namespace NMonitoring;
 
-IMonPage::IMonPage(const TString& path, const TString& title) 
+IMonPage::IMonPage(const TString& path, const TString& title)
     : Path(path)
     , Title(title)
 {

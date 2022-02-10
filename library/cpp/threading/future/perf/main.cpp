@@ -1,7 +1,7 @@
 #include <library/cpp/testing/benchmark/bench.h>
 #include <library/cpp/threading/future/future.h>
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/xrange.h>
 
 using namespace NThreading;
@@ -38,7 +38,7 @@ Y_CPU_BENCHMARK(AllocPromiseUI64, iface) {
 }
 
 Y_CPU_BENCHMARK(AllocPromiseStroka, iface) {
-    TestAllocPromise<TString>(iface); 
+    TestAllocPromise<TString>(iface);
 }
 
 Y_CPU_BENCHMARK(SetPromiseUI64, iface) {
@@ -46,5 +46,5 @@ Y_CPU_BENCHMARK(SetPromiseUI64, iface) {
 }
 
 Y_CPU_BENCHMARK(SetPromiseStroka, iface) {
-    TestSetPromise<TString>(iface, "test test test"); 
+    TestSetPromise<TString>(iface, "test test test");
 }

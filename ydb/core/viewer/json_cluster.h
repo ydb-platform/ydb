@@ -249,8 +249,8 @@ public:
     THolder<TEvWhiteboard::TEvVDiskStateResponse> MergedVDiskInfo;
     THolder<TEvWhiteboard::TEvPDiskStateResponse> MergedPDiskInfo;
     THolder<TEvWhiteboard::TEvTabletStateResponse> MergedTabletInfo;
-    TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&> VDisksIndex; 
-    TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&> PDisksIndex; 
+    TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&> VDisksIndex;
+    TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&> PDisksIndex;
 
     void ReplyAndDie(const TActorContext& ctx) {
         TStringStream json;
@@ -321,8 +321,8 @@ public:
         }
         ui32 numberOfCpus = 0;
         double loadAverage = 0;
-        THashSet<TString> dataCenters; 
-        THashSet<TString> versions; 
+        THashSet<TString> dataCenters;
+        THashSet<TString> versions;
         THashSet<TString> hosts;
         THashMap<TString, int> names;
         for (const auto& pr : SystemInfo) {
@@ -402,7 +402,7 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonCluster> {
-    static TString GetSchema() { 
+    static TString GetSchema() {
         TStringStream stream;
         TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TClusterInfo>(stream);
         return stream.Str();
@@ -411,7 +411,7 @@ struct TJsonRequestSchema<TJsonCluster> {
 
 template <>
 struct TJsonRequestParameters<TJsonCluster> {
-    static TString GetParameters() { 
+    static TString GetParameters() {
         return R"___([{"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
                       {"name":"tablets","in":"query","description":"return system tablets state","required":false,"type":"boolean"},
                       {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
@@ -421,14 +421,14 @@ struct TJsonRequestParameters<TJsonCluster> {
 
 template <>
 struct TJsonRequestSummary<TJsonCluster> {
-    static TString GetSummary() { 
+    static TString GetSummary() {
         return "\"Cluster information\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonCluster> {
-    static TString GetDescription() { 
+    static TString GetDescription() {
         return "\"Returns information about cluster\"";
     }
 };

@@ -9,7 +9,7 @@ namespace NLog {
 namespace {
 
 struct TThrowedLogContext {
-    TString LocationWithLogContext; // separated with ': ' 
+    TString LocationWithLogContext; // separated with ': '
 };
 
 } // namspace
@@ -55,13 +55,13 @@ NImpl::TLogContextListItem* NImpl::GetLogContextList() {
     return FastTlsSingleton<NImpl::TLogContextListItem>();
 }
 
-TString CurrentLogContextPath() { 
+TString CurrentLogContextPath() {
     TStringStream ss;
     OutputLogCtx(&ss, false);
     return ss.Str();
 }
 
-TString ThrowedLogContextPath() { 
+TString ThrowedLogContextPath() {
     TThrowedLogContext* tlc = FastTlsSingleton<TThrowedLogContext>();
     return std::move(tlc->LocationWithLogContext);
 }

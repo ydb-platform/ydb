@@ -33,7 +33,7 @@
 #endif
 
 #ifndef SwapBytes16
-inline ui16 SwapBytes16(ui16 val) noexcept { 
+inline ui16 SwapBytes16(ui16 val) noexcept {
     #define byte_n(__val, __n) ((((unsigned char*)(&__val))[__n]))
     DoSwap(byte_n(val, 0), byte_n(val, 1));
     return val;
@@ -42,7 +42,7 @@ inline ui16 SwapBytes16(ui16 val) noexcept {
 #endif
 
 #ifndef SwapBytes32
-inline ui32 SwapBytes32(ui32 val) noexcept { 
+inline ui32 SwapBytes32(ui32 val) noexcept {
     #define byte_n(__val, __n) ((((unsigned char*)(&__val))[__n]))
     DoSwap(byte_n(val, 0), byte_n(val, 3));
     DoSwap(byte_n(val, 1), byte_n(val, 2));
@@ -52,7 +52,7 @@ inline ui32 SwapBytes32(ui32 val) noexcept {
 #endif
 
 #ifndef SwapBytes64
-inline ui64 SwapBytes64(ui64 val) noexcept { 
+inline ui64 SwapBytes64(ui64 val) noexcept {
     union {
         ui64 val;
         ui32 p[2];
@@ -66,8 +66,8 @@ inline ui64 SwapBytes64(ui64 val) noexcept {
 }
 #endif
 
-//for convenience 
-static inline ui8 SwapBytes8(ui8 v) noexcept { 
+//for convenience
+static inline ui8 SwapBytes8(ui8 v) noexcept {
     return v;
 }
 
@@ -94,22 +94,22 @@ namespace NSwapBytes {
 }
 
 template <class T>
-inline T SwapBytes(T val) noexcept { 
+inline T SwapBytes(T val) noexcept {
     return NSwapBytes::TSwapBytesHelper<sizeof(T) * 8>::Swap(val);
 }
 
 template <class T>
-inline T LittleToBig(T val) noexcept { 
+inline T LittleToBig(T val) noexcept {
     return SwapBytes(val);
 }
 
 template <class T>
-inline T BigToLittle(T val) noexcept { 
+inline T BigToLittle(T val) noexcept {
     return LittleToBig(val);
 }
 
 template <class T>
-inline T HostToInet(T val) noexcept { 
+inline T HostToInet(T val) noexcept {
 #if defined(_big_endian_)
     return val;
 #elif defined(_little_endian_)
@@ -120,12 +120,12 @@ inline T HostToInet(T val) noexcept {
 }
 
 template <class T>
-inline T InetToHost(T val) noexcept { 
+inline T InetToHost(T val) noexcept {
     return HostToInet(val);
 }
 
 template <class T>
-inline T HostToLittle(T val) noexcept { 
+inline T HostToLittle(T val) noexcept {
 #if defined(_big_endian_)
     return BigToLittle(val);
 #elif defined(_little_endian_)
@@ -136,6 +136,6 @@ inline T HostToLittle(T val) noexcept {
 }
 
 template <class T>
-inline T LittleToHost(T val) noexcept { 
+inline T LittleToHost(T val) noexcept {
     return HostToLittle(val);
 }

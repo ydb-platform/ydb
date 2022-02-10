@@ -19,10 +19,10 @@ protected:
     const TIntrusivePtr<TBlobStorageGroupInfo>& Info;
 
     // a set of sets of failed disks that fit the fail model
-    TSet<TBlobStorageGroupInfo::TGroupVDisks> FaultsFittingFailModel; 
+    TSet<TBlobStorageGroupInfo::TGroupVDisks> FaultsFittingFailModel;
 
     // a set of sets of failed disks that exceed the fail model
-    TSet<TBlobStorageGroupInfo::TGroupVDisks> FaultsExceedingFailModel; 
+    TSet<TBlobStorageGroupInfo::TGroupVDisks> FaultsExceedingFailModel;
 
     const ui32 TestPartCount;
     const ui32 TestPartIdx;
@@ -147,7 +147,7 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(PutWithResult(id, buffer, tactic), expectedStatus);
     }
 
-    void CheckBlob(const TLogoBlobID& id, bool mustRestoreFirst, NKikimrProto::EReplyStatus status, const TString& buffer) { 
+    void CheckBlob(const TLogoBlobID& id, bool mustRestoreFirst, NKikimrProto::EReplyStatus status, const TString& buffer) {
         TString data;
         NKikimrProto::EReplyStatus res = GetBlob(id, mustRestoreFirst, buffer ? &data : nullptr);
         UNIT_ASSERT_VALUES_EQUAL(res, status);

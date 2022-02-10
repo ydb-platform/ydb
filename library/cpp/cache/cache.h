@@ -81,7 +81,7 @@ public:
     }
 
     TItem* GetOldest() {
-        typename TListType::TIterator it = List.Begin(); 
+        typename TListType::TIterator it = List.Begin();
         Y_ASSERT(it != List.End());
         return &*it;
     }
@@ -116,8 +116,8 @@ public:
     }
 
 private:
-    typedef TIntrusiveList<TItem> TListType; 
-    TListType List; 
+    typedef TIntrusiveList<TItem> TListType;
+    TListType List;
     TSizeProvider SizeProvider;
     size_t ItemsAmount;
     size_t TotalSize;
@@ -189,7 +189,7 @@ public:
     }
 
     TItem* GetLeastFrequentlyUsed() {
-        typename TListType::TIterator it = List.Begin(); 
+        typename TListType::TIterator it = List.Begin();
         Y_ASSERT(it != List.End());
         return &*it;
     }
@@ -201,7 +201,7 @@ public:
 
     void Promote(TItem* item) {
         size_t counter = ++item->Counter;
-        typename TListType::TIterator it = item; 
+        typename TListType::TIterator it = item;
         while (it != List.End() && counter >= it->Counter) {
             ++it;
         }
@@ -223,8 +223,8 @@ public:
     }
 
 private:
-    typedef TIntrusiveList<TItem> TListType; 
-    TListType List; 
+    typedef TIntrusiveList<TItem> TListType;
+    TListType List;
     size_t ListSize;
     size_t MaxSize;
 };
@@ -366,18 +366,18 @@ private:
     }
 
 private:
-    TVector<TItem*> Heap; 
-    THashSet<TItem*> Removed; 
+    TVector<TItem*> Heap;
+    THashSet<TItem*> Removed;
 
     size_t Size;
     size_t MaxSize;
 };
 
-template <typename TKey, typename TValue, typename TListType, typename TDeleter> 
+template <typename TKey, typename TValue, typename TListType, typename TDeleter>
 class TCache {
-    typedef typename TListType::TItem TItem; 
+    typedef typename TListType::TItem TItem;
     typedef typename TItem::THash THash;
-    typedef THashMultiSet<TItem, THash> TIndex; 
+    typedef THashMultiSet<TItem, THash> TIndex;
     typedef typename TIndex::iterator TIndexIterator;
     typedef typename TIndex::const_iterator TIndexConstIterator;
 
@@ -418,7 +418,7 @@ public:
             return Iter->Value;
         }
 
-        friend class TCache<TKey, TValue, TListType, TDeleter>; 
+        friend class TCache<TKey, TValue, TListType, TDeleter>;
 
     private:
         TIndexConstIterator Iter;
@@ -547,7 +547,7 @@ public:
 
 protected:
     TIndex Index;
-    TListType List; 
+    TListType List;
     bool MultiValue;
 
     TIterator FindByItem(TItem* item) {
@@ -570,7 +570,7 @@ protected:
 
 struct TNoopDelete {
     template <class T>
-    static inline void Destroy(const T&) noexcept { 
+    static inline void Destroy(const T&) noexcept {
     }
 };
 

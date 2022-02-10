@@ -14,7 +14,7 @@ namespace NKikimr {
     /////////////////////////////////////////////////////////////////////////////////////////
     std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
                                              TLogSignature signature,
-                                             const TString &data, 
+                                             const TString &data,
                                              TLsnSeg seg,
                                              void *cookie,
                                              std::unique_ptr<IEventBase> syncLogMsg,
@@ -23,7 +23,7 @@ namespace NKikimr {
     std::unique_ptr<NPDisk::TEvLog> CreateHullUpdate(const std::shared_ptr<THullLogCtx> &hullLogCtx,
                                              TLogSignature signature,
                                              const NPDisk::TCommitRecord &commitRecord,
-                                             const TString &data, 
+                                             const TString &data,
                                              TLsnSeg seg,
                                              void *cookie,
                                              std::unique_ptr<IEventBase> syncLogMsg);

@@ -130,9 +130,9 @@ namespace {
                 return "\033[0m\033[2;36m";
             case DARK_WHITE:
                 return "\033[0m\033[2;37m";
- 
-            case INVALID: 
-            default: 
+
+            case INVALID:
+            default:
                 return "";
         }
     }

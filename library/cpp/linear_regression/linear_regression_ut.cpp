@@ -15,8 +15,8 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
     Y_UNIT_TEST(MeanAndDeviationTest) {
-        TVector<double> arguments; 
-        TVector<double> weights; 
+        TVector<double> arguments;
+        TVector<double> weights;
 
         const size_t argumentsCount = 100;
         for (size_t i = 0; i < argumentsCount; ++i) {
@@ -78,9 +78,9 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
     }
 
     Y_UNIT_TEST(CovariationTest) {
-        TVector<double> firstValues; 
-        TVector<double> secondValues; 
-        TVector<double> weights; 
+        TVector<double> firstValues;
+        TVector<double> secondValues;
+        TVector<double> weights;
 
         const size_t argumentsCount = 100;
         for (size_t i = 0; i < argumentsCount; ++i) {
@@ -130,9 +130,9 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
 
     template <typename TSLRSolverType>
     void SLRTest() {
-        TVector<double> arguments; 
-        TVector<double> weights; 
-        TVector<double> goals; 
+        TVector<double> arguments;
+        TVector<double> weights;
+        TVector<double> goals;
 
         const double factor = 2.;
         const double intercept = 105.;
@@ -194,18 +194,18 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
         const size_t instancesCount = 10000;
         const double randomError = 0.01;
 
-        TVector<double> coefficients; 
+        TVector<double> coefficients;
         for (size_t featureNumber = 0; featureNumber < featuresCount; ++featureNumber) {
             coefficients.push_back(featureNumber);
         }
         const double intercept = 10;
 
         TVector<TVector<double>> featuresMatrix;
-        TVector<double> goals; 
-        TVector<double> weights; 
+        TVector<double> goals;
+        TVector<double> weights;
 
         for (size_t instanceNumber = 0; instanceNumber < instancesCount; ++instanceNumber) {
-            TVector<double> features; 
+            TVector<double> features;
             for (size_t featureNumber = 0; featureNumber < featuresCount; ++featureNumber) {
                 features.push_back(RandomNumber<double>());
             }
@@ -240,8 +240,8 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
     }
 
     void TransformationTest(const ETransformationType transformationType, const size_t pointsCount) {
-        TVector<float> arguments; 
-        TVector<float> goals; 
+        TVector<float> arguments;
+        TVector<float> goals;
 
         const double regressionFactor = 10.;
         const double regressionIntercept = 100;
@@ -300,8 +300,8 @@ Y_UNIT_TEST_SUITE(TLinearRegressionTest) {
     }
 
     Y_UNIT_TEST(ResetCalculatorTest) {
-        TVector<double> arguments; 
-        TVector<double> weights; 
+        TVector<double> arguments;
+        TVector<double> weights;
         const double eps = 1e-10;
 
         const size_t argumentsCount = 100;

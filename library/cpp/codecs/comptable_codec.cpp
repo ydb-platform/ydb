@@ -22,7 +22,7 @@ namespace NCodecs {
                 return 0;
             }
 
-            TVector<char> result; 
+            TVector<char> result;
             Compressor->Compress(in, &result);
             out.Assign(&result[0], result.size());
             return 0;
@@ -34,7 +34,7 @@ namespace NCodecs {
                 return;
             }
 
-            TVector<char> result; 
+            TVector<char> result;
             Decompressor->Decompress(in, &result);
             out.Assign(&result[0], result.size());
         }
@@ -81,7 +81,7 @@ namespace NCodecs {
 
     TCompTableCodec::~TCompTableCodec() = default;
 
-    TString TCompTableCodec::GetName() const { 
+    TString TCompTableCodec::GetName() const {
         return ToString(Impl->Quality ? MyNameHQ() : MyNameLQ());
     }
 

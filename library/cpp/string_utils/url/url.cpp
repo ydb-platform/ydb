@@ -1,11 +1,11 @@
 #include "url.h"
 
-#include <util/string/cast.h> 
-#include <util/string/util.h> 
-#include <util/string/cstriter.h> 
-#include <util/string/ascii.h> 
-#include <util/string/strip.h> 
- 
+#include <util/string/cast.h>
+#include <util/string/util.h>
+#include <util/string/cstriter.h>
+#include <util/string/ascii.h>
+#include <util/string/strip.h>
+
 #include <util/charset/unidata.h> // for ToLower
 #include <util/system/defaults.h>
 #include <util/generic/algorithm.h>
@@ -267,7 +267,7 @@ TStringBuf GetParentDomain(const TStringBuf host, size_t level) noexcept {
     size_t pos = host.size();
     for (size_t i = 0; i < level; ++i) {
         pos = host.rfind('.', pos);
-        if (pos == TString::npos) 
+        if (pos == TString::npos)
             return host;
     }
     return host.SubStr(pos + 1);
@@ -310,7 +310,7 @@ TStringBuf CutMPrefix(const TStringBuf url) noexcept {
     return url;
 }
 
-static inline bool IsSchemeChar(char c) noexcept { 
+static inline bool IsSchemeChar(char c) noexcept {
     return IsAsciiAlnum(c); //what about '+' ?..
 }
 
@@ -322,7 +322,7 @@ static bool HasPrefix(const TStringBuf url) noexcept {
     return AllOf(scheme, IsSchemeChar);
 }
 
-TString AddSchemePrefix(const TString& url) { 
+TString AddSchemePrefix(const TString& url) {
     return AddSchemePrefix(url, TStringBuf("http"));
 }
 

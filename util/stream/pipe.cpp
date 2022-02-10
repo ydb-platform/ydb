@@ -7,7 +7,7 @@
 
 class TPipeBase::TImpl {
 public:
-    inline TImpl(const TString& command, const char* mode) 
+    inline TImpl(const TString& command, const char* mode)
         : Pipe_(nullptr)
     {
 #ifndef _freebsd_
@@ -21,7 +21,7 @@ public:
         }
     }
 
-    inline ~TImpl() { 
+    inline ~TImpl() {
         if (Pipe_ != nullptr) {
             ::pclose(Pipe_);
         }
@@ -31,14 +31,14 @@ public:
     FILE* Pipe_;
 };
 
-TPipeBase::TPipeBase(const TString& command, const char* mode) 
+TPipeBase::TPipeBase(const TString& command, const char* mode)
     : Impl_(new TImpl(command, mode))
 {
 }
 
 TPipeBase::~TPipeBase() = default;
 
-TPipeInput::TPipeInput(const TString& command) 
+TPipeInput::TPipeInput(const TString& command)
     : TPipeBase(command, "r")
 {
 }
@@ -61,7 +61,7 @@ size_t TPipeInput::DoRead(void* buf, size_t len) {
     return bytesRead;
 }
 
-TPipeOutput::TPipeOutput(const TString& command) 
+TPipeOutput::TPipeOutput(const TString& command)
     : TPipeBase(command, "w")
 {
 }
@@ -87,7 +87,7 @@ TPipedBase::TPipedBase(PIPEHANDLE fd)
 {
 }
 
-TPipedBase::~TPipedBase() { 
+TPipedBase::~TPipedBase() {
     if (Handle_.IsOpen()) {
         Handle_.Close();
     }

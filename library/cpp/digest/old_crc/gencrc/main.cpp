@@ -16,10 +16,10 @@ static void crc16init() {
             else
                 crc >>= 1;
 
-    for (size_t k = 0; k < 256; ++k) { 
-        Cout << "    ULL(" << CRCTAB16[k] << ")"; 
+    for (size_t k = 0; k < 256; ++k) {
+        Cout << "    ULL(" << CRCTAB16[k] << ")";
 
-        if (k != 255) { 
+        if (k != 255) {
             Cout << ",\n";
         }
     }
@@ -37,10 +37,10 @@ static void crc32init() {
             else
                 crc >>= 1;
 
-    for (size_t k = 0; k < 256; ++k) { 
-        Cout << "    ULL(" << CRCTAB32[k] << ")"; 
+    for (size_t k = 0; k < 256; ++k) {
+        Cout << "    ULL(" << CRCTAB32[k] << ")";
 
-        if (k != 255) { 
+        if (k != 255) {
             Cout << ",\n";
         }
     }

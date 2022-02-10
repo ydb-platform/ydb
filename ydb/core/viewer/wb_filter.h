@@ -13,10 +13,10 @@ template <typename ResponseType>
 struct TWhiteboardInfo;
 
 struct TEnumValue {
-    TString Name; 
+    TString Name;
     int Value;
 
-    TEnumValue(const TString& string) { 
+    TEnumValue(const TString& string) {
         if (!TryFromString<int>(string, Value)) {
             Name = string;
         }
@@ -228,7 +228,7 @@ public:
         CppType Value;
     };
 
-    static THolder<ResponseType> FilterResponse(THolder<TResponseType>& source, const TVector<THolder<IFieldProtoFilter>>& filters) { 
+    static THolder<ResponseType> FilterResponse(THolder<TResponseType>& source, const TVector<THolder<IFieldProtoFilter>>& filters) {
         THolder<TResponseType> result = MakeHolder<TResponseType>();
         auto* field = TWhiteboardInfo<ResponseType>::GetElementsField(result.Get());
         auto* sourceField = TWhiteboardInfo<ResponseType>::GetElementsField(source.Get());
@@ -268,21 +268,21 @@ public:
         return result;
     }
 
-    static TVector<THolder<IFieldProtoFilter>> GetProtoFilters(TString filters) { 
+    static TVector<THolder<IFieldProtoFilter>> GetProtoFilters(TString filters) {
         // TODO: convert to StringBuf operations?
         const Descriptor& descriptor = *TElementType::descriptor();
-        TVector<TString> requestedFilters; 
-        TVector<THolder<IFieldProtoFilter>> foundFilters; 
+        TVector<TString> requestedFilters;
+        TVector<THolder<IFieldProtoFilter>> foundFilters;
         if (filters.StartsWith('(') && filters.EndsWith(')')) {
             filters = filters.substr(1, filters.size() - 2);
         }
         StringSplitter(filters).Split(';').SkipEmpty().Collect(&requestedFilters);
-        for (const TString& str : requestedFilters) { 
+        for (const TString& str : requestedFilters) {
             size_t opFirstPos = str.find_first_of("!><=");
             // TODO: replace with error reporting
-            //Y_VERIFY(opPos != TString::npos); 
+            //Y_VERIFY(opPos != TString::npos);
             THolder<IFieldProtoFilter> filter;
-            TString field = str.substr(0, opFirstPos); 
+            TString field = str.substr(0, opFirstPos);
             size_t opEndPos = str.find_first_not_of("!><=", opFirstPos);
             if (opEndPos != TString::npos) {
                 TString op = str.substr(opFirstPos, opEndPos - opFirstPos);
@@ -545,8 +545,8 @@ public:
 };
 
 template <typename ResponseType>
-THolder<ResponseType> FilterWhiteboardResponses(THolder<ResponseType>& response, const TString& filters) { 
-    TVector<THolder<typename TWhiteboardFilter<ResponseType>::IFieldProtoFilter>> filterFilters = 
+THolder<ResponseType> FilterWhiteboardResponses(THolder<ResponseType>& response, const TString& filters) {
+    TVector<THolder<typename TWhiteboardFilter<ResponseType>::IFieldProtoFilter>> filterFilters =
             TWhiteboardFilter<ResponseType>::GetProtoFilters(filters);
     return TWhiteboardFilter<ResponseType>::FilterResponse(response, filterFilters);
 }

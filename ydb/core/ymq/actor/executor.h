@@ -226,7 +226,7 @@ private:
     const TSqsEvents::TExecutedCallback Cb_;
     THolder<TRequest> Request_;
     TString MkqlProgramText_;
-    THashMap<TString, ui64> CompileResolveCookies_; 
+    THashMap<TString, ui64> CompileResolveCookies_;
     bool CompilationPending_ = false;
     size_t CompilationRetries_ = 3;
     TMaybe<EQueryId> QueryId_; // information for logging

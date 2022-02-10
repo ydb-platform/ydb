@@ -3,7 +3,7 @@
 #include <library/cpp/codecs/codecs.h>
 
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/stream/output.h>
 
 namespace NCodecs {
@@ -15,13 +15,13 @@ namespace NCodecs {
 
     TStaticCodecInfo LoadCodecInfoFromString(TStringBuf data);
 
-    TString LoadStringFromArchive(const ui8* begin, size_t size); 
+    TString LoadStringFromArchive(const ui8* begin, size_t size);
 
     TCodecConstPtr RestoreCodecFromArchive(const ui8* begin, size_t size);
 
     // save
 
-    TString SaveCodecInfoToString(const TStaticCodecInfo&); 
+    TString SaveCodecInfoToString(const TStaticCodecInfo&);
 
     void SaveCodecInfoToStream(IOutputStream& out, const TStaticCodecInfo&);
 
@@ -29,6 +29,6 @@ namespace NCodecs {
 
     TStaticCodecInfo LoadCodecInfoFromStream(IInputStream& in);
 
-    TString FormatCodecInfo(const TStaticCodecInfo&); 
+    TString FormatCodecInfo(const TStaticCodecInfo&);
 
 }

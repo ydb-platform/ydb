@@ -1,8 +1,8 @@
 #include "quote.h"
 
 #include <util/memory/tempbuf.h>
-#include <util/string/ascii.h> 
-#include <util/string/cstriter.h> 
+#include <util/string/ascii.h>
+#include <util/string/cstriter.h>
 
 #include <cctype>
 
@@ -14,14 +14,14 @@
         ++x;                                                            \
     } while (0)
 
-#define GETSBXC                                                         \ 
-    do {                                                                \ 
-        c *= 16;                                                        \ 
-        c += (x[0] >= 'A' ? ((x[0] & 0xdf) - 'A') + 10 : (x[0] - '0')); \ 
-        x.Skip(1);                                                      \ 
-    } while (0) 
- 
- 
+#define GETSBXC                                                         \
+    do {                                                                \
+        c *= 16;                                                        \
+        c += (x[0] >= 'A' ? ((x[0] & 0xdf) - 'A') + 10 : (x[0] - '0')); \
+        x.Skip(1);                                                      \
+    } while (0)
+
+
 namespace {
     class TFromHexZeroTerm {
     public:
@@ -40,8 +40,8 @@ namespace {
                 return '%';
             ui8 c = 0;
 
-            GETSBXC; 
-            GETSBXC; 
+            GETSBXC;
+            GETSBXC;
             return c;
         }
     };
@@ -68,7 +68,7 @@ static inline char d2x(unsigned x) {
     return (char)((x < 10) ? ('0' + x) : ('A' + x - 10));
 }
 
-static inline const char* FixZero(const char* s) noexcept { 
+static inline const char* FixZero(const char* s) noexcept {
     return s ? s : "";
 }
 
@@ -155,15 +155,15 @@ char* CGIEscape(char* to, const char* from, size_t len) {
     return Escape(to, from, from + len);
 }
 
-void CGIEscape(TString& url) { 
+void CGIEscape(TString& url) {
     TTempBuf tempBuf(CgiEscapeBufLen(url.size()));
     char* to = tempBuf.Data();
 
     url.AssignNoAlias(to, CGIEscape(to, url.data(), url.size()));
 }
 
-TString CGIEscapeRet(const TStringBuf url) { 
-    TString to; 
+TString CGIEscapeRet(const TStringBuf url) {
+    TString to;
     to.ReserveAndResize(CgiEscapeBufLen(url.size()));
     to.resize(CGIEscape(to.begin(), url.data(), url.size()) - to.data());
     return to;
@@ -207,7 +207,7 @@ char* Quote(char* to, const TStringBuf s, const char* safe) {
     return Quote(to, s.data(), s.data() + s.size(), safe);
 }
 
-void Quote(TString& url, const char* safe) { 
+void Quote(TString& url, const char* safe) {
     TTempBuf tempBuf(CgiEscapeBufLen(url.size()));
     char* to = tempBuf.Data();
 
@@ -222,7 +222,7 @@ char* CGIUnescape(char* to, const char* from, size_t len) {
     return Unescape(to, from, from + len, TFromHexLenLimited(from + len));
 }
 
-void CGIUnescape(TString& url) { 
+void CGIUnescape(TString& url) {
     if (url.empty()) {
         return;
     }
@@ -235,8 +235,8 @@ void CGIUnescape(TString& url) {
     }
 }
 
-TString CGIUnescapeRet(const TStringBuf from) { 
-    TString to; 
+TString CGIUnescapeRet(const TStringBuf from) {
+    TString to;
     to.ReserveAndResize(CgiUnescapeBufLen(from.size()));
     to.resize(CGIUnescape(to.begin(), from.data(), from.size()) - to.data());
     return to;
@@ -245,7 +245,7 @@ TString CGIUnescapeRet(const TStringBuf from) {
 char* UrlUnescape(char* to, TStringBuf from) {
     while (!from.empty()) {
         char ch = from[0];
-        from.Skip(1); 
+        from.Skip(1);
         if ('%' == ch && 2 <= from.length())
             ch = TFromHexZeroTerm::x2c(from);
         *to++ = ch;
@@ -256,7 +256,7 @@ char* UrlUnescape(char* to, TStringBuf from) {
     return to;
 }
 
-void UrlUnescape(TString& url) { 
+void UrlUnescape(TString& url) {
     if (url.empty()) {
         return;
     }
@@ -269,8 +269,8 @@ void UrlUnescape(TString& url) {
     }
 }
 
-TString UrlUnescapeRet(const TStringBuf from) { 
-    TString to; 
+TString UrlUnescapeRet(const TStringBuf from) {
+    TString to;
     to.ReserveAndResize(CgiUnescapeBufLen(from.size()));
     to.resize(UrlUnescape(to.begin(), from) - to.data());
     return to;

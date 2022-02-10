@@ -2,7 +2,7 @@
 
 #include <library/cpp/json/common/defs.h>
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 #include <util/generic/deque.h>

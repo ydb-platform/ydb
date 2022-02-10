@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/string/builder.h>
 
 namespace NYsonPull {
@@ -17,10 +17,10 @@ namespace NYsonPull {
         }
 
         template <typename... Args>
-        TString format_string(Args&&... args) { 
+        TString format_string(Args&&... args) {
             TStringBuilder builder;
             NImpl::apply_args(builder, std::forward<Args>(args)...);
-            return TString(std::move(builder)); 
+            return TString(std::move(builder));
         }
     }
 }

@@ -173,7 +173,7 @@ protected:
 };
 
 template <>
-class TAlmostDoneTypeValue<TString> : public TRawTypeValue { 
+class TAlmostDoneTypeValue<TString> : public TRawTypeValue {
 public:
     TAlmostDoneTypeValue(NUdf::TDataTypeId schemeType, const TString& value)
         : TRawTypeValue(value.data(), value.size(), schemeType)
@@ -185,7 +185,7 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                     const NKikimrMiniKQL::TValue& tupleValue,
                     const TConstArrayRef<NScheme::TTypeId>& types,
                     bool allowCastFromString,
-                    TVector<TCell>& key, 
+                    TVector<TCell>& key,
                     TString& errStr)
 {
 

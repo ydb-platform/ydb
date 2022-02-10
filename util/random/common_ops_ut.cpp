@@ -10,7 +10,7 @@
 Y_UNIT_TEST_SUITE(TestCommonRNG) {
     template <class T>
     struct TRng: public TCommonRNG<T, TRng<T>> {
-        inline T GenRand() noexcept { 
+        inline T GenRand() noexcept {
             return IntHash(C_++);
         }
 

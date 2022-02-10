@@ -7,9 +7,9 @@
 
 namespace NAnalytics {
 
-inline TString ToHtml(const TTable& in) 
+inline TString ToHtml(const TTable& in)
 {
-    TSet<TString> cols; 
+    TSet<TString> cols;
     bool hasName = false;
     for (const TRow& row : in) {
         hasName = hasName || !row.Name.empty();
@@ -24,7 +24,7 @@ inline TString ToHtml(const TTable& in)
     if (hasName) {
         ss << "<th>Name</th>";
     }
-    for (const TString& c : cols) { 
+    for (const TString& c : cols) {
         ss << "<th>" << c << "</th>";
     }
     ss << "</tr></thead><tbody>";
@@ -34,7 +34,7 @@ inline TString ToHtml(const TTable& in)
         if (hasName) {
             ss << "<th>" << row.Name << "</th>";
         }
-        for (const TString& c : cols) { 
+        for (const TString& c : cols) {
             TString value;
             ss << "<td>" << (row.GetAsString(c, value) ? value : TString("-")) << "</td>";
         }
@@ -45,9 +45,9 @@ inline TString ToHtml(const TTable& in)
     return ss.Str();
 }
 
-inline TString ToTransposedHtml(const TTable& in) 
+inline TString ToTransposedHtml(const TTable& in)
 {
-    TSet<TString> cols; 
+    TSet<TString> cols;
     bool hasName = false;
     for (const TRow& row : in) {
         hasName = hasName || !row.Name.empty();
@@ -69,7 +69,7 @@ inline TString ToTransposedHtml(const TTable& in)
 
     ss << "</thead><tbody>";
 
-    for (const TString& c : cols) { 
+    for (const TString& c : cols) {
         ss << "<tr>";
         ss << "<th>" << c << "</th>";
         for (const TRow& row : in) {

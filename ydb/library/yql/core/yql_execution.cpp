@@ -26,8 +26,8 @@ public:
             IDataProvider* DataProvider = nullptr;
         };
 
-        using TQueueType = TIntrusiveListWithAutoDelete<TState::TItem, TDelete>; 
-        TQueueType Completed; 
+        using TQueueType = TIntrusiveListWithAutoDelete<TState::TItem, TDelete>;
+        TQueueType Completed;
         NThreading::TPromise<void> Promise;
         bool HasResult = false;
     };
@@ -104,7 +104,7 @@ public:
 
         TStatus combinedStatus = TStatus::Ok;
 
-        TState::TQueueType completed; 
+        TState::TQueueType completed;
         auto newPromise = NThreading::NewPromise();
         {
             TGuard<TAdaptiveLock> guard(State->Lock);
@@ -302,7 +302,7 @@ public:
 
     TStatus ExecuteChildren(const TExprNode::TPtr& node, TExprNode::TPtr& output, TExprContext& ctx, ui32 depth) {
         TStatus combinedStatus = TStatus::Ok;
-        TExprNode::TListType newChildren; 
+        TExprNode::TListType newChildren;
         bool newNode = false;
         for (auto& child : node->Children()) {
             auto newChild = child;
@@ -486,7 +486,7 @@ public:
         auto publicId = Types.TranslateOperationId(node.UniqueId());
         if (publicId) {
             auto x = Progresses.insert({ *publicId,
-                TOperationProgress(TString(category), *publicId, TOperationProgress::EState::Started) }); 
+                TOperationProgress(TString(category), *publicId, TOperationProgress::EState::Started) });
             if (x.second) {
                 Writer(x.first->second);
             }
@@ -709,7 +709,7 @@ IGraphTransformer::TStatus ValidateCallable(const TExprNode::TPtr& node, TExprCo
         return TStatus::Error;
     }
 
-    TExprNode::TListType childrenToCheck; 
+    TExprNode::TListType childrenToCheck;
     dataProvider->GetRequiredChildren(*node, childrenToCheck);
     IGraphTransformer::TStatus combinedStatus = IGraphTransformer::TStatus::Ok;
     for (ui32 i = 0; i < childrenToCheck.size(); ++i) {
@@ -787,10 +787,10 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
         }
 
         TParentsMap parentsMap;
-        THashSet<TExprNode*> overWinNodes; 
+        THashSet<TExprNode*> overWinNodes;
         GatherParents(*input, parentsMap);
         bool hasErrors = false;
-        THashSet<TIssue> added; 
+        THashSet<TIssue> added;
         auto funcCheckExecution = [&](const THashSet<TStringBuf>& notAllowList, bool collectCalcOverWindow, const TExprNode::TPtr& node) {
             if (node->IsCallable("ErrorType")) {
                 hasErrors = true;
@@ -849,7 +849,7 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
             return true;
         };
         static const THashSet<TStringBuf> noExecutionList = {"InstanceOf", "Lag", "Lead", "Rank", "DenseRank", "RowNumber"};
-        static const THashSet<TStringBuf> noExecutionListForCalcOverWindow = {"InstanceOf"}; 
+        static const THashSet<TStringBuf> noExecutionListForCalcOverWindow = {"InstanceOf"};
         VisitExpr(input, [funcCheckExecution](const TExprNode::TPtr& node) {
             bool collectCalcOverWindow = true;
             return funcCheckExecution(noExecutionList, collectCalcOverWindow, node);

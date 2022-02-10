@@ -214,7 +214,7 @@ namespace NActors {
         if (Settings && Settings->Satisfies(priority, component, 0ull)) {
             va_list params;
             va_start(params, c);
-            TString formatted; 
+            TString formatted;
             vsprintf(formatted, c, params);
 
             auto ok = OutputRecord(time, NLog::EPrio(priority), component, formatted);
@@ -229,7 +229,7 @@ namespace NActors {
     }
 
     void TLoggerActor::LogIgnoredCount(TInstant now) {
-        TString message = Sprintf("Ignored IgnoredCount# %" PRIu64 " log records due to logger overflow!", IgnoredCount); 
+        TString message = Sprintf("Ignored IgnoredCount# %" PRIu64 " log records due to logger overflow!", IgnoredCount);
         if (!OutputRecord(now, NActors::NLog::EPrio::Error, Settings->LoggerComponent, message)) {
             BecomeDefunct();
         }
@@ -304,7 +304,7 @@ namespace NActors {
 
     void TLoggerActor::HandleLogComponentLevelRequest(TLogComponentLevelRequest::TPtr& ev, const NActors::TActorContext& ctx) {
         Metrics->IncLevelRequests();
-        TString explanation; 
+        TString explanation;
         int code = Settings->SetLevel(ev->Get()->Priority, ev->Get()->Component, explanation);
         ctx.Send(ev->Sender, new TLogComponentLevelResponse(code, explanation));
     }
@@ -475,7 +475,7 @@ namespace NActors {
             }
 
         } else {
-            TString explanation; 
+            TString explanation;
             if (hasComponent && hasPriority) {
                 Settings->SetLevel(priority, component, explanation);
             }
@@ -675,7 +675,7 @@ namespace NActors {
         void WriteData(const TLogRecord& rec) override {
 #ifdef _MSC_VER
             if (IsDebuggerPresent()) {
-                TString x; 
+                TString x;
                 x.reserve(rec.Len + 2);
                 x.append(rec.Data, rec.Len);
                 x.append('\n');
@@ -699,7 +699,7 @@ namespace NActors {
         }
 
     private:
-        const TString Indent; 
+        const TString Indent;
     };
 
     class TLineFileLogBackend: public TFileLogBackend {
@@ -739,7 +739,7 @@ namespace NActors {
         return new TStderrBackend();
     }
 
-    TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName) { 
+    TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName) {
         return new TLineFileLogBackend(fileName);
     }
 

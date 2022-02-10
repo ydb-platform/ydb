@@ -23,7 +23,7 @@ TMessageCounter& TMessageCounter::operator+=(const TMessageCounter& that) {
     return *this;
 }
 
-TString TMessageCounter::ToString(bool reader) const { 
+TString TMessageCounter::ToString(bool reader) const {
     if (reader) {
         Y_ASSERT(CountCompressionRequests == 0);
     }

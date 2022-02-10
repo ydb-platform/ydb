@@ -87,7 +87,7 @@ TValue TValue::operator [](int index) const {
     }
 }
 
-TString TValue::GetMemberName(int index) const { 
+TString TValue::GetMemberName(int index) const {
     Y_ASSERT(Type.HasStruct());
     const auto& structField = Type.GetStruct();
     size_t size = structField.MemberSize();
@@ -95,11 +95,11 @@ TString TValue::GetMemberName(int index) const {
     return structField.GetMember(index).GetName();
 }
 
-TVector<TString> TValue::GetMembersNames() const { 
+TVector<TString> TValue::GetMembersNames() const {
     Y_ASSERT(Type.HasStruct());
     const auto& structField = Type.GetStruct();
     size_t size = structField.MemberSize();
-    TVector<TString> members; 
+    TVector<TString> members;
     members.reserve(size);
     for (int index = 0; (size_t)index < size; ++index) {
         members.emplace_back(structField.GetMember(index).GetName());
@@ -186,7 +186,7 @@ TWriteValue& TWriteValue::Bytes(const char* value) {
     return *this;
 }
 
-TWriteValue& TWriteValue::Bytes(const TString& value) { 
+TWriteValue& TWriteValue::Bytes(const TString& value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::String);
     Value.SetBytes(value);
@@ -200,7 +200,7 @@ TWriteValue& TWriteValue::Yson(const char* value) {
     return *this;
 }
 
-TWriteValue& TWriteValue::Yson(const TString& value) { 
+TWriteValue& TWriteValue::Yson(const TString& value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::Yson);
     Value.SetBytes(value);
@@ -326,7 +326,7 @@ TWriteValue& TWriteValue::operator =(float value) {
     return *this;
 }
 
-TWriteValue& TWriteValue::operator =(const TString& value) { 
+TWriteValue& TWriteValue::operator =(const TString& value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::Utf8);
     Value.SetText(value);
@@ -374,7 +374,7 @@ NScheme::TTypeId TValue::GetDataType() const {
     return Type.GetData().GetScheme();
 }
 
-TString TValue::GetDataText() const { 
+TString TValue::GetDataText() const {
     Y_ASSERT(Type.GetKind() == NKikimrMiniKQL::ETypeKind::Data);
     switch (Type.GetData().GetScheme()) {
     case NScheme::NTypeIds::Bool:
@@ -425,7 +425,7 @@ TString TValue::GetDataText() const {
     return TStringBuilder() << "\"<unknown type "  << Type.GetData().GetScheme() << ">\"";
 }
 
-template <> TString TValue::GetTypeText<TFormatCxx>(const TFormatCxx& format) const { 
+template <> TString TValue::GetTypeText<TFormatCxx>(const TFormatCxx& format) const {
     switch(Type.GetKind()) {
     case NKikimrMiniKQL::ETypeKind::Void:
         return "void";
@@ -437,7 +437,7 @@ template <> TString TValue::GetTypeText<TFormatCxx>(const TFormatCxx& format) co
         return "list<" + TValue::Create(Null, Type.GetList().GetItem()).GetTypeText<TFormatCxx>(format) + ">";
     case NKikimrMiniKQL::ETypeKind::Tuple:
     {
-        TString typeName = "tuple<"; 
+        TString typeName = "tuple<";
         const auto& element = Type.GetTuple().GetElement();
         for (auto it = element.begin(); it != element.end(); ++it) {
             if (it != element.begin())
@@ -449,7 +449,7 @@ template <> TString TValue::GetTypeText<TFormatCxx>(const TFormatCxx& format) co
     }
     case NKikimrMiniKQL::ETypeKind::Struct:
     {
-        TString typeName = "struct{"; 
+        TString typeName = "struct{";
         const auto& member = Type.GetStruct().GetMember();
         for (auto it = member.begin(); it != member.end(); ++it) {
             typeName += TValue::Create(Null, it->GetType()).GetTypeText<TFormatCxx>(format);
@@ -468,7 +468,7 @@ template <> TString TValue::GetTypeText<TFormatCxx>(const TFormatCxx& format) co
 }
 
 TString EscapeJsonUTF8(const TString& s) {
-    TString result; 
+    TString result;
     result.reserve(s.size());
     const char* b = s.begin();
     const char* e = s.end();
@@ -577,7 +577,7 @@ TString PrintCsvHeader(const NKikimrMiniKQL::TType& type,
     return hdr;
 }
 
-template <> TString TValue::GetValueText<TFormatJSON>(const TFormatJSON& format) const { 
+template <> TString TValue::GetValueText<TFormatJSON>(const TFormatJSON& format) const {
     switch(Type.GetKind()) {
     case NKikimrMiniKQL::ETypeKind::Void:
         return "null";
@@ -611,7 +611,7 @@ template <> TString TValue::GetValueText<TFormatJSON>(const TFormatJSON& format)
     }
     case NKikimrMiniKQL::ETypeKind::List:
     {
-        TString valueText = "["; 
+        TString valueText = "[";
         const auto& list = Value.GetList();
         const auto& type = Type.GetList().GetItem();
         for (auto it = list.begin(); it != list.end(); ++it) {
@@ -624,7 +624,7 @@ template <> TString TValue::GetValueText<TFormatJSON>(const TFormatJSON& format)
     }
     case NKikimrMiniKQL::ETypeKind::Tuple:
     {
-        TString valueText = "["; 
+        TString valueText = "[";
         const auto& tuple = Value.GetTuple();
         const auto& type = Type.GetTuple().GetElement();
         size_t maxElements = type.size();
@@ -638,7 +638,7 @@ template <> TString TValue::GetValueText<TFormatJSON>(const TFormatJSON& format)
     }
     case NKikimrMiniKQL::ETypeKind::Struct:
     {
-        TString valueText = "{"; 
+        TString valueText = "{";
         const auto& str = Value.GetStruct();
         const auto& type = Type.GetStruct().GetMember();
         size_t maxElements = type.size();
@@ -655,7 +655,7 @@ template <> TString TValue::GetValueText<TFormatJSON>(const TFormatJSON& format)
     }
     case NKikimrMiniKQL::ETypeKind::Dict:
     {
-        TString valueText = "{"; 
+        TString valueText = "{";
         const auto& dict = Value.GetDict();
         const auto& type = Type.GetDict();
         for (auto it = dict.begin(); it != dict.end(); ++it) {
@@ -676,7 +676,7 @@ template <> TString TValue::GetValueText<TFormatJSON>(const TFormatJSON& format)
     }
 }
 
-template <> TString TValue::GetValueText<TFormatRowset>(const TFormatRowset& format) const { 
+template <> TString TValue::GetValueText<TFormatRowset>(const TFormatRowset& format) const {
     if (HaveValue()) {
         switch(Type.GetKind()) {
         case NKikimrMiniKQL::ETypeKind::Void:
@@ -687,7 +687,7 @@ template <> TString TValue::GetValueText<TFormatRowset>(const TFormatRowset& for
             return TValue::Create(Value.GetOptional(), Type.GetOptional().GetItem()).GetValueText<TFormatRowset>(format);
         case NKikimrMiniKQL::ETypeKind::List:
         {
-            TString valueText; 
+            TString valueText;
             if (Type.GetList().GetItem().GetKind() == NKikimrMiniKQL::ETypeKind::Struct) {
                 const auto& list_type = Type.GetList();
                 const auto& type = list_type.GetItem().GetStruct().GetMember();
@@ -721,7 +721,7 @@ template <> TString TValue::GetValueText<TFormatRowset>(const TFormatRowset& for
         }
         case NKikimrMiniKQL::ETypeKind::Tuple:
         {
-            TString valueText = "["; 
+            TString valueText = "[";
             const auto& tuple = Value.GetTuple();
             const auto& type = Type.GetTuple().GetElement();
             size_t maxElements = type.size();
@@ -735,7 +735,7 @@ template <> TString TValue::GetValueText<TFormatRowset>(const TFormatRowset& for
         }
         case NKikimrMiniKQL::ETypeKind::Struct:
         {
-            TString valueText = ""; 
+            TString valueText = "";
             const auto& str = Value.GetStruct();
             const auto& type = Type.GetStruct().GetMember();
             size_t maxElements = type.size();
@@ -755,7 +755,7 @@ template <> TString TValue::GetValueText<TFormatRowset>(const TFormatRowset& for
         }
         case NKikimrMiniKQL::ETypeKind::Dict:
         {
-            TString valueText = ""; 
+            TString valueText = "";
             const auto& dict = Value.GetDict();
             const auto& type = Type.GetDict();
             valueText += "Key";
@@ -939,7 +939,7 @@ TValue::operator i16() const {
     return Value.GetInt32();
 }
 
-TValue::operator TString() const { 
+TValue::operator TString() const {
     Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Utf8
             || Type.GetData().GetScheme() == NScheme::NTypeIds::String
             || Type.GetData().GetScheme() == NScheme::NTypeIds::String4k

@@ -194,7 +194,7 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
         str << "        }" << Endl;
         str << "    }" << Endl;
         str << "}";
-        TString staticConfig(str.Str()); 
+        TString staticConfig(str.Str());
 
         SubstGlobal(staticConfig, "$Node1", Sprintf("%" PRIu32, runtime.GetNodeId(0)));
 

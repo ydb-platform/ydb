@@ -102,7 +102,7 @@ struct TPDiskFailureInjectionTest {
     ui32 NumIterations = 10; // 0 = unlimited
     ui32 NumFailsInIteration = 1000; // 0 = unlimited
     TTempDir TempDir;
-    TString PDiskFilePath; 
+    TString PDiskFilePath;
     ui64 DiskSize = 16ULL << 30; // 10 GB
     ui32 ChunkSize = 16 << 20; // 16 MB
     ui32 SectorSize = 4 << 10; // 4 KB
@@ -216,7 +216,7 @@ struct TPDiskFailureInjectionTest {
     }
 
     template<typename TTest>
-    void Run(TTest *test, TStateManager *stateManager, const TString& data = {}) { 
+    void Run(TTest *test, TStateManager *stateManager, const TString& data = {}) {
         TObjectWithState::DeserializeCommonState(data);
         InitActorSystem();
         ActorSystem->Start();
@@ -236,7 +236,7 @@ struct TPDiskFailureInjectionTest {
             Setup();
 
             // stored common state
-            TString state; 
+            TString state;
 
             for (ui32 fail = 0; NumFailsInIteration == 0 || fail < NumFailsInIteration; ++fail) {
                 if (TestDuration && TInstant::Now() >= startTime + *TestDuration) {

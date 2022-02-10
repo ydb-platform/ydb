@@ -12,7 +12,7 @@ size_t TAlignedInput::DoSkip(size_t len) {
     return ret;
 }
 
-size_t TAlignedInput::DoReadTo(TString& st, char ch) { 
+size_t TAlignedInput::DoReadTo(TString& st, char ch) {
     size_t ret = Stream_->ReadTo(st, ch);
     Position_ += ret;
     return ret;

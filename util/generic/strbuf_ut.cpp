@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
 
         str = qw;
         UNIT_ASSERT_EQUAL(str.SubStr(2), TStringBuf("erty"));
-        UNIT_ASSERT_EQUAL(str.Skip(3), qw.SubStr(3)); 
+        UNIT_ASSERT_EQUAL(str.Skip(3), qw.SubStr(3));
         str.Chop(1);
         UNIT_ASSERT_EQUAL(str, TStringBuf("rt"));
     }

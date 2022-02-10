@@ -11,7 +11,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TNaiveFragmentWriter
         ////////////////////////////////////////////////////////////////////////////
-        void TNaiveFragmentWriter::Finish(TString *respData) { 
+        void TNaiveFragmentWriter::Finish(TString *respData) {
             respData->clear();
             respData->reserve(DataSize);
             for (TBuffer& buffer : Chain) {
@@ -22,11 +22,11 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TLz4FragmentWriter
         ////////////////////////////////////////////////////////////////////////////
-        void TLz4FragmentWriter::Finish(TString *respData) { 
+        void TLz4FragmentWriter::Finish(TString *respData) {
             // construct result and compress it
             respData->clear();
             TNaiveFragmentWriter::Finish(respData);
-            const TString compressed = GetLz4Codec()->Encode(*respData); 
+            const TString compressed = GetLz4Codec()->Encode(*respData);
 
             // header
             std::pair<const char *, size_t> hdr = GetLz4Header();
@@ -41,12 +41,12 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TOrderedLz4FragmentWriter
         ////////////////////////////////////////////////////////////////////////////
-        void TOrderedLz4FragmentWriter::Finish(TString *respData) { 
+        void TOrderedLz4FragmentWriter::Finish(TString *respData) {
             // reorder
             TReorderCodec codec(TReorderCodec::EEncoding::Trivial);
             const TString reordered = codec.Encode(Records);
             // compress
-            const TString compressed = GetLz4Codec()->Encode(reordered); 
+            const TString compressed = GetLz4Codec()->Encode(reordered);
             // header
             std::pair<const char *, size_t> hdr = GetOrderedLz4Header();
 
@@ -60,7 +60,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TCustomCodecFragmentWriter
         ////////////////////////////////////////////////////////////////////////////
-        void TCustomCodecFragmentWriter::Finish(TString *respData) { 
+        void TCustomCodecFragmentWriter::Finish(TString *respData) {
             // reorder
             TReorderCodec codec(TReorderCodec::EEncoding::Custom);
             const TString result = codec.Encode(Records);

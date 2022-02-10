@@ -500,8 +500,8 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
             expectedJson.InsertValue("foo", "bar");
             UNIT_ASSERT(json == expectedJson);
 
-            TJsonValue::TMapType jsonMap = std::move(json.GetMapSafe()); 
-            TJsonValue::TMapType expectedMap = {{"foo", TJsonValue{"bar"}}}; 
+            TJsonValue::TMapType jsonMap = std::move(json.GetMapSafe());
+            TJsonValue::TMapType expectedMap = {{"foo", TJsonValue{"bar"}}};
             UNIT_ASSERT(jsonMap == expectedMap);
         }
     }
@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
     }
 
     Y_UNIT_TEST(GetIntegerRobustBignumStringTest) {
-        TString value = "1626862681464633683"; 
+        TString value = "1626862681464633683";
         TJsonValue json(value);
         UNIT_ASSERT_VALUES_EQUAL(json.GetUIntegerRobust(), FromString<ui64>(value));
         UNIT_ASSERT_VALUES_EQUAL(json.GetIntegerRobust(), FromString<i64>(value));
@@ -619,7 +619,7 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
             "Testing TJsonValue& operator=(TJsonValue&&) subpart self moving "
             "after TJsonValue was constrcuted from TString&&.";
 
-        json["hello"] = TString{longTestString}; 
+        json["hello"] = TString{longTestString};
         json = std::move(json["hello"]);
         UNIT_ASSERT_VALUES_EQUAL(json.GetString(), longTestString);
     }

@@ -118,13 +118,13 @@ void NAddr::PrintHost(IOutputStream& out, const IRemoteAddr& addr) {
     PrintAddr<false>(out, addr);
 }
 
-TString NAddr::PrintHost(const IRemoteAddr& addr) { 
+TString NAddr::PrintHost(const IRemoteAddr& addr) {
     TStringStream ss;
     PrintAddr<false>(ss, addr);
     return ss.Str();
 }
 
-TString NAddr::PrintHostAndPort(const IRemoteAddr& addr) { 
+TString NAddr::PrintHostAndPort(const IRemoteAddr& addr) {
     TStringStream ss;
     PrintAddr<true>(ss, addr);
     return ss.Str();

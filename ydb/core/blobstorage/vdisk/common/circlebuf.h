@@ -6,7 +6,7 @@
 template <class T>
 class TCircleBuf {
 public:
-    typedef TVector<T> TVec; 
+    typedef TVector<T> TVec;
 
     struct TIterator {
         TIterator(TVec &vec, size_t pos)

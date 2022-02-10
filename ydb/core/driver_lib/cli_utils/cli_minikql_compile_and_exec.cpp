@@ -20,11 +20,11 @@ struct TCmdCompileAndExecMiniKQLConfig : public TCliCmdConfig {
 
     void Parse(int argc, char **argv);
 
-    TString PathToTextPgm; 
-    TString PathToBinPgm; 
+    TString PathToTextPgm;
+    TString PathToBinPgm;
 
-    TString PathToTextParams; 
-    TString PathToBinParams; 
+    TString PathToTextParams;
+    TString PathToBinParams;
 };
 
 int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
@@ -47,18 +47,18 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
 
     auto* mkqlTx = request->Record.MutableTransaction()->MutableMiniKQLTransaction();
     if (config.PathToBinPgm) {
-        TString pgmBin = TFileInput(config.PathToBinPgm).ReadAll(); 
+        TString pgmBin = TFileInput(config.PathToBinPgm).ReadAll();
         mkqlTx->MutableProgram()->SetBin(pgmBin);
     } else if (config.PathToTextPgm) {
-        TString pgmText = TFileInput(config.PathToTextPgm).ReadAll(); 
+        TString pgmText = TFileInput(config.PathToTextPgm).ReadAll();
         mkqlTx->MutableProgram()->SetText(pgmText);
     }
 
     if (config.PathToBinParams) {
-        TString paramsBin = TFileInput(config.PathToBinParams).ReadAll(); 
+        TString paramsBin = TFileInput(config.PathToBinParams).ReadAll();
         mkqlTx->MutableParams()->SetBin(paramsBin);
     } else if (config.PathToTextParams) {
-        TString paramsText = TFileInput(config.PathToTextParams).ReadAll(); 
+        TString paramsText = TFileInput(config.PathToTextParams).ReadAll();
         mkqlTx->MutableParams()->SetText(paramsText);
     }
 
@@ -82,7 +82,7 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
         if (config.PathToBinPgm) {
             errors.PrintTo(Cerr);
         } else {
-            const TString pgmText = TFileInput(config.PathToTextPgm).ReadAll(); 
+            const TString pgmText = TFileInput(config.PathToTextPgm).ReadAll();
             errors.PrintWithProgramTo(Cerr, config.PathToTextPgm, pgmText);
         }
     }
@@ -94,7 +94,7 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
         if (config.PathToBinParams) {
             errors.PrintTo(Cerr);
         } else {
-            const TString paramsText = TFileInput(config.PathToTextParams).ReadAll(); 
+            const TString paramsText = TFileInput(config.PathToTextParams).ReadAll();
             errors.PrintWithProgramTo(Cerr, config.PathToTextParams, paramsText);
         }
     }

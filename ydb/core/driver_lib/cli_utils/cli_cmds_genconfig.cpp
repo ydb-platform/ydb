@@ -13,13 +13,13 @@ using NBsController::TCandidate;
 using NBsController::GroupFromCandidates;
 
 class TClientCommandGenConfigStatic : public TClientCommandConfig {
-    TString ErasureList; 
+    TString ErasureList;
 
-    TString ErasureStr; 
-    TString DesiredPDiskType = "ROT"; 
-    TString DistinctionLevelStr = "body"; 
-    TString BsFormatFile; 
-    TString RingDistinctionLevelStr; 
+    TString ErasureStr;
+    TString DesiredPDiskType = "ROT";
+    TString DistinctionLevelStr = "body";
+    TString BsFormatFile;
+    TString RingDistinctionLevelStr;
 
     TBlobStorageGroupType Type;
     ui32 AvailabilityDomain = 1;
@@ -33,7 +33,7 @@ class TClientCommandGenConfigStatic : public TClientCommandConfig {
     ui32 RingEndLevel;
     ui32 VSlot = 0;
     ui32 NumRings = 0;
-    TString VDiskKind = "Default"; 
+    TString VDiskKind = "Default";
     int VDiskKindVal = 0;
 
     int ExpectedSlotCount = -1;
@@ -46,8 +46,8 @@ class TClientCommandGenConfigStatic : public TClientCommandConfig {
     TFailDomain Prefix;
 
     struct TPDiskInfo {
-        const TString      Type;      // PDisk type as mentioned in bs_format.txt 
-        const TString      Path;      // path to device on a node 
+        const TString      Type;      // PDisk type as mentioned in bs_format.txt
+        const TString      Path;      // path to device on a node
         const TFailDomain FailDom;   // physical location of a PDisk
         const ui64        PDiskGuid; // PDisk unique identifier
         const ui32        PDiskId;   // PDisk per-node identifier
@@ -75,7 +75,7 @@ class TClientCommandGenConfigStatic : public TClientCommandConfig {
             }
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{Type# " << Type << " FailDom# " << FailDom.ToString() << " PDiskGuid# " << PDiskGuid << " PDiskId# "
                 << PDiskId << " NodeId# " << NodeId << "}";
@@ -87,7 +87,7 @@ class TClientCommandGenConfigStatic : public TClientCommandConfig {
             TFailDomain fdom;
 
             using T = NKikimrConfig::TBlobStorageFormatConfig::TDrive;
-            TVector<std::tuple<int, bool(T::*)() const, ui64(T::*)() const>> levels = { 
+            TVector<std::tuple<int, bool(T::*)() const, ui64(T::*)() const>> levels = {
                 std::make_tuple(10, &T::HasDataCenterId, &T::GetDataCenterId),
                 std::make_tuple(20, &T::HasRoomId,       &T::GetRoomId      ),
                 std::make_tuple(30, &T::HasRackId,       &T::GetRackId      ),
@@ -149,7 +149,7 @@ public:
             .StoreResult(&BsFormatFile);
     }
 
-    ui32 ParseDistinctionLevel(const TString& s) { 
+    ui32 ParseDistinctionLevel(const TString& s) {
         const ui32 level =
             s == "dc"   ? 10 :
             s == "room" ? 20 :
@@ -217,7 +217,7 @@ public:
 
         NKikimrConfig::TBlobStorageFormatConfig bsFormat;
         try {
-            TUnbufferedFileInput input(BsFormatFile); 
+            TUnbufferedFileInput input(BsFormatFile);
             const bool status = google::protobuf::TextFormat::ParseFromString(input.ReadAll(), &bsFormat);
             if (!status) {
                 ythrow yexception() << "failed to parse protobuf";
@@ -228,7 +228,7 @@ public:
         }
 
         // make a set of PDisks that fit our filtering condition
-        TVector<TPDiskInfo> pdisks; 
+        TVector<TPDiskInfo> pdisks;
         for (const NKikimrConfig::TBlobStorageFormatConfig::TDrive& drive : bsFormat.GetDrive()) {
             TPDiskInfo pdiskInfo(drive);
             if (pdiskInfo.Type == DesiredPDiskType && Prefix.IsSubdomainOf(pdiskInfo.FailDom)) {
@@ -236,12 +236,12 @@ public:
             }
         }
 
-        TVector<TCandidate> candidates; 
+        TVector<TCandidate> candidates;
         for (const TPDiskInfo& pdisk : pdisks) {
             candidates.emplace_back(pdisk.FailDom, BeginLevel, EndLevel, 0 /*badness*/, pdisk.NodeId, pdisk.PDiskId, VSlot);
         }
 
-        TVector<TVector<TVector<const TCandidate*>>> bestGroup; 
+        TVector<TVector<TVector<const TCandidate*>>> bestGroup;
         if (!CreateGroupWithRings(candidates, NumRings, FailDomains, VDisksPerFailDomain, RingBeginLevel, RingEndLevel,
                 bestGroup)) {
             Cerr << "Can't create group with given parameters"
@@ -307,14 +307,14 @@ public:
             ++vdiskIdx;
         };
 
-        auto transformDomain = [&](const TVector<const TCandidate*>& inVDisks, auto& outRing, ui32 ringIdx, ui32& domainIdx) { 
+        auto transformDomain = [&](const TVector<const TCandidate*>& inVDisks, auto& outRing, ui32 ringIdx, ui32& domainIdx) {
             ui32 vdiskIdx = 0;
             std::for_each(inVDisks.begin(), inVDisks.end(), std::bind(transformVDisk, std::placeholders::_1,
                     std::ref(*outRing.AddFailDomains()), ringIdx, domainIdx, std::ref(vdiskIdx)));
             ++domainIdx;
         };
 
-        auto transformRing = [&](const TVector<TVector<const TCandidate*>>& inDomains, auto& outGroup, ui32& ringIdx) { 
+        auto transformRing = [&](const TVector<TVector<const TCandidate*>>& inDomains, auto& outGroup, ui32& ringIdx) {
             ui32 domainIdx = 0;
             std::for_each(inDomains.begin(), inDomains.end(), std::bind(transformDomain, std::placeholders::_1,
                     std::ref(*outGroup.AddRings()), ringIdx, std::ref(domainIdx)));
@@ -330,7 +330,7 @@ public:
         std::for_each(bestGroup.begin(), bestGroup.end(), std::bind(transformRing, std::placeholders::_1,
                 std::ref(group), std::ref(ringIdx)));
 
-        TString message; 
+        TString message;
         if (!google::protobuf::TextFormat::PrintToString(pb, &message)) {
             Cerr << "failed to format resulting protobuf" << Endl;
             return EXIT_FAILURE;

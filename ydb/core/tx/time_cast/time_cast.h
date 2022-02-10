@@ -51,7 +51,7 @@ struct TEvMediatorTimecast {
             , ProcessingParams(processing)
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TEvRegisterTablet";
             str << " TabletId# " << TabletId;
@@ -72,7 +72,7 @@ struct TEvMediatorTimecast {
             , Entry(entry)
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TEvRegisterTabletResult";
             str << " TabletId# " << TabletId;
@@ -93,7 +93,7 @@ struct TEvMediatorTimecast {
             : TabletId(tabletId)
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TEvUnregisterTablet";
             str << " TabletId# " << TabletId;
@@ -147,7 +147,7 @@ struct TEvMediatorTimecast {
             Record.AddBucket(bucket);
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TEvWatch";
             for (size_t i = 0; i < Record.BucketSize(); ++i) {
@@ -159,7 +159,7 @@ struct TEvMediatorTimecast {
     };
 
     struct TEvUpdate : public TEventPB<TEvUpdate, NKikimrTxMediatorTimecast::TEvUpdate, EvUpdate> {
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{TEvUpdate ";
             if (Record.HasMediator()) {

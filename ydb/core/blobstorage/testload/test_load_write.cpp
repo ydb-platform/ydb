@@ -37,7 +37,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
             }
         };
 
-        TPriorityQueue<TEvent> Events; 
+        TPriorityQueue<TEvent> Events;
 
     public:
         void Wakeup(const TActorContext& ctx) {
@@ -61,7 +61,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
         using TCallback = std::function<void(IEventBase*, const TActorContext&)>;
 
         ui64 NextCookie = 1;
-        THashMap<ui64, TCallback> Callbacks; 
+        THashMap<ui64, TCallback> Callbacks;
 
     public:
         ui64 ObtainCookie(TCallback callback) {
@@ -752,7 +752,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
 
     TMaybe<TDuration> TestDuration;
 
-    TVector<TTabletWriter> TabletWriters; 
+    TVector<TTabletWriter> TabletWriters;
 
     TWakeupQueue WakeupQueue;
     TDeque<TInstant> WakeupScheduledAt;
@@ -902,7 +902,7 @@ public:
             if (const ui64 delta = value % WakeupRounding.GetValue()) {
                 value += WakeupRounding.GetValue() - delta;
             }
-            nextWakeupTime = TInstant::MicroSeconds(value); 
+            nextWakeupTime = TInstant::MicroSeconds(value);
         }
         const TInstant scheduledWakeupTime = WakeupScheduledAt ? WakeupScheduledAt.front() : TInstant::Max();
         if (nextWakeupTime && *nextWakeupTime < scheduledWakeupTime) {

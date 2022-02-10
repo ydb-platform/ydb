@@ -19,19 +19,19 @@ public:
         cond = CreateEvent(nullptr, rmode == rManual ? true : false, false, nullptr);
     }
 
-    inline ~TEvImpl() { 
+    inline ~TEvImpl() {
         CloseHandle(cond);
     }
 
-    inline void Reset() noexcept { 
+    inline void Reset() noexcept {
         ResetEvent(cond);
     }
 
-    inline void Signal() noexcept { 
+    inline void Signal() noexcept {
         SetEvent(cond);
     }
 
-    inline bool WaitD(TInstant deadLine) noexcept { 
+    inline bool WaitD(TInstant deadLine) noexcept {
         if (deadLine == TInstant::Max()) {
             return WaitForSingleObject(cond, INFINITE) == WAIT_OBJECT_0;
         }
@@ -51,7 +51,7 @@ public:
     {
     }
 
-    inline void Signal() noexcept { 
+    inline void Signal() noexcept {
         if (Manual && AtomicGet(Signaled)) {
             return; // shortcut
         }
@@ -67,11 +67,11 @@ public:
         }
     }
 
-    inline void Reset() noexcept { 
+    inline void Reset() noexcept {
         AtomicSet(Signaled, 0);
     }
 
-    inline bool WaitD(TInstant deadLine) noexcept { 
+    inline bool WaitD(TInstant deadLine) noexcept {
         if (Manual && AtomicGet(Signaled)) {
             return true; // shortcut
         }

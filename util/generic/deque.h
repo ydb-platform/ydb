@@ -9,7 +9,7 @@
 #include <initializer_list>
 
 template <class T, class A>
-class TDeque: public std::deque<T, TReboundAllocator<A, T>> { 
+class TDeque: public std::deque<T, TReboundAllocator<A, T>> {
     using TBase = std::deque<T, TReboundAllocator<A, T>>;
 
 public:

@@ -93,7 +93,7 @@ namespace NKikimr {
         }
 
     private:
-        THashMap<ui64, TIntrusivePtr<TMediatorTimecastEntry>> Entries; 
+        THashMap<ui64, TIntrusivePtr<TMediatorTimecastEntry>> Entries;
     };
 
     void SetupMediatorTimecastProxy(TTestActorRuntime& runtime, ui32 nodeIndex, bool useFake = false)
@@ -159,7 +159,7 @@ namespace NKikimr {
 
     class TTabletTracer : TNonCopyable {
     public:
-        TTabletTracer(bool& tracingActive, const TVector<ui64>& tabletIds) 
+        TTabletTracer(bool& tracingActive, const TVector<ui64>& tabletIds)
             : TracingActive(tracingActive)
             , TabletIds(tabletIds)
         {}
@@ -259,12 +259,12 @@ namespace NKikimr {
         TMap<TActorId, ui64> TabletRelatedActors;
         TSet<ui64> DeletedTablets;
         bool& TracingActive;
-        const TVector<ui64> TabletIds; 
+        const TVector<ui64> TabletIds;
     };
 
     class TRebootTabletObserver : public TTabletTracer {
     public:
-        TRebootTabletObserver(ui32 tabletEventCountBeforeReboot, ui64 tabletId, bool& tracingActive, const TVector<ui64>& tabletIds, 
+        TRebootTabletObserver(ui32 tabletEventCountBeforeReboot, ui64 tabletId, bool& tracingActive, const TVector<ui64>& tabletIds,
             TTestActorRuntime::TEventFilter filter, bool killOnCommit)
             : TTabletTracer(tracingActive, tabletIds)
             , TabletEventCountBeforeReboot(tabletEventCountBeforeReboot)
@@ -417,7 +417,7 @@ namespace NKikimr {
 
     class TDelayingObserver : public TTabletTracer {
     public:
-        TDelayingObserver(bool& tracingActive, double delayInjectionProbability, const TVector<ui64>& tabletIds) 
+        TDelayingObserver(bool& tracingActive, double delayInjectionProbability, const TVector<ui64>& tabletIds)
             : TTabletTracer(tracingActive, tabletIds)
             , DelayInjectionProbability(delayInjectionProbability)
             , ExecutionCount(0)
@@ -536,7 +536,7 @@ namespace NKikimr {
     private:
         const double DelayInjectionProbability;
         TAutoPtr<TDecisionTreeItem> Decisions;
-        TVector<TDecisionTreeItem*> CurrentItems; 
+        TVector<TDecisionTreeItem*> CurrentItems;
         ui64 ExecutionCount;
         ui32 NormalStepsCount;
         TMersenne<ui64> Random;
@@ -749,8 +749,8 @@ namespace NKikimr {
         UNIT_ASSERT(configureResponse->Record.GetResponse().GetSuccess());
     }
 
-    void RunTestWithReboots(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory, 
-        std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc, 
+    void RunTestWithReboots(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory,
+        std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc,
         ui32 selectedReboot, ui64 selectedTablet, ui32 bucket, ui32 totalBuckets, bool killOnCommit) {
         bool activeZone = false;
 
@@ -851,7 +851,7 @@ namespace NKikimr {
     }
 
     void RunTestWithPipeResets(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory,
-        std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc, 
+        std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc,
         ui32 selectedReboot, ui32 bucket, ui32 totalBuckets) {
         bool activeZone = false;
 
@@ -895,7 +895,7 @@ namespace NKikimr {
                 continue;
             }
 
-            TString dispatchName = Sprintf("Pipe reset at event #%" PRIu32, eventCountBeforeReboot); 
+            TString dispatchName = Sprintf("Pipe reset at event #%" PRIu32, eventCountBeforeReboot);
             if (ENABLE_REBOOT_DISPATCH_LOG)
                 Cout << "===> BEGIN dispatch: " << dispatchName << "\n";
 
@@ -940,15 +940,15 @@ namespace NKikimr {
         }
     }
 
-    void RunTestWithDelays(const TRunWithDelaysConfig& config, const TVector<ui64>& tabletIds, 
-        std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc) { 
+    void RunTestWithDelays(const TRunWithDelaysConfig& config, const TVector<ui64>& tabletIds,
+        std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc) {
         if (SUPPRESS_DELAYS || GetEnv("FAST_UT")=="1")
             return;
 
         bool activeZone = false;
         TDelayingObserver delayingObserver(activeZone, config.DelayInjectionProbability, tabletIds);
         TTabletScheduledFilter scheduledFilter(delayingObserver);
-        TString dispatchName; 
+        TString dispatchName;
         try {
             while (!delayingObserver.IsDone() && (delayingObserver.GetExecutionCount() < config.VariantsLimit)) {
                 delayingObserver.PrepareExecution();
@@ -1051,7 +1051,7 @@ namespace NKikimr {
         //Cout << event->Answer << "\n";
         ui64 totalFreeSize = 0;
         for (ui32 i = 0; i < 2; ++i) {
-            TString regex = Sprintf(".*sensor=%s:\\s(\\d+).*", i == 0 ? "FreeChunks" : "UntrimmedFreeChunks"); 
+            TString regex = Sprintf(".*sensor=%s:\\s(\\d+).*", i == 0 ? "FreeChunks" : "UntrimmedFreeChunks");
             TRegExBase matcher(regex);
             regmatch_t groups[2] = {};
             matcher.Exec(event->Answer.data(), groups, 0, 2);
@@ -1428,7 +1428,7 @@ namespace NKikimr {
     private:
         TState::TPtr State;
         TGetTabletCreationFunc GetTabletCreationFunc;
-        TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue; 
+        TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
     };
 
     void BootFakeHive(TTestActorRuntime& runtime, ui64 tabletId, TFakeHiveState::TPtr state,

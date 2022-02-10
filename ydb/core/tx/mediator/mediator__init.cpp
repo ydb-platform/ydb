@@ -10,7 +10,7 @@ using NTabletFlatExecutor::TTransactionContext;
 
 struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
     ui64 Version;
-    TVector<TCoordinatorId> Coordinators; 
+    TVector<TCoordinatorId> Coordinators;
     ui32 TimeCastBuketsPerMediator;
 
     TTxInit(TSelf *mediator)
@@ -31,7 +31,7 @@ struct TTxMediator::TTxInit : public TTransactionBase<TTxMediator> {
 
         while (!rowset.EndOfSet()) {
             const ui64 ver = rowset.GetValue<Schema::DomainConfiguration::Version>();
-            TVector<TCoordinatorId> coordinators = rowset.GetValue<Schema::DomainConfiguration::Coordinators>(); 
+            TVector<TCoordinatorId> coordinators = rowset.GetValue<Schema::DomainConfiguration::Coordinators>();
             ui32 buckets = rowset.GetValue<Schema::DomainConfiguration::TimeCastBuckets>();
 
             if (ver >= Version) {

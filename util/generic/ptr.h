@@ -44,33 +44,33 @@ inline void CheckedArrayDelete(T* t) {
 class TNoAction {
 public:
     template <class T>
-    static inline void Destroy(T*) noexcept { 
+    static inline void Destroy(T*) noexcept {
     }
 };
 
 class TDelete {
 public:
     template <class T>
-    static inline void Destroy(T* t) noexcept { 
+    static inline void Destroy(T* t) noexcept {
         CheckedDelete(t);
     }
 
     /*
-     * special handling for nullptr - call nothing 
-     */ 
-    static inline void Destroy(std::nullptr_t) noexcept { 
-    } 
- 
-    /* 
+     * special handling for nullptr - call nothing
+     */
+    static inline void Destroy(std::nullptr_t) noexcept {
+    }
+
+    /*
      * special handling for void* - call ::operator delete()
      */
-    static void Destroy(void* t) noexcept; 
+    static void Destroy(void* t) noexcept;
 };
 
 class TDeleteArray {
 public:
     template <class T>
-    static inline void Destroy(T* t) noexcept { 
+    static inline void Destroy(T* t) noexcept {
         CheckedArrayDelete(t);
     }
 };
@@ -78,7 +78,7 @@ public:
 class TDestructor {
 public:
     template <class T>
-    static inline void Destroy(T* t) noexcept { 
+    static inline void Destroy(T* t) noexcept {
         (void)t;
         t->~T();
     }
@@ -87,7 +87,7 @@ public:
 class TFree {
 public:
     template <class T>
-    static inline void Destroy(T* t) noexcept { 
+    static inline void Destroy(T* t) noexcept {
         DoDestroy((void*)t);
     }
 
@@ -95,7 +95,7 @@ private:
     /*
      * we do not want dependancy on cstdlib here...
      */
-    static void DoDestroy(void* t) noexcept; 
+    static void DoDestroy(void* t) noexcept;
 };
 
 template <class Base, class T>
@@ -103,7 +103,7 @@ class TPointerCommon {
 public:
     using TValueType = T;
 
-    inline T* operator->() const noexcept { 
+    inline T* operator->() const noexcept {
         T* ptr = AsT();
         Y_ASSERT(ptr);
         return ptr;
@@ -111,26 +111,26 @@ public:
 
 #ifndef __cpp_impl_three_way_comparison
     template <class C>
-    inline bool operator==(const C& p) const noexcept { 
+    inline bool operator==(const C& p) const noexcept {
         return (p == AsT());
     }
 
     template <class C>
-    inline bool operator!=(const C& p) const noexcept { 
+    inline bool operator!=(const C& p) const noexcept {
         return (p != AsT());
     }
 #endif
 
-    inline explicit operator bool() const noexcept { 
+    inline explicit operator bool() const noexcept {
         return nullptr != AsT();
     }
 
 protected:
-    inline T* AsT() const noexcept { 
+    inline T* AsT() const noexcept {
         return (static_cast<const Base*>(this))->Get();
     }
 
-    static inline T* DoRelease(T*& t) noexcept { 
+    static inline T* DoRelease(T*& t) noexcept {
         T* ret = t;
         t = nullptr;
         return ret;
@@ -140,13 +140,13 @@ protected:
 template <class Base, class T>
 class TPointerBase: public TPointerCommon<Base, T> {
 public:
-    inline T& operator*() const noexcept { 
+    inline T& operator*() const noexcept {
         Y_ASSERT(this->AsT());
 
         return *(this->AsT());
     }
 
-    inline T& operator[](size_t n) const noexcept { 
+    inline T& operator[](size_t n) const noexcept {
         Y_ASSERT(this->AsT());
 
         return (this->AsT())[n];
@@ -163,21 +163,21 @@ class TPointerBase<Base, void>: public TPointerCommon<Base, void> {
 template <class T, class D>
 class TAutoPtr: public TPointerBase<TAutoPtr<T, D>, T> {
 public:
-    inline TAutoPtr(T* t = nullptr) noexcept 
+    inline TAutoPtr(T* t = nullptr) noexcept
         : T_(t)
     {
     }
 
-    inline TAutoPtr(const TAutoPtr& t) noexcept 
+    inline TAutoPtr(const TAutoPtr& t) noexcept
         : T_(t.Release())
     {
     }
 
-    inline ~TAutoPtr() { 
+    inline ~TAutoPtr() {
         DoDestroy();
     }
 
-    inline TAutoPtr& operator=(const TAutoPtr& t) noexcept { 
+    inline TAutoPtr& operator=(const TAutoPtr& t) noexcept {
         if (this != &t) {
             Reset(t.Release());
         }
@@ -189,26 +189,26 @@ public:
         return this->DoRelease(T_);
     }
 
-    inline void Reset(T* t) noexcept { 
+    inline void Reset(T* t) noexcept {
         if (T_ != t) {
             DoDestroy();
             T_ = t;
         }
     }
 
-    inline void Reset() noexcept { 
+    inline void Reset() noexcept {
         Destroy();
     }
 
-    inline void Destroy() noexcept { 
+    inline void Destroy() noexcept {
         Reset(nullptr);
     }
 
-    inline void Swap(TAutoPtr& r) noexcept { 
+    inline void Swap(TAutoPtr& r) noexcept {
         DoSwap(T_, r.T_);
     }
 
-    inline T* Get() const noexcept { 
+    inline T* Get() const noexcept {
         return T_;
     }
 
@@ -219,7 +219,7 @@ public:
     }
 #endif
 private:
-    inline void DoDestroy() noexcept { 
+    inline void DoDestroy() noexcept {
         if (T_) {
             D::Destroy(T_);
         }
@@ -232,22 +232,22 @@ private:
 template <class T, class D>
 class THolder: public TPointerBase<THolder<T, D>, T> {
 public:
-    constexpr THolder() noexcept 
-        : T_(nullptr) 
-    { 
-    } 
- 
-    constexpr THolder(std::nullptr_t) noexcept 
-        : T_(nullptr) 
-    { 
-    } 
- 
+    constexpr THolder() noexcept
+        : T_(nullptr)
+    {
+    }
+
+    constexpr THolder(std::nullptr_t) noexcept
+        : T_(nullptr)
+    {
+    }
+
     explicit THolder(T* t) noexcept
         : T_(t)
     {
     }
 
-    inline THolder(TAutoPtr<T, D> t) noexcept 
+    inline THolder(TAutoPtr<T, D> t) noexcept
         : T_(t.Release())
     {
     }
@@ -272,11 +272,11 @@ public:
     THolder(const THolder&) = delete;
     THolder& operator=(const THolder&) = delete;
 
-    inline ~THolder() { 
+    inline ~THolder() {
         DoDestroy();
     }
 
-    inline void Destroy() noexcept { 
+    inline void Destroy() noexcept {
         Reset(nullptr);
     }
 
@@ -284,22 +284,22 @@ public:
         return this->DoRelease(T_);
     }
 
-    inline void Reset(T* t) noexcept { 
+    inline void Reset(T* t) noexcept {
         if (T_ != t) {
             DoDestroy();
             T_ = t;
         }
     }
 
-    inline void Reset(TAutoPtr<T, D> t) noexcept { 
+    inline void Reset(TAutoPtr<T, D> t) noexcept {
         Reset(t.Release());
     }
 
-    inline void Reset() noexcept { 
+    inline void Reset() noexcept {
         Destroy();
     }
 
-    inline void Swap(THolder& r) noexcept { 
+    inline void Swap(THolder& r) noexcept {
         DoSwap(T_, r.T_);
     }
 
@@ -307,15 +307,15 @@ public:
         return T_;
     }
 
-    inline operator TAutoPtr<T, D>() noexcept { 
+    inline operator TAutoPtr<T, D>() noexcept {
         return Release();
     }
 
-    THolder& operator=(std::nullptr_t) noexcept { 
-        this->Reset(nullptr); 
-        return *this; 
-    } 
- 
+    THolder& operator=(std::nullptr_t) noexcept {
+        this->Reset(nullptr);
+        return *this;
+    }
+
     THolder& operator=(THolder&& that) noexcept {
         this->Reset(that.Release());
         return *this;
@@ -334,7 +334,7 @@ public:
     }
 #endif
 private:
-    inline void DoDestroy() noexcept { 
+    inline void DoDestroy() noexcept {
         if (T_) {
             D::Destroy(T_);
         }
@@ -358,26 +358,26 @@ template <typename T, typename... Args>
 template <class T, class C, class D>
 class TRefCounted {
 public:
-    inline TRefCounted(long initval = 0) noexcept 
+    inline TRefCounted(long initval = 0) noexcept
         : Counter_(initval)
     {
     }
 
     inline ~TRefCounted() = default;
 
-    inline void Ref(TAtomicBase d) noexcept { 
+    inline void Ref(TAtomicBase d) noexcept {
         auto resultCount = Counter_.Add(d);
         Y_ASSERT(resultCount >= d);
         (void)resultCount;
     }
 
-    inline void Ref() noexcept { 
+    inline void Ref() noexcept {
         auto resultCount = Counter_.Inc();
         Y_ASSERT(resultCount != 0);
         (void)resultCount;
     }
 
-    inline void UnRef(TAtomicBase d) noexcept { 
+    inline void UnRef(TAtomicBase d) noexcept {
         auto resultCount = Counter_.Sub(d);
         Y_ASSERT(resultCount >= 0);
         if (resultCount == 0) {
@@ -385,7 +385,7 @@ public:
         }
     }
 
-    inline void UnRef() noexcept { 
+    inline void UnRef() noexcept {
         UnRef(1);
     }
 
@@ -393,7 +393,7 @@ public:
         return Counter_.Val();
     }
 
-    inline void DecRef() noexcept { 
+    inline void DecRef() noexcept {
         auto resultCount = Counter_.Dec();
         Y_ASSERT(resultCount >= 0);
         (void)resultCount;
@@ -448,25 +448,25 @@ using TSimpleRefCount = TRefCounted<T, TSimpleCounter, D>;
 template <class T>
 class TDefaultIntrusivePtrOps {
 public:
-    static inline void Ref(T* t) noexcept { 
+    static inline void Ref(T* t) noexcept {
         Y_ASSERT(t);
 
         t->Ref();
     }
 
-    static inline void UnRef(T* t) noexcept { 
+    static inline void UnRef(T* t) noexcept {
         Y_ASSERT(t);
 
         t->UnRef();
     }
 
-    static inline void DecRef(T* t) noexcept { 
+    static inline void DecRef(T* t) noexcept {
         Y_ASSERT(t);
 
         t->DecRef();
     }
 
-    static inline long RefCount(const T* t) noexcept { 
+    static inline long RefCount(const T* t) noexcept {
         Y_ASSERT(t);
 
         return t->RefCount();
@@ -485,7 +485,7 @@ public:
     struct TNoIncrement {
     };
 
-    inline TIntrusivePtr(T* t = nullptr) noexcept 
+    inline TIntrusivePtr(T* t = nullptr) noexcept
         : T_(t)
     {
         Ops();
@@ -498,11 +498,11 @@ public:
         Ops();
     }
 
-    inline ~TIntrusivePtr() { 
+    inline ~TIntrusivePtr() {
         UnRef();
     }
 
-    inline TIntrusivePtr(const TIntrusivePtr& p) noexcept 
+    inline TIntrusivePtr(const TIntrusivePtr& p) noexcept
         : T_(p.T_)
     {
         Ref();
@@ -537,7 +537,7 @@ public:
         Swap(p);
     }
 
-    inline TIntrusivePtr& operator=(TIntrusivePtr p) noexcept { 
+    inline TIntrusivePtr& operator=(TIntrusivePtr p) noexcept {
         p.Swap(*this);
 
         return *this;
@@ -550,19 +550,19 @@ public:
         Swap(t);
     }
 
-    inline void Reset() noexcept { 
+    inline void Reset() noexcept {
         Drop();
     }
 
-    inline T* Get() const noexcept { 
+    inline T* Get() const noexcept {
         return T_;
     }
 
-    inline void Swap(TIntrusivePtr& r) noexcept { 
+    inline void Swap(TIntrusivePtr& r) noexcept {
         DoSwap(T_, r.T_);
     }
 
-    inline void Drop() noexcept { 
+    inline void Drop() noexcept {
         TIntrusivePtr(nullptr).Swap(*this);
     }
 
@@ -575,7 +575,7 @@ public:
         return res;
     }
 
-    inline long RefCount() const noexcept { 
+    inline long RefCount() const noexcept {
         return T_ ? Ops::RefCount(T_) : 0;
     }
 
@@ -586,13 +586,13 @@ public:
     }
 #endif
 private:
-    inline void Ref() noexcept { 
+    inline void Ref() noexcept {
         if (T_) {
             Ops::Ref(T_);
         }
     }
 
-    inline void UnRef() noexcept { 
+    inline void UnRef() noexcept {
         if (T_) {
             Ops::UnRef(T_);
         }
@@ -614,18 +614,18 @@ struct THash<TIntrusivePtr<T, Ops>>: THash<const T*> {
 template <class T, class Ops>
 class TIntrusiveConstPtr: public TPointerBase<TIntrusiveConstPtr<T, Ops>, const T> {
 public:
-    inline TIntrusiveConstPtr(T* t = nullptr) noexcept // we need a non-const pointer to Ref(), UnRef() and eventually delete it. 
+    inline TIntrusiveConstPtr(T* t = nullptr) noexcept // we need a non-const pointer to Ref(), UnRef() and eventually delete it.
         : T_(t)
     {
         Ops();
         Ref();
     }
 
-    inline ~TIntrusiveConstPtr() { 
+    inline ~TIntrusiveConstPtr() {
         UnRef();
     }
 
-    inline TIntrusiveConstPtr(const TIntrusiveConstPtr& p) noexcept 
+    inline TIntrusiveConstPtr(const TIntrusiveConstPtr& p) noexcept
         : T_(p.T_)
     {
         Ref();
@@ -657,7 +657,7 @@ public:
         p.T_ = nullptr;
     }
 
-    inline TIntrusiveConstPtr& operator=(TIntrusiveConstPtr p) noexcept { 
+    inline TIntrusiveConstPtr& operator=(TIntrusiveConstPtr p) noexcept {
         p.Swap(*this);
 
         return *this;
@@ -670,19 +670,19 @@ public:
         Swap(t);
     }
 
-    inline void Reset() noexcept { 
+    inline void Reset() noexcept {
         Drop();
     }
 
-    inline const T* Get() const noexcept { 
+    inline const T* Get() const noexcept {
         return T_;
     }
 
-    inline void Swap(TIntrusiveConstPtr& r) noexcept { 
+    inline void Swap(TIntrusiveConstPtr& r) noexcept {
         DoSwap(T_, r.T_);
     }
 
-    inline void Drop() noexcept { 
+    inline void Drop() noexcept {
         TIntrusiveConstPtr(nullptr).Swap(*this);
     }
 
@@ -697,13 +697,13 @@ public:
     }
 #endif
 private:
-    inline void Ref() noexcept { 
+    inline void Ref() noexcept {
         if (T_ != nullptr) {
             Ops::Ref(T_);
         }
     }
 
-    inline void UnRef() noexcept { 
+    inline void UnRef() noexcept {
         if (T_ != nullptr) {
             Ops::UnRef(T_);
         }
@@ -732,31 +732,31 @@ class TSimpleIntrusiveOps {
 #endif
         ;
 
-    static void DoRef(T* t) noexcept { 
+    static void DoRef(T* t) noexcept {
         Ops::Ref(t);
     }
 
-    static void DoUnRef(T* t) noexcept { 
+    static void DoUnRef(T* t) noexcept {
         Ops::UnRef(t);
     }
 
 public:
-    inline TSimpleIntrusiveOps() noexcept { 
+    inline TSimpleIntrusiveOps() noexcept {
         InitStaticOps();
     }
 
     inline ~TSimpleIntrusiveOps() = default;
 
-    static inline void Ref(T* t) noexcept { 
+    static inline void Ref(T* t) noexcept {
         Ref_(t);
     }
 
-    static inline void UnRef(T* t) noexcept { 
+    static inline void UnRef(T* t) noexcept {
         UnRef_(t);
     }
 
 private:
-    static inline void InitStaticOps() noexcept { 
+    static inline void InitStaticOps() noexcept {
         struct TInit {
             inline TInit() noexcept {
                 Ref_ = DoRef;
@@ -794,7 +794,7 @@ class TSharedPtr: public TPointerBase<TSharedPtr<T, C, D>, T> {
     friend class TSharedPtr;
 
 public:
-    inline TSharedPtr() noexcept 
+    inline TSharedPtr() noexcept
         : T_(nullptr)
         , C_(nullptr)
     {
@@ -810,7 +810,7 @@ public:
         Init(t);
     }
 
-    inline TSharedPtr(T* t, C* c) noexcept 
+    inline TSharedPtr(T* t, C* c) noexcept
         : T_(t)
         , C_(c)
     {
@@ -825,7 +825,7 @@ public:
         UnRef();
     }
 
-    inline TSharedPtr(const TSharedPtr& t) noexcept 
+    inline TSharedPtr(const TSharedPtr& t) noexcept
         : T_(t.T_)
         , C_(t.C_)
     {
@@ -840,7 +840,7 @@ public:
     }
 
     template <class TT, class = TGuardConversion<T, TT>>
-    inline TSharedPtr(const TSharedPtr<TT, C, D>& t) noexcept 
+    inline TSharedPtr(const TSharedPtr<TT, C, D>& t) noexcept
         : T_(t.T_)
         , C_(t.C_)
     {
@@ -856,7 +856,7 @@ public:
         t.C_ = nullptr;
     }
 
-    inline TSharedPtr& operator=(TSharedPtr t) noexcept { 
+    inline TSharedPtr& operator=(TSharedPtr t) noexcept {
         t.Swap(*this);
 
         return *this;
@@ -869,28 +869,28 @@ public:
         Swap(t);
     }
 
-    inline void Reset() noexcept { 
+    inline void Reset() noexcept {
         Drop();
     }
 
-    inline void Drop() noexcept { 
+    inline void Drop() noexcept {
         TSharedPtr().Swap(*this);
     }
 
-    inline T* Get() const noexcept { 
+    inline T* Get() const noexcept {
         return T_;
     }
 
-    inline C* ReferenceCounter() const noexcept { 
+    inline C* ReferenceCounter() const noexcept {
         return C_;
     }
 
-    inline void Swap(TSharedPtr& r) noexcept { 
+    inline void Swap(TSharedPtr& r) noexcept {
         DoSwap(T_, r.T_);
         DoSwap(C_, r.C_);
     }
 
-    inline long RefCount() const noexcept { 
+    inline long RefCount() const noexcept {
         return C_ ? C_->Val() : 0;
     }
 
@@ -907,19 +907,19 @@ private:
         T_ = t.Release();
     }
 
-    inline void Ref() noexcept { 
+    inline void Ref() noexcept {
         if (C_) {
             C_->Inc();
         }
     }
 
-    inline void UnRef() noexcept { 
+    inline void UnRef() noexcept {
         if (C_ && !C_->Dec()) {
             DoDestroy();
         }
     }
 
-    inline void DoDestroy() noexcept { 
+    inline void DoDestroy() noexcept {
         if (T_) {
             D::Destroy(T_);
         }
@@ -985,7 +985,7 @@ public:
 template <class T, class C, class D>
 class TCopyPtr: public TPointerBase<TCopyPtr<T, C, D>, T> {
 public:
-    inline TCopyPtr(T* t = nullptr) noexcept 
+    inline TCopyPtr(T* t = nullptr) noexcept
         : T_(t)
     {
     }
@@ -1001,7 +1001,7 @@ public:
         Swap(t);
     }
 
-    inline ~TCopyPtr() { 
+    inline ~TCopyPtr() {
         DoDestroy();
     }
 
@@ -1015,26 +1015,26 @@ public:
         return DoRelease(T_);
     }
 
-    inline void Reset(T* t) noexcept { 
+    inline void Reset(T* t) noexcept {
         if (T_ != t) {
             DoDestroy();
             T_ = t;
         }
     }
 
-    inline void Reset() noexcept { 
+    inline void Reset() noexcept {
         Destroy();
     }
 
-    inline void Destroy() noexcept { 
+    inline void Destroy() noexcept {
         Reset(nullptr);
     }
 
-    inline void Swap(TCopyPtr& r) noexcept { 
+    inline void Swap(TCopyPtr& r) noexcept {
         DoSwap(T_, r.T_);
     }
 
-    inline T* Get() const noexcept { 
+    inline T* Get() const noexcept {
         return T_;
     }
 
@@ -1045,7 +1045,7 @@ public:
     }
 #endif
 private:
-    inline void DoDestroy() noexcept { 
+    inline void DoDestroy() noexcept {
         if (T_)
             D::Destroy(T_);
     }
@@ -1072,11 +1072,11 @@ public:
     {
     }
 
-    inline const T* Get() const noexcept { 
+    inline const T* Get() const noexcept {
         return Const();
     }
 
-    inline const T* Const() const noexcept { 
+    inline const T* Const() const noexcept {
         return T_.Get();
     }
 
@@ -1086,11 +1086,11 @@ public:
         return T_.Get();
     }
 
-    inline bool Shared() const noexcept { 
+    inline bool Shared() const noexcept {
         return T_.RefCount() > 1;
     }
 
-    inline void Swap(TCowPtr& r) noexcept { 
+    inline void Swap(TCowPtr& r) noexcept {
         T_.Swap(r.T_);
     }
 

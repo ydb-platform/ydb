@@ -2,7 +2,7 @@
 
 #include <util/stream/walk.h>
 #include <util/system/types.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <library/cpp/actors/util/rope.h>
 #include <library/cpp/actors/wilson/wilson_trace.h>
 

@@ -247,7 +247,7 @@ private:
         DataChunkStr(data, sizeof(char));
     }
     void DataChunkStroka(TString& data) {
-        DataChunkStr(data, sizeof(TString::char_type)); 
+        DataChunkStr(data, sizeof(TString::char_type));
     }
     void DataChunkWtroka(TUtf16String& data) {
         DataChunkStr(data, sizeof(wchar16));
@@ -281,7 +281,7 @@ private:
     typedef THashMap<ui64, TPtr<IObjectBase>> CObjectsHash;
     TAutoPtr<CObjectsHash> Objects;
 
-    TVector<IObjectBase*> ObjectQueue; 
+    TVector<IObjectBase*> ObjectQueue;
 
 public:
     bool IsReading() {
@@ -390,7 +390,7 @@ public:
             Add(2, &nSize);
         }
         int i = 1;
-        for (typename TList<T1>::iterator k = data.begin(); k != data.end(); ++k, ++i) 
+        for (typename TList<T1>::iterator k = data.begin(); k != data.end(); ++k, ++i)
             Add(i + 2, &(*k));
         return 0;
     }
@@ -542,7 +542,7 @@ public:
 
     template <class T>
     static bool HasNonTrivialSerializer(...) {
-        return sizeof(std::declval<IBinSaver*>()->Add(0, std::declval<T*>())) != 1; 
+        return sizeof(std::declval<IBinSaver*>()->Add(0, std::declval<T*>())) != 1;
     }
 
 public:
@@ -625,19 +625,19 @@ struct TRegisterSaveLoadType {
         return 0;                 \
     }
 
-#define SAVELOAD_OVERRIDE_WITHOUT_BASE(...) \ 
-    int operator&(IBinSaver& f) override {  \ 
-        f.AddMulti(__VA_ARGS__);            \ 
-        return 0;                           \ 
+#define SAVELOAD_OVERRIDE_WITHOUT_BASE(...) \
+    int operator&(IBinSaver& f) override {  \
+        f.AddMulti(__VA_ARGS__);            \
+        return 0;                           \
     }
 
-#define SAVELOAD_OVERRIDE(base, ...)       \ 
-    int operator&(IBinSaver& f) override { \ 
-        base::operator&(f);                \ 
-        f.AddMulti(__VA_ARGS__);           \ 
-        return 0;                          \ 
-    } 
- 
+#define SAVELOAD_OVERRIDE(base, ...)       \
+    int operator&(IBinSaver& f) override { \
+        base::operator&(f);                \
+        f.AddMulti(__VA_ARGS__);           \
+        return 0;                          \
+    }
+
 #define SAVELOAD_BASE(...)        \
     int operator&(IBinSaver& f) { \
         TBase::operator&(f);      \

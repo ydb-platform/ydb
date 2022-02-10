@@ -7,7 +7,7 @@ using namespace NSlidingWindow;
 Y_UNIT_TEST_SUITE(TSlidingWindowTest) {
     Y_UNIT_TEST(TestSlidingWindowMax) {
         TSlidingWindow<TMaxOperation<unsigned>> w(TDuration::Minutes(5), 5);
-        TInstant start = TInstant::MicroSeconds(TDuration::Hours(1).MicroSeconds()); 
+        TInstant start = TInstant::MicroSeconds(TDuration::Hours(1).MicroSeconds());
         TInstant now = start;
         w.Update(5, start);                        // ~ ~ ~ ~ 5
         UNIT_ASSERT_VALUES_EQUAL(w.GetValue(), 5); //         ^
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TSlidingWindowTest) {
 
     Y_UNIT_TEST(TestSlidingWindowMin) {
         TSlidingWindow<TMinOperation<unsigned>> w(TDuration::Minutes(5), 5);
-        TInstant start = TInstant::MicroSeconds(TDuration::Hours(1).MicroSeconds()); 
+        TInstant start = TInstant::MicroSeconds(TDuration::Hours(1).MicroSeconds());
         TInstant now = start;
         w.Update(5, start);                        // ~ ~ ~ ~ 5
         UNIT_ASSERT_VALUES_EQUAL(w.GetValue(), 5); //         ^
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TSlidingWindowTest) {
         TSlidingWindow<TSumOperation<unsigned>> w(TDuration::Minutes(5), 5);
         UNIT_ASSERT_VALUES_EQUAL(w.GetValue(), 0); // current sum
 
-        TInstant start = TInstant::MicroSeconds(TDuration::Hours(1).MicroSeconds()); 
+        TInstant start = TInstant::MicroSeconds(TDuration::Hours(1).MicroSeconds());
         TInstant now = start;
         w.Update(5, start);                        // 0 0 0 0 5
         UNIT_ASSERT_VALUES_EQUAL(w.GetValue(), 5); //         ^

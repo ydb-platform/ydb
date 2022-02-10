@@ -9,7 +9,7 @@
 #include <limits>
 
 template <class T>
-static inline T SlowClp2(T t) noexcept { 
+static inline T SlowClp2(T t) noexcept {
     Y_ASSERT(t > 0);
 
     T ret = 1;

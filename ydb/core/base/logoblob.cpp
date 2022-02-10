@@ -4,7 +4,7 @@
 
 namespace NKikimr {
 
-TString TLogoBlobID::ToString() const { 
+TString TLogoBlobID::ToString() const {
     return Sprintf(
         "[%" PRIu64 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 "]",
         TabletID(),
@@ -32,7 +32,7 @@ void TLogoBlobID::Out(IOutputStream &o) const {
     o << buf;
 }
 
-void TLogoBlobID::Out(IOutputStream &o, const TVector<TLogoBlobID> &vec) { 
+void TLogoBlobID::Out(IOutputStream &o, const TVector<TLogoBlobID> &vec) {
     o << "[ ";
     for (const auto &x : vec)
         o << x << ' ';
@@ -55,7 +55,7 @@ static const char *SkipSpaces(const char *str) {
     str = endptr + 1;
 
 
-bool TLogoBlobID::Parse(TLogoBlobID &out, const TString &buf, TString &errorExplanation) { 
+bool TLogoBlobID::Parse(TLogoBlobID &out, const TString &buf, TString &errorExplanation) {
     const char *str = buf.data();
     char *endptr = nullptr;
 
@@ -105,7 +105,7 @@ void LogoBlobIDFromLogoBlobID(const TLogoBlobID &id, NKikimrProto::TLogoBlobID *
 }
 
 void LogoBlobIDVectorFromLogoBlobIDRepeated(
-            TVector<TLogoBlobID> *to, 
+            TVector<TLogoBlobID> *to,
             const ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID> &proto) {
     to->reserve(proto.size());
     to->clear();

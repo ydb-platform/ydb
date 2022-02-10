@@ -24,7 +24,7 @@
 #include <google/protobuf/repeated_field.h>
 
 #include <util/charset/wide.h>
-#include <util/generic/array_ref.h> 
+#include <util/generic/array_ref.h>
 #include <util/generic/set.h>
 #include <util/generic/ylimits.h>
 #include <util/string/ascii.h>
@@ -110,7 +110,7 @@ static TString Id(const TRule_identifier& node, TTranslation& ctx) {
     return ctx.Identifier(node.GetToken1());
 }
 
-static TString Id(const TRule_id& node, TTranslation& ctx) { 
+static TString Id(const TRule_id& node, TTranslation& ctx) {
     // id: identifier | keyword;
     switch (node.Alt_case()) {
         case TRule_id::kAltId1:
@@ -721,18 +721,18 @@ static std::pair<TString, TString> TableKeyImpl(const TRule_table_key& node, TTr
 }
 
 /// \return optional prefix
-static TString ColumnNameAsStr(TTranslation& ctx, const TRule_column_name& node, TString& id) { 
+static TString ColumnNameAsStr(TTranslation& ctx, const TRule_column_name& node, TString& id) {
     id = Id(node.GetRule_an_id2(), ctx);
     return OptIdPrefixAsStr(node.GetRule_opt_id_prefix1(), ctx);
 }
 
-static TString ColumnNameAsSingleStr(TTranslation& ctx, const TRule_column_name& node) { 
-    TString body; 
-    const TString prefix = ColumnNameAsStr(ctx, node, body); 
+static TString ColumnNameAsSingleStr(TTranslation& ctx, const TRule_column_name& node) {
+    TString body;
+    const TString prefix = ColumnNameAsStr(ctx, node, body);
     return prefix ? prefix + '.' + body : body;
 }
 
-static void FillTargetList(TTranslation& ctx, const TRule_set_target_list& node, TVector<TString>& targetList) { 
+static void FillTargetList(TTranslation& ctx, const TRule_set_target_list& node, TVector<TString>& targetList) {
     targetList.push_back(ColumnNameAsSingleStr(ctx, node.GetRule_set_target2().GetRule_column_name1()));
     for (auto& block: node.GetBlock3()) {
         targetList.push_back(ColumnNameAsSingleStr(ctx, block.GetRule_set_target2().GetRule_column_name1()));
@@ -764,7 +764,7 @@ static TTableHints GetTableFuncHints(TStringBuf funcName) {
     return res;
 }
 
-static bool ValidateForCounters(const TString& input) { 
+static bool ValidateForCounters(const TString& input) {
     for (auto c : input) {
         if (!(IsAlnum(c) || c == '_')) {
             return false;
@@ -773,7 +773,7 @@ static bool ValidateForCounters(const TString& input) {
     return true;
 }
 
-static bool IsColumnsOnly(const TVector<TSortSpecificationPtr>& container) { 
+static bool IsColumnsOnly(const TVector<TSortSpecificationPtr>& container) {
     for (const auto& elem: container) {
         if (!elem->OrderExpr->GetColumnName()) {
             return false;
@@ -821,7 +821,7 @@ protected:
     bool NamedExprList(const TRule_named_expr_list& node, TVector<TNodePtr>& exprs, EExpr exprMode = EExpr::Regular);
     bool BindList(const TRule_bind_parameter_list& node, TVector<TSymbolNameWithPos>& bindNames);
     bool ActionOrSubqueryArgs(const TRule_action_or_subquery_args& node, TVector<TSymbolNameWithPos>& bindNames, ui32& optionalArgsCount);
-    bool ModulePath(const TRule_module_path& node, TVector<TString>& path); 
+    bool ModulePath(const TRule_module_path& node, TVector<TString>& path);
     bool NamedBindList(const TRule_named_bind_parameter_list& node, TVector<TSymbolNameWithPos>& names,
         TVector<TSymbolNameWithPos>& aliases);
     bool NamedBindParam(const TRule_named_bind_parameter& node, TSymbolNameWithPos& name, TSymbolNameWithPos& alias);
@@ -970,7 +970,7 @@ private:
     TNodePtr UnaryExpr(const TUnarySubExprRule& node, const TTrailingQuestions& tail);
 
     bool SqlLambdaParams(const TNodePtr& node, TVector<TSymbolNameWithPos>& args, ui32& optionalArgumentsCount);
-    bool SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& node, TVector<TNodePtr>& exprSeq); 
+    bool SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& node, TVector<TNodePtr>& exprSeq);
     bool SqlLambdaExprBody(TContext& ctx, const TRule_expr& node, TVector<TNodePtr>& exprSeq);
 
     TNodePtr KeyExpr(const TRule_key_expr& node) {
@@ -1060,7 +1060,7 @@ private:
     template <typename TGetNode, typename TIter>
     TNodePtr BinOpList(const TRule_eq_subexpr& node, TGetNode getNode, TIter begin, TIter end, const TTrailingQuestions& tail);
 
-    TNodePtr BinOperList(const TString& opName, TVector<TNodePtr>::const_iterator begin, TVector<TNodePtr>::const_iterator end) const; 
+    TNodePtr BinOperList(const TString& opName, TVector<TNodePtr>::const_iterator begin, TVector<TNodePtr>::const_iterator end) const;
 
     struct TCaseBranch {
         TNodePtr Pred;
@@ -1082,7 +1082,7 @@ private:
 
     ESmartParenthesis SmartParenthesisMode = ESmartParenthesis::Default;
 
-    THashMap<TString, TNodePtr> ExprShortcuts; 
+    THashMap<TString, TNodePtr> ExprShortcuts;
 };
 
 class TSqlCallExpr: public TSqlTranslation {
@@ -1092,7 +1092,7 @@ public:
     {
     }
 
-    TSqlCallExpr(const TSqlCallExpr& call, const TVector<TNodePtr>& args) 
+    TSqlCallExpr(const TSqlCallExpr& call, const TVector<TNodePtr>& args)
         : TSqlTranslation(call.Ctx, call.Mode)
         , Pos(call.Pos)
         , Func(call.Func)
@@ -1129,7 +1129,7 @@ public:
     }
 
     TNodePtr BuildCall() {
-        TVector<TNodePtr> args; 
+        TVector<TNodePtr> args;
         bool warnOnYqlNameSpace = true;
         if (Node && !Node->FuncName()) {
             Module = "YQL";
@@ -1187,7 +1187,7 @@ public:
         return Pos;
     }
 
-    const TVector<TNodePtr>& GetArgs() const { 
+    const TVector<TNodePtr>& GetArgs() const {
         return Args;
     }
 
@@ -1214,9 +1214,9 @@ private:
     TString Func;
     TString Module;
     TNodePtr Node;
-    TVector<TNodePtr> Args; 
-    TVector<TNodePtr> PositionalArgs; 
-    TVector<TNodePtr> NamedArgs; 
+    TVector<TNodePtr> Args;
+    TVector<TNodePtr> PositionalArgs;
+    TVector<TNodePtr> NamedArgs;
     EAggregateMode AggMode = EAggregateMode::Normal;
     TString WindowName;
     bool DistinctAllowed = false;
@@ -1308,7 +1308,7 @@ bool TSqlTranslation::ActionOrSubqueryArgs(const TRule_action_or_subquery_args& 
     return true;
 }
 
-bool TSqlTranslation::ModulePath(const TRule_module_path& node, TVector<TString>& path) { 
+bool TSqlTranslation::ModulePath(const TRule_module_path& node, TVector<TString>& path) {
     if (node.HasBlock1()) {
         path.emplace_back(TString());
     }
@@ -2813,7 +2813,7 @@ TNodePtr TSqlTranslation::TypeNode(const TRule_type_name_composite& node) {
     return AddOptionals(result, node.GetBlock2().size());
 }
 
-bool Expr(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const TRule_expr& node) { 
+bool Expr(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const TRule_expr& node) {
     TNodePtr exprNode = sqlExpr.Build(node);
     if (!exprNode) {
         return false;
@@ -2822,7 +2822,7 @@ bool Expr(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const TRule_exp
     return true;
 }
 
-bool ExprList(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const TRule_expr_list& node) { 
+bool ExprList(TSqlExpression& sqlExpr, TVector<TNodePtr>& exprNodes, const TRule_expr_list& node) {
     if (!Expr(sqlExpr, exprNodes, node.GetRule_expr1())) {
         return false;
     }
@@ -3484,13 +3484,13 @@ public:
     TSourcePtr Build(const TRule_select_unparenthesized_stmt& node, TPosition& selectPos);
 
 private:
-    bool SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column& node); 
-    bool ValidateSelectColumns(const TVector<TNodePtr>& terms); 
+    bool SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column& node);
+    bool ValidateSelectColumns(const TVector<TNodePtr>& terms);
     bool ColumnName(TVector<TNodePtr>& keys, const TRule_column_name& node);
     bool ColumnName(TVector<TNodePtr>& keys, const TRule_without_column_name& node);
     template<typename TRule>
     bool ColumnList(TVector<TNodePtr>& keys, const TRule& node);
-    bool NamedColumn(TVector<TNodePtr>& columnList, const TRule_named_column& node); 
+    bool NamedColumn(TVector<TNodePtr>& columnList, const TRule_named_column& node);
     TSourcePtr SingleSource(const TRule_single_source& node, const TVector<TString>& derivedColumns, TPosition derivedColumnsPos, bool unorderedSubquery);
     TSourcePtr NamedSingleSource(const TRule_named_single_source& node, bool unorderedSubquery);
     bool FlattenByArg(const TString& sourceLabel, TVector<TNodePtr>& flattenByColumns, TVector<TNodePtr>& flattenByExprs, const TRule_flatten_by_arg& node);
@@ -3570,7 +3570,7 @@ class TGroupByClause: public TSqlTranslation {
         typedef TIntrusivePtr<TGroupByClauseCtx> TPtr;
 
         TGroupingSetFeatures GroupFeatures;
-        TMap<TString, TNodePtr> NodeAliases; 
+        TMap<TString, TNodePtr> NodeAliases;
         size_t UnnamedCount = 0;
     };
 
@@ -3584,9 +3584,9 @@ public:
     bool Build(const TRule_group_by_clause& node, bool stream);
     bool ParseList(const TRule_grouping_element_list& groupingListNode, EGroupByFeatures featureContext);
 
-    void SetFeatures(const TString& field) const; 
-    TVector<TNodePtr>& Content(); 
-    TMap<TString, TNodePtr>& Aliases(); 
+    void SetFeatures(const TString& field) const;
+    TVector<TNodePtr>& Content();
+    TMap<TString, TNodePtr>& Aliases();
     THoppingWindowSpecPtr GetHoppingWindow() const;
     bool IsCompactGroupBy() const;
 
@@ -3594,7 +3594,7 @@ private:
     TMaybe<TVector<TNodePtr>> MultiplyGroupingSets(const TVector<TNodePtr>& lhs, const TVector<TNodePtr>& rhs) const;
     bool ResolveGroupByAndGrouping();
     bool GroupingElement(const TRule_grouping_element& node, EGroupByFeatures featureContext);
-    void FeedCollection(const TNodePtr& elem, TVector<TNodePtr>& collection, bool& hasEmpty) const; 
+    void FeedCollection(const TNodePtr& elem, TVector<TNodePtr>& collection, bool& hasEmpty) const;
     bool OrdinaryGroupingSet(const TRule_ordinary_grouping_set& node, EGroupByFeatures featureContext);
     bool OrdinaryGroupingSetList(const TRule_ordinary_grouping_set_list& node, EGroupByFeatures featureContext);
     bool HoppingWindow(const TRule_hopping_window_specification& node);
@@ -3603,20 +3603,20 @@ private:
 
     TGroupingSetFeatures& Features();
     const TGroupingSetFeatures& Features() const;
-    bool AddAlias(const TString& label, const TNodePtr& node); 
-    TString GenerateGroupByExprName(); 
-    bool IsAutogenerated(const TString* name) const; 
+    bool AddAlias(const TString& label, const TNodePtr& node);
+    TString GenerateGroupByExprName();
+    bool IsAutogenerated(const TString* name) const;
 
-    TVector<TNodePtr> GroupBySet; 
+    TVector<TNodePtr> GroupBySet;
     TGroupByClauseCtx::TPtr GroupSetContext;
     THoppingWindowSpecPtr HoppingWindowSpec; // stream queries
-    static const TString AutogenerateNamePrefix; 
+    static const TString AutogenerateNamePrefix;
     bool CompactGroupBy;
 };
 
-const TString TGroupByClause::AutogenerateNamePrefix = "group"; 
+const TString TGroupByClause::AutogenerateNamePrefix = "group";
 
-bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix) { 
+bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& suffix) {
     const auto str = to_lower(strOrig);
     const auto strLen = str.size();
     ui64 base = 10;
@@ -3638,7 +3638,7 @@ bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& s
         if (*iter == 'u') {
             --iter;
         }
-        suffix = TString(++iter, str.cend()); 
+        suffix = TString(++iter, str.cend());
     }
     value = 0;
     const TString digString(str.begin() + (base == 10 ? 0 : 2), str.end() - suffix.size());
@@ -3668,9 +3668,9 @@ bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& s
 }
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node) {
-    const TString intergerString = ctx.Token(node.GetToken1()); 
+    const TString intergerString = ctx.Token(node.GetToken1());
     ui64 value;
-    TString suffix; 
+    TString suffix;
     if (!ParseNumbers(ctx, intergerString, value, suffix)) {
         return {};
     }
@@ -3706,7 +3706,7 @@ TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node) {
 }
 
 TNodePtr LiteralReal(TContext& ctx, const TRule_real& node) {
-    const TString value(ctx.Token(node.GetToken1())); 
+    const TString value(ctx.Token(node.GetToken1()));
     YQL_ENSURE(!value.empty());
     const auto lastValue = value[value.size() - 1];
     if (lastValue == 'f' || lastValue == 'F') {
@@ -3728,7 +3728,7 @@ TMaybe<TExprOrIdent> TSqlExpression::LiteralExpr(const TRule_literal_value& node
             break;
         }
         case TRule_literal_value::kAltLiteralValue3: {
-            const TString value(Token(node.GetAlt_literal_value3().GetToken1())); 
+            const TString value(Token(node.GetAlt_literal_value3().GetToken1()));
             return BuildLiteralTypedSmartStringOrId(Ctx, value);
         }
         case TRule_literal_value::kAltLiteralValue5: {
@@ -4623,7 +4623,7 @@ TMaybe<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, const
             const auto& alt = node.GetAlt_atom_expr7();
             TString module(Id(alt.GetRule_an_id_or_type1(), *this));
             TPosition pos(Ctx.Pos());
-            TString name; 
+            TString name;
             switch (alt.GetBlock3().Alt_case()) {
                 case TRule_atom_expr::TAlt7::TBlock3::kAlt1:
                     name = Id(alt.GetBlock3().GetAlt1().GetRule_id_or_type1(), *this);
@@ -4779,7 +4779,7 @@ bool TSqlExpression::SqlLambdaParams(const TNodePtr& node, TVector<TSymbolNameWi
         Ctx.Error(node->GetPos()) << errMsg;
         return false;
     }
-    THashSet<TString> dupArgsChecker; 
+    THashSet<TString> dupArgsChecker;
     for (const auto& argPtr: tupleNodePtr->Elements()) {
         auto contentPtr = argPtr->GetAtomContent();
         if (!contentPtr || !contentPtr->StartsWith("$")) {
@@ -4812,9 +4812,9 @@ bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_expr& node, TV
     return true;
 }
 
-bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& node, TVector<TNodePtr>& exprSeq) { 
+bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& node, TVector<TNodePtr>& exprSeq) {
     TSqlExpression expr(ctx, ctx.Settings.Mode);
-    TVector<TString> localNames; 
+    TVector<TString> localNames;
     bool hasError = false;
     for (auto& block: node.GetBlock2()) {
         const auto& rule = block.GetRule_lambda_stmt1();
@@ -4884,7 +4884,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
             return UnaryExpr(node.GetAlt_con_subexpr1().GetRule_unary_subexpr1(), tail);
         case TRule_con_subexpr::kAltConSubexpr2: {
             Ctx.IncrementMonCounter("sql_features", "UnaryOperation");
-            TString opName; 
+            TString opName;
             auto token = node.GetAlt_con_subexpr2().GetRule_unary_op1().GetToken1();
             Token(token);
             TPosition pos(Ctx.Pos());
@@ -4921,17 +4921,17 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
             case TRule_cond_expr::kAltCondExpr1: {
                 const auto& matchOp = cond.GetAlt_cond_expr1();
                 const bool notMatch = matchOp.HasBlock1();
-                const TCiString& opName = Token(matchOp.GetRule_match_op2().GetToken1()); 
+                const TCiString& opName = Token(matchOp.GetRule_match_op2().GetToken1());
                 const auto& pattern = SubExpr(cond.GetAlt_cond_expr1().GetRule_eq_subexpr3(), matchOp.HasBlock4() ? TTrailingQuestions{} : tail);
                 if (!pattern) {
                     return {};
                 }
                 TNodePtr isMatch;
                 if (opName == "like" || opName == "ilike") {
-                    const TString* escapeLiteral = nullptr; 
+                    const TString* escapeLiteral = nullptr;
                     TNodePtr escapeNode;
                     const auto& escaper = BuildUdf(Ctx, pos, "Re2", "PatternFromLike", {});
-                    TVector<TNodePtr> escaperArgs({ escaper, pattern }); 
+                    TVector<TNodePtr> escaperArgs({ escaper, pattern });
 
                     if (matchOp.HasBlock4()) {
                         const auto& escapeBlock = matchOp.GetBlock4();
@@ -5038,7 +5038,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                 } else if (opName == "regexp" || opName == "rlike" || opName == "match") {
                     if (matchOp.HasBlock4()) {
                         Ctx.IncrementMonCounter("sql_errors", "RegexpEscape");
-                        TString opNameUpper(opName); 
+                        TString opNameUpper(opName);
                         opNameUpper.to_upper();
                         Error() << opName << " and ESCAPE clauses should not be used together";
                         return nullptr;
@@ -5136,7 +5136,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
     return res;
 }
 
-TNodePtr TSqlExpression::BinOperList(const TString& opName, TVector<TNodePtr>::const_iterator begin, TVector<TNodePtr>::const_iterator end) const { 
+TNodePtr TSqlExpression::BinOperList(const TString& opName, TVector<TNodePtr>::const_iterator begin, TVector<TNodePtr>::const_iterator end) const {
     TPosition pos(Ctx.Pos());
     const size_t opCount = end - begin;
     Y_VERIFY_DEBUG(opCount >= 2);
@@ -5180,7 +5180,7 @@ TNodePtr TSqlExpression::BinOper(const TString& opName, const TNode& node, TGetN
     }
     Ctx.IncrementMonCounter("sql_binary_operations", opName);
     const size_t listSize = end - begin;
-    TVector<TNodePtr> nodes; 
+    TVector<TNodePtr> nodes;
     nodes.reserve(1 + listSize);
     nodes.push_back(SubExpr(node, {}));
     for (; begin != end; ++begin) {
@@ -5196,7 +5196,7 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
         Ctx.IncrementMonCounter("sql_features", "BinaryOperation");
         Token(begin->GetToken1());
         TPosition pos(Ctx.Pos());
-        TString opName; 
+        TString opName;
         auto tokenId = begin->GetToken1().GetId();
         switch (tokenId) {
             case SQLv1LexerTokens::TOKEN_LESS:
@@ -5410,7 +5410,7 @@ TNodePtr TSqlExpression::SqlInExpr(const TRule_in_expr& node, const TTrailingQue
 }
 
 TNodePtr TSqlExpression::SmartParenthesis(const TRule_smart_parenthesis& node) {
-    TVector<TNodePtr> exprs; 
+    TVector<TNodePtr> exprs;
     Token(node.GetToken1());
     const TPosition pos(Ctx.Pos());
     const bool isTuple = node.HasBlock3();
@@ -5506,7 +5506,7 @@ TNodePtr TSqlTranslation::NamedNode(const TRule_named_nodes_stmt& rule, TVector<
 }
 
 bool TSqlTranslation::ImportStatement(const TRule_import_stmt& stmt, TVector<TString>* namesPtr) {
-    TVector<TString> modulePath; 
+    TVector<TString> modulePath;
     if (!ModulePath(stmt.GetRule_module_path2(), modulePath)) {
         return false;
     }
@@ -5564,7 +5564,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                 Error() << "Natural join is not implemented yet";
                 return false;
             }
-            TString joinOp("Inner"); 
+            TString joinOp("Inner");
             TJoinLinkSettings linkSettings;
             linkSettings.ForceSortedMerge = alt.HasBlock3();
             switch (alt.GetBlock2().Alt_case()) {
@@ -5842,7 +5842,7 @@ TSourcePtr TSqlSelect::JoinSource(const TRule_join_source& node) {
 
     if (node.Block3Size()) {
         TPosition pos(Ctx.Pos());
-        TVector<TSourcePtr> sources; 
+        TVector<TSourcePtr> sources;
         TVector<TMaybe<TPosition>> anyPositions;
         TVector<bool> anyFlags;
 
@@ -5879,7 +5879,7 @@ TSourcePtr TSqlSelect::JoinSource(const TRule_join_source& node) {
     return source;
 }
 
-bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column& node) { 
+bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column& node) {
     // result_column:
     //     opt_id_prefix ASTERISK
     //   | expr ((AS an_id) | an_id_pure)?
@@ -5936,12 +5936,12 @@ bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column&
     return true;
 }
 
-bool TSqlSelect::ValidateSelectColumns(const TVector<TNodePtr>& terms) { 
-    TSet<TString> labels; 
-    TSet<TString> asteriskSources; 
+bool TSqlSelect::ValidateSelectColumns(const TVector<TNodePtr>& terms) {
+    TSet<TString> labels;
+    TSet<TString> asteriskSources;
     for (const auto& term: terms) {
         const auto& label = term->GetLabel();
-        if (!Ctx.PragmaAllowDotInAlias && label.find('.') != TString::npos) { 
+        if (!Ctx.PragmaAllowDotInAlias && label.find('.') != TString::npos) {
             Ctx.Error(term->GetPos()) << "Unable to use '.' in column name. Invalid column name: " << label;
             return false;
         }
@@ -6089,7 +6089,7 @@ TSourcePtr TSqlSelect::NamedSingleSource(const TRule_named_single_source& node, 
             {
                 const auto& tableSampleClause = sampleBlock.GetAlt2().GetRule_tablesample_clause1();
                 const auto& modeToken = tableSampleClause.GetRule_sampling_mode2().GetToken1();
-                const TCiString& token = Token(modeToken); 
+                const TCiString& token = Token(modeToken);
                 if (token == "system") {
                     mode = ESampleMode::System;
                 } else if (token == "bernoulli") {
@@ -6194,7 +6194,7 @@ bool TSqlSelect::ColumnList(TVector<TNodePtr>& keys, const TRule& node) {
     return true;
 }
 
-bool TSqlSelect::NamedColumn(TVector<TNodePtr>& columnList, const TRule_named_column& node) { 
+bool TSqlSelect::NamedColumn(TVector<TNodePtr>& columnList, const TRule_named_column& node) {
     if (!ColumnName(columnList, node.GetRule_column_name1())) {
         return false;
     }
@@ -6462,14 +6462,14 @@ TSourcePtr TSqlSelect::ReduceCore(const TRule_reduce_core& node, const TWriteSet
         source = BuildMuxSource(pos, std::move(sources));
     }
 
-    TVector<TSortSpecificationPtr> orderBy; 
+    TVector<TSortSpecificationPtr> orderBy;
     if (node.HasBlock4()) {
         if (!SortSpecificationList(node.GetBlock4().GetRule_sort_specification_list2(), orderBy)) {
             return {};
         }
     }
 
-    TVector<TNodePtr> keys; 
+    TVector<TNodePtr> keys;
     if (!ColumnList(keys, node.GetRule_column_list6())) {
         return nullptr;
     }
@@ -6584,7 +6584,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
 
     const bool selectStream = node.HasBlock3();
-    TVector<TNodePtr> without; 
+    TVector<TNodePtr> without;
     if (node.HasBlock8()) {
         if (!ColumnList(without, node.GetBlock8().GetRule_without_column_list2())) {
             return nullptr;
@@ -6612,7 +6612,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
 
     /// \todo merge gtoupByExpr and groupBy in one
-    TVector<TNodePtr> groupByExpr, groupBy; 
+    TVector<TNodePtr> groupByExpr, groupBy;
     THoppingWindowSpecPtr hoppingWindowSpec;
     bool compactGroupBy = false;
     if (node.HasBlock11()) {
@@ -6654,7 +6654,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
 
     bool assumeSorted = false;
-    TVector<TSortSpecificationPtr> orderBy; 
+    TVector<TSortSpecificationPtr> orderBy;
     if (node.HasBlock14()) {
         auto& orderBlock = node.GetBlock14().GetRule_ext_order_by_clause1();
         assumeSorted = orderBlock.HasBlock1();
@@ -6684,7 +6684,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         }
     }
 
-    TVector<TNodePtr> terms; 
+    TVector<TNodePtr> terms;
     {
         class TScopedWinSpecs {
         public:
@@ -6854,7 +6854,7 @@ bool TSqlTranslation::FrameBound(const TRule_window_frame_bound& rule, TFrameBou
 
 bool TSqlTranslation::FrameClause(const TRule_window_frame_clause& rule, TFrameSpecificationPtr& frameSpec) {
     frameSpec = new TFrameSpecification;
-    const TString frameUnitStr = to_lower(Token(rule.GetRule_window_frame_units1().GetToken1())); 
+    const TString frameUnitStr = to_lower(Token(rule.GetRule_window_frame_units1().GetToken1()));
     if (frameUnitStr == "rows") {
         frameSpec->FrameType = EFrameType::FrameByRows;
     } else if (frameUnitStr == "range") {
@@ -7065,7 +7065,7 @@ bool TGroupByClause::ParseList(const TRule_grouping_element_list& groupingListNo
     return true;
 }
 
-void TGroupByClause::SetFeatures(const TString& field) const { 
+void TGroupByClause::SetFeatures(const TString& field) const {
     Ctx.IncrementMonCounter(field, "GroupBy");
     const auto& features = Features();
     if (features.Test(EGroupByFeatures::Ordinary)) {
@@ -7088,11 +7088,11 @@ void TGroupByClause::SetFeatures(const TString& field) const {
     }
 }
 
-TVector<TNodePtr>& TGroupByClause::Content() { 
+TVector<TNodePtr>& TGroupByClause::Content() {
     return GroupBySet;
 }
 
-TMap<TString, TNodePtr>& TGroupByClause::Aliases() { 
+TMap<TString, TNodePtr>& TGroupByClause::Aliases() {
     return GroupSetContext->NodeAliases;
 }
 
@@ -7105,7 +7105,7 @@ bool TGroupByClause::IsCompactGroupBy() const {
 }
 
 TMaybe<TVector<TNodePtr>> TGroupByClause::MultiplyGroupingSets(const TVector<TNodePtr>& lhs, const TVector<TNodePtr>& rhs) const {
-    TVector<TNodePtr> content; 
+    TVector<TNodePtr> content;
     for (const auto& leftNode: lhs) {
         auto leftPtr = leftNode->ContentListPtr();
         if (!leftPtr) {
@@ -7114,7 +7114,7 @@ TMaybe<TVector<TNodePtr>> TGroupByClause::MultiplyGroupingSets(const TVector<TNo
             return {};
         }
         for (const auto& rightNode: rhs) {
-            TVector<TNodePtr> mulItem(leftPtr->begin(), leftPtr->end()); 
+            TVector<TNodePtr> mulItem(leftPtr->begin(), leftPtr->end());
             auto rightPtr = rightNode->ContentListPtr();
             if (!rightPtr) {
                 // TODO: shouldn't happen
@@ -7137,8 +7137,8 @@ bool TGroupByClause::ResolveGroupByAndGrouping() {
     }
     auto curContent = *(*listPos)->ContentListPtr();
     if (listPos != GroupBySet.begin()) {
-        TVector<TNodePtr> emulate(GroupBySet.begin(), listPos); 
-        TVector<TNodePtr> emulateContent(1, BuildListOfNamedNodes(Ctx.Pos(), std::move(emulate))); 
+        TVector<TNodePtr> emulate(GroupBySet.begin(), listPos);
+        TVector<TNodePtr> emulateContent(1, BuildListOfNamedNodes(Ctx.Pos(), std::move(emulate)));
         auto mult = MultiplyGroupingSets(emulateContent, curContent);
         if (!mult) {
             return false;
@@ -7154,8 +7154,8 @@ bool TGroupByClause::ResolveGroupByAndGrouping() {
             }
             curContent = *mult;
         } else {
-            TVector<TNodePtr> emulate(1, *listPos); 
-            TVector<TNodePtr> emulateContent(1, BuildListOfNamedNodes(Ctx.Pos(), std::move(emulate))); 
+            TVector<TNodePtr> emulate(1, *listPos);
+            TVector<TNodePtr> emulateContent(1, BuildListOfNamedNodes(Ctx.Pos(), std::move(emulate)));
             auto mult = MultiplyGroupingSets(curContent, emulateContent);
             if (!mult) {
                 return false;
@@ -7163,14 +7163,14 @@ bool TGroupByClause::ResolveGroupByAndGrouping() {
             curContent = *mult;
         }
     }
-    TVector<TNodePtr> result(1, BuildListOfNamedNodes(Ctx.Pos(), std::move(curContent))); 
+    TVector<TNodePtr> result(1, BuildListOfNamedNodes(Ctx.Pos(), std::move(curContent)));
     std::swap(result, GroupBySet);
     return true;
 }
 
 bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupByFeatures featureContext) {
     TSourcePtr res;
-    TVector<TNodePtr> emptyContent; 
+    TVector<TNodePtr> emptyContent;
     switch (node.Alt_case()) {
         case TRule_grouping_element::kAltGroupingElement1:
             if (!OrdinaryGroupingSet(node.GetAlt_grouping_element1().GetRule_ordinary_grouping_set1(), featureContext)) {
@@ -7186,9 +7186,9 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
                 return false;
             }
             auto& content = subClause.Content();
-            TVector<TNodePtr> collection; 
+            TVector<TNodePtr> collection;
             for (auto limit = content.end(), begin = content.begin(); limit != begin; --limit) {
-                TVector<TNodePtr> grouping(begin, limit); 
+                TVector<TNodePtr> grouping(begin, limit);
                 collection.push_back(BuildListOfNamedNodes(Ctx.Pos(), std::move(grouping)));
             }
             collection.push_back(BuildListOfNamedNodes(Ctx.Pos(), std::move(emptyContent)));
@@ -7209,9 +7209,9 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
                 Ctx.Error() << "GROUP BY CUBE is allowed only for " << Ctx.PragmaGroupByCubeLimit << " columns, but you use " << content.size();
                 return false;
             }
-            TVector<TNodePtr> collection; 
+            TVector<TNodePtr> collection;
             for (unsigned mask = (1 << content.size()) - 1; mask > 0; --mask) {
-                TVector<TNodePtr> grouping; 
+                TVector<TNodePtr> grouping;
                 for (unsigned index = 0; index < content.size(); ++index) {
                     if (mask & (1 << index)) {
                         grouping.push_back(content[content.size() - index - 1]);
@@ -7232,7 +7232,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
                 return false;
             }
             auto& content = subClause.Content();
-            TVector<TNodePtr> collection; 
+            TVector<TNodePtr> collection;
             bool hasEmpty = false;
             for (auto& elem: content) {
                 auto elemContent = elem->ContentListPtr();
@@ -7245,7 +7245,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
                         FeedCollection(elem, collection, hasEmpty);
                     }
                 } else {
-                    TVector<TNodePtr> elemList(1, std::move(elem)); 
+                    TVector<TNodePtr> elemList(1, std::move(elem));
                     collection.push_back(BuildListOfNamedNodes(Ctx.Pos(), std::move(elemList)));
                 }
             }
@@ -7265,7 +7265,7 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node, EGroupB
     return true;
 }
 
-void TGroupByClause::FeedCollection(const TNodePtr& elem, TVector<TNodePtr>& collection, bool& hasEmpty) const { 
+void TGroupByClause::FeedCollection(const TNodePtr& elem, TVector<TNodePtr>& collection, bool& hasEmpty) const {
     auto elemContentPtr = elem->ContentListPtr();
     if (elemContentPtr && elemContentPtr->empty()) {
         if (hasEmpty) {
@@ -7443,7 +7443,7 @@ const TGroupByClause::TGroupingSetFeatures& TGroupByClause::Features() const {
     return GroupSetContext->GroupFeatures;
 }
 
-bool TGroupByClause::AddAlias(const TString& label, const TNodePtr& node) { 
+bool TGroupByClause::AddAlias(const TString& label, const TNodePtr& node) {
     if (Aliases().contains(label)) {
         Ctx.Error() << "Duplicated aliases not allowed";
         Ctx.IncrementMonCounter("sql_errors", "GroupByDuplicateAliases");
@@ -7453,7 +7453,7 @@ bool TGroupByClause::AddAlias(const TString& label, const TNodePtr& node) {
     return true;
 }
 
-TString TGroupByClause::GenerateGroupByExprName() { 
+TString TGroupByClause::GenerateGroupByExprName() {
     return TStringBuilder() << AutogenerateNamePrefix << GroupSetContext->UnnamedCount++;
 }
 
@@ -7631,7 +7631,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
 template<typename TRule>
 TSourcePtr TSqlSelect::Build(const TRule& node, TPosition pos, TSelectKindResult&& first) {
     TPosition unionPos = pos; // Position of first select
-    TVector<TSourcePtr> sources; 
+    TVector<TSourcePtr> sources;
     sources.emplace_back(std::move(first.Source));
 
     TVector<TSortSpecificationPtr> orderBy;
@@ -7853,7 +7853,7 @@ TSourcePtr TSqlIntoValues::ValuesSource(const TRule_values_source& node, TVector
     TPosition pos(Ctx.Pos());
     switch (node.Alt_case()) {
         case TRule_values_source::kAltValuesSource1: {
-            TVector<TVector<TNodePtr>> rows {{}}; 
+            TVector<TVector<TNodePtr>> rows {{}};
             const auto& rowList = node.GetAlt_values_source1().GetRule_values_stmt1().GetRule_values_source_row_list2();
             if (!BuildRows(rowList, rows)) {
                 return nullptr;
@@ -7897,7 +7897,7 @@ private:
 };
 
 TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
-    static const TMap<TString, ESQLWriteColumnMode> str2Mode = { 
+    static const TMap<TString, ESQLWriteColumnMode> str2Mode = {
         {"InsertInto", ESQLWriteColumnMode::InsertInto},
         {"InsertOrAbortInto", ESQLWriteColumnMode::InsertOrAbortInto},
         {"InsertOrIgnoreInto", ESQLWriteColumnMode::InsertOrIgnoreInto},
@@ -8164,13 +8164,13 @@ private:
     bool AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params);
     void AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params);
     TNodePtr PragmaStatement(const TRule_pragma_stmt& stmt, bool& success);
-    void AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node); 
+    void AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node);
 
     TNodePtr Build(const TRule_delete_stmt& stmt);
 
     TNodePtr Build(const TRule_update_stmt& stmt);
     TSourcePtr Build(const TRule_set_clause_choice& stmt);
-    bool FillSetClause(const TRule_set_clause& node, TVector<TString>& targetList, TVector<TNodePtr>& values); 
+    bool FillSetClause(const TRule_set_clause& node, TVector<TString>& targetList, TVector<TNodePtr>& values);
     TSourcePtr Build(const TRule_set_clause_list& stmt);
     TSourcePtr Build(const TRule_multiple_column_assignment& stmt);
 
@@ -8179,10 +8179,10 @@ private:
         internalStatementName.clear();
         humanStatementName.clear();
         const auto& descr = AltDescription(node);
-        TVector<TString> parts; 
+        TVector<TString> parts;
         const auto pos = descr.find(": ");
-        Y_VERIFY_DEBUG(pos != TString::npos); 
-        Split(TString(descr.begin() + pos + 2, descr.end()), "_", parts); 
+        Y_VERIFY_DEBUG(pos != TString::npos);
+        Split(TString(descr.begin() + pos + 2, descr.end()), "_", parts);
         Y_VERIFY_DEBUG(parts.size() > 1);
         parts.pop_back();
         for (auto& part: parts) {
@@ -8290,7 +8290,7 @@ TNodePtr TSqlTranslation::DoStatement(const TRule_do_stmt& stmt, bool makeLambda
     }
 }
 
-void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) { 
+void TSqlQuery::AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node) {
     blocks.emplace_back(node);
 }
 
@@ -9134,9 +9134,9 @@ void TSqlQuery::AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed
 TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success) {
     success = false;
     const TString& prefix = OptIdPrefixAsStr(stmt.GetRule_opt_id_prefix_or_type2(), *this);
-    const TString& lowerPrefix = to_lower(prefix); 
+    const TString& lowerPrefix = to_lower(prefix);
     const TString pragma(Id(stmt.GetRule_an_id3(), *this));
-    TString normalizedPragma(pragma); 
+    TString normalizedPragma(pragma);
     TMaybe<TIssue> normalizeError = NormalizeName(Ctx.Pos(), normalizedPragma);
     if (!normalizeError.Empty()) {
         Error() << normalizeError->Message;
@@ -9145,7 +9145,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
     }
 
     TVector<TDeferredAtom> values;
-    TVector<const TRule_pragma_value*> pragmaValues; 
+    TVector<const TRule_pragma_value*> pragmaValues;
     bool pragmaValueDefault = false;
     if (stmt.GetBlock4().HasAlt1()) {
         pragmaValues.push_back(&stmt.GetBlock4().GetAlt1().GetRule_pragma_value2());
@@ -9788,7 +9788,7 @@ TSourcePtr TSqlQuery::Build(const TRule_set_clause_choice& stmt) {
     }
 }
 
-bool TSqlQuery::FillSetClause(const TRule_set_clause& node, TVector<TString>& targetList, TVector<TNodePtr>& values) { 
+bool TSqlQuery::FillSetClause(const TRule_set_clause& node, TVector<TString>& targetList, TVector<TNodePtr>& values) {
     targetList.push_back(ColumnNameAsSingleStr(*this, node.GetRule_set_target1().GetRule_column_name1()));
     TColumnRefScope scope(Ctx, EColumnRefState::Allow);
     TSqlExpression sqlExpr(Ctx, Mode);
@@ -9799,8 +9799,8 @@ bool TSqlQuery::FillSetClause(const TRule_set_clause& node, TVector<TString>& ta
 }
 
 TSourcePtr TSqlQuery::Build(const TRule_set_clause_list& stmt) {
-    TVector<TString> targetList; 
-    TVector<TNodePtr> values; 
+    TVector<TString> targetList;
+    TVector<TNodePtr> values;
     const TPosition pos(Ctx.Pos());
     if (!FillSetClause(stmt.GetRule_set_clause1(), targetList, values)) {
         return nullptr;
@@ -9815,13 +9815,13 @@ TSourcePtr TSqlQuery::Build(const TRule_set_clause_list& stmt) {
 }
 
 TSourcePtr TSqlQuery::Build(const TRule_multiple_column_assignment& stmt) {
-    TVector<TString> targetList; 
+    TVector<TString> targetList;
     FillTargetList(*this, stmt.GetRule_set_target_list1(), targetList);
     auto simpleValuesNode = stmt.GetRule_simple_values_source4();
     const TPosition pos(Ctx.Pos());
     switch (simpleValuesNode.Alt_case()) {
         case TRule_simple_values_source::kAltSimpleValuesSource1: {
-            TVector<TNodePtr> values; 
+            TVector<TNodePtr> values;
             TSqlExpression sqlExpr(Ctx, Mode);
             if (!ExprList(sqlExpr, values, simpleValuesNode.GetAlt_simple_values_source1().GetRule_expr_list1())) {
                 return nullptr;
@@ -9846,7 +9846,7 @@ TSourcePtr TSqlQuery::Build(const TRule_multiple_column_assignment& stmt) {
 
 TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
     const auto& query = ast.GetRule_sql_query();
-    TVector<TNodePtr> blocks; 
+    TVector<TNodePtr> blocks;
     if (query.Alt_case() == TRule_sql_query::kAltSqlQuery1) {
         const auto& statements = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
         if (!Statement(blocks, statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2())) {

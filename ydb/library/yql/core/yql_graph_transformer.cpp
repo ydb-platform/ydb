@@ -134,7 +134,7 @@ private:
     }
 
 protected:
-    TVector<TTransformStage> Stages; 
+    TVector<TTransformStage> Stages;
     const bool UseIssueScopes;
     const bool DoCheckArguments;
     size_t Index = 0;
@@ -151,7 +151,7 @@ void AddTooManyTransformationsError(TPositionHandle pos, const TStringBuf& where
 
 }
 
-TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes) { 
+TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes) {
     return new TCompositeGraphTransformer(stages, useIssueScopes, /* doCheckArguments = */ true);
 }
 

@@ -23,8 +23,8 @@ enum EResponseStatus {
 
 ENUM_TO_STRING(EResponseStatus, RESPONSE_STATUS_MAP)
 
-void ExplainProposeTransactionStatus(ui32 status, TString& name, TString& description); 
-void ExplainExecutionEngineStatus(ui32 status, TString& name, TString& description); 
+void ExplainProposeTransactionStatus(ui32 status, TString& name, TString& description);
+void ExplainExecutionEngineStatus(ui32 status, TString& name, TString& description);
 void ExplainResponseStatus(ui32 status, TString& name, TString& description);
 
 }}

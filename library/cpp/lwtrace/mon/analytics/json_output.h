@@ -10,26 +10,26 @@
 
 namespace NAnalytics {
 
-inline TString ToJsonFlot(const TTable& in, const TString& xno, const TVector<TString>& ynos, const TString& opts = TString()) 
+inline TString ToJsonFlot(const TTable& in, const TString& xno, const TVector<TString>& ynos, const TString& opts = TString())
 {
     TStringStream ss;
     ss << "[ ";
     bool first = true;
 
-    TString xn; 
-    THashSet<TString> xopts; 
+    TString xn;
+    THashSet<TString> xopts;
     ParseNameAndOpts(xno, xn, xopts);
     bool xstack = xopts.contains("stack");
 
-    for (const TString& yno : ynos) { 
-        TString yn; 
-        THashSet<TString> yopts; 
+    for (const TString& yno : ynos) {
+        TString yn;
+        THashSet<TString> yopts;
         ParseNameAndOpts(yno, yn, yopts);
         bool ystackOpt = yopts.contains("stack");
 
         ss << (first? "": ",\n  ") <<  "{ " << opts << (opts? ", ": "") << "\"label\": \"" << yn << "\", \"data\": [ ";
         bool first2 = true;
-        using TPt = std::tuple<double, double, TString>; 
+        using TPt = std::tuple<double, double, TString>;
         std::vector<TPt> pts;
         for (const TRow& row : in) {
             double x, y;

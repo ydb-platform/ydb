@@ -21,7 +21,7 @@ TTempDir::TTempDir(const char* prefix, TCreationToken)
     TempDir = tempDir;
 }
 
-TTempDir::TTempDir(const TString& tempDir) 
+TTempDir::TTempDir(const TString& tempDir)
     : TempDir(tempDir)
     , Remove(true)
 {

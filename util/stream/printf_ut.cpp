@@ -2,7 +2,7 @@
 #include "printf.h"
 #include "str.h"
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TStreamPrintfTest) {
     }
 
     Y_UNIT_TEST(TestLargePrintf) {
-        TString s = NUnitTest::RandomString(1000000); 
+        TString s = NUnitTest::RandomString(1000000);
         TStringStream ss;
 
         Printf(ss, "%s", s.data());

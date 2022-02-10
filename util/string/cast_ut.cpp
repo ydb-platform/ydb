@@ -43,12 +43,12 @@
 template <class A>
 struct TRet {
     template <int base>
-    inline A IntFromStringForCheck(const TString& str) { 
+    inline A IntFromStringForCheck(const TString& str) {
         return IntFromString<A, base>(str);
     }
 
     template <int base>
-    inline bool TryIntFromStringForCheck(const TString& str, A& result) { 
+    inline bool TryIntFromStringForCheck(const TString& str, A& result) {
         return TryIntFromString<base>(str, result);
     }
 
@@ -126,7 +126,7 @@ inline TRet<A> F() {
 
 #if 0
 template <class T>
-inline void CheckConvertToBuffer(const T& value, const size_t size, const TString& canonValue) { 
+inline void CheckConvertToBuffer(const T& value, const size_t size, const TString& canonValue) {
     const size_t maxSize = 256;
     char buffer[maxSize];
     const char magic = 0x7F;
@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(0.12345678f, PREC_POINT_DIGITS, 6), "0.123457");
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(1e-20f, PREC_POINT_DIGITS, 6), "0.000000");
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(12.34f, PREC_POINT_DIGITS, 0), "12"); // rounding to integers drops '.'
-        // strip trailing zeroes 
+        // strip trailing zeroes
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(0.1f, PREC_POINT_DIGITS_STRIP_ZEROES, 6), "0.1");
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(0.12345678f, PREC_POINT_DIGITS_STRIP_ZEROES, 6), "0.123457");
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(1e-20f, PREC_POINT_DIGITS_STRIP_ZEROES, 6), "0");
@@ -321,7 +321,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
     }
 
     Y_UNIT_TEST(TestFromStringStringBuf) {
-        TString a = "xyz"; 
+        TString a = "xyz";
         TStringBuf b = FromString<TStringBuf>(a);
         UNIT_ASSERT_VALUES_EQUAL(a, b);
         UNIT_ASSERT_VALUES_EQUAL((void*)a.data(), (void*)b.data());
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         size_t res = 0;
         const size_t def1 = 42;
 
-        TString s1("100500"); 
+        TString s1("100500");
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault(s1, res, def1), true);
         UNIT_ASSERT_VALUES_EQUAL(res, 100500);
 
@@ -390,7 +390,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault<size_t>(s1), 100500);
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault("100500", def1), 100500);
 
-        TString s2("100q500"); 
+        TString s2("100q500");
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault(s2, res), false);
         UNIT_ASSERT_VALUES_EQUAL(res, size_t());
 
@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_DOUBLES_EQUAL((float)FromString("0.0001"), 0.0001, EPS);
         UNIT_ASSERT_DOUBLES_EQUAL((double)FromString("0.0015", sizeof("0.0015") - 2), 0.001, EPS);
         UNIT_ASSERT_DOUBLES_EQUAL((long double)FromString(TStringBuf("0.0001")), 0.0001, EPS);
-        UNIT_ASSERT_DOUBLES_EQUAL((float)FromString(TString("10E-5")), 10E-5, EPS); 
+        UNIT_ASSERT_DOUBLES_EQUAL((float)FromString(TString("10E-5")), 10E-5, EPS);
         UNIT_ASSERT_VALUES_EQUAL((bool)FromString("da"), true);
         UNIT_ASSERT_VALUES_EQUAL((bool)FromString("no"), false);
         UNIT_ASSERT_VALUES_EQUAL((short)FromString(u"9000"), 9000);
@@ -465,7 +465,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
     }
 
     static void CheckMessage(TFromStringException& exc, const TString& phrase) {
-        TString message = exc.what(); 
+        TString message = exc.what();
         if (!message.Contains(phrase)) {
             Cerr << message << Endl;
             UNIT_ASSERT(false);
@@ -536,7 +536,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
             UNIT_ASSERT_VALUES_EQUAL(hello, out);
         }
         {
-            const TUtf16String empty; 
+            const TUtf16String empty;
             TWtringBuf out;
             UNIT_ASSERT(TryFromString(empty, out));
             UNIT_ASSERT_VALUES_EQUAL(empty, out);

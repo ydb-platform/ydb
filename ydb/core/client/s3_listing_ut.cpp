@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
 
     void DoListingBySelectRange(TFlatMsgBusClient& annoyingClient,
                                 ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter, const TString& startAfter, ui32 maxKeys,
-                                TSet<TString>& commonPrefixes, TSet<TString>& contents) 
+                                TSet<TString>& commonPrefixes, TSet<TString>& contents)
     {
         // Read all rows from the bucket
         TString table = "Table";
@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
         TValue value = TValue::Create(res.GetValue(), res.GetType());
         TValue objects = value["Objects"];
         TValue l = objects["List"];
-        TVector<TString> paths; 
+        TVector<TString> paths;
         for (ui32 i = 0; i < l.Size(); ++i) {
             TValue ps = l[i];
             paths.emplace_back(ps["Path"]);
@@ -242,8 +242,8 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
 
     void DoS3Listing(TFlatMsgBusClient& annoyingClient,
                     ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter, const TString& startAfter,
-                    const TVector<TString>& columnsToReturn, ui32 maxKeys, 
-                    TVector<TString>& commonPrefixes, TVector<TString>& contents) 
+                    const TVector<TString>& columnsToReturn, ui32 maxKeys,
+                    TVector<TString>& commonPrefixes, TVector<TString>& contents)
     {
         TString pbPrefixCols =
             "Type {"
@@ -300,12 +300,12 @@ Y_UNIT_TEST_SUITE(TS3ListingTest) {
     void CompareS3Listing(TFlatMsgBusClient& annoyingClient, ui64 bucket, const TString& pathPrefix, const TString& pathDelimiter,
                        const TString& startAfter, ui32 maxKeys, const TVector<TString>& columnsToReturn)
     {
-        TSet<TString> expectedCommonPrefixes; 
-        TSet<TString> expectedContents; 
+        TSet<TString> expectedCommonPrefixes;
+        TSet<TString> expectedContents;
         DoListingBySelectRange(annoyingClient, bucket, pathPrefix, pathDelimiter, startAfter, maxKeys, expectedCommonPrefixes, expectedContents);
 
-        TVector<TString> commonPrefixes; 
-        TVector<TString> contents; 
+        TVector<TString> commonPrefixes;
+        TVector<TString> contents;
         DoS3Listing(annoyingClient, bucket, pathPrefix, pathDelimiter, startAfter, columnsToReturn, maxKeys, commonPrefixes, contents);
 
         UNIT_ASSERT_VALUES_EQUAL(expectedCommonPrefixes.size(), commonPrefixes.size());

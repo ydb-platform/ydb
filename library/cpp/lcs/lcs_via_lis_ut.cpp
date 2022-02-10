@@ -10,7 +10,7 @@ class TLCSTest: public TTestBase {
 
 private:
     size_t Length(TStringBuf s1, TStringBuf s2) {
-        TVector<TVector<size_t>> c; 
+        TVector<TVector<size_t>> c;
         c.resize(s1.size() + 1);
 
         for (size_t i = 0; i < c.size(); ++i) {
@@ -37,7 +37,7 @@ private:
     }
 
     void CheckLCSString(TStringBuf s1, TStringBuf s2, TStringBuf reflcs) {
-        TString lcs; 
+        TString lcs;
         size_t len = NLCS::MakeLCS<char>(s1, s2, &lcs);
         const char* comment = Sprintf("%s & %s = %s", s1.data(), s2.data(), reflcs.data()).c_str();
 

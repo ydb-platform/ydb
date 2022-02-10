@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(TLongsTest) {
         i16 x16 = 40;
         i64 x64 = 40;
         i64 y64;
-        TString s; 
+        TString s;
 
         s += Sprintf("x16=0x%x\n", (int)x16);
         s += Sprintf("LO_8(x16)=0x%x HI_8(x16)=0x%x\n\n", (int)Lo8(x16), (int)Hi8(x16));

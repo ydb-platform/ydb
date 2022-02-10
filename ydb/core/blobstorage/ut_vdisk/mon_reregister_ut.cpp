@@ -42,8 +42,8 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
 
             NMonitoring::TIndexMonPage *actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
 
-            TString path = "myworker"; 
-            TString name = "myworker"; 
+            TString path = "myworker";
+            TString name = "myworker";
             mon->RegisterActorPage(actorsMonPage, path, name, false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
 
             STR << "MyWorker Bootstrap: Incarnation: " << Incarnation << "\n";
@@ -119,9 +119,9 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
             client.SendHttpRequest("/actors/myworker", "", "GET", &str);
             STR << str.Str() << "\n";
 
-            const TString resp = str.Str(); 
+            const TString resp = str.Str();
             // we MUST get response from "Incarnation: 2"
-            Y_VERIFY(resp.find("Incarnation: 2") != TString::npos); 
+            Y_VERIFY(resp.find("Incarnation: 2") != TString::npos);
 
             Env->Signal();
             Die(ctx);

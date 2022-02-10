@@ -149,7 +149,7 @@ namespace NBoot {
         TVector<NPageCollection::TLargeGlobId> LargeGlobIds;
         TVector<TIntrusivePtr<TCache>> PageCollections;
         TString Legacy;
-        TString Opaque; 
+        TString Opaque;
         TVector<TString> Deltas;
         NTable::TEpoch Epoch;
 

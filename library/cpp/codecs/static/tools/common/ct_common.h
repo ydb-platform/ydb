@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/memory/blob.h>
 #include <cmath>
@@ -57,10 +57,10 @@ namespace NCodecs {
             return PerRecord((1 - compr) * RawSize);
         }
 
-        TString Format(const TStaticCodecInfo&, bool checkMode) const; 
+        TString Format(const TStaticCodecInfo&, bool checkMode) const;
     };
 
-    TComprStats TestCodec(const ICodec&, const TVector<TString>& data); 
+    TComprStats TestCodec(const ICodec&, const TVector<TString>& data);
 
     enum EDataStreamFormat {
         DSF_NONE,
@@ -68,8 +68,8 @@ namespace NCodecs {
         DSF_BASE64_LF /* "base64" */,
     };
 
-    void ParseBlob(TVector<TString>&, EDataStreamFormat, const TBlob&); 
+    void ParseBlob(TVector<TString>&, EDataStreamFormat, const TBlob&);
 
-    TBlob GetInputBlob(const TString& dataFile); 
+    TBlob GetInputBlob(const TString& dataFile);
 
 }

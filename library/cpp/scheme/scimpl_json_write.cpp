@@ -154,8 +154,8 @@ namespace NSc {
         return *this;
     }
 
-    TString TValue::ToJson(const TJsonOpts& jopts) const { 
-        TString s; 
+    TString TValue::ToJson(const TJsonOpts& jopts) const {
+        TString s;
         {
             TStringOutput out(s);
             ToJson(out, jopts);
@@ -175,7 +175,7 @@ namespace NSc {
         return MakeOptsSafeForSerializer(opts);
     }
 
-    TString TValue::ToJsonSafe(const TJsonOpts& jopts) const { 
+    TString TValue::ToJsonSafe(const TJsonOpts& jopts) const {
         return ToJson(MakeOptsSafeForSerializer(jopts));
     }
 

@@ -42,14 +42,14 @@ struct TCollectOperationHeader {
 
 
     TCollectOperationHeader(ui64 collectGeneration, ui64 collectStep,
-        TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep); 
+        TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep);
 };
 #pragma pack(pop)
 
 struct TCollectOperation : public TThrRefBase {
     TCollectOperationHeader Header;
-    TVector<TLogoBlobID> Keep; 
-    TVector<TLogoBlobID> DoNotKeep; 
+    TVector<TLogoBlobID> Keep;
+    TVector<TLogoBlobID> DoNotKeep;
 
     TCollectOperation(ui64 collectGeneration, ui64 collectStep,
             TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&doNotKeep)

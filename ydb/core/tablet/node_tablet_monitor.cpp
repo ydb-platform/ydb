@@ -111,7 +111,7 @@ public:
         Die(ctx);
     }
 
-    void Notify(const TActorContext &ctx, const TString& html) { 
+    void Notify(const TActorContext &ctx, const TString& html) {
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(html));
     }
 
@@ -209,8 +209,8 @@ public:
     }
 
     void BuildTabletList(std::function<bool(const NKikimrWhiteboard::TTabletStateInfo&)> filter,
-                        TVector<TTabletListElement>& tabletsToRender) { 
-        TVector<ui64> tabletIdIndex; 
+                        TVector<TTabletListElement>& tabletsToRender) {
+        TVector<ui64> tabletIdIndex;
 
         tabletsToRender.clear();
         for (const auto& ni : PerNodeTabletInfo) {
@@ -246,7 +246,7 @@ public:
 
     void RenderResponse(const TActorContext &ctx) {
         Sort(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end());
-        TString filterNodeHost; 
+        TString filterNodeHost;
         if (FilterNodeId != 0) {
             auto eq_it = EqualRange(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end(), FilterNodeId);
             if (eq_it.first != NodesInfo->Nodes.end()) {
@@ -258,7 +258,7 @@ public:
             Renderer->RenderPageHeader(str);
             for(ui32 cls = 0; cls < StateClassifier->GetMaxTabletStateClass(); cls++) {
                 auto filter = StateClassifier->GetTabletStateClassFilter(cls);
-                TVector<TTabletListElement> tablets; 
+                TVector<TTabletListElement> tablets;
                 BuildTabletList(filter, tablets);
                 auto listName = StateClassifier->GetTabletStateClassName(cls);
                 Renderer->RenderTabletList(str, listName, tablets, {FilterNodeId, filterNodeHost});
@@ -269,7 +269,7 @@ public:
         Die(ctx);
     }
 
-    void Notify(const TActorContext &ctx, const TString& html) { 
+    void Notify(const TActorContext &ctx, const TString& html) {
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(html));
     }
 
@@ -286,7 +286,7 @@ public:
 protected:
     TActorId Sender;
     TAutoPtr<TEvInterconnect::TEvNodesInfo> NodesInfo;
-    TMap<ui64, TAutoPtr<TEvWhiteboard::TEvTabletStateResponse>> PerNodeTabletInfo; 
+    TMap<ui64, TAutoPtr<TEvWhiteboard::TEvTabletStateResponse>> PerNodeTabletInfo;
     size_t NodesRequested;
     size_t NodesReceived;
     ui32 FilterNodeId;
@@ -330,7 +330,7 @@ public:
     void Handle(TEvStateStorage::TEvResponseReplicasDumps::TPtr &ev, const TActorContext &ctx) {
         Sort(NodesInfo->Nodes.begin(), NodesInfo->Nodes.end());
         TEvStateStorage::TEvResponseReplicasDumps &event = *ev->Get();
-        TMap<ui64, TVector<std::pair<ui32, const NKikimrStateStorage::TEvInfo*>>> indexByTabletId; 
+        TMap<ui64, TVector<std::pair<ui32, const NKikimrStateStorage::TEvInfo*>>> indexByTabletId;
         for (const auto& rdi : event.ReplicasDumps) {
             const TEvStateStorage::TEvReplicaDump& replicaDump = *rdi.second;
             for (const NKikimrStateStorage::TEvInfo& ei : replicaDump.Record.GetInfo()) {
@@ -389,7 +389,7 @@ public:
         Die(ctx);
     }
 
-    void Notify(const TActorContext &ctx, const TString& html) { 
+    void Notify(const TActorContext &ctx, const TString& html) {
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(html));
     }
 
@@ -447,7 +447,7 @@ private:
         NMon::TEvHttpInfo* msg = ev->Get();
         const TCgiParameters& cgi = msg->Request.GetParams();
         if (cgi.Has("action")) {
-            const TString &actionParam = cgi.Get("action"); 
+            const TString &actionParam = cgi.Get("action");
             if (actionParam == "browse_nodes") {
                 ctx.ExecutorThread.RegisterActor(new TNodeList(ev->Sender));
                 return;

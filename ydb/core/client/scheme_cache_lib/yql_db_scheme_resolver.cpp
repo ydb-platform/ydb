@@ -21,13 +21,13 @@ class TTableProxyActor : public TActorBootstrapped<TTableProxyActor> {
 
     const TActorId SchemeCache;
     const TActorId ResponseTo;
-    TVector<TTable> Tables; 
+    TVector<TTable> Tables;
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
         const NSchemeCache::TSchemeCacheNavigate &request = *ev->Get()->Request;
         Y_VERIFY(request.ResultSet.size() == Tables.size());
 
-        TVector<TTableResult> results; 
+        TVector<TTableResult> results;
         results.reserve(Tables.size());
 
         for (ui32 idx = 0, end = Tables.size(); idx != end; ++idx) {
@@ -146,7 +146,7 @@ public:
 
     virtual ~TDbSchemeResolver() {}
 
-    virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) override { 
+    virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) override {
         TTableResults results;
         for (auto& table : tables) {
             TTableResult result(TTableResult::Error, "Not implemented");

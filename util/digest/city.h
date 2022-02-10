@@ -52,32 +52,32 @@ namespace NPrivateCityHash {
     }
 }
 
-template <class TStringType> 
-inline ui64 CityHash64(const TStringType& str) { 
+template <class TStringType>
+inline ui64 CityHash64(const TStringType& str) {
     TStringBuf buf = NPrivateCityHash::GetBufFromStr(str);
     return CityHash64(buf.data(), buf.size());
 }
 
-template <class TStringType> 
-inline ui64 CityHash64WithSeeds(const TStringType& str, ui64 seed0, ui64 seed1) { 
+template <class TStringType>
+inline ui64 CityHash64WithSeeds(const TStringType& str, ui64 seed0, ui64 seed1) {
     TStringBuf buf = NPrivateCityHash::GetBufFromStr(str);
     return CityHash64WithSeeds(buf.data(), buf.size(), seed0, seed1);
 }
 
-template <class TStringType> 
-inline ui64 CityHash64WithSeed(const TStringType& str, ui64 seed) { 
+template <class TStringType>
+inline ui64 CityHash64WithSeed(const TStringType& str, ui64 seed) {
     TStringBuf buf = NPrivateCityHash::GetBufFromStr(str);
     return CityHash64WithSeed(buf.data(), buf.size(), seed);
 }
 
-template <class TStringType> 
-inline uint128 CityHash128(const TStringType& str) { 
+template <class TStringType>
+inline uint128 CityHash128(const TStringType& str) {
     TStringBuf buf = NPrivateCityHash::GetBufFromStr(str);
     return CityHash128(buf.data(), buf.size());
 }
 
-template <class TStringType> 
-inline uint128 CityHash128WithSeed(const TStringType& str, uint128 seed) { 
+template <class TStringType>
+inline uint128 CityHash128WithSeed(const TStringType& str, uint128 seed) {
     TStringBuf buf = NPrivateCityHash::GetBufFromStr(str);
     return CityHash128WithSeed(buf.data(), buf.size(), seed);
 }

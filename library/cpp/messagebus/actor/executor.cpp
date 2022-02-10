@@ -249,11 +249,11 @@ ui32 TExecutor::GetMaxQueueSizeAndClear() const {
     return max;
 }
 
-TString TExecutor::GetStatus() const { 
+TString TExecutor::GetStatus() const {
     return GetStatusRecordInternal().Status;
 }
 
-TString TExecutor::GetStatusSingleLine() const { 
+TString TExecutor::GetStatusSingleLine() const {
     TStringStream ss;
     ss << "work items: " << GetWorkQueueSize();
     return ss.Str();

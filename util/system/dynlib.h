@@ -3,7 +3,7 @@
 #include "defaults.h"
 
 #include <util/generic/ptr.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #define Y_GET_FUNC(dll, name) FUNC_##name((dll).Sym(#name))
 #define Y_GET_FUNC_OPTIONAL(dll, name) FUNC_##name((dll).SymOptional(#name))
@@ -22,15 +22,15 @@
 
 class TDynamicLibrary {
 public:
-    TDynamicLibrary() noexcept; 
-    TDynamicLibrary(const TString& path, int flags = DEFAULT_DLLOPEN_FLAGS); 
-    ~TDynamicLibrary(); 
+    TDynamicLibrary() noexcept;
+    TDynamicLibrary(const TString& path, int flags = DEFAULT_DLLOPEN_FLAGS);
+    ~TDynamicLibrary();
 
     void Open(const char* path, int flags = DEFAULT_DLLOPEN_FLAGS);
-    void Close() noexcept; 
-    void* SymOptional(const char* name) noexcept; 
+    void Close() noexcept;
+    void* SymOptional(const char* name) noexcept;
     void* Sym(const char* name);
-    bool IsLoaded() const noexcept; 
+    bool IsLoaded() const noexcept;
     void SetUnloadable(bool unloadable); // Set to false to avoid unloading on destructor
 
 private:
@@ -44,11 +44,11 @@ class TExternalSymbol {
 private:
     TLib* PLib;
     TDynamicLibrary* DLib;
-    TString lname; 
-    TString vname; 
+    TString lname;
+    TString vname;
 
 public:
-    TExternalSymbol() noexcept { 
+    TExternalSymbol() noexcept {
         PLib = nullptr;
         DLib = nullptr;
     }
@@ -70,7 +70,7 @@ public:
         }
         return *this;
     }
-    ~TExternalSymbol() { 
+    ~TExternalSymbol() {
         delete DLib;
     }
     // set the symbol from dynamic source
@@ -90,30 +90,30 @@ public:
         vname = vtbl_name;
     }
     // set the symbol from static source
-    void SetSym(TLib* pl) noexcept { 
+    void SetSym(TLib* pl) noexcept {
         if (DLib == nullptr && PLib == nullptr)
             PLib = pl;
     }
-    void Close() noexcept { 
+    void Close() noexcept {
         delete DLib;
         DLib = 0;
         PLib = 0;
         lname.remove();
         vname.remove();
     }
-    TLib* Symbol() const noexcept { 
+    TLib* Symbol() const noexcept {
         return PLib;
     }
-    const TString& LibName() const noexcept { 
+    const TString& LibName() const noexcept {
         return lname;
     }
-    const TString& VtblName() const noexcept { 
+    const TString& VtblName() const noexcept {
         return vname;
     }
-    bool IsStatic() const noexcept { 
+    bool IsStatic() const noexcept {
         return DLib == nullptr && PLib != nullptr;
     }
-    bool IsDynamic() const noexcept { 
+    bool IsDynamic() const noexcept {
         return DLib && DLib->IsLoaded() && PLib != nullptr;
     }
 };

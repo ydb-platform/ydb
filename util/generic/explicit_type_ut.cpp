@@ -17,7 +17,7 @@ public:
 template <class T, class Arg>
 struct TCallable: public TCallableBase {
     enum {
-        Result = sizeof(Test(std::declval<T>(), std::declval<Arg>(), 1)) == sizeof(TYes) 
+        Result = sizeof(Test(std::declval<T>(), std::declval<Arg>(), 1)) == sizeof(TYes)
     };
 };
 

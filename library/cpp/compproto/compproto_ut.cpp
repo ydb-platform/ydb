@@ -36,7 +36,7 @@ template <typename X>
 void TestSaveLoadMeta(NCompProto::TMetaInfo<X>& src) {
     TStringStream ss;
     src.Save(ss);
-    TString data = ss.Str(); 
+    TString data = ss.Str();
     NCompProto::TMetaInfo<X> loadedMeta(data);
     ss = TStringStream();
     loadedMeta.Save(ss);
@@ -44,7 +44,7 @@ void TestSaveLoadMeta(NCompProto::TMetaInfo<X>& src) {
 }
 
 template <typename TDecompressor, template <typename, typename> class TSerialize>
-void TestWithParams(const TString& metainfo, const ECompMode mode, const TTestParams& params) { 
+void TestWithParams(const TString& metainfo, const ECompMode mode, const TTestParams& params) {
     using namespace NCompProto;
     FlushPseudoRandom();
 
@@ -74,7 +74,7 @@ void TestWithParams(const TString& metainfo, const ECompMode mode, const TTestPa
     const size_t busyPages = (byteSize + (PAGESIZEX - 1)) / PAGESIZEX;
     const size_t allPages = busyPages + 1;
     const size_t allocSize = (allPages + 1) * PAGESIZEX;
-    TVector<ui8> readBuffer(allocSize); 
+    TVector<ui8> readBuffer(allocSize);
     ui8* start = &readBuffer[0];
     ui8* pageStart = reinterpret_cast<ui8*>((size_t(start) + PAGESIZEX) & ~(PAGESIZEX - 1));
     // XX DATA  DATA  DATA DATA PROT
@@ -97,7 +97,7 @@ void TestWithParams(const TString& metainfo, const ECompMode mode, const TTestPa
 }
 
 template <typename TDecompressor, template <typename, typename> class TSerialize>
-void Test(const TString& metainfo, const ECompMode mode) { 
+void Test(const TString& metainfo, const ECompMode mode) {
     for (size_t ds = 3; ds < 42; ds += (3 + PseudoRandom(5))) {
         for (size_t vas = 5; vas < 42; vas += (4 + PseudoRandom(10))) {
             TTestParams params;
@@ -111,7 +111,7 @@ void Test(const TString& metainfo, const ECompMode mode) {
 Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
     using namespace NCompProto;
 
-    const TString metainfo = 
+    const TString metainfo =
         "\n\
     repeated data id 0\n\
         scalar clicks id 0 default const 0\n\
@@ -132,10 +132,10 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
         ui32 Clicks;
         ui32 Shows;
         ui32 Extra;
-        TMap<ui32, TRegInfo> RegClicks; 
+        TMap<ui32, TRegInfo> RegClicks;
     };
 
-    TVector<TData> data; 
+    TVector<TData> data;
 
     template <class TMeta, class TFunctor>
     struct TSerialize {
@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
             void EndSelf() {
             }
             void BeginElement(ui32 element) {
-                TMap<ui32, TRegInfo>::const_iterator it = Data->RegClicks.find(element); 
+                TMap<ui32, TRegInfo>::const_iterator it = Data->RegClicks.find(element);
                 if (it == Data->RegClicks.end()) {
                     UNIT_ASSERT(0);
                 }
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
         EState State;
 
         ui32 DataInd;
-        TMap<ui32, TRegInfo>::iterator RegIter; 
+        TMap<ui32, TRegInfo>::iterator RegIter;
 
         TMetaIterator<TVerifyingDecompressor>& GetDecompressor(size_t index) {
             Y_UNUSED(index);
@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
 
 Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
     using namespace NCompProto;
-    const TString metainfo = 
+    const TString metainfo =
         "\n\
     repeated data id 0\n\
         repeated second id 3\n\
@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
             scalar inner id 0 default const 0\n\
         end\n\
     end\n";
-    TVector<std::pair<TVector<ui32>, TVector<ui32>>> data; 
+    TVector<std::pair<TVector<ui32>, TVector<ui32>>> data;
 
     template <class TMeta, class TFunctor>
     struct TSerialize {

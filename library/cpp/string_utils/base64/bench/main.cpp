@@ -4,7 +4,7 @@
 
 #include <util/generic/buffer.h>
 #include <util/generic/singleton.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/xrange.h>
 #include <util/generic/yexception.h>
@@ -12,9 +12,9 @@
 
 #include <array>
 
-static TString GenerateRandomData(const size_t minSize, const size_t maxSize) { 
+static TString GenerateRandomData(const size_t minSize, const size_t maxSize) {
     Y_ENSURE(minSize <= maxSize, "wow");
-    TString r; 
+    TString r;
     for (size_t i = 0; i < minSize; ++i) {
         r.push_back(RandomNumber<char>());
     }
@@ -32,8 +32,8 @@ static TString GenerateRandomData(const size_t minSize, const size_t maxSize) {
 }
 
 template <size_t N>
-static std::array<TString, N> GenerateRandomDataVector(const size_t minSize, const size_t maxSize) { 
-    std::array<TString, N> r; 
+static std::array<TString, N> GenerateRandomDataVector(const size_t minSize, const size_t maxSize) {
+    std::array<TString, N> r;
     for (size_t i = 0; i < N; ++i) {
         r[i] = GenerateRandomData(minSize, maxSize);
     }
@@ -42,8 +42,8 @@ static std::array<TString, N> GenerateRandomDataVector(const size_t minSize, con
 }
 
 template <size_t N>
-static std::array<TString, N> Encode(const std::array<TString, N>& d) { 
-    std::array<TString, N> r; 
+static std::array<TString, N> Encode(const std::array<TString, N>& d) {
+    std::array<TString, N> r;
     for (size_t i = 0, iEnd = d.size(); i < iEnd; ++i) {
         r[i] = Base64Encode(d[i]);
     }
@@ -67,8 +67,8 @@ namespace {
         }
 
         static constexpr size_t Size = N;
-        const std::array<TString, N> Data; 
-        const std::array<TString, N> DataEncoded; 
+        const std::array<TString, N> Data;
+        const std::array<TString, N> DataEncoded;
         std::array<TBuffer, N> PlaceToEncode;
         std::array<TBuffer, N> PlaceToDecode;
     };

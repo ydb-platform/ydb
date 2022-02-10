@@ -132,7 +132,7 @@ namespace NKikimr {
         ui32 TSerializeRoutines::SetGC(const TBlobStorageGroupType &gtype,
                                        char *buf,
                                        ui64 lsn,
-                                       const TDeque<TLogoBlobID>& phantoms) { 
+                                       const TDeque<TLogoBlobID>& phantoms) {
             char *pos = buf;
 
             TIngress ingressDontKeep;
@@ -144,7 +144,7 @@ namespace NKikimr {
             return pos - buf;
         }
 
-        bool TSerializeRoutines::CheckData(const TString &data, TString &errorString) { 
+        bool TSerializeRoutines::CheckData(const TString &data, TString &errorString) {
             const TRecordHdr *begin = (const TRecordHdr *)(data.data());
             const TRecordHdr *end = (const TRecordHdr *)(data.data() + data.size());
 
@@ -213,7 +213,7 @@ namespace NKikimr {
 
         void TSequenceOfRecs::SetGC(const TBlobStorageGroupType &gtype,
                                     ui64 lsn,
-                                    const TDeque<TLogoBlobID>& phantoms) { 
+                                    const TDeque<TLogoBlobID>& phantoms) {
             Y_VERIFY(Size == 0);
             size_t size = NSyncLog::MaxRecFullSize * phantoms.size();
             HeapBuf.resize(size);
@@ -230,7 +230,7 @@ namespace NKikimr {
             }
         }
 
-        TString TSequenceOfRecs::ToString() const { 
+        TString TSequenceOfRecs::ToString() const {
             TStringStream str;
             Output(str);
             return str.Str();

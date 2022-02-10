@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 
-TString PrintNode(const TNode* node, bool singleLine = false); 
+TString PrintNode(const TNode* node, bool singleLine = false);
 
 }
 }

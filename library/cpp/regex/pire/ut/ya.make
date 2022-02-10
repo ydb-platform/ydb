@@ -1,4 +1,4 @@
-# this test in not linked into build tree with ReCURSE and is built by unittest/library 
+# this test in not linked into build tree with ReCURSE and is built by unittest/library
 
 UNITTEST()
 

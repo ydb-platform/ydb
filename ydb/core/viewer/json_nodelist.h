@@ -85,21 +85,21 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonNodeList> {
-    static TString GetSchema() { 
+    static TString GetSchema() {
         return R"___({"type":"array","title":"TEvNodeListResponse","items":{"type":"object","title":"TNodeInfo","properties":{"Id":{"type":"integer"},"Host":{"type":"string"},"Address":{"type":"string"},"Port":{"type":"integer"}},"required":["Id","Address","Port"]}})___";
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonNodeList> {
-    static TString GetSummary() { 
+    static TString GetSummary() {
         return "\"Nodes list\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonNodeList> {
-    static TString GetDescription() { 
+    static TString GetDescription() {
         return "\"Returns list of nodes\"";
     }
 };

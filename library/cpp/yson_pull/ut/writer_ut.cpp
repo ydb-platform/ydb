@@ -3,7 +3,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #include <climits>
 #include <limits>
@@ -12,8 +12,8 @@ using namespace std::string_view_literals;
 
 namespace {
     template <typename Writer, typename Function>
-    TString with_writer(Function&& function) { 
-        TString result; 
+    TString with_writer(Function&& function) {
+        TString result;
         auto writer = NYsonPull::NDetail::make_writer<Writer>(
             NYsonPull::NOutput::FromString(&result),
             NYsonPull::EStreamType::Node);
@@ -24,19 +24,19 @@ namespace {
     }
 
     template <typename Writer>
-    TString to_yson_string(const NYsonPull::TScalar& value) { 
+    TString to_yson_string(const NYsonPull::TScalar& value) {
         return with_writer<Writer>([&](NYsonPull::TWriter& writer) {
             writer.BeginStream().Scalar(value).EndStream();
         });
     }
 
     template <typename T>
-    TString to_yson_binary_string(T&& value) { 
+    TString to_yson_binary_string(T&& value) {
         return to_yson_string<NYsonPull::NDetail::TBinaryWriterImpl>(std::forward<T>(value));
     }
 
     template <typename T>
-    TString to_yson_text_string(T&& value) { 
+    TString to_yson_text_string(T&& value) {
         return to_yson_string<NYsonPull::NDetail::TTextWriterImpl>(std::forward<T>(value));
     }
 

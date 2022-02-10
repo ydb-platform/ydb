@@ -98,7 +98,7 @@ private:
     }
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
-        TVector<NThreading::TFuture<void>> futures; 
+        TVector<NThreading::TFuture<void>> futures;
         for (auto& x : PendingProviders) {
             futures.push_back(GetTransformer(x).GetAsyncFuture(input));
         }
@@ -142,9 +142,9 @@ private:
     const TTypeAnnotationContext& Types;
     TGetTransformer GetTransformer;
     TFinish Finish;
-    TVector<IDataProvider*> PendingProviders; 
+    TVector<IDataProvider*> PendingProviders;
     bool HasRepeats = false;
-    TExprNode::TListType NewRoots; 
+    TExprNode::TListType NewRoots;
 };
 
 template <ESource Source, typename TGetTransformer, typename TFinish>

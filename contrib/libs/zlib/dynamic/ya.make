@@ -1,5 +1,5 @@
-OWNER( 
-    g:contrib 
-    g:cpp-contrib 
-) 
+OWNER(
+    g:contrib
+    g:cpp-contrib
+)
 DLL_FOR(contrib/libs/zlib)

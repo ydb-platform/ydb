@@ -19,21 +19,21 @@ namespace NMaybe {
     };
 }
 
-struct TNothing { 
+struct TNothing {
     explicit constexpr TNothing(int) noexcept {
     }
-}; 
- 
-constexpr TNothing NothingObject{0}; 
- 
-constexpr TNothing Nothing() noexcept { 
-    return NothingObject; 
-} 
- 
-constexpr bool operator==(TNothing, TNothing) noexcept { 
-    return true; 
-} 
- 
+};
+
+constexpr TNothing NothingObject{0};
+
+constexpr TNothing Nothing() noexcept {
+    return NothingObject;
+}
+
+constexpr bool operator==(TNothing, TNothing) noexcept {
+    return true;
+}
+
 template <class T, class Policy /*= ::NMaybe::TPolicyUndefinedExcept*/>
 class TMaybe: private TMaybeBase<T> {
 public:
@@ -48,7 +48,7 @@ private:
                   "Instantiation of TMaybe with reference type is ill-formed");
     static_assert(std::is_destructible<T>::value,
                   "Instantiation of TMaybe with non-destructible type is ill-formed");
- 
+
     template <class U>
     struct TConstructibleFromMaybeSomehow {
     public:
@@ -152,13 +152,13 @@ private:
     };
 
     using TBase = TMaybeBase<T>;
- 
+
 public:
     using value_type = T;
     using TValueType = value_type;
- 
+
     TMaybe() noexcept = default;
- 
+
     constexpr TMaybe(const TMaybe&) = default;
     constexpr TMaybe(TMaybe&&) = default;
 
@@ -168,15 +168,15 @@ public:
     {
     }
 
-    template <class U, class... TArgs> 
-    constexpr explicit TMaybe(TInPlace, std::initializer_list<U> il, TArgs&&... args) 
+    template <class U, class... TArgs>
+    constexpr explicit TMaybe(TInPlace, std::initializer_list<U> il, TArgs&&... args)
         : TBase(TInPlace{}, il, std::forward<TArgs>(args)...)
     {
     }
- 
+
     constexpr TMaybe(TNothing) noexcept {
     }
- 
+
     template <class U, class = std::enable_if_t<TImplicitCopyCtor<U>::value>>
     TMaybe(const TMaybe<U, Policy>& right) {
         if (right.Defined()) {
@@ -227,10 +227,10 @@ public:
     constexpr TMaybe& operator=(TMaybe&&) = default;
 
     TMaybe& operator=(TNothing) noexcept {
-        Clear(); 
-        return *this; 
-    } 
- 
+        Clear();
+        return *this;
+    }
+
     template <class U = T>
     std::enable_if_t<TAssignableFromAny<U>::value, TMaybe&> operator=(U&& right) {
         if (Defined()) {
@@ -287,7 +287,7 @@ public:
     void Clear() noexcept {
         if (Defined()) {
             this->Defined_ = false;
-            Data()->~T(); 
+            Data()->~T();
         }
     }
 
@@ -382,7 +382,7 @@ public:
         return Defined() ? TMaybe<U, Policy>(*Data()) : TMaybe<U, Policy>();
     }
 
-    constexpr explicit operator bool() const noexcept { 
+    constexpr explicit operator bool() const noexcept {
         return Defined();
     }
 
@@ -413,25 +413,25 @@ public:
     }
 
     void Swap(TMaybe& other) {
-        if (this->Defined_ == other.Defined_) { 
-            if (this->Defined_) { 
-                ::DoSwap(this->Data_, other.Data_); 
-            } 
-        } else { 
-            if (this->Defined_) { 
-                other.Init(std::move(this->Data_)); 
-                this->Clear(); 
-            } else { 
-                this->Init(std::move(other.Data_)); 
-                other.Clear(); 
-            } 
-        } 
-    } 
- 
+        if (this->Defined_ == other.Defined_) {
+            if (this->Defined_) {
+                ::DoSwap(this->Data_, other.Data_);
+            }
+        } else {
+            if (this->Defined_) {
+                other.Init(std::move(this->Data_));
+                this->Clear();
+            } else {
+                this->Init(std::move(other.Data_));
+                other.Clear();
+            }
+        }
+    }
+
     void swap(TMaybe& other) {
-        Swap(other); 
-    } 
- 
+        Swap(other);
+    }
+
 private:
     constexpr const T* Data() const noexcept {
         return std::addressof(this->Data_);
@@ -454,28 +454,28 @@ using TMaybeFail = TMaybe<T, NMaybe::TPolicyUndefinedFail>;
 template <class T, class TPolicy = ::NMaybe::TPolicyUndefinedExcept>
 constexpr TMaybe<std::decay_t<T>, TPolicy> MakeMaybe(T&& value) {
     return TMaybe<std::decay_t<T>, TPolicy>(std::forward<T>(value));
-} 
- 
-template <class T, class... TArgs> 
-constexpr TMaybe<T> MakeMaybe(TArgs&&... args) { 
-    return TMaybe<T>(typename TMaybe<T>::TInPlace{}, std::forward<TArgs>(args)...); 
-} 
- 
-template <class T, class U, class... TArgs> 
-constexpr TMaybe<T> MakeMaybe(std::initializer_list<U> il, TArgs&&... args) { 
-    return TMaybe<T>(typename TMaybe<T>::TInPlace{}, il, std::forward<TArgs>(args)...); 
-} 
- 
+}
+
+template <class T, class... TArgs>
+constexpr TMaybe<T> MakeMaybe(TArgs&&... args) {
+    return TMaybe<T>(typename TMaybe<T>::TInPlace{}, std::forward<TArgs>(args)...);
+}
+
+template <class T, class U, class... TArgs>
+constexpr TMaybe<T> MakeMaybe(std::initializer_list<U> il, TArgs&&... args) {
+    return TMaybe<T>(typename TMaybe<T>::TInPlace{}, il, std::forward<TArgs>(args)...);
+}
+
 template <class T, class TPolicy>
 void Swap(TMaybe<T, TPolicy>& lhs, TMaybe<T, TPolicy>& rhs) {
-    lhs.Swap(rhs); 
-} 
- 
+    lhs.Swap(rhs);
+}
+
 template <class T, class TPolicy>
 void swap(TMaybe<T, TPolicy>& lhs, TMaybe<T, TPolicy>& rhs) {
-    lhs.Swap(rhs); 
-} 
- 
+    lhs.Swap(rhs);
+}
+
 template <typename T, class TPolicy>
 struct THash<TMaybe<T, TPolicy>> {
     constexpr size_t operator()(const TMaybe<T, TPolicy>& data) const {
@@ -483,7 +483,7 @@ struct THash<TMaybe<T, TPolicy>> {
     }
 };
 
-// Comparisons between TMaybe 
+// Comparisons between TMaybe
 template <class T, class TPolicy>
 constexpr bool operator==(const ::TMaybe<T, TPolicy>& left, const ::TMaybe<T, TPolicy>& right) {
     return (static_cast<bool>(left) != static_cast<bool>(right))
@@ -496,218 +496,218 @@ constexpr bool operator==(const ::TMaybe<T, TPolicy>& left, const ::TMaybe<T, TP
 
 template <class T, class TPolicy>
 constexpr bool operator!=(const TMaybe<T, TPolicy>& left, const TMaybe<T, TPolicy>& right) {
-    return !(left == right); 
+    return !(left == right);
 }
- 
+
 template <class T, class TPolicy>
 constexpr bool operator<(const TMaybe<T, TPolicy>& left, const TMaybe<T, TPolicy>& right) {
-    return (!static_cast<bool>(right)) 
+    return (!static_cast<bool>(right))
                ? false
                : (
                      !static_cast<bool>(left)
                          ? true
                          : (*left < *right));
-} 
- 
+}
+
 template <class T, class TPolicy>
 constexpr bool operator>(const TMaybe<T, TPolicy>& left, const TMaybe<T, TPolicy>& right) {
-    return right < left; 
-} 
- 
+    return right < left;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator<=(const TMaybe<T, TPolicy>& left, const TMaybe<T, TPolicy>& right) {
-    return !(right < left); 
-} 
- 
+    return !(right < left);
+}
+
 template <class T, class TPolicy>
 constexpr bool operator>=(const TMaybe<T, TPolicy>& left, const TMaybe<T, TPolicy>& right) {
-    return !(left < right); 
-} 
- 
-// Comparisons with TNothing 
+    return !(left < right);
+}
+
+// Comparisons with TNothing
 template <class T, class TPolicy>
 constexpr bool operator==(const TMaybe<T, TPolicy>& left, TNothing) noexcept {
-    return !static_cast<bool>(left); 
-} 
- 
+    return !static_cast<bool>(left);
+}
+
 template <class T, class TPolicy>
 constexpr bool operator==(TNothing, const TMaybe<T, TPolicy>& right) noexcept {
-    return !static_cast<bool>(right); 
-} 
- 
+    return !static_cast<bool>(right);
+}
+
 template <class T, class TPolicy>
 constexpr bool operator!=(const TMaybe<T, TPolicy>& left, TNothing) noexcept {
-    return static_cast<bool>(left); 
-} 
- 
+    return static_cast<bool>(left);
+}
+
 template <class T, class TPolicy>
 constexpr bool operator!=(TNothing, const TMaybe<T, TPolicy>& right) noexcept {
-    return static_cast<bool>(right); 
-} 
- 
+    return static_cast<bool>(right);
+}
+
 template <class T, class TPolicy>
 constexpr bool operator<(const TMaybe<T, TPolicy>&, TNothing) noexcept {
-    return false; 
-} 
- 
+    return false;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator<(TNothing, const TMaybe<T, TPolicy>& right) noexcept {
-    return static_cast<bool>(right); 
-} 
- 
+    return static_cast<bool>(right);
+}
+
 template <class T, class TPolicy>
 constexpr bool operator<=(const TMaybe<T, TPolicy>& left, TNothing) noexcept {
-    return !static_cast<bool>(left); 
-} 
- 
+    return !static_cast<bool>(left);
+}
+
 template <class T, class TPolicy>
 constexpr bool operator<=(TNothing, const TMaybe<T, TPolicy>&) noexcept {
-    return true; 
-} 
- 
+    return true;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator>(const TMaybe<T, TPolicy>& left, TNothing) noexcept {
-    return static_cast<bool>(left); 
-} 
- 
+    return static_cast<bool>(left);
+}
+
 template <class T, class TPolicy>
 constexpr bool operator>(TNothing, const TMaybe<T, TPolicy>&) noexcept {
-    return false; 
-} 
- 
+    return false;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator>=(const TMaybe<T, TPolicy>&, TNothing) noexcept {
-    return true; 
-} 
- 
+    return true;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator>=(TNothing, const TMaybe<T, TPolicy>& right) noexcept {
-    return !static_cast<bool>(right); 
-} 
- 
-// Comparisons with T 
- 
+    return !static_cast<bool>(right);
+}
+
+// Comparisons with T
+
 template <class T, class TPolicy>
 constexpr bool operator==(const TMaybe<T, TPolicy>& maybe, const T& value) {
-    return static_cast<bool>(maybe) ? *maybe == value : false; 
-} 
- 
+    return static_cast<bool>(maybe) ? *maybe == value : false;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator==(const T& value, const TMaybe<T, TPolicy>& maybe) {
-    return static_cast<bool>(maybe) ? *maybe == value : false; 
-} 
- 
+    return static_cast<bool>(maybe) ? *maybe == value : false;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator!=(const TMaybe<T, TPolicy>& maybe, const T& value) {
-    return static_cast<bool>(maybe) ? !(*maybe == value) : true; 
-} 
- 
+    return static_cast<bool>(maybe) ? !(*maybe == value) : true;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator!=(const T& value, const TMaybe<T, TPolicy>& maybe) {
-    return static_cast<bool>(maybe) ? !(*maybe == value) : true; 
-} 
- 
+    return static_cast<bool>(maybe) ? !(*maybe == value) : true;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator<(const TMaybe<T, TPolicy>& maybe, const T& value) {
-    return static_cast<bool>(maybe) ? std::less<T>{}(*maybe, value) : true; 
-} 
- 
+    return static_cast<bool>(maybe) ? std::less<T>{}(*maybe, value) : true;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator<(const T& value, const TMaybe<T, TPolicy>& maybe) {
-    return static_cast<bool>(maybe) ? std::less<T>{}(value, *maybe) : false; 
-} 
- 
+    return static_cast<bool>(maybe) ? std::less<T>{}(value, *maybe) : false;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator<=(const TMaybe<T, TPolicy>& maybe, const T& value) {
-    return !(maybe > value); 
-} 
- 
+    return !(maybe > value);
+}
+
 template <class T, class TPolicy>
 constexpr bool operator<=(const T& value, const TMaybe<T, TPolicy>& maybe) {
-    return !(value > maybe); 
-} 
- 
+    return !(value > maybe);
+}
+
 template <class T, class TPolicy>
 constexpr bool operator>(const TMaybe<T, TPolicy>& maybe, const T& value) {
-    return static_cast<bool>(maybe) ? value < maybe : false; 
-} 
- 
+    return static_cast<bool>(maybe) ? value < maybe : false;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator>(const T& value, const TMaybe<T, TPolicy>& maybe) {
-    return static_cast<bool>(maybe) ? maybe < value : true; 
-} 
- 
+    return static_cast<bool>(maybe) ? maybe < value : true;
+}
+
 template <class T, class TPolicy>
 constexpr bool operator>=(const TMaybe<T, TPolicy>& maybe, const T& value) {
-    return !(maybe < value); 
-} 
- 
+    return !(maybe < value);
+}
+
 template <class T, class TPolicy>
 constexpr bool operator>=(const T& value, const TMaybe<T, TPolicy>& maybe) {
-    return !(value < maybe); 
-} 
- 
-// Comparison with values convertible to T 
- 
+    return !(value < maybe);
+}
+
+// Comparison with values convertible to T
+
 template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<U, T>::value, int> = 0>
 constexpr bool operator==(const ::TMaybe<T, TPolicy>& maybe, const U& value) {
-    return static_cast<bool>(maybe) ? *maybe == value : false; 
-} 
- 
+    return static_cast<bool>(maybe) ? *maybe == value : false;
+}
+
 template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<U, T>::value, int> = 0>
 constexpr bool operator==(const U& value, const ::TMaybe<T, TPolicy>& maybe) {
-    return static_cast<bool>(maybe) ? *maybe == value : false; 
-} 
- 
+    return static_cast<bool>(maybe) ? *maybe == value : false;
+}
+
 template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<U, T>::value, int> = 0>
 constexpr bool operator!=(const TMaybe<T, TPolicy>& maybe, const U& value) {
-    return static_cast<bool>(maybe) ? !(*maybe == value) : true; 
-} 
- 
+    return static_cast<bool>(maybe) ? !(*maybe == value) : true;
+}
+
 template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<U, T>::value, int> = 0>
 constexpr bool operator!=(const U& value, const TMaybe<T, TPolicy>& maybe) {
-    return static_cast<bool>(maybe) ? !(*maybe == value) : true; 
-} 
- 
+    return static_cast<bool>(maybe) ? !(*maybe == value) : true;
+}
+
 template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<U, T>::value, int> = 0>
 constexpr bool operator<(const TMaybe<T, TPolicy>& maybe, const U& value) {
-    return static_cast<bool>(maybe) ? std::less<T>{}(*maybe, value) : true; 
-} 
- 
+    return static_cast<bool>(maybe) ? std::less<T>{}(*maybe, value) : true;
+}
+
 template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<U, T>::value, int> = 0>
 constexpr bool operator<(const U& value, const TMaybe<T, TPolicy>& maybe) {
-    return static_cast<bool>(maybe) ? std::less<T>{}(value, *maybe) : false; 
-} 
- 
+    return static_cast<bool>(maybe) ? std::less<T>{}(value, *maybe) : false;
+}
+
 template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<U, T>::value, int> = 0>
 constexpr bool operator<=(const TMaybe<T, TPolicy>& maybe, const U& value) {
-    return !(maybe > value); 
-} 
- 
+    return !(maybe > value);
+}
+
 template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<U, T>::value, int> = 0>
 constexpr bool operator<=(const U& value, const TMaybe<T, TPolicy>& maybe) {
-    return !(value > maybe); 
-} 
- 
+    return !(value > maybe);
+}
+
 template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<U, T>::value, int> = 0>
 constexpr bool operator>(const TMaybe<T, TPolicy>& maybe, const U& value) {
-    return static_cast<bool>(maybe) ? value < maybe : false; 
-} 
- 
+    return static_cast<bool>(maybe) ? value < maybe : false;
+}
+
 template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<U, T>::value, int> = 0>
 constexpr bool operator>(const U& value, const TMaybe<T, TPolicy>& maybe) {
-    return static_cast<bool>(maybe) ? maybe < value : true; 
-} 
- 
+    return static_cast<bool>(maybe) ? maybe < value : true;
+}
+
 template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<U, T>::value, int> = 0>
 constexpr bool operator>=(const TMaybe<T, TPolicy>& maybe, const U& value) {
-    return !(maybe < value); 
-} 
- 
+    return !(maybe < value);
+}
+
 template <class T, class TPolicy, class U, std::enable_if_t<std::is_convertible<U, T>::value, int> = 0>
 constexpr bool operator>=(const U& value, const TMaybe<T, TPolicy>& maybe) {
-    return !(value < maybe); 
-} 
+    return !(value < maybe);
+}
 
 class IOutputStream;
 

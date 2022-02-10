@@ -17,7 +17,7 @@ namespace NActors {
         ui32 poolId,
         ui32 threads,
         ui64 spinThreshold,
-        const TString& poolName, 
+        const TString& poolName,
         TAffinity* affinity,
         TDuration timePerMailbox,
         ui32 eventsPerMailbox,
@@ -234,7 +234,7 @@ namespace NActors {
         }
     }
 
-    void TBasicExecutorPool::GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const { 
+    void TBasicExecutorPool::GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
         poolStats.MaxUtilizationTime = RelaxedLoad(&MaxUtilizationAccumulator) / (i64)(NHPTimer::GetCyclesPerSecond() / 1000);
 
         statsCopy.resize(PoolThreads + 1);

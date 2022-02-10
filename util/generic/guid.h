@@ -66,8 +66,8 @@ struct THash<TGUID> {
 };
 
 void CreateGuid(TGUID* res);
-TString GetGuidAsString(const TGUID& g); 
-TString CreateGuidAsString(); 
+TString GetGuidAsString(const TGUID& g);
+TString CreateGuidAsString();
 TGUID GetGuid(TStringBuf s);
 bool GetGuid(TStringBuf s, TGUID& result);
 

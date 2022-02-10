@@ -42,7 +42,7 @@ public:
     //
     TFlatBlobDataOutputStream()
     {}
-    TFlatBlobDataOutputStream(TString bufferToGrab) 
+    TFlatBlobDataOutputStream(TString bufferToGrab)
         : Buffer(bufferToGrab)
     {}
     ~TFlatBlobDataOutputStream() {}
@@ -74,7 +74,7 @@ public:
         return TStringBuf(Buffer.data(), Buffer.size());
     }
 
-    const TString& GetBuffer() const { 
+    const TString& GetBuffer() const {
         return Buffer;
     }
 
@@ -152,7 +152,7 @@ public:
 
 private:
     //
-    TString Buffer; 
+    TString Buffer;
 };
 
 ////////////////////////////////////////////

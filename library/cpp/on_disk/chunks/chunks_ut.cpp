@@ -102,21 +102,21 @@ public:
                 UNIT_ASSERT_EQUAL(reader.RealSize(), sizeof(ui64) + N * sizeof(ui32));
             }
         }
-        { /// TString 
+        { /// TString
             const size_t N = 4;
             TBufferStream stream;
             {
-                TGeneralVectorWriter<TString> writer; 
+                TGeneralVectorWriter<TString> writer;
                 for (size_t i = 0; i < N; ++i)
                     writer.PushBack(ToString(i));
                 writer.Save(stream);
             }
             {
                 TBlob temp = TBlob::FromStreamSingleThreaded(stream);
-                TGeneralVector<TString> reader(temp); 
+                TGeneralVector<TString> reader(temp);
                 UNIT_ASSERT_EQUAL(reader.GetSize(), N);
                 for (size_t i = 0; i < N; ++i) {
-                    TString value; 
+                    TString value;
                     reader.Get(i, value);
                     UNIT_ASSERT_EQUAL(value, ToString(i));
                     UNIT_ASSERT_EQUAL(reader.Get(i), ToString(i));
@@ -151,7 +151,7 @@ public:
         }
         { /// pointer
             const size_t N = 3;
-            TVector<int> data_holder(N); 
+            TVector<int> data_holder(N);
             int* a = &(data_holder[0]);
             TBufferStream stream;
             {
@@ -200,11 +200,11 @@ public:
     }
 
     void TestStrings() {
-        const TString FILENAME = "chunked_helpers_test.bin"; 
+        const TString FILENAME = "chunked_helpers_test.bin";
         TTempFileHandle file(FILENAME.c_str());
 
         {
-            TFixedBufferFileOutput fOut(FILENAME); 
+            TFixedBufferFileOutput fOut(FILENAME);
             TStringsVectorWriter stringsWriter;
             stringsWriter.PushBack("");
             stringsWriter.PushBack("test");
@@ -230,11 +230,11 @@ public:
     }
 
     void TestNamedChunkedData() {
-        const TString filename = MakeTempName(nullptr, "named_chunked_data_test"); 
+        const TString filename = MakeTempName(nullptr, "named_chunked_data_test");
         TTempFile file(filename);
 
         {
-            TFixedBufferFileOutput fOut(filename); 
+            TFixedBufferFileOutput fOut(filename);
             TNamedChunkedDataWriter writer(fOut);
 
             writer.NewBlock("alpha");

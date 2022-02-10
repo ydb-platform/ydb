@@ -165,7 +165,7 @@ public:
     {
         Y_VERIFY_DEBUG(!this->ArgsHolder.IsValid());
 
-        TExprNode::TListType argNodes; 
+        TExprNode::TListType argNodes;
         for (auto name : list) {
             auto argName = this->Ctx.AppendString(name);
             auto argNode = this->Ctx.NewArgument(this->Pos, argName);
@@ -183,7 +183,7 @@ public:
     {
         Y_VERIFY_DEBUG(!this->ArgsHolder.IsValid());
 
-        TExprNode::TListType argNodes; 
+        TExprNode::TListType argNodes;
         for (auto arg : list) {
             argNodes.push_back(arg.Ptr());
         }

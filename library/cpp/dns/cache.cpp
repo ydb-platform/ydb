@@ -80,7 +80,7 @@ namespace {
             }
         }
 
-        void AddAlias(const TString& host, const TString& alias) noexcept { 
+        void AddAlias(const TString& host, const TString& alias) noexcept {
             TWriteGuard guard(LA_);
 
             A_[host] = alias;
@@ -92,8 +92,8 @@ namespace {
 
     private:
         inline TResolvedHostPtr ResolveA(const TResolveTask& rt) {
-            TString originalHost(rt.Info.Host); 
-            TString host(originalHost); 
+            TString originalHost(rt.Info.Host);
+            TString host(originalHost);
 
             //3. replace host to alias, if exist
             if (A_.size()) {
@@ -129,10 +129,10 @@ namespace {
             return new TResolvedHost(originalHost, *na);
         }
 
-        typedef THashMap<TResolveInfo, TResolvedHostPtr, THashResolveInfo, TCompareResolveInfo> TCache; 
+        typedef THashMap<TResolveInfo, TResolvedHostPtr, THashResolveInfo, TCompareResolveInfo> TCache;
         TCache C_;
         TRWMutex L_;
-        typedef THashMap<TString, TString> TAliases; 
+        typedef THashMap<TString, TString> TAliases;
         TAliases A_;
         TRWMutex LA_;
     };
@@ -162,7 +162,7 @@ namespace {
         }
 
     private:
-        typedef THashMap<TResolveInfo, const TResolvedHost*, THashResolveInfo, TCompareResolveInfo> TCache; 
+        typedef THashMap<TResolveInfo, const TResolvedHost*, THashResolveInfo, TCompareResolveInfo> TCache;
         TCache C_;
         IDns* S_;
     };
@@ -192,7 +192,7 @@ namespace NDns {
         return ThrDns()->Resolve(rt);
     }
 
-    void AddHostAlias(const TString& host, const TString& alias) { 
+    void AddHostAlias(const TString& host, const TString& alias) {
         TGlobalCachedDns::Instance()->AddAlias(host, alias);
     }
 }

@@ -24,7 +24,7 @@ public:
         return promise.GetFuture();
     }
 
-    virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) override { 
+    virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) override {
         TTableResults results;
         results.reserve(tables.size());
         for (auto& table : tables) {
@@ -71,12 +71,12 @@ public:
 
 private:
     TThreadPool MtpQueue;
-    THashMap<TString, IDbSchemeResolver::TTableResult> Tables; 
+    THashMap<TString, IDbSchemeResolver::TTableResult> Tables;
 };
 
 namespace NYql {
 
-inline TExprContainer::TPtr ParseText(const TString& programText) { 
+inline TExprContainer::TPtr ParseText(const TString& programText) {
     TAstParseResult astRes = ParseAst(programText);
     astRes.Issues.PrintTo(Cerr);
     UNIT_ASSERT(astRes.IsOk());

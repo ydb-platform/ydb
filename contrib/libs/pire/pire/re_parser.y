@@ -178,7 +178,7 @@ void yyerror(Pire::Lexer& rlex, const char* str)
 
 void AppendRange(const Encoding& encoding, Fsm& a, const Term::CharacterRange& cr)
 {
-    TVector<ystring> strings; 
+    TVector<ystring> strings;
 
     for (auto&& i : cr.first) {
         ystring s;

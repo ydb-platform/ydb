@@ -29,8 +29,8 @@ struct TUserData {
     TString Content_;
 
     static void UserDataToLibraries(
-        const TVector<TUserData>& userData, 
-        THashMap<TString,TString>& libraries 
+        const TVector<TUserData>& userData,
+        THashMap<TString,TString>& libraries
     );
 
     static void FillFromFolder(

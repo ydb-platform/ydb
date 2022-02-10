@@ -26,7 +26,7 @@ class TRedBlackTreeTest: public TTestBase {
 
     class TNode: public TRbTreeItem<TNode, TCmp> {
     public:
-        inline TNode(int n) noexcept 
+        inline TNode(int n) noexcept
             : N(n)
         {
         }
@@ -51,7 +51,7 @@ class TRedBlackTreeTest: public TTestBase {
 
 private:
     inline void TestStress() {
-        TVector<TSimpleSharedPtr<TNode>> nodes; 
+        TVector<TSimpleSharedPtr<TNode>> nodes;
 
         for (int i = 0; i < 1000; ++i) {
             nodes.push_back(new TNode(i));
@@ -78,7 +78,7 @@ private:
     }
 
     inline void TestGettingIndexWithDifferentValues() {
-        TVector<TSimpleSharedPtr<TNode>> nodes; 
+        TVector<TSimpleSharedPtr<TNode>> nodes;
         size_t N = 1000;
 
         for (size_t i = 0; i < N; ++i) {
@@ -105,7 +105,7 @@ private:
     }
 
     inline void TestCheckChildrenAfterErase() {
-        TVector<TSimpleSharedPtr<TNode>> nodes; 
+        TVector<TSimpleSharedPtr<TNode>> nodes;
         size_t N = 1000;
 
         for (size_t i = 0; i < N; ++i) {
@@ -138,7 +138,7 @@ private:
     }
 
     inline void TestGettingIndexWithDifferentValuesAfterErase() {
-        TVector<TSimpleSharedPtr<TNode>> nodes; 
+        TVector<TSimpleSharedPtr<TNode>> nodes;
         size_t N = 1000;
 
         for (size_t i = 0; i < N; ++i) {
@@ -176,7 +176,7 @@ private:
     }
 
     inline void TestGettingIndexWithEqualValues() {
-        TVector<TSimpleSharedPtr<TNode>> nodes; 
+        TVector<TSimpleSharedPtr<TNode>> nodes;
         size_t N = 1000;
 
         for (size_t i = 0; i < N; ++i) {

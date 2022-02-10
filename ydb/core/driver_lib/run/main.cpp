@@ -96,7 +96,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
 
         if (mode == EDM_NO) {
             fprintf(stderr, "Unknown command '%s'\n\n", *argv);
-            opts.PrintUsage(TString("")); 
+            opts.PrintUsage(TString(""));
             exit(1);
         }
 

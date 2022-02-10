@@ -618,7 +618,7 @@ private:
 
     bool WritesDone;
 
-    THashMap<ui32, ui64> PartitionToTablet; 
+    THashMap<ui32, ui64> PartitionToTablet;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 
@@ -960,9 +960,9 @@ private:
     ui64 NextAssignId;
     THashMap<ui64, TPartitionActorInfo> Partitions; //assignId -> info
 
-    THashMap<TString, TTopicHolder> Topics; // topic -> info 
+    THashMap<TString, TTopicHolder> Topics; // topic -> info
     THashMap<TString, NPersQueue::TConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
-    THashSet<TString> TopicsToResolve; 
+    THashSet<TString> TopicsToResolve;
     THashMap<TString, TVector<ui32>> TopicGroups;
     THashMap<TString, ui64> ReadFromTimestamp;
 
@@ -979,7 +979,7 @@ private:
         }
     };
 
-    TSet<TPartitionInfo> AvailablePartitions; 
+    TSet<TPartitionInfo> AvailablePartitions;
 
     struct TFormedReadResponse: public TSimpleRefCount<TFormedReadResponse> {
         using TPtr = TIntrusivePtr<TFormedReadResponse>;
@@ -1049,7 +1049,7 @@ private:
 
     NKikimr::NPQ::TPercentileCounter PartsPerSession;
 
-    THashMap<TString, TTopicCounters> TopicCounters; 
+    THashMap<TString, TTopicCounters> TopicCounters;
     THashMap<TString, ui32> NumPartitionsFromTopic;
 
     TVector<NPQ::TLabelsInfo> Aggr;

@@ -33,7 +33,7 @@ namespace NKikimr {
     }
 
     bool TPutRecoveryLogRecOpt::ParseFromString(const TBlobStorageGroupType &gtype,
-                                                const TString &data) { 
+                                                const TString &data) {
         const char *pos = data.data();
         const char *end = data.data() + data.size();
         if (size_t(end - pos) < 24)
@@ -48,11 +48,11 @@ namespace NKikimr {
         if (size_t(end - pos) != partSize)
             return false;
 
-        Data = TString(pos, partSize); 
+        Data = TString(pos, partSize);
         return true;
     }
 
-    TString TPutRecoveryLogRecOpt::ToString() const { 
+    TString TPutRecoveryLogRecOpt::ToString() const {
         TStringStream str;
         Output(str);
         return str.Str();

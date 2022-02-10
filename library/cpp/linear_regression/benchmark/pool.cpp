@@ -3,7 +3,7 @@
 #include <util/string/cast.h>
 #include <util/stream/file.h>
 
-TInstance TInstance::FromFeaturesString(const TString& featuresString) { 
+TInstance TInstance::FromFeaturesString(const TString& featuresString) {
     TInstance instance;
 
     TStringBuf featuresStringBuf(featuresString);
@@ -29,7 +29,7 @@ TPool::TCVIterator::TCVIterator(const TPool& parentPool, const size_t foldsCount
 }
 
 void TPool::TCVIterator::ResetShuffle() {
-    TVector<size_t> instanceNumbers(ParentPool.size()); 
+    TVector<size_t> instanceNumbers(ParentPool.size());
     for (size_t instanceNumber = 0; instanceNumber < ParentPool.size(); ++instanceNumber) {
         instanceNumbers[instanceNumber] = instanceNumber;
     }
@@ -83,9 +83,9 @@ bool TPool::TCVIterator::TakeCurrent() const {
     return false;
 }
 
-void TPool::ReadFromFeatures(const TString& featuresPath) { 
-    TFileInput featuresIn(featuresPath); 
-    TString featuresString; 
+void TPool::ReadFromFeatures(const TString& featuresPath) {
+    TFileInput featuresIn(featuresPath);
+    TString featuresString;
     while (featuresIn.ReadLine(featuresString)) {
         this->push_back(TInstance::FromFeaturesString(featuresString));
     }

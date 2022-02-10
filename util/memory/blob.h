@@ -28,8 +28,8 @@ public:
         inline TBase() noexcept = default;
         virtual ~TBase() = default;
 
-        virtual void Ref() noexcept = 0; 
-        virtual void UnRef() noexcept = 0; 
+        virtual void Ref() noexcept = 0;
+        virtual void UnRef() noexcept = 0;
     };
 
 private:
@@ -38,7 +38,7 @@ private:
         size_t Length;
         TBase* Base;
 
-        inline TStorage(const void* data, size_t length, TBase* base) noexcept 
+        inline TStorage(const void* data, size_t length, TBase* base) noexcept
             : Data(data)
             , Length(length)
             , Base(base)
@@ -47,7 +47,7 @@ private:
 
         inline ~TStorage() = default;
 
-        inline void Swap(TStorage& r) noexcept { 
+        inline void Swap(TStorage& r) noexcept {
             DoSwap(Data, r.Data);
             DoSwap(Length, r.Length);
             DoSwap(Base, r.Base);
@@ -68,7 +68,7 @@ public:
     {
     }
 
-    inline TBlob(const TBlob& r) noexcept 
+    inline TBlob(const TBlob& r) noexcept
         : S_(r.S_)
     {
         Ref();
@@ -80,34 +80,34 @@ public:
         this->Swap(r);
     }
 
-    inline TBlob(const void* data, size_t length, TBase* base) noexcept 
+    inline TBlob(const void* data, size_t length, TBase* base) noexcept
         : S_(data, length, base)
     {
         Ref();
     }
 
-    inline ~TBlob() { 
+    inline ~TBlob() {
         UnRef();
     }
 
-    inline TBlob& operator=(const TBlob& r) noexcept { 
+    inline TBlob& operator=(const TBlob& r) noexcept {
         TBlob(r).Swap(*this);
 
         return *this;
     }
 
     /// Swaps content of two data arrays.
-    inline void Swap(TBlob& r) noexcept { 
+    inline void Swap(TBlob& r) noexcept {
         S_.Swap(r.S_);
     }
 
     /// Returns a const reference to the data array.
-    inline const void* Data() const noexcept { 
+    inline const void* Data() const noexcept {
         return S_.Data;
     }
 
     /// Returns the size of the data array in bytes.
-    inline size_t Length() const noexcept { 
+    inline size_t Length() const noexcept {
         return S_.Length;
     }
 
@@ -122,17 +122,17 @@ public:
     }
 
     /// Checks if the object has a data array.
-    inline bool IsNull() const noexcept { 
+    inline bool IsNull() const noexcept {
         return !Data();
     }
 
     /// Returns a const pointer of char type to the data array.
-    inline const char* AsCharPtr() const noexcept { 
+    inline const char* AsCharPtr() const noexcept {
         return (const char*)Data();
     }
 
     /// Returns a const pointer of unsigned char type to the data array.
-    inline const unsigned char* AsUnsignedCharPtr() const noexcept { 
+    inline const unsigned char* AsUnsignedCharPtr() const noexcept {
         return (const unsigned char*)Data();
     }
 
@@ -141,7 +141,7 @@ public:
     }
 
     /// Drops the data array.
-    inline void Drop() noexcept { 
+    inline void Drop() noexcept {
         TBlob().Swap(*this);
     }
 
@@ -163,21 +163,21 @@ public:
     }
 
     /// Returns the size of the data array in bytes.
-    inline size_t Size() const noexcept { 
+    inline size_t Size() const noexcept {
         return Length();
     }
 
     /// Standard iterator.
-    inline const_iterator Begin() const noexcept { 
+    inline const_iterator Begin() const noexcept {
         return AsUnsignedCharPtr();
     }
 
     /// Standard iterator.
-    inline const_iterator End() const noexcept { 
+    inline const_iterator End() const noexcept {
         return Begin() + Size();
     }
 
-    inline value_type operator[](size_t n) const noexcept { 
+    inline value_type operator[](size_t n) const noexcept {
         return *(Begin() + n);
     }
 
@@ -263,10 +263,10 @@ public:
     static TBlob FromMemoryMap(const TMemoryMap& map, ui64 offset, size_t length);
 
     /// Creates a blob with a single-threaded (non atomic) refcounter. Dynamically allocates memory and copies data from the file on the path using pread().
-    static TBlob FromFileContentSingleThreaded(const TString& path); 
+    static TBlob FromFileContentSingleThreaded(const TString& path);
 
     /// Creates a blob with a multi-threaded (atomic) refcounter. Dynamically allocates memory and copies data from the file on the path using pread().
-    static TBlob FromFileContent(const TString& path); 
+    static TBlob FromFileContent(const TString& path);
 
     /// Creates a blob with a single-threaded (non atomic) refcounter. Dynamically allocates memory and copies data from the file using pread().
     static TBlob FromFileContentSingleThreaded(const TFile& file);
@@ -295,25 +295,25 @@ public:
     static TBlob FromBuffer(TBuffer& in);
 
     /// Creates a blob from TString with a single-threaded (non atomic) refcounter.
-    static TBlob FromStringSingleThreaded(const TString& s); 
+    static TBlob FromStringSingleThreaded(const TString& s);
 
     /// Creates a blob from TString with a single-threaded (non atomic) refcounter. Doesn't copy its content.
     static TBlob FromStringSingleThreaded(TString&& s);
 
     /// Creates a blob from TString with a multi-threaded (atomic) refcounter.
-    static TBlob FromString(const TString& s); 
+    static TBlob FromString(const TString& s);
 
     /// Creates a blob from TString with a multi-threaded (atomic) refcounter. Doesn't copy its content.
     static TBlob FromString(TString&& s);
 
 private:
-    inline void Ref() noexcept { 
+    inline void Ref() noexcept {
         if (S_.Base) {
             S_.Base->Ref();
         }
     }
 
-    inline void UnRef() noexcept { 
+    inline void UnRef() noexcept {
         if (S_.Base) {
             S_.Base->UnRef();
         }

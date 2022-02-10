@@ -4,7 +4,7 @@
 
 #include <util/folder/path.h>
 #include <util/generic/singleton.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
 #include <util/string/printf.h>
@@ -66,7 +66,7 @@ public:
 
 namespace NLoggingImpl {
 
-    TString GetLocalTimeSSimple(); 
+    TString GetLocalTimeSSimple();
 
     // Returns correct log type to use
     TString PrepareToOpenLog(TString logType, int logLevel, bool rotation, bool startAsDaemon);

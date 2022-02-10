@@ -44,7 +44,7 @@ namespace NKikimr {
             return Data.GetSize();
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{id# " << LogoBlobId.ToString() << "}";
             return str.Str();
@@ -103,7 +103,7 @@ namespace NKikimr {
             , SlotIsUsed(slotIsUsed)
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{WId# " << WriteId << " HugeBlob# " << HugeBlob.ToString()
                 << " Lsn# " << RecLsn << " Used# " << SlotIsUsed << "}";
@@ -127,7 +127,7 @@ namespace NKikimr {
             , Signature(signature)
         {}
 
-        TString ToString() const { 
+        TString ToString() const {
             TStringStream str;
             str << "{" << Signature.ToString()
                 << " DelLsn# " << DeletionLsn << " Slots# "

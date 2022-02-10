@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
         TSyncNeighbors n("Prefix", TActorId(), self, info->PickTopology());
         ui64 i = 123456u;
         for (auto &x: n) {
-            x.Get().PeerSyncState.SchTime = TInstant::MicroSeconds(++i); 
+            x.Get().PeerSyncState.SchTime = TInstant::MicroSeconds(++i);
         }
 
         // old serialize/parse
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
             n2.OldParse(output.Str());
             i = 123456u;
             for (const auto &x: n2) {
-                UNIT_ASSERT_VALUES_EQUAL(x.Get().PeerSyncState.SchTime, TInstant::MicroSeconds(++i)); 
+                UNIT_ASSERT_VALUES_EQUAL(x.Get().PeerSyncState.SchTime, TInstant::MicroSeconds(++i));
             }
         }
 
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
             n3.Parse(output.Str());
             i = 123456u;
             for (const auto &x: n3) {
-                UNIT_ASSERT_VALUES_EQUAL(x.Get().PeerSyncState.SchTime, TInstant::MicroSeconds(++i)); 
+                UNIT_ASSERT_VALUES_EQUAL(x.Get().PeerSyncState.SchTime, TInstant::MicroSeconds(++i));
             }
         }
     }

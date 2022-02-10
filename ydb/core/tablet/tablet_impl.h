@@ -85,7 +85,7 @@ struct TEvTabletBase {
         const NKikimrProto::EReplyStatus Status;
         const TLogoBlobID Latest;
         const ui32 BlockedGeneration;
-        const TString Buffer; 
+        const TString Buffer;
         const TString ErrorReason;
 
         TEvFindLatestLogEntryResult(NKikimrProto::EReplyStatus status, const TString &reason = TString())
@@ -96,7 +96,7 @@ struct TEvTabletBase {
             Y_VERIFY_DEBUG(status != NKikimrProto::OK);
         }
 
-        TEvFindLatestLogEntryResult(const TLogoBlobID &latest, ui32 blockedGeneration, const TString &buffer) 
+        TEvFindLatestLogEntryResult(const TLogoBlobID &latest, ui32 blockedGeneration, const TString &buffer)
             : Status(NKikimrProto::OK)
             , Latest(latest)
             , BlockedGeneration(blockedGeneration)

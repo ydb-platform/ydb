@@ -20,7 +20,7 @@
 //
 // FarmHash, by Geoff Pike
 
-#include <util/system/compiler.h> 
+#include <util/system/compiler.h>
 #include "farmhash.h"
 // FARMHASH ASSUMPTIONS: Modify as needed, or use -DFARMHASH_ASSUME_SSE42 etc.
 // Note that if you use -DFARMHASH_ASSUME_SSE42 you likely need -msse42
@@ -1602,8 +1602,8 @@ STATIC_INLINE uint32_t Hash32Len5to12(const char *s, size_t len) {
   return fmix(Mur(c, Mur(b, Mur(a, d))));
 }
 
-Y_PRAGMA_DIAGNOSTIC_PUSH 
-Y_PRAGMA_NO_WSHADOW 
+Y_PRAGMA_DIAGNOSTIC_PUSH
+Y_PRAGMA_NO_WSHADOW
 uint32_t Hash32(const char *s, size_t len) {
   if (len <= 24) {
     return len <= 12 ?
@@ -1672,7 +1672,7 @@ uint32_t Hash32(const char *s, size_t len) {
   h = Rotate(h, 17) * c1;
   return h;
 }
-Y_PRAGMA_DIAGNOSTIC_POP 
+Y_PRAGMA_DIAGNOSTIC_POP
 
 uint32_t Hash32WithSeed(const char *s, size_t len, uint32_t seed) {
   if (len <= 24) {

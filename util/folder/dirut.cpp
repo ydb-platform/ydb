@@ -11,12 +11,12 @@
 #include <util/system/maxlen.h>
 #include <util/system/yassert.h>
 
-void SlashFolderLocal(TString& folder) { 
+void SlashFolderLocal(TString& folder) {
     if (!folder)
         return;
 #ifdef _win32_
     size_t pos;
-    while ((pos = folder.find('/')) != TString::npos) 
+    while ((pos = folder.find('/')) != TString::npos)
         folder.replace(pos, 1, LOCSLASH_S);
 #endif
     if (folder[folder.size() - 1] != LOCSLASH_C)
@@ -25,11 +25,11 @@ void SlashFolderLocal(TString& folder) {
 
 #ifndef _win32_
 
-bool correctpath(TString& folder) { 
+bool correctpath(TString& folder) {
     return resolvepath(folder, "/");
 }
 
-bool resolvepath(TString& folder, const TString& home) { 
+bool resolvepath(TString& folder, const TString& home) {
     Y_ASSERT(home && home.at(0) == '/');
     if (!folder) {
         return false;
@@ -348,7 +348,7 @@ int resolvepath(char* apath, const char* rpath, const char* cpath) {
     return correctpath(apath, tpath);
 }
 
-bool correctpath(TString& filename) { 
+bool correctpath(TString& filename) {
     char* ptr = (char*)alloca(filename.size() + 2);
     if (correctpath(ptr, filename.data())) {
         filename = ptr;
@@ -357,7 +357,7 @@ bool correctpath(TString& filename) {
     return false;
 }
 
-bool resolvepath(TString& folder, const TString& home) { 
+bool resolvepath(TString& folder, const TString& home) {
     char* ptr = (char*)alloca(folder.size() + 3 + home.size());
     if (resolvepath(ptr, folder.data(), home.data())) {
         folder = ptr;
@@ -376,7 +376,7 @@ const char* GetDirectorySeparatorS() {
     return LOCSLASH_S;
 }
 
-void RemoveDirWithContents(TString dirName) { 
+void RemoveDirWithContents(TString dirName) {
     SlashFolderLocal(dirName);
 
     TDirIterator dir(dirName, TDirIterator::TOptions(FTS_NOSTAT));
@@ -402,7 +402,7 @@ int mkpath(char* path, int mode) {
 // Implementation of realpath in FreeBSD (version 9.0 and less) and GetFullPathName in Windows
 // did not require last component of the file name to exist (other implementations will fail
 // if it does not). Use RealLocation if that behaviour is required.
-TString RealPath(const TString& path) { 
+TString RealPath(const TString& path) {
     TTempBuf result;
     Y_ASSERT(result.Size() > MAX_PATH); //TMP_BUF_LEN > MAX_PATH
 #ifdef _win_
@@ -414,10 +414,10 @@ TString RealPath(const TString& path) {
     return result.Data();
 }
 
-TString RealLocation(const TString& path) { 
+TString RealLocation(const TString& path) {
     if (NFs::Exists(path))
         return RealPath(path);
-    TString dirpath = GetDirName(path); 
+    TString dirpath = GetDirName(path);
     if (NFs::Exists(dirpath))
         return RealPath(dirpath) + GetDirectorySeparatorS() + GetFileNameComponent(path.data());
     ythrow TFileError() << "RealLocation failed \"" << path << "\"";
@@ -426,7 +426,7 @@ TString RealLocation(const TString& path) {
 int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix) {
     int ret;
 
-    TString sysTmp; 
+    TString sysTmp;
 
 #ifdef _win32_
     if (!prefix || *prefix == '/') {
@@ -449,12 +449,12 @@ int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix) {
     return 0;
 }
 
-bool IsDir(const TString& path) { 
+bool IsDir(const TString& path) {
     return TFileStat(path).IsDir();
 }
 
-TString GetHomeDir() { 
-    TString s(getenv("HOME")); 
+TString GetHomeDir() {
+    TString s(getenv("HOME"));
     if (!s) {
 #ifndef _win32_
         passwd* pw = nullptr;
@@ -505,14 +505,14 @@ const char* GetFileNameComponent(const char* f) {
     return f;
 }
 
-TString GetSystemTempDir() { 
+TString GetSystemTempDir() {
 #ifdef _win_
     char buffer[1024];
     DWORD size = GetTempPath(1024, buffer);
     if (!size) {
         ythrow TSystemError() << "failed to get system temporary directory";
     }
-    return TString(buffer, size); 
+    return TString(buffer, size);
 #else
     const char* var = "TMPDIR";
     const char* def = "/tmp";
@@ -522,11 +522,11 @@ TString GetSystemTempDir() {
 #endif
 }
 
-TString ResolveDir(const char* path) { 
+TString ResolveDir(const char* path) {
     return ResolvePath(path, true);
 }
 
-bool SafeResolveDir(const char* path, TString& result) { 
+bool SafeResolveDir(const char* path, TString& result) {
     try {
         result = ResolvePath(path, true);
         return true;
@@ -535,7 +535,7 @@ bool SafeResolveDir(const char* path, TString& result) {
     }
 }
 
-TString GetDirName(const TString& path) { 
+TString GetDirName(const TString& path) {
     return TFsPath(path).Dirname();
 }
 
@@ -548,7 +548,7 @@ char* realpath(const char* pathname, char resolved_path[MAXPATHLEN]) {
 
 #endif
 
-TString GetBaseName(const TString& path) { 
+TString GetBaseName(const TString& path) {
     return TFsPath(path).Basename();
 }
 
@@ -612,8 +612,8 @@ TString ResolvePath(const char* path, bool isDir) {
     return ResolvePath(path, nullptr, isDir);
 }
 
-TString StripFileComponent(const TString& fileName) { 
-    TString dir = IsDir(fileName) ? fileName : GetDirName(fileName); 
+TString StripFileComponent(const TString& fileName) {
+    TString dir = IsDir(fileName) ? fileName : GetDirName(fileName);
     if (!dir.empty() && dir.back() != GetDirectorySeparator()) {
         dir.append(GetDirectorySeparator());
     }

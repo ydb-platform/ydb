@@ -40,7 +40,7 @@ struct TDynamicConfig : public TThrRefBase {
                                info.GetResolveHost(),
                                (ui16)info.GetPort(),
                                TNodeLocation(info.GetLocation()),
-                               TInstant::MicroSeconds(info.GetExpire())) 
+                               TInstant::MicroSeconds(info.GetExpire()))
         {
         }
 
@@ -58,7 +58,7 @@ struct TDynamicConfig : public TThrRefBase {
         TInstant Expire;
     };
 
-    THashMap<ui32, TDynamicNodeInfo> DynamicNodes; 
+    THashMap<ui32, TDynamicNodeInfo> DynamicNodes;
     THashMap<ui32, TDynamicNodeInfo> ExpiredNodes;
     TEpochInfo Epoch;
 };

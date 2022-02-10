@@ -36,7 +36,7 @@ namespace NKikimr {
                 return TChunkSerNum(Value + shift);
             }
 
-            TString ToString() const { 
+            TString ToString() const {
                 return Sprintf("%" PRIu64, Value);
             }
 

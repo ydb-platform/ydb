@@ -30,7 +30,7 @@ namespace NKikimr {
             for (ui32 mask = 1; mask < (1 << totalParts); ++mask) {
                 std::array<TRope, MaxTotalPartCount> partsData;
                 ui32 numParts = 0;
-                NMatrix::TVectorType parts(0, totalParts); 
+                NMatrix::TVectorType parts(0, totalParts);
                 for (ui8 i = 0; i < totalParts; ++i) {
                     if (mask >> i & 1) {
                         partsData[numParts++] = TRope(TString(data[i], partSize));
@@ -56,9 +56,9 @@ namespace NKikimr {
 
         Y_UNIT_TEST(CreateIterate) {
             ui8 partId = 2;
-            TString data("abcdefgh"); 
+            TString data("abcdefgh");
             TRope buf = TDiskBlob::Create(16, partId, 3, TRope(data), Arena);
-            NMatrix::TVectorType localParts(0, 3); 
+            NMatrix::TVectorType localParts(0, 3);
             localParts.Set(partId - 1);
             TDiskBlob blob(&buf, localParts, GType, TLogoBlobID(0, 0, 0, 0, data.size(), 0));
             for (TDiskBlob::TPartIterator it = blob.begin(), e = blob.end(); it != e; ++it) {
@@ -68,29 +68,29 @@ namespace NKikimr {
         }
 
         Y_UNIT_TEST(Merge) {
-            TString data("abcdefgh"); 
+            TString data("abcdefgh");
 
             // blob1
             ui8 partId1 = 1;
             TRope buf1 = TDiskBlob::Create(16, partId1, 8, TRope(data), Arena);
-            NMatrix::TVectorType localParts1(0, 3); 
+            NMatrix::TVectorType localParts1(0, 3);
             localParts1.Set(partId1 - 1);
             TDiskBlob blob1(&buf1, localParts1, GType, TLogoBlobID(0, 0, 0, 0, data.size(), 0));
 
             // blob2
             ui8 partId2 = 3;
             TRope buf2 = TDiskBlob::Create(16, partId2, 8, TRope(data), Arena);
-            NMatrix::TVectorType localParts2(0, 3); 
+            NMatrix::TVectorType localParts2(0, 3);
             localParts2.Set(partId2 - 1);
             TDiskBlob blob2(&buf2, localParts2, GType, TLogoBlobID(0, 0, 0, 0, data.size(), 0));
 
             // merge vars
             TDiskBlobMerger merger;
-            TVector<ui8> ppp; 
-            TVector<ui8> resPpp; 
+            TVector<ui8> ppp;
+            TVector<ui8> resPpp;
             resPpp.push_back(1);
             resPpp.push_back(3);
-            NMatrix::TVectorType resParts(0, 3); 
+            NMatrix::TVectorType resParts(0, 3);
             resParts.Set(partId1 - 1);
             resParts.Set(partId2 - 1);
 
@@ -141,7 +141,7 @@ namespace NKikimr {
                         continue;
                     }
 
-                    NMatrix::TVectorType partsToStore(0, numParts); 
+                    NMatrix::TVectorType partsToStore(0, numParts);
                     for (ui8 i = 0; i < numParts; ++i) {
                         if (mask2 >> i & 1) {
                             partsToStore.Set(i);
@@ -152,7 +152,7 @@ namespace NKikimr {
                     m.SetFilterMask(partsToStore);
                     for (ui8 i = 0; i < numParts; ++i) {
                         if (mask1 >> i & 1) {
-                            NMatrix::TVectorType v(0, numParts); 
+                            NMatrix::TVectorType v(0, numParts);
                             v.Set(i);
                             TRope buffer = TDiskBlob::Create(100, i + 1, numParts, TRope(Sprintf("%08x", i)), Arena);
                             m.Add(TDiskBlob(&buffer, v, GType, TLogoBlobID(0, 0, 0, 0, 8, 0)));
@@ -162,7 +162,7 @@ namespace NKikimr {
                     TDiskBlobMerger m2;
                     for (ui8 i = 0; i < numParts; ++i) {
                         if ((mask1 & mask2) >> i & 1) {
-                            NMatrix::TVectorType v(0, numParts); 
+                            NMatrix::TVectorType v(0, numParts);
                             v.Set(i);
                             TRope buffer = TDiskBlob::Create(100, i + 1, numParts, TRope(Sprintf("%08x", i)), Arena);
                             m2.Add(TDiskBlob(&buffer, v, GType, TLogoBlobID(0, 0, 0, 0, 8, 0)));

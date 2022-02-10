@@ -6,7 +6,7 @@
 namespace NYql {
 namespace NUdf {
 
-TString AbiVersionToStr(ui32 version) 
+TString AbiVersionToStr(ui32 version)
 {
     TStringBuilder sb;
     sb << (version / 10000) << '.'

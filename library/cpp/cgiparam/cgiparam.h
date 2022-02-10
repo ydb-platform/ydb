@@ -5,18 +5,18 @@
 #include <util/generic/iterator_range.h>
 #include <util/generic/map.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #include <initializer_list>
 
 struct TStringLess {
     template <class T1, class T2>
-    inline bool operator()(const T1& t1, const T2& t2) const noexcept { 
+    inline bool operator()(const T1& t1, const T2& t2) const noexcept {
         return TStringBuf(t1) < TStringBuf(t2);
     }
 };
 
-class TCgiParameters: public TMultiMap<TString, TString> { 
+class TCgiParameters: public TMultiMap<TString, TString> {
 public:
     TCgiParameters() = default;
 
@@ -24,7 +24,7 @@ public:
         Scan(cgiParamStr);
     }
 
-    TCgiParameters(std::initializer_list<std::pair<TString, TString>> il); 
+    TCgiParameters(std::initializer_list<std::pair<TString, TString>> il);
 
     void Flush() {
         erase(begin(), end());
@@ -36,7 +36,7 @@ public:
         return count(name);
     }
 
-    TString operator()() const { 
+    TString operator()() const {
         return Print();
     }
 
@@ -51,11 +51,11 @@ public:
      * @note The returned string has format <name1>=<value1>&<name2>=<value2>&...
      * @note Names and values in the returned string are CGI-escaped.
      */
-    TString Print() const; 
+    TString Print() const;
     char* Print(char* res) const;
 
     Y_PURE_FUNCTION
-    size_t PrintSize() const noexcept; 
+    size_t PrintSize() const noexcept;
 
     /** The same as Print* except that RFC-3986 reserved characters are escaped.
      * @param safe - set of characters to be skipped in escaping

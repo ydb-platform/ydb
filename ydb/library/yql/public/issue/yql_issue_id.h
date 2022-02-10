@@ -40,8 +40,8 @@ inline TString IssueCodeToString(TIssueCode id) {
 template<typename TProto, const char* ResourceName>
 class TIssueId {
     TProto ProtoIssues_;
-    THashMap<TIssueCode, NYql::TSeverityIds::ESeverityId> IssuesMap_; 
-    THashMap<TIssueCode, TString> IssuesFormatMap_; 
+    THashMap<TIssueCode, NYql::TSeverityIds::ESeverityId> IssuesMap_;
+    THashMap<TIssueCode, TString> IssuesFormatMap_;
 
     const google::protobuf::Descriptor* GetProtoDescriptor() const {
         auto ret = ProtoIssues_.GetDescriptor();

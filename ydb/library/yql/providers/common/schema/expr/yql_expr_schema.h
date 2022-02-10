@@ -37,7 +37,7 @@ const TTypeAnnotationNode* ParseTypeFromYson(const NYT::TNode& node, TExprContex
 const TTypeAnnotationNode* ParseOrderAwareTypeFromYson(const NYT::TNode& node, TVector<TString>& topLevelColumns, TExprContext& ctx, const TPosition& pos = TPosition());
 
 void WriteResOrPullType(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type,
-    const TVector<TString>& columns); 
+    const TVector<TString>& columns);
 
 } // namespace NCommon
 } // namespace NYql

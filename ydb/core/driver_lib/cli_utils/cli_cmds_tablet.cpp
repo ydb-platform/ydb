@@ -10,10 +10,10 @@ public:
         : TClientCommandConfig("request", { "req" }, "Request to KV tablet")
     {}
 
-    TString ProtoBuf; 
+    TString ProtoBuf;
     TAutoPtr<NKikimrClient::TKeyValueRequest> Request;
-    TString OutputFile; 
-    TString InputFile; 
+    TString OutputFile;
+    TString InputFile;
 
     int OnResponse(const NKikimrClient::TResponse& response) {
         if (!OutputFile.empty()) {
@@ -22,7 +22,7 @@ public:
             Y_VERIFY(response.GetReadResult(0).GetStatus() == NKikimrProto::OK);
             Y_VERIFY(response.GetReadResult(0).HasValue());
             TFile file(OutputFile, CreateNew | WrOnly);
-            TString data = response.GetReadResult(0).GetValue(); 
+            TString data = response.GetReadResult(0).GetValue();
             file.Write(data.data(), data.size());
             file.Close();
         } else if (!InputFile.empty()) {
@@ -66,7 +66,7 @@ public:
             Y_VERIFY(Request->CmdWriteSize() == 1);
             Y_VERIFY(Request->GetCmdWrite(0).HasKey());
             Y_VERIFY(!Request->GetCmdWrite(0).HasValue());
-            TString data = TUnbufferedFileInput(InputFile).ReadAll(); 
+            TString data = TUnbufferedFileInput(InputFile).ReadAll();
             Request->MutableCmdWrite(0)->SetValue(data);
         }
     }
@@ -89,8 +89,8 @@ public:
     }
 
     TAutoPtr<NMsgBusProxy::TBusTabletLocalMKQL> Request;
-    TString Program; 
-    TString Params; 
+    TString Program;
+    TString Params;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
@@ -169,7 +169,7 @@ public:
     }
 
     TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx> Request;
-    TString SchemeChanges; 
+    TString SchemeChanges;
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);

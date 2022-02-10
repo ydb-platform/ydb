@@ -18,14 +18,14 @@ namespace NYql {
             YQL_OPERATION_PROGRESS_STATE_MAP(ENUM_VALUE_GEN)
         };
 
-        TString Category; 
+        TString Category;
         ui32 Id;
         EState State;
 
         using TStage = std::pair<TString, TInstant>;
         TStage Stage;
 
-        TString RemoteId; 
+        TString RemoteId;
 
         struct TCounters {
             ui64 Completed = 0ULL;

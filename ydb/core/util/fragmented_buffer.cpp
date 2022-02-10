@@ -106,7 +106,7 @@ void TFragmentedBuffer::Read(i32 begin, char* buffer, i32 size) const {
     }
 }
 
-TString TFragmentedBuffer::Print() const { 
+TString TFragmentedBuffer::Print() const {
     TStringStream str;
     str << "{";
     for (auto it = BufferForOffset.begin(); it != BufferForOffset.end(); it++) {

@@ -10,7 +10,7 @@ using namespace NKikimr;
 
 Y_UNIT_TEST_SUITE(ReadBatcher) {
     Y_UNIT_TEST(Range) {
-        TVector<std::pair<ui32, ui32>> ranges; 
+        TVector<std::pair<ui32, ui32>> ranges;
         const ui32 len = 8;
         for (ui32 start = 0; start <= len; ++start) {
             for (ui32 end = start; end <= len; ++end) {
@@ -45,9 +45,9 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
         };
 
         const ui32 chunkSize = 16 << 20;
-        TMap<TChunkIdx, TString> chunks; 
+        TMap<TChunkIdx, TString> chunks;
         for (TChunkIdx chunkIdx = 1; chunkIdx <= 10; ++chunkIdx) {
-            TString data(chunkSize, ' '); 
+            TString data(chunkSize, ' ');
             ui64 pattern = RandomNumber<ui64>();
             for (ui32 pos = 0; pos + sizeof(ui64) <= chunkSize; pos += sizeof(ui64)) {
                 *reinterpret_cast<ui64 *>(const_cast<char *>(data.data()) + pos) = pattern;
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(ReadBatcher) {
             ui64 serial;
             TPayload payload;
             NKikimrProto::EReplyStatus status;
-            TString data; 
+            TString data;
             while (batcher.GetResultItem(&serial, &payload, &status, &data)) {
                 STR << serial << Endl;
                 UNIT_ASSERT_VALUES_EQUAL(serial, expectedSerial);

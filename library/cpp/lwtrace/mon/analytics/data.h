@@ -1,8 +1,8 @@
 #pragma once
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/hash.h>
-#include <util/generic/vector.h> 
+#include <util/generic/vector.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -21,7 +21,7 @@ TString ToString(const TRowValue& val) {
 }
 
 struct TRow : public THashMap<TString, TRowValue> {
-    TString Name; 
+    TString Name;
 
     template<typename T>
     bool Get(const TString& name, T& value) const {
@@ -57,18 +57,18 @@ struct TRow : public THashMap<TString, TRowValue> {
     }
 };
 
-using TAttributes = THashMap<TString, TString>; 
+using TAttributes = THashMap<TString, TString>;
 
-struct TTable : public TVector<TRow> { 
+struct TTable : public TVector<TRow> {
     TAttributes Attributes;
 };
 
-struct TMatrix : public TVector<double> { 
+struct TMatrix : public TVector<double> {
     size_t Rows;
     size_t Cols;
 
     explicit TMatrix(size_t rows = 0, size_t cols = 0)
-        : TVector<double>(rows * cols) 
+        : TVector<double>(rows * cols)
         , Rows(rows)
         , Cols(cols)
     {}

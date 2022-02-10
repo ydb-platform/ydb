@@ -3,7 +3,7 @@
 #include <util/generic/yexception.h>
 
 namespace NLoggingImpl {
-    TString GetLocalTimeSSimple() { 
+    TString GetLocalTimeSSimple() {
         struct tm tm;
         return Strftime("%b%d_%H%M%S", Now().LocalTime(&tm));
     }

@@ -38,12 +38,12 @@ public:
         YQL_LOG(INFO) << "this message will be missed";
     }
 
-    const TString& GetLogs() const { 
+    const TString& GetLogs() const {
         return Logs_.Str();
     }
 
 private:
-    TString Name_; 
+    TString Name_;
     int Count_;
     TStringStream Logs_;
 };
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TTlsLogBackendTest)
 //        Cout << "--[t2 logs]-----------------\n" << r2.GetLogs() << Endl;
 
         { // t1
-            TString row1Str, row2Str, row3Str, _; 
+            TString row1Str, row2Str, row3Str, _;
             Split(r1.GetLogs(), '\n', row1Str, row2Str, row3Str, _);
 
             ui64 threadId = 0;
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TTlsLogBackendTest)
         }
 
         { // t2
-            TString row1Str, row2Str, _; 
+            TString row1Str, row2Str, _;
             Split(r2.GetLogs(), '\n', row1Str, row2Str, _);
 
             ui64 threadId = 0;

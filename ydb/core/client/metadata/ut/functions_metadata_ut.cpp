@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TFunctionsMetadataTest)
         const auto functionRegistry = CreateBuiltinRegistry();
         functionRegistry->Register("MyAdd", TFunctionDescriptor(AddUi32Metadata, nullptr));
 
-        TString metadata; 
+        TString metadata;
         SerializeMetadata(*functionRegistry, &metadata);
         DeserializeMetadata(metadata, *functionRegistry);
 

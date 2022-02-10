@@ -106,7 +106,7 @@ private:
     ui64 LastTxId;
     ui64 LastStep;
     TMockDbSchemeResolver DbSchemeResolver;
-    TString DispatchName = "NONE"; 
+    TString DispatchName = "NONE";
     bool AllowIncompleteResult = false;
     bool* ActiveZone = nullptr;
     TDuration Timeout = TDuration::Minutes(10);
@@ -169,8 +169,8 @@ public:
     using IEngineFlat = NMiniKQL::IEngineFlat;
     using TPtr = std::shared_ptr<TFakeProxyTx>;
 
-    TVector<ui64> Shards; 
-    TMap<ui64, TVector<NKikimrTxDataShard::TError>> Errors; 
+    TVector<ui64> Shards;
+    TMap<ui64, TVector<NKikimrTxDataShard::TError>> Errors;
     ui64 MinStep = 0;
     ui64 MaxStep = Max<ui64>();
 
@@ -224,7 +224,7 @@ protected:
     TString TxBody_;
     ui32 TxFlags_;
     ui32 ShardsCount_;
-    THashMap<ui64, std::shared_ptr<TBalanceCoverageBuilder>> CoverageBuilders; // key - shard 
+    THashMap<ui64, std::shared_ptr<TBalanceCoverageBuilder>> CoverageBuilders; // key - shard
     std::function<bool(TFakeProxyTx&)> Check;
 };
 
@@ -306,11 +306,11 @@ private:
     TTester& Tester;
     ui64& LastTxId_;
     ui64& LastStep_;
-    TVector<TFakeProxyTx::TPtr> TxQueue; 
+    TVector<TFakeProxyTx::TPtr> TxQueue;
     TMap<ui64, TActorId> ShardActors;
     //
-    TVector<TExpectedReadSet> DelayedReadSets; 
-    TVector<TExpectedReadSet::TWaitFor> DelayedData; 
+    TVector<TExpectedReadSet> DelayedReadSets;
+    TVector<TExpectedReadSet::TWaitFor> DelayedData;
     bool RebootOnDelay;
 
     void Propose(TFakeProxyTx& tx, bool holdImmediate = false);
@@ -318,13 +318,13 @@ private:
     void ProposeScheme(TFakeProxyTx& tx, const TVector<ui64>& shards,
         const std::function<NKikimrTxDataShard::TFlatSchemeTransaction(ui64)>& txBodyForShard);
     ui64 Plan(ui64 stepId, const TMap<ui64, TFakeProxyTx::TPtr>& txs, bool waitForResult = true);
-    void ResolveShards(const TSet<ui64>& shards); 
+    void ResolveShards(const TSet<ui64>& shards);
 };
 
 ///
 class TDatashardInitialEventsFilter {
 public:
-    TDatashardInitialEventsFilter(const TVector<ui64>& tabletIds); 
+    TDatashardInitialEventsFilter(const TVector<ui64>& tabletIds);
     TTestActorRuntime::TEventFilter Prepare();
     bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event);
 
@@ -332,18 +332,18 @@ public:
     TDatashardInitialEventsFilter(TDatashardInitialEventsFilter&&) = default;
 
     static TDatashardInitialEventsFilter CreateDefault() {
-        TVector<ui64> tabletIds; 
+        TVector<ui64> tabletIds;
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
         tabletIds.push_back((ui64)TTestTxConfig::TxTablet2);
         return TDatashardInitialEventsFilter(tabletIds);
     }
 
-    const TVector<ui64> Tablets() const { return TabletIds; } 
+    const TVector<ui64> Tablets() const { return TabletIds; }
 
 private:
-    const TVector<ui64> TabletIds; 
-    TVector<ui64> RemainTablets; 
+    const TVector<ui64> TabletIds;
+    TVector<ui64> RemainTablets;
 };
 
 ///
@@ -353,7 +353,7 @@ public:
 
     TKeyExtractor(TTester& tester, TString programText);
 
-    const TVector<TPKey>& GetKeys() const { return Engine->GetDbKeys(); } 
+    const TVector<TPKey>& GetKeys() const { return Engine->GetDbKeys(); }
 };
 
 THolder<NKqp::TEvKqp::TEvQueryRequest> MakeSQLRequest(const TString &sql,

@@ -190,7 +190,7 @@ namespace NKikimr {
         }
     }
 
-    TString TReadBatcher::DiskDataItemsToString() const { 
+    TString TReadBatcher::DiskDataItemsToString() const {
         TStringStream str;
         for (const auto &i : Result->DiskDataItemPtrs) {
             str << i->ActualRead.ToString() << " ";

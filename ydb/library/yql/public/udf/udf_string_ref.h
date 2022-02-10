@@ -5,7 +5,7 @@
 #include <util/generic/strbuf.h>
 
 #include <algorithm>
-#include <string_view> 
+#include <string_view>
 #include <type_traits>
 
 namespace NYql {
@@ -79,7 +79,7 @@ public:
         : TBase(buf.Data(), buf.Size())
     {}
 
-    template <typename TStringType> 
+    template <typename TStringType>
     inline constexpr TStringRef(const TStringType& buf) noexcept
         : TBase(TGetData<TStringType>::Get(buf), TGetSize<TStringType>::Get(buf))
     {}

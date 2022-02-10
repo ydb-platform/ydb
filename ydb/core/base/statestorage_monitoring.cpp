@@ -24,7 +24,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
 
         TReplicaInfo(const TActorId &x)
             : ActorID(x)
-            , ReplyTime(TInstant::MicroSeconds(Max<ui64>())) 
+            , ReplyTime(TInstant::MicroSeconds(Max<ui64>()))
             , CurrentLeader()
             , CurrentLeaderTablet()
             , CurrentGeneration(Max<ui32>())
@@ -36,17 +36,17 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
 
     const ui64 TabletID;
     const TActorId Sender;
-    const TString Query; 
+    const TString Query;
 
     TInstant BeginMoment;
     TInstant ReplicasRequestMoment;
 
     TDuration ProxyReplyTime;
-    TVector<TReplicaInfo> ReplicasInfo; 
+    TVector<TReplicaInfo> ReplicasInfo;
     ui64 WaitingForReplicas;
     ui64 SelfConfigContentHash;
 
-    void Reply(const TString &response, const TActorContext &ctx) { 
+    void Reply(const TString &response, const TActorContext &ctx) {
         TStringStream str;
 
         HTML(str) {
@@ -206,7 +206,7 @@ public:
         : TabletID(tabletId)
         , Sender(sender)
         , Query(query)
-        , ProxyReplyTime(TDuration::MicroSeconds(Max<ui64>())) 
+        , ProxyReplyTime(TDuration::MicroSeconds(Max<ui64>()))
         , WaitingForReplicas(0)
     {}
 

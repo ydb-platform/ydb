@@ -20,7 +20,7 @@ namespace NKikimr {
                 TActorId Sender;
                 ui64 Cookie;
             };
-            using TReadQueue = TQueue<TReadQueueItem>; 
+            using TReadQueue = TQueue<TReadQueueItem>;
             TReadQueue ReadQueue;
 
         public:

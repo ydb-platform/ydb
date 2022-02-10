@@ -164,7 +164,7 @@ namespace NKikimr {
             ui64 rawVal = setting.GetValue();
             ui64 randomNum = TAppData::RandomProvider->GenRand64();
             ui64 randomOffset = randomNum % rawVal;
-            TDuration timeout = setting + TDuration::MicroSeconds(randomOffset); 
+            TDuration timeout = setting + TDuration::MicroSeconds(randomOffset);
             ctx.Schedule(timeout, new TEvents::TEvWakeup());
             AnubisScheduled = true;
         }

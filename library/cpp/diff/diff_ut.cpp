@@ -6,7 +6,7 @@ using namespace NDiff;
 
 struct TDiffTester {
     TStringStream Res;
-    TVector<TChunk<char>> Chunks; 
+    TVector<TChunk<char>> Chunks;
 
     TStringBuf Special(const TStringBuf& str) const {
         return str;
@@ -24,14 +24,14 @@ struct TDiffTester {
         return TStringBuf(str.begin(), str.end());
     }
 
-    void Test(const TStringBuf& a, const TStringBuf& b, const TString& delims = " \t\n") { 
+    void Test(const TStringBuf& a, const TStringBuf& b, const TString& delims = " \t\n") {
         Chunks.clear();
         InlineDiff(Chunks, a, b, delims);
         Res.clear();
         PrintChunks(Res, *this, Chunks);
     }
 
-    const TString& Result() const { 
+    const TString& Result() const {
         return Res.Str();
     }
 };

@@ -41,7 +41,7 @@ static inline T ESLoad(IInputStream* in) {
 template <>
 inline TString ESLoad<TString>(IInputStream* in) {
     size_t len = ESLoad<ui32>(in);
-    TString ret; 
+    TString ret;
     TTempBuf tmp;
 
     while (len) {
@@ -62,7 +62,7 @@ inline TString ESLoad<TString>(IInputStream* in) {
 namespace {
     class TArchiveRecordDescriptor: public TSimpleRefCount<TArchiveRecordDescriptor> {
     public:
-        inline TArchiveRecordDescriptor(ui64 off, ui64 len, const TString& name) 
+        inline TArchiveRecordDescriptor(ui64 off, ui64 len, const TString& name)
             : Off_(off)
             , Len_(len)
             , Name_(name)
@@ -72,7 +72,7 @@ namespace {
         inline TArchiveRecordDescriptor(IInputStream* in)
             : Off_(ESLoad<ui64>(in))
             , Len_(ESLoad<ui64>(in))
-            , Name_(ESLoad<TString>(in)) 
+            , Name_(ESLoad<TString>(in))
         {
         }
 
@@ -84,29 +84,29 @@ namespace {
             ESSave(out, Name_);
         }
 
-        inline const TString& Name() const noexcept { 
+        inline const TString& Name() const noexcept {
             return Name_;
         }
 
-        inline ui64 Length() const noexcept { 
+        inline ui64 Length() const noexcept {
             return Len_;
         }
 
-        inline ui64 Offset() const noexcept { 
+        inline ui64 Offset() const noexcept {
             return Off_;
         }
 
     private:
         ui64 Off_;
         ui64 Len_;
-        TString Name_; 
+        TString Name_;
     };
 
     typedef TIntrusivePtr<TArchiveRecordDescriptor> TArchiveRecordDescriptorRef;
 }
 
 class TArchiveWriter::TImpl {
-    using TDict = THashMap<TString, TArchiveRecordDescriptorRef>; 
+    using TDict = THashMap<TString, TArchiveRecordDescriptorRef>;
 
 public:
     inline TImpl(IOutputStream& out, bool compress)
@@ -194,7 +194,7 @@ TArchiveWriter::TArchiveWriter(IOutputStream* out, bool compress)
 {
 }
 
-TArchiveWriter::~TArchiveWriter() { 
+TArchiveWriter::~TArchiveWriter() {
     try {
         Finish();
     } catch (...) {
@@ -253,7 +253,7 @@ namespace {
 }
 
 class TArchiveReader::TImpl {
-    typedef THashMap<TString, TArchiveRecordDescriptorRef> TDict; 
+    typedef THashMap<TString, TArchiveRecordDescriptorRef> TDict;
 
 public:
     inline TImpl(const TBlob& blob)
@@ -299,11 +299,11 @@ public:
         }
     }
 
-    inline size_t Count() const noexcept { 
+    inline size_t Count() const noexcept {
         return Recs_.size();
     }
 
-    inline TString KeyByIndex(size_t n) const { 
+    inline TString KeyByIndex(size_t n) const {
         if (n < Count()) {
             return Recs_[n]->Name();
         }
@@ -357,7 +357,7 @@ public:
 
 private:
     TBlob Blob_;
-    TVector<TArchiveRecordDescriptorRef> Recs_; 
+    TVector<TArchiveRecordDescriptorRef> Recs_;
     TDict Dict_;
     bool UseDecompression;
 };
@@ -369,11 +369,11 @@ TArchiveReader::TArchiveReader(const TBlob& data)
 
 TArchiveReader::~TArchiveReader() {}
 
-size_t TArchiveReader::Count() const noexcept { 
+size_t TArchiveReader::Count() const noexcept {
     return Impl_->Count();
 }
 
-TString TArchiveReader::KeyByIndex(size_t n) const { 
+TString TArchiveReader::KeyByIndex(size_t n) const {
     return Impl_->KeyByIndex(n);
 }
 

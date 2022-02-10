@@ -44,10 +44,10 @@ namespace NKikimr {
 
             ui64 FirstLsnToKeep() const;
             TString FirstLsnToKeepDecomposed() const;
-            TString ToString() const; 
-            TString Serialize() const; 
-            void ParseFromString(const TString &serialized); 
-            static bool CheckEntryPoint(const TString &serialized); 
+            TString ToString() const;
+            TString Serialize() const;
+            void ParseFromString(const TString &serialized);
+            static bool CheckEntryPoint(const TString &serialized);
         };
 
         ////////////////////////////////////////////////////////////////////////////
@@ -110,7 +110,7 @@ namespace NKikimr {
         class THeap;
 
         struct THullHugeKeeperPersState {
-            typedef THashSet<NHuge::THugeSlot> TAllocatedSlots; 
+            typedef THashSet<NHuge::THugeSlot> TAllocatedSlots;
             static const ui32 Signature;
             static const ui32 MilestoneHugeBlobInBytes;
 
@@ -138,7 +138,7 @@ namespace NKikimr {
                                      const ui32 overhead,
                                      const ui32 freeChunksReservation,
                                      const bool oldMapCompatible,
-                                     std::function<void(const TString&)> logFunc); 
+                                     std::function<void(const TString&)> logFunc);
             THullHugeKeeperPersState(TIntrusivePtr<TVDiskContext> vctx,
                                      const ui32 chunkSize,
                                      const ui32 appendBlockSize,
@@ -149,15 +149,15 @@ namespace NKikimr {
                                      const ui32 freeChunksReservation,
                                      const bool oldMapCompatible,
                                      const ui64 entryPointLsn,
-                                     const TString &entryPointData, 
-                                     std::function<void(const TString&)> logFunc); 
+                                     const TString &entryPointData,
+                                     std::function<void(const TString&)> logFunc);
             ~THullHugeKeeperPersState();
 
-            TString Serialize() const; 
-            void ParseFromString(const TString &data); 
+            TString Serialize() const;
+            void ParseFromString(const TString &data);
             static TString ExtractLogPosition(const TString &data);
-            static bool CheckEntryPoint(const TString &data); 
-            TString ToString() const; 
+            static bool CheckEntryPoint(const TString &data);
+            TString ToString() const;
             void RenderHtml(IOutputStream &str) const;
             ui32 GetMinREALHugeBlobInBytes() const;
             ui64 FirstLsnToKeep() const;
@@ -203,7 +203,7 @@ namespace NKikimr {
                         const TString &data);
             void FinishRecovery(const TActorContext &ctx);
 
-            void GetOwnedChunks(TSet<TChunkIdx>& chunks) const; 
+            void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
         };
 
     } // NHuge

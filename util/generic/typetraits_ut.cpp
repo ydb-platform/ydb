@@ -97,23 +97,23 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
     }
 
     Y_UNIT_TEST(TestRemoveConst) {
-        ASSERT_SAME_TYPE(std::remove_const_t<const int>, int); 
+        ASSERT_SAME_TYPE(std::remove_const_t<const int>, int);
     }
 
     Y_UNIT_TEST(TestRemoveVolatile) {
-        ASSERT_SAME_TYPE(std::remove_volatile_t<volatile int>, int); 
+        ASSERT_SAME_TYPE(std::remove_volatile_t<volatile int>, int);
     }
 
     Y_UNIT_TEST(TestRemoveCV) {
-        ASSERT_SAME_TYPE(std::remove_cv_t<const volatile int>, int); 
+        ASSERT_SAME_TYPE(std::remove_cv_t<const volatile int>, int);
     }
 
     Y_UNIT_TEST(TestAddCV) {
-        ASSERT_SAME_TYPE(std::add_cv_t<int>, const volatile int); 
+        ASSERT_SAME_TYPE(std::add_cv_t<int>, const volatile int);
     }
 
     Y_UNIT_TEST(TestClass) {
-        UNIT_ASSERT(std::is_class<TString>::value); 
+        UNIT_ASSERT(std::is_class<TString>::value);
         UNIT_ASSERT(!std::is_class<ETestEnum>::value);
         UNIT_ASSERT(!std::is_class<int>::value);
         UNIT_ASSERT(!std::is_class<void*>::value);
@@ -197,12 +197,12 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
     }
 
     Y_UNIT_TEST(TestAddRValueReference) {
-        ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int>, int&&); 
-        ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int const&>, int const&); 
-        ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int*>, int*&&); 
-        ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int*&>, int*&); 
-        ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int&&>, int&&); 
-        ASSERT_SAME_TYPE(std::add_rvalue_reference_t<void>, void); 
+        ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int>, int&&);
+        ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int const&>, int const&);
+        ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int*>, int*&&);
+        ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int*&>, int*&);
+        ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int&&>, int&&);
+        ASSERT_SAME_TYPE(std::add_rvalue_reference_t<void>, void);
     }
 
     Y_UNIT_TEST(TestIsEmpty) {
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
     }
 
     template <class T>
-    using TTrySum = decltype(std::declval<T>() + std::declval<T>()); 
+    using TTrySum = decltype(std::declval<T>() + std::declval<T>());
 
     Y_UNIT_TEST(TestIsTriviallyCopyable) {
         struct TPod {

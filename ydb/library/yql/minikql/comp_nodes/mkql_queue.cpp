@@ -110,7 +110,7 @@ private:
     }
 
     const TComputationNodePtrVector DependentNodes;
-    const TString Name; 
+    const TString Name;
     const TMaybe<ui64> Capacity;
     const ui64 InitSize;
 };

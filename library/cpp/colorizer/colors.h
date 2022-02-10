@@ -2,10 +2,10 @@
 
 #include "fwd.h"
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 
-#include <cstdio> 
+#include <cstdio>
 
 namespace NColorizer {
     /**
@@ -192,19 +192,19 @@ namespace NColorizer {
         TStringBuf YellowColor() const noexcept;
         TStringBuf WhiteColor() const noexcept;
 
-        inline bool IsTTY() const noexcept { 
+        inline bool IsTTY() const noexcept {
             return IsTTY_;
         }
 
-        inline void SetIsTTY(bool value) noexcept { 
+        inline void SetIsTTY(bool value) noexcept {
             IsTTY_ = value;
         }
 
-        inline void Enable() noexcept { 
+        inline void Enable() noexcept {
             SetIsTTY(true);
         }
 
-        inline void Disable() noexcept { 
+        inline void Disable() noexcept {
             SetIsTTY(false);
         }
 

@@ -19,14 +19,14 @@ struct TCandidate {
         ui32 vDiskSlotId);
 };
 
-bool GroupFromCandidates(TVector<TCandidate> &candidates, ui32 domainCount, ui32 candidatesPerDomainCount, 
-    TVector<TVector<const TCandidate*>> &outBestGroup); 
+bool GroupFromCandidates(TVector<TCandidate> &candidates, ui32 domainCount, ui32 candidatesPerDomainCount,
+    TVector<TVector<const TCandidate*>> &outBestGroup);
 
-bool VerifyGroup(const TVector<TVector<const TCandidate*>> &group, ui32 domainCount, ui32 candidatesPerDomainCount); 
+bool VerifyGroup(const TVector<TVector<const TCandidate*>> &group, ui32 domainCount, ui32 candidatesPerDomainCount);
 
-bool CreateGroupWithRings(const TVector<TCandidate>& candidates, ui32 numRings, ui32 numFailDomainsPerRing, 
+bool CreateGroupWithRings(const TVector<TCandidate>& candidates, ui32 numRings, ui32 numFailDomainsPerRing,
     ui32 numDisksPerFailDomain, ui32 firstRingDxLevel, ui32 lastRingDxLevel,
-    TVector<TVector<TVector<const TCandidate*>>>& bestGroup); 
+    TVector<TVector<TVector<const TCandidate*>>>& bestGroup);
 
 } //NBsController
 

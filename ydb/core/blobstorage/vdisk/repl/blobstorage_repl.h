@@ -11,7 +11,7 @@ namespace NKikimr {
         struct TProxyStat;
     };
 
-    using TBlobIdQueue = TQueue<TLogoBlobID>; 
+    using TBlobIdQueue = TQueue<TLogoBlobID>;
     using TBlobIdQueuePtr = std::shared_ptr<TBlobIdQueue>;
 
     ////////////////////////////////////////////////////////////////////////////
@@ -73,7 +73,7 @@ namespace NKikimr {
                 DropDonor = dropDonor;
             }
 
-            TString ToString() const; 
+            TString ToString() const;
             void OutputHtml(IOutputStream &str) const;
 
             TInfo();
@@ -110,9 +110,9 @@ namespace NKikimr {
     };
 
     struct TEvDetectedPhantomBlob : public TEventLocal<TEvDetectedPhantomBlob, TEvBlobStorage::EvDetectedPhantomBlob> {
-        TDeque<TLogoBlobID> Phantoms; 
+        TDeque<TLogoBlobID> Phantoms;
 
-        TEvDetectedPhantomBlob(TDeque<TLogoBlobID>&& phantoms) 
+        TEvDetectedPhantomBlob(TDeque<TLogoBlobID>&& phantoms)
             : Phantoms(std::move(phantoms))
         {}
 

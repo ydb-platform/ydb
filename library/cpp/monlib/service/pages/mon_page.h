@@ -3,7 +3,7 @@
 #include <library/cpp/monlib/service/service.h>
 #include <library/cpp/monlib/service/mon_service_http_request.h>
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/ptr.h>
 
 namespace NMonitoring {

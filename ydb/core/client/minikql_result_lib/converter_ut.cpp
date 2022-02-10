@@ -20,7 +20,7 @@ Y_UNIT_TEST(TTestWithSimpleProgram) {
     Tests::TClient client(settings);
     client.InitRootScheme();
 
-    const TString pgmText = R"___( 
+    const TString pgmText = R"___(
 (
 (let list (AsList (Uint32 '20) (Uint32 '10) (Uint32 '0)))
 (let opt (Just (String 'i_am_opt)))
@@ -39,8 +39,8 @@ Y_UNIT_TEST(TTestWithSimpleProgram) {
 
     TStruct s = ConvertResult(result.GetValue(), result.GetType());
     {
-        TListType l = s.GetMember<TOptional>("list").GetItem<TListType>(); 
-        TVector<ui32> v; 
+        TListType l = s.GetMember<TOptional>("list").GetItem<TListType>();
+        TVector<ui32> v;
         for (ui32 item : l.MakeIterable<ui32>()) {
             v.push_back(item);
         }

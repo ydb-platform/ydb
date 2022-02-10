@@ -102,13 +102,13 @@ protected:
     };
     struct TStep {
         TProcessedNodesSet ProcessedNodes;
-        TVector<TOptInfo> Optimizers; 
+        TVector<TOptInfo> Optimizers;
         bool Global = false;
     };
     TTypeAnnotationContext* Types;
     const NLog::EComponent LogComponent;
     TSet<TString> DisabledOpts;
-    TVector<TStep> Steps; 
+    TVector<TStep> Steps;
 };
 
 } // NYql

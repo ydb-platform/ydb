@@ -47,7 +47,7 @@ struct TCacheValue : TNonCopyable {
         return AccessCount;
     }
 
-    TString GetValue() const { 
+    TString GetValue() const {
         return Value;
     }
 
@@ -60,7 +60,7 @@ struct TCacheValue : TNonCopyable {
     }
 
 private:
-    const TString Value; 
+    const TString Value;
     const TActorId Owner;
     std::atomic<ui64> AccessTime;
     std::atomic<ui32> AccessCount;
@@ -74,15 +74,15 @@ struct TCacheBlobL2 {
 };
 
 struct TCacheL2Request {
-    TString TopicName; 
+    TString TopicName;
     ui64 Cookie;
-    TVector<TCacheBlobL2> RequestedBlobs; 
-    TVector<TCacheBlobL2> StoredBlobs; 
-    TVector<TCacheBlobL2> RemovedBlobs; 
-    TVector<TCacheBlobL2> ExpectedBlobs; 
-    TVector<TCacheBlobL2> MissedBlobs; 
+    TVector<TCacheBlobL2> RequestedBlobs;
+    TVector<TCacheBlobL2> StoredBlobs;
+    TVector<TCacheBlobL2> RemovedBlobs;
+    TVector<TCacheBlobL2> ExpectedBlobs;
+    TVector<TCacheBlobL2> MissedBlobs;
 
-    explicit TCacheL2Request(TString topicName) 
+    explicit TCacheL2Request(TString topicName)
         : TopicName(topicName)
         , Cookie(0)
     {}
@@ -90,9 +90,9 @@ struct TCacheL2Request {
 
 struct TCacheL2Response {
     ui64 Cookie = 0;
-    TString TopicName; 
+    TString TopicName;
     bool Overload = false;
-    TVector<TCacheBlobL2> Removed; 
+    TVector<TCacheBlobL2> Removed;
 };
 
 

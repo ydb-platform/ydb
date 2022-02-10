@@ -49,7 +49,7 @@ namespace NKikimr {
         TDiskPart EntryPoint;
 
         // IDs of chunks composing this SSTable (stored only when SSTable is dropped from index, otherwise empty)
-        TVector<ui32> ChunkIds; 
+        TVector<ui32> ChunkIds;
 
         // is this record removed from index?
         bool RemovedFromIndex;
@@ -99,7 +99,7 @@ namespace NKikimr {
             }
         }
 
-        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const { 
+        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (TChunkIdx chunkIdx : ChunkIds) {
                 const bool inserted = chunks.insert(chunkIdx).second;
                 Y_VERIFY(inserted);
@@ -143,7 +143,7 @@ namespace NKikimr {
         const TBulkFormedSstInfo& FindIntactBulkFormedSst(const TDiskPart& entryPoint) const;
         TBulkFormedSstInfo& FindIntactBulkFormedSst(const TDiskPart& entryPoint);
 
-        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const; 
+        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
 
     private:
         TVector<TBulkFormedSstInfo> BulkFormedSsts;

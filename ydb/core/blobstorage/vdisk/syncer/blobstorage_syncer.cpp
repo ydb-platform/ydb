@@ -66,9 +66,9 @@ namespace NKikimr {
             {}
         };
 
-        using TQueueType = TDeque<TItemAndSeq>; 
+        using TQueueType = TDeque<TItemAndSeq>;
 
-        TQueueType Queue; 
+        TQueueType Queue;
         ui64 InFlySeqNum = 0;
         ui64 CommittedSeqNum = 0;
     };
@@ -82,20 +82,20 @@ namespace NKikimr {
         const TActorId ReplyId;
         const TActorId NotifyId;
         const TActorId SchedulerId;
-        const TString LogAndPhase; 
+        const TString LogAndPhase;
 
         friend class TActorBootstrapped<TSyncerHttpInfoActor>;
 
         void Bootstrap(const TActorContext &ctx) {
             if (SchedulerId == TActorId()) {
-                RenderHtmlAndReply(ctx, TString()); 
+                RenderHtmlAndReply(ctx, TString());
             } else {
                 Become(&TThis::StateFunc);
                 ctx.Send(SchedulerId, Ev->Release().Release());
             }
         }
 
-        void RenderHtmlAndReply(const TActorContext &ctx, const TString &schedulerInfo) { 
+        void RenderHtmlAndReply(const TActorContext &ctx, const TString &schedulerInfo) {
             TStringStream str;
             str << "\n";
             HTML(str) {
@@ -139,7 +139,7 @@ namespace NKikimr {
                              NMon::TEvHttpInfo::TPtr &ev,
                              const TActorId &notifyId,
                              const TActorId &schedulerId,
-                             const TString &logAndPhase) 
+                             const TString &logAndPhase)
             : TActorBootstrapped<TSyncerHttpInfoActor>()
             , SyncerCtx(sc)
             , Ev(ev)

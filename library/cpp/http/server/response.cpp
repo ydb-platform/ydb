@@ -18,7 +18,7 @@ THttpResponse& THttpResponse::SetContentType(const TStringBuf& contentType) {
 }
 
 void THttpResponse::OutTo(IOutputStream& os) const {
-    TVector<IOutputStream::TPart> parts; 
+    TVector<IOutputStream::TPart> parts;
     const size_t FIRST_LINE_PARTS = 3;
     const size_t HEADERS_PARTS = Headers.Count() * 4;
     const size_t CONTENT_PARTS = 5;

@@ -8,10 +8,10 @@
 #define ZDATA "./zdata"
 
 Y_UNIT_TEST_SUITE(TBZipTest) {
-    static const TString data = "8s7d5vc6s5vc67sa4c65ascx6asd4xcv76adsfxv76s"; 
+    static const TString data = "8s7d5vc6s5vc67sa4c65ascx6asd4xcv76adsfxv76s";
 
     Y_UNIT_TEST(TestCompress) {
-        TUnbufferedFileOutput o(ZDATA); 
+        TUnbufferedFileOutput o(ZDATA);
         TBZipCompress c(&o);
 
         c.Write(data.data(), data.size());
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TBZipTest) {
         TTempFile tmp(ZDATA);
 
         {
-            TUnbufferedFileInput i(ZDATA); 
+            TUnbufferedFileInput i(ZDATA);
             TBZipDecompress d(&i);
 
             UNIT_ASSERT_EQUAL(d.ReadLine(), data);

@@ -4,7 +4,7 @@
 
 #include <util/system/defaults.h>
 
-void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringBuf suffix, int depth, bool sort) { 
+void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringBuf suffix, int depth, bool sort) {
     TDirIterator::TOptions opts;
     opts.SetMaxLevel(depth);
     if (sort) {

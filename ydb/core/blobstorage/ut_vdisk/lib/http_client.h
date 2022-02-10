@@ -25,10 +25,10 @@ public:
 
 class THttpClient {
 public:
-    using THeaders = THashMap<TString, TString>; 
+    using THeaders = THashMap<TString, TString>;
 
 public:
-    THttpClient(const TString& host, 
+    THttpClient(const TString& host,
                 ui32 port,
                 TDuration socketTimeout = TDuration::Seconds(5),
                 TDuration connectTimeout = TDuration::Seconds(30));
@@ -36,8 +36,8 @@ public:
     virtual ~THttpClient();
 
     void SendHttpRequest(const TStringBuf relativeUrl,
-                         const TString& body, 
-                         const TString& method, 
+                         const TString& body,
+                         const TString& method,
                          IOutputStream* output,
                          const THeaders& headers = THeaders()) const;
 
@@ -50,7 +50,7 @@ private:
         const unsigned statusCode) const;
 
 private:
-    const TString Host; 
+    const TString Host;
     const ui32 Port;
     const TDuration SocketTimeout;
     const TDuration ConnectTimeout;

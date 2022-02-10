@@ -182,9 +182,9 @@ namespace NKikimr {
             TMaybe<TDuration> Timeout;
             ui32 MaxInFlight = 0;
             ui32 InFlight = 0;
-            TQueue<THolder<IProcessorBase>> PendingQ; 
+            TQueue<THolder<IProcessorBase>> PendingQ;
             TMutex Mutex;
-            TSet<void*> StreamTags; 
+            TSet<void*> StreamTags;
 
         public:
             TImpl(const TGRpcClientConfig& config)

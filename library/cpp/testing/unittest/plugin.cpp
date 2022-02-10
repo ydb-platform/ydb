@@ -30,7 +30,7 @@ namespace NUnitTest {
                 }
 
             private:
-                TVector<TSimpleSharedPtr<IPlugin>> Plugins; 
+                TVector<TSimpleSharedPtr<IPlugin>> Plugins;
             };
         } // anonymous namespace
 

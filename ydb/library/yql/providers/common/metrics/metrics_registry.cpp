@@ -28,7 +28,7 @@ public:
 
 private:
     void OnCounter(
-            const TString& labelName, const TString& labelValue, 
+            const TString& labelName, const TString& labelValue,
             const TSensorCounter* counter) override
     {
         HasAnyCounters_ = true;
@@ -67,7 +67,7 @@ private:
     }
 
     void OnGroupBegin(
-            const TString& labelName, const TString& labelValue, 
+            const TString& labelName, const TString& labelValue,
             const TSensorsGroup*) override
     {
         if (labelName.empty() && labelValue.empty()) {
@@ -88,7 +88,7 @@ private:
     }
 
 private:
-    TStack<NProto::TCounterGroup*> GroupsProto_; 
+    TStack<NProto::TCounterGroup*> GroupsProto_;
     bool HasAnyCounters_;
     bool Invalidate_;
 };
@@ -100,7 +100,7 @@ class TMetricsRegistryImpl final: public IMetricsRegistry {
 public:
     TMetricsRegistryImpl(
             TSensorsGroupPtr sensors,
-            TMaybe<TString> userName) 
+            TMaybe<TString> userName)
         : Sensors_(std::move(sensors))
         , UserName_(std::move(userName))
     {
@@ -130,8 +130,8 @@ public:
     }
 
     void IncCounter(
-            const TString& labelName, 
-            const TString& labelValue, 
+            const TString& labelName,
+            const TString& labelValue,
             bool derivative) override
     {
         // total aggregate counter
@@ -175,7 +175,7 @@ public:
     bool TakeSnapshot(NProto::TMetricsRegistrySnapshot* snapshot) const override {
         bool hasRootGroupBefore = snapshot->HasRootGroup();
         TCountersPhotographer photographer(snapshot->MutableRootGroup(), snapshot->GetDontIncrement() == false);
-        Sensors_->Accept(TString(), TString(), photographer); 
+        Sensors_->Accept(TString(), TString(), photographer);
         if (!photographer.HasAnyCounters() && !hasRootGroupBefore) {
             // remove prematurely allocated group
             snapshot->ClearRootGroup();
@@ -209,16 +209,16 @@ public:
 
 private:
     TSensorCounterPtr GetCounter(
-            const TString& labelName, 
-            const TString& labelValue, 
-            const TString* userName, 
+            const TString& labelName,
+            const TString& labelValue,
+            const TString* userName,
             bool derivative)
     {
-        static const TString USER("user"); 
-        static const TString USER_ABSOLUTE("user_absolute"); 
-        static const TString TOTAL("total"); 
+        static const TString USER("user");
+        static const TString USER_ABSOLUTE("user_absolute");
+        static const TString TOTAL("total");
 
-        const TString& userGroup = derivative ? USER : USER_ABSOLUTE; 
+        const TString& userGroup = derivative ? USER : USER_ABSOLUTE;
         return Sensors_
                 ->GetSubgroup(userGroup, userName ? *userName : TOTAL)
                 ->GetNamedCounter(labelName, labelValue, derivative);
@@ -273,7 +273,7 @@ private:
 
 private:
     TSensorsGroupPtr Sensors_;
-    const TMaybe<TString> UserName_; 
+    const TMaybe<TString> UserName_;
 
     THashMap<NMonitoring::THistogramPtr, NMonitoring::IHistogramCollector*> Histograms;
 };

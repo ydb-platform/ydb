@@ -13,11 +13,11 @@ class TFastLinearRegressionSolver {
 private:
     TKahanAccumulator<double> SumSquaredGoals;
 
-    TVector<double> LinearizedOLSMatrix; 
-    TVector<double> OLSVector; 
+    TVector<double> LinearizedOLSMatrix;
+    TVector<double> OLSVector;
 
 public:
-    bool Add(const TVector<double>& features, const double goal, const double weight = 1.); 
+    bool Add(const TVector<double>& features, const double goal, const double weight = 1.);
     TLinearModel Solve() const;
     double SumSquaredErrors() const;
 };
@@ -27,17 +27,17 @@ private:
     double GoalsMean = 0.;
     double GoalsDeviation = 0.;
 
-    TVector<double> FeatureMeans; 
-    TVector<double> LastMeans; 
-    TVector<double> NewMeans; 
-    TVector<double> LinearizedOLSMatrix; 
+    TVector<double> FeatureMeans;
+    TVector<double> LastMeans;
+    TVector<double> NewMeans;
+    TVector<double> LinearizedOLSMatrix;
 
-    TVector<double> OLSVector; 
+    TVector<double> OLSVector;
 
     TKahanAccumulator<double> SumWeights;
 
 public:
-    bool Add(const TVector<double>& features, const double goal, const double weight = 1.); 
+    bool Add(const TVector<double>& features, const double goal, const double weight = 1.);
     TLinearModel Solve() const;
     double SumSquaredErrors() const;
 };
@@ -145,12 +145,12 @@ public:
     bool Add(const double* featuresBegin, const double* featuresEnd, const double* goalsBegin);
     bool Add(const double* featuresBegin, const double* featuresEnd, const double* goalsBegin, const double* weightsBegin);
 
-    bool Add(const TVector<double>& features, const TVector<double>& goals) { 
+    bool Add(const TVector<double>& features, const TVector<double>& goals) {
         Y_ASSERT(features.size() == goals.size());
         return Add(features.data(), features.data() + features.size(), goals.data());
     }
 
-    bool Add(const TVector<double>& features, const TVector<double>& goals, const TVector<double>& weights) { 
+    bool Add(const TVector<double>& features, const TVector<double>& goals, const TVector<double>& weights) {
         Y_ASSERT(features.size() == goals.size() && features.size() == weights.size());
         return Add(features.data(), features.data() + features.size(), goals.data(), weights.data());
     }
@@ -177,10 +177,10 @@ public:
 template <typename TSLRSolverType>
 class TTypedBestSLRSolver {
 private:
-    TVector<TSLRSolverType> SLRSolvers; 
+    TVector<TSLRSolverType> SLRSolvers;
 
 public:
-    bool Add(const TVector<double>& features, const double goal, const double weight = 1.) { 
+    bool Add(const TVector<double>& features, const double goal, const double weight = 1.) {
         if (SLRSolvers.empty()) {
             SLRSolvers.resize(features.size());
         }
@@ -200,7 +200,7 @@ public:
             }
         }
 
-        TVector<double> coefficients(SLRSolvers.size()); 
+        TVector<double> coefficients(SLRSolvers.size());
         double intercept = 0.0;
         if (bestSolver) {
             bestSolver->Solve(coefficients[bestSolver - SLRSolvers.begin()], intercept, regularizationParameter);
@@ -289,7 +289,7 @@ private:
     float MaximalArgument = Min<float>();
 
     ETransformationType TransformationType;
-    TVector<TPoint> Points; 
+    TVector<TPoint> Points;
 
 public:
     TFeaturesTransformerLearner(const ETransformationType transformationType)
@@ -315,7 +315,7 @@ private:
         TMeanCalculator TargetsMean;
     };
 
-    THashMap<double, TBucket> Buckets; 
+    THashMap<double, TBucket> Buckets;
     double Step;
 
 public:

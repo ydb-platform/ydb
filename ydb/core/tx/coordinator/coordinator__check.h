@@ -24,7 +24,7 @@ struct TTxCoordinator::TTxConsistencyCheck : public TTransactionBase<TTxCoordina
                 TTxId txId = rowset.GetKey();
                 TTransaction& transaction = transactions[txId];
                 transaction.PlanOnStep = rowset.GetValue<Schema::Transaction::Plan>();
-                TVector<TTabletId> affectedSet = rowset.GetValue<Schema::Transaction::AffectedSet>(); 
+                TVector<TTabletId> affectedSet = rowset.GetValue<Schema::Transaction::AffectedSet>();
                 transaction.AffectedSet.reserve(affectedSet.size());
                 for (TTabletId id : affectedSet)
                     transaction.AffectedSet.insert(id);
@@ -41,7 +41,7 @@ struct TTxCoordinator::TTxConsistencyCheck : public TTransactionBase<TTxCoordina
                 TTxId txId = rowset.GetValue<Schema::AffectedSet::TransactionID>();
                 auto itTransaction = transactions.find(txId);
                 Y_ENSURE(itTransaction != transactions.end(), "Could not find mediator's transaction");
-                THashSet<TTabletId>& unconfirmedAffectedSet = itTransaction->second.UnconfirmedAffectedSet[medId]; 
+                THashSet<TTabletId>& unconfirmedAffectedSet = itTransaction->second.UnconfirmedAffectedSet[medId];
                 unconfirmedAffectedSet.insert(rowset.GetValue<Schema::AffectedSet::DataShardID>());
                 if (!rowset.Next())
                     return false;

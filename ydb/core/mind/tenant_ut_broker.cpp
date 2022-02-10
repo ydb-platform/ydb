@@ -489,7 +489,7 @@ void CheckTenantState(TTenantTestRuntime &runtime,
         runtime.SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
         if (!ok) {
             NKikimrTenantSlotBroker::TConfig config;
-            TDuration delay = TDuration::MicroSeconds(config.GetPendingSlotTimeout()); 
+            TDuration delay = TDuration::MicroSeconds(config.GetPendingSlotTimeout());
             TDispatchOptions options;
             options.FinalEvents.emplace_back(TTenantSlotBroker::TEvPrivate::EvCheckSlotStatus, 1);
             runtime.DispatchEvents(options, delay);

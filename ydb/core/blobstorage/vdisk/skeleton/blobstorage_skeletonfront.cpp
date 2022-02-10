@@ -139,7 +139,7 @@ namespace NKikimr {
         // TIntQueueClass -- delayed queue
         ////////////////////////////////////////////////////////////////////////////
         class TIntQueueClass {
-            using TQueueType = TQueueInplace<TRecord, 4096>; 
+            using TQueueType = TQueueInplace<TRecord, 4096>;
 
         private:
             std::unique_ptr<TQueueType, TQueueType::TCleanDestructor> Queue;
@@ -153,7 +153,7 @@ namespace NKikimr {
             const ui64 MaxInFlightCost;
         public:
             const NKikimrBlobStorage::EVDiskInternalQueueId IntQueueId;
-            const TString Name; 
+            const TString Name;
 
         private:
             NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontInFlightCount;
@@ -177,7 +177,7 @@ namespace NKikimr {
                     ui64 maxInFlightCount,
                     ui64 maxInFlightCost,
                     TIntrusivePtr<NMonitoring::TDynamicCounters> skeletonFrontGroup)
-                : Queue(new TQueueType()) 
+                : Queue(new TQueueType())
                 , InFlightCount(0)
                 , InFlightCost(0)
                 , InFlightBytes(0)
@@ -365,7 +365,7 @@ namespace NKikimr {
                 str << "<br>";
             }
 
-            TString GenerateHtmlState() const { 
+            TString GenerateHtmlState() const {
                 // NOTE: warning policy:
                 // 1. For InFlightCount and InFlightCost we output them in yellow, if
                 //    queue size if half of maximun queue size
@@ -403,7 +403,7 @@ namespace NKikimr {
         private:
             std::unique_ptr<TMyQueueBackpressure> QueueBackpressure;
             NKikimrBlobStorage::EVDiskQueueId ExtQueueId;
-            TString Name; 
+            TString Name;
             NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontDeadline;
             NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontOverflow;
             NMonitoring::TDynamicCounters::TCounterPtr SkeletonFrontIncorrectMsgId;
@@ -426,7 +426,7 @@ namespace NKikimr {
             }
 
         public:
-            TExtQueueClass(NKikimrBlobStorage::EVDiskQueueId extQueueId, const TString &name, ui64 totalCost, 
+            TExtQueueClass(NKikimrBlobStorage::EVDiskQueueId extQueueId, const TString &name, ui64 totalCost,
                            bool checkMsgId, TIntrusivePtr<NMonitoring::TDynamicCounters> skeletonFrontGroup,
                            const TIntrusivePtr<TVDiskConfig>& config)
                 : QueueBackpressure()
@@ -535,7 +535,7 @@ namespace NKikimr {
                 NotifyOtherClients(ctx, feedback);
             }
 
-            TString GenerateHtmlState() const { 
+            TString GenerateHtmlState() const {
                 TStringStream str;
                 str << "\n";
                 HTML(str) {
@@ -648,7 +648,7 @@ namespace NKikimr {
 
                 const auto &bi = Config->BaseInfo;
                 TString path = Sprintf("vdisk%09" PRIu32 "_%09" PRIu32, bi.PDiskId, bi.VDiskSlotId);
-                TString name = Sprintf("%s VDisk%09" PRIu32 "_%09" PRIu32, 
+                TString name = Sprintf("%s VDisk%09" PRIu32 "_%09" PRIu32,
                                       VCtx->VDiskLogPrefix.data(), bi.PDiskId, bi.VDiskSlotId);
                 mon->RegisterActorPage(vdisksMonPage, path, name, false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
             }
@@ -1353,8 +1353,8 @@ namespace NKikimr {
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
             // we process mon requests out of order
             const TCgiParameters& cgi = ev->Get()->Request.GetParams();
-            const TString& type = cgi.Get("type"); 
-            TString html = (type == TString()) ? GenerateHtmlState(ctx) : TString(); 
+            const TString& type = cgi.Get("type");
+            TString html = (type == TString()) ? GenerateHtmlState(ctx) : TString();
             auto aid = ctx.Register(CreateFrontSkeletonMonRequestHandler(SelfVDiskId, ctx.SelfID, SkeletonId,
                 ctx.SelfID, Config, Top, ev, html));
             ActiveActors.Insert(aid);

@@ -33,7 +33,7 @@ public:
     virtual bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const = 0;
 
     // Calculate the whole size of data that needs to be read into memory
-    virtual ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const = 0; 
+    virtual ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const = 0;
 
     // Exstimate size of the merged result of reading the data
     virtual ui64 CalculateResultSize(const TKeyDesc& key) const = 0;

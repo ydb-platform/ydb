@@ -45,7 +45,7 @@ class TLogicRedo {
         TCompletionEntry(TAutoPtr<TSeat> seat, ui32 step);
     };
 
-    TDeque<TCompletionEntry> CompletionQueue; // would be graph once data-dependencies implemented 
+    TDeque<TCompletionEntry> CompletionQueue; // would be graph once data-dependencies implemented
     ui32 PrevConfirmedStep = 0;
 
 public:

@@ -6,7 +6,7 @@
 
 #include <util/system/defaults.h>
 #include <util/system/compat.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/ylimits.h>
 #include <util/system/maxlen.h>
 
@@ -217,8 +217,8 @@ public:
     /// It doesn't care about errors in request or headers, where
     /// request_uri equals to '*'.
     /// This returns copy of the string, which you have to delete.
-    TString GetUrl() { 
-        TString url; 
+    TString GetUrl() {
+        TString url;
         if (host[0] == 0 || !strcmp(host, "")) {
             url = request_uri;
         } else {

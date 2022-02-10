@@ -93,7 +93,7 @@ struct TCompactionPolicy : public TThrRefBase {
     NKikimrSchemeOp::TCompactionPolicy::TShardPolicy ShardPolicy;
     bool KeepEraseMarkers;
 
-    TVector<TGenerationPolicy> Generations; 
+    TVector<TGenerationPolicy> Generations;
 
     TCompactionPolicy();
     explicit TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& policyPb);
@@ -131,7 +131,7 @@ typedef TIntrusivePtr<TCompactionPolicy> TCompactionPolicyPtr;
 TCompactionPolicyPtr CreateDefaultTablePolicy();
 TCompactionPolicyPtr CreateDefaultUserTablePolicy();
 
-bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TCompactionPolicy& newPolicy, TString& err); 
+bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TCompactionPolicy& newPolicy, TString& err);
 
 // Get Resource Broker task type name by Compaction Broker queue ID.
 TString LegacyQueueIdToTaskName(ui32 id);

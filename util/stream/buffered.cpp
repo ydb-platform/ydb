@@ -62,10 +62,10 @@ public:
         return MemInput_.Skip(len);
     }
 
-    inline size_t ReadTo(TString& st, char to) { 
+    inline size_t ReadTo(TString& st, char to) {
         st.clear();
 
-        TString s_tmp; 
+        TString s_tmp;
 
         size_t ret = 0;
 
@@ -104,11 +104,11 @@ public:
     }
 
 private:
-    inline size_t BufLen() const noexcept { 
+    inline size_t BufLen() const noexcept {
         return AdditionalDataLength();
     }
 
-    inline void* Buf() const noexcept { 
+    inline void* Buf() const noexcept {
         return AdditionalData();
     }
 
@@ -139,7 +139,7 @@ size_t TBufferedInput::DoNext(const void** ptr, size_t len) {
     return Impl_->Next(ptr, len);
 }
 
-size_t TBufferedInput::DoReadTo(TString& st, char ch) { 
+size_t TBufferedInput::DoReadTo(TString& st, char ch) {
     return Impl_->ReadTo(st, ch);
 }
 
@@ -227,11 +227,11 @@ public:
         MemOut_.Write(c);
     }
 
-    inline void SetFlushPropagateMode(bool mode) noexcept { 
+    inline void SetFlushPropagateMode(bool mode) noexcept {
         PropagateFlush_ = mode;
     }
 
-    inline void SetFinishPropagateMode(bool mode) noexcept { 
+    inline void SetFinishPropagateMode(bool mode) noexcept {
         PropagateFinish_ = mode;
     }
 
@@ -269,17 +269,17 @@ private:
         }
     }
 
-    inline size_t Stored() const noexcept { 
+    inline size_t Stored() const noexcept {
         return Len() - MemOut_.Avail();
     }
 
-    inline size_t DownToBufferGranularity(size_t l) const noexcept { 
+    inline size_t DownToBufferGranularity(size_t l) const noexcept {
         return l - (l % Len());
     }
 
     virtual void OnBufferExhausted() = 0;
-    virtual void* Buf() const noexcept = 0; 
-    virtual size_t Len() const noexcept = 0; 
+    virtual void* Buf() const noexcept = 0;
+    virtual size_t Len() const noexcept = 0;
 
 private:
     IOutputStream* Slave_;
@@ -301,11 +301,11 @@ namespace {
         void OnBufferExhausted() final {
         }
 
-        void* Buf() const noexcept override { 
+        void* Buf() const noexcept override {
             return AdditionalData();
         }
 
-        size_t Len() const noexcept override { 
+        size_t Len() const noexcept override {
             return AdditionalDataLength();
         }
     };
@@ -333,11 +333,11 @@ namespace {
             }
         }
 
-        void* Buf() const noexcept override { 
+        void* Buf() const noexcept override {
             return (void*)B_.Data();
         }
 
-        size_t Len() const noexcept override { 
+        size_t Len() const noexcept override {
             return B_.Capacity();
         }
 
@@ -359,7 +359,7 @@ TBufferedOutputBase::TBufferedOutputBase(IOutputStream* slave, size_t buflen)
 TBufferedOutputBase::TBufferedOutputBase(TBufferedOutputBase&&) noexcept = default;
 TBufferedOutputBase& TBufferedOutputBase::operator=(TBufferedOutputBase&&) noexcept = default;
 
-TBufferedOutputBase::~TBufferedOutputBase() { 
+TBufferedOutputBase::~TBufferedOutputBase() {
     try {
         Finish();
     } catch (...) {
@@ -401,13 +401,13 @@ void TBufferedOutputBase::DoFinish() {
     }
 }
 
-void TBufferedOutputBase::SetFlushPropagateMode(bool propagate) noexcept { 
+void TBufferedOutputBase::SetFlushPropagateMode(bool propagate) noexcept {
     if (Impl_.Get()) {
         Impl_->SetFlushPropagateMode(propagate);
     }
 }
 
-void TBufferedOutputBase::SetFinishPropagateMode(bool propagate) noexcept { 
+void TBufferedOutputBase::SetFinishPropagateMode(bool propagate) noexcept {
     if (Impl_.Get()) {
         Impl_->SetFinishPropagateMode(propagate);
     }

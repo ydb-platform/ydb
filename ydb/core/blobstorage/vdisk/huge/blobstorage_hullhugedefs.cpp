@@ -21,7 +21,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TAllocChunkRecoveryLogRec
         ////////////////////////////////////////////////////////////////////////////
-        TString TAllocChunkRecoveryLogRec::Serialize() const { 
+        TString TAllocChunkRecoveryLogRec::Serialize() const {
             TStringStream str;
             str.Write(&ChunkId, sizeof(ui32));
             // refPointLsn (for backward compatibility, can be removed)
@@ -30,7 +30,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        bool TAllocChunkRecoveryLogRec::ParseFromString(const TString &data) { 
+        bool TAllocChunkRecoveryLogRec::ParseFromString(const TString &data) {
             if (data.size() != sizeof(ui32) + sizeof(ui64)) // refPointLsn(ui64) (for backward compatibility, can be removed)
                 return false;
             const char *cur = data.data();
@@ -39,7 +39,7 @@ namespace NKikimr {
             return true;
         }
 
-        TString TAllocChunkRecoveryLogRec::ToString() const { 
+        TString TAllocChunkRecoveryLogRec::ToString() const {
             TStringStream str;
             str << "{ChunkId# " << ChunkId << "}";
             return str.Str();
@@ -48,7 +48,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TFreeChunkRecoveryLogRec
         ////////////////////////////////////////////////////////////////////////////
-        TString TFreeChunkRecoveryLogRec::Serialize() const { 
+        TString TFreeChunkRecoveryLogRec::Serialize() const {
             TStringStream str;
             // refPointLsn (for backward compatibility, can be removed)
             ui64 refPointLsn = 0;
@@ -60,7 +60,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        bool TFreeChunkRecoveryLogRec::ParseFromString(const TString &data) { 
+        bool TFreeChunkRecoveryLogRec::ParseFromString(const TString &data) {
             ChunkIds.clear();
             const char *cur = data.data();
             const char *end = cur + data.size();
@@ -82,7 +82,7 @@ namespace NKikimr {
             return true;
         }
 
-        TString TFreeChunkRecoveryLogRec::ToString() const { 
+        TString TFreeChunkRecoveryLogRec::ToString() const {
             TStringStream str;
             str << "{ChunkIds# ";
             if (ChunkIds.empty())
@@ -106,13 +106,13 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TPutRecoveryLogRec
         ////////////////////////////////////////////////////////////////////////////
-        TString TPutRecoveryLogRec::Serialize() const { 
+        TString TPutRecoveryLogRec::Serialize() const {
             TStringStream str;
 
             // LogoBlobID
             NKikimrProto::TLogoBlobID proto;
             LogoBlobIDFromLogoBlobID(LogoBlobID, &proto);
-            TString lbSerialized; 
+            TString lbSerialized;
             bool res = proto.SerializeToString(&lbSerialized);
             Y_VERIFY(res);
             ui16 lbSerializedSize = lbSerialized.size();
@@ -133,7 +133,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        bool TPutRecoveryLogRec::ParseFromString(const TString &data) { 
+        bool TPutRecoveryLogRec::ParseFromString(const TString &data) {
             const char *cur = data.data();
             const char *end = cur + data.size();
 
@@ -172,7 +172,7 @@ namespace NKikimr {
             return true;
         }
 
-        TString TPutRecoveryLogRec::ToString() const { 
+        TString TPutRecoveryLogRec::ToString() const {
             TStringStream str;
             str << "{LogoBlobID# " << LogoBlobID.ToString() << " DiskAddr# " << DiskAddr.ToString() << "}";
             return str.Str();

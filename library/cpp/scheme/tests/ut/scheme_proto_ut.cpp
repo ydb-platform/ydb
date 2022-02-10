@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(TSchemeProtoTest) {
             NSc::TMessage proto;
             v.To(proto);
 
-            TString differentPath; 
+            TString differentPath;
             UNIT_ASSERT_C(NProtoBuf::IsEqual(m, proto, &differentPath), differentPath);
         }
     }

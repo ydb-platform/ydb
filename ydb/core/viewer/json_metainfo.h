@@ -130,7 +130,7 @@ public:
 
 template <>
 struct TJsonRequestSchema<TJsonMetaInfo> {
-    static TString GetSchema() { 
+    static TString GetSchema() {
         TStringStream stream;
         TProtoToJson::ProtoToJsonSchema<NKikimrViewer::TMetaInfo>(stream);
         return stream.Str();
@@ -139,7 +139,7 @@ struct TJsonRequestSchema<TJsonMetaInfo> {
 
 template <>
 struct TJsonRequestParameters<TJsonMetaInfo> {
-    static TString GetParameters() { 
+    static TString GetParameters() {
         return R"___([{"name":"path","in":"query","description":"schema path","required":false,"type":"string"},
                       {"name":"tablet_id","in":"query","description":"tablet identifier","required":false,"type":"integer"},
                       {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
@@ -151,14 +151,14 @@ struct TJsonRequestParameters<TJsonMetaInfo> {
 
 template <>
 struct TJsonRequestSummary<TJsonMetaInfo> {
-    static TString GetSummary() { 
+    static TString GetSummary() {
         return "\"Schema meta information\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonMetaInfo> {
-    static TString GetDescription() { 
+    static TString GetDescription() {
         return "\"Returns meta information about schema path\"";
     }
 };

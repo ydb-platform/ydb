@@ -75,8 +75,8 @@ private:
     TDataShard * Self;
     THashMap<ui64, TReadSetKey> CurrentReadSets;      // SeqNo -> Info
     THashMap<TReadSetKey, ui64> CurrentReadSetInfos;  // Info -> SeqNo
-    THashSet<ui64> AckedSeqno; 
-    TVector<TIntrusivePtr<TEvTxProcessing::TEvReadSetAck>> ReadSetAcks; 
+    THashSet<ui64> AckedSeqno;
+    TVector<TIntrusivePtr<TEvTxProcessing::TEvReadSetAck>> ReadSetAcks;
 };
 
 }}

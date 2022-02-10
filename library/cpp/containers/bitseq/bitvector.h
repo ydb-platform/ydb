@@ -19,7 +19,7 @@ public:
 private:
     friend class TReadonlyBitVector<T>;
     ui64 Size_;
-    TVector<TWord> Data_; 
+    TVector<TWord> Data_;
 
 public:
     TBitVector()

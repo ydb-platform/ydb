@@ -619,7 +619,7 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         auto brokerId = runtime.Register(broker);
         WaitForBootstrap(runtime);
 
-        TSet<ui64> ids; 
+        TSet<ui64> ids;
         const char *names[] = { "unknown", "compaction0", "compaction1", "wrong" };
         for (ui64 i = 1; i <= 1000; ++i) {
             SubmitTask(runtime, brokerId, sender, i, RandomNumber<ui32>(500), RandomNumber<ui32>(500),

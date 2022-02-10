@@ -143,7 +143,7 @@ namespace NWilson {
             return x.TraceId == y.TraceId && x.SpanId == y.SpanId;
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return Sprintf("%" PRIu64 ":%" PRIu64, TraceId, SpanId);
         }
 

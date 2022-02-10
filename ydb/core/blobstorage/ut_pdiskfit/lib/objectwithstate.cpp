@@ -3,9 +3,9 @@
 
 TMutex TObjectWithState::Mutex;
 TIntrusiveList<TObjectWithState> TObjectWithState::ObjectsWithState;
-THashMap<TString, TString> TObjectWithState::States; 
+THashMap<TString, TString> TObjectWithState::States;
 
-TObjectWithState::TObjectWithState(TString name) 
+TObjectWithState::TObjectWithState(TString name)
     : Name(std::move(name))
 {}
 
@@ -19,7 +19,7 @@ void TObjectWithState::Register() {
     ObjectsWithState.PushBack(this);
 }
 
-TString TObjectWithState::SerializeCommonState() { 
+TString TObjectWithState::SerializeCommonState() {
     TGuard<TMutex> lock(Mutex);
     for (TObjectWithState& object : ObjectsWithState) {
         States[object.Name] = object.SerializeState();
@@ -31,13 +31,13 @@ TString TObjectWithState::SerializeCommonState() {
         item->SetValue(kv.second);
 
     }
-    TString data; 
+    TString data;
     bool status = dict.SerializeToString(&data);
     Y_VERIFY(status);
     return data;
 }
 
-void TObjectWithState::DeserializeCommonState(const TString& data) { 
+void TObjectWithState::DeserializeCommonState(const TString& data) {
     NPDiskFIT::TObjectWithStateDict dict;
     bool status = dict.ParseFromString(data);
     Y_VERIFY(status);
@@ -48,7 +48,7 @@ void TObjectWithState::DeserializeCommonState(const TString& data) {
     }
 }
 
-TString TObjectWithState::GetState() { 
+TString TObjectWithState::GetState() {
     auto it = States.find(Name);
-    return it != States.end() ? it->second : TString(); 
+    return it != States.end() ? it->second : TString();
 }

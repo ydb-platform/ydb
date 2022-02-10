@@ -9,7 +9,7 @@
 #include <util/system/hp_timer.h>
 
 namespace NCodecs {
-    TString TComprStats::Format(const TStaticCodecInfo& info, bool checkMode) const { 
+    TString TComprStats::Format(const TStaticCodecInfo& info, bool checkMode) const {
         TStringBuilder s;
         s << "raw size/item:      " << RawSizePerRecord() << Endl;
         s << "enc.size/item:      " << EncSizePerRecord() << Endl;
@@ -26,7 +26,7 @@ namespace NCodecs {
         return s;
     }
 
-    TComprStats TestCodec(const ICodec& c, const TVector<TString>& input) { 
+    TComprStats TestCodec(const ICodec& c, const TVector<TString>& input) {
         TComprStats stats;
 
         TBuffer encodeBuffer;
@@ -51,10 +51,10 @@ namespace NCodecs {
         return stats;
     }
 
-    void ParseBlob(TVector<TString>& result, EDataStreamFormat fmt, const TBlob& blob) { 
+    void ParseBlob(TVector<TString>& result, EDataStreamFormat fmt, const TBlob& blob) {
         TStringBuf bin(blob.AsCharPtr(), blob.Size());
         TStringBuf line;
-        TString buffer; 
+        TString buffer;
         while (bin.ReadLine(line)) {
             if (DSF_BASE64_LF == fmt) {
                 Base64Decode(line, buffer);
@@ -67,7 +67,7 @@ namespace NCodecs {
         }
     }
 
-    TBlob GetInputBlob(const TString& dataFile) { 
+    TBlob GetInputBlob(const TString& dataFile) {
         return dataFile && dataFile != "-" ? TBlob::FromFile(dataFile) : TBlob::FromStream(Cin);
     }
 

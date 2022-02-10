@@ -54,7 +54,7 @@ class TDiscoverVDiskWorker {
     };
 
     // queue of blobs in descending order
-    TDeque<TBlobQueueItem> BlobQueue; 
+    TDeque<TBlobQueueItem> BlobQueue;
 
 public:
     TDiscoverVDiskWorker(const TVDiskID& vdiskId, ui64 tabletId, ui32 minGeneration, ui32 forceBlockedGeneration)
@@ -255,9 +255,9 @@ public:
 
 private:
     const TIntrusivePtr<TBlobStorageGroupInfo> Info;
-    TVector<TDiscoverVDiskWorker> VDiskWorkers; 
+    TVector<TDiscoverVDiskWorker> VDiskWorkers;
     ui32 NumReadyWorkers = 0;
-    TQueue<TDiscoveryState> StateQ; 
+    TQueue<TDiscoveryState> StateQ;
 
 public:
     TDiscoverWorker(TIntrusivePtr<TBlobStorageGroupInfo> info, ui64 tabletId, ui32 minGeneration,
@@ -432,7 +432,7 @@ class TBlobStorageGroupMirror3dcDiscoverRequest : public TBlobStorageGroupReques
     TVector<std::unique_ptr<TEvBlobStorage::TEvVGet>> Msgs;
 
     ui32 BlockedGeneration = 0;
-    TString Buffer; 
+    TString Buffer;
     bool GetFinished = false;
     bool GetInFlight = false;
     TLogoBlobID ResultBlobId;
@@ -645,7 +645,7 @@ public:
             std::unique_ptr<TEvBlobStorage::TEvDiscoverResult> response;
             if (ResultBlobId) {
                 response.reset(new TEvBlobStorage::TEvDiscoverResult(ResultBlobId, MinGeneration,
-                        ReadBody ? Buffer : TString(), BlockedGeneration)); 
+                        ReadBody ? Buffer : TString(), BlockedGeneration));
             } else {
                 response.reset(new TEvBlobStorage::TEvDiscoverResult(NKikimrProto::NODATA, MinGeneration,
                             BlockedGeneration));

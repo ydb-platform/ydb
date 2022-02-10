@@ -163,14 +163,14 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
         typedef std::pair<float, unsigned int> TElementType;
 
         const size_t randomTriesCount = 128;
-        for (size_t i1 = 0; i1 < randomTriesCount; ++i1) { 
+        for (size_t i1 = 0; i1 < randomTriesCount; ++i1) {
             const size_t desiredElementsCount = RandomNumber<size_t>(5) + 1;
             TLimitedHeap<TElementType> h1(desiredElementsCount);
             TTopKeeper<TElementType> h2(desiredElementsCount);
 
             const size_t elementsToInsert = RandomNumber<size_t>(10) + desiredElementsCount;
             UNIT_ASSERT_C(desiredElementsCount <= elementsToInsert, "Test internal invariant is broken");
-            for (size_t i2 = 0; i2 < elementsToInsert; ++i2) { 
+            for (size_t i2 = 0; i2 < elementsToInsert; ++i2) {
                 const auto f = RandomNumber<float>();
                 const auto id = RandomNumber<unsigned int>();
 
@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
             UNIT_ASSERT_EQUAL(h2.GetSize(), desiredElementsCount);
 
             const auto n = h2.GetSize();
-            for (size_t i3 = 0; i3 < n; ++i3) { 
+            for (size_t i3 = 0; i3 < n; ++i3) {
                 UNIT_ASSERT_EQUAL(h1.GetMin(), h2.GetNext());
                 h1.PopMin();
                 h2.Pop();
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
 
     Y_UNIT_TEST(CopyKeeperRegressionCase) {
         using TKeeper = TTopKeeper<float>;
-        TVector<TKeeper> v(2, TKeeper(200)); 
+        TVector<TKeeper> v(2, TKeeper(200));
         auto& k = v[1];
         for (size_t i = 0; i < 100; ++i) {
             k.Insert(RandomNumber<float>());

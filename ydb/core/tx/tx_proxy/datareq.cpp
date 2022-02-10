@@ -57,11 +57,11 @@ struct TFlatMKQLRequest : public TThrRefBase {
     NKikimrTxUserProxy::TMiniKQLTransaction::TLimits Limits;
     TRowVersion Snapshot = TRowVersion::Min();
 
-    TMap<ui64, TAutoPtr<TBalanceCoverageBuilder>> BalanceCoverageBuilders; 
+    TMap<ui64, TAutoPtr<TBalanceCoverageBuilder>> BalanceCoverageBuilders;
 
     NMiniKQL::IEngineFlat::EResult EngineResultStatusCode;
     NMiniKQL::IEngineFlat::EStatus EngineResponseStatus;
-    TString EngineResponse; 
+    TString EngineResponse;
     NKikimrMiniKQL::TResult EngineEvaluatedResponse;
 
     TFlatMKQLRequest()
@@ -92,7 +92,7 @@ public:
 
     void Initialize(bool ordered, TConstArrayRef<NScheme::TTypeId> keyTypes, const TTableRange &range);
 
-    const TVector<NScheme::TTypeId> &GetKeyTypes() { return KeyTypes; } 
+    const TVector<NScheme::TTypeId> &GetKeyTypes() { return KeyTypes; }
 
     void AddRange(const NKikimrTx::TKeyRange &range, ui64 shard);
     bool IsFull() const;
@@ -117,19 +117,19 @@ private:
 
         TRange &operator=(const TRange &other) = default;
 
-        TVector<ui64> Shards; 
+        TVector<ui64> Shards;
     };
-    using TRanges = TList<TRange>; 
+    using TRanges = TList<TRange>;
 
     bool IsGreater(const TConstArrayRef<TCell> &lhs, const TConstArrayRef<TCell> &rhs) const;
     void TryToMergeRange(TRanges::iterator it);
     bool TryToMergeWithPrev(TRanges::iterator it);
 
-    TVector<NScheme::TTypeId> KeyTypes; 
+    TVector<NScheme::TTypeId> KeyTypes;
     TSerializedTableRange SpaceRange;
     TRanges Ranges;
     bool OrderedQueue;
-    TQueue<ui64> ShardsQueue; 
+    TQueue<ui64> ShardsQueue;
     TSerializedCellVec QueuePoint;
 };
 
@@ -143,7 +143,7 @@ struct TReadTableRequest : public TThrRefBase {
     TTableId TableId;
     bool Ordered;
     bool AllowDuplicates;
-    TVector<TTableColumnInfo> Columns; 
+    TVector<TTableColumnInfo> Columns;
     NKikimrTxUserProxy::TKeyRange Range;
     TString ResponseData;
     ui64 ResponseDataFrom;
@@ -310,12 +310,12 @@ private:
 
     TIntrusivePtr<TFlatMKQLRequest> FlatMKQLRequest;
     TIntrusivePtr<TReadTableRequest> ReadTableRequest;
-    TString DatashardErrors; 
-    TVector<ui64> ComplainingDatashards; 
-    TVector<TString> UnresolvedKeys; 
+    TString DatashardErrors;
+    TVector<ui64> ComplainingDatashards;
+    TVector<TString> UnresolvedKeys;
     TAutoPtr<const NACLib::TUserToken> UserToken;
 
-    THashMap<ui64, TPerTablet> PerTablet; 
+    THashMap<ui64, TPerTablet> PerTablet;
     NYql::TIssueManager IssueManager;
     TTablePathHashSet InvalidatedTables;
     ui64 TabletsLeft; // todo: add scale modifiers
@@ -432,7 +432,7 @@ private:
 
     void ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult & record);
     void CancelProposal(ui64 exceptTablet);
-    void FailProposedRequest(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, TString errMsg, const TActorContext &ctx); 
+    void FailProposedRequest(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, TString errMsg, const TActorContext &ctx);
 
     void SendStreamClearanceResponse(ui64 shard, bool cleared, const TActorContext &ctx);
     void ProcessNextStreamClearance(bool cleared, const TActorContext &ctx);
@@ -469,11 +469,11 @@ public:
         , ResultsReceivedCount(0)
         , ResultsReceivedSize(0)
         , RequestControls(requestControls)
-        , WallClockAccepted(TInstant::MicroSeconds(0)) 
-        , WallClockResolveStarted(TInstant::MicroSeconds(0)) 
-        , WallClockResolved(TInstant::MicroSeconds(0)) 
-        , WallClockPrepared(TInstant::MicroSeconds(0)) 
-        , WallClockPlanned(TInstant::MicroSeconds(0)) 
+        , WallClockAccepted(TInstant::MicroSeconds(0))
+        , WallClockResolveStarted(TInstant::MicroSeconds(0))
+        , WallClockResolved(TInstant::MicroSeconds(0))
+        , WallClockPrepared(TInstant::MicroSeconds(0))
+        , WallClockPlanned(TInstant::MicroSeconds(0))
         , TxProxyMon(mon)
     {
         ++*TxProxyMon->DataReqInFly;
@@ -994,7 +994,7 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
             dataTransaction.SetLlvmRuntime(true);
         if (FlatMKQLRequest->PerShardKeysSizeLimitBytes)
             dataTransaction.SetPerShardKeysSizeLimitBytes(*FlatMKQLRequest->PerShardKeysSizeLimitBytes);
-        const TString transactionBuffer = dataTransaction.SerializeAsString(); 
+        const TString transactionBuffer = dataTransaction.SerializeAsString();
 
         if (transactionBuffer.size() > MaxDatashardProgramSize) {
             TString error = TStringBuilder() << "Datashard program size limit exceeded ("
@@ -1322,8 +1322,8 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
             FlatMKQLRequest->Engine = NMiniKQL::CreateEngineFlat(settings);
             FlatMKQLRequest->Engine->SetStepTxId({ 0, TxId });
 
-            TString program = mkqlTxBody.GetProgram().GetBin(); 
-            TString params = mkqlTxBody.GetParams().GetBin(); 
+            TString program = mkqlTxBody.GetProgram().GetBin();
+            TString params = mkqlTxBody.GetParams().GetBin();
             resolveReq = PrepareFlatMKQLRequest(program, params, ctx);
 
             FlatMKQLRequest->RequestAdditionResults(TxId);
@@ -1399,7 +1399,7 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
 
     Y_VERIFY(ReadTableRequest);
     bool projection = !ReadTableRequest->Columns.empty();
-    TMap<TString, size_t> colNames; 
+    TMap<TString, size_t> colNames;
     for (size_t i = 0; i < ReadTableRequest->Columns.size(); ++i) {
         auto &col = ReadTableRequest->Columns[i];
         if (colNames.contains(col.Name)) {
@@ -1426,8 +1426,8 @@ void TDataReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, 
         return Die(ctx);
     }
 
-    TVector<NScheme::TTypeId> keyColumnTypes(res.Columns.size()); 
-    TVector<TKeyDesc::TColumnOp> columns(res.Columns.size()); 
+    TVector<NScheme::TTypeId> keyColumnTypes(res.Columns.size());
+    TVector<TKeyDesc::TColumnOp> columns(res.Columns.size());
     size_t keySize = 0;
     size_t no = 0;
 
@@ -1958,7 +1958,7 @@ void TDataReq::CancelProposal(ui64 exceptTablet) {
 }
 
 void TDataReq::ExtractDatashardErrors(const NKikimrTxDataShard::TEvProposeTransactionResult & record) {
-    TString allErrors; 
+    TString allErrors;
     for (const auto &er : record.GetError()) {
         allErrors += Sprintf("[%s] %s\n", NKikimrTxDataShard::TError_EKind_Name(er.GetKind()).data(), er.GetReason().data());
     }
@@ -2741,7 +2741,7 @@ ui64 TDataReq::SelectCoordinator(NSchemeCache::TSchemeCacheRequest &cacheRequest
     return 0;
 }
 
-void TDataReq::FailProposedRequest(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, TString errMsg, const TActorContext &ctx) { 
+void TDataReq::FailProposedRequest(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, TString errMsg, const TActorContext &ctx) {
     LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
         "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId << " FailProposedRequest: " << errMsg << " Status# " << status);
 
@@ -2781,7 +2781,7 @@ void TDataReq::RegisterPlan(const TActorContext &ctx) {
     Y_VERIFY(domainsInfo);
 
     ui64 totalReadSize = 0;
-    TSet<ui32> affectedDomains; 
+    TSet<ui32> affectedDomains;
     for (const auto &xp : PerTablet) {
         const ui32 tabletDomain = domainsInfo->GetDomainUidByTabletId(xp.first);
         Y_VERIFY(tabletDomain != Max<ui32>());
@@ -2937,7 +2937,7 @@ bool TDataReq::ParseRangeKey(const NKikimrMiniKQL::TParams &proto,
                              TSerializedCellVec &buf,
                              EParseRangeKeyExp exp)
 {
-    TVector<TCell> key; 
+    TVector<TCell> key;
     if (proto.HasValue()) {
         if (!proto.HasType()) {
             UnresolvedKeys.push_back("No type was specified in the range key tuple");

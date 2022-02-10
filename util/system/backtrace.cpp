@@ -6,7 +6,7 @@
 #include <util/stream/output.h>
 #include <util/stream/format.h>
 #include <util/generic/array_ref.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 
 #ifdef _win_
     #include "mutex.h"
@@ -278,7 +278,7 @@ void TBackTrace::PrintTo(IOutputStream& out) const {
     FormatBackTraceFn(&out, Data, Size);
 }
 
-TString TBackTrace::PrintToString() const { 
+TString TBackTrace::PrintToString() const {
     TStringStream ss;
     PrintTo(ss);
     return ss.Str();

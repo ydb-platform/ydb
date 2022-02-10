@@ -7,7 +7,7 @@ struct TTxCoordinator::TTxRestartMediatorQueue : public TTransactionBase<TTxCoor
     const TTabletId MediatorId;
     const ui64 GenCookie;
 
-    TVector<bool *> StepsToConfirm; 
+    TVector<bool *> StepsToConfirm;
 
     TTxRestartMediatorQueue(ui64 mediatorId, ui64 genCookie, TSelf *coordinator)
         : TBase(coordinator)
@@ -22,15 +22,15 @@ struct TTxCoordinator::TTxRestartMediatorQueue : public TTransactionBase<TTxCoor
         if (mediator.GenCookie != GenCookie)
             return true;
 
-        THashMap<TTxId,TVector<TTabletId>> pushToAffectedBuffer; 
-        TVector<TAutoPtr<TMediatorStep>> mediatorSteps; 
+        THashMap<TTxId,TVector<TTabletId>> pushToAffectedBuffer;
+        TVector<TAutoPtr<TMediatorStep>> mediatorSteps;
 
         if (!Self->RestoreMediatorInfo(MediatorId, mediatorSteps, txc, pushToAffectedBuffer))
             return false;
 
         for (const auto& it : pushToAffectedBuffer) {
             TTransaction& transaction = Self->Transactions[it.first];
-            THashSet<TTabletId>& unconfirmedAffectedSet = transaction.UnconfirmedAffectedSet[MediatorId]; 
+            THashSet<TTabletId>& unconfirmedAffectedSet = transaction.UnconfirmedAffectedSet[MediatorId];
             Y_VERIFY(unconfirmedAffectedSet.size() == it.second.size(),
                      "Incosistent affected set in mem in DB for txId %" PRIu64, it.first);
             for (const TTabletId affectedTabletId : it.second) {
@@ -65,7 +65,7 @@ ITransaction* TTxCoordinator::CreateTxRestartMediatorQueue(TTabletId mediatorId,
     return new TTxRestartMediatorQueue(mediatorId, genCookie, this);
 }
 
-bool TTxCoordinator::RestoreMediatorInfo(TTabletId mediatorId, TVector<TAutoPtr<TMediatorStep>> &planned, TTransactionContext &txc, /*TKeyBuilder &kb, */THashMap<TTxId,TVector<TTabletId>> &pushToAffected) const { 
+bool TTxCoordinator::RestoreMediatorInfo(TTabletId mediatorId, TVector<TAutoPtr<TMediatorStep>> &planned, TTransactionContext &txc, /*TKeyBuilder &kb, */THashMap<TTxId,TVector<TTabletId>> &pushToAffected) const {
     NIceDb::TNiceDb db(txc.DB);
     pushToAffected.clear();
     planned.clear();
@@ -75,7 +75,7 @@ bool TTxCoordinator::RestoreMediatorInfo(TTabletId mediatorId, TVector<TAutoPtr<
         return false;
 
     // Later we will need this to be sorted by stepId
-    TMap<TStepId, TAutoPtr<TMediatorStep>> mediatorSteps; 
+    TMap<TStepId, TAutoPtr<TMediatorStep>> mediatorSteps;
 
     while (!rowset.EndOfSet()) {
         const TTxId txId = rowset.GetValue<Schema::AffectedSet::TransactionID>();

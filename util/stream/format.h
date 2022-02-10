@@ -113,7 +113,7 @@ namespace NFormatPrivate {
 
         if (str[0] == '-') {
             stream << '-';
-            str.Skip(1); 
+            str.Skip(1);
         }
 
         if (value.Flags & HF_ADDX) {

@@ -56,7 +56,7 @@ namespace NPQ {
         ui64 CookiePQ;
         ui32 Partition;
         ui32 MetadataWritesCount;
-        TVector<TRequestedBlob> Blobs; 
+        TVector<TRequestedBlob> Blobs;
 
         TKvRequest(ERequestType type, TActorId sender, ui64 cookie, ui32 partition)
         : Type(type)
@@ -123,8 +123,8 @@ namespace NPQ {
         {}
 
         virtual void SaveHeadBlob(const TBlobId& blob) = 0;
-        virtual void SaveUserOffset(TString client, ui32 partition, ui64 offset) = 0; 
-        virtual TDeque<TBlobId> BlobsToTouch() const = 0; 
+        virtual void SaveUserOffset(TString client, ui32 partition, ui64 offset) = 0;
+        virtual TDeque<TBlobId> BlobsToTouch() const = 0;
     };
 
     class TCacheStrategyKeepUsed : public TCacheEvictionStrategy {
@@ -143,7 +143,7 @@ namespace NPQ {
                 Head.pop_front();
         }
 
-        virtual void SaveUserOffset(TString client, ui32 partition, ui64 offset) override 
+        virtual void SaveUserOffset(TString client, ui32 partition, ui64 offset) override
         {
             Y_UNUSED(client);
             Y_UNUSED(partition);
@@ -153,14 +153,14 @@ namespace NPQ {
 #endif
         }
 
-        virtual TDeque<TBlobId> BlobsToTouch() const override 
+        virtual TDeque<TBlobId> BlobsToTouch() const override
         {
             return Head;
         }
 
     private:
         ui32 HeadBlobsCount;
-        TDeque<TBlobId> Head; 
+        TDeque<TBlobId> Head;
     };
 
     /// Intablet (L1) cache logic
@@ -192,7 +192,7 @@ namespace NPQ {
             TCacheValue::TWeakPtr Blob;
         };
 
-        using TMapType = THashMap<TBlobId, TValueL1>; 
+        using TMapType = THashMap<TBlobId, TValueL1>;
 
         struct TCounters {
             ui64 SizeBytes = 0;
@@ -230,18 +230,18 @@ namespace NPQ {
             }
         };
 
-        TIntabletCache(TString topicName, ui32 l1Size) 
+        TIntabletCache(TString topicName, ui32 l1Size)
             : TopicName(topicName)
             , L1Strategy(nullptr)
         {
             Y_UNUSED(l1Size);
         }
 
-        const TMapType& CachedMap() const { return Cache; } 
+        const TMapType& CachedMap() const { return Cache; }
         ui64 GetSize() const { return Cache.size(); }
         const TCounters& GetCounters() const { return Counters; }
 
-        void SetUserOffset(const TActorContext& ctx, TString client, ui32 partition, ui64 offset) 
+        void SetUserOffset(const TActorContext& ctx, TString client, ui32 partition, ui64 offset)
         {
             if (L1Strategy) {
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Setting reader offset. User: "
@@ -303,7 +303,7 @@ namespace NPQ {
             ctx.Send(MakePersQueueL2CacheID(), l2Request.Release()); // -> L2
         }
 
-        void SavePrefetchBlobs(const TActorContext& ctx, const TKvRequest& kvReq, const TVector<bool>& store) 
+        void SavePrefetchBlobs(const TActorContext& ctx, const TKvRequest& kvReq, const TVector<bool>& store)
         {
             Y_VERIFY(store.size() == kvReq.Blobs.size());
 
@@ -373,7 +373,7 @@ namespace NPQ {
             if (L1Strategy) {
                 THolder<TCacheL2Request> reqData = MakeHolder<TCacheL2Request>(TopicName);
 
-                TDeque<TBlobId> needTouch = L1Strategy->BlobsToTouch(); 
+                TDeque<TBlobId> needTouch = L1Strategy->BlobsToTouch();
                 PrepareTouch(ctx, reqData, needTouch);
 
                 THolder<TEvPqCache::TEvCacheL2Request> l2Request = MakeHolder<TEvPqCache::TEvCacheL2Request>(reqData.Release());
@@ -382,7 +382,7 @@ namespace NPQ {
         }
 
     private:
-        void PrepareTouch(const TActorContext& ctx, THolder<TCacheL2Request>& reqData, const TDeque<TBlobId>& used) 
+        void PrepareTouch(const TActorContext& ctx, THolder<TCacheL2Request>& reqData, const TDeque<TBlobId>& used)
         {
             for (auto& blob : used) {
                 TCacheBlobL2 blobL2 = {blob.Partition, blob.Offset, blob.PartNo, nullptr};
@@ -443,7 +443,7 @@ namespace NPQ {
 
         void RemoveEvicted()
         {
-            TMapType actual; 
+            TMapType actual;
             for (const auto& c: Cache) {
                 auto ptr = c.second.GetBlob();
                 if (ptr) {
@@ -456,12 +456,12 @@ namespace NPQ {
         }
 
     private:
-        TString TopicName; 
-        TMapType Cache; 
+        TString TopicName;
+        TMapType Cache;
         TCounters Counters;
         THolder<TCacheEvictionStrategy> L1Strategy;
 
-        void RemoveBlob(const TMapType::iterator& it) 
+        void RemoveBlob(const TMapType::iterator& it)
         {
             Counters.Dec(it->second);
             Cache.erase(it);

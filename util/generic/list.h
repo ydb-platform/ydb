@@ -10,7 +10,7 @@
 #include <utility>
 
 template <class T, class A>
-class TList: public std::list<T, TReboundAllocator<A, T>> { 
+class TList: public std::list<T, TReboundAllocator<A, T>> {
     using TBase = std::list<T, TReboundAllocator<A, T>>;
 
 public:

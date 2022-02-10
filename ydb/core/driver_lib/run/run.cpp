@@ -144,7 +144,7 @@ public:
             const ui32 domainId = domain.GetDomainId();
             const ui64 schemeRoot = domain.HasSchemeRoot() ? domain.GetSchemeRoot() : 0;
             const ui64 planResolution = domain.HasPlanResolution() ? domain.GetPlanResolution() : 500;
-            const TString domainName = domain.HasName() ? domain.GetName() : Sprintf("domain-%" PRIu32, domainId); 
+            const TString domainName = domain.HasName() ? domain.GetName() : Sprintf("domain-%" PRIu32, domainId);
             TDomainsInfo::TDomain::TStoragePoolKinds poolTypes;
             for (auto &type : domain.GetStoragePoolTypes()) {
                 Y_VERIFY(!poolTypes.contains(type.GetKind()), "duplicated slot type");
@@ -242,7 +242,7 @@ public:
             for (const NKikimrConfig::TChannelProfileConfig::TProfile::TChannel &channel : profile.GetChannel()) {
                 Y_VERIFY(channel.HasErasureSpecies());
                 Y_VERIFY(channel.HasPDiskCategory());
-                TString name = channel.GetErasureSpecies(); 
+                TString name = channel.GetErasureSpecies();
                 TBlobStorageGroupType::EErasureSpecies erasure = TBlobStorageGroupType::ErasureSpeciesByName(name);
                 if (erasure == TBlobStorageGroupType::ErasureSpeciesCount) {
                     ythrow yexception() << "wrong erasure species \"" << name << "\"";
@@ -836,12 +836,12 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     const ui32 userPoolId = cfg.GetActorSystemConfig().HasUserExecutor() ? cfg.GetActorSystemConfig().GetUserExecutor() : 0;
     const ui32 ioPoolId = cfg.GetActorSystemConfig().HasIoExecutor() ? cfg.GetActorSystemConfig().GetIoExecutor() : 0;
     const ui32 batchPoolId = cfg.GetActorSystemConfig().HasBatchExecutor() ? cfg.GetActorSystemConfig().GetBatchExecutor() : 0;
-    TMap<TString, ui32> servicePools; 
+    TMap<TString, ui32> servicePools;
     for (ui32 i = 0; i < cfg.GetActorSystemConfig().ServiceExecutorSize(); ++i) {
         auto item = cfg.GetActorSystemConfig().GetServiceExecutor(i);
-        const TString service = item.GetServiceName(); 
+        const TString service = item.GetServiceName();
         const ui32 pool = item.GetExecutorId();
-        servicePools.insert(std::pair<TString, ui32>(service, pool)); 
+        servicePools.insert(std::pair<TString, ui32>(service, pool));
     }
 
     AppData.Reset(new TAppData(sysPoolId, userPoolId, ioPoolId, batchPoolId,
@@ -990,7 +990,7 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
     }
 
     if (LogSettings->Format == NLog::TSettings::JSON_FORMAT) {
-        TString fullHostName = HostName(); 
+        TString fullHostName = HostName();
         size_t firstDot = fullHostName.find_first_of('.');
         LogSettings->ShortHostName = fullHostName.substr(0, firstDot);
     }
@@ -1003,7 +1003,7 @@ void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)
 
     auto logConfig = runConfig.AppConfig.GetLogConfig();
     for (const auto& entry : logConfig.GetEntry()) {
-        const TString& componentName = entry.GetComponent(); 
+        const TString& componentName = entry.GetComponent();
 
         NLog::EComponent component;
         if (componentName.empty()) {
@@ -1014,7 +1014,7 @@ void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)
                 componentName.data());
         }
 
-        TString explanation; 
+        TString explanation;
         if (entry.HasLevel()) {
             Y_VERIFY(LogSettings->SetLevel((NLog::EPriority)entry.GetLevel(), component, explanation) == 0);
         }
@@ -1332,8 +1332,8 @@ void RegisterBaseTagForMemoryProfiling(TActorSystem* as) {
     Y_VERIFY(as != nullptr);
     if (as->MemProfActivityBase != 0)
         return;
-    TVector<TString> holders; 
-    TVector<const char*> activityNames; 
+    TVector<TString> holders;
+    TVector<const char*> activityNames;
     for (ui32 i = 0; i < NKikimrServices::TActivity::EType_ARRAYSIZE; ++i) {
         auto current = (NKikimrServices::TActivity::EType)i;
         const char* currName = NKikimrServices::TActivity::EType_Name(current).c_str();
@@ -1530,9 +1530,9 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
     FormatFactory.Reset(new TFormatFactory);
 
 #ifdef KIKIMR_UDF_DYNAMIC_LINK
-    const TString& udfsDir = runConfig.AppConfig.GetUDFsDir(); 
+    const TString& udfsDir = runConfig.AppConfig.GetUDFsDir();
 
-    TVector<TString> udfsPaths; 
+    TVector<TString> udfsPaths;
     if (!udfsDir.empty()) {
         if (NFs::Exists(udfsDir) && IsDir(udfsDir)) {
             NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths);

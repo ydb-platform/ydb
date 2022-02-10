@@ -12,7 +12,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/hash.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/system/guard.h>
 #include <util/system/spinlock.h>
 
@@ -43,7 +43,7 @@ public:
 
         with_lock(Lock_) {
             bool hasErrors = false;
-            THashSet<TString> requiredModules; 
+            THashSet<TString> requiredModules;
             for (auto udfPtr : functions) {
                 auto& udf = *udfPtr;
                 TStringBuf moduleName, funcName;
@@ -52,13 +52,13 @@ public:
                         "Incorrect format of function name: " << udf.Name));
                     hasErrors = true;
                 } else {
-                    requiredModules.insert(TString(moduleName)); 
+                    requiredModules.insert(TString(moduleName));
                 }
             }
 
             THoldingFileStorage holdingFileStorage(FileStorage_);
             auto newRegistry = FunctionRegistry_->Clone();
-            THashMap<TString, TImport*> path2import; 
+            THashMap<TString, TImport*> path2import;
             for (auto import: imports) {
                 if (import->Modules) {
                     bool needLibrary = false;

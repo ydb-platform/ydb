@@ -19,7 +19,7 @@ namespace NKikimr {
             TChunkSerNum ChunkInProgressSerNum;
 
             // index of current chunk
-            TVector<TBlobIndexRecord> Index; 
+            TVector<TBlobIndexRecord> Index;
             ui32 IndexPos = 0;
             ui32 OffsetInBlocks = 0;
 

@@ -90,7 +90,7 @@ namespace NActors {
         int TSettings::SetLevelImpl(
             const TString& name, bool isSampling,
             EPriority priority, EComponent component, TString& explanation) {
-            TString titleName(name); 
+            TString titleName(name);
             titleName.to_title();
 
             // check priority

@@ -56,7 +56,7 @@ namespace NKikimr {
                 }
             };
 
-            TString ToString() const { 
+            TString ToString() const {
                 TStringStream str;
                 str << "[Key# " << Key.ToString() << " Lsn# " << Lsn << "]";
                 return str.Str();
@@ -343,7 +343,7 @@ namespace NKikimr {
         }
 
         // append chunk ids to the vector
-        void FillInChunkIds(TVector<ui32> &vec) const { 
+        void FillInChunkIds(TVector<ui32> &vec) const {
             // fresh doesn't have chunks
             Y_UNUSED(vec);
         }

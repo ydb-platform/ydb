@@ -37,7 +37,7 @@ protected:
     NThreading::TPromise<void> ResumeYqlExecutionPromise;
 };
 
-void MakeGatewaysConfig(const THashMap<TString, TString>& clusterMapping, NYql::TGatewaysConfig& gatewaysConfig); 
+void MakeGatewaysConfig(const THashMap<TString, TString>& clusterMapping, NYql::TGatewaysConfig& gatewaysConfig);
 
 }
 }

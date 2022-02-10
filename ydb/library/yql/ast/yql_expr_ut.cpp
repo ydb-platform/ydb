@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT(success);
     }
 
-    static bool ParseAndCompile(const TString& program) { 
+    static bool ParseAndCompile(const TString& program) {
         TAstParseResult astRes = ParseAstWithCheck(program);
         TExprContext exprCtx;
         TExprNode::TPtr exprRoot;
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 
         auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
         TAstNode* xValue = ast.Root->GetChild(0)->GetChild(1)->GetChild(1);
-        UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "0123456789ABCDEF"); 
+        UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "0123456789ABCDEF");
         UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::ArbitraryContent);
     }
 
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 
         auto ast = ConvertToAst(*exprRoot, exprCtx, TExprAnnotationFlags::None, true);
         TAstNode* xValue = ast.Root->GetChild(0)->GetChild(2)->GetChild(1);
-        UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "FEDCBA9876543210"); 
+        UNIT_ASSERT_STRINGS_EQUAL(HexEncode(TString(xValue->GetContent())), "FEDCBA9876543210");
         UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::BinaryContent);
     }
 
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 }
 
 Y_UNIT_TEST_SUITE(TCompareExprTrees) {
-    void CompileAndCompare(const TString& one, const TString& two, const std::pair<TPosition, TPosition> *const diffPositions = nullptr) { 
+    void CompileAndCompare(const TString& one, const TString& two, const std::pair<TPosition, TPosition> *const diffPositions = nullptr) {
         const auto progOne(ParseAst(one)), progTwo(ParseAst(two));
         UNIT_ASSERT(progOne.IsOk() && progTwo.IsOk());
 
@@ -1008,7 +1008,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         )";
 
         const auto disassembled = CompileAndDisassemble(program);
-        UNIT_ASSERT(TString::npos != disassembled.find("'('key 'subkey 'value)")); 
+        UNIT_ASSERT(TString::npos != disassembled.find("'('key 'subkey 'value)"));
         UNIT_ASSERT_EQUAL(disassembled.find("'('key 'subkey 'value)"), disassembled.rfind("'('key 'subkey 'value)"));
     }
 
@@ -1025,7 +1025,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         )";
 
         const auto disassembled = CompileAndDisassemble(program);
-        UNIT_ASSERT(TString::npos != disassembled.find("(+ (Int64 '40) (Int64 '2))")); 
+        UNIT_ASSERT(TString::npos != disassembled.find("(+ (Int64 '40) (Int64 '2))"));
         UNIT_ASSERT_EQUAL(disassembled.find("(+ (Int64 '40) (Int64 '2))"), disassembled.rfind("(+ (Int64 '40) (Int64 '2))"));
     }
 

@@ -34,7 +34,7 @@ namespace {
         {
         }
 
-        inline void Finish() noexcept { 
+        inline void Finish() noexcept {
             AtomicSet(FinishStarted_, 1);
 
             auto guard = Guard(Lock_);
@@ -72,8 +72,8 @@ namespace {
     private:
         TAdaptiveLock Lock_;
         TAtomic FinishStarted_;
-        TDeque<TFunc> Store_; 
-        TPriorityQueue<TFunc*, TVector<TFunc*>, TCmp> Items_; 
+        TDeque<TFunc> Store_;
+        TPriorityQueue<TFunc*, TVector<TFunc*>, TCmp> Items_;
     };
 
     static TAtomic atExitLock = 0;

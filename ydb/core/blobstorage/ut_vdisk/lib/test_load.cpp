@@ -18,7 +18,7 @@ protected:
         const ui32 maxBlobSize = 1u << 20u;
 
         TIntrusivePtr<TBlobStorageGroupInfo> ginfo = Conf->GroupInfo;
-        TVector<TVDiskID> vdisks = Conf->VDisks->GetVDiskIds(); 
+        TVector<TVDiskID> vdisks = Conf->VDisks->GetVDiskIds();
         TAutoPtr<IDataGenerator> generator;
         generator.Reset(CreateBlobGenerator(maxDataSize, maxBlobs, minBlobSize, maxBlobSize, 1, 1, ginfo,
                 vdisks, true));

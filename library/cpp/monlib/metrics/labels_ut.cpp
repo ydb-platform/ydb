@@ -124,12 +124,12 @@ Y_UNIT_TEST_SUITE(TLabelsTest) {
         UNIT_ASSERT_EQUAL(labels[0], TLabel("name1", "value1"));
         UNIT_ASSERT_EQUAL(labels[1], TLabel("name2", "value2"));
 
-        TVector<TLabel> labelsCopy; 
+        TVector<TLabel> labelsCopy;
         for (auto&& label : labels) {
             labelsCopy.emplace_back(label.Name(), label.Value());
         }
 
-        UNIT_ASSERT_EQUAL(labelsCopy, TVector<TLabel>({ 
+        UNIT_ASSERT_EQUAL(labelsCopy, TVector<TLabel>({
                                           {"name1", "value1"},
                                           {"name2", "value2"},
                                       }));

@@ -117,7 +117,7 @@ namespace NPage {
             }
             Offsets.clear();
             if (Offsets.capacity() > 10240) {
-                TVector<TPgSize>().swap(Offsets); 
+                TVector<TPgSize>().swap(Offsets);
             }
 
             return std::exchange(Blob, TSharedData{ });
@@ -282,7 +282,7 @@ namespace NPage {
 
         TSharedData Blob;
         char* Tail = nullptr;
-        TVector<TPgSize> Offsets; 
+        TVector<TPgSize> Offsets;
         TVector<ui64> Deltas;
         ui64 PageBytes = Max<ui64>();   /* Max bytes per each page blob */
         ui32 PageRows = Max<ui32>();    /* Max rows per each rows blob  */

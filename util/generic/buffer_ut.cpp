@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/datetime.h>
-#include "string.h" 
+#include "string.h"
 #include "vector.h"
 #include "buffer.h"
 
@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
         const char data[] = "1234567890qwertyuiop";
 
         TBuffer buf(13);
-        TString str; 
+        TString str;
 
         for (size_t i = 0; i < 10; ++i) {
             for (size_t j = 0; j < sizeof(data) - 1; ++j) {
@@ -91,11 +91,11 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
 
         buf.Append('a');
         UNIT_ASSERT_EQUAL(buf.Capacity(), 256);
-        TString tmp1 = "abcdef"; 
+        TString tmp1 = "abcdef";
         buf.Append(tmp1.data(), tmp1.size());
         UNIT_ASSERT_EQUAL(buf.Capacity(), 256);
 
-        TString tmp2 = "30498290sfokdsflj2308w"; 
+        TString tmp2 = "30498290sfokdsflj2308w";
         buf.Resize(1020);
         buf.Append(tmp2.data(), tmp2.size());
         UNIT_ASSERT_EQUAL(buf.Capacity(), 2048);
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
     Y_UNIT_TEST(TestShrinkToFit) {
         TBuffer buf;
 
-        TString content = "some text"; 
+        TString content = "some text";
         buf.Append(content.data(), content.size());
         UNIT_ASSERT_EQUAL(buf.Size(), 9);
         UNIT_ASSERT_EQUAL(buf.Capacity(), 16);
@@ -134,13 +134,13 @@ Y_UNIT_TEST(TestAlignUp) {
     buf.AlignUp(4, '!');
 
     UNIT_ASSERT(buf.Size() % 4 == 0);
-    UNIT_ASSERT_VALUES_EQUAL(TString(~buf, +buf), "some text!!!"); 
+    UNIT_ASSERT_VALUES_EQUAL(TString(~buf, +buf), "some text!!!");
 
     char addContent[] = "1234";
     buf.Append(addContent, sizeof(addContent));
     buf.AlignUp(4, 'X');
     UNIT_ASSERT(buf.Size() % 4 == 0);
-    UNIT_ASSERT_VALUES_EQUAL(TString(~buf, +buf), "some text!!!1234"); 
+    UNIT_ASSERT_VALUES_EQUAL(TString(~buf, +buf), "some text!!!1234");
 }
 #endif
 
@@ -164,7 +164,7 @@ Y_UNIT_TEST(TestSpeed) {
     }
 
     {
-        TVector<char> buf; 
+        TVector<char> buf;
 
         t2 = MicroSeconds();
 

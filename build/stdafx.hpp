@@ -132,7 +132,7 @@
 #include <util/system/fstat.h>
 #include <util/system/madvise.h>
 #include <util/system/valgrind.h>
-#include <util/system/shmat.h> 
+#include <util/system/shmat.h>
 #include <util/system/rusage.h>
 #include <util/system/yassert.h>
 #include <util/system/tempfile.h>
@@ -236,7 +236,7 @@
 #include <util/generic/function.h>
 #include <util/generic/flags.h>
 #include <util/generic/strfcpy.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/fastqueue.h>
 #include <util/generic/explicit_type.h>
 #include <util/generic/queue.h>

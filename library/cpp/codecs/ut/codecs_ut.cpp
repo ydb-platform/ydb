@@ -872,8 +872,8 @@ class TCodecsTest: public TTestBase {
     UNIT_TEST_SUITE_END();
 
 private:
-    TString PrintError(TStringBuf learn, TStringBuf test, TStringBuf codec, ui32 i) { 
-        TString s; 
+    TString PrintError(TStringBuf learn, TStringBuf test, TStringBuf codec, ui32 i) {
+        TString s;
         TStringOutput sout(s);
         sout << codec << ": " << i << ", "
              << "\n";
@@ -882,7 +882,7 @@ private:
         sout << HexEncode(test.data(), test.size()); //NEscJ::EscapeJ<true>(test, sout);
 
         if (s.Size() > 1536) {
-            TString res = s.substr(0, 512); 
+            TString res = s.substr(0, 512);
             res.append("...<skipped ").append(ToString(s.size() - 1024)).append(">...");
             res.append(s.substr(s.size() - 512));
         }
@@ -895,13 +895,13 @@ private:
     }
 
     template <typename TCodec, bool testsaveload>
-    void TestCodec(const TVector<TBuffer>& inlearn = TVector<TBuffer>(), const TVector<TBuffer>& in = TVector<TBuffer>(), NCodecs::TCodecPtr c = new TCodec) { 
+    void TestCodec(const TVector<TBuffer>& inlearn = TVector<TBuffer>(), const TVector<TBuffer>& in = TVector<TBuffer>(), NCodecs::TCodecPtr c = new TCodec) {
         using namespace NCodecs;
 
         TBuffer buff;
 
         {
-            TVector<TBuffer> out; 
+            TVector<TBuffer> out;
 
             c->Learn(inlearn.begin(), inlearn.end());
 
@@ -973,7 +973,7 @@ private:
 
     void TestDelta() {
         using namespace NCodecs;
-        TVector<TBuffer> d; 
+        TVector<TBuffer> d;
 
         // 1. common case
         d.emplace_back();
@@ -1016,7 +1016,7 @@ private:
     void TestPFor() {
         using namespace NCodecs;
         {
-            TVector<TBuffer> d; 
+            TVector<TBuffer> d;
             d.emplace_back();
             AppendTo(d.back(), -1LL);
             AppendTo(d.back(), -1LL);
@@ -1054,7 +1054,7 @@ private:
             TestCodec<TPForCodec<ui64, true>, true>(d);
         }
         {
-            TVector<TBuffer> d; 
+            TVector<TBuffer> d;
             d.emplace_back();
             AppendTo(d.back(), -1);
             AppendTo(d.back(), -1);
@@ -1084,7 +1084,7 @@ private:
             TestCodec<TPForCodec<ui32, true>, false>(d);
         }
         {
-            TVector<TBuffer> d; 
+            TVector<TBuffer> d;
             d.emplace_back();
             for (auto& textValue : TextValues) {
                 AppendTo(d.back(), (ui32)strlen(textValue));
@@ -1094,7 +1094,7 @@ private:
             TestCodec<TPForCodec<ui32, true>, false>(d);
         }
         {
-            TVector<TBuffer> d; 
+            TVector<TBuffer> d;
             d.emplace_back();
             for (auto& textValue : TextValues) {
                 AppendTo(d.back(), (ui64)strlen(textValue));
@@ -1109,7 +1109,7 @@ private:
     void DoTestSimpleCodec() {
         using namespace NCodecs;
         {
-            TVector<TBuffer> learn; 
+            TVector<TBuffer> learn;
 
             for (auto& textValue : TextValues) {
                 learn.emplace_back(textValue, strlen(textValue));
@@ -1122,11 +1122,11 @@ private:
         }
 
         {
-            TVector<TBuffer> learn; 
+            TVector<TBuffer> learn;
             learn.emplace_back();
             learn.back().Append('a');
 
-            TVector<TBuffer> test; 
+            TVector<TBuffer> test;
             test.emplace_back();
             for (ui32 i = 0; i < 256; ++i) {
                 test.back().Append((ui8)i);
@@ -1136,7 +1136,7 @@ private:
         }
 
         {
-            TVector<TBuffer> learn; 
+            TVector<TBuffer> learn;
             learn.emplace_back();
             for (ui32 i = 0; i < 256; ++i) {
                 for (ui32 j = 0; j < i; ++j) {
@@ -1144,7 +1144,7 @@ private:
                 }
             }
 
-            TVector<TBuffer> test; 
+            TVector<TBuffer> test;
             test.emplace_back();
             for (ui32 i = 0; i < 256; ++i) {
                 test.back().Append((ui8)i);
@@ -1154,7 +1154,7 @@ private:
         }
 
         {
-            TVector<TBuffer> learn; 
+            TVector<TBuffer> learn;
             learn.emplace_back();
             for (ui32 i = 0; i < 128; ++i) {
                 for (ui32 j = 0; j < i; ++j) {
@@ -1162,7 +1162,7 @@ private:
                 }
             }
 
-            TVector<TBuffer> test; 
+            TVector<TBuffer> test;
             test.emplace_back();
             for (ui32 i = 128; i < 256; ++i) {
                 test.back().Append((ui8)i);
@@ -1197,13 +1197,13 @@ private:
     void TestHuffmanLearnByFreqs() {
         using namespace NCodecs;
 
-        TVector<TBuffer> data; 
+        TVector<TBuffer> data;
 
         for (auto& textValue : TextValues) {
             data.emplace_back(textValue, strlen(textValue));
         }
 
-        TVector<TBuffer> outLearn; 
+        TVector<TBuffer> outLearn;
 
         {
             THuffmanCodec codec;
@@ -1215,7 +1215,7 @@ private:
             }
         }
 
-        TVector<TBuffer> outLearnByFreqs; 
+        TVector<TBuffer> outLearnByFreqs;
 
         {
             THuffmanCodec codec;
@@ -1251,30 +1251,30 @@ private:
     void TestSolar() {
         using namespace NCodecs;
         {
-            TVector<TBuffer> learn; 
+            TVector<TBuffer> learn;
 
             for (auto& textValue : TextValues) {
                 learn.emplace_back(textValue, strlen(textValue));
             }
 
-            TestCodec<TSolarCodec, true>(learn, TVector<TBuffer>(), new TSolarCodec(512, 8)); 
-            TestCodec<TAdaptiveSolarCodec, false>(learn, TVector<TBuffer>(), new TAdaptiveSolarCodec(512, 8)); 
-            TestCodec<TAdaptiveSolarCodec, true>(learn, TVector<TBuffer>(), new TAdaptiveSolarCodec(512, 8)); 
-            TestCodec<TSolarCodecShortInt, true>(learn, TVector<TBuffer>(), new TSolarCodecShortInt(512, 8)); 
+            TestCodec<TSolarCodec, true>(learn, TVector<TBuffer>(), new TSolarCodec(512, 8));
+            TestCodec<TAdaptiveSolarCodec, false>(learn, TVector<TBuffer>(), new TAdaptiveSolarCodec(512, 8));
+            TestCodec<TAdaptiveSolarCodec, true>(learn, TVector<TBuffer>(), new TAdaptiveSolarCodec(512, 8));
+            TestCodec<TSolarCodecShortInt, true>(learn, TVector<TBuffer>(), new TSolarCodecShortInt(512, 8));
         }
         {
-            TestCodec<TSolarCodec, true>(TVector<TBuffer>(), TVector<TBuffer>(), new TSolarCodec(512, 8)); 
-            TestCodec<TAdaptiveSolarCodec, false>(TVector<TBuffer>(), TVector<TBuffer>(), new TAdaptiveSolarCodec(512, 8)); 
-            TestCodec<TAdaptiveSolarCodec, true>(TVector<TBuffer>(), TVector<TBuffer>(), new TAdaptiveSolarCodec(512, 8)); 
-            TestCodec<TSolarCodecShortInt, true>(TVector<TBuffer>(), TVector<TBuffer>(), new TSolarCodecShortInt(512, 8)); 
+            TestCodec<TSolarCodec, true>(TVector<TBuffer>(), TVector<TBuffer>(), new TSolarCodec(512, 8));
+            TestCodec<TAdaptiveSolarCodec, false>(TVector<TBuffer>(), TVector<TBuffer>(), new TAdaptiveSolarCodec(512, 8));
+            TestCodec<TAdaptiveSolarCodec, true>(TVector<TBuffer>(), TVector<TBuffer>(), new TAdaptiveSolarCodec(512, 8));
+            TestCodec<TSolarCodecShortInt, true>(TVector<TBuffer>(), TVector<TBuffer>(), new TSolarCodecShortInt(512, 8));
         }
 
         {
-            TVector<TBuffer> learn; 
+            TVector<TBuffer> learn;
             learn.emplace_back();
             learn.back().Append('a');
 
-            TVector<TBuffer> test; 
+            TVector<TBuffer> test;
             test.emplace_back();
             for (ui32 i = 0; i < 256; ++i) {
                 test.back().Append((ui8)i);
@@ -1287,7 +1287,7 @@ private:
         }
 
         {
-            TVector<TBuffer> learn; 
+            TVector<TBuffer> learn;
             learn.emplace_back();
             for (ui32 i = 0; i < 256; ++i) {
                 for (ui32 j = 0; j < i; ++j) {
@@ -1295,7 +1295,7 @@ private:
                 }
             }
 
-            TVector<TBuffer> test; 
+            TVector<TBuffer> test;
             test.emplace_back();
             for (ui32 i = 0; i < 256; ++i) {
                 test.back().Append((ui8)i);
@@ -1311,7 +1311,7 @@ private:
     void TestPipeline() {
         using namespace NCodecs;
         {
-            TVector<TBuffer> learn; 
+            TVector<TBuffer> learn;
             learn.emplace_back();
             for (ui32 i = 0; i < 256; ++i) {
                 for (i32 j = i; j >= 0; --j) {
@@ -1319,7 +1319,7 @@ private:
                 }
             }
 
-            TVector<TBuffer> test; 
+            TVector<TBuffer> test;
             test.emplace_back();
             for (ui32 i = 0; i < 256; ++i) {
                 test.back().Append((ui8)i);
@@ -1329,7 +1329,7 @@ private:
                                             new TPipelineCodec(new TSolarCodec(512, 8), new TSolarCodec(512, 8), new THuffmanCodec));
         }
         {
-            TVector<TBuffer> d; 
+            TVector<TBuffer> d;
             d.emplace_back();
             for (ui32 i = 0; i < 256; ++i) {
                 for (i32 j = i; j >= 0; --j) {
@@ -1337,14 +1337,14 @@ private:
                 }
             }
 
-            TestCodec<TPipelineCodec, false>(d, TVector<TBuffer>(), 
+            TestCodec<TPipelineCodec, false>(d, TVector<TBuffer>(),
                                              new TPipelineCodec(new TDeltaCodec<ui32, false>, new TPForCodec<ui32>));
         }
     }
 
     void TestRegistry() {
         using namespace NCodecs;
-        TVector<TString> vs = ICodec::GetCodecsList(); 
+        TVector<TString> vs = ICodec::GetCodecsList();
         for (const auto& v : vs) {
             TCodecPtr p = ICodec::GetInstance(v);
             if (v == "none") {

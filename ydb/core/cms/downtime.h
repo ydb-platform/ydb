@@ -63,7 +63,7 @@ public:
         }
     };
 
-    using TSegments = TSet<TSegment, TSegmentCmp>; 
+    using TSegments = TSet<TSegment, TSegmentCmp>;
 
 public:
     TDowntime(TDuration ignoredDowntimeGap = TDuration::Zero());

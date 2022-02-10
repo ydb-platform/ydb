@@ -306,7 +306,7 @@ namespace NTypeAnnImpl {
     template <>
     IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Tuple>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        TTypeAnnotationNode::TListType items; 
+        TTypeAnnotationNode::TListType items;
         for (size_t i = 0; i < input->ChildrenSize(); ++i) {
             auto& child = input->ChildRef(i);
             if (auto status = EnsureTypeRewrite(child, ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
@@ -351,7 +351,7 @@ namespace NTypeAnnImpl {
     template <>
     IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Struct>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        TVector<const TItemExprType*> items; 
+        TVector<const TItemExprType*> items;
         for (size_t i = 0; i < input->ChildrenSize(); ++i) {
             auto& child = input->ChildRef(i);
             if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
@@ -739,7 +739,7 @@ namespace NTypeAnnImpl {
             }
         }
 
-        TString payload; 
+        TString payload;
         if (input->Child(0)->ChildrenSize() > 1) {
             if (!EnsureAtom(*input->Child(0)->Child(1), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -749,7 +749,7 @@ namespace NTypeAnnImpl {
         }
 
         const TTypeAnnotationNode* resultType = nullptr;
-        TVector<TCallableExprType::TArgumentInfo> arguments; 
+        TVector<TCallableExprType::TArgumentInfo> arguments;
         for (ui32 index = 1; index < input->ChildrenSize(); ++index) {
             auto child = input->Child(index);
             if (!EnsureTupleMinSize(*child, 1, ctx.Expr)) {
@@ -992,7 +992,7 @@ namespace NTypeAnnImpl {
         }
 
         auto structType = type->Cast<TStructExprType>();
-        TVector<const TItemExprType*> items = structType->GetItems(); 
+        TVector<const TItemExprType*> items = structType->GetItems();
         auto newItem = ctx.Expr.MakeType<TItemExprType>(input->Child(1)->Content(),
             input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
         if (!newItem->Validate(input->Pos(), ctx.Expr)) {
@@ -1033,7 +1033,7 @@ namespace NTypeAnnImpl {
         }
 
         auto structType = type->Cast<TStructExprType>();
-        TVector<const TItemExprType*> items; 
+        TVector<const TItemExprType*> items;
         items.reserve(Max<ui64>(structType->GetSize(), 1) - 1);
         bool found = false;
         for (auto& item : structType->GetItems()) {
@@ -1072,7 +1072,7 @@ namespace NTypeAnnImpl {
 
     template <>
     IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::FlattenMembers>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        TVector<const TItemExprType*> allItems; 
+        TVector<const TItemExprType*> allItems;
         for (auto& child : input->Children()) {
             if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
@@ -1107,7 +1107,7 @@ namespace NTypeAnnImpl {
                     itemType = ctx.Expr.MakeType<TOptionalExprType>(itemType);
                 }
                 auto newField = ctx.Expr.MakeType<TItemExprType>(
-                    TString::Join(prefix->Content(), field->GetName()), 
+                    TString::Join(prefix->Content(), field->GetName()),
                     itemType
                     );
                 allItems.push_back(newField);

@@ -16,7 +16,7 @@
 #   define VERBOSE_COUT(a) \
        Cerr << a
 
-static TString DebugFormatBits(ui64 value) { 
+static TString DebugFormatBits(ui64 value) {
     TStringStream s;
     for (size_t i = 7; i >=4; --i) {
         s << ((value >> i) & 1);
@@ -1541,8 +1541,8 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
     //    TODO: use 2-nd part of 'eo-split' to restore m+1 part
     //    TODO: 1-pass
     if (missingDataPartIdxA <= p.DataParts && missingDataPartIdxB >= p.TotalParts - 1) {
-        TString temp; 
-        TString &buffer = restoreFullData ? outBuffer : temp; 
+        TString temp;
+        TString &buffer = restoreFullData ? outBuffer : temp;
         if (!restoreFullData && restoreParts && missingDataPartIdxB == p.TotalParts - 1) {
             // The (f1) case, but no full data needed, only parts
             TRACE("case# f1" << Endl);
@@ -1583,8 +1583,8 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
     if (missingDataPartIdxA == p.TotalParts - 1 && missingDataPartIdxB == p.TotalParts) {
         TRACE("case# c" << Endl);
         VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
-        TString temp; 
-        TString &buffer = restoreFullData ? outBuffer : temp; 
+        TString temp;
+        TString &buffer = restoreFullData ? outBuffer : temp;
         if (!restoreFullData) {
             TRACE(__LINE__ << Endl);
             if (!restoreParityParts) {
@@ -1934,7 +1934,7 @@ void XorBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, T
     p.XorRestorePart<isStripe, restoreParts, restoreFullData, restoreParityParts>(partSet, missingDataPartIdx);
 }
 
-const std::array<TString, TErasureType::ErasureSpeciesCount> TErasureType::ErasureName{{ 
+const std::array<TString, TErasureType::ErasureSpeciesCount> TErasureType::ErasureName{{
     "none",
     "mirror-3",
     "block-3-1",

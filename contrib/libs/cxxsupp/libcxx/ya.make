@@ -12,12 +12,12 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 VERSION(2021-04-02-7959d59028dd126416cdf10dbbd22162922e1336)
 
-OWNER( 
+OWNER(
     halyavin
     somov
     g:cpp-committee
     g:cpp-contrib
-) 
+)
 
 ADDINCL(
     GLOBAL contrib/libs/cxxsupp/libcxx/include

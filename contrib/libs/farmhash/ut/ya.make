@@ -1,8 +1,8 @@
 UNITTEST_FOR(contrib/libs/farmhash)
 
-OWNER( 
-    somov 
-) 
+OWNER(
+    somov
+)
 
 NO_COMPILER_WARNINGS()
 

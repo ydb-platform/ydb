@@ -2,11 +2,11 @@
 
 #include <util/generic/vector.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/string/ascii.h>
 
 //do not own any data
-struct TPathSplitStore: public TVector<TStringBuf> { 
+struct TPathSplitStore: public TVector<TStringBuf> {
     TStringBuf Drive;
     bool IsAbsolute = false;
 
@@ -14,7 +14,7 @@ struct TPathSplitStore: public TVector<TStringBuf> {
     TStringBuf Extension() const;
 
 protected:
-    TString DoReconstruct(const TStringBuf slash) const; 
+    TString DoReconstruct(const TStringBuf slash) const;
 
     inline void DoAppendHint(size_t hint) {
         reserve(size() + hint);
@@ -24,7 +24,7 @@ protected:
 struct TPathSplitTraitsUnix: public TPathSplitStore {
     static constexpr char MainPathSep = '/';
 
-    inline TString Reconstruct() const { 
+    inline TString Reconstruct() const {
         return DoReconstruct(TStringBuf("/"));
     }
 
@@ -43,7 +43,7 @@ struct TPathSplitTraitsUnix: public TPathSplitStore {
 struct TPathSplitTraitsWindows: public TPathSplitStore {
     static constexpr char MainPathSep = '\\';
 
-    inline TString Reconstruct() const { 
+    inline TString Reconstruct() const {
         return DoReconstruct(TStringBuf("\\"));
     }
 
@@ -108,6 +108,6 @@ using TPathSplit = TPathSplitBase<TPathSplitTraitsLocal>;
 using TPathSplitUnix = TPathSplitBase<TPathSplitTraitsUnix>;
 using TPathSplitWindows = TPathSplitBase<TPathSplitTraitsWindows>;
 
-TString JoinPaths(const TPathSplit& p1, const TPathSplit& p2); 
+TString JoinPaths(const TPathSplit& p1, const TPathSplit& p2);
 
 TStringBuf CutExtension(const TStringBuf fileName);

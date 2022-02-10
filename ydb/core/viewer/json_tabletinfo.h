@@ -53,7 +53,7 @@ class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletSt
     static const bool WithRetry = false;
     using TBase = TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>;
     using TThis = TJsonTabletInfo;
-    TVector<ui64> Tablets; 
+    TVector<ui64> Tablets;
 public:
     TJsonTabletInfo(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)
         : TJsonWhiteboardRequest(viewer, ev)
@@ -146,7 +146,7 @@ public:
 
 template <>
 struct TJsonRequestParameters<TJsonTabletInfo> {
-    static TString GetParameters() { 
+    static TString GetParameters() {
         return R"___([{"name":"node_id","in":"query","description":"node identifier","required":false,"type":"integer"},)___"
                R"___({"name":"path","in":"query","description":"schema path","required":false,"type":"string"},)___"
                R"___({"name":"merge","in":"query","description":"merge information from nodes","required":false,"type":"boolean"},)___"
@@ -166,7 +166,7 @@ struct TJsonRequestParameters<TJsonTabletInfo> {
 
 template <>
 struct TJsonRequestSchema<TJsonTabletInfo> {
-    static TString GetSchema() { 
+    static TString GetSchema() {
         TStringStream stream;
         TProtoToJson::ProtoToJsonSchema<NKikimrWhiteboard::TEvTabletStateResponse>(stream);
         return stream.Str();
@@ -175,14 +175,14 @@ struct TJsonRequestSchema<TJsonTabletInfo> {
 
 template <>
 struct TJsonRequestSummary<TJsonTabletInfo> {
-    static TString GetSummary() { 
+    static TString GetSummary() {
         return "\"Информация о таблетках\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonTabletInfo> {
-    static TString GetDescription() { 
+    static TString GetDescription() {
         return "\"Возвращает информацию о статусе таблеток в кластере\"";
     }
 };

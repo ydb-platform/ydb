@@ -61,8 +61,8 @@ public:
         return AddPtr(key.data(), key.size(), data);
     }
 
-    bool AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& filename); 
-    bool AddSubtreeInFile(const TKeyBuf& key, const TString& filename) { 
+    bool AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& filename);
+    bool AddSubtreeInFile(const TKeyBuf& key, const TString& filename) {
         return AddSubtreeInFile(key.data(), key.size(), filename);
     }
 
@@ -83,8 +83,8 @@ public:
 
     size_t Save(IOutputStream& os) const;
     size_t SaveAndDestroy(IOutputStream& os);
-    size_t SaveToFile(const TString& fileName) const { 
-        TFixedBufferFileOutput out(fileName); 
+    size_t SaveToFile(const TString& fileName) const {
+        TFixedBufferFileOutput out(fileName);
         return Save(out);
     }
 

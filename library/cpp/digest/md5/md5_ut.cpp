@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TMD5Test) {
         r.Update((const unsigned char*)b + 15, strlen(b) - 15);
 
         char rs[33];
-        TString s(r.End(rs)); 
+        TString s(r.End(rs));
         s.to_lower();
 
         UNIT_ASSERT_NO_DIFF(s, TStringBuf("3ac00dd696b966fd74deee3c35a59d8f"));
@@ -26,11 +26,11 @@ Y_UNIT_TEST_SUITE(TMD5Test) {
     }
 
     Y_UNIT_TEST(TestFile) {
-        TString s = NUnitTest::RandomString(1000000, 1); 
-        const TString tmpFile = "tmp"; 
+        TString s = NUnitTest::RandomString(1000000, 1);
+        const TString tmpFile = "tmp";
 
         {
-            TFixedBufferFileOutput fo(tmpFile); 
+            TFixedBufferFileOutput fo(tmpFile);
             fo.Write(s.data(), s.size());
         }
 

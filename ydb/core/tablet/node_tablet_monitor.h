@@ -22,7 +22,7 @@ inline TActorId MakeNodeTabletMonitorID(ui32 node = 0) {
 struct ITabletStateClassifier : public TAtomicRefCount<ITabletStateClassifier>{
     virtual ui32 GetMaxTabletStateClass() const = 0;
     virtual std::function<bool(const NKikimrWhiteboard::TTabletStateInfo&)> GetTabletStateClassFilter(ui32 cls) const = 0;
-    virtual TString GetTabletStateClassName(ui32 cls) = 0; 
+    virtual TString GetTabletStateClassName(ui32 cls) = 0;
     virtual ~ITabletStateClassifier() {}
 
 };
@@ -37,7 +37,7 @@ struct TTabletListElement {
 
 struct TTabletFilterInfo {
     ui32 FilterNodeId;
-    TString FilterNodeHost; 
+    TString FilterNodeHost;
 };
 
 
@@ -45,8 +45,8 @@ struct ITabletListRenderer : public TAtomicRefCount<ITabletListRenderer> {
     virtual void RenderPageHeader(TStringStream& str) = 0;
     virtual void RenderPageFooter(TStringStream& str) = 0;
     virtual void RenderTabletList(TStringStream& str,
-                                  const TString& listName, 
-                                  const TVector<TTabletListElement>& tabletsToRender, 
+                                  const TString& listName,
+                                  const TVector<TTabletListElement>& tabletsToRender,
                                   const TTabletFilterInfo& filterInfo) = 0;
     virtual ~ITabletListRenderer() {}
 

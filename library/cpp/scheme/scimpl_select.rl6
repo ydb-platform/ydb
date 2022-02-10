@@ -54,7 +54,7 @@ namespace NSc {
     template <typename TSelector>
     struct TSelectorCtx {
         TSelector Selector;
-        TString Buffer; 
+        TString Buffer;
 
         const char* p0 = nullptr;
         const char* p = nullptr;
@@ -252,7 +252,7 @@ namespace NSc {
         return ctx.SelectPath() || !ctx.Selector.HasError;
     }
 
-    TString TValue::EscapeForPath(TStringBuf rawKey) { 
+    TString TValue::EscapeForPath(TStringBuf rawKey) {
         static const str_spn danger{"/[]"};
         if (!rawKey || danger.brk(rawKey.begin(), rawKey.end()) != rawKey.end()) {
             return NEscJ::EscapeJ<true>(rawKey);

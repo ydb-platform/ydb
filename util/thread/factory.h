@@ -27,7 +27,7 @@ public:
 
         virtual ~IThread() = default;
 
-        inline void Join() noexcept { 
+        inline void Join() noexcept {
             DoJoin();
         }
 
@@ -39,7 +39,7 @@ public:
     private:
         // it's actually DoStart
         virtual void DoRun(IThreadAble* func) = 0;
-        virtual void DoJoin() noexcept = 0; 
+        virtual void DoJoin() noexcept = 0;
     };
 
     inline IThreadFactory() noexcept = default;

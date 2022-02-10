@@ -90,9 +90,9 @@ namespace NActors {
             }
         };
 
-        TVector<TFinalEventCondition> FinalEvents; 
-        TVector<TEventMailboxId> NonEmptyMailboxes; 
-        TVector<TEventMailboxId> OnlyMailboxes; 
+        TVector<TFinalEventCondition> FinalEvents;
+        TVector<TEventMailboxId> NonEmptyMailboxes;
+        TVector<TEventMailboxId> OnlyMailboxes;
         std::function<bool()> CustomFinalCondition;
         bool Quiet = false;
     };
@@ -123,13 +123,13 @@ namespace NActors {
         static ui64 NextUniqueId;
     };
 
-    typedef TDeque<TAutoPtr<IEventHandle>> TEventsList; 
-    typedef TSet<TScheduledEventQueueItem> TScheduledEventsList; 
+    typedef TDeque<TAutoPtr<IEventHandle>> TEventsList;
+    typedef TSet<TScheduledEventQueueItem> TScheduledEventsList;
 
     class TEventMailBox : public TThrRefBase {
     public:
         TEventMailBox()
-            : InactiveUntil(TInstant::MicroSeconds(0)) 
+            : InactiveUntil(TInstant::MicroSeconds(0))
 #ifdef DEBUG_ORDER_EVENTS
             , ExpectedReceive(0)
             , NextToSend(0)
@@ -158,7 +158,7 @@ namespace NActors {
         TInstant InactiveUntil;
         TEventsList Sent;
 #ifdef DEBUG_ORDER_EVENTS
-        TMap<IEventHandle*, ui64> TrackSent; 
+        TMap<IEventHandle*, ui64> TrackSent;
         ui64 ExpectedReceive;
         ui64 NextToSend;
 #endif
@@ -238,7 +238,7 @@ namespace NActors {
         ui32 GetNodeCount() const;
         ui64 AllocateLocalId();
         ui32 InterconnectPoolId() const;
-        TString GetTempDir(); 
+        TString GetTempDir();
         TActorId Register(IActor* actor, ui32 nodeIndex = 0, ui32 poolId = 0,
             TMailboxType::EType mailboxType = TMailboxType::Simple, ui64 revolvingCounter = 0,
             const TActorId& parentid = TActorId());
@@ -427,10 +427,10 @@ namespace NActors {
         }
 
         template <typename... TEvents>
-        static TString TypeNames() { 
-            static TString names[] = { TypeName<TEvents>()... }; 
-            TString result; 
-            for (const TString& s : names) { 
+        static TString TypeNames() {
+            static TString names[] = { TypeName<TEvents>()... };
+            TString result;
+            for (const TString& s : names) {
                 if (result.empty()) {
                     result += '<';
                 } else {
@@ -464,8 +464,8 @@ namespace NActors {
         void SetDispatcherRandomSeed(TInstant time, ui64 iteration);
         TString GetActorName(const TActorId& actorId) const;
 
-        const TVector<ui64>& GetTxAllocatorTabletIds() const { return TxAllocatorTabletIds; } 
-        void SetTxAllocatorTabletIds(const TVector<ui64>& ids) { TxAllocatorTabletIds = ids; } 
+        const TVector<ui64>& GetTxAllocatorTabletIds() const { return TxAllocatorTabletIds; }
+        void SetTxAllocatorTabletIds(const TVector<ui64>& ids) { TxAllocatorTabletIds = ids; }
 
         void SetUseRealInterconnect() {
             UseRealInterconnect = true;
@@ -522,7 +522,7 @@ namespace NActors {
         TMutex Mutex;
         TCondVar MailboxesHasEvents;
         TEventMailBoxList Mailboxes;
-        TMap<ui32, ui64> EvCounters; 
+        TMap<ui32, ui64> EvCounters;
         ui64 DispatchCyclesCount;
         ui64 DispatchedEventsCount;
         ui64 DispatchedEventsLimit = 2'500'000;
@@ -566,7 +566,7 @@ namespace NActors {
             std::shared_ptr<void> AppData0;
             THolder<TActorSystem> ActorSystem;
             THolder<IExecutorPool> SchedulerPool;
-            TVector<IExecutorPool*> ExecutorPools; 
+            TVector<IExecutorPool*> ExecutorPools;
             THolder<TExecutorThread> ExecutorThread;
         };
 
@@ -605,8 +605,8 @@ namespace NActors {
             const TDispatchOptions* Options;
             TDispatchContext* PrevContext;
 
-            TMap<const TDispatchOptions::TFinalEventCondition*, ui32> FinalEventFrequency; 
-            TSet<TEventMailboxId> FoundNonEmptyMailboxes; 
+            TMap<const TDispatchOptions::TFinalEventCondition*, ui32> FinalEventFrequency;
+            TSet<TEventMailboxId> FoundNonEmptyMailboxes;
             bool FinalEventFound = false;
         };
 
@@ -627,7 +627,7 @@ namespace NActors {
         THashMap<TActorId, TActorId> ScheduleWhiteListParent;
         THashMap<TActorId, TString> ActorNames;
         TDispatchContext* CurrentDispatchContext;
-        TVector<ui64> TxAllocatorTabletIds; 
+        TVector<ui64> TxAllocatorTabletIds;
 
         static ui32 NextNodeId;
     };

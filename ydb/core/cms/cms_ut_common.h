@@ -36,7 +36,7 @@ public:
     using TEvWhiteboard = NNodeWhiteboard::TEvWhiteboard;
 
     static NKikimrBlobStorage::TEvControllerConfigResponse Config;
-    static THashMap<ui32, TFakeNodeInfo> Info; 
+    static THashMap<ui32, TFakeNodeInfo> Info;
     static TMutex Mutex;
 
     void Bootstrap(const TActorContext &ctx)

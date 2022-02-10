@@ -41,7 +41,7 @@ namespace NKikimr {
     class TDelayedHugeBlobDeleterInfo : public TThrRefBase {
         // map <LastDeletionLsn> -> <number of snapshots that were taken during the time LastDeletionLsn was equal
         // to key>; when snapshot counter reaches zero, the key is deleted from map
-        TMap<ui64, ui32> CurrentSnapshots; 
+        TMap<ui64, ui32> CurrentSnapshots;
 
         // last deletion LSN is set every time to LSN of log record containing FreeHugeBlobs vector; it is used as key
         // to CurrentSnapshots map; every shapshot taken when LastDeletionLsn has the specific value must be freed before
@@ -64,7 +64,7 @@ namespace NKikimr {
                 , Signature(signature)
             {}
         };
-        TDeque<TRemovedHugeBlobsQueueItem> RemovedHugeBlobsQueue; 
+        TDeque<TRemovedHugeBlobsQueueItem> RemovedHugeBlobsQueue;
 
     public:
         void SetActorId(const TActorId& actorId) {
@@ -137,7 +137,7 @@ namespace NKikimr {
 
                         ui32 index = 1;
                         for (const auto &record : RemovedHugeBlobsQueue) {
-                            TMap<TChunkIdx, ui32> slots; 
+                            TMap<TChunkIdx, ui32> slots;
                             for (const TDiskPart &part : record.RemovedHugeBlobs) {
                                 ++slots[part.ChunkIdx];
                             }

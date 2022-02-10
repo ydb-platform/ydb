@@ -75,7 +75,7 @@ namespace NActors {
             bool AllowDrop;
             TDuration ThrottleDelay;
             TArrayHolder<TAtomic> ComponentInfo;
-            TVector<TString> ComponentNames; 
+            TVector<TString> ComponentNames;
             EComponent MinVal;
             EComponent MaxVal;
             EComponent Mask;
@@ -90,8 +90,8 @@ namespace NActors {
                 JSON_FORMAT
             };
             ELogFormat Format;
-            TString ShortHostName; 
-            TString ClusterName; 
+            TString ShortHostName;
+            TString ClusterName;
             TString MessagePrefix;
 
             // The best way to provide minVal, maxVal and func is to have
@@ -167,7 +167,7 @@ namespace NActors {
 
         private:
             int SetLevelImpl(
-                const TString& name, bool isSampling, 
+                const TString& name, bool isSampling,
                 EPriority priority, EComponent component, TString& explanation);
         };
 

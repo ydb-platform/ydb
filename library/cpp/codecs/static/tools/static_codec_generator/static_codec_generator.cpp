@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
     Cout << "Reading training set data ... " << Flush;
-    TVector<TString> allData; 
+    TVector<TString> allData;
     for (const auto& freeArg : res.GetFreeArgs()) {
         NCodecs::ParseBlob(allData, fmt, NCodecs::GetInputBlob(freeArg));
     }
@@ -61,7 +61,7 @@ int main(int argc, char** argv) {
     auto codec = NCodecs::BuildStaticCodec(allData, info);
     Cout << "Done" << Endl;
 
-    TString codecName = NCodecs::GetStandardFileName(codec); 
+    TString codecName = NCodecs::GetStandardFileName(codec);
     NCodecs::TCodecPtr codecPtr = NCodecs::ICodec::RestoreFromString(codec.GetStoredCodec());
 
     Cout << "Testing compression ... " << Flush;
@@ -74,7 +74,7 @@ int main(int argc, char** argv) {
 
     Cout << "Saving as " << codecName << " ... " << Flush;
     {
-        TUnbufferedFileOutput fout{codecName}; 
+        TUnbufferedFileOutput fout{codecName};
         NCodecs::SaveCodecInfoToStream(fout, codec);
         fout.Finish();
     }

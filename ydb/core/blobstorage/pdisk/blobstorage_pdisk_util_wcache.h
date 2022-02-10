@@ -9,7 +9,7 @@ namespace NKikimr {
 namespace NPDisk {
 
 // FHANDLE file is used for the operation.
-// const TString &path is used for debugging and messages in outDetails. 
+// const TString &path is used for debugging and messages in outDetails.
 // TStringSteram *outDetails can be nullptr or a pointer to a TStringStream that will receive error details.
 // Return value is true in case of success.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

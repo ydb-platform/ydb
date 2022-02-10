@@ -37,7 +37,7 @@ namespace NKikimr {
             return TLogoBlobID(Raw);
         }
 
-        TString ToString() const { 
+        TString ToString() const {
             return LogoBlobID().ToString();
         }
 
@@ -196,7 +196,7 @@ namespace NKikimr {
             return TBlobType::EType(Type);
         }
 
-        NMatrix::TVectorType GetLocalParts(const TBlobStorageGroupType &gtype) const { 
+        NMatrix::TVectorType GetLocalParts(const TBlobStorageGroupType &gtype) const {
             return Ingress.LocalParts(gtype);
         }
 
@@ -204,7 +204,7 @@ namespace NKikimr {
             Ingress = Ingress.CopyWithoutLocal(gtype);
         }
 
-        TString ToString(const TIngressCache *cache, const TDiskPart *outbound) const { 
+        TString ToString(const TIngressCache *cache, const TDiskPart *outbound) const {
             Y_UNUSED(cache);
             TStringStream str;
             TBlobType::EType t = GetType();

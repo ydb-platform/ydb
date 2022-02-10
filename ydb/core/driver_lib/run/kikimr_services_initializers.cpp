@@ -546,10 +546,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         TIntrusivePtr<TTableNameserverSetup> table(new TTableNameserverSetup());
         for (const auto &node : nsConfig.GetNode()) {
             const ui32 nodeId = node.GetNodeId();
-            const TString host = node.HasHost() ? node.GetHost() : TString(); 
+            const TString host = node.HasHost() ? node.GetHost() : TString();
             const ui32 port = node.GetPort();
 
-            const TString resolveHost = node.HasInterconnectHost() ? 
+            const TString resolveHost = node.HasInterconnectHost() ?
                 node.GetInterconnectHost() : host;
 
             // Use ip address only when dns host not specified
@@ -1111,16 +1111,16 @@ void TResourceBrokerInitializer::InitializeServices(
 // TRestartsCountPublisher
 
 void TRestartsCountPublisher::PublishRestartsCount(const NMonitoring::TDynamicCounters::TCounterPtr& counter,
-                                                      const TString& restartsCountFile) { 
+                                                      const TString& restartsCountFile) {
     if (restartsCountFile.size()) {
         try {
-            TUnbufferedFileInput fileInput(restartsCountFile); 
-            const TString content = fileInput.ReadAll(); 
+            TUnbufferedFileInput fileInput(restartsCountFile);
+            const TString content = fileInput.ReadAll();
             *counter = FromString<ui32>(content);
         } catch (yexception) {
             *counter = 0;
         }
-        TUnbufferedFileOutput fileOutput(restartsCountFile); 
+        TUnbufferedFileOutput fileOutput(restartsCountFile);
         fileOutput.Write(ToString(*counter+1));
     }
 }
@@ -1242,7 +1242,7 @@ void TGRpcProxyStatusInitializer::InitializeServices(
 // This code is shared between default kikimr bootstrapper and alternative bootstrapper
 
 static TIntrusivePtr<TTabletSetupInfo> CreateTablet(
-    const TString& typeName, 
+    const TString& typeName,
     const TIntrusivePtr<TTabletStorageInfo>& tabletInfo,
     const TAppData* appData,
     const TIntrusivePtr<ITabletFactory>& customTablets = nullptr)
@@ -1936,7 +1936,7 @@ TKqpServiceInitializer::TKqpServiceInitializer(
 
 void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     bool enableKqp = true;
-    TVector<NKikimrKqp::TKqpSetting> settings; 
+    TVector<NKikimrKqp::TKqpSetting> settings;
     if (Config.HasKQPConfig()) {
         auto& kqpConfig = Config.GetKQPConfig();
         if (kqpConfig.HasEnable()) {
@@ -2020,8 +2020,8 @@ TTxProxyInitializer::TTxProxyInitializer(const TKikimrRunConfig &runConfig)
 {
 }
 
-TVector<ui64> TTxProxyInitializer::CollectAllAllocatorsFromAllDomains(const TAppData *appData) { 
-    TVector<ui64> allocators; 
+TVector<ui64> TTxProxyInitializer::CollectAllAllocatorsFromAllDomains(const TAppData *appData) {
+    TVector<ui64> allocators;
     for (auto it: appData->DomainsInfo->Domains) {
         auto &domain = it.second;
         for (auto tabletId: domain->TxAllocators) {
@@ -2077,7 +2077,7 @@ void TLeaseHolderInitializer::InitializeServices(NActors::TActorSystemSetup* set
 {
     // Lease holder is required for dynamic nodes only.
     if (Config.GetDynamicNodeConfig().HasNodeInfo()) {
-        TInstant expire = TInstant::MicroSeconds(Config.GetDynamicNodeConfig().GetNodeInfo().GetExpire()); 
+        TInstant expire = TInstant::MicroSeconds(Config.GetDynamicNodeConfig().GetNodeInfo().GetExpire());
         auto holder = NNodeBroker::CreateLeaseHolder(expire);
         setup->LocalServices.emplace_back(TActorId(),
                                           TActorSetupCmd(holder, TMailboxType::HTSwap, appData->UserPoolId));

@@ -8,14 +8,14 @@
 
 class TFakeMutex: public TNonCopyable {
 public:
-    inline void Acquire() noexcept { 
+    inline void Acquire() noexcept {
     }
 
-    inline bool TryAcquire() noexcept { 
+    inline bool TryAcquire() noexcept {
         return true;
     }
 
-    inline void Release() noexcept { 
+    inline void Release() noexcept {
     }
 
     inline void lock() noexcept {
@@ -39,9 +39,9 @@ public:
     TMutex(TMutex&&);
     ~TMutex();
 
-    void Acquire() noexcept; 
-    bool TryAcquire() noexcept; 
-    void Release() noexcept; 
+    void Acquire() noexcept;
+    bool TryAcquire() noexcept;
+    void Release() noexcept;
 
     inline void lock() noexcept {
         Acquire();
@@ -56,7 +56,7 @@ public:
     }
 
     //return opaque pointer to real handler
-    void* Handle() const noexcept; 
+    void* Handle() const noexcept;
 
 private:
     class TImpl;

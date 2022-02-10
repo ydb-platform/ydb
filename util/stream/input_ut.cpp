@@ -61,7 +61,7 @@ private:
 
 class TNoOutput: public IOutputStream {
 public:
-    TNoOutput() = default; 
+    TNoOutput() = default;
 
 protected:
     void DoWrite(const void*, size_t) override {
@@ -70,7 +70,7 @@ protected:
 
 class TSimpleStringInput: public IInputStream {
 public:
-    TSimpleStringInput(const TString& string) 
+    TSimpleStringInput(const TString& string)
         : String_(string)
     {
     }
@@ -89,7 +89,7 @@ protected:
     }
 
 private:
-    TString String_; 
+    TString String_;
 };
 
 Y_UNIT_TEST_SUITE(TInputTest) {
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TInputTest) {
 
         TSimpleStringInput in("0123456789abc");
 
-        TString t; 
+        TString t;
         UNIT_ASSERT_VALUES_EQUAL(in.ReadTo(t, '7'), 8);
         UNIT_ASSERT_VALUES_EQUAL(t, "0123456");
         UNIT_ASSERT_VALUES_EQUAL(in.ReadTo(t, 'z'), 5);
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(TInputTest) {
     Y_UNIT_TEST(TestReadLine) {
         TSimpleStringInput in("1\n22\n333");
 
-        TString t; 
+        TString t;
         UNIT_ASSERT_VALUES_EQUAL(in.ReadLine(t), 2);
         UNIT_ASSERT_VALUES_EQUAL(t, "1");
         UNIT_ASSERT_VALUES_EQUAL(in.ReadLine(t), 3);
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TInputTest) {
 
             stdIn.ForInput(text,
                            [=] {
-                               TString value; 
+                               TString value;
                                Cin.ReadTo(value, delim);
                                UNIT_ASSERT_VALUES_EQUAL(value, expectedValue);
                            });

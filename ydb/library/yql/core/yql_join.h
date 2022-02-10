@@ -10,13 +10,13 @@
 
 namespace NYql {
 
-inline TString FullColumnName(const TStringBuf& table, const TStringBuf& column) { 
-    return TString::Join(table, ".", column); 
+inline TString FullColumnName(const TStringBuf& table, const TStringBuf& column) {
+    return TString::Join(table, ".", column);
 }
 
 inline void SplitTableName(const TStringBuf& fullName, TStringBuf& table, TStringBuf& column) {
     auto pos = fullName.find('.');
-    Y_ENSURE(pos != TString::npos, "Expected full column name: " << fullName); 
+    Y_ENSURE(pos != TString::npos, "Expected full column name: " << fullName);
     table = fullName.substr(0, pos);
     column = fullName.substr(pos + 1);
 }
@@ -24,18 +24,18 @@ inline void SplitTableName(const TStringBuf& fullName, TStringBuf& table, TStrin
 struct TJoinLabel {
     TMaybe<TIssue> Parse(TExprContext& ctx, TExprNode& node, const TStructExprType* structType);
     TMaybe<TIssue> ValidateLabel(TExprContext& ctx, const NNodes::TCoAtom& label);
-    TString FullName(const TStringBuf& column) const; 
+    TString FullName(const TStringBuf& column) const;
     TStringBuf ColumnName(const TStringBuf& column) const;
     TStringBuf TableName(const TStringBuf& column) const;
     bool HasTable(const TStringBuf& table) const;
     TMaybe<const TTypeAnnotationNode*> FindColumn(const TStringBuf& table, const TStringBuf& column) const;
-    TString MemberName(const TStringBuf& table, const TStringBuf& column) const; 
-    TVector<TString> EnumerateAllColumns() const; 
-    TVector<TString> EnumerateAllMembers() const; 
+    TString MemberName(const TStringBuf& table, const TStringBuf& column) const;
+    TVector<TString> EnumerateAllColumns() const;
+    TVector<TString> EnumerateAllMembers() const;
 
     bool AddLabel = false;
     const TStructExprType* InputType;
-    TVector<TStringBuf> Tables; 
+    TVector<TStringBuf> Tables;
 };
 
 struct TJoinLabels {
@@ -44,10 +44,10 @@ struct TJoinLabels {
     TMaybe<ui32> FindInputIndex(const TStringBuf& table) const;
     TMaybe<const TTypeAnnotationNode*> FindColumn(const TStringBuf& table, const TStringBuf& column) const;
     TMaybe<const TTypeAnnotationNode*> FindColumn(const TStringBuf& fullName) const;
-    TVector<TString> EnumerateColumns(const TStringBuf& table) const; 
+    TVector<TString> EnumerateColumns(const TStringBuf& table) const;
 
-    TVector<TJoinLabel> Inputs; 
-    THashMap<TStringBuf, ui32> InputByTable; 
+    TVector<TJoinLabel> Inputs;
+    THashMap<TStringBuf, ui32> InputByTable;
 };
 
 struct TJoinOptions {
@@ -83,13 +83,13 @@ bool IsRightJoinSideOptional(const TStringBuf& joinType);
 TExprNode::TPtr FilterOutNullJoinColumns(TPositionHandle pos, const TExprNode::TPtr& input,
     const TJoinLabel& label, const TSet<TString>& optionalKeyColumns, TExprContext& ctx);
 
-TMap<TStringBuf, TVector<TStringBuf>> LoadJoinRenameMap(const TExprNode& settings); 
+TMap<TStringBuf, TVector<TStringBuf>> LoadJoinRenameMap(const TExprNode& settings);
 TSet<TVector<TStringBuf>> LoadJoinSortSets(const TExprNode& settings);
 
-THashMap<TString, const TTypeAnnotationNode*> GetJoinColumnTypes(const TExprNode& joins, 
+THashMap<TString, const TTypeAnnotationNode*> GetJoinColumnTypes(const TExprNode& joins,
     const TJoinLabels& labels, TExprContext& ctx);
 
-THashMap<TString, const TTypeAnnotationNode*> GetJoinColumnTypes(const TExprNode& joins, 
+THashMap<TString, const TTypeAnnotationNode*> GetJoinColumnTypes(const TExprNode& joins,
     const TJoinLabels& labels, const TStringBuf& joinType, TExprContext& ctx);
 
 bool AreSameJoinKeys(const TExprNode& joins, const TStringBuf& table1, const TStringBuf& column1, const TStringBuf& table2, const TStringBuf& column2);
@@ -97,14 +97,14 @@ bool AreSameJoinKeys(const TExprNode& joins, const TStringBuf& table1, const TSt
 std::pair<bool, bool> IsRequiredSide(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, ui32 inputIndex);
 
 void AppendEquiJoinRenameMap(TPositionHandle pos, const TMap<TStringBuf, TVector<TStringBuf>>& newRenameMap,
-    TExprNode::TListType& joinSettingNodes, TExprContext& ctx); 
+    TExprNode::TListType& joinSettingNodes, TExprContext& ctx);
 
 void AppendEquiJoinSortSets(TPositionHandle pos, const TSet<TVector<TStringBuf>>& newSortSets,
     TExprNode::TListType& joinSettingNodes, TExprContext& ctx);
 
-TMap<TStringBuf, TVector<TStringBuf>> UpdateUsedFieldsInRenameMap( 
-    const TMap<TStringBuf, TVector<TStringBuf>>& renameMap, 
-    const TSet<TStringBuf>& usedFields, 
+TMap<TStringBuf, TVector<TStringBuf>> UpdateUsedFieldsInRenameMap(
+    const TMap<TStringBuf, TVector<TStringBuf>>& renameMap,
+    const TSet<TStringBuf>& usedFields,
     const TStructExprType* structType
 );
 

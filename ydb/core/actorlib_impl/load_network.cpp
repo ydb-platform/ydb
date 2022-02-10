@@ -36,7 +36,7 @@ private:
     ui32 SelfNodeId;
     ui32 TotalNodesCount;
 
-    static const TString DataToSend; 
+    static const TString DataToSend;
 
     static constexpr ui32 PER_NODE_INFLIGHT_COUNT = 20240;
 
@@ -81,7 +81,7 @@ private:
     }
 };
 
-const TString TLoadNetwork::DataToSend = TString(3*1024, '!'); 
+const TString TLoadNetwork::DataToSend = TString(3*1024, '!');
 
 }
 

@@ -2,7 +2,7 @@
 
 #include "elf.h"
 
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/stream/file.h>
 #include <util/system/filemap.h>
 
@@ -13,11 +13,11 @@ inline TTo Offset(TFrom from, size_t off) {
     return reinterpret_cast<TTo>(reinterpret_cast<char*>(from) + off);
 }
 
-bool IsElf(const TString& path); 
+bool IsElf(const TString& path);
 
 class TElf {
 public:
-    TElf(const TString& path) 
+    TElf(const TString& path)
         : Map(path, TFileMap::oRdWr)
     {
         Map.Map(0, Map.Length());

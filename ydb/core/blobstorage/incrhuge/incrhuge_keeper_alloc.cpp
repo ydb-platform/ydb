@@ -37,7 +37,7 @@ namespace NKikimr {
             }
         }
 
-        void TAllocator::ApplyAllocate(NKikimrProto::EReplyStatus status, TVector<TChunkIdx>&& chunks, 
+        void TAllocator::ApplyAllocate(NKikimrProto::EReplyStatus status, TVector<TChunkIdx>&& chunks,
                 const TActorContext& ctx) {
             if (status == NKikimrProto::OK) {
                 // count these chunks as reserved, but not yet committed

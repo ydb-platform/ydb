@@ -12,17 +12,17 @@
 #include <util/system/byteorder.h>
 #include <util/ysaveload.h>
 
-#include <array> 
- 
-namespace { 
-    // reinterpret_cast from memory, where most significant bit is first 
-    inline ui128 FromMemMSF(const char* memPtr) { 
-        Y_VERIFY(memPtr, " "); 
-        return ui128{ 
-            *reinterpret_cast<const ui64*>(memPtr), 
-            *(reinterpret_cast<const ui64*>(memPtr) + 1) 
-        }; 
-    } 
+#include <array>
+
+namespace {
+    // reinterpret_cast from memory, where most significant bit is first
+    inline ui128 FromMemMSF(const char* memPtr) {
+        Y_VERIFY(memPtr, " ");
+        return ui128{
+            *reinterpret_cast<const ui64*>(memPtr),
+            *(reinterpret_cast<const ui64*>(memPtr) + 1)
+        };
+    }
 
     // zero-terminated copy of address string
     template <size_t N>
@@ -33,17 +33,17 @@ namespace {
         res[len] = '\0';
         return res;
     }
-} 
- 
+}
+
 void TIpv6Address::InitFrom(const in6_addr& addr) {
     const ui64* const ui64Ptr = reinterpret_cast<const ui64*>(&addr);
     const ui64 raw[2] = {SwapBytes(*ui64Ptr), SwapBytes(*(ui64Ptr + 1))};
-    Ip = FromMemMSF(reinterpret_cast<const char*>(raw)); 
+    Ip = FromMemMSF(reinterpret_cast<const char*>(raw));
     Type_ = Ipv6;
 }
 void TIpv6Address::InitFrom(const in_addr& addr) {
-    unsigned long swapped = SwapBytes(addr.s_addr); 
-    Ip = ui128{0, swapped}; 
+    unsigned long swapped = SwapBytes(addr.s_addr);
+    Ip = ui128{0, swapped};
     Type_ = Ipv4;
 }
 
@@ -114,7 +114,7 @@ TString TIpv6Address::ToString(bool* ok) const noexcept {
     return ToString(true, ok);
 }
 TString TIpv6Address::ToString(bool PrintScopeId, bool* ok) const noexcept {
-    TString result; 
+    TString result;
     bool isOk = true;
 
     if (Type_ == TIpv6Address::Ipv4) {
@@ -176,16 +176,16 @@ void TIpv6Address::ToInAddr(in_addr& Addr4) const {
     Y_VERIFY(Type_ == TIpv6Address::Ipv4);
 
     Zero(Addr4);
-    ui32 Value = GetLow(Ip); 
-    Y_VERIFY(Value == GetLow(Ip), " "); 
-    Y_VERIFY(GetHigh(Ip) == 0, " "); 
+    ui32 Value = GetLow(Ip);
+    Y_VERIFY(Value == GetLow(Ip), " ");
+    Y_VERIFY(GetHigh(Ip) == 0, " ");
     Addr4.s_addr = SwapBytes(Value);
 }
 void TIpv6Address::ToIn6Addr(in6_addr& Addr6) const {
     Y_VERIFY(Type_ == TIpv6Address::Ipv6);
 
     Zero(Addr6);
-    ui64 Raw[2] = {GetHigh(Ip), GetLow(Ip)}; 
+    ui64 Raw[2] = {GetHigh(Ip), GetLow(Ip)};
     *Raw = SwapBytes(*Raw);
     Raw[1] = SwapBytes(1 [Raw]);
     memcpy(&Addr6, Raw, sizeof(Raw));
@@ -213,10 +213,10 @@ bool TIpv6Address::Isv4MappedTov6() const noexcept {
     if (Type_ != Ipv6)
         return false;
 
-    if (GetHigh(Ip) != 0) 
+    if (GetHigh(Ip) != 0)
         return false; // First 64 bit are not zero -> it is not ipv4-mapped-ipv6 address
 
-    const ui64 Low = GetLow(Ip) >> 32; 
+    const ui64 Low = GetLow(Ip) >> 32;
     if (Low != 0x0000ffff)
         return false;
 
@@ -227,8 +227,8 @@ TIpv6Address TIpv6Address::TryToExtractIpv4From6() const noexcept {
     if (Isv4MappedTov6() == false)
         return TIpv6Address();
 
-    const ui64 NewLow = GetLow(Ip) & 0x00000000ffffffff; 
-    TIpv6Address Result(ui128(0, NewLow), Ipv4); 
+    const ui64 NewLow = GetLow(Ip) & 0x00000000ffffffff;
+    TIpv6Address Result(ui128(0, NewLow), Ipv4);
     return Result;
 }
 
@@ -310,7 +310,7 @@ std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromStrin
                                                                                   bool& Ok) noexcept {
     // Cout << "ParseHostAndMayBePortFromString: " << RawStr << ", Port: " << DefaultPort << Endl;
 
-    using TRes = std::tuple<THostAddressAndPort, TString, TIpPort>; 
+    using TRes = std::tuple<THostAddressAndPort, TString, TIpPort>;
 
     // ---------------------------------------------------------------------
 

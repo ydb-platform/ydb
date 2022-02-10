@@ -52,8 +52,8 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         TAstParseResult ast = ParseAst(TEST_PROGRAM);
         UNIT_ASSERT(ast.IsOk());
 
-        TString printedProgram = ast.Root->ToString(); 
-        UNIT_ASSERT(printedProgram.find('\n') == TString::npos); 
+        TString printedProgram = ast.Root->ToString();
+        UNIT_ASSERT(printedProgram.find('\n') == TString::npos);
 
         TAstParseResult parsedAst = ParseAst(printedProgram);
         UNIT_ASSERT(parsedAst.IsOk());
@@ -73,11 +73,11 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         for (ui32 i = 0; i < Y_ARRAY_SIZE(testFlags); ++i) {
             ui32 prettyFlags = testFlags[i];
 
-            TString printedProgram1 = ast.Root->ToString(prettyFlags); 
+            TString printedProgram1 = ast.Root->ToString(prettyFlags);
             TAstParseResult parsedAst = ParseAst(printedProgram1);
             UNIT_ASSERT(parsedAst.IsOk());
 
-            TString printedProgram2 = parsedAst.Root->ToString(prettyFlags); 
+            TString printedProgram2 = parsedAst.Root->ToString(prettyFlags);
             UNIT_ASSERT_STRINGS_EQUAL(printedProgram1, printedProgram2);
         }
     }
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         removedAnn.Root = RemoveAnnotations(*annRes.Root, pool);
         UNIT_ASSERT(!!removedAnn.Root);
 
-        TString strOriginal = ast.Root->ToString(); 
+        TString strOriginal = ast.Root->ToString();
         TString strAnnRemoved = removedAnn.Root->ToString();
         UNIT_ASSERT_VALUES_EQUAL(strOriginal, strAnnRemoved);
 
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
 
     template <typename TCharType>
     void TestGoodArbitraryAtom(
-                const TString& program, 
+                const TString& program,
                 const TBasicStringBuf<TCharType>& expectedValue)
     {
         TAstParseResult ast = ParseAst(program);
@@ -178,8 +178,8 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
     }
 
     void TestBadArbitraryAtom(
-                const TString& program, 
-                const TString& expectedError) 
+                const TString& program,
+                const TString& expectedError)
     {
         TAstParseResult ast = ParseAst(program);
         UNIT_ASSERT(false == ast.IsOk());
@@ -230,11 +230,11 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         TestBadArbitraryAtom("(x\"abcd", "Unexpected end of atom");
     }
 
-    void ParseAndPrint(const TString& program, const TString& expected) { 
+    void ParseAndPrint(const TString& program, const TString& expected) {
         TAstParseResult ast = ParseAst(program);
         UNIT_ASSERT_C(ast.IsOk(), program);
 
-        TString result = ast.Root->ToString(); 
+        TString result = ast.Root->ToString();
         UNIT_ASSERT_STRINGS_EQUAL_C(result, expected, program);
     }
 
@@ -265,11 +265,11 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         ParseAndPrint("(x\"ab12cd\" x)", "(x\"AB12CD\" x)");
     }
 
-    void ParseAndAdaptPrint(const TString& program, const TString& expected) { 
+    void ParseAndAdaptPrint(const TString& program, const TString& expected) {
         TAstParseResult ast = ParseAst(program);
         UNIT_ASSERT_C(ast.IsOk(), program);
 
-        TString result = ast.Root->ToString( 
+        TString result = ast.Root->ToString(
                     TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine |
                     TAstPrintFlags::AdaptArbitraryContent);
 
@@ -286,7 +286,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         ParseAndAdaptPrint("(\"\")", "(\"\")");
     }
 
-    void ParseError(const TString& program) { 
+    void ParseError(const TString& program) {
         TAstParseResult ast = ParseAst(program);
         UNIT_ASSERT_C(!ast.IsOk(), program);
     }
@@ -329,22 +329,22 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
     }
 
     Y_UNIT_TEST(MultilineAtom) {
-        TString s1 = "(@@multi \n" 
+        TString s1 = "(@@multi \n"
                    "line \n"
                    "string@@)";
         ParseAndPrint(s1, s1);
 
-        TString s2 = "(@@multi \n" 
+        TString s2 = "(@@multi \n"
                    "l@ine \n"
                    "string@@)";
         ParseAndPrint(s2, s2);
 
-        TString s3 = "(@@multi \n" 
+        TString s3 = "(@@multi \n"
                    "l@@@ine \n"
                    "string@@)";
         ParseError(s3);
 
-        TString s4 = "(@@multi \n" 
+        TString s4 = "(@@multi \n"
                     "l@@@@ine \n"
                     "string@@)";
         ParseAndPrint(s4, s4);
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
         UNIT_ASSERT(atom->IsAtom());
         UNIT_ASSERT(atom->GetFlags() & TNodeFlags::MultilineContent);
 
-        TString expected = "\n" 
+        TString expected = "\n"
                           "one@\n"
                           "two@@\n"
                           "four@@@@\n"

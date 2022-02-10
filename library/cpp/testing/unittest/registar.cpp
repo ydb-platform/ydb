@@ -15,9 +15,9 @@
 bool NUnitTest::ShouldColorizeDiff = true;
 bool NUnitTest::ContinueOnFail = false;
 
-TString NUnitTest::RandomString(size_t len, ui32 seed) { 
+TString NUnitTest::RandomString(size_t len, ui32 seed) {
     TReallyFastRng32 rand(seed);
-    TString ret; 
+    TString ret;
 
     ret.reserve(len);
 
@@ -34,7 +34,7 @@ Y_POD_STATIC_THREAD(NUnitTest::TTestBase*)
 currentTest;
 ::NUnitTest::TRaiseErrorHandler RaiseErrorHandler;
 
-void ::NUnitTest::NPrivate::RaiseError(const char* what, const TString& msg, bool fatalFailure) { 
+void ::NUnitTest::NPrivate::RaiseError(const char* what, const TString& msg, bool fatalFailure) {
     Y_VERIFY(UnittestThread, "%s in non-unittest thread with message:\n%s", what, msg.data());
     Y_VERIFY(GetCurrentTest());
 
@@ -119,7 +119,7 @@ struct TTraceDiffFormatter {
     }
 
     TString Common(TArrayRef<const char> str) const {
-        return TString(str.begin(), str.end()); 
+        return TString(str.begin(), str.end());
     }
 
     TString Left(TArrayRef<const char> str) const {
@@ -135,17 +135,17 @@ struct TTraceDiffFormatter {
     }
 };
 
-TString NUnitTest::GetFormatTag(const char* name) { 
+TString NUnitTest::GetFormatTag(const char* name) {
     return Sprintf("[[%s]]", name);
 }
 
-TString NUnitTest::GetResetTag() { 
-    return TString("[[rst]]"); 
+TString NUnitTest::GetResetTag() {
+    return TString("[[rst]]");
 }
 
-TString NUnitTest::ColoredDiff(TStringBuf s1, TStringBuf s2, const TString& delims, bool reverse) { 
+TString NUnitTest::ColoredDiff(TStringBuf s1, TStringBuf s2, const TString& delims, bool reverse) {
     TStringStream res;
-    TVector<NDiff::TChunk<char>> chunks; 
+    TVector<NDiff::TChunk<char>> chunks;
     NDiff::InlineDiff(chunks, s1, s2, delims);
     if (NUnitTest::ShouldColorizeDiff) {
         NDiff::PrintChunks(res, TDiffColorizer(reverse), chunks);
@@ -160,7 +160,7 @@ static TString MakeTestName(const NUnitTest::ITestSuiteProcessor::TTest& test) {
     return TStringBuilder() << test.unit->name << "::" << test.name;
 }
 
-static size_t CountTests(const TMap<TString, size_t>& testErrors, bool succeeded) { 
+static size_t CountTests(const TMap<TString, size_t>& testErrors, bool succeeded) {
     size_t cnt = 0;
     for (const auto& t : testErrors) {
         if (succeeded && t.second == 0) {
@@ -465,7 +465,7 @@ unsigned NUnitTest::TTestFactory::Execute() {
     Items_.QuickSort(TCmp());
     Processor_->Start();
 
-    TSet<TString> types; 
+    TSet<TString> types;
     size_t cnt = 0;
 
     for (TIntrusiveList<ITestBaseFactory>::TIterator factory = Items_.Begin(); factory != Items_.End(); ++factory) {

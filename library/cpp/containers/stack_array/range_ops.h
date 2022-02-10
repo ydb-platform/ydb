@@ -7,7 +7,7 @@
 namespace NRangeOps {
     template <class T, bool isTrivial>
     struct TRangeOpsBase {
-        static inline void DestroyRange(T* b, T* e) noexcept { 
+        static inline void DestroyRange(T* b, T* e) noexcept {
             while (e > b) {
                 (--e)->~T();
             }
@@ -30,10 +30,10 @@ namespace NRangeOps {
 
     template <class T>
     struct TRangeOpsBase<T, true> {
-        static inline void DestroyRange(T*, T*) noexcept { 
+        static inline void DestroyRange(T*, T*) noexcept {
         }
 
-        static inline void InitializeRange(T*, T*) noexcept { 
+        static inline void InitializeRange(T*, T*) noexcept {
         }
     };
 
@@ -41,7 +41,7 @@ namespace NRangeOps {
     using TRangeOps = TRangeOpsBase<T, TTypeTraits<T>::IsPod>;
 
     template <class T>
-    static inline void DestroyRange(T* b, T* e) noexcept { 
+    static inline void DestroyRange(T* b, T* e) noexcept {
         TRangeOps<T>::DestroyRange(b, e);
     }
 

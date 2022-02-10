@@ -124,19 +124,19 @@ public:
 
 class TCompletionLogWrite : public TCompletionAction {
     TPDisk *PDisk;
-    TVector<TLogWrite*> LogWriteQueue; 
-    TVector<TLogWrite*> Commits; 
-    TVector<ui32> CommitedLogChunks; 
+    TVector<TLogWrite*> LogWriteQueue;
+    TVector<TLogWrite*> Commits;
+    TVector<ui32> CommitedLogChunks;
 public:
-    TCompletionLogWrite(TPDisk *pDisk, TVector<TLogWrite*>&& logWriteQueue, TVector<TLogWrite*>&& commits, 
-            TVector<ui32>&& commitedLogChunks) 
+    TCompletionLogWrite(TPDisk *pDisk, TVector<TLogWrite*>&& logWriteQueue, TVector<TLogWrite*>&& commits,
+            TVector<ui32>&& commitedLogChunks)
         : PDisk(pDisk)
         , LogWriteQueue(std::move(logWriteQueue))
         , Commits(std::move(commits))
         , CommitedLogChunks(std::move(commitedLogChunks))
     {}
 
-    TVector<ui32>* GetCommitedLogChunksPtr() { 
+    TVector<ui32>* GetCommitedLogChunksPtr() {
         return &CommitedLogChunks;
     }
 

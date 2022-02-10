@@ -192,7 +192,7 @@ namespace NTest {
         ui32 Serial = 0;
         ui32 Failed = 0;
         TAutoPtr<IPages> Env;
-        TVector<ui32> Tags; 
+        TVector<ui32> Tags;
         TAutoPtr<TPartWriter> Writer;
     };
 

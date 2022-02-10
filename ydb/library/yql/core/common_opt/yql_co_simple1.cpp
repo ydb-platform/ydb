@@ -207,7 +207,7 @@ TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& node, const TVector<TC
 
 TExprNode::TPtr ExpandFlattenEquiJoin(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto settings = node->Children().back();
-    TExprNode::TListType settingsChildren; 
+    TExprNode::TListType settingsChildren;
     bool hasFlatten = false;
     for (auto& child : settings->Children()) {
         if (child->ChildrenSize() > 0 && child->Head().Content() == "flatten") {
@@ -237,7 +237,7 @@ TExprNode::TPtr ExpandFlattenEquiJoin(const TExprNode::TPtr& node, TExprContext&
 
     auto joins = node->Child(node->ChildrenSize() - 2);
     auto columnTypes = GetJoinColumnTypes(*joins, labels, ctx);
-    TMap<TString, std::pair<bool, TVector<TString>>> remap; // column -> isOptional, list of columns 
+    TMap<TString, std::pair<bool, TVector<TString>>> remap; // column -> isOptional, list of columns
     for (auto it : labels.Inputs) {
         for (auto item : it.InputType->GetItems()) {
             TString fullName = it.FullName(item->GetName());
@@ -260,13 +260,13 @@ TExprNode::TPtr ExpandFlattenEquiJoin(const TExprNode::TPtr& node, TExprContext&
                 }
 
                 remap.emplace(TString(columnName), std::make_pair((*type)->GetKind() == ETypeAnnotationKind::Optional,
-                    TVector<TString>(1, fullName))); 
+                    TVector<TString>(1, fullName)));
             }
         }
     }
 
     auto lambdaArg = ctx.NewArgument(node->Pos(), "row");
-    TExprNode::TListType remapItems; 
+    TExprNode::TListType remapItems;
     for (auto& x : remap) {
         TExprNode::TPtr value;
         if (x.second.second.size() == 1) {
@@ -277,7 +277,7 @@ TExprNode::TPtr ExpandFlattenEquiJoin(const TExprNode::TPtr& node, TExprContext&
                 .Seal()
                 .Build();
         } else {
-            TExprNode::TListType values; 
+            TExprNode::TListType values;
             for (auto& column : x.second.second) {
                 values.push_back(ctx.Builder(node->Pos())
                     .Callable("Member")
@@ -301,7 +301,7 @@ TExprNode::TPtr ExpandFlattenEquiJoin(const TExprNode::TPtr& node, TExprContext&
     return ctx.NewCallable(node->Pos(), "Map", { std::move(newJoin), std::move(mapLambda) });
 }
 
-void GatherEquiJoinKeyColumnsFromEquality(TExprNode::TPtr columns, THashSet<TString>& keyColumns) { 
+void GatherEquiJoinKeyColumnsFromEquality(TExprNode::TPtr columns, THashSet<TString>& keyColumns) {
     for (ui32 i = 0; i < columns->ChildrenSize(); i += 2) {
         auto table = columns->Child(i)->Content();
         auto column = columns->Child(i + 1)->Content();
@@ -309,7 +309,7 @@ void GatherEquiJoinKeyColumnsFromEquality(TExprNode::TPtr columns, THashSet<TStr
     }
 }
 
-void GatherEquiJoinKeyColumns(TExprNode::TPtr joinTree, THashSet<TString>& keyColumns) { 
+void GatherEquiJoinKeyColumns(TExprNode::TPtr joinTree, THashSet<TString>& keyColumns) {
     auto left = joinTree->Child(1);
     if (!left->IsAtom()) {
         GatherEquiJoinKeyColumns(left, keyColumns);
@@ -326,7 +326,7 @@ void GatherEquiJoinKeyColumns(TExprNode::TPtr joinTree, THashSet<TString>& keyCo
     GatherEquiJoinKeyColumnsFromEquality(rightColumns, keyColumns);
 }
 
-void GatherDroppedSingleTableColumns(TExprNode::TPtr joinTree, const TJoinLabels& labels, TSet<TString>& drops) { 
+void GatherDroppedSingleTableColumns(TExprNode::TPtr joinTree, const TJoinLabels& labels, TSet<TString>& drops) {
     auto left = joinTree->Child(1);
     auto right = joinTree->Child(2);
     if (!left->IsAtom()) {
@@ -358,7 +358,7 @@ void GatherDroppedSingleTableColumns(TExprNode::TPtr joinTree, const TJoinLabels
 
 TExprNode::TPtr RemoveDeadPayloadColumns(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto settings = node->Children().back();
-    TSet<TString> drops; 
+    TSet<TString> drops;
     for (auto& setting : settings->Children()) {
         auto name = setting->Head().Content();
         if (name == "rename") {
@@ -394,7 +394,7 @@ TExprNode::TPtr RemoveDeadPayloadColumns(const TExprNode::TPtr& node, TExprConte
         return node;
     }
 
-    THashSet<TString> keyColumns; 
+    THashSet<TString> keyColumns;
     GatherEquiJoinKeyColumns(joinTree, keyColumns);
     for (auto& keyColumn : keyColumns) {
         drops.erase(keyColumn);
@@ -439,7 +439,7 @@ TExprNode::TPtr RemoveDeadPayloadColumns(const TExprNode::TPtr& node, TExprConte
         nodeChildren[j] = ctx.ChangeChildren(*nodeChildren[j], std::move(dropChildren));
     }
 
-    TExprNode::TListType settingsChildren; 
+    TExprNode::TListType settingsChildren;
     for (const auto& setting : settings->Children()) {
         auto name = setting->Head().Content();
         if (name != "rename" || !setting->Child(2)->Content().empty() || !drops.contains(setting->Child(1)->Content())) {
@@ -655,12 +655,12 @@ TExprNode::TPtr ExpandUnionAll(const TExprNode::TPtr& node, TExprContext& ctx, T
     }
 
     auto resultStructType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    TVector<TExprNode::TPtr> nulls(resultStructType->GetSize()); 
+    TVector<TExprNode::TPtr> nulls(resultStructType->GetSize());
     auto remapList = [&ctx, &nulls, resultStructType](TExprNode::TPtr input, const TTypeAnnotationNode* inputType) -> TExprNode::TPtr {
         auto pos = input->Pos();
         auto arg = ctx.NewArgument(pos, "item");
         auto inputStructType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        TExprNode::TListType bodyItems; 
+        TExprNode::TListType bodyItems;
         ui32 resultIndex = 0;
         for (auto& item : resultStructType->GetItems()) {
             auto resultType = item->GetItemType();
@@ -711,7 +711,7 @@ TExprNode::TPtr ExpandUnionAll(const TExprNode::TPtr& node, TExprContext& ctx, T
         ) });
     };
 
-    TExprNode::TListType remappedList; 
+    TExprNode::TListType remappedList;
     // group children by ann type and preserve order for stability in tests
     std::vector<TExprNode::TListType> groups = GroupNodeChildrenByType(node);
     for (auto& group : groups) {
@@ -738,7 +738,7 @@ TExprNode::TPtr ExpandUnionAll(const TExprNode::TPtr& node, TExprContext& ctx, T
 }
 
 TExprNode::TPtr RemoveNothingFromCoalesce(const TExprNode& node, TExprContext& ctx) {
-    TExprNode::TListType newChildren(node.Children().begin() + 1, node.Children().end()); 
+    TExprNode::TListType newChildren(node.Children().begin() + 1, node.Children().end());
     return ctx.ChangeChildren(node, std::move(newChildren));
 }
 
@@ -3455,7 +3455,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 return node;
             }
 
-            TSet<TStringBuf> members; 
+            TSet<TStringBuf> members;
 
             for (const auto& member : skipNullMembers.Members().Cast()) {
                 members.insert(member.Value());
@@ -3465,7 +3465,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 members.insert(member.Value());
             }
 
-            TExprNode::TListType membersList; 
+            TExprNode::TListType membersList;
             for (const auto& memberName : members) {
                 membersList.push_back(ctx.NewAtom(innerSkip.Pos(), memberName));
             }
@@ -3562,7 +3562,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         if (node->Head().IsCallable({"Just", "AsList"})) {
             YQL_CLOG(DEBUG, Core) << "Move " << node->Content() << " over " << node->Head().Content();
-            TSet<TString> fields; 
+            TSet<TString> fields;
             node->Tail().ForEachChild([&fields](const TExprNode& child) {
                 fields.emplace(child.Content());
             });
@@ -3790,7 +3790,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 }
 
                 // fuse [i..j)
-                TExprNode::TListType fusedChildren; 
+                TExprNode::TListType fusedChildren;
                 for (ui32 listIndex = i; listIndex < j; ++listIndex) {
                     fusedChildren.insert(fusedChildren.end(), node->Child(listIndex)->Children().begin(), node->Child(listIndex)->Children().end());
                 }

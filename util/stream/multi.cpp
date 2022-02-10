@@ -22,7 +22,7 @@ size_t TMultiInput::DoRead(void* buf, size_t len) {
     return C_->Read(buf, len);
 }
 
-size_t TMultiInput::DoReadTo(TString& st, char ch) { 
+size_t TMultiInput::DoReadTo(TString& st, char ch) {
     size_t ret = C_->ReadTo(st, ch);
     if (ret == st.size() + 1) { // found a symbol, not eof
         return ret;
@@ -34,7 +34,7 @@ size_t TMultiInput::DoReadTo(TString& st, char ch) {
     if (ret == 0) {
         ret += C_->ReadTo(st, ch);
     } else {
-        TString tmp; 
+        TString tmp;
         ret += C_->ReadTo(tmp, ch);
         st += tmp;
     }

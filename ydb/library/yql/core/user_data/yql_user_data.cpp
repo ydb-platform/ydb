@@ -5,8 +5,8 @@ namespace NYql {
 namespace NUserData {
 
 void TUserData::UserDataToLibraries(
-    const TVector<TUserData>& userData, 
-    THashMap<TString,TString>& modules 
+    const TVector<TUserData>& userData,
+    THashMap<TString,TString>& modules
 ) {
     for (const TUserData& item : userData) {
         if (item.Type_ == EType::LIBRARY) {

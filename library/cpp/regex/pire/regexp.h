@@ -6,7 +6,7 @@
 #include <library/cpp/charset/recyr.hh>
 #include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/string.h> 
+#include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
@@ -15,22 +15,22 @@ namespace NRegExp {
 
     struct TFsmBase {
         struct TOptions {
-            inline TOptions& SetCaseInsensitive(bool v) noexcept { 
+            inline TOptions& SetCaseInsensitive(bool v) noexcept {
                 CaseInsensitive = v;
                 return *this;
             }
 
-            inline TOptions& SetSurround(bool v) noexcept { 
+            inline TOptions& SetSurround(bool v) noexcept {
                 Surround = v;
                 return *this;
             }
 
-            inline TOptions& SetCapture(size_t pos) noexcept { 
+            inline TOptions& SetCapture(size_t pos) noexcept {
                 CapturePos = pos;
                 return *this;
             }
 
-            inline TOptions& SetCharset(ECharset charset) noexcept { 
+            inline TOptions& SetCharset(ECharset charset) noexcept {
                 Charset = charset;
                 return *this;
             }
@@ -118,7 +118,7 @@ namespace NRegExp {
         {
         }
 
-        inline const TScanner& GetScanner() const noexcept { 
+        inline const TScanner& GetScanner() const noexcept {
             return Scanner;
         }
 
@@ -202,7 +202,7 @@ namespace NRegExp {
             Fsm.GetScanner().Initialize(State);
         }
 
-        inline bool Final() const noexcept { 
+        inline bool Final() const noexcept {
             return GetScanner().Final(GetState());
         }
 
@@ -217,11 +217,11 @@ namespace NRegExp {
             }
         }
 
-        inline const typename TFsm::TScanner& GetScanner() const noexcept { 
+        inline const typename TFsm::TScanner& GetScanner() const noexcept {
             return Fsm.GetScanner();
         }
 
-        inline const TState& GetState() const noexcept { 
+        inline const TState& GetState() const noexcept {
             return State;
         }
 
@@ -245,13 +245,13 @@ namespace NRegExp {
             return Match(s.data(), s.size(), addBegin, addEnd);
         }
 
-        inline const char* Find(const char* b, const char* e) noexcept { 
+        inline const char* Find(const char* b, const char* e) noexcept {
             return NPire::ShortestPrefix(GetScanner(), b, e);
         }
 
         typedef std::pair<const size_t*, const size_t*> TMatchedRegexps;
 
-        inline TMatchedRegexps MatchedRegexps() const noexcept { 
+        inline TMatchedRegexps MatchedRegexps() const noexcept {
             return GetScanner().AcceptedRegexps(GetState());
         }
     };
@@ -263,7 +263,7 @@ namespace NRegExp {
         {
         }
 
-        inline bool Captured() const noexcept { 
+        inline bool Captured() const noexcept {
             return GetState().Captured();
         }
 
@@ -277,7 +277,7 @@ namespace NRegExp {
             return Search(s.data(), s.size());
         }
 
-        inline TStringBuf GetCaptured() const noexcept { 
+        inline TStringBuf GetCaptured() const noexcept {
             return TStringBuf(Data.data() + GetState().Begin() - 1,
                               Data.data() + GetState().End() - 1);
         }

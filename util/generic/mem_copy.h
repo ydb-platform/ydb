@@ -13,7 +13,7 @@ template <class T>
 using TIfNotPOD = std::enable_if_t<!TTypeTraits<T>::IsPod, T*>;
 
 template <class T>
-static inline TIfPOD<T> MemCopy(T* to, const T* from, size_t n) noexcept { 
+static inline TIfPOD<T> MemCopy(T* to, const T* from, size_t n) noexcept {
     if (n) {
         memcpy(to, from, n * sizeof(T));
     }
@@ -31,7 +31,7 @@ static inline TIfNotPOD<T> MemCopy(T* to, const T* from, size_t n) {
 }
 
 template <class T>
-static inline TIfPOD<T> MemMove(T* to, const T* from, size_t n) noexcept { 
+static inline TIfPOD<T> MemMove(T* to, const T* from, size_t n) noexcept {
     if (n) {
         memmove(to, from, n * sizeof(T));
     }

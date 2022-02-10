@@ -14,7 +14,7 @@ TSizedCache::TSizedCache(size_t maxEntries, ui64 maxSize)
 }
 
 void TSizedCache::Put(const TIntrusivePtr<ICacheObj>& obj, bool lock) {
-    const TString name = obj->GetName(); 
+    const TString name = obj->GetName();
     const ui64 size = obj->GetSize();
 
     auto guard = Guard(Lock);
@@ -34,7 +34,7 @@ void TSizedCache::Put(const TIntrusivePtr<ICacheObj>& obj, bool lock) {
     }
 }
 
-void TSizedCache::Release(const TString& name, bool remove) { 
+void TSizedCache::Release(const TString& name, bool remove) {
     auto guard = Guard(Lock);
     auto it = Cache.FindWithoutPromote(name);
     if (it == Cache.End()) {
@@ -50,7 +50,7 @@ void TSizedCache::Release(const TString& name, bool remove) {
     }
 }
 
-TIntrusivePtr<TSizedCache::ICacheObj> TSizedCache::Get(const TString& name) { 
+TIntrusivePtr<TSizedCache::ICacheObj> TSizedCache::Get(const TString& name) {
     auto guard = Guard(Lock);
     auto it = Cache.Find(name);
     TIntrusivePtr<TSizedCache::ICacheObj> res;
@@ -60,7 +60,7 @@ TIntrusivePtr<TSizedCache::ICacheObj> TSizedCache::Get(const TString& name) {
     return res;
 }
 
-TIntrusivePtr<TSizedCache::ICacheObj> TSizedCache::Revoke(const TString& name) { 
+TIntrusivePtr<TSizedCache::ICacheObj> TSizedCache::Revoke(const TString& name) {
     auto guard = Guard(Lock);
     auto it = Cache.FindWithoutPromote(name);
     TIntrusivePtr<TSizedCache::ICacheObj> res;
@@ -73,7 +73,7 @@ TIntrusivePtr<TSizedCache::ICacheObj> TSizedCache::Revoke(const TString& name) {
     return res;
 }
 
-TMaybe<ui32> TSizedCache::GetLocks(const TString& name) const { 
+TMaybe<ui32> TSizedCache::GetLocks(const TString& name) const {
     auto guard = Guard(Lock);
     auto it = Cache.FindWithoutPromote(name);
     TMaybe<ui32> res;

@@ -17,25 +17,25 @@ namespace NDatetime {
         {31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}  //leap
     };
 
-    const ui32 MonthDaysNewYear[2][13] = { 
-        {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365}, //nleap 
-        {0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366}  //leap 
+    const ui32 MonthDaysNewYear[2][13] = {
+        {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365}, //nleap
+        {0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335, 366}  //leap
     };
 
-    void YDayToMonthAndDay(ui32 yday, bool isleap, ui32* month, ui32* mday) { 
-        const ui32* begin = MonthDaysNewYear[isleap] + 1; 
-        const ui32* end = begin + 12; 
-        // [31, ..., 365] or [31, ..., 366] (12 elements) 
- 
-        const ui32* pos = UpperBound(begin, end, yday); 
+    void YDayToMonthAndDay(ui32 yday, bool isleap, ui32* month, ui32* mday) {
+        const ui32* begin = MonthDaysNewYear[isleap] + 1;
+        const ui32* end = begin + 12;
+        // [31, ..., 365] or [31, ..., 366] (12 elements)
+
+        const ui32* pos = UpperBound(begin, end, yday);
         Y_ENSURE(pos != end, "day no. " << yday << " does not exist in " << (isleap ? "leap" : "non-leap") << " year");
- 
-        *month = pos - begin; 
-        *mday = yday - *(pos - 1) + 1; 
- 
+
+        *month = pos - begin;
+        *mday = yday - *(pos - 1) + 1;
+
         Y_ASSERT((*month < 12) && (1 <= *mday) && (*mday <= MonthDays[isleap][*month]));
-    } 
- 
+    }
+
     struct TTimeData {
         i32 IsDst = 0;
         i32 GMTOff = 0;

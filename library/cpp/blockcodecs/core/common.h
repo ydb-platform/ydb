@@ -91,11 +91,11 @@ namespace NBlockCodecs {
 
             const auto len = ReadUnaligned<ui64>(in.data());
 
-            if (!len) 
+            if (!len)
                 return 0;
 
-            Base()->DoDecompress(TData(in).Skip(sizeof(len)), out, len); 
-            return len; 
+            Base()->DoDecompress(TData(in).Skip(sizeof(len)), out, len);
+            return len;
         }
 
         inline const T* Base() const noexcept {

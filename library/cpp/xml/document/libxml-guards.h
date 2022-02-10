@@ -40,7 +40,7 @@ namespace NXml {
     typedef TxmlXPathObjectPtr TXPathObjectPtr;
     typedef TAutoPtr<char, NDetail::TSignedCharPtrTraits> TSignedCharPtr;
     typedef TAutoPtr<xmlChar, NDetail::TCharPtrTraits> TCharPtr;
-    typedef TxmlDocHolder TDocHolder; 
+    typedef TxmlDocHolder TDocHolder;
     typedef TxmlURIPtr TURIPtr;
     typedef TxmlNodePtr TNodePtr;
     typedef TAutoPtr<xmlOutputBuffer, NDetail::TOutputBufferPtrTraits> TOutputBufferPtr;

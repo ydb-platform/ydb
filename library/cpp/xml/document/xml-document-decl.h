@@ -15,8 +15,8 @@ namespace NXml {
     class TConstNodes;
     class TConstNode;
 
-    using TXPathContext = xmlXPathContext; 
- 
+    using TXPathContext = xmlXPathContext;
+
     class TDocument {
     public:
         enum Source {
@@ -35,11 +35,11 @@ namespace NXml {
         TDocument(const TString& source, Source type = File);
 
     public:
-        TDocument(const TDocument& that) = delete; 
-        TDocument& operator=(const TDocument& that) = delete; 
+        TDocument(const TDocument& that) = delete;
+        TDocument& operator=(const TDocument& that) = delete;
 
-        TDocument(TDocument&& that); 
-        TDocument& operator=(TDocument&& that); 
+        TDocument(TDocument&& that);
+        TDocument& operator=(TDocument&& that);
 
         /**
         * get root element
@@ -74,12 +74,12 @@ namespace NXml {
         void ParseFile(const TString& file);
         void ParseString(TZtStringBuf xml);
 
-        TDocument(TDocHolder doc) 
-            : Doc(std::move(doc)) 
+        TDocument(TDocHolder doc)
+            : Doc(std::move(doc))
         {
         }
 
-        TDocHolder Doc; 
+        TDocHolder Doc;
     };
 
     struct TNamespaceForXPath {
@@ -150,7 +150,7 @@ namespace NXml {
         friend class TConstNode;
         friend class TNode;
 
-        TConstNodes(xmlDoc* doc, TXPathObjectPtr obj); 
+        TConstNodes(xmlDoc* doc, TXPathObjectPtr obj);
 
         size_t SizeValue;
         xmlDoc* Doc;
@@ -161,7 +161,7 @@ namespace NXml {
     public:
         friend class TDocument;
         friend class TConstNode;
-        friend class TTextReader; 
+        friend class TTextReader;
 
         /**
         * check if node is null
@@ -174,18 +174,18 @@ namespace NXml {
         bool IsElementNode() const;
 
         /**
-        * Create xpath context to be used later for fast xpath evaluation. 
-        * @param nss: explicitly specify XML namespaces to use and their prefixes 
-        * 
-        * For better performance, when you need to evaluate several xpath expressions, 
-        * it makes sense to create a context, load namespace prefixes once 
-        * and use the context several times in Node(), Nodes(), XPath() function calls for several nodes. 
-        * The context may be used with any node of the current document, but 
-        * cannot be shared between different XML documents. 
-        */ 
-        TXPathContextPtr CreateXPathContext(const TNamespacesForXPath& nss = TNamespacesForXPath()) const; 
- 
-        /** 
+        * Create xpath context to be used later for fast xpath evaluation.
+        * @param nss: explicitly specify XML namespaces to use and their prefixes
+        *
+        * For better performance, when you need to evaluate several xpath expressions,
+        * it makes sense to create a context, load namespace prefixes once
+        * and use the context several times in Node(), Nodes(), XPath() function calls for several nodes.
+        * The context may be used with any node of the current document, but
+        * cannot be shared between different XML documents.
+        */
+        TXPathContextPtr CreateXPathContext(const TNamespacesForXPath& nss = TNamespacesForXPath()) const;
+
+        /**
         * get all element nodes matching given xpath expression
         * @param xpath: xpath expression
         * @param quiet: don't throw exception if zero nodes found
@@ -197,17 +197,17 @@ namespace NXml {
         TConstNodes Nodes(TZtStringBuf xpath, bool quiet = false, const TNamespacesForXPath& ns = TNamespacesForXPath()) const;
 
         /**
-        * get all element nodes matching given xpath expression 
-        * @param xpath: xpath expression 
-        * @param quiet: don't throw exception if zero nodes found 
-        * @param ctxt: reusable xpath context 
-        * 
-        * For historical reasons, this only works for *element* nodes. 
-        * Use the XPath function if you need other kinds of nodes. 
-        */ 
+        * get all element nodes matching given xpath expression
+        * @param xpath: xpath expression
+        * @param quiet: don't throw exception if zero nodes found
+        * @param ctxt: reusable xpath context
+        *
+        * For historical reasons, this only works for *element* nodes.
+        * Use the XPath function if you need other kinds of nodes.
+        */
         TConstNodes Nodes(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const;
- 
-        /** 
+
+        /**
         * get all nodes matching given xpath expression
         * @param xpath: xpath expression
         * @param quiet: don't throw exception if zero nodes found
@@ -216,18 +216,18 @@ namespace NXml {
         TConstNodes XPath(TZtStringBuf xpath, bool quiet = false, const TNamespacesForXPath& ns = TNamespacesForXPath()) const;
 
         /**
-        * get all nodes matching given xpath expression 
-        * @param xpath: xpath expression 
-        * @param quiet: don't throw exception if zero nodes found 
-        * @param ctxt: reusable xpath context 
-        */ 
+        * get all nodes matching given xpath expression
+        * @param xpath: xpath expression
+        * @param quiet: don't throw exception if zero nodes found
+        * @param ctxt: reusable xpath context
+        */
         TConstNodes XPath(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const;
- 
-        /** 
+
+        /**
         * get the first element node matching given xpath expression
         * @param xpath: path to node (from current node)
         * @param quiet: don't throw exception if node not found,
-        *               return null node (@see IsNull()) 
+        *               return null node (@see IsNull())
         * @param ns: explicitly specify XML namespaces to use and their prefixes
         *
         * For historical reasons, this only works for *element* nodes.
@@ -238,23 +238,23 @@ namespace NXml {
         TConstNode Node(TZtStringBuf xpath, bool quiet = false, const TNamespacesForXPath& ns = TNamespacesForXPath()) const;
 
         /**
-        * get the first element node matching given xpath expression 
-        * @param xpath: path to node (from current node) 
-        * @param quiet: don't throw exception if node not found, 
-        *               return null node (@see IsNull()) 
-        * @param ctxt: reusable xpath context 
-        * 
-        * For historical reasons, this only works for *element* nodes. 
-        * Use the XPath function if you need other kinds of nodes. 
-        */ 
+        * get the first element node matching given xpath expression
+        * @param xpath: path to node (from current node)
+        * @param quiet: don't throw exception if node not found,
+        *               return null node (@see IsNull())
+        * @param ctxt: reusable xpath context
+        *
+        * For historical reasons, this only works for *element* nodes.
+        * Use the XPath function if you need other kinds of nodes.
+        */
         TNode Node(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt);
         TConstNode Node(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const;
- 
-        /** 
+
+        /**
         * get node first child
         * @param name: child name
-        * @note if name is empty, returns the first child node of type "element" 
-        * @note returns null node if no child found 
+        * @note if name is empty, returns the first child node of type "element"
+        * @note returns null node if no child found
         */
         TNode FirstChild(TZtStringBuf name);
         TConstNode FirstChild(TZtStringBuf name) const;
@@ -272,8 +272,8 @@ namespace NXml {
         /**
         * get node neighbour
         * @param name: neighbour name
-        * @note if name is empty, returns the next sibling node of type "element" 
-        * @node returns null node if no neighbour found 
+        * @note if name is empty, returns the next sibling node of type "element"
+        * @node returns null node if no neighbour found
         */
         TNode NextSibling(TZtStringBuf name);
         TConstNode NextSibling(TZtStringBuf name) const;
@@ -495,18 +495,18 @@ namespace NXml {
         }
 
         /**
-        * Create xpath context to be used later for fast xpath evaluation. 
-        * @param nss: explicitly specify XML namespaces to use and their prefixes 
-        */ 
+        * Create xpath context to be used later for fast xpath evaluation.
+        * @param nss: explicitly specify XML namespaces to use and their prefixes
+        */
         TXPathContextPtr CreateXPathContext(const TNamespacesForXPath& nss = TNamespacesForXPath()) const {
-            return ActualNode.CreateXPathContext(nss); 
-        } 
- 
-        /** 
+            return ActualNode.CreateXPathContext(nss);
+        }
+
+        /**
         * get all element nodes matching given xpath expression
         * @param xpath: xpath expression
         * @param quiet: don't throw exception if zero nodes found
-        * @param ns: explicitly specify XML namespaces to use and their prefixes 
+        * @param ns: explicitly specify XML namespaces to use and their prefixes
         *
         * For historical reasons, this only works for *element* nodes.
         * Use the XPath function if you need other kinds of nodes.
@@ -516,44 +516,44 @@ namespace NXml {
         }
 
         /**
-        * get all element nodes matching given xpath expression 
-        * @param xpath: xpath expression 
-        * @param quiet: don't throw exception if zero nodes found 
-        * @param ctxt: reusable xpath context 
-        * 
-        * For historical reasons, this only works for *element* nodes. 
-        * Use the XPath function if you need other kinds of nodes. 
-        */ 
+        * get all element nodes matching given xpath expression
+        * @param xpath: xpath expression
+        * @param quiet: don't throw exception if zero nodes found
+        * @param ctxt: reusable xpath context
+        *
+        * For historical reasons, this only works for *element* nodes.
+        * Use the XPath function if you need other kinds of nodes.
+        */
         TConstNodes Nodes(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const {
-            return ActualNode.Nodes(xpath, quiet, ctxt); 
-        } 
- 
-        /** 
+            return ActualNode.Nodes(xpath, quiet, ctxt);
+        }
+
+        /**
         * get all nodes matching given xpath expression
         * @param xpath: xpath expression
         * @param quiet: don't throw exception if zero nodes found
-        * @param ns: explicitly specify XML namespaces to use and their prefixes 
+        * @param ns: explicitly specify XML namespaces to use and their prefixes
         */
         TConstNodes XPath(TZtStringBuf xpath, bool quiet = false, const TNamespacesForXPath& ns = TNamespacesForXPath()) const {
             return ActualNode.XPath(xpath, quiet, ns);
         }
 
         /**
-        * get all nodes matching given xpath expression 
-        * @param xpath: xpath expression 
-        * @param quiet: don't throw exception if zero nodes found 
-        * @param ctxt: reusable xpath context 
-        */ 
+        * get all nodes matching given xpath expression
+        * @param xpath: xpath expression
+        * @param quiet: don't throw exception if zero nodes found
+        * @param ctxt: reusable xpath context
+        */
         TConstNodes XPath(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const {
-            return ActualNode.XPath(xpath, quiet, ctxt); 
-        } 
- 
-        /** 
+            return ActualNode.XPath(xpath, quiet, ctxt);
+        }
+
+        /**
         * get the first element node matching given xpath expression
         * @param xpath: path to node (from current node)
         * @param quiet: don't throw exception if node not found,
-        *               return null node (@see IsNull()) 
-        * @param ns: explicitly specify XML namespaces to use and their prefixes 
+        *               return null node (@see IsNull())
+        * @param ns: explicitly specify XML namespaces to use and their prefixes
         *
         * For historical reasons, this only works for *element* nodes.
         * Use the XPath function if you need other kinds of nodes.
@@ -562,20 +562,20 @@ namespace NXml {
             return ActualNode.Node(xpath, quiet, ns);
         }
 
-        /** 
-        * get the first element node matching given xpath expression 
-        * @param xpath: path to node (from current node) 
-        * @param quiet: don't throw exception if node not found, 
-        *               return null node (@see IsNull()) 
-        * @param ctxt: reusable xpath context 
-        * 
-        * For historical reasons, this only works for *element* nodes. 
-        * Use the XPath function if you need other kinds of nodes. 
-        */ 
+        /**
+        * get the first element node matching given xpath expression
+        * @param xpath: path to node (from current node)
+        * @param quiet: don't throw exception if node not found,
+        *               return null node (@see IsNull())
+        * @param ctxt: reusable xpath context
+        *
+        * For historical reasons, this only works for *element* nodes.
+        * Use the XPath function if you need other kinds of nodes.
+        */
         TConstNode Node(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const {
-            return ActualNode.Node(xpath, quiet, ctxt); 
-        } 
- 
+            return ActualNode.Node(xpath, quiet, ctxt);
+        }
+
         TConstNode FirstChild(TZtStringBuf name) const {
             return ActualNode.FirstChild(name);
         }

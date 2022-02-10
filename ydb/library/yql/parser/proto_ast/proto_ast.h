@@ -17,7 +17,7 @@ namespace NProtoAST {
         auto begin = input->get_nextChar();
         auto end = begin + input->get_sizeBuf();
         if (begin != end && SafeReadUTF8Char(rune, runeLen, begin, end) == RECODE_OK) {
-            err << " '" << TStringBuf((const char*)begin, runeLen) << "' (Unicode character <" << ui32(rune) << ">)"; 
+            err << " '" << TStringBuf((const char*)begin, runeLen) << "' (Unicode character <" << ui32(rune) << ">)";
         }
     }
 

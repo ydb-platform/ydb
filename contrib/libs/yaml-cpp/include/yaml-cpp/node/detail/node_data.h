@@ -27,11 +27,11 @@ class node;
 
 namespace YAML {
 namespace detail {
-class YAML_CPP_API node_data { 
+class YAML_CPP_API node_data {
  public:
   node_data();
-  node_data(const node_data&) = delete; 
-  node_data& operator=(const node_data&) = delete; 
+  node_data(const node_data&) = delete;
+  node_data& operator=(const node_data&) = delete;
 
   void mark_defined();
   void set_mark(const Mark& mark);
@@ -114,7 +114,7 @@ class YAML_CPP_API node_data {
   mutable std::size_t m_seqSize;
 
   // map
-  typedef std::vector<std::pair<node*, node*>> node_map; 
+  typedef std::vector<std::pair<node*, node*>> node_map;
   node_map m_map;
 
   typedef std::pair<node*, node*> kv_pair;

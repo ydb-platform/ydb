@@ -62,23 +62,23 @@ Y_UNIT_TEST_SUITE(TSimpleTMTest) {
     }
 
     Y_UNIT_TEST(TestYDayConversion) {
-        using namespace NDatetime; 
-        ui32 month; 
-        ui32 mday; 
- 
-        for (ui32 yday = 0; yday < 365; ++yday) { 
-            YDayToMonthAndDay(yday, false, &month, &mday); 
-            UNIT_ASSERT_VALUES_EQUAL(yday, YDayFromMonthAndDay(month, mday, false)); 
-        } 
-        for (ui32 yday = 0; yday < 366; ++yday) { 
-            YDayToMonthAndDay(yday, true, &month, &mday); 
-            UNIT_ASSERT_VALUES_EQUAL(yday, YDayFromMonthAndDay(month, mday, true)); 
-        } 
- 
-        UNIT_ASSERT_EXCEPTION(YDayToMonthAndDay(365, false, &month, &mday), yexception); 
-        UNIT_ASSERT_EXCEPTION(YDayToMonthAndDay(366, true, &month, &mday), yexception); 
-    } 
- 
+        using namespace NDatetime;
+        ui32 month;
+        ui32 mday;
+
+        for (ui32 yday = 0; yday < 365; ++yday) {
+            YDayToMonthAndDay(yday, false, &month, &mday);
+            UNIT_ASSERT_VALUES_EQUAL(yday, YDayFromMonthAndDay(month, mday, false));
+        }
+        for (ui32 yday = 0; yday < 366; ++yday) {
+            YDayToMonthAndDay(yday, true, &month, &mday);
+            UNIT_ASSERT_VALUES_EQUAL(yday, YDayFromMonthAndDay(month, mday, true));
+        }
+
+        UNIT_ASSERT_EXCEPTION(YDayToMonthAndDay(365, false, &month, &mday), yexception);
+        UNIT_ASSERT_EXCEPTION(YDayToMonthAndDay(366, true, &month, &mday), yexception);
+    }
+
     Y_UNIT_TEST(SimpleTMTest) {
         using namespace NDatetime;
 

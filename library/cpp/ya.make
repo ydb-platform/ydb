@@ -129,7 +129,7 @@ RECURSE(
     fuid
     fuid/ut
     function_tracer
-    geo 
+    geo
     geobase
     geobase/ut
     geohash

@@ -4193,7 +4193,7 @@ class GeneratorBodyDefNode(DefNode):
         # ----- Function header
         code.putln("")
         self.generate_function_header(code)
-        code.putln("__pyx_CoroutineObject *%s = (__pyx_CoroutineObject *)%s_obj;" % (Naming.generator_cname, Naming.generator_cname)) 
+        code.putln("__pyx_CoroutineObject *%s = (__pyx_CoroutineObject *)%s_obj;" % (Naming.generator_cname, Naming.generator_cname))
         closure_init_code = code.insertion_point()
         # ----- Local variables
         code.putln("PyObject *%s = NULL;" % Naming.retval_cname)

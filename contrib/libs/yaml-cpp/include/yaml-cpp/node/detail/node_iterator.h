@@ -9,9 +9,9 @@
 
 #include "yaml-cpp/dll.h"
 #include "yaml-cpp/node/ptr.h"
-#include <cstddef> 
-#include <iterator> 
-#include <memory> 
+#include <cstddef>
+#include <iterator>
+#include <memory>
 #include <map>
 #include <utility>
 #include <vector>
@@ -19,7 +19,7 @@
 namespace YAML {
 namespace detail {
 struct iterator_type {
-  enum value { NoneType, Sequence, Map }; 
+  enum value { NoneType, Sequence, Map };
 };
 
 template <typename V>
@@ -37,7 +37,7 @@ struct node_iterator_value : public std::pair<V*, V*> {
 };
 
 typedef std::vector<node*> node_seq;
-typedef std::vector<std::pair<node*, node*>> node_map; 
+typedef std::vector<std::pair<node*, node*>> node_map;
 
 template <typename V>
 struct node_iterator_type {
@@ -53,27 +53,27 @@ struct node_iterator_type<const V> {
 
 template <typename V>
 class node_iterator_base
-    : public std::iterator<std::forward_iterator_tag, node_iterator_value<V>, 
-                           std::ptrdiff_t, node_iterator_value<V>*, 
-                           node_iterator_value<V>> { 
+    : public std::iterator<std::forward_iterator_tag, node_iterator_value<V>,
+                           std::ptrdiff_t, node_iterator_value<V>*,
+                           node_iterator_value<V>> {
  private:
   struct enabler {};
 
-  struct proxy { 
-    explicit proxy(const node_iterator_value<V>& x) : m_ref(x) {} 
-    node_iterator_value<V>* operator->() { return std::addressof(m_ref); } 
-    operator node_iterator_value<V>*() { return std::addressof(m_ref); } 
- 
-    node_iterator_value<V> m_ref; 
-  }; 
- 
+  struct proxy {
+    explicit proxy(const node_iterator_value<V>& x) : m_ref(x) {}
+    node_iterator_value<V>* operator->() { return std::addressof(m_ref); }
+    operator node_iterator_value<V>*() { return std::addressof(m_ref); }
+
+    node_iterator_value<V> m_ref;
+  };
+
  public:
   typedef typename node_iterator_type<V>::seq SeqIter;
   typedef typename node_iterator_type<V>::map MapIter;
   typedef node_iterator_value<V> value_type;
 
   node_iterator_base()
-      : m_type(iterator_type::NoneType), m_seqIt(), m_mapIt(), m_mapEnd() {} 
+      : m_type(iterator_type::NoneType), m_seqIt(), m_mapIt(), m_mapEnd() {}
   explicit node_iterator_base(SeqIter seqIt)
       : m_type(iterator_type::Sequence),
         m_seqIt(seqIt),
@@ -89,8 +89,8 @@ class node_iterator_base
 
   template <typename W>
   node_iterator_base(const node_iterator_base<W>& rhs,
-                     typename std::enable_if<std::is_convertible<W*, V*>::value, 
-                                             enabler>::type = enabler()) 
+                     typename std::enable_if<std::is_convertible<W*, V*>::value,
+                                             enabler>::type = enabler())
       : m_type(rhs.m_type),
         m_seqIt(rhs.m_seqIt),
         m_mapIt(rhs.m_mapIt),
@@ -100,12 +100,12 @@ class node_iterator_base
   friend class node_iterator_base;
 
   template <typename W>
-  bool operator==(const node_iterator_base<W>& rhs) const { 
+  bool operator==(const node_iterator_base<W>& rhs) const {
     if (m_type != rhs.m_type)
       return false;
 
     switch (m_type) {
-      case iterator_type::NoneType: 
+      case iterator_type::NoneType:
         return true;
       case iterator_type::Sequence:
         return m_seqIt == rhs.m_seqIt;
@@ -115,14 +115,14 @@ class node_iterator_base
     return true;
   }
 
-  template <typename W> 
-  bool operator!=(const node_iterator_base<W>& rhs) const { 
-    return !(*this == rhs); 
-  } 
- 
-  node_iterator_base<V>& operator++() { 
+  template <typename W>
+  bool operator!=(const node_iterator_base<W>& rhs) const {
+    return !(*this == rhs);
+  }
+
+  node_iterator_base<V>& operator++() {
     switch (m_type) {
-      case iterator_type::NoneType: 
+      case iterator_type::NoneType:
         break;
       case iterator_type::Sequence:
         ++m_seqIt;
@@ -132,18 +132,18 @@ class node_iterator_base
         m_mapIt = increment_until_defined(m_mapIt);
         break;
     }
-    return *this; 
+    return *this;
   }
 
-  node_iterator_base<V> operator++(int) { 
-    node_iterator_base<V> iterator_pre(*this); 
-    ++(*this); 
-    return iterator_pre; 
-  } 
- 
-  value_type operator*() const { 
+  node_iterator_base<V> operator++(int) {
+    node_iterator_base<V> iterator_pre(*this);
+    ++(*this);
+    return iterator_pre;
+  }
+
+  value_type operator*() const {
     switch (m_type) {
-      case iterator_type::NoneType: 
+      case iterator_type::NoneType:
         return value_type();
       case iterator_type::Sequence:
         return value_type(**m_seqIt);
@@ -153,8 +153,8 @@ class node_iterator_base
     return value_type();
   }
 
-  proxy operator->() const { return proxy(**this); } 
- 
+  proxy operator->() const { return proxy(**this); }
+
   MapIter increment_until_defined(MapIter it) {
     while (it != m_mapEnd && !is_defined(it))
       ++it;

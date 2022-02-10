@@ -26,7 +26,7 @@ namespace NXml {
                 ParseString(xml);
                 break;
             case RootName: {
-                TDocHolder doc(xmlNewDoc(XMLCHAR("1.0"))); 
+                TDocHolder doc(xmlNewDoc(XMLCHAR("1.0")));
                 if (!doc)
                     THROW(XmlException, "Can't create xml document.");
                 doc->encoding = xmlStrdup(XMLCHAR("utf-8"));
@@ -36,21 +36,21 @@ namespace NXml {
                     THROW(XmlException, "Can't create root node.");
                 xmlDocSetRootElement(doc.Get(), node.Get());
                 Y_UNUSED(node.Release());
-                Doc = std::move(doc); 
+                Doc = std::move(doc);
             } break;
             default:
                 THROW(InvalidArgument, "Wrong source type");
         }
     }
 
-    TDocument::TDocument(TDocument&& doc) 
-        : Doc(std::move(doc.Doc)) 
+    TDocument::TDocument(TDocument&& doc)
+        : Doc(std::move(doc.Doc))
     {
     }
 
-    TDocument& TDocument::operator=(TDocument&& doc) { 
+    TDocument& TDocument::operator=(TDocument&& doc) {
         if (this != &doc)
-            doc.Swap(*this); 
+            doc.Swap(*this);
 
         return *this;
     }
@@ -63,7 +63,7 @@ namespace NXml {
         if (!pctx)
             THROW(XmlException, "Can't create parser context");
 
-        TDocHolder doc(xmlCtxtReadFile(pctx.Get(), file.c_str(), nullptr, XML_PARSE_NOCDATA)); 
+        TDocHolder doc(xmlCtxtReadFile(pctx.Get(), file.c_str(), nullptr, XML_PARSE_NOCDATA));
         if (!doc)
             THROW(XmlException, "Can't parse file " << file);
 
@@ -72,7 +72,7 @@ namespace NXml {
         if (res == -1)
             THROW(XmlException, "XIncludes processing failed");
 
-        Doc = std::move(doc); 
+        Doc = std::move(doc);
     }
 
     void TDocument::ParseString(TZtStringBuf xml) {
@@ -80,12 +80,12 @@ namespace NXml {
         if (pctx.Get() == nullptr)
             THROW(XmlException, "Can't create parser context");
 
-        TDocHolder doc(xmlCtxtReadMemory(pctx.Get(), xml.c_str(), (int)xml.size(), nullptr, nullptr, XML_PARSE_NOCDATA)); 
+        TDocHolder doc(xmlCtxtReadMemory(pctx.Get(), xml.c_str(), (int)xml.size(), nullptr, nullptr, XML_PARSE_NOCDATA));
 
         if (!doc)
             THROW(XmlException, "Can't parse string");
 
-        Doc = std::move(doc); 
+        Doc = std::move(doc);
     }
 
     TNode TDocument::Root() {
@@ -113,34 +113,34 @@ namespace NXml {
     }
 
     TXPathContextPtr TNode::CreateXPathContext(const TNamespacesForXPath& nss) const {
-        TXPathContextPtr ctx = xmlXPathNewContext(DocPointer); 
-        if (!ctx) 
-            THROW(XmlException, "Can't create empty xpath context"); 
- 
-        for (const auto& ns : nss) { 
-            const int r = xmlXPathRegisterNs(ctx.Get(), XMLCHAR(ns.Prefix.c_str()), XMLCHAR(ns.Url.c_str())); 
-            if (r != 0) 
-                THROW(XmlException, "Can't register namespace " << ns.Url << " with prefix " << ns.Prefix); 
-        } 
- 
-        return ctx; 
-    } 
- 
+        TXPathContextPtr ctx = xmlXPathNewContext(DocPointer);
+        if (!ctx)
+            THROW(XmlException, "Can't create empty xpath context");
+
+        for (const auto& ns : nss) {
+            const int r = xmlXPathRegisterNs(ctx.Get(), XMLCHAR(ns.Prefix.c_str()), XMLCHAR(ns.Url.c_str()));
+            if (r != 0)
+                THROW(XmlException, "Can't register namespace " << ns.Url << " with prefix " << ns.Prefix);
+        }
+
+        return ctx;
+    }
+
     TConstNodes TNode::XPath(TZtStringBuf xpath, bool quiet, const TNamespacesForXPath& ns) const {
-        TXPathContextPtr ctxt = CreateXPathContext(ns); 
-        return XPath(xpath, quiet, *ctxt); 
-    } 
+        TXPathContextPtr ctxt = CreateXPathContext(ns);
+        return XPath(xpath, quiet, *ctxt);
+    }
 
     TConstNodes TNode::XPath(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const {
-        if (xmlXPathSetContextNode(NodePointer, &ctxt) != 0) 
-            THROW(XmlException, "Can't set xpath context node, probably the context is associated with another document"); 
- 
-        TXPathObjectPtr obj = xmlXPathEvalExpression(XMLCHAR(xpath.c_str()), &ctxt); 
-        if (!obj) 
-            THROW(XmlException, "Can't evaluate xpath expression " << xpath); 
- 
-        TConstNodes nodes(DocPointer, obj); 
- 
+        if (xmlXPathSetContextNode(NodePointer, &ctxt) != 0)
+            THROW(XmlException, "Can't set xpath context node, probably the context is associated with another document");
+
+        TXPathObjectPtr obj = xmlXPathEvalExpression(XMLCHAR(xpath.c_str()), &ctxt);
+        if (!obj)
+            THROW(XmlException, "Can't evaluate xpath expression " << xpath);
+
+        TConstNodes nodes(DocPointer, obj);
+
         if (nodes.Size() == 0 && !quiet)
             THROW(NodeNotFound, xpath);
 
@@ -148,30 +148,30 @@ namespace NXml {
     }
 
     TConstNodes TNode::Nodes(TZtStringBuf xpath, bool quiet, const TNamespacesForXPath& ns) const {
-        TXPathContextPtr ctxt = CreateXPathContext(ns); 
-        return Nodes(xpath, quiet, *ctxt); 
-    } 
- 
+        TXPathContextPtr ctxt = CreateXPathContext(ns);
+        return Nodes(xpath, quiet, *ctxt);
+    }
+
     TConstNodes TNode::Nodes(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const {
-        TConstNodes nodes = XPath(xpath, quiet, ctxt); 
+        TConstNodes nodes = XPath(xpath, quiet, ctxt);
         if (nodes.Size() != 0 && !nodes[0].IsElementNode())
             THROW(XmlException, "xpath points to non-element nodes: " << xpath);
         return nodes;
     }
 
     TNode TNode::Node(TZtStringBuf xpath, bool quiet, const TNamespacesForXPath& ns) {
-        TXPathContextPtr ctxt = CreateXPathContext(ns); 
-        return Node(xpath, quiet, *ctxt); 
-    } 
+        TXPathContextPtr ctxt = CreateXPathContext(ns);
+        return Node(xpath, quiet, *ctxt);
+    }
 
     TConstNode TNode::Node(TZtStringBuf xpath, bool quiet, const TNamespacesForXPath& ns) const {
-        TXPathContextPtr ctxt = CreateXPathContext(ns); 
-        return Node(xpath, quiet, *ctxt); 
-    } 
- 
+        TXPathContextPtr ctxt = CreateXPathContext(ns);
+        return Node(xpath, quiet, *ctxt);
+    }
+
     TNode TNode::Node(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) {
-        TConstNodes n = Nodes(xpath, quiet, ctxt); 
- 
+        TConstNodes n = Nodes(xpath, quiet, ctxt);
+
         if (n.Size() == 0 && !quiet)
             THROW(NodeNotFound, xpath);
 
@@ -182,7 +182,7 @@ namespace NXml {
     }
 
     TConstNode TNode::Node(TZtStringBuf xpath, bool quiet, TXPathContext& ctxt) const {
-        return const_cast<TNode*>(this)->Node(xpath, quiet, ctxt); 
+        return const_cast<TNode*>(this)->Node(xpath, quiet, ctxt);
     }
 
     TNode TNode::FirstChild(TZtStringBuf name) {
@@ -271,9 +271,9 @@ namespace NXml {
     }
 
     TString TNode::Name() const {
-        if (IsNull()) 
-            THROW(XmlException, "Node is null"); 
- 
+        if (IsNull())
+            THROW(XmlException, "Node is null");
+
         return CAST2CHAR(NodePointer->name);
     }
 
@@ -294,9 +294,9 @@ namespace NXml {
     }
 
     bool TNode::IsText() const {
-        if (IsNull()) 
-            THROW(XmlException, "Node is null"); 
- 
+        if (IsNull())
+            THROW(XmlException, "Node is null");
+
         return NodePointer->type == XML_TEXT_NODE;
     }
 
@@ -368,10 +368,10 @@ namespace NXml {
         return TConstNodesRef(*this);
     }
 
-    TConstNodes::TConstNodes(xmlDoc* doc, TXPathObjectPtr obj) 
-        : SizeValue(obj && obj->nodesetval ? obj->nodesetval->nodeNr : 0) 
-        , Doc(doc) 
-        , Obj(obj) 
+    TConstNodes::TConstNodes(xmlDoc* doc, TXPathObjectPtr obj)
+        : SizeValue(obj && obj->nodesetval ? obj->nodesetval->nodeNr : 0)
+        , Doc(doc)
+        , Obj(obj)
     {
     }
 

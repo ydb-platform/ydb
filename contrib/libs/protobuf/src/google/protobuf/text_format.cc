@@ -1316,7 +1316,7 @@ class TextFormat::Printer::TextGenerator
       Write(text + pos, size - pos);
     } else {
       Write(text, size);
-      if (size > 0 && text[size - 1] == '\n') { 
+      if (size > 0 && text[size - 1] == '\n') {
         at_start_of_line_ = true;
       }
     }

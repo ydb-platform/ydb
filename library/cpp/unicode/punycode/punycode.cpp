@@ -19,7 +19,7 @@ static inline void CheckIdnaResult(int rc) {
 
 // UTF-32 helpers
 
-static inline void AppendWideToUtf32(const TWtringBuf& in, TVector<ui32>& out) { 
+static inline void AppendWideToUtf32(const TWtringBuf& in, TVector<ui32>& out) {
     out.reserve(out.size() + in.size() + 1);
 
     const wchar16* b = in.begin();
@@ -29,18 +29,18 @@ static inline void AppendWideToUtf32(const TWtringBuf& in, TVector<ui32>& out) {
     }
 }
 
-static inline void AppendUtf32ToWide(const ui32* in, size_t len, TUtf16String& out) { 
+static inline void AppendUtf32ToWide(const ui32* in, size_t len, TUtf16String& out) {
     out.reserve(out.size() + len);
 
-    const ui32* b = in; 
-    const ui32* e = in + len; 
+    const ui32* b = in;
+    const ui32* e = in + len;
     for (; b != e; ++b) {
-        WriteSymbol(wchar32(*b), out); 
+        WriteSymbol(wchar32(*b), out);
     }
 }
 
 TStringBuf WideToPunycode(const TWtringBuf& in16, TString& out) {
-    TVector<ui32> in32; 
+    TVector<ui32> in32;
     AppendWideToUtf32(in16, in32);
     size_t outlen = in32.size();
 
@@ -59,7 +59,7 @@ TStringBuf WideToPunycode(const TWtringBuf& in16, TString& out) {
 
 TWtringBuf PunycodeToWide(const TStringBuf& in, TUtf16String& out16) {
     size_t outlen = in.size();
-    TVector<ui32> out32(outlen); 
+    TVector<ui32> out32(outlen);
 
     int rc = punycode_decode(in.size(), in.data(), &outlen, out32.begin(), nullptr);
     CheckPunycodeResult(rc);
@@ -80,7 +80,7 @@ namespace {
 }
 
 TString HostNameToPunycode(const TWtringBuf& unicodeHost) {
-    TVector<ui32> in32; 
+    TVector<ui32> in32;
     AppendWideToUtf32(unicodeHost, in32);
     in32.push_back(0);
 
@@ -96,12 +96,12 @@ TUtf16String PunycodeToHostName(const TStringBuf& punycodeHost) {
         ythrow TPunycodeError() << "Non-ASCII punycode input";
 
     size_t len = punycodeHost.size();
-    TVector<ui32> in32(len + 1, 0); 
+    TVector<ui32> in32(len + 1, 0);
     for (size_t i = 0; i < len; ++i)
         in32[i] = static_cast<ui8>(punycodeHost[i]);
     in32[len] = 0;
 
-    TIdnaResult<ui32> out; 
+    TIdnaResult<ui32> out;
     int rc = idna_to_unicode_4z4z(in32.begin(), &out.Data, 0);
     CheckIdnaResult(rc);
 

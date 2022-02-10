@@ -476,7 +476,7 @@ namespace NKikimr {
 
                 struct TNotReady : yexception {};
 
-                auto processInlineTable = [&](auto (TRow::*member), const auto *inlineTable) { 
+                auto processInlineTable = [&](auto (TRow::*member), const auto *inlineTable) {
                     using TInlineTable = std::remove_pointer_t<decltype(inlineTable)>;
                     if (!FetchTable<TInlineTable>(db, param, item.*member, key)) {
                         ythrow TNotReady();

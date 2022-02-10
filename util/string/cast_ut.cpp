@@ -350,13 +350,13 @@ Y_UNIT_TEST_SUITE(TCastTest) {
 #endif
 
     Y_UNIT_TEST(TestWide) {
-        TUtf16String iw = u"-100500"; 
+        TUtf16String iw = u"-100500";
         int iv = 0;
         UNIT_ASSERT_VALUES_EQUAL(TryFromString(iw, iv), true);
         UNIT_ASSERT_VALUES_EQUAL(iv, -100500);
 
         ui64 uv = 0;
-        TUtf16String uw = u"21474836470"; 
+        TUtf16String uw = u"21474836470";
         UNIT_ASSERT_VALUES_EQUAL(TryFromString(uw, uv), true);
         UNIT_ASSERT_VALUES_EQUAL(uv, 21474836470ull);
 
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         int res2 = 0;
         const int def2 = -6;
 
-        TUtf16String s3 = u"-100500"; 
+        TUtf16String s3 = u"-100500";
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault(s3, res2, def2), true);
         UNIT_ASSERT_VALUES_EQUAL(res2, -100500);
 
@@ -424,7 +424,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault(s3, def2), -100500);
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault<size_t>(s3), size_t());
 
-        TUtf16String s4 = u"-f100500"; 
+        TUtf16String s4 = u"-f100500";
         UNIT_ASSERT_VALUES_EQUAL(TryFromStringWithDefault(s4, res2, def2), false);
         UNIT_ASSERT_VALUES_EQUAL(res2, def2);
 
@@ -456,12 +456,12 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_DOUBLES_EQUAL((float)FromString(TString("10E-5")), 10E-5, EPS);
         UNIT_ASSERT_VALUES_EQUAL((bool)FromString("da"), true);
         UNIT_ASSERT_VALUES_EQUAL((bool)FromString("no"), false);
-        UNIT_ASSERT_VALUES_EQUAL((short)FromString(u"9000"), 9000); 
-        UNIT_ASSERT_VALUES_EQUAL((int)FromString(u"-100500"), -100500); 
-        UNIT_ASSERT_VALUES_EQUAL((unsigned long long)FromString(TWtringBuf(u"42", 1)), 4); 
+        UNIT_ASSERT_VALUES_EQUAL((short)FromString(u"9000"), 9000);
+        UNIT_ASSERT_VALUES_EQUAL((int)FromString(u"-100500"), -100500);
+        UNIT_ASSERT_VALUES_EQUAL((unsigned long long)FromString(TWtringBuf(u"42", 1)), 4);
         int integer = FromString("125");
-        ui16 wideCharacterCode = FromString(u"125"); 
-        UNIT_ASSERT_VALUES_EQUAL(integer, wideCharacterCode); 
+        ui16 wideCharacterCode = FromString(u"125");
+        UNIT_ASSERT_VALUES_EQUAL(integer, wideCharacterCode);
     }
 
     static void CheckMessage(TFromStringException& exc, const TString& phrase) {
@@ -530,7 +530,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
             UNIT_ASSERT_VALUES_EQUAL(empty, out);
         }
         {
-            const auto hello = u"hello"; 
+            const auto hello = u"hello";
             TWtringBuf out;
             UNIT_ASSERT(TryFromString(hello, out));
             UNIT_ASSERT_VALUES_EQUAL(hello, out);
@@ -578,25 +578,25 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(87423.2031250000001), "87423.20313");
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(1.0e60, PREC_POINT_DIGITS_STRIP_ZEROES, 0), "1e+60");
     }
- 
-    Y_UNIT_TEST(TestChar) { 
-        // Given a character ch, ToString(ch) returns 
-        // the decimal representation of its integral value 
- 
-        // char 
-        UNIT_ASSERT_VALUES_EQUAL(ToString('\0'), "0"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString('0'), "48"); 
- 
-        // wchar16 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(u'\0'), "0"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(u'0'), "48"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(u'я'), "1103"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(u'\uFFFF'), "65535"); 
- 
-        // wchar32 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(U'\0'), "0"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(U'0'), "48"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(U'я'), "1103"); 
-        UNIT_ASSERT_VALUES_EQUAL(ToString(U'\U0001F600'), "128512"); // 'GRINNING FACE' (U+1F600) 
-    } 
+
+    Y_UNIT_TEST(TestChar) {
+        // Given a character ch, ToString(ch) returns
+        // the decimal representation of its integral value
+
+        // char
+        UNIT_ASSERT_VALUES_EQUAL(ToString('\0'), "0");
+        UNIT_ASSERT_VALUES_EQUAL(ToString('0'), "48");
+
+        // wchar16
+        UNIT_ASSERT_VALUES_EQUAL(ToString(u'\0'), "0");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(u'0'), "48");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(u'я'), "1103");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(u'\uFFFF'), "65535");
+
+        // wchar32
+        UNIT_ASSERT_VALUES_EQUAL(ToString(U'\0'), "0");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(U'0'), "48");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(U'я'), "1103");
+        UNIT_ASSERT_VALUES_EQUAL(ToString(U'\U0001F600'), "128512"); // 'GRINNING FACE' (U+1F600)
+    }
 };

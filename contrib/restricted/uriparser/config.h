@@ -35,17 +35,17 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
+ 
 #if !defined(URI_CONFIG_H)
 # define URI_CONFIG_H 1
-
-
-
+ 
+ 
+ 
 #define PACKAGE_VERSION "0.9.6"
-
+ 
 #define HAVE_WPRINTF
 #define HAVE_REALLOCARRAY
-
-
-
+ 
+ 
+ 
 #endif  /* !defined(URI_CONFIG_H) */

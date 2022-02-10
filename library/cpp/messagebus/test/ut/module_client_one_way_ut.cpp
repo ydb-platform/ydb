@@ -5,7 +5,7 @@
 
 #include <library/cpp/messagebus/misc/test_sync.h>
 #include <library/cpp/messagebus/oldmodule/module.h>
-
+ 
 using namespace NBus;
 using namespace NBus::NTest;
 

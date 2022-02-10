@@ -25,8 +25,8 @@ get_string_method "strcasestr.c" && sed --in-place 's/#include <string.h>/#inclu
 get_string_method "memrchr.c"
 get_string_method "stpcpy.c"
 
-mkdir -p include/windows/sys
-curl "https://raw.githubusercontent.com/openbsd/src/master/sys/sys/queue.h" --output "include/windows/sys/queue.h"
+mkdir -p include/windows/sys 
+curl "https://raw.githubusercontent.com/openbsd/src/master/sys/sys/queue.h" --output "include/windows/sys/queue.h" 
 
 mkdir -p include/readpassphrase
 curl "https://raw.githubusercontent.com/openbsd/src/master/include/readpassphrase.h" --output "include/readpassphrase/readpassphrase.h" && fix_decls "include/readpassphrase/readpassphrase.h"

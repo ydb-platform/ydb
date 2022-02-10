@@ -4,7 +4,7 @@
 
 #include <library/cpp/messagebus/ybus.h>
 #include <library/cpp/messagebus/protobuf/ybusbuf.h>
-
+ 
 namespace NCalculator {
     typedef ::NBus::TBusBufferMessage<TRequestSumRecord, 1> TRequestSum;
     typedef ::NBus::TBusBufferMessage<TRequestMulRecord, 2> TRequestMul;

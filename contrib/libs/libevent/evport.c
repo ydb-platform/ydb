@@ -54,10 +54,10 @@
  */
 
 #include "event2/event-config.h"
-#include "evconfig-private.h"
+#include "evconfig-private.h" 
 
-#ifdef EVENT__HAVE_EVENT_PORTS
-
+#ifdef EVENT__HAVE_EVENT_PORTS 
+ 
 #include <sys/time.h>
 #include <sys/queue.h>
 #include <errno.h>
@@ -78,8 +78,8 @@
 #include "evsignal-internal.h"
 #include "evmap-internal.h"
 
-#define INITIAL_EVENTS_PER_GETN 8
-#define MAX_EVENTS_PER_GETN 4096
+#define INITIAL_EVENTS_PER_GETN 8 
+#define MAX_EVENTS_PER_GETN 4096 
 
 /*
  * Per-file-descriptor information about what events we're subscribed to. These
@@ -87,12 +87,12 @@
  */
 
 struct fd_info {
-	/* combinations of EV_READ and EV_WRITE */
-	short fdi_what;
-	/* Index of this fd within ed_pending, plus 1.  Zero if this fd is
-	 * not in ed_pending.  (The +1 is a hack so that memset(0) will set
-	 * it to a nil index. */
-	int pending_idx_plus_1;
+	/* combinations of EV_READ and EV_WRITE */ 
+	short fdi_what; 
+	/* Index of this fd within ed_pending, plus 1.  Zero if this fd is 
+	 * not in ed_pending.  (The +1 is a hack so that memset(0) will set 
+	 * it to a nil index. */ 
+	int pending_idx_plus_1; 
 };
 
 #define FDI_HAS_READ(fdi)  ((fdi)->fdi_what & EV_READ)
@@ -103,15 +103,15 @@ struct fd_info {
 
 struct evport_data {
 	int		ed_port;	/* event port for system events  */
-	/* How many elements of ed_pending should we look at? */
-	int ed_npending;
-	/* How many elements are allocated in ed_pending and pevtlist? */
-	int ed_maxevents;
+	/* How many elements of ed_pending should we look at? */ 
+	int ed_npending; 
+	/* How many elements are allocated in ed_pending and pevtlist? */ 
+	int ed_maxevents; 
 	/* fdi's that we need to reassoc */
-	int *ed_pending;
-	/* storage space for incoming events. */ 
-	port_event_t *ed_pevtlist;
-	
+	int *ed_pending; 
+	/* storage space for incoming events. */  
+	port_event_t *ed_pevtlist; 
+	 
 };
 
 static void*	evport_init(struct event_base *);
@@ -119,7 +119,7 @@ static int evport_add(struct event_base *, int fd, short old, short events, void
 static int evport_del(struct event_base *, int fd, short old, short events, void *);
 static int	evport_dispatch(struct event_base *, struct timeval *);
 static void	evport_dealloc(struct event_base *);
-static int	grow(struct evport_data *, int min_events);
+static int	grow(struct evport_data *, int min_events); 
 
 const struct eventop evportops = {
 	"evport",
@@ -130,7 +130,7 @@ const struct eventop evportops = {
 	evport_dealloc,
 	1, /* need reinit */
 	0, /* features */
-	sizeof(struct fd_info), /* fdinfo length */
+	sizeof(struct fd_info), /* fdinfo length */ 
 };
 
 /*
@@ -150,47 +150,47 @@ evport_init(struct event_base *base)
 		return (NULL);
 	}
 
-	if (grow(evpd, INITIAL_EVENTS_PER_GETN) < 0) {
+	if (grow(evpd, INITIAL_EVENTS_PER_GETN) < 0) { 
 		close(evpd->ed_port);
 		mm_free(evpd);
-		return NULL;
+		return NULL; 
 	}
-		
-	evpd->ed_npending = 0;
+		 
+	evpd->ed_npending = 0; 
 
-	evsig_init_(base);
+	evsig_init_(base); 
 
 	return (evpd);
 }
 
-static int
-grow(struct evport_data *data, int min_events)
-{
-	int newsize;
-	int *new_pending;
-	port_event_t *new_pevtlist;
-	if (data->ed_maxevents) {
-		newsize = data->ed_maxevents;
-		do {
-			newsize *= 2;
-		} while (newsize < min_events);
-	} else {
-		newsize = min_events;
-	}
-
-	new_pending = mm_realloc(data->ed_pending, sizeof(int)*newsize);
-	if (new_pending == NULL)
-		return -1;
-	data->ed_pending = new_pending;
-	new_pevtlist = mm_realloc(data->ed_pevtlist, sizeof(port_event_t)*newsize);
-	if (new_pevtlist == NULL)
-		return -1;
-	data->ed_pevtlist = new_pevtlist; 
-
-	data->ed_maxevents = newsize;
-	return 0;
-}
-
+static int 
+grow(struct evport_data *data, int min_events) 
+{ 
+	int newsize; 
+	int *new_pending; 
+	port_event_t *new_pevtlist; 
+	if (data->ed_maxevents) { 
+		newsize = data->ed_maxevents; 
+		do { 
+			newsize *= 2; 
+		} while (newsize < min_events); 
+	} else { 
+		newsize = min_events; 
+	} 
+ 
+	new_pending = mm_realloc(data->ed_pending, sizeof(int)*newsize); 
+	if (new_pending == NULL) 
+		return -1; 
+	data->ed_pending = new_pending; 
+	new_pevtlist = mm_realloc(data->ed_pevtlist, sizeof(port_event_t)*newsize); 
+	if (new_pevtlist == NULL) 
+		return -1; 
+	data->ed_pevtlist = new_pevtlist;  
+ 
+	data->ed_maxevents = newsize; 
+	return 0; 
+} 
+ 
 #ifdef CHECK_INVARIANTS
 /*
  * Checks some basic properties about the evport_data structure. Because it
@@ -236,7 +236,7 @@ reassociate(struct evport_data *epdp, struct fd_info *fdip, int fd)
 
 	if (sysevents != 0) {
 		if (port_associate(epdp->ed_port, PORT_SOURCE_FD,
-				   fd, sysevents, fdip) == -1) {
+				   fd, sysevents, fdip) == -1) { 
 			event_warn("port_associate");
 			return (-1);
 		}
@@ -257,12 +257,12 @@ evport_dispatch(struct event_base *base, struct timeval *tv)
 {
 	int i, res;
 	struct evport_data *epdp = base->evbase;
-	port_event_t *pevtlist = epdp->ed_pevtlist;
+	port_event_t *pevtlist = epdp->ed_pevtlist; 
 
 	/*
 	 * port_getn will block until it has at least nevents events. It will
 	 * also return how many it's given us (which may be more than we asked
-	 * for, as long as it's less than our maximum (ed_maxevents)) in
+	 * for, as long as it's less than our maximum (ed_maxevents)) in 
 	 * nevents.
 	 */
 	int nevents = 1;
@@ -285,25 +285,25 @@ evport_dispatch(struct event_base *base, struct timeval *tv)
 	 * last time which need reassociation. See comment at the end of the
 	 * loop below.
 	 */
-	for (i = 0; i < epdp->ed_npending; ++i) {
+	for (i = 0; i < epdp->ed_npending; ++i) { 
 		struct fd_info *fdi = NULL;
-		const int fd = epdp->ed_pending[i];
-		if (fd != -1) {
-			/* We might have cleared out this event; we need
-			 * to be sure that it's still set. */
-			fdi = evmap_io_get_fdinfo_(&base->io, fd);
+		const int fd = epdp->ed_pending[i]; 
+		if (fd != -1) { 
+			/* We might have cleared out this event; we need 
+			 * to be sure that it's still set. */ 
+			fdi = evmap_io_get_fdinfo_(&base->io, fd); 
 		}
 
 		if (fdi != NULL && FDI_HAS_EVENTS(fdi)) {
 			reassociate(epdp, fdi, fd);
-			/* epdp->ed_pending[i] = -1; */
-			fdi->pending_idx_plus_1 = 0;
+			/* epdp->ed_pending[i] = -1; */ 
+			fdi->pending_idx_plus_1 = 0; 
 		}
 	}
 
 	EVBASE_RELEASE_LOCK(base, th_base_lock);
 
-	res = port_getn(epdp->ed_port, pevtlist, epdp->ed_maxevents,
+	res = port_getn(epdp->ed_port, pevtlist, epdp->ed_maxevents, 
 	    (unsigned int *) &nevents, ts_p);
 
 	EVBASE_ACQUIRE_LOCK(base, th_base_lock);
@@ -325,13 +325,13 @@ evport_dispatch(struct event_base *base, struct timeval *tv)
 	for (i = 0; i < nevents; ++i) {
 		port_event_t *pevt = &pevtlist[i];
 		int fd = (int) pevt->portev_object;
-		struct fd_info *fdi = pevt->portev_user;
-		/*EVUTIL_ASSERT(evmap_io_get_fdinfo_(&base->io, fd) == fdi);*/
+		struct fd_info *fdi = pevt->portev_user; 
+		/*EVUTIL_ASSERT(evmap_io_get_fdinfo_(&base->io, fd) == fdi);*/ 
 
 		check_evportop(epdp);
 		check_event(pevt);
 		epdp->ed_pending[i] = fd;
-		fdi->pending_idx_plus_1 = i + 1;
+		fdi->pending_idx_plus_1 = i + 1; 
 
 		/*
 		 * Figure out what kind of event it was
@@ -353,17 +353,17 @@ evport_dispatch(struct event_base *base, struct timeval *tv)
 		if (pevt->portev_events & (POLLERR|POLLHUP|POLLNVAL))
 			res |= EV_READ|EV_WRITE;
 
-		evmap_io_active_(base, fd, res);
+		evmap_io_active_(base, fd, res); 
 	} /* end of all events gotten */
-	epdp->ed_npending = nevents;
+	epdp->ed_npending = nevents; 
 
-	if (nevents == epdp->ed_maxevents &&
-	    epdp->ed_maxevents < MAX_EVENTS_PER_GETN) {
-		/* we used all the space this time.  We should be ready
-		 * for more events next time around. */
-		grow(epdp, epdp->ed_maxevents * 2);
-	}
-
+	if (nevents == epdp->ed_maxevents && 
+	    epdp->ed_maxevents < MAX_EVENTS_PER_GETN) { 
+		/* we used all the space this time.  We should be ready 
+		 * for more events next time around. */ 
+		grow(epdp, epdp->ed_maxevents * 2); 
+	} 
+ 
 	check_evportop(epdp);
 
 	return (0);
@@ -379,7 +379,7 @@ static int
 evport_add(struct event_base *base, int fd, short old, short events, void *p)
 {
 	struct evport_data *evpd = base->evbase;
-	struct fd_info *fdi = p;
+	struct fd_info *fdi = p; 
 
 	check_evportop(evpd);
 
@@ -396,12 +396,12 @@ static int
 evport_del(struct event_base *base, int fd, short old, short events, void *p)
 {
 	struct evport_data *evpd = base->evbase;
-	struct fd_info *fdi = p;
-	int associated = ! fdi->pending_idx_plus_1;
+	struct fd_info *fdi = p; 
+	int associated = ! fdi->pending_idx_plus_1; 
 
 	check_evportop(evpd);
 
-	fdi->fdi_what &= ~(events &(EV_READ|EV_WRITE));
+	fdi->fdi_what &= ~(events &(EV_READ|EV_WRITE)); 
 
 	if (associated) {
 		if (!FDI_HAS_EVENTS(fdi) &&
@@ -421,10 +421,10 @@ evport_del(struct event_base *base, int fd, short old, short events, void *p)
 		}
 	} else {
 		if ((fdi->fdi_what & (EV_READ|EV_WRITE)) == 0) {
-			const int i = fdi->pending_idx_plus_1 - 1;
-			EVUTIL_ASSERT(evpd->ed_pending[i] == fd);
+			const int i = fdi->pending_idx_plus_1 - 1; 
+			EVUTIL_ASSERT(evpd->ed_pending[i] == fd); 
 			evpd->ed_pending[i] = -1;
-			fdi->pending_idx_plus_1 = 0;
+			fdi->pending_idx_plus_1 = 0; 
 		}
 	}
 	return 0;
@@ -436,16 +436,16 @@ evport_dealloc(struct event_base *base)
 {
 	struct evport_data *evpd = base->evbase;
 
-	evsig_dealloc_(base);
+	evsig_dealloc_(base); 
 
 	close(evpd->ed_port);
 
-	if (evpd->ed_pending)
-		mm_free(evpd->ed_pending);
-	if (evpd->ed_pevtlist)
-		mm_free(evpd->ed_pevtlist);
-
+	if (evpd->ed_pending) 
+		mm_free(evpd->ed_pending); 
+	if (evpd->ed_pevtlist) 
+		mm_free(evpd->ed_pevtlist); 
+ 
 	mm_free(evpd);
 }
-
-#endif /* EVENT__HAVE_EVENT_PORTS */
+ 
+#endif /* EVENT__HAVE_EVENT_PORTS */ 

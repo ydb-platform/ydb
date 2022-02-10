@@ -26,58 +26,58 @@
  */
 
 #include "event2/event-config.h"
-#include "evconfig-private.h"
+#include "evconfig-private.h" 
 
-#ifdef _WIN32
+#ifdef _WIN32 
 #include <winsock2.h>
 #include <windows.h>
 #include <io.h>
 #endif
 
-#ifdef EVENT__HAVE_VASPRINTF
-/* If we have vasprintf, we need to define _GNU_SOURCE before we include
- * stdio.h.  This comes from evconfig-private.h.
- */
-#endif
-
+#ifdef EVENT__HAVE_VASPRINTF 
+/* If we have vasprintf, we need to define _GNU_SOURCE before we include 
+ * stdio.h.  This comes from evconfig-private.h. 
+ */ 
+#endif 
+ 
 #include <sys/types.h>
 
-#ifdef EVENT__HAVE_SYS_TIME_H
+#ifdef EVENT__HAVE_SYS_TIME_H 
 #include <sys/time.h>
 #endif
 
-#ifdef EVENT__HAVE_SYS_SOCKET_H
+#ifdef EVENT__HAVE_SYS_SOCKET_H 
 #include <sys/socket.h>
 #endif
 
-#ifdef EVENT__HAVE_SYS_UIO_H
+#ifdef EVENT__HAVE_SYS_UIO_H 
 #include <sys/uio.h>
 #endif
 
-#ifdef EVENT__HAVE_SYS_IOCTL_H
+#ifdef EVENT__HAVE_SYS_IOCTL_H 
 #include <sys/ioctl.h>
 #endif
 
-#ifdef EVENT__HAVE_SYS_MMAN_H
+#ifdef EVENT__HAVE_SYS_MMAN_H 
 #include <sys/mman.h>
 #endif
 
-#ifdef EVENT__HAVE_SYS_SENDFILE_H
+#ifdef EVENT__HAVE_SYS_SENDFILE_H 
 #include <sys/sendfile.h>
 #endif
-#ifdef EVENT__HAVE_SYS_STAT_H
-#include <sys/stat.h>
-#endif
+#ifdef EVENT__HAVE_SYS_STAT_H 
+#include <sys/stat.h> 
+#endif 
 
-
+ 
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifdef EVENT__HAVE_STDARG_H
+#ifdef EVENT__HAVE_STDARG_H 
 #include <stdarg.h>
 #endif
-#ifdef EVENT__HAVE_UNISTD_H
+#ifdef EVENT__HAVE_UNISTD_H 
 #include <unistd.h>
 #endif
 #include <limits.h>
@@ -95,7 +95,7 @@
 #include "evthread-internal.h"
 #include "evbuffer-internal.h"
 #include "bufferevent-internal.h"
-#include "event-internal.h"
+#include "event-internal.h" 
 
 /* some systems do not have MAP_FAILED */
 #ifndef MAP_FAILED
@@ -103,16 +103,16 @@
 #endif
 
 /* send file support */
-#if defined(EVENT__HAVE_SYS_SENDFILE_H) && defined(EVENT__HAVE_SENDFILE) && defined(__linux__)
+#if defined(EVENT__HAVE_SYS_SENDFILE_H) && defined(EVENT__HAVE_SENDFILE) && defined(__linux__) 
 #define USE_SENDFILE		1
 #define SENDFILE_IS_LINUX	1
-#elif defined(EVENT__HAVE_SENDFILE) && defined(__FreeBSD__)
+#elif defined(EVENT__HAVE_SENDFILE) && defined(__FreeBSD__) 
 #define USE_SENDFILE		1
 #define SENDFILE_IS_FREEBSD	1
-#elif defined(EVENT__HAVE_SENDFILE) && defined(__APPLE__)
+#elif defined(EVENT__HAVE_SENDFILE) && defined(__APPLE__) 
 #define USE_SENDFILE		1
 #define SENDFILE_IS_MACOSX	1
-#elif defined(EVENT__HAVE_SENDFILE) && defined(__sun__) && defined(__svr4__)
+#elif defined(EVENT__HAVE_SENDFILE) && defined(__sun__) && defined(__svr4__) 
 #define USE_SENDFILE		1
 #define SENDFILE_IS_SOLARIS	1
 #endif
@@ -133,25 +133,25 @@
 #define CHAIN_PINNED(ch)  (((ch)->flags & EVBUFFER_MEM_PINNED_ANY) != 0)
 #define CHAIN_PINNED_R(ch)  (((ch)->flags & EVBUFFER_MEM_PINNED_R) != 0)
 
-/* evbuffer_ptr support */
-#define PTR_NOT_FOUND(ptr) do {			\
-	(ptr)->pos = -1;					\
-	(ptr)->internal_.chain = NULL;		\
-	(ptr)->internal_.pos_in_chain = 0;	\
-} while (0)
-
+/* evbuffer_ptr support */ 
+#define PTR_NOT_FOUND(ptr) do {			\ 
+	(ptr)->pos = -1;					\ 
+	(ptr)->internal_.chain = NULL;		\ 
+	(ptr)->internal_.pos_in_chain = 0;	\ 
+} while (0) 
+ 
 static void evbuffer_chain_align(struct evbuffer_chain *chain);
 static int evbuffer_chain_should_realign(struct evbuffer_chain *chain,
     size_t datalen);
-static void evbuffer_deferred_callback(struct event_callback *cb, void *arg);
+static void evbuffer_deferred_callback(struct event_callback *cb, void *arg); 
 static int evbuffer_ptr_memcmp(const struct evbuffer *buf,
     const struct evbuffer_ptr *pos, const char *mem, size_t len);
 static struct evbuffer_chain *evbuffer_expand_singlechain(struct evbuffer *buf,
     size_t datlen);
-static int evbuffer_ptr_subtract(struct evbuffer *buf, struct evbuffer_ptr *pos,
-    size_t howfar);
-static int evbuffer_file_segment_materialize(struct evbuffer_file_segment *seg);
-static inline void evbuffer_chain_incref(struct evbuffer_chain *chain);
+static int evbuffer_ptr_subtract(struct evbuffer *buf, struct evbuffer_ptr *pos, 
+    size_t howfar); 
+static int evbuffer_file_segment_materialize(struct evbuffer_file_segment *seg); 
+static inline void evbuffer_chain_incref(struct evbuffer_chain *chain); 
 
 static struct evbuffer_chain *
 evbuffer_chain_new(size_t size)
@@ -185,69 +185,69 @@ evbuffer_chain_new(size_t size)
 	/* this way we can manipulate the buffer to different addresses,
 	 * which is required for mmap for example.
 	 */
-	chain->buffer = EVBUFFER_CHAIN_EXTRA(unsigned char, chain);
+	chain->buffer = EVBUFFER_CHAIN_EXTRA(unsigned char, chain); 
 
-	chain->refcnt = 1;
-
+	chain->refcnt = 1; 
+ 
 	return (chain);
 }
 
 static inline void
 evbuffer_chain_free(struct evbuffer_chain *chain)
 {
-	EVUTIL_ASSERT(chain->refcnt > 0);
-	if (--chain->refcnt > 0) {
-		/* chain is still referenced by other chains */
-		return;
-	}
-
+	EVUTIL_ASSERT(chain->refcnt > 0); 
+	if (--chain->refcnt > 0) { 
+		/* chain is still referenced by other chains */ 
+		return; 
+	} 
+ 
 	if (CHAIN_PINNED(chain)) {
-		/* will get freed once no longer dangling */
-		chain->refcnt++;
+		/* will get freed once no longer dangling */ 
+		chain->refcnt++; 
 		chain->flags |= EVBUFFER_DANGLING;
 		return;
 	}
-
-	/* safe to release chain, it's either a referencing
-	 * chain or all references to it have been freed */
-	if (chain->flags & EVBUFFER_REFERENCE) {
-		struct evbuffer_chain_reference *info =
-		    EVBUFFER_CHAIN_EXTRA(
-			    struct evbuffer_chain_reference,
-			    chain);
-		if (info->cleanupfn)
-			(*info->cleanupfn)(chain->buffer,
-			    chain->buffer_len,
-			    info->extra);
-	}
-	if (chain->flags & EVBUFFER_FILESEGMENT) {
-		struct evbuffer_chain_file_segment *info =
-		    EVBUFFER_CHAIN_EXTRA(
-			    struct evbuffer_chain_file_segment,
-			    chain);
-		if (info->segment) {
-#ifdef _WIN32
-			if (info->segment->is_mapping)
-				UnmapViewOfFile(chain->buffer);
+ 
+	/* safe to release chain, it's either a referencing 
+	 * chain or all references to it have been freed */ 
+	if (chain->flags & EVBUFFER_REFERENCE) { 
+		struct evbuffer_chain_reference *info = 
+		    EVBUFFER_CHAIN_EXTRA( 
+			    struct evbuffer_chain_reference, 
+			    chain); 
+		if (info->cleanupfn) 
+			(*info->cleanupfn)(chain->buffer, 
+			    chain->buffer_len, 
+			    info->extra); 
+	} 
+	if (chain->flags & EVBUFFER_FILESEGMENT) { 
+		struct evbuffer_chain_file_segment *info = 
+		    EVBUFFER_CHAIN_EXTRA( 
+			    struct evbuffer_chain_file_segment, 
+			    chain); 
+		if (info->segment) { 
+#ifdef _WIN32 
+			if (info->segment->is_mapping) 
+				UnmapViewOfFile(chain->buffer); 
 #endif
-			evbuffer_file_segment_free(info->segment);
+			evbuffer_file_segment_free(info->segment); 
 		}
 	}
-	if (chain->flags & EVBUFFER_MULTICAST) {
-		struct evbuffer_multicast_parent *info =
-		    EVBUFFER_CHAIN_EXTRA(
-			    struct evbuffer_multicast_parent,
-			    chain);
-		/* referencing chain is being freed, decrease
-		 * refcounts of source chain and associated
-		 * evbuffer (which get freed once both reach
-		 * zero) */
-		EVUTIL_ASSERT(info->source != NULL);
-		EVUTIL_ASSERT(info->parent != NULL);
-		EVBUFFER_LOCK(info->source);
-		evbuffer_chain_free(info->parent);
-		evbuffer_decref_and_unlock_(info->source);
-	}
+	if (chain->flags & EVBUFFER_MULTICAST) { 
+		struct evbuffer_multicast_parent *info = 
+		    EVBUFFER_CHAIN_EXTRA( 
+			    struct evbuffer_multicast_parent, 
+			    chain); 
+		/* referencing chain is being freed, decrease 
+		 * refcounts of source chain and associated 
+		 * evbuffer (which get freed once both reach 
+		 * zero) */ 
+		EVUTIL_ASSERT(info->source != NULL); 
+		EVUTIL_ASSERT(info->parent != NULL); 
+		EVBUFFER_LOCK(info->source); 
+		evbuffer_chain_free(info->parent); 
+		evbuffer_decref_and_unlock_(info->source); 
+	} 
 
 	mm_free(chain);
 }
@@ -316,11 +316,11 @@ evbuffer_chain_insert(struct evbuffer *buf,
 		EVUTIL_ASSERT(buf->first == NULL);
 		buf->first = buf->last = chain;
 	} else {
-		struct evbuffer_chain **chp;
-		chp = evbuffer_free_trailing_empty_chains(buf);
-		*chp = chain;
-		if (chain->off)
-			buf->last_with_datap = chp;
+		struct evbuffer_chain **chp; 
+		chp = evbuffer_free_trailing_empty_chains(buf); 
+		*chp = chain; 
+		if (chain->off) 
+			buf->last_with_datap = chp; 
 		buf->last = chain;
 	}
 	buf->total_len += chain->off;
@@ -337,14 +337,14 @@ evbuffer_chain_insert_new(struct evbuffer *buf, size_t datlen)
 }
 
 void
-evbuffer_chain_pin_(struct evbuffer_chain *chain, unsigned flag)
+evbuffer_chain_pin_(struct evbuffer_chain *chain, unsigned flag) 
 {
 	EVUTIL_ASSERT((chain->flags & flag) == 0);
 	chain->flags |= flag;
 }
 
 void
-evbuffer_chain_unpin_(struct evbuffer_chain *chain, unsigned flag)
+evbuffer_chain_unpin_(struct evbuffer_chain *chain, unsigned flag) 
 {
 	EVUTIL_ASSERT((chain->flags & flag) != 0);
 	chain->flags &= ~flag;
@@ -352,12 +352,12 @@ evbuffer_chain_unpin_(struct evbuffer_chain *chain, unsigned flag)
 		evbuffer_chain_free(chain);
 }
 
-static inline void
-evbuffer_chain_incref(struct evbuffer_chain *chain)
-{
-    ++chain->refcnt;
-}
-
+static inline void 
+evbuffer_chain_incref(struct evbuffer_chain *chain) 
+{ 
+    ++chain->refcnt; 
+} 
+ 
 struct evbuffer *
 evbuffer_new(void)
 {
@@ -367,7 +367,7 @@ evbuffer_new(void)
 	if (buffer == NULL)
 		return (NULL);
 
-	LIST_INIT(&buffer->callbacks);
+	LIST_INIT(&buffer->callbacks); 
 	buffer->refcnt = 1;
 	buffer->last_with_datap = &buffer->first;
 
@@ -393,7 +393,7 @@ evbuffer_clear_flags(struct evbuffer *buf, ev_uint64_t flags)
 }
 
 void
-evbuffer_incref_(struct evbuffer *buf)
+evbuffer_incref_(struct evbuffer *buf) 
 {
 	EVBUFFER_LOCK(buf);
 	++buf->refcnt;
@@ -401,7 +401,7 @@ evbuffer_incref_(struct evbuffer *buf)
 }
 
 void
-evbuffer_incref_and_lock_(struct evbuffer *buf)
+evbuffer_incref_and_lock_(struct evbuffer *buf) 
 {
 	EVBUFFER_LOCK(buf);
 	++buf->refcnt;
@@ -411,10 +411,10 @@ int
 evbuffer_defer_callbacks(struct evbuffer *buffer, struct event_base *base)
 {
 	EVBUFFER_LOCK(buffer);
-	buffer->cb_queue = base;
+	buffer->cb_queue = base; 
 	buffer->deferred_cbs = 1;
-	event_deferred_cb_init_(&buffer->deferred,
-	    event_base_get_npriorities(base) / 2,
+	event_deferred_cb_init_(&buffer->deferred, 
+	    event_base_get_npriorities(base) / 2, 
 	    evbuffer_deferred_callback, buffer);
 	EVBUFFER_UNLOCK(buffer);
 	return 0;
@@ -423,7 +423,7 @@ evbuffer_defer_callbacks(struct evbuffer *buffer, struct event_base *base)
 int
 evbuffer_enable_locking(struct evbuffer *buf, void *lock)
 {
-#ifdef EVENT__DISABLE_THREAD_SUPPORT
+#ifdef EVENT__DISABLE_THREAD_SUPPORT 
 	return -1;
 #else
 	if (buf->lock)
@@ -445,7 +445,7 @@ evbuffer_enable_locking(struct evbuffer *buf, void *lock)
 }
 
 void
-evbuffer_set_parent_(struct evbuffer *buf, struct bufferevent *bev)
+evbuffer_set_parent_(struct evbuffer *buf, struct bufferevent *bev) 
 {
 	EVBUFFER_LOCK(buf);
 	buf->parent = bev;
@@ -477,7 +477,7 @@ evbuffer_run_callbacks(struct evbuffer *buffer, int running_deferred)
 
 	ASSERT_EVBUFFER_LOCKED(buffer);
 
-	if (LIST_EMPTY(&buffer->callbacks)) {
+	if (LIST_EMPTY(&buffer->callbacks)) { 
 		buffer->n_add_for_cb = buffer->n_del_for_cb = 0;
 		return;
 	}
@@ -492,12 +492,12 @@ evbuffer_run_callbacks(struct evbuffer *buffer, int running_deferred)
 		buffer->n_add_for_cb = 0;
 		buffer->n_del_for_cb = 0;
 	}
-	for (cbent = LIST_FIRST(&buffer->callbacks);
-	     cbent != LIST_END(&buffer->callbacks);
+	for (cbent = LIST_FIRST(&buffer->callbacks); 
+	     cbent != LIST_END(&buffer->callbacks); 
 	     cbent = next) {
 		/* Get the 'next' pointer now in case this callback decides
 		 * to remove itself or something. */
-		next = LIST_NEXT(cbent, next);
+		next = LIST_NEXT(cbent, next); 
 
 		if ((cbent->flags & mask) != masked_val)
 			continue;
@@ -511,27 +511,27 @@ evbuffer_run_callbacks(struct evbuffer *buffer, int running_deferred)
 }
 
 void
-evbuffer_invoke_callbacks_(struct evbuffer *buffer)
+evbuffer_invoke_callbacks_(struct evbuffer *buffer) 
 {
-	if (LIST_EMPTY(&buffer->callbacks)) {
+	if (LIST_EMPTY(&buffer->callbacks)) { 
 		buffer->n_add_for_cb = buffer->n_del_for_cb = 0;
 		return;
 	}
 
 	if (buffer->deferred_cbs) {
-		if (event_deferred_cb_schedule_(buffer->cb_queue, &buffer->deferred)) {
-			evbuffer_incref_and_lock_(buffer);
-			if (buffer->parent)
-				bufferevent_incref_(buffer->parent);
-			EVBUFFER_UNLOCK(buffer);
-		}
+		if (event_deferred_cb_schedule_(buffer->cb_queue, &buffer->deferred)) { 
+			evbuffer_incref_and_lock_(buffer); 
+			if (buffer->parent) 
+				bufferevent_incref_(buffer->parent); 
+			EVBUFFER_UNLOCK(buffer); 
+		} 
 	}
 
 	evbuffer_run_callbacks(buffer, 0);
 }
 
 static void
-evbuffer_deferred_callback(struct event_callback *cb, void *arg)
+evbuffer_deferred_callback(struct event_callback *cb, void *arg) 
 {
 	struct bufferevent *parent = NULL;
 	struct evbuffer *buffer = arg;
@@ -541,9 +541,9 @@ evbuffer_deferred_callback(struct event_callback *cb, void *arg)
 	EVBUFFER_LOCK(buffer);
 	parent = buffer->parent;
 	evbuffer_run_callbacks(buffer, 1);
-	evbuffer_decref_and_unlock_(buffer);
+	evbuffer_decref_and_unlock_(buffer); 
 	if (parent)
-		bufferevent_decref_(parent);
+		bufferevent_decref_(parent); 
 }
 
 static void
@@ -551,14 +551,14 @@ evbuffer_remove_all_callbacks(struct evbuffer *buffer)
 {
 	struct evbuffer_cb_entry *cbent;
 
-	while ((cbent = LIST_FIRST(&buffer->callbacks))) {
-		LIST_REMOVE(cbent, next);
-		mm_free(cbent);
+	while ((cbent = LIST_FIRST(&buffer->callbacks))) { 
+		LIST_REMOVE(cbent, next); 
+		mm_free(cbent); 
 	}
 }
 
 void
-evbuffer_decref_and_unlock_(struct evbuffer *buffer)
+evbuffer_decref_and_unlock_(struct evbuffer *buffer) 
 {
 	struct evbuffer_chain *chain, *next;
 	ASSERT_EVBUFFER_LOCKED(buffer);
@@ -576,7 +576,7 @@ evbuffer_decref_and_unlock_(struct evbuffer *buffer)
 	}
 	evbuffer_remove_all_callbacks(buffer);
 	if (buffer->deferred_cbs)
-		event_deferred_cb_cancel_(buffer->cb_queue, &buffer->deferred);
+		event_deferred_cb_cancel_(buffer->cb_queue, &buffer->deferred); 
 
 	EVBUFFER_UNLOCK(buffer);
 	if (buffer->own_lock)
@@ -588,7 +588,7 @@ void
 evbuffer_free(struct evbuffer *buffer)
 {
 	EVBUFFER_LOCK(buffer);
-	evbuffer_decref_and_unlock_(buffer);
+	evbuffer_decref_and_unlock_(buffer); 
 }
 
 void
@@ -631,42 +631,42 @@ evbuffer_get_contiguous_space(const struct evbuffer *buf)
 	return result;
 }
 
-size_t
-evbuffer_add_iovec(struct evbuffer * buf, struct evbuffer_iovec * vec, int n_vec) {
-	int n;
-	size_t res;
-	size_t to_alloc;
-
-	EVBUFFER_LOCK(buf);
-
-	res = to_alloc = 0;
-
-	for (n = 0; n < n_vec; n++) {
-		to_alloc += vec[n].iov_len;
-	}
-
-	if (evbuffer_expand_fast_(buf, to_alloc, 2) < 0) {
-		goto done;
-	}
-
-	for (n = 0; n < n_vec; n++) {
-		/* XXX each 'add' call here does a bunch of setup that's
-		 * obviated by evbuffer_expand_fast_, and some cleanup that we
-		 * would like to do only once.  Instead we should just extract
-		 * the part of the code that's needed. */
-
-		if (evbuffer_add(buf, vec[n].iov_base, vec[n].iov_len) < 0) {
-			goto done;
-		}
-
-		res += vec[n].iov_len;
-	}
-
-done:
-    EVBUFFER_UNLOCK(buf);
-    return res;
-}
-
+size_t 
+evbuffer_add_iovec(struct evbuffer * buf, struct evbuffer_iovec * vec, int n_vec) { 
+	int n; 
+	size_t res; 
+	size_t to_alloc; 
+ 
+	EVBUFFER_LOCK(buf); 
+ 
+	res = to_alloc = 0; 
+ 
+	for (n = 0; n < n_vec; n++) { 
+		to_alloc += vec[n].iov_len; 
+	} 
+ 
+	if (evbuffer_expand_fast_(buf, to_alloc, 2) < 0) { 
+		goto done; 
+	} 
+ 
+	for (n = 0; n < n_vec; n++) { 
+		/* XXX each 'add' call here does a bunch of setup that's 
+		 * obviated by evbuffer_expand_fast_, and some cleanup that we 
+		 * would like to do only once.  Instead we should just extract 
+		 * the part of the code that's needed. */ 
+ 
+		if (evbuffer_add(buf, vec[n].iov_base, vec[n].iov_len) < 0) { 
+			goto done; 
+		} 
+ 
+		res += vec[n].iov_len; 
+	} 
+ 
+done: 
+    EVBUFFER_UNLOCK(buf); 
+    return res; 
+} 
+ 
 int
 evbuffer_reserve_space(struct evbuffer *buf, ev_ssize_t size,
     struct evbuffer_iovec *vec, int n_vecs)
@@ -683,14 +683,14 @@ evbuffer_reserve_space(struct evbuffer *buf, ev_ssize_t size,
 		if ((chain = evbuffer_expand_singlechain(buf, size)) == NULL)
 			goto done;
 
-		vec[0].iov_base = (void *)CHAIN_SPACE_PTR(chain);
-		vec[0].iov_len = (size_t)CHAIN_SPACE_LEN(chain);
+		vec[0].iov_base = (void *)CHAIN_SPACE_PTR(chain); 
+		vec[0].iov_len = (size_t)CHAIN_SPACE_LEN(chain); 
 		EVUTIL_ASSERT(size<0 || (size_t)vec[0].iov_len >= (size_t)size);
 		n = 1;
 	} else {
-		if (evbuffer_expand_fast_(buf, size, n_vecs)<0)
+		if (evbuffer_expand_fast_(buf, size, n_vecs)<0) 
 			goto done;
-		n = evbuffer_read_setup_vecs_(buf, size, vec, n_vecs,
+		n = evbuffer_read_setup_vecs_(buf, size, vec, n_vecs, 
 				&chainp, 0);
 	}
 
@@ -704,17 +704,17 @@ static int
 advance_last_with_data(struct evbuffer *buf)
 {
 	int n = 0;
-	struct evbuffer_chain **chainp = buf->last_with_datap;
-
+	struct evbuffer_chain **chainp = buf->last_with_datap; 
+ 
 	ASSERT_EVBUFFER_LOCKED(buf);
 
-	if (!*chainp)
+	if (!*chainp) 
 		return 0;
 
-	while ((*chainp)->next) {
-		chainp = &(*chainp)->next;
-		if ((*chainp)->off)
-			buf->last_with_datap = chainp;
+	while ((*chainp)->next) { 
+		chainp = &(*chainp)->next; 
+		if ((*chainp)->off) 
+			buf->last_with_datap = chainp; 
 		++n;
 	}
 	return n;
@@ -737,7 +737,7 @@ evbuffer_commit_space(struct evbuffer *buf,
 		result = 0;
 		goto done;
 	} else if (n_vecs == 1 &&
-	    (buf->last && vec[0].iov_base == (void *)CHAIN_SPACE_PTR(buf->last))) {
+	    (buf->last && vec[0].iov_base == (void *)CHAIN_SPACE_PTR(buf->last))) { 
 		/* The user only got or used one chain; it might not
 		 * be the first one with space in it. */
 		if ((size_t)vec[0].iov_len > (size_t)CHAIN_SPACE_LEN(buf->last))
@@ -763,7 +763,7 @@ evbuffer_commit_space(struct evbuffer *buf,
 	for (i=0; i<n_vecs; ++i) {
 		if (!chain)
 			goto done;
-		if (vec[i].iov_base != (void *)CHAIN_SPACE_PTR(chain) ||
+		if (vec[i].iov_base != (void *)CHAIN_SPACE_PTR(chain) || 
 		    (size_t)vec[i].iov_len > CHAIN_SPACE_LEN(chain))
 			goto done;
 		chain = chain->next;
@@ -783,7 +783,7 @@ okay:
 	buf->total_len += added;
 	buf->n_add_for_cb += added;
 	result = 0;
-	evbuffer_invoke_callbacks_(buf);
+	evbuffer_invoke_callbacks_(buf); 
 
 done:
 	EVBUFFER_UNLOCK(buf);
@@ -888,62 +888,62 @@ COPY_CHAIN(struct evbuffer *dst, struct evbuffer *src)
 static void
 APPEND_CHAIN(struct evbuffer *dst, struct evbuffer *src)
 {
-	struct evbuffer_chain **chp;
-
+	struct evbuffer_chain **chp; 
+ 
 	ASSERT_EVBUFFER_LOCKED(dst);
 	ASSERT_EVBUFFER_LOCKED(src);
-
-	chp = evbuffer_free_trailing_empty_chains(dst);
-	*chp = src->first;
-
+ 
+	chp = evbuffer_free_trailing_empty_chains(dst); 
+	*chp = src->first; 
+ 
 	if (src->last_with_datap == &src->first)
-		dst->last_with_datap = chp;
+		dst->last_with_datap = chp; 
 	else
 		dst->last_with_datap = src->last_with_datap;
 	dst->last = src->last;
 	dst->total_len += src->total_len;
 }
 
-static inline void
-APPEND_CHAIN_MULTICAST(struct evbuffer *dst, struct evbuffer *src)
-{
-	struct evbuffer_chain *tmp;
-	struct evbuffer_chain *chain = src->first;
-	struct evbuffer_multicast_parent *extra;
-
-	ASSERT_EVBUFFER_LOCKED(dst);
-	ASSERT_EVBUFFER_LOCKED(src);
-
-	for (; chain; chain = chain->next) {
-		if (!chain->off || chain->flags & EVBUFFER_DANGLING) {
-			/* skip empty chains */
-			continue;
-		}
-
-		tmp = evbuffer_chain_new(sizeof(struct evbuffer_multicast_parent));
-		if (!tmp) {
-			event_warn("%s: out of memory", __func__);
-			return;
-		}
-		extra = EVBUFFER_CHAIN_EXTRA(struct evbuffer_multicast_parent, tmp);
-		/* reference evbuffer containing source chain so it
-		 * doesn't get released while the chain is still
-		 * being referenced to */
-		evbuffer_incref_(src);
-		extra->source = src;
-		/* reference source chain which now becomes immutable */
-		evbuffer_chain_incref(chain);
-		extra->parent = chain;
-		chain->flags |= EVBUFFER_IMMUTABLE;
-		tmp->buffer_len = chain->buffer_len;
-		tmp->misalign = chain->misalign;
-		tmp->off = chain->off;
-		tmp->flags |= EVBUFFER_MULTICAST|EVBUFFER_IMMUTABLE;
-		tmp->buffer = chain->buffer;
-		evbuffer_chain_insert(dst, tmp);
-	}
-}
-
+static inline void 
+APPEND_CHAIN_MULTICAST(struct evbuffer *dst, struct evbuffer *src) 
+{ 
+	struct evbuffer_chain *tmp; 
+	struct evbuffer_chain *chain = src->first; 
+	struct evbuffer_multicast_parent *extra; 
+ 
+	ASSERT_EVBUFFER_LOCKED(dst); 
+	ASSERT_EVBUFFER_LOCKED(src); 
+ 
+	for (; chain; chain = chain->next) { 
+		if (!chain->off || chain->flags & EVBUFFER_DANGLING) { 
+			/* skip empty chains */ 
+			continue; 
+		} 
+ 
+		tmp = evbuffer_chain_new(sizeof(struct evbuffer_multicast_parent)); 
+		if (!tmp) { 
+			event_warn("%s: out of memory", __func__); 
+			return; 
+		} 
+		extra = EVBUFFER_CHAIN_EXTRA(struct evbuffer_multicast_parent, tmp); 
+		/* reference evbuffer containing source chain so it 
+		 * doesn't get released while the chain is still 
+		 * being referenced to */ 
+		evbuffer_incref_(src); 
+		extra->source = src; 
+		/* reference source chain which now becomes immutable */ 
+		evbuffer_chain_incref(chain); 
+		extra->parent = chain; 
+		chain->flags |= EVBUFFER_IMMUTABLE; 
+		tmp->buffer_len = chain->buffer_len; 
+		tmp->misalign = chain->misalign; 
+		tmp->off = chain->off; 
+		tmp->flags |= EVBUFFER_MULTICAST|EVBUFFER_IMMUTABLE; 
+		tmp->buffer = chain->buffer; 
+		evbuffer_chain_insert(dst, tmp); 
+	} 
+} 
+ 
 static void
 PREPEND_CHAIN(struct evbuffer *dst, struct evbuffer *src)
 {
@@ -1000,8 +1000,8 @@ evbuffer_add_buffer(struct evbuffer *outbuf, struct evbuffer *inbuf)
 	inbuf->n_del_for_cb += in_total_len;
 	outbuf->n_add_for_cb += in_total_len;
 
-	evbuffer_invoke_callbacks_(inbuf);
-	evbuffer_invoke_callbacks_(outbuf);
+	evbuffer_invoke_callbacks_(inbuf); 
+	evbuffer_invoke_callbacks_(outbuf); 
 
 done:
 	EVBUFFER_UNLOCK2(inbuf, outbuf);
@@ -1009,49 +1009,49 @@ done:
 }
 
 int
-evbuffer_add_buffer_reference(struct evbuffer *outbuf, struct evbuffer *inbuf)
-{
-	size_t in_total_len, out_total_len;
-	struct evbuffer_chain *chain;
-	int result = 0;
-
-	EVBUFFER_LOCK2(inbuf, outbuf);
-	in_total_len = inbuf->total_len;
-	out_total_len = outbuf->total_len;
-	chain = inbuf->first;
-
-	if (in_total_len == 0)
-		goto done;
-
-	if (outbuf->freeze_end || outbuf == inbuf) {
-		result = -1;
-		goto done;
-	}
-
-	for (; chain; chain = chain->next) {
-		if ((chain->flags & (EVBUFFER_FILESEGMENT|EVBUFFER_SENDFILE|EVBUFFER_MULTICAST)) != 0) {
-			/* chain type can not be referenced */
-			result = -1;
-			goto done;
-		}
-	}
-
-	if (out_total_len == 0) {
-		/* There might be an empty chain at the start of outbuf; free
-		 * it. */
-		evbuffer_free_all_chains(outbuf->first);
-	}
-	APPEND_CHAIN_MULTICAST(outbuf, inbuf);
-
-	outbuf->n_add_for_cb += in_total_len;
-	evbuffer_invoke_callbacks_(outbuf);
-
-done:
-	EVBUFFER_UNLOCK2(inbuf, outbuf);
-	return result;
-}
-
-int
+evbuffer_add_buffer_reference(struct evbuffer *outbuf, struct evbuffer *inbuf) 
+{ 
+	size_t in_total_len, out_total_len; 
+	struct evbuffer_chain *chain; 
+	int result = 0; 
+ 
+	EVBUFFER_LOCK2(inbuf, outbuf); 
+	in_total_len = inbuf->total_len; 
+	out_total_len = outbuf->total_len; 
+	chain = inbuf->first; 
+ 
+	if (in_total_len == 0) 
+		goto done; 
+ 
+	if (outbuf->freeze_end || outbuf == inbuf) { 
+		result = -1; 
+		goto done; 
+	} 
+ 
+	for (; chain; chain = chain->next) { 
+		if ((chain->flags & (EVBUFFER_FILESEGMENT|EVBUFFER_SENDFILE|EVBUFFER_MULTICAST)) != 0) { 
+			/* chain type can not be referenced */ 
+			result = -1; 
+			goto done; 
+		} 
+	} 
+ 
+	if (out_total_len == 0) { 
+		/* There might be an empty chain at the start of outbuf; free 
+		 * it. */ 
+		evbuffer_free_all_chains(outbuf->first); 
+	} 
+	APPEND_CHAIN_MULTICAST(outbuf, inbuf); 
+ 
+	outbuf->n_add_for_cb += in_total_len; 
+	evbuffer_invoke_callbacks_(outbuf); 
+ 
+done: 
+	EVBUFFER_UNLOCK2(inbuf, outbuf); 
+	return result; 
+} 
+ 
+int 
 evbuffer_prepend_buffer(struct evbuffer *outbuf, struct evbuffer *inbuf)
 {
 	struct evbuffer_chain *pinned, *last;
@@ -1090,8 +1090,8 @@ evbuffer_prepend_buffer(struct evbuffer *outbuf, struct evbuffer *inbuf)
 	inbuf->n_del_for_cb += in_total_len;
 	outbuf->n_add_for_cb += in_total_len;
 
-	evbuffer_invoke_callbacks_(inbuf);
-	evbuffer_invoke_callbacks_(outbuf);
+	evbuffer_invoke_callbacks_(inbuf); 
+	evbuffer_invoke_callbacks_(outbuf); 
 done:
 	EVBUFFER_UNLOCK2(inbuf, outbuf);
 	return result;
@@ -1151,14 +1151,14 @@ evbuffer_drain(struct evbuffer *buf, size_t len)
 		}
 
 		buf->first = chain;
-		EVUTIL_ASSERT(remaining <= chain->off);
-		chain->misalign += remaining;
-		chain->off -= remaining;
+		EVUTIL_ASSERT(remaining <= chain->off); 
+		chain->misalign += remaining; 
+		chain->off -= remaining; 
 	}
 
 	buf->n_del_for_cb += len;
 	/* Tell someone about changes in this buffer */
-	evbuffer_invoke_callbacks_(buf);
+	evbuffer_invoke_callbacks_(buf); 
 
 done:
 	EVBUFFER_UNLOCK(buf);
@@ -1171,7 +1171,7 @@ evbuffer_remove(struct evbuffer *buf, void *data_out, size_t datlen)
 {
 	ev_ssize_t n;
 	EVBUFFER_LOCK(buf);
-	n = evbuffer_copyout_from(buf, NULL, data_out, datlen);
+	n = evbuffer_copyout_from(buf, NULL, data_out, datlen); 
 	if (n > 0) {
 		if (evbuffer_drain(buf, n)<0)
 			n = -1;
@@ -1183,37 +1183,37 @@ evbuffer_remove(struct evbuffer *buf, void *data_out, size_t datlen)
 ev_ssize_t
 evbuffer_copyout(struct evbuffer *buf, void *data_out, size_t datlen)
 {
-	return evbuffer_copyout_from(buf, NULL, data_out, datlen);
-}
-
-ev_ssize_t
-evbuffer_copyout_from(struct evbuffer *buf, const struct evbuffer_ptr *pos,
-    void *data_out, size_t datlen)
-{
+	return evbuffer_copyout_from(buf, NULL, data_out, datlen); 
+} 
+ 
+ev_ssize_t 
+evbuffer_copyout_from(struct evbuffer *buf, const struct evbuffer_ptr *pos, 
+    void *data_out, size_t datlen) 
+{ 
 	/*XXX fails badly on sendfile case. */
 	struct evbuffer_chain *chain;
 	char *data = data_out;
 	size_t nread;
 	ev_ssize_t result = 0;
-	size_t pos_in_chain;
+	size_t pos_in_chain; 
 
 	EVBUFFER_LOCK(buf);
 
-	if (pos) {
-		if (datlen > (size_t)(EV_SSIZE_MAX - pos->pos)) {
-			result = -1;
-			goto done;
-		}
-		chain = pos->internal_.chain;
-		pos_in_chain = pos->internal_.pos_in_chain;
-		if (datlen + pos->pos > buf->total_len)
-			datlen = buf->total_len - pos->pos;
-	} else {
-		chain = buf->first;
-		pos_in_chain = 0;
-		if (datlen > buf->total_len)
-			datlen = buf->total_len;
-	}
+	if (pos) { 
+		if (datlen > (size_t)(EV_SSIZE_MAX - pos->pos)) { 
+			result = -1; 
+			goto done; 
+		} 
+		chain = pos->internal_.chain; 
+		pos_in_chain = pos->internal_.pos_in_chain; 
+		if (datlen + pos->pos > buf->total_len) 
+			datlen = buf->total_len - pos->pos; 
+	} else { 
+		chain = buf->first; 
+		pos_in_chain = 0; 
+		if (datlen > buf->total_len) 
+			datlen = buf->total_len; 
+	} 
 
 
 	if (datlen == 0)
@@ -1226,25 +1226,25 @@ evbuffer_copyout_from(struct evbuffer *buf, const struct evbuffer_ptr *pos,
 
 	nread = datlen;
 
-	while (datlen && datlen >= chain->off - pos_in_chain) {
-		size_t copylen = chain->off - pos_in_chain;
-		memcpy(data,
-		    chain->buffer + chain->misalign + pos_in_chain,
-		    copylen);
-		data += copylen;
-		datlen -= copylen;
+	while (datlen && datlen >= chain->off - pos_in_chain) { 
+		size_t copylen = chain->off - pos_in_chain; 
+		memcpy(data, 
+		    chain->buffer + chain->misalign + pos_in_chain, 
+		    copylen); 
+		data += copylen; 
+		datlen -= copylen; 
 
 		chain = chain->next;
-		pos_in_chain = 0;
+		pos_in_chain = 0; 
 		EVUTIL_ASSERT(chain || datlen==0);
 	}
 
 	if (datlen) {
 		EVUTIL_ASSERT(chain);
-		EVUTIL_ASSERT(datlen+pos_in_chain <= chain->off);
-
-		memcpy(data, chain->buffer + chain->misalign + pos_in_chain,
-		    datlen);
+		EVUTIL_ASSERT(datlen+pos_in_chain <= chain->off); 
+ 
+		memcpy(data, chain->buffer + chain->misalign + pos_in_chain, 
+		    datlen); 
 	}
 
 	result = nread;
@@ -1303,7 +1303,7 @@ evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 		chain = chain->next;
 	}
 
-	if (chain != src->first) {
+	if (chain != src->first) { 
 		/* we can remove the chain */
 		struct evbuffer_chain **chp;
 		chp = evbuffer_free_trailing_empty_chains(dst);
@@ -1336,8 +1336,8 @@ evbuffer_remove_buffer(struct evbuffer *src, struct evbuffer *dst,
 	src->n_del_for_cb += nread;
 
 	if (nread) {
-		evbuffer_invoke_callbacks_(dst);
-		evbuffer_invoke_callbacks_(src);
+		evbuffer_invoke_callbacks_(dst); 
+		evbuffer_invoke_callbacks_(src); 
 	}
 	result = (int)nread;/*XXXX should change return type */
 
@@ -1473,14 +1473,14 @@ evbuffer_readline(struct evbuffer *buffer)
 static inline ev_ssize_t
 evbuffer_strchr(struct evbuffer_ptr *it, const char chr)
 {
-	struct evbuffer_chain *chain = it->internal_.chain;
-	size_t i = it->internal_.pos_in_chain;
+	struct evbuffer_chain *chain = it->internal_.chain; 
+	size_t i = it->internal_.pos_in_chain; 
 	while (chain != NULL) {
 		char *buffer = (char *)chain->buffer + chain->misalign;
 		char *cp = memchr(buffer+i, chr, chain->off-i);
 		if (cp) {
-			it->internal_.chain = chain;
-			it->internal_.pos_in_chain = cp - buffer;
+			it->internal_.chain = chain; 
+			it->internal_.pos_in_chain = cp - buffer; 
 			it->pos += (cp - buffer - i);
 			return it->pos;
 		}
@@ -1522,14 +1522,14 @@ find_eol_char(char *s, size_t len)
 static ev_ssize_t
 evbuffer_find_eol_char(struct evbuffer_ptr *it)
 {
-	struct evbuffer_chain *chain = it->internal_.chain;
-	size_t i = it->internal_.pos_in_chain;
+	struct evbuffer_chain *chain = it->internal_.chain; 
+	size_t i = it->internal_.pos_in_chain; 
 	while (chain != NULL) {
 		char *buffer = (char *)chain->buffer + chain->misalign;
 		char *cp = find_eol_char(buffer+i, chain->off-i);
 		if (cp) {
-			it->internal_.chain = chain;
-			it->internal_.pos_in_chain = cp - buffer;
+			it->internal_.chain = chain; 
+			it->internal_.pos_in_chain = cp - buffer; 
 			it->pos += (cp - buffer) - i;
 			return it->pos;
 		}
@@ -1541,16 +1541,16 @@ evbuffer_find_eol_char(struct evbuffer_ptr *it)
 	return (-1);
 }
 
-static inline size_t
+static inline size_t 
 evbuffer_strspn(
 	struct evbuffer_ptr *ptr, const char *chrset)
 {
-	size_t count = 0;
-	struct evbuffer_chain *chain = ptr->internal_.chain;
-	size_t i = ptr->internal_.pos_in_chain;
+	size_t count = 0; 
+	struct evbuffer_chain *chain = ptr->internal_.chain; 
+	size_t i = ptr->internal_.pos_in_chain; 
 
 	if (!chain)
-		return 0;
+		return 0; 
 
 	while (1) {
 		char *buffer = (char *)chain->buffer + chain->misalign;
@@ -1560,8 +1560,8 @@ evbuffer_strspn(
 				if (buffer[i] == *p++)
 					goto next;
 			}
-			ptr->internal_.chain = chain;
-			ptr->internal_.pos_in_chain = i;
+			ptr->internal_.chain = chain; 
+			ptr->internal_.pos_in_chain = i; 
 			ptr->pos += count;
 			return count;
 		next:
@@ -1570,8 +1570,8 @@ evbuffer_strspn(
 		i = 0;
 
 		if (! chain->next) {
-			ptr->internal_.chain = chain;
-			ptr->internal_.pos_in_chain = i;
+			ptr->internal_.chain = chain; 
+			ptr->internal_.pos_in_chain = i; 
 			ptr->pos += count;
 			return count;
 		}
@@ -1581,16 +1581,16 @@ evbuffer_strspn(
 }
 
 
-static inline int
+static inline int 
 evbuffer_getchr(struct evbuffer_ptr *it)
 {
-	struct evbuffer_chain *chain = it->internal_.chain;
-	size_t off = it->internal_.pos_in_chain;
+	struct evbuffer_chain *chain = it->internal_.chain; 
+	size_t off = it->internal_.pos_in_chain; 
 
-	if (chain == NULL)
-		return -1;
-
-	return (unsigned char)chain->buffer[chain->misalign + off];
+	if (chain == NULL) 
+		return -1; 
+ 
+	return (unsigned char)chain->buffer[chain->misalign + off]; 
 }
 
 struct evbuffer_ptr
@@ -1602,22 +1602,22 @@ evbuffer_search_eol(struct evbuffer *buffer,
 	size_t extra_drain = 0;
 	int ok = 0;
 
-	/* Avoid locking in trivial edge cases */
-	if (start && start->internal_.chain == NULL) {
-		PTR_NOT_FOUND(&it);
-		if (eol_len_out)
-			*eol_len_out = extra_drain;
-		return it;
-	}
-
+	/* Avoid locking in trivial edge cases */ 
+	if (start && start->internal_.chain == NULL) { 
+		PTR_NOT_FOUND(&it); 
+		if (eol_len_out) 
+			*eol_len_out = extra_drain; 
+		return it; 
+	} 
+ 
 	EVBUFFER_LOCK(buffer);
 
 	if (start) {
 		memcpy(&it, start, sizeof(it));
 	} else {
 		it.pos = 0;
-		it.internal_.chain = buffer->first;
-		it.internal_.pos_in_chain = 0;
+		it.internal_.chain = buffer->first; 
+		it.internal_.pos_in_chain = 0; 
 	}
 
 	/* the eol_style determines our first stop character and how many
@@ -1636,37 +1636,37 @@ evbuffer_search_eol(struct evbuffer *buffer,
 		extra_drain = 2;
 		break;
 	}
-	case EVBUFFER_EOL_CRLF: {
-		ev_ssize_t start_pos = it.pos;
-		/* Look for a LF ... */
-		if (evbuffer_strchr(&it, '\n') < 0)
-			goto done;
-		extra_drain = 1;
-		/* ... optionally preceeded by a CR. */
-		if (it.pos == start_pos)
-			break; /* If the first character is \n, don't back up */
-		/* This potentially does an extra linear walk over the first
-		 * few chains.  Probably, that's not too expensive unless you
-		 * have a really pathological setup. */
-		memcpy(&it2, &it, sizeof(it));
-		if (evbuffer_ptr_subtract(buffer, &it2, 1)<0)
-			break;
-		if (evbuffer_getchr(&it2) == '\r') {
-			memcpy(&it, &it2, sizeof(it));
-			extra_drain = 2;
+	case EVBUFFER_EOL_CRLF: { 
+		ev_ssize_t start_pos = it.pos; 
+		/* Look for a LF ... */ 
+		if (evbuffer_strchr(&it, '\n') < 0) 
+			goto done; 
+		extra_drain = 1; 
+		/* ... optionally preceeded by a CR. */ 
+		if (it.pos == start_pos) 
+			break; /* If the first character is \n, don't back up */ 
+		/* This potentially does an extra linear walk over the first 
+		 * few chains.  Probably, that's not too expensive unless you 
+		 * have a really pathological setup. */ 
+		memcpy(&it2, &it, sizeof(it)); 
+		if (evbuffer_ptr_subtract(buffer, &it2, 1)<0) 
+			break; 
+		if (evbuffer_getchr(&it2) == '\r') { 
+			memcpy(&it, &it2, sizeof(it)); 
+			extra_drain = 2; 
 		}
 		break;
-	}
+	} 
 	case EVBUFFER_EOL_LF:
 		if (evbuffer_strchr(&it, '\n') < 0)
 			goto done;
 		extra_drain = 1;
 		break;
-	case EVBUFFER_EOL_NUL:
-		if (evbuffer_strchr(&it, '\0') < 0)
-			goto done;
-		extra_drain = 1;
-		break;
+	case EVBUFFER_EOL_NUL: 
+		if (evbuffer_strchr(&it, '\0') < 0) 
+			goto done; 
+		extra_drain = 1; 
+		break; 
 	default:
 		goto done;
 	}
@@ -1675,8 +1675,8 @@ evbuffer_search_eol(struct evbuffer *buffer,
 done:
 	EVBUFFER_UNLOCK(buffer);
 
-	if (!ok)
-		PTR_NOT_FOUND(&it);
+	if (!ok) 
+		PTR_NOT_FOUND(&it); 
 	if (eol_len_out)
 		*eol_len_out = extra_drain;
 
@@ -1744,11 +1744,11 @@ evbuffer_add(struct evbuffer *buf, const void *data_in, size_t datlen)
 		goto done;
 	}
 
-	if (*buf->last_with_datap == NULL) {
-		chain = buf->last;
-	} else {
-		chain = *buf->last_with_datap;
-	}
+	if (*buf->last_with_datap == NULL) { 
+		chain = buf->last; 
+	} else { 
+		chain = *buf->last_with_datap; 
+	} 
 
 	/* If there are no chains allocated for this buffer, allocate one
 	 * big enough to hold all the data. */
@@ -1816,7 +1816,7 @@ evbuffer_add(struct evbuffer *buf, const void *data_in, size_t datlen)
 	buf->n_add_for_cb += datlen;
 
 out:
-	evbuffer_invoke_callbacks_(buf);
+	evbuffer_invoke_callbacks_(buf); 
 	result = 0;
 done:
 	EVBUFFER_UNLOCK(buf);
@@ -1831,10 +1831,10 @@ evbuffer_prepend(struct evbuffer *buf, const void *data, size_t datlen)
 
 	EVBUFFER_LOCK(buf);
 
-	if (datlen == 0) {
-		result = 0;
-		goto done;
-	}
+	if (datlen == 0) { 
+		result = 0; 
+		goto done; 
+	} 
 	if (buf->freeze_start) {
 		goto done;
 	}
@@ -1888,7 +1888,7 @@ evbuffer_prepend(struct evbuffer *buf, const void *data, size_t datlen)
 	if ((tmp = evbuffer_chain_new(datlen)) == NULL)
 		goto done;
 	buf->first = tmp;
-	if (buf->last_with_datap == &buf->first && chain->off)
+	if (buf->last_with_datap == &buf->first && chain->off) 
 		buf->last_with_datap = &tmp->next;
 
 	tmp->next = chain;
@@ -1899,10 +1899,10 @@ evbuffer_prepend(struct evbuffer *buf, const void *data, size_t datlen)
 
 	memcpy(tmp->buffer + tmp->misalign, data, datlen);
 	buf->total_len += datlen;
-	buf->n_add_for_cb += datlen;
+	buf->n_add_for_cb += datlen; 
 
 out:
-	evbuffer_invoke_callbacks_(buf);
+	evbuffer_invoke_callbacks_(buf); 
 	result = 0;
 done:
 	EVBUFFER_UNLOCK(buf);
@@ -1994,7 +1994,7 @@ evbuffer_expand_singlechain(struct evbuffer *buf, size_t datlen)
 	/* Would expanding this chunk be affordable and worthwhile? */
 	if (CHAIN_SPACE_LEN(chain) < chain->buffer_len / 8 ||
 	    chain->off > MAX_TO_COPY_IN_EXPAND ||
-		datlen >= (EVBUFFER_CHAIN_MAX - chain->off)) {
+		datlen >= (EVBUFFER_CHAIN_MAX - chain->off)) { 
 		/* It's not worth resizing this chain. Can the next one be
 		 * used? */
 		if (chain->next && CHAIN_SPACE_LEN(chain->next) >= datlen) {
@@ -2048,7 +2048,7 @@ err:
 /* Make sure that datlen bytes are available for writing in the last n
  * chains.  Never copies or moves data. */
 int
-evbuffer_expand_fast_(struct evbuffer *buf, size_t datlen, int n)
+evbuffer_expand_fast_(struct evbuffer *buf, size_t datlen, int n) 
 {
 	struct evbuffer_chain *chain = buf->last, *tmp, *next;
 	size_t avail;
@@ -2172,13 +2172,13 @@ evbuffer_expand(struct evbuffer *buf, size_t datlen)
  * Reads data from a file descriptor into a buffer.
  */
 
-#if defined(EVENT__HAVE_SYS_UIO_H) || defined(_WIN32)
+#if defined(EVENT__HAVE_SYS_UIO_H) || defined(_WIN32) 
 #define USE_IOVEC_IMPL
 #endif
 
 #ifdef USE_IOVEC_IMPL
 
-#ifdef EVENT__HAVE_SYS_UIO_H
+#ifdef EVENT__HAVE_SYS_UIO_H 
 /* number of iovec we use for writev, fragmentation is going to determine
  * how much we end up writing */
 
@@ -2222,7 +2222,7 @@ evbuffer_expand(struct evbuffer *buf, size_t datlen)
     @return The number of buffers we're using.
  */
 int
-evbuffer_read_setup_vecs_(struct evbuffer *buf, ev_ssize_t howmuch,
+evbuffer_read_setup_vecs_(struct evbuffer *buf, ev_ssize_t howmuch, 
     struct evbuffer_iovec *vecs, int n_vecs_avail,
     struct evbuffer_chain ***chainp, int exact)
 {
@@ -2238,18 +2238,18 @@ evbuffer_read_setup_vecs_(struct evbuffer *buf, ev_ssize_t howmuch,
 	so_far = 0;
 	/* Let firstchain be the first chain with any space on it */
 	firstchainp = buf->last_with_datap;
-	EVUTIL_ASSERT(*firstchainp);
+	EVUTIL_ASSERT(*firstchainp); 
 	if (CHAIN_SPACE_LEN(*firstchainp) == 0) {
 		firstchainp = &(*firstchainp)->next;
 	}
 
 	chain = *firstchainp;
-	EVUTIL_ASSERT(chain);
+	EVUTIL_ASSERT(chain); 
 	for (i = 0; i < n_vecs_avail && so_far < (size_t)howmuch; ++i) {
 		size_t avail = (size_t) CHAIN_SPACE_LEN(chain);
 		if (avail > (howmuch - so_far) && exact)
 			avail = howmuch - so_far;
-		vecs[i].iov_base = (void *)CHAIN_SPACE_PTR(chain);
+		vecs[i].iov_base = (void *)CHAIN_SPACE_PTR(chain); 
 		vecs[i].iov_len = avail;
 		so_far += avail;
 		chain = chain->next;
@@ -2262,7 +2262,7 @@ evbuffer_read_setup_vecs_(struct evbuffer *buf, ev_ssize_t howmuch,
 static int
 get_n_bytes_readable_on_socket(evutil_socket_t fd)
 {
-#if defined(FIONREAD) && defined(_WIN32)
+#if defined(FIONREAD) && defined(_WIN32) 
 	unsigned long lng = EVBUFFER_MAX_READ;
 	if (ioctlsocket(fd, FIONREAD, &lng) < 0)
 		return -1;
@@ -2310,26 +2310,26 @@ evbuffer_read(struct evbuffer *buf, evutil_socket_t fd, int howmuch)
 #ifdef USE_IOVEC_IMPL
 	/* Since we can use iovecs, we're willing to use the last
 	 * NUM_READ_IOVEC chains. */
-	if (evbuffer_expand_fast_(buf, howmuch, NUM_READ_IOVEC) == -1) {
+	if (evbuffer_expand_fast_(buf, howmuch, NUM_READ_IOVEC) == -1) { 
 		result = -1;
 		goto done;
 	} else {
 		IOV_TYPE vecs[NUM_READ_IOVEC];
-#ifdef EVBUFFER_IOVEC_IS_NATIVE_
-		nvecs = evbuffer_read_setup_vecs_(buf, howmuch, vecs,
+#ifdef EVBUFFER_IOVEC_IS_NATIVE_ 
+		nvecs = evbuffer_read_setup_vecs_(buf, howmuch, vecs, 
 		    NUM_READ_IOVEC, &chainp, 1);
 #else
 		/* We aren't using the native struct iovec.  Therefore,
 		   we are on win32. */
 		struct evbuffer_iovec ev_vecs[NUM_READ_IOVEC];
-		nvecs = evbuffer_read_setup_vecs_(buf, howmuch, ev_vecs, 2,
+		nvecs = evbuffer_read_setup_vecs_(buf, howmuch, ev_vecs, 2, 
 		    &chainp, 1);
 
 		for (i=0; i < nvecs; ++i)
 			WSABUF_FROM_EVBUFFER_IOV(&vecs[i], &ev_vecs[i]);
 #endif
 
-#ifdef _WIN32
+#ifdef _WIN32 
 		{
 			DWORD bytesRead;
 			DWORD flags=0;
@@ -2360,7 +2360,7 @@ evbuffer_read(struct evbuffer *buf, evutil_socket_t fd, int howmuch)
 	/* We can append new data at this point */
 	p = chain->buffer + chain->misalign + chain->off;
 
-#ifndef _WIN32
+#ifndef _WIN32 
 	n = read(fd, p, howmuch);
 #else
 	n = recv(fd, p, howmuch, 0);
@@ -2404,7 +2404,7 @@ evbuffer_read(struct evbuffer *buf, evutil_socket_t fd, int howmuch)
 	buf->n_add_for_cb += n;
 
 	/* Tell someone about changes in this buffer */
-	evbuffer_invoke_callbacks_(buf);
+	evbuffer_invoke_callbacks_(buf); 
 	result = n;
 done:
 	EVBUFFER_UNLOCK(buf);
@@ -2447,8 +2447,8 @@ evbuffer_write_iovec(struct evbuffer *buffer, evutil_socket_t fd,
 	}
 	if (! i)
 		return 0;
-
-#ifdef _WIN32
+ 
+#ifdef _WIN32 
 	{
 		DWORD bytesSent;
 		if (WSASend(fd, iov, i, &bytesSent, 0, NULL, NULL))
@@ -2465,17 +2465,17 @@ evbuffer_write_iovec(struct evbuffer *buffer, evutil_socket_t fd,
 
 #ifdef USE_SENDFILE
 static inline int
-evbuffer_write_sendfile(struct evbuffer *buffer, evutil_socket_t dest_fd,
+evbuffer_write_sendfile(struct evbuffer *buffer, evutil_socket_t dest_fd, 
     ev_ssize_t howmuch)
 {
 	struct evbuffer_chain *chain = buffer->first;
-	struct evbuffer_chain_file_segment *info =
-	    EVBUFFER_CHAIN_EXTRA(struct evbuffer_chain_file_segment,
-		chain);
-	const int source_fd = info->segment->fd;
+	struct evbuffer_chain_file_segment *info = 
+	    EVBUFFER_CHAIN_EXTRA(struct evbuffer_chain_file_segment, 
+		chain); 
+	const int source_fd = info->segment->fd; 
 #if defined(SENDFILE_IS_MACOSX) || defined(SENDFILE_IS_FREEBSD)
 	int res;
-	ev_off_t len = chain->off;
+	ev_off_t len = chain->off; 
 #elif defined(SENDFILE_IS_LINUX) || defined(SENDFILE_IS_SOLARIS)
 	ev_ssize_t res;
 	off_t offset = chain->misalign;
@@ -2484,20 +2484,20 @@ evbuffer_write_sendfile(struct evbuffer *buffer, evutil_socket_t dest_fd,
 	ASSERT_EVBUFFER_LOCKED(buffer);
 
 #if defined(SENDFILE_IS_MACOSX)
-	res = sendfile(source_fd, dest_fd, chain->misalign, &len, NULL, 0);
+	res = sendfile(source_fd, dest_fd, chain->misalign, &len, NULL, 0); 
 	if (res == -1 && !EVUTIL_ERR_RW_RETRIABLE(errno))
 		return (-1);
 
 	return (len);
 #elif defined(SENDFILE_IS_FREEBSD)
-	res = sendfile(source_fd, dest_fd, chain->misalign, chain->off, NULL, &len, 0);
+	res = sendfile(source_fd, dest_fd, chain->misalign, chain->off, NULL, &len, 0); 
 	if (res == -1 && !EVUTIL_ERR_RW_RETRIABLE(errno))
 		return (-1);
 
 	return (len);
 #elif defined(SENDFILE_IS_LINUX)
 	/* TODO(niels): implement splice */
-	res = sendfile(dest_fd, source_fd, &offset, chain->off);
+	res = sendfile(dest_fd, source_fd, &offset, chain->off); 
 	if (res == -1 && EVUTIL_ERR_RW_RETRIABLE(errno)) {
 		/* if this is EAGAIN or EINTR return 0; otherwise, -1 */
 		return (0);
@@ -2506,7 +2506,7 @@ evbuffer_write_sendfile(struct evbuffer *buffer, evutil_socket_t dest_fd,
 #elif defined(SENDFILE_IS_SOLARIS)
 	{
 		const off_t offset_orig = offset;
-		res = sendfile(dest_fd, source_fd, &offset, chain->off);
+		res = sendfile(dest_fd, source_fd, &offset, chain->off); 
 		if (res == -1 && EVUTIL_ERR_RW_RETRIABLE(errno)) {
 			if (offset - offset_orig)
 				return offset - offset_orig;
@@ -2544,7 +2544,7 @@ evbuffer_write_atmost(struct evbuffer *buffer, evutil_socket_t fd,
 #endif
 #ifdef USE_IOVEC_IMPL
 		n = evbuffer_write_iovec(buffer, fd, howmuch);
-#elif defined(_WIN32)
+#elif defined(_WIN32) 
 		/* XXX(nickm) Don't disable this code until we know if
 		 * the WSARecv code above works. */
 		void *p = evbuffer_pullup(buffer, howmuch);
@@ -2594,38 +2594,38 @@ evbuffer_find(struct evbuffer *buffer, const unsigned char *what, size_t len)
 	return search;
 }
 
-/* Subract <b>howfar</b> from the position of <b>pos</b> within
- * <b>buf</b>. Returns 0 on success, -1 on failure.
- *
- * This isn't exposed yet, because of potential inefficiency issues.
- * Maybe it should be. */
-static int
-evbuffer_ptr_subtract(struct evbuffer *buf, struct evbuffer_ptr *pos,
-    size_t howfar)
-{
-	if (pos->pos < 0)
-		return -1;
-	if (howfar > (size_t)pos->pos)
-		return -1;
-	if (pos->internal_.chain && howfar <= pos->internal_.pos_in_chain) {
-		pos->internal_.pos_in_chain -= howfar;
-		pos->pos -= howfar;
-		return 0;
-	} else {
-		const size_t newpos = pos->pos - howfar;
-		/* Here's the inefficient part: it walks over the
-		 * chains until we hit newpos. */
-		return evbuffer_ptr_set(buf, pos, newpos, EVBUFFER_PTR_SET);
-	}
-}
-
+/* Subract <b>howfar</b> from the position of <b>pos</b> within 
+ * <b>buf</b>. Returns 0 on success, -1 on failure. 
+ * 
+ * This isn't exposed yet, because of potential inefficiency issues. 
+ * Maybe it should be. */ 
+static int 
+evbuffer_ptr_subtract(struct evbuffer *buf, struct evbuffer_ptr *pos, 
+    size_t howfar) 
+{ 
+	if (pos->pos < 0) 
+		return -1; 
+	if (howfar > (size_t)pos->pos) 
+		return -1; 
+	if (pos->internal_.chain && howfar <= pos->internal_.pos_in_chain) { 
+		pos->internal_.pos_in_chain -= howfar; 
+		pos->pos -= howfar; 
+		return 0; 
+	} else { 
+		const size_t newpos = pos->pos - howfar; 
+		/* Here's the inefficient part: it walks over the 
+		 * chains until we hit newpos. */ 
+		return evbuffer_ptr_set(buf, pos, newpos, EVBUFFER_PTR_SET); 
+	} 
+} 
+ 
 int
 evbuffer_ptr_set(struct evbuffer *buf, struct evbuffer_ptr *pos,
     size_t position, enum evbuffer_ptr_how how)
 {
 	size_t left = position;
 	struct evbuffer_chain *chain = NULL;
-	int result = 0;
+	int result = 0; 
 
 	EVBUFFER_LOCK(buf);
 
@@ -2642,9 +2642,9 @@ evbuffer_ptr_set(struct evbuffer *buf, struct evbuffer_ptr *pos,
 			EVBUFFER_UNLOCK(buf);
 			return -1;
 		}
-		chain = pos->internal_.chain;
+		chain = pos->internal_.chain; 
 		pos->pos += position;
-		position = pos->internal_.pos_in_chain;
+		position = pos->internal_.pos_in_chain; 
 		break;
 	}
 
@@ -2655,20 +2655,20 @@ evbuffer_ptr_set(struct evbuffer *buf, struct evbuffer_ptr *pos,
 		position = 0;
 	}
 	if (chain) {
-		pos->internal_.chain = chain;
-		pos->internal_.pos_in_chain = position + left;
-	} else if (left == 0) {
-		/* The first byte in the (nonexistent) chain after the last chain */
-		pos->internal_.chain = NULL;
-		pos->internal_.pos_in_chain = 0;
+		pos->internal_.chain = chain; 
+		pos->internal_.pos_in_chain = position + left; 
+	} else if (left == 0) { 
+		/* The first byte in the (nonexistent) chain after the last chain */ 
+		pos->internal_.chain = NULL; 
+		pos->internal_.pos_in_chain = 0; 
 	} else {
-		PTR_NOT_FOUND(pos);
-		result = -1;
+		PTR_NOT_FOUND(pos); 
+		result = -1; 
 	}
 
 	EVBUFFER_UNLOCK(buf);
 
-	return result;
+	return result; 
 }
 
 /**
@@ -2690,8 +2690,8 @@ evbuffer_ptr_memcmp(const struct evbuffer *buf, const struct evbuffer_ptr *pos,
 	    pos->pos + len > buf->total_len)
 		return -1;
 
-	chain = pos->internal_.chain;
-	position = pos->internal_.pos_in_chain;
+	chain = pos->internal_.chain; 
+	position = pos->internal_.pos_in_chain; 
 	while (len && chain) {
 		size_t n_comparable;
 		if (len + position > chain->off)
@@ -2729,15 +2729,15 @@ evbuffer_search_range(struct evbuffer *buffer, const char *what, size_t len, con
 
 	if (start) {
 		memcpy(&pos, start, sizeof(pos));
-		chain = pos.internal_.chain;
+		chain = pos.internal_.chain; 
 	} else {
 		pos.pos = 0;
-		chain = pos.internal_.chain = buffer->first;
-		pos.internal_.pos_in_chain = 0;
+		chain = pos.internal_.chain = buffer->first; 
+		pos.internal_.pos_in_chain = 0; 
 	}
 
 	if (end)
-		last_chain = end->internal_.chain;
+		last_chain = end->internal_.chain; 
 
 	if (!len || len > EV_SSIZE_MAX)
 		goto done;
@@ -2747,12 +2747,12 @@ evbuffer_search_range(struct evbuffer *buffer, const char *what, size_t len, con
 	while (chain) {
 		const unsigned char *start_at =
 		    chain->buffer + chain->misalign +
-		    pos.internal_.pos_in_chain;
+		    pos.internal_.pos_in_chain; 
 		p = memchr(start_at, first,
-		    chain->off - pos.internal_.pos_in_chain);
+		    chain->off - pos.internal_.pos_in_chain); 
 		if (p) {
 			pos.pos += p - start_at;
-			pos.internal_.pos_in_chain += p - start_at;
+			pos.internal_.pos_in_chain += p - start_at; 
 			if (!evbuffer_ptr_memcmp(buffer, &pos, what, len)) {
 				if (end && pos.pos + (ev_ssize_t)len > end->pos)
 					goto not_found;
@@ -2760,22 +2760,22 @@ evbuffer_search_range(struct evbuffer *buffer, const char *what, size_t len, con
 					goto done;
 			}
 			++pos.pos;
-			++pos.internal_.pos_in_chain;
-			if (pos.internal_.pos_in_chain == chain->off) {
-				chain = pos.internal_.chain = chain->next;
-				pos.internal_.pos_in_chain = 0;
+			++pos.internal_.pos_in_chain; 
+			if (pos.internal_.pos_in_chain == chain->off) { 
+				chain = pos.internal_.chain = chain->next; 
+				pos.internal_.pos_in_chain = 0; 
 			}
 		} else {
 			if (chain == last_chain)
 				goto not_found;
-			pos.pos += chain->off - pos.internal_.pos_in_chain;
-			chain = pos.internal_.chain = chain->next;
-			pos.internal_.pos_in_chain = 0;
+			pos.pos += chain->off - pos.internal_.pos_in_chain; 
+			chain = pos.internal_.chain = chain->next; 
+			pos.internal_.pos_in_chain = 0; 
 		}
 	}
 
 not_found:
-	PTR_NOT_FOUND(&pos);
+	PTR_NOT_FOUND(&pos); 
 done:
 	EVBUFFER_UNLOCK(buffer);
 	return pos;
@@ -2790,20 +2790,20 @@ evbuffer_peek(struct evbuffer *buffer, ev_ssize_t len,
 	int idx = 0;
 	ev_ssize_t len_so_far = 0;
 
-	/* Avoid locking in trivial edge cases */
-	if (start_at && start_at->internal_.chain == NULL)
-		return 0;
-
+	/* Avoid locking in trivial edge cases */ 
+	if (start_at && start_at->internal_.chain == NULL) 
+		return 0; 
+ 
 	EVBUFFER_LOCK(buffer);
 
 	if (start_at) {
-		chain = start_at->internal_.chain;
+		chain = start_at->internal_.chain; 
 		len_so_far = chain->off
-		    - start_at->internal_.pos_in_chain;
+		    - start_at->internal_.pos_in_chain; 
 		idx = 1;
 		if (n_vec > 0) {
-			vec[0].iov_base = (void *)(chain->buffer + chain->misalign
-			    + start_at->internal_.pos_in_chain);
+			vec[0].iov_base = (void *)(chain->buffer + chain->misalign 
+			    + start_at->internal_.pos_in_chain); 
 			vec[0].iov_len = len_so_far;
 		}
 		chain = chain->next;
@@ -2824,7 +2824,7 @@ evbuffer_peek(struct evbuffer *buffer, ev_ssize_t len,
 		if (len >= 0 && len_so_far >= len)
 			break;
 		if (idx<n_vec) {
-			vec[idx].iov_base = (void *)(chain->buffer + chain->misalign);
+			vec[idx].iov_base = (void *)(chain->buffer + chain->misalign); 
 			vec[idx].iov_len = chain->off;
 		} else if (len<0) {
 			break;
@@ -2890,7 +2890,7 @@ evbuffer_add_vprintf(struct evbuffer *buf, const char *fmt, va_list ap)
 			buf->n_add_for_cb += sz;
 
 			advance_last_with_data(buf);
-			evbuffer_invoke_callbacks_(buf);
+			evbuffer_invoke_callbacks_(buf); 
 			result = sz;
 			goto done;
 		}
@@ -2930,7 +2930,7 @@ evbuffer_add_reference(struct evbuffer *outbuf,
 	if (!chain)
 		return (-1);
 	chain->flags |= EVBUFFER_REFERENCE | EVBUFFER_IMMUTABLE;
-	chain->buffer = (unsigned char *)data;
+	chain->buffer = (unsigned char *)data; 
 	chain->buffer_len = datlen;
 	chain->off = datlen;
 
@@ -2948,7 +2948,7 @@ evbuffer_add_reference(struct evbuffer *outbuf,
 	evbuffer_chain_insert(outbuf, chain);
 	outbuf->n_add_for_cb += datlen;
 
-	evbuffer_invoke_callbacks_(outbuf);
+	evbuffer_invoke_callbacks_(outbuf); 
 
 	result = 0;
 done:
@@ -2960,374 +2960,374 @@ done:
 /* TODO(niels): we may want to add to automagically convert to mmap, in
  * case evbuffer_remove() or evbuffer_pullup() are being used.
  */
-struct evbuffer_file_segment *
-evbuffer_file_segment_new(
-	int fd, ev_off_t offset, ev_off_t length, unsigned flags)
+struct evbuffer_file_segment * 
+evbuffer_file_segment_new( 
+	int fd, ev_off_t offset, ev_off_t length, unsigned flags) 
 {
-	struct evbuffer_file_segment *seg =
-	    mm_calloc(sizeof(struct evbuffer_file_segment), 1);
-	if (!seg)
-		return NULL;
-	seg->refcnt = 1;
-	seg->fd = fd;
-	seg->flags = flags;
-	seg->file_offset = offset;
-	seg->cleanup_cb = NULL;
-	seg->cleanup_cb_arg = NULL;
-#ifdef _WIN32
-#ifndef lseek
-#define lseek _lseeki64
+	struct evbuffer_file_segment *seg = 
+	    mm_calloc(sizeof(struct evbuffer_file_segment), 1); 
+	if (!seg) 
+		return NULL; 
+	seg->refcnt = 1; 
+	seg->fd = fd; 
+	seg->flags = flags; 
+	seg->file_offset = offset; 
+	seg->cleanup_cb = NULL; 
+	seg->cleanup_cb_arg = NULL; 
+#ifdef _WIN32 
+#ifndef lseek 
+#define lseek _lseeki64 
 #endif
-#ifndef fstat
-#define fstat _fstat
+#ifndef fstat 
+#define fstat _fstat 
 #endif
-#ifndef stat
-#define stat _stat
-#endif
-#endif
-	if (length == -1) {
-		struct stat st;
-		if (fstat(fd, &st) < 0)
-			goto err;
-		length = st.st_size;
-	}
-	seg->length = length;
+#ifndef stat 
+#define stat _stat 
+#endif 
+#endif 
+	if (length == -1) { 
+		struct stat st; 
+		if (fstat(fd, &st) < 0) 
+			goto err; 
+		length = st.st_size; 
+	} 
+	seg->length = length; 
 
 	if (offset < 0 || length < 0 ||
 	    ((ev_uint64_t)length > EVBUFFER_CHAIN_MAX) ||
 	    (ev_uint64_t)offset > (ev_uint64_t)(EVBUFFER_CHAIN_MAX - length))
-		goto err;
+		goto err; 
 
 #if defined(USE_SENDFILE)
-	if (!(flags & EVBUF_FS_DISABLE_SENDFILE)) {
-		seg->can_sendfile = 1;
-		goto done;
+	if (!(flags & EVBUF_FS_DISABLE_SENDFILE)) { 
+		seg->can_sendfile = 1; 
+		goto done; 
 	}
-#endif
+#endif 
 
-	if (evbuffer_file_segment_materialize(seg)<0)
-		goto err;
+	if (evbuffer_file_segment_materialize(seg)<0) 
+		goto err; 
 
-#if defined(USE_SENDFILE)
-done:
-#endif
-	if (!(flags & EVBUF_FS_DISABLE_LOCKING)) {
-		EVTHREAD_ALLOC_LOCK(seg->lock, 0);
-	}
-	return seg;
-err:
-	mm_free(seg);
-	return NULL;
-}
+#if defined(USE_SENDFILE) 
+done: 
+#endif 
+	if (!(flags & EVBUF_FS_DISABLE_LOCKING)) { 
+		EVTHREAD_ALLOC_LOCK(seg->lock, 0); 
+	} 
+	return seg; 
+err: 
+	mm_free(seg); 
+	return NULL; 
+} 
 
-#ifdef EVENT__HAVE_MMAP
-static long
-get_page_size(void)
-{
-#ifdef SC_PAGE_SIZE
-	return sysconf(SC_PAGE_SIZE);
-#elif defined(_SC_PAGE_SIZE)
-	return sysconf(_SC_PAGE_SIZE);
-#else
-	return 1;
-#endif
-}
-#endif
+#ifdef EVENT__HAVE_MMAP 
+static long 
+get_page_size(void) 
+{ 
+#ifdef SC_PAGE_SIZE 
+	return sysconf(SC_PAGE_SIZE); 
+#elif defined(_SC_PAGE_SIZE) 
+	return sysconf(_SC_PAGE_SIZE); 
+#else 
+	return 1; 
+#endif 
+} 
+#endif 
 
-/* DOCDOC */
-/* Requires lock */
-static int
-evbuffer_file_segment_materialize(struct evbuffer_file_segment *seg)
-{
-	const unsigned flags = seg->flags;
-	const int fd = seg->fd;
-	const ev_off_t length = seg->length;
-	const ev_off_t offset = seg->file_offset;
-
-	if (seg->contents)
-		return 0; /* already materialized */
-
-#if defined(EVENT__HAVE_MMAP)
-	if (!(flags & EVBUF_FS_DISABLE_MMAP)) {
-		off_t offset_rounded = 0, offset_leftover = 0;
-		void *mapped;
-		if (offset) {
-			/* mmap implementations don't generally like us
-			 * to have an offset that isn't a round  */
-			long page_size = get_page_size();
-			if (page_size == -1)
-				goto err;
-			offset_leftover = offset % page_size;
-			offset_rounded = offset - offset_leftover;
+/* DOCDOC */ 
+/* Requires lock */ 
+static int 
+evbuffer_file_segment_materialize(struct evbuffer_file_segment *seg) 
+{ 
+	const unsigned flags = seg->flags; 
+	const int fd = seg->fd; 
+	const ev_off_t length = seg->length; 
+	const ev_off_t offset = seg->file_offset; 
+ 
+	if (seg->contents) 
+		return 0; /* already materialized */ 
+ 
+#if defined(EVENT__HAVE_MMAP) 
+	if (!(flags & EVBUF_FS_DISABLE_MMAP)) { 
+		off_t offset_rounded = 0, offset_leftover = 0; 
+		void *mapped; 
+		if (offset) { 
+			/* mmap implementations don't generally like us 
+			 * to have an offset that isn't a round  */ 
+			long page_size = get_page_size(); 
+			if (page_size == -1) 
+				goto err; 
+			offset_leftover = offset % page_size; 
+			offset_rounded = offset - offset_leftover; 
 		}
-		mapped = mmap(NULL, length + offset_leftover,
-		    PROT_READ,
+		mapped = mmap(NULL, length + offset_leftover, 
+		    PROT_READ, 
 #ifdef MAP_NOCACHE
-		    MAP_NOCACHE | /* ??? */
+		    MAP_NOCACHE | /* ??? */ 
 #endif
 #ifdef MAP_FILE
 		    MAP_FILE |
 #endif
 		    MAP_PRIVATE,
-		    fd, offset_rounded);
+		    fd, offset_rounded); 
 		if (mapped == MAP_FAILED) {
 			event_warn("%s: mmap(%d, %d, %zu) failed",
 			    __func__, fd, 0, (size_t)(offset + length));
-		} else {
-			seg->mapping = mapped;
-			seg->contents = (char*)mapped+offset_leftover;
-			seg->mmap_offset = 0;
-			seg->is_mapping = 1;
-			goto done;
+		} else { 
+			seg->mapping = mapped; 
+			seg->contents = (char*)mapped+offset_leftover; 
+			seg->mmap_offset = 0; 
+			seg->is_mapping = 1; 
+			goto done; 
 		}
-	}
+	} 
+#endif 
+#ifdef _WIN32 
+	if (!(flags & EVBUF_FS_DISABLE_MMAP)) { 
+		intptr_t h = _get_osfhandle(fd); 
+		HANDLE m; 
+		ev_uint64_t total_size = length+offset; 
+		if ((HANDLE)h == INVALID_HANDLE_VALUE) 
+			goto err; 
+		m = CreateFileMapping((HANDLE)h, NULL, PAGE_READONLY, 
+		    (total_size >> 32), total_size & 0xfffffffful, 
+		    NULL); 
+		if (m != INVALID_HANDLE_VALUE) { /* Does h leak? */ 
+			seg->mapping_handle = m; 
+			seg->mmap_offset = offset; 
+			seg->is_mapping = 1; 
+			goto done; 
+		}
+	} 
+#endif 
+	{ 
+		ev_off_t start_pos = lseek(fd, 0, SEEK_CUR), pos; 
+		ev_off_t read_so_far = 0; 
+		char *mem; 
+		int e; 
+		ev_ssize_t n = 0; 
+		if (!(mem = mm_malloc(length))) 
+			goto err; 
+		if (start_pos < 0) { 
+			mm_free(mem); 
+			goto err; 
+		} 
+		if (lseek(fd, offset, SEEK_SET) < 0) { 
+			mm_free(mem); 
+			goto err; 
+		} 
+		while (read_so_far < length) { 
+			n = read(fd, mem+read_so_far, length-read_so_far); 
+			if (n <= 0) 
+				break; 
+			read_so_far += n; 
+		} 
+
+		e = errno; 
+		pos = lseek(fd, start_pos, SEEK_SET); 
+		if (n < 0 || (n == 0 && length > read_so_far)) { 
+			mm_free(mem); 
+			errno = e; 
+			goto err; 
+		} else if (pos < 0) { 
+			mm_free(mem); 
+			goto err; 
+		} 
+
+		seg->contents = mem; 
+	} 
+
+done: 
+	return 0; 
+err: 
+	return -1; 
+} 
+
+void evbuffer_file_segment_add_cleanup_cb(struct evbuffer_file_segment *seg, 
+	evbuffer_file_segment_cleanup_cb cb, void* arg) 
+{ 
+	EVUTIL_ASSERT(seg->refcnt > 0); 
+	seg->cleanup_cb = cb; 
+	seg->cleanup_cb_arg = arg; 
+} 
+
+void 
+evbuffer_file_segment_free(struct evbuffer_file_segment *seg) 
+{ 
+	int refcnt; 
+	EVLOCK_LOCK(seg->lock, 0); 
+	refcnt = --seg->refcnt; 
+	EVLOCK_UNLOCK(seg->lock, 0); 
+	if (refcnt > 0) 
+		return; 
+	EVUTIL_ASSERT(refcnt == 0); 
+ 
+	if (seg->is_mapping) { 
+#ifdef _WIN32 
+		CloseHandle(seg->mapping_handle); 
+#elif defined (EVENT__HAVE_MMAP) 
+		off_t offset_leftover; 
+		offset_leftover = seg->file_offset % get_page_size(); 
+		if (munmap(seg->mapping, seg->length + offset_leftover) == -1) 
+			event_warn("%s: munmap failed", __func__); 
 #endif
-#ifdef _WIN32
-	if (!(flags & EVBUF_FS_DISABLE_MMAP)) {
-		intptr_t h = _get_osfhandle(fd);
-		HANDLE m;
-		ev_uint64_t total_size = length+offset;
-		if ((HANDLE)h == INVALID_HANDLE_VALUE)
-			goto err;
-		m = CreateFileMapping((HANDLE)h, NULL, PAGE_READONLY,
-		    (total_size >> 32), total_size & 0xfffffffful,
-		    NULL);
-		if (m != INVALID_HANDLE_VALUE) { /* Does h leak? */
-			seg->mapping_handle = m;
-			seg->mmap_offset = offset;
-			seg->is_mapping = 1;
-			goto done;
-		}
-	}
-#endif
-	{
-		ev_off_t start_pos = lseek(fd, 0, SEEK_CUR), pos;
-		ev_off_t read_so_far = 0;
-		char *mem;
-		int e;
-		ev_ssize_t n = 0;
-		if (!(mem = mm_malloc(length)))
-			goto err;
-		if (start_pos < 0) {
-			mm_free(mem);
-			goto err;
-		}
-		if (lseek(fd, offset, SEEK_SET) < 0) {
-			mm_free(mem);
-			goto err;
-		}
-		while (read_so_far < length) {
-			n = read(fd, mem+read_so_far, length-read_so_far);
-			if (n <= 0)
-				break;
-			read_so_far += n;
-		}
+	} else if (seg->contents) { 
+		mm_free(seg->contents); 
+	} 
 
-		e = errno;
-		pos = lseek(fd, start_pos, SEEK_SET);
-		if (n < 0 || (n == 0 && length > read_so_far)) {
-			mm_free(mem);
-			errno = e;
-			goto err;
-		} else if (pos < 0) {
-			mm_free(mem);
-			goto err;
-		}
+	if ((seg->flags & EVBUF_FS_CLOSE_ON_FREE) && seg->fd >= 0) { 
+		close(seg->fd); 
+	} 
+	 
+	if (seg->cleanup_cb) { 
+		(*seg->cleanup_cb)((struct evbuffer_file_segment const*)seg,  
+		    seg->flags, seg->cleanup_cb_arg); 
+		seg->cleanup_cb = NULL; 
+		seg->cleanup_cb_arg = NULL; 
+	} 
 
-		seg->contents = mem;
-	}
+	EVTHREAD_FREE_LOCK(seg->lock, 0); 
+	mm_free(seg); 
+} 
 
-done:
-	return 0;
-err:
-	return -1;
-}
-
-void evbuffer_file_segment_add_cleanup_cb(struct evbuffer_file_segment *seg,
-	evbuffer_file_segment_cleanup_cb cb, void* arg)
-{
-	EVUTIL_ASSERT(seg->refcnt > 0);
-	seg->cleanup_cb = cb;
-	seg->cleanup_cb_arg = arg;
-}
-
-void
-evbuffer_file_segment_free(struct evbuffer_file_segment *seg)
-{
-	int refcnt;
-	EVLOCK_LOCK(seg->lock, 0);
-	refcnt = --seg->refcnt;
-	EVLOCK_UNLOCK(seg->lock, 0);
-	if (refcnt > 0)
-		return;
-	EVUTIL_ASSERT(refcnt == 0);
-
-	if (seg->is_mapping) {
-#ifdef _WIN32
-		CloseHandle(seg->mapping_handle);
-#elif defined (EVENT__HAVE_MMAP)
-		off_t offset_leftover;
-		offset_leftover = seg->file_offset % get_page_size();
-		if (munmap(seg->mapping, seg->length + offset_leftover) == -1)
-			event_warn("%s: munmap failed", __func__);
-#endif
-	} else if (seg->contents) {
-		mm_free(seg->contents);
-	}
-
-	if ((seg->flags & EVBUF_FS_CLOSE_ON_FREE) && seg->fd >= 0) {
-		close(seg->fd);
-	}
-	
-	if (seg->cleanup_cb) {
-		(*seg->cleanup_cb)((struct evbuffer_file_segment const*)seg, 
-		    seg->flags, seg->cleanup_cb_arg);
-		seg->cleanup_cb = NULL;
-		seg->cleanup_cb_arg = NULL;
-	}
-
-	EVTHREAD_FREE_LOCK(seg->lock, 0);
-	mm_free(seg);
-}
-
-int
-evbuffer_add_file_segment(struct evbuffer *buf,
-    struct evbuffer_file_segment *seg, ev_off_t offset, ev_off_t length)
-{
-	struct evbuffer_chain *chain;
-	struct evbuffer_chain_file_segment *extra;
-	int can_use_sendfile = 0;
-
-	EVBUFFER_LOCK(buf);
-	EVLOCK_LOCK(seg->lock, 0);
-	if (buf->flags & EVBUFFER_FLAG_DRAINS_TO_FD) {
-		can_use_sendfile = 1;
-	} else {
-		if (!seg->contents) {
-			if (evbuffer_file_segment_materialize(seg)<0) {
-				EVLOCK_UNLOCK(seg->lock, 0);
-				EVBUFFER_UNLOCK(buf);
-				return -1;
+int 
+evbuffer_add_file_segment(struct evbuffer *buf, 
+    struct evbuffer_file_segment *seg, ev_off_t offset, ev_off_t length) 
+{ 
+	struct evbuffer_chain *chain; 
+	struct evbuffer_chain_file_segment *extra; 
+	int can_use_sendfile = 0; 
+ 
+	EVBUFFER_LOCK(buf); 
+	EVLOCK_LOCK(seg->lock, 0); 
+	if (buf->flags & EVBUFFER_FLAG_DRAINS_TO_FD) { 
+		can_use_sendfile = 1; 
+	} else { 
+		if (!seg->contents) { 
+			if (evbuffer_file_segment_materialize(seg)<0) { 
+				EVLOCK_UNLOCK(seg->lock, 0); 
+				EVBUFFER_UNLOCK(buf); 
+				return -1; 
 			}
 		}
-	}
-	EVLOCK_UNLOCK(seg->lock, 0);
+	} 
+	EVLOCK_UNLOCK(seg->lock, 0); 
 
-	if (buf->freeze_end)
-		goto err;
+	if (buf->freeze_end) 
+		goto err; 
 
-	if (length < 0) {
-		if (offset > seg->length)
-			goto err;
-		length = seg->length - offset;
-	}
-
-	/* Can we actually add this? */
-	if (offset+length > seg->length)
-		goto err;
-
-	chain = evbuffer_chain_new(sizeof(struct evbuffer_chain_file_segment));
-	if (!chain)
-		goto err;
-	extra = EVBUFFER_CHAIN_EXTRA(struct evbuffer_chain_file_segment, chain);
-
-	chain->flags |= EVBUFFER_IMMUTABLE|EVBUFFER_FILESEGMENT;
-	if (can_use_sendfile && seg->can_sendfile) {
-		chain->flags |= EVBUFFER_SENDFILE;
-		chain->misalign = seg->file_offset + offset;
-		chain->off = length;
-		chain->buffer_len = chain->misalign + length;
-	} else if (seg->is_mapping) {
-#ifdef _WIN32
-		ev_uint64_t total_offset = seg->mmap_offset+offset;
-		ev_uint64_t offset_rounded=0, offset_remaining=0;
-		LPVOID data;
-		if (total_offset) {
-			SYSTEM_INFO si;
-			memset(&si, 0, sizeof(si)); /* cargo cult */
-			GetSystemInfo(&si);
-			offset_remaining = total_offset % si.dwAllocationGranularity;
-			offset_rounded = total_offset - offset_remaining;
-		}
-		data = MapViewOfFile(
-			seg->mapping_handle,
-			FILE_MAP_READ,
-			offset_rounded >> 32,
-			offset_rounded & 0xfffffffful,
-			length + offset_remaining);
-		if (data == NULL) {
-			mm_free(chain);
-			goto err;
-		}
-		chain->buffer = (unsigned char*) data;
-		chain->buffer_len = length+offset_remaining;
-		chain->misalign = offset_remaining;
-		chain->off = length;
-#else
-		chain->buffer = (unsigned char*)(seg->contents + offset);
-		chain->buffer_len = length;
-		chain->off = length;
+	if (length < 0) { 
+		if (offset > seg->length) 
+			goto err; 
+		length = seg->length - offset; 
+	} 
+ 
+	/* Can we actually add this? */ 
+	if (offset+length > seg->length) 
+		goto err; 
+ 
+	chain = evbuffer_chain_new(sizeof(struct evbuffer_chain_file_segment)); 
+	if (!chain) 
+		goto err; 
+	extra = EVBUFFER_CHAIN_EXTRA(struct evbuffer_chain_file_segment, chain); 
+ 
+	chain->flags |= EVBUFFER_IMMUTABLE|EVBUFFER_FILESEGMENT; 
+	if (can_use_sendfile && seg->can_sendfile) { 
+		chain->flags |= EVBUFFER_SENDFILE; 
+		chain->misalign = seg->file_offset + offset; 
+		chain->off = length; 
+		chain->buffer_len = chain->misalign + length; 
+	} else if (seg->is_mapping) { 
+#ifdef _WIN32 
+		ev_uint64_t total_offset = seg->mmap_offset+offset; 
+		ev_uint64_t offset_rounded=0, offset_remaining=0; 
+		LPVOID data; 
+		if (total_offset) { 
+			SYSTEM_INFO si; 
+			memset(&si, 0, sizeof(si)); /* cargo cult */ 
+			GetSystemInfo(&si); 
+			offset_remaining = total_offset % si.dwAllocationGranularity; 
+			offset_rounded = total_offset - offset_remaining; 
+		} 
+		data = MapViewOfFile( 
+			seg->mapping_handle, 
+			FILE_MAP_READ, 
+			offset_rounded >> 32, 
+			offset_rounded & 0xfffffffful, 
+			length + offset_remaining); 
+		if (data == NULL) { 
+			mm_free(chain); 
+			goto err; 
+		} 
+		chain->buffer = (unsigned char*) data; 
+		chain->buffer_len = length+offset_remaining; 
+		chain->misalign = offset_remaining; 
+		chain->off = length; 
+#else 
+		chain->buffer = (unsigned char*)(seg->contents + offset); 
+		chain->buffer_len = length; 
+		chain->off = length; 
 #endif
-	} else {
-		chain->buffer = (unsigned char*)(seg->contents + offset);
-		chain->buffer_len = length;
-		chain->off = length;
+	} else { 
+		chain->buffer = (unsigned char*)(seg->contents + offset); 
+		chain->buffer_len = length; 
+		chain->off = length; 
 	}
 
 	EVLOCK_LOCK(seg->lock, 0);
 	++seg->refcnt;
 	EVLOCK_UNLOCK(seg->lock, 0);
-	extra->segment = seg;
-	buf->n_add_for_cb += length;
-	evbuffer_chain_insert(buf, chain);
+	extra->segment = seg; 
+	buf->n_add_for_cb += length; 
+	evbuffer_chain_insert(buf, chain); 
 
-	evbuffer_invoke_callbacks_(buf);
-
-	EVBUFFER_UNLOCK(buf);
-
-	return 0;
-err:
-	EVBUFFER_UNLOCK(buf);
-	evbuffer_file_segment_free(seg); /* Lowers the refcount */
-	return -1;
+	evbuffer_invoke_callbacks_(buf); 
+ 
+	EVBUFFER_UNLOCK(buf); 
+ 
+	return 0; 
+err: 
+	EVBUFFER_UNLOCK(buf); 
+	evbuffer_file_segment_free(seg); /* Lowers the refcount */ 
+	return -1; 
 }
 
-int
-evbuffer_add_file(struct evbuffer *buf, int fd, ev_off_t offset, ev_off_t length)
-{
-	struct evbuffer_file_segment *seg;
-	unsigned flags = EVBUF_FS_CLOSE_ON_FREE;
-	int r;
+int 
+evbuffer_add_file(struct evbuffer *buf, int fd, ev_off_t offset, ev_off_t length) 
+{ 
+	struct evbuffer_file_segment *seg; 
+	unsigned flags = EVBUF_FS_CLOSE_ON_FREE; 
+	int r; 
 
-	seg = evbuffer_file_segment_new(fd, offset, length, flags);
-	if (!seg)
-		return -1;
-	r = evbuffer_add_file_segment(buf, seg, 0, length);
-	if (r == 0)
-		evbuffer_file_segment_free(seg);
-	return r;
-}
-
-int
+	seg = evbuffer_file_segment_new(fd, offset, length, flags); 
+	if (!seg) 
+		return -1; 
+	r = evbuffer_add_file_segment(buf, seg, 0, length); 
+	if (r == 0) 
+		evbuffer_file_segment_free(seg); 
+	return r; 
+} 
+ 
+int 
 evbuffer_setcb(struct evbuffer *buffer, evbuffer_cb cb, void *cbarg)
 {
 	EVBUFFER_LOCK(buffer);
 
-	if (!LIST_EMPTY(&buffer->callbacks))
+	if (!LIST_EMPTY(&buffer->callbacks)) 
 		evbuffer_remove_all_callbacks(buffer);
 
 	if (cb) {
 		struct evbuffer_cb_entry *ent =
 		    evbuffer_add_cb(buffer, NULL, cbarg);
-		if (!ent) {
-			EVBUFFER_UNLOCK(buffer);
-			return -1;
-		}
+		if (!ent) { 
+			EVBUFFER_UNLOCK(buffer); 
+			return -1; 
+		} 
 		ent->cb.cb_obsolete = cb;
 		ent->flags |= EVBUFFER_CB_OBSOLETE;
 	}
 	EVBUFFER_UNLOCK(buffer);
-	return 0;
+	return 0; 
 }
 
 struct evbuffer_cb_entry *
@@ -3340,7 +3340,7 @@ evbuffer_add_cb(struct evbuffer *buffer, evbuffer_cb_func cb, void *cbarg)
 	e->cb.cb_func = cb;
 	e->cbarg = cbarg;
 	e->flags = EVBUFFER_CB_ENABLED;
-	LIST_INSERT_HEAD(&buffer->callbacks, e, next);
+	LIST_INSERT_HEAD(&buffer->callbacks, e, next); 
 	EVBUFFER_UNLOCK(buffer);
 	return e;
 }
@@ -3350,7 +3350,7 @@ evbuffer_remove_cb_entry(struct evbuffer *buffer,
 			 struct evbuffer_cb_entry *ent)
 {
 	EVBUFFER_LOCK(buffer);
-	LIST_REMOVE(ent, next);
+	LIST_REMOVE(ent, next); 
 	EVBUFFER_UNLOCK(buffer);
 	mm_free(ent);
 	return 0;
@@ -3362,7 +3362,7 @@ evbuffer_remove_cb(struct evbuffer *buffer, evbuffer_cb_func cb, void *cbarg)
 	struct evbuffer_cb_entry *cbent;
 	int result = -1;
 	EVBUFFER_LOCK(buffer);
-	LIST_FOREACH(cbent, &buffer->callbacks, next) {
+	LIST_FOREACH(cbent, &buffer->callbacks, next) { 
 		if (cb == cbent->cb.cb_func && cbarg == cbent->cbarg) {
 			result = evbuffer_remove_cb_entry(buffer, cbent);
 			goto done;
@@ -3448,20 +3448,20 @@ evbuffer_cb_unsuspend(struct evbuffer *buffer, struct evbuffer_cb_entry *cb)
 #endif
 
 int
-evbuffer_get_callbacks_(struct evbuffer *buffer, struct event_callback **cbs,
-    int max_cbs)
+evbuffer_get_callbacks_(struct evbuffer *buffer, struct event_callback **cbs, 
+    int max_cbs) 
 {
-	int r = 0;
-	EVBUFFER_LOCK(buffer);
-	if (buffer->deferred_cbs) {
-		if (max_cbs < 1) {
-			r = -1;
-			goto done;
-		}
-		cbs[0] = &buffer->deferred;
-		r = 1;
-	}
-done:
-	EVBUFFER_UNLOCK(buffer);
-	return r;
+	int r = 0; 
+	EVBUFFER_LOCK(buffer); 
+	if (buffer->deferred_cbs) { 
+		if (max_cbs < 1) { 
+			r = -1; 
+			goto done; 
+		} 
+		cbs[0] = &buffer->deferred; 
+		r = 1; 
+	} 
+done: 
+	EVBUFFER_UNLOCK(buffer); 
+	return r; 
 }

@@ -65,7 +65,7 @@ IF (OS_DARWIN)
     )
 ENDIF()
 
-IF (OS_WINDOWS)
+IF (OS_WINDOWS) 
     ADDINCL(
         GLOBAL contrib/libs/libc_compat/include/windows
     )
@@ -78,8 +78,8 @@ IF (OS_WINDOWS)
         strsep.c
         src/windows/sys/uio.c
     )
-ENDIF()
-
+ENDIF() 
+ 
 IF (OS_LINUX)
     ADDINCL(
         GLOBAL contrib/libs/libc_compat/include/readpassphrase

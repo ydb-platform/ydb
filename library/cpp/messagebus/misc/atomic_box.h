@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/system/atomic.h>
-
+#include <util/system/atomic.h> 
+ 
 // TAtomic with human interface
 template <typename T>
 class TAtomicBox {

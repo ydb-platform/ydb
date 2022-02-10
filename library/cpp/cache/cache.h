@@ -101,20 +101,20 @@ public:
         return ItemsAmount;
     }
 
-    size_t GetTotalSize() const {
-        return TotalSize;
-    }
-
-    size_t GetMaxSize() const {
-        return MaxSize;
-    }
-
-    // It does not remove current items if newSize is less than TotalSize.
-    // Caller should use RemoveIfOverflown to clean up list in this case
-    void SetMaxSize(size_t newSize) {
-        MaxSize = newSize;
-    }
-
+    size_t GetTotalSize() const { 
+        return TotalSize; 
+    } 
+ 
+    size_t GetMaxSize() const { 
+        return MaxSize; 
+    } 
+ 
+    // It does not remove current items if newSize is less than TotalSize. 
+    // Caller should use RemoveIfOverflown to clean up list in this case 
+    void SetMaxSize(size_t newSize) { 
+        MaxSize = newSize; 
+    } 
+ 
 private:
     typedef TIntrusiveList<TItem> TListType;
     TListType List;
@@ -212,16 +212,16 @@ public:
         return ListSize;
     }
 
-    size_t GetMaxSize() const {
-        return MaxSize;
-    }
-
-    // It does not remove current items if newSize is less than TotalSize.
-    // Caller should use RemoveIfOverflown to clean up list in this case
-    void SetMaxSize(size_t newSize) {
-        MaxSize = newSize;
-    }
-
+    size_t GetMaxSize() const { 
+        return MaxSize; 
+    } 
+ 
+    // It does not remove current items if newSize is less than TotalSize. 
+    // Caller should use RemoveIfOverflown to clean up list in this case 
+    void SetMaxSize(size_t newSize) { 
+        MaxSize = newSize; 
+    } 
+ 
 private:
     typedef TIntrusiveList<TItem> TListType;
     TListType List;
@@ -333,16 +333,16 @@ public:
         return Size;
     }
 
-    size_t GetMaxSize() const {
-        return MaxSize;
-    }
-
-    // It does not remove current items if newSize is less than TotalSize.
-    // Caller should use RemoveIfOverflown to clean up list in this case
-    void SetMaxSize(size_t newSize) {
-        MaxSize = newSize;
-    }
-
+    size_t GetMaxSize() const { 
+        return MaxSize; 
+    } 
+ 
+    // It does not remove current items if newSize is less than TotalSize. 
+    // Caller should use RemoveIfOverflown to clean up list in this case 
+    void SetMaxSize(size_t newSize) { 
+        MaxSize = newSize; 
+    } 
+ 
     void Clear() {
         Heap.clear();
         Removed.clear();
@@ -531,20 +531,20 @@ public:
         Index.clear();
     }
 
-    void SetMaxSize(size_t newSize) {
-        List.SetMaxSize(newSize);
-
-        TItem* removedItem = nullptr;
-        while ((removedItem = List.RemoveIfOverflown())) {
-            EraseFromIndex(removedItem);
-        }
-        Y_ASSERT(Index.size() == List.GetSize());
-    }
-
-    size_t GetMaxSize() const {
-        return List.GetMaxSize();
-    }
-
+    void SetMaxSize(size_t newSize) { 
+        List.SetMaxSize(newSize); 
+ 
+        TItem* removedItem = nullptr; 
+        while ((removedItem = List.RemoveIfOverflown())) { 
+            EraseFromIndex(removedItem); 
+        } 
+        Y_ASSERT(Index.size() == List.GetSize()); 
+    } 
+ 
+    size_t GetMaxSize() const { 
+        return List.GetMaxSize(); 
+    } 
+ 
 protected:
     TIndex Index;
     TListType List;
@@ -595,10 +595,10 @@ public:
     TIterator FindOldest() {
         return TBase::Empty() ? TBase::End() : this->FindByItem(TBase::List.GetOldest());
     }
-
+ 
     size_t TotalSize() const {
-        return TBase::List.GetTotalSize();
-    }
+        return TBase::List.GetTotalSize(); 
+    } 
 };
 
 template <typename TKey, typename TValue, typename TDeleter = TNoopDelete>

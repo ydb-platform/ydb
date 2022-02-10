@@ -3,8 +3,8 @@
 #include "actor.h"
 #include "queue_for_actor.h"
 
-#include <functional>
-
+#include <functional> 
+ 
 namespace NActor {
     template <typename TItem>
     class IQueueInActor {

@@ -23,51 +23,51 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef DEFER_INTERNAL_H_INCLUDED_
-#define DEFER_INTERNAL_H_INCLUDED_
+#ifndef DEFER_INTERNAL_H_INCLUDED_ 
+#define DEFER_INTERNAL_H_INCLUDED_ 
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include "event2/event-config.h"
-#include "evconfig-private.h"
-
+#include "evconfig-private.h" 
+ 
 #include <sys/queue.h>
 
-struct event_callback;
-typedef void (*deferred_cb_fn)(struct event_callback *, void *);
+struct event_callback; 
+typedef void (*deferred_cb_fn)(struct event_callback *, void *); 
 
 /**
-   Initialize an empty, non-pending event_callback.
+   Initialize an empty, non-pending event_callback. 
 
-   @param deferred The struct event_callback structure to initialize.
-   @param priority The priority that the callback should run at.
-   @param cb The function to run when the struct event_callback executes.
+   @param deferred The struct event_callback structure to initialize. 
+   @param priority The priority that the callback should run at. 
+   @param cb The function to run when the struct event_callback executes. 
    @param arg The function's second argument.
  */
-EVENT2_EXPORT_SYMBOL
-void event_deferred_cb_init_(struct event_callback *, ev_uint8_t, deferred_cb_fn, void *);
+EVENT2_EXPORT_SYMBOL 
+void event_deferred_cb_init_(struct event_callback *, ev_uint8_t, deferred_cb_fn, void *); 
 /**
-   Change the priority of a non-pending event_callback.
+   Change the priority of a non-pending event_callback. 
  */
-void event_deferred_cb_set_priority_(struct event_callback *, ev_uint8_t);
+void event_deferred_cb_set_priority_(struct event_callback *, ev_uint8_t); 
 /**
-   Cancel a struct event_callback if it is currently scheduled in an event_base.
+   Cancel a struct event_callback if it is currently scheduled in an event_base. 
  */
-EVENT2_EXPORT_SYMBOL
-void event_deferred_cb_cancel_(struct event_base *, struct event_callback *);
-/**
-   Activate a struct event_callback if it is not currently scheduled in an event_base.
+EVENT2_EXPORT_SYMBOL 
+void event_deferred_cb_cancel_(struct event_base *, struct event_callback *); 
+/** 
+   Activate a struct event_callback if it is not currently scheduled in an event_base. 
 
-   Return true if it was not previously scheduled.
- */
-EVENT2_EXPORT_SYMBOL
-int event_deferred_cb_schedule_(struct event_base *, struct event_callback *);
+   Return true if it was not previously scheduled. 
+ */ 
+EVENT2_EXPORT_SYMBOL 
+int event_deferred_cb_schedule_(struct event_base *, struct event_callback *); 
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* EVENT_INTERNAL_H_INCLUDED_ */
+#endif /* EVENT_INTERNAL_H_INCLUDED_ */ 
 

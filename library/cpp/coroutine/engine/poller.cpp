@@ -356,7 +356,7 @@ namespace {
 }
 
 THolder<IPollerFace> IPollerFace::Default() {
-    return Construct(*SingletonWithPriority<TUserPoller, 0>());
+    return Construct(*SingletonWithPriority<TUserPoller, 0>()); 
 }
 
 THolder<IPollerFace> IPollerFace::Construct(TStringBuf name) {

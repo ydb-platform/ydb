@@ -1,13 +1,13 @@
 #pragma once
 
 #include "defs.h"
-#include "message.h"
+#include "message.h" 
 #include "message_status.h"
 #include "use_after_free_checker.h"
 #include "use_count_checker.h"
 
-#include <util/generic/noncopyable.h>
-
+#include <util/generic/noncopyable.h> 
+ 
 namespace NBus {
     /////////////////////////////////////////////////////////////////
     /// \brief Interface to message bus handler

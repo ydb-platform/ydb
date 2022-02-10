@@ -76,7 +76,7 @@ def parse_pyx_includes(filename, path, source_root, seen=None):
 
     with open(abs_path, 'rb') as f:
         # Don't parse cimports and etc - irrelevant for cython, it's linker work
-        includes = ymake.parse_cython_includes(f.read())
+        includes = ymake.parse_cython_includes(f.read()) 
 
     abs_dirname = os.path.dirname(abs_path)
     # All includes are relative to the file which include

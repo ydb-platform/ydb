@@ -277,12 +277,12 @@ void TContExecutor::ScheduleExecutionNow(TCont* cont) noexcept {
 }
 
 namespace {
-    inline TContExecutor*& ThisThreadExecutor() {
-        struct TThisThreadExecutorHolder {
+    inline TContExecutor*& ThisThreadExecutor() { 
+        struct TThisThreadExecutorHolder { 
             TContExecutor* Executor = nullptr;
-        };
-        return FastTlsSingletonWithPriority<TThisThreadExecutorHolder, 0>()->Executor;
-    }
+        }; 
+        return FastTlsSingletonWithPriority<TThisThreadExecutorHolder, 0>()->Executor; 
+    } 
 }
 
 void TContExecutor::DeleteScheduled() noexcept {
@@ -292,14 +292,14 @@ void TContExecutor::DeleteScheduled() noexcept {
 }
 
 TCont* RunningCont() {
-    TContExecutor* thisThreadExecutor = ThisThreadExecutor();
+    TContExecutor* thisThreadExecutor = ThisThreadExecutor(); 
     return thisThreadExecutor ? thisThreadExecutor->Running() : nullptr;
 }
 
 void TContExecutor::RunScheduler() noexcept {
     try {
         TContExecutor* const prev = ThisThreadExecutor();
-        ThisThreadExecutor() = this;
+        ThisThreadExecutor() = this; 
         TCont* caller = Current_;
         TExceptionSafeContext* context = caller ? caller->Trampoline_.Context() : &SchedContext_;
         Y_DEFER {

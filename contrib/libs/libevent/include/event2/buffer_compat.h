@@ -24,11 +24,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef EVENT2_BUFFER_COMPAT_H_INCLUDED_
-#define EVENT2_BUFFER_COMPAT_H_INCLUDED_
+#ifndef EVENT2_BUFFER_COMPAT_H_INCLUDED_ 
+#define EVENT2_BUFFER_COMPAT_H_INCLUDED_ 
 
-#include <event2/visibility.h>
-
+#include <event2/visibility.h> 
+ 
 /** @file event2/buffer_compat.h
 
 	Obsolete and deprecated versions of the functions in buffer.h: provided
@@ -37,7 +37,7 @@
 
 
 /**
-   Obsolete alias for evbuffer_readln(buffer, NULL, EVBUFFER_EOL_ANY).
+   Obsolete alias for evbuffer_readln(buffer, NULL, EVBUFFER_EOL_ANY). 
 
    @deprecated This function is deprecated because its behavior is not correct
       for almost any protocol, and also because it's wholly subsumed by
@@ -47,7 +47,7 @@
    @return pointer to a single line, or NULL if an error occurred
 
 */
-EVENT2_EXPORT_SYMBOL
+EVENT2_EXPORT_SYMBOL 
 char *evbuffer_readline(struct evbuffer *buffer);
 
 /** Type definition for a callback that is invoked whenever data is added or
@@ -90,10 +90,10 @@ typedef void (*evbuffer_cb)(struct evbuffer *buffer, size_t old_len, size_t new_
   @param cb the callback function to invoke when the evbuffer is modified,
 	 or NULL to remove all callbacks.
   @param cbarg an argument to be provided to the callback function
-  @return 0 if successful, or -1 on error
+  @return 0 if successful, or -1 on error 
  */
-EVENT2_EXPORT_SYMBOL
-int evbuffer_setcb(struct evbuffer *buffer, evbuffer_cb cb, void *cbarg);
+EVENT2_EXPORT_SYMBOL 
+int evbuffer_setcb(struct evbuffer *buffer, evbuffer_cb cb, void *cbarg); 
 
 
 /**
@@ -104,7 +104,7 @@ int evbuffer_setcb(struct evbuffer *buffer, evbuffer_cb cb, void *cbarg);
   @param len the length of the search string
   @return a pointer to the beginning of the search string, or NULL if the search failed.
  */
-EVENT2_EXPORT_SYMBOL
+EVENT2_EXPORT_SYMBOL 
 unsigned char *evbuffer_find(struct evbuffer *buffer, const unsigned char *what, size_t len);
 
 /** deprecated in favor of calling the functions directly */

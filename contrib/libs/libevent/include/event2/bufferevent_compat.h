@@ -25,11 +25,11 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef EVENT2_BUFFEREVENT_COMPAT_H_INCLUDED_
-#define EVENT2_BUFFEREVENT_COMPAT_H_INCLUDED_
+#ifndef EVENT2_BUFFEREVENT_COMPAT_H_INCLUDED_ 
+#define EVENT2_BUFFEREVENT_COMPAT_H_INCLUDED_ 
 
-#include <event2/visibility.h>
-
+#include <event2/visibility.h> 
+ 
 #define evbuffercb bufferevent_data_cb
 #define everrorcb bufferevent_event_cb
 
@@ -74,7 +74,7 @@
 	  error occurred
   @see bufferevent_base_set(), bufferevent_free()
   */
-EVENT2_EXPORT_SYMBOL
+EVENT2_EXPORT_SYMBOL 
 struct bufferevent *bufferevent_new(evutil_socket_t fd,
     evbuffercb readcb, evbuffercb writecb, everrorcb errorcb, void *cbarg);
 
@@ -86,7 +86,7 @@ struct bufferevent *bufferevent_new(evutil_socket_t fd,
   @param timeout_read the read timeout
   @param timeout_write the write timeout
  */
-EVENT2_EXPORT_SYMBOL
+EVENT2_EXPORT_SYMBOL 
 void bufferevent_settimeout(struct bufferevent *bufev,
     int timeout_read, int timeout_write);
 

@@ -26,27 +26,27 @@
  */
 
 #include "event2/event-config.h"
-#include "evconfig-private.h"
+#include "evconfig-private.h" 
 
-#ifdef EVENT__HAVE_SYS_TYPES_H
+#ifdef EVENT__HAVE_SYS_TYPES_H 
 #include <sys/types.h>
 #endif
-#ifdef EVENT__HAVE_SYS_PARAM_H
+#ifdef EVENT__HAVE_SYS_PARAM_H 
 #include <sys/param.h>
 #endif
 
-#ifdef _WIN32
+#ifdef _WIN32 
 #define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <windows.h>
 #undef WIN32_LEAN_AND_MEAN
-#endif
-
-#ifdef EVENT__HAVE_SYS_IOCTL_H
+#endif 
+ 
+#ifdef EVENT__HAVE_SYS_IOCTL_H 
 #include <sys/ioctl.h>
 #endif
 #include <sys/queue.h>
-#ifdef EVENT__HAVE_SYS_TIME_H
+#ifdef EVENT__HAVE_SYS_TIME_H 
 #include <sys/time.h>
 #endif
 
@@ -54,10 +54,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifndef _WIN32
+#ifndef _WIN32 
 #include <syslog.h>
 #endif
-#ifdef EVENT__HAVE_UNISTD_H
+#ifdef EVENT__HAVE_UNISTD_H 
 #include <unistd.h>
 #endif
 #include <limits.h>
@@ -93,13 +93,13 @@
        a final padding nibble with value 0 is appended.
 */
 
-EVENT2_EXPORT_SYMBOL
+EVENT2_EXPORT_SYMBOL 
 int evtag_decode_int(ev_uint32_t *pnumber, struct evbuffer *evbuf);
-EVENT2_EXPORT_SYMBOL
+EVENT2_EXPORT_SYMBOL 
 int evtag_decode_int64(ev_uint64_t *pnumber, struct evbuffer *evbuf);
-EVENT2_EXPORT_SYMBOL
+EVENT2_EXPORT_SYMBOL 
 int evtag_encode_tag(struct evbuffer *evbuf, ev_uint32_t tag);
-EVENT2_EXPORT_SYMBOL
+EVENT2_EXPORT_SYMBOL 
 int evtag_decode_tag(ev_uint32_t *ptag, struct evbuffer *evbuf);
 
 void
@@ -217,14 +217,14 @@ decode_tag_internal(ev_uint32_t *ptag, struct evbuffer *evbuf, int dodrain)
 
 	while (count++ < len) {
 		ev_uint8_t lower = *data++;
-		if (shift >= 28) {
-			/* Make sure it fits into 32 bits */
-			if (shift > 28)
-				return (-1);
-			if ((lower & 0x7f) > 15)
-				return (-1);
-		}
-		number |= (lower & (unsigned)0x7f) << shift;
+		if (shift >= 28) { 
+			/* Make sure it fits into 32 bits */ 
+			if (shift > 28) 
+				return (-1); 
+			if ((lower & 0x7f) > 15) 
+				return (-1); 
+		} 
+		number |= (lower & (unsigned)0x7f) << shift; 
 		shift += 7;
 
 		if (!(lower & 0x80)) {

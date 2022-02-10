@@ -3,7 +3,7 @@
 #include "example.h"
 
 #include <library/cpp/messagebus/oldmodule/module.h>
-
+ 
 namespace NBus {
     namespace NTest {
         struct TExampleModule: public TBusModule {

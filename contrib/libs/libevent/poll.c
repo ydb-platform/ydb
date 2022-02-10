@@ -27,12 +27,12 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "event2/event-config.h"
-#include "evconfig-private.h"
+#include "evconfig-private.h" 
 
-#ifdef EVENT__HAVE_POLL
-
+#ifdef EVENT__HAVE_POLL 
+ 
 #include <sys/types.h>
-#ifdef EVENT__HAVE_SYS_TIME_H
+#ifdef EVENT__HAVE_SYS_TIME_H 
 #include <sys/time.h>
 #endif
 #include <sys/queue.h>
@@ -51,7 +51,7 @@
 #include "evmap-internal.h"
 #include "event2/thread.h"
 #include "evthread-internal.h"
-#include "time-internal.h"
+#include "time-internal.h" 
 
 /* Since Linux 2.6.17, poll is able to report about peer half-closed connection
    using special POLLRDHUP flag on a read event.
@@ -78,8 +78,8 @@ struct pollop {
 };
 
 static void *poll_init(struct event_base *);
-static int poll_add(struct event_base *, int, short old, short events, void *idx);
-static int poll_del(struct event_base *, int, short old, short events, void *idx);
+static int poll_add(struct event_base *, int, short old, short events, void *idx); 
+static int poll_del(struct event_base *, int, short old, short events, void *idx); 
 static int poll_dispatch(struct event_base *, struct timeval *);
 static void poll_dealloc(struct event_base *);
 
@@ -103,10 +103,10 @@ poll_init(struct event_base *base)
 	if (!(pollop = mm_calloc(1, sizeof(struct pollop))))
 		return (NULL);
 
-	evsig_init_(base);
+	evsig_init_(base); 
 
-	evutil_weakrand_seed_(&base->weakrand_seed, 0);
-
+	evutil_weakrand_seed_(&base->weakrand_seed, 0); 
+ 
 	return (pollop);
 }
 
@@ -144,7 +144,7 @@ poll_dispatch(struct event_base *base, struct timeval *tv)
 
 	nfds = pop->nfds;
 
-#ifndef EVENT__DISABLE_THREAD_SUPPORT
+#ifndef EVENT__DISABLE_THREAD_SUPPORT 
 	if (base->th_base_lock) {
 		/* If we're using this backend in a multithreaded setting,
 		 * then we need to work on a copy of event_set, so that we can
@@ -172,7 +172,7 @@ poll_dispatch(struct event_base *base, struct timeval *tv)
 #endif
 
 	if (tv != NULL) {
-		msec = evutil_tv_to_msec_(tv);
+		msec = evutil_tv_to_msec_(tv); 
 		if (msec < 0 || msec > INT_MAX)
 			msec = INT_MAX;
 	}
@@ -197,7 +197,7 @@ poll_dispatch(struct event_base *base, struct timeval *tv)
 	if (res == 0 || nfds == 0)
 		return (0);
 
-	i = evutil_weakrand_range_(&base->weakrand_seed, nfds);
+	i = evutil_weakrand_range_(&base->weakrand_seed, nfds); 
 	for (j = 0; j < nfds; j++) {
 		int what;
 		if (++i == nfds)
@@ -209,7 +209,7 @@ poll_dispatch(struct event_base *base, struct timeval *tv)
 		res = 0;
 
 		/* If the file gets closed notify */
-		if (what & (POLLHUP|POLLERR|POLLNVAL))
+		if (what & (POLLHUP|POLLERR|POLLNVAL)) 
 			what |= POLLIN|POLLOUT;
 		if (what & POLLIN)
 			res |= EV_READ;
@@ -220,18 +220,18 @@ poll_dispatch(struct event_base *base, struct timeval *tv)
 		if (res == 0)
 			continue;
 
-		evmap_io_active_(base, event_set[i].fd, res);
+		evmap_io_active_(base, event_set[i].fd, res); 
 	}
 
 	return (0);
 }
 
 static int
-poll_add(struct event_base *base, int fd, short old, short events, void *idx_)
+poll_add(struct event_base *base, int fd, short old, short events, void *idx_) 
 {
 	struct pollop *pop = base->evbase;
 	struct pollfd *pfd = NULL;
-	struct pollidx *idx = idx_;
+	struct pollidx *idx = idx_; 
 	int i;
 
 	EVUTIL_ASSERT((events & EV_SIGNAL) == 0);
@@ -290,11 +290,11 @@ poll_add(struct event_base *base, int fd, short old, short events, void *idx_)
  */
 
 static int
-poll_del(struct event_base *base, int fd, short old, short events, void *idx_)
+poll_del(struct event_base *base, int fd, short old, short events, void *idx_) 
 {
 	struct pollop *pop = base->evbase;
 	struct pollfd *pfd = NULL;
-	struct pollidx *idx = idx_;
+	struct pollidx *idx = idx_; 
 	int i;
 
 	EVUTIL_ASSERT((events & EV_SIGNAL) == 0);
@@ -330,7 +330,7 @@ poll_del(struct event_base *base, int fd, short old, short events, void *idx_)
 		 */
 		memcpy(&pop->event_set[i], &pop->event_set[pop->nfds],
 		       sizeof(struct pollfd));
-		idx = evmap_io_get_fdinfo_(&base->io, pop->event_set[i].fd);
+		idx = evmap_io_get_fdinfo_(&base->io, pop->event_set[i].fd); 
 		EVUTIL_ASSERT(idx);
 		EVUTIL_ASSERT(idx->idxplus1 == pop->nfds + 1);
 		idx->idxplus1 = i + 1;
@@ -345,7 +345,7 @@ poll_dealloc(struct event_base *base)
 {
 	struct pollop *pop = base->evbase;
 
-	evsig_dealloc_(base);
+	evsig_dealloc_(base); 
 	if (pop->event_set)
 		mm_free(pop->event_set);
 	if (pop->event_set_copy)
@@ -354,5 +354,5 @@ poll_dealloc(struct event_base *base)
 	memset(pop, 0, sizeof(struct pollop));
 	mm_free(pop);
 }
-
-#endif /* EVENT__HAVE_POLL */
+ 
+#endif /* EVENT__HAVE_POLL */ 

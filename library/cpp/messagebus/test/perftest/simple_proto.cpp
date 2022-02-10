@@ -1,8 +1,8 @@
-#include "simple_proto.h"
+#include "simple_proto.h" 
 
 #include <util/generic/cast.h>
 
-#include <typeinfo>
+#include <typeinfo> 
 
 using namespace NBus;
 

@@ -5,7 +5,7 @@
 
 #include <util/stream/output.h>
 #include <util/stream/format.h>
-#include <util/generic/array_ref.h> 
+#include <util/generic/array_ref.h>
 #include <util/generic/string.h>
 
 #ifdef _win_
@@ -284,18 +284,18 @@ TString TBackTrace::PrintToString() const {
     return ss.Str();
 }
 
-size_t TBackTrace::size() const { 
-    return Size; 
-} 
- 
-const void* const* TBackTrace::data() const { 
-    return Data; 
-} 
- 
-TBackTrace::operator TBackTraceView() const { 
-    return TBackTraceView(Data, Size); 
-} 
- 
+size_t TBackTrace::size() const {
+    return Size;
+}
+
+const void* const* TBackTrace::data() const {
+    return Data;
+}
+
+TBackTrace::operator TBackTraceView() const {
+    return TBackTraceView(Data, Size);
+}
+
 TBackTrace TBackTrace::FromCurrentException() {
 #ifdef _YNDX_LIBUNWIND_EXCEPTION_BACKTRACE_SIZE
     TBackTrace result;

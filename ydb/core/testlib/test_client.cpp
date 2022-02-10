@@ -124,8 +124,8 @@ namespace Tests {
     NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
         Y_UNUSED(typeRegistry);
         // register test UDFs
-        auto freg = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone();
-        NKikimr::NMiniKQL::FillStaticModules(*freg);
+        auto freg = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone(); 
+        NKikimr::NMiniKQL::FillStaticModules(*freg); 
         return freg.Release();
     }
 
@@ -195,10 +195,10 @@ namespace Tests {
         app.SetFnRegistry(Settings->FrFactory);
         app.SetFormatsFactory(Settings->Formats);
 
-        if (Settings->Formats) {
-            NKikHouse::RegisterFormat(*Settings->Formats);
-        }
-
+        if (Settings->Formats) { 
+            NKikHouse::RegisterFormat(*Settings->Formats); 
+        } 
+ 
         NKikimr::SetupChannelProfiles(app, Settings->Domain);
 
         Runtime->SetupMonitoring();

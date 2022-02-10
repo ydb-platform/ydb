@@ -87,7 +87,7 @@ class TKqpWriterTestLoadActor : public TActorBootstrapped<TKqpWriterTestLoadActo
     TString PreparedSelectQuery;
 
 public:
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return NKikimrServices::TActivity::KQP_TEST_WORKLOAD;
     }
 

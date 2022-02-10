@@ -1,12 +1,12 @@
 OWNER(g:yq)
-
-LIBRARY()
-
-SRCS(
-    init.cpp
-)
-
-PEERDIR(
+ 
+LIBRARY() 
+ 
+SRCS( 
+    init.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/actors/core
     library/cpp/actors/http
     ydb/core/base
@@ -49,8 +49,8 @@ PEERDIR(
     ydb/library/yql/providers/ydb/actors
     ydb/library/yql/providers/ydb/comp_nodes
     ydb/library/yql/providers/ydb/provider
-)
-
-YQL_LAST_ABI_VERSION()
-
-END()
+) 
+ 
+YQL_LAST_ABI_VERSION() 
+ 
+END() 

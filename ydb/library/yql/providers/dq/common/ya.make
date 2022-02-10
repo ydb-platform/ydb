@@ -11,9 +11,9 @@ PEERDIR(
 )
 
 SRCS(
-    attrs.cpp
-    yql_dq_common.cpp
-    yql_dq_settings.cpp
+    attrs.cpp 
+    yql_dq_common.cpp 
+    yql_dq_settings.cpp 
 )
 
 YQL_LAST_ABI_VERSION()

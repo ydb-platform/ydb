@@ -56,22 +56,22 @@ void TGRpcServer::Start() {
     using grpc::ServerBuilder;
     using grpc::ResourceQuota;
     ServerBuilder builder;
-    auto credentials = grpc::InsecureServerCredentials();
-    if (Options_.SslData) {
+    auto credentials = grpc::InsecureServerCredentials(); 
+    if (Options_.SslData) { 
         grpc::SslServerCredentialsOptions::PemKeyCertPair keycert;
         keycert.cert_chain = std::move(Options_.SslData->Cert);
         keycert.private_key = std::move(Options_.SslData->Key);
         grpc::SslServerCredentialsOptions sslOps;
         sslOps.pem_root_certs = std::move(Options_.SslData->Root);
         sslOps.pem_key_cert_pairs.push_back(keycert);
-        credentials = grpc::SslServerCredentials(sslOps);
-    }
-    if (Options_.ExternalListener) {
-        Options_.ExternalListener->Init(builder.experimental().AddExternalConnectionAcceptor(
-            ServerBuilder::experimental_type::ExternalConnectionType::FROM_FD,
-            credentials
-        ));
-    } else {
+        credentials = grpc::SslServerCredentials(sslOps); 
+    } 
+    if (Options_.ExternalListener) { 
+        Options_.ExternalListener->Init(builder.experimental().AddExternalConnectionAcceptor( 
+            ServerBuilder::experimental_type::ExternalConnectionType::FROM_FD, 
+            credentials 
+        )); 
+    } else { 
         builder.AddListeningPort(server_address, credentials);
     }
     builder.SetMaxReceiveMessageSize(Options_.MaxMessageSize);
@@ -171,10 +171,10 @@ void TGRpcServer::Start() {
             }));
         }
     }
-
-    if (Options_.ExternalListener) {
-        Options_.ExternalListener->Start();
-    }
+ 
+    if (Options_.ExternalListener) { 
+        Options_.ExternalListener->Start(); 
+    } 
 }
 
 void TGRpcServer::Stop() {
@@ -223,10 +223,10 @@ void TGRpcServer::Stop() {
     }
 
     Ts.clear();
-
-    if (Options_.ExternalListener) {
-        Options_.ExternalListener->Stop();
-    }
+ 
+    if (Options_.ExternalListener) { 
+        Options_.ExternalListener->Stop(); 
+    } 
 }
 
 ui16 TGRpcServer::GetPort() const {

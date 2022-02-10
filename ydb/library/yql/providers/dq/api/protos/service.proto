@@ -7,117 +7,117 @@ import "ydb/library/yql/dq/proto/dq_tasks.proto";
 
 package Yql.DqsProto;
 
-message TAttr {
-    string Name = 1;
-    string Value = 2;
-}
-
-message ResponseMetric {
-    string Name = 1;
-    int64 Sum = 2;
-    int64 Max = 3;
-    int64 Min = 4;
-    int64 Avg = 5;
-    int64 Count = 6;
-}
-
+message TAttr { 
+    string Name = 1; 
+    string Value = 2; 
+} 
+ 
+message ResponseMetric { 
+    string Name = 1; 
+    int64 Sum = 2; 
+    int64 Max = 3; 
+    int64 Min = 4; 
+    int64 Avg = 5; 
+    int64 Count = 6; 
+} 
+ 
 message ExecuteQueryResult {
     Ydb.ResultSet result = 1;
-    bytes yson = 2;
+    bytes yson = 2; 
 }
 
-message TFile {
-    enum EFileType {
-        EUDF_FILE = 0;
-        EUSER_FILE = 1;
-        EEXE_FILE = 2;
-    }
-
-    string LocalPath = 1;
-    string ObjectId = 2;
-    string Name = 3;
-    EFileType ObjectType = 4;
-    int64 Size = 5;
+message TFile { 
+    enum EFileType { 
+        EUDF_FILE = 0; 
+        EUSER_FILE = 1; 
+        EEXE_FILE = 2; 
+    } 
+ 
+    string LocalPath = 1; 
+    string ObjectId = 2; 
+    string Name = 3; 
+    EFileType ObjectType = 4; 
+    int64 Size = 5; 
+} 
+ 
+message TWorkerInfo { 
+    // TGuid Guid = 1; // reserved 
+    uint32 NodeId = 2; 
+    string ClusterName = 3; 
+    repeated TAttribute Attribute = 4; 
+    string JobId = 5; 
+    string OperationId = 6; 
+    string Guid = 7; 
+}; 
+ 
+message TTaskMeta { 
+    uint64 StageId = 1; 
+    repeated TFile Files = 2; 
+    map<string, string> SecureParams = 3; 
+    map<string, bytes> TaskParams = 4; 
+    repeated TAttr Settings = 5; // pragmas 
+    repeated TWorkerInfo WorkerInfo = 6; //debug info 
+    string ClusterNameHint = 7; 
+} 
+ 
+message TWorkerFilter { 
+    repeated TFile File = 1; 
+    string Revision = 2; 
+    string ClusterName = 3; 
+    string ClusterNameHint = 4; 
+    repeated string Address = 5; 
+    repeated uint64 NodeId = 6; 
+    repeated uint64 NodeIdHint = 7; 
 }
 
-message TWorkerInfo {
-    // TGuid Guid = 1; // reserved
-    uint32 NodeId = 2;
-    string ClusterName = 3;
-    repeated TAttribute Attribute = 4;
-    string JobId = 5;
-    string OperationId = 6;
-    string Guid = 7;
-};
-
-message TTaskMeta {
-    uint64 StageId = 1;
-    repeated TFile Files = 2;
-    map<string, string> SecureParams = 3;
-    map<string, bytes> TaskParams = 4;
-    repeated TAttr Settings = 5; // pragmas
-    repeated TWorkerInfo WorkerInfo = 6; //debug info
-    string ClusterNameHint = 7;
-}
-
-message TWorkerFilter {
-    repeated TFile File = 1;
-    string Revision = 2;
-    string ClusterName = 3;
-    string ClusterNameHint = 4;
-    repeated string Address = 5;
-    repeated uint64 NodeId = 6;
-    repeated uint64 NodeIdHint = 7;
-}
-
-message ExecuteGraphRequest {
-    Ydb.Operations.OperationParams Params = 1;
-    repeated NYql.NDqProto.TDqTask Task = 3;
-    uint64 SourceId = 4;
-    bytes ResultType = 5;
-    repeated string Columns = 6;
-    string Session = 7;
-    repeated TAttr Settings = 8;
+message ExecuteGraphRequest { 
+    Ydb.Operations.OperationParams Params = 1; 
+    repeated NYql.NDqProto.TDqTask Task = 3; 
+    uint64 SourceId = 4; 
+    bytes ResultType = 5; 
+    repeated string Columns = 6; 
+    string Session = 7; 
+    repeated TAttr Settings = 8; 
     map<string, string> SecureParams = 9;
     bool Discard = 12;
     map<string, string> GraphParams = 13;
-}
-
-message ExecuteGraphResponse {
-    Ydb.Operations.Operation Operation = 1;
-    repeated ResponseMetric Metric = 2;
-    bool Truncated = 3;
-}
-
+} 
+ 
+message ExecuteGraphResponse { 
+    Ydb.Operations.Operation Operation = 1; 
+    repeated ResponseMetric Metric = 2; 
+    bool Truncated = 3; 
+} 
+ 
 message SvnRevisionRequest {
 }
 
 message SvnRevisionResponse {
     string Revision = 1;
 }
-
-message OpenSessionRequest {
-    string Session = 1;
+ 
+message OpenSessionRequest { 
+    string Session = 1; 
     string Username = 2;
-}
-
-message OpenSessionResponse {
-}
-
-message CloseSessionRequest {
-    string Session = 1;
-}
-
-message CloseSessionResponse {
-}
-
-message PingSessionRequest {
-    string Session = 1;
-}
-
-message PingSessionResponse {
-}
-
+} 
+ 
+message OpenSessionResponse { 
+} 
+ 
+message CloseSessionRequest { 
+    string Session = 1; 
+} 
+ 
+message CloseSessionResponse { 
+} 
+ 
+message PingSessionRequest { 
+    string Session = 1; 
+} 
+ 
+message PingSessionResponse { 
+} 
+ 
 message QueryStatusRequest {
   string Session = 1;
 }
@@ -126,179 +126,179 @@ message QueryStatusResponse {
   string Status = 1;
 }
 
-message TAttribute {
-    string Key = 1;
-    string Value = 2;
-}
-
-message RegisterNodeRequest {
-    message TGuid {
-        fixed32 Dw0 = 1;
-        fixed32 Dw1 = 2;
-        fixed32 Dw2 = 3;
-        fixed32 Dw3 = 4;
-    }
-
-    TGuid Guid = 11;
-
-    uint32 NodeId = 1;
-    string Address = 2;
-    uint32 Port = 3;
-    string Role = 4;
-    repeated uint32 KnownNodes = 5;
-    string Revision = 6;
-    string ClusterName = 7;
-    uint32 RunningWorkers = 8;
-    repeated string RunningOperation = 22;
-    uint32 Epoch = 9;
-
-    message LocalFile {
-        string ObjectId = 2;
-    }
-    repeated LocalFile FilesOnNode = 10;
-    repeated TFile DownloadList = 14; // filled authomatically
-
-    repeated TAttribute Attribute = 12;
-
-    enum TCapability {
-        ECAP_NONE = 0;
-        ECAP_RUNEXE = 1;
-        ECAP_COMPUTE_ACTOR = 2;
-    }
-
-    uint32 Capabilities = 15;
-    int64 FreeDiskSize = 16;
-    int64 UsedDiskSize = 17;
-    uint32 Capacity = 18;
-    string StartTime = 19;
-    bool Zombie = 20; // set by gwm
-
-    message TRusage {
-        int64 Stime = 1;
-        int64 Utime = 2;
-        int64 MajorPageFaults = 6;
-        int64 CpuSystem = 7;
-        int64 CpuUser = 8;
-        int64 CpuTotal = 9;
-    }
-
-    TRusage Rusage = 21;
-
-    bool Full = 23; // If Full == false only Guid? present
-    uint32 Pid = 24;
-}
-
-message RegisterNodeResponse {
-    message Node {
-        uint32 NodeId = 1;
-        string Address = 2;
-        uint32 Port = 3;
-    }
-
-    repeated Node Nodes = 1;
-    uint32 Epoch = 2;
-    repeated TFile DownloadList = 3;
-
-    string Revision = 4;
-}
-
-message JobStopRequest {
-    string WorkerId = 1;
-    string Revision = 2;
-    string ClusterName = 3;
-    repeated TAttribute Attribute = 4;
-    bool Force = 5;
-    bool NegativeRevision = 6;
-}
-
-message JobStopResponse {
-}
-
-message OperationStopRequest {
-    string OperationId = 1;
-}
-
-message OperationStopResponse {
-}
-
-message ClusterStatusRequest {
-}
-
-message ClusterStatusResponse {
-    message File {
-        string ObjectId = 2;
-        string Name = 3;
-        int32 Count = 4;
-        int32 Left = 5;
-        int64 Size = 6;
-    }
-
-    message TWorker {
-        string Guid = 1;
-        uint32 NodeId = 2;
-        string Address = 3;
-        uint32 Port = 4;
-        uint32 Epoch = 5;
-        string LastPingTime = 6;
-        string Revision = 7;
-        string ClusterName = 8;
-        repeated string Resource = 9;
-        repeated File DownloadList = 10;
-        repeated TFile ActiveDownload = 22;
-        uint64 UseCount = 12;
-        int64 UseTime = 13;
-        repeated TAttribute Attribute = 14;
-        bool Stopping = 15;
-        int64 FreeDiskSize = 17;
-        int64 UsedDiskSize = 18;
-        uint32 Capacity = 19;
-        int32 RunningWorkerActors = 20;
-        repeated string Operation = 26;
-        int32 RunningRequests = 24;
-        string StartTime = 21;
-        bool Dead = 23;
-        RegisterNodeRequest.TRusage Rusage = 25;
-    }
-
-    string Revision = 1;
-    repeated TWorker Worker = 2;
-
-    message WaitInfo {
-        uint32 Count = 1;
-        repeated File Resources = 2;
-        string OperationId = 3;
-        string UserName = 4;
-    }
-    repeated WaitInfo WaitList = 4;
-
-    message ResourceStat {
-        string Id = 1;
-        string Name = 6;
-        TFile.EFileType ObjectType = 7;
-        int64 Size = 8;
-        int64 UseTime = 2;
-        int64 WaitTime = 3;
-        int64 UseCount = 4;
-        int64 TryCount = 5;
-    }
-
-    repeated ResourceStat Resource = 5;
-    repeated string Uploading = 6;
-    int64 FreeListSize = 7;
-    int64 Capacity = 8;
-    int64 RunningRequests = 9;
-
-    message TServiceNode {
-        string Guid = 1;
-        uint32 NodeId = 2;
-        string Revision = 3;
-        repeated string File = 4;
-        uint32 Pid = 5;
-        string Address = 6;
-    };
-
-    repeated TServiceNode ServiceNode = 10;
-}
+message TAttribute { 
+    string Key = 1; 
+    string Value = 2; 
+} 
+ 
+message RegisterNodeRequest { 
+    message TGuid { 
+        fixed32 Dw0 = 1; 
+        fixed32 Dw1 = 2; 
+        fixed32 Dw2 = 3; 
+        fixed32 Dw3 = 4; 
+    } 
+ 
+    TGuid Guid = 11; 
+ 
+    uint32 NodeId = 1; 
+    string Address = 2; 
+    uint32 Port = 3; 
+    string Role = 4; 
+    repeated uint32 KnownNodes = 5; 
+    string Revision = 6; 
+    string ClusterName = 7; 
+    uint32 RunningWorkers = 8; 
+    repeated string RunningOperation = 22; 
+    uint32 Epoch = 9; 
+ 
+    message LocalFile { 
+        string ObjectId = 2; 
+    } 
+    repeated LocalFile FilesOnNode = 10; 
+    repeated TFile DownloadList = 14; // filled authomatically 
+ 
+    repeated TAttribute Attribute = 12; 
+ 
+    enum TCapability { 
+        ECAP_NONE = 0; 
+        ECAP_RUNEXE = 1; 
+        ECAP_COMPUTE_ACTOR = 2; 
+    } 
+ 
+    uint32 Capabilities = 15; 
+    int64 FreeDiskSize = 16; 
+    int64 UsedDiskSize = 17; 
+    uint32 Capacity = 18; 
+    string StartTime = 19; 
+    bool Zombie = 20; // set by gwm 
+ 
+    message TRusage { 
+        int64 Stime = 1; 
+        int64 Utime = 2; 
+        int64 MajorPageFaults = 6; 
+        int64 CpuSystem = 7; 
+        int64 CpuUser = 8; 
+        int64 CpuTotal = 9; 
+    } 
+ 
+    TRusage Rusage = 21; 
+ 
+    bool Full = 23; // If Full == false only Guid? present 
+    uint32 Pid = 24; 
+} 
+ 
+message RegisterNodeResponse { 
+    message Node { 
+        uint32 NodeId = 1; 
+        string Address = 2; 
+        uint32 Port = 3; 
+    } 
+ 
+    repeated Node Nodes = 1; 
+    uint32 Epoch = 2; 
+    repeated TFile DownloadList = 3; 
+ 
+    string Revision = 4; 
+} 
+ 
+message JobStopRequest { 
+    string WorkerId = 1; 
+    string Revision = 2; 
+    string ClusterName = 3; 
+    repeated TAttribute Attribute = 4; 
+    bool Force = 5; 
+    bool NegativeRevision = 6; 
+} 
+ 
+message JobStopResponse { 
+} 
+ 
+message OperationStopRequest { 
+    string OperationId = 1; 
+} 
+ 
+message OperationStopResponse { 
+} 
+ 
+message ClusterStatusRequest { 
+} 
+ 
+message ClusterStatusResponse { 
+    message File { 
+        string ObjectId = 2; 
+        string Name = 3; 
+        int32 Count = 4; 
+        int32 Left = 5; 
+        int64 Size = 6; 
+    } 
+ 
+    message TWorker { 
+        string Guid = 1; 
+        uint32 NodeId = 2; 
+        string Address = 3; 
+        uint32 Port = 4; 
+        uint32 Epoch = 5; 
+        string LastPingTime = 6; 
+        string Revision = 7; 
+        string ClusterName = 8; 
+        repeated string Resource = 9; 
+        repeated File DownloadList = 10; 
+        repeated TFile ActiveDownload = 22; 
+        uint64 UseCount = 12; 
+        int64 UseTime = 13; 
+        repeated TAttribute Attribute = 14; 
+        bool Stopping = 15; 
+        int64 FreeDiskSize = 17; 
+        int64 UsedDiskSize = 18; 
+        uint32 Capacity = 19; 
+        int32 RunningWorkerActors = 20; 
+        repeated string Operation = 26; 
+        int32 RunningRequests = 24; 
+        string StartTime = 21; 
+        bool Dead = 23; 
+        RegisterNodeRequest.TRusage Rusage = 25; 
+    } 
+ 
+    string Revision = 1; 
+    repeated TWorker Worker = 2; 
+ 
+    message WaitInfo { 
+        uint32 Count = 1; 
+        repeated File Resources = 2; 
+        string OperationId = 3; 
+        string UserName = 4; 
+    } 
+    repeated WaitInfo WaitList = 4; 
+ 
+    message ResourceStat { 
+        string Id = 1; 
+        string Name = 6; 
+        TFile.EFileType ObjectType = 7; 
+        int64 Size = 8; 
+        int64 UseTime = 2; 
+        int64 WaitTime = 3; 
+        int64 UseCount = 4; 
+        int64 TryCount = 5; 
+    } 
+ 
+    repeated ResourceStat Resource = 5; 
+    repeated string Uploading = 6; 
+    int64 FreeListSize = 7; 
+    int64 Capacity = 8; 
+    int64 RunningRequests = 9; 
+ 
+    message TServiceNode { 
+        string Guid = 1; 
+        uint32 NodeId = 2; 
+        string Revision = 3; 
+        repeated string File = 4; 
+        uint32 Pid = 5; 
+        string Address = 6; 
+    }; 
+ 
+    repeated TServiceNode ServiceNode = 10; 
+} 
 
 message GetMasterRequest {
 }
@@ -326,22 +326,22 @@ message IsReadyRequest {
 message IsReadyResponse {
     bool IsReady = 1;
 }
-
-message RoutesRequest {
-    uint32 NodeId = 1;
-}
-
-message RoutesResponse {
-    repeated RegisterNodeResponse.Node Nodes = 1;
-}
-
-message BenchmarkRequest {
-    int32 WorkerCount = 1;
-    int32 Inflight = 2;
-    int32 TotalRequests = 3;
-    int64 MaxRunTimeMs = 4;
-}
-
-message BenchmarkResponse {
-    // to be filled
-}
+ 
+message RoutesRequest { 
+    uint32 NodeId = 1; 
+} 
+ 
+message RoutesResponse { 
+    repeated RegisterNodeResponse.Node Nodes = 1; 
+} 
+ 
+message BenchmarkRequest { 
+    int32 WorkerCount = 1; 
+    int32 Inflight = 2; 
+    int32 TotalRequests = 3; 
+    int64 MaxRunTimeMs = 4; 
+} 
+ 
+message BenchmarkResponse { 
+    // to be filled 
+} 

@@ -233,7 +233,7 @@ namespace NActors {
             INTERCONNECT_PROXY_TCP = 12,
             INTERCONNECT_SESSION_TCP = 13,
             INTERCONNECT_COMMON = 171,
-            SELF_PING_ACTOR = 207,
+            SELF_PING_ACTOR = 207, 
             TEST_ACTOR_RUNTIME = 283,
             INTERCONNECT_HANDSHAKE = 284,
             INTERCONNECT_POLLER = 285,
@@ -248,11 +248,11 @@ namespace NActors {
             INTERCONNECT_PROXY_WRAPPER = 546,
         };
 
-        using EActivityType = EActorActivity;
-        ui32 ActivityType;
-
+        using EActivityType = EActorActivity; 
+        ui32 ActivityType; 
+ 
     protected:
-        IActor(TReceiveFunc stateFunc, ui32 activityType = OTHER)
+        IActor(TReceiveFunc stateFunc, ui32 activityType = OTHER) 
             : StateFunc(stateFunc)
             , SelfActorId(TActorId())
             , ElapsedTicks(0)
@@ -288,7 +288,7 @@ namespace NActors {
         }
 
     protected:
-        void SetActivityType(ui32 activityType) {
+        void SetActivityType(ui32 activityType) { 
             ActivityType = activityType;
         }
 
@@ -338,7 +338,7 @@ namespace NActors {
         void AddElapsedTicks(i64 ticks) {
             ElapsedTicks += ticks;
         }
-        auto GetActivityType() const {
+        auto GetActivityType() const { 
             return ActivityType;
         }
         ui64 GetHandledEvents() const {
@@ -393,28 +393,28 @@ namespace NActors {
         return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(index);
     }
 
-    template <typename TDerived>
-    class TActor: public IActor {
-    private:
-        template <typename T, typename = const char*>
-        struct HasActorName: std::false_type { };
-        template <typename T>
-        struct HasActorName<T, decltype((void)T::ActorName, (const char*)nullptr)>: std::true_type { };
-
+    template <typename TDerived> 
+    class TActor: public IActor { 
+    private: 
+        template <typename T, typename = const char*> 
+        struct HasActorName: std::false_type { }; 
+        template <typename T> 
+        struct HasActorName<T, decltype((void)T::ActorName, (const char*)nullptr)>: std::true_type { }; 
+ 
         static ui32 GetActivityTypeIndex() {
-            if constexpr(HasActorName<TDerived>::value) {
-                return TLocalProcessKey<TActorActivityTag, TDerived::ActorName>::GetIndex();
-            } else {
-                using TActorActivity = decltype(((TDerived*)nullptr)->ActorActivityType());
-                // if constexpr(std::is_enum<TActorActivity>::value) {
-                    return TEnumProcessKey<TActorActivityTag, TActorActivity>::GetIndex(
-                    TDerived::ActorActivityType());
-                //} else {
-                    // for int, ui32, ...
-                //    return TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetIndex(
-                //        static_cast<IActor::EActorActivity>(TDerived::ActorActivityType()));
-                //}
-            }
+            if constexpr(HasActorName<TDerived>::value) { 
+                return TLocalProcessKey<TActorActivityTag, TDerived::ActorName>::GetIndex(); 
+            } else { 
+                using TActorActivity = decltype(((TDerived*)nullptr)->ActorActivityType()); 
+                // if constexpr(std::is_enum<TActorActivity>::value) { 
+                    return TEnumProcessKey<TActorActivityTag, TActorActivity>::GetIndex( 
+                    TDerived::ActorActivityType()); 
+                //} else { 
+                    // for int, ui32, ... 
+                //    return TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetIndex( 
+                //        static_cast<IActor::EActorActivity>(TDerived::ActorActivityType())); 
+                //} 
+            } 
         }
 
     protected:
@@ -423,17 +423,17 @@ namespace NActors {
             return EActorActivity::OTHER;
         } //*/
 
-        // static constexpr char ActorName[] = "UNNAMED";
-
+        // static constexpr char ActorName[] = "UNNAMED"; 
+ 
         TActor(void (TDerived::*func)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx), ui32 activityType = GetActivityTypeIndex())
             : IActor(static_cast<TReceiveFunc>(func), activityType)
-        { }
+        { } 
 
     public:
         typedef TDerived TThis;
     };
 
-
+ 
 #define STFUNC_SIG TAutoPtr< ::NActors::IEventHandle>&ev, const ::NActors::TActorContext &ctx
 #define STATEFN_SIG TAutoPtr<::NActors::IEventHandle>& ev
 #define STFUNC(funcName) void funcName(TAutoPtr< ::NActors::IEventHandle>& ev, const ::NActors::TActorContext& ctx)

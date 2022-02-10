@@ -6,7 +6,7 @@
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
-
+ 
 #include <library/cpp/grpc/server/grpc_request.h>
 #include <library/cpp/grpc/server/grpc_server.h>
 
@@ -16,14 +16,14 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/threading/future/future.h>
 
-#include "grpc_session.h"
-
+#include "grpc_session.h" 
+ 
 namespace NYql::NDqs {
     class TDatabaseManager;
 
     class TDqsGrpcService: public NGrpc::TGrpcServiceBase<Yql::DqsProto::DqService> {
     public:
-        TDqsGrpcService(NActors::TActorSystem& system,
+        TDqsGrpcService(NActors::TActorSystem& system, 
                         TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
                         const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories);
 
@@ -33,8 +33,8 @@ namespace NYql::NDqs {
         bool IncRequest();
         void DecRequest();
 
-        NThreading::TFuture<void> Stop();
-
+        NThreading::TFuture<void> Stop(); 
+ 
     private:
         NActors::TActorSystem& ActorSystem;
         grpc::ServerCompletionQueue* CQ = nullptr;
@@ -42,11 +42,11 @@ namespace NYql::NDqs {
 
         TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
         TDqTaskPreprocessorFactoryCollection DqTaskPreprocessorFactories;
-        TMutex Mutex;
+        TMutex Mutex; 
         NThreading::TPromise<void> Promise;
-        std::atomic<ui64> RunningRequests;
-        std::atomic<bool> Stopping;
-
-        TSessionStorage Sessions;
+        std::atomic<ui64> RunningRequests; 
+        std::atomic<bool> Stopping; 
+ 
+        TSessionStorage Sessions; 
     };
 }

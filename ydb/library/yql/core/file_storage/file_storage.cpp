@@ -87,46 +87,46 @@ public:
     }
 
     TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5 = {}) override {
-        YQL_LOG(INFO) << "PutFileStripped to cache: " << file;
-        if (originalMd5.empty()) {
-            YQL_LOG(WARN) << "Empty md5 for: " << file;
-        }
-        const auto md5 = originalMd5.empty() ? MD5::File(file) : originalMd5;
-        const auto strippedMetaFile = md5 + ".stripped_meta";
-        auto lock = MultiResourceLock.Acquire(strippedMetaFile);
-
-        TUrlMeta strippedMeta;
-        strippedMeta.TryReadFrom(GetRoot() / strippedMetaFile);
-        if (strippedMeta.ContentFile) {
-            if (auto result = Storage.HardlinkFromStorage(strippedMeta.ContentFile, strippedMeta.Md5, "")) {
-                return result;
-            }
-        }
-
-        strippedMeta = TUrlMeta();
-        const TString storageFileName = md5 + ".file.stripped";
-        TFileLinkPtr result = Storage.Put(storageFileName, "", "", [&file](const TFsPath& dstPath) {
+        YQL_LOG(INFO) << "PutFileStripped to cache: " << file; 
+        if (originalMd5.empty()) { 
+            YQL_LOG(WARN) << "Empty md5 for: " << file; 
+        } 
+        const auto md5 = originalMd5.empty() ? MD5::File(file) : originalMd5; 
+        const auto strippedMetaFile = md5 + ".stripped_meta"; 
+        auto lock = MultiResourceLock.Acquire(strippedMetaFile); 
+ 
+        TUrlMeta strippedMeta; 
+        strippedMeta.TryReadFrom(GetRoot() / strippedMetaFile); 
+        if (strippedMeta.ContentFile) { 
+            if (auto result = Storage.HardlinkFromStorage(strippedMeta.ContentFile, strippedMeta.Md5, "")) { 
+                return result; 
+            } 
+        } 
+ 
+        strippedMeta = TUrlMeta(); 
+        const TString storageFileName = md5 + ".file.stripped"; 
+        TFileLinkPtr result = Storage.Put(storageFileName, "", "", [&file](const TFsPath& dstPath) { 
             ui64 size;
             TString md5;
             TShellCommand cmd("strip", {file, "-o", dstPath.GetPath()});
             cmd.Run().Wait();
             if (*cmd.GetExitCode() != 0) {
                 ythrow yexception() << cmd.GetError();
-            }
+            } 
             md5 = MD5::File(dstPath.GetPath());
             size = TFile(dstPath.GetPath(), OpenExisting | RdOnly).GetLength();
             YQL_LOG(DEBUG) << "Strip " << file << " to " << dstPath.GetPath();
             return std::make_pair(size, md5);
-        });
-
-        strippedMeta.ContentFile = result->GetStorageFileName();
-        strippedMeta.Md5 = result->GetMd5();
-        auto metaTmpFile = Storage.GetTemp() / Storage.GetTempName();
-        strippedMeta.SaveTo(metaTmpFile);
-        Storage.MoveToStorage(metaTmpFile, strippedMetaFile);
-        return result;
-    }
-
+        }); 
+ 
+        strippedMeta.ContentFile = result->GetStorageFileName(); 
+        strippedMeta.Md5 = result->GetMd5(); 
+        auto metaTmpFile = Storage.GetTemp() / Storage.GetTempName(); 
+        strippedMeta.SaveTo(metaTmpFile); 
+        Storage.MoveToStorage(metaTmpFile, strippedMetaFile); 
+        return result; 
+    } 
+ 
     TFileLinkPtr PutInline(const TString& data) override {
         const auto md5 = MD5::Calc(data);
         const TString storageFileName = md5 + ".file";

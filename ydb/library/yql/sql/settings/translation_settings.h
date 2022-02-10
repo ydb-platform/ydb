@@ -34,14 +34,14 @@ namespace NSQLTranslation {
         Disable
     };
 
-    class ISqlFeaturePolicy : public TThrRefBase {
+    class ISqlFeaturePolicy : public TThrRefBase { 
     public:
-        virtual ~ISqlFeaturePolicy() = default;
-        virtual bool Allow() const = 0;
+        virtual ~ISqlFeaturePolicy() = default; 
+        virtual bool Allow() const = 0; 
 
-        using TPtr = TIntrusivePtr<ISqlFeaturePolicy>;
+        using TPtr = TIntrusivePtr<ISqlFeaturePolicy>; 
 
-        static TPtr MakeAlwaysDisallow();
+        static TPtr MakeAlwaysDisallow(); 
     };
 
     struct TTableBindingSettings {
@@ -79,8 +79,8 @@ namespace NSQLTranslation {
         EV0Behavior V0Behavior;
         bool V0ForceDisable;
         bool WarnOnV0;
-        ISqlFeaturePolicy::TPtr V0WarnAsError;
-        ISqlFeaturePolicy::TPtr DqDefaultAuto;
+        ISqlFeaturePolicy::TPtr V0WarnAsError; 
+        ISqlFeaturePolicy::TPtr DqDefaultAuto; 
         bool AssumeYdbOnClusterWithSlash;
     };
 

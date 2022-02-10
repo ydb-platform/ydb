@@ -5,7 +5,7 @@
 #include <ydb/public/lib/experimental/ydb_experimental.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-
+ 
 namespace NKikimr::NKqp {
 
 using namespace NYdb;

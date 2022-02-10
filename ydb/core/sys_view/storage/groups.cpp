@@ -4,7 +4,7 @@
 namespace NKikimr::NSysView {
 
 template<> void SetField<0>(NKikimrSysView::TGroupKey& key, ui32 value) { key.SetGroupId(value); }
-
+ 
 class TGroupsScan : public TStorageScanBase<TGroupsScan, TEvSysView::TEvGetGroupsResponse> {
 public:
     using TStorageScanBase::TStorageScanBase;

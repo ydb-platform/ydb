@@ -14,12 +14,12 @@ namespace NYql::NDqProto {
 }
 
 namespace NYql::NDqs {
-
+ 
 class TProtoBuilder {
-public:
+public: 
     TProtoBuilder(const TString& type, const TVector<TString>& columns);
     ~TProtoBuilder();
-
+ 
     bool CanBuildResultSet() const;
     Ydb::ResultSet BuildResultSet(const TVector<NYql::NDqProto::TData>& data);
     TString BuildYson(const TVector<NYql::NDqProto::TData>& data, ui64 maxBytesLimit = std::numeric_limits<ui64>::max());
@@ -37,4 +37,4 @@ private:
 };
 
 } // NYql::NDqs
-
+ 

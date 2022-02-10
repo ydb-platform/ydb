@@ -1,15 +1,15 @@
-LIBRARY()
-
-OWNER(g:yql)
-
+LIBRARY() 
+ 
+OWNER(g:yql) 
+ 
 SRCS(
     log.cpp
 )
-
-PEERDIR(
+ 
+PEERDIR( 
     library/cpp/actors/core
-    library/cpp/actors/protos
+    library/cpp/actors/protos 
     ydb/core/protos
-)
-
-END()
+) 
+ 
+END() 

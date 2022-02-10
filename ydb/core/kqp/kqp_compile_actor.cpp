@@ -8,7 +8,7 @@
 #include <ydb/core/kqp/host/kqp_host.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
-
+ 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/json/json_writer.h>
@@ -33,7 +33,7 @@ static const TString YqlName = "CompileActor";
 using namespace NKikimrConfig;
 using namespace NThreading;
 using namespace NYql;
-using namespace NYql::NDq;
+using namespace NYql::NDq; 
 
 class TKqpCompileActor : public TActorBootstrapped<TKqpCompileActor> {
 public:
@@ -83,7 +83,7 @@ public:
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup()));
 
-        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, "");
+        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, ""); 
 
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;
         counters->Counters = Counters;
@@ -240,7 +240,7 @@ private:
     void Handle(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
         Y_ENSURE(!ev->Get()->QueryId);
 
-        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, "");
+        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, ""); 
 
         if (!ev->Get()->Finished) {
             NCpuTime::TCpuTimer timer(CompileCpuTime);
@@ -322,7 +322,7 @@ private:
     void HandleRecompile(TEvKqp::TEvContinueProcess::TPtr &ev, const TActorContext &ctx) {
         Y_ENSURE(!ev->Get()->QueryId);
 
-        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, "");
+        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, ""); 
 
         if (!ev->Get()->Finished) {
             NCpuTime::TCpuTimer timer(CompileCpuTime);

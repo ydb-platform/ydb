@@ -276,12 +276,12 @@ public:
         return task;
     }
 
-    void Clear() {
-        StagesInfo.clear();
-        Tasks.clear();
-        Channels.clear();
-    }
-
+    void Clear() { 
+        StagesInfo.clear(); 
+        Tasks.clear(); 
+        Channels.clear(); 
+    } 
+ 
 private:
     THashMap<TStageId, TStageInfoType> StagesInfo;
     TVector<TTaskType> Tasks;

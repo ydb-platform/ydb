@@ -15,7 +15,7 @@ namespace NActors {
             return INTERCONNECT_COMMON;
         }
 
-        TInterconnectListenerTCP(const TString& address, ui16 port, TInterconnectProxyCommon::TPtr common, const TMaybe<SOCKET>& socket = Nothing());
+        TInterconnectListenerTCP(const TString& address, ui16 port, TInterconnectProxyCommon::TPtr common, const TMaybe<SOCKET>& socket = Nothing()); 
         int Bind();
 
     private:
@@ -45,7 +45,7 @@ namespace NActors {
 
         const NInterconnect::TAddress Address;
         TIntrusivePtr<NInterconnect::TStreamSocket> Listener;
-        const bool ExternalSocket;
+        const bool ExternalSocket; 
         TPollerToken::TPtr PollerToken;
         TInterconnectProxyCommon::TPtr const ProxyCommonCtx;
     };

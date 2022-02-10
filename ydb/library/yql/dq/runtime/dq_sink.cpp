@@ -137,10 +137,10 @@ public:
         return true;
     }
 
-    NKikimr::NMiniKQL::TType* GetOutputType() const override {
-        return OutputType;
-    }
-
+    NKikimr::NMiniKQL::TType* GetOutputType() const override { 
+        return OutputType; 
+    } 
+ 
     const TDqSinkStats* GetStats() const override {
         return &BasicStats;
     }
@@ -175,7 +175,7 @@ private:
 private:
     const ui64 OutputIndex;
     const ui64 MaxStoredBytes;
-    NKikimr::NMiniKQL::TType* const OutputType;
+    NKikimr::NMiniKQL::TType* const OutputType; 
     ui64 EstimatedStoredBytes = 0;
     ui64 ValuesPushed = 0;
     bool Finished = false;

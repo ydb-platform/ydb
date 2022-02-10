@@ -665,7 +665,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
             ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
             return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
         }
-        return AsyncTransformWithFallback(false);
+        return AsyncTransformWithFallback(false); 
     });
 }
 
@@ -734,7 +734,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
             ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
             return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
         }
-        return AsyncTransformWithFallback(false);
+        return AsyncTransformWithFallback(false); 
     });
 }
 
@@ -805,8 +805,8 @@ TProgram::TFutureStatus TProgram::RunAsync(
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
 
-    SavedExprRoot_ = ExprRoot_;
-
+    SavedExprRoot_ = ExprRoot_; 
+ 
     return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
         try {
@@ -816,7 +816,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
             ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
             return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
         }
-        return AsyncTransformWithFallback(false);
+        return AsyncTransformWithFallback(false); 
     });
 }
 
@@ -877,8 +877,8 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
 
-    SavedExprRoot_ = ExprRoot_;
-
+    SavedExprRoot_ = ExprRoot_; 
+ 
     return openSession.Apply([this](const TFuture<void>& f) {
         YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
         try {
@@ -888,115 +888,115 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
             ExprCtx_->IssueManager.RaiseIssue(ExceptionToIssue(e));
             return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
         }
-        return AsyncTransformWithFallback(false);
+        return AsyncTransformWithFallback(false); 
     });
 }
 
-TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool applyAsyncChanges)
-{
-    return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, applyAsyncChanges).Apply([this](const TFuture<IGraphTransformer::TStatus>& res) {
-        auto status = res.GetValueSync();
-        if (status == IGraphTransformer::TStatus::Error
-            && !TypeCtx_->ForceDq
-            && SavedExprRoot_
-            && TypeCtx_->DqCaptured
-            && TypeCtx_->DqFallbackPolicy != "never")
-        {
-            ExprRoot_ = SavedExprRoot_;
-            SavedExprRoot_ = nullptr;
-
-            auto issues = ExprCtx_->IssueManager.GetIssues();
-            bool hasDqGatewayError = false;
-            bool hasDqGatewayFallbackError = false;
-
-            auto checkIssue = [&](const TIssue& issue) {
-                if (issue.GetCode() == TIssuesIds::DQ_GATEWAY_ERROR) {
-                    YQL_LOG(DEBUG) << "Gateway Error " << issue;
-                    hasDqGatewayError = true;
-                } else if (issue.GetCode() == TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR) {
-                    YQL_LOG(DEBUG) << "Gateway Fallback Error " << issue;
-                    hasDqGatewayError = true;
-                    hasDqGatewayFallbackError = true;
-                }
-            };
-
-            std::function<void(const TIssuePtr& issue)> recursiveCheck = [&](const TIssuePtr& issue) {
-                checkIssue(*issue);
-                for (const auto& subissue : issue->GetSubIssues()) {
-                    recursiveCheck(subissue);
-                }
-            };
-
-            std::function<void(const TIssuePtr& issue)> toWarning = [&](const TIssuePtr& issue) {
-                if (issue->Severity == TSeverityIds::S_ERROR
-                    || issue->Severity == TSeverityIds::S_FATAL
-                    || issue->Severity == TSeverityIds::S_WARNING)
-                {
-                    issue->Severity = TSeverityIds::S_INFO;
-                }
-                for (const auto& subissue : issue->GetSubIssues()) {
-                    toWarning(subissue);
-                }
-            };
-
-            for (const auto& issue : issues) {
-                checkIssue(issue);
-                // check subissues
-                for (const auto& subissue : issue.GetSubIssues()) {
-                    recursiveCheck(subissue);
-                }
-            }
-
-            ExprCtx_->IssueManager.Reset();
-
-            if (hasDqGatewayError && !hasDqGatewayFallbackError && TypeCtx_->DqFallbackPolicy.find("always") == TString::npos) {
-                // unrecoverable error
-                ExprCtx_->IssueManager.AddIssues(issues);
-                return res;
-            }
-
-            YQL_LOG(DEBUG) << "Fallback, Issues: " << issues.ToString();
-
-            ExprCtx_->Reset();
-            Transformer_->Rewind();
-
-            for (auto sink : TypeCtx_->DataSinks) {
-                sink->Reset();
-            }
-            for (auto source : TypeCtx_->DataSources) {
-                source->Reset();
-            }
+TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool applyAsyncChanges) 
+{ 
+    return AsyncTransform(*Transformer_, ExprRoot_, *ExprCtx_, applyAsyncChanges).Apply([this](const TFuture<IGraphTransformer::TStatus>& res) { 
+        auto status = res.GetValueSync(); 
+        if (status == IGraphTransformer::TStatus::Error 
+            && !TypeCtx_->ForceDq 
+            && SavedExprRoot_ 
+            && TypeCtx_->DqCaptured 
+            && TypeCtx_->DqFallbackPolicy != "never") 
+        { 
+            ExprRoot_ = SavedExprRoot_; 
+            SavedExprRoot_ = nullptr; 
+ 
+            auto issues = ExprCtx_->IssueManager.GetIssues(); 
+            bool hasDqGatewayError = false; 
+            bool hasDqGatewayFallbackError = false; 
+ 
+            auto checkIssue = [&](const TIssue& issue) { 
+                if (issue.GetCode() == TIssuesIds::DQ_GATEWAY_ERROR) { 
+                    YQL_LOG(DEBUG) << "Gateway Error " << issue; 
+                    hasDqGatewayError = true; 
+                } else if (issue.GetCode() == TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR) { 
+                    YQL_LOG(DEBUG) << "Gateway Fallback Error " << issue; 
+                    hasDqGatewayError = true; 
+                    hasDqGatewayFallbackError = true; 
+                } 
+            }; 
+ 
+            std::function<void(const TIssuePtr& issue)> recursiveCheck = [&](const TIssuePtr& issue) { 
+                checkIssue(*issue); 
+                for (const auto& subissue : issue->GetSubIssues()) { 
+                    recursiveCheck(subissue); 
+                } 
+            }; 
+ 
+            std::function<void(const TIssuePtr& issue)> toWarning = [&](const TIssuePtr& issue) { 
+                if (issue->Severity == TSeverityIds::S_ERROR 
+                    || issue->Severity == TSeverityIds::S_FATAL 
+                    || issue->Severity == TSeverityIds::S_WARNING) 
+                { 
+                    issue->Severity = TSeverityIds::S_INFO; 
+                } 
+                for (const auto& subissue : issue->GetSubIssues()) { 
+                    toWarning(subissue); 
+                } 
+            }; 
+ 
+            for (const auto& issue : issues) { 
+                checkIssue(issue); 
+                // check subissues 
+                for (const auto& subissue : issue.GetSubIssues()) { 
+                    recursiveCheck(subissue); 
+                } 
+            } 
+ 
+            ExprCtx_->IssueManager.Reset(); 
+ 
+            if (hasDqGatewayError && !hasDqGatewayFallbackError && TypeCtx_->DqFallbackPolicy.find("always") == TString::npos) { 
+                // unrecoverable error 
+                ExprCtx_->IssueManager.AddIssues(issues); 
+                return res; 
+            } 
+ 
+            YQL_LOG(DEBUG) << "Fallback, Issues: " << issues.ToString(); 
+ 
+            ExprCtx_->Reset(); 
+            Transformer_->Rewind(); 
+ 
+            for (auto sink : TypeCtx_->DataSinks) { 
+                sink->Reset(); 
+            } 
+            for (auto source : TypeCtx_->DataSources) { 
+                source->Reset(); 
+            } 
             CleanupLastSession();
-
-            if (hasDqGatewayError) {
-                TIssue warning("DQ cannot execute the query");
-                warning.Severity = TSeverityIds::S_INFO;
-
-                for (auto& issue : issues) {
-                    TIssuePtr newIssue = new TIssue(issue);
-                    if (newIssue->Severity == TSeverityIds::S_ERROR
-                        || issue.Severity == TSeverityIds::S_FATAL
-                        || issue.Severity == TSeverityIds::S_WARNING)
-                    {
-                        newIssue->Severity = TSeverityIds::S_INFO;
-                    }
-                    for (auto& subissue : newIssue->GetSubIssues()) {
-                        toWarning(subissue);
-                    }
-                    warning.AddSubIssue(newIssue);
-                }
-
-                ExprCtx_->IssueManager.AddIssues({warning});
-            }
-
-            // don't execute recapture again
-            ExprCtx_->Step.Done(TExprStep::Recapture);
-            return AsyncTransformWithFallback(false);
-        }
-        return res;
-    });
-}
-
+ 
+            if (hasDqGatewayError) { 
+                TIssue warning("DQ cannot execute the query"); 
+                warning.Severity = TSeverityIds::S_INFO; 
+ 
+                for (auto& issue : issues) { 
+                    TIssuePtr newIssue = new TIssue(issue); 
+                    if (newIssue->Severity == TSeverityIds::S_ERROR 
+                        || issue.Severity == TSeverityIds::S_FATAL 
+                        || issue.Severity == TSeverityIds::S_WARNING) 
+                    { 
+                        newIssue->Severity = TSeverityIds::S_INFO; 
+                    } 
+                    for (auto& subissue : newIssue->GetSubIssues()) { 
+                        toWarning(subissue); 
+                    } 
+                    warning.AddSubIssue(newIssue); 
+                } 
+ 
+                ExprCtx_->IssueManager.AddIssues({warning}); 
+            } 
+ 
+            // don't execute recapture again 
+            ExprCtx_->Step.Done(TExprStep::Recapture); 
+            return AsyncTransformWithFallback(false); 
+        } 
+        return res; 
+    }); 
+} 
+ 
 TMaybe<TString> TProgram::GetQueryAst() {
     if (ExternalQueryAst_) {
         return ExternalQueryAst_;
@@ -1191,7 +1191,7 @@ TMaybe<TString> TProgram::GetDiscoveredData() {
 
 TProgram::TFutureStatus TProgram::ContinueAsync() {
     YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
-    return AsyncTransformWithFallback(true);
+    return AsyncTransformWithFallback(true); 
 }
 
 void TProgram::Abort()
@@ -1202,7 +1202,7 @@ void TProgram::Abort()
 void TProgram::CleanupLastSession() {
     YQL_LOG_CTX_ROOT_SCOPE(GetSessionId());
 
-    TString sessionId = GetSessionId();
+    TString sessionId = GetSessionId(); 
     if (sessionId.empty()) {
         return;
     }
@@ -1320,8 +1320,8 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
 
     if (providerNames.contains(DqProviderName)) {
         resultProviderDataSources.push_back(TString(DqProviderName));
-    }
-
+    } 
+ 
     if (!resultProviderDataSources.empty())
     {
         auto resultFormat = ResultFormat_;

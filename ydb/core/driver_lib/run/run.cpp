@@ -539,7 +539,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["logstore"] = &hasLogStore;
         bool hasAuth = services.empty();
         names["auth"] = &hasAuth;
-
+ 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
             enabled.insert(name);
@@ -1312,9 +1312,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     if (serviceMask.EnableKqp || serviceMask.EnableYandexQuery) {
-        sil->AddServiceInitializer(new TYqlLogsInitializer(runConfig));
-    }
-
+        sil->AddServiceInitializer(new TYqlLogsInitializer(runConfig)); 
+    } 
+ 
     if (serviceMask.EnableYandexQuery && runConfig.AppConfig.GetYandexQueryConfig().GetEnabled()) {
         YqSharedResources = NYq::CreateYqSharedResources(runConfig.AppConfig.GetYandexQueryConfig(),
             ModuleFactories->YdbCredentialProviderFactory, Counters->GetSubgroup("counters", "yq"));

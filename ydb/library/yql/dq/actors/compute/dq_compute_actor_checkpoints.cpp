@@ -24,8 +24,8 @@
 
 namespace NYql::NDq {
 
-using namespace NActors;
-
+using namespace NActors; 
+ 
 namespace {
 
 TString MakeStringForLog(const NDqProto::TCheckpoint& checkpoint) {

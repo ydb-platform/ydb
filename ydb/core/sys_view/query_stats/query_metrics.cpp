@@ -29,7 +29,7 @@ class TQueryMetricsScan : public TScanActorBase<TQueryMetricsScan> {
 public:
     using TBase = TScanActorBase<TQueryMetricsScan>;
 
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 

@@ -940,112 +940,112 @@ double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx) {
 }
 
 void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics) {
-    if (statistics.empty()) {
-        return;
-    }
-
-    THashMap<TString, std::tuple<i64, i64, i64, TMaybe<i64>>> total; // sum, count, max, min
-
-    writer.OnBeginMap();
-
-    if (totalOnly) {
-        for (const auto& opStatistics : statistics) {
-            for (auto& el : opStatistics.second.Entries) {
-                if (el.Value) {
-                    continue;
-                }
-
-                auto& totalEntry = total[el.Name];
-                if (auto val = el.Sum) {
-                    std::get<0>(totalEntry) += *val;
-                }
-                if (auto val = el.Count) {
-                    std::get<1>(totalEntry) += *val;
-                }
-                if (auto val = el.Max) {
-                    std::get<2>(totalEntry) = Max<i64>(*val, std::get<2>(totalEntry));
-                }
-                if (auto val = el.Min) {
-                    std::get<3>(totalEntry) = Min<i64>(*val, std::get<3>(totalEntry).GetOrElse(Max<i64>()));
-                }
-            }
-        }
-    }
-    else {
-        for (const auto& opStatistics : statistics) {
-            writer.OnKeyedItem(ToString(opStatistics.first));
-            writer.OnBeginMap();
-            for (auto& el : opStatistics.second.Entries) {
-                writer.OnKeyedItem(el.Name);
-                if (el.Value) {
-                    writer.OnStringScalar(*el.Value);
-                    continue;
-                }
-
-                auto& totalEntry = total[el.Name];
-                writer.OnBeginMap();
-                if (auto val = el.Sum) {
-                    writer.OnKeyedItem("sum");
-                    writer.OnInt64Scalar(*val);
-                    std::get<0>(totalEntry) += *val;
-                }
-                if (auto val = el.Count) {
-                    writer.OnKeyedItem("count");
-                    writer.OnInt64Scalar(*val);
-                    std::get<1>(totalEntry) += *val;
-                }
-                if (auto val = el.Avg) {
-                    writer.OnKeyedItem("avg");
-                    writer.OnInt64Scalar(*val);
-                }
-                if (auto val = el.Max) {
-                    writer.OnKeyedItem("max");
-                    writer.OnInt64Scalar(*val);
-                    std::get<2>(totalEntry) = Max<i64>(*val, std::get<2>(totalEntry));
-                }
-                if (auto val = el.Min) {
-                    writer.OnKeyedItem("min");
-                    writer.OnInt64Scalar(*val);
-                    std::get<3>(totalEntry) = Min<i64>(*val, std::get<3>(totalEntry).GetOrElse(Max<i64>()));
-                }
-                writer.OnEndMap();
-            }
-            writer.OnEndMap();
-        }
-    }
-
-    TVector<TString> statKeys;
-    std::transform(total.cbegin(), total.cend(), std::back_inserter(statKeys), [](const decltype(total)::value_type& v) { return v.first; });
-    std::sort(statKeys.begin(), statKeys.end());
-
-    writer.OnKeyedItem("total");
-    writer.OnBeginMap();
-    for (auto& key: statKeys) {
-        auto& totalEntry = total[key];
-        writer.OnKeyedItem(key);
-        writer.OnBeginMap();
-
-        writer.OnKeyedItem("sum");
-        writer.OnInt64Scalar(std::get<0>(totalEntry));
-
-        writer.OnKeyedItem("count");
-        writer.OnInt64Scalar(std::get<1>(totalEntry));
-
-        writer.OnKeyedItem("avg");
-        writer.OnInt64Scalar(std::get<1>(totalEntry) ? (std::get<0>(totalEntry) / std::get<1>(totalEntry)) : 0l);
-
-        writer.OnKeyedItem("max");
-        writer.OnInt64Scalar(std::get<2>(totalEntry));
-
-        writer.OnKeyedItem("min");
-        writer.OnInt64Scalar(std::get<3>(totalEntry).GetOrElse(0));
-
-        writer.OnEndMap();
-    }
-    writer.OnEndMap(); // total
-
-    writer.OnEndMap();
-}
-
+    if (statistics.empty()) { 
+        return; 
+    } 
+ 
+    THashMap<TString, std::tuple<i64, i64, i64, TMaybe<i64>>> total; // sum, count, max, min 
+ 
+    writer.OnBeginMap(); 
+ 
+    if (totalOnly) { 
+        for (const auto& opStatistics : statistics) { 
+            for (auto& el : opStatistics.second.Entries) { 
+                if (el.Value) { 
+                    continue; 
+                } 
+ 
+                auto& totalEntry = total[el.Name]; 
+                if (auto val = el.Sum) { 
+                    std::get<0>(totalEntry) += *val; 
+                } 
+                if (auto val = el.Count) { 
+                    std::get<1>(totalEntry) += *val; 
+                } 
+                if (auto val = el.Max) { 
+                    std::get<2>(totalEntry) = Max<i64>(*val, std::get<2>(totalEntry)); 
+                } 
+                if (auto val = el.Min) { 
+                    std::get<3>(totalEntry) = Min<i64>(*val, std::get<3>(totalEntry).GetOrElse(Max<i64>())); 
+                } 
+            } 
+        } 
+    } 
+    else { 
+        for (const auto& opStatistics : statistics) { 
+            writer.OnKeyedItem(ToString(opStatistics.first)); 
+            writer.OnBeginMap(); 
+            for (auto& el : opStatistics.second.Entries) { 
+                writer.OnKeyedItem(el.Name); 
+                if (el.Value) { 
+                    writer.OnStringScalar(*el.Value); 
+                    continue; 
+                } 
+ 
+                auto& totalEntry = total[el.Name]; 
+                writer.OnBeginMap(); 
+                if (auto val = el.Sum) { 
+                    writer.OnKeyedItem("sum"); 
+                    writer.OnInt64Scalar(*val); 
+                    std::get<0>(totalEntry) += *val; 
+                } 
+                if (auto val = el.Count) { 
+                    writer.OnKeyedItem("count"); 
+                    writer.OnInt64Scalar(*val); 
+                    std::get<1>(totalEntry) += *val; 
+                } 
+                if (auto val = el.Avg) { 
+                    writer.OnKeyedItem("avg"); 
+                    writer.OnInt64Scalar(*val); 
+                } 
+                if (auto val = el.Max) { 
+                    writer.OnKeyedItem("max"); 
+                    writer.OnInt64Scalar(*val); 
+                    std::get<2>(totalEntry) = Max<i64>(*val, std::get<2>(totalEntry)); 
+                } 
+                if (auto val = el.Min) { 
+                    writer.OnKeyedItem("min"); 
+                    writer.OnInt64Scalar(*val); 
+                    std::get<3>(totalEntry) = Min<i64>(*val, std::get<3>(totalEntry).GetOrElse(Max<i64>())); 
+                } 
+                writer.OnEndMap(); 
+            } 
+            writer.OnEndMap(); 
+        } 
+    } 
+ 
+    TVector<TString> statKeys; 
+    std::transform(total.cbegin(), total.cend(), std::back_inserter(statKeys), [](const decltype(total)::value_type& v) { return v.first; }); 
+    std::sort(statKeys.begin(), statKeys.end()); 
+ 
+    writer.OnKeyedItem("total"); 
+    writer.OnBeginMap(); 
+    for (auto& key: statKeys) { 
+        auto& totalEntry = total[key]; 
+        writer.OnKeyedItem(key); 
+        writer.OnBeginMap(); 
+ 
+        writer.OnKeyedItem("sum"); 
+        writer.OnInt64Scalar(std::get<0>(totalEntry)); 
+ 
+        writer.OnKeyedItem("count"); 
+        writer.OnInt64Scalar(std::get<1>(totalEntry)); 
+ 
+        writer.OnKeyedItem("avg"); 
+        writer.OnInt64Scalar(std::get<1>(totalEntry) ? (std::get<0>(totalEntry) / std::get<1>(totalEntry)) : 0l); 
+ 
+        writer.OnKeyedItem("max"); 
+        writer.OnInt64Scalar(std::get<2>(totalEntry)); 
+ 
+        writer.OnKeyedItem("min"); 
+        writer.OnInt64Scalar(std::get<3>(totalEntry).GetOrElse(0)); 
+ 
+        writer.OnEndMap(); 
+    } 
+    writer.OnEndMap(); // total 
+ 
+    writer.OnEndMap(); 
+} 
+ 
 } // namespace NCommon
 } // namespace NYql

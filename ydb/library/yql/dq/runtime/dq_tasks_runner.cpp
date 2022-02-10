@@ -558,7 +558,7 @@ public:
         return TaskHasEffects;
     }
 
-    IDqInputChannel::TPtr GetInputChannel(ui64 channelId) override {
+    IDqInputChannel::TPtr GetInputChannel(ui64 channelId) override { 
         auto ptr = InputChannels.FindPtr(channelId);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have input channelId: " << channelId);
         return *ptr;

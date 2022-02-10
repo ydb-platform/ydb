@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/minikql/mkql_node.h>
-
+ 
 #include <util/datetime/base.h>
 #include <util/generic/ptr.h>
 
@@ -51,8 +51,8 @@ public:
     virtual bool HasData() const = 0;
     virtual bool IsFinished() const = 0;
 
-    virtual NKikimr::NMiniKQL::TType* GetOutputType() const = 0;
-
+    virtual NKikimr::NMiniKQL::TType* GetOutputType() const = 0; 
+ 
     virtual const TDqOutputStats* GetStats() const = 0;
 };
 

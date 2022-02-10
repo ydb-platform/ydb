@@ -28,7 +28,7 @@ PEERDIR(
 )
 
 SRCS(
-    actor_activity_ut.cpp
+    actor_activity_ut.cpp 
     actor_bootstrapped_ut.cpp
     actor_tracker_ut.cpp
     test_interconnect_ut.cpp

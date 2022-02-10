@@ -1,6 +1,6 @@
 #include "proto_builder.h"
 #include "full_result_writer.h"
-
+ 
 #include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
@@ -10,22 +10,22 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/utils/yql_panic.h>
-
+ 
 #include <library/cpp/actors/core/actor.h>
 
-#include <util/generic/size_literals.h>
+#include <util/generic/size_literals.h> 
 #include <util/system/env.h>
-
-#include <utility>
-
-namespace NYql::NDqs {
-
-using namespace NKikimr::NMiniKQL;
-
+ 
+#include <utility> 
+ 
+namespace NYql::NDqs { 
+ 
+using namespace NKikimr::NMiniKQL; 
+ 
 class TFullResultWriterActor : public NActors::TActor<TFullResultWriterActor> {
-public:
+public: 
     static constexpr char ActorName[] = "YQL_DQ_FULL_RESULT_WRITER";
-
+ 
     explicit TFullResultWriterActor(const TString& traceId,
         const TString& resultType,
         THolder<IDqFullResultWriter>&& writer,
@@ -158,4 +158,4 @@ THolder<NActors::IActor> MakeFullResultWriterActor(
     return MakeHolder<TFullResultWriterActor>(traceId, resultType, std::move(writer), aggregatorId);
 }
 
-} // namespace NYql::NDqs
+} // namespace NYql::NDqs 

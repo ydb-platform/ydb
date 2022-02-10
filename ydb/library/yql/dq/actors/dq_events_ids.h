@@ -1,12 +1,12 @@
 #pragma once
 
-#include <library/cpp/actors/core/events.h>
+#include <library/cpp/actors/core/events.h> 
 
 namespace NYql {
 namespace NDq {
 
-struct TDqEvents {
-    enum EEventSpaceDq {
+struct TDqEvents { 
+    enum EEventSpaceDq { 
         ES_DQ_COMPUTE_KQP_COMPATIBLE = 4145, // TKikimrEvents::ES_KQP
         ES_DQ_COMPUTE = 4212 //TKikimrEvents::ES_DQ
     };

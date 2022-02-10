@@ -143,30 +143,30 @@ TExprNode::TPtr TDataProviderBase::RewriteIO(const TExprNode::TPtr& node, TExprC
 void TDataProviderBase::PostRewriteIO() {
 }
 
-void TDataProviderBase::Reset() {
-    GetConfigurationTransformer().Rewind();
-    GetIODiscoveryTransformer().Rewind();
-    GetEpochsTransformer().Rewind();
-    GetIntentDeterminationTransformer().Rewind();
-    for (auto flag : {true, false}) {
-        GetTypeAnnotationTransformer(flag).Rewind();
-    }
-    for (auto flag1 : {true, false}) {
-        for (auto flag2 : {true, false}) {
-            GetConstraintTransformer(flag1, flag2).Rewind();
-        }
-    }
-    GetRecaptureOptProposalTransformer().Rewind();
-    GetLogicalOptProposalTransformer().Rewind();
-    GetPhysicalOptProposalTransformer().Rewind();
-    GetPhysicalFinalizingTransformer().Rewind();
-    GetLoadTableMetadataTransformer().Rewind();
-    GetCallableExecutionTransformer().Rewind();
-    GetFinalizingTransformer().Rewind();
-    GetPlanInfoTransformer().Rewind();
+void TDataProviderBase::Reset() { 
+    GetConfigurationTransformer().Rewind(); 
+    GetIODiscoveryTransformer().Rewind(); 
+    GetEpochsTransformer().Rewind(); 
+    GetIntentDeterminationTransformer().Rewind(); 
+    for (auto flag : {true, false}) { 
+        GetTypeAnnotationTransformer(flag).Rewind(); 
+    } 
+    for (auto flag1 : {true, false}) { 
+        for (auto flag2 : {true, false}) { 
+            GetConstraintTransformer(flag1, flag2).Rewind(); 
+        } 
+    } 
+    GetRecaptureOptProposalTransformer().Rewind(); 
+    GetLogicalOptProposalTransformer().Rewind(); 
+    GetPhysicalOptProposalTransformer().Rewind(); 
+    GetPhysicalFinalizingTransformer().Rewind(); 
+    GetLoadTableMetadataTransformer().Rewind(); 
+    GetCallableExecutionTransformer().Rewind(); 
+    GetFinalizingTransformer().Rewind(); 
+    GetPlanInfoTransformer().Rewind(); 
     GetTrackableNodeProcessor().GetCleanupTransformer().Rewind();
-}
-
+} 
+ 
 IGraphTransformer& TDataProviderBase::GetRecaptureOptProposalTransformer() {
     return NullTransformer_;
 }

@@ -133,7 +133,7 @@ class TKeyValueWriterTestLoadActor : public TActorBootstrapped<TKeyValueWriterTe
     NMonitoring::TPercentileTrackerLg<6, 5, 15> ResponseTimes;
 
 public:
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return NKikimrServices::TActivity::BS_LOAD_PDISK_LOG_WRITE;
     }
 

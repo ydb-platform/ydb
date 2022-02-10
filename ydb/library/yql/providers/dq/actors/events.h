@@ -14,27 +14,27 @@
 namespace NYql::NDqs {
     using TDqExecuterEvents = NDq::TBaseDqExecuterEvents<NActors::TEvents::EEventSpace::ES_USERSPACE>;
 
-    struct TEvDqTask : NActors::TEventPB<TEvDqTask, NDqProto::TDqTaskRequest, TDqExecuterEvents::ES_DQ_TASK> {
+    struct TEvDqTask : NActors::TEventPB<TEvDqTask, NDqProto::TDqTaskRequest, TDqExecuterEvents::ES_DQ_TASK> { 
         TEvDqTask() = default;
         explicit TEvDqTask(NDqProto::TDqTask task);
     };
 
-    struct TEvDqFailure : NActors::TEventPB<TEvDqFailure, NDqProto::TDqFailure, TDqExecuterEvents::ES_DQ_FAILURE> {
-        TEvDqFailure() = default;
+    struct TEvDqFailure : NActors::TEventPB<TEvDqFailure, NDqProto::TDqFailure, TDqExecuterEvents::ES_DQ_FAILURE> { 
+        TEvDqFailure() = default; 
         explicit TEvDqFailure(const TIssue& issue, bool retriable = false, bool needFallback = false);
-    };
-
+    }; 
+ 
     struct TEvQueryResponse
         : NActors::TEventPB<TEvQueryResponse, NDqProto::TQueryResponse, TDqExecuterEvents::ES_RESULT_SET> {
         TEvQueryResponse() = default;
         explicit TEvQueryResponse(NDqProto::TQueryResponse&& queryResult);
     };
 
-    struct TEvGraphRequest : NActors::TEventPB<TEvGraphRequest, NDqProto::TGraphRequest, TDqExecuterEvents::ES_GRAPH> {
-        TEvGraphRequest() = default;
+    struct TEvGraphRequest : NActors::TEventPB<TEvGraphRequest, NDqProto::TGraphRequest, TDqExecuterEvents::ES_GRAPH> { 
+        TEvGraphRequest() = default; 
         TEvGraphRequest(const Yql::DqsProto::ExecuteGraphRequest& request, NActors::TActorId controlId, NActors::TActorId resultId, NActors::TActorId checkPointCoordinatorId = {});
-    };
-
+    }; 
+ 
     struct TEvReadyState : NActors::TEventPB<TEvReadyState, NDqProto::TReadyState, TDqExecuterEvents::ES_READY_TO_PULL> {
         TEvReadyState() = default;
         TEvReadyState(NActors::TActorId sourceId, TString type);
@@ -64,16 +64,16 @@ namespace NYql::NDqs {
         TEvPullDataResponse() = default;
         explicit TEvPullDataResponse(NDqProto::TPullResponse& data);
     };
-
-    struct TEvPingRequest
-        : NActors::TEventPB<TEvPingRequest, NYql::NDqProto::TPingRequest, TDqDataEvents::ES_PING_REQUEST> {
-        TEvPingRequest() = default;
-    };
-
-    struct TEvPingResponse
-        : NActors::TEventPB<TEvPingResponse, NYql::NDqProto::TPingResponse, TDqDataEvents::ES_PING_RESPONSE> {
-        TEvPingResponse() = default;
-    };
+ 
+    struct TEvPingRequest 
+        : NActors::TEventPB<TEvPingRequest, NYql::NDqProto::TPingRequest, TDqDataEvents::ES_PING_REQUEST> { 
+        TEvPingRequest() = default; 
+    }; 
+ 
+    struct TEvPingResponse 
+        : NActors::TEventPB<TEvPingResponse, NYql::NDqProto::TPingResponse, TDqDataEvents::ES_PING_RESPONSE> { 
+        TEvPingResponse() = default; 
+    }; 
 
     struct TEvFullResultWriterStatusRequest
         : NActors::TEventPB<TEvFullResultWriterStatusRequest, NYql::NDqProto::TFullResultWriterStatusRequest,

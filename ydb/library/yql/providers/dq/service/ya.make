@@ -4,8 +4,8 @@ OWNER(g:yql)
 
 SRCS(
     grpc_service.cpp
-    grpc_session.cpp
-    service_node.cpp
+    grpc_session.cpp 
+    service_node.cpp 
     interconnect_helpers.cpp
 )
 

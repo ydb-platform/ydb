@@ -1,8 +1,8 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:yql)
-
-PEERDIR(
+ 
+PEERDIR( 
     ydb/library/yql/minikql
     ydb/library/yql/minikql/computation
     ydb/library/yql/minikql/invoke_builtins
@@ -18,14 +18,14 @@ PEERDIR(
     ydb/library/yql/providers/dq/counters
     ydb/library/yql/providers/dq/interface
     ydb/library/yql/providers/dq/task_runner
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
 
-SRCS(
-    file_cache.cpp
-    task_command_executor.cpp
-    runtime_data.cpp
-)
-
-END()
+SRCS( 
+    file_cache.cpp 
+    task_command_executor.cpp 
+    runtime_data.cpp 
+) 
+ 
+END() 

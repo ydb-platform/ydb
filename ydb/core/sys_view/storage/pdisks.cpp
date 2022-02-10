@@ -5,7 +5,7 @@ namespace NKikimr::NSysView {
 
 template<> void SetField<0>(NKikimrSysView::TPDiskKey& key, ui32 value) { key.SetNodeId(value); }
 template<> void SetField<1>(NKikimrSysView::TPDiskKey& key, ui32 value) { key.SetPDiskId(value); }
-
+ 
 class TPDisksScan : public TStorageScanBase<TPDisksScan, TEvSysView::TEvGetPDisksResponse> {
 public:
     using TStorageScanBase::TStorageScanBase;

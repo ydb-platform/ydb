@@ -233,7 +233,7 @@ private:
         memoryLimits.MkqlLightProgramMemoryLimit = Config.GetMkqlLightProgramMemoryLimit();
         memoryLimits.MkqlHeavyProgramMemoryLimit = Config.GetMkqlHeavyProgramMemoryLimit();
         if (Config.GetEnableInstantMkqlMemoryAlloc()) {
-            memoryLimits.AllocateMemoryFn = [rm = ResourceManager()](const auto& txId, ui64 taskId, ui64 memory) {
+            memoryLimits.AllocateMemoryFn = [rm = ResourceManager()](const auto& txId, ui64 taskId, ui64 memory) { 
                 NRm::TKqpResourcesRequest resources;
                 resources.MemoryPool = NRm::EKqpMemoryPool::ScanQuery;
                 resources.Memory = memory;

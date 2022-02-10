@@ -1,4 +1,4 @@
-#include "dq_compute_actor_channels.h"
+#include "dq_compute_actor_channels.h" 
 
 #include <util/string/join.h>
 
@@ -31,7 +31,7 @@ TString InFlightMessagesStr(const TCollection& inFlight) {
 
 } // anonymous namespace
 
-TDqComputeActorChannels::TDqComputeActorChannels(TActorId owner, const TTxId& txId, const NDqProto::TDqTask& task,
+TDqComputeActorChannels::TDqComputeActorChannels(TActorId owner, const TTxId& txId, const NDqProto::TDqTask& task, 
     bool retryOnUndelivery, NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, ui32 actorActivityType)
     : TActor(&TDqComputeActorChannels::WorkState, actorActivityType)
     , Owner(owner)
@@ -151,7 +151,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
         inputChannel.Finished = true;
     }
 
-    Cbs->TakeInputChannelData(std::move(*record.MutableChannelData()), !record.GetNoAck());
+    Cbs->TakeInputChannelData(std::move(*record.MutableChannelData()), !record.GetNoAck()); 
 }
 
 void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& ev) {
@@ -683,11 +683,11 @@ const TDqComputeActorChannels::TOutputChannelStats* TDqComputeActorChannels::Get
     return OutCh(channelId).Stats.get();
 }
 
-void TDqComputeActorChannels::SendChannelDataAck(i64 channelId, i64 freeSpace) {
-    TInputChannelState& inputChannel = InCh(channelId);
-    SendChannelDataAck(inputChannel, freeSpace);
-}
-
+void TDqComputeActorChannels::SendChannelDataAck(i64 channelId, i64 freeSpace) { 
+    TInputChannelState& inputChannel = InCh(channelId); 
+    SendChannelDataAck(inputChannel, freeSpace); 
+} 
+ 
 void TDqComputeActorChannels::SendChannelDataAck(TInputChannelState& inputChannel, i64 freeSpace) {
     LOG_D("Sending channel data ack to"
         << " channelId: " << inputChannel.ChannelId

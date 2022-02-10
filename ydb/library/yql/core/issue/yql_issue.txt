@@ -584,7 +584,7 @@ ids {
   code: YQL_JSON_QUERY_RETURNING_JSON_IS_DEPRECATED
   severity: S_WARNING
 }
-ids {
+ids { 
   code: YQL_DEPRECATED_LIST_FLATMAP_OPTIONAL
   severity: S_WARNING
 }
@@ -597,10 +597,10 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: DQ_GATEWAY_ERROR
-  severity: S_ERROR
-}
-ids {
-  code: DQ_GATEWAY_NEED_FALLBACK_ERROR
-  severity: S_ERROR
-}
+  code: DQ_GATEWAY_ERROR 
+  severity: S_ERROR 
+} 
+ids { 
+  code: DQ_GATEWAY_NEED_FALLBACK_ERROR 
+  severity: S_ERROR 
+} 

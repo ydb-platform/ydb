@@ -144,7 +144,7 @@ TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, const TP
                     .Build()
                 .Build()
             .Build()
-        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())
@@ -296,7 +296,7 @@ TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& o
                 .Args(newArgs)
                 .Body(ctx.ReplaceNodes(newProgram->TailPtr(), inputArgReplaces))
                 .Build()
-            .Settings(TDqStageSettings().BuildNode(ctx, stage.Pos()))
+            .Settings(TDqStageSettings().BuildNode(ctx, stage.Pos())) 
             .Done();
 
     optCtx.RemapNode(stage.Ref(), newStage.Ptr());
@@ -1049,7 +1049,7 @@ TExprBase DqBuildSortStage(TExprBase node, TExprContext& ctx, IOptimizationConte
                     .KeySelectorLambda(ctx.DeepCopyLambda(sort.KeySelectorLambda().Ref()))
                     .Build()
                 .Build()
-            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
             .Done();
     }
 
@@ -1061,50 +1061,50 @@ TExprBase DqBuildSortStage(TExprBase node, TExprContext& ctx, IOptimizationConte
         .Done();
 }
 
-
-// will generate smth like this
-// (let $7 (DqPhyStage '((DqCnUnionAll (TDqOutput $5 '"0"))) (lambda '($13) (FromFlow (Take (Skip (ToFlow $13) (Uint64 '1)) $6))) '()))
-// (let $8 (DqPhyStage '((DqCnUnionAll (TDqOutput $7 '"0"))) (lambda '($14) (FromFlow (Take (ToFlow $14) $6))) '()))
-// maybe optimize (Take (Skip ...) ...) ?
+ 
+// will generate smth like this 
+// (let $7 (DqPhyStage '((DqCnUnionAll (TDqOutput $5 '"0"))) (lambda '($13) (FromFlow (Take (Skip (ToFlow $13) (Uint64 '1)) $6))) '())) 
+// (let $8 (DqPhyStage '((DqCnUnionAll (TDqOutput $7 '"0"))) (lambda '($14) (FromFlow (Take (ToFlow $14) $6))) '())) 
+// maybe optimize (Take (Skip ...) ...) ? 
 TExprBase DqBuildSkipStage(TExprBase node, TExprContext& ctx, IOptimizationContext& /* optCtx */,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
-{
-    if (!node.Maybe<TCoSkip>().Input().Maybe<TDqCnUnionAll>()) {
-        return node;
-    }
-
-    auto skip = node.Cast<TCoSkip>();
-    if (!IsDqPureExpr(skip.Count())) {
-        return node;
-    }
-
-    auto dqUnion = skip.Input().Cast<TDqCnUnionAll>();
+{ 
+    if (!node.Maybe<TCoSkip>().Input().Maybe<TDqCnUnionAll>()) { 
+        return node; 
+    } 
+ 
+    auto skip = node.Cast<TCoSkip>(); 
+    if (!IsDqPureExpr(skip.Count())) { 
+        return node; 
+    } 
+ 
+    auto dqUnion = skip.Input().Cast<TDqCnUnionAll>(); 
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
-        return node;
-    }
-
-    auto stage = Build<TDqStage>(ctx, node.Pos())
-            .Inputs()
-                .Add(dqUnion)
-                .Build()
-            .Program()
-                .Args({"stream"})
-                .Body<TCoSkip>()
-                    .Input("stream")
-                    .Count(skip.Count())
-                    .Build()
-                .Build()
-            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
-            .Done();
-
-    return Build<TDqCnUnionAll>(ctx, node.Pos())
-        .Output()
-            .Stage(stage)
-            .Index().Build("0")
-            .Build()
-        .Done();
-}
-
+        return node; 
+    } 
+ 
+    auto stage = Build<TDqStage>(ctx, node.Pos()) 
+            .Inputs() 
+                .Add(dqUnion) 
+                .Build() 
+            .Program() 
+                .Args({"stream"}) 
+                .Body<TCoSkip>() 
+                    .Input("stream") 
+                    .Count(skip.Count()) 
+                    .Build() 
+                .Build() 
+            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
+            .Done(); 
+ 
+    return Build<TDqCnUnionAll>(ctx, node.Pos()) 
+        .Output() 
+            .Stage(stage) 
+            .Index().Build("0") 
+            .Build() 
+        .Done(); 
+} 
+ 
 TExprBase DqBuildTakeStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
@@ -1150,7 +1150,7 @@ TExprBase DqBuildTakeStage(TExprBase node, TExprContext& ctx, IOptimizationConte
                     .Count(take.Count())
                     .Build()
                 .Build()
-            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
             .Done();
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())
@@ -1214,7 +1214,7 @@ TExprBase DqBuildTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationC
                 .Count(take.Count())
                 .Build()
             .Build()
-        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())
@@ -1230,15 +1230,15 @@ TExprBase DqRewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx, IOptim
         return node;
     }
 
-    auto dqUnion = node.Cast<TCoLength>().List().Cast<TDqCnUnionAll>();
+    auto dqUnion = node.Cast<TCoLength>().List().Cast<TDqCnUnionAll>(); 
 
-    auto zero = Build<TCoUint64>(ctx, node.Pos())
+    auto zero = Build<TCoUint64>(ctx, node.Pos()) 
                     .Literal().Build("0")
                     .Done();
 
-    auto field = BuildAtom("_dq_agg_cnt", node.Pos(), ctx);
-
-    auto combine = Build<TCoCombineByKey>(ctx, node.Pos())
+    auto field = BuildAtom("_dq_agg_cnt", node.Pos(), ctx); 
+ 
+    auto combine = Build<TCoCombineByKey>(ctx, node.Pos()) 
             .Input(dqUnion)
             .PreMapLambda()
                 .Args({"item"})
@@ -1265,23 +1265,23 @@ TExprBase DqRewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx, IOptim
             .FinishHandlerLambda()
                 .Args({"key", "state"})
                 .Body<TCoJust>()
-                    .Input<TCoAsStruct>()
-                        .Add<TCoNameValueTuple>()
-                            .Name(field)
-                            .Value("state")
-                            .Build()
-                        .Build()
+                    .Input<TCoAsStruct>() 
+                        .Add<TCoNameValueTuple>() 
+                            .Name(field) 
+                            .Value("state") 
+                            .Build() 
+                        .Build() 
                     .Build()
                 .Build()
             .Done();
 
-    const auto stub = MakeBool<false>(node.Pos(), ctx);
-
-    auto partition = Build<TCoPartitionsByKeys>(ctx, node.Pos())
+    const auto stub = MakeBool<false>(node.Pos(), ctx); 
+ 
+    auto partition = Build<TCoPartitionsByKeys>(ctx, node.Pos()) 
             .Input(combine)
             .KeySelectorLambda()
                 .Args({"item"})
-                .Body(stub)
+                .Body(stub) 
                 .Build()
             .SortDirections<TCoVoid>()
                 .Build()
@@ -1291,50 +1291,50 @@ TExprBase DqRewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx, IOptim
                 .Args({"list"})
                 .Body<TCoCondense1>()
                     .Input("list")
-                    .InitHandler(BuildIdentityLambda(node.Pos(), ctx)) // take struct from CombineByKey result
+                    .InitHandler(BuildIdentityLambda(node.Pos(), ctx)) // take struct from CombineByKey result 
                     .SwitchHandler()
                         .Args({"item", "state"})
-                        .Body(stub)
+                        .Body(stub) 
                         .Build()
                     .UpdateHandler()
                         .Args({"item", "state"})
-                        .Body<TCoAsStruct>()
-                            .Add<TCoNameValueTuple>()
-                                .Name(field)
-                                .Value<TCoAggrAdd>()
-                                    .Left<TCoMember>()
-                                        .Struct("state")
-                                        .Name(field)
-                                        .Build()
-                                    .Right<TCoMember>()
-                                        .Struct("item")
-                                        .Name(field)
-                                        .Build()
-                                    .Build()
-                                .Build()
+                        .Body<TCoAsStruct>() 
+                            .Add<TCoNameValueTuple>() 
+                                .Name(field) 
+                                .Value<TCoAggrAdd>() 
+                                    .Left<TCoMember>() 
+                                        .Struct("state") 
+                                        .Name(field) 
+                                        .Build() 
+                                    .Right<TCoMember>() 
+                                        .Struct("item") 
+                                        .Name(field) 
+                                        .Build() 
+                                    .Build() 
+                                .Build() 
                             .Build()
                         .Build()
                     .Build()
                 .Build()
             .Done();
 
-    auto toOptional = Build<TCoToOptional>(ctx, node.Pos())
-            .List(partition)
-            .Done();
-
-    auto coalesce = Build<TCoCoalesce>(ctx, node.Pos())
-            .Predicate(toOptional)
-            .Value<TCoAsStruct>()
-                .Add<TCoNameValueTuple>()
-                    .Name(field)
-                    .Value(zero)
-                    .Build()
+    auto toOptional = Build<TCoToOptional>(ctx, node.Pos()) 
+            .List(partition) 
+            .Done(); 
+ 
+    auto coalesce = Build<TCoCoalesce>(ctx, node.Pos()) 
+            .Predicate(toOptional) 
+            .Value<TCoAsStruct>() 
+                .Add<TCoNameValueTuple>() 
+                    .Name(field) 
+                    .Value(zero) 
+                    .Build() 
                 .Build()
-            .Done();
-
-    return Build<TCoMember>(ctx, node.Pos())
-        .Struct(coalesce)
-        .Name(field)
+            .Done(); 
+ 
+    return Build<TCoMember>(ctx, node.Pos()) 
+        .Struct(coalesce) 
+        .Name(field) 
         .Done();
 }
 
@@ -1352,7 +1352,7 @@ TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
                 .Input(node)
                 .Build()
             .Build()
-        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())
@@ -1373,11 +1373,11 @@ TExprBase DqBuildPureExprStage(TExprBase node, TExprContext& ctx) {
  * can be pure expressions not wrapped in DqStage (e.g. ... UNION ALL SELECT 1).
  */
 TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
-    if (!node.Maybe<TCoExtendBase>()) {
+    if (!node.Maybe<TCoExtendBase>()) { 
         return node;
     }
 
-    auto extend = node.Cast<TCoExtendBase>();
+    auto extend = node.Cast<TCoExtendBase>(); 
     TVector<TCoArgument> inputArgs;
     TVector<TExprBase> inputConns;
     TVector<TExprBase> extendArgs;
@@ -1415,7 +1415,7 @@ TExprBase DqBuildExtendStage(TExprBase node, TExprContext& ctx) {
                 .Add(extendArgs)
                 .Build()
             .Build()
-        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+        .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
         .Done();
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())

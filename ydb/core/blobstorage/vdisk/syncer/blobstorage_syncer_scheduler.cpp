@@ -163,7 +163,7 @@ namespace NKikimr {
         )
 
     public:
-        static constexpr auto ActorActivityType() {
+        static constexpr auto ActorActivityType() { 
             return NKikimrServices::TActivity::BS_SYNCER_COMMITTER_PROXY;
         }
 

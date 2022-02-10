@@ -11,19 +11,19 @@
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/writer.h>
-
+ 
 namespace NYql::NDqs {
 
 using namespace NKikimr::NMiniKQL;
 
 namespace {
-
+ 
 TVector<ui32> BuildColumnOrder(const TVector<TString>& columns, NKikimr::NMiniKQL::TType* resultType) {
     MKQL_ENSURE(resultType, "Incorrect result type");
     if (resultType->GetKind() != TType::EKind::Struct || columns.empty()) {
         return {};
-    }
-
+    } 
+ 
     TVector<ui32> columnOrder;
     THashMap<TString, ui32> column2id;
     auto structType = AS_TYPE(TStructType, resultType);
@@ -32,14 +32,14 @@ TVector<ui32> BuildColumnOrder(const TVector<TString>& columns, NKikimr::NMiniKQ
         column2id[columnName] = i;
     }
     columnOrder.resize(columns.size());
-
+ 
     int id = 0;
     for (const auto& columnName : columns) {
         columnOrder[id++] = column2id[columnName];
     }
     return columnOrder;
 }
-
+ 
 NDqProto::EDataTransportVersion GetTransportVersion(const NYql::NDqProto::TData& data) {
     switch (data.GetTransportVersion()) {
         case 10000:
@@ -55,7 +55,7 @@ NDqProto::EDataTransportVersion GetTransportVersion(const NYql::NDqProto::TData&
 }
 
 } // unnamed
-
+ 
 TProtoBuilder::TProtoBuilder(const TString& type, const TVector<TString>& columns)
     : Alloc()
     , TypeEnv(Alloc)
@@ -64,21 +64,21 @@ TProtoBuilder::TProtoBuilder(const TString& type, const TVector<TString>& column
 {
     Alloc.Release();
 }
-
+ 
 TProtoBuilder::~TProtoBuilder() {
     Alloc.Acquire();
 }
-
+ 
 bool TProtoBuilder::CanBuildResultSet() const {
     return ResultType->GetKind() == TType::EKind::Struct;
 }
-
+ 
 TString TProtoBuilder::BuildYson(const TVector<NYql::NDqProto::TData>& rows, ui64 maxBytesLimit) {
     ui64 size = 0;
     TStringStream out;
     NYson::TYsonWriter writer((IOutputStream*)&out);
     writer.OnBeginList();
-
+ 
     auto full = WriteData(rows, [&](const NYql::NUdf::TUnboxedValuePod& value) {
         auto rowYson = NCommon::WriteYsonValue(value, ResultType, ColumnOrder.empty() ? nullptr : &ColumnOrder);
         writer.OnListItem();
@@ -86,25 +86,25 @@ TString TProtoBuilder::BuildYson(const TVector<NYql::NDqProto::TData>& rows, ui6
         size += rowYson.size();
         return size <= maxBytesLimit;
     });
-
+ 
     if (!full) {
         ythrow yexception() << "Too big yson result size: " << size << " > " << maxBytesLimit;
-    }
-
+    } 
+ 
     writer.OnEndList();
     return out.Str();
 }
-
+ 
 bool TProtoBuilder::WriteYsonData(const NYql::NDqProto::TData& data, const std::function<bool(const TString& rawYson)>& func) {
     return WriteData(data, [&](const NYql::NUdf::TUnboxedValuePod& value) {
         auto rowYson = NCommon::WriteYsonValue(value, ResultType, ColumnOrder.empty() ? nullptr : &ColumnOrder);
         return func(rowYson);
     });
 }
-
+ 
 bool TProtoBuilder::WriteData(const NDqProto::TData& data, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
     TGuard<TScopedAlloc> allocGuard(Alloc);
-
+ 
     TMemoryUsageInfo memInfo("ProtoBuilder");
     THolderFactory holderFactory(Alloc.Ref(), memInfo);
     NDqProto::EDataTransportVersion transportVersion = GetTransportVersion(data);
@@ -116,11 +116,11 @@ bool TProtoBuilder::WriteData(const NDqProto::TData& data, const std::function<b
     for (const auto& item : buffer) {
         if (!func(item)) {
             return false;
-        }
-    }
+        } 
+    } 
     return true;
 }
-
+ 
 bool TProtoBuilder::WriteData(const TVector<NDqProto::TData>& rows, const std::function<bool(const NYql::NUdf::TUnboxedValuePod& value)>& func) {
     TGuard<TScopedAlloc> allocGuard(Alloc);
 

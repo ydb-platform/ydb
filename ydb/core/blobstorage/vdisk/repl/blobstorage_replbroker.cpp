@@ -38,7 +38,7 @@ namespace NKikimr {
         TReplMemTokenId NextMemToken = 1;
 
     public:
-        static constexpr auto ActorActivityType() {
+        static constexpr auto ActorActivityType() { 
             return NKikimrServices::TActivity::BS_REPL_BROKER;
         }
 

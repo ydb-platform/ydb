@@ -86,7 +86,7 @@
         "Builder": {"Generate": "None"},
         "Children": [
             {"Index": 0, "Name": "Inputs", "Type": "TExprList"},
-            {"Index": 1, "Name": "Program", "Type": "TCoLambda"},
+            {"Index": 1, "Name": "Program", "Type": "TCoLambda"}, 
             {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"},
             {"Index": 3, "Name": "Sinks", "Type": "TDqSinksList", "Optional": true}
         ]
@@ -99,7 +99,7 @@
     {
         "Name": "TDqPhyStage",
         "Base": "TDqStageBase",
-        "Match": {"Type": "Callable", "Name": "DqPhyStage"}
+        "Match": {"Type": "Callable", "Name": "DqPhyStage"} 
     },
     {
         "Name": "TDqStageList",

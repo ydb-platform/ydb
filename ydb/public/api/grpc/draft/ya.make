@@ -20,7 +20,7 @@ SRCS(
     ydb_s3_internal_v1.proto
     ydb_long_tx_v1.proto
     ydb_logstore_v1.proto
-    yql_db_v1.proto
+    yql_db_v1.proto 
 )
 
 PEERDIR(

@@ -55,7 +55,7 @@ public:
     IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override;
     TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override;
     void PostRewriteIO() override;
-    void Reset() override;
+    void Reset() override; 
     IGraphTransformer& GetRecaptureOptProposalTransformer() override;
     IGraphTransformer& GetLogicalOptProposalTransformer() override;
     IGraphTransformer& GetPhysicalOptProposalTransformer() override;

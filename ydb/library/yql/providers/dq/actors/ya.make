@@ -1,24 +1,24 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:yql)
-
-SRCS(
+ 
+SRCS( 
     compute_actor.cpp
-    events.cpp
-    executer_actor.cpp
-    execution_helpers.cpp
+    events.cpp 
+    executer_actor.cpp 
+    execution_helpers.cpp 
     graph_execution_events_actor.cpp
-    resource_allocator.cpp
+    resource_allocator.cpp 
     task_controller.cpp
     worker_actor.cpp
     result_aggregator.cpp
     result_receiver.cpp
     full_result_writer.cpp
     proto_builder.cpp
-)
-
-PEERDIR(
-    library/cpp/actors/core
+) 
+ 
+PEERDIR( 
+    library/cpp/actors/core 
     library/cpp/yson
     ydb/core/base
     ydb/library/mkql_proto
@@ -46,8 +46,8 @@ PEERDIR(
     ydb/library/yql/providers/dq/task_runner_actor
     ydb/library/yql/providers/dq/worker_manager
     ydb/library/yql/providers/dq/worker_manager/interface
-)
-
+) 
+ 
 YQL_LAST_ABI_VERSION()
-
-END()
+ 
+END() 

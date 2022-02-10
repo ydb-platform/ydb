@@ -27,15 +27,15 @@ struct TSslData {
     TString Root;
 };
 
-struct IExternalListener
-    : public TThrRefBase
-{
-    using TPtr = TIntrusivePtr<IExternalListener>;
-    virtual void Init(std::unique_ptr<grpc::experimental::ExternalConnectionAcceptor> acceptor) = 0;
-    virtual void Start() = 0;
-    virtual void Stop() = 0;
-};
-
+struct IExternalListener 
+    : public TThrRefBase 
+{ 
+    using TPtr = TIntrusivePtr<IExternalListener>; 
+    virtual void Init(std::unique_ptr<grpc::experimental::ExternalConnectionAcceptor> acceptor) = 0; 
+    virtual void Start() = 0; 
+    virtual void Stop() = 0; 
+}; 
+ 
 //! Server's options.
 struct TServerOptions {
 #define DECLARE_FIELD(name, type, default) \
@@ -93,8 +93,8 @@ struct TServerOptions {
     //! Custom configurator for ServerBuilder.
     DECLARE_FIELD(ServerBuilderMutator, std::function<void(grpc::ServerBuilder&)>, [](grpc::ServerBuilder&){});
 
-    DECLARE_FIELD(ExternalListener, IExternalListener::TPtr, nullptr);
-
+    DECLARE_FIELD(ExternalListener, IExternalListener::TPtr, nullptr); 
+ 
     //! Logger which will be used to write logs about requests handling (iff appropriate log level is enabled).
     DECLARE_FIELD(Logger, TLoggerPtr, nullptr);
 

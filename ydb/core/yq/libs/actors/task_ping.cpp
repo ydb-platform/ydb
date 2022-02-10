@@ -77,7 +77,7 @@ public:
         Become(&TTaskPingRequestActor::StateFunc);
         const auto& req = Ev->Record;
         OperationId = req.query_id().value();
-        OwnerId = req.owner_id();
+        OwnerId = req.owner_id(); 
         Scope = req.scope();
         Deadline = NProtoInterop::CastFromProto(req.deadline());
         LOG_D("Request CP::PingTask with size: " << req.ByteSize() << " bytes");
@@ -223,7 +223,7 @@ private:
     const TInstant StartTime;
 
     TString OperationId;
-    TString OwnerId;
+    TString OwnerId; 
     TString Scope;
     TInstant Deadline;
     NYql::TIssues Issues;

@@ -192,7 +192,7 @@ void BuildMapChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inpu
     auto& originStageInfo = graph.GetStageInfo(cnMap.Output().Stage());
     auto outputIndex = FromString<ui32>(cnMap.Output().Index().Value());
 
-    BuildMapChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false /*spilling*/, logFunc);
+    BuildMapChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false /*spilling*/, logFunc); 
 }
 
 template <typename TGraph>

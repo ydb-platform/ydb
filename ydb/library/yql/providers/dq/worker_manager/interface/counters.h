@@ -9,7 +9,7 @@ struct TWorkerManagerCounters {
     NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryAllocated;
 
     explicit TWorkerManagerCounters(NMonitoring::TDynamicCounterPtr root);
-    TWorkerManagerCounters();
+    TWorkerManagerCounters(); 
 };
 
-} // namespace NYql::NDqs
+} // namespace NYql::NDqs 

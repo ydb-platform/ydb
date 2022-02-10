@@ -126,7 +126,7 @@ struct TEvDqCompute {
         }
     };
 
-    struct TEvRestoreFromCheckpoint : public NActors::TEventPB<TEvRestoreFromCheckpoint,
+    struct TEvRestoreFromCheckpoint : public NActors::TEventPB<TEvRestoreFromCheckpoint, 
         NDqProto::TEvRestoreFromCheckpoint, TDqComputeEvents::EvRestoreFromCheckpoint> {
 
         TEvRestoreFromCheckpoint() = default;
@@ -149,7 +149,7 @@ struct TEvDqCompute {
         }
     };
 
-    struct TEvRestoreFromCheckpointResult : public NActors::TEventPB<TEvRestoreFromCheckpointResult,
+    struct TEvRestoreFromCheckpointResult : public NActors::TEventPB<TEvRestoreFromCheckpointResult, 
         NDqProto::TEvRestoreFromCheckpointResult, TDqComputeEvents::EvRestoreFromCheckpointResult> {
         using TBaseEventPB = NActors::TEventPB<TEvRestoreFromCheckpointResult, NDqProto::TEvRestoreFromCheckpointResult, TDqComputeEvents::EvRestoreFromCheckpointResult>;
 
@@ -251,14 +251,14 @@ struct TComputeMemoryLimits {
 using TTaskRunnerFactory = std::function<
     TIntrusivePtr<IDqTaskRunner>(const NDqProto::TDqTask& task, const TLogFunc& logFunc)
 >;
-
+ 
 void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& taskStats,
     NDqProto::TDqTaskStats* protoTask, bool withProfileStats);
 
-NActors::IActor* CreateDqComputeActor(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
+NActors::IActor* CreateDqComputeActor(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task, 
     IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     const TTaskRunnerFactory& taskRunnerFactory);
-
+ 
 } // namespace NDq
 } // namespace NYql

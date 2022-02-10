@@ -220,11 +220,11 @@ private:
 TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformer(const TVector<TTransformStage>& stages, bool useIssueScopes);
 TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformerWithNoArgChecks(const TVector<TTransformStage>& stages, bool useIssueScopes);
 
-TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer(
-    const std::function<bool(const TExprNode::TPtr& input, TExprContext& ctx)>& condition,
-    const TTransformStage& left,
-    const TTransformStage& right);
-
+TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer( 
+    const std::function<bool(const TExprNode::TPtr& input, TExprContext& ctx)>& condition, 
+    const TTransformStage& left, 
+    const TTransformStage& right); 
+ 
 IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx);
 IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool breakOnRestart = false);
 

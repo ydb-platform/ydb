@@ -259,11 +259,11 @@ namespace {
             output = input;
             auto status = DelegatedProvider->GetCallableExecutionTransformer()
                 .ApplyAsyncChanges(DelegatedNode, DelegatedNodeOutput, ctx);
-            if (status == TStatus::Repeat && input != DelegatedNodeOutput->TailPtr()) {
-                output = DelegatedNodeOutput->TailPtr();
-            } else {
-                FinishNode(*input, ctx, status);
-            }
+            if (status == TStatus::Repeat && input != DelegatedNodeOutput->TailPtr()) { 
+                output = DelegatedNodeOutput->TailPtr(); 
+            } else { 
+                FinishNode(*input, ctx, status); 
+            } 
             return status;
         }
 
@@ -1379,14 +1379,14 @@ namespace {
             return *CallableExecutionTransformer;
         }
 
-        void Reset() final {
-            TDataProviderBase::Reset();
-            if (CallableExecutionTransformer) {
-                CallableExecutionTransformer.Reset();
-            }
-            Config->CommittedResults.clear();
-        }
-
+        void Reset() final { 
+            TDataProviderBase::Reset(); 
+            if (CallableExecutionTransformer) { 
+                CallableExecutionTransformer.Reset(); 
+            } 
+            Config->CommittedResults.clear(); 
+        } 
+ 
         bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
             if (CanExecute(node)) {
                 children.push_back(node.ChildPtr(0));

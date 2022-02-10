@@ -134,7 +134,7 @@ public:
         return std::pair<ui64, TAutoPtr<IEventBase>>(TabletID, static_cast<TDerived *>(this)->MakeReq(ctx));
     }
 
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return Activity;
     }
 };

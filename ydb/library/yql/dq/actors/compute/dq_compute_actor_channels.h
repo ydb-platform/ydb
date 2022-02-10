@@ -1,6 +1,6 @@
 #pragma once
 
-#include "dq_compute_actor.h"
+#include "dq_compute_actor.h" 
 
 #include <ydb/core/kqp/kqp.h>
 
@@ -21,7 +21,7 @@ public:
 
     struct ICallbacks {
         virtual i64 GetInputChannelFreeSpace(ui64 channelId) const = 0;
-        virtual void TakeInputChannelData(NDqProto::TChannelData&& channelData, bool ack) = 0;
+        virtual void TakeInputChannelData(NDqProto::TChannelData&& channelData, bool ack) = 0; 
         virtual void PeerFinished(ui64 channelId) = 0;
         virtual void ResumeExecution() = 0;
 
@@ -39,7 +39,7 @@ public:
     };
 
 public:
-    TDqComputeActorChannels(NActors::TActorId owner, const TTxId& txId, const NYql::NDqProto::TDqTask& task, bool retryOnUndelivery,
+    TDqComputeActorChannels(NActors::TActorId owner, const TTxId& txId, const NYql::NDqProto::TDqTask& task, bool retryOnUndelivery, 
         NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, ui32 actorActivityType);
 
 private:
@@ -71,7 +71,7 @@ public:
     void SetOutputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
     bool CanSendChannelData(ui64 channelId);
     void SendChannelData(NDqProto::TChannelData&& channelData);
-    void SendChannelDataAck(i64 channelId, i64 freeSpace);
+    void SendChannelDataAck(i64 channelId, i64 freeSpace); 
     bool PollChannel(ui64 channelId, i64 freeSpace);
     bool CheckInFlight(const TString& prefix);
     bool FinishInputChannels();
@@ -175,7 +175,7 @@ private:
 
 private:
     const NActors::TActorId Owner;
-    const TTxId TxId;
+    const TTxId TxId; 
     const ui64 TaskId;
     const bool RetryOnUndelivery;
     bool SupportCheckpoints = false;

@@ -51,7 +51,7 @@ const TTypeAnnotationNode* GetDqConnectionType(const TDqConnection& node, TExprC
 template <typename TStage>
 TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
     if (!EnsureMinMaxArgsCount(*stage, 3, 4, ctx)) {
-        return TStatus::Error;
+        return TStatus::Error; 
     }
 
     auto* inputsTuple = stage->Child(TDqStageBase::idx_Inputs);
@@ -196,9 +196,9 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
     bool isLeftOptional = IsLeftJoinSideOptional(joinType);
     auto leftType = ParseJoinInputType(leftRowType, leftLabel, ctx, isLeftOptional);
     if (leftType.empty() && joinType != "Cross") {
-        TStringStream str; str << "Cannot parse left join input type: ";
-        leftRowType.Out(str);
-        ctx.AddError(TIssue(ctx.GetPosition(pos), str.Str()));
+        TStringStream str; str << "Cannot parse left join input type: "; 
+        leftRowType.Out(str); 
+        ctx.AddError(TIssue(ctx.GetPosition(pos), str.Str())); 
         return nullptr;
     }
 
@@ -206,9 +206,9 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
     bool isRightOptional = IsRightJoinSideOptional(joinType);
     auto rightType = ParseJoinInputType(rightRowType, rightLabel, ctx, isRightOptional);
     if (rightType.empty() && joinType != "Cross") {
-        TStringStream str; str << "Cannot parse right join input type: ";
-        rightRowType.Out(str);
-        ctx.AddError(TIssue(ctx.GetPosition(pos), str.Str()));
+        TStringStream str; str << "Cannot parse right join input type: "; 
+        rightRowType.Out(str); 
+        ctx.AddError(TIssue(ctx.GetPosition(pos), str.Str())); 
         return nullptr;
     }
 
@@ -266,16 +266,16 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
     }
 
     auto addAllMembersFrom = [&ctx](const THashMap<TStringBuf, THashMap<TStringBuf, const TTypeAnnotationNode*>>& type,
-        TVector<const TItemExprType*>* result, bool makeOptional = false)
+        TVector<const TItemExprType*>* result, bool makeOptional = false) 
     {
         for (const auto& it : type) {
             for (const auto& it2 : it.second) {
                 auto memberName = FullColumnName(it.first, it2.first);
-                if (makeOptional && it2.second->GetKind() != ETypeAnnotationKind::Optional) {
-                    result->emplace_back(ctx.MakeType<TItemExprType>(memberName, ctx.MakeType<TOptionalExprType>(it2.second)));
-                } else {
-                    result->emplace_back(ctx.MakeType<TItemExprType>(memberName, it2.second));
-                }
+                if (makeOptional && it2.second->GetKind() != ETypeAnnotationKind::Optional) { 
+                    result->emplace_back(ctx.MakeType<TItemExprType>(memberName, ctx.MakeType<TOptionalExprType>(it2.second))); 
+                } else { 
+                    result->emplace_back(ctx.MakeType<TItemExprType>(memberName, it2.second)); 
+                } 
             }
         }
     };
@@ -285,7 +285,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
         addAllMembersFrom(leftType, &resultStructItems, joinType == "Right");
     }
     if (joinType != "LeftOnly" && joinType != "LeftSemi") {
-        addAllMembersFrom(rightType, &resultStructItems, joinType == "Left");
+        addAllMembersFrom(rightType, &resultStructItems, joinType == "Left"); 
     }
 
     auto rowType = ctx.MakeType<TStructExprType>(resultStructItems);

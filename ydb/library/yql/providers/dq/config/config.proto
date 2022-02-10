@@ -92,7 +92,7 @@ message TDqConfig {
         optional TPortoSettings PortoSettings = 31;
         optional bool ContainerCpuLimit = 26; // for testing only
         optional TSolomon Solomon = 30;
-        optional bool CanUseComputeActor = 32 [default = false];
+        optional bool CanUseComputeActor = 32 [default = false]; 
     }
 
     repeated TYtBackend YtBackends = 5;

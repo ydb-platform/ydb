@@ -283,10 +283,10 @@ public:
         return rows;
     }
 
-    NKikimr::NMiniKQL::TType* GetOutputType() const override {
-        return OutputType;
-    }
-
+    NKikimr::NMiniKQL::TType* GetOutputType() const override { 
+        return OutputType; 
+    } 
+ 
     const TDqOutputChannelStats* GetStats() const override {
         return &BasicStats;
     }
@@ -763,10 +763,10 @@ public:
         return rows;
     }
 
-    NKikimr::NMiniKQL::TType* GetOutputType() const override {
-        return OutputType;
-    }
-
+    NKikimr::NMiniKQL::TType* GetOutputType() const override { 
+        return OutputType; 
+    } 
+ 
     const TDqOutputChannelStats* GetStats() const override {
         return &BasicStats;
     }

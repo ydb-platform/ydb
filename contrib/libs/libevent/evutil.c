@@ -1250,11 +1250,11 @@ evutil_adjust_hints_for_addrconfig_(struct evutil_addrinfo *hints)
 #ifdef USE_NATIVE_GETADDRINFO
 static int need_numeric_port_hack_=0;
 static int need_socktype_protocol_hack_=0;
-#ifdef WIN32
-static int tested_for_getaddrinfo_hacks=1;
-#else
+#ifdef WIN32 
+static int tested_for_getaddrinfo_hacks=1; 
+#else 
 static int tested_for_getaddrinfo_hacks=0;
-#endif
+#endif 
 /* Some older BSDs (like OpenBSD up to 4.6) used to believe that
    giving a numeric port without giving an ai_socktype was verboten.
    We test for this so we can apply an appropriate workaround.  If it

@@ -10,7 +10,7 @@
 #include <ydb/core/sys_view/service/sysview_service.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-
+ 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -91,7 +91,7 @@ class TQueryStatsScan : public TScanActorBase<TQueryStatsScan<TGreater>> {
 public:
     using TBase = TScanActorBase<TQueryStatsScan<TGreater>>;
 
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 

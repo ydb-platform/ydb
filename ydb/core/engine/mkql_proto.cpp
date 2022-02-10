@@ -67,11 +67,11 @@ NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, c
     case TType::EKind::Void:
         return NUdf::TUnboxedValuePod::Void();
 
-    case TType::EKind::Null:
-    case TType::EKind::EmptyList:
-    case TType::EKind::EmptyDict:
-        return NUdf::TUnboxedValue();
-
+    case TType::EKind::Null: 
+    case TType::EKind::EmptyList: 
+    case TType::EKind::EmptyDict: 
+        return NUdf::TUnboxedValue(); 
+ 
     case TType::EKind::Data:
         return HandleKindDataImport(type, value);
 
@@ -140,20 +140,20 @@ NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, c
         return dictBuilder->Build();
     }
 
-    case TType::EKind::Variant: {
-        auto variantType = static_cast<TVariantType*>(type);
-        auto index = value.variant_index();
-        auto unboxedValue = ImportValueFromProto(variantType->GetAlternativeType(index), value, factory);
-        auto res = factory.CreateVariantHolder(std::move(unboxedValue.Release()), index);
-        return std::move(res);
-    }
-
-    case TType::EKind::Tagged: {
-        auto taggedType = static_cast<TTaggedType*>(type);
-        auto unboxedValue = ImportValueFromProto(taggedType->GetBaseType(), value, factory);
-        return std::move(unboxedValue);
-    }
-
+    case TType::EKind::Variant: { 
+        auto variantType = static_cast<TVariantType*>(type); 
+        auto index = value.variant_index(); 
+        auto unboxedValue = ImportValueFromProto(variantType->GetAlternativeType(index), value, factory); 
+        auto res = factory.CreateVariantHolder(std::move(unboxedValue.Release()), index); 
+        return std::move(res); 
+    } 
+ 
+    case TType::EKind::Tagged: { 
+        auto taggedType = static_cast<TTaggedType*>(type); 
+        auto unboxedValue = ImportValueFromProto(taggedType->GetBaseType(), value, factory); 
+        return std::move(unboxedValue); 
+    } 
+ 
     default:
         MKQL_ENSURE(false, TStringBuilder() << "Unknown kind: " << type->GetKindAsStr());
     }

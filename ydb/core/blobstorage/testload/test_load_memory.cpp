@@ -26,7 +26,7 @@ class TMemoryTestLoadActor : public TActorBootstrapped<TMemoryTestLoadActor> {
     ui64 AllocatedSize = 0;
 
 public:
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return NKikimrServices::TActivity::BS_LOAD_PDISK_LOG_WRITE;
     }
 

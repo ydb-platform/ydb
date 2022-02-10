@@ -5052,7 +5052,7 @@ TNodePtr TSqlQuery::Build(const TSQLParserAST& ast) {
     TVector<TNodePtr> blocks;
 
     if (Ctx.Settings.WarnOnV0) {
-        if (Ctx.Settings.V0WarnAsError->Allow()) {
+        if (Ctx.Settings.V0WarnAsError->Allow()) { 
             Error() << "SQL v0 syntax is deprecated and no longer supported. Please switch to v1: https://clubs.at.yandex-team.ru/yql/2910";
             return nullptr;
         }

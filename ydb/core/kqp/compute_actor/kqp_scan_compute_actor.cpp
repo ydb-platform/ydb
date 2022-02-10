@@ -12,7 +12,7 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/grpc_services/local_rate_limiter.h>
-
+ 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
@@ -20,19 +20,19 @@
 
 #include <util/generic/deque.h>
 
-namespace NKikimr {
-namespace NKqp {
-
-namespace {
-
+namespace NKikimr { 
+namespace NKqp { 
+ 
+namespace { 
+ 
 using namespace NYql;
 using namespace NYql::NDq;
 
 bool IsDebugLogEnabled(const TActorSystem* actorSystem, NActors::NLog::EComponent component) {
-    auto* settings = actorSystem->LoggerSettings();
+    auto* settings = actorSystem->LoggerSettings(); 
     return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, component);
-}
-
+} 
+ 
 TString DebugPrintRanges(TConstArrayRef<NScheme::TTypeId> types,
   const TSmallVec<TSerializedTableRange>& ranges)
 {
@@ -66,23 +66,23 @@ class TKqpScanComputeActor : public TDqComputeActorBase<TKqpScanComputeActor> {
         struct TEvRetryShard : public TEventLocal<TEvRetryShard, EvRetryShard> {};
     };
 
-public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+public: 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
         return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;
-    }
-
+    } 
+ 
     TKqpScanComputeActor(const NKikimrKqp::TKqpSnapshot& snapshot, const TActorId& executerId, ui64 txId,
         NDqProto::TDqTask&& task, IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, TIntrusivePtr<TKqpCounters> counters)
         : TBase(executerId, txId, std::move(task), std::move(sourceActorFactory), std::move(sinkActorFactory), settings, memoryLimits)
         , ComputeCtx(settings.StatsMode)
-        , Snapshot(snapshot)
+        , Snapshot(snapshot) 
         , Counters(counters)
     {
         YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
         YQL_ENSURE(!Meta.GetReads().empty());
         YQL_ENSURE(Meta.GetTable().GetTableKind() != (ui32)ETableKind::SysView);
-
+ 
         KeyColumnTypes.assign(Meta.GetKeyColumnTypes().begin(), Meta.GetKeyColumnTypes().end());
     }
 
@@ -763,7 +763,7 @@ private:
         }
         TBase::HandleExecuteBase(ev);
     }
-
+ 
     void HandleExecute(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         auto nodeId = ev->Get()->NodeId;
         CA_LOG_N("Disconnected node " << nodeId);
@@ -781,20 +781,20 @@ private:
 
     void StartTableScan() {
         YQL_ENSURE(!Shards.empty());
-
+ 
         auto& state = Shards.front();
-
+ 
         YQL_ENSURE(state.State == EShardState::Initial);
         state.State = EShardState::Starting;
         state.Generation = ++LastGeneration;
         state.ActorId = {};
-
+ 
         CA_LOG_D("StartTableScan: '" << ScanData->TablePath << "', shardId: " << state.TabletId << ", gen: " << state.Generation
             << ", ranges: " << DebugPrintRanges(KeyColumnTypes, GetScanRanges(state)));
 
         SendStartScanRequest(state, state.Generation);
     }
-
+ 
     void SendScanDataAck(TShardState& state, ui64 freeSpace) {
         CA_LOG_D("Send EvScanDataAck to " << state.ActorId << ", freeSpace: " << freeSpace << ", gen: " << state.Generation);
         ui32 flags = IEventHandle::FlagTrackDelivery;
@@ -803,7 +803,7 @@ private:
         }
         Send(state.ActorId, new TEvKqpCompute::TEvScanDataAck(freeSpace, state.Generation), flags);
     }
-
+ 
     void SendStartScanRequest(TShardState& state, ui32 gen) {
         YQL_ENSURE(state.State == EShardState::Starting);
 
@@ -812,7 +812,7 @@ private:
         for (auto& column: ScanData->GetColumns()) {
             ev->Record.AddColumnTags(column.Tag);
             ev->Record.AddColumnTypes(column.Type);
-        }
+        } 
         ev->Record.MutableSkipNullKeys()->CopyFrom(Meta.GetSkipNullKeys());
 
         auto ranges = GetScanRanges(state);
@@ -824,16 +824,16 @@ private:
             range.Serialize(*newRange);
         }
 
-        ev->Record.MutableSnapshot()->CopyFrom(Snapshot);
-        if (RuntimeSettings.Timeout) {
-            ev->Record.SetTimeoutMs(RuntimeSettings.Timeout.Get()->MilliSeconds());
-        }
-        ev->Record.SetStatsMode(RuntimeSettings.StatsMode);
+        ev->Record.MutableSnapshot()->CopyFrom(Snapshot); 
+        if (RuntimeSettings.Timeout) { 
+            ev->Record.SetTimeoutMs(RuntimeSettings.Timeout.Get()->MilliSeconds()); 
+        } 
+        ev->Record.SetStatsMode(RuntimeSettings.StatsMode); 
         ev->Record.SetScanId(0);
         ev->Record.SetTxId(std::get<ui64>(TxId));
         ev->Record.SetTablePath(ScanData->TablePath);
         ev->Record.SetSchemaVersion(ScanData->TableId.SchemaVersion);
-
+ 
         ev->Record.SetGeneration(gen);
 
         ev->Record.SetReverse(Meta.GetReverse());
@@ -858,9 +858,9 @@ private:
             << ", range: " << DebugPrintRanges(KeyColumnTypes, GetScanRanges(state)));
 
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), state.TabletId, !subscribed),
-            IEventHandle::FlagTrackDelivery);
-    }
-
+            IEventHandle::FlagTrackDelivery); 
+    } 
+ 
     const TSmallVec<TSerializedTableRange> GetScanRanges(const TShardState& state) const {
         // No any data read previously, return all ranges
         if (!LastKey.DataSize()) {
@@ -959,7 +959,7 @@ private:
     struct TScanFreeSpace : public IDestructable {
         ui64 FreeSpace = 0;
     };
-
+ 
     THolder<IDestructable> GetSourcesState() override {
         if (ScanData) {
             auto state = MakeHolder<TScanFreeSpace>();
@@ -970,31 +970,31 @@ private:
         }
         return nullptr;
     }
-
+ 
     void PollSources(THolder<IDestructable> prev) override {
         if (!prev || !ScanData || Shards.empty()) {
             return;
-        }
-
+        } 
+ 
         auto& state = Shards.front();
 
         ui64 freeSpace = GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes()
             ? GetMemoryLimits().ScanBufferSize - ScanData->GetStoredBytes()
             : 0ul;
         ui64 prevFreeSpace = static_cast<TScanFreeSpace*>(prev.Get())->FreeSpace;
-
+ 
         CA_LOG_T("Scan over tablet " << state.TabletId << " finished: " << ScanData->IsFinished()
             << ", prevFreeSpace: " << prevFreeSpace << ", freeSpace: " << freeSpace << ", peer: " << state.ActorId);
-
+ 
         if (!ScanData->IsFinished() && state.State != EShardState::PostRunning
             && prevFreeSpace < freeSpace && state.ActorId)
         {
             CA_LOG_T("[poll] Send EvScanDataAck to " << state.ActorId << ", gen: " << state.Generation
                 << ", freeSpace: " << freeSpace);
             SendScanDataAck(state, freeSpace);
-        }
+        } 
     }
-
+ 
     void TerminateSources(const TString& message, bool success) override {
         if (!ScanData || Shards.empty()) {
             return;
@@ -1005,13 +1005,13 @@ private:
         if (state.ActorId) {
             CA_LOG(prio, "Send abort execution event to scan over tablet: " << state.TabletId << ", table: "
                 << ScanData->TablePath << ", scan actor: " << state.ActorId << ", message: " << message);
-
+ 
             Send(state.ActorId, new TEvKqp::TEvAbortExecution(
                 success ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::ABORTED, message));
         } else {
             CA_LOG(prio, "Table: " << ScanData->TablePath << ", scan has not been started yet");
         }
-    }
+    } 
 
     void PassAway() override {
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
@@ -1128,17 +1128,17 @@ private:
     ui32 LastGeneration = 0;
     TSet<ui64> AffectedShards;
     THashSet<ui32> TrackingNodes;
-};
-
+}; 
+ 
 } // anonymous namespace
-
+ 
 IActor* CreateKqpScanComputeActor(const NKikimrKqp::TKqpSnapshot& snapshot, const TActorId& executerId, ui64 txId,
     NDqProto::TDqTask&& task, IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, TIntrusivePtr<TKqpCounters> counters)
-{
+{ 
     return new TKqpScanComputeActor(snapshot, executerId, txId, std::move(task), std::move(sourceActorFactory), std::move(sinkActorFactory),
         settings, memoryLimits, counters);
-}
-
-} // namespace NKqp
-} // namespace NKikimr
+} 
+ 
+} // namespace NKqp 
+} // namespace NKikimr 

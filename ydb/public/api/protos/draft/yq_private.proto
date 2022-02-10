@@ -1,25 +1,25 @@
-syntax = "proto3";
-option cc_enable_arenas = true;
-
+syntax = "proto3"; 
+option cc_enable_arenas = true; 
+ 
 package Yq.Private;
-
+ 
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
-
+ 
 import "ydb/public/api/protos/yq.proto";
-
-import "google/protobuf/timestamp.proto";
-
-////////////////////////////////////////////////////////////
-
-message GetTaskRequest {
+ 
+import "google/protobuf/timestamp.proto"; 
+ 
+//////////////////////////////////////////////////////////// 
+ 
+message GetTaskRequest { 
     string tenant = 1;
     string owner_id = 2; // guid, should be refreshed on node restart
     string host = 3;
     Ydb.Operations.OperationParams operation_params = 4;
-}
-
+} 
+ 
 message SignedIdentity {
     string value = 1;
     string signature = 2;
@@ -36,21 +36,21 @@ message TopicConsumer {
     bool add_bearer_to_token = 8;
 }
 
-message GetTaskResult {
+message GetTaskResult { 
     message Task {
         // come back later in 10 sec ?
         SignedIdentity result_id = 1;
         SignedIdentity query_id = 2;
         SignedIdentity job_id = 3;
         uint64 generation = 4;
-
+ 
         bool streaming = 5;
         repeated bytes dq_graph = 6;
         // text, connection and binding are empty if dq_graph is not empty
         string text = 7;
         repeated YandexQuery.Connection connection = 8;
         repeated YandexQuery.Binding binding = 9;
-
+ 
         string user_token = 10; // IAM token for debug
         repeated SignedIdentity service_accounts = 11;
         string user_id = 12;
@@ -70,24 +70,24 @@ message GetTaskResult {
         YandexQuery.StreamingDisposition disposition = 25;
     }
     repeated Task tasks = 1;
-}
-
-message GetTaskResponse {
-    Ydb.Operations.Operation operation = 1; // GetTaskResult
-}
-
-message PingTaskRequest {
+} 
+ 
+message GetTaskResponse { 
+    Ydb.Operations.Operation operation = 1; // GetTaskResult 
+} 
+ 
+message PingTaskRequest { 
     string owner_id = 1;
     SignedIdentity query_id = 2;
     SignedIdentity job_id = 3;
     SignedIdentity result_id = 4;
     YandexQuery.QueryMeta.ComputeStatus status = 5;
-    repeated Ydb.Issue.IssueMessage issues = 6;
+    repeated Ydb.Issue.IssueMessage issues = 6; 
     repeated Ydb.Issue.IssueMessage transient_issues = 16;
-    uint32 result_set_count = 7;
-    string statistics = 8;
+    uint32 result_set_count = 7; 
+    string statistics = 8; 
     repeated YandexQuery.ResultSetMeta result_set_meta = 9;
-    string executer_info = 10;
+    string executer_info = 10; 
     repeated bytes dq_graph = 11;
     int32 dq_graph_index = 20;
     string ast = 12;
@@ -101,34 +101,34 @@ message PingTaskRequest {
     google.protobuf.Timestamp started_at = 101;
     google.protobuf.Timestamp finished_at = 102;
     google.protobuf.Timestamp deadline = 103;
-}
-
-message PingTaskResult {
+} 
+ 
+message PingTaskResult { 
     YandexQuery.QueryAction action = 1;
-}
-
-message PingTaskResponse {
-    Ydb.Operations.Operation operation = 1; // PingTaskResult
-}
-
-message WriteTaskResultRequest {
+} 
+ 
+message PingTaskResponse { 
+    Ydb.Operations.Operation operation = 1; // PingTaskResult 
+} 
+ 
+message WriteTaskResultRequest { 
     string owner_id = 1;
     SignedIdentity result_id = 2;
-    Ydb.ResultSet result_set = 3;
-    uint32 result_set_id = 4;
-    uint64 offset = 5;
+    Ydb.ResultSet result_set = 3; 
+    uint32 result_set_id = 4; 
+    uint64 offset = 5; 
     uint64 request_id = 6;
     Ydb.Operations.OperationParams operation_params = 7;
     google.protobuf.Timestamp deadline = 8;
-}
-
-message WriteTaskResultResult {
+} 
+ 
+message WriteTaskResultResult { 
     uint64 request_id = 1;
-}
-
-message WriteTaskResultResponse {
-    Ydb.Operations.Operation operation = 1; // WriteRowsResultResult
-}
+} 
+ 
+message WriteTaskResultResponse { 
+    Ydb.Operations.Operation operation = 1; // WriteRowsResultResult 
+} 
 
 message NodeInfo {
     uint32 node_id = 1;

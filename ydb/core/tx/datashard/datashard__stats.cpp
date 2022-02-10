@@ -23,7 +23,7 @@ public:
         , SearchHeight(searchHeight)
     {}
 
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return NKikimrServices::TActivity::DATASHARD_STATS_BUILDER;
     }
 

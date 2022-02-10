@@ -1096,7 +1096,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
         }
 
     public:
-        static constexpr auto ActorActivityType() {
+        static constexpr auto ActorActivityType() { 
             return TActivity::SCHEME_BOARD_INFO_REQUESTER_ACTOR;
         }
 
@@ -1312,7 +1312,7 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     }
 
 public:
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return TActivity::SCHEME_BOARD_MONITORING_ACTOR;
     }
 

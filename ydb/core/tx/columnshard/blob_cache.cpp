@@ -66,7 +66,7 @@ private:
     const TCounterPtr ReadsInQueue;
 
 public:
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return NKikimrServices::TActivity::BLOB_CACHE_ACTOR;
     }
 

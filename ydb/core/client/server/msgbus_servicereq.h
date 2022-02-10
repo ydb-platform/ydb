@@ -50,7 +50,7 @@ public:
         }
     }
 
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return Activity;
     }
 };

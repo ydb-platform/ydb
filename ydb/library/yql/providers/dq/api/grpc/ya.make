@@ -3,7 +3,7 @@ PROTO_LIBRARY()
 GRPC()
 
 OWNER(
-    g:yql
+    g:yql 
 )
 
 SRCS(

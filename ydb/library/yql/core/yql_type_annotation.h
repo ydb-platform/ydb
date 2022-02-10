@@ -188,7 +188,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TVector<TString> AvailablePureResultDataSources;
     TString FullResultDataSink;
     TUserDataStorage::TPtr UserDataStorage;
-    TUserDataTable UserDataStorageCrutches;
+    TUserDataTable UserDataStorageCrutches; 
     TYqlOperationOptions OperationOptions;
     TVector<TCredentialTablePtr> Credentials;
     TUserCredentials UserCredentials;
@@ -215,9 +215,9 @@ struct TTypeAnnotationContext: public TThrRefBase {
         UdfTypeCache; // (name,typecfg,type)->(type,run config type,new user type)
     bool UseTableMetaFromGraph = false;
     bool DiscoveryMode = false;
-    bool ForceDq = false;
-    bool DqCaptured = false; // TODO: Add before/after recapture transformers
-    TString DqFallbackPolicy = "";
+    bool ForceDq = false; 
+    bool DqCaptured = false; // TODO: Add before/after recapture transformers 
+    TString DqFallbackPolicy = ""; 
     bool StrictTableProps = true;
     bool JsonQueryReturnsJsonDocument = false;
     ui32 FolderSubDirsLimit = 1000;

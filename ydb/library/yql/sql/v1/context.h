@@ -234,8 +234,8 @@ namespace NSQLTranslationV1 {
         bool WarnUnnamedColumns = false;
         bool DiscoveryMode = false;
         bool EnableSystemColumns = true;
-        bool DqEngineEnable = false;
-        bool DqEngineForce = false;
+        bool DqEngineEnable = false; 
+        bool DqEngineForce = false; 
         TMaybe<bool> JsonQueryReturnsJsonDocument;
         TMaybe<bool> AnsiInForEmptyOrNullableItemsCollections;
         TMaybe<bool> AnsiRankForNullableKeys = true;

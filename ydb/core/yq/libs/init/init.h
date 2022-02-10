@@ -1,36 +1,36 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/core/base/appdata.h>
-
+ 
 #include <ydb/core/yq/libs/actors/nodes_manager.h>
 #include <ydb/core/yq/libs/actors/proxy.h>
 #include <ydb/core/yq/libs/actors/proxy_private.h>
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
-
+ 
 #include <ydb/library/folder_service/proto/config.pb.h>
 #include <ydb/core/yq/libs/config/protos/audit.pb.h>
 
 #include <ydb/library/yql/providers/pq/cm_client/interface/client.h>
 
-#include <library/cpp/actors/core/actor.h>
-
+#include <library/cpp/actors/core/actor.h> 
+ 
 #include <util/generic/ptr.h>
-
+ 
 namespace NYq {
 
-using TActorRegistrator = std::function<void(NActors::TActorId, NActors::IActor*)>;
-
+using TActorRegistrator = std::function<void(NActors::TActorId, NActors::IActor*)>; 
+ 
 IYqSharedResources::TPtr CreateYqSharedResources(
     const NYq::NConfig::TConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NMonitoring::TDynamicCounterPtr& counters);
 
-void Init(
+void Init( 
     const NYq::NConfig::TConfig& config,
-    ui32 nodeId,
-    const TActorRegistrator& actorRegistrator,
-    const NKikimr::TAppData* appData,
+    ui32 nodeId, 
+    const TActorRegistrator& actorRegistrator, 
+    const NKikimr::TAppData* appData, 
     const TString& tenant,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const IYqSharedResources::TPtr& yqSharedResources,

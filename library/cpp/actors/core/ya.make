@@ -100,7 +100,7 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(defs.h)
-GENERATE_ENUM_SERIALIZATION(actor.h)
+GENERATE_ENUM_SERIALIZATION(actor.h) 
 
 PEERDIR(
     library/cpp/actors/memory_log

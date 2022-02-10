@@ -1229,7 +1229,7 @@ private:
         limits.ChannelBufferSize = 50_MB;
         limits.MkqlLightProgramMemoryLimit = Request.MkqlMemoryLimit > 0 ? std::min(500_MB, Request.MkqlMemoryLimit) : 500_MB;
         limits.MkqlHeavyProgramMemoryLimit = Request.MkqlMemoryLimit > 0 ? std::min(2_GB, Request.MkqlMemoryLimit) : 2_GB;
-        limits.AllocateMemoryFn = [TxId = TxId](auto /* txId */, ui64 taskId, ui64 memory) {
+        limits.AllocateMemoryFn = [TxId = TxId](auto /* txId */, ui64 taskId, ui64 memory) { 
             LOG_E("Data query task cannot allocate additional memory during executing."
                       << " Task: " << taskId << ", memory: " << memory);
             return false;

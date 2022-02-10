@@ -184,9 +184,9 @@ void TDqDataSerializer::Deserialize(const NDqProto::TData& data, const TType* it
         default:
             YQL_ENSURE(false, "Unsupported TransportVersion");
     }
-}
-
-
+} 
+ 
+ 
 NDqProto::TData TDqDataSerializer::SerializeParam(const TMkqlValueRef& param, const TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory)
 {

@@ -37,7 +37,7 @@ class TLongTimer : public TActor<TLongTimer> {
         ctx.Schedule(TDuration::Seconds(ThresholdSec), new TEvents::TEvWakeup());
     }
 public:
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return NKikimrServices::TActivity::ACTORLIB_LONG_TIMER;
     }
 

@@ -1,22 +1,22 @@
-#include "entity_id.h"
+#include "entity_id.h" 
 #include <util/stream/str.h>
 #include <util/system/yassert.h>
-#include <util/datetime/base.h>
-#include <util/system/unaligned_mem.h>
-#include <util/random/easy.h>
-#include <util/stream/format.h>
-#include <util/string/ascii.h>
-
+#include <util/datetime/base.h> 
+#include <util/system/unaligned_mem.h> 
+#include <util/random/easy.h> 
+#include <util/stream/format.h> 
+#include <util/string/ascii.h> 
+ 
 namespace NYq {
-
-// used ascii order: IntToChar[i] < IntToChar[i+1]
-constexpr char IntToChar[] = {
+ 
+// used ascii order: IntToChar[i] < IntToChar[i+1] 
+constexpr char IntToChar[] = { 
     '0', '1', '2', '3', '4', '5', '6', '7', // 8
     '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', // 16
     'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', // 24
     'o', 'p', 'q', 'r', 's', 't', 'u', 'v', // 32
-};
-
+}; 
+ 
 static bool IsValidSymbol(char symbol) {
     return '0' <= symbol && symbol <= '9' || 'a' <= symbol && symbol <= 'v';
 }
@@ -33,14 +33,14 @@ TString Conv(ui32 n) {
 
 // 55 bits = 11 symbols
 TString ConvTime(ui64 time) {
-    char buf[12] = {0};
-    for (int i = 0; i < 11; i++) {
+    char buf[12] = {0}; 
+    for (int i = 0; i < 11; i++) { 
         buf[10 - i] = IntToChar[time & 0x1f];
         time >>= 5;
-    }
-    return buf;
-}
-
+    } 
+    return buf; 
+} 
+ 
 /*
 - prefix [2 symbols (10 bit)] - service identifier
 - type [1 symbol (5 bit)] - resource type (query, job, connection, binding, result, ...)
@@ -54,7 +54,7 @@ TString GetEntityIdAsString(const TString& prefix, EEntityType type) {
     Y_VERIFY(IsValidSymbol(prefix[1]), "not valid character for prefix[1]");
     return GetEntityIdAsString(prefix, type, TInstant::Now(), RandomNumber<ui32>());
 }
-
+ 
 TString GetEntityIdAsString(const TString& prefix, EEntityType type, TInstant now, ui32 rnd) {
     // The maximum time that fits in 55 bits. Necessary for the correct inversion of time
     static constexpr TInstant MaxSeconds = TInstant::FromValue(0x7FFFFFFFFFFFFFULL);
@@ -63,8 +63,8 @@ TString GetEntityIdAsString(const TString& prefix, EEntityType type, TInstant no
     TStringStream stream;
     stream << prefix << static_cast<char>(type) << ConvTime(reversedTime) << Conv(rnd);
     return stream.Str();
-}
-
+} 
+ 
 struct TEntityIdGenerator : public IEntityIdGenerator {
     TEntityIdGenerator(const TString& prefix)
         : Prefix(prefix)

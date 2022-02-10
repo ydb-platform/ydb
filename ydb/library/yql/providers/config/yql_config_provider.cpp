@@ -663,26 +663,26 @@ namespace {
                     return false;
                 }
             }
-            else if (name == "DqEngine") {
-                if (args.size() != 1) {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size()));
-                    return false;
-                }
-
+            else if (name == "DqEngine") { 
+                if (args.size() != 1) { 
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected at most 1 argument, but got " << args.size())); 
+                    return false; 
+                } 
+ 
                 auto arg = TString{args[0]};
-                if (Find(Types.AvailablePureResultDataSources, DqProviderName) == Types.AvailablePureResultDataSources.end() || arg == "disable") {
-                    ; // reserved
-                } else if (arg == "auto") {
+                if (Find(Types.AvailablePureResultDataSources, DqProviderName) == Types.AvailablePureResultDataSources.end() || arg == "disable") { 
+                    ; // reserved 
+                } else if (arg == "auto") { 
                     Types.PureResultDataSource = DqProviderName;
-                    Types.ForceDq = false;
-                } else if (arg == "force") {
+                    Types.ForceDq = false; 
+                } else if (arg == "force") { 
                     Types.PureResultDataSource = DqProviderName;
-                    Types.ForceDq = true;
-                } else {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0]));
-                    return false;
-                }
-            }
+                    Types.ForceDq = true; 
+                } else { 
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected `disable|auto|force', but got: " << args[0])); 
+                    return false; 
+                } 
+            } 
             else if (name == "IssueCountLimit") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
@@ -709,15 +709,15 @@ namespace {
                 }
                 Types.StrictTableProps = false;
             }
-            else if (name == "GeobaseDownloadUrl") {
-                if (args.size() != 1) {
-                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
-                    return false;
-                }
-                Types.UserDataStorageCrutches
-                    .emplace(
-                        TUserDataKey::File(TStringBuf("/home/geodata6.bin")),
-                        TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}}).first->second.Usage.Set(EUserDataBlockUsage::Path);
+            else if (name == "GeobaseDownloadUrl") { 
+                if (args.size() != 1) { 
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size())); 
+                    return false; 
+                } 
+                Types.UserDataStorageCrutches 
+                    .emplace( 
+                        TUserDataKey::File(TStringBuf("/home/geodata6.bin")), 
+                        TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}}).first->second.Usage.Set(EUserDataBlockUsage::Path); 
             }
             else if (name == "JsonQueryReturnsJsonDocument" || name == "DisableJsonQueryReturnsJsonDocument") {
                 if (args.size() != 0) {

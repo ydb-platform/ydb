@@ -1,13 +1,13 @@
 OWNER(g:yq)
-
-LIBRARY()
-
-SRCS(
-    yql_mock.cpp
-)
-
-PEERDIR(
-    library/cpp/actors/core
+ 
+LIBRARY() 
+ 
+SRCS( 
+    yql_mock.cpp 
+) 
+ 
+PEERDIR( 
+    library/cpp/actors/core 
     library/cpp/json/yson
     library/cpp/monlib/dynamic_counters
     library/cpp/random_provider
@@ -40,8 +40,8 @@ PEERDIR(
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/worker_manager/interface
     ydb/library/yql/providers/ydb/provider
-)
-
-YQL_LAST_ABI_VERSION()
-
-END()
+) 
+ 
+YQL_LAST_ABI_VERSION() 
+ 
+END() 

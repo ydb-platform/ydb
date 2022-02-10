@@ -582,11 +582,11 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
         return holderFactory.CreateVariantHolder(UnpackImpl(innerType, buf, topLength, holderFactory).Release(), variantIndex);
     }
 
-    case TType::EKind::Tagged: {
-        auto taggedType = static_cast<const TTaggedType*>(type);
-        return UnpackImpl(taggedType->GetBaseType(), buf, topLength, holderFactory);
-    }
-
+    case TType::EKind::Tagged: { 
+        auto taggedType = static_cast<const TTaggedType*>(type); 
+        return UnpackImpl(taggedType->GetBaseType(), buf, topLength, holderFactory); 
+    } 
+ 
     default:
         THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
     }
@@ -974,11 +974,11 @@ bool TValuePacker::HasOptionalFields(const TType* type) {
         return HasOptionalFields(variantType->GetUnderlyingType());
     }
 
-    case TType::EKind::Tagged:  {
-        auto taggedType = static_cast<const TTaggedType*>(type);
-        return HasOptionalFields(taggedType->GetBaseType());
-    }
-
+    case TType::EKind::Tagged:  { 
+        auto taggedType = static_cast<const TTaggedType*>(type); 
+        return HasOptionalFields(taggedType->GetBaseType()); 
+    } 
+ 
     default:
         THROW yexception() << "Unsupported type: " << type->GetKindAsStr();
     }

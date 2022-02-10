@@ -8,8 +8,8 @@
 
 namespace NYql::NDq {
 
-struct TDqStageSettings {
-    static constexpr TStringBuf LogicalIdSettingName = "_logical_id";
+struct TDqStageSettings { 
+    static constexpr TStringBuf LogicalIdSettingName = "_logical_id"; 
     static constexpr TStringBuf IdSettingName = "_id";
     static constexpr TStringBuf SinglePartitionSettingName = "_single_partition";
     static constexpr TStringBuf IsExternalSetting = "is_external_function";
@@ -17,7 +17,7 @@ struct TDqStageSettings {
     static constexpr TStringBuf TransformTypeSetting = "transform_type";
     static constexpr TStringBuf TransformConcurrencySetting = "concurrency";
 
-    ui64 LogicalId = 0;
+    ui64 LogicalId = 0; 
     TString Id;
     bool SinglePartition = false;
 
@@ -26,12 +26,12 @@ struct TDqStageSettings {
     TString TransformName;
     ui32 TransformConcurrency = 0;
 
-    static TDqStageSettings Parse(const NNodes::TDqStageBase& node);
+    static TDqStageSettings Parse(const NNodes::TDqStageBase& node); 
 
-    static TDqStageSettings New(const NNodes::TDqStageBase& node);
-
-    static TDqStageSettings New() {
-        TDqStageSettings s;
+    static TDqStageSettings New(const NNodes::TDqStageBase& node); 
+ 
+    static TDqStageSettings New() { 
+        TDqStageSettings s; 
         s.Id = CreateGuidAsString();
         return s;
     }

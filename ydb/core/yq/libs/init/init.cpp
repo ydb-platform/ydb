@@ -1,8 +1,8 @@
-#include "init.h"
-
+#include "init.h" 
+ 
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/test_connection/test_connection.h>
-
+ 
 #include <ydb/core/yq/libs/audit/yq_audit_service.h>
 #include <ydb/core/yq/libs/common/service_counters.h>
 #include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
@@ -10,10 +10,10 @@
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/library/folder_service/folder_service.h>
 
-#include <library/cpp/actors/http/http_proxy.h>
+#include <library/cpp/actors/http/http_proxy.h> 
 #include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
-
+ 
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_io_actors_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
@@ -36,7 +36,7 @@
 
 #include <util/stream/file.h>
 #include <util/system/hostname.h>
-
+ 
 namespace {
 
 std::tuple<TString, TString> GetLocalAddress(const TString* overrideHostname = nullptr) {
@@ -93,13 +93,13 @@ std::tuple<TString, TString> GetLocalAddress(const TString* overrideHostname = n
 
 namespace NYq {
 
-using namespace NKikimr;
-
-void Init(
+using namespace NKikimr; 
+ 
+void Init( 
     const NYq::NConfig::TConfig& protoConfig,
-    ui32 nodeId,
-    const TActorRegistrator& actorRegistrator,
-    const TAppData* appData,
+    ui32 nodeId, 
+    const TActorRegistrator& actorRegistrator, 
+    const TAppData* appData, 
     const TString& tenant,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const IYqSharedResources::TPtr& iyqSharedResources,
@@ -107,8 +107,8 @@ void Init(
     const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig)>& auditServiceFactory,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ui32& icPort
-    )
-{
+    ) 
+{ 
     Y_VERIFY(iyqSharedResources, "No YQ shared resources created");
     TYqSharedResources::TPtr yqSharedResources = TYqSharedResources::Cast(iyqSharedResources);
     const auto clientCounters = appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "ClientMetrics");
@@ -158,16 +158,16 @@ void Init(
     auto workerManagerCounters = NYql::NDqs::TWorkerManagerCounters(yqCounters->GetSubgroup("subsystem", "worker_manager"));
 
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory({
-        NYql::GetCommonDqFactory(),
+        NYql::GetCommonDqFactory(), 
         NYql::GetDqYdbFactory(yqSharedResources->YdbDriver),
-        NKikimr::NMiniKQL::GetYqlFactory()
-    });
-
+        NKikimr::NMiniKQL::GetYqlFactory() 
+    }); 
+ 
     NYql::TTaskTransformFactory dqTaskTransformFactory = NYql::CreateCompositeTaskTransformFactory({
-        NYql::CreateCommonDqTaskTransformFactory(),
-        NYql::CreateYdbDqTaskTransformFactory()
-    });
-
+        NYql::CreateCommonDqTaskTransformFactory(), 
+        NYql::CreateYdbDqTaskTransformFactory() 
+    }); 
+ 
     auto sourceActorFactory = MakeIntrusive<NYql::NDq::TDqSourceFactory>();
     auto sinkActorFactory = MakeIntrusive<NYql::NDq::TDqSinkFactory>();
 
@@ -187,7 +187,7 @@ void Init(
         RegisterDqPqWriteActorFactory(*sinkActorFactory, yqSharedResources->YdbDriver, credentialsFactory);
         RegisterDQSolomonWriteActorFactory(*sinkActorFactory, credentialsFactory);
     }
-
+ 
     ui64 mkqlInitialMemoryLimit = 8_GB;
 
     if (protoConfig.GetResourceManager().GetEnabled()) {
@@ -200,22 +200,22 @@ void Init(
         if (!mkqlAllocSize) {
             mkqlAllocSize = 30_MB;
         }
-        NYql::NDqs::TLocalWorkerManagerOptions lwmOptions;
-        lwmOptions.Counters = workerManagerCounters;
-        lwmOptions.Factory = NYql::NTaskRunnerProxy::CreateFactory(appData->FunctionRegistry, dqCompFactory, dqTaskTransformFactory, false);
-        lwmOptions.SourceActorFactory = sourceActorFactory;
-        lwmOptions.SinkActorFactory = sinkActorFactory;
-        lwmOptions.TaskRunnerInvokerFactory = new NYql::NDqs::TTaskRunnerInvokerFactory();
-        lwmOptions.MkqlInitialMemoryLimit = mkqlInitialMemoryLimit;
-        lwmOptions.MkqlTotalMemoryLimit = mkqlTotalMemoryLimit;
-        lwmOptions.MkqlMinAllocSize = mkqlAllocSize;
+        NYql::NDqs::TLocalWorkerManagerOptions lwmOptions; 
+        lwmOptions.Counters = workerManagerCounters; 
+        lwmOptions.Factory = NYql::NTaskRunnerProxy::CreateFactory(appData->FunctionRegistry, dqCompFactory, dqTaskTransformFactory, false); 
+        lwmOptions.SourceActorFactory = sourceActorFactory; 
+        lwmOptions.SinkActorFactory = sinkActorFactory; 
+        lwmOptions.TaskRunnerInvokerFactory = new NYql::NDqs::TTaskRunnerInvokerFactory(); 
+        lwmOptions.MkqlInitialMemoryLimit = mkqlInitialMemoryLimit; 
+        lwmOptions.MkqlTotalMemoryLimit = mkqlTotalMemoryLimit; 
+        lwmOptions.MkqlMinAllocSize = mkqlAllocSize; 
         auto resman = NYql::NDqs::CreateLocalWorkerManager(lwmOptions);
-
+ 
         actorRegistrator(NYql::NDqs::MakeWorkerManagerActorID(nodeId), resman);
     }
-
+ 
     ::NYq::NCommon::TServiceCounters serviceCounters(appData->Counters);
-
+ 
     if (protoConfig.GetNodesManager().GetEnabled()) {
         const auto localAddr =  GetLocalAddress(&HostName());
         auto nodesManager = CreateYqlNodesManager(
@@ -230,13 +230,13 @@ void Init(
             tenant,
             mkqlInitialMemoryLimit,
             clientCounters);
-
+ 
         actorRegistrator(MakeYqlNodesManagerId(), nodesManager);
     }
-
-    auto httpProxy = NHttp::CreateHttpProxy(*NMonitoring::TMetricRegistry::Instance());
+ 
+    auto httpProxy = NHttp::CreateHttpProxy(*NMonitoring::TMetricRegistry::Instance()); 
     actorRegistrator(MakeYqlAnalyticsHttpProxyId(), httpProxy);
-
+ 
     if (protoConfig.GetPendingFetcher().GetEnabled()) {
         auto fetcher = CreatePendingFetcher(
             yqSharedResources,
@@ -255,7 +255,7 @@ void Init(
             std::move(pqCmConnections),
             clientCounters
             );
-
+ 
         actorRegistrator(MakeYqlAnalyticsFetcherId(nodeId), fetcher);
     }
 
@@ -268,8 +268,8 @@ void Init(
 
         actorRegistrator(MakeYqPrivateProxyId(), proxyPrivate);
     }
-}
-
+} 
+ 
 IYqSharedResources::TPtr CreateYqSharedResources(
     const NYq::NConfig::TConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,

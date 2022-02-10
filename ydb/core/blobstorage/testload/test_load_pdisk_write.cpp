@@ -127,7 +127,7 @@ class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoad
     TMap<double, TIntrusivePtr<NMonitoring::TCounterForPtr>> DevicePercentiles;
 
 public:
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return NKikimrServices::TActivity::BS_LOAD_PDISK_WRITE;
     }
 

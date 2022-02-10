@@ -216,7 +216,7 @@ public:
                 snapshots.emplace(client.first, snapshot.ExtractResult());
             } else {
                 failed = true;
-                const auto& config = State_->Configuration->Clusters[TString(client.first)];
+                const auto& config = State_->Configuration->Clusters[TString(client.first)]; 
                 ctx.AddError(TIssue({}, TStringBuilder() << "Failed to take snapshot for: `" << client.first << "`, endpoint: " << config.Endpoint << ", status: " << snapshot.GetStatus()));
                 for (const auto& issue : snapshot.GetIssues())
                     ctx.AddError(issue);

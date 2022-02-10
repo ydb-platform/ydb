@@ -8,8 +8,8 @@ TWorkerManagerCounters::TWorkerManagerCounters(NMonitoring::TDynamicCounterPtr r
    MkqlMemoryAllocated = root->GetCounter("MkqlMemoryAllocated");
 }
 
-TWorkerManagerCounters::TWorkerManagerCounters()
-    : TWorkerManagerCounters(new NMonitoring::TDynamicCounters)
-{ }
-
-} // namespace NYql::NDqs
+TWorkerManagerCounters::TWorkerManagerCounters() 
+    : TWorkerManagerCounters(new NMonitoring::TDynamicCounters) 
+{ } 
+ 
+} // namespace NYql::NDqs 

@@ -32,12 +32,12 @@ struct IMetricsRegistry: public TThrRefBase {
             const TString& labelValue,
             bool derivative = true) = 0;
 
-    virtual void AddCounter(
-            const TString& labelName,
-            const TString& labelValue,
-            i64 value,
-            bool derivative = true) = 0;
-
+    virtual void AddCounter( 
+            const TString& labelName, 
+            const TString& labelValue, 
+            i64 value, 
+            bool derivative = true) = 0; 
+ 
     // will invalidate all counters
     virtual bool TakeSnapshot(
             NProto::TMetricsRegistrySnapshot* snapshot) const = 0;

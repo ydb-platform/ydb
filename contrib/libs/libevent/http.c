@@ -200,9 +200,9 @@ static void evhttp_write_buffer(struct evhttp_connection *,
     void (*)(struct evhttp_connection *, void *), void *);
 static void evhttp_make_header(struct evhttp_connection *, struct evhttp_request *);
 
-static struct evhttp_cb *
-evhttp_dispatch_callback(struct httpcbq *callbacks, struct evhttp_request *req, int chunked);
-
+static struct evhttp_cb * 
+evhttp_dispatch_callback(struct httpcbq *callbacks, struct evhttp_request *req, int chunked); 
+ 
 /* callbacks for bufferevent */
 static void evhttp_read_cb(struct bufferevent *, void *);
 static void evhttp_write_cb(struct bufferevent *, void *);
@@ -983,7 +983,7 @@ evhttp_handle_chunked_read(struct evhttp_request *req, struct evbuffer *buf)
 		req->ntoread = -1;
 		if (req->chunk_cb != NULL) {
 			req->flags |= EVHTTP_REQ_DEFER_FREE;
-			(*req->chunk_cb)(req, req->chunk_cb_arg);
+			(*req->chunk_cb)(req, req->chunk_cb_arg); 
 			evbuffer_drain(req->input_buffer,
 			    evbuffer_get_length(req->input_buffer));
 			req->flags &= ~EVHTTP_REQ_DEFER_FREE;
@@ -993,12 +993,12 @@ evhttp_handle_chunked_read(struct evhttp_request *req, struct evbuffer *buf)
 		}
 	}
 
-	if (req->chunk_cb != NULL) {
-		req->flags |= EVHTTP_REQ_PROCESS_CHUNKS_END;
-		(*req->chunk_cb)(req, req->chunk_cb_arg);
-		req->flags &= ~EVHTTP_REQ_PROCESS_CHUNKS_END;
-	}
-
+	if (req->chunk_cb != NULL) { 
+		req->flags |= EVHTTP_REQ_PROCESS_CHUNKS_END; 
+		(*req->chunk_cb)(req, req->chunk_cb_arg); 
+		req->flags &= ~EVHTTP_REQ_PROCESS_CHUNKS_END; 
+	} 
+ 
 	return (MORE_DATA_EXPECTED);
 }
 
@@ -1112,7 +1112,7 @@ evhttp_read_body(struct evhttp_connection *evcon, struct evhttp_request *req)
 
 	if (evbuffer_get_length(req->input_buffer) > 0 && req->chunk_cb != NULL) {
 		req->flags |= EVHTTP_REQ_DEFER_FREE;
-		(*req->chunk_cb)(req, req->chunk_cb_arg);
+		(*req->chunk_cb)(req, req->chunk_cb_arg); 
 		req->flags &= ~EVHTTP_REQ_DEFER_FREE;
 		evbuffer_drain(req->input_buffer,
 		    evbuffer_get_length(req->input_buffer));
@@ -1364,23 +1364,23 @@ evhttp_connection_reset_(struct evhttp_connection *evcon)
 		if (evhttp_connected(evcon) && evcon->closecb != NULL)
 			(*evcon->closecb)(evcon, evcon->closecb_arg);
 
-		/* if we have a bufferevent factory callback set, get a new bufferevent */
-		if (NULL != evcon->bufcb && -1 != bufferevent_getfd(evcon->bufev)) {
-			struct bufferevent *bev = (*evcon->bufcb)(evcon->bufcb_arg);
-
-			if (NULL == bev) {
-				event_warn("%s: bufferevent factory callback failed", __func__);
-			}
-			else {
-				if (bufferevent_get_base(bev) != evcon->base) {
-					bufferevent_base_set(evcon->base, bev);
-				}
-
-				bufferevent_free(evcon->bufev);
-				evcon->bufev = bev;
-			}
-		}
-
+		/* if we have a bufferevent factory callback set, get a new bufferevent */ 
+		if (NULL != evcon->bufcb && -1 != bufferevent_getfd(evcon->bufev)) { 
+			struct bufferevent *bev = (*evcon->bufcb)(evcon->bufcb_arg); 
+ 
+			if (NULL == bev) { 
+				event_warn("%s: bufferevent factory callback failed", __func__); 
+			} 
+			else { 
+				if (bufferevent_get_base(bev) != evcon->base) { 
+					bufferevent_base_set(evcon->base, bev); 
+				} 
+ 
+				bufferevent_free(evcon->bufev); 
+				evcon->bufev = bev; 
+			} 
+		} 
+ 
 		shutdown(evcon->fd, EVUTIL_SHUT_WR);
 		evutil_closesocket(evcon->fd);
 		evcon->fd = -1;
@@ -1585,7 +1585,7 @@ evhttp_error_cb(struct bufferevent *bufev, short what, void *arg)
 		}
 
 		evhttp_connection_fail_(evcon, EVREQ_HTTP_EOF);
-	} else if (what == BEV_EVENT_CONNECTED) {
+	} else if (what == BEV_EVENT_CONNECTED) { 
 	} else {
 		evhttp_connection_fail_(evcon, EVREQ_HTTP_BUFFER_ERROR);
 	}
@@ -1918,13 +1918,13 @@ evhttp_parse_request_line(struct evhttp_request *req, char *line, size_t len)
 	    !evhttp_find_vhost(req->evcon->http_server, NULL, hostname))
 		req->flags |= EVHTTP_PROXY_REQUEST;
 
-	{
-		struct evhttp_cb * chunkcb = evhttp_dispatch_callback(&req->evcon->http_server->callbacks, req, 1);
-		if (chunkcb) {
-			req->chunk_cb = chunkcb->cb;
-			req->chunk_cb_arg = chunkcb->cbarg;
-		}
-	}
+	{ 
+		struct evhttp_cb * chunkcb = evhttp_dispatch_callback(&req->evcon->http_server->callbacks, req, 1); 
+		if (chunkcb) { 
+			req->chunk_cb = chunkcb->cb; 
+			req->chunk_cb_arg = chunkcb->cbarg; 
+		} 
+	} 
 
 	return 0;
 }
@@ -2403,30 +2403,30 @@ evhttp_read_header(struct evhttp_connection *evcon,
  * happen elsewhere.
  */
 
-struct evhttp_connection *evhttp_connection_base_bufferevent_factory_new(
-       struct event_base *base, struct evdns_base *dnsbase,
-       bev_factory_cb cb, void * arg, const char *address, unsigned short port)
-{
-       struct bufferevent *bev = NULL;
-
-       if (NULL != cb) {
-               if (NULL == (bev = (*cb)(arg))) {
-                       event_warn("%s: bufferevent factory callback failed", __func__);
-                       return (NULL);
-               }
-       }
-
-       struct evhttp_connection *ret =
-               evhttp_connection_base_bufferevent_new(base, dnsbase, bev, address, port);
-
-       if (NULL != ret) {
-               ret->bufcb = cb;
-               ret->bufcb_arg = arg;
-       }
-
-       return (ret);
-}
-
+struct evhttp_connection *evhttp_connection_base_bufferevent_factory_new( 
+       struct event_base *base, struct evdns_base *dnsbase, 
+       bev_factory_cb cb, void * arg, const char *address, unsigned short port) 
+{ 
+       struct bufferevent *bev = NULL; 
+ 
+       if (NULL != cb) { 
+               if (NULL == (bev = (*cb)(arg))) { 
+                       event_warn("%s: bufferevent factory callback failed", __func__); 
+                       return (NULL); 
+               } 
+       } 
+ 
+       struct evhttp_connection *ret = 
+               evhttp_connection_base_bufferevent_new(base, dnsbase, bev, address, port); 
+ 
+       if (NULL != ret) { 
+               ret->bufcb = cb; 
+               ret->bufcb_arg = arg; 
+       } 
+ 
+       return (ret); 
+} 
+ 
 struct evhttp_connection *
 evhttp_connection_new(const char *address, ev_uint16_t port)
 {
@@ -2434,7 +2434,7 @@ evhttp_connection_new(const char *address, ev_uint16_t port)
 }
 
 struct evhttp_connection *
-evhttp_connection_base_bufferevent_new(struct event_base *base, struct evdns_base *dnsbase, struct bufferevent* bev,
+evhttp_connection_base_bufferevent_new(struct event_base *base, struct evdns_base *dnsbase, struct bufferevent* bev, 
     const char *address, ev_uint16_t port)
 {
 	struct evhttp_connection *evcon = NULL;
@@ -2460,11 +2460,11 @@ evhttp_connection_base_bufferevent_new(struct event_base *base, struct evdns_bas
 		goto error;
 	}
 
-	if (bev == NULL) {
+	if (bev == NULL) { 
 		if (!(bev = bufferevent_socket_new(base, -1, 0))) {
 			event_warn("%s: bufferevent_socket_new failed", __func__);
-			goto error;
-		}
+			goto error; 
+		} 
 	}
 
 	bufferevent_setcb(bev, evhttp_read_cb, evhttp_write_cb, evhttp_error_cb, evcon);
@@ -2505,17 +2505,17 @@ struct bufferevent* evhttp_connection_get_bufferevent(struct evhttp_connection *
 
 struct evhttp *
 evhttp_connection_get_server(struct evhttp_connection *evcon)
-{
+{ 
 	return evcon->http_server;
 }
-
-struct evhttp_connection *
-evhttp_connection_base_new(struct event_base *base, struct evdns_base *dnsbase,
+ 
+struct evhttp_connection * 
+evhttp_connection_base_new(struct event_base *base, struct evdns_base *dnsbase, 
     const char *address, ev_uint16_t port)
-{
-	return evhttp_connection_base_bufferevent_new(base, dnsbase, NULL, address, port);
-}
-
+{ 
+	return evhttp_connection_base_bufferevent_new(base, dnsbase, NULL, address, port); 
+} 
+ 
 void evhttp_connection_set_family(struct evhttp_connection *evcon,
 	int family)
 {
@@ -3390,7 +3390,7 @@ evhttp_parse_query_str(const char *uri, struct evkeyvalq *headers)
 }
 
 static struct evhttp_cb *
-evhttp_dispatch_callback(struct httpcbq *callbacks, struct evhttp_request *req, int chunked)
+evhttp_dispatch_callback(struct httpcbq *callbacks, struct evhttp_request *req, int chunked) 
 {
 	struct evhttp_cb *cb;
 	size_t offset = 0;
@@ -3407,13 +3407,13 @@ evhttp_dispatch_callback(struct httpcbq *callbacks, struct evhttp_request *req, 
 
 	TAILQ_FOREACH(cb, callbacks, next) {
 		if (!strcmp(cb->what, translated)) {
-			if (chunked < 0) {
-				mm_free(translated);
-				return (cb);
-			} else if (chunked == cb->chunked) {
-				mm_free(translated);
-				return (cb);
-			}
+			if (chunked < 0) { 
+				mm_free(translated); 
+				return (cb); 
+			} else if (chunked == cb->chunked) { 
+				mm_free(translated); 
+				return (cb); 
+			} 
 		}
 	}
 
@@ -3554,7 +3554,7 @@ evhttp_handle_request(struct evhttp_request *req, void *arg)
 		evhttp_find_vhost(http, &http, hostname);
 	}
 
-	if ((cb = evhttp_dispatch_callback(&http->callbacks, req, -1)) != NULL) {
+	if ((cb = evhttp_dispatch_callback(&http->callbacks, req, -1)) != NULL) { 
 		(*cb->cb)(req, cb->cbarg);
 		return;
 	}
@@ -3974,8 +3974,8 @@ evhttp_set_allowed_methods(struct evhttp* http, ev_uint16_t methods)
 }
 
 int
-evhttp_set_cb_internal(struct evhttp *http, const char *uri,
-    void (*cb)(struct evhttp_request *, void *), void *cbarg, int chunked)
+evhttp_set_cb_internal(struct evhttp *http, const char *uri, 
+    void (*cb)(struct evhttp_request *, void *), void *cbarg, int chunked) 
 {
 	struct evhttp_cb *http_cb;
 
@@ -3997,7 +3997,7 @@ evhttp_set_cb_internal(struct evhttp *http, const char *uri,
 	}
 	http_cb->cb = cb;
 	http_cb->cbarg = cbarg;
-	http_cb->chunked = chunked;
+	http_cb->chunked = chunked; 
 
 	TAILQ_INSERT_TAIL(&http->callbacks, http_cb, next);
 
@@ -4005,19 +4005,19 @@ evhttp_set_cb_internal(struct evhttp *http, const char *uri,
 }
 
 int
-evhttp_set_cb(struct evhttp *http, const char *uri,
-    void (*cb)(struct evhttp_request *, void *), void *cbarg)
-{
-	return evhttp_set_cb_internal(http, uri, cb, cbarg, 0);
-}
-
-int evhttp_set_chunk_cb(struct evhttp *http, const char *path,
-    void (*chunk_cb)(struct evhttp_request *, void *), void *cb_arg)
-{
-	return evhttp_set_cb_internal(http, path, chunk_cb, cb_arg, 1);
-}
-
-int
+evhttp_set_cb(struct evhttp *http, const char *uri, 
+    void (*cb)(struct evhttp_request *, void *), void *cbarg) 
+{ 
+	return evhttp_set_cb_internal(http, uri, cb, cbarg, 0); 
+} 
+ 
+int evhttp_set_chunk_cb(struct evhttp *http, const char *path, 
+    void (*chunk_cb)(struct evhttp_request *, void *), void *cb_arg) 
+{ 
+	return evhttp_set_cb_internal(http, path, chunk_cb, cb_arg, 1); 
+} 
+ 
+int 
 evhttp_del_cb(struct evhttp *http, const char *uri)
 {
 	struct evhttp_cb *http_cb;
@@ -4044,14 +4044,14 @@ evhttp_set_gencb(struct evhttp *http,
 	http->gencbarg = cbarg;
 }
 
-void
-evhttp_set_bevcb(struct evhttp *http,
-    struct bufferevent* (*cb)(struct event_base *, void *), void *cbarg)
-{
-	http->bevcb = cb;
-	http->bevcbarg = cbarg;
-}
-
+void 
+evhttp_set_bevcb(struct evhttp *http, 
+    struct bufferevent* (*cb)(struct event_base *, void *), void *cbarg) 
+{ 
+	http->bevcb = cb; 
+	http->bevcbarg = cbarg; 
+} 
+ 
 /*
  * Request related functions
  */
@@ -4166,10 +4166,10 @@ evhttp_connection_get_base(struct evhttp_connection *conn)
 
 void
 evhttp_request_set_chunked_cb(struct evhttp_request *req,
-    void (*cb)(struct evhttp_request *, void *), void *arg)
+    void (*cb)(struct evhttp_request *, void *), void *arg) 
 {
 	req->chunk_cb = cb;
-	req->chunk_cb_arg = arg;
+	req->chunk_cb_arg = arg; 
 }
 
 void
@@ -4305,7 +4305,7 @@ evhttp_get_request_connection(
 {
 	struct evhttp_connection *evcon;
 	char *hostname = NULL, *portname = NULL;
-	struct bufferevent* bev = NULL;
+	struct bufferevent* bev = NULL; 
 
 #ifdef EVENT__HAVE_STRUCT_SOCKADDR_UN
 	if (sa->sa_family == AF_UNIX) {
@@ -4325,11 +4325,11 @@ evhttp_get_request_connection(
 		__func__, hostname, portname, EV_SOCK_ARG(fd)));
 
 	/* we need a connection object to put the http request on */
-	if (http->bevcb != NULL) {
-		bev = (*http->bevcb)(http->base, http->bevcbarg);
-	}
-	evcon = evhttp_connection_base_bufferevent_new(
-		http->base, NULL, bev, hostname, atoi(portname));
+	if (http->bevcb != NULL) { 
+		bev = (*http->bevcb)(http->base, http->bevcbarg); 
+	} 
+	evcon = evhttp_connection_base_bufferevent_new( 
+		http->base, NULL, bev, hostname, atoi(portname)); 
 	mm_free(hostname);
 	mm_free(portname);
 	if (evcon == NULL)

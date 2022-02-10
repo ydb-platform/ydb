@@ -29,7 +29,7 @@ class TKqpScanResult : public IDestructable {};
 
 class TKqpScan : public TActor<TKqpScan>, public NTable::IScan {
 public:
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return NKikimrServices::TActivity::KQP_TABLE_SCAN;
     }
 

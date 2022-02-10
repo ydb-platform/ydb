@@ -117,7 +117,7 @@ class TPDiskReaderTestLoadActor : public TActorBootstrapped<TPDiskReaderTestLoad
 
     TString ErrorReason;
 public:
-    static constexpr auto ActorActivityType() {
+    static constexpr auto ActorActivityType() { 
         return NKikimrServices::TActivity::BS_LOAD_PDISK_READ;
     }
 

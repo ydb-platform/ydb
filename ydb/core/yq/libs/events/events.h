@@ -10,21 +10,21 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/yq/scope.h>
 
-#include <library/cpp/actors/core/events.h>
-
+#include <library/cpp/actors/core/events.h> 
+ 
 #include <util/digest/multi.h>
 
 namespace NYq {
 
-using NYdb::NYq::TScope;
-
+using NYdb::NYq::TScope; 
+ 
 enum class DatabaseType {
     Ydb,
     ClickHouse,
     DataStreams,
     ObjectStorage
 };
-
+ 
 struct TQueryResult {
     TVector<Ydb::ResultSet> Sets;
     TInstant ExpirationDeadline;
@@ -33,7 +33,7 @@ struct TQueryResult {
 
 struct TEvents {
     // Events.
-    struct TEvAnalyticsBase {
+    struct TEvAnalyticsBase { 
         TString AuthToken;
         TString UserId;
         bool HasPerm = false;
@@ -108,7 +108,7 @@ struct TEvents {
             , ResultSets(resultSets)
         {}
     };
-
+ 
     struct TEvDbFunctionRequest : NActors::TEventLocal<TEvDbFunctionRequest, TEventIds::EvDbFunctionRequest> {
         using TFunction = std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)>;
         TFunction Handler;
@@ -156,24 +156,24 @@ struct TEvents {
     struct TEvEndpointRequest : NActors::TEventLocal<TEvEndpointRequest, TEventIds::EvEndpointRequest> {
         THashMap<std::pair<TString, DatabaseType>, TDatabaseAuth> DatabaseIds; // DbId, DatabaseType => database auth
         TString YdbMvpEndpoint;
-        TString MdbGateway;
-        TString TraceId;
+        TString MdbGateway; 
+        TString TraceId; 
         bool MdbTransformHost;
-
-        TEvEndpointRequest(
+ 
+        TEvEndpointRequest( 
             const THashMap<std::pair<TString, DatabaseType>, TDatabaseAuth>& databaseIds,
-            const TString& ydbMvpEndpoint,
-            const TString& mdbGateway,
-            const TString& traceId,
+            const TString& ydbMvpEndpoint, 
+            const TString& mdbGateway, 
+            const TString& traceId, 
             bool mdbTransformHost)
-            : DatabaseIds(databaseIds)
+            : DatabaseIds(databaseIds) 
             , YdbMvpEndpoint(ydbMvpEndpoint)
-            , MdbGateway(mdbGateway)
-            , TraceId(traceId)
+            , MdbGateway(mdbGateway) 
+            , TraceId(traceId) 
             , MdbTransformHost(mdbTransformHost)
-        { }
-    };
-
+        { } 
+    }; 
+ 
     struct TEvDataStreamsReadRulesCreationResult : NActors::TEventLocal<TEvDataStreamsReadRulesCreationResult, TEventIds::EvDataStreamsReadRulesCreationResult> {
         explicit TEvDataStreamsReadRulesCreationResult(NYql::TIssues issues)
             : Issues(std::move(issues))
@@ -200,16 +200,16 @@ struct TEvents {
 
         YandexQuery::QueryAction Action;
     };
-
+ 
     struct TEvForwardPingRequest : NActors::TEventLocal<TEvForwardPingRequest, TEventIds::EvForwardPingRequest> {
         explicit TEvForwardPingRequest(const Yq::Private::PingTaskRequest& request, bool final = false)
-            : Request(request)
+            : Request(request) 
             , Final(final)
-        { }
-
+        { } 
+ 
         Yq::Private::PingTaskRequest Request;
         bool Final; // Is this the last ping request.
-    };
+    }; 
 
     struct TEvForwardPingResponse : NActors::TEventLocal<TEvForwardPingResponse, TEventIds::EvForwardPingResponse> {
         TEvForwardPingResponse(bool success, YandexQuery::QueryAction action)

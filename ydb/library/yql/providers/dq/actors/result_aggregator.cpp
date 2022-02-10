@@ -1,4 +1,4 @@
-#include "result_aggregator.h"
+#include "result_aggregator.h" 
 #include "result_receiver.h"
 #include "proto_builder.h"
 #include "full_result_writer.h"
@@ -9,16 +9,16 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
-
+ 
 #include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
-
+ 
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/sql/sql.h>
 
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/log/log.h>
-
+ 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
@@ -36,15 +36,15 @@
 #include <util/stream/str.h>
 #include <util/stream/length.h>
 
-
+ 
 namespace NYql::NDqs::NExecutionHelpers {
-
+ 
 using namespace NYql;
 using namespace NYql::NDqProto;
 using namespace NYql::NNodes;
-
+ 
 using namespace NKikimr::NMiniKQL;
-
+ 
 using namespace Yql::DqsProto;
 
 using namespace NYql::NDq;
@@ -53,13 +53,13 @@ using namespace NYql::NDqProto;
 using namespace NActors;
 
 namespace {
-
+ 
 class TResultAggregator: public TSynchronizableRichActor<TResultAggregator>, NYql::TCounters {
     static constexpr ui32 MAX_RESULT_BATCH = 2048;
 
 public:
     static constexpr char ActorName[] = "YQL_DQ_RESULT_AGGREGATOR";
-
+ 
     explicit TResultAggregator(const TVector<TString>& columns, const NActors::TActorId& executerId, const TString& traceId,
         const TDqConfiguration::TPtr& settings, const TString& resultType, NActors::TActorId graphExecutionEventsId, bool discard)
         : TSynchronizableRichActor<TResultAggregator>(&TResultAggregator::Handler)
@@ -77,7 +77,7 @@ public:
             PullRequestTimeout = TDuration::MilliSeconds(settings->PullRequestTimeoutMs.Get().GetOrElse(0));
             PingTimeout = TDuration::MilliSeconds(settings->PingTimeoutMs.Get().GetOrElse(0));
             PingPeriod = Max(PingTimeout/4, TDuration::MilliSeconds(1000));
-
+ 
             SizeLimit = Settings->_AllResultsBytesLimit.Get().GetOrElse(64000000);
             YQL_LOG(DEBUG) << "_AllResultsBytesLimit = " << SizeLimit;
 
@@ -89,7 +89,7 @@ public:
     }
 
 private:
-#define HANDLER_STUB(TEvType)                                           \
+#define HANDLER_STUB(TEvType)                                           \ 
     cFunc(TEvType::EventType, [this]() {                        \
         YQL_LOG_CTX_SCOPE(TraceId);                             \
         YQL_LOG(DEBUG) << "Unexpected event " << ( #TEvType );  \
@@ -151,28 +151,28 @@ private:
         if (PingTimeout && now - PingStartTime > PingTimeout) {
             OnError("PingTimeout " + ToString(SourceID.NodeId()), true, true);
         }
-
+ 
         if (!PingRequested) {
             PingRequested = true;
             PingStartTime = now;
             Send(SourceID, MakeHolder<TEvPingRequest>(), IEventHandle::FlagTrackDelivery);
         }
-
+ 
         TimerCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
         Schedule(PingPeriod, new TEvents::TEvWakeup(), TimerCookieHolder.Get());
     }
-
+ 
     void OnReadyState(TEvReadyState::TPtr& ev, const TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceId);
         AddCounters(ev->Get()->Record);
-
+ 
         SourceID = NActors::ActorIdFromProto(ev->Get()->Record.GetSourceId());
         Send(SelfId(), MakeHolder<TEvPullResult>());
-
+ 
         PingStartTime = PullRequestStartTime = TInstant::Now();
         TimerCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
         Schedule(PingPeriod, new TEvents::TEvWakeup(), TimerCookieHolder.Get());
-
+ 
         AddCriticalEventType(TEvents::TEvWakeup::EventType);
         AddCriticalEventType(TEvPingResponse::EventType);
     }
@@ -196,10 +196,10 @@ private:
     void OnPingResponse(TEvPingResponse::TPtr&, const TActorContext&) {
         PingRequested = false;
     }
-
+ 
     void OnPullResponse(TEvPullDataResponse::TPtr& ev, const TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceId);
-
+ 
         if (FinishCalled) {
             // finalization has been begun, actor will not kill himself anymore, should ignore responses instead
             return;
@@ -208,7 +208,7 @@ private:
         auto& response = ev->Get()->Record;
 
         AddCounters(response);
-
+ 
         switch (response.GetResponseType()) {
             case NYql::NDqProto::CONTINUE: {
                 Send(SelfId(), MakeHolder<TEvPullResult>());
@@ -231,7 +231,7 @@ private:
                 YQL_ENSURE(false, "Unknown pull result");
                 break;
         }
-
+ 
         if (!Discard) {
             auto fullResultTableEnabled = Settings->EnableFullResultWrite.Get().GetOrElse(false);
 
@@ -239,7 +239,7 @@ private:
                 WriteToFullResultTable(new NDqProto::TData(std::move(*response.MutableData())));
             } else {
                 DataParts.emplace_back(std::move(*response.MutableData()));
-
+ 
                 bool full = true;
                 bool exceedRows = false;
                 try {
@@ -258,7 +258,7 @@ private:
                 } catch (...) {
                     OnError(CurrentExceptionMessage(), false, false);
                     return;
-                }
+                } 
 
                 if (!full) {
                     if (fullResultTableEnabled) {
@@ -311,7 +311,7 @@ private:
         // TODO Customize
         return FullResultSentBytes - FullResultReceivedBytes <= 32_MB;
     }
-
+ 
     template <class TCallback>
     void UpdateEventQueueStatus(TCallback callback) {
         YQL_LOG(DEBUG) << "UpdateEQStatus before: sent " << (FullResultSentBytes / 1024.0) << " kB "
@@ -367,7 +367,7 @@ private:
         Send(FullResultWriterID, MakeHolder<TEvPullDataResponse>(response));
         FullResultSentBytes += respSize;
     }
-
+ 
     void Finish(bool truncated = false, const TIssues& issues = {}) {
         YQL_LOG(DEBUG) << __FUNCTION__ << ", truncated=" << truncated;
         YQL_ENSURE(!FinishCalled);
@@ -386,7 +386,7 @@ private:
     void DoFinish() {
         Send(ExecuterID, new TEvGraphFinished());
     }
-
+ 
     void OnFullResultWriterResponse(TEvDqFailure::TPtr& ev, const TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << __FUNCTION__;
@@ -396,7 +396,7 @@ private:
             Send(ExecuterID, ev->Release().Release());
         }
     }
-
+ 
     void OnQueryResult(TEvQueryResponse::TPtr& ev, const TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
@@ -500,7 +500,7 @@ public:
 
 private:
     STRICT_STFUNC(Handler, { HFunc(TEvQueryResponse, OnQueryResult); })
-
+ 
     void OnQueryResult(TEvQueryResponse::TPtr& ev, const TActorContext&) {
         if (!ev->Get()->Record.HasResultSet()&&ev->Get()->Record.GetYson().empty()) {
             NYql::TIssues issues;

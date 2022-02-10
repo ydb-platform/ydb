@@ -1,7 +1,7 @@
 LIBRARY()
 
 OWNER(
-    g:yql
+    g:yql 
 )
 
 SRCS(
@@ -33,4 +33,4 @@ RUN_PROGRAM(
     ${ARCADIA_ROOT}/util/generic/hash_set.h
 )
 
-END()
+END() 

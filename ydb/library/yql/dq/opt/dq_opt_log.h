@@ -24,8 +24,8 @@ NNodes::TExprBase DqExpandWindowFunctions(NNodes::TExprBase node, TExprContext& 
 
 NNodes::TExprBase DqMergeQueriesWithSinks(NNodes::TExprBase dqQueryNode, TExprContext& ctx);
 
-NNodes::TExprBase DqFlatMapOverExtend(NNodes::TExprBase node, TExprContext& ctx);
-
+NNodes::TExprBase DqFlatMapOverExtend(NNodes::TExprBase node, TExprContext& ctx); 
+ 
 NNodes::TMaybeNode<NNodes::TExprBase> DqUnorderedInStage(NNodes::TExprBase node,
     const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx, TTypeAnnotationContext* typeCtx);
 

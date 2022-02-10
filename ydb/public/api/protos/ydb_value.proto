@@ -45,11 +45,11 @@ message DictType {
     Type payload = 2;
 }
 
-message TaggedType {
-    string tag = 1;
-    Type type = 2;
-}
-
+message TaggedType { 
+    string tag = 1; 
+    Type type = 2; 
+} 
+ 
 message Type {
     enum PrimitiveTypeId {
         PRIMITIVE_TYPE_ID_UNSPECIFIED = 0x0000;
@@ -92,13 +92,13 @@ message Type {
         StructType struct_type = 104;
         DictType dict_type = 105;
         VariantType variant_type = 106;
-        TaggedType tagged_type = 107;
+        TaggedType tagged_type = 107; 
 
         /* Special types */
         google.protobuf.NullValue void_type = 201;
-        google.protobuf.NullValue null_type = 202;
-        google.protobuf.NullValue empty_list_type = 203;
-        google.protobuf.NullValue empty_dict_type = 204;
+        google.protobuf.NullValue null_type = 202; 
+        google.protobuf.NullValue empty_list_type = 203; 
+        google.protobuf.NullValue empty_dict_type = 204; 
     }
 }
 

@@ -6,7 +6,7 @@
 #include <ydb/library/yql/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <ydb/library/yql/core/type_ann/type_ann_core.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
-
+ 
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 #include <ydb/library/yql/dq/opt/dq_opt_phy_finalizing.h>
@@ -15,7 +15,7 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
 #include <ydb/library/yql/utils/log/log.h>
-
+ 
 #include <util/string/split.h>
 
 #define PERFORM_RULE(func, ...)                                            \
@@ -53,7 +53,7 @@ namespace NYql::NDqs {
                                     .List(input)
                                     .Build()
                                 .Build()
-                            .Settings(TDqStageSettings().BuildNode(ctx, input->Pos()))
+                            .Settings(TDqStageSettings().BuildNode(ctx, input->Pos())) 
                             .Build()
                         .Index()
                             .Build("0")
@@ -87,7 +87,7 @@ namespace NYql::NDqs {
                         .Args({"row"})
                         .Body("row")
                         .Build()
-                    .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+                    .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
                     .Build()
                 .Index()
                     .Build("0")
@@ -117,7 +117,7 @@ namespace NYql::NDqs {
     }
 
     namespace NPeephole {
-
+ 
         class TDqsPeepholeTransformer: public TSyncTransformerBase {
         public:
             TDqsPeepholeTransformer(THolder<IGraphTransformer>&& typeAnnTransformer,
@@ -134,22 +134,22 @@ namespace NYql::NDqs {
                 }
 
                 auto transformer = CreateDqsRewritePhyCallablesTransformer();
-                auto status = InstantTransform(*transformer, inputExpr, ctx);
-                if (status.Level != TStatus::Ok) {
-                    ctx.AddError(TIssue(ctx.GetPosition(inputExpr->Pos()), TString("Peephole optimization failed for Dq stage")));
-                    return TStatus::Error;
-                }
-
-                bool hasNonDeterministicFunctions = false;
-                status = PeepHoleOptimizeNode<true>(inputExpr, inputExpr, ctx, TypesCtx, TypeAnnTransformer.Get(), hasNonDeterministicFunctions);
-                if (status.Level != TStatus::Ok) {
-                    ctx.AddError(TIssue(ctx.GetPosition(inputExpr->Pos()), TString("Peephole optimization failed for Dq stage")));
-                    return TStatus::Error;
-                }
-
-                outputExpr = inputExpr;
-                Optimized = true;
-                return TStatus::Ok;
+                auto status = InstantTransform(*transformer, inputExpr, ctx); 
+                if (status.Level != TStatus::Ok) { 
+                    ctx.AddError(TIssue(ctx.GetPosition(inputExpr->Pos()), TString("Peephole optimization failed for Dq stage"))); 
+                    return TStatus::Error; 
+                } 
+ 
+                bool hasNonDeterministicFunctions = false; 
+                status = PeepHoleOptimizeNode<true>(inputExpr, inputExpr, ctx, TypesCtx, TypeAnnTransformer.Get(), hasNonDeterministicFunctions); 
+                if (status.Level != TStatus::Ok) { 
+                    ctx.AddError(TIssue(ctx.GetPosition(inputExpr->Pos()), TString("Peephole optimization failed for Dq stage"))); 
+                    return TStatus::Error; 
+                } 
+ 
+                outputExpr = inputExpr; 
+                Optimized = true; 
+                return TStatus::Ok; 
             }
 
             void Rewind() final {

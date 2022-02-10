@@ -4,7 +4,7 @@
 #include <ydb/public/lib/experimental/ydb_experimental.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-
+ 
 #include <util/generic/size_literals.h>
 
 namespace NKikimr {

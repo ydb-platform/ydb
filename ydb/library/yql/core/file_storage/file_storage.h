@@ -27,7 +27,7 @@ struct IFileStorage: public TThrRefBase {
     virtual ~IFileStorage() = default;
     virtual void AddDownloader(IDownloaderPtr downloader) = 0;
     virtual TFileLinkPtr PutFile(const TString& file, const TString& outFileName = {}) = 0;
-    virtual TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5 = {}) = 0;
+    virtual TFileLinkPtr PutFileStripped(const TString& file, const TString& originalMd5 = {}) = 0; 
     virtual TFileLinkPtr PutInline(const TString& data) = 0;
     virtual TFileLinkPtr PutUrl(const TString& url, const TString& oauthToken) = 0;
     // async versions

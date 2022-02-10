@@ -10,7 +10,7 @@ namespace NKikimr {
         const TIntrusivePtr<TDelayedHugeBlobDeleterInfo> Info;
 
     public:
-        static constexpr auto ActorActivityType() {
+        static constexpr auto ActorActivityType() { 
             return NKikimrServices::TActivity::BS_DELAYED_HUGE_BLOB_DELETER;
         }
 

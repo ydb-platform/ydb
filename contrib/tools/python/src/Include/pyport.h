@@ -714,7 +714,7 @@ extern int fdatasync(int);
 #endif
 
 #ifdef _PY_PORT_CTYPE_UTF8_ISSUE
-#ifndef __cplusplus 
+#ifndef __cplusplus
    /* The workaround below is unsafe in C++ because
     * the <locale> defines these symbols as real functions,
     * with a slightly different signature.
@@ -737,7 +737,7 @@ extern int fdatasync(int);
 #undef toupper
 #define toupper(c) towupper(btowc(c))
 #endif
-#endif 
+#endif
 
 
 /* Declarations for symbol visibility.

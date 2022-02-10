@@ -14,7 +14,7 @@ NO_LINT()
 
 END()
 
-RECURSE( 
-    tornado-4 
-    tornado-6 
+RECURSE(
+    tornado-4
+    tornado-6
 )

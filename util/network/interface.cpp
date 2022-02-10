@@ -41,17 +41,17 @@ namespace NAddr {
                 for (IP_ADAPTER_UNICAST_ADDRESS* addr = ptr->FirstUnicastAddress; addr != 0; addr = addr->Next) {
                     sockaddr* a = (sockaddr*)addr->Address.lpSockaddr;
                     if (IsInetAddress(a)) {
-                        TNetworkInterface networkInterface; 
+                        TNetworkInterface networkInterface;
 
                         // Not very efficient but straightforward
                         for (size_t i = 0; ptr->FriendlyName[i] != 0; i++) {
                             CHAR w = ptr->FriendlyName[i];
                             char c = (w < 0x80) ? char(w) : '?';
-                            networkInterface.Name.append(1, c); 
+                            networkInterface.Name.append(1, c);
                         }
 
-                        networkInterface.Address = new TOpaqueAddr(a); 
-                        result.push_back(networkInterface); 
+                        networkInterface.Address = new TOpaqueAddr(a);
+                        result.push_back(networkInterface);
                     }
                 }
             }

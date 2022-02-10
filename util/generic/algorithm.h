@@ -469,34 +469,34 @@ template <typename C, typename Val>
 Val Accumulate(const C& c, Val val) {
     // std::move since C++20
     return Accumulate(std::begin(c), std::end(c), std::move(val));
-} 
- 
+}
+
 template <typename C, typename Val, typename BinOp>
 Val Accumulate(const C& c, Val val, BinOp binOp) {
     // std::move since C++20
     return Accumulate(std::begin(c), std::end(c), std::move(val), binOp);
-} 
- 
+}
+
 template <typename It1, typename It2, typename Val>
 static inline Val InnerProduct(It1 begin1, It1 end1, It2 begin2, Val val) {
     return std::inner_product(begin1, end1, begin2, val);
 }
 
 template <typename It1, typename It2, typename Val, typename BinOp1, typename BinOp2>
-static inline Val InnerProduct(It1 begin1, It1 end1, It2 begin2, Val val, BinOp1 binOp1, BinOp2 binOp2) { 
+static inline Val InnerProduct(It1 begin1, It1 end1, It2 begin2, Val val, BinOp1 binOp1, BinOp2 binOp2) {
     return std::inner_product(begin1, end1, begin2, val, binOp1, binOp2);
-} 
- 
+}
+
 template <typename TVectorType>
 static inline typename TVectorType::value_type InnerProduct(const TVectorType& lhs, const TVectorType& rhs, typename TVectorType::value_type val = typename TVectorType::value_type()) {
     return std::inner_product(lhs.begin(), lhs.end(), rhs.begin(), val);
-} 
- 
+}
+
 template <typename TVectorType, typename BinOp1, typename BinOp2>
 static inline typename TVectorType::value_type InnerProduct(const TVectorType& lhs, const TVectorType& rhs, typename TVectorType::value_type val, BinOp1 binOp1, BinOp2 binOp2) {
     return std::inner_product(lhs.begin(), lhs.end(), rhs.begin(), val, binOp1, binOp2);
-} 
- 
+}
+
 template <class T>
 static inline T MinElement(T begin, T end) {
     return std::min_element(begin, end);

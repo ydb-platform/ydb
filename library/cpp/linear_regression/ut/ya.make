@@ -1,15 +1,15 @@
-UNITTEST() 
- 
+UNITTEST()
+
 OWNER(alex-sh)
- 
-PEERDIR( 
+
+PEERDIR(
     ADDINCL library/cpp/linear_regression
-) 
- 
+)
+
 SRCDIR(library/cpp/linear_regression)
- 
-SRCS( 
-    linear_regression_ut.cpp 
-) 
- 
-END() 
+
+SRCS(
+    linear_regression_ut.cpp
+)
+
+END()

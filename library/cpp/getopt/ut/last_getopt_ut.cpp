@@ -493,20 +493,20 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     }
 
     Y_UNIT_TEST(TestRangeSplitValue) {
-        TOptsNoDefault opts; 
+        TOptsNoDefault opts;
         TVector<ui32> vals;
         opts.AddLongOption('s', "split").RangeSplitHandler(&vals, ',', '-');
         TOptsParseResultTestWrapper r(&opts, V({"prog", "--split=1,8-10", "--split=12-14"}));
         UNIT_ASSERT_EQUAL(vals.size(), 7);
-        UNIT_ASSERT_EQUAL(vals[0], 1); 
-        UNIT_ASSERT_EQUAL(vals[1], 8); 
-        UNIT_ASSERT_EQUAL(vals[2], 9); 
-        UNIT_ASSERT_EQUAL(vals[3], 10); 
-        UNIT_ASSERT_EQUAL(vals[4], 12); 
-        UNIT_ASSERT_EQUAL(vals[5], 13); 
-        UNIT_ASSERT_EQUAL(vals[6], 14); 
-    } 
- 
+        UNIT_ASSERT_EQUAL(vals[0], 1);
+        UNIT_ASSERT_EQUAL(vals[1], 8);
+        UNIT_ASSERT_EQUAL(vals[2], 9);
+        UNIT_ASSERT_EQUAL(vals[3], 10);
+        UNIT_ASSERT_EQUAL(vals[4], 12);
+        UNIT_ASSERT_EQUAL(vals[5], 13);
+        UNIT_ASSERT_EQUAL(vals[6], 14);
+    }
+
     Y_UNIT_TEST(TestParseArgs) {
         TOptsNoDefault o("AbCx:y:z::");
         UNIT_ASSERT_EQUAL(o.GetCharOption('A').HasArg_, NO_ARGUMENT);

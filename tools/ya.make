@@ -63,7 +63,7 @@ RECURSE(
     jsv8
     json_to_jsonlines
     langdiscr-test
-    lemmas_merger_builder 
+    lemmas_merger_builder
     lemmer-test
     lemmer-test/tests
     lenval_debug

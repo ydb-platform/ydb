@@ -253,7 +253,7 @@ namespace NSc {
         inline bool IsDict() const;
 
         inline const TDict& GetDict() const;
-        inline TDict& GetDictMutable(); 
+        inline TDict& GetDictMutable();
         inline TValue& SetDict(); // turns into dict if not one, returns self
         inline TValue& ClearDict();
 

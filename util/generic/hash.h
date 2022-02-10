@@ -1345,7 +1345,7 @@ void THashTable<V, K, HF, Ex, Eq, A>::basic_clear() {
     if (!num_elements) {
         return;
     }
- 
+
     node** first = buckets.begin();
     node** last = buckets.end();
     for (; first < last; ++first) {
@@ -1358,7 +1358,7 @@ void THashTable<V, K, HF, Ex, Eq, A>::basic_clear() {
             }
             *first = nullptr;
         }
-    } 
+    }
     num_elements = 0;
 }
 

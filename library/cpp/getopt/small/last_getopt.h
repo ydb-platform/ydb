@@ -75,12 +75,12 @@ namespace NLastGetopt {
                     Target->insert(Target->end(), NPrivate::OptFromString<TValue>(val, parser->CurOpt()));
                 });
             }
-        } 
- 
+        }
+
     private:
         TContainer* Target;
         char Delim;
-    }; 
+    };
 
     template <class TpFunc>
     struct TOptKVHandler: public IOptHandler {

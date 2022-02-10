@@ -230,7 +230,7 @@ enum EPartitionLabeledCounters {
 
     METRIC_WRITE_QUOTA_USAGE = 32                                 [(LabeledCounterOpts) = {Name: "PartitionMaxWriteQuotaUsage" AggrFunc : EAF_MAX}];
 
-    METRIC_MIN_SID_LIFETIME = 33                                   [(LabeledCounterOpts) = {Name: "SourceIdMinLifetimeMs" AggrFunc : EAF_MIN}]; 
- 
+    METRIC_MIN_SID_LIFETIME = 33                                   [(LabeledCounterOpts) = {Name: "SourceIdMinLifetimeMs" AggrFunc : EAF_MIN}];
+
 }
 

@@ -1205,7 +1205,7 @@ Y_UNIT_TEST(TestWritePQ) {
 }
 
 
-Y_UNIT_TEST(TestSourceIdDropByUserWrites) { 
+Y_UNIT_TEST(TestSourceIdDropByUserWrites) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1242,49 +1242,49 @@ Y_UNIT_TEST(TestSourceIdDropByUserWrites) {
 }
 
 
-Y_UNIT_TEST(TestSourceIdDropBySourceIdCount) { 
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        tc.Runtime->SetScheduledLimit(200); 
- 
-        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 6*1024*1024, true, 0, 3); //no important client, lifetimeseconds=0 - delete right now 
- 
-        TVector<std::pair<ui64, TString>> data; 
-        activeZone = true; 
- 
-        TString ss{32, '_'}; 
- 
-        data.push_back({1, ss}); 
-        CmdWrite(0,"sourceid0", data, tc, false, {}, false, "", -1, 100); 
-        Cout << "written sourceid0" << Endl; 
- 
+Y_UNIT_TEST(TestSourceIdDropBySourceIdCount) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        tc.Runtime->SetScheduledLimit(200);
+
+        PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 6*1024*1024, true, 0, 3); //no important client, lifetimeseconds=0 - delete right now
+
+        TVector<std::pair<ui64, TString>> data;
+        activeZone = true;
+
+        TString ss{32, '_'};
+
+        data.push_back({1, ss});
+        CmdWrite(0,"sourceid0", data, tc, false, {}, false, "", -1, 100);
+        Cout << "written sourceid0" << Endl;
+
         PQGetPartInfo(100, 101, tc);
- 
-        CmdWrite(0,"sourceidx", data, tc, false, {}, false, "", -1, 2000); 
-        Cout << "written sourceidx" << Endl; 
-        CmdWrite(0,"sourceid1", data, tc, false, {}, false, "", -1, 3000); 
-        Cout << "written sourceid1" << Endl; 
+
+        CmdWrite(0,"sourceidx", data, tc, false, {}, false, "", -1, 2000);
+        Cout << "written sourceidx" << Endl;
+        CmdWrite(0,"sourceid1", data, tc, false, {}, false, "", -1, 3000);
+        Cout << "written sourceid1" << Endl;
         PQGetPartInfo(2000, 3001, tc);
-        //fail - already written 
-        CmdWrite(0,"sourceid0", data, tc, false); 
-        Cout << "written sourceid0" << Endl; 
+        //fail - already written
+        CmdWrite(0,"sourceid0", data, tc, false);
+        Cout << "written sourceid0" << Endl;
         PQGetPartInfo(2000, 3001, tc);
- 
-        for (ui64 i=0; i < 5; ++i) { 
-            CmdWrite(0, TStringBuilder() << "sourceid_" << i, data, tc, false, {}, false, "", -1, 3001 + i); 
-            Cout << "written sourceid_" << i << Endl; 
-        } 
-        CmdWrite(0,"sourceid0", data, tc, false); 
-        Cout << "written sourceid0" << Endl; 
+
+        for (ui64 i=0; i < 5; ++i) {
+            CmdWrite(0, TStringBuilder() << "sourceid_" << i, data, tc, false, {}, false, "", -1, 3001 + i);
+            Cout << "written sourceid_" << i << Endl;
+        }
+        CmdWrite(0,"sourceid0", data, tc, false);
+        Cout << "written sourceid0" << Endl;
         PQGetPartInfo(2000, 3007, tc);
-    }); 
-} 
- 
- 
+    });
+}
+
+
 Y_UNIT_TEST(TestWriteOffsetWithBigMessage) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {

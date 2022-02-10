@@ -1,8 +1,8 @@
 #include "partition.h"
 #include "event_helpers.h"
 #include "read.h"
-#include "sourceid.h" 
-#include "ownerinfo.h" 
+#include "sourceid.h"
+#include "ownerinfo.h"
 #include "mirrorer.h"
 
 #include <ydb/core/base/appdata.h>
@@ -512,7 +512,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
         ManageWriteTimestampEstimate = LocalDC;
     }
 
- 
+
     WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
 
     CalcTopicWriteQuotaParams();
@@ -1075,13 +1075,13 @@ bool TPartition::DropOldStuff(TEvKeyValue::TEvRequest* request, bool hasWrites, 
     bool haveChanges = false;
     if (DropOldData(request, hasWrites, ctx))
         haveChanges = true;
-    LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE, TStringBuilder() << "Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff"); 
+    LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE, TStringBuilder() << "Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff");
     if (SourceIdStorage.DropOldSourceIds(request, ctx.Now(), StartOffset, Partition, Config.GetPartitionConfig())) {
         haveChanges = true;
-        SourceIdStorage.MarkOwnersForDeletedSourceId(Owners); 
-    } 
-    LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE, TStringBuilder() << "Have " << request->Record.CmdDeleteRangeSize() << " items to delete all stuff"); 
-    LOG_TRACE(ctx, NKikimrServices::PERSQUEUE, TStringBuilder() << "Delete command " << request->ToString()); 
+        SourceIdStorage.MarkOwnersForDeletedSourceId(Owners);
+    }
+    LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE, TStringBuilder() << "Have " << request->Record.CmdDeleteRangeSize() << " items to delete all stuff");
+    LOG_TRACE(ctx, NKikimrServices::PERSQUEUE, TStringBuilder() << "Delete command " << request->ToString());
     return haveChanges;
 }
 
@@ -1646,7 +1646,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     TStringBuilder ss;
     ss << "SYNC INIT topic " << TopicName << " partitition " << Partition << " so " << StartOffset << " endOffset " << EndOffset << " Head " << Head << "\n";
-    for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) { 
+    for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         ss << "SYNC INIT sourceId " << s.first << " seqNo " << s.second.SeqNo << " offset " << s.second.Offset << "\n";
     }
     for (const auto& h : DataKeysBody) {
@@ -1674,7 +1674,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     if (!NewPartition) {
         ctx.Send(Tablet, new TEvPQ::TEvInitComplete(Partition));
     }
-    for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) { 
+    for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Init complete for topic '" << TopicName << "' Partition: " << Partition << " SourceId: " <<
                             s.first << " SeqNo: " << s.second.SeqNo << " offset: " << s.second.Offset << " MaxOffset: " << EndOffset);
     }
@@ -1737,7 +1737,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
 }
 
 
-THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator& it, const TActorContext& ctx) { 
+THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator& it, const TActorContext& ctx) {
     Y_VERIFY(ReservedSize >= it->second.ReservedSize);
     ReservedSize -= it->second.ReservedSize;
     UpdateWriteBufferIsFullState(ctx.Now());
@@ -2700,12 +2700,12 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx)
 
             bool already = false;
 
-            auto it = SourceIdStorage.GetInMemorySourceIds().find(s); 
+            auto it = SourceIdStorage.GetInMemorySourceIds().find(s);
 
             ui64 maxSeqNo = 0;
             ui64 maxOffset = 0;
 
-            if (it != SourceIdStorage.GetInMemorySourceIds().end()) { 
+            if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
                 maxSeqNo = it->second.SeqNo;
                 maxOffset = it->second.Offset;
                 if (it->second.SeqNo >= seqNo && !writeResponse.Msg.DisableDeduplication) {
@@ -2721,12 +2721,12 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx)
             }
             if (!already && partNo + 1 == totalParts) {
                 if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
-                    Counters.Cumulative()[COUNTER_PQ_SID_CREATED].Increment(1); 
+                    Counters.Cumulative()[COUNTER_PQ_SID_CREATED].Increment(1);
                     SourceIdStorage.RegisterSourceId(s, writeResponse.Msg.SeqNo, offset, CurrentTimestamp);
                 } else {
                     SourceIdStorage.RegisterSourceId(s, it->second.Updated(writeResponse.Msg.SeqNo, offset, CurrentTimestamp));
                 }
- 
+
                 Counters.Cumulative()[COUNTER_PQ_WRITE_OK].Increment(1);
             }
             ReplyWrite(
@@ -3212,10 +3212,10 @@ void TPartition::ReportLabeledCounters(const TActorContext& ctx)
 
     TDuration lifetimeNow = ctx.Now() - SourceIdStorage.MinAvailableTimestamp(ctx.Now());
     if (lifetimeNow.MilliSeconds() != PartitionLabeledCounters.GetCounters()[METRIC_MIN_SID_LIFETIME].Get()) {
-        haveChanges = true; 
+        haveChanges = true;
         PartitionLabeledCounters.GetCounters()[METRIC_MIN_SID_LIFETIME].Set(lifetimeNow.MilliSeconds());
-    } 
- 
+    }
+
     ui64 headGapSize = DataKeysBody.empty() ? 0 : (Head.Offset - (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount()));
     ui64 gapSize = GapSize + headGapSize;
     ui32 gapsCount = GapOffsets.size() + (headGapSize ? 1 : 0);
@@ -3563,10 +3563,10 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     }
 
     ui64 decReservedSize = 0;
-    TStringBuf owner; 
+    TStringBuf owner;
 
     if (!mirroredPartition && !ev->Get()->IsDirectWrite) {
-        owner = TOwnerInfo::GetOwnerFromOwnerCookie(ev->Get()->OwnerCookie); 
+        owner = TOwnerInfo::GetOwnerFromOwnerCookie(ev->Get()->OwnerCookie);
         auto it = Owners.find(owner);
 
         if (it == Owners.end() || it->second.NeedResetOwner) {
@@ -3575,15 +3575,15 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
             return;
         }
 
-        if (it->second.SourceIdDeleted) { 
-            ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED, 
-                TStringBuilder() << "Yours maximum written sequence number for session was deleted, need to recreate session. " 
+        if (it->second.SourceIdDeleted) {
+            ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::SOURCEID_DELETED,
+                TStringBuilder() << "Yours maximum written sequence number for session was deleted, need to recreate session. "
                     << "Current count of sourceIds is " << SourceIdStorage.GetInMemorySourceIds().size() << " and limit is " << Config.GetPartitionConfig().GetSourceIdMaxCounts()
                     << ", current minimum sourceid timestamp(Ms) is " << SourceIdStorage.MinAvailableTimestamp(ctx.Now()).MilliSeconds()
                     << " and border timestamp(Ms) is " << ((ctx.Now() - TInstant::Seconds(Config.GetPartitionConfig().GetSourceIdLifetimeSeconds())).MilliSeconds()));
-            return; 
-        } 
- 
+            return;
+        }
+
         if (it->second.OwnerCookie != ev->Get()->OwnerCookie) {
             ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::WRONG_COOKIE,
                         TStringBuilder() << "incorrect ownerCookie " << ev->Get()->OwnerCookie << ", must be " << it->second.OwnerCookie);
@@ -3633,10 +3633,10 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
                 TStringBuilder() << "too big message " << sz << " vs. maximum " << MAX_BLOB_PART_SIZE);
             return;
         }
- 
-        if (!mirroredPartition) { 
-            SourceIdStorage.RegisterSourceIdOwner(msg.SourceId, owner); 
-        } 
+
+        if (!mirroredPartition) {
+            SourceIdStorage.RegisterSourceIdOwner(msg.SourceId, owner);
+        }
     }
 
     if (EndOffset - StartOffset >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxCountInPartition())
@@ -3951,7 +3951,7 @@ void TPartition::CancelAllWritesOnWrite(const TActorContext& ctx, TEvKeyValue::T
     FailBadClient(ctx);
     NewHead.Clear();
     NewHead.Offset = EndOffset;
-    sourceIdWriter.Clear(); 
+    sourceIdWriter.Clear();
     request->Record.Clear();
     PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
     CompactedKeys.clear();
@@ -4038,17 +4038,17 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
 
         ui64 poffset = p.Offset ? *p.Offset : curOffset;
 
-        auto it_inMemory = SourceIdStorage.GetInMemorySourceIds().find(p.Msg.SourceId); 
-        auto it_toWrite = sourceIdWriter.GetSourceIdsToWrite().find(p.Msg.SourceId); 
-        if (!p.Msg.DisableDeduplication && (it_inMemory != SourceIdStorage.GetInMemorySourceIds().end() && it_inMemory->second.SeqNo >= p.Msg.SeqNo || (it_toWrite != sourceIdWriter.GetSourceIdsToWrite().end() && it_toWrite->second.SeqNo >= p.Msg.SeqNo))) { 
-            bool isWriting = (it_toWrite != sourceIdWriter.GetSourceIdsToWrite().end()); 
-            bool isCommitted = (it_inMemory != SourceIdStorage.GetInMemorySourceIds().end()); 
+        auto it_inMemory = SourceIdStorage.GetInMemorySourceIds().find(p.Msg.SourceId);
+        auto it_toWrite = sourceIdWriter.GetSourceIdsToWrite().find(p.Msg.SourceId);
+        if (!p.Msg.DisableDeduplication && (it_inMemory != SourceIdStorage.GetInMemorySourceIds().end() && it_inMemory->second.SeqNo >= p.Msg.SeqNo || (it_toWrite != sourceIdWriter.GetSourceIdsToWrite().end() && it_toWrite->second.SeqNo >= p.Msg.SeqNo))) {
+            bool isWriting = (it_toWrite != sourceIdWriter.GetSourceIdsToWrite().end());
+            bool isCommitted = (it_inMemory != SourceIdStorage.GetInMemorySourceIds().end());
 
             if (poffset >= curOffset) {
                 LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "Already written message. Topic: '" << TopicName << "' Partition: " << Partition
                     << " SourceId: '" << EscapeC(p.Msg.SourceId) << "'. Message seqNo = " << p.Msg.SeqNo
-                    << ". Committed seqNo = " << (isCommitted ? it_inMemory->second.SeqNo : 0) 
-                    << (isWriting ? ". Writing seqNo: " : ". ") << (isWriting ? it_toWrite->second.SeqNo : 0) << " EndOffset " << EndOffset 
+                    << ". Committed seqNo = " << (isCommitted ? it_inMemory->second.SeqNo : 0)
+                    << (isWriting ? ". Writing seqNo: " : ". ") << (isWriting ? it_toWrite->second.SeqNo : 0) << " EndOffset " << EndOffset
                     << " CurOffset " << curOffset << " offset " << poffset);
 
                 Counters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
@@ -4070,7 +4070,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
             CancelAllWritesOnWrite(ctx, request,
                                     TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) << " seqNo: " << p.Msg.SeqNo
                                         << " partNo: " << p.Msg.PartNo << " has incorrect offset " << poffset << ", must be at least " << curOffset,
-                                        p, sourceIdWriter, NPersQueue::NErrorCode::EErrorCode::WRITE_ERROR_BAD_OFFSET); 
+                                        p, sourceIdWriter, NPersQueue::NErrorCode::EErrorCode::WRITE_ERROR_BAD_OFFSET);
             return false;
         }
 
@@ -4083,7 +4083,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                                         TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) << " seqNo: " << p.Msg.SeqNo
                                             << " partNo: " << p.Msg.PartNo << " has gap inside partitioned message, incorrect offset "
                                             << poffset << ", must be " << curOffset,
-                                            p, sourceIdWriter); 
+                                            p, sourceIdWriter);
                 return false;
             }
             curOffset = poffset;
@@ -4123,7 +4123,7 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
         TString s;
         if (!PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
             //this must not be happen - client sends gaps, fail this client till the end
-            CancelAllWritesOnWrite(ctx, request, s, p, sourceIdWriter); 
+            CancelAllWritesOnWrite(ctx, request, s, p, sourceIdWriter);
             //now no changes will leak
             return false;
         }
@@ -4473,7 +4473,7 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, const TActorCon
         : ESourceIdFormat::Raw;
     TSourceIdWriter sourceIdWriter(format);
 
-    bool headCleared = AppendHeadWithNewWrites(request, ctx, sourceIdWriter); 
+    bool headCleared = AppendHeadWithNewWrites(request, ctx, sourceIdWriter);
 
     if (headCleared) {
         Y_VERIFY(!CompactedKeys.empty() || Head.PackedSize == 0);
@@ -4483,7 +4483,7 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, const TActorCon
     }
 
     if (NewHead.PackedSize == 0) { //nothing added to head - just compaction or tmp part blobs writed
-        Y_VERIFY(sourceIdWriter.GetSourceIdsToWrite().empty()); 
+        Y_VERIFY(sourceIdWriter.GetSourceIdsToWrite().empty());
         return request->Record.CmdWriteSize() > 0 || request->Record.CmdRenameSize() > 0 || request->Record.CmdDeleteRangeSize() > 0;
     }
 

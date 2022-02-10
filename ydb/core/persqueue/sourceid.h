@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/key.h>
@@ -6,11 +6,11 @@
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
-#include <util/generic/set.h> 
- 
-namespace NKikimr { 
-namespace NPQ { 
- 
+#include <util/generic/set.h>
+
+namespace NKikimr {
+namespace NPQ {
+
 enum class ESourceIdFormat: ui8 {
     Raw = 0,
     Proto = 1,
@@ -47,37 +47,37 @@ struct TSourceIdInfo {
     // Proto format
     static TSourceIdInfo Parse(const NKikimrPQ::TMessageGroupInfo& proto);
     void Serialize(NKikimrPQ::TMessageGroupInfo& proto) const;
- 
+
     bool operator==(const TSourceIdInfo& rhs) const;
     void Out(IOutputStream& out) const;
- 
+
     bool IsExpired(TDuration ttl, TInstant now) const;
- 
+
 }; // TSourceIdInfo
- 
+
 using TSourceIdMap = THashMap<TString, TSourceIdInfo>;
- 
+
 class TSourceIdStorage {
 public:
     const TSourceIdMap& GetInMemorySourceIds() const {
         return InMemorySourceIds;
     }
- 
+
     template <typename... Args>
     void RegisterSourceId(const TString& sourceId, Args&&... args) {
         RegisterSourceIdInfo(sourceId, TSourceIdInfo(std::forward<Args>(args)...), false);
     }
- 
+
     void DeregisterSourceId(const TString& sourceId);
 
     void LoadSourceIdInfo(const TString& key, const TString& data, TInstant now);
     bool DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInstant now, ui64 startOffset, ui32 partition, const NKikimrPQ::TPartitionConfig& config);
- 
+
     void RegisterSourceIdOwner(const TString& sourceId, const TStringBuf& ownerCookie);
     void MarkOwnersForDeletedSourceId(THashMap<TString, TOwnerInfo>& owners);
- 
+
     TInstant MinAvailableTimestamp(TInstant now) const;
- 
+
 private:
     void LoadRawSourceIdInfo(const TString& key, const TString& data, TInstant now);
     void LoadProtoSourceIdInfo(const TString& key, const TString& data);
@@ -88,28 +88,28 @@ private:
     THashMap<TString, TString> SourceIdOwners;
     TVector<TString> OwnersToDrop;
     TSet<std::pair<ui64, TString>> SourceIdsByOffset;
- 
+
 }; // TSourceIdStorage
 
 class TSourceIdWriter {
 public:
     explicit TSourceIdWriter(ESourceIdFormat format);
- 
+
     const TSourceIdMap& GetSourceIdsToWrite() const {
         return Registrations;
     }
- 
+
     template <typename... Args>
     void RegisterSourceId(const TString& sourceId, Args&&... args) {
         Registrations[sourceId] = TSourceIdInfo(std::forward<Args>(args)...);
     }
- 
+
     void DeregisterSourceId(const TString& sourceId);
     void Clear();
- 
+
     void FillRequest(TEvKeyValue::TEvRequest* request, ui32 partition);
     static void FillKeyAndData(ESourceIdFormat format, const TString& sourceId, const TSourceIdInfo& sourceIdInfo, TKeyPrefix& key, TBuffer& data);
- 
+
 private:
     static void FillRawData(const TSourceIdInfo& sourceIdInfo, TBuffer& data);
     static void FillProtoData(const TSourceIdInfo& sourceIdInfo, TBuffer& data);
@@ -119,11 +119,11 @@ private:
     const ESourceIdFormat Format;
     TSourceIdMap Registrations;
     THashSet<TString> Deregistrations;
- 
+
 }; // TSourceIdWriter
 
-} // NPQ 
-} // NKikimr 
+} // NPQ
+} // NKikimr
 
 Y_DECLARE_OUT_SPEC(inline, NKikimr::NPQ::TSourceIdInfo, out, value) {
     return value.Out(out);

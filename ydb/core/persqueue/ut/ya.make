@@ -35,7 +35,7 @@ SRCS(
     pq_ut.cpp
     type_codecs_ut.cpp
     pq_ut.h
-    sourceid_ut.cpp 
+    sourceid_ut.cpp
     user_info_ut.cpp
 )
 

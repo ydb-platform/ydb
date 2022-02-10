@@ -57,106 +57,106 @@ Y_UNIT_TEST(TestWriteVeryBigMessage) {
 }
 
 
-Y_UNIT_TEST(TestOnDiskStoredSourceIds) { 
-    TTestContext tc; 
-    RunTestWithReboots(tc.TabletIds, [&]() { 
-        return tc.InitialEventsFilter.Prepare(); 
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) { 
-        TFinalizer finalizer(tc); 
-        tc.Prepare(dispatchName, setup, activeZone); 
-        tc.Runtime->SetScheduledLimit(200); 
+Y_UNIT_TEST(TestOnDiskStoredSourceIds) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        tc.Runtime->SetScheduledLimit(200);
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc, 2, 6*1024*1024, true, 0, 3); //no important client, lifetimeseconds=0 - delete right now
- 
-        TVector<TString> writtenSourceIds; 
- 
-        TVector<std::pair<ui64, TString>> data; 
-        activeZone = true; 
- 
-        TString ss{32, '_'}; 
-        ui32 NUM_SOURCEIDS = 100; 
-        data.push_back({1, ss}); 
-        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 100); 
-        ui32 offset = 1200; 
-        for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) { 
-            try { 
-                TString cookie = CmdSetOwner(0, tc).first; 
-                THolder<TEvPersQueue::TEvRequest> request; 
-                tc.Runtime->ResetScheduledCount(); 
-                request.Reset(new TEvPersQueue::TEvRequest); 
-                auto req = request->Record.MutablePartitionRequest(); 
-                req->SetPartition(0); 
-                req->SetOwnerCookie(cookie); 
-                req->SetMessageNo(0); 
-                req->SetCmdWriteOffset(offset); 
-                for (ui32 i=0; i < NUM_SOURCEIDS; ++i) { 
-                  auto write = req->AddCmdWrite(); 
-                  write->SetSourceId(TStringBuilder() << "sourceid_" << i); 
-                  write->SetSeqNo(0); 
-                  write->SetData(ss); 
-                } 
-                tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries()); 
-                TAutoPtr<IEventHandle> handle; 
-                TEvPersQueue::TEvResponse *result; 
-                result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle, [](const TEvPersQueue::TEvResponse& ev){ 
-                  if (!ev.Record.HasPartitionResponse() || !ev.Record.GetPartitionResponse().HasCmdReadResult()) 
-                    return true; 
-                  return false; 
-                 }); //there could be outgoing reads in TestReadSubscription test 
- 
-                UNIT_ASSERT(result); 
-                UNIT_ASSERT(result->Record.HasStatus()); 
-                if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) { 
-                  tc.Runtime->DispatchEvents();   // Dispatch events so that initialization can make progress 
-                  retriesLeft = 2; 
-                  continue; 
-                } 
- 
-                if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_BAD_OFFSET) { 
-                  ++offset; 
-                  continue; 
-                } 
- 
-                Cout << "Error code is " << static_cast<int>(result->Record.GetErrorCode()) << Endl; 
-                UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK); 
- 
-                UNIT_ASSERT(result->Record.GetPartitionResponse().CmdWriteResultSize() == NUM_SOURCEIDS); 
-                for (ui32 i = 0; i < NUM_SOURCEIDS; ++i) { 
-                  UNIT_ASSERT(result->Record.GetPartitionResponse().GetCmdWriteResult(i).HasAlreadyWritten()); 
-                  UNIT_ASSERT(result->Record.GetPartitionResponse().GetCmdWriteResult(i).HasOffset()); 
-                } 
-                // for (ui32 i = 0; i < NUM_SOURCEIDS; ++i) { 
-                //   auto res = result->Record.GetPartitionResponse().GetCmdWriteResult(i); 
-                //   UNIT_ASSERT(!result->Record.GetPartitionResponse().GetCmdWriteResult(i).GetAlreadyWritten()); 
-                // } 
- 
-                retriesLeft = 0; 
-            } catch (NActors::TSchedulingLimitReachedException) { 
-                UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2); 
-                retriesLeft = 3; 
-            } 
-        } 
-        for (ui64 i=100; i < 104; ++i) { 
-            CmdWrite(0, TStringBuilder() << "sourceid_" << i, data, tc, false, {}, false, "", -1, offset + i); 
-            Cout << TInstant::Now() << " written sourceid_" << i << Endl; 
-        } 
-        for (ui64 i=100; i < 104; ++i) { 
-            writtenSourceIds.push_back(TStringBuilder() << "sourceid_" << i); 
-        } 
-        Cout << TInstant::Now() << " now check list of sourceIds" << Endl; 
-        auto sourceIds = CmdSourceIdRead(tc); 
-        UNIT_ASSERT(sourceIds.size() > 0); 
-        for (auto& s: sourceIds) { 
-            Cout << "try to find sourceId " << s << Endl; 
-            auto findIt = std::find(writtenSourceIds.begin(), writtenSourceIds.end(), s); 
-            UNIT_ASSERT_VALUES_UNEQUAL(findIt, writtenSourceIds.end()); 
-        } 
-        Cout << TInstant::Now() << "All Ok" << Endl; 
-    }); 
-} 
- 
- 
- 
- 
+
+        TVector<TString> writtenSourceIds;
+
+        TVector<std::pair<ui64, TString>> data;
+        activeZone = true;
+
+        TString ss{32, '_'};
+        ui32 NUM_SOURCEIDS = 100;
+        data.push_back({1, ss});
+        CmdWrite(0, "sourceid0", data, tc, false, {}, false, "", -1, 100);
+        ui32 offset = 1200;
+        for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
+            try {
+                TString cookie = CmdSetOwner(0, tc).first;
+                THolder<TEvPersQueue::TEvRequest> request;
+                tc.Runtime->ResetScheduledCount();
+                request.Reset(new TEvPersQueue::TEvRequest);
+                auto req = request->Record.MutablePartitionRequest();
+                req->SetPartition(0);
+                req->SetOwnerCookie(cookie);
+                req->SetMessageNo(0);
+                req->SetCmdWriteOffset(offset);
+                for (ui32 i=0; i < NUM_SOURCEIDS; ++i) {
+                  auto write = req->AddCmdWrite();
+                  write->SetSourceId(TStringBuilder() << "sourceid_" << i);
+                  write->SetSeqNo(0);
+                  write->SetData(ss);
+                }
+                tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+                TAutoPtr<IEventHandle> handle;
+                TEvPersQueue::TEvResponse *result;
+                result = tc.Runtime->GrabEdgeEventIf<TEvPersQueue::TEvResponse>(handle, [](const TEvPersQueue::TEvResponse& ev){
+                  if (!ev.Record.HasPartitionResponse() || !ev.Record.GetPartitionResponse().HasCmdReadResult())
+                    return true;
+                  return false;
+                 }); //there could be outgoing reads in TestReadSubscription test
+
+                UNIT_ASSERT(result);
+                UNIT_ASSERT(result->Record.HasStatus());
+                if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                  tc.Runtime->DispatchEvents();   // Dispatch events so that initialization can make progress
+                  retriesLeft = 2;
+                  continue;
+                }
+
+                if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_BAD_OFFSET) {
+                  ++offset;
+                  continue;
+                }
+
+                Cout << "Error code is " << static_cast<int>(result->Record.GetErrorCode()) << Endl;
+                UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
+
+                UNIT_ASSERT(result->Record.GetPartitionResponse().CmdWriteResultSize() == NUM_SOURCEIDS);
+                for (ui32 i = 0; i < NUM_SOURCEIDS; ++i) {
+                  UNIT_ASSERT(result->Record.GetPartitionResponse().GetCmdWriteResult(i).HasAlreadyWritten());
+                  UNIT_ASSERT(result->Record.GetPartitionResponse().GetCmdWriteResult(i).HasOffset());
+                }
+                // for (ui32 i = 0; i < NUM_SOURCEIDS; ++i) {
+                //   auto res = result->Record.GetPartitionResponse().GetCmdWriteResult(i);
+                //   UNIT_ASSERT(!result->Record.GetPartitionResponse().GetCmdWriteResult(i).GetAlreadyWritten());
+                // }
+
+                retriesLeft = 0;
+            } catch (NActors::TSchedulingLimitReachedException) {
+                UNIT_ASSERT_VALUES_EQUAL(retriesLeft, 2);
+                retriesLeft = 3;
+            }
+        }
+        for (ui64 i=100; i < 104; ++i) {
+            CmdWrite(0, TStringBuilder() << "sourceid_" << i, data, tc, false, {}, false, "", -1, offset + i);
+            Cout << TInstant::Now() << " written sourceid_" << i << Endl;
+        }
+        for (ui64 i=100; i < 104; ++i) {
+            writtenSourceIds.push_back(TStringBuilder() << "sourceid_" << i);
+        }
+        Cout << TInstant::Now() << " now check list of sourceIds" << Endl;
+        auto sourceIds = CmdSourceIdRead(tc);
+        UNIT_ASSERT(sourceIds.size() > 0);
+        for (auto& s: sourceIds) {
+            Cout << "try to find sourceId " << s << Endl;
+            auto findIt = std::find(writtenSourceIds.begin(), writtenSourceIds.end(), s);
+            UNIT_ASSERT_VALUES_UNEQUAL(findIt, writtenSourceIds.end());
+        }
+        Cout << TInstant::Now() << "All Ok" << Endl;
+    });
+}
+
+
+
+
 } // TKeyValueTest
 } // NKikimr

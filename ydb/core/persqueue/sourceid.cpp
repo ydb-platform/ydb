@@ -1,25 +1,25 @@
-#include "sourceid.h" 
-#include "ownerinfo.h" 
+#include "sourceid.h"
+#include "ownerinfo.h"
 
 #include <ydb/core/persqueue/partition.h>
 
 #include <util/generic/size_literals.h>
 
 #include <algorithm>
- 
-namespace NKikimr { 
-namespace NPQ { 
- 
+
+namespace NKikimr {
+namespace NPQ {
+
 static constexpr ui64 MAX_DELETE_COMMAND_SIZE = 10_MB;
 static constexpr ui64 MAX_DELETE_COMMAND_COUNT = 1000;
- 
+
 template <typename T>
 T ReadAs(const TString& data, ui32& pos) {
     auto result = *((T*)(data.c_str() + pos));
     pos += sizeof(T);
     return result;
 }
- 
+
 template <typename T>
 T ReadAs(const TString& data, ui32& pos, const T& default_) {
     if (pos + sizeof(T) <= data.size()) {
@@ -28,13 +28,13 @@ T ReadAs(const TString& data, ui32& pos, const T& default_) {
         return default_;
     }
 }
- 
+
 template <typename T>
 void Write(T value, TBuffer& data, ui32& pos) {
     memcpy(data.Data() + pos, &value, sizeof(T));
     pos += sizeof(T);
 }
- 
+
 TSourceIdInfo::EState TSourceIdInfo::ConvertState(NKikimrPQ::TMessageGroupInfo::EState value) {
     switch (value) {
     case NKikimrPQ::TMessageGroupInfo::STATE_REGISTERED:
@@ -214,7 +214,7 @@ void TSourceIdStorage::DeregisterSourceId(const TString& sourceId) {
 
 bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInstant now, ui64 startOffset, ui32 partition, const NKikimrPQ::TPartitionConfig& config) {
     TVector<std::pair<ui64, TString>> toDelOffsets;
- 
+
     ui64 maxDeleteSourceIds = 0;
     if (InMemorySourceIds.size() > config.GetSourceIdMaxCounts()) {
         maxDeleteSourceIds = InMemorySourceIds.size() - config.GetSourceIdMaxCounts();
@@ -253,20 +253,20 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
                     reachedLimit = true;
                     break;
                 }
-            } 
- 
+            }
+
             if (reachedLimit) {
                 break; // Check here size to prevent crashing in protobuf verify -max size is 25Mb's and no more then 100K operations
                        // but even 10Mbs sounds too big here.
                        // Rest of SourceIds will be deleted in next DropOldSourceIds calls, whitch will be made
                        // right after complete of current deletion.
-            } 
+            }
         } else {
             // there are no space for new sourcID to delete, stop check sourceIds
             break;
-        } 
-    } 
- 
+        }
+    }
+
     for (auto& t : toDelOffsets) {
         // delete sourceId from memory
         size_t res = InMemorySourceIds.erase(t.second);
@@ -298,7 +298,7 @@ void TSourceIdStorage::LoadSourceIdInfo(const TString& key, const TString& data,
         Y_FAIL_S("Unexpected mark: " << (char)mark);
     }
 }
- 
+
 void TSourceIdStorage::LoadRawSourceIdInfo(const TString& key, const TString& data, TInstant now) {
     Y_VERIFY(key.size() >= TKeyPrefix::MarkedSize());
     Y_VERIFY(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkSourceId);
@@ -316,7 +316,7 @@ void TSourceIdStorage::LoadProtoSourceIdInfo(const TString& key, const TString& 
 
     RegisterSourceIdInfo(key.substr(TKeyPrefix::MarkedSize()), TSourceIdInfo::Parse(proto), true);
 }
- 
+
 void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdInfo&& sourceIdInfo, bool load) {
     auto it = InMemorySourceIds.find(sourceId);
     if (it != InMemorySourceIds.end()) {
@@ -324,51 +324,51 @@ void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdIn
         const auto res = SourceIdsByOffset.erase(std::make_pair(it->second.Offset, sourceId));
         Y_VERIFY(res == 1);
     }
- 
+
     const auto offset = sourceIdInfo.Offset;
     InMemorySourceIds[sourceId] = std::move(sourceIdInfo);
 
     const bool res = SourceIdsByOffset.emplace(offset, sourceId).second;
     Y_VERIFY(res);
 }
- 
+
 void TSourceIdStorage::RegisterSourceIdOwner(const TString& sourceId, const TStringBuf& ownerCookie) {
     if (ownerCookie == "default") {
         // cookie for legacy http protocol - skip it, we use one cookie for all write sessions
         return;
-    } 
+    }
     // owner cookie could be deleted in main object - so we should copy it
     SourceIdOwners[sourceId] = ownerCookie;
 }
- 
+
 void TSourceIdStorage::MarkOwnersForDeletedSourceId(THashMap<TString, TOwnerInfo>& owners) {
     for (auto& sourceid : OwnersToDrop) {
         auto it = owners.find(sourceid);
         if (it != owners.end()) {
              it->second.SourceIdDeleted = true;
-        } 
-    } 
- 
+        }
+    }
+
     OwnersToDrop.clear();
 }
- 
+
 TInstant TSourceIdStorage::MinAvailableTimestamp(TInstant now) const {
     TInstant ds = now;
     if (!SourceIdsByOffset.empty()) {
         auto it = InMemorySourceIds.find(SourceIdsByOffset.begin()->second);
         Y_VERIFY(it != InMemorySourceIds.end());
         ds = Min(ds, it->second.WriteTimestamp);
-    } 
+    }
 
     return ds;
 }
- 
+
 /// TSourceIdWriter
 TSourceIdWriter::TSourceIdWriter(ESourceIdFormat format)
     : Format(format)
 {
 }
- 
+
 void TSourceIdWriter::DeregisterSourceId(const TString& sourceId) {
     Deregistrations.insert(sourceId);
 }
@@ -418,12 +418,12 @@ void TSourceIdWriter::FillRequest(TEvKeyValue::TEvRequest* request, ui32 partiti
     for (const auto& [sourceId, sourceIdInfo] : Registrations) {
         FillKeyAndData(Format, sourceId, sourceIdInfo, key, data);
         FillWrite(key, data, *request->Record.AddCmdWrite());
-    } 
+    }
 
     for (const auto& sourceId : Deregistrations) {
         FillDelete(partition, sourceId, *request->Record.AddCmdDeleteRange());
     }
 }
- 
-} // NPQ 
-} // NKikimr 
+
+} // NPQ
+} // NKikimr

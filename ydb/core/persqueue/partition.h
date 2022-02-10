@@ -17,8 +17,8 @@
 #include "subscriber.h"
 #include "header.h"
 #include "user_info.h"
-#include "sourceid.h" 
-#include "ownerinfo.h" 
+#include "sourceid.h"
+#include "ownerinfo.h"
 
 #include <variant>
 
@@ -162,7 +162,7 @@ private:
 
     //will fill sourceIds, request and NewHead
     //returns true if head is compacted
-    bool AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx, TSourceIdWriter& sourceIdWriter); 
+    bool AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx, TSourceIdWriter& sourceIdWriter);
     std::pair<TKey, ui32> GetNewWriteKey(bool headCleared);
     void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx);
 
@@ -200,7 +200,7 @@ private:
     void InitUserInfoForImportantClients(const TActorContext& ctx);
 
 
-    THashMap<TString, TOwnerInfo>::iterator DropOwner(THashMap<TString, TOwnerInfo>::iterator& it, const TActorContext& ctx); 
+    THashMap<TString, TOwnerInfo>::iterator DropOwner(THashMap<TString, TOwnerInfo>::iterator& it, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvPipeDisconnected::TPtr& ev, const TActorContext& ctx);
 
@@ -586,10 +586,10 @@ private:
     bool InitDone;
     const bool NewPartition;
 
-    THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners; 
+    THashMap<TString, NKikimr::NPQ::TOwnerInfo> Owners;
     THashSet<TActorId> OwnerPipes;
 
-    TSourceIdStorage SourceIdStorage; 
+    TSourceIdStorage SourceIdStorage;
 
     std::deque<THolder<TEvPQ::TEvChangeOwner>> WaitToChangeOwner;
 

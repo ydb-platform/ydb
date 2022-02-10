@@ -1137,10 +1137,10 @@ message TopicSettings {
     int32 partitions_count = 1 [(value) = "> 0"];
     // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.  Default limit - 36 hours.
     int64 retention_period_ms = 2 [(value) = "> 0"];
-    // How long last written seqno for message group should be stored. Must be greater then retention_period_ms and less then limit for this database.  Default limit - 16 days. 
-    int64 message_group_seqno_retention_period_ms = 12 [(value) = ">= 0"]; 
-    // How many last written seqno for various message groups should be stored per partition. Must be less than limit for this database.  Default limit - 6*10^6 values. 
-    int64 max_partition_message_groups_seqno_stored = 13 [(value) = ">= 0"]; 
+    // How long last written seqno for message group should be stored. Must be greater then retention_period_ms and less then limit for this database.  Default limit - 16 days.
+    int64 message_group_seqno_retention_period_ms = 12 [(value) = ">= 0"];
+    // How many last written seqno for various message groups should be stored per partition. Must be less than limit for this database.  Default limit - 6*10^6 values.
+    int64 max_partition_message_groups_seqno_stored = 13 [(value) = ">= 0"];
     // Max format version that is allowed for writers. Must be value from enum FormatVersion.
     // Writes with greater format version are forbiden.
     Format supported_format = 3;

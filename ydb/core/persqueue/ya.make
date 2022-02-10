@@ -15,10 +15,10 @@ SRCS(
     pq.cpp
     pq_database.cpp
     pq_impl.cpp
-    sourceid.cpp 
+    sourceid.cpp
     mirrorer.cpp
     mirrorer.h
-    ownerinfo.cpp 
+    ownerinfo.cpp
     partition.cpp
     pq_l2_cache.cpp
     read_balancer.cpp

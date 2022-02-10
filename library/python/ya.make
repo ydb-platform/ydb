@@ -150,7 +150,7 @@ RECURSE(
     python-django-yauth/tests
     python-django-yauth
     reactor
-    redis_utils
+    redis_utils 
     reservoir_sampling
     refsclient
     resource

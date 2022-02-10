@@ -243,7 +243,7 @@ RECURSE(
     django-debug-panel
     django-debug-toolbar
     django-dirtyfields
-    django-dynamic-raw-id
+    django-dynamic-raw-id 
     django-enumfields
     django-environ
     django-etc
@@ -289,13 +289,13 @@ RECURSE(
     django-rest-framework-docs
     django-rest-multiple-models
     django-reversion
-    django-select2-forms
+    django-select2-forms 
     django-sentinel
     django-simple-history
     django-siteforms
     django-sitemessage
     django-sitetree
-    django-sortedm2m
+    django-sortedm2m 
     django-storages
     django-tastypie
     django-test-migrations
@@ -907,7 +907,7 @@ RECURSE(
     python-magic
     python-memcached
     python-mimeparse
-    python-multipart
+    python-multipart 
     python-pptx
     python-prctl
     python-rapidjson

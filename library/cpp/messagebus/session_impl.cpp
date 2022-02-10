@@ -211,22 +211,22 @@ void TBusSessionImpl::GetInFlightBulk(TArrayRef<const TNetAddr> addrs, TArrayRef
     }
 }
 
-size_t TBusSessionImpl::GetConnectSyscallsNumForTestImpl(const TNetAddr& addr) const {
-    TRemoteConnectionPtr conn = const_cast<TBusSessionImpl*>(this)->GetConnection(addr, false);
-    if (!!conn) {
-        return conn->GetConnectSyscallsNumForTest();
-    } else {
-        return 0;
-    }
-}
-
+size_t TBusSessionImpl::GetConnectSyscallsNumForTestImpl(const TNetAddr& addr) const { 
+    TRemoteConnectionPtr conn = const_cast<TBusSessionImpl*>(this)->GetConnection(addr, false); 
+    if (!!conn) { 
+        return conn->GetConnectSyscallsNumForTest(); 
+    } else { 
+        return 0; 
+    } 
+} 
+ 
 void TBusSessionImpl::GetConnectSyscallsNumBulkForTest(TArrayRef<const TNetAddr> addrs, TArrayRef<size_t> results) const {
     Y_VERIFY(addrs.size() == results.size(), "input.size != output.size");
-    for (size_t i = 0; i < addrs.size(); ++i) {
-        results[i] = GetConnectSyscallsNumForTestImpl(addrs[i]);
-    }
-}
-
+    for (size_t i = 0; i < addrs.size(); ++i) { 
+        results[i] = GetConnectSyscallsNumForTestImpl(addrs[i]); 
+    } 
+} 
+ 
 void TBusSessionImpl::FillStatus() {
 }
 

@@ -127,7 +127,7 @@ namespace {
     Y_NO_SANITIZE("address")
     Y_NO_SANITIZE("memory") static void ContextTrampoLine() {
         void** argPtr = (void**)((char*)AlignUp(&argPtr + EXTRA_PUSH_ARGS, STACK_ALIGN) + STACK_ALIGN);
-        Y_ASSERT(*(argPtr - 1) == *(argPtr - 2)); 
+        Y_ASSERT(*(argPtr - 1) == *(argPtr - 2));
 
         Run(*(argPtr - 1));
     }
@@ -183,7 +183,7 @@ TContMachineContext::TContMachineContext(const TContClosure& c)
      * fake return address
      */
     for (size_t i = 0; i < EXTRA_PUSH_ARGS; ++i) {
-        stack.Push(nullptr); 
+        stack.Push(nullptr);
     }
     #endif
 
@@ -249,7 +249,7 @@ void TContMachineContext::SwitchTo(TContMachineContext* next) noexcept {
 
 struct TContMachineContext::TImpl {
     inline TImpl()
-        : TL(nullptr) 
+        : TL(nullptr)
         , Finish(false)
     {
     }

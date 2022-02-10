@@ -40,7 +40,7 @@ struct TTxCoordinator::TTxConsistencyCheck : public TTransactionBase<TTxCoordina
                 TTabletId medId = rowset.GetValue<Schema::AffectedSet::MediatorID>();
                 TTxId txId = rowset.GetValue<Schema::AffectedSet::TransactionID>();
                 auto itTransaction = transactions.find(txId);
-                Y_ENSURE(itTransaction != transactions.end(), "Could not find mediator's transaction"); 
+                Y_ENSURE(itTransaction != transactions.end(), "Could not find mediator's transaction");
                 THashSet<TTabletId>& unconfirmedAffectedSet = itTransaction->second.UnconfirmedAffectedSet[medId];
                 unconfirmedAffectedSet.insert(rowset.GetValue<Schema::AffectedSet::DataShardID>());
                 if (!rowset.Next())
@@ -48,17 +48,17 @@ struct TTxCoordinator::TTxConsistencyCheck : public TTransactionBase<TTxCoordina
             }
         }
         {
-            Y_ENSURE(transactions.size() == Self->Transactions.size(), "Size of in memory and stored transactions mismatch"); 
+            Y_ENSURE(transactions.size() == Self->Transactions.size(), "Size of in memory and stored transactions mismatch");
             for (auto it = transactions.begin(); it != transactions.end(); ++it) {
                 auto jt = Self->Transactions.find(it->first);
-                Y_ENSURE(jt != Self->Transactions.end(), "Stored transaction hasn't been found in memory"); 
-                Y_ENSURE(it->second.PlanOnStep == jt->second.PlanOnStep, "Plan step mismatch"); 
-                Y_ENSURE(it->second.AffectedSet == jt->second.AffectedSet, "Affected set mismatch"); 
-                Y_ENSURE(it->second.UnconfirmedAffectedSet.size() == jt->second.UnconfirmedAffectedSet.size(), "Unconfirmed affected set size mismatch"); 
+                Y_ENSURE(jt != Self->Transactions.end(), "Stored transaction hasn't been found in memory");
+                Y_ENSURE(it->second.PlanOnStep == jt->second.PlanOnStep, "Plan step mismatch");
+                Y_ENSURE(it->second.AffectedSet == jt->second.AffectedSet, "Affected set mismatch");
+                Y_ENSURE(it->second.UnconfirmedAffectedSet.size() == jt->second.UnconfirmedAffectedSet.size(), "Unconfirmed affected set size mismatch");
                 for (auto kt = it->second.UnconfirmedAffectedSet.begin(); kt != it->second.UnconfirmedAffectedSet.end(); ++kt) {
                     auto lt = jt->second.UnconfirmedAffectedSet.find(kt->first);
-                    Y_ENSURE(lt != jt->second.UnconfirmedAffectedSet.end(), "Mediator hasn't' been found in memory"); 
-                    Y_ENSURE(lt->second == kt->second, "Unconfirmed affected set doesn't match"); 
+                    Y_ENSURE(lt != jt->second.UnconfirmedAffectedSet.end(), "Mediator hasn't' been found in memory");
+                    Y_ENSURE(lt->second == kt->second, "Unconfirmed affected set doesn't match");
                 }
             }
         }

@@ -1,15 +1,15 @@
-#include "dirut.h" 
+#include "dirut.h"
 #include "path.h"
 #include "pathsplit.h"
 
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/string/cast.h>
-#include <util/system/compiler.h> 
-#include <util/system/file.h> 
+#include <util/system/compiler.h>
+#include <util/system/file.h>
 #include <util/system/fs.h>
 
 struct TFsPath::TSplit: public TAtomicRefCount<TSplit>, public TPathSplit {
-    inline TSplit(const TStringBuf path) 
+    inline TSplit(const TStringBuf path)
         : TPathSplit(path)
     {
     }
@@ -187,7 +187,7 @@ TFsPath::TSplit& TFsPath::GetSplit() const {
 }
 
 static Y_FORCE_INLINE void VerifyPath(const TStringBuf path) {
-    Y_VERIFY(!path.Contains('\0'), "wrong format of TFsPath"); 
+    Y_VERIFY(!path.Contains('\0'), "wrong format of TFsPath");
 }
 
 TFsPath::TFsPath() {
@@ -199,7 +199,7 @@ TFsPath::TFsPath(const TString& path)
     VerifyPath(Path_);
 }
 
-TFsPath::TFsPath(const TStringBuf path) 
+TFsPath::TFsPath(const TStringBuf path)
     : Path_(ToString(path))
 {
     VerifyPath(Path_);
@@ -231,19 +231,19 @@ struct TClosedir {
 void TFsPath::ListNames(TVector<TString>& children) const {
     CheckDefined();
     THolder<DIR, TClosedir> dir(opendir(this->c_str()));
-    if (!dir) { 
+    if (!dir) {
         ythrow TIoSystemError() << "failed to opendir " << Path_;
-    } 
- 
+    }
+
     for (;;) {
         struct dirent de;
         struct dirent* ok;
-        // TODO(yazevnul|IGNIETFERRO-1070): remove these macroses by replacing `readdir_r` with proper 
-        // alternative 
-        Y_PRAGMA_DIAGNOSTIC_PUSH 
-        Y_PRAGMA_NO_DEPRECATED 
+        // TODO(yazevnul|IGNIETFERRO-1070): remove these macroses by replacing `readdir_r` with proper
+        // alternative
+        Y_PRAGMA_DIAGNOSTIC_PUSH
+        Y_PRAGMA_NO_DEPRECATED
         int r = readdir_r(dir.Get(), &de, &ok);
-        Y_PRAGMA_DIAGNOSTIC_POP 
+        Y_PRAGMA_DIAGNOSTIC_POP
         if (r != 0) {
             ythrow TIoSystemError() << "failed to readdir " << Path_;
         }
@@ -278,8 +278,8 @@ bool TFsPath::Contains(const TString& component) const {
 void TFsPath::List(TVector<TFsPath>& files) const {
     TVector<TString> names;
     ListNames(names);
-    for (auto& name : names) { 
-        files.push_back(Child(name)); 
+    for (auto& name : names) {
+        files.push_back(Child(name));
     }
 }
 
@@ -409,8 +409,8 @@ void TFsPath::ForceDelete() const {
     if (stat.IsDir()) {
         TVector<TFsPath> children;
         List(children);
-        for (auto& i : children) { 
-            i.ForceDelete(); 
+        for (auto& i : children) {
+            i.ForceDelete();
         }
         ::rmdir(this->c_str());
     } else {
@@ -467,21 +467,21 @@ const TPathSplit& TFsPath::PathSplit() const {
 }
 
 template <>
-void Out<TFsPath>(IOutputStream& os, const TFsPath& f) { 
+void Out<TFsPath>(IOutputStream& os, const TFsPath& f) {
     os << f.GetPath();
 }
 
 template <>
-TFsPath FromStringImpl<TFsPath>(const char* s, size_t len) { 
-    return TFsPath{TStringBuf{s, len}}; 
-} 
- 
-template <> 
-bool TryFromStringImpl(const char* s, size_t len, TFsPath& result) { 
-    try { 
-        result = TStringBuf{s, len}; 
-        return true; 
+TFsPath FromStringImpl<TFsPath>(const char* s, size_t len) {
+    return TFsPath{TStringBuf{s, len}};
+}
+
+template <>
+bool TryFromStringImpl(const char* s, size_t len, TFsPath& result) {
+    try {
+        result = TStringBuf{s, len};
+        return true;
     } catch (std::exception&) {
-        return false; 
-    } 
-} 
+        return false;
+    }
+}

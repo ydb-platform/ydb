@@ -8,15 +8,15 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) { 
-    Y_UNIT_TEST(TestDataBuild) { 
+Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
+    Y_UNIT_TEST(TestDataBuild) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto d2 = BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)456), NUdf::EDataSlot::Uint32, env);
         UNIT_ASSERT_EQUAL(d2->GetType()->GetSchemeType(), NUdf::TDataType<ui32>::Id);
     }
 
-    Y_UNIT_TEST(TestStructTypeBuilder) { 
+    Y_UNIT_TEST(TestStructTypeBuilder) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto type = TStructTypeBuilder(env)
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
         UNIT_ASSERT_EQUAL(type->GetKind(), TType::EKind::Struct);
     }
 
-    Y_UNIT_TEST(TestStructLiteralBuilder) { 
+    Y_UNIT_TEST(TestStructLiteralBuilder) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto structObj = TStructLiteralBuilder(env)
@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
         UNIT_ASSERT(structObj->GetType()->IsSameType(*structObj2->GetType()));
     }
 
-    Y_UNIT_TEST(TestListLiteralBuilder) { 
+    Y_UNIT_TEST(TestListLiteralBuilder) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto list = TListLiteralBuilder(env, TDataType::Create(NUdf::TDataType<ui32>::Id, env))
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
         UNIT_ASSERT_EQUAL(list->GetItemsCount(), 2);
     }
 
-    Y_UNIT_TEST(TestCallableTypeBuilder) { 
+    Y_UNIT_TEST(TestCallableTypeBuilder) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto callableType = TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
         UNIT_ASSERT_EQUAL(callableType->GetArgumentsCount(), 2);
     }
 
-    Y_UNIT_TEST(TestCallableTypeBuilderWithNamesAndFlags) { 
+    Y_UNIT_TEST(TestCallableTypeBuilderWithNamesAndFlags) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto callableType = TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
         UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(2), 0);
     }
 
-    Y_UNIT_TEST(TestCallableTypeBuilderBadOrderArgNames) { 
+    Y_UNIT_TEST(TestCallableTypeBuilderBadOrderArgNames) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         UNIT_ASSERT_EXCEPTION(TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestCallableTypeBuilderDuplicateArgNames) { 
+    Y_UNIT_TEST(TestCallableTypeBuilderDuplicateArgNames) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         UNIT_ASSERT_EXCEPTION(TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestDictLiteralBuilder) { 
+    Y_UNIT_TEST(TestDictLiteralBuilder) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto dict = TDictLiteralBuilder(env, TDataType::Create(NUdf::TDataType<ui32>::Id, env),
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
         UNIT_ASSERT_EQUAL(dict->GetItemsCount(), 2);
     }
 
-    Y_UNIT_TEST(TestCallableBuilder) { 
+    Y_UNIT_TEST(TestCallableBuilder) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto callable1 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
         UNIT_ASSERT_EQUAL(callable2->GetInputsCount(), 2);
     }
 
-    Y_UNIT_TEST(TestCallableBuilderWithNamesAndFlags) { 
+    Y_UNIT_TEST(TestCallableBuilderWithNamesAndFlags) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto callable1 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env))

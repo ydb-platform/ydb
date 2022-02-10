@@ -76,7 +76,7 @@ namespace NUtils {
 ///////////////////////////////////////////////////////////////////////////////
 // TCsvInputStream
 ///////////////////////////////////////////////////////////////////////////////
-TCsvInputStream::TCsvInputStream(IInputStream& slave, char delimiter) 
+TCsvInputStream::TCsvInputStream(IInputStream& slave, char delimiter)
     : Slave_(slave)
     , Delim_(delimiter)
 {
@@ -159,7 +159,7 @@ TVector<TString> TCsvInputBuffer::ReadLineWithEscaping()
 ///////////////////////////////////////////////////////////////////////////////
 // TCsvOutputStream
 ///////////////////////////////////////////////////////////////////////////////
-TCsvOutputStream::TCsvOutputStream(IOutputStream& slave, char delimiter, bool quoteItems) 
+TCsvOutputStream::TCsvOutputStream(IOutputStream& slave, char delimiter, bool quoteItems)
     : Slave_(slave)
     , WasNL_(true)
     , Delim_(delimiter)

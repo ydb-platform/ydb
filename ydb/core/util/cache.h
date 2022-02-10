@@ -130,23 +130,23 @@ public:
     virtual ui64 UpdateUsedSize(const TKey& key, const TValue& newValue, ui64 oldSize) = 0;
 
     static ui64 DefaultMeasureCallback(const TKey& key, const TValue& value) {
-        Y_UNUSED(key); 
-        Y_UNUSED(value); 
+        Y_UNUSED(key);
+        Y_UNUSED(value);
         return 1;
     }
 
     static void DefaultEvictionCallback(const TKey& key, TValue& value, ui64 size) {
-        Y_UNUSED(key); 
-        Y_UNUSED(value); 
-        Y_UNUSED(size); 
+        Y_UNUSED(key);
+        Y_UNUSED(value);
+        Y_UNUSED(size);
     }
 
     static void DefaultKeyEvictionCallback(const TKey& key) {
-        Y_UNUSED(key); 
+        Y_UNUSED(key);
     }
 
     static bool DefaultOverflowCallback(const TSelf& cache) {
-        Y_UNUSED(cache); 
+        Y_UNUSED(cache);
         return false;
     }
 };
@@ -260,8 +260,8 @@ public:
     }
 
     void OnInsert(const TKey& key, const TValue& value, ui64 size) override {
-        Y_UNUSED(key); 
-        Y_UNUSED(value); 
+        Y_UNUSED(key);
+        Y_UNUSED(value);
         UsedSize += size;
         ++Count;
     }
@@ -308,7 +308,7 @@ public:
 
     ui64 UpdateUsedSize(const TKey& key, const TValue& newValue, ui64 oldSize) override final {
         ui64 newSize = MeasureCallback(key, newValue);
-        Y_VERIFY(UsedSize >= oldSize); 
+        Y_VERIFY(UsedSize >= oldSize);
         UsedSize -= oldSize;
         UsedSize += newSize;
         return newSize;
@@ -525,7 +525,7 @@ public:
         ui64 size = TSelf::Measure(item->Key, item->Value);
         this->OnEvict(item->Key, item->Value, size);
         auto itemIt = Index.find(*item);
-        Y_VERIFY_DEBUG(itemIt != Index.end()); 
+        Y_VERIFY_DEBUG(itemIt != Index.end());
         Index.erase(itemIt);
         return true;
     }
@@ -683,14 +683,14 @@ public:
             ui64 size = TSelf::Measure(inItem->Key, inItem->Value);
             this->OnEvict(inItem->Key, inItem->Value, size);
             auto inItemIt = InIndex.find(*inItem);
-            Y_VERIFY_DEBUG(inItemIt != InIndex.end()); 
+            Y_VERIFY_DEBUG(inItemIt != InIndex.end());
             InIndex.erase(inItemIt);
             InSize -= size;
 
             if (OutIndex.size() > Config->OutKeyRatio * TSelf::GetCount()) {
                 auto outItem = OutList.PopBack();
                 auto outItemIt = OutIndex.find(*outItem);
-                Y_VERIFY_DEBUG(outItemIt != OutIndex.end()); 
+                Y_VERIFY_DEBUG(outItemIt != OutIndex.end());
                 this->OnKeyEvict(outItemIt->Key);
                 OutIndex.erase(outItemIt);
             }
@@ -703,7 +703,7 @@ public:
             ui64 size = TSelf::Measure(item->Key, item->Value);
             this->OnEvict(item->Key, item->Value, size);
             auto mainIndexIt = MainIndex.find(*item);
-            Y_VERIFY_DEBUG(mainIndexIt != MainIndex.end()); 
+            Y_VERIFY_DEBUG(mainIndexIt != MainIndex.end());
             MainIndex.erase(mainIndexIt);
             return true;
         }

@@ -259,7 +259,7 @@ private:
         if (basepath.empty()) {
             basepath = "/viewer";
         } else {
-            if (basepath.EndsWith("/api/")) { 
+            if (basepath.EndsWith("/api/")) {
                 basepath = basepath.substr(0, basepath.size() - 5);
             }
         }

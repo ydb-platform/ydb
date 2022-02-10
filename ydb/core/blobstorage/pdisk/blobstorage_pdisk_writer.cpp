@@ -64,8 +64,8 @@ void TBufferedWriter::SetupWithBuffer(ui64 startOffset, ui64 currentOffset, TBuf
 
 ui8* TBufferedWriter::Seek(ui64 offset, ui32 count, ui32 reserve, TReqId reqId, NWilson::TTraceId *traceId,
         ui32 chunkIdx) {
-    Y_VERIFY(count > 0); 
-    Y_VERIFY(count <= 16); 
+    Y_VERIFY(count > 0);
+    Y_VERIFY(count <= 16);
     if (NextOffset != offset || NextOffset + SectorSize * reserve - StartOffset > CurrentBuffer->Size()) {
         WriteBufferWithFlush(LastReqId, traceId, nullptr, chunkIdx);
         StartOffset = offset;
@@ -79,7 +79,7 @@ ui8* TBufferedWriter::Seek(ui64 offset, ui32 count, ui32 reserve, TReqId reqId, 
 }
 
 ui8* TBufferedWriter::Get() const {
-    Y_VERIFY(CurrentSector); 
+    Y_VERIFY(CurrentSector);
     return CurrentSector;
 }
 

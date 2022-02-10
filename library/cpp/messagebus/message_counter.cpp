@@ -25,7 +25,7 @@ TMessageCounter& TMessageCounter::operator+=(const TMessageCounter& that) {
 
 TString TMessageCounter::ToString(bool reader) const {
     if (reader) {
-        Y_ASSERT(CountCompressionRequests == 0); 
+        Y_ASSERT(CountCompressionRequests == 0);
     }
 
     TStringStream readValue;

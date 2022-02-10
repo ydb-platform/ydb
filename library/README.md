@@ -17,15 +17,15 @@ library
 
 5. The library **MUST** depend only on a limited list of external components
     (currently it is `util/`, `contrib/`, `vendor/`, `library/`).
- 
+
 6. Any code in Arcadia (except `contrib/`, `vendor/` and `util/`) **MAY** depend on the `library/`.
- 
+
 7. The library **MUST** be accompanied by `README.md` file and a brief description of the project.
 
 8. The library **MUST** be accompanied by unit-tests.
 
 9. CPU- or/and RAM-bound algorithms **SHOULD** provide benchmarks.
- 
+
 10. There **MUST** be no trade secrets of Yandex in `library/`: anything that can cause harm on publishing as OpenSource. For example:
     * spam filter rules;
     * coefficients for ML;
@@ -34,11 +34,11 @@ library
 11. All OSS (OpenSource Software) ready code **MUST** be accompanied by macro [LICENCE](https://docs.yandex-team.ru/ya-make/manual/common/macros#licence(license...)) in `ya.make`.
 
 12. All language specific aspects are defined by `<language>` committee: see `library/<language>/README.md`.
- 
+
 13. The library **MUST** satisfy `<language>` style-guide.
 
 14. The existing library **SHOULD** be improved instead of creating a new one - if it is possible.
- 
+
     Please do not create yet another library for the same thing: just improve existing one.
 
 Contacts

@@ -7,9 +7,9 @@
 
 namespace NKikimr {
 
-Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) { 
+Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
 
-    Y_UNIT_TEST(TestBelongsToSubgroup) { 
+    Y_UNIT_TEST(TestBelongsToSubgroup) {
         for (ui32 disks = 1; disks < 4; ++disks) {
             for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) {
                 if (species == TBlobStorageGroupType::ErasureMirror3dc) {
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         }
     }
 
-    Y_UNIT_TEST(SubgroupPartLayout) { 
+    Y_UNIT_TEST(SubgroupPartLayout) {
         TLogoBlobID id(1, 1, 1, 0, 100, 0);
 
         for (ui32 species = 0; species < TBlobStorageGroupType::ErasureSpeciesCount; ++species) {
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         }
     }
 
-    Y_UNIT_TEST(GroupQuorumCheckerOrdinary) { 
+    Y_UNIT_TEST(GroupQuorumCheckerOrdinary) {
         for (ui32 i = 0; i < TBlobStorageGroupType::ErasureSpeciesCount; ++i) {
             auto erasure = static_cast<TBlobStorageGroupType::EErasureSpecies>(i);
             if (erasure == TBlobStorageGroupType::ErasureMirror3dc || erasure == TBlobStorageGroupType::ErasureMirror3of4) {
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoTest) {
         }
     }
 
-    Y_UNIT_TEST(GroupQuorumCheckerMirror3dc) { 
+    Y_UNIT_TEST(GroupQuorumCheckerMirror3dc) {
         const ui32 numFailRealms = 3;
         const ui32 numFailDomains = 4;
         TBlobStorageGroupInfo info(TBlobStorageGroupType::ErasureMirror3dc, 1, numFailDomains, numFailRealms);

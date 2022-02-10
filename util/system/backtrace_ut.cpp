@@ -3,7 +3,7 @@
 #include <util/generic/array_ref.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 
 using PFunc = int (*)(void**, size_t);
 

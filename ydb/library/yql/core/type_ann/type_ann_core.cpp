@@ -10915,7 +10915,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         const auto resourceType = resourceArg->GetTypeAnn()->Cast<TResourceExprType>();
         const auto resourceTag = resourceType->GetTag();
         using NKikimr::NMiniKQL::ResourceQueuePrefix;
-        if (!resourceTag.StartsWith(ResourceQueuePrefix)) { 
+        if (!resourceTag.StartsWith(ResourceQueuePrefix)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(resourceArg->Pos()), "You should use resource from QueueCreate"));
             return false;
         }

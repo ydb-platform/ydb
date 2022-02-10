@@ -58,12 +58,12 @@ public:
     }
 
     void OnMessageSent(TBusMessage* pMessage) override {
-        Y_UNUSED(pMessage); 
-        Y_ASSERT(ExpectReply); 
+        Y_UNUSED(pMessage);
+        Y_ASSERT(ExpectReply);
     }
 
     void OnMessageSentOneWay(TAutoPtr<TBusMessage> pMessage) override {
-        Y_ASSERT(!ExpectReply); 
+        Y_ASSERT(!ExpectReply);
         TBusSyncMessageData* data = static_cast<TBusSyncMessageData*>(pMessage.Release()->Data);
         SignalResult(data, /*pReply=*/nullptr, MESSAGE_OK);
     }
@@ -76,7 +76,7 @@ public:
 
 private:
     void SignalResult(TBusSyncMessageData* data, TBusMessage* pReply, EMessageStatus status) const {
-        Y_VERIFY(data, "Message data is set to NULL."); 
+        Y_VERIFY(data, "Message data is set to NULL.");
         TGuard<TMutex> G(data->ReplyLock);
         data->Reply = pReply;
         data->ReplyStatus = status;

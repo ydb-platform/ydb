@@ -219,7 +219,7 @@ class TPollTest: public TTestBase {
 
 public:
     inline TPollTest() {
-        srand(static_cast<unsigned int>(time(nullptr))); 
+        srand(static_cast<unsigned int>(time(nullptr)));
     }
 
     void TestPollInOut();
@@ -273,7 +273,7 @@ SOCKET TPollTest::StartClientSocket(ui32 ip, ui16 port) {
 }
 
 SOCKET TPollTest::AcceptConnection(SOCKET serverSocket) {
-    SOCKET connectedSocket = accept(serverSocket, nullptr, nullptr); 
+    SOCKET connectedSocket = accept(serverSocket, nullptr, nullptr);
     if (connectedSocket == INVALID_SOCKET) {
         ythrow yexception() << "Can not accept connection on server socket (" << LastSystemErrorText() << ")";
     }

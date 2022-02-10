@@ -4,7 +4,7 @@
 
 #include <util/random/random.h>
 
-Y_UNIT_TEST_SUITE(RingBuffer) { 
+Y_UNIT_TEST_SUITE(RingBuffer) {
     struct TRingBufferTester {
         TRingBuffer<unsigned> RingBuffer;
 
@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(RingBuffer) {
         }
     }
 
-    Y_UNIT_TEST(Random) { 
+    Y_UNIT_TEST(Random) {
         for (unsigned i = 0; i < 100; ++i) {
             Iter();
         }

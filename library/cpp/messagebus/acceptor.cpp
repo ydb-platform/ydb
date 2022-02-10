@@ -113,8 +113,8 @@ void TAcceptor::SendStatus(TInstant now) {
 }
 
 void TAcceptor::HandleEvent(SOCKET socket, void* cookie) {
-    Y_UNUSED(socket); 
-    Y_UNUSED(cookie); 
+    Y_UNUSED(socket);
+    Y_UNUSED(cookie);
 
     GetActor()->Schedule();
 }

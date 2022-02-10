@@ -23,8 +23,8 @@ static NUdf::TUnboxedValuePod AddUi32(const NUdf::TUnboxedValuePod* args)
     return NUdf::TUnboxedValuePod(first + second);
 }
 
-Y_UNIT_TEST_SUITE(TFunctionRegistryTest) { 
-    Y_UNIT_TEST(TestRegistration) { 
+Y_UNIT_TEST_SUITE(TFunctionRegistryTest) {
+    Y_UNIT_TEST(TestRegistration) {
         const auto functionRegistry = CreateBuiltinRegistry();
         functionRegistry->Register("MyAdd", TFunctionDescriptor(AddUi32Metadata, &AddUi32));
 

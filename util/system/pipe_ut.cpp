@@ -2,8 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(TPipeTest) { 
-    Y_UNIT_TEST(TestPipe) { 
+Y_UNIT_TEST_SUITE(TPipeTest) {
+    Y_UNIT_TEST(TestPipe) {
         TPipe r;
         TPipe w;
         TPipe::Pipe(r, w);

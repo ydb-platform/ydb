@@ -1,4 +1,4 @@
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 
 #define POLY_16 0x1021
 #define POLY_32 0xEDB88320UL

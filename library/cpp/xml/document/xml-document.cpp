@@ -308,7 +308,7 @@ namespace NXml {
 
     static int XmlWriteToOstream(void* context, const char* buffer, int len) {
         // possibly use to save doc as well
-        IOutputStream* out = (IOutputStream*)context; 
+        IOutputStream* out = (IOutputStream*)context;
         out->Write(buffer, len);
         return len;
     }

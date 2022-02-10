@@ -44,7 +44,7 @@ namespace NKikimr {
                     MaxId = id;
             }
 
-            void Finish(IOutputStream &str, bool pretty) { 
+            void Finish(IOutputStream &str, bool pretty) {
 
                 HTML(str) {
                     if (pretty) {
@@ -80,8 +80,8 @@ namespace NKikimr {
                 Channels[c].Update(id, m);
             }
 
-            void Finish(IOutputStream &str, ui64 tabletID, bool pretty) { 
-                auto tabletIDOutputer = [tabletID] (IOutputStream &str) { 
+            void Finish(IOutputStream &str, ui64 tabletID, bool pretty) {
+                auto tabletIDOutputer = [tabletID] (IOutputStream &str) {
                     HTML(str) {
                         TABLED() {
                             SMALL() {
@@ -95,16 +95,16 @@ namespace NKikimr {
                 Finish(str, tabletIDOutputer, pretty);
             }
 
-            void Finish(IOutputStream &str, bool pretty) { 
-                auto nothing = [] (IOutputStream &) {}; 
+            void Finish(IOutputStream &str, bool pretty) {
+                auto nothing = [] (IOutputStream &) {};
                 Finish(str, nothing, pretty);
             }
 
         private:
             TVector<TChannelInfo> Channels;
 
-            void Finish(IOutputStream &str, 
-                        std::function<void (IOutputStream &)> t, 
+            void Finish(IOutputStream &str,
+                        std::function<void (IOutputStream &)> t,
                         bool pretty)
             {
                 HTML(str) {
@@ -136,7 +136,7 @@ namespace NKikimr {
                 AllChannels.Update(id, m);
             }
 
-            void Finish(IOutputStream &str, bool pretty) { 
+            void Finish(IOutputStream &str, bool pretty) {
                 AllChannels.Finish(str, TabletID, pretty);
             }
 
@@ -170,7 +170,7 @@ namespace NKikimr {
                 AllChannels.Update(id, m);
             }
 
-            void Finish(IOutputStream &str, bool pretty) { 
+            void Finish(IOutputStream &str, bool pretty) {
                 HTML(str) {
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
@@ -223,14 +223,14 @@ namespace NKikimr {
     }
 
     template <>
-    void TLevelIndexStatActor<TKeyLogoBlob, TMemRecLogoBlob>::CalculateStat(IOutputStream &str, 
+    void TLevelIndexStatActor<TKeyLogoBlob, TMemRecLogoBlob>::CalculateStat(IOutputStream &str,
                                                                             bool pretty) {
         // aggregation class
         struct TAggr {
             using TLevelSegment = ::NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
             using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
 
-            TAggr(IOutputStream &str, bool pretty) 
+            TAggr(IOutputStream &str, bool pretty)
                 : Str(str)
                 , Pretty(pretty)
             {}
@@ -254,7 +254,7 @@ namespace NKikimr {
             }
 
             TAllTablets Tablets;
-            IOutputStream &Str; 
+            IOutputStream &Str;
             bool Pretty;
         };
 
@@ -264,14 +264,14 @@ namespace NKikimr {
     }
 
     template <>
-    void TLevelIndexStatActor<TKeyBlock, TMemRecBlock>::CalculateStat(IOutputStream &str, 
+    void TLevelIndexStatActor<TKeyBlock, TMemRecBlock>::CalculateStat(IOutputStream &str,
                                                                       bool pretty) {
         // aggregation class
         struct TAggr {
             using TLevelSegment = ::NKikimr::TLevelSegment<TKeyBlock, TMemRecBlock>;
             using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
 
-            TAggr(IOutputStream &str, bool pretty) 
+            TAggr(IOutputStream &str, bool pretty)
                 : Str(str)
                 , Pretty(pretty)
             {}
@@ -339,7 +339,7 @@ namespace NKikimr {
             using TMapType = TMap<ui64, TValue>; // TabletId -> TValue
 
             TMapType Map;
-            IOutputStream &Str; 
+            IOutputStream &Str;
             bool Pretty;
         };
 
@@ -350,14 +350,14 @@ namespace NKikimr {
     }
 
     template <>
-    void TLevelIndexStatActor<TKeyBarrier, TMemRecBarrier>::CalculateStat(IOutputStream &str, 
+    void TLevelIndexStatActor<TKeyBarrier, TMemRecBarrier>::CalculateStat(IOutputStream &str,
                                                                           bool pretty) {
         // aggregation class
         struct TAggr {
             using TLevelSegment = ::NKikimr::TLevelSegment<TKeyBarrier, TMemRecBarrier>;
             using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
 
-            TAggr(IOutputStream &str, bool pretty) 
+            TAggr(IOutputStream &str, bool pretty)
                 : Str(str)
                 , Pretty(pretty)
             {}
@@ -440,7 +440,7 @@ namespace NKikimr {
             using TMapType = TMap<TKey, TValue>; // TKey -> TValue
 
             TMapType Map;
-            IOutputStream &Str; 
+            IOutputStream &Str;
             bool Pretty;
         };
 

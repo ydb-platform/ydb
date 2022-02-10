@@ -136,7 +136,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node); 
+        Y_VERIFY_DEBUG(Node);
         return Node->Translate(ctx);
     }
 
@@ -164,24 +164,24 @@ public:
     }
 
     bool AddFilter(TContext& ctx, TNodePtr filter) override  {
-        Y_UNUSED(filter); 
+        Y_UNUSED(filter);
         ctx.Error(Pos) << "Source does not allow filtering";
         return false;
     }
 
     TNodePtr Build(TContext& ctx) override  {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
         return Y("AsList", Y("Uint32", Q("0")));
     }
 
     bool AddGroupKey(TContext& ctx, const TString& column) override {
-        Y_UNUSED(column); 
+        Y_UNUSED(column);
         ctx.Error(Pos) << "Source does not allow grouping";
         return false;
     }
 
     bool AddAggregation(TContext& ctx, TAggregationPtr aggr) override {
-        Y_UNUSED(aggr); 
+        Y_UNUSED(aggr);
         ctx.Error(Pos) << "Source does not allow aggregation";
         return false;
     }
@@ -193,13 +193,13 @@ public:
 
     TNodePtr BuildFilter(TContext& ctx, const TString& label, const TNodePtr& groundNode) override {
         Y_UNUSED(ctx);
-        Y_UNUSED(label); 
+        Y_UNUSED(label);
         Y_UNUSED(groundNode);
         return nullptr;
     }
 
     TNodePtr BuildAggregation(const TString& label) override {
-        Y_UNUSED(label); 
+        Y_UNUSED(label);
         return nullptr;
     }
 
@@ -285,12 +285,12 @@ protected:
     {}
 
     void AllColumns() override {
-        Y_VERIFY_DEBUG(Source); 
+        Y_VERIFY_DEBUG(Source);
         return Source->AllColumns();
     }
 
     const TColumns* GetColumns() const override {
-        Y_VERIFY_DEBUG(Source); 
+        Y_VERIFY_DEBUG(Source);
         return Source->GetColumns();
     }
 
@@ -300,7 +300,7 @@ protected:
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
-        Y_VERIFY_DEBUG(Source); 
+        Y_VERIFY_DEBUG(Source);
         const TString label(Source->GetLabel());
         Source->SetLabel(Label);
         const auto ret = Source->AddColumn(ctx, column);
@@ -707,7 +707,7 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) override {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
         return NewSource ? NewSource->Build(ctx) : Node;
     }
 
@@ -1524,7 +1524,7 @@ private:
                 terms = L(terms, (Y("let", "res", Y("AsList", "row"))));
             }
         } else if (!Columns.List.empty()) {
-            Y_VERIFY_DEBUG(Columns.List.size() == Terms.size()); 
+            Y_VERIFY_DEBUG(Columns.List.size() == Terms.size());
             const bool isJoin = Source->GetJoin();
 
             terms = TermsGround ? TermsGround : Y();

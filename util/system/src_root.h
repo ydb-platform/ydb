@@ -7,19 +7,19 @@
 
 namespace NPrivate {
     struct TStaticBuf {
-        constexpr TStaticBuf(const char* data, unsigned len) noexcept 
+        constexpr TStaticBuf(const char* data, unsigned len) noexcept
             : Data(data)
             , Len(len)
         {
         }
 
         template <class T>
-        constexpr T As() const noexcept { 
+        constexpr T As() const noexcept {
             return T(Data, Len);
         }
 
         template <class T>
-        constexpr operator T() const noexcept { 
+        constexpr operator T() const noexcept {
             return this->As<T>();
         }
 

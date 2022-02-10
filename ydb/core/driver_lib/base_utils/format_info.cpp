@@ -8,7 +8,7 @@
 namespace NKikimr {
 
 int MainFormatInfo(const TCommandConfig &cmdConf, int argc, char** argv) {
-    Y_UNUSED(cmdConf); 
+    Y_UNUSED(cmdConf);
 
     TCmdFormatInfoConfig formatInfoConfig;
     formatInfoConfig.Parse(argc, argv);

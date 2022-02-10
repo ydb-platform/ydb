@@ -32,10 +32,10 @@ void RunCheckFailModel(TBlobStorageGroupType::EErasureSpecies erasure) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TDsProxyQuorumTracker) { 
+Y_UNIT_TEST_SUITE(TDsProxyQuorumTracker) {
 
 #define UNIT_TEST_FOR_ERASURE(ERASURE) \
-    Y_UNIT_TEST(CheckFailModel##ERASURE) { \ 
+    Y_UNIT_TEST(CheckFailModel##ERASURE) { \
         RunCheckFailModel(TBlobStorageGroupType::ERASURE); \
     }
 

@@ -5,8 +5,8 @@
 
 using namespace NProtoBuf;
 
-Y_UNIT_TEST_SUITE(RepeatedFieldUtils) { 
-    Y_UNIT_TEST(RemoveIf) { 
+Y_UNIT_TEST_SUITE(RepeatedFieldUtils) {
+    Y_UNIT_TEST(RemoveIf) {
         {
             NProtobufUtilUt::TWalkTest msg;
             msg.AddRepInt(0);

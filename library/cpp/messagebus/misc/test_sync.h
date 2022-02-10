@@ -32,7 +32,7 @@ public:
     void WaitFor(unsigned n) {
         TGuard<TMutex> guard(Mutex);
 
-        Y_VERIFY(Current <= n, "too late, waiting for %d, already %d", n, Current); 
+        Y_VERIFY(Current <= n, "too late, waiting for %d, already %d", n, Current);
 
         while (n > Current) {
             CondVar.WaitI(Mutex);
@@ -42,7 +42,7 @@ public:
     void WaitForAndIncrement(unsigned n) {
         TGuard<TMutex> guard(Mutex);
 
-        Y_VERIFY(Current <= n, "too late, waiting for %d, already %d", n, Current); 
+        Y_VERIFY(Current <= n, "too late, waiting for %d, already %d", n, Current);
 
         while (n > Current) {
             CondVar.WaitI(Mutex);
@@ -55,7 +55,7 @@ public:
     void CheckAndIncrement(unsigned n) {
         TGuard<TMutex> guard(Mutex);
 
-        Y_VERIFY(Current == n, "must be %d, currently %d", n, Current); 
+        Y_VERIFY(Current == n, "must be %d, currently %d", n, Current);
 
         DoInc();
         CondVar.BroadCast();
@@ -64,12 +64,12 @@ public:
     void Check(unsigned n) {
         TGuard<TMutex> guard(Mutex);
 
-        Y_VERIFY(Current == n, "must be %d, currently %d", n, Current); 
+        Y_VERIFY(Current == n, "must be %d, currently %d", n, Current);
     }
 
 private:
     void DoInc() {
         unsigned r = ++Current;
-        Y_UNUSED(r); 
+        Y_UNUSED(r);
     }
 };

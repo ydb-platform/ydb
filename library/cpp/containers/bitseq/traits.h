@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/bitops.h> 
+#include <util/generic/bitops.h>
 #include <util/generic/typetraits.h>
 #include <util/system/yassert.h>
 
@@ -12,7 +12,7 @@ struct TBitSeqTraits {
 
     static inline TWord ElemMask(ui8 count) {
         // NOTE: Shifting by the type's length is UB, so we need this workaround.
-        if (Y_LIKELY(count)) 
+        if (Y_LIKELY(count))
             return TWord(-1) >> (NumBits - count);
         return 0;
     }

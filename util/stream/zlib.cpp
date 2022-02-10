@@ -29,7 +29,7 @@ namespace {
         inline ~TZLibCommon() = default;
 
         inline const char* GetErrMsg() const noexcept {
-            return Z()->msg != nullptr ? Z()->msg : "unknown error"; 
+            return Z()->msg != nullptr ? Z()->msg : "unknown error";
         }
 
         inline z_stream* Z() const noexcept {
@@ -45,9 +45,9 @@ namespace {
     }
 
     struct TChunkedZeroCopyInput {
-        inline TChunkedZeroCopyInput(IZeroCopyInput* in) 
+        inline TChunkedZeroCopyInput(IZeroCopyInput* in)
             : In(in)
-            , Buf(nullptr) 
+            , Buf(nullptr)
             , Len(0)
         {
         }
@@ -72,7 +72,7 @@ namespace {
             return true;
         }
 
-        IZeroCopyInput* In; 
+        IZeroCopyInput* In;
         const char* Buf;
         size_t Len;
     };
@@ -162,7 +162,7 @@ private:
 };
 
 namespace {
-    class TDecompressStream: public IZeroCopyInput, public TZLibDecompress::TImpl, public TAdditionalStorage<TDecompressStream> { 
+    class TDecompressStream: public IZeroCopyInput, public TZLibDecompress::TImpl, public TAdditionalStorage<TDecompressStream> {
     public:
         inline TDecompressStream(IInputStream* input, ZLib::StreamType type, TStringBuf dict)
             : TZLibDecompress::TImpl(this, type, dict)
@@ -181,7 +181,7 @@ namespace {
         }
 
     private:
-        IInputStream* Stream_; 
+        IInputStream* Stream_;
     };
 
     using TZeroCopyDecompress = TZLibDecompress::TImpl;
@@ -314,7 +314,7 @@ private:
     }
 
 private:
-    IOutputStream* Stream_; 
+    IOutputStream* Stream_;
     THolder<gz_header> GZHeader_;
 };
 

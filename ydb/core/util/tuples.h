@@ -58,7 +58,7 @@ struct hash<pair<TFirst, TSecond>> {
 // output for tuples
 template <typename TupleType, std::size_t N>
 struct OutTuple : OutTuple<TupleType, N - 1> {
-    static void Out(IOutputStream& stream, const TupleType& t) { 
+    static void Out(IOutputStream& stream, const TupleType& t) {
         OutTuple<TupleType, N - 1>::Out(stream, t);
         stream << "," << std::get<N>(t);
     }
@@ -66,13 +66,13 @@ struct OutTuple : OutTuple<TupleType, N - 1> {
 
 template <typename TupleType>
 struct OutTuple<TupleType, 0> {
-    static void Out(IOutputStream& stream, const TupleType& t) { 
+    static void Out(IOutputStream& stream, const TupleType& t) {
         stream << std::get<0>(t);
     }
 };
 
 template <typename... Types>
-IOutputStream& operator <<(IOutputStream& stream, const std::tuple<Types...>& t) { 
+IOutputStream& operator <<(IOutputStream& stream, const std::tuple<Types...>& t) {
     stream << "(";
     OutTuple<std::tuple<Types...>, sizeof...(Types) - 1>::Out(stream, t);
     stream << ")";

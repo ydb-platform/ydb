@@ -8,14 +8,14 @@
 namespace NKikimr {
     using namespace NActors;
 
-Y_UNIT_TEST_SUITE(TActorTest) { 
+Y_UNIT_TEST_SUITE(TActorTest) {
     TTestActorRuntime::TEgg MakeEgg()
     {
         return
             { new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr };
     }
 
-    Y_UNIT_TEST(TestHandleEvent) { 
+    Y_UNIT_TEST(TestHandleEvent) {
         class TMyActor : public TActor<TMyActor> {
         public:
             TMyActor(const TActorId& sender)
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(StateFunc)
             {
-                Y_UNUSED(ctx); 
+                Y_UNUSED(ctx);
                 UNIT_ASSERT_EQUAL_C(ev->Sender, Sender, "sender check");
                 UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::TSystem::Wakeup, "ev. type check");
             }
@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvWakeup));
     }
 
-    Y_UNIT_TEST(TestDie) { 
+    Y_UNIT_TEST(TestDie) {
         class TMyActor : public TActor<TMyActor> {
         public:
             TMyActor()
@@ -64,7 +64,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvPoisonPill));
     }
 
-    Y_UNIT_TEST(TestStateSwitch) { 
+    Y_UNIT_TEST(TestStateSwitch) {
         class TMyActor : public TActor<TMyActor> {
         public:
             TMyActor()
@@ -75,14 +75,14 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(OldStateFunc)
             {
-                Y_UNUSED(ctx); 
+                Y_UNUSED(ctx);
                 UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::THelloWorld::Ping, "ev. type check");
                 Become(&TMyActor::NewStateFunc);
             }
 
             STFUNC(NewStateFunc)
             {
-                Y_UNUSED(ctx); 
+                Y_UNUSED(ctx);
                 UNIT_ASSERT_EQUAL_C(ev->Type, TEvents::THelloWorld::Pong, "ev. type check");
                 StateChanged = true;
             }
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         UNIT_ASSERT_EQUAL(actor->IsStateChanged(), true);
     }
 
-    Y_UNIT_TEST(TestSendEvent) { 
+    Y_UNIT_TEST(TestSendEvent) {
         class TMyActor : public TActor<TMyActor> {
         public:
             TMyActor()
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         runtime.PushEventsFront(events);
     }
 
-    Y_UNIT_TEST(TestScheduleEvent) { 
+    Y_UNIT_TEST(TestScheduleEvent) {
         class TMyActor : public TActor<TMyActor> {
         public:
             TMyActor()
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(StateFunc)
             {
-                Y_UNUSED(ev); 
+                Y_UNUSED(ev);
                 ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
             }
         };
@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
         runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
-            Y_UNUSED(event); 
+            Y_UNUSED(event);
             deadline = runtime.GetCurrentTime() + delay;
             return false;
         });
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         UNIT_ASSERT_EQUAL_C(scheduledEvents.begin()->Event->Type, TEvents::TSystem::Wakeup, "scheduled ev. type check");
     }
 
-    Y_UNIT_TEST(TestCreateChildActor) { 
+    Y_UNIT_TEST(TestCreateChildActor) {
         class TChildActor : public TActor<TChildActor> {
         public:
             TChildActor()
@@ -180,8 +180,8 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(StateFunc)
             {
-                Y_UNUSED(ctx); 
-                Y_UNUSED(ev); 
+                Y_UNUSED(ctx);
+                Y_UNUSED(ev);
             }
         };
 
@@ -194,7 +194,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(StateFunc)
             {
-                Y_UNUSED(ev); 
+                Y_UNUSED(ev);
                 ChildId = ctx.RegisterWithSameMailbox(new TChildActor());
                 ctx.Send(ChildId, new TEvents::TEvPing());
             }
@@ -226,7 +226,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         runtime.PushEventsFront(events);
     }
 
-    Y_UNIT_TEST(TestSendAfterDelay) { 
+    Y_UNIT_TEST(TestSendAfterDelay) {
         TMutex syncMutex;
 
         class TMyActor : public TActor<TMyActor> {
@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         with_lock(syncMutex) {}
     }
 
-    Y_UNIT_TEST(TestGetCtxTime) { 
+    Y_UNIT_TEST(TestGetCtxTime) {
         class TMyActor : public TActor<TMyActor> {
         public:
             TMyActor()
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         runtime.PushEventsFront(events);
     }
 
-    Y_UNIT_TEST(TestSendFromAnotherThread) { 
+    Y_UNIT_TEST(TestSendFromAnotherThread) {
         enum {
             EvCounter = EventSpaceBegin(TEvents::ES_PRIVATE)
         };
@@ -374,7 +374,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(StateFunc)
             {
-                Y_UNUSED(ctx); 
+                Y_UNUSED(ctx);
                 switch (ev->GetTypeRewrite()) {
                 case EvCounter:
                     ui32 eventCounter = reinterpret_cast<TEvCounter*>(ev->GetBase())->Counter;
@@ -405,7 +405,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
 
             STFUNC(StateFunc)
             {
-                Y_UNUSED(ev); 
+                Y_UNUSED(ev);
                 SelfId = ctx.SelfID;
                 ActorSystem = ctx.ExecutorThread.ActorSystem;
                 Thread.Reset(new TThread(&TProducerActor::ThreadProc, this));
@@ -454,8 +454,8 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             TActorId producerId = runtime.Register(producerActor);
             runtime.Send(new IEventHandle(producerId, sender, new TEvents::TEvPing));
             runtime.SetObserverFunc([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-                Y_UNUSED(runtime); 
-                Y_UNUSED(event); 
+                Y_UNUSED(runtime);
+                Y_UNUSED(event);
                 return TTestActorRuntime::EEventAction::PROCESS;
             });
 
@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         }
     }
 
-    Y_UNIT_TEST(TestScheduleReaction) { 
+    Y_UNIT_TEST(TestScheduleReaction) {
         class TMyActor : public TActor<TMyActor> {
         public:
             TMyActor()
@@ -533,7 +533,7 @@ Y_UNIT_TEST_SUITE(TActorTest) {
         UNIT_ASSERT(myActor->CompletedReceived);
     }
 
-    Y_UNIT_TEST(TestFilteredGrab) { 
+    Y_UNIT_TEST(TestFilteredGrab) {
         enum EEv {
             EvCounter = EventSpaceBegin(TEvents::ES_PRIVATE)
         };

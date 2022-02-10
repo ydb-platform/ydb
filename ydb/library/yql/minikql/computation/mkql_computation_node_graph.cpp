@@ -813,7 +813,7 @@ TIntrusivePtr<TComputationPatternImpl> MakeComputationPatternImpl(TExploringNode
 
     auto builder = MakeHolder<TComputationGraphBuildingVisitor>(opts);
     for (const auto& node : explorer.GetNodes()) {
-        Y_VERIFY(node->GetCookie() <= IS_NODE_REACHABLE, "TNode graph should not be reused"); 
+        Y_VERIFY(node->GetCookie() <= IS_NODE_REACHABLE, "TNode graph should not be reused");
         if (node->GetCookie() == IS_NODE_REACHABLE) {
             node->Accept(*builder);
         }

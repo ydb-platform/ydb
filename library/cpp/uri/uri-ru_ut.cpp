@@ -13,8 +13,8 @@ namespace NUri {
         }
     }
 
-    Y_UNIT_TEST_SUITE(URLTestRU) { 
-        Y_UNIT_TEST(test_httpURL2) { 
+    Y_UNIT_TEST_SUITE(URLTestRU) {
+        Y_UNIT_TEST(test_httpURL2) {
             TUri url;
             UNIT_ASSERT_VALUES_EQUAL(url.Parse("g:h"), TState::ParsedBadScheme);
             UNIT_ASSERT_VALUES_EQUAL(url.Parse("http:g"), TState::ParsedBadFormat);
@@ -120,7 +120,7 @@ namespace NUri {
             AsWin1251("mailto:&#107;&#97;&#109;&#112;&#97;&#64;&#117;&#107;&#114;&#46;&#110;&#101;&#116;?subject=Арабский язык"), "mailto:kampa@ukr.net?subject=%C0%F0%E0%E1%F1%EA%E8%E9%20%FF%E7%FB%EA",
             {}};
 
-        Y_UNIT_TEST(testHtLinkDecode) { 
+        Y_UNIT_TEST(testHtLinkDecode) {
             char decodedlink[URL_MAXLEN + 10];
             for (int i = 0; links[i]; i += 2) {
                 UNIT_ASSERT(HtLinkDecode(links[i].c_str(), decodedlink, sizeof(decodedlink)));
@@ -128,7 +128,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(testRuIDNA) { 
+        Y_UNIT_TEST(testRuIDNA) {
             {
 #define DEC "\xD7\xE5\xF0\xE5\xEf\xEE\xE2\xE5\xF6.\xF0\xF4" /* "Череповец.рф" in Windows-1251 */
 #define ENC "%D7%E5%F0%E5%EF%EE%E2%E5%F6.%F0%F4"

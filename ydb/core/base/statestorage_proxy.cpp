@@ -173,7 +173,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void MergeConnectionError(ui64 cookie) {
-        Y_VERIFY(cookie < Replicas); 
+        Y_VERIFY(cookie < Replicas);
 
         if (Signature[cookie] == 0) {
             Signature[cookie] = Max<ui64>();
@@ -226,7 +226,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         } else if (status == NKikimrProto::ERROR) {
             ReplicaSelection->MergeReply(TStateStorageInfo::TSelection::StatusNoInfo, &ReplyStatus, cookie, false);
         } else {
-            Y_FAIL(); 
+            Y_FAIL();
         }
 
         for (ui32 i = 0, end = record.FollowerSize(); i < end; ++i) {
@@ -319,7 +319,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             ReplyAndDie(NKikimrProto::RACE);
             return;
         }
-        Y_VERIFY_DEBUG(false); 
+        Y_VERIFY_DEBUG(false);
         PassAway();
     }
 
@@ -390,7 +390,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             ReplyAndDie(NKikimrProto::RACE);
             return;
         }
-        Y_VERIFY_DEBUG(false); 
+        Y_VERIFY_DEBUG(false);
         PassAway();
     }
 
@@ -455,7 +455,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void UpdateSigFor(ui64 cookie, ui64 sig) {
-        Y_VERIFY(cookie < Replicas); 
+        Y_VERIFY(cookie < Replicas);
 
         if (Signature[cookie] == 0) {
             Signature[cookie] = sig;

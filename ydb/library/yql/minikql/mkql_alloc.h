@@ -391,8 +391,8 @@ template <typename T>
 class TPagedList
 {
 public:
-    static_assert(sizeof(T) <= TAlignedPagePool::POOL_PAGE_SIZE, "Too big object"); 
-    static constexpr size_t OBJECTS_PER_PAGE = TAlignedPagePool::POOL_PAGE_SIZE / sizeof(T); 
+    static_assert(sizeof(T) <= TAlignedPagePool::POOL_PAGE_SIZE, "Too big object");
+    static constexpr size_t OBJECTS_PER_PAGE = TAlignedPagePool::POOL_PAGE_SIZE / sizeof(T);
 
     class TIterator;
     class TConstIterator;

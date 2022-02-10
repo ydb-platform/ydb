@@ -8,7 +8,7 @@
 
 using namespace NRainCheck;
 
-Y_UNIT_TEST_SUITE(RainCheckSimple) { 
+Y_UNIT_TEST_SUITE(RainCheckSimple) {
     struct TTaskWithCompletionCallback: public ISimpleTask {
         TTestEnv* const Env;
         TTestSync* const TestSync;
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(RainCheckSimple) {
         }
 
         void SleepCompletionCallback(TSubtaskCompletion* completion) {
-            Y_VERIFY(completion == &SleepCompletion); 
+            Y_VERIFY(completion == &SleepCompletion);
             TestSync->CheckAndIncrement(1);
 
             Env->SleepService.Sleep(&SleepCompletion, TDuration::MilliSeconds(1));
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(RainCheckSimple) {
         }
     };
 
-    Y_UNIT_TEST(CompletionCallback) { 
+    Y_UNIT_TEST(CompletionCallback) {
         TTestEnv env;
         TTestSync testSync;
 

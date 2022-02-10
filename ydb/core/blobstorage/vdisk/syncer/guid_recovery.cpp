@@ -153,7 +153,7 @@ namespace NKikimr {
             return TDecision(EDecision::Good, step, guid, TString(), false);
         }
 
-        void TDecision::Output(IOutputStream &str) const { 
+        void TDecision::Output(IOutputStream &str) const {
             str << "[Decision# " << Decision;
             switch (Decision) {
                 case EDecision::FirstRun:
@@ -187,7 +187,7 @@ namespace NKikimr {
         // TOutcome
         // Outcome of the final decision that we pass outside
         ////////////////////////////////////////////////////////////////////////////
-        void TOutcome::Output(IOutputStream &str) const { 
+        void TOutcome::Output(IOutputStream &str) const {
             str << "[Decision# " << Decision;
             str << " Guid# " << Guid;
             if (!Explanation.empty())
@@ -283,7 +283,7 @@ namespace NKikimr {
                         EFirstRunStep::STATE__Uninitialized, "");
                 }
 
-                void Output(IOutputStream &str) const { 
+                void Output(IOutputStream &str) const {
                     if (IsInconsistent) {
                         str << "[Inconsistent Explanation: \"" << Explanation << "\"]";
                     } else {

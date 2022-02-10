@@ -17,7 +17,7 @@ const TString& TCgiParameters::Get(const TStringBuf name, size_t numOfValue) con
     return end() == it ? Default<TString>() : it->second;
 }
 
-bool TCgiParameters::Erase(const TStringBuf name, size_t pos) { 
+bool TCgiParameters::Erase(const TStringBuf name, size_t pos) {
     const auto pair = equal_range(name);
 
     for (auto it = pair.first; it != pair.second; ++it, --pos) {
@@ -46,7 +46,7 @@ bool TCgiParameters::Erase(const TStringBuf name, const TStringBuf val) {
     return found;
 }
 
-size_t TCgiParameters::EraseAll(const TStringBuf name) { 
+size_t TCgiParameters::EraseAll(const TStringBuf name) {
     size_t num = 0;
 
     const auto pair = equal_range(name);
@@ -89,36 +89,36 @@ static inline TString DoUnescape(const TStringBuf s) {
     return res;
 }
 
-void TCgiParameters::InsertEscaped(const TStringBuf name, const TStringBuf value) { 
+void TCgiParameters::InsertEscaped(const TStringBuf name, const TStringBuf value) {
     InsertUnescaped(DoUnescape(name), DoUnescape(value));
 }
 
 template <bool addAll, class F>
-static inline void DoScan(const TStringBuf s, F& f) { 
+static inline void DoScan(const TStringBuf s, F& f) {
     ScanKeyValue<addAll, '&', '='>(s, f);
 }
 
 struct TAddEscaped {
     TCgiParameters* C;
 
-    inline void operator()(const TStringBuf key, const TStringBuf val) { 
+    inline void operator()(const TStringBuf key, const TStringBuf val) {
         C->InsertEscaped(key, val);
     }
 };
 
-void TCgiParameters::Scan(const TStringBuf query, bool form) { 
+void TCgiParameters::Scan(const TStringBuf query, bool form) {
     Flush();
     form ? ScanAdd(query) : ScanAddAll(query);
 }
 
-void TCgiParameters::ScanAdd(const TStringBuf query) { 
+void TCgiParameters::ScanAdd(const TStringBuf query) {
     TAddEscaped f = {this};
 
     DoScan<false>(query, f);
 }
 
-void TCgiParameters::ScanAddUnescaped(const TStringBuf query) { 
-    auto f = [this](const TStringBuf key, const TStringBuf val) { 
+void TCgiParameters::ScanAddUnescaped(const TStringBuf query) {
+    auto f = [this](const TStringBuf key, const TStringBuf val) {
         this->InsertUnescaped(key, val);
     };
 
@@ -133,7 +133,7 @@ void TCgiParameters::ScanAddAllUnescaped(const TStringBuf query) {
     DoScan<true>(query, f);
 }
 
-void TCgiParameters::ScanAddAll(const TStringBuf query) { 
+void TCgiParameters::ScanAddAll(const TStringBuf query) {
     TAddEscaped f = {this};
 
     DoScan<true>(query, f);
@@ -172,7 +172,7 @@ char* TCgiParameters::Print(char* res) const {
 size_t TCgiParameters::PrintSize() const noexcept {
     size_t res = size(); // for '&'
 
-    for (const auto& i : *this) { 
+    for (const auto& i : *this) {
         res += CgiEscapeBufLen(i.first.size() + i.second.size()); // extra zero will be used for '='
     }
 

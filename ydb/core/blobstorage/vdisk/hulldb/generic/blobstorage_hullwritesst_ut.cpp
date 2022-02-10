@@ -6,13 +6,13 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/null.h> 
- 
+#include <util/stream/null.h>
+
 #define STR Cnull
 
 namespace NKikimr {
 
-    Y_UNIT_TEST_SUITE(TBlobStorageHullWriteSst) { 
+    Y_UNIT_TEST_SUITE(TBlobStorageHullWriteSst) {
 
         ////////////////////////////////////////////////////////////////////////////////////////
         // Definitions
@@ -178,7 +178,7 @@ namespace NKikimr {
                     WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks);
                     pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
-                    Y_VERIFY(pushRes); 
+                    Y_VERIFY(pushRes);
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
                     Apply(msg);
@@ -220,7 +220,7 @@ namespace NKikimr {
                     WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks);
                     pushRes = WriterPtr->Push(key, merger.GetMemRec(), merger.GetDataMerger());
-                    Y_VERIFY(pushRes); 
+                    Y_VERIFY(pushRes);
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
                     Apply(msg);
@@ -249,7 +249,7 @@ namespace NKikimr {
                     WriterPtr = std::make_unique<TWriterBlock>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks);
                     pushRes = WriterPtr->Push(key, memRec, merger.GetDataMerger());
-                    Y_VERIFY(pushRes); 
+                    Y_VERIFY(pushRes);
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
                     Apply(msg);
@@ -264,7 +264,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////////////////
         // TESTS (LogoBlobs)
         ////////////////////////////////////////////////////////////////////////////////////////
-        Y_UNIT_TEST(LogoBlobOneSstOneIndex) { 
+        Y_UNIT_TEST(LogoBlobOneSstOneIndex) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
             ui64 ownerRound = 1;
@@ -312,7 +312,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
         }
 
-        Y_UNIT_TEST(LogoBlobOneSstMultiIndex) { 
+        Y_UNIT_TEST(LogoBlobOneSstMultiIndex) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
             ui64 ownerRound = 1;
@@ -330,7 +330,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
         }
 
-        Y_UNIT_TEST(LogoBlobMultiSstOneIndex) { 
+        Y_UNIT_TEST(LogoBlobMultiSstOneIndex) {
             ui32 chunksToUse = 2;
             ui8 owner = 1;
             ui64 ownerRound = 1;
@@ -351,7 +351,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
         }
 
-        Y_UNIT_TEST(LogoBlobMultiSstMultiIndex) { 
+        Y_UNIT_TEST(LogoBlobMultiSstMultiIndex) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
             ui64 ownerRound = 1;
@@ -395,7 +395,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////////////////
         // TESTS (Outbound LogoBlobs)
         ////////////////////////////////////////////////////////////////////////////////////////
-        Y_UNIT_TEST(LogoBlobOneSstOneIndexPartOutbound) { 
+        Y_UNIT_TEST(LogoBlobOneSstOneIndexPartOutbound) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
             ui64 ownerRound = 1;
@@ -412,7 +412,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
         }
 
-        Y_UNIT_TEST(LogoBlobOneSstMultiIndexPartOutbound) { 
+        Y_UNIT_TEST(LogoBlobOneSstMultiIndexPartOutbound) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
             ui64 ownerRound = 1;
@@ -430,7 +430,7 @@ namespace NKikimr {
         }
 
 
-        Y_UNIT_TEST(LogoBlobMultiSstOneIndexPartOutbound) { 
+        Y_UNIT_TEST(LogoBlobMultiSstOneIndexPartOutbound) {
             ui32 chunksToUse = 1;
             ui8 owner = 1;
             ui64 ownerRound = 1;
@@ -452,7 +452,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////////////////
         // TESTS (NoData)
         ////////////////////////////////////////////////////////////////////////////////////////
-        Y_UNIT_TEST(BlockOneSstOneIndex) { 
+        Y_UNIT_TEST(BlockOneSstOneIndex) {
             ui32 chunksToUse = 2;
             ui8 owner = 1;
             ui64 ownerRound = 1;
@@ -469,7 +469,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
         }
 
-        Y_UNIT_TEST(BlockOneSstMultiIndex) { 
+        Y_UNIT_TEST(BlockOneSstMultiIndex) {
             ui32 chunksToUse = 4;
             ui8 owner = 1;
             ui64 ownerRound = 1;
@@ -486,7 +486,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(test.GetStat().ToString(), res);
         }
 
-        Y_UNIT_TEST(BlockMultiSstOneIndex) { 
+        Y_UNIT_TEST(BlockMultiSstOneIndex) {
             ui32 chunksToUse = 1;
             ui8 owner = 1;
             ui64 ownerRound = 1;

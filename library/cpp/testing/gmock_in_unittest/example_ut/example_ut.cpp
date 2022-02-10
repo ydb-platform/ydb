@@ -27,8 +27,8 @@ public:
 
 using namespace testing;
 
-Y_UNIT_TEST_SUITE(TExampleGMockTest) { 
-    Y_UNIT_TEST(TSimpleTest) { 
+Y_UNIT_TEST_SUITE(TExampleGMockTest) {
+    Y_UNIT_TEST(TSimpleTest) {
         TTestMock mock;
         EXPECT_CALL(mock, Func1())
             .Times(AtLeast(1));
@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(TExampleGMockTest) {
         }
     }
 
-    Y_UNIT_TEST(TNonExpectedCallTest) { 
+    Y_UNIT_TEST(TNonExpectedCallTest) {
         TTestMock mock;
         EXPECT_CALL(mock, Func1())
             .Times(AtMost(1));
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TExampleGMockTest) {
         }
     }
 
-    Y_UNIT_TEST(TReturnValuesTest) { 
+    Y_UNIT_TEST(TReturnValuesTest) {
         TTestMock mock;
         EXPECT_CALL(mock, Func2(TString("1")))
             .WillOnce(Return(1))
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TExampleGMockTest) {
         }
     }
 
-    Y_UNIT_TEST(TStrictCallSequenceTest) { 
+    Y_UNIT_TEST(TStrictCallSequenceTest) {
         TTestMock mock;
         {
             InSequence seq;
@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(TExampleGMockTest) {
         }
     }
 
-    Y_UNIT_TEST(TUninterestingMethodIsFailureTest) { 
+    Y_UNIT_TEST(TUninterestingMethodIsFailureTest) {
         StrictMock<TTestMock> mock;
         EXPECT_CALL(mock, Func1())
             .Times(1);

@@ -48,9 +48,9 @@ private:
     TStringStream Logs_;
 };
 
-Y_UNIT_TEST_SUITE(TTlsLogBackendTest) 
+Y_UNIT_TEST_SUITE(TTlsLogBackendTest)
 {
-    Y_UNIT_TEST(CaptureOutputs) { 
+    Y_UNIT_TEST(CaptureOutputs) {
         YqlLoggerScope logger(new TTlsLogBackend(new TNullLogBackend));
 
         YQL_LOG(INFO) << "this message will be missed";

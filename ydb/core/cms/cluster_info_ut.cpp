@@ -235,8 +235,8 @@ void CheckScheduledLocks(const TLockableItem &item, Ts... locks)
     CheckScheduledLocks(item.ScheduledLocks.begin(), item.ScheduledLocks.end(), locks...);
 }
 
-Y_UNIT_TEST_SUITE(TClusterInfoTest) { 
-    Y_UNIT_TEST(DeviceId) { 
+Y_UNIT_TEST_SUITE(TClusterInfoTest) {
+    Y_UNIT_TEST(DeviceId) {
         UNIT_ASSERT(!TPDiskInfo::IsDeviceName("pdisk"));
         UNIT_ASSERT(!TPDiskInfo::IsDeviceName("disk-1"));
         UNIT_ASSERT(!TPDiskInfo::IsDeviceName("pdisk-"));
@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT_VALUES_EQUAL(TVDiskInfo::NameToId("vdisk-1-2-3-4-5"), TVDiskID(1, 2, 3, 4, 5));
     }
 
-    Y_UNIT_TEST(FillInfo) { 
+    Y_UNIT_TEST(FillInfo) {
         TEvInterconnect::TNodeInfo node1 =
             { 1, "::1", "test1", "test1", 1, TNodeLocation() };
         TEvInterconnect::TNodeInfo node2 =

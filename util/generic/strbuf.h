@@ -153,9 +153,9 @@ public:
 
     inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos) noexcept
         : TBasicStringBuf(src, pos, TBase::npos)
-    { 
-    } 
- 
+    {
+    }
+
     Y_PURE_FUNCTION inline TBasicStringBuf SubString(size_t pos, size_t n) const noexcept {
         pos = Min(pos, size());
         n = Min(n, size() - pos);
@@ -290,7 +290,7 @@ public:
         SplitOn(pos, l, r, 0);
     }
 
-    /* 
+    /*
     // Not implemented intentionally, use TrySplitOn() instead
     void RSplitOn(size_t pos, TdSelf& l, TdSelf& r) const noexcept;
     void RSplitAt(size_t pos, TdSelf& l, TdSelf& r) const noexcept;
@@ -319,7 +319,7 @@ public:
 
 public:
     inline bool AfterPrefix(const TdSelf& prefix, TdSelf& result) const noexcept {
-        if (this->StartsWith(prefix)) { 
+        if (this->StartsWith(prefix)) {
             result = Tail(prefix.size());
             return true;
         }
@@ -327,7 +327,7 @@ public:
     }
 
     inline bool BeforeSuffix(const TdSelf& suffix, TdSelf& result) const noexcept {
-        if (this->EndsWith(suffix)) { 
+        if (this->EndsWith(suffix)) {
             result = Head(size() - suffix.size());
             return true;
         }
@@ -370,7 +370,7 @@ public:
         SplitOn(pos, tok, *this);
         return tok;
     }
-    /* 
+    /*
     // See comment on RSplitOn() above
     TdSelf RSplitOffOn(size_t pos);
     TdSelf RNextTokOn(size_t pos);

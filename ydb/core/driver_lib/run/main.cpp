@@ -145,7 +145,7 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         case EDM_ACTORSYS_PERFTEST:
             return NDriverClient::ActorsysPerfTest(cmdConf, argc, argv);
         default:
-            Y_FAIL("Not Happens"); 
+            Y_FAIL("Not Happens");
         }
     }
 } // NKikimr

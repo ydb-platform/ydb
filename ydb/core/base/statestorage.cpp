@@ -54,7 +54,7 @@ public:
         , Delta(Primes[hash % 128])
         , A(hash + Delta)
     {
-        Y_VERIFY_DEBUG(Delta > Sz); 
+        Y_VERIFY_DEBUG(Delta > Sz);
     }
 
     ui32 Next() {

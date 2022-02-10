@@ -24,7 +24,7 @@ static inline TNetworkAddress ToNetworkAddr(const TString& address, ui16 port) {
 void THttpServerOptions::BindAddresses(TBindAddresses& ret) const {
     THashSet<TString> check;
 
-    for (auto addr : BindSockaddr) { 
+    for (auto addr : BindSockaddr) {
         if (!addr.Port) {
             addr.Port = Port;
         }

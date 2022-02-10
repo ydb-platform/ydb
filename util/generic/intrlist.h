@@ -332,11 +332,11 @@ public:
         TIntrusiveList temp;
 
         temp.Append(right);
-        Y_ASSERT(right.Empty()); 
+        Y_ASSERT(right.Empty());
         right.Append(*this);
-        Y_ASSERT(this->Empty()); 
+        Y_ASSERT(this->Empty());
         this->Append(temp);
-        Y_ASSERT(temp.Empty()); 
+        Y_ASSERT(temp.Empty());
     }
 
 public:
@@ -823,12 +823,12 @@ public:
     }
 
     inline T* Front() noexcept {
-        Y_ASSERT(Begin_); 
+        Y_ASSERT(Begin_);
         return Begin_->Node();
     }
 
     inline const T* Front() const noexcept {
-        Y_ASSERT(Begin_); 
+        Y_ASSERT(Begin_);
         return Begin_->Node();
     }
 
@@ -838,7 +838,7 @@ public:
     }
 
     inline T* PopFront() noexcept {
-        Y_ASSERT(Begin_); 
+        Y_ASSERT(Begin_);
 
         TListItem* const ret = Begin_;
         Begin_ = Begin_->Next();

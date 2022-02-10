@@ -11,7 +11,7 @@ public:
     {}
 
     TEvents::TEvPoisonPill* MakeReq(const TActorContext &ctx) {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
         return new TEvents::TEvPoisonPill();
     }
 

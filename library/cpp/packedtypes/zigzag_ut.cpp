@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(TZigZagTest) { 
+Y_UNIT_TEST_SUITE(TZigZagTest) {
     template <typename T>
     void TestEncodeDecode(T value) {
         auto encoded = ZigZagEncode(value);
@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TZigZagTest) {
         TestEncodeDecode((TSignedInt)-123);
     }
 
-    Y_UNIT_TEST(TestSigned) { 
+    Y_UNIT_TEST(TestSigned) {
         TestImpl<i16>();
         TestImpl<i32>();
         TestImpl<i64>();

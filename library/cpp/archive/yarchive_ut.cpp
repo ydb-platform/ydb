@@ -5,7 +5,7 @@
 #include <util/string/cast.h>
 #include <util/stream/file.h>
 #include <util/system/tempfile.h>
-#include <util/memory/blob.h> 
+#include <util/memory/blob.h>
 
 class TArchiveTest: public TTestBase {
     UNIT_TEST_SUITE(TArchiveTest)
@@ -56,7 +56,7 @@ void TArchiveTest::TestRead() {
 
     for (size_t i = 0; i < 1000; ++i) {
         const TString key = "/" + ToString(i);
-        TAutoPtr<IInputStream> is = r.ObjectByKey(key); 
+        TAutoPtr<IInputStream> is = r.ObjectByKey(key);
         const TString data = is->ReadAll();
 
         UNIT_ASSERT_EQUAL(data, "data" + ToString(i * 1000) + "dataend");

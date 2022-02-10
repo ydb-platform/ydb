@@ -9,7 +9,7 @@
 
 namespace NKikimr {
 
-Y_UNIT_TEST_SUITE(TTicketParserTest) { 
+Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
     Y_UNIT_TEST(LoginGood) {
         using namespace Tests;

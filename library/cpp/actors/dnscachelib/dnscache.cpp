@@ -176,7 +176,7 @@ TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
 
     THostCache::iterator p;
 
-    Y_ASSERT(family == AF_INET || family == AF_INET6); 
+    Y_ASSERT(family == AF_INET || family == AF_INET6);
 
     {
         TGuard<TMutex> lock(CacheMtx);
@@ -317,7 +317,7 @@ void TDnsCache::WaitTask(TAtomic& flag) {
             }
         }
 
-        Y_ASSERT(nfds != 0); 
+        Y_ASSERT(nfds != 0);
 
         const TDuration left = TInstant(TTimeKeeper::GetTimeval()) - start;
         const TDuration wait = Max(Timeout - left, TDuration::Zero());
@@ -363,7 +363,7 @@ void TDnsCache::GHBNCallback(void* arg, int status, int, struct hostent* info) {
     TGuard<TMutex> lock(ctx->Owner->CacheMtx);
     THostCache::iterator p = ctx->Owner->HostCache.find(ctx->Hostname);
 
-    Y_ASSERT(p != ctx->Owner->HostCache.end()); 
+    Y_ASSERT(p != ctx->Owner->HostCache.end());
 
     time_t& resolved = (ctx->Family == AF_INET ? p->second.ResolvedV4 : p->second.ResolvedV6);
     time_t& notfound = (ctx->Family == AF_INET ? p->second.NotFoundV4 : p->second.NotFoundV6);
@@ -387,7 +387,7 @@ void TDnsCache::GHBNCallback(void* arg, int status, int, struct hostent* info) {
                 p->second.AddrsV6.push_back(*(struct in6_addr*)(info->h_addr_list[i]));
             }
         } else {
-            Y_FAIL("unknown address type in ares callback"); 
+            Y_FAIL("unknown address type in ares callback");
         }
         resolved = TTimeKeeper::GetTime();
         notfound = 0;
@@ -403,7 +403,7 @@ void TDnsCache::GHBACallback(void* arg, int status, int, struct hostent* info) {
     TGuard<TMutex> lock(ctx->Owner->CacheMtx);
     TAddrCache::iterator p = ctx->Owner->AddrCache.find(ctx->Addr);
 
-    Y_ASSERT(p != ctx->Owner->AddrCache.end()); 
+    Y_ASSERT(p != ctx->Owner->AddrCache.end());
 
     if (status == ARES_SUCCESS) {
         p->second.Hostname = info->h_name;

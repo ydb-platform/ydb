@@ -6,10 +6,10 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(ParserTestSuite) { 
+Y_UNIT_TEST_SUITE(ParserTestSuite) {
     using namespace NTvmAuth;
 
-    Y_UNIT_TEST(Keys) { 
+    Y_UNIT_TEST(Keys) {
         UNIT_ASSERT_EXCEPTION(TParserTvmKeys::ParseStrV1("2:asds"), TMalformedTvmKeysException);
         UNIT_ASSERT_EXCEPTION(TParserTvmKeys::ParseStrV1("3:asds"), TMalformedTvmKeysException);
         UNIT_ASSERT_EXCEPTION(TParserTvmKeys::ParseStrV1("1:+a/sds"), TMalformedTvmKeysException);
@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(ParserTestSuite) {
         UNIT_ASSERT_VALUES_EQUAL("sdsd", NUtils::Bin2base64url(TParserTvmKeys::ParseStrV1("1:sdsd")));
     }
 
-    Y_UNIT_TEST(TicketsStrV3) { 
+    Y_UNIT_TEST(TicketsStrV3) {
         UNIT_ASSERT_EQUAL(TParserTickets::TStrRes({ETicketStatus::Ok,
                                                    NUtils::Base64url2bin("CgYIDRCUkQYQDBgcIgdiYjpzZXNzIghiYjpzZXNzMg"),
                                                    NUtils::Base64url2bin("ERmeH_yzC7K_QsoHTyw7llCsyExEz3CoEopPIuivA0ZAtTaFq_Pa0l9Fhhx_NX9WpOp2CPyY5cFc4PXhcO83jCB7-EGvHNxGN-j2NQalERzPiKqkDCO0Q5etLzSzrfTlvMz7sXDvELNBHyA0PkAQnbz4supY0l-0Q6JBYSEF3zOVMjjE-HeQIFL3ats3_PakaUMWRvgQQ88pVdYZqAtbDw9PlTla7ommygVZQjcfNFXV1pJKRgOCLs-YyCjOJHLKL04zYj0X6KsOCTUeqhj7ml96wLZ-g1X9tyOR2WAr2Ctq7wIEHwqhxOLgOSKqm05xH6Vi3E_hekf50oe2jPfKEA"),
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(ParserTestSuite) {
                                                      TParserTickets::ServiceFlag()));
     }
 
-    Y_UNIT_TEST(TicketsV3) { 
+    Y_UNIT_TEST(TicketsV3) {
         NRw::TPublicKeys pub;
 
         UNIT_ASSERT_EQUAL(ETicketStatus::Malformed,

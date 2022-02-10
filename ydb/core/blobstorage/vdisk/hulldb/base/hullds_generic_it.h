@@ -40,7 +40,7 @@ namespace NKikimr {
         }
 
         void Next() {
-            Y_VERIFY_DEBUG(Valid()); 
+            Y_VERIFY_DEBUG(Valid());
 
             if (!Iter1.Valid()) {
                 Iter2.Next();
@@ -79,7 +79,7 @@ namespace NKikimr {
             Iter2.SeekToFirst();
         }
 
-        void DumpAll(IOutputStream &str) const { 
+        void DumpAll(IOutputStream &str) const {
             Iter1.DumpAll(str);
             Iter2.DumpAll(str);
         }
@@ -125,7 +125,7 @@ namespace NKikimr {
         }
 
         void Prev() {
-            Y_VERIFY_DEBUG(Valid()); 
+            Y_VERIFY_DEBUG(Valid());
 
             if (!Iter1.Valid()) {
                 Iter2.Prev();

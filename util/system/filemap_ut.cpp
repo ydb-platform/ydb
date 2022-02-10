@@ -11,7 +11,7 @@
 #include <cstring>
 #include <cstdio>
 
-Y_UNIT_TEST_SUITE(TFileMapTest) { 
+Y_UNIT_TEST_SUITE(TFileMapTest) {
     static const char* FileName_("./mappped_file");
 
     void BasicTest(TMemoryMapCommon::EOpenMode mode) {
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         BasicTest(TMemoryMapCommon::oRdWr | TMemoryMapCommon::oPopulate);
     }
 
-    Y_UNIT_TEST(TestFileRemap) { 
+    Y_UNIT_TEST(TestFileRemap) {
         const char data1[] = "01234";
         const char data2[] = "abcdefg";
         const char data3[] = "COPY";
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         NFs::Remove(FileName_);
     }
 
-    Y_UNIT_TEST(TestFileMapDbgName) { 
+    Y_UNIT_TEST(TestFileMapDbgName) {
         // This test checks that dbgName passed to the TFileMap constructor is saved inside the object and appears
         // in subsequent error messages.
         const char* const dbgName = "THIS_IS_A_TEST";
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
 #elif defined(_cygwin_)
 //cygwin is not real unix :(
 #else
-    Y_UNIT_TEST(TestNotGreedy) { 
+    Y_UNIT_TEST(TestNotGreedy) {
         unsigned page[4096 / sizeof(unsigned)];
 
     #if defined(_unix_)
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
     }
 #endif
 
-    Y_UNIT_TEST(TestFileMappedArray) { 
+    Y_UNIT_TEST(TestFileMappedArray) {
         {
             TFileMappedArray<ui32> mappedArray;
             ui32 data[] = {123, 456, 789, 10};
@@ -268,13 +268,13 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         NFs::Remove(FileName_);
     }
 
-    Y_UNIT_TEST(TestMappedArray) { 
+    Y_UNIT_TEST(TestMappedArray) {
         ui32 sz = 10;
 
         TMappedArray<ui32> mappedArray;
 
         ui32* ptr = mappedArray.Create(sz);
-        UNIT_ASSERT(ptr != nullptr); 
+        UNIT_ASSERT(ptr != nullptr);
         UNIT_ASSERT(mappedArray.size() == sz);
         UNIT_ASSERT(mappedArray.begin() + sz == mappedArray.end());
 
@@ -290,12 +290,12 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         UNIT_ASSERT(mappedArray.size() == 1000 && mappedArray2.size() == sz);
     }
 
-    Y_UNIT_TEST(TestMemoryMap) { 
+    Y_UNIT_TEST(TestMemoryMap) {
         TFile file(FileName_, CreateAlways | WrOnly);
         file.Close();
 
         FILE* f = fopen(FileName_, "rb");
-        UNIT_ASSERT(f != nullptr); 
+        UNIT_ASSERT(f != nullptr);
         try {
             TMemoryMap mappedMem(f);
             mappedMem.Map(mappedMem.Length() / 2, mappedMem.Length() + 100); // overflow
@@ -318,7 +318,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         NFs::Remove(FileName_);
     }
 
-    Y_UNIT_TEST(TestMemoryMapIsWritable) { 
+    Y_UNIT_TEST(TestMemoryMapIsWritable) {
         TFile file(FileName_, CreateAlways | WrOnly);
         file.Close();
 
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         NFs::Remove(FileName_);
     }
 
-    Y_UNIT_TEST(TestFileMapIsWritable) { 
+    Y_UNIT_TEST(TestFileMapIsWritable) {
         TFile file(FileName_, CreateAlways | WrOnly);
         file.Close();
         {

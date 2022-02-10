@@ -27,7 +27,7 @@ namespace NMonitoring {
     }
 
     char* PrettyNum(i64 val, char* buf, size_t size) {
-        Y_ASSERT(buf); 
+        Y_ASSERT(buf);
         if (size < 4) {
             buf[0] = 0;
             return buf;
@@ -37,7 +37,7 @@ namespace NMonitoring {
             *buf = '\0';
         } else {
             size_t len = 2 + strnlen(buf + 2, size - 4);
-            Y_ASSERT(len < size); 
+            Y_ASSERT(len < size);
             buf[0] = ' ';
             buf[1] = '(';
             buf[len] = ')';

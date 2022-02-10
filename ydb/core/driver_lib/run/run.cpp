@@ -227,21 +227,21 @@ public:
         // setup channel profiles
         appData->ChannelProfiles = new TChannelProfiles();
         ui32 idx = 0;
-        Y_VERIFY(Config.GetChannelProfileConfig().ProfileSize() > 0); 
+        Y_VERIFY(Config.GetChannelProfileConfig().ProfileSize() > 0);
         for (const NKikimrConfig::TChannelProfileConfig::TProfile &profile : Config.GetChannelProfileConfig().GetProfile()) {
             const ui32 profileId = profile.GetProfileId();
-            Y_VERIFY(profileId == idx, "Duplicate, missing or out of order profileId %" PRIu32 " (expected %" PRIu32 ")", 
+            Y_VERIFY(profileId == idx, "Duplicate, missing or out of order profileId %" PRIu32 " (expected %" PRIu32 ")",
                 profileId, idx);
             ++idx;
             const ui32 channels = profile.ChannelSize();
-            Y_VERIFY(channels >= 2); 
+            Y_VERIFY(channels >= 2);
 
             appData->ChannelProfiles->Profiles.emplace_back();
             TChannelProfiles::TProfile &outProfile = appData->ChannelProfiles->Profiles.back();
             ui32 channelIdx = 0;
             for (const NKikimrConfig::TChannelProfileConfig::TProfile::TChannel &channel : profile.GetChannel()) {
-                Y_VERIFY(channel.HasErasureSpecies()); 
-                Y_VERIFY(channel.HasPDiskCategory()); 
+                Y_VERIFY(channel.HasErasureSpecies());
+                Y_VERIFY(channel.HasPDiskCategory());
                 TString name = channel.GetErasureSpecies();
                 TBlobStorageGroupType::EErasureSpecies erasure = TBlobStorageGroupType::ErasureSpeciesByName(name);
                 if (erasure == TBlobStorageGroupType::ErasureSpeciesCount) {
@@ -1010,7 +1010,7 @@ void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)
             component = NLog::InvalidComponent;
         } else {
             component = LogSettings->FindComponent(componentName);
-            Y_VERIFY(component != NLog::InvalidComponent, "Invalid component name in log configuration file: \"%s\"", 
+            Y_VERIFY(component != NLog::InvalidComponent, "Invalid component name in log configuration file: \"%s\"",
                 componentName.data());
         }
 
@@ -1019,10 +1019,10 @@ void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)
             Y_VERIFY(LogSettings->SetLevel((NLog::EPriority)entry.GetLevel(), component, explanation) == 0);
         }
         if (entry.HasSamplingLevel()) {
-            Y_VERIFY(LogSettings->SetSamplingLevel((NLog::EPriority)entry.GetSamplingLevel(), component, explanation) == 0); 
+            Y_VERIFY(LogSettings->SetSamplingLevel((NLog::EPriority)entry.GetSamplingLevel(), component, explanation) == 0);
         }
         if (entry.HasSamplingRate()) {
-            Y_VERIFY(LogSettings->SetSamplingRate(entry.GetSamplingRate(), component, explanation) == 0); 
+            Y_VERIFY(LogSettings->SetSamplingRate(entry.GetSamplingRate(), component, explanation) == 0);
         }
     }
 }
@@ -1386,7 +1386,7 @@ void TKikimrRunner::KikimrStart() {
 }
 
 void TKikimrRunner::KikimrStop(bool graceful) {
-    Y_UNUSED(graceful); 
+    Y_UNUSED(graceful);
 
     if (EnabledGrpcService) {
         ActorSystem->Send(new IEventHandle(NGRpcService::CreateGrpcPublisherServiceActorId(), {}, new TEvents::TEvPoisonPill));

@@ -9,8 +9,8 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-Y_UNIT_TEST_SUITE(NOther) { 
-    Y_UNIT_TEST(Blocks) 
+Y_UNIT_TEST_SUITE(NOther) {
+    Y_UNIT_TEST(Blocks)
     {
         NWriter::TConf conf;
 

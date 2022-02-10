@@ -449,7 +449,7 @@ private:
     }
 
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override {
-        Y_UNUSED(ev); 
+        Y_UNUSED(ev);
         return Die(ctx);
     }
 

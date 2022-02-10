@@ -289,7 +289,7 @@ namespace {
     };
 }
 
-Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) { 
+Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
 
     template<NUdf::TDataTypeId TKey, NUdf::TDataTypeId TValue>
     NKikimrMiniKQL::TResult WriteSomething(
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
         return res;
     }
 
-    Y_UNIT_TEST(TestEmptyProgram) { 
+    Y_UNIT_TEST(TestEmptyProgram) {
         TDriver driver;
         auto& pgmBuilder = driver.PgmBuilder;
         auto pgm = pgmBuilder.Build(pgmBuilder.NewEmptyListOfVoid());
@@ -353,7 +353,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestPureProgram) { 
+    Y_UNIT_TEST(TestPureProgram) {
         TDriver driver;
         auto& pgmBuilder = driver.PgmBuilder;
         auto value = pgmBuilder.TProgramBuilder::TProgramBuilder::NewDataLiteral<ui32>(42);
@@ -392,7 +392,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestAbort) { 
+    Y_UNIT_TEST(TestAbort) {
         TDriver driver;
         auto& pgmBuilder = driver.PgmBuilder;
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.Abort()));
@@ -407,7 +407,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRowWithoutColumnsNotExists) { 
+    Y_UNIT_TEST(TestSelectRowWithoutColumnsNotExists) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         auto& pgmBuilder = driver.PgmBuilder;
@@ -453,7 +453,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRowWithoutColumnsExists) { 
+    Y_UNIT_TEST(TestSelectRowWithoutColumnsExists) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -512,7 +512,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRowPayload) { 
+    Y_UNIT_TEST(TestSelectRowPayload) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -593,7 +593,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRowPayloadNullKey) { 
+    Y_UNIT_TEST(TestSelectRowPayloadNullKey) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -660,7 +660,7 @@ Value {
     }
 
 
-    Y_UNIT_TEST(TestEraseRow) { 
+    Y_UNIT_TEST(TestEraseRow) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -705,7 +705,7 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestEraseRowNullKey) { 
+    Y_UNIT_TEST(TestEraseRowNullKey) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -785,7 +785,7 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestUpdateRowNotExistWithoutColumns) { 
+    Y_UNIT_TEST(TestUpdateRowNotExistWithoutColumns) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -823,7 +823,7 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestUpdateRowNotExistSetPayload) { 
+    Y_UNIT_TEST(TestUpdateRowNotExistSetPayload) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -866,7 +866,7 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestUpdateRowNotExistSetPayloadNullValue) { 
+    Y_UNIT_TEST(TestUpdateRowNotExistSetPayloadNullValue) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -895,7 +895,7 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestUpdateRowNotExistErasePayload) { 
+    Y_UNIT_TEST(TestUpdateRowNotExistErasePayload) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -935,7 +935,7 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestUpdateRowExistChangePayload) { 
+    Y_UNIT_TEST(TestUpdateRowExistChangePayload) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -988,7 +988,7 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestUpdateRowExistErasePayload) { 
+    Y_UNIT_TEST(TestUpdateRowExistErasePayload) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -1038,7 +1038,7 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestSelectRangeFullWithoutColumnsNotExists) { 
+    Y_UNIT_TEST(TestSelectRangeFullWithoutColumnsNotExists) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         auto& pgmBuilder = driver.PgmBuilder;
@@ -1109,7 +1109,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeFullWithoutColumnsNotExistsNullKey) { 
+    Y_UNIT_TEST(TestSelectRangeFullWithoutColumnsNotExistsNullKey) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         auto& pgmBuilder = driver.PgmBuilder;
@@ -1181,7 +1181,7 @@ Value {
     }
 
 
-    Y_UNIT_TEST(TestSelectRangeFullExists) { 
+    Y_UNIT_TEST(TestSelectRangeFullExists) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -1299,7 +1299,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeFullExistsTruncatedByItems) { 
+    Y_UNIT_TEST(TestSelectRangeFullExistsTruncatedByItems) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -1409,7 +1409,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeFullExistsTruncatedByItemsFromNull) { 
+    Y_UNIT_TEST(TestSelectRangeFullExistsTruncatedByItemsFromNull) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -1519,7 +1519,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeFullExistsTruncatedByBytes) { 
+    Y_UNIT_TEST(TestSelectRangeFullExistsTruncatedByBytes) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -1640,7 +1640,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeFromInclusive) { 
+    Y_UNIT_TEST(TestSelectRangeFromInclusive) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -1761,7 +1761,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeFromExclusive) { 
+    Y_UNIT_TEST(TestSelectRangeFromExclusive) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -1877,7 +1877,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeToInclusive) { 
+    Y_UNIT_TEST(TestSelectRangeToInclusive) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -2001,7 +2001,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeNullNull) { 
+    Y_UNIT_TEST(TestSelectRangeNullNull) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -2111,7 +2111,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeToExclusive) { 
+    Y_UNIT_TEST(TestSelectRangeToExclusive) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -2228,7 +2228,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeBothIncFromIncTo) { 
+    Y_UNIT_TEST(TestSelectRangeBothIncFromIncTo) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -2357,7 +2357,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeBothExcFromIncTo) { 
+    Y_UNIT_TEST(TestSelectRangeBothExcFromIncTo) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -2479,7 +2479,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeBothIncFromExcTo) { 
+    Y_UNIT_TEST(TestSelectRangeBothIncFromExcTo) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -2601,7 +2601,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeBothExcFromExcTo) { 
+    Y_UNIT_TEST(TestSelectRangeBothExcFromExcTo) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -2716,7 +2716,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRowManyShards) { 
+    Y_UNIT_TEST(TestSelectRowManyShards) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema2>(Shard2);
@@ -2865,7 +2865,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestEraseRowManyShards) { 
+    Y_UNIT_TEST(TestEraseRowManyShards) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema2>(Shard2);
@@ -2941,7 +2941,7 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestUpdateRowManyShards) { 
+    Y_UNIT_TEST(TestUpdateRowManyShards) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema2>(Shard2);
@@ -3131,23 +3131,23 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestCASBoth2Success) { 
+    Y_UNIT_TEST(TestCASBoth2Success) {
         TestCASBoth2Impl(false, false);
     }
 
-    Y_UNIT_TEST(TestCASBoth2Fail1) { 
+    Y_UNIT_TEST(TestCASBoth2Fail1) {
         TestCASBoth2Impl(true, false);
     }
 
-    Y_UNIT_TEST(TestCASBoth2Fail2) { 
+    Y_UNIT_TEST(TestCASBoth2Fail2) {
         TestCASBoth2Impl(false, true);
     }
 
-    Y_UNIT_TEST(TestCASBoth2Fail12) { 
+    Y_UNIT_TEST(TestCASBoth2Fail12) {
         TestCASBoth2Impl(true, true);
     }
 
-    Y_UNIT_TEST(TestSelectRowNoShards) { 
+    Y_UNIT_TEST(TestSelectRowNoShards) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -3221,7 +3221,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeNoShards) { 
+    Y_UNIT_TEST(TestSelectRangeNoShards) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -3324,7 +3324,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestUpdateRowNoShards) { 
+    Y_UNIT_TEST(TestUpdateRowNoShards) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -3365,7 +3365,7 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestEraseRowNoShards) { 
+    Y_UNIT_TEST(TestEraseRowNoShards) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -3410,7 +3410,7 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(TestSelectRangeWithPartitions) { 
+    Y_UNIT_TEST(TestSelectRangeWithPartitions) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -3535,7 +3535,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeWithPartitionsTruncatedByItems) { 
+    Y_UNIT_TEST(TestSelectRangeWithPartitionsTruncatedByItems) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -3654,7 +3654,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestSelectRangeWithPartitionsTruncatedByBytes) { 
+    Y_UNIT_TEST(TestSelectRangeWithPartitionsTruncatedByBytes) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -4336,7 +4336,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestBug998) { 
+    Y_UNIT_TEST(TestBug998) {
         TDriver driver;
         auto& pgmBuilder = driver.PgmBuilder;
         auto value1 = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(4294967172);
@@ -4377,7 +4377,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestAcquireLocks) { 
+    Y_UNIT_TEST(TestAcquireLocks) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         auto& pgmBuilder = driver.PgmBuilder;
@@ -4534,7 +4534,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestDiagnostics) { 
+    Y_UNIT_TEST(TestDiagnostics) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         auto& pgmBuilder = driver.PgmBuilder;
@@ -4687,7 +4687,7 @@ Value {
         UNIT_ASSERT_STRINGS_EQUAL(resStr, expectedStr);
     }
 
-    Y_UNIT_TEST(TestMapsPushdown) { 
+    Y_UNIT_TEST(TestMapsPushdown) {
         const TString okValue = "Ok";
 
         TDriver driver;
@@ -4783,7 +4783,7 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(NoMapPushdownMultipleConsumers) { 
+    Y_UNIT_TEST(NoMapPushdownMultipleConsumers) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -4851,7 +4851,7 @@ Value {
         ])___", res);
     }
 
-    Y_UNIT_TEST(NoMapPushdownNonPureLambda) { 
+    Y_UNIT_TEST(NoMapPushdownNonPureLambda) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -4912,7 +4912,7 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(NoOrderedMapPushdown) { 
+    Y_UNIT_TEST(NoOrderedMapPushdown) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -4988,7 +4988,7 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(NoMapPushdownWriteToTable) { 
+    Y_UNIT_TEST(NoMapPushdownWriteToTable) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema2>(Shard2);
@@ -5091,7 +5091,7 @@ Value {
         }
     }
 
-    Y_UNIT_TEST(NoMapPushdownArgClosure) { 
+    Y_UNIT_TEST(NoMapPushdownArgClosure) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema2>(Shard2);
@@ -5181,7 +5181,7 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(TestSomePushDown) { 
+    Y_UNIT_TEST(TestSomePushDown) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema2>(Shard2);
@@ -5279,7 +5279,7 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(TestCombineByKeyPushdown) { 
+    Y_UNIT_TEST(TestCombineByKeyPushdown) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -5393,7 +5393,7 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(TestCombineByKeyNoPushdown) { 
+    Y_UNIT_TEST(TestCombineByKeyNoPushdown) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -5502,7 +5502,7 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(TestTakePushdown) { 
+    Y_UNIT_TEST(TestTakePushdown) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -5584,7 +5584,7 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(TestNoOrderedTakePushdown) { 
+    Y_UNIT_TEST(TestNoOrderedTakePushdown) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -5660,7 +5660,7 @@ Value {
         ]]])___", res);
     }
 
-    Y_UNIT_TEST(TestLengthPushdown) { 
+    Y_UNIT_TEST(TestLengthPushdown) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -5739,7 +5739,7 @@ Value {
         NKqp::CompareYson(R"___([["3"]])___", res);
     }
 
-    Y_UNIT_TEST(TestNoAggregatedPushdown) { 
+    Y_UNIT_TEST(TestNoAggregatedPushdown) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -5826,7 +5826,7 @@ Value {
         NKqp::CompareYson(R"___([["1"]])___", res);
     }
 
-    Y_UNIT_TEST(TestTopSortPushdownPk) { 
+    Y_UNIT_TEST(TestTopSortPushdownPk) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -5911,7 +5911,7 @@ Value {
         NKqp::CompareYson(R"___([[[[["2"];["Value2"]];[["3"];["Value3"]]]]])___", res);
     }
 
-    Y_UNIT_TEST(TestTopSortPushdown) { 
+    Y_UNIT_TEST(TestTopSortPushdown) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema1>(Shard2);
@@ -6184,7 +6184,7 @@ Value {
         NKqp::CompareYson(R"___([[[[["4"];["Value4"]];[["3"];["Value3"]]]]])___", res);
     }
 
-    Y_UNIT_TEST(TestSelectRangeNoColumns) { 
+    Y_UNIT_TEST(TestSelectRangeNoColumns) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
 
@@ -6230,7 +6230,7 @@ Value {
         NKqp::CompareYson(R"___([["3"]])___", res);
     }
 
-    Y_UNIT_TEST(TestInternalResult) { 
+    Y_UNIT_TEST(TestInternalResult) {
         TDriver driver;
         auto& pgmBuilder = driver.PgmBuilder;
         auto value = pgmBuilder.TProgramBuilder::TProgramBuilder::NewDataLiteral<ui32>(42);
@@ -6242,7 +6242,7 @@ Value {
         Cout << res.DebugString() << Endl;
     }
 
-    Y_UNIT_TEST(TestIndependentSelects) { 
+    Y_UNIT_TEST(TestIndependentSelects) {
         TDriver driver;
         driver.ShardDbState.AddShard<Schema1>(Shard1);
         driver.ShardDbState.AddShard<Schema2>(Shard2);

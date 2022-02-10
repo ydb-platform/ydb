@@ -4,7 +4,7 @@
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 
 namespace NCodecs {
     class TStaticCodecInfo;
@@ -23,11 +23,11 @@ namespace NCodecs {
 
     TString SaveCodecInfoToString(const TStaticCodecInfo&);
 
-    void SaveCodecInfoToStream(IOutputStream& out, const TStaticCodecInfo&); 
+    void SaveCodecInfoToStream(IOutputStream& out, const TStaticCodecInfo&);
 
     // misc
 
-    TStaticCodecInfo LoadCodecInfoFromStream(IInputStream& in); 
+    TStaticCodecInfo LoadCodecInfoFromStream(IInputStream& in);
 
     TString FormatCodecInfo(const TStaticCodecInfo&);
 

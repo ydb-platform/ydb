@@ -153,7 +153,7 @@ public:
     void Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart>);
 
     void DebugDumpTable(ui32 table, IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const;
-    void DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const; 
+    void DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const;
 
     TKeyRangeCache* DebugGetTableErasedKeysCache(ui32 table) const;
 

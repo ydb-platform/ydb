@@ -26,7 +26,7 @@ do {                            \
 } while (false)                 \
 
 
-Y_UNIT_TEST_SUITE(TDSProxyGetTest) { 
+Y_UNIT_TEST_SUITE(TDSProxyGetTest) {
 
 void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool isVerboseNoDataEnabled, bool checkCrc) {
     TActorSystemStub actorSystemStub;
@@ -128,15 +128,15 @@ void TestIntervalsAndCrcAllOk(TErasureType::EErasureSpecies erasureSpecies, bool
 }
 
 // Without CRC
-Y_UNIT_TEST(TestBlock42GetIntervalsAllOk) { 
+Y_UNIT_TEST(TestBlock42GetIntervalsAllOk) {
     TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, false, false);
 }
 
-Y_UNIT_TEST(TestBlock42GetIntervalsAllOkVerbose) { 
+Y_UNIT_TEST(TestBlock42GetIntervalsAllOkVerbose) {
     TestIntervalsAndCrcAllOk(TErasureType::Erasure4Plus2Block, true, false);
 }
 
-Y_UNIT_TEST(TestMirror32GetIntervalsAllOk) { 
+Y_UNIT_TEST(TestMirror32GetIntervalsAllOk) {
     TestIntervalsAndCrcAllOk(TErasureType::ErasureMirror3Plus2, false, false);
 }
 
@@ -1232,11 +1232,11 @@ void TestWipedErrorWithTwoBlobs(TErasureType::EErasureSpecies erasureSpecies, bo
     return;
 }
 
-Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOk) { 
+Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOk) {
     TestIntervalsWipedAllOk(TErasureType::Erasure4Plus2Block);
 }
 
-Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOkVerbose) { 
+Y_UNIT_TEST(TestBlock42GetIntervalsWipedAllOkVerbose) {
     TestIntervalsWipedAllOk(TErasureType::Erasure4Plus2Block, true);
 }
 
@@ -1264,7 +1264,7 @@ Y_UNIT_TEST(TestBlock42WipedErrorWithTwoBlobs) {
     TestWipedErrorWithTwoBlobs(TErasureType::Erasure4Plus2Block);
 }
 
-Y_UNIT_TEST(TestMirror32GetIntervalsWipedAllOk) { 
+Y_UNIT_TEST(TestMirror32GetIntervalsWipedAllOk) {
     TestIntervalsWipedAllOk(TErasureType::ErasureMirror3Plus2);
 }
 
@@ -1356,7 +1356,7 @@ Y_UNIT_TEST(TestBlock42GetSpecific3) {
 
 }
 
-Y_UNIT_TEST_SUITE(TDSProxyLooksLikeLostTheBlob) { 
+Y_UNIT_TEST_SUITE(TDSProxyLooksLikeLostTheBlob) {
 
 class TTestPossibleBlobLost {
     TErasureType::EErasureSpecies ErasureSpecies;
@@ -1560,7 +1560,7 @@ public:
     }
 };
 
-Y_UNIT_TEST(TDSProxyLooksLikeLostTheBlobBlock42) { 
+Y_UNIT_TEST(TDSProxyLooksLikeLostTheBlobBlock42) {
     const ui64 blobSize = 128;
     for (ui32 i = 1; i < 3; ++i) {
         TTestPossibleBlobLost test(TErasureType::Erasure4Plus2Block, blobSize, i, {NKikimrProto::ERROR, NKikimrProto::ERROR});
@@ -1770,6 +1770,6 @@ Y_UNIT_TEST(TDSProxyErrorRegressionBlock42) {
     test.Run();
 }
 
-} // Y_UNIT_TEST_SUITE TDSProxyLooksLikeLostTheBlob 
+} // Y_UNIT_TEST_SUITE TDSProxyLooksLikeLostTheBlob
 } // namespace NDSProxyGetTest
 } // namespace NKikimr

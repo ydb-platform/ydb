@@ -23,7 +23,7 @@ namespace NKikimr {
             case EWriterDataType::Fresh:       return data ? vctx->CompDataFresh : vctx->CompIndexFresh;
             case EWriterDataType::Comp:        return data ? vctx->CompData : vctx->CompIndex;
             case EWriterDataType::Replication: return vctx->Replication;
-            default:                           Y_FAIL("incorrect EWriterDataType provided"); 
+            default:                           Y_FAIL("incorrect EWriterDataType provided");
         }
     }
 
@@ -60,7 +60,7 @@ namespace NKikimr {
         }
 
         void Push(const void *data, size_t len) {
-            Y_VERIFY(Offset + len <= ChunkSize && !Finished); 
+            Y_VERIFY(Offset + len <= ChunkSize && !Finished);
 
             while (len) {
                 if (!HasBuffer) {
@@ -83,7 +83,7 @@ namespace NKikimr {
         }
 
         void FinishChunk() {
-            Y_VERIFY(!Finished); 
+            Y_VERIFY(!Finished);
             Finished = true;
 
             if (Offset == ChunkSize)
@@ -195,7 +195,7 @@ namespace NKikimr {
             }
             TDiskPart result = ChunkWriter->GetDiskPartForBookmark();
             static const char padding[3] = {0, 0, 0};
-            Y_VERIFY_DEBUG(alignedLen - len <= 3); 
+            Y_VERIFY_DEBUG(alignedLen - len <= 3);
             ChunkWriter->Push(padding, alignedLen - len);
 
             return result;
@@ -352,14 +352,14 @@ namespace NKikimr {
                 // there is no space to fit in current chunk -- restart base writer with new chunk
                 TBase::FinishChunk();
                 result = TBase::AppendAligned(buffer);
-                Y_VERIFY(result); 
+                Y_VERIFY(result);
             }
 
             return *result;
         }
 
         TDataWriterConclusion Finish() {
-            Y_VERIFY(!Finished); 
+            Y_VERIFY(!Finished);
             const ui32 alignedOffset = AlignUpAppendBlockSize(Offset, AppendBlockSize);
             if (const size_t num = alignedOffset - Offset) {
                 char *buffer = (char*)alloca(num);
@@ -516,7 +516,7 @@ namespace NKikimr {
                 }
                 case TBlobType::HugeBlob: {
                     const TVector<TDiskPart> &saved = dataMerger->GetHugeBlobMerger().SavedData();
-                    Y_VERIFY(saved.size() == 1); 
+                    Y_VERIFY(saved.size() == 1);
 
                     TMemRec memRecTmp(memRec);
                     memRecTmp.SetHugeBlob(saved.at(0));
@@ -529,7 +529,7 @@ namespace NKikimr {
                     auto beg = dataMerger->GetHugeBlobMerger().SavedData().begin();
                     auto end = dataMerger->GetHugeBlobMerger().SavedData().end();
 
-                    Y_VERIFY_DEBUG(beg + 1 < end); 
+                    Y_VERIFY_DEBUG(beg + 1 < end);
                     TMemRec newMemRec(memRec);
                     ui32 idx = ui32(Outbound.size());
                     ui32 num = ui32(end - beg);
@@ -547,7 +547,7 @@ namespace NKikimr {
                     ItemsWithHugeData++;
                     break;
                 }
-                default: Y_FAIL("Impossible case"); 
+                default: Y_FAIL("Impossible case");
             }
 
             ++Items;
@@ -714,7 +714,7 @@ namespace NKikimr {
         }
 
         void StartIndexChunk() {
-            Y_VERIFY(!Writer); 
+            Y_VERIFY(!Writer);
             Y_VERIFY(!Finished);
 
             // obtain chunk index from reserved chunks list
@@ -742,7 +742,7 @@ namespace NKikimr {
         }
 
         bool PackData(ui32 maxMsgs) {
-            Y_VERIFY(!Finished); 
+            Y_VERIFY(!Finished);
 
             while (MsgQueue.size() < maxMsgs) {
                 switch (PendingOp) {
@@ -872,7 +872,7 @@ namespace NKikimr {
                     }
                     break;
 
-                default: Y_FAIL("Impossible case"); 
+                default: Y_FAIL("Impossible case");
             }
 
             IndexBuilder.Push(key, memRecToAdd, dataMerger);

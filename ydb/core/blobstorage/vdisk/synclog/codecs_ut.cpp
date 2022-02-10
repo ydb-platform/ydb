@@ -28,7 +28,7 @@ void CheckCodec(const TVector<TNumber> &v, TCodecPtr codec = new TCodec) {
     UNIT_ASSERT(memcmp(src.data(), res.data(), src.size()) == 0);
 }
 
-Y_UNIT_TEST_SUITE(VarLengthIntCodec) { 
+Y_UNIT_TEST_SUITE(VarLengthIntCodec) {
 
     template <class TNumber>
     void VarLength(const TVector<TNumber> &v) {
@@ -50,24 +50,24 @@ Y_UNIT_TEST_SUITE(VarLengthIntCodec) {
         VarLength<TNumber>(v);
     }
 
-    Y_UNIT_TEST(BasicTest32) { 
+    Y_UNIT_TEST(BasicTest32) {
         BasicTest<ui32>();
     }
 
-    Y_UNIT_TEST(BasicTest64) { 
+    Y_UNIT_TEST(BasicTest64) {
         BasicTest<ui64>();
     }
 
-    Y_UNIT_TEST(Random32) { 
+    Y_UNIT_TEST(Random32) {
         Random<ui32>();
     }
 
-    Y_UNIT_TEST(Random64) { 
+    Y_UNIT_TEST(Random64) {
         Random<ui32>();
     }
 }
 
-Y_UNIT_TEST_SUITE(RunLengthCodec) { 
+Y_UNIT_TEST_SUITE(RunLengthCodec) {
 
     template <class TNumber>
     void RunLength(const TVector<TNumber> &v) {
@@ -89,24 +89,24 @@ Y_UNIT_TEST_SUITE(RunLengthCodec) {
         RunLength<TNumber>(v);
     }
 
-    Y_UNIT_TEST(BasicTest32) { 
+    Y_UNIT_TEST(BasicTest32) {
         BasicTest<ui32>();
     }
 
-    Y_UNIT_TEST(BasicTest64) { 
+    Y_UNIT_TEST(BasicTest64) {
         BasicTest<ui64>();
     }
 
-    Y_UNIT_TEST(Random32) { 
+    Y_UNIT_TEST(Random32) {
         Random<ui32>();
     }
 
-    Y_UNIT_TEST(Random64) { 
+    Y_UNIT_TEST(Random64) {
         Random<ui32>();
     }
 }
 
-Y_UNIT_TEST_SUITE(SemiSortedDeltaCodec) { 
+Y_UNIT_TEST_SUITE(SemiSortedDeltaCodec) {
 
     template <class TNumber>
     void SemiSortedDelta(const TVector<TNumber> &v) {
@@ -128,24 +128,24 @@ Y_UNIT_TEST_SUITE(SemiSortedDeltaCodec) {
         SemiSortedDelta<TNumber>(v);
     }
 
-    Y_UNIT_TEST(BasicTest32) { 
+    Y_UNIT_TEST(BasicTest32) {
         BasicTest<ui32>();
     }
 
-    Y_UNIT_TEST(BasicTest64) { 
+    Y_UNIT_TEST(BasicTest64) {
         BasicTest<ui64>();
     }
 
-    Y_UNIT_TEST(Random32) { 
+    Y_UNIT_TEST(Random32) {
         Random<ui32>();
     }
 
-    Y_UNIT_TEST(Random64) { 
+    Y_UNIT_TEST(Random64) {
         Random<ui32>();
     }
 }
 
-Y_UNIT_TEST_SUITE(SemiSortedDeltaAndVarLengthCodec) { 
+Y_UNIT_TEST_SUITE(SemiSortedDeltaAndVarLengthCodec) {
 
     template <class TNumber>
     void SemiSortedDeltaAndVarLength(const TVector<TNumber> &v) {
@@ -170,19 +170,19 @@ Y_UNIT_TEST_SUITE(SemiSortedDeltaAndVarLengthCodec) {
         SemiSortedDeltaAndVarLength<TNumber>(v);
     }
 
-    Y_UNIT_TEST(BasicTest32) { 
+    Y_UNIT_TEST(BasicTest32) {
         BasicTest<ui32>();
     }
 
-    Y_UNIT_TEST(BasicTest64) { 
+    Y_UNIT_TEST(BasicTest64) {
         BasicTest<ui64>();
     }
 
-    Y_UNIT_TEST(Random32) { 
+    Y_UNIT_TEST(Random32) {
         Random<ui32>();
     }
 
-    Y_UNIT_TEST(Random64) { 
+    Y_UNIT_TEST(Random64) {
         Random<ui32>();
     }
 }

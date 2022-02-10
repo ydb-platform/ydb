@@ -16,7 +16,7 @@ extern const char* const Char2DigitTable;
 
 inline static int Char2Digit(char ch) {
     char result = Char2DigitTable[(unsigned char)ch];
-    Y_ENSURE(result != '\xff', "invalid hex character " << (int)ch); 
+    Y_ENSURE(result != '\xff', "invalid hex character " << (int)ch);
     return result;
 }
 

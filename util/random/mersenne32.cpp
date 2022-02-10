@@ -83,13 +83,13 @@ void TMersenne32::InitNext() noexcept {
     mti = 0;
 }
 
-TMersenne32::TMersenne32(IInputStream& input) 
+TMersenne32::TMersenne32(IInputStream& input)
     : mti(N + 1)
 {
     ui32 buf[128];
 
     input.LoadOrFail(buf, sizeof(buf));
-    InitByArray(buf, Y_ARRAY_SIZE(buf)); 
+    InitByArray(buf, Y_ARRAY_SIZE(buf));
 }
 
 #undef M

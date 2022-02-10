@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/actors/protos/unittests.pb.h>
 
-Y_UNIT_TEST_SUITE(TEventSerialization) { 
+Y_UNIT_TEST_SUITE(TEventSerialization) {
     struct TMockEvent: public NActors::IEventBase {
         TBigMessage* msg;
         bool
@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(TEventSerialization) {
         };
     };
 
-    Y_UNIT_TEST(Coroutine) { 
+    Y_UNIT_TEST(Coroutine) {
         TString strA(507, 'a');
         TString strB(814, 'b');
         TString strC(198, 'c');

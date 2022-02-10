@@ -151,7 +151,7 @@ void TCodepageTest::TestUTF() {
         //"\xed\xbe\x80",
         //"\xed\xbf\xbf",
     };
-    for (size_t i = 0; i < Y_ARRAY_SIZE(badStrings); ++i) { 
+    for (size_t i = 0; i < Y_ARRAY_SIZE(badStrings); ++i) {
         wchar32 rune;
         const ui8* p = (const ui8*)badStrings[i];
         size_t len;
@@ -169,15 +169,15 @@ void TCodepageTest::TestBrokenMultibyte() {
     size_t nwritten = 0;
     size_t nread = 0;
 
-    RECODE_RESULT res = RecodeToUnicode(cp, sampletext, recodeResult, Y_ARRAY_SIZE(sampletext), Y_ARRAY_SIZE(recodeResult), nread, nwritten); 
+    RECODE_RESULT res = RecodeToUnicode(cp, sampletext, recodeResult, Y_ARRAY_SIZE(sampletext), Y_ARRAY_SIZE(recodeResult), nread, nwritten);
     UNIT_ASSERT(res == RECODE_OK);
     UNIT_ASSERT(nread == 1);
     UNIT_ASSERT(nwritten == 0);
 
     const char bigSample[] = {'\xC3', '\x87', '\xC3', '\x8E', '\xC2', '\xB0', '\xC3', '\x85', '\xC3', '\x85', '\xC3', '\xB8'};
-    res = RecodeToUnicode(cp, bigSample, recodeResult, Y_ARRAY_SIZE(bigSample), Y_ARRAY_SIZE(recodeResult), nread, nwritten); 
+    res = RecodeToUnicode(cp, bigSample, recodeResult, Y_ARRAY_SIZE(bigSample), Y_ARRAY_SIZE(recodeResult), nread, nwritten);
     UNIT_ASSERT(res == RECODE_OK);
-    UNIT_ASSERT(nread == Y_ARRAY_SIZE(bigSample)); 
+    UNIT_ASSERT(nread == Y_ARRAY_SIZE(bigSample));
 }
 
 void TCodepageTest::TestUTFFromUnknownPlane() {
@@ -191,7 +191,7 @@ void TCodepageTest::TestUTFFromUnknownPlane() {
 
     size_t readchars = 0;
     size_t writtenbytes = 0;
-    size_t samplelen = Y_ARRAY_SIZE(sampletext); 
+    size_t samplelen = Y_ARRAY_SIZE(sampletext);
 
     RECODE_RESULT res = RecodeFromUnicode(CODES_UTF8, sampletext, bytebuffer, samplelen, BUFFER_SIZE, readchars, writtenbytes);
 
@@ -291,11 +291,11 @@ static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize
 void TCodepageTest::TestSurrogatePairs() {
     const char* utf8NonBMP = "\xf4\x80\x89\x84\xf4\x80\x89\x87\xf4\x80\x88\xba";
     wchar16 wNonBMPDummy[] = {0xDBC0, 0xDE44, 0xDBC0, 0xDE47, 0xDBC0, 0xDE3A};
-    TestSurrogates(utf8NonBMP, wNonBMPDummy, Y_ARRAY_SIZE(wNonBMPDummy)); 
+    TestSurrogates(utf8NonBMP, wNonBMPDummy, Y_ARRAY_SIZE(wNonBMPDummy));
 
     const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n";
     wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'};
-    TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2)); 
+    TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2));
 }
 
 void TCodepageTest::TestEncodingHints() {
@@ -329,7 +329,7 @@ void TCodepageTest::TestEncodingHints() {
 void TCodepageTest::TestToLower() {
     TTempBuf buf;
     char* data = buf.Data();
-    const size_t n = Y_ARRAY_SIZE(yandexUpperCase); // including NTS 
+    const size_t n = Y_ARRAY_SIZE(yandexUpperCase); // including NTS
     memcpy(data, yandexUpperCase, n);
     ToLower(data, n - 1);
     UNIT_ASSERT(strcmp(data, yandexLowerCase) == 0);
@@ -338,7 +338,7 @@ void TCodepageTest::TestToLower() {
 void TCodepageTest::TestToUpper() {
     TTempBuf buf;
     char* data = buf.Data();
-    const size_t n = Y_ARRAY_SIZE(yandexLowerCase); // including NTS 
+    const size_t n = Y_ARRAY_SIZE(yandexLowerCase); // including NTS
     memcpy(data, yandexLowerCase, n);
     ToUpper(data, n - 1);
     UNIT_ASSERT(strcmp(data, yandexUpperCase) == 0);

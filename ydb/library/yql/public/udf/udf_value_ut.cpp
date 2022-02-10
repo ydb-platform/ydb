@@ -6,9 +6,9 @@
 
 using namespace NYql::NUdf;
 
-Y_UNIT_TEST_SUITE(TUdfValue) { 
+Y_UNIT_TEST_SUITE(TUdfValue) {
 
-    Y_UNIT_TEST(TestOptional) { 
+    Y_UNIT_TEST(TestOptional) {
         TUnboxedValuePod foo((ui32) 42);
         UNIT_ASSERT(foo);
         UNIT_ASSERT(42 == foo.Get<ui32>());
@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(TUdfValue) {
         UNIT_ASSERT(42 == bar.Get<ui32>());
     }
 
-    Y_UNIT_TEST(TestOptional2) { 
+    Y_UNIT_TEST(TestOptional2) {
         auto valueOpt = TUnboxedValuePod((ui32) 42);
         UNIT_ASSERT(valueOpt);
         UNIT_ASSERT(valueOpt.HasValue());
@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TUdfValue) {
         UNIT_ASSERT(42 == value.Get<ui32>());
     }
 
-    Y_UNIT_TEST(TestEmptyOptional) { 
+    Y_UNIT_TEST(TestEmptyOptional) {
         auto optEmpty = TUnboxedValuePod();
         UNIT_ASSERT(!optEmpty);
         UNIT_ASSERT(!optEmpty.HasValue());
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TUdfValue) {
         UNIT_ASSERT(!v);
     }
 
-    Y_UNIT_TEST(TestVariant) { 
+    Y_UNIT_TEST(TestVariant) {
         TUnboxedValuePod foo((ui64) 42);
         UNIT_ASSERT(foo);
 
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TUdfValue) {
         UNIT_ASSERT(42 == foo.Get<ui64>());
     }
 
-    Y_UNIT_TEST(TestEmptyInVariant) { 
+    Y_UNIT_TEST(TestEmptyInVariant) {
         TUnboxedValuePod foo;
         UNIT_ASSERT(!foo);
         UNIT_ASSERT(!foo.HasValue());
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TUdfValue) {
         UNIT_ASSERT(!std::memcmp(&opt, &bar, sizeof(bar)));
     }
 
-    Y_UNIT_TEST(TestInvalid) { 
+    Y_UNIT_TEST(TestInvalid) {
         TUnboxedValuePod foo;
         UNIT_ASSERT(!foo.IsInvalid());
 
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TUdfValue) {
         UNIT_ASSERT(bad.IsInvalid());
     }
 
-    Y_UNIT_TEST(TestDump) { 
+    Y_UNIT_TEST(TestDump) {
         NKikimr::NMiniKQL::TScopedAlloc alloc;
         UNIT_ASSERT_STRINGS_EQUAL(TStringBuilder() << TUnboxedValuePod(), "Empty, count: 0");
         UNIT_ASSERT_STRINGS_EQUAL((TStringBuilder() << TUnboxedValuePod().MakeOptional()), "Empty, count: 1");
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(TUdfValue) {
         UNIT_ASSERT(objStr.StartsWith("Boxed, pointer:"));
     }
 
-    Y_UNIT_TEST(LockMethodsTable) { 
+    Y_UNIT_TEST(LockMethodsTable) {
 #define METHOD_INDEX(name) GetMethodPtrIndex(TBoxedValueAccessor::GetMethodPtr(TBoxedValueAccessor::EMethod::name))
         UNIT_ASSERT_VALUES_EQUAL(2, METHOD_INDEX(HasFastListLength));
         UNIT_ASSERT_VALUES_EQUAL(3, METHOD_INDEX(GetListLength));

@@ -15,7 +15,7 @@
 #include <util/system/defaults.h>
 #include <util/system/event.h>
 #include <util/system/mutex.h>
-#include <util/system/pipe.h> 
+#include <util/system/pipe.h>
 #include <util/system/thread.h>
 #include <util/thread/factory.h>
 

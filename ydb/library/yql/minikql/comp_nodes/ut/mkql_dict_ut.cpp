@@ -7,7 +7,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
-    Y_UNIT_TEST_LLVM(TestDictLength) { 
+    Y_UNIT_TEST_LLVM(TestDictLength) {
         TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().template Get<ui64>(), 2);
     }
 
-    Y_UNIT_TEST_LLVM(TestDictContains) { 
+    Y_UNIT_TEST_LLVM(TestDictContains) {
         TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestDictLookup) { 
+    Y_UNIT_TEST_LLVM(TestDictLookup) {
         TSetup<LLVM> setup;
         TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
@@ -207,19 +207,19 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestSortedDictContains) { 
+    Y_UNIT_TEST_LLVM(TestSortedDictContains) {
         TestConvertedDictContains<LLVM>(&TProgramBuilder::ToSortedDict);
     }
 
-    Y_UNIT_TEST_LLVM(TestSortedDictLookup) { 
+    Y_UNIT_TEST_LLVM(TestSortedDictLookup) {
         TestConvertedDictLookup<LLVM>(&TProgramBuilder::ToSortedDict);
     }
 
-    Y_UNIT_TEST_LLVM(TestHashedDictContains) { 
+    Y_UNIT_TEST_LLVM(TestHashedDictContains) {
         TestConvertedDictContains<LLVM>(&TProgramBuilder::ToHashedDict);
     }
 
-    Y_UNIT_TEST_LLVM(TestHashedDictLookup) { 
+    Y_UNIT_TEST_LLVM(TestHashedDictLookup) {
         TestConvertedDictLookup<LLVM>(&TProgramBuilder::ToHashedDict);
     }
 
@@ -311,11 +311,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         UNIT_ASSERT_VALUES_EQUAL(items[3], "E");
     }
 
-    Y_UNIT_TEST_LLVM(TestSortedDictItems) { 
+    Y_UNIT_TEST_LLVM(TestSortedDictItems) {
         TestDictItemsImpl<LLVM, false>(&TProgramBuilder::ToSortedDict);
     }
 
-    Y_UNIT_TEST_LLVM(TestHashedDictItems) { 
+    Y_UNIT_TEST_LLVM(TestHashedDictItems) {
         TestDictItemsImpl<LLVM, true>(&TProgramBuilder::ToHashedDict);
     }
 
@@ -380,11 +380,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestSortedMultiDictLookup) { 
+    Y_UNIT_TEST_LLVM(TestSortedMultiDictLookup) {
         TestConvertedMultiDictLookup<LLVM>(&TProgramBuilder::ToSortedDict);
     }
 
-    Y_UNIT_TEST_LLVM(TestHashedMultiDictLookup) { 
+    Y_UNIT_TEST_LLVM(TestHashedMultiDictLookup) {
         TestConvertedMultiDictLookup<LLVM>(&TProgramBuilder::ToHashedDict);
     }
 }

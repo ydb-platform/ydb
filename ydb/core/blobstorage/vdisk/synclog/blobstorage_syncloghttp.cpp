@@ -118,7 +118,7 @@ namespace NKikimr {
                 , KeeperId(keeperId)
                 , NeighborsPtr(neighborsPtr)
             {
-                Y_VERIFY_DEBUG(Ev->Get()->SubRequestId == TDbMon::SyncLogId); 
+                Y_VERIFY_DEBUG(Ev->Get()->SubRequestId == TDbMon::SyncLogId);
             }
         };
 

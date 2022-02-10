@@ -10,7 +10,7 @@
 using namespace NAddr;
 
 template <bool printPort>
-static inline void PrintAddr(IOutputStream& out, const IRemoteAddr& addr) { 
+static inline void PrintAddr(IOutputStream& out, const IRemoteAddr& addr) {
     const sockaddr* a = addr.Addr();
     char buf[INET6_ADDRSTRLEN + 10];
 
@@ -90,7 +90,7 @@ static inline void PrintAddr(IOutputStream& out, const IRemoteAddr& addr) {
 }
 
 template <>
-void Out<IRemoteAddr>(IOutputStream& out, const IRemoteAddr& addr) { 
+void Out<IRemoteAddr>(IOutputStream& out, const IRemoteAddr& addr) {
     PrintAddr<true>(out, addr);
 }
 
@@ -114,7 +114,7 @@ void Out<NAddr::TOpaqueAddr>(IOutputStream& out, const NAddr::TOpaqueAddr& addr)
     PrintAddr<true>(out, addr);
 }
 
-void NAddr::PrintHost(IOutputStream& out, const IRemoteAddr& addr) { 
+void NAddr::PrintHost(IOutputStream& out, const IRemoteAddr& addr) {
     PrintAddr<false>(out, addr);
 }
 

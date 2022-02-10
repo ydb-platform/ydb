@@ -48,11 +48,11 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
             return;
         }
 
-        Y_VERIFY(ev->Cookie < RequestInfos.size()); 
+        Y_VERIFY(ev->Cookie < RequestInfos.size());
         TRequestInfo &info = RequestInfos[ev->Cookie];
-        Y_VERIFY(!info.IsReplied); 
+        Y_VERIFY(!info.IsReplied);
         info.IsReplied = true;
-        Y_VERIFY(res.ResponseSz == info.EndIdx - info.BeginIdx); 
+        Y_VERIFY(res.ResponseSz == info.EndIdx - info.BeginIdx);
 
         for (ui64 offset = 0; offset < res.ResponseSz; ++offset) {
             Responses[info.BeginIdx + offset] = res.Responses[offset];
@@ -159,7 +159,7 @@ public:
             << " Query# " << dumpQuery()
             << " Deadline# " << Deadline);
 
-        Y_VERIFY(QuerySize != 0); // reply with error? 
+        Y_VERIFY(QuerySize != 0); // reply with error?
         ui32 beginIdx = 0;
         TLogoBlobID lastBlobId;
         TQueryResultSizeTracker resultSize;

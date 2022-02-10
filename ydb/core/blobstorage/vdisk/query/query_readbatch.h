@@ -150,12 +150,12 @@ namespace NKikimr {
             }
 
             bool ShouldUpdateWithDisk() const {
-                Y_VERIFY_DEBUG(Type == ET_CLEAN || Type == ET_SETDISK || Type == ET_SETMEM); 
+                Y_VERIFY_DEBUG(Type == ET_CLEAN || Type == ET_SETDISK || Type == ET_SETMEM);
                 return Type == ET_CLEAN || Type == ET_SETDISK;
             }
 
             bool ShouldUpdateWithMem() const {
-                Y_VERIFY_DEBUG(Type == ET_CLEAN || Type == ET_SETDISK || Type == ET_SETMEM); 
+                Y_VERIFY_DEBUG(Type == ET_CLEAN || Type == ET_SETDISK || Type == ET_SETMEM);
                 return Type == ET_CLEAN || Type == ET_SETDISK;
             }
 
@@ -196,7 +196,7 @@ namespace NKikimr {
             }
 
             static bool DiskPartLess(const TDataItem *x, const TDataItem *y) {
-                Y_VERIFY_DEBUG(x->ActualRead.Size && y->ActualRead.Size); // compare items with non-null Part only 
+                Y_VERIFY_DEBUG(x->ActualRead.Size && y->ActualRead.Size); // compare items with non-null Part only
                 return x->ActualRead < y->ActualRead;
             }
         };

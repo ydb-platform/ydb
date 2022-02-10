@@ -142,7 +142,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node); 
+        Y_VERIFY_DEBUG(Node);
         return Node->Translate(ctx);
     }
 
@@ -182,19 +182,19 @@ public:
     }
 
     bool AddFilter(TContext& ctx, TNodePtr filter) override  {
-        Y_UNUSED(filter); 
+        Y_UNUSED(filter);
         auto pos = filter ? filter->GetPos() : Pos;
         ctx.Error(pos) << (MissingFrom ? "Filtering is not allowed without FROM" : "Source does not allow filtering");
         return false;
     }
 
     TNodePtr Build(TContext& ctx) override  {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
         return Y("AsList", Y("AsStruct"));
     }
 
     bool AddGroupKey(TContext& ctx, const TString& column) override {
-        Y_UNUSED(column); 
+        Y_UNUSED(column);
         ctx.Error(Pos) << "Grouping is not allowed " << (MissingFrom ? "without FROM" : "in this context");
         return false;
     }
@@ -232,12 +232,12 @@ public:
 
     TNodePtr BuildFilter(TContext& ctx, const TString& label) override {
         Y_UNUSED(ctx);
-        Y_UNUSED(label); 
+        Y_UNUSED(label);
         return nullptr;
     }
 
     TNodePtr BuildAggregation(const TString& label) override {
-        Y_UNUSED(label); 
+        Y_UNUSED(label);
         return nullptr;
     }
 
@@ -339,12 +339,12 @@ protected:
     {}
 
     void AllColumns() override {
-        Y_VERIFY_DEBUG(Source); 
+        Y_VERIFY_DEBUG(Source);
         return Source->AllColumns();
     }
 
     const TColumns* GetColumns() const override {
-        Y_VERIFY_DEBUG(Source); 
+        Y_VERIFY_DEBUG(Source);
         return Source->GetColumns();
     }
 
@@ -354,7 +354,7 @@ protected:
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
-        Y_VERIFY_DEBUG(Source); 
+        Y_VERIFY_DEBUG(Source);
         const TString label(Source->GetLabel());
         Source->SetLabel(Label);
         const auto ret = Source->AddColumn(ctx, column);
@@ -856,7 +856,7 @@ public:
     }
 
     TNodePtr Build(TContext& ctx) override {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
         return NewSource ? NewSource->Build(ctx) : Node;
     }
 

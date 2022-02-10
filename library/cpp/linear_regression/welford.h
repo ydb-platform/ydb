@@ -11,7 +11,7 @@ private:
     TKahanAccumulator<double> SumWeights;
 
 public:
-    Y_SAVELOAD_DEFINE(Mean, SumWeights); 
+    Y_SAVELOAD_DEFINE(Mean, SumWeights);
 
     void Multiply(const double value);
     void Add(const double value, const double weight = 1.);
@@ -40,7 +40,7 @@ private:
     TKahanAccumulator<double> SumWeights;
 
 public:
-    Y_SAVELOAD_DEFINE(Covariation, FirstValueMean, SecondValueMean, SumWeights); 
+    Y_SAVELOAD_DEFINE(Covariation, FirstValueMean, SecondValueMean, SumWeights);
 
     void Add(const double firstValue, const double secondValue, const double weight = 1.);
     void Remove(const double firstValue, const double secondValue, const double weight = 1.);
@@ -62,7 +62,7 @@ private:
     TMeanCalculator MeanCalculator;
 
 public:
-    Y_SAVELOAD_DEFINE(Deviation, MeanCalculator); 
+    Y_SAVELOAD_DEFINE(Deviation, MeanCalculator);
 
     void Add(const double value, const double weight = 1.);
     void Remove(const double value, const double weight = 1.);

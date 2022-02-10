@@ -6,36 +6,36 @@
 
 // useful cross-platfrom definitions for compilers
 
-/** 
- * @def Y_FUNC_SIGNATURE 
- * 
- * Use this macro to get pretty function name (see example). 
- * 
- * @code 
- * void Hi() { 
- *     Cout << Y_FUNC_SIGNATURE << Endl; 
- * } 
- 
- * template <typename T> 
- * void Do() { 
- *     Cout << Y_FUNC_SIGNATURE << Endl; 
- * } 
- 
- * int main() { 
- *    Hi();         // void Hi() 
- *    Do<int>();    // void Do() [T = int] 
+/**
+ * @def Y_FUNC_SIGNATURE
+ *
+ * Use this macro to get pretty function name (see example).
+ *
+ * @code
+ * void Hi() {
+ *     Cout << Y_FUNC_SIGNATURE << Endl;
+ * }
+
+ * template <typename T>
+ * void Do() {
+ *     Cout << Y_FUNC_SIGNATURE << Endl;
+ * }
+
+ * int main() {
+ *    Hi();         // void Hi()
+ *    Do<int>();    // void Do() [T = int]
  *    Do<TString>(); // void Do() [T = TString]
- * } 
- * @endcode 
- */ 
-#if defined(__GNUC__) 
+ * }
+ * @endcode
+ */
+#if defined(__GNUC__)
     #define Y_FUNC_SIGNATURE __PRETTY_FUNCTION__
-#elif defined(_MSC_VER) 
+#elif defined(_MSC_VER)
     #define Y_FUNC_SIGNATURE __FUNCSIG__
-#else 
+#else
     #define Y_FUNC_SIGNATURE ""
-#endif 
- 
+#endif
+
 #ifdef __GNUC__
     #define Y_PRINTF_FORMAT(n, m) __attribute__((__format__(__printf__, n, m)))
 #endif
@@ -53,26 +53,26 @@
 #endif
 
 /**
- * @def Y_DECLARE_UNUSED 
- * 
- * Macro is needed to silence compiler warning about unused entities (e.g. function or argument). 
- * 
- * @code 
- * Y_DECLARE_UNUSED int FunctionUsedSolelyForDebugPurposes(); 
- * assert(FunctionUsedSolelyForDebugPurposes() == 42); 
- * 
- * void Foo(const int argumentUsedOnlyForDebugPurposes Y_DECLARE_UNUSED) { 
- *     assert(argumentUsedOnlyForDebugPurposes == 42); 
- *     // however you may as well omit `Y_DECLARE_UNUSED` and use `UNUSED` macro instead 
- *     Y_UNUSED(argumentUsedOnlyForDebugPurposes); 
- * } 
- * @endcode 
- */ 
+ * @def Y_DECLARE_UNUSED
+ *
+ * Macro is needed to silence compiler warning about unused entities (e.g. function or argument).
+ *
+ * @code
+ * Y_DECLARE_UNUSED int FunctionUsedSolelyForDebugPurposes();
+ * assert(FunctionUsedSolelyForDebugPurposes() == 42);
+ *
+ * void Foo(const int argumentUsedOnlyForDebugPurposes Y_DECLARE_UNUSED) {
+ *     assert(argumentUsedOnlyForDebugPurposes == 42);
+ *     // however you may as well omit `Y_DECLARE_UNUSED` and use `UNUSED` macro instead
+ *     Y_UNUSED(argumentUsedOnlyForDebugPurposes);
+ * }
+ * @endcode
+ */
 #ifdef __GNUC__
     #define Y_DECLARE_UNUSED __attribute__((unused))
 #endif
 
-#ifndef Y_DECLARE_UNUSED 
+#ifndef Y_DECLARE_UNUSED
     #define Y_DECLARE_UNUSED
 #endif
 
@@ -152,7 +152,7 @@
     #define Y_PREFETCH_WRITE(Pointer, Priority) (void)(const void*)(Pointer), (void)Priority
 #endif
 
-#ifndef Y_LIKELY 
+#ifndef Y_LIKELY
     #define Y_LIKELY(Cond) (Cond)
     #define Y_UNLIKELY(Cond) (Cond)
 #endif

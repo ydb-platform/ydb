@@ -4,13 +4,13 @@
 #include "strbuf.h"
 #include "string.h"
 #include "utility.h"
-#include "va_args.h" 
+#include "va_args.h"
 #include <utility>
 
-#include <util/stream/tempbuf.h> 
-#include <util/system/compat.h> 
-#include <util/system/compiler.h> 
-#include <util/system/defaults.h> 
+#include <util/stream/tempbuf.h>
+#include <util/system/compat.h>
+#include <util/system/compiler.h>
+#include <util/system/defaults.h>
 #include <util/system/error.h>
 #include <util/system/src_location.h>
 #include <util/system/platform.h>
@@ -39,30 +39,30 @@ namespace NPrivateException {
 
     class yexception: public std::exception {
     public:
-        yexception(); 
-        yexception(const yexception&) = default; 
-        yexception(yexception&&) = default; 
- 
-        yexception& operator=(const yexception&) = default; 
-        yexception& operator=(yexception&&) = default; 
- 
+        yexception();
+        yexception(const yexception&) = default;
+        yexception(yexception&&) = default;
+
+        yexception& operator=(const yexception&) = default;
+        yexception& operator=(yexception&&) = default;
+
         const char* what() const noexcept override;
         virtual const TBackTrace* BackTrace() const noexcept;
 
         template <class T>
         inline void Append(const T& t) {
             TTempBufCuttingWrapperOutput tempBuf(Buf_);
-            static_cast<IOutputStream&>(tempBuf) << t; 
-            ZeroTerminate(); 
+            static_cast<IOutputStream&>(tempBuf) << t;
+            ZeroTerminate();
         }
 
-        TStringBuf AsStrBuf() const; 
+        TStringBuf AsStrBuf() const;
 
     private:
-        void ZeroTerminate() noexcept; 
- 
-    private: 
-        TTempBuf Buf_; 
+        void ZeroTerminate() noexcept;
+
+    private:
+        TTempBuf Buf_;
     };
 
     template <class E, class T>
@@ -82,7 +82,7 @@ namespace NPrivateException {
 class yexception: public NPrivateException::yexception {
 };
 
-Y_DECLARE_OUT_SPEC(inline, yexception, stream, value) { 
+Y_DECLARE_OUT_SPEC(inline, yexception, stream, value) {
     stream << value.AsStrBuf();
 }
 
@@ -175,13 +175,13 @@ std::string CurrentExceptionTypeName();
 
 TString FormatExc(const std::exception& exception);
 
-#define Y_ENSURE_EX(CONDITION, THROW_EXPRESSION) \ 
-    do {                                         \ 
-        if (Y_UNLIKELY(!(CONDITION))) {          \ 
-            ythrow THROW_EXPRESSION;             \ 
-        }                                        \ 
+#define Y_ENSURE_EX(CONDITION, THROW_EXPRESSION) \
+    do {                                         \
+        if (Y_UNLIKELY(!(CONDITION))) {          \
+            ythrow THROW_EXPRESSION;             \
+        }                                        \
     } while (false)
- 
+
 /// @def Y_ENSURE_SIMPLE
 /// This macro works like the Y_ENSURE, but requires the second argument to be a constant string view.
 /// Should not be used directly.
@@ -195,25 +195,25 @@ TString FormatExc(const std::exception& exception);
     } while (false)
 
 #define Y_ENSURE_IMPL_1(CONDITION) Y_ENSURE_SIMPLE(CONDITION, ::TStringBuf("Condition violated: `" Y_STRINGIZE(CONDITION) "'"), ::NPrivate::ThrowYException)
-#define Y_ENSURE_IMPL_2(CONDITION, MESSAGE) Y_ENSURE_EX(CONDITION, yexception() << MESSAGE) 
- 
+#define Y_ENSURE_IMPL_2(CONDITION, MESSAGE) Y_ENSURE_EX(CONDITION, yexception() << MESSAGE)
+
 #define Y_ENSURE_BT_IMPL_1(CONDITION) Y_ENSURE_SIMPLE(CONDITION, ::TStringBuf("Condition violated: `" Y_STRINGIZE(CONDITION) "'"), ::NPrivate::ThrowYExceptionWithBacktrace)
 #define Y_ENSURE_BT_IMPL_2(CONDITION, MESSAGE) Y_ENSURE_EX(CONDITION, TWithBackTrace<yexception>() << MESSAGE)
 
-/** 
- * @def Y_ENSURE 
- * 
- * This macro is inteded to use as a shortcut for `if () { throw }`. 
- * 
- * @code 
- * void DoSomethingLovely(const int x, const int y) { 
- *     Y_ENSURE(x > y, "`x` must be greater than `y`"); 
- *     Y_ENSURE(x > y); // if you are too lazy 
- *     // actually doing something nice here 
- * } 
- * @endcode 
- */ 
-#define Y_ENSURE(...) Y_PASS_VA_ARGS(Y_MACRO_IMPL_DISPATCHER_2(__VA_ARGS__, Y_ENSURE_IMPL_2, Y_ENSURE_IMPL_1)(__VA_ARGS__)) 
+/**
+ * @def Y_ENSURE
+ *
+ * This macro is inteded to use as a shortcut for `if () { throw }`.
+ *
+ * @code
+ * void DoSomethingLovely(const int x, const int y) {
+ *     Y_ENSURE(x > y, "`x` must be greater than `y`");
+ *     Y_ENSURE(x > y); // if you are too lazy
+ *     // actually doing something nice here
+ * }
+ * @endcode
+ */
+#define Y_ENSURE(...) Y_PASS_VA_ARGS(Y_MACRO_IMPL_DISPATCHER_2(__VA_ARGS__, Y_ENSURE_IMPL_2, Y_ENSURE_IMPL_1)(__VA_ARGS__))
 
 /**
  * @def Y_ENSURE_BT

@@ -23,8 +23,8 @@ struct TDtorTracer {
 
 ui64 TDtorTracer::InstanceCount = 0;
 
-Y_UNIT_TEST_SUITE(TCacheTest) { 
-    Y_UNIT_TEST(TestUnboundedMapCache) { 
+Y_UNIT_TEST_SUITE(TCacheTest) {
+    Y_UNIT_TEST(TestUnboundedMapCache) {
         TUnboundedCacheOnMap<ui32, TString> cache;
         TString* tmp;
         UNIT_ASSERT_EQUAL(cache.GetCount(), 0);
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT(!cache.IsOverflow());
     }
 
-    Y_UNIT_TEST(EnsureNoLeakAfterUnboundedCacheOnMapDtor) { 
+    Y_UNIT_TEST(EnsureNoLeakAfterUnboundedCacheOnMapDtor) {
         {
             TUnboundedCacheOnMap<ui32, TDtorTracer> cache;
             TDtorTracer* tmp;
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT_EQUAL(TDtorTracer::InstanceCount, 0);
     }
 
-    Y_UNIT_TEST(TestSizeBasedOverflowCallback) { 
+    Y_UNIT_TEST(TestSizeBasedOverflowCallback) {
         TUnboundedCacheOnMap<ui32, TString> cache;
         TSizeBasedOverflowCallback<ui32, TString> overflowCallback(2);
         cache.SetOverflowCallback([&](const ICache<ui32, TString>& cache) { return overflowCallback(cache); });
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT(!cache.IsOverflow());
     }
 
-    Y_UNIT_TEST(TestLruCache) { 
+    Y_UNIT_TEST(TestLruCache) {
         TLruCache<ui32, TString> cache;
         TString* tmp;
         TSizeBasedOverflowCallback<ui32, TString> overflowCallback(2);
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT_EQUAL(cache.GetUsedSize(), 0);
     }
 
-    Y_UNIT_TEST(EnsureNoLeakAfterLruCacheDtor) { 
+    Y_UNIT_TEST(EnsureNoLeakAfterLruCacheDtor) {
         {
             TLruCache<ui32, TDtorTracer> cache;
             TDtorTracer* tmp;
@@ -144,13 +144,13 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT_EQUAL(TDtorTracer::InstanceCount, 0);
     }
 
-    Y_UNIT_TEST(Test2QCache) { 
+    Y_UNIT_TEST(Test2QCache) {
         TIntrusivePtr<T2QCacheConfig> config(new T2QCacheConfig);
         T2QCache<ui32, TString> cache(config);
         TString lastEvicted;
         cache.SetEvictionCallback([&](const ui32& key, TString& value, ui64 size){
-            Y_UNUSED(key); 
-            Y_UNUSED(size); 
+            Y_UNUSED(key);
+            Y_UNUSED(size);
             lastEvicted = value;
         });
 
@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT_EQUAL(lastEvictedKey, 8);
     }
 
-    Y_UNIT_TEST(EnsureNoLeakAfterQ2CacheDtor) { 
+    Y_UNIT_TEST(EnsureNoLeakAfterQ2CacheDtor) {
         {
             TIntrusivePtr<T2QCacheConfig> config(new T2QCacheConfig);
             T2QCache<ui32, TDtorTracer> cache(config);
@@ -250,9 +250,9 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT_EQUAL(TDtorTracer::InstanceCount, 0);
     }
 
-    Y_UNIT_TEST(TestUpdateItemSize) { 
+    Y_UNIT_TEST(TestUpdateItemSize) {
         TUnboundedCacheOnMap<ui32, TString> cache([](const ui32& key, const TString& value) {
-            Y_UNUSED(key); 
+            Y_UNUSED(key);
             return value.size();
         });
 

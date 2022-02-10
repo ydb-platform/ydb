@@ -774,7 +774,7 @@ void TBusModuleImpl::DestroyJob(TJobRunner* job) {
     {
         TWhatThreadDoesAcquireGuard<TMutex> G(Lock, "modules: acquiring lock for DestroyJob");
         int jobCount = AtomicDecrement(JobCount);
-        Y_VERIFY(jobCount >= 0, "decremented too much"); 
+        Y_VERIFY(jobCount >= 0, "decremented too much");
         Jobs.erase(job->JobStorageIterator);
 
         if (AtomicGet(State) == STOPPED) {
@@ -789,7 +789,7 @@ void TBusModuleImpl::DestroyJob(TJobRunner* job) {
 
 void TBusModuleImpl::OnMessageReceived(TAutoPtr<TBusMessage> msg0, TOnMessageContext& context) {
     TBusMessage* msg = !!msg0 ? msg0.Get() : context.GetMessage();
-    Y_VERIFY(!!msg); 
+    Y_VERIFY(!!msg);
 
     THolder<TJobRunner> jobRunner(new TJobRunner(Module->CreateJobInstance(msg)));
     jobRunner->Job->MessageHolder.Reset(msg0.Release());
@@ -810,11 +810,11 @@ void TBusModuleImpl::Shutdown() {
     }
     AtomicSet(State, TBusModuleImpl::STOPPED);
 
-    for (auto& clientSession : ClientSessions) { 
-        clientSession->Shutdown(); 
+    for (auto& clientSession : ClientSessions) {
+        clientSession->Shutdown();
     }
-    for (auto& serverSession : ServerSessions) { 
-        serverSession->Shutdown(); 
+    for (auto& serverSession : ServerSessions) {
+        serverSession->Shutdown();
     }
 
     for (size_t starter = 0; starter < Starters.size(); ++starter) {
@@ -823,8 +823,8 @@ void TBusModuleImpl::Shutdown() {
 
     {
         TWhatThreadDoesAcquireGuard<TMutex> guard(Lock, "modules: acquiring lock for Shutdown");
-        for (auto& Job : Jobs) { 
-            Job->Schedule(); 
+        for (auto& Job : Jobs) {
+            Job->Schedule();
         }
 
         while (!Jobs.empty()) {
@@ -834,8 +834,8 @@ void TBusModuleImpl::Shutdown() {
 }
 
 EMessageStatus TBusModule::StartJob(TAutoPtr<TBusMessage> message) {
-    Y_VERIFY(Impl->State == TBusModuleImpl::RUNNING); 
-    Y_VERIFY(!!Impl->Queue); 
+    Y_VERIFY(Impl->State == TBusModuleImpl::RUNNING);
+    Y_VERIFY(!!Impl->Queue);
 
     if ((unsigned)AtomicGet(Impl->JobCount) >= Impl->ModuleConfig.StarterMaxInFlight) {
         return MESSAGE_BUSY;
@@ -853,16 +853,16 @@ void TModuleServerHandler::OnMessage(TOnMessageContext& msg) {
 
 void TModuleClientHandler::OnReply(TAutoPtr<TBusMessage> req, TAutoPtr<TBusMessage> resp) {
     TJobRunner* job = GetJob(req.Get());
-    Y_ASSERT(job); 
-    Y_ASSERT(job->Job->Message != req.Get()); 
+    Y_ASSERT(job);
+    Y_ASSERT(job->Job->Message != req.Get());
     job->EnqueueAndSchedule(TJobResponseMessage(req.Release(), resp.Release(), MESSAGE_OK));
     job->UnRef();
 }
 
 void TModuleClientHandler::OnMessageSentOneWay(TAutoPtr<TBusMessage> req) {
     TJobRunner* job = GetJob(req.Get());
-    Y_ASSERT(job); 
-    Y_ASSERT(job->Job->Message != req.Get()); 
+    Y_ASSERT(job);
+    Y_ASSERT(job->Job->Message != req.Get());
     job->EnqueueAndSchedule(TJobResponseMessage(req.Release(), nullptr, MESSAGE_OK));
     job->UnRef();
 }
@@ -870,7 +870,7 @@ void TModuleClientHandler::OnMessageSentOneWay(TAutoPtr<TBusMessage> req) {
 void TModuleClientHandler::OnError(TAutoPtr<TBusMessage> msg, EMessageStatus status) {
     TJobRunner* job = GetJob(msg.Get());
     if (job) {
-        Y_ASSERT(job->Job->Message != msg.Get()); 
+        Y_ASSERT(job->Job->Message != msg.Get());
         job->EnqueueAndSchedule(TJobResponseMessage(msg.Release(), nullptr, status));
         job->UnRef();
     }

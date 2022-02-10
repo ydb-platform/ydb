@@ -35,7 +35,7 @@ namespace {
             static void* ThreadProc(void* func) {
                 ((IThreadAble*)(func))->Execute();
 
-                return nullptr; 
+                return nullptr;
             }
 
         private:

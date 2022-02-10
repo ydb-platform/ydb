@@ -62,7 +62,7 @@ namespace NKikimr {
                 return str.Str();
             }
 
-            void DebugPrint(IOutputStream &str) const { 
+            void DebugPrint(IOutputStream &str) const {
                 str << "key=" << Key.ToString() << " lsn=" << Lsn;
             }
         };
@@ -345,11 +345,11 @@ namespace NKikimr {
         // append chunk ids to the vector
         void FillInChunkIds(TVector<ui32> &vec) const {
             // fresh doesn't have chunks
-            Y_UNUSED(vec); 
+            Y_UNUSED(vec);
         }
 
         // dump all data of the segment accessible by this iterator
-        void DumpAll(IOutputStream &str) const { 
+        void DumpAll(IOutputStream &str) const {
             str << "=== Fresh (lsn=" << Lsn << ")===\n";
             TIterator it(Seg->Index.get());
             it.SeekToFirst();

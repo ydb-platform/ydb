@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(TestArrayRef) { 
+Y_UNIT_TEST_SUITE(TestArrayRef) {
     Y_UNIT_TEST(TestDefaultConstructor) {
         TArrayRef<int> defaulted;
         UNIT_ASSERT_VALUES_EQUAL(defaulted.data(), nullptr);
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         UNIT_ASSERT_EQUAL(aRef.subspan(1, 3), MakeArrayRef(std::vector<int>{2, 3, 4}));
     }
 
-    Y_UNIT_TEST(TestSlice) { 
+    Y_UNIT_TEST(TestSlice) {
         const int a0[] = {1, 2, 3};
         TArrayRef<const int> r0(a0);
         TArrayRef<const int> s0 = r0.Slice(2);
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         a[0] = 8;
     }
 
-    Y_UNIT_TEST(TestConst) { 
+    Y_UNIT_TEST(TestConst) {
         int a[] = {1, 2};
         Do(a);
         UNIT_ASSERT_VALUES_EQUAL(a[0], 8);
@@ -298,25 +298,25 @@ Y_UNIT_TEST_SUITE(TestArrayRef) {
         static_assert(r2.size() == 4, "r2.size() is not equal to 4");
         static_assert(r2.data()[2] == -3, "r2.data()[2] is not equal to -3");
     }
- 
-    template <typename T> 
-    static void Foo(const TConstArrayRef<T>) { 
-        // noop 
-    } 
- 
-    Y_UNIT_TEST(TestMakeConstArrayRef) { 
-        TVector<int> data; 
- 
-        // Won't compile because can't deduce `T` for `Foo` 
-        // Foo(data); 
- 
-        // Won't compile because again can't deduce `T` for `Foo` 
-        // Foo(MakeArrayRef(data)); 
- 
-        // Success! 
-        Foo(MakeConstArrayRef(data)); 
- 
-        const TVector<int> constData; 
-        Foo(MakeConstArrayRef(constData)); 
-    } 
+
+    template <typename T>
+    static void Foo(const TConstArrayRef<T>) {
+        // noop
+    }
+
+    Y_UNIT_TEST(TestMakeConstArrayRef) {
+        TVector<int> data;
+
+        // Won't compile because can't deduce `T` for `Foo`
+        // Foo(data);
+
+        // Won't compile because again can't deduce `T` for `Foo`
+        // Foo(MakeArrayRef(data));
+
+        // Success!
+        Foo(MakeConstArrayRef(data));
+
+        const TVector<int> constData;
+        Foo(MakeConstArrayRef(constData));
+    }
 }

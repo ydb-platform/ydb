@@ -37,4 +37,4 @@ enum class ETypeAnnotationKind : ui64 {
 }
 
 template<>
-void Out<NYql::ETypeAnnotationKind>(class IOutputStream &o, NYql::ETypeAnnotationKind x); 
+void Out<NYql::ETypeAnnotationKind>(class IOutputStream &o, NYql::ETypeAnnotationKind x);

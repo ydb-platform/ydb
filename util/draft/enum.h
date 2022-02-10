@@ -11,13 +11,13 @@
 class TEnumNotFoundException: public yexception {
 };
 
-#define EnumFromString(key, entries) EnumFromStringImpl(key, entries, Y_ARRAY_SIZE(entries)) 
+#define EnumFromString(key, entries) EnumFromStringImpl(key, entries, Y_ARRAY_SIZE(entries))
 #define EnumFromStringWithSize(key, entries, size) EnumFromStringImpl(key, entries, size)
-#define FindEnumFromString(key, entries) FindEnumFromStringImpl(key, entries, Y_ARRAY_SIZE(entries)) 
+#define FindEnumFromString(key, entries) FindEnumFromStringImpl(key, entries, Y_ARRAY_SIZE(entries))
 #define FindEnumFromStringWithSize(key, entries, size) FindEnumFromStringImpl(key, entries, size)
-#define EnumToString(key, entries) EnumToStringImpl(key, entries, Y_ARRAY_SIZE(entries)) 
+#define EnumToString(key, entries) EnumToStringImpl(key, entries, Y_ARRAY_SIZE(entries))
 #define EnumToStringWithSize(key, entries, size) EnumToStringImpl(key, entries, size)
-#define PrintEnumItems(entries) PrintEnumItemsImpl(entries, Y_ARRAY_SIZE(entries)) 
+#define PrintEnumItems(entries) PrintEnumItemsImpl(entries, Y_ARRAY_SIZE(entries))
 
 template <class K1, class K2, class V>
 const V* FindEnumFromStringImpl(K1 key, const std::pair<K2, V>* entries, size_t arraySize) {

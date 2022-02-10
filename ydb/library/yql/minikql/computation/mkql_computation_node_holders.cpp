@@ -204,7 +204,7 @@ private:
     }
 
     NUdf::IBoxedValuePtr ToIndexDictImpl(const NUdf::IValueBuilder& builder) const override {
-        Y_UNUSED(builder); 
+        Y_UNUSED(builder);
         return const_cast<TDirectListHolder*>(this);
     }
 
@@ -1111,10 +1111,10 @@ private:
             Reverse(Items.begin(), Items.end());
             break;
         default:
-            Y_FAIL(); 
+            Y_FAIL();
         }
 
-        Y_VERIFY_DEBUG(IsSortedUnique()); 
+        Y_VERIFY_DEBUG(IsSortedUnique());
         IsBuilt = true;
 
         if (!Items.empty()) {

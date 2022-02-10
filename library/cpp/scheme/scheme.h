@@ -302,15 +302,15 @@ namespace NSc {
 
         // TODO: Переименовать ToJson в ToJsonUnsafe, а ToJsonSafe в ToJson
         TString ToJson(const TJsonOpts& = TJsonOpts()) const;
-        const TValue& ToJson(IOutputStream&, const TJsonOpts& = TJsonOpts()) const; // returns self 
+        const TValue& ToJson(IOutputStream&, const TJsonOpts& = TJsonOpts()) const; // returns self
 
         // ToJson(JO_SORT_KEYS | JO_SKIP_UNSAFE)
         TString ToJsonSafe(const TJsonOpts& = TJsonOpts()) const;
-        const TValue& ToJsonSafe(IOutputStream&, const TJsonOpts& = TJsonOpts()) const; 
+        const TValue& ToJsonSafe(IOutputStream&, const TJsonOpts& = TJsonOpts()) const;
 
         // ToJson(JO_SORT_KEYS | JO_PRETTY | JO_SKIP_UNSAFE)
         TString ToJsonPretty(const TJsonOpts& = TJsonOpts()) const;
-        const TValue& ToJsonPretty(IOutputStream&, const TJsonOpts& = TJsonOpts()) const; 
+        const TValue& ToJsonPretty(IOutputStream&, const TJsonOpts& = TJsonOpts()) const;
 
         NJson::TJsonValue ToJsonValue() const;
 
@@ -400,7 +400,7 @@ namespace NSc {
             return DefaultValue();
         }
 
-        void DoWriteJsonImpl(IOutputStream&, const TJsonOpts&, NImpl::TKeySortContext&, NImpl::TSelfLoopContext&) const; 
+        void DoWriteJsonImpl(IOutputStream&, const TJsonOpts&, NImpl::TKeySortContext&, NImpl::TSelfLoopContext&) const;
 
         bool IsSameOrAncestorOf(const TValue& other) const;
 

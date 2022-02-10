@@ -8,9 +8,9 @@ namespace NKikimr {
 
     // naive implementation of clz
     inline unsigned int NaiveClz(unsigned int v) {
-        Y_ASSERT(v); 
+        Y_ASSERT(v);
         unsigned int cntr = 0;
-        const static unsigned mask = 1u << (std::numeric_limits<unsigned int>::digits - 1); 
+        const static unsigned mask = 1u << (std::numeric_limits<unsigned int>::digits - 1);
         while ((v & mask) == 0) {
             v <<= 1;
             cntr++;

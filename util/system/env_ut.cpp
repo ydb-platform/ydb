@@ -3,19 +3,19 @@
 #include <util/generic/string.h>
 #include "env.h"
 
-Y_UNIT_TEST_SUITE(EnvTest) { 
-    Y_UNIT_TEST(GetSetEnvTest) { 
+Y_UNIT_TEST_SUITE(EnvTest) {
+    Y_UNIT_TEST(GetSetEnvTest) {
         TString key = "util_GETENV_TestVar";
         TString value = "Some value for env var";
         TString def = "Some default value for env var";
-        // first of all, it should be clear 
+        // first of all, it should be clear
         UNIT_ASSERT_VALUES_EQUAL(GetEnv(key), TString());
         UNIT_ASSERT_VALUES_EQUAL(GetEnv(key, def), def);
-        SetEnv(key, value); 
-        // set and see what value we get here 
-        UNIT_ASSERT_VALUES_EQUAL(GetEnv(key), value); 
+        SetEnv(key, value);
+        // set and see what value we get here
+        UNIT_ASSERT_VALUES_EQUAL(GetEnv(key), value);
         UNIT_ASSERT_VALUES_EQUAL(GetEnv(key, def), value);
-        // set empty value 
+        // set empty value
         SetEnv(key, TString());
         UNIT_ASSERT_VALUES_EQUAL(GetEnv(key), TString());
 
@@ -27,5 +27,5 @@ Y_UNIT_TEST_SUITE(EnvTest) {
         UNIT_ASSERT_VALUES_EQUAL(GetEnv(longKey), longValue);
         SetEnv(longKey, TString());
         UNIT_ASSERT_VALUES_EQUAL(GetEnv(longKey), TString());
-    } 
+    }
 }

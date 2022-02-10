@@ -3,7 +3,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(TTestTLS) { 
+Y_UNIT_TEST_SUITE(TTestTLS) {
     struct X {
         inline X()
             : V(0)
@@ -22,10 +22,10 @@ Y_UNIT_TEST_SUITE(TTestTLS) {
         V;
     };
 
-    Y_UNIT_TEST(TestHugeSetup) { 
+    Y_UNIT_TEST(TestHugeSetup) {
         TArrayHolder<X> x(new X[100000]);
 
-        struct TThr: public ISimpleThread { 
+        struct TThr: public ISimpleThread {
             inline TThr(X* ptr)
                 : P(ptr)
             {

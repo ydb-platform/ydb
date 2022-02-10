@@ -3,7 +3,7 @@
 #include <library/cpp/bit_io/bitoutput.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/bitops.h> 
+#include <util/generic/bitops.h>
 #include <util/stream/buffer.h>
 #include <util/stream/length.h>
 #include <util/string/printf.h>

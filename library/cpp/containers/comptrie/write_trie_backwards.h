@@ -17,7 +17,7 @@ namespace NCompactTrie {
 
     struct TOpaqueTrie;
 
-    size_t WriteTrieBackwards(IOutputStream& os, TReverseNodeEnumerator& enumerator, bool verbose); 
-    size_t WriteTrieBackwardsNoAlloc(IOutputStream& os, TReverseNodeEnumerator& enumerator, TOpaqueTrie& trie, EMinimizeMode mode); 
+    size_t WriteTrieBackwards(IOutputStream& os, TReverseNodeEnumerator& enumerator, bool verbose);
+    size_t WriteTrieBackwardsNoAlloc(IOutputStream& os, TReverseNodeEnumerator& enumerator, TOpaqueTrie& trie, EMinimizeMode mode);
 
 }

@@ -94,7 +94,7 @@ private:
     void HandleStopTrace(TEvMessageBusTracer::TEvStopTrace::TPtr &ev, const TActorContext &ctx);
     void HandleTraceEvent(TEvMessageBusTracer::TEvTraceEvent::TPtr &ev, const TActorContext &);
 
-    TAutoPtr<IOutputStream> Stream; 
+    TAutoPtr<IOutputStream> Stream;
     TString Path;
 };
 

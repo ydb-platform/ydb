@@ -41,7 +41,7 @@ public:
             return ret;
         }
 
-        return nullptr; 
+        return nullptr;
     }
 
     inline void* WaitT(const TDuration& timeOut) {

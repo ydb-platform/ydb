@@ -141,10 +141,10 @@ namespace {
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(RainCheckHttpClient) { 
+Y_UNIT_TEST_SUITE(RainCheckHttpClient) {
     static const TIpPort SERVER_PORT = 4000;
 
-    Y_UNIT_TEST(Simple) { 
+    Y_UNIT_TEST(Simple) {
         // TODO: randomize port
         if (!IsFixedPortTestAllowed()) {
             return;
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(RainCheckHttpClient) {
         env.TestSync.WaitForAndIncrement(1);
     }
 
-    Y_UNIT_TEST(SimplePost) { 
+    Y_UNIT_TEST(SimplePost) {
         // TODO: randomize port
         if (!IsFixedPortTestAllowed()) {
             return;
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(RainCheckHttpClient) {
         env.TestSync.WaitForAndIncrement(1);
     }
 
-    Y_UNIT_TEST(HttpCodeExtraction) { 
+    Y_UNIT_TEST(HttpCodeExtraction) {
     // Find "request failed(" string, then copy len("HTTP/1.X NNN") chars and try to convert NNN to HTTP code.
 
 #define CHECK_VALID_LINE(line, code)                                    \

@@ -12,9 +12,9 @@
 namespace NKikimr {
 namespace NTable {
 
-Y_UNIT_TEST_SUITE(TCompaction) { 
+Y_UNIT_TEST_SUITE(TCompaction) {
 
-    Y_UNIT_TEST(OneMemtable) 
+    Y_UNIT_TEST(OneMemtable)
     {
         using namespace NTest;
 
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TCompaction) {
         TCheckIt(eggs, { }).IsTheSame(mass.Saved);
     }
 
-    Y_UNIT_TEST(ManyParts) 
+    Y_UNIT_TEST(ManyParts)
     {
         using namespace NTest;
 
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TCompaction) {
         TCheckIt(eggs, { }).IsTheSame(mass.Saved);
     }
 
-    Y_UNIT_TEST(BootAbort) 
+    Y_UNIT_TEST(BootAbort)
     {
         using namespace NTest;
 
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TCompaction) {
         UNIT_ASSERT(!eggs.Parts && eggs.NoResult());
     }
 
-    Y_UNIT_TEST(Defaults) 
+    Y_UNIT_TEST(Defaults)
     {
         using namespace NTest;
 
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TCompaction) {
         }
     }
 
-    Y_UNIT_TEST(Merges) 
+    Y_UNIT_TEST(Merges)
     {
         using namespace NTest;
 

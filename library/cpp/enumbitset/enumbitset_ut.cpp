@@ -21,8 +21,8 @@ enum ETestEnum {
 };
 using TTestBitSet = TEnumBitSet<ETestEnum, TE_FIRST, TE_MAX>;
 
-Y_UNIT_TEST_SUITE(TEnumBitSetTest) { 
-    Y_UNIT_TEST(TestMainFunctions) { 
+Y_UNIT_TEST_SUITE(TEnumBitSetTest) {
+    Y_UNIT_TEST(TestMainFunctions) {
         auto ebs = TTestBitSet(TE_FIRST, TE_MIDDLE);
 
         UNIT_ASSERT(ebs.SafeTest(TE_FIRST));
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TEnumBitSetTest) {
         UNIT_ASSERT(!ebs.SafeTest(TE_OVERFLOW));
     }
 
-    Y_UNIT_TEST(TestEmpty) { 
+    Y_UNIT_TEST(TestEmpty) {
         TTestBitSet mask;
         UNIT_ASSERT(mask.Empty());
         if (mask)
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TEnumBitSetTest) {
             UNIT_ASSERT(false && "should not be empty");
     }
 
-    Y_UNIT_TEST(TestIter) { 
+    Y_UNIT_TEST(TestIter) {
         TTestBitSet mask = TTestBitSet(TE_1, TE_3, TE_7);
 
         TTestBitSet mask2;
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TEnumBitSetTest) {
         UNIT_ASSERT(mask == mask2);
     }
 
-    Y_UNIT_TEST(TestSerialization) { 
+    Y_UNIT_TEST(TestSerialization) {
         auto ebs = TTestBitSet(TE_MIDDLE, TE_6, TE_7);
 
         TStringStream ss;
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(TEnumBitSetTest) {
         UNIT_ASSERT_EQUAL(ebs, ebs2);
     }
 
-    Y_UNIT_TEST(TestStringRepresentation) { 
+    Y_UNIT_TEST(TestStringRepresentation) {
         auto ebs = TTestBitSet(TE_MIDDLE, TE_6, TE_7);
 
         UNIT_ASSERT_EQUAL(ebs.ToString(), "D00000000000000000");

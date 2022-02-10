@@ -575,7 +575,7 @@ namespace NKikimr {
                         case EProcessQueueAction::Exit:
                             return false;
                         default:
-                            Y_FAIL("invalid EProcessQueueAction"); 
+                            Y_FAIL("invalid EProcessQueueAction");
                     }
                 }
             }
@@ -606,12 +606,12 @@ namespace NKikimr {
             }
 
             if (Writer.GetState() == TReplSstStreamWriter::EState::STOPPED) {
-                Y_VERIFY(RecoveryQueue.empty()); 
+                Y_VERIFY(RecoveryQueue.empty());
                 Finish();
                 return false;
             }
 
-            Y_FAIL("incorrect merger state State# %" PRIu32, ui32(Writer.GetState())); 
+            Y_FAIL("incorrect merger state State# %" PRIu32, ui32(Writer.GetState()));
         }
 
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
@@ -648,7 +648,7 @@ namespace NKikimr {
                         // we are already at in flight limit, do not accept more messages
                         return EProcessQueueAction::Exit;
                     }
-                    Y_VERIFY(HugeBlobsInFlight < HugeBlobsInFlightMax); 
+                    Y_VERIFY(HugeBlobsInFlight < HugeBlobsInFlightMax);
                     ++HugeBlobsInFlight;
 
                     ++ReplCtx->MonGroup.ReplHugeBlobsRecovered();
@@ -669,7 +669,7 @@ namespace NKikimr {
                     case TReplSstStreamWriter::EState::COLLECT:
                         break;
                     default:
-                        Y_FAIL("unexpected State# %" PRIu32, static_cast<ui32>(Writer.GetState())); 
+                        Y_FAIL("unexpected State# %" PRIu32, static_cast<ui32>(Writer.GetState()));
                 }
 
                 if (Writer.AddRecoveredBlob(front)) {
@@ -717,7 +717,7 @@ namespace NKikimr {
                     (VDiskId, msg->VDiskId.ToString()));
                 --NumRunningProxies;
             } else {
-                Y_VERIFY(proxy->Valid()); 
+                Y_VERIFY(proxy->Valid());
                 MergeHeap.push_back(proxy);
                 PushHeap(MergeHeap.begin(), MergeHeap.end(), TVDiskProxy::TPtrGreater());
             }
@@ -741,7 +741,7 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr& /*ev*/) {
             // FIXME: Handle NotOK
             // this message is received when huge blob is written by Skeleton
-            Y_VERIFY(HugeBlobsInFlight != 0); 
+            Y_VERIFY(HugeBlobsInFlight != 0);
             --HugeBlobsInFlight;
             Merge();
         }

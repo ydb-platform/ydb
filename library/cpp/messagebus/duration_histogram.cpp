@@ -48,7 +48,7 @@ namespace {
 }
 
 TString TDurationHistogram::LabelBefore(unsigned i) {
-    Y_VERIFY(i < Buckets); 
+    Y_VERIFY(i < Buckets);
 
     TDuration d = Singleton<TMarks>()->Marks[i];
 
@@ -67,8 +67,8 @@ TString TDurationHistogram::LabelBefore(unsigned i) {
 
 TString TDurationHistogram::PrintToString() const {
     TStringStream ss;
-    for (auto time : Times) { 
-        ss << time << "\n"; 
+    for (auto time : Times) {
+        ss << time << "\n";
     }
     return ss.Str();
 }

@@ -58,8 +58,8 @@ namespace {
             GREP,
             CAPTURE,
             REPLACE,
-            COUNT, 
-            FIND_AND_CONSUME, 
+            COUNT,
+            FIND_AND_CONSUME,
         };
 
         template <bool posix>
@@ -104,7 +104,7 @@ namespace {
             static auto capture = TStringRef::Of("Capture");
             static auto replace = TStringRef::Of("Replace");
             static auto count = TStringRef::Of("Count");
-            static auto findAndconsume = TStringRef::Of("FindAndConsume"); 
+            static auto findAndconsume = TStringRef::Of("FindAndConsume");
 
             switch (mode) {
                 case EMode::MATCH:
@@ -117,10 +117,10 @@ namespace {
                     return replace;
                 case EMode::COUNT:
                     return count;
-                case EMode::FIND_AND_CONSUME: 
-                    return findAndconsume; 
+                case EMode::FIND_AND_CONSUME:
+                    return findAndconsume;
             }
-            Y_FAIL("Unexpected mode"); 
+            Y_FAIL("Unexpected mode");
         }
 
         TRe2Udf(

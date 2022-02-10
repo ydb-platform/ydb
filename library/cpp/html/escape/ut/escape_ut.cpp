@@ -3,8 +3,8 @@
 
 using namespace NHtml;
 
-Y_UNIT_TEST_SUITE(TEscapeHtml) { 
-    Y_UNIT_TEST(Escape) { 
+Y_UNIT_TEST_SUITE(TEscapeHtml) {
+    Y_UNIT_TEST(Escape) {
         UNIT_ASSERT_EQUAL(EscapeText("in & out"), "in &amp; out");
         UNIT_ASSERT_EQUAL(EscapeText("&&"), "&amp;&amp;");
         UNIT_ASSERT_EQUAL(EscapeText("&amp;"), "&amp;amp;");

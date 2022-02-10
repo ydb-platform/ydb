@@ -56,7 +56,7 @@ namespace NKikimr {
                 return IndexItemsKeep == 0;
             }
 
-            void Output(IOutputStream &str) const { 
+            void Output(IOutputStream &str) const {
                 str << "{IndexItemsTotal: " << IndexItemsTotal
                     << " IndexItemsKeep: " << IndexItemsKeep
                     << " IndexBytesTotal: " << IndexBytesTotal

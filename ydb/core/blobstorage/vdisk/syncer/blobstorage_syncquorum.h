@@ -64,7 +64,7 @@ namespace NKikimr {
                 SyncedDisks = TBlobStorageGroupInfo::TGroupVDisks(Top.get());
             }
 
-            void Output(IOutputStream &str) const { 
+            void Output(IOutputStream &str) const {
                 str << "{Debug# " << Debug.ToString() << "}";
             }
 

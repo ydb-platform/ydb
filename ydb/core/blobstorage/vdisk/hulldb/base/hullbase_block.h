@@ -104,28 +104,28 @@ namespace NKikimr {
         }
 
         void SetDiskBlob(const TDiskPart &dataAddr) {
-            Y_UNUSED(dataAddr); 
+            Y_UNUSED(dataAddr);
             // nothing to do
         }
 
         void SetHugeBlob(const TDiskPart &) {
-            Y_FAIL("Must not be called"); 
+            Y_FAIL("Must not be called");
         }
 
         void SetManyHugeBlobs(ui32, ui32, ui32) {
-            Y_FAIL("Must not be called"); 
+            Y_FAIL("Must not be called");
         }
 
         void SetMemBlob(ui64, ui32) {
-            Y_FAIL("Must not be called"); 
+            Y_FAIL("Must not be called");
         }
 
         void SetNoBlob() {
         }
 
         void SetType(TBlobType::EType t) {
-            Y_VERIFY_DEBUG(t == TBlobType::DiskBlob); 
-            Y_UNUSED(t); 
+            Y_VERIFY_DEBUG(t == TBlobType::DiskBlob);
+            Y_UNUSED(t);
         }
 
         TDiskDataExtractor *GetDiskData(TDiskDataExtractor *extr, const TDiskPart *) const {
@@ -134,7 +134,7 @@ namespace NKikimr {
         }
 
         TMemPart GetMemData() const {
-            Y_FAIL("Must not be called"); 
+            Y_FAIL("Must not be called");
         }
 
         NMatrix::TVectorType GetLocalParts(TBlobStorageGroupType) const {
@@ -149,8 +149,8 @@ namespace NKikimr {
         }
 
         TString ToString(const TIngressCache *cache, const TDiskPart *outbound = nullptr) const {
-            Y_UNUSED(cache); 
-            Y_UNUSED(outbound); 
+            Y_UNUSED(cache);
+            Y_UNUSED(outbound);
             return Sprintf("{BlockedGen: %" PRIu32 "}", BlockedGeneration);
         }
     };

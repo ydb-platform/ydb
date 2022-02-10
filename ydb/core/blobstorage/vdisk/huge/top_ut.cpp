@@ -1,15 +1,15 @@
 #include "top.h"
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/null.h> 
- 
+#include <util/stream/null.h>
+
 using namespace NKikimr;
 
 #define STR Cnull
 
-Y_UNIT_TEST_SUITE(TopTest) { 
+Y_UNIT_TEST_SUITE(TopTest) {
 
-    Y_UNIT_TEST(Test1) { 
+    Y_UNIT_TEST(Test1) {
         TTop<int, 3> top;
 
         top.Push(15);
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TopTest) {
         STR << "\n";
     }
 
-    Y_UNIT_TEST(Test2) { 
+    Y_UNIT_TEST(Test2) {
         TTop<int, 4> top;
 
         top.Push(2);

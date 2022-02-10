@@ -4,15 +4,15 @@
 
 #include <util/charset/wide.h>
 
-Y_UNIT_TEST_SUITE(TStringClassify) { 
-    Y_UNIT_TEST(TestIsSpace) { 
+Y_UNIT_TEST_SUITE(TStringClassify) {
+    Y_UNIT_TEST(TestIsSpace) {
         UNIT_ASSERT_EQUAL(IsSpace(" "), true);
         UNIT_ASSERT_EQUAL(IsSpace("\t\r\n"), true);
         UNIT_ASSERT_EQUAL(IsSpace(""), false);
         UNIT_ASSERT_EQUAL(IsSpace("   a"), false);
     }
 
-    Y_UNIT_TEST(TestIsTrue) { 
+    Y_UNIT_TEST(TestIsTrue) {
         UNIT_ASSERT(IsTrue("1"));
         UNIT_ASSERT(IsTrue("yes"));
         UNIT_ASSERT(IsTrue("YeS"));
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT(!IsTrue("foobar"));
     }
 
-    Y_UNIT_TEST(TestIsFalse) { 
+    Y_UNIT_TEST(TestIsFalse) {
         UNIT_ASSERT(IsFalse("0"));
         UNIT_ASSERT(IsFalse("no"));
         UNIT_ASSERT(IsFalse("off"));
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT(!IsFalse("foobar"));
     }
 
-    Y_UNIT_TEST(TestIsNumber) { 
+    Y_UNIT_TEST(TestIsNumber) {
         UNIT_ASSERT(IsNumber("0"));
         UNIT_ASSERT(IsNumber("12345678901234567890"));
         UNIT_ASSERT(!IsNumber("1234567890a"));
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TStringClassify) {
         UNIT_ASSERT(!IsNumber(u"foobar"));
     }
 
-    Y_UNIT_TEST(TestIsHexNumber) { 
+    Y_UNIT_TEST(TestIsHexNumber) {
         UNIT_ASSERT(IsHexNumber("0"));
         UNIT_ASSERT(IsHexNumber("aaaadddAAAAA"));
         UNIT_ASSERT(IsHexNumber("0123456789ABCDEFabcdef"));

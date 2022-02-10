@@ -16,7 +16,7 @@ TTempDir::TTempDir(const char* prefix, TCreationToken)
 {
     char tempDir[MAX_PATH];
     if (MakeTempDir(tempDir, prefix) != 0) {
-        ythrow TSystemError() << "Can't create temporary directory"; 
+        ythrow TSystemError() << "Can't create temporary directory";
     }
     TempDir = tempDir;
 }

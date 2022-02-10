@@ -4,8 +4,8 @@
 
 using namespace NKikimr::NSQS;
 
-Y_UNIT_TEST_SUITE(TParseParamsTests) { 
-    Y_UNIT_TEST(CreateUser) { 
+Y_UNIT_TEST_SUITE(TParseParamsTests) {
+    Y_UNIT_TEST(CreateUser) {
         TParameters params;
         TParametersParser parser(&params);
         parser.Append("Action", "CreateUser");
@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TParseParamsTests) {
         UNIT_ASSERT_EQUAL(params.Attributes[1].GetValue(), "1");
     }
 
-    Y_UNIT_TEST(ChangeMessageVisibilityBatchRequest) { 
+    Y_UNIT_TEST(ChangeMessageVisibilityBatchRequest) {
         TParameters params;
         TParametersParser parser(&params);
         parser.Append("ChangeMessageVisibilityBatchRequestEntry.2.ReceiptHandle", "batch message 2");
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TParseParamsTests) {
         UNIT_ASSERT_EQUAL(params.BatchEntries[2].Id, "Y");
     }
 
-    Y_UNIT_TEST(DeleteMessageBatchRequest) { 
+    Y_UNIT_TEST(DeleteMessageBatchRequest) {
         TParameters params;
         TParametersParser parser(&params);
         parser.Append("DeleteMessageBatchRequestEntry.2.ReceiptHandle", "batch message 2");
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TParseParamsTests) {
         UNIT_ASSERT_EQUAL(params.BatchEntries[2].Id, "Y");
     }
 
-    Y_UNIT_TEST(MessageBody) { 
+    Y_UNIT_TEST(MessageBody) {
         TParameters params;
         TParametersParser parser(&params);
         parser.Append("Action", "SendMessage");
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TParseParamsTests) {
         UNIT_ASSERT_STRINGS_EQUAL(params.MessageAttributes[5].GetDataType(), "Binary");
     }
 
-    Y_UNIT_TEST(SendMessageBatchRequest) { 
+    Y_UNIT_TEST(SendMessageBatchRequest) {
         TParameters params;
         TParametersParser parser(&params);
         parser.Append("SendMessageBatchRequestEntry.2.MessageBody", "batch message 2");
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TParseParamsTests) {
         UNIT_ASSERT_STRINGS_EQUAL(*params.BatchEntries[2].QueueUrl, "url");
     }
 
-    Y_UNIT_TEST(UnnumberedAttribute) { 
+    Y_UNIT_TEST(UnnumberedAttribute) {
         TParameters params;
         TParametersParser parser(&params);
         parser.Append("Attribute.Name",  "DelaySeconds");
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(TParseParamsTests) {
         UNIT_ASSERT_EQUAL(params.Attributes[1].GetValue(), "1");
     }
 
-    Y_UNIT_TEST(UnnumberedAttributeName) { 
+    Y_UNIT_TEST(UnnumberedAttributeName) {
         TParameters params;
         TParametersParser parser(&params);
         parser.Append("AttributeName", "All");

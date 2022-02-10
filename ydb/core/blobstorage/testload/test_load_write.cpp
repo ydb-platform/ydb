@@ -411,7 +411,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
                     std::bind(&TTabletWriter::ExposeCounters, this, _1), ctx);
         }
 
-        void DumpState(IOutputStream& str) { 
+        void DumpState(IOutputStream& str) {
 #define DUMP_PARAM(NAME) \
             TABLER() { \
                 TABLED() { str << #NAME; } \

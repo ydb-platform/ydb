@@ -71,7 +71,7 @@ namespace NKikimr {
     }
 
 
-    void TLocalRecoveryInfo::OutputCounters(IOutputStream &str, 
+    void TLocalRecoveryInfo::OutputCounters(IOutputStream &str,
                                             const TString &prefix,
                                             const TString &suffix,
                                             const TString &hr) const {
@@ -156,7 +156,7 @@ namespace NKikimr {
     }
 
 
-    void TLocalRecoveryInfo::Output(IOutputStream &str) const { 
+    void TLocalRecoveryInfo::Output(IOutputStream &str) const {
         str << "{"; // border
         if (LocalRecoveryFinishTime.GetValue() == 0) {
             str << "RecoveryDuration# INPROGRESS";
@@ -179,7 +179,7 @@ namespace NKikimr {
         str << "}"; // border
     }
 
-    void TLocalRecoveryInfo::OutputHtml(IOutputStream &str) const { 
+    void TLocalRecoveryInfo::OutputHtml(IOutputStream &str) const {
         str << "\n";
         HTML(str) {
             DIV_CLASS("panel panel-default") {

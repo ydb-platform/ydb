@@ -72,7 +72,7 @@ namespace NKikimr {
                     return c2;
             }
 
-            void Output(IOutputStream &str) const { 
+            void Output(IOutputStream &str) const {
                 str << Val;
             }
 
@@ -145,7 +145,7 @@ namespace NKikimr {
                 return Val / Base;
             }
 
-            void Output(IOutputStream &str) const { 
+            void Output(IOutputStream &str) const {
                 ui64 intPart = Val / Base;
                 ui64 fractPart = Val % Base;
 
@@ -203,7 +203,7 @@ namespace NKikimr {
                     return Changed == s.Changed && Weight == s.Weight;
                 }
 
-                void Output(IOutputStream &str) const { 
+                void Output(IOutputStream &str) const {
                     str << "[" << (Changed ? "true" : "false") << ", " << Weight << "]";
                 }
 
@@ -244,7 +244,7 @@ namespace NKikimr {
                 return CurRank;
             }
 
-            void RenderHtml(IOutputStream &str) const { 
+            void RenderHtml(IOutputStream &str) const {
                 NKikimrWhiteboard::EFlag light;
                 if (CurRank <= YellowThreshold)
                     light = NKikimrWhiteboard::EFlag::Green;
@@ -371,7 +371,7 @@ namespace NKikimr {
         TDynamicPDiskWeightsManager(const TVDiskContextPtr &vctx, const TPDiskCtxPtr &pdiskCtx);
         void ApplyUpdates(const TActorContext &ctx);
         void Feedback(const NPDisk::TEvConfigureSchedulerResult &res, const TActorContext &ctx);
-        void RenderHtml(IOutputStream &str) const; 
+        void RenderHtml(IOutputStream &str) const;
         void ToWhiteboard(NKikimrWhiteboard::TVDiskSatisfactionRank &v) const;
         static void DefWhiteboard(NKikimrWhiteboard::TVDiskSatisfactionRank &v);
 

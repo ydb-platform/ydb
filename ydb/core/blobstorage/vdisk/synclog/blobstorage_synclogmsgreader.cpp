@@ -117,7 +117,7 @@ namespace NKikimr {
         // TOrderedLz4FragmentReader
         ////////////////////////////////////////////////////////////////////////////
         bool TOrderedLz4FragmentReader::Check(TString &errorString) {
-            Y_UNUSED(errorString); 
+            Y_UNUSED(errorString);
             return Decompress();
         }
 
@@ -141,7 +141,7 @@ namespace NKikimr {
         // TCustomCodecFragmentReader
         ////////////////////////////////////////////////////////////////////////////
         bool TCustomCodecFragmentReader::Check(TString &errorString) {
-            Y_UNUSED(errorString); 
+            Y_UNUSED(errorString);
             return Decompress();
         }
 
@@ -177,7 +177,7 @@ namespace NKikimr {
                     Impl.reset(new TCustomCodecFragmentReader(data));
                     break;
                 default:
-                    Y_FAIL("Unknwon codec"); 
+                    Y_FAIL("Unknwon codec");
             }
         }
 

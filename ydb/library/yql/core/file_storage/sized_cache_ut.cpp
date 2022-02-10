@@ -27,8 +27,8 @@ struct TTestCacheObj: public TSizedCache::ICacheObj {
     bool Dismissed;
 };
 
-Y_UNIT_TEST_SUITE(TSizedCacheTests) { 
-    Y_UNIT_TEST(Count) { 
+Y_UNIT_TEST_SUITE(TSizedCacheTests) {
+    Y_UNIT_TEST(Count) {
         TSizedCache cache(100, 100);
         TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ull);
         TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ull);
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TSizedCacheTests) {
         UNIT_ASSERT_VALUES_EQUAL(cache.GetCount(), 3);
     }
 
-    Y_UNIT_TEST(GetOccupiedSize) { 
+    Y_UNIT_TEST(GetOccupiedSize) {
         TSizedCache cache(100, 100);
         TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ull);
         TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ull);
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(TSizedCacheTests) {
         UNIT_ASSERT_VALUES_EQUAL(cache.GetOccupiedSize(), 45);
     }
 
-    Y_UNIT_TEST(DisplaceByCount) { 
+    Y_UNIT_TEST(DisplaceByCount) {
         TSizedCache cache(2, 100);
         TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ull);
         TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ull);
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TSizedCacheTests) {
         UNIT_ASSERT(!o3->Dismissed);
     }
 
-    Y_UNIT_TEST(DisplaceBySize) { 
+    Y_UNIT_TEST(DisplaceBySize) {
         TSizedCache cache(100, 35);
         TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ull);
         TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ull);
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TSizedCacheTests) {
         UNIT_ASSERT(!o3->Dismissed);
     }
 
-    Y_UNIT_TEST(Lock) { 
+    Y_UNIT_TEST(Lock) {
         TSizedCache cache(2, 30);
         TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ull);
         TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ull);
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TSizedCacheTests) {
         UNIT_ASSERT(!o3->Dismissed);
     }
 
-    Y_UNIT_TEST(MultiLock) { 
+    Y_UNIT_TEST(MultiLock) {
         TSizedCache cache(2, 30);
         TIntrusivePtr<TTestCacheObj> o1 = MakeIntrusive<TTestCacheObj>("o1", 10ull);
         TIntrusivePtr<TTestCacheObj> o2 = MakeIntrusive<TTestCacheObj>("o2", 20ull);

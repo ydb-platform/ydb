@@ -36,7 +36,7 @@
 #include <util/generic/ylimits.h>
 
 #include <util/string/cast.h>
-#include <util/stream/mem.h> 
+#include <util/stream/mem.h>
 #include <util/system/datetime.h>
 #include <util/system/error.h>
 #include <util/memory/tempbuf.h>
@@ -54,7 +54,7 @@ int inet_aton(const char* cp, struct in_addr* inp) {
     sockaddr_in addr;
     addr.sin_family = AF_INET;
     int psz = sizeof(addr);
-    if (0 == WSAStringToAddress((char*)cp, AF_INET, nullptr, (LPSOCKADDR)&addr, &psz)) { 
+    if (0 == WSAStringToAddress((char*)cp, AF_INET, nullptr, (LPSOCKADDR)&addr, &psz)) {
         memcpy(inp, &addr.sin_addr, sizeof(in_addr));
         return 1;
     }
@@ -180,7 +180,7 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept {
         if (fd->events & POLLOUT) {
             FD_SET(fd->fd, &writefds);
         }
-        int error = select(0, &readfds, &writefds, nullptr, &timeout); 
+        int error = select(0, &readfds, &writefds, nullptr, &timeout);
         if (error > 0) {
             if (FD_ISSET(fd->fd, &readfds)) {
                 fd->revents |= POLLIN;
@@ -315,8 +315,8 @@ void SetReusePort(SOCKET s, bool value) {
 #if defined(SO_REUSEPORT)
     CheckedSetSockOpt(s, SOL_SOCKET, SO_REUSEPORT, (int)value, "reuse port");
 #else
-    Y_UNUSED(s); 
-    Y_UNUSED(value); 
+    Y_UNUSED(s);
+    Y_UNUSED(value);
     ythrow TSystemError(ENOSYS) << "SO_REUSEPORT is not defined";
 #endif
 }
@@ -340,8 +340,8 @@ void SetCloseOnExec(SOCKET s, bool value) {
         ythrow TSystemError() << "fcntl() failed";
     }
 #else
-    Y_UNUSED(s); 
-    Y_UNUSED(value); 
+    Y_UNUSED(s);
+    Y_UNUSED(value);
 #endif
 }
 
@@ -485,8 +485,8 @@ void SetTcpFastOpen(SOCKET s, int qlen) {
 #if defined(TCP_FASTOPEN)
     TTcpFastOpenFeature::Instance()->SetFastOpen(s, qlen);
 #else
-    Y_UNUSED(s); 
-    Y_UNUSED(qlen); 
+    Y_UNUSED(s);
+    Y_UNUSED(qlen);
 #endif
 }
 
@@ -561,9 +561,9 @@ void TSocketHolder::Close() noexcept {
 // because often it means double close
 // that is disasterous
 #ifdef _win_
-            Y_VERIFY(WSAGetLastError() != WSAENOTSOCK, "must not quietly close bad socket descriptor"); 
+            Y_VERIFY(WSAGetLastError() != WSAENOTSOCK, "must not quietly close bad socket descriptor");
 #elif defined(_unix_)
-            Y_VERIFY(errno != EBADF, "must not quietly close bad descriptor: fd=%d", int(Fd_)); 
+            Y_VERIFY(errno != EBADF, "must not quietly close bad descriptor: fd=%d", int(Fd_));
 #else
     #error unsupported platform
 #endif
@@ -611,7 +611,7 @@ private:
 };
 
 template <>
-void Out<const struct addrinfo*>(IOutputStream& os, const struct addrinfo* ai) { 
+void Out<const struct addrinfo*>(IOutputStream& os, const struct addrinfo* ai) {
     if (ai->ai_flags & AI_CANONNAME) {
         os << "`" << ai->ai_canonname << "' ";
     }
@@ -628,12 +628,12 @@ void Out<const struct addrinfo*>(IOutputStream& os, const struct addrinfo* ai) {
 }
 
 template <>
-void Out<struct addrinfo*>(IOutputStream& os, struct addrinfo* ai) { 
+void Out<struct addrinfo*>(IOutputStream& os, struct addrinfo* ai) {
     Out<const struct addrinfo*>(os, static_cast<const struct addrinfo*>(ai));
 }
 
 template <>
-void Out<TNetworkAddress>(IOutputStream& os, const TNetworkAddress& addr) { 
+void Out<TNetworkAddress>(IOutputStream& os, const TNetworkAddress& addr) {
     os << &*addr.Begin();
 }
 
@@ -919,16 +919,16 @@ TSocketOutput::~TSocketOutput() {
 }
 
 void TSocketOutput::DoWrite(const void* buf, size_t len) {
-    size_t send = 0; 
+    size_t send = 0;
     while (len) {
         const ssize_t ret = S_.Send(buf, len);
 
         if (ret < 0) {
-            ythrow TSystemError(-(int)ret) << "can not write to socket output stream; " << send << " bytes already send"; 
+            ythrow TSystemError(-(int)ret) << "can not write to socket output stream; " << send << " bytes already send";
         }
         buf = (const char*)buf + ret;
         len -= ret;
-        send += ret; 
+        send += ret;
     }
 }
 
@@ -1080,7 +1080,7 @@ TNetworkAddress::TNetworkAddress(const TString& host, ui16 port)
 }
 
 TNetworkAddress::TNetworkAddress(ui16 port)
-    : Impl_(new TImpl(nullptr, port, 0)) 
+    : Impl_(new TImpl(nullptr, port, 0))
 {
 }
 
@@ -1091,7 +1091,7 @@ struct addrinfo* TNetworkAddress::Info() const noexcept {
 }
 
 TNetworkResolutionError::TNetworkResolutionError(int error) {
-    const char* errMsg = nullptr; 
+    const char* errMsg = nullptr;
 #ifdef _win_
     errMsg = LastSystemErrorText(error); // gai_strerror is not thread-safe on Windows
 #else
@@ -1163,7 +1163,7 @@ static inline void SetNonBlockSocket(SOCKET fd, int value) {
     DWORD written = 0;
 
     if (!inbuf) {
-        WSAEventSelect(fd, nullptr, 0); 
+        WSAEventSelect(fd, nullptr, 0);
     }
 
     if (WSAIoctl(fd, FIONBIO, &inbuf, sizeof(inbuf), &outbuf, sizeof(outbuf), &written, 0, 0) == SOCKET_ERROR) {
@@ -1185,7 +1185,7 @@ static inline bool IsNonBlockSocket(SOCKET fd) {
 void SetNonBlock(SOCKET fd, bool value) {
 #if defined(_unix_)
     #if defined(FIONBIO)
-    Y_UNUSED(SetFlag); // shut up clang about unused function 
+    Y_UNUSED(SetFlag); // shut up clang about unused function
     int nb = value;
 
     if (ioctl(fd, FIONBIO, &nb) < 0) {

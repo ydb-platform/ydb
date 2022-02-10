@@ -9,14 +9,14 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 #include <util/random/mersenne.h>
- 
+
 namespace NKikimr {
 namespace NTable {
 namespace NTest {
 
-Y_UNIT_TEST_SUITE(TLegacy) { 
+Y_UNIT_TEST_SUITE(TLegacy) {
 
     /* This is legacy place for UT, do not put here more tests */
 
@@ -36,9 +36,9 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         return new NPage::TFrames(writer.Make());
     }
 
-    Y_UNIT_TEST(IndexIter) { 
+    Y_UNIT_TEST(IndexIter) {
         TNullOutput devNull;
-        IOutputStream& dbgOut = devNull; //*/ Cerr; 
+        IOutputStream& dbgOut = devNull; //*/ Cerr;
 
         NScheme::TTypeRegistry typeRegistry;
 
@@ -89,9 +89,9 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         fnIterate(eggs.At(0), newLay.RowScheme());
     }
 
-    Y_UNIT_TEST(ScreenedIndexIter) { 
+    Y_UNIT_TEST(ScreenedIndexIter) {
         TNullOutput devNull;
-        IOutputStream& dbgOut = devNull; //*/ Cerr; 
+        IOutputStream& dbgOut = devNull; //*/ Cerr;
 
         NScheme::TTypeRegistry typeRegistry;
 
@@ -216,9 +216,9 @@ Y_UNIT_TEST_SUITE(TLegacy) {
         }
     }
 
-    Y_UNIT_TEST(StatsIter) { 
+    Y_UNIT_TEST(StatsIter) {
         TNullOutput devNull;
-        IOutputStream& dbgOut = devNull; //*/ Cerr; 
+        IOutputStream& dbgOut = devNull; //*/ Cerr;
 
         NScheme::TTypeRegistry typeRegistry;
 
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TLegacy) {
             dbgOut << DbgPrintTuple(key, typeRegistry)
                    << " " << stIter.GetCurrentRowCount() << " " << stIter.GetCurrentDataSize() << Endl;
 
-            prevKey = TSerializedCellVec(TSerializedCellVec::Serialize(TConstArrayRef<TCell>(key.Columns, key.ColumnCount))); 
+            prevKey = TSerializedCellVec(TSerializedCellVec::Serialize(TConstArrayRef<TCell>(key.Columns, key.ColumnCount)));
             prevRowCount = stIter.GetCurrentRowCount();
             prevDataSize = stIter.GetCurrentDataSize();
             stIter.Next();

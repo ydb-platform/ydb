@@ -72,8 +72,8 @@ IDataSetPtr DataSetSelector(EDataSet t, ui32 minHugeBlobSize) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-#define Y_UNIT_TEST_COMP_DISK(TestName, ClassName, Setup, CompParam, VDiskNumParam, g)     \ 
-Y_UNIT_TEST(TestName) {                                                                    \ 
+#define Y_UNIT_TEST_COMP_DISK(TestName, ClassName, Setup, CompParam, VDiskNumParam, g)     \
+Y_UNIT_TEST(TestName) {                                                                    \
     IDataSetPtr ds = DataSetSelector(g, 64u << 10u);                                            \
     ClassName test(ds, CompParam, VDiskNumParam);                                               \
     TestRun<ClassName, Setup>(&test, TIMEOUT);                                   \
@@ -82,33 +82,33 @@ Y_UNIT_TEST(TestName) {                                                         
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // SIMPLE BS
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskExtreme) { 
+Y_UNIT_TEST_SUITE(TBsVDiskExtreme) {
 
-    Y_UNIT_TEST(SimpleGetFromEmptyDB) { 
+    Y_UNIT_TEST(SimpleGetFromEmptyDB) {
         TSimpleGetFromEmptyDB test;
         TestRun<TSimpleGetFromEmptyDB, TFastVDiskSetup>(&test, TIMEOUT);
     }
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put3GetFresh, TSimple3Put3Get, TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put3GetCompaction, TSimple3Put3Get, TFastVDiskSetupCompacted, true, 0, DG_3PUT) 
+    Y_UNIT_TEST_COMP_DISK(Simple3Put3GetCompaction, TSimple3Put3Get, TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqGetAllFresh, TSimple3Put1SeqGetAll, TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqGetAllCompaction, TSimple3Put1SeqGetAll, TFastVDiskSetupCompacted, true, 0, DG_3PUT) 
+    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqGetAllCompaction, TSimple3Put1SeqGetAll, TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqGet2Fresh, TSimple3Put1SeqGet2, TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqGet2Compaction, TSimple3Put1SeqGet2, TFastVDiskSetupCompacted, true, 0, DG_3PUT) 
+    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqGet2Compaction, TSimple3Put1SeqGet2, TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqSubsOkFresh, TSimple3Put1SeqSubsOk, TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqSubsOkCompaction, TSimple3Put1SeqSubsOk, TFastVDiskSetupCompacted, true, 0, DG_3PUT) 
+    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqSubsOkCompaction, TSimple3Put1SeqSubsOk, TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqSubsErrorFresh, TSimple3Put1SeqSubsError, TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqSubsErrorCompaction, TSimple3Put1SeqSubsError, TFastVDiskSetupCompacted, true, 0, DG_3PUT) 
+    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqSubsErrorCompaction, TSimple3Put1SeqSubsError, TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingKeyFresh, TSimple3Put1GetMissingKey, TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingKeyCompaction, TSimple3Put1GetMissingKey, TFastVDiskSetupCompacted, true, 0, DG_3PUT) 
+    Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingKeyCompaction, TSimple3Put1GetMissingKey, TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingPartFresh, TSimple3Put1GetMissingPart, TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingPartCompaction, TSimple3Put1GetMissingPart, TFastVDiskSetupCompacted, true, 0, DG_3PUT) 
+    Y_UNIT_TEST_COMP_DISK(Simple3Put1GetMissingPartCompaction, TSimple3Put1GetMissingPart, TFastVDiskSetupCompacted, true, 0, DG_3PUT)
     // TODO: Make range queries
     // TODO: Block and read block
 }
@@ -117,86 +117,86 @@ Y_UNIT_TEST_SUITE(TBsVDiskExtreme) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // SIMPLE BS
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskExtremeHuge) { 
+Y_UNIT_TEST_SUITE(TBsVDiskExtremeHuge) {
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put3GetFresh, TSimple3Put3Get, TFastVDiskSetup, false, 0, DG_3PUT_HUGE)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put3GetCompaction, TSimple3Put3Get, TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE) 
+    Y_UNIT_TEST_COMP_DISK(Simple3Put3GetCompaction, TSimple3Put3Get, TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE)
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqGetAllFresh, TSimple3Put1SeqGetAll, TFastVDiskSetup, false, 0, DG_3PUT_HUGE)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqGetAllCompaction, TSimple3Put1SeqGetAll, TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE) 
+    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqGetAllCompaction, TSimple3Put1SeqGetAll, TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE)
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqGet2Fresh, TSimple3Put1SeqGet2, TFastVDiskSetup, false, 0, DG_3PUT_HUGE)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqGet2Compaction, TSimple3Put1SeqGet2, TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE) 
+    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqGet2Compaction, TSimple3Put1SeqGet2, TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE)
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqSubsOkFresh, TSimple3Put1SeqSubsOk, TFastVDiskSetup, false, 0, DG_3PUT_HUGE)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqSubsOkCompaction, TSimple3Put1SeqSubsOk, TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE) 
+    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqSubsOkCompaction, TSimple3Put1SeqSubsOk, TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE)
 
     Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqSubsErrorFresh, TSimple3Put1SeqSubsError, TFastVDiskSetup, false, 0, DG_3PUT_HUGE)
-    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqSubsErrorCompaction, TSimple3Put1SeqSubsError, TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE) 
+    Y_UNIT_TEST_COMP_DISK(Simple3Put1SeqSubsErrorCompaction, TSimple3Put1SeqSubsError, TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // SIMPLE BS
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskExtremeHandoff) { 
+Y_UNIT_TEST_SUITE(TBsVDiskExtremeHandoff) {
     Y_UNIT_TEST_COMP_DISK(SimpleHnd6Put1SeqGetFresh, TSimpleHnd6Put1SeqGet, TFastVDiskSetupHndOff, false, 7, DB_3PUT2HND)
-    Y_UNIT_TEST_COMP_DISK(SimpleHnd6Put1SeqGetCompaction, TSimpleHnd6Put1SeqGet, TFastVDiskSetupCompactedHndOff, true, 7, DB_3PUT2HND) 
+    Y_UNIT_TEST_COMP_DISK(SimpleHnd6Put1SeqGetCompaction, TSimpleHnd6Put1SeqGet, TFastVDiskSetupCompactedHndOff, true, 7, DB_3PUT2HND)
 
     Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetFresh, TSimpleHnd2Put1Get, TFastVDiskSetupHndOff, false, 7, DB_1PUT2HND)
-    Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetCompaction, TSimpleHnd2Put1Get, TFastVDiskSetupCompactedHndOff, true, 7, DB_1PUT2HND) 
+    Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetCompaction, TSimpleHnd2Put1Get, TFastVDiskSetupCompactedHndOff, true, 7, DB_1PUT2HND)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // SIMPLE BS
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskExtremeHandoffHuge) { 
+Y_UNIT_TEST_SUITE(TBsVDiskExtremeHandoffHuge) {
 
     Y_UNIT_TEST_COMP_DISK(SimpleHndPut1SeqGetFresh, TSimpleHnd6Put1SeqGet, TFastVDiskSetupHndOff, false, 7, DB_3PUT2HND_HUGE)
     // FIXME: turn this test on after implementing handoffs for huge blobs
-    //Y_UNIT_TEST_COMP_DISK(SimpleHndPut1SeqGetCompaction, TSimpleHnd6Put1SeqGet, TFastVDiskSetupCompactedHndOff, true, 7, DB_3PUT2HND_HUGE) 
+    //Y_UNIT_TEST_COMP_DISK(SimpleHndPut1SeqGetCompaction, TSimpleHnd6Put1SeqGet, TFastVDiskSetupCompactedHndOff, true, 7, DB_3PUT2HND_HUGE)
 
     Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetFresh, TSimpleHnd2Put1Get, TFastVDiskSetupHndOff, false, 7, DB_1PUT2HND_HUGE)
-    Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetCompaction, TSimpleHnd2Put1Get, TFastVDiskSetupCompactedHndOff, true, 7, DB_1PUT2HND_HUGE) 
+    Y_UNIT_TEST_COMP_DISK(SimpleHnd2Put1GetCompaction, TSimpleHnd2Put1Get, TFastVDiskSetupCompactedHndOff, true, 7, DB_1PUT2HND_HUGE)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // RANGE BS
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskRange) { 
+Y_UNIT_TEST_SUITE(TBsVDiskRange) {
 
-    Y_UNIT_TEST(RangeGetFromEmptyDB) { 
+    Y_UNIT_TEST(RangeGetFromEmptyDB) {
         TRangeGetFromEmptyDB test;
         TestRun<TRangeGetFromEmptyDB, TFastVDiskSetup>(&test, TIMEOUT);
     }
 
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllForwardFresh, TSimple3PutRangeGetAllForward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllForwardFresh, TSimple3PutRangeGetAllForward,
                                TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllForwardCompaction, TSimple3PutRangeGetAllForward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllForwardCompaction, TSimple3PutRangeGetAllForward,
                                TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllBackwardFresh, TSimple3PutRangeGetAllBackward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllBackwardFresh, TSimple3PutRangeGetAllBackward,
                                TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllBackwardCompaction, TSimple3PutRangeGetAllBackward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllBackwardCompaction, TSimple3PutRangeGetAllBackward,
                                TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingForwardFresh, TSimple3PutRangeGetNothingForward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingForwardFresh, TSimple3PutRangeGetNothingForward,
                                TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingForwardCompaction, TSimple3PutRangeGetNothingForward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingForwardCompaction, TSimple3PutRangeGetNothingForward,
                                TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingBackwardFresh, TSimple3PutRangeGetNothingBackward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingBackwardFresh, TSimple3PutRangeGetNothingBackward,
                                TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingBackwardCompaction, TSimple3PutRangeGetNothingBackward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingBackwardCompaction, TSimple3PutRangeGetNothingBackward,
                                TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleForwardFresh, TSimple3PutRangeGetMiddleForward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleForwardFresh, TSimple3PutRangeGetMiddleForward,
                                TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleForwardCompaction, TSimple3PutRangeGetMiddleForward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleForwardCompaction, TSimple3PutRangeGetMiddleForward,
                                TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleBackwardFresh, TSimple3PutRangeGetMiddleBackward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleBackwardFresh, TSimple3PutRangeGetMiddleBackward,
                                TFastVDiskSetup, false, 0, DG_3PUT)
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleBackwardCompaction, TSimple3PutRangeGetMiddleBackward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleBackwardCompaction, TSimple3PutRangeGetMiddleBackward,
                                TFastVDiskSetupCompacted, true, 0, DG_3PUT)
 
     // FIXME: We need a test when we read from VDisk that got its data from other VDisk during syncing
@@ -207,36 +207,36 @@ Y_UNIT_TEST_SUITE(TBsVDiskRange) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // RANGE BS
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskRangeHuge) { 
+Y_UNIT_TEST_SUITE(TBsVDiskRangeHuge) {
 
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllForwardFresh, TSimple3PutRangeGetAllForward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllForwardFresh, TSimple3PutRangeGetAllForward,
                                TFastVDiskSetup, false, 0, DG_3PUT_HUGE)
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllForwardCompaction, TSimple3PutRangeGetAllForward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllForwardCompaction, TSimple3PutRangeGetAllForward,
                                TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE)
 
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllBackwardFresh, TSimple3PutRangeGetAllBackward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllBackwardFresh, TSimple3PutRangeGetAllBackward,
                                TFastVDiskSetup, false, 0, DG_3PUT_HUGE)
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllBackwardCompaction, TSimple3PutRangeGetAllBackward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetAllBackwardCompaction, TSimple3PutRangeGetAllBackward,
                                TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE)
 
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingForwardFresh, TSimple3PutRangeGetNothingForward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingForwardFresh, TSimple3PutRangeGetNothingForward,
                                TFastVDiskSetup, false, 0, DG_3PUT_HUGE)
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingForwardCompaction, TSimple3PutRangeGetNothingForward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingForwardCompaction, TSimple3PutRangeGetNothingForward,
                                TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE)
 
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingBackwardFresh, TSimple3PutRangeGetNothingBackward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingBackwardFresh, TSimple3PutRangeGetNothingBackward,
                                TFastVDiskSetup, false, 0, DG_3PUT_HUGE)
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingBackwardCompaction, TSimple3PutRangeGetNothingBackward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetNothingBackwardCompaction, TSimple3PutRangeGetNothingBackward,
                                TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE)
 
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleForwardFresh, TSimple3PutRangeGetMiddleForward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleForwardFresh, TSimple3PutRangeGetMiddleForward,
                                TFastVDiskSetup, false, 0, DG_3PUT_HUGE)
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleForwardCompaction, TSimple3PutRangeGetMiddleForward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleForwardCompaction, TSimple3PutRangeGetMiddleForward,
                                TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE)
 
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleBackwardFresh, TSimple3PutRangeGetMiddleBackward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleBackwardFresh, TSimple3PutRangeGetMiddleBackward,
                                TFastVDiskSetup, false, 0, DG_3PUT_HUGE)
-    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleBackwardCompaction, TSimple3PutRangeGetMiddleBackward, 
+    Y_UNIT_TEST_COMP_DISK(Simple3PutRangeGetMiddleBackwardCompaction, TSimple3PutRangeGetMiddleBackward,
                                TFastVDiskSetupCompacted, true, 0, DG_3PUT_HUGE)
 }
 
@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskManyPutGetCheckSize) {
 }
 Y_UNIT_TEST_SUITE(TBsVDiskManyPutGet) {
     //// Group
-    Y_UNIT_TEST(ManyPutGet) { 
+    Y_UNIT_TEST(ManyPutGet) {
         TManyPutGet test(false, LARGE_MSG_NUM, 100, UNK);
         TestRun<TManyPutGet, TFastVDiskSetupHndOff>(&test, TDuration::Minutes(100));
     }
@@ -296,24 +296,24 @@ Y_UNIT_TEST_SUITE(TBsVDiskManyPutGet) {
         TestRun<TManyMultiPutGet, TFastVDiskSetupHndOff>(&test, TDuration::Minutes(100));
     }
 
-    Y_UNIT_TEST(ManyPutGetWaitCompaction) { 
+    Y_UNIT_TEST(ManyPutGetWaitCompaction) {
         TManyPutGet test(true, SMALL_MSG_NUM, 100, UNK);
         TestRun<TManyPutGet, TFastVDiskSetupHndOff>(&test, TDuration::Minutes(100));
     }
 
     //// Group
-    Y_UNIT_TEST(ManyPutRangeGetFreshIndexOnly) { 
+    Y_UNIT_TEST(ManyPutRangeGetFreshIndexOnly) {
         TManyPutRangeGet test(false, true, MIDDLE_MSG_NUM, 100, UNK);
         TestRun<TManyPutRangeGet, TFastVDiskSetup>(&test, TDuration::Minutes(100));
     }
 
-    Y_UNIT_TEST(ManyPutRangeGetCompactionIndexOnly) { 
+    Y_UNIT_TEST(ManyPutRangeGetCompactionIndexOnly) {
         TManyPutRangeGet test(true, true, MIDDLE_MSG_NUM, 100, UNK);
         TestRun<TManyPutRangeGet, TFastVDiskSetupCompacted>(&test, TDuration::Minutes(100));
     }
 
     /// Group (read is mixed, fresh and compacted)
-    Y_UNIT_TEST(ManyPutRangeGet2ChannelsIndexOnly) { 
+    Y_UNIT_TEST(ManyPutRangeGet2ChannelsIndexOnly) {
         TManyPutRangeGet2Channels test(false, true, LARGE_MSG_NUM, 100, UNK);
         TestRun<TManyPutRangeGet2Channels, TFastVDiskSetup>(&test, TDuration::Minutes(100));
     }
@@ -323,38 +323,38 @@ Y_UNIT_TEST_SUITE(TBsVDiskManyPutGet) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // GC
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskGC) { 
-    Y_UNIT_TEST(GCPutKeepIntoEmptyDB) { 
+Y_UNIT_TEST_SUITE(TBsVDiskGC) {
+    Y_UNIT_TEST(GCPutKeepIntoEmptyDB) {
         TGCPutKeepIntoEmptyDB test;
         TestRun<TGCPutKeepIntoEmptyDB, TFastVDiskSetupCompacted>(&test, TIMEOUT);
     } // FIXME: Fresh???
 
-    Y_UNIT_TEST(GCPutBarrierVDisk0NoSync) { 
+    Y_UNIT_TEST(GCPutBarrierVDisk0NoSync) {
         TGCPutBarrierVDisk0 test;
         TestRun<TGCPutBarrierVDisk0, TFastCompactionGCNoSyncVDiskSetup>(&test, TIMEOUT);
     }
 
-    Y_UNIT_TEST(GCPutBarrierSync) { 
+    Y_UNIT_TEST(GCPutBarrierSync) {
         TGCPutBarrier test;
         TestRun<TGCPutBarrier, TFastVDiskSetupCompacted>(&test, TIMEOUT);
     }
 
-    Y_UNIT_TEST(GCPutKeepBarrierSync) { 
+    Y_UNIT_TEST(GCPutKeepBarrierSync) {
         TGCPutKeepBarrier test;
         TestRun<TGCPutKeepBarrier, TFastVDiskSetupCompacted>(&test, TIMEOUT);
     }
 
-    Y_UNIT_TEST(GCPutManyBarriersNoSync) { 
+    Y_UNIT_TEST(GCPutManyBarriersNoSync) {
         TGCPutManyBarriers test;
         TestRun<TGCPutManyBarriers, TFastCompactionGCNoSyncVDiskSetup>(&test, TIMEOUT);
     }
 
-    Y_UNIT_TEST(TGCManyVPutsCompactGCAllTest) { 
+    Y_UNIT_TEST(TGCManyVPutsCompactGCAllTest) {
         TGCManyVPutsCompactGCAll test;
         TestRun<TGCManyVPutsCompactGCAll, TFastVDiskSetupCompacted>(&test, TIMEOUT);
     }
 
-    Y_UNIT_TEST(TGCManyVPutsDelTabletTest) { 
+    Y_UNIT_TEST(TGCManyVPutsDelTabletTest) {
         TGCManyVPutsDelTablet test;
         TestRun<TGCManyVPutsDelTablet, TFastVDiskSetupCompacted>(&test, TIMEOUT);
     }
@@ -366,8 +366,8 @@ Y_UNIT_TEST_SUITE(TBsVDiskGC) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // OUT OF SPACE
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskOutOfSpace) { 
-    Y_UNIT_TEST(WriteUntilOrangeZone) { 
+Y_UNIT_TEST_SUITE(TBsVDiskOutOfSpace) {
+    Y_UNIT_TEST(WriteUntilOrangeZone) {
         return; // Test is ignored. FIX: KIKIMR-8019
 
         TWriteUntilOrangeZone test;
@@ -376,7 +376,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskOutOfSpace) {
         TestRun<TWriteUntilOrangeZone, TFastVDiskSetupCompacted>(&test, TIMEOUT, chunkSize, diskSize);
     }
 
-    Y_UNIT_TEST(WriteUntilYellowZone) { 
+    Y_UNIT_TEST(WriteUntilYellowZone) {
         TWriteUntilYellowZone test;
         const ui32 chunkSize = 512u << 10u;
         const ui64 diskSize = 700ull << 20ull;
@@ -414,8 +414,8 @@ Y_UNIT_TEST_SUITE(TBsVDiskBrokenPDisk) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // HANDOFF MOVE DEL
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsVDiskHandoffMoveDel) { 
-    Y_UNIT_TEST(HandoffMoveDel) { 
+Y_UNIT_TEST_SUITE(TBsVDiskHandoffMoveDel) {
+    Y_UNIT_TEST(HandoffMoveDel) {
         TTestHandoffMoveDel test;
         TestRun<TTestHandoffMoveDel, TFastVDiskSetupCompacted>(&test, TIMEOUT);
     }
@@ -424,13 +424,13 @@ Y_UNIT_TEST_SUITE(TBsVDiskHandoffMoveDel) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // Huge
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsHuge) { 
-    Y_UNIT_TEST(Simple) { 
+Y_UNIT_TEST_SUITE(TBsHuge) {
+    Y_UNIT_TEST(Simple) {
         THugeModuleTest test;
         TestRun<THugeModuleTest, TFastVDiskSetupCompacted>(&test, TIMEOUT);
     }
 
-    Y_UNIT_TEST(SimpleErasureNone) { 
+    Y_UNIT_TEST(SimpleErasureNone) {
         THugeModuleTest test;
         TestRun<THugeModuleTest, TFastVDiskSetupCompacted>(&test,
                                                            TIMEOUT,
@@ -445,8 +445,8 @@ Y_UNIT_TEST_SUITE(TBsHuge) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 // Local Recovery
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
-Y_UNIT_TEST_SUITE(TBsLocalRecovery) { 
-    Y_UNIT_TEST(StartStopNotEmptyDB) { 
+Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
+    Y_UNIT_TEST(StartStopNotEmptyDB) {
         const ui32 numIterations = NValgrind::PlainOrUnderValgrind(10, 2);
         TConfiguration Conf;
         TFastVDiskSetup vdiskSetup;
@@ -468,13 +468,13 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
         }
     }
 
-    Y_UNIT_TEST(WriteRestartRead) { 
+    Y_UNIT_TEST(WriteRestartRead) {
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         auto settings = TWriteRestartReadSettings::OneSetup(1000, 10, UNK, vdiskSetup);
         WriteRestartRead(settings, TIMEOUT);
     }
 
-    Y_UNIT_TEST(WriteRestartReadHuge) { 
+    Y_UNIT_TEST(WriteRestartReadHuge) {
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         auto settings = TWriteRestartReadSettings::OneSetup(1000, 65u << 10u, HUGEB, vdiskSetup);
         WriteRestartRead(settings, TIMEOUT);
@@ -526,7 +526,7 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
     }
     */
 
-    Y_UNIT_TEST(ChaoticWriteRestart) { 
+    Y_UNIT_TEST(ChaoticWriteRestart) {
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         TChaoticWriteRestartWriteSettings settings(
             TWriteRestartReadSettings::OneSetup(100000, 10, UNK, vdiskSetup),
@@ -536,7 +536,7 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
         ChaoticWriteRestartWrite(settings, TIMEOUT);
     }
 
-    Y_UNIT_TEST(ChaoticWriteRestartHuge) { 
+    Y_UNIT_TEST(ChaoticWriteRestartHuge) {
         return; // https://st.yandex-team.ru/KIKIMR-5314
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         TChaoticWriteRestartWriteSettings settings(
@@ -547,7 +547,7 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
         ChaoticWriteRestartWrite(settings, TIMEOUT);
     }
 
-    Y_UNIT_TEST(ChaoticWriteRestartHugeXXX) { 
+    Y_UNIT_TEST(ChaoticWriteRestartHugeXXX) {
         auto vdiskSetup = std::make_shared<TFastVDiskSetup>();
         TChaoticWriteRestartWriteSettings settings(
             TWriteRestartReadSettings::OneSetup(300, 65u << 10u, HUGEB, vdiskSetup),
@@ -563,7 +563,7 @@ Y_UNIT_TEST_SUITE(TBsLocalRecovery) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 Y_UNIT_TEST_SUITE(TBsOther1) {
 
-    Y_UNIT_TEST(PoisonPill) { 
+    Y_UNIT_TEST(PoisonPill) {
         TManyPutRangeGet2Channels test(false, true, LARGE_MSG_NUM, 100, UNK);
         TConfiguration Conf;
         TFastVDiskSetup vdiskSetup;
@@ -590,7 +590,7 @@ Y_UNIT_TEST_SUITE(TBsOther1) {
         Conf.Shutdown();
     }
 
-    Y_UNIT_TEST(ChaoticParallelWrite) { 
+    Y_UNIT_TEST(ChaoticParallelWrite) {
         auto cls = std::make_shared<TPutHandleClassGenerator>(UNK);
         NTestSuiteTBsOther1::ChaoticParallelWriteGeneric<TFastVDiskSetup>(
                 5000, 100, 10, cls, TDuration::Seconds(600), TDuration());
@@ -652,18 +652,18 @@ Y_UNIT_TEST_SUITE(TBsDbStat) {
 // Sync/Repl
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 Y_UNIT_TEST_SUITE(TBsVDiskRepl1) {
-    Y_UNIT_TEST(ReplProxyData) { 
+    Y_UNIT_TEST(ReplProxyData) {
         TTestReplProxyData test;
         TestRun<TTestReplProxyData, TFastVDiskSetupCompacted>(&test, TIMEOUT);
     }
 
-    Y_UNIT_TEST(ReplProxyKeepBits) { 
+    Y_UNIT_TEST(ReplProxyKeepBits) {
         TTestReplProxyKeepBits test;
         TestRun<TTestReplProxyKeepBits, TFastVDiskSetupCompacted>(&test, TIMEOUT);
     }
 
 
-    Y_UNIT_TEST(ReplEraseDiskRestore) { 
+    Y_UNIT_TEST(ReplEraseDiskRestore) {
         TSmallCommonDataSet dataSet;
         ui32 domainsNum = 4u;
         ui32 disksInDomain = 2u;
@@ -686,7 +686,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl1) {
 }
 
 Y_UNIT_TEST_SUITE(TBsVDiskRepl2) {
-    Y_UNIT_TEST(ReplEraseDiskRestoreWOOneDisk) { 
+    Y_UNIT_TEST(ReplEraseDiskRestoreWOOneDisk) {
         TSmallCommonDataSet dataSet;
         ui32 domainsNum = 4u;
         ui32 disksInDomain = 2u;
@@ -710,7 +710,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl2) {
 }
 
 Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
-    Y_UNIT_TEST(ReplEraseDiskRestoreMultipart) { 
+    Y_UNIT_TEST(ReplEraseDiskRestoreMultipart) {
         TSmallCommonDataSet dataSet;
         ui32 domainsNum = 4u;
         ui32 disksInDomain = 1u;
@@ -731,7 +731,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         UNIT_ASSERT(success2);
     }
 
-    Y_UNIT_TEST(AnubisTest) { 
+    Y_UNIT_TEST(AnubisTest) {
         // ignored
         return;
 
@@ -775,7 +775,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         }
     }
 
-    Y_UNIT_TEST(ReplPerf) { 
+    Y_UNIT_TEST(ReplPerf) {
         const ui64 maxDataSize = 10 << 20;
         const ui32 maxBlobs = 2000; // FIXME: set up -1
         const ui32 minBlobSize = 128;
@@ -845,7 +845,7 @@ Y_UNIT_TEST_SUITE(TBsVDiskRepl3) {
         UNIT_ASSERT(success3);
     }
 
-    Y_UNIT_TEST(SyncLogTest) { 
+    Y_UNIT_TEST(SyncLogTest) {
         TConfiguration Conf;
         TNoVDiskSetup vdiskSetup;
         Conf.Prepare(&vdiskSetup);

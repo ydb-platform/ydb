@@ -1,7 +1,7 @@
 #include "tls.h"
 #include "error.h"
 
-#include <util/string/strip.h> 
+#include <util/string/strip.h>
 #include <util/generic/strfcpy.h>
 
 #include <cerrno>

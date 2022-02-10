@@ -48,7 +48,7 @@ public:
     inline TGuard(TGuard&& g) noexcept
         : T_(g.T_)
     {
-        g.T_ = nullptr; 
+        g.T_ = nullptr;
     }
 
     inline ~TGuard() {
@@ -58,7 +58,7 @@ public:
     inline void Release() noexcept {
         if (WasAcquired()) {
             TOps::Release(T_);
-            T_ = nullptr; 
+            T_ = nullptr;
         }
     }
 
@@ -67,7 +67,7 @@ public:
     }
 
     inline bool WasAcquired() const noexcept {
-        return T_ != nullptr; 
+        return T_ != nullptr;
     }
 
     inline T* GetMutex() const noexcept {
@@ -150,12 +150,12 @@ public:
     inline void Release() noexcept {
         if (WasAcquired()) {
             TOps::Release(T_);
-            T_ = nullptr; 
+            T_ = nullptr;
         }
     }
 
     inline bool WasAcquired() const noexcept {
-        return T_ != nullptr; 
+        return T_ != nullptr;
     }
 
     explicit inline operator bool() const noexcept {
@@ -164,7 +164,7 @@ public:
 
 private:
     inline void Init(const T* t) noexcept {
-        T_ = nullptr; 
+        T_ = nullptr;
         T* tMutable = const_cast<T*>(t);
         if (TOps::TryAcquire(tMutable)) {
             T_ = tMutable;

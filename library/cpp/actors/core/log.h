@@ -252,7 +252,7 @@ namespace NActors {
         void HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx);
         void HandleWakeup();
         [[nodiscard]] bool OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component, const TString& formatted) noexcept;
-        void RenderComponentPriorities(IOutputStream& str); 
+        void RenderComponentPriorities(IOutputStream& str);
         void LogIgnoredCount(TInstant now);
         void WriteMessageStat(const NLog::TEvLog& ev);
         static const char* FormatLocalTimestamp(TInstant time, char* buf);

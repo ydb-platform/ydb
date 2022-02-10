@@ -389,7 +389,7 @@ void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExpr
 }
 
 template<>
-void Out<NYql::IGraphTransformer::TStatus::ELevel>(class IOutputStream &o, NYql::IGraphTransformer::TStatus::ELevel x) { 
+void Out<NYql::IGraphTransformer::TStatus::ELevel>(class IOutputStream &o, NYql::IGraphTransformer::TStatus::ELevel x) {
 #define YQL_GT_STATUS_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::IGraphTransformer::TStatus::name: \
         o << #name; \

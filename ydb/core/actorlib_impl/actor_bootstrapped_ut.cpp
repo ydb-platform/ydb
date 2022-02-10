@@ -5,7 +5,7 @@
 
 using namespace NActors;
 
-Y_UNIT_TEST_SUITE(ActorBootstrapped) { 
+Y_UNIT_TEST_SUITE(ActorBootstrapped) {
     class TTestBoostrapped: public TActorBootstrapped<TTestBoostrapped>
     {
     public:
@@ -46,11 +46,11 @@ Y_UNIT_TEST_SUITE(ActorBootstrapped) {
     }
 
 
-    Y_UNIT_TEST(TestBootstrapped) { 
+    Y_UNIT_TEST(TestBootstrapped) {
         TestBootrappedActor<TTestBoostrapped>();
     }
 
-    Y_UNIT_TEST(TestBootstrappedParent) { 
+    Y_UNIT_TEST(TestBootstrappedParent) {
         TestBootrappedActor<TTestBoostrappedParent>();
     }
 }

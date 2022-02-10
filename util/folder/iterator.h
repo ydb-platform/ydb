@@ -58,7 +58,7 @@ public:
         inline void Init(int opts) noexcept {
             FtsOptions = opts | FTS_NOCHDIR;
             MaxLevel = Max<size_t>();
-            Cmp = nullptr; 
+            Cmp = nullptr;
         }
     };
 
@@ -67,7 +67,7 @@ public:
         , Path_(path)
     {
         Trees_[0] = Path_.begin();
-        Trees_[1] = nullptr; 
+        Trees_[1] = nullptr;
 
         ClearLastSystemError();
         FileTree_.Reset(yfts_open(Trees_, Options_.FtsOptions, Options_.Cmp));

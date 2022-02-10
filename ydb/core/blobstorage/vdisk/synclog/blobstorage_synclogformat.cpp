@@ -13,7 +13,7 @@ namespace NKikimr {
                                              ui64 lsn,
                                              const TLogoBlobID &id,
                                              const TIngress &ingress) {
-            //Y_VERIFY_DEBUG(id.PartId() == 0); 
+            //Y_VERIFY_DEBUG(id.PartId() == 0);
             TRecordHdr *hdr = (TRecordHdr *)buf;
             TLogoBlobRec *rec = (TLogoBlobRec *)(hdr + 1);
             hdr->RecType = TRecordHdr::RecLogoBlob;
@@ -220,7 +220,7 @@ namespace NKikimr {
             Size = NSyncLog::TSerializeRoutines::SetGC(gtype, HeapBuf.data(), lsn, phantoms);
         }
 
-        void TSequenceOfRecs::Output(IOutputStream &str) const { 
+        void TSequenceOfRecs::Output(IOutputStream &str) const {
             TIterator it(this);
             it.SeekToFirst();
             while (it.Valid()) {

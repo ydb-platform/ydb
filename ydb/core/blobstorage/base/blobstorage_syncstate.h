@@ -37,12 +37,12 @@ namespace NKikimr {
             return !operator ==(x);
         }
 
-        void Serialize(IOutputStream &s) const { 
+        void Serialize(IOutputStream &s) const {
             s.Write(&Guid, sizeof(Guid));
             s.Write(&SyncedLsn, sizeof(SyncedLsn));
         }
 
-        bool Deserialize(IInputStream &s) { 
+        bool Deserialize(IInputStream &s) {
             if (s.Load(&Guid, sizeof(Guid)) != sizeof(Guid))
                 return false;
             if (s.Load(&SyncedLsn, sizeof(SyncedLsn)) != sizeof(SyncedLsn))
@@ -50,7 +50,7 @@ namespace NKikimr {
             return true;
         }
 
-        void Output(IOutputStream &str) const { 
+        void Output(IOutputStream &str) const {
             str << "[" << Guid << " " << SyncedLsn << "]";
         }
 

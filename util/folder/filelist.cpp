@@ -26,7 +26,7 @@ void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringB
 
         TStringBuf filename = file->fts_path + dirNameLength + 1;
 
-        if (filename.empty() || !filename.StartsWith(prefix) || !filename.EndsWith(suffix)) { 
+        if (filename.empty() || !filename.StartsWith(prefix) || !filename.EndsWith(suffix)) {
             continue;
         }
 

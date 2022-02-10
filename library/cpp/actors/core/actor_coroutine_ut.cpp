@@ -11,7 +11,7 @@
 
 using namespace NActors;
 
-Y_UNIT_TEST_SUITE(ActorCoro) { 
+Y_UNIT_TEST_SUITE(ActorCoro) {
     enum {
         Begin = EventSpaceBegin(TEvents::ES_USERSPACE),
         Request,
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
         actorSystem.Stop();
     }
 
-    Y_UNIT_TEST(Basic) { 
+    Y_UNIT_TEST(Basic) {
         if (NSan::TSanIsOn()) {
             // TODO https://st.yandex-team.ru/DEVTOOLS-3154
             return;
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(ActorCoro) {
         Check(MakeHolder<TEvEnough>());
     }
 
-    Y_UNIT_TEST(PoisonPill) { 
+    Y_UNIT_TEST(PoisonPill) {
         Check(MakeHolder<TEvents::TEvPoisonPill>());
     }
 }

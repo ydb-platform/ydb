@@ -43,7 +43,7 @@ void SimpleScanner::Save(yostream* s) const
 	SavePodType(s, Empty());
 	Impl::AlignSave(s, sizeof(Empty()));
 	if (!Empty()) {
-		Y_ASSERT(m_buffer); 
+		Y_ASSERT(m_buffer);
 		Impl::AlignedSaveArray(s, m_buffer.Get(), BufSize());
 	}
 }
@@ -77,7 +77,7 @@ void SlowScanner::Save(yostream* s) const
 	SavePodType(s, Empty());
 	Impl::AlignSave(s, sizeof(Empty()));
 	if (!Empty()) {
-		Y_ASSERT(!m_vec.empty()); 
+		Y_ASSERT(!m_vec.empty());
 		Impl::AlignedSaveArray(s, m_letters, MaxChar);
 		Impl::AlignedSaveArray(s, m_finals, m.statesCount);
 

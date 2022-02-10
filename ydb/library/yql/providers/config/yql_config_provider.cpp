@@ -407,7 +407,7 @@ namespace {
         }
 
         TString GetProviderPath(const TExprNode& node) override {
-            Y_UNUSED(node); 
+            Y_UNUSED(node);
             return "config";
         }
 

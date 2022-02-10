@@ -1,15 +1,15 @@
 #include "blobstorage_synclogmem.h"
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 
 #define STR Cnull
- 
+
 namespace NKikimr {
 
     using namespace NSyncLog;
 
-    Y_UNIT_TEST_SUITE(TBlobStorageSyncLogMem) { 
+    Y_UNIT_TEST_SUITE(TBlobStorageSyncLogMem) {
 
         /////////////////////////////////////////////////////////////////////////////////////////
         // Put Blocks
@@ -141,14 +141,14 @@ namespace NKikimr {
         }
 
 
-        Y_UNIT_TEST(EmptyMemRecLog) { 
+        Y_UNIT_TEST(EmptyMemRecLog) {
             const ui32 pageSize = 1024u;
             NSyncLog::TMemRecLog mem(pageSize);
             TMemRecLogSnapshotPtr snap = mem.GetSnapshot();
             TestEmptySnapshot(snap);
         }
 
-        Y_UNIT_TEST(FilledIn1) { 
+        Y_UNIT_TEST(FilledIn1) {
             const ui32 pageSize = 1024u;
             const ui32 elems = 1000u;
             NSyncLog::TMemRecLog mem(pageSize);
@@ -160,7 +160,7 @@ namespace NKikimr {
             TestFilledIn1(snap, elems);
         }
 
-        Y_UNIT_TEST(EmptyMemRecLogPutAfterSnapshot) { 
+        Y_UNIT_TEST(EmptyMemRecLogPutAfterSnapshot) {
             const ui32 pageSize = 1024u;
             const ui32 elems = 1000u;
             NSyncLog::TMemRecLog mem(pageSize);
@@ -169,7 +169,7 @@ namespace NKikimr {
             TestEmptySnapshot(snap);
         }
 
-        Y_UNIT_TEST(FilledIn1PutAfterSnapshot) { 
+        Y_UNIT_TEST(FilledIn1PutAfterSnapshot) {
             const ui32 pageSize = 1024u;
             const ui32 elems = 1000u;
             NSyncLog::TMemRecLog mem(pageSize);
@@ -182,7 +182,7 @@ namespace NKikimr {
             TestFilledIn1(snap, elems);
         }
 
-        Y_UNIT_TEST(ManyLogoBlobsPerf) { 
+        Y_UNIT_TEST(ManyLogoBlobsPerf) {
             // just put many records
             const ui32 pageSize = 1024u;
             const ui32 elems = 10000000u;

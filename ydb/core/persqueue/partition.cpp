@@ -70,7 +70,7 @@ struct TPartition::THasDataDeadline {
 
 class TKeyLevel {
 public:
-    friend IOutputStream& operator <<(IOutputStream& out, const TKeyLevel& value); 
+    friend IOutputStream& operator <<(IOutputStream& out, const TKeyLevel& value);
 
     TKeyLevel(ui32 border)
     : Border_(border)
@@ -173,7 +173,7 @@ private:
 };
 
 
-void HtmlOutput(IOutputStream& out, const TString& line, const std::deque<std::pair<TKey, ui32>>& keys) 
+void HtmlOutput(IOutputStream& out, const TString& line, const std::deque<std::pair<TKey, ui32>>& keys)
 {
     HTML(out) {
         TABLE() {
@@ -207,7 +207,7 @@ void HtmlOutput(IOutputStream& out, const TString& line, const std::deque<std::p
 }
 
 
-IOutputStream& operator <<(IOutputStream& out, const TKeyLevel& value) { 
+IOutputStream& operator <<(IOutputStream& out, const TKeyLevel& value) {
     TStringStream str;
     str << "count=" << value.Keys_.size() << " sum=" << value.Sum_ << " border=" << value.Border_ << " recs= " << value.RecsCount_ << ":";
     HtmlOutput(out, str.Str(), value.Keys_);
@@ -330,7 +330,7 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, ui32 par
     auto range = read->MutableRange();
     TKeyPrefix from(c, partition);
     if (!key.empty()) {
-        Y_VERIFY(key.StartsWith(TStringBuf(from.Data(), from.Size()))); 
+        Y_VERIFY(key.StartsWith(TStringBuf(from.Data(), from.Size())));
         from.Clear();
         from.Append(key.data(), key.size());
     }

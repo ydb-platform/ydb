@@ -5,7 +5,7 @@
 using namespace NMonitoring;
 
 Y_UNIT_TEST_SUITE(JsonWriterTests) {
-    Y_UNIT_TEST(One) { 
+    Y_UNIT_TEST(One) {
         TStringStream ss;
         TDeprecatedJsonWriter w(&ss);
         w.OpenDocument();

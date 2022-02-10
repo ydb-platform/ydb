@@ -2,8 +2,8 @@
 
 #include "moved.h"
 
-Y_UNIT_TEST_SUITE(TMovedTest) { 
-    Y_UNIT_TEST(Simple) { 
+Y_UNIT_TEST_SUITE(TMovedTest) {
+    Y_UNIT_TEST(Simple) {
         TMoved<THolder<int>> h1(MakeHolder<int>(10));
         TMoved<THolder<int>> h2 = h1;
         UNIT_ASSERT(!*h1);
@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TMovedTest) {
         UNIT_ASSERT_VALUES_EQUAL(11, **h);
     }
 
-    Y_UNIT_TEST(PassToFunction) { 
+    Y_UNIT_TEST(PassToFunction) {
         THolder<int> h(new int(11));
         Foo(h);
     }

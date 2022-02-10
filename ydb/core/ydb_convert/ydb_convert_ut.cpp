@@ -51,8 +51,8 @@ static void TestConvertValueFromYdb(const TString& inputType, const TString& inp
     UNIT_ASSERT_NO_DIFF(result, expected);
 }
 
-Y_UNIT_TEST_SUITE(ConvertMiniKQLTypeToYdbTypeTest) { 
-    Y_UNIT_TEST(SimpleType) { 
+Y_UNIT_TEST_SUITE(ConvertMiniKQLTypeToYdbTypeTest) {
+    Y_UNIT_TEST(SimpleType) {
         const TString input =
             "Kind: Data\n"
             "Data {\n"
@@ -214,14 +214,14 @@ Variant {
     }
 
 
-    Y_UNIT_TEST(Void) { 
+    Y_UNIT_TEST(Void) {
         const TString input = "Kind: Void\n";
         const TString expected = "void_type: NULL_VALUE\n";
         TestConvertTypeToYdb(input, expected);
         TestConvertTypeFromYdb(expected, input);
     }
 
-    Y_UNIT_TEST(Optional) { 
+    Y_UNIT_TEST(Optional) {
         const TString input =
             "Kind: Optional\n"
             "Optional {\n"
@@ -242,7 +242,7 @@ Variant {
         TestConvertTypeFromYdb(expected, input);
     }
 
-    Y_UNIT_TEST(List) { 
+    Y_UNIT_TEST(List) {
         const TString input =
             "Kind: List\n"
             "List {\n"
@@ -262,7 +262,7 @@ Variant {
         TestConvertTypeFromYdb(expected, input);
     }
 
-    Y_UNIT_TEST(Tuple) { 
+    Y_UNIT_TEST(Tuple) {
         const TString input =
             "Kind: Tuple\n"
             "Tuple {\n"
@@ -292,7 +292,7 @@ Variant {
         TestConvertTypeFromYdb(expected, input);
     }
 
-    Y_UNIT_TEST(Struct) { 
+    Y_UNIT_TEST(Struct) {
         const TString input =
             "Kind: Struct\n"
             "Struct {\n"
@@ -334,7 +334,7 @@ Variant {
         TestConvertTypeFromYdb(expected, input);
     }
 
-    Y_UNIT_TEST(Dict) { 
+    Y_UNIT_TEST(Dict) {
         const TString input =
             "Kind: Dict\n"
             "Dict {\n"
@@ -365,12 +365,12 @@ Variant {
     }
 }
 
-Y_UNIT_TEST_SUITE(ConvertMiniKQLValueToYdbValueTest) { 
-    Y_UNIT_TEST(Void) { 
+Y_UNIT_TEST_SUITE(ConvertMiniKQLValueToYdbValueTest) {
+    Y_UNIT_TEST(Void) {
         TestConvertValueToYdb("Kind: Void\n", "", "");
     }
 
-    Y_UNIT_TEST(SimpleBool) { 
+    Y_UNIT_TEST(SimpleBool) {
         const TString inputType =
             "Kind: Data\n"
             "Data {\n"
@@ -379,7 +379,7 @@ Y_UNIT_TEST_SUITE(ConvertMiniKQLValueToYdbValueTest) {
         TestConvertValueToYdb(inputType, "Bool: true\n", "bool_value: true\n");
     }
 
-    Y_UNIT_TEST(SimpleInt32) { 
+    Y_UNIT_TEST(SimpleInt32) {
         const TString inputType =
             "Kind: Data\n"
             "Data {\n"
@@ -388,7 +388,7 @@ Y_UNIT_TEST_SUITE(ConvertMiniKQLValueToYdbValueTest) {
         TestConvertValueToYdb(inputType, "Int32: -42\n", "int32_value: -42\n");
     }
 
-    Y_UNIT_TEST(SimpleInt64) { 
+    Y_UNIT_TEST(SimpleInt64) {
          const TString inputType =
             "Kind: Data\n"
             "Data {\n"
@@ -451,7 +451,7 @@ Hi128: 2
         TestConvertValueToYdb(inputType, uuidStr, "low_128: 1\nhigh_128: 2\n");
     }
 
-    Y_UNIT_TEST(OptionalString) { 
+    Y_UNIT_TEST(OptionalString) {
         const TString inputType =
             "Kind: Optional\n"
             "Optional {\n"
@@ -469,7 +469,7 @@ Hi128: 2
         TestConvertValueToYdb(inputType, inputValue, "bytes_value: \"abc\"\n");
     }
 
-    Y_UNIT_TEST(OptionalEmpty) { 
+    Y_UNIT_TEST(OptionalEmpty) {
         const TString inputType =
             "Kind: Optional\n"
             "Optional {\n"
@@ -484,7 +484,7 @@ Hi128: 2
         TestConvertValueToYdb(inputType, inputValue, "null_flag_value: NULL_VALUE\n");
     }
 
-    Y_UNIT_TEST(OptionalOptionalEmpty) { 
+    Y_UNIT_TEST(OptionalOptionalEmpty) {
         const TString inputType =
             "Kind: Optional\n"
             "Optional {\n"
@@ -509,7 +509,7 @@ Hi128: 2
             "}\n");
     }
 
-    Y_UNIT_TEST(OptionalOptionalEmpty2) { 
+    Y_UNIT_TEST(OptionalOptionalEmpty2) {
         const TString inputType =
             "Kind: Optional\n"
             "Optional {\n"
@@ -530,7 +530,7 @@ Hi128: 2
             "null_flag_value: NULL_VALUE\n");
     }
 
-    Y_UNIT_TEST(List) { 
+    Y_UNIT_TEST(List) {
         const TString inputType =
             "Kind: List\n"
             "List {\n"
@@ -557,7 +557,7 @@ Hi128: 2
             "}\n");
     }
 
-    Y_UNIT_TEST(Struct) { 
+    Y_UNIT_TEST(Struct) {
         const TString inputType =
             "Kind: Struct\n"
             "Struct {\n"
@@ -596,7 +596,7 @@ Hi128: 2
             "}\n");
     }
 
-    Y_UNIT_TEST(Dict) { 
+    Y_UNIT_TEST(Dict) {
         const TString inputType =
             "Kind: Dict\n"
             "Dict {\n"
@@ -633,7 +633,7 @@ Hi128: 2
             "}\n");
     }
 
-    Y_UNIT_TEST(Tuple) { 
+    Y_UNIT_TEST(Tuple) {
         const TString inputType =
             "Kind: Tuple\n"
             "Tuple {\n"
@@ -705,12 +705,12 @@ variant_index: 1
 
 }
 
-Y_UNIT_TEST_SUITE(ConvertYdbValueToMiniKQLValueTest) { 
-    Y_UNIT_TEST(Void) { 
+Y_UNIT_TEST_SUITE(ConvertYdbValueToMiniKQLValueTest) {
+    Y_UNIT_TEST(Void) {
         TestConvertValueFromYdb("void_type: NULL_VALUE\n", "", "");
     }
 
-    Y_UNIT_TEST(SimpleBool) { 
+    Y_UNIT_TEST(SimpleBool) {
         const TString inputType =
             "type_id: BOOL\n";
         TestConvertValueFromYdb(inputType, "bool_value: true\n", "Bool: true\n");
@@ -722,7 +722,7 @@ Y_UNIT_TEST_SUITE(ConvertYdbValueToMiniKQLValueTest) {
         UNIT_ASSERT_EXCEPTION(TestConvertValueFromYdb(inputType, "int32_value: -42\n", "Bool: true\n"), yexception);
     }
 
-    Y_UNIT_TEST(SimpleInt32) { 
+    Y_UNIT_TEST(SimpleInt32) {
         const TString inputType =
             "type_id: INT32\n";
         TestConvertValueFromYdb(inputType, "int32_value: -42\n", "Int32: -42\n");
@@ -789,7 +789,7 @@ Hi128: 2
         UNIT_ASSERT_EXCEPTION(TestConvertValueFromYdb(inputType, "bytes_value: \"abc\"\n", "Low128: 123\nHi128: 456\n"), yexception);
     }
 
-    Y_UNIT_TEST(OptionalString) { 
+    Y_UNIT_TEST(OptionalString) {
         const TString inputType =
             "optional_type {\n"
             "  item {\n"
@@ -803,7 +803,7 @@ Hi128: 2
             "}\n");
     }
 
-    Y_UNIT_TEST(OptionalEmpty) { 
+    Y_UNIT_TEST(OptionalEmpty) {
         const TString inputType =
             "optional_type {\n"
             "  item {\n"
@@ -814,7 +814,7 @@ Hi128: 2
         TestConvertValueFromYdb(inputType, inputValue, "");
     }
 
-    Y_UNIT_TEST(OptionalOptionalEmpty) { 
+    Y_UNIT_TEST(OptionalOptionalEmpty) {
         const TString inputType =
             "optional_type {\n"
             "  item {\n"
@@ -834,7 +834,7 @@ Hi128: 2
             "}\n");
     }
 
-    Y_UNIT_TEST(OptionalOptionalEmpty2) { 
+    Y_UNIT_TEST(OptionalOptionalEmpty2) {
         const TString inputType =
             "optional_type {\n"
             "  item {\n"
@@ -849,7 +849,7 @@ Hi128: 2
         TestConvertValueFromYdb(inputType, inputValue, "");
     }
 
-    Y_UNIT_TEST(List) { 
+    Y_UNIT_TEST(List) {
         const TString inputType =
             "list_type {\n"
             "  item {\n"
@@ -872,7 +872,7 @@ Hi128: 2
             "}\n");
     }
 
-    Y_UNIT_TEST(Struct) { 
+    Y_UNIT_TEST(Struct) {
         const TString inputType =
             "struct_type {\n"
             "  members {\n"
@@ -904,7 +904,7 @@ Hi128: 2
             "}\n");
     }
 
-    Y_UNIT_TEST(Dict) { 
+    Y_UNIT_TEST(Dict) {
         const TString inputType =
             "dict_type {\n"
             "  key {\n"
@@ -936,7 +936,7 @@ Hi128: 2
 
     }
 
-    Y_UNIT_TEST(Tuple) { 
+    Y_UNIT_TEST(Tuple) {
         const TString inputType =
             "tuple_type {\n"
             "  elements {\n"

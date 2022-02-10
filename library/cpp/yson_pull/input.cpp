@@ -24,10 +24,10 @@ THolder<IStream> NInput::FromMemory(TStringBuf data) {
     return MakeHolder<TOwned<TMemoryInput>>(data);
 }
 
-THolder<IStream> NInput::FromInputStream(IInputStream* input, size_t buffer_size) { 
+THolder<IStream> NInput::FromInputStream(IInputStream* input, size_t buffer_size) {
     return MakeHolder<TOwned<TBufferedInput>>(input, buffer_size);
 }
 
-THolder<IStream> NInput::FromZeroCopyInput(IZeroCopyInput* input) { 
+THolder<IStream> NInput::FromZeroCopyInput(IZeroCopyInput* input) {
     return MakeHolder<TZeroCopy>(input);
 }

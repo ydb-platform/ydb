@@ -37,8 +37,8 @@ void EatPartialString(TIntrusivePtr<HttpType>& request, const TString& data) {
 
 }
 
-Y_UNIT_TEST_SUITE(HttpProxy) { 
-    Y_UNIT_TEST(BasicParsing) { 
+Y_UNIT_TEST_SUITE(HttpProxy) {
+    Y_UNIT_TEST(BasicParsing) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
         EatWholeString(request, "GET /test HTTP/1.1\r\nHost: test\r\nSome-Header: 32344\r\n\r\n");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n");
     }
 
-    Y_UNIT_TEST(BasicParsingChunkedBody) { 
+    Y_UNIT_TEST(BasicParsingChunkedBody) {
         NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
         NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
         EatWholeString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(compressedBody, response->Body);
     }
 
-    Y_UNIT_TEST(BasicPartialParsing) { 
+    Y_UNIT_TEST(BasicPartialParsing) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
         EatPartialString(request, "GET /test HTTP/1.1\r\nHost: test\r\nSome-Header: 32344\r\n\r\n");
         UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n");
     }
 
-    Y_UNIT_TEST(BasicPartialParsingChunkedBody) { 
+    Y_UNIT_TEST(BasicPartialParsingChunkedBody) {
         NHttp::THttpOutgoingRequestPtr request = nullptr; //new NHttp::THttpOutgoingRequest();
         NHttp::THttpIncomingResponsePtr response = new NHttp::THttpIncomingResponse(request);
         EatPartialString(response, "HTTP/1.1 200 OK\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nthis\r\n4\r\n is \r\n5\r\ntest.\r\n0\r\n\r\n");
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(response->Body, "this is test.");
     }
 
-    Y_UNIT_TEST(AdvancedParsing) { 
+    Y_UNIT_TEST(AdvancedParsing) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
         EatWholeString(request, "GE");
         EatWholeString(request, "T");
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nSome-Header: 32344\r\n\r\n");
     }
 
-    Y_UNIT_TEST(AdvancedPartialParsing) { 
+    Y_UNIT_TEST(AdvancedPartialParsing) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
         EatPartialString(request, "GE");
         EatPartialString(request, "T");
@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(requestData, "GET /data/url HTTP/1.1\r\nHost: www.yandex.ru\r\nAccept: */*\r\nCookie: cookie1=123456; cookie2=45678;\r\n");
     }
 
-    Y_UNIT_TEST(BasicRunning) { 
+    Y_UNIT_TEST(BasicRunning) {
         NActors::TTestActorRuntimeBase actorSystem;
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
@@ -304,7 +304,7 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
         UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
     }
 
-    /*Y_UNIT_TEST(AdvancedRunning) { 
+    /*Y_UNIT_TEST(AdvancedRunning) {
         THolder<NActors::TActorSystemSetup> setup = MakeHolder<NActors::TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 1;

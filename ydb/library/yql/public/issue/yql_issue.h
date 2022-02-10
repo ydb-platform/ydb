@@ -280,7 +280,7 @@ public:
 
     void PrintTo(IOutputStream& out, bool oneLine = false) const;
     void PrintWithProgramTo(
-            IOutputStream& out, 
+            IOutputStream& out,
             const TString& programFilename,
             const TString& programText) const;
 
@@ -323,13 +323,13 @@ TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message);
 } // namespace NYql
 
 template <>
-void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& pos); 
+void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& pos);
 
 template <>
-void Out<NYql::TRange>(IOutputStream& out, const NYql::TRange& pos); 
+void Out<NYql::TRange>(IOutputStream& out, const NYql::TRange& pos);
 
 template <>
-void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& error); 
+void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& error);
 
 template <>
 struct THash<NYql::TIssue> {

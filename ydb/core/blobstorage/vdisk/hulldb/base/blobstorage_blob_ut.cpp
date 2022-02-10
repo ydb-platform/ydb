@@ -11,9 +11,9 @@ namespace NKikimr {
 
     const TBlobStorageGroupType GType(TBlobStorageGroupType::ErasureNone);
 
-    Y_UNIT_TEST_SUITE(TBlobStorageDiskBlob) { 
+    Y_UNIT_TEST_SUITE(TBlobStorageDiskBlob) {
 
-        Y_UNIT_TEST(CreateFromDistinctParts) { 
+        Y_UNIT_TEST(CreateFromDistinctParts) {
             const ui8 totalParts = MaxTotalPartCount;
             const ui32 partSize = 6;
             const ui64 fullDataSize = partSize * totalParts / 2;
@@ -54,7 +54,7 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(CreateIterate) { 
+        Y_UNIT_TEST(CreateIterate) {
             ui8 partId = 2;
             TString data("abcdefgh");
             TRope buf = TDiskBlob::Create(16, partId, 3, TRope(data), Arena);
@@ -67,7 +67,7 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(Merge) { 
+        Y_UNIT_TEST(Merge) {
             TString data("abcdefgh");
 
             // blob1
@@ -133,7 +133,7 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(FilterMask) { 
+        Y_UNIT_TEST(FilterMask) {
             const ui8 numParts = 6;
             for (ui32 mask1 = 1; mask1 < (1 << numParts); ++mask1) {
                 for (ui32 mask2 = 1; mask2 < (1 << numParts); ++mask2) {

@@ -1,5 +1,5 @@
-#include <util/stream/output.h> 
-#include <util/stream/null.h> 
+#include <util/stream/output.h>
+#include <util/stream/null.h>
 #include <util/system/compat.h>
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
@@ -20,7 +20,7 @@ TSysLogBackend::TSysLogBackend(const char* ident, EFacility facility, int flags)
     , Flags(flags)
 {
 #if defined(_unix_)
-    Y_ASSERT(TSYSLOG_LOCAL0 <= facility && facility <= TSYSLOG_LOCAL7); 
+    Y_ASSERT(TSYSLOG_LOCAL0 <= facility && facility <= TSYSLOG_LOCAL7);
 
     static const int f2sf[] = {
         LOG_LOCAL0,
@@ -56,7 +56,7 @@ void TSysLogBackend::WriteData(const TLogRecord& rec) {
 #if defined(_unix_)
     syslog(ELogPriority2SyslogPriority(rec.Priority), "%.*s", (int)rec.Len, rec.Data);
 #else
-    Y_UNUSED(rec); 
+    Y_UNUSED(rec);
 #endif
 }
 

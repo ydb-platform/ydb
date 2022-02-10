@@ -133,7 +133,7 @@ public:
         }
     }
 
-    void Render(IOutputStream& str) { 
+    void Render(IOutputStream& str) {
         const TInstant now = TAppData::TimeProvider->Now();
 
 #define PARAM(NAME, V) \

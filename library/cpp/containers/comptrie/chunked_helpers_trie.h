@@ -48,7 +48,7 @@ public:
         return Builder.Find(key, strlen(key), &dummy);
     }
 
-    void Save(IOutputStream& out) const { 
+    void Save(IOutputStream& out) const {
         Builder.Save(out);
     }
 
@@ -164,7 +164,7 @@ public:
         }
     }
 
-    void Save(IOutputStream& out, bool minimize = false) const { 
+    void Save(IOutputStream& out, bool minimize = false) const {
         if (minimize) {
             CompactTrieMinimize<TBuilder>(out, Builder, false);
         } else {
@@ -191,7 +191,7 @@ public:
         Values.push_back(TValue(key, value));
     }
 
-    void Save(IOutputStream& out) { 
+    void Save(IOutputStream& out) {
         Sort(Values.begin(), Values.end());
         TTrieMapWriter<T, true> writer;
         for (typename TValues::const_iterator toValue = Values.begin(); toValue != Values.end(); ++toValue)

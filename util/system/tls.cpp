@@ -41,7 +41,7 @@ namespace {
             class TStoredValue: public TIntrusiveListItem<TStoredValue> {
             public:
                 inline TStoredValue(const TKey* key)
-                    : Data_(nullptr) 
+                    : Data_(nullptr)
                     , Dtor_(key->Dtor)
                 {
                 }
@@ -98,7 +98,7 @@ namespace {
         };
 
         inline TPerThreadStorage* MyStorage() {
-#if defined(Y_HAVE_FAST_POD_TLS) 
+#if defined(Y_HAVE_FAST_POD_TLS)
             Y_POD_STATIC_THREAD(TPerThreadStorage*)
             my(nullptr);
 
@@ -123,14 +123,14 @@ namespace {
     class TMasterTls: public TGenericTlsBase {
     public:
         inline TMasterTls() {
-            Y_VERIFY(!pthread_key_create(&Key_, Dtor), "pthread_key_create failed"); 
+            Y_VERIFY(!pthread_key_create(&Key_, Dtor), "pthread_key_create failed");
         }
 
         inline ~TMasterTls() override {
             //explicitly call dtor for main thread
             Dtor(pthread_getspecific(Key_));
 
-            Y_VERIFY(!pthread_key_delete(Key_), "pthread_key_delete failed"); 
+            Y_VERIFY(!pthread_key_delete(Key_), "pthread_key_delete failed");
         }
 
         static inline TMasterTls* Instance() {
@@ -144,7 +144,7 @@ namespace {
             if (!ret) {
                 ret = new TPerThreadStorage();
 
-                Y_VERIFY(!pthread_setspecific(Key_, ret), "pthread_setspecific failed"); 
+                Y_VERIFY(!pthread_setspecific(Key_, ret), "pthread_setspecific failed");
             }
 
             return (TPerThreadStorage*)ret;

@@ -207,7 +207,7 @@ protected:
                         size -= long(ChunkParser.lastchar - (char*)buf + 1);
                         buf = ChunkParser.lastchar + 1;
                         ChunkSize = ChunkParser.chunk_length;
-                        Y_ASSERT(ChunkSize >= 0); 
+                        Y_ASSERT(ChunkSize >= 0);
                         State = ChunkSize ? hp_read_chunk : hp_eof;
                     } else {
                         Header->entity_size += size;
@@ -264,7 +264,7 @@ public:
         return 0;
     }
     long Read(void*& buf) {
-        Y_ASSERT(Bufsize >= 0); 
+        Y_ASSERT(Bufsize >= 0);
         if (!Bufsize) {
             Bufsize = -1;
             return 0;

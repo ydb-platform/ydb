@@ -3,7 +3,7 @@
 #include "leaf_skipper.h"
 #include <cstddef>
 
-class IOutputStream; 
+class IOutputStream;
 
 namespace NCompactTrie {
     size_t MeasureOffset(size_t offset);

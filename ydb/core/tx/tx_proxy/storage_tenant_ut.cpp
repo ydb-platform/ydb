@@ -14,8 +14,8 @@ using namespace NKikimr;
 using namespace NTxProxyUT;
 using namespace NHelpers;
 
-Y_UNIT_TEST_SUITE(TStorageTenantTest) { 
-    Y_UNIT_TEST(Boot) { 
+Y_UNIT_TEST_SUITE(TStorageTenantTest) {
+    Y_UNIT_TEST(Boot) {
         TTestEnvWithPoolsSupport env;
         auto lsroot = env.GetClient().Ls("/");
         Print(lsroot);
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         NTestLs::Finished(lsdomain);
     }
 
-    Y_UNIT_TEST(LsLs) { 
+    Y_UNIT_TEST(LsLs) {
         TTestEnvWithPoolsSupport env(2, 2);
         auto storagePool = env.CreatePoolsForTenant("USER_0");
 
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         }
     }
 
-    Y_UNIT_TEST(CreateDummyTabletsInDifferentDomains) { 
+    Y_UNIT_TEST(CreateDummyTabletsInDifferentDomains) {
         TTestEnvWithPoolsSupport env(2, 2);
 
         auto first_storage_pools = env.CreatePoolsForTenant("USER_0");
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         CheckThatAllChannelsIsRightStoragePools(secondStorageInfo, second_storage_pools);
     }
 
-    Y_UNIT_TEST(CreateTableInsideSubDomain) { 
+    Y_UNIT_TEST(CreateTableInsideSubDomain) {
         TTestEnvWithPoolsSupport env(1, 2);
         auto storagePool = env.CreatePoolsForTenant("USER_0");
 
@@ -246,7 +246,7 @@ Y_UNIT_TEST_SUITE(TStorageTenantTest) {
         }
     }
 
-    Y_UNIT_TEST(GenericCases) { 
+    Y_UNIT_TEST(GenericCases) {
         TTestEnvWithPoolsSupport env(1, 1);
         auto storagePool = env.CreatePoolsForTenant("USER_0");
 

@@ -22,9 +22,9 @@ namespace {
     const NTest::TMass MassZ(new NTest::TModelStd(false), 128);
 }
 
-Y_UNIT_TEST_SUITE(NPage) { 
+Y_UNIT_TEST_SUITE(NPage) {
 
-    Y_UNIT_TEST(Encoded) 
+    Y_UNIT_TEST(Encoded)
     {
         using namespace NTable::NTest;
 
@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(NPage) {
         }
     }
 
-    Y_UNIT_TEST(ABI_002) 
+    Y_UNIT_TEST(ABI_002)
     {
         const auto raw = NResource::Find("abi/002_full_part.pages");
 

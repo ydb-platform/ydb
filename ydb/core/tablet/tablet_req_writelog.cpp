@@ -87,11 +87,11 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
 
     void SendToBS(const TLogoBlobID &id, const TString &buffer, const TActorContext &ctx,
                   const NKikimrBlobStorage::EPutHandleClass handleClass) {
-        Y_VERIFY(id.TabletID() == Info->TabletID); 
+        Y_VERIFY(id.TabletID() == Info->TabletID);
         const TTabletChannelInfo *channelInfo = Info->ChannelInfo(id.Channel());
-        Y_VERIFY(channelInfo); 
+        Y_VERIFY(channelInfo);
         const TTabletChannelInfo::THistoryEntry *x = channelInfo->LatestEntry();
-        Y_VERIFY(x->FromGeneration <= id.Generation()); 
+        Y_VERIFY(x->FromGeneration <= id.Generation());
 
         ui64 cookie = RandomNumber<ui64>();
         RequestCookies ^= cookie;
@@ -113,7 +113,7 @@ public:
         , RepliesToWait(Max<ui32>())
     {
         References.swap(refs);
-        Y_VERIFY(Info); 
+        Y_VERIFY(Info);
     }
 
     void Bootstrap(const TActorContext &ctx) {

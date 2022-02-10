@@ -53,7 +53,7 @@ namespace NKikimr {
         // Return a set of subgroup's disk contaning any replicas
         TBlobStorageGroupInfo::TSubgroupVDisks GetInvolvedDisks(const TBlobStorageGroupInfo::TTopology *top) const;
 
-        void Output(IOutputStream& str, const TBlobStorageGroupType &gtype) const { 
+        void Output(IOutputStream& str, const TBlobStorageGroupType &gtype) const {
             const ui32 totalPartCount = gtype.TotalPartCount();
             str << "{";
             for (ui32 i = 0; i < totalPartCount; ++i) {

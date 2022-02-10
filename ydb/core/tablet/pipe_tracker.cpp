@@ -33,22 +33,22 @@ bool TPipeTrackerBase::DetachTablet(ui64 txid, ui64 tabletid, ui64 cookie) {
 
     tabletSet.erase(tabIt);
     auto multiIt = TxTablets.find(txid);
-    Y_VERIFY(multiIt != TxTablets.end()); 
+    Y_VERIFY(multiIt != TxTablets.end());
     auto& tablets = multiIt->second;
     auto currIt = tablets.find(tabletid);
-    Y_VERIFY(currIt != tablets.end()); 
+    Y_VERIFY(currIt != tablets.end());
     auto nextIt = currIt;
     ++nextIt;
     tablets.erase(currIt);
     if (nextIt == tablets.end() || *nextIt != tabletid) {
         if (tabletSet.empty()) {
             TxToTablet.erase(txIt);
-            Y_VERIFY(tablets.empty()); 
+            Y_VERIFY(tablets.empty());
             TxTablets.erase(multiIt);
         }
 
         auto it = TabletToTx.find(tabletid);
-        Y_VERIFY(it != TabletToTx.end()); 
+        Y_VERIFY(it != TabletToTx.end());
         it->second.erase(txid);
         if (it->second.empty()) {
             TabletToTx.erase(it);

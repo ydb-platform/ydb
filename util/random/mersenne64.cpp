@@ -85,13 +85,13 @@ void TMersenne64::InitNext() noexcept {
     mti = 0;
 }
 
-TMersenne64::TMersenne64(IInputStream& input) 
+TMersenne64::TMersenne64(IInputStream& input)
     : mti(NN + 1)
 {
     ui64 buf[128];
 
     input.LoadOrFail(buf, sizeof(buf));
-    InitByArray(buf, Y_ARRAY_SIZE(buf)); 
+    InitByArray(buf, Y_ARRAY_SIZE(buf));
 }
 
 #undef MM

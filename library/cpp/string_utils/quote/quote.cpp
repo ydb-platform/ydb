@@ -166,7 +166,7 @@ TString CGIEscapeRet(const TStringBuf url) {
     TString to;
     to.ReserveAndResize(CgiEscapeBufLen(url.size()));
     to.resize(CGIEscape(to.begin(), url.data(), url.size()) - to.data());
-    return to; 
+    return to;
 }
 
 TString& AppendCgiEscaped(const TStringBuf value, TString& to) {
@@ -203,7 +203,7 @@ char* Quote(char* to, const char* from, const char* safe) {
     return Quote(to, FixZero(from), TCStringEndIterator(), safe);
 }
 
-char* Quote(char* to, const TStringBuf s, const char* safe) { 
+char* Quote(char* to, const TStringBuf s, const char* safe) {
     return Quote(to, s.data(), s.data() + s.size(), safe);
 }
 
@@ -239,7 +239,7 @@ TString CGIUnescapeRet(const TStringBuf from) {
     TString to;
     to.ReserveAndResize(CgiUnescapeBufLen(from.size()));
     to.resize(CGIUnescape(to.begin(), from.data(), from.size()) - to.data());
-    return to; 
+    return to;
 }
 
 char* UrlUnescape(char* to, TStringBuf from) {

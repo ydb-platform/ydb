@@ -52,7 +52,7 @@ public:
     void Reset(size_t i, THolder<T> t) {
         T* current = (*this)[i];
         if (current) {
-            Y_ASSERT(current != t.Get()); 
+            Y_ASSERT(current != t.Get());
             D::Destroy(current);
         }
         (*this)[i] = t.Release();

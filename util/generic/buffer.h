@@ -42,7 +42,7 @@ public:
     }
 
     inline void EraseBack(size_t n) noexcept {
-        Y_ASSERT(n <= Pos_); 
+        Y_ASSERT(n <= Pos_);
         Pos_ -= n;
     }
 
@@ -131,7 +131,7 @@ public:
     }
 
     inline void Proceed(size_t pos) {
-        //Y_ASSERT(pos <= Len_); // see discussion in REVIEW:29021 
+        //Y_ASSERT(pos <= Len_); // see discussion in REVIEW:29021
         Resize(pos);
     }
 

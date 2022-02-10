@@ -40,7 +40,7 @@ namespace NKikimr {
             ReplicaOk, RecoveryScheduled, DataRecoverySuccess, DataRecoveryFailure);
     }
 
-    void TEvReplFinished::TInfo::OutputHtml(IOutputStream &str) const { 
+    void TEvReplFinished::TInfo::OutputHtml(IOutputStream &str) const {
 #define PARAM(NAME, VALUE) TABLER() { \
             TABLED() { str << #NAME; } \
             TABLED() { str << VALUE; } \
@@ -412,7 +412,7 @@ namespace NKikimr {
         }
 
         template<typename Iter>
-        void OutputRow(IOutputStream &str, Iter &it, Iter &e) { 
+        void OutputRow(IOutputStream &str, Iter &it, Iter &e) {
             HTML(str) {
                 TABLER() {
                     for (unsigned i = 0; i < 3 && it != e; i++, ++it) {
@@ -423,7 +423,7 @@ namespace NKikimr {
         }
 
         template<typename Iter>
-        void OutputQuantums(IOutputStream& str, Iter it, Iter e) { 
+        void OutputQuantums(IOutputStream& str, Iter it, Iter e) {
             if (it != e) {
                 OutputRow(str, it, e);
                 if (it != e) {
@@ -444,7 +444,7 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev) {
-            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::ReplId); 
+            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::ReplId);
 
             TStringStream str;
             unsigned historySize = HistorySize;

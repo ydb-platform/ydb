@@ -8,8 +8,8 @@ struct TStrokaWeighter {
     }
 };
 
-Y_UNIT_TEST_SUITE(TCacheTest) { 
-    Y_UNIT_TEST(LRUListTest) { 
+Y_UNIT_TEST_SUITE(TCacheTest) {
+    Y_UNIT_TEST(LRUListTest) {
         typedef TLRUList<int, TString> TListType;
         TListType list(2);
 
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT_EQUAL(list.GetOldest()->Key, 4);
     }
 
-    Y_UNIT_TEST(LFUListTest) { 
+    Y_UNIT_TEST(LFUListTest) {
         typedef TLFUList<int, TString> TListType;
         TListType list(2);
 
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT_EQUAL(list.GetLeastFrequentlyUsed()->Key, 1);
     }
 
-    Y_UNIT_TEST(LWListTest) { 
+    Y_UNIT_TEST(LWListTest) {
         typedef TLWList<int, TString, size_t, TStrokaWeighter> TListType;
         TListType list(2);
 
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT_EQUAL(list.GetSize(), 1);
     }
 
-    Y_UNIT_TEST(SimpleTest) { 
+    Y_UNIT_TEST(SimpleTest) {
         typedef TLRUCache<int, TString> TCache;
         TCache s(2); // size 2
         s.Insert(1, "abcd");
@@ -311,7 +311,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT(s.Find(6) != s.End());
     }
 
-    Y_UNIT_TEST(MultiCacheTest) { 
+    Y_UNIT_TEST(MultiCacheTest) {
         typedef TLRUCache<int, TString> TCache;
         TCache s(3, true);
         UNIT_ASSERT(s.Insert(1, "abcd"));
@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
     };
     int TMyDelete::count = 0;
 
-    Y_UNIT_TEST(DeleterTest) { 
+    Y_UNIT_TEST(DeleterTest) {
         typedef TLRUCache<int, TString, TMyDelete> TCache;
         TCache s(2);
         s.Insert(1, "123");
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT(TMyDelete::count == 2);
     }
 
-    Y_UNIT_TEST(PromoteOnFind) { 
+    Y_UNIT_TEST(PromoteOnFind) {
         typedef TLRUCache<int, TString> TCache;
         TCache s(2);
         s.Insert(1, "123");
@@ -357,7 +357,7 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) { 
+Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
     typedef TThreadSafeCache<ui32, TString, ui32> TCache;
 
     const char* VALS[] = {"abcd", "defg", "hjkl"};
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
         mutable i32 Creations = 0;
     };
 
-    Y_UNIT_TEST(SimpleTest) { 
+    Y_UNIT_TEST(SimpleTest) {
         for (ui32 i = 0; i < Y_ARRAY_SIZE(VALS); ++i) {
             const TString data = *TCache::Get<TCallbacks>(i);
             UNIT_ASSERT(data == VALS[i]);

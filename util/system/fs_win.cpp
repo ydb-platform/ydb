@@ -13,7 +13,7 @@ namespace NFsPrivate {
         wstr.resize(str.size());
         size_t written = 0;
         if (!UTF8ToWide(str.data(), str.size(), wstr.begin(), written))
-            return nullptr; 
+            return nullptr;
         wstr.erase(written);
         static_assert(sizeof(WCHAR) == sizeof(wchar16), "expect sizeof(WCHAR) == sizeof(wchar16)");
         return (const WCHAR*)wstr.data();
@@ -25,7 +25,7 @@ namespace NFsPrivate {
         return WideToUTF8((wchar16*)wstr, len);
     }
 
-    HANDLE CreateFileWithUtf8Name(const TStringBuf fName, ui32 accessMode, ui32 shareMode, ui32 createMode, ui32 attributes, bool inheritHandle) { 
+    HANDLE CreateFileWithUtf8Name(const TStringBuf fName, ui32 accessMode, ui32 shareMode, ui32 createMode, ui32 attributes, bool inheritHandle) {
         TUtf16String wstr;
         LPCWSTR wname = UTF8ToWCHAR(fName, wstr);
         if (!wname) {
@@ -34,9 +34,9 @@ namespace NFsPrivate {
         }
         SECURITY_ATTRIBUTES secAttrs;
         secAttrs.bInheritHandle = inheritHandle ? TRUE : FALSE;
-        secAttrs.lpSecurityDescriptor = nullptr; 
+        secAttrs.lpSecurityDescriptor = nullptr;
         secAttrs.nLength = sizeof(secAttrs);
-        return ::CreateFileW(wname, accessMode, shareMode, &secAttrs, createMode, attributes, nullptr); 
+        return ::CreateFileW(wname, accessMode, shareMode, &secAttrs, createMode, attributes, nullptr);
     }
 
     bool WinRename(const TString& oldPath, const TString& newPath) {
@@ -110,7 +110,7 @@ namespace NFsPrivate {
             return false;
         }
 
-        return (CreateHardLinkW(npPtr, epPtr, nullptr) != 0); 
+        return (CreateHardLinkW(npPtr, epPtr, nullptr) != 0);
     }
 
     bool WinExists(const TString& path) {
@@ -186,7 +186,7 @@ namespace NFsPrivate {
         TTempBuf buf;
         while (true) {
             DWORD bytesReturned = 0;
-            BOOL res = DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, nullptr, 0, buf.Data(), buf.Size(), &bytesReturned, nullptr); 
+            BOOL res = DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, nullptr, 0, buf.Data(), buf.Size(), &bytesReturned, nullptr);
             if (res) {
                 REPARSE_DATA_BUFFER* rdb = (REPARSE_DATA_BUFFER*)buf.Data();
                 if (rdb->ReparseTag == IO_REPARSE_TAG_SYMLINK) {
@@ -219,8 +219,8 @@ bool GetObjectId(const char* path, GUID* id) {
     if (h.IsOpen()) {
         FILE_OBJECTID_BUFFER fob;
         DWORD resSize = 0;
-        if (DeviceIoControl(h, FSCTL_CREATE_OR_GET_OBJECT_ID, nullptr, 0, &fob, sizeof(fob), &resSize, nullptr)) { 
-            Y_ASSERT(resSize == sizeof(fob)); 
+        if (DeviceIoControl(h, FSCTL_CREATE_OR_GET_OBJECT_ID, nullptr, 0, &fob, sizeof(fob), &resSize, nullptr)) {
+            Y_ASSERT(resSize == sizeof(fob));
             memcpy(id, &fob.ObjectId, sizeof(GUID));
             return true;
         }

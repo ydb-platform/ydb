@@ -207,9 +207,9 @@ protected:
 
 	void SetJump(size_t oldState, Char c, size_t newState)
 	{
-		Y_ASSERT(m_buffer); 
-		Y_ASSERT(oldState < m.statesCount); 
-		Y_ASSERT(newState < m.statesCount); 
+		Y_ASSERT(m_buffer);
+		Y_ASSERT(oldState < m.statesCount);
+		Y_ASSERT(newState < m.statesCount);
 		m_transitions[oldState * STATE_ROW_SIZE + 1 + c]
 			= (((newState - oldState) * STATE_ROW_SIZE) * sizeof(Transition));
 	}
@@ -218,13 +218,13 @@ protected:
 
 	void SetInitial(size_t state)
 	{
-		Y_ASSERT(m_buffer); 
+		Y_ASSERT(m_buffer);
 		m.initial = reinterpret_cast<size_t>(m_transitions + state * STATE_ROW_SIZE + 1);
 	}
 
 	void SetTag(size_t state, size_t tag)
 	{
-		Y_ASSERT(m_buffer); 
+		Y_ASSERT(m_buffer);
 		m_transitions[state * STATE_ROW_SIZE] = tag;
 	}
 

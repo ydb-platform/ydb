@@ -846,7 +846,7 @@ public:
         TraceEvents.emplace(ts, Event(shortId, ts, ph, cat, argsItem, name, id));
     }
 
-    void Output(IOutputStream& os) 
+    void Output(IOutputStream& os)
     {
         os << "{\"traceEvents\":[";
         bool first = true;
@@ -1124,18 +1124,18 @@ template <> TString UrlErase<true>(const TCgiParameters& e, const TString& key, 
     return MakeUrlEraseSub(e, key, value);
 }
 
-void OutputCommonHeader(IOutputStream& out) 
+void OutputCommonHeader(IOutputStream& out)
 {
     out << NResource::Find("lwtrace/mon/static/header.html") << Endl;
 }
 
-void OutputCommonFooter(IOutputStream& out) 
+void OutputCommonFooter(IOutputStream& out)
 {
     out << NResource::Find("lwtrace/mon/static/footer.html") << Endl;
 }
 
 struct TScopedHtmlInner {
-    explicit TScopedHtmlInner(IOutputStream& str) 
+    explicit TScopedHtmlInner(IOutputStream& str)
         : Str(str)
     {
         Str << "<!DOCTYPE html>\n"
@@ -1154,7 +1154,7 @@ struct TScopedHtmlInner {
 
     inline operator bool () const noexcept { return true; }
 
-    IOutputStream &Str; 
+    IOutputStream &Str;
 };
 
 TString NavbarHeader()
@@ -1165,7 +1165,7 @@ TString NavbarHeader()
 }
 
 struct TSelectorsContainer {
-    TSelectorsContainer(IOutputStream& str) 
+    TSelectorsContainer(IOutputStream& str)
         : Str(str)
     {
         Str << "<nav id=\"selectors-container\" class=\"navbar navbar-default\">"
@@ -1192,11 +1192,11 @@ struct TSelectorsContainer {
         } catch(...) {}
     }
 
-    IOutputStream& Str; 
+    IOutputStream& Str;
 };
 
 struct TNullContainer {
-    TNullContainer(IOutputStream&) {} 
+    TNullContainer(IOutputStream&) {}
 };
 
 class TPageGenBase: public std::exception {};
@@ -1275,7 +1275,7 @@ TString BtnClass() {
     return "btn";
 }
 
-void SelectorTitle(IOutputStream& os, const TString& text) 
+void SelectorTitle(IOutputStream& os, const TString& text)
 {
     if (!text.empty()) {
         os << text;
@@ -1283,7 +1283,7 @@ void SelectorTitle(IOutputStream& os, const TString& text)
 }
 
 template <ui64 flags>
-void BtnHref(IOutputStream& os, const TString& text, const TString& href, bool push = false) 
+void BtnHref(IOutputStream& os, const TString& text, const TString& href, bool push = false)
 {
     if (flags & Button) {
         os << "<button type=\"button\" style=\"display: inline-block;margin:3px\" class=\""
@@ -1299,17 +1299,17 @@ void BtnHref(IOutputStream& os, const TString& text, const TString& href, bool p
     }
 }
 
-void DropdownBeginSublist(IOutputStream& os, const TString& text) 
+void DropdownBeginSublist(IOutputStream& os, const TString& text)
 {
     os << "<li>" << text << "<ul class=\"dropdown-menu\">";
 }
 
-void DropdownEndSublist(IOutputStream& os) 
+void DropdownEndSublist(IOutputStream& os)
 {
     os << "</ul></li>";
 }
 
-void DropdownItem(IOutputStream& os, const TString& text, const TString& href, bool separated = false) 
+void DropdownItem(IOutputStream& os, const TString& text, const TString& href, bool separated = false)
 {
     if (separated) {
         os << "<li role=\"separator\" class=\"divider\"></li>";
@@ -1341,7 +1341,7 @@ TString GetDescription(const TString& value, const TVariants& variants)
 }
 
 template <ui64 flags, bool sub = false>
-void DropdownSelector(IOutputStream& os, const TCgiParameters& e, const TString& param, const TString& value, 
+void DropdownSelector(IOutputStream& os, const TCgiParameters& e, const TString& param, const TString& value,
                       const TString& text, const TVariants& variants, const TString& realValue = TString())
 {
     HTML(os) {
@@ -1567,7 +1567,7 @@ public:
         row.emplace_back(ToString(probe->GetExecutorsCount()));
     }
 
-    void Output(IOutputStream& os) 
+    void Output(IOutputStream& os)
     {
         HTML(os) {
             TABLE() {
@@ -1837,10 +1837,10 @@ public:
 
 class TTracesHtmlPrinter {
 private:
-    IOutputStream& Os; 
+    IOutputStream& Os;
     TInstant Now;
 public:
-    explicit TTracesHtmlPrinter(IOutputStream& os) 
+    explicit TTracesHtmlPrinter(IOutputStream& os)
         : Os(os)
         , Now(TInstant::Now())
     {}
@@ -2182,11 +2182,11 @@ static TString EscapeJSONString(const TString& s)
 
 class TLogJsonPrinter {
 private:
-    IOutputStream& Os; 
+    IOutputStream& Os;
     bool FirstThread;
     bool FirstItem;
 public:
-    explicit TLogJsonPrinter(IOutputStream& os) 
+    explicit TLogJsonPrinter(IOutputStream& os)
         : Os(os)
         , FirstThread(true)
         , FirstItem(true)
@@ -2283,7 +2283,7 @@ public:
         Json
     };
 
-    void Output(IOutputStream& os) const 
+    void Output(IOutputStream& os) const
     {
         OutputItems<Text>(os);
         OutputDepot<Text>(os);
@@ -2365,7 +2365,7 @@ private:
     }
 
     template <EFormat Format>
-    void OutputItems(IOutputStream& os) const 
+    void OutputItems(IOutputStream& os) const
     {
         ui64 idx = 0;
         ui64 size = Items.size();
@@ -2390,7 +2390,7 @@ private:
     }
 
     template <EFormat Format>
-    void OutputDepot(IOutputStream& os) const 
+    void OutputDepot(IOutputStream& os) const
     {
         ui64 idx = 0;
         ui64 size = Depot.size();
@@ -3283,7 +3283,7 @@ public:
     }
 
     // Tabular representation of tracks data
-    void OutputTable(IOutputStream& os, const TCgiParameters& e) 
+    void OutputTable(IOutputStream& os, const TCgiParameters& e)
     {
         ui64 tracksTotal = Tree.GetRoot()->TrackCount;
 
@@ -3390,7 +3390,7 @@ public:
     }
 
     // Chromium-compatible trace representation of tracks data
-    void OutputChromeTrace(IOutputStream& os, const TCgiParameters& e) 
+    void OutputChromeTrace(IOutputStream& os, const TCgiParameters& e)
     {
         Y_UNUSED(e);
         TChromeTrace tr;
@@ -3428,7 +3428,7 @@ public:
         tr.Output(os);
     }
 
-    void OutputSliceCovarianceMatrix(IOutputStream& os, const TCgiParameters& e) 
+    void OutputSliceCovarianceMatrix(IOutputStream& os, const TCgiParameters& e)
     {
         Y_UNUSED(e);
         TPatternNode* node = Tree.GetSelectedNode();
@@ -3495,7 +3495,7 @@ private:
         return nullptr;
     }
 
-    void OutputPattern(IOutputStream& os, const TCgiParameters& e, TPatternNode* node) 
+    void OutputPattern(IOutputStream& os, const TCgiParameters& e, TPatternNode* node)
     {
         // Fill pattern name
         TString patternName;
@@ -3566,7 +3566,7 @@ private:
         }
     }
 
-    void OutputShare(IOutputStream& os, double share) 
+    void OutputShare(IOutputStream& os, double share)
     {
         double lshare = share;
         double rshare = 100 - lshare;
@@ -3610,7 +3610,7 @@ private:
         return ret;
     }
 
-    void OutputTimeline(IOutputStream& os, const TTimeline& timeline, double maxTime) 
+    void OutputTimeline(IOutputStream& os, const TTimeline& timeline, double maxTime)
     {
         static const char *barClass[] = {
             "progress-bar-info",

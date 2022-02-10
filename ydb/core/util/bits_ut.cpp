@@ -3,8 +3,8 @@
 
 namespace NKikimr {
 
-    Y_UNIT_TEST_SUITE(TBitsTest) { 
-        Y_UNIT_TEST(TestNaiveClz) { 
+    Y_UNIT_TEST_SUITE(TBitsTest) {
+        Y_UNIT_TEST(TestNaiveClz) {
             UNIT_ASSERT(sizeof(unsigned) == sizeof(ui32));
             UNIT_ASSERT_EQUAL(NaiveClz(58649), 16);
             UNIT_ASSERT_EQUAL(NaiveClz(0xF0000000), 0);

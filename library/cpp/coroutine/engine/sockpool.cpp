@@ -21,7 +21,7 @@ void SetCommonSockOpts(SOCKET sock, const struct sockaddr* sa) {
             warn("bind6");
         }
     } else {
-        Y_ASSERT(0); 
+        Y_ASSERT(0);
     }
 
     SetNoDelay(sock, true);

@@ -11,7 +11,7 @@
 
 namespace NProtoAST {
     template <typename InputType>
-    void InvalidCharacter(IOutputStream& err, const InputType* input) { 
+    void InvalidCharacter(IOutputStream& err, const InputType* input) {
         wchar32 rune = 0;
         size_t runeLen = 0;
         auto begin = input->get_nextChar();
@@ -22,7 +22,7 @@ namespace NProtoAST {
     }
 
     template <typename TokenType>
-    void InvalidToken(IOutputStream& err, const TokenType* token) { 
+    void InvalidToken(IOutputStream& err, const TokenType* token) {
         if (token) {
             if (token->get_input()) {
                 err << " '" << token->getText() << "'";
@@ -53,14 +53,14 @@ namespace NProtoAST {
 
     class TErrorOutput: public IErrorCollector {
     public:
-        TErrorOutput(IOutputStream& err, const TString& name, size_t maxErrors); 
+        TErrorOutput(IOutputStream& err, const TString& name, size_t maxErrors);
         virtual ~TErrorOutput();
 
     private:
         void AddError(ui32 line, ui32 col, const TString& message) override;
 
     public:
-        IOutputStream& Err; 
+        IOutputStream& Err;
         TString Name;
     };
 

@@ -3,8 +3,8 @@
 namespace NKikimr {
 namespace NKesus {
 
-Y_UNIT_TEST_SUITE(TProxyActorTest) { 
-    Y_UNIT_TEST(TestCreateSemaphore) { 
+Y_UNIT_TEST_SUITE(TProxyActorTest) {
+    Y_UNIT_TEST(TestCreateSemaphore) {
         TTestContext ctx;
         ctx.Setup();
         ctx.CreateSemaphore(42, "Sem1", 1);
@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(TProxyActorTest) {
         ctx.VerifySemaphoreParams(42, "Sem2", 2, "\x81\x82\x83\x84");
     }
 
-    Y_UNIT_TEST(TestCreateSemaphoreInterrupted) { 
+    Y_UNIT_TEST(TestCreateSemaphoreInterrupted) {
         TTestContext ctx;
         ctx.Setup();
         ctx.CreateSemaphore(42, "Sem1", 1);
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TProxyActorTest) {
         ctx.ExpectProxyError(edge, cookie, Ydb::StatusIds::UNAVAILABLE);
     }
 
-    Y_UNIT_TEST(TestAttachSession) { 
+    Y_UNIT_TEST(TestAttachSession) {
         TTestContext ctx;
         ctx.Setup();
 

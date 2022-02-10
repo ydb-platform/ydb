@@ -43,7 +43,7 @@ void NFs::RemoveRecursive(const TString& path) {
         switch (it->fts_info) {
             case FTS_DOT:
             case FTS_D:
-                break; 
+                break;
             default:
                 if (!NFs::Remove(it->fts_path)) {
                     ythrow TSystemError() << errStr << it->fts_path << " with cwd (" << NFs::CurrentWorkingDirectory() << ")";
@@ -55,7 +55,7 @@ void NFs::RemoveRecursive(const TString& path) {
 
 bool NFs::MakeDirectory(const TString& path, EFilePermissions mode) {
 #if defined(_win_)
-    Y_UNUSED(mode); 
+    Y_UNUSED(mode);
     return NFsPrivate::WinMakeDirectory(path);
 #else
     return mkdir(path.data(), mode) == 0;
@@ -65,8 +65,8 @@ bool NFs::MakeDirectory(const TString& path, EFilePermissions mode) {
 bool NFs::MakeDirectoryRecursive(const TString& path, EFilePermissions mode, bool alwaysCreate) {
     if (NFs::Exists(path) && TFileStat(path).IsDir()) {
         if (alwaysCreate) {
-            ythrow TIoException() << "path " << path << " already exists" 
-                                  << " with cwd (" << NFs::CurrentWorkingDirectory() << ")"; 
+            ythrow TIoException() << "path " << path << " already exists"
+                                  << " with cwd (" << NFs::CurrentWorkingDirectory() << ")";
         }
         return true;
     } else {

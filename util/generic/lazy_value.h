@@ -39,7 +39,7 @@ public:
     }
 
     void InitDefault() const {
-        Y_ASSERT(Initializer); 
+        Y_ASSERT(Initializer);
         ValueHolder = Initializer();
     }
 

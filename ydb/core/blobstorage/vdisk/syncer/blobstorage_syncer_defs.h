@@ -32,7 +32,7 @@ namespace NKikimr {
                 , DbBirthLsn(dbBirthLsn)
             {}
 
-            void Output(IOutputStream &str) const { 
+            void Output(IOutputStream &str) const {
                 str << "[State# " << State
                 << " Guid# " << Guid
                 << " DbBirthLsn# " << DbBirthLsn << "]";

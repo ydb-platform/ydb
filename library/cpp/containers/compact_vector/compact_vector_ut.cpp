@@ -2,11 +2,11 @@
 
 #include "compact_vector.h"
 
-Y_UNIT_TEST_SUITE(TCompactVectorTest) { 
-    Y_UNIT_TEST(TestSimple1) { 
+Y_UNIT_TEST_SUITE(TCompactVectorTest) {
+    Y_UNIT_TEST(TestSimple1) {
     }
 
-    Y_UNIT_TEST(TestSimple) { 
+    Y_UNIT_TEST(TestSimple) {
         TCompactVector<ui32> vector;
         for (ui32 i = 0; i < 10000; ++i) {
             vector.PushBack(i + 20);
@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(TCompactVectorTest) {
         }
     }
 
-    Y_UNIT_TEST(TestInsert) { 
+    Y_UNIT_TEST(TestInsert) {
         TCompactVector<ui32> vector;
 
         for (ui32 i = 0; i < 10; ++i) {

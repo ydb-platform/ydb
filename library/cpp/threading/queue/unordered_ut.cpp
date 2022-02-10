@@ -56,7 +56,7 @@ public:
     void ManyThreadsRndExchange() {
         TQueueType queues[COUNT];
 
-        class TWorker: public ISimpleThread { 
+        class TWorker: public ISimpleThread {
         public:
             TWorker(
                 TQueueType* queues_,

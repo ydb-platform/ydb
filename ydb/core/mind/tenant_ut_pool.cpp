@@ -271,8 +271,8 @@ void ChangeMonitoringConfig(TTenantTestRuntime &runtime,
 
 } // anonymous namesapce
 
-Y_UNIT_TEST_SUITE(TTenantPoolTests) { 
-    Y_UNIT_TEST(TestAssignTenantSimple) { 
+Y_UNIT_TEST_SUITE(TTenantPoolTests) {
+    Y_UNIT_TEST(TestAssignTenantSimple) {
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
 
         CheckConfigureSlot(runtime, 0,
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
         CheckTenantPoolStatus(runtime, TENANT1_1_NAME, TENANT1_2_NAME, "");
     }
 
-    Y_UNIT_TEST(TestAssignTenantStatic) { 
+    Y_UNIT_TEST(TestAssignTenantStatic) {
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
 
         CheckConfigureSlot(runtime, 0,
@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                               DOMAIN1_NAME, "", "");
     }
 
-    Y_UNIT_TEST(TestAssignTenantMultiple) { 
+    Y_UNIT_TEST(TestAssignTenantMultiple) {
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
 
         CheckConfigureSlot(runtime, 0,
@@ -316,7 +316,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                               TENANT1_1_NAME, TENANT1_1_NAME, TENANT1_1_NAME);
     }
 
-    Y_UNIT_TEST(TestAssignTenantWithReassigns) { 
+    Y_UNIT_TEST(TestAssignTenantWithReassigns) {
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
 
         CheckConfigureSlot(runtime, 0,
@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                               TENANT1_1_NAME, TENANT1_2_NAME, DOMAIN1_NAME);
     }
 
-    Y_UNIT_TEST(TestAssignTenantWithDetach) { 
+    Y_UNIT_TEST(TestAssignTenantWithDetach) {
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
 
         CheckConfigureSlot(runtime, 0,
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                               TENANT1_1_NAME, "", "");
     }
 
-    Y_UNIT_TEST(TestAssignTenantUnknownTenant) { 
+    Y_UNIT_TEST(TestAssignTenantUnknownTenant) {
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
 
         CheckConfigureSlot(runtime, 0,
@@ -374,7 +374,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
         CheckTenantPoolStatus(runtime);
     }
 
-    Y_UNIT_TEST(TestAssignTenantPostponed) { 
+    Y_UNIT_TEST(TestAssignTenantPostponed) {
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
 
         CheckConfigureSlot(runtime, 0,
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                               TENANT1_1_NAME, TENANT1_2_NAME, "");
     }
 
-    Y_UNIT_TEST(TestOwnership) { 
+    Y_UNIT_TEST(TestOwnership) {
         TTenantTestRuntime runtime(DefaultTenantTestConfig);
         TAutoPtr<IEventHandle> handle;
 
@@ -453,7 +453,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
                               TENANT1_2_NAME, TENANT1_2_NAME, "");
     }
 
-    Y_UNIT_TEST(TestSensorLabels) { 
+    Y_UNIT_TEST(TestSensorLabels) {
         const TTenantTestConfig config = {
             // Domains {name, schemeshard {{ subdomain_names }}}
             {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }},
@@ -646,7 +646,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
 
     }
 
-    Y_UNIT_TEST(TestSensorLabelsForStaticConfig) { 
+    Y_UNIT_TEST(TestSensorLabelsForStaticConfig) {
         const TTenantTestConfig config = {
             // Domains {name, schemeshard {{ subdomain_names }}}
             {{ {DOMAIN1_NAME, SCHEME_SHARD1_ID, {{ TENANT1_1_NAME, TENANT1_2_NAME }}} }},

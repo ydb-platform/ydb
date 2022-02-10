@@ -103,7 +103,7 @@ namespace {
     };
 }
 
-Y_UNIT_TEST_SUITE(TestProtocols) { 
+Y_UNIT_TEST_SUITE(TestProtocols) {
     class TResolveTester
         : public TProtoReadyActor<TActorBootstrapped, TResolveTester>
         , public TResolveClientProtocol
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
     };
 
 
-    Y_UNIT_TEST(TestResolveProtocol) { 
+    Y_UNIT_TEST(TestResolveProtocol) {
         for (size_t i = 0; i < 10; ++i) {
             TTestBasicRuntime runtime(2);
             runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
     };
 
 
-    Y_UNIT_TEST(TestConnectProtocol) { 
+    Y_UNIT_TEST(TestConnectProtocol) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
         THTTP200OkServer serverImpl("");
@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
     };
 
 
-    Y_UNIT_TEST(TestHTTPCollected) { 
+    Y_UNIT_TEST(TestHTTPCollected) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
         THTTP200OkServer serverImpl("");
@@ -681,7 +681,7 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
     };
 
 
-    Y_UNIT_TEST(TestHTTPRequest) { 
+    Y_UNIT_TEST(TestHTTPRequest) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
         THTTP200OkServer serverImpl("");

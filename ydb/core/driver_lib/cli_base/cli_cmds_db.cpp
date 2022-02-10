@@ -16,8 +16,8 @@
 #include <util/generic/hash.h>
 #include <util/string/split.h>
 #include <util/string/join.h>
-#include <util/string/printf.h> 
- 
+#include <util/string/printf.h>
+
 namespace NKikimr {
 namespace NDriverClient {
 
@@ -531,7 +531,7 @@ public:
         TClientCommand::Parse(config);
         Request = new NKikimrClient::TSchemeInitRoot();
         Root = config.ParseResult->GetFreeArgs()[0];
-        if (Root.StartsWith('/')) 
+        if (Root.StartsWith('/'))
             Root = Root.substr(1);
         Request->SetTagName(Root);
         if (DefaultStoragePool) {

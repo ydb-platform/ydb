@@ -13,7 +13,7 @@ struct TBoundCheck {
         Size = s;
     }
     T& operator[](size_t i) const {
-        Y_ASSERT(i >= 0 && i < Size); 
+        Y_ASSERT(i >= 0 && i < Size);
         return Data[i];
     }
 };

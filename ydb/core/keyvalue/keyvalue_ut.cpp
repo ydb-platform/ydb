@@ -45,15 +45,15 @@ public:
     }
 
     bool operator()(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-        Y_UNUSED(runtime); 
-        Y_UNUSED(event); 
+        Y_UNUSED(runtime);
+        Y_UNUSED(event);
         return false;
     }
 };
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(TKeyValueTest) { 
+Y_UNIT_TEST_SUITE(TKeyValueTest) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SETUP
@@ -74,7 +74,7 @@ struct TTestContext {
     }
 
     void Prepare(const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &outActiveZone) {
-        Y_UNUSED(dispatchName); 
+        Y_UNUSED(dispatchName);
         outActiveZone = false;
         Runtime.Reset(new TTestBasicRuntime);
         Runtime->SetScheduledLimit(100);
@@ -130,7 +130,7 @@ void DoWithRetry(std::function<bool(void)> action, i32 retryCount = 2) {
 void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
         const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
         const NKikimrClient::TKeyValueRequest::EPriority priority, TTestContext &tc) {
-    Y_VERIFY(keys.size() == values.size()); 
+    Y_VERIFY(keys.size() == values.size());
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
@@ -174,8 +174,8 @@ void CmdWrite(const TString &key, const TString &value,
 void CmdRead(const TDeque<TString> &keys,
         const NKikimrClient::TKeyValueRequest::EPriority priority,
         const TDeque<TString> &expectedValues, const TDeque<bool> expectedNodatas, TTestContext &tc) {
-    Y_VERIFY(keys.size() == expectedValues.size()); 
-    Y_VERIFY(expectedNodatas.size() == 0 || expectedNodatas.size() == keys.size()); 
+    Y_VERIFY(keys.size() == expectedValues.size());
+    Y_VERIFY(expectedNodatas.size() == 0 || expectedNodatas.size() == keys.size());
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
@@ -211,7 +211,7 @@ void CmdRead(const TDeque<TString> &keys,
 
 void CmdRename(const TDeque<TString> &oldKeys, const TDeque<TString> &newKeys, TTestContext &tc,
         bool expectOk = true) {
-    Y_VERIFY(oldKeys.size() == newKeys.size()); 
+    Y_VERIFY(oldKeys.size() == newKeys.size());
     TAutoPtr<IEventHandle> handle;
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
@@ -1137,7 +1137,7 @@ Y_UNIT_TEST(TestWrite200KDeleteThenResponseErrorNewApi) {
 }
 */
 
-Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOk) { 
+Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOk) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1216,7 +1216,7 @@ Y_UNIT_TEST(TestWriteReadWithRestartsThenResponseOkNewApi) {
 }
 
 
-Y_UNIT_TEST(TestInlineWriteReadWithRestartsThenResponseOk) { 
+Y_UNIT_TEST(TestInlineWriteReadWithRestartsThenResponseOk) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1424,7 +1424,7 @@ TString PrepareData(ui32 size, ui32 flavor) {
 }
 
 
-Y_UNIT_TEST(TestWriteReadRangeLimitThenLimitWorks) { 
+Y_UNIT_TEST(TestWriteReadRangeLimitThenLimitWorks) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1606,7 +1606,7 @@ Y_UNIT_TEST(TestWriteReadRangeDataLimitThenLimitWorksNewApi) {
 }
 
 
-Y_UNIT_TEST(TestInlineWriteReadRangeLimitThenLimitWorks) { 
+Y_UNIT_TEST(TestInlineWriteReadRangeLimitThenLimitWorks) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1660,7 +1660,7 @@ Y_UNIT_TEST(TestInlineWriteReadRangeLimitThenLimitWorksNewApi) {
 }
 
 
-Y_UNIT_TEST(TestCopyRangeWorks) { 
+Y_UNIT_TEST(TestCopyRangeWorks) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1730,7 +1730,7 @@ Y_UNIT_TEST(TestCopyRangeWorksNewApi) {
 }
 
 
-Y_UNIT_TEST(TestInlineCopyRangeWorks) { 
+Y_UNIT_TEST(TestInlineCopyRangeWorks) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1776,7 +1776,7 @@ Y_UNIT_TEST(TestInlineCopyRangeWorksNewApi) {
 }
 
 
-Y_UNIT_TEST(TestConcatWorks) { 
+Y_UNIT_TEST(TestConcatWorks) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1826,7 +1826,7 @@ Y_UNIT_TEST(TestConcatWorksNewApi) {
 }
 
 
-Y_UNIT_TEST(TestRenameWorks) { 
+Y_UNIT_TEST(TestRenameWorks) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1868,7 +1868,7 @@ Y_UNIT_TEST(TestRenameWorksewApi) {
 }
 
 
-Y_UNIT_TEST(TestWriteToExtraChannelThenReadMixedChannelsReturnsOk) { 
+Y_UNIT_TEST(TestWriteToExtraChannelThenReadMixedChannelsReturnsOk) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1910,7 +1910,7 @@ Y_UNIT_TEST(TestWriteToExtraChannelThenReadMixedChannelsReturnsOkNewApi) {
 }
 
 
-Y_UNIT_TEST(TestIncrementalKeySet) { 
+Y_UNIT_TEST(TestIncrementalKeySet) {
     // generate initial key set
     TSet<TString> keys;
     for (ui32 i = 0; i < 100; ++i) {
@@ -1989,7 +1989,7 @@ Y_UNIT_TEST(TestIncrementalKeySet) {
     }
 }
 
-Y_UNIT_TEST(TestGetStatusWorks) { 
+Y_UNIT_TEST(TestGetStatusWorks) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -2014,7 +2014,7 @@ Y_UNIT_TEST(TestGetStatusWorksNewApi) {
    });
 }
 
-Y_UNIT_TEST(TestWriteReadWhileWriteWorks) { 
+Y_UNIT_TEST(TestWriteReadWhileWriteWorks) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -2051,7 +2051,7 @@ Y_UNIT_TEST(TestWriteReadWhileWriteWorks) {
     });
 }
 
-Y_UNIT_TEST(TestSetExecutorFastLogPolicy) { 
+Y_UNIT_TEST(TestSetExecutorFastLogPolicy) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();

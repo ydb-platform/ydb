@@ -30,7 +30,7 @@ size_t TUnbufferedFileInput::DoSkip(size_t len) {
          * actually doing one read is cheaper. Experiments show that the
          * border that separates two implementations performance-wise lies
          * in the range of 384-512 bytes (assuming that the file is in OS cache). */
-        return IInputStream::DoSkip(len); 
+        return IInputStream::DoSkip(len);
     }
 
     /* TFile::Seek can seek beyond the end of file, so we need to do
@@ -81,14 +81,14 @@ public:
 };
 
 TMappedFileInput::TMappedFileInput(const TFile& file)
-    : TMemoryInput(nullptr, 0) 
+    : TMemoryInput(nullptr, 0)
     , Impl_(new TImpl(file))
 {
     Reset(Impl_->Data(), Impl_->Size());
 }
 
 TMappedFileInput::TMappedFileInput(const TString& path)
-    : TMemoryInput(nullptr, 0) 
+    : TMemoryInput(nullptr, 0)
     , Impl_(new TImpl(TFile(path, OpenExisting | RdOnly)))
 {
     Reset(Impl_->Data(), Impl_->Size());

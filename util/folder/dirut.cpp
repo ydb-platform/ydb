@@ -5,8 +5,8 @@
 #include "pathsplit.h"
 #include "path.h"
 
-#include <util/generic/yexception.h> 
-#include <util/system/compiler.h> 
+#include <util/generic/yexception.h>
+#include <util/system/compiler.h>
 #include <util/system/fs.h>
 #include <util/system/maxlen.h>
 #include <util/system/yassert.h>
@@ -30,13 +30,13 @@ bool correctpath(TString& folder) {
 }
 
 bool resolvepath(TString& folder, const TString& home) {
-    Y_ASSERT(home && home.at(0) == '/'); 
+    Y_ASSERT(home && home.at(0) == '/');
     if (!folder) {
         return false;
     }
     // may be from windows
     char* ptr = folder.begin();
-    while ((ptr = strchr(ptr, '\\')) != nullptr) 
+    while ((ptr = strchr(ptr, '\\')) != nullptr)
         *ptr = '/';
 
     if (folder.at(0) == '~') {
@@ -383,14 +383,14 @@ void RemoveDirWithContents(TString dirName) {
 
     for (auto it = dir.begin(); it != dir.end(); ++it) {
         switch (it->fts_info) {
-            case FTS_F: 
-            case FTS_DEFAULT: 
-            case FTS_DP: 
-            case FTS_SL: 
-            case FTS_SLNONE: 
-                if (!NFs::Remove(it->fts_path)) 
-                    ythrow TSystemError() << "error while removing " << it->fts_path; 
-                break; 
+            case FTS_F:
+            case FTS_DEFAULT:
+            case FTS_DP:
+            case FTS_SL:
+            case FTS_SLNONE:
+                if (!NFs::Remove(it->fts_path))
+                    ythrow TSystemError() << "error while removing " << it->fts_path;
+                break;
         }
     }
 }
@@ -404,7 +404,7 @@ int mkpath(char* path, int mode) {
 // if it does not). Use RealLocation if that behaviour is required.
 TString RealPath(const TString& path) {
     TTempBuf result;
-    Y_ASSERT(result.Size() > MAX_PATH); //TMP_BUF_LEN > MAX_PATH 
+    Y_ASSERT(result.Size() > MAX_PATH); //TMP_BUF_LEN > MAX_PATH
 #ifdef _win_
     if (GetFullPathName(path.data(), result.Size(), result.Data(), nullptr) == 0)
 #else
@@ -437,7 +437,7 @@ int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix) {
         prefix = sysTmp.data();
     }
 
-    if ((ret = ResolvePath(prefix, nullptr, path, 1)) != 0) 
+    if ((ret = ResolvePath(prefix, nullptr, path, 1)) != 0)
         return ret;
     if (!TFileStat(path).IsDir())
         return ENOENT;
@@ -457,7 +457,7 @@ TString GetHomeDir() {
     TString s(getenv("HOME"));
     if (!s) {
 #ifndef _win32_
-        passwd* pw = nullptr; 
+        passwd* pw = nullptr;
         s = getenv("USER");
         if (s)
             pw = getpwnam(s.data());
@@ -468,7 +468,7 @@ TString GetHomeDir() {
         else
 #endif
         {
-            char* cur_dir = getcwd(nullptr, 0); 
+            char* cur_dir = getcwd(nullptr, 0);
             s = cur_dir;
             free(cur_dir);
         }
@@ -477,8 +477,8 @@ TString GetHomeDir() {
 }
 
 void MakeDirIfNotExist(const char* path, int mode) {
-    if (!NFs::MakeDirectory(path, NFs::EFilePermission(mode)) && !NFs::Exists(path)) { 
-        ythrow TSystemError() << "failed to create directory " << path; 
+    if (!NFs::MakeDirectory(path, NFs::EFilePermission(mode)) && !NFs::Exists(path)) {
+        ythrow TSystemError() << "failed to create directory " << path;
     }
 }
 

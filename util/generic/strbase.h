@@ -46,7 +46,7 @@ public:
 
     using size_type = size_t;
     using difference_type = ptrdiff_t;
-    static constexpr size_t npos = size_t(-1); 
+    static constexpr size_t npos = size_t(-1);
 
     using const_iterator = const TCharType*;
     using const_reference = const TCharType&;
@@ -144,13 +144,13 @@ public:
     }
 
     inline const_iterator cbegin() const noexcept {
-        return begin(); 
-    } 
- 
+        return begin();
+    }
+
     inline const_iterator cend() const noexcept {
-        return end(); 
-    } 
- 
+        return end();
+    }
+
     inline const_reverse_iterator rbegin() const noexcept {
         return const_reverse_iterator(Ptr() + size());
     }
@@ -294,35 +294,35 @@ public:
         return equal(LegacySubString(*this, p, n), LegacySubString(t, 0, n1));
     }
 
-    static inline bool StartsWith(const TCharType* what, size_t whatLen, const TCharType* with, size_t withLen) noexcept { 
+    static inline bool StartsWith(const TCharType* what, size_t whatLen, const TCharType* with, size_t withLen) noexcept {
         return withLen <= whatLen && TStringViewWithTraits(what, withLen) == TStringViewWithTraits(with, withLen);
     }
 
-    static inline bool EndsWith(const TCharType* what, size_t whatLen, const TCharType* with, size_t withLen) noexcept { 
+    static inline bool EndsWith(const TCharType* what, size_t whatLen, const TCharType* with, size_t withLen) noexcept {
         return withLen <= whatLen && TStringViewWithTraits(what + whatLen - withLen, withLen) == TStringViewWithTraits(with, withLen);
     }
 
-    inline bool StartsWith(const TCharType* s, size_t n) const noexcept { 
-        return StartsWith(Ptr(), Len(), s, n); 
+    inline bool StartsWith(const TCharType* s, size_t n) const noexcept {
+        return StartsWith(Ptr(), Len(), s, n);
     }
 
     inline bool StartsWith(const TStringView s) const noexcept {
         return StartsWith(s.data(), s.length());
     }
 
-    inline bool StartsWith(TCharType ch) const noexcept { 
+    inline bool StartsWith(TCharType ch) const noexcept {
         return !empty() && TTraits::eq(*Ptr(), ch);
     }
 
-    inline bool EndsWith(const TCharType* s, size_t n) const noexcept { 
-        return EndsWith(Ptr(), Len(), s, n); 
+    inline bool EndsWith(const TCharType* s, size_t n) const noexcept {
+        return EndsWith(Ptr(), Len(), s, n);
     }
 
     inline bool EndsWith(const TStringView s) const noexcept {
         return EndsWith(s.data(), s.length());
     }
 
-    inline bool EndsWith(TCharType ch) const noexcept { 
+    inline bool EndsWith(TCharType ch) const noexcept {
         return !empty() && TTraits::eq(Ptr()[Len() - 1], ch);
     }
 
@@ -432,7 +432,7 @@ public:
 
     // ~~ Read access ~~
     inline TCharType at(size_t pos) const noexcept {
-        if (Y_LIKELY(pos < Len())) { 
+        if (Y_LIKELY(pos < Len())) {
             return (Ptr())[pos];
         }
         return 0;

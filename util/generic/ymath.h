@@ -10,9 +10,9 @@
 #include "typetraits.h"
 #include "utility.h"
 
-constexpr double PI = M_PI; 
-constexpr double M_LOG2_10 = 3.32192809488736234787; // log2(10) 
-constexpr double M_LN2_INV = M_LOG2E;                // 1 / ln(2) == log2(e) 
+constexpr double PI = M_PI;
+constexpr double M_LOG2_10 = 3.32192809488736234787; // log2(10)
+constexpr double M_LN2_INV = M_LOG2E;                // 1 / ln(2) == log2(e)
 
 /**
  * \returns                             Absolute value of the provided argument.
@@ -42,7 +42,7 @@ inline float Log2(float value) {
  * @returns                             Base 2 logarithm of the provided integral value.
  */
 template <class T>
-inline std::enable_if_t<std::is_integral<T>::value, double> 
+inline std::enable_if_t<std::is_integral<T>::value, double>
 Log2(T value) {
     return Log2(static_cast<double>(value));
 }
@@ -52,7 +52,7 @@ double Exp2(double);
 float Exp2f(float);
 
 template <class T>
-static constexpr T Sqr(const T t) noexcept { 
+static constexpr T Sqr(const T t) noexcept {
     return t * t;
 }
 

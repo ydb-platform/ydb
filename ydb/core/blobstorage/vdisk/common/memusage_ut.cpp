@@ -3,8 +3,8 @@
 
 using namespace NKikimr;
 
-Y_UNIT_TEST_SUITE(TTrackable) { 
-    Y_UNIT_TEST(TVector) { 
+Y_UNIT_TEST_SUITE(TTrackable) {
+    Y_UNIT_TEST(TVector) {
         NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
         TMemoryConsumer cons(cntr);
         NMonitoring::TDynamicCounters::TCounterPtr cntr2(new NMonitoring::TCounterForPtr);
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(TTrackable) {
         UNIT_ASSERT_EQUAL(*cntr, 0);
     }
 
-    Y_UNIT_TEST(TList) { 
+    Y_UNIT_TEST(TList) {
         NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
         TMemoryConsumer cons(cntr);
         TTrackableList<ui32> list{TMemoryConsumer(cons)};
@@ -44,12 +44,12 @@ Y_UNIT_TEST_SUITE(TTrackable) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*cntr), 3 * sizeof(void *));
     }
 
-    Y_UNIT_TEST(TString) { 
+    Y_UNIT_TEST(TString) {
         NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
         TMemoryConsumer cons(cntr);
     }
 
-    Y_UNIT_TEST(TBuffer) { 
+    Y_UNIT_TEST(TBuffer) {
         NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
         TMemoryConsumer cons(cntr);
     }

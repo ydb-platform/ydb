@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         pDisk->Wakeup();
     }
 
-    Y_UNIT_TEST(TestThatEveryValueOfEStateEnumKeepsItIntegerValue) { 
+    Y_UNIT_TEST(TestThatEveryValueOfEStateEnumKeepsItIntegerValue) {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Warning!
         // Kikimr Admins use Integer values of EState in their scripts!

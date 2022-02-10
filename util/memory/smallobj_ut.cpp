@@ -17,7 +17,7 @@ class TSmallObjAllocTest: public TTestBase {
         }
     };
 
-    struct TClass64: public TObjectFromPool<TClass64> { 
+    struct TClass64: public TObjectFromPool<TClass64> {
         alignas(64) ui64 Data = 0;
     };
 
@@ -30,10 +30,10 @@ class TSmallObjAllocTest: public TTestBase {
 private:
     void TestAlign() {
         TClass64::TPool pool(TDefaultAllocator::Instance());
-        TClass64* f1 = new (&pool) TClass64; 
-        TClass64* f2 = new (&pool) TClass64; 
-        TClass64* f3 = new (&pool) TClass64; 
-        TClass64* f4 = new (&pool) TClass64; 
+        TClass64* f1 = new (&pool) TClass64;
+        TClass64* f2 = new (&pool) TClass64;
+        TClass64* f3 = new (&pool) TClass64;
+        TClass64* f4 = new (&pool) TClass64;
         UNIT_ASSERT_VALUES_EQUAL(64u, alignof(TClass64));
         UNIT_ASSERT_VALUES_EQUAL((size_t)0, (size_t)(f1) & (alignof(TClass64) - 1));
         UNIT_ASSERT_VALUES_EQUAL((size_t)0, (size_t)(f2) & (alignof(TClass64) - 1));
@@ -70,8 +70,8 @@ private:
             alloced.insert(c);
         }
 
-        for (auto it : alloced) { 
-            delete it; 
+        for (auto it : alloced) {
+            delete it;
         }
 
         for (size_t i = 0; i < 10000; ++i) {

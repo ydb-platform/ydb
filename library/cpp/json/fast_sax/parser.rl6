@@ -124,7 +124,7 @@ struct TParserCtx {
     }
 
     bool OnString(TStringBuf s, EStoredStr t) {
-        if (Y_LIKELY(OnVal())) { 
+        if (Y_LIKELY(OnVal())) {
             String = s;
             Stored = t;
             return true;
@@ -210,21 +210,21 @@ machine fastjson;
 
 alphtype char;
 
-action OnNull  { if (Y_UNLIKELY(!OnNull()))  goto TOKEN_ERROR; } 
-action OnTrue  { if (Y_UNLIKELY(!OnTrue()))  goto TOKEN_ERROR; } 
-action OnFalse { if (Y_UNLIKELY(!OnFalse())) goto TOKEN_ERROR; } 
-action OnPInt  { if (Y_UNLIKELY(!OnPInt()))  goto TOKEN_ERROR; } 
-action OnNInt  { if (Y_UNLIKELY(!OnNInt()))  goto TOKEN_ERROR; } 
-action OnFlt   { if (Y_UNLIKELY(!OnFlt()))   goto TOKEN_ERROR; } 
-action OnStrU  { if (Y_UNLIKELY(!OnStrU()))  goto TOKEN_ERROR; } 
-action OnStrQ  { if (Y_UNLIKELY(!OnStrQ()))  goto TOKEN_ERROR; } 
-action OnStrE  { if (Y_UNLIKELY(!OnStrE()))  goto TOKEN_ERROR; } 
-action OnDictO { if (Y_UNLIKELY(!OnMapOpen()))  goto TOKEN_ERROR; } 
-action OnDictC { if (Y_UNLIKELY(!OnMapClose())) goto TOKEN_ERROR; } 
-action OnArrO  { if (Y_UNLIKELY(!OnArrOpen()))  goto TOKEN_ERROR; } 
-action OnArrC  { if (Y_UNLIKELY(!OnArrClose())) goto TOKEN_ERROR; } 
-action OnComma { if (Y_UNLIKELY(!OnComma())) goto TOKEN_ERROR; } 
-action OnColon { if (Y_UNLIKELY(!OnColon())) goto TOKEN_ERROR; } 
+action OnNull  { if (Y_UNLIKELY(!OnNull()))  goto TOKEN_ERROR; }
+action OnTrue  { if (Y_UNLIKELY(!OnTrue()))  goto TOKEN_ERROR; }
+action OnFalse { if (Y_UNLIKELY(!OnFalse())) goto TOKEN_ERROR; }
+action OnPInt  { if (Y_UNLIKELY(!OnPInt()))  goto TOKEN_ERROR; }
+action OnNInt  { if (Y_UNLIKELY(!OnNInt()))  goto TOKEN_ERROR; }
+action OnFlt   { if (Y_UNLIKELY(!OnFlt()))   goto TOKEN_ERROR; }
+action OnStrU  { if (Y_UNLIKELY(!OnStrU()))  goto TOKEN_ERROR; }
+action OnStrQ  { if (Y_UNLIKELY(!OnStrQ()))  goto TOKEN_ERROR; }
+action OnStrE  { if (Y_UNLIKELY(!OnStrE()))  goto TOKEN_ERROR; }
+action OnDictO { if (Y_UNLIKELY(!OnMapOpen()))  goto TOKEN_ERROR; }
+action OnDictC { if (Y_UNLIKELY(!OnMapClose())) goto TOKEN_ERROR; }
+action OnArrO  { if (Y_UNLIKELY(!OnArrOpen()))  goto TOKEN_ERROR; }
+action OnArrC  { if (Y_UNLIKELY(!OnArrClose())) goto TOKEN_ERROR; }
+action OnComma { if (Y_UNLIKELY(!OnComma())) goto TOKEN_ERROR; }
+action OnColon { if (Y_UNLIKELY(!OnColon())) goto TOKEN_ERROR; }
 action OnError { goto TOKEN_ERROR; }
 
 comment1 = "/*" (any* -- "*/") "*/";
@@ -296,7 +296,7 @@ bool TParserCtx::Parse() {
             write exec;
         }%%
         ;
-        Y_UNUSED(fastjson_en_main); 
+        Y_UNUSED(fastjson_en_main);
     } catch (const TFromStringException& e) {
         return OnError(e.what());
     }

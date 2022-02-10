@@ -394,26 +394,26 @@ namespace {
     long TThrowerValue::Count = 0L;
 
     SIMPLE_UDF(TVoid, void()) {
-        Y_UNUSED(valueBuilder); 
-        Y_UNUSED(args); 
+        Y_UNUSED(valueBuilder);
+        Y_UNUSED(args);
         return NUdf::TUnboxedValuePod::Void();
     }
 
     SIMPLE_UDF_RUN(TNonEmpty, ui32(), NUdf::TOptional<void>) {
-        Y_UNUSED(valueBuilder); 
-        Y_UNUSED(args); 
+        Y_UNUSED(valueBuilder);
+        Y_UNUSED(args);
         return NUdf::TUnboxedValuePod(42);
     }
 
     SIMPLE_UDF(TOptionalNonEmpty, NUdf::TOptional<ui32>()) {
-        Y_UNUSED(valueBuilder); 
-        Y_UNUSED(args); 
+        Y_UNUSED(valueBuilder);
+        Y_UNUSED(args);
         return NUdf::TUnboxedValuePod(42);
     }
 
     SIMPLE_UDF_RUN(TOptionalEmpty, NUdf::TOptional<ui32>(), NUdf::TOptional<void>) {
-        Y_UNUSED(valueBuilder); 
-        Y_UNUSED(args); 
+        Y_UNUSED(valueBuilder);
+        Y_UNUSED(args);
         return NUdf::TUnboxedValuePod();
     }
 
@@ -449,7 +449,7 @@ namespace {
     }
 
     SIMPLE_UDF_RUN(TSeqListWithHole, NUdf::TListType<ui32>(ui32, ui32), NUdf::TOptional<void>) {
-        Y_UNUSED(valueBuilder); 
+        Y_UNUSED(valueBuilder);
         const ui32 size = args[0].Get<ui32>();
         const ui32 hole = args[1].Get<ui32>();
         NUdf::IBoxedValuePtr boxed(new TBrokenSeqListBoxedValue(size, hole));
@@ -594,7 +594,7 @@ namespace {
     }
 
     SIMPLE_UDF(TDictOfPerson, NUdfDictDigPerson()) {
-        Y_UNUSED(args); 
+        Y_UNUSED(args);
         Y_UNUSED(valueBuilder);
         NUdf::IBoxedValuePtr boxed(new TBrokenDictBoxedValue<ui32, NUdf::IBoxedValuePtr>(
             MAKE_DICT_DIGIT2PERSON(), std::make_pair(RAW_INDEX_NO_HOLE, RAW_INDEX_NO_HOLE)));
@@ -602,7 +602,7 @@ namespace {
     }
 
     SIMPLE_UDF_RUN(TDictOfPersonBroken, NUdfDictDigPerson(), NUdf::TOptional<void>) {
-        Y_UNUSED(args); 
+        Y_UNUSED(args);
         Y_UNUSED(valueBuilder);
         NUdf::IBoxedValuePtr boxed(new TBrokenDictBoxedValue<ui32, NUdf::IBoxedValuePtr>(
             MAKE_DICT_DIGIT2PERSON_BROKEN(), std::make_pair(RAW_INDEX_NO_HOLE, RAW_INDEX_NO_HOLE)));
@@ -639,7 +639,7 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistryWithUDFs() {
     return freg;
 }
 
-Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) { 
+Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
     typedef std::function<std::vector<TRuntimeNode>(TProgramBuilder&)> BuildArgsFunc;
     typedef std::function<void(const NUdf::TUnboxedValuePod&, const NUdf::IValueBuilder*)> ValidateValueFunc;
     typedef std::function<void(const NUdf::TUnboxedValuePod&, const NUdf::IValueBuilder*, const TType* type)> FullValidateValueFunc;
@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         }
     }
 
-    Y_UNIT_TEST(TestUdfException) { 
+    Y_UNIT_TEST(TestUdfException) {
         ValidateValueFunc validateFunc = [](const NUdf::TUnboxedValuePod& value, const NUdf::IValueBuilder* valueBuilder) {
             valueBuilder->NewStringNotFilled(0xBAD).AsStringValue().Ref(); // Leak string.
             NUdf::TBoxedValueAccessor::Skip(*value.GetListIterator().AsBoxed().Release()); // Leak value and throw exception.
@@ -699,11 +699,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         UNIT_ASSERT_VALUES_EQUAL(TThrowerValue::Count, 0L);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckVoid) { 
+    Y_UNIT_TEST(TestUdfResultCheckVoid) {
         ProcessSimpleUdfFunc("UtUDF.Void");
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckExceptionOnEmpty) { 
+    Y_UNIT_TEST(TestUdfResultCheckExceptionOnEmpty) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         bool wrapped = false;
@@ -712,15 +712,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         UNIT_ASSERT(!wrapped);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckNonEmpty) { 
+    Y_UNIT_TEST(TestUdfResultCheckNonEmpty) {
         ProcessSimpleUdfFunc("UtUDF.NonEmpty");
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckOptionalNonEmpty) { 
+    Y_UNIT_TEST(TestUdfResultCheckOptionalNonEmpty) {
         ProcessSimpleUdfFunc("UtUDF.OptionalNonEmpty");
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckOptionalEmpty) { 
+    Y_UNIT_TEST(TestUdfResultCheckOptionalEmpty) {
         ProcessSimpleUdfFunc("UtUDF.OptionalEmpty");
     }
 
@@ -740,7 +740,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         return std::vector<TRuntimeNode>{callable, pgmBuilder.NewDataLiteral(testVal)};
     };
 
-    Y_UNIT_TEST(TestVerifyArgsCallableCorrect) { 
+    Y_UNIT_TEST(TestVerifyArgsCallableCorrect) {
         ui32 testVal = 44;
         BuildArgsFunc argsFunc = [testVal](TProgramBuilder& pgmBuilder) {
             return MakeCallableInArgs(testVal, pgmBuilder);
@@ -752,7 +752,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         ProcessSimpleUdfFunc("UtUDF.BackSub2Mul2", argsFunc, validateFunc);
     }
 
-    Y_UNIT_TEST(TestVerifyArgsCallableBrokenOnArgument) { 
+    Y_UNIT_TEST(TestVerifyArgsCallableBrokenOnArgument) {
         ui32 testVal = 101;
         BuildArgsFunc argsFunc = [testVal](TProgramBuilder& pgmBuilder) {
             return MakeCallableInArgs(testVal, pgmBuilder);
@@ -760,7 +760,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         UNIT_ASSERT_EXCEPTION(ProcessSimpleUdfFunc("UtUDF.BackSub2Mul2", argsFunc), TUdfValidateException);
     }
 
-    Y_UNIT_TEST(TestVerifyArgsCallableBrokenOnReturn) { 
+    Y_UNIT_TEST(TestVerifyArgsCallableBrokenOnReturn) {
         ui32 testVal = 1;
         BuildArgsFunc argsFunc = [testVal](TProgramBuilder& pgmBuilder) {
             return MakeCallableInArgs(testVal, pgmBuilder);
@@ -768,7 +768,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         UNIT_ASSERT_EXCEPTION(ProcessSimpleUdfFunc("UtUDF.BackSub2Mul2", argsFunc), TUdfValidateException);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckEmptySeqList) { 
+    Y_UNIT_TEST(TestUdfResultCheckEmptySeqList) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral<ui32>(0)};
         };
@@ -780,7 +780,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         ProcessSimpleUdfFunc("UtUDF.SeqList", argsFunc, validateFunc);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckSeqList) { 
+    Y_UNIT_TEST(TestUdfResultCheckSeqList) {
         static constexpr ui32 listSize = 31;
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(listSize)};
@@ -797,7 +797,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         ProcessSimpleUdfFunc("UtUDF.SeqList", argsFunc, validateFunc);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckSeqListWithHoleFirst) { 
+    Y_UNIT_TEST(TestUdfResultCheckSeqListWithHoleFirst) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             const ui32 listSize = 31;
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(listSize),
@@ -816,7 +816,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         UNIT_ASSERT_EXCEPTION(ProcessSimpleUdfFunc("UtUDF.SeqListWithHole", argsFunc, validateFunc, {}, NUdf::EValidateMode::Greedy), TUdfValidateException);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckSeqListWithHoleMiddle) { 
+    Y_UNIT_TEST(TestUdfResultCheckSeqListWithHoleMiddle) {
         static constexpr ui32 listSize = 31;
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(listSize),
@@ -841,7 +841,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         UNIT_ASSERT_EXCEPTION(ProcessSimpleUdfFunc("UtUDF.SeqListWithHole", argsFunc, validateFunc, {}, NUdf::EValidateMode::Greedy), TUdfValidateException);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckSeqListWithHoleLast) { 
+    Y_UNIT_TEST(TestUdfResultCheckSeqListWithHoleLast) {
         static constexpr ui32 listSize = 31;
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(listSize),
@@ -863,35 +863,35 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         UNIT_ASSERT_EXCEPTION(ProcessSimpleUdfFunc("UtUDF.SeqListWithHole", argsFunc, validateFunc, {}, NUdf::EValidateMode::Greedy), TUdfValidateException);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckTuple) { 
+    Y_UNIT_TEST(TestUdfResultCheckTuple) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(RAW_INDEX_NO_HOLE)};
         };
         ProcessSimpleUdfFunc("UtUDF.Tuple", argsFunc);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckTupleWithHoleFirst) { 
+    Y_UNIT_TEST(TestUdfResultCheckTupleWithHoleFirst) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral<ui32>(0)};
         };
         UNIT_ASSERT_EXCEPTION(ProcessSimpleUdfFunc("UtUDF.Tuple", argsFunc), TUdfValidateException);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckTupleWithHoleMiddle) { 
+    Y_UNIT_TEST(TestUdfResultCheckTupleWithHoleMiddle) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral<ui32>(std::tuple_size<decltype(TUPLE)>::value / 2)};
         };
         UNIT_ASSERT_EXCEPTION(ProcessSimpleUdfFunc("UtUDF.Tuple", argsFunc), TUdfValidateException);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckTupleWithHoleLast) { 
+    Y_UNIT_TEST(TestUdfResultCheckTupleWithHoleLast) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral<ui32>(std::tuple_size<decltype(TUPLE)>::value - 1)};
         };
         UNIT_ASSERT_EXCEPTION(ProcessSimpleUdfFunc("UtUDF.Tuple", argsFunc), TUdfValidateException);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitFull) { 
+    Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitFull) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(RAW_INDEX_NO_HOLE),
                 pgmBuilder.NewDataLiteral(RAW_INDEX_NO_HOLE)};
@@ -909,7 +909,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         ProcessSimpleUdfFunc("UtUDF.DictDigDig", argsFunc, validateFunc);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitKeyHole) { 
+    Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitKeyHole) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral<ui32>(0),
                 pgmBuilder.NewDataLiteral(RAW_INDEX_NO_HOLE)};
@@ -927,7 +927,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         ProcessSimpleUdfFunc("UtUDF.DictDigDig", argsFunc, validateFunc);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitValueHole) { 
+    Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitValueHole) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(RAW_INDEX_NO_HOLE),
                 pgmBuilder.NewDataLiteral<ui32>(DICT_DIGIT2DIGIT.size() - 1)};
@@ -944,7 +944,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         };
         ProcessSimpleUdfFunc("UtUDF.DictDigDig", argsFunc, validateFunc);
     }
-    Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitHoleAsOptKeyHole) { 
+    Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitHoleAsOptKeyHole) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(RAW_INDEX_NO_HOLE),
                 pgmBuilder.NewDataLiteral<ui32>(0)};
@@ -962,7 +962,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         ProcessSimpleUdfFunc("UtUDF.DictDigDig", argsFunc, validateFunc);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitHoleAsOptValueHole) { 
+    Y_UNIT_TEST(TestUdfResultCheckDictDigitDigitHoleAsOptValueHole) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral<ui32>(DICT_DIGIT2DIGIT.size() - 1),
                 pgmBuilder.NewDataLiteral(RAW_INDEX_NO_HOLE)};
@@ -980,35 +980,35 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         ProcessSimpleUdfFunc("UtUDF.DictDigDig", argsFunc, validateFunc);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckPersonStruct) { 
+    Y_UNIT_TEST(TestUdfResultCheckPersonStruct) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(RAW_INDEX_NO_HOLE)};
         };
         ProcessSimpleUdfFunc("UtUDF.PersonStruct", argsFunc);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckPersonStructWithHoleFirst) { 
+    Y_UNIT_TEST(TestUdfResultCheckPersonStructWithHoleFirst) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral<ui32>(0)};
         };
         UNIT_ASSERT_EXCEPTION(ProcessSimpleUdfFunc("UtUDF.PersonStruct", argsFunc), TUdfValidateException);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckPersonStructWithHoleMiddle) { 
+    Y_UNIT_TEST(TestUdfResultCheckPersonStructWithHoleMiddle) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral<ui32>(1)};
         };
         UNIT_ASSERT_EXCEPTION(ProcessSimpleUdfFunc("UtUDF.PersonStruct", argsFunc), TUdfValidateException);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckPersonStructWithHoleLast) { 
+    Y_UNIT_TEST(TestUdfResultCheckPersonStructWithHoleLast) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral<ui32>(2)};
         };
         UNIT_ASSERT_EXCEPTION(ProcessSimpleUdfFunc("UtUDF.PersonStruct", argsFunc), TUdfValidateException);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckTupleOfPersonStruct) { 
+    Y_UNIT_TEST(TestUdfResultCheckTupleOfPersonStruct) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(RAW_INDEX_NO_HOLE)};
         };
@@ -1024,7 +1024,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         ProcessSimpleUdfFunc("UtUDF.TupleOfPersonStruct", argsFunc, {}, fullValidateFunc, NUdf::EValidateMode::Greedy);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckTupleOfPersonStructNoList) { 
+    Y_UNIT_TEST(TestUdfResultCheckTupleOfPersonStructNoList) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(RAW_INDEX_NO_HOLE)};
         };
@@ -1075,7 +1075,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
             UNIT_ASSERT_EXCEPTION(dictIter.NextPair(key, payload), TUdfValidateException);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckListOfPersonStructToIndexDict) { 
+    Y_UNIT_TEST(TestUdfResultCheckListOfPersonStructToIndexDict) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(RAW_INDEX_NO_HOLE)};
         };
@@ -1086,7 +1086,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         ProcessSimpleUdfFunc("UtUDF.ListOfPersonStructToIndexDict", argsFunc, validateFunc);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckListOfPersonStruct) { 
+    Y_UNIT_TEST(TestUdfResultCheckListOfPersonStruct) {
         BuildArgsFunc argsFunc = [](TProgramBuilder& pgmBuilder) {
             return std::vector<TRuntimeNode>{pgmBuilder.NewDataLiteral(RAW_INDEX_NO_HOLE)};
         };
@@ -1099,7 +1099,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         ProcessSimpleUdfFunc("UtUDF.ListOfPersonStruct", argsFunc, {}, fullValidateFunc);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckListOfPersonStructWithBrokenIndexToDict) { 
+    Y_UNIT_TEST(TestUdfResultCheckListOfPersonStructWithBrokenIndexToDict) {
         FullValidateValueFunc fullValidateFunc = [](const NUdf::TUnboxedValuePod& value, const NUdf::IValueBuilder* valueBuilder,
             const TType* type) {
             Y_UNUSED(type);
@@ -1113,7 +1113,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         ProcessSimpleUdfFunc("UtUDF.ListOfPersonStructWithBrokenIndexToDict", {}, {}, fullValidateFunc);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckDictOfPerson) { 
+    Y_UNIT_TEST(TestUdfResultCheckDictOfPerson) {
         ValidateValueFunc validateFunc = [](const NUdf::TUnboxedValuePod& value, const NUdf::IValueBuilder*) {
             auto dictIter = value.GetDictIterator();
             NUdf::TUnboxedValue key, payload;
@@ -1130,7 +1130,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLValidateTest) {
         ProcessSimpleUdfFunc("UtUDF.DictOfPerson", {}, validateFunc);
     }
 
-    Y_UNIT_TEST(TestUdfResultCheckDictOfPersonBroken) { 
+    Y_UNIT_TEST(TestUdfResultCheckDictOfPersonBroken) {
         ValidateValueFunc validateFunc = [](const NUdf::TUnboxedValuePod& value, const NUdf::IValueBuilder*) {
             auto dictIter = value.GetDictIterator();
             NUdf::TUnboxedValue key, payload;

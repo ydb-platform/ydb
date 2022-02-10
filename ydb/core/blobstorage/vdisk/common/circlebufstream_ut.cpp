@@ -5,9 +5,9 @@
 
 #define STR Cnull
 
-Y_UNIT_TEST_SUITE(TCircleBufStringStreamTest) { 
+Y_UNIT_TEST_SUITE(TCircleBufStringStreamTest) {
 
-    Y_UNIT_TEST(TestAligned) { 
+    Y_UNIT_TEST(TestAligned) {
         TCircleBufStringStream<32> str;
         UNIT_ASSERT_EQUAL(str.Str(), TString()); // empty string
 
@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TCircleBufStringStreamTest) {
         UNIT_ASSERT_EQUAL(str.Str(), CircleBufStringStreamSkipPrefix + hexDigits + hexDigits);
     }
 
-    Y_UNIT_TEST(TestNotAligned) { 
+    Y_UNIT_TEST(TestNotAligned) {
         TCircleBufStringStream<32> str;
         UNIT_ASSERT_EQUAL(str.Str(), TString()); // empty string
 
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TCircleBufStringStreamTest) {
                           TString("456789ABCDEF__0123456789ABCDEF__"));
     }
 
-    Y_UNIT_TEST(TestOverflow) { 
+    Y_UNIT_TEST(TestOverflow) {
         TCircleBufStringStream<16> str;
         UNIT_ASSERT_EQUAL(str.Str(), TString()); // empty string
 

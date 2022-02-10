@@ -1,11 +1,11 @@
-OWNER( 
+OWNER(
     g:util
-    pg 
-) 
+    pg
+)
 SUBSCRIBER(g:util-subscribers)
- 
+
 RECURSE(
-    collapse 
-    escape_c 
+    collapse
+    escape_c
     strtod
 )

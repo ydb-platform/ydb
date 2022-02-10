@@ -105,7 +105,7 @@ namespace NKikimr {
                 , InitialCapacity(Base.GetCapacity())
             {
 #ifndef NDEBUG
-                Y_VERIFY(InitialCapacity == Base.LastCapacity, "InitialCapacity# %zu Base.LastCapacity# %zu", 
+                Y_VERIFY(InitialCapacity == Base.LastCapacity, "InitialCapacity# %zu Base.LastCapacity# %zu",
                         InitialCapacity, Base.LastCapacity);
 #endif
             }
@@ -136,7 +136,7 @@ namespace NKikimr {
         ~TTrackableBase() {
             size_t capacity = GetCapacity();
 #ifndef NDEBUG
-            Y_VERIFY(capacity == LastCapacity, "capacity# %zu LastCapacity# %zu", capacity, LastCapacity); 
+            Y_VERIFY(capacity == LastCapacity, "capacity# %zu LastCapacity# %zu", capacity, LastCapacity);
 #endif
             Consumer.Subtract(capacity);
         }
@@ -437,8 +437,8 @@ namespace NKikimr {
         WRAP_METHOD(data, const)
         WRAP_METHOD(compare, const)
         WRAP_METHOD(equal, const)
-        WRAP_METHOD(StartsWith, const) 
-        WRAP_METHOD(EndsWith, const) 
+        WRAP_METHOD(StartsWith, const)
+        WRAP_METHOD(EndsWith, const)
         WRAP_METHOD(at, const)
         WRAP_METHOD(operator[], const)
         WRAP_METHOD(find, const)

@@ -149,7 +149,7 @@ inline void CheckConvertToBuffer(const T& value, const size_t size, const TStrin
 }
 #endif
 
-Y_UNIT_TEST_SUITE(TCastTest) { 
+Y_UNIT_TEST_SUITE(TCastTest) {
     template <class A>
     inline TRet<A> F() {
         return TRet<A>();
@@ -173,10 +173,10 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(res, false);
         UNIT_ASSERT_DOUBLES_EQUAL(f, 42.0, eps); // check value was not trashed
         UNIT_ASSERT_EXCEPTION(f = FromString<TFloat>(str), TFromStringException);
-        Y_UNUSED(f); // shut up compiler about 'assigned value that is not used' 
+        Y_UNUSED(f); // shut up compiler about 'assigned value that is not used'
     }
 
-    Y_UNIT_TEST(TestToFrom) { 
+    Y_UNIT_TEST(TestToFrom) {
         test1(bool, true);
         test1(bool, false);
         test2(bool, "");
@@ -229,18 +229,18 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         test1(long long int, LLONG_MIN + 1);
     }
 
-    Y_UNIT_TEST(TestVolatile) { 
+    Y_UNIT_TEST(TestVolatile) {
         volatile int x = 1;
         UNIT_ASSERT_VALUES_EQUAL(ToString(x), "1");
     }
 
-    Y_UNIT_TEST(TestStrToD) { 
-        UNIT_ASSERT_DOUBLES_EQUAL(StrToD("1.1", nullptr), 1.1, EPS); 
-        UNIT_ASSERT_DOUBLES_EQUAL(StrToD("1.12345678", nullptr), 1.12345678, EPS); 
-        UNIT_ASSERT_DOUBLES_EQUAL(StrToD("10E-5", nullptr), 10E-5, EPS); 
-        UNIT_ASSERT_DOUBLES_EQUAL(StrToD("1.1E+5", nullptr), 1.1E+5, EPS); 
+    Y_UNIT_TEST(TestStrToD) {
+        UNIT_ASSERT_DOUBLES_EQUAL(StrToD("1.1", nullptr), 1.1, EPS);
+        UNIT_ASSERT_DOUBLES_EQUAL(StrToD("1.12345678", nullptr), 1.12345678, EPS);
+        UNIT_ASSERT_DOUBLES_EQUAL(StrToD("10E-5", nullptr), 10E-5, EPS);
+        UNIT_ASSERT_DOUBLES_EQUAL(StrToD("1.1E+5", nullptr), 1.1E+5, EPS);
 
-        char* ret = nullptr; 
+        char* ret = nullptr;
 
         UNIT_ASSERT_DOUBLES_EQUAL(StrToD("1.1y", &ret), 1.1, EPS);
         UNIT_ASSERT_VALUES_EQUAL(*ret, 'y');
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(*ret, 'z');
     }
 
-    Y_UNIT_TEST(TestFloats) { 
+    Y_UNIT_TEST(TestFloats) {
         // "%g" mode
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(0.1f, PREC_NDIGITS, 6), "0.1"); // drop trailing zeroes
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(0.12345678f, PREC_NDIGITS, 6), "0.123457");
@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_STRINGS_EQUAL(FloatToString(-std::numeric_limits<float>::infinity()), "-inf");
     }
 
-    Y_UNIT_TEST(TestReadFloats) { 
+    Y_UNIT_TEST(TestReadFloats) {
         GoodFloatTester<float>("0.0001", 0.0001f, EPS);
         GoodFloatTester<double>("0.0001", 0.0001, EPS);
         GoodFloatTester<long double>("0.0001", 0.0001, EPS);
@@ -303,24 +303,24 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         //BadFloatTester<float>("10E");
         //BadFloatTester<float>("10.E");
         BadFloatTester<float>("..0");
-        BadFloatTester<float>(""); // IGNIETFERRO-300 
+        BadFloatTester<float>(""); // IGNIETFERRO-300
         BadFloatTester<double>("1.00.01");
         BadFloatTester<double>("1.0001E5b");
         BadFloatTester<double>("1.0001s");
         BadFloatTester<double>("1..01");
-        BadFloatTester<double>(""); // IGNIETFERRO-300 
+        BadFloatTester<double>(""); // IGNIETFERRO-300
         BadFloatTester<long double>(".1.00");
         BadFloatTester<long double>("1.00.");
         BadFloatTester<long double>("1.0001e5-");
         BadFloatTester<long double>("10e 2");
-        BadFloatTester<long double>(""); // IGNIETFERRO-300 
+        BadFloatTester<long double>(""); // IGNIETFERRO-300
     }
 
-    Y_UNIT_TEST(TestLiteral) { 
+    Y_UNIT_TEST(TestLiteral) {
         UNIT_ASSERT_VALUES_EQUAL(ToString("abc"), TString("abc"));
     }
 
-    Y_UNIT_TEST(TestFromStringStringBuf) { 
+    Y_UNIT_TEST(TestFromStringStringBuf) {
         TString a = "xyz";
         TStringBuf b = FromString<TStringBuf>(a);
         UNIT_ASSERT_VALUES_EQUAL(a, b);
@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
     }
 
 #if 0
-    Y_UNIT_TEST(TestBufferOverflow) { 
+    Y_UNIT_TEST(TestBufferOverflow) {
         CheckConvertToBuffer<float>(1.f, 5, "1");
         CheckConvertToBuffer<float>(1.005f, 3, "1.005");
         CheckConvertToBuffer<float>(1.00000000f, 3, "1");
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
     }
 #endif
 
-    Y_UNIT_TEST(TestWide) { 
+    Y_UNIT_TEST(TestWide) {
         TUtf16String iw = u"-100500";
         int iv = 0;
         UNIT_ASSERT_VALUES_EQUAL(TryFromString(iw, iv), true);
@@ -371,7 +371,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(uv, 21474836470ull);
     }
 
-    Y_UNIT_TEST(TestDefault) { 
+    Y_UNIT_TEST(TestDefault) {
         size_t res = 0;
         const size_t def1 = 42;
 
@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(FromStringWithDefault<size_t>(s4), size_t());
     }
 
-    Y_UNIT_TEST(TestBool) { 
+    Y_UNIT_TEST(TestBool) {
         // True cases
         UNIT_ASSERT_VALUES_EQUAL(FromString<bool>("yes"), true);
         UNIT_ASSERT_VALUES_EQUAL(FromString<bool>("1"), true);
@@ -449,7 +449,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_EXCEPTION(FromString<bool>("something"), yexception);
     }
 
-    Y_UNIT_TEST(TestAutoDetectType) { 
+    Y_UNIT_TEST(TestAutoDetectType) {
         UNIT_ASSERT_DOUBLES_EQUAL((float)FromString("0.0001"), 0.0001, EPS);
         UNIT_ASSERT_DOUBLES_EQUAL((double)FromString("0.0015", sizeof("0.0015") - 2), 0.001, EPS);
         UNIT_ASSERT_DOUBLES_EQUAL((long double)FromString(TStringBuf("0.0001")), 0.0001, EPS);
@@ -472,7 +472,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         }
     }
 
-    Y_UNIT_TEST(ErrorMessages) { 
+    Y_UNIT_TEST(ErrorMessages) {
         try {
             FromString<ui32>("");
             UNIT_ASSERT(false);
@@ -509,47 +509,47 @@ Y_UNIT_TEST_SUITE(TCastTest) {
             CheckMessage(e, "Unexpected symbol \".\" at pos 1 in string \"0.328413745072\"");
         }
     }
- 
-    Y_UNIT_TEST(TryStringBuf) { 
-        { 
-            constexpr TStringBuf hello = "hello";
-            TStringBuf out; 
-            UNIT_ASSERT(TryFromString(hello, out)); 
-            UNIT_ASSERT_VALUES_EQUAL(hello, out);
-        } 
-        { 
-            constexpr TStringBuf empty = "";
-            TStringBuf out; 
-            UNIT_ASSERT(TryFromString(empty, out)); 
-            UNIT_ASSERT_VALUES_EQUAL(empty, out);
-        } 
-        { 
-            constexpr TStringBuf empty; 
-            TStringBuf out; 
-            UNIT_ASSERT(TryFromString(empty, out)); 
-            UNIT_ASSERT_VALUES_EQUAL(empty, out);
-        } 
-        { 
-            const auto hello = u"hello";
-            TWtringBuf out; 
-            UNIT_ASSERT(TryFromString(hello, out)); 
-            UNIT_ASSERT_VALUES_EQUAL(hello, out);
-        } 
-        { 
-            const TUtf16String empty;
-            TWtringBuf out; 
-            UNIT_ASSERT(TryFromString(empty, out)); 
-            UNIT_ASSERT_VALUES_EQUAL(empty, out);
-        } 
-        { 
-            constexpr TWtringBuf empty; 
-            TWtringBuf out; 
-            UNIT_ASSERT(TryFromString(empty, out)); 
-            UNIT_ASSERT_VALUES_EQUAL(empty, out);
-        } 
-    } 
 
-    Y_UNIT_TEST(Nan) { 
+    Y_UNIT_TEST(TryStringBuf) {
+        {
+            constexpr TStringBuf hello = "hello";
+            TStringBuf out;
+            UNIT_ASSERT(TryFromString(hello, out));
+            UNIT_ASSERT_VALUES_EQUAL(hello, out);
+        }
+        {
+            constexpr TStringBuf empty = "";
+            TStringBuf out;
+            UNIT_ASSERT(TryFromString(empty, out));
+            UNIT_ASSERT_VALUES_EQUAL(empty, out);
+        }
+        {
+            constexpr TStringBuf empty;
+            TStringBuf out;
+            UNIT_ASSERT(TryFromString(empty, out));
+            UNIT_ASSERT_VALUES_EQUAL(empty, out);
+        }
+        {
+            const auto hello = u"hello";
+            TWtringBuf out;
+            UNIT_ASSERT(TryFromString(hello, out));
+            UNIT_ASSERT_VALUES_EQUAL(hello, out);
+        }
+        {
+            const TUtf16String empty;
+            TWtringBuf out;
+            UNIT_ASSERT(TryFromString(empty, out));
+            UNIT_ASSERT_VALUES_EQUAL(empty, out);
+        }
+        {
+            constexpr TWtringBuf empty;
+            TWtringBuf out;
+            UNIT_ASSERT(TryFromString(empty, out));
+            UNIT_ASSERT_VALUES_EQUAL(empty, out);
+        }
+    }
+
+    Y_UNIT_TEST(Nan) {
         double xx = 0;
 
         UNIT_ASSERT(!TryFromString("NaN", xx));
@@ -557,7 +557,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT(!TryFromString("nan", xx));
     }
 
-    Y_UNIT_TEST(Infinity) { 
+    Y_UNIT_TEST(Infinity) {
         double xx = 0;
 
         UNIT_ASSERT(!TryFromString("Infinity", xx));
@@ -565,7 +565,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT(!TryFromString("infinity", xx));
     }
 
-    Y_UNIT_TEST(TestBorderCases) { 
+    Y_UNIT_TEST(TestBorderCases) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(0.0), "0");
         UNIT_ASSERT_VALUES_EQUAL(ToString(1.0), "1");
         UNIT_ASSERT_VALUES_EQUAL(ToString(10.0), "10");

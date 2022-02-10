@@ -223,17 +223,17 @@ public:
 
     _yhashtable_buckets(const Alloc& other)
         : base_type(other)
-        , Data(nullptr) 
+        , Data(nullptr)
         , Size()
     {
     }
 
     ~_yhashtable_buckets() {
-        Y_ASSERT(!Data); 
+        Y_ASSERT(!Data);
     }
 
     void initialize_dynamic(TBucketDivisor size) {
-        Y_ASSERT(!Data); 
+        Y_ASSERT(!Data);
 
         Data = this->_get_alloc().allocate(size() + 2) + 1;
         Size = size;
@@ -242,7 +242,7 @@ public:
     }
 
     void deinitialize_dynamic() {
-        Y_ASSERT(Data); 
+        Y_ASSERT(Data);
 
         this->_get_alloc().deallocate(Data - 1, *reinterpret_cast<size_type*>(Data - 1));
         Data = pointer();
@@ -257,7 +257,7 @@ public:
     }
 
     void deinitialize_static() {
-        Y_ASSERT(Data); 
+        Y_ASSERT(Data);
 
         Data = pointer();
         Size = TBucketDivisor();
@@ -500,7 +500,7 @@ private:
 
     node* get_node() {
         node* result = this->_get_alloc().allocate(1);
-        Y_ASSERT((reinterpret_cast<uintptr_t>(result) & 1) == 0); /* We're using the last bit of the node pointer. */ 
+        Y_ASSERT((reinterpret_cast<uintptr_t>(result) & 1) == 0); /* We're using the last bit of the node pointer. */
         return result;
     }
     void put_node(node* p) {
@@ -640,7 +640,7 @@ public:
     }
 
     iterator end() {
-        return iterator(nullptr); 
+        return iterator(nullptr);
     } /*y*/
 
     const_iterator begin() const {
@@ -651,7 +651,7 @@ public:
     }
 
     const_iterator end() const {
-        return const_iterator(nullptr); 
+        return const_iterator(nullptr);
     } /*y*/
 
 public:
@@ -767,7 +767,7 @@ public:
         node* first;
         for (first = buckets[n];
              first && !equals(get_key(first->val), key);
-             first = ((uintptr_t)first->next & 1) ? nullptr : first->next) /*y*/ 
+             first = ((uintptr_t)first->next & 1) ? nullptr : first->next) /*y*/
         {
         }
         return iterator(first); /*y*/
@@ -779,7 +779,7 @@ public:
         const node* first;
         for (first = buckets[n];
              first && !equals(get_key(first->val), key);
-             first = ((uintptr_t)first->next & 1) ? nullptr : first->next) /*y*/ 
+             first = ((uintptr_t)first->next & 1) ? nullptr : first->next) /*y*/
         {
         }
         return const_iterator(first); /*y*/
@@ -839,7 +839,7 @@ public:
 
     // implemented in save_stl.h
     template <class KeySaver>
-    int save_for_st(IOutputStream* stream, KeySaver& ks, sthash<int, int, THash<int>, TEqualTo<int>, typename KeySaver::TSizeType>* stHash = nullptr) const; 
+    int save_for_st(IOutputStream* stream, KeySaver& ks, sthash<int, int, THash<int>, TEqualTo<int>, typename KeySaver::TSizeType>* stHash = nullptr) const;
 
     void clear(size_type downsize) {
         basic_clear();
@@ -956,13 +956,13 @@ private:
 
 template <class V>
 __yhashtable_iterator<V>& __yhashtable_iterator<V>::operator++() {
-    Y_ASSERT(cur); 
+    Y_ASSERT(cur);
     cur = cur->next;
     if ((uintptr_t)cur & 1) {
         node** bucket = (node**)((uintptr_t)cur & ~1);
-        while (*bucket == nullptr) 
+        while (*bucket == nullptr)
             ++bucket;
-        Y_ASSERT(*bucket != nullptr); 
+        Y_ASSERT(*bucket != nullptr);
         cur = (node*)((uintptr_t)*bucket & ~1);
     }
     return *this;
@@ -977,13 +977,13 @@ inline __yhashtable_iterator<V> __yhashtable_iterator<V>::operator++(int) {
 
 template <class V>
 __yhashtable_const_iterator<V>& __yhashtable_const_iterator<V>::operator++() {
-    Y_ASSERT(cur); 
+    Y_ASSERT(cur);
     cur = cur->next;
     if ((uintptr_t)cur & 1) {
         node** bucket = (node**)((uintptr_t)cur & ~1);
-        while (*bucket == nullptr) 
+        while (*bucket == nullptr)
             ++bucket;
-        Y_ASSERT(*bucket != nullptr); 
+        Y_ASSERT(*bucket != nullptr);
         cur = (node*)((uintptr_t)*bucket & ~1);
     }
     return *this;
@@ -1166,7 +1166,7 @@ typename THashTable<V, K, HF, Ex, Eq, A>::size_type THashTable<V, K, HF, Ex, Eq,
             }
         }
         if (equals(get_key(first->val), key)) {
-            buckets[n] = ((uintptr_t)first->next & 1) ? nullptr : first->next; /*y*/ 
+            buckets[n] = ((uintptr_t)first->next & 1) ? nullptr : first->next; /*y*/
             ++erased;
             --num_elements;
             delete_node(first);
@@ -1196,7 +1196,7 @@ typename THashTable<V, K, HF, Ex, Eq, A>::size_type THashTable<V, K, HF, Ex, Eq,
             }
         }
         if (equals(get_key(first->val), key)) {
-            buckets[n] = ((uintptr_t)first->next & 1) ? nullptr : first->next; /*y*/ 
+            buckets[n] = ((uintptr_t)first->next & 1) ? nullptr : first->next; /*y*/
             --num_elements;
             delete_node(first);
             return 1;
@@ -1212,7 +1212,7 @@ void THashTable<V, K, HF, Ex, Eq, A>::erase(const iterator& it) {
         node* cur = buckets[n];
 
         if (cur == p) {
-            buckets[n] = ((uintptr_t)cur->next & 1) ? nullptr : cur->next; /*y*/ 
+            buckets[n] = ((uintptr_t)cur->next & 1) ? nullptr : cur->next; /*y*/
             delete_node(cur);
             --num_elements;
         } else {
@@ -1280,7 +1280,7 @@ bool THashTable<V, K, HF, Ex, Eq, A>::reserve(size_type num_elements_hint) {
                     while (first) {
                         size_type new_bucket = bkt_num(first->val, n);
                         node* next = first->next;
-                        buckets[bucket] = ((uintptr_t)next & 1) ? nullptr : next; /*y*/ 
+                        buckets[bucket] = ((uintptr_t)next & 1) ? nullptr : next; /*y*/
                         next = tmp[new_bucket];
                         first->next = next ? next : (node*)((uintptr_t) & (tmp[new_bucket + 1]) | 1); /*y*/
                         tmp[new_bucket] = first;
@@ -1298,7 +1298,7 @@ bool THashTable<V, K, HF, Ex, Eq, A>::reserve(size_type num_elements_hint) {
                     while (tmp[bucket]) {
                         node* next = tmp[bucket]->next;
                         delete_node(tmp[bucket]);
-                        tmp[bucket] = ((uintptr_t)next & 1) ? nullptr : next /*y*/; 
+                        tmp[bucket] = ((uintptr_t)next & 1) ? nullptr : next /*y*/;
                     }
                 }
                 throw;
@@ -1356,7 +1356,7 @@ void THashTable<V, K, HF, Ex, Eq, A>::basic_clear() {
                 delete_node(cur);
                 cur = next;
             }
-            *first = nullptr; 
+            *first = nullptr;
         }
     }
     num_elements = 0;
@@ -1364,7 +1364,7 @@ void THashTable<V, K, HF, Ex, Eq, A>::basic_clear() {
 
 template <class V, class K, class HF, class Ex, class Eq, class A>
 void THashTable<V, K, HF, Ex, Eq, A>::copy_from_dynamic(const THashTable& ht) {
-    Y_ASSERT(buckets.size() == ht.buckets.size() && !ht.empty()); 
+    Y_ASSERT(buckets.size() == ht.buckets.size() && !ht.empty());
 
 #ifdef __STL_USE_EXCEPTIONS
     try {
@@ -1637,7 +1637,7 @@ public:
 
     template <class TKey>
     T& operator[](const TKey& key) {
-        insert_ctx ctx = nullptr; 
+        insert_ctx ctx = nullptr;
         iterator it = find(key, ctx);
 
         if (it != end()) {
@@ -1712,7 +1712,7 @@ public:
 
     // if (stHash != NULL) bucket_count() must be equal to stHash->bucket_count()
     template <class KeySaver>
-    int save_for_st(IOutputStream* stream, KeySaver& ks, sthash<int, int, THash<int>, TEqualTo<int>, typename KeySaver::TSizeType>* stHash = nullptr) const { 
+    int save_for_st(IOutputStream* stream, KeySaver& ks, sthash<int, int, THash<int>, TEqualTo<int>, typename KeySaver::TSizeType>* stHash = nullptr) const {
         return rep.template save_for_st<KeySaver>(stream, ks, stHash);
     }
 
@@ -1978,7 +1978,7 @@ public:
 
     // if (stHash != NULL) bucket_count() must be equal to stHash->bucket_count()
     template <class KeySaver>
-    int save_for_st(IOutputStream* stream, KeySaver& ks, sthash<int, int, THash<int>, TEqualTo<int>, typename KeySaver::TSizeType>* stHash = nullptr) const { 
+    int save_for_st(IOutputStream* stream, KeySaver& ks, sthash<int, int, THash<int>, TEqualTo<int>, typename KeySaver::TSizeType>* stHash = nullptr) const {
         return rep.template save_for_st<KeySaver>(stream, ks, stHash);
     }
 

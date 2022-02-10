@@ -22,9 +22,9 @@ class TBZipDecompressError: public TBZipException {
 class TBZipCompressError: public TBZipException {
 };
 
-class TBZipDecompress: public IInputStream { 
+class TBZipDecompress: public IInputStream {
 public:
-    TBZipDecompress(IInputStream* input, size_t bufLen = BZIP_BUF_LEN); 
+    TBZipDecompress(IInputStream* input, size_t bufLen = BZIP_BUF_LEN);
     ~TBZipDecompress() override;
 
 private:
@@ -35,9 +35,9 @@ private:
     THolder<TImpl> Impl_;
 };
 
-class TBZipCompress: public IOutputStream { 
+class TBZipCompress: public IOutputStream {
 public:
-    TBZipCompress(IOutputStream* out, size_t compressionLevel = BZIP_COMPRESSION_LEVEL, size_t bufLen = BZIP_BUF_LEN); 
+    TBZipCompress(IOutputStream* out, size_t compressionLevel = BZIP_COMPRESSION_LEVEL, size_t bufLen = BZIP_BUF_LEN);
     ~TBZipCompress() override;
 
 private:

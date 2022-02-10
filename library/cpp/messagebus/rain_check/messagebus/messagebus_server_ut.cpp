@@ -14,7 +14,7 @@ struct TMessageBusServerEnv: public TTestEnvTemplate<TMessageBusServerEnv> {
     TExampleProtocol Proto;
 };
 
-Y_UNIT_TEST_SUITE(RainCheckMessageBusServer) { 
+Y_UNIT_TEST_SUITE(RainCheckMessageBusServer) {
     struct TSimpleServerTask: public ISimpleTask {
     private:
         TMessageBusServerEnv* const Env;
@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(RainCheckMessageBusServer) {
         }
     };
 
-    Y_UNIT_TEST(Simple) { 
+    Y_UNIT_TEST(Simple) {
         TMessageBusServerEnv env;
 
         THolder<TBusTaskStarter> starter(TBusTaskStarter::NewStarter<TSimpleServerTask>(&env));

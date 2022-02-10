@@ -435,13 +435,13 @@ namespace {
                 && node.GetChild(0)->GetContent() == TStringBuf("block");
     }
 
-    Y_NO_INLINE void Indent(IOutputStream& out, ui32 indentation) { 
+    Y_NO_INLINE void Indent(IOutputStream& out, ui32 indentation) {
         char* whitespaces = reinterpret_cast<char*>(alloca(indentation));
         memset(whitespaces, ' ', indentation);
         out.Write(whitespaces, indentation);
     }
 
-    void MultilineAtomPrint(IOutputStream& out, const TStringBuf& str) { 
+    void MultilineAtomPrint(IOutputStream& out, const TStringBuf& str) {
         out << TStringBuf("@@");
         size_t idx = str.find('@');
         if (idx == TString::npos) {
@@ -469,7 +469,7 @@ namespace {
         out << TStringBuf("@@");
     }
 
-    void PrintNode(IOutputStream& out, const TAstNode& node) { 
+    void PrintNode(IOutputStream& out, const TAstNode& node) {
         if (node.GetType() == TAstNode::Atom) {
             if (node.GetFlags() & TNodeFlags::ArbitraryContent) {
                 EscapeArbitraryAtom(node.GetContent(), '"', &out);
@@ -503,7 +503,7 @@ namespace {
     }
 
     void PrettyPrintNode(
-            IOutputStream& out, const TAstNode& node, 
+            IOutputStream& out, const TAstNode& node,
             i32 indent, i32 blockLevel, i32 localIndent, ui32 flags)
     {
         if (!(flags & TAstPrintFlags::PerLine)) {
@@ -633,11 +633,11 @@ TAstParseResult ParseAst(const TStringBuf& str, TMemoryPool* externalPool, const
     return parser.Parse();
 }
 
-void TAstNode::PrintTo(IOutputStream& out) const { 
+void TAstNode::PrintTo(IOutputStream& out) const {
     PrintNode(out, *this);
 }
 
-void TAstNode::PrettyPrintTo(IOutputStream& out, ui32 flags) const { 
+void TAstNode::PrettyPrintTo(IOutputStream& out, ui32 flags) const {
     PrettyPrintNode(out, *this, 0, 0, 0, flags);
 }
 
@@ -646,7 +646,7 @@ TAstNode TAstNode::QuoteAtom(TPosition(0, 0), TStringBuf("quote"), TNodeFlags::D
 } // namespace NYql
 
 template<>
-void Out<NYql::TAstNode::EType>(class IOutputStream &o, NYql::TAstNode::EType x) { 
+void Out<NYql::TAstNode::EType>(class IOutputStream &o, NYql::TAstNode::EType x) {
 #define YQL_AST_NODE_TYPE_MAP_TO_STRING_IMPL(name, ...) \
     case ::NYql::TAstNode::name: \
         o << #name; \

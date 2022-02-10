@@ -14,7 +14,7 @@ namespace NMiniKQL {
 
 using namespace NTabletFlatExecutor;
 
-Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) { 
+Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
 
     struct Schema : NIceDb::Schema {
         struct TestTable : Table<1> {
@@ -39,14 +39,14 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
     };
 
 
-    Y_UNIT_TEST(ShardId) { 
+    Y_UNIT_TEST(ShardId) {
         NTable::TDatabase DB;
         TEngineHostCounters hostCounters;
         TUnversionedEngineHost host(DB, hostCounters, TEngineHostSettings(100));
         UNIT_ASSERT_VALUES_EQUAL(host.GetShardId(), 100);
     }
 
-    Y_UNIT_TEST(Basic) { 
+    Y_UNIT_TEST(Basic) {
         NTable::TDatabase DB;
         NIceDb::TNiceDb db(DB);
 
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
 
             // TODO: ... MINIKQL ...
 
-            Y_UNUSED(host); 
+            Y_UNUSED(host);
             DB.Commit(3, true);
         }
 

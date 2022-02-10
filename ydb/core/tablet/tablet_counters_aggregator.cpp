@@ -717,7 +717,7 @@ private:
             TTabletTypes::EType tabletType,
             const TTabletCountersBase* limitedAppCounters = {})
         {
-            Y_VERIFY(executorCounters); 
+            Y_VERIFY(executorCounters);
 
             if (executorCounters) {
                 if (!TabletExecutorCounters.IsInitialized) {
@@ -811,7 +811,7 @@ private:
             {}
 
             void Initialize(const TTabletCountersBase* counters) {
-                Y_VERIFY(!IsInitialized); 
+                Y_VERIFY(!IsInitialized);
 
                 if (counters) {
                     THashMap<TString, THolder<THistogramCounter>> histogramAggregates;
@@ -906,7 +906,7 @@ private:
             }
 
             void Apply(ui64 tabletID, const TTabletCountersBase* counters, TTabletTypes::EType tabletType) {
-                Y_VERIFY(counters); 
+                Y_VERIFY(counters);
 
                 TInstant now = TInstant::Now();
                 auto it = LastAggregateUpdateTime.find(tabletID);
@@ -1609,7 +1609,7 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
     Become(&TThis::StateWork);
 
     TAppData* appData = AppData(ctx);
-    Y_VERIFY(!TabletMon); 
+    Y_VERIFY(!TabletMon);
 
     if (AppData(ctx)->FeatureFlags.GetEnableDbCounters() && !Follower) {
         auto callback = MakeIntrusive<TTabletMon::TTabletsDbWatcherCallback>(ctx.ActorSystem());
@@ -1632,7 +1632,7 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
 ////////////////////////////////////////////
 void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddCounters::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
     TEvTabletCounters::TEvTabletAddCounters* msg = ev->Get();
     TabletMon->Apply(msg->TabletID, msg->TabletType, msg->TenantPathId, msg->ExecutorCounters.Get(), msg->AppCounters.Get(), ctx);
 }
@@ -1650,7 +1650,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddLabele
 ////////////////////////////////////////////
 void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletCountersForgetTablet::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
     TEvTabletCounters::TEvTabletCountersForgetTablet* msg = ev->Get();
     TabletMon->ForgetTablet(msg->TabletID, msg->TabletType, msg->TenantPathId);
 }
@@ -1831,7 +1831,7 @@ TTabletCountersAggregatorActor::HandleWakeup(const TActorContext &ctx) {
 /// public state functions
 ////////////////////////////////////////////
 STFUNC(TTabletCountersAggregatorActor::StateWork) {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvTabletCounters::TEvTabletAddCounters, HandleWork);
         HFunc(TEvTabletCounters::TEvTabletCountersForgetTablet, HandleWork);

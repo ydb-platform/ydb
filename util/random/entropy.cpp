@@ -5,10 +5,10 @@
 #include "shuffle.h"
 #include "init_atfork.h"
 
-#include <util/stream/output.h> 
-#include <util/stream/mem.h> 
+#include <util/stream/output.h>
+#include <util/stream/mem.h>
 #include <util/stream/zlib.h>
-#include <util/stream/buffer.h> 
+#include <util/stream/buffer.h>
 
 #include <util/system/fs.h>
 #include <util/system/info.h>
@@ -102,7 +102,7 @@ namespace {
     };
 
     //not thread-safe
-    class TMersenneInput: public IInputStream { 
+    class TMersenneInput: public IInputStream {
         using TKey = ui64;
         using TRnd = TMersenne<TKey>;
 
@@ -134,7 +134,7 @@ namespace {
         TRnd Rnd_;
     };
 
-    class TEntropyPoolStream: public IInputStream { 
+    class TEntropyPoolStream: public IInputStream {
     public:
         inline explicit TEntropyPoolStream(const TBuffer& buffer)
             : Mi_(buffer)
@@ -154,7 +154,7 @@ namespace {
         TBufferedInput Bi_;
     };
 
-    struct TSeedStream: public IInputStream { 
+    struct TSeedStream: public IInputStream {
         size_t DoRead(void* inbuf, size_t len) override {
             char* buf = (char*)inbuf;
 
@@ -184,11 +184,11 @@ namespace {
             Reset();
         }
 
-        inline IInputStream& EntropyPool() noexcept { 
+        inline IInputStream& EntropyPool() noexcept {
             return *EP;
         }
 
-        inline IInputStream& Seed() noexcept { 
+        inline IInputStream& Seed() noexcept {
             return SS;
         }
 
@@ -208,11 +208,11 @@ namespace {
     using TRandomTraits = TDefaultTraits;
 }
 
-IInputStream& EntropyPool() { 
+IInputStream& EntropyPool() {
     return TRandomTraits::Instance().EntropyPool();
 }
 
-IInputStream& Seed() { 
+IInputStream& Seed() {
     return TRandomTraits::Instance().Seed();
 }
 

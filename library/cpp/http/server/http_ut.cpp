@@ -5,12 +5,12 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 
 #include <util/generic/cast.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/stream/zlib.h>
 #include <util/system/datetime.h>
 #include <util/system/sem.h>
 
-Y_UNIT_TEST_SUITE(THttpServerTest) { 
+Y_UNIT_TEST_SUITE(THttpServerTest) {
     class TEchoServer: public THttpServer::ICallBack {
         class TRequest: public THttpClientRequestEx {
         public:
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         return res;
     }
 
-    Y_UNIT_TEST(TestEchoServer) { 
+    Y_UNIT_TEST(TestEchoServer) {
         TString res = TestData();
         TPortManager pm;
         const ui16 port = pm.GetPort();
@@ -368,7 +368,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         }
     }
 
-    Y_UNIT_TEST(TestReusePortEnabled) { 
+    Y_UNIT_TEST(TestReusePortEnabled) {
         if (!IsReusePortAvailable()) {
             return; // skip test
         }
@@ -403,7 +403,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         }
     }
 
-    Y_UNIT_TEST(TestReusePortDisabled) { 
+    Y_UNIT_TEST(TestReusePortDisabled) {
         // check that with the ReusePort option disabled it's impossible to start two servers on the same port
         // check that ReusePort option is disabled by default (don't set it explicitly in the test)
         TPortManager pm;
@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         UNIT_ASSERT(false == server1.Start());
     }
 
-    Y_UNIT_TEST(TestFailServer) { 
+    Y_UNIT_TEST(TestFailServer) {
         /**
          * Emulate request processing failures
          * Data should be large enough not to fit into socket buffer
@@ -541,7 +541,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         server.Stop();
     };
 
-    Y_UNIT_TEST(TTestReleaseConnection) { 
+    Y_UNIT_TEST(TTestReleaseConnection) {
         TPortManager pm;
         const ui16 port = pm.GetPort();
 
@@ -685,7 +685,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
     };
 
 #if 0
-    Y_UNIT_TEST(TestSocketsLeak) { 
+    Y_UNIT_TEST(TestSocketsLeak) {
         const bool trueFalse[] = {true, false};
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

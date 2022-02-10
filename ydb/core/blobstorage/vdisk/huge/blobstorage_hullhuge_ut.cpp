@@ -1,9 +1,9 @@
 #include "blobstorage_hullhuge.h"
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 
- 
+
 // change to Cerr if you want logging
 #define STR Cnull
 
@@ -12,9 +12,9 @@ namespace NKikimr {
 
     using namespace NHuge;
 
-    Y_UNIT_TEST_SUITE(TBlobStorageHullHugeKeeperPersState) { 
+    Y_UNIT_TEST_SUITE(TBlobStorageHullHugeKeeperPersState) {
 
-        Y_UNIT_TEST(SerializeParse) { 
+        Y_UNIT_TEST(SerializeParse) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
             ui32 minHugeBlobInBytes = 512u << 10u;

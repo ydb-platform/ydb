@@ -70,7 +70,7 @@ struct TStorageStatusFlags {
         return str.Str();
     }
 
-    void Output(IOutputStream &out) const { 
+    void Output(IOutputStream &out) const {
         out << "{"
             << ((Raw & NKikimrBlobStorage::StatusIsValid) ? " Valid" : "")
             << ((Raw & NKikimrBlobStorage::StatusDiskSpaceCyan) ? " Cyan" : "")
@@ -255,7 +255,7 @@ struct TTabletChannelInfo {
 
     ui32 GroupForGeneration(ui32 gen) const {
         const size_t historySize = History.size();
-        Y_VERIFY(historySize > 0, "empty channel history"); 
+        Y_VERIFY(historySize > 0, "empty channel history");
 
         const THistoryEntry * const first = &*History.begin();
         if (historySize == 1) {
@@ -405,7 +405,7 @@ inline ui32 GroupIDFromBlobStorageProxyID(TActorId actorId) {
         (((actorId.RawX2() >> (0 * 8)) & 0xff) << 8) |
         (((actorId.RawX2() >> (1 * 8)) & 0xff) << 16) |
         (((actorId.RawX2() >> (2 * 8)) & 0xff) << 24));
-    Y_VERIFY(MakeBlobStorageProxyID(blobStorageGroup) == actorId); 
+    Y_VERIFY(MakeBlobStorageProxyID(blobStorageGroup) == actorId);
     return blobStorageGroup;
 }
 
@@ -954,7 +954,7 @@ struct TEvBlobStorage {
         {}
 
         TString Print(bool isFull) const {
-            Y_UNUSED(isFull); 
+            Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvPutResult {Id# " << Id.ToString();
             str << " Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
@@ -1067,7 +1067,7 @@ struct TEvBlobStorage {
         }
 
         TString Print(bool isFull) const {
-            Y_UNUSED(isFull); 
+            Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvGet {MustRestoreFirst# " << (MustRestoreFirst ? "true" : "false");
             str << " GetHandleClass# " << NKikimrBlobStorage::EGetHandleClass_Name(GetHandleClass);
@@ -1222,7 +1222,7 @@ struct TEvBlobStorage {
         {}
 
         TString Print(bool isFull) const {
-            Y_UNUSED(isFull); 
+            Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvBlock {TabletId# " << TabletId
                 << " Generation# " << Generation
@@ -1253,7 +1253,7 @@ struct TEvBlobStorage {
         {}
 
         TString Print(bool isFull) const {
-            Y_UNUSED(isFull); 
+            Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvBlockResult {Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
             if (ErrorReason.size()) {
@@ -1576,7 +1576,7 @@ struct TEvBlobStorage {
         {}
 
         TString Print(bool isFull) const {
-            Y_UNUSED(isFull); 
+            Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvDiscover {TabletId# " << TabletId;
             str << " MinGeneration# " << MinGeneration;
@@ -1613,7 +1613,7 @@ struct TEvBlobStorage {
             , MinGeneration(minGeneration)
             , BlockedGeneration(blockedGeneration)
         {
-            Y_VERIFY_DEBUG(status != NKikimrProto::OK); 
+            Y_VERIFY_DEBUG(status != NKikimrProto::OK);
         }
 
         TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer)
@@ -1676,7 +1676,7 @@ struct TEvBlobStorage {
         {}
 
         TString Print(bool isFull) const {
-            Y_UNUSED(isFull); 
+            Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvRange {TabletId# " << TabletId;
             str << " From# " << From.ToString();
@@ -1823,7 +1823,7 @@ struct TEvBlobStorage {
         }
 
         TString Print(bool isFull) const {
-            Y_UNUSED(isFull); 
+            Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvCollectGarbage {TabletId# " << TabletId;
             str << " RecordGeneration# " << RecordGeneration;
@@ -1900,7 +1900,7 @@ struct TEvBlobStorage {
         {}
 
         TString Print(bool isFull) const {
-            Y_UNUSED(isFull); 
+            Y_UNUSED(isFull);
             TStringStream str;
             str << "TEvCollectGarbageResult {TabletId# " << TabletId;
             str << " RecordGeneration# " << RecordGeneration;
@@ -2075,7 +2075,7 @@ static inline NKikimrBlobStorage::EVDiskQueueId HandleClassToQueueId(NKikimrBlob
         case NKikimrBlobStorage::EPutHandleClass::UserData:
             return NKikimrBlobStorage::EVDiskQueueId::PutUserData;
         default:
-            Y_FAIL("Unexpected case"); 
+            Y_FAIL("Unexpected case");
     }
 }
 

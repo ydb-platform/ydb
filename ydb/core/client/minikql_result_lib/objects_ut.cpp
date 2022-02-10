@@ -10,9 +10,9 @@ namespace NKikimr {
 using namespace NKikimrMiniKQL;
 using namespace NResultLib;
 
-Y_UNIT_TEST_SUITE(TMiniKQLResultTest) { 
+Y_UNIT_TEST_SUITE(TMiniKQLResultTest) {
 
-Y_UNIT_TEST(TOptionalTest) { 
+Y_UNIT_TEST(TOptionalTest) {
     { // Optional of Bool.
         TType type;
         type.SetKind(ETypeKind::Optional);
@@ -35,7 +35,7 @@ Y_UNIT_TEST(TOptionalTest) {
     }
 }
 
-Y_UNIT_TEST(TListTest) { 
+Y_UNIT_TEST(TListTest) {
     { // List of Int32.
         TType type;
         type.SetKind(ETypeKind::List);
@@ -86,7 +86,7 @@ Y_UNIT_TEST(TListTest) {
 }
 
 
-Y_UNIT_TEST(TTupleTest) { 
+Y_UNIT_TEST(TTupleTest) {
     { // Tuple of (Optional of Int32, List of Uint64).
         TType type;
         type.SetKind(ETypeKind::Tuple);
@@ -124,7 +124,7 @@ Y_UNIT_TEST(TTupleTest) {
     }
 }
 
-Y_UNIT_TEST(TStructTest) { 
+Y_UNIT_TEST(TStructTest) {
     { // Struct of {"a" : Int64, "b" : Int32}.
         TType type;
         type.SetKind(ETypeKind::Struct);

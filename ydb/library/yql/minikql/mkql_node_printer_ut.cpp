@@ -82,8 +82,8 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(TMiniKQLNodePrinterTest) { 
-    Y_UNIT_TEST(TestPrintWithoutSchema) { 
+Y_UNIT_TEST_SUITE(TMiniKQLNodePrinterTest) {
+    Y_UNIT_TEST(TestPrintWithoutSchema) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto node = BuildGraph(env);
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodePrinterTest) {
         UNIT_ASSERT_EQUAL(s2, s);
     }
 
-    Y_UNIT_TEST(RuntimeNodeSerialization) { 
+    Y_UNIT_TEST(RuntimeNodeSerialization) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<ui32>::Id, env);

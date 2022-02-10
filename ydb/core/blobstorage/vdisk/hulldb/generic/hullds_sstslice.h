@@ -90,7 +90,7 @@ namespace NKikimr {
             return Segs->ObsoleteLastCompactedLsn();
         }
 
-        void OutputHtml(ui32 &index, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const { 
+        void OutputHtml(ui32 &index, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const {
             Segs->OutputHtml(index, str, sum);
         }
 
@@ -163,7 +163,7 @@ namespace NKikimr {
             Segs->GetOwnedChunks(chunks);
         }
 
-        void OutputHtml(ui32 &index, ui32 level, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const { 
+        void OutputHtml(ui32 &index, ui32 level, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const {
             Segs->OutputHtml(index, level, str, sum);
         }
     };
@@ -327,7 +327,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void OutputHtml(IOutputStream &str) const; 
+        void OutputHtml(IOutputStream &str) const;
 
         ui32 GetLevelXNumber() const {
             return SortedLevels.size();
@@ -447,7 +447,7 @@ namespace NKikimr {
             return Level0SegsNum;
         }
 
-        void Output(IOutputStream &str) const { 
+        void Output(IOutputStream &str) const {
             TSstIterator it(this);
             it.SeekToFirst();
             unsigned curLevel = 0;

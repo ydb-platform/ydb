@@ -16,7 +16,7 @@ static inline size_t ToReserve(const T& t) {
     return ret;
 }
 
-void TPathSplitTraitsUnix::DoParseFirstPart(const TStringBuf part) { 
+void TPathSplitTraitsUnix::DoParseFirstPart(const TStringBuf part) {
     if (part == TStringBuf(".")) {
         push_back(TStringBuf("."));
 
@@ -30,7 +30,7 @@ void TPathSplitTraitsUnix::DoParseFirstPart(const TStringBuf part) {
     DoParsePart(part);
 }
 
-void TPathSplitTraitsUnix::DoParsePart(const TStringBuf part0) { 
+void TPathSplitTraitsUnix::DoParsePart(const TStringBuf part0) {
     DoAppendHint(part0.size() / 8);
 
     TStringBuf next(part0);
@@ -43,7 +43,7 @@ void TPathSplitTraitsUnix::DoParsePart(const TStringBuf part0) {
     AppendComponent(next);
 }
 
-void TPathSplitTraitsWindows::DoParseFirstPart(const TStringBuf part0) { 
+void TPathSplitTraitsWindows::DoParseFirstPart(const TStringBuf part0) {
     TStringBuf part(part0);
 
     if (part == TStringBuf(".")) {
@@ -64,7 +64,7 @@ void TPathSplitTraitsWindows::DoParseFirstPart(const TStringBuf part0) {
     DoParsePart(part);
 }
 
-void TPathSplitTraitsWindows::DoParsePart(const TStringBuf part0) { 
+void TPathSplitTraitsWindows::DoParsePart(const TStringBuf part0) {
     DoAppendHint(part0.size() / 8);
 
     size_t pos = 0;
@@ -106,7 +106,7 @@ TString TPathSplitStore::DoReconstruct(const TStringBuf slash) const {
     return r;
 }
 
-void TPathSplitStore::AppendComponent(const TStringBuf comp) { 
+void TPathSplitStore::AppendComponent(const TStringBuf comp) {
     if (!comp || comp == TStringBuf(".")) {
         ; // ignore
     } else if (comp == TStringBuf("..") && !empty() && back() != TStringBuf("..")) {
@@ -122,7 +122,7 @@ TStringBuf TPathSplitStore::Extension() const {
 }
 
 template <>
-void Out<TPathSplit>(IOutputStream& o, const TPathSplit& ps) { 
+void Out<TPathSplit>(IOutputStream& o, const TPathSplit& ps) {
     o << ps.Reconstruct();
 }
 
@@ -134,7 +134,7 @@ TString JoinPaths(const TPathSplit& p1, const TPathSplit& p2) {
     return TPathSplit(p1).AppendMany(p2.begin(), p2.end()).Reconstruct();
 }
 
-TStringBuf CutExtension(const TStringBuf fileName) { 
+TStringBuf CutExtension(const TStringBuf fileName) {
     if (fileName.empty()) {
         return fileName;
     }

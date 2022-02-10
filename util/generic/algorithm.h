@@ -181,7 +181,7 @@ static inline bool AnyOf(const C& c, P pred) {
 template <class I, class P>
 static inline auto FindIfPtr(I f, I l, P pred) -> decltype(&*f) {
     I found = FindIf(f, l, pred);
-    return (found != l) ? &*found : nullptr; 
+    return (found != l) ? &*found : nullptr;
 }
 
 template <class C, class P>
@@ -218,16 +218,16 @@ inline bool EqualToOneOf(const T& x, const U& y, const Other&... other) {
     return x == y || EqualToOneOf(x, other...);
 }
 
-template <typename T> 
-static inline size_t CountOf(const T&) { 
-    return 0; 
-} 
- 
-template <typename T, typename U, typename... Other> 
-static inline size_t CountOf(const T& x, const U& y, const Other&... other) { 
-    return static_cast<size_t>(x == y) + CountOf(x, other...); 
-} 
- 
+template <typename T>
+static inline size_t CountOf(const T&) {
+    return 0;
+}
+
+template <typename T, typename U, typename... Other>
+static inline size_t CountOf(const T& x, const U& y, const Other&... other) {
+    return static_cast<size_t>(x == y) + CountOf(x, other...);
+}
+
 template <class I>
 static inline void PushHeap(I f, I l) {
     std::push_heap(f, l);
@@ -438,7 +438,7 @@ static inline void Fill(I f, I l, const T& v) {
     std::fill(f, l, v);
 }
 
-template <typename I, typename S, typename T> 
+template <typename I, typename S, typename T>
 static inline I FillN(I f, S n, const T& v) {
     return std::fill_n(f, n, v);
 }

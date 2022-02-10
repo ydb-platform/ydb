@@ -4,7 +4,7 @@
 
 using namespace NACLib;
 
-Y_UNIT_TEST_SUITE(ACLib) { 
+Y_UNIT_TEST_SUITE(ACLib) {
     static const TString James = "james@bookstore";
     static const TVector<TString> JamesGroups = {"Humans", "Administrators"};
     static const TString Cat = "cat@bookstore";
@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(ACLib) {
     static const TString Dog = "dog@bookstore";
     static const TVector<TString> DogGroups = {"Animals", "Dogs", "Writers"};
 
-    Y_UNIT_TEST(TestUsers) { 
+    Y_UNIT_TEST(TestUsers) {
         TSecurityObject rootACL(James, true);
 
         rootACL.AddAccess(EAccessType::Allow, EAccessRights::GenericRead, Cat, EInheritanceType::InheritContainer);
@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(ACLib) {
         UNIT_ASSERT(effectiveCatFileACL.CheckAccess(EAccessRights::UpdateRow, dogToken) == false);
     }
 
-    Y_UNIT_TEST(TestGroups) { 
+    Y_UNIT_TEST(TestGroups) {
         TSecurityObject rootACL(James, true);
 
         rootACL.AddAccess(EAccessType::Allow, EAccessRights::GenericRead, "Readers", EInheritanceType::InheritContainer | EInheritanceType::InheritObject);

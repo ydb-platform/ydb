@@ -103,7 +103,7 @@ namespace NKikimr {
             return CreateLevelIndexExtremeQueryActor(queryCtx, parentId,
                     std::move(fullSnap.LogoBlobsSnap), std::move(fullSnap.BarriersSnap), ev, std::move(result), replSchedulerId);
         } else {
-            Y_FAIL("Impossible case"); 
+            Y_FAIL("Impossible case");
         }
     }
 

@@ -82,7 +82,7 @@ const char* GetFQDNHostName() {
 
 bool IsFQDN(const TString& name) {
     TString absName = name;
-    if (!absName.EndsWith('.')) { 
+    if (!absName.EndsWith('.')) {
         absName.append(".");
     }
 

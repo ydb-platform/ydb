@@ -49,7 +49,7 @@ namespace NKikimr {
                 return KeepIndex;
             }
 
-            void Output(IOutputStream &str) { 
+            void Output(IOutputStream &str) {
                 str << "[index# " << KeepIndex << " data# " << KeepData
                     << " barrier# " << KeepByBarrier << "]";
             }
@@ -86,7 +86,7 @@ namespace NKikimr {
                 return std::make_tuple(TabletId, Channel);
             }
 
-            void Output(IOutputStream& str) const { 
+            void Output(IOutputStream& str) const {
                 str << TabletId << ":" << Channel;
             }
 
@@ -134,7 +134,7 @@ namespace NKikimr {
                 return *this != TBarrier();
             }
 
-            void Output(IOutputStream& str) const { 
+            void Output(IOutputStream& str) const {
                 str << "Issued:[" << BarrierGen << ":" << BarrierGenCounter << "]" << " -> Collect:[" << CollectGen << ":" << CollectStep << "]";
             }
 

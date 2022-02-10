@@ -8,12 +8,12 @@
 
 template <class T>
 static constexpr T Max() noexcept {
-    return std::numeric_limits<T>::max(); 
+    return std::numeric_limits<T>::max();
 }
 
 template <class T>
 static constexpr T Min() noexcept {
-    return std::numeric_limits<T>::min(); 
+    return std::numeric_limits<T>::min();
 }
 
 namespace NPrivate {

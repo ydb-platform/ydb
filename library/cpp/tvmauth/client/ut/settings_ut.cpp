@@ -6,7 +6,7 @@
 
 using namespace NTvmAuth;
 
-Y_UNIT_TEST_SUITE(ClientSettings) { 
+Y_UNIT_TEST_SUITE(ClientSettings) {
 #if !defined(_win_)
     Y_UNIT_TEST(CheckValid) {
         struct TTestCase {

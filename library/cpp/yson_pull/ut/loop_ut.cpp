@@ -202,7 +202,7 @@ namespace {
 
     class sys_error {};
 
-    IOutputStream& operator<<(IOutputStream& stream, const sys_error&) { 
+    IOutputStream& operator<<(IOutputStream& stream, const sys_error&) {
         stream << strerror(errno);
         return stream;
     }
@@ -317,66 +317,66 @@ namespace {
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(Loop) { 
-    Y_UNIT_TEST(memory_pretty_text) { 
+Y_UNIT_TEST_SUITE(Loop) {
+    Y_UNIT_TEST(memory_pretty_text) {
         test_memory(pretty_text, 100);
     }
 
-    Y_UNIT_TEST(memory_text) { 
+    Y_UNIT_TEST(memory_text) {
         test_memory(text, 100);
     }
 
-    Y_UNIT_TEST(memory_binary) { 
+    Y_UNIT_TEST(memory_binary) {
         test_memory(binary, 100);
     }
 
 #ifdef _unix_
-    Y_UNIT_TEST(posix_fd_pretty_text_buffered) { 
+    Y_UNIT_TEST(posix_fd_pretty_text_buffered) {
         test_posix_fd(pretty_text, 100, 1024, 1024);
     }
 
-    Y_UNIT_TEST(posix_fd_pretty_text_unbuffered) { 
+    Y_UNIT_TEST(posix_fd_pretty_text_unbuffered) {
         test_posix_fd(pretty_text, 100, 1, 0);
     }
 
-    Y_UNIT_TEST(posix_fd_text_buffered) { 
+    Y_UNIT_TEST(posix_fd_text_buffered) {
         test_posix_fd(text, 100, 1024, 1024);
     }
 
-    Y_UNIT_TEST(posix_fd_text_unbuffered) { 
+    Y_UNIT_TEST(posix_fd_text_unbuffered) {
         test_posix_fd(text, 100, 1, 0);
     }
 
-    Y_UNIT_TEST(posix_fd_binary_buffered) { 
+    Y_UNIT_TEST(posix_fd_binary_buffered) {
         test_posix_fd(binary, 100, 1024, 1024);
     }
 
-    Y_UNIT_TEST(posix_fd_binary_unbuffered) { 
+    Y_UNIT_TEST(posix_fd_binary_unbuffered) {
         test_posix_fd(binary, 100, 1, 0);
     }
 
-    Y_UNIT_TEST(stdio_file_pretty_text_buffered) { 
+    Y_UNIT_TEST(stdio_file_pretty_text_buffered) {
         test_stdio_file(pretty_text, 100, 1024, 1024);
     }
 
-    Y_UNIT_TEST(stdio_file_pretty_text_unbuffered) { 
+    Y_UNIT_TEST(stdio_file_pretty_text_unbuffered) {
         test_stdio_file(pretty_text, 100, 1, 0);
     }
 
-    Y_UNIT_TEST(stdio_file_text_buffered) { 
+    Y_UNIT_TEST(stdio_file_text_buffered) {
         test_stdio_file(text, 100, 1024, 1024);
     }
 
-    Y_UNIT_TEST(stdio_file_text_unbuffered) { 
+    Y_UNIT_TEST(stdio_file_text_unbuffered) {
         test_stdio_file(text, 100, 1, 0);
     }
 
-    Y_UNIT_TEST(stdio_file_binary_buffered) { 
+    Y_UNIT_TEST(stdio_file_binary_buffered) {
         test_stdio_file(binary, 100, 1024, 1024);
     }
 
-    Y_UNIT_TEST(stdio_file_binary_unbuffered) { 
+    Y_UNIT_TEST(stdio_file_binary_unbuffered) {
         test_stdio_file(binary, 100, 1, 0);
     }
 #endif
-} // Y_UNIT_TEST_SUITE(Loop) 
+} // Y_UNIT_TEST_SUITE(Loop)

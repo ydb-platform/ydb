@@ -88,7 +88,7 @@ protected:
 /**
  * Input stream that binds to a standard output stream of an existing process.
  */
-class TPipedInput: public TPipedBase, public IInputStream { 
+class TPipedInput: public TPipedBase, public IInputStream {
 public:
     TPipedInput(PIPEHANDLE fd);
     ~TPipedInput() override;
@@ -100,7 +100,7 @@ private:
 /**
  * Output stream that binds to a standard input stream of an existing process.
  */
-class TPipedOutput: public TPipedBase, public IOutputStream { 
+class TPipedOutput: public TPipedBase, public IOutputStream {
 public:
     TPipedOutput(PIPEHANDLE fd);
     ~TPipedOutput() override;

@@ -11,16 +11,16 @@
     #include <cstdlib>
 #endif
 
-/** 
+/**
  * On Windows there may be many copies of enviroment variables, there at least two known, one is
  * manipulated by Win32 API, another by C runtime, so we must be consistent in the choice of
- * functions used to manipulate them. 
- * 
- * Relevant links: 
- *  - http://bugs.python.org/issue16633 
+ * functions used to manipulate them.
+ *
+ * Relevant links:
+ *  - http://bugs.python.org/issue16633
  *  - https://a.yandex-team.ru/review/108892/details
- */ 
- 
+ */
+
 TString GetEnv(const TString& key, const TString& def) {
 #ifdef _win_
     size_t len = GetEnvironmentVariableA(key.data(), nullptr, 0);

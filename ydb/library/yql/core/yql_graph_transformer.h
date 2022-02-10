@@ -62,7 +62,7 @@ public:
             return TStatus((TStatus::ELevel)Max(Level, other.Level), hasRestart);
         }
 
-        void Out(IOutputStream &out) const { 
+        void Out(IOutputStream &out) const {
             out << (TStatus::ELevel)Level;
             if (HasRestart) {
                 out << ", with restart";
@@ -236,14 +236,14 @@ void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExpr
 class TSyncTransformerBase : public TGraphTransformerBase {
 public:
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
-        Y_UNUSED(input); 
+        Y_UNUSED(input);
         YQL_ENSURE(false, "Not supported");
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        Y_UNUSED(input); 
-        Y_UNUSED(output); 
-        Y_UNUSED(ctx); 
+        Y_UNUSED(input);
+        Y_UNUSED(output);
+        Y_UNUSED(ctx);
         YQL_ENSURE(false, "Not supported");
     }
 };
@@ -396,7 +396,7 @@ typedef std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash> TSyncMap;
 
 template<>
 inline void Out<NYql::IGraphTransformer::TStatus>(
-    IOutputStream &out, const NYql::IGraphTransformer::TStatus& status) 
+    IOutputStream &out, const NYql::IGraphTransformer::TStatus& status)
 {
     status.Out(out);
 }

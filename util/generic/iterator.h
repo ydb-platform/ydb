@@ -1,6 +1,6 @@
 #pragma once
 
-#include <iterator> 
+#include <iterator>
 #include <utility>
 
 namespace NStlIterator {
@@ -130,10 +130,10 @@ public:
 
 /**
  * Transform given reverse iterator into forward iterator pointing to the same element.
- * 
+ *
  * @see http://stackoverflow.com/a/1830240
- */ 
+ */
 template <class TIterator>
 auto ToForwardIterator(TIterator iter) {
-    return std::next(iter).base(); 
+    return std::next(iter).base();
 }

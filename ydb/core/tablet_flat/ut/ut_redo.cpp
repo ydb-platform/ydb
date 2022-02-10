@@ -9,12 +9,12 @@ namespace NKikimr {
 namespace NTable {
 
 
-Y_UNIT_TEST_SUITE(Redo) { 
+Y_UNIT_TEST_SUITE(Redo) {
     namespace ETypes = NScheme::NTypeIds;
 
     using namespace NTest;
 
-    Y_UNIT_TEST(ABI_008) 
+    Y_UNIT_TEST(ABI_008)
     {
         /* Redo log taken from DBase::Basics test that cover all events */
 

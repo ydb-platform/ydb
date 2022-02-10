@@ -8,7 +8,7 @@ namespace NKikimr {
         // TSyncLogPage
         ////////////////////////////////////////////////////////////////////////////
         void TSyncLogPage::Put(ui32 pageSize, const TRecordHdr *rec, ui32 dataSize) {
-            Y_VERIFY(HaveRoom(pageSize, dataSize) && 
+            Y_VERIFY(HaveRoom(pageSize, dataSize) &&
                    (Header.LastLsn == 0 || rec->Lsn > Header.LastLsn),
                    "Header# %s rec# %s pageSize# %" PRIu32 " dataSize# %" PRIu32,
                    Header.ToString().data(), rec->ToString().data(), pageSize, dataSize);
@@ -60,7 +60,7 @@ namespace NKikimr {
             }
         }
 
-        void TMemRecLogSnapshot::OutputHtml(IOutputStream &str) const { 
+        void TMemRecLogSnapshot::OutputHtml(IOutputStream &str) const {
             HTML(str) {
                 DIV_CLASS("well well-sm") {
                     STRONG() {str << "TMemRecLog<br>";}
@@ -114,7 +114,7 @@ namespace NKikimr {
                 if (first) {
                     first = false;
                 } else {
-                    Y_VERIFY(hdr->Lsn > lsn, "lsn# %" PRIu64 " hdrLsn# %" PRIu64, lsn, hdr->Lsn); 
+                    Y_VERIFY(hdr->Lsn > lsn, "lsn# %" PRIu64 " hdrLsn# %" PRIu64, lsn, hdr->Lsn);
                 }
                 lsn = hdr->Lsn;
 
@@ -158,7 +158,7 @@ namespace NKikimr {
             } else {
                 // pageFirstLsn >= lsn
                 ui64 pageFirstLsn = PagesIt.Get().GetFirstLsn();
-                Y_VERIFY_DEBUG(pageFirstLsn >= lsn); 
+                Y_VERIFY_DEBUG(pageFirstLsn >= lsn);
                 TPageIterator firstIt(PagesIt.GetSnap());
                 firstIt.SeekToFirst();
                 if (pageFirstLsn == lsn || PagesIt == firstIt) {
@@ -174,16 +174,16 @@ namespace NKikimr {
             }
 
             // we have found the required page and it is PagesIt
-            Y_VERIFY_DEBUG(PagesIt.Valid()); 
+            Y_VERIFY_DEBUG(PagesIt.Valid());
 
             // find exact position in the page
             SetupHdr();
             while (Hdr->Lsn < lsn) {
                 Hdr = Hdr->Next();
-                Y_VERIFY_DEBUG(Hdr != HdrEnd); 
+                Y_VERIFY_DEBUG(Hdr != HdrEnd);
             }
 
-            Y_VERIFY_DEBUG(Valid()); 
+            Y_VERIFY_DEBUG(Valid());
         }
 
         void TMemRecLogSnapshot::TIterator::Next() {
@@ -229,7 +229,7 @@ namespace NKikimr {
                 return str.Str();
             };
 
-            Y_VERIFY(Pages.empty() || Pages.back()->GetLastLsn() < rec->Lsn, 
+            Y_VERIFY(Pages.empty() || Pages.back()->GetLastLsn() < rec->Lsn,
                    "pagesSize# %" PRIu32 " lastLsn# %" PRIu64 " recLsn# %" PRIu64 " dump#\n %s",
                    ui32(Pages.size()), Pages.back()->GetLastLsn(), rec->Lsn, errorReport().data());
 
@@ -245,12 +245,12 @@ namespace NKikimr {
         }
 
         void TMemRecLog::PutMany(const void *buf, ui32 size) {
-            Y_VERIFY_DEBUG(size); 
+            Y_VERIFY_DEBUG(size);
             TRecordHdr *rec = (TRecordHdr*)buf;
             ui32 recSize = 0;
             do {
                 recSize = rec->GetSize();
-                Y_VERIFY_DEBUG(recSize <= size); 
+                Y_VERIFY_DEBUG(recSize <= size);
                 PutOne(rec, recSize);
                 rec = rec->Next();
                 size -= recSize;
@@ -288,7 +288,7 @@ namespace NKikimr {
             // void skip cache pages, i.e. find the first page that is not in cache
             TSyncLogPages::const_iterator it = ::LowerBound(Pages.begin(), Pages.end(), diskLastLsn, less);
             if (it == Pages.end()) {
-                Y_VERIFY(Pages.empty()); 
+                Y_VERIFY(Pages.empty());
                 return TMemRecLogSnapshotPtr();
             }
 
@@ -326,7 +326,7 @@ namespace NKikimr {
                 return Sprintf("{Mem: [%" PRIu64 ", %" PRIu64 "]}", GetFirstLsn(), GetLastLsn());
         }
 
-        void TMemRecLog::Output(IOutputStream &s) const { 
+        void TMemRecLog::Output(IOutputStream &s) const {
             TMemRecLogSnapshotPtr snap = GetSnapshot();
             TMemRecLogSnapshot::TIterator it(snap);
             it.SeekToFirst();

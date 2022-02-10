@@ -92,8 +92,8 @@ struct TObjectCountChecker {
     }
 };
 
-Y_UNIT_TEST_SUITE(TActor) { 
-    Y_UNIT_TEST(Simple) { 
+Y_UNIT_TEST_SUITE(TActor) {
+    Y_UNIT_TEST(Simple) {
         TObjectCountChecker objectCountChecker;
 
         TExecutor executor(4);
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(TActor) {
         actor->Acted.WaitFor(1u);
     }
 
-    Y_UNIT_TEST(ScheduleAfterStart) { 
+    Y_UNIT_TEST(ScheduleAfterStart) {
         TObjectCountChecker objectCountChecker;
 
         TExecutor executor(4);
@@ -147,11 +147,11 @@ Y_UNIT_TEST_SUITE(TActor) {
         }
     }
 
-    Y_UNIT_TEST(ComplexContention) { 
+    Y_UNIT_TEST(ComplexContention) {
         ComplexImpl(4, 6);
     }
 
-    Y_UNIT_TEST(ComplexNoContention) { 
+    Y_UNIT_TEST(ComplexNoContention) {
         ComplexImpl(6, 4);
     }
 }

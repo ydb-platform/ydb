@@ -20,7 +20,7 @@
 #endif
 
 /**
-    @def Y_THREAD(TType) 
+    @def Y_THREAD(TType)
 
     A thread-local wrapper for a given class. Suitable for POD and classes with a constructor with a single argument.
 
@@ -46,7 +46,7 @@
     Example:
         @code
         //the field declaration in header
-        Y_THREAD(TBuffer) TmpBuffer; 
+        Y_THREAD(TBuffer) TmpBuffer;
         //...later somewhere in cpp...
         TmpBuffer.Clear();
         for (size_t i = 0; i < sz && TrieCursor[i].second.IsFork(); ++i) {
@@ -57,10 +57,10 @@
     Example:
         @code
         //the field decalrataion in header
-        Y_THREAD(TMyWriter*) ThreadLocalWriter; 
+        Y_THREAD(TMyWriter*) ThreadLocalWriter;
         //...later somewhere in cpp...
         TMyWriter*& writerRef = ThreadLocalWriter.Get();
-        if (writerRef == nullptr) { 
+        if (writerRef == nullptr) {
             THolder<TMyWriter> threadLocalWriter( new TMyWriter(
                 *Session,
                 MinLogError,
@@ -84,7 +84,7 @@
 
     Example:
         @code
-        Y_THREAD(TScoreCalcer*) ScoreCalcerPtr; 
+        Y_THREAD(TScoreCalcer*) ScoreCalcerPtr;
         static TScoreCalcer* GetScoreCalcer(yint maxElemCount) {
             if (ScoreCalcerPtr == 0) {
                 ScoreCalcerPtr = new TScoreCalcer();
@@ -98,35 +98,35 @@
 **/
 
 /**
-    @def Y_STATIC_THREAD(TType) 
+    @def Y_STATIC_THREAD(TType)
 
-    Equivalent to "static Y_THREAD(TType)" 
+    Equivalent to "static Y_THREAD(TType)"
 
-    @see Y_THREAD(TType) 
+    @see Y_THREAD(TType)
 **/
 
 /**
-    @def Y_POD_THREAD(TType) 
+    @def Y_POD_THREAD(TType)
 
-    Same interface as Y_THREAD(TType), but TType must be a POD. 
-    Implemented (based on the compiler) as Y_THREAD(TType) or as native tls. 
+    Same interface as Y_THREAD(TType), but TType must be a POD.
+    Implemented (based on the compiler) as Y_THREAD(TType) or as native tls.
 
-    @see Y_THREAD(TType) 
+    @see Y_THREAD(TType)
 **/
 
 /**
     @def STATIC_POD_THREAD(TType)
 
-    Equivalent to "static Y_POD_THREAD(TType)" 
+    Equivalent to "static Y_POD_THREAD(TType)"
 
-    @see Y_POD_THREAD(TType) 
+    @see Y_POD_THREAD(TType)
 **/
 
-#define Y_THREAD(T) ::NTls::TValue<T> 
-#define Y_STATIC_THREAD(T) static Y_THREAD(T) 
+#define Y_THREAD(T) ::NTls::TValue<T>
+#define Y_STATIC_THREAD(T) static Y_THREAD(T)
 
 // gcc and msvc support automatic tls for POD types
-#if defined(Y_DISABLE_THRKEY_OPTIMIZATION) 
+#if defined(Y_DISABLE_THRKEY_OPTIMIZATION)
 // nothing to do
 #elif defined(__clang__)
     #define Y_POD_THREAD(T) thread_local T
@@ -140,7 +140,7 @@
     #define Y_POD_STATIC_THREAD(T) __declspec(thread) static T
 #endif
 
-#if !defined(Y_POD_THREAD) || !defined(Y_POD_STATIC_THREAD) 
+#if !defined(Y_POD_THREAD) || !defined(Y_POD_STATIC_THREAD)
     #define Y_POD_THREAD(T) Y_THREAD(T)
     #define Y_POD_STATIC_THREAD(T) Y_STATIC_THREAD(T)
 #else

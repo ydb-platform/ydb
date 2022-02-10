@@ -58,10 +58,10 @@ message TMergeTest {
    repeated TMergeTestMerge NoMergeRepSub = 4 [(DontMergeField)=true];
    optional TMergeTestNoMerge NoMergeOptSub  = 5;
 }
- 
-message TTextTest { 
-    optional uint32 Foo = 1; 
-} 
+
+message TTextTest {
+    optional uint32 Foo = 1;
+}
 
 message TTextEnumTest {
    enum EnumTest {

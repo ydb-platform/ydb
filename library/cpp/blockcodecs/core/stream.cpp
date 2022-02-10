@@ -64,7 +64,7 @@ namespace {
     }
 }
 
-TCodedOutput::TCodedOutput(IOutputStream* out, const ICodec* c, size_t bufLen) 
+TCodedOutput::TCodedOutput(IOutputStream* out, const ICodec* c, size_t bufLen)
     : C_(c)
     , D_(bufLen)
     , S_(out)
@@ -95,7 +95,7 @@ void TCodedOutput::DoWrite(const void* buf, size_t len) {
 
         D_.Append(in, avail);
 
-        Y_ASSERT(!D_.Avail()); 
+        Y_ASSERT(!D_.Avail());
 
         in += avail;
         len -= avail;
@@ -146,7 +146,7 @@ void TCodedOutput::DoFinish() {
     }
 }
 
-TDecodedInput::TDecodedInput(IInputStream* in) 
+TDecodedInput::TDecodedInput(IInputStream* in)
     : S_(in)
     , C_(nullptr)
 {

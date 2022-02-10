@@ -6,8 +6,8 @@
 #include <util/memory/blob.h>
 #include <util/stream/buffer.h>
 
-Y_UNIT_TEST_SUITE(TBitVectorTest) { 
-    Y_UNIT_TEST(TestEmpty) { 
+Y_UNIT_TEST_SUITE(TBitVectorTest) {
+    Y_UNIT_TEST(TestEmpty) {
         TBitVector<ui64> v64;
         UNIT_ASSERT_EQUAL(v64.Size(), 0);
         UNIT_ASSERT_EQUAL(v64.Words(), 0);
@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(TBitVectorTest) {
         UNIT_ASSERT_EQUAL(v32.Words(), 0);
     }
 
-    Y_UNIT_TEST(TestOneWord) { 
+    Y_UNIT_TEST(TestOneWord) {
         TBitVector<ui32> v;
         v.Append(1, 1);
         v.Append(0, 1);
@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TBitVectorTest) {
         UNIT_ASSERT_EQUAL(v.Words(), 1);
     }
 
-    Y_UNIT_TEST(TestManyWords) { 
+    Y_UNIT_TEST(TestManyWords) {
         static const int BITS = 10;
         TBitVector<ui64> v;
 
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TBitVectorTest) {
             UNIT_ASSERT_EQUAL(v.Get(i * BITS, BITS), (ui64)i);
     }
 
-    Y_UNIT_TEST(TestMaxWordSize) { 
+    Y_UNIT_TEST(TestMaxWordSize) {
         TBitVector<ui32> v;
         for (int i = 0; i < 100; ++i)
             v.Append(i, 32);
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TBitVectorTest) {
         UNIT_ASSERT_EQUAL(v.Get(10 * 32, 32), 100500);
     }
 
-    Y_UNIT_TEST(TestReadonlyVector) { 
+    Y_UNIT_TEST(TestReadonlyVector) {
         TBitVector<ui64> v(100);
         for (ui64 i = 0; i < v.Size(); ++i) {
             if (i % 3 == 0) {

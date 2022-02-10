@@ -4,7 +4,7 @@
 
 #include <util/generic/ylimits.h>
 
-Y_UNIT_TEST_SUITE(TPackNumTest) { 
+Y_UNIT_TEST_SUITE(TPackNumTest) {
     static ui32 TEST_DATA_UI32[] = {
         0,
         0x80,
@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TPackNumTest) {
 
     static size_t DELTA = 10;
 
-    Y_UNIT_TEST(PackUnpack32) { 
+    Y_UNIT_TEST(PackUnpack32) {
         char buf[10];
         for (ui32 num: TEST_DATA_UI32) {
             for (ui32 i = num - Min<ui32>(num, DELTA); i < num + Min<ui32>(DELTA, Max<ui32>() - num); ++i) {
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TPackNumTest) {
         }
     }
 
-    Y_UNIT_TEST(PackUnpack64) { 
+    Y_UNIT_TEST(PackUnpack64) {
         char buf[10];
         for (ui64 num: TEST_DATA_UI64) {
             for (ui64 i = num - Min<ui64>(num, DELTA); i < num + Min<ui64>(DELTA, Max<ui64>() - num); ++i) {

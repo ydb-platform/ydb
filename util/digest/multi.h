@@ -5,7 +5,7 @@
 #include "numeric.h"
 
 template <typename TOne>
-constexpr size_t MultiHash(const TOne& one) noexcept { 
+constexpr size_t MultiHash(const TOne& one) noexcept {
     return THash<TOne>()(one);
 }
 template <typename THead, typename... TTail>

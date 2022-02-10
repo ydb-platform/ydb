@@ -2,8 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(TLazyValueTestSuite) { 
-    Y_UNIT_TEST(TestLazyValue) { 
+Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
+    Y_UNIT_TEST(TestLazyValue) {
         TLazyValue<int> value([]() {
             return 5;
         });
@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
         UNIT_ASSERT(value);
     }
 
-    Y_UNIT_TEST(TestLazyValueInitialization) { 
+    Y_UNIT_TEST(TestLazyValueInitialization) {
         TLazyValue<int> value1([]() { return 5; });
 
         TLazyValue<int> value2 = []() { return 5; };
@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
         copy1 = value2;
     }
 
-    Y_UNIT_TEST(TestLazyValueCopy) { 
+    Y_UNIT_TEST(TestLazyValueCopy) {
         TLazyValue<int> value([]() { return 5; });
         UNIT_ASSERT(!value);
 
@@ -113,13 +113,13 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
 
     size_t TValueProvider::CountParseDataCalled = 0;
 
-    Y_UNIT_TEST(TestValueProvider) { 
+    Y_UNIT_TEST(TestValueProvider) {
         TValueProvider provider;
 
         UNIT_ASSERT(provider.GetData() == "hi");
     }
 
-    Y_UNIT_TEST(TestValueProviderCopy) { 
+    Y_UNIT_TEST(TestValueProviderCopy) {
         TValueProvider provider;
         provider.GetData();
         const auto countParsed = TValueProvider::CountParseDataCalled;
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
         UNIT_ASSERT_EQUAL(countParsed, TValueProvider::CountParseDataCalled);
     }
 
-    Y_UNIT_TEST(TestEmptyProviderCopy) { 
+    Y_UNIT_TEST(TestEmptyProviderCopy) {
         TValueProvider provider;
         TValueProvider copy(provider);
 
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(TLazyValueTestSuite) {
         UNIT_ASSERT_EQUAL(countParsed + 2, TValueProvider::CountParseDataCalled);
     }
 
-    Y_UNIT_TEST(TestMakeLazy) { 
+    Y_UNIT_TEST(TestMakeLazy) {
         auto lv = MakeLazy([] {
             return 100500;
         });

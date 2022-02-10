@@ -15,8 +15,8 @@ private:
     T* EndOfStorage;
 
     void StateCheck() {
-        Y_ASSERT(Start <= Finish); 
-        Y_ASSERT(Finish <= EndOfStorage); 
+        Y_ASSERT(Start <= Finish);
+        Y_ASSERT(Finish <= EndOfStorage);
     }
 
 public:
@@ -69,12 +69,12 @@ public:
     }
 
     T& operator[](size_t index) {
-        Y_ASSERT(index < size()); 
+        Y_ASSERT(index < size());
         return Start[index];
     }
 
     const T& operator[](size_t index) const {
-        Y_ASSERT(index < size()); 
+        Y_ASSERT(index < size());
         return Start[index];
     }
 
@@ -122,7 +122,7 @@ public:
         size_t newCapacity = FastClp2(n);
         TVectorSwaps<T> tmp;
         tmp.Start = (T*)malloc(sizeof(T) * newCapacity);
-        Y_VERIFY(!!tmp.Start); 
+        Y_VERIFY(!!tmp.Start);
 
         tmp.EndOfStorage = tmp.Start + newCapacity;
 
@@ -146,7 +146,7 @@ public:
 
     template <class TIterator>
     void insert(iterator pos, TIterator b, TIterator e) {
-        Y_VERIFY(pos == end(), "TODO: only insert at the end is implemented"); 
+        Y_VERIFY(pos == end(), "TODO: only insert at the end is implemented");
 
         size_t count = e - b;
 

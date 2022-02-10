@@ -461,7 +461,7 @@ namespace {
         writer.Write(SHORT_TOPIC_NAME, {"valuevaluevalue1"}, true);
     }
 
-    Y_UNIT_TEST(CloseActiveWriteSessionOnClusterDisable) { 
+    Y_UNIT_TEST(CloseActiveWriteSessionOnClusterDisable) {
         NPersQueue::TTestServer server;
 
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 10);
@@ -517,7 +517,7 @@ namespace {
         UNIT_ASSERT(writer->Close());
     }
 
-    Y_UNIT_TEST(ReadFromSeveralPartitions) { 
+    Y_UNIT_TEST(ReadFromSeveralPartitions) {
         NPersQueue::TTestServer server;
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_METACACHE });
 
@@ -625,7 +625,7 @@ namespace {
     }
 
 
-    Y_UNIT_TEST(WriteExisting) { 
+    Y_UNIT_TEST(WriteExisting) {
         NPersQueue::TTestServer server;
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
 
@@ -648,7 +648,7 @@ namespace {
         server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 1, "abacaba", 2, "valuevaluevalue1", "", ETransport::GRpc);
     }
 
-    Y_UNIT_TEST(WriteExistingBigValue) { 
+    Y_UNIT_TEST(WriteExistingBigValue) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2, 8*1024*1024, 86400, 100000);
@@ -661,7 +661,7 @@ namespace {
         UNIT_ASSERT(TInstant::Now() - now > TDuration::MilliSeconds(5990)); //speed limit is 200kb/s and burst is 200kb, so to write 1mb it will take at least 4 seconds
     }
 
-    Y_UNIT_TEST(WriteEmptyData) { 
+    Y_UNIT_TEST(WriteEmptyData) {
         NPersQueue::TTestServer server{PQSettings(0).SetDomainName("Root").SetNodeCount(2)};
 
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
@@ -676,7 +676,7 @@ namespace {
     }
 
 
-    Y_UNIT_TEST(WriteNonExistingPartition) { 
+    Y_UNIT_TEST(WriteNonExistingPartition) {
         NPersQueue::TTestServer server{PQSettings(0).SetDomainName("Root").SetNodeCount(2)};
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
 
@@ -688,7 +688,7 @@ namespace {
         );
     }
 
-    Y_UNIT_TEST(WriteNonExistingTopic) { 
+    Y_UNIT_TEST(WriteNonExistingTopic) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE });
@@ -699,7 +699,7 @@ namespace {
         );
     }
 
-    Y_UNIT_TEST(SchemeshardRestart) { 
+    Y_UNIT_TEST(SchemeshardRestart) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(1));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
         TString secondTopic = "rt3.dc1--topic2";
@@ -717,7 +717,7 @@ namespace {
         server.AnnoyingClient->WriteToPQ(secondTopic, 1, "abacaba", 1, "valuevaluevalue1");
     }
 
-    Y_UNIT_TEST(WriteAfterAlter) { 
+    Y_UNIT_TEST(WriteAfterAlter) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 2);
 
@@ -745,7 +745,7 @@ namespace {
         server.AnnoyingClient->WriteToPQ(DEFAULT_TOPIC_NAME, 15, "abacaba", 1, "valuevaluevalue1");
     }
 
-    Y_UNIT_TEST(Delete) { 
+    Y_UNIT_TEST(Delete) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
 
         server.EnableLogs({ NKikimrServices::FLAT_TX_SCHEMESHARD, NKikimrServices::PERSQUEUE});
@@ -767,7 +767,7 @@ namespace {
     }
 
 
-    Y_UNIT_TEST(BigRead) { 
+    Y_UNIT_TEST(BigRead) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400, 20000000, "user1", 2000000);
 
@@ -793,7 +793,7 @@ namespace {
 
 
     // expects that L2 size is 32Mb
-    Y_UNIT_TEST(Cache) { 
+    Y_UNIT_TEST(Cache) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 8*1024*1024, 86400);
 
@@ -824,7 +824,7 @@ namespace {
         UNIT_ASSERT(fromCache < 5);
     }
 
-    Y_UNIT_TEST(CacheHead) { 
+    Y_UNIT_TEST(CacheHead) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 6*1024*1024, 86400);
 
@@ -853,7 +853,7 @@ namespace {
         }
     }
 
-    Y_UNIT_TEST(SameOffset) { 
+    Y_UNIT_TEST(SameOffset) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1, 6*1024*1024, 86400);
         TString secondTopic = DEFAULT_TOPIC_NAME + "2";
@@ -888,7 +888,7 @@ namespace {
     }
 
 
-    Y_UNIT_TEST(FetchRequest) { 
+    Y_UNIT_TEST(FetchRequest) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root"));
         TString secondTopic = DEFAULT_TOPIC_NAME + "2";
 
@@ -913,7 +913,7 @@ namespace {
         server.AnnoyingClient->FetchRequestPQ({{secondTopic, 5, 500, 400},{secondTopic, 4, 0, 400},{DEFAULT_TOPIC_NAME, 1, 0, 400}}, 400, 1000000);
     }
 
-    Y_UNIT_TEST(Init) { 
+    Y_UNIT_TEST(Init) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
         if (!true) {
             server.EnableLogs( {
@@ -984,7 +984,7 @@ namespace {
         }
     }
 
-    Y_UNIT_TEST(WhenDisableNodeAndCreateTopic_ThenAllPartitionsAreOnOtherNode) { 
+    Y_UNIT_TEST(WhenDisableNodeAndCreateTopic_ThenAllPartitionsAreOnOtherNode) {
         NPersQueue::TTestServer server(PQSettings(0).SetDomainName("Root").SetNodeCount(2));
         server.EnableLogs({ NKikimrServices::PERSQUEUE, NKikimrServices::HIVE });
         TString unusedTopic = "rt3.dc1--unusedtopic";
@@ -1063,7 +1063,7 @@ namespace {
     };
 
 
-    Y_UNIT_TEST(CheckACLForGrpcWrite) { 
+    Y_UNIT_TEST(CheckACLForGrpcWrite) {
         NPersQueue::TTestServer server(PQSettings(0, 1));
         server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY });
         PrepareForGrpc(server);
@@ -1135,7 +1135,7 @@ namespace {
     }
 
 
-    Y_UNIT_TEST(CheckACLForGrpcRead) { 
+    Y_UNIT_TEST(CheckACLForGrpcRead) {
         NPersQueue::TTestServer server(PQSettings(0, 1));
         server.EnableLogs({ NKikimrServices::PQ_READ_PROXY });
         server.EnableLogs({ NKikimrServices::PERSQUEUE }, NActors::NLog::PRI_INFO);
@@ -1258,7 +1258,7 @@ namespace {
         }
     }
 
-    Y_UNIT_TEST(CheckKillBalancer) { 
+    Y_UNIT_TEST(CheckKillBalancer) {
         NPersQueue::TTestServer server;
         server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
         PrepareForGrpc(server);
@@ -1315,7 +1315,7 @@ namespace {
     }
 
 
-    Y_UNIT_TEST(TestWriteStat) { 
+    Y_UNIT_TEST(TestWriteStat) {
         NPersQueue::TTestServer server(PQSettings(0, 1, true, "10"), false);
         auto netDataUpdated = server.PrepareNetDataFile(FormNetData());
         UNIT_ASSERT(netDataUpdated);
@@ -1430,7 +1430,7 @@ namespace {
     }
 
 /*
-    Y_UNIT_TEST(TestLockErrors) { 
+    Y_UNIT_TEST(TestLockErrors) {
         return;  // Test is ignored. FIX: KIKIMR-7881
 
         NPersQueue::TTestServer server;

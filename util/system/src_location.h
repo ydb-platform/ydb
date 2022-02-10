@@ -5,7 +5,7 @@
 #include <util/generic/strbuf.h>
 
 struct TSourceLocation {
-    constexpr TSourceLocation(const TStringBuf f, int l) noexcept 
+    constexpr TSourceLocation(const TStringBuf f, int l) noexcept
         : File(f)
         , Line(l)
     {

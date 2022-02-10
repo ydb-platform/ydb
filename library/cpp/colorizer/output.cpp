@@ -5,6 +5,6 @@
 using namespace NColorizer;
 
 template <>
-void Out<TColorHandle>(IOutputStream& o, const TColorHandle& h) { 
+void Out<TColorHandle>(IOutputStream& o, const TColorHandle& h) {
     o << (*(h.C).*h.F)();
 }

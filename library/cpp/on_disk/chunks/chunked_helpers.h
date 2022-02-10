@@ -8,15 +8,15 @@
 #include <util/memory/blob.h>
 #include <util/stream/buffer.h>
 #include <util/stream/mem.h>
-#include <util/system/unaligned_mem.h> 
+#include <util/system/unaligned_mem.h>
 #include <util/ysaveload.h>
 
 #include "reader.h"
 #include "writer.h"
 
 #include <cmath>
-#include <cstddef> 
- 
+#include <cstddef>
+
 template <typename T>
 class TYVector {
 private:
@@ -25,14 +25,14 @@ private:
 
 public:
     TYVector(const TBlob& blob)
-        : Size(IntegerCast<ui32>(ReadUnaligned<ui64>(blob.Data()))) 
+        : Size(IntegerCast<ui32>(ReadUnaligned<ui64>(blob.Data())))
         , Data((const T*)((const char*)blob.Data() + sizeof(ui64)))
     {
     }
 
     void Get(size_t idx, T& t) const {
         assert(idx < (size_t)Size);
-        t = ReadUnaligned<T>(Data + idx); 
+        t = ReadUnaligned<T>(Data + idx);
     }
 
     const T& At(size_t idx) const {
@@ -63,7 +63,7 @@ public:
         Vector.push_back(value);
     }
 
-    void Save(IOutputStream& out) const { 
+    void Save(IOutputStream& out) const {
         ui64 uSize = (ui64)Vector.size();
         out.Write(&uSize, sizeof(uSize));
         out.Write(Vector.data(), Vector.size() * sizeof(T));
@@ -172,16 +172,16 @@ protected:
         typename TTypeTraits<TValue>::TFuncParam Second() const {
             return Value;
         }
- 
-        static TKey GetFirst(const void* self) { 
-            static constexpr size_t offset = offsetof(TThis, Key); 
+
+        static TKey GetFirst(const void* self) {
+            static constexpr size_t offset = offsetof(TThis, Key);
             return ReadUnaligned<TKey>(reinterpret_cast<const char*>(self) + offset);
-        } 
- 
-        static TValue GetSecond(const void* self) { 
-            static constexpr size_t offset = offsetof(TThis, Value); 
+        }
+
+        static TValue GetSecond(const void* self) {
+            static constexpr size_t offset = offsetof(TThis, Value);
             return ReadUnaligned<TValue>(reinterpret_cast<const char*>(self) + offset);
-        } 
+        }
     };
 #pragma pack(pop)
 
@@ -221,10 +221,10 @@ protected:
 
     template <typename TKey>
     static ui32 KeyHash(typename TTypeTraits<TKey>::TFuncParam key, ui16 bits) {
-        Y_ASSERT(bits < 32); 
+        Y_ASSERT(bits < 32);
         const ui32 res = ui32(key) & ((ui32(1) << bits) - 1);
 
-        Y_ASSERT(res < (ui32(1) << bits)); 
+        Y_ASSERT(res < (ui32(1) << bits));
         return res;
     }
 };
@@ -240,7 +240,7 @@ private:
     bool IsPlainEnought(ui16 bits) const {
         TVector<size_t> counts(1LL << bits, 0);
         for (size_t i = 0; i < Data.size(); ++i) {
-            size_t& count = counts[KeyHash<TKey>(TKeyValuePair::GetFirst(&Data[i]), bits)]; 
+            size_t& count = counts[KeyHash<TKey>(TKeyValuePair::GetFirst(&Data[i]), bits)];
             ++count;
             if (count > 2)
                 return false;
@@ -253,8 +253,8 @@ public:
         Data.push_back(TKeyValuePair(key, value));
     }
 
-    void Save(IOutputStream& out) const { 
-        Y_ASSERT(Data.size() < Max<ui32>()); 
+    void Save(IOutputStream& out) const {
+        Y_ASSERT(Data.size() < Max<ui32>());
 
         WriteBin<ui16>(&out, VERSION_ID);
         static const ui32 PAIR_SIZE = sizeof(TKeyValuePair);
@@ -274,7 +274,7 @@ public:
         const ui32 nBuckets = ui32(1) << bits;
         TData2 data2(nBuckets);
         for (size_t i = 0; i < Data.size(); ++i)
-            data2[KeyHash<TKey>(TKeyValuePair::GetFirst(&Data[i]), bits)].push_back(Data[i]); 
+            data2[KeyHash<TKey>(TKeyValuePair::GetFirst(&Data[i]), bits)].push_back(Data[i]);
 
         typedef TVector<TInterval> TIntervals;
         TIntervals intervals(nBuckets);
@@ -288,7 +288,7 @@ public:
         for (ui32 i = 0; i < nBuckets; ++i) {
             for (size_t j = 0; j < data2[i].size(); ++j)
                 for (size_t k = j + 1; k < data2[i].size(); ++k)
-                    if (TKeyValuePair::GetFirst(&data2[i][j]) == TKeyValuePair::GetFirst(&data2[i][k])) 
+                    if (TKeyValuePair::GetFirst(&data2[i][j]) == TKeyValuePair::GetFirst(&data2[i][k]))
                         ythrow yexception() << "key clash";
         }
 #endif
@@ -306,11 +306,11 @@ private:
     const char* P;
 
     ui16 GetBits() const {
-        return ReadUnaligned<ui16>(P + 6); 
+        return ReadUnaligned<ui16>(P + 6);
     }
 
     ui32 GetSize() const {
-        return ReadUnaligned<ui32>(P + 8); 
+        return ReadUnaligned<ui32>(P + 8);
     }
 
     const TInterval* GetIntervals() const {
@@ -326,11 +326,11 @@ private:
         static_assert(sizeof(T) == 1, "expect sizeof(T) == 1");
         P = reinterpret_cast<const char*>(p);
 #ifndef NDEBUG
-        ui16 version = ReadUnaligned<ui16>(p); 
+        ui16 version = ReadUnaligned<ui16>(p);
         if (version != VERSION_ID)
             ythrow yexception() << "bad version: " << version;
         static const ui32 PAIR_SIZE = sizeof(TKeyValuePair);
-        const ui32 size = ReadUnaligned<ui32>(p + 2); 
+        const ui32 size = ReadUnaligned<ui32>(p + 2);
         if (size != PAIR_SIZE)
             ythrow yexception() << "bad size " << size << " instead of " << PAIR_SIZE;
 #endif
@@ -354,8 +354,8 @@ public:
         const TKeyValuePair* pair = GetData() + TInterval::GetOffset(intervalPtr + hash);
         const ui32 length = TInterval::GetLength(intervalPtr + hash);
         for (ui32 i = 0; i < length; ++i, ++pair) {
-            if (TKeyValuePair::GetFirst(pair) == key) { 
-                *res = TKeyValuePair::GetSecond(pair); 
+            if (TKeyValuePair::GetFirst(pair) == key) {
+                *res = TKeyValuePair::GetSecond(pair);
                 return true;
             }
         }
@@ -407,8 +407,8 @@ private:
 
 public:
     TSingleValue(const TBlob& blob) {
-        Y_ASSERT(blob.Length() >= sizeof(T)); 
-        Y_ASSERT(blob.Length() <= sizeof(T) + 16); 
+        Y_ASSERT(blob.Length() >= sizeof(T));
+        Y_ASSERT(blob.Length() <= sizeof(T) + 16);
         Value = reinterpret_cast<const T*>(blob.Begin());
     }
 
@@ -434,7 +434,7 @@ public:
         Value = value;
     }
 
-    void Save(IOutputStream& out) const { 
+    void Save(IOutputStream& out) const {
         out.Write(&Value, sizeof(Value));
     }
 };
@@ -528,12 +528,12 @@ private:
 
 template <class T>
 struct TSaveLoadVectorNonPodElement {
-    static inline void Save(IOutputStream* out, const T& t) { 
+    static inline void Save(IOutputStream* out, const T& t) {
         TSerializer<T>::Save(out, t);
     }
 
-    static inline void Load(IInputStream* in, T& t, size_t elementSize) { 
-        Y_ASSERT(elementSize > 0); 
+    static inline void Load(IInputStream* in, T& t, size_t elementSize) {
+        Y_ASSERT(elementSize > 0);
         TSerializer<T>::Load(in, t);
     }
 };
@@ -547,8 +547,8 @@ private:
 
 public:
     TVectorTakingIntoAccountThePodType(const TBlob& blob) {
-        SizeofOffsets = ReadUnaligned<ui64>(blob.Begin()); 
-        Y_ASSERT(SizeofOffsets > 0); 
+        SizeofOffsets = ReadUnaligned<ui64>(blob.Begin());
+        Y_ASSERT(SizeofOffsets > 0);
         Offsets = reinterpret_cast<const ui64*>(blob.Begin() + sizeof(ui64));
         Data = reinterpret_cast<const char*>(blob.Begin() + sizeof(ui64) + SizeofOffsets * sizeof(ui64));
     }
@@ -560,12 +560,12 @@ public:
     size_t GetLength(ui64 index) const {
         if (index + 1 >= SizeofOffsets)
             ythrow yexception() << "bad offset";
-        return IntegerCast<size_t>(ReadUnaligned<ui64>(Offsets + index + 1) - ReadUnaligned<ui64>(Offsets + index)); 
+        return IntegerCast<size_t>(ReadUnaligned<ui64>(Offsets + index + 1) - ReadUnaligned<ui64>(Offsets + index));
     }
 
     void Get(ui64 index, T& t) const {
         const size_t len = GetLength(index);
-        TMemoryInput input(Data + ReadUnaligned<ui64>(Offsets + index), len); 
+        TMemoryInput input(Data + ReadUnaligned<ui64>(Offsets + index), len);
         TSaveLoadVectorNonPodElement<T>::Load(&input, t, len);
     }
 
@@ -603,7 +603,7 @@ public:
         return Offsets.size();
     }
 
-    void Save(IOutputStream& out) const { 
+    void Save(IOutputStream& out) const {
         ui64 sizeofOffsets = Offsets.size() + 1;
         out.Write(&sizeofOffsets, sizeof(sizeofOffsets));
         out.Write(Offsets.data(), Offsets.size() * sizeof(Offsets[0]));
@@ -656,12 +656,12 @@ struct TGeneralVectorG<TItem, true> {
 
 template <>
 struct TSaveLoadVectorNonPodElement<TString> {
-    static inline void Save(IOutputStream* out, const TString& s) { 
+    static inline void Save(IOutputStream* out, const TString& s) {
         out->Write(s.data(), s.size() + 1);
     }
 
     static inline void Load(TMemoryInput* in, TString& s, size_t elementSize) {
-        Y_ASSERT(elementSize > 0 && in->Avail() >= elementSize); 
+        Y_ASSERT(elementSize > 0 && in->Avail() >= elementSize);
         s.assign(in->Buf(), elementSize - 1); /// excluding 0 at the end
     }
 };

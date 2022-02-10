@@ -232,7 +232,7 @@ namespace NLastGetopt {
         Pos_ = pc;
 
         bool r = ParseOptArg(Pos_);
-        Y_ASSERT(r); 
+        Y_ASSERT(r);
         while (Pos_ == pc) {
             Y_ASSERT(Sop_ > 0);
             r = ParseShortOptWithinArg(Pos_, Sop_);

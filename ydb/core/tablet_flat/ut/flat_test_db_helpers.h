@@ -141,11 +141,11 @@ public:
     template<typename T>
     TDbRowUpdate& Set(TString tagName, const T& val) {
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(GetRoot());
-        Y_VERIFY(tableInfo, "Unknown table id %u", GetRoot()); 
+        Y_VERIFY(tableInfo, "Unknown table id %u", GetRoot());
         const ui32* tagId = tableInfo->ColumnNames.FindPtr(tagName);
         Y_VERIFY(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot());
         const auto *colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId);
-        Y_VERIFY(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId); 
+        Y_VERIFY(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId);
         NScheme::TTypeId type = colInfo->PType;
         TagOps[*tagId] = FromVal(type, val);
         return *this;
@@ -153,11 +153,11 @@ public:
 
     TDbRowUpdate& Erase(TString tagName) {
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(GetRoot());
-        Y_VERIFY(tableInfo, "Unknown table id %u", GetRoot()); 
+        Y_VERIFY(tableInfo, "Unknown table id %u", GetRoot());
         const ui32* tagId = tableInfo->ColumnNames.FindPtr(tagName);
         Y_VERIFY(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot());
         const auto * colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId);
-        Y_VERIFY(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId); 
+        Y_VERIFY(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId);
         TagOps[*tagId] = MakeNull(ECellOp::Null);
         return *this;
     }
@@ -217,7 +217,7 @@ public:
 
     void Apply(const TDbRowUpdate& update) {
         TVector<TRawTypeValue> key;
-        Y_VERIFY(!update.GetKey().empty()); 
+        Y_VERIFY(!update.GetKey().empty());
         for (const auto& col : update.GetKey()) {
             key.push_back(col.Get());
         }
@@ -232,7 +232,7 @@ public:
 
     void Apply(const TDbRowErase& erase) {
         TVector<TRawTypeValue> key;
-        Y_VERIFY(!erase.GetKey().empty()); 
+        Y_VERIFY(!erase.GetKey().empty());
         for (const auto& col : erase.GetKey()) {
             key.push_back(col.Get());
         }

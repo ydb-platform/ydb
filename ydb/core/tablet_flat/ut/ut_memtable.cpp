@@ -18,7 +18,7 @@ namespace {
 using TCheckIt = NTest::TChecker<NTest::TWrapMemtable, TIntrusiveConstPtr<TMemTable>>;
 using TCheckReverseIt = NTest::TChecker<NTest::TWrapReverseMemtable, TIntrusiveConstPtr<TMemTable>>;
 
-Y_UNIT_TEST_SUITE(Memtable) 
+Y_UNIT_TEST_SUITE(Memtable)
 {
     using namespace NTest;
 
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(Memtable)
                     .RowScheme();
     }
 
-    Y_UNIT_TEST(Basics) 
+    Y_UNIT_TEST(Basics)
     {
         const auto lay = BasicRowLayout();
 
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(Memtable)
         wrap.To(41).Is(bar).Next().Is(foo).Next().Is(EReady::Gone);
     }
 
-    Y_UNIT_TEST(Markers) 
+    Y_UNIT_TEST(Markers)
     {
         const auto lay = BasicRowLayout();
 
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(Memtable)
         TCheckIt(*cooker.Add(null, ERowOp::Upsert), { }).To(11).Has(null);
     }
 
-    Y_UNIT_TEST(Overlap) 
+    Y_UNIT_TEST(Overlap)
     {
         const auto lay = BasicRowLayout();
 
@@ -148,14 +148,14 @@ Y_UNIT_TEST_SUITE(Memtable)
         TCheckIt(*cooker.Add(r0W, ERowOp::Erase), { }).To(19).NoKey(r0W, false);
     }
 
-    Y_UNIT_TEST(Wreck) 
+    Y_UNIT_TEST(Wreck)
     {
         auto egg = *TCooker(Mass.Model->Scheme).Add(Mass.Saved, ERowOp::Upsert);
 
         TWreck<TCheckIt, TIntrusiveConstPtr<TMemTable>>(Mass, 666).Do(EWreck::Cached, egg);
     }
 
-    Y_UNIT_TEST(Erased) 
+    Y_UNIT_TEST(Erased)
     {
         auto egg =
             *TCooker(Mass.Model->Scheme)

@@ -17,14 +17,14 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
-    Y_UNIT_TEST(TestExportVoidTypeYdb) { 
+    Y_UNIT_TEST(TestExportVoidTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewVoid();
             return pgmReturn;
         }, "void_type: NULL_VALUE\n");
     }
 
-    Y_UNIT_TEST(TestExportDataTypeYdb) { 
+    Y_UNIT_TEST(TestExportDataTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewDataLiteral<i32>(42);
             return pgmReturn;
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
         "type_id: UUID\n");
     }
 
-    Y_UNIT_TEST(TestExportOptionalTypeYdb) { 
+    Y_UNIT_TEST(TestExportOptionalTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<i32>(42));
             return pgmReturn;
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
         "}\n");
     }
 
-    Y_UNIT_TEST(TestExportListTypeYdb) { 
+    Y_UNIT_TEST(TestExportListTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.AsList(pgmBuilder.NewDataLiteral<i32>(42));
             return pgmReturn;
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
         "}\n");
     }
 
-    Y_UNIT_TEST(TestExportTupleTypeYdb) { 
+    Y_UNIT_TEST(TestExportTupleTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
             TRuntimeNode::TList items;
             items.push_back(pgmBuilder.NewDataLiteral<i32>(42));
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
         "}\n");
     }
 
-    Y_UNIT_TEST(TestExportStructTypeYdb) { 
+    Y_UNIT_TEST(TestExportStructTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
             std::vector<std::pair<std::string_view, TRuntimeNode>> items;
             items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) });
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTestYdb) {
         "}\n");
     }
 
-    Y_UNIT_TEST(TestExportDictTypeYdb) { 
+    Y_UNIT_TEST(TestExportDictTypeYdb) {
         TestExportType<Ydb::Type>([](TProgramBuilder& pgmBuilder) {
             auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<i32>::Id),
                 pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
@@ -199,28 +199,28 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
         expected);
     }
 
-    Y_UNIT_TEST(TestExportVoidYdb) { 
+    Y_UNIT_TEST(TestExportVoidYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewVoid();
             return pgmReturn;
         }, "");
     }
 
-    Y_UNIT_TEST(TestExportBoolYdb) { 
+    Y_UNIT_TEST(TestExportBoolYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewDataLiteral(true);
             return pgmReturn;
         }, "bool_value: true\n");
     }
 
-    Y_UNIT_TEST(TestExportIntegralYdb) { 
+    Y_UNIT_TEST(TestExportIntegralYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewDataLiteral<i32>(42);
             return pgmReturn;
         }, "int32_value: 42\n");
     }
 
-    Y_UNIT_TEST(TestExportDoubleYdb) { 
+    Y_UNIT_TEST(TestExportDoubleYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewDataLiteral(3.5);
             return pgmReturn;
@@ -277,14 +277,14 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
            "high_128: 1\n");
     }
 
-    Y_UNIT_TEST(TestExportEmptyOptionalYdb) { 
+    Y_UNIT_TEST(TestExportEmptyOptionalYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<char*>::Id);
             return pgmReturn;
         }, "null_flag_value: NULL_VALUE\n");
     }
 
-    Y_UNIT_TEST(TestExportEmptyOptionalOptionalYdb) { 
+    Y_UNIT_TEST(TestExportEmptyOptionalOptionalYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewOptional(
                 pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<char*>::Id));
@@ -295,7 +295,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
         "}\n");
     }
 
-    Y_UNIT_TEST(TestExportMultipleOptionalNotEmptyYdb) { 
+    Y_UNIT_TEST(TestExportMultipleOptionalNotEmptyYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewOptional(
                 pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc")));
@@ -303,14 +303,14 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
         }, "bytes_value: \"abc\"\n");
     }
 
-    Y_UNIT_TEST(TestExportOptionalYdb) { 
+    Y_UNIT_TEST(TestExportOptionalYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.NewOptional(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc"));
             return pgmReturn;
         }, "bytes_value: \"abc\"\n");
     }
 
-    Y_UNIT_TEST(TestExportListYdb) { 
+    Y_UNIT_TEST(TestExportListYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             auto pgmReturn = pgmBuilder.AsList(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc"));
             return pgmReturn;
@@ -320,7 +320,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
         "}\n");
     }
 
-    Y_UNIT_TEST(TestExportTupleYdb) { 
+    Y_UNIT_TEST(TestExportTupleYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             TRuntimeNode::TList items;
             items.push_back(pgmBuilder.NewDataLiteral<i32>(42));
@@ -336,7 +336,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
         "}\n");
     }
 
-    Y_UNIT_TEST(TestExportStructYdb) { 
+    Y_UNIT_TEST(TestExportStructYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             std::vector<std::pair<std::string_view, TRuntimeNode>> items;
             items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) });
@@ -352,7 +352,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
         "}\n");
     }
 
-    Y_UNIT_TEST(TestExportDictYdb) { 
+    Y_UNIT_TEST(TestExportDictYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<i32>::Id),
                 pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
@@ -372,7 +372,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
         "}\n");
     }
 
-    Y_UNIT_TEST(TestExportVariantYdb) { 
+    Y_UNIT_TEST(TestExportVariantYdb) {
         TestExportValue<Ydb::Value>([](TProgramBuilder& pgmBuilder) {
             std::vector<TType*> tupleElemenTypes;
             tupleElemenTypes.push_back(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id));
@@ -402,7 +402,7 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
         return errStr;
     }
 
-    Y_UNIT_TEST(TestCellsFromTuple) { 
+    Y_UNIT_TEST(TestCellsFromTuple) {
         UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
             {
                 NScheme::NTypeIds::Int32

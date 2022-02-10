@@ -1,7 +1,7 @@
 #include "murmur.h"
 
-#include <util/system/unaligned_mem.h> 
- 
+#include <util/system/unaligned_mem.h>
+
 namespace NMurmurPrivate {
     //-----------------------------------------------------------------------------
     // MurmurHash2, by Austin Appleby

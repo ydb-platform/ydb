@@ -1,7 +1,7 @@
 #pragma once
 
-#include "fwd.h" 
- 
+#include "fwd.h"
+
 #include <util/datetime/base.h>
 #include <util/generic/function.h>
 #include <util/generic/maybe.h>

@@ -59,10 +59,10 @@ private:
     static const T* TypedPointer(const char* pointer) noexcept {
         return reinterpret_cast<const T*>(pointer);
     }
-    static constexpr size_t RawSize(const size_t size) noexcept { 
+    static constexpr size_t RawSize(const size_t size) noexcept {
         return size * sizeof(T);
     }
-    static constexpr size_t TypedSize(const size_t size) noexcept { 
+    static constexpr size_t TypedSize(const size_t size) noexcept {
         return size / sizeof(T);
     }
 

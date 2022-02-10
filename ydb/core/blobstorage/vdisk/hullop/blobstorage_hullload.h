@@ -56,7 +56,7 @@ namespace NKikimr {
         {}
 
         void Add(ui32 chunkIdx) {
-            Y_VERIFY_DEBUG(chunkIdx); 
+            Y_VERIFY_DEBUG(chunkIdx);
             if (chunkIdx != LastChunkIdx) {
                 LastChunkIdx = chunkIdx;
                 AllChunks.insert(chunkIdx);
@@ -64,7 +64,7 @@ namespace NKikimr {
         }
 
         void FillInVector(TVector<ui32> &vec) {
-            Y_VERIFY_DEBUG(vec.empty()); 
+            Y_VERIFY_DEBUG(vec.empty());
             vec.reserve(AllChunks.size());
             for (const auto &x : AllChunks)
                 vec.push_back(x);
@@ -158,7 +158,7 @@ namespace NKikimr {
         }
 
         void Finish(const TActorContext &ctx) {
-            Y_VERIFY(RestToReadIndex == 0 && RestToReadOutbound == 0); 
+            Y_VERIFY(RestToReadIndex == 0 && RestToReadOutbound == 0);
 
             // add data chunks to ChunksBuilder
             typedef typename TLevelSegment::TMemIterator TMemIterator;
@@ -190,14 +190,14 @@ namespace NKikimr {
         }
 
         void AppendIndexData(const char *data, size_t size) {
-            Y_VERIFY_DEBUG(data && size && RestToReadIndex >= size); 
+            Y_VERIFY_DEBUG(data && size && RestToReadIndex >= size);
 
             RestToReadIndex -= size;
             memcpy(reinterpret_cast<char *>(LevelSegment->LoadedIndex.data()) + RestToReadIndex, data, size);
         }
 
         void AppendData(const char *data, size_t size) {
-            Y_VERIFY_DEBUG(data && size); 
+            Y_VERIFY_DEBUG(data && size);
 
             if (RestToReadOutbound) {
                 if (RestToReadOutbound >= size) {
@@ -316,7 +316,7 @@ namespace NKikimr {
             , Chunks()
         {
             const TDiskPart& entry = levelSegment->GetEntryPoint();
-            Y_VERIFY_DEBUG(!entry.Empty()); 
+            Y_VERIFY_DEBUG(!entry.Empty());
         }
     };
 
@@ -374,7 +374,7 @@ namespace NKikimr {
                 ActiveActors.Insert(aid);
                 ++Pos;
             } else {
-                Y_VERIFY_DEBUG(Pos == Size); 
+                Y_VERIFY_DEBUG(Pos == Size);
                 ctx.Send(Recipient, new THullSegmentsLoaded(Segs));
                 TThis::Die(ctx);
             }

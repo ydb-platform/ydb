@@ -128,7 +128,7 @@ namespace NKikimr {
             void Load(IInputStream *s);
             bool HaveBeenUsed() const;
             TString ToString() const;
-            void RenderHtml(IOutputStream &str) const; 
+            void RenderHtml(IOutputStream &str) const;
             ui32 GetAllocatedSlots() const;
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
         };
@@ -162,8 +162,8 @@ namespace NKikimr {
             bool HaveBeenUsed() const;
             TString ToString() const;
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
-            void RenderHtml(IOutputStream &str) const; 
-            void RenderHtmlForUsage(IOutputStream &str) const; 
+            void RenderHtml(IOutputStream &str) const;
+            void RenderHtmlForUsage(IOutputStream &str) const;
         };
 
 
@@ -318,10 +318,10 @@ namespace NKikimr {
             //////////////////////////////////////////////////////////////////////////////////////////
             // Output
             //////////////////////////////////////////////////////////////////////////////////////////
-            void RenderHtml(IOutputStream &str) const; 
+            void RenderHtml(IOutputStream &str) const;
             TString ToString() const;
 
-            void PrintOutSearchTable(IOutputStream &str) { 
+            void PrintOutSearchTable(IOutputStream &str) {
                 Chains.PrintOutSearchTable(str);
             }
 

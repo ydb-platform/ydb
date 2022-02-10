@@ -28,8 +28,8 @@ int NResolver::GetHostIP(const char* hostname, ui32* ip, size_t* slots) {
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
-    struct addrinfo* gai_res = nullptr; 
-    int gai_ret = getaddrinfo(hostname, nullptr, &hints, &gai_res); 
+    struct addrinfo* gai_res = nullptr;
+    int gai_ret = getaddrinfo(hostname, nullptr, &hints, &gai_res);
     if (gai_ret == 0 && gai_res->ai_addr) {
         struct addrinfo* cur = gai_res;
         for (i = 0; i < *slots && cur; i++, cur = cur->ai_next, ipsFound++) {

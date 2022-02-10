@@ -163,7 +163,7 @@ void TAllPDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, ui32 node,
 }
 
 TOnePDisk &TAllPDisks::Get(ui32 pDiskID) {
-    Y_ASSERT(pDiskID > 0); 
+    Y_ASSERT(pDiskID > 0);
     return PDisks.at(pDiskID - 1);
 }
 
@@ -434,7 +434,7 @@ class TDbInitWaitActor : public TActorBootstrapped<TDbInitWaitActor> {
     }
 
     void Handle(TEvBlobStorage::TEvVReadyNotify::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev); 
+        Y_UNUSED(ev);
         --Count;
         if (Count == 0)
             Finish(ctx, true);
@@ -470,5 +470,5 @@ void TConfiguration::PoisonVDisks() {
 
 void TConfiguration::PoisonPDisks() {
     // FIXME: implement
-    Y_VERIFY_DEBUG(false); 
+    Y_VERIFY_DEBUG(false);
 }

@@ -947,4 +947,4 @@ const NUnicode::NPrivate::TComposition::TRawData NUnicode::NPrivate::TCompositio
     { 0x115B9, 0x115AF, 0x115BB },
 }; // TRawData
 
-const size_t NUnicode::NPrivate::TComposition::RawDataSize = Y_ARRAY_SIZE(NUnicode::NPrivate::TComposition::RawData); 
+const size_t NUnicode::NPrivate::TComposition::RawDataSize = Y_ARRAY_SIZE(NUnicode::NPrivate::TComposition::RawData);

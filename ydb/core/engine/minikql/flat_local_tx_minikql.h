@@ -103,7 +103,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
     }
 
     bool PrepareParams(TTransactionContext &txc, const TAppData *appData) {
-        Y_UNUSED(txc); 
+        Y_UNUSED(txc);
         if (SourceProgram.Params.Binary) {
             SerializedMiniKQLParams = SourceProgram.Program.Binary;
             return true;
@@ -277,7 +277,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
             if (affectedShardCount == 0) {
                 proxyEngine->AfterShardProgramsExtracted();
             } else {
-                Y_VERIFY(affectedShardCount == 1); 
+                Y_VERIFY(affectedShardCount == 1);
 
                 IEngineFlat::TShardData shardData;
                 EngineResultStatusCode = proxyEngine->GetAffectedShard(0, shardData);
@@ -313,14 +313,14 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 if (EngineResultStatusCode != IEngineFlat::EResult::Ok)
                     return MakeResponse(engine.Get(), ctx);
 
-                Y_VERIFY(engine->GetOutgoingReadsetsCount() == 0); 
+                Y_VERIFY(engine->GetOutgoingReadsetsCount() == 0);
                 engine->AfterOutgoingReadsetsExtracted();
 
                 EngineResultStatusCode = engine->PrepareIncomingReadsets();
                 if (EngineResultStatusCode != IEngineFlat::EResult::Ok)
                     return MakeResponse(engine.Get(), ctx);
 
-                Y_VERIFY(engine->GetExpectedIncomingReadsetsCount() == 0); 
+                Y_VERIFY(engine->GetExpectedIncomingReadsetsCount() == 0);
 
                 EngineResultStatusCode = engine->Execute();
                 if (EngineResultStatusCode != IEngineFlat::EResult::Ok)
@@ -342,11 +342,11 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
 
             return true;
         } catch (const TNotReadyTabletException& ex) {
-            Y_UNUSED(ex); 
+            Y_UNUSED(ex);
             ++PageFaultCount;
             return false;
         } catch (...) {
-            Y_FAIL("there must be no leaked exceptions"); 
+            Y_FAIL("there must be no leaked exceptions");
         }
     }
 

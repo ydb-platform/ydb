@@ -431,12 +431,12 @@ public:
     {}
 };
 
-Y_UNIT_TEST_SUITE(IcbAsActorTests) { 
-    Y_UNIT_TEST(TestHttpGetResponse) { 
+Y_UNIT_TEST_SUITE(IcbAsActorTests) {
+    Y_UNIT_TEST(TestHttpGetResponse) {
         Run<TTestHttpGetResponse>();
     }
 
-    Y_UNIT_TEST(TestHttpPostReaction) { 
+    Y_UNIT_TEST(TestHttpPostReaction) {
         Run<TTestHttpPostReaction>();
     }
 };

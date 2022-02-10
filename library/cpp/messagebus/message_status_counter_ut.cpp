@@ -7,8 +7,8 @@
 using namespace NBus;
 using namespace NBus::NPrivate;
 
-Y_UNIT_TEST_SUITE(MessageStatusCounter) { 
-    Y_UNIT_TEST(MessageStatusConversion) { 
+Y_UNIT_TEST_SUITE(MessageStatusCounter) {
+    Y_UNIT_TEST(MessageStatusConversion) {
         const ::google::protobuf::EnumDescriptor* descriptor =
             TMessageStatusRecord_EMessageStatus_descriptor();
 

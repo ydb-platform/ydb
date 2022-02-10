@@ -9,7 +9,7 @@ THyperLogCounter::THyperLogCounter()
 THyperLogCounter::THyperLogCounter(ui8 value)
     : Value(value)
 {
-    Y_VERIFY(value < 64); 
+    Y_VERIFY(value < 64);
 }
 
 ui8 THyperLogCounter::GetValue() const {
@@ -30,7 +30,7 @@ bool THyperLogCounter::Increment(IRandomProvider& randomProvider) {
         return false;
 
     ++Value;
-    Y_VERIFY_DEBUG(Value < 64); 
+    Y_VERIFY_DEBUG(Value < 64);
     return true;
 }
 
@@ -76,7 +76,7 @@ bool THyperLogCounter::Add(ui64 addend, IRandomProvider& randomProvider) {
         remain >>= 1;
     }
 
-    Y_VERIFY_DEBUG(Value < 64); 
+    Y_VERIFY_DEBUG(Value < 64);
     return (oldValue != Value);
 }
 
@@ -92,7 +92,7 @@ THybridLogCounter::THybridLogCounter(ui8 value)
     : Value(value)
 {
     if (Value & IsHyperLog) {
-        Y_VERIFY((value & DataMask) < 64); 
+        Y_VERIFY((value & DataMask) < 64);
     }
 }
 

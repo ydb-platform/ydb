@@ -18,9 +18,9 @@ void ComputePrefixFunction(const T* begin, const T* end, ssize_t** result) {
             j = resultHolder[j];
         ++i;
         ++j;
-        Y_ASSERT(i >= 0); 
-        Y_ASSERT(j >= 0); 
-        Y_ASSERT(j < len); 
+        Y_ASSERT(i >= 0);
+        Y_ASSERT(j >= 0);
+        Y_ASSERT(j < len);
         if ((i < len) && (begin[i] == begin[j]))
             resultHolder[i] = resultHolder[j];
         else
@@ -41,7 +41,7 @@ public:
     TKMPMatcher(const TString& pattern);
 
     bool SubStr(const char* begin, const char* end, const char*& result) const {
-        Y_ASSERT(begin <= end); 
+        Y_ASSERT(begin <= end);
         ssize_t m = Pattern.size();
         ssize_t n = end - begin;
         ssize_t i, j;

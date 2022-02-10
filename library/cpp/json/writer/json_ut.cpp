@@ -6,8 +6,8 @@
 
 #include <limits>
 
-Y_UNIT_TEST_SUITE(JsonWriter) { 
-    Y_UNIT_TEST(Struct) { 
+Y_UNIT_TEST_SUITE(JsonWriter) {
+    Y_UNIT_TEST(Struct) {
         NJsonWriter::TBuf w;
         w.BeginList();
         w.BeginObject()
@@ -29,21 +29,21 @@ Y_UNIT_TEST_SUITE(JsonWriter) {
         const char* exp = "[{\"key\":\"value\",\"xk\":13,\"key2\":[{},{}]},43,\"x\",\"...\"]";
         UNIT_ASSERT_EQUAL(w.Str(), exp);
     }
-    Y_UNIT_TEST(EscapedString) { 
+    Y_UNIT_TEST(EscapedString) {
         NJsonWriter::TBuf w(NJsonWriter::HEM_ESCAPE_HTML);
         w.WriteString(" \n \r \t \007 \b \f ' <tag> &ent; \"txt\" ");
         TString ws = w.Str();
         const char* exp = "\" \\n \\r \\t \\u0007 \\b \\f &#39; &lt;tag&gt; &amp;ent; &quot;txt&quot; \"";
         UNIT_ASSERT_STRINGS_EQUAL(ws.c_str(), exp);
     }
-    Y_UNIT_TEST(UnescapedString) { 
+    Y_UNIT_TEST(UnescapedString) {
         NJsonWriter::TBuf w;
         w.WriteString(" \n \r \t \b \f '; -- <tag> &ent; \"txt\"", NJsonWriter::HEM_DONT_ESCAPE_HTML);
         TString ws = w.Str();
         const char* exp = "\" \\n \\r \\t \\b \\f \\u0027; -- \\u003Ctag\\u003E &ent; \\\"txt\\\"\"";
         UNIT_ASSERT_STRINGS_EQUAL(ws.c_str(), exp);
     }
-    Y_UNIT_TEST(UnescapedChaining) { 
+    Y_UNIT_TEST(UnescapedChaining) {
         NJsonWriter::TBuf w(NJsonWriter::HEM_DONT_ESCAPE_HTML);
         w.UnsafeWriteRawBytes("(", 1);
         w.BeginList().WriteString("<>&'\\").BeginList();
@@ -52,27 +52,27 @@ Y_UNIT_TEST_SUITE(JsonWriter) {
         const char* exp = "([\"\\u003C\\u003E&\\u0027\\\\\",[]]";
         UNIT_ASSERT_STRINGS_EQUAL(ws.c_str(), exp);
     }
-    Y_UNIT_TEST(Utf8) { 
+    Y_UNIT_TEST(Utf8) {
         TString ws = NJsonWriter::TBuf().WriteString("яЯ σΣ ש א").Str();
         const char* exp = "\"яЯ σΣ ש א\"";
         UNIT_ASSERT_STRINGS_EQUAL(ws.c_str(), exp);
     }
-    Y_UNIT_TEST(WrongObject) { 
+    Y_UNIT_TEST(WrongObject) {
         NJsonWriter::TBuf w;
         w.BeginObject();
         UNIT_ASSERT_EXCEPTION(w.WriteString("hehe"), NJsonWriter::TError);
     }
-    Y_UNIT_TEST(WrongList) { 
+    Y_UNIT_TEST(WrongList) {
         NJsonWriter::TBuf w;
         w.BeginList();
         UNIT_ASSERT_EXCEPTION(w.WriteKey("hehe"), NJsonWriter::TError);
     }
-    Y_UNIT_TEST(Incomplete) { 
+    Y_UNIT_TEST(Incomplete) {
         NJsonWriter::TBuf w;
         w.BeginList();
         UNIT_ASSERT_EXCEPTION(w.Str(), NJsonWriter::TError);
     }
-    Y_UNIT_TEST(BareKey) { 
+    Y_UNIT_TEST(BareKey) {
         NJsonWriter::TBuf w;
         w.BeginObject()
             .CompatWriteKeyWithoutQuotes("p")
@@ -84,24 +84,24 @@ Y_UNIT_TEST_SUITE(JsonWriter) {
         const char* exp = "{p:1,n:0}";
         UNIT_ASSERT_STRINGS_EQUAL(ws.c_str(), exp);
     }
-    Y_UNIT_TEST(UnescapedStringInObject) { 
+    Y_UNIT_TEST(UnescapedStringInObject) {
         NJsonWriter::TBuf w(NJsonWriter::HEM_DONT_ESCAPE_HTML);
         w.BeginObject().WriteKey("key").WriteString("</&>'").EndObject();
         TString ws = w.Str();
         const char* exp = "{\"key\":\"\\u003C\\/&\\u003E\\u0027\"}";
         UNIT_ASSERT_STRINGS_EQUAL(ws.c_str(), exp);
     }
-    Y_UNIT_TEST(ForeignStreamStr) { 
+    Y_UNIT_TEST(ForeignStreamStr) {
         NJsonWriter::TBuf w(NJsonWriter::HEM_DONT_ESCAPE_HTML, &Cerr);
         UNIT_ASSERT_EXCEPTION(w.Str(), NJsonWriter::TError);
     }
-    Y_UNIT_TEST(ForeignStreamValue) { 
+    Y_UNIT_TEST(ForeignStreamValue) {
         TStringStream ss;
         NJsonWriter::TBuf w(NJsonWriter::HEM_DONT_ESCAPE_HTML, &ss);
         w.WriteInt(1543);
         UNIT_ASSERT_STRINGS_EQUAL(ss.Str(), "1543");
     }
-    Y_UNIT_TEST(Indentation) { 
+    Y_UNIT_TEST(Indentation) {
         NJsonWriter::TBuf w(NJsonWriter::HEM_DONT_ESCAPE_HTML);
         w.SetIndentSpaces(2);
         w.BeginList()
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(JsonWriter) {
                           "]";
         UNIT_ASSERT_STRINGS_EQUAL(exp, w.Str());
     }
-    Y_UNIT_TEST(WriteJsonValue) { 
+    Y_UNIT_TEST(WriteJsonValue) {
         using namespace NJson;
         TJsonValue val;
         val.AppendValue(1);
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(JsonWriter) {
         const char exp[] = "[1,\"2\",3.5,{\"key\":\"value\"},null]";
         UNIT_ASSERT_STRINGS_EQUAL(exp, w.Str());
     }
-    Y_UNIT_TEST(WriteJsonValueSorted) { 
+    Y_UNIT_TEST(WriteJsonValueSorted) {
         using namespace NJson;
         TJsonValue val;
         val.InsertValue("1", TJsonValue(1));
@@ -159,35 +159,35 @@ Y_UNIT_TEST_SUITE(JsonWriter) {
         const char exp[] = "{\"0\":{\"succ\":1,\"zero\":0},\"1\":1,\"2\":2}";
         UNIT_ASSERT_STRINGS_EQUAL(exp, w.Str());
     }
-    Y_UNIT_TEST(Unescaped) { 
+    Y_UNIT_TEST(Unescaped) {
         NJsonWriter::TBuf buf(NJsonWriter::HEM_UNSAFE);
         buf.WriteString("</security>'");
         UNIT_ASSERT_STRINGS_EQUAL("\"</security>'\"", buf.Str());
     }
-    Y_UNIT_TEST(LittleBobbyJsonp) { 
+    Y_UNIT_TEST(LittleBobbyJsonp) {
         NJsonWriter::TBuf buf;
         buf.WriteString("hello\xe2\x80\xa8\xe2\x80\xa9stranger");
         UNIT_ASSERT_STRINGS_EQUAL("\"hello\\u2028\\u2029stranger\"", buf.Str());
     }
-    Y_UNIT_TEST(LittleBobbyInvalid) { 
+    Y_UNIT_TEST(LittleBobbyInvalid) {
         NJsonWriter::TBuf buf;
         TStringBuf incomplete("\xe2\x80\xa8", 2);
         buf.WriteString(incomplete);
         // garbage in - garbage out
         UNIT_ASSERT_STRINGS_EQUAL("\"\xe2\x80\"", buf.Str());
     }
-    Y_UNIT_TEST(OverlyZealous) { 
+    Y_UNIT_TEST(OverlyZealous) {
         NJsonWriter::TBuf buf;
         buf.WriteString("—");
         UNIT_ASSERT_STRINGS_EQUAL("\"—\"", buf.Str());
     }
-    Y_UNIT_TEST(RelaxedEscaping) { 
+    Y_UNIT_TEST(RelaxedEscaping) {
         NJsonWriter::TBuf buf(NJsonWriter::HEM_RELAXED);
         buf.WriteString("</>");
         UNIT_ASSERT_STRINGS_EQUAL("\"\\u003C/\\u003E\"", buf.Str());
     }
 
-    Y_UNIT_TEST(FloatFormatting) { 
+    Y_UNIT_TEST(FloatFormatting) {
         NJsonWriter::TBuf buf(NJsonWriter::HEM_DONT_ESCAPE_HTML);
         buf.BeginList()
             .WriteFloat(0.12345678987654321f)
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(JsonWriter) {
         UNIT_ASSERT_STRINGS_EQUAL(exp, buf.Str());
     }
 
-    Y_UNIT_TEST(NanFormatting) { 
+    Y_UNIT_TEST(NanFormatting) {
         {
             NJsonWriter::TBuf buf;
             buf.BeginObject();

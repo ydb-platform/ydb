@@ -33,7 +33,7 @@ public:
         // Parse protobuf options for enum values for app counters
         for (int i = 0; i < appDesc->value_count(); i++) {
             const NProtoBuf::EnumValueDescriptor* vdesc = appDesc->value(i);
-            Y_VERIFY(vdesc->number() == vdesc->index(), "counter '%s' number (%d) != index (%d)", 
+            Y_VERIFY(vdesc->number() == vdesc->index(), "counter '%s' number (%d) != index (%d)",
                    vdesc->full_name().c_str(), vdesc->number(), vdesc->index());
             if (!vdesc->options().HasExtension(CounterOpts)) {
                 NamesStrings.emplace_back(); // empty name
@@ -141,7 +141,7 @@ public:
         for (int j = 0; j < typesDesc->value_count(); j++) {
             const NProtoBuf::EnumValueDescriptor* tt = typesDesc->value(j);
             TTxType txType = tt->number();
-            Y_VERIFY((int)txType == tt->index(), "tx type '%s' number (%d) != index (%d)", 
+            Y_VERIFY((int)txType == tt->index(), "tx type '%s' number (%d) != index (%d)",
                    tt->full_name().c_str(), txType, tt->index());
             Y_VERIFY(tt->options().HasExtension(TxTypeOpts), "tx type '%s' number (%d) is missing TxTypeOpts",
                     tt->full_name().c_str(), txType);
@@ -149,7 +149,7 @@ public:
             TString txPrefix = tto.GetName() + "/";
             for (int i = 0; i < txDesc->value_count(); i++) {
                 const NProtoBuf::EnumValueDescriptor* v = txDesc->value(i);
-                Y_VERIFY(v->number() == v->index(), "counter '%s' number (%d) != index (%d)", 
+                Y_VERIFY(v->number() == v->index(), "counter '%s' number (%d) != index (%d)",
                        v->full_name().c_str(), v->number(), v->index());
                 if (!v->options().HasExtension(CounterOpts)) {
                     NamesStrings.emplace_back(); // empty name
@@ -181,7 +181,7 @@ public:
 
     virtual const TVector<TTabletPercentileCounter::TRangeDef>& GetRanges(size_t idx) const
     {
-        Y_VERIFY(idx < Size); 
+        Y_VERIFY(idx < Size);
         if (!Ranges[idx].empty()) {
             return Ranges[idx];
         } else {
@@ -408,9 +408,9 @@ protected:
     size_t IndexOf(TTxType txType, ui32 txCounter) const {
         // Note that enum values are used only inside a process, not on disc/messages
         // so there are no backward compatibility issues
-        Y_VERIFY(txCounter < TxCountersSize[counterType]); 
+        Y_VERIFY(txCounter < TxCountersSize[counterType]);
         size_t ret = TxOffset[counterType] + txType * TxCountersSize[counterType] + txCounter;
-        Y_VERIFY(ret < Size[counterType]); 
+        Y_VERIFY(ret < Size[counterType]);
         return ret;
     }
 };

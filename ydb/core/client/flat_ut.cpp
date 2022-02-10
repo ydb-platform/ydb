@@ -109,9 +109,9 @@ namespace {
 }
 
 
-Y_UNIT_TEST_SUITE(TFlatTest) { 
+Y_UNIT_TEST_SUITE(TFlatTest) {
 
-    Y_UNIT_TEST(Init) { 
+    Y_UNIT_TEST(Init) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.DeleteTable("/dc-1/Berkanavt/tables", "Classes");
     }
 
-    Y_UNIT_TEST(SelectBigRangePerf) { 
+    Y_UNIT_TEST(SelectBigRangePerf) {
         // Scenario from https://st.yandex-team.ru/KIKIMR-2715
         // Increase N_ROWS and N_REQS for profiling
         const int N_ROWS = 100; // 10000
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
     }
 
-    Y_UNIT_TEST(SelectRowWithTargetParameter) { 
+    Y_UNIT_TEST(SelectRowWithTargetParameter) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -376,7 +376,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_NO_DIFF(result.GetValue().GetStruct(0).GetOptional().GetOptional().GetBytes(), "test1");
     }
 
-    Y_UNIT_TEST(ModifyMultipleRowsCrossShardAllToAll) { 
+    Y_UNIT_TEST(ModifyMultipleRowsCrossShardAllToAll) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -516,7 +516,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.FlatQueryParams(query, params, false, result);
     }
 
-    Y_UNIT_TEST(CrossRW) { 
+    Y_UNIT_TEST(CrossRW) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -893,7 +893,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
     }
 
-    Y_UNIT_TEST(Mix_DML_DDL) { 
+    Y_UNIT_TEST(Mix_DML_DDL) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -1013,7 +1013,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ))", NMsgBusProxy::MSTATUS_ERROR);
     }
 
-    Y_UNIT_TEST(MiniKQLRanges) { 
+    Y_UNIT_TEST(MiniKQLRanges) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -1078,7 +1078,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     void TestLsSuccess(TFlatMsgBusClient& annoyingClient, const TString& name, const TVector<TString>& children) {
         TString selfName = name;
         if (selfName != "/") {
-            selfName= name.substr(name.find_last_of('/')+1); 
+            selfName= name.substr(name.find_last_of('/')+1);
         }
         TAutoPtr<NMsgBusProxy::TBusResponse> res = annoyingClient.Ls(name);
         UNIT_ASSERT_VALUES_EQUAL_C(res->Record.GetPathDescription().GetSelf().GetName(), selfName, "Self name doesn't match");
@@ -1111,7 +1111,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                                    "Unexpected status for " + name);
     }
 
-    Y_UNIT_TEST(Ls) { 
+    Y_UNIT_TEST(Ls) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false));
@@ -1169,7 +1169,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         }
     }
 
-    Y_UNIT_TEST(ReadOnlyMode) { 
+    Y_UNIT_TEST(ReadOnlyMode) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port).SetEnableMockOnSingleNode(false));
@@ -1204,7 +1204,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
     }
 
-    Y_UNIT_TEST(PathSorting) { 
+    Y_UNIT_TEST(PathSorting) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false));
@@ -1250,7 +1250,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                                    "Unexpected status for pathId " + ToString(pathId));
     }
 
-    Y_UNIT_TEST(LsPathId) { 
+    Y_UNIT_TEST(LsPathId) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port).SetEnableSystemViews(false));
@@ -1279,7 +1279,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         return res->Record.GetStatus();
     }
 
-    Y_UNIT_TEST(InitRoot) { 
+    Y_UNIT_TEST(InitRoot) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -1299,7 +1299,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-2"), NMsgBusProxy::MSTATUS_ERROR);
     }
 
-    Y_UNIT_TEST(CheckACL) { 
+    Y_UNIT_TEST(CheckACL) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -1432,7 +1432,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 #endif
     }
 
-    Y_UNIT_TEST(OutOfDiskSpace) { 
+    Y_UNIT_TEST(OutOfDiskSpace) {
         return;  // TODO https://st.yandex-team.ru/KIKIMR-2279
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
@@ -1561,7 +1561,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)status, NMsgBusProxy::MSTATUS_ERROR, "Big read should fail");
     }
 
-    Y_UNIT_TEST(RejectByPerShardReadSize) { 
+    Y_UNIT_TEST(RejectByPerShardReadSize) {
         NKikimrConfig::TImmediateControlsConfig controls;
         controls.MutableTxLimitControls()->SetPerRequestDataSizeLimit(1000000000);
         controls.MutableTxLimitControls()->SetPerShardIncomingReadSetSizeLimit(1000000000);
@@ -1575,7 +1575,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TestRejectByPerShardReadSize(controls, "");
     }
 
-    Y_UNIT_TEST(RejectByPerRequestSize) { 
+    Y_UNIT_TEST(RejectByPerRequestSize) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
 
@@ -1648,7 +1648,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL_C((NMsgBusProxy::EResponseStatus)status, NMsgBusProxy::MSTATUS_ERROR, "Big read should fail");
     }
 
-    Y_UNIT_TEST(RejectByIncomingReadSetSize) { 
+    Y_UNIT_TEST(RejectByIncomingReadSetSize) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         NKikimrConfig::TImmediateControlsConfig controls;
@@ -1886,7 +1886,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
 
-    Y_UNIT_TEST(CopyTableAndRead) { 
+    Y_UNIT_TEST(CopyTableAndRead) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
 
@@ -1918,7 +1918,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_NO_DIFF(strResult, strResultOld);
     }
 
-    Y_UNIT_TEST(CopyTableAndCompareColumnsSchema) { 
+    Y_UNIT_TEST(CopyTableAndCompareColumnsSchema) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
 
@@ -1973,7 +1973,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     }
 
 
-    Y_UNIT_TEST(CopyCopiedTableAndRead) { 
+    Y_UNIT_TEST(CopyCopiedTableAndRead) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2048,7 +2048,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_NO_DIFF(strResult, strResultOld);
     }
 
-    Y_UNIT_TEST(CopyTableAndDropCopy) { 
+    Y_UNIT_TEST(CopyTableAndDropCopy) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2097,7 +2097,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         WaitForTabletsToBeDeletedInHive(annoyingClient, cleverServer.GetRuntime(), datashards);
     }
 
-    Y_UNIT_TEST(CopyTableAndDropOriginal) { 
+    Y_UNIT_TEST(CopyTableAndDropOriginal) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2135,7 +2135,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         WaitForTabletsToBeDeletedInHive(annoyingClient, cleverServer.GetRuntime(), datashards);
     }
 
-    Y_UNIT_TEST(CopyTableAndReturnPartAfterCompaction) { 
+    Y_UNIT_TEST(CopyTableAndReturnPartAfterCompaction) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2207,7 +2207,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         WaitForTabletsToBeDeletedInHive(annoyingClient, cleverServer.GetRuntime(), datashards);
     }
 
-    Y_UNIT_TEST(CopyTableDropOriginalAndReturnPartAfterCompaction) { 
+    Y_UNIT_TEST(CopyTableDropOriginalAndReturnPartAfterCompaction) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2289,7 +2289,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         WaitForTabletsToBeDeletedInHive(annoyingClient, cleverServer.GetRuntime(), datashards);
     }
 
-    Y_UNIT_TEST(CopyCopiedTableAndDropFirstCopy) { 
+    Y_UNIT_TEST(CopyCopiedTableAndDropFirstCopy) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2407,7 +2407,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(response.GetSchemeStatus(), NKikimrScheme::StatusNameConflict);
     }
 
-    Y_UNIT_TEST(SplitEmptyAndWrite) { 
+    Y_UNIT_TEST(SplitEmptyAndWrite) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2468,7 +2468,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.Ls("/dc-1/Dir/TableOld");
     }
 
-    Y_UNIT_TEST(SplitEmptyTwice) { 
+    Y_UNIT_TEST(SplitEmptyTwice) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2505,7 +2505,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.Ls("/dc-1/Dir/TableOld");
     }
 
-    Y_UNIT_TEST(MergeEmptyAndWrite) { 
+    Y_UNIT_TEST(MergeEmptyAndWrite) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2541,7 +2541,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.Ls("/dc-1/Dir/TableOld");
     }
 
-    Y_UNIT_TEST(WriteMergeAndRead) { 
+    Y_UNIT_TEST(WriteMergeAndRead) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2634,7 +2634,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         SplitTable(annoyingClient, "/dc-1/Dir/TableOld", 0, {splitKey});
     }
 
-    Y_UNIT_TEST(SplitThenMerge) { 
+    Y_UNIT_TEST(SplitThenMerge) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2672,7 +2672,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.Ls("/dc-1/Dir/TableOld");
     }
 
-    Y_UNIT_TEST(WriteSplitAndRead) { 
+    Y_UNIT_TEST(WriteSplitAndRead) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2768,7 +2768,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.Ls("/dc-1/Dir/TableOld");
     }
 
-    Y_UNIT_TEST(WriteSplitKillRead) { 
+    Y_UNIT_TEST(WriteSplitKillRead) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2816,7 +2816,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.Ls("/dc-1/Dir/TableOld");
     }
 
-    Y_UNIT_TEST(SplitBoundaryRead) { 
+    Y_UNIT_TEST(SplitBoundaryRead) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2835,7 +2835,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         SplitTable(annoyingClient, "/dc-1/Dir/TableOld", 0, {11111});
     }
 
-    Y_UNIT_TEST(WriteSplitWriteSplit) { 
+    Y_UNIT_TEST(WriteSplitWriteSplit) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -2883,7 +2883,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.Ls("/dc-1/Dir/TableOld");
     }
 
-    Y_UNIT_TEST(AutoSplitBySize) { 
+    Y_UNIT_TEST(AutoSplitBySize) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -3051,7 +3051,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             }
     }
 
-    Y_UNIT_TEST(AutoMergeBySize) { 
+    Y_UNIT_TEST(AutoMergeBySize) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -3158,7 +3158,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 6);
     }
 
-    Y_UNIT_TEST(AutoSplitMergeQueue) { 
+    Y_UNIT_TEST(AutoSplitMergeQueue) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port).SetEnableMvcc(false));
@@ -3234,7 +3234,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_UNEQUAL_C(finalPartitions[0], initialPartitions[0], "Partitions din't change");
     }
 
-    Y_UNIT_TEST(GetTabletCounters) { 
+    Y_UNIT_TEST(GetTabletCounters) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));
@@ -3334,7 +3334,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         LargeDatashardReplyRO(annoyingClient);
     }
 
-    Y_UNIT_TEST(LargeDatashardReplyRW) { 
+    Y_UNIT_TEST(LargeDatashardReplyRW) {
         const ui32 TABLE_ROWS = 700;
         const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb
         const ui32 KEY_TO_ERASE = 1;
@@ -3393,7 +3393,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT(!res.GetValue().GetStruct(0).GetOptional().HasOptional());
     }
 
-    Y_UNIT_TEST(LargeProxyReply) { 
+    Y_UNIT_TEST(LargeProxyReply) {
         const ui32 TABLE_ROWS = 350;
         const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb
 
@@ -3436,7 +3436,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         ), NMsgBusProxy::MSTATUS_ERROR, TEvTxUserProxy::TResultStatus::ExecResultUnavailable);
     }
 
-    Y_UNIT_TEST(LargeProxyReplyRW) { 
+    Y_UNIT_TEST(LargeProxyReplyRW) {
         const ui32 TABLE_ROWS = 350;
         const ui32 BLOB_SIZE = 100 * 1024; // 100 Kb
         const ui32 KEY_TO_ERASE = 1;
@@ -3495,7 +3495,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT(!res.GetValue().GetStruct(0).GetOptional().HasOptional());
     }
 
-    Y_UNIT_TEST(PartBloomFilter) { 
+    Y_UNIT_TEST(PartBloomFilter) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);
         TServer cleverServer = TServer(TServerSettings(port));

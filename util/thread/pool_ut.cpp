@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/random/fast.h>
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
         }
     }
 
-    Y_UNIT_TEST(TestAddAndOwn) { 
+    Y_UNIT_TEST(TestAddAndOwn) {
         TThreadPool q;
         q.Start(2);
         bool processed = false;
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
         UNIT_ASSERT_C(destructed, "Not destructed");
     }
 
-    Y_UNIT_TEST(TestAddFunc) { 
+    Y_UNIT_TEST(TestAddFunc) {
         TFailAddQueue queue;
         bool added = queue.AddFunc(
             []() {} // Lambda, I call him 'Lambda'!
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
         UNIT_CHECK_GENERATED_EXCEPTION(queue.SafeAddFunc([] {}), TThreadPoolException);
     }
 
-    Y_UNIT_TEST(TestFunctionNotCopied) { 
+    Y_UNIT_TEST(TestFunctionNotCopied) {
         struct TFailOnCopy {
             TFailOnCopy() {
             }

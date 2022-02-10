@@ -420,7 +420,7 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
 bool TProgram::Compile(const TString& username) {
     YQL_PROFILE_FUNC(TRACE);
 
-    Y_ENSURE(AstRoot_, "Program not parsed yet"); 
+    Y_ENSURE(AstRoot_, "Program not parsed yet");
     if (!ExprCtx_) {
         ExprCtx_.Reset(new TExprContext(NextUniqueId_));
     }
@@ -599,9 +599,9 @@ TProgram::TFutureStatus TProgram::ValidateAsync(const TString& username, IOutput
 
 TProgram::TStatus TProgram::Optimize(
         const TString& username,
-        IOutputStream* traceOut, 
-        IOutputStream* tracePlan, 
-        IOutputStream* exprOut, 
+        IOutputStream* traceOut,
+        IOutputStream* tracePlan,
+        IOutputStream* exprOut,
         bool withTypes)
 {
     YQL_PROFILE_FUNC(TRACE);
@@ -611,9 +611,9 @@ TProgram::TStatus TProgram::Optimize(
 
 TProgram::TFutureStatus TProgram::OptimizeAsync(
         const TString& username,
-        IOutputStream* traceOut, 
-        IOutputStream* tracePlan, 
-        IOutputStream* exprOut, 
+        IOutputStream* traceOut,
+        IOutputStream* tracePlan,
+        IOutputStream* exprOut,
         bool withTypes)
 {
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
@@ -740,9 +740,9 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
 
 TProgram::TStatus TProgram::Run(
         const TString& username,
-        IOutputStream* traceOut, 
-        IOutputStream* tracePlan, 
-        IOutputStream* exprOut, 
+        IOutputStream* traceOut,
+        IOutputStream* tracePlan,
+        IOutputStream* exprOut,
         bool withTypes)
 {
     YQL_PROFILE_FUNC(TRACE);
@@ -752,9 +752,9 @@ TProgram::TStatus TProgram::Run(
 
 TProgram::TFutureStatus TProgram::RunAsync(
         const TString& username,
-        IOutputStream* traceOut, 
-        IOutputStream* tracePlan, 
-        IOutputStream* exprOut, 
+        IOutputStream* traceOut,
+        IOutputStream* tracePlan,
+        IOutputStream* exprOut,
         bool withTypes)
 {
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {

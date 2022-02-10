@@ -24,28 +24,28 @@ struct TRbTreeNodeBase {
 
     inline void ReInitNode() noexcept {
         Color_ = RBTreeBlack;
-        Parent_ = nullptr; 
-        Left_ = nullptr; 
-        Right_ = nullptr; 
+        Parent_ = nullptr;
+        Left_ = nullptr;
+        Right_ = nullptr;
         Children_ = 1;
     }
 
     static TBasePtr MinimumNode(TBasePtr x) {
-        while (x->Left_ != nullptr) 
+        while (x->Left_ != nullptr)
             x = x->Left_;
 
         return x;
     }
 
     static TBasePtr MaximumNode(TBasePtr x) {
-        while (x->Right_ != nullptr) 
+        while (x->Right_ != nullptr)
             x = x->Right_;
 
         return x;
     }
 
     static TBasePtr ByIndex(TBasePtr x, size_t index) {
-        if (x->Left_ != nullptr) { 
+        if (x->Left_ != nullptr) {
             if (index < x->Left_->Children_)
                 return ByIndex(x->Left_, index);
             index -= x->Left_->Children_;
@@ -178,7 +178,7 @@ public:
     class TRealNode: public TNodeBase {
     public:
         inline TRealNode()
-            : Tree_(nullptr) 
+            : Tree_(nullptr)
         {
         }
 
@@ -190,7 +190,7 @@ public:
             if (Tree_) {
                 Tree_->EraseImpl(this);
                 ReInitNode();
-                Tree_ = nullptr; 
+                Tree_ = nullptr;
             }
         }
 
@@ -221,7 +221,7 @@ public:
 
     inline void Init() noexcept {
         Data_.Color_ = RBTreeRed;
-        Data_.Parent_ = nullptr; 
+        Data_.Parent_ = nullptr;
         Data_.Left_ = &Data_;
         Data_.Right_ = &Data_;
         Data_.Children_ = 0;
@@ -229,7 +229,7 @@ public:
 
     struct TDestroy {
         inline void operator()(TValue& v) const noexcept {
-            v.SetRbTreeParent(nullptr); 
+            v.SetRbTreeParent(nullptr);
             v.ReInitNode();
         }
     };
@@ -291,7 +291,7 @@ public:
         TBasePtr y = &this->Data_;
         TBasePtr x = Root();
 
-        while (x != nullptr) { 
+        while (x != nullptr) {
             ++(x->Children_);
             y = x;
 
@@ -332,10 +332,10 @@ public:
 
     template <class T1>
     inline TValue* Find(const T1& k) const {
-        TBasePtr y = nullptr; 
+        TBasePtr y = nullptr;
         TBasePtr x = Root(); // Current node.
 
-        while (x != nullptr) 
+        while (x != nullptr)
             if (!KeyCompare_(ValueNode(x), k))
                 y = x, x = LeftNode(x);
             else
@@ -343,7 +343,7 @@ public:
 
         if (y) {
             if (KeyCompare_(k, ValueNode(y))) {
-                y = nullptr; 
+                y = nullptr;
             }
         }
 
@@ -375,7 +375,7 @@ public:
         TBasePtr y = const_cast<TBasePtr>(&this->Data_); /* Last node which is not less than k. */
         TBasePtr x = Root();                             /* Current node. */
 
-        while (x != nullptr) 
+        while (x != nullptr)
             if (!KeyCompare_(ValueNode(x), k))
                 y = x, x = LeftNode(x);
             else
@@ -389,7 +389,7 @@ public:
         TBasePtr y = const_cast<TBasePtr>(&this->Data_); /* Last node which is greater than k. */
         TBasePtr x = Root();                             /* Current node. */
 
-        while (x != nullptr) 
+        while (x != nullptr)
             if (KeyCompare_(k, ValueNode(x)))
                 y = x, x = LeftNode(x);
             else
@@ -402,11 +402,11 @@ public:
     inline size_t LessCount(const T1& k) const {
         auto x = LowerBound(k);
         if (x == const_cast<TBasePtr>(&this->Data_)) {
-            if (const auto root = Root()) { 
-                return root->Children_; 
-            } else { 
-                return 0; 
-            } 
+            if (const auto root = Root()) {
+                return root->Children_;
+            } else {
+                return 0;
+            }
         } else {
             return GetIndex(x);
         }
@@ -439,9 +439,9 @@ public:
 private:
     // CRP 7/10/00 inserted argument on_right, which is another hint (meant to
     // act like on_left and ignore a portion of the if conditions -- specify
-    // on_right != nullptr to bypass comparison as false or on_left != nullptr to bypass 
+    // on_right != nullptr to bypass comparison as false or on_left != nullptr to bypass
     // comparison as true)
-    TIterator InsertImpl(TRbTreeNodeBase* parent, TRbTreeNodeBase* val, TRbTreeNodeBase* on_left = nullptr, TRbTreeNodeBase* on_right = nullptr) { 
+    TIterator InsertImpl(TRbTreeNodeBase* parent, TRbTreeNodeBase* val, TRbTreeNodeBase* on_left = nullptr, TRbTreeNodeBase* on_right = nullptr) {
         ValueNode(val).SetRbTreeParent(this);
         TBasePtr new_node = val;
 
@@ -450,10 +450,10 @@ private:
             // also makes LeftMost() = new_node
             Root() = new_node;
             RightMost() = new_node;
-        } else if (on_right == nullptr && 
-                   // If on_right != nullptr, the remainder fails to false 
-                   (on_left != nullptr || 
-                    // If on_left != nullptr, the remainder succeeds to true 
+        } else if (on_right == nullptr &&
+                   // If on_right != nullptr, the remainder fails to false
+                   (on_left != nullptr ||
+                    // If on_left != nullptr, the remainder succeeds to true
                     KeyCompare_(ValueNode(val), ValueNode(parent))))
  {
             LeftNode(parent) = new_node;
@@ -532,7 +532,7 @@ template <class TDummy>
 void TRbGlobal<TDummy>::RotateLeft(TRbTreeNodeBase* x, TRbTreeNodeBase*& root) {
     TRbTreeNodeBase* y = x->Right_;
     x->Right_ = y->Left_;
-    if (y->Left_ != nullptr) 
+    if (y->Left_ != nullptr)
         y->Left_->Parent_ = x;
     y->Parent_ = x->Parent_;
 
@@ -552,7 +552,7 @@ template <class TDummy>
 void TRbGlobal<TDummy>::RotateRight(TRbTreeNodeBase* x, TRbTreeNodeBase*& root) {
     TRbTreeNodeBase* y = x->Left_;
     x->Left_ = y->Right_;
-    if (y->Right_ != nullptr) 
+    if (y->Right_ != nullptr)
         y->Right_->Parent_ = x;
     y->Parent_ = x->Parent_;
 
@@ -633,7 +633,7 @@ TRbTreeNodeBase* TRbGlobal<TDummy>::RebalanceForErase(TRbTreeNodeBase* z,
     TRbTreeNodeBase* x;
     TRbTreeNodeBase* x_parent;
 
-    if (y->Left_ == nullptr) // z has at most one non-null child. y == z. 
+    if (y->Left_ == nullptr) // z has at most one non-null child. y == z.
         x = y->Right_;       // x might be null.
     else {
         if (y->Right_ == nullptr)                        // z has exactly one non-null child. y == z.
@@ -691,14 +691,14 @@ TRbTreeNodeBase* TRbGlobal<TDummy>::RebalanceForErase(TRbTreeNodeBase* z,
         }
 
         if (leftmost == z) {
-            if (z->Right_ == nullptr) // z->mLeft must be null also 
+            if (z->Right_ == nullptr) // z->mLeft must be null also
                 leftmost = z->Parent_;
             // makes leftmost == _M_header if z == root
             else
                 leftmost = TRbTreeNodeBase::MinimumNode(x);
         }
         if (rightmost == z) {
-            if (z->Left_ == nullptr) // z->mRight must be null also 
+            if (z->Left_ == nullptr) // z->mRight must be null also
                 rightmost = z->Parent_;
             // makes rightmost == _M_header if z == root
             else // x == z->mLeft
@@ -707,7 +707,7 @@ TRbTreeNodeBase* TRbGlobal<TDummy>::RebalanceForErase(TRbTreeNodeBase* z,
     }
 
     if (y->Color_ != RBTreeRed) {
-        while (x != root && (x == nullptr || x->Color_ == RBTreeBlack)) 
+        while (x != root && (x == nullptr || x->Color_ == RBTreeBlack))
             if (x == x_parent->Left_) {
                 TRbTreeNodeBase* w = x_parent->Right_;
                 if (w->Color_ == RBTreeRed) {
@@ -716,9 +716,9 @@ TRbTreeNodeBase* TRbGlobal<TDummy>::RebalanceForErase(TRbTreeNodeBase* z,
                     RotateLeft(x_parent, root);
                     w = x_parent->Right_;
                 }
-                if ((w->Left_ == nullptr || 
+                if ((w->Left_ == nullptr ||
                      w->Left_->Color_ == RBTreeBlack) &&
-                    (w->Right_ == nullptr || 
+                    (w->Right_ == nullptr ||
                      w->Right_->Color_ == RBTreeBlack))
                 {
                     w->Color_ = RBTreeRed;
@@ -748,9 +748,9 @@ TRbTreeNodeBase* TRbGlobal<TDummy>::RebalanceForErase(TRbTreeNodeBase* z,
                     RotateRight(x_parent, root);
                     w = x_parent->Left_;
                 }
-                if ((w->Right_ == nullptr || 
+                if ((w->Right_ == nullptr ||
                      w->Right_->Color_ == RBTreeBlack) &&
-                    (w->Left_ == nullptr || 
+                    (w->Left_ == nullptr ||
                      w->Left_->Color_ == RBTreeBlack))
                 {
                     w->Color_ = RBTreeRed;
@@ -782,7 +782,7 @@ template <class TDummy>
 TRbTreeNodeBase* TRbGlobal<TDummy>::DecrementNode(TRbTreeNodeBase* Node_) {
     if (Node_->Color_ == RBTreeRed && Node_->Parent_->Parent_ == Node_)
         Node_ = Node_->Right_;
-    else if (Node_->Left_ != nullptr) { 
+    else if (Node_->Left_ != nullptr) {
         Node_ = TRbTreeNodeBase::MaximumNode(Node_->Left_);
     } else {
         TBasePtr y = Node_->Parent_;
@@ -797,7 +797,7 @@ TRbTreeNodeBase* TRbGlobal<TDummy>::DecrementNode(TRbTreeNodeBase* Node_) {
 
 template <class TDummy>
 TRbTreeNodeBase* TRbGlobal<TDummy>::IncrementNode(TRbTreeNodeBase* Node_) {
-    if (Node_->Right_ != nullptr) { 
+    if (Node_->Right_ != nullptr) {
         Node_ = TRbTreeNodeBase::MinimumNode(Node_->Right_);
     } else {
         TBasePtr y = Node_->Parent_;

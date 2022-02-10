@@ -2,11 +2,11 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(ObjectsCounter) { 
+Y_UNIT_TEST_SUITE(ObjectsCounter) {
     struct TObject: public TObjectCounter<TObject> {
     };
 
-    Y_UNIT_TEST(Test1) { 
+    Y_UNIT_TEST(Test1) {
         TObject obj;
         TVector<TObject> objects;
         for (ui32 i = 0; i < 100; ++i) {
@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(ObjectsCounter) {
         UNIT_ASSERT_EQUAL(TObjectCounter<TObject>::ObjectCount(), 101);
     }
 
-    Y_UNIT_TEST(TestEq) { 
+    Y_UNIT_TEST(TestEq) {
         TObject obj;
         {
             TObject obj1 = obj;
@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(ObjectsCounter) {
         UNIT_ASSERT_EQUAL(TObjectCounter<TObject>::ObjectCount(), 1);
     }
 
-    Y_UNIT_TEST(TestMove) { 
+    Y_UNIT_TEST(TestMove) {
         TObject obj;
         UNIT_ASSERT_EQUAL(TObjectCounter<TObject>::ObjectCount(), 1);
         {

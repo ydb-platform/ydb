@@ -10,8 +10,8 @@
 #include <cstddef>
 #include <memory>
 
-class IInputStream; 
-class IZeroCopyInput; 
+class IInputStream;
+class IZeroCopyInput;
 
 namespace NYsonPull {
     namespace NInput {
@@ -74,8 +74,8 @@ namespace NYsonPull {
         //! Does not take ownership on streambuf.
         THolder<IStream> FromPosixFd(int fd, size_t buffer_size = 65536);
 
-        THolder<IStream> FromZeroCopyInput(IZeroCopyInput* input); 
+        THolder<IStream> FromZeroCopyInput(IZeroCopyInput* input);
 
-        THolder<IStream> FromInputStream(IInputStream* input, size_t buffer_size = 65536); 
+        THolder<IStream> FromInputStream(IInputStream* input, size_t buffer_size = 65536);
     }
 }

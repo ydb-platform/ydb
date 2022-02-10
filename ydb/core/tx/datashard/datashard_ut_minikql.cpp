@@ -9,9 +9,9 @@ using NClient::TValue;
 using IEngineFlat = NMiniKQL::IEngineFlat;
 
 
-Y_UNIT_TEST_SUITE(TTxDataShardMiniKQL) { 
+Y_UNIT_TEST_SUITE(TTxDataShardMiniKQL) {
 
-Y_UNIT_TEST(ReadConstant) { 
+Y_UNIT_TEST(ReadConstant) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
 
@@ -24,7 +24,7 @@ Y_UNIT_TEST(ReadConstant) {
 
 //
 
-Y_UNIT_TEST(Write) { 
+Y_UNIT_TEST(Write) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
 
@@ -43,7 +43,7 @@ Y_UNIT_TEST(Write) {
 
 //
 
-Y_UNIT_TEST(ReadAfterWrite) { 
+Y_UNIT_TEST(ReadAfterWrite) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
 
@@ -158,7 +158,7 @@ Y_UNIT_TEST(ReadSpecialColumns) {
 
 //
 
-Y_UNIT_TEST(ReadNonExisting) { 
+Y_UNIT_TEST(ReadNonExisting) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
 
@@ -181,7 +181,7 @@ Y_UNIT_TEST(ReadNonExisting) {
     }
 }
 
-Y_UNIT_TEST(WriteEraseRead) { 
+Y_UNIT_TEST(WriteEraseRead) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
 
@@ -232,7 +232,7 @@ Y_UNIT_TEST(WriteEraseRead) {
 
 //
 
-Y_UNIT_TEST(SelectRange) { 
+Y_UNIT_TEST(SelectRange) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
 
@@ -447,7 +447,7 @@ Y_UNIT_TEST(SelectRange) {
 
 //
 
-Y_UNIT_TEST(SelectRangeWithNotFullKey) { 
+Y_UNIT_TEST(SelectRangeWithNotFullKey) {
     TTester t(TTester::ESchema_DoubleKV);
     TFakeMiniKQLProxy proxy(t);
 
@@ -661,7 +661,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
 
 //
 
-Y_UNIT_TEST(WriteAndReadMultipleShards) { 
+Y_UNIT_TEST(WriteAndReadMultipleShards) {
     TTester t(TTester::ESchema_MultiShardKV);
     TFakeMiniKQLProxy proxy(t);
 
@@ -729,7 +729,7 @@ void GetTableStats(TTestActorRuntime &runtime, ui64 tabletId, ui64 tableId, NKik
     stats.Swap(response->Record.MutableTableStats());
 }
 
-Y_UNIT_TEST(TableStats) { 
+Y_UNIT_TEST(TableStats) {
     TTester t(TTester::ESchema_MultiShardKV);
     TFakeMiniKQLProxy proxy(t);
 
@@ -811,7 +811,7 @@ Y_UNIT_TEST(TableStats) {
                   "LastAccessTime should change after read");
 }
 
-Y_UNIT_TEST(TableStatsHistograms) { 
+Y_UNIT_TEST(TableStatsHistograms) {
     TTester t(TTester::ESchema_MultiShardKV);
     TFakeMiniKQLProxy proxy(t);
 
@@ -932,7 +932,7 @@ void CrossShard_1_Cycle_Impl(const TString& dispatchName, std::function<void (TT
     }
 }
 
-Y_UNIT_TEST(CrossShard_1_Cycle) { 
+Y_UNIT_TEST(CrossShard_1_Cycle) {
     TVector<ui64> tabletIds;
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
@@ -1009,7 +1009,7 @@ void CrossShard_2_SwapAndCopy_Impl(const TString& dispatchName, std::function<vo
     }
 }
 
-Y_UNIT_TEST(CrossShard_2_SwapAndCopy) { 
+Y_UNIT_TEST(CrossShard_2_SwapAndCopy) {
     TVector<ui64> tabletIds;
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
@@ -1087,7 +1087,7 @@ void CrossShard_3_AllToOne_Impl(const TString& dispatchName, std::function<void 
     }
 }
 
-Y_UNIT_TEST(CrossShard_3_AllToOne) { 
+Y_UNIT_TEST(CrossShard_3_AllToOne) {
     TVector<ui64> tabletIds;
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
@@ -1163,7 +1163,7 @@ void CrossShard_4_OneToAll_Impl(const TString& dispatchName, std::function<void 
     }
 }
 
-Y_UNIT_TEST(CrossShard_4_OneToAll) { 
+Y_UNIT_TEST(CrossShard_4_OneToAll) {
     TVector<ui64> tabletIds;
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
@@ -1275,7 +1275,7 @@ void CrossShard_5_AllToAll_Impl(const TString& dispatchName, std::function<void 
     }
 }
 
-Y_UNIT_TEST(CrossShard_5_AllToAll) { 
+Y_UNIT_TEST(CrossShard_5_AllToAll) {
     TVector<ui64> tabletIds;
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
@@ -1351,7 +1351,7 @@ void CrossShard_6_Local_Impl(const TString& dispatchName, std::function<void (TT
     }
 }
 
-Y_UNIT_TEST(CrossShard_6_Local) { 
+Y_UNIT_TEST(CrossShard_6_Local) {
     TVector<ui64> tabletIds;
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet0);
     tabletIds.push_back((ui64)TTestTxConfig::TxTablet1);
@@ -1362,7 +1362,7 @@ Y_UNIT_TEST(CrossShard_6_Local) {
     }, &CrossShard_6_Local_Impl);
 }
 
-Y_UNIT_TEST(WriteAndReadMany) { 
+Y_UNIT_TEST(WriteAndReadMany) {
     TTester t(TTester::ESchema_DoubleKV);
     TFakeMiniKQLProxy proxy(t);
 
@@ -1536,7 +1536,7 @@ void CheckCounters(const std::tuple<ui64, ui64, ui64> &newCnt, const std::tuple<
     UNIT_ASSERT_VALUES_EQUAL(std::get<2>(newCnt) - std::get<2>(oldCnt), d3);
 }
 
-Y_UNIT_TEST(MemoryUsageImmediateSmallTx) { 
+Y_UNIT_TEST(MemoryUsageImmediateSmallTx) {
     bool activeZone = false;
     TTester t(TTester::ESchema_KV, "dispatch_name", [&](TTestActorRuntime &runtime) {
             SetupProfiles(runtime);
@@ -1583,7 +1583,7 @@ Y_UNIT_TEST(MemoryUsageImmediateSmallTx) {
     CheckCounters(counters3, counters2, 1, 0, 0);
 }
 
-Y_UNIT_TEST(MemoryUsageImmediateMediumTx) { 
+Y_UNIT_TEST(MemoryUsageImmediateMediumTx) {
     bool activeZone = false;
     TTester t(TTester::ESchema_KV, "dispatch_name", [&](TTestActorRuntime &runtime) {
             SetupProfiles(runtime);
@@ -1615,7 +1615,7 @@ Y_UNIT_TEST(MemoryUsageImmediateMediumTx) {
     CheckCounters(counters2, counters1, TCounterRange{2, 3}, 0, 0);
 }
 
-Y_UNIT_TEST(MemoryUsageImmediateHugeTx) { 
+Y_UNIT_TEST(MemoryUsageImmediateHugeTx) {
     bool activeZone = false;
     TTester t(TTester::ESchema_KV, "dispatch_name", [&](TTestActorRuntime &runtime) {
             SetupProfiles(runtime);
@@ -1647,7 +1647,7 @@ Y_UNIT_TEST(MemoryUsageImmediateHugeTx) {
     CheckCounters(counters2, counters1, 4, 0, 0);
 }
 
-Y_UNIT_TEST(MemoryUsageMultiShard) { 
+Y_UNIT_TEST(MemoryUsageMultiShard) {
     bool activeZone = false;
     TTester t(TTester::ESchema_MultiShardKV, "dispatch_name", [&](TTestActorRuntime &runtime) {
             SetupProfiles(runtime);
@@ -1709,6 +1709,6 @@ Y_UNIT_TEST(MemoryUsageMultiShard) {
     }
 }
 
-} // Y_UNIT_TEST_SUITE(TTxDataShardMiniKQL) 
+} // Y_UNIT_TEST_SUITE(TTxDataShardMiniKQL)
 
 } // namespace NKikimr

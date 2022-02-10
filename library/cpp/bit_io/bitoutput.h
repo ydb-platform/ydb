@@ -4,7 +4,7 @@
 
 #include <util/stream/output.h>
 #include <util/system/yassert.h>
-#include <util/generic/bitops.h> 
+#include <util/generic/bitops.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
@@ -148,7 +148,7 @@ namespace NBitIO {
     public:
         void WriteData(const char* begin, const char* end) {
             size_t sz = end - begin;
-            Y_VERIFY(sz <= Left, " "); 
+            Y_VERIFY(sz <= Left, " ");
             memcpy(Data, begin, sz);
             Data += sz;
             Left -= sz;
@@ -172,21 +172,21 @@ namespace NBitIO {
     using TBitOutputYVector = TBitOutputVector<TVector<char>>;
 
     class TBitOutputStreamImpl {
-        IOutputStream* Out; 
+        IOutputStream* Out;
 
     public:
         void WriteData(const char* begin, const char* end) {
             Out->Write(begin, end - begin);
         }
 
-        TBitOutputStreamImpl(IOutputStream* out) 
+        TBitOutputStreamImpl(IOutputStream* out)
             : Out(out)
         {
         }
     };
 
     struct TBitOutputStream: public TBitOutputStreamImpl, public TBitOutputBase<TBitOutputStreamImpl> {
-        inline TBitOutputStream(IOutputStream* out) 
+        inline TBitOutputStream(IOutputStream* out)
             : TBitOutputStreamImpl(out)
             , TBitOutputBase<TBitOutputStreamImpl>(this)
         {

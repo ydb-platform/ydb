@@ -155,7 +155,7 @@ public:
     }
 
     TNodeBuilder<TParent, TCoLambda>& Args(const TCoArguments& node) {
-        Y_VERIFY_DEBUG(!this->ArgsHolder.IsValid()); 
+        Y_VERIFY_DEBUG(!this->ArgsHolder.IsValid());
 
         this->ArgsHolder = node;
         return *this;
@@ -163,7 +163,7 @@ public:
 
     TNodeBuilder<TParent, TCoLambda>& Args(std::initializer_list<TStringBuf> list)
     {
-        Y_VERIFY_DEBUG(!this->ArgsHolder.IsValid()); 
+        Y_VERIFY_DEBUG(!this->ArgsHolder.IsValid());
 
         TExprNode::TListType argNodes;
         for (auto name : list) {

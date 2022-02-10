@@ -15,7 +15,7 @@ namespace NKikimr {
         }
 
         const TMemRec &GetMemRec() const {
-            Y_VERIFY_DEBUG(Finished); 
+            Y_VERIFY_DEBUG(Finished);
             return MemRec;
         }
 
@@ -93,7 +93,7 @@ namespace NKikimr {
         }
 
         void Finish() {
-            Y_VERIFY_DEBUG(!Empty()); 
+            Y_VERIFY_DEBUG(!Empty());
             Finished = true;
         }
     };
@@ -165,7 +165,7 @@ namespace NKikimr {
                     break;
                 }
                 default:
-                    Y_FAIL("Impossible case"); 
+                    Y_FAIL("Impossible case");
             }
             VerifyConsistency(memRec, outbound);
         }
@@ -183,7 +183,7 @@ namespace NKikimr {
                         // intentionally do nothing: don't add any data to DataMerger, because we don't need it
                     }
                 } else {
-                    Y_VERIFY(memRec.GetType() == TBlobType::HugeBlob); 
+                    Y_VERIFY(memRec.GetType() == TBlobType::HugeBlob);
                     TDiskDataExtractor extr;
                     memRec.GetDiskData(&extr, nullptr);
                     const NMatrix::TVectorType v = memRec.GetLocalParts(GType);
@@ -229,7 +229,7 @@ namespace NKikimr {
         }
 
         void Finish() {
-            Y_VERIFY_DEBUG(!Empty()); 
+            Y_VERIFY_DEBUG(!Empty());
             VerifyConsistency();
 
             // in case when we keep data and disk merger contains small blobs, we set up small blob record -- this logic
@@ -249,7 +249,7 @@ namespace NKikimr {
         }
 
         const TDataMerger *GetDataMerger() const {
-            Y_VERIFY_DEBUG(Finished); 
+            Y_VERIFY_DEBUG(Finished);
             return &DataMerger;
         }
 
@@ -454,7 +454,7 @@ namespace NKikimr {
         }
 
         void Finish() {
-            Y_VERIFY_DEBUG(!Empty()); 
+            Y_VERIFY_DEBUG(!Empty());
             LastWriteWinsMerger.Finish(Callback);
             Finished = true;
         }

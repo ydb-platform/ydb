@@ -9,7 +9,7 @@
 #endif
 
 int TouchFile(const char* filePath) {
-    return utime(filePath, nullptr); 
+    return utime(filePath, nullptr);
 }
 
 int SetModTime(const char* filePath, time_t modtime, time_t actime) {

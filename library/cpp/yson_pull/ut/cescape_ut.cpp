@@ -39,20 +39,20 @@ namespace {
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(CEscape) { 
-    Y_UNIT_TEST(ExhaustiveOneChar) { 
+Y_UNIT_TEST_SUITE(CEscape) {
+    Y_UNIT_TEST(ExhaustiveOneChar) {
         test_exhaustive<1>();
     }
 
-    Y_UNIT_TEST(ExhaustiveTwoChars) { 
+    Y_UNIT_TEST(ExhaustiveTwoChars) {
         test_exhaustive<2>();
     }
 
-    Y_UNIT_TEST(ExhaustiveThreeChars) { 
+    Y_UNIT_TEST(ExhaustiveThreeChars) {
         test_exhaustive<3>();
     }
 
-    Y_UNIT_TEST(SpecialEscapeEncode) { 
+    Y_UNIT_TEST(SpecialEscapeEncode) {
         //UNIT_ASSERT_VALUES_EQUAL(R"(\b)", NCEscape::encode("\b"));
         //UNIT_ASSERT_VALUES_EQUAL(R"(\f)", NCEscape::encode("\f"));
         UNIT_ASSERT_VALUES_EQUAL(R"(\n)", NCEscape::encode("\n"));
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(CEscape) {
         UNIT_ASSERT_VALUES_EQUAL(R"(\t)", NCEscape::encode("\t"));
     }
 
-    Y_UNIT_TEST(SpecialEscapeDecode) { 
+    Y_UNIT_TEST(SpecialEscapeDecode) {
         UNIT_ASSERT_VALUES_EQUAL("\b", NCEscape::decode(R"(\b)"));
         UNIT_ASSERT_VALUES_EQUAL("\f", NCEscape::decode(R"(\f)"));
         UNIT_ASSERT_VALUES_EQUAL("\n", NCEscape::decode(R"(\n)"));
@@ -68,4 +68,4 @@ Y_UNIT_TEST_SUITE(CEscape) {
         UNIT_ASSERT_VALUES_EQUAL("\t", NCEscape::decode(R"(\t)"));
     }
 
-} // Y_UNIT_TEST_SUITE(CEscape) 
+} // Y_UNIT_TEST_SUITE(CEscape)

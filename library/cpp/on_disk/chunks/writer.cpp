@@ -8,7 +8,7 @@ static inline void WriteAux(IOutputStream* out, const TVector<ui64>& data) {
 
 /*************************** TBuffersWriter ***************************/
 
-TChunkedDataWriter::TChunkedDataWriter(IOutputStream& slave) 
+TChunkedDataWriter::TChunkedDataWriter(IOutputStream& slave)
     : Slave(slave)
     , Offset(0)
 {
@@ -36,8 +36,8 @@ void TChunkedDataWriter::WriteFooter() {
 }
 
 size_t TChunkedDataWriter::GetCurrentBlockOffset() const {
-    Y_ASSERT(!Offsets.empty()); 
-    Y_ASSERT(Offset >= Offsets.back()); 
+    Y_ASSERT(!Offsets.empty());
+    Y_ASSERT(Offset >= Offsets.back());
     return Offset - Offsets.back();
 }
 

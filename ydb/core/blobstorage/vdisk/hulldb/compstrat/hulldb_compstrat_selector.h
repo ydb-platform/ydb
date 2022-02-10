@@ -39,7 +39,7 @@ namespace NKikimr {
                 , Task(task)
                 , Params(params)
             {
-                Y_VERIFY_DEBUG(Task); 
+                Y_VERIFY_DEBUG(Task);
                 Task->Clear();
                 Task->FullCompactionInfo.first = Params.FullCompactionAttrs;
             }

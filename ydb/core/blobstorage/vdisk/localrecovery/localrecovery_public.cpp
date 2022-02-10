@@ -390,7 +390,7 @@ namespace NKikimr {
         }
 
         bool InitHugeBlobKeeper(const TStartingPoints &startingPoints, const TActorContext &ctx) {
-            Y_UNUSED(ctx); 
+            Y_UNUSED(ctx);
             const ui32 blocksInChunk = LocRecCtx->PDiskCtx->Dsk->ChunkSize / LocRecCtx->PDiskCtx->Dsk->AppendBlockSize;
             Y_VERIFY(LocRecCtx->PDiskCtx->Dsk->AppendBlockSize * blocksInChunk == LocRecCtx->PDiskCtx->Dsk->ChunkSize);
 
@@ -398,7 +398,7 @@ namespace NKikimr {
             MaxLogoBlobDataSizeInBlocks += !!(Config->MaxLogoBlobDataSize -
                     MaxLogoBlobDataSizeInBlocks * LocRecCtx->PDiskCtx->Dsk->AppendBlockSize);
             const ui32 slotsInChunk = blocksInChunk / MaxLogoBlobDataSizeInBlocks;
-            Y_VERIFY(slotsInChunk > 1); 
+            Y_VERIFY(slotsInChunk > 1);
 
             auto logFunc = [&] (const TString &msg) {
                 LOG_DEBUG(ctx, BS_HULLHUGE, msg);
@@ -602,7 +602,7 @@ namespace NKikimr {
                     HullBarriersDBInitialized = true;
                     break;
                 default:
-                    Y_FAIL("Unexpected case"); 
+                    Y_FAIL("Unexpected case");
             }
 
             if (DatabaseStateLoaded())

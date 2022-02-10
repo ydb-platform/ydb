@@ -26,7 +26,7 @@ namespace NKikimr {
             return Guid == g.Guid;
         }
 
-        void Output(IOutputStream &str) const { 
+        void Output(IOutputStream &str) const {
             str << Guid;
         }
 
@@ -67,7 +67,7 @@ namespace NKikimr {
             return Guid == g.Guid;
         }
 
-        void Output(IOutputStream &str) const { 
+        void Output(IOutputStream &str) const {
             str << Guid;
         }
 

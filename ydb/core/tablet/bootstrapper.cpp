@@ -210,7 +210,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
     }
 
     void Boot(const TActorContext &ctx) {
-        Y_VERIFY(!LookOnActorID); 
+        Y_VERIFY(!LookOnActorID);
 
         LOG_NOTICE(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, boot",
                    TabletInfo->TabletID, GetTabletTypeName());
@@ -224,7 +224,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
             LookOnActorID = x->Tablet(TabletInfo.Get(), ctx.SelfID, ctx, 0, AppData(ctx)->ResourceProfiles);
         }
 
-        Y_VERIFY(LookOnActorID); 
+        Y_VERIFY(LookOnActorID);
 
         Watched.Reset(new TWatched());
 
@@ -269,7 +269,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
     }
 
     void BecomeWatch(const TActorId &watchOn, bool owner, const TActorContext &ctx) {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
 
         BootDelayedUntil = { };
         Round.Destroy();
@@ -325,7 +325,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
             Round->Aliens[alienNodeIdx] = TRound::TAlien(TRound::EAlienState::Disconnected, Max<ui64>());
             return false;
         default:
-            Y_FAIL("unhandled case"); 
+            Y_FAIL("unhandled case");
         }
     }
 
@@ -439,7 +439,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void HandleFree(TEvBootstrapper::TEvWatchResult::TPtr &ev, const TActorContext &ctx) {
         const NKikimrBootstrapper::TEvWatchResult &record = ev->Get()->Record;
-        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID); 
+        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID);
 
         if (record.GetRound() != RoundCounter)
             return;
@@ -477,7 +477,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void HandleFree(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
         const NKikimrBootstrapper::TEvWatch &record = ev->Get()->Record;
-        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID); 
+        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID);
 
         ctx.Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(), NKikimrBootstrapper::TEvWatchResult::FREE, SelfSeed, record.GetRound()));
     }
@@ -501,7 +501,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void HandleOwner(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
         const NKikimrBootstrapper::TEvWatch &record = ev->Get()->Record;
-        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID); 
+        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID);
 
         // add to watchers list (if node not already there)
         Watched->AddWatcher(ev->Sender, record.GetRound());
@@ -510,7 +510,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void HandleWatch(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
         const NKikimrBootstrapper::TEvWatch &record = ev->Get()->Record;
-        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID); 
+        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID);
 
         if (Watches->CheckWatch(ev->Sender.NodeId())) {
             ctx.Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(), NKikimrBootstrapper::TEvWatchResult::UNKNOWN, 0, record.GetRound()));
@@ -534,7 +534,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
 
     void HandleStandBy(TEvBootstrapper::TEvWatch::TPtr &ev, const TActorContext &ctx) {
         const NKikimrBootstrapper::TEvWatch &record = ev->Get()->Record;
-        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID); 
+        Y_VERIFY(record.GetTabletID() == TabletInfo->TabletID);
 
         ctx.Send(ev->Sender, new TEvBootstrapper::TEvWatchResult(record.GetTabletID(), NKikimrBootstrapper::TEvWatchResult::UNKNOWN, Max<ui64>(), record.GetRound()));
     }
@@ -563,11 +563,11 @@ public:
         , RoundCounter(0xdeadbeefdeadbeefull)
         , SelfSeed(0xdeadbeefdeadbeefull)
     {
-        Y_VERIFY(TTabletTypes::TYPE_INVALID != TabletInfo->TabletType); 
+        Y_VERIFY(TTabletTypes::TYPE_INVALID != TabletInfo->TabletType);
     }
 
     TAutoPtr<IEventHandle> AfterRegister(const TActorId &selfId, const TActorId &parentId) override {
-        Y_UNUSED(parentId); 
+        Y_UNUSED(parentId);
         return new IEventHandle(selfId, selfId, new TEvents::TEvBootstrap());
     }
 

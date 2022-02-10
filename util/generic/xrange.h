@@ -24,7 +24,7 @@ namespace NPrivate {
         using TDiff = decltype(T() - T());
 
     public:
-        constexpr TSimpleXRange(T start, T finish) noexcept 
+        constexpr TSimpleXRange(T start, T finish) noexcept
             : Start(start)
             , Finish(Max(start, finish))
         {
@@ -38,20 +38,20 @@ namespace NPrivate {
             using reference = const T&;
             using iterator_category = std::random_access_iterator_tag;
 
-            constexpr TIterator(T value) noexcept 
+            constexpr TIterator(T value) noexcept
                 : Value(value)
             {
             }
 
-            constexpr T operator*() const noexcept { 
+            constexpr T operator*() const noexcept {
                 return Value;
             }
 
-            constexpr bool operator!=(const TIterator& other) const noexcept { 
+            constexpr bool operator!=(const TIterator& other) const noexcept {
                 return Value != other.Value;
             }
 
-            constexpr bool operator==(const TIterator& other) const noexcept { 
+            constexpr bool operator==(const TIterator& other) const noexcept {
                 return Value == other.Value;
             }
 
@@ -65,23 +65,23 @@ namespace NPrivate {
                 return *this;
             }
 
-            constexpr TDiff operator-(const TIterator& b) const noexcept { 
+            constexpr TDiff operator-(const TIterator& b) const noexcept {
                 return Value - b.Value;
             }
 
             template <typename IntType>
-            constexpr TIterator operator+(const IntType& b) const noexcept { 
+            constexpr TIterator operator+(const IntType& b) const noexcept {
                 return TIterator(Value + b);
             }
 
             template <typename IntType>
-            TIterator& operator+=(const IntType& b) noexcept { 
+            TIterator& operator+=(const IntType& b) noexcept {
                 Value += b;
                 return *this;
             }
 
             template <typename IntType>
-            constexpr TIterator operator-(const IntType& b) const noexcept { 
+            constexpr TIterator operator-(const IntType& b) const noexcept {
                 return TIterator(Value - b);
             }
 
@@ -103,15 +103,15 @@ namespace NPrivate {
         using iterator = TIterator;
         using const_iterator = TIterator;
 
-        constexpr TIterator begin() const noexcept { 
+        constexpr TIterator begin() const noexcept {
             return TIterator(Start);
         }
 
-        constexpr TIterator end() const noexcept { 
+        constexpr TIterator end() const noexcept {
             return TIterator(Finish);
         }
 
-        constexpr T size() const noexcept { 
+        constexpr T size() const noexcept {
             return Finish - Start;
         }
 
@@ -130,7 +130,7 @@ namespace NPrivate {
         using TDiff = decltype(T() - T());
 
     public:
-        constexpr TSteppedXRange(T start, T finish, TDiff step) noexcept 
+        constexpr TSteppedXRange(T start, T finish, TDiff step) noexcept
             : Start_(start)
             , Step_(step)
             , Finish_(CalcRealFinish(Start_, finish, Step_))
@@ -146,21 +146,21 @@ namespace NPrivate {
             using reference = const T&;
             using iterator_category = std::random_access_iterator_tag;
 
-            constexpr TIterator(T value, const TSteppedXRange& parent) noexcept 
+            constexpr TIterator(T value, const TSteppedXRange& parent) noexcept
                 : Value_(value)
                 , Parent_(&parent)
             {
             }
 
-            constexpr T operator*() const noexcept { 
+            constexpr T operator*() const noexcept {
                 return Value_;
             }
 
-            constexpr bool operator!=(const TIterator& other) const noexcept { 
+            constexpr bool operator!=(const TIterator& other) const noexcept {
                 return Value_ != other.Value_;
             }
 
-            constexpr bool operator==(const TIterator& other) const noexcept { 
+            constexpr bool operator==(const TIterator& other) const noexcept {
                 return Value_ == other.Value_;
             }
 
@@ -174,23 +174,23 @@ namespace NPrivate {
                 return *this;
             }
 
-            constexpr TDiff operator-(const TIterator& b) const noexcept { 
+            constexpr TDiff operator-(const TIterator& b) const noexcept {
                 return (Value_ - b.Value_) / Parent_->Step_;
             }
 
             template <typename IntType>
-            constexpr TIterator operator+(const IntType& b) const noexcept { 
+            constexpr TIterator operator+(const IntType& b) const noexcept {
                 return TIterator(*this) += b;
             }
 
             template <typename IntType>
-            TIterator& operator+=(const IntType& b) noexcept { 
+            TIterator& operator+=(const IntType& b) noexcept {
                 Value_ += b * Parent_->Step_;
                 return *this;
             }
 
             template <typename IntType>
-            constexpr TIterator operator-(const IntType& b) const noexcept { 
+            constexpr TIterator operator-(const IntType& b) const noexcept {
                 return TIterator(*this) -= b;
             }
 
@@ -209,16 +209,16 @@ namespace NPrivate {
         using iterator = TIterator;
         using const_iterator = TIterator;
 
-        constexpr TIterator begin() const noexcept { 
+        constexpr TIterator begin() const noexcept {
             return TIterator(Start_, *this);
         }
 
-        constexpr TIterator end() const noexcept { 
+        constexpr TIterator end() const noexcept {
             return TIterator(Finish_, *this);
         }
 
         static T CalcRealFinish(T start, T expFinish, TDiff step) {
-            Y_ASSERT(step != 0); 
+            Y_ASSERT(step != 0);
             if (step > 0) {
                 if (expFinish > start) {
                     return start + step * ((expFinish - 1 - start) / step + 1);
@@ -228,7 +228,7 @@ namespace NPrivate {
             return start - TSteppedXRange<TDiff>::CalcRealFinish(0, start - expFinish, -step);
         }
 
-        constexpr T size() const noexcept { 
+        constexpr T size() const noexcept {
             return (Finish_ - Start_) / Step_;
         }
 
@@ -251,18 +251,18 @@ namespace NPrivate {
  * @param step must be non-zero
  */
 template <typename T>
-constexpr ::NPrivate::TSteppedXRange<T> xrange(T start, T finish, decltype(T() - T()) step) noexcept { 
+constexpr ::NPrivate::TSteppedXRange<T> xrange(T start, T finish, decltype(T() - T()) step) noexcept {
     return {start, finish, step};
 }
 
 /// generate sequence [start; finish)
 template <typename T>
-constexpr ::NPrivate::TSimpleXRange<T> xrange(T start, T finish) noexcept { 
+constexpr ::NPrivate::TSimpleXRange<T> xrange(T start, T finish) noexcept {
     return {start, finish};
 }
 
 /// generate sequence [0; finish)
 template <typename T>
-constexpr auto xrange(T finish) noexcept -> decltype(xrange(T(), finish)) { 
+constexpr auto xrange(T finish) noexcept -> decltype(xrange(T(), finish)) {
     return xrange(T(), finish);
 }

@@ -56,7 +56,7 @@ NUnicode::NPrivate::TComposition::TComposition() {
         while (*decompBegin) {
             wchar32 tail = *(decompBegin++);
             wchar32 comp = ComposeHangul(lead, tail);
-            Y_ASSERT(comp != 0); 
+            Y_ASSERT(comp != 0);
 
             Data[TKey(lead, tail)] = comp;
 

@@ -7,9 +7,9 @@
 namespace NKikimr {
 namespace NTable {
 
-Y_UNIT_TEST_SUITE(Self) { 
+Y_UNIT_TEST_SUITE(Self) {
 
-    Y_UNIT_TEST(Literals) 
+    Y_UNIT_TEST(Literals)
     {
         using namespace NTest;
         using TPut = NTest::TCookRow;

@@ -59,7 +59,7 @@ public:
     }
 
 private:
-    IOutputStream& out; 
+    IOutputStream& out;
     bool FirstCounter;
     TString prefix;
 };

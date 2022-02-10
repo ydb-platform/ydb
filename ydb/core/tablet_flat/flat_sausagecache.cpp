@@ -267,7 +267,7 @@ std::pair<ui32, ui64> TPrivatePageCache::Load(TVector<ui32> &pages, TPrivatePage
             page->LoadState = TPage::LoadStateRequested;
             bytesToRequest += page->Size;
 
-            Y_VERIFY(!page->WaitQueue); 
+            Y_VERIFY(!page->WaitQueue);
             page->WaitQueue = new TPage::TWaitQueue();
             page->WaitQueue->Push(waitPad);
             waitPad->Inc();
@@ -276,7 +276,7 @@ std::pair<ui32, ui64> TPrivatePageCache::Load(TVector<ui32> &pages, TPrivatePage
             ++it;
             break;
         case TPage::LoadStateLoaded:
-            Y_FAIL("must not request already loaded pages"); 
+            Y_FAIL("must not request already loaded pages");
         case TPage::LoadStateRequested:
             if (!page->WaitQueue)
                 page->WaitQueue = new TPage::TWaitQueue();
@@ -447,7 +447,7 @@ void TPrivatePageCache::Evict(TPage *pages) {
 
             break;
         default:
-            Y_FAIL("unknown load state"); 
+            Y_FAIL("unknown load state");
         }
 
         TPage *next = page->Next()->Node();

@@ -26,12 +26,12 @@ enum EMultiplier {
 
 ENUM_TO_STRING(EMultiplier, MULTIPLIER_MAP)
 
-Y_UNIT_TEST_SUITE(EnumCodegen) { 
-    Y_UNIT_TEST(GenWithValue) { 
+Y_UNIT_TEST_SUITE(EnumCodegen) {
+    Y_UNIT_TEST(GenWithValue) {
         UNIT_ASSERT_VALUES_EQUAL(6, MB);
     }
 
-    Y_UNIT_TEST(ToCString) { 
+    Y_UNIT_TEST(ToCString) {
         UNIT_ASSERT_VALUES_EQUAL("RED", ToCString(RED));
         UNIT_ASSERT_VALUES_EQUAL("BLUE", ToCString(BLUE));
         UNIT_ASSERT_VALUES_EQUAL("GREEN", (TStringBuilder() << GREEN));

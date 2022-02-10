@@ -9,8 +9,8 @@
 
 static const char* FileName_("./test.file");
 
-Y_UNIT_TEST_SUITE(TDirectIoTestSuite) { 
-    Y_UNIT_TEST(TestDirectFile) { 
+Y_UNIT_TEST_SUITE(TDirectIoTestSuite) {
+    Y_UNIT_TEST(TestDirectFile) {
         TDirectIOBufferedFile file(FileName_, RdWr | Direct | Seq | CreateAlways, 1 << 15);
         TVector<ui64> data((1 << 15) + 1);
         TVector<ui64> readResult(data.size());

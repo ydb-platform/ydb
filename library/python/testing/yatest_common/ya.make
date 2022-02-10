@@ -26,7 +26,7 @@ PY_SRCS(
 
 PEERDIR(
     contrib/python/six
-    library/python/cores 
+    library/python/cores
     library/python/filelock
     library/python/fs
 )

@@ -42,7 +42,7 @@ namespace {
         return {i};
     }
 
-    inline IOutputStream& operator<<(IOutputStream& o, const TPad<2>& p) { 
+    inline IOutputStream& operator<<(IOutputStream& o, const TPad<2>& p) {
         if (p.I < 10) {
             if (p.I >= 0) {
                 o << '0';
@@ -52,7 +52,7 @@ namespace {
         return o << p.I;
     }
 
-    inline IOutputStream& operator<<(IOutputStream& o, const TPad<4>& p) { 
+    inline IOutputStream& operator<<(IOutputStream& o, const TPad<4>& p) {
         if (p.I < 1000) {
             if (p.I >= 0) {
                 if (p.I < 10) {
@@ -68,7 +68,7 @@ namespace {
         return o << p.I;
     }
 
-    inline IOutputStream& operator<<(IOutputStream& o, const TPad<6>& p) { 
+    inline IOutputStream& operator<<(IOutputStream& o, const TPad<6>& p) {
         if (p.I < 100000) {
             if (p.I >= 0) {
                 if (p.I < 10) {
@@ -88,11 +88,11 @@ namespace {
         return o << p.I;
     }
 
-    void WriteMicroSecondsToStream(IOutputStream& os, ui32 microSeconds) { 
+    void WriteMicroSecondsToStream(IOutputStream& os, ui32 microSeconds) {
         os << '.' << Pad<6>(microSeconds);
     }
 
-    void WriteTmToStream(IOutputStream& os, const struct tm& theTm) { 
+    void WriteTmToStream(IOutputStream& os, const struct tm& theTm) {
         os << Pad<4>(theTm.tm_year + 1900) << '-' << Pad<2>(theTm.tm_mon + 1) << '-' << Pad<2>(theTm.tm_mday) << 'T'
            << Pad<2>(theTm.tm_hour) << ':' << Pad<2>(theTm.tm_min) << ':' << Pad<2>(theTm.tm_sec);
     }
@@ -134,20 +134,20 @@ namespace {
 }
 
 template <>
-void Out<TDuration>(IOutputStream& os, TTypeTraits<TDuration>::TFuncParam duration) { 
+void Out<TDuration>(IOutputStream& os, TTypeTraits<TDuration>::TFuncParam duration) {
     os << duration.Seconds();
     WriteMicroSecondsToStream(os, duration.MicroSecondsOfSecond());
     os << 's';
 }
 
 template <>
-void Out<TInstant>(IOutputStream& os, TTypeTraits<TInstant>::TFuncParam instant) { 
+void Out<TInstant>(IOutputStream& os, TTypeTraits<TInstant>::TFuncParam instant) {
     char buf[64];
     auto len = FormatDate8601(buf, sizeof(buf), instant.TimeT());
- 
+
     // shouldn't happen due to current implementation of FormatDate8601() and GmTimeR()
     Y_ENSURE(len, TStringBuf("Out<TInstant>: year does not fit into an integer"));
- 
+
     os.Write(buf, len - 1 /* 'Z' */);
     WriteMicroSecondsToStream(os, instant.MicroSecondsOfSecond());
     os << 'Z';

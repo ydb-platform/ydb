@@ -8,7 +8,7 @@
 
 #include <util/generic/buffer.h>
 #include <util/stream/str.h>
-#include <util/stream/buffer.h> 
+#include <util/stream/buffer.h>
 #include <util/stream/zerocopy.h>
 #include <util/string/vector.h>
 
@@ -30,7 +30,7 @@ namespace NMonitoring {
                         return;
                     }
                     TString path = GetPath();
-                    if (!path.StartsWith('/')) { 
+                    if (!path.StartsWith('/')) {
                         out << "HTTP/1.1 400 Bad request\r\nConnection: Close\r\n\r\n";
                         return;
                     }
@@ -165,7 +165,7 @@ namespace NMonitoring {
         throw; // just rethrow
     }
 
-    void TCoHttpServer::ProcessRequest(IOutputStream& out, const IHttpRequest& request) { 
+    void TCoHttpServer::ProcessRequest(IOutputStream& out, const IHttpRequest& request) {
         try {
             TNetworkAddress addr(BindAddr, Port);
             TSocket sock(addr);
@@ -257,7 +257,7 @@ namespace NMonitoring {
         CoServer.Stop();
     }
 
-    void TMonService::DispatchRequest(IOutputStream& out, const IHttpRequest& request) { 
+    void TMonService::DispatchRequest(IOutputStream& out, const IHttpRequest& request) {
         if (strcmp(request.GetPath(), "/") == 0) {
             out << "HTTP/1.1 200 Ok\nConnection: Close\n\n";
             MtHandler(out, request);

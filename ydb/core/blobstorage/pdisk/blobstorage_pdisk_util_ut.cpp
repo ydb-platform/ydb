@@ -23,9 +23,9 @@
 
 namespace NKikimr { namespace NPDisk {
 
-Y_UNIT_TEST_SUITE(TPDiskUtil) { 
+Y_UNIT_TEST_SUITE(TPDiskUtil) {
 
-    Y_UNIT_TEST(AtomicBlockCounterFunctional) { 
+    Y_UNIT_TEST(AtomicBlockCounterFunctional) {
         TAtomicBlockCounter counter;
         UNIT_ASSERT_EQUAL(counter.Get(), 0);
         UNIT_ASSERT_EQUAL(counter.Increment(), 1);
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         UNIT_ASSERT_EQUAL(counter.Add(5), 10);
     }
 
-    Y_UNIT_TEST(AtomicBlockCounterSeqno) { 
+    Y_UNIT_TEST(AtomicBlockCounterSeqno) {
         TAtomicBlockCounter counter;
         TAtomicBlockCounter::TResult res;
         counter.BlockA(res);
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         }
     }
 
-    Y_UNIT_TEST(Light) { 
+    Y_UNIT_TEST(Light) {
         TLight l;
         TIntrusivePtr<NMonitoring::TDynamicCounters> c(new NMonitoring::TDynamicCounters());
         l.Initialize(c, "l");
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         }
     }
 
-    Y_UNIT_TEST(LightOverflow) { 
+    Y_UNIT_TEST(LightOverflow) {
         TLight l;
         TIntrusivePtr<NMonitoring::TDynamicCounters> c(new NMonitoring::TDynamicCounters());
         l.Initialize(c, "l");
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(TPDiskUtil) {
         }
     }
 
-    Y_UNIT_TEST(DriveEstimator) { 
+    Y_UNIT_TEST(DriveEstimator) {
         TTempFileHandle file;
         file.Resize(1 << 30);
         TDriveEstimator estimator(file.Name());

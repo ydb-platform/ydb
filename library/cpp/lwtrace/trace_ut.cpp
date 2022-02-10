@@ -35,9 +35,9 @@ LWTRACE_USING(LWTRACE_UT_PROVIDER)
 
 using namespace NLWTrace;
 
-Y_UNIT_TEST_SUITE(LWTraceTrace) { 
+Y_UNIT_TEST_SUITE(LWTraceTrace) {
 #ifndef LWTRACE_DISABLE
-    Y_UNIT_TEST(Smoke) { 
+    Y_UNIT_TEST(Smoke) {
         TManager mngr(*Singleton<TProbeRegistry>(), true);
         TQuery q;
         bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
@@ -549,7 +549,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         UNIT_ASSERT_STRINGS_EQUAL(str, "OT_EQ (0)");
     }
 
-    Y_UNIT_TEST(Track) { 
+    Y_UNIT_TEST(Track) {
         TManager mngr(*Singleton<TProbeRegistry>(), true);
         TQuery q;
         bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(

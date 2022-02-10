@@ -41,7 +41,7 @@ constexpr size_t ChaCha::BLOCK_SIZE;
 void ChaCha::SetKey(const ui8* key, size_t size)
 {
   const char *constants;
-  Y_ASSERT((size == 16 || size == 32) && "key must be 16 or 32 bytes long"); 
+  Y_ASSERT((size == 16 || size == 32) && "key must be 16 or 32 bytes long");
 
   state_[4] = U8TO32_LITTLE(key + 0);
   state_[5] = U8TO32_LITTLE(key + 4);

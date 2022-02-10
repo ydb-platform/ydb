@@ -44,7 +44,7 @@ public:
     TWord Peek(ui8 count) const {
         if (!count)
             return 0;
-        Y_VERIFY_DEBUG(count <= TTraits::NumBits); 
+        Y_VERIFY_DEBUG(count <= TTraits::NumBits);
 
         if (!Mask)
             return *Data & TTraits::ElemMask(count);
@@ -64,7 +64,7 @@ public:
     TWord Read(ui8 count) {
         if (!count)
             return 0;
-        Y_VERIFY_DEBUG(count <= TTraits::NumBits); 
+        Y_VERIFY_DEBUG(count <= TTraits::NumBits);
 
         if (!Mask) {
             Current = *Data++;

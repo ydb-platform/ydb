@@ -546,8 +546,8 @@ public:
  * 4. Resume scan.
  * 5. Check number of scanned rows.
  */
-Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) { 
-    Y_UNIT_TEST(TestCompactionScan) { 
+Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
+    Y_UNIT_TEST(TestCompactionScan) {
         TMyEnvBase env;
         TRowsModel data;
 
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(TFlatTableCompactionScan) {
 }
 
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorTxLimit) { 
+Y_UNIT_TEST_SUITE(TFlatTableExecutorTxLimit) {
 
     struct TTxSchema : public ITransaction {
         TTxSchema(TActorId owner) : Owner(owner) { }
@@ -773,7 +773,7 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
         TRowsModel Rows;
     };
 
-    Y_UNIT_TEST(TestRunBackgroundSnapshot) { 
+    Y_UNIT_TEST(TestRunBackgroundSnapshot) {
         TMyEnvCompaction env;
 
         env.SendAsync(env.Rows.MakeRows(5));
@@ -782,7 +782,7 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
         env->DispatchEvents(options);
     }
 
-    Y_UNIT_TEST(TestChangeBackgroundSnapshotToRegular) { 
+    Y_UNIT_TEST(TestChangeBackgroundSnapshotToRegular) {
         TMyEnvCompaction env;
 
         env.BlockBackgroundQueue();
@@ -798,7 +798,7 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
         env->DispatchEvents(options2);
     }
 
-    Y_UNIT_TEST(TestRunBackgroundCompactionGen1) { 
+    Y_UNIT_TEST(TestRunBackgroundCompactionGen1) {
         TMyEnvCompaction env;
 
         env.BlockBackgroundQueue();
@@ -808,7 +808,7 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
         env->DispatchEvents(options);
     }
 
-    Y_UNIT_TEST(TestChangeBackgroundCompactionToRegular) { 
+    Y_UNIT_TEST(TestChangeBackgroundCompactionToRegular) {
         TMyEnvCompaction env;
 
         env.BlockBackgroundQueue();
@@ -825,7 +825,7 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
         env->DispatchEvents(options2);
     }
 
-    Y_UNIT_TEST(TestRunBackgroundCompactionGen2) { 
+    Y_UNIT_TEST(TestRunBackgroundCompactionGen2) {
         TMyEnvCompaction env;
 
         env.BlockBackgroundQueue();
@@ -836,7 +836,7 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
         env->DispatchEvents(options);
     }
 
-    Y_UNIT_TEST(TestChangeBackgroundSnapshotPriorityByTime) { 
+    Y_UNIT_TEST(TestChangeBackgroundSnapshotPriorityByTime) {
         TMyEnvCompaction env;
 
         env.BlockBackgroundQueue();
@@ -852,7 +852,7 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
         env->DispatchEvents(options2);
     }
 
-    Y_UNIT_TEST(TestChangeBackgroundCompactionPriorityByTime) { 
+    Y_UNIT_TEST(TestChangeBackgroundCompactionPriorityByTime) {
         TMyEnvCompaction env;
 
         env.BlockBackgroundQueue();
@@ -885,7 +885,7 @@ Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
 }
 
 
-Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) { 
+Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
 
     using namespace NKikimrResourceBroker;
     using namespace NResourceBroker;
@@ -929,7 +929,7 @@ Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
         TRowsModel Rows;
     };
 
-    Y_UNIT_TEST(TestPostponedScan) { 
+    Y_UNIT_TEST(TestPostponedScan) {
         TMyEnvScans env;
         TAutoPtr<IEventHandle> handle;
 
@@ -952,7 +952,7 @@ Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
         env.SendSync(new TEvTestFlatTablet::TEvCancelScan);
     }
 
-    Y_UNIT_TEST(TestCancelRunningPostponedScan) { 
+    Y_UNIT_TEST(TestCancelRunningPostponedScan) {
         TMyEnvScans env;
         TAutoPtr<IEventHandle> handle;
 
@@ -975,7 +975,7 @@ Y_UNIT_TEST_SUITE(TFlatTablePostponedScan) {
 
 }
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) { 
+Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
 
     struct TTaskSequence {
         struct TEvent {
@@ -1393,7 +1393,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
     };
 
 
-    Y_UNIT_TEST(TestExecutorSetResourceProfile) { 
+    Y_UNIT_TEST(TestExecutorSetResourceProfile) {
         TMyEnvProfiles env;
 
         env.SendSync(new NFake::TEvExecute{ new TTxCheckResourceProfile("profile1") });
@@ -1402,7 +1402,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
         env.SendSync(new NFake::TEvExecute{ new TTxCheckResourceProfile("profile1") }, true);
     }
 
-    Y_UNIT_TEST(TestExecutorRequestTxData) { 
+    Y_UNIT_TEST(TestExecutorRequestTxData) {
         TMyEnvProfiles env;
 
         // Request static memory.
@@ -1425,7 +1425,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                             {110 << 10, {"", "large_transaction"}}});
     }
 
-    Y_UNIT_TEST(TestExecutorStaticMemoryLimits) { 
+    Y_UNIT_TEST(TestExecutorStaticMemoryLimits) {
         TMyEnvProfiles env;
 
         const ui64 limit = env.Profile->GetStaticTabletTxMemoryLimit();
@@ -1444,7 +1444,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
         env.CheckMemoryRequest({{limit * 2 + 1, {}, true}});
     }
 
-    Y_UNIT_TEST(TestExecutorReuseStaticMemory) { 
+    Y_UNIT_TEST(TestExecutorReuseStaticMemory) {
         TMyEnvProfiles env;
 
         env.Profile->SetStaticTxMemoryLimit(100 << 20);
@@ -1461,11 +1461,11 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
         }
     }
 
-    Y_UNIT_TEST(TestExecutorTxDataLimitExceeded) { 
+    Y_UNIT_TEST(TestExecutorTxDataLimitExceeded) {
         TMyEnvProfiles().CheckMemoryRequest({{500 << 20, {}, false, true}});
     }
 
-    Y_UNIT_TEST(TestExecutorRequestPages) { 
+    Y_UNIT_TEST(TestExecutorRequestPages) {
         TMyEnvProfiles env;
 
         env.SendSync(env.Rows.MakeRows(100, 2 << 10));
@@ -1495,7 +1495,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                              0, {"large_transaction"}}});
     }
 
-    Y_UNIT_TEST(TestExecutorPageLimitExceeded) { 
+    Y_UNIT_TEST(TestExecutorPageLimitExceeded) {
         TMyEnvProfiles env;
 
         env.Profile->SetTxMemoryLimit(50 << 10);
@@ -1506,7 +1506,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                            {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, 0, {}, false, true}});
     }
 
-    Y_UNIT_TEST(TestExecutorRequestMemory) { 
+    Y_UNIT_TEST(TestExecutorRequestMemory) {
         TMyEnvProfiles env;
 
         env.SendSync(env.Rows.MakeRows(100, 2 << 10));
@@ -1546,7 +1546,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                            {{{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, 95 << 10, {"large_transaction"}}});
     }
 
-    Y_UNIT_TEST(TestExecutorMemoryLimitExceeded) { 
+    Y_UNIT_TEST(TestExecutorMemoryLimitExceeded) {
         TMyEnvProfiles env;
 
         env.Profile->SetTxMemoryLimit(50 << 10);
@@ -1556,7 +1556,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
         env.CheckMemoryRequest({{{1, 2, 3, 4, 5}, 45 << 10, {}, false, true}});
     }
 
-    Y_UNIT_TEST(TestExecutorPreserveTxData) { 
+    Y_UNIT_TEST(TestExecutorPreserveTxData) {
         TMyEnvProfiles env;
 
         // Preserved static replaces static.
@@ -1635,7 +1635,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                             {false, true, 500 << 20, {}, false, true}});
     }
 
-    Y_UNIT_TEST(TestExecutorTxDataGC) { 
+    Y_UNIT_TEST(TestExecutorTxDataGC) {
         TMyEnvProfiles env;
 
         // Preserve dynamic and drop it.
@@ -1644,7 +1644,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                             {true, 0, {}}});
     }
 
-    Y_UNIT_TEST(TestExecutorTxPartialDataHold) { 
+    Y_UNIT_TEST(TestExecutorTxPartialDataHold) {
         TMyEnvProfiles env;
 
         // Hold part of static data.
@@ -1659,7 +1659,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                             {false, true, 0, {}}});
     }
 
-    Y_UNIT_TEST(TestExecutorTxHoldAndUse) { 
+    Y_UNIT_TEST(TestExecutorTxHoldAndUse) {
         TMyEnvProfiles env;
 
         // Hold part of static data.
@@ -1677,7 +1677,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                             {false, true, 0, {"", "", "medium_transaction"}}});
     }
 
-    Y_UNIT_TEST(TestExecutorTxHoldOnRelease) { 
+    Y_UNIT_TEST(TestExecutorTxHoldOnRelease) {
         TMyEnvProfiles env;
 
         // Hold dynamic data on task extend. Merge two small tasks into one medium.
@@ -1689,7 +1689,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorResourceProfile) {
                             { false /* static */, true /* dynamic */ });
     }
 
-    Y_UNIT_TEST(TestUpdateConfig) { 
+    Y_UNIT_TEST(TestUpdateConfig) {
         TMyEnvProfiles env;
 
         // Request dynamic memory (large task).

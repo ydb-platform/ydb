@@ -3,8 +3,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/charset/wide.h>
 
-Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) { 
-    Y_UNIT_TEST(TestLeftPad) { 
+Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
+    Y_UNIT_TEST(TestLeftPad) {
         TStringStream ss;
         ss << LeftPad(10, 4, '0');
         UNIT_ASSERT_VALUES_EQUAL("0010", ss.Str());
@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
         UNIT_ASSERT_VALUES_EQUAL("222", ss.Str());
     }
 
-    Y_UNIT_TEST(TestRightPad) { 
+    Y_UNIT_TEST(TestRightPad) {
         TStringStream ss;
         ss << RightPad("aa", 4);
         UNIT_ASSERT_VALUES_EQUAL("aa  ", ss.Str());
@@ -24,14 +24,14 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
         UNIT_ASSERT_VALUES_EQUAL("aa", ss.Str());
     }
 
-    Y_UNIT_TEST(TestTime) { 
+    Y_UNIT_TEST(TestTime) {
         TStringStream ss;
 
         ss << "[" << Time << "] "
            << "qwqw" << TimeHumanReadable << Endl;
     }
 
-    Y_UNIT_TEST(TestHexReference) { 
+    Y_UNIT_TEST(TestHexReference) {
         /*
             One possible implementation of Hex() stores a reference to the given object.
             This can lead to wrong results if the given object is a temporary
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
         UNIT_ASSERT_VALUES_EQUAL("0x01234567", ss->Str());
     }
 
-    Y_UNIT_TEST(TestHexText) { 
+    Y_UNIT_TEST(TestHexText) {
         {
             TStringStream ss;
             ss << HexText(TStringBuf("abcи"));
@@ -60,13 +60,13 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
         }
     }
 
-    Y_UNIT_TEST(TestBin) { 
+    Y_UNIT_TEST(TestBin) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(Bin(static_cast<ui32>(2), nullptr)), "10");
         UNIT_ASSERT_VALUES_EQUAL(ToString(SBin(static_cast<i32>(-2), nullptr)), "-10");
         UNIT_ASSERT_VALUES_EQUAL(ToString(SBin(static_cast<i32>(-2))), "-0b00000000000000000000000000000010");
         UNIT_ASSERT_VALUES_EQUAL(ToString(SBin(static_cast<i32>(-2), HF_FULL)), "-00000000000000000000000000000010");
         UNIT_ASSERT_VALUES_EQUAL(ToString(Bin(static_cast<ui32>(15), nullptr)), "1111");
-        UNIT_ASSERT_VALUES_EQUAL(ToString(Bin(static_cast<ui32>(1))), "0b00000000000000000000000000000001"); 
+        UNIT_ASSERT_VALUES_EQUAL(ToString(Bin(static_cast<ui32>(1))), "0b00000000000000000000000000000001");
         UNIT_ASSERT_VALUES_EQUAL(ToString(Bin(static_cast<ui32>(-1))), "0b11111111111111111111111111111111");
         UNIT_ASSERT_VALUES_EQUAL(ToString(Bin(static_cast<i32>(-1))), "0b11111111111111111111111111111111");
         UNIT_ASSERT_VALUES_EQUAL(ToString(Bin(static_cast<i32>(-1), nullptr)), "11111111111111111111111111111111");
@@ -75,13 +75,13 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(Bin(static_cast<ui64>(1234587912357ull))), "0b0000000000000000000000010001111101110011001011001000100010100101");
     }
 
-    Y_UNIT_TEST(TestBinText) { 
+    Y_UNIT_TEST(TestBinText) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(BinText(TStringBuf("\1"))), "00000001");
         UNIT_ASSERT_VALUES_EQUAL(ToString(BinText(TStringBuf("\1\1"))), "00000001 00000001");
         UNIT_ASSERT_VALUES_EQUAL(ToString(BinText(TStringBuf("aaa"))), "01100001 01100001 01100001");
     }
 
-    Y_UNIT_TEST(TestPrec) { 
+    Y_UNIT_TEST(TestPrec) {
         TStringStream ss;
         ss << Prec(1.2345678901234567, PREC_AUTO);
         UNIT_ASSERT_VALUES_EQUAL("1.2345678901234567", ss.Str());
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
         UNIT_ASSERT_VALUES_EQUAL("1.235", ss.Str());
     }
 
-    Y_UNIT_TEST(TestHumanReadableSize1000) { 
+    Y_UNIT_TEST(TestHumanReadableSize1000) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(HumanReadableSize(0, SF_QUANTITY)), "0");
 
         UNIT_ASSERT_VALUES_EQUAL(ToString(HumanReadableSize(1, SF_QUANTITY)), "1");
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(HumanReadableSize(-12345678 * 1000ll, SF_QUANTITY)), "-12.3G");
     }
 
-    Y_UNIT_TEST(TestHumanReadableSize1024) { 
+    Y_UNIT_TEST(TestHumanReadableSize1024) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(HumanReadableSize(0, SF_BYTES)), "0B");
 
         UNIT_ASSERT_VALUES_EQUAL(ToString(HumanReadableSize(100, SF_BYTES)), "100B");
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(HumanReadableSize(-1010ll * 1024 * 1024 * 1024 * 1024, SF_BYTES)), "-1010TiB");
     }
 
-    Y_UNIT_TEST(TestHumanReadableDuration) { 
+    Y_UNIT_TEST(TestHumanReadableDuration) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(HumanReadable(TDuration::MicroSeconds(0))), "0us");
         UNIT_ASSERT_VALUES_EQUAL(ToString(HumanReadable(TDuration::MicroSeconds(1))), "1us");
         UNIT_ASSERT_VALUES_EQUAL(ToString(HumanReadable(TDuration::MicroSeconds(100))), "100us");

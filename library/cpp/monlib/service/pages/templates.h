@@ -188,12 +188,12 @@ namespace NMonitoring {
     };
 
     struct TOutputStreamRef {
-        TOutputStreamRef(IOutputStream& str) 
+        TOutputStreamRef(IOutputStream& str)
             : Str(str)
         {
         }
 
-        inline operator IOutputStream&() noexcept { 
+        inline operator IOutputStream&() noexcept {
             return Str;
         }
 
@@ -201,7 +201,7 @@ namespace NMonitoring {
             return true; // just to work with WITH_SCOPED
         }
 
-        IOutputStream& Str; 
+        IOutputStream& Str;
     };
 
     extern const char HtmlTag[5];

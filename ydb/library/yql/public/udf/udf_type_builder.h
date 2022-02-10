@@ -815,7 +815,7 @@ struct TCallableArgsHelper<> {
             ICallableTypeBuilder& callableBuilder,
             const IFunctionTypeInfoBuilder& builder)
     {
-        Y_UNUSED(callableBuilder); Y_UNUSED(builder); 
+        Y_UNUSED(callableBuilder); Y_UNUSED(builder);
     }
 };
 
@@ -857,7 +857,7 @@ struct TTupleHelper<> {
             ITupleTypeBuilder& tupleBuilder,
             const IFunctionTypeInfoBuilder& builder)
     {
-        Y_UNUSED(tupleBuilder); Y_UNUSED(builder); 
+        Y_UNUSED(tupleBuilder); Y_UNUSED(builder);
     }
 };
 
@@ -882,7 +882,7 @@ struct TTypeBuilderHelper<NUdf::TVariant<TArgs...>> {
 template <>
 struct TArgsHelper<> {
     static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) {
-        Y_UNUSED(builder); 
+        Y_UNUSED(builder);
         Y_UNUSED(name);
         Y_UNUSED(flags);
     }

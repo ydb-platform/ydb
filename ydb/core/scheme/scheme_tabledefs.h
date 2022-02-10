@@ -617,7 +617,7 @@ public:
         SCHEME_KEY_DESCRIPTION_STATUS_MAP(ENUM_VALUE_GEN)
     };
 
-    static void Out(IOutputStream& out, EStatus x); 
+    static void Out(IOutputStream& out, EStatus x);
 
     // one column operation (in)
     struct TColumnOp {

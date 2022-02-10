@@ -4,7 +4,7 @@
 
 #include <util/random/shuffle.h>
 #include <util/random/random.h>
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NSyncLog;
@@ -50,9 +50,9 @@ bool Equal(const TRecordsWithSerial& x, const TRecordsWithSerial& y) {
         Equal(x.BlocksV2, y.BlocksV2);
 }
 
-Y_UNIT_TEST_SUITE(ReorderCodecTest) { 
+Y_UNIT_TEST_SUITE(ReorderCodecTest) {
 
-    Y_UNIT_TEST(Basic) { 
+    Y_UNIT_TEST(Basic) {
         TRecordsWithSerial recsSrc;
 
         // logoblobs
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(ReorderCodecTest) {
 #include <library/cpp/codecs/huffman_codec.h>
 #include <library/cpp/codecs/solar_codec.h>
 
-Y_UNIT_TEST_SUITE(CodecsTest) { 
+Y_UNIT_TEST_SUITE(CodecsTest) {
 
     using namespace NCodecs;
 
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
         STR << "v size: " << sizeof(v1[0]) * v1.size() << "; encoded size: " << buf.Size() << "\n";
     }
 
-    Y_UNIT_TEST(Basic) { 
+    Y_UNIT_TEST(Basic) {
         // logoblobs
         TVector<ui32> v1 {20, 21, 22, 23, 24, 15, 19, 16, 17, 18, 20, 78, 89, 90, 91, 93, 74, 68, 69};
         TVector<ui32> v2 {15, 16, 17, 19, 19, 20, 21, 22, 25, 26, 29, 25, 26, 45, 46, 47, 47, 49, 50};
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
         Delta(v4);
     }
 
-    Y_UNIT_TEST(NaturalNumbersAndZero) { 
+    Y_UNIT_TEST(NaturalNumbersAndZero) {
         TVector<ui32> v;
         const ui32 n = 100000;
         v.reserve(n);
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(CodecsTest) {
         Delta(v);
     }
 
-    Y_UNIT_TEST(LargeAndRepeated) { 
+    Y_UNIT_TEST(LargeAndRepeated) {
         TVector<ui32> v;
 
         for (ui32 t = 0; t < 100; t++) {

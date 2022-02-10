@@ -101,7 +101,7 @@ namespace NWilson {
         }
 
         // Output trace id into a string stream
-        void Output(IOutputStream& s, const TTraceId& parentTraceId) const { 
+        void Output(IOutputStream& s, const TTraceId& parentTraceId) const {
             union {
                 ui8 buffer[3 * sizeof(ui64)];
                 struct {
@@ -122,7 +122,7 @@ namespace NWilson {
         }
 
         // output just span id into stream
-        void OutputSpanId(IOutputStream& s) const { 
+        void OutputSpanId(IOutputStream& s) const {
             const size_t base64size = Base64EncodeBufSize(sizeof(SpanId));
             char base64[base64size];
             char* end = Base64Encode(base64, reinterpret_cast<const ui8*>(&SpanId), sizeof(SpanId));

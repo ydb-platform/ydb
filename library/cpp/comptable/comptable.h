@@ -66,10 +66,10 @@ namespace NCompTable {
 template <>
 class TSerializer<NCompTable::TCompressorTable> {
 public:
-    static inline void Save(IOutputStream* out, const NCompTable::TCompressorTable& entry) { 
+    static inline void Save(IOutputStream* out, const NCompTable::TCompressorTable& entry) {
         SavePodType(out, entry);
     }
-    static inline void Load(IInputStream* in, NCompTable::TCompressorTable& entry) { 
+    static inline void Load(IInputStream* in, NCompTable::TCompressorTable& entry) {
         LoadPodType(in, entry);
     }
 };

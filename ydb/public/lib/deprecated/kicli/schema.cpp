@@ -66,7 +66,7 @@ ui16 TType::GetId() const {
 
 TSchemaObject::TSchemaObject(TKikimr& kikimr, const TString& path, const TString& name, ui64 pathId, EPathType pathType)
     : Kikimr(kikimr)
-    , Path(path.EndsWith('/') ? path + name : path + "/" + name) 
+    , Path(path.EndsWith('/') ? path + name : path + "/" + name)
     , Name(name)
     , PathId(pathId)
     , PathType(pathType)

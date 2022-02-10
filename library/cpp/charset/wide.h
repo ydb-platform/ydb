@@ -18,7 +18,7 @@
 //! @note @c dest buffer must fit at least @c len number of characters
 template <typename TCharType>
 inline size_t WideToChar(const TCharType* text, size_t len, char* dest, ECharset enc) {
-    Y_ASSERT(SingleByteCodepage(enc)); 
+    Y_ASSERT(SingleByteCodepage(enc));
 
     const char* start = dest;
 
@@ -57,21 +57,21 @@ namespace NDetail {
 
         template <typename TCharType>
         inline TBasicStringBuf<TCharType> RecodeSingleByteChar(const TStringBuf src, TCharType* dst, const CodePage& cp) {
-            Y_ASSERT(cp.SingleByteCodepage()); 
+            Y_ASSERT(cp.SingleByteCodepage());
             ::CharToWide(src.data(), src.size(), dst, cp);
             return TBasicStringBuf<TCharType>(dst, src.size());
         }
 
         template <typename TCharType>
         inline TStringBuf RecodeSingleByteChar(const TBasicStringBuf<TCharType> src, char* dst, const CodePage& cp) {
-            Y_ASSERT(cp.SingleByteCodepage()); 
+            Y_ASSERT(cp.SingleByteCodepage());
             ::WideToChar(src.data(), src.size(), dst, cp.CPEnum);
             return TStringBuf(dst, src.size());
         }
 
         template <typename TCharType>
         inline TBasicStringBuf<TCharType> RecodeMultiByteChar(const TStringBuf src, TCharType* dst, ECharset encoding) {
-            Y_ASSERT(!NCodepagePrivate::NativeCodepage(encoding)); 
+            Y_ASSERT(!NCodepagePrivate::NativeCodepage(encoding));
             size_t read = 0;
             size_t written = 0;
             ::NICONVPrivate::RecodeToUnicode(encoding, src.data(), dst, src.size(), src.size(), read, written);
@@ -80,7 +80,7 @@ namespace NDetail {
 
         template <typename TCharType>
         inline TStringBuf RecodeMultiByteChar(const TBasicStringBuf<TCharType> src, char* dst, ECharset encoding) {
-            Y_ASSERT(!NCodepagePrivate::NativeCodepage(encoding)); 
+            Y_ASSERT(!NCodepagePrivate::NativeCodepage(encoding));
             size_t read = 0;
             size_t written = 0;
             ::NICONVPrivate::RecodeFromUnicode(encoding, src.data(), dst, src.size(), src.size() * 3, read, written);

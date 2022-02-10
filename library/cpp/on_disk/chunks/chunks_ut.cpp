@@ -20,13 +20,13 @@ struct TPodStruct {
 template <>
 struct TSaveLoadVectorNonPodElement<TPodStruct> {
     typedef TPodStruct TItem;
-    static inline void Save(IOutputStream* out, const TItem& item) { 
+    static inline void Save(IOutputStream* out, const TItem& item) {
         TSerializer<int>::Save(out, item.x);
         TSerializer<float>::Save(out, item.y);
     }
 
-    static inline void Load(IInputStream* in, TItem& item, size_t elementSize) { 
-        Y_ASSERT(elementSize == sizeof(TItem)); 
+    static inline void Load(IInputStream* in, TItem& item, size_t elementSize) {
+        Y_ASSERT(elementSize == sizeof(TItem));
         TSerializer<int>::Load(in, item.x);
         TSerializer<float>::Load(in, item.y);
     }

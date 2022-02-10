@@ -52,7 +52,7 @@ namespace NTest {
             return Seq++, *row;
         }
 
-        void Describe(IOutputStream &out) const noexcept override 
+        void Describe(IOutputStream &out) const noexcept override
         {
             out
                 << "Std{"

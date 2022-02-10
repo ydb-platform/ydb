@@ -158,7 +158,7 @@ namespace NKikimr {
             static TString ExtractLogPosition(const TString &data);
             static bool CheckEntryPoint(const TString &data);
             TString ToString() const;
-            void RenderHtml(IOutputStream &str) const; 
+            void RenderHtml(IOutputStream &str) const;
             ui32 GetMinREALHugeBlobInBytes() const;
             ui64 FirstLsnToKeep() const;
             TString FirstLsnToKeepDecomposed() const;

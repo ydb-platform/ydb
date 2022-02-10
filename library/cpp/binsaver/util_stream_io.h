@@ -10,7 +10,7 @@ class TYaStreamInput: public IBinaryStream {
     IInputStream& Stream;
 
     int WriteImpl(const void*, int) override {
-        Y_ASSERT(0); 
+        Y_ASSERT(0);
         return 0;
     }
     int ReadImpl(void* userBuffer, int size) override {
@@ -53,7 +53,7 @@ class TYaStreamOutput: public IBinaryStream {
         return size;
     }
     int ReadImpl(void*, int) override {
-        Y_ASSERT(0); 
+        Y_ASSERT(0);
         return 0;
     }
     bool IsValid() const override {

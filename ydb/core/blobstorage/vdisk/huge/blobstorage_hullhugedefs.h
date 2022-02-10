@@ -136,7 +136,7 @@ namespace NKikimr {
                 return x;
             }
 
-            void Serialize(IOutputStream &str) const { 
+            void Serialize(IOutputStream &str) const {
                 str.Write(&ChunkId, sizeof(ui32));
                 str.Write(&Offset, sizeof(ui32));
                 str.Write(&Size, sizeof(ui32));
@@ -261,7 +261,7 @@ namespace NKikimr {
             }
 
             TBlobType::EType GetBlobType() const {
-                Y_VERIFY(!Empty()); 
+                Y_VERIFY(!Empty());
                 return DiskPtrs.size() == 1 ? TBlobType::HugeBlob : TBlobType::ManyHugeBlobs;
             }
 
@@ -342,12 +342,12 @@ namespace NKikimr {
                         ++locIt;
                         ++it;
                     } else if (Parts.Get(i)) {
-                        Y_VERIFY_DEBUG(locIt != locEnd); 
+                        Y_VERIFY_DEBUG(locIt != locEnd);
                         newDiskPtrs.push_back(*locIt);
                         newCircaLsns.push_back(CircaLsns[locIt - locBegin]);
                         ++locIt;
                     } else if (parts.Get(i)) {
-                        Y_VERIFY_DEBUG(it != end); 
+                        Y_VERIFY_DEBUG(it != end);
                         newDiskPtrs.push_back(*it);
                         newCircaLsns.push_back(circaLsn);
                         ++it;

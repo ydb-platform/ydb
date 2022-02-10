@@ -209,7 +209,7 @@ namespace NKikimr {
             }
 
             void Handle(TEvSyncLogReadFinished::TPtr &ev, const TActorContext &ctx) {
-                Y_UNUSED(ctx); 
+                Y_UNUSED(ctx);
                 NeighborsPtr->Unlock(ev->Get()->VDiskID);
                 ActiveActors.Erase(ev->Sender);
             }
@@ -245,7 +245,7 @@ namespace NKikimr {
             }
 
             void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-                Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::SyncLogId); 
+                Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::SyncLogId);
                 auto aid = ctx.RegisterWithSameMailbox(CreateGetHttpInfoActor(SlCtx->VCtx, GInfo, ev, SelfId(), KeeperId,
                     NeighborsPtr));
                 ActiveActors.Insert(aid);

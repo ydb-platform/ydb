@@ -538,8 +538,8 @@ void RestartTenantSlotBroker(TTenantTestRuntime &runtime)
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) { 
-    Y_UNIT_TEST(TestAllocateExactSlots) { 
+Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
+    Y_UNIT_TEST(TestAllocateExactSlots) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 3, 3, 0,
@@ -553,7 +553,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT3_TYPE, DATA_CENTER3, 1, 0, 0);
     }
 
-    Y_UNIT_TEST(TestAllocateExactSlotsMissing) { 
+    Y_UNIT_TEST(TestAllocateExactSlotsMissing) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 4, 3, 1,
@@ -567,7 +567,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT3_TYPE, DATA_CENTER3, 6, 0, 3);
     }
 
-    Y_UNIT_TEST(TestAllocateTypedSlots) { 
+    Y_UNIT_TEST(TestAllocateTypedSlots) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, ANY_DATA_CENTER, 3, 3, 0,
@@ -581,7 +581,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT3_TYPE, ANY_DATA_CENTER, 1, 0, 0);
     }
 
-    Y_UNIT_TEST(TestAllocateTypedSlotsAll) { 
+    Y_UNIT_TEST(TestAllocateTypedSlotsAll) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, ANY_DATA_CENTER, 9, 9, 0);
@@ -591,7 +591,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT1_TYPE, ANY_DATA_CENTER, 9, 0, 0);
     }
 
-    Y_UNIT_TEST(TestAllocateTypedSlotsMissing) { 
+    Y_UNIT_TEST(TestAllocateTypedSlotsMissing) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, ANY_DATA_CENTER, 10, 9, 1);
@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT1_TYPE, ANY_DATA_CENTER, 10, 0, 1);
     }
 
-    Y_UNIT_TEST(TestAllocateLocatedSlots) { 
+    Y_UNIT_TEST(TestAllocateLocatedSlots) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          ANY_SLOT_TYPE, DATA_CENTER1, 3, 3, 0,
@@ -616,7 +616,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          ANY_SLOT_TYPE, DATA_CENTER3, 3, 0, 0);
     }
 
-    Y_UNIT_TEST(TestAllocateLocatedSlotsAll) { 
+    Y_UNIT_TEST(TestAllocateLocatedSlotsAll) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          ANY_SLOT_TYPE, DATA_CENTER1, 9, 9, 0);
@@ -626,7 +626,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          ANY_SLOT_TYPE, DATA_CENTER1, 9, 0, 0);
     }
 
-    Y_UNIT_TEST(TestAllocateLocatedSlotsMissing) { 
+    Y_UNIT_TEST(TestAllocateLocatedSlotsMissing) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          ANY_SLOT_TYPE, DATA_CENTER1, 10, 9, 1);
@@ -636,7 +636,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          ANY_SLOT_TYPE, DATA_CENTER1, 10, 0, 1);
     }
 
-    Y_UNIT_TEST(TestAlterMoreStrictAndKeep) { 
+    Y_UNIT_TEST(TestAlterMoreStrictAndKeep) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 3, 3, 0);
@@ -650,7 +650,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          ANY_SLOT_TYPE, ANY_DATA_CENTER, 1, 0, 0);
     }
 
-    Y_UNIT_TEST(TestAlterLessStrictDataCenterAndKeep) { 
+    Y_UNIT_TEST(TestAlterLessStrictDataCenterAndKeep) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, ANY_DATA_CENTER, 3, 3, 0);
@@ -665,7 +665,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT1_TYPE, DATA_CENTER3, 1, 0, 0);
     }
 
-    Y_UNIT_TEST(TestAlterLessStrictTypeAndKeep) { 
+    Y_UNIT_TEST(TestAlterLessStrictTypeAndKeep) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          ANY_SLOT_TYPE, DATA_CENTER1, 3, 3, 0);
@@ -680,7 +680,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT3_TYPE, DATA_CENTER1, 1, 0, 0);
     }
 
-    Y_UNIT_TEST(TestAlterLessStrictTypeAndDataCenterAndKeep) { 
+    Y_UNIT_TEST(TestAlterLessStrictTypeAndDataCenterAndKeep) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          ANY_SLOT_TYPE, ANY_DATA_CENTER, 9, 9, 0);
@@ -701,7 +701,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT3_TYPE, DATA_CENTER3, 1, 0, 0);
     }
 
-    Y_UNIT_TEST(TestAlterAndDontKeep) { 
+    Y_UNIT_TEST(TestAlterAndDontKeep) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 3, 3, 0);
@@ -723,7 +723,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT2_TYPE, DATA_CENTER2, 1, 0, 0);
     }
 
-    Y_UNIT_TEST(TestAlterIncrease) { 
+    Y_UNIT_TEST(TestAlterIncrease) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 1, 1, 0);
@@ -741,7 +741,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT2_TYPE, DATA_CENTER1, 1, 0, 0);
     }
 
-    Y_UNIT_TEST(TestAlterDecrease) { 
+    Y_UNIT_TEST(TestAlterDecrease) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 3, 3, 0);
@@ -759,7 +759,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT2_TYPE, DATA_CENTER1, 1, 0, 0);
     }
 
-    Y_UNIT_TEST(TestAlterRemove) { 
+    Y_UNIT_TEST(TestAlterRemove) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 3, 3, 0);
@@ -780,7 +780,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT2_TYPE, DATA_CENTER1, 3, 0, 0);
     }
 
-    Y_UNIT_TEST(TestMoveSlotToAnotherTenant) { 
+    Y_UNIT_TEST(TestMoveSlotToAnotherTenant) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 2, 2, 0);
@@ -804,7 +804,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT1_TYPE, DATA_CENTER1, 2, 0, 0);
     }
 
-    Y_UNIT_TEST(TestMoveSlotWithFairShare) { 
+    Y_UNIT_TEST(TestMoveSlotWithFairShare) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, ANY_DATA_CENTER, 9, 9, 0);
@@ -841,7 +841,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT1_TYPE, ANY_DATA_CENTER, 4, 0, 2);
     }
 
-    Y_UNIT_TEST(TestDisconnectAndReconnect) { 
+    Y_UNIT_TEST(TestDisconnectAndReconnect) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, ANY_DATA_CENTER, 9, 9, 0);
@@ -909,7 +909,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
         }
     }
 
-    Y_UNIT_TEST(TestAddSlotToPool) { 
+    Y_UNIT_TEST(TestAddSlotToPool) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 3, 3, 0);
@@ -941,7 +941,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT1_TYPE, ANY_DATA_CENTER, 7, 0, 0);
     }
 
-    Y_UNIT_TEST(TestRemoveSlotFromPool) { 
+    Y_UNIT_TEST(TestRemoveSlotFromPool) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 3, 3, 0);
@@ -963,7 +963,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT1_TYPE, DATA_CENTER1, 3, 0, 1);
     }
 
-    Y_UNIT_TEST(TestChangeSlotType) { 
+    Y_UNIT_TEST(TestChangeSlotType) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 3, 3, 0);
@@ -994,7 +994,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT2_TYPE, DATA_CENTER1, 4, 0, 0);
     }
 
-    Y_UNIT_TEST(TestChangeSlotOwner) { 
+    Y_UNIT_TEST(TestChangeSlotOwner) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT2_TYPE, DATA_CENTER1, 3, 3, 0);
@@ -1046,7 +1046,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT1_TYPE, DATA_CENTER1, 3, 0, 0);
     }
 
-    Y_UNIT_TEST(TestRestartTablet) { 
+    Y_UNIT_TEST(TestRestartTablet) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 3, 3, 0);
@@ -1102,7 +1102,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                          SLOT2_TYPE, DATA_CENTER3, 3, 0, 0);
     }
 
-    Y_UNIT_TEST(TestListTenants) { 
+    Y_UNIT_TEST(TestListTenants) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 3, 3, 0);
@@ -1141,7 +1141,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
                                                 {SLOT2_TYPE, DATA_CENTER3, 3, 0, 0} }}} }});
     }
 
-    Y_UNIT_TEST(TestRandom) { 
+    Y_UNIT_TEST(TestRandom) {
         TTenantTestRuntime runtime(TenantTestConfig3DC());
 
         constexpr int NITERS = 10;
@@ -1231,7 +1231,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
         }
     }
 
-    Y_UNIT_TEST(TestSlotLabels) { 
+    Y_UNIT_TEST(TestSlotLabels) {
         TTenantTestRuntime runtime(TenantTestConfigSingleSlot());
         CheckAlterTenant(runtime, TENANT1_1_NAME,
                          SLOT1_TYPE, DATA_CENTER1, 1, 1, 0);

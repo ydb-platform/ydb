@@ -12,13 +12,13 @@ namespace NUtils {
 ///////////////////////////////////////////////////////////////////////////////
 class TCsvInputStream {
 public:
-    TCsvInputStream(IInputStream& slave, char delimiter = ';'); 
+    TCsvInputStream(IInputStream& slave, char delimiter = ';');
 
     TVector<TString> ReadLine();
     TVector<TString> ReadLineWithEscaping();
 
 private:
-    IInputStream& Slave_; 
+    IInputStream& Slave_;
     const char    Delim_;
 };
 
@@ -42,9 +42,9 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 // TCsvOutputStream
 ///////////////////////////////////////////////////////////////////////////////
-class TCsvOutputStream: public IOutputStream { 
+class TCsvOutputStream: public IOutputStream {
 public:
-    TCsvOutputStream(IOutputStream& slave, char delimiter = ';', bool quoteItems = true); 
+    TCsvOutputStream(IOutputStream& slave, char delimiter = ';', bool quoteItems = true);
 
     // hack for output empty values
     inline TCsvOutputStream& operator<<(const TString& value) {
@@ -71,7 +71,7 @@ private:
     void DoFlush() override;
 
 private:
-    IOutputStream& Slave_; 
+    IOutputStream& Slave_;
     bool WasNL_;
     const char Delim_;
     const bool QuoteItems_;

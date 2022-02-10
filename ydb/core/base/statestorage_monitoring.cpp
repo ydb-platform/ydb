@@ -150,7 +150,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
     void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &ev, const TActorContext &ctx) {
         const NKikimrStateStorage::TEvInfo &record = ev->Get()->Record;
         const ui64 cookie = record.GetCookie();
-        Y_VERIFY(cookie < ReplicasInfo.size()); 
+        Y_VERIFY(cookie < ReplicasInfo.size());
 
         auto &xinfo = ReplicasInfo[cookie];
 
@@ -175,7 +175,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
     }
 
     void HandleInit(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev); 
+        Y_UNUSED(ev);
         return Reply("unknown state storage", ctx);
     }
 

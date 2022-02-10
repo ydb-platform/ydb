@@ -61,8 +61,8 @@ namespace NTabletPipe {
         }
 
         void EvictionCallback(const ui64& key, TClientCacheEntry& value, ui64 size) {
-            Y_UNUSED(key); 
-            Y_UNUSED(size); 
+            Y_UNUSED(key);
+            Y_UNUSED(size);
             if (!value.Client)
                 return;
 
@@ -111,7 +111,7 @@ namespace NTabletPipe {
         }
 
         void Detach(const TActorContext& ctx) override {
-            Y_UNUSED(ctx); 
+            Y_UNUSED(ctx);
             Container->Clear();
             if (PoolContainer) {
                 PoolContainer->Clear();
@@ -141,7 +141,7 @@ namespace NTabletPipe {
         }
 
         void Close(const TActorContext& ctx, ui64 tabletId) override {
-            Y_UNUSED(ctx); 
+            Y_UNUSED(ctx);
             Container->Erase(tabletId);
             if (PoolContainer)
                 PoolContainer->Erase(tabletId);
@@ -184,7 +184,7 @@ namespace NTabletPipe {
         void MoveToPool(ui64 tabletId, const TClientCacheEntry& currentClient) {
             TClientCacheEntry* insertedClient;
             if (!PoolContainer->Insert(tabletId, currentClient, insertedClient)) {
-                Y_VERIFY_DEBUG(!insertedClient->Client); 
+                Y_VERIFY_DEBUG(!insertedClient->Client);
                 *insertedClient = currentClient;
             }
 
@@ -194,7 +194,7 @@ namespace NTabletPipe {
         void Erase(ui64 tabletId, const TActorId& clientId) {
             TClientCacheEntry* currentClient;
             if (Container->Find(tabletId, currentClient)) {
-                Y_VERIFY_DEBUG(!!currentClient->Client); 
+                Y_VERIFY_DEBUG(!!currentClient->Client);
                 if (!clientId || (currentClient->Client == clientId))
                     Container->Erase(tabletId);
             }

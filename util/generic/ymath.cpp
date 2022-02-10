@@ -11,8 +11,8 @@ float Exp2f(float x) {
 #ifdef _MSC_VER
 
 double Erf(double x) {
-    static constexpr double _M_2_SQRTPI = 1.12837916709551257390; 
-    static constexpr double eps = 1.0e-7; 
+    static constexpr double _M_2_SQRTPI = 1.12837916709551257390;
+    static constexpr double eps = 1.0e-7;
     if (fabs(x) >= 3.75)
         return x > 0 ? 1.0 : -1.0;
     double r = _M_2_SQRTPI * x;
@@ -29,12 +29,12 @@ double Erf(double x) {
 #endif // _MSC_VER
 
 double LogGammaImpl(double x) {
-    static constexpr double lnSqrt2Pi = 0.91893853320467274178; // log(sqrt(2.0 * PI)) 
-    static constexpr double coeff9 = 1.0 / 1188.0; 
-    static constexpr double coeff7 = -1.0 / 1680.0; 
-    static constexpr double coeff5 = 1.0 / 1260.0; 
-    static constexpr double coeff3 = -1.0 / 360.0; 
-    static constexpr double coeff1 = 1.0 / 12.0; 
+    static constexpr double lnSqrt2Pi = 0.91893853320467274178; // log(sqrt(2.0 * PI))
+    static constexpr double coeff9 = 1.0 / 1188.0;
+    static constexpr double coeff7 = -1.0 / 1680.0;
+    static constexpr double coeff5 = 1.0 / 1260.0;
+    static constexpr double coeff3 = -1.0 / 360.0;
+    static constexpr double coeff1 = 1.0 / 12.0;
 
     if ((x == 1.0) || (x == 2.0)) {
         return 0.0; // 0! = 1

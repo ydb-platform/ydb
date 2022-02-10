@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         return meta.Finish();
     }
 
-    Y_UNIT_TEST(Align) 
+    Y_UNIT_TEST(Align)
     {
         const std::array<ui64, 3> steps = {{ 200, 500, 1000 }};
 
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
                     && lookup5.Up.Blob == 1 && lookup5.Up.Skip == 20);
     }
 
-    Y_UNIT_TEST(Meta) 
+    Y_UNIT_TEST(Meta)
     {
         TString chunk1(5000000, '1');
         TString chunk2(15000000, '2');
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         }
     }
 
-    Y_UNIT_TEST(Grow) 
+    Y_UNIT_TEST(Grow)
     {
         const TMeta meta(MakeMeta(), 0);
         const std::array<ui32, 9> nums = {{ 0, 1, 2, 3, 4, 5, 6, 7, 8 }};
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         UNIT_ASSERT((grow(200) == 10));
     }
 
-    Y_UNIT_TEST(Groups) 
+    Y_UNIT_TEST(Groups)
     {
         const std::array<TGlobId, 6> globs = {{
             { TLogoBlobID(1, 2, 3, 1, 10, 0), 7 },
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         }
     }
 
-    Y_UNIT_TEST(Chop) 
+    Y_UNIT_TEST(Chop)
     {
         static const std::array<TLogoBlobID, 6> dash = {{
             TLogoBlobID(10, 20, 30, 1, 25, 0),

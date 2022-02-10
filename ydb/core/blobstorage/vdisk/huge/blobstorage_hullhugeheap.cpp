@@ -286,7 +286,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void TChain::RenderHtml(IOutputStream &str) const { 
+        void TChain::RenderHtml(IOutputStream &str) const {
             auto output = [&str] (const TFreeSpace &c) {
                 for (const auto &x : c) {
                     size_t freeSlots = 0;
@@ -375,7 +375,7 @@ namespace NKikimr {
             ChainPtr->GetOwnedChunks(chunks);
         }
 
-        void TChainDelegator::RenderHtml(IOutputStream &str) const { 
+        void TChainDelegator::RenderHtml(IOutputStream &str) const {
             HTML(str) {
                 TABLER() {
                     TABLED() {str << SlotSize << " / " << SlotsInChunk;}
@@ -384,7 +384,7 @@ namespace NKikimr {
             }
         }
 
-        void TChainDelegator::RenderHtmlForUsage(IOutputStream &str) const { 
+        void TChainDelegator::RenderHtmlForUsage(IOutputStream &str) const {
             HTML(str) {
                 TABLER() {
                     TABLED() {str << SlotSize;}
@@ -559,7 +559,7 @@ namespace NKikimr {
             return str.Str();
         }
 
-        void TAllChains::RenderHtml(IOutputStream &str) const { 
+        void TAllChains::RenderHtml(IOutputStream &str) const {
             HTML(str) {
                 TABLE_CLASS ("table table-condensed") {
                     TABLEHEAD() {
@@ -576,7 +576,7 @@ namespace NKikimr {
             }
         }
 
-        void TAllChains::RenderHtmlForUsage(IOutputStream &str) const { 
+        void TAllChains::RenderHtmlForUsage(IOutputStream &str) const {
             HTML(str) {
                 TABLE_CLASS ("table table-condensed") {
                     TABLEHEAD() {
@@ -852,7 +852,7 @@ namespace NKikimr {
         //////////////////////////////////////////////////////////////////////////////////////////
         // THeap: Output
         //////////////////////////////////////////////////////////////////////////////////////////
-        void THeap::RenderHtml(IOutputStream &str) const { 
+        void THeap::RenderHtml(IOutputStream &str) const {
             str << "\n";
             HTML(str) {
                 COLLAPSED_BUTTON_CONTENT("hugeheapusageid", "Heap Usage") {

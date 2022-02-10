@@ -1,7 +1,7 @@
 #include "blobstorage_syncquorum.h"
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/shuffle.h>
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 
 #define STR Cnull
 
@@ -9,7 +9,7 @@ using namespace NKikimr::NSync;
 
 namespace NKikimr {
 
-    Y_UNIT_TEST_SUITE(TQuorumTrackerTests) { 
+    Y_UNIT_TEST_SUITE(TQuorumTrackerTests) {
 
         TVector<TVDiskID> GetDisks(TBlobStorageGroupInfo *groupInfo) {
             TVector<TVDiskID> vdisks;
@@ -33,7 +33,7 @@ namespace NKikimr {
             UNIT_ASSERT(tracker.HasQuorum());
         }
 
-        Y_UNIT_TEST(ErasureNoneNeverHasQuorum_4_1) { 
+        Y_UNIT_TEST(ErasureNoneNeverHasQuorum_4_1) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureNone, 1, 4);
 
             auto vdisks = GetDisks(&groupInfo);
@@ -49,7 +49,7 @@ namespace NKikimr {
             UNIT_ASSERT(!tracker.HasQuorum());
         }
 
-        Y_UNIT_TEST(Erasure4Plus2BlockIncludingMyFailDomain_8_2) { 
+        Y_UNIT_TEST(Erasure4Plus2BlockIncludingMyFailDomain_8_2) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 8);
 
             auto vdisks = GetDisks(&groupInfo);
@@ -66,7 +66,7 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(Erasure4Plus2BlockNotIncludingMyFailDomain_8_2) { 
+        Y_UNIT_TEST(Erasure4Plus2BlockNotIncludingMyFailDomain_8_2) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::Erasure4Plus2Block, 2, 8);
 
             auto vdisks = GetDisks(&groupInfo);
@@ -83,7 +83,7 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(ErasureMirror3IncludingMyFailDomain_4_2) { 
+        Y_UNIT_TEST(ErasureMirror3IncludingMyFailDomain_4_2) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 4);
             auto vdisks = GetDisks(&groupInfo);
             const TVDiskID& self = vdisks[0];
@@ -93,7 +93,7 @@ namespace NKikimr {
             Check(tracker, vdisks, notYetQuorum, 6);
         }
 
-        Y_UNIT_TEST(ErasureMirror3IncludingMyFailDomain_5_2) { 
+        Y_UNIT_TEST(ErasureMirror3IncludingMyFailDomain_5_2) {
             TBlobStorageGroupInfo groupInfo(TBlobStorageGroupType::ErasureMirror3, 2, 5);
             auto vdisks = GetDisks(&groupInfo);
             const TVDiskID& self = vdisks[0];

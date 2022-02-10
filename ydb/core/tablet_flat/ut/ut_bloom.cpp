@@ -10,7 +10,7 @@
 namespace NKikimr {
 namespace NTable {
 
-Y_UNIT_TEST_SUITE(Bloom) { 
+Y_UNIT_TEST_SUITE(Bloom) {
     using namespace NTest;
 
     static const NTest::TMass Mass0(new NTest::TModelS3Hash, 24000, 42, 0.5);
@@ -104,14 +104,14 @@ Y_UNIT_TEST_SUITE(Bloom) {
         return alter;
     }
 
-    Y_UNIT_TEST(Conf) 
+    Y_UNIT_TEST(Conf)
     {
         NBloom::TEstimator estimator(0.001);
         UNIT_ASSERT(estimator.Hashes() > 0);
         UNIT_ASSERT(estimator.Bits(0) > 0);
     }
 
-    Y_UNIT_TEST(Hashes) 
+    Y_UNIT_TEST(Hashes)
     {
         const NTest::TRowTool tool(*Mass0.Model->Scheme);
 
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         UNIT_ASSERT_C(0x3841f2f07c20fc07 == salt, "Hash is broken");
     }
 
-    Y_UNIT_TEST(Rater) 
+    Y_UNIT_TEST(Rater)
     {
         const auto filter = TCooker::Make(Mass0, 0.001);
 
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         UNIT_ASSERT_C(rate < 0.001 * 1.3, "Bloom filter error " << rate);
     }
 
-    Y_UNIT_TEST(Dipping) 
+    Y_UNIT_TEST(Dipping)
     {
         double edge = 0.13, error = 0.1;
 
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         }
     }
 
-    Y_UNIT_TEST(Basics) 
+    Y_UNIT_TEST(Basics)
     {
         TDbExec me;
 
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(Bloom) {
         }
     }
 
-    Y_UNIT_TEST(Stairs) 
+    Y_UNIT_TEST(Stairs)
     {
         const ui32 Height = 99;
 

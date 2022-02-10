@@ -20,27 +20,27 @@
 #include <string_view>
 #include <cstdio>
 
-#if defined(_win_) 
+#if defined(_win_)
     #include <io.h>
-#endif 
+#endif
 
 constexpr size_t MAX_UTF8_BYTES = 4; // UTF-8-encoded code point takes between 1 and 4 bytes
 
-IOutputStream::IOutputStream() noexcept = default; 
+IOutputStream::IOutputStream() noexcept = default;
 
-IOutputStream::~IOutputStream() = default; 
+IOutputStream::~IOutputStream() = default;
 
-void IOutputStream::DoFlush() { 
+void IOutputStream::DoFlush() {
     /*
      * do nothing
      */
 }
 
-void IOutputStream::DoFinish() { 
+void IOutputStream::DoFinish() {
     Flush();
 }
 
-void IOutputStream::DoWriteV(const TPart* parts, size_t count) { 
+void IOutputStream::DoWriteV(const TPart* parts, size_t count) {
     for (size_t i = 0; i < count; ++i) {
         const TPart& part = parts[i];
 
@@ -69,7 +69,7 @@ void Out<wchar32>(IOutputStream& o, wchar32 ch) {
     o.Write(buffer, length);
 }
 
-static void WriteString(IOutputStream& o, const wchar16* w, size_t n) { 
+static void WriteString(IOutputStream& o, const wchar16* w, size_t n) {
     const size_t buflen = (n * MAX_UTF8_BYTES); // * 4 because the conversion functions can convert unicode character into maximum 4 bytes of UTF8
     TTempBuf buffer(buflen + 1);
     char* const data = buffer.Data();
@@ -90,12 +90,12 @@ static void WriteString(IOutputStream& o, const wchar32* w, size_t n) {
 }
 
 template <>
-void Out<TString>(IOutputStream& o, const TString& p) { 
+void Out<TString>(IOutputStream& o, const TString& p) {
     o.Write(p.data(), p.size());
 }
 
 template <>
-void Out<std::string>(IOutputStream& o, const std::string& p) { 
+void Out<std::string>(IOutputStream& o, const std::string& p) {
     o.Write(p.data(), p.length());
 }
 
@@ -130,7 +130,7 @@ void Out<TUtf32StringBuf>(IOutputStream& o, const TUtf32StringBuf& p) {
 }
 
 template <>
-void Out<const wchar16*>(IOutputStream& o, const wchar16* w) { 
+void Out<const wchar16*>(IOutputStream& o, const wchar16* w) {
     if (w) {
         WriteString(o, w, std::char_traits<wchar16>::length(w));
     } else {
@@ -148,7 +148,7 @@ void Out<const wchar32*>(IOutputStream& o, const wchar32* w) {
 }
 
 template <>
-void Out<TUtf16String>(IOutputStream& o, const TUtf16String& w) { 
+void Out<TUtf16String>(IOutputStream& o, const TUtf16String& w) {
     WriteString(o, w.c_str(), w.size());
 }
 
@@ -159,19 +159,19 @@ void Out<TUtf32String>(IOutputStream& o, const TUtf32String& w) {
 
 #define DEF_CONV_DEFAULT(type)                  \
     template <>                                 \
-    void Out<type>(IOutputStream & o, type p) { \ 
+    void Out<type>(IOutputStream & o, type p) { \
         o << ToString(p);                       \
     }
 
 #define DEF_CONV_CHR(type)                      \
     template <>                                 \
-    void Out<type>(IOutputStream & o, type p) { \ 
+    void Out<type>(IOutputStream & o, type p) { \
         o.Write((char)p);                       \
     }
 
 #define DEF_CONV_NUM(type, len)                                   \
     template <>                                                   \
-    void Out<type>(IOutputStream & o, type p) {                   \ 
+    void Out<type>(IOutputStream & o, type p) {                   \
         char buf[len];                                            \
         o.Write(buf, ToString(p, buf, sizeof(buf)));              \
     }                                                             \
@@ -211,12 +211,12 @@ void Out<typename std::vector<bool>::reference>(IOutputStream& o, const std::vec
 
 #ifndef TSTRING_IS_STD_STRING
 template <>
-void Out<TBasicCharRef<TString>>(IOutputStream& o, const TBasicCharRef<TString>& c) { 
+void Out<TBasicCharRef<TString>>(IOutputStream& o, const TBasicCharRef<TString>& c) {
     o << static_cast<char>(c);
 }
 
 template <>
-void Out<TBasicCharRef<TUtf16String>>(IOutputStream& o, const TBasicCharRef<TUtf16String>& c) { 
+void Out<TBasicCharRef<TUtf16String>>(IOutputStream& o, const TBasicCharRef<TUtf16String>& c) {
     o << static_cast<wchar16>(c);
 }
 
@@ -227,19 +227,19 @@ void Out<TBasicCharRef<TUtf32String>>(IOutputStream& o, const TBasicCharRef<TUtf
 #endif
 
 template <>
-void Out<const void*>(IOutputStream& o, const void* t) { 
+void Out<const void*>(IOutputStream& o, const void* t) {
     o << Hex(size_t(t));
 }
 
 template <>
-void Out<void*>(IOutputStream& o, void* t) { 
+void Out<void*>(IOutputStream& o, void* t) {
     Out<const void*>(o, t);
 }
 
 using TNullPtr = decltype(nullptr);
 
 template <>
-void Out<TNullPtr>(IOutputStream& o, TTypeTraits<TNullPtr>::TFuncParam) { 
+void Out<TNullPtr>(IOutputStream& o, TTypeTraits<TNullPtr>::TFuncParam) {
     o << TStringBuf("nullptr");
 }
 
@@ -258,7 +258,7 @@ namespace {
     public:
         using TLogFuncPtr = void (*)(int, const char*, const char*);
 
-        class TAndroidStdOutput: public IOutputStream { 
+        class TAndroidStdOutput: public IOutputStream {
         public:
             inline TAndroidStdOutput(TLogFuncPtr logFuncPtr) noexcept
                 : Buffer()
@@ -339,7 +339,7 @@ namespace {
 #endif // _android_
 
 namespace {
-    class TStdOutput: public IOutputStream { 
+    class TStdOutput: public IOutputStream {
     public:
         inline TStdOutput(FILE* f) noexcept
             : F_(f)
@@ -355,7 +355,7 @@ namespace {
                 // On Windows, if 'F_' is console -- 'fwrite' returns count of written characters.
                 // If, for example, console output codepage is UTF-8, then returned value is
                 // not equal to 'len'. So, we ignore some 'errno' values...
-                if ((errno == 0 || errno == EINVAL || errno == EILSEQ) && _isatty(fileno(F_))) { 
+                if ((errno == 0 || errno == EINVAL || errno == EILSEQ) && _isatty(fileno(F_))) {
                     return;
                 }
 #endif
@@ -401,7 +401,7 @@ namespace {
     };
 }
 
-IOutputStream& NPrivate::StdErrStream() noexcept { 
+IOutputStream& NPrivate::StdErrStream() noexcept {
 #if defined(_android_)
     if (TAndroidStdIOStreams::Enabled) {
         return TAndroidStdIOStreams::Instance().Err;
@@ -410,7 +410,7 @@ IOutputStream& NPrivate::StdErrStream() noexcept {
     return TStdIOStreams::Instance().Err;
 }
 
-IOutputStream& NPrivate::StdOutStream() noexcept { 
+IOutputStream& NPrivate::StdOutStream() noexcept {
 #if defined(_android_)
     if (TAndroidStdIOStreams::Enabled) {
         return TAndroidStdIOStreams::Instance().Out;
@@ -423,6 +423,6 @@ void RedirectStdioToAndroidLog(bool redirect) {
 #if defined(_android_)
     TAndroidStdIOStreams::Enabled = redirect;
 #else
-    Y_UNUSED(redirect); 
+    Y_UNUSED(redirect);
 #endif
 }

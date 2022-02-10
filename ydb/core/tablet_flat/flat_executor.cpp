@@ -440,7 +440,7 @@ void TExecutor::TranscriptBootOpResult(ui32 res, const TActorContext &ctx) {
 
         return Broken();
     default:
-        Y_FAIL("unknown boot result"); 
+        Y_FAIL("unknown boot result");
     }
 }
 
@@ -686,10 +686,10 @@ void TExecutor::FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext 
 }
 
 void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) {
-    Y_VERIFY(CurrentStateFunc() == &TThis::StateBoot && BootLogic); 
+    Y_VERIFY(CurrentStateFunc() == &TThis::StateBoot && BootLogic);
 
     TEvTablet::TEvRestored *msg = ev->Get();
-    Y_VERIFY(Generation() == msg->Generation); 
+    Y_VERIFY(Generation() == msg->Generation);
 
     const TExecutorBootLogic::EOpResult res = BootLogic->ReceiveRestored(ev);
     return TranscriptBootOpResult(res, ctx);
@@ -1400,7 +1400,7 @@ bool TExecutor::CanExecuteTransaction() const {
 }
 
 void TExecutor::Execute(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
-    Y_VERIFY(ActivationQueue, "attempt to execute transaction before activation"); 
+    Y_VERIFY(ActivationQueue, "attempt to execute transaction before activation");
 
     TAutoPtr<TSeat> seat = new TSeat(++TransactionUniqCounter, self);
 
@@ -1456,7 +1456,7 @@ void TExecutor::Execute(TAutoPtr<ITransaction> self, const TActorContext &ctx) {
 }
 
 void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ctx) {
-    Y_VERIFY_DEBUG(!ActiveTransaction); 
+    Y_VERIFY_DEBUG(!ActiveTransaction);
 
     ActiveTransaction = true;
     ++seat->Retries;
@@ -2398,7 +2398,7 @@ void TExecutor::MakeLogSnapshot() {
 }
 
 void TExecutor::Handle(TEvPrivate::TEvActivateExecution::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev); 
+    Y_UNUSED(ev);
     Y_VERIFY(ActivateTransactionInFlight > 0);
     ActivateTransactionInFlight--;
 
@@ -2615,7 +2615,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         return Broken();
     }
 
-    Y_VERIFY(msg->Generation == Generation()); 
+    Y_VERIFY(msg->Generation == Generation());
     const ui32 step = msg->Step;
 
     ActiveTransaction = true;
@@ -2656,7 +2656,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     case ECommit::Data:
         {
             auto it = InFlyCompactionGcBarriers.find(step);
-            Y_VERIFY(it != InFlyCompactionGcBarriers.end()); 
+            Y_VERIFY(it != InFlyCompactionGcBarriers.end());
             // just check, real barrier release on follower gc ack
         }
 
@@ -2665,7 +2665,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     case ECommit::Misc:
         break;
     default:
-        Y_FAIL("unknown event cookie"); 
+        Y_FAIL("unknown event cookie");
     }
 
     CheckYellow(std::move(msg->YellowMoveChannels), std::move(msg->YellowStopChannels));
@@ -3535,13 +3535,13 @@ bool TExecutor::CompactTables() {
 }
 
 STFUNC(TExecutor::StateInit) {
-    Y_UNUSED(ev); 
-    Y_UNUSED(ctx); 
-    Y_FAIL("must be no events before boot processing"); 
+    Y_UNUSED(ev);
+    Y_UNUSED(ctx);
+    Y_FAIL("must be no events before boot processing");
 }
 
 STFUNC(TExecutor::StateBoot) {
-    Y_VERIFY(BootLogic); 
+    Y_VERIFY(BootLogic);
     switch (ev->GetTypeRewrite()) {
         // N.B. must work during follower promotion to leader
         HFunc(TEvPrivate::TEvActivateExecution, Handle);

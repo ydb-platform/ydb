@@ -307,26 +307,26 @@ void TestDropTableCommon(TIntrusivePtr<IKikimrGateway> gateway) {
 } // namespace
 
 
-Y_UNIT_TEST_SUITE(KikimrIcGateway) { 
-    Y_UNIT_TEST(TestListPath) { 
+Y_UNIT_TEST_SUITE(KikimrIcGateway) {
+    Y_UNIT_TEST(TestListPath) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestListPathCommon(GetIcGateway(kikimr.GetTestServer()));
     }
 
-    Y_UNIT_TEST(TestLoadTableMetadata) { 
+    Y_UNIT_TEST(TestLoadTableMetadata) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestLoadTableMetadataCommon(GetIcGateway(kikimr.GetTestServer()));
     }
 
-    Y_UNIT_TEST(TestRunSimple) { 
+    Y_UNIT_TEST(TestRunSimple) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestRunSimpleCommon(GetIcGateway(kikimr.GetTestServer()));
     }
 
-    Y_UNIT_TEST(TestCreateTable) { 
+    Y_UNIT_TEST(TestCreateTable) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestCreateTableCommon(GetIcGateway(kikimr.GetTestServer()), kikimr.GetTestClient());
@@ -346,14 +346,14 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
             TTestIndexSettings{true});
     }
 
-    Y_UNIT_TEST(TestCreateTableNoFolder) { 
+    Y_UNIT_TEST(TestCreateTableNoFolder) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestCreateTableCommon(GetIcGateway(kikimr.GetTestServer()), kikimr.GetTestClient(), false, Nothing(),
             false, true);
     }
 
-    Y_UNIT_TEST(TestCreateSameTable) { 
+    Y_UNIT_TEST(TestCreateSameTable) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestCreateTableCommon(GetIcGateway(kikimr.GetTestServer()), kikimr.GetTestClient());
@@ -366,7 +366,7 @@ Y_UNIT_TEST_SUITE(KikimrIcGateway) {
             TTestIndexSettings{false});
     }
 
-    Y_UNIT_TEST(TestDropTable) { 
+    Y_UNIT_TEST(TestDropTable) {
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false));
         CreateSampleTables(kikimr);
         TestDropTableCommon(GetIcGateway(kikimr.GetTestServer()));

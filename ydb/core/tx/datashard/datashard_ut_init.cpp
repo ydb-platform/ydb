@@ -50,7 +50,7 @@ TString GetTablePath(TTestActorRuntime &runtime,
 
 }
 
-Y_UNIT_TEST_SUITE(TTxDataShardTestInit) { 
+Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
     Y_UNIT_TEST(TestMvccStateSwitch) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         waitFor([&]{ return datashard->GetSnapshotManager().GetMvccState() == NDataShard::EMvccState::MvccDisabled; }, "mvcc disabled");
     }
 
-    Y_UNIT_TEST(TestGetShardStateAfterInitialization) { 
+    Y_UNIT_TEST(TestGetShardStateAfterInitialization) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
 
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         runtime.DispatchEvents(options);
 
-        Y_UNUSED(sender); 
+        Y_UNUSED(sender);
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvGetShardState(sender));
         TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<TEvDataShard::TEvGetShardStateResult>(handle);

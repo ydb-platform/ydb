@@ -10,8 +10,8 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
-Y_UNIT_TEST_SUITE(TSchemeShardTest) { 
-    Y_UNIT_TEST(Boot) { 
+Y_UNIT_TEST_SUITE(TSchemeShardTest) {
+    Y_UNIT_TEST(Boot) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
     }
@@ -2426,7 +2426,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
 #if 0 // KIKIMR-1452
-    Y_UNIT_TEST(CreateSameTable) { 
+    Y_UNIT_TEST(CreateSameTable) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -3969,7 +3969,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    Y_UNIT_TEST(AlterTableKeyColumns) { 
+    Y_UNIT_TEST(AlterTableKeyColumns) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -4216,7 +4216,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::PathVersionEqual(11)});
     }
 
-    Y_UNIT_TEST(ConfigColumnFamily) { 
+    Y_UNIT_TEST(ConfigColumnFamily) {
         using NKikimrSchemeOp::EColumnCodec;
         using NKikimrSchemeOp::EColumnCache;
         using NKikimrSchemeOp::EColumnStorage;
@@ -7030,7 +7030,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     void TestSerializedCellVec(TVector<TCell>& cells) {
-        TString serialized = TSerializedCellVec::Serialize(TArrayRef<const TCell>(cells)); 
+        TString serialized = TSerializedCellVec::Serialize(TArrayRef<const TCell>(cells));
         UNIT_ASSERT_VALUES_EQUAL_C(cells.empty(), serialized.empty(), "Empty/non-empty mismatch");
         TSerializedCellVec deserialized(serialized);
         UNIT_ASSERT_VALUES_EQUAL_C(cells.size(), deserialized.GetCells().size(), "Sizes don't match");
@@ -7846,7 +7846,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
     }
 
-    Y_UNIT_TEST(AssignBlockStoreVolumeDuringAlter) { 
+    Y_UNIT_TEST(AssignBlockStoreVolumeDuringAlter) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;

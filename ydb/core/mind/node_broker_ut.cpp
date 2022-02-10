@@ -642,8 +642,8 @@ void RestartNodeBroker(TTestActorRuntime &runtime)
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(TNodeBrokerTest) { 
-    Y_UNIT_TEST(BasicFunctionality) 
+Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
+    Y_UNIT_TEST(BasicFunctionality)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4);
@@ -1076,8 +1076,8 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TDynamicNameserverTest) { 
-    Y_UNIT_TEST(BasicFunctionality) 
+Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
+    Y_UNIT_TEST(BasicFunctionality)
     {
         TTestBasicRuntime runtime(8, false);
         Setup(runtime);

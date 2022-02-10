@@ -3,7 +3,7 @@
 #include <util/generic/array_ref.h>
 #include <util/generic/strbuf.h>
 
-class IInputStream; 
+class IInputStream;
 
 class MD5 {
 public:
@@ -38,7 +38,7 @@ public:
     // 8-byte xor-based mix
     ui64 EndHalfMix();
 
-    MD5& Update(IInputStream* in); 
+    MD5& Update(IInputStream* in);
 
     /*
      * Return hex-encoded md5 checksum for given file.
@@ -48,11 +48,11 @@ public:
     static char* File(const char* filename, char* buf);
     static TString File(const TString& filename);
 
-    static char* Data(const void* data, size_t len, char* buf); 
+    static char* Data(const void* data, size_t len, char* buf);
     static char* Data(const TArrayRef<const ui8>& data, char* buf);
     static TString Data(const TArrayRef<const ui8>& data);
     static TString Data(TStringBuf data);
-    static char* Stream(IInputStream* in, char* buf); 
+    static char* Stream(IInputStream* in, char* buf);
 
     static TString Calc(TStringBuf data);                     // 32-byte hex-encoded
     static TString Calc(const TArrayRef<const ui8>& data);    // 32-byte hex-encoded

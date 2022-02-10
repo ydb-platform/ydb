@@ -526,7 +526,7 @@ public:
     }
 
     NUdf::TType* Build() const override {
-        Y_VERIFY(ReturnType_, "callable returns type is not configured"); 
+        Y_VERIFY(ReturnType_, "callable returns type is not configured");
 
         NMiniKQL::TNode* payload = nullptr;
 

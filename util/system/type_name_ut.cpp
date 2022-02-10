@@ -8,8 +8,8 @@
 #include <stdexcept>
 #include <string>
 
-Y_UNIT_TEST_SUITE(TDemangleTest) { 
-    Y_UNIT_TEST(SimpleTest) { 
+Y_UNIT_TEST_SUITE(TDemangleTest) {
+    Y_UNIT_TEST(SimpleTest) {
         // just check it does not crash or leak
         CppDemangle("hello");
         CppDemangle("");

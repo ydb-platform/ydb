@@ -12,7 +12,7 @@
 namespace NKikimr {
     namespace NGRpcProxy {
 
-        class TGRpcClient::TImpl : ISimpleThread { 
+        class TGRpcClient::TImpl : ISimpleThread {
             struct IProcessorBase {
                 virtual ~IProcessorBase() = default;
                 virtual void Start() = 0;
@@ -195,7 +195,7 @@ namespace NKikimr {
                 if (config.Timeout != TDuration::Max()) {
                     Timeout = config.Timeout;
                 }
-                ISimpleThread::Start(); 
+                ISimpleThread::Start();
             }
 
             ~TImpl() {

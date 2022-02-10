@@ -19,7 +19,7 @@ namespace NKikimr {
             , Value(value)
         {}
 
-        void Output(IOutputStream &str) const; 
+        void Output(IOutputStream &str) const;
 
     private:
         NKikimrWhiteboard::EFlag Light;

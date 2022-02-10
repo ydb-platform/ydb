@@ -1,7 +1,7 @@
 LIBRARY()
 
-OWNER(gulin) 
- 
+OWNER(gulin)
+
 NO_UTIL()
 
 NO_COMPILER_WARNINGS()

@@ -12,9 +12,9 @@ using namespace NMiniKQL;
 
 static const NScheme::TTypeId Uint32Id = NScheme::NTypeIds::Uint32;
 
-Y_UNIT_TEST_SUITE(TFunctionsMetadataTest) 
+Y_UNIT_TEST_SUITE(TFunctionsMetadataTest)
 {
-    Y_UNIT_TEST(Serialization) { 
+    Y_UNIT_TEST(Serialization) {
         static TFunctionParamMetadata AddUi32Metadata[] = {
             { Uint32Id, 0 }, // result
             { Uint32Id, 0 }, // first arg

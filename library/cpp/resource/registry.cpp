@@ -69,8 +69,8 @@ namespace {
         }
 
         void FindMatch(const TStringBuf subkey, IMatch& cb) const override {
-            for (const auto& it : *this) { 
-                if (it.first.StartsWith(subkey)) { 
+            for (const auto& it : *this) {
+                if (it.first.StartsWith(subkey)) {
                     // temporary
                     // https://st.yandex-team.ru/DEVTOOLS-3985
                     try {

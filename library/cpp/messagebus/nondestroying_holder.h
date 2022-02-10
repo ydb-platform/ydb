@@ -16,7 +16,7 @@ public:
     }
 
     ~TNonDestroyingHolder() {
-        Y_VERIFY(!*this, "stored object must be explicitly released"); 
+        Y_VERIFY(!*this, "stored object must be explicitly released");
     }
 };
 
@@ -34,6 +34,6 @@ public:
     }
 
     inline ~TNonDestroyingAutoPtr() {
-        Y_VERIFY(!*this, "stored object must be explicitly released"); 
+        Y_VERIFY(!*this, "stored object must be explicitly released");
     }
 };

@@ -23,8 +23,8 @@ namespace NKikimr {
 
 namespace NDriverClient {
 
-    void DumpProxyErrorCodes(IOutputStream &o, const NKikimrClient::TResponse &response); 
-    void DumpSchemeErrorCode(IOutputStream &o, const NKikimrClient::TResponse &response); 
+    void DumpProxyErrorCodes(IOutputStream &o, const NKikimrClient::TResponse &response);
+    void DumpSchemeErrorCode(IOutputStream &o, const NKikimrClient::TResponse &response);
 
     int SchemeInitRoot(TCommandConfig &cmdConf, int argc, char** argv);
     int BSAdmCreateVSlots(TCommandConfig &cmdConf, int argc, char **argv);

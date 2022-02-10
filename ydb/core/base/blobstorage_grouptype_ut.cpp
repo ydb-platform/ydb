@@ -4,15 +4,15 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/printf.h>
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 
 namespace NKikimr {
 
 #define STR Cnull
 
-Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) { 
+Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) {
 
-    Y_UNIT_TEST(TestCorrectLayout) { 
+    Y_UNIT_TEST(TestCorrectLayout) {
         TBlobStorageGroupType groupType(TBlobStorageGroupType::Erasure3Plus1Stripe);
 
         ui32 blobSubgroupSize = groupType.BlobSubgroupSize();
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupTypeTest) {
 #undef CORRECTION_DESCRIPTION
     }
 
-    Y_UNIT_TEST(OutputInfoAboutErasureSpecies) { 
+    Y_UNIT_TEST(OutputInfoAboutErasureSpecies) {
         for (int i = TErasureType::ErasureNone; i < TErasureType::ErasureSpeciesCount; i++) {
             auto es = (TErasureType::EErasureSpecies)i;
             TBlobStorageGroupType groupType(es);

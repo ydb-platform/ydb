@@ -48,7 +48,7 @@ void AssertPointEqual(const NProto::TPoint& p, TInstant time, i64 value) {
     UNIT_ASSERT_VALUES_EQUAL(p.GetInt64(), value);
 }
 
-Y_UNIT_TEST_SUITE(TSpackTest) { 
+Y_UNIT_TEST_SUITE(TSpackTest) {
     ui8 expectedHeader_v1_0[] = {
         0x53, 0x50,             // magic "SP"                     (fixed ui16)
     // minor, major
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         return MakeIntrusive<TSummaryDoubleSnapshot>(10.1, -0.45, 0.478, 0.3, 30u);
     }
 
-    Y_UNIT_TEST(Encode) { 
+    Y_UNIT_TEST(Encode) {
         TBuffer buffer;
         TBufferOutput out(buffer);
         auto e = EncoderSpackV1(
@@ -669,19 +669,19 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         }
     }
 
-    Y_UNIT_TEST(CompressionIdentity) { 
+    Y_UNIT_TEST(CompressionIdentity) {
         TestCompression(ECompression::IDENTITY);
     }
 
-    Y_UNIT_TEST(CompressionZlib) { 
+    Y_UNIT_TEST(CompressionZlib) {
         TestCompression(ECompression::ZLIB);
     }
 
-    Y_UNIT_TEST(CompressionZstd) { 
+    Y_UNIT_TEST(CompressionZstd) {
         TestCompression(ECompression::ZSTD);
     }
 
-    Y_UNIT_TEST(CompressionLz4) { 
+    Y_UNIT_TEST(CompressionLz4) {
         TestCompression(ECompression::LZ4);
     }
 

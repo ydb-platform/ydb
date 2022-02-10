@@ -44,7 +44,7 @@ public:
 
     void Handle(TEvLocal::TEvEnumerateTabletsResult::TPtr &ev, const TActorContext &ctx) {
         const NKikimrLocal::TEvEnumerateTabletsResult &record = ev->Get()->Record;
-        Y_VERIFY(record.HasStatus()); 
+        Y_VERIFY(record.HasStatus());
         THolder<ResponseType> response(new ResponseType());
         if (record.GetStatus() != NKikimrProto::OK) {
             response->Record.SetStatus(MSTATUS_ERROR);
@@ -82,7 +82,7 @@ public:
     }
 
     TEvLocal::TEvEnumerateTablets* MakeReq(const TActorContext &ctx) {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
         if (IsFiltered) {
             return new TEvLocal::TEvEnumerateTablets(TabletType);
         }
@@ -90,8 +90,8 @@ public:
     }
 
     NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx) {
-        Y_UNUSED(ctx); 
-        Y_UNUSED(status); 
+        Y_UNUSED(ctx);
+        Y_UNUSED(status);
         ui64 nodeId = IsNodeIdPresent ? NodeId : ctx.SelfID.NodeId();
         THolder<ResponseType> response(new ResponseType());
         response->Record.SetStatus(MSTATUS_ERROR);
@@ -101,13 +101,13 @@ public:
     }
 
     void HandleTimeout(const TActorContext &ctx) {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
         TAutoPtr<TBusResponse> response(new TBusResponseStatus(MSTATUS_TIMEOUT, ""));
         TBase::SendReplyAndDie(response.Release(), ctx);
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev); 
+        Y_UNUSED(ev);
         THolder<ResponseType> response(new ResponseType());
         ui64 nodeId = IsNodeIdPresent ? NodeId : ctx.SelfID.NodeId();
         response->Record.SetStatus(MSTATUS_ERROR);

@@ -30,7 +30,7 @@ namespace NTest {
             return *row;
         }
 
-        void Describe(IOutputStream &out) const noexcept override 
+        void Describe(IOutputStream &out) const noexcept override
         {
             out << "Model2Cols";
         }

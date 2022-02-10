@@ -981,21 +981,21 @@ public:
 
     void TestPrefixSuffix() {
         const TStringType emptyStr;
-        UNIT_ASSERT_EQUAL(emptyStr.StartsWith('x'), false); 
-        UNIT_ASSERT_EQUAL(emptyStr.EndsWith('x'), false); 
-        UNIT_ASSERT_EQUAL(emptyStr.StartsWith(0), false); 
-        UNIT_ASSERT_EQUAL(emptyStr.EndsWith(0), false); 
-        UNIT_ASSERT_EQUAL(emptyStr.StartsWith(emptyStr), true); 
-        UNIT_ASSERT_EQUAL(emptyStr.EndsWith(emptyStr), true); 
+        UNIT_ASSERT_EQUAL(emptyStr.StartsWith('x'), false);
+        UNIT_ASSERT_EQUAL(emptyStr.EndsWith('x'), false);
+        UNIT_ASSERT_EQUAL(emptyStr.StartsWith(0), false);
+        UNIT_ASSERT_EQUAL(emptyStr.EndsWith(0), false);
+        UNIT_ASSERT_EQUAL(emptyStr.StartsWith(emptyStr), true);
+        UNIT_ASSERT_EQUAL(emptyStr.EndsWith(emptyStr), true);
 
         const char_type chars[] = {'h', 'e', 'l', 'l', 'o', 0};
         const TStringType str(chars);
-        UNIT_ASSERT_EQUAL(str.StartsWith('h'), true); 
-        UNIT_ASSERT_EQUAL(str.StartsWith('o'), false); 
-        UNIT_ASSERT_EQUAL(str.EndsWith('o'), true); 
-        UNIT_ASSERT_EQUAL(str.EndsWith('h'), false); 
-        UNIT_ASSERT_EQUAL(str.StartsWith(emptyStr), true); 
-        UNIT_ASSERT_EQUAL(str.EndsWith(emptyStr), true); 
+        UNIT_ASSERT_EQUAL(str.StartsWith('h'), true);
+        UNIT_ASSERT_EQUAL(str.StartsWith('o'), false);
+        UNIT_ASSERT_EQUAL(str.EndsWith('o'), true);
+        UNIT_ASSERT_EQUAL(str.EndsWith('h'), false);
+        UNIT_ASSERT_EQUAL(str.StartsWith(emptyStr), true);
+        UNIT_ASSERT_EQUAL(str.EndsWith(emptyStr), true);
     }
 
 #ifndef TSTRING_IS_STD_STRING

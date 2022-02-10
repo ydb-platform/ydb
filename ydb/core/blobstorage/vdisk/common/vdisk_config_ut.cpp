@@ -5,7 +5,7 @@
 
 namespace NKikimr {
 
-    Y_UNIT_TEST_SUITE(TVDiskConfigTest) { 
+    Y_UNIT_TEST_SUITE(TVDiskConfigTest) {
 
 
         Y_UNIT_TEST(JustConfig) {
@@ -18,7 +18,7 @@ namespace NKikimr {
                     TPDiskCategory::DEVICE_TYPE_ROT, 0x01, kind, 1, {});
         }
 
-        Y_UNIT_TEST(Basic) { 
+        Y_UNIT_TEST(Basic) {
             TString prototext = R"___(
             VDiskKinds {
                 Kind: Test1
@@ -42,7 +42,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(cfg->FreshReadReadyMode, false);
         }
 
-        Y_UNIT_TEST(RtmrProblem1) { 
+        Y_UNIT_TEST(RtmrProblem1) {
             TString prototext = R"___(
             VDiskKinds {
             Kind: Log
@@ -60,7 +60,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(cfg->FreshUseDreg, true);
         }
 
-        Y_UNIT_TEST(RtmrProblem2) { 
+        Y_UNIT_TEST(RtmrProblem2) {
             TString prototext = R"___(
             VDiskKinds {
             Kind: Log
@@ -86,7 +86,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(cfg->FreshUseDreg, true);
         }
 
-        Y_UNIT_TEST(ThreeLevels) { 
+        Y_UNIT_TEST(ThreeLevels) {
             TString prototext = R"___(
             VDiskKinds {
                 Kind: Test1
@@ -118,7 +118,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(cfgGrand->FreshBufSizeLogoBlobs, 64);
         }
 
-        Y_UNIT_TEST(NoMoneyNoHoney) { 
+        Y_UNIT_TEST(NoMoneyNoHoney) {
             TString prototext;
             TAllVDiskKinds kinds(prototext);
             TIntrusivePtr<TVDiskConfig> cfg;

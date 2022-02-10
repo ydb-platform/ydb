@@ -17,7 +17,7 @@
 namespace {
     struct TFeatureCheck {
         inline TFeatureCheck()
-            : Accept4(nullptr) 
+            : Accept4(nullptr)
             , HaveSockNonBlock(false)
         {
 #if defined(_unix_) && defined(SOCK_NONBLOCK)
@@ -32,10 +32,10 @@ namespace {
     #endif
 
                 if (Accept4) {
-                    Accept4(-1, nullptr, nullptr, SOCK_NONBLOCK); 
+                    Accept4(-1, nullptr, nullptr, SOCK_NONBLOCK);
 
                     if (errno == ENOSYS) {
-                        Accept4 = nullptr; 
+                        Accept4 = nullptr;
                     }
                 }
             }

@@ -1,17 +1,17 @@
 #include "blobstorage_hullstorageratio.h"
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/null.h> 
- 
+#include <util/stream/null.h>
+
 namespace NKikimr {
 
 #define STR Cnull
 
     using namespace NHullComp;
 
-    Y_UNIT_TEST_SUITE(TBlobStorageHullStorageRatio) { 
+    Y_UNIT_TEST_SUITE(TBlobStorageHullStorageRatio) {
 
-        Y_UNIT_TEST(Test) { 
+        Y_UNIT_TEST(Test) {
             TSstRatio Ratio;
 
             // item

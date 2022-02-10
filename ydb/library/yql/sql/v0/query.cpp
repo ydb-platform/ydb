@@ -474,10 +474,10 @@ public:
             if (!type) {
                 return false;
             }
-            Y_ASSERT(type->IsList()); 
-            Y_ASSERT(type->GetChildrenCount() > 1); 
+            Y_ASSERT(type->IsList());
+            Y_ASSERT(type->GetChildrenCount() > 1);
             auto typeName = type->GetChild(0);
-            Y_ASSERT(typeName->IsAtom()); 
+            Y_ASSERT(typeName->IsAtom());
             if (typeName->GetContent() == "OptionalType") {
                 ctx.Error(col.Pos) << "CREATE TABLE clause requires non-optional column types in scheme";
                 return false;

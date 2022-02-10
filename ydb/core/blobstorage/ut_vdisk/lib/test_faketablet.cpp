@@ -31,7 +31,7 @@ class TFakeTabletLogChannelActor : public NActors::TActorBootstrapped<TFakeTable
     }
 
     void Handle(TEvents::TEvCompleted::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev); 
+        Y_UNUSED(ev);
         Iteration(ctx);
     }
 
@@ -78,7 +78,7 @@ class TFakeTabletHugeBlobChannelActor : public NActors::TActorBootstrapped<TFake
     }
 
     void Handle(TEvents::TEvCompleted::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev); 
+        Y_UNUSED(ev);
         ctx.Schedule(WaitTime, new TEvents::TEvWakeup());
     }
 
@@ -137,7 +137,7 @@ class TFakeTabletActor : public NActors::TActorBootstrapped<TFakeTabletActor> {
     }
 
     void Handle(TEvents::TEvCompleted::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev); 
+        Y_UNUSED(ev);
         Counter--;
         if (Counter == 0)
             Finish(ctx);
@@ -190,7 +190,7 @@ class TFakeTabletLoadActor : public NActors::TActorBootstrapped<TFakeTabletLoadA
     }
 
     void Handle(TEvents::TEvCompleted::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev); 
+        Y_UNUSED(ev);
         Counter--;
         if (Counter == 0)
             Finish(ctx);

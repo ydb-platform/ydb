@@ -53,7 +53,7 @@ namespace NKikimr {
                 Committed = true;
             }
 
-            void DumpQueue(IOutputStream& str) { 
+            void DumpQueue(IOutputStream& str) {
                 HTML(str) {
                     TABLE() {
                         TABLEHEAD() {
@@ -251,7 +251,7 @@ namespace NKikimr {
                 ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
             }
 
-            void ProcessQueue(IOutputStream& str, const TString& queue) { 
+            void ProcessQueue(IOutputStream& str, const TString& queue) {
                 TVector<std::tuple<TString, TMaybe<TParams>, ui32>> items;
 
                 HTML(str) {

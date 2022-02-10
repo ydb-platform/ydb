@@ -30,7 +30,7 @@ namespace NKikimr {
                 case Lz4Signature: return ECodec::Lz4;
                 case OrderedLz4Signature: return ECodec::OrderedLz4;
                 case CustomCodecSignature: return ECodec::CustomCodec;
-                default: Y_FAIL("Unknown codec; signature# %" PRIu64, signature); 
+                default: Y_FAIL("Unknown codec; signature# %" PRIu64, signature);
             }
         }
 
@@ -81,7 +81,7 @@ namespace NKikimr {
                     Steps.push_back(id.Step());
                     Cookies.push_back(id.Cookie());
                     Sizes.push_back(id.BlobSize());
-                    Y_VERIFY_DEBUG(id.PartId() == 0); 
+                    Y_VERIFY_DEBUG(id.PartId() == 0);
                     Ingresses.push_back(x.Ingress.Raw());
                     Counters.push_back(x.Counter);
                 }
@@ -106,7 +106,7 @@ namespace NKikimr {
 
             ui32 Size() const {
                 const ui32 blobsSize = TabletIds.size();
-                Y_VERIFY_DEBUG(blobsSize == Channels.size() && blobsSize == Generations.size() && 
+                Y_VERIFY_DEBUG(blobsSize == Channels.size() && blobsSize == Generations.size() &&
                              blobsSize == Steps.size() && blobsSize == Cookies.size() &&
                              blobsSize == Sizes.size() && blobsSize == Ingresses.size() &&
                              blobsSize == Counters.size());
@@ -135,7 +135,7 @@ namespace NKikimr {
                 Counters.resize(blobsSize);
             }
 
-            virtual void Encode(IOutputStream &str) = 0; 
+            virtual void Encode(IOutputStream &str) = 0;
             virtual const char *Decode(const char *pos, const char *end) = 0;
             virtual size_t GetEncodedApproximationSize() const = 0;
         };
@@ -145,7 +145,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         class TLogoBlobColumnsTrivialCodec : public TLogoBlobColumns {
         public:
-            virtual void Encode(IOutputStream &str) override { 
+            virtual void Encode(IOutputStream &str) override {
                 const ui32 blobsSize = Size();
                 str.Write(&blobsSize, sizeof(ui32));
                 if (blobsSize) {
@@ -245,7 +245,7 @@ namespace NKikimr {
                 pos += bufSize;
 
                 size_t decodedSize = decoded.Size();
-                Y_VERIFY(decodedSize == blobsSize * sizeof(TNumber), 
+                Y_VERIFY(decodedSize == blobsSize * sizeof(TNumber),
                        "decodedSize# %zu blobSize# %" PRIu32 " sizeof(TNumber)=%zu",
                        decodedSize, blobsSize, sizeof(TNumber));
                 v.clear();
@@ -266,7 +266,7 @@ namespace NKikimr {
                 PFor64Codec.Reset(new TPForCodec<ui64, false>);
             }
 
-            virtual void Encode(IOutputStream &str) override { 
+            virtual void Encode(IOutputStream &str) override {
                 const ui32 blobsSize = Size();
                 str.Write(&blobsSize, sizeof(ui32));
                 if (blobsSize) {
@@ -325,7 +325,7 @@ namespace NKikimr {
                         LogoBlobsColumns.reset(new TLogoBlobColumnsCustomCodec);
                         break;
                     default:
-                        Y_FAIL("Unexpected case"); 
+                        Y_FAIL("Unexpected case");
                 }
             }
 

@@ -34,8 +34,8 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(TKesusTest) { 
-    Y_UNIT_TEST(TestKesusConfig) { 
+Y_UNIT_TEST_SUITE(TKesusTest) {
+    Y_UNIT_TEST(TestKesusConfig) {
         TTestContext ctx;
         ctx.Setup();
 
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.SetConfig(12345, MakeConfig("/foo/bar/baz"), 41, Ydb::StatusIds::PRECONDITION_FAILED);
     }
 
-    Y_UNIT_TEST(TestRegisterProxy) { 
+    Y_UNIT_TEST(TestRegisterProxy) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyProxyRegistered(proxy, 1);
     }
 
-    Y_UNIT_TEST(TestRegisterProxyBadGeneration) { 
+    Y_UNIT_TEST(TestRegisterProxyBadGeneration) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.MustRegisterProxy(proxy, 2, Ydb::StatusIds::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(TestRegisterProxyFromDeadActor) { 
+    Y_UNIT_TEST(TestRegisterProxyFromDeadActor) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->Register(new TDyingActor());
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyProxyNotRegistered(proxy);
     }
 
-    Y_UNIT_TEST(TestRegisterProxyLinkFailure) { 
+    Y_UNIT_TEST(TestRegisterProxyLinkFailure) {
         TTestContext ctx;
         ctx.Setup(2);
         // register proxy from the second node
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyProxyNotRegistered(proxy);
     }
 
-    Y_UNIT_TEST(TestUnregisterProxy) { 
+    Y_UNIT_TEST(TestUnregisterProxy) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyProxyNotRegistered(proxy);
     }
 
-    Y_UNIT_TEST(TestUnregisterProxyBadGeneration) { 
+    Y_UNIT_TEST(TestUnregisterProxyBadGeneration) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.MustUnregisterProxy(proxy, 1, Ydb::StatusIds::BAD_SESSION);
     }
 
-    Y_UNIT_TEST(TestAttachNewSessions) { 
+    Y_UNIT_TEST(TestAttachNewSessions) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyProxyHasSessions(proxy, 1, {1, 2});
     }
 
-    Y_UNIT_TEST(TestAttachMissingSession) { 
+    Y_UNIT_TEST(TestAttachMissingSession) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::SESSION_EXPIRED);
     }
 
-    Y_UNIT_TEST(TestAttachOldGeneration) { 
+    Y_UNIT_TEST(TestAttachOldGeneration) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyProxyHasSessions(proxy, 2, {1});
     }
 
-    Y_UNIT_TEST(TestAttachOutOfSequence) { 
+    Y_UNIT_TEST(TestAttachOutOfSequence) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy1 = ctx.Runtime->AllocateEdgeActor();
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyProxyHasSessions(proxy1, 1, {1});
     }
 
-    Y_UNIT_TEST(TestAttachOutOfSequenceInTx) { 
+    Y_UNIT_TEST(TestAttachOutOfSequenceInTx) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyProxyHasSessions(proxy, 1, {1});
     }
 
-    Y_UNIT_TEST(TestAttachThenReRegister) { 
+    Y_UNIT_TEST(TestAttachThenReRegister) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifySessionExists(1);
     }
 
-    Y_UNIT_TEST(TestAttachFastPath) { 
+    Y_UNIT_TEST(TestAttachFastPath) {
         TTestContext ctx;
         ctx.Setup();
         EnableRelaxedAttach(ctx);
@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(111, proxy2, 1), 2);
     }
 
-    Y_UNIT_TEST(TestAttachFastPathBlocked) { 
+    Y_UNIT_TEST(TestAttachFastPathBlocked) {
         TTestContext ctx;
         ctx.Setup();
         EnableRelaxedAttach(ctx);
@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(222, proxy2, 1), 1);
     }
 
-    Y_UNIT_TEST(TestSessionDetach) { 
+    Y_UNIT_TEST(TestSessionDetach) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy1 = ctx.Runtime->AllocateEdgeActor();
@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.MustDetachSession(proxy1, 1, 1);
     }
 
-    Y_UNIT_TEST(TestSessionDetachFutureId) { 
+    Y_UNIT_TEST(TestSessionDetachFutureId) {
         TTestContext ctx;
         ctx.Setup();
         EnableRelaxedAttach(ctx);
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         UNIT_ASSERT_VALUES_EQUAL(ctx.ExpectAttachSessionResult(111, proxy, 1), 1);
     }
 
-    Y_UNIT_TEST(TestSessionDestroy) { 
+    Y_UNIT_TEST(TestSessionDestroy) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy1 = ctx.Runtime->AllocateEdgeActor();
@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 2);
     }
 
-    Y_UNIT_TEST(TestAttachTimeoutTooBig) { 
+    Y_UNIT_TEST(TestAttachTimeoutTooBig) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -339,7 +339,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetError().GetStatus(), Ydb::StatusIds::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(TestSessionTimeoutAfterDetach) { 
+    Y_UNIT_TEST(TestSessionTimeoutAfterDetach) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -354,7 +354,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyProxyHasSessions(proxy, 1, {});
     }
 
-    Y_UNIT_TEST(TestSessionTimeoutAfterReboot) { 
+    Y_UNIT_TEST(TestSessionTimeoutAfterReboot) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -368,7 +368,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifySessionNotFound(1);
     }
 
-    Y_UNIT_TEST(TestSessionTimeoutAfterUnregister) { 
+    Y_UNIT_TEST(TestSessionTimeoutAfterUnregister) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSessionId(), 1);
     }
 
-    Y_UNIT_TEST(TestSessionStealing) { 
+    Y_UNIT_TEST(TestSessionStealing) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy1 = ctx.Runtime->AllocateEdgeActor();
@@ -456,13 +456,13 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyProxyHasSessions(proxy2, 222, {});
     }
 
-    Y_UNIT_TEST(TestLockNotFound) { 
+    Y_UNIT_TEST(TestLockNotFound) {
         TTestContext ctx;
         ctx.Setup();
         ctx.VerifyLockNotFound("Lock1");
     }
 
-    Y_UNIT_TEST(TestAcquireLocks) { 
+    Y_UNIT_TEST(TestAcquireLocks) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifySessionNotFound(2);
     }
 
-    Y_UNIT_TEST(TestAcquireRepeat) { 
+    Y_UNIT_TEST(TestAcquireRepeat) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -519,7 +519,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockExclusive("Lock1", 1);
     }
 
-    Y_UNIT_TEST(TestAcquireDowngrade) { 
+    Y_UNIT_TEST(TestAcquireDowngrade) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -537,7 +537,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockShared("Lock1", {1});
     }
 
-    Y_UNIT_TEST(TestAcquireUpgrade) { 
+    Y_UNIT_TEST(TestAcquireUpgrade) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -551,7 +551,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockShared("Lock1", {1}); // still locked in shared mode
     }
 
-    Y_UNIT_TEST(TestAcquireTimeout) { 
+    Y_UNIT_TEST(TestAcquireTimeout) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy1 = ctx.Runtime->AllocateEdgeActor();
@@ -588,7 +588,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockShared("Lock2", {1});
     }
 
-    Y_UNIT_TEST(TestAcquireBeforeTimeoutViaRelease) { 
+    Y_UNIT_TEST(TestAcquireBeforeTimeoutViaRelease) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy1 = ctx.Runtime->AllocateEdgeActor();
@@ -623,7 +623,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockExclusive("Lock2", 2);
     }
 
-    Y_UNIT_TEST(TestAcquireBeforeTimeoutViaSessionTimeout) { 
+    Y_UNIT_TEST(TestAcquireBeforeTimeoutViaSessionTimeout) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy1 = ctx.Runtime->AllocateEdgeActor();
@@ -662,7 +662,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockExclusive("Lock2", 2);
     }
 
-    Y_UNIT_TEST(TestAcquireBeforeTimeoutViaModeChange) { 
+    Y_UNIT_TEST(TestAcquireBeforeTimeoutViaModeChange) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy1 = ctx.Runtime->AllocateEdgeActor();
@@ -702,7 +702,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockShared("Lock2", {1, 2});
     }
 
-    Y_UNIT_TEST(TestAcquireSharedBlocked) { 
+    Y_UNIT_TEST(TestAcquireSharedBlocked) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -729,7 +729,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockWaiters("Lock1", {});
     }
 
-    Y_UNIT_TEST(TestAcquireTimeoutAfterReboot) { 
+    Y_UNIT_TEST(TestAcquireTimeoutAfterReboot) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -760,7 +760,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockWaiters("Lock1", {});
     }
 
-    Y_UNIT_TEST(TestAcquireWaiterDowngrade) { 
+    Y_UNIT_TEST(TestAcquireWaiterDowngrade) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -780,7 +780,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockShared("Lock1", {1, 2});
     }
 
-    Y_UNIT_TEST(TestAcquireWaiterUpgrade) { 
+    Y_UNIT_TEST(TestAcquireWaiterUpgrade) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -800,7 +800,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockWaiters("Lock1", {2});
     }
 
-    Y_UNIT_TEST(TestAcquireWaiterChangeTimeoutToZero) { 
+    Y_UNIT_TEST(TestAcquireWaiterChangeTimeoutToZero) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -829,7 +829,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifyLockWaiters("Lock1", {});
     }
 
-    Y_UNIT_TEST(TestAcquireWaiterRelease) { 
+    Y_UNIT_TEST(TestAcquireWaiterRelease) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -846,7 +846,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.ExpectAcquireLockResult(222, proxy, 1, Ydb::StatusIds::ABORTED);
     }
 
-    Y_UNIT_TEST(TestReleaseLockFailure) { 
+    Y_UNIT_TEST(TestReleaseLockFailure) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -862,7 +862,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.MustReleaseLock(333, proxy, 1, 2, "Lock1", false);
     }
 
-    Y_UNIT_TEST(TestCreateSemaphore) { 
+    Y_UNIT_TEST(TestCreateSemaphore) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -885,7 +885,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifySemaphoreNotFound("Sem2");
     }
 
-    Y_UNIT_TEST(TestDeleteSemaphore) { 
+    Y_UNIT_TEST(TestDeleteSemaphore) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -901,7 +901,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.DeleteSemaphore("Sem1", Ydb::StatusIds::NOT_FOUND);
     }
 
-    Y_UNIT_TEST(TestAcquireSemaphore) { 
+    Y_UNIT_TEST(TestAcquireSemaphore) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -937,7 +937,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.ExpectAcquireSemaphoreResult(333, proxy, 1, Ydb::StatusIds::ABORTED);
     }
 
-    Y_UNIT_TEST(TestReleaseSemaphore) { 
+    Y_UNIT_TEST(TestReleaseSemaphore) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -963,7 +963,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifySemaphoreWaiters("Sem1", {});
     }
 
-    Y_UNIT_TEST(TestAcquireSemaphoreTimeout) { 
+    Y_UNIT_TEST(TestAcquireSemaphoreTimeout) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -985,7 +985,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifySemaphoreWaiters("Sem1", {});
     }
 
-    Y_UNIT_TEST(TestAcquireSemaphoreTimeoutTooBig) { 
+    Y_UNIT_TEST(TestAcquireSemaphoreTimeoutTooBig) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -997,7 +997,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.ExpectAcquireSemaphoreResult(111, proxy, 1, Ydb::StatusIds::BAD_REQUEST);
     }
 
-    Y_UNIT_TEST(TestAcquireSemaphoreTimeoutInfinite) { 
+    Y_UNIT_TEST(TestAcquireSemaphoreTimeoutInfinite) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -1016,7 +1016,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifySemaphoreWaiters("Sem1", {2});
     }
 
-    Y_UNIT_TEST(TestAcquireSemaphoreRebootTimeout) { 
+    Y_UNIT_TEST(TestAcquireSemaphoreRebootTimeout) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -1033,7 +1033,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifySemaphoreOwners("Sem1", {});
     }
 
-    Y_UNIT_TEST(TestAcquireSemaphoreViaDecrease) { 
+    Y_UNIT_TEST(TestAcquireSemaphoreViaDecrease) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -1065,7 +1065,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifySemaphoreWaiters("Sem1", {});
     }
 
-    Y_UNIT_TEST(TestAcquireSemaphoreViaRelease) { 
+    Y_UNIT_TEST(TestAcquireSemaphoreViaRelease) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -1091,7 +1091,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifySemaphoreWaiters("Sem1", {});
     }
 
-    Y_UNIT_TEST(TestSemaphoreData) { 
+    Y_UNIT_TEST(TestSemaphoreData) {
         TTestContext ctx;
         ctx.Setup();
 
@@ -1125,7 +1125,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.VerifySemaphoreNotFound("Sem3");
     }
 
-    Y_UNIT_TEST(TestDescribeSemaphoreWatches) { 
+    Y_UNIT_TEST(TestDescribeSemaphoreWatches) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();
@@ -1279,7 +1279,7 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         }
     }
 
-    Y_UNIT_TEST(TestSemaphoreSessionFailures) { 
+    Y_UNIT_TEST(TestSemaphoreSessionFailures) {
         TTestContext ctx;
         ctx.Setup();
         auto proxy = ctx.Runtime->AllocateEdgeActor();

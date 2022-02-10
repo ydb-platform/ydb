@@ -1,9 +1,9 @@
 #include "blobstorage_hullhugeheap.h"
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 
- 
+
 // change to Cerr if you want logging
 #define STR Cnull
 
@@ -11,9 +11,9 @@ namespace NKikimr {
 
     using namespace NHuge;
 
-    Y_UNIT_TEST_SUITE(TBlobStorageHullHugeDefs) { 
+    Y_UNIT_TEST_SUITE(TBlobStorageHullHugeDefs) {
 
-        Y_UNIT_TEST(FreeRes1) { 
+        Y_UNIT_TEST(FreeRes1) {
             TMask mask;
             mask.Set(0, 8);
             mask.Reset(1);
@@ -38,7 +38,7 @@ namespace NKikimr {
     }
 
 
-    Y_UNIT_TEST_SUITE(TBlobStorageHullHugeChain) { 
+    Y_UNIT_TEST_SUITE(TBlobStorageHullHugeChain) {
 
         /////////////////////////////////////////////////////////////////////////////////////////////////////////
         void AllocateScenaryOneChunk(TChain &chain, TVector<NPrivate::TChunkSlot> &arr, ui32 slotsInChunk) {
@@ -85,15 +85,15 @@ namespace NKikimr {
             FreeScenaryOneChunk(chain, arr, slotsInChunk);
         }
 
-        Y_UNIT_TEST(HeapAllocSmall) { 
+        Y_UNIT_TEST(HeapAllocSmall) {
             AllocFreeOneChunk(8);
         }
 
-        Y_UNIT_TEST(HeapAllocLargeStandard) { 
+        Y_UNIT_TEST(HeapAllocLargeStandard) {
             AllocFreeOneChunk(128);
         }
 
-        Y_UNIT_TEST(HeapAllocLargeNonStandard) { 
+        Y_UNIT_TEST(HeapAllocLargeNonStandard) {
             AllocFreeOneChunk(143);
         }
 
@@ -184,11 +184,11 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(AllocFreeAllocTest) { 
+        Y_UNIT_TEST(AllocFreeAllocTest) {
             AllocFreeAlloc(8);
         }
 
-        Y_UNIT_TEST(AllocFreeRestartAllocTest) { 
+        Y_UNIT_TEST(AllocFreeRestartAllocTest) {
             AllocFreeRestartAlloc(8);
         }
     }
@@ -247,7 +247,7 @@ namespace NKikimr {
         }
     }
 
-    Y_UNIT_TEST_SUITE(TBlobStorageHullHugeLayout) { 
+    Y_UNIT_TEST_SUITE(TBlobStorageHullHugeLayout) {
 
         Y_UNIT_TEST(TestOldAppendBlockSize) {
             TAllChains all("vdisk", 134274560, 56896, 512 << 10, 512 << 10, 10 << 20, 8, false);
@@ -279,9 +279,9 @@ namespace NKikimr {
     }
 
 
-    Y_UNIT_TEST_SUITE(TBlobStorageHullHugeHeap) { 
+    Y_UNIT_TEST_SUITE(TBlobStorageHullHugeHeap) {
 
-        Y_UNIT_TEST(AllocateAllFromOneChunk) { 
+        Y_UNIT_TEST(AllocateAllFromOneChunk) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
             ui32 minHugeBlobInBytes = 512u << 10u;
@@ -348,7 +348,7 @@ namespace NKikimr {
             UNIT_ASSERT_EQUAL(c1 + c2, 8);
         }
 
-        Y_UNIT_TEST(AllocateAllReleaseAll) { 
+        Y_UNIT_TEST(AllocateAllReleaseAll) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
             ui32 minHugeBlobInBytes = 512u << 10u;
@@ -363,7 +363,7 @@ namespace NKikimr {
             FreeScenary(heap, arr);
         }
 
-        Y_UNIT_TEST(AllocateAllSerializeDeserializeReleaseAll) { 
+        Y_UNIT_TEST(AllocateAllSerializeDeserializeReleaseAll) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
             ui32 minHugeBlobInBytes = 512u << 10u;
@@ -383,7 +383,7 @@ namespace NKikimr {
             FreeScenary(newHeap, arr);
         }
 
-        Y_UNIT_TEST(RecoveryMode) { 
+        Y_UNIT_TEST(RecoveryMode) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
             ui32 minHugeBlobInBytes = 512u << 10u;
@@ -412,7 +412,7 @@ namespace NKikimr {
             heap.RecoveryModeAllocate(TDiskPart(34, 0, 6u << 20u));
         }
 
-        Y_UNIT_TEST(BorderValues) { 
+        Y_UNIT_TEST(BorderValues) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
             ui32 minHugeBlobInBytes = 512u << 10u;

@@ -3,14 +3,14 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/datetime/cputimer.h>
 
 #include <limits>
 
 template <class T>
 static inline T SlowClp2(T t) noexcept {
-    Y_ASSERT(t > 0); 
+    Y_ASSERT(t > 0);
 
     T ret = 1;
 

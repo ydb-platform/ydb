@@ -66,8 +66,8 @@ size_t NDiff::InlineDiff(TVector<TChunk<char>>& chunks, const TStringBuf& left, 
     TCollection<char> c2(right, delims);
     TVector<TChunk<ui64>> diff;
     const size_t dist = InlineDiff<ui64>(diff, c1.GetKeys(), c2.GetKeys());
-    for (const auto& it : diff) { 
-        chunks.push_back(TChunk<char>(c1.Remap(it.Left), c2.Remap(it.Right), c1.Remap(it.Common))); 
+    for (const auto& it : diff) {
+        chunks.push_back(TChunk<char>(c1.Remap(it.Left), c2.Remap(it.Right), c1.Remap(it.Common)));
     }
     return dist;
 }
@@ -80,7 +80,7 @@ size_t NDiff::InlineDiff(TVector<TChunk<wchar16>>& chunks, const TWtringBuf& lef
     TCollection<wchar16> c2(right, delims);
     TVector<TChunk<ui64>> diff;
     const size_t dist = InlineDiff<ui64>(diff, c1.GetKeys(), c2.GetKeys());
-    for (const auto& it : diff) { 
+    for (const auto& it : diff) {
         chunks.push_back(TChunk<wchar16>(c1.Remap(it.Left), c2.Remap(it.Right), c1.Remap(it.Common)));
     }
     return dist;

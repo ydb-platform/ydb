@@ -17,7 +17,7 @@ TTaskTracker::TTaskTracker(NActor::TExecutor* executor)
 }
 
 TTaskTracker::~TTaskTracker() {
-    Y_ASSERT(Tasks.Empty()); 
+    Y_ASSERT(Tasks.Empty());
 }
 
 void TTaskTracker::Shutdown() {
@@ -36,7 +36,7 @@ void TTaskTracker::ProcessItem(NActor::TDefaultTag, NActor::TDefaultTag, ITaskFa
 }
 
 void TTaskTracker::ProcessItem(NActor::TDefaultTag, NActor::TDefaultTag, TTaskTrackerReceipt* receipt) {
-    Y_ASSERT(!receipt->Empty()); 
+    Y_ASSERT(!receipt->Empty());
     receipt->Unlink();
     delete receipt;
 }

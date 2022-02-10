@@ -21,7 +21,7 @@ namespace NKikimr {
                 , NodesInfo(nodesInfo)
             {}
 
-            void operator() (IOutputStream &str, TNeighbors::TConstIterator it) { 
+            void operator() (IOutputStream &str, TNeighbors::TConstIterator it) {
                 HTML(str) {
                     SMALL() {
                         STRONG() {
@@ -96,7 +96,7 @@ namespace NKikimr {
             return isLocked;
         }
 
-        void TSyncLogNeighbors::OutputHtml(IOutputStream &str, 
+        void TSyncLogNeighbors::OutputHtml(IOutputStream &str,
                                            const TBlobStorageGroupInfo &ginfo,
                                            TEvInterconnect::TEvNodesInfo::TPtr nodesInfo) {
             TPrinter printer(ginfo, nodesInfo);

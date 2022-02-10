@@ -19,7 +19,7 @@ namespace NTest {
             return static_cast<TImpl&>(*this);
         }
 
-        IOutputStream& Log() const noexcept 
+        IOutputStream& Log() const noexcept
         {
             Cerr << "On " << Seq << ": ";
 

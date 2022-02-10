@@ -54,7 +54,7 @@ private:
 };
 
 void TFtsTest::TestSimple() {
-    const char* dotPath[2] = {"." LOCSLASH_S, nullptr}; 
+    const char* dotPath[2] = {"." LOCSLASH_S, nullptr};
     TFileTree currentDirTree((char* const*)dotPath, 0, FtsCmp);
     UNIT_ASSERT(currentDirTree());
     TTempDir tempDir = MakeTempName(yfts_read(currentDirTree())->fts_path);
@@ -79,7 +79,7 @@ void TFtsTest::TestSimple() {
     CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir2" LOCSLASH_S "file4").data(), FTS_F);
     CheckEnt(yfts_read(fileTree()), (tempDir() + LOCSLASH_S "dir2").data(), FTS_DP);
     CheckEnt(yfts_read(fileTree()), (tempDir()).data(), FTS_DP);
-    UNIT_ASSERT_EQUAL(yfts_read(fileTree()), nullptr); 
+    UNIT_ASSERT_EQUAL(yfts_read(fileTree()), nullptr);
 }
 
 class TTempDirWithLostAccess: public TTempDir {

@@ -9,7 +9,7 @@
     }
 
 template <>
-void Out<THttpParserBase::States>(IOutputStream& out, THttpParserBase::States st) { 
+void Out<THttpParserBase::States>(IOutputStream& out, THttpParserBase::States st) {
     using type = THttpParserBase::States;
     switch (st) {
         ENUM_OUT(hp_error)
@@ -46,8 +46,8 @@ namespace {
 
 }
 
-Y_UNIT_TEST_SUITE(TestHttpParser) { 
-    Y_UNIT_TEST(TestTrivialRequest) { 
+Y_UNIT_TEST_SUITE(TestHttpParser) {
+    Y_UNIT_TEST(TestTrivialRequest) {
         const TString blob{
             "GET /search?q=hi HTTP/1.1\r\n"
             "Host:  www.google.ru:8080 \r\n"
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
     }
 
     // XXX: `entity_size` is i32 and `content_length` is i64!
-    Y_UNIT_TEST(TestTrivialResponse) { 
+    Y_UNIT_TEST(TestTrivialResponse) {
         const TString blob{
             "HTTP/1.1 200 Ok\r\n"
             "Content-Length: 2\r\n"
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
     }
 
     // XXX: `entity_size` is off by one in TE:chunked case.
-    Y_UNIT_TEST(TestChunkedResponse) { 
+    Y_UNIT_TEST(TestChunkedResponse) {
         const TString blob{
             "HTTP/1.1 200 OK\r\n"
             "Transfer-Encoding: chunked\r\n"
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
                                                "\r\n"));
     }
 
-    Y_UNIT_TEST(TestPipelineClenByteByByte) { 
+    Y_UNIT_TEST(TestPipelineClenByteByByte) {
         const TString& blob = PipelineClenBlob_;
         THttpHeader hdr;
         TTestHttpParser parser;
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
     }
 
     // XXX: Content-Length is ignored, Body() looks unexpected!
-    Y_UNIT_TEST(TestPipelineClenOneChunk) { 
+    Y_UNIT_TEST(TestPipelineClenOneChunk) {
         const TString& blob = PipelineClenBlob_;
         THttpHeader hdr;
         TTestHttpParser parser;
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
                                                                 "\r\n"));
     }
 
-    Y_UNIT_TEST(TestPipelineChunkedByteByByte) { 
+    Y_UNIT_TEST(TestPipelineChunkedByteByByte) {
         const TString& blob = PipelineChunkedBlob_;
         THttpHeader hdr;
         TTestHttpParser parser;
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TestHttpParser) {
         AssertPipelineChunked(parser, hdr);
     }
 
-    Y_UNIT_TEST(TestPipelineChunkedOneChunk) { 
+    Y_UNIT_TEST(TestPipelineChunkedOneChunk) {
         const TString& blob = PipelineChunkedBlob_;
         THttpHeader hdr;
         TTestHttpParser parser;

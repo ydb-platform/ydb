@@ -18,7 +18,7 @@ namespace {
 }
 
 const TString& GetProgramName() {
-    return Singleton<TProgramNameHolder>()->ProgName; 
+    return Singleton<TProgramNameHolder>()->ProgName;
 }
 
 void SetProgramName(const char* argv0) {

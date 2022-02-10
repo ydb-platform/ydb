@@ -43,10 +43,10 @@ void RunTest(TBlobStorageGroupType groupType, bool minimum = false, ui32 testPar
     }
 }
 
-Y_UNIT_TEST_SUITE(TBsProxyFaultToleranceTest) { 
+Y_UNIT_TEST_SUITE(TBsProxyFaultToleranceTest) {
 
 #define FAULT_TOLERANCE_TEST(ERASURE, T) \
-    Y_UNIT_TEST(Check##T##ERASURE) { \ 
+    Y_UNIT_TEST(Check##T##ERASURE) { \
         RunTest<T>(TBlobStorageGroupType::ERASURE); \
     }
 

@@ -18,7 +18,7 @@ namespace NSc {
         return IsFinite(d);
     }
 
-    static inline void WriteString(IOutputStream& out, TStringBuf s) { 
+    static inline void WriteString(IOutputStream& out, TStringBuf s) {
         NEscJ::EscapeJ<true, true>(s, out);
     }
 
@@ -39,7 +39,7 @@ namespace NSc {
     }
 
     template <typename TDictKeys>
-    static inline void WriteDict(IOutputStream& out, const TDictKeys& keys, const TDict& dict, 
+    static inline void WriteDict(IOutputStream& out, const TDictKeys& keys, const TDict& dict,
                                  const TJsonOpts& jopts, NImpl::TKeySortContext& sortCtx, NImpl::TSelfLoopContext& loopCtx) {
         using const_iterator = typename TDictKeys::const_iterator;
         const_iterator begin = keys.begin();
@@ -63,7 +63,7 @@ namespace NSc {
         }
     }
 
-    void TValue::DoWriteJsonImpl(IOutputStream& out, const TJsonOpts& jopts, 
+    void TValue::DoWriteJsonImpl(IOutputStream& out, const TJsonOpts& jopts,
                                  NImpl::TKeySortContext& sortCtx, NImpl::TSelfLoopContext& loopCtx) const {
         const TScCore& core = Core();
 
@@ -140,7 +140,7 @@ namespace NSc {
         }
     }
 
-    const TValue& TValue::ToJson(IOutputStream& out, const TJsonOpts& jopts) const { 
+    const TValue& TValue::ToJson(IOutputStream& out, const TJsonOpts& jopts) const {
         using namespace NImpl;
 
         if (jopts.FormatJson) {
@@ -179,7 +179,7 @@ namespace NSc {
         return ToJson(MakeOptsSafeForSerializer(jopts));
     }
 
-    const TValue& TValue::ToJsonSafe(IOutputStream& out, const TJsonOpts& jopts) const { 
+    const TValue& TValue::ToJsonSafe(IOutputStream& out, const TJsonOpts& jopts) const {
         return ToJson(out, MakeOptsSafeForSerializer(jopts));
     }
 
@@ -187,7 +187,7 @@ namespace NSc {
         return ToJson(MakeOptsPrettyForSerializer(jopts));
     }
 
-    const TValue& TValue::ToJsonPretty(IOutputStream& out, const TJsonOpts& jopts) const { 
+    const TValue& TValue::ToJsonPretty(IOutputStream& out, const TJsonOpts& jopts) const {
         return ToJson(out, MakeOptsPrettyForSerializer(jopts));
     }
 }

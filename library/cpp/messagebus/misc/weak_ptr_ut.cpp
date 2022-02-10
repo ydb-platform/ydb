@@ -2,7 +2,7 @@
 
 #include "weak_ptr.h"
 
-Y_UNIT_TEST_SUITE(TWeakPtrTest) { 
+Y_UNIT_TEST_SUITE(TWeakPtrTest) {
     struct TWeakPtrTester: public TWeakRefCounted<TWeakPtrTester> {
         int* const CounterPtr;
 
@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TWeakPtrTest) {
         }
     };
 
-    Y_UNIT_TEST(Simple) { 
+    Y_UNIT_TEST(Simple) {
         int destroyCount = 0;
 
         TIntrusivePtr<TWeakPtrTester> p(new TWeakPtrTester(&destroyCount));

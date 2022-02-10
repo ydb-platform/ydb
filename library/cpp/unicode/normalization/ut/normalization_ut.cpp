@@ -4,7 +4,7 @@
 
 #include <library/cpp/unicode/normalization/normalization.h>
 
-Y_UNIT_TEST_SUITE(TUnicodeNormalizationTest) { 
+Y_UNIT_TEST_SUITE(TUnicodeNormalizationTest) {
     template <NUnicode::ENormalization NormType>
     void TestInit() {
         NUnicode::TNormalizer<NormType> normalizer;
@@ -14,19 +14,19 @@ Y_UNIT_TEST_SUITE(TUnicodeNormalizationTest) {
         normalizer.Normalize(w);
     }
 
-    Y_UNIT_TEST(TestInitNFD) { 
+    Y_UNIT_TEST(TestInitNFD) {
         TestInit<NUnicode::NFD>();
     }
 
-    Y_UNIT_TEST(TestInitNFC) { 
+    Y_UNIT_TEST(TestInitNFC) {
         TestInit<NUnicode::NFC>();
     }
 
-    Y_UNIT_TEST(TestInitNFKD) { 
+    Y_UNIT_TEST(TestInitNFKD) {
         TestInit<NUnicode::NFKD>();
     }
 
-    Y_UNIT_TEST(TestInitNFKC) { 
+    Y_UNIT_TEST(TestInitNFKC) {
         TestInit<NUnicode::NFKC>();
     }
 }

@@ -11,7 +11,7 @@ TBusSessionJobCount::TBusSessionJobCount()
 }
 
 TBusSessionJobCount::~TBusSessionJobCount() {
-    Y_VERIFY(JobCount == 0, "must be 0 job count to destroy job"); 
+    Y_VERIFY(JobCount == 0, "must be 0 job count to destroy job");
 }
 
 void TBusSessionJobCount::WaitForZero() {

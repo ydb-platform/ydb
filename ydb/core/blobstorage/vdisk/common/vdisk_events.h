@@ -295,7 +295,7 @@ namespace NKikimr {
             , ActorId(ActorIdFromProto(msgQoS.GetSenderActorId()))
         {}
 
-        void Output(IOutputStream &str) const { 
+        void Output(IOutputStream &str) const {
             str << "{ClientId# " << ClientId
                 << " RecByteSize# " << RecByteSize
                 << " MsgId# " << MsgId
@@ -321,8 +321,8 @@ namespace NKikimr {
             : Ctx(ctx)
             , Event(std::move(event))
         {
-            Y_VERIFY_DEBUG(Ctx.ExtQueueId != NKikimrBlobStorage::EVDiskQueueId::Unknown); 
-            Y_VERIFY_DEBUG(Ctx.IntQueueId != NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown); 
+            Y_VERIFY_DEBUG(Ctx.ExtQueueId != NKikimrBlobStorage::EVDiskQueueId::Unknown);
+            Y_VERIFY_DEBUG(Ctx.IntQueueId != NKikimrBlobStorage::EVDiskInternalQueueId::IntUnknown);
         }
     };
 
@@ -364,11 +364,11 @@ namespace NKikimr {
         {}
 
         virtual ~TEvVResultBase() {
-            //Y_VERIFY(Finalized); 
+            //Y_VERIFY(Finalized);
         }
 
         virtual void FinalizeAndSend(const TActorContext& /*ctx*/, std::unique_ptr<IEventHandle> ev) {
-            Y_VERIFY(!Finalized); // call Finalize only once 
+            Y_VERIFY(!Finalized); // call Finalize only once
             Finalized = true;
 
             if (CounterPtr) {
@@ -1358,7 +1358,7 @@ namespace NKikimr {
             size_t size = request.ExtremeQueriesSize();
             for (unsigned i = 0; i < size; i++) {
                 const NKikimrBlobStorage::TExtremeQuery &query = request.GetExtremeQueries(i);
-                Y_VERIFY(request.HasVDiskID()); 
+                Y_VERIFY(request.HasVDiskID());
                 TLogoBlobID id = LogoBlobIDFromLogoBlobID(query.GetId());
                 ui64 shift = (query.HasShift() ? query.GetShift() : 0);
                 ui64 *cookie = nullptr;
@@ -1752,11 +1752,11 @@ namespace NKikimr {
         void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
                 const NKikimrBlobStorage::TEvVBlock &request) {
             Record.SetStatus(status);
-            Y_VERIFY(request.HasTabletId()); 
+            Y_VERIFY(request.HasTabletId());
             Record.SetTabletId(request.GetTabletId());
-            Y_VERIFY(request.HasGeneration()); 
+            Y_VERIFY(request.HasGeneration());
             Record.SetGeneration(request.GetGeneration());
-            Y_VERIFY(request.HasVDiskID()); 
+            Y_VERIFY(request.HasVDiskID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
             VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
         }
@@ -2127,10 +2127,10 @@ namespace NKikimr {
         void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
                 const NKikimrBlobStorage::TEvVGetBlock &request) {
             Record.SetStatus(status);
-            Y_VERIFY(request.HasTabletId()); 
+            Y_VERIFY(request.HasTabletId());
             Record.SetTabletId(request.GetTabletId());
             // WARNING: Generation is not set!
-            Y_VERIFY(request.HasVDiskID()); 
+            Y_VERIFY(request.HasVDiskID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
             VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
         }
@@ -2251,13 +2251,13 @@ namespace NKikimr {
         void MakeError(NKikimrProto::EReplyStatus status, const TString& /*errorReason*/,
                 const NKikimrBlobStorage::TEvVCollectGarbage &request) {
             Record.SetStatus(status);
-            Y_VERIFY(request.HasTabletId()); 
+            Y_VERIFY(request.HasTabletId());
             Record.SetTabletId(request.GetTabletId());
-            Y_VERIFY(request.HasRecordGeneration()); 
+            Y_VERIFY(request.HasRecordGeneration());
             Record.SetRecordGeneration(request.GetRecordGeneration());
-            Y_VERIFY(request.HasChannel()); 
+            Y_VERIFY(request.HasChannel());
             Record.SetChannel(request.GetChannel());
-            Y_VERIFY(request.HasVDiskID()); 
+            Y_VERIFY(request.HasVDiskID());
             TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
             VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
         }
@@ -2564,7 +2564,7 @@ namespace NKikimr {
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
         }
 
-        void Output(IOutputStream &str) const { 
+        void Output(IOutputStream &str) const {
             auto vd = VDiskIDFromVDiskID(Record.GetVDiskID());
             str << "{TEvVSyncGuidResult: Status# " << Record.GetStatus();
             str << " VDiskId# " << vd.ToString() << "}";

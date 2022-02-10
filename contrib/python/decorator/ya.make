@@ -5,7 +5,7 @@ LICENSE(BSD-3-Clause)
 OWNER(g:python-contrib borman)
 
 VERSION(4.4.2)
- 
+
 NO_LINT()
 
 PY_SRCS(

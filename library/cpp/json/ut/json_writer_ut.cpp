@@ -5,8 +5,8 @@
 
 using namespace NJson;
 
-Y_UNIT_TEST_SUITE(TJsonWriterTest) { 
-    Y_UNIT_TEST(SimpleWriteTest) { 
+Y_UNIT_TEST_SUITE(TJsonWriterTest) {
+    Y_UNIT_TEST(SimpleWriteTest) {
         TString expected1 = "{\"key1\":1,\"key2\":2,\"key3\":3";
         TString expected2 = expected1 + ",\"array\":[\"stroka\",false]";
         TString expected3 = expected2 + "}";
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
         UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected3);
     }
 
-    Y_UNIT_TEST(SimpleWriteValueTest) { 
+    Y_UNIT_TEST(SimpleWriteValueTest) {
         TString expected = "{\"key1\":null,\"key2\":{\"subkey1\":[1,{\"subsubkey\":\"test2\"},null,true],\"subkey2\":\"test\"}}";
         TJsonValue v;
         v["key1"] = JSON_NULL;
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
         UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected);
     }
 
-    Y_UNIT_TEST(FormatOutput) { 
+    Y_UNIT_TEST(FormatOutput) {
         TString expected = "{\n  \"key1\":null,\n  \"key2\":\n    {\n      \"subkey1\":\n        [\n          1,\n          {\n            \"subsubkey\":\"test2\"\n          },\n          null,\n          true\n        ],\n      \"subkey2\":\"test\"\n    }\n}";
         TJsonValue v;
         v["key1"] = JSON_NULL;
@@ -69,7 +69,7 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
         UNIT_ASSERT_STRINGS_EQUAL(out.Str(), expected);
     }
 
-    Y_UNIT_TEST(SortKeys) { 
+    Y_UNIT_TEST(SortKeys) {
         TString expected = "{\"a\":null,\"j\":null,\"n\":null,\"y\":null,\"z\":null}";
         TJsonValue v;
         v["z"] = JSON_NULL;
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
         UNIT_ASSERT_STRINGS_EQUAL(out.Str(), expected);
     }
 
-    Y_UNIT_TEST(SimpleUnsignedIntegerWriteTest) { 
+    Y_UNIT_TEST(SimpleUnsignedIntegerWriteTest) {
         {
             TString expected = "{\"test\":1}";
             TJsonValue v;
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
         } // 18446744073709551615
     }     // SimpleUnsignedIntegerWriteTest
 
-    Y_UNIT_TEST(WriteOptionalTest) { 
+    Y_UNIT_TEST(WriteOptionalTest) {
         {
             TString expected = "{\"test\":1}";
 
@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
         }
     }
 
-    Y_UNIT_TEST(Callback) { 
+    Y_UNIT_TEST(Callback) {
         NJsonWriter::TBuf json;
         json.WriteString("A");
         UNIT_ASSERT_VALUES_EQUAL(json.Str(), "\"A\"");
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
         UNIT_ASSERT_VALUES_EQUAL(WrapJsonToCallback(json, "Foo"), "Foo(\"A\")");
     }
 
-    Y_UNIT_TEST(FloatPrecision) { 
+    Y_UNIT_TEST(FloatPrecision) {
         const double value = 1517933989.4242;
         const NJson::TJsonValue json(value);
         NJson::TJsonWriterConfig config;

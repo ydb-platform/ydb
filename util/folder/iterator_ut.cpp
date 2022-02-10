@@ -11,8 +11,8 @@
 
 static TString JoinWithNewline(const TVector<TString>& strings) {
     TStringStream ss;
-    for (const auto& string : strings) { 
-        ss << string << "\n"; 
+    for (const auto& string : strings) {
+        ss << string << "\n";
     }
     return ss.Str();
 }

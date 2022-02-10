@@ -206,8 +206,8 @@ private:
     }
 
     TStatus HandleLength(TExprBase node, TExprContext& ctx) override {
-        Y_UNUSED(node); 
-        Y_UNUSED(ctx); 
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
         return TStatus::Error;
     }
 

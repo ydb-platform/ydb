@@ -7,7 +7,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
-    Y_UNIT_TEST_LLVM(TestNanvl) { 
+    Y_UNIT_TEST_LLVM(TestNanvl) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 

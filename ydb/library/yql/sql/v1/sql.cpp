@@ -5657,7 +5657,7 @@ bool TSqlSelect::JoinOp(ISource* join, const TRule_join_source::TBlock3& block, 
                 return false;
             }
 
-            Y_VERIFY_DEBUG(join->GetJoin()); 
+            Y_VERIFY_DEBUG(join->GetJoin());
             join->GetJoin()->SetupJoin(joinOp, joinKeyExpr, linkSettings);
             break;
         }
@@ -5687,7 +5687,7 @@ TNodePtr TSqlSelect::JoinExpr(ISource* join, const TRule_join_constraint& node) 
                 return nullptr;
             }
 
-            Y_VERIFY_DEBUG(join->GetJoin()); 
+            Y_VERIFY_DEBUG(join->GetJoin());
             return join->GetJoin()->BuildJoinKeys(Ctx, names);
         }
         default:

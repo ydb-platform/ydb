@@ -19,7 +19,7 @@ namespace NCodecs {
         return STATIC_CODEC_INFO_MAGIC;
     }
 
-    void SaveCodecInfoToStream(IOutputStream& out, const TStaticCodecInfo& info) { 
+    void SaveCodecInfoToStream(IOutputStream& out, const TStaticCodecInfo& info) {
         TBufferOutput bout;
         info.SerializeToArcadiaStream(&bout);
         ui64 hash = DataSignature(bout.Buffer());
@@ -28,7 +28,7 @@ namespace NCodecs {
         ::Save(&out, bout.Buffer());
     }
 
-    TStaticCodecInfo LoadCodecInfoFromStream(IInputStream& in) { 
+    TStaticCodecInfo LoadCodecInfoFromStream(IInputStream& in) {
         {
             TBuffer magic;
             magic.Resize(GetStaticCodecInfoMagic().size());

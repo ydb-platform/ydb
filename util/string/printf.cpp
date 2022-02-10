@@ -1,7 +1,7 @@
 #include "printf.h"
 
 #include <util/stream/printf.h>
-#include <util/stream/str.h> 
+#include <util/stream/str.h>
 
 int vsprintf(TString& s, const char* c, va_list params) {
     TStringOutput so(s.remove());

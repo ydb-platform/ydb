@@ -1,15 +1,15 @@
-OWNER( 
-    yazevnul 
+OWNER(
+    yazevnul
     g:util
-) 
+)
 SUBSCRIBER(g:util-subscribers)
- 
-RECURSE( 
-    cpu_id 
-    cpu_id/metrics 
-    create_destroy_thread 
-    create_destroy_thread/metrics 
-) 
+
+RECURSE(
+    cpu_id
+    cpu_id/metrics
+    create_destroy_thread
+    create_destroy_thread/metrics
+)
 
 IF (NOT OS_WINDOWS)
     RECURSE(

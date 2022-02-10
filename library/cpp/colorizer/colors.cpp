@@ -452,7 +452,7 @@ TColors& NColorizer::StdOut() {
     return *Singleton<TStdOutColors>();
 }
 
-TColors& NColorizer::AutoColors(IOutputStream& os) { 
+TColors& NColorizer::AutoColors(IOutputStream& os) {
     if (&os == &Cerr) {
         return StdErr();
     }

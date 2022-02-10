@@ -27,7 +27,7 @@
 //////////////////////////////////////////////////////////////////////////////
 // forward declarations
 //////////////////////////////////////////////////////////////////////////////
-class IOutputStream; 
+class IOutputStream;
 
 namespace NKikimr {
     namespace NMiniKQL {
@@ -77,7 +77,7 @@ public:
 
     virtual THashSet<TString> GetAllModuleNames() const = 0;
 
-    virtual void PrintInfoTo(IOutputStream& out) const = 0; 
+    virtual void PrintInfoTo(IOutputStream& out) const = 0;
 
     virtual void CleanupModulesOnTerminate() const = 0;
 

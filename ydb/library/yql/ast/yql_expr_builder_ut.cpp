@@ -3,21 +3,21 @@
 
 namespace NYql {
 
-Y_UNIT_TEST_SUITE(TExprBuilder) { 
-    Y_UNIT_TEST(TestEmpty) { 
+Y_UNIT_TEST_SUITE(TExprBuilder) {
+    Y_UNIT_TEST(TestEmpty) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestRootAtom) { 
+    Y_UNIT_TEST(TestRootAtom) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle()).Atom("ABC").Build();
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Atom);
         UNIT_ASSERT_VALUES_EQUAL(res->Content(), "ABC");
     }
 
-    Y_UNIT_TEST(TestRootAtomTwice) { 
+    Y_UNIT_TEST(TestRootAtomTwice) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Atom("ABC")
@@ -25,14 +25,14 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestRootEmptyList) { 
+    Y_UNIT_TEST(TestRootEmptyList) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle()).List().Seal().Build();
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::List);
         UNIT_ASSERT_VALUES_EQUAL(res->ChildrenSize(), 0);
     }
 
-    Y_UNIT_TEST(TestRootEmptyListTwice) { 
+    Y_UNIT_TEST(TestRootEmptyListTwice) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .List()
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestListWithAtoms) { 
+    Y_UNIT_TEST(TestListWithAtoms) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle())
             .List()
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "XYZ");
     }
 
-    Y_UNIT_TEST(TestMismatchChildIndex) { 
+    Y_UNIT_TEST(TestMismatchChildIndex) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .List()
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestListWithAdd) { 
+    Y_UNIT_TEST(TestListWithAdd) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle())
             .List()
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "XYZ");
     }
 
-    Y_UNIT_TEST(TestNestedListWithAtoms) { 
+    Y_UNIT_TEST(TestNestedListWithAtoms) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle())
             .List()
@@ -106,20 +106,20 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "XYZ");
     }
 
-    Y_UNIT_TEST(TestWrongLevelBuild) { 
+    Y_UNIT_TEST(TestWrongLevelBuild) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .List()
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestWrongLevelSeal) { 
+    Y_UNIT_TEST(TestWrongLevelSeal) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Seal(), yexception);
     }
 
-    Y_UNIT_TEST(TestCallableWithAtoms) { 
+    Y_UNIT_TEST(TestCallableWithAtoms) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle())
             .Callable("Func")
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "XYZ");
     }
 
-    Y_UNIT_TEST(TestNestedCallableWithAtoms) { 
+    Y_UNIT_TEST(TestNestedCallableWithAtoms) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle())
             .Callable("Func1")
@@ -163,13 +163,13 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "XYZ");
     }
 
-    Y_UNIT_TEST(TestRootWorld) { 
+    Y_UNIT_TEST(TestRootWorld) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle()).World().Build();
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::World);
     }
 
-    Y_UNIT_TEST(TestCallableWithWorld) { 
+    Y_UNIT_TEST(TestCallableWithWorld) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle())
             .Callable("Func")
@@ -183,14 +183,14 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Head().Type(), TExprNode::World);
     }
 
-    Y_UNIT_TEST(TestIncompleteRootLambda) { 
+    Y_UNIT_TEST(TestIncompleteRootLambda) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Lambda()
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestIncompleteInnerLambda) { 
+    Y_UNIT_TEST(TestIncompleteInnerLambda) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .List()
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestRootLambda) { 
+    Y_UNIT_TEST(TestRootLambda) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle()).Lambda().Atom("ABC").Seal().Build();
         UNIT_ASSERT_VALUES_EQUAL(res->Type(), TExprNode::Lambda);
@@ -210,7 +210,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "ABC");
     }
 
-    Y_UNIT_TEST(TestRootLambdaWithBodyAsSet) { 
+    Y_UNIT_TEST(TestRootLambdaWithBodyAsSet) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle())
             .Lambda()
@@ -226,7 +226,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Child(1)->Content(), "ABC");
     }
 
-    Y_UNIT_TEST(TestInnerLambdaWithParam) { 
+    Y_UNIT_TEST(TestInnerLambdaWithParam) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle())
             .List()
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_VALUES_EQUAL(res->Head().Child(1)->Content(), "ABC");
     }
 
-    Y_UNIT_TEST(TestDuplicateLambdaParamNames) { 
+    Y_UNIT_TEST(TestDuplicateLambdaParamNames) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Lambda()
@@ -260,14 +260,14 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestParamAtRoot) { 
+    Y_UNIT_TEST(TestParamAtRoot) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Param("aaa")
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestParamInList) { 
+    Y_UNIT_TEST(TestParamInList) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .List()
@@ -276,7 +276,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestParamInCallable) { 
+    Y_UNIT_TEST(TestParamInCallable) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Callable("Func")
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestParamAfterLambdaBody) { 
+    Y_UNIT_TEST(TestParamAfterLambdaBody) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Lambda()
@@ -296,14 +296,14 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestIndexedAtomAtRoot) { 
+    Y_UNIT_TEST(TestIndexedAtomAtRoot) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Atom(0, "ABC")
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestIndexedListAtRoot) { 
+    Y_UNIT_TEST(TestIndexedListAtRoot) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .List(0)
@@ -311,14 +311,14 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestIndexedWorldAtRoot) { 
+    Y_UNIT_TEST(TestIndexedWorldAtRoot) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .World(0)
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestIndexedCallableAtRoot) { 
+    Y_UNIT_TEST(TestIndexedCallableAtRoot) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Callable(0, "Func")
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestIndexedLambdaAtRoot) { 
+    Y_UNIT_TEST(TestIndexedLambdaAtRoot) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Lambda(0)
@@ -384,7 +384,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestAddAtLambda) { 
+    Y_UNIT_TEST(TestAddAtLambda) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle())
             .Lambda()
@@ -393,7 +393,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestLambdaWithArgAsBody) { 
+    Y_UNIT_TEST(TestLambdaWithArgAsBody) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle())
             .Lambda()
@@ -414,7 +414,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_EQUAL(res->Child(1), res->Head().Child(0));
     }
 
-    Y_UNIT_TEST(TestIndexedArgAsLambdaBody) { 
+    Y_UNIT_TEST(TestIndexedArgAsLambdaBody) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle()).Lambda()
             .Param("x")
@@ -423,7 +423,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestWrongArgName) { 
+    Y_UNIT_TEST(TestWrongArgName) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle()).Lambda()
             .Param("x")
@@ -432,7 +432,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestLambdaWithArgInCallables) { 
+    Y_UNIT_TEST(TestLambdaWithArgInCallables) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle())
             .Lambda()
@@ -460,7 +460,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_EQUAL(res->Child(1)->Child(1), res->Head().Child(0));
     }
 
-    Y_UNIT_TEST(TestNestedScopeInLambda) { 
+    Y_UNIT_TEST(TestNestedScopeInLambda) {
         TExprContext ctx;
         auto res = ctx.Builder(TPositionHandle())
             .Lambda()
@@ -504,7 +504,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             res->Head().Child(1));
     }
 
-    Y_UNIT_TEST(TestNonIndexedArg) { 
+    Y_UNIT_TEST(TestNonIndexedArg) {
         TExprContext ctx;
         UNIT_ASSERT_EXCEPTION(ctx.Builder(TPositionHandle()).Lambda()
             .Param("x")
@@ -515,7 +515,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
             .Build(), yexception);
     }
 
-    Y_UNIT_TEST(TestApplyLambdaArgAsRoot) { 
+    Y_UNIT_TEST(TestApplyLambdaArgAsRoot) {
         TExprContext ctx;
         auto lambda = ctx.Builder(TPositionHandle())
             .Lambda()
@@ -540,7 +540,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_EQUAL(res->Child(1), res->Head().Child(0));
     }
 
-    Y_UNIT_TEST(TestApplyLambdaArgInContainer) { 
+    Y_UNIT_TEST(TestApplyLambdaArgInContainer) {
         TExprContext ctx;
         auto lambda = ctx.Builder(TPositionHandle())
             .Lambda()
@@ -569,7 +569,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_EQUAL(res->Child(1)->Child(0), res->Head().Child(0));
     }
 
-    Y_UNIT_TEST(TestApplyPartialLambdaArgAsRoot) { 
+    Y_UNIT_TEST(TestApplyPartialLambdaArgAsRoot) {
         TExprContext ctx;
         auto lambda = ctx.Builder(TPositionHandle())
             .Lambda()
@@ -599,7 +599,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_EQUAL(res->Child(1)->Child(1), res->Head().Child(0));
     }
 
-    Y_UNIT_TEST(TestApplyPartialLambdaArgInContainer) { 
+    Y_UNIT_TEST(TestApplyPartialLambdaArgInContainer) {
         TExprContext ctx;
         auto lambda = ctx.Builder(TPositionHandle())
             .Lambda()
@@ -631,7 +631,7 @@ Y_UNIT_TEST_SUITE(TExprBuilder) {
         UNIT_ASSERT_EQUAL(res->Child(1)->Head().Child(1), res->Head().Child(0));
     }
 
-    Y_UNIT_TEST(TestApplyOuterArg) { 
+    Y_UNIT_TEST(TestApplyOuterArg) {
         TExprContext ctx;
         auto ast = ctx.Builder(TPositionHandle())
             .Lambda()

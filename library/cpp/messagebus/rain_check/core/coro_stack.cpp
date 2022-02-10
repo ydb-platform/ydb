@@ -12,8 +12,8 @@ using namespace NRainCheck::NPrivate;
 TCoroStack::TCoroStack(size_t size)
     : SizeValue(size)
 {
-    Y_VERIFY(size % sizeof(ui32) == 0); 
-    Y_VERIFY(size >= 0x1000); 
+    Y_VERIFY(size % sizeof(ui32) == 0);
+    Y_VERIFY(size >= 0x1000);
 
     DataHolder.Reset(malloc(size));
 

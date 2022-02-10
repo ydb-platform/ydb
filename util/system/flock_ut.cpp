@@ -5,15 +5,15 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(TFileLockTest) { 
-    Y_UNIT_TEST(TestFlock) { 
+Y_UNIT_TEST_SUITE(TFileLockTest) {
+    Y_UNIT_TEST(TestFlock) {
         TTempFileHandle tmp("./file");
 
         UNIT_ASSERT_EQUAL(Flock(tmp.GetHandle(), LOCK_EX), 0);
         UNIT_ASSERT_EQUAL(Flock(tmp.GetHandle(), LOCK_UN), 0);
     }
 
-    Y_UNIT_TEST(TestFileLocker) { 
+    Y_UNIT_TEST(TestFileLocker) {
         TTempFileHandle tmp("./file.locker");
         TFileLock fileLockExclusive1("./file.locker");
         TFileLock fileLockExclusive2("./file.locker");

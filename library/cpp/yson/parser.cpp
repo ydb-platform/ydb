@@ -47,7 +47,7 @@ namespace NYson {
 
     TYsonParser::TYsonParser(
         NYT::NYson::IYsonConsumer* consumer,
-        IInputStream* stream, 
+        IInputStream* stream,
         EYsonType type,
         bool enableLinePositionInfo,
         TMaybe<ui64> memoryLimit)
@@ -160,7 +160,7 @@ namespace NYson {
 
     TYsonListParser::TYsonListParser(
         NYT::NYson::IYsonConsumer* consumer,
-        IInputStream* stream, 
+        IInputStream* stream,
         bool enableLinePositionInfo,
         TMaybe<ui64> memoryLimit)
         : Impl(new TImpl(consumer, stream, enableLinePositionInfo, memoryLimit))

@@ -3,8 +3,8 @@
 #include <util/generic/ptr.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(ScopeToolsTest) { 
-    Y_UNIT_TEST(OnScopeExitTest) { 
+Y_UNIT_TEST_SUITE(ScopeToolsTest) {
+    Y_UNIT_TEST(OnScopeExitTest) {
         int i = 0;
 
         {
@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(ScopeToolsTest) {
         UNIT_ASSERT_VALUES_EQUAL(2, i);
     }
 
-    Y_UNIT_TEST(OnScopeExitMoveTest) { 
+    Y_UNIT_TEST(OnScopeExitMoveTest) {
         THolder<int> i{new int{10}};
         int p = 0;
 

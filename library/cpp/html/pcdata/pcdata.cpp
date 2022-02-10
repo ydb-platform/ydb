@@ -61,7 +61,7 @@ TString EncodeHtmlPcdata(const TStringBuf str, bool qAmp) {
 
 TString DecodeHtmlPcdata(const TString& sz) {
     TString res;
-    const char* codes[] = {"&quot;", "&lt;", "&gt;", "&#39;", "&#039;", "&amp;", "&apos;", nullptr}; 
+    const char* codes[] = {"&quot;", "&lt;", "&gt;", "&#39;", "&#039;", "&amp;", "&apos;", nullptr};
     const char chars[] = {'\"', '<', '>', '\'', '\'', '&', '\''};
     for (size_t i = 0; i < sz.length(); ++i) {
         char c = sz[i];

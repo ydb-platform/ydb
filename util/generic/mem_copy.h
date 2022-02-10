@@ -7,10 +7,10 @@
 #include <cstring>
 
 template <class T>
-using TIfPOD = std::enable_if_t<TTypeTraits<T>::IsPod, T*>; 
+using TIfPOD = std::enable_if_t<TTypeTraits<T>::IsPod, T*>;
 
 template <class T>
-using TIfNotPOD = std::enable_if_t<!TTypeTraits<T>::IsPod, T*>; 
+using TIfNotPOD = std::enable_if_t<!TTypeTraits<T>::IsPod, T*>;
 
 template <class T>
 static inline TIfPOD<T> MemCopy(T* to, const T* from, size_t n) noexcept {

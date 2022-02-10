@@ -17,12 +17,12 @@ private:
     TVector<T> Data;
 
     void StateCheck() const {
-        Y_ASSERT(Capacity == Data.size()); 
-        Y_ASSERT(Capacity == (1u << CapacityPow)); 
-        Y_ASSERT((Capacity & CapacityMask) == 0u); 
-        Y_ASSERT(Capacity - CapacityMask == 1u); 
-        Y_ASSERT(WritePos < Capacity); 
-        Y_ASSERT(ReadPos < Capacity); 
+        Y_ASSERT(Capacity == Data.size());
+        Y_ASSERT(Capacity == (1u << CapacityPow));
+        Y_ASSERT((Capacity & CapacityMask) == 0u);
+        Y_ASSERT(Capacity - CapacityMask == 1u);
+        Y_ASSERT(WritePos < Capacity);
+        Y_ASSERT(ReadPos < Capacity);
     }
 
     size_t Writable() const {

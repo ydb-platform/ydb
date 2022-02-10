@@ -20,7 +20,7 @@ namespace NTest {
         virtual TRow Make(ui64 seq, bool hole) noexcept = 0;
         virtual ui64 Base(const TRow &row) const noexcept = 0;
         virtual void Check(TArrayRef<const ui64>) const = 0;
-        virtual void Describe(IOutputStream&) const noexcept = 0; 
+        virtual void Describe(IOutputStream&) const noexcept = 0;
 
         const TIntrusiveConstPtr<TRowScheme> Scheme;
     };
@@ -54,7 +54,7 @@ namespace NTest {
             }
         }
 
-        void Describe(IOutputStream &out) const noexcept 
+        void Describe(IOutputStream &out) const noexcept
         {
             out
                 << "Mass{"

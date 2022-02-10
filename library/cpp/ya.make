@@ -4,8 +4,8 @@ RECURSE(
     accurate_accumulate
     accurate_accumulate/benchmark
     accurate_accumulate/benchmark/metrics
-    actors 
-    actors/ut 
+    actors
+    actors/ut
     aio
     any
     any/ut
@@ -14,7 +14,7 @@ RECURSE(
     barcode
     barcode/ut
     binsaver
-    binsaver/ut 
+    binsaver/ut
     binsaver/ut_util
     bit_io
     bit_io/ut
@@ -62,8 +62,8 @@ RECURSE(
     config/ut
     consistent_hash_ring
     consistent_hash_ring/ut
-    consistent_hashing 
-    consistent_hashing/ut 
+    consistent_hashing
+    consistent_hashing/ut
     containers
     coroutine
     cppparser
@@ -136,7 +136,7 @@ RECURSE(
     geohash/tile
     geohash/tile/ut
     geohash/ut
-    geolocation 
+    geolocation
     geotarget
     getopt
     getopt/last_getopt_demo
@@ -195,8 +195,8 @@ RECURSE(
     langmask/proto
     langmask/serialization
     langmask/ut
-    langs 
-    langs/ut 
+    langs
+    langs/ut
     lcookie
     lcookie/ut
     lcs
@@ -243,8 +243,8 @@ RECURSE(
     minhash
     minhash/tools
     minhash/ut
-    mongo 
-    monlib 
+    mongo
+    monlib
     msgpack
     msgpack2json
     msgpack2json/ut
@@ -338,8 +338,8 @@ RECURSE(
     solve_ambig/ut
     sorter
     sorter/ut
-    sqlite3 
-    sqlite3/ut 
+    sqlite3
+    sqlite3/ut
     sse
     ssh
     ssh/ut

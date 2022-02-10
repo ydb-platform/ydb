@@ -19,7 +19,7 @@ static int g_LoggerInitialized = 0;
 
 namespace {
 
-void WriteLocalTime(IOutputStream* out) { 
+void WriteLocalTime(IOutputStream* out) {
     struct timeval now;
     gettimeofday(&now, nullptr);
 
@@ -206,7 +206,7 @@ void InitLogger(TAutoPtr<TLogBackend> backend) {
     }
 }
 
-void InitLogger(IOutputStream* out) { 
+void InitLogger(IOutputStream* out) {
     InitLogger(new TStreamLogBackend(out));
 }
 

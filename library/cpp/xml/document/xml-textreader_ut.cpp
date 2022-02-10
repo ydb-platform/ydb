@@ -29,8 +29,8 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(TestXmlTextReader) { 
-    Y_UNIT_TEST(BasicExample) { 
+Y_UNIT_TEST_SUITE(TestXmlTextReader) {
+    Y_UNIT_TEST(BasicExample) {
         const TString xml = "<?xml version=\"1.0\"?>\n"
                             "<example toto=\"1\">\n"
                             "  <examplechild id=\"1\">\n"
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
                             ""
                             "</root>";
 
-    Y_UNIT_TEST(ParseXmlSimple) { 
+    Y_UNIT_TEST(ParseXmlSimple) {
         struct TCountry {
             TString Name;
             TVector<TString> Cities;
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
             c.Name = node.FirstChild("name").Value<TString>();
 
             const NXml::TConstNodes cityNodes = node.Nodes("cities/city");
-            for (auto cityNode : cityNodes) { 
+            for (auto cityNode : cityNodes) {
                 c.Cities.push_back(cityNode.Value<TString>());
             }
         };
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
         UNIT_ASSERT_EQUAL(ukraine.Cities[0], "Киев");
     }
 
-    Y_UNIT_TEST(ParseXmlDeepLevel) { 
+    Y_UNIT_TEST(ParseXmlDeepLevel) {
         TVector<TString> cities;
 
         auto handler = [&cities](NXml::TConstNode node) {
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
         UNIT_ASSERT_EQUAL(cities[3], "Киев");
     }
 
-    Y_UNIT_TEST(ParseXmlException) { 
+    Y_UNIT_TEST(ParseXmlException) {
         // Check that exception properly passes through plain C code of libxml,
         // no leaks are detected by valgrind.
         auto handler = [](NXml::TConstNode node) {
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(TestXmlTextReader) {
         ""
         "</Companies>";
 
-    Y_UNIT_TEST(NamespaceHell) { 
+    Y_UNIT_TEST(NamespaceHell) {
         using TNS = NXml::TNamespaceForXPath;
         const NXml::TNamespacesForXPath ns = {
             TNS{"b", "http://maps.yandex.ru/backa/1.x"},

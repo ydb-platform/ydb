@@ -5,7 +5,7 @@
 
 #include <util/charset/utf8.h>
 #include <util/generic/hash.h>
-#include <util/stream/output.h> // for IOutputStream 
+#include <util/stream/output.h> // for IOutputStream
 #include <util/string/ascii.h>
 
 #define DECLARE_TYPED_TYPE_NAME(x)\
@@ -164,7 +164,7 @@ namespace NNames {
     extern const char DyNumber[9];
 }
 
-void WriteEscapedValue(IOutputStream &out, const char *data, size_t size); 
+void WriteEscapedValue(IOutputStream &out, const char *data, size_t size);
 
 class TString : public TStringBase<TString, NTypeIds::String, NNames::String> {};
 
@@ -197,7 +197,7 @@ public:
     }
 
     static TRawTypeValue ToRawTypeValue(const ::TString& value) {
-        Y_VERIFY(value.size() <= MaxSize); 
+        Y_VERIFY(value.size() <= MaxSize);
         return TRawTypeValue((const void*)value.data(), value.size(), TypeId);
     }
 };

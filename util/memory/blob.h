@@ -6,7 +6,7 @@
 #include <util/system/defaults.h>
 
 class TMemoryMap;
-class IInputStream; 
+class IInputStream;
 class TFile;
 class TBuffer;
 
@@ -281,10 +281,10 @@ public:
     static TBlob FromFileContent(const TFile& file, ui64 offset, size_t length);
 
     /// Creates a blob from the stream content with a single-threaded (non atomic) refcounter.
-    static TBlob FromStreamSingleThreaded(IInputStream& in); 
+    static TBlob FromStreamSingleThreaded(IInputStream& in);
 
     /// Creates a blob from the stream content with a multi-threaded (atomic) refcounter.
-    static TBlob FromStream(IInputStream& in); 
+    static TBlob FromStream(IInputStream& in);
 
     /// Creates a blob with a single-threaded (non atomic) refcounter. No memory allocation, no content copy.
     /// @details The input object becomes empty.

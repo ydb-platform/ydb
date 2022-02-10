@@ -14,7 +14,7 @@ namespace NYsonPull {
         namespace NInput {
             class TStreamBase: public NYsonPull::NInput::IStream {
             protected:
-                result DoFillBufferFrom(IZeroCopyInput& input) { 
+                result DoFillBufferFrom(IZeroCopyInput& input) {
                     void* ptr = nullptr;
                     size_t size = input.Next(&ptr);
                     if (Y_UNLIKELY(size == 0)) {
@@ -26,10 +26,10 @@ namespace NYsonPull {
             };
 
             class TZeroCopy: public TStreamBase {
-                IZeroCopyInput* Input; 
+                IZeroCopyInput* Input;
 
             public:
-                explicit TZeroCopy(IZeroCopyInput* input) 
+                explicit TZeroCopy(IZeroCopyInput* input)
                     : Input(input)
                 {
                 }

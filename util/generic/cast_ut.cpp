@@ -7,7 +7,7 @@ class TGenericCastsTest: public TTestBase {
     UNIT_TEST(TestVerifyDynamicCast)
     UNIT_TEST(TestIntegralCast)
     UNIT_TEST(TestEnumCast)
-    UNIT_TEST(TestToUnderlying) 
+    UNIT_TEST(TestToUnderlying)
     UNIT_TEST(TestBitCast)
     UNIT_TEST_SUITE_END();
 
@@ -55,32 +55,32 @@ private:
         UNIT_ASSERT(SafeIntegerCast<B>(-1) == BM1);
         UNIT_ASSERT(SafeIntegerCast<C>(1) == C::CM1);
     }
- 
-    void TestToUnderlying() { 
-        enum A { 
-            AM1 = -1 
-        }; 
- 
+
+    void TestToUnderlying() {
+        enum A {
+            AM1 = -1
+        };
+
         enum B: int {
-            BM1 = -1 
-        }; 
- 
+            BM1 = -1
+        };
+
         enum class C: unsigned short {
-            CM1 = 1 
-        }; 
- 
-        static_assert(static_cast<std::underlying_type_t<A>>(AM1) == ToUnderlying(AM1), ""); 
-        static_assert(static_cast<std::underlying_type_t<B>>(BM1) == ToUnderlying(BM1), ""); 
-        static_assert(static_cast<std::underlying_type_t<C>>(C::CM1) == ToUnderlying(C::CM1), ""); 
- 
-        static_assert(std::is_same<std::underlying_type_t<A>, decltype(ToUnderlying(AM1))>::value, ""); 
-        static_assert(std::is_same<std::underlying_type_t<B>, decltype(ToUnderlying(BM1))>::value, ""); 
-        static_assert(std::is_same<std::underlying_type_t<C>, decltype(ToUnderlying(C::CM1))>::value, ""); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<std::underlying_type_t<A>>(AM1), ToUnderlying(AM1)); 
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<std::underlying_type_t<B>>(BM1), ToUnderlying(BM1)); 
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<std::underlying_type_t<C>>(C::CM1), ToUnderlying(C::CM1)); 
-    } 
+            CM1 = 1
+        };
+
+        static_assert(static_cast<std::underlying_type_t<A>>(AM1) == ToUnderlying(AM1), "");
+        static_assert(static_cast<std::underlying_type_t<B>>(BM1) == ToUnderlying(BM1), "");
+        static_assert(static_cast<std::underlying_type_t<C>>(C::CM1) == ToUnderlying(C::CM1), "");
+
+        static_assert(std::is_same<std::underlying_type_t<A>, decltype(ToUnderlying(AM1))>::value, "");
+        static_assert(std::is_same<std::underlying_type_t<B>, decltype(ToUnderlying(BM1))>::value, "");
+        static_assert(std::is_same<std::underlying_type_t<C>, decltype(ToUnderlying(C::CM1))>::value, "");
+
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<std::underlying_type_t<A>>(AM1), ToUnderlying(AM1));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<std::underlying_type_t<B>>(BM1), ToUnderlying(BM1));
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<std::underlying_type_t<C>>(C::CM1), ToUnderlying(C::CM1));
+    }
 
     void TestBitCast() {
         // Change sign of float

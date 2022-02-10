@@ -28,9 +28,9 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(TScreen) { 
+Y_UNIT_TEST_SUITE(TScreen) {
 
-    Y_UNIT_TEST(Cuts) 
+    Y_UNIT_TEST(Cuts)
     {
         using namespace NTable::NTest;
         using THole = TScreen::THole;
@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
                 TScreen({ {7, 10 }, { 40, 70 }, { 80, 91 } })));
     }
 
-    Y_UNIT_TEST(Join) 
+    Y_UNIT_TEST(Join)
     {
         using namespace NTable::NTest;
         using THole = TScreen::THole;
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
         }
     }
 
-    Y_UNIT_TEST(Sequential) 
+    Y_UNIT_TEST(Sequential)
     {
         using namespace NTable::NTest;
 
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
         }
     }
 
-    Y_UNIT_TEST(Random) 
+    Y_UNIT_TEST(Random)
     {
         using namespace NTable::NTest;
 
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
         }
     }
 
-    Y_UNIT_TEST(Shrink) 
+    Y_UNIT_TEST(Shrink)
     {
         using namespace NTable::NTest;
 

@@ -1331,7 +1331,7 @@ void TDataShard::Handle(TEvents::TEvGone::TPtr &ev) {
 
 void TDataShard::Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvents::TEvPoisonPill");
-    Y_UNUSED(ev); 
+    Y_UNUSED(ev);
     BecomeBroken(ctx);
 }
 
@@ -1660,7 +1660,7 @@ void TDataShard::Handle(TEvTxProcessing::TEvReadSetAck::TPtr &ev, const TActorCo
 }
 
 void TDataShard::Handle(TEvPrivate::TEvProgressTransaction::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev); 
+    Y_UNUSED(ev);
     IncCounter(COUNTER_TX_PROGRESS_EV);
     ExecuteProgressTx(ctx);
 }
@@ -1885,22 +1885,22 @@ void TDataShard::AckRSToDeletedTablet(ui64 tabletId, const TActorContext& ctx) {
 }
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev); Y_UNUSED(ctx); 
+    Y_UNUSED(ev); Y_UNUSED(ctx);
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Server connected at tablet %s %" PRIu64 ,
               Executor()->GetStats().IsFollower ? "follower" : "leader", ev->Get()->TabletId);
 }
 
 void TDataShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev); Y_UNUSED(ctx); 
+    Y_UNUSED(ev); Y_UNUSED(ctx);
 }
 
 void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Got TEvMediatorTimecast::TEvRegisterTabletResult at " << TabletID()
                 << " time " << ev->Get()->Entry->Get(TabletID()));
-    Y_VERIFY(ev->Get()->TabletId == TabletID()); 
+    Y_VERIFY(ev->Get()->TabletId == TabletID());
     MediatorTimeCastEntry = ev->Get()->Entry;
-    Y_VERIFY(MediatorTimeCastEntry); 
+    Y_VERIFY(MediatorTimeCastEntry);
 
     Pipeline.ActivateWaitingTxOps(ctx);
 }
@@ -2010,8 +2010,8 @@ void TDataShard::UpdateLagCounters(const TActorContext &ctx) {
 }
 
 void TDataShard::FillSplitTrajectory(ui64 origin, NKikimrTx::TBalanceTrackList& tracks) {
-    Y_UNUSED(origin); 
-    Y_UNUSED(tracks); 
+    Y_UNUSED(origin);
+    Y_UNUSED(tracks);
 }
 
 THolder<TEvTxProcessing::TEvReadSet>

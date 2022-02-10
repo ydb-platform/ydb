@@ -7,7 +7,7 @@ namespace NKikimr {
 
 using namespace NKikimr::NDataShard;
 
-Y_UNIT_TEST_SUITE(TxKeys) { 
+Y_UNIT_TEST_SUITE(TxKeys) {
 
 static TString ProgSelectRow(TString key) {
     return Sprintf(R"((
@@ -83,7 +83,7 @@ static void ComparePointAndRange(TTester& t, std::pair<ui32, TString> point, TSt
 
 //
 
-Y_UNIT_TEST(ComparePointKeys) { 
+Y_UNIT_TEST(ComparePointKeys) {
     TTester t(TTester::ESchema_DoubleKV, TTester::TOptions());
 
     ComparePoints(t, {0, ""}, {0, ""}, 0);
@@ -108,7 +108,7 @@ Y_UNIT_TEST(ComparePointKeys) {
     ComparePoints(t, {1, "a"}, {0, "ba"}, 1);
 }
 
-Y_UNIT_TEST(ComparePointKeysWithNull) { 
+Y_UNIT_TEST(ComparePointKeysWithNull) {
     TTester t(TTester::ESchema_DoubleKV, TTester::TOptions());
 
     const char * nullNull = "'('key1 (Null)) '('key2 (Null))";
@@ -130,7 +130,7 @@ Y_UNIT_TEST(ComparePointKeysWithNull) {
     ComparePointsStr(t, ToPointKey({0, ""}), Sprintf(null, 0), 1);
 }
 
-Y_UNIT_TEST(ComparePointAndRange) { 
+Y_UNIT_TEST(ComparePointAndRange) {
     TTester t(TTester::ESchema_DoubleKV, TTester::TOptions());
 
     ComparePointAndRange(t, {0, ""}, {0, ""}, {0, ""}, "'IncFrom 'IncTo", 0);
@@ -207,7 +207,7 @@ Y_UNIT_TEST(ComparePointAndRange) {
     ComparePointAndRange(t, {0, "c"}, {0, "a"}, {0, "b"}, "'ExcFrom 'ExcTo", 1);
 }
 
-Y_UNIT_TEST(ComparePointAndRangeWithNull) { 
+Y_UNIT_TEST(ComparePointAndRangeWithNull) {
     TTester t(TTester::ESchema_DoubleKV, TTester::TOptions());
 
     const char * nullNull = "'('key1 (Null)) '('key2 (Null))";
@@ -233,7 +233,7 @@ Y_UNIT_TEST(ComparePointAndRangeWithNull) {
     ComparePointAndRangeStr(t, Sprintf(null, 0), "'ExcFrom 'ExcTo '('key1 (Null) (Uint32 '0)) '('key2 (Null) (Utf8 'a))", 0);
 }
 
-Y_UNIT_TEST(ComparePointAndRangeWithInf) { 
+Y_UNIT_TEST(ComparePointAndRangeWithInf) {
     TTester t(TTester::ESchema_DoubleKV, TTester::TOptions());
 
     const char * nullNull = "'('key1 (Null)) '('key2 (Null))";

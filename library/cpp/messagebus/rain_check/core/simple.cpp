@@ -9,7 +9,7 @@ TSimpleTaskRunner::TSimpleTaskRunner(IEnv* env, ISubtaskListener* parentTask, TA
 }
 
 TSimpleTaskRunner::~TSimpleTaskRunner() {
-    Y_ASSERT(!ContinueFunc); 
+    Y_ASSERT(!ContinueFunc);
 }
 
 bool TSimpleTaskRunner::ReplyReceived() {

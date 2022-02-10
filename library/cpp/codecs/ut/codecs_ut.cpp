@@ -1111,7 +1111,7 @@ private:
         {
             TVector<TBuffer> learn;
 
-            for (auto& textValue : TextValues) { 
+            for (auto& textValue : TextValues) {
                 learn.emplace_back(textValue, strlen(textValue));
             }
 
@@ -1199,7 +1199,7 @@ private:
 
         TVector<TBuffer> data;
 
-        for (auto& textValue : TextValues) { 
+        for (auto& textValue : TextValues) {
             data.emplace_back(textValue, strlen(textValue));
         }
 
@@ -1221,15 +1221,15 @@ private:
             THuffmanCodec codec;
             std::pair<char, ui64> freqs[256];
 
-            for (size_t i = 0; i < Y_ARRAY_SIZE(freqs); ++i) { 
+            for (size_t i = 0; i < Y_ARRAY_SIZE(freqs); ++i) {
                 freqs[i].first = (char)i;
                 freqs[i].second = 0;
             }
 
-            for (auto& textValue : TextValues) { 
-                size_t len = strlen(textValue); 
+            for (auto& textValue : TextValues) {
+                size_t len = strlen(textValue);
                 for (size_t j = 0; j < len; ++j) {
-                    ++freqs[(ui32)(0xFF & textValue[j])].second; 
+                    ++freqs[(ui32)(0xFF & textValue[j])].second;
                 }
             }
 
@@ -1253,7 +1253,7 @@ private:
         {
             TVector<TBuffer> learn;
 
-            for (auto& textValue : TextValues) { 
+            for (auto& textValue : TextValues) {
                 learn.emplace_back(textValue, strlen(textValue));
             }
 
@@ -1345,14 +1345,14 @@ private:
     void TestRegistry() {
         using namespace NCodecs;
         TVector<TString> vs = ICodec::GetCodecsList();
-        for (const auto& v : vs) { 
-            TCodecPtr p = ICodec::GetInstance(v); 
-            if (v == "none") { 
+        for (const auto& v : vs) {
+            TCodecPtr p = ICodec::GetInstance(v);
+            if (v == "none") {
                 UNIT_ASSERT(!p);
                 continue;
             }
-            UNIT_ASSERT_C(!!p, v); 
-            UNIT_ASSERT_C(TStringBuf(v).Head(3) == TStringBuf(p->GetName()).Head(3), v + " " + p->GetName()); 
+            UNIT_ASSERT_C(!!p, v);
+            UNIT_ASSERT_C(TStringBuf(v).Head(3) == TStringBuf(p->GetName()).Head(3), v + " " + p->GetName());
         }
     }
 };

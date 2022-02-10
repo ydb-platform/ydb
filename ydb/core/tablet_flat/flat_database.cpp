@@ -411,7 +411,7 @@ void TDatabase::DebugDumpTable(ui32 table, IOutputStream& str, const NScheme::TT
         str << "unknown" << Endl;
 }
 
-void TDatabase::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const { 
+void TDatabase::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const {
     for (const auto& it: DatabaseImpl->Scheme->Tables) {
         if (DatabaseImpl->Get(it.first, false)) {
             str << "======= " << it.second.Name << " ======\n";

@@ -10,9 +10,9 @@
 /**
  * A proxy output stream that writes into two slave streams simultaneously.
  */
-class TTeeOutput: public IOutputStream { 
+class TTeeOutput: public IOutputStream {
 public:
-    TTeeOutput(IOutputStream* l, IOutputStream* r) noexcept; 
+    TTeeOutput(IOutputStream* l, IOutputStream* r) noexcept;
     ~TTeeOutput() override;
 
 private:
@@ -21,8 +21,8 @@ private:
     void DoFinish() override;
 
 private:
-    IOutputStream* L_; 
-    IOutputStream* R_; 
+    IOutputStream* L_;
+    IOutputStream* R_;
 };
 
 /** @} */

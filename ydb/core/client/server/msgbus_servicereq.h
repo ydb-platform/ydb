@@ -29,7 +29,7 @@ protected:
 
 public:
     NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx) {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
         return new TBusResponseStatus(status, "undocumented error 3");
     }
 

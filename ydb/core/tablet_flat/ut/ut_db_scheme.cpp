@@ -128,8 +128,8 @@ namespace {
     };
 }
 
-Y_UNIT_TEST_SUITE(TScheme) { 
-    Y_UNIT_TEST(Shapshot) 
+Y_UNIT_TEST_SUITE(TScheme) {
+    Y_UNIT_TEST(Shapshot)
     {
         const TModel model;
 
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(TScheme) {
         UNIT_ASSERT(TCompare().Do(TModel::TableId, origin, restored));
     }
 
-    Y_UNIT_TEST(Delta) 
+    Y_UNIT_TEST(Delta)
     {
         const TModel model;
 
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(TScheme) {
         model.Check(restored);
     }
 
-    Y_UNIT_TEST(Policy) 
+    Y_UNIT_TEST(Policy)
     {
         auto delta = TModel().Build();
 

@@ -7,17 +7,17 @@
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <util/system/tls.h>
 
-extern Y_POD_THREAD(IOutputStream*) HtmlOutputStreamPtr; 
+extern Y_POD_THREAD(IOutputStream*) HtmlOutputStreamPtr;
 
-static IOutputStream& HtmlOutputStream() { 
-    Y_VERIFY(!!HtmlOutputStreamPtr); 
+static IOutputStream& HtmlOutputStream() {
+    Y_VERIFY(!!HtmlOutputStreamPtr);
     return *HtmlOutputStreamPtr;
 }
 
 struct THtmlOutputStreamPushPop {
-    IOutputStream* const Prev; 
+    IOutputStream* const Prev;
 
-    THtmlOutputStreamPushPop(IOutputStream* outputStream) 
+    THtmlOutputStreamPushPop(IOutputStream* outputStream)
         : Prev(HtmlOutputStreamPtr)
     {
         HtmlOutputStreamPtr = outputStream;

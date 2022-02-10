@@ -5,8 +5,8 @@ OWNER(
     espetrov
 )
 
-LIBRARY() 
- 
+LIBRARY()
+
 SRCS(
     local_executor.cpp
     tbb_local_executor.cpp

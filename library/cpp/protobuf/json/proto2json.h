@@ -19,7 +19,7 @@ namespace NJson {
     class TJsonWriter;
 }
 
-class IOutputStream; 
+class IOutputStream;
 class TStringStream;
 
 namespace NProtobufJson {

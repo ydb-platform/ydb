@@ -16,14 +16,14 @@
 namespace NKikimr {
 
 ui64 TMediatorTimecastEntry::Get(ui64 tabletId) const {
-    Y_UNUSED(tabletId); 
+    Y_UNUSED(tabletId);
     return AtomicGet(Step);
 }
 
 void TMediatorTimecastEntry::Update(ui64 step, ui64 *exemption, ui64 exsz) {
-    Y_VERIFY(exsz == 0, "exemption lists not supported yet"); 
-    Y_UNUSED(exemption); 
-    Y_UNUSED(exsz); 
+    Y_VERIFY(exsz == 0, "exemption lists not supported yet");
+    Y_UNUSED(exemption);
+    Y_UNUSED(exsz);
 
     AtomicSet(Step, step);
 }
@@ -123,7 +123,7 @@ class TMediatorTimecastProxy : public TActor<TMediatorTimecastProxy> {
             TMediator &mediator = xpair.second;
 
             if (mediator.PipeClient == pipeClient) {
-                Y_VERIFY(tabletId == mediatorTabletId); 
+                Y_VERIFY(tabletId == mediatorTabletId);
                 mediator.PipeClient = TActorId();
                 RegisterMediator(mediatorTabletId, mediator, ctx);
                 return;
@@ -181,7 +181,7 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvRegisterTablet::TPtr
     TMediator &mediator = MediatorInfo(mediatorTabletId, processingParams);
     tabletInfo.Mediator = &mediator;
 
-    Y_VERIFY(bucketId < mediator.BucketsSz); 
+    Y_VERIFY(bucketId < mediator.BucketsSz);
     auto &bucket = mediator.Buckets[bucketId];
     if (!bucket.Entry)
         bucket.Entry = new TMediatorTimecastEntry();
@@ -262,7 +262,7 @@ void TMediatorTimecastProxy::Handle(TEvMediatorTimecast::TEvUpdate::TPtr &ev, co
         << " HANDLE "<< ev->Get()->ToString());
 
     const NKikimrTxMediatorTimecast::TEvUpdate &record = ev->Get()->Record;
-    Y_VERIFY(record.ExemptionSize() == 0, "exemption lists are not supported yet"); 
+    Y_VERIFY(record.ExemptionSize() == 0, "exemption lists are not supported yet");
 
     const ui64 mediatorTabletId = record.GetMediator();
     auto it = Mediators.find(mediatorTabletId);

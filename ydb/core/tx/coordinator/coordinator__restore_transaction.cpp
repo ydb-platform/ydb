@@ -14,7 +14,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
     {}
 
     bool Restore(TTransactions &transactions, TTransactionContext &txc, const TActorContext &ctx) {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
         NIceDb::TNiceDb db(txc.DB);
 
         {
@@ -67,7 +67,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
                 out.Finish();
                 Cerr << "Coordinator DB dumped to " << dbDumpFile;
                 Sleep(TDuration::Seconds(10));
-                Y_FAIL("Transaction(s) not found!"); 
+                Y_FAIL("Transaction(s) not found!");
             }
         }
 
@@ -92,7 +92,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
         // start mediator queues
         for (ui64 mediatorId: Self->Config.Mediators->List()) {
             TMediator &mediator = Self->Mediator(mediatorId, ctx);
-            Y_UNUSED(mediator); 
+            Y_UNUSED(mediator);
         }
 
         // start plan process.

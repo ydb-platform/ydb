@@ -2,34 +2,34 @@
 
 #include <library/cpp/streams/zc_memory_input/zc_memory_input.h>
 
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/ysaveload.h>
 
 #include "longs.h"
 
 struct Stream_traits {
     template <typename T>
-    static T get(IInputStream& in) { 
+    static T get(IInputStream& in) {
         T x;
         ::Load(&in, x);
         return x;
     }
-    static ui8 get_8(IInputStream& in) { 
+    static ui8 get_8(IInputStream& in) {
         return get<ui8>(in);
     }
-    static ui16 get_16(IInputStream& in) { 
+    static ui16 get_16(IInputStream& in) {
         return get<ui16>(in);
     }
-    static ui32 get_32(IInputStream& in) { 
+    static ui32 get_32(IInputStream& in) {
         return get<ui32>(in);
     }
-    static void put_8(ui8 x, IOutputStream& out) { 
+    static void put_8(ui8 x, IOutputStream& out) {
         ::Save(&out, x);
     }
-    static void put_16(ui16 x, IOutputStream& out) { 
+    static void put_16(ui16 x, IOutputStream& out) {
         ::Save(&out, x);
     }
-    static void put_32(ui32 x, IOutputStream& out) { 
+    static void put_32(ui32 x, IOutputStream& out) {
         ::Save(&out, x);
     }
     static int is_good(IInputStream& /*in*/) {

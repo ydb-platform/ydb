@@ -8,7 +8,7 @@
 class TPipeBase::TImpl {
 public:
     inline TImpl(const TString& command, const char* mode)
-        : Pipe_(nullptr) 
+        : Pipe_(nullptr)
     {
 #ifndef _freebsd_
         if (strcmp(mode, "r+") == 0) {
@@ -16,13 +16,13 @@ public:
         }
 #endif
         Pipe_ = ::popen(command.data(), mode);
-        if (Pipe_ == nullptr) { 
+        if (Pipe_ == nullptr) {
             ythrow TSystemError() << "failed to open pipe: " << command.Quote();
         }
     }
 
     inline ~TImpl() {
-        if (Pipe_ != nullptr) { 
+        if (Pipe_ != nullptr) {
             ::pclose(Pipe_);
         }
     }
@@ -44,14 +44,14 @@ TPipeInput::TPipeInput(const TString& command)
 }
 
 size_t TPipeInput::DoRead(void* buf, size_t len) {
-    if (Impl_->Pipe_ == nullptr) { 
+    if (Impl_->Pipe_ == nullptr) {
         return 0;
     }
 
     size_t bytesRead = ::fread(buf, 1, len, Impl_->Pipe_);
     if (bytesRead == 0) {
         int exitStatus = ::pclose(Impl_->Pipe_);
-        Impl_->Pipe_ = nullptr; 
+        Impl_->Pipe_ = nullptr;
         if (exitStatus == -1) {
             ythrow TSystemError() << "pclose() failed";
         } else if (exitStatus != 0) {
@@ -67,14 +67,14 @@ TPipeOutput::TPipeOutput(const TString& command)
 }
 
 void TPipeOutput::DoWrite(const void* buf, size_t len) {
-    if (Impl_->Pipe_ == nullptr || len != ::fwrite(buf, 1, len, Impl_->Pipe_)) { 
+    if (Impl_->Pipe_ == nullptr || len != ::fwrite(buf, 1, len, Impl_->Pipe_)) {
         ythrow TSystemError() << "fwrite failed";
     }
 }
 
 void TPipeOutput::Close() {
     int exitStatus = ::pclose(Impl_->Pipe_);
-    Impl_->Pipe_ = nullptr; 
+    Impl_->Pipe_ = nullptr;
     if (exitStatus == -1) {
         ythrow TSystemError() << "pclose() failed";
     } else if (exitStatus != 0) {

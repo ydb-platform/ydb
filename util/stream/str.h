@@ -15,7 +15,7 @@
 /**
  * Input stream for reading data from a string.
  */
-class TStringInput: public IZeroCopyInputFastReadTo { 
+class TStringInput: public IZeroCopyInputFastReadTo {
 public:
     /**
      * Constructs a string input stream that reads character data from the
@@ -109,7 +109,7 @@ private:
  */
 class TStringStream: private TEmbedPolicy<TString>, public TStringInput, public TStringOutput {
     using TEmbeddedString = TEmbedPolicy<TString>;
- 
+
 public:
     inline TStringStream()
         : TEmbeddedString()

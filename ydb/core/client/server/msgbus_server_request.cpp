@@ -271,7 +271,7 @@ bool TMessageBusServerRequest::AllRequestsCompletedMKQL(const TActorContext& ctx
             return true;
         }
         default:
-            Y_FAIL("Unknown mkqlTxMode."); 
+            Y_FAIL("Unknown mkqlTxMode.");
     }
 }
 

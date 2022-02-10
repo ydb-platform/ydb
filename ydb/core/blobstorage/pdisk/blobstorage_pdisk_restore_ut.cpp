@@ -10,7 +10,7 @@
 
 namespace NKikimr {
 
-Y_UNIT_TEST_SUITE(TYardTestRestore) { 
+Y_UNIT_TEST_SUITE(TYardTestRestore) {
 
     YARD_UNIT_TEST(TestRestore15) {
         TTestContext tc(false, true);

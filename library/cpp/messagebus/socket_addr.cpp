@@ -74,6 +74,6 @@ TNetAddr NBus::NPrivate::TBusSocketAddr::ToNetAddr() const {
 }
 
 template <>
-void Out<TBusSocketAddr>(IOutputStream& out, const TBusSocketAddr& addr) { 
+void Out<TBusSocketAddr>(IOutputStream& out, const TBusSocketAddr& addr) {
     out << addr.ToNetAddr();
 }

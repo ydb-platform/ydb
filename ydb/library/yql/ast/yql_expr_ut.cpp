@@ -5,7 +5,7 @@
 
 namespace NYql {
 
-Y_UNIT_TEST_SUITE(TCompileYqlExpr) { 
+Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
 
     static TAstParseResult ParseAstWithCheck(const TStringBuf& s) {
         TAstParseResult res = ParseAst(s);
@@ -38,20 +38,20 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         return result;
     }
 
-    Y_UNIT_TEST(TestNoReturn1) { 
+    Y_UNIT_TEST(TestNoReturn1) {
         auto s = "(\n"
             ")\n";
         UNIT_ASSERT(false == ParseAndCompile(s));
     }
 
-    Y_UNIT_TEST(TestNoReturn2) { 
+    Y_UNIT_TEST(TestNoReturn2) {
         auto s = "(\n"
             "(let x 'y)\n"
             ")\n";
         UNIT_ASSERT(false == ParseAndCompile(s));
     }
 
-    Y_UNIT_TEST(TestExportInsteadOfReturn) { 
+    Y_UNIT_TEST(TestExportInsteadOfReturn) {
         const auto s =
             "# library\n"
             "(\n"
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT(false == ParseAndCompile(s));
     }
 
-    Y_UNIT_TEST(TestLeftAfterReturn) { 
+    Y_UNIT_TEST(TestLeftAfterReturn) {
         auto s = "(\n"
             "(return 'x)\n"
             "(let x 'y)\n"
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT(false == ParseAndCompile(s));
     }
 
-    Y_UNIT_TEST(TestReturn) { 
+    Y_UNIT_TEST(TestReturn) {
         auto s = "(\n"
             "(return world)\n"
             ")\n";
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Type(), TExprNode::World);
     }
 
-    Y_UNIT_TEST(TestExport) { 
+    Y_UNIT_TEST(TestExport) {
         auto s = "(\n"
             "(let X 'Y)\n"
             "(let ex '42)\n"
@@ -100,7 +100,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT_VALUES_EQUAL("Y", exports["X"]->Content());
     }
 
-    Y_UNIT_TEST(TestEmptyLib) { 
+    Y_UNIT_TEST(TestEmptyLib) {
         auto s = "(\n"
             "(let X 'Y)\n"
             "(let ex '42)\n"
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT(cohesion.Imports.empty());
     }
 
-    Y_UNIT_TEST(TestArbitraryAtom) { 
+    Y_UNIT_TEST(TestArbitraryAtom) {
         auto s = "(\n"
             "(let x '\"\\x01\\x23\\x45\\x67\\x89\\xAB\\xCD\\xEF\")"
             "(return x)\n"
@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::ArbitraryContent);
     }
 
-    Y_UNIT_TEST(TestBinaryAtom) { 
+    Y_UNIT_TEST(TestBinaryAtom) {
         auto s = "(\n"
             "(let x 'x\"FEDCBA9876543210\")"
             "(return x)\n"
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT(xValue->GetFlags() & TNodeFlags::BinaryContent);
     }
 
-    Y_UNIT_TEST(TestLet) { 
+    Y_UNIT_TEST(TestLet) {
         auto s = "(\n"
         "(let x 'y)\n"
         "(return x)\n"
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Content(), "y");
     }
 
-    Y_UNIT_TEST(TestComplexQuote) { 
+    Y_UNIT_TEST(TestComplexQuote) {
         auto s = "(\n"
             "(let x 'a)\n"
             "(let y 'b)\n"
@@ -188,21 +188,21 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Content(), "b");
     }
 
-    Y_UNIT_TEST(TestEmptyReturn) { 
+    Y_UNIT_TEST(TestEmptyReturn) {
         auto s = "(\n"
             "(return)\n"
             ")\n";
         UNIT_ASSERT(false == ParseAndCompile(s));
     }
 
-    Y_UNIT_TEST(TestManyReturn) { 
+    Y_UNIT_TEST(TestManyReturn) {
         auto s = "(\n"
             "(return world world)\n"
             ")\n";
         UNIT_ASSERT(false == ParseAndCompile(s));
     }
 
-    Y_UNIT_TEST(TestUnknownFunction) { 
+    Y_UNIT_TEST(TestUnknownFunction) {
         auto s = "(\n"
             "(let a '2)\n"
             "(let x (+ a '3))\n"
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(1)->Content(), "3");
     }
 
-    Y_UNIT_TEST(TestReturnTwice) { 
+    Y_UNIT_TEST(TestReturnTwice) {
         auto s = "(\n"
             "(return)\n"
             "(return)\n"
@@ -230,7 +230,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT(false == ParseAndCompile(s));
     }
 
-    Y_UNIT_TEST(TestDeclareNonTop) { 
+    Y_UNIT_TEST(TestDeclareNonTop) {
         const auto s = R"(
             (
             (let $1 (block '(
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT(false == ParseAndCompile(s));
     }
 
-    Y_UNIT_TEST(TestDeclareHideLet) { 
+    Y_UNIT_TEST(TestDeclareHideLet) {
         const auto s = R"(
             (
             (let $name (Uint32 '10))
@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT(false == ParseAndCompile(s));
     }
 
-    Y_UNIT_TEST(TestDeclareBadName) { 
+    Y_UNIT_TEST(TestDeclareBadName) {
         const auto s = R"(
             (
             (declare $15 (DataType 'Uint32))
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT(false == ParseAndCompile(s));
     }
 
-    Y_UNIT_TEST(TestLetHideDeclare) { 
+    Y_UNIT_TEST(TestLetHideDeclare) {
         const auto s = R"(
             (
             (declare $name (DataType 'Uint32))
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
         UNIT_ASSERT_VALUES_EQUAL(exprRoot->Child(0)->Content(), "10");
     }
 
-    Y_UNIT_TEST(TestDeclare) { 
+    Y_UNIT_TEST(TestDeclare) {
         const auto s = R"(
             (
             (declare $param (DataType 'Uint32))
@@ -305,7 +305,7 @@ Y_UNIT_TEST_SUITE(TCompileYqlExpr) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TCompareExprTrees) { 
+Y_UNIT_TEST_SUITE(TCompareExprTrees) {
     void CompileAndCompare(const TString& one, const TString& two, const std::pair<TPosition, TPosition> *const diffPositions = nullptr) {
         const auto progOne(ParseAst(one)), progTwo(ParseAst(two));
         UNIT_ASSERT(progOne.IsOk() && progTwo.IsOk());
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(TCompareExprTrees) {
             UNIT_ASSERT(CompareExprTrees(diffOne, diffTwo));
     }
 
-    Y_UNIT_TEST(BigGoodCompare) { 
+    Y_UNIT_TEST(BigGoodCompare) {
         const auto one = R"(
             (
             (let $1 world)
@@ -854,7 +854,7 @@ Y_UNIT_TEST_SUITE(TCompareExprTrees) {
         CompileAndCompare(one, two);
     }
 
-    Y_UNIT_TEST(DiffrentAtoms) { 
+    Y_UNIT_TEST(DiffrentAtoms) {
         const auto one = "((return (+ '4 (- '3 '2))))";
         const auto two = "((let x '3)\n(let y '1)\n(let z (- x y))\n(let r (+ '4 z))\n(return r))";
 
@@ -862,7 +862,7 @@ Y_UNIT_TEST_SUITE(TCompareExprTrees) {
         CompileAndCompare(one, two, &diff);
     }
 
-    Y_UNIT_TEST(DiffrentLists) { 
+    Y_UNIT_TEST(DiffrentLists) {
         const auto one = "((return '('7 '4 '('1 '3 '2))))";
         const auto two = "((let x '('1 '3))\n(let y '('7 '4 x))\n(return y))";
 
@@ -870,7 +870,7 @@ Y_UNIT_TEST_SUITE(TCompareExprTrees) {
         CompileAndCompare(one, two, &diff);
     }
 
-    Y_UNIT_TEST(DiffrentCallables) { 
+    Y_UNIT_TEST(DiffrentCallables) {
         const auto one = "((return (- '4 (- '3 '2))))";
         const auto two = "((let x '3)\n(let y '2)\n(let z (- x y))\n(let r (+ '4 z))\n(return r))";
 
@@ -878,7 +878,7 @@ Y_UNIT_TEST_SUITE(TCompareExprTrees) {
         CompileAndCompare(one, two, &diff);
     }
 
-    Y_UNIT_TEST(SwapArguments) { 
+    Y_UNIT_TEST(SwapArguments) {
         const auto one = "((let l (lambda '(x y) (+ x y)))\n(return (Apply l '7 '9)))";
         const auto two = "((return (Apply (lambda '(x y) (+ y x)) '7 '9)))";
 
@@ -887,7 +887,7 @@ Y_UNIT_TEST_SUITE(TCompareExprTrees) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TConvertToAst) { 
+Y_UNIT_TEST_SUITE(TConvertToAst) {
     static TString CompileAndDisassemble(const TString& program, bool expectEqualExprs = true) {
         const auto astRes = ParseAst(program);
         UNIT_ASSERT(astRes.IsOk());
@@ -913,7 +913,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         return convRes.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
     }
 
-    Y_UNIT_TEST(ManyLambdaWithCaptures) { 
+    Y_UNIT_TEST(ManyLambdaWithCaptures) {
         const auto program = R"(
             (
             #comment
@@ -948,7 +948,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         CompileAndDisassemble(program);
     }
 
-    Y_UNIT_TEST(LambdaWithCaptureArgumentOfTopLambda) { 
+    Y_UNIT_TEST(LambdaWithCaptureArgumentOfTopLambda) {
         const auto program = R"(
                 (
                 (let mr_source (DataSource 'yt 'plato))
@@ -972,7 +972,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         CompileAndDisassemble(program);
     }
 
-    Y_UNIT_TEST(LambdaWithCapture) { 
+    Y_UNIT_TEST(LambdaWithCapture) {
         const auto program = R"(
             (
             (let conf (Configure! world (DataSource 'yt '"$all") '"Attr" '"mapjoinlimit" '"1"))
@@ -1012,7 +1012,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         UNIT_ASSERT_EQUAL(disassembled.find("'('key 'subkey 'value)"), disassembled.rfind("'('key 'subkey 'value)"));
     }
 
-    Y_UNIT_TEST(ManyLambdasWithCommonCapture) { 
+    Y_UNIT_TEST(ManyLambdasWithCommonCapture) {
         const auto program = R"(
             (
             (let c42 (+ (Int64 '40) (Int64 '2)))
@@ -1029,7 +1029,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         UNIT_ASSERT_EQUAL(disassembled.find("(+ (Int64 '40) (Int64 '2))"), disassembled.rfind("(+ (Int64 '40) (Int64 '2))"));
     }
 
-    Y_UNIT_TEST(CapturedUseInTopLevelAfrerLambda) { 
+    Y_UNIT_TEST(CapturedUseInTopLevelAfrerLambda) {
         const auto program = R"(
             (
             (let $1 (DataSink 'result))
@@ -1057,7 +1057,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         CompileAndDisassemble(program);
     }
 
-    Y_UNIT_TEST(SelectCommonAncestor) { 
+    Y_UNIT_TEST(SelectCommonAncestor) {
         const auto program = R"(
         (
         (let $1 (DataSink 'result))
@@ -1157,7 +1157,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         CompileAndDisassemble(program);
     }
 
-    Y_UNIT_TEST(Parameters) { 
+    Y_UNIT_TEST(Parameters) {
         const auto program = R"(
         (
         (let $nameType (OptionalType (DataType 'String)))
@@ -1186,7 +1186,7 @@ Y_UNIT_TEST_SUITE(TConvertToAst) {
         UNIT_ASSERT(TString::npos != disassembled.find("(declare $Name (OptionalType (DataType 'String)))"));
     }
 
-    Y_UNIT_TEST(ParametersDifferentTypes) { 
+    Y_UNIT_TEST(ParametersDifferentTypes) {
         const auto program = R"(
         (
         (let $1 (Read! world (DataSource '"kikimr" '"local_ut") (Key '('table (String '"tmp/table"))) (Void) '()))

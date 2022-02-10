@@ -209,8 +209,8 @@ TComputationNodeFactory GetTestFactory() {
     };
 }
 
-Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) { 
-    Y_UNIT_TEST_LLVM(TestEmbeddedByteAt) { 
+Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
+    Y_UNIT_TEST_LLVM(TestEmbeddedByteAt) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -246,7 +246,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestStringByteAt) { 
+    Y_UNIT_TEST_LLVM(TestStringByteAt) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -282,7 +282,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestCountBitsUI8) { 
+    Y_UNIT_TEST_LLVM(TestCountBitsUI8) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -331,7 +331,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestCountBitsUI16) { 
+    Y_UNIT_TEST_LLVM(TestCountBitsUI16) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -380,7 +380,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestShiftLeft) { 
+    Y_UNIT_TEST_LLVM(TestShiftLeft) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -429,7 +429,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestShiftRight) { 
+    Y_UNIT_TEST_LLVM(TestShiftRight) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -478,7 +478,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestRotLeft) { 
+    Y_UNIT_TEST_LLVM(TestRotLeft) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -527,7 +527,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestRotRight) { 
+    Y_UNIT_TEST_LLVM(TestRotRight) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -576,7 +576,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestConvertIntToBool) { 
+    Y_UNIT_TEST_LLVM(TestConvertIntToBool) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -610,7 +610,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestFloatAbs) { 
+    Y_UNIT_TEST_LLVM(TestFloatAbs) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -641,7 +641,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestIntegerAbs) { 
+    Y_UNIT_TEST_LLVM(TestIntegerAbs) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -672,7 +672,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestToIntegral) { 
+    Y_UNIT_TEST_LLVM(TestToIntegral) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -685,7 +685,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(1).template Get<ui32>(), 2U);
     }
 
-    Y_UNIT_TEST_LLVM(TestFloatToI16) { 
+    Y_UNIT_TEST_LLVM(TestFloatToI16) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -734,7 +734,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestDoubleToBool) { 
+    Y_UNIT_TEST_LLVM(TestDoubleToBool) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -783,7 +783,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestDoubleToUI32) { 
+    Y_UNIT_TEST_LLVM(TestDoubleToUI32) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1433,7 +1433,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestNanvl) { 
+    Y_UNIT_TEST_LLVM(TestNanvl) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1472,7 +1472,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestConvertToFloat) { 
+    Y_UNIT_TEST_LLVM(TestConvertToFloat) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1482,7 +1482,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().template Get<float>(), 7.0f);
     }
 
-    Y_UNIT_TEST_LLVM(TestAppend) { 
+    Y_UNIT_TEST_LLVM(TestAppend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         auto pgmReturn = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
@@ -1502,7 +1502,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestForkedAppend) { 
+    Y_UNIT_TEST_LLVM(TestForkedAppend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto list1 = pb.NewList(pb.NewDataType(NUdf::TDataType<ui32>::Id), {pb.NewDataLiteral<ui32>(34)});
@@ -1529,7 +1529,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator2.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestPrepend) { 
+    Y_UNIT_TEST_LLVM(TestPrepend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         auto pgmReturn = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
@@ -1549,7 +1549,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestPrependOfVoid) { 
+    Y_UNIT_TEST_LLVM(TestPrependOfVoid) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         auto pgmReturn = pb.NewEmptyListOfVoid();
@@ -1564,7 +1564,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Skip());
     }
 
-    Y_UNIT_TEST_LLVM(TestForkedPrepend) { 
+    Y_UNIT_TEST_LLVM(TestForkedPrepend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto list = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
@@ -1592,7 +1592,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator2.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestAppendOfVoid) { 
+    Y_UNIT_TEST_LLVM(TestAppendOfVoid) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         auto pgmReturn = pb.NewEmptyListOfVoid();
@@ -1607,7 +1607,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Skip());
     }
 
-    Y_UNIT_TEST_LLVM(TestExtend) { 
+    Y_UNIT_TEST_LLVM(TestExtend) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto emptyList = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
@@ -1628,7 +1628,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestExtend3) { 
+    Y_UNIT_TEST_LLVM(TestExtend3) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto emptyList = pb.NewEmptyList(pb.NewDataType(NUdf::TDataType<ui32>::Id));
@@ -1795,7 +1795,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(list.GetElement(4).template Get<double>(), -7898.8);
     }
 
-    Y_UNIT_TEST_LLVM(TestAdd) { 
+    Y_UNIT_TEST_LLVM(TestAdd) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1808,7 +1808,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(res, 3);
     }
 
-    Y_UNIT_TEST_LLVM(TestSub) { 
+    Y_UNIT_TEST_LLVM(TestSub) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1821,7 +1821,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(res, 5);
     }
 
-    Y_UNIT_TEST_LLVM(TestMul) { 
+    Y_UNIT_TEST_LLVM(TestMul) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1834,7 +1834,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(res, 6);
     }
 
-    Y_UNIT_TEST_LLVM(TestDiv) { 
+    Y_UNIT_TEST_LLVM(TestDiv) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1848,7 +1848,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 5);
     }
 
-    Y_UNIT_TEST_LLVM(TestDivZero) { 
+    Y_UNIT_TEST_LLVM(TestDivZero) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1861,7 +1861,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!value);
     }
 
-    Y_UNIT_TEST_LLVM(TestIDivOverflow) { 
+    Y_UNIT_TEST_LLVM(TestIDivOverflow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1874,7 +1874,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!value);
     }
 
-    Y_UNIT_TEST_LLVM(TestMod) { 
+    Y_UNIT_TEST_LLVM(TestMod) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1888,7 +1888,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 2);
     }
 
-    Y_UNIT_TEST_LLVM(TestModZero) { 
+    Y_UNIT_TEST_LLVM(TestModZero) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1901,7 +1901,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!value);
     }
 
-    Y_UNIT_TEST_LLVM(TestIModOverflow) { 
+    Y_UNIT_TEST_LLVM(TestIModOverflow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1914,7 +1914,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!value);
     }
 
-    Y_UNIT_TEST_LLVM(TestStruct) { 
+    Y_UNIT_TEST_LLVM(TestStruct) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1945,7 +1945,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestMapOverList) { 
+    Y_UNIT_TEST_LLVM(TestMapOverList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -1976,7 +1976,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestMapOverStream) { 
+    Y_UNIT_TEST_LLVM(TestMapOverStream) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2043,7 +2043,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
     }
 
 #ifndef _win_
-    Y_UNIT_TEST_LLVM(TestMapUnwrapThrow) { 
+    Y_UNIT_TEST_LLVM(TestMapUnwrapThrow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2066,7 +2066,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_EXCEPTION(iterator.Next(item), yexception);
     }
 
-    Y_UNIT_TEST_LLVM(TestMapUnwrapThrowMessage) { 
+    Y_UNIT_TEST_LLVM(TestMapUnwrapThrowMessage) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2092,7 +2092,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_EXCEPTION(iterator.Next(item), yexception);
     }
 
-    Y_UNIT_TEST_LLVM(TestMapEnsureThrowMessage) { 
+    Y_UNIT_TEST_LLVM(TestMapEnsureThrowMessage) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2115,7 +2115,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_EXCEPTION(iterator.Next(item), yexception);
     }
 #endif
-    Y_UNIT_TEST_LLVM(TestMapWithCoalesce) { 
+    Y_UNIT_TEST_LLVM(TestMapWithCoalesce) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2146,7 +2146,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestSizeOfOptional) { 
+    Y_UNIT_TEST_LLVM(TestSizeOfOptional) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2174,7 +2174,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestSizeOfOptionalString) { 
+    Y_UNIT_TEST_LLVM(TestSizeOfOptionalString) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2208,7 +2208,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestMapWithIfExists) { 
+    Y_UNIT_TEST_LLVM(TestMapWithIfExists) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2239,7 +2239,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestMapOverListLazy) { 
+    Y_UNIT_TEST_LLVM(TestMapOverListLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2269,7 +2269,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestMapOverOptional) { 
+    Y_UNIT_TEST_LLVM(TestMapOverOptional) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2287,7 +2287,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(value.template Get<ui32>(), 3);
     }
 
-    Y_UNIT_TEST_LLVM(TestFloatMinMax) { 
+    Y_UNIT_TEST_LLVM(TestFloatMinMax) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2414,7 +2414,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestFloatMod) { 
+    Y_UNIT_TEST_LLVM(TestFloatMod) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2444,7 +2444,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestDoubleMod) { 
+    Y_UNIT_TEST_LLVM(TestDoubleMod) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2567,7 +2567,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestCoalesce) { 
+    Y_UNIT_TEST_LLVM(TestCoalesce) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2597,7 +2597,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!value.GetElement(4));
     }
 
-    Y_UNIT_TEST_LLVM(TestExists) { 
+    Y_UNIT_TEST_LLVM(TestExists) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2621,7 +2621,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestIf) { 
+    Y_UNIT_TEST_LLVM(TestIf) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2646,7 +2646,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestIfPresent) { 
+    Y_UNIT_TEST_LLVM(TestIfPresent) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2817,7 +2817,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestIncDec) { 
+    Y_UNIT_TEST_LLVM(TestIncDec) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2837,7 +2837,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestLogical) { 
+    Y_UNIT_TEST_LLVM(TestLogical) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2908,7 +2908,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestZip) { 
+    Y_UNIT_TEST_LLVM(TestZip) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2934,7 +2934,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNBOXED_VALUE_STR_EQUAL(list.GetElement(1).GetElement(1), "E");
     }
 
-    Y_UNIT_TEST_LLVM(TestZipLazy) { 
+    Y_UNIT_TEST_LLVM(TestZipLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2964,7 +2964,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestZipAll) { 
+    Y_UNIT_TEST_LLVM(TestZipAll) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -2992,7 +2992,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNBOXED_VALUE_STR_EQUAL(list.GetElement(2).GetElement(1), "W");
     }
 
-    Y_UNIT_TEST_LLVM(TestZipAllLazy) { 
+    Y_UNIT_TEST_LLVM(TestZipAllLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3026,7 +3026,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestReduce) { 
+    Y_UNIT_TEST_LLVM(TestReduce) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3061,7 +3061,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(value.GetElement(0).template Get<ui32>(), 3);
     }
 
-    Y_UNIT_TEST_LLVM(TestReduceOverStream) { 
+    Y_UNIT_TEST_LLVM(TestReduceOverStream) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3096,7 +3096,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(value.GetElement(0).template Get<ui32>(), 3);
     }
 
-    Y_UNIT_TEST_LLVM(TestListLength) { 
+    Y_UNIT_TEST_LLVM(TestListLength) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3108,7 +3108,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().template Get<ui64>(), 2);
     }
 
-    Y_UNIT_TEST_LLVM(TestReverse) { 
+    Y_UNIT_TEST_LLVM(TestReverse) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3128,7 +3128,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestSkipForAppend) { 
+    Y_UNIT_TEST_LLVM(TestSkipForAppend) {
         const ui32 n = 100;
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3193,7 +3193,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestSkipForPrepend) { 
+    Y_UNIT_TEST_LLVM(TestSkipForPrepend) {
         const ui32 n = 100;
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3255,7 +3255,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestTakeForAppend) { 
+    Y_UNIT_TEST_LLVM(TestTakeForAppend) {
         const ui32 n = 100;
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3317,7 +3317,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestTakeForPrepend) { 
+    Y_UNIT_TEST_LLVM(TestTakeForPrepend) {
         const ui32 n = 100;
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -3379,7 +3379,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestReplicate) { 
+    Y_UNIT_TEST_LLVM(TestReplicate) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3399,7 +3399,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestIntegralCasts) { 
+    Y_UNIT_TEST_LLVM(TestIntegralCasts) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3411,7 +3411,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(res, 2);
     }
 
-    Y_UNIT_TEST_LLVM(TestCastFourIntoTrue) { 
+    Y_UNIT_TEST_LLVM(TestCastFourIntoTrue) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3423,7 +3423,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(res);
     }
 
-    Y_UNIT_TEST_LLVM(TestSubstring) { 
+    Y_UNIT_TEST_LLVM(TestSubstring) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3772,7 +3772,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestSize) { 
+    Y_UNIT_TEST_LLVM(TestSize) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3799,7 +3799,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestEnumerate) { 
+    Y_UNIT_TEST_LLVM(TestEnumerate) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3821,7 +3821,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestEnumerateLazy) { 
+    Y_UNIT_TEST_LLVM(TestEnumerateLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3844,7 +3844,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestEnumerateLazyThenReverse) { 
+    Y_UNIT_TEST_LLVM(TestEnumerateLazyThenReverse) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3867,7 +3867,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestEnumerateLazyThenSkip) { 
+    Y_UNIT_TEST_LLVM(TestEnumerateLazyThenSkip) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -3892,7 +3892,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().GetElement(2).template Get<ui64>(), 1);
     }
 
-    Y_UNIT_TEST_LLVM(TestEnumerateLazyThenTake) { 
+    Y_UNIT_TEST_LLVM(TestEnumerateLazyThenTake) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4001,7 +4001,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestSort) { 
+    Y_UNIT_TEST_LLVM(TestSort) {
         TestSortImpl<LLVM>(true);
         TestSortImpl<LLVM>(false);
     }
@@ -4041,7 +4041,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         return result;
     }
 
-    Y_UNIT_TEST_LLVM(TestSortTuples) { 
+    Y_UNIT_TEST_LLVM(TestSortTuples) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4057,7 +4057,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
             };
 
             TVector<TRuntimeNode> tuplesList;
-            for (ui32 i = 0; i < Y_ARRAY_SIZE(testData); i++) { 
+            for (ui32 i = 0; i < Y_ARRAY_SIZE(testData); i++) {
                 TVector<TRuntimeNode> elements(3);
                 elements[0] = pb.NewDataLiteral(std::get<0>(testData[i]));
                 elements[1] = pb.NewDataLiteral(std::get<1>(testData[i]));
@@ -4134,7 +4134,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestAsList) { 
+    Y_UNIT_TEST_LLVM(TestAsList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto pgmReturn = pb.AsList(pb.NewDataLiteral<ui32>(34));
@@ -4149,7 +4149,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestListIfTrue) { 
+    Y_UNIT_TEST_LLVM(TestListIfTrue) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto pgmReturn = pb.ListIf(pb.NewDataLiteral(true),
@@ -4165,7 +4165,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestListIfFalse) { 
+    Y_UNIT_TEST_LLVM(TestListIfFalse) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto pgmReturn = pb.ListIf(pb.NewDataLiteral(false),
@@ -4177,7 +4177,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Skip());
     }
 
-    Y_UNIT_TEST_LLVM(TestNth) { 
+    Y_UNIT_TEST_LLVM(TestNth) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
         const auto element0 = pb.NewDataLiteral<ui32>(34);
@@ -4190,7 +4190,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(res, 56);
     }
 
-    Y_UNIT_TEST_LLVM(NonDeterministicEnv) { 
+    Y_UNIT_TEST_LLVM(NonDeterministicEnv) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4217,7 +4217,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(false == iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestIndexDictContains) { 
+    Y_UNIT_TEST_LLVM(TestIndexDictContains) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4248,7 +4248,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestIndexDictLookup) { 
+    Y_UNIT_TEST_LLVM(TestIndexDictLookup) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4281,7 +4281,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestIndexDictContainsLazy) { 
+    Y_UNIT_TEST_LLVM(TestIndexDictContainsLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4313,7 +4313,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestIndexDictLookupLazy) { 
+    Y_UNIT_TEST_LLVM(TestIndexDictLookupLazy) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4438,7 +4438,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestFromString) { 
+    Y_UNIT_TEST_LLVM(TestFromString) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4463,7 +4463,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestStrictFromString) { 
+    Y_UNIT_TEST_LLVM(TestStrictFromString) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4499,7 +4499,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         }
     }
 
-    Y_UNIT_TEST_LLVM(TestFromBytes) { 
+    Y_UNIT_TEST_LLVM(TestFromBytes) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4517,7 +4517,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!res.GetElement(1));
     }
 
-    Y_UNIT_TEST_LLVM(TestMTRand) { 
+    Y_UNIT_TEST_LLVM(TestMTRand) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4553,7 +4553,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestRandom) { 
+    Y_UNIT_TEST_LLVM(TestRandom) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4573,7 +4573,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(tuple.GetElement(1).template Get<ui64>(), expectedValue2);
     }
 
-    Y_UNIT_TEST_LLVM(TestNow) { 
+    Y_UNIT_TEST_LLVM(TestNow) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4810,7 +4810,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(full.GetElement(2U).template Get<float>(), -3.14f);
     }
 #endif
-    Y_UNIT_TEST_LLVM(TestPerfHolders) { 
+    Y_UNIT_TEST_LLVM(TestPerfHolders) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4861,7 +4861,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         Cout << t2 - t1 << Endl;
     }
 
-    Y_UNIT_TEST_LLVM(TestPerfGrep) { 
+    Y_UNIT_TEST_LLVM(TestPerfGrep) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -4905,7 +4905,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         return NUdf::TUnboxedValuePod(stringRef.Size() == 5 && std::memcmp(stringRef.Data(), "ABCDE", 5) == 0);
     }
 
-    Y_UNIT_TEST_LLVM(TestPerfGrepSpecialFunc) { 
+    Y_UNIT_TEST_LLVM(TestPerfGrepSpecialFunc) {
         const auto t1 = TInstant::Now();
         {
             NUdf::TUnboxedValuePod items[2];

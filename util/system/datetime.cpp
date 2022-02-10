@@ -17,12 +17,12 @@
     #define Y_HAS_CLOCK_GETTIME
 #endif
 
-static ui64 ToMicroSeconds(const struct timeval& tv) { 
+static ui64 ToMicroSeconds(const struct timeval& tv) {
     return (ui64)tv.tv_sec * 1000000 + (ui64)tv.tv_usec;
 }
 
 #if defined(_win_)
-static ui64 ToMicroSeconds(const FILETIME& ft) { 
+static ui64 ToMicroSeconds(const FILETIME& ft) {
     return (((ui64)ft.dwHighDateTime << 32) + (ui64)ft.dwLowDateTime) / (ui64)10;
 }
 #elif defined(Y_HAS_CLOCK_GETTIME)
@@ -31,9 +31,9 @@ static ui64 ToMicroSeconds(const struct timespec& ts) {
 }
 #endif
 
-ui64 MicroSeconds() noexcept { 
+ui64 MicroSeconds() noexcept {
     struct timeval tv;
-    gettimeofday(&tv, nullptr); 
+    gettimeofday(&tv, nullptr);
 
     return ToMicroSeconds(tv);
 }
@@ -48,7 +48,7 @@ ui64 ThreadCPUUserTime() noexcept {
 #endif
 }
 
-ui64 ThreadCPUSystemTime() noexcept { 
+ui64 ThreadCPUSystemTime() noexcept {
 #if defined(_win_)
     FILETIME creationTime, exitTime, kernelTime, userTime;
     GetThreadTimes(GetCurrentThread(), &creationTime, &exitTime, &kernelTime, &userTime);
@@ -58,7 +58,7 @@ ui64 ThreadCPUSystemTime() noexcept {
 #endif
 }
 
-ui64 ThreadCPUTime() noexcept { 
+ui64 ThreadCPUTime() noexcept {
 #if defined(_win_)
     FILETIME creationTime, exitTime, kernelTime, userTime;
     GetThreadTimes(GetCurrentThread(), &creationTime, &exitTime, &kernelTime, &userTime);
@@ -72,13 +72,13 @@ ui64 ThreadCPUTime() noexcept {
 #endif
 }
 
-ui32 Seconds() noexcept { 
+ui32 Seconds() noexcept {
     struct timeval tv;
-    gettimeofday(&tv, nullptr); 
+    gettimeofday(&tv, nullptr);
     return tv.tv_sec;
 }
 
-void NanoSleep(ui64 ns) noexcept { 
+void NanoSleep(ui64 ns) noexcept {
 #if defined(_win_)
     Sleep(ns / 1000000);
 #else
@@ -88,7 +88,7 @@ void NanoSleep(ui64 ns) noexcept {
     req.tv_nsec = ns % NS;
     struct timespec left;
     while (nanosleep(&req, &left) < 0) {
-        Y_ASSERT(errno == EINTR); 
+        Y_ASSERT(errno == EINTR);
         req = left;
     }
 #endif

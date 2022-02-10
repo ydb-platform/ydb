@@ -2,8 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(TEasyRndInterface) { 
-    Y_UNIT_TEST(Test1) { 
+Y_UNIT_TEST_SUITE(TEasyRndInterface) {
+    Y_UNIT_TEST(Test1) {
         {
             ui32 x = 0;
 

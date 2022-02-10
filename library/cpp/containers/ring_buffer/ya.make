@@ -1,9 +1,9 @@
 OWNER(mowgli)
- 
-LIBRARY() 
- 
-SRCS( 
-    ring_buffer.cpp 
-) 
- 
-END() 
+
+LIBRARY()
+
+SRCS(
+    ring_buffer.cpp
+)
+
+END()

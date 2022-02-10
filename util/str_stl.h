@@ -46,15 +46,15 @@ namespace NHashPrivate {
             return NumericHash(t);
         }
     };
- 
-    template <typename C> 
-    struct TStringHash { 
-        using is_transparent = void; 
- 
-        inline size_t operator()(const TBasicStringBuf<C> s) const noexcept { 
+
+    template <typename C>
+    struct TStringHash {
+        using is_transparent = void;
+
+        inline size_t operator()(const TBasicStringBuf<C> s) const noexcept {
             return NHashPrivate::ComputeStringHash(s.data(), s.size());
-        } 
-    }; 
+        }
+    };
 }
 
 template <class T>
@@ -88,18 +88,18 @@ template <>
 struct hash<TUtf16String>: ::NHashPrivate::TStringHash<wchar16> {
 };
 
-template <> 
+template <>
 struct THash<TWtringBuf>: ::NHashPrivate::TStringHash<wchar16> {
-}; 
+};
 
-template <> 
+template <>
 struct hash<TUtf32String>: ::NHashPrivate::TStringHash<wchar32> {
-}; 
- 
-template <> 
+};
+
+template <>
 struct THash<TUtf32StringBuf>: ::NHashPrivate::TStringHash<wchar32> {
-}; 
- 
+};
+
 template <class C, class T, class A>
 struct hash<std::basic_string<C, T, A>>: ::NHashPrivate::TStringHash<C> {
 };
@@ -221,7 +221,7 @@ struct TCIEqualTo<const char*> {
 
 template <>
 struct TCIEqualTo<TStringBuf> {
-    inline bool operator()(const TStringBuf a, const TStringBuf b) const { 
+    inline bool operator()(const TStringBuf a, const TStringBuf b) const {
         return a.size() == b.size() && strnicmp(a.data(), b.data(), a.size()) == 0;
     }
 };

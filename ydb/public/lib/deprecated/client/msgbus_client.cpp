@@ -22,7 +22,7 @@ void TMsgBusClientConfig::CrackAddress(const TString& address, TString& hostname
                 port = FromString<ui32>(address.substr(last_colon_pos + 1));
                 hostname = address.substr(0, last_colon_pos);
             }
-            if (hostname.StartsWith('[') && hostname.EndsWith(']')) { 
+            if (hostname.StartsWith('[') && hostname.EndsWith(']')) {
                 hostname = hostname.substr(1, hostname.size() - 2);
             }
         }
@@ -129,7 +129,7 @@ void TMsgBusClient::Shutdown() {
 }
 
 NBus::EMessageStatus TMsgBusClient::SyncCall(TAutoPtr<NBus::TBusMessage> msg, TAutoPtr<NBus::TBusMessage> &reply) {
-    Y_VERIFY(!msg->Data); 
+    Y_VERIFY(!msg->Data);
     TAutoPtr<TSyncMessageCookie> cookie(new TSyncMessageCookie());
     msg->Data = cookie.Get();
 

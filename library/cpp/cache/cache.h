@@ -82,7 +82,7 @@ public:
 
     TItem* GetOldest() {
         typename TListType::TIterator it = List.Begin();
-        Y_ASSERT(it != List.End()); 
+        Y_ASSERT(it != List.End());
         return &*it;
     }
 
@@ -190,7 +190,7 @@ public:
 
     TItem* GetLeastFrequentlyUsed() {
         typename TListType::TIterator it = List.Begin();
-        Y_ASSERT(it != List.End()); 
+        Y_ASSERT(it != List.End());
         return &*it;
     }
 
@@ -310,7 +310,7 @@ public:
     TItem* GetLightest() {
         FixHeap();
 
-        Y_ASSERT(!Heap.empty()); 
+        Y_ASSERT(!Heap.empty());
 
         return Heap.front();
     }
@@ -319,7 +319,7 @@ public:
     // Erased items are stored in Removed set
     // and will be deleted on-access (using FixHeap method)
     void Erase(TItem* item) {
-        Y_ASSERT(Size > 0); 
+        Y_ASSERT(Size > 0);
 
         --Size;
         Removed.insert(item);
@@ -460,14 +460,14 @@ public:
 
     // note: it shouldn't touch 'value' if it returns false.
     bool PickOut(const TKey& key, TValue* value) {
-        Y_ASSERT(value); 
+        Y_ASSERT(value);
         TIndexIterator it = Index.find(TItem(key));
         if (it == Index.end())
             return false;
         *value = it->Value;
         List.Erase(const_cast<TItem*>(&*it));
         Index.erase(it);
-        Y_ASSERT(Index.size() == List.GetSize()); 
+        Y_ASSERT(Index.size() == List.GetSize());
         return true;
     }
 
@@ -492,7 +492,7 @@ public:
             }
         }
 
-        Y_ASSERT(Index.size() == List.GetSize()); 
+        Y_ASSERT(Index.size() == List.GetSize());
         return !insertedWasRemoved;
     }
 
@@ -505,7 +505,7 @@ public:
         }
         Insert(key, value);
 
-        Y_ASSERT(Index.size() == List.GetSize()); 
+        Y_ASSERT(Index.size() == List.GetSize());
     }
 
     void Erase(TIterator it) {
@@ -514,7 +514,7 @@ public:
         TDeleter::Destroy(item->Value);
         Index.erase(it.Iter);
 
-        Y_ASSERT(Index.size() == List.GetSize()); 
+        Y_ASSERT(Index.size() == List.GetSize());
     }
 
     bool Empty() const {
@@ -527,7 +527,7 @@ public:
             List.Erase(item);
             TDeleter::Destroy(item->Value);
         }
-        Y_ASSERT(List.GetSize() == 0); 
+        Y_ASSERT(List.GetSize() == 0);
         Index.clear();
     }
 
@@ -563,7 +563,7 @@ protected:
     void EraseFromIndex(TItem* item) {
         TDeleter::Destroy(item->Value);
         TIterator it = FindByItem(item);
-        Y_ASSERT(it != End()); 
+        Y_ASSERT(it != End());
         Index.erase(it.Iter);
     }
 };

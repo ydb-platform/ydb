@@ -88,7 +88,7 @@ namespace NKikimr {
 
         void Bootstrap(const TActorContext &ctx) {
             Prepare();
-            Y_VERIFY_DEBUG(!Merger.HaveToMergeData()); 
+            Y_VERIFY_DEBUG(!Merger.HaveToMergeData());
             MainCycleIndexOnly(ctx);
         }
 

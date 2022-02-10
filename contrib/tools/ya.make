@@ -5,7 +5,7 @@ RECURSE(
     bison
     chromaprinter
     file2c
-    flame-graph 
+    flame-graph
     flatc
     flatc64
     flex

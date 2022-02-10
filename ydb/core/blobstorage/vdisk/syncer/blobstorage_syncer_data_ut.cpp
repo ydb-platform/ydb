@@ -6,7 +6,7 @@ using namespace NKikimr;
 using namespace NSync;
 
 
-Y_UNIT_TEST_SUITE(TSyncNeighborsTests) { 
+Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
 
     template<typename... TArgs>
     void SerDes(TArgs&&... args) {
@@ -48,15 +48,15 @@ Y_UNIT_TEST_SUITE(TSyncNeighborsTests) {
         }
     }
 
-    Y_UNIT_TEST(SerDes1) { 
+    Y_UNIT_TEST(SerDes1) {
         SerDes(TBlobStorageGroupType::ErasureMirror3, 2U, 4U);
     }
 
-    Y_UNIT_TEST(SerDes2) { 
+    Y_UNIT_TEST(SerDes2) {
         SerDes(TBlobStorageGroupType::Erasure4Plus2Block, 1U, 8U);
     }
 
-    Y_UNIT_TEST(SerDes3) { 
+    Y_UNIT_TEST(SerDes3) {
         SerDes(TBlobStorageGroupType::Erasure4Plus2Block, 2U, 8U);
     }
 }

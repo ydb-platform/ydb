@@ -27,8 +27,8 @@ namespace {
     };
 }
 
-Y_UNIT_TEST_SUITE(Retry) { 
-    Y_UNIT_TEST(RetryOnExceptionSuccess) { 
+Y_UNIT_TEST_SUITE(Retry) {
+    Y_UNIT_TEST(RetryOnExceptionSuccess) {
         UNIT_ASSERT_NO_EXCEPTION(DoWithRetry(TDoOnSecondOrThrow{}, TRetryOptions(1, TDuration::Zero())));
     }
     Y_UNIT_TEST(RetryOnExceptionSuccessWithOnFail) {
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(Retry) {
         UNIT_ASSERT_NO_EXCEPTION(DoWithRetry<ui32>(TDoOnSecondOrThrow{}, cb, TRetryOptions(1, TDuration::Zero()), true));
         UNIT_ASSERT_EQUAL(value, 1);
     }
-    Y_UNIT_TEST(RetryOnExceptionFail) { 
+    Y_UNIT_TEST(RetryOnExceptionFail) {
         UNIT_ASSERT_EXCEPTION(DoWithRetry(TDoOnSecondOrThrow{}, TRetryOptions(0, TDuration::Zero())), yexception);
     }
     Y_UNIT_TEST(RetryOnExceptionFailWithOnFail) {
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(Retry) {
         UNIT_ASSERT_EQUAL(value, 1);
     }
 
-    Y_UNIT_TEST(RetryOnExceptionSuccessWithValue) { 
+    Y_UNIT_TEST(RetryOnExceptionSuccessWithValue) {
         std::function<ui32()> f = TDoOnSecondOrThrow{};
         UNIT_ASSERT(42 == *DoWithRetry<ui32>(f, TRetryOptions(1, TDuration::Zero()), false));
     }
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(Retry) {
         UNIT_ASSERT(42 == *DoWithRetry<ui32>(f, cb, TRetryOptions(1, TDuration::Zero()), false));
         UNIT_ASSERT_EQUAL(value, 1);
     }
-    Y_UNIT_TEST(RetryOnExceptionFailWithValue) { 
+    Y_UNIT_TEST(RetryOnExceptionFailWithValue) {
         std::function<ui32()> f = TDoOnSecondOrThrow{};
         UNIT_ASSERT(!DoWithRetry<ui32>(f, TRetryOptions(0, TDuration::Zero()), false).Defined());
     }
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(Retry) {
         UNIT_ASSERT_EQUAL(value, 1);
     }
 
-    Y_UNIT_TEST(RetryOnExceptionSuccessWithValueAndRethrow) { 
+    Y_UNIT_TEST(RetryOnExceptionSuccessWithValueAndRethrow) {
         std::function<ui32()> f = TDoOnSecondOrThrow{};
         UNIT_ASSERT(42 == *DoWithRetry<ui32>(f, TRetryOptions(1, TDuration::Zero()), true));
     }
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(Retry) {
         UNIT_ASSERT(42 == *DoWithRetry<ui32>(f, cb, TRetryOptions(1, TDuration::Zero()), true));
         UNIT_ASSERT_EQUAL(value, 1);
     }
-    Y_UNIT_TEST(RetryOnExceptionFailWithValueAndRethrow) { 
+    Y_UNIT_TEST(RetryOnExceptionFailWithValueAndRethrow) {
         std::function<ui32()> f = TDoOnSecondOrThrow{};
         UNIT_ASSERT_EXCEPTION(DoWithRetry<ui32>(f, TRetryOptions(0, TDuration::Zero()), true), yexception);
     }
@@ -93,10 +93,10 @@ Y_UNIT_TEST_SUITE(Retry) {
         UNIT_ASSERT_EQUAL(value, 1);
     }
 
-    Y_UNIT_TEST(RetryOnRetCodeSuccess) { 
+    Y_UNIT_TEST(RetryOnRetCodeSuccess) {
         UNIT_ASSERT(true == DoWithRetryOnRetCode(TDoOnSecondOrFail{}, TRetryOptions(1, TDuration::Zero())));
     }
-    Y_UNIT_TEST(RetryOnRetCodeFail) { 
+    Y_UNIT_TEST(RetryOnRetCodeFail) {
         UNIT_ASSERT(false == DoWithRetryOnRetCode(TDoOnSecondOrFail{}, TRetryOptions(0, TDuration::Zero())));
     }
     Y_UNIT_TEST(MakeRetryOptionsFromProto) {

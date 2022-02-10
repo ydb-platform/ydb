@@ -155,7 +155,7 @@ private:
 };
 
 TRuntimeNode ReplaceAsVoid(TCallable& callable, const TTypeEnvironment& env) {
-    Y_UNUSED(callable); 
+    Y_UNUSED(callable);
     return TRuntimeNode(env.GetVoid(), true);
 };
 
@@ -291,7 +291,7 @@ public:
     }
 
     EResult SetProgram(TStringBuf program, TStringBuf params) noexcept override {
-        Y_VERIFY(!Program.GetNode(), "Program is already set"); 
+        Y_VERIFY(!Program.GetNode(), "Program is already set");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         TRuntimeNode programNode;
         try {
@@ -376,12 +376,12 @@ public:
     }
 
     TVector<THolder<TKeyDesc>>& GetDbKeys() noexcept override {
-        Y_VERIFY(Program.GetNode(), "Program is not set"); 
+        Y_VERIFY(Program.GetNode(), "Program is not set");
         return DbKeys;
     }
 
     EResult PrepareShardPrograms(const TShardLimits& limits) noexcept override {
-        Y_VERIFY(!AreAffectedShardsPrepared, "PrepareShardPrograms is already called"); 
+        Y_VERIFY(!AreAffectedShardsPrepared, "PrepareShardPrograms is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         AffectedShards.clear();
         TSet<ui64> affectedShardSet;
@@ -389,7 +389,7 @@ public:
         TSet<ui64> onlineReadSet;
         for (ui32 keyIndex = 0; keyIndex < DbKeys.size(); ++keyIndex) {
             auto& key = DbKeys[keyIndex];
-            Y_VERIFY(key->Status == TKeyDesc::EStatus::Ok, "Some DB keys are not resolved correctly"); 
+            Y_VERIFY(key->Status == TKeyDesc::EStatus::Ok, "Some DB keys are not resolved correctly");
             AddShards(affectedShardSet, *key);
             if (affectedShardSet.size() > limits.ShardCount) {
                 AddError("PrepareShardPrograms", __LINE__,
@@ -508,15 +508,15 @@ public:
     }
 
     ui32 GetAffectedShardCount() const noexcept override {
-        Y_VERIFY(AreAffectedShardsPrepared, "PrepareShardPrograms must be called first"); 
-        Y_VERIFY(!AreShardProgramsExtracted, "AfterShardProgramsExtracted is already called"); 
+        Y_VERIFY(AreAffectedShardsPrepared, "PrepareShardPrograms must be called first");
+        Y_VERIFY(!AreShardProgramsExtracted, "AfterShardProgramsExtracted is already called");
         return static_cast<ui32>(AffectedShards.size());
     }
 
     EResult GetAffectedShard(ui32 index, TShardData& data) const noexcept override {
-        Y_VERIFY(AreAffectedShardsPrepared, "PrepareShardPrograms must be called first"); 
-        Y_VERIFY(!AreShardProgramsExtracted, "AfterShardProgramsExtracted is already called"); 
-        Y_VERIFY(index < AffectedShards.size(), "Bad index"); 
+        Y_VERIFY(AreAffectedShardsPrepared, "PrepareShardPrograms must be called first");
+        Y_VERIFY(!AreShardProgramsExtracted, "AfterShardProgramsExtracted is already called");
+        Y_VERIFY(index < AffectedShards.size(), "Bad index");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         data = AffectedShards[index];
         data.Program = SerializeRuntimeNode(SpecializedParts[index].Program, Env);
@@ -524,8 +524,8 @@ public:
     }
 
     void AfterShardProgramsExtracted() noexcept override {
-        Y_VERIFY(AreAffectedShardsPrepared, "PrepareShardPrograms must be called first"); 
-        Y_VERIFY(!AreShardProgramsExtracted, "AfterShardProgramsExtracted is already called"); 
+        Y_VERIFY(AreAffectedShardsPrepared, "PrepareShardPrograms must be called first");
+        Y_VERIFY(!AreShardProgramsExtracted, "AfterShardProgramsExtracted is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         TVector<THolder<TKeyDesc>>().swap(DbKeys);
         TVector<TProgramParts>().swap(SpecializedParts);
@@ -533,7 +533,7 @@ public:
     }
 
     void AddShardReply(ui64 origin, const TStringBuf& reply) noexcept override {
-        Y_VERIFY(!IsResultBuilt, "BuildResult is already called"); 
+        Y_VERIFY(!IsResultBuilt, "BuildResult is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         if (reply.empty()) {
             Status = EStatus::Error;
@@ -546,7 +546,7 @@ public:
     }
 
     void FinalizeOriginReplies(ui64 origin) noexcept override {
-        Y_VERIFY(!IsResultBuilt, "BuildResult is already called"); 
+        Y_VERIFY(!IsResultBuilt, "BuildResult is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         for (const auto& shardData : AffectedShards) {
             if (shardData.ShardId == origin) {
@@ -587,8 +587,8 @@ public:
     }
 
     void BuildResult() noexcept override {
-        Y_VERIFY(AreShardProgramsExtracted, "AfterShardProgramsExtracted must be called first"); 
-        Y_VERIFY(!IsResultBuilt, "BuildResult is already called"); 
+        Y_VERIFY(AreShardProgramsExtracted, "AfterShardProgramsExtracted must be called first");
+        Y_VERIFY(!IsResultBuilt, "BuildResult is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         if (Status == EStatus::Error)
             return;
@@ -685,7 +685,7 @@ public:
             return EResult::Cancelled;
         }
 
-        Y_VERIFY(IsResultBuilt, "BuildResult is not called yet"); 
+        Y_VERIFY(IsResultBuilt, "BuildResult is not called yet");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         if (Settings.EvaluateResultType) {
             ExportTypeToProto(ResultType, *result.MutableType());
@@ -735,7 +735,7 @@ public:
     }
 
     EResult AddProgram(ui64 origin, const TStringBuf& program, bool readOnly) noexcept override {
-        Y_VERIFY(ProgramPerOrigin.find(origin) == ProgramPerOrigin.end(), "Program for that origin is already added"); 
+        Y_VERIFY(ProgramPerOrigin.find(origin) == ProgramPerOrigin.end(), "Program for that origin is already added");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         TRuntimeNode node;
         try {
@@ -796,9 +796,9 @@ public:
     }
 
     EResult Validate(TValidationInfo& validationInfo) override {
-        Y_VERIFY(!IsProgramValidated, "Validate is already called"); 
-        Y_VERIFY(ProgramPerOrigin.size() == 1, "One program must be added to engine"); 
-        Y_VERIFY(Settings.Host, "Host is not set"); 
+        Y_VERIFY(!IsProgramValidated, "Validate is already called");
+        Y_VERIFY(ProgramPerOrigin.size() == 1, "One program must be added to engine");
+        Y_VERIFY(Settings.Host, "Host is not set");
         TGuard<TScopedAlloc> allocGuard(Alloc);
 
         if (ProgramPerOrigin.begin()->first != Settings.Host->GetShardId())
@@ -938,7 +938,7 @@ public:
                     }
 
                     THolder<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env);
-                    Y_VERIFY(desc); 
+                    Y_VERIFY(desc);
                     Y_VERIFY(desc->RowOperation == TKeyDesc::ERowOperation::Read);
                     TValidatedKey validKey(std::move(desc), false);
 
@@ -971,7 +971,7 @@ public:
                     }
 
                     THolder<TKeyDesc> desc = ExtractTableKey(*static_cast<TCallable*>(item.GetNode()), Strings, Env);
-                    Y_VERIFY(desc); 
+                    Y_VERIFY(desc);
                     Y_VERIFY(desc->RowOperation == TKeyDesc::ERowOperation::Update ||
                              desc->RowOperation == TKeyDesc::ERowOperation::Erase);
                     if (!desc->Range.Point) {
@@ -1090,9 +1090,9 @@ public:
     }
 
     EResult PrepareOutgoingReadsets() override {
-        Y_VERIFY(!AreOutgoingReadSetsPrepared, "PrepareOutgoingReadsets is already called"); 
-        Y_VERIFY(Settings.Host, "Host is not set"); 
-        Y_VERIFY(ProgramPerOrigin.size() > 0, "At least one program must be added to engine"); 
+        Y_VERIFY(!AreOutgoingReadSetsPrepared, "PrepareOutgoingReadsets is already called");
+        Y_VERIFY(Settings.Host, "Host is not set");
+        Y_VERIFY(ProgramPerOrigin.size() > 0, "At least one program must be added to engine");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         try {
             OutgoingReadsets.clear();
@@ -1200,20 +1200,20 @@ public:
     }
 
     ui32 GetOutgoingReadsetsCount() const noexcept override {
-        Y_VERIFY(AreOutgoingReadSetsPrepared, "PrepareOutgoingReadsets is not called yet"); 
-        Y_VERIFY(!AreOutgoingReadSetsExtracted, "AfterOutgoingReadsetsExtracted is already called"); 
+        Y_VERIFY(AreOutgoingReadSetsPrepared, "PrepareOutgoingReadsets is not called yet");
+        Y_VERIFY(!AreOutgoingReadSetsExtracted, "AfterOutgoingReadsetsExtracted is already called");
         return static_cast<ui32>(OutgoingReadsets.size());
     }
 
     TReadSet GetOutgoingReadset(ui32 index) const override {
-        Y_VERIFY(AreOutgoingReadSetsPrepared, "PrepareOutgoingReadsets is not called yet"); 
-        Y_VERIFY(!AreOutgoingReadSetsExtracted, "AfterOutgoingReadsetsExtracted is already called"); 
-        Y_VERIFY(index < OutgoingReadsets.size(), "Bad index"); 
+        Y_VERIFY(AreOutgoingReadSetsPrepared, "PrepareOutgoingReadsets is not called yet");
+        Y_VERIFY(!AreOutgoingReadSetsExtracted, "AfterOutgoingReadsetsExtracted is already called");
+        Y_VERIFY(index < OutgoingReadsets.size(), "Bad index");
         return OutgoingReadsets[index];
     }
 
     void AfterOutgoingReadsetsExtracted() noexcept override {
-        Y_VERIFY(!AreOutgoingReadSetsExtracted, "AfterOutgoingReadsetsExtracted is already called"); 
+        Y_VERIFY(!AreOutgoingReadSetsExtracted, "AfterOutgoingReadsetsExtracted is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         TVector<TReadSet>().swap(OutgoingReadsets);
         AreOutgoingReadSetsExtracted = true;
@@ -1224,9 +1224,9 @@ public:
     }
 
     EResult PrepareIncomingReadsets() override {
-        Y_VERIFY(!AreIncomingReadsetsPrepared, "PrepareIncomingReadsets is already called"); 
-        Y_VERIFY(Settings.Host, "Host is not set"); 
-        Y_VERIFY(ProgramPerOrigin.size() > 0, "At least one program must be added to engine"); 
+        Y_VERIFY(!AreIncomingReadsetsPrepared, "PrepareIncomingReadsets is already called");
+        Y_VERIFY(Settings.Host, "Host is not set");
+        Y_VERIFY(ProgramPerOrigin.size() > 0, "At least one program must be added to engine");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         IncomingReadsetsShards.clear();
         try {
@@ -1265,13 +1265,13 @@ public:
     }
 
     ui32 GetExpectedIncomingReadsetsCount() const noexcept override {
-        Y_VERIFY(AreIncomingReadsetsPrepared, "PrepareIncomingReadsets is not called yet"); 
+        Y_VERIFY(AreIncomingReadsetsPrepared, "PrepareIncomingReadsets is not called yet");
         return static_cast<ui32>(IncomingReadsetsShards.size());
     }
 
     ui64 GetExpectedIncomingReadsetOriginShard(ui32 index) const noexcept override {
-        Y_VERIFY(AreIncomingReadsetsPrepared, "PrepareIncomingReadsets is not called yet"); 
-        Y_VERIFY(index < IncomingReadsetsShards.size(), "Bad index"); 
+        Y_VERIFY(AreIncomingReadsetsPrepared, "PrepareIncomingReadsets is not called yet");
+        Y_VERIFY(index < IncomingReadsetsShards.size(), "Bad index");
         return IncomingReadsetsShards[index];
     }
 
@@ -1286,8 +1286,8 @@ public:
     }
 
     EResult Execute() override {
-        Y_VERIFY(!IsExecuted, "Execute is already called"); 
-        Y_VERIFY(Settings.Host, "Host is not set"); 
+        Y_VERIFY(!IsExecuted, "Execute is already called");
+        Y_VERIFY(Settings.Host, "Host is not set");
         TGuard<TScopedAlloc> allocGuard(Alloc);
 
         if (IsCancelled) {
@@ -1419,7 +1419,7 @@ public:
             return EResult::ProgramError;
         }
 
-        Y_VERIFY(ExecutionReplies.size() == ProgramPerOrigin.size()); 
+        Y_VERIFY(ExecutionReplies.size() == ProgramPerOrigin.size());
         ProgramPerOrigin.clear();
         ProgramSizes.clear();
         IsExecuted = true;
@@ -1427,9 +1427,9 @@ public:
     }
 
     TString GetShardReply(ui64 origin) const noexcept override {
-        Y_VERIFY(IsExecuted, "Execute is not called yet"); 
+        Y_VERIFY(IsExecuted, "Execute is not called yet");
         auto it = ExecutionReplies.find(origin);
-        Y_VERIFY(it != ExecutionReplies.end(), "Bad origin: %" PRIu64, origin); 
+        Y_VERIFY(it != ExecutionReplies.end(), "Bad origin: %" PRIu64, origin);
         return it->second;
     }
 
@@ -1510,7 +1510,7 @@ private:
             auto name = callable->GetType()->GetNameStr();
             if (name == Strings.SelectRow || name == Strings.SelectRange) {
                 auto ctxIt = ProxyCallables.find(callable->GetUniqueId());
-                Y_VERIFY(ctxIt != ProxyCallables.end()); 
+                Y_VERIFY(ctxIt != ProxyCallables.end());
                 ctxIt->second.ShardsToWrite.insert(shard);
             }
         }
@@ -1567,7 +1567,7 @@ private:
 
             if (name == Strings.SelectRow || name == Strings.SelectRange) {
                 auto ctxIt = ProxyCallables.find(callable->GetUniqueId());
-                Y_VERIFY(ctxIt != ProxyCallables.end()); 
+                Y_VERIFY(ctxIt != ProxyCallables.end());
                 auto& ctx = ctxIt->second;
                 auto uniqueName = ToString(callable->GetUniqueId());
                 shardsForReadBuilder.Add(uniqueName, ctx.ShardsForRead);
@@ -1908,7 +1908,7 @@ private:
 
             if (name == Strings.SelectRow || name == Strings.SelectRange) {
                 auto ctxIt = ProxyCallables.find(callable->GetUniqueId());
-                Y_VERIFY(ctxIt != ProxyCallables.end()); 
+                Y_VERIFY(ctxIt != ProxyCallables.end());
                 ProxyRepliesCallables[callable->GetUniqueId()] = callable;
             } else if (name == Strings.Builtins.Filter ||
                        name == Strings.Builtins.FilterNullMembers ||
@@ -2032,7 +2032,7 @@ private:
             auto name = ctx.Node->GetType()->GetNameStr();
             if (name == Strings.SelectRow || name == Strings.SelectRange) {
                 auto key = ctx.Key;
-                Y_VERIFY(key); 
+                Y_VERIFY(key);
 
                 TListLiteralBuilder listOfShards(Env, Ui64Type);
                 for (auto& partition : key->Partitions) {
@@ -2141,7 +2141,7 @@ TAutoPtr<IEngineFlat> CreateEngineFlat(const TEngineFlatSettings& settings) {
 } // namespace NKikimr
 
 template<>
-void Out<NKikimr::NMiniKQL::IEngineFlat::EStatus>(IOutputStream& o, NKikimr::NMiniKQL::IEngineFlat::EStatus status) { 
+void Out<NKikimr::NMiniKQL::IEngineFlat::EStatus>(IOutputStream& o, NKikimr::NMiniKQL::IEngineFlat::EStatus status) {
     using namespace NKikimr::NMiniKQL;
     switch (status) {
         case IEngineFlat::EStatus::Unknown:   o << "Unknown"; break;

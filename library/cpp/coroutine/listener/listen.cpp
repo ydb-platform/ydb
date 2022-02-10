@@ -181,7 +181,7 @@ private:
     class TListeners: public TIntrusiveListWithAutoDelete<TOneSocketListener, TDelete> {
     private:
         template <class T>
-        using TIt = std::conditional_t<std::is_const<T>::value, typename T::TConstIterator, typename T::TIterator>; 
+        using TIt = std::conditional_t<std::is_const<T>::value, typename T::TConstIterator, typename T::TIterator>;
 
         template <class T>
         static inline TIt<T> FindImpl(T* t, const IRemoteAddr& addr) {

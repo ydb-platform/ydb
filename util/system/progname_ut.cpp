@@ -2,8 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-Y_UNIT_TEST_SUITE(TProgramNameTest) { 
-    Y_UNIT_TEST(TestIt) { 
+Y_UNIT_TEST_SUITE(TProgramNameTest) {
+    Y_UNIT_TEST(TestIt) {
         TString progName = GetProgramName();
 
         try {

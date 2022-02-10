@@ -7,7 +7,7 @@
 using namespace NBus;
 
 void TSimpleProtocol::Serialize(const TBusMessage* mess, TBuffer& data) {
-    Y_VERIFY(typeid(TSimpleMessage) == typeid(*mess)); 
+    Y_VERIFY(typeid(TSimpleMessage) == typeid(*mess));
     const TSimpleMessage* typed = static_cast<const TSimpleMessage*>(mess);
     data.Append((const char*)&typed->Payload, 4);
 }

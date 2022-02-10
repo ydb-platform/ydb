@@ -212,7 +212,7 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
-        Y_UNUSED(ev); 
+        Y_UNUSED(ev);
         PipeClient = TActorId();
         ErrorReason = Sprintf("Client pipe to Hive destroyed (connection lost), Marker# HC9");
         SendReplyMove(CreateErrorReply(MSTATUS_ERROR, ctx));
@@ -233,7 +233,7 @@ public:
     }
 
     virtual NBus::TBusMessage* CreateErrorReply(EResponseStatus status, const TActorContext &ctx) {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
         THolder<ResponseType> result(new ResponseType());
         auto &rec = result->Record;
         rec.SetStatus(status);

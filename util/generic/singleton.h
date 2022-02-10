@@ -8,7 +8,7 @@
 
 template <class T>
 struct TSingletonTraits {
-    static constexpr size_t Priority = 65536; 
+    static constexpr size_t Priority = 65536;
 };
 
 namespace NPrivate {

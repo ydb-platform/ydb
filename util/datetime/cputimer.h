@@ -78,10 +78,10 @@ class TFormattedPrecisionTimer {
 private:
     ui64 Start;
     const char* Message;
-    IOutputStream* Out; 
+    IOutputStream* Out;
 
 public:
-    TFormattedPrecisionTimer(const char* message = "took ", IOutputStream* out = &Cout); 
+    TFormattedPrecisionTimer(const char* message = "took ", IOutputStream* out = &Cout);
     ~TFormattedPrecisionTimer();
 };
 

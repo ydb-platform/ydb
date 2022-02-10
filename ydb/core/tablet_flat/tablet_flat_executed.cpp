@@ -143,8 +143,8 @@ void TTabletExecutedFlat::DefaultSignalTabletActive(const TActorContext &ctx) {
 }
 
 void TTabletExecutedFlat::Enqueue(STFUNC_SIG) {
-    Y_UNUSED(ev); 
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ev);
+    Y_UNUSED(ctx);
 }
 
 void TTabletExecutedFlat::ActivateExecutor(const TActorContext &ctx) {

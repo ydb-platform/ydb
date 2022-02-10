@@ -52,7 +52,7 @@ namespace NKikimr {
         }
 
         const TDiskPart &SwearOne() const {
-            Y_VERIFY_DEBUG(Begin + 1 == End); 
+            Y_VERIFY_DEBUG(Begin + 1 == End);
             return *Begin;
         }
 
@@ -190,7 +190,7 @@ namespace NKikimr {
         static TString Serialize(const TBlobStorageGroupType &gtype, const TLogoBlobID &id, const TRope &rope);
         bool ParseFromString(const TBlobStorageGroupType &gtype, const TString &data);
         TString ToString() const;
-        void Output(IOutputStream &str) const; 
+        void Output(IOutputStream &str) const;
     };
 
 } // NKikimr

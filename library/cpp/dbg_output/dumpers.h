@@ -48,7 +48,7 @@ struct TDumper<TCopyPtr<T, C, D>> {
 };
 
 //small ints
-// Default dumper prints them via IOutputStream << (value), which results in raw 
+// Default dumper prints them via IOutputStream << (value), which results in raw
 // chars, not integer values. Cast to a bigger int type to force printing as
 // integers.
 // NB: i8 = signed char != char != unsigned char = ui8
@@ -102,10 +102,10 @@ template <class T>
 struct TDumper<TArrayRef<T>>: public TSeqDumper {
 };
 
-template <class T, size_t N> 
+template <class T, size_t N>
 struct TDumper<std::array<T, N>>: public TSeqDumper {
-}; 
- 
+};
+
 template <class T, class A>
 struct TDumper<TDeque<T, A>>: public TSeqDumper {
 };

@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/string/strip.h> 
+#include <util/string/strip.h>
 #include <library/cpp/regex/pcre/regexp.h>
 #include <util/stream/output.h>
 
@@ -54,17 +54,17 @@ private:
     UNIT_TEST_SUITE_END();
 
     inline void TestRe() {
-        for (const auto& regTest : REGTEST_DATA) { 
+        for (const auto& regTest : REGTEST_DATA) {
             memset(Matches, 0, sizeof(Matches));
             TString result;
 
             TRegExBase re(regTest.Regexp, regTest.CompileOptions);
             if (re.Exec(regTest.Data, Matches, regTest.RunOptions) == 0) {
-                for (auto& matche : Matches) { 
-                    if (matche.rm_so == -1) { 
+                for (auto& matche : Matches) {
+                    if (matche.rm_so == -1) {
                         break;
                     }
-                    result.append(Sprintf("%i %i ", matche.rm_so, matche.rm_eo)); 
+                    result.append(Sprintf("%i %i ", matche.rm_so, matche.rm_eo));
                 }
             } else {
                 result = "NM";
@@ -75,7 +75,7 @@ private:
     }
 
     inline void TestSubst() {
-        for (const auto& substTest : SUBSTTEST_DATA) { 
+        for (const auto& substTest : SUBSTTEST_DATA) {
             TRegExSubst subst(substTest.Regexp, substTest.CompileOptions);
             subst.ParseReplacement(substTest.Replacement);
             TString result = subst.Replace(substTest.Data, substTest.RunOptions);

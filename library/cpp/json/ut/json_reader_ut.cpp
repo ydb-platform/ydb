@@ -66,8 +66,8 @@ public:
     }
 };
 
-Y_UNIT_TEST_SUITE(TJsonReaderTest) { 
-    Y_UNIT_TEST(JsonReformatTest) { 
+Y_UNIT_TEST_SUITE(TJsonReaderTest) {
+    Y_UNIT_TEST(JsonReformatTest) {
         TString data = "{\"null value\": null, \"intkey\": 10, \"double key\": 11.11, \"string key\": \"string\", \"array\": [1,2,3,\"TString\"], \"bool key\": true}";
 
         TString result1, result2;
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         }
     }
 
-    Y_UNIT_TEST(TJsonTreeTest) { 
+    Y_UNIT_TEST(TJsonTreeTest) {
         TString data = "{\"intkey\": 10, \"double key\": 11.11, \"null value\":null, \"string key\": \"string\", \"array\": [1,2,3,\"TString\"], \"bool key\": true}";
         TStringStream in;
         in << data;
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         UNIT_ASSERT_VALUES_EQUAL(value["array"][3].GetString(), (*array)[3].GetString());
     }
 
-    Y_UNIT_TEST(TJsonRomaTest) { 
+    Y_UNIT_TEST(TJsonRomaTest) {
         TString data = "{\"test\": [ {\"name\": \"A\"} ]}";
 
         TStringStream in;
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         UNIT_ASSERT_VALUES_EQUAL(value["test"][0]["name"].GetString(), TString("A"));
     }
 
-    Y_UNIT_TEST(TJsonReadTreeWithComments) { 
+    Y_UNIT_TEST(TJsonReadTreeWithComments) {
         {
             TString leadingCommentData = "{ // \"test\" : 1 \n}";
             {
@@ -209,7 +209,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         }
     }
 
-    Y_UNIT_TEST(TJsonSignedIntegerTest) { 
+    Y_UNIT_TEST(TJsonSignedIntegerTest) {
         {
             TStringStream in;
             in << "{ \"test\" : " << Min<i64>() << " }";
@@ -234,7 +234,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         } // Max<i64>() + 1
     }
 
-    Y_UNIT_TEST(TJsonUnsignedIntegerTest) { 
+    Y_UNIT_TEST(TJsonUnsignedIntegerTest) {
         {
             TStringStream in;
             in << "{ \"test\" : 1 }";
@@ -309,7 +309,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         }
     } // TJsonUnsignedIntegerTest
 
-    Y_UNIT_TEST(TJsonDoubleTest) { 
+    Y_UNIT_TEST(TJsonDoubleTest) {
         {
             TStringStream in;
             in << "{ \"test\" : 1.0 }";
@@ -355,7 +355,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         } // Max<ui64>()
     }     // TJsonDoubleTest
 
-    Y_UNIT_TEST(TJsonInvalidTest) { 
+    Y_UNIT_TEST(TJsonInvalidTest) {
         {
             // No exceptions mode.
             TStringStream in;
@@ -373,7 +373,7 @@ Y_UNIT_TEST_SUITE(TJsonReaderTest) {
         }
     }
 
-    Y_UNIT_TEST(TJsonMemoryLeakTest) { 
+    Y_UNIT_TEST(TJsonMemoryLeakTest) {
         // after https://clubs.at.yandex-team.ru/stackoverflow/3691
         TString s = ".";
         NJson::TJsonValue json;

@@ -31,8 +31,8 @@ namespace {
     }
 }
 
-Y_UNIT_TEST_SUITE(Network) { 
-    Y_UNIT_TEST(BindOnPortConcrete) { 
+Y_UNIT_TEST_SUITE(Network) {
+    Y_UNIT_TEST(BindOnPortConcrete) {
         if (!IsFixedPortTestAllowed()) {
             return;
         }
@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(Network) {
         }
     }
 
-    Y_UNIT_TEST(BindOnPortRandom) { 
+    Y_UNIT_TEST(BindOnPortRandom) {
         TVector<TBindResult> r = BindOnPort(0, false).second;
         UNIT_ASSERT_VALUES_EQUAL(size_t(2), r.size());
 
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(Network) {
         UNIT_ASSERT_VALUES_EQUAL(r.at(0).Addr.GetPort(), r.at(1).Addr.GetPort());
     }
 
-    Y_UNIT_TEST(BindOnBusyPort) { 
+    Y_UNIT_TEST(BindOnBusyPort) {
         auto r = BindOnPort(0, false);
 
         UNIT_ASSERT_EXCEPTION_CONTAINS(BindOnPort(r.first, false), TSystemError, "failed to bind on port " + ToString(r.first));

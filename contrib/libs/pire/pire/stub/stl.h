@@ -56,8 +56,8 @@ namespace Pire {
         Error(const ystring& msg) { *this << msg; }
     };
 
-    typedef IOutputStream yostream; 
-    typedef IInputStream yistream; 
+    typedef IOutputStream yostream;
+    typedef IInputStream yistream;
 
     template<class Iter>
     ystring Join(Iter begin, Iter end, const ystring& separator) { return JoinStrings(begin, end, separator); }

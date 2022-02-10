@@ -21,14 +21,14 @@
 
 
 namespace NKikimr {
-Y_UNIT_TEST_SUITE(TPQTest) { 
+Y_UNIT_TEST_SUITE(TPQTest) {
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SINGLE COMMAND TEST FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Y_UNIT_TEST(TestGroupsBalancer) { 
+Y_UNIT_TEST(TestGroupsBalancer) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.Prepare();
@@ -76,7 +76,7 @@ Y_UNIT_TEST(TestGroupsBalancer) {
 
 }
 
-Y_UNIT_TEST(TestGroupsBalancer2) { 
+Y_UNIT_TEST(TestGroupsBalancer2) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.Prepare();
@@ -137,7 +137,7 @@ Y_UNIT_TEST(TestGroupsBalancer3) {
 }
 
 
-Y_UNIT_TEST(TestUserInfoCompatibility) { 
+Y_UNIT_TEST(TestUserInfoCompatibility) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -223,7 +223,7 @@ Y_UNIT_TEST(TestReadRuleVersions) {
     });
 }
 
-Y_UNIT_TEST(TestCreateBalancer) { 
+Y_UNIT_TEST(TestCreateBalancer) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -272,7 +272,7 @@ Y_UNIT_TEST(TestCreateBalancer) {
     });
 }
 
-Y_UNIT_TEST(TestDescribeBalancer) { 
+Y_UNIT_TEST(TestDescribeBalancer) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -302,7 +302,7 @@ Y_UNIT_TEST(TestDescribeBalancer) {
     });
 }
 
-Y_UNIT_TEST(TestCheckACL) { 
+Y_UNIT_TEST(TestCheckACL) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -452,7 +452,7 @@ void CheckLabeledCountersResponse(ui32 count, TTestContext& tc, TVector<TString>
     }
 }
 
-Y_UNIT_TEST(TestSwitchOffImportantFlag) { 
+Y_UNIT_TEST(TestSwitchOffImportantFlag) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -551,7 +551,7 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
 }
 
 
-Y_UNIT_TEST(TestSeveralOwners) { 
+Y_UNIT_TEST(TestSeveralOwners) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -583,7 +583,7 @@ Y_UNIT_TEST(TestSeveralOwners) {
 }
 
 
-Y_UNIT_TEST(TestWaitInOwners) { 
+Y_UNIT_TEST(TestWaitInOwners) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -679,7 +679,7 @@ Y_UNIT_TEST(TestWaitInOwners) {
 
 
 
-Y_UNIT_TEST(TestReserveBytes) { 
+Y_UNIT_TEST(TestReserveBytes) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -740,7 +740,7 @@ Y_UNIT_TEST(TestReserveBytes) {
 
 
 
-Y_UNIT_TEST(TestMessageNo) { 
+Y_UNIT_TEST(TestMessageNo) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -792,7 +792,7 @@ Y_UNIT_TEST(TestMessageNo) {
 }
 
 
-Y_UNIT_TEST(TestPartitionedBlobFails) { 
+Y_UNIT_TEST(TestPartitionedBlobFails) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -952,7 +952,7 @@ Y_UNIT_TEST(TestPartitionedBlobFails) {
     });
 }
 
-Y_UNIT_TEST(TestAlreadyWritten) { 
+Y_UNIT_TEST(TestAlreadyWritten) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -979,7 +979,7 @@ Y_UNIT_TEST(TestAlreadyWritten) {
 }
 
 
-Y_UNIT_TEST(TestAlreadyWrittenWithoutDeduplication) { 
+Y_UNIT_TEST(TestAlreadyWrittenWithoutDeduplication) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1004,7 +1004,7 @@ Y_UNIT_TEST(TestAlreadyWrittenWithoutDeduplication) {
 }
 
 
-Y_UNIT_TEST(TestWritePQCompact) { 
+Y_UNIT_TEST(TestWritePQCompact) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1061,7 +1061,7 @@ Y_UNIT_TEST(TestWritePQCompact) {
 }
 
 
-Y_UNIT_TEST(TestWritePQBigMessage) { 
+Y_UNIT_TEST(TestWritePQBigMessage) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1114,7 +1114,7 @@ Y_UNIT_TEST(TestWritePQBigMessage) {
 }
 
 
-Y_UNIT_TEST(TestWritePQ) { 
+Y_UNIT_TEST(TestWritePQ) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1285,7 +1285,7 @@ Y_UNIT_TEST(TestSourceIdDropBySourceIdCount) {
 }
 
 
-Y_UNIT_TEST(TestWriteOffsetWithBigMessage) { 
+Y_UNIT_TEST(TestWriteOffsetWithBigMessage) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1320,7 +1320,7 @@ Y_UNIT_TEST(TestWriteOffsetWithBigMessage) {
 }
 
 
-Y_UNIT_TEST(TestWriteSplit) { 
+Y_UNIT_TEST(TestWriteSplit) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1345,7 +1345,7 @@ Y_UNIT_TEST(TestWriteSplit) {
 }
 
 
-Y_UNIT_TEST(TestLowWatermark) { 
+Y_UNIT_TEST(TestLowWatermark) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1381,7 +1381,7 @@ Y_UNIT_TEST(TestLowWatermark) {
 
 
 
-Y_UNIT_TEST(TestWriteToFullPartition) { 
+Y_UNIT_TEST(TestWriteToFullPartition) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1416,7 +1416,7 @@ Y_UNIT_TEST(TestWriteToFullPartition) {
 
 
 
-Y_UNIT_TEST(TestPQPartialRead) { 
+Y_UNIT_TEST(TestPQPartialRead) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1449,7 +1449,7 @@ Y_UNIT_TEST(TestPQPartialRead) {
 }
 
 
-Y_UNIT_TEST(TestPQRead) { 
+Y_UNIT_TEST(TestPQRead) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1501,7 +1501,7 @@ Y_UNIT_TEST(TestPQRead) {
 }
 
 
-Y_UNIT_TEST(TestPQSmallRead) { 
+Y_UNIT_TEST(TestPQSmallRead) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1542,7 +1542,7 @@ Y_UNIT_TEST(TestPQSmallRead) {
     });
 }
 
-Y_UNIT_TEST(TestPQReadAhead) { 
+Y_UNIT_TEST(TestPQReadAhead) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1589,7 +1589,7 @@ Y_UNIT_TEST(TestPQReadAhead) {
     });
 }
 
-Y_UNIT_TEST(TestOwnership) { 
+Y_UNIT_TEST(TestOwnership) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1610,7 +1610,7 @@ Y_UNIT_TEST(TestOwnership) {
     });
 }
 
-Y_UNIT_TEST(TestSetClientOffset) { 
+Y_UNIT_TEST(TestSetClientOffset) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1640,7 +1640,7 @@ Y_UNIT_TEST(TestSetClientOffset) {
     });
 }
 
-Y_UNIT_TEST(TestReadSessions) { 
+Y_UNIT_TEST(TestReadSessions) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1679,7 +1679,7 @@ Y_UNIT_TEST(TestReadSessions) {
 
 
 
-Y_UNIT_TEST(TestGetTimestamps) { 
+Y_UNIT_TEST(TestGetTimestamps) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1732,7 +1732,7 @@ Y_UNIT_TEST(TestGetTimestamps) {
 }
 
 
-Y_UNIT_TEST(TestChangeConfig) { 
+Y_UNIT_TEST(TestChangeConfig) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1767,7 +1767,7 @@ Y_UNIT_TEST(TestChangeConfig) {
     });
 }
 
-Y_UNIT_TEST(TestReadSubscription) { 
+Y_UNIT_TEST(TestReadSubscription) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1865,7 +1865,7 @@ Y_UNIT_TEST(TestReadSubscription) {
 //
 
 
-Y_UNIT_TEST(TestPQCacheSizeManagement) { 
+Y_UNIT_TEST(TestPQCacheSizeManagement) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
@@ -1903,7 +1903,7 @@ Y_UNIT_TEST(TestPQCacheSizeManagement) {
     });
 }
 
-Y_UNIT_TEST(TestOffsetEstimation) { 
+Y_UNIT_TEST(TestOffsetEstimation) {
     std::deque<NPQ::TDataKey> container = {
         {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, 0, 1, 0, 0, 0), 0, TInstant::Seconds(1), 10},
         {NPQ::TKey(NPQ::TKeyPrefix::EType::TypeNone, 0, 2, 0, 0, 0), 0, TInstant::Seconds(1), 10},
@@ -1923,7 +1923,7 @@ Y_UNIT_TEST(TestOffsetEstimation) {
     UNIT_ASSERT_EQUAL(NPQ::GetOffsetEstimate(container, TInstant::MilliSeconds(3500), 9999), 9999);
 }
 
-Y_UNIT_TEST(TestMaxTimeLagRewind) { 
+Y_UNIT_TEST(TestMaxTimeLagRewind) {
     TTestContext tc;
 
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1963,7 +1963,7 @@ Y_UNIT_TEST(TestMaxTimeLagRewind) {
 }
 
 
-Y_UNIT_TEST(TestWriteTimeStampEstimate) { 
+Y_UNIT_TEST(TestWriteTimeStampEstimate) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.Prepare();

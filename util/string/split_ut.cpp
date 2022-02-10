@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/charset/wide.h>
 #include <util/datetime/cputimer.h>
 #include <util/generic/maybe.h>
@@ -119,8 +119,8 @@ void TestLimitingConsumerOnRange(TVector<TString>& good, const char* b, const ch
     UNIT_ASSERT_EQUAL(TString(limits.Last), TString(last));
 }
 
-Y_UNIT_TEST_SUITE(SplitStringTest) { 
-    Y_UNIT_TEST(TestCharSingleDelimiter) { 
+Y_UNIT_TEST_SUITE(SplitStringTest) {
+    Y_UNIT_TEST(TestCharSingleDelimiter) {
         TString data("qw ab  qwabcab");
         TString canonic[] = {"qw", "ab", "", "qwabcab"};
         TVector<TString> good(canonic, canonic + 4);
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
     }
 
-    Y_UNIT_TEST(TestWideSingleDelimiter) { 
+    Y_UNIT_TEST(TestWideSingleDelimiter) {
         TUtf16String data(u"qw ab  qwabcab");
         TUtf16String canonic[] = {u"qw", u"ab", TUtf16String(), u"qwabcab"};
         TVector<TUtf16String> good(canonic, canonic + 4);
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
     }
 
-    Y_UNIT_TEST(TestConvertToIntCharSingleDelimiter) { 
+    Y_UNIT_TEST(TestConvertToIntCharSingleDelimiter) {
         TString data("42 4242 -12345 0");
         i32 canonic[] = {42, 4242, -12345, 0};
         TVector<i32> good(canonic, canonic + 4);
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TestConsumerOnRange<TSkipEmptyTokens<TStrokaConsumer>>(good, data.data(), data.end(), " ");
     }
 
-    Y_UNIT_TEST(TestCharKeepDelimiters) { 
+    Y_UNIT_TEST(TestCharKeepDelimiters) {
         TString data("qw ab  qwabcab ");
         TString canonic[] = {"qw", " ", "ab", " ", "", " ", "qwabcab", " ", ""};
         TVector<TString> good(canonic, canonic + 9);
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TestConsumerOnRange<TKeepDelimiters<TStrokaConsumer>>(good, data.data(), data.end(), " ");
     }
 
-    Y_UNIT_TEST(TestCharLimit) { 
+    Y_UNIT_TEST(TestCharLimit) {
         TString data("qw ab  qwabcab ");
         TString canonic[] = {"qw", "ab"};
         TVector<TString> good(canonic, canonic + 2);
@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TestLimitingConsumerOnRange(good, data.data(), data.end(), " ", 3, " qwabcab ");
     }
 
-    Y_UNIT_TEST(TestCharStringDelimiter) { 
+    Y_UNIT_TEST(TestCharStringDelimiter) {
         TString data("qw ab qwababcab");
         TString canonic[] = {"qw ", " qw", "", "c", ""};
         TVector<TString> good(canonic, canonic + 5);
@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
     }
 
-    Y_UNIT_TEST(TestWideStringDelimiter) { 
+    Y_UNIT_TEST(TestWideStringDelimiter) {
         TUtf16String data(u"qw ab qwababcab");
         TUtf16String canonic[] = {u"qw ", u" qw", TUtf16String(), u"c", TUtf16String()};
         TVector<TUtf16String> good(canonic, canonic + 5);
@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
     }
 
-    Y_UNIT_TEST(TestCharSetDelimiter) { 
+    Y_UNIT_TEST(TestCharSetDelimiter) {
         TString data("qw ab qwababccab");
         TString canonic[] = {"q", " ab q", "abab", "", "ab"};
         TVector<TString> good(canonic, canonic + 5);
@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
     }
 
-    Y_UNIT_TEST(TestWideSetDelimiter) { 
+    Y_UNIT_TEST(TestWideSetDelimiter) {
         TUtf16String data(u"qw ab qwababccab");
         TUtf16String canonic[] = {u"q", u" ab q", u"abab", TUtf16String(), u"ab"};
         TVector<TUtf16String> good(canonic, canonic + 5);
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
     }
 
-    Y_UNIT_TEST(TestWideSetDelimiterRange) { 
+    Y_UNIT_TEST(TestWideSetDelimiterRange) {
         TUtf16String data(u"qw ab qwababccab");
         TUtf16String canonic[] = {u"q", u" ab q", u"abab", TUtf16String(), u"ab"};
         TVector<TUtf16String> good(1);
@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         Cmp(good, test);
     }
 
-    Y_UNIT_TEST(TestSplit) { 
+    Y_UNIT_TEST(TestSplit) {
         TString data("qw ab qwababcba");
         TString canonic[] = {"qw ", " qw", "c"};
         TVector<TString> good(canonic, canonic + 3);
@@ -251,7 +251,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         Cmp(good, test1);
     }
 
-    Y_UNIT_TEST(ConvenientSplitTest) { 
+    Y_UNIT_TEST(ConvenientSplitTest) {
         TString data("abc 22 33.5 xyz");
         TString str;
         int num1 = 0;
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         UNIT_ASSERT_VALUES_EQUAL(strBuf, "xyz");
     }
 
-    Y_UNIT_TEST(ConvenientSplitTestWithMaybe) { 
+    Y_UNIT_TEST(ConvenientSplitTestWithMaybe) {
         TString data("abc 42");
         TString str;
         TMaybe<double> num2 = 1;
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         UNIT_ASSERT(!maybe);
     }
 
-    Y_UNIT_TEST(ConvenientSplitTestExceptions) { 
+    Y_UNIT_TEST(ConvenientSplitTestExceptions) {
         TString data("abc 22 33");
         TString s1, s2, s3, s4;
 
@@ -286,7 +286,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         UNIT_ASSERT_EXCEPTION(Split(data, ' ', s1, s2, s3, s4), yexception);
     }
 
-    Y_UNIT_TEST(ConvenientSplitTestMaybeExceptions) { 
+    Y_UNIT_TEST(ConvenientSplitTestMaybeExceptions) {
         TString data("abc 22 33");
         TString s1, s2;
         TMaybe<TString> m1, m2;

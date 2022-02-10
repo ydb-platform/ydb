@@ -15,8 +15,8 @@
 using namespace NBus;
 using namespace NBus::NTest;
 
-Y_UNIT_TEST_SUITE(ModuleServerTests) { 
-    Y_UNIT_TEST(TestModule) { 
+Y_UNIT_TEST_SUITE(ModuleServerTests) {
+    Y_UNIT_TEST(TestModule) {
         TObjectCountCheck objectCountCheck;
 
         /// create or get instance of message queue, need one per application
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(ModuleServerTests) {
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
             WaitTwoRequestsLatch.CountDown();
-            Y_VERIFY(WaitTwoRequestsLatch.Await(TDuration::Seconds(5)), "oops"); 
+            Y_VERIFY(WaitTwoRequestsLatch.Await(TDuration::Seconds(5)), "oops");
 
             VerifyDynamicCast<TExampleRequest*>(mess);
 
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(ModuleServerTests) {
         }
     };
 
-    Y_UNIT_TEST(TestOnMessageHandlerCalledInParallel) { 
+    Y_UNIT_TEST(TestOnMessageHandlerCalledInParallel) {
         TObjectCountCheck objectCountCheck;
 
         TBusQueueConfig config;
@@ -79,18 +79,18 @@ Y_UNIT_TEST_SUITE(ModuleServerTests) {
         TSystemEvent ClientDiedEvent;
 
         TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
-            Y_UNUSED(mess); 
+            Y_UNUSED(mess);
 
             MessageReceivedEvent.Signal();
 
-            Y_VERIFY(ClientDiedEvent.WaitT(TDuration::Seconds(5)), "oops"); 
+            Y_VERIFY(ClientDiedEvent.WaitT(TDuration::Seconds(5)), "oops");
 
             job->SendReply(new TExampleResponse(&Proto.ResponseCount));
             return nullptr;
         }
     };
 
-    Y_UNIT_TEST(TestReplyCalledAfterClientDisconnected) { 
+    Y_UNIT_TEST(TestReplyCalledAfterClientDisconnected) {
         TObjectCountCheck objectCountCheck;
 
         TBusQueueConfig config;

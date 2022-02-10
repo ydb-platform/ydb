@@ -57,7 +57,7 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestHMMapInitializerList);
     UNIT_TEST(TestHSetInitializerList);
     UNIT_TEST(TestHMSetInitializerList);
-    UNIT_TEST(TestHSetInsertInitializerList); 
+    UNIT_TEST(TestHSetInsertInitializerList);
     UNIT_TEST(TestTupleHash);
     UNIT_TEST_SUITE_END();
 
@@ -108,7 +108,7 @@ protected:
     void TestHMMapInitializerList();
     void TestHSetInitializerList();
     void TestHMSetInitializerList();
-    void TestHSetInsertInitializerList(); 
+    void TestHSetInsertInitializerList();
     void TestTupleHash();
 };
 
@@ -798,7 +798,7 @@ public:
     TCountingAllocator(TAllocatorCounters* counters)
         : Counters_(counters)
     {
-        Y_ASSERT(counters); 
+        Y_ASSERT(counters);
     }
 
     template <class Other>
@@ -1187,44 +1187,44 @@ void THashTest::TestHMSetInitializerList() {
     h2.insert("baz");
     UNIT_ASSERT_EQUAL(h1, h2);
 }
- 
-namespace { 
-    struct TFoo { 
-        int A; 
-        int B; 
- 
+
+namespace {
+    struct TFoo {
+        int A;
+        int B;
+
         bool operator==(const TFoo& o) const {
-            return A == o.A && B == o.B; 
-        } 
-    }; 
-} 
- 
-template <> 
-struct THash<TFoo> { 
-    size_t operator()(const TFoo& v) const { 
-        return v.A ^ v.B; 
-    } 
-}; 
- 
-template <> 
-void Out<TFoo>(IOutputStream& o, const TFoo& v) { 
-    o << '{' << v.A << ';' << v.B << '}'; 
-} 
- 
-void THashTest::TestHSetInsertInitializerList() { 
-    { 
+            return A == o.A && B == o.B;
+        }
+    };
+}
+
+template <>
+struct THash<TFoo> {
+    size_t operator()(const TFoo& v) const {
+        return v.A ^ v.B;
+    }
+};
+
+template <>
+void Out<TFoo>(IOutputStream& o, const TFoo& v) {
+    o << '{' << v.A << ';' << v.B << '}';
+}
+
+void THashTest::TestHSetInsertInitializerList() {
+    {
         const THashSet<int> x = {1};
         THashSet<int> y;
-        y.insert({1}); 
-        UNIT_ASSERT_VALUES_EQUAL(x, y); 
-    } 
-    { 
+        y.insert({1});
+        UNIT_ASSERT_VALUES_EQUAL(x, y);
+    }
+    {
         const THashSet<int> x = {1, 2};
         THashSet<int> y;
-        y.insert({1, 2}); 
-        UNIT_ASSERT_VALUES_EQUAL(x, y); 
-    } 
-    { 
+        y.insert({1, 2});
+        UNIT_ASSERT_VALUES_EQUAL(x, y);
+    }
+    {
         const THashSet<int> x = {1, 2, 3, 4, 5};
         THashSet<int> y;
         y.insert({
@@ -1234,21 +1234,21 @@ void THashTest::TestHSetInsertInitializerList() {
             4,
             5,
         });
-        UNIT_ASSERT_VALUES_EQUAL(x, y); 
-    } 
-    { 
+        UNIT_ASSERT_VALUES_EQUAL(x, y);
+    }
+    {
         const THashSet<TFoo> x = {{1, 2}};
         THashSet<TFoo> y;
-        y.insert({{1, 2}}); 
-        UNIT_ASSERT_VALUES_EQUAL(x, y); 
-    } 
-    { 
+        y.insert({{1, 2}});
+        UNIT_ASSERT_VALUES_EQUAL(x, y);
+    }
+    {
         const THashSet<TFoo> x = {{1, 2}, {3, 4}};
         THashSet<TFoo> y;
-        y.insert({{1, 2}, {3, 4}}); 
-        UNIT_ASSERT_VALUES_EQUAL(x, y); 
-    } 
-} 
+        y.insert({{1, 2}, {3, 4}});
+        UNIT_ASSERT_VALUES_EQUAL(x, y);
+    }
+}
 
 /*
 * Sequence for MultiHash is reversed as it calculates hash as

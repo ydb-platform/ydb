@@ -11,7 +11,7 @@ public:
     {
     }
     ~TExtraRef() {
-        Y_VERIFY(!Holds); 
+        Y_VERIFY(!Holds);
     }
 
     template <typename TThis>

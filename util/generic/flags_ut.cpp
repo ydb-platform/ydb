@@ -31,7 +31,7 @@ namespace {
     Y_DECLARE_OPERATORS_FOR_FLAGS(ETestFlags3)
 }
 
-Y_UNIT_TEST_SUITE(TFlagsTest) { 
+Y_UNIT_TEST_SUITE(TFlagsTest) {
     template <class Enum>
     void TestEnum() {
         {
@@ -66,12 +66,12 @@ Y_UNIT_TEST_SUITE(TFlagsTest) {
         }
     }
 
-    Y_UNIT_TEST(TestFlags) { 
+    Y_UNIT_TEST(TestFlags) {
         TestEnum<ETestFlag1>();
         TestEnum<ETestFlag2>();
     }
 
-    Y_UNIT_TEST(TestZero) { 
+    Y_UNIT_TEST(TestZero) {
         /*  This code should simply compile. */
 
         ETest1 f = 0;
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TFlagsTest) {
         ff = 0;
     }
 
-    Y_UNIT_TEST(TestOutput) { 
+    Y_UNIT_TEST(TestOutput) {
         ETest1 value0 = nullptr, value1 = Test1, value7 = Test1 | Test2 | Test4;
 
         UNIT_ASSERT_VALUES_EQUAL(ToString(value0), "TFlags(0000000000000000)");
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(TFlagsTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(value7), "TFlags(0000000000000111)");
     }
 
-    Y_UNIT_TEST(TestHash) { 
+    Y_UNIT_TEST(TestHash) {
         ETest1 value0 = nullptr, value1 = Test1;
 
         THashMap<ETest1, int> hash;
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(TFlagsTest) {
         UNIT_ASSERT_VALUES_EQUAL(hash[value1], 1);
     }
 
-    Y_UNIT_TEST(TestBaseType) { 
+    Y_UNIT_TEST(TestBaseType) {
         ui16 goodValue = 7;
         auto goodFlags = ETest1::FromBaseType(goodValue);
         UNIT_ASSERT(goodFlags& ETestFlag1::Test1);

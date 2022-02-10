@@ -2,8 +2,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
-Y_UNIT_TEST_SUITE(TWildcardTest) { 
-    Y_UNIT_TEST(TestWildcard) { 
+Y_UNIT_TEST_SUITE(TWildcardTest) {
+    Y_UNIT_TEST(TestWildcard) {
         UNIT_ASSERT(NKikimr::IsMatchesWildcard("some/test/string", "*"));
         UNIT_ASSERT(NKikimr::IsMatchesWildcard("some/test/string", "*/*"));
         UNIT_ASSERT(NKikimr::IsMatchesWildcard("some/test/string", "some/test/string"));
@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TWildcardTest) {
         UNIT_ASSERT(!NKikimr::IsMatchesWildcard("", "*/test/*"));
     }
 
-    Y_UNIT_TEST(TestWildcards) { 
+    Y_UNIT_TEST(TestWildcards) {
         UNIT_ASSERT(NKikimr::IsMatchesWildcards("some/test/string", "ssome*,*strring,*"));
         UNIT_ASSERT(NKikimr::IsMatchesWildcards("some/test/string", "ssome*,*,*strring"));
         UNIT_ASSERT(NKikimr::IsMatchesWildcards("some/test/string", "*,ssome*,*strring"));

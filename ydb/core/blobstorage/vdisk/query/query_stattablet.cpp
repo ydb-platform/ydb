@@ -29,9 +29,9 @@ namespace NKikimr {
             TThis::Die(ctx);
         }
 
-        void ProcessBarriers(IOutputStream &str, ui64 tabletId, bool pretty); 
-        void ProcessBlocks(IOutputStream &str, ui64 tabletId, bool pretty); 
-        void ProcessLogoBlobs(IOutputStream &str, ui64 tabletId, bool pretty); 
+        void ProcessBarriers(IOutputStream &str, ui64 tabletId, bool pretty);
+        void ProcessBlocks(IOutputStream &str, ui64 tabletId, bool pretty);
+        void ProcessLogoBlobs(IOutputStream &str, ui64 tabletId, bool pretty);
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -102,7 +102,7 @@ namespace NKikimr {
         };
         using TMapType = TMap<TChannelLevel, TValue>;
 
-        IOutputStream &Str; 
+        IOutputStream &Str;
         ui64 TabletId;
         bool Pretty;
         TMapType Map;
@@ -266,7 +266,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TTabletStatActor::ProcessBarriers
     ////////////////////////////////////////////////////////////////////////////
-    void TTabletStatActor::ProcessBarriers(IOutputStream &str, ui64 tabletId, bool pretty) { 
+    void TTabletStatActor::ProcessBarriers(IOutputStream &str, ui64 tabletId, bool pretty) {
         Y_UNUSED(pretty);
 
         // build barriers
@@ -318,7 +318,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TTabletStatActor::ProcessBlocks
     ////////////////////////////////////////////////////////////////////////////
-    void TTabletStatActor::ProcessBlocks(IOutputStream &str, ui64 tabletId, bool pretty) { 
+    void TTabletStatActor::ProcessBlocks(IOutputStream &str, ui64 tabletId, bool pretty) {
         Y_UNUSED(pretty);
         using TIndexForwardIterator = TBlocksSnapshot::TIndexForwardIterator;
 
@@ -353,7 +353,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TTabletStatActor::ProcessLogoBlobs
     ////////////////////////////////////////////////////////////////////////////
-    void TTabletStatActor::ProcessLogoBlobs(IOutputStream &str, ui64 tabletId, bool pretty) { 
+    void TTabletStatActor::ProcessLogoBlobs(IOutputStream &str, ui64 tabletId, bool pretty) {
         TAggr aggr(str, tabletId, pretty, TIngress::IngressMode(HullCtx->VCtx->Top->GType));
         TraverseDbWithoutMerge(HullCtx, &aggr, FullSnap.LogoBlobsSnap);
     }

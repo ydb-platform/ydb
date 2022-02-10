@@ -7,7 +7,7 @@ using namespace NBus;
 using namespace NBus::NPrivate;
 using namespace NActor;
 
-Y_UNIT_TEST_SUITE(TSchedulerActorTests) { 
+Y_UNIT_TEST_SUITE(TSchedulerActorTests) {
     struct TMyActor: public TAtomicRefCount<TMyActor>, public TActor<TMyActor>, public TScheduleActor<TMyActor> {
         TTestSync TestSync;
 
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TSchedulerActorTests) {
 
         void Act(TDefaultTag) {
             if (!Alarm.FetchTask()) {
-                Y_FAIL("must not have no spurious wakeups in test"); 
+                Y_FAIL("must not have no spurious wakeups in test");
             }
 
             TestSync.WaitForAndIncrement(Iteration++);
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TSchedulerActorTests) {
         }
     };
 
-    Y_UNIT_TEST(Simple) { 
+    Y_UNIT_TEST(Simple) {
         TExecutor executor(1);
         TScheduler scheduler;
 

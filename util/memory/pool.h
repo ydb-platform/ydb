@@ -33,7 +33,7 @@ private:
             : Cur_((char*)(this + 1))
             , Left_(len)
         {
-            Y_ASSERT((((size_t)Cur_) % PLATFORM_DATA_ALIGN) == 0); 
+            Y_ASSERT((((size_t)Cur_) % PLATFORM_DATA_ALIGN) == 0);
         }
 
         inline void* Allocate(size_t len) noexcept {
@@ -46,7 +46,7 @@ private:
                 return ret;
             }
 
-            return nullptr; 
+            return nullptr;
         }
 
         inline void* Allocate(size_t len, size_t align) noexcept {
@@ -57,7 +57,7 @@ private:
                 return static_cast<char*>(ret) + pad;
             }
 
-            return nullptr; 
+            return nullptr;
         }
 
         inline size_t BlockLength() const noexcept {

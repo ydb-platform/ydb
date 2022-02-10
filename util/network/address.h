@@ -20,7 +20,7 @@ namespace NAddr {
 
     IRemoteAddrPtr GetSockAddr(SOCKET s);
     IRemoteAddrPtr GetPeerAddr(SOCKET s);
-    void PrintHost(IOutputStream& out, const IRemoteAddr& addr); 
+    void PrintHost(IOutputStream& out, const IRemoteAddr& addr);
 
     TString PrintHost(const IRemoteAddr& addr);
     TString PrintHostAndPort(const IRemoteAddr& addr);

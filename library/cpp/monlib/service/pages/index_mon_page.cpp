@@ -53,8 +53,8 @@ void TIndexMonPage::Output(IMonHttpRequest& request) {
 
 void TIndexMonPage::OutputIndex(IOutputStream& out, bool pathEndsWithSlash) {
     TGuard<TMutex> g(Mtx);
-    for (auto& Page : Pages) { 
-        IMonPage* page = Page.Get(); 
+    for (auto& Page : Pages) {
+        IMonPage* page = Page.Get();
         if (page->IsInIndex()) {
             TString pathToDir = "";
             if (!pathEndsWithSlash) {
@@ -97,7 +97,7 @@ TIndexMonPage* TIndexMonPage::RegisterIndexPage(const TString& path, const TStri
 IMonPage* TIndexMonPage::FindPage(const TString& relativePath) {
     TGuard<TMutex> g(Mtx);
 
-    Y_VERIFY(!relativePath.StartsWith('/')); 
+    Y_VERIFY(!relativePath.StartsWith('/'));
     TPagesByPath::iterator i = PagesByPath.find("/" + relativePath);
     if (i == PagesByPath.end()) {
         return nullptr;
@@ -110,7 +110,7 @@ TIndexMonPage* TIndexMonPage::FindIndexPage(const TString& relativePath) {
     return VerifyDynamicCast<TIndexMonPage*>(FindPage(relativePath));
 }
 
-void TIndexMonPage::OutputCommonJsCss(IOutputStream& out) { 
+void TIndexMonPage::OutputCommonJsCss(IOutputStream& out) {
     out << "<link rel='stylesheet' href='https://yastatic.net/bootstrap/3.3.1/css/bootstrap.min.css'>\n";
     out << "<script language='javascript' type='text/javascript' src='https://yastatic.net/jquery/2.1.3/jquery.min.js'></script>\n";
     out << "<script language='javascript' type='text/javascript' src='https://yastatic.net/bootstrap/3.3.1/js/bootstrap.min.js'></script>\n";

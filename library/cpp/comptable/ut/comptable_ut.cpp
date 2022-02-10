@@ -39,8 +39,8 @@ void DoTest(const TCompressorTable& table, const TVector<TString>& lines) {
     UNIT_ASSERT(compSize < origSize);
 }
 
-Y_UNIT_TEST_SUITE(TestComptable) { 
-    Y_UNIT_TEST(TestComptableCompressDecompress) { 
+Y_UNIT_TEST_SUITE(TestComptable) {
+    Y_UNIT_TEST(TestComptableCompressDecompress) {
         TReallyFastRng32 rr(17);
         TVector<TString> lines;
         for (size_t i = 0; i < 1000000; ++i) {

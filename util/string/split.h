@@ -261,7 +261,7 @@ struct TSetDelimiter: private TFindFirstOf<const Char> {
 };
 
 namespace NSplitTargetHasPushBack {
-    Y_HAS_MEMBER(push_back, PushBack); 
+    Y_HAS_MEMBER(push_back, PushBack);
 }
 
 template <class T, class = void>

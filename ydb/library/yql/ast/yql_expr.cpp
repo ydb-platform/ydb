@@ -40,7 +40,7 @@ namespace {
         return static_cast<const T*>(*ins.first);
     }
 
-    void DumpNode(const TExprNode& node, IOutputStream& out, ui32 level, TNodeSet& visited) { 
+    void DumpNode(const TExprNode& node, IOutputStream& out, ui32 level, TNodeSet& visited) {
         for (ui32 i = 0; i < level; ++i) {
             out.Write(' ');
         }
@@ -3199,7 +3199,7 @@ void CheckCounts(const TExprNode& root) {
 } // namespace NYql
 
 template<>
-void Out<NYql::TExprNode::EType>(class IOutputStream &o, NYql::TExprNode::EType x) { 
+void Out<NYql::TExprNode::EType>(class IOutputStream &o, NYql::TExprNode::EType x) {
 #define YQL_EXPR_NODE_TYPE_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::TExprNode::name: \
         o << #name; \
@@ -3214,7 +3214,7 @@ void Out<NYql::TExprNode::EType>(class IOutputStream &o, NYql::TExprNode::EType 
 }
 
 template<>
-void Out<NYql::TExprNode::EState>(class IOutputStream &o, NYql::TExprNode::EState x) { 
+void Out<NYql::TExprNode::EState>(class IOutputStream &o, NYql::TExprNode::EState x) {
 #define YQL_EXPR_NODE_STATE_MAP_TO_STRING_IMPL(name, ...) \
     case NYql::TExprNode::EState::name: \
         o << #name; \

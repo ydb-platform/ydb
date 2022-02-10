@@ -19,7 +19,7 @@
 #include <util/random/entropy.h>
 #include <util/stream/file.h>
 #include <util/string/printf.h>
-#include <util/string/subst.h> 
+#include <util/string/subst.h>
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -39,7 +39,7 @@ namespace NBlobStorageNodeWardenTest{
 #if ENABLE_FORKED_TESTS
 #    define CUSTOM_UNIT_TEST(a) SIMPLE_UNIT_FORKED_TEST(a)
 #else
-#define CUSTOM_UNIT_TEST(a) Y_UNIT_TEST(a) 
+#define CUSTOM_UNIT_TEST(a) Y_UNIT_TEST(a)
 #endif //ENABLE_FORKED_TESTS
 
 #define VERBOSE_COUT(str) \
@@ -245,7 +245,7 @@ void Setup(TTestActorRuntime& runtime) {
 }
 
 
-Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) { 
+Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     ui64 GetBsc(TTestActorRuntime &runtime) {
         ui64 defaultStateStorageGroup = runtime.GetAppData(0).DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID);
         ui64 bsController = MakeBSControllerID(defaultStateStorageGroup);

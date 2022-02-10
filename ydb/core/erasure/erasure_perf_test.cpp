@@ -210,13 +210,13 @@ void MeasureSplitTime(TErasureType &type) {
     }
 }
 
-Y_UNIT_TEST_SUITE(TErasurePerfTest) { 
-    Y_UNIT_TEST(Split) { 
+Y_UNIT_TEST_SUITE(TErasurePerfTest) {
+    Y_UNIT_TEST(Split) {
         TErasureType type(TErasureType::EErasureSpecies::Erasure4Plus2Block);
         MeasureSplitTime(type);
     }
 
-    Y_UNIT_TEST(Restore) { 
+    Y_UNIT_TEST(Restore) {
         TErasureType type(TErasureType::EErasureSpecies::Erasure4Plus2Block);
         MeasureRestoreTime(type);
     }

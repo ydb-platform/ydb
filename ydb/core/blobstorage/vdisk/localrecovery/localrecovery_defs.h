@@ -22,7 +22,7 @@ namespace NKikimr {
                 , LastLsn(lastLsn)
             {}
 
-            void Output(IOutputStream &str) const { 
+            void Output(IOutputStream &str) const {
                 str << "{RecsN# " << Records << " Lsns# [" << FirstLsn << " " << LastLsn << "]}";
             }
         };
@@ -265,8 +265,8 @@ namespace NKikimr {
         ///////////////////////////////////////////////////////////////////////////////
         TLocalRecoveryInfo(const NMonGroup::TLocalRecoveryGroup &monGroup);
         void FillIn(NKikimrBlobStorage::TLocalRecoveryInfo *proto) const;
-        void Output(IOutputStream &str) const; 
-        void OutputHtml(IOutputStream &str) const; 
+        void Output(IOutputStream &str) const;
+        void OutputHtml(IOutputStream &str) const;
         TString ToString() const;
         void SetStartingPoint(TLogSignature signature, ui64 lsn);
         void HandleReadLogResult(const NPDisk::TEvReadLogResult::TResults &results);
@@ -277,7 +277,7 @@ namespace NKikimr {
 
     private:
         void Disp(TRec r);
-        void OutputCounters(IOutputStream &str, 
+        void OutputCounters(IOutputStream &str,
                             const TString &prefix,
                             const TString &suffix,
                             const TString &hr) const;

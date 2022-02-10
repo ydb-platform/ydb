@@ -134,7 +134,7 @@ namespace NMemInfo {
         Zero(proc);
 
         errno = 0;
-        if (sysctl((int*)mib, 4, &proc, &size, nullptr, 0) == -1) { 
+        if (sysctl((int*)mib, 4, &proc, &size, nullptr, 0) == -1) {
             int err = errno;
             TString errtxt = LastSystemErrorText(err);
             ythrow yexception() << "sysctl({CTL_KERN,KERN_PROC,KERN_PROC_PID,pid},4,proc,&size,NULL,0) returned -1, errno: " << err << " (" << errtxt << ")" << Endl;

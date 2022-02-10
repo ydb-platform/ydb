@@ -47,7 +47,7 @@ namespace NKikimr {
             return static_cast<ui64>(AtomicGet(ConfirmedLsn));
         }
 
-        void Output(IOutputStream &str) const { 
+        void Output(IOutputStream &str) const {
             str << "{InFly# [";
             TAllocFreeQueue<TLsnSeg>::TIterator it(InFly);
             it.SeekToFirst();

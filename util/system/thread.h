@@ -8,7 +8,7 @@
 #include <util/generic/string.h>
 
 #include "defaults.h"
-#include "progname.h" 
+#include "progname.h"
 
 bool SetHighestThreadPriority();
 
@@ -27,11 +27,11 @@ public:
         size_t StackSize;
         void* StackPointer;
         // See comments for `SetCurrentThreadName`
-        TString Name = GetProgramName(); 
+        TString Name = GetProgramName();
 
         inline TParams()
-            : Proc(nullptr) 
-            , Data(nullptr) 
+            : Proc(nullptr)
+            , Data(nullptr)
             , StackSize(0)
             , StackPointer(nullptr)
         {
@@ -103,24 +103,24 @@ public:
 
     static TId ImpossibleThreadId() noexcept;
     static TId CurrentThreadId() noexcept;
- 
+
     /*
      * Returns numeric thread id, as visible in e. g. htop.
      * Consider using this value for logging.
      */
     static TId CurrentThreadNumericId() noexcept;
 
-    // NOTE: Content of `name` will be copied. 
-    // 
-    // NOTE: On Linux thread name is limited to 15 symbols which is probably the smallest one among 
+    // NOTE: Content of `name` will be copied.
+    //
+    // NOTE: On Linux thread name is limited to 15 symbols which is probably the smallest one among
     // all platforms. If you provide a name longer than 15 symbols it will be cut. So if you expect
     // `CurrentThreadName` to return the same name as `name` make sure it's not longer than 15
-    // symbols. 
+    // symbols.
     static void SetCurrentThreadName(const char* name);
 
     // NOTE: Will return empty string where CanGetCurrentThreadName() returns false.
     static TString CurrentThreadName();
- 
+
     // NOTE: Depends on a platform version.
     // Will return true for Darwin, Linux or fresh Windows 10.
     static bool CanGetCurrentThreadName();
@@ -157,11 +157,11 @@ private:
     THolder<TImpl> Impl_;
 };
 
-class ISimpleThread: public TThread { 
+class ISimpleThread: public TThread {
 public:
-    ISimpleThread(size_t stackSize = 0); 
+    ISimpleThread(size_t stackSize = 0);
 
-    virtual ~ISimpleThread() = default; 
+    virtual ~ISimpleThread() = default;
 
     virtual void* ThreadProc() = 0;
 };

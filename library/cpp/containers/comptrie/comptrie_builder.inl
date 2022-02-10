@@ -53,18 +53,18 @@ protected:
     bool FindLongestPrefixImpl(const char* keyptr, size_t keylen, size_t* prefixLen, TData* value) const;
 
     size_t NodeMeasureSubtree(TNode* thiz) const;
-    ui64 NodeSaveSubtree(TNode* thiz, IOutputStream& os) const; 
-    ui64 NodeSaveSubtreeAndDestroy(TNode* thiz, IOutputStream& osy); 
+    ui64 NodeSaveSubtree(TNode* thiz, IOutputStream& os) const;
+    ui64 NodeSaveSubtreeAndDestroy(TNode* thiz, IOutputStream& osy);
     void NodeBufferSubtree(TNode* thiz);
 
     size_t NodeMeasureLeafValue(TNode* thiz) const;
-    ui64 NodeSaveLeafValue(TNode* thiz, IOutputStream& os) const; 
+    ui64 NodeSaveLeafValue(TNode* thiz, IOutputStream& os) const;
 
     virtual ui64 ArcMeasure(const TArc* thiz, size_t leftsize, size_t rightsize) const;
 
     virtual ui64 ArcSaveSelf(const TArc* thiz, IOutputStream& os) const;
-    ui64 ArcSave(const TArc* thiz, IOutputStream& os) const; 
-    ui64 ArcSaveAndDestroy(const TArc* thiz, IOutputStream& os); 
+    ui64 ArcSave(const TArc* thiz, IOutputStream& os) const;
+    ui64 ArcSaveAndDestroy(const TArc* thiz, IOutputStream& os);
 
 public:
     TCompactTrieBuilderImpl(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc);
@@ -83,8 +83,8 @@ public:
     bool FindEntry(const TSymbol* key, size_t keylen, TData* value) const;
     bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const;
 
-    size_t Save(IOutputStream& os) const; 
-    size_t SaveAndDestroy(IOutputStream& os); 
+    size_t Save(IOutputStream& os) const;
+    size_t SaveAndDestroy(IOutputStream& os);
 
     void Clear();
 
@@ -118,8 +118,8 @@ public:
         virtual ~ISubtree() = default;
         virtual bool IsLast() const = 0;
         virtual ui64 Measure(const TBuilderImpl* builder) const = 0;
-        virtual ui64 Save(const TBuilderImpl* builder, IOutputStream& os) const = 0; 
-        virtual ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) = 0; 
+        virtual ui64 Save(const TBuilderImpl* builder, IOutputStream& os) const = 0;
+        virtual ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) = 0;
         virtual void Destroy(TBuilderImpl*) { }
 
         // Tries to find key in subtree.
@@ -135,7 +135,7 @@ public:
         typedef typename TCompactVector<TArc>::const_iterator const_iterator;
 
         TArcSet() {
-            Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree() 
+            Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree()
         }
 
         iterator Find(char ch);
@@ -166,17 +166,17 @@ public:
             return builder->ArcMeasure(&(*this)[median], leftsize, rightsize);
         }
 
-        ui64 Save(const TBuilderImpl* builder, IOutputStream& os) const override { 
+        ui64 Save(const TBuilderImpl* builder, IOutputStream& os) const override {
             return SaveRange(builder, 0, this->size(), os);
         }
 
-        ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) override { 
+        ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) override {
             ui64 result = SaveRangeAndDestroy(builder, 0, this->size(), os);
             Destroy(builder);
             return result;
         }
 
-        ui64 SaveRange(const TBuilderImpl* builder, size_t from, size_t to, IOutputStream& os) const { 
+        ui64 SaveRange(const TBuilderImpl* builder, size_t from, size_t to, IOutputStream& os) const {
             if (from >= to)
                 return 0;
 
@@ -188,7 +188,7 @@ public:
             return written;
         }
 
-        ui64 SaveRangeAndDestroy(TBuilderImpl* builder, size_t from, size_t to, IOutputStream& os) { 
+        ui64 SaveRangeAndDestroy(TBuilderImpl* builder, size_t from, size_t to, IOutputStream& os) {
             if (from >= to)
                 return 0;
 
@@ -209,7 +209,7 @@ public:
         }
 
         ~TArcSet() override {
-            Y_ASSERT(this->empty()); 
+            Y_ASSERT(this->empty());
         }
 
     };
@@ -218,7 +218,7 @@ public:
         TArrayWithSizeHolder<char> Buffer;
 
         TBufferedSubtree() {
-            Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree() 
+            Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree()
         }
 
         bool IsLast() const override {
@@ -255,12 +255,12 @@ public:
             return Buffer.Size();
         }
 
-        ui64 Save(const TBuilderImpl*, IOutputStream& os) const override { 
+        ui64 Save(const TBuilderImpl*, IOutputStream& os) const override {
             os.Write(Buffer.Get(), Buffer.Size());
             return Buffer.Size();
         }
 
-        ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) override { 
+        ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) override {
             ui64 result = Save(builder, os);
             TArrayWithSizeHolder<char>().Swap(Buffer);
             return result;
@@ -284,7 +284,7 @@ public:
             Data->FileName = fileName;
             Data->Size = size;
 
-            Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree() 
+            Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree()
         }
 
         bool IsLast() const override {
@@ -320,7 +320,7 @@ public:
             return Data->Size;
         }
 
-        ui64 Save(const TBuilderImpl*, IOutputStream& os) const override { 
+        ui64 Save(const TBuilderImpl*, IOutputStream& os) const override {
             TUnbufferedFileInput is(Data->FileName);
             ui64 written = TransferData(&is, &os);
             if (written != Data->Size)
@@ -328,7 +328,7 @@ public:
             return written;
         }
 
-        ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) override { 
+        ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) override {
             return Save(builder, os);
         }
     };
@@ -412,7 +412,7 @@ public:
 
     ~TNode() {
         Subtree()->~ISubtree();
-        Y_ASSERT(PayloadType == DATA_ABSENT); 
+        Y_ASSERT(PayloadType == DATA_ABSENT);
     }
 
 };
@@ -457,12 +457,12 @@ bool TCompactTrieBuilder<T, D, S>::FindLongestPrefix(
 }
 
 template <class T, class D, class S>
-size_t TCompactTrieBuilder<T, D, S>::Save(IOutputStream& os) const { 
+size_t TCompactTrieBuilder<T, D, S>::Save(IOutputStream& os) const {
     return Impl->Save(os);
 }
 
 template <class T, class D, class S>
-size_t TCompactTrieBuilder<T, D, S>::SaveAndDestroy(IOutputStream& os) { 
+size_t TCompactTrieBuilder<T, D, S>::SaveAndDestroy(IOutputStream& os) {
     return Impl->SaveAndDestroy(os);
 }
 
@@ -509,13 +509,13 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ConvertSymbolArrayTo
     for (size_t i = 0; i < keylen; ++i) {
         TSymbol label = key[i];
         for (int j = (int)NCompactTrie::ExtraBits<TSymbol>(); j >= 0; j -= 8) {
-            Y_ASSERT(ckeyptr < buf.Data() + buflen); 
+            Y_ASSERT(ckeyptr < buf.Data() + buflen);
             *(ckeyptr++) = (char)(label >> j);
         }
     }
 
     buf.Proceed(buflen);
-    Y_ASSERT(ckeyptr == buf.Data() + buf.Filled()); 
+    Y_ASSERT(ckeyptr == buf.Data() + buf.Filled());
 }
 
 template <class T, class D, class S>
@@ -750,7 +750,7 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Clear() {
 }
 
 template <class T, class D, class S>
-size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Save(IOutputStream& os) const { 
+size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Save(IOutputStream& os) const {
     const size_t len = NodeMeasureSubtree(Root);
     if (len != NodeSaveSubtree(Root, os))
         ythrow yexception() << "something wrong";
@@ -759,7 +759,7 @@ size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Save(IOutputStream
 }
 
 template <class T, class D, class S>
-size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::SaveAndDestroy(IOutputStream& os) { 
+size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::SaveAndDestroy(IOutputStream& os) {
     const size_t len = NodeMeasureSubtree(Root);
     if (len != NodeSaveSubtreeAndDestroy(Root, os))
         ythrow yexception() << "something wrong";
@@ -829,12 +829,12 @@ size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeMeasureSubtree
 }
 
 template <class T, class D, class S>
-ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveSubtree(TNode* thiz, IOutputStream& os) const { 
+ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveSubtree(TNode* thiz, IOutputStream& os) const {
     return thiz->Subtree()->Save(this, os);
 }
 
 template <class T, class D, class S>
-ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveSubtreeAndDestroy(TNode* thiz, IOutputStream& os) { 
+ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveSubtreeAndDestroy(TNode* thiz, IOutputStream& os) {
     return thiz->Subtree()->SaveAndDestroy(this, os);
 }
 
@@ -853,7 +853,7 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeBufferSubtree(TN
     TMemoryOutput bufout(buffer.Get(), buffer.Size());
 
     ui64 written = arcSet->Save(this, bufout);
-    Y_ASSERT(written == bufferLength); 
+    Y_ASSERT(written == bufferLength);
 
     arcSet->Destroy(this);
     arcSet->~TArcSet();
@@ -872,7 +872,7 @@ size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeMeasureLeafVal
 }
 
 template <class T, class D, class S>
-ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveLeafValue(TNode* thiz, IOutputStream& os) const { 
+ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeSaveLeafValue(TNode* thiz, IOutputStream& os) const {
     if (!thiz->IsFinal())
         return 0;
 
@@ -919,7 +919,7 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcMeasure(
 }
 
 template <class T, class D, class S>
-ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveSelf(const TArc* thiz, IOutputStream& os) const { 
+ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveSelf(const TArc* thiz, IOutputStream& os) const {
     using namespace NCompactTrie;
 
     ui64 written = 0;
@@ -962,14 +962,14 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveSelf(const TA
 }
 
 template <class T, class D, class S>
-ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSave(const TArc* thiz, IOutputStream& os) const { 
+ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSave(const TArc* thiz, IOutputStream& os) const {
     ui64 written =  ArcSaveSelf(thiz, os);
     written += NodeSaveSubtree(thiz->Node, os);
     return written;
 }
 
 template <class T, class D, class S>
-ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveAndDestroy(const TArc* thiz, IOutputStream& os) { 
+ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcSaveAndDestroy(const TArc* thiz, IOutputStream& os) {
     ui64 written = ArcSaveSelf(thiz, os);
     written += NodeSaveSubtreeAndDestroy(thiz->Node, os);
     return written;
@@ -1061,13 +1061,13 @@ const typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
 // as you expect it to, and can destroy the trie in the making.
 
 template <class TPacker>
-size_t CompactTrieMinimize(IOutputStream& os, const char* data, size_t datalength, bool verbose /*= false*/, const TPacker& packer /*= TPacker()*/, NCompactTrie::EMinimizeMode mode) { 
+size_t CompactTrieMinimize(IOutputStream& os, const char* data, size_t datalength, bool verbose /*= false*/, const TPacker& packer /*= TPacker()*/, NCompactTrie::EMinimizeMode mode) {
     using namespace NCompactTrie;
     return CompactTrieMinimizeImpl(os, data, datalength, verbose, &packer, mode);
 }
 
 template <class TTrieBuilder>
-size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool verbose /*=false*/) { 
+size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool verbose /*=false*/) {
     TBufferStream buftmp;
     size_t len = builder.Save(buftmp);
     return CompactTrieMinimize<typename TTrieBuilder::TPacker>(os, buftmp.Buffer().Data(), len, verbose);
@@ -1093,27 +1093,27 @@ size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool 
 // (there is not much difference between these papers, actually).
 //
 template <class TPacker>
-size_t CompactTrieMakeFastLayout(IOutputStream& os, const char* data, size_t datalength, bool verbose /*= false*/, const TPacker& packer /*= TPacker()*/) { 
+size_t CompactTrieMakeFastLayout(IOutputStream& os, const char* data, size_t datalength, bool verbose /*= false*/, const TPacker& packer /*= TPacker()*/) {
     using namespace NCompactTrie;
     return CompactTrieMakeFastLayoutImpl(os, data, datalength, verbose, &packer);
 }
 
 template <class TTrieBuilder>
-size_t CompactTrieMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder, bool verbose /*=false*/) { 
+size_t CompactTrieMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder, bool verbose /*=false*/) {
     TBufferStream buftmp;
     size_t len = builder.Save(buftmp);
     return CompactTrieMakeFastLayout<typename TTrieBuilder::TPacker>(os, buftmp.Buffer().Data(), len, verbose);
 }
 
 template <class TPacker>
-size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const char* data, size_t datalength, bool verbose/*=false*/, const TPacker& packer/*= TPacker()*/) { 
+size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const char* data, size_t datalength, bool verbose/*=false*/, const TPacker& packer/*= TPacker()*/) {
     TBufferStream buftmp;
     size_t len = CompactTrieMinimize(buftmp, data, datalength, verbose, packer);
     return CompactTrieMakeFastLayout(os, buftmp.Buffer().Data(), len, verbose, packer);
 }
 
 template <class TTrieBuilder>
-size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder, bool verbose /*=false*/) { 
+size_t CompactTrieMinimizeAndMakeFastLayout(IOutputStream& os, const TTrieBuilder& builder, bool verbose /*=false*/) {
     TBufferStream buftmp;
     size_t len = CompactTrieMinimize(buftmp, builder, verbose);
     return CompactTrieMakeFastLayout<typename TTrieBuilder::TPacker>(os, buftmp.Buffer().Data(), len, verbose);

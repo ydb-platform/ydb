@@ -289,7 +289,7 @@
 #include <util/stream/input.h>
 #include <util/stream/trace.h>
 #include <util/stream/output.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/stream/format.h>
 #include <util/stream/tee.h>
 #include <util/stream/multi.h>
@@ -306,7 +306,7 @@
 #include <util/stream/str.h>
 #include <util/stream/file.h>
 #include <util/stream/zerocopy.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/random/common_ops.h>
 #include <util/random/shuffle.h>
 #include <util/random/lcg_engine.h>

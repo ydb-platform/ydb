@@ -158,7 +158,7 @@ alignas(16) ui32 chacha_const[] = {
 
 void ChaChaVec::SetKey(const ui8* key, size_t size)
 {
-    Y_ASSERT((size == KEY_SIZE) && "key must be 32 bytes long"); 
+    Y_ASSERT((size == KEY_SIZE) && "key must be 32 bytes long");
 
     alignas(16) ui8 aligned_key[KEY_SIZE];
     memcpy(aligned_key, key, size);

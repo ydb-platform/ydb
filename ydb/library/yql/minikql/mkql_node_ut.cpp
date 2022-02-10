@@ -9,8 +9,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) { 
-    Y_UNIT_TEST(TestTypeOfType) { 
+Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
+    Y_UNIT_TEST(TestTypeOfType) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         {
@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestTypeOfVoid) { 
+    Y_UNIT_TEST(TestTypeOfVoid) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         {
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         }
     }
 
-    Y_UNIT_TEST(TestVoid) { 
+    Y_UNIT_TEST(TestVoid) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TVoid* voidObj = env.GetVoid();
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(voidObj->GetType() == env.GetTypeOfVoid());
     }
 
-    Y_UNIT_TEST(TestTypeOfData) { 
+    Y_UNIT_TEST(TestTypeOfData) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(dtype1Cloned->IsSameType(*dtype1));
     }
 
-    Y_UNIT_TEST(TestData) { 
+    Y_UNIT_TEST(TestData) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(d1->GetType() == dtype1);
     }
 
-    Y_UNIT_TEST(TestStructType) { 
+    Y_UNIT_TEST(TestStructType) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TStructType* sempty = env.GetEmptyStruct()->GetType();
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_EXCEPTION(TStructType::Create(duplicatedMembers.data(), duplicatedMembers.size(), env), yexception);
     }
 
-    Y_UNIT_TEST(TestStructLiteral) { 
+    Y_UNIT_TEST(TestStructLiteral) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TStructType* semptyType = env.GetEmptyStruct()->GetType();
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_NO_EXCEPTION(TStructLiteral::Create(s1values.size(), s1values.data(), s1typeDyn, env));
     }
 
-    Y_UNIT_TEST(TestListType) { 
+    Y_UNIT_TEST(TestListType) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TListType* list1type = TListType::Create(env.GetVoid()->GetGenericType(), env);
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(!list1type->IsSameType(*list2type));
     }
 
-    Y_UNIT_TEST(TestStreamType) { 
+    Y_UNIT_TEST(TestStreamType) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TStreamType* stream1type = TStreamType::Create(env.GetVoid()->GetGenericType(), env);
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(!stream1type->IsSameType(*stream2type));
     }
 
-    Y_UNIT_TEST(TestListLiteral) { 
+    Y_UNIT_TEST(TestListLiteral) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<char*>::Id, env);
@@ -197,7 +197,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_NO_EXCEPTION(TListLiteral::Create(someDynItems.data(), someDynItems.size(), list2typeDyn, env));
     }
 
-    Y_UNIT_TEST(TestOptionalType) { 
+    Y_UNIT_TEST(TestOptionalType) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TOptionalType* opt1type = TOptionalType::Create(env.GetVoid()->GetGenericType(), env);
@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(!opt1type->IsSameType(*opt2type));
     }
 
-    Y_UNIT_TEST(TestOptionalLiteral) { 
+    Y_UNIT_TEST(TestOptionalLiteral) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<char*>::Id, env);
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_NO_EXCEPTION(TOptionalLiteral::Create(dynItem, opt2typeDyn, env));
     }
 
-    Y_UNIT_TEST(TestDictType) { 
+    Y_UNIT_TEST(TestDictType) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(!dictType1->IsSameType(*dictType2));
     }
 
-    Y_UNIT_TEST(TestCallableType) { 
+    Y_UNIT_TEST(TestCallableType) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TCallableType* ctype1 = TCallableType::Create("c1", env.GetTypeOfVoid(),
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_EXCEPTION(ctype2optArg->SetOptionalArgumentsCount(3), yexception);
     }
 
-    Y_UNIT_TEST(TestDictLiteral) { 
+    Y_UNIT_TEST(TestDictLiteral) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TDataType* dtype1 = TDataType::Create(NUdf::TDataType<char*>::Id, env);
@@ -349,7 +349,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_NO_EXCEPTION(TDictLiteral::Create(someDynItems.size(), someDynItems.data(), dict2TypeDyn, env));
     }
 
-    Y_UNIT_TEST(TestCallable) { 
+    Y_UNIT_TEST(TestCallable) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TCallableType* ctype1 = TCallableType::Create("c1", env.GetTypeOfVoid(),
@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_EQUAL(c2->GetResult().GetStaticType()->GetKind(), TType::EKind::Void);
     }
 
-    Y_UNIT_TEST(TestThrowingVisitor) { 
+    Y_UNIT_TEST(TestThrowingVisitor) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TThrowingNodeVisitor visitor;
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_EXCEPTION(visitor.Visit(*env.GetTypeOfType()), yexception);
     }
 
-    Y_UNIT_TEST(TestEmptyVisitor) { 
+    Y_UNIT_TEST(TestEmptyVisitor) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TEmptyNodeVisitor visitor;
@@ -438,7 +438,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(any1->TNode::Equals(*any2));
     }
 
-    Y_UNIT_TEST(TestTupleType) { 
+    Y_UNIT_TEST(TestTupleType) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TTupleType* tempty = env.GetEmptyTuple()->GetType();
@@ -465,7 +465,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(!t2cloned->IsSameType(*t1));
     }
 
-    Y_UNIT_TEST(TestTupleLiteral) { 
+    Y_UNIT_TEST(TestTupleLiteral) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         TTupleType* temptyType = env.GetEmptyTuple()->GetType();
@@ -498,7 +498,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT_NO_EXCEPTION(TTupleLiteral::Create(t1values.size(), t1values.data(), t1typeDyn, env));
     }
 
-    Y_UNIT_TEST(TestVariantType) { 
+    Y_UNIT_TEST(TestVariantType) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto emptyStructType = env.GetEmptyStruct()->GetType();
@@ -540,7 +540,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLNodeTest) {
         UNIT_ASSERT(var2struct->GetUnderlyingType() == struct2type);
     }
 
-    Y_UNIT_TEST(TestVariantLiteral) { 
+    Y_UNIT_TEST(TestVariantLiteral) {
         TScopedAlloc alloc;
         TTypeEnvironment env(alloc);
         auto emptyStructType = env.GetEmptyStruct()->GetType();

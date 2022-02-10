@@ -17,7 +17,7 @@ struct TFakeKey {
 
 struct TFakeKeyComparator {
     bool operator () (const TFakeKey& a, const TFakeKey& b) const {
-        Y_ASSERT(a.Columns.size() == b.Columns.size()); 
+        Y_ASSERT(a.Columns.size() == b.Columns.size());
         for (ui32 i = 0; i < a.Columns.size(); ++i) {
             const TRawTypeValue& av = a.Columns[i].Get();
             const TRawTypeValue& bv = b.Columns[i].Get();
@@ -25,7 +25,7 @@ struct TFakeKeyComparator {
                 return true;
             if (bv.IsEmpty())
                 return false;
-            Y_ASSERT(av.Type() == bv.Type()); 
+            Y_ASSERT(av.Type() == bv.Type());
             int res = CompareTypedCells(TCell(&av), TCell(&bv), av.Type());
             if (res)
                 return res < 0;
@@ -136,7 +136,7 @@ public:
     }
 
     bool IsRowDeleted() override {
-        Y_ASSERT(IsValid()); 
+        Y_ASSERT(IsValid());
         return RowIt->second.IsDeleted;
     }
 

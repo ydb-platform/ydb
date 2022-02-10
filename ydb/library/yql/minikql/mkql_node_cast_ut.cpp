@@ -27,7 +27,7 @@ class TMiniKQLNodeCast: public TTestBase
     void BadAsTypeTest() {
         TRuntimeNode node = Uint32AsNode(123);
         TCallableType* type = AS_TYPE(TCallableType, node);
-        Y_UNUSED(type); 
+        Y_UNUSED(type);
     }
 
     void AsValueTest() {
@@ -49,7 +49,7 @@ class TMiniKQLNodeCast: public TTestBase
     void BadAsValueTest() {
         TRuntimeNode node = Uint32AsNode(123);
         TListLiteral* list = AS_VALUE(TListLiteral, node);
-        Y_UNUSED(list); 
+        Y_UNUSED(list);
     }
 
     TMiniKQLNodeCast()

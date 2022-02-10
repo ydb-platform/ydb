@@ -10,7 +10,7 @@ void DoInitGlobalLog(const TString& logType, const int logLevel, const bool rota
 void DoInitGlobalLog(THolder<TLogBackend> backend, THolder<ILoggerFormatter> formatter = {});
 
 inline void InitGlobalLog2Null() {
-    DoInitGlobalLog("null", TLOG_EMERG, false, false); 
+    DoInitGlobalLog("null", TLOG_EMERG, false, false);
 }
 
 inline void InitGlobalLog2Console(int loglevel = TLOG_INFO) {
@@ -91,7 +91,7 @@ namespace NPrivateGlobalLogger {
         ~TVerifyEvent();
         template <class T>
         inline TVerifyEvent& operator<<(const T& t) {
-            static_cast<IOutputStream&>(*this) << t; 
+            static_cast<IOutputStream&>(*this) << t;
 
             return *this;
         }

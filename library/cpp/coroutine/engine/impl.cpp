@@ -34,7 +34,7 @@ TCont::TCont(NCoro::NStack::IAllocator& allocator,
 {}
 
 
-void TCont::PrintMe(IOutputStream& out) const noexcept { 
+void TCont::PrintMe(IOutputStream& out) const noexcept {
     out << "cont("
         << "name = " << Name_ << ", "
         << "addr = " << Hex((size_t)this)

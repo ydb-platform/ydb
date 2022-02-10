@@ -54,7 +54,7 @@ private:
         int arr[] = {1, 2, 3};
         const size_t canonicalHash = static_cast<size_t>(ULL(3903918011533391876));
         TContiguousHash<TSimpleRangeHash> hasher;
-        UNIT_ASSERT_EQUAL(canonicalHash, hasher(TArrayRef<int>(arr, arr + 3))); 
+        UNIT_ASSERT_EQUAL(canonicalHash, hasher(TArrayRef<int>(arr, arr + 3)));
     }
 };
 

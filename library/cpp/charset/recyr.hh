@@ -47,7 +47,7 @@ inline RECODE_RESULT RecodeFromUnicode(ECharset to, const TCharType* in, char* o
 }
 
 inline RECODE_RESULT RecodeFromUnicode(ECharset theEncoding, const wchar16* chars, size_t length,
-                                       char* bytes, size_t size, size_t* read = nullptr, size_t* written = nullptr) { 
+                                       char* bytes, size_t size, size_t* read = nullptr, size_t* written = nullptr) {
     size_t w = 0, r = 0;
     RECODE_RESULT rc = ::RecodeFromUnicode(theEncoding, chars, bytes, length, size, r, w);
     if (read)
@@ -122,7 +122,7 @@ inline bool Recode(ECharset from, ECharset to, const TStringBuf& in, TString& ou
     size_t inRead = 0;
     size_t outWritten = 0;
     const RECODE_RESULT res = Recode(from, to, in.data(), out.begin(), inSize, outSize, inRead, outWritten);
-    Y_ENSURE(RECODE_OK == res, "Recode failed. "); 
+    Y_ENSURE(RECODE_OK == res, "Recode failed. ");
     if (outWritten > outSize)
         ythrow yexception() << "Recode overrun the buffer: size="
                             << outSize << " need=" << outWritten;

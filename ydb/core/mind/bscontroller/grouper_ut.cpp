@@ -16,7 +16,7 @@ enum ELevel {
     LevelDrive = 200
 };
 
-Y_UNIT_TEST_SUITE(TBlobStorageControllerGrouperTest) { 
+Y_UNIT_TEST_SUITE(TBlobStorageControllerGrouperTest) {
 
     static void construct_group_and_assert_it_is_valid(
         TVector<NBsController::TCandidate> candidates,
@@ -40,12 +40,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageControllerGrouperTest) {
         UNIT_ASSERT(!isOk);
     }
 
-    Y_UNIT_TEST(TestGroupFromCandidatesEmpty) { 
+    Y_UNIT_TEST(TestGroupFromCandidatesEmpty) {
         TVector<NBsController::TCandidate> candidates;
         construct_group_and_assert_it_is_NOT_valid(candidates, 4, 1);
     }
 
-    Y_UNIT_TEST(TestGroupFromCandidatesTrivial) { 
+    Y_UNIT_TEST(TestGroupFromCandidatesTrivial) {
         ui32 nodeId = 0;
         ui32 pDiskId = 0;
         ui32 badness = 0;
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageControllerGrouperTest) {
         construct_group_and_assert_it_is_valid(candidates, 4);
     }
 
-    Y_UNIT_TEST(TestGroupFromCandidatesHuge) { 
+    Y_UNIT_TEST(TestGroupFromCandidatesHuge) {
         ui32 nodeId = 0;
         const ui32 vDiskSlotId = 1;
 
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageControllerGrouperTest) {
         return candidates;
     }
 
-    Y_UNIT_TEST(when_one_server_per_rack_in_4_racks_then_can_construct_group_with_4_domains) { 
+    Y_UNIT_TEST(when_one_server_per_rack_in_4_racks_then_can_construct_group_with_4_domains) {
         TVector<NBsController::TCandidate> candidates;
 
         for (ui32 rackIdx = 0; rackIdx < 4; ++rackIdx) {
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageControllerGrouperTest) {
         construct_group_and_assert_it_is_NOT_valid(candidates, 4, 3);
     }
 
-    Y_UNIT_TEST(when_one_server_per_rack_in_4_racks_then_can_construct_group_with_4_domains_and_one_small_node) { 
+    Y_UNIT_TEST(when_one_server_per_rack_in_4_racks_then_can_construct_group_with_4_domains_and_one_small_node) {
         const ui32 domainIdx = 1;
         const ui32 roomIdx = 0;
 

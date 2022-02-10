@@ -44,8 +44,8 @@ RECURSE(
     fml_sweeper_api
     frq_index_print
     geo
-    geodb_ops 
-    geodb_ops/tests 
+    geodb_ops
+    geodb_ops/tests
     geograph_compiler
     go_test_miner
     go_fake_xcrun
@@ -65,7 +65,7 @@ RECURSE(
     langdiscr-test
     lemmas_merger_builder
     lemmer-test
-    lemmer-test/tests 
+    lemmer-test/tests
     lenval_debug
     lua
     memcheck
@@ -81,7 +81,7 @@ RECURSE(
     nehc
     nlp_test
     nodeiter_test
-    nodeiter_test/tests 
+    nodeiter_test/tests
     normalize_requests
     nots
     oauth_token
@@ -95,9 +95,9 @@ RECURSE(
     printlinks
     printphones
     printreqs
-    printreqs/tests 
+    printreqs/tests
     printrichnode
-    printrichnode/tests 
+    printrichnode/tests
     printtrie
     printurls
     printwzrd
@@ -116,8 +116,8 @@ RECURSE(
     qlz
     query_marker_builder
     queryrectest
-    queryrectest/tests 
-    queryrectest/tests/data 
+    queryrectest/tests
+    queryrectest/tests/data
     rcgtest
     re_check
     recode
@@ -157,11 +157,11 @@ RECURSE(
     tomaparsertest
     trans_str
     triecompiler
-    triecompiler/build_tool 
-    triecompiler/lib 
-    trie_ops 
-    trie_ops/lib 
-    trie_ops/tests 
+    triecompiler/build_tool
+    triecompiler/lib
+    trie_ops
+    trie_ops/lib
+    trie_ops/tests
     trigram_index_print
     uc
     unpackrichtree

@@ -15,21 +15,21 @@ enum ETraceLevel: ui8 {
     TRACE_VERBOSE = 7
 };
 
-#if !defined(NDEBUG) && !defined(Y_ENABLE_TRACE) 
+#if !defined(NDEBUG) && !defined(Y_ENABLE_TRACE)
     #define Y_ENABLE_TRACE
 #endif
 
-#ifdef Y_ENABLE_TRACE 
+#ifdef Y_ENABLE_TRACE
 
     /**
  * Writes the given data into standard debug stream if current debug level set
  * via `DBGOUT` environment variable permits it.
  *
- * Does nothing in release builds unless `Y_ENABLE_TRACE` is defined. 
+ * Does nothing in release builds unless `Y_ENABLE_TRACE` is defined.
  *
  * Example usage:
  * @code
- * Y_DBGTRACE(DEBUG, "Advance from " << node1 << " to " << node2); 
+ * Y_DBGTRACE(DEBUG, "Advance from " << node1 << " to " << node2);
  * @endcode
  *
  * @param elevel                        Debug level of this trace command, e.g.

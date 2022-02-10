@@ -9,9 +9,9 @@ namespace NKikimr {
 
     using namespace NMatrix;
 
-    Y_UNIT_TEST_SUITE(TBlobStorageIngressMatrix) { 
+    Y_UNIT_TEST_SUITE(TBlobStorageIngressMatrix) {
 
-        Y_UNIT_TEST(VectorTest) { 
+        Y_UNIT_TEST(VectorTest) {
             TVectorType vec(0, 7);
             vec.Set(0);
             vec.Set(4);
@@ -45,7 +45,7 @@ namespace NKikimr {
             UNIT_ASSERT(!TVectorType(0x37, 5).Empty());
         }
 
-        Y_UNIT_TEST(VectorTestEmpty) { 
+        Y_UNIT_TEST(VectorTestEmpty) {
             TVectorType vec(0, 7);
             UNIT_ASSERT(vec.Empty());
             vec.Set(0);
@@ -59,7 +59,7 @@ namespace NKikimr {
             UNIT_ASSERT(!vec.Empty());
         }
 
-        Y_UNIT_TEST(VectorTestMinus) { 
+        Y_UNIT_TEST(VectorTestMinus) {
             TVectorType vec1(0, 7);
             vec1.Set(0);
             vec1.Set(4);
@@ -76,7 +76,7 @@ namespace NKikimr {
             UNIT_ASSERT(vec1 - vec2 == res);
         }
 
-        Y_UNIT_TEST(VectorTestBitwiseAnd) { 
+        Y_UNIT_TEST(VectorTestBitwiseAnd) {
             TVectorType vec1(0, 7);
             vec1.Set(0);
             vec1.Set(4);
@@ -92,7 +92,7 @@ namespace NKikimr {
             UNIT_ASSERT((vec1 & vec2) == res);
         }
 
-        Y_UNIT_TEST(VectorTestBitwiseComplement1) { 
+        Y_UNIT_TEST(VectorTestBitwiseComplement1) {
             TVectorType vec1(0, 4);
             TVectorType vec2(~vec1);
             TVectorType vec3(0, 4);
@@ -104,7 +104,7 @@ namespace NKikimr {
             UNIT_ASSERT(vec2 == vec3);
         }
 
-        Y_UNIT_TEST(VectorTestBitwiseComplement2) { 
+        Y_UNIT_TEST(VectorTestBitwiseComplement2) {
             TVectorType vec1(0, 5);
             vec1.Set(2);
             vec1.Set(4);
@@ -117,7 +117,7 @@ namespace NKikimr {
             UNIT_ASSERT(vec2 == vec3);
         }
 
-        Y_UNIT_TEST(VectorTestBitsBefore1) { 
+        Y_UNIT_TEST(VectorTestBitsBefore1) {
             TVectorType vec1(0, 7);
             vec1.Set(0);
             vec1.Set(4);
@@ -139,7 +139,7 @@ namespace NKikimr {
             UNIT_ASSERT(res == canon);
         }
 
-        Y_UNIT_TEST(VectorTestBitsBefore2) { 
+        Y_UNIT_TEST(VectorTestBitsBefore2) {
             TVectorType vec1(0, 4);
             vec1.Set(1);
             vec1.Set(2);
@@ -157,7 +157,7 @@ namespace NKikimr {
             UNIT_ASSERT(res == canon);
         }
 
-        Y_UNIT_TEST(VectorTestIterator1) { 
+        Y_UNIT_TEST(VectorTestIterator1) {
             TVectorType vec1(0, 7);
             vec1.Set(1);
             vec1.Set(4);
@@ -175,7 +175,7 @@ namespace NKikimr {
             UNIT_ASSERT(res == canon);
         }
 
-        Y_UNIT_TEST(VectorTestIterator2) { 
+        Y_UNIT_TEST(VectorTestIterator2) {
             TVectorType vec1(0, 7);
             vec1.Set(0);
             vec1.Set(1);
@@ -192,7 +192,7 @@ namespace NKikimr {
             UNIT_ASSERT(res == canon);
         }
 
-        Y_UNIT_TEST(VectorTestIterator3) { 
+        Y_UNIT_TEST(VectorTestIterator3) {
             TVectorType vec1(0, 6);
             vec1.Set(0);
 
@@ -206,7 +206,7 @@ namespace NKikimr {
             UNIT_ASSERT(res == canon);
         }
 
-        Y_UNIT_TEST(MatrixTest) { 
+        Y_UNIT_TEST(MatrixTest) {
             ui8 data[7];
             TMatrix m(data, 8, 7);
             m.Zero();
@@ -261,7 +261,7 @@ namespace NKikimr {
         }
 
 
-        Y_UNIT_TEST(ShiftedBitVecBase) { 
+        Y_UNIT_TEST(ShiftedBitVecBase) {
             ui64 data = 0;
             TShiftedBitVecBase vec((ui8 *)&data, 3, 15); // i.e. size=12
             // test set
@@ -316,7 +316,7 @@ namespace NKikimr {
             UNIT_ASSERT(dd == 0x54A);
         }
 
-        Y_UNIT_TEST(ShiftedMainBitVec) { 
+        Y_UNIT_TEST(ShiftedMainBitVec) {
             ui64 data = 0;
             TShiftedMainBitVec vec((ui8*)&data, 7, 14);
             vec.Set(0);
@@ -326,7 +326,7 @@ namespace NKikimr {
             UNIT_ASSERT(vec.ToVector() == TVectorType(0xAC, 7));
         }
 
-        Y_UNIT_TEST(ShiftedHandoffBitVec) { 
+        Y_UNIT_TEST(ShiftedHandoffBitVec) {
             ui64 data = 0;
             TShiftedHandoffBitVec vec((ui8*)&data, 7, 21);
             vec.Set(0);

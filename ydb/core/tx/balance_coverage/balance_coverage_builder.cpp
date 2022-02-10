@@ -22,7 +22,7 @@ namespace NKikimr {
 
         bool hasAdded = false;
         for (const auto& track : tracks.GetTrack()) {
-            Y_VERIFY_DEBUG(track.HopSize() > 0); 
+            Y_VERIFY_DEBUG(track.HopSize() > 0);
             bool result = AddToTree(track);
             hasAdded = hasAdded || result;
         }
@@ -39,7 +39,7 @@ namespace NKikimr {
     }
 
     bool TBalanceCoverageBuilder::AddNode(TAutoPtr<TNode>& node, const NKikimrTx::TBalanceTrack& track, ui32 index) {
-        Y_VERIFY(node->Tablet == track.GetHop(index).GetShard()); 
+        Y_VERIFY(node->Tablet == track.GetHop(index).GetShard());
         ++index;
         if (index == track.HopSize()) {
             bool oldResult = node->HasResult;

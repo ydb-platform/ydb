@@ -458,7 +458,7 @@ namespace NFlatExecutorSetup {
             : TabletActorID(tablet)
             , TabletInfo(info)
         {
-            Y_VERIFY(TTabletTypes::TYPE_INVALID != TabletInfo->TabletType); 
+            Y_VERIFY(TTabletTypes::TYPE_INVALID != TabletInfo->TabletType);
         }
 
         TActorId ExecutorActorID;

@@ -7,7 +7,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
-    Y_UNIT_TEST_LLVM(TestSqueeze) { 
+    Y_UNIT_TEST_LLVM(TestSqueeze) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestSqueezeOnEmpty) { 
+    Y_UNIT_TEST_LLVM(TestSqueezeOnEmpty) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestSqueeze1OverEmpty) { 
+    Y_UNIT_TEST_LLVM(TestSqueeze1OverEmpty) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestSqueeze1OverSingle) { 
+    Y_UNIT_TEST_LLVM(TestSqueeze1OverSingle) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
     }
 
-    Y_UNIT_TEST_LLVM(TestSqueeze1OverMany) { 
+    Y_UNIT_TEST_LLVM(TestSqueeze1OverMany) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
 

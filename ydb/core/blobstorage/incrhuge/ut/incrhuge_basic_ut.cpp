@@ -131,8 +131,8 @@ public:
     }
 };
 
-Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) { 
-    Y_UNIT_TEST(WriteReadDeleteEnum) { 
+Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
+    Y_UNIT_TEST(WriteReadDeleteEnum) {
         return; /* TODO(alexvru): https://st.yandex-team.ru/KIKIMR-7588 */
 
         TTestEnv env;
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
         env.Stop();
     }
 
-    Y_UNIT_TEST(WriteReadDeleteEnumRecover) { 
+    Y_UNIT_TEST(WriteReadDeleteEnumRecover) {
         return; /* TODO(alexvru): https://st.yandex-team.ru/KIKIMR-7588 */
 
         TTestActorConcurrent::TTestActorState state;
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
         }
     }
 
-    Y_UNIT_TEST(Defrag) { 
+    Y_UNIT_TEST(Defrag) {
         TTestEnv env;
         env.Setup(true, 0, nullptr, 1000);
         env.Start();
@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
         env.Stop();
     }
 
-    Y_UNIT_TEST(Recovery) { 
+    Y_UNIT_TEST(Recovery) {
         return; // TODO https://st.yandex-team.ru/KIKIMR-3065
         TTestEnv env;
         env.Setup(true, 0, nullptr, 2000, 128 << 20);
@@ -232,7 +232,7 @@ Y_UNIT_TEST_SUITE(TIncrHugeBasicTest) {
         env.Stop();
     }
 
-/*    Y_UNIT_TEST(FaultyPDisk) { 
+/*    Y_UNIT_TEST(FaultyPDisk) {
         for (ui32 counter = 20; counter < 1000; ++counter) {
             TTestActorSeq::TTestActorState state;
             TTestActorSeq *actor;

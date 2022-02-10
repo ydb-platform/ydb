@@ -5,8 +5,8 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/stream/null.h> 
- 
+#include <util/stream/null.h>
+
 // change to Cerr if you want logging
 #define STR Cnull
 
@@ -14,7 +14,7 @@ namespace NKikimr {
 
     static std::shared_ptr<TRopeArena> Arena = std::make_shared<TRopeArena>(&TRopeArenaBackend::Allocate);
 
-    Y_UNIT_TEST_SUITE(TBlobStorageHullFresh) { 
+    Y_UNIT_TEST_SUITE(TBlobStorageHullFresh) {
 
         ////////////////////////////////////////////////////////////////////////////////////////
         // Definitions
@@ -96,7 +96,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////////////////
         // Test SimpleForward
         ////////////////////////////////////////////////////////////////////////////////////////
-        Y_UNIT_TEST(SimpleForward) { 
+        Y_UNIT_TEST(SimpleForward) {
             const TFreshData::TFreshDataSnapshot &snapshot = *DsSimple.Snap3;
             THullCtxPtr hullCtx = TestCtx.GetHullCtx();
             TFreshData::TFreshDataSnapshot::TForwardIterator it(hullCtx, &snapshot);
@@ -172,23 +172,23 @@ namespace NKikimr {
         }
 
 
-        Y_UNIT_TEST(SimpleBackwardEnd) { 
+        Y_UNIT_TEST(SimpleBackwardEnd) {
             SimpleBackwardEnd<TDatasetSimple>(DsSimple);
         }
 
-        Y_UNIT_TEST(SimpleBackWardEnd2Times) { 
+        Y_UNIT_TEST(SimpleBackWardEnd2Times) {
             SimpleBackwardEnd<TDatasetSimple2Times>(DsSimple2Times);
         }
 
-        Y_UNIT_TEST(SimpleBackwardMiddle) { 
+        Y_UNIT_TEST(SimpleBackwardMiddle) {
             SimpleBackwardMiddle<TDatasetSimple>(DsSimple);
         }
 
-        Y_UNIT_TEST(SimpleBackWardMiddle2Times) { 
+        Y_UNIT_TEST(SimpleBackWardMiddle2Times) {
             SimpleBackwardMiddle<TDatasetSimple2Times>(DsSimple2Times);
         }
 
-        Y_UNIT_TEST(SolomonStandCrash) { 
+        Y_UNIT_TEST(SolomonStandCrash) {
             TFreshDataPtr fresh(new TFreshData(GetLevelIndexSetting(),
                 CreateDefaultTimeProvider(), Arena));
 
@@ -217,7 +217,7 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(it.GetCurKey().ToString(), "[72075186224037891:2:22744:0:0:0:0]");
         }
 
-        Y_UNIT_TEST(Perf) { 
+        Y_UNIT_TEST(Perf) {
             TFreshDataPtr fresh(new TFreshData(GetLevelIndexSetting(), CreateDefaultTimeProvider(), Arena));
 
             using TIdxKey = TFreshIndex<TKeyLogoBlob, TMemRecLogoBlob>::TIdxKey;

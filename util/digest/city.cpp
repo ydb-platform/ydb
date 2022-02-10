@@ -201,7 +201,7 @@ uint64 CityHash64WithSeed(const char* s, size_t len, uint64 seed) noexcept {
 }
 
 uint64 CityHash64WithSeeds(const char* s, size_t len,
-                           uint64 seed0, uint64 seed1) noexcept { 
+                           uint64 seed0, uint64 seed1) noexcept {
     return HashLen16(CityHash64(s, len) - seed0, seed1);
 }
 
@@ -310,7 +310,7 @@ uint128 CityHash128(const char* s, size_t len) noexcept {
     }
 }
 
-// TODO(yazevnul): move this function to unittests 
+// TODO(yazevnul): move this function to unittests
 void TestCompilationOfCityHashTemplates() {
     TStringBuf s;
     CityHash64(s);

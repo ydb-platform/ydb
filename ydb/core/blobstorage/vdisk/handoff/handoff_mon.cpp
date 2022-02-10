@@ -18,7 +18,7 @@ namespace NKikimr {
             NHandoff::TPrivateProxyStatePtr PrState;
 
             TInfo() = default;
-            TInfo(IInputStream &) { 
+            TInfo(IInputStream &) {
                 Y_FAIL("Not supported");
             }
             TInfo(const NHandoff::TCountersPtr &c, const NHandoff::TPrivateProxyStatePtr &p)
@@ -59,7 +59,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvHandoffProxyMonResult::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(Counter > 0); 
+            Y_VERIFY_DEBUG(Counter > 0);
 
             auto d = ev->Get();
             Cells[d->VDiskID].Get() = TInfo(d->CountersPtr, d->PrivateProxyStatePtr);
@@ -96,7 +96,7 @@ namespace NKikimr {
 
         // outputs state in HTML
         struct TPrinter {
-            void operator() (IOutputStream &str, TCells::TConstIterator it) { 
+            void operator() (IOutputStream &str, TCells::TConstIterator it) {
                 if (it->Myself) {
                     HTML(str) {
                         PARA_CLASS("text-info") {str << "Self";}
@@ -139,7 +139,7 @@ namespace NKikimr {
         TActiveActors ActiveActors;
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::HandoffMonId); 
+            Y_VERIFY_DEBUG(ev->Get()->SubRequestId == TDbMon::HandoffMonId);
             auto actor = std::make_unique<THandoffMonRequestActor>(ctx.SelfID, SelfVDisk, Top, ProxiesPtr, ev);
             auto aid = ctx.Register(actor.release());
             ActiveActors.Insert(aid);

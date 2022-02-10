@@ -6,7 +6,7 @@
 #include <util/datetime/base.h>
 #include <util/generic/vector.h>
 
-Y_UNIT_TEST_SUITE(TElasticQueueTest) { 
+Y_UNIT_TEST_SUITE(TElasticQueueTest) {
     const size_t MaxQueueSize = 20;
     const size_t ThreadCount = 10;
     const size_t N = 100000;
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
 
 //fill test -- fill queue with "endless" jobs
     TSystemEvent WaitEvent;
-    Y_UNIT_TEST(FillTest) { 
+    Y_UNIT_TEST(FillTest) {
         Counters.Reset();
 
         struct TWaitJob: public IObjectInQueue {
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TElasticQueueTest) {
 
     static size_t TryCounter;
 
-    Y_UNIT_TEST(ConcurrentTest) { 
+    Y_UNIT_TEST(ConcurrentTest) {
         Counters.Reset();
         TryCounter = 0;
 

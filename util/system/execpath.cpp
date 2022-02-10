@@ -39,7 +39,7 @@ static inline bool GoodPath(const TString& path) {
 static inline int FreeBSDSysCtl(int* mib, size_t mibSize, TTempBuf& res) {
     for (size_t i = 0; i < 2; ++i) {
         size_t cb = res.Size();
-        if (sysctl(mib, mibSize, res.Data(), &cb, nullptr, 0) == 0) { 
+        if (sysctl(mib, mibSize, res.Data(), &cb, nullptr, 0) == 0) {
             res.Proceed(cb);
             return 0;
         } else if (errno == ENOMEM) {
@@ -54,7 +54,7 @@ static inline int FreeBSDSysCtl(int* mib, size_t mibSize, TTempBuf& res) {
 static inline TString FreeBSDGetExecPath() {
     int mib[] = {CTL_KERN, KERN_PROC, KERN_PROC_PATHNAME, -1};
     TTempBuf buf;
-    int r = FreeBSDSysCtl(mib, Y_ARRAY_SIZE(mib), buf); 
+    int r = FreeBSDSysCtl(mib, Y_ARRAY_SIZE(mib), buf);
     if (r == 0) {
         return TString(buf.Data(), buf.Filled() - 1);
     } else if (r == ENOTSUP) { // older FreeBSD version
@@ -73,7 +73,7 @@ static inline TString FreeBSDGetExecPath() {
 static inline TString FreeBSDGetArgv0() {
     int mib[] = {CTL_KERN, KERN_PROC, KERN_PROC_ARGS, getpid()};
     TTempBuf buf;
-    int r = FreeBSDSysCtl(mib, Y_ARRAY_SIZE(mib), buf); 
+    int r = FreeBSDSysCtl(mib, Y_ARRAY_SIZE(mib), buf);
     if (r == 0) {
         return TString(buf.Data());
     } else if (r == ENOTSUP) {
@@ -118,7 +118,7 @@ static TString GetExecPathImpl() {
 #elif defined(_win_)
     TTempBuf execNameBuf;
     for (;;) {
-        DWORD r = GetModuleFileName(nullptr, execNameBuf.Data(), execNameBuf.Size()); 
+        DWORD r = GetModuleFileName(nullptr, execNameBuf.Data(), execNameBuf.Size());
         if (r == execNameBuf.Size()) {
             execNameBuf = TTempBuf(execNameBuf.Size() * 2);
         } else if (r == 0) {

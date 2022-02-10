@@ -4,7 +4,7 @@
 using namespace NDatetime;
 
 template <>
-void Out<TSimpleTM>(IOutputStream& os, TTypeTraits<TSimpleTM>::TFuncParam value) { 
+void Out<TSimpleTM>(IOutputStream& os, TTypeTraits<TSimpleTM>::TFuncParam value) {
     os << value.ToString() << ", dst: " << int(value.IsDst);
 }
 

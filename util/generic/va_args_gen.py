@@ -65,7 +65,7 @@ def count(limit):
     print('#define Y_COUNT_ARGS(...) Y_PASS_VA_ARGS('
           '__Y_COUNT_ARGS(__VA_ARGS__, {}))'.format(numbers))
     print('#define __Y_COUNT_ARGS({}, N, ...) N'.format(u_numbers))
- 
+
 
 def get_elem(limit):
     print(textwrap.dedent('''

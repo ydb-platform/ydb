@@ -3717,7 +3717,7 @@ void TSchemeShard::OnDetach(const TActorContext &ctx) {
 }
 
 void TSchemeShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev); 
+    Y_UNUSED(ev);
     Die(ctx);
 }
 
@@ -3786,15 +3786,15 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 // This is overriden as noop in order to activate the table only at the end of Init transaction
 // when all the in-mem state has been populated
 void TSchemeShard::DefaultSignalTabletActive(const TActorContext &ctx) {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
 }
 
 void TSchemeShard::Cleanup(const TActorContext &ctx) {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
 }
 
 void TSchemeShard::Enqueue(STFUNC_SIG) {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
     Y_FAIL_S("No enqueue method emplemented."
               << " unhandled event type: " << ev->GetTypeRewrite()
              << " event: " << (ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"));
@@ -4571,8 +4571,8 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
 }
 
 void TSchemeShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev); 
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ev);
+    Y_UNUSED(ctx);
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Pipe server connected"
                     << ", at tablet: " << ev->Get()->TabletId);
@@ -4608,7 +4608,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
 }
 
 void TSchemeShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev); 
+    Y_UNUSED(ev);
     LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Server pipe is reset"
                     << ", at schemeshard: " << TabletID());
@@ -5259,7 +5259,7 @@ void TSchemeShard::RestartPipeTx(TTabletId tabletId, const TActorContext& ctx) {
 }
 
 void TSchemeShard::Handle(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-    Y_UNUSED(ev); 
+    Y_UNUSED(ev);
     BreakTabletAndRestart(ctx);
 }
 

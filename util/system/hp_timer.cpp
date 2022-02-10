@@ -66,8 +66,8 @@ namespace {
 
             double vec[N_VEC];
 
-            for (auto& i : vec) { 
-                i = EstimateCPUClock(); 
+            for (auto& i : vec) {
+                i = EstimateCPUClock();
             }
 
             Sort(vec, vec + N_VEC);
@@ -93,23 +93,23 @@ namespace {
     };
 }
 
-double NHPTimer::GetSeconds(const STime& a) noexcept { 
+double NHPTimer::GetSeconds(const STime& a) noexcept {
     return TFreq::Instance().GetSeconds(a);
 }
 
-double NHPTimer::GetClockRate() noexcept { 
+double NHPTimer::GetClockRate() noexcept {
     return TFreq::Instance().GetClockRate();
 }
 
-ui64 NHPTimer::GetCyclesPerSecond() noexcept { 
+ui64 NHPTimer::GetCyclesPerSecond() noexcept {
     return TFreq::Instance().GetCyclesPerSecond();
 }
 
-void NHPTimer::GetTime(STime* pTime) noexcept { 
+void NHPTimer::GetTime(STime* pTime) noexcept {
     *pTime = GetCycleCount();
 }
 
-double NHPTimer::GetTimePassed(STime* pTime) noexcept { 
+double NHPTimer::GetTimePassed(STime* pTime) noexcept {
     STime old(*pTime);
 
     *pTime = GetCycleCount();

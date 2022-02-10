@@ -34,7 +34,7 @@ void BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
             continue;
 
         TDbTupleRef currentKey = stIter.GetCurrentKey();
-        TString serializedKey = TSerializedCellVec::Serialize(TConstArrayRef<TCell>(currentKey.Columns, currentKey.ColumnCount)); 
+        TString serializedKey = TSerializedCellVec::Serialize(TConstArrayRef<TCell>(currentKey.Columns, currentKey.ColumnCount));
 
         if (nextRowsBucket) {
             stats.RowCountHistogram.push_back({serializedKey, stats.RowCount});

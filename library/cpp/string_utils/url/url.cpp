@@ -124,7 +124,7 @@ TStringBuf CutSchemePrefix(const TStringBuf url) noexcept {
 }
 
 template <bool KeepPort>
-static inline TStringBuf GetHostAndPortImpl(const TStringBuf url) { 
+static inline TStringBuf GetHostAndPortImpl(const TStringBuf url) {
     TStringBuf urlNoScheme = url;
 
     urlNoScheme.Skip(GetHttpPrefixSize(url));
@@ -324,8 +324,8 @@ static bool HasPrefix(const TStringBuf url) noexcept {
 
 TString AddSchemePrefix(const TString& url) {
     return AddSchemePrefix(url, TStringBuf("http"));
-} 
- 
+}
+
 TString AddSchemePrefix(const TString& url, TStringBuf scheme) {
     if (HasPrefix(url)) {
         return url;
@@ -347,7 +347,7 @@ static inline int x2c(unsigned char* x) {
 static inline int Unescape(char* str) {
     char *to, *from;
     int dlen = 0;
-    if ((str = strchr(str, '%')) == nullptr) 
+    if ((str = strchr(str, '%')) == nullptr)
         return dlen;
     for (to = str, from = str; *from; from++, to++) {
         if ((*to = *from) == '%') {
@@ -361,7 +361,7 @@ static inline int Unescape(char* str) {
     return dlen;
 }
 
-size_t NormalizeUrlName(char* dest, const TStringBuf source, size_t dest_size) { 
+size_t NormalizeUrlName(char* dest, const TStringBuf source, size_t dest_size) {
     if (source.empty() || source[0] == '?')
         return strlcpy(dest, "/", dest_size);
     size_t len = Min(dest_size - 1, source.length());
@@ -372,7 +372,7 @@ size_t NormalizeUrlName(char* dest, const TStringBuf source, size_t dest_size) {
     return len;
 }
 
-size_t NormalizeHostName(char* dest, const TStringBuf source, size_t dest_size, ui16 defport) { 
+size_t NormalizeHostName(char* dest, const TStringBuf source, size_t dest_size, ui16 defport) {
     size_t len = Min(dest_size - 1, source.length());
     memcpy(dest, source.data(), len);
     dest[len] = 0;

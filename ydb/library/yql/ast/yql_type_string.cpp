@@ -847,7 +847,7 @@ private:
             MakeLiteralAtom(TStringBuf("ListType")),
             itemType,
         };
-        return MakeList(items, Y_ARRAY_SIZE(items)); 
+        return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
     TAstNode* MakeStreamType(TAstNode* itemType) {
@@ -880,7 +880,7 @@ private:
             keyType,
             valueType,
         };
-        return MakeList(items, Y_ARRAY_SIZE(items)); 
+        return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
     TAstNode* MakeTupleType(TSmallVec<TAstNode*>& items) {
@@ -897,7 +897,7 @@ private:
                 MakeQuotedAtom(member.first, TNodeFlags::ArbitraryContent), // name
                 member.second,                // type
             };
-            items.push_back(MakeQuote(MakeList(memberType, Y_ARRAY_SIZE(memberType)))); 
+            items.push_back(MakeQuote(MakeList(memberType, Y_ARRAY_SIZE(memberType))));
         }
 
         return MakeList(items.data(), items.size());
@@ -949,7 +949,7 @@ private:
             MakeLiteralAtom(TStringBuf("ResourceType")),
             MakeQuotedAtom(tag),
         };
-        return MakeList(items, Y_ARRAY_SIZE(items)); 
+        return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
     TAstNode* MakeVoidType() {
@@ -1009,7 +1009,7 @@ private:
             MakeLiteralAtom(TStringBuf("DataType")),
             MakeQuotedAtom(type),
         };
-        return MakeList(items, Y_ARRAY_SIZE(items)); 
+        return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
     TAstNode* MakeDecimalType(TStringBuf precision, TStringBuf scale) {
@@ -1027,7 +1027,7 @@ private:
             MakeLiteralAtom(TStringBuf("OptionalType")),
             type,
         };
-        return MakeList(items, Y_ARRAY_SIZE(items)); 
+        return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
     TAstNode* MakeAtom(TStringBuf content, ui32 flags = TNodeFlags::Default) {
@@ -1043,7 +1043,7 @@ private:
             &TAstNode::QuoteAtom,
             node,
         };
-        return MakeList(items, Y_ARRAY_SIZE(items)); 
+        return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
     TAstNode* MakeQuotedAtom(TStringBuf content, ui32 flags = TNodeFlags::Default) {
@@ -1100,14 +1100,14 @@ private:
 class TTypePrinter: public TTypeAnnotationVisitor
 {
 public:
-    TTypePrinter(IOutputStream& out) 
+    TTypePrinter(IOutputStream& out)
         : Out_(out)
     {
     }
 
 private:
     void Visit(const TUnitExprType& type) final {
-        Y_UNUSED(type); 
+        Y_UNUSED(type);
         Out_ << TStringBuf("Unit");
     }
 
@@ -1179,7 +1179,7 @@ private:
     }
 
     void Visit(const TWorldExprType& type) final {
-        Y_UNUSED(type); 
+        Y_UNUSED(type);
         Out_ << TStringBuf("World");
     }
 
@@ -1263,7 +1263,7 @@ private:
     }
 
     void Visit(const TVoidExprType& type) final {
-        Y_UNUSED(type); 
+        Y_UNUSED(type);
         Out_ << TStringBuf("Void");
     }
 
@@ -1283,7 +1283,7 @@ private:
     }
 
     void Visit(const TGenericExprType& type) final {
-        Y_UNUSED(type); 
+        Y_UNUSED(type);
         Out_ << TStringBuf("Generic");
     }
 
@@ -1346,7 +1346,7 @@ private:
     }
 
 private:
-    IOutputStream& Out_; 
+    IOutputStream& Out_;
 };
 
 } // namespace

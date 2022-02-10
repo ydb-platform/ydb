@@ -97,7 +97,7 @@ namespace NKikimr {
                        "response from Yard: msg# %s", res.ToString().data()));
     }
 
-    void TDynamicPDiskWeightsManager::RenderHtml(IOutputStream &str) const { 
+    void TDynamicPDiskWeightsManager::RenderHtml(IOutputStream &str) const {
         HTML(str) {
             TABLE_CLASS ("table table-condensed") {
                 TABLEHEAD() {

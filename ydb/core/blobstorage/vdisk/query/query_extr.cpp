@@ -188,7 +188,7 @@ namespace NKikimr {
             for (rit.SeekToFirst(); rit.Valid(); rit.Next()) {
                 const NReadBatcher::TDataItem *it = rit.Get();
                 const TQuery *query = static_cast<const TQuery*>(it->Cookie);
-                Y_VERIFY_DEBUG(query->LogoBlobID.PartId() == 0); 
+                Y_VERIFY_DEBUG(query->LogoBlobID.PartId() == 0);
                 const ui64 *cookiePtr = query->HasCookie ? &query->CookieVal : nullptr;
 
                 ui64 ingr = it->Ingress.Raw();

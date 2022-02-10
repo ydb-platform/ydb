@@ -67,8 +67,8 @@ static bool operator==(const TBlob& l, const TBlob& r) {
     return TStringBuf(l.AsCharPtr(), l.Size()) == TStringBuf(r.AsCharPtr(), r.Size());
 }
 
-Y_UNIT_TEST_SUITE(BinSaver){ 
-    Y_UNIT_TEST(HasTrivialSerializer){ 
+Y_UNIT_TEST_SUITE(BinSaver){
+    Y_UNIT_TEST(HasTrivialSerializer){
         UNIT_ASSERT(!IBinSaver::HasNonTrivialSerializer<TBinarySerializable>(0u));
 UNIT_ASSERT(!IBinSaver::HasNonTrivialSerializer<TNonBinarySerializable>(0u));
 UNIT_ASSERT(IBinSaver::HasNonTrivialSerializer<TCustomSerializer>(0u));
@@ -79,33 +79,33 @@ UNIT_ASSERT(IBinSaver::HasNonTrivialSerializer<TVector<TCustomSerializer>>(0u));
 }
 
 
-Y_UNIT_TEST(TestStroka) { 
+Y_UNIT_TEST(TestStroka) {
     TestBinSaverSerialization(TString("QWERTY"));
 }
 
-Y_UNIT_TEST(TestMoveOnlyType) { 
+Y_UNIT_TEST(TestMoveOnlyType) {
     TestBinSaverSerializationToBuffer(TMoveOnlyType());
 }
 
-Y_UNIT_TEST(TestVectorStrok) { 
+Y_UNIT_TEST(TestVectorStrok) {
     TestBinSaverSerialization(TVector<TString>{"A", "B", "C"});
 }
 
-Y_UNIT_TEST(TestCArray) { 
+Y_UNIT_TEST(TestCArray) {
     TestBinSaverSerialization(TTypeWithArray());
 }
 
-Y_UNIT_TEST(TestSets) { 
+Y_UNIT_TEST(TestSets) {
     TestBinSaverSerialization(THashSet<TString>{"A", "B", "C"});
     TestBinSaverSerialization(TSet<TString>{"A", "B", "C"});
 }
 
-Y_UNIT_TEST(TestMaps) { 
+Y_UNIT_TEST(TestMaps) {
     TestBinSaverSerialization(THashMap<TString, ui32>{{"A", 1}, {"B", 2}, {"C", 3}});
     TestBinSaverSerialization(TMap<TString, ui32>{{"A", 1}, {"B", 2}, {"C", 3}});
 }
 
-Y_UNIT_TEST(TestBlob) { 
+Y_UNIT_TEST(TestBlob) {
     TestBinSaverSerialization(TBlob::FromStringSingleThreaded("qwerty"));
 }
 
@@ -125,7 +125,7 @@ Y_UNIT_TEST(TestVariant) {
     }
 }
 
-Y_UNIT_TEST(TestPod) { 
+Y_UNIT_TEST(TestPod) {
     struct TPod {
         ui32 A = 5;
         ui64 B = 7;
@@ -141,7 +141,7 @@ Y_UNIT_TEST(TestPod) {
     TestBinSaverSerialization(TVector<TPod>{custom});
 }
 
-Y_UNIT_TEST(TestSubPod) { 
+Y_UNIT_TEST(TestSubPod) {
     struct TPod {
         struct TSub {
             ui32 X = 10;
@@ -166,7 +166,7 @@ Y_UNIT_TEST(TestSubPod) {
     TestBinSaverSerialization(TVector<TPod>{custom});
 }
 
-Y_UNIT_TEST(TestMemberAndOpIsMain) { 
+Y_UNIT_TEST(TestMemberAndOpIsMain) {
     struct TBase {
         TString S;
         virtual int operator&(IBinSaver& f) {

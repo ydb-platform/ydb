@@ -27,7 +27,7 @@ void TFileListTest::TestSimple() {
     fileList.Fill(tempDir().data(), "", "", 1000);
     TString fileName(fileList.Next());
     UNIT_ASSERT_EQUAL(fileName, "subdir" LOCSLASH_S "file");
-    UNIT_ASSERT_EQUAL(fileList.Next(), nullptr); 
+    UNIT_ASSERT_EQUAL(fileList.Next(), nullptr);
 }
 
 void TFileListTest::TestPrefix() {

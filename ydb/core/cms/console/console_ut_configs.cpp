@@ -903,8 +903,8 @@ TVector<ui64> CheckConfigureLogAffected(TTenantTestRuntime &runtime,
 
 } // anonymous namespace
 
-Y_UNIT_TEST_SUITE(TConsoleConfigTests) { 
-    Y_UNIT_TEST(TestAddConfigItem) { 
+Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
+    Y_UNIT_TEST(TestAddConfigItem) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
@@ -960,7 +960,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                       ITEM_DOMAIN_TENANT_POOL_2, ITEM_HOST12_LOG_1);
     }
 
-    Y_UNIT_TEST(TestModifyConfigItem) { 
+    Y_UNIT_TEST(TestModifyConfigItem) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
@@ -1075,7 +1075,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                       ITEM_DOMAIN_TENANT_POOL_2);
     }
 
-    Y_UNIT_TEST(TestRemoveConfigItem) { 
+    Y_UNIT_TEST(TestRemoveConfigItem) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
@@ -1161,7 +1161,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         CheckGetItems(runtime, TVector<ui32>());
     }
 
-    Y_UNIT_TEST(TestConfigureOrderConflicts) { 
+    Y_UNIT_TEST(TestConfigureOrderConflicts) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
@@ -1314,7 +1314,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                       ITEM_TENANT2_TYPE1_LOG_1, ITEM_TENANT2_TYPE2_LOG_1);
     }
 
-    Y_UNIT_TEST(TestGetItems) { 
+    Y_UNIT_TEST(TestGetItems) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
@@ -1721,7 +1721,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                       ITEM_TENANT2_TYPE2_LOG_1, ITEM_TENANT2_TYPE2_LOG_2);
     }
 
-    Y_UNIT_TEST(TestGetNodeItems) { 
+    Y_UNIT_TEST(TestGetNodeItems) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
@@ -1787,7 +1787,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                           ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2);
     }
 
-    Y_UNIT_TEST(TestGetNodeConfig) { 
+    Y_UNIT_TEST(TestGetNodeConfig) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
@@ -1876,7 +1876,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
     }
 
-    Y_UNIT_TEST(TestAutoOrder) { 
+    Y_UNIT_TEST(TestAutoOrder) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
@@ -1935,7 +1935,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2);
     }
 
-    Y_UNIT_TEST(TestAutoKind) { 
+    Y_UNIT_TEST(TestAutoKind) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 
@@ -1959,7 +1959,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                        MakeAddAction(ITEM_DOMAIN_LOG_2));
     }
 
-    Y_UNIT_TEST(TestAutoSplit) { 
+    Y_UNIT_TEST(TestAutoSplit) {
         TTenantTestRuntime runtime(DefaultConsoleTestConfig());
         InitializeTestConfigItems();
 

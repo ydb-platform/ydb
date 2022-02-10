@@ -137,7 +137,7 @@ namespace NKikimr {
             }
         }
 
-        void Output(const TString &html, IOutputStream &str, const char *name) { 
+        void Output(const TString &html, IOutputStream &str, const char *name) {
             if (!html.empty())
                 str << html;
             else
@@ -177,9 +177,9 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfoRes::TPtr &ev, const TActorContext &ctx) {
-            Y_VERIFY_DEBUG(Counter > 0); 
+            Y_VERIFY_DEBUG(Counter > 0);
             NMon::TEvHttpInfoRes *ptr = dynamic_cast<NMon::TEvHttpInfoRes*>(ev->Get());
-            Y_VERIFY_DEBUG(ptr); 
+            Y_VERIFY_DEBUG(ptr);
 
             static const std::unordered_map<int, TString TThis::*> names{
                 {TDbMon::SkeletonStateId,          &TThis::SkeletonState},
@@ -387,7 +387,7 @@ namespace NKikimr {
                 req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(SelfVDiskId, TInstant::Max(),
                         NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 15);
             } else
-                Y_FAIL("Unknown button"); 
+                Y_FAIL("Unknown button");
 
             if (req) {
                 req->SetIsLocalMon();
@@ -401,7 +401,7 @@ namespace NKikimr {
             Become(&TThis::StateFunc);
         }
 
-        void OutputOneQueryResult(IOutputStream &str, const NKikimrBlobStorage::TQueryResult &q) { 
+        void OutputOneQueryResult(IOutputStream &str, const NKikimrBlobStorage::TQueryResult &q) {
             HTML(str) {
                 DIV_CLASS("well well-small") {
                     const TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
@@ -590,7 +590,7 @@ namespace NKikimr {
             Become(&TThis::StateFunc);
         }
 
-        void OutputOneResult(IOutputStream &str, const NKikimrBlobStorage::TBarrierKey &k, 
+        void OutputOneResult(IOutputStream &str, const NKikimrBlobStorage::TBarrierKey &k,
                              const NKikimrBlobStorage::TBarrierVal &v) {
             TIngressCachePtr ingressCache = TIngressCache::Create(Top, SelfVDiskId);
             HTML(str) {
@@ -685,7 +685,7 @@ namespace NKikimr {
             , IsRangeQuery(false)
             , ShowInternals(false)
         {
-            Y_UNUSED(ShowInternals); 
+            Y_UNUSED(ShowInternals);
         }
     };
 
@@ -919,7 +919,7 @@ namespace NKikimr {
             }
         }
 
-        void Output(const TString &html, IOutputStream &str, const char *name) { 
+        void Output(const TString &html, IOutputStream &str, const char *name) {
             if (!html.empty())
                 str << html;
             else
@@ -944,8 +944,8 @@ namespace NKikimr {
 
         void Handle(NMon::TEvHttpInfoRes::TPtr &ev, const TActorContext &ctx) {
             NMon::TEvHttpInfoRes *ptr = dynamic_cast<NMon::TEvHttpInfoRes*>(ev->Get());
-            Y_VERIFY_DEBUG(ptr); 
-            Y_VERIFY_DEBUG(ptr->SubRequestId == 0); 
+            Y_VERIFY_DEBUG(ptr);
+            Y_VERIFY_DEBUG(ptr->SubRequestId == 0);
             SkeletonAnswer = ptr->Answer;
             Finish(ctx);
         }

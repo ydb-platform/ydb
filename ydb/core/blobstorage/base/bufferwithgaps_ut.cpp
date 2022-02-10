@@ -3,16 +3,16 @@
 
 using NKikimr::TBufferWithGaps;
 
-Y_UNIT_TEST_SUITE(BufferWithGaps) { 
+Y_UNIT_TEST_SUITE(BufferWithGaps) {
 
-    Y_UNIT_TEST(Basic) { 
+    Y_UNIT_TEST(Basic) {
         TBufferWithGaps buffer(0);
         TString data = "Hello!";
         buffer.SetData(TString(data));
         UNIT_ASSERT_STRINGS_EQUAL(data, buffer.Substr(0, buffer.Size()));
     }
 
-    Y_UNIT_TEST(IsReadable) { 
+    Y_UNIT_TEST(IsReadable) {
         TBufferWithGaps buffer(0);
         TString data = "Hello! How are you? I'm fine, and you? Me too, thanks!";
         TString gaps = "G           GGGG           GG              GGG G     G";

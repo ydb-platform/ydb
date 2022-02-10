@@ -7,7 +7,7 @@
 #include <util/system/compiler.h>
 
 namespace NXml {
-    TTextReader::TTextReader(IInputStream& stream, const TOptions& options) 
+    TTextReader::TTextReader(IInputStream& stream, const TOptions& options)
         : Stream(stream)
         , IsError(false)
     {
@@ -169,12 +169,12 @@ namespace NXml {
     // It is almost "noexcept" (std::bad_alloc may happen when saving exception message to new TString).
     // Waiting for std::exception_ptr and std::rethrow_exception from C++11 in Arcadia to make it really "noexcept".
     int TTextReader::ReadFromInputStreamCallback(void* context, char* buffer, int len) {
-        Y_ASSERT(len >= 0); 
+        Y_ASSERT(len >= 0);
         TTextReader* reader = static_cast<TTextReader*>(context);
 
         int result = -1;
 
-        // Exception may be thrown by IInputStream::Read(). 
+        // Exception may be thrown by IInputStream::Read().
         // It is caught unconditionally because exceptions cannot safely pass through libxml2 plain C code
         // (no destructors, no RAII, raw pointers, so in case of stack unwinding some memory gets leaked).
 
@@ -191,7 +191,7 @@ namespace NXml {
 
     void TTextReader::OnLibxmlError(void* arg, const char* msg, xmlParserSeverities severity, xmlTextReaderLocatorPtr locator) {
         TTextReader* reader = static_cast<TTextReader*>(arg);
-        Y_ASSERT(reader != nullptr); 
+        Y_ASSERT(reader != nullptr);
 
         TStringStream& out = reader->LogError();
 
@@ -247,7 +247,7 @@ namespace NXml {
     }
 
     void TTextReader::CheckForExceptions() const {
-        if (Y_LIKELY(!IsError)) { 
+        if (Y_LIKELY(!IsError)) {
             return;
         }
 
@@ -266,28 +266,28 @@ namespace NXml {
     }
 
     bool TTextReader::BoolResult(int value) const {
-        if (Y_UNLIKELY(value == -1)) { 
+        if (Y_UNLIKELY(value == -1)) {
             ThrowException();
         }
         return (value != 0);
     }
 
     int TTextReader::IntResult(int value) const {
-        if (Y_UNLIKELY(value == -1)) { 
+        if (Y_UNLIKELY(value == -1)) {
             ThrowException();
         }
         return value;
     }
 
     char TTextReader::CharResult(int value) const {
-        if (Y_UNLIKELY(value == -1)) { 
+        if (Y_UNLIKELY(value == -1)) {
             ThrowException();
         }
         return static_cast<char>(value);
     }
 
     TStringBuf TTextReader::ConstStringResult(const xmlChar* value) const {
-        if (Y_UNLIKELY(value == nullptr)) { 
+        if (Y_UNLIKELY(value == nullptr)) {
             ThrowException();
         }
         return CAST2CHAR(value);
@@ -299,7 +299,7 @@ namespace NXml {
     }
 
     TString TTextReader::TempStringResult(TCharPtr value) const {
-        if (Y_UNLIKELY(value == nullptr)) { 
+        if (Y_UNLIKELY(value == nullptr)) {
             ThrowException();
         }
         return TString(CAST2CHAR(value.Get()));

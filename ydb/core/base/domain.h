@@ -284,19 +284,19 @@ struct TDomainsInfo : public TThrRefBase {
 
     ui32 GetDefaultStateStorageGroup(ui32 domainUid) const {
         auto it = Domains.find(domainUid);
-        Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid); 
+        Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid);
         return it->second->DefaultStateStorageGroup;
     }
 
     ui32 GetDefaultHiveUid(ui32 domainUid) const {
         auto it = Domains.find(domainUid);
-        Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid); 
+        Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid);
         return it->second->DefaultHiveUid;
     }
 
     ui32 GetStateStorageGroupDomainUid(ui32 stateStorageGroup) const {
         auto it = DomainByStateStorageGroup.find(stateStorageGroup);
-        Y_VERIFY(it != DomainByStateStorageGroup.end(), "stateStorageGroup = %" PRIu32, stateStorageGroup); 
+        Y_VERIFY(it != DomainByStateStorageGroup.end(), "stateStorageGroup = %" PRIu32, stateStorageGroup);
         return it->second->DomainUid;
     }
 
@@ -310,7 +310,7 @@ struct TDomainsInfo : public TThrRefBase {
 
     const TDomain& GetDomain(ui32 domainUid) const {
         auto it = Domains.find(domainUid);
-        Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid); 
+        Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid);
         return *(it->second);
     }
 

@@ -1,17 +1,17 @@
-OWNER( 
-    yazevnul 
+OWNER(
+    yazevnul
     g:util
-) 
+)
 SUBSCRIBER(g:util-subscribers)
- 
+
 Y_BENCHMARK()
- 
-SRCS( 
-    main.cpp 
-) 
- 
-PEERDIR( 
+
+SRCS(
+    main.cpp
+)
+
+PEERDIR(
     library/cpp/fast_log
-) 
- 
-END() 
+)
+
+END()

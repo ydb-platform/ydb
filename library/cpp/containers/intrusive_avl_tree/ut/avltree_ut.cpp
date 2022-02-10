@@ -59,7 +59,7 @@ void TAvlTreeTest::TestLowerBound() {
     TIt it_large(1000);
     UNIT_ASSERT_EQUAL(its.LowerBound(&it3), &it3);
     UNIT_ASSERT_EQUAL(its.LowerBound(&it_zero), &it5);
-    UNIT_ASSERT_EQUAL(its.LowerBound(&it_large), nullptr); 
+    UNIT_ASSERT_EQUAL(its.LowerBound(&it_large), nullptr);
 }
 
 void TAvlTreeTest::TestIterator() {
@@ -81,7 +81,7 @@ void TAvlTreeTest::TestIterator() {
     its.Insert(&it2);
 
     TVector<int> res;
-    for (const TIt& i : its) { 
+    for (const TIt& i : its) {
         res.push_back(i.Val);
     }
 
@@ -89,7 +89,7 @@ void TAvlTreeTest::TestIterator() {
     UNIT_ASSERT_EQUAL(res, expected);
 
     res.clear();
-    for (TIt& i : its) { 
+    for (TIt& i : its) {
         res.push_back(i.Val);
     }
     UNIT_ASSERT_EQUAL(res, expected);

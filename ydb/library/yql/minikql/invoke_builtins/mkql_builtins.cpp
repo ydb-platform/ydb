@@ -67,7 +67,7 @@ void PrintType(NUdf::TDataTypeId schemeType, bool isOptional, IOutputStream& out
 void PrintFunctionSignature(
         const std::string_view& funcName,
         const TFunctionDescriptor& desc,
-        IOutputStream& out) 
+        IOutputStream& out)
 {
     const auto* param = desc.ResultAndArgs;
     out << '\t';
@@ -262,7 +262,7 @@ ui64 TBuiltinFunctionRegistry::GetMetadataEtag() const
     return *MetadataEtag;
 }
 
-void TBuiltinFunctionRegistry::PrintInfoTo(IOutputStream& out) const 
+void TBuiltinFunctionRegistry::PrintInfoTo(IOutputStream& out) const
 {
     for (const auto& f: Functions) {
          out << f.first << ": [\n";

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "fwd.h" 
- 
+#include "fwd.h"
+
 #include <library/cpp/threading/future/core/future.h>
 #include <library/cpp/threading/future/wait/wait_group.h>
 

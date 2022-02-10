@@ -42,7 +42,7 @@ public:
         , CollectorErrors(0)
         , IsSpringCleanup(isSpringCleanup)
     {
-        Y_VERIFY(CollectOperation.Get()); 
+        Y_VERIFY(CollectOperation.Get());
     }
 
     void Bootstrap(const TActorContext &ctx) {
@@ -162,7 +162,7 @@ public:
                 (*out)[outIdx] = blob;
                 ++outIdx;
             }
-            Y_VERIFY(outIdx == size); 
+            Y_VERIFY(outIdx == size);
         }
     }
 

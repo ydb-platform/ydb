@@ -108,7 +108,7 @@ void Test(const TString& metainfo, const ECompMode mode) {
     }
 }
 
-Y_UNIT_TEST_SUITE(CompProtoTestBasic) { 
+Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
     using namespace NCompProto;
 
     const TString metainfo =
@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
         TMap<ui32, TRegInfo>::iterator RegIter;
 
         TMetaIterator<TVerifyingDecompressor>& GetDecompressor(size_t index) {
-            Y_UNUSED(index); 
+            Y_UNUSED(index);
             return *Parent;
         }
 
@@ -354,24 +354,24 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
         }
     };
 
-    Y_UNIT_TEST(VerifyDecompression) { 
+    Y_UNIT_TEST(VerifyDecompression) {
         Test<TVerifyingDecompressor, TSerialize>(metainfo, CM_SINGLEPASS);
     }
 
-    Y_UNIT_TEST(VerifyHistDecompression) { 
+    Y_UNIT_TEST(VerifyHistDecompression) {
         Test<TVerifyingDecompressor, TSerialize>(metainfo, CM_TWOPASS);
     }
 
-    Y_UNIT_TEST(VerifyDecompressionMulti) { 
+    Y_UNIT_TEST(VerifyDecompressionMulti) {
         Test<TMultiDecompressor, TSerialize>(metainfo, CM_SINGLEPASS);
     }
 
-    Y_UNIT_TEST(VerifyHistDecompressionMulti) { 
+    Y_UNIT_TEST(VerifyHistDecompressionMulti) {
         Test<TMultiDecompressor, TSerialize>(metainfo, CM_TWOPASS);
     }
 }
 
-Y_UNIT_TEST_SUITE(CompProtoTestExtended) { 
+Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
     using namespace NCompProto;
     const TString metainfo =
         "\n\
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
         }
 
         TMetaIterator<TVerifyingDecompressor>& GetDecompressor(size_t index) {
-            Y_UNUSED(index); 
+            Y_UNUSED(index);
             return *Parent;
         }
 
@@ -533,11 +533,11 @@ Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
             }
         }
     };
-    Y_UNIT_TEST(VerifyDecompression) { 
+    Y_UNIT_TEST(VerifyDecompression) {
         Test<TVerifyingDecompressor, TSerialize>(metainfo, CM_SINGLEPASS);
     }
 
-    Y_UNIT_TEST(VerifyHistDecompression) { 
+    Y_UNIT_TEST(VerifyHistDecompression) {
         Test<TVerifyingDecompressor, TSerialize>(metainfo, CM_TWOPASS);
     }
 }

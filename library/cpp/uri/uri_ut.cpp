@@ -6,7 +6,7 @@
 #include <util/system/maxlen.h>
 
 namespace NUri {
-    Y_UNIT_TEST_SUITE(URLTest) { 
+    Y_UNIT_TEST_SUITE(URLTest) {
         static const char* urls[] = {
             "http://a/b/c/d;p?q#r",
             "g", "http://a/b/c/g",
@@ -60,7 +60,7 @@ namespace NUri {
             // "%2zy",          "http://a/b/c/%2zy",
             nullptr};
 
-        Y_UNIT_TEST(test_httpURL) { 
+        Y_UNIT_TEST(test_httpURL) {
             TUri rel, base, abs;
             TState::EParsed er = base.Parse(urls[0]);
             UNIT_ASSERT_VALUES_EQUAL(er, TState::ParsedOK);
@@ -91,7 +91,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(test_Schemes) { 
+        Y_UNIT_TEST(test_Schemes) {
             TUri url;
             UNIT_ASSERT_VALUES_EQUAL(url.Parse("www.ya.ru/index.html"), TState::ParsedOK);
             UNIT_ASSERT_EQUAL(url.GetScheme(), TScheme::SchemeEmpty);
@@ -128,7 +128,7 @@ namespace NUri {
             {nullptr, nullptr, nullptr, TUri::LinkIsBad},
         };
 
-        Y_UNIT_TEST(test_httpURLNormalize) { 
+        Y_UNIT_TEST(test_httpURLNormalize) {
             TUri normalizedLink;
 
             for (int i = 0; link4Norm[i].link; i++) {
@@ -149,7 +149,7 @@ namespace NUri {
             "http://a/b//c", "http://a/b/c",
             nullptr, nullptr};
 
-        Y_UNIT_TEST(test_httpURLPathOperation) { 
+        Y_UNIT_TEST(test_httpURLPathOperation) {
             char copyUrl[URL_MAXLEN];
             for (int i = 0; urlsWithMultipleSlash[i]; i += 2) {
                 const TStringBuf url(urlsWithMultipleSlash[i]);
@@ -187,14 +187,14 @@ namespace NUri {
             TState::ParsedBadHost,
         };
 
-        Y_UNIT_TEST(test_httpURLCheckHost) { 
+        Y_UNIT_TEST(test_httpURLCheckHost) {
             for (size_t index = 0; hostsForCheckHost[index]; ++index) {
                 TState::EParsed state = TUri::CheckHost(hostsForCheckHost[index]);
                 UNIT_ASSERT_VALUES_EQUAL(state, answersForCheckHost[index]);
             }
         }
 
-        Y_UNIT_TEST(test_httpURLSet) { 
+        Y_UNIT_TEST(test_httpURLSet) {
             // set port
             {
                 TUri parsedUrl;
@@ -232,7 +232,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(test_httpURLAuth) { 
+        Y_UNIT_TEST(test_httpURLAuth) {
             {
                 TUri parsedUrl;
                 TState::EParsed st = parsedUrl.Parse("http://@www.host.com/path", TFeature::FeaturesRobot);
@@ -258,28 +258,28 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(test01) { 
+        Y_UNIT_TEST(test01) {
             TTest test = {
                 "user:pass@host:8080", TFeature::FeaturesAll, TState::ParsedRootless, "user", "", "", "", 0, "", "", ""};
             TUri url;
             URL_TEST(url, test);
         }
 
-        Y_UNIT_TEST(test02) { 
+        Y_UNIT_TEST(test02) {
             TTest test = {
                 "http://host", TFeature::FeaturesAll, TState::ParsedOK, "http", "", "", "host", 80, "/", "", ""};
             TUri url;
             URL_TEST(url, test);
         }
 
-        Y_UNIT_TEST(test03) { 
+        Y_UNIT_TEST(test03) {
             TTest test = {
                 "https://host", TFeature::FeatureSchemeFlexible | TFeature::FeatureAllowHostIDN, TState::ParsedOK, "https", "", "", "host", 443, "/", "", ""};
             TUri url;
             URL_TEST(url, test);
         }
 
-        Y_UNIT_TEST(test04) { 
+        Y_UNIT_TEST(test04) {
             TTest test = {
                 "user:pass@host:8080", TFeature::FeaturesAll | TFeature::FeatureNoRelPath | TFeature::FeatureAllowRootless, TState::ParsedOK, "user", "", "", "", 0, "pass@host:8080", "", ""};
             TUri url;
@@ -289,7 +289,7 @@ namespace NUri {
             URL_EQ(url, url2);
         }
 
-        Y_UNIT_TEST(test05) { 
+        Y_UNIT_TEST(test05) {
             TTest test = {
                 "host:8080", TFeature::FeaturesAll | TFeature::FeatureNoRelPath | TFeature::FeatureAllowRootless, TState::ParsedOK, "host", "", "", "", 0, "8080", "", ""};
             TUri url;
@@ -297,7 +297,7 @@ namespace NUri {
             UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "host:8080");
         }
 
-        Y_UNIT_TEST(test06) { 
+        Y_UNIT_TEST(test06) {
             TTest test = {
                 "http://user:pass@host?q", TFeature::FeaturesAll, TState::ParsedOK, "http", "user", "pass", "host", 80, "/", "q", ""};
             TUri url;
@@ -359,7 +359,7 @@ namespace NUri {
             URL_EQ(url, url2);
         }
 
-        Y_UNIT_TEST(test07) { 
+        Y_UNIT_TEST(test07) {
             {
                 TTest test = {
                     "http://host/path//", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "http", "", "", "host", 80, "/path/", "", ""};
@@ -385,7 +385,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(test08) { 
+        Y_UNIT_TEST(test08) {
             {
                 TTest test = {
                     "mailto://user@host.com", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "mailto", "user", "", "host.com", 0, "", "", ""};
@@ -472,7 +472,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(test09) { 
+        Y_UNIT_TEST(test09) {
             {
                 TTest test = {
                     "mailto:user@host.com", TFeature::FeaturesAll | TFeature::FeatureAllowRootless, TState::ParsedOK, "mailto", "", "", "", 0, "user@host.com", "", ""};
@@ -493,7 +493,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(test10) { 
+        Y_UNIT_TEST(test10) {
             // test some escaping madness, note the ehost vs host
             {
                 TString host = "президент.рф";
@@ -553,7 +553,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(test11) { 
+        Y_UNIT_TEST(test11) {
             {
                 TTest test = {
                     "HtTp://HoSt/%50aTh/?Query#Frag", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedOK, "http", "", "", "host", 80, "/PaTh/", "Query", "Frag"};
@@ -569,7 +569,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(test12) { 
+        Y_UNIT_TEST(test12) {
             // test characters which are not always safe
             {
 #define RAW "/:"
@@ -666,7 +666,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(testFlexibleAuthority) { 
+        Y_UNIT_TEST(testFlexibleAuthority) {
             TUri uri;
             UNIT_ASSERT_EQUAL(uri.Parse("http://hello_world", TFeature::FeatureCheckHost), TState::ParsedBadHost);
             UNIT_ASSERT_EQUAL(uri.Parse("http://hello_world", TFeature::FeatureSchemeFlexible), TState::ParsedOK);
@@ -683,7 +683,7 @@ namespace NUri {
             UNIT_ASSERT_VALUES_EQUAL(uri.GetField(TField::FieldQuery), "");
         }
 
-        Y_UNIT_TEST(testSpecialChar) { 
+        Y_UNIT_TEST(testSpecialChar) {
             // test characters which are not always allowed
             {
                 TTest test = {
@@ -729,7 +729,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(testIPv6) { 
+        Y_UNIT_TEST(testIPv6) {
             {
 #define RAW "[1080:0:0:0:8:800:200C:417A]"
 #define DEC "[1080:0:0:0:8:800:200c:417a]"
@@ -743,7 +743,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(testEscapedFragment) { 
+        Y_UNIT_TEST(testEscapedFragment) {
             {
                 TTest test = {
                     "http://host.com#!a=b&c=d#e+g%41%25", TParseFlags(TFeature::FeaturesAll | TFeature::FeatureHashBangToEscapedFragment), TState::ParsedOK, "http", "", "", "host.com", 80, "/", "_escaped_fragment_=a=b%26c=d%23e%2BgA%2525", ""};
@@ -760,7 +760,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(testReEncode) { 
+        Y_UNIT_TEST(testReEncode) {
             {
                 TStringStream out;
                 TUri::ReEncode(out, "foo bar");
@@ -782,7 +782,7 @@ namespace NUri {
             "http://translate.yandex.net/api/v1/tr.json/translate?lang=en-ru&text=>",
             nullptr};
 
-        Y_UNIT_TEST(test_NonRfcUrls) { 
+        Y_UNIT_TEST(test_NonRfcUrls) {
             TUri url;
             const long flags = TFeature::FeaturesRobot;
             for (size_t i = 0;; ++i) {
@@ -797,7 +797,7 @@ namespace NUri {
             "http://www.'>'.com/?.net/",
             nullptr};
 
-        Y_UNIT_TEST(test_CheckParseException) { 
+        Y_UNIT_TEST(test_CheckParseException) {
             TUri url;
             const long flags = TFeature::FeaturesRobot | TFeature::FeaturesEncode;
             for (size_t i = 0;; ++i) {
@@ -818,7 +818,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(test_PrintPort) { 
+        Y_UNIT_TEST(test_PrintPort) {
             TUri uri;
             {
                 uri.Parse("http://srv.net:9100/print", TFeature::FeaturesRecommended);
@@ -834,7 +834,7 @@ namespace NUri {
             }
         }
 
-        Y_UNIT_TEST(test_ParseFailures) { 
+        Y_UNIT_TEST(test_ParseFailures) {
             {
                 TTest test = {
                     "http://host:port", TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TState::ParsedBadFormat, "", "", "", "", Max<ui16>(), "", "", ""};
@@ -901,8 +901,8 @@ namespace NUri {
         }
     }
 
-    Y_UNIT_TEST_SUITE(TInvertDomainTest) { 
-        Y_UNIT_TEST(TestInvert) { 
+    Y_UNIT_TEST_SUITE(TInvertDomainTest) {
+        Y_UNIT_TEST(TestInvert) {
             TString a;
             UNIT_ASSERT_EQUAL(InvertDomain(a), "");
             TString aa(".:/foo");
@@ -954,8 +954,8 @@ namespace NUri {
         return r;
     }
 
-    Y_UNIT_TEST_SUITE(QargsTest) { 
-        Y_UNIT_TEST(TestSorting) { 
+    Y_UNIT_TEST_SUITE(QargsTest) {
+        Y_UNIT_TEST(TestSorting) {
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/"), "http://ya.ru/");
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?"), "http://ya.ru/?");
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?some=value"), "http://ya.ru/?some=value");
@@ -973,7 +973,7 @@ namespace NUri {
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?b==&a=&&c="), "http://ya.ru/?a=&b==&c=");
         }
 
-        Y_UNIT_TEST(TestParsingCorners) { 
+        Y_UNIT_TEST(TestParsingCorners) {
             TString s;
 
             UNIT_ASSERT_EQUAL(ProcessQargs("http://ya.ru/?=", s), TQueryArg::ProcessedOK);
@@ -992,14 +992,14 @@ namespace NUri {
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?a"), "http://ya.ru/?a");
         }
 
-        Y_UNIT_TEST(TestFiltering) { 
+        Y_UNIT_TEST(TestFiltering) {
             UNIT_ASSERT_STRINGS_EQUAL(FilterQargs("http://ya.ru/?some=value", "missing"), "http://ya.ru/?some=value");
             UNIT_ASSERT_STRINGS_EQUAL(FilterQargs("http://ya.ru/?b=1&a=2", "b"), "http://ya.ru/?a=2");
             UNIT_ASSERT_STRINGS_EQUAL(FilterQargs("http://ya.ru/?b=1&a=2&a=3", "a"), "http://ya.ru/?b=1");
             UNIT_ASSERT_STRINGS_EQUAL(FilterQargs("http://ya.ru/?some=&another=", "another"), "http://ya.ru/?some=");
         }
 
-        Y_UNIT_TEST(TestRemoveEmptyFeature) { 
+        Y_UNIT_TEST(TestRemoveEmptyFeature) {
             TUri uri;
             uri.Parse("http://ya.ru/?", NUri::TFeature::FeaturesRecommended);
 
@@ -1009,7 +1009,7 @@ namespace NUri {
             UNIT_ASSERT_STRINGS_EQUAL(uri.PrintS(), "http://ya.ru/");
         }
 
-        Y_UNIT_TEST(TestNoRemoveEmptyFeature) { 
+        Y_UNIT_TEST(TestNoRemoveEmptyFeature) {
             TUri uri;
             uri.Parse("http://ya.ru/?", NUri::TFeature::FeaturesRecommended);
 

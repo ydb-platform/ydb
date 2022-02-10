@@ -30,9 +30,9 @@ struct TDecompressorError: public yexception {
  *
  * @see http://code.google.com/p/lz4/
  */
-class TLz4Compress: public IOutputStream { 
+class TLz4Compress: public IOutputStream {
 public:
-    TLz4Compress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15); 
+    TLz4Compress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15);
     ~TLz4Compress() override;
 
 private:
@@ -50,9 +50,9 @@ private:
  *
  * @see http://code.google.com/p/lz4/
  */
-class TLz4Decompress: public IInputStream { 
+class TLz4Decompress: public IInputStream {
 public:
-    TLz4Decompress(IInputStream* slave); 
+    TLz4Decompress(IInputStream* slave);
     ~TLz4Decompress() override;
 
 private:
@@ -68,9 +68,9 @@ private:
  *
  * @see http://code.google.com/p/snappy/
  */
-class TSnappyCompress: public IOutputStream { 
+class TSnappyCompress: public IOutputStream {
 public:
-    TSnappyCompress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15); 
+    TSnappyCompress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15);
     ~TSnappyCompress() override;
 
 private:
@@ -88,9 +88,9 @@ private:
  *
  * @see http://code.google.com/p/snappy/
  */
-class TSnappyDecompress: public IInputStream { 
+class TSnappyDecompress: public IInputStream {
 public:
-    TSnappyDecompress(IInputStream* slave); 
+    TSnappyDecompress(IInputStream* slave);
     ~TSnappyDecompress() override;
 
 private:
@@ -104,9 +104,9 @@ private:
 /**
  * MiniLZO compressing stream.
  */
-class TLzoCompress: public IOutputStream { 
+class TLzoCompress: public IOutputStream {
 public:
-    TLzoCompress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15); 
+    TLzoCompress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15);
     ~TLzoCompress() override;
 
 private:
@@ -122,9 +122,9 @@ private:
 /**
  * MiniLZO decompressing stream.
  */
-class TLzoDecompress: public IInputStream { 
+class TLzoDecompress: public IInputStream {
 public:
-    TLzoDecompress(IInputStream* slave); 
+    TLzoDecompress(IInputStream* slave);
     ~TLzoDecompress() override;
 
 private:
@@ -138,9 +138,9 @@ private:
 /**
  * FastLZ compressing stream.
  */
-class TLzfCompress: public IOutputStream { 
+class TLzfCompress: public IOutputStream {
 public:
-    TLzfCompress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15); 
+    TLzfCompress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15);
     ~TLzfCompress() override;
 
 private:
@@ -156,9 +156,9 @@ private:
 /**
  * FastLZ decompressing stream.
  */
-class TLzfDecompress: public IInputStream { 
+class TLzfDecompress: public IInputStream {
 public:
-    TLzfDecompress(IInputStream* slave); 
+    TLzfDecompress(IInputStream* slave);
     ~TLzfDecompress() override;
 
 private:
@@ -172,7 +172,7 @@ private:
 /**
  * QuickLZ compressing stream.
  */
-class TLzqCompress: public IOutputStream { 
+class TLzqCompress: public IOutputStream {
 public:
     enum EVersion {
         V_1_31 = 0,
@@ -189,7 +189,7 @@ public:
         M_1000000 = 2
     };
 
-    TLzqCompress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15, 
+    TLzqCompress(IOutputStream* slave, ui16 maxBlockSize = 1 << 15,
                  EVersion ver = V_1_31,
                  unsigned level = 0,
                  EMode mode = M_0);
@@ -208,9 +208,9 @@ private:
 /**
  * QuickLZ decompressing stream.
  */
-class TLzqDecompress: public IInputStream { 
+class TLzqDecompress: public IInputStream {
 public:
-    TLzqDecompress(IInputStream* slave); 
+    TLzqDecompress(IInputStream* slave);
     ~TLzqDecompress() override;
 
 private:
@@ -233,10 +233,10 @@ private:
  * @param input                         Stream to decompress.
  * @return                              Decompressing proxy input stream.
  */
-TAutoPtr<IInputStream> OpenLzDecompressor(IInputStream* input); 
-TAutoPtr<IInputStream> TryOpenLzDecompressor(IInputStream* input); 
-TAutoPtr<IInputStream> TryOpenLzDecompressor(const TStringBuf& signature, IInputStream* input); 
+TAutoPtr<IInputStream> OpenLzDecompressor(IInputStream* input);
+TAutoPtr<IInputStream> TryOpenLzDecompressor(IInputStream* input);
+TAutoPtr<IInputStream> TryOpenLzDecompressor(const TStringBuf& signature, IInputStream* input);
 
-TAutoPtr<IInputStream> OpenOwnedLzDecompressor(TAutoPtr<IInputStream> input); 
-TAutoPtr<IInputStream> TryOpenOwnedLzDecompressor(TAutoPtr<IInputStream> input); 
-TAutoPtr<IInputStream> TryOpenOwnedLzDecompressor(const TStringBuf& signature, TAutoPtr<IInputStream> input); 
+TAutoPtr<IInputStream> OpenOwnedLzDecompressor(TAutoPtr<IInputStream> input);
+TAutoPtr<IInputStream> TryOpenOwnedLzDecompressor(TAutoPtr<IInputStream> input);
+TAutoPtr<IInputStream> TryOpenOwnedLzDecompressor(const TStringBuf& signature, TAutoPtr<IInputStream> input);

@@ -12,7 +12,7 @@ namespace {
     template <size_t N>
     struct TRandomAsciiString: public TVector<char> {
         inline TRandomAsciiString() {
-            reserve(N); 
+            reserve(N);
             for (size_t i = 0; i < N; ++i) {
                 push_back(RandomNumber<char>(127));
             }

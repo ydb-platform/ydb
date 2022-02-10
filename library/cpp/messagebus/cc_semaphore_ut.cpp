@@ -29,8 +29,8 @@ namespace {
     };
 }
 
-Y_UNIT_TEST_SUITE(TComplexConditionSemaphore) { 
-    Y_UNIT_TEST(Simple) { 
+Y_UNIT_TEST_SUITE(TComplexConditionSemaphore) {
+    Y_UNIT_TEST(Simple) {
         TTestSemaphore sema;
         UNIT_ASSERT(!sema.TryWait());
         sema.Release();

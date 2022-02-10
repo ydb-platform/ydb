@@ -13,10 +13,10 @@ namespace NYsonPull {
     namespace NDetail {
         namespace NOutput {
             class TStream: public TBuffered<TStream> {
-                IOutputStream* Output; 
+                IOutputStream* Output;
 
             public:
-                TStream(IOutputStream* output, size_t buffer_size) 
+                TStream(IOutputStream* output, size_t buffer_size)
                     : TBuffered<TStream>(buffer_size)
                     , Output(output)
                 {

@@ -28,7 +28,7 @@ private:
     }
 
     void Handle(TEvBlobStorage::TEvVPutResult::TPtr &ev, const TActorContext &ctx) {
-        Y_VERIFY(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%s", 
+        Y_VERIFY(ev->Get()->Record.GetStatus() == NKikimrProto::OK, "Status=%s",
                NKikimrProto::EReplyStatus_Name(ev->Get()->Record.GetStatus()).data());
         LOG_NOTICE(ctx, NActorsServices::TEST, "  TEvVPutResult succeded");
 

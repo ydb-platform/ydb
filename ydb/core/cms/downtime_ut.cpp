@@ -53,8 +53,8 @@ void CheckDowntime(const TDowntime &downtime, Ts... intervals)
                          intervals...);
 }
 
-Y_UNIT_TEST_SUITE(TDowntimeTest) { 
-    Y_UNIT_TEST(AddDowntime) 
+Y_UNIT_TEST_SUITE(TDowntimeTest) {
+    Y_UNIT_TEST(AddDowntime)
     {
         TDowntime downtime1(TDuration::Seconds(10));
         TInstant t1 = Now();
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(TDowntimeTest) {
         CheckDowntime(downtime2, t3, t4, "notification-2");
     }
 
-    Y_UNIT_TEST(HasUpcomingDowntime) 
+    Y_UNIT_TEST(HasUpcomingDowntime)
     {
         TDowntime downtime1(TDuration::Seconds(5));
         TInstant t1 = Now();
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(TDowntimeTest) {
         UNIT_ASSERT(!downtime1.HasUpcomingDowntime(t6, TDuration::Seconds(0), TDuration::Seconds(11)));
     }
 
-    Y_UNIT_TEST(SetIgnoredDowntimeGap) 
+    Y_UNIT_TEST(SetIgnoredDowntimeGap)
     {
         TDowntime downtime1(TDuration::Seconds(5));
         TInstant t1 = Now();
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(TDowntimeTest) {
         CheckDowntime(downtime1, t1, t8, "s1, s2, s3, s4");
     }
 
-    Y_UNIT_TEST(CleanupOldSegments) 
+    Y_UNIT_TEST(CleanupOldSegments)
     {
         TDowntime downtime1(TDuration::Seconds(5));
         TInstant t1 = Now();

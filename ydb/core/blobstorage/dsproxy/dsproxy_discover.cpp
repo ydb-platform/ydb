@@ -320,13 +320,13 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
 
         TotalRecieved++;
         NKikimrBlobStorage::TEvVGetBlockResult &record = ev->Get()->Record;
-        Y_VERIFY(record.HasStatus()); 
+        Y_VERIFY(record.HasStatus());
         const NKikimrProto::EReplyStatus status = record.GetStatus();
 
-        Y_VERIFY(record.HasVDiskID()); 
+        Y_VERIFY(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
-        Y_VERIFY(status == NKikimrProto::OK || status == NKikimrProto::NODATA || status == NKikimrProto::ERROR 
+        Y_VERIFY(status == NKikimrProto::OK || status == NKikimrProto::NODATA || status == NKikimrProto::ERROR
             || status == NKikimrProto::VDISK_ERROR_STATE, "status# %" PRIu32, ui32(status));
 
         A_LOG_LOG_S(false, PriorityForStatusInbound(status), "BSD03",
@@ -338,7 +338,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         if (status == NKikimrProto::NODATA) {
             // nothing
         } else if (status == NKikimrProto::OK) {
-            Y_VERIFY(record.HasGeneration()); 
+            Y_VERIFY(record.HasGeneration());
             BlockedGen = Max(BlockedGen, record.GetGeneration());
         } else if (status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE) {
             ++GetBlockErrors;
@@ -384,10 +384,10 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
 
         TotalRecieved++;
         NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
-        Y_VERIFY(record.HasStatus()); 
+        Y_VERIFY(record.HasStatus());
         const NKikimrProto::EReplyStatus status = record.GetStatus();
 
-        Y_VERIFY(record.HasVDiskID()); 
+        Y_VERIFY(record.HasVDiskID());
         const TVDiskID vdisk = VDiskIDFromVDiskID(record.GetVDiskID());
 
         Y_VERIFY(status == NKikimrProto::OK || status == NKikimrProto::ERROR || status == NKikimrProto::VDISK_ERROR_STATE);
@@ -751,7 +751,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         switch (status) {
         case NKikimrProto::OK:
             {
-                Y_VERIFY(msg->ResponseSz == 1); 
+                Y_VERIFY(msg->ResponseSz == 1);
                 TEvBlobStorage::TEvGetResult::TResponse &response = msg->Responses[0];
                 switch (response.Status) {
                 case NKikimrProto::OK:

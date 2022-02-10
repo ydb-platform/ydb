@@ -1,8 +1,8 @@
-import library.python.svn_version as sv 
+import library.python.svn_version as sv
 
 
 def test_simple():
-    assert sv.svn_version() 
+    assert sv.svn_version()
     assert isinstance(sv.svn_version(), str)
     assert sv.svn_revision()
     assert isinstance(sv.svn_revision(), int)

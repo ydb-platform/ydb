@@ -218,11 +218,11 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev, const TActorContext &ctx) {
-        Y_VERIFY(!InFlightBatchByCookie.empty()); 
+        Y_VERIFY(!InFlightBatchByCookie.empty());
 
         // Find the corresponding request (as replies come in random order)
         auto foundIt = InFlightBatchByCookie.find(ev->Cookie);
-        Y_VERIFY(foundIt != InFlightBatchByCookie.end(), "Cookie# %" PRIu64 " not found!", ev->Cookie); 
+        Y_VERIFY(foundIt != InFlightBatchByCookie.end(), "Cookie# %" PRIu64 " not found!", ev->Cookie);
         TInFlightBatch &request = foundIt->second;
 
         InFlightQueries -= request.ReadQueue.size();
@@ -274,7 +274,7 @@ public:
             return;
         }
 
-        Y_VERIFY(ev->Get()->ResponseSz == request.ReadQueue.size()); 
+        Y_VERIFY(ev->Get()->ResponseSz == request.ReadQueue.size());
         auto groupId = ev->Get()->GroupId;
         decltype(request.ReadQueue)::iterator it = request.ReadQueue.begin();
         for (ui32 i = 0, num = ev->Get()->ResponseSz; i < num; ++i, ++it) {
@@ -287,7 +287,7 @@ public:
                     read.Value.resize(read.ValueSize);
                 }
                 Y_VERIFY(response.Buffer.size() == readItem.BlobSize);
-                Y_VERIFY(readItem.ValueOffset + readItem.BlobSize <= read.ValueSize); 
+                Y_VERIFY(readItem.ValueOffset + readItem.BlobSize <= read.ValueSize);
                 memcpy(const_cast<char *>(read.Value.data()) + readItem.ValueOffset, response.Buffer.data(), response.Buffer.size());
                 IntermediateResults->Stat.GroupReadBytes[std::make_pair(response.Id.Channel(), groupId)] += response.Buffer.size();
                 IntermediateResults->Stat.GroupReadIops[std::make_pair(response.Id.Channel(), groupId)] += 1; // FIXME: count distinct blobs?
@@ -572,7 +572,7 @@ public:
             Y_VERIFY(group != Max<ui32>(), "Get Blob# %s is mapped to an invalid group (-1)!",
                     readItem.LogoBlobId.ToString().c_str());
             if (prevGroup != Max<ui32>()) {
-                Y_VERIFY(prevGroup == group); 
+                Y_VERIFY(prevGroup == group);
             } else {
                 prevGroup = group;
             }
@@ -585,7 +585,7 @@ public:
         ++NextInFlightBatchCookie;
         InFlightBatchByCookie[cookie] = std::move(request);
 
-        Y_VERIFY(queryIdx == readQueryCount); 
+        Y_VERIFY(queryIdx == readQueryCount);
         SendToBSProxy(
             ctx, prevGroup,
             new TEvBlobStorage::TEvGet(readQueries, readQueryCount, IntermediateResults->Deadline,

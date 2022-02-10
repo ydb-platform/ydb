@@ -122,7 +122,7 @@ namespace {
     };
 
     struct TSslIO: public TSslInitOnDemand, public TOptions {
-        inline TSslIO(IInputStream* in, IOutputStream* out, const TOptions& opts) 
+        inline TSslIO(IInputStream* in, IOutputStream* out, const TOptions& opts)
             : TOptions(opts)
             , Io(in, out)
             , Ctx(CreateClientContext())
@@ -240,18 +240,18 @@ namespace {
 }
 
 struct TOpenSslClientIO::TImpl: public TSslIO {
-    inline TImpl(IInputStream* in, IOutputStream* out, const TOptions& opts) 
+    inline TImpl(IInputStream* in, IOutputStream* out, const TOptions& opts)
         : TSslIO(in, out, opts)
     {
     }
 };
 
-TOpenSslClientIO::TOpenSslClientIO(IInputStream* in, IOutputStream* out) 
+TOpenSslClientIO::TOpenSslClientIO(IInputStream* in, IOutputStream* out)
     : Impl_(new TImpl(in, out, TOptions()))
 {
 }
 
-TOpenSslClientIO::TOpenSslClientIO(IInputStream* in, IOutputStream* out, const TOptions& options) 
+TOpenSslClientIO::TOpenSslClientIO(IInputStream* in, IOutputStream* out, const TOptions& options)
     : Impl_(new TImpl(in, out, options))
 {
 }

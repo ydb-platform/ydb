@@ -80,7 +80,7 @@ namespace NKiwiAggr {
             histo.GetType() == HT_ADAPTIVE_WARD_HISTOGRAM ||
             histo.GetType() == HT_ADAPTIVE_HISTOGRAM)
         {
-            Y_VERIFY(histo.FreqSize() == histo.PositionSize(), "Corrupted histo"); 
+            Y_VERIFY(histo.FreqSize() == histo.PositionSize(), "Corrupted histo");
             for (size_t j = 0; j < histo.FreqSize(); ++j) {
                 double value = histo.GetPosition(j);
                 double weight = histo.GetFreq(j);
@@ -350,7 +350,7 @@ namespace NKiwiAggr {
     }
 
     double TAdaptiveHistogram::CalcUpperBound(double sum) {
-        Y_VERIFY(sum >= 0, "Sum must be >= 0"); 
+        Y_VERIFY(sum >= 0, "Sum must be >= 0");
         if (sum == 0.0) {
             return MinValue;
         }
@@ -391,7 +391,7 @@ namespace NKiwiAggr {
     }
 
     double TAdaptiveHistogram::CalcLowerBound(double sum) {
-        Y_VERIFY(sum >= 0, "Sum must be >= 0"); 
+        Y_VERIFY(sum >= 0, "Sum must be >= 0");
         if (sum == 0.0) {
             return MaxValue;
         }
@@ -509,13 +509,13 @@ namespace NKiwiAggr {
             ++rightBin;
             TWeightedValue newBin(value, weight + currentBin->second);
             if (rightBin != Bins.end()) {
-                Y_VERIFY(BinsByQuality.erase(CalcQuality(*currentBin, *rightBin)) == 1, "Erase failed"); 
+                Y_VERIFY(BinsByQuality.erase(CalcQuality(*currentBin, *rightBin)) == 1, "Erase failed");
                 BinsByQuality.insert(CalcQuality(newBin, *rightBin));
             }
             if (currentBin != Bins.begin()) {
                 TPairSet::iterator leftBin = currentBin;
                 --leftBin;
-                Y_VERIFY(BinsByQuality.erase(CalcQuality(*leftBin, *currentBin)) == 1, "Erase failed"); 
+                Y_VERIFY(BinsByQuality.erase(CalcQuality(*leftBin, *currentBin)) == 1, "Erase failed");
                 BinsByQuality.insert(CalcQuality(*leftBin, newBin));
             }
             Bins.erase(currentBin);
@@ -530,7 +530,7 @@ namespace NKiwiAggr {
             if (rightBin == Bins.end()) {
                 BinsByQuality.insert(CalcQuality(*leftBin, weightedValue));
             } else {
-                Y_VERIFY(BinsByQuality.erase(CalcQuality(*leftBin, *rightBin)) == 1, "Erase failed"); 
+                Y_VERIFY(BinsByQuality.erase(CalcQuality(*leftBin, *rightBin)) == 1, "Erase failed");
                 BinsByQuality.insert(CalcQuality(*leftBin, weightedValue));
                 BinsByQuality.insert(CalcQuality(weightedValue, *rightBin));
             }
@@ -543,20 +543,20 @@ namespace NKiwiAggr {
 
     void TAdaptiveHistogram::Erase(double value) {
         TPairSet::iterator currentBin = Bins.lower_bound(TWeightedValue(value, -1.0));
-        Y_VERIFY(currentBin != Bins.end() && currentBin->first == value, "Can't find bin that should be erased"); 
+        Y_VERIFY(currentBin != Bins.end() && currentBin->first == value, "Can't find bin that should be erased");
         TPairSet::iterator rightBin = currentBin;
         ++rightBin;
         if (currentBin == Bins.begin()) {
-            Y_VERIFY(rightBin != Bins.end(), "No right bin for the first bin"); 
-            Y_VERIFY(BinsByQuality.erase(CalcQuality(*currentBin, *rightBin)) != 0, "Erase failed"); 
+            Y_VERIFY(rightBin != Bins.end(), "No right bin for the first bin");
+            Y_VERIFY(BinsByQuality.erase(CalcQuality(*currentBin, *rightBin)) != 0, "Erase failed");
         } else {
             TPairSet::iterator leftBin = currentBin;
             --leftBin;
             if (rightBin == Bins.end()) {
-                Y_VERIFY(BinsByQuality.erase(CalcQuality(*leftBin, *currentBin)) != 0, "Erase failed"); 
+                Y_VERIFY(BinsByQuality.erase(CalcQuality(*leftBin, *currentBin)) != 0, "Erase failed");
             } else {
-                Y_VERIFY(BinsByQuality.erase(CalcQuality(*leftBin, *currentBin)) != 0, "Erase failed"); 
-                Y_VERIFY(BinsByQuality.erase(CalcQuality(*currentBin, *rightBin)) != 0, "Erase failed"); 
+                Y_VERIFY(BinsByQuality.erase(CalcQuality(*leftBin, *currentBin)) != 0, "Erase failed");
+                Y_VERIFY(BinsByQuality.erase(CalcQuality(*currentBin, *rightBin)) != 0, "Erase failed");
                 BinsByQuality.insert(CalcQuality(*leftBin, *rightBin));
             }
         }
@@ -565,12 +565,12 @@ namespace NKiwiAggr {
 
     void TAdaptiveHistogram::Shrink() {
         TPairSet::iterator worstBin = BinsByQuality.begin();
-        Y_VERIFY(worstBin != BinsByQuality.end(), "No right bin for the first bin"); 
+        Y_VERIFY(worstBin != BinsByQuality.end(), "No right bin for the first bin");
         TPairSet::iterator leftBin = Bins.lower_bound(TWeightedValue(worstBin->second, -1.0));
-        Y_VERIFY(leftBin != Bins.end() && leftBin->first == worstBin->second, "Can't find worst bin"); 
+        Y_VERIFY(leftBin != Bins.end() && leftBin->first == worstBin->second, "Can't find worst bin");
         TPairSet::iterator rightBin = leftBin;
         ++rightBin;
-        Y_VERIFY(rightBin != Bins.end(), "Can't find right bin"); 
+        Y_VERIFY(rightBin != Bins.end(), "Can't find right bin");
 
         TWeightedValue newBin((leftBin->first * leftBin->second + rightBin->first * rightBin->second) / (leftBin->second + rightBin->second), leftBin->second + rightBin->second);
         if (Bins.size() > 2) {

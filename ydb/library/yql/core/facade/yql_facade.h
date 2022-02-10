@@ -112,30 +112,30 @@ public:
 
     TStatus Optimize(
             const TString& username,
-            IOutputStream* traceOut = nullptr, 
-            IOutputStream* tracePlan = nullptr, 
-            IOutputStream* exprOut = nullptr, 
+            IOutputStream* traceOut = nullptr,
+            IOutputStream* tracePlan = nullptr,
+            IOutputStream* exprOut = nullptr,
             bool withTypes = false);
 
     TFutureStatus OptimizeAsync(
             const TString& username,
-            IOutputStream* traceOut = nullptr, 
-            IOutputStream* tracePlan = nullptr, 
-            IOutputStream* exprOut = nullptr, 
+            IOutputStream* traceOut = nullptr,
+            IOutputStream* tracePlan = nullptr,
+            IOutputStream* exprOut = nullptr,
             bool withTypes = false);
 
     TStatus Run(
             const TString& username,
-            IOutputStream* traceOut = nullptr, 
-            IOutputStream* tracePlan = nullptr, 
-            IOutputStream* exprOut = nullptr, 
+            IOutputStream* traceOut = nullptr,
+            IOutputStream* tracePlan = nullptr,
+            IOutputStream* exprOut = nullptr,
             bool withTypes = false);
 
     TFutureStatus RunAsync(
             const TString& username,
-            IOutputStream* traceOut = nullptr, 
-            IOutputStream* tracePlan = nullptr, 
-            IOutputStream* exprOut = nullptr, 
+            IOutputStream* traceOut = nullptr,
+            IOutputStream* tracePlan = nullptr,
+            IOutputStream* exprOut = nullptr,
             bool withTypes = false);
 
     TStatus OptimizeWithConfig(
@@ -178,7 +178,7 @@ public:
 
     void Print(IOutputStream* exprOut, IOutputStream* planOut, bool cleanPlan = false);
 
-    inline void PrintErrorsTo(IOutputStream& out) const { 
+    inline void PrintErrorsTo(IOutputStream& out) const {
         if (ExprCtx_) {
             ExprCtx_->IssueManager.GetIssues().PrintWithProgramTo(out, Filename_, SourceCode_);
         }
@@ -224,8 +224,8 @@ public:
     TString ResultsAsString() const;
     void ConfigureYsonResultFormat(NYson::EYsonFormat format);
 
-    inline IOutputStream* ExprStream() const { return ExprStream_; } 
-    inline IOutputStream* PlanStream() const { return PlanStream_; } 
+    inline IOutputStream* ExprStream() const { return ExprStream_; }
+    inline IOutputStream* PlanStream() const { return PlanStream_; }
 
     NYson::EYsonFormat GetResultFormat() const { return ResultFormat_; }
     NYson::EYsonFormat GetOutputFormat() const { return OutputFormat_; }
@@ -380,8 +380,8 @@ private:
     TMaybe<TString> ExternalQueryPlan_;
     TMaybe<TString> ExternalDiagnostics_;
 
-    IOutputStream* ExprStream_ = nullptr; 
-    IOutputStream* PlanStream_ = nullptr; 
+    IOutputStream* ExprStream_ = nullptr;
+    IOutputStream* PlanStream_ = nullptr;
     TOperationProgressWriter ProgressWriter_ = [](const TOperationProgress&) {};
     TString ExtractedQueryParametersMetadataYson_;
     const bool EnableRangeComputeFor_;

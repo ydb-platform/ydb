@@ -4,8 +4,8 @@
 
 using namespace NHdr;
 
-Y_UNIT_TEST_SUITE(THistogramIterTest) { 
-    Y_UNIT_TEST(RecordedValues) { 
+Y_UNIT_TEST_SUITE(THistogramIterTest) {
+    Y_UNIT_TEST(RecordedValues) {
         THistogram h(TDuration::Hours(1).MicroSeconds(), 3);
         UNIT_ASSERT(h.RecordValues(1000, 1000));
         UNIT_ASSERT(h.RecordValue(1000 * 1000));
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(THistogramIterTest) {
         UNIT_ASSERT_EQUAL(index, 2);
     }
 
-    Y_UNIT_TEST(CorrectedRecordedValues) { 
+    Y_UNIT_TEST(CorrectedRecordedValues) {
         THistogram h(TDuration::Hours(1).MicroSeconds(), 3);
         UNIT_ASSERT(h.RecordValuesWithExpectedInterval(1000, 1000, 1000));
         UNIT_ASSERT(h.RecordValueWithExpectedInterval(1000 * 1000, 1000));
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(THistogramIterTest) {
         UNIT_ASSERT_EQUAL(totalCount, 2000);
     }
 
-    Y_UNIT_TEST(LinearValues) { 
+    Y_UNIT_TEST(LinearValues) {
         THistogram h(TDuration::Hours(1).MicroSeconds(), 3);
         UNIT_ASSERT(h.RecordValues(1000, 1000));
         UNIT_ASSERT(h.RecordValue(1000 * 1000));
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(THistogramIterTest) {
         UNIT_ASSERT_EQUAL(index, 1000);
     }
 
-    Y_UNIT_TEST(CorrectLinearValues) { 
+    Y_UNIT_TEST(CorrectLinearValues) {
         THistogram h(TDuration::Hours(1).MicroSeconds(), 3);
         UNIT_ASSERT(h.RecordValuesWithExpectedInterval(1000, 1000, 1000));
         UNIT_ASSERT(h.RecordValueWithExpectedInterval(1000 * 1000, 1000));
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(THistogramIterTest) {
         UNIT_ASSERT_EQUAL(totalCount, 2000);
     }
 
-    Y_UNIT_TEST(LogarithmicValues) { 
+    Y_UNIT_TEST(LogarithmicValues) {
         THistogram h(TDuration::Hours(1).MicroSeconds(), 3);
         UNIT_ASSERT(h.RecordValues(1000, 1000));
         UNIT_ASSERT(h.RecordValue(1000 * 1000));
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(THistogramIterTest) {
         UNIT_ASSERT_EQUAL(index, 11);
     }
 
-    Y_UNIT_TEST(CorrectedLogarithmicValues) { 
+    Y_UNIT_TEST(CorrectedLogarithmicValues) {
         THistogram h(TDuration::Hours(1).MicroSeconds(), 3);
         UNIT_ASSERT(h.RecordValuesWithExpectedInterval(1000, 1000, 1000));
         UNIT_ASSERT(h.RecordValueWithExpectedInterval(1000 * 1000, 1000));
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(THistogramIterTest) {
         UNIT_ASSERT_EQUAL(totalCount, 2000);
     }
 
-    Y_UNIT_TEST(LinearIterBucketsCorrectly) { 
+    Y_UNIT_TEST(LinearIterBucketsCorrectly) {
         THistogram h(255, 2);
         UNIT_ASSERT(h.RecordValue(193));
         UNIT_ASSERT(h.RecordValue(255));

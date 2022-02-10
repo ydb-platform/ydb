@@ -4,7 +4,7 @@
 
 using namespace NKikimr;
 
-Y_UNIT_TEST_SUITE(PtrTest) { 
+Y_UNIT_TEST_SUITE(PtrTest) {
 
     //////////////////////////////////////////////////////////////////////////////////////////
     // Basic test for TAtomicRefCountWithDeleter
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(PtrTest) {
 
     using TTest1Ptr = TIntrusivePtr<TTest1>;
 
-    Y_UNIT_TEST(Test1) { 
+    Y_UNIT_TEST(Test1) {
         TSimpleTestDeleter deleter;
 
         UNIT_ASSERT_EQUAL(deleter.GetNum(), 0);

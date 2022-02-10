@@ -9,8 +9,8 @@
 using NProtoBuf::TFieldsIterator;
 using NProtoBuf::TConstField;
 
-Y_UNIT_TEST_SUITE(Iterators) { 
-    Y_UNIT_TEST(Count) { 
+Y_UNIT_TEST_SUITE(Iterators) {
+    Y_UNIT_TEST(Count) {
         const NProtobufUtilUt::TWalkTest proto;
         const NProtoBuf::Descriptor* d = proto.GetDescriptor();
         TFieldsIterator dbegin(d), dend(d, d->field_count());
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(Iterators) {
         UNIT_ASSERT_VALUES_EQUAL(values, 1);
     }
 
-    Y_UNIT_TEST(AnyOf) { 
+    Y_UNIT_TEST(AnyOf) {
         NProtobufUtilUt::TWalkTest proto;
         const NProtoBuf::Descriptor* d = proto.GetDescriptor();
         TFieldsIterator begin(d), end(d, d->field_count());

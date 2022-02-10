@@ -31,7 +31,7 @@ namespace {
             }
         }
 
-        IOutputStream* Out; 
+        IOutputStream* Out;
         int Level;
     };
 }
@@ -41,7 +41,7 @@ struct TSingletonTraits<TDbgSelector> {
     static constexpr size_t Priority = 8;
 };
 
-IOutputStream& StdDbgStream() noexcept { 
+IOutputStream& StdDbgStream() noexcept {
     return *(Singleton<TDbgSelector>()->Out);
 }
 

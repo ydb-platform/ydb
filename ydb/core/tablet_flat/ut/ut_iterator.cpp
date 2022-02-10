@@ -54,10 +54,10 @@ namespace {
 using TCheckIt = NTest::TChecker<NTest::TWrapIter, TSubset>;
 using TCheckReverseIt = NTest::TChecker<NTest::TWrapReverseIter, TSubset>;
 
-Y_UNIT_TEST_SUITE(TIterator) { 
+Y_UNIT_TEST_SUITE(TIterator) {
     using namespace NTest;
 
-    Y_UNIT_TEST(Basics) 
+    Y_UNIT_TEST(Basics)
     {
         TCheckIt wrap(*TMake(Mass0).Mixed(0, 1, TMixerOne{ }), { });
 
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TIterator) {
         }
     }
 
-    Y_UNIT_TEST(External) 
+    Y_UNIT_TEST(External)
     {
         TCheckIt wrap(*TMake(Mass0, Conf()).Mixed(0, 1, TMixerOne{ }), { });
 
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(TIterator) {
         wrap.To(8).Next().Is(Mass0.Saved[on]);
     }
 
-    Y_UNIT_TEST(Single) 
+    Y_UNIT_TEST(Single)
     {
         auto subset = TMake(Mass0, Conf()).Mixed(0, 1, TMixerOne{ });
 
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TIterator) {
         TWreck<TCheckReverseIt, TSubset, EDirection::Reverse>(Mass0, 666).Do(EWreck::Cached, *subset);
     }
 
-    Y_UNIT_TEST(Mixed) 
+    Y_UNIT_TEST(Mixed)
     {
         auto subset = TMake(Mass0, Conf(384)).Mixed(2, 2, TMixerRnd(4));
 

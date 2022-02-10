@@ -50,7 +50,7 @@ static inline char* ToHex(size_t len, char* buf) {
 
 class TChunkedInput::TImpl {
 public:
-    inline TImpl(IInputStream* slave, TMaybe<THttpHeaders>* trailers) 
+    inline TImpl(IInputStream* slave, TMaybe<THttpHeaders>* trailers)
         : Slave_(slave)
         , Trailers_(trailers)
         , Pending_(0)
@@ -136,13 +136,13 @@ private:
     }
 
 private:
-    IInputStream* Slave_; 
+    IInputStream* Slave_;
     TMaybe<THttpHeaders>* Trailers_;
     size_t Pending_;
     bool LastChunkReaded_;
 };
 
-TChunkedInput::TChunkedInput(IInputStream* slave, TMaybe<THttpHeaders>* trailers) 
+TChunkedInput::TChunkedInput(IInputStream* slave, TMaybe<THttpHeaders>* trailers)
     : Impl_(new TImpl(slave, trailers))
 {
 }
@@ -159,10 +159,10 @@ size_t TChunkedInput::DoSkip(size_t len) {
 }
 
 class TChunkedOutput::TImpl {
-    typedef IOutputStream::TPart TPart; 
+    typedef IOutputStream::TPart TPart;
 
 public:
-    inline TImpl(IOutputStream* slave) 
+    inline TImpl(IOutputStream* slave)
         : Slave_(slave)
     {
     }
@@ -209,10 +209,10 @@ public:
     }
 
 private:
-    IOutputStream* Slave_; 
+    IOutputStream* Slave_;
 };
 
-TChunkedOutput::TChunkedOutput(IOutputStream* slave) 
+TChunkedOutput::TChunkedOutput(IOutputStream* slave)
     : Impl_(new TImpl(slave))
 {
 }

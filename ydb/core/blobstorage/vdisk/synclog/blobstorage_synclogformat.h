@@ -140,17 +140,17 @@ namespace NKikimr {
             }
 
             const TLogoBlobRec *GetLogoBlob() const {
-                Y_VERIFY_DEBUG(RecType == RecLogoBlob); 
+                Y_VERIFY_DEBUG(RecType == RecLogoBlob);
                 return (const TLogoBlobRec *)(this + 1);
             }
 
             const TBlockRec *GetBlock() const {
-                Y_VERIFY_DEBUG(RecType == RecBlock); 
+                Y_VERIFY_DEBUG(RecType == RecBlock);
                 return (const TBlockRec *)(this + 1);
             }
 
             const TBarrierRec *GetBarrier() const {
-                Y_VERIFY_DEBUG(RecType == RecBarrier); 
+                Y_VERIFY_DEBUG(RecType == RecBarrier);
                 return (const TBarrierRec *)(this + 1);
             }
 
@@ -248,7 +248,7 @@ namespace NKikimr {
             void SetGC(const TBlobStorageGroupType &gtype,
                        ui64 lsn,
                        const TDeque<TLogoBlobID>& phantoms);
-            void Output(IOutputStream &str) const; 
+            void Output(IOutputStream &str) const;
             TString ToString() const;
 
             const char *GetData() const {

@@ -17,7 +17,7 @@
 #include <util/system/defaults.h>
 #include <util/system/unaligned_mem.h>
 #include <util/system/align.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 
 #include <type_traits>
 #include <cmath>
@@ -222,17 +222,17 @@ public:
 
     template <typename T>
     static inline constexpr ui16 GetMediumPageCapacity(size_t listSize) {
-        return static_cast<ui16>((TAlignedPagePool::POOL_PAGE_SIZE - sizeof(TListHeader)) / (FastClp2(listSize) * sizeof(T) + sizeof(ui16))) & 0x7FFF; 
+        return static_cast<ui16>((TAlignedPagePool::POOL_PAGE_SIZE - sizeof(TListHeader)) / (FastClp2(listSize) * sizeof(T) + sizeof(ui16))) & 0x7FFF;
     }
 
     template <typename T>
     static inline constexpr ui32 GetLargePageCapacity() {
-        return static_cast<ui32>((TAlignedPagePool::POOL_PAGE_SIZE - sizeof(TLargeListHeader)) / sizeof(T)); 
+        return static_cast<ui32>((TAlignedPagePool::POOL_PAGE_SIZE - sizeof(TLargeListHeader)) / sizeof(T));
     }
 
     template <typename T>
     static inline constexpr size_t GetMaxListSize() {
-#define NCHASH_RAW_SIZE ((((TAlignedPagePool::POOL_PAGE_SIZE - sizeof(TListHeader)) / 2) - sizeof(ui16)) / sizeof(T)) 
+#define NCHASH_RAW_SIZE ((((TAlignedPagePool::POOL_PAGE_SIZE - sizeof(TListHeader)) / 2) - sizeof(ui16)) / sizeof(T))
         // For medium lists get downward pow2 num
         return NCHASH_RAW_SIZE > 16 ? 1ULL << MostSignificantBitCT(NCHASH_RAW_SIZE) : NCHASH_RAW_SIZE;
 #undef NCHASH_RAW_SIZE
@@ -263,7 +263,7 @@ protected:
         }
 
         // Returns count of used pages
-        size_t PrintStat(const TStringBuf& header, IOutputStream& out) const; 
+        size_t PrintStat(const TStringBuf& header, IOutputStream& out) const;
         TString DebugInfo() const;
 
         std::array<TListType, MAX_SMALL_LIST_SIZE - 1> SmallPages; // 2-16 sizes
@@ -525,7 +525,7 @@ public:
         DoSwap(Pools, other.Pools);
     }
 
-    void PrintStat(IOutputStream& out) const { 
+    void PrintStat(IOutputStream& out) const {
         size_t usedPages = 0;
         if (std::is_same<TPrimary, TSecondary>::value) {
             usedPages = Pools[0].PrintStat(TStringBuf(""), out);
@@ -652,7 +652,7 @@ private:
         const size_t byteListSize = AlignUp<size_t>(sizeof(T) * listHeader->ListSize, sizeof(ui16));
         Y_ASSERT((reinterpret_cast<ui8*>(list) - reinterpret_cast<ui8*>(listHeader + 1)) % byteListSize == 0);
         const ui64 offset = (reinterpret_cast<ui8*>(list) - reinterpret_cast<ui8*>(listHeader + 1)) / byteListSize;
-        Y_ASSERT(offset < TAlignedPagePool::POOL_PAGE_SIZE); 
+        Y_ASSERT(offset < TAlignedPagePool::POOL_PAGE_SIZE);
         *reinterpret_cast<ui16*>(list) = listHeader->FreeListOffset | 0x8000u;
         listHeader->FreeListOffset = offset;
         ++listHeader->FreeLists;
@@ -671,7 +671,7 @@ private:
         DestroyRange(list, list + *l);
         Y_ASSERT((reinterpret_cast<ui8*>(l) - reinterpret_cast<ui8*>(listHeader + 1)) % (listHeader->ListSize * sizeof(T) + sizeof(ui16)) == 0);
         ui64 offset = (reinterpret_cast<ui8*>(l) - reinterpret_cast<ui8*>(listHeader + 1)) / (listHeader->ListSize * sizeof(T) + sizeof(ui16));
-        Y_ASSERT(offset < TAlignedPagePool::POOL_PAGE_SIZE); 
+        Y_ASSERT(offset < TAlignedPagePool::POOL_PAGE_SIZE);
         *l = listHeader->FreeListOffset | 0x8000u;
         listHeader->FreeListOffset = offset;
         ++listHeader->FreeLists;
@@ -1285,7 +1285,7 @@ public:
         return true;
     }
 
-    void PrintStat(IOutputStream& out) const { 
+    void PrintStat(IOutputStream& out) const {
         size_t empty = 0;
         size_t single = 0;
         size_t list = 0;
@@ -1323,7 +1323,7 @@ protected:
     }
 
     void AllocateBuckets(size_t count) {
-        auto bucketsMemory = Max(sizeof(TItemNode) * count, (size_t)TAlignedPagePool::POOL_PAGE_SIZE); 
+        auto bucketsMemory = Max(sizeof(TItemNode) * count, (size_t)TAlignedPagePool::POOL_PAGE_SIZE);
         Buckets_ = (TItemNode*)GetPagePool().GetBlock(bucketsMemory);
         BucketsCount_ = count;
         BucketsMemory_ = bucketsMemory;

@@ -6,13 +6,13 @@
 #include <library/cpp/containers/2d_array/2d_array.h>
 
 #include <util/generic/hash_set.h>
-#include <util/generic/buffer.h> 
+#include <util/generic/buffer.h>
 #include <util/generic/list.h>
 #include <util/generic/maybe.h>
 #include <util/generic/bitmap.h>
 #include <util/generic/variant.h>
 #include <util/generic/ylimits.h>
-#include <util/memory/blob.h> 
+#include <util/memory/blob.h>
 #include <util/digest/murmur.h>
 
 #include <array>
@@ -267,7 +267,7 @@ private:
 
     // storing/loading pointers to objects
     void StoreObject(IObjectBase* pObject);
-    IObjectBase* LoadObject(); 
+    IObjectBase* LoadObject();
 
     bool bRead;
     TBufferedStream<> File;
@@ -310,21 +310,21 @@ public:
         return 0;
     }
     int Add(const chunk_id, TBlob* blob) {
-        if (bRead) { 
-            ui64 size = 0; 
-            File.Read(&size, sizeof(size)); 
+        if (bRead) {
+            ui64 size = 0;
+            File.Read(&size, sizeof(size));
             TBuffer buffer;
             buffer.Advance(size);
-            if (size > 0) 
-                File.Read(buffer.Data(), buffer.Size()); 
+            if (size > 0)
+                File.Read(buffer.Data(), buffer.Size());
             (*blob) = TBlob::FromBuffer(buffer);
-        } else { 
-            const ui64 size = blob->Size(); 
-            File.Write(&size, sizeof(size)); 
-            File.Write(blob->Data(), blob->Size()); 
-        } 
-        return 0; 
-    } 
+        } else {
+            const ui64 size = blob->Size();
+            File.Write(&size, sizeof(size));
+            File.Write(blob->Data(), blob->Size());
+        }
+        return 0;
+    }
     template <class T1, class TA>
     int Add(const chunk_id, TVector<T1, TA>* pVec) {
         if (HasNonTrivialSerializer<T1>(0u))
@@ -629,7 +629,7 @@ struct TRegisterSaveLoadType {
     int operator&(IBinSaver& f) override {  \
         f.AddMulti(__VA_ARGS__);            \
         return 0;                           \
-    } 
+    }
 
 #define SAVELOAD_OVERRIDE(base, ...)       \
     int operator&(IBinSaver& f) override { \

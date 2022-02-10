@@ -6,7 +6,7 @@
 #include <ydb/core/blobstorage/crypto/ut/chacha_test_vectors.h>
 
 
-Y_UNIT_TEST_SUITE(TChaChaVec) 
+Y_UNIT_TEST_SUITE(TChaChaVec)
 {
     void RunTest(int rounds, const ui8 key[KEY_SIZE], const ui8 iv[IV_SIZE],
             const ui8 expected[][DATA_SIZE])
@@ -26,62 +26,62 @@ Y_UNIT_TEST_SUITE(TChaChaVec)
     }
 
     // TC1: All zero key and IV.
-    Y_UNIT_TEST(KeystreamTest1) { 
+    Y_UNIT_TEST(KeystreamTest1) {
         RunTest(8, tc1_key, tc1_iv, tc1_expected_8);
         RunTest(12, tc1_key, tc1_iv, tc1_expected_12);
         RunTest(20, tc1_key, tc1_iv, tc1_expected_20);
     }
 
     // TC2: Single bit in key set. All zero IV
-    Y_UNIT_TEST(KeystreamTest2) { 
+    Y_UNIT_TEST(KeystreamTest2) {
         RunTest(8, tc2_key, tc2_iv, tc2_expected_8);
         RunTest(12, tc2_key, tc2_iv, tc2_expected_12);
         RunTest(20, tc2_key, tc2_iv, tc2_expected_20);
     }
 
     // TC3: Single bit in IV set. All zero key
-    Y_UNIT_TEST(KeystreamTest3) { 
+    Y_UNIT_TEST(KeystreamTest3) {
         RunTest(8, tc3_key, tc3_iv, tc3_expected_8);
         RunTest(12, tc3_key, tc3_iv, tc3_expected_12);
         RunTest(20, tc3_key, tc3_iv, tc3_expected_20);
     }
 
     // TC4: All bits in key and IV are set
-    Y_UNIT_TEST(KeystreamTest4) { 
+    Y_UNIT_TEST(KeystreamTest4) {
         RunTest(8, tc4_key, tc4_iv, tc4_expected_8);
         RunTest(12, tc4_key, tc4_iv, tc4_expected_12);
         RunTest(20, tc4_key, tc4_iv, tc4_expected_20);
     }
 
     // TC5: Every even bit set in key and IV
-    Y_UNIT_TEST(KeystreamTest5) { 
+    Y_UNIT_TEST(KeystreamTest5) {
         RunTest(8, tc5_key, tc5_iv, tc5_expected_8);
         RunTest(12, tc5_key, tc5_iv, tc5_expected_12);
         RunTest(20, tc5_key, tc5_iv, tc5_expected_20);
     }
 
     // TC6: Every odd bit set in key and IV
-    Y_UNIT_TEST(KeystreamTest6) { 
+    Y_UNIT_TEST(KeystreamTest6) {
         RunTest(8, tc6_key, tc6_iv, tc6_expected_8);
         RunTest(12, tc6_key, tc6_iv, tc6_expected_12);
         RunTest(20, tc6_key, tc6_iv, tc6_expected_20);
     }
 
     // TC7: Sequence patterns in key and IV
-    Y_UNIT_TEST(KeystreamTest7) { 
+    Y_UNIT_TEST(KeystreamTest7) {
         RunTest(8, tc7_key, tc7_iv, tc7_expected_8);
         RunTest(12, tc7_key, tc7_iv, tc7_expected_12);
         RunTest(20, tc7_key, tc7_iv, tc7_expected_20);
     }
 
     // TC8: key: 'All your base are belong to us!, IV: 'IETF2013'
-    Y_UNIT_TEST(KeystreamTest8) { 
+    Y_UNIT_TEST(KeystreamTest8) {
         RunTest(8, tc8_key, tc8_iv, tc8_expected_8);
         RunTest(12, tc8_key, tc8_iv, tc8_expected_12);
         RunTest(20, tc8_key, tc8_iv, tc8_expected_20);
     }
 
-    Y_UNIT_TEST(MultiEncipherOneDecipher) { 
+    Y_UNIT_TEST(MultiEncipherOneDecipher) {
         TStringBuf lorem =
                 "Lorem ipsum dolor sit amet, consectetur adipisicing elit, "
                 "sed do eiusmod tempor incididunt ut labore et dolore magna "

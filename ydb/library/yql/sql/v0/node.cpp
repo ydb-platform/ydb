@@ -42,7 +42,7 @@ TTableRef::TTableRef(const TTableRef& tr)
 }
 
 TString TTableRef::ShortName() const {
-    Y_VERIFY_DEBUG(Keys); 
+    Y_VERIFY_DEBUG(Keys);
     if (Keys->GetTableKeys()->GetTableName()) {
         return *Keys->GetTableKeys()->GetTableName();
     }
@@ -150,7 +150,7 @@ TString INode::GetOpName() const {
 }
 
 const TString* INode::GetLiteral(const TString& type) const {
-    Y_UNUSED(type); 
+    Y_UNUSED(type);
     return nullptr;
 }
 
@@ -206,8 +206,8 @@ bool INode::Init(TContext& ctx, ISource* src) {
 }
 
 bool INode::DoInit(TContext& ctx, ISource* src) {
-    Y_UNUSED(ctx); 
-    Y_UNUSED(src); 
+    Y_UNUSED(ctx);
+    Y_UNUSED(src);
     return true;
 }
 
@@ -260,7 +260,7 @@ bool INode::IsSelect() const {
 }
 
 TNodePtr INode::ShallowCopy() const {
-    Y_VERIFY_DEBUG(false, "Node is not copyable"); 
+    Y_VERIFY_DEBUG(false, "Node is not copyable");
     return nullptr;
 }
 
@@ -283,8 +283,8 @@ void INode::PrecacheState() const {
 }
 
 void INode::DoAdd(TNodePtr node) {
-    Y_UNUSED(node); 
-    Y_VERIFY_DEBUG(false, "Node is not expandable"); 
+    Y_UNUSED(node);
+    Y_VERIFY_DEBUG(false, "Node is not expandable");
 }
 
 TAstAtomNode::TAstAtomNode(TPosition pos, const TString& content, ui32 flags)
@@ -317,7 +317,7 @@ TAstDirectNode::TAstDirectNode(TAstNode* node)
 }
 
 TAstNode* TAstDirectNode::Translate(TContext& ctx) const {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
     return Node;
 }
 
@@ -411,8 +411,8 @@ TNodePtr TAstListNode::ShallowCopy() const {
 }
 
 void TAstListNode::DoAdd(TNodePtr node) {
-    Y_VERIFY_DEBUG(node); 
-    Y_VERIFY_DEBUG(node.Get() != this); 
+    Y_VERIFY_DEBUG(node);
+    Y_VERIFY_DEBUG(node.Get() != this);
     Nodes.push_back(node);
 }
 
@@ -972,8 +972,8 @@ ITableKeys* ITableKeys::GetTableKeys() {
 }
 
 TAstNode* ITableKeys::Translate(TContext& ctx) const {
-    Y_VERIFY_DEBUG(false); 
-    Y_UNUSED(ctx); 
+    Y_VERIFY_DEBUG(false);
+    Y_UNUSED(ctx);
     return nullptr;
 }
 
@@ -1003,8 +1003,8 @@ IAggregation::IAggregation(TPosition pos, const TString& name, const TString& fu
 {}
 
 TAstNode* IAggregation::Translate(TContext& ctx) const {
-    Y_VERIFY_DEBUG(false); 
-    Y_UNUSED(ctx); 
+    Y_VERIFY_DEBUG(false);
+    Y_UNUSED(ctx);
     return nullptr;
 }
 
@@ -1080,7 +1080,7 @@ void ISource::FinishColumns() {
 
 
 bool ISource::AddFilter(TContext& ctx, TNodePtr filter) {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
     Filters.push_back(filter);
     return true;
 }
@@ -1697,8 +1697,8 @@ bool ISource::InitFilters(TContext& ctx) {
 }
 
 TAstNode* ISource::Translate(TContext& ctx) const {
-    Y_VERIFY_DEBUG(false); 
-    Y_UNUSED(ctx); 
+    Y_VERIFY_DEBUG(false);
+    Y_UNUSED(ctx);
     return nullptr;
 }
 
@@ -1756,8 +1756,8 @@ bool TryStringContent(const TString& str, TString& result, ui32& flags, TString&
     error.clear();
     result.clear();
 
-    bool doubleQuoted = (str.StartsWith('"') && str.EndsWith('"')); 
-    bool singleQuoted = !doubleQuoted && (str.StartsWith('\'') && str.EndsWith('\'')); 
+    bool doubleQuoted = (str.StartsWith('"') && str.EndsWith('"'));
+    bool singleQuoted = !doubleQuoted && (str.StartsWith('\'') && str.EndsWith('\''));
 
     if (str.size() >= 2 && (doubleQuoted || singleQuoted)) {
         flags = TNodeFlags::ArbitraryContent;
@@ -1775,7 +1775,7 @@ bool TryStringContent(const TString& str, TString& result, ui32& flags, TString&
             error = UnescapeResultToString(unescapeResult);
             return false;
         }
-    } else if (str.size() >= 4 && str.StartsWith("@@") && str.EndsWith("@@")) { 
+    } else if (str.size() >= 4 && str.StartsWith("@@") && str.EndsWith("@@")) {
         flags = TNodeFlags::MultilineContent;
         TString s = str.substr(2, str.length() - 4);
         SubstGlobal(s, "@@@@", "@@");
@@ -2163,8 +2163,8 @@ public:
         , ColumnOnly(false)
         , IsColumnRequired(false)
     {
-        Y_VERIFY_DEBUG(Ids.size() > 1); 
-        Y_VERIFY_DEBUG(Ids[0].Expr); 
+        Y_VERIFY_DEBUG(Ids.size() > 1);
+        Y_VERIFY_DEBUG(Ids[0].Expr);
         auto column = dynamic_cast<TColumnNode*>(Ids[0].Expr.Get());
         if (column) {
             ui32 idx = 1;
@@ -2322,7 +2322,7 @@ public:
     }
 
     TAstNode* Translate(TContext& ctx) const override {
-        Y_VERIFY_DEBUG(Node); 
+        Y_VERIFY_DEBUG(Node);
         return Node->Translate(ctx);
     }
 
@@ -2515,7 +2515,7 @@ TNodePtr BuildBitCast(TContext& ctx, TPosition pos, TNodePtr expr, const TString
 TString TypeByAlias(const TString& alias, bool normalize) {
     TString type(alias);
     TCiString typeAlias(alias);
-    if (typeAlias.StartsWith("varchar")) { 
+    if (typeAlias.StartsWith("varchar")) {
         type = "String";
     } else if (typeAlias == "tinyint") {
         type = "Int8";

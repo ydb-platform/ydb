@@ -12,9 +12,9 @@ ui32 Rnd() {
 /*
  * Tests for TTopKeeper
  */
-Y_UNIT_TEST_SUITE(TTopKeeperTest) { 
+Y_UNIT_TEST_SUITE(TTopKeeperTest) {
     // Tests correctness on usual examples
-    Y_UNIT_TEST(CorrectnessTest) { 
+    Y_UNIT_TEST(CorrectnessTest) {
         int m = 20000;
 
         TLimitedHeap<std::pair<int, int>> h1(m);
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
     }
 
     // Tests on zero-size correctness
-    Y_UNIT_TEST(ZeroSizeCorrectnes) { 
+    Y_UNIT_TEST(ZeroSizeCorrectnes) {
         TTopKeeper<int> h(0);
         for (int i = 0; i < 100; ++i) {
             h.Insert(i % 10 + i / 10);
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
     }
 
     // Tests SetMaxSize behaviour
-    Y_UNIT_TEST(SetMaxSizeTest) { 
+    Y_UNIT_TEST(SetMaxSizeTest) {
         int m = 20000;
         TLimitedHeap<int> h1(m);
         TTopKeeper<int> h2(m);
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
     }
 
     // Tests reuse behavior
-    Y_UNIT_TEST(ReuseTest) { 
+    Y_UNIT_TEST(ReuseTest) {
         int m = 20000;
         TLimitedHeap<int> h1(m);
         TTopKeeper<int> h2(m);
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
     }
 
     // Tests reset behavior
-    Y_UNIT_TEST(ResetTest) { 
+    Y_UNIT_TEST(ResetTest) {
         int m = 20000;
         TLimitedHeap<int> h1(m);
         TTopKeeper<int> h2(m);
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
         }
     }
 
-    Y_UNIT_TEST(PreRegressionTest) { 
+    Y_UNIT_TEST(PreRegressionTest) {
         typedef std::pair<float, unsigned int> TElementType;
 
         const size_t randomTriesCount = 128;
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(TTopKeeperTest) {
         }
     }
 
-    Y_UNIT_TEST(CopyKeeperRegressionCase) { 
+    Y_UNIT_TEST(CopyKeeperRegressionCase) {
         using TKeeper = TTopKeeper<float>;
         TVector<TKeeper> v(2, TKeeper(200));
         auto& k = v[1];

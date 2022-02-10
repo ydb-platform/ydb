@@ -16,7 +16,7 @@ TString TLogoBlobID::ToString() const {
         PartId()).data();
 }
 
-void TLogoBlobID::Out(IOutputStream &o) const { 
+void TLogoBlobID::Out(IOutputStream &o) const {
     char buf[240];
     sprintf(buf,
         "[%" PRIu64 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 ":%" PRIu32 "]",

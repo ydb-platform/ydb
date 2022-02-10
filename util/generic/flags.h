@@ -6,9 +6,9 @@
 #include <util/generic/typetraits.h>
 #include <util/generic/fwd.h>
 
-class IOutputStream; 
+class IOutputStream;
 namespace NPrivate {
-    void PrintFlags(IOutputStream& stream, ui64 value, size_t size); 
+    void PrintFlags(IOutputStream& stream, ui64 value, size_t size);
 }
 
 /**
@@ -34,10 +34,10 @@ namespace NPrivate {
 template <class Enum>
 class TFlags {
     static_assert(std::is_enum<Enum>::value, "Expecting an enumeration here.");
- 
+
 public:
     using TEnum = Enum;
-    using TInt = std::underlying_type_t<Enum>; 
+    using TInt = std::underlying_type_t<Enum>;
 
     constexpr TFlags(std::nullptr_t = 0)
         : Value_(0)
@@ -79,18 +79,18 @@ public:
         return TFlags(TFlag(l.Value_ ^ r.Value_));
     }
 
-    constexpr friend TFlags 
-    operator^(TEnum l, TFlags r) { 
+    constexpr friend TFlags
+    operator^(TEnum l, TFlags r) {
         return TFlags(TFlag(static_cast<TInt>(l) ^ r.Value_));
     }
 
-    constexpr friend TFlags 
-    operator^(TFlags l, TEnum r) { 
+    constexpr friend TFlags
+    operator^(TFlags l, TEnum r) {
         return TFlags(TFlag(l.Value_ ^ static_cast<TInt>(r)));
     }
 
-    constexpr friend TFlags 
-    operator&(TFlags l, TFlags r) { 
+    constexpr friend TFlags
+    operator&(TFlags l, TFlags r) {
         return TFlags(TFlag(l.Value_ & r.Value_));
     }
 
@@ -177,7 +177,7 @@ public:
         return *this;
     }
 
-    friend IOutputStream& operator<<(IOutputStream& stream, const TFlags& flags) { 
+    friend IOutputStream& operator<<(IOutputStream& stream, const TFlags& flags) {
         ::NPrivate::PrintFlags(stream, static_cast<ui64>(flags.Value_), sizeof(TInt));
         return stream;
     }

@@ -8,8 +8,8 @@
 
 #include "str.h"
 
-Y_UNIT_TEST_SUITE(TBufferTest) { 
-    Y_UNIT_TEST(Transfer) { 
+Y_UNIT_TEST_SUITE(TBufferTest) {
+    Y_UNIT_TEST(Transfer) {
         TBuffer buffer("razrazraz", 9);
         TBufferInput input(buffer);
 
@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
         UNIT_ASSERT_VALUES_EQUAL(output.Str(), "razraz");
     }
 
-    Y_UNIT_TEST(ReadTo) { 
+    Y_UNIT_TEST(ReadTo) {
         TBuffer buffer("1234567890", 10);
         TBufferInput input(buffer);
 
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
         UNIT_ASSERT(0 == memcmp(buffer.data(), str.begin(), buffer.size()));
     }
 
-    Y_UNIT_TEST(Write) { 
+    Y_UNIT_TEST(Write) {
         TBuffer buffer;
         TBufferOutput output(buffer);
         output << "1"
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
                                 buffer.size()));
     }
 
-    Y_UNIT_TEST(WriteChars) { 
+    Y_UNIT_TEST(WriteChars) {
         TBuffer buffer;
         TBufferOutput output(buffer);
         output << '1' << '2' << '3' << '4' << '5' << '6' << '7' << '8' << '9' << '0';

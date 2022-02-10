@@ -18,7 +18,7 @@ static bool
 AreJsonMapsEqual(const NJson::TJsonValue& lhs, const NJson::TJsonValue& rhs) {
     using namespace NJson;
 
-    Y_VERIFY(lhs.GetType() == JSON_MAP, "lhs has not a JSON_MAP type."); 
+    Y_VERIFY(lhs.GetType() == JSON_MAP, "lhs has not a JSON_MAP type.");
 
     if (rhs.GetType() != JSON_MAP)
         return false;
@@ -30,12 +30,12 @@ AreJsonMapsEqual(const NJson::TJsonValue& lhs, const NJson::TJsonValue& rhs) {
     if (lhsMap.size() != rhsMap.size())
         return false;
 
-    for (const auto& lhsIt : lhsMap) { 
+    for (const auto& lhsIt : lhsMap) {
         TMapType::const_iterator rhsIt = rhsMap.find(lhsIt.first);
         if (rhsIt == rhsMap.end())
             return false;
 
-        if (lhsIt.second != rhsIt->second) 
+        if (lhsIt.second != rhsIt->second)
             return false;
     }
 
@@ -46,7 +46,7 @@ static bool
 AreJsonArraysEqual(const NJson::TJsonValue& lhs, const NJson::TJsonValue& rhs) {
     using namespace NJson;
 
-    Y_VERIFY(lhs.GetType() == JSON_ARRAY, "lhs has not a JSON_ARRAY type."); 
+    Y_VERIFY(lhs.GetType() == JSON_ARRAY, "lhs has not a JSON_ARRAY type.");
 
     if (rhs.GetType() != JSON_ARRAY)
         return false;
@@ -1099,7 +1099,7 @@ namespace NJson {
 }
 
 template <>
-void Out<NJson::TJsonValue>(IOutputStream& out, const NJson::TJsonValue& v) { 
+void Out<NJson::TJsonValue>(IOutputStream& out, const NJson::TJsonValue& v) {
     NJsonWriter::TBuf buf(NJsonWriter::HEM_DONT_ESCAPE_HTML, &out);
     buf.WriteJsonValue(&v);
 }

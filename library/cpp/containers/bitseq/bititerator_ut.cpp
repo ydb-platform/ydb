@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/vector.h>
 
-Y_UNIT_TEST_SUITE(TBitIteratorTest) { 
+Y_UNIT_TEST_SUITE(TBitIteratorTest) {
     TVector<ui16> GenWords() {
         TVector<ui16> words(1, 0);
         for (ui16 word = 1; word; ++word)
@@ -19,7 +19,7 @@ Y_UNIT_TEST_SUITE(TBitIteratorTest) {
         UNIT_ASSERT_EQUAL(peek, expected);
     }
 
-    Y_UNIT_TEST(TestNextAndPeek) { 
+    Y_UNIT_TEST(TestNextAndPeek) {
         const auto& words = GenWords();
 
         TBitIterator<ui16> iter(words.data());
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TBitIteratorTest) {
         UNIT_ASSERT_EQUAL(iter.NextWord(), words.data() + words.size());
     }
 
-    Y_UNIT_TEST(TestAlignedReadAndPeek) { 
+    Y_UNIT_TEST(TestAlignedReadAndPeek) {
         const auto& words = GenWords();
 
         TBitIterator<ui16> iter(words.data());
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TBitIteratorTest) {
         UNIT_ASSERT_EQUAL(iter.NextWord(), words.data() + words.size());
     }
 
-    Y_UNIT_TEST(TestForward) { 
+    Y_UNIT_TEST(TestForward) {
         TVector<ui32> words;
         words.push_back((1 << 10) | (1 << 20) | (1 << 25));
         words.push_back(1 | (1 << 5) | (1 << 6) | (1 << 30));
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TBitIteratorTest) {
         UNIT_ASSERT_EQUAL(iter.NextWord(), words.data() + 6);
     }
 
-    Y_UNIT_TEST(TestUnalignedReadAndPeek) { 
+    Y_UNIT_TEST(TestUnalignedReadAndPeek) {
         TVector<ui32> words;
         words.push_back((1 << 10) | (1 << 20) | (1 << 25));
         words.push_back(1 | (1 << 5) | (1 << 6) | (1 << 30));

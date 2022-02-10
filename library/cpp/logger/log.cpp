@@ -27,7 +27,7 @@ THolder<TOwningThreadedLogBackend> CreateOwningThreadedLogBackend(const TString&
 }
 
 class TLog::TImpl: public TAtomicRefCount<TImpl> {
-    class TPriorityLogStream final: public IOutputStream { 
+    class TPriorityLogStream final: public IOutputStream {
     public:
         inline TPriorityLogStream(ELogPriority p, const TImpl* parent)
             : Priority_(p)
@@ -40,13 +40,13 @@ class TLog::TImpl: public TAtomicRefCount<TImpl> {
         }
 
     private:
-        ELogPriority Priority_ = LOG_DEF_PRIORITY; 
-        const TImpl* Parent_ = nullptr; 
+        ELogPriority Priority_ = LOG_DEF_PRIORITY;
+        const TImpl* Parent_ = nullptr;
     };
 
 public:
     inline TImpl(THolder<TLogBackend> backend)
-        : Backend_(std::move(backend)) 
+        : Backend_(std::move(backend))
     {
     }
 
@@ -55,7 +55,7 @@ public:
             return;
         }
 
-        Backend_->ReopenLog(); 
+        Backend_->ReopenLog();
     }
 
     inline void ReopenLogNoFlush() {
@@ -63,7 +63,7 @@ public:
             return;
         }
 
-        Backend_->ReopenLogNoFlush(); 
+        Backend_->ReopenLogNoFlush();
     }
 
     inline void AddLog(ELogPriority priority, const char* format, va_list args) const {
@@ -77,30 +77,30 @@ public:
     }
 
     inline void ResetBackend(THolder<TLogBackend> backend) noexcept {
-        Backend_ = std::move(backend); 
+        Backend_ = std::move(backend);
     }
 
     inline THolder<TLogBackend> ReleaseBackend() noexcept {
-        return std::move(Backend_); 
+        return std::move(Backend_);
     }
 
     inline bool IsNullLog() const noexcept {
-        return !IsOpen() || (dynamic_cast<TNullLogBackend*>(Backend_.Get()) != nullptr); 
+        return !IsOpen() || (dynamic_cast<TNullLogBackend*>(Backend_.Get()) != nullptr);
     }
 
     inline bool IsOpen() const noexcept {
-        return nullptr != Backend_.Get(); 
+        return nullptr != Backend_.Get();
     }
 
     inline void CloseLog() noexcept {
-        Backend_.Destroy(); 
+        Backend_.Destroy();
 
         Y_ASSERT(!IsOpen());
     }
 
     inline void WriteData(ELogPriority priority, const char* data, size_t len) const {
         if (IsOpen()) {
-            Backend_->WriteData(TLogRecord(priority, data, len)); 
+            Backend_->WriteData(TLogRecord(priority, data, len));
         }
     }
 
@@ -113,38 +113,38 @@ public:
     }
 
     inline ELogPriority FiltrationLevel() const noexcept {
-        return Backend_->FiltrationLevel(); 
+        return Backend_->FiltrationLevel();
     }
 
     inline size_t BackEndQueueSize() const {
-        return Backend_->QueueSize(); 
+        return Backend_->QueueSize();
     }
 
 private:
-    THolder<TLogBackend> Backend_; 
-    ELogPriority DefaultPriority_ = LOG_DEF_PRIORITY; 
+    THolder<TLogBackend> Backend_;
+    ELogPriority DefaultPriority_ = LOG_DEF_PRIORITY;
 };
 
 TLog::TLog()
-    : Impl_(MakeIntrusive<TImpl>(nullptr)) 
+    : Impl_(MakeIntrusive<TImpl>(nullptr))
 {
 }
 
-TLog::TLog(const TString& fname, ELogPriority priority) 
+TLog::TLog(const TString& fname, ELogPriority priority)
     : TLog(CreateLogBackend(fname, priority, false))
-{ 
+{
 }
 
 TLog::TLog(THolder<TLogBackend> backend)
-    : Impl_(MakeIntrusive<TImpl>(std::move(backend))) 
+    : Impl_(MakeIntrusive<TImpl>(std::move(backend)))
 {
 }
 
-TLog::TLog(const TLog&) = default; 
-TLog::TLog(TLog&&) = default; 
-TLog::~TLog() = default; 
-TLog& TLog::operator=(const TLog&) = default; 
-TLog& TLog::operator=(TLog&&) = default; 
+TLog::TLog(const TLog&) = default;
+TLog::TLog(TLog&&) = default;
+TLog::~TLog() = default;
+TLog& TLog::operator=(const TLog&) = default;
+TLog& TLog::operator=(TLog&&) = default;
 
 bool TLog::IsOpen() const noexcept {
     return Impl_->IsOpen();
@@ -177,13 +177,13 @@ void TLog::AddLogVAList(const char* format, va_list lst) {
 }
 
 void TLog::ReopenLog() {
-    if (const auto copy = Impl_) { 
+    if (const auto copy = Impl_) {
         copy->ReopenLog();
     }
 }
 
 void TLog::ReopenLogNoFlush() {
-    if (const auto copy = Impl_) { 
+    if (const auto copy = Impl_) {
         copy->ReopenLogNoFlush();
     }
 }
@@ -227,9 +227,9 @@ THolder<TLogBackend> TLog::ReleaseBackend() noexcept {
 }
 
 void TLog::Write(ELogPriority priority, const char* data, size_t len) const {
-    if (Formatter_) { 
-        const auto formated = Formatter_(priority, TStringBuf{data, len}); 
-        Impl_->WriteData(priority, formated.data(), formated.size()); 
+    if (Formatter_) {
+        const auto formated = Formatter_(priority, TStringBuf{data, len});
+        Impl_->WriteData(priority, formated.data(), formated.size());
     } else {
         Impl_->WriteData(priority, data, len);
     }
@@ -244,7 +244,7 @@ void TLog::Write(const char* data, size_t len) const {
 }
 
 void TLog::SetFormatter(TLogFormatter formatter) noexcept {
-    Formatter_ = std::move(formatter); 
+    Formatter_ = std::move(formatter);
 }
 
 size_t TLog::BackEndQueueSize() const {

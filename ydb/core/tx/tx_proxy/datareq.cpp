@@ -977,7 +977,7 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
     for (ui32 shx = 0, affectedShards = engine.GetAffectedShardCount(); shx != affectedShards; ++shx) {
         NMiniKQL::IEngineFlat::TShardData shardData;
         const auto shardDataRes = engine.GetAffectedShard(shx, shardData);
-        Y_VERIFY(shardDataRes == NMiniKQL::IEngineFlat::EResult::Ok); 
+        Y_VERIFY(shardDataRes == NMiniKQL::IEngineFlat::EResult::Ok);
 
         NKikimrTxDataShard::TDataTransaction dataTransaction;
         dataTransaction.SetMiniKQL(shardData.Program);
@@ -1136,7 +1136,7 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
 }
 
 TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> TDataReq::PrepareFlatMKQLRequest(TStringBuf miniKQLProgram, TStringBuf miniKQLParams, const TActorContext &ctx) {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
 
     TAutoPtr<NSchemeCache::TSchemeCacheRequest> request(new NSchemeCache::TSchemeCacheRequest());
 
@@ -1185,7 +1185,7 @@ void TDataReq::MarkShardError(ui64 shardId, TDataReq::TPerTablet &perTablet, boo
     if (invalidateDistCache)
         TryToInvalidateTable(perTablet.TableId, ctx);
 
-    Y_UNUSED(shardId); 
+    Y_UNUSED(shardId);
 
     if (++TabletErrors == TabletsLeft) {
         LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
@@ -1202,7 +1202,7 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
 
     TEvTxProxyReq::TEvMakeRequest *msg = ev->Get();
     const NKikimrTxUserProxy::TEvProposeTransaction &record = msg->Ev->Get()->Record;
-    Y_VERIFY(record.HasTransaction()); 
+    Y_VERIFY(record.HasTransaction());
 
     ProxyFlags = record.HasProxyFlags() ? record.GetProxyFlags() : 0;
     ExecTimeoutPeriod = record.HasExecTimeoutPeriod()
@@ -1771,7 +1771,7 @@ void TDataReq::HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr &ev
 
     const ui64 tabletId = msg->GetOrigin();
     TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
-    Y_VERIFY(perTablet); 
+    Y_VERIFY(perTablet);
 
     LOG_LOG_S_SAMPLED_BY(ctx, (msg->GetStatus() != NKikimrTxDataShard::TEvProposeTransactionResult::ERROR ?
         NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
@@ -1973,7 +1973,7 @@ void TDataReq::HandlePrepareErrors(TEvDataShard::TEvProposeTransactionResult::TP
 
     const ui64 tabletId = msg->GetOrigin();
     TPerTablet *perTablet = PerTablet.FindPtr(tabletId);
-    Y_VERIFY(perTablet); 
+    Y_VERIFY(perTablet);
 
     LOG_LOG_S_SAMPLED_BY(ctx, (msg->GetStatus() != NKikimrTxDataShard::TEvProposeTransactionResult::ERROR ?
         NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR),
@@ -2642,7 +2642,7 @@ void TDataReq::MakeFlatMKQLResponse(const TActorContext &ctx, const NCpuTime::TC
         return Die(ctx);
     }
     default:
-        Y_FAIL("unknown engine status# %" PRIu32 " txid# %" PRIu64, (ui32)FlatMKQLRequest->EngineResponseStatus, (ui64)TxId); 
+        Y_FAIL("unknown engine status# %" PRIu32 " txid# %" PRIu64, (ui32)FlatMKQLRequest->EngineResponseStatus, (ui64)TxId);
     }
 }
 
@@ -2778,13 +2778,13 @@ bool TDataReq::CheckDomainLocality(NSchemeCache::TSchemeCacheRequest &cacheReque
 void TDataReq::RegisterPlan(const TActorContext &ctx) {
     WallClockPrepared = Now();
     TDomainsInfo *domainsInfo = AppData(ctx)->DomainsInfo.Get();
-    Y_VERIFY(domainsInfo); 
+    Y_VERIFY(domainsInfo);
 
     ui64 totalReadSize = 0;
     TSet<ui32> affectedDomains;
     for (const auto &xp : PerTablet) {
         const ui32 tabletDomain = domainsInfo->GetDomainUidByTabletId(xp.first);
-        Y_VERIFY(tabletDomain != Max<ui32>()); 
+        Y_VERIFY(tabletDomain != Max<ui32>());
         affectedDomains.insert(tabletDomain);
         totalReadSize += xp.second.ReadSize;
     }
@@ -2990,7 +2990,7 @@ IActor* CreateTxProxyDataReq(const TTxProxyServices &services, const ui64 txid, 
         return;
 
 template<>
-inline void Out<NKikimr::NTxProxy::TDataReq::TPerTablet::ETabletStatus>(IOutputStream& o, 
+inline void Out<NKikimr::NTxProxy::TDataReq::TPerTablet::ETabletStatus>(IOutputStream& o,
         NKikimr::NTxProxy::TDataReq::TPerTablet::ETabletStatus x) {
     switch (x) {
         DATA_REQ_PER_TABLET_STATUS_MAP(STATUS_TO_STRING_IMPL_ITEM)

@@ -40,7 +40,7 @@ public:
         return Cont;
     }
 
-    void Output(IOutputStream &str) { 
+    void Output(IOutputStream &str) {
         bool first = true;
         for (const auto &x : Cont) {
             if (!first) {

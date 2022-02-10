@@ -248,7 +248,7 @@ extern "C" void* realloc(void* oldPtr, size_t newSize) {
     NBalloc::TAllocHeader* header = (NBalloc::TAllocHeader*)oldPtr - 1;
     const size_t oldSize = header->AllocSize & ~NBalloc::SIGNATURE_MASK;
     const size_t signature = header->AllocSize & NBalloc::SIGNATURE_MASK;
-    if (Y_LIKELY((signature == NBalloc::ALIVE_SIGNATURE) || (signature == NBalloc::DISABLED_SIGNATURE))) { 
+    if (Y_LIKELY((signature == NBalloc::ALIVE_SIGNATURE) || (signature == NBalloc::DISABLED_SIGNATURE))) {
         memcpy(newPtr, oldPtr, oldSize < newSize ? oldSize : newSize);
         NBalloc::Free(oldPtr);
         return newPtr;

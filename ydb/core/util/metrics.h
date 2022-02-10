@@ -1,7 +1,7 @@
 #pragma once
 #include <array>
 #include <util/datetime/base.h>
-#include <util/stream/buffer.h> 
+#include <util/stream/buffer.h>
 #include <cmath>
 #include <ydb/core/protos/metrics.pb.h>
 

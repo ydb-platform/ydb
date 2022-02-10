@@ -5,14 +5,14 @@ namespace NKikimr {
 namespace NPQ {
 namespace {
 
-Y_UNIT_TEST_SUITE(TPQTestInternal) { 
+Y_UNIT_TEST_SUITE(TPQTestInternal) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TEST CASES
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-Y_UNIT_TEST(TestPartitionedBlobSimpleTest) { 
+Y_UNIT_TEST(TestPartitionedBlobSimpleTest) {
     THead head;
     THead newHead;
 
@@ -157,7 +157,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     }
 }
 
-Y_UNIT_TEST(TestPartitionedBigTest) { 
+Y_UNIT_TEST(TestPartitionedBigTest) {
 
     Test(true, 100, 400*1024, 3);
     Test(false, 100, 512*1024 - 9 - sizeof(ui64) - sizeof(ui16) - 100, 16); //serialized size of client blob is 512*1024 - 100
@@ -167,7 +167,7 @@ Y_UNIT_TEST(TestPartitionedBigTest) {
     Test(true, 101, 512*1024 - 9 - sizeof(ui64) - sizeof(ui16) - 100, 7); //serialized size of client blob is 512*1024 - 100
 }
 
-Y_UNIT_TEST(TestBatchPacking) { 
+Y_UNIT_TEST(TestBatchPacking) {
     TString value(10, 'a');
     TBatch batch;
     for (ui32 i = 0; i < 100; ++i) {
@@ -200,7 +200,7 @@ Y_UNIT_TEST(TestBatchPacking) {
 }
 
 
-} //Y_UNIT_TEST_SUITE 
+} //Y_UNIT_TEST_SUITE
 
 
 } // TInternalsTest

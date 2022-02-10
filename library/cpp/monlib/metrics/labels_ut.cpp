@@ -4,11 +4,11 @@
 
 using namespace NMonitoring;
 
-Y_UNIT_TEST_SUITE(TLabelsTest) { 
+Y_UNIT_TEST_SUITE(TLabelsTest) {
     TLabel pSolomon("project", "solomon");
     TLabel pKikimr("project", "kikimr");
 
-    Y_UNIT_TEST(Equals) { 
+    Y_UNIT_TEST(Equals) {
         UNIT_ASSERT(pSolomon == TLabel("project", "solomon"));
 
         UNIT_ASSERT_STRINGS_EQUAL(pSolomon.Name(), "project");
@@ -17,12 +17,12 @@ Y_UNIT_TEST_SUITE(TLabelsTest) {
         UNIT_ASSERT(pSolomon != pKikimr);
     }
 
-    Y_UNIT_TEST(ToString) { 
+    Y_UNIT_TEST(ToString) {
         UNIT_ASSERT_STRINGS_EQUAL(pSolomon.ToString(), "project=solomon");
         UNIT_ASSERT_STRINGS_EQUAL(pKikimr.ToString(), "project=kikimr");
     }
 
-    Y_UNIT_TEST(FromString) { 
+    Y_UNIT_TEST(FromString) {
         auto pYql = TLabel::FromString("project=yql");
         UNIT_ASSERT_EQUAL(pYql, TLabel("project", "yql"));
 
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TLabelsTest) {
             "label value cannot be empty");
     }
 
-    Y_UNIT_TEST(TryFromString) { 
+    Y_UNIT_TEST(TryFromString) {
         TLabel pYql;
         UNIT_ASSERT(TLabel::TryFromString("project=yql", pYql));
         UNIT_ASSERT_EQUAL(pYql, TLabel("project", "yql"));
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TLabelsTest) {
         }
     }
 
-    Y_UNIT_TEST(Labels) { 
+    Y_UNIT_TEST(Labels) {
         TLabels labels;
         UNIT_ASSERT(labels.Add(TStringBuf("name1"), TStringBuf("value1")));
         UNIT_ASSERT(labels.Size() == 1);
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(TLabelsTest) {
                                       }));
     }
 
-    Y_UNIT_TEST(Hash) { 
+    Y_UNIT_TEST(Hash) {
         TLabel label("name", "value");
         UNIT_ASSERT_EQUAL(ULL(2378153472115172159), label.Hash());
 

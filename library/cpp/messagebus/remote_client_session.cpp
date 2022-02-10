@@ -34,7 +34,7 @@ void TRemoteClientSession::OnMessageReceived(TRemoteConnection* c, TVectorSwaps<
 }
 
 EMessageStatus TRemoteClientSession::SendMessageImpl(TBusMessage* msg, const TNetAddr* addr, bool wait, bool oneWay) {
-    if (Y_UNLIKELY(IsDown())) { 
+    if (Y_UNLIKELY(IsDown())) {
         return MESSAGE_SHUTDOWN;
     }
 
@@ -47,7 +47,7 @@ EMessageStatus TRemoteClientSession::SendMessageImpl(TBusMessage* msg, const TNe
     msg->ReplyTo = resolvedAddr;
 
     TRemoteConnectionPtr c = ((TBusSessionImpl*)this)->GetConnection(resolvedAddr, true);
-    Y_ASSERT(!!c); 
+    Y_ASSERT(!!c);
 
     return CheckedCast<TRemoteClientConnection*>(c.Get())->SendMessageImpl(msg, wait, oneWay);
 }
@@ -72,24 +72,24 @@ void TRemoteClientSession::FillStatus() {
 }
 
 void TRemoteClientSession::AcquireInFlight(TArrayRef<TBusMessage* const> messages) {
-    for (auto message : messages) { 
-        Y_ASSERT(!(message->LocalFlags & MESSAGE_IN_FLIGHT_ON_CLIENT)); 
-        message->LocalFlags |= MESSAGE_IN_FLIGHT_ON_CLIENT; 
+    for (auto message : messages) {
+        Y_ASSERT(!(message->LocalFlags & MESSAGE_IN_FLIGHT_ON_CLIENT));
+        message->LocalFlags |= MESSAGE_IN_FLIGHT_ON_CLIENT;
     }
     ClientRemoteInFlight.IncrementMultiple(messages.size());
 }
 
 void TRemoteClientSession::ReleaseInFlight(TArrayRef<TBusMessage* const> messages) {
-    for (auto message : messages) { 
-        Y_ASSERT(message->LocalFlags & MESSAGE_IN_FLIGHT_ON_CLIENT); 
-        message->LocalFlags &= ~MESSAGE_IN_FLIGHT_ON_CLIENT; 
+    for (auto message : messages) {
+        Y_ASSERT(message->LocalFlags & MESSAGE_IN_FLIGHT_ON_CLIENT);
+        message->LocalFlags &= ~MESSAGE_IN_FLIGHT_ON_CLIENT;
     }
     ClientRemoteInFlight.ReleaseMultiple(messages.size());
 }
 
 void TRemoteClientSession::ReleaseInFlightAndCallOnReply(TNonDestroyingAutoPtr<TBusMessage> request, TBusMessagePtrAndHeader& response) {
     ReleaseInFlight({request.Get()});
-    if (Y_UNLIKELY(AtomicGet(Down))) { 
+    if (Y_UNLIKELY(AtomicGet(Down))) {
         InvokeOnError(request, MESSAGE_SHUTDOWN);
         InvokeOnError(response.MessagePtr.Release(), MESSAGE_SHUTDOWN);
 

@@ -16,7 +16,7 @@ namespace NKikimr {
         , VDisk(vdiskIdShort.VDisk)
     {}
 
-    TVDiskID::TVDiskID(IInputStream &str) { 
+    TVDiskID::TVDiskID(IInputStream &str) {
         if (!Deserialize(str))
             ythrow yexception() << "incorrect format";
     }
@@ -36,7 +36,7 @@ namespace NKikimr {
                         GroupID, FailRealm, FailDomain, VDisk).data();
     }
 
-    void TVDiskID::Serialize(IOutputStream &s) const { 
+    void TVDiskID::Serialize(IOutputStream &s) const {
         s.Write(&GroupID, sizeof(GroupID));
         s.Write(&GroupGeneration, sizeof(GroupGeneration));
         s.Write(&FailRealm, sizeof(FailRealm));
@@ -44,7 +44,7 @@ namespace NKikimr {
         s.Write(&VDisk, sizeof(VDisk));
     }
 
-    bool TVDiskID::Deserialize(IInputStream &s) { 
+    bool TVDiskID::Deserialize(IInputStream &s) {
         if (s.Load(&GroupID, sizeof(GroupID)) != sizeof(GroupID))
             return false;
         if (s.Load(&GroupGeneration, sizeof(GroupGeneration)) != sizeof(GroupGeneration))

@@ -4,8 +4,8 @@
 
 using namespace NMonitoring;
 
-Y_UNIT_TEST_SUITE(TStringPoolTest) { 
-    Y_UNIT_TEST(PutIfAbsent) { 
+Y_UNIT_TEST_SUITE(TStringPoolTest) {
+    Y_UNIT_TEST(PutIfAbsent) {
         TStringPoolBuilder strPool;
         strPool.SetSorted(true);
 
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TStringPoolTest) {
         UNIT_ASSERT_VALUES_EQUAL(strPool.Count(), 2);
     }
 
-    Y_UNIT_TEST(SortByFrequency) { 
+    Y_UNIT_TEST(SortByFrequency) {
         TStringPoolBuilder strPool;
         strPool.SetSorted(true);
 
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TStringPoolTest) {
         UNIT_ASSERT_VALUES_EQUAL(strPool.Count(), 2);
     }
 
-    Y_UNIT_TEST(ForEach) { 
+    Y_UNIT_TEST(ForEach) {
         TStringPoolBuilder strPool;
         strPool.SetSorted(true);
 

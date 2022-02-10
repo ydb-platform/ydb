@@ -8,10 +8,10 @@ namespace NKikimr {
 using namespace NUdf;
 namespace NMiniKQL {
 
-Y_UNIT_TEST_SUITE(TMiniKQLSafeCircularBuffer) { 
+Y_UNIT_TEST_SUITE(TMiniKQLSafeCircularBuffer) {
     typedef TSafeCircularBuffer<TUnboxedValue> TBufUnboxed;
 
-    Y_UNIT_TEST(TestUnboxedNoFailOnEmpty) { 
+    Y_UNIT_TEST(TestUnboxedNoFailOnEmpty) {
         TBufUnboxed bufferOptional(1, TUnboxedValuePod());
         TBufUnboxed buffer(1, TUnboxedValue::Void());
         UNIT_ASSERT(buffer.Get(0));
@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSafeCircularBuffer) {
         }
     }
 
-    Y_UNIT_TEST(TestUnboxedNormalUsage) { 
+    Y_UNIT_TEST(TestUnboxedNormalUsage) {
         TBufUnboxed buffer(5, TUnboxedValuePod());
         buffer.PushBack(TUnboxedValue::Embedded("It"));
         UNIT_ASSERT_EQUAL(buffer.Get(0).AsStringRef(), "It");
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLSafeCircularBuffer) {
         UNIT_ASSERT_EQUAL(buffer.Size(), 103);
     }
 
-    Y_UNIT_TEST(TestUnboxedFewCycles) { 
+    Y_UNIT_TEST(TestUnboxedFewCycles) {
         const auto multFillLevel = 0.6;
         const auto multPopLevel = 0.5;
         const auto initSize = 10;

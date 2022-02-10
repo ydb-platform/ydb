@@ -41,7 +41,7 @@ namespace NJsonWriter {
 
     class TBuf : TNonCopyable {
     public:
-        TBuf(EHtmlEscapeMode mode = HEM_DONT_ESCAPE_HTML, IOutputStream* stream = nullptr); 
+        TBuf(EHtmlEscapeMode mode = HEM_DONT_ESCAPE_HTML, IOutputStream* stream = nullptr);
 
         TValueContext WriteString(const TStringBuf& s, EHtmlEscapeMode hem);
         TValueContext WriteString(const TStringBuf& s);
@@ -93,7 +93,7 @@ namespace NJsonWriter {
         /*** Dump and forget the string constructed so far.
            * You may only call it if the `stream' parameter was NULL
            * at construction time.                                        */
-        void FlushTo(IOutputStream* stream); 
+        void FlushTo(IOutputStream* stream);
 
         /*** Write a literal string that represents a JSON value
            * (string, number, object, array, bool, or null).
@@ -145,7 +145,7 @@ namespace NJsonWriter {
         TValueContext WriteFloatImpl(TFloat f, EFloatToStringMode mode, int ndigits);
 
     private:
-        IOutputStream* Stream; 
+        IOutputStream* Stream;
         THolder<TStringStream> StringStream;
         typedef TVector<const TString*> TKeys;
         TKeys Keys;

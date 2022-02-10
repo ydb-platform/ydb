@@ -92,11 +92,11 @@ TString TContext::MakeName(const TString& name) {
     return str;
 }
 
-IOutputStream& TContext::Error() { 
+IOutputStream& TContext::Error() {
     return Error(Pos());
 }
 
-IOutputStream& TContext::Error(NYql::TPosition pos) { 
+IOutputStream& TContext::Error(NYql::TPosition pos) {
     HasPendingErrors = true;
     return MakeIssue(TSeverityIds::S_ERROR, TIssuesIds::DEFAULT_ERROR, pos);
 }
@@ -346,7 +346,7 @@ TContext& TTranslation::Context() {
     return Ctx;
 }
 
-IOutputStream& TTranslation::Error() { 
+IOutputStream& TTranslation::Error() {
     return Ctx.Error();
 }
 
@@ -361,11 +361,11 @@ TNodePtr TTranslation::GetNamedNode(const TString& name) {
 }
 
 void TTranslation::PushNamedNode(const TString& name, TNodePtr node) {
-    Y_VERIFY_DEBUG(node); 
+    Y_VERIFY_DEBUG(node);
     auto mapIt = Ctx.NamedNodes.find(name);
     if (mapIt == Ctx.NamedNodes.end()) {
         auto result = Ctx.NamedNodes.insert(std::make_pair(name, TStack<TNodePtr>()));
-        Y_VERIFY_DEBUG(result.second); 
+        Y_VERIFY_DEBUG(result.second);
         mapIt = result.first;
     }
 
@@ -374,8 +374,8 @@ void TTranslation::PushNamedNode(const TString& name, TNodePtr node) {
 
 void TTranslation::PopNamedNode(const TString& name) {
     auto mapIt = Ctx.NamedNodes.find(name);
-    Y_VERIFY_DEBUG(mapIt != Ctx.NamedNodes.end()); 
-    Y_VERIFY_DEBUG(mapIt->second.size() > 0); 
+    Y_VERIFY_DEBUG(mapIt != Ctx.NamedNodes.end());
+    Y_VERIFY_DEBUG(mapIt->second.size() > 0);
     mapIt->second.pop();
     if (mapIt->second.empty()) {
         Ctx.NamedNodes.erase(mapIt);

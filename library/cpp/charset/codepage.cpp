@@ -4,7 +4,7 @@
 #include "codepage.h"
 
 #include <util/string/cast.h>
-#include <util/string/subst.h> 
+#include <util/string/subst.h>
 #include <util/string/util.h>
 #include <util/system/hi_lo.h>
 #include <util/system/yassert.h>
@@ -90,7 +90,7 @@ static const CodePage UNSUPPORTED_CODEPAGE = {
         "unsupported",
     },
     {},
-    nullptr, 
+    nullptr,
 };
 
 static const CodePage UNKNOWN_CODEPAGE = {
@@ -99,15 +99,15 @@ static const CodePage UNKNOWN_CODEPAGE = {
         "unknown",
     },
     {},
-    nullptr, 
+    nullptr,
 };
 
 void NCodepagePrivate::TCodepagesMap::SetData(const CodePage* cp) {
-    Y_ASSERT(cp); 
+    Y_ASSERT(cp);
     int code = static_cast<int>(cp->CPEnum) + DataShift;
 
-    Y_ASSERT(code >= 0 && code < DataSize); 
-    Y_ASSERT(Data[code] == nullptr); 
+    Y_ASSERT(code >= 0 && code < DataSize);
+    Y_ASSERT(Data[code] == nullptr);
 
     Data[code] = cp;
 }
@@ -138,7 +138,7 @@ private:
         if (Data.find(name.c_str()) == Data.end()) {
             Data.insert(TData::value_type(Pool.Append(name.data(), name.size() + 1), code));
         } else {
-            Y_ASSERT(Data.find(name.c_str())->second == code); 
+            Y_ASSERT(Data.find(name.c_str())->second == code);
         }
     }
 
@@ -172,7 +172,7 @@ public:
 
             AddName(ToString(static_cast<int>(i)), e);
 
-            for (size_t j = 0; (name = page->Names[j]) != nullptr && name[0]; ++j) { 
+            for (size_t j = 0; (name = page->Names[j]) != nullptr && name[0]; ++j) {
                 AddName(name, e);
 
                 AddName(xPrefix + name, e);
@@ -199,7 +199,7 @@ ECharset CharsetByName(TStringBuf name) {
 ECharset CharsetByNameOrDie(TStringBuf name) {
     ECharset result = CharsetByName(name);
     if (result == CODES_UNKNOWN)
-        ythrow yexception() << "CharsetByNameOrDie: unknown charset '" << name << "'"; 
+        ythrow yexception() << "CharsetByNameOrDie: unknown charset '" << name << "'";
     return result;
 }
 
@@ -280,7 +280,7 @@ void DoDecodeUnknownPlane(TxChar* str, TxChar*& ee, const ECharset enc) {
                 *s = Lo8(Lo16(*s));
         }
     } else {
-        Y_ASSERT(!SingleByteCodepage(enc)); 
+        Y_ASSERT(!SingleByteCodepage(enc));
 
         TxChar* s = str;
         TxChar* d = str;
@@ -295,10 +295,10 @@ void DoDecodeUnknownPlane(TxChar* str, TxChar*& ee, const ECharset enc) {
             } else {
                 if (!buf.empty()) {
                     if (RecodeToUnicode(enc, buf.data(), d, buf.size(), e - d, read, written) == RECODE_OK) {
-                        Y_ASSERT(read == buf.size()); 
+                        Y_ASSERT(read == buf.size());
                         d += written;
                     } else { // just copying broken symbols
-                        Y_ASSERT(buf.size() <= static_cast<size_t>(e - d)); 
+                        Y_ASSERT(buf.size() <= static_cast<size_t>(e - d));
                         Copy(buf.data(), buf.size(), d);
                         d += buf.size();
                     }

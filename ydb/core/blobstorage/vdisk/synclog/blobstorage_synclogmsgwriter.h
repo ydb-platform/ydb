@@ -32,7 +32,7 @@ namespace NKikimr {
             }
 
             void Push(const TRecordHdr *hdr, size_t size) {
-                Y_VERIFY((size & 3) == 0); // ensure that size is multiple of 4 
+                Y_VERIFY((size & 3) == 0); // ensure that size is multiple of 4
                 const char *d = (const char *)hdr;
                 DataSize += size;
                 while (size) {
@@ -85,7 +85,7 @@ namespace NKikimr {
             }
 
             void Push(const TRecordHdr *hdr, size_t size) {
-                Y_VERIFY((size & 3) == 0); // ensure that size is multiple of 4 
+                Y_VERIFY((size & 3) == 0); // ensure that size is multiple of 4
                 switch (hdr->RecType) {
                     case TRecordHdr::RecLogoBlob:
                         Records.LogoBlobs.emplace_back(*hdr->GetLogoBlob(), Counter);

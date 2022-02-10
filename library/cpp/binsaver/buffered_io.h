@@ -97,7 +97,7 @@ public:
             Flush();
     }
     void Flush() {
-        Y_ASSERT(!bIsReading); 
+        Y_ASSERT(!bIsReading);
         if (bIsReading)
             return;
         Stream.Write(Buf, Pos);
@@ -108,7 +108,7 @@ public:
         return bIsEof;
     }
     inline void Read(void* userBuffer, i64 size) {
-        Y_ASSERT(bIsReading); 
+        Y_ASSERT(bIsReading);
         if (!bIsEof && size + Pos <= BufSize) {
             memcpy(userBuffer, Buf + Pos, size);
             Pos += size;
@@ -117,7 +117,7 @@ public:
         ReadComplex(userBuffer, size);
     }
     inline void Write(const void* userBuffer, i64 size) {
-        Y_ASSERT(!bIsReading); 
+        Y_ASSERT(!bIsReading);
         if (Pos + size < N_SIZE) {
             memcpy(Buf + Pos, userBuffer, size);
             Pos += size;

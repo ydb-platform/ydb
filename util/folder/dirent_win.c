@@ -39,7 +39,7 @@ struct DIR* opendir(const char* dirname) {
         closedir(dir);
         return NULL;
     }
-    dir->fff_templ = (WCHAR*)malloc((len_converted + 5) * sizeof(WCHAR)); 
+    dir->fff_templ = (WCHAR*)malloc((len_converted + 5) * sizeof(WCHAR));
     if (!dir->fff_templ) {
         closedir(dir);
         return NULL;

@@ -31,7 +31,7 @@ TTaskRunnerBase::TTaskRunnerBase(IEnv* env, ISubtaskListener* parentTask, TAutoP
 }
 
 TTaskRunnerBase::~TTaskRunnerBase() {
-    Y_ASSERT(Done); 
+    Y_ASSERT(Done);
 }
 
 namespace {
@@ -40,19 +40,19 @@ namespace {
         TRunningInThisThreadGuard(TTaskRunnerBase* task)
             : Task(task)
         {
-            Y_ASSERT(!ThreadCurrentTask); 
+            Y_ASSERT(!ThreadCurrentTask);
             ThreadCurrentTask = task;
         }
 
         ~TRunningInThisThreadGuard() {
-            Y_ASSERT(ThreadCurrentTask == Task); 
+            Y_ASSERT(ThreadCurrentTask == Task);
             ThreadCurrentTask = nullptr;
         }
     };
 }
 
 void NRainCheck::TTaskRunnerBase::Act(NActor::TDefaultTag) {
-    Y_ASSERT(RefCount() > 0); 
+    Y_ASSERT(RefCount() > 0);
 
     TRunningInThisThreadGuard g(this);
 
@@ -63,11 +63,11 @@ void NRainCheck::TTaskRunnerBase::Act(NActor::TDefaultTag) {
 
         temp.GetVector()->swap(Pending);
 
-        for (auto& pending : *temp.GetVector()) { 
-            if (pending->IsComplete()) { 
-                pending->FireCompletionCallback(GetImplBase()); 
+        for (auto& pending : *temp.GetVector()) {
+            if (pending->IsComplete()) {
+                pending->FireCompletionCallback(GetImplBase());
             } else {
-                Pending.push_back(pending); 
+                Pending.push_back(pending);
             }
         }
 
@@ -96,11 +96,11 @@ bool TTaskRunnerBase::IsRunningInThisThread() const {
 
 TSubtaskCompletion::~TSubtaskCompletion() {
     ESubtaskState state = State.Get();
-    Y_ASSERT(state == CREATED || state == DONE || state == CANCELED); 
+    Y_ASSERT(state == CREATED || state == DONE || state == CANCELED);
 }
 
 void TSubtaskCompletion::FireCompletionCallback(ITaskBase* task) {
-    Y_ASSERT(IsComplete()); 
+    Y_ASSERT(IsComplete());
 
     if (!!CompletionFunc) {
         TSubtaskCompletionFunc temp = CompletionFunc;
@@ -130,8 +130,8 @@ void NRainCheck::TSubtaskCompletion::Cancel() {
 }
 
 void TSubtaskCompletion::SetRunning(TTaskRunnerBase* parent) {
-    Y_ASSERT(!TaskRunner); 
-    Y_ASSERT(!!parent); 
+    Y_ASSERT(!TaskRunner);
+    Y_ASSERT(!!parent);
 
     TaskRunner = parent;
 
@@ -142,7 +142,7 @@ void TSubtaskCompletion::SetRunning(TTaskRunnerBase* parent) {
     for (;;) {
         ESubtaskState current = State.Get();
         if (current != CREATED && current != DONE) {
-            Y_FAIL("current state should be CREATED or DONE: %s", ToCString(current)); 
+            Y_FAIL("current state should be CREATED or DONE: %s", ToCString(current));
         }
         if (State.CompareAndSet(current, RUNNING)) {
             return;
@@ -151,7 +151,7 @@ void TSubtaskCompletion::SetRunning(TTaskRunnerBase* parent) {
 }
 
 void TSubtaskCompletion::SetDone() {
-    Y_ASSERT(!!TaskRunner); 
+    Y_ASSERT(!!TaskRunner);
     TTaskRunnerBase* temp = TaskRunner;
     TaskRunner = nullptr;
 
@@ -166,7 +166,7 @@ void TSubtaskCompletion::SetDone() {
                 break;
             }
         } else {
-            Y_FAIL("cannot SetDone: unknown state: %s", ToCString(state)); 
+            Y_FAIL("cannot SetDone: unknown state: %s", ToCString(state));
         }
     }
 
@@ -195,11 +195,11 @@ void NRainCheck::TTaskRunnerBase::ReleaseRef()
 #endif
 
 void TTaskRunnerBase::AssertInThisThread() const {
-    Y_ASSERT(IsRunningInThisThread()); 
+    Y_ASSERT(IsRunningInThisThread());
 }
 
 TTaskRunnerBase* TTaskRunnerBase::CurrentTask() {
-    Y_VERIFY(!!ThreadCurrentTask); 
+    Y_VERIFY(!!ThreadCurrentTask);
     return ThreadCurrentTask;
 }
 

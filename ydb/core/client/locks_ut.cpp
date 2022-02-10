@@ -550,11 +550,11 @@ void TestLock(const TLocksTestOptions& testOpts) {
 }
 
 /// suite TLocksTest
-Y_UNIT_TEST_SUITE(TLocksTest) { 
+Y_UNIT_TEST_SUITE(TLocksTest) {
 
 // Point locks
 
-Y_UNIT_TEST(GoodLock) { 
+Y_UNIT_TEST(GoodLock) {
     TLocksTestOptions opts;
     TestLock<TLocksV1>(opts);
     TestLock<TLocksV2>(opts);
@@ -567,7 +567,7 @@ Y_UNIT_TEST(GoodLock) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(BrokenLockUpdate) { 
+Y_UNIT_TEST(BrokenLockUpdate) {
     TLocksTestOptions opts;
     opts.Break = true;
     TestLock<TLocksV1>(opts);
@@ -581,7 +581,7 @@ Y_UNIT_TEST(BrokenLockUpdate) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(BrokenLockErase) { 
+Y_UNIT_TEST(BrokenLockErase) {
     TLocksTestOptions opts;
     opts.Break = true;
     opts.TestErase = true;
@@ -596,7 +596,7 @@ Y_UNIT_TEST(BrokenLockErase) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(UpdateLockedKey) { 
+Y_UNIT_TEST(UpdateLockedKey) {
     TLocksTestOptions opts;
     opts.Break = false;
     opts.UpdateKey = opts.BreakKey;
@@ -611,7 +611,7 @@ Y_UNIT_TEST(UpdateLockedKey) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(NoLocksSet) { 
+Y_UNIT_TEST(NoLocksSet) {
     TLocksTestOptions opts;
     opts.Break = true;
     opts.NoLocks = true;
@@ -628,7 +628,7 @@ Y_UNIT_TEST(NoLocksSet) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(GoodSameKeyLock) { 
+Y_UNIT_TEST(GoodSameKeyLock) {
     TLocksTestOptions opts;
     opts.NoBreakKey1 = opts.NoBreakKey0;
     TestLock<TLocksV1>(opts);
@@ -642,7 +642,7 @@ Y_UNIT_TEST(GoodSameKeyLock) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(BrokenSameKeyLock) { 
+Y_UNIT_TEST(BrokenSameKeyLock) {
     TLocksTestOptions opts;
     opts.Break = true;
     opts.NoBreakKey0 = opts.BreakKey;
@@ -657,7 +657,7 @@ Y_UNIT_TEST(BrokenSameKeyLock) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(GoodSameShardLock) { 
+Y_UNIT_TEST(GoodSameShardLock) {
     TLocksTestOptions opts;
     opts.NoBreakKey0 = "'('key (Uint32 '40))";
     TestLock<TLocksV1>(opts);
@@ -671,7 +671,7 @@ Y_UNIT_TEST(GoodSameShardLock) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(BrokenSameShardLock) { 
+Y_UNIT_TEST(BrokenSameShardLock) {
     TLocksTestOptions opts;
     opts.Break = true;
     opts.NoBreakKey0 = "'('key (Uint32 '40))";
@@ -686,7 +686,7 @@ Y_UNIT_TEST(BrokenSameShardLock) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(GoodDupLock) { 
+Y_UNIT_TEST(GoodDupLock) {
     TLocksTestOptions opts;
     opts.Dup = true;
     TestLock<TLocksV1>(opts);
@@ -700,7 +700,7 @@ Y_UNIT_TEST(GoodDupLock) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(BrokenDupLock) { 
+Y_UNIT_TEST(BrokenDupLock) {
     TLocksTestOptions opts;
     opts.Break = true;
     opts.Dup = true;
@@ -715,7 +715,7 @@ Y_UNIT_TEST(BrokenDupLock) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(GoodNullLock) { 
+Y_UNIT_TEST(GoodNullLock) {
     TLocksTestOptions opts;
     opts.BreakKey = "'('key (Null))";
     TestLock<TLocksV1>(opts);
@@ -729,7 +729,7 @@ Y_UNIT_TEST(GoodNullLock) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(BrokenNullLock) { 
+Y_UNIT_TEST(BrokenNullLock) {
     TLocksTestOptions opts;
     opts.Break = true;
     opts.BreakKey = "'('key (Null))";
@@ -747,7 +747,7 @@ Y_UNIT_TEST(BrokenNullLock) {
 // Range locks
 
 // (0, 42] (42, inf)
-Y_UNIT_TEST(Range_GoodLock0) { 
+Y_UNIT_TEST(Range_GoodLock0) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     TestLock<TLocksV1>(opts);
@@ -762,7 +762,7 @@ Y_UNIT_TEST(Range_GoodLock0) {
 }
 
 // (Null, 42] (42*10^8, inf)
-Y_UNIT_TEST(Range_GoodLock1) { 
+Y_UNIT_TEST(Range_GoodLock1) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.Range0Begin = "(Null)";
@@ -779,7 +779,7 @@ Y_UNIT_TEST(Range_GoodLock1) {
 }
 
 // (0, x] (x, inf)
-Y_UNIT_TEST(Range_BrokenLock0) { 
+Y_UNIT_TEST(Range_BrokenLock0) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.Break = true;
@@ -795,7 +795,7 @@ Y_UNIT_TEST(Range_BrokenLock0) {
 }
 
 // (0, x] (42*10^8, inf)
-Y_UNIT_TEST(Range_BrokenLock1) { 
+Y_UNIT_TEST(Range_BrokenLock1) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.Range1Begin = "(Uint32 '4200000000)";
@@ -812,7 +812,7 @@ Y_UNIT_TEST(Range_BrokenLock1) {
 }
 
 // (0, x) [x, inf)
-Y_UNIT_TEST(Range_BrokenLock2) { 
+Y_UNIT_TEST(Range_BrokenLock2) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.Range0Inc = "'ExcFrom 'ExcTo";
@@ -830,7 +830,7 @@ Y_UNIT_TEST(Range_BrokenLock2) {
 }
 
 // (0, x] [x, inf)
-Y_UNIT_TEST(Range_BrokenLock3) { 
+Y_UNIT_TEST(Range_BrokenLock3) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.Range0Inc = "'ExcFrom 'IncTo";
@@ -848,7 +848,7 @@ Y_UNIT_TEST(Range_BrokenLock3) {
 }
 
 // (0, x] (x, inf)
-Y_UNIT_TEST(Range_BrokenLockMax) { 
+Y_UNIT_TEST(Range_BrokenLockMax) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.BreakKey = "'('key (Uint32 '4294967295))";
@@ -866,7 +866,7 @@ Y_UNIT_TEST(Range_BrokenLockMax) {
 }
 
 // (0, x) (x, inf)
-Y_UNIT_TEST(Range_Pinhole) { 
+Y_UNIT_TEST(Range_Pinhole) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.Range0Inc = "'ExcFrom 'ExcTo";
@@ -886,7 +886,7 @@ Y_UNIT_TEST(Range_Pinhole) {
 }
 
 // [x, x] (x, inf)
-Y_UNIT_TEST(Range_CorrectDot) { 
+Y_UNIT_TEST(Range_CorrectDot) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.Range0Inc = "'IncFrom 'IncTo";
@@ -905,7 +905,7 @@ Y_UNIT_TEST(Range_CorrectDot) {
 }
 
 // (x, x] (x, inf)
-Y_UNIT_TEST(Range_IncorrectDot1) { 
+Y_UNIT_TEST(Range_IncorrectDot1) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.Range0Inc = "'ExcFrom 'IncTo";
@@ -927,7 +927,7 @@ Y_UNIT_TEST(Range_IncorrectDot1) {
 }
 
 // [x, x) (x, inf)
-Y_UNIT_TEST(Range_IncorrectDot2) { 
+Y_UNIT_TEST(Range_IncorrectDot2) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.Range0Inc = "'IncFrom 'ExcTo";
@@ -949,7 +949,7 @@ Y_UNIT_TEST(Range_IncorrectDot2) {
 }
 
 // [Null, Null] (x, inf)
-Y_UNIT_TEST(Range_CorrectNullDot) { 
+Y_UNIT_TEST(Range_CorrectNullDot) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.Range0Inc = "'IncFrom 'IncTo";
@@ -969,7 +969,7 @@ Y_UNIT_TEST(Range_CorrectNullDot) {
 }
 
 // (Null, Null] (x, inf)
-Y_UNIT_TEST(Range_IncorrectNullDot1) { 
+Y_UNIT_TEST(Range_IncorrectNullDot1) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.Range0Inc = "'ExcFrom 'IncTo";
@@ -992,7 +992,7 @@ Y_UNIT_TEST(Range_IncorrectNullDot1) {
 }
 
 // [Null, Null) (x, inf)
-Y_UNIT_TEST(Range_IncorrectNullDot2) { 
+Y_UNIT_TEST(Range_IncorrectNullDot2) {
     TLocksTestOptions opts;
     opts.TestRange = true;
     opts.Range0Inc = "'IncFrom 'ExcTo";
@@ -1015,7 +1015,7 @@ Y_UNIT_TEST(Range_IncorrectNullDot2) {
 }
 
 // test empty key
-Y_UNIT_TEST(Range_EmptyKey) { 
+Y_UNIT_TEST(Range_EmptyKey) {
     TLocksTestOptions opts;
     opts.SetTableC();
     opts.SetOnly = true;
@@ -1037,7 +1037,7 @@ Y_UNIT_TEST(Range_EmptyKey) {
 
 // Composite key
 
-Y_UNIT_TEST(CK_GoodLock) { 
+Y_UNIT_TEST(CK_GoodLock) {
     TLocksTestOptions opts;
     opts.SetTableB();
     TestLock<TLocksV1>(opts);
@@ -1051,7 +1051,7 @@ Y_UNIT_TEST(CK_GoodLock) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(CK_BrokenLock) { 
+Y_UNIT_TEST(CK_BrokenLock) {
     TLocksTestOptions opts;
     opts.SetTableB();
     opts.Break = true;
@@ -1066,7 +1066,7 @@ Y_UNIT_TEST(CK_BrokenLock) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(CK_Range_GoodLock) { 
+Y_UNIT_TEST(CK_Range_GoodLock) {
     TLocksTestOptions opts;
     opts.SetTableB();
     opts.TestRange = true;
@@ -1081,7 +1081,7 @@ Y_UNIT_TEST(CK_Range_GoodLock) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(CK_Range_BrokenLock) { 
+Y_UNIT_TEST(CK_Range_BrokenLock) {
     TLocksTestOptions opts;
     opts.SetTableB();
     opts.TestRange = true;
@@ -1099,7 +1099,7 @@ Y_UNIT_TEST(CK_Range_BrokenLock) {
     TestLock<TLocksV2>(opts);
 }
 
-Y_UNIT_TEST(CK_Range_BrokenLockInf) { 
+Y_UNIT_TEST(CK_Range_BrokenLockInf) {
     TLocksTestOptions opts;
     opts.SetTableB();
     opts.TestRange = true;
@@ -1257,12 +1257,12 @@ static void MultipleLocks() {
     }
 }
 
-Y_UNIT_TEST(MultipleLocks) { 
+Y_UNIT_TEST(MultipleLocks) {
     MultipleLocks<TLocksV1>();
     MultipleLocks<TLocksV2>();
 }
 
-Y_UNIT_TEST(SetLockFail) { 
+Y_UNIT_TEST(SetLockFail) {
     TClientServer cs;
     NKikimrMiniKQL::TResult res;
 
@@ -1320,7 +1320,7 @@ static void SetLockNothing() {
     }
 }
 
-Y_UNIT_TEST(SetLockNothing) { 
+Y_UNIT_TEST(SetLockNothing) {
     SetLockNothing<TLocksV1>();
     SetLockNothing<TLocksV2>();
 }
@@ -1405,7 +1405,7 @@ static void SetEraseSet() {
     }
 }
 
-Y_UNIT_TEST(SetEraseSet) { 
+Y_UNIT_TEST(SetEraseSet) {
     SetEraseSet<TLocksV1>();
     SetEraseSet<TLocksV2>();
 }
@@ -1576,7 +1576,7 @@ static void SetBreakSetEraseBreak() {
     }
 }
 
-Y_UNIT_TEST(SetBreakSetEraseBreak) { 
+Y_UNIT_TEST(SetBreakSetEraseBreak) {
     SetBreakSetEraseBreak<TLocksV1>();
     SetBreakSetEraseBreak<TLocksV2>();
 }
@@ -1585,11 +1585,11 @@ Y_UNIT_TEST(SetBreakSetEraseBreak) {
 
 
 /// suite TLocksFatTest
-Y_UNIT_TEST_SUITE(TLocksFatTest) { 
+Y_UNIT_TEST_SUITE(TLocksFatTest) {
 
 const ui32 NUM_LOTS = 250;
 
-Y_UNIT_TEST(PointSetBreak) { 
+Y_UNIT_TEST(PointSetBreak) {
     TClientServer cs;
     //NKikimrMiniKQL::TResult res;
 
@@ -1624,7 +1624,7 @@ Y_UNIT_TEST(PointSetBreak) {
     }
 }
 
-Y_UNIT_TEST(PointSetNotBreak) { 
+Y_UNIT_TEST(PointSetNotBreak) {
     TClientServer cs;
     //NKikimrMiniKQL::TResult res;
 
@@ -1694,12 +1694,12 @@ static void PointSetRemove() {
     }
 }
 
-Y_UNIT_TEST(PointSetRemove) { 
+Y_UNIT_TEST(PointSetRemove) {
     PointSetRemove<TLocksV1>();
     PointSetRemove<TLocksV2>();
 }
 
-Y_UNIT_TEST(RangeSetBreak) { 
+Y_UNIT_TEST(RangeSetBreak) {
     TClientServer cs;
     NKikimrMiniKQL::TResult res;
 
@@ -1731,7 +1731,7 @@ Y_UNIT_TEST(RangeSetBreak) {
     }
 }
 
-Y_UNIT_TEST(RangeSetNotBreak) { 
+Y_UNIT_TEST(RangeSetNotBreak) {
     TClientServer cs;
     NKikimrMiniKQL::TResult res;
 
@@ -1797,7 +1797,7 @@ static void RangeSetRemove() {
     }
 }
 
-Y_UNIT_TEST(RangeSetRemove) { 
+Y_UNIT_TEST(RangeSetRemove) {
     RangeSetRemove<TLocksV1>();
     RangeSetRemove<TLocksV2>();
 }
@@ -1905,7 +1905,7 @@ static void LocksLimit() {
     }
 }
 
-Y_UNIT_TEST(LocksLimit) { 
+Y_UNIT_TEST(LocksLimit) {
     LocksLimit<TLocksV1>();
     LocksLimit<TLocksV2>();
 }

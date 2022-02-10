@@ -2,11 +2,11 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <google/protobuf/message.h>
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 
 struct TJsonSettings {
     using TMapperKey = const ::google::protobuf::FieldDescriptor*;
-    using TMapperValue = std::function<void(IOutputStream&, const ::google::protobuf::Message&, const TJsonSettings&)>; 
+    using TMapperValue = std::function<void(IOutputStream&, const ::google::protobuf::Message&, const TJsonSettings&)>;
     using TNameGenerator = std::function<TString(const google::protobuf::FieldDescriptor&)>;
     bool UI64AsString = true; // JavaScript could not handle large numbers (bigger than 2^53)
     bool EnumAsNumbers = true;

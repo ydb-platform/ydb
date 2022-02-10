@@ -22,13 +22,13 @@ enum ESizeFormat {
 };
 
 namespace NFormatPrivate {
-    template <size_t Value> 
+    template <size_t Value>
     struct TLog2: std::integral_constant<size_t, TLog2<Value / 2>::value + 1> {};
 
-    template <> 
+    template <>
     struct TLog2<1>: std::integral_constant<size_t, 0> {};
 
-    static inline void WriteChars(IOutputStream& os, char c, size_t count) { 
+    static inline void WriteChars(IOutputStream& os, char c, size_t count) {
         if (count == 0)
             return;
         TTempBuf buf(count);
@@ -51,7 +51,7 @@ namespace NFormatPrivate {
     };
 
     template <typename T>
-    IOutputStream& operator<<(IOutputStream& o, const TLeftPad<T>& lp) { 
+    IOutputStream& operator<<(IOutputStream& o, const TLeftPad<T>& lp) {
         TTempBuf buf;
         TMemoryOutput ss(buf.Data(), buf.Size());
         ss << lp.Value;
@@ -78,7 +78,7 @@ namespace NFormatPrivate {
     };
 
     template <typename T>
-    IOutputStream& operator<<(IOutputStream& o, const TRightPad<T>& lp) { 
+    IOutputStream& operator<<(IOutputStream& o, const TRightPad<T>& lp) {
         TTempBuf buf;
         TMemoryOutput ss(buf.Data(), buf.Size());
         ss << lp.Value;
@@ -107,7 +107,7 @@ namespace NFormatPrivate {
     using TUnsignedBaseNumber = TBaseNumber<std::make_unsigned_t<std::remove_cv_t<T>>, Base>;
 
     template <typename T, size_t Base>
-    IOutputStream& operator<<(IOutputStream& stream, const TBaseNumber<T, Base>& value) { 
+    IOutputStream& operator<<(IOutputStream& stream, const TBaseNumber<T, Base>& value) {
         char buf[8 * sizeof(T) + 1]; /* Add 1 for sign. */
         TStringBuf str(buf, IntToString<Base>(value.Value, buf, sizeof(buf)));
 
@@ -143,7 +143,7 @@ namespace NFormatPrivate {
     };
 
     template <typename Char, size_t Base>
-    IOutputStream& operator<<(IOutputStream& os, const TBaseText<Char, Base>& text) { 
+    IOutputStream& operator<<(IOutputStream& os, const TBaseText<Char, Base>& text) {
         for (size_t i = 0; i < text.Text.size(); ++i) {
             if (i != 0) {
                 os << ' ';
@@ -164,7 +164,7 @@ namespace NFormatPrivate {
     };
 
     template <typename T>
-    IOutputStream& operator<<(IOutputStream& o, const TFloatPrecision<T>& prec) { 
+    IOutputStream& operator<<(IOutputStream& o, const TFloatPrecision<T>& prec) {
         char buf[512];
         size_t count = FloatToString(prec.Value, buf, sizeof(buf), prec.Mode, prec.NDigits);
         o << TStringBuf(buf, count);
@@ -174,7 +174,7 @@ namespace NFormatPrivate {
     struct THumanReadableDuration {
         TDuration Value;
 
-        constexpr THumanReadableDuration(const TDuration& value) 
+        constexpr THumanReadableDuration(const TDuration& value)
             : Value(value)
         {
         }
@@ -190,7 +190,7 @@ namespace NFormatPrivate {
  * Output manipulator basically equivalent to `std::setw` and `std::setfill`
  * combined.
  *
- * When written into a `IOutputStream`, writes out padding characters first, 
+ * When written into a `IOutputStream`, writes out padding characters first,
  * and then provided value.
  *
  * Example usage:
@@ -204,7 +204,7 @@ namespace NFormatPrivate {
  * @see RightPad
  */
 template <typename T>
-static constexpr ::NFormatPrivate::TLeftPad<T> LeftPad(const T& value, const size_t width, const char padc = ' ') noexcept { 
+static constexpr ::NFormatPrivate::TLeftPad<T> LeftPad(const T& value, const size_t width, const char padc = ' ') noexcept {
     return ::NFormatPrivate::TLeftPad<T>(value, width, padc);
 }
 
@@ -216,7 +216,7 @@ static constexpr ::NFormatPrivate::TLeftPad<const T*> LeftPad(const T (&value)[N
 /**
  * Output manipulator similar to `std::setw` and `std::setfill`.
  *
- * When written into a `IOutputStream`, writes provided value first, and then 
+ * When written into a `IOutputStream`, writes provided value first, and then
  * the padding characters.
  *
  * Example usage:
@@ -230,7 +230,7 @@ static constexpr ::NFormatPrivate::TLeftPad<const T*> LeftPad(const T (&value)[N
  * @see LeftPad
  */
 template <typename T>
-static constexpr ::NFormatPrivate::TRightPad<T> RightPad(const T& value, const size_t width, const char padc = ' ') noexcept { 
+static constexpr ::NFormatPrivate::TRightPad<T> RightPad(const T& value, const size_t width, const char padc = ' ') noexcept {
     return ::NFormatPrivate::TRightPad<T>(value, width, padc);
 }
 
@@ -242,7 +242,7 @@ static constexpr ::NFormatPrivate::TRightPad<const T*> RightPad(const T (&value)
 /**
  * Output manipulator similar to `std::setbase(16)`.
  *
- * When written into a `IOutputStream`, writes out the provided value in 
+ * When written into a `IOutputStream`, writes out the provided value in
  * hexadecimal form. The value is treated as unsigned, even if its type is in
  * fact signed.
  *
@@ -263,7 +263,7 @@ static constexpr ::NFormatPrivate::TUnsignedBaseNumber<T, 16> Hex(const T& value
 /**
  * Output manipulator similar to `std::setbase(16)`.
  *
- * When written into a `IOutputStream`, writes out the provided value in 
+ * When written into a `IOutputStream`, writes out the provided value in
  * hexadecimal form.
  *
  * Example usage:
@@ -283,7 +283,7 @@ static constexpr ::NFormatPrivate::TBaseNumber<T, 16> SHex(const T& value, const
 /**
  * Output manipulator similar to `std::setbase(2)`.
  *
- * When written into a `IOutputStream`, writes out the provided value in 
+ * When written into a `IOutputStream`, writes out the provided value in
  * binary form. The value is treated as unsigned, even if its type is in
  * fact signed.
  *
@@ -304,7 +304,7 @@ static constexpr ::NFormatPrivate::TUnsignedBaseNumber<T, 2> Bin(const T& value,
 /**
  * Output manipulator similar to `std::setbase(2)`.
  *
- * When written into a `IOutputStream`, writes out the provided value in 
+ * When written into a `IOutputStream`, writes out the provided value in
  * binary form.
  *
  * Example usage:
@@ -324,7 +324,7 @@ static constexpr ::NFormatPrivate::TBaseNumber<T, 2> SBin(const T& value, const 
 /**
  * Output manipulator for hexadecimal string output.
  *
- * When written into a `IOutputStream`, writes out the provided characters 
+ * When written into a `IOutputStream`, writes out the provided characters
  * in hexadecimal form divided by space character.
  *
  * Example usage:
@@ -343,7 +343,7 @@ static inline ::NFormatPrivate::TBaseText<TChar, 16> HexText(const TBasicStringB
 /**
  * Output manipulator for binary string output.
  *
- * When written into a `IOutputStream`, writes out the provided characters 
+ * When written into a `IOutputStream`, writes out the provided characters
  * in binary form divided by space character.
  *
  * Example usage:
@@ -361,7 +361,7 @@ static inline ::NFormatPrivate::TBaseText<TChar, 2> BinText(const TBasicStringBu
 /**
  * Output manipulator for printing `TDuration` values.
  *
- * When written into a `IOutputStream`, writes out the provided `TDuration` 
+ * When written into a `IOutputStream`, writes out the provided `TDuration`
  * in auto-adjusted human-readable format.
  *
  * Example usage:
@@ -372,7 +372,7 @@ static inline ::NFormatPrivate::TBaseText<TChar, 2> BinText(const TBasicStringBu
  *
  * @param value                         Value to output.
  */
-static constexpr ::NFormatPrivate::THumanReadableDuration HumanReadable(const TDuration duration) noexcept { 
+static constexpr ::NFormatPrivate::THumanReadableDuration HumanReadable(const TDuration duration) noexcept {
     return ::NFormatPrivate::THumanReadableDuration(duration);
 }
 
@@ -380,7 +380,7 @@ static constexpr ::NFormatPrivate::THumanReadableDuration HumanReadable(const TD
  * Output manipulator for writing out human-readable number of elements / memory
  * amount in `ls -h` style.
  *
- * When written into a `IOutputStream`, writes out the provided unsigned integer 
+ * When written into a `IOutputStream`, writes out the provided unsigned integer
  * variable with small precision and a suffix (like 'K', 'M', 'G' for numbers, or
  * 'B', 'KiB', 'MiB', 'GiB' for bytes).
  *
@@ -400,13 +400,13 @@ static constexpr ::NFormatPrivate::THumanReadableSize HumanReadableSize(const do
     return {size, format};
 }
 
-void Time(IOutputStream& l); 
-void TimeHumanReadable(IOutputStream& l); 
+void Time(IOutputStream& l);
+void TimeHumanReadable(IOutputStream& l);
 
 /**
  * Output manipulator for adjusting precision of floating point values.
  *
- * When written into a `IOutputStream`, writes out the provided floating point 
+ * When written into a `IOutputStream`, writes out the provided floating point
  * variable with given precision. The behavior depends on provided `mode`.
  *
  * Example usage:
@@ -420,14 +420,14 @@ void TimeHumanReadable(IOutputStream& l);
  * @see EFloatToStringMode
  */
 template <typename T>
-static constexpr ::NFormatPrivate::TFloatPrecision<T> Prec(const T& value, const EFloatToStringMode mode, const int ndigits = 0) noexcept { 
+static constexpr ::NFormatPrivate::TFloatPrecision<T> Prec(const T& value, const EFloatToStringMode mode, const int ndigits = 0) noexcept {
     return {value, mode, ndigits};
 }
 
 /**
  * Output manipulator for adjusting precision of floating point values.
  *
- * When written into a `IOutputStream`, writes out the provided floating point 
+ * When written into a `IOutputStream`, writes out the provided floating point
  * variable with given precision. The behavior is equivalent to `Prec(value, PREC_NDIGITS, ndigits)`.
  *
  * Example usage:
@@ -439,6 +439,6 @@ static constexpr ::NFormatPrivate::TFloatPrecision<T> Prec(const T& value, const
  * @param ndigits                       Number of significant digits.
  */
 template <typename T>
-static constexpr ::NFormatPrivate::TFloatPrecision<T> Prec(const T& value, const int ndigits) noexcept { 
+static constexpr ::NFormatPrivate::TFloatPrecision<T> Prec(const T& value, const int ndigits) noexcept {
     return {value, PREC_NDIGITS, ndigits};
 }

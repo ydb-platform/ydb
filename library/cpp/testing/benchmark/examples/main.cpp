@@ -120,9 +120,9 @@ Y_CPU_BENCHMARK(FunctionCallCost_StringBufVal1, iface) {
 
     for (auto i : xrange<size_t>(0, iface.Iterations())) {
         (void)i;
-        NBench::Escape(&x); 
+        NBench::Escape(&x);
         Y_DO_NOT_OPTIMIZE_AWAY(FS1(x));
-        NBench::Clobber(); 
+        NBench::Clobber();
     }
 }
 
@@ -131,9 +131,9 @@ Y_CPU_BENCHMARK(FunctionCallCost_StringBufRef1, iface) {
 
     for (auto i : xrange<size_t>(0, iface.Iterations())) {
         (void)i;
-        NBench::Escape(&x); 
+        NBench::Escape(&x);
         Y_DO_NOT_OPTIMIZE_AWAY(FS2(x));
-        NBench::Clobber(); 
+        NBench::Clobber();
     }
 }
 
@@ -143,10 +143,10 @@ Y_CPU_BENCHMARK(FunctionCallCost_StringBufVal2, iface) {
 
     for (auto i : xrange<size_t>(0, iface.Iterations())) {
         (void)i;
-        NBench::Escape(&x); 
-        NBench::Escape(&y); 
+        NBench::Escape(&x);
+        NBench::Escape(&y);
         Y_DO_NOT_OPTIMIZE_AWAY(FS1_2(x, y));
-        NBench::Clobber(); 
+        NBench::Clobber();
     }
 }
 
@@ -156,10 +156,10 @@ Y_CPU_BENCHMARK(FunctionCallCost_StringBufRef2, iface) {
 
     for (auto i : xrange<size_t>(0, iface.Iterations())) {
         (void)i;
-        NBench::Escape(&x); 
-        NBench::Escape(&y); 
+        NBench::Escape(&x);
+        NBench::Escape(&y);
         Y_DO_NOT_OPTIMIZE_AWAY(FS2_2(x, y));
-        NBench::Clobber(); 
+        NBench::Clobber();
     }
 }
 
@@ -181,35 +181,35 @@ Y_CPU_BENCHMARK(FunctionCallCost_TwoArg, iface) {
         Y_DO_NOT_OPTIMIZE_AWAY(FFF(i, i));
     }
 }
- 
-/* An example of incorrect benchmark. As of r2581591 Clang 3.7 produced following assembly: 
- * @code 
- *        │      push   %rbp 
- *        │      mov    %rsp,%rbp 
- *        │      push   %rbx 
- *        │      push   %rax 
- *        │      mov    (%rdi),%rbx 
- *        │      test   %rbx,%rbx 
- *        │    ↓ je     25 
- *        │      xor    %edi,%edi 
- *        │      xor    %esi,%esi 
+
+/* An example of incorrect benchmark. As of r2581591 Clang 3.7 produced following assembly:
+ * @code
+ *        │      push   %rbp
+ *        │      mov    %rsp,%rbp
+ *        │      push   %rbx
+ *        │      push   %rax
+ *        │      mov    (%rdi),%rbx
+ *        │      test   %rbx,%rbx
+ *        │    ↓ je     25
+ *        │      xor    %edi,%edi
+ *        │      xor    %esi,%esi
  *        │    → callq  FS1(TBasicStringBuf<char, std::char_traits<char
- *        │      nop 
- * 100.00 │20:┌─→dec    %rbx 
- *        │   └──jne    20 
- *        │25:   add    $0x8,%rsp 
- *        │      pop    %rbx 
- *        │      pop    %rbp 
- *        │    ← retq 
- * @endcode 
- * 
- * So, this benchmark is measuring empty loop! 
- */ 
-Y_CPU_BENCHMARK(Incorrect_FunctionCallCost_StringBufVal1, iface) { 
-    TStringBuf x; 
- 
-    for (auto i : xrange<size_t>(0, iface.Iterations())) { 
-        (void)i; 
-        Y_DO_NOT_OPTIMIZE_AWAY(FS1(x)); 
-    } 
-} 
+ *        │      nop
+ * 100.00 │20:┌─→dec    %rbx
+ *        │   └──jne    20
+ *        │25:   add    $0x8,%rsp
+ *        │      pop    %rbx
+ *        │      pop    %rbp
+ *        │    ← retq
+ * @endcode
+ *
+ * So, this benchmark is measuring empty loop!
+ */
+Y_CPU_BENCHMARK(Incorrect_FunctionCallCost_StringBufVal1, iface) {
+    TStringBuf x;
+
+    for (auto i : xrange<size_t>(0, iface.Iterations())) {
+        (void)i;
+        Y_DO_NOT_OPTIMIZE_AWAY(FS1(x));
+    }
+}

@@ -122,7 +122,7 @@ namespace {
             } else if (rt.Method == TResolveTask::Threaded) {
                 na = ThreadedResolve(host, rt.Info.Port);
             } else {
-                Y_ASSERT(0); 
+                Y_ASSERT(0);
                 throw yexception() << TStringBuf("invalid resolve method");
             }
 

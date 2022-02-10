@@ -16,8 +16,8 @@ using THSI = THashSet<int>;
 using TSI = TSet<int>;
 using TPI = std::pair<int, int>;
 
-Y_UNIT_TEST_SUITE(TSchemeCastTest) { 
-    Y_UNIT_TEST(TestYVector) { 
+Y_UNIT_TEST_SUITE(TSchemeCastTest) {
+    Y_UNIT_TEST(TestYVector) {
         TVI v;
         for (int i = 0; i < 3; ++i)
             v.push_back(i);
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
         UNIT_ASSERT(std::equal(v.begin(), v.end(), y.begin()));
     }
 
-    Y_UNIT_TEST(TestYHash) { 
+    Y_UNIT_TEST(TestYHash) {
         THI h;
         for (int i = 0; i < 3; ++i)
             h[i] = i * i;
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToJson(h2, true), ToJson(h, true));
     }
 
-    Y_UNIT_TEST(TestYMap) { 
+    Y_UNIT_TEST(TestYMap) {
         TMI h;
         for (int i = 0; i < 3; ++i)
             h[i] = i * i;
@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToJson(h2, true), ToJson(h, true));
     }
 
-    Y_UNIT_TEST(TestYHashSet) { 
+    Y_UNIT_TEST(TestYHashSet) {
         THSI h;
         for (int i = 0; i < 3; ++i)
             h.insert(i * i);
@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToJson(h2, true), ToJson(h, true));
     }
 
-    Y_UNIT_TEST(TestYSet) { 
+    Y_UNIT_TEST(TestYSet) {
         TSI h;
         for (int i = 0; i < 3; ++i)
             h.insert(i * i);
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToJson(h2, true), ToJson(h, true));
     }
 
-    Y_UNIT_TEST(TestTPair) { 
+    Y_UNIT_TEST(TestTPair) {
         TPI p(1, 1);
 
         const TString etalon = "[1,1]";
@@ -113,7 +113,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
         }
     };
 
-    Y_UNIT_TEST(TestTCustom) { 
+    Y_UNIT_TEST(TestTCustom) {
         TCustom x(2, 3);
 
         const TString etalon = "{\"a\":2,\"b\":3}";
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToJson(x2, true), ToJson(x, true));
     }
 
-    Y_UNIT_TEST(TestVectorOfPairs) { 
+    Y_UNIT_TEST(TestVectorOfPairs) {
         typedef TVector<TPI> TVPI;
         TVPI v;
 
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToJson(v2, true), ToJson(v, true));
     }
 
-    Y_UNIT_TEST(TestSetOfCustom) { 
+    Y_UNIT_TEST(TestSetOfCustom) {
         typedef TSet<TCustom> TSC;
         TSC s;
         s.insert(TCustom(2, 3));
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(ToJson(s2, true), ToJson(s, true));
     }
 
-    Y_UNIT_TEST(TestExceptions) { 
+    Y_UNIT_TEST(TestExceptions) {
         NSc::TValue v = 1;
         const TString json = v.ToJson();
         UNIT_ASSERT_EXCEPTION(FromJson<TVI>(json, true), yexception);

@@ -593,6 +593,6 @@ namespace NSc {
 }
 
 template <>
-void Out<NSc::TValue>(IOutputStream& o, TTypeTraits<NSc::TValue>::TFuncParam v) { 
+void Out<NSc::TValue>(IOutputStream& o, TTypeTraits<NSc::TValue>::TFuncParam v) {
     o.Write(v.ToJson(true));
 }

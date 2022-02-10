@@ -11,8 +11,8 @@ TIntrusivePtr<TBlobStorageGroupInfo> CreateTestGroupInfo(TVector<TVDiskID>& vdis
     return info;
 }
 
-Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoIterTest) { 
-    Y_UNIT_TEST(IteratorForward) { 
+Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoIterTest) {
+    Y_UNIT_TEST(IteratorForward) {
         TVector<TVDiskID> vdisks;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroupInfo(vdisks);
         ui32 pos = 0;
@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoIterTest) {
         }
     }
 
-    Y_UNIT_TEST(IteratorBackward) { 
+    Y_UNIT_TEST(IteratorBackward) {
         TVector<TVDiskID> vdisks;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroupInfo(vdisks);
         auto end = info->VDisksEnd();
@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoIterTest) {
         }
     }
 
-    Y_UNIT_TEST(IteratorForwardAndBackward) { 
+    Y_UNIT_TEST(IteratorForwardAndBackward) {
         TVector<TVDiskID> vdisks;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroupInfo(vdisks);
         ui32 pos = 0;
@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoIterTest) {
         UNIT_ASSERT_EQUAL(pos, vdisks.size());
     }
 
-    Y_UNIT_TEST(PerRealmIterator) { 
+    Y_UNIT_TEST(PerRealmIterator) {
         TVector<TVDiskID> vdisks;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroupInfo(vdisks);
         for (auto realmIt = info->FailRealmsBegin(); realmIt != info->FailRealmsEnd(); ++realmIt) {
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoIterTest) {
         }
     }
 
-    Y_UNIT_TEST(PerFailDomainRange) { 
+    Y_UNIT_TEST(PerFailDomainRange) {
         TVector<TVDiskID> vdisks;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroupInfo(vdisks);
         for (auto it = info->FailRealmsBegin(); it != info->FailRealmsEnd(); ++it) {
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoIterTest) {
         }
     }
 
-    Y_UNIT_TEST(Domains) { 
+    Y_UNIT_TEST(Domains) {
         TVector<TVDiskID> vdisks;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroupInfo(vdisks);
         TVector<std::pair<ui32, ui32>> x1, x2;
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoIterTest) {
         UNIT_ASSERT_VALUES_EQUAL(x1, x2);
     }
 
-    Y_UNIT_TEST(Indexes) { 
+    Y_UNIT_TEST(Indexes) {
         TVector<TVDiskID> vdisks;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroupInfo(vdisks);
         for (auto it = info->VDisksBegin(); it != info->VDisksEnd(); ++it) {
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageGroupInfoIterTest) {
         }
     }
 
-    Y_UNIT_TEST(WalkFailRealms) { 
+    Y_UNIT_TEST(WalkFailRealms) {
         TVector<TVDiskID> vdisks;
         TIntrusivePtr<TBlobStorageGroupInfo> info = CreateTestGroupInfo(vdisks);
         ui32 num = 0;

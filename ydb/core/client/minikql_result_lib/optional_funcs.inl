@@ -3,7 +3,7 @@
 
 #define ENSURE_HAS_ITEM() \
     do { \
-        Y_ENSURE(HasItem(), "Optional is empty!"); \ 
+        Y_ENSURE(HasItem(), "Optional is empty!"); \
     } while (0);
 
 template <>

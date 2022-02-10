@@ -13,7 +13,7 @@
 #include <util/generic/singleton.h>
 #include <util/generic/fastqueue.h>
 
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/string/builder.h>
 
 #include <util/system/event.h>
@@ -94,7 +94,7 @@ public:
         }
 
         TAtforkQueueRestarter::Get().UnregisterObject(this);
-        Y_ASSERT(Tharr.empty()); 
+        Y_ASSERT(Tharr.empty());
     }
 
     inline bool Add(IObjectInQueue* obj) {
@@ -209,7 +209,7 @@ private:
         }
 
         while (true) {
-            IObjectInQueue* job = nullptr; 
+            IObjectInQueue* job = nullptr;
 
             with_lock (QueueMutex) {
                 while (Queue.Empty() && !AtomicGet(ShouldTerminate)) {
@@ -309,7 +309,7 @@ private:
 #if defined(_bionic_)
 //no pthread_atfork on android libc
 #elif defined(_unix_)
-            pthread_atfork(nullptr, nullptr, ProcessChildAction); 
+            pthread_atfork(nullptr, nullptr, ProcessChildAction);
 #endif
         }
     };
@@ -395,7 +395,7 @@ public:
                 TTsr tsr(Impl_->Parent_);
                 IObjectInQueue* obj;
 
-                while ((obj = Impl_->WaitForJob()) != nullptr) { 
+                while ((obj = Impl_->WaitForJob()) != nullptr) {
                     if (Impl_->Catching) {
                         try {
                             try {
@@ -424,7 +424,7 @@ public:
         , Namer(params)
         , ThrCount_(0)
         , AllDone_(false)
-        , Obj_(nullptr) 
+        , Obj_(nullptr)
         , Free_(0)
         , IdleTime_(TDuration::Max())
     {
@@ -445,7 +445,7 @@ public:
 
     inline void Add(IObjectInQueue* obj) {
         with_lock (Mutex_) {
-            while (Obj_ != nullptr) { 
+            while (Obj_ != nullptr) {
                 CondFree_.Wait(Mutex_);
             }
 
@@ -522,7 +522,7 @@ private:
         }
 
         IObjectInQueue* ret = Obj_;
-        Obj_ = nullptr; 
+        Obj_ = nullptr;
 
         --Free_;
 
@@ -746,7 +746,7 @@ namespace {
         void DoJoin() noexcept override {
             if (Impl_) {
                 Impl_->WaitForComplete();
-                Impl_ = nullptr; 
+                Impl_ = nullptr;
             }
         }
 

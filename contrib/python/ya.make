@@ -1002,7 +1002,7 @@ RECURSE(
     six
     skynet_pyro4
     slack-sdk
-    slackclient 
+    slackclient
     smart-open
     smmap
     snappy

@@ -1,12 +1,12 @@
 #pragma once
 
 #include <util/generic/strbuf.h>
-#include <util/system/types.h>
+#include <util/system/types.h> 
 
 namespace NYsonPull {
     namespace NDetail {
         namespace NSymbol {
-#define SYM(name, value) constexpr ui8 name = value
+#define SYM(name, value) constexpr ui8 name = value 
 
             //! Indicates the beginning of a list.
             SYM(begin_list, '[');

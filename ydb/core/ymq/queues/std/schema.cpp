@@ -1,8 +1,8 @@
 #include "schema.h"
 
-namespace NKikimr::NSQS { 
+namespace NKikimr::NSQS {
 
-TVector<TTable> GetStandardTables(ui64 shards, ui64 partitions, bool enableAutosplit, ui64 sizeToSplit) { 
+TVector<TTable> GetStandardTables(ui64 shards, ui64 partitions, bool enableAutosplit, ui64 sizeToSplit) {
     const TVector<TColumn> AttributesColumns = {
         TColumn("State",                     NScheme::NTypeIds::Uint64, true),
         TColumn("ContentBasedDeduplication", NScheme::NTypeIds::Bool),
@@ -14,8 +14,8 @@ TVector<TTable> GetStandardTables(ui64 shards, ui64 partitions, bool enableAutos
         TColumn("VisibilityTimeout",         NScheme::NTypeIds::Uint64),
         TColumn("DlqName",                   NScheme::NTypeIds::Utf8),
         TColumn("DlqArn",                    NScheme::NTypeIds::Utf8),
-        TColumn("MaxReceiveCount",           NScheme::NTypeIds::Uint64), 
-        TColumn("ShowDetailedCountersDeadline", NScheme::NTypeIds::Uint64)}; 
+        TColumn("MaxReceiveCount",           NScheme::NTypeIds::Uint64),
+        TColumn("ShowDetailedCountersDeadline", NScheme::NTypeIds::Uint64)};
 
     const TVector<TColumn> StateColumns = {
         TColumn("State",                     NScheme::NTypeIds::Uint64, true),
@@ -26,9 +26,9 @@ TVector<TTable> GetStandardTables(ui64 shards, ui64 partitions, bool enableAutos
         TColumn("InflyCount",                NScheme::NTypeIds::Int64),
         TColumn("MessageCount",              NScheme::NTypeIds::Int64),
         TColumn("ReadOffset",                NScheme::NTypeIds::Uint64),
-        TColumn("WriteOffset",               NScheme::NTypeIds::Uint64), 
-        TColumn("CleanupVersion",            NScheme::NTypeIds::Uint64), 
-        TColumn("InflyVersion",              NScheme::NTypeIds::Uint64)}; 
+        TColumn("WriteOffset",               NScheme::NTypeIds::Uint64),
+        TColumn("CleanupVersion",            NScheme::NTypeIds::Uint64),
+        TColumn("InflyVersion",              NScheme::NTypeIds::Uint64)};
 
     const TVector<TColumn> MessagesDataColumns = {
         TColumn("RandomId",                  NScheme::NTypeIds::Uint64, true, partitions),
@@ -38,13 +38,13 @@ TVector<TTable> GetStandardTables(ui64 shards, ui64 partitions, bool enableAutos
         TColumn("MessageId",                 NScheme::NTypeIds::String),
         TColumn("SenderId",                  NScheme::NTypeIds::String)};
 
-    const TVector<TColumn> MessagesColumns = { 
+    const TVector<TColumn> MessagesColumns = {
         TColumn("Offset",                    NScheme::NTypeIds::Uint64, true),
         TColumn("RandomId",                  NScheme::NTypeIds::Uint64),
         TColumn("SentTimestamp",             NScheme::NTypeIds::Uint64),
         TColumn("DelayDeadline",             NScheme::NTypeIds::Uint64)};
 
-    const TVector<TColumn> InflyColumns = { 
+    const TVector<TColumn> InflyColumns = {
         TColumn("Offset",                    NScheme::NTypeIds::Uint64, true),
         TColumn("RandomId",                  NScheme::NTypeIds::Uint64),
         TColumn("LoadId",                    NScheme::NTypeIds::Uint64),
@@ -52,8 +52,8 @@ TVector<TTable> GetStandardTables(ui64 shards, ui64 partitions, bool enableAutos
         TColumn("LockTimestamp",             NScheme::NTypeIds::Uint64),
         TColumn("ReceiveCount",              NScheme::NTypeIds::Uint32),
         TColumn("SentTimestamp",             NScheme::NTypeIds::Uint64),
-        TColumn("VisibilityDeadline",        NScheme::NTypeIds::Uint64), 
-        TColumn("DelayDeadline",             NScheme::NTypeIds::Uint64)}; 
+        TColumn("VisibilityDeadline",        NScheme::NTypeIds::Uint64),
+        TColumn("DelayDeadline",             NScheme::NTypeIds::Uint64)};
 
     const TVector<TColumn> SentTimestampIdxColumns = {
         TColumn("SentTimestamp",             NScheme::NTypeIds::Uint64, true),
@@ -68,34 +68,34 @@ TVector<TTable> GetStandardTables(ui64 shards, ui64 partitions, bool enableAutos
                     .SetColumns(AttributesColumns)
                     .SetSmall(true)
                     .SetInMemory(true)
-                    .SetShard(-1) 
+                    .SetShard(-1)
                     .SetHasLeaderTablet());
     list.push_back(TTable("State")
                     .SetColumns(StateColumns)
                     .SetSmall(true)
-                    .SetOnePartitionPerShard(true) 
+                    .SetOnePartitionPerShard(true)
                     .SetInMemory(true)
                     .SetShard(-1));
 
     for (ui64 i = 0; i < shards; ++i) {
         list.push_back(TTable("MessageData")
-                       .SetColumns(MessagesDataColumns) 
-                       .SetSequential(true) 
-                       .SetShard(i) 
-                       .SetAutosplit(enableAutosplit, sizeToSplit)); 
+                       .SetColumns(MessagesDataColumns)
+                       .SetSequential(true)
+                       .SetShard(i)
+                       .SetAutosplit(enableAutosplit, sizeToSplit));
         list.push_back(TTable("Messages")
-                       .SetColumns(MessagesColumns) 
-                       .SetSequential(true) 
-                       .SetShard(i)); 
+                       .SetColumns(MessagesColumns)
+                       .SetSequential(true)
+                       .SetShard(i));
         list.push_back(TTable("Infly")
-                       .SetColumns(InflyColumns) 
-                       .SetSmall(true) 
-                       .SetInMemory(true) 
-                       .SetShard(i)); 
+                       .SetColumns(InflyColumns)
+                       .SetSmall(true)
+                       .SetInMemory(true)
+                       .SetShard(i));
         list.push_back(TTable("SentTimestampIdx")
-                       .SetColumns(SentTimestampIdxColumns) 
-                       .SetSequential(true) 
-                       .SetShard(i)); 
+                       .SetColumns(SentTimestampIdxColumns)
+                       .SetSequential(true)
+                       .SetShard(i));
     }
 
     return list;
@@ -118,4 +118,4 @@ TVector<TTable> GetStandardTableNames(ui64 shards) {
     return list;
 }
 
-} // namespace NKikimr::NSQS 
+} // namespace NKikimr::NSQS

@@ -18,7 +18,7 @@
 
 bool NFs::Remove(const TString& path) {
 #if defined(_win_)
-    return NFsPrivate::WinRemove(path); 
+    return NFsPrivate::WinRemove(path);
 #else
     return ::remove(path.data()) == 0;
 #endif
@@ -86,21 +86,21 @@ bool NFs::MakeDirectoryRecursive(const TString& path, EFilePermissions mode, boo
 
 bool NFs::Rename(const TString& oldPath, const TString& newPath) {
 #if defined(_win_)
-    return NFsPrivate::WinRename(oldPath, newPath); 
+    return NFsPrivate::WinRename(oldPath, newPath);
 #else
     return ::rename(oldPath.data(), newPath.data()) == 0;
 #endif
 }
 
 void NFs::HardLinkOrCopy(const TString& existingPath, const TString& newPath) {
-    if (!NFs::HardLink(existingPath, newPath)) { 
-        Copy(existingPath, newPath); 
+    if (!NFs::HardLink(existingPath, newPath)) {
+        Copy(existingPath, newPath);
     }
 }
 
 bool NFs::HardLink(const TString& existingPath, const TString& newPath) {
 #if defined(_win_)
-    return NFsPrivate::WinHardLink(existingPath, newPath); 
+    return NFsPrivate::WinHardLink(existingPath, newPath);
 #elif defined(_unix_)
     return (0 == link(existingPath.data(), newPath.data()));
 #endif
@@ -108,7 +108,7 @@ bool NFs::HardLink(const TString& existingPath, const TString& newPath) {
 
 bool NFs::SymLink(const TString& targetPath, const TString& linkPath) {
 #if defined(_win_)
-    return NFsPrivate::WinSymLink(targetPath, linkPath); 
+    return NFsPrivate::WinSymLink(targetPath, linkPath);
 #elif defined(_unix_)
     return 0 == symlink(targetPath.data(), linkPath.data());
 #endif
@@ -116,7 +116,7 @@ bool NFs::SymLink(const TString& targetPath, const TString& linkPath) {
 
 TString NFs::ReadLink(const TString& path) {
 #if defined(_win_)
-    return NFsPrivate::WinReadLink(path); 
+    return NFsPrivate::WinReadLink(path);
 #elif defined(_unix_)
     TTempBuf buf;
     while (true) {
@@ -148,7 +148,7 @@ void NFs::Copy(const TString& existingPath, const TString& newPath) {
 
 bool NFs::Exists(const TString& path) {
 #if defined(_win_)
-    return NFsPrivate::WinExists(path); 
+    return NFsPrivate::WinExists(path);
 #elif defined(_unix_)
     return access(path.data(), F_OK) == 0;
 #endif

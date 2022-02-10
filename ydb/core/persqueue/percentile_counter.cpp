@@ -132,7 +132,7 @@ TMultiCounter::operator bool() {
 
 
 TPercentileCounter::TPercentileCounter(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TVector<TLabelsInfo>& labels, const TVector<std::pair<TString, TString>>& subgroups, const TString& sensor,
-                    const TVector<std::pair<ui64, TString>>& intervals, const bool deriv, bool expiring) 
+                    const TVector<std::pair<ui64, TString>>& intervals, const bool deriv, bool expiring)
 {
     Y_VERIFY(!intervals.empty());
     Counters.reserve(intervals.size());
@@ -145,27 +145,27 @@ TPercentileCounter::TPercentileCounter(TIntrusivePtr<NMonitoring::TDynamicCounte
 }
 
 void TPercentileCounter::IncFor(ui64 key, ui64 value) {
-    if (!Ranges.empty()) { 
-        ui32 i = 0; 
-        // The last range value is Max<ui64>(). 
-        while (Ranges[i] < key) { 
-            ++i; 
-        } 
-        Y_ASSERT(i < Ranges.size()); 
+    if (!Ranges.empty()) {
+        ui32 i = 0;
+        // The last range value is Max<ui64>().
+        while (Ranges[i] < key) {
+            ++i;
+        }
+        Y_ASSERT(i < Ranges.size());
         Counters[i].Inc(value);
-    } 
+    }
 }
 
 void TPercentileCounter::DecFor(ui64 key, ui64 value) {
-    if (!Ranges.empty()) { 
-        ui32 i = 0; 
-        // The last range value is Max<ui64>(). 
-        while (Ranges[i] < key) { 
-            ++i; 
-        } 
-        Y_ASSERT(i < Ranges.size()); 
+    if (!Ranges.empty()) {
+        ui32 i = 0;
+        // The last range value is Max<ui64>().
+        while (Ranges[i] < key) {
+            ++i;
+        }
+        Y_ASSERT(i < Ranges.size());
         Counters[i].Dec(value);
-    } 
+    }
 }
 
 NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TVector<NPQ::TLabelsInfo> aggr, const TString name, ui32 border, TVector<ui32> durations)

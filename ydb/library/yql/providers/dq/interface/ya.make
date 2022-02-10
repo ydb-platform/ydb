@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/protobuf 
+    contrib/libs/protobuf
     library/cpp/yson
     ydb/library/yql/ast
     ydb/library/yql/core

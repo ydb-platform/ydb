@@ -525,7 +525,7 @@ protected:
         if (MonitoringAddress)
             AppConfig.MutableMonitoringConfig()->SetMonitoringAddress(MonitoringAddress);
         if (SqsHttpPort)
-            RunConfig.AppConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort); 
+            RunConfig.AppConfig.MutableSqsConfig()->MutableHttpServerConfig()->SetPort(SqsHttpPort);
         if (GRpcPort) {
             auto& conf = *AppConfig.MutableGRpcConfig();
             conf.SetStartGRpcProxy(true);

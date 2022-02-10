@@ -24,7 +24,7 @@ using namespace NKikimr::NMiniKQL;
 
 class TFullResultWriterActor : public NActors::TActor<TFullResultWriterActor> {
 public:
-    static constexpr char ActorName[] = "YQL_DQ_FULL_RESULT_WRITER"; 
+    static constexpr char ActorName[] = "YQL_DQ_FULL_RESULT_WRITER";
 
     explicit TFullResultWriterActor(const TString& traceId,
         const TString& resultType,

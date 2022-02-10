@@ -1,6 +1,6 @@
 #include "pending_checkpoint.h"
 
-namespace NYq { 
+namespace NYq {
 
 TPendingCheckpoint::TPendingCheckpoint(THashSet<NActors::TActorId> toBeAcknowledged, TPendingCheckpointStats stats)
     : NotYetAcknowledged(std::move(toBeAcknowledged))
@@ -46,17 +46,17 @@ size_t TPendingRestoreCheckpoint::NotYetAcknowledgedCount() const {
     return NotYetAcknowledged.size();
 }
 
-void TPendingInitCoordinator::OnNewCheckpointCoordinatorAck() { 
-    ++NewCheckpointCoordinatorAcksGot; 
-    Y_VERIFY(NewCheckpointCoordinatorAcksGot <= ActorsCount); 
-} 
- 
-bool TPendingInitCoordinator::AllNewCheckpointCoordinatorAcksProcessed() const { 
-    return NewCheckpointCoordinatorAcksGot == ActorsCount; 
-} 
- 
-bool TPendingInitCoordinator::CanInjectCheckpoint() const { 
-    return AllNewCheckpointCoordinatorAcksProcessed() && CheckpointId; 
-} 
- 
-} // namespace NYq 
+void TPendingInitCoordinator::OnNewCheckpointCoordinatorAck() {
+    ++NewCheckpointCoordinatorAcksGot;
+    Y_VERIFY(NewCheckpointCoordinatorAcksGot <= ActorsCount);
+}
+
+bool TPendingInitCoordinator::AllNewCheckpointCoordinatorAcksProcessed() const {
+    return NewCheckpointCoordinatorAcksGot == ActorsCount;
+}
+
+bool TPendingInitCoordinator::CanInjectCheckpoint() const {
+    return AllNewCheckpointCoordinatorAcksProcessed() && CheckpointId;
+}
+
+} // namespace NYq

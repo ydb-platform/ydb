@@ -77,14 +77,14 @@ namespace NJsonWriter {
             return *this;
         }
 
-        /*** NaN and Inf are not valid json values, 
-           * so if WriteNanAsString is set, writer would write string 
-           * intead of throwing exception (default case)                  */ 
+        /*** NaN and Inf are not valid json values,
+           * so if WriteNanAsString is set, writer would write string
+           * intead of throwing exception (default case)                  */
         TBuf& SetWriteNanAsString(bool writeNanAsString = true) {
-            WriteNanAsString = writeNanAsString; 
+            WriteNanAsString = writeNanAsString;
             return *this;
-        } 
- 
+        }
+
         /*** Return the string formed in the internal TStringStream.
            * You may only call it if the `stream' parameter was NULL
            * at construction time.                                        */
@@ -141,10 +141,10 @@ namespace NJsonWriter {
         void CheckAndPop(EJsonEntity e);
         EJsonEntity StackTop() const;
 
-        template <class TFloat> 
-        TValueContext WriteFloatImpl(TFloat f, EFloatToStringMode mode, int ndigits); 
+        template <class TFloat>
+        TValueContext WriteFloatImpl(TFloat f, EFloatToStringMode mode, int ndigits);
 
-    private: 
+    private:
         IOutputStream* Stream;
         THolder<TStringStream> StringStream;
         typedef TVector<const TString*> TKeys;
@@ -155,7 +155,7 @@ namespace NJsonWriter {
         bool NeedNewline;
         const EHtmlEscapeMode EscapeMode;
         int IndentSpaces;
-        bool WriteNanAsString; 
+        bool WriteNanAsString;
     };
 
     // Please don't try to instantiate the classes declared below this point.

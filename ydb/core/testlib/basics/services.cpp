@@ -229,13 +229,13 @@ namespace NPDisk {
         }
     }
 
-    void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex) 
-    { 
-        runtime.AddLocalService(MakeQuoterServiceID(), 
-                TActorSetupCmd(CreateQuoterService(), TMailboxType::HTSwap, 0), 
-                nodeIndex); 
-    } 
- 
+    void SetupQuoterService(TTestActorRuntime& runtime, ui32 nodeIndex)
+    {
+        runtime.AddLocalService(MakeQuoterServiceID(),
+                TActorSetupCmd(CreateQuoterService(), TMailboxType::HTSwap, 0),
+                nodeIndex);
+    }
+
     void SetupBasicServices(TTestActorRuntime& runtime, TAppPrepare& app, bool mock,
                             NFake::INode* factory, NFake::TStorage storage, NFake::TCaches caches)
     {
@@ -267,7 +267,7 @@ namespace NPDisk {
             SetupResourceBroker(runtime, nodeIndex);
             SetupSharedPageCache(runtime, nodeIndex, caches);
             SetupBlobCache(runtime, nodeIndex);
-            SetupQuoterService(runtime, nodeIndex); 
+            SetupQuoterService(runtime, nodeIndex);
 
             if (factory)
                 factory->Birth(nodeIndex);

@@ -1,7 +1,7 @@
-# Disable test on windows until DEVTOOLS-5591 and DEVTOOLS-5388 will be fixed. 
-IF (NOT OS_WINDOWS) 
+# Disable test on windows until DEVTOOLS-5591 and DEVTOOLS-5388 will be fixed.
+IF (NOT OS_WINDOWS)
     UNITTEST_FOR(ydb/core/quoter)
- 
+
     OWNER(g:kikimr)
 
     PEERDIR(

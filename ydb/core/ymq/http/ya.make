@@ -1,8 +1,8 @@
-OWNER( 
+OWNER(
     g:kikimr
-    g:sqs 
-) 
- 
+    g:sqs
+)
+
 LIBRARY()
 
 SRCS(
@@ -10,11 +10,11 @@ SRCS(
     http.cpp
     types.cpp
     xml.cpp
-    xml_builder.cpp 
+    xml_builder.cpp
 )
 
 PEERDIR(
-    contrib/libs/libxml 
+    contrib/libs/libxml
     library/cpp/actors/core
     library/cpp/cgiparam
     library/cpp/http/misc

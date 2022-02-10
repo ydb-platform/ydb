@@ -43,7 +43,7 @@ public:
     static constexpr ui64 PING_TIMER_TAG = 1;
     static constexpr ui64 AGGR_TIMER_TAG = 2;
 
-    static constexpr char ActorName[] = "YQL_DQ_TASK_CONTROLLER"; 
+    static constexpr char ActorName[] = "YQL_DQ_TASK_CONTROLLER";
 
     explicit TTaskController(
         const TString& traceId,
@@ -260,9 +260,9 @@ private:
         auto& stats = s;
         // basic stats
         ADD_COUNTER(ComputeCpuTimeUs)
-        ADD_COUNTER(PendingInputTimeUs) 
-        ADD_COUNTER(PendingOutputTimeUs) 
-        ADD_COUNTER(FinishTimeUs) 
+        ADD_COUNTER(PendingInputTimeUs)
+        ADD_COUNTER(PendingOutputTimeUs)
+        ADD_COUNTER(FinishTimeUs)
 
         // profile stats
         ADD_COUNTER(BuildCpuTimeUs)
@@ -329,7 +329,7 @@ private:
             ADD_COUNTER(MaxMemoryUsage);
 
             ADD_COUNTER(SerializationTimeUs);
-            ADD_COUNTER(BlockedByCapacity); 
+            ADD_COUNTER(BlockedByCapacity);
 
             ADD_COUNTER(SpilledBytes);
             ADD_COUNTER(SpilledRows);

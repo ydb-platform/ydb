@@ -45,7 +45,7 @@ class IQueueClientEvent {
 public:
     virtual ~IQueueClientEvent() = default;
 
-    //! Execute an action defined by implementation 
+    //! Execute an action defined by implementation
     virtual bool Execute(bool ok) = 0;
 
     //! Finish and destroy event

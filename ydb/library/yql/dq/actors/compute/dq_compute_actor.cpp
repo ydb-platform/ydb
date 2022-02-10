@@ -30,10 +30,10 @@ class TDqComputeActor : public TDqComputeActorBase<TDqComputeActor> {
     using TBase = TDqComputeActorBase<TDqComputeActor>;
 
 public:
-    static constexpr char ActorName[] = "DQ_COMPUTE_ACTOR"; 
+    static constexpr char ActorName[] = "DQ_COMPUTE_ACTOR";
 
     TDqComputeActor(const TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
-        IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory, 
+        IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         const TTaskRunnerFactory& taskRunnerFactory)
         : TBase(executerId, txId, std::move(task), std::move(sourceActorFactory), std::move(sinkActorFactory), settings, memoryLimits)
@@ -67,8 +67,8 @@ private:
 
 
 IActor* CreateDqComputeActor(const TActorId& executerId, const TTxId& txId, NYql::NDqProto::TDqTask&& task,
-    IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory, 
-    const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, const TTaskRunnerFactory& taskRunnerFactory) 
+    IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
+    const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, const TTaskRunnerFactory& taskRunnerFactory)
 {
     return new TDqComputeActor(executerId, txId, std::move(task), std::move(sourceActorFactory),
         std::move(sinkActorFactory), settings, memoryLimits, taskRunnerFactory);

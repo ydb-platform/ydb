@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/yq/libs/actors/logging/log.h> 
+#include <ydb/core/yq/libs/actors/logging/log.h>
 #include <ydb/core/yq/libs/config/protos/control_plane_proxy.pb.h>
 
 #include <library/cpp/actors/core/actor.h>
@@ -24,4 +24,4 @@ NActors::TActorId ControlPlaneProxyActorId();
 
 NActors::IActor* CreateControlPlaneProxyActor(const NConfig::TControlPlaneProxyConfig& config, const NMonitoring::TDynamicCounterPtr& counters);
 
-} // namespace NYq 
+} // namespace NYq

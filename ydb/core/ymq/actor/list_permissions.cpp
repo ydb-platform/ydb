@@ -10,37 +10,37 @@
 #include <util/string/cast.h>
 #include <util/string/join.h>
 
-namespace NKikimr::NSQS { 
- 
+namespace NKikimr::NSQS {
+
 class TListPermissionsActor
    : public TActionActor<TListPermissionsActor> {
 public:
-    TListPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) 
-        : TActionActor(sourceSqsRequest, EAction::ListPermissions, std::move(cb)) 
+    TListPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb)
+        : TActionActor(sourceSqsRequest, EAction::ListPermissions, std::move(cb))
     {
         Response_.MutableListPermissions()->SetRequestId(RequestId_);
-        CopySecurityToken(Request()); 
+        CopySecurityToken(Request());
     }
 
     static constexpr bool NeedExistingQueue() {
         return false;
     }
 
-    static constexpr bool NeedUserSpecified() { 
-        return false; 
-    } 
- 
+    static constexpr bool NeedUserSpecified() {
+        return false;
+    }
+
 private:
     bool DoValidate() override {
-        if (!Request().GetPath()) { 
+        if (!Request().GetPath()) {
             MakeError(Response_.MutableListPermissions(), NErrors::MISSING_PARAMETER, "No Path parameter.");
             return false;
         }
 
-        Path_ = MakeAbsolutePath(Request().GetPath()); 
+        Path_ = MakeAbsolutePath(Request().GetPath());
 
         if (IsForbiddenPath(Path_)) {
-            MakeError(MutableErrorDesc(), NErrors::INVALID_PARAMETER_VALUE, Sprintf("Path does not exist: %s.", SanitizeNodePath(Path_).c_str())); 
+            MakeError(MutableErrorDesc(), NErrors::INVALID_PARAMETER_VALUE, Sprintf("Path does not exist: %s.", SanitizeNodePath(Path_).c_str()));
             return false;
         }
 
@@ -52,29 +52,29 @@ private:
     }
 
     virtual TString GetCustomACLPath() const override {
-        return MakeAbsolutePath(Request().GetPath()); 
+        return MakeAbsolutePath(Request().GetPath());
     }
 
     TString DoGetQueueName() const override {
         return {};
     }
 
-    void RequestSchemeShard(const TString& path) { 
+    void RequestSchemeShard(const TString& path) {
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
         record->SetPath(path);
 
-        Send(MakeTxProxyID(), navigateRequest.release()); 
+        Send(MakeTxProxyID(), navigateRequest.release());
     }
 
-    void DoAction() override { 
+    void DoAction() override {
         Become(&TThis::WaitSchemeShardResponse);
-        RequestSchemeShard(Path_); 
+        RequestSchemeShard(Path_);
     }
 
-    STATEFN(WaitSchemeShardResponse) { 
+    STATEFN(WaitSchemeShardResponse) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvWakeup, HandleWakeup); 
+            hFunc(TEvWakeup, HandleWakeup);
             hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeShardResponse);
         }
     }
@@ -140,7 +140,7 @@ private:
                 break;
             }
             case NKikimrScheme::StatusPathDoesNotExist: {
-                MakeError(MutableErrorDesc(), NErrors::INVALID_PARAMETER_VALUE, Sprintf("Path does not exist: %s.", SanitizeNodePath(Path_).c_str())); 
+                MakeError(MutableErrorDesc(), NErrors::INVALID_PARAMETER_VALUE, Sprintf("Path does not exist: %s.", SanitizeNodePath(Path_).c_str()));
                 break;
             }
             default: {
@@ -149,19 +149,19 @@ private:
             }
         }
 
-        SendReplyAndDie(); 
+        SendReplyAndDie();
     }
 
-    const TListPermissionsRequest& Request() const { 
-        return SourceSqsRequest_.GetListPermissions(); 
-    } 
- 
+    const TListPermissionsRequest& Request() const {
+        return SourceSqsRequest_.GetListPermissions();
+    }
+
 private:
     TString Path_;
 };
 
-IActor* CreateListPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) { 
-    return new TListPermissionsActor(sourceSqsRequest, std::move(cb)); 
+IActor* CreateListPermissionsActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+    return new TListPermissionsActor(sourceSqsRequest, std::move(cb));
 }
 
-} // namespace NKikimr::NSQS 
+} // namespace NKikimr::NSQS

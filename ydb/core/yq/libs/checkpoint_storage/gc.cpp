@@ -1,13 +1,13 @@
 #include "gc.h"
 
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
-#include <ydb/core/yq/libs/checkpoint_storage/events/events.h> 
-#include <ydb/core/yq/libs/actors/logging/log.h> 
+#include <ydb/core/yq/libs/checkpoint_storage/events/events.h>
+#include <ydb/core/yq/libs/actors/logging/log.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-namespace NYq { 
+namespace NYq {
 
 using namespace NActors;
 using namespace NThreading;
@@ -60,7 +60,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx);
 
-    static constexpr char ActorName[] = "YQ_GC_ACTOR"; 
+    static constexpr char ActorName[] = "YQ_GC_ACTOR";
 
 private:
     STRICT_STFUNC(StateFunc,
@@ -179,4 +179,4 @@ std::unique_ptr<NActors::IActor> NewGC(
     return std::unique_ptr<NActors::IActor>(new TActorGC(checkpointStorage, stateStorage));
 }
 
-} // namespace NYq 
+} // namespace NYq

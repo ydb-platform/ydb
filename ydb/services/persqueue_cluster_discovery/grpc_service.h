@@ -23,7 +23,7 @@ private:
     void SetupIncomingRequests(NGrpc::TLoggerPtr logger);
 
     NActors::TActorSystem* ActorSystem_;
-    grpc::ServerCompletionQueue* CQ_ = nullptr; 
+    grpc::ServerCompletionQueue* CQ_ = nullptr;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
     NActors::TActorId GRpcRequestProxyId_;

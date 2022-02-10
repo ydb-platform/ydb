@@ -23,18 +23,18 @@ using namespace NKikimrClient;
 
 namespace NKikimr {
 using namespace NSchemeCache;
- 
-Ydb::PersQueue::V1::Codec CodecByName(const TString& codec) { 
-    static const THashMap<TString, Ydb::PersQueue::V1::Codec> codecsByName = { 
-        { "raw",  Ydb::PersQueue::V1::CODEC_RAW  }, 
-        { "gzip", Ydb::PersQueue::V1::CODEC_GZIP }, 
-        { "lzop", Ydb::PersQueue::V1::CODEC_LZOP }, 
-        { "zstd", Ydb::PersQueue::V1::CODEC_ZSTD }, 
-    }; 
-    auto codecIt = codecsByName.find(codec); 
-    return codecIt != codecsByName.end() ? codecIt->second : Ydb::PersQueue::V1::CODEC_UNSPECIFIED; 
-} 
- 
+
+Ydb::PersQueue::V1::Codec CodecByName(const TString& codec) {
+    static const THashMap<TString, Ydb::PersQueue::V1::Codec> codecsByName = {
+        { "raw",  Ydb::PersQueue::V1::CODEC_RAW  },
+        { "gzip", Ydb::PersQueue::V1::CODEC_GZIP },
+        { "lzop", Ydb::PersQueue::V1::CODEC_LZOP },
+        { "zstd", Ydb::PersQueue::V1::CODEC_ZSTD },
+    };
+    auto codecIt = codecsByName.find(codec);
+    return codecIt != codecsByName.end() ? codecIt->second : Ydb::PersQueue::V1::CODEC_UNSPECIFIED;
+}
+
 template <>
 void FillExtraFieldsForDataChunk(
     const Ydb::PersQueue::V1::StreamingWriteClientMessage::InitRequest& init,
@@ -248,7 +248,7 @@ void TWriteSessionActor::CheckFinish(const TActorContext& ctx) {
         CloseSession("out of order Writes done before initialization", PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
     }
-    if (Writes.empty() && FormedWrites.empty() && SentMessages.empty()) { 
+    if (Writes.empty() && FormedWrites.empty() && SentMessages.empty()) {
         CloseSession("", PersQueue::ErrorCode::OK, ctx);
         return;
     }
@@ -870,7 +870,7 @@ void TWriteSessionActor::Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr&
         batchWriteResponse->add_sequence_numbers(res.GetSeqNo());
         batchWriteResponse->add_offsets(res.GetOffset());
         batchWriteResponse->add_already_written(res.GetAlreadyWritten());
- 
+
         stat->set_queued_in_partition_duration_ms(
             Max((i64)res.GetTotalTimeInPartitionQueueMs(), stat->queued_in_partition_duration_ms()));
         stat->set_throttled_on_partition_duration_ms(
@@ -939,14 +939,14 @@ void TWriteSessionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, con
 }
 
 void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
-    TWriteRequestBatchInfo::TPtr writeRequest = new TWriteRequestBatchInfo(); 
+    TWriteRequestBatchInfo::TPtr writeRequest = new TWriteRequestBatchInfo();
 
     auto ev = MakeHolder<NPQ::TEvPartitionWriter::TEvWriteRequest>(++NextRequestCookie);
     NKikimrClient::TPersQueueRequest& request = ev->Record;
 
-    writeRequest->UserWriteRequests = std::move(Writes); 
-    Writes.clear(); 
- 
+    writeRequest->UserWriteRequests = std::move(Writes);
+    Writes.clear();
+
     i64 diff = 0;
     auto addData = [&](const StreamingWriteClientMessage::WriteRequest& writeRequest, const i32 messageIndex) {
         auto w = request.MutablePartitionRequest()->AddCmdWrite();
@@ -956,14 +956,14 @@ void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
         w->SetCreateTimeMS(writeRequest.created_at_ms(messageIndex));
         w->SetUncompressedSize(writeRequest.blocks_uncompressed_sizes(messageIndex));
         w->SetClientDC(ClientDC);
-    }; 
+    };
 
-    for (const auto& write : writeRequest->UserWriteRequests) { 
-        diff -= write->Request.ByteSize(); 
+    for (const auto& write : writeRequest->UserWriteRequests) {
+        diff -= write->Request.ByteSize();
         const auto& writeRequest = write->Request.write_request();
         for (i32 messageIndex = 0; messageIndex != writeRequest.sequence_numbers_size(); ++messageIndex) {
             addData(writeRequest, messageIndex);
-        } 
+        }
     }
 
     writeRequest->Cookie = request.GetPartitionRequest().GetCookie();
@@ -975,8 +975,8 @@ void TWriteSessionActor::GenerateNextWriteRequest(const TActorContext& ctx) {
     BytesInflight.Inc(diff);
     BytesInflightTotal.Inc(diff);
 
-    writeRequest->ByteSize = request.ByteSize(); 
-    FormedWrites.push_back(writeRequest); 
+    writeRequest->ByteSize = request.ByteSize();
+    FormedWrites.push_back(writeRequest);
 
     ctx.Send(Writer, std::move(ev));
     ++NumReserveBytesRequests;
@@ -1080,14 +1080,14 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWrite::TPtr& ev, const TActorCont
     auto dataCheck = [&](const StreamingWriteClientMessage::WriteRequest& data, const i32 messageIndex) -> bool {
         if (data.sequence_numbers(messageIndex) <= 0) {
             CloseSession(TStringBuilder() << "bad write request - 'sequence_numbers' items must be greater than 0. Value at position " << messageIndex << " is " << data.sequence_numbers(messageIndex), PersQueue::ErrorCode::BAD_REQUEST, ctx);
-            return false; 
-        } 
+            return false;
+        }
 
         if (messageIndex > 0 && data.sequence_numbers(messageIndex) <= data.sequence_numbers(messageIndex - 1)) {
             CloseSession(TStringBuilder() << "bad write request - 'sequence_numbers' are unsorted. Value " << data.sequence_numbers(messageIndex) << " at position " << messageIndex
                 << " is less than or equal to value " << data.sequence_numbers(messageIndex - 1) << " at position " << (messageIndex - 1), PersQueue::ErrorCode::BAD_REQUEST, ctx);
-            return false; 
-        } 
+            return false;
+        }
 
         if (data.blocks_headers(messageIndex).size() != CODEC_ID_SIZE) {
             CloseSession(TStringBuilder() << "bad write request - 'blocks_headers' at position " << messageIndex <<  " has incorrect size " << data.blocks_headers(messageIndex).size() << " [B]. Only headers of size " << CODEC_ID_SIZE << " [B] (with codec identifier) are supported in block format version 0", PersQueue::ErrorCode::BAD_REQUEST, ctx);
@@ -1106,12 +1106,12 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWrite::TPtr& ev, const TActorCont
                 << ", only single message per block is supported by block format version 0", PersQueue::ErrorCode::BAD_REQUEST, ctx);
             return false;
         }
-        return true; 
-    }; 
+        return true;
+    };
     for (i32 messageIndex = 0; messageIndex != messageCount; ++messageIndex) {
         if (!dataCheck(writeRequest, messageIndex)) {
-            return; 
-        } 
+            return;
+        }
     }
 
     THolder<TEvPQProxy::TEvWrite> event(ev->Release());

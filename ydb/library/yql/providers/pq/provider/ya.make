@@ -1,32 +1,32 @@
-LIBRARY() 
- 
-OWNER( 
-    galaxycrab 
-    g:yq 
-    g:yql 
-) 
- 
-SRCS( 
-    yql_pq_datasink.cpp 
-    yql_pq_datasink_execution.cpp 
+LIBRARY()
+
+OWNER(
+    galaxycrab
+    g:yq
+    g:yql
+)
+
+SRCS(
+    yql_pq_datasink.cpp
+    yql_pq_datasink_execution.cpp
     yql_pq_datasink_io_discovery.cpp
-    yql_pq_datasink_type_ann.cpp 
-    yql_pq_datasource.cpp 
-    yql_pq_datasource_type_ann.cpp 
-    yql_pq_dq_integration.cpp 
+    yql_pq_datasink_type_ann.cpp
+    yql_pq_datasource.cpp
+    yql_pq_datasource_type_ann.cpp
+    yql_pq_dq_integration.cpp
     yql_pq_io_discovery.cpp
-    yql_pq_load_meta.cpp 
-    yql_pq_logical_opt.cpp 
-    yql_pq_mkql_compiler.cpp 
-    yql_pq_physical_optimize.cpp 
-    yql_pq_provider.cpp 
+    yql_pq_load_meta.cpp
+    yql_pq_logical_opt.cpp
+    yql_pq_mkql_compiler.cpp
+    yql_pq_physical_optimize.cpp
+    yql_pq_provider.cpp
     yql_pq_provider_impl.cpp
-    yql_pq_settings.cpp 
-    yql_pq_topic_key_parser.cpp 
-    yql_pq_helpers.cpp 
-) 
- 
-PEERDIR( 
+    yql_pq_settings.cpp
+    yql_pq_topic_key_parser.cpp
+    yql_pq_helpers.cpp
+)
+
+PEERDIR(
     library/cpp/random_provider
     library/cpp/time_provider
     ydb/core/yq/libs/db_resolver
@@ -55,11 +55,11 @@ PEERDIR(
     ydb/library/yql/providers/pq/expr_nodes
     ydb/library/yql/providers/pq/proto
     ydb/library/yql/providers/result/expr_nodes
-) 
- 
-YQL_LAST_ABI_VERSION() 
- 
-END() 
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()
 
 IF (NOT OPENSOURCE)
     RECURSE_FOR_TESTS(

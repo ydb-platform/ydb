@@ -23,7 +23,7 @@ struct TRichActorFutureCallback : public TRichActor<TRichActorFutureCallback<Eve
     using TFailure = std::function<void(void)>;
     using TBase = TRichActor<TRichActorFutureCallback<EventType>>;
 
-    static constexpr char ActorName[] = "YQL_DQ_ACTOR_FUTURE_CALLBACK"; 
+    static constexpr char ActorName[] = "YQL_DQ_ACTOR_FUTURE_CALLBACK";
 
     TRichActorFutureCallback(TCallback&& callback, TFailure&& failure, TDuration timeout)
         : TBase(&TRichActorFutureCallback::StateWaitForEvent)

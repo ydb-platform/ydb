@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h" 
+#include "defs.h"
 
 #include "schema.h"
 #include <ydb/core/base/quoter.h>
@@ -10,10 +10,10 @@
 
 #include <util/generic/maybe.h>
 
-namespace NKikimr::NSQS { 
+namespace NKikimr::NSQS {
 
 class TCreateQueueSchemaActorV2
-    : public TActorBootstrapped<TCreateQueueSchemaActorV2> 
+    : public TActorBootstrapped<TCreateQueueSchemaActorV2>
 {
 public:
      TCreateQueueSchemaActorV2(const TQueuePath& path,
@@ -24,41 +24,41 @@ public:
                                const TString& folderId,
                                const bool isCloudMode,
                                const bool enableQueueAttributesValidation,
-                               TIntrusivePtr<TUserCounters> userCounters, 
-                               TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources); 
+                               TIntrusivePtr<TUserCounters> userCounters,
+                               TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources);
 
     ~TCreateQueueSchemaActorV2();
 
     void InitMissingQueueAttributes(const NKikimrConfig::TSqsConfig& config);
 
-    void Bootstrap(); 
+    void Bootstrap();
 
-    void RequestQueueParams(); 
+    void RequestQueueParams();
 
-    STATEFN(Preamble); 
+    STATEFN(Preamble);
 
-    void HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev); 
+    void HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev);
 
-    void OnReadQueueParams(TSqsEvents::TEvExecuted::TPtr& ev); 
+    void OnReadQueueParams(TSqsEvents::TEvExecuted::TPtr& ev);
 
-    void RunAtomicCounterIncrement(); 
-    void OnAtomicCounterIncrement(TSqsEvents::TEvAtomicCounterIncrementResult::TPtr& ev); 
+    void RunAtomicCounterIncrement();
+    void OnAtomicCounterIncrement(TSqsEvents::TEvAtomicCounterIncrementResult::TPtr& ev);
 
-    void RequestCreateQueueQuota(); 
-    void OnCreateQueueQuota(TEvQuota::TEvClearance::TPtr& ev); 
- 
+    void RequestCreateQueueQuota();
+    void OnCreateQueueQuota(TEvQuota::TEvClearance::TPtr& ev);
+
     void RequestTablesFormatSettings(const TString& accountName);
-    void RegisterMakeDirActor(const TString& workingDir, const TString& dirName); 
+    void RegisterMakeDirActor(const TString& workingDir, const TString& dirName);
 
     void RequestLeaderTabletId();
 
-    void CreateComponents(); 
+    void CreateComponents();
 
-    STATEFN(CreateComponentsState); 
+    STATEFN(CreateComponentsState);
 
-    void Step(); 
+    void Step();
 
-    void OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev); 
+    void OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
 
     void OnDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
 
@@ -68,24 +68,24 @@ public:
     template <typename T>
     T GetAttribute(const TStringBuf name, const T& defaultValue) const;
 
-    void CommitNewVersion(); 
+    void CommitNewVersion();
 
-    STATEFN(FinalizeAndCommit); 
+    STATEFN(FinalizeAndCommit);
 
-    void OnCommit(TSqsEvents::TEvExecuted::TPtr& ev); 
+    void OnCommit(TSqsEvents::TEvExecuted::TPtr& ev);
 
-    void MatchQueueAttributes(const ui64 currentVersion); 
+    void MatchQueueAttributes(const ui64 currentVersion);
 
-    STATEFN(MatchAttributes); 
+    STATEFN(MatchAttributes);
 
-    void OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr& ev); 
+    void OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr& ev);
 
-    void AddRPSQuota(); 
- 
-    void HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuoterResourceResult::TPtr& ev); 
- 
-    void PassAway() override; 
- 
+    void AddRPSQuota();
+
+    void HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuoterResourceResult::TPtr& ev);
+
+    void PassAway() override;
+
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SQS_ACTOR;
     }
@@ -99,7 +99,7 @@ private:
         MakeTables,
         DescribeTableForSetSchemeShardId,
         DiscoverLeaderTabletId,
-        AddQuoterResource, 
+        AddQuoterResource,
     };
 
     const TQueuePath QueuePath_;
@@ -116,13 +116,13 @@ private:
     bool EnableQueueAttributesValidation_ = true;
 
     ui32 TablesFormat_ = 0;
-    ui64 Version_ = 0; 
+    ui64 Version_ = 0;
 
     TString VersionName_;
     TString VersionedQueueFullPath_;
     TString ExistingQueueResourceId_;
-    TIntrusivePtr<TUserCounters> UserCounters_; 
-    TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_; 
+    TIntrusivePtr<TUserCounters> UserCounters_;
+    TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResources_;
     ui64 RequiredShardsCount_ = 0;
     ui64 CreatedShardsCount_ = 0;
     TVector<TTable> RequiredTables_;
@@ -135,28 +135,28 @@ private:
     std::pair<ui64, ui64> TableWithLeaderPathId_ = std::make_pair(0, 0); // (scheme shard, path id) are required for describing table
 
     ECreateComponentsStep CurrentCreationStep_ = ECreateComponentsStep::GetTablesFormatSetting;
- 
+
     TActorId AddQuoterResourceActor_;
 };
 
 class TDeleteQueueSchemaActorV2
-    : public TActorBootstrapped<TDeleteQueueSchemaActorV2> 
+    : public TActorBootstrapped<TDeleteQueueSchemaActorV2>
 {
 public:
     TDeleteQueueSchemaActorV2(const TQueuePath& path,
                               const TActorId& sender,
                               const TString& requestId,
-                              TIntrusivePtr<TUserCounters> userCounters); 
+                              TIntrusivePtr<TUserCounters> userCounters);
 
     TDeleteQueueSchemaActorV2(const TQueuePath& path,
                               const TActorId& sender,
                               const TString& requestId,
-                              TIntrusivePtr<TUserCounters> userCounters, 
+                              TIntrusivePtr<TUserCounters> userCounters,
                               const ui64 advisedQueueVersion,
                               const ui64 advisedShardCount,
                               const bool advisedIsFifoFlag);
 
-    void Bootstrap(); 
+    void Bootstrap();
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SQS_ACTOR;
@@ -165,24 +165,24 @@ public:
 private:
     void PrepareCleanupPlan(const bool isFifo, const ui64 shardCount);
 
-    void NextAction(); 
+    void NextAction();
 
-    void DoSuccessOperation(); 
+    void DoSuccessOperation();
 
-    void DeleteRPSQuota(); 
- 
+    void DeleteRPSQuota();
+
 private:
-    STATEFN(StateFunc) { 
+    STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TSqsEvents::TEvExecuted, HandleExecuted); 
-            hFunc(NKesus::TEvKesus::TEvDeleteQuoterResourceResult, HandleDeleteQuoterResource); 
-            cFunc(TEvPoisonPill::EventType, PassAway); 
+            hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
+            hFunc(NKesus::TEvKesus::TEvDeleteQuoterResourceResult, HandleDeleteQuoterResource);
+            cFunc(TEvPoisonPill::EventType, PassAway);
         }
     }
 
-    void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev); 
-    void HandleDeleteQuoterResource(NKesus::TEvKesus::TEvDeleteQuoterResourceResult::TPtr& ev); 
-    void PassAway() override; 
+    void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
+    void HandleDeleteQuoterResource(NKesus::TEvKesus::TEvDeleteQuoterResourceResult::TPtr& ev);
+    void PassAway() override;
 
 private:
     enum class EDeleting : ui32 {
@@ -191,7 +191,7 @@ private:
         RemoveShards,
         RemoveQueueVersionDirectory,
         RemoveQueueDirectory,
-        DeleteQuoterResource, 
+        DeleteQuoterResource,
         Finish,
     };
 
@@ -201,9 +201,9 @@ private:
     TVector<int> Shards_;
     ui32 SI_;
     const TString RequestId_;
-    TIntrusivePtr<TUserCounters> UserCounters_; 
+    TIntrusivePtr<TUserCounters> UserCounters_;
     ui64 Version_ = 0;
     TActorId DeleteQuoterResourceActor_;
 };
 
-} // namespace NKikimr::NSQS 
+} // namespace NKikimr::NSQS

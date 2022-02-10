@@ -6,4 +6,4 @@ RECURSE(
     tests
     topic_parser
     topic_parser_public
-) 
+)

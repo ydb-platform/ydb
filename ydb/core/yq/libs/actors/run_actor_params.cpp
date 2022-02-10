@@ -12,9 +12,9 @@ TRunActorParams::TRunActorParams(
     NYql::IModuleResolver::TPtr& moduleResolver,
     ui64 nextUniqueId,
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
-    ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections, 
+    ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const ::NYq::NConfig::TCommonConfig& commonConfig,
-    const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig, 
+    const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
     const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
     const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
     const ::NYq::NConfig::TPingerConfig& pingerConfig,
@@ -34,12 +34,12 @@ TRunActorParams::TRunActorParams(
     YandexQuery::ExecuteMode executeMode,
     const TString& resultId,
     const YandexQuery::StateLoadMode stateLoadMode,
-    const YandexQuery::StreamingDisposition& streamingDisposition, 
+    const YandexQuery::StreamingDisposition& streamingDisposition,
     YandexQuery::QueryMeta::ComputeStatus status,
     const TString& cloudId,
     TVector<YandexQuery::ResultSetMeta> resultSetMetas,
     TVector<TString> dqGraphs,
-    int32_t dqGraphIndex, 
+    int32_t dqGraphIndex,
     TVector<Yq::Private::TopicConsumer> createdTopicConsumers,
     bool automatic,
     const TString& queryName,
@@ -53,9 +53,9 @@ TRunActorParams::TRunActorParams(
     , ModuleResolver(moduleResolver)
     , NextUniqueId(nextUniqueId)
     , DqCompFactory(dqCompFactory)
-    , PqCmConnections(std::move(pqCmConnections)) 
+    , PqCmConnections(std::move(pqCmConnections))
     , CommonConfig(commonConfig)
-    , CheckpointCoordinatorConfig(checkpointCoordinatorConfig) 
+    , CheckpointCoordinatorConfig(checkpointCoordinatorConfig)
     , PrivateApiConfig(privateApiConfig)
     , GatewaysConfig(gatewaysConfig)
     , PingerConfig(pingerConfig)
@@ -75,13 +75,13 @@ TRunActorParams::TRunActorParams(
     , ExecuteMode(executeMode)
     , ResultId(resultId)
     , StateLoadMode(stateLoadMode)
-    , StreamingDisposition(streamingDisposition) 
+    , StreamingDisposition(streamingDisposition)
     , Status(status)
     , CloudId(cloudId)
     , ResultSetMetas(std::move(resultSetMetas))
     , DqGraphs(std::move(dqGraphs))
     , DqGraphIndex(dqGraphIndex)
-    , CreatedTopicConsumers(std::move(createdTopicConsumers)) 
+    , CreatedTopicConsumers(std::move(createdTopicConsumers))
     , Automatic(automatic)
     , QueryName(queryName)
     , Deadline(deadline)

@@ -62,7 +62,7 @@ struct TComputationOptsFull: public TComputationOpts {
 
 struct TComputationMutables {
     ui32 CurValueIndex = 0U;
-    std::vector<ui32> SerializableValues; // Indices of values that need to be saved in IComputationGraph::SaveGraphState() and restored in IComputationGraph::LoadGraphState(). 
+    std::vector<ui32> SerializableValues; // Indices of values that need to be saved in IComputationGraph::SaveGraphState() and restored in IComputationGraph::LoadGraphState().
 };
 
 class THolderFactory;
@@ -112,8 +112,8 @@ public:
 
     virtual ~IComputationNode() {}
 
-    virtual void InitNode(TComputationContext&) const = 0; 
- 
+    virtual void InitNode(TComputationContext&) const = 0;
+
     virtual NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const = 0;
 
     virtual IComputationNode* AddDependence(const IComputationNode* node) = 0;
@@ -191,8 +191,8 @@ public:
     virtual const THolderFactory& GetHolderFactory() const = 0;
     virtual ITerminator* GetTerminator() const = 0;
     virtual bool SetExecuteLLVM(bool value) = 0;
-    virtual TString SaveGraphState() = 0; 
-    virtual void LoadGraphState(TStringBuf state) = 0; 
+    virtual TString SaveGraphState() = 0;
+    virtual void LoadGraphState(TStringBuf state) = 0;
 };
 
 class TNodeFactory;

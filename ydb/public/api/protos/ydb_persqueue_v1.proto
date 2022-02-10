@@ -16,14 +16,14 @@ option cc_enable_arenas = true;
 // packed encoding ('message' types can't be packed encoded). In non-repeated fields we use 'ms' for consistency.
 // * Any message with non-empty 'issues' property leads to streaming RPC termination.
 
-enum Codec { 
-    CODEC_UNSPECIFIED = 0; 
-    CODEC_RAW = 1; 
-    CODEC_GZIP = 2; 
-    CODEC_LZOP = 3; 
-    CODEC_ZSTD = 4; 
-} 
- 
+enum Codec {
+    CODEC_UNSPECIFIED = 0;
+    CODEC_RAW = 1;
+    CODEC_GZIP = 2;
+    CODEC_LZOP = 3;
+    CODEC_ZSTD = 4;
+}
+
 message SessionMetaValue {
     map<string, string> value = 1;
 }
@@ -95,7 +95,7 @@ message StreamingWriteClientMessage {
         // If message is bigger than max_block_size - it will be transferred as SIZE/max_block_size blocks. All of
         // this blocks will be with block_count = 0 but not the last one - last one's block_count will be greater than 0;
         // Blocks can be reordered upto max_flush_window_size of uncompressed data.
-        // Each block contains concatenated client messages, compressed by chosen codec. 
+        // Each block contains concatenated client messages, compressed by chosen codec.
         // If there is not full client message inside block, then all block contains only this part of message.
         // blocks:      A A A B B B BCDE
         // offset:      1 1 1 2 2 2 2
@@ -152,8 +152,8 @@ message StreamingWriteServerMessage {
 
         // Block (see StreamingWriteClientMessage.WriteRequest.blocks_data) format version supported by server or configured for a topic. Client must write data only with them.
         int64 block_format_version = 6;
-        // Client can only use compression codecs from this set to write messages to topic, session will be closed with BAD_REQUEST otherwise. 
-        repeated Codec supported_codecs = 10; 
+        // Client can only use compression codecs from this set to write messages to topic, session will be closed with BAD_REQUEST otherwise.
+        repeated Codec supported_codecs = 10;
 
         // Maximal flush window size choosed by server. Size of uncompressed data not sended to server must not be bigger than flush window size.
         // In other words, this is maximal size of gap inside uncompressed data, which is not sended to server yet.
@@ -235,428 +235,428 @@ message CommitOffsetRange {
     uint64 end_offset = 3;
 }
 
-// TODO: replace with it actual protocol client message 
+// TODO: replace with it actual protocol client message
 /**
- * Request for read session. Contains one of: 
- *      InitRequest - handshake request. 
- *      ReadRequest - request for data. 
- *      CommitRequest - request for commit of some read data. 
- *      CreatePartitionStreamResponse - signal for server that client is ready to get data from partition. 
- *      DestroyPartitionStreamResponse - signal for server that client finished working with partition. Must be sent only after corresponding Release request from server. 
- *      StopReadRequest - signal for server that client is not ready to get more data from this partition. 
- *      ResumeReadRequest - signal for server that client is ready to get more data from this partition. 
- */ 
-message StreamingReadClientMessageNew { 
-    oneof client_message { 
-        InitRequest init_request = 1; 
-        ReadRequest read_request = 2; 
-        CreatePartitionStreamResponse create_partition_stream_response = 3; 
-        CommitRequest commit_request = 4; 
-        DestroyPartitionStreamResponse destroy_partition_stream_response = 5; 
-        StopReadRequest stop_read_request = 6; 
-        ResumeReadRequest resume_read_request = 7; 
-        PartitionStreamStatusRequest partition_stream_status_request = 8; 
-        AddTopicRequest add_topic_request = 9; 
-        RemoveTopicRequest remove_topic_request = 10; 
-    } 
- 
-    // User credentials if update is needed or empty string. 
-    string token = 20; 
- 
-    // Handshake request. 
-    message InitRequest { 
-        // Message that describes topic to read. 
-        // Topics that will be read by this session. 
-        repeated TopicReadSettings topics_read_settings = 1; 
-        // Flag that indicates reading only of original topics in cluster or all including mirrored. 
-        bool read_only_original = 2; 
-        // Path of consumer that is used for reading by this session. 
-        string consumer = 3; 
- 
-        // Skip all messages that has write timestamp smaller than now - max_time_lag_ms. 
-        int64 max_lag_duration_ms = 4; 
-        // Read data only after this timestamp from all topics. 
-        int64 start_from_written_at_ms = 5; 
- 
-        // Maximum block format version supported by the client. Server will asses this parameter and return actual data blocks version in 
-        // StreamingReadServerMessage.InitResponse.block_format_version_by_topic (and StreamingReadServerMessage.AddTopicResponse.block_format_version) 
-        // or error if client will not be able to read data. 
-        int64 max_supported_block_format_version = 6; 
- 
-        // Maximal size of client cache for message_group_id, ip and meta, per partition. 
-        // There is separate caches for each partition partition streams. 
-        // There is separate caches for message group identifiers, ip and meta inside one partition partition stream. 
-        int64 max_meta_cache_size = 10; 
- 
-        // State of client read session. Could be provided to server for retries. 
-        message State { 
-            message PartitionStreamState { 
-                enum Status { 
-                    // Not used state. 
-                    STATUS_UNSPECIFIED = 0; 
-                    // Client seen Create message but not yet responded to server with Created message. 
-                    CREATING = 1; 
-                    // Client seen Destroy message but not yet responded with Released message. 
-                    DESTROYING = 2; 
-                    // Client sent Created or ResumeReadRequest message to server for this partition stream. 
-                    READING = 3; 
-                    // Client sent StopReadRequest for this partition stream. 
-                    STOPPED = 4; 
-                } 
-                // Partition partition stream. 
-                PartitionStream partition_stream = 1; 
-                // Current read offset if has one. Actual for states DESTROYING, READING and STOPPED. 
-                int64 read_offset = 2; 
-                // Ranges of committed by client offsets. 
-                repeated OffsetsRange offset_ranges = 3; 
-                // Status of partition stream. 
-                Status status = 4; 
-            } 
-            repeated PartitionStreamState partition_streams_states = 1; 
-        } 
- 
-        // Session identifier for retries. Must be the same as session_id from Inited server response. If this is first connect, not retry - do not use this field. 
-        string session_id = 100; 
-        // 0 for first init message and incremental value for connect retries. 
-        int64 connection_attempt = 101; 
-        // Formed state for retries. If not retry - do not use this field. 
-        State state = 102; 
- 
-        int64 idle_timeout_ms = 200; 
-    } 
- 
-    // TODO: add topics/groups and remove them from reading 
- 
-    // Message that represents client readiness for receiving more data. 
-    message ReadRequest { 
-        // Client acquired this amount of free bytes more for buffer. Server can send more data at most of this uncompressed size. 
-        // Subsequent messages with 5 and 10 request_uncompressed_size are treated by server that it can send messages for at most 15 bytes. 
-        int64 request_uncompressed_size = 1; 
-    } 
- 
-    // Signal for server that cient is ready to recive data for partition. 
-    message CreatePartitionStreamResponse { 
-        // Partition stream identifier of partition to start read. 
-        int64 partition_stream_id = 1; 
- 
-        // Start reading from partition offset that is not less than read_offset. 
-        // Init.max_time_lag_ms and Init.read_timestamp_ms could lead to skip of more messages. 
-        // The same with actual committed offset. Regardless of set read_offset server will return data from maximal offset from read_offset, actual committed offset 
-        // and offsets calculated from Init.max_time_lag_ms and Init.read_timestamp_ms. 
-        int64 read_offset = 2; 
-        // All messages with offset less than commit_offset are processed by client. Server will commit this position if this is not done yet. 
-        int64 commit_offset = 3; 
- 
-        // This option will enable sanity check on server for read_offset. Server will verify that read_offset is no less that actual committed offset. 
-        // If verification will fail then server will kill this read session and client will find out error in reading logic. 
-        // If client is not setting read_offset, sanity check will fail so do not set verify_read_offset if you not setting correct read_offset. 
-        bool verify_read_offset = 4; 
- 
-    } 
- 
-    // Signal for server that client finished working with this partition. Must be sent only after corresponding Release request from server. 
-    // Server will give this partition to other read session only after Released signal. 
-    message DestroyPartitionStreamResponse { 
-        // Partition stream identifier of partition partition stream that is released by client. 
-        int64 partition_stream_id = 1; 
-    } 
- 
-    // Signal for server that client is not ready to recieve more data from this partition. 
-    message StopReadRequest { 
-        repeated int64 partition_stream_ids = 1; 
-    } 
- 
-    // Signal for server that client is ready to receive more data from this partition. 
-    message ResumeReadRequest { 
-        repeated int64 partition_stream_ids = 1; 
- 
-        // Offset to start reading - may be smaller than known one in case of dropping of read-ahead in client lib. 
-        repeated int64 read_offsets = 2; 
- 
-        // Cookie for matching data from PartitionStream after resuming. Must be greater than zero. 
-        repeated int64 resume_cookies = 3; 
-    } 
- 
-    // Signal for server that client processed some read data. 
-    message CommitRequest { 
-        // Partition offsets that indicates processed data. 
-        repeated PartitionCommit commits = 1; 
-    } 
- 
-    message PartitionStreamStatusRequest { 
-        int64 partition_stream_id = 1; 
-    } 
- 
-    // Add topic to current read session 
-    message AddTopicRequest { 
-        TopicReadSettings topic_read_settings = 1; 
-    } 
- 
-    // Remove topic from current read session 
-    message RemoveTopicRequest { 
-        string topic = 1; 
-    } 
- 
-    message TopicReadSettings { 
-        // Topic path. 
-        string topic = 1; 
-        // Partition groups that will be read by this session. 
-        // If list is empty - then session will read all partition groups. 
-        repeated int64 partition_group_ids = 2; 
-        // Read data only after this timestamp from this topic. 
-        int64 start_from_written_at_ms = 3; 
-    } 
- 
-    /** 
-     * Message that is used for describing commit. 
-     */ 
-    message PartitionCommit { 
-        // Identifier of partition stream with data to commit. 
-        int64 partition_stream_id = 1; 
-        // Processed ranges. 
-        repeated OffsetsRange offsets = 2; 
-    } 
-} 
- 
-// TODO: replace with it actual protocol server message 
-/** 
- * Response for read session. Contains one of : 
- *      InitResponse - handshake response from server. 
- *      BatchReadResponse - portion of data. 
- *      CommitResponse - acknowledgment for commit. 
- *      CreatePartitionStreamRequest - command from server to create a partition partition stream. 
- *      DestroyPartitionStreamRequest - command from server to destroy a partition partition stream. 
- */ 
-message StreamingReadServerMessageNew { 
-    oneof server_message { 
-        InitResponse init_response = 3; 
-        BatchReadResponse batch_read_response = 4; 
-        CreatePartitionStreamRequest create_partition_stream_request = 5; 
-        DestroyPartitionStreamRequest destroy_partition_stream_request = 6; 
-        CommitResponse commit_response = 7; 
-        PartitionStreamStatusResponse partition_stream_status_response = 8; 
-        StopReadResponse stop_read_response = 9; 
-        ResumeReadResponse resume_read_response = 10; 
-        AddTopicResponse add_topic_response = 11; 
-        RemoveTopicResponse remove_topic_response = 12; 
-    } 
- 
-    Ydb.StatusIds.StatusCode status = 1; 
- 
-    repeated Ydb.Issue.IssueMessage issues = 2; 
- 
-    // Handshake response. 
-    message InitResponse { 
-        // Read session identifier for debug purposes. 
-        string session_id = 1; 
-        // Block format version of data client will receive from topics. 
-        map<string, int64> block_format_version_by_topic = 2; 
- 
-        // Choosed maximan cache size by server. 
-        // Client must use cache of this size. Could change on retries - reduce size of cache in this case. 
-        int64 max_meta_cache_size = 10; 
-    } 
- 
-    // Command to create a partition partition stream. 
-    // Client must react on this signal by sending StartRead when ready recieve data from this partition. 
-    message CreatePartitionStreamRequest { 
-        // Partition partition stream description. 
-        PartitionStream partition_stream = 1; 
- 
-        // Actual committed offset. 
-        int64 committed_offset = 2; 
-        // Offset of first not existing message in partition till now. 
-        int64 end_offset = 3; 
- 
-    } 
- 
-    // Command to destroy concrete partition stream. 
-    message DestroyPartitionStreamRequest { 
-        // Identifier of partition partition stream that is ready to be closed by server. 
-        int64 partition_stream_id = 1; 
- 
-        // Flag of gracefull or not destroy. 
-        // If True then server is waiting for Destroyed signal from client before giving of this partition for other read session. 
-        // Server will not send more data from this partition. 
-        // Client can process all received data and wait for commit and only after send Destroyed signal. 
-        // If False then server gives partition for other session right now. 
-        // All futher commits for this PartitionStream has no effect. Server is not waiting for Destroyed signal. 
-        bool graceful = 2; 
- 
-        // Last known committed offset. 
-        int64 committed_offset = 3; 
-    } 
- 
-    // Acknowledgement for commits. 
-    message CommitResponse { 
-        // Per-partition commit representation. 
-        message PartitionCommittedOffset { 
-            // Partition partition stream identifier. 
-            int64 partition_stream_id = 1; 
-            // Last committed offset. 
-            int64 committed_offset = 2; 
-        } 
-        // Partitions with progress. 
-        repeated PartitionCommittedOffset partitions_committed_offsets = 1; 
-    } 
- 
-    // Readed data. 
-    message BatchReadResponse { 
-        // One client message representation. 
-        // Client lib must send commit right now for all skipped data (from it's read offset till first offset in range). 
-        message PartitionData { 
-            // Data inside this message is from partition stream with this identifier. 
-            int64 partition_stream_id = 1; 
- 
-            // Offsets in partition that assigned for messages. 
-            // Unique value for clientside deduplication - (topic, cluster, partition_id, offset). 
-            repeated int64 offsets = 2; 
-            // Sequence numbers that provided with messages on write from client. 
-            // Same size as offsets. 
-            // Unique value for clientside deduplication - (topic, cluster, message_group_id, sequence_number). 
-            repeated int64 sequence_numbers = 3; 
-            // Timestamps of creation of messages provided on write from client. 
-            // Same size as offsets. 
-            repeated int64 created_at_ms = 4; 
-            // Timestamps of writing in partition for client messages. 
-            // Same size as offsets. 
-            repeated int64 written_at_ms = 5; 
- 
-             // New messageGroupIds for updating cache. 
-             // Size of vector is the same as number of negative values in message_group_id_indexes. 
-            repeated string message_group_ids = 6; 
-            // Indexes of messageGroupIds. 
-            // same size as offsets. 
-            // Negative values (-X) means - put first not used messageGroupId from message_group_ids on index X in cache and use it for this client message. 
-            // Positive values (X) means -use element by index X from cache for this client message. Do not change state of cache. 
-            // Assumptions: 
-            //      - Server will use positive values only for proposed before indexes. 
-            //      - Each value is from 1 to max_meta_cache_size by abs. 
-            //      - Do not make assumptions about choosing algorihm. 
-            //      - There is separate caches of size max_meta_cache_size for different partition and different metadata fileds - message_group_id, ip and session_meta_data. 
-            //      - Number of negative values in message_group_id_indexes vector is the same as length of message_group_ids vector. 
-            // Example: 
-            //                max_meta_cache_size :  2 
-            //                      Cache indexes :  1  2 
-            //      Cache state before processing :  s0,? // ? means not set yet. 
-            // 
-            //                  message_group_ids :  s1 s2 s3 s1 
-            //           message_group_id_indexes :  -1    -2    1     2     1     1     -1    2     -2 
-            //                        cache state :  s1,?  s1,s2 s1,s2 s1,s2 s1,s2 s1,s2 s3,s2 s3,s2 s3,s1 
-            //             real message group ids :  s1    s2    s1    s2    s1    s1    s3    s2    s1 
-            //                      Cache indexes :  1  2 
-            //       Cache state after processing :  s3,s1 
-            repeated sint64 message_group_id_indexes = 7; 
- 
-            // New ips for updating ip cache. 
-            repeated string ips = 8; 
-            // Same as message_group_id_indexes but for ips. 
-            repeated sint64 ip_indexes = 9; 
- 
-            // New session meta datas for updating cache. 
-            repeated SessionMetaValue message_session_meta = 10; 
-            // Same as message_group_id_indexes but for session meta data. 
-            repeated sint64 message_session_meta_indexes = 11; 
- 
-            // Client messages sizes. 
-            // Same size as offsets. 
-            repeated int64 message_sizes = 12; 
- 
-            // Block must contain whole client message when it's size is not bigger that max_block_size. 
-            // If message is bigger than max_block_size - it will be transferred as SIZE/max_block_size blocks. All of this blocks will be with block_count = 0 but not the last one - last one's block_count will be 0; 
-            // Blocks can be reordered upto provided by client uncompressed free buffer size. 
-            // blocks:      A A A B B B CDE 
-            // offset:      1 1 1 4 4 4 6 
-            // part_number: 0 1 2 0 1 2 0 
-            // count:       0 0 1 0 0 1 3 
-            // Offset will be the same as in Offsets. 
-            repeated int64 blocks_offsets = 13; 
-            repeated int64 blocks_part_numbers = 14; 
-            // How many complete messages and imcomplete messages end parts (one at most) this block contains 
-            repeated int64 blocks_message_counts = 15; 
-            repeated int64 blocks_uncompressed_sizes = 16; 
+ * Request for read session. Contains one of:
+ *      InitRequest - handshake request.
+ *      ReadRequest - request for data.
+ *      CommitRequest - request for commit of some read data.
+ *      CreatePartitionStreamResponse - signal for server that client is ready to get data from partition.
+ *      DestroyPartitionStreamResponse - signal for server that client finished working with partition. Must be sent only after corresponding Release request from server.
+ *      StopReadRequest - signal for server that client is not ready to get more data from this partition.
+ *      ResumeReadRequest - signal for server that client is ready to get more data from this partition.
+ */
+message StreamingReadClientMessageNew {
+    oneof client_message {
+        InitRequest init_request = 1;
+        ReadRequest read_request = 2;
+        CreatePartitionStreamResponse create_partition_stream_response = 3;
+        CommitRequest commit_request = 4;
+        DestroyPartitionStreamResponse destroy_partition_stream_response = 5;
+        StopReadRequest stop_read_request = 6;
+        ResumeReadRequest resume_read_request = 7;
+        PartitionStreamStatusRequest partition_stream_status_request = 8;
+        AddTopicRequest add_topic_request = 9;
+        RemoveTopicRequest remove_topic_request = 10;
+    }
+
+    // User credentials if update is needed or empty string.
+    string token = 20;
+
+    // Handshake request.
+    message InitRequest {
+        // Message that describes topic to read.
+        // Topics that will be read by this session.
+        repeated TopicReadSettings topics_read_settings = 1;
+        // Flag that indicates reading only of original topics in cluster or all including mirrored.
+        bool read_only_original = 2;
+        // Path of consumer that is used for reading by this session.
+        string consumer = 3;
+
+        // Skip all messages that has write timestamp smaller than now - max_time_lag_ms.
+        int64 max_lag_duration_ms = 4;
+        // Read data only after this timestamp from all topics.
+        int64 start_from_written_at_ms = 5;
+
+        // Maximum block format version supported by the client. Server will asses this parameter and return actual data blocks version in
+        // StreamingReadServerMessage.InitResponse.block_format_version_by_topic (and StreamingReadServerMessage.AddTopicResponse.block_format_version)
+        // or error if client will not be able to read data.
+        int64 max_supported_block_format_version = 6;
+
+        // Maximal size of client cache for message_group_id, ip and meta, per partition.
+        // There is separate caches for each partition partition streams.
+        // There is separate caches for message group identifiers, ip and meta inside one partition partition stream.
+        int64 max_meta_cache_size = 10;
+
+        // State of client read session. Could be provided to server for retries.
+        message State {
+            message PartitionStreamState {
+                enum Status {
+                    // Not used state.
+                    STATUS_UNSPECIFIED = 0;
+                    // Client seen Create message but not yet responded to server with Created message.
+                    CREATING = 1;
+                    // Client seen Destroy message but not yet responded with Released message.
+                    DESTROYING = 2;
+                    // Client sent Created or ResumeReadRequest message to server for this partition stream.
+                    READING = 3;
+                    // Client sent StopReadRequest for this partition stream.
+                    STOPPED = 4;
+                }
+                // Partition partition stream.
+                PartitionStream partition_stream = 1;
+                // Current read offset if has one. Actual for states DESTROYING, READING and STOPPED.
+                int64 read_offset = 2;
+                // Ranges of committed by client offsets.
+                repeated OffsetsRange offset_ranges = 3;
+                // Status of partition stream.
+                Status status = 4;
+            }
+            repeated PartitionStreamState partition_streams_states = 1;
+        }
+
+        // Session identifier for retries. Must be the same as session_id from Inited server response. If this is first connect, not retry - do not use this field.
+        string session_id = 100;
+        // 0 for first init message and incremental value for connect retries.
+        int64 connection_attempt = 101;
+        // Formed state for retries. If not retry - do not use this field.
+        State state = 102;
+
+        int64 idle_timeout_ms = 200;
+    }
+
+    // TODO: add topics/groups and remove them from reading
+
+    // Message that represents client readiness for receiving more data.
+    message ReadRequest {
+        // Client acquired this amount of free bytes more for buffer. Server can send more data at most of this uncompressed size.
+        // Subsequent messages with 5 and 10 request_uncompressed_size are treated by server that it can send messages for at most 15 bytes.
+        int64 request_uncompressed_size = 1;
+    }
+
+    // Signal for server that cient is ready to recive data for partition.
+    message CreatePartitionStreamResponse {
+        // Partition stream identifier of partition to start read.
+        int64 partition_stream_id = 1;
+
+        // Start reading from partition offset that is not less than read_offset.
+        // Init.max_time_lag_ms and Init.read_timestamp_ms could lead to skip of more messages.
+        // The same with actual committed offset. Regardless of set read_offset server will return data from maximal offset from read_offset, actual committed offset
+        // and offsets calculated from Init.max_time_lag_ms and Init.read_timestamp_ms.
+        int64 read_offset = 2;
+        // All messages with offset less than commit_offset are processed by client. Server will commit this position if this is not done yet.
+        int64 commit_offset = 3;
+
+        // This option will enable sanity check on server for read_offset. Server will verify that read_offset is no less that actual committed offset.
+        // If verification will fail then server will kill this read session and client will find out error in reading logic.
+        // If client is not setting read_offset, sanity check will fail so do not set verify_read_offset if you not setting correct read_offset.
+        bool verify_read_offset = 4;
+
+    }
+
+    // Signal for server that client finished working with this partition. Must be sent only after corresponding Release request from server.
+    // Server will give this partition to other read session only after Released signal.
+    message DestroyPartitionStreamResponse {
+        // Partition stream identifier of partition partition stream that is released by client.
+        int64 partition_stream_id = 1;
+    }
+
+    // Signal for server that client is not ready to recieve more data from this partition.
+    message StopReadRequest {
+        repeated int64 partition_stream_ids = 1;
+    }
+
+    // Signal for server that client is ready to receive more data from this partition.
+    message ResumeReadRequest {
+        repeated int64 partition_stream_ids = 1;
+
+        // Offset to start reading - may be smaller than known one in case of dropping of read-ahead in client lib.
+        repeated int64 read_offsets = 2;
+
+        // Cookie for matching data from PartitionStream after resuming. Must be greater than zero.
+        repeated int64 resume_cookies = 3;
+    }
+
+    // Signal for server that client processed some read data.
+    message CommitRequest {
+        // Partition offsets that indicates processed data.
+        repeated PartitionCommit commits = 1;
+    }
+
+    message PartitionStreamStatusRequest {
+        int64 partition_stream_id = 1;
+    }
+
+    // Add topic to current read session
+    message AddTopicRequest {
+        TopicReadSettings topic_read_settings = 1;
+    }
+
+    // Remove topic from current read session
+    message RemoveTopicRequest {
+        string topic = 1;
+    }
+
+    message TopicReadSettings {
+        // Topic path.
+        string topic = 1;
+        // Partition groups that will be read by this session.
+        // If list is empty - then session will read all partition groups.
+        repeated int64 partition_group_ids = 2;
+        // Read data only after this timestamp from this topic.
+        int64 start_from_written_at_ms = 3;
+    }
+
+    /**
+     * Message that is used for describing commit.
+     */
+    message PartitionCommit {
+        // Identifier of partition stream with data to commit.
+        int64 partition_stream_id = 1;
+        // Processed ranges.
+        repeated OffsetsRange offsets = 2;
+    }
+}
+
+// TODO: replace with it actual protocol server message
+/**
+ * Response for read session. Contains one of :
+ *      InitResponse - handshake response from server.
+ *      BatchReadResponse - portion of data.
+ *      CommitResponse - acknowledgment for commit.
+ *      CreatePartitionStreamRequest - command from server to create a partition partition stream.
+ *      DestroyPartitionStreamRequest - command from server to destroy a partition partition stream.
+ */
+message StreamingReadServerMessageNew {
+    oneof server_message {
+        InitResponse init_response = 3;
+        BatchReadResponse batch_read_response = 4;
+        CreatePartitionStreamRequest create_partition_stream_request = 5;
+        DestroyPartitionStreamRequest destroy_partition_stream_request = 6;
+        CommitResponse commit_response = 7;
+        PartitionStreamStatusResponse partition_stream_status_response = 8;
+        StopReadResponse stop_read_response = 9;
+        ResumeReadResponse resume_read_response = 10;
+        AddTopicResponse add_topic_response = 11;
+        RemoveTopicResponse remove_topic_response = 12;
+    }
+
+    Ydb.StatusIds.StatusCode status = 1;
+
+    repeated Ydb.Issue.IssueMessage issues = 2;
+
+    // Handshake response.
+    message InitResponse {
+        // Read session identifier for debug purposes.
+        string session_id = 1;
+        // Block format version of data client will receive from topics.
+        map<string, int64> block_format_version_by_topic = 2;
+
+        // Choosed maximan cache size by server.
+        // Client must use cache of this size. Could change on retries - reduce size of cache in this case.
+        int64 max_meta_cache_size = 10;
+    }
+
+    // Command to create a partition partition stream.
+    // Client must react on this signal by sending StartRead when ready recieve data from this partition.
+    message CreatePartitionStreamRequest {
+        // Partition partition stream description.
+        PartitionStream partition_stream = 1;
+
+        // Actual committed offset.
+        int64 committed_offset = 2;
+        // Offset of first not existing message in partition till now.
+        int64 end_offset = 3;
+
+    }
+
+    // Command to destroy concrete partition stream.
+    message DestroyPartitionStreamRequest {
+        // Identifier of partition partition stream that is ready to be closed by server.
+        int64 partition_stream_id = 1;
+
+        // Flag of gracefull or not destroy.
+        // If True then server is waiting for Destroyed signal from client before giving of this partition for other read session.
+        // Server will not send more data from this partition.
+        // Client can process all received data and wait for commit and only after send Destroyed signal.
+        // If False then server gives partition for other session right now.
+        // All futher commits for this PartitionStream has no effect. Server is not waiting for Destroyed signal.
+        bool graceful = 2;
+
+        // Last known committed offset.
+        int64 committed_offset = 3;
+    }
+
+    // Acknowledgement for commits.
+    message CommitResponse {
+        // Per-partition commit representation.
+        message PartitionCommittedOffset {
+            // Partition partition stream identifier.
+            int64 partition_stream_id = 1;
+            // Last committed offset.
+            int64 committed_offset = 2;
+        }
+        // Partitions with progress.
+        repeated PartitionCommittedOffset partitions_committed_offsets = 1;
+    }
+
+    // Readed data.
+    message BatchReadResponse {
+        // One client message representation.
+        // Client lib must send commit right now for all skipped data (from it's read offset till first offset in range).
+        message PartitionData {
+            // Data inside this message is from partition stream with this identifier.
+            int64 partition_stream_id = 1;
+
+            // Offsets in partition that assigned for messages.
+            // Unique value for clientside deduplication - (topic, cluster, partition_id, offset).
+            repeated int64 offsets = 2;
+            // Sequence numbers that provided with messages on write from client.
+            // Same size as offsets.
+            // Unique value for clientside deduplication - (topic, cluster, message_group_id, sequence_number).
+            repeated int64 sequence_numbers = 3;
+            // Timestamps of creation of messages provided on write from client.
+            // Same size as offsets.
+            repeated int64 created_at_ms = 4;
+            // Timestamps of writing in partition for client messages.
+            // Same size as offsets.
+            repeated int64 written_at_ms = 5;
+
+             // New messageGroupIds for updating cache.
+             // Size of vector is the same as number of negative values in message_group_id_indexes.
+            repeated string message_group_ids = 6;
+            // Indexes of messageGroupIds.
+            // same size as offsets.
+            // Negative values (-X) means - put first not used messageGroupId from message_group_ids on index X in cache and use it for this client message.
+            // Positive values (X) means -use element by index X from cache for this client message. Do not change state of cache.
+            // Assumptions:
+            //      - Server will use positive values only for proposed before indexes.
+            //      - Each value is from 1 to max_meta_cache_size by abs.
+            //      - Do not make assumptions about choosing algorihm.
+            //      - There is separate caches of size max_meta_cache_size for different partition and different metadata fileds - message_group_id, ip and session_meta_data.
+            //      - Number of negative values in message_group_id_indexes vector is the same as length of message_group_ids vector.
+            // Example:
+            //                max_meta_cache_size :  2
+            //                      Cache indexes :  1  2
+            //      Cache state before processing :  s0,? // ? means not set yet.
+            //
+            //                  message_group_ids :  s1 s2 s3 s1
+            //           message_group_id_indexes :  -1    -2    1     2     1     1     -1    2     -2
+            //                        cache state :  s1,?  s1,s2 s1,s2 s1,s2 s1,s2 s1,s2 s3,s2 s3,s2 s3,s1
+            //             real message group ids :  s1    s2    s1    s2    s1    s1    s3    s2    s1
+            //                      Cache indexes :  1  2
+            //       Cache state after processing :  s3,s1
+            repeated sint64 message_group_id_indexes = 7;
+
+            // New ips for updating ip cache.
+            repeated string ips = 8;
+            // Same as message_group_id_indexes but for ips.
+            repeated sint64 ip_indexes = 9;
+
+            // New session meta datas for updating cache.
+            repeated SessionMetaValue message_session_meta = 10;
+            // Same as message_group_id_indexes but for session meta data.
+            repeated sint64 message_session_meta_indexes = 11;
+
+            // Client messages sizes.
+            // Same size as offsets.
+            repeated int64 message_sizes = 12;
+
+            // Block must contain whole client message when it's size is not bigger that max_block_size.
+            // If message is bigger than max_block_size - it will be transferred as SIZE/max_block_size blocks. All of this blocks will be with block_count = 0 but not the last one - last one's block_count will be 0;
+            // Blocks can be reordered upto provided by client uncompressed free buffer size.
+            // blocks:      A A A B B B CDE
+            // offset:      1 1 1 4 4 4 6
+            // part_number: 0 1 2 0 1 2 0
+            // count:       0 0 1 0 0 1 3
+            // Offset will be the same as in Offsets.
+            repeated int64 blocks_offsets = 13;
+            repeated int64 blocks_part_numbers = 14;
+            // How many complete messages and imcomplete messages end parts (one at most) this block contains
+            repeated int64 blocks_message_counts = 15;
+            repeated int64 blocks_uncompressed_sizes = 16;
             // In block format version 0 each byte contains only block codec identifier
             repeated bytes blocks_headers = 17;
             repeated bytes blocks_data = 18;
- 
-            // Zero if this is not first portion of data after resume or provided by client cookie otherwise. 
-            int64 resume_cookie = 50; 
- 
-            message ReadStatistics { 
-                int64 blobs_from_cache = 1; 
-                int64 blobs_from_disk = 2; 
-                int64 bytes_from_head = 3; 
-                int64 bytes_from_cache = 4; 
-                int64 bytes_from_disk = 5; 
-                int64 repack_duration_ms = 6; 
-            } 
-            ReadStatistics read_statistics = 100; 
-        } 
- 
-        message SkipRange { 
-            // Partition Stream identifier. 
-            int64 partition_stream_id = 1; 
- 
-            // When some data is skipped by client parameters (read_timestamp_ms for example) then range of skipped offsets is sended to client. 
-            // Client lib must commit this range and change read_offset to end of this range. 
-            OffsetsRange skip_range = 2; 
-        } 
- 
-        repeated SkipRange skip_range = 1; 
- 
-        // Per-partition data. 
-        repeated PartitionData partitions = 2; 
- 
-    } 
- 
-    // Response for status requst. 
-    message PartitionStreamStatusResponse { 
-        // Identifier of partition partition stream that is ready to be closed by server. 
-        int64 partition_stream_id = 1; 
- 
-        int64 committed_offset = 2; 
-        int64 end_offset = 3; 
- 
-        // WriteTimestamp of next message (and end_offset) will be not less that WriteWatermarkMs. 
-        int64 written_at_watermark_ms = 4; 
-    } 
- 
-    message StopReadResponse { 
-    } 
- 
-    message ResumeReadResponse { 
-    } 
- 
-    message AddTopicResponse { 
-        // Block format version of data client will receive from the topic. 
-        int64 block_format_version = 1; 
-    } 
- 
-    message RemoveTopicResponse { 
-    } 
-} 
- 
-/** 
- * Message that represens concrete partition partition stream. 
- */ 
-message PartitionStream { 
-    // Topic path of partition. 
-    string topic = 1; 
-    // Cluster of topic instance. 
-    string cluster = 2; 
-    // Partition identifier. Explicit only for debug purposes. 
-    int64 partition_id = 3; 
-    // Partition group identifier. Explicit only for debug purposes. 
-    int64 partition_group_id = 4; 
- 
-    // Identitifier of partition stream. Unique inside one RPC call. 
-    int64 partition_stream_id = 6; 
- 
-    // Opaque blob. Provide it with partition stream in state for session reconnects. 
-    bytes connection_meta = 7; 
-} 
- 
-/** 
+
+            // Zero if this is not first portion of data after resume or provided by client cookie otherwise.
+            int64 resume_cookie = 50;
+
+            message ReadStatistics {
+                int64 blobs_from_cache = 1;
+                int64 blobs_from_disk = 2;
+                int64 bytes_from_head = 3;
+                int64 bytes_from_cache = 4;
+                int64 bytes_from_disk = 5;
+                int64 repack_duration_ms = 6;
+            }
+            ReadStatistics read_statistics = 100;
+        }
+
+        message SkipRange {
+            // Partition Stream identifier.
+            int64 partition_stream_id = 1;
+
+            // When some data is skipped by client parameters (read_timestamp_ms for example) then range of skipped offsets is sended to client.
+            // Client lib must commit this range and change read_offset to end of this range.
+            OffsetsRange skip_range = 2;
+        }
+
+        repeated SkipRange skip_range = 1;
+
+        // Per-partition data.
+        repeated PartitionData partitions = 2;
+
+    }
+
+    // Response for status requst.
+    message PartitionStreamStatusResponse {
+        // Identifier of partition partition stream that is ready to be closed by server.
+        int64 partition_stream_id = 1;
+
+        int64 committed_offset = 2;
+        int64 end_offset = 3;
+
+        // WriteTimestamp of next message (and end_offset) will be not less that WriteWatermarkMs.
+        int64 written_at_watermark_ms = 4;
+    }
+
+    message StopReadResponse {
+    }
+
+    message ResumeReadResponse {
+    }
+
+    message AddTopicResponse {
+        // Block format version of data client will receive from the topic.
+        int64 block_format_version = 1;
+    }
+
+    message RemoveTopicResponse {
+    }
+}
+
+/**
+ * Message that represens concrete partition partition stream.
+ */
+message PartitionStream {
+    // Topic path of partition.
+    string topic = 1;
+    // Cluster of topic instance.
+    string cluster = 2;
+    // Partition identifier. Explicit only for debug purposes.
+    int64 partition_id = 3;
+    // Partition group identifier. Explicit only for debug purposes.
+    int64 partition_group_id = 4;
+
+    // Identitifier of partition stream. Unique inside one RPC call.
+    int64 partition_stream_id = 6;
+
+    // Opaque blob. Provide it with partition stream in state for session reconnects.
+    bytes connection_meta = 7;
+}
+
+/**
  * Request for read session. Contains one of :
  *      Init - handshake request.
  *      Read - request for data.
@@ -665,86 +665,86 @@ message PartitionStream {
  *      Released - signal for server that client finished working with partition. Must be sent only after corresponding Release request from server.
  */
 
-message MigrationStreamingReadClientMessage { 
-    message TopicReadSettings { 
-        // Topic path. 
-        string topic = 1; 
-        // Partition groups that will be read by this session. 
-        // If list is empty - then session will read all partition groups. 
-        repeated int64 partition_group_ids = 2; 
-        // Read data only after this timestamp from this topic. 
-        int64 start_from_written_at_ms = 3; 
-    } 
- 
+message MigrationStreamingReadClientMessage {
+    message TopicReadSettings {
+        // Topic path.
+        string topic = 1;
+        // Partition groups that will be read by this session.
+        // If list is empty - then session will read all partition groups.
+        repeated int64 partition_group_ids = 2;
+        // Read data only after this timestamp from this topic.
+        int64 start_from_written_at_ms = 3;
+    }
+
     // Handshake request.
-    message InitRequest { 
-        // Message that describes topic to read. 
+    message InitRequest {
+        // Message that describes topic to read.
         // Topics that will be read by this session.
-        repeated TopicReadSettings topics_read_settings = 1; 
+        repeated TopicReadSettings topics_read_settings = 1;
         // Flag that indicates reading only of original topics in cluster or all including mirrored.
         bool read_only_original = 2;
-        // Path of consumer that is used for reading by this session. 
-        string consumer = 3; 
+        // Path of consumer that is used for reading by this session.
+        string consumer = 3;
 
-        // Skip all messages that has write timestamp smaller than now - max_time_lag_ms. 
-        int64 max_lag_duration_ms = 4; 
-        // Read data only after this timestamp from all topics. 
-        int64 start_from_written_at_ms = 5; 
+        // Skip all messages that has write timestamp smaller than now - max_time_lag_ms.
+        int64 max_lag_duration_ms = 4;
+        // Read data only after this timestamp from all topics.
+        int64 start_from_written_at_ms = 5;
 
-        // Maximum block format version supported by the client. Server will asses this parameter and return actual data blocks version in 
-        // StreamingReadServerMessage.InitResponse.block_format_version_by_topic (and StreamingReadServerMessage.AddTopicResponse.block_format_version) 
-        // or error if client will not be able to read data. 
-        int64 max_supported_block_format_version = 6; 
+        // Maximum block format version supported by the client. Server will asses this parameter and return actual data blocks version in
+        // StreamingReadServerMessage.InitResponse.block_format_version_by_topic (and StreamingReadServerMessage.AddTopicResponse.block_format_version)
+        // or error if client will not be able to read data.
+        int64 max_supported_block_format_version = 6;
 
-        // Maximal size of client cache for message_group_id, ip and meta, per partition. 
-        // There is separate caches for each partition partition streams. 
-        // There is separate caches for message group identifiers, ip and meta inside one partition partition stream. 
-        int64 max_meta_cache_size = 10; 
+        // Maximal size of client cache for message_group_id, ip and meta, per partition.
+        // There is separate caches for each partition partition streams.
+        // There is separate caches for message group identifiers, ip and meta inside one partition partition stream.
+        int64 max_meta_cache_size = 10;
 
-        // State of client read session. Could be provided to server for retries. 
-        message State { 
-            message PartitionStreamState { 
-                enum Status { 
-                    // Not used state. 
-                    STATUS_UNSPECIFIED = 0; 
-                    // Client seen Create message but not yet responded to server with Created message. 
-                    CREATING = 1; 
-                    // Client seen Destroy message but not yet responded with Released message. 
-                    DESTROYING = 2; 
-                    // Client sent Created or ResumeReadRequest message to server for this partition stream. 
-                    READING = 3; 
-                    // Client sent StopReadRequest for this partition stream. 
-                    STOPPED = 4; 
-                } 
-                // Partition partition stream. 
-                PartitionStream partition_stream = 1; 
-                // Current read offset if has one. Actual for states DESTROYING, READING and STOPPED. 
-                int64 read_offset = 2; 
-                // Ranges of committed by client offsets. 
-                repeated OffsetsRange offset_ranges = 3; 
-                // Status of partition stream. 
-                Status status = 4; 
-            } 
-            repeated PartitionStreamState partition_streams_states = 1; 
-        } 
- 
-        // Session identifier for retries. Must be the same as session_id from Inited server response. If this is first connect, not retry - do not use this field. 
-        string session_id = 100; 
-        // 0 for first init message and incremental value for connect retries. 
-        int64 connection_attempt = 101; 
-        // Formed state for retries. If not retry - do not use this field. 
-        State state = 102; 
- 
-        int64 idle_timeout_ms = 200; 
- 
- 
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////// 
-        // TODO: remove after refactoring 
-        // Single read request params. 
-        ReadParams read_params = 42; 
+        // State of client read session. Could be provided to server for retries.
+        message State {
+            message PartitionStreamState {
+                enum Status {
+                    // Not used state.
+                    STATUS_UNSPECIFIED = 0;
+                    // Client seen Create message but not yet responded to server with Created message.
+                    CREATING = 1;
+                    // Client seen Destroy message but not yet responded with Released message.
+                    DESTROYING = 2;
+                    // Client sent Created or ResumeReadRequest message to server for this partition stream.
+                    READING = 3;
+                    // Client sent StopReadRequest for this partition stream.
+                    STOPPED = 4;
+                }
+                // Partition partition stream.
+                PartitionStream partition_stream = 1;
+                // Current read offset if has one. Actual for states DESTROYING, READING and STOPPED.
+                int64 read_offset = 2;
+                // Ranges of committed by client offsets.
+                repeated OffsetsRange offset_ranges = 3;
+                // Status of partition stream.
+                Status status = 4;
+            }
+            repeated PartitionStreamState partition_streams_states = 1;
+        }
+
+        // Session identifier for retries. Must be the same as session_id from Inited server response. If this is first connect, not retry - do not use this field.
+        string session_id = 100;
+        // 0 for first init message and incremental value for connect retries.
+        int64 connection_attempt = 101;
+        // Formed state for retries. If not retry - do not use this field.
+        State state = 102;
+
+        int64 idle_timeout_ms = 200;
+
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // TODO: remove after refactoring
+        // Single read request params.
+        ReadParams read_params = 42;
 
         bool ranges_mode = 442;
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
     }
 
     // Request of single read.
@@ -812,7 +812,7 @@ message MigrationStreamingReadClientMessage {
     }
 
     oneof request {
-        InitRequest init_request = 1; 
+        InitRequest init_request = 1;
         Read read = 2;
         StartRead start_read = 3;
         Commit commit = 4;
@@ -835,17 +835,17 @@ message MigrationStreamingReadClientMessage {
  *      Release - signal from server for releasing of partition.
  */
 
-message MigrationStreamingReadServerMessage { 
+message MigrationStreamingReadServerMessage {
     // Handshake response.
-    message InitResponse { 
+    message InitResponse {
         // Read session identifier for debug purposes.
-        string session_id = 1; 
-        // Block format version of data client will receive from topics. 
-        map<string, int64> block_format_version_by_topic = 2; 
- 
-        // Choosed maximan cache size by server. 
-        // Client must use cache of this size. Could change on retries - reduce size of cache in this case. 
-        int64 max_meta_cache_size = 10; 
+        string session_id = 1;
+        // Block format version of data client will receive from topics.
+        map<string, int64> block_format_version_by_topic = 2;
+
+        // Choosed maximan cache size by server.
+        // Client must use cache of this size. Could change on retries - reduce size of cache in this case.
+        int64 max_meta_cache_size = 10;
     }
 
     // Signal that partition is assigned to this read session. Client must react on this signal by sending StartRead when ready.
@@ -905,7 +905,7 @@ message MigrationStreamingReadServerMessage {
             // Timestamp of creation of message provided on write from client.
             uint64 create_timestamp_ms = 3;
             // Codec that is used for data compressing.
-            Codec codec = 4; 
+            Codec codec = 4;
             // Compressed client message body.
             bytes data = 5;
             // Uncompressed size of client message body.
@@ -974,7 +974,7 @@ message MigrationStreamingReadServerMessage {
     repeated Ydb.Issue.IssueMessage issues = 2;
 
     oneof response {
-        InitResponse init_response = 3; 
+        InitResponse init_response = 3;
         DataBatch data_batch = 4;
         Assigned assigned = 5;
         Release release = 6;

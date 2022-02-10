@@ -3,7 +3,7 @@
 
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/shared_resources/db_pool.h>
- 
+
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -15,12 +15,12 @@
 #include <util/generic/guid.h>
 #include <util/system/hostname.h>
 
-#define LOG_E(stream) \ 
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream) 
-#define LOG_I(stream) \ 
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream) 
-#define LOG_D(stream) \ 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream) 
+#define LOG_E(stream) \
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
+#define LOG_I(stream) \
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
+#define LOG_D(stream) \
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, stream)
 
 namespace NYq {
 

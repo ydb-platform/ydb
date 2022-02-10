@@ -6,17 +6,17 @@
 
 namespace NYq {
 
-namespace { 
- 
-bool IsFinishedStatus(YandexQuery::QueryMeta::ComputeStatus status) { 
-    return status == YandexQuery::QueryMeta::ABORTED_BY_SYSTEM 
-        || status == YandexQuery::QueryMeta::ABORTED_BY_USER 
-        || status == YandexQuery::QueryMeta::COMPLETED 
-        || status == YandexQuery::QueryMeta::FAILED; 
-} 
- 
-} // namespace 
- 
+namespace {
+
+bool IsFinishedStatus(YandexQuery::QueryMeta::ComputeStatus status) {
+    return status == YandexQuery::QueryMeta::ABORTED_BY_SYSTEM
+        || status == YandexQuery::QueryMeta::ABORTED_BY_USER
+        || status == YandexQuery::QueryMeta::COMPLETED
+        || status == YandexQuery::QueryMeta::FAILED;
+}
+
+} // namespace
+
 std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructHardPingTask(
     const TEvControlPlaneStorage::TEvPingTaskRequest* request, std::shared_ptr<YandexQuery::QueryAction> response,
     const TString& tablePathPrefix, const TDuration& automaticQueriesTtl) {
@@ -151,23 +151,23 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             *query.mutable_meta()->mutable_result_expire_at() = NProtoInterop::CastToProto(request->Deadline);
         }
 
-        if (request->StateLoadMode) { 
-            internal.set_state_load_mode(request->StateLoadMode); 
-            if (request->StateLoadMode == YandexQuery::FROM_LAST_CHECKPOINT) { // Saved checkpoint 
-                query.mutable_meta()->set_has_saved_checkpoints(true); 
-            } 
-        } 
- 
-        if (request->StreamingDisposition) { 
-            internal.mutable_disposition()->CopyFrom(*request->StreamingDisposition); 
-        } 
- 
-        if (request->Status && IsFinishedStatus(*request->Status)) { 
-            internal.clear_created_topic_consumers(); 
-            internal.clear_dq_graph(); 
-            internal.clear_dq_graph_index(); 
-        } 
- 
+        if (request->StateLoadMode) {
+            internal.set_state_load_mode(request->StateLoadMode);
+            if (request->StateLoadMode == YandexQuery::FROM_LAST_CHECKPOINT) { // Saved checkpoint
+                query.mutable_meta()->set_has_saved_checkpoints(true);
+            }
+        }
+
+        if (request->StreamingDisposition) {
+            internal.mutable_disposition()->CopyFrom(*request->StreamingDisposition);
+        }
+
+        if (request->Status && IsFinishedStatus(*request->Status)) {
+            internal.clear_created_topic_consumers();
+            internal.clear_dq_graph();
+            internal.clear_dq_graph_index();
+        }
+
         if (!request->CreatedTopicConsumers.empty()) {
             std::set<Yq::Private::TopicConsumer, TTopicConsumerLess> mergedConsumers;
             for (auto&& c : *internal.mutable_created_topic_consumers()) {

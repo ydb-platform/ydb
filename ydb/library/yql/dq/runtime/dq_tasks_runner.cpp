@@ -124,11 +124,11 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
     TVector<IDqInput::TPtr>&& inputs, const THolderFactory& holderFactory)
 {
     switch (inputDesc.GetTypeCase()) {
-        case NYql::NDqProto::TTaskInput::kSource: 
-            Y_VERIFY(inputs.size() == 1); 
-            [[fallthrough]]; 
+        case NYql::NDqProto::TTaskInput::kSource:
+            Y_VERIFY(inputs.size() == 1);
+            [[fallthrough]];
         case NYql::NDqProto::TTaskInput::kUnionAll:
-            return CreateInputUnionValue(std::move(inputs), holderFactory); 
+            return CreateInputUnionValue(std::move(inputs), holderFactory);
         case NYql::NDqProto::TTaskInput::kMerge: {
             const auto& protoSortCols = inputDesc.GetMerge().GetSortColumns();
             TVector<TSortColumnInfo> sortColsInfo;
@@ -143,15 +143,15 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
 }
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type,
-    const NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs) 
+    const NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs)
 {
     switch (outputDesc.GetTypeCase()) {
-        case NDqProto::TTaskOutput::kSink: 
-            Y_VERIFY(outputDesc.ChannelsSize() == 0); 
-            [[fallthrough]]; 
+        case NDqProto::TTaskOutput::kSink:
+            Y_VERIFY(outputDesc.ChannelsSize() == 0);
+            [[fallthrough]];
         case NDqProto::TTaskOutput::kMap: {
-            YQL_ENSURE(outputs.size() == 1); 
-            return CreateOutputMapConsumer(outputs[0]); 
+            YQL_ENSURE(outputs.size() == 1);
+            return CreateOutputMapConsumer(outputs[0]);
         }
 
         case NDqProto::TTaskOutput::kHashPartition: {
@@ -166,12 +166,12 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
                 channelIds[i] = outputDesc.GetChannels(i).GetId();
             }
 
-            return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumnTypes), 
+            return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumnTypes),
                 std::move(keyColumnIndices), typeEnv);
         }
 
         case NDqProto::TTaskOutput::kBroadcast: {
-            return CreateOutputBroadcastConsumer(std::move(outputs)); 
+            return CreateOutputBroadcastConsumer(std::move(outputs));
         }
 
         case NDqProto::TTaskOutput::kRangePartition: {
@@ -190,9 +190,9 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
 
 IDqOutputConsumer::TPtr TDqTaskRunnerExecutionContext::CreateOutputConsumer(const TTaskOutput& outputDesc,
     const NKikimr::NMiniKQL::TType* type, NUdf::IApplyContext*, const TTypeEnvironment& typeEnv,
-    TVector<IDqOutput::TPtr>&& outputs) const 
+    TVector<IDqOutput::TPtr>&& outputs) const
 {
-    return DqBuildOutputConsumer(outputDesc, type, typeEnv, std::move(outputs)); 
+    return DqBuildOutputConsumer(outputDesc, type, typeEnv, std::move(outputs));
 }
 
 IDqChannelStorage::TPtr TDqTaskRunnerExecutionContext::CreateChannelStorage(ui64 /* channelId */) const {
@@ -410,22 +410,22 @@ public:
 
             TVector<IDqInput::TPtr> inputs{Reserve(std::max<ui64>(inputDesc.ChannelsSize(), 1))}; // 1 is for "source" type of input.
 
-            if (inputDesc.HasSource()) { 
-                auto source = CreateDqSource(i, ProgramParsed.InputItemTypes[i], 
-                    memoryLimits.ChannelBufferSize, Settings.CollectProfileStats); 
-                auto [_, inserted] = Sources.emplace(i, source); 
-                Y_VERIFY(inserted); 
-                inputs.emplace_back(source); 
-            } else { 
-                for (auto& inputChannelDesc : inputDesc.GetChannels()) { 
-                    ui64 channelId = inputChannelDesc.GetId(); 
-                    auto inputChannel = CreateDqInputChannel(channelId, ProgramParsed.InputItemTypes[i], 
+            if (inputDesc.HasSource()) {
+                auto source = CreateDqSource(i, ProgramParsed.InputItemTypes[i],
+                    memoryLimits.ChannelBufferSize, Settings.CollectProfileStats);
+                auto [_, inserted] = Sources.emplace(i, source);
+                Y_VERIFY(inserted);
+                inputs.emplace_back(source);
+            } else {
+                for (auto& inputChannelDesc : inputDesc.GetChannels()) {
+                    ui64 channelId = inputChannelDesc.GetId();
+                    auto inputChannel = CreateDqInputChannel(channelId, ProgramParsed.InputItemTypes[i],
                         memoryLimits.ChannelBufferSize, Settings.CollectProfileStats, typeEnv, holderFactory,
                         inputChannelDesc.GetTransportVersion());
-                    auto ret = InputChannels.emplace(channelId, inputChannel); 
+                    auto ret = InputChannels.emplace(channelId, inputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated input channelId: " << channelId);
-                    inputs.emplace_back(inputChannel); 
-                } 
+                    inputs.emplace_back(inputChannel);
+                }
             }
 
             auto entryNode = ProgramParsed.CompGraph->GetEntryPoint(i, true);
@@ -444,15 +444,15 @@ public:
             }
 
             TVector<IDqOutput::TPtr> outputs{Reserve(std::max<ui64>(outputDesc.ChannelsSize(), 1))};
-            if (outputDesc.HasSink()) { 
+            if (outputDesc.HasSink()) {
                 auto sink = CreateDqSink(i, ProgramParsed.OutputItemTypes[i], memoryLimits.ChannelBufferSize,
                     Settings.CollectProfileStats);
-                auto [_, inserted] = Sinks.emplace(i, sink); 
-                Y_VERIFY(inserted); 
-                outputs.emplace_back(sink); 
-            } else { 
-                for (auto& outputChannelDesc : outputDesc.GetChannels()) { 
-                    ui64 channelId = outputChannelDesc.GetId(); 
+                auto [_, inserted] = Sinks.emplace(i, sink);
+                Y_VERIFY(inserted);
+                outputs.emplace_back(sink);
+            } else {
+                for (auto& outputChannelDesc : outputDesc.GetChannels()) {
+                    ui64 channelId = outputChannelDesc.GetId();
 
                     TDqOutputChannelSettings settings;
                     settings.MaxStoredBytes = memoryLimits.ChannelBufferSize;
@@ -461,21 +461,21 @@ public:
                     settings.CollectProfileStats = Settings.CollectProfileStats;
                     settings.AllowGeneratorsInUnboxedValues = Settings.AllowGeneratorsInUnboxedValues;
 
-                    if (!outputChannelDesc.GetInMemory()) { 
+                    if (!outputChannelDesc.GetInMemory()) {
                         settings.ChannelStorage = execCtx.CreateChannelStorage(channelId);
-                    } 
+                    }
 
                     auto outputChannel = CreateDqOutputChannel(channelId, ProgramParsed.OutputItemTypes[i], typeEnv,
                         holderFactory, settings, LogFunc);
- 
-                    auto ret = OutputChannels.emplace(channelId, outputChannel); 
+
+                    auto ret = OutputChannels.emplace(channelId, outputChannel);
                     YQL_ENSURE(ret.second, "task: " << TaskId << ", duplicated output channelId: " << channelId);
-                    outputs.emplace_back(outputChannel); 
+                    outputs.emplace_back(outputChannel);
                 }
             }
 
             outputConsumers[i] = execCtx.CreateOutputConsumer(outputDesc, ProgramParsed.OutputItemTypes[i],
-                Context.ApplyCtx, typeEnv, std::move(outputs)); 
+                Context.ApplyCtx, typeEnv, std::move(outputs));
         }
 
         if (outputConsumers.empty()) {
@@ -564,24 +564,24 @@ public:
         return *ptr;
     }
 
-    IDqSource::TPtr GetSource(ui64 inputIndex) override { 
-        auto ptr = Sources.FindPtr(inputIndex); 
+    IDqSource::TPtr GetSource(ui64 inputIndex) override {
+        auto ptr = Sources.FindPtr(inputIndex);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have input index: " << inputIndex);
-        return *ptr; 
-    } 
- 
+        return *ptr;
+    }
+
     IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) override {
         auto ptr = OutputChannels.FindPtr(channelId);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have output channelId: " << channelId);
         return *ptr;
     }
 
-    IDqSink::TPtr GetSink(ui64 outputIndex) override { 
-        auto ptr = Sinks.FindPtr(outputIndex); 
+    IDqSink::TPtr GetSink(ui64 outputIndex) override {
+        auto ptr = Sinks.FindPtr(outputIndex);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have output index: " << outputIndex);
-        return *ptr; 
-    } 
- 
+        return *ptr;
+    }
+
     TGuard<NKikimr::NMiniKQL::TScopedAlloc> BindAllocator(TMaybe<ui64> memoryLimit) override {
         auto guard = Context.TypeEnv ? Context.TypeEnv->BindAllocator() : SelfTypeEnv->BindAllocator();
         if (memoryLimit) {
@@ -598,24 +598,24 @@ public:
         return Context.TypeEnv ? *Context.TypeEnv : *SelfTypeEnv;
     }
 
-    const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override { 
-        return ProgramParsed.CompGraph->GetHolderFactory(); 
-    } 
- 
-    const THashMap<TString, TString>& GetSecureParams() const override { 
-        return Settings.SecureParams; 
-    } 
- 
-    const THashMap<TString, TString>& GetTaskParams() const override { 
-        return Settings.TaskParams; 
-    } 
- 
-    void UpdateStats() override { 
-        if (Stats) { 
-            Stats->RunStatusTimeMetrics.UpdateStatusTime(); 
-        } 
-    } 
- 
+    const NKikimr::NMiniKQL::THolderFactory& GetHolderFactory() const override {
+        return ProgramParsed.CompGraph->GetHolderFactory();
+    }
+
+    const THashMap<TString, TString>& GetSecureParams() const override {
+        return Settings.SecureParams;
+    }
+
+    const THashMap<TString, TString>& GetTaskParams() const override {
+        return Settings.TaskParams;
+    }
+
+    void UpdateStats() override {
+        if (Stats) {
+            Stats->RunStatusTimeMetrics.UpdateStatusTime();
+        }
+    }
+
     const TDqTaskRunnerStats* GetStats() const override {
         return Stats.get();
     }
@@ -707,10 +707,10 @@ private:
     };
     TProgramParsed ProgramParsed;
 
-    THashMap<ui64, IDqInputChannel::TPtr> InputChannels; // Channel id -> Channel 
-    THashMap<ui64, IDqSource::TPtr> Sources; // Input index -> Source 
-    THashMap<ui64, IDqOutputChannel::TPtr> OutputChannels; // Channel id -> Channel 
-    THashMap<ui64, IDqSink::TPtr> Sinks; // Output index -> Sink 
+    THashMap<ui64, IDqInputChannel::TPtr> InputChannels; // Channel id -> Channel
+    THashMap<ui64, IDqSource::TPtr> Sources; // Input index -> Source
+    THashMap<ui64, IDqOutputChannel::TPtr> OutputChannels; // Channel id -> Channel
+    THashMap<ui64, IDqSink::TPtr> Sinks; // Output index -> Sink
     IDqOutputConsumer::TPtr Output;
     NUdf::TUnboxedValue ResultStream;
 

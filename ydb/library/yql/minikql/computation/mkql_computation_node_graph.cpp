@@ -559,9 +559,9 @@ public:
                 PatternNodes->GetMutables(),
                 *ArrowMemoryPool));
             ValueBuilder->SetCalleePositionHolder(Ctx->CalleePosition);
-            for (auto& node : PatternNodes->GetNodes()) { 
-                node->InitNode(*Ctx); 
-            } 
+            for (auto& node : PatternNodes->GetNodes()) {
+                node->InitNode(*Ctx);
+            }
             IsPrepared = true;
         }
     }
@@ -607,44 +607,44 @@ public:
         return old;
     }
 
-    TString SaveGraphState() override { 
-        Prepare(); 
- 
-        TString result; 
-        for (ui32 i : PatternNodes->GetMutables().SerializableValues) { 
-            const NUdf::TUnboxedValuePod& mutableValue = Ctx->MutableValues[i]; 
-            if (mutableValue.IsInvalid()) { 
-                WriteUi32(result, std::numeric_limits<ui32>::max()); // -1. 
-            } else if (mutableValue.IsBoxed()) { 
-                NUdf::TUnboxedValue saved = mutableValue.Save(); 
-                const TStringBuf savedBuf = saved.AsStringRef(); 
-                WriteUi32(result, savedBuf.Size()); 
-                result.AppendNoAlias(savedBuf.Data(), savedBuf.Size()); 
-            } else { // No load was done during previous runs (if any). 
-                MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()), "State is expected to have data or invalid value"); 
-                const NUdf::TStringRef savedRef = mutableValue.AsStringRef(); 
-                WriteUi32(result, savedRef.Size()); 
-                result.AppendNoAlias(savedRef.Data(), savedRef.Size()); 
-            } 
-        } 
-        return result; 
-    } 
- 
-    void LoadGraphState(TStringBuf state) override { 
-        Prepare(); 
- 
-        for (ui32 i : PatternNodes->GetMutables().SerializableValues) { 
-            if (const ui32 size = ReadUi32(state); size != std::numeric_limits<ui32>::max()) { 
-                MKQL_ENSURE(state.Size() >= size, "Serialized state is corrupted - buffer is too short (" << state.Size() << ") for specified size: " << size); 
-                const NUdf::TStringRef savedRef(state.Data(), size); 
-                Ctx->MutableValues[i] = MakeString(savedRef); 
-                state.Skip(size); 
-            } // else leave it Invalid() 
-        } 
- 
-        MKQL_ENSURE(state.Empty(), "Serialized state is corrupted - extra bytes left: " << state.Size()); 
-    } 
- 
+    TString SaveGraphState() override {
+        Prepare();
+
+        TString result;
+        for (ui32 i : PatternNodes->GetMutables().SerializableValues) {
+            const NUdf::TUnboxedValuePod& mutableValue = Ctx->MutableValues[i];
+            if (mutableValue.IsInvalid()) {
+                WriteUi32(result, std::numeric_limits<ui32>::max()); // -1.
+            } else if (mutableValue.IsBoxed()) {
+                NUdf::TUnboxedValue saved = mutableValue.Save();
+                const TStringBuf savedBuf = saved.AsStringRef();
+                WriteUi32(result, savedBuf.Size());
+                result.AppendNoAlias(savedBuf.Data(), savedBuf.Size());
+            } else { // No load was done during previous runs (if any).
+                MKQL_ENSURE(mutableValue.HasValue() && (mutableValue.IsString() || mutableValue.IsEmbedded()), "State is expected to have data or invalid value");
+                const NUdf::TStringRef savedRef = mutableValue.AsStringRef();
+                WriteUi32(result, savedRef.Size());
+                result.AppendNoAlias(savedRef.Data(), savedRef.Size());
+            }
+        }
+        return result;
+    }
+
+    void LoadGraphState(TStringBuf state) override {
+        Prepare();
+
+        for (ui32 i : PatternNodes->GetMutables().SerializableValues) {
+            if (const ui32 size = ReadUi32(state); size != std::numeric_limits<ui32>::max()) {
+                MKQL_ENSURE(state.Size() >= size, "Serialized state is corrupted - buffer is too short (" << state.Size() << ") for specified size: " << size);
+                const NUdf::TStringRef savedRef(state.Data(), size);
+                Ctx->MutableValues[i] = MakeString(savedRef);
+                state.Skip(size);
+            } // else leave it Invalid()
+        }
+
+        MKQL_ENSURE(state.Empty(), "Serialized state is corrupted - extra bytes left: " << state.Size());
+    }
+
 private:
     const TPatternNodes::TPtr PatternNodes;
     const TIntrusivePtr<TMemoryUsageInfo> MemInfo;

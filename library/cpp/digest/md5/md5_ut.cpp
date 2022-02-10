@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(TMD5Test) {
         fileHash = MD5::File(tmpFile);
         UNIT_ASSERT_NO_DIFF(fileHash, memoryHash);
 
-        NFs::Remove(tmpFile); 
+        NFs::Remove(tmpFile);
         fileHash = MD5::File(tmpFile);
         UNIT_ASSERT_EQUAL(fileHash.size(), 0);
     }

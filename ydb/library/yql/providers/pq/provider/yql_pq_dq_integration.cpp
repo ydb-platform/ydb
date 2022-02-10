@@ -1,7 +1,7 @@
-#include "yql_pq_dq_integration.h" 
+#include "yql_pq_dq_integration.h"
 #include "yql_pq_helpers.h"
-#include "yql_pq_mkql_compiler.h" 
- 
+#include "yql_pq_mkql_compiler.h"
+
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -12,62 +12,62 @@
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
- 
-#include <util/string/builder.h> 
- 
-namespace NYql { 
- 
-using namespace NNodes; 
- 
-namespace { 
- 
-class TPqDqIntegration: public TDqIntegrationBase { 
-public: 
+
+#include <util/string/builder.h>
+
+namespace NYql {
+
+using namespace NNodes;
+
+namespace {
+
+class TPqDqIntegration: public TDqIntegrationBase {
+public:
     explicit TPqDqIntegration(const TPqState::TPtr& state)
-        : State_(state.Get()) 
-    { 
-    } 
- 
-    ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions) { 
-        size_t topicPartitionsCount = 0; 
-        for (auto kv : topic.Props()) { 
-            auto key = kv.Name().Value(); 
-            if (key == PartitionsCountProp) { 
-                topicPartitionsCount = FromString(kv.Value().Ref().Content()); 
-            } 
-        } 
-        YQL_ENSURE(topicPartitionsCount > 0); 
- 
-        const size_t tasks = Min(maxPartitions, topicPartitionsCount); 
-        partitions.reserve(tasks); 
-        for (size_t i = 0; i < tasks; ++i) { 
-            NPq::NProto::TDqReadTaskParams params; 
-            auto* partitioninigParams = params.MutablePartitioningParams(); 
-            partitioninigParams->SetTopicPartitionsCount(topicPartitionsCount); 
-            partitioninigParams->SetEachTopicPartitionGroupId(i); 
-            partitioninigParams->SetDqPartitionsCount(tasks); 
-            YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params; 
- 
-            TString serializedParams; 
-            YQL_ENSURE(params.SerializeToString(&serializedParams)); 
-            partitions.emplace_back(std::move(serializedParams)); 
-        } 
-        return 0; 
-    } 
- 
+        : State_(state.Get())
+    {
+    }
+
+    ui64 PartitionTopicRead(const TPqTopic& topic, size_t maxPartitions, TVector<TString>& partitions) {
+        size_t topicPartitionsCount = 0;
+        for (auto kv : topic.Props()) {
+            auto key = kv.Name().Value();
+            if (key == PartitionsCountProp) {
+                topicPartitionsCount = FromString(kv.Value().Ref().Content());
+            }
+        }
+        YQL_ENSURE(topicPartitionsCount > 0);
+
+        const size_t tasks = Min(maxPartitions, topicPartitionsCount);
+        partitions.reserve(tasks);
+        for (size_t i = 0; i < tasks; ++i) {
+            NPq::NProto::TDqReadTaskParams params;
+            auto* partitioninigParams = params.MutablePartitioningParams();
+            partitioninigParams->SetTopicPartitionsCount(topicPartitionsCount);
+            partitioninigParams->SetEachTopicPartitionGroupId(i);
+            partitioninigParams->SetDqPartitionsCount(tasks);
+            YQL_CLOG(DEBUG, ProviderPq) << "Create DQ reading partition " << params;
+
+            TString serializedParams;
+            YQL_ENSURE(params.SerializeToString(&serializedParams));
+            partitions.emplace_back(std::move(serializedParams));
+        }
+        return 0;
+    }
+
     ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
         if (auto maybePqRead = TMaybeNode<TPqReadTopic>(&node)) {
             return PartitionTopicRead(maybePqRead.Cast().Topic(), maxPartitions, partitions);
         }
-        if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) { 
-            auto settings = maybeDqSource.Cast().Settings(); 
-            if (auto topicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) { 
-                return PartitionTopicRead(topicSource.Cast().Topic(), maxPartitions, partitions); 
-            } 
-        } 
+        if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
+            auto settings = maybeDqSource.Cast().Settings();
+            if (auto topicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {
+                return PartitionTopicRead(topicSource.Cast().Topic(), maxPartitions, partitions);
+            }
+        }
         return 0;
-    } 
- 
+    }
+
     TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {
         if (const auto& maybePqReadTopic = TMaybeNode<TPqReadTopic>(read)) {
             const auto& pqReadTopic = maybePqReadTopic.Cast();
@@ -106,132 +106,132 @@ public:
                 .Settings(settings)
                 .Done().Ptr();
         }
-        return read; 
-    } 
- 
+        return read;
+    }
+
     TMaybe<bool> CanWrite(const TDqSettings&, const TExprNode&, TExprContext&) override {
         YQL_ENSURE(false, "Unimplemented");
-    } 
- 
-    void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override { 
+    }
+
+    void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
         RegisterDqPqMkqlCompilers(compiler);
-    } 
- 
-    static TStringBuf Name(const TCoNameValueTuple& nameValue) { 
-        return nameValue.Name().Value(); 
-    } 
- 
-    static TStringBuf Value(const TCoNameValueTuple& nameValue) { 
-        if (TMaybeNode<TExprBase> maybeValue = nameValue.Value()) { 
-            const TExprNode& value = maybeValue.Cast().Ref(); 
-            YQL_ENSURE(value.IsAtom()); 
-            return value.Content(); 
-        } 
+    }
+
+    static TStringBuf Name(const TCoNameValueTuple& nameValue) {
+        return nameValue.Name().Value();
+    }
+
+    static TStringBuf Value(const TCoNameValueTuple& nameValue) {
+        if (TMaybeNode<TExprBase> maybeValue = nameValue.Value()) {
+            const TExprNode& value = maybeValue.Cast().Ref();
+            YQL_ENSURE(value.IsAtom());
+            return value.Content();
+        }
 
         return {};
-    } 
- 
+    }
+
     static NPq::NProto::EClusterType ToClusterType(NYql::TPqClusterConfig::EClusterType t) {
-        switch (t) { 
+        switch (t) {
         case NYql::TPqClusterConfig::CT_UNSPECIFIED:
             return NPq::NProto::Unspecified;
         case NYql::TPqClusterConfig::CT_PERS_QUEUE:
             return NPq::NProto::PersQueue;
         case NYql::TPqClusterConfig::CT_DATA_STREAMS:
             return NPq::NProto::DataStreams;
-        } 
-    } 
- 
-    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override { 
-        if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) { 
-            auto settings = maybeDqSource.Cast().Settings(); 
-            if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) { 
-                NPq::NProto::TDqPqTopicSource srcDesc; 
-                TDqPqTopicSource topicSource = maybeTopicSource.Cast(); 
- 
-                TPqTopic topic = topicSource.Topic(); 
-                srcDesc.SetTopicPath(TString(topic.Path().Value())); 
-                srcDesc.SetDatabase(TString(topic.Database().Value())); 
-                const TStringBuf cluster = topic.Cluster().Value(); 
-                const auto* clusterDesc = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster); 
-                YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster); 
-                srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType)); 
-                srcDesc.SetDatabaseId(clusterDesc->DatabaseId); 
- 
-                size_t const settingsCount = topicSource.Settings().Size(); 
-                for (size_t i = 0; i < settingsCount; ++i) { 
-                    TCoNameValueTuple setting = topicSource.Settings().Item(i); 
-                    const TStringBuf name = Name(setting); 
-                    if (name == ConsumerSetting) { 
-                        srcDesc.SetConsumerName(TString(Value(setting))); 
-                    } else if (name == EndpointSetting) { 
-                        srcDesc.SetEndpoint(TString(Value(setting))); 
-                    } else if (name == UseSslSetting) { 
-                        srcDesc.SetUseSsl(FromString<bool>(Value(setting))); 
+        }
+    }
+
+    void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
+        if (auto maybeDqSource = TMaybeNode<TDqSource>(&node)) {
+            auto settings = maybeDqSource.Cast().Settings();
+            if (auto maybeTopicSource = TMaybeNode<TDqPqTopicSource>(settings.Raw())) {
+                NPq::NProto::TDqPqTopicSource srcDesc;
+                TDqPqTopicSource topicSource = maybeTopicSource.Cast();
+
+                TPqTopic topic = topicSource.Topic();
+                srcDesc.SetTopicPath(TString(topic.Path().Value()));
+                srcDesc.SetDatabase(TString(topic.Database().Value()));
+                const TStringBuf cluster = topic.Cluster().Value();
+                const auto* clusterDesc = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
+                YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
+                srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
+                srcDesc.SetDatabaseId(clusterDesc->DatabaseId);
+
+                size_t const settingsCount = topicSource.Settings().Size();
+                for (size_t i = 0; i < settingsCount; ++i) {
+                    TCoNameValueTuple setting = topicSource.Settings().Item(i);
+                    const TStringBuf name = Name(setting);
+                    if (name == ConsumerSetting) {
+                        srcDesc.SetConsumerName(TString(Value(setting)));
+                    } else if (name == EndpointSetting) {
+                        srcDesc.SetEndpoint(TString(Value(setting)));
+                    } else if (name == UseSslSetting) {
+                        srcDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
                         srcDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
-                    } 
-                } 
- 
+                    }
+                }
+
                 if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSource.Token().Raw())) {
-                    srcDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value())); 
-                } 
- 
-                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE) { 
-                    YQL_ENSURE(srcDesc.GetConsumerName(), "No consumer specified for PersQueue cluster"); 
-                } 
- 
-                protoSettings.PackFrom(srcDesc); 
-                sourceType = "PqSource"; 
-            } 
-        } 
-    } 
- 
-    void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sinkType) override { 
-        if (auto maybeDqSink = TMaybeNode<TDqSink>(&node)) { 
-            auto settings = maybeDqSink.Cast().Settings(); 
-            if (auto maybeTopicSink = TMaybeNode<TDqPqTopicSink>(settings.Raw())) { 
-                NPq::NProto::TDqPqTopicSink sinkDesc; 
-                TDqPqTopicSink topicSink = maybeTopicSink.Cast(); 
- 
-                TPqTopic topic = topicSink.Topic(); 
-                const TStringBuf cluster = topic.Cluster().Value(); 
-                const auto* clusterDesc = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster); 
-                YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster); 
-                sinkDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType)); 
-                sinkDesc.SetTopicPath(TString(topic.Path().Value())); 
-                sinkDesc.SetDatabase(TString(topic.Database().Value())); 
- 
-                size_t const settingsCount = topicSink.Settings().Size(); 
-                for (size_t i = 0; i < settingsCount; ++i) { 
-                    TCoNameValueTuple setting = topicSink.Settings().Item(i); 
-                    const TStringBuf name = Name(setting); 
-                    if (name == EndpointSetting) { 
-                        sinkDesc.SetEndpoint(TString(Value(setting))); 
-                    } else if (name == UseSslSetting) { 
-                        sinkDesc.SetUseSsl(FromString<bool>(Value(setting))); 
+                    srcDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
+                }
+
+                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE) {
+                    YQL_ENSURE(srcDesc.GetConsumerName(), "No consumer specified for PersQueue cluster");
+                }
+
+                protoSettings.PackFrom(srcDesc);
+                sourceType = "PqSource";
+            }
+        }
+    }
+
+    void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sinkType) override {
+        if (auto maybeDqSink = TMaybeNode<TDqSink>(&node)) {
+            auto settings = maybeDqSink.Cast().Settings();
+            if (auto maybeTopicSink = TMaybeNode<TDqPqTopicSink>(settings.Raw())) {
+                NPq::NProto::TDqPqTopicSink sinkDesc;
+                TDqPqTopicSink topicSink = maybeTopicSink.Cast();
+
+                TPqTopic topic = topicSink.Topic();
+                const TStringBuf cluster = topic.Cluster().Value();
+                const auto* clusterDesc = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
+                YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
+                sinkDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
+                sinkDesc.SetTopicPath(TString(topic.Path().Value()));
+                sinkDesc.SetDatabase(TString(topic.Database().Value()));
+
+                size_t const settingsCount = topicSink.Settings().Size();
+                for (size_t i = 0; i < settingsCount; ++i) {
+                    TCoNameValueTuple setting = topicSink.Settings().Item(i);
+                    const TStringBuf name = Name(setting);
+                    if (name == EndpointSetting) {
+                        sinkDesc.SetEndpoint(TString(Value(setting)));
+                    } else if (name == UseSslSetting) {
+                        sinkDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
                         sinkDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
-                    } 
-                } 
- 
+                    }
+                }
+
                 if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSink.Token().Raw())) {
-                    sinkDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value())); 
-                } 
- 
-                protoSettings.PackFrom(sinkDesc); 
-                sinkType = "PqSink"; 
-            } 
-        } 
-    } 
- 
+                    sinkDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
+                }
+
+                protoSettings.PackFrom(sinkDesc);
+                sinkType = "PqSink";
+            }
+        }
+    }
+
     NNodes::TCoNameValueTupleList BuildTopicReadSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx) const {
         TVector<TCoNameValueTuple> props;
 
         {
             TMaybe<TString> consumer = State_->Configuration->Consumer.Get();
-            if (consumer) { 
-                Add(props, ConsumerSetting, *consumer, pos, ctx); 
+            if (consumer) {
+                Add(props, ConsumerSetting, *consumer, pos, ctx);
             }
         }
 
@@ -254,14 +254,14 @@ public:
             .Done();
     }
 
-private: 
-    TPqState* State_; // State owns dq integration, so back reference must be not smart. 
-}; 
- 
-} 
- 
-THolder<IDqIntegration> CreatePqDqIntegration(const TPqState::TPtr& state) { 
+private:
+    TPqState* State_; // State owns dq integration, so back reference must be not smart.
+};
+
+}
+
+THolder<IDqIntegration> CreatePqDqIntegration(const TPqState::TPtr& state) {
     return MakeHolder<TPqDqIntegration>(state);
-} 
- 
-} 
+}
+
+}

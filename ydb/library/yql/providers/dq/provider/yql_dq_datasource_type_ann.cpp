@@ -23,7 +23,7 @@ public:
         AddHandler({TDqReadWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleReadWrap));
         AddHandler({TDqReadWideWrap::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleWideReadWrap));
         AddHandler({TCoConfigure::CallableName()}, Hndl(&TDqsDataSourceTypeAnnotationTransformer::HandleConfig));
-        AddHandler({TDqSource::CallableName()}, Hndl(&NDq::AnnotateDqSource)); 
+        AddHandler({TDqSource::CallableName()}, Hndl(&NDq::AnnotateDqSource));
     }
 
 private:

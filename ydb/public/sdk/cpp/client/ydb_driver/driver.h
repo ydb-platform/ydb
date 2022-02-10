@@ -7,7 +7,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/request_settings.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
 
-#include <library/cpp/logger/backend.h> 
+#include <library/cpp/logger/backend.h>
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -35,7 +35,7 @@ public:
     //! Set number of client pool threads, if 0 adaptive thread pool will be used.
     //! NOTE: in case of no zero value it is possible to get deadlock if all threads
     //! of this pool is blocked somewhere in user code.
-    //! default: 0 
+    //! default: 0
     TDriverConfig& SetClientThreadsNum(size_t sz);
     //! Warning: not recommended to change
     //! Set max number of queued responses. 0 - no limit
@@ -65,10 +65,10 @@ public:
     //! default: 100
     TDriverConfig& SetMaxQueuedRequests(size_t sz);
     //! Limit using of memory for grpc buffer pool. 0 means disabled.
-    //! If enabled the size must be greater than size of recieved message. 
+    //! If enabled the size must be greater than size of recieved message.
     //! default: 0
     TDriverConfig& SetGrpcMemoryQuota(ui64 bytes);
-    //! Specify tcp keep alive settings 
+    //! Specify tcp keep alive settings
     //! This option allows to adjust tcp keep alive settings, useful to work
     //! with balancers or to detect unexpected connectivity problem.
     //! enable   - if true enable tcp keep alive and use following settings
@@ -104,8 +104,8 @@ public:
     //! default: 6 minutes
     TDriverConfig& SetSocketIdleTimeout(TDuration timeout);
 
-    //! Log backend. 
-    TDriverConfig& SetLog(THolder<TLogBackend> log); 
+    //! Log backend.
+    TDriverConfig& SetLog(THolder<TLogBackend> log);
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;

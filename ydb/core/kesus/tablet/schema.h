@@ -51,17 +51,17 @@ struct TKesusSchema : NIceDb::Schema {
         using TColumns = TableColumns<SessionId, SemaphoreId, OrderId, TimeoutMillis, Count, Data>;
     };
 
-    struct QuoterResources : Table<5> { 
-        struct Id : Column<1, NScheme::NTypeIds::Uint64> {}; 
-        struct ParentId : Column<2, NScheme::NTypeIds::Uint64> {}; 
-        struct Props : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrKesus::TStreamingQuoterResource; }; 
+    struct QuoterResources : Table<5> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct ParentId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Props : Column<3, NScheme::NTypeIds::String> { using Type = NKikimrKesus::TStreamingQuoterResource; };
 
-        using TKey = TableKey<Id>; 
-        using TColumns = TableColumns<Id, ParentId, Props>; 
-    }; 
- 
-    using TTables = SchemaTables<SysParams, Sessions, Semaphores, SessionSemaphores, QuoterResources>; 
- 
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<Id, ParentId, Props>;
+    };
+
+    using TTables = SchemaTables<SysParams, Sessions, Semaphores, SessionSemaphores, QuoterResources>;
+
     using TSettings = SchemaSettings<
         ExecutorLogBatching<true>,
         ExecutorLogFlushPeriod<500 /*500us*/>>;
@@ -78,8 +78,8 @@ struct TKesusSchema : NIceDb::Schema {
     static constexpr ui64 SysParam_ReadConsistencyMode = 10;
     static constexpr ui64 SysParam_AttachConsistencyMode = 11;
     static constexpr ui64 SysParam_StrictMarkerCounter = 12;
-    static constexpr ui64 SysParam_NextQuoterResourceId = 13; 
-    static constexpr ui64 SysParam_RateLimiterCountersMode = 14; 
+    static constexpr ui64 SysParam_NextQuoterResourceId = 13;
+    static constexpr ui64 SysParam_RateLimiterCountersMode = 14;
 };
 
 }

@@ -109,31 +109,31 @@ Y_UNIT_TEST_SUITE(TextWalkerTest) {
         UNIT_ASSERT_VALUES_EQUAL(pos, TPosition(1, 3));
     }
 }
- 
-Y_UNIT_TEST_SUITE(ToOneLineStringTest) { 
-    Y_UNIT_TEST(OneMessageTest) { 
-        TIssues issues; 
-        issues.AddIssue(TPosition(12, 34, "file.abc"), "error"); 
-        UNIT_ASSERT_STRINGS_EQUAL(issues.ToOneLineString(), "{ file.abc:34:12: Error: error }"); 
-    } 
- 
-    Y_UNIT_TEST(SubIssuesTest) { 
-        TIssue issue(TPosition(12, 34, "file.abc"), "error"); 
-        TIssue subissue("suberror"); 
-        subissue.AddSubIssue(MakeIntrusive<TIssue>("subsuberror")); 
-        issue.AddSubIssue(MakeIntrusive<TIssue>(subissue)); 
- 
-        TIssues issues; 
-        issues.AddIssue(issue); 
-        UNIT_ASSERT_STRINGS_EQUAL(issues.ToOneLineString(), "{ file.abc:34:12: Error: error subissue: { <main>: Error: suberror subissue: { <main>: Error: subsuberror } } }"); 
-    } 
- 
-    Y_UNIT_TEST(ManyIssuesTest) { 
-        TIssue issue(TPosition(12, 34, "file.abc"), "error\n"); 
-        issue.AddSubIssue(MakeIntrusive<TIssue>("suberror")); 
-        TIssues issues; 
-        issues.AddIssue(issue); 
-        issues.AddIssue(TPosition(100, 2, "abc.file"), "my\nmessage"); 
-        UNIT_ASSERT_STRINGS_EQUAL(issues.ToOneLineString(), "[ { file.abc:34:12: Error: error subissue: { <main>: Error: suberror } } { abc.file:2:100: Error: my message } ]"); 
-    } 
-} 
+
+Y_UNIT_TEST_SUITE(ToOneLineStringTest) {
+    Y_UNIT_TEST(OneMessageTest) {
+        TIssues issues;
+        issues.AddIssue(TPosition(12, 34, "file.abc"), "error");
+        UNIT_ASSERT_STRINGS_EQUAL(issues.ToOneLineString(), "{ file.abc:34:12: Error: error }");
+    }
+
+    Y_UNIT_TEST(SubIssuesTest) {
+        TIssue issue(TPosition(12, 34, "file.abc"), "error");
+        TIssue subissue("suberror");
+        subissue.AddSubIssue(MakeIntrusive<TIssue>("subsuberror"));
+        issue.AddSubIssue(MakeIntrusive<TIssue>(subissue));
+
+        TIssues issues;
+        issues.AddIssue(issue);
+        UNIT_ASSERT_STRINGS_EQUAL(issues.ToOneLineString(), "{ file.abc:34:12: Error: error subissue: { <main>: Error: suberror subissue: { <main>: Error: subsuberror } } }");
+    }
+
+    Y_UNIT_TEST(ManyIssuesTest) {
+        TIssue issue(TPosition(12, 34, "file.abc"), "error\n");
+        issue.AddSubIssue(MakeIntrusive<TIssue>("suberror"));
+        TIssues issues;
+        issues.AddIssue(issue);
+        issues.AddIssue(TPosition(100, 2, "abc.file"), "my\nmessage");
+        UNIT_ASSERT_STRINGS_EQUAL(issues.ToOneLineString(), "[ { file.abc:34:12: Error: error subissue: { <main>: Error: suberror } } { abc.file:2:100: Error: my message } ]");
+    }
+}

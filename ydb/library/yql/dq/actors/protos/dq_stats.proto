@@ -122,12 +122,12 @@ message TDqTaskStats {
 
     // profile stats
     uint64 BuildCpuTimeUs = 103;   // prepare task time: build computation graph, prepare parameters, ...
-    uint64 WaitTimeUs = 104;       // total wait (input + output) wall time 
+    uint64 WaitTimeUs = 104;       // total wait (input + output) wall time
     uint64 WaitOutputTimeUs = 105; // wait output wall time (any output: channels, sinks, ...)
-    uint64 ComputeCpuTimeUs = 102; // compute time only 
-    uint64 PendingInputTimeUs = 107; // time waiting input data 
-    uint64 PendingOutputTimeUs = 108; // time waiting output data 
-    uint64 FinishTimeUs = 109; // time in finished state // ComputeCpuTimeUs + PendingInputTimeUs + PendingOutputTimeUs + FinishTimeUs == 100% (or == const in aggregated graphs for several stages/tasks) 
+    uint64 ComputeCpuTimeUs = 102; // compute time only
+    uint64 PendingInputTimeUs = 107; // time waiting input data
+    uint64 PendingOutputTimeUs = 108; // time waiting output data
+    uint64 FinishTimeUs = 109; // time in finished state // ComputeCpuTimeUs + PendingInputTimeUs + PendingOutputTimeUs + FinishTimeUs == 100% (or == const in aggregated graphs for several stages/tasks)
     repeated TDqMkqlStat MkqlStats = 110; // stats from mkql
 
     message THistBucket {

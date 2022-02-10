@@ -26,7 +26,7 @@ SRCS(
     dummy.cpp
     dummy.h
     factories.h
-    factories.cpp 
+    factories.cpp
     kikimr_services_initializers.cpp
     kikimr_services_initializers.h
     log_backend.cpp

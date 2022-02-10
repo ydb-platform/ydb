@@ -1,12 +1,12 @@
 #pragma once
 
-#include "dq_output.h" 
+#include "dq_output.h"
 
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 
-namespace NKikimr::NMiniKQL { 
-class TTypeEnvironment; 
-} // namespace NKikimr::NMiniKQL 
+namespace NKikimr::NMiniKQL {
+class TTypeEnvironment;
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql::NDq {
 
@@ -24,14 +24,14 @@ public:
 
 IDqOutputConsumer::TPtr CreateOutputMultiConsumer(TVector<IDqOutputConsumer::TPtr>&& consumers);
 
-IDqOutputConsumer::TPtr CreateOutputMapConsumer(IDqOutput::TPtr output); 
+IDqOutputConsumer::TPtr CreateOutputMapConsumer(IDqOutput::TPtr output);
 
 IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
-    TVector<IDqOutput::TPtr>&& outputs, 
+    TVector<IDqOutput::TPtr>&& outputs,
     TVector<NUdf::TDataTypeId>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv);
 
-IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs); 
+IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs);
 
 
 } // namespace NYql::NDq

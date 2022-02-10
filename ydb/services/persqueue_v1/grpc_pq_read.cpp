@@ -98,8 +98,8 @@ void TPQReadService::Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorCo
 }
 
 
-MigrationStreamingReadServerMessage FillReadResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) { 
-    MigrationStreamingReadServerMessage res; 
+MigrationStreamingReadServerMessage FillReadResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
+    MigrationStreamingReadServerMessage res;
     FillIssue(res.add_issues(), code, errorReason);
     res.set_status(ConvertPersQueueInternalCodeToStatus(code));
     return res;

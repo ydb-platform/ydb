@@ -15,7 +15,7 @@ enum ESimpleCounters {
     COUNTER_SEMAPHORE_COUNT = 4                           [(CounterOpts) = {Name: "Semaphores"}];
     COUNTER_SEMAPHORE_OWNER_COUNT = 5                     [(CounterOpts) = {Name: "SemaphoreOwners"}];
     COUNTER_SEMAPHORE_WAITER_COUNT = 6                    [(CounterOpts) = {Name: "SemaphoreWaiters"}];
-    COUNTER_QUOTER_RESOURCE_COUNT = 7                     [(CounterOpts) = {Name: "QuoterResources"}]; 
+    COUNTER_QUOTER_RESOURCE_COUNT = 7                     [(CounterOpts) = {Name: "QuoterResources"}];
 }
 
 enum ECumulativeCounters {
@@ -37,10 +37,10 @@ enum ECumulativeCounters {
     COUNTER_REQS_SEMAPHORE_CREATE = 13                    [(CounterOpts) = {Name: "Requests/SemaphoreCreate"}];
     COUNTER_REQS_SEMAPHORE_DELETE = 14                    [(CounterOpts) = {Name: "Requests/SemaphoreDelete"}];
     COUNTER_REQS_SEMAPHORE_RELEASE = 15                   [(CounterOpts) = {Name: "Requests/SemaphoreRelease"}];
-    COUNTER_REQS_QUOTER_RESOURCE_DESCRIBE = 16            [(CounterOpts) = {Name: "Requests/QuoterResourceDescribe"}]; 
-    COUNTER_REQS_QUOTER_RESOURCE_ADD = 17                 [(CounterOpts) = {Name: "Requests/QuoterResourceAdd"}]; 
-    COUNTER_REQS_QUOTER_RESOURCE_UPDATE = 18              [(CounterOpts) = {Name: "Requests/QuoterResourceUpdate"}]; 
-    COUNTER_REQS_QUOTER_RESOURCE_DELETE = 19              [(CounterOpts) = {Name: "Requests/QuoterResourceDelete"}]; 
+    COUNTER_REQS_QUOTER_RESOURCE_DESCRIBE = 16            [(CounterOpts) = {Name: "Requests/QuoterResourceDescribe"}];
+    COUNTER_REQS_QUOTER_RESOURCE_ADD = 17                 [(CounterOpts) = {Name: "Requests/QuoterResourceAdd"}];
+    COUNTER_REQS_QUOTER_RESOURCE_UPDATE = 18              [(CounterOpts) = {Name: "Requests/QuoterResourceUpdate"}];
+    COUNTER_REQS_QUOTER_RESOURCE_DELETE = 19              [(CounterOpts) = {Name: "Requests/QuoterResourceDelete"}];
 }
 
 enum EPercentileCounters {
@@ -71,8 +71,8 @@ enum ETxTypes {
     TXTYPE_SEMAPHORE_TIMEOUT = 15                         [(TxTypeOpts) = {Name: "TxSemaphoreTimeout"}];
     TXTYPE_SEMAPHORE_UPDATE = 16                          [(TxTypeOpts) = {Name: "TxSemaphoreUpdate"}];
     TXTYPE_SELF_CHECK = 17                                [(TxTypeOpts) = {Name: "TxSelfCheck"}];
-    TXTYPE_QUOTER_RESOURCE_DESCRIBE = 18                  [(TxTypeOpts) = {Name: "TxQouterResourceDescribe"}]; 
-    TXTYPE_QUOTER_RESOURCE_ADD = 19                       [(TxTypeOpts) = {Name: "TxQouterResourceAdd"}]; 
-    TXTYPE_QUOTER_RESOURCE_UPDATE = 20                    [(TxTypeOpts) = {Name: "TxQouterResourceUpdate"}]; 
-    TXTYPE_QUOTER_RESOURCE_DELETE = 21                    [(TxTypeOpts) = {Name: "TxQouterResourceDelete"}]; 
+    TXTYPE_QUOTER_RESOURCE_DESCRIBE = 18                  [(TxTypeOpts) = {Name: "TxQouterResourceDescribe"}];
+    TXTYPE_QUOTER_RESOURCE_ADD = 19                       [(TxTypeOpts) = {Name: "TxQouterResourceAdd"}];
+    TXTYPE_QUOTER_RESOURCE_UPDATE = 20                    [(TxTypeOpts) = {Name: "TxQouterResourceUpdate"}];
+    TXTYPE_QUOTER_RESOURCE_DELETE = 21                    [(TxTypeOpts) = {Name: "TxQouterResourceDelete"}];
 }

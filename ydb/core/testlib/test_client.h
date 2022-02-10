@@ -219,19 +219,19 @@ namespace Tests {
 
         void EnableGRpc(const NGrpc::TServerOptions& options);
         void EnableGRpc(ui16 port);
- 
+
         void SetupDefaultProfiles();
- 
+
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetGRpcServerRootCounters() const {
             return GRpcServerRootCounters;
         }
 
-        void ShutdownGRpc() { 
-            if (GRpcServer) { 
-                GRpcServer->Stop(); 
-                GRpcServer = nullptr; 
-            } 
-        } 
+        void ShutdownGRpc() {
+            if (GRpcServer) {
+                GRpcServer->Stop();
+                GRpcServer = nullptr;
+            }
+        }
         void StartDummyTablets();
         TTestActorRuntime* GetRuntime() const;
         const TServerSettings& GetSettings() const;
@@ -367,7 +367,7 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus SplitTable(const TString& table, ui64 datashardId, ui64 border, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CopyTable(const TString& parent, const TString& name, const TString& src);
         NMsgBusProxy::EResponseStatus CreateKesus(const TString& parent, const TString& name);
-        NMsgBusProxy::EResponseStatus DeleteKesus(const TString& parent, const TString& name); 
+        NMsgBusProxy::EResponseStatus DeleteKesus(const TString& parent, const TString& name);
         NMsgBusProxy::EResponseStatus ConsistentCopyTables(TVector<std::pair<TString, TString>> desc, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus DeleteTable(const TString& parent, const TString& name);
         NMsgBusProxy::EResponseStatus AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& update);
@@ -433,12 +433,12 @@ namespace Tests {
 
         static void RefreshPathCache(TTestActorRuntime* runtime, const TString& path, ui32 nodeIdx = 0);
 
-        ui64 GetKesusTabletId(const TString& kesusPath); 
-        Ydb::StatusIds::StatusCode AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& props); 
-        Ydb::StatusIds::StatusCode AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const TMaybe<double> maxUnitsPerSecond = Nothing()); 
- 
-        THolder<NKesus::TEvKesus::TEvGetConfigResult> GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath); 
- 
+        ui64 GetKesusTabletId(const TString& kesusPath);
+        Ydb::StatusIds::StatusCode AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& props);
+        Ydb::StatusIds::StatusCode AddQuoterResource(TTestActorRuntime* runtime, const TString& kesusPath, const TString& resourcePath, const TMaybe<double> maxUnitsPerSecond = Nothing());
+
+        THolder<NKesus::TEvKesus::TEvGetConfigResult> GetKesusConfig(TTestActorRuntime* runtime, const TString& kesusPath);
+
     protected:
         template <class TMsg>
         TString PrintResult(NBus::TBusMessage* msg, size_t maxSz = 1000) {

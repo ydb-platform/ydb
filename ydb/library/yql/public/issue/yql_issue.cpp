@@ -5,10 +5,10 @@
 
 #include <library/cpp/colorizer/output.h>
 
-#include <util/string/ascii.h> 
+#include <util/string/ascii.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
-#include <util/string/subst.h> 
+#include <util/string/subst.h>
 #include <util/system/compiler.h>
 #include <util/generic/map.h>
 #include <util/generic/stack.h>
@@ -52,53 +52,53 @@ TTextWalker& TTextWalker::Advance(char c) {
     return *this;
 }
 
-void TIssue::PrintTo(IOutputStream& out, bool oneLine) const { 
-    out << Range() << ": " << SeverityToString(GetSeverity()) << ": "; 
-    if (oneLine) { 
-        TString message = StripString(Message); 
-        SubstGlobal(message, '\n', ' '); 
-        out << message; 
-    } else { 
-        out << Message; 
-    } 
-    if (GetCode()) { 
-        out << ", code: " << GetCode(); 
-    } 
-} 
- 
-void WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<void(const TIssue&, ui16 level)> fn, std::function<void(const TIssue&, ui16 level)> afterChildrenFn) { 
-    enum class EFnType { 
-        Main, 
-        AfterChildren, 
-    }; 
- 
-    const bool hasAfterChildrenFn = bool(afterChildrenFn); 
-    TStack<std::tuple<ui16, const TIssue*, EFnType>> issuesStack; 
-    if (hasAfterChildrenFn) { 
-        issuesStack.push(std::make_tuple(0, &topIssue, EFnType::AfterChildren)); 
-    } 
-    issuesStack.push(std::make_tuple(0, &topIssue, EFnType::Main)); 
+void TIssue::PrintTo(IOutputStream& out, bool oneLine) const {
+    out << Range() << ": " << SeverityToString(GetSeverity()) << ": ";
+    if (oneLine) {
+        TString message = StripString(Message);
+        SubstGlobal(message, '\n', ' ');
+        out << message;
+    } else {
+        out << Message;
+    }
+    if (GetCode()) {
+        out << ", code: " << GetCode();
+    }
+}
+
+void WalkThroughIssues(const TIssue& topIssue, bool leafOnly, std::function<void(const TIssue&, ui16 level)> fn, std::function<void(const TIssue&, ui16 level)> afterChildrenFn) {
+    enum class EFnType {
+        Main,
+        AfterChildren,
+    };
+
+    const bool hasAfterChildrenFn = bool(afterChildrenFn);
+    TStack<std::tuple<ui16, const TIssue*, EFnType>> issuesStack;
+    if (hasAfterChildrenFn) {
+        issuesStack.push(std::make_tuple(0, &topIssue, EFnType::AfterChildren));
+    }
+    issuesStack.push(std::make_tuple(0, &topIssue, EFnType::Main));
     while (!issuesStack.empty()) {
-        auto level = std::get<0>(issuesStack.top()); 
-        const auto& curIssue = *std::get<1>(issuesStack.top()); 
-        const EFnType fnType = std::get<2>(issuesStack.top()); 
+        auto level = std::get<0>(issuesStack.top());
+        const auto& curIssue = *std::get<1>(issuesStack.top());
+        const EFnType fnType = std::get<2>(issuesStack.top());
         issuesStack.pop();
         if (!leafOnly || curIssue.GetSubIssues().empty()) {
-            if (fnType == EFnType::Main) { 
-                fn(curIssue, level); 
-            } else { 
-                afterChildrenFn(curIssue, level); 
-            } 
+            if (fnType == EFnType::Main) {
+                fn(curIssue, level);
+            } else {
+                afterChildrenFn(curIssue, level);
+            }
         }
-        if (fnType == EFnType::Main) { 
-            level++; 
-            const auto& subIssues = curIssue.GetSubIssues(); 
-            for (int i = subIssues.size() - 1; i >= 0; i--) { 
-                if (hasAfterChildrenFn) { 
-                    issuesStack.push(std::make_tuple(level, subIssues[i].Get(), EFnType::AfterChildren)); 
-                } 
-                issuesStack.push(std::make_tuple(level, subIssues[i].Get(), EFnType::Main)); 
-            } 
+        if (fnType == EFnType::Main) {
+            level++;
+            const auto& subIssues = curIssue.GetSubIssues();
+            for (int i = subIssues.size() - 1; i >= 0; i--) {
+                if (hasAfterChildrenFn) {
+                    issuesStack.push(std::make_tuple(level, subIssues[i].Get(), EFnType::AfterChildren));
+                }
+                issuesStack.push(std::make_tuple(level, subIssues[i].Get(), EFnType::Main));
+            }
         }
     }
 }
@@ -143,38 +143,38 @@ void ProgramLinesWithErrors(
 
 } // namspace
 
-void TIssues::PrintTo(IOutputStream& out, bool oneLine) const 
+void TIssues::PrintTo(IOutputStream& out, bool oneLine) const
 {
-    if (oneLine) { 
-        bool printWithSpace = false; 
-        if (Issues_.size() > 1) { 
-            printWithSpace = true; 
-            out << "["; 
-        } 
-        for (const auto& topIssue: Issues_) { 
-            WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 level) { 
-                if (level > 0) { 
-                    out << " subissue: { "; 
-                } else { 
-                    out << (printWithSpace ? " { " : "{ "); 
-                } 
-                issue.PrintTo(out, true); 
-            }, 
-            [&](const TIssue&, ui16) { 
-                out << " }"; 
-            }); 
-        } 
-        if (Issues_.size() > 1) { 
-            out << " ]"; 
-        } 
-    } else { 
-        for (const auto& topIssue: Issues_) { 
-            WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 level) { 
-                auto shift = level * 4; 
-                Indent(out, shift); 
-                out << issue << Endl; 
-            }); 
-        } 
+    if (oneLine) {
+        bool printWithSpace = false;
+        if (Issues_.size() > 1) {
+            printWithSpace = true;
+            out << "[";
+        }
+        for (const auto& topIssue: Issues_) {
+            WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 level) {
+                if (level > 0) {
+                    out << " subissue: { ";
+                } else {
+                    out << (printWithSpace ? " { " : "{ ");
+                }
+                issue.PrintTo(out, true);
+            },
+            [&](const TIssue&, ui16) {
+                out << " }";
+            });
+        }
+        if (Issues_.size() > 1) {
+            out << " ]";
+        }
+    } else {
+        for (const auto& topIssue: Issues_) {
+            WalkThroughIssues(topIssue, false, [&](const TIssue& issue, ui16 level) {
+                auto shift = level * 4;
+                Indent(out, shift);
+                out << issue << Endl;
+            });
+        }
     }
 }
 
@@ -283,5 +283,5 @@ void Out<NYql::TRange>(IOutputStream & out, const NYql::TRange & range) {
 
 template <>
 void Out<NYql::TIssue>(IOutputStream& out, const NYql::TIssue& error) {
-    error.PrintTo(out); 
+    error.PrintTo(out);
 }

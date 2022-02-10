@@ -1,20 +1,20 @@
-#pragma once 
-#include <util/generic/ptr.h> 
+#pragma once
+#include <util/generic/ptr.h>
 #include <util/generic/size_literals.h>
 #include <library/cpp/threading/chunk_queue/queue.h>
 #include <util/generic/overloaded.h>
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include "sdk_test_setup.h"
 
-namespace NPersQueue { 
- 
+namespace NPersQueue {
+
 using namespace NThreading;
 using namespace NYdb::NPersQueue;
 using namespace NKikimr;
 using namespace NKikimr::NPersQueueTests;
 
- 
+
 struct TWriteResult {
     bool Ok = false;
     // No acknowledgement is expected from a writer under test
@@ -71,4 +71,4 @@ public:
 
 };
 
-} // namespace NPersQueue 
+} // namespace NPersQueue

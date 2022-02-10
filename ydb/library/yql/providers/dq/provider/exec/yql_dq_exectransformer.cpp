@@ -212,7 +212,7 @@ private:
 
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
         pipeline->Add(NDq::CreateDqBuildPhyStagesTransformer(false), "Build-Phy");
-        pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(), "Rewrite-Phy-Callables"); 
+        pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(), "Rewrite-Phy-Callables");
     }
 
     void AfterOptimize(TTransformationPipeline*) const final {}
@@ -229,7 +229,7 @@ public:
         AddHandler({TStringBuf("Result")}, RequireNone(), Hndl(&TInMemoryExecTransformer::HandleResult));
         AddHandler({TStringBuf("Pull")}, RequireNone(), Hndl(&TInMemoryExecTransformer::HandlePull));
         AddHandler({TDqCnResult::CallableName()}, RequireNone(), Pass());
-        AddHandler({TDqQuery::CallableName()}, RequireFirst(), Pass()); 
+        AddHandler({TDqQuery::CallableName()}, RequireFirst(), Pass());
     }
 
 private:
@@ -838,19 +838,19 @@ private:
         TInstant startTime = TInstant::Now();
         auto pull = TPull(input);
 
-        YQL_ENSURE(!TMaybeNode<TDqQuery>(pull.Input().Ptr()) || State->Settings->EnableComputeActor.Get().GetOrElse(false), 
-            "DqQuery is not supported with worker actor"); 
- 
+        YQL_ENSURE(!TMaybeNode<TDqQuery>(pull.Input().Ptr()) || State->Settings->EnableComputeActor.Get().GetOrElse(false),
+            "DqQuery is not supported with worker actor");
+
         TString type;
         TVector<TString> columns;
-        GetResultType(&type, &columns, pull.Ref(), pull.Input().Ref()); 
+        GetResultType(&type, &columns, pull.Ref(), pull.Input().Ref());
 
-        const bool oneGraphPerQuery = State->Settings->_OneGraphPerQuery.Get().GetOrElse(false); 
-        size_t graphsCount = 0; 
+        const bool oneGraphPerQuery = State->Settings->_OneGraphPerQuery.Get().GetOrElse(false);
+        size_t graphsCount = 0;
         THashMap<ui32, ui32> allPublicIds;
         THashMap<ui64, ui32> stage2publicId;
         bool hasStageError = false;
-        VisitExpr(pull.Ptr(), [&](const TExprNode::TPtr& node) { 
+        VisitExpr(pull.Ptr(), [&](const TExprNode::TPtr& node) {
             if (TResTransientBase::Match(node.Get()))
                 return false;
             if (const TExprBase expr(node); expr.Maybe<TDqConnection>()) {
@@ -867,26 +867,26 @@ private:
                         allPublicIds.emplace(*publicId, 0U);
                     }
                 }
-            } else if (oneGraphPerQuery) { 
-                if (expr.Maybe<TDqCnResult>() || expr.Maybe<TDqQuery>()) { 
-                    ++graphsCount; 
-                } 
+            } else if (oneGraphPerQuery) {
+                if (expr.Maybe<TDqCnResult>() || expr.Maybe<TDqQuery>()) {
+                    ++graphsCount;
+                }
             }
             return true;
         });
-        YQL_ENSURE(!oneGraphPerQuery || graphsCount == 1, "Internal error: only one graph per query is allowed"); 
+        YQL_ENSURE(!oneGraphPerQuery || graphsCount == 1, "Internal error: only one graph per query is allowed");
 
         if (hasStageError) {
             return SyncError();
         }
 
-        auto optimizedInput = pull.Input().Ptr(); 
+        auto optimizedInput = pull.Input().Ptr();
         THashMap<TString, TString> secureParams;
         NCommon::FillSecureParams(optimizedInput, *State->TypeCtx, secureParams);
 
         optimizedInput = ctx.ShallowCopy(*optimizedInput);
-        optimizedInput->SetTypeAnn(pull.Input().Ref().GetTypeAnn()); 
-        optimizedInput->CopyConstraints(pull.Input().Ref()); 
+        optimizedInput->SetTypeAnn(pull.Input().Ref().GetTypeAnn());
+        optimizedInput->CopyConstraints(pull.Input().Ref());
 
         TDqsPipelineConfigurator peepholeConfig;
         TPeepholeSettings peepholeSettings;
@@ -918,7 +918,7 @@ private:
             State->TypeCtx, ctx, State->FunctionRegistry,
             optimizedInput);
 
-        // exprRoot must be DqCnResult or DqQuery 
+        // exprRoot must be DqCnResult or DqQuery
 
         executionPlanner->SetPublicIds(stage2publicId);
 
@@ -1006,7 +1006,7 @@ private:
             return FallbackWithMessage(pull.Ref(), "Too big attachment", ctx);
         }
 
-        IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(pull.Ref()); 
+        IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(pull.Ref());
         settings = settings->WithFillSettings(fillSettings);
 
         if (const auto optLLVM = State->TypeCtx->OptLLVM) {

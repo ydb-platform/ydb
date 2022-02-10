@@ -1532,10 +1532,10 @@ private:
                 ++i;
             }
 
-            if (!resolveErrors.empty()) { 
+            if (!resolveErrors.empty()) {
                 TMiniKQLCompileResult result(resolveErrors);
-                return SendResponseAndDie(result, std::move(compileResolveCookies), ctx); 
-            } 
+                return SendResponseAndDie(result, std::move(compileResolveCookies), ctx);
+            }
 
             TMiniKQLCompileResult result;
 

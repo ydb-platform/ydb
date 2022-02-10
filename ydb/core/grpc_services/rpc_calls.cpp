@@ -13,7 +13,7 @@ void FillYdbStatus(Ydb::PersQueue::V1::StreamingWriteServerMessage& resp, const 
 }
 
 template <>
-void FillYdbStatus(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) { 
+void FillYdbStatus(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) {
     resp.set_status(status);
     NYql::IssuesToMessage(issues, resp.mutable_issues());
 }

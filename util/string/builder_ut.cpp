@@ -37,27 +37,27 @@ Y_UNIT_TEST_SUITE(TStringBuilderTest) {
         out << sb;
         TestEquals("a", s);
     }
- 
+
     Y_UNIT_TEST(TestStringBuilderRValue) {
-        struct TRValueAcceptTester { 
+        struct TRValueAcceptTester {
             static bool IsRValue(const TString&) {
-                return false; 
-            } 
- 
+                return false;
+            }
+
             static bool IsRValue(TString&&) {
-                return true; 
-            } 
-        }; 
- 
-        UNIT_ASSERT(TRValueAcceptTester::IsRValue(TStringBuilder() << "a" << 1)); 
- 
-        TStringBuilder b; 
-        UNIT_ASSERT(!TRValueAcceptTester::IsRValue(b << "a" << 1)); 
-        TStringBuilder b2; 
-        UNIT_ASSERT(!TRValueAcceptTester::IsRValue(b2 << "a" << 1 << TStringBuilder() << "a")); 
-        UNIT_ASSERT_VALUES_EQUAL("a1a", b2); 
- 
-        UNIT_ASSERT(TRValueAcceptTester::IsRValue(TStringBuilder() << b2)); 
-        UNIT_ASSERT_VALUES_EQUAL("a1a", TStringBuilder() << b2); 
-    } 
+                return true;
+            }
+        };
+
+        UNIT_ASSERT(TRValueAcceptTester::IsRValue(TStringBuilder() << "a" << 1));
+
+        TStringBuilder b;
+        UNIT_ASSERT(!TRValueAcceptTester::IsRValue(b << "a" << 1));
+        TStringBuilder b2;
+        UNIT_ASSERT(!TRValueAcceptTester::IsRValue(b2 << "a" << 1 << TStringBuilder() << "a"));
+        UNIT_ASSERT_VALUES_EQUAL("a1a", b2);
+
+        UNIT_ASSERT(TRValueAcceptTester::IsRValue(TStringBuilder() << b2));
+        UNIT_ASSERT_VALUES_EQUAL("a1a", TStringBuilder() << b2);
+    }
 }

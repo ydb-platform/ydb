@@ -134,7 +134,7 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
         attrMode |= /*FILE_FLAG_NO_BUFFERING |*/ FILE_FLAG_WRITE_THROUGH;
     }
 
-    Fd_ = NFsPrivate::CreateFileWithUtf8Name(fName, faMode, shMode, fcMode, attrMode, inheritHandle); 
+    Fd_ = NFsPrivate::CreateFileWithUtf8Name(fName, faMode, shMode, fcMode, attrMode, inheritHandle);
 
     if ((oMode & ::ForAppend) && (Fd_ != INVALID_FHANDLE)) {
         ::SetFilePointer(Fd_, 0, 0, FILE_END);

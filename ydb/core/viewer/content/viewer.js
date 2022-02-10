@@ -1496,8 +1496,8 @@ function tabletTypeToSymbol(type) {
         return "CN";
     case "TenantSlotBroker":
         return "TB";
-    case "Kesus": 
-        return "K"; 
+    case "Kesus":
+        return "K";
     case "OlapShard":
         return "OS";
     case "ColumnShard":
@@ -2588,8 +2588,8 @@ function schemaPathTypeToString(pathType) {
         return "Table";
     case 3:
         return "PersQueueGroup";
-    case 7: 
-        return "Kesus"; 
+    case 7:
+        return "Kesus";
     case 10:
         return "Tenant";
     case 15:
@@ -2843,53 +2843,53 @@ function onTreeNodeComplete(result, obj) {
         }
     }
 
-    if (result.PathDescription.Self.PathType === 7) { 
-        tablet = String(result.PathDescription.Kesus.KesusTabletId); 
-        SchemaTabletElements[tablet] = null; 
- 
-        row = tab.insertRow(); 
-        name = row.insertCell(-1); 
-        value = row.insertCell(-1); 
-        name.innerHTML = "PathId"; 
-        value.innerHTML = String(result.PathDescription.Kesus.PathId); 
- 
-        row = tab.insertRow(); 
-        name = row.insertCell(-1); 
-        value = row.insertCell(-1); 
-        name.innerHTML = "KesusTabletId"; 
-        value.innerHTML = String(result.PathDescription.Kesus.KesusTabletId); 
- 
-        row = tab.insertRow(); 
-        name = row.insertCell(-1); 
-        value = row.insertCell(-1); 
-        name.innerHTML = "Version"; 
-        value.innerHTML = String(result.PathDescription.Kesus.Version); 
- 
-        row = tab.insertRow(); 
-        name = row.insertCell(-1); 
-        value = row.insertCell(-1); 
-        name.innerHTML = "Self check period (ms)"; 
-        value.innerHTML = String(result.PathDescription.Kesus.Config.self_check_period_millis); 
- 
-        row = tab.insertRow(); 
-        name = row.insertCell(-1); 
-        value = row.insertCell(-1); 
-        name.innerHTML = "Session grace period (ms)"; 
-        value.innerHTML = String(result.PathDescription.Kesus.Config.session_grace_period_millis); 
- 
-        row = tab.insertRow(); 
-        name = row.insertCell(-1); 
-        value = row.insertCell(-1); 
-        name.innerHTML = "Read consistency mode"; 
-        value.innerHTML = String(result.PathDescription.Kesus.Config.read_consistency_mode); 
- 
-        row = tab.insertRow(); 
-        name = row.insertCell(-1); 
-        value = row.insertCell(-1); 
-        name.innerHTML = "Attach consistency mode"; 
-        value.innerHTML = String(result.PathDescription.Kesus.Config.attach_consistency_mode); 
-    } 
- 
+    if (result.PathDescription.Self.PathType === 7) {
+        tablet = String(result.PathDescription.Kesus.KesusTabletId);
+        SchemaTabletElements[tablet] = null;
+
+        row = tab.insertRow();
+        name = row.insertCell(-1);
+        value = row.insertCell(-1);
+        name.innerHTML = "PathId";
+        value.innerHTML = String(result.PathDescription.Kesus.PathId);
+
+        row = tab.insertRow();
+        name = row.insertCell(-1);
+        value = row.insertCell(-1);
+        name.innerHTML = "KesusTabletId";
+        value.innerHTML = String(result.PathDescription.Kesus.KesusTabletId);
+
+        row = tab.insertRow();
+        name = row.insertCell(-1);
+        value = row.insertCell(-1);
+        name.innerHTML = "Version";
+        value.innerHTML = String(result.PathDescription.Kesus.Version);
+
+        row = tab.insertRow();
+        name = row.insertCell(-1);
+        value = row.insertCell(-1);
+        name.innerHTML = "Self check period (ms)";
+        value.innerHTML = String(result.PathDescription.Kesus.Config.self_check_period_millis);
+
+        row = tab.insertRow();
+        name = row.insertCell(-1);
+        value = row.insertCell(-1);
+        name.innerHTML = "Session grace period (ms)";
+        value.innerHTML = String(result.PathDescription.Kesus.Config.session_grace_period_millis);
+
+        row = tab.insertRow();
+        name = row.insertCell(-1);
+        value = row.insertCell(-1);
+        name.innerHTML = "Read consistency mode";
+        value.innerHTML = String(result.PathDescription.Kesus.Config.read_consistency_mode);
+
+        row = tab.insertRow();
+        name = row.insertCell(-1);
+        value = row.insertCell(-1);
+        name.innerHTML = "Attach consistency mode";
+        value.innerHTML = String(result.PathDescription.Kesus.Config.attach_consistency_mode);
+    }
+
     if (Object.keys(SchemaTabletElements).length !== 0) {
         panelTablets.innerHTML = "<img src='throbber.gif'></img>";
         row = tab.insertRow();

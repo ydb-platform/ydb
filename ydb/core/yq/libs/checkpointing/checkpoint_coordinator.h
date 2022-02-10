@@ -5,7 +5,7 @@
 
 #include <ydb/core/yq/libs/checkpointing/events/events.h>
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
-#include <ydb/core/yq/libs/checkpoint_storage/events/events.h> 
+#include <ydb/core/yq/libs/checkpoint_storage/events/events.h>
 
 #include <ydb/core/yq/libs/config/protos/checkpoint_coordinator.pb.h>
 #include <ydb/public/api/protos/yq.pb.h>
@@ -16,26 +16,26 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
-namespace NYq { 
+namespace NYq {
 
 using namespace NActors;
-using namespace NYq::NConfig; 
+using namespace NYq::NConfig;
 
 class TCheckpointCoordinator : public TActorBootstrapped<TCheckpointCoordinator> {
 public:
     TCheckpointCoordinator(TCoordinatorId coordinatorId,
                            const TActorId& taskControllerId,
                            const TActorId& storageProxy,
-                           const TActorId& runActorId, 
+                           const TActorId& runActorId,
                            const TCheckpointCoordinatorConfig& settings,
                            const NMonitoring::TDynamicCounterPtr& counters,
-                           const NProto::TGraphParams& graphParams, 
-                           const YandexQuery::StateLoadMode& stateLoadMode, 
-                           const YandexQuery::StreamingDisposition& streamingDisposition); 
+                           const NProto::TGraphParams& graphParams,
+                           const YandexQuery::StateLoadMode& stateLoadMode,
+                           const YandexQuery::StreamingDisposition& streamingDisposition);
 
     void Handle(const NYql::NDqs::TEvReadyState::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvRegisterCoordinatorResponse::TPtr&);
-    void Handle(const NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck::TPtr&); 
+    void Handle(const NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse::TPtr&);
     void Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpointResult::TPtr&);
     void Handle(const TEvCheckpointCoordinator::TEvScheduleCheckpointing::TPtr&);
@@ -45,18 +45,18 @@ public:
     void Handle(const NYql::NDq::TEvDqCompute::TEvStateCommitted::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvCompleteCheckpointResponse::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvAbortCheckpointResponse::TPtr&);
-    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev); 
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev);
     void Handle(NActors::TEvents::TEvPoison::TPtr&);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr&);
-    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev); 
-    void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev); 
-    void Handle(const TEvCheckpointCoordinator::TEvRunGraph::TPtr&); 
+    void Handle(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
+    void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev);
+    void Handle(const TEvCheckpointCoordinator::TEvRunGraph::TPtr&);
 
 
     STRICT_STFUNC(DispatchEvent,
-        hFunc(NYql::NDqs::TEvReadyState, Handle) 
+        hFunc(NYql::NDqs::TEvReadyState, Handle)
         hFunc(TEvCheckpointStorage::TEvRegisterCoordinatorResponse, Handle)
-        hFunc(NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck, Handle) 
+        hFunc(NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck, Handle)
         hFunc(TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse, Handle)
         hFunc(NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpointResult, Handle)
         hFunc(TEvCheckpointCoordinator::TEvScheduleCheckpointing, Handle)
@@ -66,12 +66,12 @@ public:
         hFunc(NYql::NDq::TEvDqCompute::TEvStateCommitted, Handle)
         hFunc(TEvCheckpointStorage::TEvCompleteCheckpointResponse, Handle)
         hFunc(TEvCheckpointStorage::TEvAbortCheckpointResponse, Handle)
-        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle) 
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle)
         hFunc(NActors::TEvents::TEvPoison, Handle)
         hFunc(NActors::TEvents::TEvUndelivered, Handle)
-        hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle) 
-        hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle) 
-        hFunc(TEvCheckpointCoordinator::TEvRunGraph, Handle) 
+        hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle)
+        hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle)
+        hFunc(TEvCheckpointCoordinator::TEvRunGraph, Handle)
     )
 
     void Bootstrap();
@@ -80,20 +80,20 @@ public:
 
 private:
     void InitCheckpoint();
-    void InjectCheckpoint(const TCheckpointId& checkpointId); 
+    void InjectCheckpoint(const TCheckpointId& checkpointId);
     void ScheduleNextCheckpoint();
     void UpdateInProgressMetric();
-    void PassAway() override; 
-    void RestoreFromOwnCheckpoint(const TCheckpointMetadata& checkpoint); 
-    void TryToRestoreOffsetsFromForeignCheckpoint(const TCheckpointMetadata& checkpoint); 
+    void PassAway() override;
+    void RestoreFromOwnCheckpoint(const TCheckpointMetadata& checkpoint);
+    void TryToRestoreOffsetsFromForeignCheckpoint(const TCheckpointMetadata& checkpoint);
 
-    template <class TEvPtr> 
-    bool OnComputeActorEventReceived(TEvPtr& ev) { 
-        const auto actorIt = AllActors.find(ev->Sender); 
-        Y_VERIFY(actorIt != AllActors.end()); 
-        return actorIt->second->EventsQueue.OnEventReceived(ev); 
-    } 
- 
+    template <class TEvPtr>
+    bool OnComputeActorEventReceived(TEvPtr& ev) {
+        const auto actorIt = AllActors.find(ev->Sender);
+        Y_VERIFY(actorIt != AllActors.end());
+        return actorIt->second->EventsQueue.OnEventReceived(ev);
+    }
+
     struct TCheckpointCoordinatorMetrics {
         TCheckpointCoordinatorMetrics(const NMonitoring::TDynamicCounterPtr& counters) {
             auto subgroup = counters->GetSubgroup("subsystem", "checkpoint_coordinator");
@@ -112,9 +112,9 @@ private:
             CheckpointDurationMillis = subgroup->GetHistogram("CheckpointDurationMillis", NMonitoring::ExponentialHistogram(12, 2, 1024)); // ~ 1s -> ~ 1 h
             CheckpointSizeBytes = subgroup->GetHistogram("CheckpointSizeBytes", NMonitoring::ExponentialHistogram(8, 32, 32));             // 32b -> 1Tb
             SkippedDueToInFlightLimit = subgroup->GetCounter("SkippedDueToInFlightLimit");
-            RestoredFromSavedCheckpoint = subgroup->GetCounter("RestoredFromSavedCheckpoint", true); 
-            StartedFromEmptyCheckpoint = subgroup->GetCounter("StartedFromEmptyCheckpoint", true); 
-            RestoredStreamingOffsetsFromCheckpoint = subgroup->GetCounter("RestoredStreamingOffsetsFromCheckpoint", true); 
+            RestoredFromSavedCheckpoint = subgroup->GetCounter("RestoredFromSavedCheckpoint", true);
+            StartedFromEmptyCheckpoint = subgroup->GetCounter("StartedFromEmptyCheckpoint", true);
+            RestoredStreamingOffsetsFromCheckpoint = subgroup->GetCounter("RestoredStreamingOffsetsFromCheckpoint", true);
         }
 
         NMonitoring::TDynamicCounters::TCounterPtr InProgress;
@@ -129,52 +129,52 @@ private:
         NMonitoring::TDynamicCounters::TCounterPtr LastCheckpointDurationMillis;
         NMonitoring::TDynamicCounters::TCounterPtr LastCheckpointSizeBytes;
         NMonitoring::TDynamicCounters::TCounterPtr SkippedDueToInFlightLimit;
-        NMonitoring::TDynamicCounters::TCounterPtr RestoredFromSavedCheckpoint; 
-        NMonitoring::TDynamicCounters::TCounterPtr StartedFromEmptyCheckpoint; 
-        NMonitoring::TDynamicCounters::TCounterPtr RestoredStreamingOffsetsFromCheckpoint; 
+        NMonitoring::TDynamicCounters::TCounterPtr RestoredFromSavedCheckpoint;
+        NMonitoring::TDynamicCounters::TCounterPtr StartedFromEmptyCheckpoint;
+        NMonitoring::TDynamicCounters::TCounterPtr RestoredStreamingOffsetsFromCheckpoint;
         NMonitoring::THistogramPtr CheckpointBarrierDeliveryTimeMillis;
         NMonitoring::THistogramPtr CheckpointDurationMillis;
         NMonitoring::THistogramPtr CheckpointSizeBytes;
     };
 
-    struct TComputeActorTransportStuff : public TSimpleRefCount<TComputeActorTransportStuff> { 
-        using TPtr = TIntrusivePtr<TComputeActorTransportStuff>; 
- 
-        NYql::NDq::TRetryEventsQueue EventsQueue; 
-    }; 
- 
+    struct TComputeActorTransportStuff : public TSimpleRefCount<TComputeActorTransportStuff> {
+        using TPtr = TIntrusivePtr<TComputeActorTransportStuff>;
+
+        NYql::NDq::TRetryEventsQueue EventsQueue;
+    };
+
     const TCoordinatorId CoordinatorId;
     const TActorId TaskControllerId;
     const TActorId StorageProxy;
-    const TActorId RunActorId; 
+    const TActorId RunActorId;
     std::unique_ptr<TCheckpointIdGenerator> CheckpointIdGenerator;
     TCheckpointCoordinatorConfig Settings;
     const TDuration CheckpointingPeriod;
-    const NProto::TGraphParams GraphParams; 
-    TString GraphDescId; 
+    const NProto::TGraphParams GraphParams;
+    TString GraphDescId;
 
-    THashMap<TActorId, TComputeActorTransportStuff::TPtr> AllActors; 
-    THashSet<TActorId> AllActorsSet; 
-    THashMap<TActorId, TComputeActorTransportStuff::TPtr> ActorsToTrigger; 
-    THashMap<TActorId, TComputeActorTransportStuff::TPtr> ActorsToWaitFor; 
-    THashSet<TActorId> ActorsToWaitForSet; 
-    THashMap<TActorId, TComputeActorTransportStuff::TPtr> ActorsToNotify; 
-    THashSet<TActorId> ActorsToNotifySet; 
-    THashMap<ui64, TActorId> TaskIdToActor; // Task id -> actor. 
+    THashMap<TActorId, TComputeActorTransportStuff::TPtr> AllActors;
+    THashSet<TActorId> AllActorsSet;
+    THashMap<TActorId, TComputeActorTransportStuff::TPtr> ActorsToTrigger;
+    THashMap<TActorId, TComputeActorTransportStuff::TPtr> ActorsToWaitFor;
+    THashSet<TActorId> ActorsToWaitForSet;
+    THashMap<TActorId, TComputeActorTransportStuff::TPtr> ActorsToNotify;
+    THashSet<TActorId> ActorsToNotifySet;
+    THashMap<ui64, TActorId> TaskIdToActor; // Task id -> actor.
     THashMap<TCheckpointId, TPendingCheckpoint, TCheckpointIdHash> PendingCheckpoints;
     THashMap<TCheckpointId, TPendingCheckpoint, TCheckpointIdHash> PendingCommitCheckpoints;
     TMaybe<TPendingRestoreCheckpoint> PendingRestoreCheckpoint;
-    std::unique_ptr<TPendingInitCoordinator> PendingInit; 
+    std::unique_ptr<TPendingInitCoordinator> PendingInit;
     bool GraphIsRunning = false;
-    bool InitingZeroCheckpoint = false; 
-    bool RestoringFromForeignCheckpoint = false; 
+    bool InitingZeroCheckpoint = false;
+    bool RestoringFromForeignCheckpoint = false;
 
     TCheckpointCoordinatorMetrics Metrics;
 
     YandexQuery::StateLoadMode StateLoadMode;
-    YandexQuery::StreamingDisposition StreamingDisposition; 
+    YandexQuery::StreamingDisposition StreamingDisposition;
 };
 
-THolder<NActors::IActor> MakeCheckpointCoordinator(TCoordinatorId coordinatorId, const TActorId& executerId, const TActorId& storageProxy, const TActorId& runActorId, const TCheckpointCoordinatorConfig& settings, const NMonitoring::TDynamicCounterPtr& counters, const NProto::TGraphParams& graphParams, const YandexQuery::StateLoadMode& stateLoadMode = YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT, const YandexQuery::StreamingDisposition& streamingDisposition = {}); 
+THolder<NActors::IActor> MakeCheckpointCoordinator(TCoordinatorId coordinatorId, const TActorId& executerId, const TActorId& storageProxy, const TActorId& runActorId, const TCheckpointCoordinatorConfig& settings, const NMonitoring::TDynamicCounterPtr& counters, const NProto::TGraphParams& graphParams, const YandexQuery::StateLoadMode& stateLoadMode = YandexQuery::StateLoadMode::FROM_LAST_CHECKPOINT, const YandexQuery::StreamingDisposition& streamingDisposition = {});
 
-} // namespace NYq 
+} // namespace NYq

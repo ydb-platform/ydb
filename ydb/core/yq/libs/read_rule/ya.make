@@ -1,14 +1,14 @@
 OWNER(g:yq)
- 
-LIBRARY() 
- 
-SRCS( 
-    read_rule_creator.cpp 
-    read_rule_deleter.cpp 
-) 
- 
-PEERDIR( 
-    library/cpp/actors/core 
+
+LIBRARY()
+
+SRCS(
+    read_rule_creator.cpp
+    read_rule_deleter.cpp
+)
+
+PEERDIR(
+    library/cpp/actors/core
     ydb/core/protos
     ydb/core/yq/libs/events
     ydb/public/api/protos
@@ -17,8 +17,8 @@ PEERDIR(
     ydb/library/yql/providers/common/proto
     ydb/library/yql/providers/dq/api/protos
     ydb/library/yql/providers/pq/proto
-) 
- 
-YQL_LAST_ABI_VERSION() 
- 
-END() 
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()

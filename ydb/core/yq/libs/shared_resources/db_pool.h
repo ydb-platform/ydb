@@ -9,8 +9,8 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-#include <util/system/mutex.h> 
- 
+#include <util/system/mutex.h>
+
 namespace NYq {
 
 class TDbPool: public TThrRefBase {

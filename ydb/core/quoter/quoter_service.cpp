@@ -1,52 +1,52 @@
 #include "quoter_service_impl.h"
-#include "debug_info.h" 
-#include "kesus_quoter_proxy.h" 
-#include "probes.h" 
- 
+#include "debug_info.h"
+#include "kesus_quoter_proxy.h"
+#include "probes.h"
+
 #include <ydb/core/base/counters.h>
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
-#include <cmath> 
- 
+#include <cmath>
+
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR
 #error log macro definition clash
 #endif
 
-#define BLOG_T(stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream) 
+#define BLOG_T(stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
 #define BLOG_D(stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
 #define BLOG_I(stream) LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
-#define BLOG_WARN(stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream) 
+#define BLOG_WARN(stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
 #define BLOG_ERROR(stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::QUOTER_SERVICE, stream)
 
-LWTRACE_USING(QUOTER_SERVICE_PROVIDER); 
+LWTRACE_USING(QUOTER_SERVICE_PROVIDER);
 
- 
+
 namespace NKikimr {
 namespace NQuoter {
 
-extern const TString CONSUMED_COUNTER_NAME = "QuotaConsumed"; 
-extern const TString REQUESTED_COUNTER_NAME = "QuotaRequested"; 
-extern const TString RESOURCE_COUNTER_SENSOR_NAME = "resource"; 
-extern const TString QUOTER_COUNTER_SENSOR_NAME = "quoter"; 
-extern const TString QUOTER_SERVICE_COUNTER_SENSOR_NAME = "quoter_service"; 
-extern const TString RESOURCE_QUEUE_SIZE_COUNTER_SENSOR_NAME = "QueueSize"; 
-extern const TString RESOURCE_QUEUE_WEIGHT_COUNTER_SENSOR_NAME = "QueueWeight"; 
-extern const TString RESOURCE_ALLOCATED_OFFLINE_COUNTER_SENSOR_NAME = "AllocatedOffline"; 
-extern const TString RESOURCE_DROPPED_COUNTER_SENSOR_NAME = "QuotaDropped"; 
-extern const TString RESOURCE_ACCUMULATED_COUNTER_SENSOR_NAME = "QuotaAccumulated"; 
-extern const TString RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME = "QuotaReceivedFromKesus"; 
-extern const TString REQUEST_QUEUE_TIME_SENSOR_NAME = "RequestQueueTimeMs"; 
-extern const TString REQUESTS_COUNT_SENSOR_NAME = "RequestsCount"; 
-extern const TString ELAPSED_MICROSEC_IN_STARVATION_SENSOR_NAME = "ElapsedMicrosecInStarvation"; 
-extern const TString REQUEST_TIME_SENSOR_NAME = "RequestTimeMs"; 
-extern const TString DISCONNECTS_COUNTER_SENSOR_NAME = "Disconnects"; 
- 
-constexpr double TICK_RATE_EPSILON = 0.0000000001; 
- 
-NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() { 
-    return NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000}); 
-} 
- 
+extern const TString CONSUMED_COUNTER_NAME = "QuotaConsumed";
+extern const TString REQUESTED_COUNTER_NAME = "QuotaRequested";
+extern const TString RESOURCE_COUNTER_SENSOR_NAME = "resource";
+extern const TString QUOTER_COUNTER_SENSOR_NAME = "quoter";
+extern const TString QUOTER_SERVICE_COUNTER_SENSOR_NAME = "quoter_service";
+extern const TString RESOURCE_QUEUE_SIZE_COUNTER_SENSOR_NAME = "QueueSize";
+extern const TString RESOURCE_QUEUE_WEIGHT_COUNTER_SENSOR_NAME = "QueueWeight";
+extern const TString RESOURCE_ALLOCATED_OFFLINE_COUNTER_SENSOR_NAME = "AllocatedOffline";
+extern const TString RESOURCE_DROPPED_COUNTER_SENSOR_NAME = "QuotaDropped";
+extern const TString RESOURCE_ACCUMULATED_COUNTER_SENSOR_NAME = "QuotaAccumulated";
+extern const TString RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME = "QuotaReceivedFromKesus";
+extern const TString REQUEST_QUEUE_TIME_SENSOR_NAME = "RequestQueueTimeMs";
+extern const TString REQUESTS_COUNT_SENSOR_NAME = "RequestsCount";
+extern const TString ELAPSED_MICROSEC_IN_STARVATION_SENSOR_NAME = "ElapsedMicrosecInStarvation";
+extern const TString REQUEST_TIME_SENSOR_NAME = "RequestTimeMs";
+extern const TString DISCONNECTS_COUNTER_SENSOR_NAME = "Disconnects";
+
+constexpr double TICK_RATE_EPSILON = 0.0000000001;
+
+NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
+    return NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000});
+}
+
 TRequest& TReqState::Get(ui32 idx) {
     Y_VERIFY(idx < Requests.size());
     auto &x = Requests[idx];
@@ -80,7 +80,7 @@ ui32 TReqState::Allocate(TActorId source, ui64 eventCookie) {
     auto &x = Requests[idx];
     x.Source = source;
     x.EventCookie = eventCookie;
-    x.StartTime = TActivationContext::Now(); 
+    x.StartTime = TActivationContext::Now();
 
     Y_VERIFY_DEBUG(x.PrevByOwner == Max<ui32>());
     Y_VERIFY_DEBUG(x.NextByOwner == Max<ui32>());
@@ -112,16 +112,16 @@ void TReqState::Free(ui32 idx) {
         Requests[x.PrevByOwner].NextByOwner = x.NextByOwner;
     }
 
-    if (lastEntry) { 
-        ByOwner.erase(x.Source); 
-    } else { 
-        auto byOwnerIt = ByOwner.find(x.Source); 
-        Y_VERIFY_DEBUG(byOwnerIt != ByOwner.end()); 
-        if (byOwnerIt->second == idx) { 
-            byOwnerIt->second = x.NextByOwner != Max<ui32>() ? x.NextByOwner : x.PrevByOwner; 
-        } 
-    } 
- 
+    if (lastEntry) {
+        ByOwner.erase(x.Source);
+    } else {
+        auto byOwnerIt = ByOwner.find(x.Source);
+        Y_VERIFY_DEBUG(byOwnerIt != ByOwner.end());
+        if (byOwnerIt->second == idx) {
+            byOwnerIt->second = x.NextByOwner != Max<ui32>() ? x.NextByOwner : x.PrevByOwner;
+        }
+    }
+
     x.NextByOwner = Max<ui32>();
     x.PrevByOwner = Max<ui32>();
 
@@ -137,8 +137,8 @@ void TReqState::Free(ui32 idx) {
     x.NextDeadlineRequest = Max<ui32>();
 
     x.Source = TActorId();
-    x.Orbit.Reset(); 
- 
+    x.Orbit.Reset();
+
     Unused.push_back(idx);
 }
 
@@ -194,8 +194,8 @@ void TResState::FreeChain(ui32 headIdx) {
         x.ResourceId = 0;
         TString().swap(x.ResourceName);
         TString().swap(x.QuoterName);
-        x.StartQueueing = TInstant::Zero(); 
-        x.StartCharging = TInstant::Zero(); 
+        x.StartQueueing = TInstant::Zero();
+        x.StartCharging = TInstant::Zero();
     }
 }
 
@@ -205,46 +205,46 @@ void TResource::ApplyQuotaChannel(const TEvQuota::TUpdateTick &tick) {
     QuotaChannels[tick.Channel] = tick;
 }
 
-void TResource::MarkStartedCharging(TRequest& request, TResourceLeaf& leaf, TInstant now) { 
-    if (leaf.StartCharging == TInstant::Zero()) { 
-        leaf.StartCharging = now; 
-        LWTRACK(StartCharging, request.Orbit, leaf.QuoterName, leaf.ResourceName, leaf.QuoterId, leaf.ResourceId); 
-        if (leaf.StartQueueing == TInstant::Zero()) { // was not in queue 
-            Counters.RequestQueueTime->Collect(0); 
-        } else { 
-            Counters.RequestQueueTime->Collect((now - leaf.StartQueueing).MilliSeconds()); 
-        } 
-    } 
-} 
- 
-void TResource::StartStarvation(TInstant now) { 
-    StopStarvation(now); 
-    StartStarvationTime = now; 
-} 
- 
-void TResource::StopStarvation(TInstant now) { 
-    if (StartStarvationTime != TInstant::Zero()) { 
-        *Counters.ElapsedMicrosecInStarvation += (now - StartStarvationTime).MicroSeconds(); 
-        StartStarvationTime = TInstant::Zero(); 
-    } 
-} 
- 
-TDuration TResource::Charge(TRequest& request, TResourceLeaf& leaf, TInstant now) { 
-    MarkStartedCharging(request, leaf, now); 
- 
+void TResource::MarkStartedCharging(TRequest& request, TResourceLeaf& leaf, TInstant now) {
+    if (leaf.StartCharging == TInstant::Zero()) {
+        leaf.StartCharging = now;
+        LWTRACK(StartCharging, request.Orbit, leaf.QuoterName, leaf.ResourceName, leaf.QuoterId, leaf.ResourceId);
+        if (leaf.StartQueueing == TInstant::Zero()) { // was not in queue
+            Counters.RequestQueueTime->Collect(0);
+        } else {
+            Counters.RequestQueueTime->Collect((now - leaf.StartQueueing).MilliSeconds());
+        }
+    }
+}
+
+void TResource::StartStarvation(TInstant now) {
+    StopStarvation(now);
+    StartStarvationTime = now;
+}
+
+void TResource::StopStarvation(TInstant now) {
+    if (StartStarvationTime != TInstant::Zero()) {
+        *Counters.ElapsedMicrosecInStarvation += (now - StartStarvationTime).MicroSeconds();
+        StartStarvationTime = TInstant::Zero();
+    }
+}
+
+TDuration TResource::Charge(TRequest& request, TResourceLeaf& leaf, TInstant now) {
+    MarkStartedCharging(request, leaf, now);
+
     if (leaf.IsUsedAmount) {
         ChargeUsedAmount(leaf.Amount, now);
         Counters.RequestTime->Collect((now - request.StartTime).MilliSeconds());
         return TDuration::Zero();
     }
 
-    const TDuration result = Charge(leaf.Amount, now); 
-    if (result == TDuration::Zero()) { 
-        Counters.RequestTime->Collect((now - request.StartTime).MilliSeconds()); 
-    } 
-    return result; 
-} 
- 
+    const TDuration result = Charge(leaf.Amount, now);
+    if (result == TDuration::Zero()) {
+        Counters.RequestTime->Collect((now - request.StartTime).MilliSeconds());
+    }
+    return result;
+}
+
 void TResource::ChargeUsedAmount(double amount, TInstant now) {
     BLOG_T("ChargeUsedAmount \"" << Resource << "\" for " << amount
            << ". Balance: " << Balance
@@ -263,30 +263,30 @@ void TResource::ChargeUsedAmount(double amount, TInstant now) {
     StartStarvation(now);
 }
 
-TDuration TResource::Charge(double amount, TInstant now) { 
+TDuration TResource::Charge(double amount, TInstant now) {
 // Zero - charged
 // Max - not in current tick (or resource already queued)
 // smth b/w - delayed by pace limit
-    if (TickRate < TICK_RATE_EPSILON) { // zero 
-        return TDuration::Max(); 
-    } 
+    if (TickRate < TICK_RATE_EPSILON) { // zero
+        return TDuration::Max();
+    }
 
     // could be fullfilled right now?
-    const double ticksToFullfill = amount / TickRate; 
-    const double durationToFullfillInUs = ticksToFullfill * static_cast<double>(TickSize.MicroSeconds()); 
-    // TODO: calculate time for many requests (not for one). Now errors can be accumulated when big rates are used. 
-    const TInstant timeToFullfill = LastAllocated + TDuration::MicroSeconds(lround(durationToFullfillInUs)); 
- 
-    BLOG_T("Charge \"" << Resource << "\" for " << amount 
-           << ". Balance: " << Balance 
-           << ". FreeBalance: " << FreeBalance 
-           << ". TicksToFullfill: " << ticksToFullfill 
-           << ". DurationToFullfillInUs: " << durationToFullfillInUs 
-           << ". TimeToFullfill: " << timeToFullfill 
-           << ". Now: " << now 
-           << ". LastAllocated: " << LastAllocated); 
- 
-    if (Balance >= 0.0) { 
+    const double ticksToFullfill = amount / TickRate;
+    const double durationToFullfillInUs = ticksToFullfill * static_cast<double>(TickSize.MicroSeconds());
+    // TODO: calculate time for many requests (not for one). Now errors can be accumulated when big rates are used.
+    const TInstant timeToFullfill = LastAllocated + TDuration::MicroSeconds(lround(durationToFullfillInUs));
+
+    BLOG_T("Charge \"" << Resource << "\" for " << amount
+           << ". Balance: " << Balance
+           << ". FreeBalance: " << FreeBalance
+           << ". TicksToFullfill: " << ticksToFullfill
+           << ". DurationToFullfillInUs: " << durationToFullfillInUs
+           << ". TimeToFullfill: " << timeToFullfill
+           << ". Now: " << now
+           << ". LastAllocated: " << LastAllocated);
+
+    if (Balance >= 0.0) {
         if (timeToFullfill <= now) {
             LastAllocated = Max(now - QuoterServiceConfig.ScheduleTickSize * 2, timeToFullfill);
             Balance -= amount;
@@ -296,8 +296,8 @@ TDuration TResource::Charge(double amount, TInstant now) {
             if (FreeBalance > Balance)
                 FreeBalance = Balance;
 
-            Counters.Consumed->Add(static_cast<i64>(amount)); 
-            StopStarvation(now); 
+            Counters.Consumed->Add(static_cast<i64>(amount));
+            StopStarvation(now);
             return TDuration::Zero();
         }
 
@@ -308,21 +308,21 @@ TDuration TResource::Charge(double amount, TInstant now) {
             AmountConsumed += amount;
             History.Add(now, amount);
 
-            Counters.Consumed->Add(static_cast<i64>(amount)); 
-            StopStarvation(now); 
+            Counters.Consumed->Add(static_cast<i64>(amount));
+            StopStarvation(now);
             return TDuration::Zero();
         }
     }
 
-    StartStarvation(now); 
+    StartStarvation(now);
     const TDuration delay = timeToFullfill - now;
     return (delay > TDuration::Zero()) ? delay : TDuration::Max();
 }
 
-TResource& TQuoterState::GetOrCreate(ui64 quoterId, ui64 resId, const TString& quoter, const TString& resource, const TQuoterServiceConfig &quoterServiceConfig) { 
+TResource& TQuoterState::GetOrCreate(ui64 quoterId, ui64 resId, const TString& quoter, const TString& resource, const TQuoterServiceConfig &quoterServiceConfig) {
     auto xpair = Resources.emplace(resId, nullptr);
     if (xpair.second)
-        xpair.first->second.Reset(new TResource(quoterId, resId, quoter, resource, quoterServiceConfig, Counters.QuoterCounters)); 
+        xpair.first->second.Reset(new TResource(quoterId, resId, quoter, resource, quoterServiceConfig, Counters.QuoterCounters));
 
     return *xpair.first->second;
 }
@@ -331,27 +331,27 @@ bool TQuoterState::Empty() {
     return Resources.empty() && WaitingResource.empty() && WaitingQueueResolve.empty();
 }
 
-TQuoterService::TQuoterService(const TQuoterServiceConfig &config) 
-    : Config(config) 
-    , LastProcessed(TInstant::Zero()) 
-    , StaticRatedQuoter("__StaticRatedQuoter", nullptr) 
-    , TickScheduled(false) 
-{ 
-    QUOTER_SYSTEM_DEBUG(DebugInfo->QuoterService = this); 
-} 
- 
-TQuoterService::~TQuoterService() { 
-    QUOTER_SYSTEM_DEBUG(DebugInfo->QuoterService = nullptr); 
-} 
- 
+TQuoterService::TQuoterService(const TQuoterServiceConfig &config)
+    : Config(config)
+    , LastProcessed(TInstant::Zero())
+    , StaticRatedQuoter("__StaticRatedQuoter", nullptr)
+    , TickScheduled(false)
+{
+    QUOTER_SYSTEM_DEBUG(DebugInfo->QuoterService = this);
+}
+
+TQuoterService::~TQuoterService() {
+    QUOTER_SYSTEM_DEBUG(DebugInfo->QuoterService = nullptr);
+}
+
 void TQuoterService::ScheduleNextTick(TInstant requested, TResource &quores) {
-    TryTickSchedule(); 
+    TryTickSchedule();
     const TInstant next = TimeToGranularity(requested);
     const TInstant last = TimeToGranularity(quores.LastTick + quores.TickSize);
-    const TInstant selected = Max(next, last, LastProcessed); 
+    const TInstant selected = Max(next, last, LastProcessed);
     quores.NextTick = selected;
     quores.LastTick = selected;
-    BLOG_T("Schedule next tick for \"" << quores.Resource << "\". Tick size: " << quores.TickSize << ". Time: " << quores.NextTick); 
+    BLOG_T("Schedule next tick for \"" << quores.Resource << "\". Tick size: " << quores.TickSize << ". Time: " << quores.NextTick);
     ScheduleFeed[quores.NextTick].emplace(&quores);
 }
 
@@ -364,7 +364,7 @@ TInstant TQuoterService::TimeToGranularity(TInstant rawTime) {
 }
 
 void TQuoterService::Bootstrap() {
-    TIntrusivePtr<NMonitoring::TDynamicCounters> counters = GetServiceCounters(AppData()->Counters, QUOTER_SERVICE_COUNTER_SENSOR_NAME); 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> counters = GetServiceCounters(AppData()->Counters, QUOTER_SERVICE_COUNTER_SENSOR_NAME);
 
     Counters.ActiveQuoterProxies = counters->GetCounter("ActiveQuoterProxies", false);
     Counters.ActiveProxyResources = counters->GetCounter("ActiveProxyResources", false);
@@ -374,27 +374,27 @@ void TQuoterService::Bootstrap() {
     Counters.ResultOk = counters->GetCounter("ResultOk", true);
     Counters.ResultDeadline = counters->GetCounter("ResultDeadline", true);
     Counters.ResultError = counters->GetCounter("ResultError", true);
-    Counters.RequestLatency = counters->GetHistogram("RequestLatencyMs", GetLatencyHistogramBuckets()); 
+    Counters.RequestLatency = counters->GetHistogram("RequestLatencyMs", GetLatencyHistogramBuckets());
 
-    Counters.ServiceCounters = std::move(counters); 
- 
-    StaticRatedQuoter.InitCounters(Counters.ServiceCounters); 
- 
-    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(QUOTER_SERVICE_PROVIDER)); 
- 
+    Counters.ServiceCounters = std::move(counters);
+
+    StaticRatedQuoter.InitCounters(Counters.ServiceCounters);
+
+    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(QUOTER_SERVICE_PROVIDER));
+
     Become(&TThis::StateFunc);
 }
 
-void TQuoterService::TryTickSchedule(TInstant now) { 
+void TQuoterService::TryTickSchedule(TInstant now) {
     if (!TickScheduled) {
         TickScheduled = true;
-        LastProcessed = TimeToGranularity(now != TInstant::Zero() ? now : TActivationContext::Now()); 
+        LastProcessed = TimeToGranularity(now != TInstant::Zero() ? now : TActivationContext::Now());
         Schedule(Config.ScheduleTickSize, new TEvents::TEvWakeup());
     }
 }
 
 void TQuoterService::ReplyRequest(TRequest &request, ui32 reqIdx, TEvQuota::TEvClearance::EResult resultCode) {
-    LWTRACK(RequestDone, request.Orbit, resultCode, request.EventCookie); 
+    LWTRACK(RequestDone, request.Orbit, resultCode, request.EventCookie);
     Send(request.Source, new TEvQuota::TEvClearance(resultCode), 0, request.EventCookie);
 
     ForgetRequest(request, reqIdx);
@@ -403,7 +403,7 @@ void TQuoterService::ReplyRequest(TRequest &request, ui32 reqIdx, TEvQuota::TEvC
 void TQuoterService::ForgetRequest(TRequest &request, ui32 reqIdx) {
     // request must be replied
     // we must not stop track request while not replied or explicitly canceled
-    // so only correct entry points are from ReplyRequest or from CancelRequest 
+    // so only correct entry points are from ReplyRequest or from CancelRequest
 
     // cleanup from resource wait queue
     for (ui32 leafIdx = request.ResourceLeaf; leafIdx != Max<ui32>(); ) {
@@ -431,7 +431,7 @@ void TQuoterService::ForgetRequest(TRequest &request, ui32 reqIdx) {
 
                 if (leaf.Resource->QueueHead == Max<ui32>()) {
                     leaf.Resource->QueueSize = 0;
-                    leaf.Resource->QueueWeight = 0.0; 
+                    leaf.Resource->QueueWeight = 0.0;
                 } else {
                     leaf.Resource->QueueSize -= 1;
                     leaf.Resource->QueueWeight -= leaf.Amount;
@@ -469,26 +469,26 @@ void TQuoterService::ForgetRequest(TRequest &request, ui32 reqIdx) {
 }
 
 void TQuoterService::DeclineRequest(TRequest &request, ui32 reqIdx) {
-    Counters.ResultError->Inc(); 
+    Counters.ResultError->Inc();
 
     return ReplyRequest(request, reqIdx, TEvQuota::TEvClearance::EResult::UnknownResource);
 }
 
-void TQuoterService::FailRequest(TRequest &request, ui32 reqIdx) { 
-    Counters.ResultError->Inc(); 
- 
-    return ReplyRequest(request, reqIdx, TEvQuota::TEvClearance::EResult::GenericError); 
-} 
- 
+void TQuoterService::FailRequest(TRequest &request, ui32 reqIdx) {
+    Counters.ResultError->Inc();
+
+    return ReplyRequest(request, reqIdx, TEvQuota::TEvClearance::EResult::GenericError);
+}
+
 void TQuoterService::AllowRequest(TRequest &request, ui32 reqIdx) {
     Counters.ResultOk->Inc();
-    Counters.RequestLatency->Collect((TActivationContext::Now() - request.StartTime).MilliSeconds()); 
+    Counters.RequestLatency->Collect((TActivationContext::Now() - request.StartTime).MilliSeconds());
 
     return ReplyRequest(request, reqIdx, TEvQuota::TEvClearance::EResult::Success);
 }
 
 void TQuoterService::DeadlineRequest(TRequest &request, ui32 reqIdx) {
-    Counters.ResultDeadline->Inc(); 
+    Counters.ResultDeadline->Inc();
 
     return ReplyRequest(request, reqIdx, TEvQuota::TEvClearance::EResult::Deadline);
 }
@@ -506,7 +506,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitSystemLeaf(const TEvQuota::T
     if ((leaf.ResourceId & (0x3ULL << 62)) == (1ULL << 62)) {
         // static rated resource
         const ui32 rate = (leaf.ResourceId & 0x3FFFFFFF);
-        auto &quores = StaticRatedQuoter.GetOrCreate(leaf.QuoterId, leaf.ResourceId, TString(), TString(), Config); 
+        auto &quores = StaticRatedQuoter.GetOrCreate(leaf.QuoterId, leaf.ResourceId, TString(), TString(), Config);
         if (quores.LastAllocated == TInstant::Max()) {
             Counters.KnownLocalResources->Inc();
 
@@ -517,11 +517,11 @@ TQuoterService::EInitLeafStatus TQuoterService::InitSystemLeaf(const TEvQuota::T
             quores.QueueTail = Max<ui32>();
 
             quores.LastAllocated = TInstant::Zero();
-            quores.AmountConsumed = 0.0; 
+            quores.AmountConsumed = 0.0;
             // NOTE: do not change `History`: we dont need it for static rate
 
-            quores.FreeBalance = 0.0; 
-            quores.TickRate = static_cast<double>(rate); 
+            quores.FreeBalance = 0.0;
+            quores.TickRate = static_cast<double>(rate);
             quores.Balance = quores.TickRate;
 
             quores.TickSize = TDuration::Seconds(1);
@@ -547,25 +547,25 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
     TQuoterState *quoter = quoterId ? Quoters.FindPtr(quoterId) : nullptr;
     if (quoter == nullptr) {
         if (!leaf.Quoter)
-            return EInitLeafStatus::GenericError; 
+            return EInitLeafStatus::GenericError;
 
         auto qIndxIt = QuotersIndex.find(leaf.Quoter);
         if (qIndxIt == QuotersIndex.end()) {
             TVector<TString> path = NKikimr::SplitPath(leaf.Quoter);
-            if (path.empty()) { 
-                BLOG_WARN("Empty path to quoter is provided: \"" << leaf.Quoter << "\""); 
-                return EInitLeafStatus::GenericError; 
-            } 
+            if (path.empty()) {
+                BLOG_WARN("Empty path to quoter is provided: \"" << leaf.Quoter << "\"");
+                return EInitLeafStatus::GenericError;
+            }
 
-            if (CanonizePath(path) != leaf.Quoter) { 
-                BLOG_WARN("Not canonized path to quoter is provided. Provided: \"" << leaf.Quoter << "\", but canonized is \"" << CanonizePath(path) << "\""); 
-                return EInitLeafStatus::GenericError; 
-            } 
+            if (CanonizePath(path) != leaf.Quoter) {
+                BLOG_WARN("Not canonized path to quoter is provided. Provided: \"" << leaf.Quoter << "\", but canonized is \"" << CanonizePath(path) << "\"");
+                return EInitLeafStatus::GenericError;
+            }
 
             quoterId = ++QuoterIdCounter;
             QuotersIndex.emplace(leaf.Quoter, quoterId);
 
-            quoter = &Quoters.emplace(quoterId, TQuoterState(leaf.Quoter, Counters.ServiceCounters)).first->second; 
+            quoter = &Quoters.emplace(quoterId, TQuoterState(leaf.Quoter, Counters.ServiceCounters)).first->second;
             Counters.ActiveQuoterProxies->Inc();
 
             THolder<NSchemeCache::TSchemeCacheNavigate> req(new NSchemeCache::TSchemeCacheNavigate());
@@ -607,7 +607,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
     THolder<TResource> *resHolder = leaf.ResourceId ? quoter->Resources.FindPtr(resourceId) : nullptr;
     if (resHolder == nullptr) {
         if (!leaf.Resource)
-            return EInitLeafStatus::GenericError; 
+            return EInitLeafStatus::GenericError;
 
         if (const ui64 *rsId = quoter->ResourcesIndex.FindPtr(leaf.Resource)) {
             resourceId = *rsId;
@@ -640,16 +640,16 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
         }
     }
 
-    if ((*resHolder)->NextTick == TInstant::Zero()) { 
-        ScheduleNextTick(TActivationContext::Now(), **resHolder); 
-    } 
- 
+    if ((*resHolder)->NextTick == TInstant::Zero()) {
+        ScheduleNextTick(TActivationContext::Now(), **resHolder);
+    }
+
     // ok, got resource
     const EInitLeafStatus chargeResult = TryCharge(**resHolder, quoterId, resourceId, leaf, request, reqIdx);
 
     switch (resHolder->Get()->StatUpdatePolicy) {
-    case EStatUpdatePolicy::EveryTick: 
-    case EStatUpdatePolicy::EveryActiveTick: 
+    case EStatUpdatePolicy::EveryTick:
+    case EStatUpdatePolicy::EveryActiveTick:
     case EStatUpdatePolicy::OnActivity:
         FillStats(**resHolder);
         break;
@@ -661,7 +661,7 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
 }
 
 void TQuoterService::MarkScheduleAllocation(TResource& quores, TDuration delay, TInstant now) {
-    TryTickSchedule(now); 
+    TryTickSchedule(now);
     Y_VERIFY(quores.NextTick != TInstant::Zero() && quores.NextTick != TInstant::Max());
     Y_VERIFY(delay > TDuration::Zero());
 
@@ -687,12 +687,12 @@ void TQuoterService::MarkScheduleAllocation(TResource& quores, TDuration delay, 
 }
 
 TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui64 quoterId, ui64 resourceId, const TEvQuota::TResourceLeaf &leaf, TRequest &request, ui32 reqIdx) {
-    *quores.Counters.Requested += leaf.Amount; 
-    ++*quores.Counters.RequestsCount; 
- 
-    const TInstant now = TActivationContext::Now(); 
-    bool startedCharge = false; 
-    LWTRACK(ResourceQueueState, request.Orbit, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId, quores.QueueSize, quores.QueueWeight); 
+    *quores.Counters.Requested += leaf.Amount;
+    ++*quores.Counters.RequestsCount;
+
+    const TInstant now = TActivationContext::Now();
+    bool startedCharge = false;
+    LWTRACK(ResourceQueueState, request.Orbit, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId, quores.QueueSize, quores.QueueWeight);
     if (leaf.IsUsedAmount) {
         quores.ChargeUsedAmount(leaf.Amount, now);
         LWTRACK(Charge, request.Orbit, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId);
@@ -700,16 +700,16 @@ TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui6
         return EInitLeafStatus::Charged;
     }
 
-    if (quores.QueueSize == 0) { 
-        startedCharge = true; 
-        const TDuration delay = quores.Charge(leaf.Amount, now); 
+    if (quores.QueueSize == 0) {
+        startedCharge = true;
+        const TDuration delay = quores.Charge(leaf.Amount, now);
 
-        if (delay == TDuration::Zero()) { 
-            LWTRACK(StartCharging, request.Orbit, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId); 
-            quores.Counters.RequestTime->Collect((now - request.StartTime).MilliSeconds()); 
-            return EInitLeafStatus::Charged; 
-        } 
- 
+        if (delay == TDuration::Zero()) {
+            LWTRACK(StartCharging, request.Orbit, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId);
+            quores.Counters.RequestTime->Collect((now - request.StartTime).MilliSeconds());
+            return EInitLeafStatus::Charged;
+        }
+
         MarkScheduleAllocation(quores, delay, now);
     }
 
@@ -718,11 +718,11 @@ TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui6
     TResourceLeaf& resLeaf = ResState.Get(resLeafIdx);
 
     resLeaf.State = EResourceState::Wait;
-    if (startedCharge) { 
-        quores.MarkStartedCharging(request, resLeaf, now); 
-    } else { 
-        resLeaf.StartQueueing = now; 
-    } 
+    if (startedCharge) {
+        quores.MarkStartedCharging(request, resLeaf, now);
+    } else {
+        resLeaf.StartQueueing = now;
+    }
 
     quores.QueueSize += 1;
     quores.QueueWeight += leaf.Amount;
@@ -736,10 +736,10 @@ TQuoterService::EInitLeafStatus TQuoterService::TryCharge(TResource& quores, ui6
         quores.QueueTail = resLeafIdx;
         quores.QueueHead = resLeafIdx;
     } else {
-        Y_VERIFY_DEBUG(ResState.Get(quores.QueueTail).NextInWaitQueue == Max<ui32>()); 
+        Y_VERIFY_DEBUG(ResState.Get(quores.QueueTail).NextInWaitQueue == Max<ui32>());
         resLeaf.PrevInWaitQueue = quores.QueueTail;
         ResState.Get(quores.QueueTail).NextInWaitQueue = resLeafIdx;
-        quores.QueueTail = resLeafIdx; 
+        quores.QueueTail = resLeafIdx;
     }
 
     resLeaf.NextResourceLeaf = request.ResourceLeaf;
@@ -761,7 +761,7 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
     Y_VERIFY(msg->Reqs.size() >= 1);
     bool canAllow = true;
     for (const auto &leaf : msg->Reqs) {
-        LWTRACK(RequestResource, request.Orbit, leaf.Amount, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId); 
+        LWTRACK(RequestResource, request.Orbit, leaf.Amount, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId);
         const EInitLeafStatus initLeafStatus =
             (leaf.QuoterId == TEvQuota::TResourceLeaf::QuoterSystem) ?
             InitSystemLeaf(leaf, request, reqIdx) :
@@ -770,8 +770,8 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
         switch (initLeafStatus) {
         case EInitLeafStatus::Unknown:
             return DeclineRequest(request, reqIdx);
-        case EInitLeafStatus::GenericError: 
-            return FailRequest(request, reqIdx); 
+        case EInitLeafStatus::GenericError:
+            return FailRequest(request, reqIdx);
         case EInitLeafStatus::Forbid:
             return DeadlineRequest(request, reqIdx);
         case EInitLeafStatus::Charged:
@@ -791,9 +791,9 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
 
     if (msg->Deadline != TDuration::Max()) {
         const TDuration delay = Min(TDuration::Days(1), msg->Deadline);
-        const TInstant now = TActivationContext::Now(); 
-        TryTickSchedule(now); 
-        request.Deadline = TimeToGranularity(now + delay); 
+        const TInstant now = TActivationContext::Now();
+        TryTickSchedule(now);
+        request.Deadline = TimeToGranularity(now + delay);
 
         auto deadlineIt = ScheduleDeadline.find(request.Deadline);
         if (deadlineIt == ScheduleDeadline.end()) {
@@ -815,22 +815,22 @@ void TQuoterService::InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, co
 }
 
 void TQuoterService::Handle(TEvQuota::TEvRequest::TPtr &ev) {
-    BLOG_T("Request(" << PrintEvent(ev) << ")"); 
- 
+    BLOG_T("Request(" << PrintEvent(ev) << ")");
+
     Counters.RequestsInFly->Inc();
     Counters.Requests->Inc();
 
     TEvQuota::TEvRequest *msg = ev->Get();
     const ui32 reqIdx = ReqState.Allocate(ev->Sender, ev->Cookie);
     TRequest &request = ReqState.Get(reqIdx);
-    LWTRACK(StartRequest, request.Orbit, msg->Operator, msg->Deadline, ev->Cookie); 
+    LWTRACK(StartRequest, request.Orbit, msg->Operator, msg->Deadline, ev->Cookie);
 
     if (msg->Reqs.empty()) // request nothing? most probably is error so decline
         return DeclineRequest(request, reqIdx);
 
     // dirty processing of simple embedded resources
     if (msg->Reqs.size() == 1) {
-        const TEvQuota::TResourceLeaf &leaf = msg->Reqs[0]; 
+        const TEvQuota::TResourceLeaf &leaf = msg->Reqs[0];
         switch (msg->Operator) {
         case EResourceOperator::And:
         // only one case supported right now
@@ -838,10 +838,10 @@ void TQuoterService::Handle(TEvQuota::TEvRequest::TPtr &ev) {
             if (leaf.QuoterId == TEvQuota::TResourceLeaf::QuoterSystem) {
                 switch (leaf.ResourceId) {
                 case TEvQuota::TResourceLeaf::ResourceForbid:
-                    LWTRACK(RequestResource, request.Orbit, leaf.Amount, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId); 
+                    LWTRACK(RequestResource, request.Orbit, leaf.Amount, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId);
                     return DeadlineRequest(request, reqIdx);
                 case TEvQuota::TResourceLeaf::ResourceNocheck:
-                    LWTRACK(RequestResource, request.Orbit, leaf.Amount, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId); 
+                    LWTRACK(RequestResource, request.Orbit, leaf.Amount, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId);
                     return AllowRequest(request, reqIdx);
                 }
             }
@@ -849,7 +849,7 @@ void TQuoterService::Handle(TEvQuota::TEvRequest::TPtr &ev) {
         break;
         // not supported yet modes
         default:
-            LWTRACK(RequestResource, request.Orbit, leaf.Amount, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId); 
+            LWTRACK(RequestResource, request.Orbit, leaf.Amount, leaf.Quoter, leaf.Resource, leaf.QuoterId, leaf.ResourceId);
             return DeclineRequest(request, reqIdx);
         }
     }
@@ -904,13 +904,13 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
     if (isError) {
         BLOG_I("resource sesson failed: " << quoter.QuoterName << ":" << resourceName);
 
-        for (ui32 reqIdx : waitingRequests) { 
-            if (msg->Result == TEvQuota::TEvProxySession::UnknownResource) { 
-                DeclineRequest(ReqState.Get(reqIdx), reqIdx); 
-            } else { 
-                FailRequest(ReqState.Get(reqIdx), reqIdx); 
-            } 
-        } 
+        for (ui32 reqIdx : waitingRequests) {
+            if (msg->Result == TEvQuota::TEvProxySession::UnknownResource) {
+                DeclineRequest(ReqState.Get(reqIdx), reqIdx);
+            } else {
+                FailRequest(ReqState.Get(reqIdx), reqIdx);
+            }
+        }
 
         return;
     }
@@ -920,7 +920,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
     BLOG_I("resource session established: " << quoter.QuoterName << ":" << resourceName << " as " << resourceId);
 
     // success, create resource
-    auto resPairIt = quoter.Resources.emplace(resourceId, new TResource(quoterId, resourceId, quoter.QuoterName, resourceName, Config, quoter.Counters.QuoterCounters)); 
+    auto resPairIt = quoter.Resources.emplace(resourceId, new TResource(quoterId, resourceId, quoter.QuoterName, resourceName, Config, quoter.Counters.QuoterCounters));
     Y_VERIFY(resPairIt.second, "must be no duplicating resources");
     quoter.ResourcesIndex.emplace(resourceName, resourceId);
 
@@ -929,7 +929,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
     TResource &quores = *resPairIt.first->second;
     quores.TickSize = msg->TickSize;
     quores.StatUpdatePolicy = msg->StatUpdatePolicy;
-    quores.LastAllocated = TInstant::Zero(); 
+    quores.LastAllocated = TInstant::Zero();
 
     // move requests to 'wait resource' state
     for (ui32 reqId : waitingRequests) {
@@ -948,16 +948,16 @@ void TQuoterService::Handle(TEvQuota::TEvProxySession::TPtr &ev) {
 
                 quores.QueueSize += 1;
                 quores.QueueWeight += leaf.Amount;
-                quores.Counters.Requested->Add(leaf.Amount); 
+                quores.Counters.Requested->Add(leaf.Amount);
 
                 if (quores.QueueTail == Max<ui32>()) {
                     quores.QueueTail = resIdx;
                     quores.QueueHead = resIdx;
                 } else {
-                    Y_VERIFY_DEBUG(ResState.Get(quores.QueueTail).NextInWaitQueue == Max<ui32>()); 
+                    Y_VERIFY_DEBUG(ResState.Get(quores.QueueTail).NextInWaitQueue == Max<ui32>());
                     leaf.PrevInWaitQueue = quores.QueueTail;
                     ResState.Get(quores.QueueTail).NextInWaitQueue = resIdx;
-                    quores.QueueTail = resIdx; 
+                    quores.QueueTail = resIdx;
                 }
             }
             // initial charge would be in first session update
@@ -1007,7 +1007,7 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         if (resUpdate.ResourceState == EUpdateState::Broken
             || (resUpdate.ResourceState == EUpdateState::Evict && quores.QueueHead == Max<ui32>()))
         {
-            BLOG_I("closing resource on ProxyUpdate " << quoter.QuoterName << ":" << quores.Resource); 
+            BLOG_I("closing resource on ProxyUpdate " << quoter.QuoterName << ":" << quores.Resource);
             Send(quoter.ProxyId, new TEvQuota::TEvProxyCloseSession(quores.Resource, quores.ResourceId));
 
             ForbidResource(quores);
@@ -1017,22 +1017,22 @@ void TQuoterService::Handle(TEvQuota::TEvProxyUpdate::TPtr &ev) {
         }
 
         for (auto &update : resUpdate.Update) {
-            if (update.Ticks == 0) { 
+            if (update.Ticks == 0) {
                 quores.QuotaChannels.erase(update.Channel);
-            } else { 
-                Y_VERIFY(update.Rate >= 0.0); 
+            } else {
+                Y_VERIFY(update.Rate >= 0.0);
                 quores.QuotaChannels[update.Channel] = update;
-            } 
+            }
         }
 
-        if (quores.NextTick == TInstant::Zero()) { 
+        if (quores.NextTick == TInstant::Zero()) {
             FeedResource(quores);
-            TryTickSchedule(); 
-        } 
+            TryTickSchedule();
+        }
     }
 
     if (quoter.Empty()) {
-        BLOG_I("closing quoter on ProxyUpdate as no activity left " << quoter.QuoterName); 
+        BLOG_I("closing quoter on ProxyUpdate as no activity left " << quoter.QuoterName);
         return BreakQuoter(quoterIt);
     }
 }
@@ -1072,7 +1072,7 @@ void TQuoterService::CreateKesusQuoter(NSchemeCache::TSchemeCacheNavigate::TEntr
         return BreakQuoter(indexIt, quoterIt);
     }
 
-    quoter.ProxyId = Register(CreateKesusQuoterProxy(quoterId, navigate, SelfId()), TMailboxType::HTSwap, AppData()->UserPoolId); 
+    quoter.ProxyId = Register(CreateKesusQuoterProxy(quoterId, navigate, SelfId()), TMailboxType::HTSwap, AppData()->UserPoolId);
 
     TSet<ui32> waitingQueueResolve(std::move(quoter.WaitingQueueResolve));
     for (ui32 reqIdx : waitingQueueResolve) {
@@ -1169,17 +1169,17 @@ void TQuoterService::CheckRequest(ui32 reqIdx) {
 
 void TQuoterService::FillStats(TResource &quores) {
     auto &dq = StatsToPublish[quores.QuoterId];
-    const double expectedRate = -1.0; 
-    const double cap = -1.0; 
+    const double expectedRate = -1.0;
+    const double cap = -1.0;
     dq.emplace_back(quores.ResourceId, 0, quores.AmountConsumed, quores.History, quores.QueueSize, quores.QueueWeight, expectedRate, cap);
-    quores.AmountConsumed = 0.0; 
+    quores.AmountConsumed = 0.0;
     quores.History.Clear();
 }
 
 void TQuoterService::FeedResource(TResource &quores) {
-    quores.Balance = 0.0; 
-    quores.FreeBalance = 0.0; 
-    quores.TickRate = 0.0; 
+    quores.Balance = 0.0;
+    quores.FreeBalance = 0.0;
+    quores.TickRate = 0.0;
 
     for (auto it = quores.QuotaChannels.begin(), end = quores.QuotaChannels.end(); it != end;) {
         auto &quota = it->second;
@@ -1206,20 +1206,20 @@ void TQuoterService::FeedResource(TResource &quores) {
         }
     }
 
-    BLOG_T("Feed resource \"" << quores.Resource << "\". Balance: " << quores.Balance << ". FreeBalance: " << quores.FreeBalance); 
-    LWPROBE(FeedResource, 
-            quores.Quoter, 
-            quores.Resource, 
-            quores.QuoterId, 
-            quores.ResourceId, 
-            quores.Balance, 
-            quores.FreeBalance); 
- 
+    BLOG_T("Feed resource \"" << quores.Resource << "\". Balance: " << quores.Balance << ". FreeBalance: " << quores.FreeBalance);
+    LWPROBE(FeedResource,
+            quores.Quoter,
+            quores.Resource,
+            quores.QuoterId,
+            quores.ResourceId,
+            quores.Balance,
+            quores.FreeBalance);
+
     if (quores.QueueTail == Max<ui32>()) {
         quores.NextTick = TInstant::Zero();
     } else {
         // must recheck resource allocation
-        ScheduleNextTick(quores.NextTick ? quores.NextTick + quores.TickSize : TActivationContext::Now(), quores); 
+        ScheduleNextTick(quores.NextTick ? quores.NextTick + quores.TickSize : TActivationContext::Now(), quores);
         AllocateResource(quores);
     }
 
@@ -1241,13 +1241,13 @@ void TQuoterService::FeedResource(TResource &quores) {
 }
 
 void TQuoterService::AllocateResource(TResource &quores) {
-    BLOG_T("Allocate resource \"" << quores.Resource << "\""); 
+    BLOG_T("Allocate resource \"" << quores.Resource << "\"");
     const TInstant now = TActivationContext::Now();
-    ui64 requestsProcessed = 0; 
-    const double prevAmountConsumed = quores.AmountConsumed; 
+    ui64 requestsProcessed = 0;
+    const double prevAmountConsumed = quores.AmountConsumed;
     while (quores.QueueHead != Max<ui32>()) {
         TResourceLeaf &leaf = ResState.Get(quores.QueueHead);
-        TDuration delay = quores.Charge(ReqState.Get(leaf.RequestIdx), leaf, now); 
+        TDuration delay = quores.Charge(ReqState.Get(leaf.RequestIdx), leaf, now);
 
         if (delay == TDuration::Zero()) {
             // resource available and charged
@@ -1266,7 +1266,7 @@ void TQuoterService::AllocateResource(TResource &quores) {
                 quores.QueueTail = Max<ui32>();
 
                 quores.QueueSize = 0;
-                quores.QueueWeight = 0.0; 
+                quores.QueueWeight = 0.0;
             }
 
             leaf.NextInWaitQueue = Max<ui32>();
@@ -1275,28 +1275,28 @@ void TQuoterService::AllocateResource(TResource &quores) {
             leaf.State = EResourceState::Cleared;
 
             CheckRequest(leaf.RequestIdx);
-            ++requestsProcessed; 
+            ++requestsProcessed;
         } else {
             MarkScheduleAllocation(quores, delay, now);
-            break; 
+            break;
         }
     }
-    LWPROBE(AllocateResource, 
-            quores.Quoter, 
-            quores.Resource, 
-            quores.QuoterId, 
-            quores.ResourceId, 
-            requestsProcessed, 
-            quores.AmountConsumed - prevAmountConsumed, 
-            quores.QueueSize, 
-            quores.QueueWeight, 
-            quores.Balance, 
-            quores.FreeBalance); 
+    LWPROBE(AllocateResource,
+            quores.Quoter,
+            quores.Resource,
+            quores.QuoterId,
+            quores.ResourceId,
+            requestsProcessed,
+            quores.AmountConsumed - prevAmountConsumed,
+            quores.QueueSize,
+            quores.QueueWeight,
+            quores.Balance,
+            quores.FreeBalance);
 }
 
 void TQuoterService::HandleTick() {
-    const TInstant until = TimeToGranularity(TActivationContext::Now()); 
-    while (LastProcessed < until) { 
+    const TInstant until = TimeToGranularity(TActivationContext::Now());
+    while (LastProcessed < until) {
         // process resource allocation
         auto allocIt = ScheduleAllocation.find(LastProcessed);
         if (allocIt != ScheduleAllocation.end()) {
@@ -1342,8 +1342,8 @@ void TQuoterService::HandleTick() {
 
     if (ScheduleAllocation || ScheduleFeed || ScheduleDeadline) {
         Schedule(Config.ScheduleTickSize, new TEvents::TEvWakeup());
-    } else { 
-        TickScheduled = false; 
+    } else {
+        TickScheduled = false;
     }
 }
 
@@ -1356,37 +1356,37 @@ void TQuoterService::PublishStats() {
     StatsToPublish.clear();
 }
 
-TString TQuoterService::PrintEvent(const TEvQuota::TEvRequest::TPtr& ev) { 
-    const auto& req = *ev->Get(); 
-    TStringBuilder ret; 
-    ret << "{ Operator: " << req.Operator 
-        << " Deadline: "; 
-    if (req.Deadline == TDuration::Max()) { 
-        ret << "no"; 
-    } else if (req.Deadline == TDuration::Zero()) { 
-        ret << "0"; 
-    } else { 
-        ret << req.Deadline; 
-    } 
-    ret << " Cookie: " << ev->Cookie; 
-    ret << " ["; 
-    for (size_t i = 0; i < req.Reqs.size(); ++i) { 
-        const auto& leaf = req.Reqs[i]; 
-        if (i > 0) { 
-            ret << ","; 
-        } 
-        ret << " { " << leaf.Amount << ", "; 
-        if (leaf.Quoter) { 
-            ret << "\"" << leaf.Quoter << "\":\"" << leaf.Resource << "\""; 
-        } else { 
-            ret << leaf.QuoterId << ":" << leaf.ResourceId; 
-        } 
-        ret << " }"; 
-    } 
-    ret << " ] }"; 
-    return std::move(ret); 
-} 
- 
+TString TQuoterService::PrintEvent(const TEvQuota::TEvRequest::TPtr& ev) {
+    const auto& req = *ev->Get();
+    TStringBuilder ret;
+    ret << "{ Operator: " << req.Operator
+        << " Deadline: ";
+    if (req.Deadline == TDuration::Max()) {
+        ret << "no";
+    } else if (req.Deadline == TDuration::Zero()) {
+        ret << "0";
+    } else {
+        ret << req.Deadline;
+    }
+    ret << " Cookie: " << ev->Cookie;
+    ret << " [";
+    for (size_t i = 0; i < req.Reqs.size(); ++i) {
+        const auto& leaf = req.Reqs[i];
+        if (i > 0) {
+            ret << ",";
+        }
+        ret << " { " << leaf.Amount << ", ";
+        if (leaf.Quoter) {
+            ret << "\"" << leaf.Quoter << "\":\"" << leaf.Resource << "\"";
+        } else {
+            ret << leaf.QuoterId << ":" << leaf.ResourceId;
+        }
+        ret << " }";
+    }
+    ret << " ] }";
+    return std::move(ret);
+}
+
 } // namespace NQuoter
 
 IActor* CreateQuoterService(const TQuoterServiceConfig &config) {

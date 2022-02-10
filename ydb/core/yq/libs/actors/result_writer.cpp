@@ -20,12 +20,12 @@
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
 
-#define LOG_E(stream)                                                        \ 
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream) 
-#define LOG_I(stream)                                                        \ 
-    LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream) 
-#define LOG_D(stream)                                                        \ 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream) 
+#define LOG_E(stream)                                                        \
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
+#define LOG_I(stream)                                                        \
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
+#define LOG_D(stream)                                                        \
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
 
 namespace NYq {
 
@@ -79,7 +79,7 @@ private:
 
     void PassAway() {
         auto duration = (TInstant::Now()-StartTime);
-        LOG_I("FinishWrite, Records: " << RowIndex << " HasError: " << HasError << " Size: " << Size << " Rows: " << Rows << " FreeSpace: " << FreeSpace << " Duration: " << duration << " AvgSpeed: " << Size/(duration.Seconds()+1)/1024/1024); 
+        LOG_I("FinishWrite, Records: " << RowIndex << " HasError: " << HasError << " Size: " << Size << " Rows: " << Rows << " FreeSpace: " << FreeSpace << " Duration: " << duration << " AvgSpeed: " << Size/(duration.Seconds()+1)/1024/1024);
         NActors::IActor::PassAway();
     }
 

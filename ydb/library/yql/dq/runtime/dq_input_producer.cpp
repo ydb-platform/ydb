@@ -14,9 +14,9 @@ namespace {
 
 class TDqInputUnionStreamValue : public TComputationValue<TDqInputUnionStreamValue> {
 public:
-    TDqInputUnionStreamValue(TMemoryUsageInfo* memInfo, TVector<IDqInput::TPtr>&& inputs) 
+    TDqInputUnionStreamValue(TMemoryUsageInfo* memInfo, TVector<IDqInput::TPtr>&& inputs)
         : TComputationValue<TDqInputUnionStreamValue>(memInfo)
-        , Inputs(std::move(inputs)) 
+        , Inputs(std::move(inputs))
         , CurrentItemIndex(0) {}
 
 private:
@@ -41,19 +41,19 @@ private:
         bool allFinished = true;
         CurrentBuffer.clear();
 
-        for (auto& input : Inputs) { 
-            if (input->Pop(CurrentBuffer)) { 
+        for (auto& input : Inputs) {
+            if (input->Pop(CurrentBuffer)) {
                 CurrentItemIndex = 0;
                 return NUdf::EFetchStatus::Ok;
             }
-            allFinished &= input->IsFinished(); 
+            allFinished &= input->IsFinished();
         }
 
         return allFinished ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
     }
 
 private:
-    TVector<IDqInput::TPtr> Inputs; 
+    TVector<IDqInput::TPtr> Inputs;
     TUnboxedValueVector CurrentBuffer;
     ui64 CurrentItemIndex;
 };
@@ -171,10 +171,10 @@ private:
 
 } // namespace
 
-NUdf::TUnboxedValue CreateInputUnionValue(TVector<IDqInput::TPtr>&& inputs, 
+NUdf::TUnboxedValue CreateInputUnionValue(TVector<IDqInput::TPtr>&& inputs,
     const NMiniKQL::THolderFactory& factory)
 {
-    return factory.Create<TDqInputUnionStreamValue>(std::move(inputs)); 
+    return factory.Create<TDqInputUnionStreamValue>(std::move(inputs));
 }
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(TVector<IDqInput::TPtr>&& inputs,

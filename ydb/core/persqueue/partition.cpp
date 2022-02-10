@@ -42,8 +42,8 @@ static const ui32 LEVEL0 = 32;
 
 static const TDuration UPDATE_AVAIL_SIZE_INTERVAL = TDuration::MilliSeconds(100);
 
-static const TString WRITE_QUOTA_ROOT_PATH = "write-quota"; 
- 
+static const TString WRITE_QUOTA_ROOT_PATH = "write-quota";
+
 struct TPartition::THasDataReq {
     ui64 Num;
     ui64 Offset;
@@ -289,7 +289,7 @@ void TPartition::ReplyWrite(
         write->SetMaxSeqNo(maxSeqNo);
     write->SetOffset(offset);
 
-    write->SetPartitionQuotedTimeMs(partitionQuotedTime); 
+    write->SetPartitionQuotedTimeMs(partitionQuotedTime);
     write->SetTopicQuotedTimeMs(topicQuotedTime.MilliSeconds());
     write->SetTotalTimeInPartitionQueueMs(queueTime);
     write->SetWriteTimeMs(writeTime);
@@ -515,8 +515,8 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
 
     WriteTimestampEstimate = ManageWriteTimestampEstimate ? ctx.Now() : TInstant::Zero();
 
-    CalcTopicWriteQuotaParams(); 
- 
+    CalcTopicWriteQuotaParams();
+
 
     Counters.Populate(counters);
 }
@@ -562,7 +562,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
         res.push_back(out.Str()); out.Clear();
     }
     for (auto& avg : AvgWriteBytes) {
-        out << "AvgWriteSize per " << avg.GetDuration().ToString() << " is " << avg.GetValue() << " bytes"; 
+        out << "AvgWriteSize per " << avg.GetDuration().ToString() << " is " << avg.GetValue() << " bytes";
         res.push_back(out.Str()); out.Clear();
     }
     out << Config.DebugString(); res.push_back(out.Str()); out.Clear();
@@ -809,7 +809,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
 
     MsgsWritten = NKikimr::NPQ::TMultiCounter(GetServiceCounters(counters, "pqproxy|writeSession"),
                                               GetLabels(TopicName), {}, {"MessagesWritten" + suffix}, true);
- 
+
     TVector<NPQ::TLabelsInfo> aggr = {{{{"Account", NPersQueue::GetAccount(TopicName)}}, {"total"}}};
     ui32 border = AppData(ctx)->PQConfig.GetWriteLatencyBigMs();
     auto subGroup = GetServiceCounters(counters, "pqproxy|SLI");
@@ -843,7 +843,7 @@ void TPartition::SetupTopicCounters(const TActorContext& ctx) {
 void TPartition::SetupStreamCounters(const TActorContext& ctx) {
     auto counters = AppData(ctx)->Counters;
     auto labels = NKikimr::NPQ::GetLabelsForStream(TopicName, CloudId, DbId, FolderId);
- 
+
     WriteBufferIsFullCounter.SetCounter(
         GetCountersForStream(counters, "writingTime"),
         {{"host", DCId},
@@ -1967,10 +1967,10 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     result.SetGapSize(headGapSize + GapSize);
 
     Y_VERIFY(AvgWriteBytes.size() == 4);
-    result.SetAvgWriteSpeedPerSec(AvgWriteBytes[0].GetValue()); 
-    result.SetAvgWriteSpeedPerMin(AvgWriteBytes[1].GetValue()); 
-    result.SetAvgWriteSpeedPerHour(AvgWriteBytes[2].GetValue()); 
-    result.SetAvgWriteSpeedPerDay(AvgWriteBytes[3].GetValue()); 
+    result.SetAvgWriteSpeedPerSec(AvgWriteBytes[0].GetValue());
+    result.SetAvgWriteSpeedPerMin(AvgWriteBytes[1].GetValue());
+    result.SetAvgWriteSpeedPerHour(AvgWriteBytes[2].GetValue());
+    result.SetAvgWriteSpeedPerDay(AvgWriteBytes[3].GetValue());
 
     Y_VERIFY(AvgQuotaBytes.size() == 4);
     result.SetAvgQuotaSpeedPerSec(AvgQuotaBytes[0].GetValue());
@@ -2686,8 +2686,8 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx)
 {
     ui64 offset = EndOffset;
     while (!Responses.empty()) {
-        const ui64 quotedTime = Responses.front().QuotedTime; 
-        const ui64 queueTime = Responses.front().QueueTime; 
+        const ui64 quotedTime = Responses.front().QuotedTime;
+        const ui64 queueTime = Responses.front().QueueTime;
         const ui64 writeTime = ctx.Now().MilliSeconds() - Responses.front().WriteTime;
 
         if (Responses.front().IsWrite()) {
@@ -2740,9 +2740,9 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx)
                 "Answering for message sourceid: '" << EscapeC(s) << "', Topic: '" << TopicName << "', Partition: " << Partition
                     << ", SeqNo: " << seqNo << ", partNo: " << partNo << ", Offset: " << offset << " is " << (already ? "already written" : "stored on disk")
             );
-            if (PartitionWriteQuotaWaitCounter) { 
-                PartitionWriteQuotaWaitCounter->IncFor(quotedTime); 
-            } 
+            if (PartitionWriteQuotaWaitCounter) {
+                PartitionWriteQuotaWaitCounter->IncFor(quotedTime);
+            }
 
             if (!already && partNo + 1 == totalParts)
                 ++offset;
@@ -2793,7 +2793,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx)
         }
         Responses.pop_front();
     }
-    TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero(); 
+    TopicQuotaWaitTimeForCurrentBlob = TDuration::Zero();
 }
 
 
@@ -3251,7 +3251,7 @@ void TPartition::ReportLabeledCounters(const TActorContext& ctx)
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {
-        ui64 avg = AvgWriteBytes[i].GetValue(); 
+        ui64 avg = AvgWriteBytes[i].GetValue();
         if (avg != PartitionLabeledCounters.GetCounters()[id].Get()) {
             haveChanges = true;
             PartitionLabeledCounters.GetCounters()[id].Set(avg); //total
@@ -3510,12 +3510,12 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     //All ok
     auto now = ctx.Now();
-    const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig(); 
+    const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     if (quotingConfig.GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
-        WriteQuota.Exaust(WriteNewSize, now); 
-    } else { 
-        WriteQuota.Exaust(WriteCycleSize, now); 
-    } 
+        WriteQuota.Exaust(WriteNewSize, now);
+    } else {
+        WriteQuota.Exaust(WriteCycleSize, now);
+    }
     for (auto& avg : AvgWriteBytes) {
         avg.Update(WriteNewSize, now);
     }
@@ -4448,18 +4448,18 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, const TActorCon
 
     if (!WriteQuota.CanExaust()) { // Waiting for partition quota.
         SetDeadlinesForWrites(ctx);
-        return false; 
-    } 
+        return false;
+    }
 
     if (WaitingForPreviousBlobQuota()) { // Waiting for topic quota.
         SetDeadlinesForWrites(ctx);
 
-        if (StartTopicQuotaWaitTimeForCurrentBlob == TInstant::Zero() && !Requests.empty()) { 
-            StartTopicQuotaWaitTimeForCurrentBlob = TActivationContext::Now(); 
-        } 
+        if (StartTopicQuotaWaitTimeForCurrentBlob == TInstant::Zero() && !Requests.empty()) {
+            StartTopicQuotaWaitTimeForCurrentBlob = TActivationContext::Now();
+        }
         return false;
     }
- 
+
     QuotaDeadline = TInstant::Zero();
 
     if (Requests.empty())
@@ -4550,14 +4550,14 @@ void TPartition::HandleWrites(const TActorContext& ctx)
             bool res = ProcessWrites(request.Get(), ctx);
             Y_VERIFY(!res);
         }
-        Y_VERIFY(Requests.empty() || !WriteQuota.CanExaust() || WaitingForPreviousBlobQuota()); //in this case all writes must be processed or no quota left 
+        Y_VERIFY(Requests.empty() || !WriteQuota.CanExaust() || WaitingForPreviousBlobQuota()); //in this case all writes must be processed or no quota left
         AnswerCurrentWrites(ctx); //in case if all writes are already done - no answer will be called on kv write, no kv write at all
         BecomeIdle(ctx);
         return;
     }
 
     WritesTotal.Inc();
-    WriteBlobWithQuota(std::move(request)); 
+    WriteBlobWithQuota(std::move(request));
 }
 
 
@@ -4623,100 +4623,100 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     ctx.Send(BlobCache, request.Release());
 }
 
-void TPartition::Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx) 
-{ 
-    const ui64 cookie = ev->Cookie; 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Got quota. Topic: \"" << TopicName << "\". Partition: " 
-                << Partition << ": " << ev->Get()->Result << ". Cookie: " << cookie); 
-    // Check 
-    if (Y_UNLIKELY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Success)) { 
-        Y_VERIFY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request. 
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Got quota error. Topic: \"" << TopicName << "\". Partition " 
-                    << Partition << ": " << ev->Get()->Result); 
-        ctx.Send(Tablet, new TEvents::TEvPoisonPill()); 
-        return; 
-    } 
+void TPartition::Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx)
+{
+    const ui64 cookie = ev->Cookie;
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Got quota. Topic: \"" << TopicName << "\". Partition: "
+                << Partition << ": " << ev->Get()->Result << ". Cookie: " << cookie);
+    // Check
+    if (Y_UNLIKELY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Success)) {
+        Y_VERIFY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Got quota error. Topic: \"" << TopicName << "\". Partition "
+                    << Partition << ": " << ev->Get()->Result);
+        ctx.Send(Tablet, new TEvents::TEvPoisonPill());
+        return;
+    }
 
-    // Search for proper request 
-    Y_VERIFY(TopicQuotaRequestCookie == cookie); 
-    TopicQuotaRequestCookie = 0; 
-    Y_ASSERT(!WaitingForPreviousBlobQuota()); 
- 
-    // Metrics 
-    TopicQuotaWaitTimeForCurrentBlob = StartTopicQuotaWaitTimeForCurrentBlob ? TActivationContext::Now() - StartTopicQuotaWaitTimeForCurrentBlob : TDuration::Zero(); 
-    if (TopicWriteQuotaWaitCounter) { 
-        TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds()); 
-    } 
-    // Reset quota wait time 
-    StartTopicQuotaWaitTimeForCurrentBlob = TInstant::Zero(); 
- 
+    // Search for proper request
+    Y_VERIFY(TopicQuotaRequestCookie == cookie);
+    TopicQuotaRequestCookie = 0;
+    Y_ASSERT(!WaitingForPreviousBlobQuota());
+
+    // Metrics
+    TopicQuotaWaitTimeForCurrentBlob = StartTopicQuotaWaitTimeForCurrentBlob ? TActivationContext::Now() - StartTopicQuotaWaitTimeForCurrentBlob : TDuration::Zero();
+    if (TopicWriteQuotaWaitCounter) {
+        TopicWriteQuotaWaitCounter->IncFor(TopicQuotaWaitTimeForCurrentBlob.MilliSeconds());
+    }
+    // Reset quota wait time
+    StartTopicQuotaWaitTimeForCurrentBlob = TInstant::Zero();
+
     if (CurrentStateFunc() == &TThis::StateIdle)
-        HandleWrites(ctx); 
-} 
- 
-size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request) 
-{ 
-    if (AppData()->PQConfig.GetQuotingConfig().GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) { 
-        return WriteNewSize; 
-    } else { 
-        size_t dataSize = 0; 
-        for (const auto& cmdWrite : request.Record.GetCmdWrite()) { 
-            dataSize += cmdWrite.GetValue().size(); 
-        } 
-        return dataSize; 
-    } 
-} 
- 
-void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie) 
-{ 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE, 
-            "Send write quota request. Topic: \"" << TopicName << "\". Partition: " << Partition << ". Amount: " << dataSize << ". Cookie: " << cookie); 
- 
-    Send(MakeQuoterServiceID(), 
-        new TEvQuota::TEvRequest( 
-            TEvQuota::EResourceOperator::And, 
-            { TEvQuota::TResourceLeaf(TopicWriteQuoterPath, TopicWriteQuotaResourcePath, dataSize) }, 
-            TDuration::Max()), 
-        0, 
-        cookie); 
-} 
- 
-bool TPartition::WaitingForPreviousBlobQuota() const { 
-    return TopicQuotaRequestCookie != 0; 
-} 
- 
+        HandleWrites(ctx);
+}
+
+size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request)
+{
+    if (AppData()->PQConfig.GetQuotingConfig().GetTopicWriteQuotaEntityToLimit() == NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE) {
+        return WriteNewSize;
+    } else {
+        size_t dataSize = 0;
+        for (const auto& cmdWrite : request.Record.GetCmdWrite()) {
+            dataSize += cmdWrite.GetValue().size();
+        }
+        return dataSize;
+    }
+}
+
+void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie)
+{
+    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
+            "Send write quota request. Topic: \"" << TopicName << "\". Partition: " << Partition << ". Amount: " << dataSize << ". Cookie: " << cookie);
+
+    Send(MakeQuoterServiceID(),
+        new TEvQuota::TEvRequest(
+            TEvQuota::EResourceOperator::And,
+            { TEvQuota::TResourceLeaf(TopicWriteQuoterPath, TopicWriteQuotaResourcePath, dataSize) },
+            TDuration::Max()),
+        0,
+        cookie);
+}
+
+bool TPartition::WaitingForPreviousBlobQuota() const {
+    return TopicQuotaRequestCookie != 0;
+}
+
 void TPartition::WriteBlobWithQuota(THolder<TEvKeyValue::TEvRequest>&& request)
-{ 
-    // Request quota and write blob. 
-    // Mirrored topics are not quoted in local dc. 
+{
+    // Request quota and write blob.
+    // Mirrored topics are not quoted in local dc.
     const bool skip = !IsQuotingEnabled() || TopicWriteQuotaResourcePath.empty();
-    if (size_t quotaRequestSize = skip ? 0 : GetQuotaRequestSize(*request)) { 
-        // Request with data. We should check before attempting to write data whether we have enough quota. 
-        Y_VERIFY(!WaitingForPreviousBlobQuota()); 
- 
-        TopicQuotaRequestCookie = NextTopicWriteQuotaRequestCookie++; 
-        RequestQuotaForWriteBlobRequest(quotaRequestSize, TopicQuotaRequestCookie); 
-    } 
- 
+    if (size_t quotaRequestSize = skip ? 0 : GetQuotaRequestSize(*request)) {
+        // Request with data. We should check before attempting to write data whether we have enough quota.
+        Y_VERIFY(!WaitingForPreviousBlobQuota());
+
+        TopicQuotaRequestCookie = NextTopicWriteQuotaRequestCookie++;
+        RequestQuotaForWriteBlobRequest(quotaRequestSize, TopicQuotaRequestCookie);
+    }
+
     AddMetaKey(request.Get());
 
-    WriteStartTime = TActivationContext::Now(); 
-    // Write blob 
-#if 1 
-    // PQ -> CacheProxy -> KV 
-    Send(BlobCache, request.Release()); 
-#else 
-    Send(Tablet, request.Release()); 
-#endif 
-} 
- 
-void TPartition::CalcTopicWriteQuotaParams() 
-{ 
+    WriteStartTime = TActivationContext::Now();
+    // Write blob
+#if 1
+    // PQ -> CacheProxy -> KV
+    Send(BlobCache, request.Release());
+#else
+    Send(Tablet, request.Release());
+#endif
+}
+
+void TPartition::CalcTopicWriteQuotaParams()
+{
     const auto& pqConfig = AppData()->PQConfig;
     const auto& quotingConfig = pqConfig.GetQuotingConfig();
     if (IsQuotingEnabled()) { // Mirrored topics are not quoted in local dc.
-        Y_VERIFY(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED); 
- 
+        Y_VERIFY(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
+
         TString topicPath = TopicPath.empty() ? TopicName : TopicPath;
         TFsPath fsPath(topicPath);
         if (fsPath.IsSubpathOf(pqConfig.GetRoot())) {
@@ -4725,21 +4725,21 @@ void TPartition::CalcTopicWriteQuotaParams()
         topicPath = NPersQueue::GetTopicPath(topicPath);
         auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element
         if (topicParts.size() < 2) {
-            LOG_WARN_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE, 
+            LOG_WARN_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
                        "tablet " << TabletID << " topic '" << topicPath << "' Bad topic name. Disable quoting for topic");
-            return; 
-        } 
- 
+            return;
+        }
+
         const TString account = topicParts[0];
         topicParts[0] = WRITE_QUOTA_ROOT_PATH; // write-quota/folder/topic
- 
+
         TopicWriteQuotaResourcePath = JoinPath(topicParts);
-        TopicWriteQuoterPath = TStringBuilder() << quotingConfig.GetQuotersDirectoryPath() << "/" << account; 
+        TopicWriteQuoterPath = TStringBuilder() << quotingConfig.GetQuotersDirectoryPath() << "/" << account;
         LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
                    "topicWriteQuutaResourcePath " << TopicWriteQuotaResourcePath << " topicWriteQuoterPath '" << TopicWriteQuoterPath << " account " << account);
-    } 
-} 
- 
+    }
+}
+
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
         Register(new TMirrorer(Tablet, SelfId(), TopicName, Partition, LocalDC,  EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), Counters)),

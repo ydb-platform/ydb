@@ -21,12 +21,12 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
         protoTask->SetWaitTimeUs(taskStats.WaitTime.MicroSeconds());
         protoTask->SetWaitOutputTimeUs(taskStats.WaitOutputTime.MicroSeconds());
 
-        // All run statuses metrics 
-        protoTask->SetPendingInputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingInput].MicroSeconds()); 
-        protoTask->SetPendingOutputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingOutput].MicroSeconds()); 
-        protoTask->SetFinishTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::Finished].MicroSeconds()); 
-        static_assert(TRunStatusTimeMetrics::StatusesCount == 3); // Add all statuses here 
- 
+        // All run statuses metrics
+        protoTask->SetPendingInputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingInput].MicroSeconds());
+        protoTask->SetPendingOutputTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::PendingOutput].MicroSeconds());
+        protoTask->SetFinishTimeUs(taskStats.RunStatusTimeMetrics[ERunStatus::Finished].MicroSeconds());
+        static_assert(TRunStatusTimeMetrics::StatusesCount == 3); // Add all statuses here
+
         if (taskStats.ComputeCpuTimeByRun) {
             auto snapshot = taskStats.ComputeCpuTimeByRun->Snapshot();
             for (ui32 i = 0; i < snapshot->Count(); i++) {

@@ -1,4 +1,4 @@
-#include "plugin.h" 
+#include "plugin.h"
 #include "registar.h"
 #include "utmain.h"
 
@@ -8,27 +8,27 @@
 #include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/hook/hook.h>
- 
-#include <util/datetime/base.h> 
- 
+
+#include <util/datetime/base.h>
+
 #include <util/generic/hash.h>
-#include <util/generic/hash_set.h> 
+#include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
- 
+
 #include <util/network/init.h>
- 
+
 #include <util/stream/file.h>
 #include <util/stream/output.h>
 #include <util/string/join.h>
-#include <util/string/util.h> 
+#include <util/string/util.h>
 
-#include <util/system/defaults.h> 
-#include <util/system/execpath.h> 
-#include <util/system/valgrind.h> 
-#include <util/system/shellcommand.h> 
- 
+#include <util/system/defaults.h>
+#include <util/system/execpath.h>
+#include <util/system/valgrind.h>
+#include <util/system/shellcommand.h>
+
 #if defined(_win_)
 #include <fcntl.h>
 #include <io.h>
@@ -141,26 +141,26 @@ private:
 
     void OnError(const TError* descr) override {
         const TString comment = BuildComment(descr->msg, descr->BackTrace.data());
-        ErrorMessages.push_back(comment); 
-    } 
- 
-    void OnFinish(const TFinish* descr) override { 
-        if (descr->Success) { 
+        ErrorMessages.push_back(comment);
+    }
+
+    void OnFinish(const TFinish* descr) override {
+        if (descr->Success) {
             TraceSubtestFinished(descr->test->unit->name.data(), descr->test->name, "good", "", descr->Context);
-        } else { 
-            TStringBuilder msgs; 
+        } else {
+            TStringBuilder msgs;
             for (const TString& m : ErrorMessages) {
-                if (msgs) { 
+                if (msgs) {
                     msgs << TStringBuf("\n");
-                } 
-                msgs << m; 
-            } 
-            if (msgs) { 
+                }
+                msgs << m;
+            }
+            if (msgs) {
                 msgs << TStringBuf("\n");
-            } 
+            }
             TraceSubtestFinished(descr->test->unit->name.data(), descr->test->name, "fail", msgs, descr->Context);
-            ErrorMessages.clear(); 
-        } 
+            ErrorMessages.clear();
+        }
     }
 };
 
@@ -364,8 +364,8 @@ private:
         }
     }
 
-    void OnFinish(const TFinish* descr) override { 
-        TraceProcessor->Finish(*descr); 
+    void OnFinish(const TFinish* descr) override {
+        TraceProcessor->Finish(*descr);
         if (!IsForked && ForkExitedCorrectly) {
             return;
         }
@@ -373,15 +373,15 @@ private:
             return;
         }
 
-        if (descr->Success) { 
+        if (descr->Success) {
             fprintf(stderr, "[%sgood%s] %s::%s\n", LightGreenColor().data(), OldColor().data(),
                     descr->test->unit->name.data(),
-                    descr->test->name); 
-            NOTE_IN_VALGRIND(descr->test); 
+                    descr->test->name);
+            NOTE_IN_VALGRIND(descr->test);
             PrintTimes(SaveTestDuration());
-            if (IsForked) { 
-                fprintf(stderr, "%s", ForkCorrectExitMsg); 
-            } 
+            if (IsForked) {
+                fprintf(stderr, "%s", ForkCorrectExitMsg);
+            }
         }
     }
 
@@ -613,7 +613,7 @@ static int DoUsage(const char* progname) {
          << "  -h, --help            print this help message\n"
          << "  -l, --list            print a list of available tests\n"
          << "  -A --list-verbose        print a list of available subtests\n"
-         << "  --print-before-test   print each test name before running it\n" 
+         << "  --print-before-test   print each test name before running it\n"
          << "  --print-before-suite  print each test suite name before running it\n"
          << "  --show-fails          print a list of all failed tests at the end\n"
          << "  --dont-show-fails     do not print a list of all failed tests at the end\n"
@@ -661,9 +661,9 @@ int NUnitTest::RunMain(int argc, char** argv) {
         NTesting::THook::CallBeforeRun();
         Y_DEFER { NTesting::THook::CallAfterRun(); };
 
-        NPlugin::OnStartMain(argc, argv); 
+        NPlugin::OnStartMain(argc, argv);
         Y_DEFER { NPlugin::OnStopMain(argc, argv); };
- 
+
         TColoredProcessor processor(GetExecPath());
         IOutputStream* listStream = &Cout;
         THolder<IOutputStream> listFile;

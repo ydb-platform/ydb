@@ -5,7 +5,7 @@
 #include <utility>
 
 #include <util/charset/wide.h>
-#include <util/generic/algorithm.h> 
+#include <util/generic/algorithm.h>
 #include <util/generic/buffer.h>
 #include <util/generic/map.h>
 #include <util/generic/vector.h>
@@ -17,9 +17,9 @@
 #include <util/random/random.h>
 #include <util/random/fast.h>
 
-#include <util/string/hex.h> 
+#include <util/string/hex.h>
 #include <util/string/cast.h>
- 
+
 #include "comptrie.h"
 #include "set.h"
 #include "first_symbol_iterator.h"
@@ -27,8 +27,8 @@
 #include "pattern_searcher.h"
 
 #include <array>
-#include <iterator> 
- 
+#include <iterator>
+
 
 class TCompactTrieTest: public TTestBase {
 private:
@@ -108,7 +108,7 @@ private:
 
     UNIT_TEST(TestBuilderFindLongestPrefix);
     UNIT_TEST(TestBuilderFindLongestPrefixWithEmptyValue);
- 
+
     UNIT_TEST(TestPatternSearcherEmpty);
     UNIT_TEST(TestPatternSearcherSimple);
     UNIT_TEST(TestPatternSearcherRandom);
@@ -242,10 +242,10 @@ public:
     void TestFirstSymbolIteratorChar32();
 
     void TestArrayPacker();
- 
-    void TestBuilderFindLongestPrefix(); 
-    void TestBuilderFindLongestPrefix(size_t keysCount, double branchProbability, bool isPrefixGrouped, bool hasEmptyKey); 
-    void TestBuilderFindLongestPrefixWithEmptyValue(); 
+
+    void TestBuilderFindLongestPrefix();
+    void TestBuilderFindLongestPrefix(size_t keysCount, double branchProbability, bool isPrefixGrouped, bool hasEmptyKey);
+    void TestBuilderFindLongestPrefixWithEmptyValue();
 
     void TestPatternSearcherOnDataset(
         const TVector<TString>& patterns,
@@ -396,7 +396,7 @@ void TCompactTrieTest::CheckData(const char* data, size_t datalen) {
         UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, &value));
         UNIT_ASSERT_EQUAL(len, prefixLen);
         UNIT_ASSERT_EQUAL(len * 2, value);
-        UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, nullptr)); 
+        UNIT_ASSERT(trie.FindLongestPrefix(key, &prefixLen, nullptr));
         UNIT_ASSERT_EQUAL(len, prefixLen);
     }
 
@@ -646,21 +646,21 @@ void TCompactTrieTest::TestUninitializedNonEmpty() {
     UNIT_ASSERT(it == tails.End());
 }
 
-static char RandChar() { 
-    return char(RandomNumber<size_t>() % 256); 
-} 
- 
+static char RandChar() {
+    return char(RandomNumber<size_t>() % 256);
+}
+
 static TString RandStr(const size_t max) {
     size_t len = RandomNumber<size_t>() % max;
     TString key;
     for (size_t j = 0; j < len; ++j)
-        key += RandChar(); 
+        key += RandChar();
     return key;
 }
 
 template <class T, bool minimize>
 void TCompactTrieTest::TestRandom(const size_t n, const size_t maxKeySize) {
-    const TStringBuf EMPTY_KEY = TStringBuf("", 1); 
+    const TStringBuf EMPTY_KEY = TStringBuf("", 1);
     TCompactTrieBuilder<char, typename T::TData, T> builder;
     typedef TMap<TString, typename T::TData> TKeys;
     TKeys keys;
@@ -668,7 +668,7 @@ void TCompactTrieTest::TestRandom(const size_t n, const size_t maxKeySize) {
     typename T::TData dummy;
     for (size_t i = 0; i < n; ++i) {
         const TString key = RandStr(maxKeySize);
-        if (key != EMPTY_KEY && keys.find(key) == keys.end()) { 
+        if (key != EMPTY_KEY && keys.find(key) == keys.end()) {
             const typename T::TData val = T::Data(key);
             keys[key] = val;
             UNIT_ASSERT_C(!builder.Find(key.data(), key.size(), &dummy), "key = " << HexEncode(TString(key)));
@@ -691,7 +691,7 @@ void TCompactTrieTest::TestRandom(const size_t n, const size_t maxKeySize) {
     TCompactTrieBuilder<char, typename T::TData, T> prefixGroupedBuilder(CTBF_PREFIX_GROUPED);
 
     for (typename TKeys::const_iterator i = keys.begin(), mi = keys.end(); i != mi; ++i) {
-        UNIT_ASSERT(!prefixGroupedBuilder.Find(i->first.c_str(), i->first.size(), &dummy)); 
+        UNIT_ASSERT(!prefixGroupedBuilder.Find(i->first.c_str(), i->first.size(), &dummy));
         UNIT_ASSERT(trie.Find(i->first.c_str(), i->first.size(), &dummy));
         UNIT_ASSERT(dummy == i->second);
         if (minimize) {
@@ -700,17 +700,17 @@ void TCompactTrieTest::TestRandom(const size_t n, const size_t maxKeySize) {
         }
 
         prefixGroupedBuilder.Add(i->first.c_str(), i->first.size(), dummy);
-        UNIT_ASSERT(prefixGroupedBuilder.Find(i->first.c_str(), i->first.size(), &dummy)); 
- 
-        for (typename TKeys::const_iterator j = keys.begin(), end = keys.end(); j != end; ++j) { 
-            typename T::TData valFound; 
-            if (j->first <= i->first) { 
-                UNIT_ASSERT(prefixGroupedBuilder.Find(j->first.c_str(), j->first.size(), &valFound)); 
-                UNIT_ASSERT_VALUES_EQUAL(j->second, valFound); 
-            } else { 
-                UNIT_ASSERT(!prefixGroupedBuilder.Find(j->first.c_str(), j->first.size(), &valFound)); 
-            } 
-        } 
+        UNIT_ASSERT(prefixGroupedBuilder.Find(i->first.c_str(), i->first.size(), &dummy));
+
+        for (typename TKeys::const_iterator j = keys.begin(), end = keys.end(); j != end; ++j) {
+            typename T::TData valFound;
+            if (j->first <= i->first) {
+                UNIT_ASSERT(prefixGroupedBuilder.Find(j->first.c_str(), j->first.size(), &valFound));
+                UNIT_ASSERT_VALUES_EQUAL(j->second, valFound);
+            } else {
+                UNIT_ASSERT(!prefixGroupedBuilder.Find(j->first.c_str(), j->first.size(), &valFound));
+            }
+        }
     }
 
     TBufferStream prefixGroupedBuffer;
@@ -790,18 +790,18 @@ void TCompactTrieTest::TestPrefixGrouped() {
     };
 
     for (size_t i = 0; i < Y_ARRAY_SIZE(data); ++i) {
-        ui32 val = strlen(data[i]) + 1; 
-        b1.Add(data[i], strlen(data[i]), val); 
+        ui32 val = strlen(data[i]) + 1;
+        b1.Add(data[i], strlen(data[i]), val);
         for (size_t j = 0; j < Y_ARRAY_SIZE(data); ++j) {
-            ui32 mustHave = strlen(data[j]) + 1; 
-            ui32 found = 0; 
-            if (j <= i) { 
-                UNIT_ASSERT(b1.Find(data[j], strlen(data[j]), &found)); 
-                UNIT_ASSERT_VALUES_EQUAL(mustHave, found); 
-            } else { 
-                UNIT_ASSERT(!b1.Find(data[j], strlen(data[j]), &found)); 
-            } 
-        } 
+            ui32 mustHave = strlen(data[j]) + 1;
+            ui32 found = 0;
+            if (j <= i) {
+                UNIT_ASSERT(b1.Find(data[j], strlen(data[j]), &found));
+                UNIT_ASSERT_VALUES_EQUAL(mustHave, found);
+            } else {
+                UNIT_ASSERT(!b1.Find(data[j], strlen(data[j]), &found));
+            }
+        }
     }
 
     {
@@ -1017,7 +1017,7 @@ class TCompactTrieTest::TDummyPacker: public TNullPacker<T> {
 public:
     static T Data(const TString&) {
         T data;
-        TNullPacker<T>().UnpackLeaf(nullptr, data); 
+        TNullPacker<T>().UnpackLeaf(nullptr, data);
         return data;
     }
 
@@ -1280,7 +1280,7 @@ void TCompactTrieTest::TestFindLongestPrefixWithEmptyValue() {
     }
     {
         TCompactTrie<wchar16, ui32> trie(buffer.Buffer().Data(), buffer.Buffer().Size());
-        size_t prefixLen = 123; 
+        size_t prefixLen = 123;
         ui32 value = 0;
 
         UNIT_ASSERT(trie.FindLongestPrefix(u"google", &prefixLen, &value));
@@ -1465,121 +1465,121 @@ void TCompactTrieTest::TestArrayPacker() {
     UNIT_ASSERT_VALUES_EQUAL(dataZzz.second, trieTwo.Get(dataZzz.first));
     UNIT_ASSERT_VALUES_EQUAL(dataWww.second, trieTwo.Get(dataWww.first));
 }
- 
-void TCompactTrieTest::TestBuilderFindLongestPrefix() { 
-    const size_t sizes[] = {10, 100}; 
+
+void TCompactTrieTest::TestBuilderFindLongestPrefix() {
+    const size_t sizes[] = {10, 100};
     const double branchProbabilities[] = {0.01, 0.1, 0.5, 0.9, 0.99};
-    for (size_t size : sizes) { 
-        for (double branchProbability : branchProbabilities) { 
-            TestBuilderFindLongestPrefix(size, branchProbability, false, false); 
-            TestBuilderFindLongestPrefix(size, branchProbability, false, true); 
-            TestBuilderFindLongestPrefix(size, branchProbability, true, false); 
-            TestBuilderFindLongestPrefix(size, branchProbability, true, true); 
-        } 
-    } 
-} 
- 
-void TCompactTrieTest::TestBuilderFindLongestPrefix(size_t keysCount, double branchProbability, bool isPrefixGrouped, bool hasEmptyKey) { 
+    for (size_t size : sizes) {
+        for (double branchProbability : branchProbabilities) {
+            TestBuilderFindLongestPrefix(size, branchProbability, false, false);
+            TestBuilderFindLongestPrefix(size, branchProbability, false, true);
+            TestBuilderFindLongestPrefix(size, branchProbability, true, false);
+            TestBuilderFindLongestPrefix(size, branchProbability, true, true);
+        }
+    }
+}
+
+void TCompactTrieTest::TestBuilderFindLongestPrefix(size_t keysCount, double branchProbability, bool isPrefixGrouped, bool hasEmptyKey) {
     TVector<TString> keys;
     TString keyToAdd;
-    for (size_t i = 0; i < keysCount; ++i) { 
-        const size_t prevKeyLen = keyToAdd.Size(); 
-        // add two random chars to prev key 
-        keyToAdd += RandChar(); 
-        keyToAdd += RandChar(); 
-        const bool changeBranch = prevKeyLen && RandomNumber<double>() < branchProbability; 
-        if (changeBranch) { 
-            const size_t branchPlace = RandomNumber<size_t>(prevKeyLen + 1); // random place in [0, prevKeyLen] 
-            *(keyToAdd.begin() + branchPlace) = RandChar(); 
-        } 
-        keys.push_back(keyToAdd); 
-    } 
- 
-    if (isPrefixGrouped) 
-        Sort(keys.begin(), keys.end()); 
-    else 
+    for (size_t i = 0; i < keysCount; ++i) {
+        const size_t prevKeyLen = keyToAdd.Size();
+        // add two random chars to prev key
+        keyToAdd += RandChar();
+        keyToAdd += RandChar();
+        const bool changeBranch = prevKeyLen && RandomNumber<double>() < branchProbability;
+        if (changeBranch) {
+            const size_t branchPlace = RandomNumber<size_t>(prevKeyLen + 1); // random place in [0, prevKeyLen]
+            *(keyToAdd.begin() + branchPlace) = RandChar();
+        }
+        keys.push_back(keyToAdd);
+    }
+
+    if (isPrefixGrouped)
+        Sort(keys.begin(), keys.end());
+    else
         Shuffle(keys.begin(), keys.end());
- 
+
     TCompactTrieBuilder<char, TString> builder(isPrefixGrouped ? CTBF_PREFIX_GROUPED : CTBF_NONE);
     const TString EMPTY_VALUE = "empty";
-    if (hasEmptyKey) 
-        builder.Add(nullptr, 0, EMPTY_VALUE); 
- 
-    for (size_t i = 0; i < keysCount; ++i) { 
+    if (hasEmptyKey)
+        builder.Add(nullptr, 0, EMPTY_VALUE);
+
+    for (size_t i = 0; i < keysCount; ++i) {
         const TString& key = keys[i];
- 
-        for (size_t j = 0; j < keysCount; ++j) { 
+
+        for (size_t j = 0; j < keysCount; ++j) {
             const TString& otherKey = keys[j];
-            const bool exists = j < i; 
-            size_t expectedSize = 0; 
-            if (exists) { 
-                expectedSize = otherKey.size(); 
-            } else { 
-                size_t max = 0; 
-                for (size_t k = 0; k < i; ++k) 
+            const bool exists = j < i;
+            size_t expectedSize = 0;
+            if (exists) {
+                expectedSize = otherKey.size();
+            } else {
+                size_t max = 0;
+                for (size_t k = 0; k < i; ++k)
                     if (keys[k].Size() < otherKey.Size() && keys[k].Size() > max && otherKey.StartsWith(keys[k]))
-                        max = keys[k].Size(); 
-                expectedSize = max; 
-            } 
- 
-            size_t prefixSize = 0xfcfcfc; 
+                        max = keys[k].Size();
+                expectedSize = max;
+            }
+
+            size_t prefixSize = 0xfcfcfc;
             TString value = "abcd";
-            const bool expectedResult = hasEmptyKey || expectedSize != 0; 
+            const bool expectedResult = hasEmptyKey || expectedSize != 0;
             UNIT_ASSERT_VALUES_EQUAL_C(expectedResult, builder.FindLongestPrefix(otherKey.data(), otherKey.size(), &prefixSize, &value), "otherKey = " << HexEncode(otherKey));
-            if (expectedResult) { 
-                UNIT_ASSERT_VALUES_EQUAL(expectedSize, prefixSize); 
-                if (expectedSize) { 
-                    UNIT_ASSERT_VALUES_EQUAL(TStringBuf(otherKey).SubStr(0, prefixSize), value); 
-                } else { 
-                    UNIT_ASSERT_VALUES_EQUAL(EMPTY_VALUE, value); 
-                } 
-            } else { 
-                UNIT_ASSERT_VALUES_EQUAL("abcd", value); 
-                UNIT_ASSERT_VALUES_EQUAL(0xfcfcfc, prefixSize); 
-            } 
- 
-            for (int c = 0; c < 10; ++c) { 
+            if (expectedResult) {
+                UNIT_ASSERT_VALUES_EQUAL(expectedSize, prefixSize);
+                if (expectedSize) {
+                    UNIT_ASSERT_VALUES_EQUAL(TStringBuf(otherKey).SubStr(0, prefixSize), value);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(EMPTY_VALUE, value);
+                }
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL("abcd", value);
+                UNIT_ASSERT_VALUES_EQUAL(0xfcfcfc, prefixSize);
+            }
+
+            for (int c = 0; c < 10; ++c) {
                 TString extendedKey = otherKey;
-                extendedKey += RandChar(); 
-                size_t extendedPrefixSize = 0xdddddd; 
+                extendedKey += RandChar();
+                size_t extendedPrefixSize = 0xdddddd;
                 TString extendedValue = "dcba";
                 UNIT_ASSERT_VALUES_EQUAL(expectedResult, builder.FindLongestPrefix(extendedKey.data(), extendedKey.size(), &extendedPrefixSize, &extendedValue));
-                if (expectedResult) { 
-                    UNIT_ASSERT_VALUES_EQUAL(value, extendedValue); 
-                    UNIT_ASSERT_VALUES_EQUAL(prefixSize, extendedPrefixSize); 
-                } else { 
-                    UNIT_ASSERT_VALUES_EQUAL("dcba", extendedValue); 
-                    UNIT_ASSERT_VALUES_EQUAL(0xdddddd, extendedPrefixSize); 
-                } 
-            } 
-        } 
+                if (expectedResult) {
+                    UNIT_ASSERT_VALUES_EQUAL(value, extendedValue);
+                    UNIT_ASSERT_VALUES_EQUAL(prefixSize, extendedPrefixSize);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL("dcba", extendedValue);
+                    UNIT_ASSERT_VALUES_EQUAL(0xdddddd, extendedPrefixSize);
+                }
+            }
+        }
         builder.Add(key.data(), key.size(), key);
-    } 
- 
-    TBufferOutput buffer; 
-    builder.Save(buffer); 
-} 
- 
-void TCompactTrieTest::TestBuilderFindLongestPrefixWithEmptyValue() { 
-    TCompactTrieBuilder<wchar16, ui32> builder; 
+    }
+
+    TBufferOutput buffer;
+    builder.Save(buffer);
+}
+
+void TCompactTrieTest::TestBuilderFindLongestPrefixWithEmptyValue() {
+    TCompactTrieBuilder<wchar16, ui32> builder;
     builder.Add(u"", 42);
     builder.Add(u"yandex", 271828);
     builder.Add(u"ya", 31415);
- 
-    size_t prefixLen = 123; 
-    ui32 value = 0; 
- 
+
+    size_t prefixLen = 123;
+    ui32 value = 0;
+
     UNIT_ASSERT(builder.FindLongestPrefix(u"google", &prefixLen, &value));
-    UNIT_ASSERT_VALUES_EQUAL(prefixLen, 0); 
-    UNIT_ASSERT_VALUES_EQUAL(value, 42); 
- 
+    UNIT_ASSERT_VALUES_EQUAL(prefixLen, 0);
+    UNIT_ASSERT_VALUES_EQUAL(value, 42);
+
     UNIT_ASSERT(builder.FindLongestPrefix(u"yahoo", &prefixLen, &value));
-    UNIT_ASSERT_VALUES_EQUAL(prefixLen, 2); 
-    UNIT_ASSERT_VALUES_EQUAL(value, 31415); 
- 
-    TBufferOutput buffer; 
-    builder.Save(buffer); 
-} 
+    UNIT_ASSERT_VALUES_EQUAL(prefixLen, 2);
+    UNIT_ASSERT_VALUES_EQUAL(value, 31415);
+
+    TBufferOutput buffer;
+    builder.Save(buffer);
+}
 
 void TCompactTrieTest::TestPatternSearcherEmpty() {
     TCompactPatternSearcherBuilder<char, ui32> builder;

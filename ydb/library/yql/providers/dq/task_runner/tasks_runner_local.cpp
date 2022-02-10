@@ -249,8 +249,8 @@ public:
 
     ITaskRunner::TPtr GetOld(const NDqProto::TDqTask& task, const TString& traceId) override {
         return new TLocalTaskRunner(task, Get(task, traceId));
-    } 
- 
+    }
+
     TIntrusivePtr<NDq::IDqTaskRunner> Get(const NDqProto::TDqTask& task, const TString& traceId) override {
         Y_UNUSED(traceId);
         NDq::TDqTaskRunnerSettings settings;
@@ -266,15 +266,15 @@ public:
             if ("OptLLVM" == s.GetName())
                 settings.OptLLVM = s.GetValue();
         }
-        for (const auto& x : taskMeta.GetSecureParams()) { 
+        for (const auto& x : taskMeta.GetSecureParams()) {
             settings.SecureParams[x.first] = x.second;
         }
 
-        for (const auto& x : taskMeta.GetTaskParams()) { 
-            settings.TaskParams[x.first] = x.second; 
+        for (const auto& x : taskMeta.GetTaskParams()) {
+            settings.TaskParams[x.first] = x.second;
         }
         auto ctx = ExecutionContext;
-        ctx.FuncProvider = TaskTransformFactory(settings.TaskParams, ctx.FuncRegistry); 
+        ctx.FuncProvider = TaskTransformFactory(settings.TaskParams, ctx.FuncRegistry);
         return MakeDqTaskRunner(ctx, settings, { });
     }
 

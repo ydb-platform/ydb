@@ -233,18 +233,18 @@ def grpc_tls_data_path(arguments):
     return os.getenv('YDB_GRPC_TLS_DATA_PATH', default_store)
 
 
-def enable_datastreams(arguments): 
-    return getattr(arguments, 'enable_datastreams', False) or os.getenv('YDB_ENABLE_DATASTREAMS') == 'true' 
- 
- 
-def enable_pq(arguments): 
-    return getattr(arguments, 'enable_pq', False) or enable_datastreams(arguments) 
- 
- 
-def enable_pqcd(arguments): 
-    return enable_pq(arguments) and (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true') 
- 
- 
+def enable_datastreams(arguments):
+    return getattr(arguments, 'enable_datastreams', False) or os.getenv('YDB_ENABLE_DATASTREAMS') == 'true'
+
+
+def enable_pq(arguments):
+    return getattr(arguments, 'enable_pq', False) or enable_datastreams(arguments)
+
+
+def enable_pqcd(arguments):
+    return enable_pq(arguments) and (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true')
+
+
 def deploy(arguments):
     initialize_working_dir(arguments)
     recipe = Recipe(arguments)
@@ -280,9 +280,9 @@ def deploy(arguments):
         output_path=recipe.generate_data_path(),
         pdisk_store_path=pdisk_store_path,
         domain_name='local',
-        enable_pq=enable_pq(arguments), 
-        enable_datastreams=enable_datastreams(arguments), 
-        enable_pqcd=enable_pqcd(arguments), 
+        enable_pq=enable_pq(arguments),
+        enable_datastreams=enable_datastreams(arguments),
+        enable_pqcd=enable_pqcd(arguments),
         load_udfs=True,
         suppress_version_check=arguments.suppress_version_check,
         udfs_path=arguments.ydb_udfs_dir,

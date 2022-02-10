@@ -1314,10 +1314,10 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
         resultProviderDataSources.push_back(TString(RtmrProviderName));
     }
 
-    if (providerNames.contains(PqProviderName)) { 
-        resultProviderDataSources.push_back(TString(PqProviderName)); 
-    } 
- 
+    if (providerNames.contains(PqProviderName)) {
+        resultProviderDataSources.push_back(TString(PqProviderName));
+    }
+
     if (providerNames.contains(DqProviderName)) {
         resultProviderDataSources.push_back(TString(DqProviderName));
     }

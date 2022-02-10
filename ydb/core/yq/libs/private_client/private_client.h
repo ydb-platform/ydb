@@ -11,7 +11,7 @@ template<class TProtoResult>
 class TProtoResultInternalWrapper : public NYdb::TStatus {
     friend class TPrivateClient;
 
-public: 
+public:
     TProtoResultInternalWrapper(
             NYdb::TStatus&& status,
             std::unique_ptr<TProtoResult> result)

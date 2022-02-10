@@ -6,12 +6,12 @@
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <library/cpp/logger/log.h> 
+#include <library/cpp/logger/log.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/parser.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/getenv.h>
 #include <util/stream/file.h>
 #include <ydb/public/sdk/cpp/client/resources/ydb_ca.h>
- 
+
 namespace NYdb {
 
 using NGrpc::TGRpcClientLow;
@@ -45,7 +45,7 @@ public:
     bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; }
     TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
     ui64 GetMemoryQuota() const override { return MemoryQuota; }
-    const TLog& GetLog() const override { return Log; } 
+    const TLog& GetLog() const override { return Log; }
 
     TStringType Endpoint;
     size_t NetworkThreadsNum = 2;
@@ -70,7 +70,7 @@ public:
     bool GRpcKeepAlivePermitWithoutCalls = false;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
     ui64 MemoryQuota = 0;
-    TLog Log; // Null by default. 
+    TLog Log; // Null by default.
 };
 
 TDriverConfig::TDriverConfig(const TStringType& connectionString)
@@ -115,7 +115,7 @@ TDriverConfig& TDriverConfig::SetAuthToken(const TStringType& token) {
 
 TDriverConfig& TDriverConfig::SetDatabase(const TStringType& database) {
     Impl_->Database = database;
-    Impl_->Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Impl_->Database))); 
+    Impl_->Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Impl_->Database)));
     return *this;
 }
 
@@ -172,11 +172,11 @@ TDriverConfig& TDriverConfig::SetSocketIdleTimeout(TDuration timeout) {
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetLog(THolder<TLogBackend> log) { 
-    Impl_->Log.ResetBackend(std::move(log)); 
-    return *this; 
-} 
- 
+TDriverConfig& TDriverConfig::SetLog(THolder<TLogBackend> log) {
+    Impl_->Log.ResetBackend(std::move(log));
+    return *this;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 std::shared_ptr<TGRpcConnectionsImpl> CreateInternalInterface(const TDriver connection) {

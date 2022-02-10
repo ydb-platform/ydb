@@ -25,7 +25,7 @@ struct TTestContext {
 
     TTestContext();
 
-    void Setup(ui32 nodeCount = 1, bool useRealThreads = false); 
+    void Setup(ui32 nodeCount = 1, bool useRealThreads = false);
     void Finalize();
 
     virtual void SetupLogging();
@@ -66,18 +66,18 @@ struct TTestContext {
     // Sends payload to tablet from edge, fresh pipe every time
     void SendFromEdge(const TActorId& edge, IEventBase* payload, ui64 cookie = 0);
 
-    template <class TEvent> 
+    template <class TEvent>
     void SendFromEdge(const TActorId& edge, THolder<TEvent> payload, ui64 cookie = 0) {
-        SendFromEdge(edge, payload.Release(), cookie); 
-    } 
- 
+        SendFromEdge(edge, payload.Release(), cookie);
+    }
+
     // Sends payload to tablet from proxy (caches pipe per proxy/generation pair)
     void SendFromProxy(const TActorId& proxy, ui64 generation, IEventBase* payload, ui64 cookie = 0);
 
-    // set/get config requests 
-    NKikimrKesus::TEvGetConfigResult GetConfig(); 
-    NKikimrKesus::TEvSetConfigResult SetConfig(ui64 txId, const Ydb::Coordination::Config& config, ui64 version, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
- 
+    // set/get config requests
+    NKikimrKesus::TEvGetConfigResult GetConfig();
+    NKikimrKesus::TEvSetConfigResult SetConfig(ui64 txId, const Ydb::Coordination::Config& config, ui64 version, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+
     // Makes a dummy request using this proxy/generation pair
     void SyncProxy(const TActorId& proxy, ui64 generation, bool useTransactions = false);
 
@@ -241,56 +241,56 @@ struct TTestContext {
         ui64 reqId, const TActorId& proxy, ui64 generation,
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
     TDescribeSemaphoreChanges ExpectDescribeSemaphoreChanged(ui64 reqId, const TActorId& proxy, ui64 generation);
- 
-    // Quoter 
-    THolder<TEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources( 
-        const NKikimrKesus::TEvDescribeQuoterResources& req, 
-        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
-    THolder<TEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources( 
-        const std::vector<ui64>& resourceIds, 
-        const std::vector<TString>& resourcePaths, 
-        bool recursive, 
-        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
-    NKikimrKesus::TEvDescribeQuoterResourcesResult DescribeQuoterResources( 
-        const std::vector<ui64>& resourceIds, 
-        const std::vector<TString>& resourcePaths, 
-        bool recursive); 
- 
-    ui64 AddQuoterResource(const NKikimrKesus::TStreamingQuoterResource& resource, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
-    ui64 AddQuoterResource(const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
-    ui64 AddQuoterResource(const TString& resourcePath, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) { 
-        return AddQuoterResource(resourcePath, NKikimrKesus::THierarchicalDRRResourceConfig(), status); 
-    } 
-    ui64 AddQuoterResource(const TString& resourcePath, double maxUnitsPerSecond, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) { 
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg; 
-        cfg.SetMaxUnitsPerSecond(maxUnitsPerSecond); 
-        return AddQuoterResource(resourcePath, cfg, status); 
-    } 
- 
-    void UpdateQuoterResource(const NKikimrKesus::TStreamingQuoterResource& resource, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
-    void UpdateQuoterResource(const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
-    void UpdateQuoterResource(ui64 resourceId, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
-    void UpdateQuoterResource(ui64 resourceId, double maxUnitsPerSecond, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) { 
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg; 
-        cfg.SetMaxUnitsPerSecond(maxUnitsPerSecond); 
-        return UpdateQuoterResource(resourceId, cfg, status); 
-    } 
- 
-    void DeleteQuoterResource(const NKikimrKesus::TEvDeleteQuoterResource& req, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
-    void DeleteQuoterResource(const TString& resourcePath, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
-    void DeleteQuoterResource(ui64 resourceId, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
- 
-    struct TResourceConsumingInfo { 
-        TResourceConsumingInfo(const TString& path, bool consume, double amount = 0.0, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
-        TResourceConsumingInfo(ui64 id, bool consume, double amount = 0.0, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS); 
- 
-        TString Path; 
-        ui64 Id = 0; 
-        bool Consume; 
-        double Amount; 
-        Ydb::StatusIds::StatusCode ExpectedStatus; 
-    }; 
- 
+
+    // Quoter
+    THolder<TEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources(
+        const NKikimrKesus::TEvDescribeQuoterResources& req,
+        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    THolder<TEvKesus::TEvDescribeQuoterResourcesResult> VerifyDescribeQuoterResources(
+        const std::vector<ui64>& resourceIds,
+        const std::vector<TString>& resourcePaths,
+        bool recursive,
+        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    NKikimrKesus::TEvDescribeQuoterResourcesResult DescribeQuoterResources(
+        const std::vector<ui64>& resourceIds,
+        const std::vector<TString>& resourcePaths,
+        bool recursive);
+
+    ui64 AddQuoterResource(const NKikimrKesus::TStreamingQuoterResource& resource, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    ui64 AddQuoterResource(const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    ui64 AddQuoterResource(const TString& resourcePath, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
+        return AddQuoterResource(resourcePath, NKikimrKesus::THierarchicalDRRResourceConfig(), status);
+    }
+    ui64 AddQuoterResource(const TString& resourcePath, double maxUnitsPerSecond, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg;
+        cfg.SetMaxUnitsPerSecond(maxUnitsPerSecond);
+        return AddQuoterResource(resourcePath, cfg, status);
+    }
+
+    void UpdateQuoterResource(const NKikimrKesus::TStreamingQuoterResource& resource, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    void UpdateQuoterResource(const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    void UpdateQuoterResource(ui64 resourceId, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    void UpdateQuoterResource(ui64 resourceId, double maxUnitsPerSecond, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS) {
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg;
+        cfg.SetMaxUnitsPerSecond(maxUnitsPerSecond);
+        return UpdateQuoterResource(resourceId, cfg, status);
+    }
+
+    void DeleteQuoterResource(const NKikimrKesus::TEvDeleteQuoterResource& req, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    void DeleteQuoterResource(const TString& resourcePath, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+    void DeleteQuoterResource(ui64 resourceId, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+
+    struct TResourceConsumingInfo {
+        TResourceConsumingInfo(const TString& path, bool consume, double amount = 0.0, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+        TResourceConsumingInfo(ui64 id, bool consume, double amount = 0.0, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
+
+        TString Path;
+        ui64 Id = 0;
+        bool Consume;
+        double Amount;
+        Ydb::StatusIds::StatusCode ExpectedStatus;
+    };
+
     struct TResourceAccountInfo {
         ui64 Id = 0;
         TInstant Start;
@@ -307,14 +307,14 @@ struct TTestContext {
 
     NKikimrKesus::TEvSubscribeOnResourcesResult SubscribeOnResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceConsumingInfo>& info);
     NKikimrKesus::TEvSubscribeOnResourcesResult SubscribeOnResource(const TActorId& client, const TActorId& edge, const TString& path, bool startConsuming, double amount = 0.0, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
- 
+
     void UpdateConsumptionState(const TActorId& client, const TActorId& edge, const std::vector<TResourceConsumingInfo>& info);
     void UpdateConsumptionState(const TActorId& client, const TActorId& edge, ui64 id, bool consume, double amount = 0.0, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS);
- 
+
     void AccountResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceAccountInfo>& info);
     void AccountResources(const TActorId& client, const TActorId& edge, ui64 id, TInstant start, TDuration interval, std::vector<double>&& amount);
 
-    NKikimrKesus::TEvGetQuoterResourceCountersResult GetQuoterResourceCounters(); 
+    NKikimrKesus::TEvGetQuoterResourceCountersResult GetQuoterResourceCounters();
 };
 
 }

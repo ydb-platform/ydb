@@ -103,11 +103,11 @@ protected:
     void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvBulkUpsertRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvWhoAmIRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvCreateRateLimiterResource::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvAlterRateLimiterResource::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvDropRateLimiterResource::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvListRateLimiterResources::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvDescribeRateLimiterResource::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvCreateRateLimiterResource::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvAlterRateLimiterResource::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDropRateLimiterResource::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvListRateLimiterResources::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDescribeRateLimiterResource::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvAcquireRateLimiterResource::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKikhouseCreateSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKikhouseRefreshSnapshotRequest::TPtr& ev, const TActorContext& ctx);

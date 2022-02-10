@@ -5,7 +5,7 @@
 
 namespace NYql::NDq {
 
-NKikimr::NUdf::TUnboxedValue CreateInputUnionValue(TVector<IDqInput::TPtr>&& inputs, 
+NKikimr::NUdf::TUnboxedValue CreateInputUnionValue(TVector<IDqInput::TPtr>&& inputs,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
 NKikimr::NUdf::TUnboxedValue CreateInputMergeValue(TVector<IDqInput::TPtr>&& inputs,

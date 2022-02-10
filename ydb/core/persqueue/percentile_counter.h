@@ -55,8 +55,8 @@ public:
                        const bool deriv,
                        bool expiring = true);
 
-    void IncFor(ui64 key, ui64 value = 1); 
-    void DecFor(ui64 key, ui64 value = 1); 
+    void IncFor(ui64 key, ui64 value = 1);
+    void DecFor(ui64 key, ui64 value = 1);
 
 private:
     TVector<TMultiCounter> Counters;

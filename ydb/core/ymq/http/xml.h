@@ -5,11 +5,11 @@
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/ymq/base/counters.h>
 
-namespace NKikimr::NSQS { 
+namespace NKikimr::NSQS {
 
-TSqsHttpResponse MakeErrorXmlResponse(const TErrorClass& errorClass, TUserCounters* userCounters, const TString& message = TString(), const TString& requestId = TString()); 
-TSqsHttpResponse MakeErrorXmlResponseFromCurrentException(TUserCounters* userCounters, const TString& requestId); 
+TSqsHttpResponse MakeErrorXmlResponse(const TErrorClass& errorClass, TUserCounters* userCounters, const TString& message = TString(), const TString& requestId = TString());
+TSqsHttpResponse MakeErrorXmlResponseFromCurrentException(TUserCounters* userCounters, const TString& requestId);
 
-TSqsHttpResponse ResponseToAmazonXmlFormat(const NKikimrClient::TSqsResponse& resp); 
+TSqsHttpResponse ResponseToAmazonXmlFormat(const NKikimrClient::TSqsResponse& resp);
 
-} // namespace NKikimr::NSQS 
+} // namespace NKikimr::NSQS

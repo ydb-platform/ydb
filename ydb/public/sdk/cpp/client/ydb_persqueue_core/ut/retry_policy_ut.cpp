@@ -66,15 +66,15 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
 
     };
 
-    Y_UNIT_TEST(TWriteSession_RetryOnTargetCluster) { 
+    Y_UNIT_TEST(TWriteSession_RetryOnTargetCluster) {
         auto setup1 = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME, false);
-        SDKTestSetup setup2("RetryOnTargetCluster_Dc2"); 
+        SDKTestSetup setup2("RetryOnTargetCluster_Dc2");
         setup1->AddDataCenter("dc2", setup2, false);
         setup1->Start();
         auto retryPolicy = std::make_shared<TYdbPqTestRetryPolicy>();
         auto settings = setup1->GetWriteSessionSettings();
-        settings.PreferredCluster("dc2"); 
-        settings.AllowFallbackToOtherClusters(false); 
+        settings.PreferredCluster("dc2");
+        settings.AllowFallbackToOtherClusters(false);
         settings.RetryPolicy(retryPolicy);
 
         retryPolicy->Initialized();
@@ -229,8 +229,8 @@ Y_UNIT_TEST_SUITE(RetryPolicy) {
         Cerr << "===Enable dc1\n";
         setup1->EnableDataCenter("dc1");
         auto CheckSeqNo = [&] (const TString& dcName, ui64 expectedSeqNo) {
-            settings.PreferredCluster(dcName); 
-            settings.AllowFallbackToOtherClusters(false); 
+            settings.PreferredCluster(dcName);
+            settings.AllowFallbackToOtherClusters(false);
             settings.RetryPolicy(nullptr); //switch to default policy;
             auto writer = client.CreateWriteSession(settings);
             auto seqNo = writer->GetInitSeqNo().GetValueSync();

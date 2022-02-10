@@ -4,7 +4,7 @@
 #include "last_getopt_parser.h"
 
 #include <library/cpp/colorizer/colors.h>
- 
+
 #include <util/stream/format.h>
 #include <util/charset/utf8.h>
 
@@ -62,7 +62,7 @@ namespace NLastGetopt {
             return opt->ToShortString();
         }
     }
- 
+
     TOpts::TOpts(const TStringBuf& optstring)
         : ArgPermutation_(DEFAULT_ARG_PERMUTATION)
         , AllowSingleDashForLong_(false)
@@ -392,14 +392,14 @@ namespace NLastGetopt {
                 if (requiredOptionsCount == 0)
                     continue;
                 os << Endl << colors.BoldColor() << "Required parameters" << colors.OldColor() << ":" << Endl;
-            } else { 
+            } else {
                 if (requiredOptionsCount == Opts_.size())
                     continue;
                 if (requiredOptionsCount == 0)
                     os << Endl << colors.BoldColor() << "Options" << colors.OldColor() << ":" << Endl;
                 else
                     os << Endl << colors.BoldColor() << "Optional parameters" << colors.OldColor() << ":" << Endl; // optional options would be a tautology
-            } 
+            }
 
             for (size_t i = 0; i < Opts_.size(); i++) {
                 const TOpt* opt = Opts_[i].Get();
@@ -469,7 +469,7 @@ namespace NLastGetopt {
     void TOpts::PrintUsage(const TStringBuf& program, IOutputStream& os) const {
         PrintUsage(program, os, NColorizer::AutoColors(os));
     }
- 
+
     void TOpts::PrintFreeArgsDesc(IOutputStream& os, const NColorizer::TColors& colors) const {
         if (0 == FreeArgsMax_)
             return;

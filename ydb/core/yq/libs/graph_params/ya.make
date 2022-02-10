@@ -1,5 +1,5 @@
-OWNER(g:yq) 
- 
-RECURSE( 
-    proto 
-) 
+OWNER(g:yq)
+
+RECURSE(
+    proto
+)

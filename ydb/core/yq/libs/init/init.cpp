@@ -7,11 +7,11 @@
 #include <ydb/core/yq/libs/common/service_counters.h>
 #include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
-#include <ydb/core/yq/libs/checkpoint_storage/storage_service.h> 
+#include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/library/folder_service/folder_service.h>
 
 #include <library/cpp/actors/http/http_proxy.h>
-#include <library/cpp/protobuf/json/json2proto.h> 
+#include <library/cpp/protobuf/json/json2proto.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
@@ -34,7 +34,7 @@
 #include <ydb/library/yql/providers/ydb/comp_nodes/yql_ydb_dq_transform.h>
 #include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
 
-#include <util/stream/file.h> 
+#include <util/stream/file.h>
 #include <util/system/hostname.h>
 
 namespace {
@@ -91,8 +91,8 @@ std::tuple<TString, TString> GetLocalAddress(const TString* overrideHostname = n
 
 }
 
-namespace NYq { 
- 
+namespace NYq {
+
 using namespace NKikimr;
 
 void Init(
@@ -101,7 +101,7 @@ void Init(
     const TActorRegistrator& actorRegistrator,
     const TAppData* appData,
     const TString& tenant,
-    ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections, 
+    ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const IYqSharedResources::TPtr& iyqSharedResources,
     const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
     const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig)>& auditServiceFactory,
@@ -109,8 +109,8 @@ void Init(
     const ui32& icPort
     )
 {
-    Y_VERIFY(iyqSharedResources, "No YQ shared resources created"); 
-    TYqSharedResources::TPtr yqSharedResources = TYqSharedResources::Cast(iyqSharedResources); 
+    Y_VERIFY(iyqSharedResources, "No YQ shared resources created");
+    TYqSharedResources::TPtr yqSharedResources = TYqSharedResources::Cast(iyqSharedResources);
     const auto clientCounters = appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "ClientMetrics");
 
     if (protoConfig.GetControlPlaneStorage().GetEnabled()) {
@@ -150,7 +150,7 @@ void Init(
     }
 
     if (protoConfig.GetCheckpointCoordinator().GetEnabled()) {
-        auto checkpointStorage = NYq::NewCheckpointStorageService(protoConfig.GetCheckpointCoordinator(), protoConfig.GetCommon(), credentialsProviderFactory); 
+        auto checkpointStorage = NYq::NewCheckpointStorageService(protoConfig.GetCheckpointCoordinator(), protoConfig.GetCommon(), credentialsProviderFactory);
         actorRegistrator(NYql::NDq::MakeCheckpointStorageID(), checkpointStorage.release());
     }
 
@@ -159,7 +159,7 @@ void Init(
 
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory({
         NYql::GetCommonDqFactory(),
-        NYql::GetDqYdbFactory(yqSharedResources->YdbDriver), 
+        NYql::GetDqYdbFactory(yqSharedResources->YdbDriver),
         NKikimr::NMiniKQL::GetYqlFactory()
     });
 
@@ -168,9 +168,9 @@ void Init(
         NYql::CreateYdbDqTaskTransformFactory()
     });
 
-    auto sourceActorFactory = MakeIntrusive<NYql::NDq::TDqSourceFactory>(); 
-    auto sinkActorFactory = MakeIntrusive<NYql::NDq::TDqSinkFactory>(); 
- 
+    auto sourceActorFactory = MakeIntrusive<NYql::NDq::TDqSourceFactory>();
+    auto sinkActorFactory = MakeIntrusive<NYql::NDq::TDqSinkFactory>();
+
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
     const auto httpGateway = NYql::IHTTPGateway::Make(
         &protoConfig.GetGateways().GetHttpGateway(),
@@ -214,7 +214,7 @@ void Init(
         actorRegistrator(NYql::NDqs::MakeWorkerManagerActorID(nodeId), resman);
     }
 
-    ::NYq::NCommon::TServiceCounters serviceCounters(appData->Counters); 
+    ::NYq::NCommon::TServiceCounters serviceCounters(appData->Counters);
 
     if (protoConfig.GetNodesManager().GetEnabled()) {
         const auto localAddr =  GetLocalAddress(&HostName());
@@ -276,6 +276,6 @@ IYqSharedResources::TPtr CreateYqSharedResources(
     const NMonitoring::TDynamicCounterPtr& counters)
 {
     return CreateYqSharedResourcesImpl(config, credentialsProviderFactory, counters);
-} 
- 
-} // NYq 
+}
+
+} // NYq

@@ -27,11 +27,11 @@ namespace NGRpcService {
      void SetupIncomingRequests(NGrpc::TLoggerPtr logger);
 
      NActors::TActorSystem* ActorSystem_;
-     grpc::ServerCompletionQueue* CQ_ = nullptr; 
+     grpc::ServerCompletionQueue* CQ_ = nullptr;
 
      TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
      NActors::TActorId GRpcRequestProxyId_;
-     NGrpc::TGlobalLimiter* Limiter_ = nullptr; 
+     NGrpc::TGlobalLimiter* Limiter_ = nullptr;
  };
 
 } // namespace NGRpcService

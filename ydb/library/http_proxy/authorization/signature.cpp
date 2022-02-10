@@ -16,7 +16,7 @@
 #include <util/string/join.h>
 #include <util/string/strip.h>
 
-namespace NKikimr::NSQS { 
+namespace NKikimr::NSQS {
 
 static TString HmacSHA256(TStringBuf key, TStringBuf data) {
     unsigned char hash[SHA256_DIGEST_LENGTH];
@@ -259,4 +259,4 @@ void TAwsRequestSignV4::MakeFinalStringToSign() {
     FinalStringToSignStr_ = finalStringToSign.Str();
 }
 
-} // namespace NKikimr::NSQS 
+} // namespace NKikimr::NSQS

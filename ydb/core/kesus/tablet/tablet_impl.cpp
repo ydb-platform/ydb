@@ -36,7 +36,7 @@ void TKesusTablet::ResetState() {
     SessionGracePeriod = TDuration::Seconds(10);
     ReadConsistencyMode = Ydb::Coordination::CONSISTENCY_MODE_RELAXED;
     AttachConsistencyMode = Ydb::Coordination::CONSISTENCY_MODE_STRICT;
-    RateLimiterCountersMode = Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_AGGREGATED; 
+    RateLimiterCountersMode = Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_AGGREGATED;
 
     Sessions.clear();
     Semaphores.clear();
@@ -44,8 +44,8 @@ void TKesusTablet::ResetState() {
 
     SelfCheckCounter = 0;
     StrictMarkerCounter = 0;
- 
-    NextQuoterResourceId = 1; 
+
+    NextQuoterResourceId = 1;
 }
 
 void TKesusTablet::ResetCounters() {
@@ -55,7 +55,7 @@ void TKesusTablet::ResetCounters() {
     TabletCounters->Simple()[COUNTER_SEMAPHORE_COUNT].Set(0);
     TabletCounters->Simple()[COUNTER_SEMAPHORE_OWNER_COUNT].Set(0);
     TabletCounters->Simple()[COUNTER_SEMAPHORE_WAITER_COUNT].Set(0);
-    TabletCounters->Simple()[COUNTER_QUOTER_RESOURCE_COUNT].Set(0); 
+    TabletCounters->Simple()[COUNTER_QUOTER_RESOURCE_COUNT].Set(0);
 }
 
 void TKesusTablet::OnDetach(const TActorContext& ctx) {
@@ -145,16 +145,16 @@ void TKesusTablet::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     ProxiesByNode.erase(msg->NodeId);
 }
 
-void TKesusTablet::Handle(TEvents::TEvWakeup::TPtr& ev) { 
-    switch (ev->Get()->Tag) { 
-    case QUOTER_TICK_PROCESSING_WAKEUP_TAG: 
-        QuoterTickProcessingIsScheduled = false; 
-        return HandleQuoterTick(); 
-    default: 
-        Y_VERIFY(false, "Unknown Wakeup event with tag #%" PRIu64, ev->Get()->Tag); 
-    } 
-} 
- 
+void TKesusTablet::Handle(TEvents::TEvWakeup::TPtr& ev) {
+    switch (ev->Get()->Tag) {
+    case QUOTER_TICK_PROCESSING_WAKEUP_TAG:
+        QuoterTickProcessingIsScheduled = false;
+        return HandleQuoterTick();
+    default:
+        Y_VERIFY(false, "Unknown Wakeup event with tag #%" PRIu64, ev->Get()->Tag);
+    }
+}
+
 void TKesusTablet::Handle(TEvKesus::TEvDescribeProxies::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     VerifyKesusPath(record.GetKesusPath());
@@ -290,18 +290,18 @@ STFUNC(TKesusTablet::StateWork) {
         cFunc(TEvKesus::Deprecated_EvClientReady, HandleIgnored);
         cFunc(TEvKesus::Deprecated_EvJobStatus, HandleIgnored);
 
-        hFunc(TEvKesus::TEvDescribeQuoterResources, Handle); 
-        hFunc(TEvKesus::TEvAddQuoterResource, Handle); 
-        hFunc(TEvKesus::TEvUpdateQuoterResource, Handle); 
-        hFunc(TEvKesus::TEvDeleteQuoterResource, Handle); 
-        hFunc(TEvKesus::TEvSubscribeOnResources, Handle); 
-        hFunc(TEvKesus::TEvUpdateConsumptionState, Handle); 
+        hFunc(TEvKesus::TEvDescribeQuoterResources, Handle);
+        hFunc(TEvKesus::TEvAddQuoterResource, Handle);
+        hFunc(TEvKesus::TEvUpdateQuoterResource, Handle);
+        hFunc(TEvKesus::TEvDeleteQuoterResource, Handle);
+        hFunc(TEvKesus::TEvSubscribeOnResources, Handle);
+        hFunc(TEvKesus::TEvUpdateConsumptionState, Handle);
         hFunc(TEvKesus::TEvAccountResources, Handle);
-        hFunc(TEvKesus::TEvResourcesAllocatedAck, Handle); 
-        hFunc(TEvKesus::TEvGetQuoterResourceCounters, Handle); 
-        hFunc(TEvTabletPipe::TEvServerDisconnected, Handle); 
-        hFunc(TEvents::TEvWakeup, Handle); 
- 
+        hFunc(TEvKesus::TEvResourcesAllocatedAck, Handle);
+        hFunc(TEvKesus::TEvGetQuoterResourceCounters, Handle);
+        hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+        hFunc(TEvents::TEvWakeup, Handle);
+
         hFunc(TEvPrivate::TEvSelfCheckStart, Handle);
         hFunc(TEvPrivate::TEvSelfCheckTimeout, Handle);
 

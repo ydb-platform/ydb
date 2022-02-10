@@ -47,10 +47,10 @@ public:
         , LastOrder(0)
         , CurrentConfig(currentConfig) {}
 
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
-        return NKikimrServices::TActivity::CMS_CONFIGS_SUBSCRIBER; 
-    } 
- 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::CMS_CONFIGS_SUBSCRIBER;
+    }
+
     void Bootstrap(const TActorContext &ctx) {
         auto dinfo = AppData(ctx)->DomainsInfo;
         if (dinfo->Domains.size() != 1) {

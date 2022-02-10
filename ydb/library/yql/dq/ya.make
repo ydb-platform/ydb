@@ -6,7 +6,7 @@ RECURSE(
     opt
     proto
     runtime
-    state 
+    state
     tasks
     type_ann
 )

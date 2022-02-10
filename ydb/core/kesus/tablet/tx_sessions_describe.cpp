@@ -44,7 +44,7 @@ struct TKesusTablet::TTxSessionsDescribe : public TTxBase {
 
     void Complete(const TActorContext& ctx) override {
         LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSessionsDescribe::Complete (sender=" << Sender 
+            "[" << Self->TabletID() << "] TTxSessionsDescribe::Complete (sender=" << Sender
                 << ", cookie=" << Cookie << ")");
 
         Y_VERIFY(Reply);

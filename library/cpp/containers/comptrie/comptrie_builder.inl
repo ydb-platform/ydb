@@ -1,20 +1,20 @@
 #pragma once
 
 #include "comptrie_impl.h"
-#include "comptrie_trie.h" 
+#include "comptrie_trie.h"
 #include "make_fast_layout.h"
 #include "array_with_size.h"
 
 #include <library/cpp/containers/compact_vector/compact_vector.h>
 
-#include <util/memory/alloc.h> 
+#include <util/memory/alloc.h>
 #include <util/memory/blob.h>
 #include <util/memory/pool.h>
 #include <util/memory/tempbuf.h>
 #include <util/memory/smallobj.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/buffer.h>
-#include <util/generic/strbuf.h> 
+#include <util/generic/strbuf.h>
 
 #include <util/system/align.h>
 #include <util/stream/buffer.h>
@@ -49,8 +49,8 @@ protected:
     void ConvertSymbolArrayToChar(const TSymbol* key, size_t keylen, TTempBuf& buf, size_t ckeylen) const;
     void NodeLinkTo(TNode* thiz, const TBlob& label, TNode* node);
     TNode* NodeForwardAdd(TNode* thiz, const char* label, size_t len, size_t& passed, size_t* nodeCount);
-    bool FindEntryImpl(const char* key, size_t keylen, TData* value) const; 
-    bool FindLongestPrefixImpl(const char* keyptr, size_t keylen, size_t* prefixLen, TData* value) const; 
+    bool FindEntryImpl(const char* key, size_t keylen, TData* value) const;
+    bool FindLongestPrefixImpl(const char* keyptr, size_t keylen, size_t* prefixLen, TData* value) const;
 
     size_t NodeMeasureSubtree(TNode* thiz) const;
     ui64 NodeSaveSubtree(TNode* thiz, IOutputStream& os) const;
@@ -67,7 +67,7 @@ protected:
     ui64 ArcSaveAndDestroy(const TArc* thiz, IOutputStream& os);
 
 public:
-    TCompactTrieBuilderImpl(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc); 
+    TCompactTrieBuilderImpl(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc);
     virtual ~TCompactTrieBuilderImpl();
 
     void DestroyNode(TNode* node);
@@ -81,14 +81,14 @@ public:
     bool AddSubtreeInFile(const TSymbol* key, size_t keylen, const TString& fileName);
     bool AddSubtreeInBuffer(const TSymbol* key, size_t keylen, TArrayWithSizeHolder<char>&& buffer);
     bool FindEntry(const TSymbol* key, size_t keylen, TData* value) const;
-    bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const; 
+    bool FindLongestPrefix(const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const;
 
     size_t Save(IOutputStream& os) const;
     size_t SaveAndDestroy(IOutputStream& os);
 
     void Clear();
 
-    // lies if some key was added at least twice 
+    // lies if some key was added at least twice
     size_t GetEntryCount() const;
     size_t GetNodeCount() const;
 
@@ -121,25 +121,25 @@ public:
         virtual ui64 Save(const TBuilderImpl* builder, IOutputStream& os) const = 0;
         virtual ui64 SaveAndDestroy(TBuilderImpl* builder, IOutputStream& os) = 0;
         virtual void Destroy(TBuilderImpl*) { }
- 
-        // Tries to find key in subtree. 
-        // Returns next node to find the key in (to avoid recursive calls) 
-        // If it has end result, writes it to @value and @result arguments and returns nullptr 
-        virtual const TNode* Find(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const = 0; 
-        virtual const TNode* FindLongestPrefix(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const = 0; 
+
+        // Tries to find key in subtree.
+        // Returns next node to find the key in (to avoid recursive calls)
+        // If it has end result, writes it to @value and @result arguments and returns nullptr
+        virtual const TNode* Find(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const = 0;
+        virtual const TNode* FindLongestPrefix(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const = 0;
     };
 
     class TArcSet: public ISubtree, public TCompactVector<TArc> {
     public:
         typedef typename TCompactVector<TArc>::iterator iterator;
-        typedef typename TCompactVector<TArc>::const_iterator const_iterator; 
+        typedef typename TCompactVector<TArc>::const_iterator const_iterator;
 
-        TArcSet() { 
+        TArcSet() {
             Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree()
-        } 
- 
+        }
+
         iterator Find(char ch);
-        const_iterator Find(char ch) const; 
+        const_iterator Find(char ch) const;
         void Add(const TBlob& s, TNode* node);
 
         bool IsLast() const override {
@@ -148,9 +148,9 @@ public:
 
         const TNode* Find(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override;
         const TNode* FindLongestPrefix(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override {
-            return Find(key, value, result, packer); 
-        } 
- 
+            return Find(key, value, result, packer);
+        }
+
         ui64 Measure(const TBuilderImpl* builder) const override {
             return MeasureRange(builder, 0, this->size());
         }
@@ -217,40 +217,40 @@ public:
     struct TBufferedSubtree: public ISubtree {
         TArrayWithSizeHolder<char> Buffer;
 
-        TBufferedSubtree() { 
+        TBufferedSubtree() {
             Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree()
-        } 
- 
+        }
+
         bool IsLast() const override {
             return Buffer.Empty();
         }
 
         const TNode* Find(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override {
-            if (Buffer.Empty()) { 
-                result = false; 
-                return nullptr; 
-            } 
- 
-            TCompactTrie<char, D, S> trie(Buffer.Get(), Buffer.Size(), packer); 
+            if (Buffer.Empty()) {
+                result = false;
+                return nullptr;
+            }
+
+            TCompactTrie<char, D, S> trie(Buffer.Get(), Buffer.Size(), packer);
             result = trie.Find(key.data(), key.size(), value);
- 
-            return nullptr; 
-        } 
- 
+
+            return nullptr;
+        }
+
         const TNode* FindLongestPrefix(TStringBuf& key, TData* value, bool& result, const TPacker& packer) const override {
-            if (Buffer.Empty()) { 
-                result = false; 
-                return nullptr; 
-            } 
- 
-            TCompactTrie<char, D, S> trie(Buffer.Get(), Buffer.Size(), packer); 
-            size_t prefixLen = 0; 
+            if (Buffer.Empty()) {
+                result = false;
+                return nullptr;
+            }
+
+            TCompactTrie<char, D, S> trie(Buffer.Get(), Buffer.Size(), packer);
+            size_t prefixLen = 0;
             result = trie.FindLongestPrefix(key.data(), key.size(), &prefixLen, value);
-            key = key.SubStr(prefixLen); 
- 
-            return nullptr; 
-        } 
- 
+            key = key.SubStr(prefixLen);
+
+            return nullptr;
+        }
+
         ui64 Measure(const TBuilderImpl*) const override {
             return Buffer.Size();
         }
@@ -283,7 +283,7 @@ public:
             Data.Reset(new TData);
             Data->FileName = fileName;
             Data->Size = size;
- 
+
             Y_ASSERT(reinterpret_cast<ISubtree*>(this) == static_cast<void*>(this)); // This assumption is used in TNode::Subtree()
         }
 
@@ -292,30 +292,30 @@ public:
         }
 
         const TNode* Find(TStringBuf& key, typename TCompactTrieBuilder::TData* value, bool& result, const TPacker& packer) const override {
-            if (!Data) { 
-                result = false; 
-                return nullptr; 
-            } 
- 
-            TCompactTrie<char, D, S> trie(TBlob::FromFile(Data->FileName), packer); 
+            if (!Data) {
+                result = false;
+                return nullptr;
+            }
+
+            TCompactTrie<char, D, S> trie(TBlob::FromFile(Data->FileName), packer);
             result = trie.Find(key.data(), key.size(), value);
-            return nullptr; 
-        } 
- 
+            return nullptr;
+        }
+
         const TNode* FindLongestPrefix(TStringBuf& key, typename TCompactTrieBuilder::TData* value, bool& result, const TPacker& packer) const override {
-            if (!Data) { 
-                result = false; 
-                return nullptr; 
-            } 
- 
-            TCompactTrie<char, D, S> trie(TBlob::FromFile(Data->FileName), packer); 
-            size_t prefixLen = 0; 
+            if (!Data) {
+                result = false;
+                return nullptr;
+            }
+
+            TCompactTrie<char, D, S> trie(TBlob::FromFile(Data->FileName), packer);
+            size_t prefixLen = 0;
             result = trie.FindLongestPrefix(key.data(), key.size(), &prefixLen, value);
-            key = key.SubStr(prefixLen); 
- 
-            return nullptr; 
-        } 
- 
+            key = key.SubStr(prefixLen);
+
+            return nullptr;
+        }
+
         ui64 Measure(const TBuilderImpl*) const override {
             return Data->Size;
         }
@@ -351,26 +351,26 @@ public:
 
     EPayload PayloadType;
 
-    inline const char* PayloadPtr() const { 
-        return ((const char*) this) + sizeof(TNode); 
-    } 
- 
+    inline const char* PayloadPtr() const {
+        return ((const char*) this) + sizeof(TNode);
+    }
+
     inline char* PayloadPtr() {
         return ((char*) this) + sizeof(TNode);
     }
 
     // *Payload()
-    inline const char*& PayloadAsPtr() const { 
-        const char** payload = (const char**) PayloadPtr(); 
-        return *payload; 
-    } 
- 
+    inline const char*& PayloadAsPtr() const {
+        const char** payload = (const char**) PayloadPtr();
+        return *payload;
+    }
+
     inline char*& PayloadAsPtr() {
         char** payload = (char**) PayloadPtr();
         return *payload;
     }
 
-    inline const char* GetPayload() const { 
+    inline const char* GetPayload() const {
         switch (PayloadType) {
         case DATA_INSIDE:
             return PayloadPtr();
@@ -383,11 +383,11 @@ public:
         }
     }
 
-    inline char* GetPayload() { 
-        const TNode* thiz = this; 
-        return const_cast<char*>(thiz->GetPayload()); // const_cast is to avoid copy-paste style 
-    } 
- 
+    inline char* GetPayload() {
+        const TNode* thiz = this;
+        return const_cast<char*>(thiz->GetPayload()); // const_cast is to avoid copy-paste style
+    }
+
     bool IsFinal() const {
         return PayloadType != DATA_ABSENT;
     }
@@ -420,8 +420,8 @@ public:
 // TCompactTrieBuilder
 
 template <class T, class D, class S>
-TCompactTrieBuilder<T, D, S>::TCompactTrieBuilder(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc) 
-    : Impl(new TCompactTrieBuilderImpl(flags, packer, alloc)) 
+TCompactTrieBuilder<T, D, S>::TCompactTrieBuilder(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc)
+    : Impl(new TCompactTrieBuilderImpl(flags, packer, alloc))
 {
 }
 
@@ -452,7 +452,7 @@ bool TCompactTrieBuilder<T, D, S>::Find(const TSymbol* key, size_t keylen, TData
 
 template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::FindLongestPrefix(
-                const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const { 
+                const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const {
     return Impl->FindLongestPrefix(key, keylen, prefixlen, value);
 }
 
@@ -484,10 +484,10 @@ size_t TCompactTrieBuilder<T, D, S>::GetNodeCount() const {
 // TCompactTrieBuilder::TCompactTrieBuilderImpl
 
 template <class T, class D, class S>
-TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TCompactTrieBuilderImpl(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc) 
-    : Pool(1000000, TMemoryPool::TLinearGrow::Instance(), alloc) 
+TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TCompactTrieBuilderImpl(TCompactTrieBuilderFlags flags, TPacker packer, IAllocator* alloc)
+    : Pool(1000000, TMemoryPool::TLinearGrow::Instance(), alloc)
     , PayloadSize(sizeof(void*)) // XXX: find better value
-    , NodeAllocator(new TFixedSizeAllocator(sizeof(TNode) + PayloadSize, alloc)) 
+    , NodeAllocator(new TFixedSizeAllocator(sizeof(TNode) + PayloadSize, alloc))
     , Flags(flags)
     , EntryCount(0)
     , NodeCount(1)
@@ -662,81 +662,81 @@ template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindEntry(const TSymbol* key, size_t keylen, TData* value) const {
     using namespace NCompactTrie;
 
-    if (!keylen) { 
-        const char zero = '\0'; 
-        return FindEntryImpl(&zero, 1, value); 
-    } else { 
-        size_t ckeylen = keylen * sizeof(TSymbol); 
-        TTempBuf ckeybuf(ckeylen); 
-        ConvertSymbolArrayToChar(key, keylen, ckeybuf, ckeylen); 
-        return FindEntryImpl(ckeybuf.Data(), ckeylen, value); 
+    if (!keylen) {
+        const char zero = '\0';
+        return FindEntryImpl(&zero, 1, value);
+    } else {
+        size_t ckeylen = keylen * sizeof(TSymbol);
+        TTempBuf ckeybuf(ckeylen);
+        ConvertSymbolArrayToChar(key, keylen, ckeybuf, ckeylen);
+        return FindEntryImpl(ckeybuf.Data(), ckeylen, value);
     }
-} 
+}
 
-template <class T, class D, class S> 
-bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindEntryImpl(const char* keyptr, size_t keylen, TData* value) const { 
-    const TNode* node = Root; 
-    bool result = false; 
-    TStringBuf key(keyptr, keylen); 
-    while (key && (node = node->Subtree()->Find(key, value, result, Packer))) { 
+template <class T, class D, class S>
+bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindEntryImpl(const char* keyptr, size_t keylen, TData* value) const {
+    const TNode* node = Root;
+    bool result = false;
+    TStringBuf key(keyptr, keylen);
+    while (key && (node = node->Subtree()->Find(key, value, result, Packer))) {
     }
-    return result; 
+    return result;
 }
 
 template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefix(
-                const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const { 
+                const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const {
     using namespace NCompactTrie;
 
-    if (!keylen) { 
-        const char zero = '\0'; 
-        const bool ret = FindLongestPrefixImpl(&zero, 1, prefixlen, value); 
-        if (ret && prefixlen) 
-            *prefixlen = 0; // empty key found 
-        return ret; 
-    } else { 
-        size_t ckeylen = keylen * sizeof(TSymbol); 
-        TTempBuf ckeybuf(ckeylen); 
-        ConvertSymbolArrayToChar(key, keylen, ckeybuf, ckeylen); 
-        bool ret = FindLongestPrefixImpl(ckeybuf.Data(), ckeylen, prefixlen, value); 
-        if (ret && prefixlen && *prefixlen == 1 && ckeybuf.Data()[0] == '\0') 
-            *prefixlen = 0; // if we have found empty key, set prefixlen to zero 
-        else if (!ret) // try to find value with empty key, because empty key is prefix of a every key 
-            ret = FindLongestPrefix(nullptr, 0, prefixlen, value); 
+    if (!keylen) {
+        const char zero = '\0';
+        const bool ret = FindLongestPrefixImpl(&zero, 1, prefixlen, value);
+        if (ret && prefixlen)
+            *prefixlen = 0; // empty key found
+        return ret;
+    } else {
+        size_t ckeylen = keylen * sizeof(TSymbol);
+        TTempBuf ckeybuf(ckeylen);
+        ConvertSymbolArrayToChar(key, keylen, ckeybuf, ckeylen);
+        bool ret = FindLongestPrefixImpl(ckeybuf.Data(), ckeylen, prefixlen, value);
+        if (ret && prefixlen && *prefixlen == 1 && ckeybuf.Data()[0] == '\0')
+            *prefixlen = 0; // if we have found empty key, set prefixlen to zero
+        else if (!ret) // try to find value with empty key, because empty key is prefix of a every key
+            ret = FindLongestPrefix(nullptr, 0, prefixlen, value);
 
-        if (ret && prefixlen) 
-            *prefixlen /= sizeof(TSymbol); 
+        if (ret && prefixlen)
+            *prefixlen /= sizeof(TSymbol);
 
-        return ret; 
+        return ret;
     }
-} 
+}
 
-template <class T, class D, class S> 
-bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefixImpl(const char* keyptr, size_t keylen, size_t* prefixLen, TData* value) const { 
-    const TNode* node = Root; 
-    const TNode* lastFinalNode = nullptr; 
-    bool endResult = false; 
-    TStringBuf key(keyptr, keylen); 
-    TStringBuf keyTail = key; 
-    TStringBuf lastFinalKeyTail; 
-    while (keyTail && (node = node->Subtree()->FindLongestPrefix(keyTail, value, endResult, Packer))) { 
-        if (endResult) // no more ways to find prefix and prefix has been found 
-            break; 
+template <class T, class D, class S>
+bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefixImpl(const char* keyptr, size_t keylen, size_t* prefixLen, TData* value) const {
+    const TNode* node = Root;
+    const TNode* lastFinalNode = nullptr;
+    bool endResult = false;
+    TStringBuf key(keyptr, keylen);
+    TStringBuf keyTail = key;
+    TStringBuf lastFinalKeyTail;
+    while (keyTail && (node = node->Subtree()->FindLongestPrefix(keyTail, value, endResult, Packer))) {
+        if (endResult) // no more ways to find prefix and prefix has been found
+            break;
 
-        if (node->IsFinal()) { 
-            lastFinalNode = node; 
-            lastFinalKeyTail = keyTail; 
+        if (node->IsFinal()) {
+            lastFinalNode = node;
+            lastFinalKeyTail = keyTail;
         }
     }
-    if (!endResult && lastFinalNode) { 
+    if (!endResult && lastFinalNode) {
         if (value)
-            Packer.UnpackLeaf(lastFinalNode->GetPayload(), *value); 
-        keyTail = lastFinalKeyTail; 
-        endResult = true; 
+            Packer.UnpackLeaf(lastFinalNode->GetPayload(), *value);
+        keyTail = lastFinalKeyTail;
+        endResult = true;
     }
-    if (endResult && prefixLen) 
+    if (endResult && prefixLen)
         *prefixLen = keyTail ? key.size() - keyTail.size() : key.size();
-    return endResult; 
+    return endResult;
 }
 
 template <class T, class D, class S>
@@ -991,60 +991,60 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::
 }
 
 template <class T, class D, class S>
-typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::const_iterator 
-                    TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Find(char ch) const { 
-    using namespace NCompTriePrivate; 
-    const_iterator it = LowerBound(this->begin(), this->end(), ch, TCmp()); 
- 
-    if (it != this->end() && it->Label[0] == (unsigned char)ch) { 
-        return it; 
-    } 
- 
-    return this->end(); 
-} 
- 
-template <class T, class D, class S> 
+typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::const_iterator
+                    TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Find(char ch) const {
+    using namespace NCompTriePrivate;
+    const_iterator it = LowerBound(this->begin(), this->end(), ch, TCmp());
+
+    if (it != this->end() && it->Label[0] == (unsigned char)ch) {
+        return it;
+    }
+
+    return this->end();
+}
+
+template <class T, class D, class S>
 void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Add(const TBlob& s, TNode* node) {
     using namespace NCompTriePrivate;
     this->insert(LowerBound(this->begin(), this->end(), s[0], TCmp()), TArc(s, node));
 }
 
-template <class T, class D, class S> 
-const typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode* 
-    TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Find( 
-                                TStringBuf& key, TData* value, bool& result, const TPacker& packer) const { 
-    result = false; 
-    if (!key) 
-        return nullptr; 
- 
-    const const_iterator it = Find(key[0]); 
-    if (it != this->end()) { 
-        const char* const arcLabel = it->Label.AsCharPtr(); 
-        const size_t arcLabelLen = it->Label.Length(); 
+template <class T, class D, class S>
+const typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
+    TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode::TArcSet::Find(
+                                TStringBuf& key, TData* value, bool& result, const TPacker& packer) const {
+    result = false;
+    if (!key)
+        return nullptr;
+
+    const const_iterator it = Find(key[0]);
+    if (it != this->end()) {
+        const char* const arcLabel = it->Label.AsCharPtr();
+        const size_t arcLabelLen = it->Label.Length();
         if (key.size() >= arcLabelLen && memcmp(key.data(), arcLabel, arcLabelLen) == 0) {
-            const TStringBuf srcKey = key; 
-            key = key.SubStr(arcLabelLen); 
-            const TNode* const node = it->Node; 
+            const TStringBuf srcKey = key;
+            key = key.SubStr(arcLabelLen);
+            const TNode* const node = it->Node;
             if (srcKey.size() == arcLabelLen) {
-                // unpack value of it->Node, if it has value 
-                if (!node->IsFinal()) 
-                    return nullptr; 
- 
-                if (value) 
-                    packer.UnpackLeaf(node->GetPayload(), *value); 
- 
-                result = true; 
-                return nullptr; 
-            } 
- 
-            // find in subtree 
-            return node; 
-        } 
-    } 
- 
-    return nullptr; 
-} 
- 
+                // unpack value of it->Node, if it has value
+                if (!node->IsFinal())
+                    return nullptr;
+
+                if (value)
+                    packer.UnpackLeaf(node->GetPayload(), *value);
+
+                result = true;
+                return nullptr;
+            }
+
+            // find in subtree
+            return node;
+        }
+    }
+
+    return nullptr;
+}
+
 // Different
 
 //----------------------------------------------------------------------------------------------------------------------

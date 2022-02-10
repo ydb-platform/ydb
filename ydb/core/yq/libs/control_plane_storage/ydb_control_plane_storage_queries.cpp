@@ -72,9 +72,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a query with these parameters. Please receive a permission yq.resources.managePublic"));
     }
-    if (request.disposition().has_from_last_checkpoint()) { 
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Streaming disposition \"from_last_checkpoint\" is not allowed in CreateQuery request")); 
-    } 
+    if (request.disposition().has_from_last_checkpoint()) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "Streaming disposition \"from_last_checkpoint\" is not allowed in CreateQuery request"));
+    }
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, queryId)
             << "CreateQueryRequest, validation failed: "
@@ -160,7 +160,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         }
         queryInternal.set_cloud_id(cloudId);
         queryInternal.set_state_load_mode(YandexQuery::StateLoadMode::EMPTY);
-        queryInternal.mutable_disposition()->CopyFrom(request.disposition()); 
+        queryInternal.mutable_disposition()->CopyFrom(request.disposition());
 
         if (request.execute_mode() != YandexQuery::SAVE) {
             // TODO: move to run actor priority selection
@@ -655,8 +655,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         << NKikimr::MaskTicket(token) << " "
         << request.DebugString());
 
-    if (request.content().type() == YandexQuery::QueryContent::STREAMING && request.state_load_mode() == YandexQuery::STATE_LOAD_MODE_UNSPECIFIED) { 
-        request.set_state_load_mode(YandexQuery::EMPTY); 
+    if (request.content().type() == YandexQuery::QueryContent::STREAMING && request.state_load_mode() == YandexQuery::STATE_LOAD_MODE_UNSPECIFIED) {
+        request.set_state_load_mode(YandexQuery::EMPTY);
     }
 
     NYql::TIssues issues = ValidateQuery(ev);
@@ -667,9 +667,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
     if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE && !permissions.Check(TPermissions::MANAGE_PUBLIC)) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "Permission denied to create a query with these parameters. Please receive a permission yq.resources.managePublic"));
     }
-    if (request.state_load_mode() == YandexQuery::FROM_LAST_CHECKPOINT) { 
-        issues.AddIssue(MakeErrorIssue(TIssuesIds::UNSUPPORTED, "State load mode \"FROM_LAST_CHECKPOINT\" is not supported")); 
-    } 
+    if (request.state_load_mode() == YandexQuery::FROM_LAST_CHECKPOINT) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::UNSUPPORTED, "State load mode \"FROM_LAST_CHECKPOINT\" is not supported"));
+    }
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, queryId)
             << "ModifyQueryRequest, validation failed: "
@@ -1672,7 +1672,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
         YandexQuery::DescribeJobResult result;
         TResultSetParser parser(resultSets->front());
         if (!parser.TryNextRow()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights"; 
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
         }
         if (!result.mutable_job()->ParseFromString(*parser.ColumnParser(JOB_COLUMN_NAME).GetOptionalString())) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for job. Please contact internal support";
@@ -1682,7 +1682,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
 
         bool hasViewAccces = HasViewAccess(permissions, visibility, result.job().meta().created_by(), user);
         if (!hasViewAccces) {
-            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights"; 
+            ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Job does not exist or permission denied. Please check the job id or your access rights";
         }
         return result;
     };

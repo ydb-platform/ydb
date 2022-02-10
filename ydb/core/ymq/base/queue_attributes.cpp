@@ -48,7 +48,7 @@ TQueueAttributes TQueueAttributes::FromAttributesAndConfig(const THashMap<TStrin
                 result.ContentBasedDeduplication = false;
             } else {
                 result.Error = &NErrors::INVALID_ATTRIBUTE_VALUE;
-                result.ErrorText = Sprintf(INVALID_PARAM_MSG " Valid values: true, false.", name.c_str()); 
+                result.ErrorText = Sprintf(INVALID_PARAM_MSG " Valid values: true, false.", name.c_str());
                 break;
             }
         } else if (name == "FifoQueue" && isFifoQueue) {
@@ -57,9 +57,9 @@ TQueueAttributes TQueueAttributes::FromAttributesAndConfig(const THashMap<TStrin
             } else {
                 result.Error = &NErrors::INVALID_ATTRIBUTE_VALUE;
                 if (value == "false") {
-                    result.ErrorText = Sprintf(INVALID_PARAM_MSG " Reason: Modifying queue type is not supported.", name.c_str()); 
+                    result.ErrorText = Sprintf(INVALID_PARAM_MSG " Reason: Modifying queue type is not supported.", name.c_str());
                 } else {
-                    result.ErrorText = Sprintf(INVALID_PARAM_MSG " Valid values: true, false.", name.c_str()); 
+                    result.ErrorText = Sprintf(INVALID_PARAM_MSG " Valid values: true, false.", name.c_str());
                 }
                 break;
             }
@@ -67,7 +67,7 @@ TQueueAttributes TQueueAttributes::FromAttributesAndConfig(const THashMap<TStrin
             result.RedrivePolicy = TRedrivePolicy::FromJson(value, config);
             if (result.RedrivePolicy.IsValid()) {
                 if (*result.RedrivePolicy.TargetQueueName && isFifoQueue != result.RedrivePolicy.TargetQueueName->EndsWith(".fifo")) {
-                    result.ErrorText = "Target dead letter queue should have the same type as source queue."; 
+                    result.ErrorText = "Target dead letter queue should have the same type as source queue.";
                 } else {
                     continue;
                 }
@@ -78,7 +78,7 @@ TQueueAttributes TQueueAttributes::FromAttributesAndConfig(const THashMap<TStrin
             break;
         } else {
             result.Error = &NErrors::INVALID_ATTRIBUTE_NAME;
-            result.ErrorText = Sprintf("Unknown Attribute %s.", name.c_str()); 
+            result.ErrorText = Sprintf("Unknown Attribute %s.", name.c_str());
             break;
         }
     }
@@ -107,7 +107,7 @@ bool TQueueAttributes::TryParseLimitedValue(const TString& attrName, const TStri
 
     result = Nothing();
     Error = &NErrors::INVALID_ATTRIBUTE_VALUE;
-    ErrorText = Sprintf(INVALID_PARAM_MSG " Valid values are from %" PRIu64 " to %" PRIu64 " both inclusive.", attrName.c_str(), allowedMinValue, allowedMaxValue); 
+    ErrorText = Sprintf(INVALID_PARAM_MSG " Valid values are from %" PRIu64 " to %" PRIu64 " both inclusive.", attrName.c_str(), allowedMinValue, allowedMaxValue);
 
     return false;
 }

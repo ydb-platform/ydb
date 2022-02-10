@@ -29,7 +29,7 @@ enum class EComponent {
     ProviderDq,
     ProviderClickHouse,
     ProviderYdb,
-    ProviderPq, 
+    ProviderPq,
     ProviderS3,
     CoreDq,
     // <--- put other log components here
@@ -70,7 +70,7 @@ struct EComponentHelpers {
         case EComponent::ProviderDq: return TStringBuf("DQ");
         case EComponent::ProviderClickHouse: return TStringBuf("CLICKHOUSE");
         case EComponent::ProviderYdb: return TStringBuf("YDB");
-        case EComponent::ProviderPq: return TStringBuf("PQ"); 
+        case EComponent::ProviderPq: return TStringBuf("PQ");
         case EComponent::ProviderS3: return TStringBuf("S3");
         case EComponent::CoreDq: return TStringBuf("core dq");
         default:
@@ -100,7 +100,7 @@ struct EComponentHelpers {
         if (str == TStringBuf("DQ")) return EComponent::ProviderDq;
         if (str == TStringBuf("CLICKHOUSE")) return EComponent::ProviderClickHouse;
         if (str == TStringBuf("YDB")) return EComponent::ProviderYdb;
-        if (str == TStringBuf("PQ")) return EComponent::ProviderPq; 
+        if (str == TStringBuf("PQ")) return EComponent::ProviderPq;
         if (str == TStringBuf("S3")) return EComponent::ProviderS3;
         if (str == TStringBuf("core dq")) return EComponent::CoreDq;
         ythrow yexception() << "unknown log component: '" << str << '\'';

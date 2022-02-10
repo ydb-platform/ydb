@@ -1,16 +1,16 @@
 #include "shellcommand.h"
 
-#include "compat.h" 
+#include "compat.h"
 #include "defaults.h"
-#include "fs.h" 
+#include "fs.h"
 #include "sigset.h"
-#include "spinlock.h" 
- 
+#include "spinlock.h"
+
 #include <library/cpp/testing/unittest/env.h>
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <util/folder/dirut.h> 
-#include <util/random/random.h> 
+
+#include <util/folder/dirut.h>
+#include <util/random/random.h>
 #include <util/stream/file.h>
 #include <util/stream/str.h>
 #include <util/stream/mem.h>
@@ -28,37 +28,37 @@ const size_t textSize = 20000;
 #endif
 
 class TGuardedStringStream: public IInputStream, public IOutputStream {
-public: 
-    TGuardedStringStream() { 
+public:
+    TGuardedStringStream() {
         Stream_.Reserve(100);
-    } 
- 
+    }
+
     TString Str() const {
         with_lock (Lock_) {
             return Stream_.Str();
-        } 
+        }
         return TString(); // line for compiler
-    } 
- 
-protected: 
-    size_t DoRead(void* buf, size_t len) override { 
+    }
+
+protected:
+    size_t DoRead(void* buf, size_t len) override {
         with_lock (Lock_) {
             return Stream_.Read(buf, len);
-        } 
-        return 0; // line for compiler 
-    } 
- 
-    void DoWrite(const void* buf, size_t len) override { 
+        }
+        return 0; // line for compiler
+    }
+
+    void DoWrite(const void* buf, size_t len) override {
         with_lock (Lock_) {
             return Stream_.Write(buf, len);
-        } 
-    } 
- 
-private: 
+        }
+    }
+
+private:
     TAdaptiveLock Lock_;
     TStringStream Stream_;
-}; 
- 
+};
+
 Y_UNIT_TEST_SUITE(TShellQuoteTest) {
     Y_UNIT_TEST(TestQuoteArg) {
         TString cmd;
@@ -232,9 +232,9 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         options.SetClearSignalMask(true);
         options.SetCloseAllFdsOnExec(true);
         options.SetCloseInput(false);
-        TGuardedStringStream write; 
+        TGuardedStringStream write;
         options.SetInputStream(&write);
-        TGuardedStringStream read; 
+        TGuardedStringStream read;
         options.SetOutputStream(&read);
         options.SetUseShell(true);
 
@@ -283,12 +283,12 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
     Y_UNIT_TEST(TestInterruptSimple) {
         TShellCommandOptions options;
         options.SetAsync(true);
-        options.SetCloseInput(false); 
-        TGuardedStringStream write; 
-        options.SetInputStream(&write); // set input stream that will be waited by cat 
+        options.SetCloseInput(false);
+        TGuardedStringStream write;
+        options.SetInputStream(&write); // set input stream that will be waited by cat
         TShellCommand cmd(catCommand, options);
         cmd.Run();
-        sleep(1); 
+        sleep(1);
         UNIT_ASSERT(TShellCommand::SHELL_RUNNING == cmd.GetStatus());
         cmd.Terminate();
         cmd.Wait();

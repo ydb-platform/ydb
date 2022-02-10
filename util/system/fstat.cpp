@@ -84,7 +84,7 @@ static bool GetStatByHandle(TSystemFStat& fs, FHANDLE f) {
 
 static bool GetStatByName(TSystemFStat& fs, const char* fileName, bool nofollow) {
 #ifdef _win_
-    TFileHandle h = NFsPrivate::CreateFileWithUtf8Name(fileName, FILE_READ_ATTRIBUTES | FILE_READ_EA, FILE_SHARE_READ | FILE_SHARE_WRITE, 
+    TFileHandle h = NFsPrivate::CreateFileWithUtf8Name(fileName, FILE_READ_ATTRIBUTES | FILE_READ_EA, FILE_SHARE_READ | FILE_SHARE_WRITE,
                                                        OPEN_EXISTING,
                                                        (nofollow ? FILE_FLAG_OPEN_REPARSE_POINT : 0) | FILE_FLAG_BACKUP_SEMANTICS, true);
     if (!h.IsOpen()) {

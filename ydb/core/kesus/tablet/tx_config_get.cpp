@@ -32,7 +32,7 @@ struct TKesusTablet::TTxConfigGet : public TTxBase {
         config->set_session_grace_period_millis(Self->SessionGracePeriod.MilliSeconds());
         config->set_read_consistency_mode(Self->ReadConsistencyMode);
         config->set_attach_consistency_mode(Self->AttachConsistencyMode);
-        config->set_rate_limiter_counters_mode(Self->RateLimiterCountersMode); 
+        config->set_rate_limiter_counters_mode(Self->RateLimiterCountersMode);
         Reply->Record.SetVersion(Self->ConfigVersion);
         Reply->Record.SetPath(Self->KesusPath);
         return true;

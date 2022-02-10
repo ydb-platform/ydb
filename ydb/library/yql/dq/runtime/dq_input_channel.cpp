@@ -1,17 +1,17 @@
 #include "dq_input_channel.h"
-#include "dq_input_impl.h" 
+#include "dq_input_impl.h"
 
 namespace NYql::NDq {
 
-class TDqInputChannel : public TDqInputImpl<TDqInputChannel, IDqInputChannel> { 
-    using TBaseImpl = TDqInputImpl<TDqInputChannel, IDqInputChannel>; 
-    friend TBaseImpl; 
+class TDqInputChannel : public TDqInputImpl<TDqInputChannel, IDqInputChannel> {
+    using TBaseImpl = TDqInputImpl<TDqInputChannel, IDqInputChannel>;
+    friend TBaseImpl;
 public:
     TDqInputChannel(ui64 channelId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, bool collectProfileStats,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv, const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         NDqProto::EDataTransportVersion transportVersion)
-        : TBaseImpl(inputType, maxBufferBytes) 
-        , ChannelId(channelId) 
+        : TBaseImpl(inputType, maxBufferBytes)
+        , ChannelId(channelId)
         , BasicStats(ChannelId)
         , ProfileStats(collectProfileStats ? &BasicStats : nullptr)
         , DataSerializer(typeEnv, holderFactory, transportVersion) {}
@@ -27,7 +27,7 @@ public:
             return;
         }
 
-        const i64 space = data.GetRaw().size(); 
+        const i64 space = data.GetRaw().size();
 
         NKikimr::NMiniKQL::TUnboxedValueVector buffer;
         buffer.reserve(data.GetRows());
@@ -40,7 +40,7 @@ public:
             DataSerializer.Deserialize(data, InputType, buffer);
         }
 
-        AddBatch(std::move(buffer), space); 
+        AddBatch(std::move(buffer), space);
     }
 
     const TDqInputChannelStats* GetStats() const override {

@@ -16,7 +16,7 @@ public:
     {
     }
 
-    void DoSendReply(const NKikimrClient::TSqsResponse& resp) override { 
+    void DoSendReply(const NKikimrClient::TSqsResponse& resp) override {
         auto response = MakeHolder<NMsgBusProxy::TBusSqsResponse>();
         response->Record.CopyFrom(resp);
         SendReplyMove(response.Release());
@@ -27,11 +27,11 @@ public:
 
 IActor* CreateMessageBusSqsRequest(NMsgBusProxy::TBusMessageContext& msg)
 {
-    NKikimrClient::TSqsRequest record 
+    NKikimrClient::TSqsRequest record
         = static_cast<NMsgBusProxy::TBusSqsRequest*>(msg.GetMessage())->Record;
-    record.SetRequestId(CreateGuidAsString()); 
+    record.SetRequestId(CreateGuidAsString());
 
-    return CreateProxyActionActor(record, MakeHolder<TMessageBusCallback>(msg), true); 
+    return CreateProxyActionActor(record, MakeHolder<TMessageBusCallback>(msg), true);
 }
 
 } // namespace NMsgBusProxy

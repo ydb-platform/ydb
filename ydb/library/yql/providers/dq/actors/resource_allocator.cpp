@@ -39,7 +39,7 @@ class TResourceAllocator: public TRichActor<TResourceAllocator>
 
 
 public:
-    static constexpr char ActorName[] = "YQL_DQ_RESOURCE_ALLOCATOR"; 
+    static constexpr char ActorName[] = "YQL_DQ_RESOURCE_ALLOCATOR";
 
     TResourceAllocator(
         TActorId gwmActor,

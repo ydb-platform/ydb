@@ -1,15 +1,15 @@
-OWNER( 
+OWNER(
     g:kikimr
-    g:sqs 
-) 
- 
+    g:sqs
+)
+
 LIBRARY()
 
 SRCS(
     actor.cpp
     auth_factory.cpp
-    attributes_md5.cpp 
-    cfg.cpp 
+    attributes_md5.cpp
+    cfg.cpp
     change_visibility.cpp
     count_queues.cpp
     create_queue.cpp
@@ -17,44 +17,44 @@ SRCS(
     delete_message.cpp
     delete_queue.cpp
     delete_user.cpp
-    error.cpp 
+    error.cpp
     executor.cpp
-    fifo_cleanup.cpp 
+    fifo_cleanup.cpp
     garbage_collector.cpp
     get_queue_attributes.cpp
     get_queue_url.cpp
     index_events_processor.cpp
-    infly.cpp 
-    log.cpp 
+    infly.cpp
+    log.cpp
     list_dead_letter_source_queues.cpp
     list_permissions.cpp
     list_queues.cpp
     list_users.cpp
-    local_rate_limiter_allocator.cpp 
-    message_delay_stats.cpp 
+    local_rate_limiter_allocator.cpp
+    message_delay_stats.cpp
     metering.cpp
-    migration.cpp 
+    migration.cpp
     modify_permissions.cpp
-    proxy_actor.cpp 
+    proxy_actor.cpp
     purge.cpp
     purge_queue.cpp
     queue_leader.cpp
     receive_message.cpp
-    retention.cpp 
+    retention.cpp
     schema.cpp
-    sha256.cpp 
+    sha256.cpp
     send_message.cpp
     service.cpp
     set_queue_attributes.cpp
-    proxy_service.cpp 
-    queues_list_reader.cpp 
+    proxy_service.cpp
+    queues_list_reader.cpp
     queue_schema.cpp
-    user_settings_names.cpp 
-    user_settings_reader.cpp 
+    user_settings_names.cpp
+    user_settings_reader.cpp
 )
 
 PEERDIR(
-    contrib/libs/openssl 
+    contrib/libs/openssl
     contrib/libs/protobuf
     library/cpp/actors/core
     library/cpp/containers/intrusive_rb_tree
@@ -94,8 +94,8 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-GENERATE_ENUM_SERIALIZATION(events.h) 
+GENERATE_ENUM_SERIALIZATION(events.h)
 
 GENERATE_ENUM_SERIALIZATION(metering.h)
- 
+
 END()

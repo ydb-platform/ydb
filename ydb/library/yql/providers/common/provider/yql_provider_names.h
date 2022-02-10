@@ -20,8 +20,8 @@ constexpr TStringBuf S3ProviderName = "s3";
 
 constexpr std::array<const TStringBuf, 11> Providers = {
     {ConfigProviderName, YtProviderName, KikimrProviderName, RtmrProviderName, S3ProviderName,
-     StatProviderName, SolomonProviderName, DqProviderName, ClickHouseProviderName, YdbProviderName, 
-     PqProviderName} 
+     StatProviderName, SolomonProviderName, DqProviderName, ClickHouseProviderName, YdbProviderName,
+     PqProviderName}
 };
 
 } // namespace NYql

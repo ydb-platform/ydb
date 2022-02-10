@@ -63,7 +63,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> EnablePorto; // Will be renamed to _EnablePorto
     NCommon::TConfSetting<ui64, false> _PortoMemoryLimit;
     NCommon::TConfSetting<bool, false> EnableFullResultWrite;
-    NCommon::TConfSetting<bool, false> _OneGraphPerQuery; 
+    NCommon::TConfSetting<bool, false> _OneGraphPerQuery;
     NCommon::TConfSetting<TString, false> _FallbackOnRuntimeErrors;
 
     NCommon::TConfSetting<TString, false> WorkerFilter;

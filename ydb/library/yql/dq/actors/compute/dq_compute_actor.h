@@ -68,12 +68,12 @@ struct TEvDqCompute {
         }
     };
 
-    struct TEvNewCheckpointCoordinatorAck : public NActors::TEventPB<TEvNewCheckpointCoordinatorAck, 
-        NDqProto::TEvNewCheckpointCoordinatorAck, TDqComputeEvents::EvNewCheckpointCoordinatorAck> { 
- 
-        TEvNewCheckpointCoordinatorAck() = default; 
-    }; 
- 
+    struct TEvNewCheckpointCoordinatorAck : public NActors::TEventPB<TEvNewCheckpointCoordinatorAck,
+        NDqProto::TEvNewCheckpointCoordinatorAck, TDqComputeEvents::EvNewCheckpointCoordinatorAck> {
+
+        TEvNewCheckpointCoordinatorAck() = default;
+    };
+
     struct TEvInjectCheckpoint : public NActors::TEventPB<TEvInjectCheckpoint,
         NDqProto::TEvInjectCheckpoint, TDqComputeEvents::EvInjectCheckpoint> {
 
@@ -87,16 +87,16 @@ struct TEvDqCompute {
     };
 
     struct TEvSaveTaskState : public NActors::TEventLocal<TEvSaveTaskState, TDqComputeEvents::EvSaveTaskState> {
-        TEvSaveTaskState(TString graphId, ui64 taskId, NDqProto::TCheckpoint checkpoint) 
+        TEvSaveTaskState(TString graphId, ui64 taskId, NDqProto::TCheckpoint checkpoint)
             : GraphId(std::move(graphId))
             , TaskId(taskId)
             , Checkpoint(std::move(checkpoint))
-        {} 
+        {}
 
         const TString GraphId;
         const ui64 TaskId;
         const NDqProto::TCheckpoint Checkpoint;
-        NDqProto::TComputeActorState State; 
+        NDqProto::TComputeActorState State;
     };
 
     struct TEvSaveTaskStateResult : public NActors::TEventPB<TEvSaveTaskStateResult,
@@ -132,17 +132,17 @@ struct TEvDqCompute {
         TEvRestoreFromCheckpoint() = default;
 
         TEvRestoreFromCheckpoint(ui64 checkpointId, ui64 checkpointGeneration, ui64 coordinatorGeneration) {
-            Init(checkpointId, checkpointGeneration, coordinatorGeneration); 
-            Record.MutableStateLoadPlan()->SetStateType(NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN); // default 
-        } 
- 
-        TEvRestoreFromCheckpoint(ui64 checkpointId, ui64 checkpointGeneration, ui64 coordinatorGeneration, const NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan) { 
-            Init(checkpointId, checkpointGeneration, coordinatorGeneration); 
-            *Record.MutableStateLoadPlan() = taskPlan; 
-        } 
- 
-    private: 
-        void Init(ui64 checkpointId, ui64 checkpointGeneration, ui64 coordinatorGeneration) { 
+            Init(checkpointId, checkpointGeneration, coordinatorGeneration);
+            Record.MutableStateLoadPlan()->SetStateType(NDqProto::NDqStateLoadPlan::STATE_TYPE_OWN); // default
+        }
+
+        TEvRestoreFromCheckpoint(ui64 checkpointId, ui64 checkpointGeneration, ui64 coordinatorGeneration, const NDqProto::NDqStateLoadPlan::TTaskPlan& taskPlan) {
+            Init(checkpointId, checkpointGeneration, coordinatorGeneration);
+            *Record.MutableStateLoadPlan() = taskPlan;
+        }
+
+    private:
+        void Init(ui64 checkpointId, ui64 checkpointGeneration, ui64 coordinatorGeneration) {
             Record.MutableCheckpoint()->SetId(checkpointId);
             Record.MutableCheckpoint()->SetGeneration(checkpointGeneration);
             Record.SetGeneration(coordinatorGeneration);
@@ -150,39 +150,39 @@ struct TEvDqCompute {
     };
 
     struct TEvRestoreFromCheckpointResult : public NActors::TEventPB<TEvRestoreFromCheckpointResult,
-        NDqProto::TEvRestoreFromCheckpointResult, TDqComputeEvents::EvRestoreFromCheckpointResult> { 
-        using TBaseEventPB = NActors::TEventPB<TEvRestoreFromCheckpointResult, NDqProto::TEvRestoreFromCheckpointResult, TDqComputeEvents::EvRestoreFromCheckpointResult>; 
+        NDqProto::TEvRestoreFromCheckpointResult, TDqComputeEvents::EvRestoreFromCheckpointResult> {
+        using TBaseEventPB = NActors::TEventPB<TEvRestoreFromCheckpointResult, NDqProto::TEvRestoreFromCheckpointResult, TDqComputeEvents::EvRestoreFromCheckpointResult>;
 
-        using TBaseEventPB::TBaseEventPB; 
- 
-        TEvRestoreFromCheckpointResult(const NDqProto::TCheckpoint& checkpoint, ui64 taskId, NDqProto::TEvRestoreFromCheckpointResult::ERestoreStatus status) { 
-            Record.MutableCheckpoint()->CopyFrom(checkpoint); 
-            Record.SetTaskId(taskId); 
-            Record.SetStatus(status); 
-        } 
-    }; 
- 
+        using TBaseEventPB::TBaseEventPB;
+
+        TEvRestoreFromCheckpointResult(const NDqProto::TCheckpoint& checkpoint, ui64 taskId, NDqProto::TEvRestoreFromCheckpointResult::ERestoreStatus status) {
+            Record.MutableCheckpoint()->CopyFrom(checkpoint);
+            Record.SetTaskId(taskId);
+            Record.SetStatus(status);
+        }
+    };
+
     struct TEvGetTaskState : public NActors::TEventLocal<TEvGetTaskState, TDqComputeEvents::EvGetTaskState> {
-        TEvGetTaskState(TString graphId, const std::vector<ui64>& taskIds, NDqProto::TCheckpoint checkpoint, ui64 generation) 
+        TEvGetTaskState(TString graphId, const std::vector<ui64>& taskIds, NDqProto::TCheckpoint checkpoint, ui64 generation)
             : GraphId(std::move(graphId))
-            , TaskIds(taskIds) 
+            , TaskIds(taskIds)
             , Checkpoint(std::move(checkpoint))
             , Generation(generation) {}
 
         const TString GraphId;
-        const std::vector<ui64> TaskIds; 
+        const std::vector<ui64> TaskIds;
         const NDqProto::TCheckpoint Checkpoint;
         const ui64 Generation;
     };
 
     struct TEvGetTaskStateResult : public NActors::TEventLocal<TEvGetTaskStateResult, TDqComputeEvents::EvGetTaskStateResult> {
-        TEvGetTaskStateResult(NDqProto::TCheckpoint checkpoint, TIssues issues, ui64 generation) 
+        TEvGetTaskStateResult(NDqProto::TCheckpoint checkpoint, TIssues issues, ui64 generation)
             : Checkpoint(std::move(checkpoint))
             , Issues(std::move(issues))
             , Generation(generation) {}
 
         const NDqProto::TCheckpoint Checkpoint;
-        std::vector<NDqProto::TComputeActorState> States; 
+        std::vector<NDqProto::TComputeActorState> States;
         const TIssues Issues;
         const ui64 Generation;
     };
@@ -256,7 +256,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
     NDqProto::TDqTaskStats* protoTask, bool withProfileStats);
 
 NActors::IActor* CreateDqComputeActor(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
-    IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory, 
+    IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     const TTaskRunnerFactory& taskRunnerFactory);
 

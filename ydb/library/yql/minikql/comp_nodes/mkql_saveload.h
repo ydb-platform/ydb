@@ -6,8 +6,8 @@
 
 #include <util/generic/strbuf.h>
 
-#include <string_view> 
- 
+#include <string_view>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -59,19 +59,19 @@ Y_FORCE_INLINE ui64 ReadUi64(TStringBuf& in) {
     return result;
 }
 
-Y_FORCE_INLINE void WriteString(TString& out, std::string_view str) { 
-    WriteUi32(out, str.size()); 
-    out.AppendNoAlias(str.data(), str.size()); 
-} 
- 
-Y_FORCE_INLINE std::string_view ReadString(TStringBuf& in) { 
-    const ui32 size = ReadUi32(in); 
-    MKQL_ENSURE(in.Size() >= size, "Serialized state is corrupted"); 
-    TStringBuf head = in.Head(size); 
-    in = in.Tail(size); 
-    return head; 
-} 
- 
+Y_FORCE_INLINE void WriteString(TString& out, std::string_view str) {
+    WriteUi32(out, str.size());
+    out.AppendNoAlias(str.data(), str.size());
+}
+
+Y_FORCE_INLINE std::string_view ReadString(TStringBuf& in) {
+    const ui32 size = ReadUi32(in);
+    MKQL_ENSURE(in.Size() >= size, "Serialized state is corrupted");
+    TStringBuf head = in.Head(size);
+    in = in.Tail(size);
+    return head;
+}
+
 Y_FORCE_INLINE void WriteUnboxedValue(TString& out, const TValuePacker& packer, const NUdf::TUnboxedValue& value) {
     auto state = packer.Pack(value);
     WriteUi32(out, state.size());

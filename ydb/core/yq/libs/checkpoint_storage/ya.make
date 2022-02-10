@@ -11,14 +11,14 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/fmt 
+    contrib/libs/fmt
     library/cpp/actors/core
-    ydb/core/yq/libs/actors/logging 
-    ydb/core/yq/libs/control_plane_storage 
+    ydb/core/yq/libs/actors/logging
+    ydb/core/yq/libs/control_plane_storage
     ydb/core/yq/libs/ydb
-    ydb/core/yq/libs/checkpoint_storage/events 
-    ydb/core/yq/libs/checkpoint_storage/proto 
-    ydb/core/yq/libs/checkpointing_common 
+    ydb/core/yq/libs/checkpoint_storage/events
+    ydb/core/yq/libs/checkpoint_storage/proto
+    ydb/core/yq/libs/checkpointing_common
     ydb/library/security
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_table
@@ -30,7 +30,7 @@ YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE( 
-    events 
-    proto 
-) 
+RECURSE(
+    events
+    proto
+)

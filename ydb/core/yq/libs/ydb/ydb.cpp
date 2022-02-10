@@ -10,7 +10,7 @@
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
-namespace NYq { 
+namespace NYq {
 
 using namespace NThreading;
 using namespace NYdb;
@@ -244,18 +244,18 @@ TStatus MakeErrorStatus(
     return TStatus(code, std::move(issues));
 }
 
-NYql::TIssues StatusToIssues(const NYdb::TStatus& status) { 
-    TIssues issues; 
-    if (!status.IsSuccess()) { 
-        issues = status.GetIssues(); 
-    } 
-    return issues; 
-} 
- 
+NYql::TIssues StatusToIssues(const NYdb::TStatus& status) {
+    TIssues issues;
+    if (!status.IsSuccess()) {
+        issues = status.GetIssues();
+    }
+    return issues;
+}
+
 TFuture<TIssues> StatusToIssues(const TFuture<TStatus>& future) {
     return future.Apply(
         [] (const TFuture<TStatus>& future) {
-            return StatusToIssues(future.GetValue()); 
+            return StatusToIssues(future.GetValue());
     });
 }
 
@@ -335,4 +335,4 @@ TFuture<TStatus> RollbackTransaction(const TGenerationContextPtr& context) {
     return future;
 }
 
-} // namespace NYq 
+} // namespace NYq

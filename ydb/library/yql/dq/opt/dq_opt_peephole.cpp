@@ -6,8 +6,8 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <util/generic/size_literals.h> 
- 
+#include <util/generic/size_literals.h>
+
 namespace NYql::NDq {
 
 using namespace NYql::NNodes;
@@ -515,30 +515,30 @@ NNodes::TExprBase DqPeepholeRewritePureJoin(const NNodes::TExprBase& node, TExpr
     }
 }
 
-NNodes::TExprBase DqPeepholeRewriteReplicate(const NNodes::TExprBase& node, TExprContext& ctx) { 
-    if (!node.Maybe<TDqReplicate>()) { 
-        return node; 
-    } 
-    auto dqReplicate = node.Cast<TDqReplicate>(); 
- 
-    TVector<TExprBase> branches; 
-    branches.reserve(dqReplicate.Args().Count() - 1); 
- 
-    auto inputIndex = NDq::BuildAtomList("0", dqReplicate.Pos(), ctx); 
-    for (size_t i = 1; i < dqReplicate.Args().Count(); ++i) { 
-        branches.emplace_back(inputIndex); 
-        branches.emplace_back(ctx.DeepCopyLambda(dqReplicate.Args().Get(i).Ref())); 
-    } 
- 
-    return Build<TCoSwitch>(ctx, dqReplicate.Pos()) 
-        .Input(dqReplicate.Input()) 
-        .BufferBytes() 
-            .Value(ToString(128_MB)) 
-            .Build() 
-        .FreeArgs() 
-            .Add(branches) 
-            .Build() 
-        .Done(); 
-} 
- 
+NNodes::TExprBase DqPeepholeRewriteReplicate(const NNodes::TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TDqReplicate>()) {
+        return node;
+    }
+    auto dqReplicate = node.Cast<TDqReplicate>();
+
+    TVector<TExprBase> branches;
+    branches.reserve(dqReplicate.Args().Count() - 1);
+
+    auto inputIndex = NDq::BuildAtomList("0", dqReplicate.Pos(), ctx);
+    for (size_t i = 1; i < dqReplicate.Args().Count(); ++i) {
+        branches.emplace_back(inputIndex);
+        branches.emplace_back(ctx.DeepCopyLambda(dqReplicate.Args().Get(i).Ref()));
+    }
+
+    return Build<TCoSwitch>(ctx, dqReplicate.Pos())
+        .Input(dqReplicate.Input())
+        .BufferBytes()
+            .Value(ToString(128_MB))
+            .Build()
+        .FreeArgs()
+            .Add(branches)
+            .Build()
+        .Done();
+}
+
 } // namespace NYql::NDq

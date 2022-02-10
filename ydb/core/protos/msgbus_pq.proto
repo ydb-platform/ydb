@@ -405,7 +405,7 @@ message TPersQueuePartitionResponse {
 
         //write stat
         optional uint32 PartitionQuotedTimeMs = 8;
-        optional uint32 TopicQuotedTimeMs = 11; 
+        optional uint32 TopicQuotedTimeMs = 11;
         optional uint32 TotalTimeInPartitionQueueMs = 9;
         optional uint32 WriteTimeMs = 10;
     }

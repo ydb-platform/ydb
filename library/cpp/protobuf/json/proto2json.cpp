@@ -1,8 +1,8 @@
 #include "proto2json.h"
 
-#include "json_output_create.h" 
-#include "proto2json_printer.h" 
- 
+#include "json_output_create.h"
+#include "proto2json_printer.h"
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_writer.h>
@@ -13,7 +13,7 @@
 #include <util/stream/str.h>
 #include <util/system/yassert.h>
 
-namespace NProtobufJson { 
+namespace NProtobufJson {
     void Proto2Json(const NProtoBuf::Message& proto, IJsonOutput& jsonOutput,
                     const TProto2JsonConfig& config, bool closeMap) {
         TProto2JsonPrinter printer(config);

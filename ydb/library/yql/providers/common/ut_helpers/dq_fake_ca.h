@@ -62,7 +62,7 @@ struct TSourcePromises {
 struct TSinkPromises {
     NThreading::TPromise<void> ResumeExecution = NThreading::NewPromise();
     NThreading::TPromise<TIssues> Issue = NThreading::NewPromise<TIssues>();
-    NThreading::TPromise<NDqProto::TSinkState> StateSaved = NThreading::NewPromise<NDqProto::TSinkState>(); 
+    NThreading::TPromise<NDqProto::TSinkState> StateSaved = NThreading::NewPromise<NDqProto::TSinkState>();
 };
 
 NYql::NDqProto::TCheckpoint CreateCheckpoint(ui64 id = 0);
@@ -99,10 +99,10 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
             Parent.SinkPromises.Issue = NThreading::NewPromise<TIssues>();
         };
 
-        void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint&) override { 
+        void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint&) override {
             Y_UNUSED(outputIndex);
             Parent.SinkPromises.StateSaved.SetValue(state);
-            Parent.SinkPromises.StateSaved = NThreading::NewPromise<NDqProto::TSinkState>(); 
+            Parent.SinkPromises.StateSaved = NThreading::NewPromise<NDqProto::TSinkState>();
         };
 
         TFakeActor& Parent;
@@ -206,10 +206,10 @@ struct TFakeCASetup {
 
     void SinkWrite(const TWriteValueProducer valueProducer, TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing());
 
-    void SaveSourceState(NDqProto::TCheckpoint checkpoint, NDqProto::TSourceState& state); 
+    void SaveSourceState(NDqProto::TCheckpoint checkpoint, NDqProto::TSourceState& state);
 
-    void LoadSource(const NDqProto::TSourceState& state); 
-    void LoadSink(const NDqProto::TSinkState& state); 
+    void LoadSource(const NDqProto::TSourceState& state);
+    void LoadSink(const NDqProto::TSinkState& state);
 
     void Execute(TCallback callback);
 

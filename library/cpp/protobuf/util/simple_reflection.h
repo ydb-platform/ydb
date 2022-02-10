@@ -1,17 +1,17 @@
 #pragma once
 
-#include "cast.h" 
-#include "path.h" 
+#include "cast.h"
+#include "path.h"
 #include "traits.h"
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
 
-#include <util/generic/maybe.h> 
-#include <util/generic/typetraits.h> 
-#include <util/generic/vector.h> 
-#include <util/system/defaults.h> 
- 
+#include <util/generic/maybe.h>
+#include <util/generic/typetraits.h>
+#include <util/generic/vector.h>
+#include <util/system/defaults.h>
+
 namespace NProtoBuf {
     class TConstField {
     public:
@@ -29,7 +29,7 @@ namespace NProtoBuf {
         const Message& Parent() const {
             return Msg;
         }
- 
+
         const FieldDescriptor* Field() const {
             return Fd;
         }
@@ -80,7 +80,7 @@ namespace NProtoBuf {
         bool IsMessage() const {
             return CppType() == FieldDescriptor::CPPTYPE_MESSAGE;
         }
- 
+
         bool HasSameType(const TConstField& other) const {
             if (CppType() != other.CppType())
                 return false;
@@ -90,7 +90,7 @@ namespace NProtoBuf {
                 return false;
             return true;
         }
- 
+
     protected:
         bool IsRepeated() const {
             return Fd->is_repeated();
@@ -137,7 +137,7 @@ namespace NProtoBuf {
 
         template <typename T>
         inline void Add(T value);
- 
+
         inline void MergeFrom(const TConstField& src);
 
         inline void Clear() {
@@ -167,17 +167,17 @@ namespace NProtoBuf {
                 return;
             Refl().SwapElements(Mut(), Fd, index1, index2);
         }
- 
+
         inline void Remove(size_t index) {
             if (index >= Size())
                 return;
- 
+
             // Move to the end
             for (size_t i = index, size = Size(); i < size - 1; ++i)
                 SwapElements(i, i + 1);
             RemoveLast();
         }
- 
+
         Message* MutableMessage(size_t index = 0) {
             Y_ASSERT(IsMessage());
             if (IsRepeated()) {
@@ -193,12 +193,12 @@ namespace NProtoBuf {
         inline TMsg* AddMessage() {
             return CheckedCast<TMsg*>(AddMessage());
         }
- 
+
         inline Message* AddMessage() {
             Y_ASSERT(IsMessage() && IsRepeated());
             return Refl().AddMessage(Mut(), Fd);
         }
- 
+
     private:
         Message* Mut() {
             return const_cast<Message*>(&Msg);

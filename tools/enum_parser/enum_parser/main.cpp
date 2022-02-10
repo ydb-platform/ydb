@@ -420,7 +420,7 @@ int main(int argc, char** argv) {
 
 
         if (outputFileName) {
-            NFs::Remove(outputFileName); 
+            NFs::Remove(outputFileName);
             hOut.Reset(new TFileOutput(outputFileName));
             out = hOut.Get();
 

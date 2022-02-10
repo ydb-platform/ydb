@@ -23,9 +23,9 @@ public:
 
     IDqOutputConsumer::TPtr CreateOutputConsumer(const NDqProto::TTaskOutput& outputDesc,
         const NMiniKQL::TType* type, NUdf::IApplyContext* applyCtx, const NMiniKQL::TTypeEnvironment& typeEnv,
-        TVector<IDqOutput::TPtr>&& outputs) const override 
+        TVector<IDqOutput::TPtr>&& outputs) const override
     {
-        return KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, std::move(outputs)); 
+        return KqpBuildOutputConsumer(outputDesc, type, applyCtx, typeEnv, std::move(outputs));
     }
 
     IDqChannelStorage::TPtr CreateChannelStorage(ui64 channelId) const override {

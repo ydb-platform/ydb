@@ -2,7 +2,7 @@
 #include <util/generic/string.h>
 #include <util/string/cast.h>
 
-namespace NKikimr::NSQS { 
+namespace NKikimr::NSQS {
 
 // Queue id breakdown in bits [15][1][64][7][13]:
 // [15] - service id
@@ -71,4 +71,4 @@ TString MakeQueueId(const ui16 serviceId, const ui64 uniqueNum, const TString& a
     return TQueueId(serviceId, uniqueNum, accountName).AsString();
 }
 
-} // namespace NKikimr::NSQS 
+} // namespace NKikimr::NSQS

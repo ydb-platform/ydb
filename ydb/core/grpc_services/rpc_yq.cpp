@@ -34,7 +34,7 @@ public:
     using TBase::Request_;
     using TBase::GetProtoRequest;
 
-protected: 
+protected:
     TString Token;
     TString FolderId;
     TString User;
@@ -61,7 +61,7 @@ public:
 
         TMaybe<TString> authToken = proxyCtx->GetYdbToken();
         if (!authToken) {
-            ReplyWithStatus("Token is empty", StatusIds::BAD_REQUEST); 
+            ReplyWithStatus("Token is empty", StatusIds::BAD_REQUEST);
             return;
         }
         Token = *authToken;
@@ -80,12 +80,12 @@ public:
 
         FolderId = path.back();
         if (!FolderId) {
-            ReplyWithStatus("Folder id is empty", StatusIds::BAD_REQUEST); 
+            ReplyWithStatus("Folder id is empty", StatusIds::BAD_REQUEST);
             return;
         }
 
         if (FolderId.length() > 1024) {
-            ReplyWithStatus("Folder id length greater than 1024 characters: " + FolderId, StatusIds::BAD_REQUEST); 
+            ReplyWithStatus("Folder id length greater than 1024 characters: " + FolderId, StatusIds::BAD_REQUEST);
             return;
         }
 
@@ -106,18 +106,18 @@ public:
             return;
         }
 
-        const auto* req = GetProtoRequest(); 
+        const auto* req = GetProtoRequest();
         auto ev = MakeHolder<EvRequestType>(FolderId, *req, User, Token, permissions);
         Send(NYq::ControlPlaneProxyActorId(), ev.Release());
         Become(&TYandexQueryRequestRPC<RpcRequestType, EvRequestType, EvResponseType>::StateFunc);
     }
 
-protected: 
-    void ReplyWithStatus(const TString& issueMessage, StatusIds::StatusCode status) { 
+protected:
+    void ReplyWithStatus(const TString& issueMessage, StatusIds::StatusCode status) {
         Request_->RaiseIssue(NYql::TIssue(issueMessage));
-        Request_->ReplyWithYdbStatus(status); 
-        PassAway(); 
-    } 
+        Request_->ReplyWithYdbStatus(status);
+        PassAway();
+    }
 
     STRICT_STFUNC(StateFunc,
         hFunc(EvResponseType, Handle);
@@ -130,7 +130,7 @@ protected:
             req.ReplyWithYdbStatus(StatusIds::BAD_REQUEST);
         } else {
             req.SendResult(response.Result, StatusIds::SUCCESS);
-        } 
+        }
     }
 
     template <typename TResponse, typename TReq> requires requires (TResponse r) { r.AuditDetails; }
@@ -140,7 +140,7 @@ protected:
             req.ReplyWithYdbStatus(StatusIds::BAD_REQUEST);
         } else {
             req.SendResult(response.Result, StatusIds::SUCCESS);
-        } 
+        }
 
         NYq::TEvAuditService::TExtraInfo extraInfo{
             .Token = Token,

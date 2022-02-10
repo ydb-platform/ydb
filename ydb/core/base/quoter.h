@@ -42,8 +42,8 @@ struct TEvQuota {
         const ui64 Amount;
         const bool IsUsedAmount;
 
-        TResourceLeaf(const TResourceLeaf&) = default; 
- 
+        TResourceLeaf(const TResourceLeaf&) = default;
+
         TResourceLeaf(ui64 quoterId, ui64 resourceId, ui64 amount, bool isUsedAmount = false)
             : QuoterId(quoterId)
             , ResourceId(resourceId)
@@ -96,7 +96,7 @@ struct TEvQuota {
     };
 
     // when cookie present - cancel one request
-    // when cookie omitted - cancel all requests from sender 
+    // when cookie omitted - cancel all requests from sender
     struct TEvCancelRequest : public TEventLocal<TEvClearance, EvCancelRequest> {};
 
     // b/w service and quoter proxy
@@ -145,12 +145,12 @@ struct TEvQuota {
         const ui64 ResourceId;
         const ui64 Tick;
 
-        const double Consumed; 
+        const double Consumed;
         const TTimeSeriesMap<double> History;
         const ui64 QueueSize;
-        const double QueueWeight; 
-        const double ExpectedRate; 
-        const double Cap; 
+        const double QueueWeight;
+        const double ExpectedRate;
+        const double Cap;
 
         TProxyStat(ui64 id, ui64 tick, double consumed, const TTimeSeriesMap<double>& history, ui64 queueSize, double queueWeight, double rate, double cap)
             : ResourceId(id)
@@ -158,7 +158,7 @@ struct TEvQuota {
             , Consumed(consumed)
             , History(history)
             , QueueSize(queueSize)
-            , QueueWeight(queueWeight) 
+            , QueueWeight(queueWeight)
             , ExpectedRate(rate)
             , Cap(cap)
         {}
@@ -193,17 +193,17 @@ struct TEvQuota {
     struct TUpdateTick {
         ui32 Channel;
         ui32 Ticks;
-        double Rate; 
+        double Rate;
         ETickPolicy Policy;
 
         TUpdateTick()
             : Channel(0)
             , Ticks(0)
-            , Rate(0.0) 
+            , Rate(0.0)
             , Policy(ETickPolicy::Sustained)
         {}
 
-        TUpdateTick(ui32 channel, ui32 ticks, double rate, ETickPolicy policy) 
+        TUpdateTick(ui32 channel, ui32 ticks, double rate, ETickPolicy policy)
             : Channel(channel)
             , Ticks(ticks)
             , Rate(rate)
@@ -222,11 +222,11 @@ struct TEvQuota {
 
     struct TProxyResourceUpdate {
         const ui64 ResourceId;
-        const double SustainedRate; 
+        const double SustainedRate;
         const TVector<TUpdateTick> Update;
         const EUpdateState ResourceState;
 
-        TProxyResourceUpdate(ui64 resourceId, double sustainedRate, TVector<TUpdateTick> &&update, EUpdateState resState) 
+        TProxyResourceUpdate(ui64 resourceId, double sustainedRate, TVector<TUpdateTick> &&update, EUpdateState resState)
             : ResourceId(resourceId)
             , SustainedRate(sustainedRate)
             , Update(std::move(update))

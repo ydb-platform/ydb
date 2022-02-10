@@ -15,6 +15,6 @@ message TIssuesIds {
         TIMEOUT = 1002;
         BAD_REQUEST = 1003;
         EXPIRED = 1004;
-        UNSUPPORTED = 1005; 
+        UNSUPPORTED = 1005;
     }
 }

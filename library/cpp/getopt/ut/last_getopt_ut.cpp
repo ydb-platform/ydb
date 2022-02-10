@@ -4,10 +4,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/array_size.h>
-#include <util/string/subst.h> 
-#include <util/string/vector.h> 
+#include <util/string/subst.h>
+#include <util/string/vector.h>
 #include <util/string/split.h>
- 
+
 using namespace NLastGetopt;
 
 namespace {
@@ -605,101 +605,101 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     }
 
     Y_UNIT_TEST(TestColorPrint) {
-        TOpts opts; 
-        const char* prog = "my_program"; 
-        opts.AddLongOption("long_option").Required(); 
-        opts.AddLongOption('o', "other"); 
-        opts.AddCharOption('d').DefaultValue("42"); 
-        opts.AddCharOption('s').DefaultValue("str_default"); 
-        opts.SetFreeArgsNum(123, 456); 
+        TOpts opts;
+        const char* prog = "my_program";
+        opts.AddLongOption("long_option").Required();
+        opts.AddLongOption('o', "other");
+        opts.AddCharOption('d').DefaultValue("42");
+        opts.AddCharOption('s').DefaultValue("str_default");
+        opts.SetFreeArgsNum(123, 456);
         opts.SetFreeArgTitle(0, "first_free_arg", "help");
         opts.SetFreeArgTitle(2, "second_free_arg");
         opts.AddSection("Section", "Section\n  text");
         const char* cmd[] = {prog};
-        TOptsParser parser(&opts, Y_ARRAY_SIZE(cmd), cmd); 
-        TStringStream out; 
-        NColorizer::TColors colors(true); 
-        parser.PrintUsage(out, colors); 
- 
-        // find options and green color 
+        TOptsParser parser(&opts, Y_ARRAY_SIZE(cmd), cmd);
+        TStringStream out;
+        NColorizer::TColors colors(true);
+        parser.PrintUsage(out, colors);
+
+        // find options and green color
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "--long_option" << colors.OldColor()) != TString::npos);
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "--other" << colors.OldColor()) != TString::npos);
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "-o" << colors.OldColor()) != TString::npos);
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "-d" << colors.OldColor()) != TString::npos);
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "-s" << colors.OldColor()) != TString::npos);
- 
-        // find default values 
+
+        // find default values
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.CyanColor() << "42" << colors.OldColor()) != TString::npos);
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.CyanColor() << "\"str_default\"" << colors.OldColor()) != TString::npos);
- 
-        // find free args 
+
+        // find free args
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "123" << colors.OldColor()) != TString::npos);
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "456" << colors.OldColor()) != TString::npos);
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "first_free_arg" << colors.OldColor()) != TString::npos);
         // free args without help not rendered even if they have custom title
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.GreenColor() << "second_free_arg" << colors.OldColor()) == TString::npos);
- 
-        // find signatures 
+
+        // find signatures
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Usage" << colors.OldColor()) != TString::npos);
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Required parameters" << colors.OldColor()) != TString::npos);
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Optional parameters" << colors.OldColor()) != TString::npos);
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Free args" << colors.OldColor()) != TString::npos);
- 
+
         // find sections
         UNIT_ASSERT(out.Str().find(TStringBuilder() << colors.BoldColor() << "Section" << colors.OldColor() << ":") != TString::npos);
         UNIT_ASSERT(out.Str().find(TStringBuilder() << "  Section\n    text") != TString::npos);
 
-        // print without colors 
-        TStringStream out2; 
-        opts.PrintUsage(prog, out2); 
+        // print without colors
+        TStringStream out2;
+        opts.PrintUsage(prog, out2);
         UNIT_ASSERT(out2.Str().find(colors.GreenColor()) == TString::npos);
         UNIT_ASSERT(out2.Str().find(colors.CyanColor()) == TString::npos);
         UNIT_ASSERT(out2.Str().find(colors.BoldColor()) == TString::npos);
         UNIT_ASSERT(out2.Str().find(colors.OldColor()) == TString::npos);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestPadding) {
-        const bool withColorsOpt[] = {false, true}; 
-        for (bool withColors : withColorsOpt) { 
-            TOpts opts; 
-            const char* prog = "my_program"; 
+        const bool withColorsOpt[] = {false, true};
+        for (bool withColors : withColorsOpt) {
+            TOpts opts;
+            const char* prog = "my_program";
             opts.AddLongOption("option", "description 1").Required();               // long option
             opts.AddLongOption('o', "other", "description 2");                      // char and long option
             opts.AddCharOption('d', "description 3").RequiredArgument("DD");        // char option
-            opts.AddCharOption('s', "description 4\ndescription 5\ndescription 6"); // multiline desc 
-            opts.AddLongOption('l', "very_very_very_loooong_ooooption", "description 7").RequiredArgument("LONG_ARGUMENT"); 
+            opts.AddCharOption('s', "description 4\ndescription 5\ndescription 6"); // multiline desc
+            opts.AddLongOption('l', "very_very_very_loooong_ooooption", "description 7").RequiredArgument("LONG_ARGUMENT");
             const char* cmd[] = {prog};
-            TOptsParser parser(&opts, Y_ARRAY_SIZE(cmd), cmd); 
- 
-            TStringStream out; 
-            NColorizer::TColors colors(withColors); 
-            parser.PrintUsage(out, colors); 
- 
+            TOptsParser parser(&opts, Y_ARRAY_SIZE(cmd), cmd);
+
+            TStringStream out;
+            NColorizer::TColors colors(withColors);
+            parser.PrintUsage(out, colors);
+
             TString printed = out.Str();
-            if (withColors) { 
-                // remove not printable characters 
+            if (withColors) {
+                // remove not printable characters
                 SubstGlobal(printed, TString(colors.BoldColor()), "");
                 SubstGlobal(printed, TString(colors.GreenColor()), "");
                 SubstGlobal(printed, TString(colors.CyanColor()), "");
                 SubstGlobal(printed, TString(colors.OldColor()), "");
-            } 
+            }
             TVector<TString> lines;
             StringSplitter(printed).Split('\n').SkipEmpty().Collect(&lines);
-            UNIT_ASSERT(!lines.empty()); 
+            UNIT_ASSERT(!lines.empty());
             TVector<size_t> indents;
             for (const TString& line : lines) {
-                const size_t indent = line.find("description "); 
+                const size_t indent = line.find("description ");
                 if (indent != TString::npos)
-                    indents.push_back(indent); 
-            } 
-            UNIT_ASSERT_VALUES_EQUAL(indents.size(), 7); 
-            const size_t theOnlyIndent = indents[0]; 
-            for (size_t indent : indents) { 
-                UNIT_ASSERT_VALUES_EQUAL_C(indent, theOnlyIndent, printed); 
-            } 
-        } 
-    } 
- 
+                    indents.push_back(indent);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(indents.size(), 7);
+            const size_t theOnlyIndent = indents[0];
+            for (size_t indent : indents) {
+                UNIT_ASSERT_VALUES_EQUAL_C(indent, theOnlyIndent, printed);
+            }
+        }
+    }
+
     Y_UNIT_TEST(TestAppendTo) {
         TVector<int> ints;
 

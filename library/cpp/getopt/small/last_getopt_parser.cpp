@@ -1,7 +1,7 @@
 #include "last_getopt_parser.h"
 
 #include <library/cpp/colorizer/colors.h>
- 
+
 #include <util/string/escape.h>
 
 namespace NLastGetopt {
@@ -385,5 +385,5 @@ namespace NLastGetopt {
     void TOptsParser::PrintUsage(IOutputStream& os) const {
         PrintUsage(os, NColorizer::AutoColors(os));
     }
- 
-} 
+
+}

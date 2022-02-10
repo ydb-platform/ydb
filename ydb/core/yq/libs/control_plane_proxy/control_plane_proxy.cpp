@@ -2,7 +2,7 @@
 #include "probes.h"
 #include "utils.h"
 
-#include <ydb/core/yq/libs/actors/logging/log.h> 
+#include <ydb/core/yq/libs/actors/logging/log.h>
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/util.h>
@@ -37,10 +37,10 @@
 
 
 namespace NYq {
-namespace { 
+namespace {
 
 using namespace NActors;
-using namespace NYq::NConfig; 
+using namespace NYq::NConfig;
 using namespace NKikimr;
 using namespace NThreading;
 using namespace NYdb;
@@ -48,7 +48,7 @@ using namespace NYdb::NTable;
 
 LWTRACE_USING(YQ_CONTROL_PLANE_PROXY_PROVIDER);
 
-struct TRequestCounters: public virtual TThrRefBase { 
+struct TRequestCounters: public virtual TThrRefBase {
     const TString Name;
 
     NMonitoring::TDynamicCounters::TCounterPtr InFly;
@@ -103,7 +103,7 @@ class TRequestActor : public NActors::TActorBootstrapped<TRequestActor<TRequestP
     TString CloudId;
 
 public:
-    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_REQUEST_ACTOR"; 
+    static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_REQUEST_ACTOR";
 
     explicit TRequestActor(const NConfig::TControlPlaneProxyConfig& config,
                            TActorId sender, ui32 cookie,
@@ -317,7 +317,7 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
         {
             for (auto& request: Requests) {
                 request->Register(Counters);
-            } 
+            }
         }
     };
 
@@ -335,9 +335,9 @@ public:
 
     void Bootstrap() {
         CPP_LOG_D("Starting yandex query control plane proxy. Actor id: " << SelfId());
- 
+
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_PROXY_PROVIDER));
- 
+
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
             NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
@@ -402,7 +402,7 @@ private:
         if (!Config.GetEnablePermissions()) {
             return issues;
         }
- 
+
         for (const auto& requiredPermission: requiredPermissions) {
             if (!IsIn(ev->Get()->Permissions, requiredPermission)) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::ACCESS_DENIED, "No permission " + requiredPermission + " in a given scope yandexcloud://" + ev->Get()->FolderId));
@@ -423,7 +423,7 @@ private:
         TString user = std::move(ev->Get()->User);
         TString token = std::move(ev->Get()->Token);
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(CreateQueryRequest, scope, user, delta, byteSize, isSuccess, isTimeout);
         };
@@ -461,7 +461,7 @@ private:
         TString user = std::move(ev->Get()->User);
         TString token = std::move(ev->Get()->Token);
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(ListQueriesRequest, scope, user, delta, byteSize, isSuccess, isTimeout);
         };
@@ -500,7 +500,7 @@ private:
         TString token = std::move(ev->Get()->Token);
         const TString queryId = request.query_id();
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(DescribeQueryRequest, scope, user, queryId, delta, byteSize, isSuccess, isTimeout);
         };
@@ -578,7 +578,7 @@ private:
         TString token = std::move(ev->Get()->Token);
         const TString queryId = request.query_id();
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(ModifyQueryRequest, scope, user, queryId, delta, byteSize, isSuccess, isTimeout);
         };
@@ -617,7 +617,7 @@ private:
         TString token = std::move(ev->Get()->Token);
         const TString queryId = request.query_id();
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(DeleteQueryRequest, scope, user, queryId, delta, byteSize, isSuccess, isTimeout);
         };
@@ -656,7 +656,7 @@ private:
         TString token = std::move(ev->Get()->Token);
         const TString queryId = request.query_id();
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(ControlQueryRequest, scope, user, queryId, delta, byteSize, isSuccess, isTimeout);
         };
@@ -698,7 +698,7 @@ private:
         const int64_t limit = request.limit();
         const int64_t offset = request.offset();
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(GetResultDataRequest, scope, user, queryId, resultSetIndex, offset, limit, delta, byteSize, isSuccess, isTimeout);
         };
@@ -737,7 +737,7 @@ private:
         TString token = std::move(ev->Get()->Token);
         const TString queryId = request.query_id();
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(ListJobsRequest, scope, user, queryId, delta, byteSize, isSuccess, isTimeout);
         };
@@ -814,7 +814,7 @@ private:
         TString user = std::move(ev->Get()->User);
         TString token = std::move(ev->Get()->Token);
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(CreateConnectionRequest, scope, user, delta, byteSize, isSuccess, isTimeout);
         };
@@ -857,7 +857,7 @@ private:
         TString user = std::move(ev->Get()->User);
         TString token = std::move(ev->Get()->Token);
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(ListConnectionsRequest, scope, user, delta, byteSize, isSuccess, isTimeout);
         };
@@ -896,7 +896,7 @@ private:
         TString token = std::move(ev->Get()->Token);
         const TString connectionId = request.connection_id();
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(DescribeConnectionRequest, scope, user, connectionId, delta, byteSize, isSuccess, isTimeout);
         };
@@ -935,7 +935,7 @@ private:
         TString token = std::move(ev->Get()->Token);
         const TString connectionId = request.connection_id();
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(ModifyConnectionRequest, scope, user, connectionId, delta, byteSize, isSuccess, isTimeout);
         };
@@ -979,7 +979,7 @@ private:
         TString token = std::move(ev->Get()->Token);
         const TString connectionId = request.connection_id();
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(DeleteConnectionRequest, scope, user, connectionId, delta, byteSize, isSuccess, isTimeout);
         };
@@ -1060,7 +1060,7 @@ private:
         TString user = std::move(ev->Get()->User);
         TString token = std::move(ev->Get()->Token);
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(CreateBindingRequest, scope, user, delta, byteSize, isSuccess, isTimeout);
         };
@@ -1098,7 +1098,7 @@ private:
         TString user = std::move(ev->Get()->User);
         TString token = std::move(ev->Get()->Token);
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(ListBindingsRequest, scope, user, delta, byteSize, isSuccess, isTimeout);
         };
@@ -1137,7 +1137,7 @@ private:
         TString token = std::move(ev->Get()->Token);
         const TString bindingId = request.binding_id();
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(DescribeBindingRequest, scope, user, bindingId, delta, byteSize, isSuccess, isTimeout);
         };
@@ -1176,7 +1176,7 @@ private:
         TString token = std::move(ev->Get()->Token);
         const TString bindingId = request.binding_id();
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(ModifyBindingRequest, scope, user, bindingId, delta, byteSize, isSuccess, isTimeout);
         };
@@ -1215,7 +1215,7 @@ private:
         TString token = std::move(ev->Get()->Token);
         const TString bindingId = request.binding_id();
         const int byteSize = request.ByteSize();
- 
+
         auto probe = [=](const TDuration& delta, bool isSuccess, bool isTimeout) {
             LWPROBE(DeleteBindingRequest, scope, user, bindingId, delta, byteSize, isSuccess, isTimeout);
         };
@@ -1255,8 +1255,8 @@ private:
     }
 };
 
-} // namespace 
- 
+} // namespace
+
 TActorId ControlPlaneProxyActorId() {
     constexpr TStringBuf name = "YQCTLPRX";
     return NActors::TActorId(0, name);

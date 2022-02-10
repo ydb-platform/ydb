@@ -4,13 +4,13 @@
 
 #include <util/generic/yexception.h>
 #include <util/string/join.h>
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 #include <util/system/event.h>
 #include <util/system/user.h>
 
 using namespace NKikimr::NGRpcProxy;
 
-namespace NKikimr::NSQS { 
+namespace NKikimr::NSQS {
 
 class TQueueClient::TImpl {
 public:
@@ -21,10 +21,10 @@ public:
     }
 
 #define METHOD_IMPL(name, hint) \
-    Y_CAT(Y_CAT(T, name), Response) name(const Y_CAT(Y_CAT(T, name), Request)& req) { \ 
+    Y_CAT(Y_CAT(T, name), Response) name(const Y_CAT(Y_CAT(T, name), Request)& req) { \
         NKikimrClient::TSqsRequest request; \
-        Y_CAT(Y_CAT(T, name), Response) resp; \ 
-        request.Y_CAT(Mutable, name)()->CopyFrom(req);  \ 
+        Y_CAT(Y_CAT(T, name), Response) resp; \
+        request.Y_CAT(Mutable, name)()->CopyFrom(req);  \
         TAutoEvent e; \
         Client_.SqsRequest(request, [e, &resp] (const NGRpcProxy::TGrpcError* error, const NKikimrClient::TSqsResponse& result) mutable \
             { \
@@ -32,14 +32,14 @@ public:
                     resp.MutableError()->SetStatus(502); \
                     resp.MutableError()->SetMessage(error->first); \
                 } else { \
-                    resp.CopyFrom(result.Y_CAT(Get, name)());   \ 
+                    resp.CopyFrom(result.Y_CAT(Get, name)());   \
                 } \
                 e.Signal(); \
             } \
         ); \
         e.WaitI(); \
         if (resp.HasError() && Options_.Throw) { \
-            ythrow TQueueException(resp.GetError(), resp.GetRequestId()); \ 
+            ythrow TQueueException(resp.GetError(), resp.GetRequestId()); \
         } \
         return resp; \
     }
@@ -57,8 +57,8 @@ public:
     METHOD_IMPL(ReceiveMessage,          "can't receive a message");
     METHOD_IMPL(SendMessage,             "can't enqueue a message");
     METHOD_IMPL(ModifyPermissions,       "can't modify permissions");
-    METHOD_IMPL(GetQueueAttributes,      "can't get queue attributes"); 
-    METHOD_IMPL(SetQueueAttributes,      "can't set queue attributes"); 
+    METHOD_IMPL(GetQueueAttributes,      "can't get queue attributes");
+    METHOD_IMPL(SetQueueAttributes,      "can't set queue attributes");
     METHOD_IMPL(ListPermissions,         "can't list permissions");
 
 #undef METHOD_IMPL
@@ -134,16 +134,16 @@ TModifyPermissionsResponse TQueueClient::ModifyPermissions(const TModifyPermissi
     return Impl_->ModifyPermissions(req);
 }
 
-TGetQueueAttributesResponse TQueueClient::GetQueueAttributes(const TGetQueueAttributesRequest& req) { 
-    return Impl_->GetQueueAttributes(req); 
-} 
- 
-TSetQueueAttributesResponse TQueueClient::SetQueueAttributes(const TSetQueueAttributesRequest& req) { 
-    return Impl_->SetQueueAttributes(req); 
-} 
- 
+TGetQueueAttributesResponse TQueueClient::GetQueueAttributes(const TGetQueueAttributesRequest& req) {
+    return Impl_->GetQueueAttributes(req);
+}
+
+TSetQueueAttributesResponse TQueueClient::SetQueueAttributes(const TSetQueueAttributesRequest& req) {
+    return Impl_->SetQueueAttributes(req);
+}
+
 TListPermissionsResponse TQueueClient::ListPermissions(const TListPermissionsRequest& req) {
     return Impl_->ListPermissions(req);
 }
 
-} // namespace NKikimr::NSQS 
+} // namespace NKikimr::NSQS

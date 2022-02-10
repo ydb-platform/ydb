@@ -9,8 +9,8 @@
 #include <util/stream/file.h>
 #include <util/string/strip.h>
 
-#define LOG_E(stream)                                                   \ 
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, stream) 
+#define LOG_E(stream)                                                   \
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, stream)
 
 namespace NYq {
 
@@ -65,7 +65,7 @@ public:
         RequestInProgress = true;
         RequestInProgressTimestamp = TInstant::Now();
         const auto& requestVariant = Requests.front();
- 
+
         if (auto pRequest = std::get_if<TRequest>(&requestVariant)) {
             auto& request = *pRequest;
             auto actorSystem = ctx.ActorSystem();
@@ -159,7 +159,7 @@ private:
         TActorId Sender;
         ui64 Cookie;
         TFunction Handler;
- 
+
         TFunctionRequest() = default;
         TFunctionRequest(const TActorId sender, ui64 cookie, TFunction&& handler)
             : Sender(sender)

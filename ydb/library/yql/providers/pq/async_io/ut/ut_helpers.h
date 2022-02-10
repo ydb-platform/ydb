@@ -23,66 +23,66 @@ NYql::NPq::NProto::TDqPqTopicSource BuildPqTopicSourceSettings(TString topic);
 
 NYql::NPq::NProto::TDqPqTopicSink BuildPqTopicSinkSettings(TString topic);
 
-struct TPqIoTestFixture : public NUnitTest::TBaseFixture { 
-    std::unique_ptr<TFakeCASetup> CaSetup = std::make_unique<TFakeCASetup>(); 
-    NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr"))); 
+struct TPqIoTestFixture : public NUnitTest::TBaseFixture {
+    std::unique_ptr<TFakeCASetup> CaSetup = std::make_unique<TFakeCASetup>();
+    NYdb::TDriver Driver = NYdb::TDriver(NYdb::TDriverConfig().SetLog(CreateLogBackend("cerr")));
 
-    TPqIoTestFixture(); 
-    ~TPqIoTestFixture(); 
+    TPqIoTestFixture();
+    ~TPqIoTestFixture();
 
-    void InitSource( 
-        NYql::NPq::NProto::TDqPqTopicSource&& settings, 
-        i64 freeSpace = 1_MB); 
- 
-    void InitSource( 
-        const TString& topic, 
-        i64 freeSpace = 1_MB) 
-    { 
-        InitSource(BuildPqTopicSourceSettings(topic), freeSpace); 
-    } 
- 
-    template<typename T> 
-    std::vector<T> SourceRead(const TReadValueParser<T> parser, i64 freeSpace = 12345) { 
-        return CaSetup->SourceRead(parser, freeSpace); 
-    } 
- 
-    template<typename T> 
-    std::vector<T> SourceReadUntil( 
-        const TReadValueParser<T> parser, 
-        ui64 size, 
-        i64 eachReadFreeSpace = 1000, 
-        TDuration timeout = TDuration::Seconds(10)) 
-    { 
-        return CaSetup->SourceReadUntil(parser, size, eachReadFreeSpace, timeout); 
-    } 
- 
-    void SaveSourceState(NDqProto::TCheckpoint checkpoint, NDqProto::TSourceState& state) { 
-        CaSetup->SaveSourceState(checkpoint, state); 
-    } 
- 
-    void LoadSource(const NDqProto::TSourceState& state) { 
-        return CaSetup->LoadSource(state); 
-    } 
- 
- 
-    void InitSink( 
-        NYql::NPq::NProto::TDqPqTopicSink&& settings, 
-        i64 freeSpace = 1_MB); 
- 
-    void InitSink( 
-        const TString& topic, 
-        i64 freeSpace = 1_MB) 
-    { 
-        InitSink(BuildPqTopicSinkSettings(topic), freeSpace); 
-    } 
- 
-    void LoadSink(const NDqProto::TSinkState& state) { 
-        CaSetup->LoadSink(state); 
-    } 
- 
-    void SinkWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing()); 
-}; 
- 
+    void InitSource(
+        NYql::NPq::NProto::TDqPqTopicSource&& settings,
+        i64 freeSpace = 1_MB);
+
+    void InitSource(
+        const TString& topic,
+        i64 freeSpace = 1_MB)
+    {
+        InitSource(BuildPqTopicSourceSettings(topic), freeSpace);
+    }
+
+    template<typename T>
+    std::vector<T> SourceRead(const TReadValueParser<T> parser, i64 freeSpace = 12345) {
+        return CaSetup->SourceRead(parser, freeSpace);
+    }
+
+    template<typename T>
+    std::vector<T> SourceReadUntil(
+        const TReadValueParser<T> parser,
+        ui64 size,
+        i64 eachReadFreeSpace = 1000,
+        TDuration timeout = TDuration::Seconds(10))
+    {
+        return CaSetup->SourceReadUntil(parser, size, eachReadFreeSpace, timeout);
+    }
+
+    void SaveSourceState(NDqProto::TCheckpoint checkpoint, NDqProto::TSourceState& state) {
+        CaSetup->SaveSourceState(checkpoint, state);
+    }
+
+    void LoadSource(const NDqProto::TSourceState& state) {
+        return CaSetup->LoadSource(state);
+    }
+
+
+    void InitSink(
+        NYql::NPq::NProto::TDqPqTopicSink&& settings,
+        i64 freeSpace = 1_MB);
+
+    void InitSink(
+        const TString& topic,
+        i64 freeSpace = 1_MB)
+    {
+        InitSink(BuildPqTopicSinkSettings(topic), freeSpace);
+    }
+
+    void LoadSink(const NDqProto::TSinkState& state) {
+        CaSetup->LoadSink(state);
+    }
+
+    void SinkWrite(std::vector<TString> data, TMaybe<NDqProto::TCheckpoint> checkpoint = Nothing());
+};
+
 TString GetDefaultPqEndpoint();
 
 extern const TString DefaultPqConsumer;

@@ -52,7 +52,7 @@ class ReadResponseMatcher(BaseMatcher):
         self.__message_count_matcher = less_than_or_equal_to(messages_count)
         return self
 
-    def with_n_or_more_messages(self, messages_count): 
+    def with_n_or_more_messages(self, messages_count):
         self.__message_count_matcher = greater_than_or_equal_to(messages_count)
         return self
 

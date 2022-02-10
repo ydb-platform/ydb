@@ -16,7 +16,7 @@ TRateLimiterTestSetup::TRateLimiterTestSetup(
     bool enableReadQuoting
 )
     : Server(new NPersQueue::TTestServer(false))
-    , LimitedEntity(limitedEntity) 
+    , LimitedEntity(limitedEntity)
     , WriteAccountQuota(writeAccountQuota)
     , ReadAccountQuota(readAccountQuota)
 {
@@ -98,7 +98,7 @@ THolder<Ydb::PersQueue::IProducer> TRateLimiterTestSetup::StartProducer(const TS
     Ydb::PersQueue::TProducerSettings producerSettings;
     producerSettings.Server = Ydb::PersQueue::TServerSetting("localhost", Server->GrpcPort);
     producerSettings.Topic = topicPath;
-    producerSettings.SourceId = "TRateLimiterTestSetupSourceId"; 
+    producerSettings.SourceId = "TRateLimiterTestSetupSourceId";
     producerSettings.Codec = compress ? "gzip" : "raw";
     THolder<Ydb::PersQueue::IProducer> producer = PQLib->CreateProducer(producerSettings);
     auto startResult = producer->Start();
@@ -110,7 +110,7 @@ THolder<Ydb::PersQueue::IProducer> TRateLimiterTestSetup::StartProducer(const TS
 void TRateLimiterTestSetup::Start(bool enableReadQuoting) {
     InitServer(enableReadQuoting);
     InitQuoting();
-    WaitWritePQServiceInitialization(); 
+    WaitWritePQServiceInitialization();
 }
 
 void TRateLimiterTestSetup::InitServer(bool enableReadQuoting) {
@@ -131,8 +131,8 @@ void TRateLimiterTestSetup::InitServer(bool enableReadQuoting) {
             NKikimrServices::QUOTER_PROXY,
             NKikimrServices::KESUS_TABLET,
             NKikimrServices::PQ_READ_SPEED_LIMITER
-        }, 
-        NActors::NLog::PRI_TRACE 
+        },
+        NActors::NLog::PRI_TRACE
     );
 }
 
@@ -142,8 +142,8 @@ void TRateLimiterTestSetup::InitQuoting() {
     Server->AnnoyingClient->MkDir("/Root/PersQueue/System", "Quoters");
 }
 
-void TRateLimiterTestSetup::WaitWritePQServiceInitialization() { 
+void TRateLimiterTestSetup::WaitWritePQServiceInitialization() {
     PQDataWriter = MakeHolder<TPQDataWriter>("writer_source_id", *Server);
 }
- 
-} 
+
+}

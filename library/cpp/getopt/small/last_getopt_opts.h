@@ -3,7 +3,7 @@
 #include "last_getopt_opt.h"
 
 #include <library/cpp/colorizer/fwd.h>
- 
+
 #include <util/generic/map.h>
 
 namespace NLastGetopt {
@@ -594,7 +594,7 @@ namespace NLastGetopt {
          * @param colors       colorizer
          */
         void PrintUsage(const TStringBuf& program, IOutputStream& os, const NColorizer::TColors& colors) const;
- 
+
         /**
          * Print usage string
          *

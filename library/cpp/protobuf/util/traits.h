@@ -177,7 +177,7 @@ namespace NProtoBuf {
         static inline T GetDefault(const FieldDescriptor* field) {
             return TBaseTraits::GetDefault(field);
         }
- 
+
         static inline bool Has(const Message& msg, const FieldDescriptor* field) {
             return TBaseTraits::Has(msg, field);
         }

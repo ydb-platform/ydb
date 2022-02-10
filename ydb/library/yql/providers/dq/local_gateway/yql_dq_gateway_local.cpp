@@ -25,21 +25,21 @@ using namespace NActors;
 using NDqs::MakeWorkerManagerActorID;
 
 namespace {
-    // TODO: Use the only driver for both sources. 
+    // TODO: Use the only driver for both sources.
     NDq::IDqSourceActorFactory::TPtr CreateSourceActorFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway) {
         auto factory = MakeIntrusive<NYql::NDq::TDqSourceFactory>();
-        RegisterDqPqReadActorFactory(*factory, driver, nullptr); 
+        RegisterDqPqReadActorFactory(*factory, driver, nullptr);
         RegisterYdbReadActorFactory(*factory, driver, nullptr);
         RegisterS3ReadActorFactory(*factory, nullptr, httpGateway);
         RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
         return factory;
     }
- 
-    NDq::IDqSinkActorFactory::TPtr CreateSinkActorFactory(const NYdb::TDriver& driver) { 
-        auto factory = MakeIntrusive<NYql::NDq::TDqSinkFactory>(); 
-        RegisterDqPqWriteActorFactory(*factory, driver, nullptr); 
-        return factory; 
-    } 
+
+    NDq::IDqSinkActorFactory::TPtr CreateSinkActorFactory(const NYdb::TDriver& driver) {
+        auto factory = MakeIntrusive<NYql::NDq::TDqSinkFactory>();
+        RegisterDqPqWriteActorFactory(*factory, driver, nullptr);
+        return factory;
+    }
 }
 
 class TLocalServiceHolder {

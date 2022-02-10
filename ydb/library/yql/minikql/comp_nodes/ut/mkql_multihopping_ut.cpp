@@ -256,7 +256,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
             status = root1.Fetch(val);
             if (status == NUdf::EFetchStatus::Ok) {
                 curResult.emplace_back(TOutputItem{val.GetElement(0).Get<ui32>(), val.GetElement(1).Get<ui32>(), val.GetElement(2).Get<ui64>()});
-            } 
+            }
         }
 
         check();
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
         };
         TestImpl(input, expected, true);
     }
- 
+
     Y_UNIT_TEST(TestValidness1) {
         const std::vector<TInputItem> input1 = {
             // Group; Time; Value
@@ -355,8 +355,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
         };
 
         TestImpl(input, expected, true, 5, 10, 10);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestDelay) {
         const std::vector<TInputItem> input = {
             // Group; Time; Value
@@ -370,7 +370,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
         };
 
         TestImpl(input, expected, false);
-    } 
+    }
 
     Y_UNIT_TEST(TestWindowsBeforeFirstElement) {
         const std::vector<TInputItem> input = {

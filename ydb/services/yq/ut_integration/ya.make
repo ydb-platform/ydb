@@ -8,7 +8,7 @@ OWNER(
 
 FORK_SUBTESTS()
 
-SIZE(MEDIUM) 
+SIZE(MEDIUM)
 
 SRCS(
     ut_utils.cpp

@@ -1,19 +1,19 @@
-#pragma once 
- 
-#include "string_transform.h" 
+#pragma once
+
+#include "string_transform.h"
 #include "name_generator.h"
- 
-#include <util/generic/vector.h> 
+
+#include <util/generic/vector.h>
 #include <util/generic/yexception.h>
- 
+
 #include <functional>
 
-namespace NProtobufJson { 
+namespace NProtobufJson {
     struct TProto2JsonConfig {
         using TSelf = TProto2JsonConfig;
- 
+
         bool FormatOutput = false;
- 
+
         enum MissingKeyMode {
             // Skip missing keys
             MissingKeySkip = 0,
@@ -32,10 +32,10 @@ namespace NProtobufJson {
         };
         MissingKeyMode MissingSingleKeyMode = MissingKeySkip;
         MissingKeyMode MissingRepeatedKeyMode = MissingKeySkip;
- 
+
         /// Add null value for missing fields (false by default).
         bool AddMissingFields = false;
- 
+
         enum EnumValueMode {
             EnumNumber = 0, // default
             EnumName,
@@ -44,7 +44,7 @@ namespace NProtobufJson {
             EnumFullNameLowerCase,
         };
         EnumValueMode EnumMode = EnumNumber;
- 
+
         enum FldNameMode {
             FieldNameOriginalCase = 0, // default
             FieldNameLowerCase,
@@ -54,7 +54,7 @@ namespace NProtobufJson {
             FieldNameSnakeCaseDense // ABC -> abc,      UserID -> user_id
         };
         FldNameMode FieldNameMode = FieldNameOriginalCase;
- 
+
         enum ExtFldNameMode {
             ExtFldNameFull = 0, // default, field.full_name()
             ExtFldNameShort // field.name()
@@ -64,14 +64,14 @@ namespace NProtobufJson {
         /// Use 'json_name' protobuf option for field name, mutually exclusive
         /// with FieldNameMode.
         bool UseJsonName = false;
- 
+
         /// Transforms will be applied only to string values (== protobuf fields of string / bytes type).
         /// yajl_encode_string will be used if no transforms are specified.
         TVector<TStringTransformPtr> StringTransforms;
 
         /// Print map as object, otherwise print it as array of key/value objects
         bool MapAsObject = false;
- 
+
         /// Stringify long integers which are not exactly representable by float or double values
         enum EStringifyLongNumbersMode {
             StringifyLongNumbersNever = 0, // default
@@ -97,34 +97,34 @@ namespace NProtobufJson {
             MissingSingleKeyMode = mode;
             return *this;
         }
- 
+
         TSelf& SetMissingRepeatedKeyMode(MissingKeyMode mode) {
             MissingRepeatedKeyMode = mode;
             return *this;
         }
- 
+
         TSelf& SetAddMissingFields(bool add) {
             AddMissingFields = add;
             return *this;
         }
- 
+
         TSelf& SetEnumMode(EnumValueMode mode) {
             EnumMode = mode;
             return *this;
         }
- 
+
         TSelf& SetFieldNameMode(FldNameMode mode) {
             Y_ENSURE(mode == FieldNameOriginalCase || !UseJsonName, "FieldNameMode and UseJsonName are mutually exclusive");
             FieldNameMode = mode;
             return *this;
         }
- 
+
         TSelf& SetUseJsonName(bool jsonName) {
             Y_ENSURE(!jsonName || FieldNameMode == FieldNameOriginalCase, "FieldNameMode and UseJsonName are mutually exclusive");
             UseJsonName = jsonName;
             return *this;
         }
- 
+
         TSelf& SetExtensionFieldNameMode(ExtFldNameMode mode) {
             ExtensionFieldNameMode = mode;
             return *this;

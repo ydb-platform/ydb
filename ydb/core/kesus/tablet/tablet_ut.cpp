@@ -9,8 +9,8 @@
 
 #include <util/random/random.h>
 
-#include <limits> 
- 
+#include <limits>
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -30,7 +30,7 @@ namespace {
     void EnableRelaxedAttach(TTestContext& ctx) {
         Ydb::Coordination::Config config;
         config.set_attach_consistency_mode(Ydb::Coordination::CONSISTENCY_MODE_RELAXED);
-        ctx.SetConfig(12345, config, 42); 
+        ctx.SetConfig(12345, config, 42);
     }
 }
 
@@ -39,44 +39,44 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         TTestContext ctx;
         ctx.Setup();
 
-        ctx.SetConfig(12345, MakeConfig("/foo/bar/baz"), 42); 
- 
+        ctx.SetConfig(12345, MakeConfig("/foo/bar/baz"), 42);
+
         {
-            const auto getConfigResult = ctx.GetConfig(); 
-            UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetConfig().path(), "/foo/bar/baz"); 
-            UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetVersion(), 42); 
-            UNIT_ASSERT_EQUAL_C(getConfigResult.GetConfig().rate_limiter_counters_mode(), Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_AGGREGATED, "Record: " << getConfigResult); 
+            const auto getConfigResult = ctx.GetConfig();
+            UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetConfig().path(), "/foo/bar/baz");
+            UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetVersion(), 42);
+            UNIT_ASSERT_EQUAL_C(getConfigResult.GetConfig().rate_limiter_counters_mode(), Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_AGGREGATED, "Record: " << getConfigResult);
         }
 
         {
- 
-            auto configWithModes = MakeConfig("/foo/bar/baz"); 
-            configWithModes.set_rate_limiter_counters_mode(Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED); 
-            ctx.SetConfig(12345, configWithModes, 42); 
+
+            auto configWithModes = MakeConfig("/foo/bar/baz");
+            configWithModes.set_rate_limiter_counters_mode(Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED);
+            ctx.SetConfig(12345, configWithModes, 42);
         }
 
-        { 
-            const auto getConfigResult = ctx.GetConfig(); 
-            UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetConfig().path(), "/foo/bar/baz"); 
-            UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetVersion(), 42); 
-            UNIT_ASSERT_EQUAL_C(getConfigResult.GetConfig().rate_limiter_counters_mode(), Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED, "Record: " << getConfigResult); 
-        } 
- 
+        {
+            const auto getConfigResult = ctx.GetConfig();
+            UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetConfig().path(), "/foo/bar/baz");
+            UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetVersion(), 42);
+            UNIT_ASSERT_EQUAL_C(getConfigResult.GetConfig().rate_limiter_counters_mode(), Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED, "Record: " << getConfigResult);
+        }
+
         // Verify it is restored after reboot
         ctx.RebootTablet();
- 
+
         {
-            const auto getConfigResult = ctx.GetConfig(); 
-            UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetConfig().path(), "/foo/bar/baz"); 
-            UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetVersion(), 42); 
-            UNIT_ASSERT_EQUAL_C(getConfigResult.GetConfig().rate_limiter_counters_mode(), Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED, "Record: " << getConfigResult); 
+            const auto getConfigResult = ctx.GetConfig();
+            UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetConfig().path(), "/foo/bar/baz");
+            UNIT_ASSERT_VALUES_EQUAL(getConfigResult.GetVersion(), 42);
+            UNIT_ASSERT_EQUAL_C(getConfigResult.GetConfig().rate_limiter_counters_mode(), Ydb::Coordination::RATE_LIMITER_COUNTERS_MODE_DETAILED, "Record: " << getConfigResult);
         }
 
         // Verify it is ok to repeat the event
-        ctx.SetConfig(12345, MakeConfig("/foo/bar/baz"), 42); 
+        ctx.SetConfig(12345, MakeConfig("/foo/bar/baz"), 42);
 
         // Verify it is not ok to downgrade
-        ctx.SetConfig(12345, MakeConfig("/foo/bar/baz"), 41, Ydb::StatusIds::PRECONDITION_FAILED); 
+        ctx.SetConfig(12345, MakeConfig("/foo/bar/baz"), 41, Ydb::StatusIds::PRECONDITION_FAILED);
     }
 
     Y_UNIT_TEST(TestRegisterProxy) {
@@ -1310,371 +1310,371 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         ctx.MustRegisterProxy(proxy, 2);
         testAllFailures(Ydb::StatusIds::BAD_SESSION);
     }
- 
-    Y_UNIT_TEST(TestQuoterResourceDescribe) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg1; 
-        cfg1.SetMaxUnitsPerSecond(100500); 
-        cfg1.SetMaxBurstSizeCoefficient(1.5); 
- 
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg2; 
-        cfg2.SetMaxUnitsPerSecond(10); 
- 
-        ctx.AddQuoterResource("/Root", cfg1); // id=1 
-        ctx.AddQuoterResource("/Root/Folder", cfg1); // id=2 
-        ctx.AddQuoterResource("/Root/Q1", cfg2); // id=3 
-        ctx.AddQuoterResource("/Root/Folder/Q1", cfg2); // id=4 
-        ctx.AddQuoterResource("/Root/Folder/Q2", cfg2); // id=5 
-        ctx.AddQuoterResource("/Root/Folder/Q3", cfg2); // id=6 
- 
-        ctx.AddQuoterResource("/Root2", cfg1); // id=7 
-        ctx.AddQuoterResource("/Root2/Q", cfg2); // id=8 
- 
-        auto testDescribe = [&]() { 
-            ctx.VerifyDescribeQuoterResources({100}, {}, false, Ydb::StatusIds::NOT_FOUND); // no such id 
-            ctx.VerifyDescribeQuoterResources({}, {"Nonexistent/Path"}, false, Ydb::StatusIds::NOT_FOUND); // no such path 
-            ctx.VerifyDescribeQuoterResources({}, {"/Root", ""}, false, Ydb::StatusIds::NOT_FOUND); // empty path 
-            ctx.VerifyDescribeQuoterResources({1, 1}, {}, false); // two times is OK 
-            ctx.VerifyDescribeQuoterResources({}, {"/Root2/Q", "/Root2/Q"}, false); // two times is OK 
- 
-            { 
-                // All 
-                const auto resources = ctx.DescribeQuoterResources({}, {}, true); 
-                UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 8); 
-                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(0).GetResourcePath(), "Root"); 
-                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(1).GetResourcePath(), "Root/Folder"); 
-                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(2).GetResourcePath(), "Root/Folder/Q1"); 
-                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(3).GetResourcePath(), "Root/Folder/Q2"); 
-                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(4).GetResourcePath(), "Root/Folder/Q3"); 
-                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(5).GetResourcePath(), "Root/Q1"); 
-                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(6).GetResourcePath(), "Root2"); 
-                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(7).GetResourcePath(), "Root2/Q"); 
- 
-                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(0).GetResourceId(), 1); 
-                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(1).GetResourceId(), 2); 
-                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(2).GetResourceId(), 4); 
-                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(3).GetResourceId(), 5); 
-                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(4).GetResourceId(), 6); 
-                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(5).GetResourceId(), 3); 
-                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(6).GetResourceId(), 7); 
-                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(7).GetResourceId(), 8); 
- 
-                UNIT_ASSERT_DOUBLES_EQUAL( 
-                   resources.GetResources(1).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 
-                   100500, 0.001); 
-                UNIT_ASSERT_DOUBLES_EQUAL( 
-                   resources.GetResources(6).GetHierarhicalDRRResourceConfig().GetMaxBurstSizeCoefficient(), 
-                   1.5, 0.001); 
-                UNIT_ASSERT_DOUBLES_EQUAL( 
-                   resources.GetResources(7).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 
-                   10, 0.001); 
-            } 
-            { 
-                // All upper level 
-                const auto resources = ctx.DescribeQuoterResources({}, {}, false); 
-                UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 2); 
-                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(0).GetResourcePath(), "Root"); 
-                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(1).GetResourcePath(), "Root2"); 
- 
-                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(0).GetResourceId(), 1); 
-                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(1).GetResourceId(), 7); 
-            } 
-            { 
-                // By id 
-                const auto resources = ctx.DescribeQuoterResources({3, 2}, {}, true); 
-                UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 5); 
- 
-                const auto resources2 = ctx.DescribeQuoterResources({3, 2}, {}, false); 
-                UNIT_ASSERT_VALUES_EQUAL(resources2.ResourcesSize(), 2); 
-            } 
-            { 
-                // By path 
-                const auto resources = ctx.DescribeQuoterResources({}, {"Root2/"}, true); 
-                UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 2); 
- 
-                const auto resources2 = ctx.DescribeQuoterResources({}, {"Root2/"}, false); 
-                UNIT_ASSERT_VALUES_EQUAL(resources2.ResourcesSize(), 1); 
-            } 
-        }; 
-        testDescribe(); 
-        ctx.RebootTablet(); 
-        testDescribe(); 
-    } 
- 
-    Y_UNIT_TEST(TestQuoterResourceCreation) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        // validation 
-        ctx.AddQuoterResource("/a/b", Ydb::StatusIds::BAD_REQUEST); // no parent resource 
-        ctx.AddQuoterResource(":-)", Ydb::StatusIds::BAD_REQUEST); // invalid resource name 
-        ctx.AddQuoterResource("", Ydb::StatusIds::BAD_REQUEST); // empty path 
-        ctx.AddQuoterResource("/", Ydb::StatusIds::BAD_REQUEST); // empty path 
-        ctx.AddQuoterResource("//", Ydb::StatusIds::BAD_REQUEST); // empty path 
-        { 
-            NKikimrKesus::TStreamingQuoterResource res; 
-            res.SetResourceId(42); 
-            res.SetResourcePath("/CorrentPath"); 
-            res.MutableHierarhicalDRRResourceConfig(); 
-            ctx.AddQuoterResource(res, Ydb::StatusIds::BAD_REQUEST); // resource id specified 
-        } 
-        { 
-            NKikimrKesus::TStreamingQuoterResource res; 
-            res.SetResourcePath("/CorrentPath"); 
-            ctx.AddQuoterResource(res, Ydb::StatusIds::BAD_REQUEST); // DRR config is not specified 
-        } 
- 
-        ctx.AddQuoterResource("RootQuoter", 42.0); // OK 
-        ctx.AddQuoterResource("/RootQuoter/", 42.0, Ydb::StatusIds::ALREADY_EXISTS); 
- 
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg; 
-        cfg.SetMaxUnitsPerSecond(100500); 
-        ctx.AddQuoterResource("/RootQuoter/", cfg, Ydb::StatusIds::BAD_REQUEST); // different settings 
- 
-        ctx.AddQuoterResource("RootQuoter/SubQuoter"); 
-        ctx.AddQuoterResource("/RootQuoter//OtherSubQuoter/", cfg); 
- 
-        auto checkResources = [&]() { 
-            const auto resources = ctx.DescribeQuoterResources({}, {}, true); 
-            UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 3); 
-            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(0).GetResourcePath(), "RootQuoter"); 
-            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(1).GetResourcePath(), "RootQuoter/OtherSubQuoter"); 
-            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(2).GetResourcePath(), "RootQuoter/SubQuoter"); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(0).GetResourceId(), 1); 
-            UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(1).GetResourceId(), 3); 
-            UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(2).GetResourceId(), 2); 
- 
-            UNIT_ASSERT_DOUBLES_EQUAL( 
-                resources.GetResources(1).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 
-                100500, 0.001); 
-        }; 
-        checkResources(); 
-        ctx.RebootTablet(); 
-        checkResources(); 
- 
-        ctx.AddQuoterResource("/RootQuoter", 42.0, Ydb::StatusIds::ALREADY_EXISTS); // properly loaded 
- 
-        // check that resource id was persisted 
-        ctx.AddQuoterResource("OtherRootQuoter", 100.0); 
-        const auto resources = ctx.DescribeQuoterResources({}, {"OtherRootQuoter"}, false); 
-        UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(0).GetResourceId(), 4); 
-    } 
- 
-    Y_UNIT_TEST(TestQuoterHDRRParametersValidation) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        { 
-            NKikimrKesus::THierarchicalDRRResourceConfig cfg; 
-            cfg.SetMaxUnitsPerSecond(-100); // negative 
-            ctx.AddQuoterResource("/Res", cfg, Ydb::StatusIds::BAD_REQUEST); 
-        } 
- 
-        { 
-            NKikimrKesus::THierarchicalDRRResourceConfig cfg; 
-            // no max units per second in root resource 
-            ctx.AddQuoterResource("/ResWithoutMaxUnitsPerSecond", cfg, Ydb::StatusIds::BAD_REQUEST); 
- 
-            cfg.SetMaxUnitsPerSecond(1); 
-            ctx.AddQuoterResource("/ResWithMaxUnitsPerSecond", cfg, Ydb::StatusIds::SUCCESS); 
- 
-            cfg.ClearMaxUnitsPerSecond(); // child can have no MaxUnitsPerSecond 
-            ctx.AddQuoterResource("/ResWithMaxUnitsPerSecond/ChildWithoutMaxUnitsPerSecond", cfg, Ydb::StatusIds::SUCCESS); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(TestQuoterResourceModification) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg1; 
-        cfg1.SetMaxUnitsPerSecond(100); 
- 
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg2; 
-        cfg2.SetMaxUnitsPerSecond(5); 
- 
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg3; 
-        cfg3.SetMaxUnitsPerSecond(42); 
- 
-        ctx.AddQuoterResource("/Root", cfg1); // id=1 
-        ctx.AddQuoterResource("/Root/Q", cfg1); // id=2 
- 
-        auto testBeforeModification = [&]() { 
-            const auto resources = ctx.DescribeQuoterResources({}, {}, true); 
-            UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 2); 
-            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(0).GetResourcePath(), "Root"); 
-            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(1).GetResourcePath(), "Root/Q"); 
- 
-            UNIT_ASSERT_DOUBLES_EQUAL( 
-                resources.GetResources(0).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 
-                100, 0.001); 
-            UNIT_ASSERT_DOUBLES_EQUAL( 
-                resources.GetResources(1).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 
-                100, 0.001); 
-        }; 
-        testBeforeModification(); 
-        ctx.RebootTablet(); 
-        testBeforeModification(); 
- 
-        auto testAfterModification = [&]() { 
-            const auto resources = ctx.DescribeQuoterResources({}, {}, true); 
-            UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 2); 
-            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(0).GetResourcePath(), "Root"); 
-            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(1).GetResourcePath(), "Root/Q"); 
- 
-            UNIT_ASSERT_DOUBLES_EQUAL( 
-                resources.GetResources(0).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 
-                5, 0.001); 
-            UNIT_ASSERT_DOUBLES_EQUAL( 
-                resources.GetResources(1).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 
-                5, 0.001); 
-        }; 
- 
-        ctx.UpdateQuoterResource(1, cfg2); 
-        ctx.UpdateQuoterResource("/Root/Q", cfg2); 
-        testAfterModification(); 
-        ctx.RebootTablet(); 
-        testAfterModification(); 
- 
-        // test validation 
-        { 
-            NKikimrKesus::TStreamingQuoterResource req; 
-            *req.MutableHierarhicalDRRResourceConfig() = cfg3; 
- 
-            ctx.UpdateQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // no resource path and id 
-            testAfterModification(); 
-            ctx.RebootTablet(); 
-            testAfterModification(); 
- 
+
+    Y_UNIT_TEST(TestQuoterResourceDescribe) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg1;
+        cfg1.SetMaxUnitsPerSecond(100500);
+        cfg1.SetMaxBurstSizeCoefficient(1.5);
+
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg2;
+        cfg2.SetMaxUnitsPerSecond(10);
+
+        ctx.AddQuoterResource("/Root", cfg1); // id=1
+        ctx.AddQuoterResource("/Root/Folder", cfg1); // id=2
+        ctx.AddQuoterResource("/Root/Q1", cfg2); // id=3
+        ctx.AddQuoterResource("/Root/Folder/Q1", cfg2); // id=4
+        ctx.AddQuoterResource("/Root/Folder/Q2", cfg2); // id=5
+        ctx.AddQuoterResource("/Root/Folder/Q3", cfg2); // id=6
+
+        ctx.AddQuoterResource("/Root2", cfg1); // id=7
+        ctx.AddQuoterResource("/Root2/Q", cfg2); // id=8
+
+        auto testDescribe = [&]() {
+            ctx.VerifyDescribeQuoterResources({100}, {}, false, Ydb::StatusIds::NOT_FOUND); // no such id
+            ctx.VerifyDescribeQuoterResources({}, {"Nonexistent/Path"}, false, Ydb::StatusIds::NOT_FOUND); // no such path
+            ctx.VerifyDescribeQuoterResources({}, {"/Root", ""}, false, Ydb::StatusIds::NOT_FOUND); // empty path
+            ctx.VerifyDescribeQuoterResources({1, 1}, {}, false); // two times is OK
+            ctx.VerifyDescribeQuoterResources({}, {"/Root2/Q", "/Root2/Q"}, false); // two times is OK
+
+            {
+                // All
+                const auto resources = ctx.DescribeQuoterResources({}, {}, true);
+                UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 8);
+                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(0).GetResourcePath(), "Root");
+                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(1).GetResourcePath(), "Root/Folder");
+                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(2).GetResourcePath(), "Root/Folder/Q1");
+                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(3).GetResourcePath(), "Root/Folder/Q2");
+                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(4).GetResourcePath(), "Root/Folder/Q3");
+                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(5).GetResourcePath(), "Root/Q1");
+                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(6).GetResourcePath(), "Root2");
+                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(7).GetResourcePath(), "Root2/Q");
+
+                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(0).GetResourceId(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(1).GetResourceId(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(2).GetResourceId(), 4);
+                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(3).GetResourceId(), 5);
+                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(4).GetResourceId(), 6);
+                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(5).GetResourceId(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(6).GetResourceId(), 7);
+                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(7).GetResourceId(), 8);
+
+                UNIT_ASSERT_DOUBLES_EQUAL(
+                   resources.GetResources(1).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                   100500, 0.001);
+                UNIT_ASSERT_DOUBLES_EQUAL(
+                   resources.GetResources(6).GetHierarhicalDRRResourceConfig().GetMaxBurstSizeCoefficient(),
+                   1.5, 0.001);
+                UNIT_ASSERT_DOUBLES_EQUAL(
+                   resources.GetResources(7).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                   10, 0.001);
+            }
+            {
+                // All upper level
+                const auto resources = ctx.DescribeQuoterResources({}, {}, false);
+                UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 2);
+                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(0).GetResourcePath(), "Root");
+                UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(1).GetResourcePath(), "Root2");
+
+                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(0).GetResourceId(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(1).GetResourceId(), 7);
+            }
+            {
+                // By id
+                const auto resources = ctx.DescribeQuoterResources({3, 2}, {}, true);
+                UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 5);
+
+                const auto resources2 = ctx.DescribeQuoterResources({3, 2}, {}, false);
+                UNIT_ASSERT_VALUES_EQUAL(resources2.ResourcesSize(), 2);
+            }
+            {
+                // By path
+                const auto resources = ctx.DescribeQuoterResources({}, {"Root2/"}, true);
+                UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 2);
+
+                const auto resources2 = ctx.DescribeQuoterResources({}, {"Root2/"}, false);
+                UNIT_ASSERT_VALUES_EQUAL(resources2.ResourcesSize(), 1);
+            }
+        };
+        testDescribe();
+        ctx.RebootTablet();
+        testDescribe();
+    }
+
+    Y_UNIT_TEST(TestQuoterResourceCreation) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        // validation
+        ctx.AddQuoterResource("/a/b", Ydb::StatusIds::BAD_REQUEST); // no parent resource
+        ctx.AddQuoterResource(":-)", Ydb::StatusIds::BAD_REQUEST); // invalid resource name
+        ctx.AddQuoterResource("", Ydb::StatusIds::BAD_REQUEST); // empty path
+        ctx.AddQuoterResource("/", Ydb::StatusIds::BAD_REQUEST); // empty path
+        ctx.AddQuoterResource("//", Ydb::StatusIds::BAD_REQUEST); // empty path
+        {
+            NKikimrKesus::TStreamingQuoterResource res;
+            res.SetResourceId(42);
+            res.SetResourcePath("/CorrentPath");
+            res.MutableHierarhicalDRRResourceConfig();
+            ctx.AddQuoterResource(res, Ydb::StatusIds::BAD_REQUEST); // resource id specified
+        }
+        {
+            NKikimrKesus::TStreamingQuoterResource res;
+            res.SetResourcePath("/CorrentPath");
+            ctx.AddQuoterResource(res, Ydb::StatusIds::BAD_REQUEST); // DRR config is not specified
+        }
+
+        ctx.AddQuoterResource("RootQuoter", 42.0); // OK
+        ctx.AddQuoterResource("/RootQuoter/", 42.0, Ydb::StatusIds::ALREADY_EXISTS);
+
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg;
+        cfg.SetMaxUnitsPerSecond(100500);
+        ctx.AddQuoterResource("/RootQuoter/", cfg, Ydb::StatusIds::BAD_REQUEST); // different settings
+
+        ctx.AddQuoterResource("RootQuoter/SubQuoter");
+        ctx.AddQuoterResource("/RootQuoter//OtherSubQuoter/", cfg);
+
+        auto checkResources = [&]() {
+            const auto resources = ctx.DescribeQuoterResources({}, {}, true);
+            UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 3);
+            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(0).GetResourcePath(), "RootQuoter");
+            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(1).GetResourcePath(), "RootQuoter/OtherSubQuoter");
+            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(2).GetResourcePath(), "RootQuoter/SubQuoter");
+
+            UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(0).GetResourceId(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(1).GetResourceId(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(2).GetResourceId(), 2);
+
+            UNIT_ASSERT_DOUBLES_EQUAL(
+                resources.GetResources(1).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                100500, 0.001);
+        };
+        checkResources();
+        ctx.RebootTablet();
+        checkResources();
+
+        ctx.AddQuoterResource("/RootQuoter", 42.0, Ydb::StatusIds::ALREADY_EXISTS); // properly loaded
+
+        // check that resource id was persisted
+        ctx.AddQuoterResource("OtherRootQuoter", 100.0);
+        const auto resources = ctx.DescribeQuoterResources({}, {"OtherRootQuoter"}, false);
+        UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resources.GetResources(0).GetResourceId(), 4);
+    }
+
+    Y_UNIT_TEST(TestQuoterHDRRParametersValidation) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        {
+            NKikimrKesus::THierarchicalDRRResourceConfig cfg;
+            cfg.SetMaxUnitsPerSecond(-100); // negative
+            ctx.AddQuoterResource("/Res", cfg, Ydb::StatusIds::BAD_REQUEST);
+        }
+
+        {
+            NKikimrKesus::THierarchicalDRRResourceConfig cfg;
+            // no max units per second in root resource
+            ctx.AddQuoterResource("/ResWithoutMaxUnitsPerSecond", cfg, Ydb::StatusIds::BAD_REQUEST);
+
+            cfg.SetMaxUnitsPerSecond(1);
+            ctx.AddQuoterResource("/ResWithMaxUnitsPerSecond", cfg, Ydb::StatusIds::SUCCESS);
+
+            cfg.ClearMaxUnitsPerSecond(); // child can have no MaxUnitsPerSecond
+            ctx.AddQuoterResource("/ResWithMaxUnitsPerSecond/ChildWithoutMaxUnitsPerSecond", cfg, Ydb::StatusIds::SUCCESS);
+        }
+    }
+
+    Y_UNIT_TEST(TestQuoterResourceModification) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg1;
+        cfg1.SetMaxUnitsPerSecond(100);
+
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg2;
+        cfg2.SetMaxUnitsPerSecond(5);
+
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg3;
+        cfg3.SetMaxUnitsPerSecond(42);
+
+        ctx.AddQuoterResource("/Root", cfg1); // id=1
+        ctx.AddQuoterResource("/Root/Q", cfg1); // id=2
+
+        auto testBeforeModification = [&]() {
+            const auto resources = ctx.DescribeQuoterResources({}, {}, true);
+            UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 2);
+            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(0).GetResourcePath(), "Root");
+            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(1).GetResourcePath(), "Root/Q");
+
+            UNIT_ASSERT_DOUBLES_EQUAL(
+                resources.GetResources(0).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                100, 0.001);
+            UNIT_ASSERT_DOUBLES_EQUAL(
+                resources.GetResources(1).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                100, 0.001);
+        };
+        testBeforeModification();
+        ctx.RebootTablet();
+        testBeforeModification();
+
+        auto testAfterModification = [&]() {
+            const auto resources = ctx.DescribeQuoterResources({}, {}, true);
+            UNIT_ASSERT_VALUES_EQUAL(resources.ResourcesSize(), 2);
+            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(0).GetResourcePath(), "Root");
+            UNIT_ASSERT_STRINGS_EQUAL(resources.GetResources(1).GetResourcePath(), "Root/Q");
+
+            UNIT_ASSERT_DOUBLES_EQUAL(
+                resources.GetResources(0).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                5, 0.001);
+            UNIT_ASSERT_DOUBLES_EQUAL(
+                resources.GetResources(1).GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(),
+                5, 0.001);
+        };
+
+        ctx.UpdateQuoterResource(1, cfg2);
+        ctx.UpdateQuoterResource("/Root/Q", cfg2);
+        testAfterModification();
+        ctx.RebootTablet();
+        testAfterModification();
+
+        // test validation
+        {
+            NKikimrKesus::TStreamingQuoterResource req;
+            *req.MutableHierarhicalDRRResourceConfig() = cfg3;
+
+            ctx.UpdateQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // no resource path and id
+            testAfterModification();
+            ctx.RebootTablet();
+            testAfterModification();
+
             req.SetResourcePath("?Invalid/Path?");
-            ctx.UpdateQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // invalid path 
-            testAfterModification(); 
-            ctx.RebootTablet(); 
-            testAfterModification(); 
- 
-            req.SetResourcePath("/Root/Q"); 
-            req.ClearAlgorithmSpecificConfig(); 
-            ctx.UpdateQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // no config 
-            testAfterModification(); 
-            ctx.RebootTablet(); 
-            testAfterModification(); 
- 
-            req.SetResourcePath("/Root/P"); 
-            *req.MutableHierarhicalDRRResourceConfig() = cfg3; 
-            ctx.UpdateQuoterResource(req, Ydb::StatusIds::NOT_FOUND); // no such resource 
-            testAfterModification(); 
-            ctx.RebootTablet(); 
-            testAfterModification(); 
- 
-            req.ClearResourcePath(); 
-            req.SetResourceId(42); 
-            ctx.UpdateQuoterResource(req, Ydb::StatusIds::NOT_FOUND); // no such resource 
-            testAfterModification(); 
-            ctx.RebootTablet(); 
-            testAfterModification(); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(TestQuoterResourceDeletion) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        ctx.AddQuoterResource("/Root", 1.0); // id=1 
-        ctx.AddQuoterResource("/Root/Q"); // id=2 
-        ctx.AddQuoterResource("/Root/Folder"); // id=3 
-        ctx.AddQuoterResource("/Root/Folder/Q1"); // id=4 
- 
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4); 
- 
-        // validation 
-        { 
-            NKikimrKesus::TEvDeleteQuoterResource req; 
-            ctx.DeleteQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // no resource 
-            UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4); 
- 
+            ctx.UpdateQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // invalid path
+            testAfterModification();
+            ctx.RebootTablet();
+            testAfterModification();
+
+            req.SetResourcePath("/Root/Q");
+            req.ClearAlgorithmSpecificConfig();
+            ctx.UpdateQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // no config
+            testAfterModification();
+            ctx.RebootTablet();
+            testAfterModification();
+
+            req.SetResourcePath("/Root/P");
+            *req.MutableHierarhicalDRRResourceConfig() = cfg3;
+            ctx.UpdateQuoterResource(req, Ydb::StatusIds::NOT_FOUND); // no such resource
+            testAfterModification();
+            ctx.RebootTablet();
+            testAfterModification();
+
+            req.ClearResourcePath();
+            req.SetResourceId(42);
+            ctx.UpdateQuoterResource(req, Ydb::StatusIds::NOT_FOUND); // no such resource
+            testAfterModification();
+            ctx.RebootTablet();
+            testAfterModification();
+        }
+    }
+
+    Y_UNIT_TEST(TestQuoterResourceDeletion) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        ctx.AddQuoterResource("/Root", 1.0); // id=1
+        ctx.AddQuoterResource("/Root/Q"); // id=2
+        ctx.AddQuoterResource("/Root/Folder"); // id=3
+        ctx.AddQuoterResource("/Root/Folder/Q1"); // id=4
+
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4);
+
+        // validation
+        {
+            NKikimrKesus::TEvDeleteQuoterResource req;
+            ctx.DeleteQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // no resource
+            UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4);
+
             req.SetResourcePath("?Invalid/Path?");
-            ctx.DeleteQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // invalid path 
-            UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4); 
- 
-            req.SetResourcePath("/Root/Folder/NonexistingRes"); 
-            ctx.DeleteQuoterResource(req, Ydb::StatusIds::NOT_FOUND); 
-            UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4); 
- 
-            req.ClearResourcePath(); 
-            req.SetResourceId(100); 
-            ctx.DeleteQuoterResource(req, Ydb::StatusIds::NOT_FOUND); 
-            UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4); 
- 
-            ctx.DeleteQuoterResource(3, Ydb::StatusIds::BAD_REQUEST); // Folder is not empty 
-            UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4); 
-        } 
- 
-        ctx.DeleteQuoterResource("/Root/Folder/Q1"); // By name 
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 3); 
-        ctx.RebootTablet(); 
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 3); 
- 
-        ctx.DeleteQuoterResource(3); // By id 
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 2); 
-        ctx.RebootTablet(); 
-        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 2); 
-    } 
- 
-    Y_UNIT_TEST(TestQuoterSubscribeOnResource) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        ctx.AddQuoterResource("/Q1", 10.0); // id=1 
-        ctx.AddQuoterResource("/Q2", 10.0); // id=2 
- 
-        auto edge = ctx.Runtime->AllocateEdgeActor(); 
-        auto client = ctx.Runtime->AllocateEdgeActor(); 
-        auto ans = ctx.SubscribeOnResource(client, edge, "Q1", false); 
-        UNIT_ASSERT_VALUES_EQUAL(ans.GetResults(0).GetResourceId(), 1); 
- 
-        auto client2 = ctx.Runtime->AllocateEdgeActor(); 
-        ans = ctx.SubscribeOnResources( 
-            client2, 
-            edge, 
-            { 
-                TTestContext::TResourceConsumingInfo("/Q1", false), 
-                TTestContext::TResourceConsumingInfo("/Q2", false), 
-                TTestContext::TResourceConsumingInfo("/Q3", false, 0.0, Ydb::StatusIds::NOT_FOUND), 
-            } 
-        ); 
-        UNIT_ASSERT_VALUES_EQUAL(ans.GetResults(0).GetResourceId(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(ans.GetResults(1).GetResourceId(), 2); 
-    } 
- 
-    Y_UNIT_TEST(TestAllocatesResources) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg; 
-        cfg.SetMaxUnitsPerSecond(100.0); 
-        ctx.AddQuoterResource("/Root", cfg); 
-        ctx.AddQuoterResource("/Root/Res"); // With inherited settings. 
- 
-        auto edge = ctx.Runtime->AllocateEdgeActor(); 
-        auto client = ctx.Runtime->AllocateEdgeActor(); 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root/Res", false, 0); 
-        UNIT_ASSERT(subscribeResult.GetResults(0).HasEffectiveProps()); 
-        ctx.UpdateConsumptionState(client, edge, subscribeResult.GetResults(0).GetResourceId(), true, 50.0); 
- 
-        double allocated = 0.0; 
-        do { 
-            auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge); 
-            UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1); 
-            const auto& info = result->Record.GetResourcesInfo(0); 
-            UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS); 
-            allocated += info.GetAmount(); 
-        } while (allocated < 49.99); 
-    } 
- 
+            ctx.DeleteQuoterResource(req, Ydb::StatusIds::BAD_REQUEST); // invalid path
+            UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4);
+
+            req.SetResourcePath("/Root/Folder/NonexistingRes");
+            ctx.DeleteQuoterResource(req, Ydb::StatusIds::NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4);
+
+            req.ClearResourcePath();
+            req.SetResourceId(100);
+            ctx.DeleteQuoterResource(req, Ydb::StatusIds::NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4);
+
+            ctx.DeleteQuoterResource(3, Ydb::StatusIds::BAD_REQUEST); // Folder is not empty
+            UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 4);
+        }
+
+        ctx.DeleteQuoterResource("/Root/Folder/Q1"); // By name
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 3);
+        ctx.RebootTablet();
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 3);
+
+        ctx.DeleteQuoterResource(3); // By id
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 2);
+        ctx.RebootTablet();
+        UNIT_ASSERT_VALUES_EQUAL(ctx.DescribeQuoterResources({}, {}, true).ResourcesSize(), 2);
+    }
+
+    Y_UNIT_TEST(TestQuoterSubscribeOnResource) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        ctx.AddQuoterResource("/Q1", 10.0); // id=1
+        ctx.AddQuoterResource("/Q2", 10.0); // id=2
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client = ctx.Runtime->AllocateEdgeActor();
+        auto ans = ctx.SubscribeOnResource(client, edge, "Q1", false);
+        UNIT_ASSERT_VALUES_EQUAL(ans.GetResults(0).GetResourceId(), 1);
+
+        auto client2 = ctx.Runtime->AllocateEdgeActor();
+        ans = ctx.SubscribeOnResources(
+            client2,
+            edge,
+            {
+                TTestContext::TResourceConsumingInfo("/Q1", false),
+                TTestContext::TResourceConsumingInfo("/Q2", false),
+                TTestContext::TResourceConsumingInfo("/Q3", false, 0.0, Ydb::StatusIds::NOT_FOUND),
+            }
+        );
+        UNIT_ASSERT_VALUES_EQUAL(ans.GetResults(0).GetResourceId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ans.GetResults(1).GetResourceId(), 2);
+    }
+
+    Y_UNIT_TEST(TestAllocatesResources) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg;
+        cfg.SetMaxUnitsPerSecond(100.0);
+        ctx.AddQuoterResource("/Root", cfg);
+        ctx.AddQuoterResource("/Root/Res"); // With inherited settings.
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client = ctx.Runtime->AllocateEdgeActor();
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root/Res", false, 0);
+        UNIT_ASSERT(subscribeResult.GetResults(0).HasEffectiveProps());
+        ctx.UpdateConsumptionState(client, edge, subscribeResult.GetResults(0).GetResourceId(), true, 50.0);
+
+        double allocated = 0.0;
+        do {
+            auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
+            const auto& info = result->Record.GetResourcesInfo(0);
+            UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS);
+            allocated += info.GetAmount();
+        } while (allocated < 49.99);
+    }
+
     Y_UNIT_TEST(TestQuoterAccountResourcesOnDemand) {
         TTestContext ctx;
         ctx.Setup();
@@ -2084,156 +2084,156 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         }
     }
 
-    Y_UNIT_TEST(TestPassesUpdatedPropsToSession) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg; 
-        cfg.SetMaxUnitsPerSecond(100.0); 
-        ctx.AddQuoterResource("/Root", cfg); 
-        ctx.AddQuoterResource("/Root/Res"); 
- 
-        auto edge = ctx.Runtime->AllocateEdgeActor(); 
-        auto client = ctx.Runtime->AllocateEdgeActor(); 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root/Res", false, 0); 
-        UNIT_ASSERT(subscribeResult.GetResults(0).HasEffectiveProps()); 
- 
-        // update 
-        cfg.SetMaxUnitsPerSecond(150.0); 
-        ctx.UpdateQuoterResource("/Root", cfg); 
- 
-        ctx.UpdateConsumptionState(client, edge, subscribeResult.GetResults(0).GetResourceId(), true, 50.0); 
- 
-        auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge); 
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1); 
-        const auto& info = result->Record.GetResourcesInfo(0); 
-        UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS); 
-        UNIT_ASSERT_DOUBLES_EQUAL(info.GetEffectiveProps().GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 150.0, 0.001); 
-    } 
- 
-    Y_UNIT_TEST(TestGetQuoterResourceCounters) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
-        //ctx.Runtime->SetLogPriority(NKikimrServices::KESUS_TABLET, NLog::PRI_TRACE); 
- 
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg; 
-        cfg.SetMaxUnitsPerSecond(1000.0); 
-        ctx.AddQuoterResource("/Root1", cfg); 
-        ctx.AddQuoterResource("/Root1/Res"); 
- 
-        ctx.AddQuoterResource("/Root2", cfg); 
-        ctx.AddQuoterResource("/Root2/Res"); 
-        ctx.AddQuoterResource("/Root2/Res/Subres"); 
- 
-        auto edge = ctx.Runtime->AllocateEdgeActor(); 
-        auto client = ctx.Runtime->AllocateEdgeActor(); 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root1/Res", true, 300); 
-        UNIT_ASSERT(subscribeResult.GetResults(0).HasEffectiveProps()); 
- 
+    Y_UNIT_TEST(TestPassesUpdatedPropsToSession) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg;
+        cfg.SetMaxUnitsPerSecond(100.0);
+        ctx.AddQuoterResource("/Root", cfg);
+        ctx.AddQuoterResource("/Root/Res");
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client = ctx.Runtime->AllocateEdgeActor();
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root/Res", false, 0);
+        UNIT_ASSERT(subscribeResult.GetResults(0).HasEffectiveProps());
+
+        // update
+        cfg.SetMaxUnitsPerSecond(150.0);
+        ctx.UpdateQuoterResource("/Root", cfg);
+
+        ctx.UpdateConsumptionState(client, edge, subscribeResult.GetResults(0).GetResourceId(), true, 50.0);
+
+        auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
+        const auto& info = result->Record.GetResourcesInfo(0);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_DOUBLES_EQUAL(info.GetEffectiveProps().GetHierarhicalDRRResourceConfig().GetMaxUnitsPerSecond(), 150.0, 0.001);
+    }
+
+    Y_UNIT_TEST(TestGetQuoterResourceCounters) {
+        TTestContext ctx;
+        ctx.Setup();
+        //ctx.Runtime->SetLogPriority(NKikimrServices::KESUS_TABLET, NLog::PRI_TRACE);
+
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg;
+        cfg.SetMaxUnitsPerSecond(1000.0);
+        ctx.AddQuoterResource("/Root1", cfg);
+        ctx.AddQuoterResource("/Root1/Res");
+
+        ctx.AddQuoterResource("/Root2", cfg);
+        ctx.AddQuoterResource("/Root2/Res");
+        ctx.AddQuoterResource("/Root2/Res/Subres");
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client = ctx.Runtime->AllocateEdgeActor();
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult = ctx.SubscribeOnResource(client, edge, "/Root1/Res", true, 300);
+        UNIT_ASSERT(subscribeResult.GetResults(0).HasEffectiveProps());
+
         auto WaitAllocated = [&ctx](const TActorId edge, double amount) -> double {
-            double allocated = 0.0; 
-            do { 
-                auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge); 
-                UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1); 
-                const auto& info = result->Record.GetResourcesInfo(0); 
-                UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS); 
-                allocated += info.GetAmount(); 
-            } while (allocated < amount - 0.01); 
-            return allocated; 
-        }; 
- 
-        // Wait allocation 
-        const double allocated1First = WaitAllocated(edge, 300); 
- 
-        auto CheckCountersValues = [&ctx](ui64 v1, ui64 v2) { 
-            auto counters = ctx.GetQuoterResourceCounters(); 
-            UNIT_ASSERT_VALUES_EQUAL_C(counters.ResourceCountersSize(), 5, counters); 
-            UNIT_ASSERT_VALUES_EQUAL(counters.GetResourceCounters(0).GetResourcePath(), "Root1"); 
-            UNIT_ASSERT_VALUES_EQUAL(counters.GetResourceCounters(1).GetResourcePath(), "Root1/Res"); 
-            UNIT_ASSERT_VALUES_EQUAL(counters.GetResourceCounters(2).GetResourcePath(), "Root2"); 
-            UNIT_ASSERT_VALUES_EQUAL(counters.GetResourceCounters(3).GetResourcePath(), "Root2/Res"); 
-            UNIT_ASSERT_VALUES_EQUAL(counters.GetResourceCounters(4).GetResourcePath(), "Root2/Res/Subres"); 
-            UNIT_ASSERT_VALUES_EQUAL_C(counters.GetResourceCounters(0).GetAllocated(), v1, counters); 
-            UNIT_ASSERT_VALUES_EQUAL_C(counters.GetResourceCounters(1).GetAllocated(), v1, counters); 
-            UNIT_ASSERT_VALUES_EQUAL_C(counters.GetResourceCounters(2).GetAllocated(), v2, counters); 
-            UNIT_ASSERT_VALUES_EQUAL_C(counters.GetResourceCounters(3).GetAllocated(), v2, counters); 
-            UNIT_ASSERT_VALUES_EQUAL_C(counters.GetResourceCounters(4).GetAllocated(), v2, counters); 
-        }; 
- 
-        CheckCountersValues(static_cast<ui64>(allocated1First), 0); 
- 
-        auto edge2 = ctx.Runtime->AllocateEdgeActor(); 
-        auto client2 = ctx.Runtime->AllocateEdgeActor(); 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult2First = ctx.SubscribeOnResource(client2, edge2, "/Root2/Res/Subres", true, 200); 
-        UNIT_ASSERT(subscribeResult2First.GetResults(0).HasEffectiveProps()); 
- 
-        const double allocated2First = WaitAllocated(edge2, 200); 
-        CheckCountersValues(static_cast<ui64>(allocated1First), static_cast<ui64>(allocated2First)); 
- 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult1Second = ctx.SubscribeOnResource(client, edge, "/Root1/Res", true, 20); 
-        UNIT_ASSERT(subscribeResult1Second.GetResults(0).HasEffectiveProps()); 
- 
-        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult2Second = ctx.SubscribeOnResource(client2, edge2, "/Root2/Res/Subres", true, 50); 
-        UNIT_ASSERT(subscribeResult2Second.GetResults(0).HasEffectiveProps()); 
- 
-        const double allocated1Second = WaitAllocated(edge, 20); 
-        const double allocated2Second = WaitAllocated(edge2, 50); 
- 
-        CheckCountersValues(static_cast<ui64>(allocated1First + allocated1Second), static_cast<ui64>(allocated2First + allocated2Second)); 
-    } 
- 
-    Y_UNIT_TEST(TestStopResourceAllocationWhenPipeDestroyed) { 
-        TTestContext ctx; 
-        ctx.Setup(); 
- 
-        NKikimrKesus::THierarchicalDRRResourceConfig cfg; 
-        cfg.SetMaxUnitsPerSecond(100.0); 
-        ctx.AddQuoterResource("Root", cfg); 
- 
+            double allocated = 0.0;
+            do {
+                auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
+                const auto& info = result->Record.GetResourcesInfo(0);
+                UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS);
+                allocated += info.GetAmount();
+            } while (allocated < amount - 0.01);
+            return allocated;
+        };
+
+        // Wait allocation
+        const double allocated1First = WaitAllocated(edge, 300);
+
+        auto CheckCountersValues = [&ctx](ui64 v1, ui64 v2) {
+            auto counters = ctx.GetQuoterResourceCounters();
+            UNIT_ASSERT_VALUES_EQUAL_C(counters.ResourceCountersSize(), 5, counters);
+            UNIT_ASSERT_VALUES_EQUAL(counters.GetResourceCounters(0).GetResourcePath(), "Root1");
+            UNIT_ASSERT_VALUES_EQUAL(counters.GetResourceCounters(1).GetResourcePath(), "Root1/Res");
+            UNIT_ASSERT_VALUES_EQUAL(counters.GetResourceCounters(2).GetResourcePath(), "Root2");
+            UNIT_ASSERT_VALUES_EQUAL(counters.GetResourceCounters(3).GetResourcePath(), "Root2/Res");
+            UNIT_ASSERT_VALUES_EQUAL(counters.GetResourceCounters(4).GetResourcePath(), "Root2/Res/Subres");
+            UNIT_ASSERT_VALUES_EQUAL_C(counters.GetResourceCounters(0).GetAllocated(), v1, counters);
+            UNIT_ASSERT_VALUES_EQUAL_C(counters.GetResourceCounters(1).GetAllocated(), v1, counters);
+            UNIT_ASSERT_VALUES_EQUAL_C(counters.GetResourceCounters(2).GetAllocated(), v2, counters);
+            UNIT_ASSERT_VALUES_EQUAL_C(counters.GetResourceCounters(3).GetAllocated(), v2, counters);
+            UNIT_ASSERT_VALUES_EQUAL_C(counters.GetResourceCounters(4).GetAllocated(), v2, counters);
+        };
+
+        CheckCountersValues(static_cast<ui64>(allocated1First), 0);
+
+        auto edge2 = ctx.Runtime->AllocateEdgeActor();
+        auto client2 = ctx.Runtime->AllocateEdgeActor();
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult2First = ctx.SubscribeOnResource(client2, edge2, "/Root2/Res/Subres", true, 200);
+        UNIT_ASSERT(subscribeResult2First.GetResults(0).HasEffectiveProps());
+
+        const double allocated2First = WaitAllocated(edge2, 200);
+        CheckCountersValues(static_cast<ui64>(allocated1First), static_cast<ui64>(allocated2First));
+
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult1Second = ctx.SubscribeOnResource(client, edge, "/Root1/Res", true, 20);
+        UNIT_ASSERT(subscribeResult1Second.GetResults(0).HasEffectiveProps());
+
+        const NKikimrKesus::TEvSubscribeOnResourcesResult subscribeResult2Second = ctx.SubscribeOnResource(client2, edge2, "/Root2/Res/Subres", true, 50);
+        UNIT_ASSERT(subscribeResult2Second.GetResults(0).HasEffectiveProps());
+
+        const double allocated1Second = WaitAllocated(edge, 20);
+        const double allocated2Second = WaitAllocated(edge2, 50);
+
+        CheckCountersValues(static_cast<ui64>(allocated1First + allocated1Second), static_cast<ui64>(allocated2First + allocated2Second));
+    }
+
+    Y_UNIT_TEST(TestStopResourceAllocationWhenPipeDestroyed) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        NKikimrKesus::THierarchicalDRRResourceConfig cfg;
+        cfg.SetMaxUnitsPerSecond(100.0);
+        ctx.AddQuoterResource("Root", cfg);
+
         auto CreateSession = [&]() -> std::pair<TActorId, TActorId> {
             TActorId edge = ctx.Runtime->AllocateEdgeActor();
             const TActorId sessionPipe = ctx.Runtime->ConnectToPipe(ctx.TabletId, edge, 0, GetPipeConfigWithRetries());
-            auto req = MakeHolder<TEvKesus::TEvSubscribeOnResources>(); 
+            auto req = MakeHolder<TEvKesus::TEvSubscribeOnResources>();
             ActorIdToProto(edge, req->Record.MutableActorID());
-            auto* reqRes = req->Record.AddResources(); 
-            reqRes->SetResourcePath("Root"); 
-            reqRes->SetStartConsuming(true); 
-            reqRes->SetInitialAmount(std::numeric_limits<double>::infinity()); 
-            ctx.Runtime->SendToPipe( 
-                ctx.TabletId, 
-                edge, 
-                req.Release(), 
-                0, 
-                GetPipeConfigWithRetries(), 
-                sessionPipe, 
-                0); 
-            return std::make_pair(edge, sessionPipe); 
-        }; 
- 
+            auto* reqRes = req->Record.AddResources();
+            reqRes->SetResourcePath("Root");
+            reqRes->SetStartConsuming(true);
+            reqRes->SetInitialAmount(std::numeric_limits<double>::infinity());
+            ctx.Runtime->SendToPipe(
+                ctx.TabletId,
+                edge,
+                req.Release(),
+                0,
+                GetPipeConfigWithRetries(),
+                sessionPipe,
+                0);
+            return std::make_pair(edge, sessionPipe);
+        };
+
         const std::pair<TActorId, TActorId> edgeAndSession1 = CreateSession();
         const std::pair<TActorId, TActorId> edgeAndSession2 = CreateSession();
- 
+
         auto WaitAllocation = [&](TActorId edge, double expectedAmount) {
-            size_t attempts = 30; 
-            do { 
-                auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge); 
-                UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1); 
-                const auto& info = result->Record.GetResourcesInfo(0); 
-                UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS); 
-                if (std::abs(info.GetAmount() - expectedAmount) <= 0.01) { 
-                    break; // OK 
-                } 
-            } while (--attempts); 
-            UNIT_ASSERT(attempts); 
-        }; 
- 
-        WaitAllocation(edgeAndSession1.first, 5); 
-        WaitAllocation(edgeAndSession2.first, 5); 
- 
-        // Kill pipe and then session must be deactivated on kesus. 
-        ctx.Runtime->Send(new IEventHandle(edgeAndSession2.second, edgeAndSession2.first, new TEvents::TEvPoisonPill())); 
-        WaitAllocation(edgeAndSession1.first, 10); // Now first session is the only active session and it receives all resource. 
-    } 
+            size_t attempts = 30;
+            do {
+                auto result = ctx.ExpectEdgeEvent<TEvKesus::TEvResourcesAllocated>(edge);
+                UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesInfoSize(), 1);
+                const auto& info = result->Record.GetResourcesInfo(0);
+                UNIT_ASSERT_VALUES_EQUAL(info.GetStateNotification().GetStatus(), Ydb::StatusIds::SUCCESS);
+                if (std::abs(info.GetAmount() - expectedAmount) <= 0.01) {
+                    break; // OK
+                }
+            } while (--attempts);
+            UNIT_ASSERT(attempts);
+        };
+
+        WaitAllocation(edgeAndSession1.first, 5);
+        WaitAllocation(edgeAndSession2.first, 5);
+
+        // Kill pipe and then session must be deactivated on kesus.
+        ctx.Runtime->Send(new IEventHandle(edgeAndSession2.second, edgeAndSession2.first, new TEvents::TEvPoisonPill()));
+        WaitAllocation(edgeAndSession1.first, 10); // Now first session is the only active session and it receives all resource.
+    }
 }
 
 }

@@ -57,7 +57,7 @@
     /**/
 
 // Use for code generation to handle parameter lists
-// NOTE: this is the only place to change if more parameters needed 
+// NOTE: this is the only place to change if more parameters needed
 #define FOREACH_PARAMNUM(MACRO, ...) \
     MACRO(0, ##__VA_ARGS__)          \
     MACRO(1, ##__VA_ARGS__)          \
@@ -114,9 +114,9 @@
 #define LWTRACE_TEMPLATE_PARAMS_NODEF LWTRACE_EXPAND(LWTRACE_EAT FOREACH_PARAMNUM(LWTRACE_TEMPLATE_PARAMS_NODEF_I)(0))
 #define LWTRACE_TEMPLATE_ARGS_I(i) (1) TP##i LWTRACE_COMMA
 #define LWTRACE_TEMPLATE_ARGS LWTRACE_EXPAND(LWTRACE_EAT FOREACH_PARAMNUM(LWTRACE_TEMPLATE_ARGS_I)(0))
-#define LWTRACE_FUNCTION_PARAMS_I(i) (1) typename ::NLWTrace::TParamTraits<TP##i>::TFuncParam p##i = ERROR_not_enough_parameters() LWTRACE_COMMA 
+#define LWTRACE_FUNCTION_PARAMS_I(i) (1) typename ::NLWTrace::TParamTraits<TP##i>::TFuncParam p##i = ERROR_not_enough_parameters() LWTRACE_COMMA
 #define LWTRACE_FUNCTION_PARAMS LWTRACE_EXPAND(LWTRACE_EAT FOREACH_PARAMNUM(LWTRACE_FUNCTION_PARAMS_I)(0))
-#define LWTRACE_PREPARE_PARAMS_I(i, params) params.Param[i].template CopyConstruct<typename ::NLWTrace::TParamTraits<TP##i>::TStoreType>(::NLWTrace::TParamTraits<TP##i>::ToStoreType(p##i)); 
+#define LWTRACE_PREPARE_PARAMS_I(i, params) params.Param[i].template CopyConstruct<typename ::NLWTrace::TParamTraits<TP##i>::TStoreType>(::NLWTrace::TParamTraits<TP##i>::ToStoreType(p##i));
 #define LWTRACE_PREPARE_PARAMS(params)                     \
     do {                                                   \
         FOREACH_PARAMNUM(LWTRACE_PREPARE_PARAMS_I, params) \

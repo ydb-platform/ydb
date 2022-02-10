@@ -23,10 +23,10 @@
 //
 // 4) And then serialize it to json string with inlining, e.g.:
 //
-//     Cout << NProtobufJson::PrintInlined(o, MakeFieldOptionFunctor(this_is_json)) << Endl; 
+//     Cout << NProtobufJson::PrintInlined(o, MakeFieldOptionFunctor(this_is_json)) << Endl;
 //
-// 5) Alternatively you can specify a some more abstract functor for defining raw json fields 
-// 
+// 5) Alternatively you can specify a some more abstract functor for defining raw json fields
+//
 // which will print following json to stdout:
 //     {"A":{"inner":"value"}}
 // instead of
@@ -35,17 +35,17 @@
 //
 // See ut/inline_ut.cpp for additional examples of usage.
 
-#include "config.h" 
-#include "proto2json_printer.h" 
-#include "json_output_create.h" 
+#include "config.h"
+#include "proto2json_printer.h"
+#include "json_output_create.h"
 
 #include <library/cpp/protobuf/util/simple_reflection.h>
 
-#include <util/generic/maybe.h> 
-#include <util/generic/yexception.h> 
-#include <util/generic/utility.h> 
+#include <util/generic/maybe.h>
+#include <util/generic/yexception.h>
+#include <util/generic/utility.h>
 
-#include <functional> 
+#include <functional>
 
 namespace NProtobufJson {
     template <typename TBasePrinter = TProto2JsonPrinter> // TBasePrinter is assumed to be a TProto2JsonPrinter descendant
@@ -100,7 +100,7 @@ namespace NProtobufJson {
     private:
         TFieldPredicate IsInlined;
     };
- 
+
     inline void PrintInlined(const NProtoBuf::Message& msg, TInliningPrinter<>::TFieldPredicate isInlined, IJsonOutput& output, const TProto2JsonConfig& config = TProto2JsonConfig()) {
         TInliningPrinter<> printer(std::move(isInlined), config);
         printer.Print(msg, output);

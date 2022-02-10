@@ -362,16 +362,16 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
     }
 
     Y_UNIT_TEST(TestIso8601TimeZone) {
-        time_t t1, t2, t3, t4; 
+        time_t t1, t2, t3, t4;
         UNIT_ASSERT(ParseISO8601DateTime("2010-03-28T04:27:00.000+07:00", t1));
         UNIT_ASSERT(ParseISO8601DateTime("2010-03-27T21:27:00.000Z", t2));
         UNIT_ASSERT(ParseISO8601DateTime("2010-03-27T22:27:00.000+0100", t3));
         UNIT_ASSERT(ParseISO8601DateTime("2010-03-27T20:27:00.000-01:00", t4));
-        UNIT_ASSERT_VALUES_EQUAL(t1, t2); 
-        UNIT_ASSERT_VALUES_EQUAL(t2, t3); 
-        UNIT_ASSERT_VALUES_EQUAL(t3, t4); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(t1, t2);
+        UNIT_ASSERT_VALUES_EQUAL(t2, t3);
+        UNIT_ASSERT_VALUES_EQUAL(t3, t4);
+    }
+
     Y_UNIT_TEST(TestIso8601Incorrect) {
         bool ret;
         time_t t;

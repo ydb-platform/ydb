@@ -5,10 +5,10 @@
 
 #include <util/generic/fwd.h>
 
-namespace NYq { 
+namespace NYq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TString JoinPath(const TString& basePath, const TString& path);
 
-} // namespace NYq 
+} // namespace NYq

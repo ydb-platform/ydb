@@ -15,10 +15,10 @@
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <google/protobuf/util/time_util.h>
 
-#define LOG_E(stream) \ 
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivatePingTask - QueryId: " << OperationId  << ", Owner: " << OwnerId  << ", " << stream) 
-#define LOG_D(stream) \ 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivatePingTask - QueryId: " << OperationId  << ", Owner: " << OwnerId  << ", "<< stream) 
+#define LOG_E(stream) \
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivatePingTask - QueryId: " << OperationId  << ", Owner: " << OwnerId  << ", " << stream)
+#define LOG_D(stream) \
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivatePingTask - QueryId: " << OperationId  << ", Owner: " << OwnerId  << ", "<< stream)
 
 namespace NYq {
 
@@ -153,19 +153,19 @@ private:
             event->FinishedAt = TInstant::FromValue(google::protobuf::util::TimeUtil::TimestampToMicroseconds(req.finished_at()));
         }
         event->ResignQuery = req.resign_query();
- 
-        event->CreatedTopicConsumers.reserve(req.created_topic_consumers_size()); 
-        for (const auto& topicConsumerProto : req.created_topic_consumers()) { 
-            auto& topicConsumer = event->CreatedTopicConsumers.emplace_back(); 
-            topicConsumer.DatabaseId = topicConsumerProto.database_id(); 
-            topicConsumer.Database = topicConsumerProto.database(); 
-            topicConsumer.TopicPath = topicConsumerProto.topic_path(); 
-            topicConsumer.ConsumerName = topicConsumerProto.consumer_name(); 
-            topicConsumer.ClusterEndpoint = topicConsumerProto.cluster_endpoint(); 
-            topicConsumer.UseSsl = topicConsumerProto.use_ssl(); 
-            topicConsumer.TokenName = topicConsumerProto.token_name(); 
-            topicConsumer.AddBearerToToken = topicConsumerProto.add_bearer_to_token(); 
-        } 
+
+        event->CreatedTopicConsumers.reserve(req.created_topic_consumers_size());
+        for (const auto& topicConsumerProto : req.created_topic_consumers()) {
+            auto& topicConsumer = event->CreatedTopicConsumers.emplace_back();
+            topicConsumer.DatabaseId = topicConsumerProto.database_id();
+            topicConsumer.Database = topicConsumerProto.database();
+            topicConsumer.TopicPath = topicConsumerProto.topic_path();
+            topicConsumer.ConsumerName = topicConsumerProto.consumer_name();
+            topicConsumer.ClusterEndpoint = topicConsumerProto.cluster_endpoint();
+            topicConsumer.UseSsl = topicConsumerProto.use_ssl();
+            topicConsumer.TokenName = topicConsumerProto.token_name();
+            topicConsumer.AddBearerToToken = topicConsumerProto.add_bearer_to_token();
+        }
 
         event->DqGraphs.reserve(req.dq_graph_size());
         for (const auto& g : req.dq_graph()) {
@@ -173,15 +173,15 @@ private:
             event->DqGraphs.emplace_back(g);
         }
 
-        if (req.state_load_mode()) { 
-            event->StateLoadMode = req.state_load_mode(); 
-        } 
+        if (req.state_load_mode()) {
+            event->StateLoadMode = req.state_load_mode();
+        }
 
-        if (req.has_disposition()) { 
-            event->StreamingDisposition = req.disposition(); 
-        } 
- 
- 
+        if (req.has_disposition()) {
+            event->StreamingDisposition = req.disposition();
+        }
+
+
         LOG_D("Statistics length: " << req.statistics().size() << ", "
            << "Ast length: " << req.ast().size() << " bytes, "
            << "Plan length: " << req.plan().size() << " bytes, "

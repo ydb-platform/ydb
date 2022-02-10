@@ -204,7 +204,7 @@ TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& o
             return TDqPhyPrecompute::Match(node) || TDqConnection::Match(node);
         }, ctx));
     ui32 index = FromString<ui32>(outputIndex.Value());
-    ui32 branchesCount = GetStageOutputsCount(stage, true); 
+    ui32 branchesCount = GetStageOutputsCount(stage, true);
 
     TExprNode::TPtr newProgram;
     if (branchesCount == 1) {

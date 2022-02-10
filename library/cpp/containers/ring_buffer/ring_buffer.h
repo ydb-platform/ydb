@@ -12,12 +12,12 @@ public:
         Items.reserve(MaxSize);
     }
 
-    TSimpleRingBuffer(const TSimpleRingBuffer&) = default; 
-    TSimpleRingBuffer(TSimpleRingBuffer&&) = default; 
- 
-    TSimpleRingBuffer& operator=(const TSimpleRingBuffer&) = default; 
-    TSimpleRingBuffer& operator=(TSimpleRingBuffer&&) = default; 
- 
+    TSimpleRingBuffer(const TSimpleRingBuffer&) = default;
+    TSimpleRingBuffer(TSimpleRingBuffer&&) = default;
+
+    TSimpleRingBuffer& operator=(const TSimpleRingBuffer&) = default;
+    TSimpleRingBuffer& operator=(TSimpleRingBuffer&&) = default;
+
     // First available item
     size_t FirstIndex() const {
         return Begin;
@@ -55,11 +55,11 @@ public:
         }
     }
 
-    void Clear() { 
-        Items.clear(); 
-        Begin = 0; 
-    } 
- 
+    void Clear() {
+        Items.clear();
+        Begin = 0;
+    }
+
 private:
     size_t RealIndex(size_t index) const {
         return index % MaxSize;

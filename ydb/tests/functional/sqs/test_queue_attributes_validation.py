@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import pytest
-from hamcrest import assert_that, equal_to 
+from hamcrest import assert_that, equal_to
 
-from sqs_test_base import KikimrSqsTestBase, IS_FIFO_PARAMS 
+from sqs_test_base import KikimrSqsTestBase, IS_FIFO_PARAMS
 
- 
+
 class TestQueueAttributesInCompatibilityMode(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
@@ -28,7 +28,7 @@ class TestQueueAttributesInCompatibilityMode(KikimrSqsTestBase):
         # previously set attributes should be right there
         assert_that(self._sqs_api.get_queue_attributes(queue_url)['MaximumMessageSize'], equal_to('1024'))
         try:
-            queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True, attributes={'MaximumMessageSize': 'troll'}, retries=1) 
+            queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True, attributes={'MaximumMessageSize': 'troll'}, retries=1)
         except:
             pass
         else:
@@ -167,7 +167,7 @@ class TestQueueAttributesValidation(KikimrSqsTestBase):
             assert_that(attributes[attr], equal_to(custom_attributes[attr]))
 
         # get arn by default
-        assert_that(attributes['QueueArn'], equal_to('yrn:ya:sqs:ru-central1:' + self._username + ':' + self.queue_name)) 
+        assert_that(attributes['QueueArn'], equal_to('yrn:ya:sqs:ru-central1:' + self._username + ':' + self.queue_name))
 
         # okay, now we'll try to break it
         for attr in custom_attributes:

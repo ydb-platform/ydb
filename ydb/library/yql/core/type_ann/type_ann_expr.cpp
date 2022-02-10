@@ -519,7 +519,7 @@ private:
         if (it != Types.ExpectedTypes.end()) {
             YQL_ENSURE(IsSameAnnotation(*input.GetTypeAnn(), *it->second),
                 "Rewrite error, type should be : " <<
-                *it->second << ", but it is: " << *input.GetTypeAnn() << " for node " << input.Content()); 
+                *it->second << ", but it is: " << *input.GetTypeAnn() << " for node " << input.Content());
         }
 
         auto coIt = Types.ExpectedColumnOrders.find(input.UniqueId());

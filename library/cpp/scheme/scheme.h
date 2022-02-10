@@ -294,7 +294,7 @@ namespace NSc {
         static const EJsonOpts JO_SAFE = TJsonOpts::JO_SAFE;                                               // JO_SORT_KEYS | JO_SKIP_UNSAFE
         static const EJsonOpts JO_PARSER_STRICT_WITH_COMMENTS = TJsonOpts::JO_PARSER_STRICT_WITH_COMMENTS; // strict json + strict utf8
         static const EJsonOpts JO_PARSER_STRICT = TJsonOpts::JO_PARSER_STRICT;                             // strict json + strict utf8 + comments are disallowed
-        static const EJsonOpts JO_PARSER_DISALLOW_DUPLICATE_KEYS = TJsonOpts::JO_PARSER_DISALLOW_DUPLICATE_KEYS; 
+        static const EJsonOpts JO_PARSER_DISALLOW_DUPLICATE_KEYS = TJsonOpts::JO_PARSER_DISALLOW_DUPLICATE_KEYS;
 
         static TValue FromJson(TStringBuf, const TJsonOpts& = TJsonOpts());
         static TValue FromJsonThrow(TStringBuf, const TJsonOpts& = TJsonOpts());

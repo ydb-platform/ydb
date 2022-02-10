@@ -1,6 +1,6 @@
 #pragma once
-#include "pq_data_writer.h" 
- 
+#include "pq_data_writer.h"
+
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/test_pq_client.h>
 
@@ -46,12 +46,12 @@ private:
 
     void InitServer(bool enableReadQuoting);
     void InitQuoting();
-    void WaitWritePQServiceInitialization(); 
+    void WaitWritePQServiceInitialization();
 
 private:
     THolder<NPersQueue::TTestServer> Server;
-    THolder<TPQDataWriter> PQDataWriter; // For waiting for grpc writer service initialization. 
-    const NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity LimitedEntity; 
+    THolder<TPQDataWriter> PQDataWriter; // For waiting for grpc writer service initialization.
+    const NKikimrPQ::TPQConfig::TQuotingConfig::ELimitedEntity LimitedEntity;
     double WriteAccountQuota;
     double ReadAccountQuota;
     const TString QuotersRootPath = "/Root/PersQueue/System/Quoters";

@@ -19,7 +19,7 @@ namespace NCompressionDetails {
 }
 
 #define HISTOGRAM_SETUP NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
-TWriterCounters::TWriterCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters) { 
+TWriterCounters::TWriterCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters) {
     Errors = counters->GetCounter("errors", true);
     CurrentSessionLifetimeMs = counters->GetCounter("currentSessionLifetimeMs", false);
     BytesWritten = counters->GetCounter("bytesWritten", true);
@@ -38,7 +38,7 @@ TWriterCounters::TWriterCounters(const TIntrusivePtr<NMonitoring::TDynamicCounte
 
 TWriteSession::TWriteSession(
         const TWriteSessionSettings& settings,
-         std::shared_ptr<TPersQueueClient::TImpl> client, 
+         std::shared_ptr<TPersQueueClient::TImpl> client,
          std::shared_ptr<TGRpcConnectionsImpl> connections,
          TDbDriverStatePtr dbDriverState)
     : Settings(settings)
@@ -46,7 +46,7 @@ TWriteSession::TWriteSession(
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
     , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
-    , EventsQueue(std::make_shared<TWriteSessionEventsQueue>(Settings)) 
+    , EventsQueue(std::make_shared<TWriteSessionEventsQueue>(Settings))
     , InitSeqNoPromise(NThreading::NewPromise<ui64>())
     , WakeupInterval(
             Settings.BatchFlushInterval_.GetOrElse(TDuration::Zero()) ?
@@ -58,8 +58,8 @@ TWriteSession::TWriteSession(
     if (!Settings.RetryPolicy_) {
         Settings.RetryPolicy_ = IRetryPolicy::GetDefaultPolicy();
     }
-    if (Settings.PreferredCluster_ && !Settings.AllowFallbackToOtherClusters_) { 
-        TargetCluster = *Settings.PreferredCluster_; 
+    if (Settings.PreferredCluster_ && !Settings.AllowFallbackToOtherClusters_) {
+        TargetCluster = *Settings.PreferredCluster_;
         TargetCluster.to_lower();
     }
     if (Settings.Counters_.Defined()) {
@@ -94,7 +94,7 @@ TWriteSession::THandleResult TWriteSession::RestartImpl(const TPlainStatus& stat
     if (!RetryState) {
         RetryState = Settings.RetryPolicy_->CreateRetryState();
     }
-    nextDelay = RetryState->GetNextRetryDelay(TPlainStatus(status)); 
+    nextDelay = RetryState->GetNextRetryDelay(TPlainStatus(status));
 
     if (nextDelay) {
         result.StartDelay = *nextDelay;
@@ -145,8 +145,8 @@ void TWriteSession::DoCdsRequest(TDuration delay) {
     params->set_source_id(Settings.MessageGroupId_);
     if (Settings.PartitionGroupId_.Defined())
         params->set_partition_group(*Settings.PartitionGroupId_);
-    if (Settings.PreferredCluster_.Defined()) 
-        params->set_preferred_cluster_name(*Settings.PreferredCluster_); 
+    if (Settings.PreferredCluster_.Defined())
+        params->set_preferred_cluster_name(*Settings.PreferredCluster_);
 
     auto weakConnections = std::weak_ptr<TGRpcConnectionsImpl>(Connections);
     DbDriverState->Log << TLOG_INFO << LogPrefix() << "Do schedule cds request after " << delay.MilliSeconds() << " ms\n";
@@ -214,7 +214,7 @@ void TWriteSession::OnCdsResponse(
                                                  << normalizedName);
             } else {
                 name = clusterInfo.name();
-                endpoint = ApplyClusterEndpoint(DbDriverState->DiscoveryEndpoint, clusterInfo.endpoint()); 
+                endpoint = ApplyClusterEndpoint(DbDriverState->DiscoveryEndpoint, clusterInfo.endpoint());
                 break;
             }
         }
@@ -286,7 +286,7 @@ TMaybe<TWriteSessionEvent::TEvent> TWriteSession::GetEvent(bool block) {
 
 // Client method
 TVector<TWriteSessionEvent::TEvent> TWriteSession::GetEvents(bool block, TMaybe<size_t> maxEventsCount) {
-    return EventsQueue->GetEvents(block, maxEventsCount); 
+    return EventsQueue->GetEvents(block, maxEventsCount);
 }
 
 // Only called under lock
@@ -299,8 +299,8 @@ ui64 TWriteSession::GetNextSeqNoImpl(const TMaybe<ui64>& seqNo) {
             OnSeqNoShift = false;
             SeqNoShift = 0;
         }
-    } 
-    if (seqNo.Defined()) { 
+    }
+    if (seqNo.Defined()) {
         if (*AutoSeqNoMode) {
             DbDriverState->Log << TLOG_ERR << LogPrefix() << "Cannot call write() with defined SeqNo on WriteSession running in auto-seqNo mode";
             ThrowFatalError(
@@ -468,13 +468,13 @@ void TWriteSession::OnConnectTimeout(const NGrpc::IQueueClientContextPtr& connec
         } else {
             return;
         }
-        TStringBuilder description; 
-        description << "Failed to establish connection to server. Attempts done: " << ConnectionAttemptsDone; 
+        TStringBuilder description;
+        description << "Failed to establish connection to server. Attempts done: " << ConnectionAttemptsDone;
         handleResult = RestartImpl(TPlainStatus(EStatus::TIMEOUT, description));
         if (handleResult.DoStop) {
             CloseImpl(
                     EStatus::TIMEOUT,
-                    description 
+                    description
             );
         }
     }
@@ -790,9 +790,9 @@ bool TWriteSession::CleanupOnAcknowledged(ui64 sequenceNumber) {
 // Only called under Lock
 TMemoryUsageChange TWriteSession::OnMemoryUsageChangedImpl(i64 diff) {
     bool wasOk = MemoryUsage <= Settings.MaxMemoryUsage_;
-    //if (diff < 0) { 
-    //    Y_VERIFY(MemoryUsage >= static_cast<size_t>(std::abs(diff))); 
-    //} 
+    //if (diff < 0) {
+    //    Y_VERIFY(MemoryUsage >= static_cast<size_t>(std::abs(diff)));
+    //}
     MemoryUsage += diff;
     bool nowOk = MemoryUsage <= Settings.MaxMemoryUsage_;
     if (wasOk != nowOk) {
@@ -1217,7 +1217,7 @@ TWriteSession::~TWriteSession() {
 
 TSimpleBlockingWriteSession::TSimpleBlockingWriteSession(
         const TWriteSessionSettings& settings,
-        std::shared_ptr<TPersQueueClient::TImpl> client, 
+        std::shared_ptr<TPersQueueClient::TImpl> client,
         std::shared_ptr<TGRpcConnectionsImpl> connections,
         TDbDriverStatePtr dbDriverState
 ) {

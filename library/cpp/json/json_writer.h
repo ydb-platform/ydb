@@ -5,7 +5,7 @@
 #include "json_value.h"
 
 #include <library/cpp/json/writer/json.h>
- 
+
 #include <util/stream/output.h>
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
@@ -133,7 +133,7 @@ namespace NJson {
             Buf.WriteKey(key);
             Write(value);
         }
- 
+
         // write raw json without checks
         void UnsafeWrite(const TStringBuf& key, const TStringBuf& value) {
             Buf.WriteKey(key);
@@ -144,7 +144,7 @@ namespace NJson {
             Buf.WriteKey(key);
             WriteNull();
         }
- 
+
         template <typename T>
         void WriteOptional(const TStringBuf& key, const TMaybe<T>& value) {
             if (value) {

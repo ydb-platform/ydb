@@ -1,11 +1,11 @@
-#include "factories.h" 
- 
-namespace NKikimr { 
- 
-TModuleFactories::~TModuleFactories() { 
-    if (PqCmConnections) { 
-        PqCmConnections->Stop(true); 
-    } 
-} 
- 
-} // namespace NKikimr 
+#include "factories.h"
+
+namespace NKikimr {
+
+TModuleFactories::~TModuleFactories() {
+    if (PqCmConnections) {
+        PqCmConnections->Stop(true);
+    }
+}
+
+} // namespace NKikimr

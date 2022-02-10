@@ -1,7 +1,7 @@
 #include "action.h"
-#include "error.h" 
-#include "executor.h" 
-#include "log.h" 
+#include "error.h"
+#include "executor.h"
+#include "log.h"
 #include "params.h"
 
 #include <ydb/core/ymq/base/helpers.h>
@@ -13,40 +13,40 @@
 
 using NKikimr::NClient::TValue;
 
-namespace NKikimr::NSQS { 
+namespace NKikimr::NSQS {
 
 class TDeleteMessageActor
     : public TActionActor<TDeleteMessageActor>
 {
 public:
-    TDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb) 
-        : TActionActor(sourceSqsRequest, isBatch ? EAction::DeleteMessageBatch : EAction::DeleteMessage, std::move(cb)) 
-        , IsBatch_(isBatch) 
+    TDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, bool isBatch, THolder<IReplyCallback> cb)
+        : TActionActor(sourceSqsRequest, isBatch ? EAction::DeleteMessageBatch : EAction::DeleteMessage, std::move(cb))
+        , IsBatch_(isBatch)
     {
-        if (IsBatch_) { 
-            CopyAccountName(BatchRequest()); 
-            Response_.MutableDeleteMessageBatch()->SetRequestId(RequestId_); 
-            CopySecurityToken(BatchRequest()); 
-        } else { 
-            CopyAccountName(Request()); 
-            Response_.MutableDeleteMessage()->SetRequestId(RequestId_); 
-            CopySecurityToken(Request()); 
-        } 
+        if (IsBatch_) {
+            CopyAccountName(BatchRequest());
+            Response_.MutableDeleteMessageBatch()->SetRequestId(RequestId_);
+            CopySecurityToken(BatchRequest());
+        } else {
+            CopyAccountName(Request());
+            Response_.MutableDeleteMessage()->SetRequestId(RequestId_);
+            CopySecurityToken(Request());
+        }
     }
 
     bool DoValidate() override {
         if (!GetQueueName()) {
-            MakeError(Response_.MutableDeleteMessage(), NErrors::MISSING_PARAMETER, "No QueueName parameter."); 
+            MakeError(Response_.MutableDeleteMessage(), NErrors::MISSING_PARAMETER, "No QueueName parameter.");
             return false;
         }
 
         if (IsBatch_) {
-            if (BatchRequest().EntriesSize() == 0) { 
-                MakeError(Response_.MutableDeleteMessageBatch(), NErrors::EMPTY_BATCH_REQUEST); 
+            if (BatchRequest().EntriesSize() == 0) {
+                MakeError(Response_.MutableDeleteMessageBatch(), NErrors::EMPTY_BATCH_REQUEST);
                 return false;
-            } else if (BatchRequest().EntriesSize() > TLimits::MaxBatchSize) { 
-                MakeError(Response_.MutableDeleteMessageBatch(), NErrors::TOO_MANY_ENTRIES_IN_BATCH_REQUEST); 
-                return false; 
+            } else if (BatchRequest().EntriesSize() > TLimits::MaxBatchSize) {
+                MakeError(Response_.MutableDeleteMessageBatch(), NErrors::TOO_MANY_ENTRIES_IN_BATCH_REQUEST);
+                return false;
             }
         }
 
@@ -54,55 +54,55 @@ public:
     }
 
 private:
-    void AppendEntry(const TDeleteMessageRequest& entry, TDeleteMessageResponse* resp, size_t requestIndexInBatch) { 
+    void AppendEntry(const TDeleteMessageRequest& entry, TDeleteMessageResponse* resp, size_t requestIndexInBatch) {
         try {
-            // Validate 
-            const TReceipt receipt = DecodeReceiptHandle(entry.GetReceiptHandle()); // can throw 
-            RLOG_SQS_DEBUG("Decoded receipt handle: " << receipt); 
-            if (receipt.GetShard() >= Shards_) { 
-                throw yexception() << "Invalid shard: " << receipt.GetShard(); 
-            } 
-
-            const bool isFifo = IsFifoQueue(); 
-            if (isFifo && !receipt.GetMessageGroupId()) { 
-                throw yexception() << "No message group id"; 
-            } 
-
-            auto& shardInfo = ShardInfo_[receipt.GetShard()]; 
-            // Create request 
-            if (!shardInfo.Request_) { 
-                ++RequestsToLeader_;
-                shardInfo.Request_ = MakeHolder<TSqsEvents::TEvDeleteMessageBatch>(); 
-                shardInfo.Request_->Shard = receipt.GetShard(); 
-                shardInfo.Request_->RequestId = RequestId_; 
+            // Validate
+            const TReceipt receipt = DecodeReceiptHandle(entry.GetReceiptHandle()); // can throw
+            RLOG_SQS_DEBUG("Decoded receipt handle: " << receipt);
+            if (receipt.GetShard() >= Shards_) {
+                throw yexception() << "Invalid shard: " << receipt.GetShard();
             }
- 
-            // Add new message to shard request 
-            if (IsBatch_) { 
-                shardInfo.RequestToReplyIndexMapping_.push_back(requestIndexInBatch); 
-            } 
-            shardInfo.Request_->Messages.emplace_back(); 
-            auto& msgReq = shardInfo.Request_->Messages.back(); 
-            msgReq.Offset = receipt.GetOffset(); 
-            const TInstant lockTimestamp = TInstant::MilliSeconds(receipt.GetLockTimestamp()); 
-            msgReq.LockTimestamp = lockTimestamp; 
-            if (isFifo) { 
-                msgReq.MessageGroupId = receipt.GetMessageGroupId(); 
-                msgReq.ReceiveAttemptId = receipt.GetReceiveRequestAttemptId(); 
-            } 
- 
-            // Calc metrics 
-            const TDuration processingDuration = TActivationContext::Now() - lockTimestamp; 
-            COLLECT_HISTOGRAM_COUNTER(QueueCounters_, ClientMessageProcessing_Duration, processingDuration.MilliSeconds()); 
+
+            const bool isFifo = IsFifoQueue();
+            if (isFifo && !receipt.GetMessageGroupId()) {
+                throw yexception() << "No message group id";
+            }
+
+            auto& shardInfo = ShardInfo_[receipt.GetShard()];
+            // Create request
+            if (!shardInfo.Request_) {
+                ++RequestsToLeader_;
+                shardInfo.Request_ = MakeHolder<TSqsEvents::TEvDeleteMessageBatch>();
+                shardInfo.Request_->Shard = receipt.GetShard();
+                shardInfo.Request_->RequestId = RequestId_;
+            }
+
+            // Add new message to shard request
+            if (IsBatch_) {
+                shardInfo.RequestToReplyIndexMapping_.push_back(requestIndexInBatch);
+            }
+            shardInfo.Request_->Messages.emplace_back();
+            auto& msgReq = shardInfo.Request_->Messages.back();
+            msgReq.Offset = receipt.GetOffset();
+            const TInstant lockTimestamp = TInstant::MilliSeconds(receipt.GetLockTimestamp());
+            msgReq.LockTimestamp = lockTimestamp;
+            if (isFifo) {
+                msgReq.MessageGroupId = receipt.GetMessageGroupId();
+                msgReq.ReceiveAttemptId = receipt.GetReceiveRequestAttemptId();
+            }
+
+            // Calc metrics
+            const TDuration processingDuration = TActivationContext::Now() - lockTimestamp;
+            COLLECT_HISTOGRAM_COUNTER(QueueCounters_, ClientMessageProcessing_Duration, processingDuration.MilliSeconds());
             COLLECT_HISTOGRAM_COUNTER(QueueCounters_, client_processing_duration_milliseconds, processingDuration.MilliSeconds());
         } catch (...) {
-            RLOG_SQS_WARN("Failed to process receipt handle " << entry.GetReceiptHandle() << ": " << CurrentExceptionMessage()); 
-            MakeError(resp, NErrors::RECEIPT_HANDLE_IS_INVALID); 
+            RLOG_SQS_WARN("Failed to process receipt handle " << entry.GetReceiptHandle() << ": " << CurrentExceptionMessage());
+            MakeError(resp, NErrors::RECEIPT_HANDLE_IS_INVALID);
         }
     }
 
-    void ProcessAnswer(TDeleteMessageResponse* resp, const TSqsEvents::TEvDeleteMessageBatchResponse::TMessageResult& answer) { 
-        switch (answer.Status) { 
+    void ProcessAnswer(TDeleteMessageResponse* resp, const TSqsEvents::TEvDeleteMessageBatchResponse::TMessageResult& answer) {
+        switch (answer.Status) {
             case TSqsEvents::TEvDeleteMessageBatchResponse::EDeleteMessageStatus::OK: {
                 INC_COUNTER_COUPLE(QueueCounters_, DeleteMessage_Count, deleted_count_per_second);
                 break;
@@ -118,95 +118,95 @@ private:
         }
     }
 
-    TError* MutableErrorDesc() override { 
-        return IsBatch_ ? Response_.MutableDeleteMessageBatch()->MutableError() : Response_.MutableDeleteMessage()->MutableError(); 
-    } 
- 
-    void DoAction() override { 
+    TError* MutableErrorDesc() override {
+        return IsBatch_ ? Response_.MutableDeleteMessageBatch()->MutableError() : Response_.MutableDeleteMessage()->MutableError();
+    }
+
+    void DoAction() override {
         Become(&TThis::StateFunc);
-        ShardInfo_.resize(Shards_); 
- 
+        ShardInfo_.resize(Shards_);
+
         if (IsBatch_) {
-            for (size_t i = 0, size = BatchRequest().EntriesSize(); i < size; ++i) { 
-                const auto& entry = BatchRequest().GetEntries(i); 
-                auto* response = Response_.MutableDeleteMessageBatch()->AddEntries(); 
-                response->SetId(entry.GetId()); 
-                AppendEntry(entry, response, i); 
-            } 
-        } else { 
-            AppendEntry(Request(), Response_.MutableDeleteMessage(), 0); 
-        } 
+            for (size_t i = 0, size = BatchRequest().EntriesSize(); i < size; ++i) {
+                const auto& entry = BatchRequest().GetEntries(i);
+                auto* response = Response_.MutableDeleteMessageBatch()->AddEntries();
+                response->SetId(entry.GetId());
+                AppendEntry(entry, response, i);
+            }
+        } else {
+            AppendEntry(Request(), Response_.MutableDeleteMessage(), 0);
+        }
 
         if (RequestsToLeader_) {
             Y_VERIFY(RequestsToLeader_ <= Shards_);
-            for (auto& shardInfo : ShardInfo_) { 
-                if (shardInfo.Request_) { 
+            for (auto& shardInfo : ShardInfo_) {
+                if (shardInfo.Request_) {
                     Send(QueueLeader_, shardInfo.Request_.Release());
                 }
             }
         } else {
-            SendReplyAndDie(); 
+            SendReplyAndDie();
         }
     }
 
     TString DoGetQueueName() const override {
-        return IsBatch_ ? BatchRequest().GetQueueName() : Request().GetQueueName(); 
+        return IsBatch_ ? BatchRequest().GetQueueName() : Request().GetQueueName();
     }
 
-    STATEFN(StateFunc) { 
+    STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvWakeup, HandleWakeup); 
-            hFunc(TSqsEvents::TEvDeleteMessageBatchResponse, HandleDeleteMessageBatchResponse); 
+            hFunc(TEvWakeup, HandleWakeup);
+            hFunc(TSqsEvents::TEvDeleteMessageBatchResponse, HandleDeleteMessageBatchResponse);
         }
     }
 
-    void HandleDeleteMessageBatchResponse(TSqsEvents::TEvDeleteMessageBatchResponse::TPtr& ev) { 
-        if (IsBatch_) { 
-            Y_VERIFY(ev->Get()->Shard < Shards_); 
-            const auto& shardInfo = ShardInfo_[ev->Get()->Shard]; 
-            Y_VERIFY(ev->Get()->Statuses.size() == shardInfo.RequestToReplyIndexMapping_.size()); 
-            for (size_t i = 0, size = ev->Get()->Statuses.size(); i < size; ++i) { 
-                const size_t entryIndex = shardInfo.RequestToReplyIndexMapping_[i]; 
-                Y_VERIFY(entryIndex < Response_.GetDeleteMessageBatch().EntriesSize()); 
-                ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(entryIndex), ev->Get()->Statuses[i]); 
+    void HandleDeleteMessageBatchResponse(TSqsEvents::TEvDeleteMessageBatchResponse::TPtr& ev) {
+        if (IsBatch_) {
+            Y_VERIFY(ev->Get()->Shard < Shards_);
+            const auto& shardInfo = ShardInfo_[ev->Get()->Shard];
+            Y_VERIFY(ev->Get()->Statuses.size() == shardInfo.RequestToReplyIndexMapping_.size());
+            for (size_t i = 0, size = ev->Get()->Statuses.size(); i < size; ++i) {
+                const size_t entryIndex = shardInfo.RequestToReplyIndexMapping_[i];
+                Y_VERIFY(entryIndex < Response_.GetDeleteMessageBatch().EntriesSize());
+                ProcessAnswer(Response_.MutableDeleteMessageBatch()->MutableEntries(entryIndex), ev->Get()->Statuses[i]);
             }
         } else {
             Y_VERIFY(RequestsToLeader_ == 1);
-            Y_VERIFY(ev->Get()->Statuses.size() == 1); 
-            ProcessAnswer(Response_.MutableDeleteMessage(), ev->Get()->Statuses[0]); 
+            Y_VERIFY(ev->Get()->Statuses.size() == 1);
+            ProcessAnswer(Response_.MutableDeleteMessage(), ev->Get()->Statuses[0]);
         }
 
         --RequestsToLeader_;
         if (RequestsToLeader_ == 0) {
-            SendReplyAndDie(); 
+            SendReplyAndDie();
         }
     }
 
-    const TDeleteMessageRequest& Request() const { 
-        return SourceSqsRequest_.GetDeleteMessage(); 
-    } 
- 
-    const TDeleteMessageBatchRequest& BatchRequest() const { 
-        return SourceSqsRequest_.GetDeleteMessageBatch(); 
-    } 
- 
+    const TDeleteMessageRequest& Request() const {
+        return SourceSqsRequest_.GetDeleteMessage();
+    }
+
+    const TDeleteMessageBatchRequest& BatchRequest() const {
+        return SourceSqsRequest_.GetDeleteMessageBatch();
+    }
+
 private:
     const bool IsBatch_;
 
-    struct TShardInfo { 
-        std::vector<size_t> RequestToReplyIndexMapping_; 
-        THolder<TSqsEvents::TEvDeleteMessageBatch> Request_; // actual when processing initial request, then nullptr 
-    }; 
+    struct TShardInfo {
+        std::vector<size_t> RequestToReplyIndexMapping_;
+        THolder<TSqsEvents::TEvDeleteMessageBatch> Request_; // actual when processing initial request, then nullptr
+    };
     size_t RequestsToLeader_ = 0;
-    std::vector<TShardInfo> ShardInfo_; 
+    std::vector<TShardInfo> ShardInfo_;
 };
 
-IActor* CreateDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) { 
-    return new TDeleteMessageActor(sourceSqsRequest, false, std::move(cb)); 
+IActor* CreateDeleteMessageActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+    return new TDeleteMessageActor(sourceSqsRequest, false, std::move(cb));
 }
 
-IActor* CreateDeleteMessageBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) { 
-    return new TDeleteMessageActor(sourceSqsRequest, true, std::move(cb)); 
+IActor* CreateDeleteMessageBatchActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {
+    return new TDeleteMessageActor(sourceSqsRequest, true, std::move(cb));
 }
 
-} // namespace NKikimr::NSQS 
+} // namespace NKikimr::NSQS

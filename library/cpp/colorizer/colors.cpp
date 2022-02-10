@@ -1,6 +1,6 @@
 #include "colors.h"
 
-#include <util/stream/output.h> 
+#include <util/stream/output.h>
 #include <util/generic/singleton.h>
 #include <util/system/env.h>
 
@@ -166,10 +166,10 @@ bool TColors::CalcIsTTY(FILE* file) {
 #endif
 }
 
-TColors::TColors(FILE* f) 
+TColors::TColors(FILE* f)
     : IsTTY_(true)
 {
-    SetIsTTY(CalcIsTTY(f)); 
+    SetIsTTY(CalcIsTTY(f));
 }
 
 TColors::TColors(bool ontty)
@@ -418,7 +418,7 @@ TStringBuf TColors::WhiteColor() const noexcept {
 }
 
 
-namespace { 
+namespace {
     class TStdErrColors: public TColors {
     public:
         TStdErrColors()
@@ -426,24 +426,24 @@ namespace {
         {
         }
     };
- 
-    class TStdOutColors: public TColors { 
-    public: 
-        TStdOutColors() 
-            : TColors(stdout) 
-        { 
-        } 
-    }; 
- 
-    class TDisabledColors: public TColors { 
-    public: 
-        TDisabledColors() 
-            : TColors(false) 
-        { 
-        } 
-    }; 
-} // anonymous namespace 
- 
+
+    class TStdOutColors: public TColors {
+    public:
+        TStdOutColors()
+            : TColors(stdout)
+        {
+        }
+    };
+
+    class TDisabledColors: public TColors {
+    public:
+        TDisabledColors()
+            : TColors(false)
+        {
+        }
+    };
+} // anonymous namespace
+
 TColors& NColorizer::StdErr() {
     return *Singleton<TStdErrColors>();
 }
@@ -453,13 +453,13 @@ TColors& NColorizer::StdOut() {
 }
 
 TColors& NColorizer::AutoColors(IOutputStream& os) {
-    if (&os == &Cerr) { 
-        return StdErr(); 
-    } 
-    if (&os == &Cout) { 
-        return StdOut(); 
-    } 
-    return *Singleton<TDisabledColors>(); 
+    if (&os == &Cerr) {
+        return StdErr();
+    }
+    if (&os == &Cout) {
+        return StdOut();
+    }
+    return *Singleton<TDisabledColors>();
 }
 
 size_t NColorizer::TotalAnsiEscapeCodeLen(TStringBuf text) {

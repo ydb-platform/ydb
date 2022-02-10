@@ -23,16 +23,16 @@ TString BinaryPath(TStringBuf path);
 
 // @brief return true if environment is testenv otherwise false
 bool FromYaTest();
- 
+
 // @brief returns TestsData dir (from env:ARCADIA_TESTS_DATA_DIR or path to existing folder `arcadia_tests_data` within parent folders)
 TString GetArcadiaTestsData();
 
 // @brief return current working dir (from env:TEST_WORK_PATH or cwd)
 TString GetWorkPath();
- 
+
 // @brief return tests output path (workdir + testing_out_stuff)
 TFsPath GetOutputPath();
- 
+
 // @brief return path from env:YA_TEST_RAM_DRIVE_PATH
 const TString& GetRamDrivePath();
 

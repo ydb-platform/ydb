@@ -1,45 +1,45 @@
 #include "actor.h"
 #include "action.h"
-#include "ping.h" 
-#include "proxy_actor.h" 
+#include "ping.h"
+#include "proxy_actor.h"
 
-#include <util/system/defaults.h> 
- 
+#include <util/system/defaults.h>
+
 using namespace NKikimrTxUserProxy;
 
-namespace NKikimr::NSQS { 
+namespace NKikimr::NSQS {
 
 class TUnimplementedRequestActor
     : public TActionActor<TUnimplementedRequestActor>
 {
 public:
-    TUnimplementedRequestActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb) 
-        : TActionActor(req, EAction::Unknown, std::move(cb)) 
+    TUnimplementedRequestActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb)
+        : TActionActor(req, EAction::Unknown, std::move(cb))
     {
         Response_.MutableGetQueueUrl()->SetRequestId(RequestId_);
     }
 
 private:
-    void DoAction() override { 
-        SendReplyAndDie(); 
+    void DoAction() override {
+        SendReplyAndDie();
     }
 
-    TError* MutableErrorDesc() override { 
-        return Response_.MutableGetQueueUrl()->MutableError(); 
-    } 
- 
+    TError* MutableErrorDesc() override {
+        return Response_.MutableGetQueueUrl()->MutableError();
+    }
+
     TString DoGetQueueName() const override {
         return TString();
     }
 };
 
-IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb) { 
-    Y_VERIFY(req.GetRequestId()); 
+IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb) {
+    Y_VERIFY(req.GetRequestId());
 
 #define REQUEST_CASE(action) \
-    case NKikimrClient::TSqsRequest::Y_CAT(k, action): {                \ 
-        extern IActor* Y_CAT(Y_CAT(Create, action), Actor)(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb); \ 
-        return Y_CAT(Y_CAT(Create, action), Actor)(req, std::move(cb));  \ 
+    case NKikimrClient::TSqsRequest::Y_CAT(k, action): {                \
+        extern IActor* Y_CAT(Y_CAT(Create, action), Actor)(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb); \
+        return Y_CAT(Y_CAT(Create, action), Actor)(req, std::move(cb));  \
     }
 
     switch (req.GetRequestCase()) {
@@ -50,17 +50,17 @@ IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyC
         REQUEST_CASE(DeleteMessage)
         REQUEST_CASE(DeleteMessageBatch)
         REQUEST_CASE(DeleteQueue)
-        REQUEST_CASE(DeleteQueueBatch) 
+        REQUEST_CASE(DeleteQueueBatch)
         REQUEST_CASE(DeleteUser)
         REQUEST_CASE(ListPermissions)
         REQUEST_CASE(GetQueueAttributes)
-        REQUEST_CASE(GetQueueAttributesBatch) 
+        REQUEST_CASE(GetQueueAttributesBatch)
         REQUEST_CASE(GetQueueUrl)
         REQUEST_CASE(ListQueues)
         REQUEST_CASE(ListUsers)
         REQUEST_CASE(ModifyPermissions)
         REQUEST_CASE(PurgeQueue)
-        REQUEST_CASE(PurgeQueueBatch) 
+        REQUEST_CASE(PurgeQueueBatch)
         REQUEST_CASE(ReceiveMessage)
         REQUEST_CASE(SendMessage)
         REQUEST_CASE(SendMessageBatch)
@@ -71,7 +71,7 @@ IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyC
 #undef REQUEST_CASE
 
         case NKikimrClient::TSqsRequest::REQUEST_NOT_SET:
-            return new TUnimplementedRequestActor(req, std::move(cb)); 
+            return new TUnimplementedRequestActor(req, std::move(cb));
     }
 
     Y_FAIL();
@@ -79,14 +79,14 @@ IActor* CreateActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyC
 
 IActor* CreateProxyActionActor(const NKikimrClient::TSqsRequest& req, THolder<IReplyCallback> cb, bool enableQueueLeader) {
     if (enableQueueLeader && TProxyActor::NeedCreateProxyActor(req)) {
-        return new TProxyActor(req, std::move(cb)); 
-    } else { 
-        return CreateActionActor(req, std::move(cb)); 
-    } 
-} 
- 
-IActor* CreatePingActor(THolder<IPingReplyCallback> cb, const TString& requestId) { 
-    return new TPingActor(std::move(cb), requestId); 
-} 
- 
-} // namespace NKikimr::NSQS 
+        return new TProxyActor(req, std::move(cb));
+    } else {
+        return CreateActionActor(req, std::move(cb));
+    }
+}
+
+IActor* CreatePingActor(THolder<IPingReplyCallback> cb, const TString& requestId) {
+    return new TPingActor(std::move(cb), requestId);
+}
+
+} // namespace NKikimr::NSQS

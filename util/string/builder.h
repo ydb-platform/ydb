@@ -4,14 +4,14 @@
 #include <utility>
 #include <util/generic/string.h>
 
-namespace NPrivateStringBuilder { 
+namespace NPrivateStringBuilder {
     class TStringBuilder: public TString {
     public:
         inline TStringBuilder()
             : Out(*this)
         {
         }
- 
+
         TStringBuilder(TStringBuilder&& rhs)
             : TString(std::move(rhs))
             , Out(*this)
@@ -31,9 +31,9 @@ namespace NPrivateStringBuilder {
     template <class T>
     static inline TStringBuilder&& operator<<(TStringBuilder&& builder, const T& t) {
         builder.Out << t;
- 
+
         return std::move(builder);
     }
-} 
- 
-using TStringBuilder = NPrivateStringBuilder::TStringBuilder; 
+}
+
+using TStringBuilder = NPrivateStringBuilder::TStringBuilder;

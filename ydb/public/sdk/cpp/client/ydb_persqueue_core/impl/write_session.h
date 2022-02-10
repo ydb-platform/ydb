@@ -21,86 +21,86 @@ inline const TString& GetCodecId(const ECodec codec) {
     return idByCodec[codec];
 }
 
-class TWriteSessionEventsQueue : public TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent> { 
-    using TParent = TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent>; 
+class TWriteSessionEventsQueue : public TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent> {
+    using TParent = TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent>;
 public:
     TWriteSessionEventsQueue(const TWriteSessionSettings& settings)
     : TParent(settings)
     {}
 
-    void PushEvent(TEventInfo eventInfo) { 
+    void PushEvent(TEventInfo eventInfo) {
         if (Closed || ApplyHandler(eventInfo)) {
-            return; 
-        } 
- 
-        TWaiter waiter; 
-        with_lock (Mutex) { 
-            Events.emplace(std::move(eventInfo)); 
-            waiter = PopWaiterImpl(); 
-        } 
-        waiter.Signal(); // Does nothing if waiter is empty. 
-    } 
- 
-    TMaybe<TEvent> GetEvent(bool block = false) { 
-        TMaybe<TEventInfo> eventInfo; 
-        with_lock (Mutex) { 
-            if (block) { 
-                WaitEventsImpl(); 
-            } 
-            if (HasEventsImpl()) { 
-                eventInfo = GetEventImpl(); 
-            } else { 
-                return Nothing(); 
-            } 
-        } 
-        eventInfo->OnUserRetrievedEvent(); 
-        return std::move(eventInfo->Event); 
-    } 
- 
-    TVector<TEvent> GetEvents(bool block = false, TMaybe<size_t> maxEventsCount = Nothing()) { 
-        TVector<TEventInfo> eventInfos; 
-        with_lock (Mutex) { 
-            if (block) { 
-                WaitEventsImpl(); 
-            } 
-            eventInfos.reserve(Min(Events.size() + CloseEvent.Defined(), maxEventsCount ? *maxEventsCount : std::numeric_limits<size_t>::max())); 
-            while (!Events.empty()) { 
-                eventInfos.emplace_back(GetEventImpl()); 
-                if (maxEventsCount && eventInfos.size() >= *maxEventsCount) { 
-                    break; 
-                } 
-            } 
-            if (CloseEvent && Events.empty() && (!maxEventsCount || eventInfos.size() < *maxEventsCount)) { 
-                eventInfos.push_back({*CloseEvent}); 
-            } 
-        } 
- 
-        TVector<TEvent> result; 
-        result.reserve(eventInfos.size()); 
-        for (TEventInfo& eventInfo : eventInfos) { 
-            eventInfo.OnUserRetrievedEvent(); 
-            result.emplace_back(std::move(eventInfo.Event)); 
-        } 
-        return result; 
-    } 
- 
-    void Close(const TSessionClosedEvent& event) { 
+            return;
+        }
+
         TWaiter waiter;
-        with_lock (Mutex) { 
-            CloseEvent = event; 
-            Closed = true; 
+        with_lock (Mutex) {
+            Events.emplace(std::move(eventInfo));
+            waiter = PopWaiterImpl();
+        }
+        waiter.Signal(); // Does nothing if waiter is empty.
+    }
+
+    TMaybe<TEvent> GetEvent(bool block = false) {
+        TMaybe<TEventInfo> eventInfo;
+        with_lock (Mutex) {
+            if (block) {
+                WaitEventsImpl();
+            }
+            if (HasEventsImpl()) {
+                eventInfo = GetEventImpl();
+            } else {
+                return Nothing();
+            }
+        }
+        eventInfo->OnUserRetrievedEvent();
+        return std::move(eventInfo->Event);
+    }
+
+    TVector<TEvent> GetEvents(bool block = false, TMaybe<size_t> maxEventsCount = Nothing()) {
+        TVector<TEventInfo> eventInfos;
+        with_lock (Mutex) {
+            if (block) {
+                WaitEventsImpl();
+            }
+            eventInfos.reserve(Min(Events.size() + CloseEvent.Defined(), maxEventsCount ? *maxEventsCount : std::numeric_limits<size_t>::max()));
+            while (!Events.empty()) {
+                eventInfos.emplace_back(GetEventImpl());
+                if (maxEventsCount && eventInfos.size() >= *maxEventsCount) {
+                    break;
+                }
+            }
+            if (CloseEvent && Events.empty() && (!maxEventsCount || eventInfos.size() < *maxEventsCount)) {
+                eventInfos.push_back({*CloseEvent});
+            }
+        }
+
+        TVector<TEvent> result;
+        result.reserve(eventInfos.size());
+        for (TEventInfo& eventInfo : eventInfos) {
+            eventInfo.OnUserRetrievedEvent();
+            result.emplace_back(std::move(eventInfo.Event));
+        }
+        return result;
+    }
+
+    void Close(const TSessionClosedEvent& event) {
+        TWaiter waiter;
+        with_lock (Mutex) {
+            CloseEvent = event;
+            Closed = true;
             waiter = TWaiter(Waiter.ExtractPromise(), this);
-        } 
- 
+        }
+
         TEventInfo info(event);
         ApplyHandler(info);
- 
+
         waiter.Signal();
-    } 
- 
+    }
+
 private:
-    struct THandlersVisitor : public TParent::TBaseHandlersVisitor { 
-        using TParent::TBaseHandlersVisitor::TBaseHandlersVisitor; 
+    struct THandlersVisitor : public TParent::TBaseHandlersVisitor {
+        using TParent::TBaseHandlersVisitor::TBaseHandlersVisitor;
 #define DECLARE_HANDLER(type, handler, answer)          \
         bool operator()(type& event) {                  \
             if (Settings.EventHandlers_.handler) {      \
@@ -115,7 +115,7 @@ private:
         DECLARE_HANDLER(TSessionClosedEvent, SessionClosedHandler_, false); // Not applied
 
 #undef DECLARE_HANDLER
-        bool Visit() { 
+        bool Visit() {
             return std::visit(*this, EventInfo.Event);
         }
 
@@ -125,18 +125,18 @@ private:
         THandlersVisitor visitor(Settings, eventInfo);
         return visitor.Visit();
     }
- 
-    TEventInfo GetEventImpl() { // Assumes that we're under lock and that the event queue has events. 
-        Y_ASSERT(HasEventsImpl()); 
-        if (!Events.empty()) { 
-            TEventInfo event = std::move(Events.front()); 
-            Events.pop(); 
+
+    TEventInfo GetEventImpl() { // Assumes that we're under lock and that the event queue has events.
+        Y_ASSERT(HasEventsImpl());
+        if (!Events.empty()) {
+            TEventInfo event = std::move(Events.front());
+            Events.pop();
             RenewWaiterImpl();
-            return event; 
-        } 
-        Y_ASSERT(CloseEvent); 
-        return {*CloseEvent}; 
-    } 
+            return event;
+        }
+        Y_ASSERT(CloseEvent);
+        return {*CloseEvent};
+    }
 };
 
 struct TMemoryUsageChange {
@@ -149,16 +149,16 @@ namespace NTests {
 }
 
 class TWriteSession : public IWriteSession,
-                      public std::enable_shared_from_this<TWriteSession> { 
+                      public std::enable_shared_from_this<TWriteSession> {
 private:
     friend class TSimpleBlockingWriteSession;
-    friend class TPersQueueClient; 
+    friend class TPersQueueClient;
     friend class NTests::TSimpleWriteSessionTestAdapter;
 
     using TClientMessage = Ydb::PersQueue::V1::StreamingWriteClientMessage;
     using TServerMessage = Ydb::PersQueue::V1::StreamingWriteServerMessage;
     using IWriteSessionConnectionProcessorFactory =
-            TPersQueueClient::TImpl::IWriteSessionConnectionProcessorFactory; 
+            TPersQueueClient::TImpl::IWriteSessionConnectionProcessorFactory;
     using IProcessor = IWriteSessionConnectionProcessorFactory::IProcessor;
 
     struct TMessage {
@@ -287,7 +287,7 @@ private:
 
 public:
     TWriteSession(const TWriteSessionSettings& settings,
-            std::shared_ptr<TPersQueueClient::TImpl> client, 
+            std::shared_ptr<TPersQueueClient::TImpl> client,
             std::shared_ptr<TGRpcConnectionsImpl> connections,
             TDbDriverStatePtr dbDriverState);
 
@@ -366,7 +366,7 @@ private:
 
 private:
     TWriteSessionSettings Settings;
-    std::shared_ptr<TPersQueueClient::TImpl> Client; 
+    std::shared_ptr<TPersQueueClient::TImpl> Client;
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
     TString TargetCluster;
     TString InitialCluster;
@@ -391,8 +391,8 @@ private:
     std::shared_ptr<TServerMessage> ServerMessage; // Server message to write server response to.
 
     TString SessionId;
-    IExecutor::TPtr Executor; 
-    IExecutor::TPtr CompressionExecutor; 
+    IExecutor::TPtr Executor;
+    IExecutor::TPtr CompressionExecutor;
     size_t MemoryUsage = 0; //!< Estimated amount of memory used
 
     TMessageBatch CurrentBatch;
@@ -414,7 +414,7 @@ private:
     ui64 MinUnsentSeqNo = 0;
     ui64 SeqNoShift = 0;
     TMaybe<bool> AutoSeqNoMode;
-    bool ValidateSeqNoMode = false; 
+    bool ValidateSeqNoMode = false;
 
     NThreading::TPromise<ui64> InitSeqNoPromise;
     bool InitSeqNoSetDone = false;
@@ -440,7 +440,7 @@ private:
 public:
     TSimpleBlockingWriteSession(
             const TWriteSessionSettings& settings,
-            std::shared_ptr<TPersQueueClient::TImpl> client, 
+            std::shared_ptr<TPersQueueClient::TImpl> client,
             std::shared_ptr<TGRpcConnectionsImpl> connections,
             TDbDriverStatePtr dbDriverState);
 

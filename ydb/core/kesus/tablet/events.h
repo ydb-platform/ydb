@@ -8,9 +8,9 @@
 namespace NKikimr {
 namespace NKesus {
 
-TString CanonizeQuoterResourcePath(const TVector<TString>& path); 
-TString CanonizeQuoterResourcePath(const TString& path); 
- 
+TString CanonizeQuoterResourcePath(const TVector<TString>& path);
+TString CanonizeQuoterResourcePath(const TString& path);
+
 struct TEvKesus {
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_KESUS),
@@ -66,30 +66,30 @@ struct TEvKesus {
         Deprecated_EvJobStop,
         EvDescribeSemaphoreChanged,
 
-        // Quoter API 
-        // Control API 
-        EvDescribeQuoterResources = EvBegin + 1024, 
-        EvDescribeQuoterResourcesResult, 
-        EvAddQuoterResource, 
-        EvAddQuoterResourceResult, 
-        EvUpdateQuoterResource, 
-        EvUpdateQuoterResourceResult, 
-        EvDeleteQuoterResource, 
-        EvDeleteQuoterResourceResult, 
-        // Runtime API 
-        EvSubscribeOnResources = EvBegin + 1024 + 512, 
-        EvSubscribeOnResourcesResult, 
-        EvUpdateConsumptionState, 
-        EvUpdateConsumptionStateAck, 
-        EvResourcesAllocated, 
-        EvResourcesAllocatedAck, 
-        EvProxyResourceConsumptionStatistics, 
-        EvAggregatedResourceConsumptionStatistics, 
-        EvGetQuoterResourceCounters, 
-        EvGetQuoterResourceCountersResult, 
+        // Quoter API
+        // Control API
+        EvDescribeQuoterResources = EvBegin + 1024,
+        EvDescribeQuoterResourcesResult,
+        EvAddQuoterResource,
+        EvAddQuoterResourceResult,
+        EvUpdateQuoterResource,
+        EvUpdateQuoterResourceResult,
+        EvDeleteQuoterResource,
+        EvDeleteQuoterResourceResult,
+        // Runtime API
+        EvSubscribeOnResources = EvBegin + 1024 + 512,
+        EvSubscribeOnResourcesResult,
+        EvUpdateConsumptionState,
+        EvUpdateConsumptionStateAck,
+        EvResourcesAllocated,
+        EvResourcesAllocatedAck,
+        EvProxyResourceConsumptionStatistics,
+        EvAggregatedResourceConsumptionStatistics,
+        EvGetQuoterResourceCounters,
+        EvGetQuoterResourceCountersResult,
         EvAccountResources,
         EvAccountResourcesAck,
- 
+
         EvEnd
     };
 
@@ -432,104 +432,104 @@ struct TEvKesus {
             Record.SetOwnersChanged(ownersChanged);
         }
     };
- 
-    // Quoter API 
- 
-    struct TEvDescribeQuoterResources : public TEventPB<TEvDescribeQuoterResources, NKikimrKesus::TEvDescribeQuoterResources, EvDescribeQuoterResources> { 
-        using TEventPB::TEventPB; 
-    }; 
- 
-    struct TEvDescribeQuoterResourcesResult : public TEventPB<TEvDescribeQuoterResourcesResult, NKikimrKesus::TEvDescribeQuoterResourcesResult, EvDescribeQuoterResourcesResult> { 
-        using TEventPB::TEventPB; 
- 
-        TEvDescribeQuoterResourcesResult() = default; 
- 
-        TEvDescribeQuoterResourcesResult(Ydb::StatusIds::StatusCode status, const TString& reason) { 
-            FillError(Record.MutableError(), status, reason); 
-        } 
-    }; 
- 
-    struct TEvAddQuoterResource : public TEventPB<TEvAddQuoterResource, NKikimrKesus::TEvAddQuoterResource, EvAddQuoterResource> { 
-        using TEventPB::TEventPB; 
-    }; 
- 
-    struct TEvAddQuoterResourceResult : public TEventPB<TEvAddQuoterResourceResult, NKikimrKesus::TEvAddQuoterResourceResult, EvAddQuoterResourceResult> { 
-        using TEventPB::TEventPB; 
- 
-        TEvAddQuoterResourceResult() = default; 
- 
-        TEvAddQuoterResourceResult(Ydb::StatusIds::StatusCode status, const TString& reason) { 
-            FillError(Record.MutableError(), status, reason); 
-        } 
-    }; 
- 
-    struct TEvUpdateQuoterResource : public TEventPB<TEvUpdateQuoterResource, NKikimrKesus::TEvUpdateQuoterResource, EvUpdateQuoterResource> { 
-        using TEventPB::TEventPB; 
-    }; 
- 
-    struct TEvUpdateQuoterResourceResult : public TEventPB<TEvUpdateQuoterResourceResult, NKikimrKesus::TEvUpdateQuoterResourceResult, EvUpdateQuoterResourceResult> { 
-        using TEventPB::TEventPB; 
- 
-        TEvUpdateQuoterResourceResult() = default; 
- 
-        TEvUpdateQuoterResourceResult(Ydb::StatusIds::StatusCode status, const TString& reason) { 
-            FillError(Record.MutableError(), status, reason); 
-        } 
-    }; 
- 
-    struct TEvDeleteQuoterResource : public TEventPB<TEvDeleteQuoterResource, NKikimrKesus::TEvDeleteQuoterResource, EvDeleteQuoterResource> { 
-        using TEventPB::TEventPB; 
-    }; 
- 
-    struct TEvDeleteQuoterResourceResult : public TEventPB<TEvDeleteQuoterResourceResult, NKikimrKesus::TEvDeleteQuoterResourceResult, EvDeleteQuoterResourceResult> { 
-        using TEventPB::TEventPB; 
- 
-        TEvDeleteQuoterResourceResult() = default; 
- 
-        TEvDeleteQuoterResourceResult(Ydb::StatusIds::StatusCode status, const TString& reason) { 
-            FillError(Record.MutableError(), status, reason); 
-        } 
-    }; 
- 
-    struct TEvSubscribeOnResources : public TEventPBWithArena<TEvSubscribeOnResources, NKikimrKesus::TEvSubscribeOnResources, EvSubscribeOnResources> { 
-        using TBaseEvent = TEventPBWithArena<TEvSubscribeOnResources, NKikimrKesus::TEvSubscribeOnResources, EvSubscribeOnResources>; 
-        using TBaseEvent::TBaseEvent; 
-    }; 
- 
-    struct TEvSubscribeOnResourcesResult : public TEventPBWithArena<TEvSubscribeOnResourcesResult, NKikimrKesus::TEvSubscribeOnResourcesResult, EvSubscribeOnResourcesResult> { 
-        using TBaseEvent = TEventPBWithArena<TEvSubscribeOnResourcesResult, NKikimrKesus::TEvSubscribeOnResourcesResult, EvSubscribeOnResourcesResult>; 
-        using TBaseEvent::TBaseEvent; 
-    }; 
- 
-    struct TEvUpdateConsumptionState : public TEventPBWithArena<TEvUpdateConsumptionState, NKikimrKesus::TEvUpdateConsumptionState, EvUpdateConsumptionState> { 
-        using TBaseEvent = TEventPBWithArena<TEvUpdateConsumptionState, NKikimrKesus::TEvUpdateConsumptionState, EvUpdateConsumptionState>; 
-        using TBaseEvent::TBaseEvent; 
-    }; 
- 
-    struct TEvUpdateConsumptionStateAck : public TEventPBWithArena<TEvUpdateConsumptionStateAck, NKikimrKesus::TEvUpdateConsumptionStateAck, EvUpdateConsumptionStateAck> { 
-        using TBaseEvent = TEventPBWithArena<TEvUpdateConsumptionStateAck, NKikimrKesus::TEvUpdateConsumptionStateAck, EvUpdateConsumptionStateAck>; 
-        using TBaseEvent::TBaseEvent; 
-    }; 
- 
-    struct TEvResourcesAllocated : public TEventPBWithArena<TEvResourcesAllocated, NKikimrKesus::TEvResourcesAllocated, EvResourcesAllocated> { 
-        using TBaseEvent = TEventPBWithArena<TEvResourcesAllocated, NKikimrKesus::TEvResourcesAllocated, EvResourcesAllocated>; 
-        using TBaseEvent::TBaseEvent; 
-    }; 
- 
-    struct TEvResourcesAllocatedAck : public TEventPBWithArena<TEvResourcesAllocatedAck, NKikimrKesus::TEvResourcesAllocatedAck, EvResourcesAllocatedAck> { 
-        using TBaseEvent = TEventPBWithArena<TEvResourcesAllocatedAck, NKikimrKesus::TEvResourcesAllocatedAck, EvResourcesAllocatedAck>; 
-        using TBaseEvent::TBaseEvent; 
-    }; 
- 
-    struct TEvGetQuoterResourceCounters : public TEventPBWithArena<TEvGetQuoterResourceCounters, NKikimrKesus::TEvGetQuoterResourceCounters, EvGetQuoterResourceCounters> { 
-        using TBaseEvent = TEventPBWithArena<TEvGetQuoterResourceCounters, NKikimrKesus::TEvGetQuoterResourceCounters, EvGetQuoterResourceCounters>; 
-        using TBaseEvent::TBaseEvent; 
-    }; 
- 
-    struct TEvGetQuoterResourceCountersResult : public TEventPBWithArena<TEvGetQuoterResourceCountersResult, NKikimrKesus::TEvGetQuoterResourceCountersResult, EvGetQuoterResourceCountersResult> { 
-        using TBaseEvent = TEventPBWithArena<TEvGetQuoterResourceCountersResult, NKikimrKesus::TEvGetQuoterResourceCountersResult, EvGetQuoterResourceCountersResult>; 
-        using TBaseEvent::TBaseEvent; 
-    }; 
+
+    // Quoter API
+
+    struct TEvDescribeQuoterResources : public TEventPB<TEvDescribeQuoterResources, NKikimrKesus::TEvDescribeQuoterResources, EvDescribeQuoterResources> {
+        using TEventPB::TEventPB;
+    };
+
+    struct TEvDescribeQuoterResourcesResult : public TEventPB<TEvDescribeQuoterResourcesResult, NKikimrKesus::TEvDescribeQuoterResourcesResult, EvDescribeQuoterResourcesResult> {
+        using TEventPB::TEventPB;
+
+        TEvDescribeQuoterResourcesResult() = default;
+
+        TEvDescribeQuoterResourcesResult(Ydb::StatusIds::StatusCode status, const TString& reason) {
+            FillError(Record.MutableError(), status, reason);
+        }
+    };
+
+    struct TEvAddQuoterResource : public TEventPB<TEvAddQuoterResource, NKikimrKesus::TEvAddQuoterResource, EvAddQuoterResource> {
+        using TEventPB::TEventPB;
+    };
+
+    struct TEvAddQuoterResourceResult : public TEventPB<TEvAddQuoterResourceResult, NKikimrKesus::TEvAddQuoterResourceResult, EvAddQuoterResourceResult> {
+        using TEventPB::TEventPB;
+
+        TEvAddQuoterResourceResult() = default;
+
+        TEvAddQuoterResourceResult(Ydb::StatusIds::StatusCode status, const TString& reason) {
+            FillError(Record.MutableError(), status, reason);
+        }
+    };
+
+    struct TEvUpdateQuoterResource : public TEventPB<TEvUpdateQuoterResource, NKikimrKesus::TEvUpdateQuoterResource, EvUpdateQuoterResource> {
+        using TEventPB::TEventPB;
+    };
+
+    struct TEvUpdateQuoterResourceResult : public TEventPB<TEvUpdateQuoterResourceResult, NKikimrKesus::TEvUpdateQuoterResourceResult, EvUpdateQuoterResourceResult> {
+        using TEventPB::TEventPB;
+
+        TEvUpdateQuoterResourceResult() = default;
+
+        TEvUpdateQuoterResourceResult(Ydb::StatusIds::StatusCode status, const TString& reason) {
+            FillError(Record.MutableError(), status, reason);
+        }
+    };
+
+    struct TEvDeleteQuoterResource : public TEventPB<TEvDeleteQuoterResource, NKikimrKesus::TEvDeleteQuoterResource, EvDeleteQuoterResource> {
+        using TEventPB::TEventPB;
+    };
+
+    struct TEvDeleteQuoterResourceResult : public TEventPB<TEvDeleteQuoterResourceResult, NKikimrKesus::TEvDeleteQuoterResourceResult, EvDeleteQuoterResourceResult> {
+        using TEventPB::TEventPB;
+
+        TEvDeleteQuoterResourceResult() = default;
+
+        TEvDeleteQuoterResourceResult(Ydb::StatusIds::StatusCode status, const TString& reason) {
+            FillError(Record.MutableError(), status, reason);
+        }
+    };
+
+    struct TEvSubscribeOnResources : public TEventPBWithArena<TEvSubscribeOnResources, NKikimrKesus::TEvSubscribeOnResources, EvSubscribeOnResources> {
+        using TBaseEvent = TEventPBWithArena<TEvSubscribeOnResources, NKikimrKesus::TEvSubscribeOnResources, EvSubscribeOnResources>;
+        using TBaseEvent::TBaseEvent;
+    };
+
+    struct TEvSubscribeOnResourcesResult : public TEventPBWithArena<TEvSubscribeOnResourcesResult, NKikimrKesus::TEvSubscribeOnResourcesResult, EvSubscribeOnResourcesResult> {
+        using TBaseEvent = TEventPBWithArena<TEvSubscribeOnResourcesResult, NKikimrKesus::TEvSubscribeOnResourcesResult, EvSubscribeOnResourcesResult>;
+        using TBaseEvent::TBaseEvent;
+    };
+
+    struct TEvUpdateConsumptionState : public TEventPBWithArena<TEvUpdateConsumptionState, NKikimrKesus::TEvUpdateConsumptionState, EvUpdateConsumptionState> {
+        using TBaseEvent = TEventPBWithArena<TEvUpdateConsumptionState, NKikimrKesus::TEvUpdateConsumptionState, EvUpdateConsumptionState>;
+        using TBaseEvent::TBaseEvent;
+    };
+
+    struct TEvUpdateConsumptionStateAck : public TEventPBWithArena<TEvUpdateConsumptionStateAck, NKikimrKesus::TEvUpdateConsumptionStateAck, EvUpdateConsumptionStateAck> {
+        using TBaseEvent = TEventPBWithArena<TEvUpdateConsumptionStateAck, NKikimrKesus::TEvUpdateConsumptionStateAck, EvUpdateConsumptionStateAck>;
+        using TBaseEvent::TBaseEvent;
+    };
+
+    struct TEvResourcesAllocated : public TEventPBWithArena<TEvResourcesAllocated, NKikimrKesus::TEvResourcesAllocated, EvResourcesAllocated> {
+        using TBaseEvent = TEventPBWithArena<TEvResourcesAllocated, NKikimrKesus::TEvResourcesAllocated, EvResourcesAllocated>;
+        using TBaseEvent::TBaseEvent;
+    };
+
+    struct TEvResourcesAllocatedAck : public TEventPBWithArena<TEvResourcesAllocatedAck, NKikimrKesus::TEvResourcesAllocatedAck, EvResourcesAllocatedAck> {
+        using TBaseEvent = TEventPBWithArena<TEvResourcesAllocatedAck, NKikimrKesus::TEvResourcesAllocatedAck, EvResourcesAllocatedAck>;
+        using TBaseEvent::TBaseEvent;
+    };
+
+    struct TEvGetQuoterResourceCounters : public TEventPBWithArena<TEvGetQuoterResourceCounters, NKikimrKesus::TEvGetQuoterResourceCounters, EvGetQuoterResourceCounters> {
+        using TBaseEvent = TEventPBWithArena<TEvGetQuoterResourceCounters, NKikimrKesus::TEvGetQuoterResourceCounters, EvGetQuoterResourceCounters>;
+        using TBaseEvent::TBaseEvent;
+    };
+
+    struct TEvGetQuoterResourceCountersResult : public TEventPBWithArena<TEvGetQuoterResourceCountersResult, NKikimrKesus::TEvGetQuoterResourceCountersResult, EvGetQuoterResourceCountersResult> {
+        using TBaseEvent = TEventPBWithArena<TEvGetQuoterResourceCountersResult, NKikimrKesus::TEvGetQuoterResourceCountersResult, EvGetQuoterResourceCountersResult>;
+        using TBaseEvent::TBaseEvent;
+    };
 
     struct TEvAccountResources : public TEventPBWithArena<TEvAccountResources, NKikimrKesus::TEvAccountResources, EvAccountResources> {
         using TBaseEvent = TEventPBWithArena<TEvAccountResources, NKikimrKesus::TEvAccountResources, EvAccountResources>;

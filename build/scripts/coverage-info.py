@@ -4,7 +4,7 @@ import sys
 import tarfile
 import collections
 import subprocess
-import re 
+import re
 
 
 GCDA_EXT = '.gcda'
@@ -150,13 +150,13 @@ def gen_info_global(cmd, cov_info, probe_path, update_stat, lcov_args):
 
 
 def init_all_coverage_files(gcno_archive, fname2gcno, fname2info, geninfo_executable, gcov_tool, gen_info, prefix_filter, exclude_files):
-    with tarfile.open(gcno_archive) as gcno_tf: 
-        for gcno_item in gcno_tf: 
-            if gcno_item.isfile() and gcno_item.name.endswith(GCNO_EXT): 
-                gcno_tf.extract(gcno_item) 
- 
-                gcno_name = gcno_item.name 
-                source_fname = gcno_name[:-len(GCNO_EXT)] 
+    with tarfile.open(gcno_archive) as gcno_tf:
+        for gcno_item in gcno_tf:
+            if gcno_item.isfile() and gcno_item.name.endswith(GCNO_EXT):
+                gcno_tf.extract(gcno_item)
+
+                gcno_name = gcno_item.name
+                source_fname = gcno_name[:-len(GCNO_EXT)]
                 if prefix_filter and not source_fname.startswith(prefix_filter):
                     sys.stderr.write("Skipping {} (doesn't match prefix '{}')\n".format(source_fname, prefix_filter))
                     continue
@@ -164,19 +164,19 @@ def init_all_coverage_files(gcno_archive, fname2gcno, fname2info, geninfo_execut
                     sys.stderr.write("Skipping {} (matched exclude pattern '{}')\n".format(source_fname, exclude_files.pattern))
                     continue
 
-                fname2gcno[source_fname] = gcno_name 
- 
-                if os.path.getsize(gcno_name) > 0: 
-                    coverage_info = source_fname + '.' + str(len(fname2info[source_fname])) + '.info' 
-                    fname2info[source_fname].append(coverage_info) 
-                    geninfo_cmd = [ 
-                        geninfo_executable, 
-                        '--gcov-tool', gcov_tool, 
-                        '-i', gcno_name, 
-                        '-o', coverage_info + '.tmp' 
-                    ] 
-                    gen_info(geninfo_cmd, coverage_info) 
- 
+                fname2gcno[source_fname] = gcno_name
+
+                if os.path.getsize(gcno_name) > 0:
+                    coverage_info = source_fname + '.' + str(len(fname2info[source_fname])) + '.info'
+                    fname2info[source_fname].append(coverage_info)
+                    geninfo_cmd = [
+                        geninfo_executable,
+                        '--gcov-tool', gcov_tool,
+                        '-i', gcno_name,
+                        '-o', coverage_info + '.tmp'
+                    ]
+                    gen_info(geninfo_cmd, coverage_info)
+
 
 def process_all_coverage_files(gcda_archive, fname2gcno, fname2info, geninfo_executable, gcov_tool, gen_info):
     with tarfile.open(gcda_archive) as gcda_tf:
@@ -190,10 +190,10 @@ def process_all_coverage_files(gcda_archive, fname2gcno, fname2info, geninfo_exe
                         gcda_item.name = gcda_new_name
                         gcda_tf.extract(gcda_item)
                         if os.path.getsize(gcda_new_name) > 0:
-                            coverage_info = suff + '.' + str(len(fname2info[suff])) + '.info' 
-                            fname2info[suff].append(coverage_info) 
+                            coverage_info = suff + '.' + str(len(fname2info[suff])) + '.info'
+                            fname2info[suff].append(coverage_info)
                             geninfo_cmd = [
-                                geninfo_executable, 
+                                geninfo_executable,
                                 '--gcov-tool', gcov_tool,
                                 gcda_new_name,
                                 '-o', coverage_info + '.tmp'
@@ -272,7 +272,7 @@ if __name__ == '__main__':
     parser.add_argument('--gcda-archive', action='store')
     parser.add_argument('--gcov-tool', action='store')
     parser.add_argument('--prefix-filter', action='store')
-    parser.add_argument('--exclude-regexp', action='store') 
+    parser.add_argument('--exclude-regexp', action='store')
     parser.add_argument('--teamcity-stat-output', action='store_const', const=True)
     parser.add_argument('--coverage-report-path', action='store')
     parser.add_argument('--gcov-report', action='store')

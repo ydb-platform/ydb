@@ -3,33 +3,33 @@
 #include <yandex/cloud/priv/servicecontrol/v1/access_service.grpc.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <iterator> 
- 
+
+#include <iterator>
+
 class TAccessServiceMock : public yandex::cloud::priv::servicecontrol::v1::AccessService::Service {
 public:
-    template <class TResonseProto> 
-    struct TResponse { 
-        TResonseProto Response; 
-        grpc::Status Status = grpc::Status::OK; 
-        bool RequireRequestId = false; 
-    }; 
+    template <class TResonseProto>
+    struct TResponse {
+        TResonseProto Response;
+        grpc::Status Status = grpc::Status::OK;
+        bool RequireRequestId = false;
+    };
 
-    THashMap<TString, TResponse<yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse>> AuthenticateData; 
-    THashMap<TString, TResponse<yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse>> AuthorizeData; 
- 
-    template <class TResonseProto> 
-    void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResonseProto>& resp, const TString& token) { 
-        if (resp.RequireRequestId) { 
-            auto [reqIdBegin, reqIdEnd] = ctx->client_metadata().equal_range("x-request-id"); 
-            UNIT_ASSERT_C(reqIdBegin != reqIdEnd, "RequestId is expected. Token: " << token); 
-            UNIT_ASSERT_VALUES_EQUAL_C(std::distance(reqIdBegin, reqIdEnd), 1, "Only one RequestId is expected. Token: " << token); 
-            UNIT_ASSERT_C(!reqIdBegin->second.empty(), "RequestId is expected to be not empty. Token: " << token); 
-        } 
-    } 
- 
+    THashMap<TString, TResponse<yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse>> AuthenticateData;
+    THashMap<TString, TResponse<yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse>> AuthorizeData;
+
+    template <class TResonseProto>
+    void CheckRequestId(grpc::ServerContext* ctx, const TResponse<TResonseProto>& resp, const TString& token) {
+        if (resp.RequireRequestId) {
+            auto [reqIdBegin, reqIdEnd] = ctx->client_metadata().equal_range("x-request-id");
+            UNIT_ASSERT_C(reqIdBegin != reqIdEnd, "RequestId is expected. Token: " << token);
+            UNIT_ASSERT_VALUES_EQUAL_C(std::distance(reqIdBegin, reqIdEnd), 1, "Only one RequestId is expected. Token: " << token);
+            UNIT_ASSERT_C(!reqIdBegin->second.empty(), "RequestId is expected to be not empty. Token: " << token);
+        }
+    }
+
     virtual grpc::Status Authenticate(
-            grpc::ServerContext* ctx, 
+            grpc::ServerContext* ctx,
             const yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest* request,
             yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse* response) override
     {
@@ -41,24 +41,24 @@ public:
         }
         auto it = AuthenticateData.find(key);
         if (it != AuthenticateData.end()) {
-            response->CopyFrom(it->second.Response); 
+            response->CopyFrom(it->second.Response);
             CheckRequestId(ctx, it->second, key);
-            return it->second.Status; 
+            return it->second.Status;
         } else {
             return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied");
         }
     }
 
     virtual grpc::Status Authorize(
-            grpc::ServerContext* ctx, 
+            grpc::ServerContext* ctx,
             const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest* request,
             yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override {
-        const TString& token = request->subject().user_account().id() + "-" + request->permission() + "-" + request->resource_path(0).id(); 
+        const TString& token = request->subject().user_account().id() + "-" + request->permission() + "-" + request->resource_path(0).id();
         auto it = AuthorizeData.find(token);
         if (it != AuthorizeData.end()) {
-            response->CopyFrom(it->second.Response); 
-            CheckRequestId(ctx, it->second, token); 
-            return it->second.Status; 
+            response->CopyFrom(it->second.Response);
+            CheckRequestId(ctx, it->second, token);
+            return it->second.Status;
         } else {
             return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied");
         }

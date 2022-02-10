@@ -401,7 +401,7 @@ namespace NActors {
         template <typename T>
         struct HasActorName<T, decltype((void)T::ActorName, (const char*)nullptr)>: std::true_type { };
 
-        static ui32 GetActivityTypeIndex() { 
+        static ui32 GetActivityTypeIndex() {
             if constexpr(HasActorName<TDerived>::value) {
                 return TLocalProcessKey<TActorActivityTag, TDerived::ActorName>::GetIndex();
             } else {
@@ -425,8 +425,8 @@ namespace NActors {
 
         // static constexpr char ActorName[] = "UNNAMED";
 
-        TActor(void (TDerived::*func)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx), ui32 activityType = GetActivityTypeIndex()) 
-            : IActor(static_cast<TReceiveFunc>(func), activityType) 
+        TActor(void (TDerived::*func)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx), ui32 activityType = GetActivityTypeIndex())
+            : IActor(static_cast<TReceiveFunc>(func), activityType)
         { }
 
     public:

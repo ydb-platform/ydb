@@ -1,4 +1,4 @@
-OWNER(g:yq) 
+OWNER(g:yq)
 
 PROTO_LIBRARY()
 

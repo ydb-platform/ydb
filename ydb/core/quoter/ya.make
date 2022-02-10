@@ -6,10 +6,10 @@ OWNER(
 )
 
 SRCS(
-    debug_info.cpp 
+    debug_info.cpp
     defs.h
     kesus_quoter_proxy.cpp
-    probes.cpp 
+    probes.cpp
     quoter_service.cpp
     quoter_service.h
     quoter_service_impl.h

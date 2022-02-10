@@ -67,7 +67,7 @@ namespace NBus {
         }
 
         TRemoteConnection::TWriterData::~TWriterData() {
-            Y_VERIFY(AtomicGet(Down)); 
+            Y_VERIFY(AtomicGet(Down));
             Y_VERIFY(SendQueue.Empty());
         }
 
@@ -119,7 +119,7 @@ namespace NBus {
         }
 
         TRemoteConnection::TReaderData::~TReaderData() {
-            Y_VERIFY(AtomicGet(Down)); 
+            Y_VERIFY(AtomicGet(Down));
         }
 
         void TRemoteConnection::Send(TNonDestroyingAutoPtr<TBusMessage> msg) {

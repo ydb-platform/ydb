@@ -3,15 +3,15 @@
 import logging
 import time
 
-import pytest 
-from hamcrest import assert_that, equal_to, none, is_not, is_, raises 
+import pytest
+from hamcrest import assert_that, equal_to, none, is_not, is_, raises
 
 import ydb.tests.library.common.yatest_common as yatest_common
 
 from sqs_test_base import KikimrSqsTestBase, get_sqs_client_path, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, to_bytes
- 
- 
-class SqsACLTest(KikimrSqsTestBase): 
+
+
+class SqsACLTest(KikimrSqsTestBase):
     def _modify_permissions(self, resource, action, permissions_string, clear_acl_flag=False):
         cmd = [
             get_sqs_client_path(),
@@ -27,7 +27,7 @@ class SqsACLTest(KikimrSqsTestBase):
 
         retries_count = 1
         while retries_count:
-            logging.debug("Running {}".format(' '.join(cmd))) 
+            logging.debug("Running {}".format(' '.join(cmd)))
             try:
                 yatest_common.execute(cmd)
             except yatest_common.ExecutionError as ex:
@@ -46,7 +46,7 @@ class SqsACLTest(KikimrSqsTestBase):
         ] + self._sqs_server_opts
 
         while retries_count:
-            logging.debug("Running {}".format(' '.join(cmd))) 
+            logging.debug("Running {}".format(' '.join(cmd)))
             try:
                 execute = yatest_common.execute(cmd)
             except yatest_common.ExecutionError as ex:
@@ -168,62 +168,62 @@ class SqsACLTest(KikimrSqsTestBase):
         assert('Account' in str(result))
         assert(berkanavt_sid in str(result))
         assert('Permissions' in str(result))
- 
- 
-class SqsWithForceAuthorizationTest(KikimrSqsTestBase): 
-    @classmethod 
-    def _setup_config_generator(cls): 
-        config_generator = super(SqsWithForceAuthorizationTest, cls)._setup_config_generator() 
+
+
+class SqsWithForceAuthorizationTest(KikimrSqsTestBase):
+    @classmethod
+    def _setup_config_generator(cls):
+        config_generator = super(SqsWithForceAuthorizationTest, cls)._setup_config_generator()
         config_generator.yaml_config['sqs_config']['force_access_control'] = True
-        return config_generator 
- 
-    def _setup_user(self, _username, retries_count=3): 
-        pass 
- 
-    @classmethod 
-    def create_metauser(cls, cluster, config_generator): 
-        pass 
- 
-    @pytest.mark.parametrize(argnames='token,pattern', 
-                             argvalues=[('invalid_token', 'AccessDeniedException'), ('', 'No security token was provided.'), (None, 'InvalidClientTokenId')], 
-                             ids=['invalid', 'empty', 'no']) 
-    def test_invalid_token(self, token, pattern): 
-        sqs_api = self._create_api_for_user(self._username, raise_on_error=True, security_token=token) 
- 
-        def call_list(): 
-            sqs_api.list_queues() 
- 
-        def call_get_queue_url(): 
-            sqs_api.get_queue_url('queue_name') 
- 
-        assert_that( 
-            call_list, 
-            raises( 
-                RuntimeError, 
-                pattern=pattern 
-            ) 
-        ) 
- 
-        assert_that( 
-            call_get_queue_url, 
-            raises( 
-                RuntimeError, 
-                pattern=pattern 
-            ) 
-        ) 
- 
- 
-class TestSqsACLWithTenant(get_test_with_sqs_tenant_installation(SqsACLTest)): 
-    pass 
- 
- 
-class TestSqsACLWithPath(get_test_with_sqs_installation_by_path(SqsACLTest)): 
-    pass 
- 
- 
-class TestSqsWithForceAuthorizationWithTenant(get_test_with_sqs_tenant_installation(SqsWithForceAuthorizationTest)): 
-    pass 
- 
- 
-class TestSqsWithForceAuthorizationWithPath(get_test_with_sqs_installation_by_path(SqsWithForceAuthorizationTest)): 
-    pass 
+        return config_generator
+
+    def _setup_user(self, _username, retries_count=3):
+        pass
+
+    @classmethod
+    def create_metauser(cls, cluster, config_generator):
+        pass
+
+    @pytest.mark.parametrize(argnames='token,pattern',
+                             argvalues=[('invalid_token', 'AccessDeniedException'), ('', 'No security token was provided.'), (None, 'InvalidClientTokenId')],
+                             ids=['invalid', 'empty', 'no'])
+    def test_invalid_token(self, token, pattern):
+        sqs_api = self._create_api_for_user(self._username, raise_on_error=True, security_token=token)
+
+        def call_list():
+            sqs_api.list_queues()
+
+        def call_get_queue_url():
+            sqs_api.get_queue_url('queue_name')
+
+        assert_that(
+            call_list,
+            raises(
+                RuntimeError,
+                pattern=pattern
+            )
+        )
+
+        assert_that(
+            call_get_queue_url,
+            raises(
+                RuntimeError,
+                pattern=pattern
+            )
+        )
+
+
+class TestSqsACLWithTenant(get_test_with_sqs_tenant_installation(SqsACLTest)):
+    pass
+
+
+class TestSqsACLWithPath(get_test_with_sqs_installation_by_path(SqsACLTest)):
+    pass
+
+
+class TestSqsWithForceAuthorizationWithTenant(get_test_with_sqs_tenant_installation(SqsWithForceAuthorizationTest)):
+    pass
+
+
+class TestSqsWithForceAuthorizationWithPath(get_test_with_sqs_installation_by_path(SqsWithForceAuthorizationTest)):
+    pass

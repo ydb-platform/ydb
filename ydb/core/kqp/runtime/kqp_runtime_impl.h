@@ -18,7 +18,7 @@ TTableId ParseTableId(const NMiniKQL::TRuntimeNode& node);
 NUdf::TDataTypeId UnwrapDataTypeFromStruct(const NMiniKQL::TStructType& structType, ui32 index);
 
 NYql::NDq::IDqOutputConsumer::TPtr CreateOutputRangePartitionConsumer(
-    TVector<NYql::NDq::IDqOutput::TPtr>&& outputs, TVector<TKqpRangePartition>&& partitions, 
+    TVector<NYql::NDq::IDqOutput::TPtr>&& outputs, TVector<TKqpRangePartition>&& partitions,
     TVector<NUdf::TDataTypeId>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices,
     const NMiniKQL::TTypeEnvironment& typeEnv);
 

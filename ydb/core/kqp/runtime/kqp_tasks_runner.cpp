@@ -22,7 +22,7 @@ using namespace NYql;
 using namespace NDq;
 
 IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const TType* type,
-    NUdf::IApplyContext* applyCtx, const TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs) 
+    NUdf::IApplyContext* applyCtx, const TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs)
 {
     switch (outputDesc.GetTypeCase()) {
         case NDqProto::TTaskOutput::kRangePartition: {
@@ -44,7 +44,7 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
                 partitions.emplace_back(std::move(partition));
             }
 
-            return CreateOutputRangePartitionConsumer(std::move(outputs), std::move(partitions), 
+            return CreateOutputRangePartitionConsumer(std::move(outputs), std::move(partitions),
                 std::move(keyColumnTypes), std::move(keyColumnIndices), typeEnv);
         }
 
@@ -53,7 +53,7 @@ IDqOutputConsumer::TPtr KqpBuildOutputConsumer(const NDqProto::TTaskOutput& outp
         }
 
         default: {
-            return DqBuildOutputConsumer(outputDesc, type, typeEnv, std::move(outputs)); 
+            return DqBuildOutputConsumer(outputDesc, type, typeEnv, std::move(outputs));
         }
     }
 }

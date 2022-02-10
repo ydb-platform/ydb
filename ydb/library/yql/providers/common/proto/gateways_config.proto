@@ -250,36 +250,36 @@ message TRtmrGatewayConfig {
     optional uint32 PreviewCollectTimeoutMs = 8 [default = 2000];
 }
 
-///////////////////////////// Pq ////////////////////////////// 
- 
-message TPqClusterConfig { 
-    enum EClusterType { 
+///////////////////////////// Pq //////////////////////////////
+
+message TPqClusterConfig {
+    enum EClusterType {
         CT_UNSPECIFIED = 0;
         CT_PERS_QUEUE = 1;
         CT_DATA_STREAMS = 2;
-    } 
- 
-    optional string Name = 1; 
+    }
+
+    optional string Name = 1;
     optional EClusterType ClusterType = 2 [default = CT_PERS_QUEUE];
-    optional string Endpoint = 3; 
-    optional string ConfigManagerEndpoint = 4; 
-    optional string Token = 5; 
-    optional string Database = 6 [default = "/Root"]; 
-    optional uint32 TvmId = 7 [default = 0]; 
-    optional bool UseSsl = 8; // grpcs 
+    optional string Endpoint = 3;
+    optional string ConfigManagerEndpoint = 4;
+    optional string Token = 5;
+    optional string Database = 6 [default = "/Root"];
+    optional uint32 TvmId = 7 [default = 0];
+    optional bool UseSsl = 8; // grpcs
     optional string ServiceAccountId = 9;
     optional string ServiceAccountIdSignature = 10;
     optional bool AddBearerToToken = 11; // whether to use prefix "Bearer " in token
-    optional string DatabaseId = 12; 
-    repeated TAttr Settings = 100; 
-} 
- 
-message TPqGatewayConfig { 
-    repeated TPqClusterConfig ClusterMapping = 1; 
-    optional string DefaultToken = 2; 
-    repeated TAttr DefaultSettings = 100; 
-} 
- 
+    optional string DatabaseId = 12;
+    repeated TAttr Settings = 100;
+}
+
+message TPqGatewayConfig {
+    repeated TPqClusterConfig ClusterMapping = 1;
+    optional string DefaultToken = 2;
+    repeated TAttr DefaultSettings = 100;
+}
+
 ///////////////////////////// Stat /////////////////////////////
 
 message TStatClusterConfig {
@@ -451,7 +451,7 @@ message TGatewaysConfig {
     optional TDqGatewayConfig Dq = 13;
     optional TMysqlGatewayConfig Mysql = 14;
     optional TYdbGatewayConfig Ydb = 15;
-    optional TPqGatewayConfig Pq = 16; 
+    optional TPqGatewayConfig Pq = 16;
     optional TS3GatewayConfig S3 = 17;
     optional THttpGatewayConfig HttpGateway = 18;
 }

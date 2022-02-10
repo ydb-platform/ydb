@@ -7,26 +7,26 @@
 // Helper class for printing pdisk id in the same was as it done for counters
 struct TPDiskIdField {
     typedef ui32 TStoreType;
-    typedef ui32 TFuncParam; 
- 
+    typedef ui32 TFuncParam;
+
     static void ToString(ui32 value, TString* out) {
         *out = Sprintf("%09" PRIu32, value);
     }
-    static ui32 ToStoreType(ui32 value) { 
-        return value; 
-    } 
+    static ui32 ToStoreType(ui32 value) {
+        return value;
+    }
 };
 
 namespace NKikimr { namespace NPDisk {
 
 struct TRequestTypeField {
     typedef ui32 TStoreType;
-    typedef ui32 TFuncParam; 
- 
+    typedef ui32 TFuncParam;
+
     static void ToString(ui32 value, TString* out);
-    static ui32 ToStoreType(ui32 value) { 
-        return value; 
-    } 
+    static ui32 ToStoreType(ui32 value) {
+        return value;
+    }
 };
 
 }}
@@ -35,22 +35,22 @@ namespace NKikimr {
 
 struct TBlobPutTactics {
     typedef ui64 TStoreType;
-    typedef ui64 TFuncParam; 
- 
+    typedef ui64 TFuncParam;
+
     static void ToString(ui64 value, TString* out);
-    static ui64 ToStoreType(ui64 value) { 
-        return value; 
-    } 
+    static ui64 ToStoreType(ui64 value) {
+        return value;
+    }
 };
 
 struct TEventTypeField {
     typedef ui64 TStoreType;
-    typedef ui64 TFuncParam; 
- 
+    typedef ui64 TFuncParam;
+
     static void ToString(ui64 value, TString* out);
-    static ui64 ToStoreType(ui64 value) { 
-        return value; 
-    } 
+    static ui64 ToStoreType(ui64 value) {
+        return value;
+    }
 };
 
 }

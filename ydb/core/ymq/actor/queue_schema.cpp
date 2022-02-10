@@ -1,4 +1,4 @@
-#include "cfg.h" 
+#include "cfg.h"
 #include "executor.h"
 #include "log.h"
 #include "params.h"
@@ -10,12 +10,12 @@
 #include <ydb/core/ymq/queues/std/schema.h>
 
 #include <util/digest/city.h>
-#include <util/generic/utility.h> 
+#include <util/generic/utility.h>
 #include <util/string/join.h>
- 
+
 using NKikimr::NClient::TValue;
 
-namespace NKikimr::NSQS { 
+namespace NKikimr::NSQS {
 
 constexpr TStringBuf FIFO_TABLES_DIR = ".FIFO";
 constexpr TStringBuf STD_TABLES_DIR = ".STD";
@@ -43,8 +43,8 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
                                                      const TString& folderId,
                                                      const bool isCloudMode,
                                                      const bool enableQueueAttributesValidation,
-                                                     TIntrusivePtr<TUserCounters> userCounters, 
-                                                     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources) 
+                                                     TIntrusivePtr<TUserCounters> userCounters,
+                                                     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources)
     : QueuePath_(path)
     , Request_(req)
     , Sender_(sender)
@@ -55,8 +55,8 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
     , QueueCreationTimestamp_(TInstant::Now())
     , IsCloudMode_(isCloudMode)
     , EnableQueueAttributesValidation_(enableQueueAttributesValidation)
-    , UserCounters_(std::move(userCounters)) 
-    , QuoterResources_(std::move(quoterResources)) 
+    , UserCounters_(std::move(userCounters))
+    , QuoterResources_(std::move(quoterResources))
 {
     IsFifo_ = AsciiHasSuffixIgnoreCase(IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName, ".fifo");
 
@@ -65,17 +65,17 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
         RequiredTables_ = GetFifoTables();
     } else {
         RequiredShardsCount_ = Request_.GetShards();
-        RequiredTables_ = GetStandardTables(RequiredShardsCount_, req.GetPartitions(), req.GetEnableAutosplit(), req.GetSizeToSplit()); 
+        RequiredTables_ = GetStandardTables(RequiredShardsCount_, req.GetPartitions(), req.GetEnableAutosplit(), req.GetSizeToSplit());
     }
 }
 
 TCreateQueueSchemaActorV2::~TCreateQueueSchemaActorV2() = default;
 
-static THolder<TSqsEvents::TEvQueueCreated> MakeErrorResponse(const TErrorClass& errorClass) { 
+static THolder<TSqsEvents::TEvQueueCreated> MakeErrorResponse(const TErrorClass& errorClass) {
     auto resp = MakeHolder<TSqsEvents::TEvQueueCreated>();
     resp->Success = false;
     resp->State = EQueueState::Active;
-    resp->ErrorClass = &errorClass; 
+    resp->ErrorClass = &errorClass;
 
     return resp;
 }
@@ -105,7 +105,7 @@ void TCreateQueueSchemaActorV2::InitMissingQueueAttributes(const NKikimrConfig::
     // RedrivePolicy could be unspecified
 }
 
-void TCreateQueueSchemaActorV2::Bootstrap() { 
+void TCreateQueueSchemaActorV2::Bootstrap() {
     Become(&TCreateQueueSchemaActorV2::Preamble);
 
     THashMap<TString, TString> attributes;
@@ -114,71 +114,71 @@ void TCreateQueueSchemaActorV2::Bootstrap() {
     }
 
     const bool clampValues = !EnableQueueAttributesValidation_;
-    ValidatedAttributes_ = TQueueAttributes::FromAttributesAndConfig(attributes, Cfg(), IsFifo_, clampValues); 
+    ValidatedAttributes_ = TQueueAttributes::FromAttributesAndConfig(attributes, Cfg(), IsFifo_, clampValues);
 
     if (!ValidatedAttributes_.Validate()) {
-        auto resp = MakeErrorResponse(NErrors::VALIDATION_ERROR); 
+        auto resp = MakeErrorResponse(NErrors::VALIDATION_ERROR);
         resp->Error = ValidatedAttributes_.ErrorText;
 
-        Send(Sender_, std::move(resp)); 
-        PassAway(); 
+        Send(Sender_, std::move(resp));
+        PassAway();
         return;
     }
 
     if (ValidatedAttributes_.HasClampedAttributes()) {
-        RLOG_SQS_WARN("Clamped some queue attribute values for account " << QueuePath_.UserName << " and queue name " << QueuePath_.QueueName); 
+        RLOG_SQS_WARN("Clamped some queue attribute values for account " << QueuePath_.UserName << " and queue name " << QueuePath_.QueueName);
     }
 
-    InitMissingQueueAttributes(Cfg()); 
+    InitMissingQueueAttributes(Cfg());
 
     if (ValidatedAttributes_.RedrivePolicy.TargetQueueName) {
         const TString createdQueueName = IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName;
-        auto resp = MakeErrorResponse(NErrors::VALIDATION_ERROR); 
+        auto resp = MakeErrorResponse(NErrors::VALIDATION_ERROR);
         if (ValidatedAttributes_.RedrivePolicy.TargetQueueName->empty()) {
-            resp->Error = "Empty target dead letter queue name."; 
+            resp->Error = "Empty target dead letter queue name.";
         } else if (*ValidatedAttributes_.RedrivePolicy.TargetQueueName == createdQueueName) {
             resp->Error = "Using the queue itself as a dead letter queue is not allowed.";
         } else {
-            Send(MakeSqsServiceID(SelfId().NodeId()), 
+            Send(MakeSqsServiceID(SelfId().NodeId()),
                                       new TSqsEvents::TEvGetQueueId(RequestId_, QueuePath_.UserName,
                                       *ValidatedAttributes_.RedrivePolicy.TargetQueueName, FolderId_));
             return;
         }
 
-        Send(Sender_, std::move(resp)); 
-        PassAway(); 
+        Send(Sender_, std::move(resp));
+        PassAway();
 
         return;
     }
 
-    RequestQueueParams(); 
+    RequestQueueParams();
 }
 
 static const char* const ReadQueueParamsQueryCloud = R"__(
     (
         (let customName (Parameter 'CUSTOMNAME (DataType 'Utf8String)))
         (let folderId   (Parameter 'FOLDERID   (DataType 'Utf8String)))
-        (let defaultMaxQueuesCount (Parameter 'DEFAULT_MAX_QUEUES_COUNT (DataType 'Uint64))) 
-        (let userName   (Parameter 'USER_NAME  (DataType 'Utf8String))) 
+        (let defaultMaxQueuesCount (Parameter 'DEFAULT_MAX_QUEUES_COUNT (DataType 'Uint64)))
+        (let userName   (Parameter 'USER_NAME  (DataType 'Utf8String)))
 
-        (let queuesTable '%1$s/.Queues) 
-        (let settingsTable '%1$s/.Settings) 
+        (let queuesTable '%1$s/.Queues)
+        (let settingsTable '%1$s/.Settings)
 
-        (let maxQueuesCountSettingRow '( 
-            '('Account userName) 
-            '('Name (Utf8String '"MaxQueuesCount")))) 
-        (let maxQueuesCountSettingSelect '( 
-            'Value)) 
-        (let maxQueuesCountSettingRead (SelectRow settingsTable maxQueuesCountSettingRow maxQueuesCountSettingSelect)) 
-        (let maxQueuesCountSetting (Coalesce (If (Exists maxQueuesCountSettingRead) (Cast (Member maxQueuesCountSettingRead 'Value) 'Uint64) defaultMaxQueuesCount) (Uint64 '0))) 
- 
-        (let queuesRange '( 
-            '('Account userName userName) 
+        (let maxQueuesCountSettingRow '(
+            '('Account userName)
+            '('Name (Utf8String '"MaxQueuesCount"))))
+        (let maxQueuesCountSettingSelect '(
+            'Value))
+        (let maxQueuesCountSettingRead (SelectRow settingsTable maxQueuesCountSettingRow maxQueuesCountSettingSelect))
+        (let maxQueuesCountSetting (Coalesce (If (Exists maxQueuesCountSettingRead) (Cast (Member maxQueuesCountSettingRead 'Value) 'Uint64) defaultMaxQueuesCount) (Uint64 '0)))
+
+        (let queuesRange '(
+            '('Account userName userName)
             '('QueueName (Utf8String '"") (Void))))
         (let queues
-            (Member (SelectRange queuesTable queuesRange '('QueueName 'CustomQueueName 'Version 'FolderId) '()) 'List)) 
+            (Member (SelectRange queuesTable queuesRange '('QueueName 'CustomQueueName 'Version 'FolderId) '()) 'List))
         (let overLimit
-            (LessOrEqual maxQueuesCountSetting (Length queues))) 
+            (LessOrEqual maxQueuesCountSetting (Length queues)))
 
         (let existingQueuesWithSameNameAndFolderId
             (Filter queues (lambda '(item) (block '(
@@ -211,47 +211,47 @@ static const char* const ReadQueueParamsQueryCloud = R"__(
 static const char* const ReadQueueParamsQueryYandex = R"__(
     (
         (let name       (Parameter 'NAME       (DataType 'Utf8String)))
-        (let defaultMaxQueuesCount (Parameter 'DEFAULT_MAX_QUEUES_COUNT (DataType 'Uint64))) 
-        (let userName   (Parameter 'USER_NAME (DataType 'Utf8String))) 
+        (let defaultMaxQueuesCount (Parameter 'DEFAULT_MAX_QUEUES_COUNT (DataType 'Uint64)))
+        (let userName   (Parameter 'USER_NAME (DataType 'Utf8String)))
 
-        (let queuesTable '%1$s/.Queues) 
-        (let settingsTable '%1$s/.Settings) 
+        (let queuesTable '%1$s/.Queues)
+        (let settingsTable '%1$s/.Settings)
 
-        (let maxQueuesCountSettingRow '( 
-            '('Account userName) 
-            '('Name (Utf8String '"MaxQueuesCount")))) 
-        (let maxQueuesCountSettingSelect '( 
-            'Value)) 
-        (let maxQueuesCountSettingRead (SelectRow settingsTable maxQueuesCountSettingRow maxQueuesCountSettingSelect)) 
-        (let maxQueuesCountSetting (Coalesce (If (Exists maxQueuesCountSettingRead) (Cast (Member maxQueuesCountSettingRead 'Value) 'Uint64) defaultMaxQueuesCount) (Uint64 '0))) 
- 
-        (let queuesRange '( 
-            '('Account userName userName) 
+        (let maxQueuesCountSettingRow '(
+            '('Account userName)
+            '('Name (Utf8String '"MaxQueuesCount"))))
+        (let maxQueuesCountSettingSelect '(
+            'Value))
+        (let maxQueuesCountSettingRead (SelectRow settingsTable maxQueuesCountSettingRow maxQueuesCountSettingSelect))
+        (let maxQueuesCountSetting (Coalesce (If (Exists maxQueuesCountSettingRead) (Cast (Member maxQueuesCountSettingRead 'Value) 'Uint64) defaultMaxQueuesCount) (Uint64 '0)))
+
+        (let queuesRange '(
+            '('Account userName userName)
             '('QueueName (Utf8String '"") (Void))))
         (let queues
-            (Member (SelectRange queuesTable queuesRange '('QueueState) '()) 'List)) 
+            (Member (SelectRange queuesTable queuesRange '('QueueState) '()) 'List))
         (let overLimit
-            (LessOrEqual maxQueuesCountSetting (Length queues))) 
+            (LessOrEqual maxQueuesCountSetting (Length queues)))
 
-        (let queuesRow '( 
-            '('Account userName) 
+        (let queuesRow '(
+            '('Account userName)
             '('QueueName name)))
-        (let queuesSelect '( 
+        (let queuesSelect '(
             'QueueState
             'Version))
-        (let queuesRead (SelectRow queuesTable queuesRow queuesSelect)) 
+        (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let queueExists
             (Coalesce
                 (Or
-                    (Equal (Uint64 '1) (Member queuesRead 'QueueState)) 
-                    (Equal (Uint64 '3) (Member queuesRead 'QueueState)) 
+                    (Equal (Uint64 '1) (Member queuesRead 'QueueState))
+                    (Equal (Uint64 '3) (Member queuesRead 'QueueState))
                 )
                 (Bool 'false)))
 
         (let currentVersion
             (Coalesce
-                (Member queuesRead 'Version) 
+                (Member queuesRead 'Version)
                 (Uint64 '0)
             )
         )
@@ -263,62 +263,62 @@ static const char* const ReadQueueParamsQueryYandex = R"__(
     )
 )__";
 
-void TCreateQueueSchemaActorV2::RequestQueueParams() { 
+void TCreateQueueSchemaActorV2::RequestQueueParams() {
     if (IsCloudMode_) {
-        auto ev = MakeExecuteEvent(Sprintf(ReadQueueParamsQueryCloud, Cfg().GetRoot().c_str())); 
+        auto ev = MakeExecuteEvent(Sprintf(ReadQueueParamsQueryCloud, Cfg().GetRoot().c_str()));
         auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
         TParameters(trans->MutableParams()->MutableProto())
             .Utf8("CUSTOMNAME", CustomQueueName_)
-            .Utf8("FOLDERID", FolderId_) 
-            .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount()) 
-            .Utf8("USER_NAME", QueuePath_.UserName); 
+            .Utf8("FOLDERID", FolderId_)
+            .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
+            .Utf8("USER_NAME", QueuePath_.UserName);
 
-        Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_))); 
+        Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
     } else {
-        auto ev = MakeExecuteEvent(Sprintf(ReadQueueParamsQueryYandex, Cfg().GetRoot().c_str())); 
+        auto ev = MakeExecuteEvent(Sprintf(ReadQueueParamsQueryYandex, Cfg().GetRoot().c_str()));
         auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
         TParameters(trans->MutableParams()->MutableProto())
-            .Utf8("NAME", QueuePath_.QueueName) 
-            .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount()) 
-            .Utf8("USER_NAME", QueuePath_.UserName); 
+            .Utf8("NAME", QueuePath_.QueueName)
+            .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
+            .Utf8("USER_NAME", QueuePath_.UserName);
 
-        Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_))); 
+        Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
     }
 }
 
-STATEFN(TCreateQueueSchemaActorV2::Preamble) { 
+STATEFN(TCreateQueueSchemaActorV2::Preamble) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TSqsEvents::TEvQueueId,  HandleQueueId); 
-        hFunc(TSqsEvents::TEvExecuted, OnReadQueueParams); 
-        hFunc(TEvQuota::TEvClearance, OnCreateQueueQuota); 
-        hFunc(TSqsEvents::TEvAtomicCounterIncrementResult, OnAtomicCounterIncrement); 
-        cFunc(TEvPoisonPill::EventType, PassAway); 
+        hFunc(TSqsEvents::TEvQueueId,  HandleQueueId);
+        hFunc(TSqsEvents::TEvExecuted, OnReadQueueParams);
+        hFunc(TEvQuota::TEvClearance, OnCreateQueueQuota);
+        hFunc(TSqsEvents::TEvAtomicCounterIncrementResult, OnAtomicCounterIncrement);
+        cFunc(TEvPoisonPill::EventType, PassAway);
     }
 }
 
-void TCreateQueueSchemaActorV2::HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev) { 
-    THolder<TSqsEvents::TEvQueueCreated> resp; 
+void TCreateQueueSchemaActorV2::HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev) {
+    THolder<TSqsEvents::TEvQueueCreated> resp;
     if (ev->Get()->Failed) {
-        RLOG_SQS_WARN("Get queue id failed"); 
-        resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE); 
+        RLOG_SQS_WARN("Get queue id failed");
+        resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
     } else if (!ev->Get()->Exists) {
-        resp = MakeErrorResponse(NErrors::VALIDATION_ERROR); 
-        resp->Error = "Target DLQ does not exist"; 
+        resp = MakeErrorResponse(NErrors::VALIDATION_ERROR);
+        resp->Error = "Target DLQ does not exist";
     } else {
-        RequestQueueParams(); 
+        RequestQueueParams();
         return;
     }
 
-    Y_VERIFY(resp); 
-    Send(Sender_, std::move(resp)); 
-    PassAway(); 
+    Y_VERIFY(resp);
+    Send(Sender_, std::move(resp));
+    PassAway();
 }
 
-void TCreateQueueSchemaActorV2::OnReadQueueParams(TSqsEvents::TEvExecuted::TPtr& ev) { 
+void TCreateQueueSchemaActorV2::OnReadQueueParams(TSqsEvents::TEvExecuted::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     const auto status = record.GetStatus();
 
-    THolder<TSqsEvents::TEvQueueCreated> resp; 
+    THolder<TSqsEvents::TEvQueueCreated> resp;
 
     if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
         const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
@@ -327,88 +327,88 @@ void TCreateQueueSchemaActorV2::OnReadQueueParams(TSqsEvents::TEvExecuted::TPtr&
                 ExistingQueueResourceId_ = TString(val["resourceId"]);
             }
             const ui64 currentVersion = ui64(val["version"]);
-            MatchQueueAttributes(currentVersion); 
+            MatchQueueAttributes(currentVersion);
             return;
         } else {
             if (bool(val["overLimit"])) {
-                resp = MakeErrorResponse(NErrors::OVER_LIMIT); 
-                resp->Error = "Too many queues."; 
+                resp = MakeErrorResponse(NErrors::OVER_LIMIT);
+                resp->Error = "Too many queues.";
             } else {
-                if (Cfg().GetQuotingConfig().GetEnableQuoting() && QuoterResources_) { 
-                    RequestCreateQueueQuota(); 
-                } else { 
-                    RunAtomicCounterIncrement(); 
-                } 
+                if (Cfg().GetQuotingConfig().GetEnableQuoting() && QuoterResources_) {
+                    RequestCreateQueueQuota();
+                } else {
+                    RunAtomicCounterIncrement();
+                }
                 return;
             }
         }
     } else {
-        resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE); 
-        resp->Error = "Failed to read queue params."; 
+        resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
+        resp->Error = "Failed to read queue params.";
     }
 
-    Y_VERIFY(resp); 
-    Send(Sender_, std::move(resp)); 
-    PassAway(); 
+    Y_VERIFY(resp);
+    Send(Sender_, std::move(resp));
+    PassAway();
 }
 
-void TCreateQueueSchemaActorV2::RequestCreateQueueQuota() { 
-    TDuration deadline = TDuration::Max(); 
-    const auto& quotingConfig = Cfg().GetQuotingConfig(); 
-    if (quotingConfig.HasQuotaDeadlineMs()) { 
-        deadline = TDuration::MilliSeconds(quotingConfig.GetQuotaDeadlineMs()); 
-    } 
-    Send(MakeQuoterServiceID(), 
-        new TEvQuota::TEvRequest( 
-            TEvQuota::EResourceOperator::And, 
-            { TEvQuota::TResourceLeaf(QuoterResources_->CreateQueueAction.QuoterId, QuoterResources_->CreateQueueAction.ResourceId, 1) }, 
-            deadline)); 
-} 
- 
-void TCreateQueueSchemaActorV2::OnCreateQueueQuota(TEvQuota::TEvClearance::TPtr& ev) { 
-        switch (ev->Get()->Result) { 
-        case TEvQuota::TEvClearance::EResult::GenericError: 
-        case TEvQuota::TEvClearance::EResult::UnknownResource: { 
-            RLOG_SQS_ERROR("Failed to get quota for queue creation: " << ev->Get()->Result); 
-            Send(Sender_, MakeErrorResponse(NErrors::INTERNAL_FAILURE)); 
-            PassAway(); 
-            break; 
-        } 
-        case TEvQuota::TEvClearance::EResult::Deadline: { 
-            RLOG_SQS_WARN("Failed to get quota for queue creation: deadline expired"); 
-            Send(Sender_, MakeErrorResponse(NErrors::THROTTLING_EXCEPTION)); 
-            PassAway(); 
-            break; 
-        } 
-        case TEvQuota::TEvClearance::EResult::Success: { 
-            RLOG_SQS_DEBUG("Successfully got quota for create queue request"); 
-            RunAtomicCounterIncrement(); 
-            break; 
-        } 
-        } 
-} 
- 
-void TCreateQueueSchemaActorV2::RunAtomicCounterIncrement() { 
-    Register(new TAtomicCounterActor(SelfId(), QueuePath_.GetRootPath(), RequestId_)); 
-} 
- 
-void TCreateQueueSchemaActorV2::OnAtomicCounterIncrement(TSqsEvents::TEvAtomicCounterIncrementResult::TPtr& ev) { 
+void TCreateQueueSchemaActorV2::RequestCreateQueueQuota() {
+    TDuration deadline = TDuration::Max();
+    const auto& quotingConfig = Cfg().GetQuotingConfig();
+    if (quotingConfig.HasQuotaDeadlineMs()) {
+        deadline = TDuration::MilliSeconds(quotingConfig.GetQuotaDeadlineMs());
+    }
+    Send(MakeQuoterServiceID(),
+        new TEvQuota::TEvRequest(
+            TEvQuota::EResourceOperator::And,
+            { TEvQuota::TResourceLeaf(QuoterResources_->CreateQueueAction.QuoterId, QuoterResources_->CreateQueueAction.ResourceId, 1) },
+            deadline));
+}
+
+void TCreateQueueSchemaActorV2::OnCreateQueueQuota(TEvQuota::TEvClearance::TPtr& ev) {
+        switch (ev->Get()->Result) {
+        case TEvQuota::TEvClearance::EResult::GenericError:
+        case TEvQuota::TEvClearance::EResult::UnknownResource: {
+            RLOG_SQS_ERROR("Failed to get quota for queue creation: " << ev->Get()->Result);
+            Send(Sender_, MakeErrorResponse(NErrors::INTERNAL_FAILURE));
+            PassAway();
+            break;
+        }
+        case TEvQuota::TEvClearance::EResult::Deadline: {
+            RLOG_SQS_WARN("Failed to get quota for queue creation: deadline expired");
+            Send(Sender_, MakeErrorResponse(NErrors::THROTTLING_EXCEPTION));
+            PassAway();
+            break;
+        }
+        case TEvQuota::TEvClearance::EResult::Success: {
+            RLOG_SQS_DEBUG("Successfully got quota for create queue request");
+            RunAtomicCounterIncrement();
+            break;
+        }
+        }
+}
+
+void TCreateQueueSchemaActorV2::RunAtomicCounterIncrement() {
+    Register(new TAtomicCounterActor(SelfId(), QueuePath_.GetRootPath(), RequestId_));
+}
+
+void TCreateQueueSchemaActorV2::OnAtomicCounterIncrement(TSqsEvents::TEvAtomicCounterIncrementResult::TPtr& ev) {
     auto event = ev->Get();
     if (event->Success) {
         Become(&TCreateQueueSchemaActorV2::CreateComponentsState);
         Version_ = event->NewValue;
         VersionName_ = "v" + ToString(Version_); // add "v" prefix to provide the difference with deprecated version shards
         VersionedQueueFullPath_ = TString::Join(QueuePath_.GetQueuePath(), '/', VersionName_);
-        CreateComponents(); 
+        CreateComponents();
         return;
     } else {
-        auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE); 
-        resp->Error = "Failed to create unique id."; 
+        auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
+        resp->Error = "Failed to create unique id.";
         resp->State = EQueueState::Creating;
-        Send(Sender_, std::move(resp)); 
+        Send(Sender_, std::move(resp));
     }
 
-    PassAway(); 
+    PassAway();
 }
 
 static const char* const GetTablesFormatQuery = R"__(
@@ -445,7 +445,7 @@ void TCreateQueueSchemaActorV2::RequestTablesFormatSettings(const TString& accou
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
 
-void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, const TString& dirName) { 
+void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, const TString& dirName) {
     auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
 
@@ -453,7 +453,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeDirActor(const TString& workingDir, 
     trans->SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
     trans->MutableMkDir()->SetName(dirName);
 
-    Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_))); 
+    Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
 
 void TCreateQueueSchemaActorV2::RequestLeaderTabletId() {
@@ -461,26 +461,26 @@ void TCreateQueueSchemaActorV2::RequestLeaderTabletId() {
     THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
     request->Record.MutableDescribePath()->SetSchemeshardId(TableWithLeaderPathId_.first);
     request->Record.MutableDescribePath()->SetPathId(TableWithLeaderPathId_.second);
-    Send(MakeTxProxyID(), std::move(request)); 
+    Send(MakeTxProxyID(), std::move(request));
 }
 
-void TCreateQueueSchemaActorV2::CreateComponents() { 
+void TCreateQueueSchemaActorV2::CreateComponents() {
     switch (CurrentCreationStep_) {
         case ECreateComponentsStep::GetTablesFormatSetting: {
             RequestTablesFormatSettings(QueuePath_.UserName);
             break;
         }
         case ECreateComponentsStep::MakeQueueDir: {
-            RegisterMakeDirActor(QueuePath_.GetUserPath(), QueuePath_.QueueName); 
+            RegisterMakeDirActor(QueuePath_.GetUserPath(), QueuePath_.QueueName);
             break;
         }
         case ECreateComponentsStep::MakeQueueVersionDir: {
-            RegisterMakeDirActor(QueuePath_.GetQueuePath(), VersionName_); 
+            RegisterMakeDirActor(QueuePath_.GetQueuePath(), VersionName_);
             break;
         }
         case ECreateComponentsStep::MakeShards: {
             for (ui64 shardIdx = 0; shardIdx < RequiredShardsCount_; ++shardIdx) {
-                RegisterMakeDirActor(VersionedQueueFullPath_, ToString(shardIdx)); 
+                RegisterMakeDirActor(VersionedQueueFullPath_, ToString(shardIdx));
             }
             break;
         }
@@ -491,7 +491,7 @@ void TCreateQueueSchemaActorV2::CreateComponents() {
                 cmd->MutablePartitionConfig()->MutablePipelineConfig()->SetEnableOutOfOrder(Request_.GetEnableOutOfOrderTransactionsExecution());
 
                 const TActorId actorId = Register(new TMiniKqlExecutionActor(
-                    SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_))); 
+                    SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 
                 if (table.HasLeaderTablet && !CreateTableWithLeaderTabletActorId_) {
                     CreateTableWithLeaderTabletActorId_ = actorId;
@@ -508,25 +508,25 @@ void TCreateQueueSchemaActorV2::CreateComponents() {
             RequestLeaderTabletId();
             break;
         }
-        case ECreateComponentsStep::AddQuoterResource: { 
-            AddRPSQuota(); 
-            break; 
-        } 
+        case ECreateComponentsStep::AddQuoterResource: {
+            AddRPSQuota();
+            break;
+        }
     }
 }
 
-STATEFN(TCreateQueueSchemaActorV2::CreateComponentsState) { 
+STATEFN(TCreateQueueSchemaActorV2::CreateComponentsState) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TSqsEvents::TEvExecuted, OnExecuted); 
+        hFunc(TSqsEvents::TEvExecuted, OnExecuted);
         hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, OnDescribeSchemeResult);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTableDescription);
-        hFunc(NKesus::TEvKesus::TEvAddQuoterResourceResult, HandleAddQuoterResource); 
-        cFunc(TEvPoisonPill::EventType, PassAway); 
+        hFunc(NKesus::TEvKesus::TEvAddQuoterResourceResult, HandleAddQuoterResource);
+        cFunc(TEvPoisonPill::EventType, PassAway);
     }
 }
 
-void TCreateQueueSchemaActorV2::Step() { 
-    RLOG_SQS_TRACE("Next step. Step: " << (int)CurrentCreationStep_); 
+void TCreateQueueSchemaActorV2::Step() {
+    RLOG_SQS_TRACE("Next step. Step: " << (int)CurrentCreationStep_);
     switch (CurrentCreationStep_) {
         case ECreateComponentsStep::GetTablesFormatSetting: {
             CurrentCreationStep_ = ECreateComponentsStep::MakeQueueDir;
@@ -573,23 +573,23 @@ void TCreateQueueSchemaActorV2::Step() {
             break;
         }
         case ECreateComponentsStep::DiscoverLeaderTabletId: {
-            Y_VERIFY(Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()); 
-            CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource; 
-            break; 
-        } 
-        case ECreateComponentsStep::AddQuoterResource: { 
+            Y_VERIFY(Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig());
+            CurrentCreationStep_ = ECreateComponentsStep::AddQuoterResource;
+            break;
+        }
+        case ECreateComponentsStep::AddQuoterResource: {
             Y_VERIFY(false); // unreachable
-            break; 
+            break;
         }
     }
 
-    CreateComponents(); 
+    CreateComponents();
 }
 
-void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) { 
+void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     const auto status = record.GetStatus();
-    RLOG_SQS_TRACE("OnExecuted: " << ev->Get()->Record); 
+    RLOG_SQS_TRACE("OnExecuted: " << ev->Get()->Record);
 
     if (ev->Sender == CreateTableWithLeaderTabletActorId_) {
         CreateTableWithLeaderTabletTxId_ = record.GetTxId();
@@ -600,7 +600,7 @@ void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     // Note:
     // SS finishes transaction immediately if the specified path already exists
     // DO NOT add any special logic based on the result type (except for an error)
-    if (IsGoodStatusCode(status)) { 
+    if (IsGoodStatusCode(status)) {
         if (CurrentCreationStep_ == ECreateComponentsStep::GetTablesFormatSetting) {
             const TValue value(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
             const TValue formatValue = value["tablesFormat"];
@@ -623,22 +623,22 @@ void TCreateQueueSchemaActorV2::OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
                 << QueuePath_.UserName << record);
         }
 
-        Step(); 
+        Step();
     } else {
-        RLOG_SQS_WARN("Component creation request execution error: " << record); 
+        RLOG_SQS_WARN("Component creation request execution error: " << record);
 
-        auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE); 
+        auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
         resp->State = EQueueState::Creating;
 
         if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest) {
-            resp->Error = TStringBuilder() << "Missing account: " << QueuePath_.UserName << "."; 
+            resp->Error = TStringBuilder() << "Missing account: " << QueuePath_.UserName << ".";
         } else {
             resp->Error = record.GetMiniKQLErrors();
         }
 
-        Send(Sender_, std::move(resp)); 
+        Send(Sender_, std::move(resp));
 
-        PassAway(); 
+        PassAway();
     }
 }
 
@@ -648,23 +648,23 @@ void TCreateQueueSchemaActorV2::OnDescribeSchemeResult(NSchemeShard::TEvSchemeSh
 
     if (ev->Get()->GetRecord().GetStatus() != NKikimrScheme::StatusSuccess || pathDescription.TablePartitionsSize() == 0 || !pathDescription.GetTablePartitions(0).GetDatashardId()) {
         // fail
-        auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE); 
+        auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
         resp->State = EQueueState::Creating;
         resp->Error = "Failed to discover leader.";
 
-        Send(Sender_, std::move(resp)); 
+        Send(Sender_, std::move(resp));
 
-        PassAway(); 
+        PassAway();
         return;
     }
 
     LeaderTabletId_ = pathDescription.GetTablePartitions(0).GetDatashardId();
 
-    if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) { 
-        Step(); 
-    } else { 
-        CommitNewVersion(); 
-    } 
+    if (Cfg().GetQuotingConfig().GetEnableQuoting() && Cfg().GetQuotingConfig().HasKesusQuoterConfig()) {
+        Step();
+    } else {
+        CommitNewVersion();
+    }
 }
 
 void TCreateQueueSchemaActorV2::SendDescribeTable() {
@@ -691,33 +691,33 @@ void TCreateQueueSchemaActorV2::HandleTableDescription(TEvTxProxySchemeCache::TE
     Step();
 }
 
-void TCreateQueueSchemaActorV2::AddRPSQuota() { 
-    NKikimrKesus::TEvAddQuoterResource cmd; 
-    auto& res = *cmd.MutableResource(); 
-    res.SetResourcePath(TStringBuilder() << RPS_QUOTA_NAME << "/" << QueuePath_.QueueName); 
-    res.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(Cfg().GetQuotingConfig().GetKesusQuoterConfig().GetDefaultLimits().GetStdSendMessageRate()); 
-    AddQuoterResourceActor_ = RunAddQuoterResource(TStringBuilder() << QueuePath_.GetUserPath() << "/" << QUOTER_KESUS_NAME, cmd, RequestId_); 
-} 
- 
-void TCreateQueueSchemaActorV2::HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuoterResourceResult::TPtr& ev) { 
+void TCreateQueueSchemaActorV2::AddRPSQuota() {
+    NKikimrKesus::TEvAddQuoterResource cmd;
+    auto& res = *cmd.MutableResource();
+    res.SetResourcePath(TStringBuilder() << RPS_QUOTA_NAME << "/" << QueuePath_.QueueName);
+    res.MutableHierarhicalDRRResourceConfig()->SetMaxUnitsPerSecond(Cfg().GetQuotingConfig().GetKesusQuoterConfig().GetDefaultLimits().GetStdSendMessageRate());
+    AddQuoterResourceActor_ = RunAddQuoterResource(TStringBuilder() << QueuePath_.GetUserPath() << "/" << QUOTER_KESUS_NAME, cmd, RequestId_);
+}
+
+void TCreateQueueSchemaActorV2::HandleAddQuoterResource(NKesus::TEvKesus::TEvAddQuoterResourceResult::TPtr& ev) {
     AddQuoterResourceActor_ = TActorId();
-    auto status = ev->Get()->Record.GetError().GetStatus(); 
-    if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::ALREADY_EXISTS) { 
-        RLOG_SQS_DEBUG("Successfully added quoter resource. Id: " << ev->Get()->Record.GetResourceId()); 
-        CommitNewVersion(); 
-    } else { 
-        RLOG_SQS_WARN("Failed to add quoter resource: " << ev->Get()->Record); 
-        auto resp = MakeErrorResponse(status == Ydb::StatusIds::BAD_REQUEST ? NErrors::VALIDATION_ERROR : NErrors::INTERNAL_FAILURE); 
-        resp->State = EQueueState::Creating; 
-        resp->Error = "Failed to add quoter resource."; 
- 
-        Send(Sender_, std::move(resp)); 
- 
-        PassAway(); 
-        return; 
-    } 
-} 
- 
+    auto status = ev->Get()->Record.GetError().GetStatus();
+    if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::ALREADY_EXISTS) {
+        RLOG_SQS_DEBUG("Successfully added quoter resource. Id: " << ev->Get()->Record.GetResourceId());
+        CommitNewVersion();
+    } else {
+        RLOG_SQS_WARN("Failed to add quoter resource: " << ev->Get()->Record);
+        auto resp = MakeErrorResponse(status == Ydb::StatusIds::BAD_REQUEST ? NErrors::VALIDATION_ERROR : NErrors::INTERNAL_FAILURE);
+        resp->State = EQueueState::Creating;
+        resp->Error = "Failed to add quoter resource.";
+
+        Send(Sender_, std::move(resp));
+
+        PassAway();
+        return;
+    }
+}
+
 static const char* const CommitQueueParamsQuery = R"__(
     (
         (let name                   (Parameter 'NAME              (DataType 'Utf8String)))
@@ -725,7 +725,7 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let folderId               (Parameter 'FOLDERID          (DataType 'Utf8String)))
         (let id                     (Parameter 'ID                (DataType 'String)))
         (let fifo                   (Parameter 'FIFO              (DataType 'Bool)))
-        (let contentBasedDeduplication (Parameter 'CONTENT_BASED_DEDUPLICATION (DataType 'Bool))) 
+        (let contentBasedDeduplication (Parameter 'CONTENT_BASED_DEDUPLICATION (DataType 'Bool)))
         (let now                    (Parameter 'NOW               (DataType 'Uint64)))
         (let shards                 (Parameter 'SHARDS            (DataType 'Uint64)))
         (let partitions             (Parameter 'PARTITIONS        (DataType 'Uint64)))
@@ -737,12 +737,12 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let delay                  (Parameter 'DELAY             (DataType 'Uint64)))
         (let visibility             (Parameter 'VISIBILITY        (DataType 'Uint64)))
         (let retention              (Parameter 'RETENTION         (DataType 'Uint64)))
-        (let receiveMessageWaitTime (Parameter 'RECEIVE_MESSAGE_WAIT_TIME (DataType 'Uint64))) 
+        (let receiveMessageWaitTime (Parameter 'RECEIVE_MESSAGE_WAIT_TIME (DataType 'Uint64)))
         (let dlqArn                 (Parameter 'DLQ_TARGET_ARN    (DataType 'Utf8String)))
         (let dlqName                (Parameter 'DLQ_TARGET_NAME   (DataType 'Utf8String)))
         (let maxReceiveCount        (Parameter 'MAX_RECEIVE_COUNT (DataType 'Uint64)))
-        (let defaultMaxQueuesCount  (Parameter 'DEFAULT_MAX_QUEUES_COUNT (DataType 'Uint64))) 
-        (let userName               (Parameter 'USER_NAME         (DataType 'Utf8String))) 
+        (let defaultMaxQueuesCount  (Parameter 'DEFAULT_MAX_QUEUES_COUNT (DataType 'Uint64)))
+        (let userName               (Parameter 'USER_NAME         (DataType 'Utf8String)))
 
         (let attrsTable '%1$s/Attributes)
         (let stateTable '%1$s/State)
@@ -750,24 +750,24 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let queuesTable '%2$s/.Queues)
         (let eventsTable '%2$s/.Events)
 
-        (let maxQueuesCountSettingRow '( 
-            '('Account userName) 
-            '('Name (Utf8String '"MaxQueuesCount")))) 
-        (let maxQueuesCountSettingSelect '( 
-            'Value)) 
-        (let maxQueuesCountSettingRead (SelectRow settingsTable maxQueuesCountSettingRow maxQueuesCountSettingSelect)) 
-        (let maxQueuesCountSetting (Coalesce (If (Exists maxQueuesCountSettingRead) (Cast (Member maxQueuesCountSettingRead 'Value) 'Uint64) defaultMaxQueuesCount) (Uint64 '0))) 
- 
-        (let queuesRange '( 
-            '('Account userName userName) 
+        (let maxQueuesCountSettingRow '(
+            '('Account userName)
+            '('Name (Utf8String '"MaxQueuesCount"))))
+        (let maxQueuesCountSettingSelect '(
+            'Value))
+        (let maxQueuesCountSettingRead (SelectRow settingsTable maxQueuesCountSettingRow maxQueuesCountSettingSelect))
+        (let maxQueuesCountSetting (Coalesce (If (Exists maxQueuesCountSettingRead) (Cast (Member maxQueuesCountSettingRead 'Value) 'Uint64) defaultMaxQueuesCount) (Uint64 '0)))
+
+        (let queuesRange '(
+            '('Account userName userName)
             '('QueueName (Utf8String '"") (Void))))
         (let queues
-            (Member (SelectRange queuesTable queuesRange '('QueueName 'CustomQueueName 'Version 'FolderId 'QueueState) '()) 'List)) 
+            (Member (SelectRange queuesTable queuesRange '('QueueName 'CustomQueueName 'Version 'FolderId 'QueueState) '()) 'List))
         (let overLimit
-            (LessOrEqual maxQueuesCountSetting (Length queues))) 
+            (LessOrEqual maxQueuesCountSetting (Length queues)))
 
-        (let queuesRow '( 
-            '('Account userName) 
+        (let queuesRow '(
+            '('Account userName)
             '('QueueName name)))
 
         (let eventsRow '(
@@ -775,14 +775,14 @@ static const char* const CommitQueueParamsQuery = R"__(
             '('QueueName name)
             '('EventType (Uint64 '1))))
 
-        (let queuesSelect '( 
+        (let queuesSelect '(
             'QueueState
             'QueueId
             'FifoQueue
             'Shards
             'Partitions
             'Version))
-        (let queuesRead (SelectRow queuesTable queuesRow queuesSelect)) 
+        (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let existingQueuesWithSameNameAndFolderId
             (If (Equal (Utf8String '"") customName)
@@ -806,8 +806,8 @@ static const char* const CommitQueueParamsQuery = R"__(
             (Coalesce
                 (Or
                     (Or
-                        (Equal (Uint64 '1) (Member queuesRead 'QueueState)) 
-                        (Equal (Uint64 '3) (Member queuesRead 'QueueState)) 
+                        (Equal (Uint64 '1) (Member queuesRead 'QueueState))
+                        (Equal (Uint64 '3) (Member queuesRead 'QueueState))
                     )
                     (NotEqual (Utf8String '"") existingResourceId)
                 )
@@ -816,12 +816,12 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let currentVersion
             (Coalesce
                 (Member (ToOptional existingQueuesWithSameNameAndFolderId) 'Version)
-                (Member queuesRead 'Version) 
+                (Member queuesRead 'Version)
                 (Uint64 '0)
             )
         )
 
-        (let queuesUpdate '( 
+        (let queuesUpdate '(
             '('QueueId id)
             '('CustomQueueName customName)
             '('FolderId folderId)
@@ -844,12 +844,12 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let attrRow '(%3$s))
 
         (let attrUpdate '(
-            '('ContentBasedDeduplication contentBasedDeduplication) 
+            '('ContentBasedDeduplication contentBasedDeduplication)
             '('DelaySeconds delay)
             '('FifoQueue fifo)
             '('MaximumMessageSize maxSize)
             '('MessageRetentionPeriod retention)
-            '('ReceiveMessageWaitTime receiveMessageWaitTime) 
+            '('ReceiveMessageWaitTime receiveMessageWaitTime)
             '('MaxReceiveCount maxReceiveCount)
             '('DlqArn dlqArn)
             '('DlqName dlqName)
@@ -881,9 +881,9 @@ static const char* const CommitQueueParamsQuery = R"__(
                 (SetResult 'resourceId existingResourceId)
                 (SetResult 'commited willCommit))
 
-            (ListIf queueExists (SetResult 'meta queuesRead)) 
+            (ListIf queueExists (SetResult 'meta queuesRead))
 
-            (ListIf willCommit (UpdateRow queuesTable queuesRow queuesUpdate)) 
+            (ListIf willCommit (UpdateRow queuesTable queuesRow queuesUpdate))
             (ListIf willCommit (UpdateRow eventsTable eventsRow eventsUpdate))
             (ListIf willCommit (UpdateRow attrsTable attrRow attrUpdate))
             
@@ -903,7 +903,7 @@ static const char* const CommitQueueParamsQuery = R"__(
                         '('RetentionBoundary (Uint64 '0))
                         '('ReadOffset (Uint64 '0))
                         '('WriteOffset (Uint64 '0))
-                        '('CleanupVersion (Uint64 '0)))) 
+                        '('CleanupVersion (Uint64 '0))))
                     (return (UpdateRow stateTable row update)))))))
         ))
     )
@@ -945,7 +945,7 @@ TString GetQueueIdAndShardHashesList(ui64 version, ui32 shards) {
     return hashes;
 }
 
-void TCreateQueueSchemaActorV2::CommitNewVersion() { 
+void TCreateQueueSchemaActorV2::CommitNewVersion() {
     Become(&TCreateQueueSchemaActorV2::FinalizeAndCommit);
 
     TString queuePath;
@@ -988,25 +988,25 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
         .Uint64("RECEIVE_MESSAGE_WAIT_TIME", SecondsToMs(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds))
         .Utf8("DLQ_TARGET_ARN", ValidatedAttributes_.RedrivePolicy.TargetArn ? *ValidatedAttributes_.RedrivePolicy.TargetArn : "")
         .Utf8("DLQ_TARGET_NAME", ValidatedAttributes_.RedrivePolicy.TargetQueueName ? *ValidatedAttributes_.RedrivePolicy.TargetQueueName :  "")
-        .Uint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount ? *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount : 0) 
-        .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount()) 
-        .Utf8("USER_NAME", QueuePath_.UserName); 
+        .Uint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount ? *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount : 0)
+        .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
+        .Utf8("USER_NAME", QueuePath_.UserName);
 
-    Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_))); 
+    Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
 
-STATEFN(TCreateQueueSchemaActorV2::FinalizeAndCommit) { 
+STATEFN(TCreateQueueSchemaActorV2::FinalizeAndCommit) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TSqsEvents::TEvExecuted, OnCommit); 
-        cFunc(TEvPoisonPill::EventType, PassAway); 
+        hFunc(TSqsEvents::TEvExecuted, OnCommit);
+        cFunc(TEvPoisonPill::EventType, PassAway);
     }
 }
 
-void TCreateQueueSchemaActorV2::OnCommit(TSqsEvents::TEvExecuted::TPtr& ev) { 
+void TCreateQueueSchemaActorV2::OnCommit(TSqsEvents::TEvExecuted::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     const auto status = record.GetStatus();
 
-    auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE); 
+    auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
 
     if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
         const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
@@ -1014,29 +1014,29 @@ void TCreateQueueSchemaActorV2::OnCommit(TSqsEvents::TEvExecuted::TPtr& ev) {
             // a new born queue is here!
             resp->QueueId = GeneratedQueueId_;
             resp->Success = true;
-            resp->ErrorClass = nullptr; 
+            resp->ErrorClass = nullptr;
         } else {
             // something is off
             if (bool(val["overLimit"])) {
-                resp->ErrorClass = &NErrors::OVER_LIMIT; 
-                resp->Error = "Too many queues."; 
+                resp->ErrorClass = &NErrors::OVER_LIMIT;
+                resp->Error = "Too many queues.";
              } else if (bool(val["exists"])) {
                 if (IsCloudMode_) {
                     ExistingQueueResourceId_ = TString(val["resourceId"]);
                 }
                 const ui64 currentVersion = ui64(val["version"]);
-                MatchQueueAttributes(currentVersion); 
+                MatchQueueAttributes(currentVersion);
                 return;
              } else {
                 Y_VERIFY(false); // unreachable
              }
         }
     } else {
-        resp->Error = "Failed to commit new queue version."; 
+        resp->Error = "Failed to commit new queue version.";
     }
 
-    Send(Sender_, std::move(resp)); 
-    PassAway(); 
+    Send(Sender_, std::move(resp));
+    PassAway();
 }
 
 static const char* const MatchQueueAttributesQuery = R"__(
@@ -1052,21 +1052,21 @@ static const char* const MatchQueueAttributesQuery = R"__(
         (let retention       (Parameter 'RETENTION         (DataType 'Uint64)))
         (let dlqName         (Parameter 'DLQ_TARGET_NAME   (DataType 'Utf8String)))
         (let maxReceiveCount (Parameter 'MAX_RECEIVE_COUNT (DataType 'Uint64)))
-        (let userName   (Parameter 'USER_NAME  (DataType 'Utf8String))) 
+        (let userName   (Parameter 'USER_NAME  (DataType 'Utf8String)))
 
         (let attrsTable '%1$s/%2$s/Attributes)
-        (let queuesTable '%3$s/.Queues) 
+        (let queuesTable '%3$s/.Queues)
 
-        (let queuesRange '( 
-            '('Account userName userName) 
+        (let queuesRange '(
+            '('Account userName userName)
             '('QueueName (Utf8String '"") (Void))))
         (let queues
-            (Member (SelectRange queuesTable queuesRange '('QueueState) '()) 'List)) 
+            (Member (SelectRange queuesTable queuesRange '('QueueState) '()) 'List))
 
-        (let queuesRow '( 
-            '('Account userName) 
+        (let queuesRow '(
+            '('Account userName)
             '('QueueName name)))
-        (let queuesSelect '( 
+        (let queuesSelect '(
             'QueueState
             'QueueId
             'FifoQueue
@@ -1074,19 +1074,19 @@ static const char* const MatchQueueAttributesQuery = R"__(
             'Partitions
             'DlqName
             'Version))
-        (let queuesRead (SelectRow queuesTable queuesRow queuesSelect)) 
+        (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let queueExists
             (Coalesce
                 (Or
-                    (Equal (Uint64 '1) (Member queuesRead 'QueueState)) 
-                    (Equal (Uint64 '3) (Member queuesRead 'QueueState)) 
+                    (Equal (Uint64 '1) (Member queuesRead 'QueueState))
+                    (Equal (Uint64 '3) (Member queuesRead 'QueueState))
                 )
                 (Bool 'false)))
 
         (let currentVersion
             (Coalesce
-                (Member queuesRead 'Version) 
+                (Member queuesRead 'Version)
                 (Uint64 '0)
             )
         )
@@ -1095,10 +1095,10 @@ static const char* const MatchQueueAttributesQuery = R"__(
             (Coalesce
                 (And
                     (And
-                        (And (Equal (Member queuesRead 'Shards) shards) 
-                            (Equal (Member queuesRead 'Partitions) partitions)) 
-                        (Equal (Member queuesRead 'FifoQueue) fifo)) 
-                    (Equal  (Coalesce (Member queuesRead 'DlqName) (Utf8String '"")) dlqName)) 
+                        (And (Equal (Member queuesRead 'Shards) shards)
+                            (Equal (Member queuesRead 'Partitions) partitions))
+                        (Equal (Member queuesRead 'FifoQueue) fifo))
+                    (Equal  (Coalesce (Member queuesRead 'DlqName) (Utf8String '"")) dlqName))
                 (Bool 'true)))
 
         (let attrRow '(
@@ -1136,7 +1136,7 @@ static const char* const MatchQueueAttributesQuery = R"__(
 
         (let existingQueueId
             (Coalesce
-                (Member queuesRead 'QueueId) 
+                (Member queuesRead 'QueueId)
                 (String '"")))
 
         (return (AsList
@@ -1147,7 +1147,7 @@ static const char* const MatchQueueAttributesQuery = R"__(
     )
 )__";
 
-void TCreateQueueSchemaActorV2::MatchQueueAttributes(const ui64 currentVersion) { 
+void TCreateQueueSchemaActorV2::MatchQueueAttributes(const ui64 currentVersion) {
     Become(&TCreateQueueSchemaActorV2::MatchAttributes);
 
     TString versionedQueuePath = IsCloudMode_ ? ExistingQueueResourceId_ : QueuePath_.QueueName;
@@ -1156,7 +1156,7 @@ void TCreateQueueSchemaActorV2::MatchQueueAttributes(const ui64 currentVersion) 
         versionedQueuePath = TString::Join(versionedQueuePath, "/v", ToString(currentVersion));
     }
     auto ev = MakeExecuteEvent(Sprintf(
-        MatchQueueAttributesQuery, QueuePath_.GetUserPath().c_str(), versionedQueuePath.c_str(), Cfg().GetRoot().c_str() 
+        MatchQueueAttributesQuery, QueuePath_.GetUserPath().c_str(), versionedQueuePath.c_str(), Cfg().GetRoot().c_str()
     ));
     auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
     TParameters(trans->MutableParams()->MutableProto())
@@ -1170,90 +1170,90 @@ void TCreateQueueSchemaActorV2::MatchQueueAttributes(const ui64 currentVersion) 
         .Uint64("VISIBILITY", SecondsToMs(*ValidatedAttributes_.VisibilityTimeout))
         .Uint64("RETENTION", SecondsToMs(*ValidatedAttributes_.MessageRetentionPeriod))
         .Utf8("DLQ_TARGET_NAME", ValidatedAttributes_.RedrivePolicy.TargetQueueName ? *ValidatedAttributes_.RedrivePolicy.TargetQueueName : "")
-        .Uint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount ? *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount : 0) 
-        .Utf8("USER_NAME", QueuePath_.UserName); 
+        .Uint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount ? *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount : 0)
+        .Utf8("USER_NAME", QueuePath_.UserName);
 
-    Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_))); 
+    Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
 
-STATEFN(TCreateQueueSchemaActorV2::MatchAttributes) { 
+STATEFN(TCreateQueueSchemaActorV2::MatchAttributes) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TSqsEvents::TEvExecuted, OnAttributesMatch); 
-        cFunc(TEvPoisonPill::EventType, PassAway); 
+        hFunc(TSqsEvents::TEvExecuted, OnAttributesMatch);
+        cFunc(TEvPoisonPill::EventType, PassAway);
     }
 }
 
-void TCreateQueueSchemaActorV2::OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr& ev) { 
+void TCreateQueueSchemaActorV2::OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     const auto status = record.GetStatus();
 
-    auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE); 
+    auto resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
 
     if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
         const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
         if (bool(val["exists"])) {
             resp->AlreadyExists = true;
-            resp->ErrorClass = nullptr; 
+            resp->ErrorClass = nullptr;
             resp->ExistingQueueResourceId = IsCloudMode_ ? ExistingQueueResourceId_ : QueuePath_.QueueName;
             const bool isSame = bool(val["isSame"]);
             if (isSame || !EnableQueueAttributesValidation_) {
                 resp->Success = true;
-                resp->ErrorClass = nullptr; 
+                resp->ErrorClass = nullptr;
                 resp->QueueId = TString(val["id"]);
 
                 if (!isSame) {
-                    RLOG_SQS_WARN("Queue attributes do not match for account " << QueuePath_.UserName << " and queue name " << QueuePath_.QueueName); 
+                    RLOG_SQS_WARN("Queue attributes do not match for account " << QueuePath_.UserName << " and queue name " << QueuePath_.QueueName);
                 }
             } else {
-                resp->Error = "queue with specified name already exists and has different attributes."; 
-                resp->ErrorClass = &NErrors::VALIDATION_ERROR; 
+                resp->Error = "queue with specified name already exists and has different attributes.";
+                resp->ErrorClass = &NErrors::VALIDATION_ERROR;
             }
 
             if (CurrentCreationStep_ == ECreateComponentsStep::DiscoverLeaderTabletId) {
                 // call the special version of cleanup actor
-                RLOG_SQS_WARN("Removing redundant queue version: " << Version_ << " for queue " << 
+                RLOG_SQS_WARN("Removing redundant queue version: " << Version_ << " for queue " <<
                                     QueuePath_.GetQueuePath() << ". Shards: " << RequiredShardsCount_ << " IsFifo: " << IsFifo_);
-                Register(new TDeleteQueueSchemaActorV2(QueuePath_, SelfId(), RequestId_, UserCounters_, 
+                Register(new TDeleteQueueSchemaActorV2(QueuePath_, SelfId(), RequestId_, UserCounters_,
                                                            Version_, RequiredShardsCount_, IsFifo_));
             }
 
         } else {
-            resp->Error = "Queue was removed recently."; 
-            resp->ErrorClass = &NErrors::QUEUE_DELETED_RECENTLY; 
-            resp->State = EQueueState::Deleting; 
+            resp->Error = "Queue was removed recently.";
+            resp->ErrorClass = &NErrors::QUEUE_DELETED_RECENTLY;
+            resp->State = EQueueState::Deleting;
         }
     } else {
-        resp->Error = "Failed to compare queue attributes."; 
+        resp->Error = "Failed to compare queue attributes.";
     }
 
-    Send(Sender_, std::move(resp)); 
-    PassAway(); 
+    Send(Sender_, std::move(resp));
+    PassAway();
 }
 
-void TCreateQueueSchemaActorV2::PassAway() { 
-    if (AddQuoterResourceActor_) { 
-        Send(AddQuoterResourceActor_, new TEvPoisonPill()); 
+void TCreateQueueSchemaActorV2::PassAway() {
+    if (AddQuoterResourceActor_) {
+        Send(AddQuoterResourceActor_, new TEvPoisonPill());
         AddQuoterResourceActor_ = TActorId();
-    } 
-    TActorBootstrapped<TCreateQueueSchemaActorV2>::PassAway(); 
-} 
- 
+    }
+    TActorBootstrapped<TCreateQueueSchemaActorV2>::PassAway();
+}
+
 TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      const TActorId& sender,
                                                      const TString& requestId,
-                                                     TIntrusivePtr<TUserCounters> userCounters) 
+                                                     TIntrusivePtr<TUserCounters> userCounters)
     : QueuePath_(path)
     , Sender_(sender)
     , SI_(0)
     , RequestId_(requestId)
-    , UserCounters_(std::move(userCounters)) 
+    , UserCounters_(std::move(userCounters))
 {
 }
 
 TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      const TActorId& sender,
                                                      const TString& requestId,
-                                                     TIntrusivePtr<TUserCounters> userCounters, 
+                                                     TIntrusivePtr<TUserCounters> userCounters,
                                                      const ui64 advisedQueueVersion,
                                                      const ui64 advisedShardCount,
                                                      const bool advisedIsFifoFlag)
@@ -1261,7 +1261,7 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , Sender_(sender)
     , SI_(static_cast<ui32>(EDeleting::RemoveTables))
     , RequestId_(requestId)
-    , UserCounters_(std::move(userCounters)) 
+    , UserCounters_(std::move(userCounters))
 {
     Y_VERIFY(advisedQueueVersion > 0);
 
@@ -1270,8 +1270,8 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     PrepareCleanupPlan(advisedIsFifoFlag, advisedShardCount);
 }
 
-void TDeleteQueueSchemaActorV2::Bootstrap() { 
-    NextAction(); 
+void TDeleteQueueSchemaActorV2::Bootstrap() {
+    NextAction();
     Become(&TThis::StateFunc);
 }
 
@@ -1298,21 +1298,21 @@ static TString GetVersionedQueueDir(const TString& baseQueueDir, const ui64 vers
 static const char* EraseQueueRecordQuery = R"__(
     (
         (let name (Parameter 'NAME (DataType 'Utf8String)))
-        (let userName (Parameter 'USER_NAME (DataType 'Utf8String))) 
+        (let userName (Parameter 'USER_NAME (DataType 'Utf8String)))
         (let now (Parameter 'NOW (DataType 'Uint64)))
 
-        (let queuesTable '%2$s/.Queues) 
+        (let queuesTable '%2$s/.Queues)
         (let eventsTable '%2$s/.Events)
 
-        (let queuesRow '( 
-            '('Account userName) 
+        (let queuesRow '(
+            '('Account userName)
             '('QueueName name)))
         (let eventsRow '(
             '('Account userName)
             '('QueueName name)
             '('EventType (Uint64 '0))))
 
-        (let queuesSelect '( 
+        (let queuesSelect '(
             'QueueState
             'Version
             'FifoQueue
@@ -1320,11 +1320,11 @@ static const char* EraseQueueRecordQuery = R"__(
             'CustomQueueName
             'CreatedTimestamp
             'FolderId))
-        (let queuesRead (SelectRow queuesTable queuesRow queuesSelect)) 
+        (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let currentVersion
             (Coalesce
-                (Member queuesRead 'Version) 
+                (Member queuesRead 'Version)
                 (Uint64 '0)
             )
         )
@@ -1354,8 +1354,8 @@ static const char* EraseQueueRecordQuery = R"__(
         (let queueExists
             (Coalesce
                 (Or
-                    (Equal (Uint64 '1) (Member queuesRead 'QueueState)) 
-                    (Equal (Uint64 '3) (Member queuesRead 'QueueState)) 
+                    (Equal (Uint64 '1) (Member queuesRead 'QueueState))
+                    (Equal (Uint64 '3) (Member queuesRead 'QueueState))
                 )
                 (Bool 'false)))
 
@@ -1367,66 +1367,66 @@ static const char* EraseQueueRecordQuery = R"__(
         (return (AsList
             (SetResult 'exists queueExists)
             (SetResult 'version currentVersion)
-            (SetResult 'fields queuesRead) 
+            (SetResult 'fields queuesRead)
             (If queueExists (UpdateRow eventsTable eventsRow eventsUpdate) (Void))
-            (If queueExists (EraseRow queuesTable queuesRow) (Void)))) 
+            (If queueExists (EraseRow queuesTable queuesRow) (Void))))
     )
 )__";
 
-void TDeleteQueueSchemaActorV2::NextAction() { 
+void TDeleteQueueSchemaActorV2::NextAction() {
     switch (EDeleting(SI_)) {
         case EDeleting::EraseQueueRecord: {
                 auto ev = MakeExecuteEvent(Sprintf(EraseQueueRecordQuery, QueuePath_.GetUserPath().c_str(), Cfg().GetRoot().c_str()));
             auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
             auto nowMs = TInstant::Now().MilliSeconds();
             TParameters(trans->MutableParams()->MutableProto())
-                .Utf8("NAME", QueuePath_.QueueName) 
+                .Utf8("NAME", QueuePath_.QueueName)
                 .Utf8("USER_NAME", QueuePath_.UserName)
                 .Uint64("NOW", nowMs);
 
-            Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_))); 
+            Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
             break;
         }
         case EDeleting::RemoveTables: {
-            Y_VERIFY(!Tables_.empty()); 
+            Y_VERIFY(!Tables_.empty());
 
-            Register(new TMiniKqlExecutionActor( 
-                SelfId(), RequestId_, MakeDeleteTableEvent(GetVersionedQueueDir(QueuePath_, Version_), Tables_.back()), false, QueuePath_, GetTransactionCounters(UserCounters_)) 
+            Register(new TMiniKqlExecutionActor(
+                SelfId(), RequestId_, MakeDeleteTableEvent(GetVersionedQueueDir(QueuePath_, Version_), Tables_.back()), false, QueuePath_, GetTransactionCounters(UserCounters_))
             );
             break;
         }
         case EDeleting::RemoveShards: {
-            Register(new TMiniKqlExecutionActor( 
-                SelfId(), RequestId_, MakeRemoveDirectoryEvent(GetVersionedQueueDir(QueuePath_, Version_), ToString(Shards_.back())), false, QueuePath_, GetTransactionCounters(UserCounters_)) 
+            Register(new TMiniKqlExecutionActor(
+                SelfId(), RequestId_, MakeRemoveDirectoryEvent(GetVersionedQueueDir(QueuePath_, Version_), ToString(Shards_.back())), false, QueuePath_, GetTransactionCounters(UserCounters_))
             );
             break;
         }
         case EDeleting::RemoveQueueVersionDirectory: {
-            Register(new TMiniKqlExecutionActor( 
-                SelfId(), RequestId_, MakeRemoveDirectoryEvent(QueuePath_, TString::Join("v", ToString(Version_))), false, QueuePath_, GetTransactionCounters(UserCounters_)) 
+            Register(new TMiniKqlExecutionActor(
+                SelfId(), RequestId_, MakeRemoveDirectoryEvent(QueuePath_, TString::Join("v", ToString(Version_))), false, QueuePath_, GetTransactionCounters(UserCounters_))
             );
             break;
         }
         case EDeleting::RemoveQueueDirectory: {
             // this may silently fail for versioned queues
-            Register(new TMiniKqlExecutionActor( 
-                SelfId(), RequestId_, MakeRemoveDirectoryEvent(QueuePath_.GetUserPath(), QueuePath_.QueueName), false, QueuePath_, GetTransactionCounters(UserCounters_)) 
+            Register(new TMiniKqlExecutionActor(
+                SelfId(), RequestId_, MakeRemoveDirectoryEvent(QueuePath_.GetUserPath(), QueuePath_.QueueName), false, QueuePath_, GetTransactionCounters(UserCounters_))
             );
             break;
         }
-        case EDeleting::DeleteQuoterResource: { 
-            DeleteRPSQuota(); 
-            break; 
-        } 
+        case EDeleting::DeleteQuoterResource: {
+            DeleteRPSQuota();
+            break;
+        }
         case EDeleting::Finish: {
-            Send(Sender_, MakeHolder<TSqsEvents::TEvQueueDeleted>(QueuePath_, true)); 
-            PassAway(); 
+            Send(Sender_, MakeHolder<TSqsEvents::TEvQueueDeleted>(QueuePath_, true));
+            PassAway();
             break;
         }
     }
 }
 
-void TDeleteQueueSchemaActorV2::DoSuccessOperation() { 
+void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
     if (EDeleting(SI_) == EDeleting::RemoveTables) {
         Tables_.pop_back();
 
@@ -1445,23 +1445,23 @@ void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
         }
     } else {
         SI_++;
-        if ((!Cfg().GetQuotingConfig().GetEnableQuoting() || !Cfg().GetQuotingConfig().HasKesusQuoterConfig()) && EDeleting(SI_) == EDeleting::DeleteQuoterResource) { 
-            SI_++; 
-        } 
+        if ((!Cfg().GetQuotingConfig().GetEnableQuoting() || !Cfg().GetQuotingConfig().HasKesusQuoterConfig()) && EDeleting(SI_) == EDeleting::DeleteQuoterResource) {
+            SI_++;
+        }
     }
 
-    NextAction(); 
+    NextAction();
 }
 
-void TDeleteQueueSchemaActorV2::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) { 
+void TDeleteQueueSchemaActorV2::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
     const auto& record = ev->Get()->Record;
-    if (IsGoodStatusCode(record.GetStatus())) { 
+    if (IsGoodStatusCode(record.GetStatus())) {
         if (EDeleting(SI_) == EDeleting::EraseQueueRecord) {
             const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
             if (!bool(val["exists"])) {
-                Send(Sender_, 
+                Send(Sender_,
                     MakeHolder<TSqsEvents::TEvQueueDeleted>(QueuePath_, false, "Queue does not exist."));
-                PassAway(); 
+                PassAway();
                 return;
             } else {
                 Version_ = ui64(val["version"]);
@@ -1470,50 +1470,50 @@ void TDeleteQueueSchemaActorV2::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev
             }
         }
 
-        DoSuccessOperation(); 
+        DoSuccessOperation();
     } else {
-        RLOG_SQS_WARN("request execution error: " << record); 
+        RLOG_SQS_WARN("request execution error: " << record);
 
-        if (EDeleting(SI_) == EDeleting::EraseQueueRecord) { 
-            Send(Sender_, 
-                     MakeHolder<TSqsEvents::TEvQueueDeleted>(QueuePath_, false, "Failed to erase queue record.")); 
-            PassAway(); 
-            return; 
-        } 
- 
+        if (EDeleting(SI_) == EDeleting::EraseQueueRecord) {
+            Send(Sender_,
+                     MakeHolder<TSqsEvents::TEvQueueDeleted>(QueuePath_, false, "Failed to erase queue record."));
+            PassAway();
+            return;
+        }
+
         // we don't really care if some components are already deleted
-        DoSuccessOperation(); 
+        DoSuccessOperation();
     }
 }
 
-void TDeleteQueueSchemaActorV2::DeleteRPSQuota() { 
-    NKikimrKesus::TEvDeleteQuoterResource cmd; 
-    cmd.SetResourcePath(TStringBuilder() << RPS_QUOTA_NAME << "/" << QueuePath_.QueueName); 
-    DeleteQuoterResourceActor_ = RunDeleteQuoterResource(TStringBuilder() << QueuePath_.GetUserPath() << "/" << QUOTER_KESUS_NAME, cmd, RequestId_); 
-} 
- 
-void TDeleteQueueSchemaActorV2::HandleDeleteQuoterResource(NKesus::TEvKesus::TEvDeleteQuoterResourceResult::TPtr& ev) { 
+void TDeleteQueueSchemaActorV2::DeleteRPSQuota() {
+    NKikimrKesus::TEvDeleteQuoterResource cmd;
+    cmd.SetResourcePath(TStringBuilder() << RPS_QUOTA_NAME << "/" << QueuePath_.QueueName);
+    DeleteQuoterResourceActor_ = RunDeleteQuoterResource(TStringBuilder() << QueuePath_.GetUserPath() << "/" << QUOTER_KESUS_NAME, cmd, RequestId_);
+}
+
+void TDeleteQueueSchemaActorV2::HandleDeleteQuoterResource(NKesus::TEvKesus::TEvDeleteQuoterResourceResult::TPtr& ev) {
     DeleteQuoterResourceActor_ = TActorId();
-    auto status = ev->Get()->Record.GetError().GetStatus(); 
-    if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::NOT_FOUND) { 
-        RLOG_SQS_DEBUG("Successfully deleted quoter resource"); 
- 
-        DoSuccessOperation(); 
-    } else { 
-        RLOG_SQS_WARN("Failed to delete quoter resource: " << ev->Get()->Record); 
- 
-        Send(Sender_, 
-                 MakeHolder<TSqsEvents::TEvQueueDeleted>(QueuePath_, false, "Failed to delete RPS quoter resource.")); 
-        PassAway(); 
-    } 
-} 
- 
-void TDeleteQueueSchemaActorV2::PassAway() { 
-    if (DeleteQuoterResourceActor_) { 
-        Send(DeleteQuoterResourceActor_, new TEvPoisonPill()); 
+    auto status = ev->Get()->Record.GetError().GetStatus();
+    if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::NOT_FOUND) {
+        RLOG_SQS_DEBUG("Successfully deleted quoter resource");
+
+        DoSuccessOperation();
+    } else {
+        RLOG_SQS_WARN("Failed to delete quoter resource: " << ev->Get()->Record);
+
+        Send(Sender_,
+                 MakeHolder<TSqsEvents::TEvQueueDeleted>(QueuePath_, false, "Failed to delete RPS quoter resource."));
+        PassAway();
+    }
+}
+
+void TDeleteQueueSchemaActorV2::PassAway() {
+    if (DeleteQuoterResourceActor_) {
+        Send(DeleteQuoterResourceActor_, new TEvPoisonPill());
         DeleteQuoterResourceActor_ = TActorId();
-    } 
-    TActorBootstrapped<TDeleteQueueSchemaActorV2>::PassAway(); 
-} 
- 
-} // namespace NKikimr::NSQS 
+    }
+    TActorBootstrapped<TDeleteQueueSchemaActorV2>::PassAway();
+}
+
+} // namespace NKikimr::NSQS

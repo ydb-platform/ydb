@@ -24,7 +24,7 @@ auto CreateArray(const T(&list)[N]) -> std::array<T, K> {
     return result;
 }
 
-bool DoesPingTaskUpdateQueriesTable(const TEvControlPlaneStorage::TEvPingTaskRequest* request); 
+bool DoesPingTaskUpdateQueriesTable(const TEvControlPlaneStorage::TEvPingTaskRequest* request);
 
 NYdb::TValue PackItemsToList(const TVector<NYdb::TValue>& items);
 

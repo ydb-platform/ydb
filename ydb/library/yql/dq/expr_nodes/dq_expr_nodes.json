@@ -57,29 +57,29 @@
         "Match": {"Type": "Callable", "Name": "DqPhyJoinDict"}
     },
     {
-        "Name": "TDqSource", 
-        "Base": "TCallable", 
-        "Match": {"Type": "Callable", "Name": "DqSource"}, 
-        "Children": [ 
-            {"Index": 0, "Name": "DataSource", "Type": "TCallable"}, 
-            {"Index": 1, "Name": "Settings", "Type": "TExprBase"} 
-        ] 
-    }, 
-    { 
-        "Name": "TDqSink", 
-        "Base": "TCallable", 
-        "Match": {"Type": "Callable", "Name": "DqSink"}, 
-        "Children": [ 
-            {"Index": 0, "Name": "DataSink", "Type": "TCallable"}, 
-            {"Index": 1, "Name": "Settings", "Type": "TExprBase"}, 
-            {"Index": 2, "Name": "Index", "Type": "TCoAtom"} 
-        ] 
-    }, 
-    { 
-        "Name": "TDqSinksList", 
-        "ListBase": "TDqSink" 
-    }, 
-    { 
+        "Name": "TDqSource",
+        "Base": "TCallable",
+        "Match": {"Type": "Callable", "Name": "DqSource"},
+        "Children": [
+            {"Index": 0, "Name": "DataSource", "Type": "TCallable"},
+            {"Index": 1, "Name": "Settings", "Type": "TExprBase"}
+        ]
+    },
+    {
+        "Name": "TDqSink",
+        "Base": "TCallable",
+        "Match": {"Type": "Callable", "Name": "DqSink"},
+        "Children": [
+            {"Index": 0, "Name": "DataSink", "Type": "TCallable"},
+            {"Index": 1, "Name": "Settings", "Type": "TExprBase"},
+            {"Index": 2, "Name": "Index", "Type": "TCoAtom"}
+        ]
+    },
+    {
+        "Name": "TDqSinksList",
+        "ListBase": "TDqSink"
+    },
+    {
         "Name": "TDqStageBase",
         "Base": "TCallable",
         "Match": {"Type": "CallableBase"},
@@ -87,8 +87,8 @@
         "Children": [
             {"Index": 0, "Name": "Inputs", "Type": "TExprList"},
             {"Index": 1, "Name": "Program", "Type": "TCoLambda"},
-            {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"}, 
-            {"Index": 3, "Name": "Sinks", "Type": "TDqSinksList", "Optional": true} 
+            {"Index": 2, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+            {"Index": 3, "Name": "Sinks", "Type": "TDqSinksList", "Optional": true}
         ]
     },
     {
@@ -103,7 +103,7 @@
     },
     {
         "Name": "TDqStageList",
-        "ListBase": "TDqStageBase" 
+        "ListBase": "TDqStageBase"
     },
     {
         "Name": "TDqPhyStageList",
@@ -191,15 +191,15 @@
         "Children": [
             {"Index": 0, "Name": "Input", "Type": "TExprBase"}
         ]
-    }, 
-    { 
-        "Name": "TDqQuery", 
-        "Base": "TCallable", 
-        "Match": {"Type": "Callable", "Name": "DqQuery!"}, 
-        "Children": [ 
-            {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
-            {"Index": 1, "Name": "SinkStages", "Type": "TDqStageList"} 
-        ] 
+    },
+    {
+        "Name": "TDqQuery",
+        "Base": "TCallable",
+        "Match": {"Type": "Callable", "Name": "DqQuery!"},
+        "Children": [
+            {"Index": 0, "Name": "World", "Type": "TExprBase"},
+            {"Index": 1, "Name": "SinkStages", "Type": "TDqStageList"}
+        ]
     },
     {
         "Name": "TDqPrecompute",

@@ -10,8 +10,8 @@ class TYqMockAuditServiceActor : public NActors::TActor<TYqMockAuditServiceActor
 public:
     TYqMockAuditServiceActor() : TActor<TYqMockAuditServiceActor>(&TYqMockAuditServiceActor::StateFunc) {}
 
-    static constexpr char ActorName[] = "YQ_MOCK_AUDIT_SERVICE"; 
- 
+    static constexpr char ActorName[] = "YQ_MOCK_AUDIT_SERVICE";
+
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvAuditService::CreateBindingAuditReport, Handle);

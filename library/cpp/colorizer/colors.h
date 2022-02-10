@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fwd.h" 
+#include "fwd.h"
 
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
@@ -104,8 +104,8 @@ namespace NColorizer {
         static bool CalcIsTTY(FILE* file);
 
     public:
-        explicit TColors(FILE* = stderr); 
-        explicit TColors(bool ontty); 
+        explicit TColors(FILE* = stderr);
+        explicit TColors(bool ontty);
 
         TStringBuf Reset() const noexcept;
 
@@ -213,9 +213,9 @@ namespace NColorizer {
     };
 
     /// Singletone `TColors` instances for stderr/stdout.
-    TColors& StdErr(); 
-    TColors& StdOut(); 
- 
+    TColors& StdErr();
+    TColors& StdOut();
+
     /// Choose `TColors` depending on output stream. If passed stream is stderr/stdout, return a corresponding
     /// singletone. Otherwise, return a disabled singletone (which you can, but should *not* enable).
     TColors& AutoColors(IOutputStream& os);

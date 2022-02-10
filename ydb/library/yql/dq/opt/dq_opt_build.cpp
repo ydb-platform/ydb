@@ -168,18 +168,18 @@ void MakeConsumerReplaces(
     if (info.Consumers.size() <= 1) {
         YQL_ENSURE(info.ConsumersCount == info.Consumers.size());
         return;
-    } 
+    }
 
     if (info.HasDependantConsumers && !allowDependantConsumers) {
         for (ui32 i = 0; i < info.Consumers.size(); ++i) {
             if (info.Consumers[i]) {
                 MakeConsumerReplaces(dqStage, {info.Consumers[i].Cast()}, replaces, ctx);
             }
-        } 
- 
+        }
+
         return;
-    } 
- 
+    }
+
     if (info.ConsumersCount == info.Consumers.size()) {
         return;
     }
@@ -215,10 +215,10 @@ public:
                 for (const auto& item : maybeList.Cast()) {
                     queryNodes.push_back(item);
                 }
-            } else { 
+            } else {
                 queryRoots.push_back(head);
             }
-        } 
+        }
 
         auto filter = [](const TExprNode::TPtr& exprNode) {
             return !exprNode->IsLambda();
@@ -260,7 +260,7 @@ public:
                     consumersMap[stage].HasDependantConsumers = true;
                 }
             }
-        } 
+        }
 
         TNodeOnNodeOwnedMap replaces;
         for (const auto& [stage, info] : consumersMap) {
@@ -271,15 +271,15 @@ public:
             return TStatus::Ok;
         }
 
-        TOptimizeExprSettings settings{nullptr}; 
-        settings.VisitLambdas = false; 
+        TOptimizeExprSettings settings{nullptr};
+        settings.VisitLambdas = false;
         return RemapExpr(input, output, replaces, ctx, settings);
     }
 
 private:
     const bool AllowDependantConsumers;
 };
- 
+
 class TDqBuildPhysicalStagesTransformer : public TSyncTransformerBase {
 public:
     explicit TDqBuildPhysicalStagesTransformer() {}

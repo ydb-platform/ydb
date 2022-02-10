@@ -134,7 +134,7 @@ struct TKikimrEvents : TEvents {
         ES_IAM_TOKEN_SERVICE,
         ES_HEALTH_CHECK,
         ES_DQ = NYql::NDq::TDqEvents::ES_DQ_COMPUTE, // 4212
-        ES_YQ, // 4213 
+        ES_YQ, // 4213
         ES_CHANGE_EXCHANGE,
         ES_DATABASE_SERVICE, //4215
         ES_SEQUENCESHARD, // 4216

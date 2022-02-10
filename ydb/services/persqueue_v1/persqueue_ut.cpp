@@ -44,7 +44,7 @@ using namespace Tests;
 using namespace NKikimrClient;
 using namespace Ydb::PersQueue;
 using namespace Ydb::PersQueue::V1;
-using namespace NThreading; 
+using namespace NThreading;
 using namespace NNetClassifier;
 
 TAutoPtr<IEventHandle> GetClassifierUpdate(TServer& server, const TActorId sender) {
@@ -167,17 +167,17 @@ namespace {
         TPersQueueV1TestServer server;
         SET_LOCALS;
         MAKE_INSECURE_STUB;
-        auto readStream = StubP_->MigrationStreamingRead(&rcontext); 
+        auto readStream = StubP_->MigrationStreamingRead(&rcontext);
         UNIT_ASSERT(readStream);
 
         // init read session
         {
-            MigrationStreamingReadClientMessage  req; 
-            MigrationStreamingReadServerMessage resp; 
+            MigrationStreamingReadClientMessage  req;
+            MigrationStreamingReadServerMessage resp;
 
-            req.mutable_init_request()->add_topics_read_settings()->set_topic("acc/topic1"); 
+            req.mutable_init_request()->add_topics_read_settings()->set_topic("acc/topic1");
 
-            req.mutable_init_request()->set_consumer("user"); 
+            req.mutable_init_request()->set_consumer("user");
             req.mutable_init_request()->set_read_only_original(true);
             req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1);
 
@@ -186,9 +186,9 @@ namespace {
             }
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.response_case() == MigrationStreamingReadServerMessage::kInitResponse); 
+            UNIT_ASSERT(resp.response_case() == MigrationStreamingReadServerMessage::kInitResponse);
             //send some reads
-            req.Clear(); 
+            req.Clear();
             req.mutable_read();
             for (ui32 i = 0; i < 10; ++i) {
                 if (!readStream->Write(req)) {
@@ -215,12 +215,12 @@ namespace {
         }
         ui64 assignId = 0;
         {
-            MigrationStreamingReadClientMessage  req; 
-            MigrationStreamingReadServerMessage resp; 
+            MigrationStreamingReadClientMessage  req;
+            MigrationStreamingReadServerMessage resp;
 
             //lock partition
             UNIT_ASSERT(readStream->Read(&resp));
-            UNIT_ASSERT(resp.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+            UNIT_ASSERT(resp.response_case() == MigrationStreamingReadServerMessage::kAssigned);
             UNIT_ASSERT(resp.assigned().topic().path() == "acc/topic1");
             UNIT_ASSERT(resp.assigned().cluster() == "dc1");
             UNIT_ASSERT(resp.assigned().partition() == 0);
@@ -252,11 +252,11 @@ namespace {
         }
 
         //check read results
-        MigrationStreamingReadServerMessage resp; 
+        MigrationStreamingReadServerMessage resp;
         for (ui32 i = 10; i < 16; ++i) {
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "Got read response " << resp << "\n";
-            UNIT_ASSERT_C(resp.response_case() == MigrationStreamingReadServerMessage::kDataBatch, resp); 
+            UNIT_ASSERT_C(resp.response_case() == MigrationStreamingReadServerMessage::kDataBatch, resp);
             UNIT_ASSERT(resp.data_batch().partition_data_size() == 1);
             UNIT_ASSERT(resp.data_batch().partition_data(0).batches_size() == 1);
             UNIT_ASSERT(resp.data_batch().partition_data(0).batches(0).message_data_size() == 1);
@@ -264,8 +264,8 @@ namespace {
         }
         //TODO: restart here readSession and read from position 10
         {
-            MigrationStreamingReadClientMessage  req; 
-            MigrationStreamingReadServerMessage resp; 
+            MigrationStreamingReadClientMessage  req;
+            MigrationStreamingReadServerMessage resp;
 
             auto cookie = req.mutable_commit()->add_cookies();
             cookie->set_assign_id(assignId);
@@ -275,7 +275,7 @@ namespace {
                 ythrow yexception() << "write fail";
             }
             UNIT_ASSERT(readStream->Read(&resp));
-            UNIT_ASSERT_C(resp.response_case() == MigrationStreamingReadServerMessage::kCommitted, resp); 
+            UNIT_ASSERT_C(resp.response_case() == MigrationStreamingReadServerMessage::kCommitted, resp);
         }
 
 
@@ -338,7 +338,7 @@ namespace {
         UNIT_ASSERT_VALUES_EQUAL(p, pp);
 
         writer.Write(SHORT_TOPIC_NAME, {"1", "2", "3", "4", "5"});
- 
+
         writer.Write("topic2", {"valuevaluevalue1"}, true);
 
         p = writer.InitSession("sid1", 2, true);
@@ -540,20 +540,20 @@ namespace {
         Cerr << "===Writer - writes done\n";
 
         grpc::ClientContext rcontext;
-        auto readStream = StubP_->MigrationStreamingRead(&rcontext); 
+        auto readStream = StubP_->MigrationStreamingRead(&rcontext);
         UNIT_ASSERT(readStream);
 
         // init read session
         {
-            MigrationStreamingReadClientMessage  req; 
-            MigrationStreamingReadServerMessage resp; 
+            MigrationStreamingReadClientMessage  req;
+            MigrationStreamingReadServerMessage resp;
 
             req.mutable_init_request()->add_topics_read_settings()->set_topic(SHORT_TOPIC_NAME);
 
-            req.mutable_init_request()->set_consumer("user"); 
+            req.mutable_init_request()->set_consumer("user");
             req.mutable_init_request()->set_read_only_original(true);
 
-            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1000); 
+            req.mutable_init_request()->mutable_read_params()->set_max_read_messages_count(1000);
 
             if (!readStream->Write(req)) {
                 ythrow yexception() << "write fail";
@@ -562,7 +562,7 @@ namespace {
 
             UNIT_ASSERT(readStream->Read(&resp));
             Cerr << "Read server response: " << resp.ShortDebugString() << Endl;
-            UNIT_ASSERT(resp.response_case() == MigrationStreamingReadServerMessage::kInitResponse); 
+            UNIT_ASSERT(resp.response_case() == MigrationStreamingReadServerMessage::kInitResponse);
 
             //send some reads
             Sleep(TDuration::Seconds(5));
@@ -577,22 +577,22 @@ namespace {
         }
 
         //check read results
-        MigrationStreamingReadServerMessage resp; 
-        for (ui32 i = 0; i < 2;) { 
-            MigrationStreamingReadServerMessage resp; 
+        MigrationStreamingReadServerMessage resp;
+        for (ui32 i = 0; i < 2;) {
+            MigrationStreamingReadServerMessage resp;
             UNIT_ASSERT(readStream->Read(&resp));
-            if (resp.response_case() == MigrationStreamingReadServerMessage::kAssigned) { 
-                auto assignId = resp.assigned().assign_id(); 
-                MigrationStreamingReadClientMessage req; 
+            if (resp.response_case() == MigrationStreamingReadServerMessage::kAssigned) {
+                auto assignId = resp.assigned().assign_id();
+                MigrationStreamingReadClientMessage req;
                 req.mutable_start_read()->mutable_topic()->set_path(SHORT_TOPIC_NAME);
-                req.mutable_start_read()->set_cluster("dc1"); 
-                req.mutable_start_read()->set_assign_id(assignId); 
-                UNIT_ASSERT(readStream->Write(req)); 
-                continue; 
-            } 
- 
-            UNIT_ASSERT_C(resp.response_case() == MigrationStreamingReadServerMessage::kDataBatch, resp); 
-            i += resp.data_batch().partition_data_size(); 
+                req.mutable_start_read()->set_cluster("dc1");
+                req.mutable_start_read()->set_assign_id(assignId);
+                UNIT_ASSERT(readStream->Write(req));
+                continue;
+            }
+
+            UNIT_ASSERT_C(resp.response_case() == MigrationStreamingReadServerMessage::kDataBatch, resp);
+            i += resp.data_batch().partition_data_size();
         }
     }
 
@@ -620,9 +620,9 @@ namespace {
         writer.Read(SHORT_TOPIC_NAME, "user1", "", false, false);
     }
 
-    Y_UNIT_TEST(SetupReadSession) { 
+    Y_UNIT_TEST(SetupReadSession) {
         SetupReadSessionTest();
-    } 
+    }
 
 
     Y_UNIT_TEST(WriteExisting) {
@@ -961,7 +961,7 @@ namespace {
         server.AnnoyingClient->DescribeTopic({thirdTopic}, true);
     }
 
-    void WaitResolveSuccess(TFlatMsgBusPQClient& annoyingClient, TString topic, ui32 numParts) { 
+    void WaitResolveSuccess(TFlatMsgBusPQClient& annoyingClient, TString topic, ui32 numParts) {
         const TInstant start = TInstant::Now();
         while (true) {
             TAutoPtr<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
@@ -1457,7 +1457,7 @@ namespace {
         auto msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
         UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
@@ -1474,7 +1474,7 @@ namespace {
         msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
         UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
@@ -1491,7 +1491,7 @@ namespace {
         msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
         UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
@@ -1508,7 +1508,7 @@ namespace {
         msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
         UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
@@ -1522,7 +1522,7 @@ namespace {
             msg = consumer->GetNextMessage();
             msg.Wait();
             Cerr << msg.GetValue().Response << "\n";
-            if (msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kCommitted) { 
+            if (msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kCommitted) {
                 UNIT_ASSERT(msg.GetValue().Response.committed().cookies_size() == 1);
                 UNIT_ASSERT(msg.GetValue().Response.committed().cookies(0).assign_id() == assignId);
                 UNIT_ASSERT(msg.GetValue().Response.committed().cookies(0).partition_cookie() == 0);
@@ -1534,7 +1534,7 @@ namespace {
         msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
         UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
@@ -1549,7 +1549,7 @@ namespace {
         msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
         UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
@@ -1566,7 +1566,7 @@ namespace {
         msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
         UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
@@ -1614,7 +1614,7 @@ namespace {
     }
 
 /*
-    void TestRereadsWhenDataIsEmptyImpl(bool withWait) { 
+    void TestRereadsWhenDataIsEmptyImpl(bool withWait) {
         NPersQueue::TTestServer server;
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 1);
 
@@ -1622,27 +1622,27 @@ namespace {
         TPQDataWriter writer("source", server);
         auto pqLib = TPQLib::WithCerrLogger();
 
-        // Write nonempty data 
+        // Write nonempty data
         NKikimr::NPersQueueTests::TRequestWritePQ writeReq(DEFAULT_TOPIC_NAME, 0, "src", 4);
- 
-        auto write = [&](const TString& data, bool empty = false) { 
-            NKikimrPQClient::TDataChunk dataChunk; 
-            dataChunk.SetCreateTime(42); 
-            dataChunk.SetSeqNo(++writeReq.SeqNo); 
-            dataChunk.SetData(data); 
-            if (empty) { 
-                dataChunk.SetChunkType(NKikimrPQClient::TDataChunk::GROW); // this guarantees that data will be threated as empty 
-            } 
-            TString serialized; 
-            UNIT_ASSERT(dataChunk.SerializeToString(&serialized)); 
+
+        auto write = [&](const TString& data, bool empty = false) {
+            NKikimrPQClient::TDataChunk dataChunk;
+            dataChunk.SetCreateTime(42);
+            dataChunk.SetSeqNo(++writeReq.SeqNo);
+            dataChunk.SetData(data);
+            if (empty) {
+                dataChunk.SetChunkType(NKikimrPQClient::TDataChunk::GROW); // this guarantees that data will be threated as empty
+            }
+            TString serialized;
+            UNIT_ASSERT(dataChunk.SerializeToString(&serialized));
             server.AnnoyingClient->WriteToPQ(writeReq, serialized);
-        }; 
-        write("data1"); 
-        write("data2", true); 
-        if (!withWait) { 
-            write("data3"); 
-        } 
- 
+        };
+        write("data1");
+        write("data2", true);
+        if (!withWait) {
+            write("data3");
+        }
+
         ui32 maxCount = 1;
         bool unpack = false;
         ui32 maxInflyRequests = 1;
@@ -1651,47 +1651,47 @@ namespace {
                 pqLib, server.GrpcPort, "user", {SHORT_TOPIC_NAME, {}},
                 maxCount, unpack, {}, maxInflyRequests, maxMemoryUsage
         );
-        UNIT_ASSERT_C(ccResult.Response.response_case() == MigrationStreamingReadServerMessage::kInitResponse, ccResult.Response); 
- 
-        auto msg1 = GetNextMessageSkipAssignment(consumer).GetValueSync().Response; 
- 
-        auto assertHasData = [](const MigrationStreamingReadServerMessage& msg, const TString& data) { 
+        UNIT_ASSERT_C(ccResult.Response.response_case() == MigrationStreamingReadServerMessage::kInitResponse, ccResult.Response);
+
+        auto msg1 = GetNextMessageSkipAssignment(consumer).GetValueSync().Response;
+
+        auto assertHasData = [](const MigrationStreamingReadServerMessage& msg, const TString& data) {
             const auto& d = msg.data_batch();
             UNIT_ASSERT_VALUES_EQUAL_C(d.partition_data_size(), 1, msg);
             UNIT_ASSERT_VALUES_EQUAL_C(d.partition_data(0).batches_size(), 1, msg);
             UNIT_ASSERT_VALUES_EQUAL_C(d.partition_data(0).batches(0).message_data_size(), 1, msg);
             UNIT_ASSERT_VALUES_EQUAL_C(d.partition_data(0).batches(0).message_data(0).data(), data, msg);
-        }; 
+        };
         UNIT_ASSERT_VALUES_EQUAL_C(msg1.data_batch().partition_data(0).cookie().partition_cookie(), 1, msg1);
-        assertHasData(msg1, "data1"); 
- 
-        auto resp2Future = consumer->GetNextMessage(); 
-        if (withWait) { 
-            // no data 
-            UNIT_ASSERT(!resp2Future.HasValue()); 
-            UNIT_ASSERT(!resp2Future.HasException()); 
- 
-            // waits and data doesn't arrive 
-            Sleep(TDuration::MilliSeconds(100)); 
-            UNIT_ASSERT(!resp2Future.HasValue()); 
-            UNIT_ASSERT(!resp2Future.HasException()); 
- 
-            // write data 
-            write("data3"); 
-        } 
-        const auto& msg2 = resp2Future.GetValueSync().Response; 
+        assertHasData(msg1, "data1");
+
+        auto resp2Future = consumer->GetNextMessage();
+        if (withWait) {
+            // no data
+            UNIT_ASSERT(!resp2Future.HasValue());
+            UNIT_ASSERT(!resp2Future.HasException());
+
+            // waits and data doesn't arrive
+            Sleep(TDuration::MilliSeconds(100));
+            UNIT_ASSERT(!resp2Future.HasValue());
+            UNIT_ASSERT(!resp2Future.HasException());
+
+            // write data
+            write("data3");
+        }
+        const auto& msg2 = resp2Future.GetValueSync().Response;
         UNIT_ASSERT_VALUES_EQUAL_C(msg2.data_batch().partition_data(0).cookie().partition_cookie(), 2, msg2);
 
-        assertHasData(msg2, "data3"); 
-    } 
- 
-    Y_UNIT_TEST(TestRereadsWhenDataIsEmpty) { 
-        TestRereadsWhenDataIsEmptyImpl(false); 
-    } 
- 
-    Y_UNIT_TEST(TestRereadsWhenDataIsEmptyWithWait) { 
-        TestRereadsWhenDataIsEmptyImpl(true); 
-    } 
+        assertHasData(msg2, "data3");
+    }
+
+    Y_UNIT_TEST(TestRereadsWhenDataIsEmpty) {
+        TestRereadsWhenDataIsEmptyImpl(false);
+    }
+
+    Y_UNIT_TEST(TestRereadsWhenDataIsEmptyWithWait) {
+        TestRereadsWhenDataIsEmptyImpl(true);
+    }
 
 
     Y_UNIT_TEST(TestLockAfterDrop) {
@@ -1714,7 +1714,7 @@ namespace {
 
         auto msg = consumer->GetNextMessage();
         msg.Wait();
-        UNIT_ASSERT_C(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned, msg.GetValue().Response); 
+        UNIT_ASSERT_C(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned, msg.GetValue().Response);
         UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.assigned().partition() == 0);
@@ -1728,7 +1728,7 @@ namespace {
         UNIT_ASSERT(msg.Wait(TDuration::Seconds(10)));
 
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kDataBatch); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kDataBatch);
     }
 
 
@@ -1754,12 +1754,12 @@ namespace {
         ui32 maxCount = 1;
         bool unpack = false;
         auto [consumer, ccResult] = CreateConsumer(pqLib, server.GrpcPort, "user", {"aaa/bbb/ccc/topic", {}}, maxCount, unpack);
-        UNIT_ASSERT_C(ccResult.Response.response_case() == MigrationStreamingReadServerMessage::kInitResponse, ccResult.Response); 
+        UNIT_ASSERT_C(ccResult.Response.response_case() == MigrationStreamingReadServerMessage::kInitResponse, ccResult.Response);
 
         auto msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
     }
 
 
@@ -1797,7 +1797,7 @@ namespace {
             auto msg = consumer->GetNextMessage();
             msg.Wait();
             Cerr << msg.GetValue().Response << "\n";
-            UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+            UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
             UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
             UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
         }
@@ -1810,7 +1810,7 @@ namespace {
 
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kRelease); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kRelease);
         UNIT_ASSERT(msg.GetValue().Response.release().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.release().cluster() == "dc1");
 
@@ -1821,12 +1821,12 @@ namespace {
         msg2.Wait();
         Cerr << msg2.GetValue().Response << "\n";
 
-        UNIT_ASSERT(msg2.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+        UNIT_ASSERT(msg2.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
         UNIT_ASSERT(msg2.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg2.GetValue().Response.assigned().cluster() == "dc1");
     }
 
-    Y_UNIT_TEST(TestSilentRelease) { 
+    Y_UNIT_TEST(TestSilentRelease) {
         NPersQueue::TTestServer server;
         server.AnnoyingClient->CreateTopic(DEFAULT_TOPIC_NAME, 3);
 
@@ -1860,9 +1860,9 @@ namespace {
         Cerr << ccResult.Response << "\n";
 
         for (ui32 i = 1; i <= 3; ++i) {
-            auto msg = GetNextMessageSkipAssignment(consumer); 
-            Cerr << msg.GetValueSync().Response << "\n"; 
-            UNIT_ASSERT(msg.GetValueSync().Response.response_case() == MigrationStreamingReadServerMessage::kDataBatch); 
+            auto msg = GetNextMessageSkipAssignment(consumer);
+            Cerr << msg.GetValueSync().Response << "\n";
+            UNIT_ASSERT(msg.GetValueSync().Response.response_case() == MigrationStreamingReadServerMessage::kDataBatch);
             for (auto& p : msg.GetValue().Response.data_batch().partition_data()) {
                 cookies.emplace_back(p.cookie().assign_id(), p.cookie().partition_cookie());
             }
@@ -1873,20 +1873,20 @@ namespace {
 
         auto msg = consumer->GetNextMessage();
         auto msg2 = consumer2->GetNextMessage();
-        UNIT_ASSERT(!msg2.Wait(TDuration::Seconds(1))); 
-        consumer->Commit(cookies); 
+        UNIT_ASSERT(!msg2.Wait(TDuration::Seconds(1)));
+        consumer->Commit(cookies);
 
-        if (msg.GetValueSync().Release.Initialized()) { 
-            msg.GetValueSync().Release.SetValue(); 
+        if (msg.GetValueSync().Release.Initialized()) {
+            msg.GetValueSync().Release.SetValue();
         }
 
         msg2.Wait();
         Cerr << msg2.GetValue().Response << "\n";
 
-        UNIT_ASSERT(msg2.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+        UNIT_ASSERT(msg2.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
         UNIT_ASSERT(msg2.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg2.GetValue().Response.assigned().cluster() == "dc1");
-        UNIT_ASSERT(msg2.GetValue().Response.assigned().read_offset() == 1); 
+        UNIT_ASSERT(msg2.GetValue().Response.assigned().read_offset() == 1);
     }
 
 */
@@ -1915,7 +1915,7 @@ namespace {
         auto msg = consumer->GetNextMessage();
         msg.Wait();
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kAssigned);
         UNIT_ASSERT(msg.GetValue().Response.assigned().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.assigned().cluster() == "dc1");
 
@@ -1929,7 +1929,7 @@ namespace {
         } while(!msg.Wait(TDuration::Seconds(1)));
 
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kRelease); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kRelease);
         UNIT_ASSERT(msg.GetValue().Response.release().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.release().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.release().forceful_release() == false);
@@ -1941,7 +1941,7 @@ namespace {
         UNIT_ASSERT(msg.Wait(TDuration::Seconds(1)));
 
         Cerr << msg.GetValue().Response << "\n";
-        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kRelease); 
+        UNIT_ASSERT(msg.GetValue().Response.response_case() == MigrationStreamingReadServerMessage::kRelease);
         UNIT_ASSERT(msg.GetValue().Response.release().topic().path() == SHORT_TOPIC_NAME);
         UNIT_ASSERT(msg.GetValue().Response.release().cluster() == "dc1");
         UNIT_ASSERT(msg.GetValue().Response.release().forceful_release() == true);
@@ -2138,10 +2138,10 @@ namespace {
         auto serverMessage = setup.InitSession(session);
 
 
-        auto defaultSupportedCodecs = TVector<Ydb::PersQueue::V1::Codec>{ Ydb::PersQueue::V1::CODEC_RAW, Ydb::PersQueue::V1::CODEC_GZIP, Ydb::PersQueue::V1::CODEC_LZOP }; 
+        auto defaultSupportedCodecs = TVector<Ydb::PersQueue::V1::Codec>{ Ydb::PersQueue::V1::CODEC_RAW, Ydb::PersQueue::V1::CODEC_GZIP, Ydb::PersQueue::V1::CODEC_LZOP };
         auto topicSupportedCodecs = serverMessage.init_response().supported_codecs();
-        UNIT_ASSERT_VALUES_EQUAL_C(defaultSupportedCodecs.size(), topicSupportedCodecs.size(), serverMessage.init_response()); 
-        UNIT_ASSERT_C(Equal(defaultSupportedCodecs.begin(), defaultSupportedCodecs.end(), topicSupportedCodecs.begin()), serverMessage.init_response()); 
+        UNIT_ASSERT_VALUES_EQUAL_C(defaultSupportedCodecs.size(), topicSupportedCodecs.size(), serverMessage.init_response());
+        UNIT_ASSERT_C(Equal(defaultSupportedCodecs.begin(), defaultSupportedCodecs.end(), topicSupportedCodecs.begin()), serverMessage.init_response());
     }
 
     Y_UNIT_TEST(Codecs_WriteMessageWithDefaultCodecs_MessagesAreAcknowledged) {
@@ -2458,8 +2458,8 @@ namespace {
         auto rr = props->add_read_rules();
         alter(request, Ydb::StatusIds::BAD_REQUEST, false);
         server.AnnoyingClient->AlterTopic();
-        props->add_supported_codecs(Ydb::PersQueue::V1::CODEC_RAW); 
-        props->add_supported_codecs(Ydb::PersQueue::V1::CODEC_ZSTD); 
+        props->add_supported_codecs(Ydb::PersQueue::V1::CODEC_RAW);
+        props->add_supported_codecs(Ydb::PersQueue::V1::CODEC_ZSTD);
 
         props->set_max_partition_write_speed(123);
         props->set_max_partition_write_burst(1234);
@@ -2469,8 +2469,8 @@ namespace {
         rr->set_consumer_name("consumer");
         rr->set_supported_format(Ydb::PersQueue::V1::TopicSettings::Format(1));
 
-        rr->add_supported_codecs(Ydb::PersQueue::V1::CODEC_LZOP); 
-        rr->add_supported_codecs(Ydb::PersQueue::V1::CODEC_GZIP); 
+        rr->add_supported_codecs(Ydb::PersQueue::V1::CODEC_LZOP);
+        rr->add_supported_codecs(Ydb::PersQueue::V1::CODEC_GZIP);
 
         rr->set_important(true);
         rr->set_starting_message_timestamp_ms(111);

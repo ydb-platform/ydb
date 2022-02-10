@@ -67,7 +67,7 @@ service PersQueueService {
      *         issue(description, ...)
      *        <----------------
      */
-    rpc MigrationStreamingRead(stream MigrationStreamingReadClientMessage) returns (stream MigrationStreamingReadServerMessage); 
+    rpc MigrationStreamingRead(stream MigrationStreamingReadClientMessage) returns (stream MigrationStreamingReadServerMessage);
 
     // Get information about reading
     rpc GetReadSessionsInfo(ReadInfoRequest) returns (ReadInfoResponse);

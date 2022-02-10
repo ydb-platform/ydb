@@ -1,31 +1,31 @@
-#include "yql_pq_helpers.h" 
- 
+#include "yql_pq_helpers.h"
+
 #include "yql_pq_provider_impl.h"
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
- 
-namespace NYql { 
- 
-using namespace NNodes; 
- 
-void Add(TVector<TCoNameValueTuple>& settings, TStringBuf name, TStringBuf value, TPositionHandle pos, TExprContext& ctx) { 
-    settings.push_back(Build<TCoNameValueTuple>(ctx, pos) 
-        .Name().Build(name) 
-        .Value<TCoAtom>().Build(value) 
-        .Done()); 
-} 
- 
-TCoNameValueTupleList BuildTopicPropsList(const TPqState::TTopicMeta& meta, TPositionHandle pos, TExprContext& ctx) { 
-    TVector<TCoNameValueTuple> props; 
- 
-    Add(props, PartitionsCountProp, ToString(meta.Description->PartitionsCount), pos, ctx); 
- 
-    return Build<TCoNameValueTupleList>(ctx, pos) 
-        .Add(props) 
-        .Done(); 
-} 
- 
+
+namespace NYql {
+
+using namespace NNodes;
+
+void Add(TVector<TCoNameValueTuple>& settings, TStringBuf name, TStringBuf value, TPositionHandle pos, TExprContext& ctx) {
+    settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+        .Name().Build(name)
+        .Value<TCoAtom>().Build(value)
+        .Done());
+}
+
+TCoNameValueTupleList BuildTopicPropsList(const TPqState::TTopicMeta& meta, TPositionHandle pos, TExprContext& ctx) {
+    TVector<TCoNameValueTuple> props;
+
+    Add(props, PartitionsCountProp, ToString(meta.Description->PartitionsCount), pos, ctx);
+
+    return Build<TCoNameValueTupleList>(ctx, pos)
+        .Add(props)
+        .Done();
+}
+
 void FindYdsDbIdsForResolving(
     const TPqState::TPtr& state,
     TExprNode::TPtr input,
@@ -102,4 +102,4 @@ void FillSettingsWithResolvedYdsIds(
 }
 
 
-} // namespace NYql 
+} // namespace NYql

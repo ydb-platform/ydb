@@ -1,28 +1,28 @@
 #include "all.h"
 
 #include <library/cpp/lwtrace/protos/lwtrace.pb.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <google/protobuf/text_format.h>
 
-enum ESimpleEnum { 
-    ValueA, 
-    ValueB, 
-}; 
- 
-enum class EEnumClass { 
-    ValueC, 
-    ValueD, 
-}; 
- 
+enum ESimpleEnum {
+    ValueA,
+    ValueB,
+};
+
+enum class EEnumClass {
+    ValueC,
+    ValueD,
+};
+
 #define LWTRACE_UT_PROVIDER(PROBE, EVENT, GROUPS, TYPES, NAMES)                                          \
     PROBE(NoParam, GROUPS("Group"), TYPES(), NAMES())                                                    \
     PROBE(IntParam, GROUPS("Group"), TYPES(ui32), NAMES("value"))                                        \
     PROBE(StringParam, GROUPS("Group"), TYPES(TString), NAMES("value"))                                  \
     PROBE(SymbolParam, GROUPS("Group"), TYPES(NLWTrace::TSymbol), NAMES("symbol"))                       \
     PROBE(CheckParam, GROUPS("Group"), TYPES(NLWTrace::TCheck), NAMES("value"))                          \
-    PROBE(EnumParams, GROUPS("Group"), TYPES(ESimpleEnum, EEnumClass), NAMES("simpleEnum", "enumClass")) \ 
+    PROBE(EnumParams, GROUPS("Group"), TYPES(ESimpleEnum, EEnumClass), NAMES("simpleEnum", "enumClass")) \
     PROBE(InstantParam, GROUPS("Group"), TYPES(TInstant), NAMES("value"))                                \
     PROBE(DurationParam, GROUPS("Group"), TYPES(TDuration), NAMES("value"))                              \
     PROBE(ProtoEnum, GROUPS("Group"), TYPES(NLWTrace::EOperatorType), NAMES("value"))                    \
@@ -61,13 +61,13 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
             }
         } reader;
         mngr.ReadLog("Query1", reader);
- 
-        LWPROBE(EnumParams, ValueA, EEnumClass::ValueC); 
-        LWPROBE(InstantParam, TInstant::Seconds(42)); 
-        LWPROBE(DurationParam, TDuration::MilliSeconds(146)); 
+
+        LWPROBE(EnumParams, ValueA, EEnumClass::ValueC);
+        LWPROBE(InstantParam, TInstant::Seconds(42));
+        LWPROBE(DurationParam, TDuration::MilliSeconds(146));
         LWPROBE(ProtoEnum, OT_EQ);
     }
- 
+
     Y_UNIT_TEST(Predicate) {
         TManager mngr(*Singleton<TProbeRegistry>(), true);
         TQuery q;
@@ -542,13 +542,13 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         UNIT_ASSERT(t1.NanoSeconds() - t0.NanoSeconds() >= sleepTimeNs);
     }
 
-    Y_UNIT_TEST(ProtoEnumTraits) { 
+    Y_UNIT_TEST(ProtoEnumTraits) {
         using TPbEnumTraits = TParamTraits<EOperatorType>;
-        TString str; 
+        TString str;
         TPbEnumTraits::ToString(TPbEnumTraits::ToStoreType(OT_EQ), &str);
         UNIT_ASSERT_STRINGS_EQUAL(str, "OT_EQ (0)");
-    } 
- 
+    }
+
     Y_UNIT_TEST(Track) {
         TManager mngr(*Singleton<TProbeRegistry>(), true);
         TQuery q;

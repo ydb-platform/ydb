@@ -9,13 +9,13 @@
 
 #include <util/generic/ptr.h>
 
-namespace NYq { 
+namespace NYq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class IStateStorage : public virtual TThrRefBase {
 public:
-    using TGetStateResult = std::pair<std::vector<NYql::NDqProto::TComputeActorState>, NYql::TIssues>; 
+    using TGetStateResult = std::pair<std::vector<NYql::NDqProto::TComputeActorState>, NYql::TIssues>;
     using TCountStatesResult = std::pair<size_t, NYql::TIssues>;
 
     virtual NThreading::TFuture<NYql::TIssues> Init() = 0;
@@ -24,10 +24,10 @@ public:
         ui64 taskId,
         const TString& graphId,
         const TCheckpointId& checkpointId,
-        const NYql::NDqProto::TComputeActorState& state) = 0; 
+        const NYql::NDqProto::TComputeActorState& state) = 0;
 
     virtual NThreading::TFuture<TGetStateResult> GetState(
-        const std::vector<ui64>& taskIds, 
+        const std::vector<ui64>& taskIds,
         const TString& graphId,
         const TCheckpointId& checkpointId) = 0;
 
@@ -47,4 +47,4 @@ public:
 
 using TStateStoragePtr = TIntrusivePtr<IStateStorage>;
 
-} // namespace NYq 
+} // namespace NYq

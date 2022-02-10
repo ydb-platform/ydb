@@ -24,8 +24,8 @@ public:
         virtual void TakeInputChannelData(NDqProto::TChannelData&& channelData, bool ack) = 0;
         virtual void PeerFinished(ui64 channelId) = 0;
         virtual void ResumeExecution() = 0;
- 
-        virtual ~ICallbacks() = default; 
+
+        virtual ~ICallbacks() = default;
     };
 
     struct TInputChannelStats {
@@ -40,7 +40,7 @@ public:
 
 public:
     TDqComputeActorChannels(NActors::TActorId owner, const TTxId& txId, const NYql::NDqProto::TDqTask& task, bool retryOnUndelivery,
-        NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, ui32 actorActivityType); 
+        NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, ui32 actorActivityType);
 
 private:
     STATEFN(WorkState);
@@ -66,7 +66,7 @@ private:
     void PassAway() override;
 
 public:
-    void SetCheckpointsSupport(); // Finished channels will be polled for checkpoints. 
+    void SetCheckpointsSupport(); // Finished channels will be polled for checkpoints.
     void SetInputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
     void SetOutputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
     bool CanSendChannelData(ui64 channelId);
@@ -147,13 +147,13 @@ private:
         bool EarlyFinish = false;
 
         struct TInFlightMessage {
-            TInFlightMessage(ui64 seqNo, NYql::NDqProto::TChannelData&& data, bool finished) 
+            TInFlightMessage(ui64 seqNo, NYql::NDqProto::TChannelData&& data, bool finished)
                 : SeqNo(seqNo)
                 , Data(std::move(data))
                 , Finished(finished) {}
 
             const ui64 SeqNo;
-            const NYql::NDqProto::TChannelData Data; 
+            const NYql::NDqProto::TChannelData Data;
             const bool Finished;
         };
         TMap<ui64, TInFlightMessage> InFlight;
@@ -178,7 +178,7 @@ private:
     const TTxId TxId;
     const ui64 TaskId;
     const bool RetryOnUndelivery;
-    bool SupportCheckpoints = false; 
+    bool SupportCheckpoints = false;
     ICallbacks* const Cbs;
     THashSet<ui32> TrackingNodes;
     THashMap<ui64, TInputChannelState> InputChannelsMap;

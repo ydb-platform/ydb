@@ -78,7 +78,7 @@ private:
     std::unique_ptr<NPersQueue::TTopicsListController> TopicsHandler;
     bool HaveClusters;
 };
- 
+
 
 }
 }

@@ -1,21 +1,21 @@
-#pragma once 
- 
-#include "json_output.h" 
-#include "config.h" 
- 
+#pragma once
+
+#include "json_output.h"
+#include "config.h"
+
 #include <library/cpp/json/json_writer.h>
- 
+
 #include <util/string/builder.h>
-#include <util/generic/store_policy.h> 
- 
-namespace NProtobufJson { 
+#include <util/generic/store_policy.h>
+
+namespace NProtobufJson {
     class TBaseJsonWriterOutput: public IJsonOutput {
     public:
         TBaseJsonWriterOutput(NJson::TJsonWriter& writer)
             : Writer(writer)
         {
         }
- 
+
     private:
         void DoWrite(int i) override {
             Writer.Write(i);
@@ -47,14 +47,14 @@ namespace NProtobufJson {
         void DoWrite(const TString& s) override {
             Writer.Write(s);
         }
- 
+
         void DoBeginList() override {
             Writer.OpenArray();
         }
         void DoEndList() override {
             Writer.CloseArray();
         }
- 
+
         void DoBeginObject() override {
             Writer.OpenMap();
         }
@@ -64,14 +64,14 @@ namespace NProtobufJson {
         void DoEndObject() override {
             Writer.CloseMap();
         }
- 
+
         void DoWriteRawJson(const TStringBuf& str) override {
             Writer.UnsafeWrite(str);
         }
- 
+
         NJson::TJsonWriter& Writer;
     };
- 
+
     class TJsonWriterOutput: public TEmbedPolicy<NJson::TJsonWriter>, public TBaseJsonWriterOutput {
     public:
         TJsonWriterOutput(IOutputStream* outputStream, const NJson::TJsonWriterConfig& cfg)
@@ -79,17 +79,17 @@ namespace NProtobufJson {
             , TBaseJsonWriterOutput(*Ptr())
         {
         }
- 
+
         TJsonWriterOutput(IOutputStream* outputStream, const TProto2JsonConfig& cfg)
             : TEmbedPolicy<NJson::TJsonWriter>(outputStream, CreateJsonWriterConfig(cfg))
             , TBaseJsonWriterOutput(*Ptr())
         {
         }
- 
+
     private:
         static NJson::TJsonWriterConfig CreateJsonWriterConfig(const TProto2JsonConfig& cfg);
     };
- 
+
     class TJsonStringWriterOutput: public TEmbedPolicy<TStringOutput>, public TJsonWriterOutput {
     public:
         template <typename TConfig>
@@ -99,5 +99,5 @@ namespace NProtobufJson {
         {
         }
     };
- 
+
 }

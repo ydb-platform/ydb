@@ -55,8 +55,8 @@ public:
         Become(&TKqpChannelStorageActor::WorkState);
     }
 
-    static constexpr char ActorName[] = "KQP_CHANNEL_STORAGE"; 
- 
+    static constexpr char ActorName[] = "KQP_CHANNEL_STORAGE";
+
 protected:
     void PassAway() override {
         Send(SpillingActorId, new TEvents::TEvPoison);

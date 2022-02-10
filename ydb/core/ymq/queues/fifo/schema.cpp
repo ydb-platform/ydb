@@ -1,6 +1,6 @@
 #include "schema.h"
 
-namespace NKikimr::NSQS { 
+namespace NKikimr::NSQS {
 
 static const TVector<TColumn> AttributesColumns = {
     TColumn("State",                     NScheme::NTypeIds::Uint64, true),
@@ -13,8 +13,8 @@ static const TVector<TColumn> AttributesColumns = {
     TColumn("VisibilityTimeout",         NScheme::NTypeIds::Uint64),
     TColumn("DlqName",                   NScheme::NTypeIds::Utf8),
     TColumn("DlqArn",                    NScheme::NTypeIds::Utf8),
-    TColumn("MaxReceiveCount",           NScheme::NTypeIds::Uint64), 
-    TColumn("ShowDetailedCountersDeadline", NScheme::NTypeIds::Uint64)}; 
+    TColumn("MaxReceiveCount",           NScheme::NTypeIds::Uint64),
+    TColumn("ShowDetailedCountersDeadline", NScheme::NTypeIds::Uint64)};
 
 static const TVector<TColumn> StateColumns = {
     TColumn("State",                     NScheme::NTypeIds::Uint64, true),
@@ -25,9 +25,9 @@ static const TVector<TColumn> StateColumns = {
     TColumn("MessageCount",              NScheme::NTypeIds::Int64),
     TColumn("InflyCount",                NScheme::NTypeIds::Int64),
     TColumn("ReadOffset",                NScheme::NTypeIds::Uint64),
-    TColumn("WriteOffset",               NScheme::NTypeIds::Uint64), 
-    TColumn("CleanupVersion",            NScheme::NTypeIds::Uint64), 
-    TColumn("InflyVersion",              NScheme::NTypeIds::Uint64)}; 
+    TColumn("WriteOffset",               NScheme::NTypeIds::Uint64),
+    TColumn("CleanupVersion",            NScheme::NTypeIds::Uint64),
+    TColumn("InflyVersion",              NScheme::NTypeIds::Uint64)};
 
 static const TVector<TColumn> DataColumns = {
     TColumn("RandomId",                  NScheme::NTypeIds::Uint64, true, 20),
@@ -81,7 +81,7 @@ TVector<TTable> GetFifoTables() {
 
     list.push_back(TTable("Attributes")
                     .SetColumns(AttributesColumns)
-                    .SetShard(-1) 
+                    .SetShard(-1)
                     .SetHasLeaderTablet());
     list.push_back(TTable("Data")
                     .SetColumns(DataColumns)
@@ -110,4 +110,4 @@ TVector<TTable> GetFifoTables() {
     return list;
 }
 
-} // namespace NKikimr::NSQS 
+} // namespace NKikimr::NSQS

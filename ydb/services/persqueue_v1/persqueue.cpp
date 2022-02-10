@@ -91,9 +91,9 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     }
 
     {
-        using TBiRequest = Ydb::PersQueue::V1::MigrationStreamingReadClientMessage; 
+        using TBiRequest = Ydb::PersQueue::V1::MigrationStreamingReadClientMessage;
 
-        using TBiResponse = Ydb::PersQueue::V1::MigrationStreamingReadServerMessage; 
+        using TBiResponse = Ydb::PersQueue::V1::MigrationStreamingReadServerMessage;
 
         using TStreamGRpcRequest = NGRpcServer::TGRpcStreamingRequest<
                     TBiRequest,
@@ -102,7 +102,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
                     NKikimrServices::GRPC_SERVER>;
 
 
-        TStreamGRpcRequest::Start(this, this->GetService(), CQ, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestMigrationStreamingRead, 
+        TStreamGRpcRequest::Start(this, this->GetService(), CQ, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestMigrationStreamingRead,
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamPQReadRequest(context));
                     },
@@ -150,10 +150,10 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 
 }
 
-void TGRpcPersQueueService::StopService() noexcept { 
-    TGrpcServiceBase::StopService(); 
-} 
- 
+void TGRpcPersQueueService::StopService() noexcept {
+    TGrpcServiceBase::StopService();
+}
+
 } // V1
 } // namespace NGRpcService
 } // namespace NKikimr

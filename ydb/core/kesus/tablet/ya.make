@@ -7,9 +7,9 @@ OWNER(
 
 SRCS(
     events.cpp
-    probes.cpp 
-    quoter_resource_tree.cpp 
-    quoter_runtime.cpp 
+    probes.cpp
+    quoter_resource_tree.cpp
+    quoter_runtime.cpp
     rate_accounting.cpp
     schema.cpp
     tablet_db.cpp
@@ -21,10 +21,10 @@ SRCS(
     tx_dummy.cpp
     tx_init_schema.cpp
     tx_init.cpp
-    tx_quoter_resource_add.cpp 
-    tx_quoter_resource_delete.cpp 
-    tx_quoter_resource_describe.cpp 
-    tx_quoter_resource_update.cpp 
+    tx_quoter_resource_add.cpp
+    tx_quoter_resource_delete.cpp
+    tx_quoter_resource_describe.cpp
+    tx_quoter_resource_update.cpp
     tx_self_check.cpp
     tx_semaphore_acquire.cpp
     tx_semaphore_create.cpp

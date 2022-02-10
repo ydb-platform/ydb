@@ -1,28 +1,28 @@
-OWNER( 
+OWNER(
     g:kikimr
-    g:sqs 
-) 
- 
+    g:sqs
+)
+
 LIBRARY()
 
 SRCS(
     acl.cpp
-    action.cpp 
-    counters.cpp 
-    debug_info.cpp 
+    action.cpp
+    counters.cpp
+    debug_info.cpp
     dlq_helpers.cpp
-    helpers.cpp 
-    probes.cpp 
+    helpers.cpp
+    probes.cpp
     queue_attributes.cpp
     queue_id.cpp
-    secure_protobuf_printer.cpp 
+    secure_protobuf_printer.cpp
     events_writer_iface.h
 )
 
-GENERATE_ENUM_SERIALIZATION(query_id.h) 
+GENERATE_ENUM_SERIALIZATION(query_id.h)
 
 GENERATE_ENUM_SERIALIZATION(cloud_enums.h)
- 
+
 PEERDIR(
     contrib/libs/openssl
     library/cpp/cgiparam

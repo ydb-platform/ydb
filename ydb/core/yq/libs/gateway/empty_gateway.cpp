@@ -1,9 +1,9 @@
 #include "empty_gateway.h"
 
-#include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h> 
-#include <ydb/core/yq/libs/events/events.h> 
+#include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h>
+#include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/tasks_packer/tasks_packer.h>
- 
+
 #include <library/cpp/actors/core/actor.h>
 
 namespace NYq {
@@ -63,7 +63,7 @@ public:
         }
         params.SetSession(sessionId);
 
-        NActors::TActivationContext::Send(new NActors::IEventHandle(RunActorId, {}, new TEvents::TEvGraphParams(params))); 
+        NActors::TActivationContext::Send(new NActors::IEventHandle(RunActorId, {}, new TEvents::TEvGraphParams(params)));
 
         auto result = NThreading::NewPromise<NYql::IDqGateway::TResult>();
         NYql::IDqGateway::TResult gatewayResult;

@@ -72,7 +72,7 @@ namespace NActors {
     }
 
     void TExecutorThread::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie) {
-        ++CurrentActorScheduledEventsCounter; 
+        ++CurrentActorScheduledEventsCounter;
         Ctx.Executor->Schedule(deadline, ev, cookie, Ctx.WorkerId);
     }
 
@@ -153,7 +153,7 @@ namespace NActors {
                     TCallstack::GetTlsCallstack().SetLinesToSkip();
 #endif
                     CurrentRecipient = recipient;
-                    CurrentActorScheduledEventsCounter = 0; 
+                    CurrentActorScheduledEventsCounter = 0;
 
                     if (executed == 0) {
                         double usec = Ctx.AddActivationStats(AtomicLoad(&mailbox->ScheduleMoment), hpprev);

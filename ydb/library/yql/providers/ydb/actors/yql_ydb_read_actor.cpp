@@ -106,8 +106,8 @@ public:
     static constexpr char ActorName[] = "YQL_YDB_READ_ACTOR";
 
 private:
-    void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {} 
-    void LoadState(const NDqProto::TSourceState&) final {} 
+    void SaveState(const NDqProto::TCheckpoint&, NDqProto::TSourceState&) final {}
+    void LoadState(const NDqProto::TSourceState&) final {}
     void CommitState(const NDqProto::TCheckpoint&) final {}
     ui64 GetInputIndex() const final { return InputIndex; }
 
@@ -120,10 +120,10 @@ private:
         SendRequest();
     }
 
-    // IActor & IDqSourceActor 
-    void PassAway() override { // Is called from Compute Actor 
+    // IActor & IDqSourceActor
+    void PassAway() override { // Is called from Compute Actor
         RequestsDone = true;
-        TActorBootstrapped<TYdbReadActor>::PassAway(); 
+        TActorBootstrapped<TYdbReadActor>::PassAway();
     }
 
     i64 GetSourceData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool& finished, i64 freeSpace) final {

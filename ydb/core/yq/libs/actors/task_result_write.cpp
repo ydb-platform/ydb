@@ -14,10 +14,10 @@
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 
-#define LOG_E(stream) \ 
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateWriteTask - ResultId: " << ResultId << ", RequestId: " << RequestId << ", " << stream) 
-#define LOG_D(stream) \ 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateWriteTask - ResultId: " << ResultId << ", RequestId: " << RequestId << ",  " << stream) 
+#define LOG_E(stream) \
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateWriteTask - ResultId: " << ResultId << ", RequestId: " << RequestId << ", " << stream)
+#define LOG_D(stream) \
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateWriteTask - ResultId: " << ResultId << ", RequestId: " << RequestId << ",  " << stream)
 
 namespace NYq {
 

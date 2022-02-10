@@ -3,9 +3,9 @@
 #include <ydb/core/metering/metering.h>
 
 #include <library/cpp/actors/core/event_pb.h>
- 
-#include <algorithm> 
- 
+
+#include <algorithm>
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -70,9 +70,9 @@ TTestContext::TTestContext()
     , TabletId(MakeTabletID(0, 0, 1))
 {}
 
-void TTestContext::Setup(ui32 nodeCount, bool useRealThreads) { 
+void TTestContext::Setup(ui32 nodeCount, bool useRealThreads) {
     ProxyClients.clear();
-    Runtime.Reset(new TTestBasicRuntime(nodeCount, useRealThreads)); 
+    Runtime.Reset(new TTestBasicRuntime(nodeCount, useRealThreads));
 
     SetupLogging();
     SetupTabletServices();
@@ -96,7 +96,7 @@ void TTestContext::Finalize() {
 }
 
 void TTestContext::SetupLogging() {
-    Runtime->SetLogPriority(NKikimrServices::KESUS_TABLET, NLog::PRI_TRACE); 
+    Runtime->SetLogPriority(NKikimrServices::KESUS_TABLET, NLog::PRI_TRACE);
 }
 
 void TTestContext::SetupTabletServices() {
@@ -162,28 +162,28 @@ void TTestContext::SendFromProxy(const TActorId& proxy, ui64 generation, IEventB
         cookie);
 }
 
-NKikimrKesus::TEvGetConfigResult TTestContext::GetConfig() { 
-    const ui64 cookie = RandomNumber<ui64>(); 
-    const auto edge = Runtime->AllocateEdgeActor(); 
-    SendFromEdge(edge, new TEvKesus::TEvGetConfig(), cookie); 
- 
-    auto result = ExpectEdgeEvent<TEvKesus::TEvGetConfigResult>(edge, cookie); 
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetConfig().path(), result->Record.GetPath(), "Record: " << result->Record); 
-    return result->Record; 
-} 
- 
-NKikimrKesus::TEvSetConfigResult TTestContext::SetConfig(ui64 txId, const Ydb::Coordination::Config& config, ui64 version, Ydb::StatusIds::StatusCode status) { 
-    const ui64 cookie = RandomNumber<ui64>(); 
-    const auto edge = Runtime->AllocateEdgeActor(); 
-    SendFromEdge(edge, new TEvKesus::TEvSetConfig(txId, config, version), cookie); 
- 
-    auto result = ExpectEdgeEvent<TEvKesus::TEvSetConfigResult>(edge, cookie); 
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetError().GetStatus(), status, "Record: " << result->Record); 
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetTxId(), txId, "Record: " << result->Record); 
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetTabletId(), TabletId, "Record: " << result->Record); 
-    return result->Record; 
-} 
- 
+NKikimrKesus::TEvGetConfigResult TTestContext::GetConfig() {
+    const ui64 cookie = RandomNumber<ui64>();
+    const auto edge = Runtime->AllocateEdgeActor();
+    SendFromEdge(edge, new TEvKesus::TEvGetConfig(), cookie);
+
+    auto result = ExpectEdgeEvent<TEvKesus::TEvGetConfigResult>(edge, cookie);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetConfig().path(), result->Record.GetPath(), "Record: " << result->Record);
+    return result->Record;
+}
+
+NKikimrKesus::TEvSetConfigResult TTestContext::SetConfig(ui64 txId, const Ydb::Coordination::Config& config, ui64 version, Ydb::StatusIds::StatusCode status) {
+    const ui64 cookie = RandomNumber<ui64>();
+    const auto edge = Runtime->AllocateEdgeActor();
+    SendFromEdge(edge, new TEvKesus::TEvSetConfig(txId, config, version), cookie);
+
+    auto result = ExpectEdgeEvent<TEvKesus::TEvSetConfigResult>(edge, cookie);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetError().GetStatus(), status, "Record: " << result->Record);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetTxId(), txId, "Record: " << result->Record);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetTabletId(), TabletId, "Record: " << result->Record);
+    return result->Record;
+}
+
 void TTestContext::SyncProxy(const TActorId& proxy, ui64 generation, bool useTransactions) {
     ui64 cookie = RandomNumber<ui64>();
     SendFromProxy(proxy, generation, new TEvKesus::TEvDummyRequest(useTransactions), cookie);
@@ -672,188 +672,188 @@ TTestContext::TDescribeSemaphoreChanges TTestContext::ExpectDescribeSemaphoreCha
     return changes;
 }
 
-THolder<TEvKesus::TEvDescribeQuoterResourcesResult> TTestContext::VerifyDescribeQuoterResources( 
-        const NKikimrKesus::TEvDescribeQuoterResources& req, 
-        Ydb::StatusIds::StatusCode status) 
-{ 
-    ui64 cookie = RandomNumber<ui64>(); 
-    auto edge = Runtime->AllocateEdgeActor(); 
-    SendFromEdge(edge, MakeHolder<TEvKesus::TEvDescribeQuoterResources>(req), cookie); 
-    auto result = ExpectEdgeEvent<TEvKesus::TEvDescribeQuoterResourcesResult>(edge, cookie); 
-    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError().GetStatus(), status); 
-    if (status != Ydb::StatusIds::SUCCESS) { 
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesSize(), 0); 
-    } 
-    return result; 
+THolder<TEvKesus::TEvDescribeQuoterResourcesResult> TTestContext::VerifyDescribeQuoterResources(
+        const NKikimrKesus::TEvDescribeQuoterResources& req,
+        Ydb::StatusIds::StatusCode status)
+{
+    ui64 cookie = RandomNumber<ui64>();
+    auto edge = Runtime->AllocateEdgeActor();
+    SendFromEdge(edge, MakeHolder<TEvKesus::TEvDescribeQuoterResources>(req), cookie);
+    auto result = ExpectEdgeEvent<TEvKesus::TEvDescribeQuoterResourcesResult>(edge, cookie);
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError().GetStatus(), status);
+    if (status != Ydb::StatusIds::SUCCESS) {
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.ResourcesSize(), 0);
+    }
+    return result;
 }
- 
-THolder<TEvKesus::TEvDescribeQuoterResourcesResult> TTestContext::VerifyDescribeQuoterResources( 
-        const std::vector<ui64>& resourceIds, 
-        const std::vector<TString>& resourcePaths, 
-        bool recursive, 
-        Ydb::StatusIds::StatusCode status) 
-{ 
-    NKikimrKesus::TEvDescribeQuoterResources req; 
-    for (ui64 resourceId : resourceIds) { 
-        req.AddResourceIds(resourceId); 
-    } 
-    for (const TString& resourcePath : resourcePaths) { 
-        req.AddResourcePaths(resourcePath); 
-    } 
-    req.SetRecursive(recursive); 
-    return VerifyDescribeQuoterResources(req, status); 
+
+THolder<TEvKesus::TEvDescribeQuoterResourcesResult> TTestContext::VerifyDescribeQuoterResources(
+        const std::vector<ui64>& resourceIds,
+        const std::vector<TString>& resourcePaths,
+        bool recursive,
+        Ydb::StatusIds::StatusCode status)
+{
+    NKikimrKesus::TEvDescribeQuoterResources req;
+    for (ui64 resourceId : resourceIds) {
+        req.AddResourceIds(resourceId);
+    }
+    for (const TString& resourcePath : resourcePaths) {
+        req.AddResourcePaths(resourcePath);
+    }
+    req.SetRecursive(recursive);
+    return VerifyDescribeQuoterResources(req, status);
 }
- 
-NKikimrKesus::TEvDescribeQuoterResourcesResult TTestContext::DescribeQuoterResources( 
-        const std::vector<ui64>& resourceIds, 
-        const std::vector<TString>& resourcePaths, 
-        bool recursive) 
-{ 
-    NKikimrKesus::TEvDescribeQuoterResourcesResult result = VerifyDescribeQuoterResources(resourceIds, resourcePaths, recursive)->Record; 
-    std::sort(result.MutableResources()->begin(), result.MutableResources()->end(), 
-              [](const NKikimrKesus::TStreamingQuoterResource& r1, const NKikimrKesus::TStreamingQuoterResource& r2) { 
-                  return r1.GetResourcePath() < r2.GetResourcePath(); 
-              }); 
-    return result; 
-} 
- 
-ui64 TTestContext::AddQuoterResource(const NKikimrKesus::TStreamingQuoterResource& resource, Ydb::StatusIds::StatusCode status) { 
-    ui64 cookie = RandomNumber<ui64>(); 
-    auto edge = Runtime->AllocateEdgeActor(); 
-    auto req = MakeHolder<TEvKesus::TEvAddQuoterResource>(); 
-    *req->Record.MutableResource() = resource; 
-    SendFromEdge(edge, std::move(req), cookie); 
-    auto result = ExpectEdgeEvent<TEvKesus::TEvAddQuoterResourceResult>(edge, cookie); 
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetError().GetStatus(), status, "Faied to create new quoter resource \"" << resource.GetResourcePath() << "\""); 
-    if (status == Ydb::StatusIds::SUCCESS) { 
-        UNIT_ASSERT(result->Record.GetResourceId()); 
-    } 
-    return status == Ydb::StatusIds::SUCCESS ? result->Record.GetResourceId() : 0; 
-} 
- 
-ui64 TTestContext::AddQuoterResource(const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status) { 
-    NKikimrKesus::TStreamingQuoterResource resource; 
-    resource.SetResourcePath(resourcePath); 
-    *resource.MutableHierarhicalDRRResourceConfig() = config; 
-    return AddQuoterResource(resource, status); 
-} 
- 
-void TTestContext::UpdateQuoterResource(const NKikimrKesus::TStreamingQuoterResource& resource, Ydb::StatusIds::StatusCode status) { 
-    ui64 cookie = RandomNumber<ui64>(); 
-    auto edge = Runtime->AllocateEdgeActor(); 
-    auto req = MakeHolder<TEvKesus::TEvUpdateQuoterResource>(); 
-    *req->Record.MutableResource() = resource; 
-    SendFromEdge(edge, std::move(req), cookie); 
-    auto result = ExpectEdgeEvent<TEvKesus::TEvUpdateQuoterResourceResult>(edge, cookie); 
-    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError().GetStatus(), status); 
-    if (status == Ydb::StatusIds::SUCCESS) { 
-        UNIT_ASSERT(result->Record.GetResourceId()); 
-    } 
-} 
- 
-void TTestContext::UpdateQuoterResource(const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status) { 
-    NKikimrKesus::TStreamingQuoterResource resource; 
-    resource.SetResourcePath(resourcePath); 
-    *resource.MutableHierarhicalDRRResourceConfig() = config; 
-    UpdateQuoterResource(resource, status); 
-} 
- 
-void TTestContext::UpdateQuoterResource(ui64 resourceId, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status) { 
-    NKikimrKesus::TStreamingQuoterResource resource; 
-    resource.SetResourceId(resourceId); 
-    *resource.MutableHierarhicalDRRResourceConfig() = config; 
-    UpdateQuoterResource(resource, status); 
-} 
- 
-void TTestContext::DeleteQuoterResource(const NKikimrKesus::TEvDeleteQuoterResource& req, Ydb::StatusIds::StatusCode status) { 
-    ui64 cookie = RandomNumber<ui64>(); 
-    auto edge = Runtime->AllocateEdgeActor(); 
-    SendFromEdge(edge, MakeHolder<TEvKesus::TEvDeleteQuoterResource>(req), cookie); 
-    auto result = ExpectEdgeEvent<TEvKesus::TEvDeleteQuoterResourceResult>(edge, cookie); 
-    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError().GetStatus(), status); 
-} 
- 
-void TTestContext::DeleteQuoterResource(const TString& resourcePath, Ydb::StatusIds::StatusCode status) { 
-    NKikimrKesus::TEvDeleteQuoterResource req; 
-    req.SetResourcePath(resourcePath); 
-    DeleteQuoterResource(req, status); 
-} 
- 
-void TTestContext::DeleteQuoterResource(ui64 resourceId, Ydb::StatusIds::StatusCode status) { 
-    NKikimrKesus::TEvDeleteQuoterResource req; 
-    req.SetResourceId(resourceId); 
-    DeleteQuoterResource(req, status); 
-} 
- 
-TTestContext::TResourceConsumingInfo::TResourceConsumingInfo(const TString& path, bool consume, double amount, Ydb::StatusIds::StatusCode status) 
-    : Path(path) 
-    , Consume(consume) 
-    , Amount(amount) 
-    , ExpectedStatus(status) 
-{ 
-} 
- 
-TTestContext::TResourceConsumingInfo::TResourceConsumingInfo(ui64 id, bool consume, double amount, Ydb::StatusIds::StatusCode status) 
-    : Id(id) 
-    , Consume(consume) 
-    , Amount(amount) 
-    , ExpectedStatus(status) 
-{ 
-} 
- 
+
+NKikimrKesus::TEvDescribeQuoterResourcesResult TTestContext::DescribeQuoterResources(
+        const std::vector<ui64>& resourceIds,
+        const std::vector<TString>& resourcePaths,
+        bool recursive)
+{
+    NKikimrKesus::TEvDescribeQuoterResourcesResult result = VerifyDescribeQuoterResources(resourceIds, resourcePaths, recursive)->Record;
+    std::sort(result.MutableResources()->begin(), result.MutableResources()->end(),
+              [](const NKikimrKesus::TStreamingQuoterResource& r1, const NKikimrKesus::TStreamingQuoterResource& r2) {
+                  return r1.GetResourcePath() < r2.GetResourcePath();
+              });
+    return result;
+}
+
+ui64 TTestContext::AddQuoterResource(const NKikimrKesus::TStreamingQuoterResource& resource, Ydb::StatusIds::StatusCode status) {
+    ui64 cookie = RandomNumber<ui64>();
+    auto edge = Runtime->AllocateEdgeActor();
+    auto req = MakeHolder<TEvKesus::TEvAddQuoterResource>();
+    *req->Record.MutableResource() = resource;
+    SendFromEdge(edge, std::move(req), cookie);
+    auto result = ExpectEdgeEvent<TEvKesus::TEvAddQuoterResourceResult>(edge, cookie);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Record.GetError().GetStatus(), status, "Faied to create new quoter resource \"" << resource.GetResourcePath() << "\"");
+    if (status == Ydb::StatusIds::SUCCESS) {
+        UNIT_ASSERT(result->Record.GetResourceId());
+    }
+    return status == Ydb::StatusIds::SUCCESS ? result->Record.GetResourceId() : 0;
+}
+
+ui64 TTestContext::AddQuoterResource(const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status) {
+    NKikimrKesus::TStreamingQuoterResource resource;
+    resource.SetResourcePath(resourcePath);
+    *resource.MutableHierarhicalDRRResourceConfig() = config;
+    return AddQuoterResource(resource, status);
+}
+
+void TTestContext::UpdateQuoterResource(const NKikimrKesus::TStreamingQuoterResource& resource, Ydb::StatusIds::StatusCode status) {
+    ui64 cookie = RandomNumber<ui64>();
+    auto edge = Runtime->AllocateEdgeActor();
+    auto req = MakeHolder<TEvKesus::TEvUpdateQuoterResource>();
+    *req->Record.MutableResource() = resource;
+    SendFromEdge(edge, std::move(req), cookie);
+    auto result = ExpectEdgeEvent<TEvKesus::TEvUpdateQuoterResourceResult>(edge, cookie);
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError().GetStatus(), status);
+    if (status == Ydb::StatusIds::SUCCESS) {
+        UNIT_ASSERT(result->Record.GetResourceId());
+    }
+}
+
+void TTestContext::UpdateQuoterResource(const TString& resourcePath, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status) {
+    NKikimrKesus::TStreamingQuoterResource resource;
+    resource.SetResourcePath(resourcePath);
+    *resource.MutableHierarhicalDRRResourceConfig() = config;
+    UpdateQuoterResource(resource, status);
+}
+
+void TTestContext::UpdateQuoterResource(ui64 resourceId, const NKikimrKesus::THierarchicalDRRResourceConfig& config, Ydb::StatusIds::StatusCode status) {
+    NKikimrKesus::TStreamingQuoterResource resource;
+    resource.SetResourceId(resourceId);
+    *resource.MutableHierarhicalDRRResourceConfig() = config;
+    UpdateQuoterResource(resource, status);
+}
+
+void TTestContext::DeleteQuoterResource(const NKikimrKesus::TEvDeleteQuoterResource& req, Ydb::StatusIds::StatusCode status) {
+    ui64 cookie = RandomNumber<ui64>();
+    auto edge = Runtime->AllocateEdgeActor();
+    SendFromEdge(edge, MakeHolder<TEvKesus::TEvDeleteQuoterResource>(req), cookie);
+    auto result = ExpectEdgeEvent<TEvKesus::TEvDeleteQuoterResourceResult>(edge, cookie);
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.GetError().GetStatus(), status);
+}
+
+void TTestContext::DeleteQuoterResource(const TString& resourcePath, Ydb::StatusIds::StatusCode status) {
+    NKikimrKesus::TEvDeleteQuoterResource req;
+    req.SetResourcePath(resourcePath);
+    DeleteQuoterResource(req, status);
+}
+
+void TTestContext::DeleteQuoterResource(ui64 resourceId, Ydb::StatusIds::StatusCode status) {
+    NKikimrKesus::TEvDeleteQuoterResource req;
+    req.SetResourceId(resourceId);
+    DeleteQuoterResource(req, status);
+}
+
+TTestContext::TResourceConsumingInfo::TResourceConsumingInfo(const TString& path, bool consume, double amount, Ydb::StatusIds::StatusCode status)
+    : Path(path)
+    , Consume(consume)
+    , Amount(amount)
+    , ExpectedStatus(status)
+{
+}
+
+TTestContext::TResourceConsumingInfo::TResourceConsumingInfo(ui64 id, bool consume, double amount, Ydb::StatusIds::StatusCode status)
+    : Id(id)
+    , Consume(consume)
+    , Amount(amount)
+    , ExpectedStatus(status)
+{
+}
+
 NKikimrKesus::TEvSubscribeOnResourcesResult TTestContext::SubscribeOnResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceConsumingInfo>& info) {
-    const ui64 cookie = RandomNumber<ui64>(); 
-    auto req = MakeHolder<TEvKesus::TEvSubscribeOnResources>(); 
+    const ui64 cookie = RandomNumber<ui64>();
+    auto req = MakeHolder<TEvKesus::TEvSubscribeOnResources>();
     ActorIdToProto(client, req->Record.MutableActorID());
-    req->Record.MutableResources()->Reserve(info.size()); 
-    for (const TResourceConsumingInfo& res : info) { 
-        auto* reqRes = req->Record.AddResources(); 
-        reqRes->SetResourcePath(res.Path); 
-        Y_ASSERT(!res.Id); // self check 
-        reqRes->SetStartConsuming(res.Consume); 
-        reqRes->SetInitialAmount(res.Amount); 
-    } 
- 
-    SendFromEdge(edge, std::move(req), cookie); 
-    auto result = ExpectEdgeEvent<TEvKesus::TEvSubscribeOnResourcesResult>(edge, cookie); 
-    UNIT_ASSERT_VALUES_EQUAL(result->Record.ResultsSize(), info.size()); 
-    for (size_t i = 0; i < info.size(); ++i) { 
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetResults(i).GetError().GetStatus(), info[i].ExpectedStatus); 
-        const auto status = result->Record.GetResults(i).GetError().GetStatus(); 
-        if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::ALREADY_EXISTS) { 
-            UNIT_ASSERT(result->Record.GetResults(i).GetResourceId() != 0); 
-        } else { 
-            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetResults(i).GetResourceId(), 0); 
-        } 
-    } 
-    return result->Record; 
-} 
- 
+    req->Record.MutableResources()->Reserve(info.size());
+    for (const TResourceConsumingInfo& res : info) {
+        auto* reqRes = req->Record.AddResources();
+        reqRes->SetResourcePath(res.Path);
+        Y_ASSERT(!res.Id); // self check
+        reqRes->SetStartConsuming(res.Consume);
+        reqRes->SetInitialAmount(res.Amount);
+    }
+
+    SendFromEdge(edge, std::move(req), cookie);
+    auto result = ExpectEdgeEvent<TEvKesus::TEvSubscribeOnResourcesResult>(edge, cookie);
+    UNIT_ASSERT_VALUES_EQUAL(result->Record.ResultsSize(), info.size());
+    for (size_t i = 0; i < info.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetResults(i).GetError().GetStatus(), info[i].ExpectedStatus);
+        const auto status = result->Record.GetResults(i).GetError().GetStatus();
+        if (status == Ydb::StatusIds::SUCCESS || status == Ydb::StatusIds::ALREADY_EXISTS) {
+            UNIT_ASSERT(result->Record.GetResults(i).GetResourceId() != 0);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetResults(i).GetResourceId(), 0);
+        }
+    }
+    return result->Record;
+}
+
 NKikimrKesus::TEvSubscribeOnResourcesResult TTestContext::SubscribeOnResource(const TActorId& client, const TActorId& edge, const TString& path, bool startConsuming, double amount, Ydb::StatusIds::StatusCode status) {
-    return SubscribeOnResources(client, edge, {TResourceConsumingInfo(path, startConsuming, amount, status)}); 
-} 
- 
+    return SubscribeOnResources(client, edge, {TResourceConsumingInfo(path, startConsuming, amount, status)});
+}
+
 void TTestContext::UpdateConsumptionState(const TActorId& client, const TActorId& edge, const std::vector<TResourceConsumingInfo>& info) {
-    const ui64 cookie = RandomNumber<ui64>(); 
-    auto req = MakeHolder<TEvKesus::TEvUpdateConsumptionState>(); 
+    const ui64 cookie = RandomNumber<ui64>();
+    auto req = MakeHolder<TEvKesus::TEvUpdateConsumptionState>();
     ActorIdToProto(client, req->Record.MutableActorID());
-    req->Record.MutableResourcesInfo()->Reserve(info.size()); 
-    for (const TResourceConsumingInfo& res : info) { 
-        auto* reqRes = req->Record.AddResourcesInfo(); 
-        reqRes->SetResourceId(res.Id); 
-        Y_ASSERT(res.Path.empty()); // self check 
-        reqRes->SetConsumeResource(res.Consume); 
-        reqRes->SetAmount(res.Amount); 
-    } 
- 
-    SendFromEdge(edge, std::move(req), cookie); 
-    ExpectEdgeEvent<TEvKesus::TEvUpdateConsumptionStateAck>(edge, cookie); 
-} 
- 
+    req->Record.MutableResourcesInfo()->Reserve(info.size());
+    for (const TResourceConsumingInfo& res : info) {
+        auto* reqRes = req->Record.AddResourcesInfo();
+        reqRes->SetResourceId(res.Id);
+        Y_ASSERT(res.Path.empty()); // self check
+        reqRes->SetConsumeResource(res.Consume);
+        reqRes->SetAmount(res.Amount);
+    }
+
+    SendFromEdge(edge, std::move(req), cookie);
+    ExpectEdgeEvent<TEvKesus::TEvUpdateConsumptionStateAck>(edge, cookie);
+}
+
 void TTestContext::UpdateConsumptionState(const TActorId& client, const TActorId& edge, ui64 id, bool consume, double amount, Ydb::StatusIds::StatusCode status) {
-    UpdateConsumptionState(client, edge, {TResourceConsumingInfo(id, consume, amount, status)}); 
-} 
- 
+    UpdateConsumptionState(client, edge, {TResourceConsumingInfo(id, consume, amount, status)});
+}
+
 void TTestContext::AccountResources(const TActorId& client, const TActorId& edge, const std::vector<TResourceAccountInfo>& info) {
     const ui64 cookie = RandomNumber<ui64>();
     auto req = MakeHolder<TEvKesus::TEvAccountResources>();
@@ -877,19 +877,19 @@ void TTestContext::AccountResources(const TActorId& client, const TActorId& edge
     AccountResources(client, edge, {TResourceAccountInfo(id, start, interval, std::move(amount))});
 }
 
-NKikimrKesus::TEvGetQuoterResourceCountersResult TTestContext::GetQuoterResourceCounters() { 
-    const ui64 cookie = RandomNumber<ui64>(); 
-    const auto edge = Runtime->AllocateEdgeActor(); 
-    SendFromEdge(edge, new TEvKesus::TEvGetQuoterResourceCounters(), cookie); 
- 
-    auto result = ExpectEdgeEvent<TEvKesus::TEvGetQuoterResourceCountersResult>(edge, cookie); 
-    std::sort(result->Record.MutableResourceCounters()->begin(), 
-              result->Record.MutableResourceCounters()->end(), 
-              [](const auto& c1, const auto c2) { 
-                  return c1.GetResourcePath() < c2.GetResourcePath(); 
-              }); 
-    return result->Record; 
-} 
- 
-} 
-} 
+NKikimrKesus::TEvGetQuoterResourceCountersResult TTestContext::GetQuoterResourceCounters() {
+    const ui64 cookie = RandomNumber<ui64>();
+    const auto edge = Runtime->AllocateEdgeActor();
+    SendFromEdge(edge, new TEvKesus::TEvGetQuoterResourceCounters(), cookie);
+
+    auto result = ExpectEdgeEvent<TEvKesus::TEvGetQuoterResourceCountersResult>(edge, cookie);
+    std::sort(result->Record.MutableResourceCounters()->begin(),
+              result->Record.MutableResourceCounters()->end(),
+              [](const auto& c1, const auto c2) {
+                  return c1.GetResourcePath() < c2.GetResourcePath();
+              });
+    return result->Record;
+}
+
+}
+}

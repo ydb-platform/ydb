@@ -1,13 +1,13 @@
 OWNER(g:sqs)
- 
-LIBRARY() 
- 
-SRCS( 
-    queries.cpp 
-) 
- 
-PEERDIR( 
+
+LIBRARY()
+
+SRCS(
+    queries.cpp
+)
+
+PEERDIR(
     ydb/core/ymq/base
-) 
- 
-END() 
+)
+
+END()

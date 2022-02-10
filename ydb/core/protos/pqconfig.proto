@@ -47,7 +47,7 @@ message TPQConfig {
     optional string VersionTablePath = 16 [default = "/Root/PQ/Config/V2/Versions"];
 
     optional uint32 ClustersUpdateTimeoutOnErrorSec = 17 [default = 1];
- 
+
     optional uint32 WriteInitLatencyBigMs    = 19 [default = 900];
     optional uint32 ReadInitLatencyBigMs     = 20 [default = 900];
     optional uint32 CommitLatencyBigMs       = 21 [default = 900];
@@ -56,17 +56,17 @@ message TPQConfig {
     optional uint32 ReadLatencyFromDiskBigMs = 28 [default = 1000];
 
 
-    message TQuotingConfig { 
-        optional bool EnableQuoting = 1; 
-        optional string QuotersDirectoryPath = 2 [default = "/Root/PersQueue/System/Quoters"]; 
-        optional ELimitedEntity TopicWriteQuotaEntityToLimit = 3; 
- 
-        // Enum for describing entities that quoter can limit. 
-        enum ELimitedEntity { 
-            UNSPECIFIED = 0; 
-            WRITTEN_BLOB_SIZE = 1; // Written blob size, including additional data for compaction. 
-            USER_PAYLOAD_SIZE = 2; // Message + source id size. 
-        } 
+    message TQuotingConfig {
+        optional bool EnableQuoting = 1;
+        optional string QuotersDirectoryPath = 2 [default = "/Root/PersQueue/System/Quoters"];
+        optional ELimitedEntity TopicWriteQuotaEntityToLimit = 3;
+
+        // Enum for describing entities that quoter can limit.
+        enum ELimitedEntity {
+            UNSPECIFIED = 0;
+            WRITTEN_BLOB_SIZE = 1; // Written blob size, including additional data for compaction.
+            USER_PAYLOAD_SIZE = 2; // Message + source id size.
+        }
         optional bool EnableReadQuoting = 4 [default = false];
         optional uint64 ReadCreditBytes = 5 [default = 100000];
 
@@ -74,8 +74,8 @@ message TPQConfig {
 
         optional bool PartitionReadQuotaIsTwiceWriteQuota = 7 [default = false];
 
-    } 
-    optional TQuotingConfig QuotingConfig = 18; 
+    }
+    optional TQuotingConfig QuotingConfig = 18;
 
     // Time duration that we wait before we consider remote cluster enabled for load balancing purposes
     optional uint32 RemoteClusterEnabledDelaySec = 24 [default = 300]; // 5 minutes

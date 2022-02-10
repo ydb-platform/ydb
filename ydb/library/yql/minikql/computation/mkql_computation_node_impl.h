@@ -42,8 +42,8 @@ public:
     ~TUnboxedImmutableComputationNode();
 
 private:
-    void InitNode(TComputationContext&) const override {} 
- 
+    void InitNode(TComputationContext&) const override {}
+
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const final;
 
     const IComputationNode* GetSource() const final;
@@ -75,15 +75,15 @@ protected:
     const EValueRepresentation RepresentationKind;
 };
 
-template <class IComputationNodeInterface, bool SerializableState = false> 
+template <class IComputationNodeInterface, bool SerializableState = false>
 class TStatefulComputationNode: public TRefCountedComputationNode<IComputationNodeInterface>
 {
 protected:
     TStatefulComputationNode(TComputationMutables& mutables, EValueRepresentation kind);
 
 protected:
-    void InitNode(TComputationContext&) const override {} 
- 
+    void InitNode(TComputationContext&) const override {}
+
     IComputationNode* AddDependence(const IComputationNode* node) final;
 
     EValueRepresentation GetRepresentation() const override;
@@ -125,7 +125,7 @@ private:
     void PrepareStageOne() final;
     void PrepareStageTwo() final;
 
-    void CollectDependentIndexes(const IComputationNode* owner, TIndexesMap& dependencies) const final; 
+    void CollectDependentIndexes(const IComputationNode* owner, TIndexesMap& dependencies) const final;
 
     bool IsTemporaryValue() const final;
 
@@ -141,10 +141,10 @@ protected:
     TGetter Getter;
 };
 
-template <typename TDerived, bool SerializableState = false> 
-class TStatefulSourceComputationNode: public TStatefulComputationNode<IComputationNode, SerializableState> 
+template <typename TDerived, bool SerializableState = false>
+class TStatefulSourceComputationNode: public TStatefulComputationNode<IComputationNode, SerializableState>
 {
-    using TStatefulComputationNode = TStatefulComputationNode<IComputationNode, SerializableState>; 
+    using TStatefulComputationNode = TStatefulComputationNode<IComputationNode, SerializableState>;
 private:
     bool IsTemporaryValue() const final {
         return *Stateless;
@@ -156,29 +156,29 @@ private:
 
     void PrepareStageOne() final {
         if (!Stateless) {
-            Stateless = std::accumulate(this->Dependencies.cbegin(), this->Dependencies.cend(), 0, 
+            Stateless = std::accumulate(this->Dependencies.cbegin(), this->Dependencies.cend(), 0,
                 std::bind(std::plus<i32>(), std::placeholders::_1, std::bind(&IComputationNode::GetDependencyWeight, std::placeholders::_2))) <= 1;
         }
     }
 
     void PrepareStageTwo() final {}
 
-    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final { 
+    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
         if (this == owner)
             return;
 
-        if (const auto ins = dependencies.emplace(this->ValueIndex, this->RepresentationKind); ins.second) { 
-            std::for_each(this->Dependencies.cbegin(), this->Dependencies.cend(), std::bind(&IComputationNode::CollectDependentIndexes, std::placeholders::_1, owner, std::ref(dependencies))); 
+        if (const auto ins = dependencies.emplace(this->ValueIndex, this->RepresentationKind); ins.second) {
+            std::for_each(this->Dependencies.cbegin(), this->Dependencies.cend(), std::bind(&IComputationNode::CollectDependentIndexes, std::placeholders::_1, owner, std::ref(dependencies)));
 
             if (*Stateless) {
-                dependencies.erase(ins.first); 
+                dependencies.erase(ins.first);
             }
         }
     }
 
     const IComputationNode* GetSource() const final { return this; }
 protected:
-    TStatefulSourceComputationNode(TComputationMutables& mutables, EValueRepresentation kind = EValueRepresentation::Any) 
+    TStatefulSourceComputationNode(TComputationMutables& mutables, EValueRepresentation kind = EValueRepresentation::Any)
         : TStatefulComputationNode(mutables, kind)
     {}
 
@@ -205,23 +205,23 @@ protected:
 };
 
 template <typename TDerived>
-class TMutableComputationNode: public TStatefulSourceComputationNode<TDerived> { 
-protected: 
-    using TStatefulSourceComputationNode<TDerived>::TStatefulSourceComputationNode; 
- 
-    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override { 
-        if (*this->Stateless) 
-            return static_cast<const TDerived*>(this)->DoCalculate(compCtx); 
-        NUdf::TUnboxedValue& valueRef = this->ValueRef(compCtx); 
-        if (valueRef.IsInvalid()) { 
-            valueRef = static_cast<const TDerived*>(this)->DoCalculate(compCtx); 
-        } 
- 
-        return valueRef; 
-    } 
-}; 
- 
-template <typename TDerived> 
+class TMutableComputationNode: public TStatefulSourceComputationNode<TDerived> {
+protected:
+    using TStatefulSourceComputationNode<TDerived>::TStatefulSourceComputationNode;
+
+    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override {
+        if (*this->Stateless)
+            return static_cast<const TDerived*>(this)->DoCalculate(compCtx);
+        NUdf::TUnboxedValue& valueRef = this->ValueRef(compCtx);
+        if (valueRef.IsInvalid()) {
+            valueRef = static_cast<const TDerived*>(this)->DoCalculate(compCtx);
+        }
+
+        return valueRef;
+    }
+};
+
+template <typename TDerived>
 class TFlowSourceComputationNode: public TStatefulComputationNode<IComputationNode>
 {
 protected:
@@ -255,12 +255,12 @@ private:
         return this->Dependencies.size() + Sources.size();
     }
 
-    void CollectDependentIndexes(const IComputationNode* owner, IComputationExternalNode::TIndexesMap& dependencies) const final { 
+    void CollectDependentIndexes(const IComputationNode* owner, IComputationExternalNode::TIndexesMap& dependencies) const final {
         if (this == owner)
             return;
 
-        if (dependencies.emplace(TStatefulComputationNode<IComputationNode>::ValueIndex, TStatefulComputationNode<IComputationNode>::RepresentationKind).second) { 
-            std::for_each(this->Dependencies.cbegin(), this->Dependencies.cend(), std::bind(&IComputationNode::CollectDependentIndexes, std::placeholders::_1, owner, std::ref(dependencies))); 
+        if (dependencies.emplace(TStatefulComputationNode<IComputationNode>::ValueIndex, TStatefulComputationNode<IComputationNode>::RepresentationKind).second) {
+            std::for_each(this->Dependencies.cbegin(), this->Dependencies.cend(), std::bind(&IComputationNode::CollectDependentIndexes, std::placeholders::_1, owner, std::ref(dependencies)));
         }
     }
 
@@ -287,8 +287,8 @@ class TFlowBaseComputationNode: public TRefCountedComputationNode<IFlowInterface
 protected:
     TFlowBaseComputationNode(const IComputationNode* source) : Source(source) {}
 
-    void InitNode(TComputationContext&) const override {} 
- 
+    void InitNode(TComputationContext&) const override {}
+
     TString DebugString() const override {
         return TypeName<TDerived>();
     }
@@ -421,32 +421,32 @@ private:
         THROW yexception() << "Failed to get stateless node index.";
     }
 
-    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final { 
+    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
         if (this == owner)
             return;
 
         if (this->Dependence) {
-            this->Dependence->CollectDependentIndexes(owner, dependencies); 
+            this->Dependence->CollectDependentIndexes(owner, dependencies);
         }
     }
 };
 
-template <typename TDerived, bool SerializableState = false> 
+template <typename TDerived, bool SerializableState = false>
 class TStatefulFlowComputationNode: public TBaseFlowBaseComputationNode<TDerived>
 {
 protected:
     TStatefulFlowComputationNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation kind, EValueRepresentation stateKind)
         : TBaseFlowBaseComputationNode<TDerived>(source, kind), StateIndex(mutables.CurValueIndex++), StateKind(stateKind)
-    { 
-        if constexpr (SerializableState) { 
-            mutables.SerializableValues.push_back(StateIndex); 
-        } 
-    } 
+    {
+        if constexpr (SerializableState) {
+            mutables.SerializableValues.push_back(StateIndex);
+        }
+    }
 
     NUdf::TUnboxedValue& RefState(TComputationContext& compCtx) const {
         return compCtx.MutableValues[GetIndex()];
     }
- 
+
 private:
     ui32 GetIndex() const final {
         return StateIndex;
@@ -456,13 +456,13 @@ private:
         return static_cast<const TDerived*>(this)->DoCalculate(compCtx.MutableValues[StateIndex], compCtx);
     }
 
-    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final { 
+    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
         if (this == owner)
             return;
 
-        const auto ins = dependencies.emplace(StateIndex, StateKind); 
+        const auto ins = dependencies.emplace(StateIndex, StateKind);
         if (ins.second && this->Dependence) {
-            this->Dependence->CollectDependentIndexes(owner, dependencies); 
+            this->Dependence->CollectDependentIndexes(owner, dependencies);
         }
     }
 
@@ -491,14 +491,14 @@ private:
         return StateIndex;
     }
 
-    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final { 
+    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
         if (this == owner)
             return;
 
-        const auto ins1 = dependencies.emplace(StateIndex, FirstKind); 
-        const auto ins2 = dependencies.emplace(StateIndex + 1U, SecondKind); 
+        const auto ins1 = dependencies.emplace(StateIndex, FirstKind);
+        const auto ins2 = dependencies.emplace(StateIndex + 1U, SecondKind);
         if (ins1.second && ins2.second && this->Dependence) {
-            this->Dependence->CollectDependentIndexes(owner, dependencies); 
+            this->Dependence->CollectDependentIndexes(owner, dependencies);
         }
     }
 
@@ -514,8 +514,8 @@ protected:
     TString DebugString() const final;
 
 private:
-    void InitNode(TComputationContext&) const override {} 
- 
+    void InitNode(TComputationContext&) const override {}
+
     EValueRepresentation GetRepresentation() const final;
 
     NUdf::TUnboxedValue GetValue(TComputationContext&) const final;
@@ -589,27 +589,27 @@ private:
         THROW yexception() << "Failed to get stateless node index.";
     }
 
-    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final { 
+    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
         if (this == owner)
             return;
 
         if (this->Dependence) {
-            this->Dependence->CollectDependentIndexes(owner, dependencies); 
+            this->Dependence->CollectDependentIndexes(owner, dependencies);
         }
     }
 };
 
-template <typename TDerived, bool SerializableState = false> 
+template <typename TDerived, bool SerializableState = false>
 class TStatefulWideFlowComputationNode: public TWideFlowBaseComputationNode<TDerived>
 {
 protected:
     TStatefulWideFlowComputationNode(TComputationMutables& mutables, const IComputationNode* source, EValueRepresentation stateKind)
         : TWideFlowBaseComputationNode<TDerived>(source), StateIndex(mutables.CurValueIndex++), StateKind(stateKind)
-    { 
-        if constexpr (SerializableState) { 
-            mutables.SerializableValues.push_back(StateIndex); 
-        } 
-    } 
+    {
+        if constexpr (SerializableState) {
+            mutables.SerializableValues.push_back(StateIndex);
+        }
+    }
 
     NUdf::TUnboxedValue& RefState(TComputationContext& compCtx) const {
         return compCtx.MutableValues[GetIndex()];
@@ -623,13 +623,13 @@ private:
         return StateIndex;
     }
 
-    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final { 
+    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
         if (this == owner)
             return;
 
-        const auto ins = dependencies.emplace(StateIndex, StateKind); 
+        const auto ins = dependencies.emplace(StateIndex, StateKind);
         if (ins.second && this->Dependence) {
-            this->Dependence->CollectDependentIndexes(owner, dependencies); 
+            this->Dependence->CollectDependentIndexes(owner, dependencies);
         }
     }
 
@@ -656,14 +656,14 @@ private:
         return StateIndex;
     }
 
-    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final { 
+    void CollectDependentIndexes(const IComputationNode* owner, IComputationNode::TIndexesMap& dependencies) const final {
         if (this == owner)
             return;
 
-        const auto ins1 = dependencies.emplace(StateIndex, FirstKind); 
-        const auto ins2 = dependencies.emplace(StateIndex + 1U, SecondKind); 
+        const auto ins1 = dependencies.emplace(StateIndex, FirstKind);
+        const auto ins2 = dependencies.emplace(StateIndex + 1U, SecondKind);
         if (ins1.second && ins2.second && this->Dependence) {
-            this->Dependence->CollectDependentIndexes(owner, dependencies); 
+            this->Dependence->CollectDependentIndexes(owner, dependencies);
         }
     }
 
@@ -676,7 +676,7 @@ class TDecoratorComputationNode: public TRefCountedComputationNode<IComputationN
 {
 private:
     void InitNode(TComputationContext&) const final {}
- 
+
     const IComputationNode* GetSource() const final { return Node; }
 
     IComputationNode* AddDependence(const IComputationNode* node) final {

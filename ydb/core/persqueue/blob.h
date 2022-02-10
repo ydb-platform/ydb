@@ -250,7 +250,7 @@ struct THead {
 IOutputStream& operator <<(IOutputStream& out, const THead& value);
 
 
-//stucture for tracking written KV-blobs, stored in memory parts of one partitioned blob 
+//stucture for tracking written KV-blobs, stored in memory parts of one partitioned blob
 class TPartitionedBlob {
 public:
     TPartitionedBlob& operator=(const TPartitionedBlob& x);

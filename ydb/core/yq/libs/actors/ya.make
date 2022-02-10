@@ -33,12 +33,12 @@ PEERDIR(
     library/cpp/yson/node
     ydb/core/base
     ydb/core/protos
-    ydb/core/yq/libs/actors/logging 
-    ydb/core/yq/libs/checkpointing 
-    ydb/core/yq/libs/checkpointing_common 
+    ydb/core/yq/libs/actors/logging
+    ydb/core/yq/libs/checkpointing
+    ydb/core/yq/libs/checkpointing_common
     ydb/core/yq/libs/common
     ydb/core/yq/libs/control_plane_storage
-    ydb/core/yq/libs/control_plane_storage/events 
+    ydb/core/yq/libs/control_plane_storage/events
     ydb/core/yq/libs/db_resolver
     ydb/core/yq/libs/db_schema
     ydb/core/yq/libs/events
@@ -84,7 +84,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
- 
-RECURSE( 
-    logging 
-) 
+
+RECURSE(
+    logging
+)

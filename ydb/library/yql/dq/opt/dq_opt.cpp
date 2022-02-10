@@ -144,15 +144,15 @@ bool IsSingleConsumerConnection(const TDqConnection& node, const TParentsMap& pa
         && (allowStageMultiUsage || IsSingleConsumer(node.Output().Stage(), parentsMap));
 }
 
-ui32 GetStageOutputsCount(const TDqStageBase& stage, bool includingSinks) { 
+ui32 GetStageOutputsCount(const TDqStageBase& stage, bool includingSinks) {
     auto stageType = stage.Ref().GetTypeAnn();
     YQL_ENSURE(stageType);
     auto resultsTypeTuple = stageType->Cast<TTupleExprType>();
-    ui32 result = resultsTypeTuple->GetSize(); 
-    if (!includingSinks && stage.Sinks()) { 
-        result -= stage.Sinks().Cast().Size(); 
-    } 
-    return result; 
+    ui32 result = resultsTypeTuple->GetSize();
+    if (!includingSinks && stage.Sinks()) {
+        result -= stage.Sinks().Cast().Size();
+    }
+    return result;
 }
 
 TVector<TDqConnection> FindDqConnections(const TExprBase& node) {

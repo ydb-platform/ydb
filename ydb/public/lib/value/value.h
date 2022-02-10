@@ -4,7 +4,7 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <util/generic/vector.h>
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -100,20 +100,20 @@ public:
     // returns member index by name
     int GetMemberIndex(TStringBuf name) const;
 
-    TString DumpToString() const { 
-        TStringBuilder dump; 
+    TString DumpToString() const {
+        TStringBuilder dump;
         TString res;
         ::google::protobuf::TextFormat::PrintToString(Type, &res);
-        dump << "Type:" << Endl << res << Endl; 
+        dump << "Type:" << Endl << res << Endl;
         ::google::protobuf::TextFormat::PrintToString(Value, &res);
-        dump << "Value:" << Endl << res << Endl; 
-        return std::move(dump); 
+        dump << "Value:" << Endl << res << Endl;
+        return std::move(dump);
     }
 
-    void DumpValue() const { 
-        Cerr << DumpToString(); 
-    } 
- 
+    void DumpValue() const {
+        Cerr << DumpToString();
+    }
+
     const NKikimrMiniKQL::TType& GetType() const { return Type; };
     const NKikimrMiniKQL::TValue& GetValue() const { return Value; };
 

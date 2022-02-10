@@ -4,8 +4,8 @@
 #include "json.h"
 #include <library/cpp/json/json_value.h>
 
-#include <limits> 
- 
+#include <limits>
+
 Y_UNIT_TEST_SUITE(JsonWriter) {
     Y_UNIT_TEST(Struct) {
         NJsonWriter::TBuf w;
@@ -205,53 +205,53 @@ Y_UNIT_TEST_SUITE(JsonWriter) {
         const char exp[] = "[0.123457,0.1234567899,0.316,244.1,10385.83,{\"1\":1112,\"2\":1e+03}]";
         UNIT_ASSERT_STRINGS_EQUAL(exp, buf.Str());
     }
- 
+
     Y_UNIT_TEST(NanFormatting) {
-        { 
-            NJsonWriter::TBuf buf; 
-            buf.BeginObject(); 
-            buf.WriteKey("nanvalue"); 
-            UNIT_ASSERT_EXCEPTION(buf.WriteFloat(std::numeric_limits<double>::quiet_NaN()), yexception); 
-        } 
- 
-        { 
-            NJsonWriter::TBuf buf; 
-            buf.BeginObject(); 
-            buf.WriteKey("infvalue"); 
-            UNIT_ASSERT_EXCEPTION(buf.WriteFloat(std::numeric_limits<double>::infinity()), yexception); 
-        } 
- 
-        { 
-            NJsonWriter::TBuf buf; 
-            buf.BeginList(); 
-            UNIT_ASSERT_EXCEPTION(buf.WriteFloat(std::numeric_limits<double>::quiet_NaN()), yexception); 
-        } 
- 
-        { 
-            NJsonWriter::TBuf buf; 
-            buf.BeginList(); 
-            UNIT_ASSERT_EXCEPTION(buf.WriteFloat(std::numeric_limits<double>::infinity()), yexception); 
-        } 
- 
-        { 
-            NJsonWriter::TBuf buf; 
-            buf.SetWriteNanAsString(); 
- 
-            buf.BeginObject() 
+        {
+            NJsonWriter::TBuf buf;
+            buf.BeginObject();
+            buf.WriteKey("nanvalue");
+            UNIT_ASSERT_EXCEPTION(buf.WriteFloat(std::numeric_limits<double>::quiet_NaN()), yexception);
+        }
+
+        {
+            NJsonWriter::TBuf buf;
+            buf.BeginObject();
+            buf.WriteKey("infvalue");
+            UNIT_ASSERT_EXCEPTION(buf.WriteFloat(std::numeric_limits<double>::infinity()), yexception);
+        }
+
+        {
+            NJsonWriter::TBuf buf;
+            buf.BeginList();
+            UNIT_ASSERT_EXCEPTION(buf.WriteFloat(std::numeric_limits<double>::quiet_NaN()), yexception);
+        }
+
+        {
+            NJsonWriter::TBuf buf;
+            buf.BeginList();
+            UNIT_ASSERT_EXCEPTION(buf.WriteFloat(std::numeric_limits<double>::infinity()), yexception);
+        }
+
+        {
+            NJsonWriter::TBuf buf;
+            buf.SetWriteNanAsString();
+
+            buf.BeginObject()
                 .WriteKey("nanvalue")
                 .WriteFloat(std::numeric_limits<double>::quiet_NaN())
                 .WriteKey("infvalue")
                 .WriteFloat(std::numeric_limits<double>::infinity())
                 .WriteKey("minus_infvalue")
                 .WriteFloat(-std::numeric_limits<float>::infinity())
-                .WriteKey("l") 
+                .WriteKey("l")
                 .BeginList()
                 .WriteFloat(std::numeric_limits<float>::quiet_NaN())
                 .EndList()
                 .EndObject();
- 
-            UNIT_ASSERT_STRINGS_EQUAL(buf.Str(), R"raw_json({"nanvalue":"nan","infvalue":"inf","minus_infvalue":"-inf","l":["nan"]})raw_json"); 
-        } 
+
+            UNIT_ASSERT_STRINGS_EQUAL(buf.Str(), R"raw_json({"nanvalue":"nan","infvalue":"inf","minus_infvalue":"-inf","l":["nan"]})raw_json");
+        }
 
         {
             NJsonWriter::TBuf buf;
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(JsonWriter) {
 
             UNIT_ASSERT_STRINGS_EQUAL(buf.Str(), R"({"\u003C\u003E&":"Ololo","<>&":"Ololo2"})");
         }
-    } 
+    }
 
     Y_UNIT_TEST(WriteUninitializedBoolDoesntCrashProgram) {
         // makes sense only in release build w/ address sanitizer

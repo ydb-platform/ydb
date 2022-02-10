@@ -542,13 +542,13 @@ public:
                 //s->SetFinishTs(stats->FinishTs.MilliSeconds());
                 s->SetBuildCpuTimeUs(stats->BuildCpuTime.MicroSeconds());
                 s->SetComputeCpuTimeUs(stats->ComputeCpuTime.MicroSeconds());
- 
-                // All run statuses metrics 
-                s->SetPendingInputTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::PendingInput].MicroSeconds()); 
-                s->SetPendingOutputTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::PendingOutput].MicroSeconds()); 
-                s->SetFinishTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::Finished].MicroSeconds()); 
-                static_assert(NDq::TRunStatusTimeMetrics::StatusesCount == 3); // Add all statuses here 
- 
+
+                // All run statuses metrics
+                s->SetPendingInputTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::PendingInput].MicroSeconds());
+                s->SetPendingOutputTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::PendingOutput].MicroSeconds());
+                s->SetFinishTimeUs(stats->RunStatusTimeMetrics[NDq::ERunStatus::Finished].MicroSeconds());
+                static_assert(NDq::TRunStatusTimeMetrics::StatusesCount == 3); // Add all statuses here
+
                 //s->SetTotalTime(stats->TotalTime.MilliSeconds());
                 s->SetWaitTimeUs(stats->WaitTime.MicroSeconds());
                 s->SetWaitOutputTimeUs(stats->WaitOutputTime.MicroSeconds());

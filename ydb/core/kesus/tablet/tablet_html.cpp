@@ -3,7 +3,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #include <util/string/escape.h>
-#include <util/string/subst.h> 
+#include <util/string/subst.h>
 
 namespace NKikimr {
 namespace NKesus {
@@ -340,109 +340,109 @@ struct TKesusTablet::THtmlRenderer {
             }
         }
     }
- 
-    void RenderQuoterResourceLink(IOutputStream& out, const TQuoterResourceTree* resource) { 
-        if (resource) { 
-            TCgiParameters params; 
-            params.InsertUnescaped("quoter_resource", resource->GetPath()); 
-            out << "<a href=\"app?TabletID=" << Self->TabletID() << "&" << params() << "\">" << resource->GetPath() << "</a>"; 
-        } 
-    } 
- 
-    void RenderQuoterResourceTable(IOutputStream& out, std::vector<const TQuoterResourceTree*>& resources) { 
-        std::sort(resources.begin(), resources.end(), 
-                  [](const TQuoterResourceTree* res1, const TQuoterResourceTree* res2) { 
-                      return res1->GetPath() < res2->GetPath(); 
-                  }); 
-        HTML(out) { 
-            TABLE_SORTABLE_CLASS("table") { 
-                TABLEHEAD() { 
-                    TABLER() { 
-                        TABLEH() { out << "Path"; } 
-                        TABLEH() { out << "Props"; } 
-                    } 
-                } 
-                TABLEBODY() { 
-                    for (const TQuoterResourceTree* resource : resources) { 
-                        TABLER() { 
-                            TABLED() { RenderQuoterResourceLink(out, resource); } 
-                            TABLED() { out << resource->GetProps(); } 
-                        } 
-                    } 
-                } 
-            } 
-        } 
-    } 
- 
-    void RenderQuoterResources(IOutputStream& out) { 
-        HTML(out) { 
-            H3() { out << "Quoter resources"; } 
- 
-            std::vector<const TQuoterResourceTree*> resources; 
-            resources.reserve(Self->QuoterResources.GetAllResources().size()); 
-            for (auto&& [path, resource] : Self->QuoterResources.GetAllResources()) { 
-                resources.push_back(resource); 
-            } 
- 
-            RenderQuoterResourceTable(out, resources); 
-        } 
-    } 
- 
-    void RenderQuoterResourceDetails(IOutputStream& out, const TString& path) { 
-        if (const TQuoterResourceTree* resource = Self->QuoterResources.FindPath(path)) { 
-            HTML(out) { 
-                H2() { out << "Kesus quoter resource " << EscapeC(path); } 
- 
-                PRE() { 
-                    if (resource->GetParent()) { 
-                        out << "Parent: "; RenderQuoterResourceLink(out, resource->GetParent()); out << "\n"; 
-                    } 
-                    TString props = "\n"; 
-                    props += resource->GetProps().Utf8DebugString(); 
-                    SubstGlobal(props, "\n", "\n    "); // make indent 
-                    out << "Props:" << props << "\n"; 
-                } 
- 
-                H3() { out << "Children resources"; } 
- 
-                std::vector<const TQuoterResourceTree*> resources(resource->GetChildren().begin(), resource->GetChildren().end()); 
-                RenderQuoterResourceTable(out, resources); 
- 
-                H3() { out << "Sessions"; } 
-                RenderQuoterResourceSessions(out, resource); 
-            } 
-        } else { 
-            RenderError(out, TStringBuilder() << "Resource with path " << path << " not found"); 
-        } 
-    } 
- 
-    void RenderQuoterResourceSessions(IOutputStream& out, const TQuoterResourceTree* resource) { 
-        HTML(out) { 
-            TABLE_SORTABLE_CLASS("table") { 
-                TABLEHEAD() { 
-                    TABLER() { 
-                        TABLEH() { out << "Client"; } 
-                        TABLEH() { out << "Active"; } 
-                        TABLEH() { out << "Consumed"; } 
-                        TABLEH() { out << "Requested"; } 
-                    } 
-                } 
-                TABLEBODY() { 
-                    const auto& clients = resource->GetSessions(); 
+
+    void RenderQuoterResourceLink(IOutputStream& out, const TQuoterResourceTree* resource) {
+        if (resource) {
+            TCgiParameters params;
+            params.InsertUnescaped("quoter_resource", resource->GetPath());
+            out << "<a href=\"app?TabletID=" << Self->TabletID() << "&" << params() << "\">" << resource->GetPath() << "</a>";
+        }
+    }
+
+    void RenderQuoterResourceTable(IOutputStream& out, std::vector<const TQuoterResourceTree*>& resources) {
+        std::sort(resources.begin(), resources.end(),
+                  [](const TQuoterResourceTree* res1, const TQuoterResourceTree* res2) {
+                      return res1->GetPath() < res2->GetPath();
+                  });
+        HTML(out) {
+            TABLE_SORTABLE_CLASS("table") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() { out << "Path"; }
+                        TABLEH() { out << "Props"; }
+                    }
+                }
+                TABLEBODY() {
+                    for (const TQuoterResourceTree* resource : resources) {
+                        TABLER() {
+                            TABLED() { RenderQuoterResourceLink(out, resource); }
+                            TABLED() { out << resource->GetProps(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void RenderQuoterResources(IOutputStream& out) {
+        HTML(out) {
+            H3() { out << "Quoter resources"; }
+
+            std::vector<const TQuoterResourceTree*> resources;
+            resources.reserve(Self->QuoterResources.GetAllResources().size());
+            for (auto&& [path, resource] : Self->QuoterResources.GetAllResources()) {
+                resources.push_back(resource);
+            }
+
+            RenderQuoterResourceTable(out, resources);
+        }
+    }
+
+    void RenderQuoterResourceDetails(IOutputStream& out, const TString& path) {
+        if (const TQuoterResourceTree* resource = Self->QuoterResources.FindPath(path)) {
+            HTML(out) {
+                H2() { out << "Kesus quoter resource " << EscapeC(path); }
+
+                PRE() {
+                    if (resource->GetParent()) {
+                        out << "Parent: "; RenderQuoterResourceLink(out, resource->GetParent()); out << "\n";
+                    }
+                    TString props = "\n";
+                    props += resource->GetProps().Utf8DebugString();
+                    SubstGlobal(props, "\n", "\n    "); // make indent
+                    out << "Props:" << props << "\n";
+                }
+
+                H3() { out << "Children resources"; }
+
+                std::vector<const TQuoterResourceTree*> resources(resource->GetChildren().begin(), resource->GetChildren().end());
+                RenderQuoterResourceTable(out, resources);
+
+                H3() { out << "Sessions"; }
+                RenderQuoterResourceSessions(out, resource);
+            }
+        } else {
+            RenderError(out, TStringBuilder() << "Resource with path " << path << " not found");
+        }
+    }
+
+    void RenderQuoterResourceSessions(IOutputStream& out, const TQuoterResourceTree* resource) {
+        HTML(out) {
+            TABLE_SORTABLE_CLASS("table") {
+                TABLEHEAD() {
+                    TABLER() {
+                        TABLEH() { out << "Client"; }
+                        TABLEH() { out << "Active"; }
+                        TABLEH() { out << "Consumed"; }
+                        TABLEH() { out << "Requested"; }
+                    }
+                }
+                TABLEBODY() {
+                    const auto& clients = resource->GetSessions();
                     for (const NActors::TActorId& clientId : clients) {
-                        const TQuoterSession* session = Self->QuoterResources.FindSession(clientId, resource->GetResourceId()); 
-                        Y_VERIFY(session); 
-                        TABLER() { 
-                            TABLED() { out << clientId; } 
-                            TABLED() { out << (session->IsActive() ? "true" : "false"); } 
-                            TABLED() { out << session->GetTotalConsumed(); } 
-                            TABLED() { out << session->GetAmountRequested(); } 
-                        } 
-                    } 
-                } 
-            } 
-        } 
-    } 
+                        const TQuoterSession* session = Self->QuoterResources.FindSession(clientId, resource->GetResourceId());
+                        Y_VERIFY(session);
+                        TABLER() {
+                            TABLED() { out << clientId; }
+                            TABLED() { out << (session->IsActive() ? "true" : "false"); }
+                            TABLED() { out << session->GetTotalConsumed(); }
+                            TABLED() { out << session->GetAmountRequested(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
 };
 
 bool TKesusTablet::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) {
@@ -462,14 +462,14 @@ bool TKesusTablet::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const T
             renderer.RenderSessionDetails(out, params.Get("session"));
         } else if (params.Has("semaphore")) {
             renderer.RenderSemaphoreDetails(out, params.Get("semaphore"));
-        } else if (params.Has("quoter_resource")) { 
-            renderer.RenderQuoterResourceDetails(out, params.Get("quoter_resource")); 
+        } else if (params.Has("quoter_resource")) {
+            renderer.RenderQuoterResourceDetails(out, params.Get("quoter_resource"));
         } else {
             H2() { out << "Kesus " << EscapeC(KesusPath); }
             renderer.RenderProxyList(out);
             renderer.RenderSessionList(out);
             renderer.RenderSemaphoreList(out);
-            renderer.RenderQuoterResources(out); 
+            renderer.RenderQuoterResources(out);
         }
     }
 

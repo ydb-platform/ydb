@@ -115,7 +115,7 @@ static inline long AtomicSub(TAtomic& a, long b) {
 
 #ifndef _darwin_
 
-#ifndef Y_ARRAY_SIZE 
+#ifndef Y_ARRAY_SIZE
 #define Y_ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #endif
 

@@ -1,4 +1,4 @@
-#include "yql_names.h" 
- 
-namespace NYql { 
-} // namespace NYql 
+#include "yql_names.h"
+
+namespace NYql {
+} // namespace NYql

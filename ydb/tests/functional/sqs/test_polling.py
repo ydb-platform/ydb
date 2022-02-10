@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import pytest
-from hamcrest import assert_that, equal_to 
+from hamcrest import assert_that, equal_to
 
-from sqs_matchers import ReadResponseMatcher 
+from sqs_matchers import ReadResponseMatcher
 
-from sqs_test_base import KikimrSqsTestBase, POLLING_PARAMS, IS_FIFO_PARAMS 
- 
- 
+from sqs_test_base import KikimrSqsTestBase, POLLING_PARAMS, IS_FIFO_PARAMS
+
+
 class TestSqsPolling(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
@@ -28,7 +28,7 @@ class TestSqsPolling(KikimrSqsTestBase):
 
         read_result = self._read_messages_and_assert(
             created_queue_url, messages_count=1, visibility_timeout=1000, wait_timeout=polling_wait_timeout,
-            matcher=ReadResponseMatcher().with_n_messages(1) 
+            matcher=ReadResponseMatcher().with_n_messages(1)
         )
         assert_that(read_result[0]['Body'], equal_to('test_send_message'))
 

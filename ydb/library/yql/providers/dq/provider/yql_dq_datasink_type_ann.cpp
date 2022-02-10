@@ -31,9 +31,9 @@ public:
         AddHandler({TDqPhyMapJoin::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
         AddHandler({TDqPhyCrossJoin::CallableName()}, Hndl(&NDq::AnnotateDqCrossJoin));
         AddHandler({TDqPhyJoinDict::CallableName()}, Hndl(&NDq::AnnotateDqMapOrDictJoin));
-        AddHandler({TDqSink::CallableName()}, Hndl(&NDq::AnnotateDqSink)); 
+        AddHandler({TDqSink::CallableName()}, Hndl(&NDq::AnnotateDqSink));
         AddHandler({TDqWrite::CallableName()}, Hndl(&TDqsDataSinkTypeAnnotationTransformer::AnnotateDqWrite));
-        AddHandler({TDqQuery::CallableName()}, Hndl(&NDq::AnnotateDqQuery)); 
+        AddHandler({TDqQuery::CallableName()}, Hndl(&NDq::AnnotateDqQuery));
     }
 
 private:

@@ -3,56 +3,56 @@
 #include <ydb/core/ymq/http/params.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
- 
-#include <util/string/cast.h> 
-#include <util/generic/strbuf.h> 
- 
-namespace NKikimr::NSQS { 
+
+#include <util/string/cast.h>
+#include <util/generic/strbuf.h>
+
+namespace NKikimr::NSQS {
 namespace {
- 
-const TString& ValidateAlphaNumAndPunctuation128ForAssign(const TString& value, TStringBuf parameterName) { 
-    if (value.size() > 128 || !IsAlphaNumAndPunctuation(value)) { 
-        if (parameterName) { 
-            throw TSQSException(NErrors::INVALID_PARAMETER_VALUE) 
-                << "Invalid parameter \"" << parameterName 
-                << "\". It is expected to be shorter than 128 characters and consist of aplhanum and punctuation characters."; 
-        } else { 
-            throw TSQSException(NErrors::INVALID_PARAMETER_VALUE); 
-        } 
-    } 
-    return value; 
-} 
- 
-class TParameterValidator { 
-public: 
-    TParameterValidator(TStringBuf value, TStringBuf parameterName) 
-        : Value(value) 
-        , ParameterName(parameterName) 
-    { 
-    } 
- 
-    template <class T> 
-    operator TMaybe<T>() const { 
-        T v; 
-        if (!TryFromString(Value, v)) { 
-            if (ParameterName) { 
-                throw TSQSException(NErrors::INVALID_PARAMETER_VALUE) << "Invalid parameter \"" << ParameterName << "\"."; 
-            } else { 
-                throw TSQSException(NErrors::INVALID_PARAMETER_VALUE); 
-            } 
-        } 
-        return v; 
-    } 
- 
-private: 
-    TStringBuf Value; 
-    TStringBuf ParameterName; 
-}; 
- 
-TParameterValidator ParseAndValidate(TStringBuf value, TStringBuf parameterName) { 
-    return TParameterValidator(value, parameterName); 
-} 
- 
+
+const TString& ValidateAlphaNumAndPunctuation128ForAssign(const TString& value, TStringBuf parameterName) {
+    if (value.size() > 128 || !IsAlphaNumAndPunctuation(value)) {
+        if (parameterName) {
+            throw TSQSException(NErrors::INVALID_PARAMETER_VALUE)
+                << "Invalid parameter \"" << parameterName
+                << "\". It is expected to be shorter than 128 characters and consist of aplhanum and punctuation characters.";
+        } else {
+            throw TSQSException(NErrors::INVALID_PARAMETER_VALUE);
+        }
+    }
+    return value;
+}
+
+class TParameterValidator {
+public:
+    TParameterValidator(TStringBuf value, TStringBuf parameterName)
+        : Value(value)
+        , ParameterName(parameterName)
+    {
+    }
+
+    template <class T>
+    operator TMaybe<T>() const {
+        T v;
+        if (!TryFromString(Value, v)) {
+            if (ParameterName) {
+                throw TSQSException(NErrors::INVALID_PARAMETER_VALUE) << "Invalid parameter \"" << ParameterName << "\".";
+            } else {
+                throw TSQSException(NErrors::INVALID_PARAMETER_VALUE);
+            }
+        }
+        return v;
+    }
+
+private:
+    TStringBuf Value;
+    TStringBuf ParameterName;
+};
+
+TParameterValidator ParseAndValidate(TStringBuf value, TStringBuf parameterName) {
+    return TParameterValidator(value, parameterName);
+}
+
 %%{
 machine params_parser;
 
@@ -74,8 +74,8 @@ message_attribute =
         (("Name" % { CurrentParams_->MessageAttributes[Num_].SetName(value); }) |
          ("Value" '.'
             (("StringValue" % { CurrentParams_->MessageAttributes[Num_].SetStringValue(value); }) |
-             ("DataType"    % { CurrentParams_->MessageAttributes[Num_].SetDataType(value); }) | 
-             ("BinaryValue" % { CurrentParams_->MessageAttributes[Num_].SetBinaryValue(Base64Decode(value)); })))); 
+             ("DataType"    % { CurrentParams_->MessageAttributes[Num_].SetDataType(value); }) |
+             ("BinaryValue" % { CurrentParams_->MessageAttributes[Num_].SetBinaryValue(Base64Decode(value)); }))));
 
 change_visibility_entry =
     "ChangeMessageVisibilityBatchRequestEntry" > { Id_ = 1; } ('.' int %{ Id_ = I; CurrentParams_ = &Params_->BatchEntries[Id_]; }) '.'
@@ -97,21 +97,21 @@ send_message_entry =
          ("MessageGroupId"         % { CurrentParams_->MessageGroupId = ValidateAlphaNumAndPunctuation128ForAssign(value, TStringBuf("MessageGroupId")); }) |
          message_attribute);
 
-delete_queue_entry = 
-    "DeleteQueueBatchRequestEntry" > { Id_ = 1; } ('.' int %{ Id_ = I; CurrentParams_ = &Params_->BatchEntries[Id_]; }) '.' 
-        (("Id"       % { CurrentParams_->Id = value; }) | 
-         ("QueueUrl" % { CurrentParams_->QueueUrl = value; })); 
- 
-purge_queue_entry = 
-    "PurgeQueueBatchRequestEntry" > { Id_ = 1; } ('.' int %{ Id_ = I; CurrentParams_ = &Params_->BatchEntries[Id_]; }) '.' 
-        (("Id"       % { CurrentParams_->Id = value; }) | 
-         ("QueueUrl" % { CurrentParams_->QueueUrl = value; })); 
- 
-get_queue_attributes_entry = 
-    "GetQueueAttributesBatchRequestEntry" > { Id_ = 1; } ('.' int %{ Id_ = I; CurrentParams_ = &Params_->BatchEntries[Id_]; }) '.' 
-        (("Id"       % { CurrentParams_->Id = value; }) | 
-         ("QueueUrl" % { CurrentParams_->QueueUrl = value; })); 
- 
+delete_queue_entry =
+    "DeleteQueueBatchRequestEntry" > { Id_ = 1; } ('.' int %{ Id_ = I; CurrentParams_ = &Params_->BatchEntries[Id_]; }) '.'
+        (("Id"       % { CurrentParams_->Id = value; }) |
+         ("QueueUrl" % { CurrentParams_->QueueUrl = value; }));
+
+purge_queue_entry =
+    "PurgeQueueBatchRequestEntry" > { Id_ = 1; } ('.' int %{ Id_ = I; CurrentParams_ = &Params_->BatchEntries[Id_]; }) '.'
+        (("Id"       % { CurrentParams_->Id = value; }) |
+         ("QueueUrl" % { CurrentParams_->QueueUrl = value; }));
+
+get_queue_attributes_entry =
+    "GetQueueAttributesBatchRequestEntry" > { Id_ = 1; } ('.' int %{ Id_ = I; CurrentParams_ = &Params_->BatchEntries[Id_]; }) '.'
+        (("Id"       % { CurrentParams_->Id = value; }) |
+         ("QueueUrl" % { CurrentParams_->QueueUrl = value; }));
+
 permissions_entry =
     "Permission" > { Id_ = 1; } ('.' int %{ Id_ = I; CurrentParams_ = &Params_->BatchEntries[Id_]; CurrentParams_->Action = value; });
 
@@ -144,9 +144,9 @@ main := |*
     message_attribute;
     permissions_entry;
     send_message_entry;
-    delete_queue_entry; 
-    purge_queue_entry; 
-    get_queue_attributes_entry; 
+    delete_queue_entry;
+    purge_queue_entry;
+    get_queue_attributes_entry;
 *|;
 
 }%%
@@ -186,4 +186,4 @@ void TParametersParser::Append(const TString& name, const TString& value) {
     %% write exec;
 }
 
-} // namespace NKikimr::NSQS 
+} // namespace NKikimr::NSQS

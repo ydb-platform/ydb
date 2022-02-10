@@ -38,8 +38,8 @@ namespace NProtoBuf {
         T* ret = field->Add();
         MoveRepeatedFieldItem(field, field->size() - 1, index);
         return ret;
-    } 
- 
+    }
+
     template <typename TRepeated> // suitable both for RepeatedField and RepeatedPtrField
     static void RemoveRepeatedFieldItem(TRepeated* field, size_t index) {
         if ((int)index >= field->size())
@@ -70,8 +70,8 @@ namespace NProtoBuf {
             for (int i = begIndex; i < endIndex; ++i, ++shiftIndex)
                 field->SwapElements(shiftIndex, i);
         }
-    } 
- 
+    }
+
     // Remove several items at once, could be more efficient compared to calling RemoveRepeatedFieldItem several times
     template <typename TRepeated>
     static void RemoveRepeatedFieldItems(TRepeated* field, const TVector<size_t>& sortedIndices) {

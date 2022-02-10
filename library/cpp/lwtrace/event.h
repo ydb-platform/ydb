@@ -2,7 +2,7 @@
 
 #include "preprocessor.h"
 #include "signature.h"
-#include "param_traits.h" 
+#include "param_traits.h"
 
 #include <library/cpp/lwtrace/protos/lwtrace.pb.h>
 

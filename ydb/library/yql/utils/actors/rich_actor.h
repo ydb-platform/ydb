@@ -14,10 +14,10 @@ public:
         : NActors::TActor<TDerived>(func)
     { }
 
-    ~TRichActor() { 
-        ForgetChildren(); 
-    } 
- 
+    ~TRichActor() {
+        ForgetChildren();
+    }
+
     virtual void DoPassAway() { }
 
     void PassAway() final {
@@ -37,13 +37,13 @@ public:
         Children.clear();
     }
 
-    void ForgetChildren() { // Free memory 
-        for (auto&& [child, killEvent] : Children) { 
-            delete killEvent; 
-        } 
-        Children.clear(); 
-    } 
- 
+    void ForgetChildren() { // Free memory
+        for (auto&& [child, killEvent] : Children) {
+            delete killEvent;
+        }
+        Children.clear();
+    }
+
     void UnsubscribeAll() {
         auto copy = Subscriptions;
         for (auto id : copy) {
@@ -81,10 +81,10 @@ public:
         }
     }
 
-    void AddChild(NActors::TActorId id, NActors::IEventBase* killEvent = nullptr) { 
-        Children.insert(std::make_pair(id, killEvent)); 
-    } 
- 
+    void AddChild(NActors::TActorId id, NActors::IEventBase* killEvent = nullptr) {
+        Children.insert(std::make_pair(id, killEvent));
+    }
+
     void Subscribe(ui32 nodeId) {
         Subscriptions.insert(nodeId);
     }

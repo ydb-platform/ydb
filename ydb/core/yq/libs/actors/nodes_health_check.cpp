@@ -13,10 +13,10 @@
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <google/protobuf/util/time_util.h>
 
-#define LOG_E(stream) \ 
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream) 
-#define LOG_D(stream) \ 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream) 
+#define LOG_E(stream) \
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
+#define LOG_D(stream) \
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
 
 namespace NYq {
 

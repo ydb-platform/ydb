@@ -24,8 +24,8 @@ constexpr ui32 StateVersion = 1;
 using TEqualsFunc = std::function<bool(NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod)>;
 using THashFunc = std::function<NYql::NUdf::THashType(NUdf::TUnboxedValuePod)>;
 
-class TMultiHoppingCoreWrapper : public TStatefulSourceComputationNode<TMultiHoppingCoreWrapper, true> { 
-    using TBaseComputation = TStatefulSourceComputationNode<TMultiHoppingCoreWrapper, true>; 
+class TMultiHoppingCoreWrapper : public TStatefulSourceComputationNode<TMultiHoppingCoreWrapper, true> {
+    using TBaseComputation = TStatefulSourceComputationNode<TMultiHoppingCoreWrapper, true>;
 public:
     using TSelf = TMultiHoppingCoreWrapper;
 
@@ -402,7 +402,7 @@ public:
         Y_VERIFY(!encoded, "TODO");
     }
 
-    NUdf::TUnboxedValuePod CreateStream(TComputationContext& ctx) const { 
+    NUdf::TUnboxedValuePod CreateStream(TComputationContext& ctx) const {
         const auto hopTime = Hop->GetValue(ctx).Get<i64>();
         const auto interval = Interval->GetValue(ctx).Get<i64>();
         const auto delay = Delay->GetValue(ctx).Get<i64>();
@@ -426,21 +426,21 @@ public:
                                                       TValueEqual(KeyTypes, IsTuple));
     }
 
-    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override { 
-        NUdf::TUnboxedValue& valueRef = ValueRef(compCtx); 
-        if (valueRef.IsInvalid()) { 
-            // Create new. 
-            valueRef = CreateStream(compCtx); 
-        } else if (valueRef.HasValue() && !valueRef.IsBoxed()) { 
-            // Load from saved state. 
-            NUdf::TUnboxedValue stream = CreateStream(compCtx); 
-            stream.Load(valueRef.AsStringRef()); 
-            valueRef = stream; 
-        } 
- 
-        return valueRef; 
-    } 
- 
+    NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override {
+        NUdf::TUnboxedValue& valueRef = ValueRef(compCtx);
+        if (valueRef.IsInvalid()) {
+            // Create new.
+            valueRef = CreateStream(compCtx);
+        } else if (valueRef.HasValue() && !valueRef.IsBoxed()) {
+            // Load from saved state.
+            NUdf::TUnboxedValue stream = CreateStream(compCtx);
+            stream.Load(valueRef.AsStringRef());
+            valueRef = stream;
+        }
+
+        return valueRef;
+    }
+
 private:
     void RegisterDependencies() const final {
         DependsOn(Stream);

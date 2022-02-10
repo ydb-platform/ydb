@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     d-mokhnatkin
-    g:yq 
+    g:yq
     g:yql
 )
 

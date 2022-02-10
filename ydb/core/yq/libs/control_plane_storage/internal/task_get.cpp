@@ -67,8 +67,8 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
     const std::shared_ptr<TResponseTasks>& responseTasks,
     const TInstant& taskLeaseTimestamp,
     bool disableCurrentIam,
-    const TDuration& automaticQueriesTtl, 
-    const TDuration& resultSetsTtl) 
+    const TDuration& automaticQueriesTtl,
+    const TDuration& resultSetsTtl)
 {
     const auto& task = taskInternal.Task;
 
@@ -103,7 +103,7 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
                 if (!task.Query.ParseFromString(*parser.ColumnParser(QUERY_COLUMN_NAME).GetOptionalString())) {
                     throw TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query. Please contact internal support";
                 }
-                const TInstant deadline = TInstant::Now() + (task.Query.content().automatic() ? std::min(automaticQueriesTtl, resultSetsTtl) : resultSetsTtl); 
+                const TInstant deadline = TInstant::Now() + (task.Query.content().automatic() ? std::min(automaticQueriesTtl, resultSetsTtl) : resultSetsTtl);
                 task.Deadline = deadline;
                 if (!task.Internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
                     throw TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
@@ -176,7 +176,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         TVector<TPickTaskParams> pickTaskParams;
         const auto now = TInstant::Now();
         if (resultSets.empty() || !resultSets.back().RowsCount()) {
-            return pickTaskParams; 
+            return pickTaskParams;
         }
 
         TResultSetParser parser(resultSets.back());

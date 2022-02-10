@@ -95,7 +95,7 @@ namespace NKikimr {
         }
 
         template<typename T>
-        auto WrapTuple(const T &item, std::enable_if_t<std::is_integral<T>::value>* = nullptr) {
+        auto WrapTuple(const T &item, std::enable_if_t<std::is_integral<T>::value>* = nullptr) { 
             return std::make_tuple(item);
         }
 
@@ -185,7 +185,7 @@ namespace NKikimr {
                 op.Tag = TColumn::ColumnId;
                 op.Op = NTable::ECellOp::Set;
 
-                std::tuple_element_t<Index, std::tuple<TArgs...>> &maybe = std::get<Index>(*tuple);
+                std::tuple_element_t<Index, std::tuple<TArgs...>> &maybe = std::get<Index>(*tuple); 
                 op.Value = NIceDb::TConvertTypeValue<TColumn::ColumnType>(
                         maybe ? NIceDb::TTypeValue(*maybe) : NIceDb::TTypeValue()
                     );
@@ -477,7 +477,7 @@ namespace NKikimr {
                 struct TNotReady : yexception {};
 
                 auto processInlineTable = [&](auto (TRow::*member), const auto *inlineTable) {
-                    using TInlineTable = std::remove_pointer_t<decltype(inlineTable)>;
+                    using TInlineTable = std::remove_pointer_t<decltype(inlineTable)>; 
                     if (!FetchTable<TInlineTable>(db, param, item.*member, key)) {
                         ythrow TNotReady();
                     }

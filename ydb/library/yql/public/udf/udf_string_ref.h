@@ -18,7 +18,7 @@ template<bool Const>
 class TStringRefBase
 {
 public:
-    typedef std::conditional_t<Const, const char*, char*> TDataType;
+    typedef std::conditional_t<Const, const char*, char*> TDataType; 
 
 protected:
     inline constexpr TStringRefBase() noexcept = default;

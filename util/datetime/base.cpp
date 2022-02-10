@@ -250,55 +250,55 @@ void sprint_gm_date(char* buf, time_t when, long* sec) {
     struct tm theTm;
     ::Zero(theTm);
     GmTimeR(&when, &theTm);
-    DateToString(buf, theTm);
+    DateToString(buf, theTm); 
     if (sec) {
         *sec = seconds(theTm);
     }
 }
 
-void DateToString(char* buf, const struct tm& theTm) {
-    Y_ENSURE(0 <= theTm.tm_year + 1900 && theTm.tm_year + 1900 <= 9999, "invalid year " + ToString(theTm.tm_year + 1900) + ", year should be in range [0, 9999]");
-
-    sprintf(buf, "%04d%02d%02d", theTm.tm_year + 1900, theTm.tm_mon + 1, theTm.tm_mday);
-}
-
-void DateToString(char* buf, time_t when, long* sec) {
-    struct tm theTm;
-    localtime_r(&when, &theTm);
-
-    DateToString(buf, theTm);
-
-    if (sec) {
-        *sec = seconds(theTm);
-    }
-}
-
-TString DateToString(const struct tm& theTm) {
-    char buf[DATE_BUF_LEN];
-    DateToString(buf, theTm);
-    return buf;
-}
-
-TString DateToString(time_t when, long* sec) {
-    char buf[DATE_BUF_LEN];
-    DateToString(buf, when, sec);
-    return buf;
-}
-
-TString YearToString(const struct tm& theTm) {
-    Y_ENSURE(0 <= theTm.tm_year + 1900 && theTm.tm_year + 1900 <= 9999, "invalid year " + ToString(theTm.tm_year + 1900) + ", year should be in range [0, 9999]");
+void DateToString(char* buf, const struct tm& theTm) { 
+    Y_ENSURE(0 <= theTm.tm_year + 1900 && theTm.tm_year + 1900 <= 9999, "invalid year " + ToString(theTm.tm_year + 1900) + ", year should be in range [0, 9999]"); 
+ 
+    sprintf(buf, "%04d%02d%02d", theTm.tm_year + 1900, theTm.tm_mon + 1, theTm.tm_mday); 
+} 
+ 
+void DateToString(char* buf, time_t when, long* sec) { 
+    struct tm theTm; 
+    localtime_r(&when, &theTm); 
+ 
+    DateToString(buf, theTm); 
+ 
+    if (sec) { 
+        *sec = seconds(theTm); 
+    } 
+} 
+ 
+TString DateToString(const struct tm& theTm) { 
+    char buf[DATE_BUF_LEN]; 
+    DateToString(buf, theTm); 
+    return buf; 
+} 
+ 
+TString DateToString(time_t when, long* sec) { 
+    char buf[DATE_BUF_LEN]; 
+    DateToString(buf, when, sec); 
+    return buf; 
+} 
+ 
+TString YearToString(const struct tm& theTm) { 
+    Y_ENSURE(0 <= theTm.tm_year + 1900 && theTm.tm_year + 1900 <= 9999, "invalid year " + ToString(theTm.tm_year + 1900) + ", year should be in range [0, 9999]"); 
     char buf[16];
     sprintf(buf, "%04d", theTm.tm_year + 1900);
     return buf;
-}
-
-TString YearToString(time_t when) {
-    struct tm theTm;
-    localtime_r(&when, &theTm);
-
-    return YearToString(theTm);
-}
-
+} 
+ 
+TString YearToString(time_t when) { 
+    struct tm theTm; 
+    localtime_r(&when, &theTm); 
+ 
+    return YearToString(theTm); 
+} 
+ 
 bool sscan_date(const char* date, struct tm& theTm) {
     int year, mon, mday;
     if (sscanf(date, "%4d%2d%2d", &year, &mon, &mday) != 3) {

@@ -5,30 +5,30 @@
 
 namespace NStlIterator {
     template <class T>
-    class TProxy {
-    public:
-        TProxy() = default;
+    class TProxy { 
+    public: 
+        TProxy() = default; 
         TProxy(T&& value)
             : Value_(std::move(value))
         {
+        } 
+
+        const T* operator->() const noexcept { 
+            return &Value_; 
+        } 
+
+        const T& operator*() const noexcept { 
+            return Value_; 
+        } 
+
+        bool operator==(const TProxy& rhs) const { 
+            return Value_ == rhs.Value_; 
         }
 
-        const T* operator->() const noexcept {
-            return &Value_;
-        }
-
-        const T& operator*() const noexcept {
-            return Value_;
-        }
-
-        bool operator==(const TProxy& rhs) const {
-            return Value_ == rhs.Value_;
-        }
-
-    private:
-        T Value_;
+    private: 
+        T Value_; 
     };
-} // namespace NStlIterator
+} // namespace NStlIterator 
 
 /**
  * Range adaptor that turns a derived class with a Java-style iteration
@@ -71,9 +71,9 @@ public: // TODO: private
         static constexpr bool IsNoexceptNext = noexcept(std::declval<TSlave>().Next());
 
         using difference_type = std::ptrdiff_t;
-        using pointer = decltype(std::declval<TSlave>().Next());
-        using reference = decltype(*std::declval<TSlave>().Next());
-        using value_type = std::remove_cv_t<std::remove_reference_t<reference>>;
+        using pointer = decltype(std::declval<TSlave>().Next()); 
+        using reference = decltype(*std::declval<TSlave>().Next()); 
+        using value_type = std::remove_cv_t<std::remove_reference_t<reference>>; 
         using iterator_category = std::input_iterator_tag;
 
         inline TIterator() noexcept
@@ -97,11 +97,11 @@ public: // TODO: private
         }
 
         inline pointer operator->() const noexcept {
-            return Cur_;
+            return Cur_; 
         }
 
         inline reference operator*() const noexcept {
-            return *Cur_;
+            return *Cur_; 
         }
 
         inline TIterator& operator++() noexcept(IsNoexceptNext) {
@@ -112,18 +112,18 @@ public: // TODO: private
 
     private:
         TSlave* Slave_;
-        pointer Cur_;
+        pointer Cur_; 
     };
 
 public:
-    using const_iterator = TIterator;
-    using iterator = const_iterator;
-
-    inline iterator begin() const noexcept(TIterator::IsNoexceptNext) {
+    using const_iterator = TIterator; 
+    using iterator = const_iterator; 
+ 
+    inline iterator begin() const noexcept(TIterator::IsNoexceptNext) { 
         return TIterator(const_cast<TSlave*>(static_cast<const TSlave*>(this)));
     }
 
-    inline iterator end() const noexcept {
+    inline iterator end() const noexcept { 
         return TIterator();
     }
 };

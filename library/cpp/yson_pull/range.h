@@ -16,11 +16,11 @@ namespace NYsonPull {
         {
         }
 
-        const TEvent* Last() const noexcept {
+        const TEvent* Last() const noexcept { 
             return &Reader_.LastEvent();
         }
 
-        const TEvent* Next() {
+        const TEvent* Next() { 
             if (Y_UNLIKELY(AtEnd)) {
                 return nullptr;
             }

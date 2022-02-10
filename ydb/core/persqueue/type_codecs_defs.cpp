@@ -40,8 +40,8 @@ inline void AddFixedLen(TTypeCodecs* codecs, bool initDefaults = true) {
 template <typename TType>
 void AddIntCodecs(TTypeCodecs* codecs) {
     static_assert(std::is_integral<typename TType::TValueType>::value, "Not an integral type.");
-    using TSigned = std::make_signed_t<typename TType::TValueType>;
-    using TUnsigned = std::make_unsigned_t<typename TType::TValueType>;
+    using TSigned = std::make_signed_t<typename TType::TValueType>; 
+    using TUnsigned = std::make_unsigned_t<typename TType::TValueType>; 
 
     codecs->AddCodec<TVarIntCodec<TUnsigned, true>>();
     codecs->AddCodec<TVarIntCodec<TUnsigned, false>>();

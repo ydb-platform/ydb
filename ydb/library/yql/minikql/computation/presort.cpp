@@ -68,7 +68,7 @@ TUnsigned DecodeUnsigned(TStringBuf& input) {
 template <typename TSigned, bool Desc>
 Y_FORCE_INLINE
 void EncodeSigned(TVector<ui8>& output, TSigned value) {
-    using TUnsigned = std::make_unsigned_t<TSigned>;
+    using TUnsigned = std::make_unsigned_t<TSigned>; 
     constexpr size_t size = sizeof(TUnsigned);
     constexpr TUnsigned shift = TUnsigned(1) << (size * 8 - 1);
 
@@ -78,7 +78,7 @@ void EncodeSigned(TVector<ui8>& output, TSigned value) {
 template <typename TSigned, bool Desc>
 Y_FORCE_INLINE
 TSigned DecodeSigned(TStringBuf& input) {
-    using TUnsigned = std::make_unsigned_t<TSigned>;
+    using TUnsigned = std::make_unsigned_t<TSigned>; 
     constexpr size_t size = sizeof(TUnsigned);
     constexpr TUnsigned shift = TUnsigned(1) << (size * 8 - 1);
 

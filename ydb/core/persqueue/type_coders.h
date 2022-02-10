@@ -147,7 +147,7 @@ template <typename TIntType>
 class TVarIntValueCoder {
 public:
     using TType = TIntType;
-    using TSigned = std::make_signed_t<TType>;
+    using TSigned = std::make_signed_t<TType>; 
 
     inline size_t Save(TFlatBlobDataOutputStream* output, TType value) {
         const auto outValue = static_cast<i64>(value); // TODO: fix out_long(i32)
@@ -162,7 +162,7 @@ template <typename TIntType>
 class TZigZagValueCoder {
 public:
     using TType = TIntType;
-    using TSigned = std::make_signed_t<TType>;
+    using TSigned = std::make_signed_t<TType>; 
 
     inline size_t Save(TFlatBlobDataOutputStream* output, TType value) {
         const auto zigZagged = static_cast<i64>(ZigZagEncode(value));

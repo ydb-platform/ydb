@@ -573,8 +573,8 @@ auto ConvertValue(const SourceType& value) {
 template <typename ColumnType,
           typename TargetType,
           typename SourceType,
-          std::enable_if_t<!std::is_pod<SourceType>::value, bool> = true,
-          std::enable_if_t<!std::is_pod<TargetType>::value, bool> = true,
+          std::enable_if_t<!std::is_pod<SourceType>::value, bool> = true, 
+          std::enable_if_t<!std::is_pod<TargetType>::value, bool> = true, 
           typename std::enable_if<!std::is_base_of<::google::protobuf::Message, SourceType>::value, bool>::type = true,
           typename std::enable_if<!std::is_base_of<::google::protobuf::Message, TargetType>::value, bool>::type = true>
 auto ConvertValue(const SourceType& value) {

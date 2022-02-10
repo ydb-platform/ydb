@@ -52,7 +52,7 @@ public:
 
         THttpParser<TCheck>::Init(header, head_request);
         const char* scheme = HttpUrlSchemeKindToString((THttpURL::TSchemeKind)TAgent::GetScheme());
-        size_t schemelen = strlen(scheme); 
+        size_t schemelen = strlen(scheme);
         if (*path == '/') {
             header->base = TStringBuf(scheme, schemelen);
             header->base += TStringBuf("://", 3);
@@ -123,8 +123,8 @@ public:
                     header->error = HTTP_HEADER_TOO_LARGE;
                     break;
                 }
-            } 
-            if (!inheader) { 
+            }
+            if (!inheader) {
                 maxsize = TCheck::GetMaxBodySize(header);
             }
             if (header->http_status >= HTTP_EXTENDED)

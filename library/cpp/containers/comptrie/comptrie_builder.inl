@@ -453,10 +453,10 @@ bool TCompactTrieBuilder<T, D, S>::Find(const TSymbol* key, size_t keylen, TData
 template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::FindLongestPrefix(
                 const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const {
-    return Impl->FindLongestPrefix(key, keylen, prefixlen, value); 
-} 
- 
-template <class T, class D, class S> 
+    return Impl->FindLongestPrefix(key, keylen, prefixlen, value);
+}
+
+template <class T, class D, class S>
 size_t TCompactTrieBuilder<T, D, S>::Save(IOutputStream& os) const {
     return Impl->Save(os);
 }
@@ -686,8 +686,8 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindEntryImpl(const 
 template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefix(
                 const TSymbol* key, size_t keylen, size_t* prefixlen, TData* value) const {
-    using namespace NCompactTrie; 
- 
+    using namespace NCompactTrie;
+
     if (!keylen) {
         const char zero = '\0';
         const bool ret = FindLongestPrefixImpl(&zero, 1, prefixlen, value);
@@ -703,14 +703,14 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefix(
             *prefixlen = 0; // if we have found empty key, set prefixlen to zero
         else if (!ret) // try to find value with empty key, because empty key is prefix of a every key
             ret = FindLongestPrefix(nullptr, 0, prefixlen, value);
- 
+
         if (ret && prefixlen)
             *prefixlen /= sizeof(TSymbol);
- 
+
         return ret;
-    } 
+    }
 }
- 
+
 template <class T, class D, class S>
 bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefixImpl(const char* keyptr, size_t keylen, size_t* prefixLen, TData* value) const {
     const TNode* node = Root;
@@ -722,24 +722,24 @@ bool TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::FindLongestPrefixImp
     while (keyTail && (node = node->Subtree()->FindLongestPrefix(keyTail, value, endResult, Packer))) {
         if (endResult) // no more ways to find prefix and prefix has been found
             break;
- 
+
         if (node->IsFinal()) {
             lastFinalNode = node;
             lastFinalKeyTail = keyTail;
-        } 
-    } 
+        }
+    }
     if (!endResult && lastFinalNode) {
-        if (value) 
+        if (value)
             Packer.UnpackLeaf(lastFinalNode->GetPayload(), *value);
         keyTail = lastFinalKeyTail;
         endResult = true;
-    } 
+    }
     if (endResult && prefixLen)
         *prefixLen = keyTail ? key.size() - keyTail.size() : key.size();
     return endResult;
-} 
- 
-template <class T, class D, class S> 
+}
+
+template <class T, class D, class S>
 void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::Clear() {
     DestroyNode(Root);
     Pool.Clear();

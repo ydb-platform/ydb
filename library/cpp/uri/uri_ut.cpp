@@ -264,21 +264,21 @@ namespace NUri {
             TUri url;
             URL_TEST(url, test);
         }
- 
+
         Y_UNIT_TEST(test02) {
             TTest test = {
                 "http://host", TFeature::FeaturesAll, TState::ParsedOK, "http", "", "", "host", 80, "/", "", ""};
             TUri url;
             URL_TEST(url, test);
         }
- 
+
         Y_UNIT_TEST(test03) {
             TTest test = {
                 "https://host", TFeature::FeatureSchemeFlexible | TFeature::FeatureAllowHostIDN, TState::ParsedOK, "https", "", "", "host", 443, "/", "", ""};
             TUri url;
             URL_TEST(url, test);
         }
- 
+
         Y_UNIT_TEST(test04) {
             TTest test = {
                 "user:pass@host:8080", TFeature::FeaturesAll | TFeature::FeatureNoRelPath | TFeature::FeatureAllowRootless, TState::ParsedOK, "user", "", "", "", 0, "pass@host:8080", "", ""};
@@ -288,7 +288,7 @@ namespace NUri {
             CMP_URL(url2, test);
             URL_EQ(url, url2);
         }
- 
+
         Y_UNIT_TEST(test05) {
             TTest test = {
                 "host:8080", TFeature::FeaturesAll | TFeature::FeatureNoRelPath | TFeature::FeatureAllowRootless, TState::ParsedOK, "host", "", "", "", 0, "8080", "", ""};

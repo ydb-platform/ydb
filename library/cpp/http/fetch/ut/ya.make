@@ -1,7 +1,7 @@
 UNITTEST_FOR(library/cpp/http/fetch)
 
 OWNER(
-    g:zora 
+    g:zora
 )
 
 SRCS(

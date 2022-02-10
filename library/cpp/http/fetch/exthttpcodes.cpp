@@ -158,8 +158,8 @@ static ui16* prepare_flags(http_flag* arg) {
 
     // для стандартных кодов ошибок берем флаги из первого кода каждой группы и проставляем их
     // всем кодам не перечисленным в таблице выше
-    for (size_t group = 0; group < 1000; group += 100) 
-        for (size_t j = group + 1; j < group + 100; ++j) 
+    for (size_t group = 0; group < 1000; group += 100)
+        for (size_t j = group + 1; j < group + 100; ++j)
             flags[j] = flags[group];
 
     // предыдущий цикл затер некоторые флаги перечисленные в таблице выше
@@ -171,12 +171,12 @@ static ui16* prepare_flags(http_flag* arg) {
 }
 
 ui16* http2status = prepare_flags(HTTP_FLAG);
- 
+
 TStringBuf ExtHttpCodeStr(int code) noexcept {
-    if (code < HTTP_CODE_MAX) { 
+    if (code < HTTP_CODE_MAX) {
         return HttpCodeStr(code);
-    } 
-    switch (code) { 
+    }
+    switch (code) {
         case HTTP_BAD_RESPONSE_HEADER:
             return TStringBuf("Bad response header");
         case HTTP_CONNECTION_LOST:
@@ -257,10 +257,10 @@ TStringBuf ExtHttpCodeStr(int code) noexcept {
             return TStringBuf("Cached copy for the url is not available");
         case HTTP_TIMEDOUT_WHILE_BYTES_RECEIVING:
             return TStringBuf("Timed out while bytes receiving");
- 
+
             // TODO: messages for >2000 codes
- 
+
         default:
             return TStringBuf("Unknown HTTP code");
-    } 
-} 
+    }
+}

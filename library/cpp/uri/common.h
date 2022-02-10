@@ -145,7 +145,7 @@ namespace NUri {
             // Cases interpreted for processing (if required):
             //  (effects on result of Parse method)
             //==============================
- 
+
             // path needs normalization
             // (simplification of directory tree: /../, /./, etc.
             FEATURE_NAME(PathOperation),

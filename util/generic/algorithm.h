@@ -103,16 +103,16 @@ static inline void PartialSort(T f, T m, T l, C c) {
     std::partial_sort(f, m, l, c);
 }
 
-template <class T, class R> 
-static inline R PartialSortCopy(T f, T l, R of, R ol) { 
+template <class T, class R>
+static inline R PartialSortCopy(T f, T l, R of, R ol) {
     return std::partial_sort_copy(f, l, of, ol);
-} 
- 
-template <class T, class R, class C> 
-static inline R PartialSortCopy(T f, T l, R of, R ol, C c) { 
+}
+
+template <class T, class R, class C>
+static inline R PartialSortCopy(T f, T l, R of, R ol, C c) {
     return std::partial_sort_copy(f, l, of, ol, c);
-} 
- 
+}
+
 template <class I, class T>
 static inline I Find(I f, I l, const T& v) {
     return std::find(f, l, v);

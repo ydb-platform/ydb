@@ -4,7 +4,7 @@
 #include <library/cpp/http/misc/httpcodes.h>
 
 enum ExtHttpCodes {
-    // Custom 
+    // Custom
     HTTP_EXTENDED = 1000,
     HTTP_BAD_RESPONSE_HEADER = 1000,
     HTTP_CONNECTION_LOST = 1001,
@@ -137,5 +137,5 @@ static inline int Http2Status(int code) {
     extern ui16* http2status;
     return http2status[code & (EXT_HTTP_CODE_MAX - 1)];
 }
- 
+
 TStringBuf ExtHttpCodeStr(int code) noexcept;

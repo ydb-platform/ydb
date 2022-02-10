@@ -534,7 +534,7 @@ public:
     {
     }
 };
- 
+
 class TInet6StreamSocket: public TStreamSocket {
 public:
     TInet6StreamSocket(SOCKET fd)
@@ -549,60 +549,60 @@ public:
 };
 
 class TStreamSocketInput: public IInputStream {
-public: 
+public:
     TStreamSocketInput(TStreamSocket* socket)
-        : Socket(socket) 
-    { 
-    } 
+        : Socket(socket)
+    {
+    }
     void SetSocket(TStreamSocket* socket) {
-        Socket = socket; 
-    } 
- 
-protected: 
+        Socket = socket;
+    }
+
+protected:
     TStreamSocket* Socket;
- 
+
     size_t DoRead(void* buf, size_t len) override {
         Y_VERIFY(Socket, "TStreamSocketInput: socket isn't set");
-        const ssize_t ret = Socket->Recv(buf, len); 
- 
-        if (ret >= 0) { 
-            return (size_t)ret; 
-        } 
- 
+        const ssize_t ret = Socket->Recv(buf, len);
+
+        if (ret >= 0) {
+            return (size_t)ret;
+        }
+
         ythrow TSystemError(-(int)ret) << "can not read from socket input stream";
-    } 
-}; 
- 
+    }
+};
+
 class TStreamSocketOutput: public IOutputStream {
-public: 
+public:
     TStreamSocketOutput(TStreamSocket* socket)
-        : Socket(socket) 
-    { 
-    } 
+        : Socket(socket)
+    {
+    }
     void SetSocket(TStreamSocket* socket) {
-        Socket = socket; 
-    } 
- 
+        Socket = socket;
+    }
+
     TStreamSocketOutput(TStreamSocketOutput&&) noexcept = default;
     TStreamSocketOutput& operator=(TStreamSocketOutput&&) noexcept = default;
 
-protected: 
+protected:
     TStreamSocket* Socket;
- 
+
     void DoWrite(const void* buf, size_t len) override {
         Y_VERIFY(Socket, "TStreamSocketOutput: socket isn't set");
- 
+
         const char* ptr = (const char*)buf;
-        while (len) { 
-            const ssize_t ret = Socket->Send(ptr, len); 
- 
-            if (ret < 0) { 
+        while (len) {
+            const ssize_t ret = Socket->Send(ptr, len);
+
+            if (ret < 0) {
                 ythrow TSystemError(-(int)ret) << "can not write to socket output stream";
-            } 
- 
+            }
+
             Y_ASSERT((size_t)ret <= len);
-            len -= (size_t)ret; 
-            ptr += (size_t)ret; 
-        } 
-    } 
-}; 
+            len -= (size_t)ret;
+            ptr += (size_t)ret;
+        }
+    }
+};

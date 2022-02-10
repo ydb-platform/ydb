@@ -4,9 +4,9 @@
 #include "httpparser.h"
 #include "exthttpcodes.h"
 
-#include <util/system/defaults.h> 
-#include <util/generic/yexception.h> 
- 
+#include <util/system/defaults.h>
+#include <util/generic/yexception.h>
+
 #include <contrib/libs/zlib/zlib.h>
 
 #include <errno.h>
@@ -35,8 +35,8 @@ public:
         , MaxContSize(0)
         , Buf(nullptr)
         , ZErr(0)
-        , ConnectionClosed(0) 
-        , IgnoreTrailingGarbage(true) 
+        , ConnectionClosed(0)
+        , IgnoreTrailingGarbage(true)
     {
         memset(&Stream, 0, sizeof(Stream));
     }
@@ -50,14 +50,14 @@ public:
         }
     }
 
-    void SetConnectionClosed(int cc) { 
-        ConnectionClosed = cc; 
-    } 
- 
-    void SetIgnoreTrailingGarbage(bool ignore) { 
-        IgnoreTrailingGarbage = ignore; 
-    } 
- 
+    void SetConnectionClosed(int cc) {
+        ConnectionClosed = cc;
+    }
+
+    void SetIgnoreTrailingGarbage(bool ignore) {
+        IgnoreTrailingGarbage = ignore;
+    }
+
     int Init(
         THttpHeader* H,
         int parsHeader,
@@ -122,11 +122,11 @@ public:
                         return -1;
                     }
                     if (!IgnoreTrailingGarbage && BufSize == Stream.avail_out && Stream.avail_in > 0) {
-                        Header->error = EXT_HTTP_GZIPERROR; 
-                        ZErr = EFAULT; 
+                        Header->error = EXT_HTTP_GZIPERROR;
+                        ZErr = EFAULT;
                         Stream.msg = (char*)"trailing garbage";
-                        return -1; 
-                    } 
+                        return -1;
+                    }
                     return long(BufSize - Stream.avail_out);
 
                 case Z_NEED_DICT:
@@ -236,8 +236,8 @@ protected:
     size_t CurContSize, MaxContSize;
     ui8* Buf;
     int ZErr;
-    int ConnectionClosed; 
-    bool IgnoreTrailingGarbage; 
+    int ConnectionClosed;
+    bool IgnoreTrailingGarbage;
 };
 
 class zlib_exception: public yexception {

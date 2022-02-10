@@ -5,7 +5,7 @@
 #include <util/generic/intrlist.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <utility>
 
 template <class TValue>
@@ -57,7 +57,7 @@ public:
 
         struct THash {
             size_t operator()(const TItem& item) const {
-                return ::THash<TKey>()(item.Key); 
+                return ::THash<TKey>()(item.Key);
             }
         };
     };
@@ -427,7 +427,7 @@ public:
     TCache(TListType&& list, bool multiValue = false)
         : Index()
         , List(std::move(list))
-        , MultiValue(multiValue) 
+        , MultiValue(multiValue)
     {
     }
 
@@ -435,10 +435,10 @@ public:
         Clear();
     }
 
-    size_t Size() const { 
-        return Index.size(); 
-    } 
- 
+    size_t Size() const {
+        return Index.size();
+    }
+
     TIterator Begin() const {
         return TIterator(Index.begin());
     }
@@ -458,28 +458,28 @@ public:
         return TIterator(Index.find(TItem(key)));
     }
 
-    // note: it shouldn't touch 'value' if it returns false. 
+    // note: it shouldn't touch 'value' if it returns false.
     bool PickOut(const TKey& key, TValue* value) {
         Y_ASSERT(value);
-        TIndexIterator it = Index.find(TItem(key)); 
-        if (it == Index.end()) 
-            return false; 
-        *value = it->Value; 
-        List.Erase(const_cast<TItem*>(&*it)); 
-        Index.erase(it); 
+        TIndexIterator it = Index.find(TItem(key));
+        if (it == Index.end())
+            return false;
+        *value = it->Value;
+        List.Erase(const_cast<TItem*>(&*it));
+        Index.erase(it);
         Y_ASSERT(Index.size() == List.GetSize());
-        return true; 
-    } 
- 
+        return true;
+    }
+
     bool Insert(const std::pair<TKey, TValue>& p) {
         return Insert(p.first, p.second);
     }
 
     bool Insert(const TKey& key, const TValue& value) {
-        TItem tmpItem(key, value); 
-        if (!MultiValue && Index.find(tmpItem) != Index.end()) 
-            return false; 
-        TIndexIterator it = Index.insert(tmpItem); 
+        TItem tmpItem(key, value);
+        if (!MultiValue && Index.find(tmpItem) != Index.end())
+            return false;
+        TIndexIterator it = Index.insert(tmpItem);
 
         TItem* insertedItem = const_cast<TItem*>(&*it);
         auto removedItem = List.Insert(insertedItem);
@@ -497,8 +497,8 @@ public:
     }
 
     void Update(const TKey& key, const TValue& value) {
-        if (MultiValue) 
-            ythrow yexception() << "TCache: can't \"Update\" in multicache"; 
+        if (MultiValue)
+            ythrow yexception() << "TCache: can't \"Update\" in multicache";
         TIterator it = Find(key);
         if (it != End()) {
             Erase(it);
@@ -548,23 +548,23 @@ public:
 protected:
     TIndex Index;
     TListType List;
-    bool MultiValue; 
+    bool MultiValue;
 
     TIterator FindByItem(TItem* item) {
         std::pair<TIndexIterator, TIndexIterator> p = Index.equal_range(*item);
-        // we have to delete the exact unlinked item (there may be multiple items for one key) 
-        TIndexIterator it; 
+        // we have to delete the exact unlinked item (there may be multiple items for one key)
+        TIndexIterator it;
         for (it = p.first; it != p.second; ++it)
-            if (&*it == item) 
-                break; 
+            if (&*it == item)
+                break;
         return (it == p.second ? End() : TIterator(it));
-    } 
- 
+    }
+
     void EraseFromIndex(TItem* item) {
         TDeleter::Destroy(item->Value);
-        TIterator it = FindByItem(item); 
+        TIterator it = FindByItem(item);
         Y_ASSERT(it != End());
-        Index.erase(it.Iter); 
+        Index.erase(it.Iter);
     }
 };
 
@@ -579,7 +579,7 @@ class TLRUCache: public TCache<TKey, TValue, TLRUList<TKey, TValue, TSizeProvide
     using TListType = TLRUList<TKey, TValue, TSizeProvider>;
     typedef TCache<TKey, TValue, TListType, TDeleter> TBase;
 
-public: 
+public:
     TLRUCache(size_t maxSize, bool multiValue = false, const TSizeProvider& sizeProvider = TSizeProvider())
         : TBase(TListType(maxSize, sizeProvider), multiValue)
     {
@@ -591,10 +591,10 @@ public:
     TValue& GetOldest() {
         return TBase::List.GetOldest()->Value;
     }
- 
-    TIterator FindOldest() { 
+
+    TIterator FindOldest() {
         return TBase::Empty() ? TBase::End() : this->FindByItem(TBase::List.GetOldest());
-    } 
+    }
 
     size_t TotalSize() const {
         return TBase::List.GetTotalSize();

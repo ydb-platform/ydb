@@ -3,7 +3,7 @@
 
 namespace NMonitoring {
     char* PrettyNumShort(i64 val, char* buf, size_t size) {
-        static const char shorts[] = {' ', 'K', 'M', 'G', 'T', 'P', 'E'}; 
+        static const char shorts[] = {' ', 'K', 'M', 'G', 'T', 'P', 'E'};
         unsigned i = 0;
         i64 major = val;
         i64 minor = 0;

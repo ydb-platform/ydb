@@ -97,21 +97,21 @@ public:
 
     constexpr bool operator<(const TIpv6Address& other) const noexcept {
         if (Type_ != other.Type_)
-            return Type_ > other.Type_; 
-        else 
-            return Ip < other.Ip; 
+            return Type_ > other.Type_;
+        else
+            return Ip < other.Ip;
     }
     constexpr bool operator>(const TIpv6Address& other) const noexcept {
         if (Type_ != other.Type_)
-            return Type_ < other.Type_; 
-        else 
-            return Ip > other.Ip; 
+            return Type_ < other.Type_;
+        else
+            return Ip > other.Ip;
     }
     constexpr bool operator==(const TIpv6Address& other) const noexcept {
-        return Type_ == other.Type_ && Ip == other.Ip; 
+        return Type_ == other.Type_ && Ip == other.Ip;
     }
     constexpr bool operator!=(const TIpv6Address& other) const noexcept {
-        return Type_ != other.Type_ || Ip != other.Ip; 
+        return Type_ != other.Type_ || Ip != other.Ip;
     }
 
     constexpr bool operator<=(const TIpv6Address& other) const noexcept {

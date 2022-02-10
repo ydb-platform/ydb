@@ -122,17 +122,17 @@ TString TIpv6Address::ToString(bool PrintScopeId, bool* ok) const noexcept {
         in_addr addr;
         ToInAddr(addr);
         isOk = inet_ntop(AF_INET, &addr, result.begin(), INET_ADDRSTRLEN);
-        result.resize(result.find('\0')); 
+        result.resize(result.find('\0'));
     } else if (Type_ == TIpv6Address::Ipv6) {
         result.resize(INET6_ADDRSTRLEN + 2);
         in6_addr addr;
         ToIn6Addr(addr);
         isOk = inet_ntop(AF_INET6, &addr, result.begin(), INET6_ADDRSTRLEN);
-        result.resize(result.find('\0')); 
+        result.resize(result.find('\0'));
         if (PrintScopeId)
             result += "%" + ::ToString(ScopeId_);
-    } else { 
-        result = "null"; 
+    } else {
+        result = "null";
         isOk = true;
     }
 

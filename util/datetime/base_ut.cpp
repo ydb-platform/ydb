@@ -335,7 +335,7 @@ Y_UNIT_TEST_SUITE(TDateTimeTest) {
             UNIT_ASSERT_EQUAL(ptm1, &tms1);
             UNIT_ASSERT(CompareTMFull(ptm0, ptm1));
         }
-    } 
+    }
 }
 
 Y_UNIT_TEST_SUITE(DateTimeTest) {

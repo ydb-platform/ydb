@@ -5,9 +5,9 @@
 #include <library/cpp/mime/types/mime.h>
 
 #include <util/system/defaults.h>
-#include <util/system/compat.h> 
+#include <util/system/compat.h>
 #include <util/generic/string.h>
-#include <util/generic/ylimits.h> 
+#include <util/generic/ylimits.h>
 #include <util/system/maxlen.h>
 
 #include <ctime>
@@ -26,9 +26,9 @@ extern const i8 DEFAULT_REQUEST_PRIORITY;   /// == -1
 extern const i32 DEFAULT_RESPONSE_TIMEOUT;  /// == -1
 
 #define HTTP_PREFIX "http://"
-#define MAX_LANGREGION_LEN 4 
+#define MAX_LANGREGION_LEN 4
 #define MAXWORD_LEN 55
- 
+
 enum HTTP_COMPRESSION {
     HTTP_COMPRESSION_UNSET = 0,
     HTTP_COMPRESSION_ERROR = 1,
@@ -105,9 +105,9 @@ public:
         printf("compression_method: %" PRIi8 "\n", compression_method);
         printf("transfer_chunked: %" PRIi8 "\n", transfer_chunked);
         printf("connection_closed: %" PRIi8 "\n", connection_closed);
-        printf("content_range_start: %" PRIi64 "\n", content_range_start); 
-        printf("content_range_end: %" PRIi64 "\n", content_range_end); 
-        printf("content_range_entity_length: %" PRIi64 "\n", content_range_entity_length); 
+        printf("content_range_start: %" PRIi64 "\n", content_range_start);
+        printf("content_range_end: %" PRIi64 "\n", content_range_end);
+        printf("content_range_entity_length: %" PRIi64 "\n", content_range_entity_length);
         printf("base: \"%s\"\n", base.c_str());
         printf("error: %" PRIi16 "\n", error);
     }
@@ -132,26 +132,26 @@ struct THttpHeader: public THttpBaseHeader {
 public:
     i8 accept_ranges;
     i8 squid_error;
-    i8 x_robots_tag; // deprecated, use x_robots_state instead 
+    i8 x_robots_tag; // deprecated, use x_robots_state instead
     i16 http_status;
     TString location;
     TString rel_canonical;
     char hreflangs[HREFLANG_MAX];
     i64 retry_after;
-    TString x_robots_state; // 'xxxxx' format, see `library/html/zoneconf/parsefunc.cpp` 
+    TString x_robots_state; // 'xxxxx' format, see `library/html/zoneconf/parsefunc.cpp`
 
 public:
     void Init() {
         THttpBaseHeader::Init();
         accept_ranges = -1;
-        squid_error = 0; 
+        squid_error = 0;
         x_robots_tag = 0;
         rel_canonical.clear();
         http_status = -1;
         location.clear();
         hreflangs[0] = 0;
         retry_after = DEFAULT_RETRY_AFTER;
-        x_robots_state = "xxxxx"; 
+        x_robots_state = "xxxxx";
     }
 
     void Print() const {
@@ -170,10 +170,10 @@ public:
     char host[HOST_MAX];
     char from[MAXWORD_LEN];
     char user_agent[MAXWORD_LEN];
-    char x_yandex_langregion[MAX_LANGREGION_LEN]; 
+    char x_yandex_langregion[MAX_LANGREGION_LEN];
     char x_yandex_sourcename[MAXWORD_LEN];
-    char x_yandex_requesttype[MAXWORD_LEN]; 
-    char x_yandex_fetchoptions[MAXWORD_LEN]; 
+    char x_yandex_requesttype[MAXWORD_LEN];
+    char x_yandex_fetchoptions[MAXWORD_LEN];
     i8 http_method;
     i8 x_yandex_request_priority;
     i32 x_yandex_response_timeout;
@@ -190,10 +190,10 @@ public:
         host[0] = 0;
         from[0] = 0;
         user_agent[0] = 0;
-        x_yandex_langregion[0] = 0; 
+        x_yandex_langregion[0] = 0;
         x_yandex_sourcename[0] = 0;
-        x_yandex_requesttype[0] = 0; 
-        x_yandex_fetchoptions[0] = 0; 
+        x_yandex_requesttype[0] = 0;
+        x_yandex_fetchoptions[0] = 0;
         http_method = HTTP_METHOD_UNDEFINED;
         x_yandex_request_priority = DEFAULT_REQUEST_PRIORITY;
         x_yandex_response_timeout = DEFAULT_RESPONSE_TIMEOUT;

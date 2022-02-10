@@ -245,16 +245,16 @@ enum EServiceKikimr {
     SEQUENCESHARD = 602;
     SEQUENCEPROXY = 603;
 
-    YF_JOB_SERVICE      = 701; 
-    YF_JOB_RUNNER       = 702; 
-    YF_JOB_AGENT        = 703; 
-    YF_GATEWAY          = 704; 
-    YF_GATEWAY_SERVICE  = 705; 
-    YF_SERVICE          = 706; 
-    YF_MON_SERVICE      = 707; 
-    YF_CALL_BALANCER    = 708; 
-    YF_DESCRIPTIONS_SERVICE = 709; 
-    YF_WORKER           = 710; 
+    YF_JOB_SERVICE      = 701;
+    YF_JOB_RUNNER       = 702;
+    YF_JOB_AGENT        = 703;
+    YF_GATEWAY          = 704;
+    YF_GATEWAY_SERVICE  = 705;
+    YF_SERVICE          = 706;
+    YF_MON_SERVICE      = 707;
+    YF_CALL_BALANCER    = 708;
+    YF_DESCRIPTIONS_SERVICE = 709;
+    YF_WORKER           = 710;
 
     NET_CLASSIFIER = 711;
 

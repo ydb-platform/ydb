@@ -146,7 +146,7 @@ RECURSE(
     syntaxer
     tarccreate
     tarcview
-    templater 
+    templater
     test_norm
     test_relev
     testlangmodel
@@ -175,7 +175,7 @@ RECURSE(
     voice
     webxmltest
     wizard_yt
-    ygetparam 
+    ygetparam
     ylzocat
     yson_pp
     zk_client

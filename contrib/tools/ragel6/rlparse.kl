@@ -1241,13 +1241,13 @@ nonterm inline_block_interpret uses inline_item;
 inline_block_item:
 	inline_expr_any 
 	final {
-		$$->inlineItem = new InlineItem( $1->token.loc, $1->token.data, InlineItem::Text ); 
+		$$->inlineItem = new InlineItem( $1->token.loc, $1->token.data, InlineItem::Text );
 	};
 
 inline_block_item:
 	inline_block_symbol 
 	final {
-		$$->inlineItem = new InlineItem( $1->token.loc, $1->token.data, InlineItem::Text ); 
+		$$->inlineItem = new InlineItem( $1->token.loc, $1->token.data, InlineItem::Text );
 	};
 
 inline_block_item:
@@ -1338,13 +1338,13 @@ inline_expr_item:
 	inline_expr_any 
 	final {
 		/* Return a text segment. */
-		$$->inlineItem = new InlineItem( $1->token.loc, $1->token.data, InlineItem::Text ); 
+		$$->inlineItem = new InlineItem( $1->token.loc, $1->token.data, InlineItem::Text );
 	};
 inline_expr_item:
 	inline_expr_symbol
 	final {
 		/* Return a text segment, must heap alloc the text. */
-		$$->inlineItem = new InlineItem( $1->token.loc, $1->token.data, InlineItem::Text ); 
+		$$->inlineItem = new InlineItem( $1->token.loc, $1->token.data, InlineItem::Text );
 	};
 inline_expr_item:
 	inline_expr_interpret

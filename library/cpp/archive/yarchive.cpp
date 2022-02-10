@@ -367,7 +367,7 @@ TArchiveReader::TArchiveReader(const TBlob& data)
 {
 }
 
-TArchiveReader::~TArchiveReader() {}
+TArchiveReader::~TArchiveReader() {} 
 
 size_t TArchiveReader::Count() const noexcept {
     return Impl_->Count();

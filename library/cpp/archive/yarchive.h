@@ -1,11 +1,11 @@
 #pragma once
 
-#include "models_archive_reader.h"
-
+#include "models_archive_reader.h" 
+ 
 #include <util/generic/fwd.h>
 #include <util/generic/ptr.h>
 
-
+ 
 class IInputStream;
 class IOutputStream;
 
@@ -29,7 +29,7 @@ private:
     THolder<TImpl> Impl_;
 };
 
-class TArchiveReader : public IModelsArchiveReader {
+class TArchiveReader : public IModelsArchiveReader { 
 public:
     explicit TArchiveReader(const TBlob& data);
     ~TArchiveReader() override;

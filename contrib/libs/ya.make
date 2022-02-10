@@ -137,7 +137,7 @@ RECURSE(
     libbpf
     libbz2
     libc_compat
-    libc_userver_workarounds 
+    libc_userver_workarounds
     libcpuid
     libcroco
     libde265

@@ -125,13 +125,13 @@ struct TOptsParserTester {
     }
 };
 
-namespace {
+namespace { 
     bool gSimpleFlag = false;
-    void SimpleHander(void) {
-        gSimpleFlag = true;
-    }
-}
-
+    void SimpleHander(void) { 
+        gSimpleFlag = true; 
+    } 
+} 
+ 
 Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     Y_UNIT_TEST(TestEqual) {
         TOptsNoDefault opts;
@@ -738,36 +738,36 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     }
 
     Y_UNIT_TEST(TestEasySetup) {
-        TEasySetup opts;
-        bool flag = false;
+        TEasySetup opts; 
+        bool flag = false; 
         opts('v', "version", "print version information")('a', "abstract", "some abstract param", true)('b', "buffer", "SIZE", "some param with argument")('c', "count", "SIZE", "some param with required argument")('t', "true", HandlerStoreTrue(&flag), "Some arg with handler")("global", SimpleHander, "Another arg with handler");
-
-        {
-            gSimpleFlag = false;
+ 
+        { 
+            gSimpleFlag = false; 
             TOptsParseResultTestWrapper r(&opts, V({"cmd", "--abstract"}));
-            UNIT_ASSERT(!flag);
-            UNIT_ASSERT(!gSimpleFlag);
-        }
-
-        {
+            UNIT_ASSERT(!flag); 
+            UNIT_ASSERT(!gSimpleFlag); 
+        } 
+ 
+        { 
             TOptsParseResultTestWrapper r(&opts, V({"cmd", "--abstract", "--global", "-t"}));
-            UNIT_ASSERT(flag);
-            UNIT_ASSERT(gSimpleFlag);
-        }
-
-        {
+            UNIT_ASSERT(flag); 
+            UNIT_ASSERT(gSimpleFlag); 
+        } 
+ 
+        { 
             UNIT_ASSERT_EXCEPTION(
                 TOptsParseResultTestWrapper(&opts, V({"cmd", "--true"})),
                 TUsageException);
-        }
-
-        {
+        } 
+ 
+        { 
             TOptsParseResultTestWrapper r(&opts, V({"cmd", "--abstract", "--buffer=512"}));
-            UNIT_ASSERT(r.Has('b'));
-            UNIT_ASSERT_VALUES_EQUAL(r.Get('b', 0), "512");
-        }
-    }
-
+            UNIT_ASSERT(r.Has('b')); 
+            UNIT_ASSERT_VALUES_EQUAL(r.Get('b', 0), "512"); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestTOptsParseResultException) {
         // verify that TOptsParseResultException actually throws a TUsageException instead of exit()
         // not using wrapper here because it can hide bugs (see review #243810 and r2737774)

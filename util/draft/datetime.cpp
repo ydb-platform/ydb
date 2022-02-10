@@ -45,7 +45,7 @@ namespace NDatetime {
             ::localtime_r(&t, &tt);
 #ifndef _win_
             GMTOff = tt.tm_gmtoff;
-#else
+#else 
             TIME_ZONE_INFORMATION tz;
             switch (GetTimeZoneInformation(&tz)) {
                 case TIME_ZONE_ID_UNKNOWN:

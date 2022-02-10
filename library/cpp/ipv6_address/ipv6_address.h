@@ -115,13 +115,13 @@ public:
     }
 
     constexpr bool operator<=(const TIpv6Address& other) const noexcept {
-        return !(*this > other); 
-    } 
- 
+        return !(*this > other);
+    }
+
     constexpr bool operator>=(const TIpv6Address& other) const noexcept {
-        return !(*this < other); 
-    } 
- 
+        return !(*this < other);
+    }
+
     constexpr operator ui128() const noexcept {
         return Ip;
     }

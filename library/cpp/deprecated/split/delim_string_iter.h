@@ -167,19 +167,19 @@ inline TDelimStringIter begin_delim(TStringBuf str, TStringBuf delim) {
 inline TDelimStringIter end_delim(const TString& /*str*/, TStringBuf /*delim*/) {
     return TDelimStringIter();
 }
-
+ 
 class TKeyValueDelimStringIter {
-public:
+public: 
     TKeyValueDelimStringIter(const TStringBuf str, const TStringBuf delim);
-    bool Valid() const;
+    bool Valid() const; 
     TKeyValueDelimStringIter& operator++();
     const TStringBuf& Key() const;
     const TStringBuf& Value() const;
-
-private:
+ 
+private: 
     TDelimStringIter DelimIter;
-    TStringBuf ChunkKey, ChunkValue;
-
-private:
-    void ReadKeyAndValue();
-};
+    TStringBuf ChunkKey, ChunkValue; 
+ 
+private: 
+    void ReadKeyAndValue(); 
+}; 

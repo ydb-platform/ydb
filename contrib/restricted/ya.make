@@ -41,6 +41,7 @@ RECURSE(
     liburcu
     libxsmm
     llhttp
+    mlir
     mpg123
     murmurhash
     nfs_ganesha

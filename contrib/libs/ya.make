@@ -225,7 +225,6 @@ RECURSE(
     mimalloc
     minilzo
     minizip
-    mlir11
     mms
     mongo-c-driver
     mongo-cxx-driver

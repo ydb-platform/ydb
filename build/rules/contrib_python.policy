@@ -692,9 +692,9 @@ DENY .* -> contrib/python/sqlalchemy/sqlalchemy-1.2
 ALLOW education/ -> contrib/python/dataclasses-json
 DENY .* -> contrib/python/dataclasses-json
 
-# https://st.yandex-team.ru/CONTRIB-2222
-ALLOW browser/infra/.* -> contrib/python/hurry.filesize
-DENY .* -> contrib/python/hurry.filesize
+# https://st.yandex-team.ru/CONTRIB-2222 
+ALLOW browser/infra/.* -> contrib/python/hurry.filesize 
+DENY .* -> contrib/python/hurry.filesize 
 
 # https://st.yandex-team.ru/CONTRIB-2338
 ALLOW noc/.* -> contrib/python/asyncssh

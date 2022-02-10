@@ -270,7 +270,7 @@ namespace NCompactTrie {
 
                 const size_t len = newNode.Pack(buffer);
                 OffsetIndex.Add(Trie.Length - Get().GetOffset(), resultLength + len);
-
+ 
                 return len;
             }
         };

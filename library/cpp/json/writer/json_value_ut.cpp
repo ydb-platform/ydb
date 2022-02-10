@@ -245,10 +245,10 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
             lhs.InsertValue("l", last);
 
             TJsonValue result;
-            UNIT_ASSERT(lhs.GetValueByPath("l/a/c/e", result, '/'));
+            UNIT_ASSERT(lhs.GetValueByPath("l/a/c/e", result, '/')); 
             UNIT_ASSERT(result.GetStringRobust() == "f");
-            UNIT_ASSERT(!lhs.GetValueByPath("l/a/c/se", result, '/'));
-            UNIT_ASSERT(lhs.GetValueByPath("l/a/c", result, '/'));
+            UNIT_ASSERT(!lhs.GetValueByPath("l/a/c/se", result, '/')); 
+            UNIT_ASSERT(lhs.GetValueByPath("l/a/c", result, '/')); 
             UNIT_ASSERT(result.GetStringRobust() == "{\"e\":\"f\"}");
 
             // faster TStringBuf version
@@ -260,28 +260,28 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
             UNIT_ASSERT_EQUAL(lhs.GetValueByPath("a/c/e/x", '/'), NULL);
             UNIT_ASSERT_EQUAL(lhs.GetValueByPath("nokey", '/'), NULL);
             UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("", '/'), lhs); // itself
-
-            TJsonValue array;
-            TJsonValue third;
-            array[0] = first;
-            array[1] = second;
-            third["t"] = array;
-
-            UNIT_ASSERT(array.GetValueByPath("[0].e", result));
-            UNIT_ASSERT(result.GetStringRobust() == "f");
-            UNIT_ASSERT(third.GetValueByPath("t.[0].e", result));
-            UNIT_ASSERT(result.GetStringRobust() == "f");
-            UNIT_ASSERT(third.GetValueByPath("t.[1].c.e", result));
-            UNIT_ASSERT(result.GetStringRobust() == "f");
-            UNIT_ASSERT(!third.GetValueByPath("t.[2]", result));
-
-            UNIT_ASSERT(third.SetValueByPath("t.[2]", "g"));
-            UNIT_ASSERT(third.GetValueByPath("t.[2]", result));
-            UNIT_ASSERT(result.GetStringRobust() == "g");
-
-            UNIT_ASSERT(lhs.SetValueByPath("l/a/c/se", "h", '/'));
-            UNIT_ASSERT(lhs.GetValueByPath("l/a/c/se", result, '/'));
-            UNIT_ASSERT(result.GetStringRobust() == "h");
+ 
+            TJsonValue array; 
+            TJsonValue third; 
+            array[0] = first; 
+            array[1] = second; 
+            third["t"] = array; 
+ 
+            UNIT_ASSERT(array.GetValueByPath("[0].e", result)); 
+            UNIT_ASSERT(result.GetStringRobust() == "f"); 
+            UNIT_ASSERT(third.GetValueByPath("t.[0].e", result)); 
+            UNIT_ASSERT(result.GetStringRobust() == "f"); 
+            UNIT_ASSERT(third.GetValueByPath("t.[1].c.e", result)); 
+            UNIT_ASSERT(result.GetStringRobust() == "f"); 
+            UNIT_ASSERT(!third.GetValueByPath("t.[2]", result)); 
+ 
+            UNIT_ASSERT(third.SetValueByPath("t.[2]", "g")); 
+            UNIT_ASSERT(third.GetValueByPath("t.[2]", result)); 
+            UNIT_ASSERT(result.GetStringRobust() == "g"); 
+ 
+            UNIT_ASSERT(lhs.SetValueByPath("l/a/c/se", "h", '/')); 
+            UNIT_ASSERT(lhs.GetValueByPath("l/a/c/se", result, '/')); 
+            UNIT_ASSERT(result.GetStringRobust() == "h"); 
         }
     }
 

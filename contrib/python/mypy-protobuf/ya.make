@@ -1,9 +1,9 @@
 PY3_LIBRARY()
 
-OWNER(torkve g:python-contrib)
-
+OWNER(torkve g:python-contrib) 
+ 
 VERSION(2.10)
-
+ 
 LICENSE(Apache-2.0)
 
 PEERDIR(
@@ -30,4 +30,4 @@ END()
 
 RECURSE(
     bin
-)
+) 

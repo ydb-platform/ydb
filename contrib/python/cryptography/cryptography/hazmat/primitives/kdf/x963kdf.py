@@ -8,34 +8,34 @@ import struct
 
 from cryptography import utils
 from cryptography.exceptions import (
-    AlreadyFinalized,
-    InvalidKey,
-    UnsupportedAlgorithm,
-    _Reasons,
+    AlreadyFinalized, 
+    InvalidKey, 
+    UnsupportedAlgorithm, 
+    _Reasons, 
 )
-from cryptography.hazmat.backends import _get_backend
+from cryptography.hazmat.backends import _get_backend 
 from cryptography.hazmat.backends.interfaces import HashBackend
 from cryptography.hazmat.primitives import constant_time, hashes
 from cryptography.hazmat.primitives.kdf import KeyDerivationFunction
 
 
 def _int_to_u32be(n):
-    return struct.pack(">I", n)
+    return struct.pack(">I", n) 
 
 
 @utils.register_interface(KeyDerivationFunction)
 class X963KDF(object):
-    def __init__(self, algorithm, length, sharedinfo, backend=None):
-        backend = _get_backend(backend)
+    def __init__(self, algorithm, length, sharedinfo, backend=None): 
+        backend = _get_backend(backend) 
 
         max_len = algorithm.digest_size * (2 ** 32 - 1)
         if length > max_len:
             raise ValueError(
-                "Can not derive keys larger than {} bits.".format(max_len)
-            )
-        if sharedinfo is not None:
-            utils._check_bytes("sharedinfo", sharedinfo)
-
+                "Can not derive keys larger than {} bits.".format(max_len) 
+            ) 
+        if sharedinfo is not None: 
+            utils._check_bytes("sharedinfo", sharedinfo) 
+ 
         self._algorithm = algorithm
         self._length = length
         self._sharedinfo = sharedinfo
@@ -43,7 +43,7 @@ class X963KDF(object):
         if not isinstance(backend, HashBackend):
             raise UnsupportedAlgorithm(
                 "Backend object does not implement HashBackend.",
-                _Reasons.BACKEND_MISSING_INTERFACE,
+                _Reasons.BACKEND_MISSING_INTERFACE, 
             )
         self._backend = backend
         self._used = False
@@ -52,7 +52,7 @@ class X963KDF(object):
         if self._used:
             raise AlreadyFinalized
         self._used = True
-        utils._check_byteslike("key_material", key_material)
+        utils._check_byteslike("key_material", key_material) 
         output = [b""]
         outlen = 0
         counter = 1
@@ -67,7 +67,7 @@ class X963KDF(object):
             outlen += len(output[-1])
             counter += 1
 
-        return b"".join(output)[: self._length]
+        return b"".join(output)[: self._length] 
 
     def verify(self, key_material, expected_key):
         if not constant_time.bytes_eq(self.derive(key_material), expected_key):

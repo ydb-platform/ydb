@@ -18,8 +18,8 @@ int HMAC_Update(HMAC_CTX *, const unsigned char *, size_t);
 int HMAC_Final(HMAC_CTX *, unsigned char *, unsigned int *);
 int HMAC_CTX_copy(HMAC_CTX *, HMAC_CTX *);
 
-HMAC_CTX *HMAC_CTX_new(void);
-void HMAC_CTX_free(HMAC_CTX *ctx);
+HMAC_CTX *HMAC_CTX_new(void); 
+void HMAC_CTX_free(HMAC_CTX *ctx); 
 """
 
 CUSTOMIZATIONS = """

@@ -649,7 +649,7 @@ RECURSE(
     mutablerecords
     mypy
     mypy-extensions
-    mypy-protobuf
+    mypy-protobuf 
     mypy-zope
     MySQL-python
     mysqlclient-python

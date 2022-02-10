@@ -1,4 +1,4 @@
-#include "shellcommand.h"
+#include "shellcommand.h" 
 #include "user.h"
 #include "nice.h"
 #include "sigset.h"
@@ -10,14 +10,14 @@
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>
-#include <util/network/socket.h>
+#include <util/network/socket.h> 
 #include <util/stream/pipe.h>
-#include <util/stream/str.h>
+#include <util/stream/str.h> 
 #include <util/string/cast.h>
 #include <util/system/info.h>
 
-#include <errno.h>
-
+#include <errno.h> 
+ 
 #if defined(_unix_)
     #include <unistd.h>
     #include <fcntl.h>
@@ -177,7 +177,7 @@ public:
         TRealPipeHandle(fds[1]).Swap(writer);
     }
 
-private:
+private: 
     REALPIPEHANDLE Fd_;
 };
 
@@ -203,7 +203,7 @@ private:
     TString CollectedError;
     TString InternalError;
     TThread* WatchThread;
-    TMutex TerminateMutex;
+    TMutex TerminateMutex; 
     TFileHandle InputHandle;
     TFileHandle OutputHandle;
     TFileHandle ErrorHandle;
@@ -227,8 +227,8 @@ private:
     THashMap<TString, TString> Environment;
     int Nice = 0;
     std::function<void()> FuncAfterFork = {};
-
-    struct TProcessInfo {
+ 
+    struct TProcessInfo { 
         TImpl* Parent;
         TRealPipeHandle InputFd;
         TRealPipeHandle OutputFd;
@@ -239,9 +239,9 @@ private:
             , OutputFd(outputFd)
             , ErrorFd(errorFd)
         {
-        }
-    };
-
+        } 
+    }; 
+ 
     struct TPipes {
         TRealPipeHandle OutputPipeFd[2];
         TRealPipeHandle ErrorPipeFd[2];
@@ -279,7 +279,7 @@ private:
     void StartProcess(TPipes& pipes);
 #endif
 
-public:
+public: 
     inline TImpl(const TStringBuf cmd, const TList<TString>& args, const TShellCommandOptions& options, const TString& workdir)
         : Pid(0)
         , Command(ToString(cmd))
@@ -307,61 +307,61 @@ public:
         , Environment(options.Environment)
         , Nice(options.Nice)
         , FuncAfterFork(options.FuncAfterFork)
-    {
+    { 
         if (InputStream) {
             // TODO change usages to call SetInputStream instead of directly assigning to InputStream
             InputMode = TShellCommandOptions::HANDLE_STREAM;
         }
-    }
-
-    inline ~TImpl() {
-        if (WatchThread) {
+    } 
+ 
+    inline ~TImpl() { 
+        if (WatchThread) { 
             with_lock (TerminateMutex) {
-                TerminateFlag = true;
-            }
+                TerminateFlag = true; 
+            } 
 
-            delete WatchThread;
-        }
+            delete WatchThread; 
+        } 
 
 #if defined(_win_)
         if (Pid) {
             CloseHandle(Pid);
         }
 #endif
-    }
-
+    } 
+ 
     inline void AppendArgument(const TStringBuf argument) {
         if (AtomicGet(ExecutionStatus) == SHELL_RUNNING) {
-            ythrow yexception() << "You cannot change command parameters while process is running";
-        }
+            ythrow yexception() << "You cannot change command parameters while process is running"; 
+        } 
         Arguments.push_back(ToString(argument));
-    }
-
+    } 
+ 
     inline const TString& GetOutput() const {
         if (AtomicGet(ExecutionStatus) == SHELL_RUNNING) {
-            ythrow yexception() << "You cannot retrieve output while process is running.";
-        }
-        return CollectedOutput;
-    }
-
+            ythrow yexception() << "You cannot retrieve output while process is running."; 
+        } 
+        return CollectedOutput; 
+    } 
+ 
     inline const TString& GetError() const {
         if (AtomicGet(ExecutionStatus) == SHELL_RUNNING) {
-            ythrow yexception() << "You cannot retrieve output while process is running.";
-        }
-        return CollectedError;
-    }
-
+            ythrow yexception() << "You cannot retrieve output while process is running."; 
+        } 
+        return CollectedError; 
+    } 
+ 
     inline const TString& GetInternalError() const {
         if (AtomicGet(ExecutionStatus) != SHELL_INTERNAL_ERROR) {
-            ythrow yexception() << "Internal error hasn't occured so can't be retrieved.";
-        }
-        return InternalError;
-    }
-
-    inline ECommandStatus GetStatus() const {
+            ythrow yexception() << "Internal error hasn't occured so can't be retrieved."; 
+        } 
+        return InternalError; 
+    } 
+ 
+    inline ECommandStatus GetStatus() const { 
         return static_cast<ECommandStatus>(AtomicGet(ExecutionStatus));
-    }
-
+    } 
+ 
     inline TMaybe<int> GetExitCode() const {
         return ExitCode;
     }
@@ -388,7 +388,7 @@ public:
 
     // start child process
     void Run();
-
+ 
     inline void Terminate() {
         if (!!Pid && (AtomicGet(ExecutionStatus) == SHELL_RUNNING)) {
             bool ok =
@@ -408,24 +408,24 @@ public:
         }
     }
 
-    inline void Wait() {
+    inline void Wait() { 
         if (WatchThread) {
-            WatchThread->Join();
+            WatchThread->Join(); 
         }
-    }
-
+    } 
+ 
     inline void CloseInput() {
         AtomicSet(ShouldCloseInput, true);
     }
 
     inline static bool TerminateIsRequired(void* processInfo) {
         TProcessInfo* pi = reinterpret_cast<TProcessInfo*>(processInfo);
-        if (!pi->Parent->TerminateFlag) {
-            return false;
-        }
-        pi->InputFd.Close();
-        pi->ErrorFd.Close();
-        pi->OutputFd.Close();
+        if (!pi->Parent->TerminateFlag) { 
+            return false; 
+        } 
+        pi->InputFd.Close(); 
+        pi->ErrorFd.Close(); 
+        pi->OutputFd.Close(); 
 
         if (pi->Parent->CloseStreams) {
             if (pi->Parent->ErrorStream) {
@@ -436,13 +436,13 @@ public:
             }
         }
 
-        delete pi;
-        return true;
-    }
-
+        delete pi; 
+        return true; 
+    } 
+ 
     // interchange io while process is alive
     inline static void Communicate(TProcessInfo* pi);
-
+ 
     inline static void* WatchProcess(void* data) {
         TProcessInfo* pi = reinterpret_cast<TProcessInfo*>(data);
         Communicate(pi);
@@ -511,7 +511,7 @@ public:
 
     TString GetQuotedCommand() const;
 };
-
+ 
 #if defined(_win_)
 void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
     // Setup STARTUPINFO to redirect handles.
@@ -931,9 +931,9 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
             {
                 with_lock (pi->Parent->TerminateMutex) {
                     if (TerminateIsRequired(pi)) {
-                        return;
+                        return; 
                     }
-                }
+                } 
 
                 waitPidResult =
 #if defined(_unix_)
@@ -1039,20 +1039,20 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
                             input = nullptr;
                         }
                         continue;
-                    }
+                    } 
                     bufPos = inputBuffer.Data();
-                }
+                } 
 
                 bytes = pi->InputFd.Write(bufPos, bytesToWrite);
                 if (bytes > 0) {
                     bytesToWrite -= bytes;
                     bufPos += bytes;
-                } else {
+                } else { 
                     input = nullptr;
-                }
+                } 
 
                 DBG(Cerr << "transferred " << bytes << " bytes of input" << Endl);
-            }
+            } 
 #endif
         }
         DBG(Cerr << "process finished" << Endl);
@@ -1075,19 +1075,19 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
             DWORD exitCode = STILL_ACTIVE;
             if (!GetExitCodeProcess(pi->Parent->Pid, &exitCode)) {
                 ythrow yexception() << "GetExitCodeProcess: " << LastSystemErrorText();
-            }
+            } 
             if (exitCode == 0)
                 cleanExit = true;
             processExitCode = static_cast<int>(exitCode);
             DBG(Cerr << "exit code: " << exitCode << Endl);
-        }
+        } 
 #endif
         pi->Parent->ExitCode = processExitCode;
         if (cleanExit) {
             AtomicSet(pi->Parent->ExecutionStatus, SHELL_FINISHED);
         } else {
             AtomicSet(pi->Parent->ExecutionStatus, SHELL_ERROR);
-        }
+        } 
 
 #if defined(_win_)
         for (auto& threadHolder : streamThreads)
@@ -1115,12 +1115,12 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
             pi->InputFd.Close();
         }
         Cdbg << "shell command internal error: " << pi->Parent->InternalError << Endl;
-    }
+    } 
     // Now we can safely delete process info struct and other data
     pi->Parent->TerminateFlag = true;
     TerminateIsRequired(pi);
 }
-
+ 
 TShellCommand::TShellCommand(const TStringBuf cmd, const TList<TString>& args, const TShellCommandOptions& options,
                              const TString& workdir)
     : Impl(new TImpl(cmd, args, options, workdir))
@@ -1129,32 +1129,32 @@ TShellCommand::TShellCommand(const TStringBuf cmd, const TList<TString>& args, c
 
 TShellCommand::TShellCommand(const TStringBuf cmd, const TShellCommandOptions& options, const TString& workdir)
     : Impl(new TImpl(cmd, TList<TString>(), options, workdir))
-{
-}
-
+{ 
+} 
+ 
 TShellCommand::~TShellCommand() = default;
-
+ 
 TShellCommand& TShellCommand::operator<<(const TStringBuf argument) {
     Impl->AppendArgument(argument);
-    return *this;
-}
-
+    return *this; 
+} 
+ 
 const TString& TShellCommand::GetOutput() const {
-    return Impl->GetOutput();
-}
-
+    return Impl->GetOutput(); 
+} 
+ 
 const TString& TShellCommand::GetError() const {
-    return Impl->GetError();
-}
-
+    return Impl->GetError(); 
+} 
+ 
 const TString& TShellCommand::GetInternalError() const {
-    return Impl->GetInternalError();
-}
-
+    return Impl->GetInternalError(); 
+} 
+ 
 TShellCommand::ECommandStatus TShellCommand::GetStatus() const {
-    return Impl->GetStatus();
-}
-
+    return Impl->GetStatus(); 
+} 
+ 
 TMaybe<int> TShellCommand::GetExitCode() const {
     return Impl->GetExitCode();
 }
@@ -1176,19 +1176,19 @@ TFileHandle& TShellCommand::GetErrorHandle() {
 }
 
 TShellCommand& TShellCommand::Run() {
-    Impl->Run();
-    return *this;
-}
-
+    Impl->Run(); 
+    return *this; 
+} 
+ 
 TShellCommand& TShellCommand::Terminate() {
     Impl->Terminate();
     return *this;
 }
 
 TShellCommand& TShellCommand::Wait() {
-    Impl->Wait();
-    return *this;
-}
+    Impl->Wait(); 
+    return *this; 
+} 
 
 TShellCommand& TShellCommand::CloseInput() {
     Impl->CloseInput();

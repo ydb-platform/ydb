@@ -40,17 +40,17 @@ def _byte_padding_update(buffer_, data, block_size):
     if buffer_ is None:
         raise AlreadyFinalized("Context was already finalized.")
 
-    utils._check_byteslike("data", data)
+    utils._check_byteslike("data", data) 
 
-    # six.PY2: Only coerce non-bytes objects to avoid triggering bad behavior
-    # of future's newbytes type. Unconditionally call bytes() after Python 2
-    # support is gone.
-    buffer_ += data if isinstance(data, bytes) else bytes(data)
+    # six.PY2: Only coerce non-bytes objects to avoid triggering bad behavior 
+    # of future's newbytes type. Unconditionally call bytes() after Python 2 
+    # support is gone. 
+    buffer_ += data if isinstance(data, bytes) else bytes(data) 
 
     finished_blocks = len(buffer_) // (block_size // 8)
 
-    result = buffer_[: finished_blocks * (block_size // 8)]
-    buffer_ = buffer_[finished_blocks * (block_size // 8) :]
+    result = buffer_[: finished_blocks * (block_size // 8)] 
+    buffer_ = buffer_[finished_blocks * (block_size // 8) :] 
 
     return buffer_, result
 
@@ -67,17 +67,17 @@ def _byte_unpadding_update(buffer_, data, block_size):
     if buffer_ is None:
         raise AlreadyFinalized("Context was already finalized.")
 
-    utils._check_byteslike("data", data)
+    utils._check_byteslike("data", data) 
 
-    # six.PY2: Only coerce non-bytes objects to avoid triggering bad behavior
-    # of future's newbytes type. Unconditionally call bytes() after Python 2
-    # support is gone.
-    buffer_ += data if isinstance(data, bytes) else bytes(data)
+    # six.PY2: Only coerce non-bytes objects to avoid triggering bad behavior 
+    # of future's newbytes type. Unconditionally call bytes() after Python 2 
+    # support is gone. 
+    buffer_ += data if isinstance(data, bytes) else bytes(data) 
 
     finished_blocks = max(len(buffer_) // (block_size // 8) - 1, 0)
 
-    result = buffer_[: finished_blocks * (block_size // 8)]
-    buffer_ = buffer_[finished_blocks * (block_size // 8) :]
+    result = buffer_[: finished_blocks * (block_size // 8)] 
+    buffer_ = buffer_[finished_blocks * (block_size // 8) :] 
 
     return buffer_, result
 
@@ -119,8 +119,8 @@ class _PKCS7PaddingContext(object):
 
     def update(self, data):
         self._buffer, result = _byte_padding_update(
-            self._buffer, data, self.block_size
-        )
+            self._buffer, data, self.block_size 
+        ) 
         return result
 
     def _padding(self, size):
@@ -128,8 +128,8 @@ class _PKCS7PaddingContext(object):
 
     def finalize(self):
         result = _byte_padding_pad(
-            self._buffer, self.block_size, self._padding
-        )
+            self._buffer, self.block_size, self._padding 
+        ) 
         self._buffer = None
         return result
 
@@ -143,14 +143,14 @@ class _PKCS7UnpaddingContext(object):
 
     def update(self, data):
         self._buffer, result = _byte_unpadding_update(
-            self._buffer, data, self.block_size
-        )
+            self._buffer, data, self.block_size 
+        ) 
         return result
 
     def finalize(self):
         result = _byte_unpadding_check(
-            self._buffer, self.block_size, lib.Cryptography_check_pkcs7_padding
-        )
+            self._buffer, self.block_size, lib.Cryptography_check_pkcs7_padding 
+        ) 
         self._buffer = None
         return result
 
@@ -176,8 +176,8 @@ class _ANSIX923PaddingContext(object):
 
     def update(self, data):
         self._buffer, result = _byte_padding_update(
-            self._buffer, data, self.block_size
-        )
+            self._buffer, data, self.block_size 
+        ) 
         return result
 
     def _padding(self, size):
@@ -185,8 +185,8 @@ class _ANSIX923PaddingContext(object):
 
     def finalize(self):
         result = _byte_padding_pad(
-            self._buffer, self.block_size, self._padding
-        )
+            self._buffer, self.block_size, self._padding 
+        ) 
         self._buffer = None
         return result
 
@@ -200,15 +200,15 @@ class _ANSIX923UnpaddingContext(object):
 
     def update(self, data):
         self._buffer, result = _byte_unpadding_update(
-            self._buffer, data, self.block_size
-        )
+            self._buffer, data, self.block_size 
+        ) 
         return result
 
     def finalize(self):
         result = _byte_unpadding_check(
-            self._buffer,
-            self.block_size,
-            lib.Cryptography_check_ansix923_padding,
-        )
+            self._buffer, 
+            self.block_size, 
+            lib.Cryptography_check_ansix923_padding, 
+        ) 
         self._buffer = None
         return result

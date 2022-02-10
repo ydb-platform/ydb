@@ -5,7 +5,7 @@
 from __future__ import absolute_import, division, print_function
 
 INCLUDES = """
-#if !defined(OPENSSL_NO_CMAC)
+#if !defined(OPENSSL_NO_CMAC) 
 #include <openssl/cmac.h>
 #endif
 """

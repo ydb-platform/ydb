@@ -5,7 +5,7 @@ PY2_LIBRARY()
 OWNER(blinkov g:python-contrib)
 
 VERSION(2.5.2)
-
+ 
 LICENSE(BSD-3-Clause)
 
 NO_LINT()

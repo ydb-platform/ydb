@@ -46,17 +46,17 @@ class GeneralName(object):
 @utils.register_interface(GeneralName)
 class RFC822Name(object):
     def __init__(self, value):
-        if isinstance(value, six.text_type):
-            try:
-                value.encode("ascii")
-            except UnicodeEncodeError:
-                raise ValueError(
-                    "RFC822Name values should be passed as an A-label string. "
-                    "This means unicode characters should be encoded via "
-                    "a library like idna."
-                )
-        else:
-            raise TypeError("value must be string")
+        if isinstance(value, six.text_type): 
+            try: 
+                value.encode("ascii") 
+            except UnicodeEncodeError: 
+                raise ValueError( 
+                    "RFC822Name values should be passed as an A-label string. " 
+                    "This means unicode characters should be encoded via " 
+                    "a library like idna." 
+                ) 
+        else: 
+            raise TypeError("value must be string") 
 
         name, address = parseaddr(value)
         if name or not address:
@@ -68,14 +68,14 @@ class RFC822Name(object):
 
     value = utils.read_only_property("_value")
 
-    @classmethod
-    def _init_without_validation(cls, value):
-        instance = cls.__new__(cls)
-        instance._value = value
-        return instance
-
+    @classmethod 
+    def _init_without_validation(cls, value): 
+        instance = cls.__new__(cls) 
+        instance._value = value 
+        return instance 
+ 
     def __repr__(self):
-        return "<RFC822Name(value={0!r})>".format(self.value)
+        return "<RFC822Name(value={0!r})>".format(self.value) 
 
     def __eq__(self, other):
         if not isinstance(other, RFC822Name):
@@ -93,30 +93,30 @@ class RFC822Name(object):
 @utils.register_interface(GeneralName)
 class DNSName(object):
     def __init__(self, value):
-        if isinstance(value, six.text_type):
-            try:
-                value.encode("ascii")
-            except UnicodeEncodeError:
-                raise ValueError(
-                    "DNSName values should be passed as an A-label string. "
-                    "This means unicode characters should be encoded via "
-                    "a library like idna."
-                )
-        else:
-            raise TypeError("value must be string")
+        if isinstance(value, six.text_type): 
+            try: 
+                value.encode("ascii") 
+            except UnicodeEncodeError: 
+                raise ValueError( 
+                    "DNSName values should be passed as an A-label string. " 
+                    "This means unicode characters should be encoded via " 
+                    "a library like idna." 
+                ) 
+        else: 
+            raise TypeError("value must be string") 
 
         self._value = value
 
     value = utils.read_only_property("_value")
 
-    @classmethod
-    def _init_without_validation(cls, value):
-        instance = cls.__new__(cls)
-        instance._value = value
-        return instance
-
+    @classmethod 
+    def _init_without_validation(cls, value): 
+        instance = cls.__new__(cls) 
+        instance._value = value 
+        return instance 
+ 
     def __repr__(self):
-        return "<DNSName(value={0!r})>".format(self.value)
+        return "<DNSName(value={0!r})>".format(self.value) 
 
     def __eq__(self, other):
         if not isinstance(other, DNSName):
@@ -127,37 +127,37 @@ class DNSName(object):
     def __ne__(self, other):
         return not self == other
 
-    def __hash__(self):
-        return hash(self.value)
+    def __hash__(self): 
+        return hash(self.value) 
 
-
+ 
 @utils.register_interface(GeneralName)
 class UniformResourceIdentifier(object):
     def __init__(self, value):
-        if isinstance(value, six.text_type):
-            try:
-                value.encode("ascii")
-            except UnicodeEncodeError:
-                raise ValueError(
-                    "URI values should be passed as an A-label string. "
-                    "This means unicode characters should be encoded via "
-                    "a library like idna."
-                )
-        else:
-            raise TypeError("value must be string")
+        if isinstance(value, six.text_type): 
+            try: 
+                value.encode("ascii") 
+            except UnicodeEncodeError: 
+                raise ValueError( 
+                    "URI values should be passed as an A-label string. " 
+                    "This means unicode characters should be encoded via " 
+                    "a library like idna." 
+                ) 
+        else: 
+            raise TypeError("value must be string") 
 
-        self._value = value
-
-    value = utils.read_only_property("_value")
-
-    @classmethod
-    def _init_without_validation(cls, value):
-        instance = cls.__new__(cls)
-        instance._value = value
-        return instance
-
+        self._value = value 
+ 
+    value = utils.read_only_property("_value") 
+ 
+    @classmethod 
+    def _init_without_validation(cls, value): 
+        instance = cls.__new__(cls) 
+        instance._value = value 
+        return instance 
+ 
     def __repr__(self):
-        return "<UniformResourceIdentifier(value={0!r})>".format(self.value)
+        return "<UniformResourceIdentifier(value={0!r})>".format(self.value) 
 
     def __eq__(self, other):
         if not isinstance(other, UniformResourceIdentifier):
@@ -183,7 +183,7 @@ class DirectoryName(object):
     value = utils.read_only_property("_value")
 
     def __repr__(self):
-        return "<DirectoryName(value={})>".format(self.value)
+        return "<DirectoryName(value={})>".format(self.value) 
 
     def __eq__(self, other):
         if not isinstance(other, DirectoryName):
@@ -194,10 +194,10 @@ class DirectoryName(object):
     def __ne__(self, other):
         return not self == other
 
-    def __hash__(self):
-        return hash(self.value)
+    def __hash__(self): 
+        return hash(self.value) 
 
-
+ 
 @utils.register_interface(GeneralName)
 class RegisteredID(object):
     def __init__(self, value):
@@ -209,7 +209,7 @@ class RegisteredID(object):
     value = utils.read_only_property("_value")
 
     def __repr__(self):
-        return "<RegisteredID(value={})>".format(self.value)
+        return "<RegisteredID(value={})>".format(self.value) 
 
     def __eq__(self, other):
         if not isinstance(other, RegisteredID):
@@ -220,10 +220,10 @@ class RegisteredID(object):
     def __ne__(self, other):
         return not self == other
 
-    def __hash__(self):
-        return hash(self.value)
+    def __hash__(self): 
+        return hash(self.value) 
 
-
+ 
 @utils.register_interface(GeneralName)
 class IPAddress(object):
     def __init__(self, value):
@@ -233,8 +233,8 @@ class IPAddress(object):
                 ipaddress.IPv4Address,
                 ipaddress.IPv6Address,
                 ipaddress.IPv4Network,
-                ipaddress.IPv6Network,
-            ),
+                ipaddress.IPv6Network, 
+            ), 
         ):
             raise TypeError(
                 "value must be an instance of ipaddress.IPv4Address, "
@@ -247,7 +247,7 @@ class IPAddress(object):
     value = utils.read_only_property("_value")
 
     def __repr__(self):
-        return "<IPAddress(value={})>".format(self.value)
+        return "<IPAddress(value={})>".format(self.value) 
 
     def __eq__(self, other):
         if not isinstance(other, IPAddress):
@@ -258,10 +258,10 @@ class IPAddress(object):
     def __ne__(self, other):
         return not self == other
 
-    def __hash__(self):
-        return hash(self.value)
+    def __hash__(self): 
+        return hash(self.value) 
 
-
+ 
 @utils.register_interface(GeneralName)
 class OtherName(object):
     def __init__(self, type_id, value):
@@ -277,9 +277,9 @@ class OtherName(object):
     value = utils.read_only_property("_value")
 
     def __repr__(self):
-        return "<OtherName(type_id={}, value={!r})>".format(
-            self.type_id, self.value
-        )
+        return "<OtherName(type_id={}, value={!r})>".format( 
+            self.type_id, self.value 
+        ) 
 
     def __eq__(self, other):
         if not isinstance(other, OtherName):
@@ -289,6 +289,6 @@ class OtherName(object):
 
     def __ne__(self, other):
         return not self == other
-
-    def __hash__(self):
-        return hash((self.type_id, self.value))
+ 
+    def __hash__(self): 
+        return hash((self.type_id, self.value)) 

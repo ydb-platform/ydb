@@ -57,7 +57,7 @@ class HMACBackend(object):
     @abc.abstractmethod
     def create_hmac_ctx(self, key, algorithm):
         """
-        Create a context for calculating a message authentication code.
+        Create a context for calculating a message authentication code. 
         """
 
 
@@ -72,7 +72,7 @@ class CMACBackend(object):
     @abc.abstractmethod
     def create_cmac_ctx(self, algorithm):
         """
-        Create a context for calculating a message authentication code.
+        Create a context for calculating a message authentication code. 
         """
 
 
@@ -86,9 +86,9 @@ class PBKDF2HMACBackend(object):
         """
 
     @abc.abstractmethod
-    def derive_pbkdf2_hmac(
-        self, algorithm, length, salt, iterations, key_material
-    ):
+    def derive_pbkdf2_hmac( 
+        self, algorithm, length, salt, iterations, key_material 
+    ): 
         """
         Return length bytes derived from provided PBKDF2 parameters.
         """
@@ -244,13 +244,13 @@ class PEMSerializationBackend(object):
         Loads a public key from PEM encoded data.
         """
 
-    @abc.abstractmethod
-    def load_pem_parameters(self, data):
-        """
-        Load encryption parameters from PEM encoded data.
-        """
+    @abc.abstractmethod 
+    def load_pem_parameters(self, data): 
+        """ 
+        Load encryption parameters from PEM encoded data. 
+        """ 
 
-
+ 
 @six.add_metaclass(abc.ABCMeta)
 class DERSerializationBackend(object):
     @abc.abstractmethod
@@ -266,13 +266,13 @@ class DERSerializationBackend(object):
         Loads a public key from DER encoded data.
         """
 
-    @abc.abstractmethod
-    def load_der_parameters(self, data):
-        """
-        Load encryption parameters from DER encoded data.
-        """
+    @abc.abstractmethod 
+    def load_der_parameters(self, data): 
+        """ 
+        Load encryption parameters from DER encoded data. 
+        """ 
 
-
+ 
 @six.add_metaclass(abc.ABCMeta)
 class X509Backend(object):
     @abc.abstractmethod
@@ -335,10 +335,10 @@ class X509Backend(object):
 @six.add_metaclass(abc.ABCMeta)
 class DHBackend(object):
     @abc.abstractmethod
-    def generate_dh_parameters(self, generator, key_size):
+    def generate_dh_parameters(self, generator, key_size): 
         """
         Generate a DHParameters instance with a modulus of key_size bits.
-        Using the given generator. Often 2 or 5.
+        Using the given generator. Often 2 or 5. 
         """
 
     @abc.abstractmethod
@@ -349,41 +349,41 @@ class DHBackend(object):
         """
 
     @abc.abstractmethod
-    def generate_dh_private_key_and_parameters(self, generator, key_size):
+    def generate_dh_private_key_and_parameters(self, generator, key_size): 
         """
         Generate a DHPrivateKey instance using key size only.
-        Using the given generator. Often 2 or 5.
+        Using the given generator. Often 2 or 5. 
         """
 
     @abc.abstractmethod
     def load_dh_private_numbers(self, numbers):
         """
-        Load a DHPrivateKey from DHPrivateNumbers
+        Load a DHPrivateKey from DHPrivateNumbers 
         """
 
     @abc.abstractmethod
     def load_dh_public_numbers(self, numbers):
         """
-        Load a DHPublicKey from DHPublicNumbers.
+        Load a DHPublicKey from DHPublicNumbers. 
         """
 
     @abc.abstractmethod
     def load_dh_parameter_numbers(self, numbers):
         """
-        Load DHParameters from DHParameterNumbers.
+        Load DHParameters from DHParameterNumbers. 
         """
 
     @abc.abstractmethod
-    def dh_parameters_supported(self, p, g, q=None):
+    def dh_parameters_supported(self, p, g, q=None): 
         """
-        Returns whether the backend supports DH with these parameter values.
+        Returns whether the backend supports DH with these parameter values. 
         """
 
     @abc.abstractmethod
-    def dh_x942_serialization_supported(self):
+    def dh_x942_serialization_supported(self): 
         """
-        Returns True if the backend supports the serialization of DH objects
-        with subgroup order (q).
+        Returns True if the backend supports the serialization of DH objects 
+        with subgroup order (q). 
         """
 
 

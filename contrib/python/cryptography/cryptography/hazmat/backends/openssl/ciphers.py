@@ -13,11 +13,11 @@ from cryptography.hazmat.primitives.ciphers import modes
 @utils.register_interface(ciphers.CipherContext)
 @utils.register_interface(ciphers.AEADCipherContext)
 @utils.register_interface(ciphers.AEADEncryptionContext)
-@utils.register_interface(ciphers.AEADDecryptionContext)
+@utils.register_interface(ciphers.AEADDecryptionContext) 
 class _CipherContext(object):
     _ENCRYPT = 1
     _DECRYPT = 0
-    _MAX_CHUNK_SIZE = 2 ** 30 - 1
+    _MAX_CHUNK_SIZE = 2 ** 30 - 1 
 
     def __init__(self, backend, cipher, mode, operation):
         self._backend = backend
@@ -41,45 +41,45 @@ class _CipherContext(object):
             adapter = registry[type(cipher), type(mode)]
         except KeyError:
             raise UnsupportedAlgorithm(
-                "cipher {} in {} mode is not supported "
+                "cipher {} in {} mode is not supported " 
                 "by this backend.".format(
-                    cipher.name, mode.name if mode else mode
-                ),
-                _Reasons.UNSUPPORTED_CIPHER,
+                    cipher.name, mode.name if mode else mode 
+                ), 
+                _Reasons.UNSUPPORTED_CIPHER, 
             )
 
         evp_cipher = adapter(self._backend, cipher, mode)
         if evp_cipher == self._backend._ffi.NULL:
-            msg = "cipher {0.name} ".format(cipher)
-            if mode is not None:
-                msg += "in {0.name} mode ".format(mode)
-            msg += (
-                "is not supported by this backend (Your version of OpenSSL "
-                "may be too old. Current version: {}.)"
-            ).format(self._backend.openssl_version_text())
-            raise UnsupportedAlgorithm(msg, _Reasons.UNSUPPORTED_CIPHER)
+            msg = "cipher {0.name} ".format(cipher) 
+            if mode is not None: 
+                msg += "in {0.name} mode ".format(mode) 
+            msg += ( 
+                "is not supported by this backend (Your version of OpenSSL " 
+                "may be too old. Current version: {}.)" 
+            ).format(self._backend.openssl_version_text()) 
+            raise UnsupportedAlgorithm(msg, _Reasons.UNSUPPORTED_CIPHER) 
 
         if isinstance(mode, modes.ModeWithInitializationVector):
-            iv_nonce = self._backend._ffi.from_buffer(
-                mode.initialization_vector
-            )
-        elif isinstance(mode, modes.ModeWithTweak):
-            iv_nonce = self._backend._ffi.from_buffer(mode.tweak)
+            iv_nonce = self._backend._ffi.from_buffer( 
+                mode.initialization_vector 
+            ) 
+        elif isinstance(mode, modes.ModeWithTweak): 
+            iv_nonce = self._backend._ffi.from_buffer(mode.tweak) 
         elif isinstance(mode, modes.ModeWithNonce):
-            iv_nonce = self._backend._ffi.from_buffer(mode.nonce)
-        elif isinstance(cipher, modes.ModeWithNonce):
-            iv_nonce = self._backend._ffi.from_buffer(cipher.nonce)
+            iv_nonce = self._backend._ffi.from_buffer(mode.nonce) 
+        elif isinstance(cipher, modes.ModeWithNonce): 
+            iv_nonce = self._backend._ffi.from_buffer(cipher.nonce) 
         else:
             iv_nonce = self._backend._ffi.NULL
         # begin init with cipher and operation type
-        res = self._backend._lib.EVP_CipherInit_ex(
-            ctx,
-            evp_cipher,
-            self._backend._ffi.NULL,
-            self._backend._ffi.NULL,
-            self._backend._ffi.NULL,
-            operation,
-        )
+        res = self._backend._lib.EVP_CipherInit_ex( 
+            ctx, 
+            evp_cipher, 
+            self._backend._ffi.NULL, 
+            self._backend._ffi.NULL, 
+            self._backend._ffi.NULL, 
+            operation, 
+        ) 
         self._backend.openssl_assert(res != 0)
         # set the key length to handle variable key ciphers
         res = self._backend._lib.EVP_CIPHER_CTX_set_key_length(
@@ -88,30 +88,30 @@ class _CipherContext(object):
         self._backend.openssl_assert(res != 0)
         if isinstance(mode, modes.GCM):
             res = self._backend._lib.EVP_CIPHER_CTX_ctrl(
-                ctx,
-                self._backend._lib.EVP_CTRL_AEAD_SET_IVLEN,
-                len(iv_nonce),
-                self._backend._ffi.NULL,
+                ctx, 
+                self._backend._lib.EVP_CTRL_AEAD_SET_IVLEN, 
+                len(iv_nonce), 
+                self._backend._ffi.NULL, 
             )
             self._backend.openssl_assert(res != 0)
-            if mode.tag is not None:
+            if mode.tag is not None: 
                 res = self._backend._lib.EVP_CIPHER_CTX_ctrl(
-                    ctx,
-                    self._backend._lib.EVP_CTRL_AEAD_SET_TAG,
-                    len(mode.tag),
-                    mode.tag,
+                    ctx, 
+                    self._backend._lib.EVP_CTRL_AEAD_SET_TAG, 
+                    len(mode.tag), 
+                    mode.tag, 
                 )
                 self._backend.openssl_assert(res != 0)
-                self._tag = mode.tag
+                self._tag = mode.tag 
 
         # pass key/iv
         res = self._backend._lib.EVP_CipherInit_ex(
             ctx,
             self._backend._ffi.NULL,
             self._backend._ffi.NULL,
-            self._backend._ffi.from_buffer(cipher.key),
-            iv_nonce,
-            operation,
+            self._backend._ffi.from_buffer(cipher.key), 
+            iv_nonce, 
+            operation, 
         )
         self._backend.openssl_assert(res != 0)
         # We purposely disable padding here as it's handled higher up in the
@@ -120,48 +120,48 @@ class _CipherContext(object):
         self._ctx = ctx
 
     def update(self, data):
-        buf = bytearray(len(data) + self._block_size_bytes - 1)
-        n = self.update_into(data, buf)
-        return bytes(buf[:n])
-
-    def update_into(self, data, buf):
-        total_data_len = len(data)
-        if len(buf) < (total_data_len + self._block_size_bytes - 1):
-            raise ValueError(
-                "buffer must be at least {} bytes for this "
-                "payload".format(len(data) + self._block_size_bytes - 1)
-            )
-
-        data_processed = 0
-        total_out = 0
+        buf = bytearray(len(data) + self._block_size_bytes - 1) 
+        n = self.update_into(data, buf) 
+        return bytes(buf[:n]) 
+ 
+    def update_into(self, data, buf): 
+        total_data_len = len(data) 
+        if len(buf) < (total_data_len + self._block_size_bytes - 1): 
+            raise ValueError( 
+                "buffer must be at least {} bytes for this " 
+                "payload".format(len(data) + self._block_size_bytes - 1) 
+            ) 
+ 
+        data_processed = 0 
+        total_out = 0 
         outlen = self._backend._ffi.new("int *")
-        baseoutbuf = self._backend._ffi.from_buffer(buf)
-        baseinbuf = self._backend._ffi.from_buffer(data)
+        baseoutbuf = self._backend._ffi.from_buffer(buf) 
+        baseinbuf = self._backend._ffi.from_buffer(data) 
 
-        while data_processed != total_data_len:
-            outbuf = baseoutbuf + total_out
-            inbuf = baseinbuf + data_processed
-            inlen = min(self._MAX_CHUNK_SIZE, total_data_len - data_processed)
-
-            res = self._backend._lib.EVP_CipherUpdate(
-                self._ctx, outbuf, outlen, inbuf, inlen
-            )
-            self._backend.openssl_assert(res != 0)
-            data_processed += inlen
-            total_out += outlen[0]
-
-        return total_out
-
+        while data_processed != total_data_len: 
+            outbuf = baseoutbuf + total_out 
+            inbuf = baseinbuf + data_processed 
+            inlen = min(self._MAX_CHUNK_SIZE, total_data_len - data_processed) 
+ 
+            res = self._backend._lib.EVP_CipherUpdate( 
+                self._ctx, outbuf, outlen, inbuf, inlen 
+            ) 
+            self._backend.openssl_assert(res != 0) 
+            data_processed += inlen 
+            total_out += outlen[0] 
+ 
+        return total_out 
+ 
     def finalize(self):
-        if (
-            self._operation == self._DECRYPT
-            and isinstance(self._mode, modes.ModeWithAuthenticationTag)
-            and self.tag is None
-        ):
-            raise ValueError(
-                "Authentication tag must be provided when decrypting."
-            )
-
+        if ( 
+            self._operation == self._DECRYPT 
+            and isinstance(self._mode, modes.ModeWithAuthenticationTag) 
+            and self.tag is None 
+        ): 
+            raise ValueError( 
+                "Authentication tag must be provided when decrypting." 
+            ) 
+ 
         buf = self._backend._ffi.new("unsigned char[]", self._block_size_bytes)
         outlen = self._backend._ffi.new("int *")
         res = self._backend._lib.EVP_CipherFinal_ex(self._ctx, buf, outlen)
@@ -172,59 +172,59 @@ class _CipherContext(object):
                 raise InvalidTag
 
             self._backend.openssl_assert(
-                errors[0]._lib_reason_match(
+                errors[0]._lib_reason_match( 
                     self._backend._lib.ERR_LIB_EVP,
-                    self._backend._lib.EVP_R_DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH,
-                ),
-                errors=errors,
+                    self._backend._lib.EVP_R_DATA_NOT_MULTIPLE_OF_BLOCK_LENGTH, 
+                ), 
+                errors=errors, 
             )
             raise ValueError(
                 "The length of the provided data is not a multiple of "
                 "the block length."
             )
 
-        if (
-            isinstance(self._mode, modes.GCM)
-            and self._operation == self._ENCRYPT
-        ):
+        if ( 
+            isinstance(self._mode, modes.GCM) 
+            and self._operation == self._ENCRYPT 
+        ): 
             tag_buf = self._backend._ffi.new(
                 "unsigned char[]", self._block_size_bytes
             )
             res = self._backend._lib.EVP_CIPHER_CTX_ctrl(
-                self._ctx,
-                self._backend._lib.EVP_CTRL_AEAD_GET_TAG,
-                self._block_size_bytes,
-                tag_buf,
+                self._ctx, 
+                self._backend._lib.EVP_CTRL_AEAD_GET_TAG, 
+                self._block_size_bytes, 
+                tag_buf, 
             )
             self._backend.openssl_assert(res != 0)
             self._tag = self._backend._ffi.buffer(tag_buf)[:]
 
         res = self._backend._lib.EVP_CIPHER_CTX_cleanup(self._ctx)
         self._backend.openssl_assert(res == 1)
-        return self._backend._ffi.buffer(buf)[: outlen[0]]
+        return self._backend._ffi.buffer(buf)[: outlen[0]] 
 
-    def finalize_with_tag(self, tag):
-        if len(tag) < self._mode._min_tag_length:
-            raise ValueError(
-                "Authentication tag must be {} bytes or longer.".format(
-                    self._mode._min_tag_length
-                )
-            )
-        res = self._backend._lib.EVP_CIPHER_CTX_ctrl(
-            self._ctx, self._backend._lib.EVP_CTRL_AEAD_SET_TAG, len(tag), tag
-        )
-        self._backend.openssl_assert(res != 0)
-        self._tag = tag
-        return self.finalize()
-
+    def finalize_with_tag(self, tag): 
+        if len(tag) < self._mode._min_tag_length: 
+            raise ValueError( 
+                "Authentication tag must be {} bytes or longer.".format( 
+                    self._mode._min_tag_length 
+                ) 
+            ) 
+        res = self._backend._lib.EVP_CIPHER_CTX_ctrl( 
+            self._ctx, self._backend._lib.EVP_CTRL_AEAD_SET_TAG, len(tag), tag 
+        ) 
+        self._backend.openssl_assert(res != 0) 
+        self._tag = tag 
+        return self.finalize() 
+ 
     def authenticate_additional_data(self, data):
         outlen = self._backend._ffi.new("int *")
         res = self._backend._lib.EVP_CipherUpdate(
-            self._ctx,
-            self._backend._ffi.NULL,
-            outlen,
-            self._backend._ffi.from_buffer(data),
-            len(data),
+            self._ctx, 
+            self._backend._ffi.NULL, 
+            outlen, 
+            self._backend._ffi.from_buffer(data), 
+            len(data), 
         )
         self._backend.openssl_assert(res != 0)
 

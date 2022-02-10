@@ -496,7 +496,7 @@ uint8_t Cryptography_check_ansix923_padding(const uint8_t *data,
     return (mismatch & 1) == 0;
 }
 
-#define CRYPTOGRAPHY_PACKAGE_VERSION "3.3.2"
+#define CRYPTOGRAPHY_PACKAGE_VERSION "3.3.2" 
 
 /************************************************************/
 
@@ -505,15 +505,15 @@ static void *_cffi_types[] = {
 /*  1 */ _CFFI_OP(_CFFI_OP_POINTER, 2), // uint8_t const *
 /*  2 */ _CFFI_OP(_CFFI_OP_PRIMITIVE, 18), // uint8_t
 /*  3 */ _CFFI_OP(_CFFI_OP_FUNCTION_END, 0),
-/*  4 */ _CFFI_OP(_CFFI_OP_POINTER, 5), // char const *
-/*  5 */ _CFFI_OP(_CFFI_OP_PRIMITIVE, 2), // char
+/*  4 */ _CFFI_OP(_CFFI_OP_POINTER, 5), // char const * 
+/*  5 */ _CFFI_OP(_CFFI_OP_PRIMITIVE, 2), // char 
 };
 
-static void _cffi_const_CRYPTOGRAPHY_PACKAGE_VERSION(char *o)
-{
-  *(char const * *)o = CRYPTOGRAPHY_PACKAGE_VERSION;
-}
-
+static void _cffi_const_CRYPTOGRAPHY_PACKAGE_VERSION(char *o) 
+{ 
+  *(char const * *)o = CRYPTOGRAPHY_PACKAGE_VERSION; 
+} 
+ 
 static uint8_t _cffi_d_Cryptography_check_ansix923_padding(uint8_t const * x0, uint8_t x1)
 {
   return Cryptography_check_ansix923_padding(x0, x1);
@@ -607,7 +607,7 @@ _cffi_f_Cryptography_check_pkcs7_padding(PyObject *self, PyObject *args)
 #endif
 
 static const struct _cffi_global_s _cffi_globals[] = {
-  { "CRYPTOGRAPHY_PACKAGE_VERSION", (void *)_cffi_const_CRYPTOGRAPHY_PACKAGE_VERSION, _CFFI_OP(_CFFI_OP_CONSTANT, 4), (void *)0 },
+  { "CRYPTOGRAPHY_PACKAGE_VERSION", (void *)_cffi_const_CRYPTOGRAPHY_PACKAGE_VERSION, _CFFI_OP(_CFFI_OP_CONSTANT, 4), (void *)0 }, 
   { "Cryptography_check_ansix923_padding", (void *)_cffi_f_Cryptography_check_ansix923_padding, _CFFI_OP(_CFFI_OP_CPYTHON_BLTN_V, 0), (void *)_cffi_d_Cryptography_check_ansix923_padding },
   { "Cryptography_check_pkcs7_padding", (void *)_cffi_f_Cryptography_check_pkcs7_padding, _CFFI_OP(_CFFI_OP_CPYTHON_BLTN_V, 0), (void *)_cffi_d_Cryptography_check_pkcs7_padding },
 };
@@ -619,12 +619,12 @@ static const struct _cffi_type_context_s _cffi_type_context = {
   NULL,  /* no struct_unions */
   NULL,  /* no enums */
   NULL,  /* no typenames */
-  3,  /* num_globals */
+  3,  /* num_globals */ 
   0,  /* num_struct_unions */
   0,  /* num_enums */
   0,  /* num_typenames */
   NULL,  /* no includes */
-  6,  /* num_types */
+  6,  /* num_types */ 
   0,  /* flags */
 };
 
@@ -653,6 +653,6 @@ PyInit__padding(void)
 PyMODINIT_FUNC
 init_padding(void)
 {
-  _cffi_init("_padding", 0x2601, &_cffi_type_context);
+  _cffi_init("_padding", 0x2601, &_cffi_type_context); 
 }
 #endif

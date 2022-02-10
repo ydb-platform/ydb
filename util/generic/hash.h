@@ -1929,7 +1929,7 @@ public:
         return rep.find(key);
     }
 
-    template <class TheKey> 
+    template <class TheKey>
     iterator find(const TheKey& key, insert_ctx& ins) {
         return rep.find_i(key, ins);
     }

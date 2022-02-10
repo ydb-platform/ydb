@@ -18,9 +18,9 @@ class TAtomicTest
     UNIT_TEST(TestAtomicSub)
     UNIT_TEST(TestAtomicGetAndSub)
     UNIT_TEST(TestAtomicSwap)
-    UNIT_TEST(TestAtomicOr) 
-    UNIT_TEST(TestAtomicAnd) 
-    UNIT_TEST(TestAtomicXor) 
+    UNIT_TEST(TestAtomicOr)
+    UNIT_TEST(TestAtomicAnd)
+    UNIT_TEST(TestAtomicXor)
     UNIT_TEST(TestCAS)
     UNIT_TEST(TestGetAndCAS)
     UNIT_TEST(TestLockUnlock)
@@ -152,27 +152,27 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(v, Max<intptr_t>());
     }
 
-    inline void TestAtomicOr() { 
-        TAtomic v = 0xf0; 
- 
-        UNIT_ASSERT_VALUES_EQUAL(AtomicOr(v, 0x0f), 0xff); 
-        UNIT_ASSERT_VALUES_EQUAL(v, 0xff); 
-    } 
- 
-    inline void TestAtomicAnd() { 
-        TAtomic v = 0xff; 
- 
-        UNIT_ASSERT_VALUES_EQUAL(AtomicAnd(v, 0xf0), 0xf0); 
-        UNIT_ASSERT_VALUES_EQUAL(v, 0xf0); 
-    } 
- 
-    inline void TestAtomicXor() { 
-        TAtomic v = 0x00; 
- 
-        UNIT_ASSERT_VALUES_EQUAL(AtomicXor(v, 0xff), 0xff); 
-        UNIT_ASSERT_VALUES_EQUAL(AtomicXor(v, 0xff), 0x00); 
-    } 
- 
+    inline void TestAtomicOr() {
+        TAtomic v = 0xf0;
+
+        UNIT_ASSERT_VALUES_EQUAL(AtomicOr(v, 0x0f), 0xff);
+        UNIT_ASSERT_VALUES_EQUAL(v, 0xff);
+    }
+
+    inline void TestAtomicAnd() {
+        TAtomic v = 0xff;
+
+        UNIT_ASSERT_VALUES_EQUAL(AtomicAnd(v, 0xf0), 0xf0);
+        UNIT_ASSERT_VALUES_EQUAL(v, 0xf0);
+    }
+
+    inline void TestAtomicXor() {
+        TAtomic v = 0x00;
+
+        UNIT_ASSERT_VALUES_EQUAL(AtomicXor(v, 0xff), 0xff);
+        UNIT_ASSERT_VALUES_EQUAL(AtomicXor(v, 0xff), 0x00);
+    }
+
     inline void TestAtomicPtr() {
         int* p;
         AtomicSet(p, nullptr);

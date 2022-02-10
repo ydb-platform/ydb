@@ -100,10 +100,10 @@ static inline intptr_t AtomicAnd(TAtomic& a, intptr_t b) {
     return _InterlockedAnd64(&a, b) & b;
 }
 
-static inline intptr_t AtomicXor(TAtomic& a, intptr_t b) { 
-    return _InterlockedXor64(&a, b) ^ b; 
-} 
- 
+static inline intptr_t AtomicXor(TAtomic& a, intptr_t b) {
+    return _InterlockedXor64(&a, b) ^ b;
+}
+
 #endif // _x86_
 
 //TODO

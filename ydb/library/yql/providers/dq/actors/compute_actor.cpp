@@ -19,7 +19,7 @@ IActor* CreateComputeActor(
     NDq::TAllocateMemoryCallback allocateMemoryFn,
     NDq::TFreeMemoryCallback freeMemoryFn,
     const TActorId& executerId,
-    const TString& operationId,
+    const TString& operationId, 
     NYql::NDqProto::TDqTask&& task,
     const TString& computeActorType,
     const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory)
@@ -27,17 +27,17 @@ IActor* CreateComputeActor(
     auto memoryLimits = NDq::TComputeMemoryLimits();
     memoryLimits.ChannelBufferSize = 1000000;
     memoryLimits.ScanBufferSize = 16_MB;
-    // light == heavy since we allow extra allocation
+    // light == heavy since we allow extra allocation 
     memoryLimits.MkqlLightProgramMemoryLimit = options.MkqlInitialMemoryLimit;
     memoryLimits.MkqlHeavyProgramMemoryLimit = options.MkqlInitialMemoryLimit;
-    memoryLimits.AllocateMemoryFn = allocateMemoryFn;
-    memoryLimits.FreeMemoryFn = freeMemoryFn;
-    // min alloc size == min free size to simplify api
+    memoryLimits.AllocateMemoryFn = allocateMemoryFn; 
+    memoryLimits.FreeMemoryFn = freeMemoryFn; 
+    // min alloc size == min free size to simplify api 
     memoryLimits.MinMemAllocSize = options.MkqlMinAllocSize;
     memoryLimits.MinMemFreeSize = options.MkqlMinAllocSize;
 
     auto computeRuntimeSettings = NDq::TComputeRuntimeSettings();
-    computeRuntimeSettings.ExtraMemoryAllocationPool = 3;
+    computeRuntimeSettings.ExtraMemoryAllocationPool = 3; 
     computeRuntimeSettings.FailOnUndelivery = false;
     computeRuntimeSettings.StatsMode = NDqProto::DQ_STATS_MODE_PROFILE;
 

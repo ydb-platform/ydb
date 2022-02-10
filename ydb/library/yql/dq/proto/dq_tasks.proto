@@ -148,6 +148,6 @@ message TDqTask {
     repeated TTaskInput Inputs = 5;
     repeated TTaskOutput Outputs = 6;
     google.protobuf.Any Meta = 7;
-    bool CreateSuspended = 8;
+    bool CreateSuspended = 8; 
     optional TDqTransform OutputTransform = 12;
 }

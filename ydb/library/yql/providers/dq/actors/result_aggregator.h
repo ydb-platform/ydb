@@ -9,9 +9,9 @@
 
 namespace NYql::NDqs::NExecutionHelpers {
     THolder<NActors::IActor> MakeResultAggregator(
-        const TVector<TString>& columns,
-        const NActors::TActorId& executerId,
-        const TString& traceId,
+        const TVector<TString>& columns, 
+        const NActors::TActorId& executerId, 
+        const TString& traceId, 
         const THashMap<TString, TString>& secureParams,
         const TDqConfiguration::TPtr& settings,
         const TString& resultType,

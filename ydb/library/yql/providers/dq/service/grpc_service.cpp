@@ -363,7 +363,7 @@ namespace NYql::NDqs {
                 YQL_LOG(DEBUG) << __FUNCTION__;
                 MergeTaskMetas(params);
 
-                auto executerId = RegisterChild(NDq::MakeDqExecuter(MakeWorkerManagerActorID(SelfId().NodeId()), SelfId(), TraceId, Username, Settings, Counters, RequestStartTime));
+                auto executerId = RegisterChild(NDq::MakeDqExecuter(MakeWorkerManagerActorID(SelfId().NodeId()), SelfId(), TraceId, Username, Settings, Counters, RequestStartTime)); 
 
                 TVector<TString> columns;
                 columns.reserve(Request->GetColumns().size());
@@ -388,11 +388,11 @@ namespace NYql::NDqs {
                     Request->GetResultType(),
                     Request->GetDiscard(),
                     GraphExecutionEventsActorId).Release());
-                auto controlId = Settings->EnableComputeActor.Get().GetOrElse(false) == false ? resultId
-                    :  RegisterChild(NYql::MakeTaskController(TraceId, executerId, resultId, Settings, NYq::NCommon::TServiceCounters(Counters, nullptr, "")).Release());
-                Send(executerId, MakeHolder<TEvGraphRequest>(
+                auto controlId = Settings->EnableComputeActor.Get().GetOrElse(false) == false ? resultId 
+                    :  RegisterChild(NYql::MakeTaskController(TraceId, executerId, resultId, Settings, NYq::NCommon::TServiceCounters(Counters, nullptr, "")).Release()); 
+                Send(executerId, MakeHolder<TEvGraphRequest>( 
                     *Request,
-                    controlId,
+                    controlId, 
                     resultId));
             }
 

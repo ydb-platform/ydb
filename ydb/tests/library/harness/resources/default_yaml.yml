@@ -180,61 +180,61 @@ net_classifier_config:
     retry_interval_seconds: 30
     net_data_update_interval_seconds: 60
   cms_config_timeout_seconds: 30
-yandex_query_config:
-  enabled: false
-  enable_dynamic_nameservice: false
-  common:
-    use_bearer_for_ydb: true
-    ids_prefix: "pt"
-  control_plane_storage:
-    enabled: true
-    available_binding:
-    - "DATA_STREAMS"
-    - "OBJECT_STORAGE"
-    available_connection:
-    - "YDB_DATABASE"
-    - "CLICKHOUSE_CLUSTER"
-    - "DATA_STREAMS"
-    - "OBJECT_STORAGE"
-    - "MONITORING"
-    storage:
-      endpoint: ""
-  control_plane_proxy:
-    enabled: true
-    request_timeout: "30s"
-  private_api:
-    enabled: true
-  token_accessor:
-    enabled: true
-  gateways:
-    enabled: true
-    pq:
-      cluster_mapping: []
-    solomon:
-      cluster_mapping: []
-    dq:
-      default_settings: []
-  db_pool:
-    enabled: true
-    storage:
-      endpoint: ""
-  checkpoint_coordinator:
-    enabled: true
-    checkpointing_period_millis: 1000
-    max_inflight: 1
-    storage:
-      endpoint: ""
-  resource_manager:
-    enabled: true
-  private_proxy:
-    enabled: true
-  nodes_manager:
-    enabled: true
-  pending_fetcher:
-    enabled: true
-  audit:
-    enabled: false
-    uaconfig:
-      uri: ""
-  pinger:
-    ping_period: "30s"
+yandex_query_config: 
+  enabled: false 
+  enable_dynamic_nameservice: false 
+  common: 
+    use_bearer_for_ydb: true 
+    ids_prefix: "pt" 
+  control_plane_storage: 
+    enabled: true 
+    available_binding: 
+    - "DATA_STREAMS" 
+    - "OBJECT_STORAGE" 
+    available_connection: 
+    - "YDB_DATABASE" 
+    - "CLICKHOUSE_CLUSTER" 
+    - "DATA_STREAMS" 
+    - "OBJECT_STORAGE" 
+    - "MONITORING" 
+    storage: 
+      endpoint: "" 
+  control_plane_proxy: 
+    enabled: true 
+    request_timeout: "30s" 
+  private_api: 
+    enabled: true 
+  token_accessor: 
+    enabled: true 
+  gateways: 
+    enabled: true 
+    pq: 
+      cluster_mapping: [] 
+    solomon: 
+      cluster_mapping: [] 
+    dq: 
+      default_settings: [] 
+  db_pool: 
+    enabled: true 
+    storage: 
+      endpoint: "" 
+  checkpoint_coordinator: 
+    enabled: true 
+    checkpointing_period_millis: 1000 
+    max_inflight: 1 
+    storage: 
+      endpoint: "" 
+  resource_manager: 
+    enabled: true 
+  private_proxy: 
+    enabled: true 
+  nodes_manager: 
+    enabled: true 
+  pending_fetcher: 
+    enabled: true 
+  audit: 
+    enabled: false 
+    uaconfig: 
+      uri: "" 
+  pinger: 
+    ping_period: "30s" 

@@ -34,7 +34,7 @@ message TAllocateWorkersRequest {
     string ComputeActorType = 15;
     repeated NYql.NDqProto.TDqTask Task = 12; // used for compute actor
     NActorsProto.TActorId ResultActorId = 13; // used for compute actor
-
+ 
     uint64 FreeWorkerAfterMs = 14;
 }
 
@@ -180,7 +180,7 @@ message TQueryResponse {
 }
 
 message TDqFailure {
-    repeated Ydb.Issue.IssueMessage Issues = 4;
+    repeated Ydb.Issue.IssueMessage Issues = 4; 
     repeated TMetric Metric = 5;
     bool Retriable = 6;
     bool NeedFallback = 7;
@@ -188,9 +188,9 @@ message TDqFailure {
 
 message TGraphRequest {
     Yql.DqsProto.ExecuteGraphRequest Request = 1;
-    NActorsProto.TActorId ControlId = 2;
-    NActorsProto.TActorId ResultId = 3;
-    NActorsProto.TActorId CheckPointCoordinatorId = 4; // may be empty
+    NActorsProto.TActorId ControlId = 2; 
+    NActorsProto.TActorId ResultId = 3; 
+    NActorsProto.TActorId CheckPointCoordinatorId = 4; // may be empty 
 }
 
 message TDqTaskRequest {

@@ -21,7 +21,7 @@ namespace NYql::NDqs {
 
     struct TEvDqFailure : NActors::TEventPB<TEvDqFailure, NDqProto::TDqFailure, TDqExecuterEvents::ES_DQ_FAILURE> {
         TEvDqFailure() = default;
-        explicit TEvDqFailure(const TIssue& issue, bool retriable = false, bool needFallback = false);
+        explicit TEvDqFailure(const TIssue& issue, bool retriable = false, bool needFallback = false); 
     };
 
     struct TEvQueryResponse
@@ -32,13 +32,13 @@ namespace NYql::NDqs {
 
     struct TEvGraphRequest : NActors::TEventPB<TEvGraphRequest, NDqProto::TGraphRequest, TDqExecuterEvents::ES_GRAPH> {
         TEvGraphRequest() = default;
-        TEvGraphRequest(const Yql::DqsProto::ExecuteGraphRequest& request, NActors::TActorId controlId, NActors::TActorId resultId, NActors::TActorId checkPointCoordinatorId = {});
+        TEvGraphRequest(const Yql::DqsProto::ExecuteGraphRequest& request, NActors::TActorId controlId, NActors::TActorId resultId, NActors::TActorId checkPointCoordinatorId = {}); 
     };
 
     struct TEvReadyState : NActors::TEventPB<TEvReadyState, NDqProto::TReadyState, TDqExecuterEvents::ES_READY_TO_PULL> {
         TEvReadyState() = default;
         TEvReadyState(NActors::TActorId sourceId, TString type);
-        explicit TEvReadyState(NDqProto::TReadyState&& proto);
+        explicit TEvReadyState(NDqProto::TReadyState&& proto); 
     };
 
     struct TEvPullResult : NActors::TEventBase<TEvPullResult, TDqExecuterEvents::ES_PULL_RESULT> {
@@ -74,7 +74,7 @@ namespace NYql::NDqs {
         : NActors::TEventPB<TEvPingResponse, NYql::NDqProto::TPingResponse, TDqDataEvents::ES_PING_RESPONSE> {
         TEvPingResponse() = default;
     };
-
+ 
     struct TEvFullResultWriterStatusRequest
         : NActors::TEventPB<TEvFullResultWriterStatusRequest, NYql::NDqProto::TFullResultWriterStatusRequest,
         TDqDataEvents::ES_FULL_RESULT_WRITER_STATUS_REQUEST> {
@@ -88,7 +88,7 @@ namespace NYql::NDqs {
         explicit TEvFullResultWriterStatusResponse(NDqProto::TFullResultWriterStatusResponse& data);
     };
 
-    struct TEvGraphFinished : NActors::TEventBase<TEvGraphFinished, TDqExecuterEvents::ES_GRAPH_FINISHED> {
-        DEFINE_SIMPLE_NONLOCAL_EVENT(TEvGraphFinished, "");
-    };
+    struct TEvGraphFinished : NActors::TEventBase<TEvGraphFinished, TDqExecuterEvents::ES_GRAPH_FINISHED> { 
+        DEFINE_SIMPLE_NONLOCAL_EVENT(TEvGraphFinished, ""); 
+    }; 
 }

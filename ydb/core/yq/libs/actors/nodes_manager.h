@@ -25,12 +25,12 @@ IActor* CreateYqlNodesManager(
     const NYql::NDqs::TWorkerManagerCounters& workerManagerCounters,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
-    const ::NYq::NCommon::TServiceCounters& serviceCounters,
+    const ::NYq::NCommon::TServiceCounters& serviceCounters, 
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const ui32& icPort,
     const TString& address,
-    const TString& tenant = "",
+    const TString& tenant = "", 
     ui64 mkqlInitialMemoryLimit = 0,
     const NMonitoring::TDynamicCounterPtr& clientCounters = MakeIntrusive<NMonitoring::TDynamicCounters>());
 

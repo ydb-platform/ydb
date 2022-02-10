@@ -22,7 +22,7 @@ TRunActorParams::TRunActorParams(
     const TScope& scope,
     const TString& authToken,
     const TActorId& databaseResolver,
-    const TString& queryId,
+    const TString& queryId, 
     const TString& userId,
     const TString& owner,
     const int64_t previousQueryRevision,
@@ -33,12 +33,12 @@ TRunActorParams::TRunActorParams(
     YandexQuery::QueryContent::QueryType queryType,
     YandexQuery::ExecuteMode executeMode,
     const TString& resultId,
-    const YandexQuery::StateLoadMode stateLoadMode,
+    const YandexQuery::StateLoadMode stateLoadMode, 
     const YandexQuery::StreamingDisposition& streamingDisposition,
     YandexQuery::QueryMeta::ComputeStatus status,
-    const TString& cloudId,
-    TVector<YandexQuery::ResultSetMeta> resultSetMetas,
-    TVector<TString> dqGraphs,
+    const TString& cloudId, 
+    TVector<YandexQuery::ResultSetMeta> resultSetMetas, 
+    TVector<TString> dqGraphs, 
     int32_t dqGraphIndex,
     TVector<Yq::Private::TopicConsumer> createdTopicConsumers,
     bool automatic,
@@ -63,7 +63,7 @@ TRunActorParams::TRunActorParams(
     , Scope(scope)
     , AuthToken(authToken)
     , DatabaseResolver(databaseResolver)
-    , QueryId(queryId)
+    , QueryId(queryId) 
     , UserId(userId)
     , Owner(owner)
     , PreviousQueryRevision(previousQueryRevision)
@@ -76,11 +76,11 @@ TRunActorParams::TRunActorParams(
     , ResultId(resultId)
     , StateLoadMode(stateLoadMode)
     , StreamingDisposition(streamingDisposition)
-    , Status(status)
+    , Status(status) 
     , CloudId(cloudId)
-    , ResultSetMetas(std::move(resultSetMetas))
-    , DqGraphs(std::move(dqGraphs))
-    , DqGraphIndex(dqGraphIndex)
+    , ResultSetMetas(std::move(resultSetMetas)) 
+    , DqGraphs(std::move(dqGraphs)) 
+    , DqGraphIndex(dqGraphIndex) 
     , CreatedTopicConsumers(std::move(createdTopicConsumers))
     , Automatic(automatic)
     , QueryName(queryName)

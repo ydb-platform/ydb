@@ -3,7 +3,7 @@ OWNER(g:yq)
 LIBRARY()
 
 SRCS(
-    empty_gateway.cpp
+    empty_gateway.cpp 
 )
 
 PEERDIR(

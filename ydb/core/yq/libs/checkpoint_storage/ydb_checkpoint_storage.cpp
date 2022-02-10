@@ -725,7 +725,7 @@ TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinator
                 coordinator.GraphId,
                 coordinator.Generation);
 
-            return RegisterCheckGeneration(context);
+            return RegisterCheckGeneration(context); 
         });
 
     return StatusToIssues(future);

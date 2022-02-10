@@ -29,7 +29,7 @@ SRCS(
     interconnect_impl.h
     interconnect_mon.cpp
     interconnect_mon.h
-    interconnect_nameserver_dynamic.cpp
+    interconnect_nameserver_dynamic.cpp 
     interconnect_nameserver_table.cpp
     interconnect_proxy_wrapper.cpp
     interconnect_proxy_wrapper.h

@@ -186,12 +186,12 @@ void Init(
 
         RegisterDqPqWriteActorFactory(*sinkActorFactory, yqSharedResources->YdbDriver, credentialsFactory);
         RegisterDQSolomonWriteActorFactory(*sinkActorFactory, credentialsFactory);
-    }
+    } 
 
-    ui64 mkqlInitialMemoryLimit = 8_GB;
-
+    ui64 mkqlInitialMemoryLimit = 8_GB; 
+ 
     if (protoConfig.GetResourceManager().GetEnabled()) {
-        mkqlInitialMemoryLimit = protoConfig.GetResourceManager().GetMkqlInitialMemoryLimit();
+        mkqlInitialMemoryLimit = protoConfig.GetResourceManager().GetMkqlInitialMemoryLimit(); 
         if (!mkqlInitialMemoryLimit) {
             mkqlInitialMemoryLimit = 8_GB;
         }
@@ -227,7 +227,7 @@ void Init(
             yqSharedResources,
             icPort,
             std::get<1>(localAddr),
-            tenant,
+            tenant, 
             mkqlInitialMemoryLimit,
             clientCounters);
 

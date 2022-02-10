@@ -70,9 +70,9 @@ bool ParseCounterName(TString* prefix, std::map<TString, TString>* labels, TStri
     auto pos = counterName.find(":");
     if (pos == TString::npos) {
         return false;
-    }
+    } 
     *prefix = counterName.substr(0, pos);
-
+ 
     auto labelsString = counterName.substr(pos+1);
 
     *name = "";

@@ -37,7 +37,7 @@ class TResultWriter : public NActors::TActorBootstrapped<TResultWriter> {
 public:
     TResultWriter(
         const NYdb::TDriver& driver,
-        const NActors::TActorId& executerId,
+        const NActors::TActorId& executerId, 
         const TString& resultType,
         const NConfig::TPrivateApiConfig& privateApiConfig,
         const TResultId& resultId,
@@ -45,7 +45,7 @@ public:
         const TString& traceId,
         const TInstant& deadline,
         const NMonitoring::TDynamicCounterPtr& clientCounters)
-        : ExecuterId(executerId)
+        : ExecuterId(executerId) 
         , ResultBuilder(MakeHolder<TProtoBuilder>(resultType, columns))
         , ResultId({resultId})
         , TraceId(traceId)
@@ -85,7 +85,7 @@ private:
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&, const NActors::TActorContext& ) {
         auto req = MakeHolder<TEvDqFailure>(TIssue("Undelivered").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), /*retriable=*/ false, /*needFallback=*/false);
-        Send(ExecuterId, req.Release());
+        Send(ExecuterId, req.Release()); 
         HasError = true;
     }
 
@@ -98,24 +98,24 @@ private:
         Send(ExecuterId, req.Release());
     }
 
-    void MaybeFinish() {
+    void MaybeFinish() { 
         if (Finished && Requests.empty()) {
-            Send(ExecuterId, new TEvGraphFinished());
+            Send(ExecuterId, new TEvGraphFinished()); 
         }
     }
 
     void OnQueryResult(TEvQueryResponse::TPtr& ev, const TActorContext&) {
         Finished = true;
         NYql::NDqProto::TQueryResponse queryResult(ev->Get()->Record);
-
+ 
         *queryResult.MutableYson() = ResultBuilder->BuildYson(Head);
-        if (!Issues.Empty()) {
-            IssuesToMessage(Issues, queryResult.MutableIssues());
+        if (!Issues.Empty()) { 
+            IssuesToMessage(Issues, queryResult.MutableIssues()); 
         }
-        queryResult.SetTruncated(Truncated);
-        queryResult.SetRowsCount(Rows);
-
-        Send(ExecuterId, new TEvQueryResponse(std::move(queryResult)));
+        queryResult.SetTruncated(Truncated); 
+        queryResult.SetRowsCount(Rows); 
+ 
+        Send(ExecuterId, new TEvQueryResponse(std::move(queryResult))); 
     }
 
     void OnReadyState(TEvReadyState::TPtr&, const TActorContext&) { }
@@ -131,7 +131,7 @@ private:
         if (it == Requests.end()) {
             HasError = true;
             auto req = MakeHolder<TEvDqFailure>(TIssue("Unknown RequestId").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), /*retriable=*/ false, /*needFallback=*/false);
-            Send(ExecuterId, req.Release());
+            Send(ExecuterId, req.Release()); 
             return;
         }
         auto& request = it->second;
@@ -309,7 +309,7 @@ private:
             LOG_E(CurrentExceptionMessage());
             auto req = MakeHolder<TEvDqFailure>(TIssue("Internal error on data write").SetCode(NYql::DEFAULT_ERROR, TSeverityIds::S_ERROR), /*retriable=*/ false,
                 /*needFallback=*/false);
-            Send(ExecuterId, req.Release());
+            Send(ExecuterId, req.Release()); 
             HasError = true;
         }
     }
@@ -330,7 +330,7 @@ private:
     ui64 Size = 0;
     ui64 Rows = 0;
 
-    const TActorId ExecuterId;
+    const TActorId ExecuterId; 
     THolder<TProtoBuilder> ResultBuilder;
     const TResultId ResultId;
     const TString TraceId;
@@ -356,7 +356,7 @@ private:
 
 NActors::IActor* CreateResultWriter(
     const NYdb::TDriver& driver,
-    const NActors::TActorId& executerId,
+    const NActors::TActorId& executerId, 
     const TString& resultType,
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const TResultId& resultId,

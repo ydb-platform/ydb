@@ -44,7 +44,7 @@ public:
     TResourceAllocator(
         TActorId gwmActor,
         TActorId senderId,
-        TActorId controlId,
+        TActorId controlId, 
         ui32 workerCount,
         const TString& traceId,
         const TDqConfiguration::TPtr settings,
@@ -54,7 +54,7 @@ public:
         : TRichActor<TResourceAllocator>(&TResourceAllocator::Handle)
         , GwmActor(gwmActor)
         , SenderId(senderId)
-        , ControlId(controlId)
+        , ControlId(controlId) 
         , RequestedCount(workerCount)
         , TraceId(traceId)
         , Settings(settings)
@@ -243,7 +243,7 @@ private:
         if (!Tasks.empty()) {
             request->Record.SetCreateComputeActor(true);
             request->Record.SetComputeActorType(ComputeActorType);
-            ActorIdToProto(ControlId, request->Record.MutableResultActorId());
+            ActorIdToProto(ControlId, request->Record.MutableResultActorId()); 
             *request->Record.AddTask() = node.Task;
         }
         YQL_LOG(WARN) << "Send TEvAllocateWorkersRequest to " << NDqs::NExecutionHelpers::PrettyPrintWorkerInfo(node.WorkerInfo, 0);
@@ -298,7 +298,7 @@ private:
 
     const TActorId GwmActor;
     const TActorId SenderId;
-    const TActorId ControlId;
+    const TActorId ControlId; 
 
     THashMap<ui64, TRequestInfo> RequestedNodes;
     ui32 RequestedCount;
@@ -329,7 +329,7 @@ private:
 NActors::IActor* CreateResourceAllocator(
     TActorId gwmActor,
     TActorId senderId,
-    TActorId controlId,
+    TActorId controlId, 
     ui32 size,
     const TString& traceId,
     const TDqConfiguration::TPtr& settings,

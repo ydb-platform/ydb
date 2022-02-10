@@ -57,20 +57,20 @@ public:
         const NDqs::TWorkerManagerCounters& workerManagerCounters,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
-        const ::NYq::NCommon::TServiceCounters& serviceCounters,
+        const ::NYq::NCommon::TServiceCounters& serviceCounters, 
         const NConfig::TPrivateApiConfig& privateApiConfig,
         const ui32& icPort,
         const TString& address,
-        const TString& tenant,
+        const TString& tenant, 
         ui64 mkqlInitialMemoryLimit,
         const NMonitoring::TDynamicCounterPtr& clientCounters)
         : WorkerManagerCounters(workerManagerCounters)
         , TimeProvider(timeProvider)
         , RandomProvider(randomProvider)
-        , ServiceCounters(serviceCounters, "node_manager")
+        , ServiceCounters(serviceCounters, "node_manager") 
         , PrivateApiConfig(privateApiConfig)
         , Tenant(tenant)
-        , MkqlInitialMemoryLimit(mkqlInitialMemoryLimit)
+        , MkqlInitialMemoryLimit(mkqlInitialMemoryLimit) 
         , YqSharedResources(yqSharedResources)
         , IcPort(icPort)
         , Address(address)
@@ -88,50 +88,50 @@ public:
     static constexpr char ActorName[] = "YQ_NODES_MANAGER";
 
     void PassAway() final {
-        LOG_I("PassAway STOPPED");
+        LOG_I("PassAway STOPPED"); 
         NActors::IActor::PassAway();
     }
 
     void Bootstrap(const TActorContext&) {
         Become(&TYqlNodesManagerActor::StateFunc);
-        ServiceCounters.Counters->GetCounter("EvBootstrap", true)->Inc();
-        LOG_I("Bootstrap STARTED");
-        NodesHealthCheck();
+        ServiceCounters.Counters->GetCounter("EvBootstrap", true)->Inc(); 
+        LOG_I("Bootstrap STARTED"); 
+        NodesHealthCheck(); 
     }
 
 private:
-    void Handle(NDqs::TEvAllocateWorkersRequest::TPtr& ev) {
-        ServiceCounters.Counters->GetCounter("EvAllocateWorkersRequest", true)->Inc();
+    void Handle(NDqs::TEvAllocateWorkersRequest::TPtr& ev) { 
+        ServiceCounters.Counters->GetCounter("EvAllocateWorkersRequest", true)->Inc(); 
         const auto &rec = ev->Get()->Record;
         const auto count = rec.GetCount();
         Y_ASSERT(count != 0);
         auto resourceId = rec.GetResourceId();
         if (!resourceId) {
-            resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
+            resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId(); 
         }
 
         TVector<TPeer> nodes;
         for (ui32 i = 0; i < count; ++i) {
-            TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0};
+            TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0}; 
             if (!Peers.empty()) {
-                auto FirstPeer = NextPeer;
-                while (true) {
-                    if (NextPeer >= Peers.size()) {
-                        NextPeer = 0;
-                    }
-
-                    auto& nextNode = Peers[NextPeer];
-                    ++NextPeer;
-
-                    if (NextPeer == FirstPeer   // we closed loop w/o success, fallback to round robin then
-                       || nextNode.MemoryLimit == 0 // not limit defined for the node
-                       || nextNode.MemoryLimit > nextNode.MemoryAllocated + MkqlInitialMemoryLimit // memory is enough
-                    ) {
-                        // adjust allocated size to place next tasks correctly, will be reset after next health check
-                        nextNode.MemoryAllocated += MkqlInitialMemoryLimit;
-                        node = nextNode;
-                        break;
-                    }
+                auto FirstPeer = NextPeer; 
+                while (true) { 
+                    if (NextPeer >= Peers.size()) { 
+                        NextPeer = 0; 
+                    } 
+ 
+                    auto& nextNode = Peers[NextPeer]; 
+                    ++NextPeer; 
+ 
+                    if (NextPeer == FirstPeer   // we closed loop w/o success, fallback to round robin then 
+                       || nextNode.MemoryLimit == 0 // not limit defined for the node 
+                       || nextNode.MemoryLimit > nextNode.MemoryAllocated + MkqlInitialMemoryLimit // memory is enough 
+                    ) { 
+                        // adjust allocated size to place next tasks correctly, will be reset after next health check 
+                        nextNode.MemoryAllocated += MkqlInitialMemoryLimit; 
+                        node = nextNode; 
+                        break; 
+                    } 
                 }
             }
             nodes.push_back(node);
@@ -146,50 +146,50 @@ private:
             *worker->MutableGuid() = node.InstanceId;
             worker->SetNodeId(node.NodeId);
         }
-        LOG_D("TEvAllocateWorkersResponse " << req->Record.DebugString());
+        LOG_D("TEvAllocateWorkersResponse " << req->Record.DebugString()); 
 
         Send(ev->Sender, req.Release());
     }
 
-    void Handle(NDqs::TEvFreeWorkersNotify::TPtr&) {
-        ServiceCounters.Counters->GetCounter("EvFreeWorkersNotify", true)->Inc();
+    void Handle(NDqs::TEvFreeWorkersNotify::TPtr&) { 
+        ServiceCounters.Counters->GetCounter("EvFreeWorkersNotify", true)->Inc(); 
     }
 
     STRICT_STFUNC(
         StateFunc,
 
-        hFunc(NActors::TEvents::TEvWakeup, HandleWakeup)
-        hFunc(NDqs::TEvAllocateWorkersRequest, Handle)
-        hFunc(NDqs::TEvFreeWorkersNotify, Handle)
-        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
+        hFunc(NActors::TEvents::TEvWakeup, HandleWakeup) 
+        hFunc(NDqs::TEvAllocateWorkersRequest, Handle) 
+        hFunc(NDqs::TEvFreeWorkersNotify, Handle) 
+        hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered) 
         hFunc(TEvHealthNodesResponse, HandleResponse)
         )
 
-    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
-        ServiceCounters.Counters->GetCounter("EvWakeup", true)->Inc();
+    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) { 
+        ServiceCounters.Counters->GetCounter("EvWakeup", true)->Inc(); 
         auto tag = ev->Get()->Tag;
         switch (tag) {
         case WU_NodesHealthCheck:
-            NodesHealthCheck();
+            NodesHealthCheck(); 
             break;
         }
     }
 
-    void NodesHealthCheck() {
+    void NodesHealthCheck() { 
         const TDuration ttl = TDuration::Seconds(5);
-        Schedule(ttl, new NActors::TEvents::TEvWakeup(WU_NodesHealthCheck));
+        Schedule(ttl, new NActors::TEvents::TEvWakeup(WU_NodesHealthCheck)); 
 
-        ServiceCounters.Counters->GetCounter("NodesHealthCheck", true)->Inc();
+        ServiceCounters.Counters->GetCounter("NodesHealthCheck", true)->Inc(); 
 
         Yq::Private::NodesHealthCheckRequest request;
         request.set_tenant(Tenant);
-        auto& node = *request.mutable_node();
-        node.set_node_id(SelfId().NodeId());
-        node.set_instance_id(InstanceId);
-        node.set_hostname(HostName());
-        node.set_active_workers(AtomicGet(WorkerManagerCounters.ActiveWorkers->GetAtomic()));
-        node.set_memory_limit(AtomicGet(WorkerManagerCounters.MkqlMemoryLimit->GetAtomic()));
-        node.set_memory_allocated(AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic()));
+        auto& node = *request.mutable_node(); 
+        node.set_node_id(SelfId().NodeId()); 
+        node.set_instance_id(InstanceId); 
+        node.set_hostname(HostName()); 
+        node.set_active_workers(AtomicGet(WorkerManagerCounters.ActiveWorkers->GetAtomic())); 
+        node.set_memory_limit(AtomicGet(WorkerManagerCounters.MkqlMemoryLimit->GetAtomic())); 
+        node.set_memory_allocated(AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic())); 
         node.set_interconnect_port(IcPort);
         node.set_node_address(Address);
         const auto actorSystem = NActors::TActivationContext::ActorSystem();
@@ -206,9 +206,9 @@ private:
             });
     }
 
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
+    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) { 
         LOG_E("TYqlNodesManagerActor::OnUndelivered");
-        ServiceCounters.Counters->GetCounter("OnUndelivered", true)->Inc();
+        ServiceCounters.Counters->GetCounter("OnUndelivered", true)->Inc(); 
     }
 
     void HandleResponse(TEvHealthNodesResponse::TPtr& ev) {
@@ -225,8 +225,8 @@ private:
 
             Peers.clear();
             for (const auto& node : res.nodes()) {
-                Peers.push_back({node.node_id(), node.instance_id() + "," + node.hostname(),
-                  node.active_workers(), node.memory_limit(), node.memory_allocated()});
+                Peers.push_back({node.node_id(), node.instance_id() + "," + node.hostname(), 
+                  node.active_workers(), node.memory_limit(), node.memory_allocated()}); 
 
                 if (node.interconnect_port()) {
                     nodesInfo.emplace_back(TEvInterconnect::TNodeInfo{
@@ -239,8 +239,8 @@ private:
                 }
             }
 
-            ServiceCounters.Counters->GetCounter("PeerCount", false)->Set(Peers.size());
-            ServiceCounters.Counters->GetCounter("NodesHealthCheckOk", true)->Inc();
+            ServiceCounters.Counters->GetCounter("PeerCount", false)->Set(Peers.size()); 
+            ServiceCounters.Counters->GetCounter("NodesHealthCheckOk", true)->Inc(); 
 
             LOG_D("Send NodeInfo with size: " << nodesInfo.size() << " to DynamicNameserver");
             if (!nodesInfo.empty()) {
@@ -248,7 +248,7 @@ private:
             }
         } catch (yexception &e) {
             LOG_E(e.what());
-            ServiceCounters.Counters->GetCounter("NodesHealthCheckFail", true)->Inc();
+            ServiceCounters.Counters->GetCounter("NodesHealthCheckFail", true)->Inc(); 
         }
     }
 
@@ -256,10 +256,10 @@ private:
     NDqs::TWorkerManagerCounters WorkerManagerCounters;
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
-    ::NYq::NCommon::TServiceCounters ServiceCounters;
+    ::NYq::NCommon::TServiceCounters ServiceCounters; 
     NConfig::TPrivateApiConfig PrivateApiConfig;
     TString Tenant;
-    ui64 MkqlInitialMemoryLimit;
+    ui64 MkqlInitialMemoryLimit; 
 
     NYq::TYqSharedResources::TPtr YqSharedResources;
 
@@ -271,9 +271,9 @@ private:
     struct TPeer {
         ui32 NodeId;
         TString InstanceId;
-        ui64 ActiveWorkers;
-        ui64 MemoryLimit;
-        ui64 MemoryAllocated;
+        ui64 ActiveWorkers; 
+        ui64 MemoryLimit; 
+        ui64 MemoryAllocated; 
     };
     TVector<TPeer> Peers;
     ui32 ResourceIdPart = 0;
@@ -295,12 +295,12 @@ IActor* CreateYqlNodesManager(
     const NDqs::TWorkerManagerCounters& workerManagerCounters,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
-    const ::NYq::NCommon::TServiceCounters& serviceCounters,
+    const ::NYq::NCommon::TServiceCounters& serviceCounters, 
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const ui32& icPort,
     const TString& address,
-    const TString& tenant,
+    const TString& tenant, 
     ui64 mkqlInitialMemoryLimit,
     const NMonitoring::TDynamicCounterPtr& clientCounters) {
     return new TYqlNodesManagerActor(yqSharedResources, workerManagerCounters,

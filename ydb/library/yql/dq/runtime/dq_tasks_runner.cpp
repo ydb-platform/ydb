@@ -212,13 +212,13 @@ public:
         , CollectBasicStats(Settings.CollectBasicStats)
         , CollectProfileStats(Settings.CollectProfileStats)
     {
-        if (CollectBasicStats) {
+        if (CollectBasicStats) { 
             Stats = std::make_unique<TDqTaskRunnerStats>();
-            if (Y_UNLIKELY(CollectProfileStats)) {
+            if (Y_UNLIKELY(CollectProfileStats)) { 
                 Stats->ComputeCpuTimeByRun = NMonitoring::ExponentialHistogram(6, 10, 10);
-            }
-        } else {
-            YQL_ENSURE(!CollectProfileStats, "CollectProfileStats requires CollectBasicStats to be set as well");
+            } 
+        } else { 
+            YQL_ENSURE(!CollectProfileStats, "CollectProfileStats requires CollectBasicStats to be set as well"); 
         }
 
         if (!Context.Alloc) {
@@ -521,7 +521,7 @@ public:
             Stats->RunStatusTimeMetrics.SetCurrentStatus(runStatus, RunComputeTime);
         }
 
-        if (Y_UNLIKELY(CollectProfileStats)) {
+        if (Y_UNLIKELY(CollectProfileStats)) { 
             Stats->ComputeCpuTimeByRun->Collect(RunComputeTime.MilliSeconds());
 
             if (ProgramParsed.StatsRegistry) {
@@ -530,7 +530,7 @@ public:
                     Stats->MkqlStats.emplace_back(TMkqlStat{key, value});
                 });
             }
-        }
+        } 
 
         if (runStatus == ERunStatus::Finished) {
             if (Stats) {
@@ -719,7 +719,7 @@ private:
     bool CollectBasicStats = false;
     bool CollectProfileStats = false;
     std::unique_ptr<TDqTaskRunnerStats> Stats;
-    TDuration RunComputeTime;
+    TDuration RunComputeTime; 
 
 private:
     // statistics support

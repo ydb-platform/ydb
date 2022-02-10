@@ -38,16 +38,16 @@ public:
     static constexpr char ActorName[] = "YQL_DQ_EXECUTER";
 
     TDqExecuter(
-        const NActors::TActorId& gwmActorId,
-        const NActors::TActorId& printerId,
+        const NActors::TActorId& gwmActorId, 
+        const NActors::TActorId& printerId, 
         const TString& traceId, const TString& username,
         const TDqConfiguration::TPtr& settings,
         const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
-        TInstant requestStartTime,
-        bool createTaskSuspended)
+        TInstant requestStartTime, 
+        bool createTaskSuspended) 
         : TRichActor<TDqExecuter>(&TDqExecuter::Handler)
-        , GwmActorId(gwmActorId)
-        , PrinterId(printerId)
+        , GwmActorId(gwmActorId) 
+        , PrinterId(printerId) 
         , Settings(settings)
         , TraceId(traceId)
         , Username(username)
@@ -58,7 +58,7 @@ public:
         , ExecutionHistogram(Counters->GetSubgroup("component", "ServiceProxyActorHistograms")->GetHistogram("ExecutionTime", ExponentialHistogram(10, 3, 1)))
         , AllocationHistogram(Counters->GetSubgroup("component", "ServiceProxyActorHistograms")->GetHistogram("WorkersAllocationTime", ExponentialHistogram(10, 2, 1)))
         , TasksHistogram(Counters->GetSubgroup("component", "ServiceProxyActorHistograms")->GetHistogram("TasksCount", ExponentialHistogram(10, 2, 1)))
-        , CreateTaskSuspended(createTaskSuspended)
+        , CreateTaskSuspended(createTaskSuspended) 
     { }
 
     ~TDqExecuter() {
@@ -75,10 +75,10 @@ private:
         HFunc(TEvGraphRequest, OnGraph);
         HFunc(TEvAllocateWorkersResponse, OnAllocateWorkersResponse);
         cFunc(TEvents::TEvPoison::EventType, PassAway);
-        hFunc(NActors::TEvents::TEvPoisonTaken, Handle);
-        HFunc(TEvDqFailure, OnFailure);
-        HFunc(TEvGraphFinished, OnGraphFinished);
-        HFunc(TEvQueryResponse, OnQueryResponse);
+        hFunc(NActors::TEvents::TEvPoisonTaken, Handle); 
+        HFunc(TEvDqFailure, OnFailure); 
+        HFunc(TEvGraphFinished, OnGraphFinished); 
+        HFunc(TEvQueryResponse, OnQueryResponse); 
         // execution timeout
         cFunc(TEvents::TEvBootstrap::EventType, [this]() {
             YQL_LOG_CTX_SCOPE(TraceId);
@@ -87,7 +87,7 @@ private:
             issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
             Issues.AddIssues({issue});
             *ExecutionTimeoutCounter += 1;
-            Finish(/*retriable=*/ false, /*needFallback=*/ true);
+            Finish(/*retriable=*/ false, /*needFallback=*/ true); 
         })
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup)
     })
@@ -129,12 +129,12 @@ private:
 
     void OnGraph(TEvGraphRequest::TPtr& ev, const NActors::TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceId);
-        Y_VERIFY(!ControlId);
+        Y_VERIFY(!ControlId); 
         Y_VERIFY(!ResultId);
         YQL_LOG(DEBUG) << "TDqExecuter::OnGraph";
-        ControlId = NActors::ActorIdFromProto(ev->Get()->Record.GetControlId());
+        ControlId = NActors::ActorIdFromProto(ev->Get()->Record.GetControlId()); 
         ResultId = NActors::ActorIdFromProto(ev->Get()->Record.GetResultId());
-        CheckPointCoordinatorId = NActors::ActorIdFromProto(ev->Get()->Record.GetCheckPointCoordinatorId());
+        CheckPointCoordinatorId = NActors::ActorIdFromProto(ev->Get()->Record.GetCheckPointCoordinatorId()); 
         // These actors will be killed at exit.
         AddChild(ControlId);
         AddChild(ResultId);
@@ -160,7 +160,7 @@ private:
             Settings->Save(taskMeta);
 
             task.MutableMeta()->PackFrom(taskMeta);
-            task.SetCreateSuspended(CreateTaskSuspended);
+            task.SetCreateSuspended(CreateTaskSuspended); 
 
             tasks.emplace_back(task);
         }
@@ -177,7 +177,7 @@ private:
         const TString computeActorType = Settings->ComputeActorType.Get().GetOrElse("old");
 
         auto resourceAllocator = RegisterChild(CreateResourceAllocator(
-            GwmActorId, SelfId(), ControlId, workerCount,
+            GwmActorId, SelfId(), ControlId, workerCount, 
             TraceId, Settings,
             Counters,
             enableComputeActor ? tasks : TVector<NYql::NDqProto::TDqTask>(),
@@ -187,7 +187,7 @@ private:
         allocateRequest->Record.SetCreateComputeActor(enableComputeActor);
         allocateRequest->Record.SetComputeActorType(computeActorType);
         if (enableComputeActor) {
-            ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId());
+            ActorIdToProto(ControlId, allocateRequest->Record.MutableResultActorId()); 
         }
         for (const auto& [_, f] : files) {
             *allocateRequest->Record.AddFiles() = f;
@@ -217,7 +217,7 @@ private:
         StartCounter("AllocateWorkers");
 
         TActivationContext::Send(new IEventHandle(
-            GwmActorId,
+            GwmActorId, 
             resourceAllocator,
             allocateRequest.Release(),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
@@ -236,67 +236,67 @@ private:
         }
     }
 
-    void Finish(bool retriable, bool needFallback = false)
+    void Finish(bool retriable, bool needFallback = false) 
     {
         YQL_LOG(DEBUG) << __FUNCTION__ << ", retriable=" << retriable << ", needFallback=" << needFallback;
-        if (Finished) {
-            YQL_LOG(WARN) << "Re-Finish IGNORED with Retriable=" << retriable << ", NeedFallback=" << needFallback;
-        } else {
-            FlushCounter("ExecutionTime");
-            TQueryResponse result;
-            IssuesToMessage(Issues, result.MutableIssues());
-            result.SetRetriable(retriable);
-            result.SetNeedFallback(needFallback);
-            FlushCounters(result);
-            Send(ControlId, MakeHolder<TEvQueryResponse>(std::move(result)));
-            Finished = true;
-        }
+        if (Finished) { 
+            YQL_LOG(WARN) << "Re-Finish IGNORED with Retriable=" << retriable << ", NeedFallback=" << needFallback; 
+        } else { 
+            FlushCounter("ExecutionTime"); 
+            TQueryResponse result; 
+            IssuesToMessage(Issues, result.MutableIssues()); 
+            result.SetRetriable(retriable); 
+            result.SetNeedFallback(needFallback); 
+            FlushCounters(result); 
+            Send(ControlId, MakeHolder<TEvQueryResponse>(std::move(result))); 
+            Finished = true; 
+        } 
     }
 
     void OnFailure(TEvDqFailure::TPtr& ev, const NActors::TActorContext&) {
-        if (!Finished) {
-            YQL_LOG_CTX_SCOPE(TraceId);
+        if (!Finished) { 
+            YQL_LOG_CTX_SCOPE(TraceId); 
             YQL_LOG(DEBUG) << __FUNCTION__;
-            AddCounters(ev->Get()->Record);
-            bool retriable = ev->Get()->Record.GetRetriable();
-            bool fallback = ev->Get()->Record.GetNeedFallback();
-            if (ev->Get()->Record.IssuesSize()) {
-                TIssues issues;
-                IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
-                Issues.AddIssues(issues);
-            }
+            AddCounters(ev->Get()->Record); 
+            bool retriable = ev->Get()->Record.GetRetriable(); 
+            bool fallback = ev->Get()->Record.GetNeedFallback(); 
+            if (ev->Get()->Record.IssuesSize()) { 
+                TIssues issues; 
+                IssuesFromMessage(ev->Get()->Record.GetIssues(), issues); 
+                Issues.AddIssues(issues); 
+            } 
             Finish(retriable, fallback);
         }
     }
 
-    void OnGraphFinished(TEvGraphFinished::TPtr&, const NActors::TActorContext&) {
+    void OnGraphFinished(TEvGraphFinished::TPtr&, const NActors::TActorContext&) { 
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << __FUNCTION__;
-        if (!Finished) {
-            try {
-                TFailureInjector::Reach("dq_fail_on_finish", [] { throw yexception() << "dq_fail_on_finish"; });
-                Finish(false);
-            } catch (...) {
-                YQL_LOG(ERROR) << " FailureInjector " << CurrentExceptionMessage();
-                Issues.AddIssue(TIssue("FailureInjection"));
-                Finish(true);
-            }
+        if (!Finished) { 
+            try { 
+                TFailureInjector::Reach("dq_fail_on_finish", [] { throw yexception() << "dq_fail_on_finish"; }); 
+                Finish(false); 
+            } catch (...) { 
+                YQL_LOG(ERROR) << " FailureInjector " << CurrentExceptionMessage(); 
+                Issues.AddIssue(TIssue("FailureInjection")); 
+                Finish(true); 
+            } 
         }
-    }
-
-    // TBD: wait for PoisonTaken from CheckPointCoordinator before send TEvQueryResponse to PrinterId
-
-    void OnQueryResponse(TEvQueryResponse::TPtr& ev, const TActorContext&) {
+    } 
+ 
+    // TBD: wait for PoisonTaken from CheckPointCoordinator before send TEvQueryResponse to PrinterId 
+ 
+    void OnQueryResponse(TEvQueryResponse::TPtr& ev, const TActorContext&) { 
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << __FUNCTION__;
-        Send(PrinterId, ev->Release().Release());
-        PassAway();
-    }
-
-    void Handle(NActors::TEvents::TEvPoisonTaken::TPtr&) {
-        // ignore ack from checkpoint coordinator now
-    }
-
+        Send(PrinterId, ev->Release().Release()); 
+        PassAway(); 
+    } 
+ 
+    void Handle(NActors::TEvents::TEvPoisonTaken::TPtr&) { 
+        // ignore ack from checkpoint coordinator now 
+    } 
+ 
     void OnAllocateWorkersResponse(TEvAllocateWorkersResponse::TPtr& ev, const NActors::TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceId);
         YQL_LOG(DEBUG) << "TDqExecuter::TEvAllocateWorkersResponse";
@@ -313,7 +313,7 @@ private:
                     << ev->Get()->Record.GetError().GetMessage() << ":"
                     << static_cast<int>(ev->Get()->Record.GetError().GetErrorCode());
                 Issues.AddIssue(TIssue(ev->Get()->Record.GetError().GetMessage()).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR));
-                Finish(/*retriable = */ true, /*fallback = */ true);
+                Finish(/*retriable = */ true, /*fallback = */ true); 
                 return;
             }
             case TAllocateWorkersResponse::kNodes:
@@ -355,7 +355,7 @@ private:
         YQL_LOG(INFO) << workers.size() << " workers allocated";
 
         YQL_ENSURE(workers.size() == tasks.size());
-
+ 
         auto res = MakeHolder<TEvReadyState>(ExecutionPlanner->GetSourceID(), ExecutionPlanner->GetResultType());
 
         if (Settings->EnableComputeActor.Get().GetOrElse(false) == false) {
@@ -385,15 +385,15 @@ private:
 
         AllocationHistogram->Collect((ExecutionStart-StartTime).Seconds());
 
-        auto readyState1 = res->Record;
-        auto readyState2 = res->Record;
-        Send(ControlId, res.Release());
-        if (ResultId != SelfId()) {
-            Send(ResultId, new TEvReadyState(std::move(readyState1)));
-        }
-        if (CheckPointCoordinatorId) {
-            Send(CheckPointCoordinatorId, new TEvReadyState(std::move(readyState2)));
-        }
+        auto readyState1 = res->Record; 
+        auto readyState2 = res->Record; 
+        Send(ControlId, res.Release()); 
+        if (ResultId != SelfId()) { 
+            Send(ResultId, new TEvReadyState(std::move(readyState1))); 
+        } 
+        if (CheckPointCoordinatorId) { 
+            Send(CheckPointCoordinatorId, new TEvReadyState(std::move(readyState2))); 
+        } 
 
         if (Timeout) {
             ExecutionTimeoutCookieHolder.Reset(ISchedulerCookie::Make2Way());
@@ -442,13 +442,13 @@ private:
         }
     }
 
-    NActors::TActorId GwmActorId;
-    NActors::TActorId PrinterId;
+    NActors::TActorId GwmActorId; 
+    NActors::TActorId PrinterId; 
     TDqConfiguration::TPtr Settings;
 
-    NActors::TActorId ControlId;
+    NActors::TActorId ControlId; 
     NActors::TActorId ResultId;
-    NActors::TActorId CheckPointCoordinatorId;
+    NActors::TActorId CheckPointCoordinatorId; 
     TExprNode::TPtr ExprRoot;
     THolder<IDqsExecutionPlanner> ExecutionPlanner;
     ui64 ResourceId = 0;
@@ -472,20 +472,20 @@ private:
     THistogramPtr TasksHistogram;
 
     TIssues Issues;
-    bool CreateTaskSuspended;
-    bool Finished = false;
+    bool CreateTaskSuspended; 
+    bool Finished = false; 
 };
 
 NActors::IActor* MakeDqExecuter(
-    const NActors::TActorId& gwmActorId,
-    const NActors::TActorId& printerId,
+    const NActors::TActorId& gwmActorId, 
+    const NActors::TActorId& printerId, 
     const TString& traceId, const TString& username,
     const TDqConfiguration::TPtr& settings,
     const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
-    TInstant requestStartTime,
-    bool createTaskSuspended
+    TInstant requestStartTime, 
+    bool createTaskSuspended 
 ) {
-    return new TLogWrapReceive(new TDqExecuter(gwmActorId, printerId, traceId, username, settings, counters, requestStartTime, createTaskSuspended), traceId);
+    return new TLogWrapReceive(new TDqExecuter(gwmActorId, printerId, traceId, username, settings, counters, requestStartTime, createTaskSuspended), traceId); 
 }
 
 } // namespace NDq

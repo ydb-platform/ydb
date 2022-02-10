@@ -1,5 +1,5 @@
-#include "utils.h"
-
+#include "utils.h" 
+ 
 #include "checkpoint_coordinator.h"
 
 #include <ydb/core/yq/libs/actors/logging/log.h>
@@ -28,7 +28,7 @@ namespace NYq {
 
 TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
                                                const TActorId& taskControllerId,
-                                               const TActorId& storageProxy,
+                                               const TActorId& storageProxy, 
                                                const TActorId& runActorId,
                                                const TCheckpointCoordinatorConfig& settings,
                                                const NMonitoring::TDynamicCounterPtr& counters,
@@ -51,22 +51,22 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
 void TCheckpointCoordinator::Bootstrap() {
     Become(&TThis::DispatchEvent);
     CC_LOG_D("Bootstrapped with streaming disposition " << StreamingDisposition << " and state load mode " << YandexQuery::StateLoadMode_Name(StateLoadMode));
-}
-
-void TCheckpointCoordinator::Handle(const NYql::NDqs::TEvReadyState::TPtr& ev) {
-    const auto& tasks = ev->Get()->Record.GetTask();
-    const auto& actorIds = ev->Get()->Record.GetActorId();
-    Y_VERIFY(tasks.size() == actorIds.size());
-
-    for (int i = 0; i < static_cast<int>(tasks.size()); ++i) {
-        auto& task = tasks[i];
+} 
+ 
+void TCheckpointCoordinator::Handle(const NYql::NDqs::TEvReadyState::TPtr& ev) { 
+    const auto& tasks = ev->Get()->Record.GetTask(); 
+    const auto& actorIds = ev->Get()->Record.GetActorId(); 
+    Y_VERIFY(tasks.size() == actorIds.size()); 
+ 
+    for (int i = 0; i < static_cast<int>(tasks.size()); ++i) { 
+        auto& task = tasks[i]; 
         auto& actorId = TaskIdToActor[task.GetId()];
         if (actorId) {
             Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::InternalError(TStringBuilder() << "Duplicate task id: " << task.GetId()));
             return;
         }
         actorId = ActorIdFromProto(actorIds[i]);
-
+ 
         TComputeActorTransportStuff::TPtr transport = AllActors[actorId] = MakeIntrusive<TComputeActorTransportStuff>();
         transport->EventsQueue.Init(CoordinatorId.ToString(), SelfId(), SelfId(), task.GetId());
         transport->EventsQueue.OnNewRecipientId(actorId);
@@ -84,10 +84,10 @@ void TCheckpointCoordinator::Handle(const NYql::NDqs::TEvReadyState::TPtr& ev) {
                 ActorsToWaitFor[actorId] = transport;
                 ActorsToWaitForSet.insert(actorId);
             }
-        }
+        } 
         AllActorsSet.insert(actorId);
-    }
-
+    } 
+ 
     PendingInit = std::make_unique<TPendingInitCoordinator>(AllActors.size());
 
     CC_LOG_D("Send TEvRegisterCoordinatorRequest");
@@ -555,17 +555,17 @@ void TCheckpointCoordinator::Handle(NActors::TEvInterconnect::TEvNodeConnected::
     }
 }
 
-void TCheckpointCoordinator::Handle(NActors::TEvents::TEvPoison::TPtr& ev) {
+void TCheckpointCoordinator::Handle(NActors::TEvents::TEvPoison::TPtr& ev) { 
     CC_LOG_D("Got TEvPoison");
-    Send(ev->Sender, new NActors::TEvents::TEvPoisonTaken(), 0, ev->Cookie);
-    PassAway();
-}
-
+    Send(ev->Sender, new NActors::TEvents::TEvPoisonTaken(), 0, ev->Cookie); 
+    PassAway(); 
+} 
+ 
 void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     TStringStream message;
     message << "Got TEvUndelivered; reason: " << ev->Get()->Reason << ", sourceType: " << ev->Get()->SourceType;
     CC_LOG_D(message.Str());
-    Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::Unavailable(message.Str()));
+    Send(TaskControllerId, NYql::NDq::TEvDq::TEvAbortExecution::Unavailable(message.Str())); 
     PassAway();
 }
 
@@ -583,6 +583,6 @@ void TCheckpointCoordinator::PassAway() {
 
 THolder<NActors::IActor> MakeCheckpointCoordinator(TCoordinatorId coordinatorId, const TActorId& taskControllerId, const TActorId& storageProxy, const TActorId& runActorId, const TCheckpointCoordinatorConfig& settings, const NMonitoring::TDynamicCounterPtr& counters, const NProto::TGraphParams& graphParams, const YandexQuery::StateLoadMode& stateLoadMode, const YandexQuery::StreamingDisposition& streamingDisposition) {
     return MakeHolder<TCheckpointCoordinator>(coordinatorId, taskControllerId, storageProxy, runActorId, settings, counters, graphParams, stateLoadMode, streamingDisposition);
-}
-
+} 
+ 
 } // namespace NYq

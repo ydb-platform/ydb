@@ -56,9 +56,9 @@ message TEvComputeActorState {
     optional TDqComputeActorStats Stats = 6;
 };
 
-message TEvComputeStateRequest {
-}
-
+message TEvComputeStateRequest { 
+} 
+ 
 message TEvComputeChannelData {
     optional TChannelData ChannelData = 1;
     optional uint64 SendTime = 2;

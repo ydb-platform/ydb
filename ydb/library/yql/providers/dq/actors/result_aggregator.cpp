@@ -1,5 +1,5 @@
 #include "result_aggregator.h"
-#include "result_receiver.h"
+#include "result_receiver.h" 
 #include "proto_builder.h"
 #include "full_result_writer.h"
 
@@ -204,9 +204,9 @@ private:
             // finalization has been begun, actor will not kill himself anymore, should ignore responses instead
             return;
         }
-
+ 
         auto& response = ev->Get()->Record;
-
+ 
         AddCounters(response);
 
         switch (response.GetResponseType()) {
@@ -409,7 +409,7 @@ private:
         }
 
         YQL_LOG(DEBUG) << "Waiting for " << BlockingActors.size() << " blocking actors";
-
+ 
         QueryResponse.Reset(ev->Release().Release());
         Become(&TResultAggregator::ShutdownHandler);
         Send(SelfId(), MakeHolder<TEvents::TEvGone>());
@@ -448,10 +448,10 @@ private:
             IssuesToMessage(FinishIssues, result.MutableIssues());
         }
         result.SetTruncated(FinishTruncated);
-
+ 
         Send(ExecuterID, new TEvQueryResponse(std::move(result)));
     }
-
+ 
     const NActors::TActorId ExecuterID;
     NActors::TActorId SourceID;
     const NActors::TActorId GraphExecutionEventsId;
@@ -478,7 +478,7 @@ private:
     ui64 FullResultSentBytes = 0;
     ui64 FullResultReceivedBytes = 0;
     ui64 FullResultSentDataParts = 0;
-
+ 
     TIssues FinishIssues;
     bool FinishTruncated = false;
     bool FinishCalled = false;

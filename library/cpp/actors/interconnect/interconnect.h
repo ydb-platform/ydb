@@ -125,28 +125,28 @@ namespace NActors {
 
     TActorId GetNameserviceActorId();
 
-    /**
-     * Const table-lookup based name service
-     */
-
+    /** 
+     * Const table-lookup based name service 
+     */ 
+ 
     IActor* CreateNameserverTable(
         const TIntrusivePtr<TTableNameserverSetup>& setup,
         ui32 poolId = 0);
 
     /**
-     * Name service which can be paired with external discovery service.
-     * Copies information from setup on the start (table may be empty).
-     * Handles TEvNodesInfo to change list of known nodes. 
-     * 
-     * If PendingPeriod is not zero, wait for unknown nodeId
-     */
-
-    IActor* CreateDynamicNameserver(
-        const TIntrusivePtr<TTableNameserverSetup>& setup,
-        const TDuration& pendingPeriod = TDuration::Zero(),
-        ui32 poolId = 0);
-
-    /**
+     * Name service which can be paired with external discovery service. 
+     * Copies information from setup on the start (table may be empty). 
+     * Handles TEvNodesInfo to change list of known nodes.  
+     *  
+     * If PendingPeriod is not zero, wait for unknown nodeId 
+     */ 
+ 
+    IActor* CreateDynamicNameserver( 
+        const TIntrusivePtr<TTableNameserverSetup>& setup, 
+        const TDuration& pendingPeriod = TDuration::Zero(), 
+        ui32 poolId = 0); 
+ 
+    /** 
      * Creates an actor that resolves host/port and replies with either:
      *
      * - TEvLocalNodeInfo on success
@@ -158,14 +158,14 @@ namespace NActors {
         const TString& host, ui16 port, ui32 nodeId, const TString& defaultAddress,
         const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline);
 
-    inline IActor* CreateResolveActor(
-        ui32 nodeId, const TTableNameserverSetup::TNodeInfo& nodeInfo,
-        const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline)
-    {
-        return CreateResolveActor(nodeInfo.ResolveHost, nodeInfo.Port, nodeId, nodeInfo.Address,
-            replyTo, replyFrom, deadline);
-    }
-
+    inline IActor* CreateResolveActor( 
+        ui32 nodeId, const TTableNameserverSetup::TNodeInfo& nodeInfo, 
+        const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline) 
+    { 
+        return CreateResolveActor(nodeInfo.ResolveHost, nodeInfo.Port, nodeId, nodeInfo.Address, 
+            replyTo, replyFrom, deadline); 
+    } 
+ 
     /**
      * Creates an actor that resolves host/port and replies with either:
      * 

@@ -25,7 +25,7 @@ RECURSE(
     brotli
     c-ares
     cairo
-    cbc
+    cbc 
     cctools
     cctz
     cereal
@@ -97,7 +97,7 @@ RECURSE(
     grpc/python
     grpc/src/proto
     gtfs_realtime
-    h3
+    h3 
     harfbuzz
     hdf5
     hdr_histogram
@@ -258,7 +258,7 @@ RECURSE(
     openssl
     opentracing-cpp
     opus
-    ortools
+    ortools 
     ortools/proto
     osrm
     pam

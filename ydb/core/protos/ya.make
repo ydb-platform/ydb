@@ -8,10 +8,10 @@ OWNER(
     g:kikimr
 )
 
-IF (OS_WINDOWS)
-    NO_OPTIMIZE_PY_PROTOS()
-ENDIF()
-
+IF (OS_WINDOWS) 
+    NO_OPTIMIZE_PY_PROTOS() 
+ENDIF() 
+ 
 SRCS(
     alloc.proto
     base.proto

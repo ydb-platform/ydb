@@ -99,7 +99,7 @@ RECURSE(
     backports.tempfile
     backports.weakref
     banal
-    bandit
+    bandit 
     bcrypt
     beautifulsoup4
     behave
@@ -374,10 +374,10 @@ RECURSE(
     fingerprints
     fire
     flake8
-    flake8-bandit
+    flake8-bandit 
     flake8-commas
     flake8-docstrings
-    flake8-polyfill
+    flake8-polyfill 
     flake8-quotes
     flake8-string-format
     flaky

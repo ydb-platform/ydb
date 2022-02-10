@@ -83,7 +83,7 @@ SRCS(
     fixunstfdi.c
     fixunstfsi.c
     fixunstfti.c
-    fixunsxfti.c
+    fixunsxfti.c 
     floatditf.c
     floatsitf.c
     floattidf.c

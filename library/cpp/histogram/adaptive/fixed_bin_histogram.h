@@ -71,8 +71,8 @@ namespace NKiwiAggr {
         virtual double CalcUpperBoundSafe(double sum);
         virtual double CalcLowerBoundSafe(double sum);
 
-        double CalcDensity(double value);
-
+        double CalcDensity(double value); 
+ 
     private:
         double CalcBinRange(double referencePoint, double maxValue);
         void SetFrame(double minValue, double maxValue, bool clear);

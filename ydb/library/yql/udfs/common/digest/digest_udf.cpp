@@ -32,13 +32,13 @@ namespace {
         return TUnboxedValuePod(hash);
     }
 
-    SIMPLE_UDF(TCrc64, ui64(TAutoMap<char*>)) { 
-        Y_UNUSED(valueBuilder); 
-        const auto& inputRef = args[0].AsStringRef(); 
-        ui64 hash = crc64(inputRef.Data(), inputRef.Size()); 
-        return TUnboxedValuePod(hash); 
-    } 
- 
+    SIMPLE_UDF(TCrc64, ui64(TAutoMap<char*>)) {
+        Y_UNUSED(valueBuilder);
+        const auto& inputRef = args[0].AsStringRef();
+        ui64 hash = crc64(inputRef.Data(), inputRef.Size());
+        return TUnboxedValuePod(hash);
+    }
+
     SIMPLE_UDF(TFnv32, ui32(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
@@ -352,7 +352,7 @@ namespace {
 
     SIMPLE_MODULE(TDigestModule,
                   TCrc32c,
-                  TCrc64, 
+                  TCrc64,
                   TFnv32,
                   TFnv64,
                   TMurMurHash,

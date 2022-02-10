@@ -79,7 +79,14 @@ namespace NMonitoring {
                 TLabels labels,
                 IHistogramCollectorPtr collector);
 
+        /**
+         * Set all registered metrics to zero
+         */
         void Reset();
+        /**
+         * Remove all registered metrics from registry
+         */
+        void Clear();
 
         void Accept(TInstant time, IMetricConsumer* consumer) const override;
         void Append(TInstant time, IMetricConsumer* consumer) const override;

@@ -28,7 +28,7 @@ message TTabletTypes {
         DataShard = 18;
         // number 19 was JobRunnerPoolManager - flat JRPM tablet
         PersQueue = 20;
-        Cms = 21; 
+        Cms = 21;
         NodeBroker = 22;
         TxAllocator = 23;
         PersQueueReadBalancer = 24;

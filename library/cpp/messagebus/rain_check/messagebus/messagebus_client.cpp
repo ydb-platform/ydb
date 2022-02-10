@@ -49,10 +49,10 @@ void TBusClientService::SendOneWay(
     ProcessResultCommon(message, addr, future, ok);
 }
 
-NBus::TBusClientSessionPtr TBusClientService::GetSessionForMonitoring() const {
-    return Session;
-}
-
+NBus::TBusClientSessionPtr TBusClientService::GetSessionForMonitoring() const { 
+    return Session; 
+} 
+ 
 void TBusClientService::Send(
     TBusMessageAutoPtr message, const TNetAddr& addr,
     TBusFuture* future) {

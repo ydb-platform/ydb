@@ -52,9 +52,9 @@ namespace NRainCheck {
         void Send(NBus::TBusMessageAutoPtr, const NBus::TNetAddr&, TBusFuture* future);
         void SendOneWay(NBus::TBusMessageAutoPtr, const NBus::TNetAddr&, TBusFuture* future);
 
-        // Use it only for monitoring
-        NBus::TBusClientSessionPtr GetSessionForMonitoring() const;
-
+        // Use it only for monitoring 
+        NBus::TBusClientSessionPtr GetSessionForMonitoring() const; 
+ 
     private:
         void SendCommon(NBus::TBusMessage*, const NBus::TNetAddr&, TBusFuture* future);
         void ProcessResultCommon(NBus::TBusMessageAutoPtr, const NBus::TNetAddr&, TBusFuture* future, NBus::EMessageStatus);

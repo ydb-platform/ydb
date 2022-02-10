@@ -126,7 +126,7 @@ namespace {
 
 #define STRING_UDF_MAP(XX)           \
     XX(Base64Encode, Base64Encode)   \
-    XX(Base64EncodeUrl, Base64EncodeUrl)   \
+    XX(Base64EncodeUrl, Base64EncodeUrl)   \ 
     XX(EscapeC, EscapeC)             \
     XX(UnescapeC, UnescapeC)         \
     XX(HexEncode, HexEncode)         \

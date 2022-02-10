@@ -1019,7 +1019,7 @@
 #define HAVE_STDINT_H_WITH_UINTMAX 1
 
 /* Define to 1 if you have the <stdio_ext.h> header file. */
-#if defined(__FreeBSD__) || defined(__MACH__)
+#if defined(__FreeBSD__) || defined(__MACH__) 
 #define HAVE_STDIO_EXT_H 0
 #else
 #define HAVE_STDIO_EXT_H 1

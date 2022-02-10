@@ -281,7 +281,7 @@ migrations:
     - disk/admin/monitors/common
     - disk/admin/robot_switcher
     - dj/tools/viewer/custom/entity
-    - education/lib/nirvana/operations/yt_nodes_deep_diff 
+    - education/lib/nirvana/operations/yt_nodes_deep_diff
     - education/schoolbook/analytics/adhoc/ANALITICSEDU-515
     - education/schoolbook/analytics/adhoc/ANALITICSEDU-687
     - entity/ontodb/tasks/backup_yt_tables/lib

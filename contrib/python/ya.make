@@ -287,7 +287,7 @@ RECURSE(
     django-redis-cache
     django-replicated
     django-rest-framework-docs
-    django-rest-multiple-models 
+    django-rest-multiple-models
     django-reversion
     django-select2-forms
     django-sentinel
@@ -610,7 +610,7 @@ RECURSE(
     marshmallow_dataclass
     marshmallow-enum
     marshmallow-mongoengine
-    marshmallow-oneofschema 
+    marshmallow-oneofschema
     marshmallow-sqlalchemy
     marshmallow-union
     matplotlib

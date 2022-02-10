@@ -637,9 +637,9 @@ ALLOW .* -> vendor/github.com/google/cel-go
 # CONTRIB-1654 Hard to misuse extensible crypto library
 ALLOW .* -> vendor/github.com/google/tink/go
 
-# CONTRIB-1907 Parser of the Graphviz DOT language
-ALLOW .* -> vendor/github.com/awalterschulze/gographviz
-
+# CONTRIB-1907 Parser of the Graphviz DOT language 
+ALLOW .* -> vendor/github.com/awalterschulze/gographviz 
+ 
 # CONTRIB-1923 memcache client
 ALLOW .* -> vendor/github.com/bradfitz/gomemcache
 
@@ -1013,10 +1013,10 @@ ALLOW load/projects/pandora -> vendor/github.com/onsi/ginkgo
 # CONTRIB-2029
 ALLOW load/projects/pandora -> vendor/github.com/magiconair/properties/assert
 
-# CONTRIB-2255
-ALLOW transfer_manager/go/pkg/source/eventhub -> vendor/github.com/Azure/azure-event-hubs-go/v3
-ALLOW transfer_manager/go/pkg/source/eventhub -> vendor/github.com/Azure/azure-amqp-common-go/v3/sas
-
+# CONTRIB-2255 
+ALLOW transfer_manager/go/pkg/source/eventhub -> vendor/github.com/Azure/azure-event-hubs-go/v3 
+ALLOW transfer_manager/go/pkg/source/eventhub -> vendor/github.com/Azure/azure-amqp-common-go/v3/sas 
+ 
 # CONTRIB-2347
 ALLOW trust/psp/core/go -> vendor/github.com/gorilla/mux
 ALLOW trust/psp/core/handler -> vendor/github.com/gorilla/mux

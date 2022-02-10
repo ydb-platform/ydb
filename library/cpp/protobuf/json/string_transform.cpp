@@ -25,8 +25,8 @@ namespace NProtobufJson {
 
     void TDoubleUnescapeTransform::Transform(TString& str) const {
         str = google::protobuf::UnescapeCEscapeString(Unescape(str));
-    }
-
+    } 
+ 
     TString TDoubleUnescapeTransform::Unescape(const TString& str) const {
         if (str.empty()) {
             return str;

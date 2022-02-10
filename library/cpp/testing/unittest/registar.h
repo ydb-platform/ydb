@@ -986,7 +986,7 @@ public:                       \
 #define Y_UNIT_TEST_SUITE(N) Y_UNIT_TEST_SUITE_IMPL(N, TTestBase)
 #define Y_UNIT_TEST_SUITE_F(N, F) Y_UNIT_TEST_SUITE_IMPL_F(N, TTestBase, F)
 #define RUSAGE_UNIT_TEST_SUITE(N) Y_UNIT_TEST_SUITE_IMPL(N, NUnitTest::TRusageTest, ::NUnitTest::TBaseTestCase)
-
+ 
 #define Y_UNIT_TEST_IMPL_REGISTER(N, FF, F)            \
     struct TTestCase##N : public F {                        \
         TTestCase##N()                                      \

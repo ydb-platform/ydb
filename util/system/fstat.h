@@ -41,7 +41,7 @@ public:
 private:
     void MakeFromFileName(const char* fileName, bool nofollow);
 };
-
-i64 GetFileLength(FHANDLE fd);
+ 
+i64 GetFileLength(FHANDLE fd); 
 i64 GetFileLength(const char* name);
 i64 GetFileLength(const TString& name);

@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "fwd.h"
 #include "factory.h"
 
@@ -311,8 +311,8 @@ public:
 private:
     class TImpl;
     THolder<TImpl> Impl_;
-};
-
+}; 
+ 
 /** Behave like TThreadPool or TAdaptiveThreadPool, choosen by thrnum parameter of Start()  */
 class TSimpleThreadPool: public TThreadPoolBase {
 public:

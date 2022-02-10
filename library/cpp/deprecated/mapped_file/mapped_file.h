@@ -4,7 +4,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/utility.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 #include <util/system/align.h>
 #include <util/system/file.h>
 #include <util/system/filemap.h>
@@ -15,25 +15,25 @@
 
 /// Deprecated (by pg@), use TFileMap or TMemoryMap instead
 class TMappedFile {
-private:
+private: 
     TFileMap* Map_;
 
 private:
     TMappedFile(TFileMap* map, const char* dbgName);
 
-public:
+public: 
     TMappedFile() {
         Map_ = nullptr;
-    }
+    } 
 
     ~TMappedFile() {
-        term();
-    }
+        term(); 
+    } 
 
     explicit TMappedFile(const TString& name) {
         Map_ = nullptr;
         init(name, TFileMap::oRdOnly);
-    }
+    } 
 
     TMappedFile(const TFile& file, TFileMap::EOpenMode om = TFileMap::oRdOnly, const char* dbgName = "unknown");
 
@@ -52,8 +52,8 @@ public:
             Map_->Unmap();
             delete Map_;
             Map_ = nullptr;
-        }
-    }
+        } 
+    } 
 
     size_t getSize() const {
         return (Map_ ? Map_->MappedSize() : 0);
@@ -69,4 +69,4 @@ public:
     void swap(TMappedFile& file) noexcept {
         DoSwap(Map_, file.Map_);
     }
-};
+}; 

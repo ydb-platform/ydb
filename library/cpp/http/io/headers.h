@@ -12,7 +12,7 @@ class IOutputStream;
 /// @addtogroup Streams_HTTP
 /// @{
 /// Объект, содержащий информацию о HTTP-заголовке.
-class THttpInputHeader {
+class THttpInputHeader { 
 public:
     /// @param[in] header - строка вида 'параметр: значение'.
     THttpInputHeader(TStringBuf header);

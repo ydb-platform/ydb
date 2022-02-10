@@ -18,7 +18,7 @@
 
 #include <library/cpp/messagebus/ybus.h>
 
-namespace NBus {
+namespace NBus { 
     void* TBusStarter::_starter(void* data) {
         TBusStarter* pThis = static_cast<TBusStarter*>(data);
         pThis->Starter();
@@ -61,5 +61,5 @@ namespace NBus {
             }
         }
     }
-
-}
+ 
+} 

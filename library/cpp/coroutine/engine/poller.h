@@ -18,7 +18,7 @@ enum class EContPoller {
 class IPollerFace {
 public:
     struct TChange {
-        SOCKET Fd;
+        SOCKET Fd; 
         void* Data;
         ui16 Flags;
     };

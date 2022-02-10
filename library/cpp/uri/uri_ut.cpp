@@ -4,7 +4,7 @@
 #include <library/cpp/html/entity/htmlentity.h>
 
 #include <util/system/maxlen.h>
-
+ 
 namespace NUri {
     Y_UNIT_TEST_SUITE(URLTest) {
         static const char* urls[] = {
@@ -66,7 +66,7 @@ namespace NUri {
             UNIT_ASSERT_VALUES_EQUAL(er, TState::ParsedOK);
             UNIT_ASSERT(base.IsValidAbs());
             UNIT_ASSERT_VALUES_EQUAL(base.PrintS(), urls[0]);
-
+ 
             TString errbuf;
             TStringOutput out(errbuf);
             const long mflag = TFeature::FeaturesAll;
@@ -75,12 +75,12 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL_C(er, TState::ParsedOK, urls[i]);
                 rel.Merge(base);
                 UNIT_ASSERT_VALUES_EQUAL_C(rel.PrintS(), urls[i + 1], urls[i]);
-
+ 
                 // try the same thing differently
                 er = rel.Parse(urls[i], mflag, urls[0]);
                 UNIT_ASSERT_VALUES_EQUAL_C(er, TState::ParsedOK, urls[i]);
                 UNIT_ASSERT_VALUES_EQUAL_C(rel.PrintS(), urls[i + 1], urls[i]);
-
+ 
                 // lastly...
                 er = abs.Parse(urls[i + 1], mflag);
                 UNIT_ASSERT_VALUES_EQUAL(er, TState::ParsedOK);
@@ -120,7 +120,7 @@ namespace NUri {
             const char* const result;
             TUri::TLinkType ltype;
         };
-
+ 
         static const Link4Norm link4Norm[] = {
             {"http://www.alltest.ru/all.php?a=aberporth", "http://www.alltest.ru/all.php?a=domestic jobs", "", TUri::LinkIsBad},
             {"http://www.alltest.ru/all.php?a=aberporth", "http://www.alltest.ru/all.php?a=domestic%20jobs", "http://www.alltest.ru/all.php?a=domestic%20jobs", TUri::LinkIsLocal},
@@ -130,7 +130,7 @@ namespace NUri {
 
         Y_UNIT_TEST(test_httpURLNormalize) {
             TUri normalizedLink;
-
+ 
             for (int i = 0; link4Norm[i].link; i++) {
                 TUri base;
                 TState::EParsed er = base.Parse(link4Norm[i].base);
@@ -141,14 +141,14 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL_C(s, link4Norm[i].result, link4Norm[i].link);
             }
         }
-
+ 
         static const char* urlsWithMultipleSlash[] = {
             "http://a/http://b", "http://a/http://b",
             "http://a/https://b", "http://a/https://b",
             "http://a/b://c", "http://a/b:/c",
             "http://a/b//c", "http://a/b/c",
             nullptr, nullptr};
-
+ 
         Y_UNIT_TEST(test_httpURLPathOperation) {
             char copyUrl[URL_MAXLEN];
             for (int i = 0; urlsWithMultipleSlash[i]; i += 2) {
@@ -164,7 +164,7 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL_C(uri.PrintS(), normurl, url);
             }
         }
-
+ 
         static const char* hostsForCheckHost[] = {
             "simplehost.ru",
             "third_level.host.ru",

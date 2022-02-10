@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defaults.h"
+#include "defaults.h" 
 
 #if defined(_win_)
     #include <winerror.h>
@@ -38,7 +38,7 @@
         #undef EWOULDBLOCK
         #undef ENAMETOOLONG
         #undef ENOTEMPTY
-
+ 
         #define EWOULDBLOCK WSAEWOULDBLOCK
         #define EINPROGRESS WSAEINPROGRESS
         #define EALREADY WSAEALREADY

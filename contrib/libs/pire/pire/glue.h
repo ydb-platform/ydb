@@ -97,7 +97,7 @@ private:
 				return ind;
 			}
 		}
-		return (size_t)-1;
+		return (size_t)-1; 
 	}
 
 	static size_t Hash(const key_type& st) {

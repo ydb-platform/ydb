@@ -1,9 +1,9 @@
-#pragma once
-
+#pragma once 
+ 
 #include "platform.h"
-
-#if defined(_win_)
-
+ 
+#if defined(_win_) 
+ 
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
     #endif
@@ -13,7 +13,7 @@
     #endif
 
     #include <windows.h>
-
+ 
     #undef GetFreeSpace
     #undef LoadImage
     #undef GetMessage
@@ -33,11 +33,11 @@
     #undef GetProp
     #undef SetProp
     #undef RemoveProp
-
+ 
     #undef IGNORE
     #undef ERROR
     #undef TRANSPARENT
-
+ 
     #undef CM_NONE
 
-#endif
+#endif 

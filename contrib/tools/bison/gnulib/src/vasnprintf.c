@@ -5575,10 +5575,10 @@ VASNPRINTF (DCHAR_T *resultbuf, size_t *lengthp,
     if (buf_malloced != NULL)
       free (buf_malloced);
     CLEANUP ();
-#if (defined _MSC_VER) && (_MSC_VER < 1800)
-#else
+#if (defined _MSC_VER) && (_MSC_VER < 1800) 
+#else 
     errno = EOVERFLOW;
-#endif
+#endif 
     return NULL;
 #endif
 

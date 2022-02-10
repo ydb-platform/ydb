@@ -9,7 +9,7 @@
 /// NBus::TBusSession.
 
 /// To implement the module some virtual functions needs to be overridden:
-
+ 
 /// NBus::TBusModule::CreateExtSession() creates and registers an
 /// external session that receives incoming messages as input for module
 /// processing.
@@ -18,13 +18,13 @@
 /// NBus::TBusJob is somewhat similar to a thread, it maintains all the state
 /// during processing of one incoming message. Default implementation of
 /// NBus::TBusJob will maintain all send and received messages during
-/// lifetime of this job. Each message, status and reply can be found
+/// lifetime of this job. Each message, status and reply can be found 
 /// within NBus::TJobState using NBus::TBusJob::GetState(). If your module
 /// needs to maintain an additional information during lifetime of the job
 /// you can derive your own class from NBus::TBusJob and override job
-/// factory method NBus::IJobFactory::CreateJobInstance() to create your instances.
+/// factory method NBus::IJobFactory::CreateJobInstance() to create your instances. 
 
-/// Processing of a given message starts with a call to NBus::TBusModule::Start()
+/// Processing of a given message starts with a call to NBus::TBusModule::Start() 
 /// handler that should be overridden in the module implementation. Within
 /// the callback handler module can perform any computation and access any
 /// datastore tables that it needs. The handler can also access any module
@@ -33,7 +33,7 @@
 
 /// Handler should use NBus::TBusJob::Send() to send messages to other client
 /// sessions and it can use NBus::TBusJob::Reply() to send reply to the main
-/// job message. When handler is done, it returns the pointer to the next handler to call
+/// job message. When handler is done, it returns the pointer to the next handler to call 
 /// when all pending messages have cleared. If handler
 /// returns pointer to itself the module will reschedule execution of this handler
 /// for a later time. This should be done in case NBus::TBusJob::Send() returns

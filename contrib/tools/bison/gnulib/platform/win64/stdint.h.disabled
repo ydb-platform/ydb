@@ -35,9 +35,9 @@
 #endif // _MSC_VER ]
 
 
-#ifndef _MSC_STDINT_H_
-
-#if _MSC_VER >= 1600
+#ifndef _MSC_STDINT_H_ 
+ 
+#if _MSC_VER >= 1600 
 #  ifndef __clang__
 #     include <../include/stdint.h>
 #  else
@@ -45,11 +45,11 @@
 #  endif
 #endif
 
-#ifndef _MSC_STDINT_H_
-#define _MSC_STDINT_H_
+#ifndef _MSC_STDINT_H_ 
+#define _MSC_STDINT_H_ 
 
-#if _MSC_VER < 1600
-
+#if _MSC_VER < 1600 
+ 
 #include <limits.h>
 
 // For Visual Studio 6 in C++ mode and for many Visual Studio versions when
@@ -259,7 +259,7 @@ typedef uint64_t  uintmax_t;
 
 #endif // __STDC_CONSTANT_MACROS ]
 
-#endif // _MSC_VER < 1600 ]
+#endif // _MSC_VER < 1600 ] 
 
 #endif // _MSC_STDINT_H_ ]
-#endif // _MSC_STDINT_H_ ]
+#endif // _MSC_STDINT_H_ ] 

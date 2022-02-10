@@ -5,12 +5,12 @@
 
 TUnbufferedFileInput::TUnbufferedFileInput(const TString& path)
     : File_(path, OpenExisting | RdOnly | Seq)
-{
+{ 
     if (!File_.IsOpen()) {
         ythrow TIoException() << "file " << path << " not open";
-    }
-}
-
+    } 
+} 
+ 
 TUnbufferedFileInput::TUnbufferedFileInput(const TFile& file)
     : File_(file)
 {
@@ -80,7 +80,7 @@ public:
     inline ~TImpl() = default;
 };
 
-TMappedFileInput::TMappedFileInput(const TFile& file)
+TMappedFileInput::TMappedFileInput(const TFile& file) 
     : TMemoryInput(nullptr, 0)
     , Impl_(new TImpl(file))
 {
@@ -90,8 +90,8 @@ TMappedFileInput::TMappedFileInput(const TFile& file)
 TMappedFileInput::TMappedFileInput(const TString& path)
     : TMemoryInput(nullptr, 0)
     , Impl_(new TImpl(TFile(path, OpenExisting | RdOnly)))
-{
+{ 
     Reset(Impl_->Data(), Impl_->Size());
-}
-
+} 
+ 
 TMappedFileInput::~TMappedFileInput() = default;

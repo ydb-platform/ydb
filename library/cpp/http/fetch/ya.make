@@ -1,5 +1,5 @@
 LIBRARY()
-
+ 
 OWNER(
     g:zora
 )
@@ -14,25 +14,25 @@ PEERDIR(
     library/cpp/uri
 )
 
-SRCS(
-    http_digest.cpp
-    http_socket.cpp
+SRCS( 
+    http_digest.cpp 
+    http_socket.cpp 
     httpheader.cpp
-    httpload.cpp
-    exthttpcodes.cpp
+    httpload.cpp 
+    exthttpcodes.cpp 
     httpfsm.rl6
-    httpagent.h
-    httpfetcher.h
-    httpheader.h
-    httpparser.h
-    httpzreader.h
+    httpagent.h 
+    httpfetcher.h 
+    httpheader.h 
+    httpparser.h 
+    httpzreader.h 
     sockhandler.h
-)
-
+) 
+ 
 GENERATE_ENUM_SERIALIZATION(httpheader.h)
 
 SET(RAGEL6_FLAGS -CF1)
 
-END()
+END() 
 
 RECURSE_FOR_TESTS(ut)

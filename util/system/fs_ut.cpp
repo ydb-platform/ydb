@@ -1,24 +1,24 @@
-#include "fs.h"
-
+#include "fs.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include "file.h"
 #include "sysstat.h"
 #include "fstat.h"
-#include <util/folder/dirut.h>
+#include <util/folder/dirut.h> 
 #include <util/folder/path.h>
-
+ 
 //WARNING: on windows the test must be run with administative rules
 
-class TFsTest: public TTestBase {
-    UNIT_TEST_SUITE(TFsTest);
+class TFsTest: public TTestBase { 
+    UNIT_TEST_SUITE(TFsTest); 
     UNIT_TEST(TestCreateRemove);
     UNIT_TEST(TestRename);
     UNIT_TEST(TestSymlink);
     UNIT_TEST(TestHardlink);
     UNIT_TEST(TestCwdOpts);
     UNIT_TEST(TestEnsureExists);
-    UNIT_TEST_SUITE_END();
+    UNIT_TEST_SUITE_END(); 
 
 public:
     void TestCreateRemove();
@@ -27,10 +27,10 @@ public:
     void TestHardlink();
     void TestCwdOpts();
     void TestEnsureExists();
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TFsTest);
-
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TFsTest); 
+ 
 static void Touch(const TFsPath& path) {
     TFile file(path, CreateAlways | WrOnly);
     file.Write("123", 3);
@@ -192,10 +192,10 @@ void TFsTest::TestHardlink() {
 }
 
 static void RunSymLinkTest(TString fileLocalName, TString symLinkName) {
-    // if previous running was failed
+    // if previous running was failed 
     TFsPath subDir = "tempsubdir";
     TFsPath srcFile = subDir / fileLocalName;
-
+ 
     TFsPath subsubDir1 = subDir / "dir1";
     TFsPath subsubDir2 = subDir / "dir2";
 
@@ -215,51 +215,51 @@ static void RunSymLinkTest(TString fileLocalName, TString symLinkName) {
     NFs::MakeDirectory(subDir);
     NFs::MakeDirectory(subsubDir1, NFs::FP_NONSECRET_FILE);
     NFs::MakeDirectory(subsubDir2, NFs::FP_SECRET_FILE);
-    {
+    { 
         TFile file(srcFile, CreateNew | WrOnly);
-        file.Write("1234567", 7);
-    }
+        file.Write("1234567", 7); 
+    } 
     UNIT_ASSERT(NFs::SymLink(subDir, linkD1));
     UNIT_ASSERT(NFs::SymLink("../dir2", linkD2));
     UNIT_ASSERT(NFs::SymLink("../dir3", dangling));
     UNIT_ASSERT_STRINGS_EQUAL(NFs::ReadLink(linkD2), TString("..") + LOCSLASH_S "dir2");
     UNIT_ASSERT_STRINGS_EQUAL(NFs::ReadLink(dangling), TString("..") + LOCSLASH_S "dir3");
-    {
+    { 
         TFile file(linkD1 / fileLocalName, OpenExisting | RdOnly);
-        UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 7);
-    }
+        UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 7); 
+    } 
     UNIT_ASSERT(NFs::SymLink(srcFile, symLinkName));
-    {
+    { 
         TFile file(symLinkName, OpenExisting | RdOnly);
-        UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 7);
-    }
-    {
+        UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 7); 
+    } 
+    { 
         TFileStat fs(linkD1);
-        UNIT_ASSERT(!fs.IsFile());
-        UNIT_ASSERT(fs.IsDir());
-        UNIT_ASSERT(!fs.IsSymlink());
-    }
-    {
+        UNIT_ASSERT(!fs.IsFile()); 
+        UNIT_ASSERT(fs.IsDir()); 
+        UNIT_ASSERT(!fs.IsSymlink()); 
+    } 
+    { 
         TFileStat fs(linkD1, true);
-        UNIT_ASSERT(!fs.IsFile());
-        //UNIT_ASSERT(fs.IsDir()); // failed on unix
-        UNIT_ASSERT(fs.IsSymlink());
-    }
-    {
+        UNIT_ASSERT(!fs.IsFile()); 
+        //UNIT_ASSERT(fs.IsDir()); // failed on unix 
+        UNIT_ASSERT(fs.IsSymlink()); 
+    } 
+    { 
         TFileStat fs(symLinkName);
-        UNIT_ASSERT(fs.IsFile());
-        UNIT_ASSERT(!fs.IsDir());
-        UNIT_ASSERT(!fs.IsSymlink());
+        UNIT_ASSERT(fs.IsFile()); 
+        UNIT_ASSERT(!fs.IsDir()); 
+        UNIT_ASSERT(!fs.IsSymlink()); 
         UNIT_ASSERT_VALUES_EQUAL(fs.Size, 7u);
-    }
+    } 
 
-    {
+    { 
         TFileStat fs(symLinkName, true);
         //UNIT_ASSERT(fs.IsFile()); // no evidence that symlink has to be a file as well
-        UNIT_ASSERT(!fs.IsDir());
-        UNIT_ASSERT(fs.IsSymlink());
-    }
-
+        UNIT_ASSERT(!fs.IsDir()); 
+        UNIT_ASSERT(fs.IsSymlink()); 
+    } 
+ 
     UNIT_ASSERT(NFs::Remove(symLinkName));
     UNIT_ASSERT(NFs::Exists(srcFile));
 
@@ -274,7 +274,7 @@ static void RunSymLinkTest(TString fileLocalName, TString symLinkName) {
     UNIT_ASSERT(NFs::Remove(subsubDir1));
     UNIT_ASSERT(NFs::Remove(subsubDir2));
     UNIT_ASSERT(NFs::Remove(subDir));
-}
+} 
 
 void TFsTest::TestSymlink() {
     // if previous running was failed

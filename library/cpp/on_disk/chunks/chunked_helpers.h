@@ -269,7 +269,7 @@ public:
             bits = 0;
         }
         WriteBin<ui16>(&out, bits);
-        WriteBin<ui32>(&out, (ui32)Data.size());
+        WriteBin<ui32>(&out, (ui32)Data.size()); 
 
         const ui32 nBuckets = ui32(1) << bits;
         TData2 data2(nBuckets);
@@ -281,8 +281,8 @@ public:
         ui32 offset = 0;
         for (ui32 i = 0; i < nBuckets; ++i) {
             intervals[i].Offset = offset;
-            intervals[i].Length = (ui32)data2[i].size();
-            offset += (ui32)data2[i].size();
+            intervals[i].Length = (ui32)data2[i].size(); 
+            offset += (ui32)data2[i].size(); 
         }
 #ifndef NDEBUG
         for (ui32 i = 0; i < nBuckets; ++i) {

@@ -1,13 +1,13 @@
 #include "file.h"
-#include "fs.h"
+#include "fs.h" 
 #include "tempfile.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/stream/file.h>
 #include <util/generic/yexception.h>
-
-class TFileTest: public TTestBase {
+ 
+class TFileTest: public TTestBase { 
     UNIT_TEST_SUITE(TFileTest);
     UNIT_TEST(TestOpen);
     UNIT_TEST(TestOpenSync);
@@ -115,45 +115,45 @@ public:
         UNIT_ASSERT_EQUAL(data.length(), 12);
         UNIT_ASSERT(data.StartsWith("12345"));
     }
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TFileTest);
-
-void TFileTest::TestOpen() {
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TFileTest); 
+ 
+void TFileTest::TestOpen() { 
     TString res;
-    TFile f1;
-
-    try {
-        TFile f2("f1.txt", OpenExisting);
-    } catch (const yexception& e) {
-        res = e.what();
-    }
-    UNIT_ASSERT(!res.empty());
-    res.remove();
-
-    try {
-        TFile f2("f1.txt", OpenAlways);
-        f1 = f2;
-    } catch (const yexception& e) {
-        res = e.what();
-    }
-    UNIT_ASSERT(res.empty());
-    UNIT_ASSERT(f1.IsOpen());
-    UNIT_ASSERT_VALUES_EQUAL(f1.GetName(), "f1.txt");
-    UNIT_ASSERT_VALUES_EQUAL(f1.GetLength(), 0);
-
-    try {
+    TFile f1; 
+ 
+    try { 
+        TFile f2("f1.txt", OpenExisting); 
+    } catch (const yexception& e) { 
+        res = e.what(); 
+    } 
+    UNIT_ASSERT(!res.empty()); 
+    res.remove(); 
+ 
+    try { 
+        TFile f2("f1.txt", OpenAlways); 
+        f1 = f2; 
+    } catch (const yexception& e) { 
+        res = e.what(); 
+    } 
+    UNIT_ASSERT(res.empty()); 
+    UNIT_ASSERT(f1.IsOpen()); 
+    UNIT_ASSERT_VALUES_EQUAL(f1.GetName(), "f1.txt"); 
+    UNIT_ASSERT_VALUES_EQUAL(f1.GetLength(), 0); 
+ 
+    try { 
         TFile f2("f1.txt", CreateNew);
-    } catch (const yexception& e) {
-        res = e.what();
-    }
-    UNIT_ASSERT(!res.empty());
-    res.remove();
-
-    f1.Close();
-    UNIT_ASSERT(unlink("f1.txt") == 0);
-}
-
+    } catch (const yexception& e) { 
+        res = e.what(); 
+    } 
+    UNIT_ASSERT(!res.empty()); 
+    res.remove(); 
+ 
+    f1.Close(); 
+    UNIT_ASSERT(unlink("f1.txt") == 0); 
+} 
+ 
 void TFileTest::TestOpenSync() {
     TFile f1("f1.txt", CreateNew | Sync);
     UNIT_ASSERT(f1.IsOpen());
@@ -162,60 +162,60 @@ void TFileTest::TestOpenSync() {
     UNIT_ASSERT(unlink("f1.txt") == 0);
 }
 
-void TFileTest::TestRW() {
+void TFileTest::TestRW() { 
     TFile f1("f1.txt", CreateNew);
-    UNIT_ASSERT(f1.IsOpen());
-    UNIT_ASSERT_VALUES_EQUAL(f1.GetName(), "f1.txt");
-    UNIT_ASSERT_VALUES_EQUAL(f1.GetLength(), 0);
-    ui32 d[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    UNIT_ASSERT(f1.IsOpen()); 
+    UNIT_ASSERT_VALUES_EQUAL(f1.GetName(), "f1.txt"); 
+    UNIT_ASSERT_VALUES_EQUAL(f1.GetLength(), 0); 
+    ui32 d[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}; 
     f1.Write(&d, sizeof(ui32) * 10);
-    UNIT_ASSERT_VALUES_EQUAL(f1.GetLength(), 40);
-    UNIT_ASSERT_VALUES_EQUAL(f1.GetPosition(), 40);
-    UNIT_ASSERT_VALUES_EQUAL(f1.Seek(12, sSet), 12);
-    f1.Flush();
-    ui32 v;
-    f1.Load(&v, sizeof(v));
+    UNIT_ASSERT_VALUES_EQUAL(f1.GetLength(), 40); 
+    UNIT_ASSERT_VALUES_EQUAL(f1.GetPosition(), 40); 
+    UNIT_ASSERT_VALUES_EQUAL(f1.Seek(12, sSet), 12); 
+    f1.Flush(); 
+    ui32 v; 
+    f1.Load(&v, sizeof(v)); 
     UNIT_ASSERT_VALUES_EQUAL(v, 3u);
-    UNIT_ASSERT_VALUES_EQUAL(f1.GetPosition(), 16);
-
-    TFile f2 = f1;
-    UNIT_ASSERT(f2.IsOpen());
-    UNIT_ASSERT_VALUES_EQUAL(f2.GetName(), "f1.txt");
-    UNIT_ASSERT_VALUES_EQUAL(f2.GetPosition(), 16);
-    UNIT_ASSERT_VALUES_EQUAL(f2.GetLength(), 40);
-    f2.Write(&v, sizeof(v));
-
-    UNIT_ASSERT_VALUES_EQUAL(f1.GetPosition(), 20);
-    UNIT_ASSERT_VALUES_EQUAL(f1.Seek(-4, sCur), 16);
-    v = 0;
-    f1.Load(&v, sizeof(v));
+    UNIT_ASSERT_VALUES_EQUAL(f1.GetPosition(), 16); 
+ 
+    TFile f2 = f1; 
+    UNIT_ASSERT(f2.IsOpen()); 
+    UNIT_ASSERT_VALUES_EQUAL(f2.GetName(), "f1.txt"); 
+    UNIT_ASSERT_VALUES_EQUAL(f2.GetPosition(), 16); 
+    UNIT_ASSERT_VALUES_EQUAL(f2.GetLength(), 40); 
+    f2.Write(&v, sizeof(v)); 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(f1.GetPosition(), 20); 
+    UNIT_ASSERT_VALUES_EQUAL(f1.Seek(-4, sCur), 16); 
+    v = 0; 
+    f1.Load(&v, sizeof(v)); 
     UNIT_ASSERT_VALUES_EQUAL(v, 3u);
-    f1.Close();
-    UNIT_ASSERT(!f1.IsOpen());
-    UNIT_ASSERT(!f2.IsOpen());
-    UNIT_ASSERT(unlink("f1.txt") == 0);
+    f1.Close(); 
+    UNIT_ASSERT(!f1.IsOpen()); 
+    UNIT_ASSERT(!f2.IsOpen()); 
+    UNIT_ASSERT(unlink("f1.txt") == 0); 
 }
 
-#ifdef _unix_
+#ifdef _unix_ 
     #include <locale.h>
-#endif
-
-void TFileTest::TestLocale() {
-#ifdef _unix_
+#endif 
+ 
+void TFileTest::TestLocale() { 
+#ifdef _unix_ 
     const char* loc = setlocale(LC_CTYPE, nullptr);
-    setlocale(LC_CTYPE, "ru_RU.UTF-8");
-#endif
-    TFile f("Имя.txt", CreateNew);
-    UNIT_ASSERT(f.IsOpen());
-    UNIT_ASSERT_VALUES_EQUAL(f.GetName(), "Имя.txt");
-    UNIT_ASSERT_VALUES_EQUAL(f.GetLength(), 0);
-    f.Close();
+    setlocale(LC_CTYPE, "ru_RU.UTF-8"); 
+#endif 
+    TFile f("Имя.txt", CreateNew); 
+    UNIT_ASSERT(f.IsOpen()); 
+    UNIT_ASSERT_VALUES_EQUAL(f.GetName(), "Имя.txt"); 
+    UNIT_ASSERT_VALUES_EQUAL(f.GetLength(), 0); 
+    f.Close(); 
     UNIT_ASSERT(NFs::Remove("Имя.txt"));
-#ifdef _unix_
-    setlocale(LC_CTYPE, loc);
-#endif
-}
-
+#ifdef _unix_ 
+    setlocale(LC_CTYPE, loc); 
+#endif 
+} 
+ 
 void TFileTest::TestFlush() {
     TTempFile tmp("tmp");
 

@@ -4,12 +4,12 @@
 
 #include <util/generic/ylimits.h>
 
-#ifdef _win_
+#ifdef _win_ 
     #include "winint.h"
 #else
     #include <fcntl.h>
-#endif
-
+#endif 
+ 
 class TSysErrorTest: public TTestBase {
     UNIT_TEST_SUITE(TSysErrorTest);
     UNIT_TEST(TestErrorCode)
@@ -30,11 +30,11 @@ private:
     }
 
     inline void GenFailure() {
-#ifdef _win_
+#ifdef _win_ 
         SetLastError(3);
-#else
+#else 
         UNIT_ASSERT(open("/non-existent", O_RDONLY) < 0);
-#endif
+#endif 
     }
 };
 

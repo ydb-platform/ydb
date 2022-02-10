@@ -1,6 +1,6 @@
 #include "mapped_file.h"
 
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 #include <util/system/defaults.h>
 #include <util/system/hi_lo.h>
 #include <util/system/filemap.h>
@@ -57,8 +57,8 @@ void TMappedFile::init(const TString& name, TFileMap::EOpenMode om) {
     Y_UNUSED(map.Release());
     newFile.swap(*this);
     newFile.term();
-}
-
+} 
+ 
 void TMappedFile::flush() {
     Map_->Flush();
 }

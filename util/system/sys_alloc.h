@@ -12,11 +12,11 @@ inline void* y_allocate(size_t n) {
         throw std::bad_alloc();
     }
 
-    return r;
+    return r; 
 }
 
 inline void y_deallocate(void* p) {
-    free(p);
+    free(p); 
 }
 
 /**
@@ -39,5 +39,5 @@ inline void* y_reallocate(void* p, size_t new_sz) {
         throw std::bad_alloc();
     }
 
-    return r;
+    return r; 
 }

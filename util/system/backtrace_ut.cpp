@@ -8,12 +8,12 @@
 using PFunc = int (*)(void**, size_t);
 
 int Dbg1(void** buf, size_t len) {
-    volatile int ret = (int)BackTrace(buf, len);
+    volatile int ret = (int)BackTrace(buf, len); 
     return ret;
 }
 
 int Dbg2(void** buf, size_t len) {
-    volatile int ret = (int)BackTrace(buf, len);
+    volatile int ret = (int)BackTrace(buf, len); 
     return ret;
 }
 

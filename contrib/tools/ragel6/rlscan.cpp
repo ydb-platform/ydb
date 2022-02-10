@@ -805,7 +805,7 @@ void Scanner::endSection( )
 bool isAbsolutePath( const char *path )
 {
 #ifdef _WIN32
-	return isalpha( path[0] ) && path[1] == ':' && (path[2] == '\\' || path[2] == '/');
+	return isalpha( path[0] ) && path[1] == ':' && (path[2] == '\\' || path[2] == '/'); 
 #else
 	return path[0] == '/';
 #endif
@@ -823,8 +823,8 @@ inline char* resolvePath(const char* rel, const char* abs) {
     strcpy(ret + l3, rel);
 
     return ret;
-}
-
+} 
+ 
 char **Scanner::makeIncludePathChecks( const char *thisFileName, 
 		const char *fileName, int fnlen )
 {
@@ -844,7 +844,7 @@ char **Scanner::makeIncludePathChecks( const char *thisFileName,
 		checks = new char*[2 + id.includePaths.length()];
 
 		/* Search from the the location of the current file. */
-		const char *lastSlash = strrchr( thisFileName, '/' );
+		const char *lastSlash = strrchr( thisFileName, '/' ); 
 		if ( lastSlash == 0 )
 			checks[nextCheck++] = data;
 		else {
@@ -857,7 +857,7 @@ char **Scanner::makeIncludePathChecks( const char *thisFileName,
 			long checkLen = pathLen + 1 + length;
 			char *check = new char[checkLen+1];
 			memcpy( check, *incp, pathLen );
-			check[pathLen] = '/';
+			check[pathLen] = '/'; 
 			memcpy( check+pathLen+1, data, length );
 			check[checkLen] = 0;
 			checks[nextCheck++] = check;

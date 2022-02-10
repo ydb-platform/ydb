@@ -2,7 +2,7 @@
 
 #define POLY_16 0x1021
 #define POLY_32 0xEDB88320UL
-#define POLY_64 ULL(0xE543279765927881)
+#define POLY_64 ULL(0xE543279765927881) 
 
 static void crc16init() {
     ui32 CRCTAB16[256];

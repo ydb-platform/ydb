@@ -62,19 +62,19 @@ Y_UNIT_TEST_SUITE(TDirutTest) {
         UNIT_ASSERT(resolvepath(path, base));
         UNIT_ASSERT(path == canon);
     }
-
+ 
     Y_UNIT_TEST(TestResolvePath) {
-#ifdef _win_
+#ifdef _win_ 
         DoTest("bar", "c:\\foo\\baz", "c:\\foo\\baz\\bar");
         DoTest("c:\\foo\\bar", "c:\\bar\\baz", "c:\\foo\\bar");
-#else
+#else 
         DoTest("bar", "/foo/baz", "/foo/bar");
         DoTest("/foo/bar", "/bar/baz", "/foo/bar");
 
     #ifdef NDEBUG
         DoTest("bar", "./baz", "./bar");
         #if 0 // should we support, for consistency, single-label dirs
-        DoTest("bar", "baz", "bar");
+        DoTest("bar", "baz", "bar"); 
         #endif
     #endif
 #endif

@@ -56,7 +56,7 @@ inline void YaDebugBreak() {
 
 #undef Y_ASSERT
 
-#if !defined(NDEBUG) && !defined(__GCCXML__)
+#if !defined(NDEBUG) && !defined(__GCCXML__) 
     #define Y_ASSERT(a)                                         \
         do {                                                    \
             try {                                               \

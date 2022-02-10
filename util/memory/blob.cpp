@@ -166,7 +166,7 @@ TBlob TBlob::SubBlob(size_t begin, size_t end) const {
 }
 
 TBlob TBlob::DeepCopy() const {
-    return TBlob::Copy(Data(), Length());
+    return TBlob::Copy(Data(), Length()); 
 }
 
 template <class TCounter>
@@ -184,11 +184,11 @@ static inline TBlob CopyConstruct(const void* data, size_t len) {
     return ret;
 }
 
-TBlob TBlob::CopySingleThreaded(const void* data, size_t length) {
+TBlob TBlob::CopySingleThreaded(const void* data, size_t length) { 
     return CopyConstruct<TSimpleCounter>(data, length);
 }
 
-TBlob TBlob::Copy(const void* data, size_t length) {
+TBlob TBlob::Copy(const void* data, size_t length) { 
     return CopyConstruct<TAtomicCounter>(data, length);
 }
 
@@ -292,11 +292,11 @@ TBlob TBlob::LockedFromMemoryMap(const TMemoryMap& map, ui64 offset, size_t leng
     return ConstructFromMap<TAtomicCounter>(map, offset, length, EMappingMode::Locked);
 }
 
-TBlob TBlob::FromMemoryMapSingleThreaded(const TMemoryMap& map, ui64 offset, size_t length) {
+TBlob TBlob::FromMemoryMapSingleThreaded(const TMemoryMap& map, ui64 offset, size_t length) { 
     return ConstructFromMap<TSimpleCounter>(map, offset, length, EMappingMode::Standard);
 }
 
-TBlob TBlob::FromMemoryMap(const TMemoryMap& map, ui64 offset, size_t length) {
+TBlob TBlob::FromMemoryMap(const TMemoryMap& map, ui64 offset, size_t length) { 
     return ConstructFromMap<TAtomicCounter>(map, offset, length, EMappingMode::Standard);
 }
 
@@ -334,34 +334,34 @@ TBlob TBlob::FromFileContent(const TString& path) {
     return ConstructFromFileContent<TAtomicCounter>(file, 0, file.GetLength());
 }
 
-TBlob TBlob::FromFileContentSingleThreaded(const TFile& file) {
+TBlob TBlob::FromFileContentSingleThreaded(const TFile& file) { 
     return ConstructFromFileContent<TSimpleCounter>(file, 0, file.GetLength());
 }
 
-TBlob TBlob::FromFileContent(const TFile& file) {
+TBlob TBlob::FromFileContent(const TFile& file) { 
     return ConstructFromFileContent<TAtomicCounter>(file, 0, file.GetLength());
 }
 
-TBlob TBlob::FromFileContentSingleThreaded(const TFile& file, ui64 offset, size_t length) {
+TBlob TBlob::FromFileContentSingleThreaded(const TFile& file, ui64 offset, size_t length) { 
     return ConstructFromFileContent<TSimpleCounter>(file, offset, length);
 }
 
-TBlob TBlob::FromFileContent(const TFile& file, ui64 offset, size_t length) {
+TBlob TBlob::FromFileContent(const TFile& file, ui64 offset, size_t length) { 
     return ConstructFromFileContent<TAtomicCounter>(file, offset, length);
 }
 
 template <class TCounter>
-static inline TBlob ConstructFromBuffer(TBuffer& in) {
+static inline TBlob ConstructFromBuffer(TBuffer& in) { 
     using TBase = TBufferBlobBase<TCounter>;
-    THolder<TBase> base(new TBase(in));
-
-    TBlob ret(base->Buffer().Data(), base->Buffer().Size(), base.Get());
+    THolder<TBase> base(new TBase(in)); 
+ 
+    TBlob ret(base->Buffer().Data(), base->Buffer().Size(), base.Get()); 
     Y_UNUSED(base.Release());
-
-    return ret;
-}
-
-template <class TCounter>
+ 
+    return ret; 
+} 
+ 
+template <class TCounter> 
 static inline TBlob ConstructFromStream(IInputStream& in) {
     TBuffer buf;
 
@@ -371,7 +371,7 @@ static inline TBlob ConstructFromStream(IInputStream& in) {
         TransferData(&in, &out);
     }
 
-    return ConstructFromBuffer<TCounter>(buf);
+    return ConstructFromBuffer<TCounter>(buf); 
 }
 
 TBlob TBlob::FromStreamSingleThreaded(IInputStream& in) {
@@ -381,14 +381,14 @@ TBlob TBlob::FromStreamSingleThreaded(IInputStream& in) {
 TBlob TBlob::FromStream(IInputStream& in) {
     return ConstructFromStream<TAtomicCounter>(in);
 }
-
-TBlob TBlob::FromBufferSingleThreaded(TBuffer& in) {
-    return ConstructFromBuffer<TSimpleCounter>(in);
-}
-
-TBlob TBlob::FromBuffer(TBuffer& in) {
-    return ConstructFromBuffer<TAtomicCounter>(in);
-}
+ 
+TBlob TBlob::FromBufferSingleThreaded(TBuffer& in) { 
+    return ConstructFromBuffer<TSimpleCounter>(in); 
+} 
+ 
+TBlob TBlob::FromBuffer(TBuffer& in) { 
+    return ConstructFromBuffer<TAtomicCounter>(in); 
+} 
 
 template <class TCounter, class S>
 TBlob ConstructFromString(S&& s) {

@@ -134,5 +134,5 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
         UNIT_ASSERT_EQUAL(abs1 == "Very long description string written in unknown language.", true);
         UNIT_ASSERT_EQUAL(abs2 == "Very long description string written in unknown ...", true);
         UNIT_ASSERT_EQUAL(abs3 == "Very long description string written in ...", true);
-    }
+    } 
 }

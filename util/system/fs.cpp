@@ -1,9 +1,9 @@
-#include "fs.h"
-#include "defaults.h"
+#include "fs.h" 
+#include "defaults.h" 
 
 #if defined(_win_)
     #include "fs_win.h"
-#else
+#else 
     #include <unistd.h>
     #include <errno.h>
 #endif
@@ -11,17 +11,17 @@
 #include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>
 #include <util/stream/file.h>
-#include <util/charset/wide.h>
+#include <util/charset/wide.h> 
 #include <util/folder/iterator.h>
 #include <util/system/fstat.h>
 #include <util/folder/path.h>
 
 bool NFs::Remove(const TString& path) {
-#if defined(_win_)
+#if defined(_win_) 
     return NFsPrivate::WinRemove(path);
-#else
+#else 
     return ::remove(path.data()) == 0;
-#endif
+#endif 
 }
 
 void NFs::RemoveRecursive(const TString& path) {
@@ -107,19 +107,19 @@ bool NFs::HardLink(const TString& existingPath, const TString& newPath) {
 }
 
 bool NFs::SymLink(const TString& targetPath, const TString& linkPath) {
-#if defined(_win_)
+#if defined(_win_) 
     return NFsPrivate::WinSymLink(targetPath, linkPath);
-#elif defined(_unix_)
+#elif defined(_unix_) 
     return 0 == symlink(targetPath.data(), linkPath.data());
-#endif
-}
-
+#endif 
+} 
+ 
 TString NFs::ReadLink(const TString& path) {
-#if defined(_win_)
+#if defined(_win_) 
     return NFsPrivate::WinReadLink(path);
-#elif defined(_unix_)
-    TTempBuf buf;
-    while (true) {
+#elif defined(_unix_) 
+    TTempBuf buf; 
+    while (true) { 
         ssize_t r = readlink(path.data(), buf.Data(), buf.Size());
         if (r < 0) {
             ythrow yexception() << "can't read link " << path << ", errno = " << errno;
@@ -127,11 +127,11 @@ TString NFs::ReadLink(const TString& path) {
         if (r < (ssize_t)buf.Size()) {
             return TString(buf.Data(), r);
         }
-        buf = TTempBuf(buf.Size() * 2);
-    }
-#endif
-}
-
+        buf = TTempBuf(buf.Size() * 2); 
+    } 
+#endif 
+} 
+ 
 void NFs::Cat(const TString& dstPath, const TString& srcPath) {
     TUnbufferedFileInput src(srcPath);
     TUnbufferedFileOutput dst(TFile(dstPath, ForAppend | WrOnly | Seq));

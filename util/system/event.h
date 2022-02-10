@@ -1,15 +1,15 @@
 #pragma once
-
+ 
 #include <util/generic/ptr.h>
 #include <util/datetime/base.h>
-
+ 
 struct TEventResetType {
     enum ResetMode {
         rAuto,   // the state will be nonsignaled after Wait() returns
         rManual, // we need call Reset() to set the state to nonsignaled.
     };
 };
-
+ 
 /**
  * DEPRECATED!
  *
@@ -23,7 +23,7 @@ public:
     TSystemEvent& operator=(const TSystemEvent& other) noexcept;
 
     ~TSystemEvent();
-
+ 
     void Reset() noexcept;
     void Signal() noexcept;
 

@@ -4,7 +4,7 @@
 #include <util/string/ascii.h>
 #include <util/system/defaults.h>
 
-#include <cstdlib>
+#include <cstdlib> 
 #include <util/generic/noncopyable.h>
 
 class TGlobalImpl : TNonCopyable {
@@ -24,7 +24,7 @@ private:
     };
 
 private:
-    void CopyResults(int count) {
+    void CopyResults(int count) { 
         for (int i = 0; i < count; i++) {
             Pmatch[MatchPos].rm_so = MatchBuf[2 * i];
             Pmatch[MatchPos].rm_eo = MatchBuf[2 * i + 1];
@@ -35,7 +35,7 @@ private:
         }
     }
 
-    int DoPcreExec(int opts) {
+    int DoPcreExec(int opts) { 
         int rc = pcre_exec(
             PregComp,    /* the compiled pattern */
             nullptr,     /* no extra data - we didn't study the pattern */
@@ -89,7 +89,7 @@ public:
         StrLen = strlen(Str);
     }
 
-    int ExecGlobal() {
+    int ExecGlobal() { 
         StartOffset = 0;
         int rc = DoPcreExec(Options);
 

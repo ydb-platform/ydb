@@ -64,27 +64,27 @@ namespace NPackers {
         }
     }
 
-    namespace NImpl {
-        template <class T, bool isSigned>
-        struct TConvertImpl {
-            static inline ui64 Convert(const T& data);
-        };
-
-        template <class T>
-        struct TConvertImpl<T, true> {
-            static inline ui64 Convert(const T& data) {
-                return ConvertIntegral<i64>(static_cast<i64>(data));
-            }
-        };
-
-        template <class T>
-        struct TConvertImpl<T, false> {
-            static inline ui64 Convert(const T& data) {
-                return data;
-            }
-        };
-    }
-
+    namespace NImpl { 
+        template <class T, bool isSigned> 
+        struct TConvertImpl { 
+            static inline ui64 Convert(const T& data); 
+        }; 
+ 
+        template <class T> 
+        struct TConvertImpl<T, true> { 
+            static inline ui64 Convert(const T& data) { 
+                return ConvertIntegral<i64>(static_cast<i64>(data)); 
+            } 
+        }; 
+ 
+        template <class T> 
+        struct TConvertImpl<T, false> { 
+            static inline ui64 Convert(const T& data) { 
+                return data; 
+            } 
+        }; 
+    } 
+ 
     template <class T>
     inline ui64 ConvertIntegral(const T& data) {
         static_assert(std::is_integral<T>::value, "T must be integral type");
@@ -149,33 +149,33 @@ namespace NPackers {
         return SkipTable[(ui8)*p];
     }
 
-    namespace NImpl {
-        template <class T, bool isSigned>
-        struct TUnpackLeafImpl {
+    namespace NImpl { 
+        template <class T, bool isSigned> 
+        struct TUnpackLeafImpl { 
             inline void UnpackLeaf(const char* p, T& t) const;
-        };
-        template <class T>
-        struct TUnpackLeafImpl<T, true> {
+        }; 
+        template <class T> 
+        struct TUnpackLeafImpl<T, true> { 
             inline void UnpackLeaf(const char* p, T& t) const {
                 ui64 val;
                 TIntegralPacker<ui64>().UnpackLeaf(p, val);
-                if (val & 1) {
+                if (val & 1) { 
                     t = -1 * static_cast<i64>(val >> 1);
-                } else {
+                } else { 
                     t = static_cast<T>(val >> 1);
-                }
-            }
-        };
-        template <class T>
-        struct TUnpackLeafImpl<T, false> {
+                } 
+            } 
+        }; 
+        template <class T> 
+        struct TUnpackLeafImpl<T, false> { 
             inline void UnpackLeaf(const char* p, T& t) const {
                 ui64 tmp;
                 TIntegralPacker<ui64>().UnpackLeaf(p, tmp);
                 t = static_cast<T>(tmp);
-            }
-        };
-    }
-
+            } 
+        }; 
+    } 
+ 
     template <class T>
     inline void TIntegralPacker<T>::UnpackLeaf(const char* p, T& t) const {
         NImpl::TUnpackLeafImpl<T, std::is_signed<T>::value>().UnpackLeaf(p, t);

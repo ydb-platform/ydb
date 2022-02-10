@@ -1,4 +1,4 @@
-#include "fstat.h"
+#include "fstat.h" 
 #include "file.h"
 
 #include <sys/stat.h>
@@ -16,20 +16,20 @@
     #define _S_IFLNK 0x80000000
 
 ui32 GetFileMode(DWORD fileAttributes) {
-    ui32 mode = 0;
-    if (fileAttributes == 0xFFFFFFFF)
-        return mode;
+    ui32 mode = 0; 
+    if (fileAttributes == 0xFFFFFFFF) 
+        return mode; 
     if (fileAttributes & FILE_ATTRIBUTE_DEVICE)
-        mode |= _S_IFCHR;
+        mode |= _S_IFCHR; 
     if (fileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
-        mode |= _S_IFLNK; // todo: was undefined by the moment of writing this code
+        mode |= _S_IFLNK; // todo: was undefined by the moment of writing this code 
     if (fileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-        mode |= _S_IFDIR;
-    if (fileAttributes & (FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE))
-        mode |= _S_IFREG;
+        mode |= _S_IFDIR; 
+    if (fileAttributes & (FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE)) 
+        mode |= _S_IFREG; 
     if ((fileAttributes & FILE_ATTRIBUTE_READONLY) == 0)
         mode |= _S_IWRITE;
-    return mode;
+    return mode; 
 }
 
     #define S_ISDIR(st_mode) (st_mode & _S_IFDIR)
@@ -57,21 +57,21 @@ static void MakeStat(TFileStat& st, const TSystemFStat& fs) {
     st.CTime = fs.st_ctime;
     st.INode = fs.st_ino;
 #else
-    timeval tv;
+    timeval tv; 
     FileTimeToTimeval(&fs.ftCreationTime, &tv);
-    st.CTime = tv.tv_sec;
+    st.CTime = tv.tv_sec; 
     FileTimeToTimeval(&fs.ftLastAccessTime, &tv);
-    st.ATime = tv.tv_sec;
+    st.ATime = tv.tv_sec; 
     FileTimeToTimeval(&fs.ftLastWriteTime, &tv);
-    st.MTime = tv.tv_sec;
+    st.MTime = tv.tv_sec; 
     st.NLinks = fs.nNumberOfLinks;
     st.Mode = GetFileMode(fs.dwFileAttributes);
-    st.Uid = 0;
-    st.Gid = 0;
+    st.Uid = 0; 
+    st.Gid = 0; 
     st.Size = ((ui64)fs.nFileSizeHigh << 32) | fs.nFileSizeLow;
     st.AllocationSize = st.Size; // FIXME
     st.INode = ((ui64)fs.nFileIndexHigh << 32) | fs.nFileIndexLow;
-#endif
+#endif 
 }
 
 static bool GetStatByHandle(TSystemFStat& fs, FHANDLE f) {
@@ -147,7 +147,7 @@ bool TFileStat::IsDir() const noexcept {
 bool TFileStat::IsSymlink() const noexcept {
     return S_ISLNK(Mode);
 }
-
+ 
 bool operator==(const TFileStat& l, const TFileStat& r) noexcept {
     return l.Mode == r.Mode &&
            l.Uid == r.Uid &&
@@ -163,27 +163,27 @@ bool operator!=(const TFileStat& l, const TFileStat& r) noexcept {
     return !(l == r);
 }
 
-i64 GetFileLength(FHANDLE fd) {
+i64 GetFileLength(FHANDLE fd) { 
 #if defined(_win_)
-    LARGE_INTEGER pos;
-    if (!::GetFileSizeEx(fd, &pos))
-        return -1L;
-    return pos.QuadPart;
+    LARGE_INTEGER pos; 
+    if (!::GetFileSizeEx(fd, &pos)) 
+        return -1L; 
+    return pos.QuadPart; 
 #elif defined(_unix_)
-    struct stat statbuf;
+    struct stat statbuf; 
     if (::fstat(fd, &statbuf) != 0) {
-        return -1L;
+        return -1L; 
     }
     if (!(statbuf.st_mode & (S_IFREG | S_IFBLK | S_IFCHR))) {
         // st_size only makes sense for regular files or devices
         errno = EINVAL;
         return -1L;
     }
-    return statbuf.st_size;
-#else
+    return statbuf.st_size; 
+#else 
     #error unsupported platform
-#endif
-}
+#endif 
+} 
 
 i64 GetFileLength(const char* name) {
 #if defined(_win_)

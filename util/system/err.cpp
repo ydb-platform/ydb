@@ -1,4 +1,4 @@
-#include "defaults.h"
+#include "defaults.h" 
 #include "progname.h"
 #include "compat.h"
 #include "error.h"
@@ -21,7 +21,7 @@ void vwarnx(const char* fmt, va_list args) {
 void vwarn(const char* fmt, va_list args) {
     int curErrNo = errno;
     auto curErrText = LastSystemErrorText();
-
+ 
     Y_DEFER {
         errno = curErrNo;
     };

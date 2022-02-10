@@ -7,8 +7,8 @@
 
 class TMemoryMap;
 class IInputStream;
-class TFile;
-class TBuffer;
+class TFile; 
+class TBuffer; 
 
 enum class EMappingMode {
     /// Just mmap a file allowing lazy page loading at access
@@ -289,11 +289,11 @@ public:
     /// Creates a blob with a single-threaded (non atomic) refcounter. No memory allocation, no content copy.
     /// @details The input object becomes empty.
     static TBlob FromBufferSingleThreaded(TBuffer& in);
-
+ 
     /// Creates a blob with a multi-threaded (atomic) refcounter. No memory allocation, no content copy.
     /// @details The input object becomes empty.
     static TBlob FromBuffer(TBuffer& in);
-
+ 
     /// Creates a blob from TString with a single-threaded (non atomic) refcounter.
     static TBlob FromStringSingleThreaded(const TString& s);
 

@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         char data[] = "abcdefgh";
 
         TFile file(FileName_, CreateAlways | WrOnly);
-        file.Write(static_cast<void*>(data), sizeof(data));
+        file.Write(static_cast<void*>(data), sizeof(data)); 
         file.Close();
 
         {
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             size_t sz = sizeof(data) / sizeof(data[0]);
 
             TFile file(FileName_, CreateAlways | WrOnly);
-            file.Write(static_cast<void*>(data), sizeof(data));
+            file.Write(static_cast<void*>(data), sizeof(data)); 
             file.Close();
 
             mappedArray.Init(FileName_);
@@ -253,8 +253,8 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
             // actual test end
 
             file = TFile(FileName_, WrOnly);
-            file.Seek(0, sEnd);
-            file.Write("x", 1);
+            file.Seek(0, sEnd); 
+            file.Write("x", 1); 
             file.Close();
 
             bool caught = false;
@@ -279,7 +279,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         UNIT_ASSERT(mappedArray.begin() + sz == mappedArray.end());
 
         for (size_t i = 0; i < sz; ++i) {
-            mappedArray[i] = (ui32)i;
+            mappedArray[i] = (ui32)i; 
         }
         for (size_t i = 0; i < sz; ++i) {
             UNIT_ASSERT(mappedArray[i] == i);
@@ -287,7 +287,7 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
 
         TMappedArray<ui32> mappedArray2(1000);
         mappedArray.swap(mappedArray2);
-        UNIT_ASSERT(mappedArray.size() == 1000 && mappedArray2.size() == sz);
+        UNIT_ASSERT(mappedArray.size() == 1000 && mappedArray2.size() == sz); 
     }
 
     Y_UNIT_TEST(TestMemoryMap) {

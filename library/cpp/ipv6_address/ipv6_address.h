@@ -19,8 +19,8 @@
 namespace NAddr {
     class IRemoteAddr;
 }
-struct in6_addr;
-struct in_addr;
+struct in6_addr; 
+struct in_addr; 
 struct sockaddr;
 struct sockaddr_in;
 struct sockaddr_in6;

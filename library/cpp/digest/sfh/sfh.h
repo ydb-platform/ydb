@@ -6,9 +6,9 @@
 inline ui32 SuperFastHash(const void* d, size_t l) noexcept {
     ui32 hash = (ui32)l;
     ui32 tmp;
-
+ 
     if (!l || !d)
-        return 0;
+        return 0; 
 
     TUnalignedMemoryIterator<ui16, 4> iter(d, l);
 

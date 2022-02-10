@@ -55,7 +55,7 @@ struct NullClient : TBusClientHandlerError {
         UNIT_ASSERT(serverAddr.GetPort() > 0);
 
         /// create or get instance of message queue, need one per application
-        Queue = CreateMessageQueue();
+        Queue = CreateMessageQueue(); 
 
         /// register source/client session
         Session = TBusClientSession::Create(&Proto, this, sessionConfig, Queue);
@@ -99,7 +99,7 @@ public:
         NumMessages = 0;
 
         /// create or get instance of single message queue, need one for application
-        Queue = CreateMessageQueue();
+        Queue = CreateMessageQueue(); 
 
         /// register destination session
         TBusServerSessionConfig sessionConfig;

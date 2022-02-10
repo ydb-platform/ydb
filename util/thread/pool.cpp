@@ -1,7 +1,7 @@
 #include <atomic>
 
 #include <util/system/defaults.h>
-
+ 
 #if defined(_unix_)
     #include <pthread.h>
 #endif
@@ -21,7 +21,7 @@
 #include <util/system/atomic.h>
 #include <util/system/condvar.h>
 #include <util/system/thread.h>
-
+ 
 #include <util/datetime/base.h>
 
 #include "factory.h"
@@ -122,7 +122,7 @@ public:
             }
 
             Queue.Push(obj);
-        }
+        } 
 
         QueuePushCond.Signal();
 
@@ -357,8 +357,8 @@ bool TThreadPool::Add(IObjectInQueue* obj) {
     }
 
     return Impl_->Add(obj);
-}
-
+} 
+ 
 void TThreadPool::Start(size_t thrnum, size_t maxque) {
     Impl_.Reset(new TImpl(this, thrnum, maxque, Params));
 }

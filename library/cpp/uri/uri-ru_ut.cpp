@@ -2,7 +2,7 @@
 #include <library/cpp/charset/recyr.hh>
 #include <library/cpp/html/entity/htmlentity.h>
 #include <util/system/maxlen.h>
-
+ 
 namespace NUri {
     namespace {
         TString AsWin1251(const TString& s) {
@@ -70,7 +70,7 @@ namespace NUri {
 
             "images\nil.jpg", "images%0Ail.jpg",
             "http://caedebaturque.termez.su\r\n/?article=218", "http://caedebaturque.termez.su%0D%0A/?article=218",
-
+ 
             AsKoi8("javascript:window.external.AddFavorite(\'http://www.humor.look.ru/\',\'Злобные Деды Морозы!!!\')"), "javascript:window.external.AddFavorite(\'http://www.humor.look.ru/\',\'%FA%CC%CF%C2%CE%D9%C5%20%E4%C5%C4%D9%20%ED%CF%D2%CF%DA%D9!!!\')",
             "search.php?search_author=%CB%FE%E4%EC%E8%EB%E0+%C3%F3%F1%E5%E2%E0&amp;showresults=posts&amp;sid=8", "search.php?search_author=%CB%FE%E4%EC%E8%EB%E0+%C3%F3%F1%E5%E2%E0&showresults=posts&sid=8",
             AsWin1251("/Search/author/?q=Штрибель Х.В."), "/Search/author/?q=%D8%F2%F0%E8%E1%E5%EB%FC%20%D5.%C2.",
@@ -108,7 +108,7 @@ namespace NUri {
             "/a-mp3/stype-1/?search=Э", "/a-mp3/stype-1/?search=%D0%AD",
             "/a-mp3/stype-1/?search=Ю", "/a-mp3/stype-1/?search=%D0%AE",
             "/a-mp3/stype-1/?search=Я", "/a-mp3/stype-1/?search=%D0%AF",
-
+ 
             "javascript:emoticon(\":&#39;(\")", "javascript:emoticon(\":\'(\")",
             "javascript:emoticon(\'&gt;:o\')", "javascript:emoticon(\'>:o\')",
             "javascript:emoticon(\']:-&gt;\')", "javascript:emoticon(\']:->\')",
@@ -119,7 +119,7 @@ namespace NUri {
             "&quot;http://www.fubix.ru&quot;", "\"http://www.fubix.ru\"",
             AsWin1251("mailto:&#107;&#97;&#109;&#112;&#97;&#64;&#117;&#107;&#114;&#46;&#110;&#101;&#116;?subject=Арабский язык"), "mailto:kampa@ukr.net?subject=%C0%F0%E0%E1%F1%EA%E8%E9%20%FF%E7%FB%EA",
             {}};
-
+ 
         Y_UNIT_TEST(testHtLinkDecode) {
             char decodedlink[URL_MAXLEN + 10];
             for (int i = 0; links[i]; i += 2) {
@@ -127,7 +127,7 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL(decodedlink, links[i + 1]);
             }
         }
-
+ 
         Y_UNIT_TEST(testRuIDNA) {
             {
 #define DEC "\xD7\xE5\xF0\xE5\xEf\xEE\xE2\xE5\xF6.\xF0\xF4" /* "Череповец.рф" in Windows-1251 */
@@ -160,4 +160,4 @@ namespace NUri {
         }
     }
 
-}
+} 

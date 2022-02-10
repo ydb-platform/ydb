@@ -64,10 +64,10 @@ snprintf (char *str, size_t size, const char *format, ...)
 
   if (INT_MAX < len)
     {
-#if (defined _MSC_VER) && (MSC_VER < 1800)
-#else
+#if (defined _MSC_VER) && (MSC_VER < 1800) 
+#else 
       errno = EOVERFLOW;
-#endif
+#endif 
       return -1;
     }
 

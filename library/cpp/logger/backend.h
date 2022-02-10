@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "priority.h"
 
 #include <util/generic/noncopyable.h>
@@ -7,7 +7,7 @@
 #include <cstddef>
 
 struct TLogRecord;
-
+ 
 // NOTE: be aware that all `TLogBackend`s are registred in singleton.
 class TLogBackend: public TNonCopyable {
 public:

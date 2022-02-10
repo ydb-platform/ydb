@@ -323,10 +323,10 @@ c_stack_action (void (*action) (int))
 int
 c_stack_action (void (*action) (int)  __attribute__ ((unused)))
 {
-#if (defined _MSC_VER) && (_MSC_VER < 1800)
-#else
+#if (defined _MSC_VER) && (_MSC_VER < 1800) 
+#else 
   errno = ENOTSUP;
-#endif
+#endif 
   return -1;
 }
 

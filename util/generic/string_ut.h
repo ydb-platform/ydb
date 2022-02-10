@@ -578,23 +578,23 @@ public:
         // append family
         s.append(Data.x());
         UNIT_ASSERT(s == Data._0123456x());
-
+ 
 #ifdef TSTRING_IS_STD_STRING
         s.append(Data.xyz() + 1, 1);
 #else
         s.append(Data.xyz(), 1, 1);
 #endif
         UNIT_ASSERT(s == Data._0123456xy());
-
+ 
         s.append(TStringType(Data.z()));
         UNIT_ASSERT(s == Data._0123456xyz());
-
+ 
         s.append(TStringType(Data.XYZ()), 2, 1);
         UNIT_ASSERT(s == Data._0123456xyzZ());
-
+ 
         s.append(*Data._0());
         UNIT_ASSERT(s == Data._0123456xyzZ0());
-
+ 
         // prepend family
         s = Data._0123456xyz();
         s.prepend(TStringType(Data.abc()));
@@ -649,7 +649,7 @@ public:
         UNIT_ASSERT(s.at(s.size()) == 0);
         UNIT_ASSERT(s[s.size()] == 0);
     }
-
+ 
 #ifndef TSTRING_IS_STD_STRING
     void TestRefCount() {
         using TStr = TStringType;
@@ -682,12 +682,12 @@ public:
 
         UNIT_ASSERT(s.find(Data._345()) == 3);
         UNIT_ASSERT(s.find(Data._345(), 5) == 10);
-
+ 
         UNIT_ASSERT(s.find(Data._345(), 20) == TStringType::npos);
         UNIT_ASSERT(s.find(*Data._3()) == 3);
         UNIT_ASSERT(s.find(TStringType(Data._345())) == 3);
         UNIT_ASSERT(s.find(TStringType(Data._345()), 2) == 3);
-
+ 
         UNIT_ASSERT(s.find_first_of(TStringType(Data._389())) == 3);
         UNIT_ASSERT(s.find_first_of(Data._389()) == 3);
         UNIT_ASSERT(s.find_first_of(Data._389(), s.size()) == TStringType::npos);
@@ -696,7 +696,7 @@ public:
         UNIT_ASSERT(s.find_first_of('1', 2) == 8);
         UNIT_ASSERT(s.find_first_not_of('0') == 1);
         UNIT_ASSERT(s.find_first_not_of('1', 1) == 2);
-
+ 
         const TStringType rs = Data._0123401234();
         UNIT_ASSERT(rs.rfind(*Data._3()) == 8);
 
@@ -720,8 +720,8 @@ public:
         UNIT_ASSERT(s.rfind(TStringType(Data._345()), 6) == 3);
         UNIT_ASSERT(s.rfind(TStringType(Data._345()), 3) == 3);
         UNIT_ASSERT(s.rfind(TStringType(Data._345()), 2) == TStringType::npos);
-    }
-
+    } 
+ 
     void TestContains() {
         const TStringType s(Data._0123456_12345());
         const TStringType s2(Data._0123());
@@ -743,7 +743,7 @@ public:
 
     void TestOperators() {
         TStringType s(Data._0123456());
-
+ 
         // operator +=
         s += TStringType(Data.x());
         UNIT_ASSERT(s == Data._0123456x());

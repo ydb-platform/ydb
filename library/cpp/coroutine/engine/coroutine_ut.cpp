@@ -282,7 +282,7 @@ void TCoroTest::TestMutex() {
     TContExecutor e(32000);
     e.Execute(CoMutexTest);
     UNIT_ASSERT_EQUAL(res, "1212");
-    res.clear();
+    res.clear(); 
 }
 
 static TContMutex m1;
@@ -322,7 +322,7 @@ void TCoroTest::TestCondVar() {
     TContExecutor e(32000);
     e.Execute(CoCondVarTest);
     UNIT_ASSERT_EQUAL(res, "0^1234561^1234562^123456");
-    res.clear();
+    res.clear(); 
 }
 
 namespace NCoroTestJoin {

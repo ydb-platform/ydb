@@ -398,15 +398,15 @@ public:
         Y_ASSERT(resultCount >= 0);
         (void)resultCount;
     }
-
+ 
     TRefCounted(const TRefCounted&)
         : Counter_(0)
     {
     }
-
+ 
     void operator=(const TRefCounted&) {
     }
-
+ 
 private:
     C Counter_;
 };
@@ -459,10 +459,10 @@ public:
 
         t->UnRef();
     }
-
+ 
     static inline void DecRef(T* t) noexcept {
         Y_ASSERT(t);
-
+ 
         t->DecRef();
     }
 
@@ -571,10 +571,10 @@ public:
         if (T_) {
             Ops::DecRef(T_);
             T_ = nullptr;
-        }
+        } 
         return res;
     }
-
+ 
     inline long RefCount() const noexcept {
         return T_ ? Ops::RefCount(T_) : 0;
     }

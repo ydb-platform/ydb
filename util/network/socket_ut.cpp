@@ -312,29 +312,29 @@ void TPollTest::TestPollInOut() {
         }
     }
 
-    int expectedCount = 0;
+    int expectedCount = 0; 
     for (size_t i = 0; i < connectedSockets.size(); ++i) {
         pollfd fd = {(i % 5 == 4) ? INVALID_SOCKET : static_cast<SOCKET>(*connectedSockets[i]), POLLIN | POLLOUT, 0};
         fds.push_back(fd);
-        if (i % 5 != 4)
-            ++expectedCount;
+        if (i % 5 != 4) 
+            ++expectedCount; 
     }
 
     int polledCount = poll(&fds[0], fds.size(), INFTIM);
-    UNIT_ASSERT_EQUAL(expectedCount, polledCount);
+    UNIT_ASSERT_EQUAL(expectedCount, polledCount); 
 
     for (size_t i = 0; i < connectedSockets.size(); ++i) {
-        short revents = fds[i].revents;
+        short revents = fds[i].revents; 
         if (i % 5 == 0) {
-            UNIT_ASSERT_EQUAL(static_cast<short>(POLLRDNORM | POLLWRNORM), revents);
+            UNIT_ASSERT_EQUAL(static_cast<short>(POLLRDNORM | POLLWRNORM), revents); 
         } else if (i % 5 == 1) {
-            UNIT_ASSERT_EQUAL(static_cast<short>(POLLOUT | POLLWRNORM), revents);
+            UNIT_ASSERT_EQUAL(static_cast<short>(POLLOUT | POLLWRNORM), revents); 
         } else if (i % 5 == 2) {
-            UNIT_ASSERT_EQUAL(static_cast<short>(POLLHUP | POLLRDNORM | POLLWRNORM), revents);
+            UNIT_ASSERT_EQUAL(static_cast<short>(POLLHUP | POLLRDNORM | POLLWRNORM), revents); 
         } else if (i % 5 == 3) {
-            UNIT_ASSERT_EQUAL(static_cast<short>(POLLHUP | POLLWRNORM), revents);
+            UNIT_ASSERT_EQUAL(static_cast<short>(POLLHUP | POLLWRNORM), revents); 
         } else if (i % 5 == 4) {
-            UNIT_ASSERT_EQUAL(static_cast<short>(POLLNVAL), revents);
+            UNIT_ASSERT_EQUAL(static_cast<short>(POLLNVAL), revents); 
         }
     }
 #endif

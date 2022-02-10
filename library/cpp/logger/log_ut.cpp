@@ -54,7 +54,7 @@ void TLogTest::TestFile() {
         log.AddLog("some useful data %d, %u, %lf, %s\n", v1, v2, v3, v4);
     }
 
-    TBlob data = TBlob::FromFileSingleThreaded(LOGFILE);
+    TBlob data = TBlob::FromFileSingleThreaded(LOGFILE); 
 
     UNIT_ASSERT_EQUAL(TString((const char*)data.Begin(), data.Size()), "some useful data 12, 34, 3.000000, qwqwqw\n");
 }
@@ -73,7 +73,7 @@ void TLogTest::TestThreaded() {
         log.AddLog("some useful data %d, %u, %lf, %s\n", v1, v2, v3, v4);
     }
 
-    TBlob data = TBlob::FromFileSingleThreaded(LOGFILE);
+    TBlob data = TBlob::FromFileSingleThreaded(LOGFILE); 
 
     UNIT_ASSERT_EQUAL(TString((const char*)data.Begin(), data.Size()), "some useful data 12, 34, 3.000000, qwqwqw\n");
 }

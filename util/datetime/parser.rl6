@@ -7,7 +7,7 @@
 
 #include <util/datetime/parser.h>
 #include <util/generic/ymath.h>
-
+ 
 
 %%{
 
@@ -119,18 +119,18 @@ action set_mil_offset {
         if (c <= 'M') {
             // ['A'..'M'] \ 'J'
             if (c < 'J')
-                DateTimeFields.ZoneOffsetMinutes = (i32)TDuration::Hours(c - 'A' + 1).Minutes();
+                DateTimeFields.ZoneOffsetMinutes = (i32)TDuration::Hours(c - 'A' + 1).Minutes(); 
             else
-                DateTimeFields.ZoneOffsetMinutes = (i32)TDuration::Hours(c - 'A').Minutes();
+                DateTimeFields.ZoneOffsetMinutes = (i32)TDuration::Hours(c - 'A').Minutes(); 
         } else {
             // ['N'..'Y']
-            DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(c - 'N' + 1).Minutes();
+            DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(c - 'N' + 1).Minutes(); 
         }
     }
 }
 
 action set_digit_offset {
-    DateTimeFields.ZoneOffsetMinutes = Sign * (i32)(TDuration::Hours(I / 100) + TDuration::Minutes(I % 100)).Minutes();
+    DateTimeFields.ZoneOffsetMinutes = Sign * (i32)(TDuration::Hours(I / 100) + TDuration::Minutes(I % 100)).Minutes(); 
 }
 
 mil_zone = /[A-IK-Za-ik-z]/ $set_mil_offset;
@@ -142,14 +142,14 @@ mil_zone = /[A-IK-Za-ik-z]/ $set_mil_offset;
 
 zone = 'UT' @{ DateTimeFields.ZoneOffsetMinutes = 0; }
     | 'GMT' @{ DateTimeFields.ZoneOffsetMinutes = 0; }
-    | 'EST' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(5).Minutes();}
-    | 'EDT' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(4).Minutes(); }
-    | 'CST' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(6).Minutes();}
-    | 'CDT' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(5).Minutes(); }
-    | 'MST' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(7).Minutes();}
-    | 'MDT' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(6).Minutes(); }
-    | 'PST' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(8).Minutes();}
-    | 'PDT' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(7).Minutes(); };
+    | 'EST' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(5).Minutes();} 
+    | 'EDT' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(4).Minutes(); } 
+    | 'CST' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(6).Minutes();} 
+    | 'CDT' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(5).Minutes(); } 
+    | 'MST' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(7).Minutes();} 
+    | 'MDT' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(6).Minutes(); } 
+    | 'PST' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(8).Minutes();} 
+    | 'PDT' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(7).Minutes(); }; 
 
 digit_offset = ('+' | '-') > { Sign = fc == '+' ? 1 : -1; } . int4 @set_digit_offset;
 

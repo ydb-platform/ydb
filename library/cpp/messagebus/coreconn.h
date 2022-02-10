@@ -27,10 +27,10 @@
 #include <deque>
 #include <utility>
 
-#ifdef NO_ERROR
+#ifdef NO_ERROR 
 #undef NO_ERROR
-#endif
-
+#endif 
+ 
 #define BUS_WORKER_CONDVAR
 //#define BUS_WORKER_MIXED
 
@@ -63,5 +63,5 @@ namespace NBus {
         POLL_READ,
         POLL_WRITE
     };
-
+ 
 }

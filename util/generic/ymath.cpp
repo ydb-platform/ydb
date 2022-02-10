@@ -8,7 +8,7 @@ float Exp2f(float x) {
     return powf(2.0f, x);
 }
 
-#ifdef _MSC_VER
+#ifdef _MSC_VER 
 
 double Erf(double x) {
     static constexpr double _M_2_SQRTPI = 1.12837916709551257390;

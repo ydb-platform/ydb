@@ -60,7 +60,7 @@ namespace {
 
 }
 
-namespace NBus {
+namespace NBus { 
     namespace NPrivate {
         class TJobStorage {
         };
@@ -327,11 +327,11 @@ namespace NBus {
     {
         Handler = TJobHandler(&TBusModule::Start);
     }
-
+ 
     TBusJob::~TBusJob() {
         Y_ASSERT(Pending.size() == 0);
         //Y_ASSERT(SleepUntil == 0);
-
+ 
         ClearAllMessageStates();
     }
 
@@ -618,7 +618,7 @@ namespace NBus {
     }
 
     //////////////////////////////////////////////////////////////////////
-
+ 
     void TBusModuleImpl::CancelJob(TBusJob* job, EMessageStatus status) {
         TWhatThreadDoesAcquireGuard<TMutex> G(Lock, "modules: acquiring lock for CancelJob");
         if (job) {
@@ -636,8 +636,8 @@ namespace NBus {
             strReturn += "TODO\n";
         }
         return strReturn;
-    }
-
+    } 
+ 
     TBusModuleConfig::TBusModuleConfig()
         : StarterMaxInFlight(1000)
     {
@@ -652,10 +652,10 @@ namespace NBus {
         : Impl(new TBusModuleImpl(this, name))
     {
     }
-
+ 
     TBusModule::~TBusModule() {
     }
-
+ 
     const char* TBusModule::GetName() const {
         return Impl->Name;
     }
@@ -680,7 +680,7 @@ namespace NBus {
 
     bool TBusModule::Shutdown() {
         Impl->Shutdown();
-
+ 
         return true;
     }
 
@@ -688,16 +688,16 @@ namespace NBus {
         TBusJob* job = new TBusJob(this, message);
         return job;
     }
-
+ 
     /**
-Example for external session creation:
-
-TBusSession* TMyModule::CreateExtSession(TBusMessageQueue& queue) {
-    TBusSession* session = CreateDefaultDestination(queue, &ExternalProto, ExternalConfig);
-    session->RegisterService(hostname, begin, end);
-    return session;
-*/
-
+Example for external session creation: 
+ 
+TBusSession* TMyModule::CreateExtSession(TBusMessageQueue& queue) { 
+    TBusSession* session = CreateDefaultDestination(queue, &ExternalProto, ExternalConfig); 
+    session->RegisterService(hostname, begin, end); 
+    return session; 
+*/ 
+ 
     bool TBusModule::CreatePrivateSessions(TBusMessageQueue* queue) {
         Impl->Queue = queue;
         return true;
@@ -782,11 +782,11 @@ void TBusModuleImpl::DestroyJob(TJobRunner* job) {
                 ShutdownCondVar.BroadCast();
             }
         }
-    }
+    } 
 
     job->JobStorageIterator = TList<TJobRunner*>::iterator();
 }
-
+ 
 void TBusModuleImpl::OnMessageReceived(TAutoPtr<TBusMessage> msg0, TOnMessageContext& context) {
     TBusMessage* msg = !!msg0 ? msg0.Get() : context.GetMessage();
     Y_VERIFY(!!msg);
@@ -797,7 +797,7 @@ void TBusModuleImpl::OnMessageReceived(TAutoPtr<TBusMessage> msg0, TOnMessageCon
     SetJob(jobRunner->Job->Message, jobRunner.Get());
 
     AtomicIncrement(JobCount);
-
+ 
     AddJob(jobRunner.Get());
 
     jobRunner.Release()->Schedule();
@@ -858,14 +858,14 @@ void TModuleClientHandler::OnReply(TAutoPtr<TBusMessage> req, TAutoPtr<TBusMessa
     job->EnqueueAndSchedule(TJobResponseMessage(req.Release(), resp.Release(), MESSAGE_OK));
     job->UnRef();
 }
-
+ 
 void TModuleClientHandler::OnMessageSentOneWay(TAutoPtr<TBusMessage> req) {
     TJobRunner* job = GetJob(req.Get());
     Y_ASSERT(job);
     Y_ASSERT(job->Job->Message != req.Get());
     job->EnqueueAndSchedule(TJobResponseMessage(req.Release(), nullptr, MESSAGE_OK));
     job->UnRef();
-}
+} 
 
 void TModuleClientHandler::OnError(TAutoPtr<TBusMessage> msg, EMessageStatus status) {
     TJobRunner* job = GetJob(msg.Get());

@@ -49,18 +49,18 @@ extern "C" {
 #endif
 }
 
-#ifdef _MSC_VER
+#ifdef _MSC_VER 
     #define popen _popen
     #define pclose _pclose
-#endif
-
+#endif 
+ 
 #ifdef _win_
     #define NAME_MAX FILENAME_MAX
-#endif
-#ifdef _sun_
+#endif 
+#ifdef _sun_ 
     #define NAME_MAX PATH_MAX
-#endif
-
+#endif 
+ 
 #ifdef _win_
 
     #ifdef sleep // may be defined by perl
@@ -71,10 +71,10 @@ void sleep(i64 len);
 void usleep(i64 len);
 
 #endif
-
+ 
 #ifdef _win_
-int ftruncate(int fd, i64 length);
-int truncate(const char* name, i64 length);
+int ftruncate(int fd, i64 length); 
+int truncate(const char* name, i64 length); 
 #endif
 
 #if defined(GNUC)

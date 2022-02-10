@@ -8,7 +8,7 @@
 #include <util/string/util.h>
 #include <util/system/thread.h>
 
-namespace NBus {
+namespace NBus { 
     TBusInstant Now() {
         return millisec();
     }

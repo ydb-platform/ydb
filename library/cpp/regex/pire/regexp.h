@@ -11,7 +11,7 @@
 #include <util/generic/yexception.h>
 
 namespace NRegExp {
-    struct TMatcher;
+    struct TMatcher; 
 
     struct TFsmBase {
         struct TOptions {

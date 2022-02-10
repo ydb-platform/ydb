@@ -5,7 +5,7 @@
 #include <util/string/printf.h>
 #include <util/stream/output.h>
 #include <util/generic/singleton.h>
-
+ 
 #if defined(_unix_)
     #include <unistd.h>
     #include <sched.h>
@@ -14,7 +14,7 @@
     #include <sys/param.h>
 #elif defined(_win_)
     #include <util/system/winint.h>
-#endif
+#endif 
 
 TTimer::TTimer(const TStringBuf message) {
     static const int SMALL_DURATION_CHAR_LENGTH = 9;                     // strlen("0.123456s")
@@ -90,7 +90,7 @@ TFormattedPrecisionTimer::~TFormattedPrecisionTimer() {
 
     *Out << Message << ": " << diff << " ticks " << FormatCycles(diff) << Endl;
 }
-
+ 
 TFuncTimer::TFuncTimer(const char* func)
     : Start_(TInstant::Now())
     , Func_(func)
@@ -103,26 +103,26 @@ TFuncTimer::~TFuncTimer() {
 }
 
 TTimeLogger::TTimeLogger(const TString& message, bool verbose)
-    : Message(message)
+    : Message(message) 
     , Verbose(verbose)
-    , OK(false)
+    , OK(false) 
     , Begin(time(nullptr))
     , BeginCycles(GetCycleCount())
-{
+{ 
     if (Verbose) {
         fprintf(stderr, "=========================================================\n");
         fprintf(stderr, "%s started: %.24s (%lu) (%d)\n", Message.data(), ctime(&Begin), (unsigned long)Begin, (int)getpid());
     }
-}
-
+} 
+ 
 double TTimeLogger::ElapsedTime() const {
     return time(nullptr) - Begin;
 }
 
 void TTimeLogger::SetOK() {
-    OK = true;
-}
-
+    OK = true; 
+} 
+ 
 TTimeLogger::~TTimeLogger() {
     time_t tim = time(nullptr);
     ui64 endCycles = GetCycleCount();
@@ -133,4 +133,4 @@ TTimeLogger::~TTimeLogger() {
                 (unsigned long)tim - (unsigned long)Begin, FormatCycles(endCycles - BeginCycles).data());
         fprintf(stderr, "%s=========================================================\n", prefix);
     }
-}
+} 

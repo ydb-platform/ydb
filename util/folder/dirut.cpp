@@ -12,118 +12,118 @@
 #include <util/system/yassert.h>
 
 void SlashFolderLocal(TString& folder) {
-    if (!folder)
-        return;
-#ifdef _win32_
-    size_t pos;
+    if (!folder) 
+        return; 
+#ifdef _win32_ 
+    size_t pos; 
     while ((pos = folder.find('/')) != TString::npos)
         folder.replace(pos, 1, LOCSLASH_S);
-#endif
+#endif 
     if (folder[folder.size() - 1] != LOCSLASH_C)
-        folder.append(LOCSLASH_S);
-}
-
-#ifndef _win32_
-
+        folder.append(LOCSLASH_S); 
+} 
+ 
+#ifndef _win32_ 
+ 
 bool correctpath(TString& folder) {
-    return resolvepath(folder, "/");
-}
-
+    return resolvepath(folder, "/"); 
+} 
+ 
 bool resolvepath(TString& folder, const TString& home) {
     Y_ASSERT(home && home.at(0) == '/');
-    if (!folder) {
-        return false;
-    }
-    // may be from windows
+    if (!folder) { 
+        return false; 
+    } 
+    // may be from windows 
     char* ptr = folder.begin();
     while ((ptr = strchr(ptr, '\\')) != nullptr)
-        *ptr = '/';
-
-    if (folder.at(0) == '~') {
-        if (folder.length() == 1 || folder.at(1) == '/') {
+        *ptr = '/'; 
+ 
+    if (folder.at(0) == '~') { 
+        if (folder.length() == 1 || folder.at(1) == '/') { 
             folder = GetHomeDir() + (folder.data() + 1);
-        } else {
+        } else { 
             char* buf = (char*)alloca(folder.length() + 1);
             strcpy(buf, folder.data() + 1);
-            char* p = strchr(buf, '/');
-            if (p)
-                *p++ = 0;
-            passwd* pw = getpwnam(buf);
-            if (pw) {
-                folder = pw->pw_dir;
-                folder += "/";
-                if (p)
-                    folder += p;
-            } else {
-                return false; // unknown user
-            }
-        }
-    }
-    int len = folder.length() + home.length() + 1;
-    char* path = (char*)alloca(len);
-    if (folder.at(0) != '/') {
+            char* p = strchr(buf, '/'); 
+            if (p) 
+                *p++ = 0; 
+            passwd* pw = getpwnam(buf); 
+            if (pw) { 
+                folder = pw->pw_dir; 
+                folder += "/"; 
+                if (p) 
+                    folder += p; 
+            } else { 
+                return false; // unknown user 
+            } 
+        } 
+    } 
+    int len = folder.length() + home.length() + 1; 
+    char* path = (char*)alloca(len); 
+    if (folder.at(0) != '/') { 
         strcpy(path, home.data());
         strcpy(strrchr(path, '/') + 1, folder.data()); // the last char must be '/' if it's a dir
-    } else {
+    } else { 
         strcpy(path, folder.data());
-    }
+    } 
     len = strlen(path) + 1;
-    // grabbed from url.cpp
+    // grabbed from url.cpp 
     char* newpath = (char*)alloca(len + 2);
     const char** pp = (const char**)alloca(len * sizeof(char*));
-    int i = 0;
-    for (char* s = path; s;) {
-        pp[i++] = s;
-        s = strchr(s, '/');
-        if (s)
-            *s++ = 0;
-    }
-
-    for (int j = 1; j < i;) {
+    int i = 0; 
+    for (char* s = path; s;) { 
+        pp[i++] = s; 
+        s = strchr(s, '/'); 
+        if (s) 
+            *s++ = 0; 
+    } 
+ 
+    for (int j = 1; j < i;) { 
         const char*& p = pp[j];
         if (strcmp(p, ".") == 0 || strcmp(p, "") == 0) {
             if (j == i - 1) {
-                p = "";
-                break;
-            } else {
+                p = ""; 
+                break; 
+            } else { 
                 memmove(pp + j, pp + j + 1, (i - j - 1) * sizeof(p));
                 --i;
-            }
-        } else if (strcmp(p, "..") == 0) {
+            } 
+        } else if (strcmp(p, "..") == 0) { 
             if (j == i - 1) {
-                if (j == 1) {
-                    p = "";
-                } else {
+                if (j == 1) { 
+                    p = ""; 
+                } else { 
                     --i;
                     pp[j - 1] = "";
-                }
-                break;
-            } else {
-                if (j == 1) {
+                } 
+                break; 
+            } else { 
+                if (j == 1) { 
                     memmove(pp + j, pp + j + 1, (i - j - 1) * sizeof(p));
                     --i;
-                } else {
+                } else { 
                     memmove(pp + j - 1, pp + j + 1, (i - j - 1) * sizeof(p));
                     i -= 2;
                     --j;
-                }
-            }
-        } else
+                } 
+            } 
+        } else 
             ++j;
-    }
-
-    char* s = newpath;
-    for (int k = 0; k < i; k++) {
-        s = strchr(strcpy(s, pp[k]), 0);
-        *s++ = '/';
-    }
-    *(--s) = 0;
-    folder = newpath;
-    return true;
-}
-
-#else
-
+    } 
+ 
+    char* s = newpath; 
+    for (int k = 0; k < i; k++) { 
+        s = strchr(strcpy(s, pp[k]), 0); 
+        *s++ = '/'; 
+    } 
+    *(--s) = 0; 
+    folder = newpath; 
+    return true; 
+} 
+ 
+#else 
+ 
 using dir_type = enum {
     dt_empty,
     dt_error,
@@ -131,17 +131,17 @@ using dir_type = enum {
     dt_dir
 };
 
-// precondition:  *ptr != '\\' || *ptr == 0 (cause dt_error)
-// postcondition: *ptr != '\\'
+// precondition:  *ptr != '\\' || *ptr == 0 (cause dt_error) 
+// postcondition: *ptr != '\\' 
 template <typename T>
 static int next_dir(T*& ptr) {
-    int has_blank = 0;
-    int has_dot = 0;
-    int has_letter = 0;
-    int has_ctrl = 0;
-
+    int has_blank = 0; 
+    int has_dot = 0; 
+    int has_letter = 0; 
+    int has_ctrl = 0; 
+ 
     while (*ptr && *ptr != '\\') {
-        int c = (unsigned char)*ptr++;
+        int c = (unsigned char)*ptr++; 
         switch (c) {
             case ' ':
                 ++has_blank;
@@ -164,23 +164,23 @@ static int next_dir(T*& ptr) {
                     ++has_ctrl;
                 else
                     ++has_letter;
-        }
-    }
-    if (*ptr)
+        } 
+    } 
+    if (*ptr) 
         ++ptr;
-    if (has_ctrl)
-        return dt_error;
-    if (has_letter)
-        return dt_dir;
-    if (has_dot && has_blank)
-        return dt_error;
-    if (has_dot == 1)
-        return dt_empty;
-    if (has_dot == 2)
-        return dt_up;
-    return dt_error;
-}
-
+    if (has_ctrl) 
+        return dt_error; 
+    if (has_letter) 
+        return dt_dir; 
+    if (has_dot && has_blank) 
+        return dt_error; 
+    if (has_dot == 1) 
+        return dt_empty; 
+    if (has_dot == 2) 
+        return dt_up; 
+    return dt_error; 
+} 
+ 
 using disk_type = enum {
     dk_noflags = 0,
     dk_unc = 1,
@@ -192,34 +192,34 @@ using disk_type = enum {
 // root slash (if any) - part of disk
 template <typename T>
 static int skip_disk(T*& ptr) {
-    int result = dk_noflags;
-    if (!*ptr)
-        return result;
-    if (ptr[0] == '\\' && ptr[1] == '\\') {
+    int result = dk_noflags; 
+    if (!*ptr) 
+        return result; 
+    if (ptr[0] == '\\' && ptr[1] == '\\') { 
         result |= dk_unc | dk_fromroot;
-        ptr += 2;
-        if (next_dir(ptr) != dt_dir)
+        ptr += 2; 
+        if (next_dir(ptr) != dt_dir) 
             return dk_error; // has no host name
-        if (next_dir(ptr) != dt_dir)
+        if (next_dir(ptr) != dt_dir) 
             return dk_error; // has no share name
-    } else {
+    } else { 
         if (*ptr && *(ptr + 1) == ':') {
-            result |= dk_hasdrive;
-            ptr += 2;
-        }
-        if (*ptr == '\\' || *ptr == '/') {
+            result |= dk_hasdrive; 
+            ptr += 2; 
+        } 
+        if (*ptr == '\\' || *ptr == '/') { 
             ++ptr;
-            result |= dk_fromroot;
-        }
-    }
-    return result;
-}
-
+            result |= dk_fromroot; 
+        } 
+    } 
+    return result; 
+} 
+ 
 int correctpath(char* cpath, const char* path) {
     if (!path || !*path) {
-        *cpath = 0;
-        return 1;
-    }
+        *cpath = 0; 
+        return 1; 
+    } 
     char* ptr = (char*)path;
     char* cptr = cpath;
     int counter = 0;
@@ -238,14 +238,14 @@ int correctpath(char* cpath, const char* path) {
         ++ptr;
     }
     *cptr = 0;
-    // replace '/' by '\'
-    int dk = skip_disk(cpath);
+    // replace '/' by '\' 
+    int dk = skip_disk(cpath); 
 
-    if (dk == dk_error)
-        return 0;
-
+    if (dk == dk_error) 
+        return 0; 
+ 
     char* ptr1 = ptr = cpath;
-    int level = 0;
+    int level = 0; 
     while (*ptr) {
         switch (next_dir(ptr)) {
             case dt_dir:
@@ -253,8 +253,8 @@ int correctpath(char* cpath, const char* path) {
                 break;
             case dt_empty:
                 memmove(ptr1, ptr, strlen(ptr) + 1);
-                ptr = ptr1;
-                break;
+                ptr = ptr1; 
+                break; 
             case dt_up:
                 --level;
                 if (level >= 0) {
@@ -272,100 +272,100 @@ int correctpath(char* cpath, const char* path) {
                         memmove(cpath - 3, ptr, strlen(ptr) + 1);
                         return 1;
                     }
-                }
+                } 
                 if (dk & dk_fromroot)
                     return 0;
                 break;
             case dt_error:
             default:
-                return 0;
-        }
-        ptr1 = ptr;
-    }
-
+                return 0; 
+        } 
+        ptr1 = ptr; 
+    } 
+ 
     if ((ptr > cpath || ptr == cpath && dk & dk_unc) && *(ptr - 1) == '\\')
         *(ptr - 1) = 0;
-    return 1;
-}
-
+    return 1; 
+} 
+ 
 static inline int normchar(unsigned char c) {
     return (c < 'a' || c > 'z') ? c : c - 32;
-}
-
+} 
+ 
 static inline char* strslashcat(char* a, const char* b) {
-    size_t len = strlen(a);
+    size_t len = strlen(a); 
     if (len && a[len - 1] != '\\')
-        a[len++] = '\\';
+        a[len++] = '\\'; 
     strcpy(a + len, b);
-    return a;
-}
-
+    return a; 
+} 
+ 
 int resolvepath(char* apath, const char* rpath, const char* cpath) {
     const char* redisk = rpath;
-    if (!rpath || !*rpath)
-        return 0;
-    int rdt = skip_disk(redisk);
-    if (rdt == dk_error)
-        return 0;
+    if (!rpath || !*rpath) 
+        return 0; 
+    int rdt = skip_disk(redisk); 
+    if (rdt == dk_error) 
+        return 0; 
     if (rdt & dk_unc || rdt & dk_hasdrive && rdt & dk_fromroot) {
-        return correctpath(apath, rpath);
-    }
-
+        return correctpath(apath, rpath); 
+    } 
+ 
     const char* cedisk = cpath;
-    if (!cpath || !*cpath)
-        return 0;
-    int cdt = skip_disk(cedisk);
-    if (cdt == dk_error)
-        return 0;
-
+    if (!cpath || !*cpath) 
+        return 0; 
+    int cdt = skip_disk(cedisk); 
+    if (cdt == dk_error) 
+        return 0; 
+ 
     char* tpath = (char*)alloca(strlen(rpath) + strlen(cpath) + 3);
-
-    // rdt&dk_hasdrive && !rdt&dk_fromroot
+ 
+    // rdt&dk_hasdrive && !rdt&dk_fromroot 
     if (rdt & dk_hasdrive) {
         if (!(cdt & dk_fromroot))
-            return 0;
+            return 0; 
         if (cdt & dk_hasdrive && normchar(*rpath) != normchar(*cpath))
-            return 0;
-        memcpy(tpath, rpath, 2);
-        memcpy(tpath + 2, cedisk, strlen(cedisk) + 1);
-        strslashcat(tpath, redisk);
-
+            return 0; 
+        memcpy(tpath, rpath, 2); 
+        memcpy(tpath + 2, cedisk, strlen(cedisk) + 1); 
+        strslashcat(tpath, redisk); 
+ 
         // !rdt&dk_hasdrive && rdt&dk_fromroot
     } else if (rdt & dk_fromroot) {
         if (!(cdt & dk_hasdrive) && !(cdt & dk_unc))
-            return 0;
+            return 0; 
         memcpy(tpath, cpath, cedisk - cpath);
         tpath[cedisk - cpath] = 0;
-        strslashcat(tpath, redisk);
-
+        strslashcat(tpath, redisk); 
+ 
         // !rdt&dk_hasdrive && !rdt&dk_fromroot
-    } else {
+    } else { 
         if (!(cdt & dk_fromroot) || !(cdt & dk_hasdrive) && !(cdt & dk_unc))
-            return 0;
-        strslashcat(strcpy(tpath, cpath), redisk);
-    }
-
-    return correctpath(apath, tpath);
-}
-
+            return 0; 
+        strslashcat(strcpy(tpath, cpath), redisk); 
+    } 
+ 
+    return correctpath(apath, tpath); 
+} 
+ 
 bool correctpath(TString& filename) {
     char* ptr = (char*)alloca(filename.size() + 2);
     if (correctpath(ptr, filename.data())) {
-        filename = ptr;
-        return true;
-    }
-    return false;
-}
-
+        filename = ptr; 
+        return true; 
+    } 
+    return false; 
+} 
+ 
 bool resolvepath(TString& folder, const TString& home) {
     char* ptr = (char*)alloca(folder.size() + 3 + home.size());
     if (resolvepath(ptr, folder.data(), home.data())) {
-        folder = ptr;
-        return true;
-    }
-    return false;
-}
-
+        folder = ptr; 
+        return true; 
+    } 
+    return false; 
+} 
+ 
 #endif // !defined _win32_
 
 char GetDirectorySeparator() {

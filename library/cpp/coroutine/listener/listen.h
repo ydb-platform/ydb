@@ -3,7 +3,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/ylimits.h>
 
-struct TIpAddress;
+struct TIpAddress; 
 class TContExecutor;
 class TSocketHolder;
 class TNetworkAddress;
@@ -110,7 +110,7 @@ public:
     void Stop() noexcept;
 
     void StopListenAddr(const NAddr::IRemoteAddr& addr);
-    void StopListenAddr(const TIpAddress& addr);
+    void StopListenAddr(const TIpAddress& addr); 
     void StopListenAddr(const TNetworkAddress& addr);
 
     template <class T>

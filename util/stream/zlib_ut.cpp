@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
 
             UNIT_ASSERT_EQUAL(d.ReadAll(), DATA);
         }
-    }
+    } 
 
     Y_UNIT_TEST(Dictionary) {
         static constexpr TStringBuf data = "<html><body></body></html>";

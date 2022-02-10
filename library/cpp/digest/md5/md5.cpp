@@ -5,7 +5,7 @@
 #include <util/stream/input.h>
 #include <util/stream/file.h>
 #include <util/string/hex.h>
-
+ 
 #include <contrib/libs/nayuki_md5/md5.h>
 
 namespace {
@@ -42,11 +42,11 @@ char* MD5::File(const char* filename, char* buf) {
 
         return Stream(&fi, buf);
     } catch (...) {
-    }
+    } 
 
     return nullptr;
-}
-
+} 
+ 
 TString MD5::File(const TString& filename) {
     TString buf;
     buf.ReserveAndResize(MD5_HEX_DIGEST_LENGTH);
@@ -63,8 +63,8 @@ char* MD5::Data(const TArrayRef<const ui8>& data, char* buf) {
 
 char* MD5::Data(const void* data, size_t len, char* buf) {
     return Data(MakeUnsignedArrayRef(data, len), buf);
-}
-
+} 
+ 
 TString MD5::Data(const TArrayRef<const ui8>& data) {
     TString buf;
     buf.ReserveAndResize(MD5_HEX_DIGEST_LENGTH);
@@ -92,25 +92,25 @@ static const ui8 PADDING[MD5_BLOCK_LENGTH] = {
     0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-
-/* MD5 initialization. Begins an MD5 operation, writing a new context. */
-
+ 
+/* MD5 initialization. Begins an MD5 operation, writing a new context. */ 
+ 
 void MD5::Init() {
     BufferSize = 0;
     StreamSize = 0;
-    /* Load magic initialization constants.  */
+    /* Load magic initialization constants.  */ 
     State[0] = 0x67452301;
     State[1] = 0xefcdab89;
     State[2] = 0x98badcfe;
     State[3] = 0x10325476;
-}
-
+} 
+ 
 /*
- * MD5 block update operation. Continues an MD5 message-digest
- * operation, processing another message block, and updating the
- * context.
- */
-
+ * MD5 block update operation. Continues an MD5 message-digest 
+ * operation, processing another message block, and updating the 
+ * context. 
+ */ 
+ 
 void MD5::UpdatePart(TArrayRef<const ui8> data) {
     /* Count input bytes */
     StreamSize += data.size();
@@ -135,12 +135,12 @@ void MD5::UpdatePart(TArrayRef<const ui8> data) {
     /* Save remaining input in buffer */
     memcpy(Buffer, data.data(), data.size());
     BufferSize += data.size();
-}
-
-/*
- * MD5 padding. Adds padding followed by original length.
- */
-
+} 
+ 
+/* 
+ * MD5 padding. Adds padding followed by original length. 
+ */ 
+ 
 void MD5::Pad() {
     size_t streamSize = StreamSize;
 
@@ -155,40 +155,40 @@ void MD5::Pad() {
         Buffer[MD5_PADDING_SHIFT + i] = static_cast<ui8>(streamSize & 0xFFU);
     }
     md5_compress(State, Buffer);
-}
-
-/*
- * MD5 finalization. Ends an MD5 message-digest operation, writing the
- * the message digest and zeroizing the context.
- */
-
+} 
+ 
+/* 
+ * MD5 finalization. Ends an MD5 message-digest operation, writing the 
+ * the message digest and zeroizing the context. 
+ */ 
+ 
 ui8* MD5::Final(ui8 digest[16]) {
-    /* Do padding. */
-    Pad();
-    /* Store state in digest */
+    /* Do padding. */ 
+    Pad(); 
+    /* Store state in digest */ 
     memcpy(digest, State, 16);
-    /* Zeroize sensitive information. */
+    /* Zeroize sensitive information. */ 
     Init();
 
     return digest;
-}
-
+} 
+ 
 char* MD5::End(char* buf) {
     static const char hex[] = "0123456789abcdef";
     ui8 digest[16];
     if (!buf)
-        buf = (char*)malloc(33);
+        buf = (char*)malloc(33); 
     if (!buf)
         return nullptr;
-    Final(digest);
+    Final(digest); 
     for (ui8 i = 0; i < MD5_HEX_DIGEST_LENGTH / 2; i++) {
         buf[i * 2] = hex[digest[i] >> 4];
         buf[i * 2 + 1] = hex[digest[i] & 0x0f];
-    }
+    } 
     buf[32] = '\0';
-    return buf;
-}
-
+    return buf; 
+} 
+ 
 char* MD5::End_b64(char* buf) {
     ui8 digest[16];
     if (!buf)

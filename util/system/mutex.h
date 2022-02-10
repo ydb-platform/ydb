@@ -14,7 +14,7 @@ public:
     inline bool TryAcquire() noexcept {
         return true;
     }
-
+ 
     inline void Release() noexcept {
     }
 

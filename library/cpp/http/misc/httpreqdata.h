@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <library/cpp/digest/lower_case/hash_ops.h>
 
 #include <util/str_stl.h>
@@ -14,11 +14,11 @@
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
 #include <util/generic/buffer.h>
-
+ 
 using THttpHeadersContainer = THashMap<TString, TString, TCIOps, TCIOps>;
 
 class TBaseServerRequestData {
-public:
+public: 
     TBaseServerRequestData(SOCKET s = INVALID_SOCKET);
     TBaseServerRequestData(const char* qs, SOCKET s = INVALID_SOCKET);
 
@@ -29,7 +29,7 @@ public:
 
     const TString& ServerName() const {
         return Host;
-    }
+    } 
 
     NAddr::IRemoteAddrPtr ServerAddress() const {
         return NAddr::GetSockAddr(Socket);
@@ -37,15 +37,15 @@ public:
 
     const TString& ServerPort() const {
         return Port;
-    }
+    } 
 
-    const char* ScriptName() const {
-        return Path;
-    }
+    const char* ScriptName() const { 
+        return Path; 
+    } 
 
-    const char* QueryString() const {
-        return Search;
-    }
+    const char* QueryString() const { 
+        return Search; 
+    } 
 
     TStringBuf QueryStringBuf() const {
         return TStringBuf(Search, SearchLength);
@@ -82,22 +82,22 @@ public:
     }
 
     void SetPath(const TString& path);
-    const char* GetCurPage() const;
+    const char* GetCurPage() const; 
     bool Parse(const char* req);
     void AddHeader(const TString& name, const TString& value);
 
-private:
+private: 
     TBuffer PathStorage;
     mutable char* Addr;
     TString Host;
     TString Port;
-    char* Path;
-    char* Search;
+    char* Path; 
+    char* Search; 
     size_t SearchLength; // length of Search
     TStringBuf OrigSearch;
     THttpHeadersContainer HeadersIn_;
     mutable char AddrData[INET6_ADDRSTRLEN];
-    SOCKET Socket;
+    SOCKET Socket; 
     ui64 BeginTime;
     mutable TString CurPage;
     TBuffer ParseBuf;
@@ -105,7 +105,7 @@ private:
 };
 
 class TServerRequestData: public TBaseServerRequestData {
-public:
+public: 
     TServerRequestData(SOCKET s = INVALID_SOCKET)
         : TBaseServerRequestData(s)
     {
@@ -122,4 +122,4 @@ public:
 
 public:
     TCgiParameters CgiParam;
-};
+}; 

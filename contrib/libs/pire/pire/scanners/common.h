@@ -59,7 +59,7 @@ namespace Pire {
 			, PtrSize(sizeof(void*))
 			, MaxWordSize(sizeof(Impl::MaxSizeWord))
 			, Type(type)
-			, HdrSize((ui32)hdrsize)
+			, HdrSize((ui32)hdrsize) 
 		{}
 
 		void Validate(ui32 type, size_t hdrsize) const

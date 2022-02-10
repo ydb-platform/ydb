@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(THttpCompressionTest) {
             auto encodedStream = (*encoder)(&buffer);
             encodedStream->Write(DATA);
         }
-
+ 
         TZLibDecompress decompressor(&buffer);
         UNIT_ASSERT_EQUAL(decompressor.ReadAll(), DATA);
     }

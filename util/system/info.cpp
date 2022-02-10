@@ -146,14 +146,14 @@ size_t NSystemInfo::NumberOfCpus() {
 
 size_t NSystemInfo::LoadAverage(double* la, size_t len) {
 #if defined(_win_) || defined(_musl_) || defined(_bionic_)
-    int ret = -1;
-#else
+    int ret = -1; 
+#else 
     for (size_t i = 0; i < len; ++i) {
         la[i] = 0;
     }
 
     int ret = getloadavg(la, len);
-#endif
+#endif 
 
     if (ret < 0) {
         for (size_t i = 0; i < len; ++i) {

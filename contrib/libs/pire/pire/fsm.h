@@ -250,7 +250,7 @@ namespace Pire {
 	};
 
 	template<class Scanner>
-	void BuildScanner(const Fsm& fsm, Scanner& r)
+	void BuildScanner(const Fsm& fsm, Scanner& r) 
 	{
 		TSet<size_t> dead;
 		if (Scanner::DeadFlag)

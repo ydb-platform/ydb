@@ -4,11 +4,11 @@
     #include <malloc.h>
 #elif defined(_sun)
     #include <alloca.h>
-#endif
+#endif 
 
 #include <cerrno>
 #include <cstring>
-
+ 
 #ifdef _win_
     #include "winint.h"
 #else
@@ -23,7 +23,7 @@
     #endif
 #endif
 
-#ifdef USE_SYSV_SEMAPHORES
+#ifdef USE_SYSV_SEMAPHORES 
     #include <errno.h>
     #include <sys/types.h>
     #include <sys/ipc.h>
@@ -38,7 +38,7 @@ union semun {
     #else
 union semun arg;
     #endif
-#endif
+#endif 
 
 #include <util/digest/city.h>
 #include <util/string/cast.h>
@@ -50,7 +50,7 @@ namespace {
     private:
 #ifdef _win_
         using SEMHANDLE = HANDLE;
-#else
+#else 
     #ifdef USE_SYSV_SEMAPHORES
         using SEMHANDLE = int;
     #else
@@ -102,12 +102,12 @@ namespace {
             }
     #endif
 #endif
-        }
-
+        } 
+ 
         inline ~TSemaphoreImpl() {
 #ifdef _win_
             ::CloseHandle(Handle);
-#else
+#else 
     #ifdef USE_SYSV_SEMAPHORES
     // we DO NOT want 'semctl(Handle, 0, IPC_RMID)' for multiprocess tasks;
     //struct sembuf ops[] = {{0, 0, IPC_NOWAIT}};
@@ -116,13 +116,13 @@ namespace {
     #else
             sem_close(Handle); // we DO NOT want sem_unlink(...)
     #endif
-#endif
+#endif 
         }
-
+ 
         inline void Release() noexcept {
 #ifdef _win_
             ::ReleaseSemaphore(Handle, 1, 0);
-#else
+#else 
     #ifdef USE_SYSV_SEMAPHORES
             struct sembuf ops[] = {{0, 1, SEM_UNDO}};
             int ret = semop(Handle, ops, 1);
@@ -130,15 +130,15 @@ namespace {
             int ret = sem_post(Handle);
     #endif
             Y_VERIFY(ret == 0, "can not release semaphore");
-#endif
+#endif 
         }
-
+ 
         //The UNIX semaphore object does not support a timed "wait", and
         //hence to maintain consistancy, for win32 case we use INFINITE or 0 timeout.
         inline void Acquire() noexcept {
 #ifdef _win_
             Y_VERIFY(::WaitForSingleObject(Handle, INFINITE) == WAIT_OBJECT_0, "can not acquire semaphore");
-#else
+#else 
     #ifdef USE_SYSV_SEMAPHORES
             struct sembuf ops[] = {{0, -1, SEM_UNDO}};
             int ret = semop(Handle, ops, 1);
@@ -146,16 +146,16 @@ namespace {
             int ret = sem_wait(Handle);
     #endif
             Y_VERIFY(ret == 0, "can not acquire semaphore");
-#endif
+#endif 
         }
-
+ 
         inline bool TryAcquire() noexcept {
 #ifdef _win_
             // zero-second time-out interval
             // WAIT_OBJECT_0: current free count > 0
             // WAIT_TIMEOUT:  current free count == 0
             return ::WaitForSingleObject(Handle, 0) == WAIT_OBJECT_0;
-#else
+#else 
     #ifdef USE_SYSV_SEMAPHORES
             struct sembuf ops[] = {{0, -1, SEM_UNDO | IPC_NOWAIT}};
             int ret = semop(Handle, ops, 1);
@@ -163,7 +163,7 @@ namespace {
             int ret = sem_trywait(Handle);
     #endif
             return ret == 0;
-#endif
+#endif 
         }
     };
 
@@ -252,7 +252,7 @@ class TFastSemaphore::TImpl: public TString, public TSemaphoreImpl {
 public:
     inline TImpl(ui32 n)
         : TString(ToString(RandomNumber<ui64>()))
-        , TSemaphoreImpl(c_str(), n)
+        , TSemaphoreImpl(c_str(), n) 
     {
     }
 };

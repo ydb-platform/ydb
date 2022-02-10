@@ -1,5 +1,5 @@
-#include "datetime.h"
-#include "defaults.h"
+#include "datetime.h" 
+#include "defaults.h" 
 
 #include <cstdio>
 
@@ -7,7 +7,7 @@
 #include "event.h"
 #include "mutex.h"
 #include "condvar.h"
-
+ 
 #ifdef _win_
     #include "winint.h"
 #endif
@@ -66,7 +66,7 @@ public:
             Cond.Signal();
         }
     }
-
+ 
     inline void Reset() noexcept {
         AtomicSet(Signaled, 0);
     }
@@ -109,9 +109,9 @@ private:
 
 TSystemEvent::TSystemEvent(ResetMode rmode)
     : EvImpl_(new TEvImpl(rmode))
-{
-}
-
+{ 
+} 
+ 
 TSystemEvent::TSystemEvent(const TSystemEvent& other) noexcept
     : EvImpl_(other.EvImpl_)
 {
@@ -123,11 +123,11 @@ TSystemEvent& TSystemEvent::operator=(const TSystemEvent& other) noexcept {
 }
 
 TSystemEvent::~TSystemEvent() = default;
-
+ 
 void TSystemEvent::Reset() noexcept {
     EvImpl_->Reset();
-}
-
+} 
+ 
 void TSystemEvent::Signal() noexcept {
     EvImpl_->Signal();
 }

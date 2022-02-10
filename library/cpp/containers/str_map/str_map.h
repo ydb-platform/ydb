@@ -31,9 +31,9 @@ pool_insert(Map* m, const char* key, const typename Map::mapped_type& data, TBuf
     return ins;
 }
 
-#define HASH_SIZE_DEFAULT 100
+#define HASH_SIZE_DEFAULT 100 
 #define AVERAGEWORD_BUF 10
-
+ 
 template <class T, class HashFcn, class EqualTo, class Alloc>
 class string_hash: public THashMap<const char*, T, HashFcn, EqualTo, Alloc> {
 protected:
@@ -49,7 +49,7 @@ public:
     string_hash() {
         pool.Reserve(HASH_SIZE_DEFAULT * AVERAGEWORD_BUF); // reserve here
     }
-    string_hash(size_type hash_size, pool_size_type pool_size)
+    string_hash(size_type hash_size, pool_size_type pool_size) 
         : THashMap<const char*, T, HashFcn, EqualTo, Alloc>(hash_size)
     {
         pool.Reserve(pool_size); // reserve here
@@ -66,46 +66,46 @@ public:
     pool_size_type pool_size() const {
         return pool.Size();
     }
-
-    string_hash(const string_hash& sh)
+ 
+    string_hash(const string_hash& sh) 
         : THashMap<const char*, T, HashFcn, EqualTo, Alloc>()
-    {
-        for (const_iterator i = sh.begin(); i != sh.end(); ++i)
-            insert_copy((*i).first, (*i).second);
-    }
-    /* May be faster?
-    string_hash(const string_hash& sh)
+    { 
+        for (const_iterator i = sh.begin(); i != sh.end(); ++i) 
+            insert_copy((*i).first, (*i).second); 
+    } 
+    /* May be faster? 
+    string_hash(const string_hash& sh) 
         : THashMap<const char *, T, HashFcn, EqualTo>(sh)
-    {
-        pool = sh.pool;
-        size_t delta = pool.begin() - sh.pool.begin();
-        for (iterator i = begin(); i != end(); ++i)
-            (const char*&)(*i).first += delta;
-    }
-    */
+    { 
+        pool = sh.pool; 
+        size_t delta = pool.begin() - sh.pool.begin(); 
+        for (iterator i = begin(); i != end(); ++i) 
+            (const char*&)(*i).first += delta; 
+    } 
+    */ 
     string_hash& operator=(const string_hash& sh) {
-        if (&sh != this) {
-            clear_hash();
-            for (const_iterator i = sh.begin(); i != sh.end(); ++i)
-                insert_copy((*i).first, (*i).second);
-        }
-        return *this;
-    }
-
+        if (&sh != this) { 
+            clear_hash(); 
+            for (const_iterator i = sh.begin(); i != sh.end(); ++i) 
+                insert_copy((*i).first, (*i).second); 
+        } 
+        return *this; 
+    } 
+ 
     mapped_type& operator[](const char* key) {
         iterator I = yh::find(key);
         if (I == yh::end())
-            I = insert_copy(key, mapped_type()).first;
-        return (*I).second;
-    }
+            I = insert_copy(key, mapped_type()).first; 
+        return (*I).second; 
+    } 
 };
 
-template <class C, class T, class HashFcn, class EqualTo>
+template <class C, class T, class HashFcn, class EqualTo> 
 class THashWithSegmentedPoolForKeys: protected  THashMap<const C*, T, HashFcn, EqualTo>, TNonCopyable {
-protected:
-    segmented_pool<C> pool;
+protected: 
+    segmented_pool<C> pool; 
 
-public:
+public: 
     using yh = THashMap<const C*, T, HashFcn, EqualTo>;
     using iterator = typename yh::iterator;
     using const_iterator = typename yh::const_iterator;
@@ -114,68 +114,68 @@ public:
     using key_type = typename yh::key_type;
     using value_type = typename yh::value_type;
 
-    THashWithSegmentedPoolForKeys(size_type hash_size = HASH_SIZE_DEFAULT, size_t segsize = HASH_SIZE_DEFAULT * AVERAGEWORD_BUF, bool afs = false)
-        : yh(hash_size)
-        , pool(segsize)
-    {
-        if (afs)
-            pool.alloc_first_seg();
-    }
-
+    THashWithSegmentedPoolForKeys(size_type hash_size = HASH_SIZE_DEFAULT, size_t segsize = HASH_SIZE_DEFAULT * AVERAGEWORD_BUF, bool afs = false) 
+        : yh(hash_size) 
+        , pool(segsize) 
+    { 
+        if (afs) 
+            pool.alloc_first_seg(); 
+    } 
+ 
     std::pair<iterator, bool> insert_copy(const C* key, size_t keylen, const mapped_type& data) {
         std::pair<iterator, bool> ins = this->insert(value_type(key, data));
-        if (ins.second) // new?
-            (const C*&)(*ins.first).first = pool.append(key, keylen);
-        return ins;
-    }
-
-    void clear_hash() {
-        yh::clear();
-        pool.restart();
-    }
-
-    size_t pool_size() const {
-        return pool.size();
-    }
-
-    size_t size() const {
-        return yh::size();
-    }
-
-    bool empty() const {
-        return yh::empty();
-    }
-
-    iterator begin() {
-        return yh::begin();
-    }
-
-    iterator end() {
-        return yh::end();
-    }
-
-    const_iterator begin() const {
-        return yh::begin();
-    }
-
-    const_iterator end() const {
-        return yh::end();
-    }
-
-    iterator find(const key_type& key) {
-        return yh::find(key);
-    }
-
-    const_iterator find(const key_type& key) const {
-        return yh::find(key);
-    }
-
+        if (ins.second) // new? 
+            (const C*&)(*ins.first).first = pool.append(key, keylen); 
+        return ins; 
+    } 
+ 
+    void clear_hash() { 
+        yh::clear(); 
+        pool.restart(); 
+    } 
+ 
+    size_t pool_size() const { 
+        return pool.size(); 
+    } 
+ 
+    size_t size() const { 
+        return yh::size(); 
+    } 
+ 
+    bool empty() const { 
+        return yh::empty(); 
+    } 
+ 
+    iterator begin() { 
+        return yh::begin(); 
+    } 
+ 
+    iterator end() { 
+        return yh::end(); 
+    } 
+ 
+    const_iterator begin() const { 
+        return yh::begin(); 
+    } 
+ 
+    const_iterator end() const { 
+        return yh::end(); 
+    } 
+ 
+    iterator find(const key_type& key) { 
+        return yh::find(key); 
+    } 
+ 
+    const_iterator find(const key_type& key) const { 
+        return yh::find(key); 
+    } 
+ 
     const yh& get_THashMap() const {
         return static_cast<const yh&>(*this);
     }
-};
-
-template <class T, class HashFcn, class EqualTo>
+}; 
+ 
+template <class T, class HashFcn, class EqualTo> 
 class segmented_string_hash: public THashWithSegmentedPoolForKeys<char, T, HashFcn, EqualTo> {
 public:
     using Base = THashWithSegmentedPoolForKeys<char, T, HashFcn, EqualTo>;
@@ -186,20 +186,20 @@ public:
     using key_type = typename Base::key_type;
     using value_type = typename Base::value_type;
 
-public:
-    segmented_string_hash(size_type hash_size = HASH_SIZE_DEFAULT, size_t segsize = HASH_SIZE_DEFAULT * AVERAGEWORD_BUF, bool afs = false)
+public: 
+    segmented_string_hash(size_type hash_size = HASH_SIZE_DEFAULT, size_t segsize = HASH_SIZE_DEFAULT * AVERAGEWORD_BUF, bool afs = false) 
         : Base(hash_size, segsize, afs)
     {
     }
-
+ 
     std::pair<iterator, bool> insert_copy(const char* key, const mapped_type& data) {
-        return Base::insert_copy(key, strlen(key) + 1, data);
+        return Base::insert_copy(key, strlen(key) + 1, data); 
     }
-
-    mapped_type& operator[](const char* key) {
-        iterator I = Base::find(key);
-        if (I == Base::end())
-            I = insert_copy(key, mapped_type()).first;
-        return (*I).second;
+ 
+    mapped_type& operator[](const char* key) { 
+        iterator I = Base::find(key); 
+        if (I == Base::end()) 
+            I = insert_copy(key, mapped_type()).first; 
+        return (*I).second; 
     }
 };

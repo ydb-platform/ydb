@@ -68,7 +68,7 @@ static inline bool IsFinite(double f) {
 #if defined(isfinite)
     return isfinite(f);
 #elif defined(_win_)
-    return _finite(f) != 0;
+    return _finite(f) != 0; 
 #elif defined(_darwin_)
     return isfinite(f);
 #elif defined(__GNUC__)
@@ -82,7 +82,7 @@ static inline bool IsFinite(double f) {
 
 static inline bool IsNan(double f) {
 #if defined(_win_)
-    return _isnan(f) != 0;
+    return _isnan(f) != 0; 
 #else
     return std::isnan(f);
 #endif
@@ -92,7 +92,7 @@ inline bool IsValidFloat(double f) {
     return IsFinite(f) && !IsNan(f);
 }
 
-#ifdef _MSC_VER
+#ifdef _MSC_VER 
 double Erf(double x);
 #else
 inline double Erf(double x) {

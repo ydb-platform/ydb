@@ -48,7 +48,7 @@ namespace NLastGetopt {
                 return -1;
             } else {
                 optarg = (char*)OptsParser->CurVal();
-                optind = (int)OptsParser->Pos_;
+                optind = (int)OptsParser->Pos_; 
                 if (longindex && OptsParser->CurOpt())
                     *longindex = (int)Opts->IndexOf(OptsParser->CurOpt());
                 return OptsParser->CurOpt() ? OptsParser->CurOpt()->GetCharOr0() : 1;

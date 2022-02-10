@@ -2,10 +2,10 @@
 
 //THIS FILE A COMPAT STUB HEADER
 
-#include <cstring>
+#include <cstring> 
 #include <cstdarg>
 #include <algorithm>
-
+ 
 #include <util/system/defaults.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
@@ -20,16 +20,16 @@ inline void RemoveIfLast(T& s, int c) {
     const size_t length = s.length();
     if (length && s[length - 1] == c)
         s.remove(length - 1);
-}
-
+} 
+ 
 /// Adds lastCh symbol to the the of the string if it is not already there.
 inline void addIfNotLast(TString& s, int lastCh) {
     size_t len = s.length();
     if (!len || s[len - 1] != lastCh) {
         s.append(char(lastCh));
     }
-}
-
+} 
+ 
 /// @details Finishes the string with lastCh1 if lastCh2 is not present in the string and lastCh1 is not already at the end of the string.
 /// Else, if lastCh2 is not equal to the symbol before the last, it finishes the string with lastCh2.
 /// @todo ?? Define, when to apply the function. Is in use several times for URLs parsing.
@@ -41,8 +41,8 @@ inline void addIfAbsent(TString& s, char lastCh1, char lastCh2) {
     } else if (pos < s.length() - 1) {
         addIfNotLast(s, lastCh2);
     }
-}
-
+} 
+ 
 /// @}
 
 /*

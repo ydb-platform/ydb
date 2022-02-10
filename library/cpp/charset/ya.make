@@ -9,8 +9,8 @@ SRCS(
     cp_encrec.cpp
     doccodes.cpp
     iconv.cpp
-    recyr.hh
-    recyr_int.hh
+    recyr.hh 
+    recyr_int.hh 
     ci_string.cpp
     wide.cpp
 )

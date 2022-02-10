@@ -2,12 +2,12 @@
 #include "defaults.h"
 #include "progname.h"
 
-#include <cctype>
-#include <cerrno>
-#include <cstdio>
+#include <cctype> 
+#include <cerrno> 
+#include <cstdio> 
 #include <cstring>
-#include <cstdarg>
-#include <cstdlib>
+#include <cstdarg> 
+#include <cstdlib> 
 
 #include <util/generic/string.h>
 
@@ -34,12 +34,12 @@ void usleep(i64 len) {
 
     #include <fcntl.h>
 int ftruncate(int fd, i64 length) {
-    return _chsize_s(fd, length);
+    return _chsize_s(fd, length); 
 }
 int truncate(const char* name, i64 length) {
-    int fd = ::_open(name, _O_WRONLY);
-    int ret = ftruncate(fd, length);
-    ::close(fd);
-    return ret;
-}
+    int fd = ::_open(name, _O_WRONLY); 
+    int ret = ftruncate(fd, length); 
+    ::close(fd); 
+    return ret; 
+} 
 #endif

@@ -87,7 +87,7 @@ namespace NAddr {
         }
 
         socklen_t Len() const override {
-            return (socklen_t)AI_->ai_addrlen;
+            return (socklen_t)AI_->ai_addrlen; 
         }
 
     private:

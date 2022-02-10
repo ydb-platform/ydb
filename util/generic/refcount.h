@@ -2,7 +2,7 @@
 
 #include <util/system/guard.h>
 #include <util/system/atomic.h>
-#include <util/system/defaults.h>
+#include <util/system/defaults.h> 
 #include <util/system/yassert.h>
 
 template <class TCounterCheckPolicy>

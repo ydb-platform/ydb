@@ -184,13 +184,13 @@ IF (NOT OS_LINUX)
 ENDIF()
 
 IF (NOT OS_WINDOWS)
-    SRCS(
-        src/stdio-write.c
-    )
+    SRCS( 
+        src/stdio-write.c 
+    ) 
 ENDIF()
-
+ 
 IF (OS_WINDOWS)
-    SRCS(
+    SRCS( 
         src/frexp.c
         src/wcrtomb.c
         src/perror.c
@@ -225,7 +225,7 @@ IF (OS_WINDOWS)
         src/waitpid.c
         src/wcwidth.c
         src/uniwidth/width.c
-    )
+    ) 
 ENDIF()
 
 IF (NOT OS_LINUX OR MUSL)

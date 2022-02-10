@@ -53,15 +53,15 @@ namespace {
         return 0;
     }
 
-    template <typename T>
+    template <typename T> 
     inline T CutHttpPrefixImpl(const T& url, bool ignorehttps) {
         size_t prefixSize = GetHttpPrefixSizeImpl<typename T::char_type>(url.data(), TKnownSize(url.size()), ignorehttps);
         if (prefixSize)
             return url.substr(prefixSize);
-        return url;
-    }
-}
-
+        return url; 
+    } 
+} 
+ 
 namespace NUrl {
 
     TSplitUrlToHostAndPathResult SplitUrlToHostAndPath(const TStringBuf url) {
@@ -75,8 +75,8 @@ namespace NUrl {
 
 size_t GetHttpPrefixSize(const char* url, bool ignorehttps) noexcept {
     return GetHttpPrefixSizeImpl<char>(url, TUncheckedSize(), ignorehttps);
-}
-
+} 
+ 
 size_t GetHttpPrefixSize(const wchar16* url, bool ignorehttps) noexcept {
     return GetHttpPrefixSizeImpl<wchar16>(url, TUncheckedSize(), ignorehttps);
 }
@@ -95,8 +95,8 @@ TStringBuf CutHttpPrefix(const TStringBuf url, bool ignorehttps) noexcept {
 
 TWtringBuf CutHttpPrefix(const TWtringBuf url, bool ignorehttps) noexcept {
     return CutHttpPrefixImpl(url, ignorehttps);
-}
-
+} 
+ 
 size_t GetSchemePrefixSize(const TStringBuf url) noexcept {
     struct TDelim: public str_spn {
         inline TDelim()
@@ -144,8 +144,8 @@ static inline TStringBuf GetHostAndPortImpl(const TStringBuf url) {
     }
 
     return urlNoScheme;
-}
-
+} 
+ 
 TStringBuf GetHost(const TStringBuf url) noexcept {
     return GetHostAndPortImpl<false>(url);
 }
@@ -279,10 +279,10 @@ TStringBuf GetZone(const TStringBuf host) noexcept {
 
 TStringBuf CutWWWPrefix(const TStringBuf url) noexcept {
     if (url.size() >= 4 && url[3] == '.' && !strnicmp(url.data(), "www", 3))
-        return url.substr(4);
-    return url;
-}
-
+        return url.substr(4); 
+    return url; 
+} 
+ 
 TStringBuf CutWWWNumberedPrefix(const TStringBuf url) noexcept {
     auto it = url.begin();
 
@@ -334,44 +334,44 @@ TString AddSchemePrefix(const TString& url, TStringBuf scheme) {
     return TString::Join(scheme, TStringBuf("://"), url);
 }
 
-#define X(c) (c >= 'A' ? ((c & 0xdf) - 'A') + 10 : (c - '0'))
-
-static inline int x2c(unsigned char* x) {
+#define X(c) (c >= 'A' ? ((c & 0xdf) - 'A') + 10 : (c - '0')) 
+ 
+static inline int x2c(unsigned char* x) { 
     if (!IsAsciiHex(x[0]) || !IsAsciiHex(x[1]))
-        return -1;
-    return X(x[0]) * 16 + X(x[1]);
-}
-
+        return -1; 
+    return X(x[0]) * 16 + X(x[1]); 
+} 
+ 
 #undef X
 
 static inline int Unescape(char* str) {
     char *to, *from;
-    int dlen = 0;
+    int dlen = 0; 
     if ((str = strchr(str, '%')) == nullptr)
-        return dlen;
-    for (to = str, from = str; *from; from++, to++) {
-        if ((*to = *from) == '%') {
+        return dlen; 
+    for (to = str, from = str; *from; from++, to++) { 
+        if ((*to = *from) == '%') { 
             int c = x2c((unsigned char*)from + 1);
-            *to = char((c > 0) ? c : '0');
-            from += 2;
-            dlen += 2;
-        }
-    }
+            *to = char((c > 0) ? c : '0'); 
+            from += 2; 
+            dlen += 2; 
+        } 
+    } 
     *to = 0; /* terminate it at the new length */
-    return dlen;
-}
-
+    return dlen; 
+} 
+ 
 size_t NormalizeUrlName(char* dest, const TStringBuf source, size_t dest_size) {
     if (source.empty() || source[0] == '?')
-        return strlcpy(dest, "/", dest_size);
+        return strlcpy(dest, "/", dest_size); 
     size_t len = Min(dest_size - 1, source.length());
     memcpy(dest, source.data(), len);
     dest[len] = 0;
-    len -= Unescape(dest);
-    strlwr(dest);
-    return len;
-}
-
+    len -= Unescape(dest); 
+    strlwr(dest); 
+    return len; 
+} 
+ 
 size_t NormalizeHostName(char* dest, const TStringBuf source, size_t dest_size, ui16 defport) {
     size_t len = Min(dest_size - 1, source.length());
     memcpy(dest, source.data(), len);
@@ -382,11 +382,11 @@ size_t NormalizeHostName(char* dest, const TStringBuf source, size_t dest_size, 
     char* ptr = strstr(dest, buf);
     if (ptr && ptr[buflen] == 0) {
         len -= buflen;
-        *ptr = 0;
-    }
-    strlwr(dest);
-    return len;
-}
+        *ptr = 0; 
+    } 
+    strlwr(dest); 
+    return len; 
+} 
 
 TStringBuf RemoveFinalSlash(TStringBuf str) noexcept {
     if (str.EndsWith('/')) {

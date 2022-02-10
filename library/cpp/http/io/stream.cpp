@@ -971,14 +971,14 @@ unsigned ParseHttpRetCode(const TStringBuf& ret) {
 
     return FromString<unsigned>(code.data(), code.size());
 }
-
+ 
 void SendMinimalHttpRequest(TSocket& s, const TStringBuf& host, const TStringBuf& request, const TStringBuf& agent, const TStringBuf& from) {
-    TSocketOutput so(s);
-    THttpOutput output(&so);
-
-    output.EnableKeepAlive(false);
-    output.EnableCompression(false);
-
+    TSocketOutput so(s); 
+    THttpOutput output(&so); 
+ 
+    output.EnableKeepAlive(false); 
+    output.EnableCompression(false); 
+ 
     const IOutputStream::TPart parts[] = {
         IOutputStream::TPart(TStringBuf("GET ")),
         IOutputStream::TPart(request),
@@ -994,11 +994,11 @@ void SendMinimalHttpRequest(TSocket& s, const TStringBuf& host, const TStringBuf
         IOutputStream::TPart(from),
         IOutputStream::TPart::CrLf(),
         IOutputStream::TPart::CrLf(),
-    };
+    }; 
 
-    output.Write(parts, sizeof(parts) / sizeof(*parts));
-    output.Finish();
-}
+    output.Write(parts, sizeof(parts) / sizeof(*parts)); 
+    output.Finish(); 
+} 
 
 TArrayRef<const TStringBuf> SupportedCodings() {
     return TCompressionCodecFactory::Instance().GetBestCodecs();

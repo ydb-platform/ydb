@@ -9,7 +9,7 @@
 #include <util/generic/hash_set.h>
 #include <util/system/hostname.h>
 
-namespace NBus {
+namespace NBus { 
     using namespace NAddr;
 
     static TIpPort GetAddrPort(const IRemoteAddr& addr) {
@@ -360,7 +360,7 @@ namespace NBus {
     }
 
     int TBusLocator::LocateKeys(TBusService service, TBusKeyVec& keys, bool onlyLocal) {
-        TGuard<TMutex> G(Lock);
+        TGuard<TMutex> G(Lock); 
         Y_VERIFY(keys.empty(), "Non empty keys");
 
         TServiceId serviceId = GetServiceId(service);
@@ -374,7 +374,7 @@ namespace NBus {
                 continue;
             }
             keys.push_back(std::make_pair(item.Start, item.End));
-        }
+        } 
         return (int)keys.size();
     }
 

@@ -534,7 +534,7 @@ namespace NUri {
             Y_ASSERT(IsValidAbs() && other.IsValidAbs());
             return Equal(other, FlagScheme | FlagHostPort);
         }
-
+ 
         TLinkType Locality(const TUri& other) const {
             if (IsSameDocument(other))
                 return LinkIsFragment;
@@ -542,11 +542,11 @@ namespace NUri {
                 return LinkIsLocal;
             return LinkIsGlobal;
         }
-
+ 
         static IOutputStream& ReEncodeField(IOutputStream& out, const TStringBuf& val, EField fld, long flags = FeaturesEncodeDecode) {
             return NEncode::TEncoder::ReEncode(out, val, NEncode::TEncodeMapper(flags, fld));
         }
-
+ 
         static IOutputStream& ReEncodeToField(IOutputStream& out, const TStringBuf& val, EField srcfld, long srcflags, EField dstfld, long dstflags) {
             return NEncode::TEncoder::ReEncodeTo(out, val, NEncode::TEncodeMapper(srcflags, srcfld), NEncode::TEncodeToMapper(dstflags, dstfld));
         }

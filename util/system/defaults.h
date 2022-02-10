@@ -1,6 +1,6 @@
 #pragma once
 
-#include "platform.h"
+#include "platform.h" 
 
 #if defined _unix_
     #define LOCSLASH_C '/'
@@ -15,7 +15,7 @@
 #endif
 
 // low and high parts of integers
-#if !defined(_win_)
+#if !defined(_win_) 
     #include <sys/param.h>
 #endif
 
@@ -79,7 +79,7 @@
     #include <malloc.h>
 #elif defined(_sun_)
     #include <alloca.h>
-#endif
+#endif 
 
 #ifdef NDEBUG
     #define Y_IF_DEBUG(X)

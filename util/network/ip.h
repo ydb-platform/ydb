@@ -29,7 +29,7 @@ static inline TIpHost IpFromString(const char* ipStr) {
 }
 
 static inline char* IpToString(TIpHost ip, char* buf, size_t len) {
-    if (!inet_ntop(AF_INET, (void*)&ip, buf, (socklen_t)len)) {
+    if (!inet_ntop(AF_INET, (void*)&ip, buf, (socklen_t)len)) { 
         ythrow TSystemError() << "Failed to get ip address string";
     }
 

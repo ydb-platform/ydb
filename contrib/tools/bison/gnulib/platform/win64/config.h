@@ -911,7 +911,7 @@
 /* #undef HAVE_SLEEP */
 
 /* Define to 1 if you have the `snprintf' function. */
-#define HAVE_SNPRINTF 1
+#define HAVE_SNPRINTF 1 
 
 /* Define if the return value of the snprintf function is the number of of
    bytes (excluding the terminating NUL) that would have been produced if the

@@ -1,10 +1,10 @@
 #include "info.h"
 #include "madvise.h"
-#include "defaults.h"
+#include "defaults.h" 
 #include "hi_lo.h"
 
 #include <util/generic/buffer.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 #include <util/generic/singleton.h>
 
 #if defined(_win_)
@@ -149,7 +149,7 @@ public:
         } else {
             PtrStart_ = nullptr;
         }
-#endif
+#endif 
     }
 
     void CheckFile() const {
@@ -210,7 +210,7 @@ public:
         return File_.IsOpen()
 #if defined(_win_)
                && Mapping_ != nullptr
-#endif
+#endif 
             ;
     }
 
@@ -437,8 +437,8 @@ TMemoryMap::EOpenMode TMemoryMap::GetMode() const noexcept {
 
 TFile TMemoryMap::GetFile() const noexcept {
     return Impl_->GetFile();
-}
-
+} 
+ 
 TFileMap::TFileMap(const TMemoryMap& map) noexcept
     : Map_(map)
 {
@@ -523,8 +523,8 @@ TFileMap::~TFileMap() {
     } catch (...) {
         // ¯\_(ツ)_/¯
     }
-}
-
+} 
+ 
 void TFileMap::Precharge(size_t pos, size_t size) const {
     NPrivate::Precharge(Ptr(), MappedSize(), pos, size);
 }
@@ -535,51 +535,51 @@ TMappedAllocation::TMappedAllocation(size_t size, bool shared, void* addr)
     , Shared_(shared)
 #if defined(_win_)
     , Mapping_(nullptr)
-#endif
-{
+#endif 
+{ 
     if (size != 0) {
         Alloc(size, addr);
     }
-}
-
+} 
+ 
 void* TMappedAllocation::Alloc(size_t size, void* addr) {
     assert(Ptr_ == nullptr);
 #if defined(_win_)
     (void)addr;
     Mapping_ = CreateFileMapping((HANDLE)-1, nullptr, PAGE_READWRITE, 0, size ? size : 1, nullptr);
     Ptr_ = MapViewOfFile(Mapping_, FILE_MAP_WRITE, 0, 0, size ? size : 1);
-#else
+#else 
     Ptr_ = mmap(addr, size, PROT_READ | PROT_WRITE, (Shared_ ? MAP_SHARED : MAP_PRIVATE) | MAP_ANON, -1, 0);
 
     if (Ptr_ == (void*)MAP_FAILED) {
         Ptr_ = nullptr;
-    }
-#endif
+    } 
+#endif 
     if (Ptr_ != nullptr) {
         Size_ = size;
     }
     return Ptr_;
-}
-
+} 
+ 
 void TMappedAllocation::Dealloc() {
     if (Ptr_ == nullptr) {
-        return;
+        return; 
     }
 #if defined(_win_)
     UnmapViewOfFile(Ptr_);
     CloseHandle(Mapping_);
     Mapping_ = nullptr;
-#else
+#else 
     munmap((caddr_t)Ptr_, Size_);
-#endif
+#endif 
     Ptr_ = nullptr;
     Size_ = 0;
-}
-
+} 
+ 
 void TMappedAllocation::swap(TMappedAllocation& with) {
     DoSwap(Ptr_, with.Ptr_);
     DoSwap(Size_, with.Size_);
 #if defined(_win_)
     DoSwap(Mapping_, with.Mapping_);
-#endif
-}
+#endif 
+} 

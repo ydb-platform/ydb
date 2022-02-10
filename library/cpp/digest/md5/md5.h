@@ -1,8 +1,8 @@
 #pragma once
-
+ 
 #include <util/generic/array_ref.h>
 #include <util/generic/strbuf.h>
-
+ 
 class IInputStream;
 
 class MD5 {
@@ -74,4 +74,4 @@ private:
     ui8 Buffer[64];  /* input buffer */
     ui32 State[4];   /* state (ABCD) */
     ui64 StreamSize; /* total bytes in input stream */
-};
+}; 

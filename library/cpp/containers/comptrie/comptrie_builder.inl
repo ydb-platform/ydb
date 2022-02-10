@@ -508,7 +508,7 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ConvertSymbolArrayTo
 
     for (size_t i = 0; i < keylen; ++i) {
         TSymbol label = key[i];
-        for (int j = (int)NCompactTrie::ExtraBits<TSymbol>(); j >= 0; j -= 8) {
+        for (int j = (int)NCompactTrie::ExtraBits<TSymbol>(); j >= 0; j -= 8) { 
             Y_ASSERT(ckeyptr < buf.Data() + buflen);
             *(ckeyptr++) = (char)(label >> j);
         }

@@ -73,18 +73,18 @@ static inline intptr_t AtomicGetAndCas(TAtomic* a, intptr_t exchange, intptr_t c
     return compare;
 }
 
-static inline intptr_t AtomicOr(TAtomic& a, intptr_t b) {
+static inline intptr_t AtomicOr(TAtomic& a, intptr_t b) { 
     return __atomic_or_fetch(&a, b, __ATOMIC_SEQ_CST);
-}
-
+} 
+ 
 static inline intptr_t AtomicXor(TAtomic& a, intptr_t b) {
     return __atomic_xor_fetch(&a, b, __ATOMIC_SEQ_CST);
 }
 
-static inline intptr_t AtomicAnd(TAtomic& a, intptr_t b) {
+static inline intptr_t AtomicAnd(TAtomic& a, intptr_t b) { 
     return __atomic_and_fetch(&a, b, __ATOMIC_SEQ_CST);
-}
-
+} 
+ 
 static inline void AtomicBarrier() {
     __sync_synchronize();
 }

@@ -1,12 +1,12 @@
 UNITTEST()
 
-OWNER(
-    g:util
-    vskipin
-)
+OWNER( 
+    g:util 
+    vskipin 
+) 
 
 PEERDIR(
-    library/cpp/cache
+    library/cpp/cache 
 )
 
 SRCS(

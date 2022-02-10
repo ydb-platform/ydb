@@ -520,13 +520,13 @@ Y_UNIT_TEST(TestInvalidJson) {
     UNIT_ASSERT_EXCEPTION(Json2Proto(val, proto), yexception);
 }
 
-Y_UNIT_TEST(TestInvalidRepeatedFieldWithMapAsObject) {
-    TCompositeRepeated proto;
-    TJson2ProtoConfig config;
-    config.MapAsObject = true;
+Y_UNIT_TEST(TestInvalidRepeatedFieldWithMapAsObject) { 
+    TCompositeRepeated proto; 
+    TJson2ProtoConfig config; 
+    config.MapAsObject = true; 
     UNIT_ASSERT_EXCEPTION(Json2Proto(TStringBuf(R"({"Part":{"Boo":{}}})"), proto, config), yexception);
-}
-
+} 
+ 
 Y_UNIT_TEST(TestStringTransforms) {
     // Check that strings and bytes are transformed
     {

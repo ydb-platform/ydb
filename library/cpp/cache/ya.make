@@ -1,16 +1,16 @@
 LIBRARY()
 
-OWNER(
-    g:util
-)
+OWNER( 
+    g:util 
+) 
 
 SRCS(
     cache.cpp
-    thread_safe_cache.cpp
+    thread_safe_cache.cpp 
 )
 
 END()
-
-RECURSE_FOR_TESTS(
-    ut
-)
+ 
+RECURSE_FOR_TESTS( 
+    ut 
+) 

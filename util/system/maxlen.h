@@ -20,13 +20,13 @@
         #define PATH_MAX _MAX_PATH
     #endif
 #else
-
+ 
     #ifndef MAX_PATH
         #define MAX_PATH PATH_MAX
     #endif
-
+ 
     #ifndef _MAX_PATH
         #define _MAX_PATH PATH_MAX
     #endif
-
-#endif
+ 
+#endif 

@@ -6,35 +6,35 @@
 
 #include <cerrno>
 #include <cstring>
-
-#ifdef _win32_
+ 
+#ifdef _win32_ 
     #include "winint.h"
     #include <io.h>
 #else
     #include <unistd.h>
     #include <stdlib.h>
-#endif
+#endif 
 
 extern "C" int mkstemps(char* path, int slen);
 
 TString MakeTempName(const char* wrkDir, const char* prefix, const char* extension) {
-#ifndef _win32_
+#ifndef _win32_ 
     TString filePath;
-
+ 
     if (wrkDir && *wrkDir) {
         filePath += wrkDir;
     } else {
         filePath += GetSystemTempDir();
     }
-
+ 
     if (filePath.back() != '/') {
         filePath += '/';
     }
-
+ 
     if (prefix) {
         filePath += prefix;
     }
-
+ 
     filePath += "XXXXXX"; // mkstemps requirement
 
     size_t extensionPartLength = 0;
@@ -46,28 +46,28 @@ TString MakeTempName(const char* wrkDir, const char* prefix, const char* extensi
         filePath += extension;
         extensionPartLength += strlen(extension);
     }
-
+ 
     int fd = mkstemps(const_cast<char*>(filePath.data()), extensionPartLength);
     if (fd >= 0) {
         close(fd);
         return filePath;
-    }
-#else
+    } 
+#else 
     char tmpDir[MAX_PATH + 1]; // +1 -- for terminating null character
     char filePath[MAX_PATH];
     const char* pDir = 0;
-
+ 
     if (wrkDir && *wrkDir) {
-        pDir = wrkDir;
+        pDir = wrkDir; 
     } else if (GetTempPath(MAX_PATH + 1, tmpDir)) {
         pDir = tmpDir;
     }
-
+ 
     // it always takes up to 3 characters, no more
     if (GetTempFileName(pDir, (prefix) ? (prefix) : "yan", 0, filePath)) {
         return filePath;
     }
-#endif
+#endif 
 
     ythrow TSystemError() << "can not create temp name(" << wrkDir << ", " << prefix << ", " << extension << ")";
 }

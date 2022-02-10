@@ -437,7 +437,7 @@ template <class I, class T>
 static inline void Fill(I f, I l, const T& v) {
     std::fill(f, l, v);
 }
- 
+
 template <typename I, typename S, typename T>
 static inline I FillN(I f, S n, const T& v) {
     return std::fill_n(f, n, v);
@@ -446,12 +446,12 @@ static inline I FillN(I f, S n, const T& v) {
 template <class T>
 static inline void Reverse(T f, T l) {
     std::reverse(f, l);
-} 
- 
+}
+
 template <class T>
 static inline void Rotate(T f, T m, T l) {
     std::rotate(f, m, l);
-} 
+}
 
 template <typename It, typename Val>
 Val Accumulate(It begin, It end, Val val) {
@@ -464,7 +464,7 @@ Val Accumulate(It begin, It end, Val val, BinOp binOp) {
     // std::move since C++20
     return std::accumulate(begin, end, std::move(val), binOp);
 }
- 
+
 template <typename C, typename Val>
 Val Accumulate(const C& c, Val val) {
     // std::move since C++20
@@ -498,25 +498,25 @@ static inline typename TVectorType::value_type InnerProduct(const TVectorType& l
 }
 
 template <class T>
-static inline T MinElement(T begin, T end) { 
+static inline T MinElement(T begin, T end) {
     return std::min_element(begin, end);
-} 
- 
+}
+
 template <class T, class C>
-static inline T MinElement(T begin, T end, C comp) { 
+static inline T MinElement(T begin, T end, C comp) {
     return std::min_element(begin, end, comp);
-} 
- 
+}
+
 template <class T>
-static inline T MaxElement(T begin, T end) { 
+static inline T MaxElement(T begin, T end) {
     return std::max_element(begin, end);
-} 
- 
+}
+
 template <class T, class C>
-static inline T MaxElement(T begin, T end, C comp) { 
+static inline T MaxElement(T begin, T end, C comp) {
     return std::max_element(begin, end, comp);
-} 
- 
+}
+
 template <class I, class F>
 I MaxElementBy(I begin, I end, F&& func) {
     using TValue = decltype(func(*begin));
@@ -558,7 +558,7 @@ void ApplyToMany(TOp op, TArgs&&... args) {
 template <class TI, class TOp>
 inline void ForEach(TI f, TI l, TOp op) {
     std::for_each(f, l, op);
-} 
+}
 
 namespace NPrivate {
     template <class T, class TOp, size_t... Is>

@@ -69,15 +69,15 @@ TModChooser::TMode::TMode(const TString& name, TMainClass* main, const TString& 
 {
 }
 
-TModChooser::TModChooser() 
+TModChooser::TModChooser()
     : ModesHelpOption("-?") // Default help option in last_getopt
     , VersionHandler(nullptr)
     , ShowSeparated(true)
     , SvnRevisionOptionDisabled(false)
     , PrintShortCommandInUsage(false)
-{ 
-} 
- 
+{
+}
+
 TModChooser::~TModChooser() = default;
 
 void TModChooser::AddMode(const TString& mode, const TMainFunctionRawPtr func, const TString& description, bool hidden, bool noCompletion) {
@@ -133,13 +133,13 @@ void TModChooser::SetDescription(const TString& descr) {
 }
 
 void TModChooser::SetModesHelpOption(const TString& helpOption) {
-    ModesHelpOption = helpOption; 
-} 
- 
-void TModChooser::SetVersionHandler(TVersionHandlerPtr handler) { 
-    VersionHandler = handler; 
-} 
- 
+    ModesHelpOption = helpOption;
+}
+
+void TModChooser::SetVersionHandler(TVersionHandlerPtr handler) {
+    VersionHandler = handler;
+}
+
 void TModChooser::SetSeparatedMode(bool separated) {
     ShowSeparated = separated;
 }
@@ -185,9 +185,9 @@ int TModChooser::Run(const int argc, const char** argv) const {
         return 0;
     }
     if (VersionHandler && (modeName == "-v" || modeName == "--version")) {
-        VersionHandler(); 
-        return 0; 
-    } 
+        VersionHandler();
+        return 0;
+    }
     if (!SvnRevisionOptionDisabled && modeName == "--svnrevision") {
         NLastGetopt::PrintVersionAndExit(nullptr);
     }

@@ -5,7 +5,7 @@
 
 #include <util/folder/dirut.h>
 #include <util/folder/filelist.h>
-#include <util/folder/path.h> 
+#include <util/folder/path.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/memory/blob.h>
@@ -332,7 +332,7 @@ static inline void Append(IOutputStream& w, const TString& fname, const TString&
     TMappedFileInput in(fname);
 
     if (!Quiet) {
-        Cerr << "--> " << rname << Endl; 
+        Cerr << "--> " << rname << Endl;
     }
 
     TransferData((IInputStream*)&in, &w);
@@ -341,20 +341,20 @@ static inline void Append(IOutputStream& w, const TString& fname, const TString&
 static inline void Append(TDuplicatesMap& w, const TString& fname, const TString& rname) {
     w.Add(fname, rname);
 }
- 
+
 static inline void Append(TDeduplicationArchiveWriter& w, const TString& fname, const TString& rname) {
     if (!Quiet) {
-        Cerr << "--> " << rname << Endl; 
+        Cerr << "--> " << rname << Endl;
     }
- 
+
     if (const TString* rootRecordName = w.DuplicatesMap.Synonyms.FindPtr(rname)) {
         w.Writer.AddSynonym(*rootRecordName, rname);
     } else {
         TMappedFileInput in(fname);
         w.Writer.Add(rname, &in);
     }
-} 
- 
+}
+
 namespace {
     struct TRec {
         bool Recursive = false;
@@ -376,7 +376,7 @@ namespace {
             } else {
                 Append(w, Path, Key.size() ? Key : Prefix + "/" + GetFile(Path));
             }
-        } 
+        }
 
         template <typename T>
         inline void DoRecurse(T& w, const TString& off) const {
@@ -415,13 +415,13 @@ namespace {
 }
 
 static TString CutFirstSlash(const TString& fileName) {
-    if (fileName[0] == '/') { 
-        return fileName.substr(1); 
-    } else { 
-        return fileName; 
-    } 
-} 
- 
+    if (fileName[0] == '/') {
+        return fileName.substr(1);
+    } else {
+        return fileName;
+    }
+}
+
 struct TMappingReader {
     TMemoryMap Map;
     TBlob Blob;
@@ -438,51 +438,51 @@ struct TMappingReader {
 static void UnpackArchive(const TString& archive, const TFsPath& dir = TFsPath()) {
     TMappingReader mappingReader(archive);
     const TArchiveReader& reader = mappingReader.Reader;
-    const size_t count = reader.Count(); 
-    for (size_t i = 0; i < count; ++i) { 
+    const size_t count = reader.Count();
+    for (size_t i = 0; i < count; ++i) {
         const TString key = reader.KeyByIndex(i);
         const TString fileName = CutFirstSlash(key);
         if (!Quiet) {
-            Cerr << archive << " --> " << fileName << Endl; 
+            Cerr << archive << " --> " << fileName << Endl;
         }
         const TFsPath path(dir / fileName);
-        path.Parent().MkDirs(); 
+        path.Parent().MkDirs();
         TAutoPtr<IInputStream> in = reader.ObjectByKey(key);
         TFixedBufferFileOutput out(path);
-        TransferData(in.Get(), &out); 
-        out.Finish(); 
-    } 
-} 
- 
+        TransferData(in.Get(), &out);
+        out.Finish();
+    }
+}
+
 static void ListArchive(const TString& archive, bool cutSlash) {
     TMappingReader mappingReader(archive);
     const TArchiveReader& reader = mappingReader.Reader;
-    const size_t count = reader.Count(); 
-    for (size_t i = 0; i < count; ++i) { 
+    const size_t count = reader.Count();
+    for (size_t i = 0; i < count; ++i) {
         const TString key = reader.KeyByIndex(i);
         TString fileName = key;
         if (cutSlash) {
             fileName = CutFirstSlash(key);
         }
-        Cout << fileName << Endl; 
-    } 
-} 
- 
+        Cout << fileName << Endl;
+    }
+}
+
 static void ListArchiveMd5(const TString& archive, bool cutSlash) {
     TMappingReader mappingReader(archive);
     const TArchiveReader& reader = mappingReader.Reader;
-    const size_t count = reader.Count(); 
-    for (size_t i = 0; i < count; ++i) { 
+    const size_t count = reader.Count();
+    for (size_t i = 0; i < count; ++i) {
         const TString key = reader.KeyByIndex(i);
         TString fileName = key;
         if (cutSlash) {
             fileName = CutFirstSlash(key);
         }
-        char md5buf[33]; 
-        Cout << fileName << '\t' << MD5::Stream(reader.ObjectByKey(key).Get(), md5buf) << Endl; 
-    } 
-} 
- 
+        char md5buf[33];
+        Cout << fileName << '\t' << MD5::Stream(reader.ObjectByKey(key).Get(), md5buf) << Endl;
+    }
+}
+
 int main(int argc, char** argv) {
     NLastGetopt::TOpts opts;
     opts.AddHelpOption('?');
@@ -633,27 +633,27 @@ int main(int argc, char** argv) {
     }
 
     try {
-        if (listMd5) { 
+        if (listMd5) {
             for (const auto& rec: recs) {
                 ListArchiveMd5(rec.Path, cutSlash);
-            } 
-        } else if (list) { 
+            }
+        } else if (list) {
             for (const auto& rec: recs) {
                 ListArchive(rec.Path, cutSlash);
-            } 
-        } else if (unpack) { 
-            const TFsPath dir(unpackDir); 
+            }
+        } else if (unpack) {
+            const TFsPath dir(unpackDir);
             for (const auto& rec: recs) {
                 UnpackArchive(rec.Path, dir);
-            } 
-        } else { 
+            }
+        } else {
             TAutoPtr<IOutputStream> outf(OpenOutput(outputf));
             IOutputStream* out = outf.Get();
             THolder<IOutputStream> hexout;
 
-            if (hexdump) { 
-                hexout.Reset(new THexOutput(out)); 
-                out = hexout.Get(); 
+            if (hexdump) {
+                hexout.Reset(new THexOutput(out));
+                out = hexout.Get();
             } else if (stride) {
                 hexout.Reset(new TStringArrayOutput(out, stride));
                 out = hexout.Get();
@@ -663,29 +663,29 @@ int main(int argc, char** argv) {
             } else if (cppBase) {
                 hexout.Reset(new TCStringOutput(out, cppBase));
                 out = hexout.Get();
-            } 
+            }
 
             outf->Write(prepend.data(), prepend.size());
 
-            if (cat) { 
+            if (cat) {
                 for (const auto& rec: recs) {
                     rec.Recurse(*out);
-                } 
-            } else { 
+                }
+            } else {
                 TDuplicatesMap duplicatesMap;
                 if (deduplicate) {
                     for (const auto& rec: recs) {
                         rec.Recurse(duplicatesMap);
                     }
-                } 
+                }
                 duplicatesMap.Finish();
                 TDeduplicationArchiveWriter w(duplicatesMap, out, !doNotZip);
                 for (const auto& rec: recs) {
                     rec.Recurse(w);
                 }
-                w.Finish(); 
-            } 
- 
+                w.Finish();
+            }
+
             try {
                 out->Finish();
             } catch (...) {

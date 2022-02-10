@@ -83,11 +83,11 @@ char* MD5::Stream(IInputStream* in, char* buf) {
 MD5& MD5::Update(IInputStream* in) {
     TMd5Stream md5(this);
 
-    TransferData(in, &md5); 
+    TransferData(in, &md5);
 
     return *this;
-} 
- 
+}
+
 static const ui8 PADDING[MD5_BLOCK_LENGTH] = {
     0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

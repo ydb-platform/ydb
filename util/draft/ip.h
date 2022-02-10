@@ -6,7 +6,7 @@
 
 #include <util/str_stl.h>
 #include <util/generic/maybe.h>
-#include <util/generic/variant.h> 
+#include <util/generic/variant.h>
 
 #ifdef _unix_
     #include <sys/types.h>

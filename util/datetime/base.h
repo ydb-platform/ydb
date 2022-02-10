@@ -58,8 +58,8 @@ size_t FormatDate8601(char* buf, size_t len, time_t when);
 
 inline void sprint_date8601(char* buf, time_t when) {
     buf[FormatDate8601(buf, 64, when)] = 0;
-} 
- 
+}
+
 bool ParseISO8601DateTimeDeprecated(const char* date, time_t& utcTime);
 bool ParseISO8601DateTimeDeprecated(const char* date, size_t dateLen, time_t& utcTime);
 bool ParseRFC822DateTimeDeprecated(const char* date, time_t& utcTime);
@@ -77,7 +77,7 @@ bool ParseHTTPDateTime(const char* date, time_t& utcTime);
 bool ParseHTTPDateTime(const char* date, size_t dateLen, time_t& utcTime);
 bool ParseX509ValidityDateTime(const char* date, time_t& utcTime);
 bool ParseX509ValidityDateTime(const char* date, size_t dateLen, time_t& utcTime);
- 
+
 constexpr long TVdiff(timeval r1, timeval r2) {
     return (1000000 * (r2.tv_sec - r1.tv_sec) + (r2.tv_usec - r1.tv_usec));
 }

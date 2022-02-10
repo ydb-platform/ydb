@@ -1,17 +1,17 @@
 #pragma once
- 
+
 // #define DO_PRN
- 
+
 #include <cstddef>
 
 #include "common.h"
- 
+
 #include <library/cpp/charset/doccodes.h>
 #include <util/generic/strbuf.h>
 #include <util/stream/output.h>
 #include <util/string/cast.h>
 #include <util/system/yassert.h>
- 
+
 namespace NUri {
     class TParser;
 
@@ -123,12 +123,12 @@ namespace NUri {
             End = pc;
             return true;
         }
- 
+
         void Set(const TStringBuf& buf) {
             Enter(buf.data());
             Leave(buf.data() + buf.length());
         }
- 
+
     public:
         bool IsSet() const {
             return End;
@@ -191,7 +191,7 @@ namespace NUri {
                      || TFeature::FeaturesPath != (Flags & TFeature::FeaturesPath));
             State = ParseImpl();
         }
- 
+
     public:
         const TSection& Get(TField::EField fld) const {
             return Sections[fld];
@@ -253,7 +253,7 @@ namespace NUri {
 #endif
             Sections[fld].Reset(pc);
         }
- 
+
         void storeSection(const TStringBuf& val, TField::EField fld) {
 #ifdef DO_PRN
             PrintHead(val.data(), __FUNCTION__, fld);
@@ -270,7 +270,7 @@ namespace NUri {
             copyRequirements(pc);
             Sections[fld].Enter(pc);
         }
- 
+
         void finishSection(const char* pc, TField::EField fld) {
 #ifdef DO_PRN
             PrintHead(pc, __FUNCTION__, fld);
@@ -279,7 +279,7 @@ namespace NUri {
             if (Sections[fld].Leave(pc))
                 copyRequirements(pc);
         }
- 
+
         void setRequirement(const char* ptr, ui64 flags) {
 #ifdef DO_PRN
             PrintHead(ptr, __FUNCTION__) << IntToString<16>(flags)
@@ -315,7 +315,7 @@ namespace NUri {
             if (nullptr != CurRange.Beg && CurRange.Beg != ptr)
                 copyRequirementsImpl(ptr);
         }
- 
+
         void HexDigit(const char* ptr, char c) {
             Y_UNUSED(ptr);
             HexAdd(c - '0');
@@ -336,7 +336,7 @@ namespace NUri {
             HexValue = 0;
         }
         void HexSet(const char* ptr);
- 
+
         void PctEndImpl(const char* ptr);
         void PctEnd(const char* ptr) {
             if (nullptr != PctBegin && ptr != PctBegin)
@@ -358,4 +358,4 @@ namespace NUri {
         TState::EParsed ParseImpl();
     };
 
-} 
+}

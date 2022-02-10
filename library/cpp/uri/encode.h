@@ -3,12 +3,12 @@
 #include "common.h"
 
 #include <util/stream/output.h>
- 
+
 namespace NUri {
     namespace NEncode {
 #define CHAR_TYPE_NAME(f) _ECT##f
 #define CHAR_TYPE_FLAG(f) ECF##f = 1u << CHAR_TYPE_NAME(f)
- 
+
         enum ECharType {
             CHAR_TYPE_NAME(Digit),
             CHAR_TYPE_NAME(Lower),
@@ -29,10 +29,10 @@ namespace NUri {
             ECGUnres = ECGAlnum | ECFUnres,
             ECGStdrd = ECGUnres | ECFStdrd,
         };
- 
+
 #undef CHAR_TYPE_NAME
 #undef CHAR_TYPE_FLAG
- 
+
         struct TCharFlags {
             ui32 TypeFlags;
             ui64 FeatFlags;
@@ -135,7 +135,7 @@ namespace NUri {
             static bool IsType(unsigned char c, ui64 flags) {
                 return GetFlags(c).TypeFlags & flags;
             }
- 
+
         public:
             static bool IsDigit(unsigned char c) {
                 return IsType(c, ECFDigit);
@@ -158,7 +158,7 @@ namespace NUri {
             static const TCharFlags& GetFlags(unsigned char c) {
                 return Grammar().Get(c);
             }
- 
+
         public:
             // process an encoded string, decoding safe chars and encoding unsafe
             static IOutputStream& ReEncode(IOutputStream& out, const TStringBuf& val, const TEncodeMapper& srcfld) {
@@ -169,13 +169,13 @@ namespace NUri {
                 TEncoder(out, srcfld, dstfld).ReEncode(val);
                 return out;
             }
- 
+
             // see also UrlUnescape() from string/quote.h
             static IOutputStream& Decode(
                 IOutputStream& out, const TStringBuf& val, ui64 flags) {
                 return ReEncode(out, val, flags | TFeature::FeatureDecodeANY);
             }
- 
+
         public:
             // process a raw string or char, encode as needed
             static IOutputStream& Hex(IOutputStream& out, unsigned char val);
@@ -185,18 +185,18 @@ namespace NUri {
             }
             static IOutputStream& EncodeAll(IOutputStream& out, const TStringBuf& val);
             static IOutputStream& EncodeNotAlnum(IOutputStream& out, const TStringBuf& val);
- 
+
             static IOutputStream& EncodeField(IOutputStream& out, const TStringBuf& val, TField::EField fld);
             static IOutputStream& EncodeField(IOutputStream& out, const TStringBuf& val, TField::EField fld, ui64 flags);
 
             static IOutputStream& Encode(IOutputStream& out, const TStringBuf& val) {
                 return EncodeField(out, val, TField::FieldAllMAX);
             }
- 
+
             static IOutputStream& Encode(IOutputStream& out, const TStringBuf& val, ui64 flags) {
                 return EncodeField(out, val, TField::FieldAllMAX, flags);
             }
- 
+
         public:
             class TGrammar {
                 TCharFlags Map_[256];
@@ -239,12 +239,12 @@ namespace NUri {
             const TEncodeToMapper FldDst;
             ui64 OutFlags;
             int HexValue;
- 
+
         protected:
             void HexReset() {
                 HexValue = 0;
             }
- 
+
             void HexDigit(char c) {
                 HexAdd(c - '0');
             }
@@ -254,7 +254,7 @@ namespace NUri {
             void HexLower(char c) {
                 HexAdd(c - 'a' + 10);
             }
- 
+
             void HexAdd(int val) {
                 HexValue <<= 4;
                 HexValue += val;
@@ -275,8 +275,8 @@ namespace NUri {
             }
             void Do(unsigned char, int);
         };
-    } 
+    }
 
     using TEncoder = NEncode::TEncoder;
- 
-} 
+
+}

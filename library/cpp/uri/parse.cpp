@@ -1,24 +1,24 @@
 #include "parse.h"
 #include "common.h"
 #include "encode.h"
- 
+
 namespace NUri {
     const TParseFlags TParser::FieldFlags[] =
         {
             TParseFlags(0 // FieldScheme
                             | TFeature::FeatureToLower,
                         0)
- 
+
                 ,
             TParseFlags(0 // FieldUsername
                             | TFeature::FeatureDecodeANY | TFeature::FeaturesDecode | TFeature::FeatureEncodePercent,
                         0 | TFeature::FeatureToLower)
- 
+
                 ,
             TParseFlags(0 // FieldPassword
                             | TFeature::FeatureDecodeANY | TFeature::FeaturesDecode | TFeature::FeatureEncodePercent,
                         0 | TFeature::FeatureToLower)
- 
+
                 ,
             TParseFlags(0 // FieldHost
                             | TFeature::FeatureToLower | TFeature::FeatureUpperEncoded | (TFeature::FeaturesMaybeEncode & ~TFeature::FeatureEncodeExtendedDelim),
@@ -57,7 +57,7 @@ namespace NUri {
             if (mask & TFeature::FeaturesDecode)
                 Decode += range.Decode;
         }
- 
+
     }
 
     void TParser::copyRequirementsImpl(const char* ptr) {
@@ -89,8 +89,8 @@ namespace NUri {
             section.AddRange(CurRange, GetFieldFlags(fld));
         }
         CurRange.Reset();
-    } 
- 
+    }
+
     void TParser::PctEndImpl(const char* ptr) {
 #ifdef DO_PRN
         PrintHead(PctBegin, __FUNCTION__);
@@ -111,10 +111,10 @@ namespace NUri {
         PctBegin = nullptr;
         const unsigned char ch = HexValue;
         ui64 flags = TEncoder::GetFlags('%').FeatFlags | TEncoder::GetFlags(ch).FeatFlags;
- 
+
         setRequirementExcept(ptr, flags, TFeature::FeaturesMaybeEncode);
     }
- 
+
     TState::EParsed TParser::ParseImpl() {
 #ifdef DO_PRN
         PrintHead(UriStr.data(), "[Parsing]") << "URL";
@@ -142,7 +142,7 @@ namespace NUri {
 
         if ((Flags & TFeature::FeatureDenyNetworkPath) && IsNetPath())
             return TState::ParsedBadFormat;
- 
+
         const TSection& scheme = Sections[TField::FieldScheme];
         Scheme = scheme.IsSet() ? TSchemeInfo::GetKind(scheme.Get()) : TScheme::SchemeEmpty;
         const TSchemeInfo& schemeInfo = TSchemeInfo::Get(Scheme);
@@ -157,7 +157,7 @@ namespace NUri {
 
             if (Flags & TFeature::FeatureAllowRootless)
                 return TState::ParsedOK;
- 
+
             if (!(Flags & TFeature::FeatureSchemeFlexible))
                 return TState::ParsedBadScheme;
 
@@ -166,16 +166,16 @@ namespace NUri {
 
         checkSectionCollision(TField::FieldUser, TField::FieldHost);
         checkSectionCollision(TField::FieldPass, TField::FieldPort);
- 
+
         if (0 == (Flags & TFeature::FeatureAuthSupported))
             if (Sections[TField::FieldUser].IsSet() || Sections[TField::FieldPass].IsSet())
                 return TState::ParsedBadAuth;
- 
+
         TSection& host = Sections[TField::FieldHost];
         if (host.IsSet())
             for (; host.End != host.Beg && '.' == host.End[-1];)
                 --host.End;
- 
+
         if (scheme.IsSet()) {
             ui64 wantCareFlags = 0;
             switch (Scheme) {
@@ -193,7 +193,7 @@ namespace NUri {
                         TFeature::FeatureSchemeFlexible | TFeature::FeatureSchemeKnown;
                     break;
             }
- 
+
             if (0 != wantCareFlags && 0 == (Flags & wantCareFlags))
                 return TState::ParsedBadScheme;
             if ((schemeInfo.FldReq & TField::FlagHost) || (Flags & TFeature::FeatureRemoteOnly))
@@ -204,4 +204,4 @@ namespace NUri {
         return TState::ParsedOK;
     }
 
-} 
+}

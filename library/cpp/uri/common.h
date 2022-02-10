@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <util/stream/output.h>
 #include <util/system/compat.h>
 #include <util/generic/strbuf.h>
@@ -10,7 +10,7 @@ namespace NUri {
         class TEncodeMapperBase;
         struct TCharFlags;
     }
- 
+
     namespace NParse {
         class TRange;
     }
@@ -60,7 +60,7 @@ namespace NUri {
             FIELD_FLAG(UrlMAX),
             FIELD_FLAG(HostAscii),
             FIELD_FLAG(AllMAX),
- 
+
             FlagHostPort = FlagHost | FlagPort,
             FlagAuth = FlagUser | FlagPass,
             FlagFragment = FlagFrag,
@@ -92,8 +92,8 @@ namespace NUri {
             // add before this line
             ParsedMAX
         };
-    }; 
- 
+    };
+
     struct TScheme {
         // don't forget to define a SchemeRegistry entry
         enum EKind {
@@ -110,19 +110,19 @@ namespace NUri {
             ,
             SchemeUnknown
         };
-    }; 
- 
+    };
+
     class TFeature {
         friend class NEncode::TEncoder;
         friend class NEncode::TEncodeMapperBase;
         friend struct NEncode::TCharFlags;
         friend class TParser;
         friend class NParse::TRange;
- 
+
 #define FEATURE_NAME(f) _BitFeature##f
 #define FEATURE_FLAG_NAME(f) Feature##f
 #define FEATURE_FLAG(f) FEATURE_FLAG_NAME(f) = 1UL << FEATURE_NAME(f)
- 
+
     protected:
         enum EBit {
             //==============================
@@ -134,10 +134,10 @@ namespace NUri {
 
             // allows all known schemes in URL
             FEATURE_NAME(SchemeKnown),
- 
+
             // allows all schemes, not only known
             FEATURE_NAME(SchemeFlexible),
- 
+
             // allow opaque (RFC 2396) or rootless (RFC 3986) urls
             FEATURE_NAME(AllowRootless),
 
@@ -156,7 +156,7 @@ namespace NUri {
             // in scheme and host segments:
             // change upper case letters onto lower case ones
             FEATURE_NAME(ToLower),
- 
+
             // decode unreserved symbols
             FEATURE_NAME(DecodeUnreserved),
 
@@ -209,7 +209,7 @@ namespace NUri {
 
             // tries to fix errors (in particular, in fragment)
             FEATURE_NAME(TryToFix),
- 
+
             // check host for DNS compliance
             FEATURE_NAME(CheckHost),
 
@@ -228,7 +228,7 @@ namespace NUri {
 
             // robot interpreted network paths as BadFormat urls
             FEATURE_NAME(DenyNetworkPath),
- 
+
             // robot interprets URLs without a host as BadFormat
             FEATURE_NAME(RemoteOnly),
 
@@ -315,15 +315,15 @@ namespace NUri {
             FeaturesEncodeExtended = 0 | FeatureEncodeExtendedASCII | FeatureEncodeExtendedDelim,
 
             FeaturesEncode = 0 | FeatureEncodeForSQL | FeatureEncodeSpace | FeatureEncodeCntrl | FeatureEncodePercent | FeaturesEncodeExtended,
- 
+
             // these are not guaranteed to apply to a given field
 
             FeatureDecodeAllowed = 0 | FeatureDecodeUnreserved | FeatureDecodeFieldAllowed,
- 
+
             FeaturesMaybeDecode = 0 | FeaturesDecode | FeatureDecodeAllowed,
- 
+
             FeaturesMaybeEncode = 0 | FeaturesEncode,
- 
+
             FeaturesEncodeDecode = 0 | FeaturesMaybeEncode | FeaturesMaybeDecode,
 
             FeaturesAllEncoder = 0 | FeaturesEncodeDecode | FeatureDecodeANY | FeatureToLower | FeatureUpperEncoded | FeatureEncodeSpaceAsPlus,
@@ -333,12 +333,12 @@ namespace NUri {
 
             FeaturesDefault = 0 // it reproduces old parsedURL
                               | FeaturePathOperation | FeaturePathDenyRootParent | FeatureCheckHost,
- 
+
             // essentially allows all valid RFC urls and keeps them as-is
             FeaturesBare = 0 | FeatureAuthSupported | FeatureSchemeFlexible | FeatureAllowEmptyPath,
 
             FeaturesAll = 0 | FeatureAuthSupported | FeatureSchemeFlexible | FeatureCheckHost | FeaturesNormalizeSet,
- 
+
             // Deprecated, use FeaturesRecommended
             FeaturesRobotOld = 0
                                // http://tools.ietf.org/html/rfc3986#section-6.2.2
@@ -367,7 +367,7 @@ namespace NUri {
     static inline int strnicmp(const char* lt, const char* rt, size_t len) {
         return lt == rt ? 0 : ::strnicmp(lt, rt, len);
     }
- 
+
     static inline int CompareNoCasePrefix(const TStringBuf& lt, const TStringBuf& rt) {
         return strnicmp(lt.data(), rt.data(), rt.length());
     }
@@ -381,7 +381,7 @@ namespace NUri {
             return CompareNoCasePrefix(lt, rt);
         return lt.length() < rt.length() ? -1 : 1;
     }
- 
+
     class TSchemeInfo {
     public:
         const TScheme::EKind Kind;
@@ -413,7 +413,7 @@ namespace NUri {
         static ui16 GetDefaultPort(TScheme::EKind scheme) {
             return Get(scheme).Port;
         }
- 
+
     private:
         static const TSchemeInfo Registry[];
     };

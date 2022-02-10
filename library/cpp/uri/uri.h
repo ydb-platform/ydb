@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "common.h"
 #include "encode.h"
 
@@ -13,7 +13,7 @@
 #include <util/stream/output.h>
 #include <util/stream/str.h>
 #include <util/system/yassert.h>
- 
+
 #include <cstdlib>
 
 namespace NUri {
@@ -41,7 +41,7 @@ namespace NUri {
         TScheme::EKind Scheme;
         /// contains fields out of buffer (and possibly not null-terminated)
         ui32 FieldsDirty;
- 
+
     private:
         void Alloc(size_t len) {
             Dealloc(); // to prevent copy below
@@ -50,7 +50,7 @@ namespace NUri {
         void Dealloc() {
             Buffer.Clear();
         }
- 
+
         void ClearImpl() {
             Port = 0;
             FieldsSet = 0;
@@ -114,7 +114,7 @@ namespace NUri {
             FldSetNoDirty(fld, value);
             FldMarkDirty(fld);
         }
- 
+
         const TStringBuf& FldGet(EField fld) const {
             return Fields[fld];
         }
@@ -268,18 +268,18 @@ namespace NUri {
         {
             CopyImpl(url);
         }
- 
+
         ~TUri() {
             Clear();
         }
- 
+
         void Copy(const TUri& url) {
             if (&url != this) {
                 CopyData(url);
                 CopyImpl(url);
             }
         }
- 
+
         void Clear() {
             Dealloc();
             ClearImpl();
@@ -288,7 +288,7 @@ namespace NUri {
         ui32 GetFieldMask() const {
             return FieldsSet;
         }
- 
+
         ui32 GetUrlFieldMask() const {
             return GetFieldMask() & FlagUrlFields;
         }
@@ -305,10 +305,10 @@ namespace NUri {
             if (FldIsDirty())
                 RewriteImpl();
         }
- 
+
     private:
         TState::EParsed AssignImpl(const TParser& parser, TScheme::EKind defscheme = SchemeEmpty);
- 
+
         TState::EParsed ParseImpl(const TStringBuf& url, const TParseFlags& flags = FeaturesDefault, ui32 maxlen = 0, TScheme::EKind defscheme = SchemeEmpty, ECharset enc = CODES_UTF8);
 
     public:
@@ -353,16 +353,16 @@ namespace NUri {
         // -1 - ignore portions
 
         void Merge(const TUri& base, int correctAbs = -1);
- 
+
         TLinkType Normalize(const TUri& base, const TStringBuf& link, const TStringBuf& codebase = TStringBuf(), long careFlags = FeaturesDefault, ECharset enc = CODES_UTF8);
- 
+
     private:
         int PrintFlags(int flags) const {
             if (0 == (FlagUrlFields & flags))
                 flags |= FlagUrlFields;
             return flags;
         }
- 
+
     protected:
         size_t PrintSize(ui32 flags) const;
 
@@ -421,7 +421,7 @@ namespace NUri {
             Print(str, flags);
             return str;
         }
- 
+
         // Only non-default scheme and port are printed
         char* PrintHost(char* str, size_t size) const {
             return Print(str, size, (Scheme != SchemeHTTP ? FlagScheme : 0) | FlagHostPort);
@@ -434,7 +434,7 @@ namespace NUri {
         int Compare(const TUri& A, int flags = FlagUrlFields) const;
 
         int CompareField(EField fld, const TUri& url) const;
- 
+
         const TStringBuf& GetField(EField fld) const {
             return FldIsValid(fld) && FldIsSet(fld) ? FldGet(fld) : Default<TStringBuf>();
         }
@@ -442,7 +442,7 @@ namespace NUri {
         ui16 GetPort() const {
             return 0 == Port ? DefaultPort : Port;
         }
- 
+
         const TStringBuf& GetHost() const {
             if (GetFieldMask() & FlagHostAscii)
                 return FldGet(FieldHostAscii);
@@ -450,7 +450,7 @@ namespace NUri {
                 return FldGet(FieldHost);
             return Default<TStringBuf>();
         }
- 
+
         bool UseHostAscii() {
             return FldMov(FieldHostAscii, FieldHost);
         }
@@ -465,11 +465,11 @@ namespace NUri {
         bool IsNull(ui32 flags = FlagScheme | FlagHost | FlagPath) const {
             return !FldSetCmp(flags);
         }
- 
+
         bool IsNull(EField fld) const {
             return !FldIsSet(fld);
         }
- 
+
         bool IsValidAbs() const {
             if (IsNull(FlagScheme | FlagHost | FlagPath))
                 return false;
@@ -483,11 +483,11 @@ namespace NUri {
                 return true;
             return IsAbsPathImpl();
         }
- 
+
         bool IsRootless() const {
             return FldSetCmp(FlagScheme | FlagHost | FlagPath, FlagScheme | FlagPath) && !IsAbsPathImpl();
         }
- 
+
         // for RFC 2396 compatibility
         bool IsOpaque() const {
             return IsRootless();
@@ -502,33 +502,33 @@ namespace NUri {
         bool operator!() const {
             return IsNull();
         }
- 
+
         bool Equal(const TUri& A, int flags = FlagUrlFields) const {
             return (Compare(A, flags) == 0);
         }
- 
+
         bool Less(const TUri& A, int flags = FlagUrlFields) const {
             return (Compare(A, flags) < 0);
         }
- 
+
         bool operator==(const TUri& A) const {
             return Equal(A, FlagNoFrag);
         }
- 
+
         bool operator!=(const TUri& A) const {
             return !Equal(A, FlagNoFrag);
         }
- 
+
         bool operator<(const TUri& A) const {
             return Less(A, FlagNoFrag);
         }
- 
+
         bool IsSameDocument(const TUri& other) const {
             // pre: both *this and 'other' should be normalized to valid abs
             Y_ASSERT(IsValidAbs());
             return Equal(other, FlagNoFrag);
         }
- 
+
         bool IsLocal(const TUri& other) const {
             // pre: both *this and 'other' should be normalized to valid abs
             Y_ASSERT(IsValidAbs() && other.IsValidAbs());
@@ -550,7 +550,7 @@ namespace NUri {
         static IOutputStream& ReEncodeToField(IOutputStream& out, const TStringBuf& val, EField srcfld, long srcflags, EField dstfld, long dstflags) {
             return NEncode::TEncoder::ReEncodeTo(out, val, NEncode::TEncodeMapper(srcflags, srcfld), NEncode::TEncodeToMapper(dstflags, dstfld));
         }
- 
+
         static IOutputStream& ReEncode(IOutputStream& out, const TStringBuf& val, long flags = FeaturesEncodeDecode) {
             return ReEncodeField(out, val, FieldAllMAX, flags);
         }
@@ -559,7 +559,7 @@ namespace NUri {
             return flags & FeaturePathDenyRootParent ? 1
                                                      : flags & FeaturePathStripRootParent ? -1 : 0;
         }
- 
+
         static bool PathOperation(char*& pathBeg, char*& pathEnd, int correctAbs);
 
     private:
@@ -588,7 +588,7 @@ namespace NUri {
 
     class TUriUpdate {
         TUri& Uri_;
- 
+
     public:
         TUriUpdate(TUri& uri)
             : Uri_(uri)

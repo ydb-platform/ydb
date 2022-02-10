@@ -88,7 +88,7 @@ private:
         bool Push(T&& value) {
             return Insert(std::move(value));
         }
- 
+
         template <class... TArgs>
         bool Emplace(TArgs&&... args) {
             return Insert(T(std::forward<TArgs>(args)...)); // TODO: make it "real" emplace, not that fake one

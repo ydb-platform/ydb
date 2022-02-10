@@ -106,8 +106,8 @@ def generate_mf():
 
 
 if __name__ == '__main__':
-    try: 
-        generate_mf() 
-    except Exception as e: 
-        sys.stderr.write(str(e) + '\n') 
-        sys.exit(1) 
+    try:
+        generate_mf()
+    except Exception as e:
+        sys.stderr.write(str(e) + '\n')
+        sys.exit(1)

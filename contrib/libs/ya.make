@@ -375,7 +375,7 @@ IF (OS_FREEBSD OR OS_LINUX)
         asmglibc
         httpd
         mod_perl2
-        libeatmydata 
+        libeatmydata
     )
 ENDIF()
 

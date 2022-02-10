@@ -19,16 +19,16 @@ import tempfile
 import six
 
 logger = logging.getLogger(__name__ if __name__ != '__main__' else 'ymake_conf.py')
- 
+
 
 def init_logger(verbose):
     logging.basicConfig(level=logging.DEBUG if verbose else logging.INFO)
- 
- 
+
+
 class DebugString(object):
     def __init__(self, get_string_func):
         self.get_string_func = get_string_func
- 
+
     def __str__(self):
         return self.get_string_func()
 
@@ -47,13 +47,13 @@ class Platform(object):
         self.name = name
         self.os = self._parse_os(os)
         self.arch = arch.lower()
- 
+
         self.is_i386 = self.arch in ('i386', 'x86')
         self.is_i686 = self.arch == 'i686'
         self.is_x86 = self.is_i386 or self.is_i686
         self.is_x86_64 = self.arch in ('x86_64', 'amd64')
         self.is_intel = self.is_x86 or self.is_x86_64
- 
+
         self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7a_neon', 'arm', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv8 = self.arch in ('armv8', 'armv8a', 'arm64', 'aarch64', 'armv8a_cortex_a35', 'armv8a_cortex_a53')
         self.is_armv8m = self.arch in ('armv8m_cortex_m33',)
@@ -208,8 +208,8 @@ class Platform(object):
             return 'cygwin'
 
         return os
- 
- 
+
+
 def which(prog):
     if os.path.exists(prog) and os.access(prog, os.X_OK):
         return prog
@@ -230,15 +230,15 @@ def which(prog):
             p = os.path.join(dir_, prog + ext)
             if os.path.exists(p) and os.path.isfile(p) and os.access(p, os.X_OK):
                 return p
- 
+
     return None
 
 
 def get_stdout(command):
     stdout, code = get_stdout_and_code(command)
     return stdout if code == 0 else None
- 
- 
+
+
 def get_stdout_and_code(command):
     # noinspection PyBroadException
     try:
@@ -248,7 +248,7 @@ def get_stdout_and_code(command):
     except Exception:
         return None, None
 
- 
+
 def to_strings(o):
     if isinstance(o, (list, tuple)):
         for s in o:
@@ -267,7 +267,7 @@ def to_strings(o):
 def emit(key, *value):
     print('{0}={1}'.format(key, ' '.join(to_strings(value))))
 
- 
+
 def emit_with_comment(comment, key, *value):
     print('# {}'.format(comment))
     emit(key, *value)
@@ -280,7 +280,7 @@ def emit_with_ignore_comment(key, *value):
 def append(key, *value):
     print('{0}+={1}'.format(key, ' '.join(to_strings(value))))
 
- 
+
 def emit_big(text):
     prefix = None
     first = True
@@ -401,16 +401,16 @@ class Options(object):
     def __init__(self, argv):
         def parse_presets(raw_presets):
             presets = {}
-            for p in raw_presets: 
-                toks = p.split('=', 1) 
+            for p in raw_presets:
+                toks = p.split('=', 1)
                 name = toks[0]
                 value = toks[1] if len(toks) >= 2 else ''
                 presets[name] = value
             return presets
 
-        parser = optparse.OptionParser(add_help_option=False) 
+        parser = optparse.OptionParser(add_help_option=False)
         opt_group = optparse.OptionGroup(parser, 'Conf script options')
-        opt_group.add_option('--toolchain-params', dest='toolchain_params', action='store', help='Set toolchain params via file') 
+        opt_group.add_option('--toolchain-params', dest='toolchain_params', action='store', help='Set toolchain params via file')
         opt_group.add_option('-D', '--preset', dest='presets', action='append', default=[], help='set or override presets')
         opt_group.add_option('-l', '--local-distbuild', dest='local_distbuild', action='store_true', default=False, help='conf for local distbuild')
         parser.add_option_group(opt_group)
@@ -466,7 +466,7 @@ class Build(object):
 
         # TODO(somov): Удалить, когда перестанет использоваться.
         self.build_system = 'ymake'
- 
+
         self.ignore_local_files = False
 
         dist_prefix = 'dist-'
@@ -497,7 +497,7 @@ class Build(object):
 
         if self.pic:
             emit('PIC', 'yes')
- 
+
         emit('COMPILER_ID', self.tc.type.upper())
 
         if self.is_valgrind:
@@ -513,7 +513,7 @@ class Build(object):
         linker.print_linker()
 
         self._print_other_settings(compiler)
- 
+
     def _print_build_settings(self):
         emit('BUILD_TYPE', self.build_type.upper())
         emit('BT_' + self.build_type.upper().replace('-', '_'), 'yes')
@@ -741,21 +741,21 @@ class System(object):
         :type platform: Platform
         """
         self.platform = platform
- 
+
     def print_windows_target_const(self):
         # TODO(somov): Remove this variables, use generic OS/arch variables in makelists.
         emit('WINDOWS', 'yes')
         emit('WIN32', 'yes')
         if self.platform.is_64_bit == 64:
             emit('WIN64', 'yes')
- 
+
     def print_nix_target_const(self):
         emit('JAVA_INCLUDE', '-I{0}/include -I{0}/include/{1}'.format('/usr/lib/jvm/default-java', self.platform.os_compat))
- 
+
         emit('UNIX', 'yes')
         emit('REALPRJNAME')
         emit('SONAME')
- 
+
     @staticmethod
     def print_nix_host_const():
         emit('WRITE_COMMAND', '/bin/echo', '-e')
@@ -772,15 +772,15 @@ when (($USEMPROF == "yes") || ($USE_MPROF == "yes")) {
     C_SYSTEM_LIBRARIES_INTERCEPT+=-ldmalloc
 }
 ''')
- 
+
     def print_target_settings(self):
         emit('TARGET_PLATFORM', self.platform.os_compat)
         emit('HARDWARE_ARCH', '32' if self.platform.is_32_bit else '64')
         emit('HARDWARE_TYPE', self.platform.arch)
- 
+
         for variable in self.platform.arch_variables:
             emit(variable, 'yes')
- 
+
         for variable in self.platform.os_variables:
             emit(variable, 'yes')
 
@@ -843,7 +843,7 @@ class CompilerDetector(object):
 
         if stdout is None:
             return None
- 
+
         vars_ = {}
         for line in stdout.split('\n'):
             parts = line.split('=', 1)
@@ -863,7 +863,7 @@ class CompilerDetector(object):
         logger.debug('e=%s', os.environ)
         if c_compiler is None:
             raise ConfigureError('Custom compiler was requested but not specified')
- 
+
         c_compiler_path = which(c_compiler)
 
         clang_vars = ['__clang_major__', '__clang_minor__', '__clang_patchlevel__']
@@ -920,7 +920,7 @@ class ToolchainOptions(object):
         """
         self.host = build.host
         self.target = build.target
- 
+
         tc_json = build.params
 
         logger.debug('Toolchain host %s', self.host)
@@ -1016,7 +1016,7 @@ class ToolchainOptions(object):
 class GnuToolchainOptions(ToolchainOptions):
     def __init__(self, build, detector):
         super(GnuToolchainOptions, self).__init__(build, detector)
- 
+
         self.ar = self.params.get('ar')
         self.ar_plugin = self.params.get('ar_plugin')
         self.inplace_tools = self.params.get('inplace_tools', False)
@@ -1102,9 +1102,9 @@ class GnuToolchain(Toolchain):
         target = build.target
 
         self.c_flags_platform = list(tc.target_opt)
- 
+
         self.default_os_sdk_root = get_os_sdk(target)
- 
+
         self.env = self.tc.get_env()
 
         self.env_go = {}
@@ -1937,7 +1937,7 @@ class LD(Linker):
             (not target.is_iossim and target.is_ios, '-Wl,-sdk_version,13.1'),
             (target.is_iossim, '-Wl,-sdk_version,14.5'),
         ])
- 
+
         if self.ld_sdk:
             self.ld_flags.append(self.ld_sdk)
 
@@ -2174,7 +2174,7 @@ class LD(Linker):
         emit('MD5LIB', '-lcrypt')
         emit('LIBRESOLV', self.libresolv)
         emit('PROFFLAG', '-pg')
- 
+
 
 class MSVCToolchainOptions(ToolchainOptions):
     def __init__(self, build, detector):
@@ -2829,7 +2829,7 @@ class Ragel(object):
         self.rlgen_flags = []
         self.ragel_flags = []
         self.ragel6_flags = []
- 
+
     def configure_toolchain(self, build, compiler):
         if isinstance(compiler, MSVCCompiler):
             self.set_default_flags(optimized=False)

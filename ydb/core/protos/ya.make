@@ -12,7 +12,7 @@ IF (OS_WINDOWS)
     NO_OPTIMIZE_PY_PROTOS()
 ENDIF()
 
-SRCS( 
+SRCS(
     alloc.proto
     base.proto
     bind_channel_storage_pool.proto

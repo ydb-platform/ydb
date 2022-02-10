@@ -1,49 +1,49 @@
-import functools 
+import functools
 import threading
 import collections
- 
- 
-def map0(func, value): 
-    return func(value) if value is not None else value 
- 
- 
-def single(x): 
-    if len(x) != 1: 
-        raise Exception('Length of {} is not equal to 1'.format(x)) 
-    return x[0] 
- 
- 
-class _Result(object): 
-    pass 
- 
- 
-def lazy(func): 
-    result = _Result() 
- 
+
+
+def map0(func, value):
+    return func(value) if value is not None else value
+
+
+def single(x):
+    if len(x) != 1:
+        raise Exception('Length of {} is not equal to 1'.format(x))
+    return x[0]
+
+
+class _Result(object):
+    pass
+
+
+def lazy(func):
+    result = _Result()
+
     @functools.wraps(func)
     def wrapper(*args):
-        try: 
-            return result.result 
-        except AttributeError: 
+        try:
+            return result.result
+        except AttributeError:
             result.result = func(*args)
- 
-        return result.result 
- 
-    return wrapper 
- 
- 
-def lazy_property(fn): 
-    attr_name = '_lazy_' + fn.__name__ 
- 
-    @property 
-    def _lazy_property(self): 
-        if not hasattr(self, attr_name): 
-            setattr(self, attr_name, fn(self)) 
-        return getattr(self, attr_name) 
- 
-    return _lazy_property 
- 
- 
+
+        return result.result
+
+    return wrapper
+
+
+def lazy_property(fn):
+    attr_name = '_lazy_' + fn.__name__
+
+    @property
+    def _lazy_property(self):
+        if not hasattr(self, attr_name):
+            setattr(self, attr_name, fn(self))
+        return getattr(self, attr_name)
+
+    return _lazy_property
+
+
 class classproperty(object):
     def __init__(self, func):
         self.func = func
@@ -67,7 +67,7 @@ class lazy_classproperty(object):
 def memoize(limit=0, thread_local=False):
     assert limit >= 0
 
-    def decorator(func): 
+    def decorator(func):
         memory = {}
         lock = threading.Lock()
 
@@ -86,7 +86,7 @@ def memoize(limit=0, thread_local=False):
                             if len(keys) > limit:
                                 del memory[keys.popleft()]
                         return memory[args]
- 
+
         else:
 
             def get(args):
@@ -112,15 +112,15 @@ def memoize(limit=0, thread_local=False):
 
         return wrapper
 
-    return decorator 
- 
- 
-# XXX: add test 
-def compose(*functions): 
-    def compose2(f, g): 
-        return lambda x: f(g(x)) 
+    return decorator
 
-    return functools.reduce(compose2, functions, lambda x: x) 
+
+# XXX: add test
+def compose(*functions):
+    def compose2(f, g):
+        return lambda x: f(g(x))
+
+    return functools.reduce(compose2, functions, lambda x: x)
 
 
 class Singleton(type):

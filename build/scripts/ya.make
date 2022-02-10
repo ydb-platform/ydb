@@ -1,5 +1,5 @@
 OWNER(g:ymake)
- 
+
 PY2TEST()
 
 TEST_SRCS(
@@ -57,7 +57,7 @@ TEST_SRCS(
     link_exe.py
     link_fat_obj.py
     link_lib.py
-    llvm_opt_wrapper.py 
+    llvm_opt_wrapper.py
     merge_coverage_data.py
     merge_files.py
     mkdir.py
@@ -92,11 +92,11 @@ TEST_SRCS(
     writer.py
     xargs.py
     yield_line.py
-    yndexer.py 
+    yndexer.py
 )
 
 PEERDIR(
     ydb/library/yql/public/udf
 )
 
-END() 
+END()

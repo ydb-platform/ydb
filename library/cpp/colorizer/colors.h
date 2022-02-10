@@ -1,10 +1,10 @@
-#pragma once 
+#pragma once
 
 #include "fwd.h"
- 
+
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
- 
+
 #include <cstdio>
 
 namespace NColorizer {
@@ -106,13 +106,13 @@ namespace NColorizer {
     public:
         explicit TColors(FILE* = stderr);
         explicit TColors(bool ontty);
- 
+
         TStringBuf Reset() const noexcept;
- 
+
         TStringBuf StyleLight() const noexcept;
         TStringBuf StyleDark() const noexcept;
         TStringBuf StyleNormal() const noexcept;
- 
+
         TStringBuf ItalicOn() const noexcept;
         TStringBuf ItalicOff() const noexcept;
         TStringBuf UnderlineOn() const noexcept;
@@ -195,7 +195,7 @@ namespace NColorizer {
         inline bool IsTTY() const noexcept {
             return IsTTY_;
         }
- 
+
         inline void SetIsTTY(bool value) noexcept {
             IsTTY_ = value;
         }
@@ -210,7 +210,7 @@ namespace NColorizer {
 
     private:
         bool IsTTY_;
-    }; 
+    };
 
     /// Singletone `TColors` instances for stderr/stdout.
     TColors& StdErr();
@@ -222,7 +222,7 @@ namespace NColorizer {
 
     /// Calculate total length of all ANSI escape codes in the text.
     size_t TotalAnsiEscapeCodeLen(TStringBuf text);
-} 
+}
 
 TStringBuf ToStringBuf(NColorizer::EAnsiCode x);
 TString ToString(NColorizer::EAnsiCode x);

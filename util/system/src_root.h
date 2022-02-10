@@ -1,8 +1,8 @@
 #pragma once
 
-#include "compiler.h" 
+#include "compiler.h"
 #include "defaults.h"
- 
+
 #include <type_traits>
 
 namespace NPrivate {
@@ -48,10 +48,10 @@ namespace NPrivate {
     constexpr unsigned RootPrefixLength(const TStaticBuf& f) noexcept {
         if (IsProperPrefix(ArcRoot, f)) {
             return ArcRoot.Len + 1;
-        } 
+        }
         if (IsProperPrefix(BuildRoot, f)) {
             return BuildRoot.Len + 1;
-        } 
+        }
         return 0;
     }
 

@@ -1,5 +1,5 @@
 {
-    "tools": { 
+    "tools": {
         "cc": {
             "description": "Run C compiler"
         },
@@ -511,8 +511,8 @@
         "exp_stats": {
             "description": "bsyeti tool"
         }
-    }, 
-    "toolchain": { 
+    },
+    "toolchain": {
         "bigb_request": {
             "tools": {
                 "bigb_request": {
@@ -1025,13 +1025,13 @@
                 }
             ]
         },
-        "ymake": { 
-            "tools": { 
+        "ymake": {
+            "tools": {
                 "ymake": {
                     "bottle": "ymake",
                     "executable": "ymake"
                 }
-            }, 
+            },
             "platforms": [
                 {
                     "host": {
@@ -1073,7 +1073,7 @@
                     "default": true
                 }
             ]
-        }, 
+        },
         "maven_import_sandbox_uploader": {
             "tools": {
                 "maven_import_sandbox_uploader": {
@@ -2706,13 +2706,13 @@
                 }
             ]
         },
-        "gdb": { 
-            "tools": { 
+        "gdb": {
+            "tools": {
                 "gdb": {
                     "bottle": "gdb",
                     "executable": "gdb"
                 }
-            }, 
+            },
             "platforms": [
                 {
                     "host": {
@@ -2749,10 +2749,10 @@
             ],
             "env": {
                 "TERMINFO": [
-                    "$(ROOT)/gdb/lib/terminfo" 
+                    "$(ROOT)/gdb/lib/terminfo"
                 ]
             }
-        }, 
+        },
         "gdbserver": {
             "tools": {
                 "gdbserver": {
@@ -3492,13 +3492,13 @@
                 }
             ]
         },
-        "valgrind": { 
-            "tools": { 
+        "valgrind": {
+            "tools": {
                 "valgrind": {
                     "bottle": "valgrind",
                     "executable": "valgrind"
                 }
-            }, 
+            },
             "platforms": [
                 {
                     "host": {
@@ -3650,13 +3650,13 @@
                 }
             ]
         },
-        "jq": { 
-            "tools": { 
+        "jq": {
+            "tools": {
                 "jq": {
                     "bottle": "jq",
                     "executable": "jq"
                 }
-            }, 
+            },
             "platforms": [
                 {
                     "host": {
@@ -3665,7 +3665,7 @@
                     "default": true
                 }
             ]
-        }, 
+        },
         "vim": {
             "tools": {
                 "vim": {
@@ -3769,8 +3769,8 @@
                 }
             ]
         },
-        "kiwi": { 
-            "tools": { 
+        "kiwi": {
+            "tools": {
                 "kwmktorrent": {
                     "bottle": "kwmktorrent",
                     "executable": "kwmktorrent"
@@ -3799,7 +3799,7 @@
                     "bottle": "kwworm",
                     "executable": "kwworm"
                 }
-            }, 
+            },
             "platforms": [
                 {
                     "host": {
@@ -3808,7 +3808,7 @@
                     "default": true
                 }
             ]
-        }, 
+        },
         "optrace": {
             "tools": {
                 "optrace": {
@@ -3885,14 +3885,14 @@
                     "default": true
                 }
             ]
-        }, 
-        "ant": { 
-            "tools": { 
+        },
+        "ant": {
+            "tools": {
                 "ant": {
                     "bottle": "ant",
                     "executable": "ant"
                 }
-            }, 
+            },
             "platforms": [
                 {
                     "host": {
@@ -4349,7 +4349,7 @@
                     "default": true
                 }
             ]
-        }, 
+        },
         "rtags": {
             "tools": {
                 "rtags": {
@@ -4371,14 +4371,14 @@
                 }
             ]
         },
-        "afl-fuzz": { 
-            "tools": { 
+        "afl-fuzz": {
+            "tools": {
                 "afl-fuzz": {
                     "bottle": "afl-fuzz",
                     "executable": "afl-fuzz"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4391,7 +4391,7 @@
                     },
                     "default": true
                 }
-            ] 
+            ]
         },
         "horadric": {
             "tools": {
@@ -5721,9 +5721,9 @@
                     "default": true
                 }
             ]
-        } 
-    }, 
-    "bottles": { 
+        }
+    },
+    "bottles": {
         "msvc2019": {
             "formula": {
                 "sandbox_id": 887495315,
@@ -5738,19 +5738,19 @@
                 ]
             }
         },
-        "ymake": { 
-            "formula": { 
+        "ymake": {
+            "formula": {
                 "sandbox_id": [
                     1206141440
                 ],
                 "match": "ymake"
-            }, 
-            "executable": { 
+            },
+            "executable": {
                 "ymake": [
                     "ymake"
                 ]
-            } 
-        }, 
+            }
+        },
         "clang-format": {
             "formula": {
                 "sandbox_id": [
@@ -6722,17 +6722,17 @@
                 ]
             }
         },
-        "gdb": { 
-            "formula": { 
+        "gdb": {
+            "formula": {
                 "sandbox_id": [
                     1037272933,
                     1032891985,
                     717207102,
                     1032896450
                 ],
-                "match": "GDB" 
-            }, 
-            "executable": { 
+                "match": "GDB"
+            },
+            "executable": {
                 "gdb": [
                     "gdb",
                     "bin",
@@ -6743,8 +6743,8 @@
                     "bin",
                     "gdbserver"
                 ]
-            } 
-        }, 
+            }
+        },
         "pprof": {
             "formula": {
                 "sandbox_id": 1115456319,
@@ -6779,32 +6779,32 @@
                 ]
             }
         },
-        "valgrind": { 
-            "formula": { 
+        "valgrind": {
+            "formula": {
                 "sandbox_id": 944969271,
-                "match": "Valgrind" 
-            }, 
-            "executable": { 
+                "match": "Valgrind"
+            },
+            "executable": {
                 "valgrind": [
                     "valgrind"
                 ]
-            } 
-        }, 
-        "jq": { 
-            "formula": { 
+            }
+        },
+        "jq": {
+            "formula": {
                 "sandbox_id": [
                     38336932,
                     38337150,
                     38337983
                 ],
-                "match": "jq" 
-            }, 
-            "executable": { 
+                "match": "jq"
+            },
+            "executable": {
                 "jq": [
                     "jq"
                 ]
-            } 
-        }, 
+            }
+        },
         "yf": {
             "formula": {
                 "sandbox_id": [
@@ -7092,25 +7092,25 @@
                     "kwmqbuild"
                 ]
             }
-        }, 
+        },
         "gpt": {
             "formula": {
                 "sandbox_id": 21836503,
                 "match": "GooglePerformanceTools"
             }
-        }, 
-        "ant": { 
-            "formula": { 
+        },
+        "ant": {
+            "formula": {
                 "sandbox_id": 36996223,
-                "match": "ant" 
-            }, 
-            "executable": { 
+                "match": "ant"
+            },
+            "executable": {
                 "ant": [
                     "apache-ant-1.9.6",
                     "bin",
                     "ant"
                 ]
-            } 
+            }
         },
         "maven": {
             "formula": {
@@ -7173,16 +7173,16 @@
             }
         },
         "afl-fuzz": {
-            "formula": { 
-                "sandbox_id": 80600007, 
-                "match": "afl-fuzz" 
-            }, 
-            "executable": { 
+            "formula": {
+                "sandbox_id": 80600007,
+                "match": "afl-fuzz"
+            },
+            "executable": {
                 "afl-fuzz": [
                     "afl-fuzz"
                 ]
-            } 
-        }, 
+            }
+        },
         "horadric": {
             "formula": {
                 "sandbox_id": 1210601101,
@@ -8089,11 +8089,11 @@
                     "profile_size_analyzer"
                 ]
             }
-        } 
+        }
     },
     "toolchain_aliases": {
         "clang-win-x86_64": "clang12-win-x86_64",
         "clang-win-i686": "clang12-win-i686",
         "gcc-linux-x86_64": "gcc82-linux-x86_64"
-    } 
+    }
 }

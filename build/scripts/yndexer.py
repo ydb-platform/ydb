@@ -1,9 +1,9 @@
-import sys 
-import subprocess 
+import sys
+import subprocess
 import threading
-import os 
+import os
 import re
- 
+
 
 rx_resource_dir = re.compile(r'libraries: =([^:]*)')
 
@@ -41,19 +41,19 @@ class Process(object):
         return self._result
 
 
-if __name__ == '__main__': 
-    args = sys.argv 
- 
-    yndexer = args[1] 
+if __name__ == '__main__':
+    args = sys.argv
+
+    yndexer = args[1]
     timeout = int(args[2])
     arc_root = args[3]
     build_root = args[4]
     input_file = args[5]
     output_file = args[-1]
     tail_args = args[6:-1]
- 
-    subprocess.check_call(tail_args) 
- 
+
+    subprocess.check_call(tail_args)
+
     clang = tail_args[0]
     out = subprocess.check_output([clang, '-print-search-dirs'])
     resource_dir = rx_resource_dir.search(out).group(1)
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     ] + tail_args + [
         '-resource-dir', resource_dir,
     ]
- 
+
     process = Process(yndexer_args)
     result = process.wait(timeout=timeout)
 

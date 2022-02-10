@@ -127,27 +127,27 @@ class Test(object):
         return [x.status for x in self.subtests].count(status)
 
 
-class NoMd5FileException(Exception): 
-    pass 
- 
- 
-TEST_SUBTEST_SEPARATOR = '::' 
- 
- 
-# TODO: extract color theme logic from ya 
-COLOR_THEME = { 
-    'test_name': 'light-blue', 
-    'test_project_path': 'dark-blue', 
-    'test_dir_desc': 'dark-magenta', 
-    'test_binary_path': 'light-gray', 
-} 
- 
- 
-# XXX: remove me 
-class YaCtx(object): 
-    pass 
- 
-ya_ctx = YaCtx() 
+class NoMd5FileException(Exception):
+    pass
+
+
+TEST_SUBTEST_SEPARATOR = '::'
+
+
+# TODO: extract color theme logic from ya
+COLOR_THEME = {
+    'test_name': 'light-blue',
+    'test_project_path': 'dark-blue',
+    'test_dir_desc': 'dark-magenta',
+    'test_binary_path': 'light-gray',
+}
+
+
+# XXX: remove me
+class YaCtx(object):
+    pass
+
+ya_ctx = YaCtx()
 
 TRACE_FILE_NAME = "ytest.report.trace"
 

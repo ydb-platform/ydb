@@ -1,21 +1,21 @@
 # coding: utf-8
 
 import codecs
-import errno 
-import logging 
-import os 
+import errno
+import logging
+import os
 import random
-import shutil 
+import shutil
 import six
 import stat
 import sys
- 
+
 import library.python.func
 import library.python.strings
 import library.python.windows
- 
+
 logger = logging.getLogger(__name__)
- 
+
 
 try:
     WindowsError
@@ -40,12 +40,12 @@ class CustomFsError(OSError):
 # Throws OSError
 @errorfix_win
 def ensure_dir(path):
-    try: 
-        os.makedirs(path) 
-    except OSError as e: 
+    try:
+        os.makedirs(path)
+    except OSError as e:
         if e.errno != errno.EEXIST or not os.path.isdir(path):
-            raise 
- 
+            raise
+
 
 # Directories creation
 # If dst is already exists and is a directory - does nothing
@@ -54,9 +54,9 @@ def ensure_dir(path):
 @errorfix_win
 def create_dirs(path):
     ensure_dir(path)
-    return path 
- 
- 
+    return path
+
+
 # Atomic file/directory move (rename)
 # Doesn't guarantee dst replacement
 # Atomic if no device boundaries are crossed
@@ -72,8 +72,8 @@ def create_dirs(path):
 @library.python.windows.diehard(library.python.windows.RETRIABLE_FILE_ERRORS, tries=_diehard_win_tries)
 def move(src, dst):
     os.rename(src, dst)
- 
- 
+
+
 # Atomic replacing file move (rename)
 # Replaces dst if exists and not a dir
 # Doesn't guarantee dst dir replacement
@@ -372,94 +372,94 @@ def copytree3(
     ignore_dangling_symlinks=False,
     dirs_exist_ok=False,
 ):
-    """Recursively copy a directory tree. 
- 
-    The copytree3 is a port of shutil.copytree function from python-3.2. 
-    It has additional useful parameters and may be helpful while we are 
-    on python-2.x. It has to be removed as soon as we have moved to 
-    python-3.2 or higher. 
- 
-    The destination directory must not already exist. 
-    If exception(s) occur, an Error is raised with a list of reasons. 
- 
-    If the optional symlinks flag is true, symbolic links in the 
-    source tree result in symbolic links in the destination tree; if 
-    it is false, the contents of the files pointed to by symbolic 
-    links are copied. If the file pointed by the symlink doesn't 
-    exist, an exception will be added in the list of errors raised in 
-    an Error exception at the end of the copy process. 
- 
-    You can set the optional ignore_dangling_symlinks flag to true if you 
-    want to silence this exception. Notice that this has no effect on 
-    platforms that don't support os.symlink. 
- 
-    The optional ignore argument is a callable. If given, it 
-    is called with the `src` parameter, which is the directory 
-    being visited by copytree3(), and `names` which is the list of 
-    `src` contents, as returned by os.listdir(): 
- 
-        callable(src, names) -> ignored_names 
- 
-    Since copytree3() is called recursively, the callable will be 
-    called once for each directory that is copied. It returns a 
-    list of names relative to the `src` directory that should 
-    not be copied. 
- 
-    The optional copy_function argument is a callable that will be used 
-    to copy each file. It will be called with the source path and the 
-    destination path as arguments. By default, copy2() is used, but any 
-    function that supports the same signature (like copy()) can be used. 
- 
-    """ 
-    names = os.listdir(src) 
-    if ignore is not None: 
-        ignored_names = ignore(src, names) 
-    else: 
-        ignored_names = set() 
- 
+    """Recursively copy a directory tree.
+
+    The copytree3 is a port of shutil.copytree function from python-3.2.
+    It has additional useful parameters and may be helpful while we are
+    on python-2.x. It has to be removed as soon as we have moved to
+    python-3.2 or higher.
+
+    The destination directory must not already exist.
+    If exception(s) occur, an Error is raised with a list of reasons.
+
+    If the optional symlinks flag is true, symbolic links in the
+    source tree result in symbolic links in the destination tree; if
+    it is false, the contents of the files pointed to by symbolic
+    links are copied. If the file pointed by the symlink doesn't
+    exist, an exception will be added in the list of errors raised in
+    an Error exception at the end of the copy process.
+
+    You can set the optional ignore_dangling_symlinks flag to true if you
+    want to silence this exception. Notice that this has no effect on
+    platforms that don't support os.symlink.
+
+    The optional ignore argument is a callable. If given, it
+    is called with the `src` parameter, which is the directory
+    being visited by copytree3(), and `names` which is the list of
+    `src` contents, as returned by os.listdir():
+
+        callable(src, names) -> ignored_names
+
+    Since copytree3() is called recursively, the callable will be
+    called once for each directory that is copied. It returns a
+    list of names relative to the `src` directory that should
+    not be copied.
+
+    The optional copy_function argument is a callable that will be used
+    to copy each file. It will be called with the source path and the
+    destination path as arguments. By default, copy2() is used, but any
+    function that supports the same signature (like copy()) can be used.
+
+    """
+    names = os.listdir(src)
+    if ignore is not None:
+        ignored_names = ignore(src, names)
+    else:
+        ignored_names = set()
+
     if not (dirs_exist_ok and os.path.isdir(dst)):
         os.makedirs(dst)
 
-    errors = [] 
-    for name in names: 
-        if name in ignored_names: 
-            continue 
-        srcname = os.path.join(src, name) 
-        dstname = os.path.join(dst, name) 
-        try: 
-            if os.path.islink(srcname): 
-                linkto = os.readlink(srcname) 
-                if symlinks: 
-                    # We can't just leave it to `copy_function` because legacy 
-                    # code with a custom `copy_function` may rely on copytree3 
-                    # doing the right thing. 
-                    os.symlink(linkto, dstname) 
-                else: 
-                    # ignore dangling symlink if the flag is on 
-                    if not os.path.exists(linkto) and ignore_dangling_symlinks: 
-                        continue 
-                    # otherwise let the copy occurs. copy2 will raise an error 
-                    copy_function(srcname, dstname) 
-            elif os.path.isdir(srcname): 
+    errors = []
+    for name in names:
+        if name in ignored_names:
+            continue
+        srcname = os.path.join(src, name)
+        dstname = os.path.join(dst, name)
+        try:
+            if os.path.islink(srcname):
+                linkto = os.readlink(srcname)
+                if symlinks:
+                    # We can't just leave it to `copy_function` because legacy
+                    # code with a custom `copy_function` may rely on copytree3
+                    # doing the right thing.
+                    os.symlink(linkto, dstname)
+                else:
+                    # ignore dangling symlink if the flag is on
+                    if not os.path.exists(linkto) and ignore_dangling_symlinks:
+                        continue
+                    # otherwise let the copy occurs. copy2 will raise an error
+                    copy_function(srcname, dstname)
+            elif os.path.isdir(srcname):
                 copytree3(srcname, dstname, symlinks, ignore, copy_function, dirs_exist_ok=dirs_exist_ok)
-            else: 
-                # Will raise a SpecialFileError for unsupported file types 
-                copy_function(srcname, dstname) 
-        # catch the Error from the recursive copytree3 so that we can 
-        # continue with other files 
+            else:
+                # Will raise a SpecialFileError for unsupported file types
+                copy_function(srcname, dstname)
+        # catch the Error from the recursive copytree3 so that we can
+        # continue with other files
         except shutil.Error as err:
-            errors.extend(err.args[0]) 
+            errors.extend(err.args[0])
         except EnvironmentError as why:
-            errors.append((srcname, dstname, str(why))) 
-    try: 
-        shutil.copystat(src, dst) 
+            errors.append((srcname, dstname, str(why)))
+    try:
+        shutil.copystat(src, dst)
     except OSError as why:
-        if WindowsError is not None and isinstance(why, WindowsError): 
-            # Copying file access times may fail on Windows 
-            pass 
-        else: 
-            errors.extend((src, dst, str(why))) 
-    if errors: 
+        if WindowsError is not None and isinstance(why, WindowsError):
+            # Copying file access times may fail on Windows
+            pass
+        else:
+            errors.extend((src, dst, str(why)))
+    if errors:
         raise shutil.Error(errors)
 
 

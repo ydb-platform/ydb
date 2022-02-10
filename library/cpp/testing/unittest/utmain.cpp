@@ -542,28 +542,28 @@ public:
     TEnumeratingProcessor(bool verbose, IOutputStream& stream) noexcept
         : Verbose_(verbose)
         , Stream_(stream)
-    { 
-    } 
- 
+    {
+    }
+
     ~TEnumeratingProcessor() override {
     }
 
     bool CheckAccess(TString name, size_t /*num*/) override {
-        if (Verbose_) { 
-            return true; 
-        } else { 
+        if (Verbose_) {
+            return true;
+        } else {
             Stream_ << name << "\n";
-            return false; 
-        } 
-    } 
- 
+            return false;
+        }
+    }
+
     bool CheckAccessTest(TString suite, const char* name) override {
         Stream_ << suite << "::" << name << "\n";
         return false;
     }
- 
-private: 
-    bool Verbose_; 
+
+private:
+    bool Verbose_;
     IOutputStream& Stream_;
 };
 

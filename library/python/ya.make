@@ -138,7 +138,7 @@ RECURSE(
     path
     path/tests
     protobuf
-    pymain 
+    pymain
     pyscopg2
     pytest
     pytest-mongodb

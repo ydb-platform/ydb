@@ -2,10 +2,10 @@ import pickle
 import random
 from collections import deque
 from copy import copy as shallow_copy
-
-import pytest
+ 
+import pytest 
 from markupsafe import Markup
-
+ 
 from jinja2.utils import consume
 from jinja2.utils import generate_lorem_ipsum
 from jinja2.utils import LRUCache
@@ -13,18 +13,18 @@ from jinja2.utils import missing
 from jinja2.utils import object_type_repr
 from jinja2.utils import select_autoescape
 from jinja2.utils import urlize
-
-
+ 
+ 
 class TestLRUCache:
-    def test_simple(self):
-        d = LRUCache(3)
-        d["a"] = 1
-        d["b"] = 2
-        d["c"] = 3
-        d["a"]
-        d["d"] = 4
+    def test_simple(self): 
+        d = LRUCache(3) 
+        d["a"] = 1 
+        d["b"] = 2 
+        d["c"] = 3 
+        d["a"] 
+        d["d"] = 4 
         assert d.keys() == ["d", "a", "c"]
-
+ 
     def test_values(self):
         cache = LRUCache(3)
         cache["b"] = 1
@@ -35,18 +35,18 @@ class TestLRUCache:
         cache = LRUCache(2)
         assert cache.values() == []
 
-    def test_pickleable(self):
-        cache = LRUCache(2)
-        cache["foo"] = 42
-        cache["bar"] = 23
-        cache["foo"]
-
-        for protocol in range(3):
-            copy = pickle.loads(pickle.dumps(cache, protocol))
-            assert copy.capacity == cache.capacity
-            assert copy._mapping == cache._mapping
-            assert copy._queue == cache._queue
-
+    def test_pickleable(self): 
+        cache = LRUCache(2) 
+        cache["foo"] = 42 
+        cache["bar"] = 23 
+        cache["foo"] 
+ 
+        for protocol in range(3): 
+            copy = pickle.loads(pickle.dumps(cache, protocol)) 
+            assert copy.capacity == cache.capacity 
+            assert copy._mapping == cache._mapping 
+            assert copy._queue == cache._queue 
+ 
     @pytest.mark.parametrize("copy_func", [LRUCache.copy, shallow_copy])
     def test_copy(self, copy_func):
         cache = LRUCache(2)
@@ -57,7 +57,7 @@ class TestLRUCache:
         copy["c"] = 3
         assert copy._queue != cache._queue
         assert copy.keys() == ["c", "b"]
-
+ 
     def test_clear(self):
         d = LRUCache(3)
         d["a"] = 1
@@ -104,24 +104,24 @@ class TestLRUCache:
 
 
 class TestHelpers:
-    def test_object_type_repr(self):
+    def test_object_type_repr(self): 
         class X:
-            pass
-
+            pass 
+ 
         assert object_type_repr(42) == "int object"
         assert object_type_repr([]) == "list object"
         assert object_type_repr(X()) == "__tests__.test_utils.X object"
         assert object_type_repr(None) == "None"
         assert object_type_repr(Ellipsis) == "Ellipsis"
 
-    def test_autoescape_select(self):
-        func = select_autoescape(
+    def test_autoescape_select(self): 
+        func = select_autoescape( 
             enabled_extensions=("html", ".htm"),
             disabled_extensions=("txt",),
             default_for_string="STRING",
             default="NONE",
-        )
-
+        ) 
+ 
         assert func(None) == "STRING"
         assert func("unknown.foo") == "NONE"
         assert func("foo.html")
@@ -129,12 +129,12 @@ class TestHelpers:
         assert not func("foo.txt")
         assert func("FOO.HTML")
         assert not func("FOO.TXT")
-
-
+ 
+ 
 class TestEscapeUrlizeTarget:
-    def test_escape_urlize_target(self):
-        url = "http://example.org"
-        target = "<script>"
+    def test_escape_urlize_target(self): 
+        url = "http://example.org" 
+        target = "<script>" 
         assert urlize(url, target=target) == (
             '<a href="http://example.org"'
             ' target="&lt;script&gt;">'

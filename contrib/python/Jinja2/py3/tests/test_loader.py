@@ -1,39 +1,39 @@
 import importlib.abc
 import importlib.machinery
 import importlib.util
-import os
+import os 
 import platform
 import shutil
-import sys
-import tempfile
+import sys 
+import tempfile 
 import time
-import weakref
+import weakref 
 from pathlib import Path
-
+ 
 import pytest
 
 from jinja2 import Environment
 from jinja2 import loaders
 from jinja2 import PackageLoader
 from jinja2.exceptions import TemplateNotFound
-from jinja2.loaders import split_template_path
-
+from jinja2.loaders import split_template_path 
+ 
 import yatest.common as yc
-
+ 
 
 class TestLoaders:
-    def test_dict_loader(self, dict_loader):
-        env = Environment(loader=dict_loader)
+    def test_dict_loader(self, dict_loader): 
+        env = Environment(loader=dict_loader) 
         tmpl = env.get_template("justdict.html")
         assert tmpl.render().strip() == "FOO"
         pytest.raises(TemplateNotFound, env.get_template, "missing.html")
-
-    def test_package_loader(self, package_loader):
-        env = Environment(loader=package_loader)
+ 
+    def test_package_loader(self, package_loader): 
+        env = Environment(loader=package_loader) 
         tmpl = env.get_template("test.html")
         assert tmpl.render().strip() == "BAR"
         pytest.raises(TemplateNotFound, env.get_template, "missing.html")
-
+ 
     def test_filesystem_loader_overlapping_names(self, filesystem_loader):
         t2_dir = Path(filesystem_loader.searchpath[0]) / ".." / "templates2"
         # Make "foo" show up before "foo/test.html".
@@ -42,83 +42,83 @@ class TestLoaders:
         e.get_template("foo")
         # This would raise NotADirectoryError if "t2/foo" wasn't skipped.
         e.get_template("foo/test.html")
-
-    def test_choice_loader(self, choice_loader):
-        env = Environment(loader=choice_loader)
+ 
+    def test_choice_loader(self, choice_loader): 
+        env = Environment(loader=choice_loader) 
         tmpl = env.get_template("justdict.html")
         assert tmpl.render().strip() == "FOO"
         tmpl = env.get_template("test.html")
         assert tmpl.render().strip() == "BAR"
         pytest.raises(TemplateNotFound, env.get_template, "missing.html")
-
-    def test_function_loader(self, function_loader):
-        env = Environment(loader=function_loader)
+ 
+    def test_function_loader(self, function_loader): 
+        env = Environment(loader=function_loader) 
         tmpl = env.get_template("justfunction.html")
         assert tmpl.render().strip() == "FOO"
         pytest.raises(TemplateNotFound, env.get_template, "missing.html")
-
-    def test_prefix_loader(self, prefix_loader):
-        env = Environment(loader=prefix_loader)
+ 
+    def test_prefix_loader(self, prefix_loader): 
+        env = Environment(loader=prefix_loader) 
         tmpl = env.get_template("a/test.html")
         assert tmpl.render().strip() == "BAR"
         tmpl = env.get_template("b/justdict.html")
         assert tmpl.render().strip() == "FOO"
         pytest.raises(TemplateNotFound, env.get_template, "missing")
-
-    def test_caching(self):
-        changed = False
-
-        class TestLoader(loaders.BaseLoader):
-            def get_source(self, environment, template):
+ 
+    def test_caching(self): 
+        changed = False 
+ 
+        class TestLoader(loaders.BaseLoader): 
+            def get_source(self, environment, template): 
                 return "foo", None, lambda: not changed
 
-        env = Environment(loader=TestLoader(), cache_size=-1)
+        env = Environment(loader=TestLoader(), cache_size=-1) 
         tmpl = env.get_template("template")
         assert tmpl is env.get_template("template")
-        changed = True
+        changed = True 
         assert tmpl is not env.get_template("template")
-        changed = False
-
-    def test_no_cache(self):
+        changed = False 
+ 
+    def test_no_cache(self): 
         mapping = {"foo": "one"}
-        env = Environment(loader=loaders.DictLoader(mapping), cache_size=0)
+        env = Environment(loader=loaders.DictLoader(mapping), cache_size=0) 
         assert env.get_template("foo") is not env.get_template("foo")
-
-    def test_limited_size_cache(self):
+ 
+    def test_limited_size_cache(self): 
         mapping = {"one": "foo", "two": "bar", "three": "baz"}
-        loader = loaders.DictLoader(mapping)
-        env = Environment(loader=loader, cache_size=2)
+        loader = loaders.DictLoader(mapping) 
+        env = Environment(loader=loader, cache_size=2) 
         t1 = env.get_template("one")
         t2 = env.get_template("two")
         assert t2 is env.get_template("two")
         assert t1 is env.get_template("one")
         env.get_template("three")
-        loader_ref = weakref.ref(loader)
+        loader_ref = weakref.ref(loader) 
         assert (loader_ref, "one") in env.cache
         assert (loader_ref, "two") not in env.cache
         assert (loader_ref, "three") in env.cache
-
-    def test_cache_loader_change(self):
+ 
+    def test_cache_loader_change(self): 
         loader1 = loaders.DictLoader({"foo": "one"})
         loader2 = loaders.DictLoader({"foo": "two"})
-        env = Environment(loader=loader1, cache_size=2)
+        env = Environment(loader=loader1, cache_size=2) 
         assert env.get_template("foo").render() == "one"
-        env.loader = loader2
+        env.loader = loader2 
         assert env.get_template("foo").render() == "two"
-
-    def test_dict_loader_cache_invalidates(self):
+ 
+    def test_dict_loader_cache_invalidates(self): 
         mapping = {"foo": "one"}
-        env = Environment(loader=loaders.DictLoader(mapping))
+        env = Environment(loader=loaders.DictLoader(mapping)) 
         assert env.get_template("foo").render() == "one"
         mapping["foo"] = "two"
         assert env.get_template("foo").render() == "two"
-
-    def test_split_template_path(self):
+ 
+    def test_split_template_path(self): 
         assert split_template_path("foo/bar") == ["foo", "bar"]
         assert split_template_path("./foo/bar") == ["foo", "bar"]
         pytest.raises(TemplateNotFound, split_template_path, "../foo")
-
-
+ 
+ 
 class TestFileSystemLoader:
     searchpath = (Path(yc.test_source_path()) / "res" / "templates").resolve()
 
@@ -176,30 +176,30 @@ class TestFileSystemLoader:
 
 
 class TestModuleLoader:
-    archive = None
-
+    archive = None 
+ 
     def compile_down(self, prefix_loader, zip="deflated"):
-        log = []
-        self.reg_env = Environment(loader=prefix_loader)
-        if zip is not None:
+        log = [] 
+        self.reg_env = Environment(loader=prefix_loader) 
+        if zip is not None: 
             fd, self.archive = tempfile.mkstemp(suffix=".zip")
-            os.close(fd)
-        else:
-            self.archive = tempfile.mkdtemp()
+            os.close(fd) 
+        else: 
+            self.archive = tempfile.mkdtemp() 
         self.reg_env.compile_templates(self.archive, zip=zip, log_function=log.append)
-        self.mod_env = Environment(loader=loaders.ModuleLoader(self.archive))
+        self.mod_env = Environment(loader=loaders.ModuleLoader(self.archive)) 
         return "".join(log)
-
-    def teardown(self):
+ 
+    def teardown(self): 
         if hasattr(self, "mod_env"):
-            if os.path.isfile(self.archive):
-                os.remove(self.archive)
-            else:
-                shutil.rmtree(self.archive)
-            self.archive = None
-
-    def test_log(self, prefix_loader):
-        log = self.compile_down(prefix_loader)
+            if os.path.isfile(self.archive): 
+                os.remove(self.archive) 
+            else: 
+                shutil.rmtree(self.archive) 
+            self.archive = None 
+ 
+    def test_log(self, prefix_loader): 
+        log = self.compile_down(prefix_loader) 
         assert (
             'Compiled "a/foo/test.html" as '
             "tmpl_a790caf9d669e39ea4d280d597ec891c4ef0404a" in log
@@ -209,50 +209,50 @@ class TestModuleLoader:
             'Could not compile "a/syntaxerror.html": '
             "Encountered unknown tag 'endif'" in log
         )
-
-    def _test_common(self):
+ 
+    def _test_common(self): 
         tmpl1 = self.reg_env.get_template("a/test.html")
         tmpl2 = self.mod_env.get_template("a/test.html")
-        assert tmpl1.render() == tmpl2.render()
-
+        assert tmpl1.render() == tmpl2.render() 
+ 
         tmpl1 = self.reg_env.get_template("b/justdict.html")
         tmpl2 = self.mod_env.get_template("b/justdict.html")
-        assert tmpl1.render() == tmpl2.render()
-
-    def test_deflated_zip_compile(self, prefix_loader):
+        assert tmpl1.render() == tmpl2.render() 
+ 
+    def test_deflated_zip_compile(self, prefix_loader): 
         self.compile_down(prefix_loader, zip="deflated")
-        self._test_common()
-
-    def test_stored_zip_compile(self, prefix_loader):
+        self._test_common() 
+ 
+    def test_stored_zip_compile(self, prefix_loader): 
         self.compile_down(prefix_loader, zip="stored")
-        self._test_common()
-
-    def test_filesystem_compile(self, prefix_loader):
-        self.compile_down(prefix_loader, zip=None)
-        self._test_common()
-
-    def test_weak_references(self, prefix_loader):
-        self.compile_down(prefix_loader)
+        self._test_common() 
+ 
+    def test_filesystem_compile(self, prefix_loader): 
+        self.compile_down(prefix_loader, zip=None) 
+        self._test_common() 
+ 
+    def test_weak_references(self, prefix_loader): 
+        self.compile_down(prefix_loader) 
         self.mod_env.get_template("a/test.html")
         key = loaders.ModuleLoader.get_template_key("a/test.html")
-        name = self.mod_env.loader.module.__name__
-
-        assert hasattr(self.mod_env.loader.module, key)
-        assert name in sys.modules
-
-        # unset all, ensure the module is gone from sys.modules
+        name = self.mod_env.loader.module.__name__ 
+ 
+        assert hasattr(self.mod_env.loader.module, key) 
+        assert name in sys.modules 
+ 
+        # unset all, ensure the module is gone from sys.modules 
         self.mod_env = None
+ 
+        try: 
+            import gc 
 
-        try:
-            import gc
-
-            gc.collect()
+            gc.collect() 
         except BaseException:
-            pass
-
-        assert name not in sys.modules
-
-    def test_choice_loader(self, prefix_loader):
+            pass 
+ 
+        assert name not in sys.modules 
+ 
+    def test_choice_loader(self, prefix_loader): 
         self.compile_down(prefix_loader)
         self.mod_env.loader = loaders.ChoiceLoader(
             [self.mod_env.loader, loaders.DictLoader({"DICT_SOURCE": "DICT_TEMPLATE"})]
@@ -261,7 +261,7 @@ class TestModuleLoader:
         assert tmpl1.render() == "BAR"
         tmpl2 = self.mod_env.get_template("DICT_SOURCE")
         assert tmpl2.render() == "DICT_TEMPLATE"
-
+ 
     def test_prefix_loader(self, prefix_loader):
         self.compile_down(prefix_loader)
         self.mod_env.loader = loaders.PrefixLoader(
@@ -274,10 +274,10 @@ class TestModuleLoader:
         assert tmpl1.render() == "BAR"
         tmpl2 = self.mod_env.get_template("DICT/test.html")
         assert tmpl2.render() == "DICT_TEMPLATE"
-
+ 
     def test_path_as_pathlib(self, prefix_loader):
         self.compile_down(prefix_loader)
-
+ 
         mod_path = self.mod_env.loader.module.__path__[0]
         mod_loader = loaders.ModuleLoader(Path(mod_path))
         self.mod_env = Environment(loader=mod_loader)

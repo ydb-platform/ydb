@@ -320,7 +320,7 @@ RECURSE(
     svm
     svt-hevc
     svt-vp9
-    szip
+    szip 
     t1ha
     taocrypt
     tbb

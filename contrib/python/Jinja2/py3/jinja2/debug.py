@@ -1,24 +1,24 @@
 import platform
-import sys
+import sys 
 import typing as t
 from types import CodeType
 from types import TracebackType
-
+ 
 from .exceptions import TemplateSyntaxError
 from .utils import internal_code
 from .utils import missing
-
+ 
 if t.TYPE_CHECKING:
     from .runtime import Context
-
+ 
 
 def rewrite_traceback_stack(source: t.Optional[str] = None) -> BaseException:
     """Rewrite the current exception to replace any tracebacks from
     within compiled template code with tracebacks that look like they
     came from the template source.
-
+ 
     This must be called within an ``except`` block.
-
+ 
     :param source: For ``TemplateSyntaxError``, the original source if
         known.
     :return: The original exception with the rewritten traceback.
@@ -26,7 +26,7 @@ def rewrite_traceback_stack(source: t.Optional[str] = None) -> BaseException:
     _, exc_value, tb = sys.exc_info()
     exc_value = t.cast(BaseException, exc_value)
     tb = t.cast(TracebackType, tb)
-
+ 
     if isinstance(exc_value, TemplateSyntaxError) and not exc_value.translated:
         exc_value.translated = True
         exc_value.source = source
@@ -41,9 +41,9 @@ def rewrite_traceback_stack(source: t.Optional[str] = None) -> BaseException:
     else:
         # Skip the frame for the render function.
         tb = tb.tb_next
-
+ 
     stack = []
-
+ 
     # Build the stack of traceback object, replacing any in template
     # code with the source file and line information.
     while tb is not None:
@@ -52,27 +52,27 @@ def rewrite_traceback_stack(source: t.Optional[str] = None) -> BaseException:
         if tb.tb_frame.f_code in internal_code:
             tb = tb.tb_next
             continue
-
+ 
         template = tb.tb_frame.f_globals.get("__jinja_template__")
-
+ 
         if template is not None:
             lineno = template.get_corresponding_lineno(tb.tb_lineno)
             fake_tb = fake_traceback(exc_value, tb, template.filename, lineno)
             stack.append(fake_tb)
-        else:
+        else: 
             stack.append(tb)
-
+ 
         tb = tb.tb_next
-
+ 
     tb_next = None
-
+ 
     # Assign tb_next in reverse to avoid circular references.
     for tb in reversed(stack):
         tb_next = tb_set_next(tb, tb_next)
-
+ 
     return exc_value.with_traceback(tb_next)
-
-
+ 
+ 
 def fake_traceback(  # type: ignore
     exc_value: BaseException, tb: t.Optional[TracebackType], filename: str, lineno: int
 ) -> TracebackType:
@@ -80,7 +80,7 @@ def fake_traceback(  # type: ignore
     template source instead of the compiled code. The filename, line
     number, and location name will point to the template, and the local
     variables will be the current template context.
-
+ 
     :param exc_value: The original exception to be re-raised to create
         the new traceback.
     :param tb: The original traceback to get the local variables and
@@ -93,9 +93,9 @@ def fake_traceback(  # type: ignore
         # available at that point in the template.
         locals = get_template_locals(tb.tb_frame.f_locals)
         locals.pop("__jinja_exception__", None)
-    else:
+    else: 
         locals = {}
-
+ 
     globals = {
         "__name__": filename,
         "__file__": filename,
@@ -105,19 +105,19 @@ def fake_traceback(  # type: ignore
     code: CodeType = compile(
         "\n" * (lineno - 1) + "raise __jinja_exception__", filename, "exec"
     )
-
+ 
     # Build a new code object that points to the template file and
     # replaces the location with a block name.
     location = "template"
-
+ 
     if tb is not None:
         function = tb.tb_frame.f_code.co_name
-
+ 
         if function == "root":
             location = "top-level template code"
         elif function.startswith("block_"):
             location = f"block {function[6:]!r}"
-
+ 
     if sys.version_info >= (3, 8):
         code = code.replace(co_name=location)
     else:
@@ -138,59 +138,59 @@ def fake_traceback(  # type: ignore
             code.co_freevars,
             code.co_cellvars,
         )
-
+ 
     # Execute the new code, which is guaranteed to raise, and return
     # the new traceback without this frame.
     try:
         exec(code, globals, locals)
     except BaseException:
         return sys.exc_info()[2].tb_next  # type: ignore
-
-
+ 
+ 
 def get_template_locals(real_locals: t.Mapping[str, t.Any]) -> t.Dict[str, t.Any]:
     """Based on the runtime locals, get the context that would be
     available at that point in the template.
     """
     # Start with the current template context.
     ctx: "t.Optional[Context]" = real_locals.get("context")
-
+ 
     if ctx is not None:
         data: t.Dict[str, t.Any] = ctx.get_all().copy()
-    else:
+    else: 
         data = {}
-
+ 
     # Might be in a derived context that only sets local variables
     # rather than pushing a context. Local variables follow the scheme
     # l_depth_name. Find the highest-depth local that has a value for
     # each name.
     local_overrides: t.Dict[str, t.Tuple[int, t.Any]] = {}
-
+ 
     for name, value in real_locals.items():
         if not name.startswith("l_") or value is missing:
             # Not a template variable, or no longer relevant.
-            continue
+            continue 
 
-        try:
+        try: 
             _, depth_str, name = name.split("_", 2)
             depth = int(depth_str)
-        except ValueError:
-            continue
+        except ValueError: 
+            continue 
 
-        cur_depth = local_overrides.get(name, (-1,))[0]
+        cur_depth = local_overrides.get(name, (-1,))[0] 
 
-        if cur_depth < depth:
-            local_overrides[name] = (depth, value)
-
+        if cur_depth < depth: 
+            local_overrides[name] = (depth, value) 
+ 
     # Modify the context with any derived context.
     for name, (_, value) in local_overrides.items():
-        if value is missing:
+        if value is missing: 
             data.pop(name, None)
-        else:
+        else: 
             data[name] = value
-
+ 
     return data
-
-
+ 
+ 
 if sys.version_info >= (3, 7):
     # tb_next is directly assignable as of Python 3.7
     def tb_set_next(
@@ -198,11 +198,11 @@ if sys.version_info >= (3, 7):
     ) -> TracebackType:
         tb.tb_next = tb_next
         return tb
-
-
+ 
+ 
 elif platform.python_implementation() == "PyPy":
     # PyPy might have special support, and won't work with ctypes.
-    try:
+    try: 
         import tputil  # type: ignore
     except ImportError:
         # Without tproxy support, use the original traceback.
@@ -210,7 +210,7 @@ elif platform.python_implementation() == "PyPy":
             tb: TracebackType, tb_next: t.Optional[TracebackType]
         ) -> TracebackType:
             return tb
-
+ 
     else:
         # With tproxy support, create a proxy around the traceback that
         # returns the new tb_next.
@@ -220,40 +220,40 @@ elif platform.python_implementation() == "PyPy":
             def controller(op):  # type: ignore
                 if op.opname == "__getattribute__" and op.args[0] == "tb_next":
                     return tb_next
-
+ 
                 return op.delegate()
-
+ 
             return tputil.make_proxy(controller, obj=tb)  # type: ignore
-
-
+ 
+ 
 else:
     # Use ctypes to assign tb_next at the C level since it's read-only
     # from Python.
-    import ctypes
-
+    import ctypes 
+ 
     class _CTraceback(ctypes.Structure):
         _fields_ = [
             # Extra PyObject slots when compiled with Py_TRACE_REFS.
             ("PyObject_HEAD", ctypes.c_byte * object().__sizeof__()),
             # Only care about tb_next as an object, not a traceback.
             ("tb_next", ctypes.py_object),
-        ]
-
+        ] 
+ 
     def tb_set_next(
         tb: TracebackType, tb_next: t.Optional[TracebackType]
     ) -> TracebackType:
         c_tb = _CTraceback.from_address(id(tb))
-
+ 
         # Clear out the old tb_next.
-        if tb.tb_next is not None:
+        if tb.tb_next is not None: 
             c_tb_next = ctypes.py_object(tb.tb_next)
             c_tb.tb_next = ctypes.py_object()
             ctypes.pythonapi.Py_DecRef(c_tb_next)
-
+ 
         # Assign the new tb_next.
         if tb_next is not None:
             c_tb_next = ctypes.py_object(tb_next)
             ctypes.pythonapi.Py_IncRef(c_tb_next)
             c_tb.tb_next = c_tb_next
-
+ 
         return tb

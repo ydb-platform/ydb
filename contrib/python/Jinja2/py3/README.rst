@@ -1,12 +1,12 @@
 Jinja
 =====
-
+ 
 Jinja is a fast, expressive, extensible templating engine. Special
 placeholders in the template allow writing code similar to Python
 syntax. Then the template is passed data to render the final document.
-
+ 
 It includes:
-
+ 
 -   Template inheritance and inclusion.
 -   Define and import macros within templates.
 -   HTML templates can use autoescaping to prevent XSS from untrusted
@@ -20,7 +20,7 @@ It includes:
 -   Exceptions point to the correct line in templates to make debugging
     easier.
 -   Extensible filters, tests, functions, and even syntax.
-
+ 
 Jinja's philosophy is that while application logic belongs in Python if
 possible, it shouldn't make the template designer's job difficult by
 restricting functionality too much.
@@ -41,19 +41,19 @@ Install and update using `pip`_:
 In A Nutshell
 -------------
 
-.. code-block:: jinja
-
+.. code-block:: jinja 
+ 
     {% extends "base.html" %}
     {% block title %}Members{% endblock %}
-    {% block content %}
-      <ul>
-      {% for user in users %}
-        <li><a href="{{ user.url }}">{{ user.username }}</a></li>
-      {% endfor %}
-      </ul>
-    {% endblock %}
-
-
+    {% block content %} 
+      <ul> 
+      {% for user in users %} 
+        <li><a href="{{ user.url }}">{{ user.username }}</a></li> 
+      {% endfor %} 
+      </ul> 
+    {% endblock %} 
+ 
+ 
 Donate
 ------
 
@@ -67,7 +67,7 @@ donate today`_.
 
 Links
 -----
-
+ 
 -   Documentation: https://jinja.palletsprojects.com/
 -   Changes: https://jinja.palletsprojects.com/changes/
 -   PyPI Releases: https://pypi.org/project/Jinja2/

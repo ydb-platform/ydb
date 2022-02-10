@@ -1,6 +1,6 @@
-{
-  "version": "1.0",
-  "examples": {
+{ 
+  "version": "1.0", 
+  "examples": { 
     "AbortMultipartUpload": [
       {
         "input": {
@@ -1839,5 +1839,5 @@
         "title": "To upload a part by copying byte range from an existing object as data source"
       }
     ]
-  }
-}
+  } 
+} 

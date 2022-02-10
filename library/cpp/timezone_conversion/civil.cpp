@@ -76,10 +76,10 @@ namespace NDatetime {
         return result;
     }
 
-    TTimeZone GetFixedTimeZone(const long offset) {
-        return cctz::fixed_time_zone(std::chrono::seconds(offset));
-    }
-
+    TTimeZone GetFixedTimeZone(const long offset) { 
+        return cctz::fixed_time_zone(std::chrono::seconds(offset)); 
+    } 
+ 
     TCivilSecond Convert(const TInstant& absTime, const TTimeZone& tz) {
         return cctz::convert(TSystemClock::from_time_t(absTime.TimeT()), tz);
     }

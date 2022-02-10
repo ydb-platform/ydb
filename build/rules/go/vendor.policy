@@ -217,9 +217,9 @@ ALLOW .* -> vendor/github.com/gorilla/websocket
 # http sessions with cookie and filesystem session storage
 ALLOW .* -> vendor/github.com/gorilla/sessions
 
-# Package gorilla/schema fills a struct with form values
-ALLOW .* -> vendor/github.com/gorilla/schema
-
+# Package gorilla/schema fills a struct with form values 
+ALLOW .* -> vendor/github.com/gorilla/schema 
+ 
 # S2 geometry
 ALLOW .* -> vendor/github.com/golang/geo
 
@@ -1032,11 +1032,11 @@ ALLOW infra/infractl/.* -> vendor/gopkg.in/yaml.v3
 # CONTRIB-2445
 ALLOW psp -> vendor/github.com/zimmski/go-mutesting
 
-# CONTRIB-2460
-ALLOW .* -> vendor/github.com/dgraph-io/ristretto
-
+# CONTRIB-2460 
+ALLOW .* -> vendor/github.com/dgraph-io/ristretto 
+ 
 #
 # This section is for EXCEPTIONS. Add new rule above, not here.
 #
-
+ 
 DENY .* -> vendor/

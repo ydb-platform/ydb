@@ -1,27 +1,27 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 import pickle
 import re
 from traceback import format_exception
-
-import pytest
-
+ 
+import pytest 
+ 
 from jinja2 import ChoiceLoader
 from jinja2 import DictLoader
 from jinja2 import Environment
 from jinja2 import TemplateSyntaxError
-
-
-@pytest.fixture
-def fs_env(filesystem_loader):
+ 
+ 
+@pytest.fixture 
+def fs_env(filesystem_loader): 
     """returns a new environment."""
-    return Environment(loader=filesystem_loader)
-
-
-class TestDebug(object):
-    def assert_traceback_matches(self, callback, expected_tb):
+    return Environment(loader=filesystem_loader) 
+ 
+ 
+class TestDebug(object): 
+    def assert_traceback_matches(self, callback, expected_tb): 
         with pytest.raises(Exception) as exc_info:
-            callback()
-
+            callback() 
+ 
         tb = format_exception(exc_info.type, exc_info.value, exc_info.tb)
         m = re.search(expected_tb.strip(), "".join(tb))
         assert m is not None, "Traceback did not match:\n\n%s\nexpected:\n%s" % (
@@ -29,50 +29,50 @@ class TestDebug(object):
             expected_tb,
         )
 
-    def test_runtime_error(self, fs_env):
-        def test():
-            tmpl.render(fail=lambda: 1 / 0)
+    def test_runtime_error(self, fs_env): 
+        def test(): 
+            tmpl.render(fail=lambda: 1 / 0) 
 
         tmpl = fs_env.get_template("broken.html")
         self.assert_traceback_matches(
             test,
             r"""
-  File ".*?broken.html", line 2, in (top-level template code|<module>)
-    \{\{ fail\(\) \}\}
-  File ".*debug?.pyc?", line \d+, in <lambda>
-    tmpl\.render\(fail=lambda: 1 / 0\)
-ZeroDivisionError: (int(eger)? )?division (or modulo )?by zero
+  File ".*?broken.html", line 2, in (top-level template code|<module>) 
+    \{\{ fail\(\) \}\} 
+  File ".*debug?.pyc?", line \d+, in <lambda> 
+    tmpl\.render\(fail=lambda: 1 / 0\) 
+ZeroDivisionError: (int(eger)? )?division (or modulo )?by zero 
 """,
         )
-
-    def test_syntax_error(self, fs_env):
+ 
+    def test_syntax_error(self, fs_env): 
         # The trailing .*? is for PyPy 2 and 3, which don't seem to
         # clear the exception's original traceback, leaving the syntax
         # error in the middle of other compiler frames.
         self.assert_traceback_matches(
             lambda: fs_env.get_template("syntaxerror.html"),
             """(?sm)
-  File ".*?syntaxerror.html", line 4, in (template|<module>)
+  File ".*?syntaxerror.html", line 4, in (template|<module>) 
     \\{% endif %\\}.*?
 (jinja2\\.exceptions\\.)?TemplateSyntaxError: Encountered unknown tag 'endif'. Jinja \
 was looking for the following tags: 'endfor' or 'else'. The innermost block that needs \
 to be closed is 'for'.
     """,
         )
-
-    def test_regular_syntax_error(self, fs_env):
-        def test():
+ 
+    def test_regular_syntax_error(self, fs_env): 
+        def test(): 
             raise TemplateSyntaxError("wtf", 42)
 
         self.assert_traceback_matches(
             test,
             r"""
-  File ".*debug.pyc?", line \d+, in test
+  File ".*debug.pyc?", line \d+, in test 
     raise TemplateSyntaxError\("wtf", 42\)
-(jinja2\.exceptions\.)?TemplateSyntaxError: wtf
+(jinja2\.exceptions\.)?TemplateSyntaxError: wtf 
   line 42""",
         )
-
+ 
     def test_pickleable_syntax_error(self, fs_env):
         original = TemplateSyntaxError("bad template", 42, "test", "test.txt")
         unpickled = pickle.loads(pickle.dumps(original))
@@ -95,9 +95,9 @@ to be closed is 'for'.
 
         assert exc_info.value.source is not None
 
-    def test_local_extraction(self):
+    def test_local_extraction(self): 
         from jinja2.debug import get_template_locals
-        from jinja2.runtime import missing
+        from jinja2.runtime import missing 
 
         locals = get_template_locals(
             {

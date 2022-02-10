@@ -1,13 +1,13 @@
-# -*- coding: utf-8 -*-
-"""
+# -*- coding: utf-8 -*- 
+""" 
 markupsafe._constants
 ~~~~~~~~~~~~~~~~~~~~~
-
+ 
 :copyright: 2010 Pallets
 :license: BSD-3-Clause
-"""
-
-HTML_ENTITIES = {
+""" 
+ 
+HTML_ENTITIES = { 
     "AElig": 198,
     "Aacute": 193,
     "Acirc": 194,
@@ -261,4 +261,4 @@ HTML_ENTITIES = {
     "zeta": 950,
     "zwj": 8205,
     "zwnj": 8204,
-}
+} 

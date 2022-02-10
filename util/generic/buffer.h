@@ -27,7 +27,7 @@ public:
     TBuffer(TBuffer&& b) noexcept;
 
     TBuffer& operator=(TBuffer&& b) noexcept;
-
+ 
     TBuffer& operator=(const TBuffer& b) {
         if (this != &b) {
             Assign(b.Data(), b.Size());

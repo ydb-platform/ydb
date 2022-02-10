@@ -9,11 +9,11 @@ namespace {
     enum ETestEnum {
     };
 
-    class TPodClass {
+    class TPodClass { 
     };
 
-    class TNonPodClass {
-        TNonPodClass() {
+    class TNonPodClass { 
+        TNonPodClass() { 
         }
     };
 
@@ -39,37 +39,37 @@ namespace {
 
     class TNonEmptyDerivedClass: public TNonEmptyClass {
     };
-
+ 
     class TStdLayoutClass1: public TEmptyClass {
-    public:
-        int Value1;
-        int Value2;
-    };
-
+    public: 
+        int Value1; 
+        int Value2; 
+    }; 
+ 
     class TStdLayoutClass2: public TNonEmptyClass {
-    };
-
-    class TNonStdLayoutClass1 {
-    public:
-        int Value1;
+    }; 
+ 
+    class TNonStdLayoutClass1 { 
+    public: 
+        int Value1; 
 
     protected:
-        int Value2;
-    };
-
-    class TNonStdLayoutClass2 {
-    public:
+        int Value2; 
+    }; 
+ 
+    class TNonStdLayoutClass2 { 
+    public: 
         virtual void Func() {
         }
-    };
-
+    }; 
+ 
     class TNonStdLayoutClass3: public TNonStdLayoutClass2 {
-    };
-
+    }; 
+ 
     class TNonStdLayoutClass4: public TEmptyClass {
-    public:
-        TEmptyClass Base;
-    };
+    public: 
+        TEmptyClass Base; 
+    }; 
 }
 
 #define ASSERT_SAME_TYPE(x, y)                     \
@@ -131,7 +131,7 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         UNIT_ASSERT(!std::is_arithmetic<T*>::value);
 
         bool a;
-
+ 
         a = std::is_same<typename TTypeTraits<T>::TFuncParam, T>::value;
         UNIT_ASSERT(a);
         a = std::is_same<typename TTypeTraits<const volatile T>::TFuncParam, const volatile T>::value;
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         UNIT_ASSERT(!std::is_empty<TNonEmptyClass>::value);
         UNIT_ASSERT(!std::is_empty<TNonEmptyDerivedClass>::value);
     }
-
+ 
     Y_UNIT_TEST(TestIsStandardLayout) {
         UNIT_ASSERT(std::is_standard_layout<TStdLayoutClass1>::value);
         UNIT_ASSERT(std::is_standard_layout<TStdLayoutClass2>::value);
@@ -225,8 +225,8 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass2>::value);
         UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass3>::value);
         UNIT_ASSERT(!std::is_standard_layout<TNonStdLayoutClass4>::value);
-    }
-
+    } 
+ 
     template <class T>
     using TTrySum = decltype(std::declval<T>() + std::declval<T>());
 
@@ -318,32 +318,32 @@ namespace {
     };
 
     template <>
-    struct TTypeTraitsExpected<TPodClass>: public TTypeTraitsExpected<void> {
+    struct TTypeTraitsExpected<TPodClass>: public TTypeTraitsExpected<void> { 
         enum { IsClassType = true };
         enum { IsVoid = false };
     };
 
     template <>
-    struct TTypeTraitsExpected<TNonPodClass>: public TTypeTraitsExpected<TPodClass> {
+    struct TTypeTraitsExpected<TNonPodClass>: public TTypeTraitsExpected<TPodClass> { 
         enum { IsPod = false };
     };
 
     template <>
-    struct TTypeTraitsExpected<TNonPodClass&>: public TTypeTraitsExpected<TNonPodClass> {
+    struct TTypeTraitsExpected<TNonPodClass&>: public TTypeTraitsExpected<TNonPodClass> { 
         enum { IsClassType = false };
         enum { IsReference = true };
         enum { IsLvalueReference = true };
     };
 
     template <>
-    struct TTypeTraitsExpected<TNonPodClass&&>: public TTypeTraitsExpected<TNonPodClass> {
+    struct TTypeTraitsExpected<TNonPodClass&&>: public TTypeTraitsExpected<TNonPodClass> { 
         enum { IsClassType = false };
         enum { IsReference = true };
         enum { IsRvalueReference = true };
     };
 
     template <>
-    struct TTypeTraitsExpected<const TNonPodClass&>: public TTypeTraitsExpected<TNonPodClass&> {
+    struct TTypeTraitsExpected<const TNonPodClass&>: public TTypeTraitsExpected<TNonPodClass&> { 
     };
 
     template <>
@@ -416,10 +416,10 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTestNg) {
     TYPE_TEST(FloatReference, float&)
     TYPE_TEST(FloatConstReference, const float&)
     TYPE_TEST(FloatArray, float[17])
-    TYPE_TEST(PodClass, TPodClass)
-    TYPE_TEST(NonPodClass, TNonPodClass)
-    TYPE_TEST(NonPodClassReference, TNonPodClass&)
-    TYPE_TEST(NonPodClassConstReference, const TNonPodClass&)
+    TYPE_TEST(PodClass, TPodClass) 
+    TYPE_TEST(NonPodClass, TNonPodClass) 
+    TYPE_TEST(NonPodClassReference, TNonPodClass&) 
+    TYPE_TEST(NonPodClassConstReference, const TNonPodClass&) 
 }
 
 enum E4 {

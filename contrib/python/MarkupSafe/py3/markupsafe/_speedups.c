@@ -1,22 +1,22 @@
-#include <Python.h>
+#include <Python.h> 
+ 
+static PyObject* markup; 
+ 
+static int 
+init_constants(void) 
+{ 
+	PyObject *module; 
 
-static PyObject* markup;
-
-static int
-init_constants(void)
-{
-	PyObject *module;
-
-	/* import markup type so that we can mark the return value */
-	module = PyImport_ImportModule("markupsafe");
-	if (!module)
-		return 0;
-	markup = PyObject_GetAttrString(module, "Markup");
-	Py_DECREF(module);
-
-	return 1;
-}
-
+	/* import markup type so that we can mark the return value */ 
+	module = PyImport_ImportModule("markupsafe"); 
+	if (!module) 
+		return 0; 
+	markup = PyObject_GetAttrString(module, "Markup"); 
+	Py_DECREF(module); 
+ 
+	return 1; 
+} 
+ 
 #define GET_DELTA(inp, inp_end, delta) \
 	while (inp < inp_end) { \
 		switch (*inp++) { \
@@ -31,7 +31,7 @@ init_constants(void)
 			break; \
 		} \
 	}
-
+ 
 #define DO_ESCAPE(inp, inp_end, outp) \
 	{ \
 		Py_ssize_t ncopy = 0; \
@@ -88,7 +88,7 @@ init_constants(void)
 		memcpy(outp, inp-ncopy, sizeof(*outp)*ncopy); \
 	}
 
-static PyObject*
+static PyObject* 
 escape_unicode_kind1(PyUnicodeObject *in)
 {
 	Py_UCS1 *inp = PyUnicode_1BYTE_DATA(in);
@@ -184,11 +184,11 @@ escape_unicode(PyUnicodeObject *in)
 }
 
 static PyObject*
-escape(PyObject *self, PyObject *text)
-{
+escape(PyObject *self, PyObject *text) 
+{ 
 	static PyObject *id_html;
-	PyObject *s = NULL, *rv = NULL, *html;
-
+	PyObject *s = NULL, *rv = NULL, *html; 
+ 
 	if (id_html == NULL) {
 		id_html = PyUnicode_InternFromString("__html__");
 		if (id_html == NULL) {
@@ -196,67 +196,67 @@ escape(PyObject *self, PyObject *text)
 		}
 	}
 
-	/* we don't have to escape integers, bools or floats */
-	if (PyLong_CheckExact(text) ||
+	/* we don't have to escape integers, bools or floats */ 
+	if (PyLong_CheckExact(text) || 
 		PyFloat_CheckExact(text) || PyBool_Check(text) ||
 		text == Py_None)
-		return PyObject_CallFunctionObjArgs(markup, text, NULL);
-
-	/* if the object has an __html__ method that performs the escaping */
+		return PyObject_CallFunctionObjArgs(markup, text, NULL); 
+ 
+	/* if the object has an __html__ method that performs the escaping */ 
 	html = PyObject_GetAttr(text ,id_html);
-	if (html) {
+	if (html) { 
 		s = PyObject_CallObject(html, NULL);
-		Py_DECREF(html);
+		Py_DECREF(html); 
 		if (s == NULL) {
 			return NULL;
 		}
 		/* Convert to Markup object */
 		rv = PyObject_CallFunctionObjArgs(markup, (PyObject*)s, NULL);
 		Py_DECREF(s);
-		return rv;
-	}
-
-	/* otherwise make the object unicode if it isn't, then escape */
-	PyErr_Clear();
-	if (!PyUnicode_Check(text)) {
-		PyObject *unicode = PyObject_Str(text);
-		if (!unicode)
-			return NULL;
-		s = escape_unicode((PyUnicodeObject*)unicode);
-		Py_DECREF(unicode);
-	}
-	else
-		s = escape_unicode((PyUnicodeObject*)text);
-
-	/* convert the unicode string into a markup object. */
-	rv = PyObject_CallFunctionObjArgs(markup, (PyObject*)s, NULL);
-	Py_DECREF(s);
-	return rv;
-}
-
-
-static PyObject*
-escape_silent(PyObject *self, PyObject *text)
-{
-	if (text != Py_None)
-		return escape(self, text);
-	return PyObject_CallFunctionObjArgs(markup, NULL);
-}
-
-
-static PyObject*
+		return rv; 
+	} 
+ 
+	/* otherwise make the object unicode if it isn't, then escape */ 
+	PyErr_Clear(); 
+	if (!PyUnicode_Check(text)) { 
+		PyObject *unicode = PyObject_Str(text); 
+		if (!unicode) 
+			return NULL; 
+		s = escape_unicode((PyUnicodeObject*)unicode); 
+		Py_DECREF(unicode); 
+	} 
+	else 
+		s = escape_unicode((PyUnicodeObject*)text); 
+ 
+	/* convert the unicode string into a markup object. */ 
+	rv = PyObject_CallFunctionObjArgs(markup, (PyObject*)s, NULL); 
+	Py_DECREF(s); 
+	return rv; 
+} 
+ 
+ 
+static PyObject* 
+escape_silent(PyObject *self, PyObject *text) 
+{ 
+	if (text != Py_None) 
+		return escape(self, text); 
+	return PyObject_CallFunctionObjArgs(markup, NULL); 
+} 
+ 
+ 
+static PyObject* 
 soft_str(PyObject *self, PyObject *s)
-{
-	if (!PyUnicode_Check(s))
-		return PyObject_Str(s);
-	Py_INCREF(s);
-	return s;
-}
-
-
+{ 
+	if (!PyUnicode_Check(s)) 
+		return PyObject_Str(s); 
+	Py_INCREF(s); 
+	return s; 
+} 
+ 
+ 
 static PyObject*
 soft_unicode(PyObject *self, PyObject *s)
-{
+{ 
 	PyErr_WarnEx(
 		PyExc_DeprecationWarning,
 		"'soft_unicode' has been renamed to 'soft_str'. The old name"
@@ -264,9 +264,9 @@ soft_unicode(PyObject *self, PyObject *s)
 		2
 	);
 	return soft_str(self, s);
-}
-
-
+} 
+ 
+ 
 static PyMethodDef module_methods[] = {
 	{
 		"escape",
@@ -317,23 +317,23 @@ static PyMethodDef module_methods[] = {
 	{NULL, NULL, 0, NULL}  /* Sentinel */
 };
 
-static struct PyModuleDef module_definition = {
+static struct PyModuleDef module_definition = { 
 	PyModuleDef_HEAD_INIT,
-	"markupsafe._speedups",
-	NULL,
-	-1,
-	module_methods,
-	NULL,
-	NULL,
-	NULL,
-	NULL
-};
-
-PyMODINIT_FUNC
+	"markupsafe._speedups", 
+	NULL, 
+	-1, 
+	module_methods, 
+	NULL, 
+	NULL, 
+	NULL, 
+	NULL 
+}; 
+ 
+PyMODINIT_FUNC 
 PyInit__speedups(void)
-{
-	if (!init_constants())
-		return NULL;
-
-	return PyModule_Create(&module_definition);
-}
+{ 
+	if (!init_constants()) 
+		return NULL; 
+ 
+	return PyModule_Create(&module_definition); 
+} 

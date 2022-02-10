@@ -242,7 +242,7 @@ namespace NYql::NDqs {
 
         int result = gethostname(buffer.data(), buffer.size() - 1);
         if (result != 0) {
-            Cerr << "gethostname failed for " << std::string_view{buffer.data(), buffer.size()} << " error " << strerror(errno) << Endl; 
+            Cerr << "gethostname failed for " << std::string_view{buffer.data(), buffer.size()} << " error " << strerror(errno) << Endl;
             return std::make_tuple(hostName, localAddress);
         }
 
@@ -262,7 +262,7 @@ namespace NYql::NDqs {
         addrinfo* response = nullptr;
         result = getaddrinfo(buffer.data(), nullptr, &request, &response);
         if (result != 0) {
-            Cerr << "getaddrinfo failed for " << std::string_view{buffer.data(), buffer.size()} << " error " << gai_strerror(result) << Endl; 
+            Cerr << "getaddrinfo failed for " << std::string_view{buffer.data(), buffer.size()} << " error " << gai_strerror(result) << Endl;
             return std::make_tuple(hostName, localAddress);
         }
 

@@ -352,11 +352,11 @@ def get_values_list(unit, key):
     return [r for r in res if r and r not in ['""', "''"]]
 
 
-def get_norm_paths(unit, key):
-    # return paths without trailing (back)slash
-    return [x.rstrip('\\/') for x in get_values_list(unit, key)]
-
-
+def get_norm_paths(unit, key): 
+    # return paths without trailing (back)slash 
+    return [x.rstrip('\\/') for x in get_values_list(unit, key)] 
+ 
+ 
 def get_unit_list_variable(unit, name):
     items = unit.get(name)
     if items:
@@ -715,7 +715,7 @@ def onadd_pytest_script(unit, *args):
     test_files = get_values_list(unit, 'TEST_SRCS_VALUE')
     tags = _get_test_tags(unit)
     requirements = get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
-    test_data = get_norm_paths(unit, 'TEST_DATA_VALUE')
+    test_data = get_norm_paths(unit, 'TEST_DATA_VALUE') 
     data, data_files = get_canonical_test_resources(unit)
     test_data += data
     python_paths = get_values_list(unit, 'TEST_PYTHON_PATH_VALUE')
@@ -760,7 +760,7 @@ def add_test_to_dart(unit, test_type, binary_path=None, runner_bin=None):
     test_files = get_values_list(unit, 'TEST_SRCS_VALUE')
     tags = _get_test_tags(unit)
     requirements = get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
-    test_data = get_norm_paths(unit, 'TEST_DATA_VALUE')
+    test_data = get_norm_paths(unit, 'TEST_DATA_VALUE') 
     data, data_files = get_canonical_test_resources(unit)
     test_data += data
     python_paths = get_values_list(unit, 'TEST_PYTHON_PATH_VALUE')
@@ -812,7 +812,7 @@ def onjava_test(unit, *args):
     unit_path = unit.path()
     path = _common.strip_roots(unit_path)
 
-    test_data = get_norm_paths(unit, 'TEST_DATA_VALUE')
+    test_data = get_norm_paths(unit, 'TEST_DATA_VALUE') 
     test_data.append('arcadia/build/scripts/run_junit.py')
     test_data.append('arcadia/build/scripts/unpacking_jtest_runner.py')
 

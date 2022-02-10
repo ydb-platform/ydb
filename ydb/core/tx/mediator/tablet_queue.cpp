@@ -20,10 +20,10 @@ namespace NTxMediator {
 
 class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     struct TStepEntry {
-        const TStepId Step; 
+        const TStepId Step;
         ui64 RefCounter;
 
-        TStepEntry(TStepId step) 
+        TStepEntry(TStepId step)
             : Step(step)
             , RefCounter(0)
         {}
@@ -72,8 +72,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
     TAutoPtr<NTabletPipe::IClientCache> Pipes;
 
-    TStepId AcceptedStep; 
-    TStepId CommitedStep; 
+    TStepId AcceptedStep;
+    TStepId CommitedStep;
     TStepEntry *ActiveStep;
 
     THashSet<TActorId> TimecastWatches;
@@ -135,8 +135,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
     void Handle(TEvTxMediator::TEvCommitTabletStep::TPtr &ev, const TActorContext &ctx) {
         TEvTxMediator::TEvCommitTabletStep *msg = ev->Get();
-        const TStepId step = msg->Step; 
-        const TTabletId tablet = msg->TabletId; 
+        const TStepId step = msg->Step;
+        const TTabletId tablet = msg->TabletId;
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " HANDLE " << msg->ToString() << " marker# M4");
@@ -169,8 +169,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
     void Handle(TEvTxMediator::TEvOoOTabletStep::TPtr &ev, const TActorContext &ctx) {
         TEvTxMediator::TEvOoOTabletStep *msg = ev->Get();
-        const TStepId step = msg->Step; 
-        const TTabletId tablet = msg->TabletId; 
+        const TStepId step = msg->Step;
+        const TTabletId tablet = msg->TabletId;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
 
@@ -185,7 +185,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         const TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-        const TTabletId tablet = msg->TabletId; 
+        const TTabletId tablet = msg->TabletId;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
 
@@ -194,8 +194,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
         if (!Pipes->OnConnect(ev)) {
             if (msg->Dead) {
-                LOG_WARN_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString() 
-                    << " Mediator# " << Mediator << " HANDLE TEvClientConnected(Dead=true)"); 
+                LOG_WARN_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
+                    << " Mediator# " << Mediator << " HANDLE TEvClientConnected(Dead=true)");
                 while (TTabletEntry::TStep *sx = tabletEntry.Queue->Head()) {
                     tabletEntry.MergeOutOfOrder(sx);
                     AckOoO(tablet, sx->StepRef->Step, sx->Transactions, ctx);
@@ -221,7 +221,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         const TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-        const TTabletId tablet = msg->TabletId; 
+        const TTabletId tablet = msg->TabletId;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
 
@@ -241,7 +241,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
     void Handle(TEvTxMediator::TEvStepPlanComplete::TPtr &ev, const TActorContext &ctx) {
         const TEvTxMediator::TEvStepPlanComplete *msg = ev->Get();
-        const TStepId step = msg->Step; 
+        const TStepId step = msg->Step;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
 
@@ -256,8 +256,8 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
 
     void Handle(TEvTxProcessing::TEvPlanStepAccepted::TPtr &ev, const TActorContext &ctx) {
         const NKikimrTx::TEvPlanStepAccepted &record = ev->Get()->Record;
-        const TTabletId tablet = record.GetTabletId(); 
-        const TStepId step = record.GetStep(); 
+        const TTabletId tablet = record.GetTabletId();
+        const TStepId step = record.GetStep();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " HANDLE " << ev->Get()->ToString());
 
@@ -326,12 +326,12 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     static NTabletPipe::TClientConfig GetPipeClientConfig() {
         NTabletPipe::TClientConfig config;
         config.CheckAliveness = true;
-        config.RetryPolicy = { 
-            .RetryLimitCount = 30, 
-            .MinRetryTime = TDuration::MilliSeconds(10), 
-            .MaxRetryTime = TDuration::MilliSeconds(500), 
-            .BackoffMultiplier = 2, 
-        }; 
+        config.RetryPolicy = {
+            .RetryLimitCount = 30,
+            .MinRetryTime = TDuration::MilliSeconds(10),
+            .MaxRetryTime = TDuration::MilliSeconds(500),
+            .BackoffMultiplier = 2,
+        };
         return config;
     }
 
@@ -371,20 +371,20 @@ public:
 };
 
 TString yvector2str(const TVector<TTx>& v) {
-    TStringStream stream; 
-    stream << '{'; 
-    for (auto it = v.begin(); it != v.end(); ++it) { 
-        if (it != v.begin()) 
-            stream << ','; 
-        stream << it->TxId; 
-    } 
-    stream << '}'; 
-    return stream.Str(); 
-} 
-// 
- 
+    TStringStream stream;
+    stream << '{';
+    for (auto it = v.begin(); it != v.end(); ++it) {
+        if (it != v.begin())
+            stream << ',';
+        stream << it->TxId;
+    }
+    stream << '}';
+    return stream.Str();
+}
+//
+
 void TTxMediatorTabletQueue::TTabletEntry::MergeOutOfOrder(TStep *sx) {
-    const TStepId step = sx->StepRef->Step; 
+    const TStepId step = sx->StepRef->Step;
     const auto ox = OutOfOrder.find(step);
     if (ox != OutOfOrder.end()) {
         const TVector<TTx> &o = ox->second;
@@ -394,7 +394,7 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeOutOfOrder(TStep *sx) {
             yvector2str(sx->Transactions).c_str()
         );
         Y_VERIFY_DEBUG(IsSorted(o.begin(), o.end(), TTx::TCmpOrderId()), "%s", yvector2str(o).c_str());
-        // 
+        //
         // ok, now merge sorted arrays replacing ack-to
         TVector<TTx>::iterator planIt = sx->Transactions.begin();
         TVector<TTx>::iterator planEnd = sx->Transactions.end();
@@ -424,7 +424,7 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeToOutOfOrder(TStepId step, TVect
         old.swap(current);
         Y_VERIFY_DEBUG(IsSorted(old.begin(), old.end(), TTx::TCmpOrderId()), "%s", yvector2str(old).c_str());
         Y_VERIFY_DEBUG(IsSorted(update.begin(), update.end(), TTx::TCmpOrderId()), "%s", yvector2str(update).c_str());
-        // 
+        //
         // now merge old with update
         TVector<TTx>::const_iterator oldIt = old.begin();
         TVector<TTx>::const_iterator oldEnd = old.end();
@@ -432,14 +432,14 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeToOutOfOrder(TStepId step, TVect
         TVector<TTx>::const_iterator updEnd = update.end();
 
         while (oldIt != oldEnd && updIt != updEnd) {
-            if (oldIt->TxId < updIt->TxId) { 
+            if (oldIt->TxId < updIt->TxId) {
                 current.push_back(*oldIt);
                 ++oldIt;
-            } else if (updIt->TxId < oldIt->TxId) { 
-                current.push_back(*updIt); 
+            } else if (updIt->TxId < oldIt->TxId) {
+                current.push_back(*updIt);
                 ++updIt;
             } else {
-                current.push_back(*updIt); 
+                current.push_back(*updIt);
                 ++updIt;
                 ++oldIt;
             }
@@ -449,7 +449,7 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeToOutOfOrder(TStepId step, TVect
         current.insert(current.end(), oldIt, oldEnd);
         current.insert(current.end(), updIt, updEnd);
         Y_VERIFY_DEBUG(IsSorted(current.begin(), current.end(), TTx::TCmpOrderId()), "%s", yvector2str(current).c_str());
-        // 
+        //
     }
 }
 

@@ -1,10 +1,10 @@
-#include "cli.h" 
-#include "cli_cmds.h" 
+#include "cli.h"
+#include "cli_cmds.h"
 #include <util/string/split.h>
- 
-namespace NKikimr { 
-namespace NDriverClient { 
- 
+
+namespace NKikimr {
+namespace NDriverClient {
+
 class TInterconnectLoad : public TClientCommand {
     TString Name;
     ui32 Channel = 0;
@@ -289,11 +289,11 @@ public:
     }
 };
 
-TClientCommandDebug::TClientCommandDebug() 
-    : TClientCommandTree("debug") 
+TClientCommandDebug::TClientCommandDebug()
+    : TClientCommandTree("debug")
 {
     AddCommand(std::make_unique<TInterconnect>());
 }
- 
-} 
-} 
+
+}
+}

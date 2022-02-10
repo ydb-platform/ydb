@@ -57,9 +57,9 @@ void TTablet::ReportTabletStateChange(ETabletState state) {
     const TActorId tabletStateServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
     if (state == TTabletStateInfo::Created || state == TTabletStateInfo::ResolveLeader) {
         Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, Info, StateStorageInfo.KnownGeneration, Leader));
-    } else { 
+    } else {
         Send(tabletStateServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateUpdate(TabletID(), FollowerId, state, StateStorageInfo.KnownGeneration));
-    } 
+    }
 }
 
 void TTablet::PromoteToCandidate(ui32 gen) {
@@ -155,7 +155,7 @@ void TTablet::WriteZeroEntry(TEvTablet::TDependencyGraph *graph) {
         Y_VERIFY(gen == lastGeneration);
 
         lastInGeneration = step;
- 
+
         if (it->IsSnapshot) {
             snapshot = std::pair<ui32, ui32>(gen, step);
             snapIterator = it;
@@ -945,20 +945,20 @@ void TTablet::HandleRebuildGraphResult(TEvTabletBase::TEvRebuildGraphResult::TPt
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnRebuildGraphResult>(msg->Trace.Get()));
     }
-    TIntrusivePtr<TEvTablet::TDependencyGraph> graph; 
+    TIntrusivePtr<TEvTablet::TDependencyGraph> graph;
     switch (msg->Status) {
     case NKikimrProto::OK:
-        graph = msg->DependencyGraph; 
-        break; 
+        graph = msg->DependencyGraph;
+        break;
     case NKikimrProto::NODATA:
-        graph = new TEvTablet::TDependencyGraph(std::pair<ui32, ui32>(0, 0)); 
-        break; 
+        graph = new TEvTablet::TDependencyGraph(std::pair<ui32, ui32>(0, 0));
+        break;
     default:
-        break; 
-    } 
-    switch (msg->Status) { 
-    case NKikimrProto::OK: 
-    case NKikimrProto::NODATA: 
+        break;
+    }
+    switch (msg->Status) {
+    case NKikimrProto::OK:
+    case NKikimrProto::NODATA:
         WriteZeroEntry(graph.Get());
         Send(UserTablet,
                  new TEvTablet::TEvBoot(TabletID(), StateStorageInfo.KnownGeneration,
@@ -966,8 +966,8 @@ void TTablet::HandleRebuildGraphResult(TEvTabletBase::TEvRebuildGraphResult::TPt
                                         TxCacheQuota,
                                         std::move(msg->GroupReadBytes),
                                         std::move(msg->GroupReadOps)));
-        return; 
-    default: 
+        return;
+    default:
         {
             BLOG_ERROR("HandleRebuildGraphResult, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status));
             return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootBSError, msg->ErrorReason);
@@ -1754,7 +1754,7 @@ void TTablet::CancelTablet(TEvTablet::TEvTabletDead::EReason reason, const TStri
 
     if (FollowerStStGuardian)
         Send(FollowerStStGuardian, new TEvents::TEvPoisonPill());
- 
+
     if (RebuildGraphRequest)
         Send(RebuildGraphRequest, new TEvents::TEvPoisonPill());
 
@@ -1836,7 +1836,7 @@ TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetu
     , ResourceProfiles(profiles)
     , TxCacheQuota(txCacheQuota)
 {
-    Y_VERIFY(!info->Channels.empty() && !info->Channels[0].History.empty()); 
+    Y_VERIFY(!info->Channels.empty() && !info->Channels[0].History.empty());
     Y_VERIFY(TTabletTypes::TYPE_INVALID != info->TabletType);
 }
 
@@ -1906,14 +1906,14 @@ void TTablet::Bootstrap() {
 
 void TTablet::ExternalWriteZeroEntry(TTabletStorageInfo *info, ui32 gen, TActorIdentity owner) {
     THolder<NKikimrTabletBase::TTabletLogEntry> entry = MakeHolder<NKikimrTabletBase::TTabletLogEntry>();
-    entry->SetSnapshot(MakeGenStepPair(0, 0)); 
-    entry->SetZeroConfirmed(MakeGenStepPair(0, 0)); 
-    entry->SetZeroTailSz(0); 
-    TLogoBlobID logid(info->TabletID, gen, 0, 0, 0, 0); 
+    entry->SetSnapshot(MakeGenStepPair(0, 0));
+    entry->SetZeroConfirmed(MakeGenStepPair(0, 0));
+    entry->SetZeroTailSz(0);
+    TLogoBlobID logid(info->TabletID, gen, 0, 0, 0, 0);
     TVector<TEvTablet::TLogEntryReference> refs;
     TActivationContext::Register(CreateTabletReqWriteLog(owner, logid, entry.Release(), refs, TEvBlobStorage::TEvPut::TacticDefault, info));
-} 
- 
+}
+
 TActorId TTabletSetupInfo::Apply(TTabletStorageInfo *info, TActorIdentity owner) {
     return TActivationContext::Register(Op(owner, info), owner, MailboxType, PoolId);
 }

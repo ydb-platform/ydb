@@ -7,8 +7,8 @@
 namespace NKikimr {
 namespace NDataShard {
 
-using NTabletFlatExecutor::TTransactionContext; 
- 
+using NTabletFlatExecutor::TTransactionContext;
+
 class TDataShard::TTxStopGuard : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxStopGuard(TDataShard* ds)

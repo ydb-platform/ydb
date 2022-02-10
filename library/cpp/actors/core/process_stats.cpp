@@ -1,7 +1,7 @@
 #include "actorsystem.h"
 #include "actor_bootstrapped.h"
 #include "hfunc.h"
-#include "process_stats.h" 
+#include "process_stats.h"
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
@@ -44,8 +44,8 @@ namespace NActors {
 
     bool TProcStat::Fill(pid_t pid) {
         try {
-            TString strPid(ToString(pid)); 
-            TFileInput proc("/proc/" + strPid + "/status"); 
+            TString strPid(ToString(pid));
+            TFileInput proc("/proc/" + strPid + "/status");
             TString str;
             while (proc.ReadLine(str)) {
                 if (ExtractVal(str, "VmRSS:", Rss))
@@ -60,7 +60,7 @@ namespace NActors {
 
             float tickPerMillisec = TicksPerMillisec();
 
-            TFileInput procStat("/proc/" + strPid + "/stat"); 
+            TFileInput procStat("/proc/" + strPid + "/stat");
             procStat.ReadLine(str);
             if (!str.empty()) {
                 sscanf(str.data(),
@@ -78,7 +78,7 @@ namespace NActors {
                 Uptime = SystemUptime - TDuration::MilliSeconds(StartTime / TicksPerMillisec());
             }
 
-            TFileInput statm("/proc/" + strPid + "/statm"); 
+            TFileInput statm("/proc/" + strPid + "/statm");
             statm.ReadLine(str);
             TVector<TString> fields;
             StringSplitter(str).Split(' ').SkipEmpty().Collect(&fields);
@@ -91,27 +91,27 @@ namespace NActors {
                 FileRss = shared * PageSize;
                 AnonRss = (resident - shared) * PageSize;
             }
- 
-            TFileInput cgroup("/proc/" + strPid + "/cgroup"); 
-            TString line; 
-            TString memoryCGroup; 
-            while (cgroup.ReadLine(line) > 0) { 
-                StringSplitter(line).Split(':').Collect(&fields); 
-                if (fields.size() > 2 && fields[1] == "memory") { 
-                    memoryCGroup = fields[2]; 
-                    break; 
-                } 
-            } 
-            if (!memoryCGroup.empty()) { 
-                TFileInput limit("/sys/fs/cgroup/memory" + memoryCGroup + "/memory.limit_in_bytes"); 
-                if (limit.ReadLine(line) > 0) { 
-                    CGroupMemLim = FromString<ui64>(line); 
-                    if (CGroupMemLim > (1ULL << 40)) { 
-                        CGroupMemLim = 0; 
-                    } 
-                } 
-            } 
- 
+
+            TFileInput cgroup("/proc/" + strPid + "/cgroup");
+            TString line;
+            TString memoryCGroup;
+            while (cgroup.ReadLine(line) > 0) {
+                StringSplitter(line).Split(':').Collect(&fields);
+                if (fields.size() > 2 && fields[1] == "memory") {
+                    memoryCGroup = fields[2];
+                    break;
+                }
+            }
+            if (!memoryCGroup.empty()) {
+                TFileInput limit("/sys/fs/cgroup/memory" + memoryCGroup + "/memory.limit_in_bytes");
+                if (limit.ReadLine(line) > 0) {
+                    CGroupMemLim = FromString<ui64>(line);
+                    if (CGroupMemLim > (1ULL << 40)) {
+                        CGroupMemLim = 0;
+                    }
+                }
+            }
+
         } catch (...) {
             return false;
         }
@@ -191,7 +191,7 @@ namespace {
             VmSize = ProcStatGroup->GetCounter("Process/VmSize", false);
             AnonRssSize = ProcStatGroup->GetCounter("Process/AnonRssSize", false);
             FileRssSize = ProcStatGroup->GetCounter("Process/FileRssSize", false);
-            CGroupMemLimit = ProcStatGroup->GetCounter("Process/CGroupMemLimit", false); 
+            CGroupMemLimit = ProcStatGroup->GetCounter("Process/CGroupMemLimit", false);
             UserTime = ProcStatGroup->GetCounter("Process/UserTime", true);
             SysTime = ProcStatGroup->GetCounter("Process/SystemTime", true);
             MinorPageFaults = ProcStatGroup->GetCounter("Process/MinorPageFaults", true);
@@ -205,9 +205,9 @@ namespace {
             *VmSize = procStat.Vsize;
             *AnonRssSize = procStat.AnonRss;
             *FileRssSize = procStat.FileRss;
-            if (procStat.CGroupMemLim) { 
-                *CGroupMemLimit = procStat.CGroupMemLim; 
-            } 
+            if (procStat.CGroupMemLim) {
+                *CGroupMemLimit = procStat.CGroupMemLim;
+            }
             *UserTime = procStat.Utime;
             *SysTime = procStat.Stime;
             *MinorPageFaults = procStat.MinFlt;
@@ -222,7 +222,7 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr VmSize;
         NMonitoring::TDynamicCounters::TCounterPtr AnonRssSize;
         NMonitoring::TDynamicCounters::TCounterPtr FileRssSize;
-        NMonitoring::TDynamicCounters::TCounterPtr CGroupMemLimit; 
+        NMonitoring::TDynamicCounters::TCounterPtr CGroupMemLimit;
         NMonitoring::TDynamicCounters::TCounterPtr UserTime;
         NMonitoring::TDynamicCounters::TCounterPtr SysTime;
         NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaults;
@@ -242,7 +242,7 @@ namespace {
             VmSize = registry.IntGauge({{"sensor", "process.VmSize"}});
             AnonRssSize = registry.IntGauge({{"sensor", "process.AnonRssSize"}});
             FileRssSize = registry.IntGauge({{"sensor", "process.FileRssSize"}});
-            CGroupMemLimit = registry.IntGauge({{"sensor", "process.CGroupMemLimit"}}); 
+            CGroupMemLimit = registry.IntGauge({{"sensor", "process.CGroupMemLimit"}});
             UptimeSeconds = registry.IntGauge({{"sensor", "process.UptimeSeconds"}});
             NumThreads = registry.IntGauge({{"sensor", "process.NumThreads"}});
             SystemUptimeSeconds = registry.IntGauge({{"sensor", "system.UptimeSeconds"}});
@@ -257,7 +257,7 @@ namespace {
             VmSize->Set(procStat.Vsize);
             AnonRssSize->Set(procStat.AnonRss);
             FileRssSize->Set(procStat.FileRss);
-            CGroupMemLimit->Set(procStat.CGroupMemLim); 
+            CGroupMemLimit->Set(procStat.CGroupMemLim);
             UptimeSeconds->Set(procStat.Uptime.Seconds());
             NumThreads->Set(procStat.NumThreads);
             SystemUptimeSeconds->Set(procStat.SystemUptime.Seconds());
@@ -282,7 +282,7 @@ namespace {
         NMonitoring::TIntGauge* VmSize;
         NMonitoring::TIntGauge* AnonRssSize;
         NMonitoring::TIntGauge* FileRssSize;
-        NMonitoring::TIntGauge* CGroupMemLimit; 
+        NMonitoring::TIntGauge* CGroupMemLimit;
         NMonitoring::TRate* UserTime;
         NMonitoring::TRate* SysTime;
         NMonitoring::TRate* MinorPageFaults;

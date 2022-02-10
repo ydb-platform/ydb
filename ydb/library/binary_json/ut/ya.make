@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/binary_json) 
+UNITTEST_FOR(ydb/library/binary_json)
 
 OWNER(g:kikimr)
 

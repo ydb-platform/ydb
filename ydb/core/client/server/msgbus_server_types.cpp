@@ -19,7 +19,7 @@ public:
         return NKikimrServices::TActivity::MSGBUS_COMMON;
     }
 
-    TMessageBusGetTypes(TBusMessageContext &msg, TMaybe<ui64> etag) 
+    TMessageBusGetTypes(TBusMessageContext &msg, TMaybe<ui64> etag)
         : TMessageBusSessionIdentHolder(msg)
         , Etag(etag)
     {}
@@ -40,7 +40,7 @@ public:
             SerializeMetadata(*functionRegistry, reply->Record.MutableFunctionMetadata());
         }
 
-        SendReplyMove(reply); 
+        SendReplyMove(reply);
         return Die(ctx);
     }
 
@@ -48,7 +48,7 @@ private:
     const TMaybe<ui64> Etag;
 };
 
-IActor* CreateMessageBusGetTypes(TBusMessageContext &msg) { 
+IActor* CreateMessageBusGetTypes(TBusMessageContext &msg) {
     const auto &record = static_cast<TBusTypesRequest *>(msg.GetMessage())->Record;
 
     const TMaybe<ui64> etag = record.HasETag() ? record.GetETag() : TMaybe<ui64>();

@@ -100,8 +100,8 @@ public:
             ValueTypes.push_back(column->PType);
         }
 
-        for (auto tag : scheme.GetTableInfo(root)->KeyColumns) { 
-            KeyTypes.push_back(scheme.GetColumnInfo(root, tag)->PType); 
+        for (auto tag : scheme.GetTableInfo(root)->KeyColumns) {
+            KeyTypes.push_back(scheme.GetColumnInfo(root, tag)->PType);
         }
 
         KeyCells.reserve(KeyTypes.size());

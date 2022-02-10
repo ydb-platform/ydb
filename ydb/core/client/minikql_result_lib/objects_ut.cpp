@@ -8,7 +8,7 @@
 namespace NKikimr {
 
 using namespace NKikimrMiniKQL;
-using namespace NResultLib; 
+using namespace NResultLib;
 
 Y_UNIT_TEST_SUITE(TMiniKQLResultTest) {
 

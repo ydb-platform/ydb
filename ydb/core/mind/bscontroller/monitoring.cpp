@@ -1075,7 +1075,7 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             availableSize += m.GetAvailableSize();
             satisfactionRank = std::max(satisfactionRank, m.GetSatisfactionRank());
         }
- 
+
         auto renderLatency = [&](const auto& perc) {
             TABLED() {
                 if (perc) {
@@ -1116,8 +1116,8 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             const auto& status = group.Status;
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus); }
-        } 
-    } 
+        }
+    }
 }
 
 } // NBlobStorageController

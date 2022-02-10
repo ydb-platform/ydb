@@ -17,8 +17,8 @@ message TEvNodeInfo {
 
 extend google.protobuf.FieldOptions {
     optional string PrintName = 50376;
-} 
- 
+}
+
 message TNodeLocation {
     // compatibility section -- will be removed in future versions
     optional uint32 DataCenterNum = 1 [deprecated=true];

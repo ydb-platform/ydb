@@ -178,9 +178,9 @@ TActorId MakeMiniKQLCompileServiceID() {
 
 const TActorId& GetMiniKQLCompileServiceID() {
     static TActorId miniKQLCompileServiceID = MakeMiniKQLCompileServiceID();
-    return miniKQLCompileServiceID; 
-} 
- 
+    return miniKQLCompileServiceID;
+}
+
 IActor* CreateMiniKQLCompileService(size_t compileInflightLimit) {
     THolder<NYql::IDbSchemeResolver> resolver;
     return new TMiniKQLCompileService(compileInflightLimit, std::move(resolver));

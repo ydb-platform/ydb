@@ -271,7 +271,7 @@ public:
         if (uniqEnd != requestedPools.end()) {
             result->SetError(
                 NKikimrScheme::StatusInvalidParameter,
-                "Malformed subdomain request: requested storage pools is not unique, for example, the pool '" + uniqEnd->GetName() +"' repeats several times"); 
+                "Malformed subdomain request: requested storage pools is not unique, for example, the pool '" + uniqEnd->GetName() +"' repeats several times");
             return result;
         }
 

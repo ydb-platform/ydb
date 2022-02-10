@@ -38,14 +38,14 @@ SRCS(
     operation_queue.h
     page_map.cpp
     pb.h
-    proto_duration.h 
+    proto_duration.h
     queue_inplace.h
     queue_oneone_inplace.h
-    simple_cache.h 
+    simple_cache.h
     single_thread_ic_mock.cpp
     single_thread_ic_mock.h
     stlog.h
-    templates.h 
+    templates.h
     testactorsys.cpp
     testactorsys.h
     text.cpp
@@ -53,11 +53,11 @@ SRCS(
     time_series_vec.h
     token_bucket.h
     throughput_meter.h
-    tuples.h 
+    tuples.h
     type_alias.h
     ulid.cpp
     ulid.h
-    wildcard.h 
+    wildcard.h
     yverify_stream.h
 )
 

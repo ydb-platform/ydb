@@ -20,23 +20,23 @@ namespace NMonitoring {
         THolder<IAuthProvider> AuthProvider_;
 
     public:
-        static THttpServerOptions HttpServerOptions(ui16 port, const TString& host, ui32 threads) { 
+        static THttpServerOptions HttpServerOptions(ui16 port, const TString& host, ui32 threads) {
             THttpServerOptions opts(port);
-            if (!host.empty()) { 
-                opts.SetHost(host); 
-            } 
+            if (!host.empty()) {
+                opts.SetHost(host);
+            }
             opts.SetClientTimeout(TDuration::Minutes(1));
             opts.EnableCompression(true);
             opts.SetThreads(threads);
-            opts.SetMaxConnections(std::max<ui32>(100, threads)); 
-            opts.EnableRejectExcessConnections(true); 
+            opts.SetMaxConnections(std::max<ui32>(100, threads));
+            opts.EnableRejectExcessConnections(true);
             return opts;
         }
 
-        static THttpServerOptions HttpServerOptions(ui16 port, ui32 threads) { 
-            return HttpServerOptions(port, TString(), threads); 
-        } 
- 
+        static THttpServerOptions HttpServerOptions(ui16 port, ui32 threads) {
+            return HttpServerOptions(port, TString(), threads);
+        }
+
     public:
         explicit TMonService2(ui16 port, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr);
         explicit TMonService2(ui16 port, ui32 threads, const TString& title = GetProgramName(), THolder<IAuthProvider> auth = nullptr);

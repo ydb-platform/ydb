@@ -1,12 +1,12 @@
 #include "flat_dbase_scheme.h"
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NTable {
- 
-TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const { 
+
+TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
     TAlter delta;
 
-    for (const auto& itTable : Tables) { 
+    for (const auto& itTable : Tables) {
         const auto table = itTable.first;
 
         delta.AddTable(itTable.second.Name, table);
@@ -46,7 +46,7 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
         // N.B. must be last for compatibility with older versions :(
         delta.SetByKeyFilter(table, itTable.second.ByKeyFilter);
         delta.SetColdBorrow(table, itTable.second.ColdBorrow);
-    } 
+    }
 
     delta.SetRedo(Redo.Annex);
     delta.SetExecutorCacheSize(Executor.CacheSize);
@@ -56,9 +56,9 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
     delta.SetExecutorFastLogPolicy(Executor.LogFastTactic);
 
     return delta.Flush();
-} 
- 
- 
+}
+
+
 TAlter& TAlter::Merge(const TSchemeChanges &log)
 {
     Log.MutableDelta()->MergeFrom(log.GetDelta());
@@ -70,79 +70,79 @@ TAlter& TAlter::AddTable(const TString& name, ui32 id)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::AddTable);
-    delta.SetTableName(name); 
-    delta.SetTableId(id); 
+    delta.SetTableName(name);
+    delta.SetTableId(id);
 
     return *this;
-} 
- 
+}
+
 TAlter& TAlter::DropTable(ui32 id)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::DropTable);
-    delta.SetTableId(id); 
+    delta.SetTableId(id);
 
     return *this;
-} 
- 
+}
+
 TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::AddColumn);
-    delta.SetColumnName(name); 
-    delta.SetTableId(table); 
-    delta.SetColumnId(id); 
-    delta.SetColumnType(type); 
+    delta.SetColumnName(name);
+    delta.SetTableId(table);
+    delta.SetColumnId(id);
+    delta.SetColumnType(type);
     delta.SetNotNull(notNull);
 
     if (!null.IsNull())
         delta.SetDefault(null.Data(), null.Size());
 
     return *this;
-} 
- 
+}
+
 TAlter& TAlter::DropColumn(ui32 table, ui32 id)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::DropColumn);
-    delta.SetTableId(table); 
-    delta.SetColumnId(id); 
+    delta.SetTableId(table);
+    delta.SetColumnId(id);
 
     return *this;
-} 
- 
+}
+
 TAlter& TAlter::AddColumnToFamily(ui32 table, ui32 column, ui32 family)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::AddColumnToFamily);
-    delta.SetTableId(table); 
-    delta.SetColumnId(column); 
+    delta.SetTableId(table);
+    delta.SetColumnId(column);
     delta.SetFamilyId(family);
 
     return *this;
-} 
- 
+}
+
 TAlter& TAlter::AddFamily(ui32 table, ui32 family, ui32 room)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::AddFamily);
-    delta.SetTableId(table); 
+    delta.SetTableId(table);
     delta.SetFamilyId(family);
     delta.SetRoomId(room);
 
     return *this;
-} 
- 
+}
+
 TAlter& TAlter::AddColumnToKey(ui32 table, ui32 column)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::AddColumnToKey);
-    delta.SetTableId(table); 
-    delta.SetColumnId(column); 
+    delta.SetTableId(table);
+    delta.SetColumnId(column);
 
     return *this;
-} 
- 
+}
+
 TAlter& TAlter::SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec)
 {
     TAlterRecord& delta = *Log.AddDelta();
@@ -292,10 +292,10 @@ TAlter& TAlter::SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 max
 
 TAutoPtr<TSchemeChanges> TAlter::Flush()
 {
-    TAutoPtr<TSchemeChanges> log(new TSchemeChanges); 
+    TAutoPtr<TSchemeChanges> log(new TSchemeChanges);
     log->MutableDelta()->Swap(Log.MutableDelta());
-    return log; 
-} 
- 
-} 
-} 
+    return log;
+}
+
+}
+}

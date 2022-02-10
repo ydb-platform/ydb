@@ -89,7 +89,7 @@ ALLOW cloud/kms/benchcrypto/cpp -> kikimr/core/blobstorage/crypto
 ALLOW rtmapreduce -> kikimr/yf
 
 ALLOW rtmapreduce/libs -> kikimr/core
-ALLOW rtmapreduce/libs -> kikimr/yndx 
+ALLOW rtmapreduce/libs -> kikimr/yndx
 ALLOW rtmapreduce/libs -> kikimr/library/shop
 ALLOW rtmapreduce/libs -> kikimr/driver_lib/run
 ALLOW rtmapreduce/libs -> kikimr/library/aclib
@@ -159,7 +159,7 @@ ALLOW ydb/library/yql/dq/actors/compute -> kikimr/core/protos
 ALLOW yql/ -> kikimr/library/mkql_proto
 ALLOW yql/ -> kikimr/library/binary_json
 ALLOW yql/ -> kikimr/library/dynumber
-ALLOW yql/ -> kikimr/yndx/security 
+ALLOW yql/ -> kikimr/yndx/security
 
 ALLOW ydb/library/yql/providers/ydb -> kikimr/yq
 ALLOW ydb/library/yql/providers/ydb -> kikimr/public/lib/experimental

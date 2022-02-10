@@ -14,13 +14,13 @@ using namespace NActors;
 
 class TJsonTopicInfo : public TActorBootstrapped<TJsonTopicInfo> {
     using TBase = TActorBootstrapped<TJsonTopicInfo>;
-    IViewer* Viewer; 
+    IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     NKikimrTabletCountersAggregator::TEvTabletLabeledCountersResponse TopicInfoResult;
     TJsonSettings JsonSettings;
     TString Topic;
     TString Client;
-    TString GroupNames; 
+    TString GroupNames;
     bool ShowAll = false;
     ui32 Timeout = 0;
 
@@ -29,9 +29,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonTopicInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev) 
-        : Viewer(viewer) 
-        , Event(ev) 
+    TJsonTopicInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
+        : Viewer(viewer)
+        , Event(ev)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -41,7 +41,7 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
         Topic = params.Get("path");
         Client = params.Has("client") ? params.Get("client") : "total";
-        GroupNames = params.Get("group_names"); 
+        GroupNames = params.Get("group_names");
         ShowAll = FromStringWithDefault<bool>(params.Get("all"), false);
         size_t pos = Topic.rfind('/');
         if (pos != TString::npos)
@@ -64,15 +64,15 @@ public:
     }
 
     void Handle(TEvTabletCounters::TEvTabletLabeledCountersResponse::TPtr &ev, const TActorContext &ctx) {
-        TString groupPrefix = Client + "/"; 
-        TString groupSuffix = "/" + Topic; 
+        TString groupPrefix = Client + "/";
+        TString groupSuffix = "/" + Topic;
         for (ui32 i = 0; i < ev->Get()->Record.LabeledCountersByGroupSize(); ++i) {
             const auto& uc = ev->Get()->Record.GetLabeledCountersByGroup(i);
-            const TString& group(uc.GetGroup()); 
-            if (ShowAll 
-                    || (group.StartsWith(groupPrefix) && group.EndsWith(groupSuffix)) 
-                    || uc.GetGroup() == Topic 
-                    || uc.GetGroupNames() == GroupNames) { 
+            const TString& group(uc.GetGroup());
+            if (ShowAll
+                    || (group.StartsWith(groupPrefix) && group.EndsWith(groupSuffix))
+                    || uc.GetGroup() == Topic
+                    || uc.GetGroupNames() == GroupNames) {
                 TopicInfoResult.AddLabeledCountersByGroup()->CopyFrom(uc);
             }
         }
@@ -81,13 +81,13 @@ public:
 
     void ReplyAndDie(const TActorContext &ctx) {
         TStringStream json;
-        TProtoToJson::ProtoToJson(json, TopicInfoResult, JsonSettings); 
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON() + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
+        TProtoToJson::ProtoToJson(json, TopicInfoResult, JsonSettings);
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON() + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 
     void HandleTimeout(const TActorContext &ctx) {
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(), 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 };
@@ -96,7 +96,7 @@ template <>
 struct TJsonRequestSchema<TJsonTopicInfo> {
     static TString GetSchema() {
         TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<TEvTabletCounters::TEvTabletLabeledCountersResponse::ProtoRecordType>(stream); 
+        TProtoToJson::ProtoToJsonSchema<TEvTabletCounters::TEvTabletLabeledCountersResponse::ProtoRecordType>(stream);
         return stream.Str();
     }
 };
@@ -104,26 +104,26 @@ struct TJsonRequestSchema<TJsonTopicInfo> {
 template <>
 struct TJsonRequestParameters<TJsonTopicInfo> {
     static TString GetParameters() {
-        return R"___([{"name":"path","in":"query","description":"schema path","required":true,"type":"string"}, 
-                      {"name":"client","in":"query","description":"client name","required":false,"type":"string","default":"total"}, 
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"}, 
-                      {"name":"all","in":"query","description":"return all topics and all clients","required":false,"type":"boolean","default":false}, 
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"}, 
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer",default:10000}])___"; 
+        return R"___([{"name":"path","in":"query","description":"schema path","required":true,"type":"string"},
+                      {"name":"client","in":"query","description":"client name","required":false,"type":"string","default":"total"},
+                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
+                      {"name":"all","in":"query","description":"return all topics and all clients","required":false,"type":"boolean","default":false},
+                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
+                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer",default:10000}])___";
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonTopicInfo> {
     static TString GetSummary() {
-        return "\"PQ topic information\""; 
+        return "\"PQ topic information\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonTopicInfo> {
     static TString GetDescription() {
-        return "\"Information about PQ topic\""; 
+        return "\"Information about PQ topic\"";
     }
 };
 

@@ -112,13 +112,13 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
     }
 
     void ReplyWithStatus(const TActorId &recp, ui64 tabletId, ui64 cookie, NKikimrProto::EReplyStatus status) {
-        THolder<TEvStateStorage::TEvReplicaInfo> msg(new TEvStateStorage::TEvReplicaInfo(tabletId, status)); 
-        msg->Record.SetCookie(cookie); 
+        THolder<TEvStateStorage::TEvReplicaInfo> msg(new TEvStateStorage::TEvReplicaInfo(tabletId, status));
+        msg->Record.SetCookie(cookie);
         msg->Record.SetSignature(Signature());
         msg->Record.SetConfigContentHash(Info->ContentHash());
         Send(recp, msg.Release());
-    } 
- 
+    }
+
     bool EraseFollowerAndNotify(ui64 tabletId, TEntry &tabletEntry, TActorId followerGuardian) {
         if (!tabletEntry.Followers.erase(followerGuardian))
             return false;
@@ -191,21 +191,21 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
     }
 
     void Handle(TEvStateStorage::TEvReplicaDumpRequest::TPtr &ev) {
-        TAutoPtr<TEvStateStorage::TEvReplicaDump> dump = new TEvStateStorage::TEvReplicaDump(); 
-        for (const auto &it : Tablets) { 
-            NKikimrStateStorage::TEvInfo& info = *dump->Record.AddInfo(); 
-            info.SetTabletID(it.first); 
-            info.SetCurrentGeneration(it.second.CurrentGeneration); 
-            info.SetCurrentStep(it.second.CurrentStep); 
+        TAutoPtr<TEvStateStorage::TEvReplicaDump> dump = new TEvStateStorage::TEvReplicaDump();
+        for (const auto &it : Tablets) {
+            NKikimrStateStorage::TEvInfo& info = *dump->Record.AddInfo();
+            info.SetTabletID(it.first);
+            info.SetCurrentGeneration(it.second.CurrentGeneration);
+            info.SetCurrentStep(it.second.CurrentStep);
             ActorIdToProto(it.second.CurrentLeader, info.MutableCurrentLeader());
             ActorIdToProto(it.second.CurrentLeaderTablet, info.MutableCurrentLeaderTablet());
-            if (it.second.TabletState == TTabletState::Locked) { 
+            if (it.second.TabletState == TTabletState::Locked) {
                 info.SetLockedFor(TActivationContext::Now().MicroSeconds() - it.second.LockedFrom);
-            } 
-        } 
+            }
+        }
         Send(ev->Sender, dump.Release(), 0, ev->Cookie);
-    } 
- 
+    }
+
     void Handle(TEvStateStorage::TEvReplicaUpdate::TPtr &ev) {
         TEvStateStorage::TEvReplicaUpdate *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
@@ -273,10 +273,10 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
     }
 
     void Handle(TEvStateStorage::TEvReplicaDelete::TPtr &ev) {
-        TEvStateStorage::TEvReplicaDelete *msg = ev->Get(); 
+        TEvStateStorage::TEvReplicaDelete *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());
-        const ui64 tabletId = msg->Record.GetTabletID(); 
-        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup); 
+        const ui64 tabletId = msg->Record.GetTabletID();
+        Y_VERIFY_DEBUG(StateStorageGroupFromTabletID(tabletId) == Info->StateStorageGroup);
 
         auto tabletIt = Tablets.find(tabletId);
         if (tabletIt == Tablets.end()) {
@@ -292,8 +292,8 @@ class TStateStorageReplica : public TActor<TStateStorageReplica> {
 
         Tablets.erase(tabletIt);
         ReplyWithStatus(ev->Sender, tabletId, 0/*msg->Record.GetCookie()*/, NKikimrProto::OK);
-    } 
- 
+    }
+
     void Handle(TEvStateStorage::TEvReplicaLock::TPtr &ev) {
         TEvStateStorage::TEvReplicaLock *msg = ev->Get();
         BLOG_D("Replica::Handle ev: " << msg->ToString());

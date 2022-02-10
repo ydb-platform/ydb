@@ -13,7 +13,7 @@ IF (OS_WINDOWS)
 ENDIF()
 
 SRCS(
-    alloc.proto 
+    alloc.proto
     base.proto
     bind_channel_storage_pool.proto
     blobstorage.proto
@@ -72,7 +72,7 @@ SRCS(
     kqp.proto
     local.proto
     long_tx_service.proto
-    metrics.proto 
+    metrics.proto
     minikql_engine.proto
     msgbus.proto
     msgbus_health.proto
@@ -99,17 +99,17 @@ SRCS(
     subdomains.proto
     table_stats.proto
     tablet.proto
-    tablet_counters_aggregator.proto 
-    tablet_counters.proto 
+    tablet_counters_aggregator.proto
+    tablet_counters.proto
     tablet_database.proto
     tablet_pipe.proto
-    tablet_tx.proto 
+    tablet_tx.proto
     tenant_pool.proto
     tenant_slot_broker.proto
     test_shard.proto
     tracing.proto
     tablet_tracing_signals.proto
-    node_whiteboard.proto 
+    node_whiteboard.proto
     tx.proto
     tx_columnshard.proto
     tx_datashard.proto

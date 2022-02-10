@@ -1736,24 +1736,24 @@ namespace NSchemeShardUT_Private {
         auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
-        auto createUser = transaction->MutableAlterLogin()->MutableCreateUser(); 
-        createUser->SetUser(user); 
-        createUser->SetPassword(password); 
-        return evTx; 
-    } 
- 
+        auto createUser = transaction->MutableAlterLogin()->MutableCreateUser();
+        createUser->SetUser(user);
+        createUser->SetPassword(password);
+        return evTx;
+    }
+
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
-        TActorId sender = runtime.AllocateEdgeActor(); 
+        TActorId sender = runtime.AllocateEdgeActor();
         auto evLogin = new TEvSchemeShard::TEvLogin();
-        evLogin->Record.SetUser(user); 
-        evLogin->Record.SetPassword(password); 
+        evLogin->Record.SetUser(user);
+        evLogin->Record.SetPassword(password);
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
-        TAutoPtr<IEventHandle> handle; 
+        TAutoPtr<IEventHandle> handle;
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
-        UNIT_ASSERT(event); 
-        return event->Record; 
-    } 
- 
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
     // class TFakeDataReq {
     TFakeDataReq::TFakeDataReq(NActors::TTestActorRuntime &runtime, ui64 txId, const TString &table, const TString &query)
         : Runtime(runtime)

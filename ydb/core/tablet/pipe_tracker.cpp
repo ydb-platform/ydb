@@ -1,14 +1,14 @@
-#include "pipe_tracker.h" 
+#include "pipe_tracker.h"
 
 namespace NKikimr {
 
-std::unordered_set<ui64> TPipeTrackerBase::EmptySet; 
-std::unordered_set<std::pair<ui64, ui64>> TPipeTrackerBase::EmptyPairSet; 
+std::unordered_set<ui64> TPipeTrackerBase::EmptySet;
+std::unordered_set<std::pair<ui64, ui64>> TPipeTrackerBase::EmptyPairSet;
 
 void TPipeTrackerBase::AttachTablet(ui64 txid, ui64 tabletid, ui64 cookie) {
     auto txIt = TxToTablet.find(txid);
     if (txIt == TxToTablet.end()) {
-        txIt = TxToTablet.emplace(txid, std::unordered_set<std::pair<ui64, ui64>>()).first; 
+        txIt = TxToTablet.emplace(txid, std::unordered_set<std::pair<ui64, ui64>>()).first;
     }
 
     auto& tabletSet = txIt->second;
@@ -64,7 +64,7 @@ bool TPipeTrackerBase::IsTxAlive(ui64 txid) const {
     return (txIt != TxToTablet.end());
 }
 
-const std::unordered_set<ui64> &TPipeTrackerBase::FindTx(ui64 tabletid) const { 
+const std::unordered_set<ui64> &TPipeTrackerBase::FindTx(ui64 tabletid) const {
     auto it = TabletToTx.find(tabletid);
     if (it == TabletToTx.end())
         return EmptySet;
@@ -72,7 +72,7 @@ const std::unordered_set<ui64> &TPipeTrackerBase::FindTx(ui64 tabletid) const {
     return it->second;
 }
 
-const std::unordered_set<std::pair<ui64, ui64> > &TPipeTrackerBase::FindTablets(ui64 txid) const { 
+const std::unordered_set<std::pair<ui64, ui64> > &TPipeTrackerBase::FindTablets(ui64 txid) const {
     auto it = TxToTablet.find(txid);
     if (it == TxToTablet.end())
         return EmptyPairSet;

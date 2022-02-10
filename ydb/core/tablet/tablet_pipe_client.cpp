@@ -389,31 +389,31 @@ namespace NTabletPipe {
             Lookup(ctx);
         }
 
-        void RequestHiveInfo(ui64 hiveTabletId) { 
-            static TClientConfig clientConfig({.RetryLimitCount = 3, .MinRetryTime = TDuration::MilliSeconds(300)}); 
-            HiveClient = Register(CreateClient(SelfId(), hiveTabletId, clientConfig)); 
-            NTabletPipe::SendData(SelfId(), HiveClient, new TEvHive::TEvRequestHiveInfo(TabletId, false)); 
-        } 
- 
+        void RequestHiveInfo(ui64 hiveTabletId) {
+            static TClientConfig clientConfig({.RetryLimitCount = 3, .MinRetryTime = TDuration::MilliSeconds(300)});
+            HiveClient = Register(CreateClient(SelfId(), hiveTabletId, clientConfig));
+            NTabletPipe::SendData(SelfId(), HiveClient, new TEvHive::TEvRequestHiveInfo(TabletId, false));
+        }
+
         // check aliveness section
         void Handle(TEvHive::TEvResponseHiveInfo::TPtr &ev, const TActorContext &ctx) {
             const auto &record = ev->Get()->Record;
-            if (record.HasForwardRequest() && (++CurrentHiveForwards < MAX_HIVE_FORWARDS)) { 
-                BLOG_I("hive request forwarded to " << record.GetForwardRequest().GetHiveTabletId()); 
-                CloseClient(ctx, HiveClient); 
-                RequestHiveInfo(record.GetForwardRequest().GetHiveTabletId()); 
-                return; 
-            } 
-            bool definitelyDead = false; 
-            if (record.GetTablets().empty()) { 
-                definitelyDead = true; // the tablet wasn't found in Hive 
-            } else { 
-                const auto &info = record.GetTablets(0); 
-                Y_VERIFY(info.GetTabletID() == TabletId); 
-                if (!info.HasState() || info.GetState() == 202/*THive::ETabletState::Deleting*/) { 
-                    definitelyDead = true; 
-                } 
-            } 
+            if (record.HasForwardRequest() && (++CurrentHiveForwards < MAX_HIVE_FORWARDS)) {
+                BLOG_I("hive request forwarded to " << record.GetForwardRequest().GetHiveTabletId());
+                CloseClient(ctx, HiveClient);
+                RequestHiveInfo(record.GetForwardRequest().GetHiveTabletId());
+                return;
+            }
+            bool definitelyDead = false;
+            if (record.GetTablets().empty()) {
+                definitelyDead = true; // the tablet wasn't found in Hive
+            } else {
+                const auto &info = record.GetTablets(0);
+                Y_VERIFY(info.GetTabletID() == TabletId);
+                if (!info.HasState() || info.GetState() == 202/*THive::ETabletState::Deleting*/) {
+                    definitelyDead = true;
+                }
+            }
 
             ctx.Send(Owner, new TEvTabletPipe::TEvClientConnected(TabletId, NKikimrProto::ERROR, SelfId(), TActorId(), Leader, definitelyDead));
             return Die(ctx);
@@ -509,7 +509,7 @@ namespace NTabletPipe {
             LastKnownLeader = TActorId();
 
             TDuration waitDuration;
-            if (Config.RetryPolicy && RetryState.IsAllowedToRetry(waitDuration, Config.RetryPolicy)) { 
+            if (Config.RetryPolicy && RetryState.IsAllowedToRetry(waitDuration, Config.RetryPolicy)) {
                 if (waitDuration == TDuration::Zero()) {
                     BLOG_D("immediate retry");
                     Lookup(ctx);
@@ -677,11 +677,11 @@ namespace NTabletPipe {
         TActorId ServerId;
         typedef TOneOneQueueInplace<IEventHandle*, 32> TPayloadQueue;
         TAutoPtr<TPayloadQueue, TPayloadQueue::TPtrCleanDestructor> PayloadQueue;
-        TClientRetryState RetryState; 
+        TClientRetryState RetryState;
         bool Leader;
         TActorId HiveClient;
-        ui32 CurrentHiveForwards = 0; 
-        static constexpr ui32 MAX_HIVE_FORWARDS = 10; 
+        ui32 CurrentHiveForwards = 0;
+        static constexpr ui32 MAX_HIVE_FORWARDS = 10;
     };
 
     IActor* CreateClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config) {
@@ -730,7 +730,7 @@ namespace NTabletPipe {
     void CloseClient(const TActorContext& ctx, const TActorId& clientId) {
         ctx.Send(clientId, new TEvents::TEvPoisonPill);
     }
- 
+
     void CloseClient(TActorIdentity self, TActorId clientId) {
         self.Send(clientId, new TEvents::TEvPoisonPill());
     }
@@ -742,20 +742,20 @@ namespace NTabletPipe {
         }
     }
 
-    bool TClientRetryState::IsAllowedToRetry(TDuration& wait, const TClientRetryPolicy& policy) { 
-        if (RetryNumber == 0) { 
-           wait = policy.DoFirstRetryInstantly ? TDuration::Zero() : policy.MinRetryTime; 
-        } else { 
+    bool TClientRetryState::IsAllowedToRetry(TDuration& wait, const TClientRetryPolicy& policy) {
+        if (RetryNumber == 0) {
+           wait = policy.DoFirstRetryInstantly ? TDuration::Zero() : policy.MinRetryTime;
+        } else {
             const ui64 baseRetryDuration = RetryDuration.GetValue() * policy.BackoffMultiplier;
             const ui64 croppedRetryDuration = Min(policy.MaxRetryTime.GetValue(), baseRetryDuration);
             const ui64 randomizedRetryDuration = croppedRetryDuration * AppData()->RandomProvider->Uniform(100, 115) / 100;
             wait = TDuration::FromValue(randomizedRetryDuration);
-            wait = Max(policy.MinRetryTime, wait); 
-        } 
-        ++RetryNumber; 
-        RetryDuration = wait; 
-        return !policy.RetryLimitCount || RetryNumber <= policy.RetryLimitCount; 
-    } 
+            wait = Max(policy.MinRetryTime, wait);
+        }
+        ++RetryNumber;
+        RetryDuration = wait;
+        return !policy.RetryLimitCount || RetryNumber <= policy.RetryLimitCount;
+    }
 
     TDuration TClientRetryState::MakeCheckDelay() {
         const ui64 randomizedRetryDuration = RetryDuration.GetValue() * AppData()->RandomProvider->Uniform(100, 133) / 100;

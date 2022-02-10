@@ -196,7 +196,7 @@ TRuntimeNode OptimizeMap(TCallable& callable, const TTypeEnvironment& env) {
     auto listType = static_cast<TListType*>(returnType);
     auto newItemInput = callable.GetInput(2);
     if (listType->GetItemType()->IsVoid() && newItemInput.HasValue()) {
-        return TRuntimeNode(env.GetListOfVoid(), true); 
+        return TRuntimeNode(env.GetListOfVoid(), true);
     }
 
     return TRuntimeNode(&callable, false);

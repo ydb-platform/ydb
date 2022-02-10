@@ -109,12 +109,12 @@ static Ydb::StatusIds::StatusCode WaitForStatus(std::shared_ptr<grpc::Channel> c
     return response.operation().status();
 }
 
-struct TKikimrTestSettings { 
-    static constexpr bool SSL = false; 
-    static constexpr bool AUTH = false; 
-    static constexpr bool PrecreatePools = true; 
-}; 
- 
+struct TKikimrTestSettings {
+    static constexpr bool SSL = false;
+    static constexpr bool AUTH = false;
+    static constexpr bool PrecreatePools = true;
+};
+
 Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
     Y_UNIT_TEST(SimpleRequest) {
         TKikimrWithGrpcAndRootSchema server;
@@ -208,9 +208,9 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
             return std::make_pair(status, gStatus);
         };
 
-        UNIT_ASSERT_VALUES_EQUAL(doTest("/Root"), std::make_pair(Ydb::StatusIds::SUCCESS, 0)); 
-        UNIT_ASSERT_VALUES_EQUAL(doTest("/blabla"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, 16)); 
-        UNIT_ASSERT_VALUES_EQUAL(doTest("blabla"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, 16)); 
+        UNIT_ASSERT_VALUES_EQUAL(doTest("/Root"), std::make_pair(Ydb::StatusIds::SUCCESS, 0));
+        UNIT_ASSERT_VALUES_EQUAL(doTest("/blabla"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, 16));
+        UNIT_ASSERT_VALUES_EQUAL(doTest("blabla"), std::make_pair(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED, 16));
     }
 
     Y_UNIT_TEST(GrpcRequestProxyWithoutToken) {
@@ -257,7 +257,7 @@ Y_UNIT_TEST_SUITE(TGRpcClientLowTest) {
     Y_UNIT_TEST(BiStreamPing) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
-        TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig); 
+        TKikimrWithGrpcAndRootSchemaWithAuth server(appConfig);
 
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
@@ -535,7 +535,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
     }
 
     Y_UNIT_TEST(TestAuth) {
-        TKikimrWithGrpcAndRootSchemaWithAuthAndSsl server; 
+        TKikimrWithGrpcAndRootSchemaWithAuthAndSsl server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -3152,7 +3152,7 @@ tx_meta {
         setting.SetValue("2");
         settings.push_back(setting);
 
-        TKikimrWithGrpcAndRootSchema server(NKikimrConfig::TAppConfig(), settings); 
+        TKikimrWithGrpcAndRootSchema server(NKikimrConfig::TAppConfig(), settings);
         ui16 grpc = server.GetPort();
 
         std::shared_ptr<grpc::Channel> channel;

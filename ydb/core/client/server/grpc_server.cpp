@@ -460,10 +460,10 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_ACTOR_REQUEST(BlobStorageLoadRequest,    TBsTestLoadRequest,                MTYPE_CLIENT_LOAD_REQUEST)
     ADD_ACTOR_REQUEST(BlobStorageGetRequest,     TBsGetRequest,                     MTYPE_CLIENT_GET_REQUEST)
     ADD_ACTOR_REQUEST(ChooseProxy,               TChooseProxyRequest,               MTYPE_CLIENT_CHOOSE_PROXY)
-    ADD_ACTOR_REQUEST(WhoAmI,                    TWhoAmI,                           MTYPE_CLIENT_WHOAMI) 
-    ADD_ACTOR_REQUEST(ResolveNode,               TResolveNodeRequest,               MTYPE_CLIENT_RESOLVE_NODE) 
-    ADD_ACTOR_REQUEST(FillNode,                  TFillNodeRequest,                  MTYPE_CLIENT_FILL_NODE) 
-    ADD_ACTOR_REQUEST(DrainNode,                 TDrainNodeRequest,                 MTYPE_CLIENT_DRAIN_NODE) 
+    ADD_ACTOR_REQUEST(WhoAmI,                    TWhoAmI,                           MTYPE_CLIENT_WHOAMI)
+    ADD_ACTOR_REQUEST(ResolveNode,               TResolveNodeRequest,               MTYPE_CLIENT_RESOLVE_NODE)
+    ADD_ACTOR_REQUEST(FillNode,                  TFillNodeRequest,                  MTYPE_CLIENT_FILL_NODE)
+    ADD_ACTOR_REQUEST(DrainNode,                 TDrainNodeRequest,                 MTYPE_CLIENT_DRAIN_NODE)
     ADD_ACTOR_REQUEST(InterconnectDebug,         TInterconnectDebug,                MTYPE_CLIENT_INTERCONNECT_DEBUG)
     ADD_ACTOR_REQUEST(TestShardControl,          TTestShardControlRequest,          MTYPE_CLIENT_TEST_SHARD_CONTROL)
 
@@ -511,7 +511,7 @@ void TGRpcService::SetupIncomingRequests() {
     ADD_PROXY_REQUEST_BASE(NAME, TYPE, TResponse, EVENT_TYPE, MTYPE)
 
     // proxy requests
-    ADD_PROXY_REQUEST(SchemeInitRoot,  TSchemeInitRoot,  TEvBusProxy::TEvInitRoot,            MTYPE_CLIENT_SCHEME_INITROOT) 
+    ADD_PROXY_REQUEST(SchemeInitRoot,  TSchemeInitRoot,  TEvBusProxy::TEvInitRoot,            MTYPE_CLIENT_SCHEME_INITROOT)
 
     ADD_PROXY_REQUEST(PersQueueRequest, TPersQueueRequest, TEvBusProxy::TEvPersQueue,           MTYPE_CLIENT_PERSQUEUE)
     ADD_PROXY_REQUEST(Request,          TRequest,          TEvBusProxy::TEvRequest,             MTYPE_CLIENT_REQUEST)

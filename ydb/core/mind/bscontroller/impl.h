@@ -53,7 +53,7 @@ public:
     class TTxMonEvent_OperationLog;
     class TTxMonEvent_HealthEvents;
     class TTxMonEvent_SetDown;
-    class TTxMonEvent_GetDown; 
+    class TTxMonEvent_GetDown;
     class TTxUpdateDiskMetrics;
     class TTxUpdateGroupLatencies;
     class TTxGroupReconfigureWipe;

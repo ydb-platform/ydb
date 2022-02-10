@@ -29,8 +29,8 @@ TRunCommandConfigParser::TRunOpts::TRunOpts()
     , StartBusProxy(false)
     , BusProxyPort(NMsgBusProxy::TProtocol::DefaultPort)
     , MonitoringPort(0)
-    , MonitoringAddress() 
-    , MonitoringThreads(10) 
+    , MonitoringAddress()
+    , MonitoringThreads(10)
     , RestartsCountFile("")
     , StartTracingBusProxy(true)
     , CompileInflightLimit(100000)
@@ -54,7 +54,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("log-file", "log config file").OptionalArgument("PATH");
     opts.AddLongOption("ic-file", "interconnect config file").OptionalArgument("PATH");
     opts.AddLongOption("channels-file", "tablet channel profile config file").OptionalArgument("PATH").Required();
-    opts.AddLongOption("vdisk-file", "vdisk kind config file").OptionalArgument("PATH"); 
+    opts.AddLongOption("vdisk-file", "vdisk kind config file").OptionalArgument("PATH");
     opts.AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH");
     opts.AddLongOption("kqp-file", "Kikimr Query Processor config file").OptionalArgument("PATH");
     opts.AddLongOption("incrhuge-file", "incremental huge blob keeper config file").OptionalArgument("PATH");
@@ -69,10 +69,10 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("pqcd-file", "PQCD config file").OptionalArgument("PATH");
     opts.AddLongOption("netclassifier-file", "NetClassifier config file").OptionalArgument("PATH");
     opts.AddLongOption("auth-file", "authorization config file").OptionalArgument("PATH");
-    opts.AddLongOption("auth-token-file", "authorization token config file").OptionalArgument("PATH"); 
+    opts.AddLongOption("auth-token-file", "authorization token config file").OptionalArgument("PATH");
     opts.AddLongOption("key-file", "encryption key config file").OptionalArgument("PATH");
     opts.AddLongOption("sqs-file", "SQS config file").OptionalArgument("PATH");
-    opts.AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH"); 
+    opts.AddLongOption("alloc-file", "Allocator config file").OptionalArgument("PATH");
     opts.AddLongOption("yql-file", "Yql Analytics config file").OptionalArgument("PATH");
     opts.AddLongOption("yq-file", "Yandex Query config file").OptionalArgument("PATH");
 }
@@ -112,10 +112,10 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
     if (res.Has("bootstrap-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("bootstrap-file"), Config.AppConfig.MutableBootstrapConfig()));
     }
- 
-    if (res.Has("vdisk-file")) { 
+
+    if (res.Has("vdisk-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("vdisk-file"), Config.AppConfig.MutableVDiskConfig()));
-    } 
+    }
 
     if (res.Has("drivemodel-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("drivemodel-file"), Config.AppConfig.MutableDriveModelConfig()));
@@ -184,24 +184,24 @@ void TRunCommandConfigParser::ParseConfigFiles(const NLastGetopt::TOptsParseResu
         Y_VERIFY(ParsePBFromFile(res.Get("auth-file"), Config.AppConfig.MutableAuthConfig()));
     }
 
-    if (res.Has("auth-token-file")) { 
-        Y_VERIFY(ParsePBFromFile(res.Get("auth-token-file"), Config.AppConfig.MutableAuthConfig())); 
-    } 
- 
+    if (res.Has("auth-token-file")) {
+        Y_VERIFY(ParsePBFromFile(res.Get("auth-token-file"), Config.AppConfig.MutableAuthConfig()));
+    }
+
     if (res.Has("key-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("key-file"), Config.AppConfig.MutableKeyConfig()));
     }
- 
+
     if (res.Has("pdisk-key-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("pdisk-key-file"), Config.AppConfig.MutablePDiskKeyConfig()));
     }
 
-    if (res.Has("alloc-file")) { 
-        Y_VERIFY(ParsePBFromFile(res.Get("alloc-file"), Config.AppConfig.MutableAllocatorConfig())); 
-    } else { 
-        auto allocConfig = DummyAllocatorConfig(); 
-        Config.AppConfig.MutableAllocatorConfig()->CopyFrom(*allocConfig); 
-    } 
+    if (res.Has("alloc-file")) {
+        Y_VERIFY(ParsePBFromFile(res.Get("alloc-file"), Config.AppConfig.MutableAllocatorConfig()));
+    } else {
+        auto allocConfig = DummyAllocatorConfig();
+        Config.AppConfig.MutableAllocatorConfig()->CopyFrom(*allocConfig);
+    }
 
     if (res.Has("yq-file")) {
         Y_VERIFY(ParsePBFromFile(res.Get("yq-file"), Config.AppConfig.MutableYandexQueryConfig()));
@@ -244,8 +244,8 @@ void TRunCommandConfigParser::ParseRunOpts(int argc, char **argv) {
             .RequiredArgument(Sprintf("NUM (0,%d]", NActors::TActorId::MaxNodeId)).Required().StoreResult(&RunOpts.NodeId);
     opts.AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&RunOpts.ProxyBindToProxy);
     opts.AddLongOption("mon-port", "Monitoring port").OptionalArgument("NUM").StoreResult(&RunOpts.MonitoringPort);
-    opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&RunOpts.MonitoringAddress); 
-    opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&RunOpts.MonitoringThreads); 
+    opts.AddLongOption("mon-address", "Monitoring address").OptionalArgument("ADDR").StoreResult(&RunOpts.MonitoringAddress);
+    opts.AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&RunOpts.MonitoringThreads);
 
     SetupLastGetOptForConfigFiles(opts);
     opts.AddLongOption("bootstrap-file", "Bootstrap config file").OptionalArgument("PATH");
@@ -346,8 +346,8 @@ void TRunCommandConfigParser::ApplyParsedOptions() {
 
     Config.AppConfig.MutableBootstrapConfig()->MutableCompileServiceConfig()->SetInflightLimit(RunOpts.CompileInflightLimit);
     Config.AppConfig.MutableMonitoringConfig()->SetMonitoringPort(RunOpts.MonitoringPort);
-    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringAddress(RunOpts.MonitoringAddress); 
-    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringThreads(RunOpts.MonitoringThreads); 
+    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringAddress(RunOpts.MonitoringAddress);
+    Config.AppConfig.MutableMonitoringConfig()->SetMonitoringThreads(RunOpts.MonitoringThreads);
     Config.AppConfig.MutableRestartsCountConfig()->SetRestartsCountFile(RunOpts.RestartsCountFile);
 }
 

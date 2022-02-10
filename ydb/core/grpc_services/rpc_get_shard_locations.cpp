@@ -94,10 +94,10 @@ private:
             NTabletPipe::TClientConfig clientConfig;
             clientConfig.AllowFollower = false;
             clientConfig.CheckAliveness = false;
-            clientConfig.RetryPolicy = { 
-                .RetryLimitCount = 2, 
-                .MinRetryTime = TDuration::MilliSeconds(5), 
-            }; 
+            clientConfig.RetryPolicy = {
+                .RetryLimitCount = 2,
+                .MinRetryTime = TDuration::MilliSeconds(5),
+            };
             ShardPipes[ti] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, ti, clientConfig));
         }
 

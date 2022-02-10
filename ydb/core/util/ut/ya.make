@@ -47,7 +47,7 @@ SRCS(
     time_series_vec_ut.cpp
     token_bucket_ut.cpp
     ulid_ut.cpp
-    wildcard_ut.cpp 
+    wildcard_ut.cpp
 )
 
 END()

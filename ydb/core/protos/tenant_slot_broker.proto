@@ -45,7 +45,7 @@ message TTenantState {
     repeated TSlotAllocation MisplacedSlots = 5;
     repeated TSlotAllocation SplitSlots = 6;
     repeated TSlotAllocation PinnedSlots = 7;
-    repeated TSlotId AssignedSlots = 8; 
+    repeated TSlotId AssignedSlots = 8;
 }
 
 message TAlterTenant {

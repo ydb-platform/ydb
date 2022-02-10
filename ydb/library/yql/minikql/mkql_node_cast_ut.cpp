@@ -35,7 +35,7 @@ class TMiniKQLNodeCast: public TTestBase
 
         TCallableType* ctype = TCallableType::Create(
                     "callable", dataNode.GetStaticType(),
-                    0, nullptr, nullptr, Env); 
+                    0, nullptr, nullptr, Env);
 
         TCallable* callable = TCallable::Create(dataNode, ctype, Env);
 

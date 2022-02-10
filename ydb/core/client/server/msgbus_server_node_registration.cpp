@@ -56,7 +56,7 @@ public:
         }
 
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = {.RetryLimitCount = 10}; 
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(group), pipeConfig);
         NodeBrokerPipe = ctx.RegisterWithSameMailbox(pipe);
 

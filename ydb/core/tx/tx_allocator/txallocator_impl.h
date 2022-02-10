@@ -56,8 +56,8 @@ public:
     struct Schema : NIceDb::Schema {
         // for compatible use old names config, dummyKey, reservedIds
         struct config : Table<1> {
-            enum EKeyType : bool { 
-                ReservedTo = true, 
+            enum EKeyType : bool {
+                ReservedTo = true,
             };
 
             // for compatible use old names

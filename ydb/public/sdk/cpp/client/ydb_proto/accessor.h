@@ -35,8 +35,8 @@ public:
     static const Ydb::TableStats::QueryStats& GetProto(const NTable::TQueryStats& queryStats);
     static const Ydb::Table::DescribeTableResult& GetProto(const NTable::TTableDescription& tableDescription);
     static const Ydb::PersQueue::V1::DescribeTopicResult& GetProto(const NYdb::NPersQueue::TDescribeTopicResult& topicDescription);
- 
-    static NTable::TQueryStats FromProto(const Ydb::TableStats::QueryStats& queryStats); 
+
+    static NTable::TQueryStats FromProto(const Ydb::TableStats::QueryStats& queryStats);
     static NTable::TTableDescription FromProto(const Ydb::Table::CreateTableRequest& request);
     static NTable::TIndexDescription FromProto(const Ydb::Table::TableIndex& tableIndex);
     static NTable::TIndexDescription FromProto(const Ydb::Table::TableIndexDescription& tableIndexDesc);

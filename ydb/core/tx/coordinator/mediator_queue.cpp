@@ -7,7 +7,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 
 namespace NKikimr {
-namespace NFlatTxCoordinator { 
+namespace NFlatTxCoordinator {
 
 class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMediatorQueue> {
     const TActorId Owner;
@@ -73,7 +73,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
             << " HANDLE EvMediatorQueueStep step# " << msg->Step->Step);
 
         if (msg->GenCookie == GenCookie && PipeClient) {
-            const NFlatTxCoordinator::TMediatorStep &step = *msg->Step; 
+            const NFlatTxCoordinator::TMediatorStep &step = *msg->Step;
 
             LOG_DEBUG(ctx, NKikimrServices::TX_COORDINATOR_PRIVATE, "[%" PRIu64 "] to [%" PRIu64 "], step [%" PRIu64 "]", Coordinator, Mediator, step.Step);
 
@@ -127,9 +127,9 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
         if (!Confirmations)
             Confirmations.Reset(new TMediatorConfirmations(Mediator));
 
-        const TTabletId tabletId = record.GetTabletId(); 
+        const TTabletId tabletId = record.GetTabletId();
         for (const auto txid : record.GetTxId()) {
-            Confirmations->Acks[txid].insert(tabletId); 
+            Confirmations->Acks[txid].insert(tabletId);
         }
     }
 
@@ -173,8 +173,8 @@ public:
 };
 
 IActor* CreateTxCoordinatorMediatorQueue(const TActorId &owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration) {
-    return new NFlatTxCoordinator::TTxCoordinatorMediatorQueue(owner, coordinator, mediator, coordinatorGeneration); 
+    return new NFlatTxCoordinator::TTxCoordinatorMediatorQueue(owner, coordinator, mediator, coordinatorGeneration);
 }
 
 }
-} 
+}

@@ -106,10 +106,10 @@ inline void TTestWithActorSystem::Run(NActors::IActor *testActor) {
     if (!MonPort) {
         MonPort = pm.GetPort(MonPort);
     }
-    Monitoring.reset(new NActors::TMon({ 
-        .Port = MonPort, 
-        .Title = "at" 
-    })); 
+    Monitoring.reset(new NActors::TMon({
+        .Port = MonPort,
+        .Title = "at"
+    }));
     NMonitoring::TIndexMonPage *actorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
     Y_UNUSED(actorsMonPage);
     Monitoring->RegisterCountersPage("counters", "Counters", Counters);

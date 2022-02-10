@@ -10,7 +10,7 @@
 
 
 namespace NKikimr {
-namespace NResultLib { 
+namespace NResultLib {
 
 using TProtoValue = NKikimrMiniKQL::TValue;
 using TProtoType = NKikimrMiniKQL::TType;
@@ -314,5 +314,5 @@ THashMap<K, V> TDict::GetHashMap() const {
 
 #undef ENSURE_KIND
 
-} // namespace NResultLib 
+} // namespace NResultLib
 } // namespace NKikimr

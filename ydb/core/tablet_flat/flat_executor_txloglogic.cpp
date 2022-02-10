@@ -81,13 +81,13 @@ void CompleteRoTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx, 
     seat->Complete(ownerCtx);
     LWTRACK(TransactionCompleteEnd, seat->Self->Orbit, seat->UniqID);
 
-    const ui64 completeTimeus = ui64(1000000. * completeTimer.Passed()); 
- 
+    const ui64 completeTimeus = ui64(1000000. * completeTimer.Passed());
+
     counters->Cumulative()[TExecutorCounters::TX_RO_COMPLETED].Increment(1);
     if (appTxCounters && txType != UnknownTxType)
         appTxCounters->TxCumulative(txType, COUNTER_TT_RO_COMPLETED).Increment(1);
     counters->Percentile()[TExecutorCounters::TX_PERCENTILE_COMMITED_CPUTIME].IncrementFor(completeTimeus);
-    counters->Cumulative()[TExecutorCounters::CONSUMED_CPU].Increment(completeTimeus); 
+    counters->Cumulative()[TExecutorCounters::CONSUMED_CPU].Increment(completeTimeus);
     if (appTxCounters && txType != UnknownTxType)
         appTxCounters->TxCumulative(txType, COUNTER_TT_COMMITED_CPUTIME).Increment(completeTimeus);
 }
@@ -246,13 +246,13 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
         entry.InFlyRWTransaction->Complete(ownerCtx);
         LWTRACK(TransactionCompleteEnd, seat->Self->Orbit, seat->UniqID);
 
-        const ui64 completeTimeus = ui64(1000000. * completeTimer.Passed()); 
- 
+        const ui64 completeTimeus = ui64(1000000. * completeTimer.Passed());
+
         Counters->Cumulative()[TExecutorCounters::TX_RW_COMPLETED].Increment(1);
         if (AppTxCounters && txType != UnknownTxType)
             AppTxCounters->TxCumulative(txType, COUNTER_TT_RW_COMPLETED).Increment(1);
         Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_COMMITED_CPUTIME].IncrementFor(completeTimeus);
-        Counters->Cumulative()[TExecutorCounters::CONSUMED_CPU].Increment(completeTimeus); 
+        Counters->Cumulative()[TExecutorCounters::CONSUMED_CPU].Increment(completeTimeus);
         if (AppTxCounters && txType != UnknownTxType)
             AppTxCounters->TxCumulative(txType, COUNTER_TT_COMMITED_CPUTIME).Increment(completeTimeus);
 

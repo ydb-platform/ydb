@@ -120,10 +120,10 @@ namespace NActors {
             return TString();
         }
 
-        virtual ui32 GetThreads() const { 
-            return 1; 
-        } 
- 
+        virtual ui32 GetThreads() const {
+            return 1;
+        }
+
         // generic
         virtual TAffinity* Affinity() const = 0;
 

@@ -25,7 +25,7 @@ struct TEvTabletBase {
         EvRebuildGraphResult,
         EvFindLatestLogEntryResult,
         EvWriteLogResult,
-        EvDeleteTabletResult, 
+        EvDeleteTabletResult,
 
         EvFollowerRetry = EvBlockBlobStorageResult + 512,
         EvTrySyncFollower,
@@ -38,12 +38,12 @@ struct TEvTabletBase {
 
     struct TEvBlockBlobStorageResult : public TEventLocal<TEvBlockBlobStorageResult, EvBlockBlobStorageResult> {
         const NKikimrProto::EReplyStatus Status;
-        const ui64 TabletId; 
+        const ui64 TabletId;
         const TString ErrorReason;
 
         TEvBlockBlobStorageResult(NKikimrProto::EReplyStatus status, ui64 tabletId, const TString &reason = TString())
             : Status(status)
-            , TabletId(tabletId) 
+            , TabletId(tabletId)
             , ErrorReason(reason)
         {}
     };
@@ -53,7 +53,7 @@ struct TEvTabletBase {
         const TString ErrorReason;
 
         TIntrusivePtr<TEvTablet::TDependencyGraph> DependencyGraph;
-        NMetrics::TTabletThroughputRawValue GroupReadBytes; 
+        NMetrics::TTabletThroughputRawValue GroupReadBytes;
         NMetrics::TTabletIopsRawValue GroupReadOps;
         THolder<NTracing::ITrace> Trace;
 
@@ -75,7 +75,7 @@ struct TEvTabletBase {
         )
             : Status(NKikimrProto::OK)
             , DependencyGraph(graph)
-            , GroupReadBytes(std::move(read)) 
+            , GroupReadBytes(std::move(read))
             , GroupReadOps(std::move(readOps))
             , Trace(trace)
         {}
@@ -109,7 +109,7 @@ struct TEvTabletBase {
         const TLogoBlobID EntryId;
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
-        NMetrics::TTabletThroughputRawValue GroupWrittenBytes; 
+        NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
         NMetrics::TTabletIopsRawValue GroupWrittenOps;
         const TString ErrorReason;
 
@@ -129,7 +129,7 @@ struct TEvTabletBase {
             , EntryId(entryId)
             , YellowMoveChannels(std::move(yellowMoveChannels))
             , YellowStopChannels(std::move(yellowStopChannels))
-            , GroupWrittenBytes(std::move(written)) 
+            , GroupWrittenBytes(std::move(written))
             , GroupWrittenOps(std::move(writtenOps))
             , ErrorReason(reason)
         {}
@@ -142,7 +142,7 @@ struct TEvTabletBase {
             : Round(round)
         {}
     };
- 
+
     struct TEvTrySyncFollower : public TEventLocal<TEvTrySyncFollower, EvTrySyncFollower> {
         const TActorId FollowerId;
         TSchedulerCookieHolder CookieHolder;
@@ -155,15 +155,15 @@ struct TEvTabletBase {
 
     struct TEvTryBuildFollowerGraph : public TEventLocal<TEvTryBuildFollowerGraph, EvTryBuildFollowerGraph> {};
 
-    struct TEvDeleteTabletResult : public TEventLocal<TEvDeleteTabletResult, EvDeleteTabletResult> { 
-        const NKikimrProto::EReplyStatus Status; 
-        const ui64 TabletId; 
- 
-        TEvDeleteTabletResult(NKikimrProto::EReplyStatus status, ui64 tabletId) 
-            : Status(status) 
-            , TabletId(tabletId) 
-        {} 
-    }; 
+    struct TEvDeleteTabletResult : public TEventLocal<TEvDeleteTabletResult, EvDeleteTabletResult> {
+        const NKikimrProto::EReplyStatus Status;
+        const ui64 TabletId;
+
+        TEvDeleteTabletResult(NKikimrProto::EReplyStatus status, ui64 tabletId)
+            : Status(status)
+            , TabletId(tabletId)
+        {}
+    };
 };
 
 }

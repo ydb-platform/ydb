@@ -179,8 +179,8 @@ void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& 
 template <typename T, typename... Tt>
 void AppendKeyColumn(ui32 root, const TScheme& scheme, TVector<TFakeTableCell>& tuple, T t, Tt... tt) {
     ui32 pos = tuple.size();
-    ui32 tag = scheme.GetTableInfo(root)->KeyColumns[pos]; 
-    NScheme::TTypeId type = scheme.GetColumnInfo(root, tag)->PType; 
+    ui32 tag = scheme.GetTableInfo(root)->KeyColumns[pos];
+    NScheme::TTypeId type = scheme.GetColumnInfo(root, tag)->PType;
     tuple.push_back(FromVal(type, t));
     AppendKeyColumn(root, scheme, tuple, tt...);
 }

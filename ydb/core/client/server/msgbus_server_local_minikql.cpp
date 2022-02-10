@@ -1,5 +1,5 @@
 #include "msgbus_tabletreq.h"
-#include "msgbus_securereq.h" 
+#include "msgbus_securereq.h"
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -14,10 +14,10 @@ public:
     TMessageBusLocalMKQL(TBusMessageContext &msg, const NKikimrClient::TLocalMKQL &request, ui64 tabletId, bool withRetry, TDuration timeout, bool connectToFollower)
         : TMessageBusSecureRequest(msg, tabletId, withRetry, timeout, connectToFollower)
         , Request(request)
-    { 
-        SetSecurityToken(static_cast<TBusTabletLocalMKQL*>(msg.GetMessage())->Record.GetSecurityToken()); 
-        SetRequireAdminAccess(true); 
-    } 
+    {
+        SetSecurityToken(static_cast<TBusTabletLocalMKQL*>(msg.GetMessage())->Record.GetSecurityToken());
+        SetRequireAdminAccess(true);
+    }
 
     void Handle(TEvTablet::TEvLocalMKQLResponse::TPtr &ev, const TActorContext &ctx) {
         const auto &record = ev->Get()->Record;

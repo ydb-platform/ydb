@@ -1,7 +1,7 @@
 #pragma once
 
-#include "grpc_endpoint.h" 
- 
+#include "grpc_endpoint.h"
+
 #include "rpc_calls.h"
 
 #include <library/cpp/actors/core/actor.h>
@@ -112,8 +112,8 @@ protected:
     void Handle(TEvKikhouseCreateSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKikhouseRefreshSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKikhouseDiscardSnapshotRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvSelfCheckRequest::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvSelfCheckRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamExecuteScanQueryRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCoordinationSessionRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvLongTxBeginRequest::TPtr& ev, const TActorContext& ctx);

@@ -798,10 +798,10 @@ TValue JsonToYdbValue(const TString& jsonString, const TType& type, EBinaryStrin
             TStringBuilder() << "Exception while parsing string \"" << jsonString << "\" as json: " << e.what());
     }
     return JsonToYdbValue(jsonValue, type, encoding);
-} 
+}
 
 TValue JsonToYdbValue(const NJson::TJsonValue& jsonValue, const TType& type, EBinaryStringEncoding encoding) {
-    TValueBuilder builder; 
+    TValueBuilder builder;
     TTypeParser typeParser(type);
 
     TJsonToYdbConverter converter(builder, jsonValue, typeParser, encoding);

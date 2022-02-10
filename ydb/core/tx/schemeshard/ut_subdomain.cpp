@@ -402,11 +402,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::PathsInsideDomain(3),
                             NLs::ShardsInsideDomain(4)});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/table_0"),
-                           {NLs::InSubdomain}); 
+                           {NLs::InSubdomain});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/dir_0"),
-                           {NLs::InSubdomain}); 
+                           {NLs::InSubdomain});
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/dir_0/table_1"),
-                           {NLs::InSubdomain}); 
+                           {NLs::InSubdomain});
     }
 
     Y_UNIT_TEST(CreateSubDomainWithoutTablets) {
@@ -598,7 +598,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         }
     }
 
-    Y_UNIT_TEST(SimultaneousCreateForceDrop) { 
+    Y_UNIT_TEST(SimultaneousCreateForceDrop) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -627,7 +627,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 2));
     }
 
-    Y_UNIT_TEST(ForceDropTwice) { 
+    Y_UNIT_TEST(ForceDropTwice) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -659,7 +659,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::ShardsInsideDomain(0)});
     }
 
-    Y_UNIT_TEST(SimultaneousCreateForceDropTwice) { 
+    Y_UNIT_TEST(SimultaneousCreateForceDropTwice) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -1177,10 +1177,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
         UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "BlockStoreVolumes", "PathId", 3));
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                           {NLs::SubdomainWithNoEmptyStoragePools}); 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/BSVolume"), 
-                           {NLs::PathsInsideDomain(1), 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                           {NLs::SubdomainWithNoEmptyStoragePools});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/BSVolume"),
+                           {NLs::PathsInsideDomain(1),
                             NLs::ShardsInsideDomain(4)});
 
         TestForceDropSubDomain(runtime, txId++, "/MyRoot", "USER_0");
@@ -1267,11 +1267,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         );
         UNIT_ASSERT_VALUES_EQUAL(tablet->BoundChannels[3].GetSize(), 222);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                            {NLs::SubdomainWithNoEmptyStoragePools}); 
- 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                            {NLs::SubdomainWithNoEmptyStoragePools});
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/BSVolume"),
-                            {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(4)}); 
+                            {NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(4)});
 
         vc.ClearBlockSize();
         vc.ClearPartitions();
@@ -1561,14 +1561,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            "Coordinators: 1 "
                            "Mediators: 2 "
                            "TimeCastBucketsPerMediator: 2 "
-                           "StoragePools { " 
-                           "  Name: \"pool-1\" " 
-                           "  Kind: \"pool-kind-1\" " 
-                           "} " 
-                           "StoragePools { " 
-                           "  Name: \"pool-2\" " 
-                           "  Kind: \"pool-kind-2\" " 
-                           "} " 
+                           "StoragePools { "
+                           "  Name: \"pool-1\" "
+                           "  Kind: \"pool-kind-1\" "
+                           "} "
+                           "StoragePools { "
+                           "  Name: \"pool-2\" "
+                           "  Kind: \"pool-kind-2\" "
+                           "} "
                            "StoragePools {"
                            "  Name: \"pool-hdd-1\""
                            "  Kind: \"hdd-1\""
@@ -1585,14 +1585,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            "Coordinators: 1 "
                            "Mediators: 2 "
                            "TimeCastBucketsPerMediator: 2 "
-                           "StoragePools { " 
-                           "  Name: \"pool-1\" " 
-                           "  Kind: \"pool-kind-1\" " 
-                           "} " 
-                           "StoragePools { " 
-                           "  Name: \"pool-2\" " 
-                           "  Kind: \"pool-kind-2\" " 
-                           "} " 
+                           "StoragePools { "
+                           "  Name: \"pool-1\" "
+                           "  Kind: \"pool-kind-1\" "
+                           "} "
+                           "StoragePools { "
+                           "  Name: \"pool-2\" "
+                           "  Kind: \"pool-kind-2\" "
+                           "} "
                            "StoragePools {"
                            "  Name: \"pool-hdd-2\""
                            "  Kind: \"hdd-1\""
@@ -1605,14 +1605,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            "Coordinators: 1 "
                            "Mediators: 2 "
                            "TimeCastBucketsPerMediator: 2 "
-                           "StoragePools { " 
-                           "  Name: \"pool-1\" " 
-                           "  Kind: \"pool-kind-1\" " 
-                           "} " 
-                           "StoragePools { " 
-                           "  Name: \"pool-2\" " 
-                           "  Kind: \"pool-kind-2\" " 
-                           "} " 
+                           "StoragePools { "
+                           "  Name: \"pool-1\" "
+                           "  Kind: \"pool-kind-1\" "
+                           "} "
+                           "StoragePools { "
+                           "  Name: \"pool-2\" "
+                           "  Kind: \"pool-kind-2\" "
+                           "} "
                            "StoragePools {"
                            "  Name: \"pool-hdd-1\""
                            "  Kind: \"hdd-1\""
@@ -1641,14 +1641,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                            "Coordinators: 1 "
                            "Mediators: 2 "
                            "TimeCastBucketsPerMediator: 2 "
-                           "StoragePools { " 
-                           "  Name: \"pool-1\" " 
-                           "  Kind: \"pool-kind-1\" " 
-                           "} " 
-                           "StoragePools { " 
-                           "  Name: \"pool-2\" " 
-                           "  Kind: \"pool-kind-2\" " 
-                           "} " 
+                           "StoragePools { "
+                           "  Name: \"pool-1\" "
+                           "  Kind: \"pool-kind-1\" "
+                           "} "
+                           "StoragePools { "
+                           "  Name: \"pool-2\" "
+                           "  Kind: \"pool-kind-2\" "
+                           "} "
                            "StoragePools {"
                            "  Name: \"pool-hdd-1\""
                            "  Kind: \"hdd-1\""
@@ -1834,14 +1834,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::ShardsInsideDomain(0)});
 
         TestAlterSubDomain(runtime, txId++,  "/MyRoot",
-                           "StoragePools { " 
-                           "  Name: \"pool-1\" " 
-                           "  Kind: \"pool-kind-1\" " 
-                           "} " 
-                           "StoragePools { " 
-                           "  Name: \"pool-2\" " 
-                           "  Kind: \"pool-kind-2\" " 
-                           "} " 
+                           "StoragePools { "
+                           "  Name: \"pool-1\" "
+                           "  Kind: \"pool-kind-1\" "
+                           "} "
+                           "StoragePools { "
+                           "  Name: \"pool-2\" "
+                           "  Kind: \"pool-kind-2\" "
+                           "} "
                            "StoragePools {"
                            "  Name: \"pool-hdd-1\""
                            "  Kind: \"hdd-1\""
@@ -1862,14 +1862,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                             NLs::ShardsInsideDomain(0)});
 
         TestAlterSubDomain(runtime, txId++,  "/MyRoot",
-                           "StoragePools { " 
-                           "  Name: \"pool-1\" " 
-                           "  Kind: \"pool-kind-1\" " 
-                           "} " 
-                           "StoragePools { " 
-                           "  Name: \"pool-2\" " 
-                           "  Kind: \"pool-kind-2\" " 
-                           "} " 
+                           "StoragePools { "
+                           "  Name: \"pool-1\" "
+                           "  Kind: \"pool-kind-1\" "
+                           "} "
+                           "StoragePools { "
+                           "  Name: \"pool-2\" "
+                           "  Kind: \"pool-kind-2\" "
+                           "} "
                            "StoragePools {"
                            "  Name: \"pool-hdd-1\""
                            "  Kind: \"hdd-1\""

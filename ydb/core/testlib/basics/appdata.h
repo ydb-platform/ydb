@@ -76,7 +76,7 @@ namespace NKikimr {
         bool EnableKqpSpilling = false;
         NKikimrConfig::TCompactionConfig CompactionConfig;
         TString NetDataSourceUrl;
-        NKikimrConfig::THiveConfig HiveConfig; 
+        NKikimrConfig::THiveConfig HiveConfig;
         NKikimrConfig::TDataShardConfig DataShardConfig;
         NKikimrConfig::TMeteringConfig MeteringConfig;
         NKikimrPQ::TPQConfig PQConfig;

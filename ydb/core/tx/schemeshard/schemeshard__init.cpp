@@ -1485,7 +1485,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 TSubDomainInfo::TPtr rootDomainInfo = new TSubDomainInfo(version, Self->RootPathId());
                 rootDomainInfo->SetSchemeLimits(rootLimits);
-                rootDomainInfo->SetSecurityStateVersion(row.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>()); 
+                rootDomainInfo->SetSecurityStateVersion(row.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>());
 
                 rootDomainInfo->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
 
@@ -1555,7 +1555,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     domainInfo->SetDomainStateVersion(rowset.GetValueOrDefault<Schema::SubDomains::StateVersion>(0));
-                    domainInfo->SetSecurityStateVersion(rowset.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>()); 
+                    domainInfo->SetSecurityStateVersion(rowset.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>());
                     domainInfo->SetDiskQuotaExceeded(rowset.GetValueOrDefault<Schema::SubDomains::DiskQuotaExceeded>(false));
                     if (domainInfo->GetDiskQuotaExceeded()) {
                         Self->ChangeDiskSpaceQuotaExceeded(+1);
@@ -2201,18 +2201,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 Y_VERIFY(Self->ShardInfos.contains(shardIdx));
                 TShardInfo& shardInfo = Self->ShardInfos[shardIdx];
-                if (shardInfo.BindedChannels.size() <= channelId) { 
-                    shardInfo.BindedChannels.resize(channelId + 1); 
-                } 
-                TChannelBind& channelBind = shardInfo.BindedChannels[channelId]; 
+                if (shardInfo.BindedChannels.size() <= channelId) {
+                    shardInfo.BindedChannels.resize(channelId + 1);
+                }
+                TChannelBind& channelBind = shardInfo.BindedChannels[channelId];
 
                 if (bindingData) {
                     bool parseOk = ParseFromStringNoSizeLimit(channelBind, bindingData);
                     Y_VERIFY(parseOk);
-                } 
+                }
                 if (poolName) {
                     channelBind.SetStoragePoolName(poolName);
-                } 
+                }
             }
 
         }
@@ -3503,66 +3503,66 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Read security state 
-        NLoginProto::TSecurityState securityState; 
+        // Read security state
+        NLoginProto::TSecurityState securityState;
         {
-            auto rowset = db.Table<Schema::LoginKeys>().Select(); 
- 
-            if (!rowset.IsReady()) { 
-                return false; 
-            } 
- 
-            while (!rowset.EndOfSet()) { 
-                auto& key = *securityState.AddPublicKeys(); 
-                key.SetKeyId(rowset.GetValue<Schema::LoginKeys::KeyId>()); 
-                key.SetKeyDataPEM(rowset.GetValue<Schema::LoginKeys::KeyDataPEM>()); 
-                key.SetExpiresAt(rowset.GetValueOrDefault<Schema::LoginKeys::ExpiresAt>()); 
-                if (!rowset.Next()) { 
-                    return false; 
-                } 
-            } 
-        } 
-        std::unordered_map<TString, int> sidIndex; 
-        { 
-            auto rowset = db.Table<Schema::LoginSids>().Select(); 
- 
-            if (!rowset.IsReady()) { 
-                return false; 
-            } 
- 
-            while (!rowset.EndOfSet()) { 
-                auto& sid = *securityState.AddSids(); 
-                sid.SetName(rowset.GetValue<Schema::LoginSids::SidName>()); 
-                sid.SetType(rowset.GetValue<Schema::LoginSids::SidType>()); 
-                sid.SetHash(rowset.GetValue<Schema::LoginSids::SidHash>()); 
-                sidIndex[sid.name()] = securityState.SidsSize() - 1; 
-                if (!rowset.Next()) { 
-                    return false; 
-                } 
-            } 
-        } 
-        { 
-            auto rowset = db.Table<Schema::LoginSidMembers>().Select(); 
- 
-            if (!rowset.IsReady()) { 
-                return false; 
-            } 
- 
-            while (!rowset.EndOfSet()) { 
-                TString sidName = rowset.GetValue<Schema::LoginSidMembers::SidName>(); 
-                auto itSidIndex = sidIndex.find(sidName); 
-                if (itSidIndex != sidIndex.end()) { 
-                    NLoginProto::TSid& sid = (*securityState.MutableSids())[itSidIndex->second]; 
-                    sid.AddMembers(rowset.GetValue<Schema::LoginSidMembers::SidMember>()); 
-                } 
-                if (!rowset.Next()) { 
-                    return false; 
-                } 
-            } 
-        } 
-        Self->LoginProvider.UpdateSecurityState(std::move(securityState)); 
- 
-        { 
+            auto rowset = db.Table<Schema::LoginKeys>().Select();
+
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                auto& key = *securityState.AddPublicKeys();
+                key.SetKeyId(rowset.GetValue<Schema::LoginKeys::KeyId>());
+                key.SetKeyDataPEM(rowset.GetValue<Schema::LoginKeys::KeyDataPEM>());
+                key.SetExpiresAt(rowset.GetValueOrDefault<Schema::LoginKeys::ExpiresAt>());
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+        std::unordered_map<TString, int> sidIndex;
+        {
+            auto rowset = db.Table<Schema::LoginSids>().Select();
+
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                auto& sid = *securityState.AddSids();
+                sid.SetName(rowset.GetValue<Schema::LoginSids::SidName>());
+                sid.SetType(rowset.GetValue<Schema::LoginSids::SidType>());
+                sid.SetHash(rowset.GetValue<Schema::LoginSids::SidHash>());
+                sidIndex[sid.name()] = securityState.SidsSize() - 1;
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+        {
+            auto rowset = db.Table<Schema::LoginSidMembers>().Select();
+
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TString sidName = rowset.GetValue<Schema::LoginSidMembers::SidName>();
+                auto itSidIndex = sidIndex.find(sidName);
+                if (itSidIndex != sidIndex.end()) {
+                    NLoginProto::TSid& sid = (*securityState.MutableSids())[itSidIndex->second];
+                    sid.AddMembers(rowset.GetValue<Schema::LoginSidMembers::SidMember>());
+                }
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+        Self->LoginProvider.UpdateSecurityState(std::move(securityState));
+
+        {
             TShardBackupStatusRows backupStatuses;
             if (!LoadBackupStatuses(db, backupStatuses)) {
                 return false;
@@ -3660,7 +3660,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             domainInfo->AddInternalShard(shardIdx);
 
             switch (si.second.TabletType) {
-            case ETabletType::DataShard: 
+            case ETabletType::DataShard:
                 {
                     const auto table = Self->Tables.FindPtr(pathId);
                     if (tabletId != InvalidTabletId) {
@@ -3671,10 +3671,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                     break;
                 }
-            case ETabletType::PersQueue: 
+            case ETabletType::PersQueue:
                 Self->TabletCounters->Simple()[COUNTER_PQ_SHARD_COUNT].Add(1);
                 break;
-            case ETabletType::PersQueueReadBalancer: 
+            case ETabletType::PersQueueReadBalancer:
                 Self->TabletCounters->Simple()[COUNTER_PQ_RB_SHARD_COUNT].Add(1);
                 break;
             case ETabletType::BlockStoreVolume:
@@ -3692,10 +3692,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::Kesus:
                 Self->TabletCounters->Simple()[COUNTER_KESUS_SHARD_COUNT].Add(1);
                 break;
-            case ETabletType::Coordinator: 
+            case ETabletType::Coordinator:
                 Self->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_COORDINATOR_COUNT].Add(1);
                 break;
-            case ETabletType::Mediator: 
+            case ETabletType::Mediator:
                 Self->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_MEDIATOR_COUNT].Add(1);
                 break;
             case ETabletType::RTMRPartition:
@@ -3707,9 +3707,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             case ETabletType::SchemeShard:
                 Self->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_SCHEME_SHARD_COUNT].Add(1);
                 break;
-            case ETabletType::Hive: 
-                Self->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_HIVE_COUNT].Add(1); 
-                break; 
+            case ETabletType::Hive:
+                Self->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_HIVE_COUNT].Add(1);
+                break;
             case ETabletType::SysViewProcessor:
                 Self->TabletCounters->Simple()[COUNTER_SYS_VIEW_PROCESSOR_COUNT].Add(1);
                 break;

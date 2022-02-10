@@ -446,7 +446,7 @@ private:
     STATEFN(WaitAuthCheckMessages) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
-            hFunc(TEvTicketParser::TEvAuthorizeTicketResult, HandleTicketParserResponse); 
+            hFunc(TEvTicketParser::TEvAuthorizeTicketResult, HandleTicketParserResponse);
             hFunc(TEvWakeup, HandleWakeup);
         }
     }
@@ -482,7 +482,7 @@ private:
     }
 
     void RequestTicketParser() {
-        this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(SecurityToken_)); 
+        this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(SecurityToken_));
     }
 
     bool IsACLProtectedAccount(const TString& accountName) const {
@@ -599,8 +599,8 @@ private:
         OnAuthCheckMessage();
     }
 
-    void HandleTicketParserResponse(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) { 
-        const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get()); 
+    void HandleTicketParserResponse(TEvTicketParser::TEvAuthorizeTicketResult::TPtr& ev) {
+        const TEvTicketParser::TEvAuthorizeTicketResult& result(*ev->Get());
         if (!result.Error.empty()) {
             RLOG_SQS_ERROR("Got ticket parser error: " << result.Error << ". " << Action_ << " was rejected");
             MakeError(MutableErrorDesc(), NErrors::ACCESS_DENIED);

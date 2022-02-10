@@ -108,11 +108,11 @@ TList<TActorId> TStateStorageInfo::SelectAllReplicas() const {
     for (auto &ring : Rings) {
         for (TActorId replica : ring.Replicas)
             replicas.push_back(replica);
-    } 
+    }
 
-    return replicas; 
-} 
- 
+    return replicas;
+}
+
 ui32 TStateStorageInfo::TRing::ContentHash() const {
     ui64 hash = 17;
     for (TActorId replica : Replicas) {

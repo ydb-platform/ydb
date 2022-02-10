@@ -34,7 +34,7 @@ namespace NKikimr {
     NTabletPipe::TClientConfig GetPipeConfigWithRetries()
     {
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries(); 
+        pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         return pipeConfig;
     }
 

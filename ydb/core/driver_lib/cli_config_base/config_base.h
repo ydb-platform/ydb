@@ -36,18 +36,18 @@ const TString ArgFormatDescription();
 struct TCommandConfig {
     TMaybe<std::variant<NMsgBusProxy::TMsgBusClientConfig, NGRpcProxy::TGRpcClientConfig>> ClientConfig;
 
-    enum class EServerType { 
-        MessageBus, 
-        GRpc, 
-    }; 
- 
-    struct TServerEndpoint { 
-        EServerType ServerType; 
-        TString Address; 
+    enum class EServerType {
+        MessageBus,
+        GRpc,
+    };
+
+    struct TServerEndpoint {
+        EServerType ServerType;
+        TString Address;
         TMaybe<bool> EnableSsl = Nothing();
-    }; 
- 
-    static TServerEndpoint ParseServerAddress(const TString& address); 
+    };
+
+    static TServerEndpoint ParseServerAddress(const TString& address);
 };
 
 extern TCommandConfig CommandConfig;

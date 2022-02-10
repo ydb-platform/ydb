@@ -79,9 +79,9 @@ namespace NActors {
                 return;
             }
         }
-        if (const auto& callback = ProxyCommonCtx->InitWhiteboard) { 
-            callback(Address.GetPort(), TlsActivationContext->ExecutorThread.ActorSystem); 
-        } 
+        if (const auto& callback = ProxyCommonCtx->InitWhiteboard) {
+            callback(Address.GetPort(), TlsActivationContext->ExecutorThread.ActorSystem);
+        }
         const bool success = ctx.Send(MakePollerActorId(), new TEvPollerRegister(Listener, SelfId(), {}));
         Y_VERIFY(success);
         Become(&TThis::Listen);

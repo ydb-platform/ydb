@@ -115,8 +115,8 @@ TString TSchemeCacheRequest::TEntry::ToString(const NScheme::TTypeRegistry& type
 
     out << " }";
     return out;
-} 
- 
+}
+
 TString TSchemeCacheRequest::ToString(const NScheme::TTypeRegistry& typeRegistry) const {
     return TStringBuilder() << "{"
         << " ErrorCount: " << ErrorCount

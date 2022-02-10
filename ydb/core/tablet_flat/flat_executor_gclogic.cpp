@@ -1,26 +1,26 @@
-#include "flat_executor_gclogic.h" 
+#include "flat_executor_gclogic.h"
 #include "flat_bio_eggs.h"
 #include <ydb/core/base/tablet.h>
- 
-namespace NKikimr { 
-namespace NTabletFlatExecutor { 
- 
+
+namespace NKikimr {
+namespace NTabletFlatExecutor {
+
 TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
     : TabletStorageInfo(std::move(info))
     , Cookies(cookies)
     , Generation(Cookies->Gen)
     , Slicer(1, Cookies.Get(), NBlockIO::BlockSize)
-    , SnapshotStep(0) 
+    , SnapshotStep(0)
     , PrevSnapshotStep(0)
     , ConfirmedOnSendStep(0)
     , AllowGarbageCollection(false)
-{ 
-} 
- 
+{
+}
+
 void TExecutorGCLogic::WriteToLog(TLogCommit &commit) {
     TGCTime time(Generation, commit.Step);
-    TGCLogEntry& uncommittedDelta = UncommittedDeltaLog[time]; 
-    uncommittedDelta.Time = time; 
+    TGCLogEntry& uncommittedDelta = UncommittedDeltaLog[time];
+    uncommittedDelta.Time = time;
 
     const ui32 gcEntriesInBatch = 250000; // ~7mb rawsize
 
@@ -59,18 +59,18 @@ void TExecutorGCLogic::WriteToLog(TLogCommit &commit) {
             Slicer.One(commit.Refs, proto.SerializeAsString(), true);
         }
     }
-} 
- 
-TGCLogEntry TExecutorGCLogic::SnapshotLog(ui32 step) { 
-    TGCTime snapshotTime(Generation, step); 
-    TGCLogEntry snapshot(snapshotTime); 
-    for (const auto& chIt : ChannelInfo) { 
-        for (const auto& le : chIt.second.CommittedDelta) { 
+}
+
+TGCLogEntry TExecutorGCLogic::SnapshotLog(ui32 step) {
+    TGCTime snapshotTime(Generation, step);
+    TGCLogEntry snapshot(snapshotTime);
+    for (const auto& chIt : ChannelInfo) {
+        for (const auto& le : chIt.second.CommittedDelta) {
             Y_VERIFY(le.first <= snapshotTime);
             TExecutorGCLogic::MergeVectors(snapshot.Delta.Created, le.second.Created);
             TExecutorGCLogic::MergeVectors(snapshot.Delta.Deleted, le.second.Deleted);
-        } 
-    } 
+        }
+    }
 
     for (const auto &it : UncommittedDeltaLog) {
         TExecutorGCLogic::MergeVectors(snapshot.Delta.Created, it.second.Delta.Created);
@@ -78,22 +78,22 @@ TGCLogEntry TExecutorGCLogic::SnapshotLog(ui32 step) {
     }
 
     PrevSnapshotStep = SnapshotStep;
-    SnapshotStep = step; 
-    return snapshot; 
-} 
- 
+    SnapshotStep = step;
+    return snapshot;
+}
+
 void TExecutorGCLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, ui32 step) {
-    TGCLogEntry gcLogEntry = SnapshotLog(step); 
+    TGCLogEntry gcLogEntry = SnapshotLog(step);
     auto *gcSnapDiscovered = snap.MutableGcSnapDiscovered();
     auto *gcSnapLeft = snap.MutableGcSnapLeft();
- 
+
     gcSnapDiscovered->Reserve(gcLogEntry.Delta.Created.size());
     for (const TLogoBlobID &x : gcLogEntry.Delta.Created)
-        LogoBlobIDFromLogoBlobID(x, gcSnapDiscovered->Add()); 
- 
+        LogoBlobIDFromLogoBlobID(x, gcSnapDiscovered->Add());
+
     gcSnapLeft->Reserve(gcLogEntry.Delta.Deleted.size());
     for (const TLogoBlobID &x : gcLogEntry.Delta.Deleted)
-        LogoBlobIDFromLogoBlobID(x, gcSnapLeft->Add()); 
+        LogoBlobIDFromLogoBlobID(x, gcSnapLeft->Add());
 
     for (const auto &chIt : ChannelInfo) {
         if (chIt.second.CommitedGcBarrier) {
@@ -103,52 +103,52 @@ void TExecutorGCLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, ui32 s
             x->SetSetToStep(chIt.second.CommitedGcBarrier.Step);
         }
     }
-} 
- 
+}
+
 void TExecutorGCLogic::OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActorContext& ctx) {
-    auto it = UncommittedDeltaLog.find(TGCTime(Generation, step)); 
-    if (it != UncommittedDeltaLog.end()) { 
-        ApplyDelta(it->first, it->second.Delta); 
-        UncommittedDeltaLog.erase(it); 
-    } 
+    auto it = UncommittedDeltaLog.find(TGCTime(Generation, step));
+    if (it != UncommittedDeltaLog.end()) {
+        ApplyDelta(it->first, it->second.Delta);
+        UncommittedDeltaLog.erase(it);
+    }
 
     ConfirmedOnSendStep = Max(ConfirmedOnSendStep, confirmedOnSend);
 
     if (step >= SnapshotStep)
-        SendCollectGarbage(ctx); 
-} 
- 
-void TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr) { 
-    TEvBlobStorage::TEvCollectGarbageResult* ev = ptr->Get(); 
-    TChannelInfo& channel = ChannelInfo[ev->Channel]; 
-    if (ev->Status == NKikimrProto::EReplyStatus::OK) { 
-        channel.OnCollectGarbageSuccess(); 
-    } else { 
-        channel.OnCollectGarbageFailure(); 
-    } 
-} 
- 
-void TExecutorGCLogic::ApplyLogEntry(TGCLogEntry& entry) { 
-    ApplyDelta(entry.Time, entry.Delta); 
-} 
- 
+        SendCollectGarbage(ctx);
+}
+
+void TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr) {
+    TEvBlobStorage::TEvCollectGarbageResult* ev = ptr->Get();
+    TChannelInfo& channel = ChannelInfo[ev->Channel];
+    if (ev->Status == NKikimrProto::EReplyStatus::OK) {
+        channel.OnCollectGarbageSuccess();
+    } else {
+        channel.OnCollectGarbageFailure();
+    }
+}
+
+void TExecutorGCLogic::ApplyLogEntry(TGCLogEntry& entry) {
+    ApplyDelta(entry.Time, entry.Delta);
+}
+
 void TExecutorGCLogic::ApplyLogSnapshot(TGCLogEntry &snapshot, const TVector<std::pair<ui32, ui64>> &barriers) {
-    ApplyLogEntry(snapshot); 
+    ApplyLogEntry(snapshot);
     for (auto &xpair : barriers) {
         const ui32 channel = xpair.first;
         const std::pair<ui32, ui32> barrier = ExpandGenStepPair(xpair.second);
         ChannelInfo[channel].CommitedGcBarrier = {barrier.first, barrier.second};
     }
-} 
- 
+}
+
 void TExecutorGCLogic::HoldBarrier(ui32 step) {
     Y_VERIFY(true == HoldBarriersSet.insert(TGCTime(Generation, step)).second);
-} 
- 
+}
+
 void TExecutorGCLogic::ReleaseBarrier(ui32 step) {
     Y_VERIFY(1 == HoldBarriersSet.erase(TGCTime(Generation, step)));
-} 
- 
+}
+
 ui32 TExecutorGCLogic::GetActiveGcBarrier() {
     if (HoldBarriersSet.empty())
         return Max<ui32>();
@@ -160,21 +160,21 @@ void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
     AllowGarbageCollection = true;
 }
 
-void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) { 
+void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
     for (const TLogoBlobID &blobId : delta.Created) {
         auto &channel = ChannelInfo[blobId.Channel()];
         TGCTime gcTime(blobId.Generation(), blobId.Step());
         Y_VERIFY(channel.KnownGcBarrier < gcTime);
         channel.CommittedDelta[gcTime].Created.push_back(blobId);
-    } 
+    }
 
     for (const TLogoBlobID &blobId : delta.Deleted) {
         auto &channel = ChannelInfo[blobId.Channel()];
         channel.CommittedDelta[time].Deleted.push_back(blobId);
     }
-} 
- 
-void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) { 
+}
+
+void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
     if (!AllowGarbageCollection)
         return;
 
@@ -184,41 +184,41 @@ void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
 
     const TGCTime minTime = std::min(uncommittedTime, std::min(uncommitedSnap, minBarrier));
 
-    for (auto it = ChannelInfo.begin(); it != ChannelInfo.end(); ++it) { 
+    for (auto it = ChannelInfo.begin(); it != ChannelInfo.end(); ++it) {
         it->second.SendCollectGarbage(minTime, TabletStorageInfo.Get(), it->first, Generation, ctx);
-    } 
-} 
- 
-TExecutorGCLogic::TChannelInfo::TChannelInfo() 
+    }
+}
+
+TExecutorGCLogic::TChannelInfo::TChannelInfo()
     : GcCounter(1)
     , GcWaitFor(0)
-{ 
-} 
- 
-void TExecutorGCLogic::TChannelInfo::ApplyDelta(TGCTime time, TGCBlobDelta& delta) { 
-    TGCBlobDelta& committedDelta = CommittedDelta[time]; 
+{
+}
+
+void TExecutorGCLogic::TChannelInfo::ApplyDelta(TGCTime time, TGCBlobDelta& delta) {
+    TGCBlobDelta& committedDelta = CommittedDelta[time];
     DoSwap(committedDelta, delta);
     Y_VERIFY_DEBUG(delta.Created.empty() && delta.Deleted.empty());
-} 
- 
+}
+
 void TExecutorGCLogic::MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source) {
-    if (!source.empty()) { 
-        destination.insert(destination.end(), source.begin(), source.end()); 
-    } 
-} 
- 
+    if (!source.empty()) {
+        destination.insert(destination.end(), source.begin(), source.end());
+    }
+}
+
 void TExecutorGCLogic::MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source) {
-    if (!source.empty()) { 
-        if (!destination) { 
+    if (!source.empty()) {
+        if (!destination) {
             destination.Reset(new TVector<TLogoBlobID>(source));
-        } else { 
-            MergeVectors(*destination.Get(), source); 
-        } 
-    } 
-} 
- 
+        } else {
+            MergeVectors(*destination.Get(), source);
+        }
+    }
+}
+
 void DeduplicateGCKeepVectors(TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, ui32 barrierGen, ui32 barrierStep) {
-    if (keep && doNotKeep && !keep->empty() && !doNotKeep->empty()) { 
+    if (keep && doNotKeep && !keep->empty() && !doNotKeep->empty()) {
         // vectors must be sorted!
 
         TVector<TLogoBlobID>::const_iterator keepIt = keep->begin();
@@ -281,17 +281,17 @@ void DeduplicateGCKeepVectors(TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *
             keep->erase(keepIns, keepEnd);
         if (notKeepModified)
             doNotKeep->erase(notIns, notEnd);
-    } 
-} 
- 
+    }
+}
+
 TVector<TLogoBlobID>* TExecutorGCLogic::CreateVector(const TVector<TLogoBlobID>& source) {
-    if (!source.empty()) { 
+    if (!source.empty()) {
         return new TVector<TLogoBlobID>(source);
-    } else { 
-        return nullptr; 
-    } 
-} 
- 
+    } else {
+        return nullptr;
+    }
+}
+
 TExecutorGCLogic::TIntrospection TExecutorGCLogic::IntrospectStateSize() const {
      TIntrospection ret;
 
@@ -354,9 +354,9 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
     ++GcWaitFor;
 }
 
-void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) { 
+void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
     if (GcWaitFor > 0)
-        return; 
+        return;
 
     TVector<TLogoBlobID> keep;
     TVector<TLogoBlobID> notKeep;
@@ -368,9 +368,9 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
             keep.insert(keep.end(), it->second.Created.begin(), it->second.Created.end());
             notKeep.insert(notKeep.end(), it->second.Deleted.begin(), it->second.Deleted.end());
             collectBarrier = it->first;
-        } else 
-            break; 
-    } 
+        } else
+            break;
+    }
 
     // The first barrier of gen:0 (zero entry) is special
     TGCTime zeroTime{ generation, 0 };
@@ -443,26 +443,26 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                 SendCollectGarbageEntry(ctx, std::move(xpair.second.first), std::move(xpair.second.second), tabletStorageInfo->TabletID, channel, xpair.first, generation);
             }
         }
-    } 
-} 
- 
-void TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() { 
+    }
+}
+
+void TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() {
     if (--GcWaitFor || !CollectSent)
         return;
 
     auto it = CommittedDelta.upper_bound(CollectSent);
     if (it != CommittedDelta.begin()) {
-        CommittedDelta.erase(CommittedDelta.begin(), it); 
-    } 
+        CommittedDelta.erase(CommittedDelta.begin(), it);
+    }
 
-    CollectSent.Clear(); 
+    CollectSent.Clear();
     CommitedGcBarrier = KnownGcBarrier;
-} 
- 
-void TExecutorGCLogic::TChannelInfo::OnCollectGarbageFailure() { 
-    CollectSent.Clear(); 
+}
+
+void TExecutorGCLogic::TChannelInfo::OnCollectGarbageFailure() {
+    CollectSent.Clear();
     --GcWaitFor;
-} 
- 
-} 
-} 
+}
+
+}
+}

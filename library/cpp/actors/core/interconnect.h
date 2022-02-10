@@ -60,7 +60,7 @@ namespace NActors {
 
         // protobuf-parser ctor
         explicit TNodeLocation(const NActorsInterconnect::TNodeLocation& location);
- 
+
         // serialized protobuf ctor
         static constexpr struct TFromSerialized {} FromSerialized {};
         TNodeLocation(TFromSerialized, const TString& s);
@@ -114,7 +114,7 @@ namespace NActors {
         friend bool operator > (const TNodeLocation& x, const TNodeLocation& y) { return x.Compare(y) >  0; }
         friend bool operator >=(const TNodeLocation& x, const TNodeLocation& y) { return x.Compare(y) >= 0; }
     };
- 
+
     struct TEvInterconnect {
         enum EEv {
             EvForward = EventSpaceBegin(TEvents::ES_INTERCONNECT),
@@ -177,7 +177,7 @@ namespace NActors {
 
         struct TEvListNodes: public TEventLocal<TEvListNodes, EvListNodes> {
         };
- 
+
         struct TNodeInfo {
             ui32 NodeId;
             TString Address;
@@ -185,10 +185,10 @@ namespace NActors {
             TString ResolveHost;
             ui16 Port;
             TNodeLocation Location;
- 
-            TNodeInfo() = default; 
-            TNodeInfo(const TNodeInfo&) = default; 
-            TNodeInfo& operator =(const TNodeInfo&) = default; 
+
+            TNodeInfo() = default;
+            TNodeInfo(const TNodeInfo&) = default;
+            TNodeInfo& operator =(const TNodeInfo&) = default;
             TNodeInfo(ui32 nodeId,
                       const TString& address,
                       const TString& host,
@@ -203,12 +203,12 @@ namespace NActors {
                 , Location(location)
             {
             }
- 
+
             operator ui32() const {
                 return NodeId;
             }
         };
- 
+
         struct TEvNodesInfo: public TEventLocal<TEvNodesInfo, EvNodesInfo> {
             TVector<TNodeInfo> Nodes;
 
@@ -218,8 +218,8 @@ namespace NActors {
                         return &x;
                 }
                 return nullptr;
-            } 
-        }; 
+            }
+        };
 
         struct TEvDisconnect;
 
@@ -251,5 +251,5 @@ namespace NActors {
         struct TEvPoisonSession : TEventLocal<TEvPoisonSession, EvPoisonSession> {};
 
         struct TEvTerminate : TEventLocal<TEvTerminate, EvTerminate> {};
-    }; 
+    };
 }

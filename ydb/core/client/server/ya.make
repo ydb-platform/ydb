@@ -8,20 +8,20 @@ OWNER(
 
 SRCS(
     document_conversion.h
-    http_ping.cpp 
-    http_ping.h 
+    http_ping.cpp
+    http_ping.h
     msgbus_blobstorage_config.cpp
     msgbus_bsadm.cpp
-    msgbus_http_server.h 
-    msgbus_http_server.cpp 
+    msgbus_http_server.h
+    msgbus_http_server.cpp
     msgbus_server.cpp
     msgbus_server.h
     msgbus_server_cms.cpp
     msgbus_server_configdummy.cpp
     msgbus_server_console.cpp
-    msgbus_server_db.cpp 
-    msgbus_server_drain_node.cpp 
-    msgbus_server_fill_node.cpp 
+    msgbus_server_db.cpp
+    msgbus_server_drain_node.cpp
+    msgbus_server_fill_node.cpp
     msgbus_server_get.cpp
     msgbus_server_hive_create_tablet.cpp
     msgbus_server_keyvalue.cpp
@@ -32,7 +32,7 @@ SRCS(
     msgbus_server_pq_metarequest.h
     msgbus_server_pq_metarequest.cpp
     msgbus_server_pq_read_session_info.cpp
-    msgbus_server_resolve_node.cpp 
+    msgbus_server_resolve_node.cpp
     msgbus_server_ic_debug.cpp
     msgbus_server_load.cpp
     msgbus_server_local_enumerate_tablets.cpp
@@ -40,22 +40,22 @@ SRCS(
     msgbus_server_local_scheme_tx.cpp
     msgbus_server_node_registration.cpp
     msgbus_server_proxy.cpp
-    msgbus_server_proxy.h 
-    msgbus_server_request.cpp 
-    msgbus_server_request.h 
+    msgbus_server_proxy.h
+    msgbus_server_request.cpp
+    msgbus_server_request.h
     msgbus_server_s3_listing.cpp
     msgbus_server_scheme_initroot.cpp
-    msgbus_server_scheme_request.cpp 
+    msgbus_server_scheme_request.cpp
     msgbus_server_sqs.cpp
     msgbus_server_tablet_counters.cpp
-    msgbus_server_tablet_kill.cpp 
-    msgbus_server_tablet_state.cpp 
+    msgbus_server_tablet_kill.cpp
+    msgbus_server_tablet_state.cpp
     msgbus_server_test_shard_request.cpp
-    msgbus_server_tracer.cpp 
-    msgbus_server_tracer.h 
-    msgbus_server_tx_request.cpp 
+    msgbus_server_tracer.cpp
+    msgbus_server_tracer.h
+    msgbus_server_tx_request.cpp
     msgbus_server_types.cpp
-    msgbus_server_whoami.cpp 
+    msgbus_server_whoami.cpp
     msgbus_servicereq.h
     msgbus_tabletreq.h
     grpc_server.cpp

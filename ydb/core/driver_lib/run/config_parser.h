@@ -47,8 +47,8 @@ protected:
         NBus::TBusServerSessionConfig ProxyBusSessionConfig;
         TVector<ui64> ProxyBindToProxy;
         ui32 MonitoringPort;
-        TString MonitoringAddress; 
-        ui32 MonitoringThreads; 
+        TString MonitoringAddress;
+        ui32 MonitoringThreads;
         TString RestartsCountFile;
         bool StartTracingBusProxy;
         TString TracePath;

@@ -35,12 +35,12 @@ namespace NKikimr {
         static NTabletPipe::TClientConfig GetPipeClientConfig() {
             NTabletPipe::TClientConfig config;
             config.CheckAliveness = true;
-            config.RetryPolicy = { 
-                .RetryLimitCount = 3, 
-                .MinRetryTime = TDuration::MilliSeconds(10), 
-                .MaxRetryTime = TDuration::MilliSeconds(500), 
-                .BackoffMultiplier = 2 
-            }; 
+            config.RetryPolicy = {
+                .RetryLimitCount = 3,
+                .MinRetryTime = TDuration::MilliSeconds(10),
+                .MaxRetryTime = TDuration::MilliSeconds(500),
+                .BackoffMultiplier = 2
+            };
             return config;
         }
 

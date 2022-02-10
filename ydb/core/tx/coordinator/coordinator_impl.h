@@ -19,14 +19,14 @@
 #include <library/cpp/actors/core/hfunc.h>
 
 #include <util/generic/hash_set.h>
-#include <util/stream/file.h> 
+#include <util/stream/file.h>
 #include <util/stream/zlib.h>
- 
+
 #include <algorithm>
 
 namespace NKikimr {
-namespace NFlatTxCoordinator { 
- 
+namespace NFlatTxCoordinator {
+
 typedef ui64 TStepId;
 typedef ui64 TTabletId;
 typedef ui64 TTxId;
@@ -137,36 +137,36 @@ struct TMediatorConfirmations {
 
 IActor* CreateTxCoordinatorMediatorQueue(const TActorId &owner, ui64 coordinator, ui64 mediator, ui64 coordinatorGeneration);
 
-using NTabletFlatExecutor::TTabletExecutedFlat; 
+using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
-using NTabletFlatExecutor::TTransactionBase; 
-using NTabletFlatExecutor::TTransactionContext; 
- 
+using NTabletFlatExecutor::TTransactionBase;
+using NTabletFlatExecutor::TTransactionContext;
+
 //#define COORDINATOR_LOG_TO_FILE
 
 #ifdef COORDINATOR_LOG_TO_FILE
-#define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream) \ 
-do { \ 
-    ::NActors::NLog::TSettings *mSettings = (::NActors::NLog::TSettings*)((actorCtxOrSystem).LoggerSettings()); \ 
-    ::NActors::NLog::EPriority mPriority = (::NActors::NLog::EPriority)(priority); \ 
-    ::NActors::NLog::EComponent mComponent = (::NActors::NLog::EComponent)(component); \ 
-    if (mSettings && mSettings->Satisfies(mPriority, mComponent, sampleBy)) { \ 
-        TStringBuilder logStringBuilder; \ 
-        logStringBuilder << stream; \ 
+#define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream) \
+do { \
+    ::NActors::NLog::TSettings *mSettings = (::NActors::NLog::TSettings*)((actorCtxOrSystem).LoggerSettings()); \
+    ::NActors::NLog::EPriority mPriority = (::NActors::NLog::EPriority)(priority); \
+    ::NActors::NLog::EComponent mComponent = (::NActors::NLog::EComponent)(component); \
+    if (mSettings && mSettings->Satisfies(mPriority, mComponent, sampleBy)) { \
+        TStringBuilder logStringBuilder; \
+        logStringBuilder << stream; \
         Self->DebugLog << (TString)logStringBuilder << Endl; \
-    } \ 
-} while(0) \ 
-/**/ 
+    } \
+} while(0) \
+/**/
 #else
 #define FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream) \
     LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream)
 #endif
- 
-#define FLOG_LOG_S(actorCtxOrSystem, priority, component, stream) FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream) 
-#define FLOG_DEBUG_S(actorCtxOrSystem, component, stream)  FLOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, stream) 
- 
- 
-class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat { 
+
+#define FLOG_LOG_S(actorCtxOrSystem, priority, component, stream) FLOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, 0ull, stream)
+#define FLOG_DEBUG_S(actorCtxOrSystem, component, stream)  FLOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, stream)
+
+
+class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat {
 
     struct TEvPrivate {
         enum EEv {
@@ -213,7 +213,7 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
 
         TAutoPtr<TQ, TQ::TPtrCleanDestructor> Unsorted;
 
-        TSlot& LowSlot(TStepId step) { 
+        TSlot& LowSlot(TStepId step) {
             TMap<TStepId, TSlot>::iterator it = Low.find(step);
             if (it != Low.end())
                 return it->second;
@@ -230,13 +230,13 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
     struct TTxInit;
     struct TTxRestoreTransactions;
     struct TTxConfigure;
-    struct TTxSchema; 
-    struct TTxUpgrade; 
+    struct TTxSchema;
+    struct TTxUpgrade;
     struct TTxPlanStep;
     struct TTxRestartMediatorQueue;
     struct TTxMediatorConfirmations;
-    struct TTxConsistencyCheck; 
-    struct TTxMonitoring; 
+    struct TTxConsistencyCheck;
+    struct TTxMonitoring;
     struct TTxStopGuard;
     struct TTxAcquireReadStep;
 
@@ -289,16 +289,16 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
         {}
     };
 
-    struct TTransaction { 
-        TStepId PlanOnStep; 
+    struct TTransaction {
+        TStepId PlanOnStep;
         THashSet<TTabletId> AffectedSet;
         THashMap<TTabletId, THashSet<TTabletId>> UnconfirmedAffectedSet;
- 
-        TTransaction() 
-            : PlanOnStep(0) 
-        {} 
-    }; 
- 
+
+        TTransaction()
+            : PlanOnStep(0)
+        {}
+    };
+
     struct TAcquireReadStepRequest {
         TActorId Sender;
         ui64 Cookie;
@@ -327,41 +327,41 @@ class TTxCoordinator : public TActor<TTxCoordinator>, public TTabletExecutedFlat
     };
 
 public:
-    struct Schema : NIceDb::Schema { 
+    struct Schema : NIceDb::Schema {
         static const ui32 CurrentVersion;
 
-        struct Transaction : Table<0> { 
+        struct Transaction : Table<0> {
             struct ID : Column<0, NScheme::NTypeIds::Uint64> {}; // PK
             struct Plan : Column<1, NScheme::NTypeIds::Uint64> {};
             struct AffectedSet : Column<2, NScheme::NTypeIds::String> { using Type = TVector<TTabletId>; };
 
-            using TKey = TableKey<ID>; 
-            using TColumns = TableColumns<ID, Plan, AffectedSet>; 
+            using TKey = TableKey<ID>;
+            using TColumns = TableColumns<ID, Plan, AffectedSet>;
         };
 
-        struct AffectedSet : Table<4> { 
+        struct AffectedSet : Table<4> {
             struct MediatorID : Column<1, NScheme::NTypeIds::Uint64> {};
-            struct TransactionID : Column<2, Transaction::ID::ColumnType> {}; 
+            struct TransactionID : Column<2, Transaction::ID::ColumnType> {};
             struct DataShardID : Column<3, NScheme::NTypeIds::Uint64> {};
- 
-            using TKey = TableKey<MediatorID, TransactionID, DataShardID>; 
-            using TColumns = TableColumns<MediatorID, TransactionID, DataShardID>; 
+
+            using TKey = TableKey<MediatorID, TransactionID, DataShardID>;
+            using TColumns = TableColumns<MediatorID, TransactionID, DataShardID>;
         };
 
-        struct State : Table<2> { 
-            enum EKeyType { 
-                KeyLastPlanned, 
-                DatabaseVersion, 
+        struct State : Table<2> {
+            enum EKeyType {
+                KeyLastPlanned,
+                DatabaseVersion,
                 AcquireReadStepLast,
-            }; 
- 
+            };
+
             struct StateKey : Column<0, NScheme::NTypeIds::Uint64> { using Type = EKeyType; }; // PK
             struct StateValue : Column<1, NScheme::NTypeIds::Uint64> {};
- 
-            using TKey = TableKey<StateKey>; 
-            using TColumns = TableColumns<StateKey, StateValue>; 
+
+            using TKey = TableKey<StateKey>;
+            using TColumns = TableColumns<StateKey, StateValue>;
         };
- 
+
         struct DomainConfiguration : Table<5> {
             struct Version : Column<1, NScheme::NTypeIds::Uint64> {};
             struct Mediators : Column<2, NScheme::NTypeIds::String> { using Type = TVector<TTabletId>; };
@@ -374,7 +374,7 @@ public:
 
         using TTables = SchemaTables<Transaction, AffectedSet, State, DomainConfiguration>;
     };
- 
+
 private:
     struct TCoordinatorMonCounters {
         TIntrusivePtr<NMonitoring::TDynamicCounters> Coordinator;
@@ -414,17 +414,17 @@ private:
     TMediatorsIndex Mediators;
 
     typedef THashMap<TTxId, TTransaction> TTransactions;
-    TTransactions Transactions; 
- 
+    TTransactions Transactions;
+
     bool Stopping = false;
 
 #ifdef COORDINATOR_LOG_TO_FILE
-    // HACK 
+    // HACK
     TString DebugName;
     TFixedBufferFileOutput DebugLogFile;
     TZLibCompress DebugLog;
 #endif
- 
+
     void Die(const TActorContext &ctx) override {
         for (TMediatorsIndex::iterator it = Mediators.begin(), end = Mediators.end(); it != end; ++it) {
             TMediator &x = it->second;
@@ -475,8 +475,8 @@ private:
     void Handle(TEvTxCoordinator::TEvCoordinatorConfirmPlan::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorContext &ctx);
 
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx); 
- 
+    void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
+
     void DoConfiguration(const TEvSubDomain::TEvConfigure &ev, const TActorContext &ctx, const TActorId &ackTo = TActorId());
 
     void Sync(ui64 mediator, const TActorContext &ctx);
@@ -488,7 +488,7 @@ private:
     bool RestoreMediatorInfo(TTabletId mediatorId, TVector<TAutoPtr<TMediatorStep>> &planned, TTransactionContext &txc, /*TKeyBuilder &kb, */THashMap<TTxId,TVector<TTabletId>> &pushToAffected) const;
 
     void TryInitMonCounters(const TActorContext &ctx);
-    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override; 
+    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;
 
     void OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) override;
     void OnStopGuardStarting(const TActorContext &ctx);
@@ -533,7 +533,7 @@ public:
                   HFunc(TEvents::TEvPoisonPill, Handle)
                   IgnoreFunc(TEvTabletPipe::TEvServerConnected)
                   IgnoreFunc(TEvTabletPipe::TEvServerDisconnected))
- 
+
    STFUNC_TABLET_IGN(StateBroken,)
 };
 

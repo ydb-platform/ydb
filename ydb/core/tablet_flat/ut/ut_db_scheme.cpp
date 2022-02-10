@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/tablet_flat/flat_dbase_apply.h>
- 
+
 namespace NKikimr {
 namespace NTable {
 
@@ -134,35 +134,35 @@ Y_UNIT_TEST_SUITE(TScheme) {
         const TModel model;
 
         TScheme origin;
- 
+
         TSchemeModifier(origin).Apply(*model.Build().Flush());
- 
+
         model.Check(origin);
- 
+
         TScheme restored;
- 
+
         TSchemeModifier(restored).Apply(*origin.GetSnapshot());
- 
+
         model.Check(restored);
 
         UNIT_ASSERT(!TCompare().Do(TModel::TableId, origin, {}));
         UNIT_ASSERT(TCompare().Do(TModel::TableId, origin, origin));
         UNIT_ASSERT(TCompare().Do(TModel::TableId, origin, restored));
-    } 
- 
+    }
+
     Y_UNIT_TEST(Delta)
     {
         const TModel model;
- 
+
         TAlter delta = model.Build();
- 
+
         TScheme restored;
- 
+
         TSchemeModifier(restored).Apply(*delta.Flush());
- 
+
         model.Check(restored);
-    } 
- 
+    }
+
     Y_UNIT_TEST(Policy)
     {
         auto delta = TModel().Build();
@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(TScheme) {
             UNIT_ASSERT(false);
         }
     }
-} 
- 
-} 
-} 
+}
+
+}
+}

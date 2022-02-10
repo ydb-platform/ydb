@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/mkql_proto) 
+UNITTEST_FOR(ydb/library/mkql_proto)
 
 OWNER(g:kikimr)
 

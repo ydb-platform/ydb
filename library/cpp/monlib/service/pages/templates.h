@@ -123,32 +123,32 @@ namespace NMonitoring {
         {
             Str << "<" << tag;
 
-            if (!cls.empty()) { 
+            if (!cls.empty()) {
                 Str << " class=\"" << cls << "\"";
             }
 
-            if (!for0.empty()) { 
+            if (!for0.empty()) {
                 Str << " for=\"" << for0 << "\"";
             }
 
-            if (!id.empty()) { 
+            if (!id.empty()) {
                 Str << "id=\"" << id << "\"";
             }
             Str << ">";
         }
 
         TTag(IOutputStream& str, std::initializer_list<std::pair<TStringBuf, TStringBuf>> attributes)
-            : Str(str) 
-        { 
-            Str << "<" << tag; 
-            for (const std::pair<TStringBuf, TStringBuf>& attr : attributes) { 
-                if (!attr.second.empty()) { 
-                    Str << ' ' << attr.first << "=\"" << attr.second << "\""; 
-                } 
-            } 
-            Str << ">"; 
-        } 
- 
+            : Str(str)
+        {
+            Str << "<" << tag;
+            for (const std::pair<TStringBuf, TStringBuf>& attr : attributes) {
+                if (!attr.second.empty()) {
+                    Str << ' ' << attr.first << "=\"" << attr.second << "\"";
+                }
+            }
+            Str << ">";
+        }
+
         ~TTag() {
             try {
                 Str << "</" << tag << ">";

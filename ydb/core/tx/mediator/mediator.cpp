@@ -10,7 +10,7 @@ namespace NTxMediator {
         : Step(record.GetStep())
         , PrevStep(record.GetPrevStep())
     {
-        const std::size_t txsize = record.TransactionsSize(); 
+        const std::size_t txsize = record.TransactionsSize();
 
         // todo: save body as-is, without any processing
         // and defer parsing and per-tablet mapping for latter stage, when we could merge all selected steps
@@ -19,16 +19,16 @@ namespace NTxMediator {
         Transactions.reserve(txsize);
         TabletsToTransaction.reserve(record.GetTotalTxAffectedEntries());
 
-        for (std::size_t i = 0; i != txsize; ++i) { 
+        for (std::size_t i = 0; i != txsize; ++i) {
             const NKikimrTx::TCoordinatorTransaction &c = record.GetTransactions(i);
 
-            Transactions.emplace_back( 
+            Transactions.emplace_back(
                     c.HasModerator() ? c.GetModerator() : 0,
                     c.GetTxId()
-                ); 
+                );
 
             for (ui32 tabi = 0, tabe = c.GetAffectedSet().size(); tabi != tabe; ++tabi)
-                TabletsToTransaction.emplace_back(c.GetAffectedSet(tabi), i); 
+                TabletsToTransaction.emplace_back(c.GetAffectedSet(tabi), i);
         }
     }
 

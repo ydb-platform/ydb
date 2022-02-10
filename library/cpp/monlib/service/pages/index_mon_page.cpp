@@ -136,16 +136,16 @@ void TIndexMonPage::OutputBody(IMonHttpRequest& req) {
     out << "<div>\n"
         << "</body>\n";
 }
- 
+
 void TIndexMonPage::SortPages() {
-    TGuard<TMutex> g(Mtx); 
-    std::sort(Pages.begin(), Pages.end(), [](const TMonPagePtr& a, const TMonPagePtr& b) { 
+    TGuard<TMutex> g(Mtx);
+    std::sort(Pages.begin(), Pages.end(), [](const TMonPagePtr& a, const TMonPagePtr& b) {
         return AsciiCompareIgnoreCase(a->GetTitle(), b->GetTitle()) < 0;
-    }); 
-} 
- 
-void TIndexMonPage::ClearPages() { 
-    TGuard<TMutex> g(Mtx); 
-    Pages.clear(); 
-    PagesByPath.clear(); 
-} 
+    });
+}
+
+void TIndexMonPage::ClearPages() {
+    TGuard<TMutex> g(Mtx);
+    Pages.clear();
+    PagesByPath.clear();
+}

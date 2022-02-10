@@ -4,17 +4,17 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <util/random/random.h> 
+#include <util/random/random.h>
 #include <util/system/sanitizers.h>
 #include <array>
- 
+
 namespace NYql {
 using namespace NKikimr::NMiniKQL;
 
     namespace NUdf {
         extern NUdf::TUniquePtr<NUdf::IUdfModule> CreateStatModule();
     }
- 
+
     Y_UNIT_TEST_SUITE(TUDFStatTest) {
         Y_UNIT_TEST(SimplePercentile) {
             auto mutableFunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
@@ -28,27 +28,27 @@ using namespace NKikimr::NMiniKQL;
             auto udfTDigest_Create = pgmBuilder.Udf("Stat.TDigest_Create");
             auto udfTDigest_AddValue = pgmBuilder.Udf("Stat.TDigest_AddValue");
             auto udfTDigest_GetPercentile = pgmBuilder.Udf("Stat.TDigest_GetPercentile");
- 
+
             TRuntimeNode pgmDigest;
             {
                 auto param1 = pgmBuilder.NewDataLiteral<double>(0.0);
                 TVector<TRuntimeNode> params = {param1};
                 pgmDigest = pgmBuilder.Apply(udfTDigest_Create, params);
             }
- 
+
             for (int n = 1; n < 10; n += 1) {
                 auto param2 = pgmBuilder.NewDataLiteral((double)n);
                 TVector<TRuntimeNode> params = {pgmDigest, param2};
                 pgmDigest = pgmBuilder.Apply(udfTDigest_AddValue, params);
             }
- 
+
             TRuntimeNode pgmReturn;
             {
                 auto param2 = pgmBuilder.NewDataLiteral<double>(0.9);
                 TVector<TRuntimeNode> params = {pgmDigest, param2};
                 pgmReturn = pgmBuilder.Apply(udfTDigest_GetPercentile, params);
             }
- 
+
             TExploringNodeVisitor explorer;
             explorer.Walk(pgmReturn.GetNode(), env);
             TComputationPatternOpts opts(alloc.Ref(), env, GetBuiltinFactory(), mutableFunctionRegistry.Get(),
@@ -78,21 +78,21 @@ using namespace NKikimr::NMiniKQL;
                 TVector<TRuntimeNode> params = {param1};
                 pgmDigest = pgmBuilder.Apply(udfTDigest_Create, params);
             }
- 
+
             TVector<double> vals = {800, 20, 150};
             for (auto val : vals) {
                 auto param2 = pgmBuilder.NewDataLiteral(val);
                 TVector<TRuntimeNode> params = {pgmDigest, param2};
                 pgmDigest = pgmBuilder.Apply(udfTDigest_AddValue, params);
             }
- 
+
             TRuntimeNode pgmReturn;
             {
                 auto param2 = pgmBuilder.NewDataLiteral<double>(0.5);
                 TVector<TRuntimeNode> params = {pgmDigest, param2};
                 pgmReturn = pgmBuilder.Apply(udfTDigest_GetPercentile, params);
             }
- 
+
             TExploringNodeVisitor explorer;
             explorer.Walk(pgmReturn.GetNode(), env);
             TComputationPatternOpts opts(alloc.Ref(), env, GetBuiltinFactory(), mutableFunctionRegistry.Get(),
@@ -103,7 +103,7 @@ using namespace NKikimr::NMiniKQL;
             Cerr << value.Get<double>() << Endl;
             //~ UNIT_ASSERT_DOUBLES_EQUAL(value.Get<double>(), 9.0, 0.001);
         }
- 
+
         Y_UNIT_TEST(SerializedPercentile) {
             auto mutableFunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
             auto randomProvider = CreateDeterministicRandomProvider(1);
@@ -200,7 +200,7 @@ using namespace NKikimr::NMiniKQL;
                 }
                 pgmSerializedDataVector.push_back(pgmSerializedData);
             }
- 
+
             TRuntimeNode pgmDigest;
             for (size_t i = 0; i < pgmSerializedDataVector.size(); ++i) {
                 TRuntimeNode pgmDigest2;
@@ -215,14 +215,14 @@ using namespace NKikimr::NMiniKQL;
                     pgmDigest = pgmBuilder.Apply(udfTDigest_Merge, params);
                 }
             }
- 
+
             TRuntimeNode pgmReturn;
             {
                 auto param2 = pgmBuilder.NewDataLiteral<double>(0.9);
                 TVector<TRuntimeNode> params = {pgmDigest, param2};
                 pgmReturn = pgmBuilder.Apply(udfTDigest_GetPercentile, params);
             }
- 
+
             TExploringNodeVisitor explorer;
             explorer.Walk(pgmReturn.GetNode(), env);
             TComputationPatternOpts opts(alloc.Ref(), env, GetBuiltinFactory(), mutableFunctionRegistry.Get(),
@@ -232,11 +232,11 @@ using namespace NKikimr::NMiniKQL;
             auto value = graph->GetValue();
             UNIT_ASSERT_DOUBLES_EQUAL(value.Get<double>(), 8.95, 0.001);
         }
- 
+
         static double GetParetoRandomNumber(double a) {
             return 1 / pow(RandomNumber<double>(), double(1) / a);
         }
- 
+
         Y_UNIT_TEST(BigPercentile) {
             auto mutableFunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
             auto randomProvider = CreateDeterministicRandomProvider(1);
@@ -260,7 +260,7 @@ using namespace NKikimr::NMiniKQL;
                 double randomNumber = GetParetoRandomNumber(10);
                 randomNumbers1.push_back(randomNumber);
                 randomNumbers2.push_back(pgmBuilder.NewDataLiteral(randomNumber));
-            } 
+            }
             TRuntimeNode bigList = pgmBuilder.AsList(randomNumbers2);
             auto pgmDigest =
                 pgmBuilder.Fold1(bigList,
@@ -283,7 +283,7 @@ using namespace NKikimr::NMiniKQL;
                     args[1] = param2;
                     return pgmBuilder.Apply(udfTDigest_GetPercentile, args);
                 });
- 
+
             TExploringNodeVisitor explorer;
             explorer.Walk(pgmReturn.GetNode(), env);
             TComputationPatternOpts opts(alloc.Ref(), env, GetBuiltinFactory(), mutableFunctionRegistry.Get(),
@@ -300,7 +300,7 @@ using namespace NKikimr::NMiniKQL;
             double p = (index - 0.5) / double(randomNumbers1.size());
             UNIT_ASSERT_DOUBLES_EQUAL(p, PERCENTILE, THRESHOLD);
         }
- 
+
         Y_UNIT_TEST(CentroidPrecision) {
             auto mutableFunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
             auto randomProvider = CreateDeterministicRandomProvider(1);
@@ -347,7 +347,7 @@ using namespace NKikimr::NMiniKQL;
                     args[1] = param2;
                     return pgmBuilder.Apply(udfTDigest_GetPercentile, args);
                 });
- 
+
             TExploringNodeVisitor explorer;
             explorer.Walk(pgmReturn.GetNode(), env);
             TComputationPatternOpts opts(alloc.Ref(), env, GetBuiltinFactory(), mutableFunctionRegistry.Get(),
@@ -359,5 +359,5 @@ using namespace NKikimr::NMiniKQL;
             double digestValue = value.Get<double>();
             UNIT_ASSERT_EQUAL(digestValue, majorityValue);
         }
-    } 
-} 
+    }
+}

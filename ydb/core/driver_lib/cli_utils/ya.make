@@ -8,21 +8,21 @@ SRCS(
     cli_actorsystem_perftest.cpp
     cli_cmd_config.h
     cli_cmd_config.cpp
-    cli_cmds.h 
-    cli_cmds_admin.cpp 
-    cli_cmds_bs.cpp 
+    cli_cmds.h
+    cli_cmds_admin.cpp
+    cli_cmds_bs.cpp
     cli_cmds_cms.cpp
     cli_cmds_config.cpp
     cli_cmds_console.cpp
-    cli_cmds_debug.cpp 
-    cli_cmds_disk.cpp 
+    cli_cmds_debug.cpp
+    cli_cmds_disk.cpp
     cli_cmds_genconfig.cpp
     cli_cmds_get.cpp
-    cli_cmds_group.cpp 
-    cli_cmds_node.cpp 
-    cli_cmds_root.cpp 
-    cli_cmds_server.cpp 
-    cli_cmds_tablet.cpp 
+    cli_cmds_group.cpp
+    cli_cmds_node.cpp
+    cli_cmds_root.cpp
+    cli_cmds_server.cpp
+    cli_cmds_tablet.cpp
     cli_cmds_tenant.cpp
     cli_fakeinitshard.cpp
     cli_keyvalue.cpp

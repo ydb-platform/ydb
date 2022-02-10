@@ -1,4 +1,4 @@
-#include "pipe_tracker.h" 
+#include "pipe_tracker.h"
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -78,26 +78,26 @@ Y_UNIT_TEST_SUITE(TPipeTrackerTest) {
         UNIT_ASSERT(tracker.IsTxAlive(txid1));
         UNIT_ASSERT(tracker.IsTxAlive(txid2));
         UNIT_ASSERT(tracker.FindTx(tablet1).size() == 2);
-        UNIT_ASSERT(tracker.FindTx(tablet1).count(txid1) == 1); 
-        UNIT_ASSERT(tracker.FindTx(tablet1).count(txid2) == 1); 
+        UNIT_ASSERT(tracker.FindTx(tablet1).count(txid1) == 1);
+        UNIT_ASSERT(tracker.FindTx(tablet1).count(txid2) == 1);
         UNIT_ASSERT(!tracker.DetachTablet(txid1, tablet1));
         UNIT_ASSERT(!tracker.IsTxAlive(txid1));
         UNIT_ASSERT(tracker.IsTxAlive(txid2));
         UNIT_ASSERT(tracker.FindTx(tablet1).size() == 1);
-        UNIT_ASSERT(tracker.FindTx(tablet1).count(txid2) == 1); 
+        UNIT_ASSERT(tracker.FindTx(tablet1).count(txid2) == 1);
         tracker.AttachTablet(txid3, tablet1);
         UNIT_ASSERT(!tracker.IsTxAlive(txid1));
         UNIT_ASSERT(tracker.IsTxAlive(txid2));
         UNIT_ASSERT(tracker.IsTxAlive(txid3));
         UNIT_ASSERT(tracker.FindTx(tablet1).size() == 2);
-        UNIT_ASSERT(tracker.FindTx(tablet1).count(txid2) == 1); 
-        UNIT_ASSERT(tracker.FindTx(tablet1).count(txid3) == 1); 
+        UNIT_ASSERT(tracker.FindTx(tablet1).count(txid2) == 1);
+        UNIT_ASSERT(tracker.FindTx(tablet1).count(txid3) == 1);
         UNIT_ASSERT(!tracker.DetachTablet(txid3, tablet1));
         UNIT_ASSERT(!tracker.IsTxAlive(txid1));
         UNIT_ASSERT(tracker.IsTxAlive(txid2));
         UNIT_ASSERT(!tracker.IsTxAlive(txid3));
         UNIT_ASSERT(tracker.FindTx(tablet1).size() == 1);
-        UNIT_ASSERT(tracker.FindTx(tablet1).count(txid2) == 1); 
+        UNIT_ASSERT(tracker.FindTx(tablet1).count(txid2) == 1);
         UNIT_ASSERT(tracker.DetachTablet(txid2, tablet1));
         UNIT_ASSERT(!tracker.IsTxAlive(txid1));
         UNIT_ASSERT(!tracker.IsTxAlive(txid2));

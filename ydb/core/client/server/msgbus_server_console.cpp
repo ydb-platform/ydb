@@ -1,5 +1,5 @@
-#include "msgbus_server_request.h" 
-#include "msgbus_securereq.h" 
+#include "msgbus_server_request.h"
+#include "msgbus_securereq.h"
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -16,10 +16,10 @@ using namespace NConsole;
 
 namespace {
 
-class TConsoleRequestActor : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TConsoleRequestActor>> 
+class TConsoleRequestActor : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TConsoleRequestActor>>
 {
     using TActorBase = TActorBootstrapped<TConsoleRequestActor>;
-    using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TConsoleRequestActor>>; 
+    using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TConsoleRequestActor>>;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -27,11 +27,11 @@ public:
     }
 
     TConsoleRequestActor(NKikimrClient::TConsoleRequest &request, NMsgBusProxy::TBusMessageContext &msg)
-        : TBase(msg) 
+        : TBase(msg)
         , Request(request)
     {
-        TBase::SetSecurityToken(request.GetSecurityToken()); 
-        TBase::SetRequireAdminAccess(true); 
+        TBase::SetSecurityToken(request.GetSecurityToken());
+        TBase::SetRequireAdminAccess(true);
     }
 
     void Bootstrap(const TActorContext &ctx)
@@ -57,14 +57,14 @@ public:
             StateStorageGroup = dinfo->GetDefaultStateStorageGroup(domain->DomainUid);
         }
 
-        SendRequest(ctx); 
-        TBase::Become(&TConsoleRequestActor::MainState); 
+        SendRequest(ctx);
+        TBase::Become(&TConsoleRequestActor::MainState);
     }
 
     void SendRequest(const TActorContext &ctx)
     {
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = {.RetryLimitCount = 10}; 
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeConsoleID(StateStorageGroup), pipeConfig);
         ConsolePipe = ctx.RegisterWithSameMailbox(pipe);
 
@@ -76,7 +76,7 @@ public:
         if (Request.HasCreateTenantRequest()) {
             auto request = MakeHolder<TEvConsole::TEvCreateTenantRequest>();
             request->Record.CopyFrom(Request.GetCreateTenantRequest());
-            request->Record.SetUserToken(TBase::GetSerializedToken()); 
+            request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetConfigRequest()) {
             auto request = MakeHolder<TEvConsole::TEvGetConfigRequest>();
@@ -85,22 +85,22 @@ public:
         } else if (Request.HasGetTenantStatusRequest()) {
             auto request = MakeHolder<TEvConsole::TEvGetTenantStatusRequest>();
             request->Record.CopyFrom(Request.GetGetTenantStatusRequest());
-            request->Record.SetUserToken(TBase::GetSerializedToken()); 
+            request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasAlterTenantRequest()) {
             auto request = MakeHolder<TEvConsole::TEvAlterTenantRequest>();
             request->Record.CopyFrom(Request.GetAlterTenantRequest());
-            request->Record.SetUserToken(TBase::GetSerializedToken()); 
+            request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasListTenantsRequest()) {
             auto request = MakeHolder<TEvConsole::TEvListTenantsRequest>();
             request->Record.CopyFrom(Request.GetListTenantsRequest());
-            request->Record.SetUserToken(TBase::GetSerializedToken()); 
+            request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasRemoveTenantRequest()) {
             auto request = MakeHolder<TEvConsole::TEvRemoveTenantRequest>();
             request->Record.CopyFrom(Request.GetRemoveTenantRequest());
-            request->Record.SetUserToken(TBase::GetSerializedToken()); 
+            request->Record.SetUserToken(TBase::GetSerializedToken());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasSetConfigRequest()) {
             auto request = MakeHolder<TEvConsole::TEvSetConfigRequest>();
@@ -291,7 +291,7 @@ public:
     void Die(const TActorContext &ctx)
     {
         NTabletPipe::CloseClient(ctx, ConsolePipe);
-        TBase::Die(ctx); 
+        TBase::Die(ctx);
     }
 
     void SendReplyAndDie(const TActorContext &ctx)

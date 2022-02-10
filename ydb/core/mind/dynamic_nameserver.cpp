@@ -25,11 +25,11 @@ void TDynamicNodeResolverBase::Bootstrap(const TActorContext &ctx)
         return;
     }
 
-    NTabletPipe::TClientRetryPolicy retryPolicy = { 
-        .RetryLimitCount = 12, 
-        .MinRetryTime = TDuration::MilliSeconds(50), 
-        .MaxRetryTime = TDuration::Seconds(2) 
-    }; 
+    NTabletPipe::TClientRetryPolicy retryPolicy = {
+        .RetryLimitCount = 12,
+        .MinRetryTime = TDuration::MilliSeconds(50),
+        .MaxRetryTime = TDuration::Seconds(2)
+    };
 
     ui32 group = dinfo->GetDefaultStateStorageGroup(domain);
     auto pipe = NTabletPipe::CreateClient(ctx.SelfID, MakeNodeBrokerID(group), NTabletPipe::TClientConfig(retryPolicy));

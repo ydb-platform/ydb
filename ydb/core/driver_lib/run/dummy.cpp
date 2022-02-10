@@ -53,11 +53,11 @@ TAutoPtr<NKikimrConfig::TChannelProfileConfig> DummyChannelProfileConfig() {
 
     return ret;
 }
- 
-TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig() { 
-    TAutoPtr<NKikimrConfig::TAllocatorConfig> ret(new NKikimrConfig::TAllocatorConfig()); 
- 
-    ret->MutableParam()->insert({"EnableDefrag", "false"}); 
- 
-    return ret; 
-} 
+
+TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig() {
+    TAutoPtr<NKikimrConfig::TAllocatorConfig> ret(new NKikimrConfig::TAllocatorConfig());
+
+    ret->MutableParam()->insert({"EnableDefrag", "false"});
+
+    return ret;
+}

@@ -6,10 +6,10 @@ OWNER(
 )
 
 SRCS(
-    grpc_endpoint_publish_actor.cpp 
+    grpc_endpoint_publish_actor.cpp
     grpc_helper.cpp
     grpc_mon.cpp
-    grpc_publisher_service_actor.cpp 
+    grpc_publisher_service_actor.cpp
     grpc_request_proxy.cpp
     local_rate_limiter.cpp
     operation_helpers.cpp
@@ -50,13 +50,13 @@ SRCS(
     rpc_kh_snapshots.cpp
     rpc_kqp_base.cpp
     rpc_list_operations.cpp
-    rpc_login.cpp 
+    rpc_login.cpp
     rpc_load_rows.cpp
     rpc_log_store.cpp
     rpc_long_tx.cpp
     rpc_make_directory.cpp
     rpc_modify_permissions.cpp
-    rpc_monitoring.cpp 
+    rpc_monitoring.cpp
     rpc_prepare_data_query.cpp
     rpc_rate_limiter_api.cpp
     rpc_read_columns.cpp
@@ -78,7 +78,7 @@ SRCS(
 PEERDIR(
     contrib/libs/xxhash
     library/cpp/cgiparam
-    library/cpp/digest/old_crc 
+    library/cpp/digest/old_crc
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/control

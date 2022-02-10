@@ -37,7 +37,7 @@ private:
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->GetRecord(); 
+        const auto& record = ev->Get()->GetRecord();
         const auto status = record.GetStatus();
         if (record.HasReason()) {
             auto issue = NYql::TIssue(record.GetReason());

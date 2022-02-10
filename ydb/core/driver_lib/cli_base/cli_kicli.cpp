@@ -59,11 +59,11 @@ void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBus
 }
 
 template <>
-int OnMessageBus(const TClientCommand::TConfig& config, const NMsgBusProxy::TBusResponse& response) { 
+int OnMessageBus(const TClientCommand::TConfig& config, const NMsgBusProxy::TBusResponse& response) {
     const NKikimrClient::TResponse& resp(response.Record);
     if (resp.HasExecutionEngineEvaluatedResponse()) {
         NClient::TValue value = NClient::TValue::Create(resp.GetExecutionEngineEvaluatedResponse().GetValue(), resp.GetExecutionEngineEvaluatedResponse().GetType());
-        Cout << value.GetValueText<NClient::TFormatJSON>({config.JsonUi64AsText, config.JsonBinaryAsBase64}); 
+        Cout << value.GetValueText<NClient::TFormatJSON>({config.JsonUi64AsText, config.JsonBinaryAsBase64});
     }
     return 0;
 }

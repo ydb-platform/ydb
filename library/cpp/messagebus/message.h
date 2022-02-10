@@ -56,12 +56,12 @@ namespace NBus {
         void BeginWork() {
             SetInWork(true);
         }
- 
+
         // for internal use only
         void EndWork() {
             SetInWork(false);
         }
- 
+
         TBusIdentity();
         ~TBusIdentity();
 

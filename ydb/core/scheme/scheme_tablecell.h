@@ -211,24 +211,24 @@ inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeCl
 template<class TTypeClass>
 inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt_a, const ui32 cnt_b) {
     Y_VERIFY_DEBUG(cnt_b <= cnt_a);
-    ui32 i = 0; 
-    for (; i < cnt_b; ++i) { 
-        int cmpRes = CompareTypedCells(a[i], b[i], type[i]); 
-        if (cmpRes != 0) 
-            return cmpRes; 
-    } 
-    for (; i < cnt_a; ++i) { 
-        if (!a[i].IsNull()) 
-            return 1; 
-    } 
-    return 0; 
-} 
+    ui32 i = 0;
+    for (; i < cnt_b; ++i) {
+        int cmpRes = CompareTypedCells(a[i], b[i], type[i]);
+        if (cmpRes != 0)
+            return cmpRes;
+    }
+    for (; i < cnt_a; ++i) {
+        if (!a[i].IsNull())
+            return 1;
+    }
+    return 0;
+}
 
 // TODO: use NYql ops when TCell and TUnboxedValuePod had merged
 inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) {
     if (cell.IsNull())
         return 0;
- 
+
     const NYql::NProto::TypeIds yqlType = static_cast<NYql::NProto::TypeIds>(type);
     switch (yqlType) {
     case NYql::NProto::TypeIds::Bool:

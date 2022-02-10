@@ -284,24 +284,24 @@ public:
     NLWTrace::TOrbit Orbit;
 };
 
-template<typename T> 
+template<typename T>
 class TTransactionBase : public ITransaction {
-protected: 
-    typedef T TSelf; 
-    typedef TTransactionBase<TSelf> TBase; 
- 
-    TSelf * const Self; 
-public: 
-    TTransactionBase(T *self) 
-        : Self(self) 
-    {} 
+protected:
+    typedef T TSelf;
+    typedef TTransactionBase<TSelf> TBase;
+
+    TSelf * const Self;
+public:
+    TTransactionBase(T *self)
+        : Self(self)
+    {}
 
     TTransactionBase(T *self, NLWTrace::TOrbit &&orbit)
         : ITransaction(std::move(orbit))
         , Self(self)
     { }
-}; 
- 
+};
+
 struct TExecutorStats {
     bool IsActive = false;
     bool IsFollower = false;
@@ -434,7 +434,7 @@ namespace NFlatExecutorSetup {
 
         TTabletStorageInfo* Info() const { return TabletInfo.Get(); }
         ui64 TabletID() const { return TabletInfo->TabletID; }
-        TTabletTypes::EType TabletType() const { return TabletInfo->TabletType; } 
+        TTabletTypes::EType TabletType() const { return TabletInfo->TabletType; }
         const TActorId& Tablet() const { return TabletActorID; }
         const TActorId& ExecutorID() const { return ExecutorActorID; }
         const TActorId& LauncherID() const { return LauncherActorID; }
@@ -522,7 +522,7 @@ namespace NFlatExecutorSetup {
 
         virtual void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr&) const = 0;
         virtual void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr&) const = 0;
-        virtual void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) const = 0; 
+        virtual void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) const = 0;
         virtual void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) = 0;
         virtual void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr&) = 0;
 

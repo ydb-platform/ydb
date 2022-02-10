@@ -1,6 +1,6 @@
 OWNER(g:kikimr)
- 
-RECURSE( 
+
+RECURSE(
     grpc
     protos
-) 
+)

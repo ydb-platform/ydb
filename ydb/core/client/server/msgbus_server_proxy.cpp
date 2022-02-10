@@ -1,7 +1,7 @@
 #include "msgbus_server.h"
-#include "msgbus_server_request.h" 
-#include "msgbus_server_proxy.h" 
-#include "msgbus_securereq.h" 
+#include "msgbus_server_request.h"
+#include "msgbus_server_proxy.h"
+#include "msgbus_securereq.h"
 
 #include <library/cpp/actors/core/hfunc.h>
 #include <ydb/core/base/appdata.h>
@@ -19,21 +19,21 @@
 namespace NKikimr {
 namespace NMsgBusProxy {
 
-template <typename ResponseType> 
-class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerFlatDescribeRequest<ResponseType>>> { 
-    using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerFlatDescribeRequest<ResponseType>>>; 
-    THolder<TBusSchemeDescribe> Request; 
+template <typename ResponseType>
+class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerFlatDescribeRequest<ResponseType>>> {
+    using TBase = TMessageBusSecureRequest<TMessageBusServerRequestBase<TMessageBusServerFlatDescribeRequest<ResponseType>>>;
+    THolder<TBusSchemeDescribe> Request;
     NYql::TIssueManager IssueManager;
- 
+
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
-        auto &mutableRecord = *ev->Get()->MutableRecord(); 
-        TAutoPtr<ResponseType> response(new ResponseType()); 
+        auto &mutableRecord = *ev->Get()->MutableRecord();
+        TAutoPtr<ResponseType> response(new ResponseType());
         response->Record.SetSchemeStatus(mutableRecord.GetStatus());
         const auto status = mutableRecord.GetStatus();
         if (status == NKikimrScheme::StatusSuccess) {
             response->Record.SetStatus(MSTATUS_OK);
             response->Record.SetPath(mutableRecord.GetPath());
-            response->Record.MutablePathDescription()->Swap(mutableRecord.MutablePathDescription()); 
+            response->Record.MutablePathDescription()->Swap(mutableRecord.MutablePathDescription());
             response->Record.SetStatusCode(NKikimrIssues::TStatusIds::SUCCESS);
         } else {
             response->Record.SetStatus(MSTATUS_ERROR);
@@ -54,52 +54,52 @@ class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMe
         if (IssueManager.GetIssues())
             IssuesToMessage(IssueManager.GetIssues(), response->Record.MutableIssues());
 
-        TBase::SendReplyAutoPtr(response); 
-        Request.Destroy(); 
+        TBase::SendReplyAutoPtr(response);
+        Request.Destroy();
         this->Die(ctx);
-    } 
- 
-public: 
+    }
+
+public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_SCHEME_DESCRIBE; }
 
-    TMessageBusServerFlatDescribeRequest(TEvBusProxy::TEvFlatDescribeRequest* msg) 
-        : TBase(msg->MsgContext) 
-        , Request(static_cast<TBusSchemeDescribe*>(msg->MsgContext.ReleaseMessage())) 
-    { 
-        TBase::SetSecurityToken(Request->Record.GetSecurityToken()); 
-    } 
- 
-    //STFUNC(StateWork) 
-    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) { 
-        switch (ev->GetTypeRewrite()) { 
+    TMessageBusServerFlatDescribeRequest(TEvBusProxy::TEvFlatDescribeRequest* msg)
+        : TBase(msg->MsgContext)
+        , Request(static_cast<TBusSchemeDescribe*>(msg->MsgContext.ReleaseMessage()))
+    {
+        TBase::SetSecurityToken(Request->Record.GetSecurityToken());
+    }
+
+    //STFUNC(StateWork)
+    void StateWork(TAutoPtr<NActors::IEventHandle>& ev, const NActors::TActorContext& ctx) {
+        switch (ev->GetTypeRewrite()) {
             HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-        } 
-    } 
- 
-    void Bootstrap(const TActorContext& ctx) { 
-        SendRequest(ctx); 
-        TBase::Become(&TMessageBusServerFlatDescribeRequest::StateWork); 
-    } 
- 
-    void SendRequest(const TActorContext& ctx) { 
-        TAutoPtr<TEvTxUserProxy::TEvNavigate> req(new TEvTxUserProxy::TEvNavigate()); 
+        }
+    }
+
+    void Bootstrap(const TActorContext& ctx) {
+        SendRequest(ctx);
+        TBase::Become(&TMessageBusServerFlatDescribeRequest::StateWork);
+    }
+
+    void SendRequest(const TActorContext& ctx) {
+        TAutoPtr<TEvTxUserProxy::TEvNavigate> req(new TEvTxUserProxy::TEvNavigate());
         NKikimrSchemeOp::TDescribePath* record = req->Record.MutableDescribePath();
- 
-        if (Request->Record.HasPath()) { 
-            record->SetPath(Request->Record.GetPath()); 
-        } else { 
-            record->SetSchemeshardId(Request->Record.GetSchemeshardId()); 
-            record->SetPathId(Request->Record.GetPathId()); 
-        } 
+
+        if (Request->Record.HasPath()) {
+            record->SetPath(Request->Record.GetPath());
+        } else {
+            record->SetSchemeshardId(Request->Record.GetSchemeshardId());
+            record->SetPathId(Request->Record.GetPathId());
+        }
         if (Request->Record.HasOptions()) {
             auto options = record->MutableOptions();
             options->CopyFrom(Request->Record.GetOptions());
         }
-        req->Record.SetUserToken(TBase::GetSerializedToken()); 
-        ctx.Send(MakeTxProxyID(), req.Release()); 
-    } 
-}; 
- 
+        req->Record.SetUserToken(TBase::GetSerializedToken());
+        ctx.Send(MakeTxProxyID(), req.Release());
+    }
+};
+
 IActor* CreateMessageBusServerProxy(
     TMessageBusServer* server,
     std::shared_ptr<IPersQueueGetReadSessionsInfoWorkerFactory> pqReadSessionsInfoWorkerFactory
@@ -149,35 +149,35 @@ TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status,
     return response.Release();
 }
 
-//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_request.cpp 
- 
-//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp 
-//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatTxRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp 
- 
-void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatDescribeRequest::TPtr& ev, const TActorContext& ctx) { 
-    TEvBusProxy::TEvFlatDescribeRequest *msg = ev->Get(); 
-    if (msg->MsgContext.GetMessage()->GetHeader()->Type == MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST) { 
-        ctx.Register(new TMessageBusServerFlatDescribeRequest<TBusOldFlatDescribeResponse>(ev->Get())); 
-    } else { 
-        ctx.Register(new TMessageBusServerFlatDescribeRequest<TBusResponse>(ev->Get())); 
-    } 
-} 
- 
-//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvDbSchema::TPtr& ev, const TActorContext& ctx); // see msgbus_server_db.cpp 
-//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvDbOperation::TPtr& ev, const TActorContext& ctx); // see msgbus_server_db.cpp 
- 
-void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) { 
-    SelfID = ctx.SelfID; 
- 
+//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_request.cpp
+
+//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvPersQueue::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp
+//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatTxRequest::TPtr& ev, const TActorContext& ctx); // see msgbus_server_scheme_request.cpp
+
+void TMessageBusServerProxy::Handle(TEvBusProxy::TEvFlatDescribeRequest::TPtr& ev, const TActorContext& ctx) {
+    TEvBusProxy::TEvFlatDescribeRequest *msg = ev->Get();
+    if (msg->MsgContext.GetMessage()->GetHeader()->Type == MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST) {
+        ctx.Register(new TMessageBusServerFlatDescribeRequest<TBusOldFlatDescribeResponse>(ev->Get()));
+    } else {
+        ctx.Register(new TMessageBusServerFlatDescribeRequest<TBusResponse>(ev->Get()));
+    }
+}
+
+//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvDbSchema::TPtr& ev, const TActorContext& ctx); // see msgbus_server_db.cpp
+//void TMessageBusServerProxy::Handle(TEvBusProxy::TEvDbOperation::TPtr& ev, const TActorContext& ctx); // see msgbus_server_db.cpp
+
+void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
+    SelfID = ctx.SelfID;
+
     TxProxy = MakeTxProxyID();
 
     SchemeCacheCounters = GetServiceCounters(AppData(ctx)->Counters, "pqproxy|cache");
-    DbOperationsCounters = new TMessageBusDbOpsCounters(AppData(ctx)->Counters); 
- 
+    DbOperationsCounters = new TMessageBusDbOpsCounters(AppData(ctx)->Counters);
+
     auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(AppData(ctx), SchemeCacheCounters);
     SchemeCache = ctx.ExecutorThread.RegisterActor(CreateSchemeBoardSchemeCache(cacheConfig.Get()));
     PqMetaCache = CreatePersQueueMetaCacheV2Id();
- 
+
     if (Server) {
         Server->InitSession(ctx.ExecutorThread.ActorSystem, ctx.SelfID);
     }
@@ -186,9 +186,9 @@ void TMessageBusServerProxy::Bootstrap(const TActorContext& ctx) {
         if (auto *busMonPage = AppData(ctx)->BusMonPage)
             Server->RegisterMonPage(busMonPage);
     }
- 
-    Become(&TThis::StateFunc); 
-} 
- 
-} 
-} 
+
+    Become(&TThis::StateFunc);
+}
+
+}
+}

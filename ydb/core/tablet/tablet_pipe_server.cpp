@@ -185,9 +185,9 @@ namespace NTabletPipe {
             OwnerId = ev->Get()->OwnerId;
             RecipientId = ev->Get()->RecipientId;
             Leader = ev->Get()->Leader;
-            Y_VERIFY(OwnerId); 
-            Y_VERIFY(RecipientId); 
-            if (InterconnectSession) { 
+            Y_VERIFY(OwnerId);
+            Y_VERIFY(RecipientId);
+            if (InterconnectSession) {
                 NeedUnsubscribe = true;
                 ctx.Send(InterconnectSession, new TEvents::TEvSubscribe(), IEventHandle::FlagTrackDelivery);
                 Become(&TThis::StateWaitingSubscribe);
@@ -297,7 +297,7 @@ namespace NTabletPipe {
             for (const auto& serverId : ServerIds) {
                 CloseServer(owner, serverId);
             }
-            Active = false; 
+            Active = false;
             ServerIds.clear();
             ActivatePending.clear();
         }

@@ -1,5 +1,5 @@
-#include "grpc_proxy_counters.h" 
-#include "grpc_request_check_actor.h" 
+#include "grpc_proxy_counters.h"
+#include "grpc_request_check_actor.h"
 #include "grpc_request_proxy.h"
 #include "local_rate_limiter.h"
 #include "operation_helpers.h"
@@ -16,9 +16,9 @@ namespace NGRpcService {
 
 using namespace NActors;
 
-static const ui32 MAX_DEFERRED_EVENTS_PER_DATABASE = 100; 
+static const ui32 MAX_DEFERRED_EVENTS_PER_DATABASE = 100;
 
-TString DatabaseFromDomain(const TAppData* appdata = AppData()) { 
+TString DatabaseFromDomain(const TAppData* appdata = AppData()) {
     auto dinfo = appdata->DomainsInfo;
     if (!dinfo)
         ythrow yexception() << "Invalid DomainsInfo ptr";
@@ -33,85 +33,85 @@ TString DatabaseFromDomain(const TAppData* appdata = AppData()) {
 
 struct TDatabaseInfo {
     enum class TDatabaseType {
-        Root, 
+        Root,
         Tenant,
         Serverless
     };
-    NKikimrTenantPool::EState State; 
-    TDatabaseType DatabaseType; 
-    THolder<TSchemeBoardEvents::TEvNotifyUpdate> SchemeBoardResult; 
-    TIntrusivePtr<TSecurityObject> SecurityObject; 
+    NKikimrTenantPool::EState State;
+    TDatabaseType DatabaseType;
+    THolder<TSchemeBoardEvents::TEvNotifyUpdate> SchemeBoardResult;
+    TIntrusivePtr<TSecurityObject> SecurityObject;
 
-    bool IsDatabaseReady() const { 
-        if (SchemeBoardResult == nullptr) { 
-            return false; 
-        } 
-        if (DatabaseType == TDatabaseType::Tenant) { 
-            switch (State) { 
-                case NKikimrTenantPool::STATE_UNKNOWN: 
-                case NKikimrTenantPool::TENANT_OK: 
-                    return true; 
-                    break; 
-                case NKikimrTenantPool::TENANT_ASSIGNED: 
-                case NKikimrTenantPool::TENANT_UNKNOWN: 
-                    return false; 
-                    break; 
-            } 
-        } 
-        return true; 
+    bool IsDatabaseReady() const {
+        if (SchemeBoardResult == nullptr) {
+            return false;
+        }
+        if (DatabaseType == TDatabaseType::Tenant) {
+            switch (State) {
+                case NKikimrTenantPool::STATE_UNKNOWN:
+                case NKikimrTenantPool::TENANT_OK:
+                    return true;
+                    break;
+                case NKikimrTenantPool::TENANT_ASSIGNED:
+                case NKikimrTenantPool::TENANT_UNKNOWN:
+                    return false;
+                    break;
+            }
+        }
+        return true;
     }
-}; 
+};
 
 
-struct TEventReqHolder { 
-    TEventReqHolder(TAutoPtr<IEventHandle> ev, IRequestProxyCtx* ctx) 
-        : Ev(std::move(ev)) 
-        , Ctx(ctx) 
-    {} 
-    TAutoPtr<IEventHandle> Ev; 
-    IRequestProxyCtx* Ctx; 
-}; 
- 
-class TGRpcRequestProxyImpl 
-    : public TActorBootstrapped<TGRpcRequestProxyImpl> 
-    , public TGRpcRequestProxy 
-{ 
-    using TBase = TActorBootstrapped<TGRpcRequestProxyImpl>; 
+struct TEventReqHolder {
+    TEventReqHolder(TAutoPtr<IEventHandle> ev, IRequestProxyCtx* ctx)
+        : Ev(std::move(ev))
+        , Ctx(ctx)
+    {}
+    TAutoPtr<IEventHandle> Ev;
+    IRequestProxyCtx* Ctx;
+};
+
+class TGRpcRequestProxyImpl
+    : public TActorBootstrapped<TGRpcRequestProxyImpl>
+    , public TGRpcRequestProxy
+{
+    using TBase = TActorBootstrapped<TGRpcRequestProxyImpl>;
 public:
-    explicit TGRpcRequestProxyImpl(const NKikimrConfig::TAppConfig& appConfig) 
-        : AppConfig(appConfig) 
-    {} 
- 
-    void Bootstrap(const TActorContext& ctx); 
-    void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx); 
- 
+    explicit TGRpcRequestProxyImpl(const NKikimrConfig::TAppConfig& appConfig)
+        : AppConfig(appConfig)
+    {}
+
+    void Bootstrap(const TActorContext& ctx);
+    void StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
+
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::GRPC_PROXY; 
+        return NKikimrServices::TActivity::GRPC_PROXY;
     }
 
-private: 
-    void HandlePoolStatus(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev, const TActorContext& ctx); 
-    void HandleRefreshToken(TRefreshTokenImpl::TPtr& ev, const TActorContext& ctx); 
-    void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev); 
-    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev); 
-    void HandleProxyService(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev); 
-    void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev); 
-    void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx); 
-    void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev); 
-    void ReplayEvents(const TString& databaseName, const TActorContext& ctx); 
+private:
+    void HandlePoolStatus(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev, const TActorContext& ctx);
+    void HandleRefreshToken(TRefreshTokenImpl::TPtr& ev, const TActorContext& ctx);
+    void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& ev);
+    void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
+    void HandleProxyService(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev);
+    void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev);
+    void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx);
+    void HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
+    void ReplayEvents(const TString& databaseName, const TActorContext& ctx);
 
-    static bool IsAuthStateOK(const IRequestProxyCtx& ctx); 
+    static bool IsAuthStateOK(const IRequestProxyCtx& ctx);
 
-    template <typename TEvent> 
-    void Handle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) { 
-        IRequestProxyCtx* requestBaseCtx = event->Get(); 
-        TString validationError; 
-        if (!requestBaseCtx->Validate(validationError)) { 
-            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_API_VALIDATION_ERROR, validationError); 
-            requestBaseCtx->RaiseIssue(issue); 
-            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST); 
+    template <typename TEvent>
+    void Handle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
+        IRequestProxyCtx* requestBaseCtx = event->Get();
+        TString validationError;
+        if (!requestBaseCtx->Validate(validationError)) {
+            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_API_VALIDATION_ERROR, validationError);
+            requestBaseCtx->RaiseIssue(issue);
+            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         } else {
-            TGRpcRequestProxy::Handle(event, ctx); 
+            TGRpcRequestProxy::Handle(event, ctx);
         }
     }
 
@@ -127,172 +127,172 @@ private:
         }
     }
 
-    void Handle(TRefreshTokenImpl::TPtr& event, const TActorContext& ctx) { 
-        const auto record = event->Get(); 
-        ctx.Send(record->GetFromId(), new TGRpcRequestProxy::TEvRefreshTokenResponse { 
-            record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_OK, 
-            record->GetInternalToken(), 
-            record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_UNAVAILABLE, 
-            NYql::TIssues()}); 
+    void Handle(TRefreshTokenImpl::TPtr& event, const TActorContext& ctx) {
+        const auto record = event->Get();
+        ctx.Send(record->GetFromId(), new TGRpcRequestProxy::TEvRefreshTokenResponse {
+            record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_OK,
+            record->GetInternalToken(),
+            record->GetAuthState().State == NGrpc::TAuthState::EAuthState::AS_UNAVAILABLE,
+            NYql::TIssues()});
     }
 
-    // returns true and defer event if no updates for given database 
-    // otherwice returns false and leave event untouched 
-    template <typename TEvent> 
-    bool DeferAndStartUpdate(const TString& database, TAutoPtr<TEventHandle<TEvent>>& ev, IRequestProxyCtx* reqCtx) { 
-        std::deque<TEventReqHolder>& queue = DeferredEvents[database]; 
-        if (queue.size() >= MAX_DEFERRED_EVENTS_PER_DATABASE) { 
-            return false; 
+    // returns true and defer event if no updates for given database
+    // otherwice returns false and leave event untouched
+    template <typename TEvent>
+    bool DeferAndStartUpdate(const TString& database, TAutoPtr<TEventHandle<TEvent>>& ev, IRequestProxyCtx* reqCtx) {
+        std::deque<TEventReqHolder>& queue = DeferredEvents[database];
+        if (queue.size() >= MAX_DEFERRED_EVENTS_PER_DATABASE) {
+            return false;
         }
 
-        if (queue.empty()) { 
-            DoStartUpdate(database); 
-        } 
- 
-        queue.push_back(TEventReqHolder(ev.Release(), reqCtx)); 
-        return true; 
+        if (queue.empty()) {
+            DoStartUpdate(database);
+        }
+
+        queue.push_back(TEventReqHolder(ev.Release(), reqCtx));
+        return true;
     }
 
-    template <typename TEvent> 
-    void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) { 
-        IRequestProxyCtx* requestBaseCtx = event->Get(); 
+    template <typename TEvent>
+    void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
+        IRequestProxyCtx* requestBaseCtx = event->Get();
 
-        LogRequest(event); 
+        LogRequest(event);
 
-        if (!SchemeCache) { 
-            const TString error = "Grpc proxy is not ready to accept request, no proxy service"; 
-            LOG_ERROR_S(ctx, NKikimrServices::GRPC_SERVER, error); 
-            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, error); 
-            requestBaseCtx->RaiseIssue(issue); 
-            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE); 
-            return; 
-        } 
-
-        if (IsAuthStateOK(*requestBaseCtx)) { 
-            Handle(event, ctx); 
-            return; 
-        } 
-
-        auto state = requestBaseCtx->GetAuthState(); 
-
-        if (state.State == NGrpc::TAuthState::AS_FAIL) { 
-            requestBaseCtx->ReplyUnauthenticated(); 
+        if (!SchemeCache) {
+            const TString error = "Grpc proxy is not ready to accept request, no proxy service";
+            LOG_ERROR_S(ctx, NKikimrServices::GRPC_SERVER, error);
+            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, error);
+            requestBaseCtx->RaiseIssue(issue);
+            requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
             return;
-        } 
+        }
 
-        if (state.State == NGrpc::TAuthState::AS_UNAVAILABLE) { 
-            Counters->IncDatabaseUnavailableCounter(); 
-            const TString error = "Unable to resolve token"; 
-            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error); 
-            requestBaseCtx->RaiseIssue(issue); 
-            requestBaseCtx->ReplyUnavaliable(); 
-            return; 
-        } 
+        if (IsAuthStateOK(*requestBaseCtx)) {
+            Handle(event, ctx);
+            return;
+        }
 
-        TString databaseName; 
-        const TDatabaseInfo* database = nullptr; 
-        bool skipResourceCheck = false; 
+        auto state = requestBaseCtx->GetAuthState();
+
+        if (state.State == NGrpc::TAuthState::AS_FAIL) {
+            requestBaseCtx->ReplyUnauthenticated();
+            return;
+        }
+
+        if (state.State == NGrpc::TAuthState::AS_UNAVAILABLE) {
+            Counters->IncDatabaseUnavailableCounter();
+            const TString error = "Unable to resolve token";
+            const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_AUTH_UNAVAILABLE, error);
+            requestBaseCtx->RaiseIssue(issue);
+            requestBaseCtx->ReplyUnavaliable();
+            return;
+        }
+
+        TString databaseName;
+        const TDatabaseInfo* database = nullptr;
+        bool skipResourceCheck = false;
         // do not check connect rights for the deprecated requests without database
         // remove this along with AllowYdbRequestsWithoutDatabase flag
         bool skipCheckConnectRigths = false;
 
-        if (state.State == NGrpc::TAuthState::AS_NOT_PERFORMED) { 
-            const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName(); 
-            if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) { 
-                databaseName = CanonizePath(maybeDatabaseName.GetRef()); 
-            } else { 
-                if (!AllowYdbRequestsWithoutDatabase) { 
-                    requestBaseCtx->ReplyUnauthenticated("Requests without specified database is not allowed"); 
+        if (state.State == NGrpc::TAuthState::AS_NOT_PERFORMED) {
+            const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
+            if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
+                databaseName = CanonizePath(maybeDatabaseName.GetRef());
+            } else {
+                if (!AllowYdbRequestsWithoutDatabase) {
+                    requestBaseCtx->ReplyUnauthenticated("Requests without specified database is not allowed");
                     return;
-                } else { 
-                    databaseName = RootDatabase; 
-                    skipResourceCheck = true; 
+                } else {
+                    databaseName = RootDatabase;
+                    skipResourceCheck = true;
                     skipCheckConnectRigths = true;
                 }
             }
-            auto it = Databases.find(databaseName); 
-            if (it != Databases.end() && it->second.IsDatabaseReady()) { 
-                database = &it->second; 
-            } else { 
-                // No given database found, start update if possible 
-                if (!DeferAndStartUpdate(databaseName, event, requestBaseCtx)) { 
-                    Counters->IncDatabaseUnavailableCounter(); 
-                    const TString error = "Grpc proxy is not ready to accept request, database unknown"; 
-                    LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Limit for deferred events per database %s reached", databaseName.c_str()); 
-                    const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error); 
-                    requestBaseCtx->RaiseIssue(issue); 
-                    requestBaseCtx->ReplyUnavaliable(); 
+            auto it = Databases.find(databaseName);
+            if (it != Databases.end() && it->second.IsDatabaseReady()) {
+                database = &it->second;
+            } else {
+                // No given database found, start update if possible
+                if (!DeferAndStartUpdate(databaseName, event, requestBaseCtx)) {
+                    Counters->IncDatabaseUnavailableCounter();
+                    const TString error = "Grpc proxy is not ready to accept request, database unknown";
+                    LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Limit for deferred events per database %s reached", databaseName.c_str());
+                    const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
+                    requestBaseCtx->RaiseIssue(issue);
+                    requestBaseCtx->ReplyUnavaliable();
                 }
-                return; 
+                return;
             }
         }
 
-        if (database) { 
-            if (database->SchemeBoardResult) { 
-                const auto& domain = database->SchemeBoardResult->DescribeSchemeResult.GetPathDescription().GetDomainDescription(); 
-                if (domain.HasResourcesDomainKey() && !skipResourceCheck && DynamicNode) { 
-                    TSubDomainKey subdomainKey(domain.GetResourcesDomainKey()); 
-                    if (!SubDomainKeys.contains(subdomainKey)) { 
-                        TStringBuilder error; 
-                        error << "Unexpected node to perform query on database: " << databaseName 
-                              << ", resource domain: " << domain.GetResourcesDomainKey().ShortDebugString(); 
-                        LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error); 
-                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error); 
-                        requestBaseCtx->RaiseIssue(issue); 
-                        requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED); 
-                        return; 
-                    } 
-                } 
-            } else { 
-                Counters->IncDatabaseUnavailableCounter(); 
-                auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, "database unavailable"); 
-                requestBaseCtx->RaiseIssue(issue); 
-                requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE); 
-                return; 
-            } 
+        if (database) {
+            if (database->SchemeBoardResult) {
+                const auto& domain = database->SchemeBoardResult->DescribeSchemeResult.GetPathDescription().GetDomainDescription();
+                if (domain.HasResourcesDomainKey() && !skipResourceCheck && DynamicNode) {
+                    TSubDomainKey subdomainKey(domain.GetResourcesDomainKey());
+                    if (!SubDomainKeys.contains(subdomainKey)) {
+                        TStringBuilder error;
+                        error << "Unexpected node to perform query on database: " << databaseName
+                              << ", resource domain: " << domain.GetResourcesDomainKey().ShortDebugString();
+                        LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error);
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, error);
+                        requestBaseCtx->RaiseIssue(issue);
+                        requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAUTHORIZED);
+                        return;
+                    }
+                }
+            } else {
+                Counters->IncDatabaseUnavailableCounter();
+                auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, "database unavailable");
+                requestBaseCtx->RaiseIssue(issue);
+                requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+                return;
+            }
 
-            Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(), 
-                database->SchemeBoardResult->DescribeSchemeResult, 
+            Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
+                database->SchemeBoardResult->DescribeSchemeResult,
                 database->SecurityObject, event.Release(), Counters, skipCheckConnectRigths));
-            return; 
+            return;
         }
 
-        // in case we somehow skipped all auth checks 
-        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "Can't authenticate request"); 
-        requestBaseCtx->RaiseIssue(issue); 
-        requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST); 
+        // in case we somehow skipped all auth checks
+        const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_TXPROXY_ERROR, "Can't authenticate request");
+        requestBaseCtx->RaiseIssue(issue);
+        requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
     }
 
-    void ForgetDatabase(const TString& database); 
-    void SubscribeToDatabase(const TString& database); 
-    void DoStartUpdate(const TString& database); 
-    bool DeferAndStartUpdate(const TString& database, TAutoPtr<IEventHandle>& ev, IRequestProxyCtx*); 
+    void ForgetDatabase(const TString& database);
+    void SubscribeToDatabase(const TString& database);
+    void DoStartUpdate(const TString& database);
+    bool DeferAndStartUpdate(const TString& database, TAutoPtr<IEventHandle>& ev, IRequestProxyCtx*);
 
-    const NKikimrConfig::TAppConfig& GetAppConfig() const override { 
-        return AppConfig; 
+    const NKikimrConfig::TAppConfig& GetAppConfig() const override {
+        return AppConfig;
     }
 
-    virtual void PassAway() override { 
-        for (auto& [database, queue] : DeferredEvents) { 
-            for (TEventReqHolder& req : queue) { 
-                req.Ctx->ReplyUnavaliable(); 
+    virtual void PassAway() override {
+        for (auto& [database, queue] : DeferredEvents) {
+            for (TEventReqHolder& req : queue) {
+                req.Ctx->ReplyUnavaliable();
             }
         }
-        for (const auto& [database, actor] : Subscribers) { 
-            Send(actor, new TEvents::TEvPoisonPill()); 
+        for (const auto& [database, actor] : Subscribers) {
+            Send(actor, new TEvents::TEvPoisonPill());
         }
-        TBase::PassAway(); 
+        TBase::PassAway();
     }
 
-    std::unordered_map<TString, TDatabaseInfo> Databases; 
-    std::unordered_map<TString, std::deque<TEventReqHolder>> DeferredEvents; // Events deferred to handle after getting database info 
-    std::unordered_map<TString, TActorId> Subscribers; 
+    std::unordered_map<TString, TDatabaseInfo> Databases;
+    std::unordered_map<TString, std::deque<TEventReqHolder>> DeferredEvents; // Events deferred to handle after getting database info
+    std::unordered_map<TString, TActorId> Subscribers;
     THashSet<TSubDomainKey> SubDomainKeys;
     bool AllowYdbRequestsWithoutDatabase = true;
     NKikimrConfig::TAppConfig AppConfig;
     TActorId SchemeCache;
     bool DynamicNode = false;
-    TString RootDatabase; 
+    TString RootDatabase;
     TIntrusivePtr<TGrpcProxyCounters> Counters;
 };
 
@@ -318,63 +318,63 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
 
     Counters = MakeIntrusive<TGrpcProxyCounters>(AppData()->Counters);
 
-    RootDatabase = DatabaseFromDomain(); 
-    TDatabaseInfo& database = Databases[RootDatabase]; 
-    database.DatabaseType = TDatabaseInfo::TDatabaseType::Root; 
-    database.State = NKikimrTenantPool::EState::TENANT_OK; 
-    DoStartUpdate(RootDatabase); 
- 
+    RootDatabase = DatabaseFromDomain();
+    TDatabaseInfo& database = Databases[RootDatabase];
+    database.DatabaseType = TDatabaseInfo::TDatabaseType::Root;
+    database.State = NKikimrTenantPool::EState::TENANT_OK;
+    DoStartUpdate(RootDatabase);
+
     Become(&TThis::StateFunc);
 }
 
-void TGRpcRequestProxyImpl::ReplayEvents(const TString& databaseName, const TActorContext& ctx) { 
-    auto itDeferredEvents = DeferredEvents.find(databaseName); 
-    if (itDeferredEvents != DeferredEvents.end()) { 
-        std::deque<TEventReqHolder>& queue = itDeferredEvents->second; 
-        std::deque<TEventReqHolder> deferredEvents; 
-        std::swap(deferredEvents, queue); // we can put back event to DeferredEvents queue in StateFunc KIKIMR-12851 
-        while (!deferredEvents.empty()) { 
+void TGRpcRequestProxyImpl::ReplayEvents(const TString& databaseName, const TActorContext& ctx) {
+    auto itDeferredEvents = DeferredEvents.find(databaseName);
+    if (itDeferredEvents != DeferredEvents.end()) {
+        std::deque<TEventReqHolder>& queue = itDeferredEvents->second;
+        std::deque<TEventReqHolder> deferredEvents;
+        std::swap(deferredEvents, queue); // we can put back event to DeferredEvents queue in StateFunc KIKIMR-12851
+        while (!deferredEvents.empty()) {
             StateFunc(deferredEvents.front().Ev, ctx);
-            deferredEvents.pop_front(); 
-        } 
-        if (queue.empty()) { 
-            DeferredEvents.erase(itDeferredEvents); 
-        } 
-    } 
-} 
- 
+            deferredEvents.pop_front();
+        }
+        if (queue.empty()) {
+            DeferredEvents.erase(itDeferredEvents);
+        }
+    }
+}
+
 void TGRpcRequestProxyImpl::HandlePoolStatus(TEvTenantPool::TEvTenantPoolStatus::TPtr& ev, const TActorContext& ctx) {
     const auto &event = ev->Get()->Record;
-    LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "Received tenant pool status, serving tenants: " << event.ShortDebugString()); 
+    LOG_INFO_S(ctx, NKikimrServices::GRPC_SERVER, "Received tenant pool status, serving tenants: " << event.ShortDebugString());
 
     SubDomainKeys.clear();
-    for (auto it = Databases.begin(); it != Databases.end();) { 
-        if (it->second.DatabaseType != TDatabaseInfo::TDatabaseType::Root) { 
-            it = Databases.erase(it); 
-        } else { 
-            ++it; 
-        } 
-    } 
+    for (auto it = Databases.begin(); it != Databases.end();) {
+        if (it->second.DatabaseType != TDatabaseInfo::TDatabaseType::Root) {
+            it = Databases.erase(it);
+        } else {
+            ++it;
+        }
+    }
     for (const auto& slot : event.GetSlots()) {
-        if (slot.GetAssignedTenant().empty()) { 
-            continue; 
+        if (slot.GetAssignedTenant().empty()) {
+            continue;
         }
         const auto& subDomainKey = TSubDomainKey(slot.GetDomainKey());
         if (subDomainKey) {
             SubDomainKeys.insert(subDomainKey);
         }
-        TString databaseName = CanonizePath(slot.GetAssignedTenant()); 
-        auto itDatabase = Databases.try_emplace(databaseName); 
-        if (itDatabase.second) { 
-            TDatabaseInfo& database = itDatabase.first->second; 
-            database.State = slot.GetState(); 
-            database.DatabaseType = TDatabaseInfo::TDatabaseType::Tenant; 
-            DoStartUpdate(databaseName); 
-        } 
-        TDatabaseInfo& database = itDatabase.first->second; 
-        if (database.IsDatabaseReady()) { 
-            ReplayEvents(databaseName, ctx); 
-        } 
+        TString databaseName = CanonizePath(slot.GetAssignedTenant());
+        auto itDatabase = Databases.try_emplace(databaseName);
+        if (itDatabase.second) {
+            TDatabaseInfo& database = itDatabase.first->second;
+            database.State = slot.GetState();
+            database.DatabaseType = TDatabaseInfo::TDatabaseType::Tenant;
+            DoStartUpdate(databaseName);
+        }
+        TDatabaseInfo& database = itDatabase.first->second;
+        if (database.IsDatabaseReady()) {
+            ReplayEvents(databaseName, ctx);
+        }
     }
 }
 
@@ -424,97 +424,97 @@ void TGRpcRequestProxyImpl::HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) 
     }
 }
 
-bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) { 
-    const auto& state = ctx.GetAuthState(); 
+bool TGRpcRequestProxyImpl::IsAuthStateOK(const IRequestProxyCtx& ctx) {
+    const auto& state = ctx.GetAuthState();
     return state.State == NGrpc::TAuthState::AS_OK ||
            state.State == NGrpc::TAuthState::AS_FAIL && state.NeedAuth == false ||
            state.NeedAuth == false && !ctx.GetYdbToken();
 }
 
-void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx) { 
-    TString databaseName = ev->Get()->Path; 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "SchemeBoardUpdate " << databaseName); 
+void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev, const TActorContext& ctx) {
+    TString databaseName = ev->Get()->Path;
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "SchemeBoardUpdate " << databaseName);
 
-    // non-serverless databases should be in the cache already 
-    auto itDatabase = Databases.try_emplace(CanonizePath(databaseName)); 
-    TDatabaseInfo& database = itDatabase.first->second; 
-    if (itDatabase.second) { 
-        database.State = NKikimrTenantPool::EState::TENANT_OK; 
-        database.DatabaseType = TDatabaseInfo::TDatabaseType::Serverless; 
+    // non-serverless databases should be in the cache already
+    auto itDatabase = Databases.try_emplace(CanonizePath(databaseName));
+    TDatabaseInfo& database = itDatabase.first->second;
+    if (itDatabase.second) {
+        database.State = NKikimrTenantPool::EState::TENANT_OK;
+        database.DatabaseType = TDatabaseInfo::TDatabaseType::Serverless;
     }
-    database.SchemeBoardResult = ev->Release(); 
-    const NKikimrScheme::TEvDescribeSchemeResult& describeScheme(database.SchemeBoardResult->DescribeSchemeResult); 
-    database.SecurityObject = new TSecurityObject(describeScheme.GetPathDescription().GetSelf().GetOwner(), 
-        describeScheme.GetPathDescription().GetSelf().GetEffectiveACL(), false); 
+    database.SchemeBoardResult = ev->Release();
+    const NKikimrScheme::TEvDescribeSchemeResult& describeScheme(database.SchemeBoardResult->DescribeSchemeResult);
+    database.SecurityObject = new TSecurityObject(describeScheme.GetPathDescription().GetSelf().GetOwner(),
+        describeScheme.GetPathDescription().GetSelf().GetEffectiveACL(), false);
 
-    if (describeScheme.GetPathDescription().HasDomainDescription() 
-        && describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) { 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updating SecurityState for " << databaseName); 
-        Send(MakeTicketParserID(), new TEvTicketParser::TEvUpdateLoginSecurityState( 
-            describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState() 
-            )); 
-    } else { 
-        if (!describeScheme.GetPathDescription().HasDomainDescription()) { 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no DomainDescription"); 
-        } else if (!describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) { 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no SecurityState"); 
+    if (describeScheme.GetPathDescription().HasDomainDescription()
+        && describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) {
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Updating SecurityState for " << databaseName);
+        Send(MakeTicketParserID(), new TEvTicketParser::TEvUpdateLoginSecurityState(
+            describeScheme.GetPathDescription().GetDomainDescription().GetSecurityState()
+            ));
+    } else {
+        if (!describeScheme.GetPathDescription().HasDomainDescription()) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no DomainDescription");
+        } else if (!describeScheme.GetPathDescription().GetDomainDescription().HasSecurityState()) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Can't update SecurityState for " << databaseName << " - no SecurityState");
         }
     }
 
-    if (database.IsDatabaseReady()) { 
-        ReplayEvents(databaseName, ctx); 
+    if (database.IsDatabaseReady()) {
+        ReplayEvents(databaseName, ctx);
     }
 }
 
-void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) { 
-    LOG_WARN_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, 
-        "SchemeBoardDelete " << ev->Get()->Path << " Strong=" << ev->Get()->Strong); 
+void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) {
+    LOG_WARN_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER,
+        "SchemeBoardDelete " << ev->Get()->Path << " Strong=" << ev->Get()->Strong);
 
-    if (ev->Get()->Strong) { 
-        ForgetDatabase(ev->Get()->Path); 
-    } 
+    if (ev->Get()->Strong) {
+        ForgetDatabase(ev->Get()->Path);
+    }
 }
 
-void TGRpcRequestProxyImpl::ForgetDatabase(const TString& database) { 
-    auto itSubscriber = Subscribers.find(database); 
-    if (itSubscriber != Subscribers.end()) { 
-        Send(itSubscriber->second, new TEvents::TEvPoisonPill()); 
-        Subscribers.erase(itSubscriber); 
+void TGRpcRequestProxyImpl::ForgetDatabase(const TString& database) {
+    auto itSubscriber = Subscribers.find(database);
+    if (itSubscriber != Subscribers.end()) {
+        Send(itSubscriber->second, new TEvents::TEvPoisonPill());
+        Subscribers.erase(itSubscriber);
     }
-    auto itDeferredEvents = DeferredEvents.find(database); 
-    if (itDeferredEvents != DeferredEvents.end()) { 
-        auto& queue(itDeferredEvents->second); 
-        while (!queue.empty()) { 
-            Counters->IncDatabaseUnavailableCounter(); 
-            queue.front().Ctx->ReplyUnauthenticated("Unknown database"); 
-            queue.pop_front(); 
-        } 
-        DeferredEvents.erase(itDeferredEvents); 
+    auto itDeferredEvents = DeferredEvents.find(database);
+    if (itDeferredEvents != DeferredEvents.end()) {
+        auto& queue(itDeferredEvents->second);
+        while (!queue.empty()) {
+            Counters->IncDatabaseUnavailableCounter();
+            queue.front().Ctx->ReplyUnauthenticated("Unknown database");
+            queue.pop_front();
+        }
+        DeferredEvents.erase(itDeferredEvents);
     }
-    Databases.erase(database); 
-} 
+    Databases.erase(database);
+}
 
-void TGRpcRequestProxyImpl::SubscribeToDatabase(const TString& database) { 
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Subscribe to " << database); 
+void TGRpcRequestProxyImpl::SubscribeToDatabase(const TString& database) {
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "Subscribe to " << database);
 
-    Y_VERIFY(!AppData()->DomainsInfo->Domains.empty()); 
-    auto& domain = AppData()->DomainsInfo->Domains.begin()->second; 
-    ui64 domainOwnerId = domain->SchemeRoot; 
-    ui32 schemeBoardGroup = domain->DefaultSchemeBoardGroup; 
+    Y_VERIFY(!AppData()->DomainsInfo->Domains.empty());
+    auto& domain = AppData()->DomainsInfo->Domains.begin()->second;
+    ui64 domainOwnerId = domain->SchemeRoot;
+    ui32 schemeBoardGroup = domain->DefaultSchemeBoardGroup;
     THolder<IActor> subscriber{CreateSchemeBoardSubscriber(SelfId(), database, schemeBoardGroup, domainOwnerId)};
-    TActorId subscriberId = Register(subscriber.Release()); 
-    auto itSubscriber = Subscribers.emplace(database, subscriberId); 
-    if (!itSubscriber.second) { 
-        Send(itSubscriber.first->second, new TEvents::TEvPoisonPill()); 
-        itSubscriber.first->second = subscriberId; 
-    } 
+    TActorId subscriberId = Register(subscriber.Release());
+    auto itSubscriber = Subscribers.emplace(database, subscriberId);
+    if (!itSubscriber.second) {
+        Send(itSubscriber.first->second, new TEvents::TEvPoisonPill());
+        itSubscriber.first->second = subscriberId;
+    }
 }
 
-void TGRpcRequestProxyImpl::DoStartUpdate(const TString& database) { 
-    // we will receive update (or delete) upon sucessfull subscription 
-    SubscribeToDatabase(database); 
-} 
- 
+void TGRpcRequestProxyImpl::DoStartUpdate(const TString& database) {
+    // we will receive update (or delete) upon sucessfull subscription
+    SubscribeToDatabase(database);
+}
+
 template<typename TEvent>
 void LogRequest(const TEvent& event) {
     auto getDebugString = [&event]()->TString {
@@ -542,139 +542,139 @@ void LogRequest(const TEvent& event) {
 }
 
 void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
-    bool handled = true; 
-    // handle internal events 
+    bool handled = true;
+    // handle internal events
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvTenantPool::TEvTenantPoolStatus, HandlePoolStatus);
         hFunc(TEvTxUserProxy::TEvGetProxyServicesResponse, HandleProxyService);
         hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleConfig);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
         hFunc(TEvents::TEvUndelivered, HandleUndelivery);
-        HFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleSchemeBoard); 
-        hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleSchemeBoard); 
+        HFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleSchemeBoard);
+        hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleSchemeBoard);
 
         default:
-            handled = false; 
-            break; 
+            handled = false;
+            break;
     }
 
-    if (handled) { 
+    if (handled) {
         return;
     }
 
-    // handle external events 
-    switch (ev->GetTypeRewrite()) { 
-        HFunc(TRefreshTokenImpl, PreHandle); 
-        HFunc(TEvLoginRequest, PreHandle); 
-        HFunc(TEvAlterTableRequest, PreHandle); 
-        HFunc(TEvCreateTableRequest, PreHandle); 
-        HFunc(TEvDropTableRequest, PreHandle); 
-        HFunc(TEvGetOperationRequest, PreHandle); 
-        HFunc(TEvCancelOperationRequest, PreHandle); 
-        HFunc(TEvForgetOperationRequest, PreHandle); 
-        HFunc(TEvListOperationsRequest, PreHandle); 
-        HFunc(TEvCreateSessionRequest, PreHandle); 
-        HFunc(TEvKeepAliveRequest, PreHandle); 
-        HFunc(TEvDeleteSessionRequest, PreHandle); 
-        HFunc(TEvCopyTableRequest, PreHandle); 
-        HFunc(TEvCopyTablesRequest, PreHandle); 
+    // handle external events
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TRefreshTokenImpl, PreHandle);
+        HFunc(TEvLoginRequest, PreHandle);
+        HFunc(TEvAlterTableRequest, PreHandle);
+        HFunc(TEvCreateTableRequest, PreHandle);
+        HFunc(TEvDropTableRequest, PreHandle);
+        HFunc(TEvGetOperationRequest, PreHandle);
+        HFunc(TEvCancelOperationRequest, PreHandle);
+        HFunc(TEvForgetOperationRequest, PreHandle);
+        HFunc(TEvListOperationsRequest, PreHandle);
+        HFunc(TEvCreateSessionRequest, PreHandle);
+        HFunc(TEvKeepAliveRequest, PreHandle);
+        HFunc(TEvDeleteSessionRequest, PreHandle);
+        HFunc(TEvCopyTableRequest, PreHandle);
+        HFunc(TEvCopyTablesRequest, PreHandle);
         HFunc(TEvRenameTablesRequest, PreHandle);
-        HFunc(TEvDescribeTableRequest, PreHandle); 
-        HFunc(TEvReadTableRequest, PreHandle); 
-        HFunc(TEvExplainDataQueryRequest, PreHandle); 
-        HFunc(TEvPrepareDataQueryRequest, PreHandle); 
-        HFunc(TEvExecuteDataQueryRequest, PreHandle); 
-        HFunc(TEvExecuteSchemeQueryRequest, PreHandle); 
-        HFunc(TEvCreateTenantRequest, PreHandle); 
-        HFunc(TEvAlterTenantRequest, PreHandle); 
-        HFunc(TEvGetTenantStatusRequest, PreHandle); 
-        HFunc(TEvListTenantsRequest, PreHandle); 
-        HFunc(TEvRemoveTenantRequest, PreHandle); 
-        HFunc(TEvBeginTransactionRequest, PreHandle); 
-        HFunc(TEvCommitTransactionRequest, PreHandle); 
-        HFunc(TEvRollbackTransactionRequest, PreHandle); 
-        HFunc(TEvListEndpointsRequest, PreHandle); 
-        HFunc(TEvDescribeTenantOptionsRequest, PreHandle); 
-        HFunc(TEvDescribeTableOptionsRequest, PreHandle); 
-        HFunc(TEvCreateCoordinationNode, PreHandle); 
-        HFunc(TEvAlterCoordinationNode, PreHandle); 
-        HFunc(TEvDropCoordinationNode, PreHandle); 
-        HFunc(TEvDescribeCoordinationNode, PreHandle); 
-        HFunc(TEvReadColumnsRequest, PreHandle); 
-        HFunc(TEvGetShardLocationsRequest, PreHandle); 
-        HFunc(TEvKikhouseDescribeTableRequest, PreHandle); 
-        HFunc(TEvS3ListingRequest, PreHandle); 
-        HFunc(TEvBiStreamPingRequest, PreHandle); 
-        HFunc(TEvExperimentalStreamQueryRequest, PreHandle); 
-        HFunc(TEvStreamPQWriteRequest, PreHandle); 
-        HFunc(TEvStreamPQReadRequest, PreHandle); 
-        HFunc(TEvPQReadInfoRequest, PreHandle); 
-        HFunc(TEvPQDropTopicRequest, PreHandle); 
-        HFunc(TEvPQCreateTopicRequest, PreHandle); 
-        HFunc(TEvPQAlterTopicRequest, PreHandle); 
-        HFunc(TEvPQAddReadRuleRequest, PreHandle); 
-        HFunc(TEvPQRemoveReadRuleRequest, PreHandle); 
-        HFunc(TEvPQDescribeTopicRequest, PreHandle); 
-        HFunc(TEvExportToYtRequest, PreHandle); 
-        HFunc(TEvExportToS3Request, PreHandle); 
-        HFunc(TEvImportFromS3Request, PreHandle); 
-        HFunc(TEvImportDataRequest, PreHandle); 
-        HFunc(TEvDiscoverPQClustersRequest, PreHandle); 
-        HFunc(TEvBulkUpsertRequest, PreHandle); 
-        HFunc(TEvWhoAmIRequest, PreHandle); 
-        HFunc(TEvCreateRateLimiterResource, PreHandle); 
-        HFunc(TEvAlterRateLimiterResource, PreHandle); 
-        HFunc(TEvDropRateLimiterResource, PreHandle); 
-        HFunc(TEvListRateLimiterResources, PreHandle); 
-        HFunc(TEvDescribeRateLimiterResource, PreHandle); 
-        HFunc(TEvAcquireRateLimiterResource, PreHandle); 
-        HFunc(TEvKikhouseCreateSnapshotRequest, PreHandle); 
-        HFunc(TEvKikhouseRefreshSnapshotRequest, PreHandle); 
-        HFunc(TEvKikhouseDiscardSnapshotRequest, PreHandle); 
-        HFunc(TEvSelfCheckRequest, PreHandle); 
-        HFunc(TEvStreamExecuteScanQueryRequest, PreHandle); 
-        HFunc(TEvCoordinationSessionRequest, PreHandle); 
-        HFunc(TEvLongTxBeginRequest, PreHandle); 
-        HFunc(TEvLongTxCommitRequest, PreHandle); 
-        HFunc(TEvLongTxRollbackRequest, PreHandle); 
-        HFunc(TEvLongTxWriteRequest, PreHandle); 
-        HFunc(TEvLongTxReadRequest, PreHandle); 
-        HFunc(TEvDataStreamsCreateStreamRequest, PreHandle); 
-        HFunc(TEvDataStreamsDeleteStreamRequest, PreHandle); 
-        HFunc(TEvDataStreamsDescribeStreamRequest, PreHandle); 
-        HFunc(TEvDataStreamsRegisterStreamConsumerRequest, PreHandle); 
-        HFunc(TEvDataStreamsDeregisterStreamConsumerRequest, PreHandle); 
-        HFunc(TEvDataStreamsDescribeStreamConsumerRequest, PreHandle); 
-        HFunc(TEvDataStreamsPutRecordRequest, PreHandle); 
-        HFunc(TEvDataStreamsListStreamsRequest, PreHandle); 
-        HFunc(TEvDataStreamsListShardsRequest, PreHandle); 
-        HFunc(TEvDataStreamsPutRecordsRequest, PreHandle); 
-        HFunc(TEvDataStreamsGetRecordsRequest, PreHandle); 
-        HFunc(TEvDataStreamsGetShardIteratorRequest, PreHandle); 
-        HFunc(TEvDataStreamsSubscribeToShardRequest, PreHandle); 
-        HFunc(TEvDataStreamsDescribeLimitsRequest, PreHandle); 
-        HFunc(TEvDataStreamsDescribeStreamSummaryRequest, PreHandle); 
-        HFunc(TEvDataStreamsDecreaseStreamRetentionPeriodRequest, PreHandle); 
-        HFunc(TEvDataStreamsIncreaseStreamRetentionPeriodRequest, PreHandle); 
-        HFunc(TEvDataStreamsUpdateShardCountRequest, PreHandle); 
-        HFunc(TEvDataStreamsUpdateStreamRequest, PreHandle); 
-        HFunc(TEvDataStreamsSetWriteQuotaRequest, PreHandle); 
-        HFunc(TEvDataStreamsListStreamConsumersRequest, PreHandle); 
-        HFunc(TEvDataStreamsAddTagsToStreamRequest, PreHandle); 
-        HFunc(TEvDataStreamsDisableEnhancedMonitoringRequest, PreHandle); 
-        HFunc(TEvDataStreamsEnableEnhancedMonitoringRequest, PreHandle); 
-        HFunc(TEvDataStreamsListTagsForStreamRequest, PreHandle); 
-        HFunc(TEvDataStreamsMergeShardsRequest, PreHandle); 
-        HFunc(TEvDataStreamsRemoveTagsFromStreamRequest, PreHandle); 
-        HFunc(TEvDataStreamsSplitShardRequest, PreHandle); 
-        HFunc(TEvDataStreamsStartStreamEncryptionRequest, PreHandle); 
-        HFunc(TEvDataStreamsStopStreamEncryptionRequest, PreHandle); 
+        HFunc(TEvDescribeTableRequest, PreHandle);
+        HFunc(TEvReadTableRequest, PreHandle);
+        HFunc(TEvExplainDataQueryRequest, PreHandle);
+        HFunc(TEvPrepareDataQueryRequest, PreHandle);
+        HFunc(TEvExecuteDataQueryRequest, PreHandle);
+        HFunc(TEvExecuteSchemeQueryRequest, PreHandle);
+        HFunc(TEvCreateTenantRequest, PreHandle);
+        HFunc(TEvAlterTenantRequest, PreHandle);
+        HFunc(TEvGetTenantStatusRequest, PreHandle);
+        HFunc(TEvListTenantsRequest, PreHandle);
+        HFunc(TEvRemoveTenantRequest, PreHandle);
+        HFunc(TEvBeginTransactionRequest, PreHandle);
+        HFunc(TEvCommitTransactionRequest, PreHandle);
+        HFunc(TEvRollbackTransactionRequest, PreHandle);
+        HFunc(TEvListEndpointsRequest, PreHandle);
+        HFunc(TEvDescribeTenantOptionsRequest, PreHandle);
+        HFunc(TEvDescribeTableOptionsRequest, PreHandle);
+        HFunc(TEvCreateCoordinationNode, PreHandle);
+        HFunc(TEvAlterCoordinationNode, PreHandle);
+        HFunc(TEvDropCoordinationNode, PreHandle);
+        HFunc(TEvDescribeCoordinationNode, PreHandle);
+        HFunc(TEvReadColumnsRequest, PreHandle);
+        HFunc(TEvGetShardLocationsRequest, PreHandle);
+        HFunc(TEvKikhouseDescribeTableRequest, PreHandle);
+        HFunc(TEvS3ListingRequest, PreHandle);
+        HFunc(TEvBiStreamPingRequest, PreHandle);
+        HFunc(TEvExperimentalStreamQueryRequest, PreHandle);
+        HFunc(TEvStreamPQWriteRequest, PreHandle);
+        HFunc(TEvStreamPQReadRequest, PreHandle);
+        HFunc(TEvPQReadInfoRequest, PreHandle);
+        HFunc(TEvPQDropTopicRequest, PreHandle);
+        HFunc(TEvPQCreateTopicRequest, PreHandle);
+        HFunc(TEvPQAlterTopicRequest, PreHandle);
+        HFunc(TEvPQAddReadRuleRequest, PreHandle);
+        HFunc(TEvPQRemoveReadRuleRequest, PreHandle);
+        HFunc(TEvPQDescribeTopicRequest, PreHandle);
+        HFunc(TEvExportToYtRequest, PreHandle);
+        HFunc(TEvExportToS3Request, PreHandle);
+        HFunc(TEvImportFromS3Request, PreHandle);
+        HFunc(TEvImportDataRequest, PreHandle);
+        HFunc(TEvDiscoverPQClustersRequest, PreHandle);
+        HFunc(TEvBulkUpsertRequest, PreHandle);
+        HFunc(TEvWhoAmIRequest, PreHandle);
+        HFunc(TEvCreateRateLimiterResource, PreHandle);
+        HFunc(TEvAlterRateLimiterResource, PreHandle);
+        HFunc(TEvDropRateLimiterResource, PreHandle);
+        HFunc(TEvListRateLimiterResources, PreHandle);
+        HFunc(TEvDescribeRateLimiterResource, PreHandle);
+        HFunc(TEvAcquireRateLimiterResource, PreHandle);
+        HFunc(TEvKikhouseCreateSnapshotRequest, PreHandle);
+        HFunc(TEvKikhouseRefreshSnapshotRequest, PreHandle);
+        HFunc(TEvKikhouseDiscardSnapshotRequest, PreHandle);
+        HFunc(TEvSelfCheckRequest, PreHandle);
+        HFunc(TEvStreamExecuteScanQueryRequest, PreHandle);
+        HFunc(TEvCoordinationSessionRequest, PreHandle);
+        HFunc(TEvLongTxBeginRequest, PreHandle);
+        HFunc(TEvLongTxCommitRequest, PreHandle);
+        HFunc(TEvLongTxRollbackRequest, PreHandle);
+        HFunc(TEvLongTxWriteRequest, PreHandle);
+        HFunc(TEvLongTxReadRequest, PreHandle);
+        HFunc(TEvDataStreamsCreateStreamRequest, PreHandle);
+        HFunc(TEvDataStreamsDeleteStreamRequest, PreHandle);
+        HFunc(TEvDataStreamsDescribeStreamRequest, PreHandle);
+        HFunc(TEvDataStreamsRegisterStreamConsumerRequest, PreHandle);
+        HFunc(TEvDataStreamsDeregisterStreamConsumerRequest, PreHandle);
+        HFunc(TEvDataStreamsDescribeStreamConsumerRequest, PreHandle);
+        HFunc(TEvDataStreamsPutRecordRequest, PreHandle);
+        HFunc(TEvDataStreamsListStreamsRequest, PreHandle);
+        HFunc(TEvDataStreamsListShardsRequest, PreHandle);
+        HFunc(TEvDataStreamsPutRecordsRequest, PreHandle);
+        HFunc(TEvDataStreamsGetRecordsRequest, PreHandle);
+        HFunc(TEvDataStreamsGetShardIteratorRequest, PreHandle);
+        HFunc(TEvDataStreamsSubscribeToShardRequest, PreHandle);
+        HFunc(TEvDataStreamsDescribeLimitsRequest, PreHandle);
+        HFunc(TEvDataStreamsDescribeStreamSummaryRequest, PreHandle);
+        HFunc(TEvDataStreamsDecreaseStreamRetentionPeriodRequest, PreHandle);
+        HFunc(TEvDataStreamsIncreaseStreamRetentionPeriodRequest, PreHandle);
+        HFunc(TEvDataStreamsUpdateShardCountRequest, PreHandle);
+        HFunc(TEvDataStreamsUpdateStreamRequest, PreHandle);
+        HFunc(TEvDataStreamsSetWriteQuotaRequest, PreHandle);
+        HFunc(TEvDataStreamsListStreamConsumersRequest, PreHandle);
+        HFunc(TEvDataStreamsAddTagsToStreamRequest, PreHandle);
+        HFunc(TEvDataStreamsDisableEnhancedMonitoringRequest, PreHandle);
+        HFunc(TEvDataStreamsEnableEnhancedMonitoringRequest, PreHandle);
+        HFunc(TEvDataStreamsListTagsForStreamRequest, PreHandle);
+        HFunc(TEvDataStreamsMergeShardsRequest, PreHandle);
+        HFunc(TEvDataStreamsRemoveTagsFromStreamRequest, PreHandle);
+        HFunc(TEvDataStreamsSplitShardRequest, PreHandle);
+        HFunc(TEvDataStreamsStartStreamEncryptionRequest, PreHandle);
+        HFunc(TEvDataStreamsStopStreamEncryptionRequest, PreHandle);
 
         HFunc(TEvProxyRuntimeEvent, PreHandle);
 
-        default: 
-            Y_FAIL("Unknown request: %u\n", ev->GetTypeRewrite()); 
-        break; 
+        default:
+            Y_FAIL("Unknown request: %u\n", ev->GetTypeRewrite());
+        break;
     }
 }
 

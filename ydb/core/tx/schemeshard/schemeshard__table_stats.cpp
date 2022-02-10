@@ -5,14 +5,14 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-template <typename T> 
-static ui64 GetThroughput(const T& c) { 
-    ui64 acc = 0; 
-    for (const auto& v : c) 
-        acc += v.GetThroughput(); 
-    return acc; 
-} 
- 
+template <typename T>
+static ui64 GetThroughput(const T& c) {
+    ui64 acc = 0;
+    for (const auto& v : c)
+        acc += v.GetThroughput();
+    return acc;
+}
+
 template <typename T>
 static ui64 GetIops(const T& c) {
     ui64 acc = 0;
@@ -126,7 +126,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     }
 
     const auto& tableStats = rec.GetTableStats();
-    const auto& tabletMetrics = rec.GetTabletMetrics(); 
+    const auto& tabletMetrics = rec.GetTabletMetrics();
     ui64 dataSize = tableStats.GetDataSize();
     ui64 rowCount = tableStats.GetRowCount();
 
@@ -166,11 +166,11 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
 
     TInstant now = AppData(ctx)->TimeProvider->Now();
     newStats.SetCurrentRawCpuUsage(tabletMetrics.GetCPU(), now);
-    newStats.Memory = tabletMetrics.GetMemory(); 
-    newStats.Network = tabletMetrics.GetNetwork(); 
-    newStats.Storage = tabletMetrics.GetStorage(); 
-    newStats.ReadThroughput = GetThroughput(tabletMetrics.GetGroupReadThroughput()); 
-    newStats.WriteThroughput = GetThroughput(tabletMetrics.GetGroupWriteThroughput()); 
+    newStats.Memory = tabletMetrics.GetMemory();
+    newStats.Network = tabletMetrics.GetNetwork();
+    newStats.Storage = tabletMetrics.GetStorage();
+    newStats.ReadThroughput = GetThroughput(tabletMetrics.GetGroupReadThroughput());
+    newStats.WriteThroughput = GetThroughput(tabletMetrics.GetGroupWriteThroughput());
     newStats.ReadIops = GetIops(tabletMetrics.GetGroupReadIops());
     newStats.WriteIops = GetIops(tabletMetrics.GetGroupWriteIops());
     newStats.PartCount = tableStats.GetPartCount();

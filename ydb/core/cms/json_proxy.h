@@ -71,7 +71,7 @@ public:
                     "TJsonProxyBase send request to " << GetTabletName() << " tablet " << tid);
 
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = {.RetryLimitCount = 10}; 
+        pipeConfig.RetryPolicy = {.RetryLimitCount = 10};
         Pipe = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tid, pipeConfig));
         NTabletPipe::SendData(ctx, Pipe, request.Release());
 

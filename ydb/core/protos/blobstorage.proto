@@ -960,7 +960,7 @@ message TNodeWardenServiceSet {
         }
         optional NKikimrBlobStorage.TVDiskID VDiskID = 1;
         optional TVDiskLocation VDiskLocation = 2;
-        optional TVDiskKind.EVDiskKind VDiskKind = 3; 
+        optional TVDiskKind.EVDiskKind VDiskKind = 3;
         optional bool DoDestroy = 4 [default = false];
         optional bool DoWipe = 5 [default = false];
         optional EEntityStatus EntityStatus = 6;
@@ -1078,19 +1078,19 @@ message TEvControllerProposeGroupKey {
     optional uint64 GroupKeyNonce = 7 [default = 0];
 }
 
-message TStorageOwnerGroupInfo { 
-    optional uint32 GroupID = 1; 
-    optional uint64 ReadThroughput = 2; // bytes per second 
-    optional uint64 WriteThroughput = 3; // bytes per second 
-    optional uint64 DataSize = 4; 
-} 
- 
-message TStorageOwnerInfo { 
-    optional uint64 OwnerID = 1; 
-    repeated TStorageOwnerGroupInfo GroupInfo = 2; 
-    optional uint64 DataSize = 3; 
-} 
- 
+message TStorageOwnerGroupInfo {
+    optional uint32 GroupID = 1;
+    optional uint64 ReadThroughput = 2; // bytes per second
+    optional uint64 WriteThroughput = 3; // bytes per second
+    optional uint64 DataSize = 4;
+}
+
+message TStorageOwnerInfo {
+    optional uint64 OwnerID = 1;
+    repeated TStorageOwnerGroupInfo GroupInfo = 2;
+    optional uint64 DataSize = 3;
+}
+
 message TEvControllerSelectGroups {
     message TStoragePoolSpecifier {
         optional string Name = 1; // filter by name if set
@@ -1099,17 +1099,17 @@ message TEvControllerSelectGroups {
     message TGroupParameters {
         optional uint32 ErasureSpecies = 1;
         optional uint64 DesiredPDiskCategory = 2;
-        optional uint64 DesiredVDiskCategory = 3; 
-        optional float RequiredIOPS = 4; 
-        optional uint64 RequiredThroughput = 5; 
-        optional uint64 RequiredDataSize = 6; 
+        optional uint64 DesiredVDiskCategory = 3;
+        optional float RequiredIOPS = 4;
+        optional uint64 RequiredThroughput = 5;
+        optional uint64 RequiredDataSize = 6;
         optional TStoragePoolSpecifier StoragePoolSpecifier = 7;
- 
+
     }
     reserved 1;
     reserved 2;
     repeated TGroupParameters GroupParameters = 3;
-    optional TStorageOwnerInfo StorageOwnerInfo = 4; 
+    optional TStorageOwnerInfo StorageOwnerInfo = 4;
     optional uint64 ObjectId = 5; // scheme object id
     optional bool ReturnAllMatchingGroups = 6; // when true, then all matching groups are returned
     optional bool BlockUntilAllResourcesAreComplete = 7; // do not respond unless resources for all groups are filled up
@@ -1140,8 +1140,8 @@ message TEvControllerUpdateDiskStatus {
     repeated NKikimrBlobStorage.TVDiskMetrics VDisksMetrics = 1;
     repeated NKikimrBlobStorage.TPDiskMetrics PDisksMetrics = 2;
     repeated TVDiskStatus VDiskStatus = 3;
-} 
- 
+}
+
 message TEvGroupStatReport {
     message TLatencyHistogram {
         repeated uint32 Buckets = 1;
@@ -1217,30 +1217,30 @@ message TEvControllerScrubReportQuantumInProgress {
     optional NKikimrBlobStorage.TVSlotId VSlotId = 1;
 }
 
-message TEvRequestBSControllerInfo { 
-    optional uint32 GroupId = 1; 
-} 
- 
-message TEvResponseBSControllerInfo { 
-    message TVDiskInfo { 
+message TEvRequestBSControllerInfo {
+    optional uint32 GroupId = 1;
+}
+
+message TEvResponseBSControllerInfo {
+    message TVDiskInfo {
         optional NKikimrBlobStorage.TVDiskID VDiskId = 1;
-        optional uint32 PDiskId = 2; 
-        optional uint32 NodeId = 3; 
-        optional uint64 PDiskCategory = 4; 
-        optional uint64 VDiskCategory = 5; // Kind 
-    } 
-    message TBSGroupInfo { 
-        optional uint32 GroupId = 1; 
-        optional uint32 ErasureSpecies = 2; 
-        repeated TVDiskInfo VDiskInfo = 3; 
+        optional uint32 PDiskId = 2;
+        optional uint32 NodeId = 3;
+        optional uint64 PDiskCategory = 4;
+        optional uint64 VDiskCategory = 5; // Kind
+    }
+    message TBSGroupInfo {
+        optional uint32 GroupId = 1;
+        optional uint32 ErasureSpecies = 2;
+        repeated TVDiskInfo VDiskInfo = 3;
         //optional uint64 ReadThroughput = 4; // bytes per second
         //optional uint64 WriteThroughput = 5; // bytes per second
-        optional uint64 DataSize = 6; 
+        optional uint64 DataSize = 6;
         //optional uint64 Counter = 7; // usage counter
-    } 
-    repeated TBSGroupInfo BSGroupInfo = 1; 
-} 
- 
+    }
+    repeated TBSGroupInfo BSGroupInfo = 1;
+}
+
 message TEvControllerNodeReport {
     enum EVDiskPhase {
         UNKNOWN = 0;

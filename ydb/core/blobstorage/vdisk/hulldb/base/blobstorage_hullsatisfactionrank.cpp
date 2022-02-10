@@ -127,7 +127,7 @@ namespace NKikimr {
                        TDecimal yellow,
                        TDecimal red,
                        NKikimrWhiteboard::TVDiskSatisfactionRank::TRank &r) {
-            //r.SetRankPercent((rank * 100u).ToUi64()); 
+            //r.SetRankPercent((rank * 100u).ToUi64());
             if (rank < yellow) {
                 r.SetFlag(NKikimrWhiteboard::Green);
             } else if (rank < red) {
@@ -143,7 +143,7 @@ namespace NKikimr {
 
     void TDynamicPDiskWeightsManager::DefWhiteboard(NKikimrWhiteboard::TVDiskSatisfactionRank &v) {
         auto set = [] (NKikimrWhiteboard::TVDiskSatisfactionRank::TRank &r) {
-            //r.SetRankPercent(0); 
+            //r.SetRankPercent(0);
             r.SetFlag(NKikimrWhiteboard::Green);
         };
 

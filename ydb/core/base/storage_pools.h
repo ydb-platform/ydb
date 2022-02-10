@@ -28,7 +28,7 @@ struct TStoragePool: public std::pair<TString, TString> {
 
 using TStoragePools = TVector<TStoragePool>;
 
-using TChannelBind = NKikimrStoragePool::TChannelBind; 
+using TChannelBind = NKikimrStoragePool::TChannelBind;
 
 using TChannelsBindings = TVector<TChannelBind>;
 

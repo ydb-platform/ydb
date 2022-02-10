@@ -28,11 +28,11 @@ public:
     { }
 
     void Bootstrap(const TActorContext& ctx) {
-        NTabletPipe::TClientConfig config({ 
-            .RetryLimitCount = 5, 
-            .MinRetryTime = TDuration::MilliSeconds(10), 
-            .MaxRetryTime = TDuration::MilliSeconds(100) 
-        }); 
+        NTabletPipe::TClientConfig config({
+            .RetryLimitCount = 5,
+            .MinRetryTime = TDuration::MilliSeconds(10),
+            .MaxRetryTime = TDuration::MilliSeconds(100)
+        });
         config.CheckAliveness = true;
 
         for (const auto& kv : BorrowedParts) {

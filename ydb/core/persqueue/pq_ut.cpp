@@ -313,7 +313,7 @@ Y_UNIT_TEST(TestCheckACL) {
         TFakeSchemeShardState::TPtr state{new TFakeSchemeShardState()};
         ui64 ssId = 9876;
         BootFakeSchemeShard(*tc.Runtime, ssId, state);
-        IActor* ticketParser = NKikimr::CreateTicketParser(tc.Runtime->GetAppData().AuthConfig); 
+        IActor* ticketParser = NKikimr::CreateTicketParser(tc.Runtime->GetAppData().AuthConfig);
         TActorId ticketParserId = tc.Runtime->Register(ticketParser);
         tc.Runtime->RegisterService(NKikimr::MakeTicketParserID(), ticketParserId);
 

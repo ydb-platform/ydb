@@ -4,35 +4,35 @@ import "ydb/core/protos/tablet_counters.proto";
 package NKikimrTabletBase;
 option java_package = "ru.yandex.kikimr.proto";
 
-// we have changed type without changing it's number because there is a binary compatibility with ui32 and enums 
-message TTabletTypes { 
-    enum EType { 
-        Unknown = 0; 
-        OldSchemeShard = 1; 
-        OldDataShard = 2; 
-        OldHive = 3; 
-        OldCoordinator = 4; 
-        Mediator = 5; 
-        OldTxProxy = 6; 
-        OldBSController = 7; 
-        Dummy = 8; 
-        // number 9 was OldJobRunnerPoolManager - hierarchical JRPM tablet 
-        RTMRPartition = 10; 
-        OldKeyValue = 11; 
-        KeyValue = 12; 
-        Coordinator = 13; 
-        Hive = 14; 
-        BSController = 15; 
-        SchemeShard = 16; 
-        TxProxy = 17; 
-        DataShard = 18; 
-        // number 19 was JobRunnerPoolManager - flat JRPM tablet 
-        PersQueue = 20; 
+// we have changed type without changing it's number because there is a binary compatibility with ui32 and enums
+message TTabletTypes {
+    enum EType {
+        Unknown = 0;
+        OldSchemeShard = 1;
+        OldDataShard = 2;
+        OldHive = 3;
+        OldCoordinator = 4;
+        Mediator = 5;
+        OldTxProxy = 6;
+        OldBSController = 7;
+        Dummy = 8;
+        // number 9 was OldJobRunnerPoolManager - hierarchical JRPM tablet
+        RTMRPartition = 10;
+        OldKeyValue = 11;
+        KeyValue = 12;
+        Coordinator = 13;
+        Hive = 14;
+        BSController = 15;
+        SchemeShard = 16;
+        TxProxy = 17;
+        DataShard = 18;
+        // number 19 was JobRunnerPoolManager - flat JRPM tablet
+        PersQueue = 20;
         Cms = 21;
-        NodeBroker = 22; 
-        TxAllocator = 23; 
-        PersQueueReadBalancer = 24; 
-        BlockStoreVolume = 25; 
+        NodeBroker = 22;
+        TxAllocator = 23;
+        PersQueueReadBalancer = 24;
+        BlockStoreVolume = 25;
         BlockStorePartition = 26;
         TenantSlotBroker = 27;
         Console = 28;
@@ -46,7 +46,7 @@ message TTabletTypes {
         TestShard = 36;
         SequenceShard = 37;
         ReplicationController = 38;
- 
+
         // when adding a new tablet type and keeping parse compatibility with the old version
         // rename existing reserved item to desired one, and add new reserved item to
         // the end of reserved list
@@ -55,11 +55,11 @@ message TTabletTypes {
         Reserved41 = 41;
         Reserved42 = 42;
 
-        UserTypeStart = 255; 
-        TypeInvalid = -1; 
-    } 
-} 
- 
+        UserTypeStart = 255;
+        TypeInvalid = -1;
+    }
+}
+
 message TTabletLogEntry {
     // normal log entries
     repeated uint32 DependsOn = 1;
@@ -97,8 +97,8 @@ message TTabletChannelInfo {
 message TTabletStorageInfo {
     optional fixed64 TabletID = 1;
     repeated TTabletChannelInfo Channels = 2;
-    optional TTabletTypes.EType TabletType = 3; 
-    optional uint32 Version = 4; 
+    optional TTabletTypes.EType TabletType = 3;
+    optional uint32 Version = 4;
     optional uint64 TenantIdOwner = 5;
     optional uint64 TenantIdLocalId = 6;
 }
@@ -182,48 +182,48 @@ message TEvFollowerRefresh {
     optional uint32 Generation = 2;
     optional bool OfflineProtocol = 3;
 }
- 
-message TEvGetCounters { 
-} 
- 
-message TEvGetCountersResponse { 
-    optional NKikimrTabletBase.TTabletCounters TabletCounters = 1; 
-} 
- 
-message TEvCutTabletHistory { 
-    optional fixed64 TabletID = 1; 
-    optional uint32 Channel = 2; 
-    optional uint32 GroupID = 3; 
-    optional uint32 FromGeneration = 4; 
-} 
- 
-message TThroughputRecord { 
-    optional uint32 GroupID = 1; 
-    optional uint32 Channel = 2; // it uint8 actually 
-    optional uint64 Throughput = 3; 
-} 
- 
+
+message TEvGetCounters {
+}
+
+message TEvGetCountersResponse {
+    optional NKikimrTabletBase.TTabletCounters TabletCounters = 1;
+}
+
+message TEvCutTabletHistory {
+    optional fixed64 TabletID = 1;
+    optional uint32 Channel = 2;
+    optional uint32 GroupID = 3;
+    optional uint32 FromGeneration = 4;
+}
+
+message TThroughputRecord {
+    optional uint32 GroupID = 1;
+    optional uint32 Channel = 2; // it uint8 actually
+    optional uint64 Throughput = 3;
+}
+
 message TIopsRecord {
     optional uint32 GroupID = 1;
     optional uint32 Channel = 2; // actually uint8
     optional uint64 Iops = 3;
 }
 
-message TMetrics { 
-    optional uint64 CPU = 1; 
-    optional uint64 Memory = 2; 
-    optional uint64 Network = 3; 
-    optional uint64 Counter = 4; 
-    optional uint64 Storage = 5; 
-    repeated TThroughputRecord GroupReadThroughput = 6; 
-    repeated TThroughputRecord GroupWriteThroughput = 7; 
-    optional uint64 ReadThroughput = 8; 
-    optional uint64 WriteThroughput = 9; 
+message TMetrics {
+    optional uint64 CPU = 1;
+    optional uint64 Memory = 2;
+    optional uint64 Network = 3;
+    optional uint64 Counter = 4;
+    optional uint64 Storage = 5;
+    repeated TThroughputRecord GroupReadThroughput = 6;
+    repeated TThroughputRecord GroupWriteThroughput = 7;
+    optional uint64 ReadThroughput = 8;
+    optional uint64 WriteThroughput = 9;
     repeated TIopsRecord GroupReadIops = 10;
     repeated TIopsRecord GroupWriteIops = 11;
     optional uint64 ReadIops = 12;
     optional uint64 WriteIops = 13;
-} 
+}
 
 message TEvTabletStop {
     enum EReason {

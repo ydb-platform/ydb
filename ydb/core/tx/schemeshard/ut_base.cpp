@@ -3280,14 +3280,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestAlterSubDomain(runtime, ++txId,  "/",
                            "StoragePools { "
-                           "  Name: \"pool-1\" " 
-                           "  Kind: \"pool-kind-1\" " 
-                           "} " 
-                           "StoragePools { " 
-                           "  Name: \"pool-2\" " 
-                           "  Kind: \"pool-kind-2\" " 
-                           "} " 
-                           "StoragePools { " 
+                           "  Name: \"pool-1\" "
+                           "  Kind: \"pool-kind-1\" "
+                           "} "
+                           "StoragePools { "
+                           "  Name: \"pool-2\" "
+                           "  Kind: \"pool-kind-2\" "
+                           "} "
+                           "StoragePools { "
                            "  Name: \"name_USER_0_kind_hdd-1\" "
                            "  Kind: \"hdd-1\" "
                            "} "
@@ -4329,14 +4329,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
                             StoragePools {
-                              Name: "pool-1" 
-                              Kind: "pool-kind-1" 
-                            } 
-                            StoragePools { 
-                              Name: "pool-2" 
-                              Kind: "pool-kind-2" 
-                            } 
-                            StoragePools { 
+                              Name: "pool-1"
+                              Kind: "pool-kind-1"
+                            }
+                            StoragePools {
+                              Name: "pool-2"
+                              Kind: "pool-kind-2"
+                            }
+                            StoragePools {
                                 Name: "name_USER_0_kind_hdd-1"
                                 Kind: "hdd-1"
                             }
@@ -4853,14 +4853,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestAlterSubDomain(runtime, ++txId,  "/", R"(
                             StoragePools {
-                              Name: "pool-1" 
-                              Kind: "pool-kind-1" 
-                            } 
-                            StoragePools { 
-                              Name: "pool-2" 
-                              Kind: "pool-kind-2" 
-                            } 
-                            StoragePools { 
+                              Name: "pool-1"
+                              Kind: "pool-kind-1"
+                            }
+                            StoragePools {
+                              Name: "pool-2"
+                              Kind: "pool-kind-2"
+                            }
+                            StoragePools {
                                 Name: "name_USER_0_kind_hdd-1"
                                 Kind: "hdd-1"
                             }

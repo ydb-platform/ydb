@@ -29,20 +29,20 @@ namespace NKikimr {
         using TFinishCallback = std::function<void (const TGrpcError*)>;
 
         class TGRpcClient {
-            TGRpcClientConfig Config; 
+            TGRpcClientConfig Config;
             class TImpl;
             THolder<TImpl> Impl;
 
         public:
             TGRpcClient(const TGRpcClientConfig& config);
             ~TGRpcClient();
-            const TGRpcClientConfig& GetConfig() const; 
+            const TGRpcClientConfig& GetConfig() const;
             grpc_connectivity_state GetNetworkStatus() const;
 
             // MiniKQL request, TResponseCallback callback (const NKikimrClient::DML& request)
             void Request(const NKikimrClient::TRequest& request, TResponseCallback callback);
-            // ChooseProxy request 
-            void ChooseProxy(const NKikimrClient::TChooseProxyRequest& request, TResponseCallback callback); 
+            // ChooseProxy request
+            void ChooseProxy(const NKikimrClient::TChooseProxyRequest& request, TResponseCallback callback);
 
             // Stream request
             void StreamRequest(const NKikimrClient::TRequest& request, TSimpleCallback<NKikimrClient::TResponse> process, TFinishCallback finish);
@@ -125,10 +125,10 @@ namespace NKikimr {
             void DbSchema(const NKikimrClient::TJSON& request, TJSONCallback callback);
             void DbOperation(const NKikimrClient::TJSON& request, TJSONCallback callback);
             void DbBatch(const NKikimrClient::TJSON& request, TJSONCallback callback);
- 
-            void WhoAmI(const NKikimrClient::TWhoAmI& request, TResponseCallback callback); 
-            void FillNode(const NKikimrClient::TFillNodeRequest& request, TResponseCallback callback); 
-            void DrainNode(const NKikimrClient::TDrainNodeRequest& request, TResponseCallback callback); 
+
+            void WhoAmI(const NKikimrClient::TWhoAmI& request, TResponseCallback callback);
+            void FillNode(const NKikimrClient::TFillNodeRequest& request, TResponseCallback callback);
+            void DrainNode(const NKikimrClient::TDrainNodeRequest& request, TResponseCallback callback);
         };
 
     } // NGRpcProxy

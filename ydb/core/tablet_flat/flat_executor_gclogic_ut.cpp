@@ -1,9 +1,9 @@
-#include "flat_executor_gclogic.h" 
+#include "flat_executor_gclogic.h"
 #include <library/cpp/testing/unittest/registar.h>
- 
-namespace NKikimr { 
-namespace NTabletFlatExecutor { 
- 
+
+namespace NKikimr {
+namespace NTabletFlatExecutor {
+
 Y_UNIT_TEST_SUITE(TFlatTableExecutorGC) {
     bool TestDeduplication(TVector<TLogoBlobID> keep, TVector<TLogoBlobID> dontkeep, ui32 gen, ui32 step, TVector<TLogoBlobID> expectKeep, TVector<TLogoBlobID> expectnot) {
         DeduplicateGCKeepVectors(&keep, &dontkeep, gen, step);
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorGC) {
             }
         ));
     }
-} 
- 
-} 
-} 
+}
+
+}
+}

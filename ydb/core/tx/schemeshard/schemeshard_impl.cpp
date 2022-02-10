@@ -62,9 +62,9 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx,
                                                    TDeque<TPathId>&& blockStoreVolumesToClean
                                                    )
 {
-    TPathId subDomainPathId = GetCurrentSubDomainPathId(); 
-    TSubDomainInfo::TPtr domainPtr = ResolveDomainInfo(subDomainPathId); 
-    LoginProvider.Audience = TPath::Init(subDomainPathId, this).PathString(); 
+    TPathId subDomainPathId = GetCurrentSubDomainPathId();
+    TSubDomainInfo::TPtr domainPtr = ResolveDomainInfo(subDomainPathId);
+    LoginProvider.Audience = TPath::Init(subDomainPathId, this).PathString();
     domainPtr->UpdateSecurityState(LoginProvider.GetSecurityState());
 
     Execute(CreateTxInitPopulator(std::move(delayPublications)), ctx);
@@ -349,8 +349,8 @@ bool TSchemeShard::ApplyStorageConfig(
 {
     if (channelsBinding && !reverseBinding) {
         // Build a hash map from storage pool name to an existing channel number
-        for (ui32 channel = 1; channel < channelsBinding.size(); ++channel) { 
-            reverseBinding.emplace(channelsBinding[channel].GetStoragePoolName(), channel); 
+        for (ui32 channel = 1; channel < channelsBinding.size(); ++channel) {
+            reverseBinding.emplace(channelsBinding[channel].GetStoragePoolName(), channel);
         }
     }
 
@@ -380,8 +380,8 @@ bool TSchemeShard::ApplyStorageConfig(
         }
 
         ui32 channel = channelsBinding.size();
-        channelsBinding.emplace_back(); 
-        channelsBinding.back().SetStoragePoolName(poolName); 
+        channelsBinding.emplace_back();
+        channelsBinding.back().SetStoragePoolName(poolName);
         reverseBinding[poolName] = channel;
         return channel;
     };
@@ -397,8 +397,8 @@ bool TSchemeShard::ApplyStorageConfig(
         auto sysLogPool = resolve(storagePools, storageConfig.GetSysLog());
         LOCAL_CHECK(sysLogPool != storagePools.end(), "unable determine pool for syslog storage");
 
-        channelsBinding.emplace_back(); 
-        channelsBinding.back().SetStoragePoolName(sysLogPool->GetName()); 
+        channelsBinding.emplace_back();
+        channelsBinding.back().SetStoragePoolName(sysLogPool->GetName());
     }
 
     if (channelsBinding.size() < 2) {
@@ -435,7 +435,7 @@ bool TSchemeShard::ApplyStorageConfig(
 #undef LOCAL_CHECK
 
     return true;
-    return true; 
+    return true;
 }
 
 void TSchemeShard::ClearDescribePathCaches(const TPathElement::TPtr node) {
@@ -579,9 +579,9 @@ bool TSchemeShard::GetBindingsRoomsChanges(
             continue;
         }
 
-        auto shardPoolsMapping = GetPoolsMapping(shardInfo.BindedChannels); 
- 
-        auto& change = changes[shardPoolsMapping]; 
+        auto shardPoolsMapping = GetPoolsMapping(shardInfo.BindedChannels);
+
+        auto& change = changes[shardPoolsMapping];
         if (change.ChannelsBindings) {
             // This change info is already initialized
             continue;
@@ -595,7 +595,7 @@ bool TSchemeShard::GetBindingsRoomsChanges(
         if (!GetBindingsRooms(domainId, partitionConfig, storageRooms, familyRooms, change.ChannelsBindings, errStr)) {
             return false;
         }
-        change.ChannelsBindingsUpdated = (GetPoolsMapping(change.ChannelsBindings) != shardPoolsMapping); 
+        change.ChannelsBindingsUpdated = (GetPoolsMapping(change.ChannelsBindings) != shardPoolsMapping);
 
         for (const auto& room : storageRooms) {
             change.PerShardConfig.AddStorageRooms()->CopyFrom(room);
@@ -772,10 +772,10 @@ bool TSchemeShard::ResolveSolomonChannels(ui32 profileId, const TPathId domainId
 }
 
 bool TSchemeShard::ResolvePqChannels(ui32 profileId, const TPathId domainId, TChannelsBindings &channelsBinding) const
-{ 
-    return ResolveChannelCommon(profileId, domainId, channelsBinding, &ResolveChannelsDetailsAsIs); 
-} 
- 
+{
+    return ResolveChannelCommon(profileId, domainId, channelsBinding, &ResolveChannelsDetailsAsIs);
+}
+
 bool TSchemeShard::ResolveChannelsByPoolKinds(
     const TVector<TStringBuf> &channelPoolKinds,
     const TPathId domainId,
@@ -866,7 +866,7 @@ bool TSchemeShard::ResolveSubdomainsChannels(const TStoragePools &storagePools, 
         channelsBinding.clear();
         return false;
     }
-    if (ChannelProfiles->Profiles.empty()) { 
+    if (ChannelProfiles->Profiles.empty()) {
         channelsBinding.clear();
         return false;
     }
@@ -943,8 +943,8 @@ bool TSchemeShard::TabletResolveChannelsDetails(ui32 profileId, const TChannelPr
         // sys log channel is 0
         // log channel is 1 always
         if (0 == channelId || 1 == channelId) {
-            result.emplace_back(); 
-            result.back().SetStoragePoolName(poolIt->GetName()); 
+            result.emplace_back();
+            result.back().SetStoragePoolName(poolIt->GetName());
             continue;
         }
 
@@ -952,8 +952,8 @@ bool TSchemeShard::TabletResolveChannelsDetails(ui32 profileId, const TChannelPr
         // but we already already provide for clients variable like ColumnStorage1Ext2
         // so we do not want to break them and we should always make at least 3 channe until StorageConfig is mainstream
         if (uniqPoolsNames.insert(poolIt->GetName()).second) {
-            result.emplace_back(); 
-            result.back().SetStoragePoolName(poolIt->GetName()); 
+            result.emplace_back();
+            result.back().SetStoragePoolName(poolIt->GetName());
         }
     }
 
@@ -1732,13 +1732,13 @@ void TSchemeShard::PersistSubDomainVersion(NIceDb::TNiceDb& db, const TPathId& p
 }
 
 void TSchemeShard::PersistSubDomainSecurityStateVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
-    Y_VERIFY(IsLocalId(pathId)); 
- 
-    db.Table<Schema::SubDomains>() 
-        .Key(pathId.LocalPathId) 
-        .Update<Schema::SubDomains::SecurityStateVersion>(subDomain.GetSecurityStateVersion()); 
-} 
- 
+    Y_VERIFY(IsLocalId(pathId));
+
+    db.Table<Schema::SubDomains>()
+        .Key(pathId.LocalPathId)
+        .Update<Schema::SubDomains::SecurityStateVersion>(subDomain.GetSecurityStateVersion());
+}
+
 void TSchemeShard::PersistSubDomain(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
     Y_VERIFY(IsLocalId(pathId));
 
@@ -1865,8 +1865,8 @@ void TSchemeShard::PersistACL(NIceDb::TNiceDb& db, const TPathElement::TPtr path
             NIceDb::TUpdate<Schema::MigratedPaths::ACL>(path->ACL),
             NIceDb::TUpdate<Schema::MigratedPaths::ACLVersion>(path->ACLVersion));
     }
-} 
- 
+}
+
 
 void TSchemeShard::PersistOwner(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
     if (path->PathId.OwnerId == TabletID()) {
@@ -2019,11 +2019,11 @@ void TSchemeShard::PersistTable(NIceDb::TNiceDb& db, const TPathId tableId) {
 }
 
 void TSchemeShard::PersistChannelsBinding(NIceDb::TNiceDb& db, const TShardIdx shardId, const TChannelsBindings& bindedChannels) {
-    for (ui32 channelId = 0; channelId < bindedChannels.size(); ++channelId) { 
-        const auto& bind = bindedChannels[channelId]; 
+    for (ui32 channelId = 0; channelId < bindedChannels.size(); ++channelId) {
+        const auto& bind = bindedChannels[channelId];
         if (IsLocalId(shardId)) {
             db.Table<Schema::ChannelsBinding>().Key(shardId.GetLocalId(), channelId).Update(
-                    NIceDb::TUpdate<Schema::ChannelsBinding::PoolName>(bind.GetStoragePoolName()), 
+                    NIceDb::TUpdate<Schema::ChannelsBinding::PoolName>(bind.GetStoragePoolName()),
                     NIceDb::TUpdate<Schema::ChannelsBinding::Binding>(bind.SerializeAsString()));
         } else {
             db.Table<Schema::MigratedChannelsBinding>().Key(shardId.GetOwnerId(), shardId.GetLocalId(), channelId).Update(
@@ -2590,7 +2590,7 @@ void TSchemeShard::PersistShardDeleted(NIceDb::TNiceDb& db, TShardIdx shardIdx, 
 
     db.Table<Schema::MigratedShardsToDelete>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Delete();
     db.Table<Schema::MigratedShards>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Delete();
-    for (ui32 channelId = 0; channelId < bindedChannels.size(); ++channelId) { 
+    for (ui32 channelId = 0; channelId < bindedChannels.size(); ++channelId) {
         db.Table<Schema::MigratedChannelsBinding>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId(), channelId).Delete();
     }
     db.Table<Schema::MigratedTableShardPartitionConfigs>().Key(shardIdx.GetOwnerId(), shardIdx.GetLocalId()).Delete();
@@ -3417,18 +3417,18 @@ TTabletId TSchemeShard::ResolveHive(TShardIdx shardIdx, const TActorContext& ctx
 }
 
 void TSchemeShard::DoShardsDeletion(const THashSet<TShardIdx>& shardIdxs, const TActorContext& ctx) {
-    TMap<TTabletId, THashSet<TShardIdx>> shardsPerHive; 
-    for (TShardIdx shardIdx : shardIdxs) { 
+    TMap<TTabletId, THashSet<TShardIdx>> shardsPerHive;
+    for (TShardIdx shardIdx : shardIdxs) {
         TTabletId hiveToRequest = ResolveHive(shardIdx, ctx);
 
         shardsPerHive[hiveToRequest].emplace(shardIdx);
-    } 
+    }
 
     for (const auto& item: shardsPerHive) {
         const auto& hive = item.first;
         const auto& shards = item.second;
-        ShardDeleter.SendDeleteRequests(hive, shards, ShardInfos, ctx); 
-    } 
+        ShardDeleter.SendDeleteRequests(hive, shards, ShardInfos, ctx);
+    }
 }
 
 NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) const {
@@ -3448,12 +3448,12 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
         switch(pathEl->PathType) {
             case NKikimrSchemeOp::EPathType::EPathTypeDir:
                 if (pathEl->IsRoot() && IsDomainSchemeShard) {
-                    TSubDomainInfo::TPtr subDomain = SubDomains.at(pathId); 
+                    TSubDomainInfo::TPtr subDomain = SubDomains.at(pathId);
                     Y_VERIFY(SubDomains.contains(pathId));
-                    result.SetSubDomainVersion(subDomain->GetVersion()); 
-                    result.SetSecurityStateVersion(subDomain->GetSecurityStateVersion()); 
+                    result.SetSubDomainVersion(subDomain->GetVersion());
+                    result.SetSecurityStateVersion(subDomain->GetSecurityStateVersion());
                     generalVersion += result.GetSubDomainVersion();
-                    generalVersion += result.GetSecurityStateVersion(); 
+                    generalVersion += result.GetSecurityStateVersion();
                 }
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
@@ -3461,18 +3461,18 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 Y_VERIFY(!(pathEl->IsRoot() && IsDomainSchemeShard));
 
                 Y_VERIFY(SubDomains.contains(pathId));
-                TSubDomainInfo::TPtr subDomain = SubDomains.at(pathId); 
-                result.SetSubDomainVersion(subDomain->GetVersion()); 
-                result.SetSecurityStateVersion(subDomain->GetSecurityStateVersion()); 
+                TSubDomainInfo::TPtr subDomain = SubDomains.at(pathId);
+                result.SetSubDomainVersion(subDomain->GetVersion());
+                result.SetSecurityStateVersion(subDomain->GetSecurityStateVersion());
                 generalVersion += result.GetSubDomainVersion();
-                generalVersion += result.GetSecurityStateVersion(); 
+                generalVersion += result.GetSecurityStateVersion();
 
-                if (ui64 version = subDomain->GetDomainStateVersion()) { 
+                if (ui64 version = subDomain->GetDomainStateVersion()) {
                     result.SetSubDomainStateVersion(version);
                     generalVersion += version;
                 }
                 break;
-            } 
+            }
             case NKikimrSchemeOp::EPathType::EPathTypeTable:
                 Y_VERIFY_S(Tables.contains(pathId),
                            "no table with id: " << pathId << ", at schemeshard: " << SelfTabletId());
@@ -3675,10 +3675,10 @@ NKikimrSubDomains::TProcessingParams TSchemeShard::CreateRootProcessingParams(co
 
 NTabletPipe::TClientConfig TSchemeShard::GetPipeClientConfig() {
     NTabletPipe::TClientConfig config;
-    config.RetryPolicy = { 
-        .MinRetryTime = TDuration::MilliSeconds(50), 
-        .MaxRetryTime = TDuration::Seconds(2), 
-    }; 
+    config.RetryPolicy = {
+        .MinRetryTime = TDuration::MilliSeconds(50),
+        .MaxRetryTime = TDuration::Seconds(2),
+    };
     return config;
 }
 
@@ -3995,7 +3995,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvSubscribeToShardDeletion, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
- 
+
     default:
         if (!HandleDefaultEvents(ev, ctx)) {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -4553,7 +4553,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TAc
     }
 
     if (ShardDeleter.Has(tabletId, clientId)) {
-        ShardDeleter.ResendDeleteRequests(TTabletId(ev->Get()->TabletId), ShardInfos, ctx); 
+        ShardDeleter.ResendDeleteRequests(TTabletId(ev->Get()->TabletId), ShardInfos, ctx);
         return;
     }
 
@@ -4595,7 +4595,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TAc
     }
 
     if (ShardDeleter.Has(tabletId, clientId)) {
-        ShardDeleter.ResendDeleteRequests(tabletId, ShardInfos, ctx); 
+        ShardDeleter.ResendDeleteRequests(tabletId, ShardInfos, ctx);
         return;
     }
 
@@ -5847,10 +5847,10 @@ bool TSchemeShard::ReadSysValue(NIceDb::TNiceDb &db, ui64 sysTag, ui64 &value, u
 }
 
 TSchemeShard::TDedicatedPipePool::TDedicatedPipePool() {
-    PipeCfg.RetryPolicy = { 
-        .MinRetryTime = TDuration::MilliSeconds(100), 
-        .MaxRetryTime = TDuration::Seconds(30), 
-    }; 
+    PipeCfg.RetryPolicy = {
+        .MinRetryTime = TDuration::MilliSeconds(100),
+        .MaxRetryTime = TDuration::Seconds(30),
+    };
 }
 
 void TSchemeShard::TDedicatedPipePool::Create(TIndexBuildId ownerTxId, TTabletId dst, THolder<IEventBase> message, const TActorContext &ctx) {
@@ -6086,8 +6086,8 @@ void TSchemeShard::ChangeDiskSpaceSoftQuotaBytes(i64 delta) {
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContext &ctx) {
-    Execute(CreateTxLogin(ev), ctx); 
-} 
- 
+    Execute(CreateTxLogin(ev), ctx);
+}
+
 } // namespace NSchemeShard
 } // namespace NKikimr

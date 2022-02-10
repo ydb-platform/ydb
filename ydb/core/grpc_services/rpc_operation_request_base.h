@@ -105,7 +105,7 @@ protected:
 
         if (!PipeClient) {
             NTabletPipe::TClientConfig config;
-            config.RetryPolicy = {.RetryLimitCount = 3}; 
+            config.RetryPolicy = {.RetryLimitCount = 3};
             PipeClient = this->RegisterWithSameMailbox(NTabletPipe::CreateClient(this->SelfId(), schemeShardId, config));
         }
 

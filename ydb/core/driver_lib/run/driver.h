@@ -15,16 +15,16 @@ namespace NKikimr {
 
 #define MODE_MAP(XX) \
     XX(EDM_RUN, "run", "run kikimr node") \
-    XX(EDM_SERVER, "server", "run kikimr node") \ 
-    XX(EDM_ADMIN, "admin", "admin running kikimr") \ 
-    XX(EDM_DB, "db", "admin running kikimr") \ 
-    XX(EDM_TABLET, "tablet", "admin running kikimr") \ 
-    XX(EDM_DEBUG, "debug", "admin running kikimr") \ 
-    XX(EDM_BS, "bs", "admin running kikimr") \ 
-    XX(EDM_BLOBSTORAGE, "blobstorage", "admin running kikimr") \ 
+    XX(EDM_SERVER, "server", "run kikimr node") \
+    XX(EDM_ADMIN, "admin", "admin running kikimr") \
+    XX(EDM_DB, "db", "admin running kikimr") \
+    XX(EDM_TABLET, "tablet", "admin running kikimr") \
+    XX(EDM_DEBUG, "debug", "admin running kikimr") \
+    XX(EDM_BS, "bs", "admin running kikimr") \
+    XX(EDM_BLOBSTORAGE, "blobstorage", "admin running kikimr") \
     XX(EDM_CMS, "cms", "admin running kikimr") \
     XX(EDM_DISCOVERY, "discovery", "discover endpoints") \
-    XX(EDM_WHOAMI, "whoami", "admin running kikimr") \ 
+    XX(EDM_WHOAMI, "whoami", "admin running kikimr") \
     XX(EDM_FORMAT_INFO, "format-info", "read pdisk format info") \
     XX(EDM_FORMAT_UTIL, "format-util", "query blob storage format configuration file") \
     XX(EDM_NODE_BY_HOST, "node-by-host", "get node id by hostname") \

@@ -39,8 +39,8 @@ struct TEvTxUserProxy {
 
         EvProposeTransactionStatus = EvProposeTransaction + 1 * 512,
         EvNavigateStatus,
-        EvInvalidateTable, 
-        EvInvalidateTableResult, 
+        EvInvalidateTable,
+        EvInvalidateTableResult,
 
         EvCancelBackupRequestDeprecated,
         EvCancelBackupResultDeprecated,
@@ -161,14 +161,14 @@ struct TEvTxUserProxy {
         TString ToString() const;
     };
 
-    struct TEvInvalidateTable : public TEventPB<TEvInvalidateTable, NKikimrTxUserProxy::TEvInvalidateTable, EvInvalidateTable> { 
-        TEvInvalidateTable() = default; 
-        TEvInvalidateTable(const TTableId& tableId) { 
+    struct TEvInvalidateTable : public TEventPB<TEvInvalidateTable, NKikimrTxUserProxy::TEvInvalidateTable, EvInvalidateTable> {
+        TEvInvalidateTable() = default;
+        TEvInvalidateTable(const TTableId& tableId) {
             Record.SetSchemeShardId(tableId.PathId.OwnerId);
             Record.SetTableId(tableId.PathId.LocalPathId);
-        } 
-    }; 
- 
+        }
+    };
+
     struct TEvInvalidateTableResult : public TEventSimple<TEvInvalidateTableResult, EvInvalidateTableResult> {};
 
     struct TEvProposeKqpTransaction : public TEventLocal<TEvProposeKqpTransaction, EvProposeKqpTransaction> {

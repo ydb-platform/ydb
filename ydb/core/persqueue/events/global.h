@@ -24,8 +24,8 @@ struct TEvPersQueue {
         EvStatusResponse,
         EvHasDataInfo, //how much data is available to fetch from partition
         EvHasDataInfoResponse,
-        EvPartitionClientInfo, 
-        EvPartitionClientInfoResponse, 
+        EvPartitionClientInfo,
+        EvPartitionClientInfoResponse,
         EvUpdateBalancerConfig,
         EvRegisterReadSession,
         EvLockPartition,
@@ -154,14 +154,14 @@ struct TEvPersQueue {
         TEvDropTabletReply()
         {}
     };
- 
-    struct TEvPartitionClientInfo : TEventPB<TEvPartitionClientInfo, NKikimrPQ::TPartitionClientInfo, EvPartitionClientInfo> { 
-        TEvPartitionClientInfo() = default; 
-    }; 
- 
-    struct TEvPartitionClientInfoResponse : TEventPB<TEvPartitionClientInfoResponse, NKikimrPQ::TClientInfoResponse, EvPartitionClientInfoResponse> { 
-        TEvPartitionClientInfoResponse() = default; 
-    }; 
+
+    struct TEvPartitionClientInfo : TEventPB<TEvPartitionClientInfo, NKikimrPQ::TPartitionClientInfo, EvPartitionClientInfo> {
+        TEvPartitionClientInfo() = default;
+    };
+
+    struct TEvPartitionClientInfoResponse : TEventPB<TEvPartitionClientInfoResponse, NKikimrPQ::TClientInfoResponse, EvPartitionClientInfoResponse> {
+        TEvPartitionClientInfoResponse() = default;
+    };
 
     struct TEvWakeupClient : TEventLocal<TEvWakeupClient, EvWakeupClient> {
         TEvWakeupClient(const TString& client, const ui32 group)

@@ -74,7 +74,7 @@
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 #include <ydb/core/client/server/msgbus_server_tracer.h>
 #include <ydb/core/client/server/http_ping.h>
- 
+
 #include <library/cpp/grpc/server/actors/logger.h>
 
 #include <ydb/services/yq/private_grpc.h>
@@ -122,7 +122,7 @@
 #include <util/system/file.h>
 #include <util/system/getpid.h>
 #include <util/system/hostname.h>
- 
+
 #include <ydb/core/tracing/tablet_info.h>
 
 namespace NKikimr {
@@ -187,21 +187,21 @@ public:
         for (const NKikimrConfig::TDomainsConfig::TNamedCompactionPolicy &policy : Config.GetDomainsConfig().GetNamedCompactionPolicy()) {
             appData->DomainsInfo->AddCompactionPolicy(policy.GetName(), new NLocalDb::TCompactionPolicy(policy.GetPolicy()));
         }
- 
-        const auto& securityConfig(Config.GetDomainsConfig().GetSecurityConfig()); 
- 
-        appData->EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement(); 
-        if (securityConfig.AdministrationAllowedSIDsSize() > 0) { 
-            TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end()); 
-            appData->AdministrationAllowedSIDs = std::move(administrationAllowedSIDs); 
-        } 
-        if (securityConfig.DefaultUserSIDsSize() > 0) { 
-            TVector<TString> defaultUserSIDs(securityConfig.GetDefaultUserSIDs().begin(), securityConfig.GetDefaultUserSIDs().end()); 
-            appData->DefaultUserSIDs = std::move(defaultUserSIDs); 
-        } 
-        appData->AllAuthenticatedUsers = securityConfig.GetAllAuthenticatedUsers(); 
 
-        appData->FeatureFlags = Config.GetFeatureFlags(); 
+        const auto& securityConfig(Config.GetDomainsConfig().GetSecurityConfig());
+
+        appData->EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
+        if (securityConfig.AdministrationAllowedSIDsSize() > 0) {
+            TVector<TString> administrationAllowedSIDs(securityConfig.GetAdministrationAllowedSIDs().begin(), securityConfig.GetAdministrationAllowedSIDs().end());
+            appData->AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
+        }
+        if (securityConfig.DefaultUserSIDsSize() > 0) {
+            TVector<TString> defaultUserSIDs(securityConfig.GetDefaultUserSIDs().begin(), securityConfig.GetDefaultUserSIDs().end());
+            appData->DefaultUserSIDs = std::move(defaultUserSIDs);
+        }
+        appData->AllAuthenticatedUsers = securityConfig.GetAllAuthenticatedUsers();
+
+        appData->FeatureFlags = Config.GetFeatureFlags();
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
         appData->EnableKqpSpilling = Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable();
 
@@ -248,7 +248,7 @@ public:
                     ythrow yexception() << "wrong erasure species \"" << name << "\"";
                 }
                 const ui64 pDiskCategory = channel.GetPDiskCategory();
-                const NKikimrBlobStorage::TVDiskKind::EVDiskKind vDiskCategory = static_cast<NKikimrBlobStorage::TVDiskKind::EVDiskKind>(channel.GetVDiskCategory()); 
+                const NKikimrBlobStorage::TVDiskKind::EVDiskKind vDiskCategory = static_cast<NKikimrBlobStorage::TVDiskKind::EVDiskKind>(channel.GetVDiskCategory());
 
                 const TString kind = channel.GetStoragePoolKind();
                 outProfile.Channels.push_back(TChannelProfiles::TProfile::TChannel(erasure, pDiskCategory, vDiskCategory, kind));
@@ -338,59 +338,59 @@ TKikimrRunner::~TKikimrRunner() {
     }
 }
 
- 
+
 void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool includeHostName)
 {
     const auto& appConfig = runConfig.AppConfig;
-    NActors::TMon::TConfig monConfig; 
-    monConfig.Port = appConfig.HasMonitoringConfig() ? appConfig.GetMonitoringConfig().GetMonitoringPort() : 0; 
-    if (monConfig.Port) { 
-        monConfig.Title = appConfig.HasMonitoringConfig() ? appConfig.GetMonitoringConfig().GetMonitoringCaption() : "YDB Monitoring"; 
-        monConfig.Threads = appConfig.GetMonitoringConfig().GetMonitoringThreads(); 
-        monConfig.Address = appConfig.GetMonitoringConfig().GetMonitoringAddress(); 
+    NActors::TMon::TConfig monConfig;
+    monConfig.Port = appConfig.HasMonitoringConfig() ? appConfig.GetMonitoringConfig().GetMonitoringPort() : 0;
+    if (monConfig.Port) {
+        monConfig.Title = appConfig.HasMonitoringConfig() ? appConfig.GetMonitoringConfig().GetMonitoringCaption() : "YDB Monitoring";
+        monConfig.Threads = appConfig.GetMonitoringConfig().GetMonitoringThreads();
+        monConfig.Address = appConfig.GetMonitoringConfig().GetMonitoringAddress();
         monConfig.RedirectMainPageTo = appConfig.GetMonitoringConfig().GetRedirectMainPageTo();
         if (includeHostName) {
             if (appConfig.HasNameserviceConfig() && appConfig.GetNameserviceConfig().NodeSize() > 0) {
                 for (const auto& it : appConfig.GetNameserviceConfig().GetNode()) {
                     if (it.HasNodeId() && it.GetNodeId() == runConfig.NodeId) {
                         if (it.HasHost()) {
-                            monConfig.Host = it.GetHost(); 
+                            monConfig.Host = it.GetHost();
                         }
                         break;
-                    } 
-                } 
-            } 
-            if (monConfig.Host) { 
-                monConfig.Title += " - " + monConfig.Host; 
-            } 
-        } 
- 
-        const auto& securityConfig(runConfig.AppConfig.GetDomainsConfig().GetSecurityConfig()); 
-        if (securityConfig.MonitoringAllowedSIDsSize() > 0) { 
-            monConfig.AllowedSIDs.assign(securityConfig.GetMonitoringAllowedSIDs().begin(), securityConfig.GetMonitoringAllowedSIDs().end()); 
-        } 
- 
-        if (ModuleFactories && ModuleFactories->MonitoringFactory) { 
-            Monitoring = ModuleFactories->MonitoringFactory(std::move(monConfig)); 
+                    }
+                }
+            }
+            if (monConfig.Host) {
+                monConfig.Title += " - " + monConfig.Host;
+            }
+        }
+
+        const auto& securityConfig(runConfig.AppConfig.GetDomainsConfig().GetSecurityConfig());
+        if (securityConfig.MonitoringAllowedSIDsSize() > 0) {
+            monConfig.AllowedSIDs.assign(securityConfig.GetMonitoringAllowedSIDs().begin(), securityConfig.GetMonitoringAllowedSIDs().end());
+        }
+
+        if (ModuleFactories && ModuleFactories->MonitoringFactory) {
+            Monitoring = ModuleFactories->MonitoringFactory(std::move(monConfig));
         } else {
-            Monitoring = new NActors::TMon(std::move(monConfig)); 
-        } 
-        if (Monitoring) { 
-            Monitoring->RegisterCountersPage("counters", "Counters", Counters); 
-            Monitoring->Register(NHttp::CreatePing()); 
-            ActorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors"); 
-        } 
+            Monitoring = new NActors::TMon(std::move(monConfig));
+        }
+        if (Monitoring) {
+            Monitoring->RegisterCountersPage("counters", "Counters", Counters);
+            Monitoring->Register(NHttp::CreatePing());
+            ActorsMonPage = Monitoring->RegisterIndexPage("actors", "Actors");
+        }
     }
 }
- 
-void TKikimrRunner::InitializeMonitoringLogin(const TKikimrRunConfig&) 
-{ 
-    if (Monitoring) { 
-        Monitoring->Register(CreateLoginPage(ActorSystem.Get())); 
-        Monitoring->Register(CreateLogoutPage(ActorSystem.Get())); 
-    } 
-} 
- 
+
+void TKikimrRunner::InitializeMonitoringLogin(const TKikimrRunConfig&)
+{
+    if (Monitoring) {
+        Monitoring->Register(CreateLoginPage(ActorSystem.Get()));
+        Monitoring->Register(CreateLogoutPage(ActorSystem.Get()));
+    }
+}
+
 void TKikimrRunner::InitializeControlBoard(const TKikimrRunConfig& runConfig)
 {
     if (Monitoring) {
@@ -447,7 +447,7 @@ void TKikimrRunner::InitializeMessageBus(
                 factories ? factories->PQReadSessionsInfoWorkerFactory : nullptr,
                 msgbusConfig.GetBusProxyPort())
             );
-        } 
+        }
         else {
             BusServer.Reset(NMsgBusProxy::CreateMsgBusServer(
                 Bus.Get(),
@@ -484,61 +484,61 @@ void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
 void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
     const auto& appConfig = runConfig.AppConfig;
 
-    auto fillFn = [&](const NKikimrConfig::TGRpcConfig& grpcConfig, NGrpc::TGRpcServer& server, NGrpc::TServerOptions& opts) { 
-        const auto& services = grpcConfig.GetServices(); 
- 
-        std::unordered_map<TString, bool*> names; 
- 
+    auto fillFn = [&](const NKikimrConfig::TGRpcConfig& grpcConfig, NGrpc::TGRpcServer& server, NGrpc::TServerOptions& opts) {
+        const auto& services = grpcConfig.GetServices();
+
+        std::unordered_map<TString, bool*> names;
+
         bool hasLegacy = opts.SslData.Empty() && services.empty();
-        names["legacy"] = &hasLegacy; 
+        names["legacy"] = &hasLegacy;
         bool hasScripting = services.empty();
-        names["scripting"] = &hasScripting; 
+        names["scripting"] = &hasScripting;
         bool hasCms = services.empty();
-        names["cms"] = &hasCms; 
+        names["cms"] = &hasCms;
         bool hasKesus = services.empty();
-        names["locking"] = names["kesus"] = &hasKesus; 
-        bool hasMonitoring = services.empty(); 
-        names["monitoring"] = &hasMonitoring; 
+        names["locking"] = names["kesus"] = &hasKesus;
+        bool hasMonitoring = services.empty();
+        names["monitoring"] = &hasMonitoring;
         bool hasDiscovery = services.empty();
-        names["discovery"] = &hasDiscovery; 
+        names["discovery"] = &hasDiscovery;
         bool hasTableService = services.empty();
-        names["table_service"] = &hasTableService; 
+        names["table_service"] = &hasTableService;
         bool hasSchemeService = false;
         bool hasOperationService = false;
-        bool hasYql = false; 
-        names["yql"] = &hasYql; 
+        bool hasYql = false;
+        names["yql"] = &hasYql;
         bool hasYqlInternal = services.empty();
-        names["yql_internal"] = &hasYqlInternal; 
+        names["yql_internal"] = &hasYqlInternal;
         bool hasPQ = services.empty();
-        names["pq"] = &hasPQ; 
+        names["pq"] = &hasPQ;
         bool hasPQv1 = false;
-        names["pqv1"] = &hasPQv1; 
+        names["pqv1"] = &hasPQv1;
         bool hasPQCD = false;
-        names["pqcd"] = &hasPQCD; 
+        names["pqcd"] = &hasPQCD;
         bool hasS3Internal = false;
-        names["s3_internal"] = &hasS3Internal; 
+        names["s3_internal"] = &hasS3Internal;
         bool hasExperimental = false;
-        names["experimental"] = &hasExperimental; 
+        names["experimental"] = &hasExperimental;
         bool hasClickhouseInternal = services.empty();
-        names["clickhouse_internal"] = &hasClickhouseInternal; 
+        names["clickhouse_internal"] = &hasClickhouseInternal;
         bool hasRateLimiter = false;
-        names["rate_limiter"] = &hasRateLimiter; 
+        names["rate_limiter"] = &hasRateLimiter;
         bool hasLongTx = false;
-        names["long_tx"] = &hasLongTx; 
+        names["long_tx"] = &hasLongTx;
         bool hasExport = services.empty();
-        names["export"] = &hasExport; 
+        names["export"] = &hasExport;
         bool hasImport = services.empty();
-        names["import"] = &hasImport; 
+        names["import"] = &hasImport;
         bool hasAnalytics = false;
-        names["analytics"] = &hasAnalytics; 
+        names["analytics"] = &hasAnalytics;
         bool hasDataStreams = false;
-        names["datastreams"] = &hasDataStreams; 
+        names["datastreams"] = &hasDataStreams;
         bool hasYandexQuery = false;
-        names["yq"] = &hasYandexQuery; 
+        names["yq"] = &hasYandexQuery;
         bool hasLogStore = false;
-        names["logstore"] = &hasLogStore; 
-        bool hasAuth = services.empty(); 
-        names["auth"] = &hasAuth; 
+        names["logstore"] = &hasLogStore;
+        bool hasAuth = services.empty();
+        names["auth"] = &hasAuth;
 
         std::unordered_set<TString> enabled;
         for (const auto& name : services) {
@@ -554,33 +554,33 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         for (const auto& name : enabled) {
-            auto itName = names.find(name); 
-            if (itName != names.end()) { 
-                *(itName->second) = true; 
+            auto itName = names.find(name);
+            if (itName != names.end()) {
+                *(itName->second) = true;
             } else if (!ModuleFactories || !ModuleFactories->GrpcServiceFactory.Has(name)) {
-                Cerr << "Unknown grpc service \"" << name << "\" was not enabled!" << Endl; 
-            } 
-        } 
- 
+                Cerr << "Unknown grpc service \"" << name << "\" was not enabled!" << Endl;
+            }
+        }
+
         for (const auto& name : disabled) {
-            auto itName = names.find(name); 
-            if (itName != names.end()) { 
-                *(itName->second) = false; 
+            auto itName = names.find(name);
+            if (itName != names.end()) {
+                *(itName->second) = false;
             } else if (!ModuleFactories || !ModuleFactories->GrpcServiceFactory.Has(name)) {
-                Cerr << "Unknown grpc service \"" << name << "\" was not disabled!" << Endl; 
-            } 
-        } 
- 
+                Cerr << "Unknown grpc service \"" << name << "\" was not disabled!" << Endl;
+            }
+        }
+
         // dependencies
         if (hasRateLimiter) {
             hasKesus = true;
         }
 
-        if (hasYql) { 
-            hasTableService = true; 
-            hasYqlInternal = true; 
-        } 
- 
+        if (hasYql) {
+            hasTableService = true;
+            hasYqlInternal = true;
+        }
+
         if (hasTableService || hasYqlInternal || hasPQ || hasKesus || hasPQv1 || hasExport || hasImport) {
             hasSchemeService = true;
             hasOperationService = true;
@@ -700,15 +700,15 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         if (hasRateLimiter) {
             server.AddService(new NQuoter::TRateLimiterGRpcService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
- 
-        if (hasMonitoring) { 
-            server.AddService(new NGRpcService::TGRpcMonitoringService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
-        } 
 
-        if (hasAuth) { 
-            server.AddService(new NGRpcService::TGRpcAuthService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
-        } 
- 
+        if (hasMonitoring) {
+            server.AddService(new NGRpcService::TGRpcMonitoringService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+        }
+
+        if (hasAuth) {
+            server.AddService(new NGRpcService::TGRpcAuthService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+        }
+
         if (hasDataStreams) {
             server.AddService(new NGRpcService::TGRpcDataStreamsService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
@@ -777,14 +777,14 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
             GRpcServers.push_back({ "grpcs", new NGrpc::TGRpcServer(sslOpts) });
 
-            fillFn(grpcConfig, *GRpcServers.back().second, sslOpts); 
+            fillFn(grpcConfig, *GRpcServers.back().second, sslOpts);
         }
 
-        if (grpcConfig.GetPort()) { 
+        if (grpcConfig.GetPort()) {
             GRpcServers.push_back({ "grpc", new NGrpc::TGRpcServer(opts) });
 
-            fillFn(grpcConfig, *GRpcServers.back().second, opts); 
-        } 
+            fillFn(grpcConfig, *GRpcServers.back().second, opts);
+        }
 
         for (auto &ex : grpcConfig.GetExtEndpoints()) {
             // todo: check uniq
@@ -796,7 +796,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                     xopts.SetHost(ex.GetHost());
 
                 GRpcServers.push_back({ "grpc", new NGrpc::TGRpcServer(xopts) });
-                fillFn(ex, *GRpcServers.back().second, xopts); 
+                fillFn(ex, *GRpcServers.back().second, xopts);
             }
 
             if (ex.HasSslPort() && ex.GetSslPort()) {
@@ -815,20 +815,20 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
                 Y_VERIFY(xopts.SslData->Key, "Key not set");
 
                 GRpcServers.push_back({ "grpcs", new NGrpc::TGRpcServer(xopts) });
-                fillFn(ex, *GRpcServers.back().second, xopts); 
+                fillFn(ex, *GRpcServers.back().second, xopts);
             }
         }
     }
 }
 
-void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) { 
-    const auto& cfg = runConfig.AppConfig; 
-    const auto& allocConfig = cfg.GetAllocatorConfig(); 
-    for (const auto& a : allocConfig.GetParam()) { 
-        NMalloc::MallocInfo().SetParam(a.first.c_str(), a.second.c_str()); 
-    } 
-} 
- 
+void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
+    const auto& cfg = runConfig.AppConfig;
+    const auto& allocConfig = cfg.GetAllocatorConfig();
+    for (const auto& a : allocConfig.GetParam()) {
+        NMalloc::MallocInfo().SetParam(a.first.c_str(), a.second.c_str());
+    }
+}
+
 void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 {
     const auto& cfg = runConfig.AppConfig;
@@ -902,10 +902,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->PDiskKeyConfig.CopyFrom(runConfig.AppConfig.GetPDiskKeyConfig());
     }
 
-    if (runConfig.AppConfig.HasHiveConfig()) { 
-        AppData->HiveConfig.CopyFrom(runConfig.AppConfig.GetHiveConfig()); 
-    } 
- 
+    if (runConfig.AppConfig.HasHiveConfig()) {
+        AppData->HiveConfig.CopyFrom(runConfig.AppConfig.GetHiveConfig());
+    }
+
     if (runConfig.AppConfig.HasDataShardConfig()) {
         AppData->DataShardConfig = runConfig.AppConfig.GetDataShardConfig();
     }
@@ -1133,7 +1133,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 
     using namespace NKikimrServicesInitializers;
     TIntrusivePtr<TServiceInitializersList> sil(new TServiceInitializersList);
- 
+
     if (serviceMask.EnableMemoryLog) {
         sil->AddServiceInitializer(new TMemoryLogInitializer(runConfig));
     }
@@ -1147,9 +1147,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableWhiteBoard) {
         sil->AddServiceInitializer(new TWhiteBoardServiceInitializer(runConfig));
     }
-    if (serviceMask.EnableNodeIdentifier) { 
-        sil->AddServiceInitializer(new TNodeIdentifierInitializer(runConfig)); 
-    } 
+    if (serviceMask.EnableNodeIdentifier) {
+        sil->AddServiceInitializer(new TNodeIdentifierInitializer(runConfig));
+    }
     if (serviceMask.EnableBSNodeWarden) {
         sil->AddServiceInitializer(new TBSNodeWardenInitializer(runConfig));
     }
@@ -1206,10 +1206,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TTxProxyInitializer(runConfig));
     }
 
-    if (serviceMask.EnableSecurityServices) { 
-        sil->AddServiceInitializer(new TSecurityServicesInitializer(runConfig, ModuleFactories)); 
-    } 
- 
+    if (serviceMask.EnableSecurityServices) {
+        sil->AddServiceInitializer(new TSecurityServicesInitializer(runConfig, ModuleFactories));
+    }
+
     if (BusServer && serviceMask.EnableMessageBusServices) {
         sil->AddServiceInitializer(new TMessageBusServicesInitializer(runConfig, *BusServer));
     }
@@ -1218,10 +1218,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TMiniKQLCompileServiceInitializer(runConfig));
     }
 
-    if (serviceMask.EnableHealthCheckService) { 
-        sil->AddServiceInitializer(new THealthCheckInitializer(runConfig)); 
-    } 
- 
+    if (serviceMask.EnableHealthCheckService) {
+        sil->AddServiceInitializer(new THealthCheckInitializer(runConfig));
+    }
+
     if (serviceMask.EnableGRpcService) {
         sil->AddServiceInitializer(new TGRpcServicesInitializer(runConfig, ModuleFactories));
     }
@@ -1441,15 +1441,15 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         YdbDriver->Stop(true);
     }
 
-    if (Monitoring) { 
-        Monitoring->Stop(); 
-    } 
- 
-    if (BusMonPage) { 
-        BusMonPage.Drop(); 
-    } 
- 
-    if (PollerThreads) { 
+    if (Monitoring) {
+        Monitoring->Stop();
+    }
+
+    if (BusMonPage) {
+        BusMonPage.Drop();
+    }
+
+    if (PollerThreads) {
         PollerThreads->Stop();
     }
 
@@ -1464,7 +1464,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         }
     }
 
-    if (ActorSystem) { 
+    if (ActorSystem) {
         ActorSystem->Stop();
     }
 
@@ -1472,7 +1472,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         server.second.Destroy();
     }
 
-    if (Bus) { 
+    if (Bus) {
         Bus->Stop();
         Bus.Drop();
     }
@@ -1569,7 +1569,7 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeLogSettings(runConfig);
     TIntrusivePtr<TServiceInitializersList> sil(runner->CreateServiceInitializersList(runConfig, servicesMask));
     runner->InitializeActorSystem(runConfig, sil, servicesMask);
-    runner->InitializeMonitoringLogin(runConfig); 
+    runner->InitializeMonitoringLogin(runConfig);
     runner->InitializeKqpController(runConfig);
     runner->InitializeGracefulShutdown(runConfig);
     runner->InitializeGRpc(runConfig);

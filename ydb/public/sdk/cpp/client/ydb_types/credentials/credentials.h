@@ -33,11 +33,11 @@ using TCredentialsProviderFactoryPtr = std::shared_ptr<ICredentialsProviderFacto
 std::shared_ptr<ICredentialsProviderFactory> CreateInsecureCredentialsProviderFactory();
 std::shared_ptr<ICredentialsProviderFactory> CreateOAuthCredentialsProviderFactory(const TStringType& token);
 
-struct TLoginCredentialsParams { 
-    TString User; 
-    TString Password; 
-}; 
- 
-std::shared_ptr<ICredentialsProviderFactory> CreateLoginCredentialsProviderFactory(TLoginCredentialsParams params); 
- 
+struct TLoginCredentialsParams {
+    TString User;
+    TString Password;
+};
+
+std::shared_ptr<ICredentialsProviderFactory> CreateLoginCredentialsProviderFactory(TLoginCredentialsParams params);
+
 } // namespace NYdb

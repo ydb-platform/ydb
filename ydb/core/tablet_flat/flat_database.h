@@ -78,7 +78,7 @@ public:
     // NOTE: the row refeneces data in some internal buffers that get invalidated on the next Select() or Commit() call
     EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row,
                         ui64 readFlags = 0, TRowVersion snapshot = TRowVersion::Max()) const noexcept;
- 
+
     EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row, TSelectStats& stats,
                   ui64 readFlags = 0, TRowVersion snapshot = TRowVersion::Max()) const noexcept;
 

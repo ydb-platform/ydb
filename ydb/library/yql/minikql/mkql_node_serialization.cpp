@@ -161,7 +161,7 @@ namespace {
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Struct); 
+                Owner.Write(TypeMarker | (char)TType::EKind::Struct);
                 Owner.WriteVar32(node.GetMembersCount());
                 for (ui32 i = node.GetMembersCount(); i-- > 0;) {
                     auto memberType = node.GetMemberType(i);
@@ -178,7 +178,7 @@ namespace {
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::List); 
+                Owner.Write(TypeMarker | (char)TType::EKind::List);
                 auto itemType = node.GetItemType();
                 Owner.AddChildNode(*itemType);
                 IsProcessed0 = false;
@@ -243,7 +243,7 @@ namespace {
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Optional); 
+                Owner.Write(TypeMarker | (char)TType::EKind::Optional);
                 auto itemType = node.GetItemType();
                 Owner.AddChildNode(*itemType);
                 IsProcessed0 = false;
@@ -256,7 +256,7 @@ namespace {
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Dict); 
+                Owner.Write(TypeMarker | (char)TType::EKind::Dict);
                 auto keyType = node.GetKeyType();
                 auto payloadType = node.GetPayloadType();
                 Owner.AddChildNode(*payloadType);
@@ -271,7 +271,7 @@ namespace {
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Callable 
+                Owner.Write(TypeMarker | (char)TType::EKind::Callable
                     | (node.IsMergeDisabled() ? UserMarker2 : 0) | (node.GetPayload() ? UserMarker3 : 0));
                 Owner.WriteVar32(node.GetArgumentsCount());
                 auto returnType = node.GetReturnType();
@@ -281,7 +281,7 @@ namespace {
 
                 for (ui32 i = node.GetArgumentsCount(); i-- > 0;) {
                     auto argumentType = node.GetArgumentType(i);
-                    Owner.AddChildNode(*argumentType); 
+                    Owner.AddChildNode(*argumentType);
                 }
 
                 Owner.AddChildNode(*returnType);
@@ -301,7 +301,7 @@ namespace {
                     return;
                 }
 
-                Owner.Write(TypeMarker | (char)TType::EKind::Tuple); 
+                Owner.Write(TypeMarker | (char)TType::EKind::Tuple);
                 Owner.WriteVar32(node.GetElementsCount());
                 for (ui32 i = node.GetElementsCount(); i-- > 0;) {
                     auto elementType = node.GetElementType(i);
@@ -1270,7 +1270,7 @@ namespace {
                 members[i].Name = ReadName();
             }
 
-            auto node = TStructType::Create(membersCount, members.data(), Env); 
+            auto node = TStructType::Create(membersCount, members.data(), Env);
             Nodes.push_back(node);
             return node;
         }
@@ -1286,7 +1286,7 @@ namespace {
                 elements[i] = elementType;
             }
 
-            auto node = TTupleType::Create(elementsCount, elements.data(), Env); 
+            auto node = TTupleType::Create(elementsCount, elements.data(), Env);
             Nodes.push_back(node);
             return node;
         }
@@ -1297,7 +1297,7 @@ namespace {
                 ThrowCorrupted();
 
             auto itemType = static_cast<TType*>(itemTypeNode);
-            auto node = TListType::Create(itemType, Env); 
+            auto node = TListType::Create(itemType, Env);
             Nodes.push_back(node);
             return node;
         }
@@ -1371,7 +1371,7 @@ namespace {
                 ThrowCorrupted();
 
             auto itemType = static_cast<TType*>(itemTypeNode);
-            auto node = TOptionalType::Create(itemType, Env); 
+            auto node = TOptionalType::Create(itemType, Env);
             Nodes.push_back(node);
             return node;
         }
@@ -1396,7 +1396,7 @@ namespace {
                 ThrowCorrupted();
 
             auto payloadType = static_cast<TType*>(payloadTypeNode);
-            auto node = TDictType::Create(keyType, payloadType, Env); 
+            auto node = TDictType::Create(keyType, payloadType, Env);
             Nodes.push_back(node);
             return node;
         }
@@ -1417,14 +1417,14 @@ namespace {
                 ThrowCorrupted();
             auto returnType = static_cast<TType*>(returnTypeNode);
 
-            TStackVec<TType*> arguments(argumentsCount); 
+            TStackVec<TType*> arguments(argumentsCount);
             for (ui32 i = 0; i < argumentsCount; ++i) {
                 auto argumentTypeNode = PopNode();
                 if (argumentTypeNode->GetType()->GetKind() != TType::EKind::Type)
                     ThrowCorrupted();
 
                 auto argumentType = static_cast<TType*>(argumentTypeNode);
-                arguments[i] = argumentType; 
+                arguments[i] = argumentType;
             }
 
             TNode* payload = nullptr;
@@ -1434,7 +1434,7 @@ namespace {
 
             auto name = ReadName();
             const ui32 optArgsCount = ReadVar32();
-            auto node = TCallableType::Create(returnType, name, argumentsCount, arguments.data(), payload, Env); 
+            auto node = TCallableType::Create(returnType, name, argumentsCount, arguments.data(), payload, Env);
             if (isMergeDisabled)
                 node->DisableMerge();
             node->SetOptionalArgumentsCount(optArgsCount);

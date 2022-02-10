@@ -247,7 +247,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
         full_command = [self.__configurator.binary_path]
         if connect_to_server:
-            full_command += ["--server={server}".format(server=server)] 
+            full_command += ["--server={server}".format(server=server)]
         full_command += cmd
 
         logger.debug("Executing command = {}".format(full_command))
@@ -495,7 +495,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         cmd.DefineStoragePool.Kind = kind
         cmd.DefineStoragePool.ErasureSpecies = str(erasure)
         cmd.DefineStoragePool.VDiskKind = "Default"
-        cmd.DefineStoragePool.NumGroups = 2 
+        cmd.DefineStoragePool.NumGroups = 2
 
         pdisk_filter = cmd.DefineStoragePool.PDiskFilter.add()
         pdisk_filter.Property.add().Type = 0

@@ -39,14 +39,14 @@ IEventBase* CreateNavigateForPath(const TString& path) {
     auto& entry = request->ResultSet.emplace_back();
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.Path = ::NKikimr::SplitPath(path);
-    entry.RedirectRequired = false; 
+    entry.RedirectRequired = false;
 
     return new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release());
 }
 
 TActorId CreatePipeClient(ui64 id, const TActorContext& ctx) {
     NTabletPipe::TClientConfig clientConfig;
-    clientConfig.RetryPolicy = {.RetryLimitCount = 3}; 
+    clientConfig.RetryPolicy = {.RetryLimitCount = 3};
     return ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, id, clientConfig));
 }
 
@@ -147,12 +147,12 @@ public:
         }
 
         NTabletPipe::TClientConfig config;
-        config.RetryPolicy = { 
-            .RetryLimitCount = 5, 
-            .MinRetryTime = TDuration::MilliSeconds(50), 
-            .MaxRetryTime = TDuration::Seconds(10), 
-            .DoFirstRetryInstantly = false 
-        }; 
+        config.RetryPolicy = {
+            .RetryLimitCount = 5,
+            .MinRetryTime = TDuration::MilliSeconds(50),
+            .MaxRetryTime = TDuration::Seconds(10),
+            .DoFirstRetryInstantly = false
+        };
         SSPipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, SchemeshardId, config));
 
         AttemptsCounter++;

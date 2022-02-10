@@ -17,11 +17,11 @@ protected:
     const TDuration Timeout;
 
     void SendReplyAndDie(NBus::TBusMessage *reply, const TActorContext &ctx) {
-        SendReplyMove(reply); 
+        SendReplyMove(reply);
         return this->Die(ctx);
     }
 
-    TMessageBusLocalServiceRequest(TBusMessageContext &msg, const TDuration& timeout) 
+    TMessageBusLocalServiceRequest(TBusMessageContext &msg, const TDuration& timeout)
         : TMessageBusSessionIdentHolder(msg)
         , ServiceID()
         , Timeout(timeout)
@@ -39,9 +39,9 @@ public:
             IEventBase* request = static_cast<TDerived *>(this)->MakeReq(ctx);
 
             ctx.Send(ServiceID, request, IEventHandle::FlagTrackDelivery, 0);
-            if (Timeout) { 
+            if (Timeout) {
                 this->Become(&TDerived::StateFunc, ctx, Timeout, new TEvents::TEvWakeup());
-            } else { 
+            } else {
                 // no timeout
                 this->Become(&TDerived::StateFunc);
             }

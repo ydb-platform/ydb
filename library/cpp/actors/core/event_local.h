@@ -66,7 +66,7 @@ namespace NActors {
         static IEventBase* Load(NActors::TEventSerializedData*) {
             return new TEv();
         }
- 
+
         static IEventBase* Load(const TString&) {
             return new TEv();
         }

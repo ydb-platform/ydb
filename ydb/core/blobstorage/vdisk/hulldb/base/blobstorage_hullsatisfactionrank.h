@@ -120,10 +120,10 @@ namespace NKikimr {
                 return TThis(Val * v.Val / Base);
             }
 
-            TThis operator + (const TThis &v) const { 
-                return TThis(Val + v.Val); 
-            } 
- 
+            TThis operator + (const TThis &v) const {
+                return TThis(Val + v.Val);
+            }
+
             TThis operator * (ui64 i) const {
                 return TThis(Val * i);
             }

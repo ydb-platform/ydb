@@ -129,9 +129,9 @@ namespace NActors {
             nodeAppData->NetClassifierConfig.CopyFrom(app0->NetClassifierConfig);
             nodeAppData->StaticBlobStorageConfig->CopyFrom(*app0->StaticBlobStorageConfig);
             nodeAppData->EnableKqpSpilling = app0->EnableKqpSpilling;
-            nodeAppData->FeatureFlags = app0->FeatureFlags; 
+            nodeAppData->FeatureFlags = app0->FeatureFlags;
             nodeAppData->CompactionConfig = app0->CompactionConfig;
-            nodeAppData->HiveConfig = app0->HiveConfig; 
+            nodeAppData->HiveConfig = app0->HiveConfig;
             nodeAppData->DataShardConfig = app0->DataShardConfig;
             nodeAppData->MeteringConfig = app0->MeteringConfig;
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
@@ -144,11 +144,11 @@ namespace NActors {
 
             if (NeedMonitoring && !SingleSysEnv) {
                 ui16 port = GetPortManager().GetPort();
-                node->Mon.Reset(new NActors::TMon({ 
-                    .Port = port, 
-                    .Threads = 10, 
-                    .Title = "KIKIMR monitoring" 
-                })); 
+                node->Mon.Reset(new NActors::TMon({
+                    .Port = port,
+                    .Threads = 10,
+                    .Title = "KIKIMR monitoring"
+                }));
                 nodeAppData->Mon = node->Mon.Get();
                 node->Mon->RegisterCountersPage("counters", "Counters", node->DynamicCounters);
                 auto actorsMonPage = node->Mon->RegisterIndexPage("actors", "Actors");

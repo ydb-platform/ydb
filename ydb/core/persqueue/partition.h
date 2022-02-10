@@ -115,7 +115,7 @@ private:
     void HandleOnInit(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx);
     void LogAndCollectError(const NKikimrPQ::TStatusResponse::TErrorMessage& error, const TActorContext& ctx);
@@ -269,7 +269,7 @@ private:
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
             HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
-            HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle); 
+            HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
         default:
             LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
             break;
@@ -307,7 +307,7 @@ private:
             HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
             HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
             HFuncTraced(TEvPQ::TEvError, Handle);
-            HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle); 
+            HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
             HFuncTraced(TEvPQ::TEvUpdateAvailableSize, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvReserveBytes, Handle);
             HFuncTraced(TEvPQ::TEvPipeDisconnected, Handle);
@@ -356,7 +356,7 @@ private:
             HFuncTraced(TEvPQ::TEvProxyResponse, Handle);
             HFuncTraced(TEvPQ::TEvError, Handle);
             HFuncTraced(TEvPQ::TEvReserveBytes, Handle);
-            HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle); 
+            HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
             HFuncTraced(TEvPQ::TEvPipeDisconnected, Handle);
             HFuncTraced(TEvPQ::TEvUpdateAvailableSize, HandleOnWrite);
             HFuncTraced(TEvPQ::TEvQuotaDeadlineCheck, Handle);

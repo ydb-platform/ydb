@@ -11,7 +11,7 @@ namespace NYql {
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 using namespace NMiniKQL;
-using namespace NResultLib; 
+using namespace NResultLib;
 using namespace NYdb::NTable;
 
 namespace {

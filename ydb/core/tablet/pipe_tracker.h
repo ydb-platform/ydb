@@ -3,8 +3,8 @@
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/util/tuples.h>
 #include <functional>
-#include <unordered_map> 
-#include <unordered_set> 
+#include <unordered_map>
+#include <unordered_set>
 
 namespace NKikimr {
 
@@ -15,15 +15,15 @@ public:
     // returns false if tabletid is not used anymore
     bool DetachTablet(ui64 txid, ui64 tabletid, ui64 cookie = 0);
     bool IsTxAlive(ui64 txid) const;
-    const std::unordered_set<ui64>& FindTx(ui64 tabletid) const; 
-    const std::unordered_set<std::pair<ui64, ui64>>& FindTablets(ui64 txid) const; 
+    const std::unordered_set<ui64>& FindTx(ui64 tabletid) const;
+    const std::unordered_set<std::pair<ui64, ui64>>& FindTablets(ui64 txid) const;
 
 private:
-    std::unordered_map<ui64, std::unordered_set<ui64>> TabletToTx; // tabletid -> txid 
-    std::unordered_map<ui64, std::unordered_set<std::pair<ui64, ui64>>> TxToTablet; // txid -> cookie:tabletid 
-    std::unordered_map<ui64, std::unordered_multiset<ui64>> TxTablets; // txid -> tabletids 
-    static std::unordered_set<ui64> EmptySet; 
-    static std::unordered_set<std::pair<ui64, ui64>> EmptyPairSet; 
+    std::unordered_map<ui64, std::unordered_set<ui64>> TabletToTx; // tabletid -> txid
+    std::unordered_map<ui64, std::unordered_set<std::pair<ui64, ui64>>> TxToTablet; // txid -> cookie:tabletid
+    std::unordered_map<ui64, std::unordered_multiset<ui64>> TxTablets; // txid -> tabletids
+    static std::unordered_set<ui64> EmptySet;
+    static std::unordered_set<std::pair<ui64, ui64>> EmptyPairSet;
 };
 
 class TPipeTracker : public TPipeTrackerBase {

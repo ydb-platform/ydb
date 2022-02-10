@@ -45,8 +45,8 @@ message TEvInitRootShard {
     optional uint32 RootTag = 2;
     optional bytes RootTagName = 3;
     optional TConfig Config = 4;
-    optional string Owner = 5; 
-    repeated NKikimrStoragePool.TStoragePool StoragePools = 6; 
+    optional string Owner = 5;
+    repeated NKikimrStoragePool.TStoragePool StoragePools = 6;
 }
 
 message TEvInitRootShardResult {

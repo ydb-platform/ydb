@@ -651,50 +651,50 @@ message TAlterColumnTable {
     optional string RESERVED_AlterTtlSettingsPresetName = 5;
 }
 
-message TLoginCreateUser { 
-    optional string User = 1; 
-    optional string Password = 2; 
-} 
- 
-message TLoginModifyUser { 
-    optional string User = 1; 
-    optional string Password = 2; 
-} 
- 
-message TLoginRemoveUser { 
-    optional string User = 1; 
-} 
- 
-message TLoginCreateGroup { 
-    optional string Group = 1; 
-} 
- 
-message TLoginAddGroupMembership { 
-    optional string Group = 1; 
-    optional string Member = 2; 
-} 
- 
-message TLoginRemoveGroupMembership { 
-    optional string Group = 1; 
-    optional string Member = 2; 
-} 
- 
-message TLoginRemoveGroup { 
-    optional string Group = 1; 
-} 
- 
-message TAlterLogin { 
-    oneof Alter { 
-        TLoginCreateUser CreateUser = 1; 
-        TLoginModifyUser ModifyUser = 2; 
-        TLoginRemoveUser RemoveUser = 3; 
-        TLoginCreateGroup CreateGroup = 4; 
-        TLoginAddGroupMembership AddGroupMembership = 5; 
-        TLoginRemoveGroupMembership RemoveGroupMembership = 6; 
-        TLoginRemoveGroup RemoveGroup = 7; 
-    } 
-} 
- 
+message TLoginCreateUser {
+    optional string User = 1;
+    optional string Password = 2;
+}
+
+message TLoginModifyUser {
+    optional string User = 1;
+    optional string Password = 2;
+}
+
+message TLoginRemoveUser {
+    optional string User = 1;
+}
+
+message TLoginCreateGroup {
+    optional string Group = 1;
+}
+
+message TLoginAddGroupMembership {
+    optional string Group = 1;
+    optional string Member = 2;
+}
+
+message TLoginRemoveGroupMembership {
+    optional string Group = 1;
+    optional string Member = 2;
+}
+
+message TLoginRemoveGroup {
+    optional string Group = 1;
+}
+
+message TAlterLogin {
+    oneof Alter {
+        TLoginCreateUser CreateUser = 1;
+        TLoginModifyUser ModifyUser = 2;
+        TLoginRemoveUser RemoveUser = 3;
+        TLoginCreateGroup CreateGroup = 4;
+        TLoginAddGroupMembership AddGroupMembership = 5;
+        TLoginRemoveGroupMembership RemoveGroupMembership = 6;
+        TLoginRemoveGroup RemoveGroup = 7;
+    }
+}
+
 enum ECdcStreamState {
     ECdcStreamStateInvalid = 0;
     ECdcStreamStateReady = 1;
@@ -1008,12 +1008,12 @@ message TBlockStoreAssignOp {
     optional uint64 TokenVersion = 3;
 }
 
-message TModifyACL { 
-    optional string Name = 1; 
-    optional bytes DiffACL = 2; // NACLibProto.TDiffACL 
-    optional string NewOwner = 3; 
-} 
- 
+message TModifyACL {
+    optional string Name = 1;
+    optional bytes DiffACL = 2; // NACLibProto.TDiffACL
+    optional string NewOwner = 3;
+}
+
 message TSplitMergeTablePartitions {
     optional uint64 TxId = 1;
     optional string TablePath = 2;
@@ -1074,7 +1074,7 @@ enum EOperationType {
     ESchemeOpDropPersQueueGroup = 5;
     ESchemeOpAlterTable = 6;
     ESchemeOpAlterPersQueueGroup = 7;
-    ESchemeOpModifyACL = 8; 
+    ESchemeOpModifyACL = 8;
     ESchemeOpRmDir = 9;
     ESchemeOpSplitMergeTablePartitions = 10;
     ESchemeOpBackup = 11;
@@ -1143,8 +1143,8 @@ enum EOperationType {
     ESchemeOpCreateColumnTable = 58;
     ESchemeOpAlterColumnTable = 59;
     ESchemeOpDropColumnTable = 60;
- 
-    ESchemeOpAlterLogin = 61; 
+
+    ESchemeOpAlterLogin = 61;
 
     /// CDC
     // Create
@@ -1230,7 +1230,7 @@ message TModifyScheme {
     optional TPersQueueGroupDescription CreatePersQueueGroup = 5;
     optional TPersQueueGroupDescription AlterPersQueueGroup = 6;
     optional TDrop Drop = 7;
-    optional TModifyACL ModifyACL = 8; 
+    optional TModifyACL ModifyACL = 8;
     optional TTableDescription AlterTable = 9;
     optional TSplitMergeTablePartitions SplitMergeTablePartitions = 10;
     optional TBackupTask Backup = 11;
@@ -1265,7 +1265,7 @@ message TModifyScheme {
     optional TColumnTableDescription CreateColumnTable = 41;
     optional TAlterColumnStore AlterColumnStore = 42;
     optional TAlterColumnTable AlterColumnTable = 43;
-    optional TAlterLogin AlterLogin = 44; 
+    optional TAlterLogin AlterLogin = 44;
     optional TCreateCdcStream CreateCdcStream = 45;
     optional TAlterCdcStream AlterCdcStream = 46;
     optional TDropCdcStream DropCdcStream = 47;
@@ -1275,11 +1275,11 @@ message TModifyScheme {
     optional TReplicationDescription Replication = 52;
 }
 
-// "Script", used by client to parse text files with multiple DDL commands 
-message TModifyScript { 
-    repeated TModifyScheme ModifyScheme = 1; 
-} 
- 
+// "Script", used by client to parse text files with multiple DDL commands
+message TModifyScript {
+    repeated TModifyScheme ModifyScheme = 1;
+}
+
 message TDescribeOptions {
     optional bool ReturnPartitioningInfo = 1 [default = true];
     optional bool ReturnPartitionConfig = 2 [default = true];
@@ -1373,7 +1373,7 @@ message TPathVersion {
     optional uint64 ColumnTableSchemaVersion = 20;
     optional uint64 ColumnTableTtlSettingsVersion = 21;
     optional uint64 CdcStreamVersion = 22;
-    optional uint64 SecurityStateVersion = 23; 
+    optional uint64 SecurityStateVersion = 23;
     optional uint64 SequenceVersion = 24;
     optional uint64 ReplicationVersion = 25;
 }
@@ -1389,9 +1389,9 @@ message TDirEntry {
     optional uint64 CreateStep = 7;
     optional uint64 ParentPathId = 8; // parentPathOwnerId ?
     optional EPathState PathState = 9;
-    optional string Owner = 10; 
-    optional bytes ACL = 11; 
-    optional bytes EffectiveACL = 12; 
+    optional string Owner = 10;
+    optional bytes ACL = 11;
+    optional bytes EffectiveACL = 12;
     optional uint64 PathVersion = 13;
     optional EPathSubType PathSubType = 14;
     optional TPathVersion Version = 15;
@@ -1426,7 +1426,7 @@ message TBackupProgress {
 message TLastBackupResult {
     optional uint32 ErrorCount = 1;
     optional uint64 CompleteTimeStamp = 2;
-    optional uint64 StartTimeStamp = 3; 
+    optional uint64 StartTimeStamp = 3;
     repeated TShardError Errors = 4;
     optional TYTSettings YTSettings = 5;
     optional uint64 DataTotalSize = 6;
@@ -1443,7 +1443,7 @@ message TPathDescription {
     optional TBackupProgress BackupProgress = 6;
     repeated TLastBackupResult LastBackupResult = 7;
     optional NKikimrTableStats.TTableStats TableStats = 8;
-    optional NKikimrTabletBase.TMetrics TabletMetrics = 9; 
+    optional NKikimrTabletBase.TMetrics TabletMetrics = 9;
     optional NKikimrSubDomains.TDomainDescription DomainDescription = 10;
     optional TRtmrVolumeDescription RtmrVolumeDescription = 11; // for rtmr volume
     optional TBlockStoreVolumeDescription BlockStoreVolumeDescription = 12;

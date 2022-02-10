@@ -10,7 +10,7 @@ struct TChannelProfiles : public TThrRefBase {
         struct TChannel {
             TBlobStorageGroupType::EErasureSpecies Erasure;
             ui64 PDiskCategory;
-            NKikimrBlobStorage::TVDiskKind::EVDiskKind VDiskCategory; 
+            NKikimrBlobStorage::TVDiskKind::EVDiskKind VDiskCategory;
 
             TString PoolKind;
 
@@ -20,20 +20,20 @@ struct TChannelProfiles : public TThrRefBase {
                      TString poolKind = TString())
                 : Erasure(erasure)
                 , PDiskCategory(pDiskCategory)
-                , VDiskCategory(vDiskCategory) 
+                , VDiskCategory(vDiskCategory)
                 , PoolKind(poolKind)
             {}
- 
-            bool operator ==(const TChannel& a) const { 
+
+            bool operator ==(const TChannel& a) const {
                 return Erasure == a.Erasure
                         && PDiskCategory == a.PDiskCategory
                         && VDiskCategory == a.VDiskCategory
                         && PoolKind == a.PoolKind;
-            } 
- 
-            bool operator !=(const TChannel& a) const { 
-                return !operator ==(a); 
-            } 
+            }
+
+            bool operator !=(const TChannel& a) const {
+                return !operator ==(a);
+            }
         };
 
         TVector<TChannel> Channels;

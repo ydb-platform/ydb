@@ -5,7 +5,7 @@
 #include <ydb/core/protos/config.pb.h>
 #include <library/cpp/actors/interconnect/event_filter.h>
 #include <util/stream/str.h>
-#include <util/generic/list.h> 
+#include <util/generic/list.h>
 #include <util/generic/map.h>
 
 namespace NKikimr {
@@ -17,8 +17,8 @@ struct TEvStateStorage {
         EvUpdate,
         EvLock,
         EvResolveReplicas,
-        EvRequestReplicasDumps, 
-        EvDelete, 
+        EvRequestReplicasDumps,
+        EvDelete,
         EvCleanup,
         EvResolveBoard,
         EvBoardInfo,
@@ -30,8 +30,8 @@ struct TEvStateStorage {
         EvInfo = EvLookup + 512,
         EvUpdateSignature,
         EvResolveReplicasList,
-        EvResponseReplicasDumps, 
-        EvDeleteResult, 
+        EvResponseReplicasDumps,
+        EvDeleteResult,
         EvListSchemeBoardResult,
 
         // replicas interface
@@ -39,11 +39,11 @@ struct TEvStateStorage {
         EvReplicaUpdate,
         EvReplicaLock,
         EvReplicaLeaderDemoted,
-        EvReplicaDumpRequest, 
-        EvReplicaDump, 
+        EvReplicaDumpRequest,
+        EvReplicaDump,
         EvReplicaRegFollower,
         EvReplicaUnregFollower,
-        EvReplicaDelete, 
+        EvReplicaDelete,
         EvReplicaCleanup,
 
         EvReplicaInfo = EvLock + 3 * 512,
@@ -157,24 +157,24 @@ struct TEvStateStorage {
         }
     };
 
-    struct TEvDelete : TEventLocal<TEvDelete, EvDelete> { 
-        const ui64 TabletID; 
-        const ui64 Cookie; 
- 
-        TEvDelete(ui64 tabletId, ui64 cookie = 0) 
-            : TabletID(tabletId) 
-            , Cookie(cookie) 
-        {} 
- 
+    struct TEvDelete : TEventLocal<TEvDelete, EvDelete> {
+        const ui64 TabletID;
+        const ui64 Cookie;
+
+        TEvDelete(ui64 tabletId, ui64 cookie = 0)
+            : TabletID(tabletId)
+            , Cookie(cookie)
+        {}
+
         TString ToString() const {
-            TStringStream str; 
-            str << "{EvDelete TabletID: " << TabletID; 
-            str << " Cookie: " << Cookie; 
-            str << "}"; 
-            return str.Str(); 
-        } 
-    }; 
- 
+            TStringStream str;
+            str << "{EvDelete TabletID: " << TabletID;
+            str << " Cookie: " << Cookie;
+            str << "}";
+            return str.Str();
+        }
+    };
+
     struct TEvCleanup : TEventLocal<TEvCleanup, EvCleanup> {
         const ui64 TabletID;
         const TActorId ProposedLeader;
@@ -185,24 +185,24 @@ struct TEvStateStorage {
         {}
     };
 
-    struct TEvDeleteResult : TEventLocal<TEvDeleteResult, EvDeleteResult> { 
-        const ui64 TabletID; 
-        const NKikimrProto::EReplyStatus Status; 
- 
-        TEvDeleteResult(ui64 tabletId, NKikimrProto::EReplyStatus status) 
-            : TabletID(tabletId) 
-            , Status(status) 
-        {} 
- 
+    struct TEvDeleteResult : TEventLocal<TEvDeleteResult, EvDeleteResult> {
+        const ui64 TabletID;
+        const NKikimrProto::EReplyStatus Status;
+
+        TEvDeleteResult(ui64 tabletId, NKikimrProto::EReplyStatus status)
+            : TabletID(tabletId)
+            , Status(status)
+        {}
+
         TString ToString() const {
-            TStringStream str; 
-            str << "{EvDeleteResult TabletID: " << TabletID; 
-            str << " Status: " << (ui32)Status; 
-            str << "}"; 
-            return str.Str(); 
-        } 
-    }; 
- 
+            TStringStream str;
+            str << "{EvDeleteResult TabletID: " << TabletID;
+            str << " Status: " << (ui32)Status;
+            str << "}";
+            return str.Str();
+        }
+    };
+
     struct TEvLock : public TEventLocal<TEvLock, EvLock> {
         const ui64 TabletID;
         const ui64 Cookie;
@@ -307,12 +307,12 @@ struct TEvStateStorage {
                 str << " Followers: [";
                 for (auto it = Followers.begin(); it != Followers.end(); ++it) {
                     if (it != Followers.begin()) {
-                        str << ','; 
-                    } 
-                    str << '{' << it->first.ToString() << ',' << it->second.ToString() << '}'; 
-                } 
-                str << "]"; 
-            } 
+                        str << ',';
+                    }
+                    str << '{' << it->first.ToString() << ',' << it->second.ToString() << '}';
+                }
+                str << "]";
+            }
             str << "}";
             return str.Str();
         }
@@ -364,7 +364,7 @@ struct TEvStateStorage {
     struct TEvReplicaInfo;
     struct TEvReplicaUpdate;
     struct TEvReplicaLock;
-    struct TEvReplicaDelete; 
+    struct TEvReplicaDelete;
     struct TEvReplicaCleanup;
     struct TEvReplicaBoardPublish;
     struct TEvReplicaBoardLookup;
@@ -378,23 +378,23 @@ struct TEvStateStorage {
     struct TEvReplicaProbeUnsubscribe;
     struct TEvReplicaProbeConnected;
     struct TEvReplicaProbeDisconnected;
- 
+
     struct TEvReplicaShutdown : public TEventPB<TEvStateStorage::TEvReplicaShutdown, NKikimrStateStorage::TEvReplicaShutdown, TEvStateStorage::EvReplicaShutdown> {
     };
 
-    struct TEvReplicaDumpRequest : public TEventPB<TEvReplicaDumpRequest, NKikimrStateStorage::TEvDumpRequest, EvReplicaDumpRequest> { 
-    }; 
- 
-    struct TEvReplicaDump : public TEventPB<TEvReplicaDump, NKikimrStateStorage::TEvDump, EvReplicaDump> { 
-    }; 
- 
-    struct TEvRequestReplicasDumps : public TEventLocal<TEvRequestReplicasDumps, EvRequestReplicasDumps> { 
- 
-    }; 
- 
-    struct TEvResponseReplicasDumps : public TEventLocal<TEvResponseReplicasDumps, EvResponseReplicasDumps> { 
+    struct TEvReplicaDumpRequest : public TEventPB<TEvReplicaDumpRequest, NKikimrStateStorage::TEvDumpRequest, EvReplicaDumpRequest> {
+    };
+
+    struct TEvReplicaDump : public TEventPB<TEvReplicaDump, NKikimrStateStorage::TEvDump, EvReplicaDump> {
+    };
+
+    struct TEvRequestReplicasDumps : public TEventLocal<TEvRequestReplicasDumps, EvRequestReplicasDumps> {
+
+    };
+
+    struct TEvResponseReplicasDumps : public TEventLocal<TEvResponseReplicasDumps, EvResponseReplicasDumps> {
         TVector<std::pair<TActorId, TAutoPtr<TEvReplicaDump>>> ReplicasDumps;
-    }; 
+    };
 
     struct TEvReplicaRegFollower : public TEventPB<TEvReplicaRegFollower, NKikimrStateStorage::TEvRegisterFollower, EvReplicaRegFollower> {
         TEvReplicaRegFollower()

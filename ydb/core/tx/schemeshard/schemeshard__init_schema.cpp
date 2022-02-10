@@ -12,7 +12,7 @@ struct TSchemeShard::TTxInitSchema : public TTransactionBase<TSchemeShard> {
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TxInitSchema.Execute");
-        NIceDb::TNiceDb(txc.DB).Materialize<Schema>(); 
+        NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
         return true;
     }
 

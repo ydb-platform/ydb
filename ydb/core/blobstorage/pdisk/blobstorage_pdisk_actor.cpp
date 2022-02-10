@@ -179,10 +179,10 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
 
         void Render(IOutputStream& os) const {
             switch (LastFlag) {
-            case NKikimrWhiteboard::Grey: 
+            case NKikimrWhiteboard::Grey:
                 break;
-            default: 
-                THtmlLightSignalRenderer(LastFlag, NKikimrWhiteboard::EFlag_Name(LastFlag)).Output(os); 
+            default:
+                THtmlLightSignalRenderer(LastFlag, NKikimrWhiteboard::EFlag_Name(LastFlag)).Output(os);
                 break;
             }
         }
@@ -409,7 +409,7 @@ public:
             if (!PDisk->CheckGuid(&info)) {
                 *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
                 *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
-                *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialFormatReadDueToGuid; 
+                *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialFormatReadDueToGuid;
                 PDisk->ErrorStr = TStringBuilder() << "Can't start due to a guid error " << info;
                 TStringStream str;
                 str << "PDiskId# " << PDisk->PDiskId << PDisk->ErrorStr;

@@ -1,16 +1,16 @@
 LIBRARY()
 
 OWNER(
-    xenoxeno 
+    xenoxeno
     g:kikimr
 )
 
 SRCS(
-    login_page.cpp 
-    login_page.h 
-    secure_request.h 
-    ticket_parser.cpp 
-    ticket_parser.h 
+    login_page.cpp
+    login_page.h
+    secure_request.h
+    ticket_parser.cpp
+    ticket_parser.h
 )
 
 PEERDIR(

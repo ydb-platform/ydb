@@ -193,17 +193,17 @@ struct TTabletChannelInfo {
     struct THistoryEntry {
         ui32 FromGeneration;
         ui32 GroupID;
-        TInstant Timestamp; // for diagnostics usage only 
+        TInstant Timestamp; // for diagnostics usage only
 
         THistoryEntry()
             : FromGeneration(0)
             , GroupID(0)
         {}
 
-        THistoryEntry(ui32 fromGeneration, ui32 groupId, TInstant timestamp = TInstant()) // groupId could be zero 
+        THistoryEntry(ui32 fromGeneration, ui32 groupId, TInstant timestamp = TInstant()) // groupId could be zero
             : FromGeneration(fromGeneration)
             , GroupID(groupId)
-            , Timestamp(timestamp) 
+            , Timestamp(timestamp)
         {}
 
         struct TCmp {
@@ -216,15 +216,15 @@ struct TTabletChannelInfo {
             TStringStream str;
             str << "{FromGeneration# " << FromGeneration;
             str << " GroupID# " << GroupID;
-            str << " Timestamp# " << Timestamp.ToString(); 
+            str << " Timestamp# " << Timestamp.ToString();
             str << "}";
             return str.Str();
         }
- 
-        bool operator ==(const THistoryEntry& other) const { 
-            return FromGeneration == other.FromGeneration 
-                    && (GroupID == other.GroupID || GroupID == 0 || other.GroupID == 0); 
-        } 
+
+        bool operator ==(const THistoryEntry& other) const {
+            return FromGeneration == other.FromGeneration
+                    && (GroupID == other.GroupID || GroupID == 0 || other.GroupID == 0);
+        }
     };
 
     ui32 Channel;
@@ -232,21 +232,21 @@ struct TTabletChannelInfo {
     TString StoragePool;
     TVector<THistoryEntry> History;
 
-    TTabletChannelInfo() 
-        : Channel() 
-        , Type() 
-    {} 
- 
-    TTabletChannelInfo(ui32 channel, TBlobStorageGroupType type) 
-        : Channel(channel) 
-        , Type(type) 
-    {} 
- 
-    TTabletChannelInfo(ui32 channel, TBlobStorageGroupType::EErasureSpecies erasureSpecies) 
-        : Channel(channel) 
+    TTabletChannelInfo()
+        : Channel()
+        , Type()
+    {}
+
+    TTabletChannelInfo(ui32 channel, TBlobStorageGroupType type)
+        : Channel(channel)
+        , Type(type)
+    {}
+
+    TTabletChannelInfo(ui32 channel, TBlobStorageGroupType::EErasureSpecies erasureSpecies)
+        : Channel(channel)
         , Type(erasureSpecies)
     {}
- 
+
     TTabletChannelInfo(ui32 channel, TString storagePool)
         : Channel(channel)
         , Type(TBlobStorageGroupType::ErasureNone)
@@ -279,19 +279,19 @@ struct TTabletChannelInfo {
     }
 
     const THistoryEntry* LatestEntry() const {
-        if (!History.empty()) 
+        if (!History.empty())
             return &History.back();
         else
             return nullptr;
     }
 
-    const THistoryEntry* PreviousEntry() const { 
-        if (History.size() > 1) 
-            return &*(History.rbegin() + 1); 
-        else 
-            return nullptr; 
-    } 
- 
+    const THistoryEntry* PreviousEntry() const {
+        if (History.size() > 1)
+            return &*(History.rbegin() + 1);
+        else
+            return nullptr;
+    }
+
     TString ToString() const {
         TStringStream str;
         str << "{Channel# " << Channel;
@@ -300,7 +300,7 @@ struct TTabletChannelInfo {
         str << " History# {";
         const size_t historySize = History.size();
         for (size_t historyIdx = 0; historyIdx < historySize; ++historyIdx) {
-            if (historyIdx != 0) { 
+            if (historyIdx != 0) {
                 str <<", ";
             }
             str << historyIdx << ":" << History[historyIdx].ToString();
@@ -316,13 +316,13 @@ public:
     TTabletStorageInfo()
         : TabletID(Max<ui64>())
         , TabletType(TTabletTypes::TYPE_INVALID)
-        , Version(0) 
+        , Version(0)
     {}
-    TTabletStorageInfo(ui64 tabletId, TTabletTypes::EType tabletType) 
-        : TabletID(tabletId) 
-        , TabletType(tabletType) 
-        , Version(0) 
-    {} 
+    TTabletStorageInfo(ui64 tabletId, TTabletTypes::EType tabletType)
+        : TabletID(tabletId)
+        , TabletType(tabletType)
+        , Version(0)
+    {}
     virtual ~TTabletStorageInfo() {}
 
     const TTabletChannelInfo* ChannelInfo(ui32 channel) const {
@@ -330,7 +330,7 @@ public:
             return nullptr;
         }
         const TTabletChannelInfo &info = Channels[channel];
-        if (info.History.empty()) { 
+        if (info.History.empty()) {
             return nullptr;
         }
         return &info;
@@ -345,13 +345,13 @@ public:
 
     TString ToString() const {
         TStringStream str;
-        str << "{Version# " << Version; 
-        str << " TabletID# " << TabletID; 
+        str << "{Version# " << Version;
+        str << " TabletID# " << TabletID;
         str << " TabletType# " << TabletType;
         str << " Channels# {";
         const size_t channelsSize = Channels.size();
         for (size_t channelIdx = 0; channelIdx < channelsSize; ++channelIdx) {
-            if (channelIdx != 0) { 
+            if (channelIdx != 0) {
                 str <<", ";
             }
             str << channelIdx << ":" << Channels[channelIdx].ToString();
@@ -365,9 +365,9 @@ public:
     TActorId BSProxyIDForChannel(ui32 channel, ui32 generation) const;
 
     bool operator<(const TTabletStorageInfo &other) const noexcept {
-        if (Version != 0 && other.Version != 0) { 
-            return Version < other.Version; 
-        } 
+        if (Version != 0 && other.Version != 0) {
+            return Version < other.Version;
+        }
         const size_t selfSize = Channels.size();
         const size_t otherSize = other.Channels.size();
         if (selfSize != otherSize)
@@ -386,10 +386,10 @@ public:
     //
     ui64 TabletID;
     TVector<TTabletChannelInfo> Channels;
-    TTabletTypes::EType TabletType; 
-    ui32 Version; 
+    TTabletTypes::EType TabletType;
+    ui32 Version;
     TPathId TenantPathId;
-    ui64 HiveId = 0; 
+    ui64 HiveId = 0;
 };
 
 inline TActorId TTabletStorageInfo::BSProxyIDForChannel(ui32 channel, ui32 generation) const {
@@ -783,8 +783,8 @@ struct TEvBlobStorage {
         EvControllerCreateVDiskSlotsResult,
         EvControllerCreateGroupResult,
         EvControllerSelectGroupsResult,
-        EvRequestControllerInfo, 
-        EvResponseControllerInfo, 
+        EvRequestControllerInfo,
+        EvResponseControllerInfo,
         EvControllerGroupReconfigureReplace, // Not used.
         EvControllerGroupReconfigureReplaceResult, // Not used.
         EvControllerGroupReconfigureWipe,
@@ -939,7 +939,7 @@ struct TEvBlobStorage {
         NKikimrProto::EReplyStatus Status;
         const TLogoBlobID Id;
         const TStorageStatusFlags StatusFlags;
-        const ui32 GroupId; 
+        const ui32 GroupId;
         const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
         TString ErrorReason;
         mutable NLWTrace::TOrbit Orbit;
@@ -949,7 +949,7 @@ struct TEvBlobStorage {
             : Status(status)
             , Id(id)
             , StatusFlags(statusFlags)
-            , GroupId(groupId) 
+            , GroupId(groupId)
             , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
         {}
 
@@ -1141,7 +1141,7 @@ struct TEvBlobStorage {
         // todo: replace with queue-like thing
         ui32 ResponseSz;
         TArrayHolder<TResponse> Responses;
-        const ui32 GroupId; 
+        const ui32 GroupId;
         ui32 BlockedGeneration = 0; // valid only for requests with non-zero TabletId and true AcquireBlockedGeneration.
         TString DebugInfo;
         TString ErrorReason;
@@ -1150,11 +1150,11 @@ struct TEvBlobStorage {
         // to measure blobstorage->client hop
         TInstant Sent;
 
-        TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, ui32 groupId) 
+        TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, ui32 groupId)
             : Status(status)
             , ResponseSz(sz)
             , Responses(sz == 0 ? nullptr : new TResponse[sz])
-            , GroupId(groupId) 
+            , GroupId(groupId)
         {}
 
         TString Print(bool isFull) const {
@@ -1720,14 +1720,14 @@ struct TEvBlobStorage {
         TLogoBlobID To;
 
         TVector<TResponse> Responses;
-        const ui32 GroupId; 
+        const ui32 GroupId;
         TString ErrorReason;
 
-        TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, ui32 groupId) 
+        TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, ui32 groupId)
             : Status(status)
             , From(from)
             , To(to)
-            , GroupId(groupId) 
+            , GroupId(groupId)
         {}
 
         TString Print(bool isFull) const {
@@ -2049,8 +2049,8 @@ struct TEvBlobStorage {
     struct TEvControllerScrubStartQuantum;
     struct TEvControllerScrubQuantumFinished;
     struct TEvControllerScrubReportQuantumInProgress;
-    struct TEvRequestControllerInfo; 
-    struct TEvResponseControllerInfo; 
+    struct TEvRequestControllerInfo;
+    struct TEvResponseControllerInfo;
     struct TEvTestLoadRequest;
     struct TEvTestLoadResponse;
 

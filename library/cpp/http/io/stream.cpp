@@ -640,15 +640,15 @@ private:
         return IsRequest(FirstLine_);
     }
 
-    inline bool HasResponseBody() const noexcept { 
-        if (IsHttpResponse()) { 
+    inline bool HasResponseBody() const noexcept {
+        if (IsHttpResponse()) {
             if (Request_ && Request_->FirstLine().StartsWith(TStringBuf("HEAD")))
-                return false; 
+                return false;
             if (FirstLine_.size() > 9 && strncmp(FirstLine_.data() + 9, "204", 3) == 0)
-                return false; 
-            return true; 
-        } 
-        return false; 
+                return false;
+            return true;
+        }
+        return false;
     }
 
     inline bool IsHttpResponse() const noexcept {
@@ -772,7 +772,7 @@ private:
         }
 
         if (IsHttpResponse()) {
-            if (Request_ && IsCompressionEnabled() && HasResponseBody()) { 
+            if (Request_ && IsCompressionEnabled() && HasResponseBody()) {
                 TString scheme = Request_->BestCompressionScheme(ComprSchemas_);
                 if (scheme != "identity") {
                     AddOrReplaceHeader(THttpInputHeader("Content-Encoding", scheme));
@@ -826,7 +826,7 @@ private:
             }
         }
 
-        if (!haveContentLength && !chunked && (IsHttpRequest() || HasResponseBody()) && SupportChunkedTransfer() && (keepAlive || encoder || IsHttpRequest())) { 
+        if (!haveContentLength && !chunked && (IsHttpRequest() || HasResponseBody()) && SupportChunkedTransfer() && (keepAlive || encoder || IsHttpRequest())) {
             AddHeader(THttpInputHeader("Transfer-Encoding", "chunked"));
             chunked = true;
         }

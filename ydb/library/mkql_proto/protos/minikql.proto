@@ -113,8 +113,8 @@ message TResult {
     optional TType Type = 1;
     optional TValue Value = 2;
 }
- 
-message TParams { 
-    optional TType Type = 1; 
-    optional TValue Value = 2; 
-} 
+
+message TParams {
+    optional TType Type = 1;
+    optional TValue Value = 2;
+}

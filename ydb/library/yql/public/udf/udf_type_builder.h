@@ -46,8 +46,8 @@ template <typename... TArgs>
 struct TTuple;
 
 template <const char* Tag>
-struct TResource {}; 
- 
+struct TResource {};
+
 template <typename... TArgs>
 struct TVariant;
 
@@ -757,11 +757,11 @@ struct TTypeBuilderHelper<TDecimalDataType<Precision, Scale>> {
 
 template <const char* Tag>
 struct TTypeBuilderHelper<TResource<Tag>> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) { 
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
         return builder.Resource(TStringRef(Tag, std::strlen(Tag)));
-    } 
-}; 
- 
+    }
+};
+
 template <typename T>
 struct TTypeBuilderHelper<TListType<T>> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {

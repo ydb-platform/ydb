@@ -47,7 +47,7 @@ void EnsureTablePartitions(NYdb::NTable::TTableClient& client, TString table, ui
 }
 
 static void MultiTenantSDK(bool asyncDiscovery) {
-    TKikimrWithGrpcAndRootSchemaWithAuthAndSsl server; 
+    TKikimrWithGrpcAndRootSchemaWithAuthAndSsl server;
     ui16 grpc = server.GetPort();
     TString location = TStringBuilder() << "localhost:" << grpc;
 
@@ -901,7 +901,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
     }
 
     Y_UNIT_TEST(SecurityTokenAuth) {
-        TKikimrWithGrpcAndRootSchemaWithAuthAndSsl server; 
+        TKikimrWithGrpcAndRootSchemaWithAuthAndSsl server;
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto connection = NYdb::TDriver(
@@ -1211,7 +1211,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
             entry.SetComponent(NKikimrServices::EServiceKikimr_Name(NKikimrServices::KQP_YQL));
             entry.SetLevel(NActors::NLog::PRI_DEBUG);
 
-            TKikimrWithGrpcAndRootSchema server(appConfig, {}, logBackend); 
+            TKikimrWithGrpcAndRootSchema server(appConfig, {}, logBackend);
 
             server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
             server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
@@ -1274,7 +1274,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         TAutoPtr<TLogBackend> logBackend(new TStreamLogBackend(&logStream));
 
         {
-            TKikimrWithGrpcAndRootSchema server({}, {}, logBackend); 
+            TKikimrWithGrpcAndRootSchema server({}, {}, logBackend);
 
             server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
 

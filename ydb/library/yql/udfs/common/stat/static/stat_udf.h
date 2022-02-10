@@ -1,15 +1,15 @@
-#pragma once 
+#pragma once
 
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
-#include "tdigest.h" 
- 
+#include "tdigest.h"
+
 using namespace NYql;
-using namespace NUdf; 
- 
-namespace { 
+using namespace NUdf;
+
+namespace {
     extern const char DigestResourceName[] = "Stat.TDigestResource";
- 
+
     typedef TBoxedResource<TDigest, DigestResourceName> TDigestResource;
     typedef TRefCountedPtr<TDigestResource> TDigestResourcePtr;
 
@@ -20,7 +20,7 @@ namespace {
         if (delta == 0 || K / delta < 1) {
             UdfTerminate((TStringBuilder() << Pos_ << " Invalid combination of delta/K values").data());
         }
- 
+
         return TUnboxedValuePod(new TDigestResource(delta, K, args[0].Get<double>()));
     }
 
@@ -31,38 +31,38 @@ namespace {
         resource->Get()->AddValue(args[1].Get<double>());
         return TUnboxedValuePod(resource);
     }
- 
+
     SIMPLE_UDF(TTDigest_GetPercentile, double(TResource<DigestResourceName>, double)) {
         Y_UNUSED(valueBuilder);
         TDigestResource::Validate(args[0]);
         return TUnboxedValuePod(static_cast<TDigestResource*>(args[0].AsBoxed().Get())->Get()->GetPercentile(args[1].Get<double>()));
     }
- 
+
     SIMPLE_UDF(TTDigest_Serialize, char*(TResource<DigestResourceName>)) {
         TDigestResource::Validate(args[0]);
         return valueBuilder->NewString(static_cast<TDigestResource*>(args[0].AsBoxed().Get())->Get()->Serialize());
     }
- 
+
     SIMPLE_UDF(TTDigest_Deserialize, TResource<DigestResourceName>(char*)) {
         Y_UNUSED(valueBuilder);
         return TUnboxedValuePod(new TDigestResource(TString(args[0].AsStringRef())));
     }
- 
+
     SIMPLE_UDF(TTDigest_Merge, TResource<DigestResourceName>(TResource<DigestResourceName>, TResource<DigestResourceName>)) {
         Y_UNUSED(valueBuilder);
         TDigestResource::Validate(args[0]);
         TDigestResource::Validate(args[1]);
         return TUnboxedValuePod(new TDigestResource(static_cast<TDigestResource*>(args[0].AsBoxed().Get())->Get(), static_cast<TDigestResource*>(args[1].AsBoxed().Get())->Get()));
     }
- 
+
     /*
- * 
- * TODO: Memory tracking 
- * 
- * 
- * 
- */ 
- 
+ *
+ * TODO: Memory tracking
+ *
+ *
+ *
+ */
+
     SIMPLE_MODULE(TStatModule,
                   TTDigest_Create,
                   TTDigest_AddValue,
@@ -70,5 +70,5 @@ namespace {
                   TTDigest_Serialize,
                   TTDigest_Deserialize,
                   TTDigest_Merge)
- 
-} 
+
+}

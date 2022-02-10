@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/persqueue/topic_parser) 
+UNITTEST_FOR(ydb/library/persqueue/topic_parser)
 
 OWNER(
     komels

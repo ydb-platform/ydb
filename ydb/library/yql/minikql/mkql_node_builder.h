@@ -16,7 +16,7 @@ inline TDataLiteral* BuildDataLiteral(const NUdf::TUnboxedValuePod& value, NUdf:
 }
 
 TOptionalLiteral* BuildOptionalLiteral(TRuntimeNode value, const TTypeEnvironment& env);
-TOptionalLiteral* BuildEmptyOptionalLiteral(TType* itemType, const TTypeEnvironment& env); 
+TOptionalLiteral* BuildEmptyOptionalLiteral(TType* itemType, const TTypeEnvironment& env);
 TOptionalLiteral* BuildEmptyOptionalDataLiteral(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env);
 TType* UnpackOptional(TRuntimeNode data, bool& isOptional);
 TType* UnpackOptional(TType* type, bool& isOptional);
@@ -25,7 +25,7 @@ TDataType* UnpackOptionalData(TType* type, bool& isOptional);
 
 class TStructTypeBuilder {
 public:
-    TStructTypeBuilder(const TTypeEnvironment& env); 
+    TStructTypeBuilder(const TTypeEnvironment& env);
     TStructTypeBuilder(const TStructTypeBuilder&) = default;
     TStructTypeBuilder& operator=(const TStructTypeBuilder&) = default;
     void Reserve(ui32 size);
@@ -41,7 +41,7 @@ private:
 
 class TListLiteralBuilder {
 public:
-    TListLiteralBuilder(const TTypeEnvironment& env, TType* type); 
+    TListLiteralBuilder(const TTypeEnvironment& env, TType* type);
     TListLiteralBuilder(const TListLiteralBuilder&) = default;
     TListLiteralBuilder& operator=(const TListLiteralBuilder&) = default;
     TListLiteralBuilder& Add(TRuntimeNode item);
@@ -56,7 +56,7 @@ private:
 
 class TStructLiteralBuilder {
 public:
-    TStructLiteralBuilder(const TTypeEnvironment& env); 
+    TStructLiteralBuilder(const TTypeEnvironment& env);
     TStructLiteralBuilder(const TStructLiteralBuilder&) = default;
     TStructLiteralBuilder& operator=(const TStructLiteralBuilder&) = default;
     void Reserve(ui32 size);
@@ -72,7 +72,7 @@ private:
 
 class TDictLiteralBuilder {
 public:
-    TDictLiteralBuilder(const TTypeEnvironment& env, TType* keyType, TType* payloadType); 
+    TDictLiteralBuilder(const TTypeEnvironment& env, TType* keyType, TType* payloadType);
     TDictLiteralBuilder(const TDictLiteralBuilder&) = default;
     TDictLiteralBuilder& operator=(const TDictLiteralBuilder&) = default;
     void Reserve(ui32 size);
@@ -89,11 +89,11 @@ private:
 
 class TCallableTypeBuilder {
 public:
-    TCallableTypeBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType); 
+    TCallableTypeBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType);
     TCallableTypeBuilder(const TCallableTypeBuilder&) = default;
     TCallableTypeBuilder& operator=(const TCallableTypeBuilder&) = default;
     void Reserve(ui32 size);
-    TCallableTypeBuilder& Add(TType* time); 
+    TCallableTypeBuilder& Add(TType* time);
     TCallableTypeBuilder& SetArgumentName(const TStringBuf& name);
     TCallableTypeBuilder& SetArgumentFlags(ui64 flags);
     TCallableTypeBuilder& SetOptionalArgs(ui32 count);
@@ -116,11 +116,11 @@ private:
 class TCallableBuilder {
 public:
     TCallableBuilder(const TTypeEnvironment& env, const TStringBuf& name, TType* returnType,
-        bool disableMerge = false); 
+        bool disableMerge = false);
     TCallableBuilder(const TCallableBuilder&) = default;
     TCallableBuilder& operator=(const TCallableBuilder&) = default;
     void Reserve(ui32 size);
-    TCallableBuilder& Add(TRuntimeNode input); 
+    TCallableBuilder& Add(TRuntimeNode input);
     TCallableBuilder& SetArgumentName(const TStringBuf& name);
     TCallableBuilder& SetArgumentFlags(ui64 flags);
     TCallableBuilder& SetOptionalArgs(ui32 count);

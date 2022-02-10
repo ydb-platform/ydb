@@ -367,7 +367,7 @@ TRuntimeNode TProgramBuilder::AddMember(TRuntimeNode structObj, const std::strin
     MKQL_ENSURE(oldType->IsStruct(), "Expected struct");
 
     const auto& oldTypeDetailed = static_cast<const TStructType&>(*oldType);
-    TStructTypeBuilder newTypeBuilder(Env); 
+    TStructTypeBuilder newTypeBuilder(Env);
     newTypeBuilder.Reserve(oldTypeDetailed.GetMembersCount() + 1);
     for (ui32 i = 0, e = oldTypeDetailed.GetMembersCount(); i < e; ++i) {
         newTypeBuilder.Add(oldTypeDetailed.GetMemberName(i), oldTypeDetailed.GetMemberType(i));
@@ -423,7 +423,7 @@ TRuntimeNode TProgramBuilder::RemoveMember(TRuntimeNode structObj, const std::st
 
 TRuntimeNode TProgramBuilder::Zip(const TArrayRef<const TRuntimeNode>& lists) {
     if (lists.empty()) {
-        return NewEmptyList(Env.GetEmptyTuple()->GetGenericType()); 
+        return NewEmptyList(Env.GetEmptyTuple()->GetGenericType());
     }
 
     std::vector<TType*> tupleTypes;
@@ -439,7 +439,7 @@ TRuntimeNode TProgramBuilder::Zip(const TArrayRef<const TRuntimeNode>& lists) {
         tupleTypes.push_back(itemType);
     }
 
-    auto returnType = TListType::Create(TTupleType::Create(tupleTypes.size(), tupleTypes.data(), Env), Env); 
+    auto returnType = TListType::Create(TTupleType::Create(tupleTypes.size(), tupleTypes.data(), Env), Env);
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     for (auto& list : lists) {
         callableBuilder.Add(list);
@@ -450,7 +450,7 @@ TRuntimeNode TProgramBuilder::Zip(const TArrayRef<const TRuntimeNode>& lists) {
 
 TRuntimeNode TProgramBuilder::ZipAll(const TArrayRef<const TRuntimeNode>& lists) {
     if (lists.empty()) {
-        return NewEmptyList(Env.GetEmptyTuple()->GetGenericType()); 
+        return NewEmptyList(Env.GetEmptyTuple()->GetGenericType());
     }
 
     std::vector<TType*> tupleTypes;
@@ -463,10 +463,10 @@ TRuntimeNode TProgramBuilder::ZipAll(const TArrayRef<const TRuntimeNode>& lists)
 
         AS_TYPE(TListType, list.GetStaticType());
         auto itemType = static_cast<const TListType&>(*list.GetStaticType()).GetItemType();
-        tupleTypes.push_back(TOptionalType::Create(itemType, Env)); 
+        tupleTypes.push_back(TOptionalType::Create(itemType, Env));
     }
 
-    auto returnType = TListType::Create(TTupleType::Create(tupleTypes.size(), tupleTypes.data(), Env), Env); 
+    auto returnType = TListType::Create(TTupleType::Create(tupleTypes.size(), tupleTypes.data(), Env), Env);
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     for (auto& list : lists) {
         callableBuilder.Add(list);
@@ -1902,7 +1902,7 @@ TRuntimeNode TProgramBuilder::NewDecimalLiteral(NYql::NDecimal::TInt128 data, ui
 }
 
 TRuntimeNode TProgramBuilder::NewOptional(TRuntimeNode data) {
-    auto type = TOptionalType::Create(data.GetStaticType(), Env); 
+    auto type = TOptionalType::Create(data.GetStaticType(), Env);
     return TRuntimeNode(TOptionalLiteral::Create(data, type, Env), true);
 }
 
@@ -1915,8 +1915,8 @@ TRuntimeNode TProgramBuilder::NewVoid() {
     return TRuntimeNode(Env.GetVoid(), true);
 }
 
-TRuntimeNode TProgramBuilder::NewEmptyListOfVoid() { 
-    return TRuntimeNode(Env.GetListOfVoid(), true); 
+TRuntimeNode TProgramBuilder::NewEmptyListOfVoid() {
+    return TRuntimeNode(Env.GetListOfVoid(), true);
 }
 
 TRuntimeNode TProgramBuilder::NewEmptyOptional(TType* optionalType) {
@@ -1941,7 +1941,7 @@ TType* TProgramBuilder::NewStructType(TType* baseStructType, const std::string_v
     MKQL_ENSURE(baseStructType->IsStruct(), "Expected struct type");
 
     const auto& detailedBaseStructType = static_cast<const TStructType&>(*baseStructType);
-    TStructTypeBuilder builder(Env); 
+    TStructTypeBuilder builder(Env);
     builder.Reserve(detailedBaseStructType.GetMembersCount() + 1);
     for (ui32 i = 0, e = detailedBaseStructType.GetMembersCount(); i < e; ++i) {
         builder.Add(detailedBaseStructType.GetMemberName(i), detailedBaseStructType.GetMemberType(i));
@@ -1952,7 +1952,7 @@ TType* TProgramBuilder::NewStructType(TType* baseStructType, const std::string_v
 }
 
 TType* TProgramBuilder::NewStructType(const TArrayRef<const std::pair<std::string_view, TType*>>& memberTypes) {
-    TStructTypeBuilder builder(Env); 
+    TStructTypeBuilder builder(Env);
     builder.Reserve(memberTypes.size());
     for (auto& x : memberTypes) {
         builder.Add(x.first, x.second);
@@ -1970,7 +1970,7 @@ TRuntimeNode TProgramBuilder::NewStruct(const TArrayRef<const std::pair<std::str
         return NewEmptyStruct();
     }
 
-    TStructLiteralBuilder builder(Env); 
+    TStructLiteralBuilder builder(Env);
     for (auto x : members) {
         builder.Add(x.first, x.second);
     }
@@ -1996,13 +1996,13 @@ TRuntimeNode TProgramBuilder::NewStruct(TType* structType, const TArrayRef<const
     return TRuntimeNode(TStructLiteral::Create(values.size(), values.data(), detailedStructType, Env), true);
 }
 
-TRuntimeNode TProgramBuilder::NewEmptyList(TType* itemType) { 
-    TListLiteralBuilder builder(Env, itemType); 
+TRuntimeNode TProgramBuilder::NewEmptyList(TType* itemType) {
+    TListLiteralBuilder builder(Env, itemType);
     return TRuntimeNode(builder.Build(), true);
 }
 
 TRuntimeNode TProgramBuilder::NewList(TType* itemType, const TArrayRef<const TRuntimeNode>& items) {
-    TListLiteralBuilder builder(Env, itemType); 
+    TListLiteralBuilder builder(Env, itemType);
     for (auto item : items) {
         builder.Add(item);
     }
@@ -2019,11 +2019,11 @@ TType* TProgramBuilder::NewDecimalType(ui8 precision, ui8 scale) {
 }
 
 TType* TProgramBuilder::NewOptionalType(TType* itemType) {
-    return TOptionalType::Create(itemType, Env); 
+    return TOptionalType::Create(itemType, Env);
 }
 
-TType* TProgramBuilder::NewListType(TType* itemType) { 
-    return TListType::Create(itemType, Env); 
+TType* TProgramBuilder::NewListType(TType* itemType) {
+    return TListType::Create(itemType, Env);
 }
 
 TType* TProgramBuilder::NewStreamType(TType* itemType) {
@@ -2047,7 +2047,7 @@ TType* TProgramBuilder::NewTaggedType(TType* baseType, const std::string_view& t
 }
 
 TType* TProgramBuilder::NewDictType(TType* keyType, TType* payloadType, bool multi) {
-    return TDictType::Create(keyType, multi ? NewListType(payloadType) : payloadType, Env); 
+    return TDictType::Create(keyType, multi ? NewListType(payloadType) : payloadType, Env);
 }
 
 TRuntimeNode TProgramBuilder::NewDict(TType* dictType, const TArrayRef<const std::pair<TRuntimeNode, TRuntimeNode>>& items) {
@@ -2065,7 +2065,7 @@ TType* TProgramBuilder::NewEmptyTupleType() {
 }
 
 TType* TProgramBuilder::NewTupleType(const TArrayRef<TType* const>& elements) {
-    return TTupleType::Create(elements.size(), elements.data(), Env); 
+    return TTupleType::Create(elements.size(), elements.data(), Env);
 }
 
 TType* TProgramBuilder::NewArrayType(const TArrayRef<TType* const>& elements) {
@@ -3059,7 +3059,7 @@ TRuntimeNode TProgramBuilder::UnaryDataFunction(TRuntimeNode data, const std::st
     } else if (flags & TDataFunctionFlags::HasStringResult) {
         resultType = TDataType::Create(NUdf::TDataType<char*>::Id, Env);
     } else if (flags & TDataFunctionFlags::HasOptionalResult) {
-        resultType = TOptionalType::Create(type, Env); 
+        resultType = TOptionalType::Create(type, Env);
     } else {
         resultType = type;
     }
@@ -3094,7 +3094,7 @@ TRuntimeNode TProgramBuilder::ToDict(TRuntimeNode list, bool multi, const TUnary
     auto payload = payloadSelector(itemArg);
     auto payloadType = payload.GetStaticType();
     if (multi) {
-        payloadType = TListType::Create(payloadType, Env); 
+        payloadType = TListType::Create(payloadType, Env);
     }
 
     auto dictType = TDictType::Create(keyType, payloadType, Env);
@@ -3815,9 +3815,9 @@ TRuntimeNode TProgramBuilder::Apply(TRuntimeNode callableNode, const TArrayRef<c
     MKQL_ENSURE(usedArgs >= callableType->GetArgumentsCount() - callableType->GetOptionalArgumentsCount(), "Too few arguments");
 
     for (ui32 i = 0; i < usedArgs; i++) {
-        TType* argType = callableType->GetArgumentType(i); 
+        TType* argType = callableType->GetArgumentType(i);
         TRuntimeNode arg = args[i];
-        MKQL_ENSURE(arg.GetStaticType()->IsConvertableTo(*argType), 
+        MKQL_ENSURE(arg.GetStaticType()->IsConvertableTo(*argType),
                     "Argument type mismatch for argument " << i << ": runtime " << argType->GetKindAsStr()
                                    << " with static " << arg.GetStaticType()->GetKindAsStr());
     }
@@ -4157,14 +4157,14 @@ TRuntimeNode TProgramBuilder::ListIf(TRuntimeNode predicate, TRuntimeNode item) 
 }
 
 TRuntimeNode TProgramBuilder::AsList(TRuntimeNode item) {
-    TListLiteralBuilder builder(Env, item.GetStaticType()); 
+    TListLiteralBuilder builder(Env, item.GetStaticType());
     builder.Add(item);
     return TRuntimeNode(builder.Build(), true);
 }
 
 TRuntimeNode TProgramBuilder::AsList(const TArrayRef<const TRuntimeNode>& items) {
     MKQL_ENSURE(!items.empty(), "required not empty list of items");
-    TListLiteralBuilder builder(Env, items[0].GetStaticType()); 
+    TListLiteralBuilder builder(Env, items[0].GetStaticType());
     for (auto item : items) {
         builder.Add(item);
     }

@@ -33,7 +33,7 @@ TIssue IssueFromMessage(const TIssueMessage& issueMessage) {
             issue = TIssue(message.message());
         }
 
-        for (const auto& subMessage : message.issues()) { 
+        for (const auto& subMessage : message.issues()) {
             auto subIssue = new TIssue();
             issue.AddSubIssue(subIssue);
             queue.push_front(std::make_pair(subIssue, &subMessage));

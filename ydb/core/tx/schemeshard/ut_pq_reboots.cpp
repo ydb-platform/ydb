@@ -70,75 +70,75 @@ Y_UNIT_TEST_SUITE(TPqGroupTestReboots) {
         });
     }
 
-    Y_UNIT_TEST(AlterWithProfileChange) { 
-        TTestBasicRuntime runtime; 
-        TTestEnv env(runtime); 
-        ui64 txId = 100; 
-        TPathVersion pqVer; 
- 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"), 
+    Y_UNIT_TEST(AlterWithProfileChange) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TPathVersion pqVer;
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                            {NLs::NoChildren});
- 
-        AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA"); 
- 
-        env.TestWaitNotification(runtime, txId); 
- 
-        TestCreatePQGroup(runtime, ++txId, "/MyRoot/DirA", 
-                        "Name: \"PQGroup\"" 
-                        "TotalGroupCount: 10 " 
-                        "PartitionPerTablet: 10 " 
-                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}" 
-                        ); 
- 
-        env.TestWaitNotification(runtime, txId); 
- 
-        pqVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup", true), 
-                                   {NLs::Finished, 
-                                    NLs::CheckPartCount("PQGroup", 10, 10, 1, 10), 
+
+        AsyncMkDir(runtime, ++txId, "/MyRoot", "DirA");
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot/DirA",
+                        "Name: \"PQGroup\""
+                        "TotalGroupCount: 10 "
+                        "PartitionPerTablet: 10 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}"
+                        );
+
+        env.TestWaitNotification(runtime, txId);
+
+        pqVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup", true),
+                                   {NLs::Finished,
+                                    NLs::CheckPartCount("PQGroup", 10, 10, 1, 10),
                                     NLs::PQPartitionsInsideDomain(10),
-                                    NLs::PathVersionEqual(2)}); 
- 
-        auto numChannels = runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.size(); 
-        { 
+                                    NLs::PathVersionEqual(2)});
+
+        auto numChannels = runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.size();
+        {
             auto itTablet = env.GetHiveState()->Tablets.find({TTestTxConfig::SchemeShard, 1});
-            UNIT_ASSERT_UNEQUAL(itTablet, env.GetHiveState()->Tablets.end()); 
-            UNIT_ASSERT_VALUES_EQUAL(itTablet->second.Type, TTabletTypes::PersQueue); 
-            UNIT_ASSERT_VALUES_EQUAL(itTablet->second.BoundChannels.size(), numChannels); 
- 
-        } 
- 
-        // increasing number of channels in 0 profile 
-        runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.emplace_back(runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.back()); 
-        runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.emplace_back(runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.back()); 
-        runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.emplace_back(runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.back()); 
-        runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.emplace_back(runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.back()); 
-        auto numChannelsNew = runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.size(); 
- 
-        TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA", 
-                        "Name: \"PQGroup\"" 
-                        "TotalGroupCount: 10 " 
-                        "PartitionPerTablet: 10 " 
-                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}", 
+            UNIT_ASSERT_UNEQUAL(itTablet, env.GetHiveState()->Tablets.end());
+            UNIT_ASSERT_VALUES_EQUAL(itTablet->second.Type, TTabletTypes::PersQueue);
+            UNIT_ASSERT_VALUES_EQUAL(itTablet->second.BoundChannels.size(), numChannels);
+
+        }
+
+        // increasing number of channels in 0 profile
+        runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.emplace_back(runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.back());
+        runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.emplace_back(runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.back());
+        runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.emplace_back(runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.back());
+        runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.emplace_back(runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.back());
+        auto numChannelsNew = runtime.GetAppData().ChannelProfiles->Profiles[0].Channels.size();
+
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot/DirA",
+                        "Name: \"PQGroup\""
+                        "TotalGroupCount: 10 "
+                        "PartitionPerTablet: 10 "
+                        "PQTabletConfig: {PartitionConfig { LifetimeSeconds : 10}}",
                          {NKikimrScheme::StatusAccepted}, {pqVer});
- 
-        env.TestWaitNotification(runtime, txId); 
- 
-        pqVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup", true), 
-                                   {NLs::Finished, 
-                                    NLs::CheckPartCount("PQGroup", 10, 10, 1, 10), 
+
+        env.TestWaitNotification(runtime, txId);
+
+        pqVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/PQGroup", true),
+                                   {NLs::Finished,
+                                    NLs::CheckPartCount("PQGroup", 10, 10, 1, 10),
                                     NLs::PQPartitionsInsideDomain(10),
-                                    NLs::PathVersionEqual(3)}); 
- 
-        { 
+                                    NLs::PathVersionEqual(3)});
+
+        {
             auto itTablet = env.GetHiveState()->Tablets.find({TTestTxConfig::SchemeShard, 1});
-            UNIT_ASSERT_UNEQUAL(itTablet, env.GetHiveState()->Tablets.end()); 
-            UNIT_ASSERT_VALUES_EQUAL(itTablet->second.Type, TTabletTypes::PersQueue); 
-            UNIT_ASSERT_VALUES_UNEQUAL(itTablet->second.BoundChannels.size(), numChannels); 
-            UNIT_ASSERT_VALUES_EQUAL(itTablet->second.BoundChannels.size(), numChannelsNew); 
-        } 
-    } 
- 
-    Y_UNIT_TEST(AlterWithReboots) { 
+            UNIT_ASSERT_UNEQUAL(itTablet, env.GetHiveState()->Tablets.end());
+            UNIT_ASSERT_VALUES_EQUAL(itTablet->second.Type, TTabletTypes::PersQueue);
+            UNIT_ASSERT_VALUES_UNEQUAL(itTablet->second.BoundChannels.size(), numChannels);
+            UNIT_ASSERT_VALUES_EQUAL(itTablet->second.BoundChannels.size(), numChannelsNew);
+        }
+    }
+
+    Y_UNIT_TEST(AlterWithReboots) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TPathVersion pqVer;

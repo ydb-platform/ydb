@@ -24,28 +24,28 @@ namespace {
     const ui64 Table1Id = 301;
     const ui64 Table2Id = 302;
 
-    struct Schema1 : NIceDb::Schema { 
+    struct Schema1 : NIceDb::Schema {
         struct Table1 : Table<Table1Id> {
             struct ID : Column<1, NUdf::TDataType<ui32>::Id> {};
             struct Value : Column<2, NUdf::TDataType<NUdf::TUtf8>::Id> {};
 
-            using TKey = TableKey<ID>; 
-            using TColumns = TableColumns<ID, Value>; 
+            using TKey = TableKey<ID>;
+            using TColumns = TableColumns<ID, Value>;
         };
 
-        using TTables = SchemaTables<Table1>; 
+        using TTables = SchemaTables<Table1>;
     };
 
-    struct Schema2 : NIceDb::Schema { 
+    struct Schema2 : NIceDb::Schema {
         struct Table2 : Table<Table2Id> {
             struct ID : Column<3, NUdf::TDataType<ui64>::Id> {};
             struct Value : Column<4, NUdf::TDataType<ui32>::Id> {};
 
-            using TKey = TableKey<ID>; 
-            using TColumns = TableColumns<ID, Value>; 
+            using TKey = TableKey<ID>;
+            using TColumns = TableColumns<ID, Value>;
         };
 
-        using TTables = SchemaTables<Table2>; 
+        using TTables = SchemaTables<Table2>;
     };
 
     struct TShardDbState {
@@ -62,7 +62,7 @@ namespace {
 
             { // Create tables
                 BeginTransaction(tabletId);
-                NIceDb::TNiceDb(*db).Materialize<TSchema>(); 
+                NIceDb::TNiceDb(*db).Materialize<TSchema>();
                 CommitTransaction(tabletId);
             }
         }
@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
     Y_UNIT_TEST(TestEmptyProgram) {
         TDriver driver;
         auto& pgmBuilder = driver.PgmBuilder;
-        auto pgm = pgmBuilder.Build(pgmBuilder.NewEmptyListOfVoid()); 
+        auto pgm = pgmBuilder.Build(pgmBuilder.NewEmptyListOfVoid());
 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &EmptyShardResolver), IEngineFlat::EStatus::Complete);

@@ -55,20 +55,20 @@ message TRequest {
     optional NKikimrTxUserProxy.TTransaction Transaction = 1;
     optional uint64 ProxyFlags = 2;
     optional uint64 ExecTimeoutPeriod = 4;
-    optional string SecurityToken = 5; 
+    optional string SecurityToken = 5;
 }
 
-message TFlatTxId { 
-    optional fixed64 TxId = 1; 
-    optional fixed64 SchemeShardTabletId = 2; 
+message TFlatTxId {
+    optional fixed64 TxId = 1;
+    optional fixed64 SchemeShardTabletId = 2;
     optional uint64 PathId = 3;
-}; 
+};
 
-message TResolveNodeResponse { 
-    optional string Host = 1; 
-    optional uint32 NodeId = 2; 
-}; 
- 
+message TResolveNodeResponse {
+    optional string Host = 1;
+    optional uint32 NodeId = 2;
+};
+
 // must start from TResponseBase
 message TResponse {
     optional uint32 Status = 1 [
@@ -86,7 +86,7 @@ message TResponse {
         ]}
     ]; // EResponseStatus from ydb/core/client/base/msgbus.h
 
-    optional string ErrorReason = 400; // When present contains human-readable error description  (aka ProtobufError) 
+    optional string ErrorReason = 400; // When present contains human-readable error description  (aka ProtobufError)
 
     optional fixed64 TxId = 2;
     optional fixed64 Step = 3;
@@ -176,57 +176,57 @@ message TResponse {
     optional int32 SchemeStatus = 300; // for enum definition see flat_tx_scheme.proto - enum EStatus
     optional uint32 SchemeTagId = 301;
     optional bytes SchemePrefix = 302;
- 
-    // TTabletStateRequest 
-    repeated NKikimrWhiteboard.TTabletStateInfo TabletStateInfo = 500; 
- 
+
+    // TTabletStateRequest
+    repeated NKikimrWhiteboard.TTabletStateInfo TabletStateInfo = 500;
+
     // TSchemeDescribe
     optional NKikimrSchemeOp.TPathDescription PathDescription = 600;
     optional string Path = 601;
- 
+
     // TSchemeOperation
-    optional TFlatTxId FlatTxId = 700; 
- 
-    // TPersQueueRequest 
+    optional TFlatTxId FlatTxId = 700;
+
+    // TPersQueueRequest
     optional NPersQueue.NErrorCode.EErrorCode ErrorCode = 800; // TODO: rename to something more PQ-specific
-    optional TPersQueuePartitionResponse PartitionResponse = 801; 
-    optional TPersQueueMetaResponse MetaResponse = 802; 
+    optional TPersQueuePartitionResponse PartitionResponse = 801;
+    optional TPersQueueMetaResponse MetaResponse = 802;
     optional TPersQueueFetchResponse FetchResponse = 803;
- 
-    // TKeyValueRequest 
-    optional uint64 Cookie = 900; 
-    repeated TKeyValueResponse.TDeleteRangeResult DeleteRangeResult = 901; 
-    optional TKeyValueResponse.TIncrementGenerationResult IncrementGenerationResult = 902; 
-    repeated TKeyValueResponse.TReadResult ReadResult = 903; 
-    repeated TKeyValueResponse.TReadRangeResult ReadRangeResult = 904; 
-    repeated TKeyValueResponse.TWriteResult WriteResult = 905; 
-    repeated TKeyValueResponse.TRenameResult RenameResult = 906; 
-    repeated TKeyValueResponse.TCopyRangeResult CopyRangeResult = 907; 
-    repeated TKeyValueResponse.TConcatResult ConcatResult = 908; 
+
+    // TKeyValueRequest
+    optional uint64 Cookie = 900;
+    repeated TKeyValueResponse.TDeleteRangeResult DeleteRangeResult = 901;
+    optional TKeyValueResponse.TIncrementGenerationResult IncrementGenerationResult = 902;
+    repeated TKeyValueResponse.TReadResult ReadResult = 903;
+    repeated TKeyValueResponse.TReadRangeResult ReadRangeResult = 904;
+    repeated TKeyValueResponse.TWriteResult WriteResult = 905;
+    repeated TKeyValueResponse.TRenameResult RenameResult = 906;
+    repeated TKeyValueResponse.TCopyRangeResult CopyRangeResult = 907;
+    repeated TKeyValueResponse.TConcatResult ConcatResult = 908;
     repeated TKeyValueResponse.TGetStatusResult GetStatusResult = 909;
     optional TKeyValueResponse.TTrimLeakedBlobsResult TrimLeakedBlobsResult = 910;
     optional TKeyValueResponse.TSetExecutorFastLogPolicyResult SetExecutorFastLogPolicyResult = 911;
- 
-    // THiveCreateTablet 
-    message TCreateTabletResult { 
-        // Should be NKikimrProto::OK or NKikimrProto::ALREADY in case of success or repeated call 
+
+    // THiveCreateTablet
+    message TCreateTabletResult {
+        // Should be NKikimrProto::OK or NKikimrProto::ALREADY in case of success or repeated call
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
-        optional uint64 TabletId = 2; 
-    } 
-    message TLookupTabletResult { 
-        // Should be NKikimrProto::OK or NKikimrProto::NODATA in case of non existing tablet 
+        optional uint64 TabletId = 2;
+    }
+    message TLookupTabletResult {
+        // Should be NKikimrProto::OK or NKikimrProto::NODATA in case of non existing tablet
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
-        optional uint64 TabletId = 2; 
-    } 
-    repeated TCreateTabletResult CreateTabletResult = 1000; 
-    repeated TLookupTabletResult LookupTabletResult = 1002; 
- 
-    // TLocalEnumerateTablets 
-    message TTabletInfo { 
-        optional uint64 TabletId = 1; 
-        optional NKikimrTabletBase.TTabletTypes.EType TabletType = 2; 
-    } 
-    repeated TTabletInfo TabletInfo = 1001; 
+        optional uint64 TabletId = 2;
+    }
+    repeated TCreateTabletResult CreateTabletResult = 1000;
+    repeated TLookupTabletResult LookupTabletResult = 1002;
+
+    // TLocalEnumerateTablets
+    message TTabletInfo {
+        optional uint64 TabletId = 1;
+        optional NKikimrTabletBase.TTabletTypes.EType TabletType = 2;
+    }
+    repeated TTabletInfo TabletInfo = 1001;
 
     // TTabletLocalSchemeTx
     optional NTabletFlatScheme.TSchemeChanges LocalDbScheme = 1010;
@@ -236,16 +236,16 @@ message TResponse {
 
     // TBlobStorageConfigRequest
     optional NKikimrBlobStorage.TConfigResponse BlobStorageConfigResponse = 1030;
- 
-    optional TResolveNodeResponse ResolveNodeResponse = 1040; 
+
+    optional TResolveNodeResponse ResolveNodeResponse = 1040;
 
     // TChooseProxyRequest
     optional string ProxyName = 1050;
     optional uint64 ProxyCookie = 1051;
 
-    // TWhoAmI 
-    optional string UserName = 1100; 
-    repeated string Groups = 1101; 
+    // TWhoAmI
+    optional string UserName = 1100;
+    repeated string Groups = 1101;
 }
 
 message TFakeConfigDummy {
@@ -275,8 +275,8 @@ message TLocalMKQL {
     optional NKikimrTxUserProxy.TMiniKQLTransaction Program = 2;
     optional bool ConnectToFollower = 3;
 
-    optional string SecurityToken = 5; 
- 
+    optional string SecurityToken = 5;
+
     optional bool WithRetry = 10;
     optional uint64 Timeout = 11;
 }
@@ -286,7 +286,7 @@ message TLocalSchemeTx {
     optional bool ConnectToFollower = 2;
     optional NTabletFlatScheme.TSchemeChanges SchemeChanges = 3;
     optional bool DryRun = 4;
-    optional string SecurityToken = 5; 
+    optional string SecurityToken = 5;
 
     optional bool WithRetry = 10;
     optional uint64 Timeout = 11;
@@ -304,8 +304,8 @@ message TSchemeInitRoot {
     optional uint32 TagId = 2;
     optional bytes TagName = 3;
     optional NKikimrTxScheme.TConfig GlobalConfig = 4;
-    optional string SecurityToken = 5; 
-    repeated NKikimrStoragePool.TStoragePool StoragePools = 6; 
+    optional string SecurityToken = 5;
+    repeated NKikimrStoragePool.TStoragePool StoragePools = 6;
 }
 
 message TBSAdm {
@@ -322,7 +322,7 @@ message TBSAdm {
     optional uint32 Domain = 1;
 
     optional TGroupReconfigureWipe GroupReconfigureWipe = 6;
-    optional string SecurityToken = 7; 
+    optional string SecurityToken = 7;
 }
 
 message THiveCreateTablet {
@@ -331,18 +331,18 @@ message THiveCreateTablet {
         optional uint64 OwnerIdx = 2; // mandatory, per-sender unique request id for duplicate request detection
         optional NKikimrTabletBase.TTabletTypes.EType TabletType = 3; // mandatory, tablet type, see ydb/core/base/tablet_types.h
         optional uint32 ChannelsProfile = 4; // mandatory, channels profile index (use 0 for default profile)
-        repeated uint32 AllowedNodeIDs = 5; 
+        repeated uint32 AllowedNodeIDs = 5;
         repeated NKikimrSubDomains.TDomainKey AllowedDomains = 6;
         repeated NKikimrStoragePool.TChannelBind BindedChannels = 7;
     }
 
-    message TCmdLookupTablet { 
-        optional uint64 OwnerId = 1; // mandatory, senders TabletId (use 0 for human/external system) 
-        optional uint64 OwnerIdx = 2; // mandatory, per-sender unique request id for duplicate request detection 
-    } 
- 
+    message TCmdLookupTablet {
+        optional uint64 OwnerId = 1; // mandatory, senders TabletId (use 0 for human/external system)
+        optional uint64 OwnerIdx = 2; // mandatory, per-sender unique request id for duplicate request detection
+    }
+
     repeated TCmdCreateTablet CmdCreateTablet = 1;
-    repeated TCmdLookupTablet CmdLookupTablet = 3; 
+    repeated TCmdLookupTablet CmdLookupTablet = 3;
     optional uint32 DomainUid = 2; // mandatory, Domain unique id, in most cases 1
 }
 
@@ -356,21 +356,21 @@ message THiveCreateTabletResult {
         optional uint64 TabletId = 2;
     }
 
-    message TLookupTabletResult { 
-        // Should be NKikimrProto::OK or NKikimrProto::NODATA in case of non existing tablet 
+    message TLookupTabletResult {
+        // Should be NKikimrProto::OK or NKikimrProto::NODATA in case of non existing tablet
         optional uint32 Status = 1; // EReplyStatus from ydb/core/protos/base.proto
-        optional uint64 TabletId = 2; 
-    } 
- 
+        optional uint64 TabletId = 2;
+    }
+
     repeated TCreateTabletResult CreateTabletResult = 2;
-    repeated TLookupTabletResult LookupTabletResult = 4; 
+    repeated TLookupTabletResult LookupTabletResult = 4;
     optional string ErrorReason = 3; // When present contains human-readable error description
 }
 
 message TLocalEnumerateTablets {
     optional uint64 DomainUid = 1; // mandatory
     optional uint32 NodeId = 2; // optional, msgbus proxy will contact it's own node if not set
-    optional NKikimrTabletBase.TTabletTypes.EType TabletType = 3; // optional, local will enumerate all tablets if not set 
+    optional NKikimrTabletBase.TTabletTypes.EType TabletType = 3; // optional, local will enumerate all tablets if not set
 }
 
 message TLocalEnumerateTabletsResult {
@@ -379,7 +379,7 @@ message TLocalEnumerateTabletsResult {
 
     message TTabletInfo {
         optional uint64 TabletId = 1;
-        optional NKikimrTabletBase.TTabletTypes.EType TabletType = 2; 
+        optional NKikimrTabletBase.TTabletTypes.EType TabletType = 2;
     }
 
     repeated TTabletInfo TabletInfo = 2;
@@ -400,66 +400,66 @@ message TTypeMetadataResponse {
     optional bytes FunctionMetadata = 4;
 }
 
-message TMessageBusTraceRequest { 
-    enum ECommand { 
-        START = 0; 
-        STOP = 1; 
-    }; 
-    optional ECommand Command = 1; 
-    optional bytes Path = 2; 
-}; 
- 
-message TMessageBusTraceStatus { 
-    optional bool TraceActive = 1; 
-    optional bytes Path = 2; 
-}; 
- 
-message TTabletKillRequest { 
-    optional uint64 TabletID = 1; 
-}; 
- 
-message TTabletStateRequest { 
-    optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1; 
-    optional bool Alive = 2; 
-    repeated fixed64 TabletIDs = 3; 
-}; 
- 
-message TFlatTxPollOptions { 
-    optional uint32 Timeout = 1 [default = 1000]; // ms 
-}; 
- 
+message TMessageBusTraceRequest {
+    enum ECommand {
+        START = 0;
+        STOP = 1;
+    };
+    optional ECommand Command = 1;
+    optional bytes Path = 2;
+};
+
+message TMessageBusTraceStatus {
+    optional bool TraceActive = 1;
+    optional bytes Path = 2;
+};
+
+message TTabletKillRequest {
+    optional uint64 TabletID = 1;
+};
+
+message TTabletStateRequest {
+    optional NKikimrTabletBase.TTabletTypes.EType TabletType = 1;
+    optional bool Alive = 2;
+    repeated fixed64 TabletIDs = 3;
+};
+
+message TFlatTxPollOptions {
+    optional uint32 Timeout = 1 [default = 1000]; // ms
+};
+
 message TSchemeOperation {
-    optional NKikimrTxUserProxy.TTransaction Transaction = 1; 
-    optional TFlatTxPollOptions PollOptions = 10; 
-    optional string SecurityToken = 5; 
-}; 
- 
+    optional NKikimrTxUserProxy.TTransaction Transaction = 1;
+    optional TFlatTxPollOptions PollOptions = 10;
+    optional string SecurityToken = 5;
+};
+
 
 message TSchemeDescribe {
-    optional string Path = 1; 
-    optional uint64 PathId = 2; 
-    optional uint64 SchemeshardId = 3; 
-    optional string SecurityToken = 5; 
+    optional string Path = 1;
+    optional uint64 PathId = 2;
+    optional uint64 SchemeshardId = 3;
+    optional string SecurityToken = 5;
     optional NKikimrSchemeOp.TDescribeOptions Options = 6;
-}; 
- 
-message TFlatDescribeResponse { 
+};
+
+message TFlatDescribeResponse {
     option deprecated = true;
-    optional uint32 Status = 1; 
+    optional uint32 Status = 1;
 
     optional string Path = 9;
     optional NKikimrSchemeOp.TPathDescription PathDescription = 2;
-    optional string ErrorReason = 3; // When present contains human-readable error description 
+    optional string ErrorReason = 3; // When present contains human-readable error description
     optional int32 SchemeStatus = 4;
 
     optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7;
     repeated Ydb.Issue.IssueMessage Issues = 8;
-}; 
- 
+};
+
 message TSchemeOperationStatus {
-    optional TFlatTxId FlatTxId = 1; 
-    optional TFlatTxPollOptions PollOptions = 10; 
-}; 
+    optional TFlatTxId FlatTxId = 1;
+    optional TFlatTxPollOptions PollOptions = 10;
+};
 
 message TBsTestLoadRequest {
     repeated uint32 NodeId = 1;
@@ -474,7 +474,7 @@ message TBsTestLoadResponse {
     };
     repeated TItem Items = 1;
 };
- 
+
 message TBsGetRequest {
     optional uint32 GroupId = 1;
     oneof Query {
@@ -488,15 +488,15 @@ message TBsGetResponse {
     optional string ErrorDescription = 3;
 };
 
-message TJsonSettings { 
-    optional bool UI64AsString = 1 [default = false]; 
-}; 
- 
-message TJSON { 
-    optional string JSON = 1; 
-    optional string SecurityToken = 2; 
-    optional TJsonSettings JsonSettings = 3; 
-}; 
+message TJsonSettings {
+    optional bool UI64AsString = 1 [default = false];
+};
+
+message TJSON {
+    optional string JSON = 1;
+    optional string SecurityToken = 2;
+    optional TJsonSettings JsonSettings = 3;
+};
 
 message TChooseProxyRequest {
     optional uint32 DataCenterNum = 1;
@@ -504,32 +504,32 @@ message TChooseProxyRequest {
     optional bool PreferLocalProxy = 2 [default = false];
 }
 
-message TWhoAmI { 
-    optional bool ReturnGroups = 1; 
-    optional string SecurityToken = 5; 
-} 
- 
+message TWhoAmI {
+    optional bool ReturnGroups = 1;
+    optional string SecurityToken = 5;
+}
+
 message TBlobStorageConfigRequest {
     optional uint32 Domain = 1;
     optional NKikimrBlobStorage.TConfigRequest Request = 2;
     optional string SecurityToken = 3;
 }
- 
-message TDrainNodeRequest { 
-    optional uint32 NodeID = 1; 
-    optional string SecurityToken = 5; 
-}; 
- 
-message TFillNodeRequest { 
-    optional uint32 NodeID = 1; 
-    optional string SecurityToken = 5; 
-}; 
- 
-message TResolveNodeRequest { 
-    optional string Host = 1; 
-    optional uint32 NodeId = 2; 
-    optional bool ResolveLocalNode = 3; // for compatibility of resolving local '.' node 
-}; 
+
+message TDrainNodeRequest {
+    optional uint32 NodeID = 1;
+    optional string SecurityToken = 5;
+};
+
+message TFillNodeRequest {
+    optional uint32 NodeID = 1;
+    optional string SecurityToken = 5;
+};
+
+message TResolveNodeRequest {
+    optional string Host = 1;
+    optional uint32 NodeId = 2;
+    optional bool ResolveLocalNode = 3; // for compatibility of resolving local '.' node
+};
 
 message TNodeRegistrationRequest {
     optional string Host = 1;

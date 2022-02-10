@@ -193,13 +193,13 @@ bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 typ
         return true;
     } else {
         // do we have inserted a new column, OR we already have the same column with the same name?
-        bool insertedNew = it.second && !haveName; 
-        bool replacedExisting = !it.second && it.first->second.Name == name && haveName && itName->second == it.first->first; 
-        Y_VERIFY_S((insertedNew || replacedExisting), 
+        bool insertedNew = it.second && !haveName;
+        bool replacedExisting = !it.second && it.first->second.Name == name && haveName && itName->second == it.first->first;
+        Y_VERIFY_S((insertedNew || replacedExisting),
             "NewName: " << name <<
-            " OldName: " << (haveName ? itName->first : it.first->second.Name) << 
-            " NewId: " << id << 
-            " OldId: " << (haveName ? itName->second : it.first->first)); 
+            " OldName: " << (haveName ? itName->first : it.first->second.Name) <<
+            " NewId: " << id <<
+            " OldId: " << (haveName ? itName->second : it.first->first));
         if (!haveName) {
             table->ColumnNames.emplace(name, id);
             return true;

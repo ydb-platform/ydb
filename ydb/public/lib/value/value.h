@@ -200,20 +200,20 @@ protected:
     TWriteValue(NKikimrMiniKQL::TValue& value, NKikimrMiniKQL::TType& type);
 };
 
-struct TFormatCxx {}; 
- 
-struct TFormatJSON { 
-    bool UI64AsString; 
-    bool BinaryAsBase64; 
- 
-    TFormatJSON(bool ui64AsString = false, bool binaryAsBase64 = false) 
-        : UI64AsString(ui64AsString) 
-        , BinaryAsBase64(binaryAsBase64) 
-    {} 
-}; 
- 
-struct TFormatRowset {}; 
-struct TFormatCSV { 
+struct TFormatCxx {};
+
+struct TFormatJSON {
+    bool UI64AsString;
+    bool BinaryAsBase64;
+
+    TFormatJSON(bool ui64AsString = false, bool binaryAsBase64 = false)
+        : UI64AsString(ui64AsString)
+        , BinaryAsBase64(binaryAsBase64)
+    {}
+};
+
+struct TFormatRowset {};
+struct TFormatCSV {
     TFormatCSV(TString delim = ",", bool printHeader = false)
         : Delim(delim)
         , PrintHeader(printHeader)

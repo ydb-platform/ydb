@@ -25,11 +25,11 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 const bool STRAND_PDISK = true;
-#ifndef NDEBUG 
-const bool ENABLE_DETAILED_HIVE_LOG = true; 
-#else 
+#ifndef NDEBUG
+const bool ENABLE_DETAILED_HIVE_LOG = true;
+#else
 const bool ENABLE_DETAILED_HIVE_LOG = false;
-#endif 
+#endif
 
 
 namespace NKikimr {
@@ -96,12 +96,12 @@ void SetupLogging(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, otherPriority);
     runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, otherPriority);
     runtime.SetLogPriority(NKikimrServices::BS_PROXY, otherPriority);
-    runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, otherPriority); 
-    runtime.SetLogPriority(NKikimrServices::TABLET_RESOLVER, otherPriority); 
+    runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, otherPriority);
+    runtime.SetLogPriority(NKikimrServices::TABLET_RESOLVER, otherPriority);
 
-    runtime.SetLogPriority(NKikimrServices::BS_SKELETON, otherPriority); 
-    runtime.SetLogPriority(NKikimrServices::BS_SYNCJOB, otherPriority); 
-    runtime.SetLogPriority(NKikimrServices::BS_SYNCER, otherPriority); 
+    runtime.SetLogPriority(NKikimrServices::BS_SKELETON, otherPriority);
+    runtime.SetLogPriority(NKikimrServices::BS_SYNCJOB, otherPriority);
+    runtime.SetLogPriority(NKikimrServices::BS_SYNCER, otherPriority);
 }
 
 void SetupServices(TTestActorRuntime &runtime) {
@@ -132,7 +132,7 @@ void SetupServices(TTestActorRuntime &runtime) {
         TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back();
         for (ui32 channelIdx = 0; channelIdx < 3; ++channelIdx) {
             profile.Channels.push_back(
-                TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureMirror3, 0, NKikimrBlobStorage::TVDiskKind::Default)); 
+                TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureMirror3, 0, NKikimrBlobStorage::TVDiskKind::Default));
         }
         app.SetChannels(std::move(channelProfiles));
     }
@@ -230,8 +230,8 @@ void SetupServices(TTestActorRuntime &runtime) {
 
     ui64 defaultStateStorageGroup = runtime.GetAppData(0).DomainsInfo->GetDefaultStateStorageGroup(DOMAIN_ID);
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(defaultStateStorageGroup),
-        TTabletTypes::FLAT_BS_CONTROLLER, TBlobStorageGroupType::ErasureMirror3, groupId), 
-        &CreateFlatBsController); 
+        TTabletTypes::FLAT_BS_CONTROLLER, TBlobStorageGroupType::ErasureMirror3, groupId),
+        &CreateFlatBsController);
 }
 
 void Setup(TTestActorRuntime& runtime) {

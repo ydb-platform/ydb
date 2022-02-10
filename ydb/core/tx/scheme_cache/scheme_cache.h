@@ -149,11 +149,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TDirEntry Info;
     };
 
-    struct TDomainDescription : public TAtomicRefCount<TDomainDescription> { 
-        EKind Kind = KindUnknown; 
-        NKikimrSubDomains::TDomainDescription Description; 
-    }; 
- 
+    struct TDomainDescription : public TAtomicRefCount<TDomainDescription> {
+        EKind Kind = KindUnknown;
+        NKikimrSubDomains::TDomainDescription Description;
+    };
+
     struct TPQGroupInfo : public TAtomicRefCount<TPQGroupInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TPersQueueGroupDescription Description;
@@ -235,7 +235,7 @@ struct TSchemeCacheNavigate {
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
 
         // other
-        TIntrusiveConstPtr<TDomainDescription> DomainDescription; 
+        TIntrusiveConstPtr<TDomainDescription> DomainDescription;
         TIntrusiveConstPtr<TPQGroupInfo> PQGroupInfo;
         TIntrusiveConstPtr<TRtmrVolumeInfo> RTMRVolumeInfo;
         TIntrusiveConstPtr<TKesusInfo> KesusInfo;
@@ -405,7 +405,7 @@ struct TEvTxProxySchemeCache {
         EvInvalidateDistEntry, // unused
         EvResolveKeySetResult,
         EvNavigateKeySet,
-        EvNavigateKeySetResult, 
+        EvNavigateKeySetResult,
         EvInvalidateTable,
         EvInvalidateTableResult,
         EvWatchPathId,
@@ -442,7 +442,7 @@ public:
         using TEvBasic::TEvBasic;
     };
 
-    struct TEvNavigateKeySetResult : public TEvBasic<TEvNavigateKeySetResult, EvNavigateKeySetResult, NSchemeCache::TSchemeCacheNavigate> { 
+    struct TEvNavigateKeySetResult : public TEvBasic<TEvNavigateKeySetResult, EvNavigateKeySetResult, NSchemeCache::TSchemeCacheNavigate> {
         using TEvBasic::TEvBasic;
     };
 

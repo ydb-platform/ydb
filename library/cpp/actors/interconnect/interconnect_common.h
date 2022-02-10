@@ -65,8 +65,8 @@ namespace NActors {
     using TRegisterMonPageCallback = std::function<void(const TString& path, const TString& title,
                                                         TActorSystem* actorSystem, const TActorId& actorId)>;
 
-    using TInitWhiteboardCallback = std::function<void(ui16 icPort, TActorSystem* actorSystem)>; 
- 
+    using TInitWhiteboardCallback = std::function<void(ui16 icPort, TActorSystem* actorSystem)>;
+
     using TUpdateWhiteboardCallback = std::function<void(const TString& peer, bool connected, bool green, bool yellow,
                                                          bool orange, bool red, TActorSystem* actorSystem)>;
 
@@ -84,7 +84,7 @@ namespace NActors {
         TVector<TString> AcceptUUID;
         ui64 StartTime = GetCycleCountFast();
         TString TechnicalSelfHostName;
-        TInitWhiteboardCallback InitWhiteboard; 
+        TInitWhiteboardCallback InitWhiteboard;
         TUpdateWhiteboardCallback UpdateWhiteboard;
         ui32 HandshakeBallastSize = 0;
         TAtomic StartedSessionKiller = 0;

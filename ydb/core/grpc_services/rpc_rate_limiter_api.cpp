@@ -158,9 +158,9 @@ protected:
 
     NTabletPipe::TClientConfig GetPipeConfig() {
         NTabletPipe::TClientConfig cfg;
-        cfg.RetryPolicy = { 
-            .RetryLimitCount = 3u 
-        }; 
+        cfg.RetryPolicy = {
+            .RetryLimitCount = 3u
+        };
         return cfg;
     }
 

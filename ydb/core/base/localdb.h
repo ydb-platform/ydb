@@ -1,8 +1,8 @@
 #pragma once
 #include "defs.h"
 #include <util/generic/map.h>
-#include <util/generic/hash_set.h> 
-#include <util/generic/list.h> 
+#include <util/generic/hash_set.h>
+#include <util/generic/list.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/util/yverify_stream.h>
 #include <google/protobuf/util/message_differencer.h>
@@ -45,7 +45,7 @@ struct TCompactionPolicy : public TThrRefBase {
         ui64 ExtraCompactionMinSize;
         ui64 ExtraCompactionExpMaxSize;
         ui64 UpliftPartSize;
- 
+
         TGenerationPolicy(ui64 sizeToCompact, ui32 countToCompact, ui32 forceCountToCompact,
                           ui64 forceSizeToCompact, const TString &resourceBrokerTask,
                           bool keepInCache,
@@ -54,11 +54,11 @@ struct TCompactionPolicy : public TThrRefBase {
 
         void Serialize(NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy& policyPb) const;
 
-        bool operator ==(const TGenerationPolicy& p) const { 
-            return SizeToCompact == p.SizeToCompact 
-                    && CountToCompact == p.CountToCompact 
-                    && ForceCountToCompact == p.ForceCountToCompact 
-                    && ForceSizeToCompact == p.ForceSizeToCompact 
+        bool operator ==(const TGenerationPolicy& p) const {
+            return SizeToCompact == p.SizeToCompact
+                    && CountToCompact == p.CountToCompact
+                    && ForceCountToCompact == p.ForceCountToCompact
+                    && ForceSizeToCompact == p.ForceSizeToCompact
                     && CompactionBrokerQueue == p.CompactionBrokerQueue
                     && ResourceBrokerTask == p.ResourceBrokerTask
                     && KeepInCache == p.KeepInCache
@@ -68,7 +68,7 @@ struct TCompactionPolicy : public TThrRefBase {
                     && ExtraCompactionMinSize == p.ExtraCompactionMinSize
                     && ExtraCompactionExpMaxSize == p.ExtraCompactionExpMaxSize
                     && UpliftPartSize == p.UpliftPartSize;
-        } 
+        }
     };
 
     ui64 InMemSizeToSnapshot;
@@ -99,12 +99,12 @@ struct TCompactionPolicy : public TThrRefBase {
     explicit TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& policyPb);
 
     void Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) const;
- 
-    bool operator ==(const TCompactionPolicy& p) const { 
-        return InMemSizeToSnapshot == p.InMemSizeToSnapshot 
-                && InMemStepsToSnapshot == p.InMemStepsToSnapshot 
-                && InMemForceStepsToSnapshot == p.InMemForceStepsToSnapshot 
-                && InMemForceSizeToSnapshot == p.InMemForceSizeToSnapshot 
+
+    bool operator ==(const TCompactionPolicy& p) const {
+        return InMemSizeToSnapshot == p.InMemSizeToSnapshot
+                && InMemStepsToSnapshot == p.InMemStepsToSnapshot
+                && InMemForceStepsToSnapshot == p.InMemForceStepsToSnapshot
+                && InMemForceSizeToSnapshot == p.InMemForceSizeToSnapshot
                 && InMemCompactionBrokerQueue == p.InMemCompactionBrokerQueue
                 && InMemResourceBrokerTask == p.InMemResourceBrokerTask
                 && ReadAheadHiThreshold == p.ReadAheadHiThreshold
@@ -123,11 +123,11 @@ struct TCompactionPolicy : public TThrRefBase {
                 && CompactionStrategy == p.CompactionStrategy
                 && KeepEraseMarkers == p.KeepEraseMarkers
                 && ::google::protobuf::util::MessageDifferencer::Equals(ShardPolicy, p.ShardPolicy);
-    } 
+    }
 };
 
 typedef TIntrusivePtr<TCompactionPolicy> TCompactionPolicyPtr;
- 
+
 TCompactionPolicyPtr CreateDefaultTablePolicy();
 TCompactionPolicyPtr CreateDefaultUserTablePolicy();
 

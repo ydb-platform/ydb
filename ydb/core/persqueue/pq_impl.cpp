@@ -893,7 +893,7 @@ void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const 
                 }
             }
         }
- 
+
         Y_VERIFY(aggr->HasCounters());
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(ctx.SelfID.NodeId());
@@ -1245,20 +1245,20 @@ void TPersQueue::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
 }
 
 
-void TPersQueue::Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx) { 
-    for (auto partition : ev->Get()->Record.GetPartitions()) { 
-        auto it = Partitions.find(partition); 
-        if (it != Partitions.end()) { 
-            ctx.Send(it->second.Actor, new TEvPQ::TEvGetPartitionClientInfo(ev->Sender), 0, ev->Cookie); 
-        } else { 
+void TPersQueue::Handle(TEvPersQueue::TEvPartitionClientInfo::TPtr& ev, const TActorContext& ctx) {
+    for (auto partition : ev->Get()->Record.GetPartitions()) {
+        auto it = Partitions.find(partition);
+        if (it != Partitions.end()) {
+            ctx.Send(it->second.Actor, new TEvPQ::TEvGetPartitionClientInfo(ev->Sender), 0, ev->Cookie);
+        } else {
             THolder<TEvPersQueue::TEvPartitionClientInfoResponse> clientInfo = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>();
-            clientInfo->Record.SetPartition(partition); 
-            ctx.Send(ev->Sender, clientInfo.Release(), 0, ev->Cookie); 
-        } 
-    } 
-} 
- 
- 
+            clientInfo->Record.SetPartition(partition);
+            ctx.Send(ev->Sender, clientInfo.Release(), 0, ev->Cookie);
+        }
+    }
+}
+
+
 void TPersQueue::Handle(TEvPersQueue::TEvStatus::TPtr& ev, const TActorContext& ctx)
 {
     if (!ConfigInited) {
@@ -2162,7 +2162,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPersQueue::TEvOffsets, Handle);
         HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
         HFuncTraced(TEvPersQueue::TEvStatus, Handle);
-        HFuncTraced(TEvPersQueue::TEvPartitionClientInfo, Handle); 
+        HFuncTraced(TEvPersQueue::TEvPartitionClientInfo, Handle);
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);
         HFuncTraced(TEvPQ::TEvInitComplete, Handle);
         HFuncTraced(TEvPQ::TEvPartitionCounters, Handle);

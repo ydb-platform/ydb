@@ -5,7 +5,7 @@ RECURSE(
     coro
     examples
     fetch
-    fetch_gpl 
+    fetch_gpl
     io
     io/fuzz
     io/list_codings

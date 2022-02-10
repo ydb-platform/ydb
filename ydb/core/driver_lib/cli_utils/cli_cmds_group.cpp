@@ -1,11 +1,11 @@
 #include <ydb/core/erasure/erasure.h>
-#include "cli.h" 
-#include "cli_cmds.h" 
+#include "cli.h"
+#include "cli_cmds.h"
 #include "proto_common.h"
- 
-namespace NKikimr { 
-namespace NDriverClient { 
- 
+
+namespace NKikimr {
+namespace NDriverClient {
+
 class TClientCommandGroupReconfigureWipe: public TClientCommand {
 public:
     TClientCommandGroupReconfigureWipe()
@@ -74,19 +74,19 @@ public:
     }
 };
 
-class TClientCommandGroup : public TClientCommandTree { 
-public: 
-    TClientCommandGroup() 
-        : TClientCommandTree("group", {}, "Group management") 
-    { 
+class TClientCommandGroup : public TClientCommandTree {
+public:
+    TClientCommandGroup()
+        : TClientCommandTree("group", {}, "Group management")
+    {
         AddCommand(std::make_unique<TClientCommandGroupReconfigure>());
-    } 
-}; 
- 
+    }
+};
+
 std::unique_ptr<TClientCommand> CreateClientCommandGroup() {
     return std::make_unique<TClientCommandGroup>();
-} 
- 
- 
-} 
-} 
+}
+
+
+}
+}

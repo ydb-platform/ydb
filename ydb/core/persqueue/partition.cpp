@@ -2048,36 +2048,36 @@ void TPartition::HandleOnInit(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorC
 }
 
 
-void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActorContext& ctx) { 
+void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActorContext& ctx) {
     THolder<TEvPersQueue::TEvPartitionClientInfoResponse> response = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>();
-    NKikimrPQ::TClientInfoResponse& result(response->Record); 
-    result.SetPartition(Partition); 
-    result.SetStartOffset(StartOffset); 
-    result.SetEndOffset(EndOffset); 
-    result.SetResponseTimestamp(ctx.Now().MilliSeconds()); 
+    NKikimrPQ::TClientInfoResponse& result(response->Record);
+    result.SetPartition(Partition);
+    result.SetStartOffset(StartOffset);
+    result.SetEndOffset(EndOffset);
+    result.SetResponseTimestamp(ctx.Now().MilliSeconds());
     for (auto& pr : UsersInfoStorage.GetAll()) {
         TUserInfo& userInfo(pr.second);
-        NKikimrPQ::TClientInfo& clientInfo = *result.AddClientInfo(); 
-        clientInfo.SetClientId(pr.first); 
-        auto& write = *clientInfo.MutableWritePosition(); 
-        write.SetOffset(userInfo.Offset); 
+        NKikimrPQ::TClientInfo& clientInfo = *result.AddClientInfo();
+        clientInfo.SetClientId(pr.first);
+        auto& write = *clientInfo.MutableWritePosition();
+        write.SetOffset(userInfo.Offset);
         userInfo.EndOffset = EndOffset;
         write.SetWriteTimestamp((userInfo.GetWriteTimestamp() ? userInfo.GetWriteTimestamp() : GetWriteTimeEstimate(userInfo.Offset)).MilliSeconds());
         write.SetCreateTimestamp(userInfo.GetCreateTimestamp().MilliSeconds());
-        auto& read = *clientInfo.MutableReadPosition(); 
-        read.SetOffset(userInfo.GetReadOffset()); 
+        auto& read = *clientInfo.MutableReadPosition();
+        read.SetOffset(userInfo.GetReadOffset());
         read.SetWriteTimestamp((userInfo.GetReadWriteTimestamp() ? userInfo.GetReadWriteTimestamp() : GetWriteTimeEstimate(userInfo.GetReadOffset())).MilliSeconds());
         read.SetCreateTimestamp(userInfo.GetReadCreateTimestamp().MilliSeconds());
         write.SetSize(GetSizeLag(userInfo.Offset));
         read.SetSize(GetSizeLag(userInfo.GetReadOffset()));
-    } 
-    ctx.Send(ev->Get()->Sender, response.Release(), 0, ev->Cookie); 
-} 
+    }
+    ctx.Send(ev->Get()->Sender, response.Release(), 0, ev->Cookie);
+}
 
 void TPartition::Handle(TEvPersQueue::TEvReportPartitionError::TPtr& ev, const TActorContext& ctx) {
     LogAndCollectError(ev->Get()->Record, ctx);
 }
- 
+
 void TPartition::LogAndCollectError(const NKikimrPQ::TStatusResponse::TErrorMessage& error, const TActorContext& ctx) {
     if (Errors.size() == MAX_ERRORS_COUNT_TO_STORE) {
         Errors.pop_front();

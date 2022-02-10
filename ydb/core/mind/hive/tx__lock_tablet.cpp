@@ -1,10 +1,10 @@
-#include "hive_impl.h" 
-#include "hive_log.h" 
+#include "hive_impl.h"
+#include "hive_log.h"
 
 namespace NKikimr {
-namespace NHive { 
+namespace NHive {
 
-class TTxLockTabletExecution : public TTransactionBase<THive> { 
+class TTxLockTabletExecution : public TTransactionBase<THive> {
 private:
     const ui64 TabletId;
     const TActorId OwnerActor;
@@ -31,10 +31,10 @@ public:
         Y_VERIFY(!!Sender);
     }
 
-    TTxType GetTxType() const override { return NHive::TXTYPE_LOCK_TABLET_EXECUTION; } 
- 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
-        BLOG_D("THive::TTxLockTabletExecution::Execute"); 
+    TTxType GetTxType() const override { return NHive::TXTYPE_LOCK_TABLET_EXECUTION; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        BLOG_D("THive::TTxLockTabletExecution::Execute");
 
         if (!OwnerActor) {
             Status = NKikimrProto::ERROR;
@@ -79,7 +79,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId 
+        BLOG_D("THive::TTxLockTabletExecution::Complete TabletId: " << TabletId
                 << " Owner: " << OwnerActor << " Status: " << Status << " " << StatusMessage);
 
         ui32 flags = 0;
@@ -96,7 +96,7 @@ public:
                     for (auto& follower : tablet->Followers) {
                         follower.InitiateStop();
                     }
-                    tablet->InitiateStop(); 
+                    tablet->InitiateStop();
                 }
                 if (tablet->LockedToActor == OwnerActor && tablet->PendingUnlockSeqNo == 0) {
                     // Lock is still valid, watch for node disconnections
@@ -122,9 +122,9 @@ ITransaction* THive::CreateLockTabletExecution(const NKikimrHive::TEvLockTabletE
     return new TTxLockTabletExecution(rec, sender, cookie, this);
 }
 
-void THive::Handle(TEvHive::TEvLockTabletExecution::TPtr& ev) { 
-    Execute(CreateLockTabletExecution(ev->Get()->Record, ev->Sender, ev->Cookie)); 
+void THive::Handle(TEvHive::TEvLockTabletExecution::TPtr& ev) {
+    Execute(CreateLockTabletExecution(ev->Get()->Record, ev->Sender, ev->Cookie));
 }
 
-} // NHive 
-} // NKikimr 
+} // NHive
+} // NKikimr

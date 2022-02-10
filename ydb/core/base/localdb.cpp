@@ -1,11 +1,11 @@
 #include "localdb.h"
 #include "compile_time_flags.h"
- 
+
 #include <ydb/core/protos/resource_broker.pb.h>
 
-namespace NKikimr { 
+namespace NKikimr {
 namespace NLocalDb {
- 
+
 TCompactionPolicy::TBackgroundPolicy::TBackgroundPolicy()
     : Threshold(101)
     , PriorityBase(100)
@@ -201,8 +201,8 @@ TCompactionPolicyPtr CreateDefaultTablePolicy() {
     policy->ShardPolicy.SetTaskPriorityBase(100);
 #endif
     return policy;
-} 
- 
+}
+
 TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
     TCompactionPolicyPtr userPolicy = new TCompactionPolicy();
     userPolicy->Generations.reserve(3);
@@ -216,8 +216,8 @@ TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
     userPolicy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
 #endif
     return userPolicy;
-} 
- 
+}
+
 bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TCompactionPolicy& newPolicy, TString& err) {
     if (newPolicy.Generations.size() < oldPolicy.Generations.size()) {
         err = Sprintf("Decreasing number of levels in compaction policy in not supported, old level count %u, new level count %u",

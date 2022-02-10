@@ -27,7 +27,7 @@ public:
 
 class TTabletListRenderer : public ITabletListRenderer {
 protected:
-    using ETabletState = NKikimrWhiteboard::TTabletStateInfo::ETabletState; 
+    using ETabletState = NKikimrWhiteboard::TTabletStateInfo::ETabletState;
     static TString GetStateName(ETabletState state);
 
     virtual TString MakeTabletMonURL(const TTabletListElement& elem,

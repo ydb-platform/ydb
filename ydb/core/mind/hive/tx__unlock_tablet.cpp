@@ -1,10 +1,10 @@
-#include "hive_impl.h" 
-#include "hive_log.h" 
+#include "hive_impl.h"
+#include "hive_log.h"
 
 namespace NKikimr {
-namespace NHive { 
+namespace NHive {
 
-class TTxUnlockTabletExecution : public TTransactionBase<THive> { 
+class TTxUnlockTabletExecution : public TTransactionBase<THive> {
     const ui64 TabletId;
     const TActorId OwnerActor;
     const ui64 SeqNo;
@@ -28,8 +28,8 @@ public:
         Y_VERIFY(!!Sender);
     }
 
-    TTxType GetTxType() const override { return NHive::TXTYPE_UNLOCK_TABLET_EXECUTION; } 
- 
+    TTxType GetTxType() const override { return NHive::TXTYPE_UNLOCK_TABLET_EXECUTION; }
+
     TTxUnlockTabletExecution(ui64 tabletId, ui64 seqNo, THive* hive)
         : TBase(hive)
         , TabletId(tabletId)
@@ -37,8 +37,8 @@ public:
         , Cookie(0)
     {}
 
-    bool Execute(TTransactionContext& txc, const TActorContext&) override { 
-        BLOG_D("THive::TTxUnlockTabletExecution::Execute"); 
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        BLOG_D("THive::TTxUnlockTabletExecution::Execute");
 
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet == nullptr) {
@@ -76,7 +76,7 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUnlockTabletExecution::Complete TabletId: " << TabletId 
+        BLOG_D("THive::TTxUnlockTabletExecution::Complete TabletId: " << TabletId
                 << " Status: " << Status << " " << StatusMessage);
 
         if (Status == NKikimrProto::OK) {
@@ -89,7 +89,7 @@ public:
                 // Tablet still exists by the time transaction finished
                 if (!tablet->IsLockedToActor()) {
                     // Try to boot it if possible
-                    tablet->TryToBoot(); 
+                    tablet->TryToBoot();
                 }
             }
         }
@@ -117,7 +117,7 @@ ITransaction* THive::CreateUnlockTabletExecution(ui64 tabletId, ui64 seqNo) {
     return new TTxUnlockTabletExecution(tabletId, seqNo, this);
 }
 
-void THive::ScheduleUnlockTabletExecution(TNodeInfo& node) { 
+void THive::ScheduleUnlockTabletExecution(TNodeInfo& node) {
     // Unlock tablets that have been locked by this node
     for (TLeaderTabletInfo* tablet : node.LockedTablets) {
         Y_VERIFY(FindTabletEvenInDeleting(tablet->Id) == tablet);
@@ -127,7 +127,7 @@ void THive::ScheduleUnlockTabletExecution(TNodeInfo& node) {
             Y_VERIFY(tablet->PendingUnlockSeqNo != 0);
             auto event = new TEvPrivate::TEvUnlockTabletReconnectTimeout(tablet->Id, tablet->PendingUnlockSeqNo);
             if (tablet->LockedReconnectTimeout) {
-                Schedule(tablet->LockedReconnectTimeout, event); 
+                Schedule(tablet->LockedReconnectTimeout, event);
             } else {
                 Send(SelfId(), event);
             }
@@ -135,10 +135,10 @@ void THive::ScheduleUnlockTabletExecution(TNodeInfo& node) {
     }
 }
 
-void THive::Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr& ev) { 
+void THive::Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr& ev) {
     TTabletId tabletId = ev->Get()->TabletId;
     ui64 seqNo = ev->Get()->SeqNo;
-    BLOG_D("THive::Handle::TEvUnlockTabletReconnectTimeout TabletId=" << tabletId); 
+    BLOG_D("THive::Handle::TEvUnlockTabletReconnectTimeout TabletId=" << tabletId);
     TLeaderTabletInfo* tablet = FindTabletEvenInDeleting(tabletId);
     if (tablet != nullptr && tablet->IsLockedToActor() && tablet->PendingUnlockSeqNo == seqNo) {
         // We use sequence numbers to make sure unlock happens only if some
@@ -154,13 +154,13 @@ void THive::Handle(TEvPrivate::TEvUnlockTabletReconnectTimeout::TPtr& ev) {
         // - reconnect timeout (execute, failure)
         //   tablet is not unlocked, because logically lock/reconnect
         //   transaction was scheduled before the timeout really happened.
-        Execute(CreateUnlockTabletExecution(tabletId, seqNo)); 
+        Execute(CreateUnlockTabletExecution(tabletId, seqNo));
     }
 }
 
-void THive::Handle(TEvHive::TEvUnlockTabletExecution::TPtr& ev) { 
-    Execute(CreateUnlockTabletExecution(ev->Get()->Record, ev->Sender, ev->Cookie)); 
+void THive::Handle(TEvHive::TEvUnlockTabletExecution::TPtr& ev) {
+    Execute(CreateUnlockTabletExecution(ev->Get()->Record, ev->Sender, ev->Cookie));
 }
 
-} // NHive 
-} // NKikimr 
+} // NHive
+} // NKikimr

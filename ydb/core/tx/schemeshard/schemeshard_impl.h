@@ -49,7 +49,7 @@
 #include <ydb/core/filestore/core/filestore.h>
 
 #include <ydb/library/login/login.h>
- 
+
 #include <util/generic/ptr.h>
 
 namespace NKikimr {
@@ -251,10 +251,10 @@ public:
         return shardIdx.GetOwnerId() == TabletID();
     }
 
-    TPathId GetCurrentSubDomainPathId() const { 
-        return RootPathId(); 
-    } 
- 
+    TPathId GetCurrentSubDomainPathId() const {
+        return RootPathId();
+    }
+
     TPathId PeekNextPathId() const {
         return MakeLocalId(NextLocalPathId);
     }
@@ -332,7 +332,7 @@ public:
     bool ResolveTabletChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolveRtmrChannels(const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolveSolomonChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
-    bool ResolvePqChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const; 
+    bool ResolvePqChannels(ui32 profileId, const TPathId domainId, TChannelsBindings& channelsBinding) const;
     bool ResolveChannelsByPoolKinds(
         const TVector<TStringBuf>& channelPoolKinds,
         const TPathId domainId,
@@ -517,7 +517,7 @@ public:
     void PersistSubDomainDatabaseQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistSubDomainState(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
-    void PersistSubDomainSecurityStateVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain); 
+    void PersistSubDomainSecurityStateVersion(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistDeleteSubDomainAlter(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain);
     void PersistKesusInfo(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
     void PersistKesusVersion(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr);
@@ -697,10 +697,10 @@ public:
     struct TTxServerlessStorageBilling;
     NTabletFlatExecutor::ITransaction* CreateTxServerlessStorageBilling();
 
-    struct TTxLogin; 
+    struct TTxLogin;
     NTabletFlatExecutor::ITransaction* CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr &ev);
 
- 
+
     template<class T> struct TTxOperationReply;
 #define DeclareCreateTxOperationReply(TEvType, TxType) \
         NTabletFlatExecutor::ITransaction* CreateTxOperationReply(TOperationId id, TEvType::TPtr& ev);
@@ -827,7 +827,7 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
- 
+
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);
 
     TOperationId RouteIncomming(TTabletId tabletId, const TActorContext& ctx);
@@ -1060,7 +1060,7 @@ public:
     void ChangeDiskSpaceHardQuotaBytes(i64 delta) override;
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
 
-    NLogin::TLoginProvider LoginProvider; 
+    NLogin::TLoginProvider LoginProvider;
 
 private:
     void OnDetach(const TActorContext &ctx) override;

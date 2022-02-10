@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         auto sender = runtime.AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        runtime.SetLogPriority(NKikimrServices::HIVE, NLog::PRI_DEBUG); 
+        runtime.SetLogPriority(NKikimrServices::HIVE, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_NOTICE);
         runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NLog::PRI_TRACE);

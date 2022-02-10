@@ -1054,7 +1054,7 @@ void InitRoot(Tests::TServer::TPtr server,
 
     auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
     const TDomainsInfo::TDomain& domain = runtime.GetAppData().DomainsInfo->GetDomain(settings.Domain);
- 
+
     auto evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(1, tid);
     auto transaction = evTx->Record.AddTransaction();
     transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
@@ -1066,8 +1066,8 @@ void InitRoot(Tests::TServer::TPtr server,
         auto* p = op->AddStoragePools();
         p->SetKind(kind);
         p->SetName(pool.GetName());
-    } 
- 
+    }
+
     runtime.SendToPipe(tid, sender, evTx.Release(), 0, GetPipeConfigWithRetries());
 
     {

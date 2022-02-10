@@ -1,5 +1,5 @@
 #include "msgbus_tabletreq.h"
-#include "msgbus_securereq.h" 
+#include "msgbus_securereq.h"
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -8,9 +8,9 @@ namespace {
     const ui64 DefaultTimeout = 90000;
 }
 
-class TMessageBusLocalSchemeTx : public TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TMessageBusLocalSchemeTx, 
+class TMessageBusLocalSchemeTx : public TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TMessageBusLocalSchemeTx,
         TEvTablet::TEvLocalSchemeTxResponse, NKikimrServices::TActivity::FRONT_LOCAL_TXRQ>> {
-    using TBase = TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TMessageBusLocalSchemeTx, 
+    using TBase = TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TMessageBusLocalSchemeTx,
     TEvTablet::TEvLocalSchemeTxResponse, NKikimrServices::TActivity::FRONT_LOCAL_TXRQ>>;
     NKikimrClient::TLocalSchemeTx Request;
 public:
@@ -19,8 +19,8 @@ public:
         , Request()
     {
         Request.Swap(&request);
-        TBase::SetSecurityToken(Request.GetSecurityToken()); 
-        TBase::SetRequireAdminAccess(true); 
+        TBase::SetSecurityToken(Request.GetSecurityToken());
+        TBase::SetRequireAdminAccess(true);
     }
 
     void Handle(TEvTablet::TEvLocalSchemeTxResponse::TPtr &ev, const TActorContext &ctx) {

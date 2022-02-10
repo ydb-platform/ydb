@@ -1,4 +1,4 @@
-LIBRARY() 
+LIBRARY()
 
 YQL_ABI_VERSION(
     2
@@ -11,19 +11,19 @@ OWNER(
     g:yql
     g:yql_ydb_core
 )
- 
-SRCS( 
-    tdigest.proto 
-    static_udf.cpp 
-    stat_udf.h 
-    tdigest.h 
-    tdigest.cpp 
-) 
- 
-PEERDIR( 
-    contrib/libs/protobuf 
-    util/draft 
+
+SRCS(
+    tdigest.proto
+    static_udf.cpp
+    stat_udf.h
+    tdigest.h
+    tdigest.cpp
+)
+
+PEERDIR(
+    contrib/libs/protobuf
+    util/draft
     ydb/library/yql/public/udf
-) 
- 
-END() 
+)
+
+END()

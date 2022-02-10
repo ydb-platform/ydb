@@ -9,7 +9,7 @@
 #include <ydb/core/tx/tx.h>
 
 namespace NKikimr {
-namespace NFlatTxCoordinator { 
+namespace NFlatTxCoordinator {
 
 static constexpr TDuration MaxEmptyPlanDelay = TDuration::Seconds(1);
 
@@ -57,10 +57,10 @@ TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
 #endif
 {
 #ifdef COORDINATOR_LOG_TO_FILE
-    // HACK 
-    Cerr << "Coordinator LOG will be dumped to " << DebugName << Endl; 
+    // HACK
+    Cerr << "Coordinator LOG will be dumped to " << DebugName << Endl;
 #endif
- 
+
     Config.PlanAhead = 50;
     Config.Resolution = 1250;
     Config.RapidSlotFlushSize = 1000; // todo: something meaningful
@@ -130,7 +130,7 @@ void TTxCoordinator::PlanTx(TAutoPtr<TTransactionProposal> &proposal, const TAct
             VolatileState.LastPlanned = planStep;
             VolatileState.Queue.RapidFreeze = true;
 
-            Execute(CreateTxPlanStep(planStep, slots, true), ctx); 
+            Execute(CreateTxPlanStep(planStep, slots, true), ctx);
         }
     } else {
         TQueueType::TSlot &planSlot = VolatileState.Queue.LowSlot(planStep);
@@ -233,7 +233,7 @@ void TTxCoordinator::Handle(TEvTxCoordinator::TEvMediatorQueueConfirmations::TPt
     TEvTxCoordinator::TEvMediatorQueueConfirmations *msg = ev->Get();
     LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR, "tablet# " << TabletID()
         << " HANDLE EvMediatorQueueConfirmations MediatorId# " << msg->Confirmations->MediatorId);
-    Execute(CreateTxMediatorConfirmations(msg->Confirmations), ctx); 
+    Execute(CreateTxMediatorConfirmations(msg->Confirmations), ctx);
 }
 
 void TTxCoordinator::Handle(TEvTxCoordinator::TEvMediatorQueueStop::TPtr &ev, const TActorContext &ctx) {
@@ -255,7 +255,7 @@ void TTxCoordinator::Handle(TEvTxCoordinator::TEvMediatorQueueRestart::TPtr &ev,
     mediator.PushUpdates = false;
     mediator.GenCookie = msg->GenCookie;
     mediator.Queue.Reset(new TMediator::TStepQueue());
-    Execute(CreateTxRestartMediatorQueue(msg->MediatorId, msg->GenCookie), ctx); 
+    Execute(CreateTxRestartMediatorQueue(msg->MediatorId, msg->GenCookie), ctx);
 }
 
 void TTxCoordinator::Handle(TEvTxCoordinator::TEvCoordinatorConfirmPlan::TPtr &ev, const TActorContext &ctx) {
@@ -300,15 +300,15 @@ void TTxCoordinator::Handle(TEvSubDomain::TEvConfigure::TPtr &ev, const TActorCo
     DoConfiguration(*ev->Get(), ctx, ev->Sender);
 }
 
-void TTxCoordinator::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) { 
-    Become(&TThis::StateBroken); 
-    ctx.Send(Tablet(), new TEvents::TEvPoisonPill); 
-} 
- 
+void TTxCoordinator::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+    Become(&TThis::StateBroken);
+    ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
+}
+
 void TTxCoordinator::OnActivateExecutor(const TActorContext &ctx) {
-    TryInitMonCounters(ctx); 
+    TryInitMonCounters(ctx);
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
-    Execute(CreateTxSchema(), ctx); 
+    Execute(CreateTxSchema(), ctx);
 }
 
 void TTxCoordinator::TryInitMonCounters(const TActorContext &ctx) {
@@ -364,15 +364,15 @@ void TTxCoordinator::SchedulePlanTick(const TActorContext &ctx) {
     ctx.Schedule(TDuration::MilliSeconds(planResolution), new TEvPrivate::TEvPlanTick());
 }
 
-bool TTxCoordinator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) { 
+bool TTxCoordinator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
     if (!Executor() || !Executor()->GetStats().IsActive)
-        return false; 
- 
-    if (!ev) 
-        return true; 
- 
-    Execute(CreateTxMonitoring(ev), ctx); 
-    return true; 
+        return false;
+
+    if (!ev)
+        return true;
+
+    Execute(CreateTxMonitoring(ev), ctx);
+    return true;
 }
 
 void TTxCoordinator::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx) {
@@ -401,8 +401,8 @@ void TTxCoordinator::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TAct
 
     Stopping = true;
     return TTabletExecutedFlat::OnTabletStop(ev, ctx);
-} 
- 
+}
+
 void TTxCoordinator::OnStopGuardStarting(const TActorContext &ctx) {
     auto processQueue = [&](auto &queue) {
         while (TAutoPtr<TTransactionProposal> proposal = queue.Pop()) {
@@ -433,7 +433,7 @@ void TTxCoordinator::OnStopGuardComplete(const TActorContext &ctx) {
 }
 
 IActor* CreateFlatTxCoordinator(const TActorId &tablet, TTabletStorageInfo *info) {
-    return new NFlatTxCoordinator::TTxCoordinator(info, tablet); 
+    return new NFlatTxCoordinator::TTxCoordinator(info, tablet);
 }
 
 }

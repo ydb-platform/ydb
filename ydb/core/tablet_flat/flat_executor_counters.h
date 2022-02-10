@@ -58,8 +58,8 @@ namespace NTabletFlatExecutor {
     XX(USED_TABLET_MEMORY, "UsedTabletMemory") \
     XX(USED_TABLET_TX_MEMORY, "UsedTabletTxMemory") \
     XX(USED_DYNAMIC_TX_MEMORY, "UsedDynamicTxMemory") \
-    XX(CONSUMED_STORAGE, "ConsumedStorage") \ 
-    XX(CONSUMED_MEMORY, "ConsumedMemory") \ 
+    XX(CONSUMED_STORAGE, "ConsumedStorage") \
+    XX(CONSUMED_MEMORY, "ConsumedMemory") \
     XX(COMPACTION_READ_IN_FLY, "CompactionReadInFly") \
 
 #define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \
@@ -105,7 +105,7 @@ namespace NTabletFlatExecutor {
     XX(GC_FORGOTTEN, "GcBlobsForgotten") \
     XX(GC_KEEPSET, "GcKeepFlagsSet") \
     XX(GC_NOTKEEPSET, "GcNotKeepFlagsSet") \
-    XX(CONSUMED_CPU, "ConsumedCPU") \ 
+    XX(CONSUMED_CPU, "ConsumedCPU") \
     XX(COMPACTION_READ_POSTPONED, "CompactionReadPostponed") \
     XX(COMPACTION_READ_CACHE_HITS, "CompactionReadCacheHits") \
     XX(COMPACTION_READ_CACHE_MISSES, "CompactionReadCacheMisses") \
@@ -121,11 +121,11 @@ namespace NTabletFlatExecutor {
     XX(TX_PERCENTILE_COMMITED_CPUTIME, "TxCommitedCPUTime") \
     XX(TX_PERCENTILE_LOGSNAP_CPUTIME, "LogSnapCPUTime") \
     XX(TX_PERCENTILE_PARTSWITCH_CPUTIME, "PartSwitchCPUTime") \
-    XX(TX_PERCENTILE_TOUCHED_BLOCKS, "TouchedBlocks") \ 
-    XX(TX_PERCENTILE_DB_DATA_BYTES, "HIST(DbDataBytes)") \ 
-    XX(TX_PERCENTILE_TABLET_BYTES_WRITTEN, "HIST(TabletBytesWritten)") \ 
-    XX(TX_PERCENTILE_TABLET_BYTES_READ, "HIST(TabletBytesRead)") \ 
-    XX(TX_PERCENTILE_CONSUMED_CPU, "HIST(ConsumedCPU)") \ 
+    XX(TX_PERCENTILE_TOUCHED_BLOCKS, "TouchedBlocks") \
+    XX(TX_PERCENTILE_DB_DATA_BYTES, "HIST(DbDataBytes)") \
+    XX(TX_PERCENTILE_TABLET_BYTES_WRITTEN, "HIST(TabletBytesWritten)") \
+    XX(TX_PERCENTILE_TABLET_BYTES_READ, "HIST(TabletBytesRead)") \
+    XX(TX_PERCENTILE_CONSUMED_CPU, "HIST(ConsumedCPU)") \
     XX(TX_PERCENTILE_FOLLOWERSYNC_LATENCY, "FollowerSyncLatency")
 
 class TExecutorCounters : public TTabletCountersBase {

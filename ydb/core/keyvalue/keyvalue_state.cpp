@@ -126,14 +126,14 @@ TAutoPtr<TTabletCountersBase> TKeyValueState::TakeTabletCounters() {
     return TabletCountersPtr;
 }
 
-TTabletCountersBase& TKeyValueState::GetTabletCounters() { 
-    return *TabletCounters; 
-} 
- 
-void TKeyValueState::SetupResourceMetrics(NMetrics::TResourceMetrics* resourceMetrics) { 
-    ResourceMetrics = resourceMetrics; 
-} 
- 
+TTabletCountersBase& TKeyValueState::GetTabletCounters() {
+    return *TabletCounters;
+}
+
+void TKeyValueState::SetupResourceMetrics(NMetrics::TResourceMetrics* resourceMetrics) {
+    ResourceMetrics = resourceMetrics;
+}
+
 void TKeyValueState::CountRequestComplete(NMsgBusProxy::EResponseStatus status,
         const TRequestStat &stat, const TActorContext &ctx)
 {
@@ -179,26 +179,26 @@ void TKeyValueState::CountRequestComplete(NMsgBusProxy::EResponseStatus status,
         }
     }
 
-    TInstant now(ctx.Now()); 
-    ResourceMetrics->Network.Increment(stat.ReadBytes + stat.RangeReadBytes + stat.WriteBytes, now); 
+    TInstant now(ctx.Now());
+    ResourceMetrics->Network.Increment(stat.ReadBytes + stat.RangeReadBytes + stat.WriteBytes, now);
 
     constexpr ui64 MaxStatChannels = 16;
-    for (const auto& pr : stat.GroupReadBytes) { 
-        ResourceMetrics->ReadThroughput[pr.first].Increment(pr.second, now); 
+    for (const auto& pr : stat.GroupReadBytes) {
+        ResourceMetrics->ReadThroughput[pr.first].Increment(pr.second, now);
         NMetrics::TChannel channel = pr.first.first;
         if (channel >= MaxStatChannels) {
             channel = MaxStatChannels - 1;
         }
         TabletCounters->Cumulative()[COUNTER_READ_BYTES_CHANNEL_0 + channel].Increment(pr.second);
-    } 
-    for (const auto& pr : stat.GroupWrittenBytes) { 
-        ResourceMetrics->WriteThroughput[pr.first].Increment(pr.second, now); 
+    }
+    for (const auto& pr : stat.GroupWrittenBytes) {
+        ResourceMetrics->WriteThroughput[pr.first].Increment(pr.second, now);
         NMetrics::TChannel channel = pr.first.first;
         if (channel >= MaxStatChannels) {
             channel = MaxStatChannels - 1;
         }
         TabletCounters->Cumulative()[COUNTER_WRITE_BYTES_CHANNEL_0 + channel].Increment(pr.second);
-    } 
+    }
     for (const auto& pr : stat.GroupReadIops) {
         ResourceMetrics->ReadIops[pr.first].Increment(pr.second, now);
     }
@@ -297,13 +297,13 @@ void TKeyValueState::CountTrashRecord(ui32 sizeBytes) {
     TabletCounters->Simple()[COUNTER_TRASH_BYTES].Add((ui64)sizeBytes);
     TabletCounters->Simple()[COUNTER_RECORD_COUNT].Add((ui64)-1);
     TabletCounters->Simple()[COUNTER_RECORD_BYTES].Add((ui64)-(i64)sizeBytes);
-    ResourceMetrics->StorageUser.Set(TabletCounters->Simple()[COUNTER_RECORD_BYTES].Get()); 
+    ResourceMetrics->StorageUser.Set(TabletCounters->Simple()[COUNTER_RECORD_BYTES].Get());
 }
 
 void TKeyValueState::CountWriteRecord(ui8 channel, ui32 sizeBytes) {
     TabletCounters->Simple()[COUNTER_RECORD_COUNT].Add(1);
     TabletCounters->Simple()[COUNTER_RECORD_BYTES].Add(sizeBytes);
-    ResourceMetrics->StorageUser.Set(TabletCounters->Simple()[COUNTER_RECORD_BYTES].Get()); 
+    ResourceMetrics->StorageUser.Set(TabletCounters->Simple()[COUNTER_RECORD_BYTES].Get());
     Y_VERIFY(channel < ChannelDataUsage.size());
     ChannelDataUsage[channel] += sizeBytes;
 }
@@ -1233,7 +1233,7 @@ void TKeyValueState::CmdWrite(THolder<TIntermediate> &intermediate, ISimpleDb &d
         auto *response = intermediate->Response.AddWriteResult();
         ProcessCmd(request, response, nullptr, db, ctx, intermediate->Stat, unixTime);
     }
-    ResourceMetrics->TryUpdate(ctx); 
+    ResourceMetrics->TryUpdate(ctx);
 }
 
 void TKeyValueState::CmdGetStatus(THolder<TIntermediate> &intermediate, ISimpleDb &db, const TActorContext &ctx) {
@@ -1685,8 +1685,8 @@ void TKeyValueState::OnRequestComplete(ui64 requestUid, ui64 generation, ui64 st
         }
     }
 
-    CountRequestComplete(status, stat, ctx); 
-    ResourceMetrics->TryUpdate(ctx); 
+    CountRequestComplete(status, stat, ctx);
+    ResourceMetrics->TryUpdate(ctx);
 
     if (Queue.size() && IntermediatesInFlight < IntermediatesInFlightLimit) {
         TRequestType::EType requestType = Queue.front()->Stat.RequestType;
@@ -2545,7 +2545,7 @@ void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescripti
     response->Record.SetErrorReason(errorDescription);
     response->Record.SetStatus(status);
 
-    ResourceMetrics->Network.Increment(response->Record.ByteSize()); 
+    ResourceMetrics->Network.Increment(response->Record.ByteSize());
 
     intermediate->IsReplied = true;
     ctx.Send(intermediate->RespondTo, response.Release());
@@ -2987,8 +2987,8 @@ void TKeyValueState::OnEvRequest(TEvKeyValue::TEvRequest::TPtr &ev, const TActor
     THolder<TIntermediate> intermediate;
     NKikimrClient::TKeyValueRequest &request = ev->Get()->Record;
 
-    ResourceMetrics->Network.Increment(request.ByteSize()); 
-    ResourceMetrics->TryUpdate(ctx); 
+    ResourceMetrics->Network.Increment(request.ByteSize());
+    ResourceMetrics->TryUpdate(ctx);
 
     bool hasWrites = request.CmdWriteSize() || request.CmdDeleteRangeSize() || request.CmdRenameSize()
                   || request.CmdCopyRangeSize() || request.CmdConcatSize() || request.HasCmdSetExecutorFastLogPolicy();
@@ -3127,10 +3127,10 @@ bool TKeyValueState::PrepareIntermediate(TEvKeyValue::TEvRequest::TPtr &ev, THol
     return true;
 }
 
-void TKeyValueState::UpdateResourceMetrics(const TActorContext& ctx) { 
-    ResourceMetrics->TryUpdate(ctx); 
-} 
- 
+void TKeyValueState::UpdateResourceMetrics(const TActorContext& ctx) {
+    ResourceMetrics->TryUpdate(ctx);
+}
+
 bool TKeyValueState::ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRange& from, TKeyRange *to,
                                   const TActorContext& ctx, THolder<TIntermediate>& intermediate, const char *cmd,
                                   ui32 index) {

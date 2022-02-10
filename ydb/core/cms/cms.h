@@ -77,77 +77,77 @@ struct TEvCms {
 
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_CMS), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_CMS)");
 
-    template <typename TEv, typename TRecord, ui32 TEventType> 
-    using TEventPB = TEventShortDebugPB<TEv, TRecord, TEventType>; 
- 
+    template <typename TEv, typename TRecord, ui32 TEventType>
+    using TEventPB = TEventShortDebugPB<TEv, TRecord, TEventType>;
+
     struct TEvClusterStateRequest : public TEventPB<TEvClusterStateRequest,
                                                     NKikimrCms::TClusterStateRequest,
-                                                    EvClusterStateRequest> { 
+                                                    EvClusterStateRequest> {
     };
 
     struct TEvClusterStateResponse : public TEventPB<TEvClusterStateResponse,
                                                      NKikimrCms::TClusterStateResponse,
-                                                     EvClusterStateResponse> { 
+                                                     EvClusterStateResponse> {
     };
 
     struct TEvPermissionRequest : public TEventPB<TEvPermissionRequest,
                                                   NKikimrCms::TPermissionRequest,
-                                                  EvPermissionRequest> { 
+                                                  EvPermissionRequest> {
     };
 
     struct TEvCheckRequest : public TEventPB<TEvCheckRequest,
                                              NKikimrCms::TCheckRequest,
-                                             EvCheckRequest> { 
+                                             EvCheckRequest> {
     };
 
     struct TEvConditionalPermissionRequest : public TEventPB<TEvConditionalPermissionRequest,
                                                              NKikimrCms::TConditionalPermissionRequest,
-                                                             EvConditionalPermissionRequest> { 
+                                                             EvConditionalPermissionRequest> {
     };
 
     struct TEvPermissionResponse : public TEventPB<TEvPermissionResponse,
                                                    NKikimrCms::TPermissionResponse,
-                                                   EvPermissionResponse> { 
+                                                   EvPermissionResponse> {
     };
 
     struct TEvManageRequestRequest : public TEventPB<TEvManageRequestRequest,
                                                      NKikimrCms::TManageRequestRequest,
-                                                     EvManageRequestRequest> { 
+                                                     EvManageRequestRequest> {
     };
 
     struct TEvManageRequestResponse : public TEventPB<TEvManageRequestResponse,
                                                       NKikimrCms::TManageRequestResponse,
-                                                      EvManageRequestResponse> { 
+                                                      EvManageRequestResponse> {
     };
 
     struct TEvManagePermissionRequest : public TEventPB<TEvManagePermissionRequest,
                                                         NKikimrCms::TManagePermissionRequest,
-                                                        EvManagePermissionRequest> { 
+                                                        EvManagePermissionRequest> {
     };
 
     struct TEvManagePermissionResponse : public TEventPB<TEvManagePermissionResponse,
                                                          NKikimrCms::TManagePermissionResponse,
-                                                         EvManagePermissionResponse> { 
+                                                         EvManagePermissionResponse> {
     };
 
     struct TEvNotification : public TEventPB<TEvNotification,
                                              NKikimrCms::TNotification,
-                                             EvNotification> { 
+                                             EvNotification> {
     };
 
     struct TEvNotificationResponse : public TEventPB<TEvNotificationResponse,
                                                      NKikimrCms::TNotificationResponse,
-                                                     EvNotificationResponse> { 
+                                                     EvNotificationResponse> {
     };
 
     struct TEvManageNotificationRequest : public TEventPB<TEvManageNotificationRequest,
                                                           NKikimrCms::TManageNotificationRequest,
-                                                          EvManageNotificationRequest> { 
+                                                          EvManageNotificationRequest> {
     };
 
     struct TEvManageNotificationResponse : public TEventPB<TEvManageNotificationResponse,
                                                            NKikimrCms::TManageNotificationResponse,
-                                                           EvManageNotificationResponse> { 
+                                                           EvManageNotificationResponse> {
     };
 
     struct TEvWalleCreateTaskRequest : public TEventPB<TEvWalleCreateTaskRequest,
@@ -238,22 +238,22 @@ struct TEvCms {
 
     struct TEvGetConfigRequest : public TEventPB<TEvGetConfigRequest,
                                                  NKikimrCms::TGetConfigRequest,
-                                                 EvGetConfigRequest> { 
+                                                 EvGetConfigRequest> {
     };
 
     struct TEvGetConfigResponse : public TEventPB<TEvGetConfigResponse,
                                                   NKikimrCms::TGetConfigResponse,
-                                                  EvGetConfigResponse> { 
+                                                  EvGetConfigResponse> {
     };
 
     struct TEvSetConfigRequest : public TEventPB<TEvSetConfigRequest,
                                                  NKikimrCms::TSetConfigRequest,
-                                                 EvSetConfigRequest> { 
+                                                 EvSetConfigRequest> {
     };
 
     struct TEvSetConfigResponse : public TEventPB<TEvSetConfigResponse,
                                                   NKikimrCms::TSetConfigResponse,
-                                                  EvSetConfigResponse> { 
+                                                  EvSetConfigResponse> {
     };
 
     struct TEvSetMarkerRequest : public TEventPB<TEvSetMarkerRequest,

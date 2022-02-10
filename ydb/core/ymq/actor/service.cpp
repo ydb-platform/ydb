@@ -98,7 +98,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
         NTabletPipe::TClientConfig cfg;
         cfg.AllowFollower = false;
         cfg.CheckAliveness = true;
-        cfg.RetryPolicy = {.RetryLimitCount = 3, .MinRetryTime = TDuration::MilliSeconds(100), .DoFirstRetryInstantly = firstTime}; 
+        cfg.RetryPolicy = {.RetryLimitCount = 3, .MinRetryTime = TDuration::MilliSeconds(100), .DoFirstRetryInstantly = firstTime};
         PipeClient_ = TActivationContext::Register(NTabletPipe::CreateClient(SelfId(), LeaderTabletId_, cfg));
         LOG_SQS_DEBUG("Connect to leader tablet [" << LeaderTabletId_ << "] for queue [" << UserName_ << "/" << QueueName_ << "]. Pipe client actor: " << PipeClient_);
     }

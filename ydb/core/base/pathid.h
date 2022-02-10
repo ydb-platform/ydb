@@ -55,15 +55,15 @@ struct THash<NKikimr::TPathId> {
     }
 };
 
-namespace std { 
-template <> 
-struct hash<NKikimr::TPathId> { 
-    size_t operator()(const NKikimr::TPathId& x) const { 
-        return x.Hash(); 
-    } 
-}; 
-} 
- 
+namespace std {
+template <>
+struct hash<NKikimr::TPathId> {
+    size_t operator()(const NKikimr::TPathId& x) const {
+        return x.Hash();
+    }
+};
+}
+
 template<>
 inline void Out<NKikimr::TPathId>(IOutputStream& o, const NKikimr::TPathId& x) {
     return x.Out(o);

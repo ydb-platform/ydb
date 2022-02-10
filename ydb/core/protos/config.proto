@@ -119,11 +119,11 @@ message TStaticNameserviceConfig {
         NS_EXTERNAL = 3;    // may be paired with external discovery
     }
 
-    message TEndpoint { 
-        optional string Name = 1; 
-        optional string Address = 2; 
-    } 
- 
+    message TEndpoint {
+        optional string Name = 1;
+        optional string Address = 2;
+    }
+
     message TNode { // todo: multiple networks
         optional uint32 NodeId = 1;
 
@@ -134,8 +134,8 @@ message TStaticNameserviceConfig {
         optional string InterconnectHost = 5;
 
         optional NActorsInterconnect.TNodeLocation Location = 6;
- 
-        repeated TEndpoint Endpoint = 7; 
+
+        repeated TEndpoint Endpoint = 7;
 
         optional NActorsInterconnect.TNodeLocation WalleLocation = 8 [deprecated=true];
     }
@@ -197,7 +197,7 @@ message TDomainsConfig {
         optional uint32 SchemeBoardSSId = 15;
     }
 
-    message THiveConfig { // look for another THiveConfig later in this file 
+    message THiveConfig { // look for another THiveConfig later in this file
         optional uint32 HiveUid = 1;
         optional fixed64 Hive = 2;
     }
@@ -210,22 +210,22 @@ message TDomainsConfig {
         optional NKikimrSchemeOp.TCompactionPolicy Policy = 2;
     }
 
-    message TSecurityConfig { 
-        optional bool EnforceUserTokenRequirement = 1 [default = false]; 
-        repeated string MonitoringAllowedSIDs = 2; 
-        repeated string AdministrationAllowedSIDs = 3; 
-        repeated string DefaultUserSIDs = 4; 
-        optional string AllAuthenticatedUsers = 5; 
-        repeated string ViewerAllowedSIDs = 6; 
-    } 
- 
+    message TSecurityConfig {
+        optional bool EnforceUserTokenRequirement = 1 [default = false];
+        repeated string MonitoringAllowedSIDs = 2;
+        repeated string AdministrationAllowedSIDs = 3;
+        repeated string DefaultUserSIDs = 4;
+        optional string AllAuthenticatedUsers = 5;
+        repeated string ViewerAllowedSIDs = 6;
+    }
+
     repeated TDomain Domain = 1;
     repeated TStateStorage StateStorage = 2;
     repeated TExecLevel ExecLevel = 3;
     repeated THiveConfig HiveConfig = 4;
     repeated TNamedCompactionPolicy NamedCompactionPolicy = 5;
-    optional TSecurityConfig SecurityConfig = 6; 
-    optional bool ForbidImplicitStoragePools = 7 [default = true]; 
+    optional TSecurityConfig SecurityConfig = 6;
+    optional bool ForbidImplicitStoragePools = 7 [default = true];
 }
 
 message TBlobStorageConfig {
@@ -303,9 +303,9 @@ message TBootstrap {
         TX_COORDINATOR = 10;
         TX_MEDIATOR = 11;
         TX_PROXY = 12;
-        FLAT_TX_COORDINATOR = 13; 
-        FLAT_HIVE = 14; 
-        FLAT_BS_CONTROLLER = 15; 
+        FLAT_TX_COORDINATOR = 13;
+        FLAT_HIVE = 14;
+        FLAT_BS_CONTROLLER = 15;
         FLAT_TX_PROXY = 17;
         TX_ALLOCATOR = 18;
 
@@ -421,7 +421,7 @@ message TChannelProfileConfig {
         message TChannel {
             optional string ErasureSpecies = 1;
             optional uint64 PDiskCategory = 2;
-            optional NKikimrBlobStorage.TVDiskKind.EVDiskKind VDiskCategory = 3 [default = Default]; 
+            optional NKikimrBlobStorage.TVDiskKind.EVDiskKind VDiskCategory = 3 [default = Default];
 
             // this option uses new BS configuration interface to obtain matching groups, and it must not be provided
             // with any of the above fields
@@ -471,17 +471,17 @@ message TMonitoringConfig {
     };
 
     optional uint32 MonitoringPort = 1 [default = 0];
-    optional uint32 MonitoringThreads = 2 [default = 10]; 
-    optional string MonitoringCaption = 3 [default = "YDB Monitoring"]; 
+    optional uint32 MonitoringThreads = 2 [default = 10];
+    optional string MonitoringCaption = 3 [default = "YDB Monitoring"];
     optional uint32 TabletMonitoringRetries = 4 [default = 1];
     optional bool ForceDatabaseLabels = 5 [default = false];
-    optional string MonitoringAddress = 6; 
+    optional string MonitoringAddress = 6;
     optional TDatabaseLabels DatabaseLabels = 7;
     optional TDatabaseAttributeLabels DatabaseAttributeLabels = 8;
     optional string DataCenter = 9;
     optional string HostLabelOverride = 10;
     optional string ProcessLocation = 11;
-    optional string AllowOrigin = 12; 
+    optional string AllowOrigin = 12;
     optional string RedirectMainPageTo = 13 [default = "monitoring/"];
 }
 
@@ -585,8 +585,8 @@ message TGRpcConfig {
     // empty service list is 'run most services "what means 'most' in unspecified"'
     repeated string Services = 20;
     optional bool ServeRootDomains = 21 [default = true];
-    repeated string ServicesEnabled = 22; 
-    repeated string ServicesDisabled = 23; 
+    repeated string ServicesEnabled = 22;
+    repeated string ServicesDisabled = 23;
 
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
@@ -629,7 +629,7 @@ message TFeatureFlags {
     optional bool SendSchemaVersionToDatashard = 14 [default = true]; // deprecated: always true
     optional bool EnableSchemeBoardCache = 15 [default = true]; // deprecated: always true
     optional bool EnableSystemViews = 16 [default = true];
-    optional bool EnableExternalHive = 17 [default = true]; 
+    optional bool EnableExternalHive = 17 [default = true];
     optional bool UseSchemeBoardCacheForSchemeRequests = 18 [default = true]; // deprecated: always true
     optional bool CompileMinikqlWithVersion = 19 [default = true]; // deprecated: always true
     optional bool ReadTableWithSnapshot = 20 [default = true];
@@ -1192,98 +1192,98 @@ message TMeteringConfig {
     repeated string SystemBackupSIDs = 2;
 };
 
-message THiveTabletLimit { 
-    optional NKikimrTabletBase.TTabletTypes.EType Type = 1; 
-    optional uint64 MaxCount = 2; 
-} 
- 
-message THiveTabletPreference { 
-    optional NKikimrTabletBase.TTabletTypes.EType Type = 1; 
-    optional NKikimrHive.TDataCentersPreference DataCentersPreference = 10; 
-} 
- 
-message THiveConfig { 
-    enum EHiveStorageBalanceStrategy { 
-        HIVE_STORAGE_BALANCE_STRATEGY_AUTO = 0; 
-        HIVE_STORAGE_BALANCE_STRATEGY_IOPS = 1; 
-        HIVE_STORAGE_BALANCE_STRATEGY_THROUGHPUT = 2; 
-        HIVE_STORAGE_BALANCE_STRATEGY_SIZE = 3; 
-    } 
- 
-    enum EHiveStorageSelectStrategy { 
-        HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0; 
-        HIVE_STORAGE_SELECT_STRATEGY_EXACT_MIN = 1; 
-        HIVE_STORAGE_SELECT_STRATEGY_RANDOM_MIN_7P = 2; 
-        HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN = 3; 
-        HIVE_STORAGE_SELECT_STRATEGY_RANDOM = 4; 
-    } 
- 
-    enum EHiveNodeBalanceStrategy { 
-        HIVE_NODE_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM = 0; 
-        HIVE_NODE_BALANCE_STRATEGY_HEAVIEST = 1; 
-        HIVE_NODE_BALANCE_STRATEGY_RANDOM = 2; 
-        HIVE_NODE_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3; 
-    } 
- 
-    enum EHiveTabletBalanceStrategy { 
-        HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM = 0; 
-        HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST = 1; 
-        HIVE_TABLET_BALANCE_STRATEGY_RANDOM = 2; 
-        HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3; 
-    } 
- 
-    enum EHiveNodeSelectStrategy { 
-        HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0; 
-        HIVE_NODE_SELECT_STRATEGY_EXACT_MIN = 1; 
-        HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P = 2; 
-        HIVE_NODE_SELECT_STRATEGY_RANDOM = 3; 
-    } 
- 
-    optional uint64 MaxTabletsScheduled = 2 [default = 100]; 
-    optional uint64 MaxResourceCounter = 3 [default = 100000000]; 
-    optional uint64 MaxResourceCPU = 4 [default = 10000000]; 
-    optional uint64 MaxResourceMemory = 5 [default = 512000000000]; 
-    optional uint64 MaxResourceNetwork = 6 [default = 1000000000]; 
-    optional double MinScatterToBalance = 7 [default = 1.01]; 
-    optional bool SpreadNeighbours = 8 [default = true]; 
-    optional uint64 MaxBootBatchSize = 9 [default = 1000]; 
-    optional uint64 DrainInflight = 10 [default = 10]; 
-    optional double DefaultUnitIOPS = 11 [default = 1]; // operations/sec 
-    optional uint64 DefaultUnitThroughput = 12 [default = 1000]; // bytes/sec 
-    optional uint64 DefaultUnitSize = 13 [default = 100000000]; // bytes 
-    optional double StorageOvercommit = 14 [default = 1.00]; 
-    optional EHiveStorageBalanceStrategy StorageBalanceStrategy = 15 [default = HIVE_STORAGE_BALANCE_STRATEGY_SIZE]; 
-    optional bool StorageSafeMode = 16 [default = true]; 
-    optional EHiveStorageSelectStrategy StorageSelectStrategy = 17 [default = HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM]; 
-    optional uint64 RequestSequenceSize = 18 [default = 1000]; 
-    optional uint64 MinRequestSequenceSize = 19 [default = 1000]; 
-    optional uint64 MaxRequestSequenceSize = 20 [default = 1000000]; 
-    optional uint64 MetricsWindowSize = 21 [default = 60000]; // milliseconds 
-    optional double MaxNodeUsageToKick = 22 [default = 1.01]; 
-    optional uint64 ResourceChangeReactionPeriod = 23 [default = 10]; // seconds 
-    optional uint64 TabletKickCooldownPeriod = 24 [default = 1800]; // seconds 
-    optional double ResourceOvercommitment = 25 [default = 3.00]; 
-    optional uint64 BalancerInflight = 26 [default = 1]; // tablets 
-    optional EHiveNodeBalanceStrategy NodeBalanceStrategy = 27 [default = HIVE_NODE_BALANCE_STRATEGY_HEAVIEST]; 
-    optional EHiveTabletBalanceStrategy TabletBalanceStrategy = 28 [default = HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM]; 
-    optional double MinPeriodBetweenBalance = 29 [default = 1.0]; // seconds 
-    optional uint64 MaxMovementsOnAutoBalancer = 30 [default = 1]; // tablets 
-    optional bool ContinueAutoBalancer = 31 [default = true]; 
-    optional double MinNodeUsageToBalance = 32 [default = 1.01]; 
-    optional double MinPeriodBetweenReassign = 33 [default = 300.0]; // seconds 
-    optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds 
-    optional double NodeRestartWatchPeriod = 35 [default = 3600.0]; // seconds 
-    optional uint64 NodeDeletePeriod = 36 [default = 14400]; // seconds 
-    repeated THiveTabletLimit DefaultTabletLimit = 37; 
-    repeated THiveTabletPreference DefaultTabletPreference = 38; 
-    optional uint64 SystemTabletCategoryId = 39 [default = 1]; 
-    optional bool EnableFastTabletMove = 40 [default = true]; 
-    optional uint64 TabletRestartsPeriod = 42 [default = 1000]; // milliseconds 
-    optional uint64 TabletRestarsMaxCount = 43 [default = 2]; // number 
-    optional uint64 PostponeStartPeriod = 44 [default = 1000]; // milliseconds 
-    optional EHiveNodeSelectStrategy NodeSelectStrategy = 45 [default = HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P]; 
-} 
- 
+message THiveTabletLimit {
+    optional NKikimrTabletBase.TTabletTypes.EType Type = 1;
+    optional uint64 MaxCount = 2;
+}
+
+message THiveTabletPreference {
+    optional NKikimrTabletBase.TTabletTypes.EType Type = 1;
+    optional NKikimrHive.TDataCentersPreference DataCentersPreference = 10;
+}
+
+message THiveConfig {
+    enum EHiveStorageBalanceStrategy {
+        HIVE_STORAGE_BALANCE_STRATEGY_AUTO = 0;
+        HIVE_STORAGE_BALANCE_STRATEGY_IOPS = 1;
+        HIVE_STORAGE_BALANCE_STRATEGY_THROUGHPUT = 2;
+        HIVE_STORAGE_BALANCE_STRATEGY_SIZE = 3;
+    }
+
+    enum EHiveStorageSelectStrategy {
+        HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0;
+        HIVE_STORAGE_SELECT_STRATEGY_EXACT_MIN = 1;
+        HIVE_STORAGE_SELECT_STRATEGY_RANDOM_MIN_7P = 2;
+        HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN = 3;
+        HIVE_STORAGE_SELECT_STRATEGY_RANDOM = 4;
+    }
+
+    enum EHiveNodeBalanceStrategy {
+        HIVE_NODE_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM = 0;
+        HIVE_NODE_BALANCE_STRATEGY_HEAVIEST = 1;
+        HIVE_NODE_BALANCE_STRATEGY_RANDOM = 2;
+        HIVE_NODE_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
+    }
+
+    enum EHiveTabletBalanceStrategy {
+        HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM = 0;
+        HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST = 1;
+        HIVE_TABLET_BALANCE_STRATEGY_RANDOM = 2;
+        HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
+    }
+
+    enum EHiveNodeSelectStrategy {
+        HIVE_NODE_SELECT_STRATEGY_WEIGHTED_RANDOM = 0;
+        HIVE_NODE_SELECT_STRATEGY_EXACT_MIN = 1;
+        HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P = 2;
+        HIVE_NODE_SELECT_STRATEGY_RANDOM = 3;
+    }
+
+    optional uint64 MaxTabletsScheduled = 2 [default = 100];
+    optional uint64 MaxResourceCounter = 3 [default = 100000000];
+    optional uint64 MaxResourceCPU = 4 [default = 10000000];
+    optional uint64 MaxResourceMemory = 5 [default = 512000000000];
+    optional uint64 MaxResourceNetwork = 6 [default = 1000000000];
+    optional double MinScatterToBalance = 7 [default = 1.01];
+    optional bool SpreadNeighbours = 8 [default = true];
+    optional uint64 MaxBootBatchSize = 9 [default = 1000];
+    optional uint64 DrainInflight = 10 [default = 10];
+    optional double DefaultUnitIOPS = 11 [default = 1]; // operations/sec
+    optional uint64 DefaultUnitThroughput = 12 [default = 1000]; // bytes/sec
+    optional uint64 DefaultUnitSize = 13 [default = 100000000]; // bytes
+    optional double StorageOvercommit = 14 [default = 1.00];
+    optional EHiveStorageBalanceStrategy StorageBalanceStrategy = 15 [default = HIVE_STORAGE_BALANCE_STRATEGY_SIZE];
+    optional bool StorageSafeMode = 16 [default = true];
+    optional EHiveStorageSelectStrategy StorageSelectStrategy = 17 [default = HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM];
+    optional uint64 RequestSequenceSize = 18 [default = 1000];
+    optional uint64 MinRequestSequenceSize = 19 [default = 1000];
+    optional uint64 MaxRequestSequenceSize = 20 [default = 1000000];
+    optional uint64 MetricsWindowSize = 21 [default = 60000]; // milliseconds
+    optional double MaxNodeUsageToKick = 22 [default = 1.01];
+    optional uint64 ResourceChangeReactionPeriod = 23 [default = 10]; // seconds
+    optional uint64 TabletKickCooldownPeriod = 24 [default = 1800]; // seconds
+    optional double ResourceOvercommitment = 25 [default = 3.00];
+    optional uint64 BalancerInflight = 26 [default = 1]; // tablets
+    optional EHiveNodeBalanceStrategy NodeBalanceStrategy = 27 [default = HIVE_NODE_BALANCE_STRATEGY_HEAVIEST];
+    optional EHiveTabletBalanceStrategy TabletBalanceStrategy = 28 [default = HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM];
+    optional double MinPeriodBetweenBalance = 29 [default = 1.0]; // seconds
+    optional uint64 MaxMovementsOnAutoBalancer = 30 [default = 1]; // tablets
+    optional bool ContinueAutoBalancer = 31 [default = true];
+    optional double MinNodeUsageToBalance = 32 [default = 1.01];
+    optional double MinPeriodBetweenReassign = 33 [default = 300.0]; // seconds
+    optional double TabletRestartWatchPeriod = 34 [default = 3600.0]; // seconds
+    optional double NodeRestartWatchPeriod = 35 [default = 3600.0]; // seconds
+    optional uint64 NodeDeletePeriod = 36 [default = 14400]; // seconds
+    repeated THiveTabletLimit DefaultTabletLimit = 37;
+    repeated THiveTabletPreference DefaultTabletPreference = 38;
+    optional uint64 SystemTabletCategoryId = 39 [default = 1];
+    optional bool EnableFastTabletMove = 40 [default = true];
+    optional uint64 TabletRestartsPeriod = 42 [default = 1000]; // milliseconds
+    optional uint64 TabletRestarsMaxCount = 43 [default = 2]; // number
+    optional uint64 PostponeStartPeriod = 44 [default = 1000]; // milliseconds
+    optional EHiveNodeSelectStrategy NodeSelectStrategy = 45 [default = HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P];
+}
+
 message TDataShardConfig {
     optional string BackupTaskName = 1 [default = "backup"];
     optional uint32 BackupTaskPriority = 2 [default = 10];
@@ -1313,7 +1313,7 @@ message TCompactionConfig {
 // This message is used to upload custom service configs
 // to CMS. Config name is used to identify owner and
 // data format.
-// Custom config validators should b8e used to detect name 
+// Custom config validators should b8e used to detect name
 // conflicts and check config consistency.
 message TNamedConfig {
     optional string Name = 1;
@@ -1343,7 +1343,7 @@ message TAppConfig {
     optional TRestartsCountConfig RestartsCountConfig = 11;
     optional TMessageBusConfig MessageBusConfig = 12;
     optional TTabletsConfig TabletsConfig = 13; // alternative bootstrapper configuration
-    optional NKikimrBlobStorage.TAllVDiskKinds VDiskConfig = 14; 
+    optional NKikimrBlobStorage.TAllVDiskKinds VDiskConfig = 14;
     optional NKikimrBlobStorage.TDriveModelList DriveModelConfig = 31;
     optional NKikimrBlobStorage.TIncrHugeConfig IncrHugeConfig = 18;
     optional string UDFsDir = 15;
@@ -1359,7 +1359,7 @@ message TAppConfig {
     optional TSqsConfig SqsConfig = 27;
     optional NKikimrPQ.TPQConfig PQConfig = 28;
     optional NKikimrTenantPool.TTenantPoolConfig TenantPoolConfig = 29;
-    optional NKikimrProto.TAuthConfig AuthConfig = 30; 
+    optional NKikimrProto.TAuthConfig AuthConfig = 30;
     optional NKikimrTenantSlotBroker.TConfig TenantSlotBrokerConfig = 32;
     optional TConfigsDispatcherConfig ConfigsDispatcherConfig = 33;
     optional TTableProfilesConfig TableProfilesConfig = 34;
@@ -1369,13 +1369,13 @@ message TAppConfig {
     optional TTableServiceConfig TableServiceConfig = 37;
     optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 38; // dynamic configuration via cms
     optional TImmediateControlsConfig ImmediateControlsConfig = 39;
-    optional TAllocatorConfig AllocatorConfig = 40; 
+    optional TAllocatorConfig AllocatorConfig = 40;
     optional NKikimrPQ.TPQClusterDiscoveryConfig PQClusterDiscoveryConfig = 41;
     optional NKikimrNetClassifier.TNetClassifierConfig NetClassifierConfig = 42;
     optional NKikimrNetClassifier.TNetClassifierDistributableConfig NetClassifierDistributableConfig = 43; // also dynamic via cms
     optional NKikimrResourceBroker.TResourceBrokerConfig ResourceBrokerConfig = 44;
     optional TMeteringConfig MeteringConfig = 45;
-    optional THiveConfig HiveConfig = 46; 
+    optional THiveConfig HiveConfig = 46;
     optional TDataShardConfig DataShardConfig = 49;
     optional NYq.NConfig.TConfig YandexQueryConfig = 50;
     optional TCompactionConfig CompactionConfig = 52;

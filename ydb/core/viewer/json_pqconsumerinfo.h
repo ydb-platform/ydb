@@ -16,7 +16,7 @@ using namespace NActors;
 
 class TJsonPQConsumerInfo : public TActorBootstrapped<TJsonPQConsumerInfo> {
     using TBase = TActorBootstrapped<TJsonPQConsumerInfo>;
-    IViewer* Viewer; 
+    IViewer* Viewer;
     NMon::TEvHttpInfo::TPtr Event;
     NKikimrClient::TResponse Result;
     TJsonSettings JsonSettings;
@@ -25,17 +25,17 @@ class TJsonPQConsumerInfo : public TActorBootstrapped<TJsonPQConsumerInfo> {
     TString DC;
     ui32 Version = 0;
     ui32 Timeout = 0;
-    ui32 Requests = 0; 
-    ui32 Responses = 0; 
+    ui32 Requests = 0;
+    ui32 Responses = 0;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonPQConsumerInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev) 
-        : Viewer(viewer) 
-        , Event(ev) 
+    TJsonPQConsumerInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
+        : Viewer(viewer)
+        , Event(ev)
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -56,21 +56,21 @@ public:
             if (pos != TString::npos) {
                 Topic = Topic.substr(pos + 1);
             }
-        } 
-        { 
-            NKikimrClient::TPersQueueRequest request; 
-            request.MutableMetaRequest()->MutableCmdGetPartitionStatus()->SetClientId(Client); 
-            request.MutableMetaRequest()->MutableCmdGetPartitionStatus()->AddTopicRequest()->SetTopic(Topic); 
+        }
+        {
+            NKikimrClient::TPersQueueRequest request;
+            request.MutableMetaRequest()->MutableCmdGetPartitionStatus()->SetClientId(Client);
+            request.MutableMetaRequest()->MutableCmdGetPartitionStatus()->AddTopicRequest()->SetTopic(Topic);
             ctx.Register(NMsgBusProxy::CreateActorServerPersQueue(ctx.SelfID, request, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), nullptr));
-            ++Requests; 
-        } 
-        { 
-            NKikimrClient::TPersQueueRequest request; 
-            request.MutableMetaRequest()->MutableCmdGetReadSessionsInfo()->SetClientId(Client); 
-            request.MutableMetaRequest()->MutableCmdGetReadSessionsInfo()->AddTopic(Topic); 
+            ++Requests;
+        }
+        {
+            NKikimrClient::TPersQueueRequest request;
+            request.MutableMetaRequest()->MutableCmdGetReadSessionsInfo()->SetClientId(Client);
+            request.MutableMetaRequest()->MutableCmdGetReadSessionsInfo()->AddTopic(Topic);
             ctx.Register(NMsgBusProxy::CreateActorServerPersQueue(ctx.SelfID, request, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), nullptr));
-            ++Requests; 
-        } 
+            ++Requests;
+        }
         Become(&TThis::StateRequestedTopicInfo, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
@@ -86,21 +86,21 @@ public:
     }
 
     void Handle(TEvPersQueue::TEvResponse::TPtr &ev, const TActorContext &ctx) {
-        Result.MergeFrom(ev->Get()->Record); 
-        if (++Responses == Requests) { 
-            ReplyAndDie(ctx); 
-        } 
+        Result.MergeFrom(ev->Get()->Record);
+        if (++Responses == Requests) {
+            ReplyAndDie(ctx);
+        }
     }
 
     void ReplyAndDie(const TActorContext &ctx) {
         TStringStream json;
-        TProtoToJson::ProtoToJson(json, Result.GetMetaResponse(), JsonSettings); 
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON() + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
+        TProtoToJson::ProtoToJson(json, Result.GetMetaResponse(), JsonSettings);
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON() + json.Str(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 
     void HandleTimeout(const TActorContext &ctx) {
-        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(), 0, NMon::IEvHttpInfoRes::EContentType::Custom)); 
+        ctx.Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPGATEWAYTIMEOUT(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Die(ctx);
     }
 };
@@ -109,7 +109,7 @@ template <>
 struct TJsonRequestSchema<TJsonPQConsumerInfo> {
     static TString GetSchema() {
         TStringStream stream;
-        TProtoToJson::ProtoToJsonSchema<NKikimrClient::TPersQueueMetaResponse>(stream); 
+        TProtoToJson::ProtoToJsonSchema<NKikimrClient::TPersQueueMetaResponse>(stream);
         return stream.Str();
     }
 };
@@ -117,27 +117,27 @@ struct TJsonRequestSchema<TJsonPQConsumerInfo> {
 template <>
 struct TJsonRequestParameters<TJsonPQConsumerInfo> {
     static TString GetParameters() {
-        return R"___([{"name":"topic","in":"query","description":"topic name","required":true,"type":"string"}, 
-                      {"name":"dc","in":"query","description":"dc name (required with version >= 3)","required":false,"type":"string", "default":""}, 
-                      {"name":"version","in":"query","description":"query version","required":false,"type":"integer", "default":"0"}, 
-                      {"name":"client","in":"query","description":"client name","required":true,"type":"string"}, 
-                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean","default":false}, 
-                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean","default":false}, 
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer","default":10000}])___"; 
+        return R"___([{"name":"topic","in":"query","description":"topic name","required":true,"type":"string"},
+                      {"name":"dc","in":"query","description":"dc name (required with version >= 3)","required":false,"type":"string", "default":""},
+                      {"name":"version","in":"query","description":"query version","required":false,"type":"integer", "default":"0"},
+                      {"name":"client","in":"query","description":"client name","required":true,"type":"string"},
+                      {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean","default":false},
+                      {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean","default":false},
+                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer","default":10000}])___";
     }
 };
 
 template <>
 struct TJsonRequestSummary<TJsonPQConsumerInfo> {
     static TString GetSummary() {
-        return "\"Consumer-topic metrics\""; 
+        return "\"Consumer-topic metrics\"";
     }
 };
 
 template <>
 struct TJsonRequestDescription<TJsonPQConsumerInfo> {
     static TString GetDescription() {
-        return "\"Returns consumer-topic metrics\""; 
+        return "\"Returns consumer-topic metrics\"";
     }
 };
 

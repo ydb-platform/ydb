@@ -163,10 +163,10 @@ public:
         Y_VERIFY(!TenantSlotBroker.Pipe);
 
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = { 
-            .MinRetryTime = TDuration::MilliSeconds(10), 
-            .MaxRetryTime = TDuration::Seconds(1), 
-        }; 
+        pipeConfig.RetryPolicy = {
+            .MinRetryTime = TDuration::MilliSeconds(10),
+            .MaxRetryTime = TDuration::Seconds(1),
+        };
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, TenantSlotBroker.TabletId, pipeConfig);
         TenantSlotBroker.Pipe = ctx.ExecutorThread.RegisterActor(pipe);
 

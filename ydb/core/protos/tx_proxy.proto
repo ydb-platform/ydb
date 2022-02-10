@@ -130,7 +130,7 @@ message TMiniKQLTransaction {
         // Server will use Text, if not set -- Bin.
         optional string Text = 1; // Text params.
         optional bytes Bin = 2;  // Serialized params.
-        optional NKikimrMiniKQL.TParams Proto = 3; 
+        optional NKikimrMiniKQL.TParams Proto = 3;
     };
 
     enum EMode {
@@ -172,7 +172,7 @@ message TTransaction {
 
     optional uint32 Flags = 6; // See ydb/core/tx/tx_datashard.h NKikimr::NTxDataShard::TTxFlags
     optional string UserRequestId = 8;
- 
+
     optional NKikimrSchemeOp.TModifyScheme ModifyScheme = 10;
     repeated NKikimrSchemeOp.TModifyScheme TransactionalModification = 11;
 
@@ -189,7 +189,7 @@ message TEvProposeTransaction {
     optional TTransaction Transaction = 1;
     optional uint64 ProxyFlags = 2;
     optional uint64 ExecTimeoutPeriod = 3;
-    optional string UserToken = 4; // already built and serialized user's token 
+    optional string UserToken = 4; // already built and serialized user's token
     optional bool StreamResponse = 5;
     optional uint64 CancelAfterMs = 6;
     optional string DatabaseName = 7;
@@ -234,7 +234,7 @@ message TEvProposeTransactionStatus {
     optional uint32 SchemeShardStatus = 30;
     optional uint32 SchemeShardReportedId = 31;
     optional bytes SchemeShardReason = 32;
-    optional fixed64 SchemeShardTabletId = 33; 
+    optional fixed64 SchemeShardTabletId = 33;
     optional uint64 PathId = 34;
     optional uint64 PathCreateTxId = 35;
     optional uint64 PathDropTxId = 36;
@@ -250,10 +250,10 @@ message TEvNavigate {
     reserved 2; // optional uint32 ReadMaterializedFamily = 2;
     reserved 3; // optional bytes TextPath = 3;
     reserved 4; // optional uint64 SchemeShardHint = 4;
- 
+
     optional NKikimrSchemeOp.TDescribePath DescribePath = 5;
- 
-    optional string UserToken = 6; // already built and serialized user's token 
+
+    optional string UserToken = 6; // already built and serialized user's token
     optional string DatabaseName = 7;
 }
 
@@ -266,14 +266,14 @@ message TEvNavigateStatus_Deprecated {
 
     optional uint32 SchemeShardStatus = 30;
     optional uint32 SchemeShardReportedId = 31;
- 
+
     optional NKikimrSchemeOp.TPathDescription PathDescription = 40;
 }
- 
-message TEvInvalidateTable { 
-    optional uint64 SchemeShardId = 1; 
-    optional uint64 TableId = 2; 
-} 
+
+message TEvInvalidateTable {
+    optional uint64 SchemeShardId = 1;
+    optional uint64 TableId = 2;
+}
 
 message TEvExportRequest {
     optional string DatabaseName = 1;

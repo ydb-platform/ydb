@@ -15,10 +15,10 @@ namespace NKikimr { namespace NTabletMonitoringProxy {
 
 struct TTabletMonitoringProxyConfig {
     bool PreferLocal = true;
-    NTabletPipe::TClientRetryPolicy RetryPolicy; 
+    NTabletPipe::TClientRetryPolicy RetryPolicy;
 
     void SetRetryLimitCount(ui32 retryLimitCount) {
-        RetryPolicy = {.RetryLimitCount = retryLimitCount}; 
+        RetryPolicy = {.RetryLimitCount = retryLimitCount};
     }
 };
 

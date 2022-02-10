@@ -1,20 +1,20 @@
-#pragma once 
- 
-#include <yandex/cloud/priv/servicecontrol/v1/access_service.grpc.pb.h> 
- 
+#pragma once
+
+#include <yandex/cloud/priv/servicecontrol/v1/access_service.grpc.pb.h>
+
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <iterator>
 
-class TAccessServiceMock : public yandex::cloud::priv::servicecontrol::v1::AccessService::Service { 
-public: 
+class TAccessServiceMock : public yandex::cloud::priv::servicecontrol::v1::AccessService::Service {
+public:
     template <class TResonseProto>
     struct TResponse {
         TResonseProto Response;
         grpc::Status Status = grpc::Status::OK;
         bool RequireRequestId = false;
     };
- 
+
     THashMap<TString, TResponse<yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse>> AuthenticateData;
     THashMap<TString, TResponse<yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse>> AuthorizeData;
 
@@ -28,9 +28,9 @@ public:
         }
     }
 
-    virtual grpc::Status Authenticate( 
+    virtual grpc::Status Authenticate(
             grpc::ServerContext* ctx,
-            const yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest* request, 
+            const yandex::cloud::priv::servicecontrol::v1::AuthenticateRequest* request,
             yandex::cloud::priv::servicecontrol::v1::AuthenticateResponse* response) override
     {
         TString key;
@@ -40,27 +40,27 @@ public:
             key = request->iam_token();
         }
         auto it = AuthenticateData.find(key);
-        if (it != AuthenticateData.end()) { 
+        if (it != AuthenticateData.end()) {
             response->CopyFrom(it->second.Response);
             CheckRequestId(ctx, it->second, key);
             return it->second.Status;
-        } else { 
-            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied"); 
-        } 
-    } 
- 
-    virtual grpc::Status Authorize( 
+        } else {
+            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied");
+        }
+    }
+
+    virtual grpc::Status Authorize(
             grpc::ServerContext* ctx,
-            const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest* request, 
-            yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override { 
+            const yandex::cloud::priv::servicecontrol::v1::AuthorizeRequest* request,
+            yandex::cloud::priv::servicecontrol::v1::AuthorizeResponse* response) override {
         const TString& token = request->subject().user_account().id() + "-" + request->permission() + "-" + request->resource_path(0).id();
-        auto it = AuthorizeData.find(token); 
-        if (it != AuthorizeData.end()) { 
+        auto it = AuthorizeData.find(token);
+        if (it != AuthorizeData.end()) {
             response->CopyFrom(it->second.Response);
             CheckRequestId(ctx, it->second, token);
             return it->second.Status;
-        } else { 
-            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied"); 
-        } 
-    } 
-}; 
+        } else {
+            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied");
+        }
+    }
+};

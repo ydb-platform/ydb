@@ -53,7 +53,7 @@ public:
                 ++RequestsLeft;
             }
         }
-        Become(&TTabletStatusCheckRequest::StateFunc); 
+        Become(&TTabletStatusCheckRequest::StateFunc);
     }
 
     STFUNC(StateFunc) {

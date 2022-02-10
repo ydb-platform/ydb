@@ -1,18 +1,18 @@
-PROTO_LIBRARY() 
- 
+PROTO_LIBRARY()
+
 OWNER(
     xenoxeno
     g:kikimr
 )
- 
-SRCS( 
-    viewer.proto 
-) 
- 
-PEERDIR( 
+
+SRCS(
+    viewer.proto
+)
+
+PEERDIR(
     ydb/core/protos
-) 
- 
+)
+
 EXCLUDE_TAGS(GO_PROTO)
 
-END() 
+END()

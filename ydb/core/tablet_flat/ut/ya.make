@@ -16,10 +16,10 @@ OWNER(g:kikimr)
 SRCS(
     datetime_ut.cpp
     decimal_ut.cpp
-    flat_cxx_database_ut.cpp 
+    flat_cxx_database_ut.cpp
     ut_db_iface.cpp
     ut_db_scheme.cpp
-    flat_executor_ut.cpp 
+    flat_executor_ut.cpp
     flat_executor_database_ut.cpp
     flat_executor_gclogic_ut.cpp
     flat_range_cache_ut.cpp

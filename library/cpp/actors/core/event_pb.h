@@ -157,7 +157,7 @@ namespace NActors {
         TString ToString() const override {
             return Record.ShortDebugString();
         }
- 
+
         bool IsSerializable() const override {
             return true;
         }
@@ -422,72 +422,72 @@ namespace NActors {
             return TypeName<TEv>() + " { " + TBase::Record.ShortDebugString() + " }";
         }
     };
- 
-    template <typename TEv, typename TRecord, ui32 TEventType> 
+
+    template <typename TEv, typename TRecord, ui32 TEventType>
     class TEventPreSerializedPB: public TEventPB<TEv, TRecord, TEventType> {
-    protected: 
-        using TBase = TEventPB<TEv, TRecord, TEventType>; 
-        using TSelf = TEventPreSerializedPB<TEv, TRecord, TEventType>; 
-        using TBase::Record; 
- 
-    public: 
-        TString PreSerializedData; // already serialized PB data (using message::SerializeToString) 
- 
-        TEventPreSerializedPB() = default; 
- 
-        explicit TEventPreSerializedPB(const TRecord& rec) 
-            : TBase(rec) 
+    protected:
+        using TBase = TEventPB<TEv, TRecord, TEventType>;
+        using TSelf = TEventPreSerializedPB<TEv, TRecord, TEventType>;
+        using TBase::Record;
+
+    public:
+        TString PreSerializedData; // already serialized PB data (using message::SerializeToString)
+
+        TEventPreSerializedPB() = default;
+
+        explicit TEventPreSerializedPB(const TRecord& rec)
+            : TBase(rec)
         {
         }
- 
-        explicit TEventPreSerializedPB(TRecord&& rec) 
-            : TBase(std::move(rec)) 
+
+        explicit TEventPreSerializedPB(TRecord&& rec)
+            : TBase(std::move(rec))
         {
         }
- 
-        // when remote event received locally this method will merge preserialized data 
-        const TRecord& GetRecord() { 
-            TRecord& base(TBase::Record); 
-            if (!PreSerializedData.empty()) { 
-                TRecord copy; 
+
+        // when remote event received locally this method will merge preserialized data
+        const TRecord& GetRecord() {
+            TRecord& base(TBase::Record);
+            if (!PreSerializedData.empty()) {
+                TRecord copy;
                 Y_PROTOBUF_SUPPRESS_NODISCARD copy.ParseFromString(PreSerializedData);
-                copy.MergeFrom(base); 
-                base.Swap(&copy); 
-                PreSerializedData.clear(); 
-            } 
+                copy.MergeFrom(base);
+                base.Swap(&copy);
+                PreSerializedData.clear();
+            }
             return TBase::Record;
-        } 
- 
-        const TRecord& GetRecord() const { 
-            return const_cast<TSelf*>(this)->GetRecord(); 
-        } 
- 
-        TRecord* MutableRecord() { 
+        }
+
+        const TRecord& GetRecord() const {
+            return const_cast<TSelf*>(this)->GetRecord();
+        }
+
+        TRecord* MutableRecord() {
             GetRecord(); // Make sure PreSerializedData is parsed
-            return &(TBase::Record); 
-        } 
- 
-        TString ToString() const override { 
+            return &(TBase::Record);
+        }
+
+        TString ToString() const override {
             return GetRecord().ShortDebugString();
-        } 
- 
+        }
+
         bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
             return chunker->WriteString(&PreSerializedData) && TBase::SerializeToArcadiaStream(chunker);
-        } 
- 
-        ui32 CalculateSerializedSize() const override { 
-            return PreSerializedData.size() + TBase::CalculateSerializedSize(); 
-        } 
- 
-        size_t GetCachedByteSize() const { 
-            return PreSerializedData.size() + TBase::GetCachedByteSize(); 
-        } 
+        }
+
+        ui32 CalculateSerializedSize() const override {
+            return PreSerializedData.size() + TBase::CalculateSerializedSize();
+        }
+
+        size_t GetCachedByteSize() const {
+            return PreSerializedData.size() + TBase::GetCachedByteSize();
+        }
 
         ui32 CalculateSerializedSizeCached() const override {
             return GetCachedByteSize();
         }
-    }; 
- 
+    };
+
     inline TActorId ActorIdFromProto(const NActorsProto::TActorId& actorId) {
         return TActorId(actorId.GetRawX1(), actorId.GetRawX2());
     }

@@ -281,17 +281,17 @@ protected:
 
     ui32 PerGenerationCounter; // for garbage collection
 
-    NMetrics::TResourceMetrics* ResourceMetrics; 
- 
+    NMetrics::TResourceMetrics* ResourceMetrics;
+
 public:
     TKeyValueState();
     void Clear();
     void SetupTabletCounters(TAutoPtr<TTabletCountersBase> counters);
     void ClearTabletCounters();
     TAutoPtr<TTabletCountersBase> TakeTabletCounters();
-    TTabletCountersBase& GetTabletCounters(); 
-    void SetupResourceMetrics(NMetrics::TResourceMetrics* metrics); 
-    void CountRequestComplete(NMsgBusProxy::EResponseStatus status, const TRequestStat &stat, const TActorContext &ctx); 
+    TTabletCountersBase& GetTabletCounters();
+    void SetupResourceMetrics(NMetrics::TResourceMetrics* metrics);
+    void CountRequestComplete(NMsgBusProxy::EResponseStatus status, const TRequestStat &stat, const TActorContext &ctx);
     void CountRequestTakeOffOrEnqueue(TRequestType::EType requestType);
     void CountRequestOtherError(TRequestType::EType requestType);
     void CountRequestIncoming(TRequestType::EType requestType);
@@ -674,16 +674,16 @@ public:
             callback(it);
         }
     }
-    void UpdateResourceMetrics(const TActorContext& ctx); 
- 
+    void UpdateResourceMetrics(const TActorContext& ctx);
+
     bool GetIsDamaged() const {
         return IsDamaged;
-    } 
- 
+    }
+
     bool GetIsTabletYellowMove() const {
         return IsTabletYellowMove;
     }
- 
+
     bool GetIsTabletYellowStop() const {
         return IsTabletYellowStop;
     }

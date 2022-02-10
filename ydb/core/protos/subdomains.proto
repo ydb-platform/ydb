@@ -16,8 +16,8 @@ message TSubDomainSettings {
     optional string Name = 4;
     optional uint32 TimeCastBucketsPerMediator = 5;
     repeated NKikimrStoragePool.TStoragePool StoragePools = 6;
-    optional bool ExternalSchemeShard = 7 [default = false]; 
-    optional bool ExternalHive = 8 [default = false]; 
+    optional bool ExternalSchemeShard = 7 [default = false];
+    optional bool ExternalHive = 8 [default = false];
     optional TDomainKey ResourcesDomainKey = 9;
     optional bool ExternalSysViewProcessor = 10 [default = false];
     optional TSchemeQuotas DeclaredSchemeQuotas = 11;
@@ -32,7 +32,7 @@ message TProcessingParams {
     repeated fixed64 Mediators = 5;
 
     optional fixed64 SchemeShard = 6;
-    optional fixed64 Hive = 7; 
+    optional fixed64 Hive = 7;
     optional fixed64 SysViewProcessor = 8;
 
     //put there SubSchemeShard and SubHive at the future
@@ -77,8 +77,8 @@ message TDomainDescription {
 
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 15;
     optional TDomainState DomainState = 16;
- 
-    optional NLoginProto.TSecurityState SecurityState = 20; 
+
+    optional NLoginProto.TSecurityState SecurityState = 20;
 }
 
 message TSchemeQuotas {

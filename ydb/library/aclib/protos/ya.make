@@ -7,8 +7,8 @@ OWNER(
 
 INCLUDE_TAGS(GO_PROTO)
 
-SRCS( 
-    aclib.proto 
-) 
+SRCS(
+    aclib.proto
+)
 
-END() 
+END()

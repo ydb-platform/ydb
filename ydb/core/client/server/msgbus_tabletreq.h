@@ -67,7 +67,7 @@ protected:
     }
 
     void SendReplyAndDie(NBus::TBusMessage *reply, const TActorContext &ctx) {
-        SendReplyMove(reply); 
+        SendReplyMove(reply);
         return Die(ctx);
     }
 
@@ -87,7 +87,7 @@ public:
     void Bootstrap(const TActorContext &ctx) {
         NTabletPipe::TClientConfig clientConfig;
         if (WithRetry) {
-            clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries(); 
+            clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         }
 
         if (ConnectToFollower) {
@@ -139,6 +139,6 @@ public:
     }
 };
 
- 
+
 }
 }

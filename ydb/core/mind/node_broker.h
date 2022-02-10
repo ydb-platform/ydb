@@ -105,27 +105,27 @@ struct TEvNodeBroker {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_NODE_BROKER),
                   "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_NODE_BROKER)");
 
-    template <typename TEv, typename TRecord, ui32 TEventType> 
-    using TEventPB = TEventShortDebugPB<TEv, TRecord, TEventType>; 
- 
+    template <typename TEv, typename TRecord, ui32 TEventType>
+    using TEventPB = TEventShortDebugPB<TEv, TRecord, TEventType>;
+
     struct TEvListNodes : public TEventPB<TEvListNodes,
                                           NKikimrNodeBroker::TListNodes,
-                                          EvListNodes> { 
+                                          EvListNodes> {
     };
 
     struct TEvResolveNode : public TEventPB<TEvResolveNode,
                                             NKikimrNodeBroker::TResolveNode,
-                                            EvResolveNode> { 
+                                            EvResolveNode> {
     };
 
     struct TEvRegistrationRequest : public TEventPB<TEvRegistrationRequest,
                                                     NKikimrNodeBroker::TRegistrationRequest,
-                                                    EvRegistrationRequest> { 
+                                                    EvRegistrationRequest> {
     };
 
     struct TEvExtendLeaseRequest : public TEventPB<TEvExtendLeaseRequest,
                                                    NKikimrNodeBroker::TExtendLeaseRequest,
-                                                   EvExtendLeaseRequest> { 
+                                                   EvExtendLeaseRequest> {
     };
 
     struct TEvNodesInfo : public TEventPreSerializedPB<TEvNodesInfo,
@@ -143,17 +143,17 @@ struct TEvNodeBroker {
 
     struct TEvResolvedNode : public TEventPB<TEvResolvedNode,
                                              NKikimrNodeBroker::TResolvedNode,
-                                             EvResolvedNode> { 
+                                             EvResolvedNode> {
     };
 
     struct TEvRegistrationResponse : public TEventPB<TEvRegistrationResponse,
                                                      NKikimrNodeBroker::TRegistrationResponse,
-                                                     EvRegistrationResponse> { 
+                                                     EvRegistrationResponse> {
     };
 
     struct TEvExtendLeaseResponse : public TEventPB<TEvExtendLeaseResponse,
                                                     NKikimrNodeBroker::TExtendLeaseResponse,
-                                                    EvExtendLeaseResponse> { 
+                                                    EvExtendLeaseResponse> {
     };
 
     struct TEvGetConfigRequest : public TEventPB<TEvGetConfigRequest,

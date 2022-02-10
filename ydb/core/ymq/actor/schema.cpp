@@ -566,7 +566,7 @@ private:
 
     void CreatePipe(bool retry) {
         NTabletPipe::TClientConfig clientConfig;
-        clientConfig.RetryPolicy = {.RetryLimitCount = 5, .MinRetryTime = TDuration::MilliSeconds(100), .DoFirstRetryInstantly = !retry}; 
+        clientConfig.RetryPolicy = {.RetryLimitCount = 5, .MinRetryTime = TDuration::MilliSeconds(100), .DoFirstRetryInstantly = !retry};
         PipeClient = this->Register(NTabletPipe::CreateClient(this->SelfId(), QuoterTabletId, clientConfig));
         RLOG_SQS_TRACE("Created pipe client to Kesus: " << PipeClient);
     }

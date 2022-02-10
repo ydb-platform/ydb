@@ -24,25 +24,25 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             ShardIdx = TShardIdx(Ev->Get()->Record.GetShardOwnerId(),
                                  Ev->Get()->Record.GetShardLocalIdx(0));
         }
-        if (Ev->Get()->Record.HasForwardRequest()) { 
-            ForwardToHiveId = TTabletId(Ev->Get()->Record.GetForwardRequest().GetHiveTabletId()); 
-        } 
+        if (Ev->Get()->Record.HasForwardRequest()) {
+            ForwardToHiveId = TTabletId(Ev->Get()->Record.GetForwardRequest().GetHiveTabletId());
+        }
     }
 
     TTxType GetTxType() const override { return TXTYPE_FREE_TABLET_RESULT; }
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         if (Status != NKikimrProto::OK) {
-            if (Status == NKikimrProto::INVALID_OWNER) { 
-                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-                           "Got DeleteTabletReply with Forward response from Hive " << HiveId << " to Hive " << ForwardToHiveId << " shardIdx " << ShardIdx); 
-                Y_VERIFY(ForwardToHiveId); 
-                Self->ShardDeleter.RedirectDeleteRequest(HiveId, ForwardToHiveId, ShardIdx, Self->ShardInfos, ctx); 
-                return; 
-            } 
+            if (Status == NKikimrProto::INVALID_OWNER) {
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                           "Got DeleteTabletReply with Forward response from Hive " << HiveId << " to Hive " << ForwardToHiveId << " shardIdx " << ShardIdx);
+                Y_VERIFY(ForwardToHiveId);
+                Self->ShardDeleter.RedirectDeleteRequest(HiveId, ForwardToHiveId, ShardIdx, Self->ShardInfos, ctx);
+                return;
+            }
             // WTF could happen that hive failed to delete the freaking tablet?
-            LOG_ALERT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-                        "Got DeleteTabletReply from Hive " << HiveId << " shardIdx " << ShardIdx << " status " << Status); 
+            LOG_ALERT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Got DeleteTabletReply from Hive " << HiveId << " shardIdx " << ShardIdx << " status " << Status);
             return;
         }
 
@@ -62,9 +62,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             case ETabletType::SchemeShard:
                 Self->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_SCHEME_SHARD_COUNT].Sub(1);
                 break;
-            case ETabletType::Hive: 
+            case ETabletType::Hive:
                 Self->TabletCounters->Simple()[COUNTER_SUB_DOMAIN_HIVE_COUNT].Sub(1);
-                break; 
+                break;
             case ETabletType::BlockStoreVolume:
                 Self->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_SHARD_COUNT].Sub(1);
                 break;
@@ -174,9 +174,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
 private:
     TShardIdx ShardIdx;
     TTabletId TabletId;
-    NKikimrProto::EReplyStatus Status; 
+    NKikimrProto::EReplyStatus Status;
     TTabletId HiveId;
-    TTabletId ForwardToHiveId = {}; 
+    TTabletId ForwardToHiveId = {};
 };
 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxDeleteTabletReply(TEvHive::TEvDeleteTabletReply::TPtr& ev) {

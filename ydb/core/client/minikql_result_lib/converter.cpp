@@ -4,11 +4,11 @@
 
 
 namespace NKikimr {
-namespace NResultLib { 
+namespace NResultLib {
 
 TStruct ConvertResult(const NKikimrMiniKQL::TValue& value, const NKikimrMiniKQL::TType& type) {
     return TStruct(value, type);
 }
 
-} // namespace NResultLib 
+} // namespace NResultLib
 } // namespace NKikimr

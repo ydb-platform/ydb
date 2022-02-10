@@ -386,7 +386,7 @@ void TExecutor::Active(const TActorContext &ctx) {
     CounterCacheMemTable = new NMonitoring::TCounterForPtr;
 
     ResourceMetrics = MakeHolder<NMetrics::TResourceMetrics>(Owner->TabletID(), 0, Launcher);
- 
+
     PendingBlobQueue.Config.TabletID = Owner->TabletID();
     PendingBlobQueue.Config.Generation = Generation();
     PendingBlobQueue.Config.Follower = false;
@@ -630,7 +630,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     TEvTablet::TEvBoot *msg = ev->Get();
     Generation0 = msg->Generation;
     Step0 = 0;
-    Launcher = msg->Launcher; 
+    Launcher = msg->Launcher;
     Memory->SetProfiles(msg->ResourceProfiles);
 
     const ui64 maxBootBytesInFly = 12 * 1024 * 1024;
@@ -643,7 +643,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     for (auto& kv : msg->GroupReadBytes) {
         totalBytes += kv.second;
     }
- 
+
     ui64 totalOps = 0;
     for (auto& kv : msg->GroupReadOps) {
         totalOps += kv.second;
@@ -1918,7 +1918,7 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
             }
             LogicRedo->CutLog(change->Deleted[num], edge, commit->GcDelta);
         }
- 
+
         if (auto garbage = std::move(change->Garbage)) {
             commit->WaitFollowerGcAck = true; // as we could collect some page collections
 
@@ -2274,16 +2274,16 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
     Counters->Cumulative()[TExecutorCounters::TX_FINISHED].Increment(1);
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_EXECUTE_CPUTIME].IncrementFor(execTimeuS);
     Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_BOOKKEEPING_CPUTIME].IncrementFor(bookkeepingTimeuS);
-    Counters->Cumulative()[TExecutorCounters::CONSUMED_CPU].Increment(execTimeuS + bookkeepingTimeuS); 
+    Counters->Cumulative()[TExecutorCounters::CONSUMED_CPU].Increment(execTimeuS + bookkeepingTimeuS);
     if (AppTxCounters && txType != UnknownTxType) {
         AppTxCounters->TxCumulative(txType, COUNTER_TT_EXECUTE_CPUTIME).Increment(execTimeuS);
         AppTxCounters->TxCumulative(txType, COUNTER_TT_BOOKKEEPING_CPUTIME).Increment(bookkeepingTimeuS);
     }
- 
-    if (ResourceMetrics) { 
+
+    if (ResourceMetrics) {
         ResourceMetrics->CPU.Increment(bookkeepingTimeuS + execTimeuS, Time->Now());
-        ResourceMetrics->TryUpdate(ctx); 
-    } 
+        ResourceMetrics->TryUpdate(ctx);
+    }
 }
 
 void TExecutor::MakeLogSnapshot() {
@@ -2308,7 +2308,7 @@ void TExecutor::MakeLogSnapshot() {
 
     LogicAlter->SnapToLog(snap);
     LogicRedo->SnapToLog(snap);
- 
+
     bool haveTxStatus = false;
 
     for (const auto& kvTable : Scheme().Tables) {
@@ -2674,7 +2674,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
     for (auto& kv : msg->GroupWrittenBytes) {
         totalBytes += kv.second;
     }
- 
+
     ui64 totalOps = 0;
     for (auto& kv : msg->GroupWrittenOps) {
         totalOps += kv.second;
@@ -2812,7 +2812,7 @@ void TExecutor::Handle(NBlockIO::TEvStat::TPtr &ev, const TActorContext &ctx) {
                 Counters->Cumulative()[TExecutorCounters::COMP_BYTES_WRITTEN].Increment(msg->Bytes);
                 Counters->Cumulative()[TExecutorCounters::COMP_BLOBS_WRITTEN].Increment(msg->Ops);
                 break;
-        } 
+        }
     } else {
         switch (msg->Dir) {
             case NBlockIO::EDir::Read:
@@ -3316,7 +3316,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
             executorCounters = Counters->MakeDiffForAggr(*CountersBaseline);
             Counters->RememberCurrentStateAsBaseline(*CountersBaseline);
- 
+
             if (ResourceMetrics && !Stats->IsFollower) {
                 // N.B. DB_UNIQUE_OUTER_BYTES is already part of DB_UNIQUE_DATA_BYTES, due to how BackingSize works
                 // We also include DB_UNIQUE_KEEP_BYTES as unreferenced data that cannot be deleted
@@ -3324,14 +3324,14 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
                         + Counters->Simple()[TExecutorCounters::DB_UNIQUE_ELOBS_BYTES].Get()
                         + Counters->Simple()[TExecutorCounters::DB_UNIQUE_KEEP_BYTES].Get();
 
-                ResourceMetrics->StorageSystem.Set(storageSize); 
+                ResourceMetrics->StorageSystem.Set(storageSize);
 
                 auto limit = Memory->Profile->GetStaticTabletTxMemoryLimit();
-                auto memorySize = limit ? (UsedTabletMemory + limit) : (UsedTabletMemory + memory.Static); 
-                ResourceMetrics->Memory.Set(memorySize); 
-                Counters->Simple()[TExecutorCounters::CONSUMED_STORAGE].Set(storageSize); 
-                Counters->Simple()[TExecutorCounters::CONSUMED_MEMORY].Set(memorySize); 
-            } 
+                auto memorySize = limit ? (UsedTabletMemory + limit) : (UsedTabletMemory + memory.Static);
+                ResourceMetrics->Memory.Set(memorySize);
+                Counters->Simple()[TExecutorCounters::CONSUMED_STORAGE].Set(storageSize);
+                Counters->Simple()[TExecutorCounters::CONSUMED_MEMORY].Set(memorySize);
+            }
         }
 
         if (AppCounters) {
@@ -3341,16 +3341,16 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 
         // tablet id + tablet type
         ui64 tabletId = Owner->TabletID();
-        auto tabletType = Owner->TabletType(); 
+        auto tabletType = Owner->TabletType();
         auto tenantPathId = Owner->Info()->TenantPathId;
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(SelfId().NodeId(), Stats->IsFollower);
         Send(countersAggregator, new TEvTabletCounters::TEvTabletAddCounters(
             CounterEventsInFlight, tabletId, tabletType, tenantPathId, executorCounters, externalTabletCounters));
- 
-        if (ResourceMetrics) { 
-            ResourceMetrics->TryUpdate(ctx); 
-        } 
+
+        if (ResourceMetrics) {
+            ResourceMetrics->TryUpdate(ctx);
+        }
     }
     Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateCounters());
 }
@@ -3358,7 +3358,7 @@ void TExecutor::UpdateCounters(const TActorContext &ctx) {
 float TExecutor::GetRejectProbability() const {
     // Limit number of in-flight TXs
     // TODO: make configurable
-    if (Stats->TxInFly > 10000) 
+    if (Stats->TxInFly > 10000)
         return 1.0;
 
     // Followers do not control compaction so let's always allow to read the data from follower
@@ -3633,11 +3633,11 @@ void TExecutor::RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
 
     if (Database) {
         HTML(str) {
-            str << "<style>"; 
-            str << "table.metrics { margin-bottom: 20px; }"; 
-            str << "table.metrics td { text-align: right; padding-right: 10px; }"; 
-            str << "table.metrics td:nth-child(3) { text-align: left; }"; 
-            str << "</style>"; 
+            str << "<style>";
+            str << "table.metrics { margin-bottom: 20px; }";
+            str << "table.metrics td { text-align: right; padding-right: 10px; }";
+            str << "table.metrics td:nth-child(3) { text-align: left; }";
+            str << "</style>";
             if (Counters) {
                 H3() {str << "Executor counters";}
                 Counters->OutputHtml(str);
@@ -3647,10 +3647,10 @@ void TExecutor::RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                 H3() {str << "App counters";}
                 AppCounters->OutputHtml(str);
             }
- 
-            if (ResourceMetrics) { 
-                str << NMetrics::AsHTML(*ResourceMetrics); 
-            } 
+
+            if (ResourceMetrics) {
+                str << NMetrics::AsHTML(*ResourceMetrics);
+            }
         }
     } else {
         HTML(str) {str << "loading...";} // todo: populate from bootlogic
@@ -3725,9 +3725,9 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
             H3() {str << "Scheme:";}
             TVector<ui32> tables;
             for (const auto &xtable : scheme->Tables)
-                tables.push_back(xtable.first); 
-            Sort(tables); 
-            for (auto itable : tables) { 
+                tables.push_back(xtable.first);
+            Sort(tables);
+            for (auto itable : tables) {
                 const auto &tinfo = scheme->Tables.find(itable)->second;
                 H4() {str << "<a href='db?TabletID=" << Owner->TabletID() << "&TableID=" << tinfo.Id << "'>Table: \"" << tinfo.Name << "\" id: " << tinfo.Id << "</a>";}
                 TABLE_SORTABLE_CLASS("table") {
@@ -3741,11 +3741,11 @@ void TExecutor::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev) const {
                     }
                     TABLEBODY() {
                         TVector<ui32> columns;
-                        for (const auto &xcol : tinfo.Columns) 
-                            columns.push_back(xcol.first); 
-                        Sort(columns); 
-                        for (auto icol : columns) { 
-                            const auto &col = tinfo.Columns.find(icol)->second; 
+                        for (const auto &xcol : tinfo.Columns)
+                            columns.push_back(xcol.first);
+                        Sort(columns);
+                        for (auto icol : columns) {
+                            const auto &col = tinfo.Columns.find(icol)->second;
                             const bool isKey = (tinfo.KeyColumns.end() != std::find(tinfo.KeyColumns.begin(), tinfo.KeyColumns.end(), col.Id));
                             TABLER() {
                                 TABLED() {str << col.Name;}
@@ -3823,12 +3823,12 @@ void TExecutor::RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> app
 }
 
 void TExecutor::GetTabletCounters(TEvTablet::TEvGetCounters::TPtr &ev) {
-    TAutoPtr<TEvTablet::TEvGetCountersResponse> response = new TEvTablet::TEvGetCountersResponse(); 
-    Counters->OutputProto(*response->Record.MutableTabletCounters()->MutableExecutorCounters()); 
-    AppCounters->OutputProto(*response->Record.MutableTabletCounters()->MutableAppCounters()); 
+    TAutoPtr<TEvTablet::TEvGetCountersResponse> response = new TEvTablet::TEvGetCountersResponse();
+    Counters->OutputProto(*response->Record.MutableTabletCounters()->MutableExecutorCounters());
+    AppCounters->OutputProto(*response->Record.MutableTabletCounters()->MutableAppCounters());
     Send(ev->Sender, response.Release(), 0, ev->Cookie);
-} 
- 
+}
+
 void TExecutor::UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr &ev) {
     Memory->SetProfiles(ev->Get()->ResourceProfiles);
     ReadResourceProfile();
@@ -3846,9 +3846,9 @@ void TExecutor::SendUserAuxUpdateToFollowers(TString upd, const TActorContext &c
 }
 
 NMetrics::TResourceMetrics* TExecutor::GetResourceMetrics() const {
-    return ResourceMetrics.Get(); 
-} 
- 
+    return ResourceMetrics.Get();
+}
+
 void TExecutor::ReadResourceProfile() {
     if (Database) {
         auto type = static_cast<TMemory::ETablet>(Owner->TabletType());
@@ -3875,7 +3875,7 @@ TString TExecutor::CheckBorrowConsistency() {
 TTransactionWaitPad::TTransactionWaitPad(THolder<TSeat> seat)
     : Seat(std::move(seat))
 {}
- 
+
 TTransactionWaitPad::~TTransactionWaitPad()
 {}
 

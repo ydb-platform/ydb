@@ -10,7 +10,7 @@
 #include <util/generic/store_policy.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
-#include <util/generic/typetraits.h> 
+#include <util/generic/typetraits.h>
 #include <util/generic/vector.h>
 #include <util/generic/ylimits.h>
 #include <util/system/compat.h>
@@ -260,28 +260,28 @@ struct TSetDelimiter: private TFindFirstOf<const Char> {
     }
 };
 
-namespace NSplitTargetHasPushBack { 
+namespace NSplitTargetHasPushBack {
     Y_HAS_MEMBER(push_back, PushBack);
-} 
- 
+}
+
 template <class T, class = void>
 struct TConsumerBackInserter;
- 
+
 template <class T>
 struct TConsumerBackInserter<T, std::enable_if_t<NSplitTargetHasPushBack::TClassHasPushBack<T>::value>> {
     static void DoInsert(T* C, const typename T::value_type& i) {
-        C->push_back(i); 
-    } 
-}; 
- 
-template <class T> 
+        C->push_back(i);
+    }
+};
+
+template <class T>
 struct TConsumerBackInserter<T, std::enable_if_t<!NSplitTargetHasPushBack::TClassHasPushBack<T>::value>> {
     static void DoInsert(T* C, const typename T::value_type& i) {
-        C->insert(C->end(), i); 
-    } 
-}; 
- 
-template <class T> 
+        C->insert(C->end(), i);
+    }
+};
+
+template <class T>
 struct TContainerConsumer {
     inline TContainerConsumer(T* c) noexcept
         : C(c)

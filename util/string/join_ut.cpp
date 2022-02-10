@@ -1,10 +1,10 @@
-#include "join.h" 
- 
+#include "join.h"
+
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/generic/vector.h> 
- 
+#include <util/generic/vector.h>
+
 #include <util/stream/output.h>
- 
+
 struct TCustomData {
     TVector<int> Ints;
 };
@@ -16,7 +16,7 @@ TString ToString(const TCustomData& d) {
 Y_UNIT_TEST_SUITE(JoinStringTest) {
     Y_UNIT_TEST(ScalarItems) {
         UNIT_ASSERT_EQUAL(Join(',', 10, 11.1, "foobar"), "10,11.1,foobar");
-        UNIT_ASSERT_EQUAL(Join(", ", 10, 11.1, "foobar"), "10, 11.1, foobar"); 
+        UNIT_ASSERT_EQUAL(Join(", ", 10, 11.1, "foobar"), "10, 11.1, foobar");
         UNIT_ASSERT_EQUAL(Join(", ", 10, 11.1, TString("foobar")), "10, 11.1, foobar");
 
         UNIT_ASSERT_EQUAL(Join('#', 0, "a", "foobar", -1.4, TStringBuf("aaa")), "0#a#foobar#-1.4#aaa");
@@ -24,19 +24,19 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
         UNIT_ASSERT_EQUAL(Join("", "a", "b", "c"), "abc");
         UNIT_ASSERT_EQUAL(Join("", "a", "b", "", "c"), "abc");
         UNIT_ASSERT_EQUAL(Join(" ", "a", "b", "", "c"), "a b  c");
-    } 
+    }
 
     Y_UNIT_TEST(IntContainerItems) {
-        int v[] = {1, 2, 3}; 
+        int v[] = {1, 2, 3};
         TVector<int> vv(v, v + 3);
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", vv), "1 2 3"); 
-        UNIT_ASSERT_EQUAL(JoinSeq(" ", vv), JoinRange(" ", vv.begin(), vv.end())); 
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", vv), "1 2 3");
+        UNIT_ASSERT_EQUAL(JoinSeq(" ", vv), JoinRange(" ", vv.begin(), vv.end()));
         UNIT_ASSERT_EQUAL(JoinRange(" ", v, v + 2), "1 2");
         UNIT_ASSERT_EQUAL(JoinSeq(" ", {}), "");
         UNIT_ASSERT_EQUAL(JoinSeq(" ", {42}), "42");
         UNIT_ASSERT_EQUAL(JoinSeq(" ", {1, 2, 3}), "1 2 3");
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(" ", v), "1 2 3");
-    } 
+    }
 
     Y_UNIT_TEST(StrContainerItems) {
         // try various overloads and template type arguments
@@ -160,4 +160,4 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
         UNIT_ASSERT_EQUAL(Join('a', 'a', 'a'), "97a97");
         UNIT_ASSERT_EQUAL(Join("a", "a", "a"), "aaa");
     }
-} 
+}

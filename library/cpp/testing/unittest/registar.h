@@ -458,7 +458,7 @@ public:                       \
         }                                                                                                                                      \
     } while (false)
 
-//strings 
+//strings
 #define UNIT_ASSERT_STRINGS_UNEQUAL_C(A, B, C)                                                           \
     do {                                                                                                 \
         const TString _a(A);                                                                             \
@@ -467,10 +467,10 @@ public:                       \
             auto&& msg = Sprintf("%s == %s %s", ToString(_a).data(), ToString(_b).data(), (::TStringBuilder() << C).data()); \
             UNIT_FAIL_IMPL("strings unequal assertion failed", msg);                                     \
         }                                                                                                \
-    } while (false) 
+    } while (false)
 
-#define UNIT_ASSERT_STRINGS_UNEQUAL(A, B) UNIT_ASSERT_STRINGS_UNEQUAL_C(A, B, "") 
- 
+#define UNIT_ASSERT_STRINGS_UNEQUAL(A, B) UNIT_ASSERT_STRINGS_UNEQUAL_C(A, B, "")
+
 //bool
 #define UNIT_ASSERT_C(A, C)                                                                             \
     do {                                                                                                \

@@ -126,7 +126,7 @@ private:
         if (nSize > 0)
             DataChunk(&data[0], sizeof(T) * nSize);
     }
- 
+
     template <class AM>
     void DoAnyMap(AM& data) {
         if (IsReading()) {
@@ -346,8 +346,8 @@ public:
     template <class T1, class T2, class T3, class T4>
     int Add(const chunk_id, TMap<T1, T2, T3, T4>* pMap) {
         DoAnyMap(*pMap);
-        return 0; 
-    } 
+        return 0;
+    }
     template <class T1, class T2, class T3, class T4, class T5>
     int Add(const chunk_id, THashMap<T1, T2, T3, T4, T5>* pHash) {
         DoAnyMap(*pHash);

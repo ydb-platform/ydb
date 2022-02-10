@@ -9,7 +9,7 @@ time_t GetDateStart(time_t ts) {
     memset(&dateTm, 0, sizeof(tm));
     localtime_r(&ts, &dateTm);
 
-    dateTm.tm_isdst = -1;
+    dateTm.tm_isdst = -1; 
 
     dateTm.tm_sec = 0;
     dateTm.tm_min = 0;

@@ -6,9 +6,9 @@ import collections
 import optparse
 import pipes
 
-from process_whole_archive_option import ProcessWholeArchiveOption
+from process_whole_archive_option import ProcessWholeArchiveOption 
 
-
+ 
 def shlex_join(cmd):
     # equivalent to shlex.join() in python 3
     return ' '.join(
@@ -147,7 +147,7 @@ def fix_cmd(arch, musl, c):
 
             return list(f(list(parse_export_file(fname))))
 
-        if p.endswith('.supp'):
+        if p.endswith('.supp'): 
             return []
 
         if p.endswith('.pkg.fake'):
@@ -167,8 +167,8 @@ def parse_args():
     parser.add_option('--fix-elf')
     parser.add_option('--linker-output')
     parser.add_option('--musl', action='store_true')
-    parser.add_option('--whole-archive-peers', action='append')
-    parser.add_option('--whole-archive-libs', action='append')
+    parser.add_option('--whole-archive-peers', action='append') 
+    parser.add_option('--whole-archive-libs', action='append') 
     return parser.parse_args()
 
 
@@ -179,7 +179,7 @@ if __name__ == '__main__':
     assert opts.target
 
     cmd = fix_cmd(opts.arch, opts.musl, args)
-    cmd = ProcessWholeArchiveOption(opts.arch, opts.whole_archive_peers, opts.whole_archive_libs).construct_cmd(cmd)
+    cmd = ProcessWholeArchiveOption(opts.arch, opts.whole_archive_peers, opts.whole_archive_libs).construct_cmd(cmd) 
 
     if opts.linker_output:
         stdout = open(opts.linker_output, 'w')

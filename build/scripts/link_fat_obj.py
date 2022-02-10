@@ -2,8 +2,8 @@ import argparse
 import subprocess
 import sys
 
-from process_whole_archive_option import ProcessWholeArchiveOption
-
+from process_whole_archive_option import ProcessWholeArchiveOption 
+ 
 YA_ARG_PREFIX = '-Ya,'
 
 
@@ -36,7 +36,7 @@ def get_args():
 
 
 def strip_suppression_files(srcs):
-    return [s for s in srcs if not s.endswith('.supp')]
+    return [s for s in srcs if not s.endswith('.supp')] 
 
 
 def main():
@@ -52,14 +52,14 @@ def main():
     # Dependencies
     global_srcs = groups['global_srcs']
     global_srcs = strip_suppression_files(global_srcs)
-    global_srcs = ProcessWholeArchiveOption(args.arch).construct_cmd(global_srcs)
+    global_srcs = ProcessWholeArchiveOption(args.arch).construct_cmd(global_srcs) 
     peers = groups['peers']
 
     # Tools
     linker = groups['linker']
     archiver = groups['archiver']
 
-    do_link = linker + ['-o', obj_output, '-Wl,-r', '-nodefaultlibs', '-nostartfiles'] + global_srcs + auto_input
+    do_link = linker + ['-o', obj_output, '-Wl,-r', '-nodefaultlibs', '-nostartfiles'] + global_srcs + auto_input 
     do_archive = archiver + [lib_output] + peers
     do_globals = None
     if args.globals_lib:

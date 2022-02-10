@@ -43,9 +43,9 @@ class Swig(iw.CustomCommand):
         elif self._swig_lang in ['jni_cpp', 'jni_java']:
             lang_specific_incl_dir = 'java'
         incl_dirs = [
-            "FOR", "swig",
+            "FOR", "swig", 
             posixpath.join(self._library_dir, lang_specific_incl_dir),
-            "FOR", "swig",
+            "FOR", "swig", 
             self._library_dir
         ]
         self._incl_dirs = ['$S', '$B'] + [posixpath.join('$S', d) for d in incl_dirs]

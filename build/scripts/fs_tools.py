@@ -6,9 +6,9 @@ import sys
 import shutil
 import errno
 
-import process_command_files as pcf
-
-
+import process_command_files as pcf 
+ 
+ 
 def link_or_copy(src, dst):
     try:
         if platform.system().lower() == 'windows':
@@ -25,7 +25,7 @@ def link_or_copy(src, dst):
 
 if __name__ == '__main__':
     mode = sys.argv[1]
-    args = pcf.get_args(sys.argv[2:])
+    args = pcf.get_args(sys.argv[2:]) 
 
     if mode == 'copy':
         shutil.copy(args[0], args[1])

@@ -59,8 +59,8 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
             )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
         }
-
-        driver.Stop(true);
+ 
+        driver.Stop(true); 
     }
 
     Y_UNIT_TEST(ReadSuccess) {
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
             SELECT * FROM `/Root/TwoShard`;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
-        driver.Stop(true);
+        driver.Stop(true); 
     }
 
     Y_UNIT_TEST(WriteSuccess) {
@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(KqpNewEngineAcl) {
                 (10u, "One", -10);
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
-        driver.Stop(true);
+        driver.Stop(true); 
     }
 
     Y_UNIT_TEST(RecursiveCreateTableShouldSuccess) {

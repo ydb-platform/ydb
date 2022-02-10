@@ -7,7 +7,7 @@ from six import iteritems
 from hamcrest.core.base_matcher import BaseMatcher
 from hamcrest.core.helpers.wrap_matcher import wrap_matcher
 
-from ydb.tests.library.common.msgbus_types import MessageBusStatus
+from ydb.tests.library.common.msgbus_types import MessageBusStatus 
 
 __author__ = 'asatarin@yandex-team.ru'
 
@@ -32,35 +32,35 @@ class FakeProtobuf(object):
     """
 
     def __init__(self, **kwargs):
-        self.__dict__['_data'] = dict()
+        self.__dict__['_data'] = dict() 
         for k, v in iteritems(kwargs):
             if v is not None:
                 setattr(self, k, v)
 
     def __getattr__(self, name):
-        ret = self._data.get(name, None)
+        ret = self._data.get(name, None) 
         if ret is None:
             ret = FakeProtobuf()
-            self._data[name] = ret
+            self._data[name] = ret 
         return ret
 
     def __setattr__(self, name, value):
         if isinstance(value, list):
-            self._data[name] = value
+            self._data[name] = value 
         else:
-            self._data[name] = wrap_matcher(value)
+            self._data[name] = wrap_matcher(value) 
 
     def __getitem__(self, name):
-        return self._data.get(name, None)
+        return self._data.get(name, None) 
 
     def __len__(self):
-        return len(self._data)
+        return len(self._data) 
 
     def __str__(self):
         return str(map(lambda x: (x[0], str(x[1])), iter(self)))
 
     def __iter__(self):
-        return iter(sorted(self._data.items(), key=lambda x: x[0]))
+        return iter(sorted(self._data.items(), key=lambda x: x[0])) 
 
 
 class AbstractProtobufMatcher(BaseMatcher):
@@ -110,10 +110,10 @@ class AbstractProtobufMatcher(BaseMatcher):
             return matcher.matches(actual_protobuf)
         elif isinstance(matcher, list):
             return len(actual_protobuf) == len(matcher) and \
-                all(
-                    self.__match(item, actual_protobuf[i])
-                    for i, item in enumerate(matcher)
-                )
+                all( 
+                    self.__match(item, actual_protobuf[i]) 
+                    for i, item in enumerate(matcher) 
+                ) 
         else:
             return all(
                 self.__match(value, getattr(actual_protobuf, name))

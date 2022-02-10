@@ -107,12 +107,12 @@ private:
 
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
-        if (record.GetResourceExhausted()) {
+        if (record.GetResourceExhausted()) { 
             Request().ReplyWithRpcStatus(grpc::StatusCode::RESOURCE_EXHAUSTED, record.GetError());
-            Die(ctx);
-            return;
-        }
-
+            Die(ctx); 
+            return; 
+        } 
+ 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             const auto& kqpResponse = record.GetResponse();
             Ydb::Table::CreateSessionResult result;

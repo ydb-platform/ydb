@@ -1,5 +1,5 @@
-
-import six
+ 
+import six 
 import time
 import random
 from collections import defaultdict
@@ -95,7 +95,7 @@ class Reason(object):
         def __init__(self, left, right):
             self.left = left
             self.right = right
-
+ 
         def produced_order(self):
             return (self.left, self.right)
 
@@ -227,7 +227,7 @@ class SerializabilityChecker(object):
         self.reasons = defaultdict(list)
 
     def prepare_keys(self, cnt):
-        for key in six.moves.range(0, cnt + 1):
+        for key in six.moves.range(0, cnt + 1): 
             assert key not in self.keys, 'Multiple prepare calls'
             self.keys[key] = KeyInfo(self.initial_node)
             self.initial_node.writes.add(key)
@@ -376,7 +376,7 @@ class SerializabilityChecker(object):
         node.writes.add(key)
 
     def commit(self, node):
-        for key, write in node.reads.items():
+        for key, write in node.reads.items(): 
             assert write in node.dependencies
             assert key in self.keys, 'Key %r was not prepared properly' % (key,)
             info = self.keys[key]
@@ -427,7 +427,7 @@ class SerializabilityChecker(object):
                 ext = set()
                 for dep in node.dependencies:
                     if dep in ext:
-                        continue  # already visited indirectly
+                        continue  # already visited indirectly 
                     dfs(dep)
                     if self.explain:
                         for k in dep.dependencies:
@@ -457,7 +457,7 @@ class SerializabilityChecker(object):
     def _fill_reverse_dependencies(self):
         """Makes sure all committed nodes have reverse dependencies initialized"""
         for node in self.committed:
-            for key, write in node.reads.items():
+            for key, write in node.reads.items(): 
                 assert write in node.dependencies
                 write.rev_reads[key].add(node)
             for dep in node.dependencies:
@@ -535,7 +535,7 @@ class SerializabilityChecker(object):
             rows = [['tx \\ key'] + ['key %r' % (key,) for key in keys] + ['description']]
             for node_id in nodes:
                 if node_id == 0:
-                    continue  # don't care
+                    continue  # don't care 
                 node = self.nodes.get(node_id)
                 values_reads = []
                 values_writes = []
@@ -605,16 +605,16 @@ class SerializabilityChecker(object):
             """Processes reads that observed this write and dependencies"""
             # Search for W->R->W2 ordering based on W->W2
             for write2 in list(write.rev_dependencies):
-                for key, reads in write.rev_reads.items():
+                for key, reads in write.rev_reads.items(): 
                     if key not in write2.writes:
-                        continue  # no intersection
+                        continue  # no intersection 
                     # Look for R that is not yet R->W2
                     for read in reads.difference(write2.dependencies):
                         if read is write2:
-                            continue  # R is W2
+                            continue  # R is W2 
                         if is_ordered(read, write2):
-                            continue  # already ordered
-                        # We must add R->W2
+                            continue  # already ordered 
+                        # We must add R->W2 
                         if self.explain:
                             self._add_reason(Reason.OrderingWRW(key, write.value, read.value, write2.value))
                         ensure_order(read, write2)
@@ -623,11 +623,11 @@ class SerializabilityChecker(object):
             """Processes writes that this read observed and dependencies"""
             # Search for RW1->W->R ordering based on RW1->R
             for rw1 in list(read.dependencies):
-                for key, write in read.reads.items():
+                for key, write in read.reads.items(): 
                     if rw1 is write:
-                        continue  # RW1 is W
+                        continue  # RW1 is W 
                     if is_ordered(rw1, write):
-                        continue  # already ordered
+                        continue  # already ordered 
                     if key in rw1.writes:
                         # We must add W1->W (key was not overwritten)
                         if self.explain:

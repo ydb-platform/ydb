@@ -4,8 +4,8 @@ import logging
 import os
 import time
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory 
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator 
 
 logger = logging.getLogger(__name__)
 
@@ -48,19 +48,19 @@ LogConfig {
 
     @classmethod
     def setup_class(cls):
-        configurator = KikimrConfigGenerator()
+        configurator = KikimrConfigGenerator() 
         cls.cluster = kikimr_cluster_factory(configurator=configurator)
         cls.cluster.start()
-        cls.cluster.create_database(
-            '/Root/database',
-            storage_pool_units_count={'hdd': 1}
-        )
-        cls.cluster.register_and_start_slots('/Root/database', count=1)
-        cls.cluster.wait_tenant_up('/Root/database')
+        cls.cluster.create_database( 
+            '/Root/database', 
+            storage_pool_units_count={'hdd': 1} 
+        ) 
+        cls.cluster.register_and_start_slots('/Root/database', count=1) 
+        cls.cluster.wait_tenant_up('/Root/database') 
 
     @classmethod
     def teardown_class(cls):
-        cls.cluster.stop()
+        cls.cluster.stop() 
 
     def _cms_config_cache_file_path(self):
         slot = self.cluster.slots[1]

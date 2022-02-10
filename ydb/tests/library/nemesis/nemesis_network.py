@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import random
 
-from ydb.tests.library.nemesis.nemesis_core import Nemesis
-from ydb.tests.library.nemesis.network.client import NetworkClient
+from ydb.tests.library.nemesis.nemesis_core import Nemesis 
+from ydb.tests.library.nemesis.network.client import NetworkClient 
 
 
 class NetworkNemesis(Nemesis):

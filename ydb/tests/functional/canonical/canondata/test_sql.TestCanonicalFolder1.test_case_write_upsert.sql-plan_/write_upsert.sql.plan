@@ -1,61 +1,61 @@
-{
-    "meta": {
-        "version": "0.1",
-        "type": "query"
-    },
-    "tables": [
-        {
-            "name": "/local/base_write_upsert_sql_plan/Input",
-            "reads": [
-                {
-                    "type": "Scan",
-                    "scan_by": [
-                        "key [-inf, \"5\")",
-                        "subkey"
-                    ],
-                    "columns": [
-                        "key",
-                        "subkey"
-                    ]
-                }
-            ],
-            "writes": [
-                {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "key (expr)",
-                        "subkey (expr)"
-                    ],
-                    "columns": [
-                        "value"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "/local/base_write_upsert_sql_plan/Input1",
-            "writes": [
-                {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
-                    "columns": [
-                        "Amount"
-                    ]
-                },
-                {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
-                    "columns": [
-                        "Comment"
-                    ]
-                }
-            ]
-        }
-    ]
-}
+{ 
+    "meta": { 
+        "version": "0.1", 
+        "type": "query" 
+    }, 
+    "tables": [ 
+        { 
+            "name": "/local/base_write_upsert_sql_plan/Input", 
+            "reads": [ 
+                { 
+                    "type": "Scan", 
+                    "scan_by": [ 
+                        "key [-inf, \"5\")", 
+                        "subkey" 
+                    ], 
+                    "columns": [ 
+                        "key", 
+                        "subkey" 
+                    ] 
+                } 
+            ], 
+            "writes": [ 
+                { 
+                    "type": "MultiUpsert", 
+                    "key": [ 
+                        "key (expr)", 
+                        "subkey (expr)" 
+                    ], 
+                    "columns": [ 
+                        "value" 
+                    ] 
+                } 
+            ] 
+        }, 
+        { 
+            "name": "/local/base_write_upsert_sql_plan/Input1", 
+            "writes": [ 
+                { 
+                    "type": "MultiUpsert", 
+                    "key": [ 
+                        "Group (expr)", 
+                        "Name (expr)" 
+                    ], 
+                    "columns": [ 
+                        "Amount" 
+                    ] 
+                }, 
+                { 
+                    "type": "MultiUpsert", 
+                    "key": [ 
+                        "Group (expr)", 
+                        "Name (expr)" 
+                    ], 
+                    "columns": [ 
+                        "Comment" 
+                    ] 
+                } 
+            ] 
+        } 
+    ] 
+} 

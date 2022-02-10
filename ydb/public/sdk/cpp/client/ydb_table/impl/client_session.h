@@ -32,8 +32,8 @@ public:
         S_IDLE,
         S_BROKEN,
         S_ACTIVE,
-        S_DISCONNECTED,
-        S_CLOSING
+        S_DISCONNECTED, 
+        S_CLOSING 
     };
 
     struct TDataQueryInfo {
@@ -53,7 +53,7 @@ public:
     const TString& GetId() const;
     const TString& GetEndpoint() const;
     void MarkBroken();
-    void MarkAsClosing();
+    void MarkAsClosing(); 
     void MarkStandalone();
     void MarkActive();
     void MarkIdle();

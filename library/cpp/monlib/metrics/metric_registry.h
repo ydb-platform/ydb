@@ -3,7 +3,7 @@
 #include "labels.h"
 #include "metric.h"
 
-#include <util/system/rwlock.h>
+#include <util/system/rwlock.h> 
 
 #include <library/cpp/threading/light_rw_lock/lightrwlock.h>
 
@@ -116,7 +116,7 @@ namespace NMonitoring {
                 IHistogramCollectorPtr collector) override;
 
     private:
-        TRWMutex Lock_;
+        TRWMutex Lock_; 
         THashMap<ILabelsPtr, IMetricPtr> Metrics_;
 
         template <typename TMetric, EMetricType type, typename TLabelsType, typename... Args>

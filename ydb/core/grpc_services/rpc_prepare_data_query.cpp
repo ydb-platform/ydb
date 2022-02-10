@@ -77,13 +77,13 @@ public:
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record.GetRef();
         SetCost(record.GetConsumedRu());
-        AddServerHintsIfAny(record);
+        AddServerHintsIfAny(record); 
 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             const auto& kqpResponse = record.GetResponse();
             const auto& queryId = kqpResponse.GetPreparedQuery();
             const auto& issueMessage = kqpResponse.GetQueryIssues();
-            const auto& queryParameters = kqpResponse.GetQueryParameters();
+            const auto& queryParameters = kqpResponse.GetQueryParameters(); 
 
             Ydb::TOperationId opId;
             opId.SetKind(TOperationId::PREPARED_QUERY_ID);
@@ -92,11 +92,11 @@ public:
 
             Ydb::Table::PrepareQueryResult queryResult;
             queryResult.set_query_id(ProtoToString(opId));
-            for (const auto& queryParameter: queryParameters) {
-                Ydb::Type parameterType;
-                ConvertMiniKQLTypeToYdbType(queryParameter.GetType(), parameterType);
-                queryResult.mutable_parameters_types()->insert({queryParameter.GetName(), parameterType});
-            }
+            for (const auto& queryParameter: queryParameters) { 
+                Ydb::Type parameterType; 
+                ConvertMiniKQLTypeToYdbType(queryParameter.GetType(), parameterType); 
+                queryResult.mutable_parameters_types()->insert({queryParameter.GetName(), parameterType}); 
+            } 
             ReplyWithResult(Ydb::StatusIds::SUCCESS, issueMessage, queryResult, ctx);
         } else {
             return OnGenericQueryResponseError(record, ctx);

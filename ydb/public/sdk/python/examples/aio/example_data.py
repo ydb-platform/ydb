@@ -2,7 +2,7 @@
 
 
 class Series(object):
-    __slots__ = ("series_id", "title", "release_date", "series_info")
+    __slots__ = ("series_id", "title", "release_date", "series_info") 
 
     def __init__(self, series_id, title, release_date, series_info):
         self.series_id = series_id
@@ -12,7 +12,7 @@ class Series(object):
 
 
 class Season(object):
-    __slots__ = ("series_id", "season_id", "title", "first_aired", "last_aired")
+    __slots__ = ("series_id", "season_id", "title", "first_aired", "last_aired") 
 
     def __init__(self, series_id, season_id, title, first_aired, last_aired):
         self.series_id = series_id
@@ -23,7 +23,7 @@ class Season(object):
 
 
 class Episode(object):
-    __slots__ = ("series_id", "season_id", "episode_id", "title", "air_date")
+    __slots__ = ("series_id", "season_id", "episode_id", "title", "air_date") 
 
     def __init__(self, series_id, season_id, episode_id, title, air_date):
         self.series_id = series_id
@@ -35,20 +35,20 @@ class Episode(object):
 
 def get_series_data():
     return [
-        Series(
-            1,
-            "IT Crowd",
-            "2006-02-03",
-            "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "
-            "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry.",
-        ),
-        Series(
-            2,
-            "Silicon Valley",
-            "2014-04-06",
-            "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and "
-            "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.",
-        ),
+        Series( 
+            1, 
+            "IT Crowd", 
+            "2006-02-03", 
+            "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by " 
+            "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry.", 
+        ), 
+        Series( 
+            2, 
+            "Silicon Valley", 
+            "2014-04-06", 
+            "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and " 
+            "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.", 
+        ), 
     ]
 
 
@@ -62,7 +62,7 @@ def get_seasons_data():
         Season(2, 2, "Season 2", "2015-04-12", "2015-06-14"),
         Season(2, 3, "Season 3", "2016-04-24", "2016-06-26"),
         Season(2, 4, "Season 4", "2017-04-23", "2017-06-25"),
-        Season(2, 5, "Season 5", "2018-03-25", "2018-05-13"),
+        Season(2, 5, "Season 5", "2018-03-25", "2018-05-13"), 
     ]
 
 

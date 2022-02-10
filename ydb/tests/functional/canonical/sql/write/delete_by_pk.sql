@@ -1,2 +1,2 @@
-DELETE FROM Input
-WHERE key == 3 AND subkey == 4;
+DELETE FROM Input 
+WHERE key == 3 AND subkey == 4; 

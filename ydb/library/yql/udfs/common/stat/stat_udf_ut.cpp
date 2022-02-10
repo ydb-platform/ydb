@@ -5,7 +5,7 @@
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <util/random/random.h>
-#include <util/system/sanitizers.h>
+#include <util/system/sanitizers.h> 
 #include <array>
 
 namespace NYql {
@@ -358,6 +358,6 @@ using namespace NKikimr::NMiniKQL;
             UNIT_ASSERT(value);
             double digestValue = value.Get<double>();
             UNIT_ASSERT_EQUAL(digestValue, majorityValue);
-        }
+        } 
     }
 }

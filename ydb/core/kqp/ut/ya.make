@@ -7,16 +7,16 @@ OWNER(
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    TIMEOUT(2400)
-    TAG(ya:fat)
-    SIZE(LARGE)
-    SPLIT_FACTOR(40)
-ELSE()
-    SPLIT_FACTOR(40)
-    TIMEOUT(600)
-    SIZE(MEDIUM)
-ENDIF()
+IF (WITH_VALGRIND) 
+    TIMEOUT(2400) 
+    TAG(ya:fat) 
+    SIZE(LARGE) 
+    SPLIT_FACTOR(40) 
+ELSE() 
+    SPLIT_FACTOR(40) 
+    TIMEOUT(600) 
+    SIZE(MEDIUM) 
+ENDIF() 
 
 SRCS(
     kqp_acl_ut.cpp
@@ -79,6 +79,6 @@ END()
 RECURSE(
     fat
     ../rm/ut
-    ../proxy/ut
+    ../proxy/ut 
     ../runtime/ut
 )

@@ -11,10 +11,10 @@ from hamcrest import (
     not_none
 )
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.util import LogLevels
-import ydb
+from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory 
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator 
+from ydb.tests.library.harness.util import LogLevels 
+import ydb 
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,8 @@ class BaseDbCounters(object):
 
     def setup_method(self, method=None):
         self.database = "/Root/users/{class_name}_{method_name}".format(
-            class_name=self.__class__.__name__,
-            method_name=method.__name__,
+            class_name=self.__class__.__name__, 
+            method_name=method.__name__, 
         )
         logger.debug("Create database %s" % self.database)
         self.cluster.create_database(
@@ -49,9 +49,9 @@ class BaseDbCounters(object):
             }
         )
 
-        self.cluster.register_and_start_slots(self.database, count=1)
-        self.cluster.wait_tenant_up(self.database)
-
+        self.cluster.register_and_start_slots(self.database, count=1) 
+        self.cluster.wait_tenant_up(self.database) 
+ 
     def teardown_method(self, method=None):
         logger.debug("Remove database %s" % self.database)
         self.cluster.remove_database(self.database)

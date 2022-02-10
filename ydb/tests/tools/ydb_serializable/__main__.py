@@ -4,7 +4,7 @@ import time
 import signal
 import multiprocessing
 from argparse import ArgumentParser
-from ydb.tests.tools.ydb_serializable.lib import (
+from ydb.tests.tools.ydb_serializable.lib import ( 
     DatabaseChecker,
     DatabaseCheckerOptions,
     DummyLogger,
@@ -17,7 +17,7 @@ def main():
     parser.add_argument('-e', '--endpoint', required=True)
     parser.add_argument('-d', '--database', required=True)
     parser.add_argument('-p', '--path', default=None)
-    parser.add_argument('-o', '--output-path', default='')
+    parser.add_argument('-o', '--output-path', default='') 
     parser.add_argument('-r', dest='nreaders', type=int, default=100, help='Number of coroutines with point-key reads, default 100')
     parser.add_argument('-w', dest='nwriters', type=int, default=100, help='Number of coroutines with point-key writes, default 100')
     parser.add_argument('-rw', dest='nreadwriters', type=int, default=100, help='Number of coroutines with point-key read/writes, default 100')
@@ -66,7 +66,7 @@ def main():
                 try:
                     checker.run(options)
                 except SerializabilityError as e:
-                    e.history.write_to_file(os.path.join(args.output_path, os.path.basename(e.table) + '_history.json'))
+                    e.history.write_to_file(os.path.join(args.output_path, os.path.basename(e.table) + '_history.json')) 
                     raise
 
                 if iterations is not None:
@@ -81,7 +81,7 @@ def main():
         signal.signal(signal.SIGTERM, handler)
 
         processes = []
-        for _ in range(args.processes):
+        for _ in range(args.processes): 
             processes.append(multiprocessing.Process(target=run_single))
 
         def reap_children():

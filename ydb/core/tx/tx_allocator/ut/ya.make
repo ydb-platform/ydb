@@ -7,9 +7,9 @@ OWNER(
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
+TIMEOUT(600) 
 
-SIZE(MEDIUM)
+SIZE(MEDIUM) 
 
 PEERDIR(
     library/cpp/testing/unittest

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-import json
+import json 
 import logging
 
-from six.moves.urllib.request import urlopen
-from six.moves.urllib.parse import urlencode
+from six.moves.urllib.request import urlopen 
+from six.moves.urllib.parse import urlencode 
 
 logger = logging.getLogger()
 TIMEOUT = 120
@@ -20,12 +20,12 @@ class HiveClient(object):
             hive_id=self.__hive_id
         )
 
-    def __get(self, url, timeout):
-        u = urlopen(url, timeout=TIMEOUT)
-        u.read()
-
+    def __get(self, url, timeout): 
+        u = urlopen(url, timeout=TIMEOUT) 
+        u.read() 
+ 
     def rebalance_all_tablets(self):
-        self.__get(
+        self.__get( 
             self.__url + '&page=Rebalance',
             timeout=TIMEOUT
         )
@@ -39,7 +39,7 @@ class HiveClient(object):
         if channels:
             url_lst.append('channel=' + ','.join(map(str, channels)))
 
-        self.__get('&'.join(url_lst), timeout=TIMEOUT)
+        self.__get('&'.join(url_lst), timeout=TIMEOUT) 
 
     def change_tablet_group_by_tablet_type(self, tablet_type, percent=None, channels=()):
         url_lst = [
@@ -53,17 +53,17 @@ class HiveClient(object):
             )
         if channels:
             url_lst.append('channel=' + ','.join(map(str, channels)))
-        self.__get('&'.join(url_lst), timeout=TIMEOUT)
+        self.__get('&'.join(url_lst), timeout=TIMEOUT) 
 
     def kick_tablets_from_node(self, node_id):
-        self.__get(
+        self.__get( 
             self.__url + "&page=KickNode&node={node}".format(node=node_id),
             timeout=TIMEOUT
         )
 
     def block_node(self, node_id, block=True):
         block = '1' if block else '0'
-        self.__get(
+        self.__get( 
             self.__url + "&page=SetDown&node={node}&down={down}".format(node=node_id, down=block),
             timeout=TIMEOUT
         )
@@ -72,7 +72,7 @@ class HiveClient(object):
         self.block_node(node_id, block=False)
 
     def change_tablet_weight(self, tablet_id, tablet_weight):
-        self.__get(
+        self.__get( 
             self.__url + "&page=UpdateResources&tablet={tablet}&kv={size}".format(
                 tablet=tablet_id,
                 size=tablet_weight
@@ -81,7 +81,7 @@ class HiveClient(object):
         )
 
     def change_tablet_cpu_usage(self, tablet_id, cpu_usage):
-        self.__get(
+        self.__get( 
             self.__url + "&page=UpdateResources&tablet={tablet}&cpu={size}".format(
                 tablet=tablet_id,
                 size=cpu_usage
@@ -93,13 +93,13 @@ class HiveClient(object):
         """
         min_scatter_to_balance=101 -- effectively disables auto rebalancing
         """
-        self.__get(
+        self.__get( 
             self.__url + "&page=Settings&minScatterToBalance={min_scatter_to_balance}".format(
-                min_scatter_to_balance=min_scatter_to_balance), timeout=TIMEOUT
+                min_scatter_to_balance=min_scatter_to_balance), timeout=TIMEOUT 
         )
 
     def set_max_scheduled_tablets(self, max_scheduled_tablets=10):
-        self.__get(
+        self.__get( 
             self.__url + "&page=Settings&maxScheduledTablets={max_scheduled_tablets}".format(
                 max_scheduled_tablets=max_scheduled_tablets
             ),
@@ -107,7 +107,7 @@ class HiveClient(object):
         )
 
     def set_max_boot_batch_size(self, max_boot_batch_size=10):
-        self.__get(
+        self.__get( 
             self.__url + "&page=Settings&maxBootBatchSize={max_boot_batch_size}".format(
                 max_boot_batch_size=max_boot_batch_size
             ),
@@ -129,15 +129,15 @@ class SwaggerClient(object):
             port=port
         )
 
-    def __get(self, url, timeout):
-        u = urlopen(url, timeout=TIMEOUT)
-        return json.load(u)
-
+    def __get(self, url, timeout): 
+        u = urlopen(url, timeout=TIMEOUT) 
+        return json.load(u) 
+ 
     def __http_get_and_parse_json(self, path, **kwargs):
-        params = urlencode(kwargs)
+        params = urlencode(kwargs) 
         url = self.__url + path + "?" + params
-        response = self.__get(url, timeout=TIMEOUT)
-        return response
+        response = self.__get(url, timeout=TIMEOUT) 
+        return response 
 
     def hive_info_by_tablet_id(self, tablet_id):
         return self.__hive_info(tablet_id=tablet_id)

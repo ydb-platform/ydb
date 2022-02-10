@@ -238,11 +238,11 @@ IF (OS_WINDOWS)
         -DKIKIMR_DISABLE_S3_OPS
     )
 ELSE()
-    SRCS(
+    SRCS( 
         export_s3_buffer.cpp
         export_s3_uploader.cpp
-        import_s3.cpp
-    )
+        import_s3.cpp 
+    ) 
 ENDIF()
 
 END()

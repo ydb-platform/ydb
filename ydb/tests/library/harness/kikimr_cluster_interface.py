@@ -1,89 +1,89 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-import abc
+#!/usr/bin/env python 
+# -*- coding: utf-8 -*- 
+import abc 
 import logging
 import time
-
-from ydb.tests.library.common.wait_for import wait_for
-from .kikimr_client import kikimr_client_factory
-from ydb.tests.library.common.protobuf_console import (
+ 
+from ydb.tests.library.common.wait_for import wait_for 
+from .kikimr_client import kikimr_client_factory 
+from ydb.tests.library.common.protobuf_console import ( 
     CreateTenantRequest, AlterTenantRequest, GetTenantStatusRequest,
-    RemoveTenantRequest, GetOperationRequest)
+    RemoveTenantRequest, GetOperationRequest) 
 import ydb.public.api.protos.ydb_cms_pb2 as cms_tenants_pb
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
-
-
+ 
+ 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
-class KiKiMRClusterInterface(object):
-    __metaclass__ = abc.ABCMeta
-
-    def __init__(self):
-        self.__client = None
-        self.__clients = None
-        self.__monitors = None
-        self.__ready_timeout_seconds = 60
-
-    @property
-    def monitors(self):
-        if self.__monitors is None:
-            self.__monitors = [node.monitor for node in self.nodes.values()]
-        return self.__monitors
-
-    @abc.abstractproperty
-    def nodes(self):
-        """
-        :return: dictionary for node_id -> KikimrNodeInterface
-        """
-        pass
-
-    @abc.abstractproperty
-    def slots(self):
-        pass
-
-    @abc.abstractmethod
-    def start(self):
-        pass
-
-    @property
-    def hostnames(self):
-        return sorted(
-            map(
-                lambda node: node.host,
-                self.nodes.values(),
-            )
-        )
-
-    @abc.abstractmethod
-    def stop(self):
-        pass
-
-    @abc.abstractproperty
-    def config(self):
-        pass
-
-    @abc.abstractmethod
+class KiKiMRClusterInterface(object): 
+    __metaclass__ = abc.ABCMeta 
+ 
+    def __init__(self): 
+        self.__client = None 
+        self.__clients = None 
+        self.__monitors = None 
+        self.__ready_timeout_seconds = 60 
+ 
+    @property 
+    def monitors(self): 
+        if self.__monitors is None: 
+            self.__monitors = [node.monitor for node in self.nodes.values()] 
+        return self.__monitors 
+ 
+    @abc.abstractproperty 
+    def nodes(self): 
+        """ 
+        :return: dictionary for node_id -> KikimrNodeInterface 
+        """ 
+        pass 
+ 
+    @abc.abstractproperty 
+    def slots(self): 
+        pass 
+ 
+    @abc.abstractmethod 
+    def start(self): 
+        pass 
+ 
+    @property 
+    def hostnames(self): 
+        return sorted( 
+            map( 
+                lambda node: node.host, 
+                self.nodes.values(), 
+            ) 
+        ) 
+ 
+    @abc.abstractmethod 
+    def stop(self): 
+        pass 
+ 
+    @abc.abstractproperty 
+    def config(self): 
+        pass 
+ 
+    @abc.abstractmethod 
     def add_storage_pool(self, name=None, kind="rot", pdisk_user_kind=0, erasure=None):
-        """
-        Adds storage pool to the cluster
-        :param erasure: Erasure for storage pool
-        :return:
-        """
-
-    @property
-    def client(self):
-        # TODO(gvit): this a legacy method, please remove it
-        if self.__client is None:
-            self.__client = kikimr_client_factory(
-                server=self.nodes[1].host,
-                port=self.nodes[1].grpc_port,
-                cluster=self,
-                retry_count=10,
-            )
-        return self.__client
-
+        """ 
+        Adds storage pool to the cluster 
+        :param erasure: Erasure for storage pool 
+        :return: 
+        """ 
+ 
+    @property 
+    def client(self): 
+        # TODO(gvit): this a legacy method, please remove it 
+        if self.__client is None: 
+            self.__client = kikimr_client_factory( 
+                server=self.nodes[1].host, 
+                port=self.nodes[1].grpc_port, 
+                cluster=self, 
+                retry_count=10, 
+            ) 
+        return self.__client 
+ 
     def get_database_status(self, database_name):
         response = self.client.send_request(
             GetTenantStatusRequest(database_name).protobuf,
@@ -99,12 +99,12 @@ class KiKiMRClusterInterface(object):
         response.Response.operation.result.Unpack(result)
         return result
 
-    def wait_tenant_up(self, database_name):
-        self.__wait_tenant_up(
-            database_name,
-            expected_computational_units=1
-        )
-
+    def wait_tenant_up(self, database_name): 
+        self.__wait_tenant_up( 
+            database_name, 
+            expected_computational_units=1 
+        ) 
+ 
     def __wait_tenant_up(
             self,
             database_name,
@@ -146,20 +146,20 @@ class KiKiMRClusterInterface(object):
             if operation.ready:
                 return operation
 
-    def create_database(
-            self,
-            database_name,
-            storage_pool_units_count,
+    def create_database( 
+            self, 
+            database_name, 
+            storage_pool_units_count, 
             disable_external_subdomain=False,
-            timeout_seconds=120
-    ):
-        req = CreateTenantRequest(database_name)
-        for storage_pool_type_name, units_count in storage_pool_units_count.items():
-            req = req.add_storage_pool(
-                storage_pool_type_name,
-                units_count,
-            )
-
+            timeout_seconds=120 
+    ): 
+        req = CreateTenantRequest(database_name) 
+        for storage_pool_type_name, units_count in storage_pool_units_count.items(): 
+            req = req.add_storage_pool( 
+                storage_pool_type_name, 
+                units_count, 
+            ) 
+ 
         if disable_external_subdomain:
             req.disable_external_subdomain()
 
@@ -171,14 +171,14 @@ class KiKiMRClusterInterface(object):
             operation = self.__wait_console_op(operation.id, timeout_seconds=timeout_seconds)
         if operation.status != StatusIds.SUCCESS:
             raise RuntimeError('create_database failed: %s' % (operation.status,))
-
+ 
         self.__wait_tenant_up(
             database_name,
-            expected_computational_units=0,
+            expected_computational_units=0, 
             timeout_seconds=timeout_seconds
         )
         return database_name
-
+ 
     def create_hostel_database(
             self,
             database_name,
@@ -203,11 +203,11 @@ class KiKiMRClusterInterface(object):
 
         self.__wait_tenant_up(
             database_name,
-            expected_computational_units=0,
+            expected_computational_units=0, 
             timeout_seconds=timeout_seconds
-        )
-        return database_name
-
+        ) 
+        return database_name 
+ 
     def create_serverless_database(
             self,
             database_name,
@@ -307,9 +307,9 @@ class KiKiMRClusterInterface(object):
         assert tenant_not_found
         return database_name
 
-    def __str__(self):
-        return "Cluster type: {ntype}: \nCluster nodes: {nodes}".format(
-            ntype=type(self), nodes=map(
-                str, self.nodes.values()
-            )
-        )
+    def __str__(self): 
+        return "Cluster type: {ntype}: \nCluster nodes: {nodes}".format( 
+            ntype=type(self), nodes=map( 
+                str, self.nodes.values() 
+            ) 
+        ) 

@@ -8,16 +8,16 @@ SRCS(
     mv_object_map_ut.cpp
 )
 
-FORK_SUBTESTS()
-
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(2400)
-    SIZE(LARGE)
-    TAG(ya:fat)
-ELSE()
-    TIMEOUT(600)
-    SIZE(MEDIUM)
-ENDIF()
+FORK_SUBTESTS() 
+ 
+IF (SANITIZER_TYPE OR WITH_VALGRIND) 
+    TIMEOUT(2400) 
+    SIZE(LARGE) 
+    TAG(ya:fat) 
+ELSE() 
+    TIMEOUT(600) 
+    SIZE(MEDIUM) 
+ENDIF() 
 
 PEERDIR(
     library/cpp/actors/util

@@ -1,29 +1,29 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import six
-
+import six 
+ 
 from hamcrest import all_of, has_property, has_properties
 from hamcrest.core.base_matcher import BaseMatcher
 
 import ydb.core.protos.msgbus_kv_pb2 as msgbus_kv
-from ydb.tests.library.common.msgbus_types import EReplyStatus, TStorageStatusFlags
-from ydb.tests.library.common.msgbus_types import MessageBusStatus
-from ydb.tests.library.matchers.collection import contains
-from ydb.tests.library.matchers.response_matchers import ProtobufWithStatusMatcher
+from ydb.tests.library.common.msgbus_types import EReplyStatus, TStorageStatusFlags 
+from ydb.tests.library.common.msgbus_types import MessageBusStatus 
+from ydb.tests.library.matchers.collection import contains 
+from ydb.tests.library.matchers.response_matchers import ProtobufWithStatusMatcher 
 
 
-def to_bytes(v):
-    if v is None:
-        return None
-
-    if not isinstance(v, six.binary_type):
-        try:
-            return bytes(v, 'utf-8')
-        except Exception as e:
-            raise ValueError(str(e), type(v))
-    return v
-
-
+def to_bytes(v): 
+    if v is None: 
+        return None 
+ 
+    if not isinstance(v, six.binary_type): 
+        try: 
+            return bytes(v, 'utf-8') 
+        except Exception as e: 
+            raise ValueError(str(e), type(v)) 
+    return v 
+ 
+ 
 class KeyValueResponseProtobufMatcher(BaseMatcher):
 
     def __init__(self, status=MessageBusStatus.MSTATUS_OK, do_describe=True):
@@ -81,7 +81,7 @@ class KeyValueResponseProtobufMatcher(BaseMatcher):
             for f in field_names:
                 if f in self.__describe_actual_proto_fields:
                     value = getattr(actual_protobuf, f)
-                    if not isinstance(value, six.text_type):
+                    if not isinstance(value, six.text_type): 
                         try:
                             value = list([v for v in value])
                         except TypeError:
@@ -149,7 +149,7 @@ class KeyValueResponseProtobufMatcher(BaseMatcher):
         self.__read_keys_matchers.append(
             has_properties(
                 Status=status,
-                Value=to_bytes(value)
+                Value=to_bytes(value) 
             )
         )
         return self
@@ -224,8 +224,8 @@ def is_ok_response():
 
 def is_valid_response_with_field(field_name, field_matcher):
     return all_of(
-        has_property('Status', MessageBusStatus.MSTATUS_OK),
-        has_property(field_name, field_matcher)
+        has_property('Status', MessageBusStatus.MSTATUS_OK), 
+        has_property(field_name, field_matcher) 
     )
 
 

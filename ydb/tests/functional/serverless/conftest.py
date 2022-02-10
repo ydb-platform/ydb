@@ -4,10 +4,10 @@ import logging
 import pytest
 import contextlib
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory 
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator 
+from ydb.tests.library.harness.util import LogLevels 
+from ydb.tests.library.common.types import Erasure 
 
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ def ydb_cluster(local_cluster_configuration, request):
 
 @pytest.fixture(scope='module')
 def ydb_root(ydb_cluster):
-    return os.path.join("/", ydb_cluster.domain_name)
+    return os.path.join("/", ydb_cluster.domain_name) 
 
 
 @pytest.fixture(scope='module')
@@ -106,16 +106,16 @@ def ydb_database_ctx(ydb_cluster, database, timeout_seconds=100):
         timeout_seconds=timeout_seconds
     )
 
-    slots = ydb_cluster.register_and_start_slots(database, count=1)
-    ydb_cluster.wait_tenant_up(database)
-
+    slots = ydb_cluster.register_and_start_slots(database, count=1) 
+    ydb_cluster.wait_tenant_up(database) 
+ 
     try:
         yield database
     finally:
         logger.info("destroy ydb_database for %s", database)
-        for slot in slots:
-            slot.stop()
-
+        for slot in slots: 
+            slot.stop() 
+ 
         ydb_cluster.remove_database(
             database,
             timeout_seconds=timeout_seconds
@@ -148,15 +148,15 @@ def ydb_hostel_db_ctx(ydb_cluster, ydb_root, timeout_seconds=100):
         timeout_seconds=timeout_seconds
     )
 
-    slots = ydb_cluster.register_and_start_slots(database, count=3)
-    ydb_cluster.wait_tenant_up(database)
-
+    slots = ydb_cluster.register_and_start_slots(database, count=3) 
+    ydb_cluster.wait_tenant_up(database) 
+ 
     try:
         yield database
     finally:
         logger.info("destroy ydb_hostel_db for %s", database)
-        for slot in slots:
-            slot.stop()
+        for slot in slots: 
+            slot.stop() 
 
         ydb_cluster.remove_database(
             database,

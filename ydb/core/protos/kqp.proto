@@ -94,51 +94,51 @@ message TQueryRequest {
     optional NYql.NDqProto.EDqStatsMode StatsMode = 20;
 }
 
-message TKqpPathIdProto {
-    optional uint32 OwnerId = 1;
-    optional uint32 TableId = 2;
-}
-
-message TIndexDescriptionProto {
-    optional string Name = 1;
-    optional uint32 Type = 2;
-    optional uint32 State = 3;
-    optional uint32 SchemaVersion = 4;
-    optional uint32 LocalPathId = 5;
-    optional uint32 PathOwnerId = 6;
-    repeated string KeyColumns = 7;
-    repeated string DataColumns = 8;
-};
-
-message TKqpColumnMetadataProto {
-    optional string Name = 1;
-    optional uint32 Id = 2;
-    optional string Type = 3;
-    optional uint32 TypeId = 4;
-    repeated string Family = 5;
+message TKqpPathIdProto { 
+    optional uint32 OwnerId = 1; 
+    optional uint32 TableId = 2; 
+} 
+ 
+message TIndexDescriptionProto { 
+    optional string Name = 1; 
+    optional uint32 Type = 2; 
+    optional uint32 State = 3; 
+    optional uint32 SchemaVersion = 4; 
+    optional uint32 LocalPathId = 5; 
+    optional uint32 PathOwnerId = 6; 
+    repeated string KeyColumns = 7; 
+    repeated string DataColumns = 8; 
+}; 
+ 
+message TKqpColumnMetadataProto { 
+    optional string Name = 1; 
+    optional uint32 Id = 2; 
+    optional string Type = 3; 
+    optional uint32 TypeId = 4; 
+    repeated string Family = 5; 
     optional bool NotNull = 6 [default = false];
-};
-
-message TKqpTableMetadataProto {
-    message TAttributeProto {
-        optional string Key = 1;
-        optional string Value = 2;
-    }
-
-    optional bool DoesExist = 1;
-    optional string Cluster  = 2;
-    optional string Name = 3;
-    optional string SysView = 4;
-    optional TKqpPathIdProto PathId = 5;
-    optional uint32 SchemaVersion = 6;
-    optional uint32 Kind = 7;
-    repeated TAttributeProto Attributes = 8;
-    repeated TKqpColumnMetadataProto Columns = 9;
-    repeated string KeyColunmNames = 10;
-    repeated TIndexDescriptionProto Indexes = 11;
-    repeated TKqpTableMetadataProto SecondaryGlobalIndexMetadata = 12;
-}
-
+}; 
+ 
+message TKqpTableMetadataProto { 
+    message TAttributeProto { 
+        optional string Key = 1; 
+        optional string Value = 2; 
+    } 
+ 
+    optional bool DoesExist = 1; 
+    optional string Cluster  = 2; 
+    optional string Name = 3; 
+    optional string SysView = 4; 
+    optional TKqpPathIdProto PathId = 5; 
+    optional uint32 SchemaVersion = 6; 
+    optional uint32 Kind = 7; 
+    repeated TAttributeProto Attributes = 8; 
+    repeated TKqpColumnMetadataProto Columns = 9; 
+    repeated string KeyColunmNames = 10; 
+    repeated TIndexDescriptionProto Indexes = 11; 
+    repeated TKqpTableMetadataProto SecondaryGlobalIndexMetadata = 12; 
+} 
+ 
 message TRlPath {
     optional string CoordinationNode = 1;
     optional string ResourcePath = 2;
@@ -170,7 +170,7 @@ message TTransformProfile {
     repeated TTransformProfile Stages = 100;
 }
 
-
+ 
 message TKqlProfile {
     optional string Query = 1;
     repeated TMkqlProfile MkqlProfiles = 2;
@@ -260,7 +260,7 @@ message TEvQueryResponse {
     optional Ydb.StatusIds.StatusCode YdbStatus = 4;
     reserved 5; // (deprecated) ForcedNewEngine
     optional uint64 ConsumedRu = 6;
-    optional bool WorkerIsClosing = 7 [default = false];
+    optional bool WorkerIsClosing = 7 [default = false]; 
 }
 
 message TCloseSessionRequest {
@@ -287,7 +287,7 @@ message TEvProcessResponse {
     reserved 1; // (deprecated) KqpStatus
     optional bytes Error = 2;
     optional Ydb.StatusIds.StatusCode YdbStatus = 3;
-    optional bool WorkerIsClosing = 4 [default = false];
+    optional bool WorkerIsClosing = 4 [default = false]; 
 }
 
 message TKqpSetting {
@@ -318,12 +318,12 @@ message TEvCreateSessionResponse {
     optional bytes Error = 2;
     optional TCreateSessionResponse Response = 3;
     optional Ydb.StatusIds.StatusCode YdbStatus = 4;
-    optional bool ResourceExhausted = 5 [default = false];
+    optional bool ResourceExhausted = 5 [default = false]; 
 }
 
 message TPingSessionRequest {
     optional bytes SessionId = 1;
-    optional uint32 TimeoutMs = 2 [default = 5000];
+    optional uint32 TimeoutMs = 2 [default = 5000]; 
 }
 
 message TEvPingSessionRequest {
@@ -333,14 +333,14 @@ message TEvPingSessionRequest {
 
 message TPingSessionResponse {
     optional Ydb.Table.KeepAliveResult.SessionStatus SessionStatus = 1;
-    optional bool WorkerIsClosing = 2 [default = false];
+    optional bool WorkerIsClosing = 2 [default = false]; 
 }
 
 message TEvPingSessionResponse {
     optional Ydb.StatusIds.StatusCode Status = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
     optional TPingSessionResponse Response = 3;
-    optional bool WorkerIsClosing = 4 [default = false];
+    optional bool WorkerIsClosing = 4 [default = false]; 
 }
 
 message TEvDataQueryStreamPart {
@@ -398,20 +398,20 @@ message TEvExecuterProgress {
     optional NActorsProto.TActorId ExecuterActorId = 1;
 };
 
-message TKqpProxyNodeResources {
-    optional uint32 NodeId = 1;
+message TKqpProxyNodeResources { 
+    optional uint32 NodeId = 1; 
     optional uint64 DataCenterNumId = 2;
-    optional uint32 ActiveWorkersCount = 3;
+    optional uint32 ActiveWorkersCount = 3; 
     optional string DataCenterId = 4;
-    optional double CpuUsage = 5;
-    optional uint32 Threads = 6;
-}
-
+    optional double CpuUsage = 5; 
+    optional uint32 Threads = 6; 
+} 
+ 
 message TKqpSnapshot {
     optional uint64 Step = 1;
     optional uint64 TxId = 2;
 }
-
+ 
 /// Legacy ResourceManager events //////////////////////////////////////////////////////////////////////////////////////
 message TEvStartComputeTasks {
     optional uint64 TxId = 1;

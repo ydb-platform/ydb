@@ -1,5 +1,5 @@
 #include "kqp_impl.h"
-#include "kqp_query_replay.h"
+#include "kqp_query_replay.h" 
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -20,7 +20,7 @@ namespace NKqp {
 using namespace NKikimrConfig;
 using namespace NYql;
 
-
+ 
 class TKqpQueryCache {
 public:
     TKqpQueryCache(size_t size, TDuration ttl)
@@ -584,10 +584,10 @@ private:
                     }
                 }
 
-                if (ev->Get()->ReplayMessage) {
-                    QueryReplayBackend->Collect(*ev->Get()->ReplayMessage);
-                }
-
+                if (ev->Get()->ReplayMessage) { 
+                    QueryReplayBackend->Collect(*ev->Get()->ReplayMessage); 
+                } 
+ 
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
                 for (auto& request : requests) {
                     Reply(request.Sender, compileResult, compileStats, ctx);
@@ -748,7 +748,7 @@ private:
     TKqpSettings::TConstPtr KqpSettings;
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
     TIntrusivePtr<TKqpCounters> Counters;
-    THolder<IQueryReplayBackend> QueryReplayBackend;
+    THolder<IQueryReplayBackend> QueryReplayBackend; 
 
     TKqpQueryCache QueryCache;
     TKqpRequestsQueue RequestsQueue;

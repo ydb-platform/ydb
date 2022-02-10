@@ -5,8 +5,8 @@ import random
 from datetime import datetime
 from tornado import gen
 from tornado.ioloop import IOLoop
-from ydb.tests.library.serializability.checker import SerializabilityError, SerializabilityChecker
-import ydb
+from ydb.tests.library.serializability.checker import SerializabilityError, SerializabilityChecker 
+import ydb 
 
 KEY_PREFIX_TYPE = ydb.TupleType().add_element(ydb.OptionalType(ydb.PrimitiveType.Uint64))
 
@@ -78,14 +78,14 @@ def new_engine_pragma(force_new_engine):
 def generate_random_name(cnt=20):
     return ''.join(
         random.choice('abcdefghijklmnopqrstuvwxyz')
-        for _ in range(cnt))
+        for _ in range(cnt)) 
 
 
 class DummyLogger(object):
     def _print(self, msg, *args):
         if args:
             msg = msg % args
-        print(msg)
+        print(msg) 
 
     debug = _print
     info = _print
@@ -526,7 +526,7 @@ class DatabaseChecker(object):
             while time.time() < deadline:
                 min_key = random.randint(0, options.keys)
                 max_key = random.randint(min_key, options.keys)
-                read_keys = list(range(min_key, max_key + 1))
+                read_keys = list(range(min_key, max_key + 1)) 
 
                 node = history.add(History.Begin('read_range', None, read_keys=read_keys)).apply_to(checker)
 
@@ -567,7 +567,7 @@ class DatabaseChecker(object):
                 if options.read_table_ranges:
                     min_key = random.randint(0, options.keys)
                     max_key = random.randint(min_key, options.keys)
-                    read_keys = list(range(min_key, max_key + 1))
+                    read_keys = list(range(min_key, max_key + 1)) 
                     key_range = ydb.KeyRange(
                         ydb.KeyBound((min_key,), KEY_PREFIX_TYPE, inclusive=True),
                         ydb.KeyBound((max_key,), KEY_PREFIX_TYPE, inclusive=True))
@@ -601,21 +601,21 @@ class DatabaseChecker(object):
 
         deadline = time.time() + options.seconds
 
-        for _ in range(options.readers):
+        for _ in range(options.readers): 
             futures.append(self.async_perform_point_reads(history, table, options, checker, deadline=deadline))
 
-        for _ in range(options.writers):
+        for _ in range(options.writers): 
             futures.append(self.async_perform_point_writes(history, table, options, checker, deadline=deadline))
 
         readwrite_keysets = set()
-        for _ in range(options.readwriters):
+        for _ in range(options.readwriters): 
             futures.append(self.async_perform_point_reads_writes(history, table, options, checker, deadline=deadline, keysets=readwrite_keysets))
             futures.append(self.async_perform_verifying_reads(history, table, options, checker, deadline=deadline, keysets=readwrite_keysets))
 
-        for _ in range(options.rangereaders):
+        for _ in range(options.rangereaders): 
             futures.append(self.async_perform_range_reads(history, table, options, checker, deadline=deadline))
 
-        for _ in range(options.readtablers):
+        for _ in range(options.readtablers): 
             futures.append(self.async_perform_read_tables(history, table, options, checker, deadline=deadline))
 
         waiter = gen.WaitIterator(*futures)
@@ -625,8 +625,8 @@ class DatabaseChecker(object):
     def before_test(self, table, options):
         with self.sync_session() as session:
             splits = []
-            for i in range(options.shards - 1):
-                splits.append(ydb.KeyBound((options.keys * (i + 1) // options.shards,)))
+            for i in range(options.shards - 1): 
+                splits.append(ydb.KeyBound((options.keys * (i + 1) // options.shards,))) 
             profile = (
                 ydb.TableProfile()
                 .with_partitioning_policy(

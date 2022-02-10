@@ -11,7 +11,7 @@ from hamcrest import (
     not_none,
 )
 
-import ydb
+import ydb 
 
 from tornado import gen
 from tornado.ioloop import IOLoop
@@ -63,7 +63,7 @@ def test_create_table(ydb_hostel_db, ydb_serverless_db, ydb_endpoint, metering_f
         def write_some_data(session, path):
             session.transaction().execute(
                 """
-                UPSERT INTO `{}` (id, value_string, value_num)
+                UPSERT INTO `{}` (id, value_string, value_num) 
                            VALUES (1u, "Ok", 0u),
                                   (2u, "Also_Ok", 0u),
                                   (3u, "And_Ok_With_Locks", 0u);
@@ -118,7 +118,7 @@ def test_turn_on_serverless_storage_billing(ydb_hostel_db, ydb_serverless_db, yd
         def write_some_data(session, path):
             session.transaction().execute(
                 """
-                UPSERT INTO `{}` (id, value_string, value_num)
+                UPSERT INTO `{}` (id, value_string, value_num) 
                            VALUES (1u, "Ok", 0u),
                                   (2u, "Also_Ok", 0u),
                                   (3u, "And_Ok_With_Locks", 0u);
@@ -342,7 +342,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
     @gen.coroutine
     def async_write_keys(path, start, cnt):
         futures = []
-        for i in range(start, start + cnt):
+        for i in range(start, start + cnt): 
             futures.append(async_write_key(path, i, 'a' * 71680))
         waiter = gen.WaitIterator(*futures)
         while not waiter.done():
@@ -351,7 +351,7 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
     @gen.coroutine
     def async_erase_keys(path, start, cnt):
         futures = []
-        for i in range(start, start + cnt):
+        for i in range(start, start + cnt): 
             futures.append(async_erase_key(path, i))
         waiter = gen.WaitIterator(*futures)
         while not waiter.done():
@@ -376,10 +376,10 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         path = os.path.join(database, "dirA0", "table")
         pool.retry_operation_sync(create_table, None, path)
 
-        for start in range(0, 1000, 100):
+        for start in range(0, 1000, 100): 
             IOLoop.current().run_sync(lambda: async_write_keys(path, start=start, cnt=100))
 
-        for _ in range(30):
+        for _ in range(30): 
             time.sleep(1)
             described = ydb_cluster.client.describe(database, '')
             logger.debug('database state after write_keys: %s', described)
@@ -395,10 +395,10 @@ def test_database_with_disk_quotas(ydb_hostel_db, ydb_disk_quoted_serverless_db,
         with pytest.raises(ydb.Unavailable, match=r'.*out of disk space.*'):
             IOLoop.current().run_sync(lambda: async_bulk_upsert(path, [BulkUpsertRow(0, 'test')]))
 
-        for start in range(0, 1000, 100):
+        for start in range(0, 1000, 100): 
             IOLoop.current().run_sync(lambda: async_erase_keys(path, start=start, cnt=100))
 
-        for _ in range(30):
+        for _ in range(30): 
             time.sleep(1)
             described = ydb_cluster.client.describe(database, '')
             logger.debug('database state after erase_keys: %s', described)

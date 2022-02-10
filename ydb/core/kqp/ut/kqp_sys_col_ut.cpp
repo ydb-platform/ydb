@@ -15,7 +15,7 @@ TDataQueryResult ExecuteDataQuery(TKikimrRunner& kikimr, const TString& query) {
         query,
         txControl,
         TExecDataQuerySettings()
-        .OperationTimeout(TDuration::Seconds(10))
+        .OperationTimeout(TDuration::Seconds(10)) 
     ).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     return result;

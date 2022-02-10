@@ -319,7 +319,7 @@ STFUNC(TGRpcProxyStatusActor::StateFunc) {
 class TChooseProxyActor : public TActorBootstrapped<TChooseProxyActor>, public NMsgBusProxy::TMessageBusSessionIdentHolder {
 
     using TBase = TActorBootstrapped<TChooseProxyActor>;
-    THolder<NMsgBusProxy::TBusChooseProxy> Request;
+    THolder<NMsgBusProxy::TBusChooseProxy> Request; 
     THashMap<ui32, TString> NodeNames;
     THashMap<ui32, TString> NodeDataCenter;
     THashMap<ui32, std::shared_ptr<TEvGRpcProxyStatus::TEvGetStatusResponse>> PerNodeResponse;
@@ -333,7 +333,7 @@ public:
     //
     TChooseProxyActor(NMsgBusProxy::TBusMessageContext &msg)
         : TMessageBusSessionIdentHolder(msg)
-        , Request(static_cast<NMsgBusProxy::TBusChooseProxy*>(msg.ReleaseMessage()))
+        , Request(static_cast<NMsgBusProxy::TBusChooseProxy*>(msg.ReleaseMessage())) 
     {
     }
 
@@ -383,8 +383,8 @@ public:
                 continue;
             s << " " << NodeNames[resp.first] << "[" << resp.first << "], " << resp.second->Record.GetWeight() << " ";
             if (filterDataCenter && filterDataCenter != NodeDataCenter[resp.first])
-                continue;
-
+                continue; 
+ 
             ui64 weight = resp.second->Record.GetWeight();
             ui64 rand = TAppData::RandomProvider->GenRand64();
             if ((weight > 0 && rand % (totalWeight + weight) >= totalWeight || preferLocalProxy && resp.first == localNodeId) && //random choosed this node or it is prefered local node

@@ -1,9 +1,9 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python 
+# -*- coding: utf-8 -*- 
 import pytest
 from hamcrest import assert_that, not_none
-
-from ydb.tests.library.common.types import Erasure
+ 
+from ydb.tests.library.common.types import Erasure 
 
 from sqs_test_base import KikimrSqsTestBase, IS_FIFO_PARAMS
 
@@ -14,7 +14,7 @@ class TestSqsRecompilesRequestsForOtherQueue(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(TestSqsRecompilesRequestsForOtherQueue, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['enable_queue_master'] = False
+        config_generator.yaml_config['sqs_config']['enable_queue_master'] = False 
         return config_generator
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
@@ -31,8 +31,8 @@ class TestSqsRecompilesRequestsForOtherQueue(KikimrSqsTestBase):
             else:
                 group_id = None
                 seq_no = None
-            result = self._sqs_apis[node_index].send_message(
-                self.queue_url, self._msg_body_template.format(next(self.counter)), deduplication_id=seq_no, group_id=group_id)
+            result = self._sqs_apis[node_index].send_message( 
+                self.queue_url, self._msg_body_template.format(next(self.counter)), deduplication_id=seq_no, group_id=group_id) 
             assert_that(
                 result, not_none()
             )

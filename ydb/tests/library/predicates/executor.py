@@ -18,7 +18,7 @@ def externals_blobs_count(monitor, tablet_id):
 def external_blobs_is_present(monitor, tablets_ids):
     predicates = []
     for tablet_id in tablets_ids:
-        value = externals_blobs_count(monitor, tablet_id)
+        value = externals_blobs_count(monitor, tablet_id) 
         case = value > 0
         log_func = logger.debug if case else logger.error
         log_func(

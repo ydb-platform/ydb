@@ -827,7 +827,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
             MOVE_EPOCH
         };
 
-        for (size_t i = 0; i < 3000; ++i) {
+        for (size_t i = 0; i < 3000; ++i) { 
             EAction action = actions[RandomNumber<ui64>(actions.size())];
             switch (action) {
             case REGISTER:

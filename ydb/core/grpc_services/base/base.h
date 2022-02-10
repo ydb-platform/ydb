@@ -357,7 +357,7 @@ public:
     virtual google::protobuf::Arena* GetArena() = 0;
     virtual const TMaybe<TString> GetRequestType() const = 0;
     virtual void SetRuHeader(ui64 ru) = 0;
-    virtual void AddServerHint(const TString& hint) = 0;
+    virtual void AddServerHint(const TString& hint) = 0; 
     virtual void SetCostInfo(float consumed_units) = 0;
 
 private:
@@ -457,10 +457,10 @@ public:
         return TMaybe<TString>{};
     }
 
-    void ReplyWithRpcStatus(grpc::StatusCode, const TString&) override {
-        Y_FAIL("Unimplemented");
-    }
-
+    void ReplyWithRpcStatus(grpc::StatusCode, const TString&) override { 
+        Y_FAIL("Unimplemented"); 
+    } 
+ 
     void ReplyUnauthenticated(const TString&) override;
     void ReplyUnavaliable() override;
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode) override {
@@ -583,10 +583,10 @@ public:
         return Ctx_->GetAuthState();
     }
 
-    void ReplyWithRpcStatus(grpc::StatusCode, const TString&) override {
-        Y_FAIL("Unimplemented");
-    }
-
+    void ReplyWithRpcStatus(grpc::StatusCode, const TString&) override { 
+        Y_FAIL("Unimplemented"); 
+    } 
+ 
     void ReplyUnauthenticated(const TString& in) override {
         const TString message = in.empty() ? TString("unauthenticated") : TString("unauthenticated, ") + in;
         Ctx_->Finish(grpc::Status(grpc::StatusCode::UNAUTHENTICATED, message));
@@ -829,10 +829,10 @@ public:
         return Ctx_->GetAuthState();
     }
 
-    void ReplyWithRpcStatus(grpc::StatusCode code, const TString& reason) override {
-        Ctx_->ReplyError(code, reason);
-    }
-
+    void ReplyWithRpcStatus(grpc::StatusCode code, const TString& reason) override { 
+        Ctx_->ReplyError(code, reason); 
+    } 
+ 
     void ReplyUnauthenticated(const TString& in) override {
         Ctx_->ReplyUnauthenticated(in);
     }
@@ -841,10 +841,10 @@ public:
         InternalToken_ = token;
     }
 
-    void AddServerHint(const TString& hint) override {
-        Ctx_->AddTrailingMetadata(NYdb::YDB_SERVER_HINTS, hint);
-    }
-
+    void AddServerHint(const TString& hint) override { 
+        Ctx_->AddTrailingMetadata(NYdb::YDB_SERVER_HINTS, hint); 
+    } 
+ 
     void SetRuHeader(ui64 ru) override {
         Ru = ru;
         auto ruStr = Sprintf("%lu", ru);

@@ -5,18 +5,18 @@ OWNER(
     g:kikimr
 )
 
-FORK_SUBTESTS()
+FORK_SUBTESTS() 
 
-SPLIT_FACTOR(5)
+SPLIT_FACTOR(5) 
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
-    TIMEOUT(3600)
+    TIMEOUT(3600) 
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(
-        cpu:4
-        ram:32
-    )
+    REQUIREMENTS( 
+        cpu:4 
+        ram:32 
+    ) 
 ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)

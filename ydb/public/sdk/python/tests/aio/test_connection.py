@@ -22,19 +22,19 @@ async def test_close(aio_connection: Connection):
 
     async def run_and_catch():
         from ydb.issues import ConnectionLost
-
+ 
         try:
             await aio_connection(request, stub, _apis.SchemeService.DescribePath)
         except ConnectionLost:
             pass
 
-    tasks = [run_and_catch() for _ in range(10)]
+    tasks = [run_and_catch() for _ in range(10)] 
 
-    tasks.append(aio_connection.close(0))
+    tasks.append(aio_connection.close(0)) 
     with pytest.raises(asyncio.CancelledError):
-        await asyncio.gather(
-            *tasks,
-        )
+        await asyncio.gather( 
+            *tasks, 
+        ) 
 
 
 @pytest.mark.asyncio
@@ -59,13 +59,13 @@ async def test_callbacks(aio_connection: Connection):
 
     aio_connection.add_cleanup_callback(cleanup)
 
-    await aio_connection(
-        request,
-        stub,
-        _apis.SchemeService.DescribePath,
-        wrap_result=wrap,
-        wrap_args=wrapper_args,
-    )
+    await aio_connection( 
+        request, 
+        stub, 
+        _apis.SchemeService.DescribePath, 
+        wrap_result=wrap, 
+        wrap_args=wrapper_args, 
+    ) 
 
     await aio_connection.close()
 

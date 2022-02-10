@@ -33,8 +33,8 @@ ENDIF()
 DEPENDS(ydb/apps/ydbd)
 
 PEERDIR(
-    ydb/tests/library
-    ydb/public/sdk/python/ydb
+    ydb/tests/library 
+    ydb/public/sdk/python/ydb 
     contrib/python/tornado/tornado-4
 )
 

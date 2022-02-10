@@ -1,59 +1,59 @@
-{
-    "meta": {
-        "version": "0.1",
-        "type": "query"
-    },
-    "tables": [
-        {
-            "name": "/local/base_pk_predicate_pk_predicate_bool_sql_plan/Input4",
-            "reads": [
-                {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key1 (\"false\")"
-                    ],
-                    "scan_by": [
-                        "Key2 (\"false\", +inf]"
-                    ],
-                    "limit": "\"1001\"",
-                    "columns": [
-                        "Value"
-                    ]
-                },
-                {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key1 (\"false\")",
-                        "Key2 (\"true\")"
-                    ],
-                    "columns": [
-                        "Value"
-                    ]
-                },
-                {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key1 (\"true\")"
-                    ],
-                    "scan_by": [
-                        "Key2 [-inf, \"true\")"
-                    ],
-                    "limit": "\"1001\"",
-                    "columns": [
-                        "Value"
-                    ]
-                },
-                {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key1 (\"true\")",
-                        "Key2 (\"false\")"
-                    ],
-                    "columns": [
-                        "Value"
-                    ]
-                }
-            ]
-        }
-    ]
-}
+{ 
+    "meta": { 
+        "version": "0.1", 
+        "type": "query" 
+    }, 
+    "tables": [ 
+        { 
+            "name": "/local/base_pk_predicate_pk_predicate_bool_sql_plan/Input4", 
+            "reads": [ 
+                { 
+                    "type": "Lookup", 
+                    "lookup_by": [ 
+                        "Key1 (\"false\")" 
+                    ], 
+                    "scan_by": [ 
+                        "Key2 (\"false\", +inf]" 
+                    ], 
+                    "limit": "\"1001\"", 
+                    "columns": [ 
+                        "Value" 
+                    ] 
+                }, 
+                { 
+                    "type": "Lookup", 
+                    "lookup_by": [ 
+                        "Key1 (\"false\")", 
+                        "Key2 (\"true\")" 
+                    ], 
+                    "columns": [ 
+                        "Value" 
+                    ] 
+                }, 
+                { 
+                    "type": "Lookup", 
+                    "lookup_by": [ 
+                        "Key1 (\"true\")" 
+                    ], 
+                    "scan_by": [ 
+                        "Key2 [-inf, \"true\")" 
+                    ], 
+                    "limit": "\"1001\"", 
+                    "columns": [ 
+                        "Value" 
+                    ] 
+                }, 
+                { 
+                    "type": "Lookup", 
+                    "lookup_by": [ 
+                        "Key1 (\"true\")", 
+                        "Key2 (\"false\")" 
+                    ], 
+                    "columns": [ 
+                        "Value" 
+                    ] 
+                } 
+            ] 
+        } 
+    ] 
+} 

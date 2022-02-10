@@ -11,18 +11,18 @@ const char* YDB_SDK_BUILD_INFO_HEADER = "x-ydb-sdk-build-info";
 const char* YDB_REQUEST_TYPE_HEADER = "x-ydb-request-type";
 const char* YDB_CONSUMED_UNITS_HEADER = "x-ydb-consumed-units";
 
-// The x-ydb-server-hints header.
-// This header can be sent in the trailing metadata with response.
-// The only possible value is "session-close". In this case client should gracefully close the session, where the request was executed.
-const char* YDB_SERVER_HINTS = "x-ydb-server-hints";
-
-// The message that server can send in trailing metadata to client in order to gracefully shutdown the session.
-const char* YDB_SESSION_CLOSE = "session-close";
-// Feature compabilities.
-// The client should send a feature capability-header in order to enable a feature on the server side.
-// Send ("x-ydb-client-capabilities", "session-balancer") pair in metadata with a СreateSession request to enable server side session balancing feature.
-const char* YDB_CLIENT_CAPABILITIES = "x-ydb-client-capabilities";
-
+// The x-ydb-server-hints header. 
+// This header can be sent in the trailing metadata with response. 
+// The only possible value is "session-close". In this case client should gracefully close the session, where the request was executed. 
+const char* YDB_SERVER_HINTS = "x-ydb-server-hints"; 
+ 
+// The message that server can send in trailing metadata to client in order to gracefully shutdown the session. 
+const char* YDB_SESSION_CLOSE = "session-close"; 
+// Feature compabilities. 
+// The client should send a feature capability-header in order to enable a feature on the server side. 
+// Send ("x-ydb-client-capabilities", "session-balancer") pair in metadata with a СreateSession request to enable server side session balancing feature. 
+const char* YDB_CLIENT_CAPABILITIES = "x-ydb-client-capabilities"; 
+ 
 TString GetSdkSemver() {
     return NResource::Find("ydb_sdk_version.txt");
 }

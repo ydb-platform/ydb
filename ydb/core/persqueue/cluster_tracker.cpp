@@ -73,10 +73,10 @@ private:
     TString MakeListClustersQuery() const {
         return Sprintf(
             R"(
-               --!syntax_v1
-               SELECT C.name, C.balancer, C.local, C.enabled, C.weight, V.version FROM `%s` AS C
+               --!syntax_v1 
+               SELECT C.name, C.balancer, C.local, C.enabled, C.weight, V.version FROM `%s` AS C 
                CROSS JOIN
-               (SELECT version FROM `%s` WHERE name == 'Cluster') AS V;
+               (SELECT version FROM `%s` WHERE name == 'Cluster') AS V; 
             )", Cfg().GetClusterTablePath().c_str(), Cfg().GetVersionTablePath().c_str());
     }
 

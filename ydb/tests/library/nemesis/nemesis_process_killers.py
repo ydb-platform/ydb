@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 import logging
 import random
-from ydb.tests.library.nemesis.nemesis_core import AbstractNemesisNodeTerrorist
-from ydb.tests.library.nemesis.remote_execution import execute_command_with_output
+from ydb.tests.library.nemesis.nemesis_core import AbstractNemesisNodeTerrorist 
+from ydb.tests.library.nemesis.remote_execution import execute_command_with_output 
 
 logger = logging.getLogger(__name__)
 
@@ -64,16 +64,16 @@ class NemesisProcessKiller(AbstractNemesisNodeTerrorist):
             return self.__get_victims_by_filter(node)
 
     def __get_victims_by_filter(self, node):
-        ps_command = ['ps', 'ax']
-        result, output = execute_command_with_output(self._full_command(node, ps_command), timeout=self.timeout)
-        if result:
-            logger.error("Failed to fetch victim process on node {node}. Will not act this time".format(node=node))
-            return []
-        else:
-            return map(
-                lambda x: x.strip().split(' ')[0],
-                self.__filter_output(output)
-            )
+        ps_command = ['ps', 'ax'] 
+        result, output = execute_command_with_output(self._full_command(node, ps_command), timeout=self.timeout) 
+        if result: 
+            logger.error("Failed to fetch victim process on node {node}. Will not act this time".format(node=node)) 
+            return [] 
+        else: 
+            return map( 
+                lambda x: x.strip().split(' ')[0], 
+                self.__filter_output(output) 
+            ) 
 
     def __filter_output(self, output):
         lines_match = {}

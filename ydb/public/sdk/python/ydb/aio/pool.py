@@ -3,7 +3,7 @@ import logging
 import random
 
 from ydb import issues
-from ydb.pool import ConnectionsCache as _ConnectionsCache, IConnectionPool
+from ydb.pool import ConnectionsCache as _ConnectionsCache, IConnectionPool 
 
 from .connection import Connection
 
@@ -122,11 +122,11 @@ class Discovery:
         if resolve_details is None:
             return False
 
-        resolved_endpoints = set(
+        resolved_endpoints = set( 
             endpoint
             for resolved_endpoint in resolve_details.endpoints
             for endpoint, endpoint_options in resolved_endpoint.endpoints_with_options()
-        )
+        ) 
         for cached_endpoint in self._cache.values():
             if cached_endpoint.endpoint not in resolved_endpoints:
                 self._cache.make_outdated(cached_endpoint)
@@ -174,15 +174,15 @@ class Discovery:
             if successful:
                 self._cache.complete_discovery(None)
             else:
-                self._cache.complete_discovery(
-                    issues.ConnectionFailure(str(self.discovery_debug_details()))
-                )
+                self._cache.complete_discovery( 
+                    issues.ConnectionFailure(str(self.discovery_debug_details())) 
+                ) 
 
-            interval = (
-                self._discovery_interval()
-                if successful
-                else self._emergency_retry_interval()
-            )
+            interval = ( 
+                self._discovery_interval() 
+                if successful 
+                else self._emergency_retry_interval() 
+            ) 
 
             try:
                 await asyncio.wait_for(self._wake_up_event.wait(), timeout=interval)
@@ -206,9 +206,9 @@ class ConnectionPool(IConnectionPool):
         self._stopped = False
         self._discovery = Discovery(self._store, self._driver_config)
 
-        self._discovery_task = asyncio.get_event_loop().create_task(
-            self._discovery.run()
-        )
+        self._discovery_task = asyncio.get_event_loop().create_task( 
+            self._discovery.run() 
+        ) 
 
     async def stop(self, timeout=10):
         self._discovery.stop()
@@ -223,7 +223,7 @@ class ConnectionPool(IConnectionPool):
         async def __wrapper__():
             await connection.close()
             self._discovery.notify_disconnected()
-
+ 
         return __wrapper__
 
     async def wait(self, timeout=7, fail_fast=False):
@@ -232,12 +232,12 @@ class ConnectionPool(IConnectionPool):
     def discovery_debug_details(self):
         return self._discovery.discovery_debug_details()
 
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        await self.stop()
-
+    async def __aenter__(self): 
+        return self 
+ 
+    async def __aexit__(self, exc_type, exc, tb): 
+        await self.stop() 
+ 
     async def __call__(
         self,
         request,
@@ -247,23 +247,23 @@ class ConnectionPool(IConnectionPool):
         settings=None,
         wrap_args=(),
         preferred_endpoint=None,
-        fast_fail=False,
+        fast_fail=False, 
     ):
         wait_timeout = settings.timeout if settings else 10
         try:
-            connection = await self._store.get(
-                preferred_endpoint, fast_fail=fast_fail, wait_timeout=wait_timeout
-            )
+            connection = await self._store.get( 
+                preferred_endpoint, fast_fail=fast_fail, wait_timeout=wait_timeout 
+            ) 
         except Exception:
             self._discovery.notify_disconnected()
             raise
 
         return await connection(
-            request,
-            stub,
-            rpc_name,
-            wrap_result,
-            settings,
-            wrap_args,
-            self._on_disconnected(connection),
+            request, 
+            stub, 
+            rpc_name, 
+            wrap_result, 
+            settings, 
+            wrap_args, 
+            self._on_disconnected(connection), 
         )

@@ -1,5 +1,5 @@
-OWNER(g:kikimr)
-PY3TEST()
+OWNER(g:kikimr) 
+PY3TEST() 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TEST_SRCS(
     common.py
@@ -11,19 +11,19 @@ TEST_SRCS(
     test_publish_into_schemeboard_with_common_ssring.py
 )
 
-SPLIT_FACTOR(20)
-TIMEOUT(600)
-SIZE(MEDIUM)
+SPLIT_FACTOR(20) 
+TIMEOUT(600) 
+SIZE(MEDIUM) 
 
 DEPENDS(ydb/apps/ydbd)
 
 PEERDIR(
-    ydb/tests/library
-    ydb/public/sdk/python/ydb
+    ydb/tests/library 
+    ydb/public/sdk/python/ydb 
 )
 
 FORK_SUBTESTS()
-
+ 
 REQUIREMENTS(ram:10)
 
 END()

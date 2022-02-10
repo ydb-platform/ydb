@@ -1,2 +1,2 @@
-SELECT * FROM Input1
-WHERE Group == 1;
+SELECT * FROM Input1 
+WHERE Group == 1; 

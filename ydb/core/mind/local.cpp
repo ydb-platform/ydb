@@ -31,7 +31,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
             EvRegisterTimeout = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvSendTabletMetrics,
             EvUpdateSystemUsage,
-            EvLocalDrainTimeout,
+            EvLocalDrainTimeout, 
             EvEnd
         };
 
@@ -40,7 +40,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         typedef TEventSchedulerEv<EvRegisterTimeout> TEvRegisterTimeout;
         struct TEvSendTabletMetrics : TEventLocal<TEvSendTabletMetrics, EvSendTabletMetrics> {};
         struct TEvUpdateSystemUsage : TEventLocal<TEvUpdateSystemUsage, EvUpdateSystemUsage> {};
-        struct TEvLocalDrainTimeout : TEventLocal<TEvLocalDrainTimeout, EvLocalDrainTimeout> {};
+        struct TEvLocalDrainTimeout : TEventLocal<TEvLocalDrainTimeout, EvLocalDrainTimeout> {}; 
     };
 
     struct TTablet {
@@ -100,18 +100,18 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     TDuration LastSendTabletMetricsDuration = {};
     constexpr static TDuration TABLET_METRICS_BATCH_INTERVAL = TDuration::MilliSeconds(5000);
     constexpr static TDuration UPDATE_SYSTEM_USAGE_INTERVAL = TDuration::MilliSeconds(1000);
-    constexpr static TDuration DRAIN_NODE_TIMEOUT = TDuration::MilliSeconds(15000);
+    constexpr static TDuration DRAIN_NODE_TIMEOUT = TDuration::MilliSeconds(15000); 
     ui64 UserPoolUsage = 0; // (usage uS x threads) / sec
     ui64 MemUsage = 0;
     ui64 MemLimit = 0;
     double NodeUsage = 0;
 
-    bool SentDrainNode = false;
-    bool DrainResultReceived = false;
-    i32 PrevEstimate = 0;
-
-    TIntrusivePtr<TDrainProgress> LastDrainRequest;
-
+    bool SentDrainNode = false; 
+    bool DrainResultReceived = false; 
+    i32 PrevEstimate = 0; 
+ 
+    TIntrusivePtr<TDrainProgress> LastDrainRequest; 
+ 
     NKikimrTabletBase::TMetrics ResourceLimit;
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
@@ -204,12 +204,12 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         HivePipeClient = TActorId();
         Connected = false;
         TryToRegister(ctx);
-        if (SentDrainNode && !DrainResultReceived) {
-            LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: drain complete: hive pipe destroyed, hive id: " << HiveId);
-            DrainResultReceived = true;
-            LastDrainRequest->OnReceive();
-            UpdateEstimate();
-        }
+        if (SentDrainNode && !DrainResultReceived) { 
+            LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "TLocalNodeRegistrar: drain complete: hive pipe destroyed, hive id: " << HiveId); 
+            DrainResultReceived = true; 
+            LastDrainRequest->OnReceive(); 
+            UpdateEstimate(); 
+        } 
     }
 
     void Handle(TEvLocal::TEvEnumerateTablets::TPtr &ev, const TActorContext &ctx) {
@@ -778,7 +778,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         if (onlineIt != OnlineTablets.end()) { // from online list
             MarkDeadTablet(onlineIt->first, generation, TEvLocal::TEvTabletStatus::StatusFailed, msg->Reason, ctx);
             OnlineTablets.erase(onlineIt);
-            UpdateEstimate();
+            UpdateEstimate(); 
             return;
         }
 
@@ -799,55 +799,55 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
         Die(ctx);
     }
 
-    void HandleDrainNodeResult(TEvHive::TEvDrainNodeResult::TPtr &ev, const TActorContext &ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Drain node result received. Online tablets: " << OnlineTablets.size());
-        Y_VERIFY(SentDrainNode);
-        Y_UNUSED(ev);
-        UpdateEstimate();
-        if (!DrainResultReceived) {
-            DrainResultReceived = true;
-            LastDrainRequest->OnReceive();
-        }
-    }
-
-    void UpdateEstimate() {
-        if (SentDrainNode) {
-            i32 diff = static_cast<i32>(OnlineTablets.size()) - PrevEstimate;
-            PrevEstimate = OnlineTablets.size();
-            LastDrainRequest->UpdateEstimate(diff);
-        }
-    }
-
-    void HandleDrainTimeout(TEvPrivate::TEvLocalDrainTimeout::TPtr &ev, const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Drain node result received: timeout. Online tablets: " << OnlineTablets.size());
-        Y_VERIFY(SentDrainNode);
-        Y_UNUSED(ev);
-        UpdateEstimate();
-        if (!DrainResultReceived) {
-            DrainResultReceived = true;
-            LastDrainRequest->OnReceive();
-        }
-    }
-
-    void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) {
-        if (!HivePipeClient) {
-            TryToRegister(ctx);
-        }
-
-        if (!SentDrainNode) {
-            LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Send drain node to hive: " << HiveId << ". Online tablets: " << OnlineTablets.size());
-            SentDrainNode = true;
-            ev->Get()->DrainProgress->OnSend();
-            LastDrainRequest = ev->Get()->DrainProgress;
-            UpdateEstimate();
-            NTabletPipe::SendData(ctx, HivePipeClient, new TEvHive::TEvDrainNode(SelfId().NodeId()));
-            ctx.Schedule(DRAIN_NODE_TIMEOUT, new TEvPrivate::TEvLocalDrainTimeout());
-            ev->Get()->DrainProgress->OnReceive();
-        } else {
-            ev->Get()->DrainProgress->OnReceive();
-        }
-    }
-
+    void HandleDrainNodeResult(TEvHive::TEvDrainNodeResult::TPtr &ev, const TActorContext &ctx) { 
+        LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Drain node result received. Online tablets: " << OnlineTablets.size()); 
+        Y_VERIFY(SentDrainNode); 
+        Y_UNUSED(ev); 
+        UpdateEstimate(); 
+        if (!DrainResultReceived) { 
+            DrainResultReceived = true; 
+            LastDrainRequest->OnReceive(); 
+        } 
+    } 
+ 
+    void UpdateEstimate() { 
+        if (SentDrainNode) { 
+            i32 diff = static_cast<i32>(OnlineTablets.size()) - PrevEstimate; 
+            PrevEstimate = OnlineTablets.size(); 
+            LastDrainRequest->UpdateEstimate(diff); 
+        } 
+    } 
+ 
+    void HandleDrainTimeout(TEvPrivate::TEvLocalDrainTimeout::TPtr &ev, const TActorContext& ctx) { 
+        LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Drain node result received: timeout. Online tablets: " << OnlineTablets.size()); 
+        Y_VERIFY(SentDrainNode); 
+        Y_UNUSED(ev); 
+        UpdateEstimate(); 
+        if (!DrainResultReceived) { 
+            DrainResultReceived = true; 
+            LastDrainRequest->OnReceive(); 
+        } 
+    } 
+ 
+    void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) { 
+        if (!HivePipeClient) { 
+            TryToRegister(ctx); 
+        } 
+ 
+        if (!SentDrainNode) { 
+            LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Send drain node to hive: " << HiveId << ". Online tablets: " << OnlineTablets.size()); 
+            SentDrainNode = true; 
+            ev->Get()->DrainProgress->OnSend(); 
+            LastDrainRequest = ev->Get()->DrainProgress; 
+            UpdateEstimate(); 
+            NTabletPipe::SendData(ctx, HivePipeClient, new TEvHive::TEvDrainNode(SelfId().NodeId())); 
+            ctx.Schedule(DRAIN_NODE_TIMEOUT, new TEvPrivate::TEvLocalDrainTimeout()); 
+            ev->Get()->DrainProgress->OnReceive(); 
+        } else { 
+            ev->Get()->DrainProgress->OnReceive(); 
+        } 
+    } 
+ 
     void UpdateCacheQuota() {
         ui64 mem = ResourceLimit.GetMemory();
         if (mem)
@@ -924,9 +924,9 @@ public:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvPrivate::TEvSendTabletMetrics, Handle);
             HFunc(TEvPrivate::TEvUpdateSystemUsage, Handle);
-            HFunc(TEvPrivate::TEvLocalDrainTimeout, HandleDrainTimeout);
-            HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain);
-            HFunc(TEvHive::TEvDrainNodeResult, HandleDrainNodeResult);
+            HFunc(TEvPrivate::TEvLocalDrainTimeout, HandleDrainTimeout); 
+            HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain); 
+            HFunc(TEvHive::TEvDrainNodeResult, HandleDrainNodeResult); 
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             CFunc(TEvents::TSystem::PoisonPill, HandlePoison);
             default:
@@ -1316,16 +1316,16 @@ class TDomainLocal : public TActorBootstrapped<TDomainLocal> {
         SendStatus(ev->Get()->TenantName, ev->Sender, ctx);
     }
 
-    void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext& ctx) {
-        for(auto& hiveId: HiveIds) {
-            LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Forward drain node to local, hive id: " << hiveId);
-            ev->Get()->DrainProgress->OnSend();
-            TActorId localRegistrarServiceId = MakeLocalRegistrarID(ctx.SelfID.NodeId(), hiveId);
-            ctx.Send(localRegistrarServiceId, new TEvLocal::TEvLocalDrainNode(ev->Get()->DrainProgress));
-        }
-        ev->Get()->DrainProgress->OnReceive();
-    }
-
+    void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext& ctx) { 
+        for(auto& hiveId: HiveIds) { 
+            LOG_NOTICE_S(ctx, NKikimrServices::LOCAL, "Forward drain node to local, hive id: " << hiveId); 
+            ev->Get()->DrainProgress->OnSend(); 
+            TActorId localRegistrarServiceId = MakeLocalRegistrarID(ctx.SelfID.NodeId(), hiveId); 
+            ctx.Send(localRegistrarServiceId, new TEvLocal::TEvLocalDrainNode(ev->Get()->DrainProgress)); 
+        } 
+        ev->Get()->DrainProgress->OnReceive(); 
+    } 
+ 
     void HandleTenant(TEvLocal::TEvAlterTenant::TPtr &ev, const TActorContext &ctx)
     {
         auto &info = ev->Get()->TenantInfo;
@@ -1385,7 +1385,7 @@ public:
             HFunc(TSchemeBoardEvents::TEvNotifyUpdate, HandleSchemeBoard);
             HFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleSchemeBoard);
 
-            HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain);
+            HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain); 
         default:
             Y_FAIL("Unexpected event for TDomainLocal");
             break;
@@ -1464,14 +1464,14 @@ public:
         ForwardOrReplyError(ev.Release(), info, ctx);
     }
 
-    void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext& ctx) {
-        for(auto& x: DomainLocals) {
-            ev->Get()->DrainProgress->OnSend();
-            ctx.Send(x.second, new TEvLocal::TEvLocalDrainNode(ev->Get()->DrainProgress));
-        }
-        ev->Get()->DrainProgress->OnReceive();
-    }
-
+    void HandleDrain(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext& ctx) { 
+        for(auto& x: DomainLocals) { 
+            ev->Get()->DrainProgress->OnSend(); 
+            ctx.Send(x.second, new TEvLocal::TEvLocalDrainNode(ev->Get()->DrainProgress)); 
+        } 
+        ev->Get()->DrainProgress->OnReceive(); 
+    } 
+ 
     void HandleTenant(TEvLocal::TEvAlterTenant::TPtr &ev, const TActorContext &ctx)
     {
         TRegistrationInfo info = ev->Get()->TenantInfo;
@@ -1492,7 +1492,7 @@ public:
             HFunc(TEvLocal::TEvRemoveTenant, HandleTenant);
             HFunc(TEvLocal::TEvAlterTenant, HandleTenant);
             HFunc(TEvLocal::TEvTenantStatus, HandleTenant);
-            HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain);
+            HFunc(TEvLocal::TEvLocalDrainNode, HandleDrain); 
 
         default:
             LOG_DEBUG_S(ctx, NKikimrServices::LOCAL,

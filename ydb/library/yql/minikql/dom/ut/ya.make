@@ -17,7 +17,7 @@ IF (NOT WINDOWS)
         ydb/library/yql/minikql/computation
         ydb/library/yql/public/udf/service/exception_policy
     )
-
+ 
     YQL_LAST_ABI_VERSION()
 
     END()

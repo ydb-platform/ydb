@@ -7,8 +7,8 @@ import ydb
 from tornado import gen
 from tornado.ioloop import IOLoop
 
-from ydb.tests.library.common.types import from_bytes
-from ydb.tornado import as_tornado_future
+from ydb.tests.library.common.types import from_bytes 
+from ydb.tornado import as_tornado_future 
 from common import (
     async_execute_serializable_job,
     async_execute_stale_ro_job,

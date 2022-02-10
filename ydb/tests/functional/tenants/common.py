@@ -2,12 +2,12 @@
 import os
 import logging
 
-from ydb.tests.library.harness.kikimr_http_client import HiveClient
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.kikimr_http_client import HiveClient 
+from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory 
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator 
 
-from ydb.tests.library.harness.util import LogLevels
-import ydb
+from ydb.tests.library.harness.util import LogLevels 
+import ydb 
 
 
 logger = logging.getLogger(__name__)
@@ -21,8 +21,8 @@ class Runtime(object):
 
         # use console features
         self._scheme_root_key = os.path.join(
-            "/",
-            cluster.domain_name,
+            "/", 
+            cluster.domain_name, 
             self._tenant_affiliation
         )
 
@@ -79,7 +79,7 @@ class DBForStaticSlots(object):
         )
         cls.cluster.start()
         cls.client = cls.cluster.client
-        cls.root_dir = os.path.join("/", cls.cluster.domain_name)
+        cls.root_dir = os.path.join("/", cls.cluster.domain_name) 
         first_node = cls.cluster.nodes[1]
         cls.boot_per_node = 1
         cls.boot_batch_size = 5
@@ -100,8 +100,8 @@ class DBForStaticSlots(object):
 
     def setup_method(self, method=None):
         self.database_name = "/Root/users/{class_name}_{method_name}".format(
-            class_name=self.__class__.__name__,
-            method_name=method.__name__,
+            class_name=self.__class__.__name__, 
+            method_name=method.__name__, 
         )
         self.cluster.create_database(
             self.database_name,

@@ -7,19 +7,19 @@ OWNER(
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
+IF (WITH_VALGRIND) 
     TIMEOUT(3600)
     SIZE(LARGE)
     TAG(ya:fat)
-    REQUIREMENTS(
-        cpu:4
-        ram:32
-    )
+    REQUIREMENTS( 
+        cpu:4 
+        ram:32 
+    ) 
 ELSE()
-    REQUIREMENTS(
-        cpu:4
-        ram:16
-    )
+    REQUIREMENTS( 
+        cpu:4 
+        ram:16 
+    ) 
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()

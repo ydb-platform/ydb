@@ -9,12 +9,12 @@ SRCS(
     kqp_compile_actor.cpp
     kqp_compile_request.cpp
     kqp_compile_service.cpp
-    kqp_shutdown_controller.cpp
-    kqp_query_replay.h
+    kqp_shutdown_controller.cpp 
+    kqp_query_replay.h 
     kqp_ic_gateway.cpp
-    kqp_ic_gateway_actors.h
-    kqp_metadata_loader.cpp
-    kqp_metadata_loader.h
+    kqp_ic_gateway_actors.h 
+    kqp_metadata_loader.cpp 
+    kqp_metadata_loader.h 
     kqp_impl.h
     kqp_response.cpp
     kqp_worker_actor.cpp

@@ -1,4 +1,4 @@
-IF (NOT WITH_VALGRIND)
+IF (NOT WITH_VALGRIND) 
     UNITTEST_FOR(ydb/core/tx/schemeshard)
 
     OWNER(
@@ -38,4 +38,4 @@ IF (NOT WITH_VALGRIND)
     REQUIREMENTS(ram:12)
 
 END()
-ENDIF()
+ENDIF() 

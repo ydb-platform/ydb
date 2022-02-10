@@ -1,6 +1,6 @@
-#include "kqp_ic_gateway_actors.h"
+#include "kqp_ic_gateway_actors.h" 
 #include "kqp_impl.h"
-#include "kqp_metadata_loader.h"
+#include "kqp_metadata_loader.h" 
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
@@ -494,13 +494,13 @@ public:
 
     TMkqlRequestHandler(const TAlignedPagePoolCounters& allocCounters, TRequest* request,
         TKqpParamsMap&& paramsMap, TPromise<TResult> promise, TCallbackFunc callback,
-        const TActorId& miniKqlComplileServiceActorId)
+        const TActorId& miniKqlComplileServiceActorId) 
         : TBase(request, promise, callback)
         , ParamsMap(std::move(paramsMap))
         , CompilationPending(false)
         , CompilationRetried(false)
         , AllocCounters(allocCounters)
-        , MiniKqlComplileServiceActorId(miniKqlComplileServiceActorId)
+        , MiniKqlComplileServiceActorId(miniKqlComplileServiceActorId) 
     {}
 
     void Bootstrap(const TActorContext& ctx) {
@@ -511,7 +511,7 @@ public:
             CompileProgram(ctx, mkqlTx.GetMode() == NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE);
         }
 
-        mkqlTx.SetCollectStats(true);
+        mkqlTx.SetCollectStats(true); 
         YQL_ENSURE(!mkqlTx.HasParams());
 
         if (!ParamsMap.Values.empty()) {
@@ -633,7 +633,7 @@ private:
         if (!CompileResolveCookies.empty()) {
             compileEv->CompileResolveCookies = std::move(CompileResolveCookies);
         }
-        ctx.Send(MiniKqlComplileServiceActorId, compileEv.Release());
+        ctx.Send(MiniKqlComplileServiceActorId, compileEv.Release()); 
         CompilationPending = true;
     }
 
@@ -654,7 +654,7 @@ private:
     TString MkqlProgramText;
     THashMap<TString, ui64> CompileResolveCookies;
     TAlignedPagePoolCounters AllocCounters;
-    TActorId MiniKqlComplileServiceActorId;
+    TActorId MiniKqlComplileServiceActorId; 
 };
 
 class TSchemeOpRequestHandler: public TRequestHandlerBase<
@@ -983,16 +983,16 @@ private:
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 public:
-    TKikimrIcGateway(const TString& cluster, const TString& database, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
-        TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters, const TActorId& mkqlComplileService)
+    TKikimrIcGateway(const TString& cluster, const TString& database, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader, 
+        TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters, const TActorId& mkqlComplileService) 
         : Cluster(cluster)
         , Database(database)
         , ActorSystem(actorSystem)
         , NodeId(nodeId)
         , Counters(counters)
-        , MetadataLoader(std::move(metadataLoader))
-        , MkqlComplileService(mkqlComplileService)
-    {}
+        , MetadataLoader(std::move(metadataLoader)) 
+        , MkqlComplileService(mkqlComplileService) 
+    {} 
 
     bool HasCluster(const TString& cluster) override {
         return cluster == Cluster;
@@ -1025,9 +1025,9 @@ public:
     }
 
     TVector<TString> GetCollectedSchemeData() override {
-        return MetadataLoader->GetCollectedSchemeData();
-    }
-
+        return MetadataLoader->GetCollectedSchemeData(); 
+    } 
+ 
     TString GetTokenCompat() const {
         return UserToken ? UserToken->Serialized : TString();
     }
@@ -1072,20 +1072,20 @@ public:
         return 0;
     }
 
-    TFuture<TTableMetadataResult> LoadTableMetadata(const TString& cluster, const TString& table,
-        TLoadTableMetadataSettings settings) override {
+    TFuture<TTableMetadataResult> LoadTableMetadata(const TString& cluster, const TString& table, 
+        TLoadTableMetadataSettings settings) override { 
         try {
             if (!CheckCluster(cluster)) {
-                return InvalidCluster<TTableMetadataResult>(cluster);
+                return InvalidCluster<TTableMetadataResult>(cluster); 
             }
-            if (UserToken) {
-                return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, UserToken->Data);
+            if (UserToken) { 
+                return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, UserToken->Data); 
             } else {
-                return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, Nothing());
+                return MetadataLoader->LoadTableMetadata(cluster, table, settings, Database, Nothing()); 
             }
 
-        } catch (yexception& e) {
-            return MakeFuture(ResultFromException<TTableMetadataResult>(e));
+        } catch (yexception& e) { 
+            return MakeFuture(ResultFromException<TTableMetadataResult>(e)); 
         }
     }
 
@@ -1992,7 +1992,7 @@ private:
     {
         auto promise = NewPromise<TMkqlResult>();
         IActor* requestHandler = new TMkqlRequestHandler(Counters->Counters->AllocCounters, request,
-            std::move(paramsMap), promise, callback, MkqlComplileService);
+            std::move(paramsMap), promise, callback, MkqlComplileService); 
         RegisterActor(requestHandler);
 
         return promise.GetFuture();
@@ -2644,17 +2644,17 @@ private:
     TKqpRequestCounters::TPtr Counters;
     TAlignedPagePoolCounters AllocCounters;
     TMaybe<TUserTokenData> UserToken;
-    std::shared_ptr<IKqpTableMetadataLoader> MetadataLoader;
-    TActorId MkqlComplileService;
+    std::shared_ptr<IKqpTableMetadataLoader> MetadataLoader; 
+    TActorId MkqlComplileService; 
 };
 
 } // namespace
 
 TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, const TString& database,
-    std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader>&& metadataLoader, TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters,
-    const TActorId& mkqlComplileService)
+    std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader>&& metadataLoader, TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters, 
+    const TActorId& mkqlComplileService) 
 {
-    return MakeIntrusive<TKikimrIcGateway>(cluster, database, std::move(metadataLoader), actorSystem, nodeId, counters, mkqlComplileService);
+    return MakeIntrusive<TKikimrIcGateway>(cluster, database, std::move(metadataLoader), actorSystem, nodeId, counters, mkqlComplileService); 
 }
 
 } // namespace NKqp

@@ -1,59 +1,59 @@
-{
-    "meta": {
-        "version": "0.1",
-        "type": "query"
-    },
-    "tables": [
-        {
-            "name": "/local/base_join_join_using_index_sql_plan/InputJoin1",
-            "reads": [
-                {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"3\")"
-                    ],
-                    "columns": [
-                        "Fk21",
-                        "Key",
-                        "Value"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "/local/base_join_join_using_index_sql_plan/InputJoinIndex2",
-            "reads": [
-                {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key1 (expr)",
-                        "Key2 (expr)"
-                    ],
-                    "columns": [
-                        "Fk2",
-                        "Value"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "/local/base_join_join_using_index_sql_plan/InputJoinIndex2/Index/indexImplTable",
-            "reads": [
-                {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Fk2 (expr)"
-                    ],
-                    "scan_by": [
-                        "Key1",
-                        "Key2"
-                    ],
-                    "columns": [
-                        "Key1",
-                        "Key2"
-                    ]
-                }
-            ]
-        }
-    ]
-}
+{ 
+    "meta": { 
+        "version": "0.1", 
+        "type": "query" 
+    }, 
+    "tables": [ 
+        { 
+            "name": "/local/base_join_join_using_index_sql_plan/InputJoin1", 
+            "reads": [ 
+                { 
+                    "type": "Lookup", 
+                    "lookup_by": [ 
+                        "Key (\"3\")" 
+                    ], 
+                    "columns": [ 
+                        "Fk21", 
+                        "Key", 
+                        "Value" 
+                    ] 
+                } 
+            ] 
+        }, 
+        { 
+            "name": "/local/base_join_join_using_index_sql_plan/InputJoinIndex2", 
+            "reads": [ 
+                { 
+                    "type": "MultiLookup", 
+                    "lookup_by": [ 
+                        "Key1 (expr)", 
+                        "Key2 (expr)" 
+                    ], 
+                    "columns": [ 
+                        "Fk2", 
+                        "Value" 
+                    ] 
+                } 
+            ] 
+        }, 
+        { 
+            "name": "/local/base_join_join_using_index_sql_plan/InputJoinIndex2/Index/indexImplTable", 
+            "reads": [ 
+                { 
+                    "type": "MultiLookup", 
+                    "lookup_by": [ 
+                        "Fk2 (expr)" 
+                    ], 
+                    "scan_by": [ 
+                        "Key1", 
+                        "Key2" 
+                    ], 
+                    "columns": [ 
+                        "Key1", 
+                        "Key2" 
+                    ] 
+                } 
+            ] 
+        } 
+    ] 
+} 

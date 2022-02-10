@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from hamcrest import assert_that
+from hamcrest import assert_that 
 
 
 def exception_to_string(e):

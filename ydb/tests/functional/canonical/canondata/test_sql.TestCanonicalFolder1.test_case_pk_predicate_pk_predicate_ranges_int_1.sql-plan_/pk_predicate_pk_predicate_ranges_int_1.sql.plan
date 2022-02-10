@@ -1,26 +1,26 @@
-{
-    "meta": {
-        "version": "0.1",
-        "type": "query"
-    },
-    "tables": [
-        {
-            "name": "/local/base_pk_predicate_pk_predicate_ranges_int_1_sql_plan/Input1",
-            "reads": [
-                {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Group",
-                        "Name"
-                    ],
-                    "columns": [
-                        "Amount",
-                        "Comment",
-                        "Group",
-                        "Name"
-                    ]
-                }
-            ]
-        }
-    ]
-}
+{ 
+    "meta": { 
+        "version": "0.1", 
+        "type": "query" 
+    }, 
+    "tables": [ 
+        { 
+            "name": "/local/base_pk_predicate_pk_predicate_ranges_int_1_sql_plan/Input1", 
+            "reads": [ 
+                { 
+                    "type": "FullScan", 
+                    "scan_by": [ 
+                        "Group", 
+                        "Name" 
+                    ], 
+                    "columns": [ 
+                        "Amount", 
+                        "Comment", 
+                        "Group", 
+                        "Name" 
+                    ] 
+                } 
+            ] 
+        } 
+    ] 
+} 

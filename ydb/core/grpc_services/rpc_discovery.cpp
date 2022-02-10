@@ -314,7 +314,7 @@ public:
 
         TStackVec<const TString*> entries;
         entries.reserve(LookupResponse->InfoEntries.size());
-        for (auto &xpair : LookupResponse->InfoEntries)
+        for (auto &xpair : LookupResponse->InfoEntries) 
             entries.emplace_back(&xpair.second.Payload);
         Shuffle(entries.begin(), entries.end());
 
@@ -361,7 +361,7 @@ public:
                 if (entry.GetSsl())
                     xres->set_ssl(true);
                 xres->set_load_factor(entry.GetLoad());
-                xres->set_node_id(entry.GetNodeId());
+                xres->set_node_id(entry.GetNodeId()); 
                 if (entry.AddressesV4Size()) {
                     xres->mutable_ip_v4()->Reserve(entry.AddressesV4Size());
                     for (const auto& addr : entry.GetAddressesV4()) {

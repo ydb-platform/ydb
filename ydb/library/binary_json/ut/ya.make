@@ -17,9 +17,9 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TAG(ya:fat)
 ELSE()
     TIMEOUT(600)
-    SIZE(MEDIUM)
-ENDIF()
-
+    SIZE(MEDIUM) 
+ENDIF() 
+ 
 PEERDIR(
     ydb/library/binary_json
     ydb/library/yql/minikql

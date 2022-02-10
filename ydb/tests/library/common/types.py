@@ -1,30 +1,30 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import codecs
+import codecs 
 
 from enum import unique, Enum, IntEnum
-from ydb.tests.library.common.generators import int_between, one_of, float_in, string_with_length, actor_id
+from ydb.tests.library.common.generators import int_between, one_of, float_in, string_with_length, actor_id 
 
 
 @unique
-class DeltaTypes(IntEnum):
-    AddTable = 1,
-    DropTable = 2,
-    AddColumn = 3,
-    DropColumn = 4,
-    AddColumnToKey = 5,
-    AddColumnToFamily = 6,
+class DeltaTypes(IntEnum): 
+    AddTable = 1, 
+    DropTable = 2, 
+    AddColumn = 3, 
+    DropColumn = 4, 
+    AddColumnToKey = 5, 
+    AddColumnToFamily = 6, 
     AddFamily = 7,
-    UpdateExecutorInfo = 8,
-    SetCompactionPolicy = 9,
+    UpdateExecutorInfo = 8, 
+    SetCompactionPolicy = 9, 
     SetRoom = 10,
     SetFamily = 11,
     SetRedo = 12,
     SetTable = 13
-
-
-@unique
+ 
+ 
+@unique 
 class PDiskCategory(IntEnum):
     ROT = 0
     SSD = 1
@@ -49,10 +49,10 @@ class VDiskCategory(IntEnum):
     Extra3 = 23
 
 
-def _erasure_type(id_, min_fail_domains, min_alive_replicas):
-    return id_, min_fail_domains, min_alive_replicas
-
-
+def _erasure_type(id_, min_fail_domains, min_alive_replicas): 
+    return id_, min_fail_domains, min_alive_replicas 
+ 
+ 
 @unique
 class Erasure(Enum):
     NONE = _erasure_type(id_=0, min_fail_domains=1, min_alive_replicas=1)
@@ -64,7 +64,7 @@ class Erasure(Enum):
     STRIPE_4_2 = _erasure_type(id_=6, min_fail_domains=8, min_alive_replicas=6)
     STRIPE_3_2 = _erasure_type(id_=7, min_fail_domains=7, min_alive_replicas=5)
     MIRROR_3_2 = _erasure_type(id_=8, min_fail_domains=5, min_alive_replicas=3)
-    MIRROR_3_DC = _erasure_type(id_=9, min_fail_domains=3, min_alive_replicas=3)
+    MIRROR_3_DC = _erasure_type(id_=9, min_fail_domains=3, min_alive_replicas=3) 
     MIRROR_3OF4 = _erasure_type(id_=18, min_fail_domains=8, min_alive_replicas=6)
 
     def __init__(self, id_, min_fail_domains, min_alive_replicas):
@@ -95,21 +95,21 @@ class Erasure(Enum):
         string_ = string_.replace("-", "_")
         return Erasure[string_]
 
-    @staticmethod
-    def from_int(species):
-        for candidate in list(Erasure):
-            if int(candidate) == species:
-                return candidate
-        raise ValueError("No valid candidate found")
+    @staticmethod 
+    def from_int(species): 
+        for candidate in list(Erasure): 
+            if int(candidate) == species: 
+                return candidate 
+        raise ValueError("No valid candidate found") 
 
-    @staticmethod
-    def common_used():
-        return (
-            Erasure.NONE, Erasure.BLOCK_4_2, Erasure.MIRROR_3_DC,
-            Erasure.MIRROR_3
-        )
-
-
+    @staticmethod 
+    def common_used(): 
+        return ( 
+            Erasure.NONE, Erasure.BLOCK_4_2, Erasure.MIRROR_3_DC, 
+            Erasure.MIRROR_3 
+        ) 
+ 
+ 
 @unique
 class TabletStates(IntEnum):
     Created = 0,
@@ -124,14 +124,14 @@ class TabletStates(IntEnum):
     Dead = 9,
     Active = 10
 
-    @staticmethod
-    def from_int(val):
-        for tablet_state in list(TabletStates):
-            if int(tablet_state) == val:
-                return tablet_state
-        return None
+    @staticmethod 
+    def from_int(val): 
+        for tablet_state in list(TabletStates): 
+            if int(tablet_state) == val: 
+                return tablet_state 
+        return None 
 
-
+ 
 def _tablet_type(id_, magic, is_unique=False, service_name=None):
     """
     Convenient wrapper for TabletTypes enum
@@ -150,8 +150,8 @@ class TabletTypes(Enum):
     KESUS = _tablet_type(29, 999)
     PERSQUEUE = _tablet_type(20, 999)
     FLAT_DATASHARD = _tablet_type(18, 999, service_name='DATASHARD')
-    BLOCKSTORE_VOLUME = _tablet_type(25, 999)
-    BLOCKSTORE_PARTITION = _tablet_type(26, 999)
+    BLOCKSTORE_VOLUME = _tablet_type(25, 999) 
+    BLOCKSTORE_PARTITION = _tablet_type(26, 999) 
 
     FLAT_TX_COORDINATOR = _tablet_type(13, 0x800001, service_name='TX_COORDINATOR')
     TX_MEDIATOR = _tablet_type(5, 0x810001, service_name='TX_MEDIATOR')
@@ -212,7 +212,7 @@ class TabletTypes(Enum):
 def bool_converter(astr):
     if isinstance(astr, bool):
         return astr
-    if astr.lower() == 'true':
+    if astr.lower() == 'true': 
         return True
     else:
         return False
@@ -241,11 +241,11 @@ class AbstractTypeEnum(Enum):
         raise AssertionError('There is no PType with value = ' + str(idn))
 
 
-def from_bytes(val):
-    try:
-        return codecs.decode(val, 'utf8')
-    except (UnicodeEncodeError, TypeError):
-        return val
+def from_bytes(val): 
+    try: 
+        return codecs.decode(val, 'utf8') 
+    except (UnicodeEncodeError, TypeError): 
+        return val 
 
 
 def _ptype_from(idn, generator, to_obj_converter=str, proto_field='Bytes', min_value=None, max_value=None):
@@ -257,25 +257,25 @@ def _ptype_from(idn, generator, to_obj_converter=str, proto_field='Bytes', min_v
 class PType(AbstractTypeEnum):
     Int32 = _ptype_from(1, int_between(-2 ** 31, 2 ** 31), int, proto_field='Int32', min_value=-2 ** 31, max_value=2 ** 31 - 1)
     Uint32 = _ptype_from(2, int_between(0, 2 ** 32), int, proto_field='Uint32', min_value=0, max_value=2 ** 32 - 1)
-    Int64 = _ptype_from(3, int_between(-2 ** 63, 2 ** 63), int, proto_field='Int64', min_value=-2**63, max_value=2 ** 63 - 1)
+    Int64 = _ptype_from(3, int_between(-2 ** 63, 2 ** 63), int, proto_field='Int64', min_value=-2**63, max_value=2 ** 63 - 1) 
     Uint64 = _ptype_from(4, int_between(0, 2 ** 64 - 1), int, proto_field='Uint64', min_value=0, max_value=2 ** 64 - 1)
     Byte = _ptype_from(5, int_between(0, 255), int, min_value=0, max_value=255)
     Bool = _ptype_from(6, one_of([True, False]), bool_converter, proto_field='Bool', min_value=True, max_value=False)
 
-    Double = _ptype_from(32, float_in(-100, 100), float, proto_field='Double')
-    Float = _ptype_from(33, float_in(-100, 100), float, proto_field='Float')
+    Double = _ptype_from(32, float_in(-100, 100), float, proto_field='Double') 
+    Float = _ptype_from(33, float_in(-100, 100), float, proto_field='Float') 
 
-    # Rework Pair later
-    PairUi64Ui64 = _ptype_from(257, int_between(0, 2 ** 64 - 1), int)
-
+    # Rework Pair later 
+    PairUi64Ui64 = _ptype_from(257, int_between(0, 2 ** 64 - 1), int) 
+ 
     String = _ptype_from(4097, string_with_length(4), str)
     SmallBoundedString = _ptype_from(4113, string_with_length(4), str)
     LargeBoundedString = _ptype_from(4114, string_with_length(500), str)
 
-    Utf8 = _ptype_from(4608, string_with_length(500), from_bytes)
+    Utf8 = _ptype_from(4608, string_with_length(500), from_bytes) 
 
-    ActorID = _ptype_from(8193, actor_id(), str)
-
+    ActorID = _ptype_from(8193, actor_id(), str) 
+ 
     def __init__(self, idn, generator, to_obj_converter, proto_field, min_value, max_value):
         self._idn_ = idn
         self.generator = generator

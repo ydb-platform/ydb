@@ -1,6 +1,6 @@
 OWNER(g:kikimr)
 
 RECURSE(
-    grpc
-    protos
+    grpc 
+    protos 
 )

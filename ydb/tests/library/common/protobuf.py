@@ -3,7 +3,7 @@
 
 import abc
 from collections import namedtuple
-import six
+import six 
 from hamcrest import has_properties
 
 import ydb.core.protos.msgbus_kv_pb2 as msgbus_kv
@@ -35,18 +35,18 @@ class AbstractProtobufBuilder(object):
         return self.__hash
 
 
-def to_bytes(v):
-    if v is None:
-        return None
-
-    if not isinstance(v, six.binary_type):
-        try:
-            return bytes(v, 'utf-8')
-        except Exception as e:
-            raise ValueError(str(e), type(v))
-    return v
-
-
+def to_bytes(v): 
+    if v is None: 
+        return None 
+ 
+    if not isinstance(v, six.binary_type): 
+        try: 
+            return bytes(v, 'utf-8') 
+        except Exception as e: 
+            raise ValueError(str(e), type(v)) 
+    return v 
+ 
+ 
 class KVRequest(AbstractProtobufBuilder):
 
     def __init__(self):
@@ -54,13 +54,13 @@ class KVRequest(AbstractProtobufBuilder):
 
     def write(self, key, value):
         write_cmd = self.protobuf.CmdWrite.add()
-        write_cmd.Key = to_bytes(key)
-        write_cmd.Value = to_bytes(value)
+        write_cmd.Key = to_bytes(key) 
+        write_cmd.Value = to_bytes(value) 
         return self
 
     def read(self, key, offset=0, size=0):
         read_cmd = self.protobuf.CmdRead.add()
-        read_cmd.Key = to_bytes(key)
+        read_cmd.Key = to_bytes(key) 
         if offset:
             read_cmd.Offset = offset
         if size:
@@ -69,9 +69,9 @@ class KVRequest(AbstractProtobufBuilder):
 
     def read_range(self, key_range, include_data=True, limit_bytes=None):
         read_range = self.protobuf.CmdReadRange.add()
-        read_range.Range.From = to_bytes(key_range.from_key)
+        read_range.Range.From = to_bytes(key_range.from_key) 
         read_range.Range.IncludeFrom = key_range.include_from
-        read_range.Range.To = to_bytes(key_range.to_key)
+        read_range.Range.To = to_bytes(key_range.to_key) 
         read_range.Range.IncludeTo = key_range.include_to
         read_range.IncludeData = include_data
         if limit_bytes is not None:
@@ -80,21 +80,21 @@ class KVRequest(AbstractProtobufBuilder):
 
     def copy_range(self, prefix_to_add, key_range=None, prefix_to_remove=None):
         clone_range = self.protobuf.CmdCopyRange.add()
-        clone_range.PrefixToAdd = to_bytes(prefix_to_add)
+        clone_range.PrefixToAdd = to_bytes(prefix_to_add) 
         if key_range is not None:
-            clone_range.Range.From = to_bytes(key_range.from_key)
+            clone_range.Range.From = to_bytes(key_range.from_key) 
             clone_range.Range.IncludeFrom = key_range.include_from
-            clone_range.Range.To = to_bytes(key_range.to_key)
+            clone_range.Range.To = to_bytes(key_range.to_key) 
             clone_range.Range.IncludeTo = key_range.include_to
         if prefix_to_remove is not None:
-            clone_range.PrefixToRemove = to_bytes(prefix_to_remove)
+            clone_range.PrefixToRemove = to_bytes(prefix_to_remove) 
         return self
 
     def concat(self, output_key, input_keys=None, keep_input=None):
         concat_cmd = self.protobuf.CmdConcat.add()
-        concat_cmd.OutputKey = to_bytes(output_key)
+        concat_cmd.OutputKey = to_bytes(output_key) 
         if input_keys is not None:
-            concat_cmd.InputKeys.extend(list(map(to_bytes, input_keys)))
+            concat_cmd.InputKeys.extend(list(map(to_bytes, input_keys))) 
         if keep_input is not None:
             concat_cmd.KeepInputs = keep_input
 
@@ -136,10 +136,10 @@ class THiveCreateTablet(AbstractProtobufBuilder):
 
 
 class TCmdCreateTablet(
-    namedtuple('TCmdCreateTablet', ['owner_id', 'owner_idx', 'type', 'allowed_node_ids', 'channels_profile', 'binded_channels'])
+    namedtuple('TCmdCreateTablet', ['owner_id', 'owner_idx', 'type', 'allowed_node_ids', 'channels_profile', 'binded_channels']) 
 ):
-    def __new__(cls, owner_id, owner_idx, type, allowed_node_ids=(), channels_profile=0, binded_channels=None):
-        return super(TCmdCreateTablet, cls).__new__(cls, owner_id, owner_idx, type, allowed_node_ids, channels_profile, binded_channels)
+    def __new__(cls, owner_id, owner_idx, type, allowed_node_ids=(), channels_profile=0, binded_channels=None): 
+        return super(TCmdCreateTablet, cls).__new__(cls, owner_id, owner_idx, type, allowed_node_ids, channels_profile, binded_channels) 
 
 
 TCmdWrite = namedtuple('TCmdWrite', ['key', 'value'])
@@ -154,9 +154,9 @@ class TCmdRead(namedtuple('TCmdRead', ['key', 'offset', 'size'])):
 
 
 class TKeyRange(
-        namedtuple('TKeyRange', ['from_key', 'to_key', 'include_from', 'include_to', 'include_data', 'limit_bytes'])):
+        namedtuple('TKeyRange', ['from_key', 'to_key', 'include_from', 'include_to', 'include_data', 'limit_bytes'])): 
     def __new__(cls, from_key, to_key, include_from=True, include_to=True, include_data=True, limit_bytes=None):
-        return super(TKeyRange, cls).__new__(cls, to_bytes(from_key), to_bytes(to_key), include_from, include_to, include_data, limit_bytes)
+        return super(TKeyRange, cls).__new__(cls, to_bytes(from_key), to_bytes(to_key), include_from, include_to, include_data, limit_bytes) 
 
     @staticmethod
     def range(func, from_, to_, include_from=True, include_to=True):
@@ -189,7 +189,7 @@ class TKeyValuePair(namedtuple('TKeyValuePair', ['key', 'value', 'size', 'creati
     def __new__(cls, key, value, size=None, creation_time=None):
         if size is None and value is not None:
             size = len(value)
-        return super(TKeyValuePair, cls).__new__(cls, to_bytes(key), to_bytes(value), size, creation_time)
+        return super(TKeyValuePair, cls).__new__(cls, to_bytes(key), to_bytes(value), size, creation_time) 
 
     def __cmp__(self, other):
         return self.key - other.key

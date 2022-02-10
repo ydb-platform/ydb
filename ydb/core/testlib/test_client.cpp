@@ -591,7 +591,7 @@ namespace Tests {
             Runtime->RegisterService(MakeTicketParserID(), ticketParserId, nodeIdx);
         }
 
-        {
+        { 
             IActor* healthCheck = NHealthCheck::CreateHealthCheckService();
             TActorId healthCheckId = Runtime->Register(healthCheck, nodeIdx);
             Runtime->RegisterService(NHealthCheck::MakeHealthCheckID(), healthCheckId, nodeIdx);

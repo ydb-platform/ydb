@@ -1,5 +1,5 @@
 OWNER(g:kikimr va-kuznecov)
-PY3TEST()
+PY3TEST() 
 
 TEST_SRCS(
     test_ydb_backup.py
@@ -7,7 +7,7 @@ TEST_SRCS(
     test_ydb_scripting.py
 )
 
-ENV(YDB_TOKEN="root@builtin")
+ENV(YDB_TOKEN="root@builtin") 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 TIMEOUT(600)
 SIZE(MEDIUM)
@@ -18,7 +18,7 @@ DEPENDS(
 )
 
 PEERDIR(
-    ydb/tests/library
+    ydb/tests/library 
 )
 
 FORK_SUBTESTS()

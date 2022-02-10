@@ -1,40 +1,40 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-import itertools
-import logging
-import time
+#!/usr/bin/env python 
+# -*- coding: utf-8 -*- 
+import itertools 
+import logging 
+import time 
 import requests
 import json
 import uuid
 import re
-import socket
+import socket 
 from hamcrest import assert_that, equal_to, not_none, none, greater_than, less_than_or_equal_to, any_of, not_
+ 
+import ydb.tests.library.common.yatest_common as yatest_common 
 
-import ydb.tests.library.common.yatest_common as yatest_common
-
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory 
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator 
+from ydb.tests.library.harness.util import LogLevels 
 from ydb.tests.library.sqs.tables import create_all_tables as create_all_sqs_tables
 
-from sqs_requests_client import SqsHttpApi
-
-import ydb
-from concurrent import futures
+from sqs_requests_client import SqsHttpApi 
+ 
+import ydb 
+from concurrent import futures 
 
 from sqs_matchers import ReadResponseMatcher
-
+ 
 DEFAULT_VISIBILITY_TIMEOUT = 30
-
-logger = logging.getLogger(__name__)
-
-
+ 
+logger = logging.getLogger(__name__) 
+ 
+ 
 IS_FIFO_PARAMS = {
     'argnames': 'is_fifo',
     'argvalues': [True, False],
     'ids': ['fifo', 'std'],
 }
-
+ 
 POLLING_PARAMS = {
     'argnames': 'polling_wait_timeout',
     'argvalues': [0, 1],
@@ -54,51 +54,51 @@ VISIBILITY_CHANGE_METHOD_PARAMS = {
 }
 
 
-def get_sqs_client_path():
+def get_sqs_client_path(): 
     return yatest_common.binary_path("ydb/core/ymq/client/bin/sqs")
-
-
+ 
+ 
 def get_kikimr_driver_path():
     return yatest_common.binary_path("ydb/apps/ydbd/ydbd")
 
 
-def to_bytes(v):
-    if v is None:
-        return v
-
-    if isinstance(v, bytes):
-        return v
-
-    return v.encode('utf-8')
-
-
-def wait_can_list_users(api):
-    retries = 120
-    while retries > 0:
-        retries -= 1
-
-        logger.info("Listing SQS users")
-
-        try:
-            api.list_queues()
-            logger.info("Success. Api is up.")
-            return True
-
-        except (requests.ConnectionError, requests.exceptions.Timeout):
-            time.sleep(1)
-            continue
-
-        except Exception:
-            logger.info("Success. Api is up.")
-            return True
-
-    return False
-
-
+def to_bytes(v): 
+    if v is None: 
+        return v 
+ 
+    if isinstance(v, bytes): 
+        return v 
+ 
+    return v.encode('utf-8') 
+ 
+ 
+def wait_can_list_users(api): 
+    retries = 120 
+    while retries > 0: 
+        retries -= 1 
+ 
+        logger.info("Listing SQS users") 
+ 
+        try: 
+            api.list_queues() 
+            logger.info("Success. Api is up.") 
+            return True 
+ 
+        except (requests.ConnectionError, requests.exceptions.Timeout): 
+            time.sleep(1) 
+            continue 
+ 
+        except Exception: 
+            logger.info("Success. Api is up.") 
+            return True 
+ 
+    return False 
+ 
+ 
 def get_fqdn():
     # the same implementation as
     # https://a.yandex-team.ru/arc/trunk/arcadia/util/system/hostname.cpp?rev=3541264#L36
-    # that is used in ydb.
+    # that is used in ydb. 
     hostname = socket.gethostname()
     addrinfo = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, 0, 0, socket.AI_CANONNAME)
     for ai in addrinfo:
@@ -112,19 +112,19 @@ def get_fqdn():
 def get_test_with_sqs_tenant_installation(base_test_class):
     class TestWithTenant(base_test_class):
         slot_count = 1
-        database = '/Root/TenantSQS'
-        sqs_root = '/Root/TenantSQS'
+        database = '/Root/TenantSQS' 
+        sqs_root = '/Root/TenantSQS' 
 
         @classmethod
         def _init_cluster(cls, cluster, config_generator):
             cluster.create_database(
-                cls.database,
+                cls.database, 
                 storage_pool_units_count={
                     'hdd': 1
                 }
             )
-            cluster.register_and_start_slots(cls.database, count=1)
-            cluster.wait_tenant_up(cls.database)
+            cluster.register_and_start_slots(cls.database, count=1) 
+            cluster.wait_tenant_up(cls.database) 
             super(TestWithTenant, cls)._init_cluster(cluster, config_generator)
 
     return TestWithTenant
@@ -132,46 +132,46 @@ def get_test_with_sqs_tenant_installation(base_test_class):
 
 def get_test_with_sqs_installation_by_path(base_test_class):
     class TestWithPath(base_test_class):
-        database = '/Root'
-        sqs_root = '/Root/PathSQS'
-
+        database = '/Root' 
+        sqs_root = '/Root/PathSQS' 
+ 
     return TestWithPath
 
 
 class KikimrSqsTestBase(object):
     erasure = None
     slot_count = 0
-    database = '/Root'
-    sqs_root = '/Root/SQS'
-    use_in_memory_pdisks = True
+    database = '/Root' 
+    sqs_root = '/Root/SQS' 
+    use_in_memory_pdisks = True 
 
     @classmethod
     def setup_class(cls):
         cls.cluster, cls.config_generator = cls._setup_cluster()
         cls.sqs_ports = []
         if cls.slot_count:
-            cls.cluster_nodes = list(cls.cluster.slots.values())
+            cls.cluster_nodes = list(cls.cluster.slots.values()) 
         else:
-            cls.cluster_nodes = list(cls.cluster.nodes.values())
+            cls.cluster_nodes = list(cls.cluster.nodes.values()) 
         cls.cluster_nodes_count = len(cls.cluster_nodes)
-        for node in cls.cluster_nodes:
-            cls.sqs_ports.append(node.sqs_port)
-
+        for node in cls.cluster_nodes: 
+            cls.sqs_ports.append(node.sqs_port) 
+ 
         cls.sqs_port = cls.sqs_ports[0]
         cls.server_fqdn = get_fqdn()
 
-    def setup_method(self, method=None):
+    def setup_method(self, method=None): 
         logging.debug('Test started: {}'.format(str(method.__name__)))
         logging.debug("Kikimr logs dir: {}".format(self.cluster.slots[1].cwd if self.slot_count else self.cluster.nodes[1].cwd))
 
         # Start all nodes in case of previous test with killed nodes
-        for node_index in range(len(self.cluster.nodes)):
+        for node_index in range(len(self.cluster.nodes)): 
             self.cluster.nodes[node_index + 1].start()  # start if not alive
 
-        for slot_index in range(len(self.cluster.slots)):
+        for slot_index in range(len(self.cluster.slots)): 
             self.cluster.slots[slot_index + 1].start()  # start if not alive
 
-        for slot_index in range(len(self.cluster.slots)):
+        for slot_index in range(len(self.cluster.slots)): 
             self._enable_tablets_on_node(slot_index)
 
         grpc_port = self.cluster.slots[1].grpc_port if self.slot_count else self.cluster.nodes[1].grpc_port
@@ -185,53 +185,53 @@ class KikimrSqsTestBase(object):
         self._msg_body_template = self._username + '-{}'
         self._setup_user(self._username)
         self._sqs_apis = []
-        for node in self.cluster_nodes:
-            self._sqs_apis.append(
-                SqsHttpApi(
+        for node in self.cluster_nodes: 
+            self._sqs_apis.append( 
+                SqsHttpApi( 
                     'localhost',
-                    node.sqs_port,
+                    node.sqs_port, 
                     self._username,
-                    raise_on_error=True,
-                    timeout=None
-                )
-            )
-
-        tp = futures.ThreadPoolExecutor(8)
-        fs = []
-        for api in self._sqs_apis:
-            fs.append(
-                tp.submit(
-                    wait_can_list_users, api
-                )
-            )
-
-        for f in fs:
-            f.result()
-
+                    raise_on_error=True, 
+                    timeout=None 
+                ) 
+            ) 
+ 
+        tp = futures.ThreadPoolExecutor(8) 
+        fs = [] 
+        for api in self._sqs_apis: 
+            fs.append( 
+                tp.submit( 
+                    wait_can_list_users, api 
+                ) 
+            ) 
+ 
+        for f in fs: 
+            f.result() 
+ 
         self._sqs_api = self._sqs_apis[0]
-
+ 
         self._driver = self._make_kikimr_driver()
 
-        self.counter = itertools.count()
-        self.message_ids = []
-        self.read_result = []
-
+        self.counter = itertools.count() 
+        self.message_ids = [] 
+        self.read_result = [] 
+ 
         self.seq_no = 0
 
-    def teardown_method(self, method=None):
+    def teardown_method(self, method=None): 
         self.check_no_queues_table(self._username)
         self._driver.stop()
 
-        logging.debug(
-            'Test finished: {}'.format(
-                str(
-                    method.__name__
-                )
-            )
-        )
-
+        logging.debug( 
+            'Test finished: {}'.format( 
+                str( 
+                    method.__name__ 
+                ) 
+            ) 
+        ) 
+ 
     def check_all_users_queues_tables_consistency(self):
-        users = [entry.name for entry in self._driver.scheme_client.list_directory(self.sqs_root).children]
+        users = [entry.name for entry in self._driver.scheme_client.list_directory(self.sqs_root).children] 
         for user in users:
             if user == '.AtomicCounter' or user == '.Settings' or user == '.Queues':
                 continue
@@ -240,7 +240,7 @@ class KikimrSqsTestBase(object):
     def check_no_queues_table(self, username):
         raised = False
         try:
-            self._driver.scheme_client.describe_path('{}/{}/Queues'.format(self.sqs_root, username))
+            self._driver.scheme_client.describe_path('{}/{}/Queues'.format(self.sqs_root, username)) 
         except:
             raised = True  # Expect SchemeError or at least ConnectionLost in tests with node killings
 
@@ -255,19 +255,19 @@ class KikimrSqsTestBase(object):
     def _setup_config_generator(cls):
         config_generator = KikimrConfigGenerator(
             erasure=cls.erasure,
-            use_in_memory_pdisks=cls.use_in_memory_pdisks,
-            additional_log_configs={'SQS': LogLevels.INFO},
-            enable_sqs=True,
-        )
-        config_generator.yaml_config['sqs_config']['root'] = cls.sqs_root
-        config_generator.yaml_config['sqs_config']['enable_queue_master'] = True
-        config_generator.yaml_config['sqs_config']['masters_describer_update_time_ms'] = 2000
-        config_generator.yaml_config['sqs_config']['max_number_of_receive_messages'] = 100
-        config_generator.yaml_config['sqs_config']['transaction_timeout_ms'] = 60000
-        config_generator.yaml_config['sqs_config']['master_connect_timeout_ms'] = 60000
-        config_generator.yaml_config['sqs_config']['check_all_shards_in_receive_message'] = True
-        config_generator.yaml_config['sqs_config']['create_legacy_duration_counters'] = False
-        config_generator.yaml_config['sqs_config']['validate_message_body'] = True
+            use_in_memory_pdisks=cls.use_in_memory_pdisks, 
+            additional_log_configs={'SQS': LogLevels.INFO}, 
+            enable_sqs=True, 
+        ) 
+        config_generator.yaml_config['sqs_config']['root'] = cls.sqs_root 
+        config_generator.yaml_config['sqs_config']['enable_queue_master'] = True 
+        config_generator.yaml_config['sqs_config']['masters_describer_update_time_ms'] = 2000 
+        config_generator.yaml_config['sqs_config']['max_number_of_receive_messages'] = 100 
+        config_generator.yaml_config['sqs_config']['transaction_timeout_ms'] = 60000 
+        config_generator.yaml_config['sqs_config']['master_connect_timeout_ms'] = 60000 
+        config_generator.yaml_config['sqs_config']['check_all_shards_in_receive_message'] = True 
+        config_generator.yaml_config['sqs_config']['create_legacy_duration_counters'] = False 
+        config_generator.yaml_config['sqs_config']['validate_message_body'] = True 
 
         return config_generator
 
@@ -305,11 +305,11 @@ class KikimrSqsTestBase(object):
         cluster.start()
         cls._init_cluster(cluster, config_generator)
         return cluster, config_generator
-
-    def _setup_user(self, _username, retries_count=20):
-        cmd = [
-            get_sqs_client_path(),
-            'user',
+ 
+    def _setup_user(self, _username, retries_count=20): 
+        cmd = [ 
+            get_sqs_client_path(), 
+            'user', 
             '-u', 'metauser',
             '-n', _username,
         ] + self._sqs_server_opts
@@ -320,13 +320,13 @@ class KikimrSqsTestBase(object):
             except yatest_common.ExecutionError as ex:
                 logging.debug("Create user failed: {}. Retrying".format(ex))
                 retries_count -= 1
-                time.sleep(3)
+                time.sleep(3) 
             else:
                 return
         raise RuntimeError("Failed to create SQS user")
-
+ 
     def _create_api_for_user(self, user_name, raise_on_error=True, security_token=None, force_private=False, iam_token=None, folder_id=None):
-        api = SqsHttpApi(self.cluster.nodes[1].host,
+        api = SqsHttpApi(self.cluster.nodes[1].host, 
                          self.cluster_nodes[0].sqs_port,
                          user_name,
                          raise_on_error=raise_on_error,
@@ -344,7 +344,7 @@ class KikimrSqsTestBase(object):
         else:
             port = self.cluster.nodes[node_index + 1].port
         connection_params = ydb.ConnectionParams("localhost:{}".format(port))
-        connection_params.set_database(self.database)
+        connection_params.set_database(self.database) 
         driver = ydb.Driver(connection_params)
         driver.wait()
         return driver
@@ -359,7 +359,7 @@ class KikimrSqsTestBase(object):
                 session = self._driver.table_client.session().create()
                 data_result_sets = session.transaction().execute(query_text, commit_tx=True)
                 return data_result_sets
-            except (ydb.ConnectionError, ydb.Timeout, ydb.BadSession, ydb.Unavailable, ydb.InternalError) as ex:
+            except (ydb.ConnectionError, ydb.Timeout, ydb.BadSession, ydb.Unavailable, ydb.InternalError) as ex: 
                 logging.warning('Kikimr driver exception: {}'.format(ex))
                 # https://st.yandex-team.ru/SQS-307
                 if retries_left:
@@ -369,18 +369,18 @@ class KikimrSqsTestBase(object):
                     raise
 
     def _queue_url_matcher(self, queue_name):
-        urls_matchers = [
-            equal_to(
-                to_bytes(
-                    str('http://{server}:{port}/{user}/{queue_name}').format(
-                        server=self.server_fqdn, port=port, user=self._username, queue_name=queue_name
-                    )
-                )
-            )
-            for port in self.sqs_ports
-        ]
+        urls_matchers = [ 
+            equal_to( 
+                to_bytes( 
+                    str('http://{server}:{port}/{user}/{queue_name}').format( 
+                        server=self.server_fqdn, port=port, user=self._username, queue_name=queue_name 
+                    ) 
+                ) 
+            ) 
+            for port in self.sqs_ports 
+        ] 
         return any_of(*urls_matchers)
-
+ 
     def _create_queue_and_assert(self, queue_name, is_fifo=False, use_http=False, attributes=None, shards=None, retries=3):
         self.queue_url = None
         if attributes is None:
@@ -413,46 +413,46 @@ class KikimrSqsTestBase(object):
                     raise
             if self.queue_url is not None:  # queue_url will be None in case of connection error
                 break
-        assert_that(
-            to_bytes(self.queue_url),
+        assert_that( 
+            to_bytes(self.queue_url), 
             self._queue_url_matcher(queue_name)
-        )
-        return self.queue_url
-
-    def _send_message_and_assert(self, queue_url, msg_body, seq_no=None, group_id=None, attributes=None, delay_seconds=None):
-        attributes = {} if attributes is None else attributes
+        ) 
+        return self.queue_url 
+ 
+    def _send_message_and_assert(self, queue_url, msg_body, seq_no=None, group_id=None, attributes=None, delay_seconds=None): 
+        attributes = {} if attributes is None else attributes 
         send_msg_result = self._sqs_api.send_message(
             queue_url, msg_body, deduplication_id=seq_no, group_id=group_id, attributes=attributes, delay_seconds=delay_seconds
         )
-        assert_that(
-            send_msg_result, not_none()
-        )
-        return send_msg_result
-
+        assert_that( 
+            send_msg_result, not_none() 
+        ) 
+        return send_msg_result 
+ 
     def _send_messages(self, queue_url, message_count, msg_body_template=None, is_fifo=False, group_id=None):
         if msg_body_template is None:
             msg_body_template = self._msg_body_template
-        ret = []
-        for _ in range(message_count):
+        ret = [] 
+        for _ in range(message_count): 
             if is_fifo:
                 result = self._send_message_and_assert(
-                    queue_url, msg_body_template.format(next(self.counter)), seq_no=self.seq_no, group_id=group_id
+                    queue_url, msg_body_template.format(next(self.counter)), seq_no=self.seq_no, group_id=group_id 
                 )
                 self.seq_no += 1
             else:
-                result = self._send_message_and_assert(queue_url, msg_body_template.format(next(self.counter)))
-            ret.append(result)
-        return ret
-
+                result = self._send_message_and_assert(queue_url, msg_body_template.format(next(self.counter))) 
+            ret.append(result) 
+        return ret 
+ 
     def _read_while_not_empty(self, queue_url, messages_count, visibility_timeout=None, wait_timeout=1, max_empty_reads=1):
         ret = []
         messages_by_time = {}
         actual_vis_timeout = visibility_timeout if visibility_timeout is not None else DEFAULT_VISIBILITY_TIMEOUT
         empty_reads_count = 0
-        max_batch_to_read = self.config_generator.yaml_config['sqs_config']['max_number_of_receive_messages']
+        max_batch_to_read = self.config_generator.yaml_config['sqs_config']['max_number_of_receive_messages'] 
         while len(ret) < messages_count:
             # noinspection PyTypeChecker
-            request_start = time.time()
+            request_start = time.time() 
             read_result = self._sqs_api.receive_message(
                 queue_url, max_number_of_messages=min(messages_count - len(ret), max_batch_to_read),
                 visibility_timeout=visibility_timeout, wait_timeout=wait_timeout
@@ -481,21 +481,21 @@ class KikimrSqsTestBase(object):
 
     def _read_messages_and_assert(
             self, queue_url, messages_count, matcher=None, visibility_timeout=None, wait_timeout=1
-    ):
+    ): 
         read_result = self._read_while_not_empty(
             queue_url, messages_count=messages_count,
-            visibility_timeout=visibility_timeout, wait_timeout=wait_timeout
-        )
+            visibility_timeout=visibility_timeout, wait_timeout=wait_timeout 
+        ) 
         if matcher is not None:
             assert_that(
                 read_result, matcher
             )
-        return read_result
-
+        return read_result 
+ 
     def _create_queue_send_x_messages_read_y_messages(
             self, queue_name, send_count, read_count, msg_body_template,
             is_fifo=False, visibility_timeout=None, wait_timeout=1, group_id="1"
-    ):
+    ): 
         self._create_queue_and_assert(queue_name, is_fifo)
         if is_fifo:
             self.message_ids = self._send_messages(
@@ -509,8 +509,8 @@ class KikimrSqsTestBase(object):
             self.queue_url, read_count,
             ReadResponseMatcher().with_some_of_message_ids(self.message_ids).with_n_messages(read_count),
             visibility_timeout, wait_timeout
-        )
-
+        ) 
+ 
     def _other_node(self, node_index):
         if node_index == 0:
             return 1
@@ -627,7 +627,7 @@ class KikimrSqsTestBase(object):
                 time.sleep(1)  # wait node to start
 
     def _smart_make_table_path(self, user_name, queue_name, queue_version, shard, table_name):
-        table_path = '{}/{}'.format(self.sqs_root, user_name)
+        table_path = '{}/{}'.format(self.sqs_root, user_name) 
         if queue_name is not None:
             table_path += '/{}'.format(queue_name)
         if queue_version is not None and queue_version != 0:
@@ -638,8 +638,8 @@ class KikimrSqsTestBase(object):
         return table_path + '/{}'.format(table_name)
 
     def _get_queue_version_number(self, user_name, queue_name):
-        table_path = '{}/.Queues'.format(self.sqs_root)
-        data_result_sets = self._execute_yql_query('SELECT Version FROM `{}` WHERE Account=\'{}\' AND QueueName=\'{}\''.format(table_path, user_name, queue_name))
+        table_path = '{}/.Queues'.format(self.sqs_root) 
+        data_result_sets = self._execute_yql_query('SELECT Version FROM `{}` WHERE Account=\'{}\' AND QueueName=\'{}\''.format(table_path, user_name, queue_name)) 
         assert_that(len(data_result_sets), equal_to(1))
         assert_that(len(data_result_sets[0].rows), equal_to(1))
 
@@ -652,8 +652,8 @@ class KikimrSqsTestBase(object):
     def _get_queue_master_tablet_id(self, user_name_param=None, queue_name_param=None):
         user_name = user_name_param if user_name_param else self._username
         queue_name = queue_name_param if queue_name_param else self.queue_name
-        table_path = '{}/.Queues'.format(self.sqs_root)
-        data_result_sets = self._execute_yql_query('SELECT MasterTabletId FROM `{}` WHERE Account=\'{}\' AND QueueName=\'{}\''.format(table_path, user_name, queue_name))
+        table_path = '{}/.Queues'.format(self.sqs_root) 
+        data_result_sets = self._execute_yql_query('SELECT MasterTabletId FROM `{}` WHERE Account=\'{}\' AND QueueName=\'{}\''.format(table_path, user_name, queue_name)) 
         assert_that(len(data_result_sets), equal_to(1))
         assert_that(len(data_result_sets[0].rows), equal_to(1))
 
@@ -704,7 +704,7 @@ class KikimrSqsTestBase(object):
             self._check_std_queue_is_empty(queue_name, queue_version)
 
     def _get_table_lines_count(self, table_path):
-        data_result_sets = self._execute_yql_query('SELECT COUNT(*) AS count FROM `{}`;'.format(table_path))
+        data_result_sets = self._execute_yql_query('SELECT COUNT(*) AS count FROM `{}`;'.format(table_path)) 
         assert_that(len(data_result_sets), equal_to(1))
         assert_that(len(data_result_sets[0].rows), equal_to(1))
         logging.debug('Received count result for table {}: {}'.format(table_path, data_result_sets[0].rows[0]))
@@ -713,7 +713,7 @@ class KikimrSqsTestBase(object):
     def _check_std_queue_is_empty(self, queue_name, queue_version):
         shards = self._get_queue_shards_count(self._username, queue_name, queue_version)
         assert_that(shards, not_(equal_to(0)))
-        for shard in range(shards):
+        for shard in range(shards): 
             self._check_std_queue_shard_is_empty(queue_name, queue_version, shard)
 
     def _check_std_queue_shard_is_empty(self, queue_name, queue_version, shard):
@@ -748,6 +748,6 @@ class KikimrSqsTestBase(object):
             session.drop_table(self._smart_make_table_path(username, queuename, version, None, 'Data'))
         else:
             shards = self._get_queue_shards_count(username, queuename, version)
-            for shard in range(shards):
+            for shard in range(shards): 
                 session.drop_table(self._smart_make_table_path(username, queuename, version, shard, 'Messages'))
                 session.drop_table(self._smart_make_table_path(username, queuename, version, shard, 'MessageData'))

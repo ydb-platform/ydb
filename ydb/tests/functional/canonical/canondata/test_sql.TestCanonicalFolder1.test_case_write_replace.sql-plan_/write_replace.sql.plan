@@ -1,63 +1,63 @@
-{
-    "meta": {
-        "version": "0.1",
-        "type": "query"
-    },
-    "tables": [
-        {
-            "name": "/local/base_write_replace_sql_plan/Input",
-            "reads": [
-                {
-                    "type": "Scan",
-                    "scan_by": [
-                        "key (\"1\", +inf]",
-                        "subkey"
-                    ],
-                    "columns": [
-                        "key",
-                        "subkey"
-                    ]
-                }
-            ],
-            "writes": [
-                {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "key (expr)",
-                        "subkey (expr)"
-                    ],
-                    "columns": [
-                        "value"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "/local/base_write_replace_sql_plan/Input1",
-            "writes": [
-                {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
-                    "columns": [
-                        "Amount",
-                        "Comment"
-                    ]
-                },
-                {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
-                    "columns": [
-                        "Amount",
-                        "Comment"
-                    ]
-                }
-            ]
-        }
-    ]
-}
+{ 
+    "meta": { 
+        "version": "0.1", 
+        "type": "query" 
+    }, 
+    "tables": [ 
+        { 
+            "name": "/local/base_write_replace_sql_plan/Input", 
+            "reads": [ 
+                { 
+                    "type": "Scan", 
+                    "scan_by": [ 
+                        "key (\"1\", +inf]", 
+                        "subkey" 
+                    ], 
+                    "columns": [ 
+                        "key", 
+                        "subkey" 
+                    ] 
+                } 
+            ], 
+            "writes": [ 
+                { 
+                    "type": "MultiUpsert", 
+                    "key": [ 
+                        "key (expr)", 
+                        "subkey (expr)" 
+                    ], 
+                    "columns": [ 
+                        "value" 
+                    ] 
+                } 
+            ] 
+        }, 
+        { 
+            "name": "/local/base_write_replace_sql_plan/Input1", 
+            "writes": [ 
+                { 
+                    "type": "MultiUpsert", 
+                    "key": [ 
+                        "Group (expr)", 
+                        "Name (expr)" 
+                    ], 
+                    "columns": [ 
+                        "Amount", 
+                        "Comment" 
+                    ] 
+                }, 
+                { 
+                    "type": "MultiUpsert", 
+                    "key": [ 
+                        "Group (expr)", 
+                        "Name (expr)" 
+                    ], 
+                    "columns": [ 
+                        "Amount", 
+                        "Comment" 
+                    ] 
+                } 
+            ] 
+        } 
+    ] 
+} 

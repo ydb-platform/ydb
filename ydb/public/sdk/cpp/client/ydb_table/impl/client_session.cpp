@@ -38,16 +38,16 @@ void TSession::TImpl::MarkBroken() {
     }
 }
 
-void TSession::TImpl::MarkAsClosing() {
-    with_lock(Lock_) {
-        if (State_ == EState::S_ACTIVE) {
-            NeedUpdateActiveCounter_ = true;
-        }
-
-        State_ = EState::S_CLOSING;
-    }
-}
-
+void TSession::TImpl::MarkAsClosing() { 
+    with_lock(Lock_) { 
+        if (State_ == EState::S_ACTIVE) { 
+            NeedUpdateActiveCounter_ = true; 
+        } 
+ 
+        State_ = EState::S_CLOSING; 
+    } 
+} 
+ 
 void TSession::TImpl::MarkStandalone() {
     State_ = EState::S_STANDALONE;
     NeedUpdateActiveCounter_ = false;

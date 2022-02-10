@@ -1,5 +1,5 @@
 #include "kqp_impl.h"
-#include "kqp_metadata_loader.h"
+#include "kqp_metadata_loader.h" 
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -11,9 +11,9 @@
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <library/cpp/json/json_writer.h>
-#include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/json/json_writer.h> 
+#include <library/cpp/string_utils/base64/base64.h> 
+#include <library/cpp/digest/md5/md5.h> 
 
 #include <util/string/escape.h>
 
@@ -55,7 +55,7 @@ public:
         , UserToken(userToken)
         , DbCounters(dbCounters)
         , Config(MakeIntrusive<TKikimrConfiguration>())
-        , CompilationTimeout(TDuration::MilliSeconds(serviceConfig.GetCompileTimeoutMs()))
+        , CompilationTimeout(TDuration::MilliSeconds(serviceConfig.GetCompileTimeoutMs())) 
         , RecompileWithNewEngine(recompileWithNewEngine)
     {
         Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), Query.Cluster, kqpSettings->Settings, false);
@@ -81,7 +81,7 @@ public:
             << ", text: \"" << EscapeC(Query.Text) << "\""
             << ", startTime: " << StartTime);
 
-        TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup()));
+        TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup())); 
 
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, "");
 
@@ -89,9 +89,9 @@ public:
         counters->Counters = Counters;
         counters->DbCounters = DbCounters;
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(AppData(ctx)->Counters);
-        std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TlsActivationContext->ActorSystem(), true);
-        Gateway = CreateKikimrIcGateway(Query.Cluster, Query.Database, std::move(loader), ctx.ExecutorThread.ActorSystem,
-            ctx.SelfID.NodeId(), counters, MakeMiniKQLCompileServiceID());
+        std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader = std::make_shared<TKqpTableMetadataLoader>(TlsActivationContext->ActorSystem(), true); 
+        Gateway = CreateKikimrIcGateway(Query.Cluster, Query.Database, std::move(loader), ctx.ExecutorThread.ActorSystem, 
+            ctx.SelfID.NodeId(), counters, MakeMiniKQLCompileServiceID()); 
         Gateway->SetToken(Query.Cluster, UserToken);
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
@@ -170,29 +170,29 @@ private:
         AsyncCompileResult->Continue().Apply(callback);
     }
 
-    void AddMessageToReplayLog(const TString& queryPlan) {
-        NJson::TJsonValue replayMessage(NJson::JSON_MAP);
-        NJson::TJsonValue tablesMeta(NJson::JSON_ARRAY);
-        for(auto data: Gateway->GetCollectedSchemeData()) {
-            tablesMeta.AppendValue(Base64Encode(std::move(data)));
-        }
-
-        replayMessage.InsertValue("query_id", Uid);
-        replayMessage.InsertValue("version", "1.0");
-        replayMessage.InsertValue("query_text", EscapeC(Query.Text));
-        replayMessage.InsertValue("table_metadata", TString(NJson::WriteJson(tablesMeta, false)));
-        replayMessage.InsertValue("created_at", ToString(TlsActivationContext->ActorSystem()->Timestamp().Seconds()));
-        replayMessage.InsertValue("query_syntax", ToString(Config->_KqpYqlSyntaxVersion.Get().GetRef()));
-        replayMessage.InsertValue("query_database", Query.Database);
-        replayMessage.InsertValue("query_cluster", Query.Cluster);
-        replayMessage.InsertValue("query_plan", queryPlan);
-        TString message(NJson::WriteJson(replayMessage, /*formatOutput*/ false));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: " << "Built the replay message "
-            << message);
-
-        ReplayMessage = std::move(message);
-    }
-
+    void AddMessageToReplayLog(const TString& queryPlan) { 
+        NJson::TJsonValue replayMessage(NJson::JSON_MAP); 
+        NJson::TJsonValue tablesMeta(NJson::JSON_ARRAY); 
+        for(auto data: Gateway->GetCollectedSchemeData()) { 
+            tablesMeta.AppendValue(Base64Encode(std::move(data))); 
+        } 
+ 
+        replayMessage.InsertValue("query_id", Uid); 
+        replayMessage.InsertValue("version", "1.0"); 
+        replayMessage.InsertValue("query_text", EscapeC(Query.Text)); 
+        replayMessage.InsertValue("table_metadata", TString(NJson::WriteJson(tablesMeta, false))); 
+        replayMessage.InsertValue("created_at", ToString(TlsActivationContext->ActorSystem()->Timestamp().Seconds())); 
+        replayMessage.InsertValue("query_syntax", ToString(Config->_KqpYqlSyntaxVersion.Get().GetRef())); 
+        replayMessage.InsertValue("query_database", Query.Database); 
+        replayMessage.InsertValue("query_cluster", Query.Cluster); 
+        replayMessage.InsertValue("query_plan", queryPlan); 
+        TString message(NJson::WriteJson(replayMessage, /*formatOutput*/ false)); 
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: " << "Built the replay message " 
+            << message); 
+ 
+        ReplayMessage = std::move(message); 
+    } 
+ 
     void Reply(const TKqpCompileResult::TConstPtr& compileResult, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Send response"
             << ", self: " << ctx.SelfID
@@ -202,9 +202,9 @@ private:
             << ", uid: " << compileResult->Uid);
 
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult);
-
-        responseEv->ReplayMessage = std::move(ReplayMessage);
-        ReplayMessage = std::nullopt;
+ 
+        responseEv->ReplayMessage = std::move(ReplayMessage); 
+        ReplayMessage = std::nullopt; 
         auto& stats = responseEv->Stats;
         stats.SetFromCache(false);
         stats.SetDurationUs((TInstant::Now() - StartTime).MicroSeconds());
@@ -256,10 +256,10 @@ private:
             Counters->ReportSqlVersion(DbCounters, *kqpResult.SqlVersion);
         }
 
-        if (status == Ydb::StatusIds::SUCCESS) {
-            AddMessageToReplayLog(kqpResult.QueryPlan);
-        }
-
+        if (status == Ydb::StatusIds::SUCCESS) { 
+            AddMessageToReplayLog(kqpResult.QueryPlan); 
+        } 
+ 
         KqpCompileResult = TKqpCompileResult::Make(Uid, std::move(Query), status, kqpResult.Issues());
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -377,7 +377,7 @@ private:
     TString UserToken;
     TKqpDbCountersPtr DbCounters;
     TKikimrConfiguration::TPtr Config;
-    TDuration CompilationTimeout;
+    TDuration CompilationTimeout; 
     bool RecompileWithNewEngine;
     TInstant StartTime;
     TDuration CompileCpuTime;
@@ -387,7 +387,7 @@ private:
     TIntrusivePtr<IKqpHost> KqpHost;
     TIntrusivePtr<IKqpHost::IAsyncQueryResult> AsyncCompileResult;
     std::shared_ptr<TKqpCompileResult> KqpCompileResult;
-    std::optional<TString> ReplayMessage;
+    std::optional<TString> ReplayMessage; 
 };
 
 void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConfig& serviceConfig) {

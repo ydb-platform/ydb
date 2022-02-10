@@ -58,31 +58,31 @@ FROM AS_TABLE($episodesData);
 
 async def create_tables():  # Creating tables with session_pool_example
     from session_pool_example import main
-
+ 
     await main()
 
 
 async def main():
     await create_tables()
-    endpoint = os.getenv("YDB_ENDPOINT")
-    database = os.getenv("YDB_DATABASE")
-    driver = ydb.aio.Driver(endpoint=endpoint, database=database)
-    pool = ydb.aio.SessionPool(driver, size=10)  # Max number of available session
+    endpoint = os.getenv("YDB_ENDPOINT") 
+    database = os.getenv("YDB_DATABASE") 
+    driver = ydb.aio.Driver(endpoint=endpoint, database=database) 
+    pool = ydb.aio.SessionPool(driver, size=10)  # Max number of available session 
     session = await pool.acquire()
     prepared_query = await session.prepare(FillDataQuery.format(database))
     await session.transaction(ydb.SerializableReadWrite()).execute(
-        prepared_query,
-        {
-            "$seriesData": example_data.get_series_data(),
-            "$seasonsData": example_data.get_seasons_data(),
-            "$episodesData": example_data.get_episodes_data(),
+        prepared_query, 
+        { 
+            "$seriesData": example_data.get_series_data(), 
+            "$seasonsData": example_data.get_seasons_data(), 
+            "$episodesData": example_data.get_episodes_data(), 
         },
-        commit_tx=True,
+        commit_tx=True, 
     )
     await pool.release(session)
     await driver.stop()
     await pool.stop()
 
-
+ 
 if __name__ == "__main__":
     asyncio.get_event_loop().run_until_complete(main())

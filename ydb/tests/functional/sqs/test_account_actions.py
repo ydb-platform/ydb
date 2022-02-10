@@ -1,9 +1,9 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python 
+# -*- coding: utf-8 -*- 
 from hamcrest import assert_that, not_none, has_item, is_not
-
+ 
 from sqs_test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation
-
+ 
 
 class AccountActionsTest(KikimrSqsTestBase):
     def test_manage_account(self):

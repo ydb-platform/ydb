@@ -8,7 +8,7 @@
 namespace NKikimr {
     constexpr char DATABASE_LABEL[] = "database";
     constexpr char SLOT_LABEL[] = "slot";
-    constexpr char HOST_LABEL[] = "host";
+    constexpr char HOST_LABEL[] = "host"; 
 
     // Get counters group for specified service. Skip tenant and slot labels.
     TIntrusivePtr<NMonitoring::TDynamicCounters> GetServiceCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> root,

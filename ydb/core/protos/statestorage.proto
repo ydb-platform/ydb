@@ -123,7 +123,7 @@ message TEndpointBoardEntry {
     repeated string Services = 5;
 
     optional string DataCenter = 6;
-    optional uint32 NodeId = 7;
+    optional uint32 NodeId = 7; 
 
     repeated string AddressesV4 = 8;
     repeated string AddressesV6 = 9;

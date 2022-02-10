@@ -1,24 +1,24 @@
-{
-    "meta": {
-        "version": "0.1",
-        "type": "query"
-    },
-    "tables": [
-        {
-            "name": "/local/base_dynumber_select_from_table_sql_plan/InputDyNumber",
-            "reads": [
-                {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Key"
-                    ],
-                    "limit": "\"1001\"",
-                    "columns": [
-                        "Key",
-                        "Value"
-                    ]
-                }
-            ]
-        }
-    ]
-}
+{ 
+    "meta": { 
+        "version": "0.1", 
+        "type": "query" 
+    }, 
+    "tables": [ 
+        { 
+            "name": "/local/base_dynumber_select_from_table_sql_plan/InputDyNumber", 
+            "reads": [ 
+                { 
+                    "type": "FullScan", 
+                    "scan_by": [ 
+                        "Key" 
+                    ], 
+                    "limit": "\"1001\"", 
+                    "columns": [ 
+                        "Key", 
+                        "Value" 
+                    ] 
+                } 
+            ] 
+        } 
+    ] 
+} 

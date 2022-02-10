@@ -20,10 +20,10 @@ IF (OS_LINUX AND NOT WITH_VALGRIND)
         MESSAGE(WARNING "It takes too much time to run test in DEBUG mode, some tests are skipped")
     ENDIF ()
 
-    PEERDIR(
+    PEERDIR( 
         ydb/core/blobstorage
         ydb/core/blobstorage/ut_pdiskfit/lib
-    )
-
+    ) 
+ 
     END()
 ENDIF()

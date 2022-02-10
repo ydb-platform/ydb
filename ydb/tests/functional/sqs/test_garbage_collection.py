@@ -1,23 +1,23 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-import logging
-import time
+#!/usr/bin/env python 
+# -*- coding: utf-8 -*- 
+import logging 
+import time 
 import multiprocessing
 import random
-
+ 
 import pytest
 from hamcrest import assert_that, equal_to, less_than_or_equal_to
-
-from sqs_requests_client import SqsHttpApi
+ 
+from sqs_requests_client import SqsHttpApi 
 
 from sqs_matchers import ReadResponseMatcher
 
-from sqs_test_base import to_bytes
+from sqs_test_base import to_bytes 
 from sqs_test_base import KikimrSqsTestBase, VISIBILITY_CHANGE_METHOD_PARAMS, IS_FIFO_PARAMS
 
-
+ 
 def send_message(server, username, queue_url, sqs_port, body, seq_no, group_id):
-    is_fifo = to_bytes(queue_url).endswith(to_bytes('.fifo'))
+    is_fifo = to_bytes(queue_url).endswith(to_bytes('.fifo')) 
     api = SqsHttpApi(
         server,
         sqs_port,
@@ -45,7 +45,7 @@ def delete_message(server, username, queue_url, sqs_port, receipt_handle):
         raise_on_error=True,
         timeout=None
     )
-    api.delete_message(to_bytes(queue_url), receipt_handle)
+    api.delete_message(to_bytes(queue_url), receipt_handle) 
 
 
 def delete_message_pack(args):
@@ -57,24 +57,24 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(TestSqsGarbageCollection, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['min_message_retention_period_ms'] = 3000
-        config_generator.yaml_config['sqs_config']['cleanup_batch_size'] = 100
-        config_generator.yaml_config['sqs_config']['cleanup_period_ms'] = 2000
-        config_generator.yaml_config['sqs_config']['deduplication_period_ms'] = 2000
-        config_generator.yaml_config['sqs_config']['groups_read_attempt_ids_period_ms'] = 2000
+        config_generator.yaml_config['sqs_config']['min_message_retention_period_ms'] = 3000 
+        config_generator.yaml_config['sqs_config']['cleanup_batch_size'] = 100 
+        config_generator.yaml_config['sqs_config']['cleanup_period_ms'] = 2000 
+        config_generator.yaml_config['sqs_config']['deduplication_period_ms'] = 2000 
+        config_generator.yaml_config['sqs_config']['groups_read_attempt_ids_period_ms'] = 2000 
         return config_generator
 
     def fill_queue_with_messages(self, number_of_mesages_to_write, is_fifo, processes=None, random_groups_max_count=50):
         args = [
             (
-                self.cluster.nodes[1].host,
+                self.cluster.nodes[1].host, 
                 self._username,
                 self.queue_url,
                 self.cluster_nodes[0].sqs_port,
                 self._msg_body_template.format(i),
                 self.seq_no + i,
                 'group_{}'.format(random.randint(1, random_groups_max_count))
-            ) for i in range(number_of_mesages_to_write)
+            ) for i in range(number_of_mesages_to_write) 
         ]
         self.seq_no += number_of_mesages_to_write
         processes_to_write = processes
@@ -86,7 +86,7 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
     def delete_messages(self, queue_url, receipt_handles):
         args = [
             (
-                self.cluster.nodes[1].host,
+                self.cluster.nodes[1].host, 
                 self._username,
                 self.queue_url,
                 self.cluster_nodes[0].sqs_port,
@@ -155,7 +155,7 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
             time.sleep(time_after_send + retention - now)
 
         number_of_messages = None
-        for i in range(100):
+        for i in range(100): 
             attributes = self._sqs_api.get_queue_attributes(self.queue_url)
             number_of_messages = int(attributes['ApproximateNumberOfMessages'])
             if number_of_messages == 0:
@@ -171,7 +171,7 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
         self._create_queue_and_assert(self.queue_name, is_fifo=True)
 
         # do the same again to ensure that this process will not stop
-        for i in range(2):
+        for i in range(2): 
             self.fill_queue_with_messages(150, True)
             time.sleep(2)
             self.wait_fifo_table_empty('Deduplication')
@@ -182,7 +182,7 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
         self._create_queue_and_assert(self.queue_name, is_fifo=True)
 
         # do the same again to ensure that this process will not stop
-        for i in range(2):
+        for i in range(2): 
             self.fill_queue_with_messages(150, True, processes=None, random_groups_max_count=random_groups_max_count)
 
             read_result = self._read_messages_and_assert(self.queue_url, 500, matcher=ReadResponseMatcher().with_n_or_more_messages(1), visibility_timeout=1000, wait_timeout=1)
@@ -198,7 +198,7 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
         self.queue_name = self.queue_name + '.fifo'
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
         groups_count = 5
-        for group_number in range(groups_count):
+        for group_number in range(groups_count): 
             self._send_messages(queue_url, 1, is_fifo=True, group_id='group_{}'.format(group_number))
 
         receive_attempt_id = 'my_attempt'
@@ -220,7 +220,7 @@ class TestSqsGarbageCollection(KikimrSqsTestBase):
         if read_result_3 is None:
             read_result_3 = []
 
-        if read_result_2 and (time_after_read - time_before_read) <= (self.config_generator.yaml_config['sqs_config']['groups_read_attempt_ids_period_ms'] / 1000):
-            message_set_2 = set([res['MessageId'] for res in read_result_2])
-            message_set_3 = set([res['MessageId'] for res in read_result_3])
+        if read_result_2 and (time_after_read - time_before_read) <= (self.config_generator.yaml_config['sqs_config']['groups_read_attempt_ids_period_ms'] / 1000): 
+            message_set_2 = set([res['MessageId'] for res in read_result_2]) 
+            message_set_3 = set([res['MessageId'] for res in read_result_3]) 
             assert_that(len(message_set_2 & message_set_3), equal_to(len(message_set_2)))

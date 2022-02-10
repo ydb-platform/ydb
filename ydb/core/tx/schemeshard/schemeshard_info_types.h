@@ -1111,7 +1111,7 @@ struct TSolomonVolumeInfo: TSimpleRefCount<TSolomonVolumeInfo> {
 };
 
 
-using TSchemeQuota = TCountedLeakyBucket;
+using TSchemeQuota = TCountedLeakyBucket; 
 
 struct TSchemeQuotas : public TVector<TSchemeQuota> {
     mutable size_t LastKnownSize = 0;
@@ -1722,17 +1722,17 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         bool ok = true;
         for (auto& quota : SchemeQuotas) {
             quota.Update(now);
-            ok &= quota.CanPush(1.0);
+            ok &= quota.CanPush(1.0); 
         }
-
+ 
         if (!ok) {
             return false;
         }
-
+ 
         for (auto& quota : SchemeQuotas) {
-            quota.Push(now, 1.0);
+            quota.Push(now, 1.0); 
         }
-
+ 
         return true;
     }
 

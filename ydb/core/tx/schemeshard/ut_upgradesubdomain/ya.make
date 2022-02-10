@@ -1,4 +1,4 @@
-IF (NOT WITH_VALGRIND)
+IF (NOT WITH_VALGRIND) 
     UNITTEST_FOR(ydb/core/tx/schemeshard)
 
     OWNER(g:kikimr)
@@ -7,7 +7,7 @@ IF (NOT WITH_VALGRIND)
 
     SIZE(MEDIUM)
 
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/supp/ubsan_supp.inc)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/supp/ubsan_supp.inc) 
 
     PEERDIR(
         library/cpp/getopt
@@ -26,4 +26,4 @@ IF (NOT WITH_VALGRIND)
     )
 
     END()
-ENDIF()
+ENDIF() 

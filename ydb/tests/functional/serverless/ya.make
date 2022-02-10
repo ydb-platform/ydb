@@ -1,5 +1,5 @@
 OWNER(g:kikimr)
-PY3TEST()
+PY3TEST() 
 
 TEST_SRCS(
     conftest.py
@@ -17,8 +17,8 @@ DEPENDS(ydb/apps/ydbd)
 
 PEERDIR(
     contrib/python/tornado/tornado-4
-    ydb/tests/library
-    ydb/public/sdk/python/ydb
+    ydb/tests/library 
+    ydb/public/sdk/python/ydb 
 )
 
 END()

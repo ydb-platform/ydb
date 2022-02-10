@@ -5,16 +5,16 @@ import string
 import pytest
 from hamcrest import assert_that, equal_to, has_item, has_properties
 
-from ydb.tests.library.common.local_db_scheme import get_scheme
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.predicates.executor import external_blobs_is_present
-from ydb.tests.library.common.protobuf_ss import CreateTableRequest
+from ydb.tests.library.common.local_db_scheme import get_scheme 
+from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory 
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator 
+from ydb.tests.library.harness.util import LogLevels 
+from ydb.tests.library.predicates.executor import external_blobs_is_present 
+from ydb.tests.library.common.protobuf_ss import CreateTableRequest 
 
-import ydb.tests.library.matchers.scheme_ops as scheme_operations
-from ydb.tests.library.common.types import PType
-import ydb
+import ydb.tests.library.matchers.scheme_ops as scheme_operations 
+from ydb.tests.library.common.types import PType 
+import ydb 
 
 logger = logging.getLogger(__name__)
 
@@ -32,59 +32,59 @@ class TBaseTenant(object):
 
     @classmethod
     def setup_class(cls):
-        configurator = KikimrConfigGenerator(additional_log_configs=cls.LOG_SETTINGS)
+        configurator = KikimrConfigGenerator(additional_log_configs=cls.LOG_SETTINGS) 
         cls.kikimr = kikimr_cluster_factory(configurator)
         cls.kikimr.start()
-        cls.tenant_path = cls.__create_tenant('common_tenant', ('hdd', 'hdd1', 'hdd2'))
-        cls.driver = ydb.Driver(
-            ydb.DriverConfig(
-                "%s:%s" % (cls.kikimr.nodes[1].host, cls.kikimr.nodes[1].port),
-                cls.tenant_path
-            )
-        )
-        cls.driver.wait()
-        cls.pool = ydb.SessionPool(cls.driver, size=5)
+        cls.tenant_path = cls.__create_tenant('common_tenant', ('hdd', 'hdd1', 'hdd2')) 
+        cls.driver = ydb.Driver( 
+            ydb.DriverConfig( 
+                "%s:%s" % (cls.kikimr.nodes[1].host, cls.kikimr.nodes[1].port), 
+                cls.tenant_path 
+            ) 
+        ) 
+        cls.driver.wait() 
+        cls.pool = ydb.SessionPool(cls.driver, size=5) 
 
     @classmethod
     def teardown_class(cls):
-        if hasattr(cls, 'pool'):
-            cls.pool.stop()
-
-        if hasattr(cls, 'driver'):
-            cls.driver.stop()
-
+        if hasattr(cls, 'pool'): 
+            cls.pool.stop() 
+ 
+        if hasattr(cls, 'driver'): 
+            cls.driver.stop() 
+ 
         if hasattr(cls, 'kikimr'):
             cls.kikimr.stop()
 
     @classmethod
-    def __create_tenant(cls, name, storage_pools=('hdd', )):
+    def __create_tenant(cls, name, storage_pools=('hdd', )): 
         tenant_path = '/Root/users/%s' % name
-        result = cls.kikimr.create_database(
+        result = cls.kikimr.create_database( 
             tenant_path,
             storage_pool_units_count={
                 x: 1 for x in storage_pools
             }
         )
 
-        cls.kikimr.register_and_start_slots(tenant_path, count=1)
-        cls.kikimr.wait_tenant_up(tenant_path)
-        return result
+        cls.kikimr.register_and_start_slots(tenant_path, count=1) 
+        cls.kikimr.wait_tenant_up(tenant_path) 
+        return result 
 
+ 
+def write_huge_blobs(pool, table_path, count=1, size=2*1024*1024): 
+    with pool.checkout() as session: 
+        prepared = session.prepare(""" 
+            declare $key as Uint64; 
+            declare $value as Utf8; 
+            upsert into `%s` (key, value) VALUES ($key, $value); 
+            """ % table_path) 
 
-def write_huge_blobs(pool, table_path, count=1, size=2*1024*1024):
-    with pool.checkout() as session:
-        prepared = session.prepare("""
-            declare $key as Uint64;
-            declare $value as Utf8;
-            upsert into `%s` (key, value) VALUES ($key, $value);
-            """ % table_path)
-
-        for _ in range(count):
-            key = random.randint(1, 2 ** 48)
-            value = ''.join(random.choice(string.ascii_lowercase) for _ in range(size))
-            session.transaction().execute(
-                prepared, {'$key': key, '$value': value},
-                commit_tx=True,
+        for _ in range(count): 
+            key = random.randint(1, 2 ** 48) 
+            value = ''.join(random.choice(string.ascii_lowercase) for _ in range(size)) 
+            session.transaction().execute( 
+                prepared, {'$key': key, '$value': value}, 
+                commit_tx=True, 
             )
 
 
@@ -225,11 +225,11 @@ def case_12():
                     'Columns': [1, 2]}
             },
             Rooms={
-                0: {
-                    'Main': 2,
+                0: { 
+                    'Main': 2, 
                     'Outer': 2,
-                    'Blobs': 2
-                }
+                    'Blobs': 2 
+                } 
             }
         )
     )
@@ -563,35 +563,35 @@ class TestStorageConfig(TBaseTenant):
 
         with self.pool.checkout() as session:
             session.execute_scheme(
-                "create table `{}` (key Int32, value String, primary key(key));".format(
+                "create table `{}` (key Int32, value String, primary key(key));".format( 
                     table_path
                 )
             )
 
-            session.transaction().execute(
-                "upsert into `{}` (key) values (101);".format(table_path),
-                commit_tx=True,
-            )
+            session.transaction().execute( 
+                "upsert into `{}` (key) values (101);".format(table_path), 
+                commit_tx=True, 
+            ) 
 
-            session.transaction().execute(
-                "select key from `{}`;".format(table_path),
-            )
+            session.transaction().execute( 
+                "select key from `{}`;".format(table_path), 
+            ) 
 
-            session.execute_scheme(
-                "drop table `{}`;".format(table_path),
-            )
+            session.execute_scheme( 
+                "drop table `{}`;".format(table_path), 
+            ) 
 
     @pytest.mark.parametrize(
         "creation_options, has_external, matcher", [x() for x in TESTS],
         ids=[x.__name__ for x in TESTS]
     )
     def test_cases(self,  creation_options, has_external, matcher):
-        table_name = 'user_table_%d' % random.randint(1, 10000)
+        table_name = 'user_table_%d' % random.randint(1, 10000) 
         table_path = '%s/%s' % (self.tenant_path, table_name)
         table_operations = scheme_operations.TableOperations(self.kikimr.client)
         table_operations.create_and_wait_and_assert(table_path, options=creation_options)
 
-        write_huge_blobs(self.pool, table_path)
+        write_huge_blobs(self.pool, table_path) 
 
         assert_that(
             external_blobs_is_present(

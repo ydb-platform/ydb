@@ -1,48 +1,48 @@
-{
-    "meta": {
-        "version": "0.1",
-        "type": "query"
-    },
-    "tables": [
-        {
-            "name": "/local/base_write_multi_write_sql_plan/Input1",
-            "writes": [
-                {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
-                    "columns": [
-                        "Amount",
-                        "Comment"
-                    ]
-                },
-                {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
-                    "columns": [
-                        "Comment"
-                    ]
-                },
-                {
-                    "type": "Erase",
-                    "key": [
-                        "Group (\"1\")",
-                        "Name (\"Name5\")"
-                    ]
-                },
-                {
-                    "type": "MultiErase",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ]
-                }
-            ]
-        }
-    ]
-}
+{ 
+    "meta": { 
+        "version": "0.1", 
+        "type": "query" 
+    }, 
+    "tables": [ 
+        { 
+            "name": "/local/base_write_multi_write_sql_plan/Input1", 
+            "writes": [ 
+                { 
+                    "type": "MultiUpsert", 
+                    "key": [ 
+                        "Group (expr)", 
+                        "Name (expr)" 
+                    ], 
+                    "columns": [ 
+                        "Amount", 
+                        "Comment" 
+                    ] 
+                }, 
+                { 
+                    "type": "MultiUpsert", 
+                    "key": [ 
+                        "Group (expr)", 
+                        "Name (expr)" 
+                    ], 
+                    "columns": [ 
+                        "Comment" 
+                    ] 
+                }, 
+                { 
+                    "type": "Erase", 
+                    "key": [ 
+                        "Group (\"1\")", 
+                        "Name (\"Name5\")" 
+                    ] 
+                }, 
+                { 
+                    "type": "MultiErase", 
+                    "key": [ 
+                        "Group (expr)", 
+                        "Name (expr)" 
+                    ] 
+                } 
+            ] 
+        } 
+    ] 
+} 

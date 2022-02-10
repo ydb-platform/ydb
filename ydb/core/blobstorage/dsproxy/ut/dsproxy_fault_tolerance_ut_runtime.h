@@ -16,7 +16,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/ut_vdisk/lib/vdisk_mock.h>
-#include <util/system/sanitizers.h>
+#include <util/system/sanitizers.h> 
 
 namespace NKikimr {
 
@@ -63,14 +63,14 @@ public:
         }
 
         auto setup = MakeHolder<TActorSystemSetup>();
-        constexpr int maxSize = NSan::TSanIsOn() ? 1: 10;
+        constexpr int maxSize = NSan::TSanIsOn() ? 1: 10; 
         setup->NodeId = 1;
         setup->ExecutorsCount = 4;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[4]);
-        setup->Executors[0].Reset(new TBasicExecutorPool(0, Min(8, maxSize), 20));
-        setup->Executors[1].Reset(new TBasicExecutorPool(1, 8, 20));
-        setup->Executors[2].Reset(new TIOExecutorPool(2, 10));
-        setup->Executors[3].Reset(new TBasicExecutorPool(3, 8, 20));
+        setup->Executors[0].Reset(new TBasicExecutorPool(0, Min(8, maxSize), 20)); 
+        setup->Executors[1].Reset(new TBasicExecutorPool(1, 8, 20)); 
+        setup->Executors[2].Reset(new TIOExecutorPool(2, 10)); 
+        setup->Executors[3].Reset(new TBasicExecutorPool(3, 8, 20)); 
         setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 1000)));
 
         setup->LocalServices.emplace_back(loggerActorId, TActorSetupCmd(new TLoggerActor(logSettings,

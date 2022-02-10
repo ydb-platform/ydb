@@ -18,10 +18,10 @@ namespace NKqp {
 using namespace NYql;
 
 
-NMonitoring::TDynamicCounterPtr TKqpCountersBase::GetQueryReplayCounters() const {
-    return QueryReplayGroup;
-}
-
+NMonitoring::TDynamicCounterPtr TKqpCountersBase::GetQueryReplayCounters() const { 
+    return QueryReplayGroup; 
+} 
+ 
 void TKqpCountersBase::CreateYdbTxKindCounters(TKqpTransactionInfo::EKind kind, const TString& name) {
     auto txKindGroup = YdbGroup->GetSubgroup("tx_kind", name);
 
@@ -184,11 +184,11 @@ void TKqpCountersBase::Init() {
     WorkersClosedError = KqpGroup->GetCounter("Workers/ClosedError", true);
     WorkersClosedRequest = KqpGroup->GetCounter("Workers/ClosedRequest", true);
     ActiveWorkers = KqpGroup->GetCounter("Workers/Active", false);
-    ProxyForwardedRequests = KqpGroup->GetCounter("Proxy/Forwarded", true);
-
-    SessionBalancerCV = KqpGroup->GetCounter("SessionBalancer/CV", false);
-    SessionBalancerShutdowns = KqpGroup->GetCounter("SessionBalancer/Shutdown", true);
-
+    ProxyForwardedRequests = KqpGroup->GetCounter("Proxy/Forwarded", true); 
+ 
+    SessionBalancerCV = KqpGroup->GetCounter("SessionBalancer/CV", false); 
+    SessionBalancerShutdowns = KqpGroup->GetCounter("SessionBalancer/Shutdown", true); 
+ 
     YdbActiveWorkers = YdbGroup->GetNamedCounter("name", "table.session.active_count", false);
 
     WorkerCleanupLatency = KqpGroup->GetHistogram(
@@ -251,10 +251,10 @@ void TKqpCountersBase::ReportQueryType(NKikimrKqp::EQueryType type) {
     OtherQueryTypes->Inc();
 }
 
-void TKqpCountersBase::ReportSessionShutdownRequest() {
-    SessionBalancerShutdowns->Inc();
-}
-
+void TKqpCountersBase::ReportSessionShutdownRequest() { 
+    SessionBalancerShutdowns->Inc(); 
+} 
+ 
 void TKqpCountersBase::ReportCreateSession(ui64 requestSize) {
     CreateSessionRequests->Inc();
     *RequestBytes += requestSize;
@@ -428,15 +428,15 @@ void TKqpCountersBase::ReportWorkerCreated() {
     YdbActiveWorkers->Inc();
 }
 
-
-void TKqpCountersBase::ReportSessionBalancerCV(ui32 value) {
-    SessionBalancerCV->Set(value);
-}
-
-void TKqpCountersBase::ReportProxyForwardedRequest() {
-    ProxyForwardedRequests->Inc();
-}
-
+ 
+void TKqpCountersBase::ReportSessionBalancerCV(ui32 value) { 
+    SessionBalancerCV->Set(value); 
+} 
+ 
+void TKqpCountersBase::ReportProxyForwardedRequest() { 
+    ProxyForwardedRequests->Inc(); 
+} 
+ 
 void TKqpCountersBase::ReportWorkerFinished(TDuration lifeSpan) {
     WorkerLifeSpan->Collect(lifeSpan.MilliSeconds());
     ActiveWorkers->Dec();
@@ -544,7 +544,7 @@ TKqpDbCounters::TKqpDbCounters(const NMonitoring::TDynamicCounterPtr& externalGr
     Counters = internalGroup;
     KqpGroup = Counters->GetSubgroup("group", "kqp");
     YdbGroup = externalGroup;
-    QueryReplayGroup = KqpGroup->GetSubgroup("subsystem", "unified_agent_query_replay");
+    QueryReplayGroup = KqpGroup->GetSubgroup("subsystem", "unified_agent_query_replay"); 
 
     Init();
 }
@@ -691,7 +691,7 @@ TKqpCounters::TKqpCounters(const NMonitoring::TDynamicCounterPtr& counters, cons
     Counters = counters;
     KqpGroup = GetServiceCounters(counters, "kqp");
     YdbGroup = GetServiceCounters(counters, "ydb");
-    QueryReplayGroup = KqpGroup->GetSubgroup("subsystem", "unified_agent_query_replay");
+    QueryReplayGroup = KqpGroup->GetSubgroup("subsystem", "unified_agent_query_replay"); 
 
     Init();
 
@@ -764,33 +764,33 @@ TKqpCounters::TKqpCounters(const NMonitoring::TDynamicCounterPtr& counters, cons
         "NE/ScanTxTotalTimeMs", NMonitoring::ExponentialHistogram(20, 2, 1));
 }
 
-NMonitoring::TDynamicCounterPtr TKqpCounters::GetQueryReplayCounters() const {
-    return QueryReplayGroup;
-}
-
-
-void TKqpCounters::ReportSessionBalancerCV(TKqpDbCountersPtr dbCounters, ui32 val) {
-    TKqpCountersBase::ReportSessionBalancerCV(val);
-    if (dbCounters) {
-        dbCounters->ReportSessionBalancerCV(val);
-    }
-}
-
-
-void TKqpCounters::ReportProxyForwardedRequest(TKqpDbCountersPtr dbCounters) {
-    TKqpCountersBase::ReportProxyForwardedRequest();
-    if (dbCounters) {
-        dbCounters->ReportProxyForwardedRequest();
-    }
-}
-
+NMonitoring::TDynamicCounterPtr TKqpCounters::GetQueryReplayCounters() const { 
+    return QueryReplayGroup; 
+} 
+ 
+ 
+void TKqpCounters::ReportSessionBalancerCV(TKqpDbCountersPtr dbCounters, ui32 val) { 
+    TKqpCountersBase::ReportSessionBalancerCV(val); 
+    if (dbCounters) { 
+        dbCounters->ReportSessionBalancerCV(val); 
+    } 
+} 
+ 
+ 
+void TKqpCounters::ReportProxyForwardedRequest(TKqpDbCountersPtr dbCounters) { 
+    TKqpCountersBase::ReportProxyForwardedRequest(); 
+    if (dbCounters) { 
+        dbCounters->ReportProxyForwardedRequest(); 
+    } 
+} 
+ 
 void TKqpCounters::ReportSessionShutdownRequest(TKqpDbCountersPtr dbCounters) {
-    TKqpCountersBase::ReportSessionShutdownRequest();
+    TKqpCountersBase::ReportSessionShutdownRequest(); 
     if (dbCounters) {
         dbCounters->ReportSessionShutdownRequest();
-    }
-}
-
+    } 
+} 
+ 
 void TKqpCounters::ReportCreateSession(TKqpDbCountersPtr dbCounters, ui64 requestSize) {
     TKqpCountersBase::ReportCreateSession(requestSize);
     if (dbCounters) {

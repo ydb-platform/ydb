@@ -5,8 +5,8 @@
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
 #include <ydb/core/client/scheme_cache_lib/yql_db_scheme_resolver.h>
 
-#include <util/generic/ptr.h>
-
+#include <util/generic/ptr.h> 
+ 
 namespace NActors {
 class IActor;
 } // namespace NActors
@@ -43,6 +43,6 @@ struct TMiniKQLCompileServiceEvents {
 NActors::TActorId MakeMiniKQLCompileServiceID();
 const NActors::TActorId& GetMiniKQLCompileServiceID();
 NActors::IActor* CreateMiniKQLCompileService(size_t compileInflightLimit);
-NActors::IActor* CreateMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver);
+NActors::IActor* CreateMiniKQLCompileService(size_t compileInflightLimit, THolder<NYql::IDbSchemeResolver>&& dbSchemeResolver); 
 
 } // namespace NKikimr

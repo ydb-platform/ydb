@@ -66,7 +66,7 @@ SRCS(
     index_builder.proto
     issue_id.proto
     kesus.proto
-    kqp_query_settings.proto
+    kqp_query_settings.proto 
     kqp_physical.proto
     kqp_stats.proto
     kqp.proto

@@ -2,7 +2,7 @@ OWNER(g:kikimr)
 
 RECURSE(
     base
-    deprecated
+    deprecated 
     experimental
     idx_test
     json_value

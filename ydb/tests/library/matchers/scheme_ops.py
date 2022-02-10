@@ -1,20 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import six
+import six 
 import abc
 import logging
 
-from hamcrest import assert_that, has_properties, equal_to, anything, any_of, instance_of, greater_than
+from hamcrest import assert_that, has_properties, equal_to, anything, any_of, instance_of, greater_than 
 
-from ydb.tests.library.common.msgbus_types import MessageBusStatus, SchemeStatus
-from ydb.tests.library.common.path_types import PathType
-from ydb.tests.library.common.protobuf import build_protobuf_if_necessary
-from ydb.tests.library.common.protobuf_ss import SchemeOperationStatus, SchemeDescribeRequest
-from ydb.tests.library.common.protobuf_ss import CreatePath, DropPathRequest
-from ydb.tests.library.common.protobuf_ss import CreateTableRequest, DropTableRequest
-from ydb.tests.library.common.protobuf_ss import RegisterTenant, DropTenantRequest, ForceDropTenantRequest
-from ydb.tests.library.common.protobuf_ss import CreateTopicRequest, DropTopicRequest, AlterTopicRequest
-from ydb.tests.library.matchers.response_matchers import DynamicFieldsProtobufMatcher
+from ydb.tests.library.common.msgbus_types import MessageBusStatus, SchemeStatus 
+from ydb.tests.library.common.path_types import PathType 
+from ydb.tests.library.common.protobuf import build_protobuf_if_necessary 
+from ydb.tests.library.common.protobuf_ss import SchemeOperationStatus, SchemeDescribeRequest 
+from ydb.tests.library.common.protobuf_ss import CreatePath, DropPathRequest 
+from ydb.tests.library.common.protobuf_ss import CreateTableRequest, DropTableRequest 
+from ydb.tests.library.common.protobuf_ss import RegisterTenant, DropTenantRequest, ForceDropTenantRequest 
+from ydb.tests.library.common.protobuf_ss import CreateTopicRequest, DropTopicRequest, AlterTopicRequest 
+from ydb.tests.library.matchers.response_matchers import DynamicFieldsProtobufMatcher 
 
 import ydb.core.protos.flat_scheme_op_pb2 as flat_scheme_op
 
@@ -137,7 +137,7 @@ class _BaseSchemeOperation(object):
     def _and_assert_scheme_status(self, response):
         assert_that(
             response,
-            DynamicFieldsProtobufMatcher().Status(MessageBusStatus.MSTATUS_OK).SchemeStatus(SchemeStatus.StatusSuccess)
+            DynamicFieldsProtobufMatcher().Status(MessageBusStatus.MSTATUS_OK).SchemeStatus(SchemeStatus.StatusSuccess) 
         )
         return response
 
@@ -153,14 +153,14 @@ class _WaitOperation(_BaseSchemeOperation):
         assert_that(
             response,
             DynamicFieldsProtobufMatcher()
-            .Status(any_of(*[x.value for x in MessageBusStatus]))
-            .SchemeStatus(any_of(*[x.value for x in SchemeStatus]))
-            .FlatTxId(
-                has_properties(
-                    TxId=instance_of(six.integer_types),
-                    SchemeShardTabletId=instance_of(six.integer_types)
+            .Status(any_of(*[x.value for x in MessageBusStatus])) 
+            .SchemeStatus(any_of(*[x.value for x in SchemeStatus])) 
+            .FlatTxId( 
+                has_properties( 
+                    TxId=instance_of(six.integer_types), 
+                    SchemeShardTabletId=instance_of(six.integer_types) 
                 )
-            )
+            ) 
         )
 
     def wait(self, response, timeout_seconds=120):
@@ -319,20 +319,20 @@ class TenantOperations(_CreateOperation, _RemoveOperation, _DescribeOperation):
 
 
 class PathOperations(_CreateOperation, _RemoveOperation, _DescribeOperation):
-    def __init__(self, client):
-        super(PathOperations, self).__init__(client)
+    def __init__(self, client): 
+        super(PathOperations, self).__init__(client) 
 
-    def create(self, path):
-        return self._send_request(
-            CreatePath(path)
-        )
+    def create(self, path): 
+        return self._send_request( 
+            CreatePath(path) 
+        ) 
 
-    def remove(self, path):
-        return self._send_request(
-            DropPathRequest(path)
-        )
+    def remove(self, path): 
+        return self._send_request( 
+            DropPathRequest(path) 
+        ) 
 
-
+ 
 class TableOperations(_CreateOperation, _RemoveOperation, _DescribeOperation):
     def __init__(self, client):
         super(TableOperations, self).__init__(client)

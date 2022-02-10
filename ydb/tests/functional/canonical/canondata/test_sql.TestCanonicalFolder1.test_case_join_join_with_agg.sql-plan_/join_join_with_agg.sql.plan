@@ -1,32 +1,32 @@
-{
-    "meta": {
-        "version": "0.1",
-        "type": "query"
-    },
-    "tables": [
-        {
-            "name": "/local/base_join_join_with_agg_sql_plan/InputJoin1",
-            "reads": [
-                {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Key"
-                    ],
-                    "columns": [
-                        "Fk21",
-                        "Value"
-                    ]
-                },
-                {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key (expr)"
-                    ],
-                    "columns": [
-                        "Key"
-                    ]
-                }
-            ]
-        }
-    ]
-}
+{ 
+    "meta": { 
+        "version": "0.1", 
+        "type": "query" 
+    }, 
+    "tables": [ 
+        { 
+            "name": "/local/base_join_join_with_agg_sql_plan/InputJoin1", 
+            "reads": [ 
+                { 
+                    "type": "FullScan", 
+                    "scan_by": [ 
+                        "Key" 
+                    ], 
+                    "columns": [ 
+                        "Fk21", 
+                        "Value" 
+                    ] 
+                }, 
+                { 
+                    "type": "MultiLookup", 
+                    "lookup_by": [ 
+                        "Key (expr)" 
+                    ], 
+                    "columns": [ 
+                        "Key" 
+                    ] 
+                } 
+            ] 
+        } 
+    ] 
+} 

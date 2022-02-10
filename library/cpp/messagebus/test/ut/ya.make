@@ -2,9 +2,9 @@ OWNER(g:messagebus)
 
 UNITTEST_FOR(library/cpp/messagebus)
 
-TIMEOUT(1200)
+TIMEOUT(1200) 
 
-SIZE(LARGE)
+SIZE(LARGE) 
 
 TAG(
     ya:not_autocheck

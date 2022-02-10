@@ -2,14 +2,14 @@ UNITTEST_FOR(ydb/core/tablet_flat)
 
 FORK_SUBTESTS()
 
-IF (WITH_VALGRIND)
-    TIMEOUT(2400)
-    TAG(ya:fat)
-    SIZE(LARGE)
-ELSE()
-    TIMEOUT(600)
-    SIZE(MEDIUM)
-ENDIF()
+IF (WITH_VALGRIND) 
+    TIMEOUT(2400) 
+    TAG(ya:fat) 
+    SIZE(LARGE) 
+ELSE() 
+    TIMEOUT(600) 
+    SIZE(MEDIUM) 
+ENDIF() 
 
 OWNER(g:kikimr)
 

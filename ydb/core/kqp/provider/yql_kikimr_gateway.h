@@ -24,8 +24,8 @@
 #include <util/generic/ptr.h>
 #include <util/string/join.h>
 
-#include <memory>
-
+#include <memory> 
+ 
 namespace NYql {
 
 using NUdf::EDataSlot;
@@ -47,10 +47,10 @@ struct TKikimrQueryLimits {
 };
 
 struct TIndexDescription {
-    enum class EType : ui32 {
-        GlobalSync = 0,
-        GlobalAsync = 1,
-
+    enum class EType : ui32 { 
+        GlobalSync = 0, 
+        GlobalAsync = 1, 
+ 
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -70,66 +70,66 @@ struct TIndexDescription {
     const ui64 LocalPathId;
     const ui64 PathOwnerId;
 
-    TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
-        EType type, EIndexState state, ui64 schemaVersion, ui64 localPathId, ui64 pathOwnerId)
-        : Name(name)
-        , KeyColumns(keyColumns)
-        , DataColumns(dataColumns)
-        , Type(type)
-        , State(state)
-        , SchemaVersion(schemaVersion)
-        , LocalPathId(localPathId)
-        , PathOwnerId(pathOwnerId)
-    {}
-
+    TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns, 
+        EType type, EIndexState state, ui64 schemaVersion, ui64 localPathId, ui64 pathOwnerId) 
+        : Name(name) 
+        , KeyColumns(keyColumns) 
+        , DataColumns(dataColumns) 
+        , Type(type) 
+        , State(state) 
+        , SchemaVersion(schemaVersion) 
+        , LocalPathId(localPathId) 
+        , PathOwnerId(pathOwnerId) 
+    {} 
+ 
     TIndexDescription(const NKikimrSchemeOp::TIndexDescription& index)
-        : Name(index.GetName())
-        , KeyColumns(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end())
-        , DataColumns(index.GetDataColumnNames().begin(), index.GetDataColumnNames().end())
-        , Type(ConvertIndexType(index))
-        , State(static_cast<EIndexState>(index.GetState()))
-        , SchemaVersion(index.GetSchemaVersion())
-        , LocalPathId(index.GetLocalPathId())
-        , PathOwnerId(index.HasPathOwnerId() ? index.GetPathOwnerId() : 0ul)
-    {}
-
-    TIndexDescription(const NKikimrKqp::TIndexDescriptionProto* message)
-        : Name(message->GetName())
-        , KeyColumns(message->GetKeyColumns().begin(), message->GetKeyColumns().end())
-        , DataColumns(message->GetDataColumns().begin(), message->GetDataColumns().end())
-        , Type(static_cast<EType>(message->GetType()))
-        , State(static_cast<EIndexState>(message->GetState()))
-        , SchemaVersion(message->GetSchemaVersion())
-        , LocalPathId(message->GetLocalPathId())
-        , PathOwnerId(message->GetPathOwnerId())
-    {}
-
+        : Name(index.GetName()) 
+        , KeyColumns(index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end()) 
+        , DataColumns(index.GetDataColumnNames().begin(), index.GetDataColumnNames().end()) 
+        , Type(ConvertIndexType(index)) 
+        , State(static_cast<EIndexState>(index.GetState())) 
+        , SchemaVersion(index.GetSchemaVersion()) 
+        , LocalPathId(index.GetLocalPathId()) 
+        , PathOwnerId(index.HasPathOwnerId() ? index.GetPathOwnerId() : 0ul) 
+    {} 
+ 
+    TIndexDescription(const NKikimrKqp::TIndexDescriptionProto* message) 
+        : Name(message->GetName()) 
+        , KeyColumns(message->GetKeyColumns().begin(), message->GetKeyColumns().end()) 
+        , DataColumns(message->GetDataColumns().begin(), message->GetDataColumns().end()) 
+        , Type(static_cast<EType>(message->GetType())) 
+        , State(static_cast<EIndexState>(message->GetState())) 
+        , SchemaVersion(message->GetSchemaVersion()) 
+        , LocalPathId(message->GetLocalPathId()) 
+        , PathOwnerId(message->GetPathOwnerId()) 
+    {} 
+ 
     static TIndexDescription::EType ConvertIndexType(const NKikimrSchemeOp::TIndexDescription& index) {
-        auto type = NYql::TIndexDescription::EType::GlobalSync;
+        auto type = NYql::TIndexDescription::EType::GlobalSync; 
         if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync) {
             type = NYql::TIndexDescription::EType::GlobalAsync;
-        }
-
-        return type;
-    }
-
-    void ToMessage(NKikimrKqp::TIndexDescriptionProto* message) const {
-        message->SetName(Name);
-        message->SetType(static_cast<ui32>(Type));
-        message->SetState(static_cast<ui32>(State));
-        message->SetSchemaVersion(SchemaVersion);
-        message->SetLocalPathId(LocalPathId);
-        message->SetPathOwnerId(PathOwnerId);
-
-        for(auto& key: KeyColumns) {
-            message->AddKeyColumns(key);
-        }
-
-        for(auto& data: DataColumns) {
-            message->AddDataColumns(data);
-        }
-    }
-
+        } 
+ 
+        return type; 
+    } 
+ 
+    void ToMessage(NKikimrKqp::TIndexDescriptionProto* message) const { 
+        message->SetName(Name); 
+        message->SetType(static_cast<ui32>(Type)); 
+        message->SetState(static_cast<ui32>(State)); 
+        message->SetSchemaVersion(SchemaVersion); 
+        message->SetLocalPathId(LocalPathId); 
+        message->SetPathOwnerId(PathOwnerId); 
+ 
+        for(auto& key: KeyColumns) { 
+            message->AddKeyColumns(key); 
+        } 
+ 
+        for(auto& data: DataColumns) { 
+            message->AddDataColumns(data); 
+        } 
+    } 
+ 
     bool IsSameIndex(const TIndexDescription& other) const {
         return Name == other.Name &&
             KeyColumns == other.KeyColumns &&
@@ -183,38 +183,38 @@ struct TKikimrColumnMetadata {
     TString Type;
     bool NotNull = false;
     ui32 TypeId = 0;
-    TVector<TString> Families;
+    TVector<TString> Families; 
 
-    TKikimrColumnMetadata() = default;
-
+    TKikimrColumnMetadata() = default; 
+ 
     TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull, ui32 typeId = 0)
-        : Name(name)
-        , Id(id)
-        , Type(type)
+        : Name(name) 
+        , Id(id) 
+        , Type(type) 
         , NotNull(notNull)
-        , TypeId(typeId)
-    {}
-
-    explicit TKikimrColumnMetadata(const NKikimrKqp::TKqpColumnMetadataProto* message)
-        : Name(message->GetName())
-        , Id(message->GetId())
-        , Type(message->GetType())
+        , TypeId(typeId) 
+    {} 
+ 
+    explicit TKikimrColumnMetadata(const NKikimrKqp::TKqpColumnMetadataProto* message) 
+        : Name(message->GetName()) 
+        , Id(message->GetId()) 
+        , Type(message->GetType()) 
         , NotNull(message->GetNotNull())
-        , TypeId(message->GetTypeId())
-        , Families(message->GetFamily().begin(), message->GetFamily().end())
-    {}
-
-    void ToMessage(NKikimrKqp::TKqpColumnMetadataProto* message) const {
-        message->SetName(Name);
-        message->SetId(Id);
-        message->SetType(Type);
+        , TypeId(message->GetTypeId()) 
+        , Families(message->GetFamily().begin(), message->GetFamily().end()) 
+    {} 
+ 
+    void ToMessage(NKikimrKqp::TKqpColumnMetadataProto* message) const { 
+        message->SetName(Name); 
+        message->SetId(Id); 
+        message->SetType(Type); 
         message->SetNotNull(NotNull);
-        message->SetTypeId(TypeId);
-        for(auto& family: Families) {
-            message->AddFamily(family);
-        }
-    }
-
+        message->SetTypeId(TypeId); 
+        for(auto& family: Families) { 
+            message->AddFamily(family); 
+        } 
+    } 
+ 
     bool IsSameScheme(const TKikimrColumnMetadata& other) const {
         return Name == other.Name && Type == other.Type && NotNull == other.NotNull;
     }
@@ -231,9 +231,9 @@ struct TKikimrPathId {
     TKikimrPathId(ui64 ownerId, ui64 tableId)
         : TKikimrPathId(std::make_pair(ownerId, tableId)) {}
 
-    TKikimrPathId(const NKikimrKqp::TKqpPathIdProto* message)
-        : TKikimrPathId(std::make_pair(message->GetOwnerId(), message->GetTableId())) {}
-
+    TKikimrPathId(const NKikimrKqp::TKqpPathIdProto* message) 
+        : TKikimrPathId(std::make_pair(message->GetOwnerId(), message->GetTableId())) {} 
+ 
     ui64 OwnerId() const { return Raw.first; }
     ui64 TableId() const { return Raw.second; }
 
@@ -256,18 +256,18 @@ struct TKikimrPathId {
     static TKikimrPathId Parse(const TStringBuf& str);
 
     std::pair<ui64, ui64> Raw;
-
-    void ToMessage(NKikimrKqp::TKqpPathIdProto* message) const {
-        message->SetOwnerId(OwnerId());
-        message->SetTableId(TableId());
-    }
+ 
+    void ToMessage(NKikimrKqp::TKqpPathIdProto* message) const { 
+        message->SetOwnerId(OwnerId()); 
+        message->SetTableId(TableId()); 
+    } 
 };
 
-enum class EKikimrTableKind : ui32 {
+enum class EKikimrTableKind : ui32 { 
     Unspecified = 0,
-    Datashard = 1,
-    SysView = 2,
-    Olap = 3
+    Datashard = 1, 
+    SysView = 2, 
+    Olap = 3 
 };
 
 struct TKikimrTableMetadata : public TThrRefBase {
@@ -307,40 +307,40 @@ struct TKikimrTableMetadata : public TThrRefBase {
     TKikimrTableMetadata()
         : TKikimrTableMetadata("", "") {}
 
-    TKikimrTableMetadata(const NKikimrKqp::TKqpTableMetadataProto* message)
-        : DoesExist(message->GetDoesExist())
-        , Cluster(message->GetCluster())
-        , Name(message->GetName())
-        , PathId(&message->GetPathId())
-        , SysView(message->GetSysView())
-        , SchemaVersion(message->GetSchemaVersion())
-        , Kind(static_cast<EKikimrTableKind>(message->GetKind()))
-        , KeyColumnNames(message->GetKeyColunmNames().begin(), message->GetKeyColunmNames().end())
-    {
-        for(auto& attr: message->GetAttributes()) {
-            Attributes.emplace(attr.GetKey(), attr.GetValue());
-        }
-
-        std::map<ui32, TString> orderMap;
-        for(auto& col: message->GetColumns()) {
-            Columns.emplace(col.GetName(), TKikimrColumnMetadata(&col));
-            orderMap.emplace(col.GetId(), col.GetName());
-        }
-
-        Indexes.reserve(message->GetIndexes().size());
-        for(auto& index: message->GetIndexes())
-            Indexes.push_back(TIndexDescription(&index));
-
-        SecondaryGlobalIndexMetadata.reserve(message->GetSecondaryGlobalIndexMetadata().size());
-        for(auto& sgim: message->GetSecondaryGlobalIndexMetadata())
-           SecondaryGlobalIndexMetadata.push_back(MakeIntrusive<TKikimrTableMetadata>(&sgim));
-
-        ColumnOrder.reserve(Columns.size());
-        for(auto& [_, name]: orderMap) {
-            ColumnOrder.emplace_back(name);
-        }
-    }
-
+    TKikimrTableMetadata(const NKikimrKqp::TKqpTableMetadataProto* message) 
+        : DoesExist(message->GetDoesExist()) 
+        , Cluster(message->GetCluster()) 
+        , Name(message->GetName()) 
+        , PathId(&message->GetPathId()) 
+        , SysView(message->GetSysView()) 
+        , SchemaVersion(message->GetSchemaVersion()) 
+        , Kind(static_cast<EKikimrTableKind>(message->GetKind())) 
+        , KeyColumnNames(message->GetKeyColunmNames().begin(), message->GetKeyColunmNames().end()) 
+    { 
+        for(auto& attr: message->GetAttributes()) { 
+            Attributes.emplace(attr.GetKey(), attr.GetValue()); 
+        } 
+ 
+        std::map<ui32, TString> orderMap; 
+        for(auto& col: message->GetColumns()) { 
+            Columns.emplace(col.GetName(), TKikimrColumnMetadata(&col)); 
+            orderMap.emplace(col.GetId(), col.GetName()); 
+        } 
+ 
+        Indexes.reserve(message->GetIndexes().size()); 
+        for(auto& index: message->GetIndexes()) 
+            Indexes.push_back(TIndexDescription(&index)); 
+ 
+        SecondaryGlobalIndexMetadata.reserve(message->GetSecondaryGlobalIndexMetadata().size()); 
+        for(auto& sgim: message->GetSecondaryGlobalIndexMetadata()) 
+           SecondaryGlobalIndexMetadata.push_back(MakeIntrusive<TKikimrTableMetadata>(&sgim)); 
+ 
+        ColumnOrder.reserve(Columns.size()); 
+        for(auto& [_, name]: orderMap) { 
+            ColumnOrder.emplace_back(name); 
+        } 
+    } 
+ 
     bool IsSameTable(const TKikimrTableMetadata& other) {
         if (!DoesExist) {
             return false;
@@ -351,7 +351,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
             return false;
         }
 
-        for (auto& [name, column]: Columns) {
+        for (auto& [name, column]: Columns) { 
             auto otherColumn = other.Columns.FindPtr(name);
             if (!otherColumn) {
                 return false;
@@ -371,42 +371,42 @@ struct TKikimrTableMetadata : public TThrRefBase {
         return true;
     }
 
-    void ToMessage(NKikimrKqp::TKqpTableMetadataProto* message) const {
-        message->SetDoesExist(DoesExist);
-        message->SetCluster(Cluster);
-        message->SetName(Name);
-        message->SetSysView(SysView);
-        PathId.ToMessage(message->MutablePathId());
-        message->SetSchemaVersion(SchemaVersion);
-        message->SetKind(static_cast<ui32>(Kind));
-        for(auto& [key, value] : Attributes) {
-            message->AddAttributes()->SetKey(key);
-            message->AddAttributes()->SetValue(value);
-        }
-
-        for(auto& [name, column] : Columns) {
-            column.ToMessage(message->AddColumns());
-        }
-
-        for(auto& key: KeyColumnNames) {
-            message->AddKeyColunmNames(key);
-        }
-
-        for(auto& index: Indexes) {
-            index.ToMessage(message->AddIndexes());
-        }
-
-        for(auto& IndexTableMetadata: SecondaryGlobalIndexMetadata) {
-            IndexTableMetadata->ToMessage(message->AddSecondaryGlobalIndexMetadata());
-        }
-    }
-
-    TString SerializeToString() const {
-        NKikimrKqp::TKqpTableMetadataProto proto;
-        ToMessage(&proto);
-        return proto.SerializeAsString();
-    }
-
+    void ToMessage(NKikimrKqp::TKqpTableMetadataProto* message) const { 
+        message->SetDoesExist(DoesExist); 
+        message->SetCluster(Cluster); 
+        message->SetName(Name); 
+        message->SetSysView(SysView); 
+        PathId.ToMessage(message->MutablePathId()); 
+        message->SetSchemaVersion(SchemaVersion); 
+        message->SetKind(static_cast<ui32>(Kind)); 
+        for(auto& [key, value] : Attributes) { 
+            message->AddAttributes()->SetKey(key); 
+            message->AddAttributes()->SetValue(value); 
+        } 
+ 
+        for(auto& [name, column] : Columns) { 
+            column.ToMessage(message->AddColumns()); 
+        } 
+ 
+        for(auto& key: KeyColumnNames) { 
+            message->AddKeyColunmNames(key); 
+        } 
+ 
+        for(auto& index: Indexes) { 
+            index.ToMessage(message->AddIndexes()); 
+        } 
+ 
+        for(auto& IndexTableMetadata: SecondaryGlobalIndexMetadata) { 
+            IndexTableMetadata->ToMessage(message->AddSecondaryGlobalIndexMetadata()); 
+        } 
+    } 
+ 
+    TString SerializeToString() const { 
+        NKikimrKqp::TKqpTableMetadataProto proto; 
+        ToMessage(&proto); 
+        return proto.SerializeAsString(); 
+    } 
+ 
     std::pair<TIntrusivePtr<TKikimrTableMetadata>, TIndexDescription::EIndexState> GetIndexMetadata(const TString& indexName) const {
         YQL_ENSURE(Indexes.size(), "GetIndexMetadata called for table without indexes");
         YQL_ENSURE(Indexes.size() == SecondaryGlobalIndexMetadata.size(), "index metadata has not been loaded yet");
@@ -426,7 +426,7 @@ struct TCreateUserSettings {
     TString Password;
     bool PasswordEncrypted = false;
 };
-
+ 
 struct TAlterUserSettings {
     TString UserName;
     TString Password;
@@ -570,17 +570,17 @@ public:
         bool WithPrivateTables_ = false;
     };
 
-    class IKqpTableMetadataLoader : public std::enable_shared_from_this<IKqpTableMetadataLoader> {
-    public:
-        virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
-            const TString& cluster, const TString& table, const TLoadTableMetadataSettings& settings, const TString& database,
-            const TMaybe<NACLib::TUserToken>& userToken) = 0;
-
-        virtual TVector<TString> GetCollectedSchemeData() = 0;
-
-        virtual ~IKqpTableMetadataLoader() = default;
-    };
-
+    class IKqpTableMetadataLoader : public std::enable_shared_from_this<IKqpTableMetadataLoader> { 
+    public: 
+        virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata( 
+            const TString& cluster, const TString& table, const TLoadTableMetadataSettings& settings, const TString& database, 
+            const TMaybe<NACLib::TUserToken>& userToken) = 0; 
+ 
+        virtual TVector<TString> GetCollectedSchemeData() = 0; 
+ 
+        virtual ~IKqpTableMetadataLoader() = default; 
+    }; 
+ 
 public:
     virtual bool HasCluster(const TString& cluster) = 0;
     virtual TVector<TString> GetClusters() = 0;
@@ -615,8 +615,8 @@ public:
 
     virtual NThreading::TFuture<TGenericResult> DropGroup(const TString& cluster, const TDropGroupSettings& settings) = 0;
 
-    virtual TVector<TString> GetCollectedSchemeData() = 0;
-
+    virtual TVector<TString> GetCollectedSchemeData() = 0; 
+ 
 public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;
 

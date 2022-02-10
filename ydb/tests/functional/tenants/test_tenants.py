@@ -1,36 +1,36 @@
 # -*- coding: utf-8 -*-
-import os
-import logging
-import random
+import os 
+import logging 
+import random 
 import pytest
 
 from hamcrest import assert_that, greater_than, is_, not_, none
-
-import ydb
+ 
+import ydb 
 
 from common import Runtime, DBForStaticSlots
 
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__) 
 
 
 class TestTenants(DBForStaticSlots):
-    def test_when_deactivate_fat_tenant_creation_another_tenant_is_ok(self):
-        logger.info("create fat tenant")
-        databases = [os.path.join(self.root_dir, "database_%d") % idx for idx in range(3)]
-        for database in databases:
-            self.cluster.create_database(
-                database,
-                storage_pool_units_count={
-                    'hdd': 1
-                }
-            )
-
+    def test_when_deactivate_fat_tenant_creation_another_tenant_is_ok(self): 
+        logger.info("create fat tenant") 
+        databases = [os.path.join(self.root_dir, "database_%d") % idx for idx in range(3)] 
+        for database in databases: 
+            self.cluster.create_database( 
+                database, 
+                storage_pool_units_count={ 
+                    'hdd': 1 
+                } 
+            ) 
+ 
             driver_config = ydb.DriverConfig(
                 "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
                 database
             )
-
+ 
             with Runtime(self.cluster, database):
                 with ydb.Driver(driver_config) as driver:
                     with ydb.SessionPool(driver) as pool:
@@ -48,18 +48,18 @@ class TestTenants(DBForStaticSlots):
                                 )
                             )
                         pool.retry_operation_sync(create_table, self.robust_retries)
-
+ 
                         def describe_table(session):
                             result = session.describe_table(os.path.join(database, 'table_0'))
                             logger.debug("> describe table: series, %s", str(result))
                             return result
                         pool.retry_operation_sync(describe_table)
-
-        logger.info("remove tenants")
-        for database in databases:
+ 
+        logger.info("remove tenants") 
+        for database in databases: 
             self.cluster.remove_database(database)
-
-    def test_register_tenant_and_force_drop_with_table(self):
+ 
+    def test_register_tenant_and_force_drop_with_table(self): 
         with Runtime(self.cluster, self.database_name, 1):
             with ydb.Driver(self.driver_config) as driver:
                 with ydb.SessionPool(driver) as pool:
@@ -107,7 +107,7 @@ class TestTenants(DBForStaticSlots):
                             .with_primary_key('id')
                         )
                     pool.retry_operation_sync(create_table, self.robust_retries)
-
+ 
                     def describe_table(session):
                         result = session.describe_table(os.path.join(self.database_name, 'table_0'))
                         logger.debug("> describe table: series, %s", str(result))
@@ -129,8 +129,8 @@ class TestTenants(DBForStaticSlots):
                 with ydb.SessionPool(driver) as pool:
                     def create_table(session):
                         session.execute_scheme(
-                            "create table `{first}` (key Int32, value String, primary key(key));"
-                            "create table `{second}` (key Int32, value String, primary key(key));"
+                            "create table `{first}` (key Int32, value String, primary key(key));" 
+                            "create table `{second}` (key Int32, value String, primary key(key));" 
                             "".format(
                                 first=table_path_1,
                                 second=table_path_2
@@ -140,8 +140,8 @@ class TestTenants(DBForStaticSlots):
 
                     def upsert(session):
                         session.transaction().execute(
-                            "upsert into `{first}` (key) values (101);"
-                            "upsert into `{second}` (key) values (102);"
+                            "upsert into `{first}` (key) values (101);" 
+                            "upsert into `{second}` (key) values (102);" 
                             "".format(
                                 first=table_path_1,
                                 second=table_path_2
@@ -152,8 +152,8 @@ class TestTenants(DBForStaticSlots):
 
                     def select(session):
                         session.transaction().execute(
-                            "select key from `{first}`;"
-                            "select key from `{second}`;"
+                            "select key from `{first}`;" 
+                            "select key from `{second}`;" 
                             "".format(
                                 first=table_path_1,
                                 second=table_path_2
@@ -180,7 +180,7 @@ class TestTenants(DBForStaticSlots):
                 with ydb.SessionPool(driver, size=1) as pool:
                     def callee(session):
                         session.execute_scheme(
-                            "CREATE TABLE wormUp (id utf8, PRIMARY KEY (id));"
+                            "CREATE TABLE wormUp (id utf8, PRIMARY KEY (id));" 
                         )
                     pool.retry_operation_sync(callee, self.robust_retries)
 
@@ -191,23 +191,23 @@ class TestTenants(DBForStaticSlots):
 
                     def wormUp(session):
                         session.execute_scheme(
-                            "CREATE TABLE wormUp (id utf8, PRIMARY KEY (id));"
+                            "CREATE TABLE wormUp (id utf8, PRIMARY KEY (id));" 
                         )
-
+ 
                     pool.retry_operation_sync(wormUp, self.robust_retries)
 
                     create_futures = []
                     table = os.path.join(self.database_name, "temp/hardware/default/compute_az", "allocations")
                     sessions = [pool.acquire() for _ in range(10)]
-
+ 
                     for session in sessions:
                         create_futures.append(
                             session.async_execute_scheme(
-                                "CREATE TABLE `{table}` (id utf8, PRIMARY KEY (id));".format(
+                                "CREATE TABLE `{table}` (id utf8, PRIMARY KEY (id));".format( 
                                     table=table
                                 )
-                            )
-                        )
+                            ) 
+                        ) 
 
                     for session in sessions:
                         pool.release(session)
@@ -221,7 +221,7 @@ class TestTenants(DBForStaticSlots):
                             pass
                         except ydb.Unavailable as e:
                             logger.info("ydb.Unavailable: " + str(e))
-
+ 
                     with pool.checkout() as session:
                         assert_that(
                             session.describe_table(table),
@@ -229,8 +229,8 @@ class TestTenants(DBForStaticSlots):
                                 not_(
                                     none()
                                 )
-                            )
-                        )
+                            ) 
+                        ) 
 
                 assert_that(
                     success_responses_count,
@@ -240,8 +240,8 @@ class TestTenants(DBForStaticSlots):
     def test_stop_start(self):
         def create_table(session, table):
             session.execute_scheme(
-                "CREATE TABLE `{table}` (id utf8, PRIMARY KEY (id));".format(table=table)
-            )
+                "CREATE TABLE `{table}` (id utf8, PRIMARY KEY (id));".format(table=table) 
+            ) 
 
         for iNo in range(5):
             with Runtime(self.cluster, self.database_name):
@@ -303,7 +303,7 @@ class TestTenants(DBForStaticSlots):
                 with ydb.SessionPool(driver) as pool:
                     def create_table(session):
                         session.execute_scheme('''
-                            CREATE TABLE `{table}`
+                            CREATE TABLE `{table}` 
                             (
                                 id Int64,
                                 primary key (id)
@@ -313,8 +313,8 @@ class TestTenants(DBForStaticSlots):
 
                     def drop_create_table(session):
                         session.execute_scheme('''
-                            DROP TABLE `{table}`;
-                            CREATE TABLE `{table}`
+                            DROP TABLE `{table}`; 
+                            CREATE TABLE `{table}` 
                             (
                                 id_1 Int64,
                                 primary key (id_1)
@@ -329,12 +329,12 @@ class TestTenants(DBForStaticSlots):
                 with ydb.SessionPool(driver) as pool:
                     def create_tables(session, table_base):
                         session.execute_scheme('''
-                            CREATE TABLE `{table}_0`
+                            CREATE TABLE `{table}_0` 
                             (
                                 id Int64,
                                 primary key (id)
                             );
-                            CREATE TABLE `{table}_1`
+                            CREATE TABLE `{table}_1` 
                             (
                                 id Int64,
                                 primary key (id)
@@ -402,26 +402,26 @@ class TestTenants(DBForStaticSlots):
 class TestYqlLocks(DBForStaticSlots):
     def _create_tables(self, pool):
         def callee(session):
-            session.execute_scheme(
-                "create table bills (account Uint64, deposit Int64, primary key(account)); "
-                "create table transfers "
-                "(tx Uint64, acc_from Uint64, acc_to Uint64, amount Int64, primary key(tx)); "
-            )
+            session.execute_scheme( 
+                "create table bills (account Uint64, deposit Int64, primary key(account)); " 
+                "create table transfers " 
+                "(tx Uint64, acc_from Uint64, acc_to Uint64, amount Int64, primary key(tx)); " 
+            ) 
         pool.retry_operation_sync(callee, self.robust_retries)
 
     @staticmethod
-    def _initial_credit(pool):
-        with pool.checkout() as session:
-            session.transaction().execute(
-                "upsert into bills (account, deposit) "
-                "values (1u, 1000), (2u, 1000); "
-                "upsert into transfers (tx, acc_from, acc_to, amount) "
-                "values (0u, 0u, 1u, 1000), (1u, 0u, 2u, 1000); ",
-                commit_tx=True,
-            )
+    def _initial_credit(pool): 
+        with pool.checkout() as session: 
+            session.transaction().execute( 
+                "upsert into bills (account, deposit) " 
+                "values (1u, 1000), (2u, 1000); " 
+                "upsert into transfers (tx, acc_from, acc_to, amount) " 
+                "values (0u, 0u, 1u, 1000), (1u, 0u, 2u, 1000); ", 
+                commit_tx=True, 
+            ) 
 
     @staticmethod
-    def _plan_transactions(pool):
+    def _plan_transactions(pool): 
         operations = []
         for x in range(1, 10):
             operations += [x, -x]
@@ -429,42 +429,42 @@ class TestYqlLocks(DBForStaticSlots):
         return zip(range(2, 2 + len(operations)), operations)
 
     @staticmethod
-    def _perform_transaction(pool, tx, operation):
-        with pool.checkout() as session:
-            session.transaction().execute(
-                "$delta = ({delta}); "
-                "$tx = ({tx}); "
-                "$first = (select account, deposit from bills where account = 1u); "
-                "$second = (select account, deposit from bills where account = 2u); "
-                ""
-                "upsert into bills (account, deposit) "
-                "select account as account, deposit - $delta as deposit FROM $first; "
-                ""
-                "upsert into bills (account, deposit) "
-                "select account as account, deposit + $delta as deposit FROM $second; "
-                ""
-                "upsert into transfers (tx, acc_from, acc_to, amount) "
-                "values ($tx, 1u, 2u, $delta); ".format(delta=operation, tx=tx),
-                commit_tx=True,
-            )
+    def _perform_transaction(pool, tx, operation): 
+        with pool.checkout() as session: 
+            session.transaction().execute( 
+                "$delta = ({delta}); " 
+                "$tx = ({tx}); " 
+                "$first = (select account, deposit from bills where account = 1u); " 
+                "$second = (select account, deposit from bills where account = 2u); " 
+                "" 
+                "upsert into bills (account, deposit) " 
+                "select account as account, deposit - $delta as deposit FROM $first; " 
+                "" 
+                "upsert into bills (account, deposit) " 
+                "select account as account, deposit + $delta as deposit FROM $second; " 
+                "" 
+                "upsert into transfers (tx, acc_from, acc_to, amount) " 
+                "values ($tx, 1u, 2u, $delta); ".format(delta=operation, tx=tx), 
+                commit_tx=True, 
+            ) 
 
     @staticmethod
-    def _control_read(pool):
-        account_first = "select account, deposit from bills where account = 1u;"
-        account_second = "select account, deposit from bills where account = 2u;"
-        transfers = "select tx, acc_from, acc_to, amount from transfers; "
+    def _control_read(pool): 
+        account_first = "select account, deposit from bills where account = 1u;" 
+        account_second = "select account, deposit from bills where account = 2u;" 
+        transfers = "select tx, acc_from, acc_to, amount from transfers; " 
 
         data = []
-        with pool.checkout() as session:
-            with session.transaction() as tx:
-                for query in (account_first, account_second, transfers):
-                    data.append(
-                        tx.execute(
-                            query
-                        )
-                    )
+        with pool.checkout() as session: 
+            with session.transaction() as tx: 
+                for query in (account_first, account_second, transfers): 
+                    data.append( 
+                        tx.execute( 
+                            query 
+                        ) 
+                    ) 
 
-                tx.commit()
+                tx.commit() 
         assert len(data) > 0
         return data
 
@@ -472,7 +472,7 @@ class TestYqlLocks(DBForStaticSlots):
         with Runtime(self.cluster, self.database_name):
             with ydb.Driver(self.driver_config) as driver:
                 with ydb.SessionPool(driver, size=1) as pool:
-
+ 
                     self._create_tables(pool)
 
                     self._initial_credit(pool)

@@ -4,72 +4,72 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/metering/metering.h>
-
+ 
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-#include <util/string/printf.h>
-#include <util/system/env.h>
-
-using namespace NSchemeShardUT_Private;
-using namespace NKikimr::NWrappers::NTestHelpers;
-
+#include <util/string/printf.h> 
+#include <util/system/env.h> 
+ 
+using namespace NSchemeShardUT_Private; 
+using namespace NKikimr::NWrappers::NTestHelpers; 
+ 
 namespace {
-
-    void Run(TTestBasicRuntime& runtime, TTestEnv& env, const TVector<TString>& tables, const TString& request,
-            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
+ 
+    void Run(TTestBasicRuntime& runtime, TTestEnv& env, const TVector<TString>& tables, const TString& request, 
+            Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS, 
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "") {
-
-        ui64 txId = 100;
-
+ 
+        ui64 txId = 100; 
+ 
         ui64 schemeshardId = TTestTxConfig::SchemeShard;
-        if (dbName != "/MyRoot") {
-            TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
-                Name: "%s"
-            )", TStringBuf(serverless ? "/MyRoot/Shared" : dbName).RNextTok('/').data()));
-            env.TestWaitNotification(runtime, txId);
-
-            TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
-                PlanResolution: 50
-                Coordinators: 1
-                Mediators: 1
-                TimeCastBucketsPerMediator: 2
-                ExternalSchemeShard: true
-                Name: "%s"
-                StoragePools {
-                  Name: "name_User_kind_hdd-1"
-                  Kind: "common"
-                }
-                StoragePools {
-                  Name: "name_User_kind_hdd-2"
-                  Kind: "external"
-                }
-            )", TStringBuf(serverless ? "/MyRoot/Shared" : dbName).RNextTok('/').data()));
-            env.TestWaitNotification(runtime, txId);
-
-            if (serverless) {
-                const auto attrs = AlterUserAttrs({
-                    {"cloud_id", "CLOUD_ID_VAL"},
-                    {"folder_id", "FOLDER_ID_VAL"},
-                    {"database_id", "DATABASE_ID_VAL"}
-                });
-
-                TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
-                    Name: "%s"
+        if (dbName != "/MyRoot") { 
+            TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"( 
+                Name: "%s" 
+            )", TStringBuf(serverless ? "/MyRoot/Shared" : dbName).RNextTok('/').data())); 
+            env.TestWaitNotification(runtime, txId); 
+ 
+            TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"( 
+                PlanResolution: 50 
+                Coordinators: 1 
+                Mediators: 1 
+                TimeCastBucketsPerMediator: 2 
+                ExternalSchemeShard: true 
+                Name: "%s" 
+                StoragePools { 
+                  Name: "name_User_kind_hdd-1" 
+                  Kind: "common" 
+                } 
+                StoragePools { 
+                  Name: "name_User_kind_hdd-2" 
+                  Kind: "external" 
+                } 
+            )", TStringBuf(serverless ? "/MyRoot/Shared" : dbName).RNextTok('/').data())); 
+            env.TestWaitNotification(runtime, txId); 
+ 
+            if (serverless) { 
+                const auto attrs = AlterUserAttrs({ 
+                    {"cloud_id", "CLOUD_ID_VAL"}, 
+                    {"folder_id", "FOLDER_ID_VAL"}, 
+                    {"database_id", "DATABASE_ID_VAL"} 
+                }); 
+ 
+                TestCreateExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"( 
+                    Name: "%s" 
                     ResourcesDomainKey {
                         SchemeShard: %lu
                         PathId: 2
                     }
                 )", TStringBuf(dbName).RNextTok('/').data(), TTestTxConfig::SchemeShard), attrs);
-                env.TestWaitNotification(runtime, txId);
-
-                TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"(
-                    PlanResolution: 50
-                    Coordinators: 1
-                    Mediators: 1
-                    TimeCastBucketsPerMediator: 2
-                    ExternalSchemeShard: true
-                    ExternalHive: false
-                    Name: "%s"
+                env.TestWaitNotification(runtime, txId); 
+ 
+                TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", Sprintf(R"( 
+                    PlanResolution: 50 
+                    Coordinators: 1 
+                    Mediators: 1 
+                    TimeCastBucketsPerMediator: 2 
+                    ExternalSchemeShard: true 
+                    ExternalHive: false 
+                    Name: "%s" 
                     StoragePools {
                       Name: "name_User_kind_hdd-1"
                       Kind: "common"
@@ -79,35 +79,35 @@ namespace {
                       Kind: "external"
                     }
                 )", TStringBuf(dbName).RNextTok('/').data()));
-                env.TestWaitNotification(runtime, txId);
-            }
-
-            TestDescribeResult(DescribePath(runtime, dbName), {
-                NLs::PathExist,
-                NLs::ExtractTenantSchemeshard(&schemeshardId)
-            });
-        }
-
-        for (const auto& table : tables) {
-            TestCreateTable(runtime, schemeshardId, ++txId, dbName, table);
-            env.TestWaitNotification(runtime, txId, schemeshardId);
-        }
-
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-
+                env.TestWaitNotification(runtime, txId); 
+            } 
+ 
+            TestDescribeResult(DescribePath(runtime, dbName), { 
+                NLs::PathExist, 
+                NLs::ExtractTenantSchemeshard(&schemeshardId) 
+            }); 
+        } 
+ 
+        for (const auto& table : tables) { 
+            TestCreateTable(runtime, schemeshardId, ++txId, dbName, table); 
+            env.TestWaitNotification(runtime, txId, schemeshardId); 
+        } 
+ 
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE); 
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE); 
+ 
         TestExport(runtime, schemeshardId, ++txId, dbName, request, userSID);
-        env.TestWaitNotification(runtime, txId, schemeshardId);
-
-        const ui64 exportId = txId;
-        TestGetExport(runtime, schemeshardId, exportId, dbName, expectedStatus);
-
-        TestForgetExport(runtime, schemeshardId, ++txId, dbName, exportId);
-        env.TestWaitNotification(runtime, exportId, schemeshardId);
-
-        TestGetExport(runtime, schemeshardId, exportId, dbName, Ydb::StatusIds::NOT_FOUND);
-    }
-
+        env.TestWaitNotification(runtime, txId, schemeshardId); 
+ 
+        const ui64 exportId = txId; 
+        TestGetExport(runtime, schemeshardId, exportId, dbName, expectedStatus); 
+ 
+        TestForgetExport(runtime, schemeshardId, ++txId, dbName, exportId); 
+        env.TestWaitNotification(runtime, exportId, schemeshardId); 
+ 
+        TestGetExport(runtime, schemeshardId, exportId, dbName, Ydb::StatusIds::NOT_FOUND); 
+    } 
+ 
     using TDelayFunc = std::function<bool(TAutoPtr<IEventHandle>&)>;
 
     void Cancel(const TVector<TString>& tables, const TString& request, TDelayFunc delayFunc) {
@@ -163,36 +163,36 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
     void RunS3(TTestBasicRuntime& runtime, const TVector<TString>& tables, const TString& request) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
-
+ 
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
-
+ 
         TTestEnv env(runtime);
         Run(runtime, env, tables, Sprintf(request.c_str(), port), Ydb::StatusIds::SUCCESS, "/MyRoot", false);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
         TTestBasicRuntime runtime;
 
         RunS3(runtime, {
-            R"(
-                Name: "Table"
-                Columns { Name: "key" Type: "Utf8" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-            )",
-        }, R"(
+            R"( 
+                Name: "Table" 
+                Columns { Name: "key" Type: "Utf8" } 
+                Columns { Name: "value" Type: "Utf8" } 
+                KeyColumnNames: ["key"] 
+            )", 
+        }, R"( 
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
+              items { 
+                source_path: "/MyRoot/Table" 
                 destination_prefix: ""
-              }
-            }
+              } 
+            } 
         )");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(ShouldSucceedOnMultiShardTable) {
         TTestBasicRuntime runtime;
 
@@ -274,29 +274,29 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         )", port), delayFunc);
     }
 
-    Y_UNIT_TEST(CancelUponCreatingExportDirShouldSucceed) {
-        CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
+    Y_UNIT_TEST(CancelUponCreatingExportDirShouldSucceed) { 
+        CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) { 
             if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
-                return false;
-            }
-
+                return false; 
+            } 
+ 
             return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMkDir;
-        });
-    }
-
-    Y_UNIT_TEST(CancelUponCopyingTablesShouldSucceed) {
-        CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) {
+        }); 
+    } 
+ 
+    Y_UNIT_TEST(CancelUponCopyingTablesShouldSucceed) { 
+        CancelShouldSucceed([](TAutoPtr<IEventHandle>& ev) { 
             if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
-                return false;
-            }
-
+                return false; 
+            } 
+ 
             return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables;
-        });
-    }
-
-    void CancelUponTransferringShouldSucceed(const TVector<TString>& tables, const TString& request) {
+        }); 
+    } 
+ 
+    void CancelUponTransferringShouldSucceed(const TVector<TString>& tables, const TString& request) { 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -305,170 +305,170 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
 
         Cancel(tables, Sprintf(request.c_str(), port), [](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
-                return false;
-            }
-
+                return false; 
+            } 
+ 
             return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
                 .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
-        });
-    }
-
-    Y_UNIT_TEST(CancelUponTransferringSingleShardTableShouldSucceed) {
-        CancelUponTransferringShouldSucceed({
-            R"(
-                Name: "Table"
-                Columns { Name: "key" Type: "Utf8" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-            )",
-        }, R"(
+        }); 
+    } 
+ 
+    Y_UNIT_TEST(CancelUponTransferringSingleShardTableShouldSucceed) { 
+        CancelUponTransferringShouldSucceed({ 
+            R"( 
+                Name: "Table" 
+                Columns { Name: "key" Type: "Utf8" } 
+                Columns { Name: "value" Type: "Utf8" } 
+                KeyColumnNames: ["key"] 
+            )", 
+        }, R"( 
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
+              items { 
+                source_path: "/MyRoot/Table" 
                 destination_prefix: ""
-              }
-            }
-        )");
-    }
-
-    Y_UNIT_TEST(CancelUponTransferringMultiShardTableShouldSucceed) {
-        CancelUponTransferringShouldSucceed({
-            R"(
-                Name: "Table"
-                Columns { Name: "key" Type: "Uint32" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-                UniformPartitionsCount: 2
-            )",
-        }, R"(
+              } 
+            } 
+        )"); 
+    } 
+ 
+    Y_UNIT_TEST(CancelUponTransferringMultiShardTableShouldSucceed) { 
+        CancelUponTransferringShouldSucceed({ 
+            R"( 
+                Name: "Table" 
+                Columns { Name: "key" Type: "Uint32" } 
+                Columns { Name: "value" Type: "Utf8" } 
+                KeyColumnNames: ["key"] 
+                UniformPartitionsCount: 2 
+            )", 
+        }, R"( 
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
+              items { 
+                source_path: "/MyRoot/Table" 
                 destination_prefix: ""
-              }
-            }
-        )");
-    }
-
-    Y_UNIT_TEST(CancelUponTransferringSingleTableShouldSucceed) {
-        // same as CancelUponTransferringSingleShardTableShouldSucceed
-    }
-
-    Y_UNIT_TEST(CancelUponTransferringManyTablesShouldSucceed) {
-        CancelUponTransferringShouldSucceed({
-            R"(
-                Name: "Table1"
-                Columns { Name: "key" Type: "Utf8" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-            )",
-            R"(
-                Name: "Table2"
-                Columns { Name: "key" Type: "Utf8" }
-                Columns { Name: "value" Type: "Utf8" }
-                KeyColumnNames: ["key"]
-            )",
-        }, R"(
+              } 
+            } 
+        )"); 
+    } 
+ 
+    Y_UNIT_TEST(CancelUponTransferringSingleTableShouldSucceed) { 
+        // same as CancelUponTransferringSingleShardTableShouldSucceed 
+    } 
+ 
+    Y_UNIT_TEST(CancelUponTransferringManyTablesShouldSucceed) { 
+        CancelUponTransferringShouldSucceed({ 
+            R"( 
+                Name: "Table1" 
+                Columns { Name: "key" Type: "Utf8" } 
+                Columns { Name: "value" Type: "Utf8" } 
+                KeyColumnNames: ["key"] 
+            )", 
+            R"( 
+                Name: "Table2" 
+                Columns { Name: "key" Type: "Utf8" } 
+                Columns { Name: "value" Type: "Utf8" } 
+                KeyColumnNames: ["key"] 
+            )", 
+        }, R"( 
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table1"
+              items { 
+                source_path: "/MyRoot/Table1" 
                 destination_prefix: "table1"
-              }
-              items {
-                source_path: "/MyRoot/Table2"
+              } 
+              items { 
+                source_path: "/MyRoot/Table2" 
                 destination_prefix: "table2"
-              }
-            }
-        )");
-    }
-
-    Y_UNIT_TEST(DropSourceTableBeforeTransferring) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
-            Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
-            Columns { Name: "value" Type: "Utf8" }
-            KeyColumnNames: ["key"]
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
-
-        bool dropNotification = false;
-        THolder<IEventHandle> delayed;
-        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
+              } 
+            } 
+        )"); 
+    } 
+ 
+    Y_UNIT_TEST(DropSourceTableBeforeTransferring) { 
+        TTestBasicRuntime runtime; 
+        TTestEnv env(runtime); 
+        ui64 txId = 100; 
+ 
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"( 
+            Name: "Table" 
+            Columns { Name: "key" Type: "Utf8" } 
+            Columns { Name: "value" Type: "Utf8" } 
+            KeyColumnNames: ["key"] 
+        )"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE); 
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE); 
+ 
+        bool dropNotification = false; 
+        THolder<IEventHandle> delayed; 
+        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) { 
+            switch (ev->GetTypeRewrite()) { 
             case TEvSchemeShard::EvModifySchemeTransaction:
-                break;
+                break; 
             case TEvSchemeShard::EvNotifyTxCompletionResult:
-                if (dropNotification) {
-                    delayed.Reset(ev.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-                return TTestActorRuntime::EEventAction::PROCESS;
-            default:
-                return TTestActorRuntime::EEventAction::PROCESS;
-            }
-
+                if (dropNotification) { 
+                    delayed.Reset(ev.Release()); 
+                    return TTestActorRuntime::EEventAction::DROP; 
+                } 
+                return TTestActorRuntime::EEventAction::PROCESS; 
+            default: 
+                return TTestActorRuntime::EEventAction::PROCESS; 
+            } 
+ 
             const auto* msg = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>();
             if (msg->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables) {
-                dropNotification = true;
-            }
-
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
-            ExportToS3Settings {
-              endpoint: "localhost:%d"
-              scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: ""
-              }
-            }
-        )", port));
-        const ui64 exportId = txId;
-
-        if (!delayed) {
-            TDispatchOptions opts;
-            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool {
-                return bool(delayed);
-            });
-            runtime.DispatchEvents(opts);
-        }
-
-        runtime.SetObserverFunc(prevObserver);
-
-        TestDropTable(runtime, ++txId, "/MyRoot", "Table");
-        env.TestWaitNotification(runtime, txId);
-
-        runtime.Send(delayed.Release(), 0, true);
-        env.TestWaitNotification(runtime, exportId);
-
-        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-
-        TestForgetExport(runtime, ++txId, "/MyRoot", exportId);
-        env.TestWaitNotification(runtime, exportId);
-
-        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
-    }
+                dropNotification = true; 
+            } 
+ 
+            return TTestActorRuntime::EEventAction::PROCESS; 
+        }); 
+ 
+        TPortManager portManager; 
+        const ui16 port = portManager.GetPort(); 
+ 
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port)); 
+        UNIT_ASSERT(s3Mock.Start()); 
+ 
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"( 
+            ExportToS3Settings { 
+              endpoint: "localhost:%d" 
+              scheme: HTTP 
+              items { 
+                source_path: "/MyRoot/Table" 
+                destination_prefix: "" 
+              } 
+            } 
+        )", port)); 
+        const ui64 exportId = txId; 
+ 
+        if (!delayed) { 
+            TDispatchOptions opts; 
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) -> bool { 
+                return bool(delayed); 
+            }); 
+            runtime.DispatchEvents(opts); 
+        } 
+ 
+        runtime.SetObserverFunc(prevObserver); 
+ 
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table"); 
+        env.TestWaitNotification(runtime, txId); 
+ 
+        runtime.Send(delayed.Release(), 0, true); 
+        env.TestWaitNotification(runtime, exportId); 
+ 
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED); 
+ 
+        TestForgetExport(runtime, ++txId, "/MyRoot", exportId); 
+        env.TestWaitNotification(runtime, exportId); 
+ 
+        TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND); 
+    } 
 
     void DropCopiesBeforeTransferring(ui32 tablesCount) {
         TTestBasicRuntime runtime;
@@ -794,4 +794,4 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
         const auto afterForget = waitForStats(1);
         UNIT_ASSERT_STRINGS_EQUAL(expected.DebugString(), afterForget.DebugString());
     }
-}
+} 

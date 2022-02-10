@@ -1517,7 +1517,7 @@ Y_UNIT_TEST_SUITE(TTenantSlotBrokerTests) {
             POOL_UP
         };
 
-        TVector<EAction> actions = { ALTER, ALTER, ALTER, CLEAR };
+        TVector<EAction> actions = { ALTER, ALTER, ALTER, CLEAR }; 
         TSet<std::pair<ui32, TString>> banned;
         TSet<std::pair<ui32, TString>> pinned;
         TSet<ui32> down;

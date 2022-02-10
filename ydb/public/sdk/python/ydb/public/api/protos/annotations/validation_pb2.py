@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=b'\n\016com.yandex.ydb\370\001\001',
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n2ydb/public/api/protos/annotations/validation.proto\x12\x03Ydb\x1a google/protobuf/descriptor.proto\"\x9b\x01\n\x05Limit\x12!\n\x05range\x18\x01 \x01(\x0b\x32\x10.Ydb.Limit.RangeH\x00\x12\x0c\n\x02lt\x18\x02 \x01(\rH\x00\x12\x0c\n\x02le\x18\x03 \x01(\rH\x00\x12\x0c\n\x02\x65q\x18\x04 \x01(\rH\x00\x12\x0c\n\x02ge\x18\x05 \x01(\rH\x00\x12\x0c\n\x02gt\x18\x06 \x01(\rH\x00\x1a!\n\x05Range\x12\x0b\n\x03min\x18\x01 \x01(\r\x12\x0b\n\x03max\x18\x02 \x01(\rB\x06\n\x04kind\"3\n\x06MapKey\x12\x1a\n\x06length\x18\x01 \x01(\x0b\x32\n.Ydb.Limit\x12\r\n\x05value\x18\x02 \x01(\t:1\n\x08required\x12\x1d.google.protobuf.FieldOptions\x18\xe2\xac\x05 \x01(\x08:9\n\x04size\x12\x1d.google.protobuf.FieldOptions\x18\xe3\xac\x05 \x01(\x0b\x32\n.Ydb.Limit:;\n\x06length\x12\x1d.google.protobuf.FieldOptions\x18\xe4\xac\x05 \x01(\x0b\x32\n.Ydb.Limit:=\n\x07map_key\x12\x1d.google.protobuf.FieldOptions\x18\xe5\xac\x05 \x01(\x0b\x32\x0b.Ydb.MapKey:.\n\x05value\x12\x1d.google.protobuf.FieldOptions\x18\xe6\xac\x05 \x01(\tB\x13\n\x0e\x63om.yandex.ydb\xf8\x01\x01\x62\x06proto3'
+  serialized_pb=b'\n2ydb/public/api/protos/annotations/validation.proto\x12\x03Ydb\x1a google/protobuf/descriptor.proto\"\x9b\x01\n\x05Limit\x12!\n\x05range\x18\x01 \x01(\x0b\x32\x10.Ydb.Limit.RangeH\x00\x12\x0c\n\x02lt\x18\x02 \x01(\rH\x00\x12\x0c\n\x02le\x18\x03 \x01(\rH\x00\x12\x0c\n\x02\x65q\x18\x04 \x01(\rH\x00\x12\x0c\n\x02ge\x18\x05 \x01(\rH\x00\x12\x0c\n\x02gt\x18\x06 \x01(\rH\x00\x1a!\n\x05Range\x12\x0b\n\x03min\x18\x01 \x01(\r\x12\x0b\n\x03max\x18\x02 \x01(\rB\x06\n\x04kind\"3\n\x06MapKey\x12\x1a\n\x06length\x18\x01 \x01(\x0b\x32\n.Ydb.Limit\x12\r\n\x05value\x18\x02 \x01(\t:1\n\x08required\x12\x1d.google.protobuf.FieldOptions\x18\xe2\xac\x05 \x01(\x08:9\n\x04size\x12\x1d.google.protobuf.FieldOptions\x18\xe3\xac\x05 \x01(\x0b\x32\n.Ydb.Limit:;\n\x06length\x12\x1d.google.protobuf.FieldOptions\x18\xe4\xac\x05 \x01(\x0b\x32\n.Ydb.Limit:=\n\x07map_key\x12\x1d.google.protobuf.FieldOptions\x18\xe5\xac\x05 \x01(\x0b\x32\x0b.Ydb.MapKey:.\n\x05value\x12\x1d.google.protobuf.FieldOptions\x18\xe6\xac\x05 \x01(\tB\x13\n\x0e\x63om.yandex.ydb\xf8\x01\x01\x62\x06proto3' 
   ,
   dependencies=[google_dot_protobuf_dot_descriptor__pb2.DESCRIPTOR,])
 
@@ -101,8 +101,8 @@ _LIMIT_RANGE = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=208,
-  serialized_end=241,
+  serialized_start=208, 
+  serialized_end=241, 
 )
 
 _LIMIT = _descriptor.Descriptor(
@@ -172,8 +172,8 @@ _LIMIT = _descriptor.Descriptor(
       create_key=_descriptor._internal_create_key,
     fields=[]),
   ],
-  serialized_start=94,
-  serialized_end=249,
+  serialized_start=94, 
+  serialized_end=249, 
 )
 
 
@@ -211,8 +211,8 @@ _MAPKEY = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=251,
-  serialized_end=302,
+  serialized_start=251, 
+  serialized_end=302, 
 )
 
 _LIMIT_RANGE.containing_type = _LIMIT

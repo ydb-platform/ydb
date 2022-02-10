@@ -65,16 +65,16 @@ def with_trace(span_name=None):
     def decorator(f):
         @functools.wraps(f)
         def wrapper(self, *args, **kwargs):
-            name = (
-                span_name
-                if span_name is not None
-                else self.__class__.__name__ + "." + f.__name__
-            )
+            name = ( 
+                span_name 
+                if span_name is not None 
+                else self.__class__.__name__ + "." + f.__name__ 
+            ) 
             with self.tracer.trace(name):
                 return f(self, *args, **kwargs)
-
+ 
         return wrapper
-
+ 
     return decorator
 
 
@@ -168,21 +168,21 @@ class Tracer:
 
         :return: new tracer
         """
-        return (
-            cls(tracer)
-            .with_post_tags({"ok": True}, {"ok": False})
-            .with_pre_tags({"started": True})
-            .with_on_error_callback(_default_on_error_callback)
+        return ( 
+            cls(tracer) 
+            .with_post_tags({"ok": True}, {"ok": False}) 
+            .with_pre_tags({"started": True}) 
+            .with_on_error_callback(_default_on_error_callback) 
             .with_verbose_level(TraceLevel.INFO)
-        )
+        ) 
 
 
 def _default_on_error_callback(ctx, exc_type, exc_val, exc_tb):
-    ctx.trace(
-        {
-            "error.type": exc_type.__name__,
-            "error.value": exc_val,
-            "error.traceback": exc_tb,
-        },
-        trace_level=TraceLevel.ERROR,
-    )
+    ctx.trace( 
+        { 
+            "error.type": exc_type.__name__, 
+            "error.value": exc_val, 
+            "error.traceback": exc_tb, 
+        }, 
+        trace_level=TraceLevel.ERROR, 
+    ) 

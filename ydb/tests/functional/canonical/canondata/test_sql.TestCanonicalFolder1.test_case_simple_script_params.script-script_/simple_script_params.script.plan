@@ -1,11 +1,11 @@
-{
-    "meta": {
-        "version": "0.2",
-        "type": "script"
-    },
-    "queries": [
-        {
-            "tables": []
-        }
-    ]
-}
+{ 
+    "meta": { 
+        "version": "0.2", 
+        "type": "script" 
+    }, 
+    "queries": [ 
+        { 
+            "tables": [] 
+        } 
+    ] 
+} 

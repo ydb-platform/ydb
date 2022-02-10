@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-import abc
+import abc 
 import heapq
 import itertools
 import logging
 import random
 import time
-import threading
-import six.moves
+import threading 
+import six.moves 
 from six.moves import collections_abc
-from ydb.tests.library.nemesis import remote_execution
+from ydb.tests.library.nemesis import remote_execution 
 
 
 def wrap_in_list(item):
@@ -35,14 +35,14 @@ class RunUnderNemesisContext(object):
         return False
 
 
-class NemesisProcess(threading.Thread):
+class NemesisProcess(threading.Thread): 
     def __init__(self, nemesis_factory, initial_sleep=10):
         super(NemesisProcess, self).__init__(name='Nemesis')
         self.__nemesis_factory = nemesis_factory
         self.__private_nemesis_list = wrap_in_list(nemesis_factory)
         self.__pq = PriorityQueue()
-        self.__is_running = threading.Event()
-        self.__finished_running = threading.Event()
+        self.__is_running = threading.Event() 
+        self.__finished_running = threading.Event() 
         self.__initial_sleep = initial_sleep
 
         self.daemon = True
@@ -68,11 +68,11 @@ class NemesisProcess(threading.Thread):
         while not self.__finished_running.is_set() and time.time() < finish_time:
             time.sleep(1)
         finish_time = time.time()
-        self.__logger.info(
-            "Stopped Nemesis successfully in {} seconds".format(
-                int(finish_time - start_time)
-            )
-        )
+        self.__logger.info( 
+            "Stopped Nemesis successfully in {} seconds".format( 
+                int(finish_time - start_time) 
+            ) 
+        ) 
 
     def run(self):
         try:
@@ -102,12 +102,12 @@ class NemesisProcess(threading.Thread):
             try:
                 nemesis.inject_fault()
             except Exception:
-                self.__logger.exception(
-                    'Inject fault for nemesis = {nemesis} failed.'.format(
-                        nemesis=nemesis,
-                    )
-                )
-
+                self.__logger.exception( 
+                    'Inject fault for nemesis = {nemesis} failed.'.format( 
+                        nemesis=nemesis, 
+                    ) 
+                ) 
+ 
             priority = time.time() + nemesis.next_schedule()
             self.__pq.add_task(task=nemesis, priority=priority)
 
@@ -151,7 +151,7 @@ class NemesisProcess(threading.Thread):
 
 
 class Nemesis(object):
-    __metaclass__ = abc.ABCMeta
+    __metaclass__ = abc.ABCMeta 
 
     def __init__(self, schedule):
         self.__schedule = Schedule.from_tuple_or_int(schedule)
@@ -165,7 +165,7 @@ class Nemesis(object):
         """
         return next(self.__schedule)
 
-    @abc.abstractmethod
+    @abc.abstractmethod 
     def prepare_state(self):
         """
         Prepare state of your Nemesis. Called only once on start.
@@ -174,7 +174,7 @@ class Nemesis(object):
         """
         pass
 
-    @abc.abstractmethod
+    @abc.abstractmethod 
     def inject_fault(self):
         """
         Inject some fault into running cluster.
@@ -183,7 +183,7 @@ class Nemesis(object):
         """
         pass
 
-    @abc.abstractmethod
+    @abc.abstractmethod 
     def extract_fault(self):
         """
         Cancel all injected fault if this is possible. Some faults can't be canceled (e.g. node formatting).
@@ -210,11 +210,11 @@ class Nemesis(object):
 
 
 class AbstractNemesisNodeTerrorist(Nemesis):
-    __metaclass__ = abc.ABCMeta
+    __metaclass__ = abc.ABCMeta 
 
     def __init__(self, node_list, act_interval, ssh_user=None, remote_sudo_user=None, timeout=60):
         super(AbstractNemesisNodeTerrorist, self).__init__(act_interval)
-        self._remote_exec_method = remote_execution.execute_command
+        self._remote_exec_method = remote_execution.execute_command 
         self.__nodes = node_list
         self.__ssh_user = ssh_user
         self.__sudo_user = remote_sudo_user
@@ -228,7 +228,7 @@ class AbstractNemesisNodeTerrorist(Nemesis):
     def timeout(self):
         return self.__timeout
 
-    @abc.abstractmethod
+    @abc.abstractmethod 
     def _commands_on_node(self, node=None):
         pass
 
@@ -283,9 +283,9 @@ class Schedule(collections_abc.Iterator):
     def __iter__(self):
         return self
 
-    def __next__(self):
-        return next(self.__iterator)
-
+    def __next__(self): 
+        return next(self.__iterator) 
+ 
     def next(self):
         return next(self.__iterator)
 
@@ -311,7 +311,7 @@ class Schedule(collections_abc.Iterator):
             return Schedule(itertools.repeat(value))
         else:
             a, b = value
-            return Schedule(six.moves.map(lambda x: random.randint(a, b), itertools.count()))
+            return Schedule(six.moves.map(lambda x: random.randint(a, b), itertools.count())) 
 
 
 class RunOnceSchedule(Schedule):
@@ -355,7 +355,7 @@ class PriorityQueue(object):
 class FakeNemesis(Nemesis):
     """
     >>> n = FakeNemesis(None)
-    >>> print(n.logger.name)
+    >>> print(n.logger.name) 
     FakeNemesis
     """
 
@@ -471,7 +471,7 @@ def test_schedule():
     >>> random.seed(123)
     >>> s = Schedule.from_tuple_or_int((10, 20))
     >>> [next(s) for _ in range(10)]
-    [10, 14, 11, 16, 14, 11, 10, 16, 18, 18]
+    [10, 14, 11, 16, 14, 11, 10, 16, 18, 18] 
     >>> s = Schedule.from_tuple_or_int(15)
     >>> [next(s) for _ in range(10)]
     [15, 15, 15, 15, 15, 15, 15, 15, 15, 15]

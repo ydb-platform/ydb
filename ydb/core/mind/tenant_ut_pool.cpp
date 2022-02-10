@@ -160,11 +160,11 @@ void CheckLabels(TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
     if (database)
         dbLabels[DATABASE_LABEL] = database;
     if (slot)
-        dbLabels[SLOT_LABEL] = "static";
-
-    if (slot.StartsWith("slot-"))
-        dbLabels["host"] = slot;
-
+        dbLabels[SLOT_LABEL] = "static"; 
+ 
+    if (slot.StartsWith("slot-")) 
+        dbLabels["host"] = slot; 
+ 
     for (auto &attr : GetDatabaseAttributeLabels()) {
         if (attrs.contains(attr))
             attrLabels.insert(*attrs.find(attr));

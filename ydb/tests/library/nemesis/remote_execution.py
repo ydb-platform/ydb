@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 import time
 import logging
-import tempfile
-import subprocess
-from concurrent import futures
+import tempfile 
+import subprocess 
+from concurrent import futures 
 
 
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 def execute_command(command, timeout=60):
     logger.info("Running: {}".format(command))
-    process = subprocess.Popen(command)
+    process = subprocess.Popen(command) 
     wait_timeout(process, timeout)
     return process.returncode
 
@@ -19,8 +19,8 @@ def execute_command(command, timeout=60):
 def execute_command_with_output(command, timeout=60):
     logger.info("Running command = {}".format(command))
     list_of_lines = []
-    with tempfile.TemporaryFile() as f_out, tempfile.TemporaryFile() as f_err:
-        process = subprocess.Popen(command, stdout=f_out, stderr=f_err)
+    with tempfile.TemporaryFile() as f_out, tempfile.TemporaryFile() as f_err: 
+        process = subprocess.Popen(command, stdout=f_out, stderr=f_err) 
         wait_timeout(process, timeout)
         process_return_code = process.returncode
         f_err.flush()
@@ -52,20 +52,20 @@ def wait_timeout(process, timeout):
 def execute_command_with_output_on_hosts(list_of_hosts, command, per_host_timeout=60, username=None):
     full_output = []
     full_retcode = 0
-    pool = futures.ProcessPoolExecutor(8)
-    fs = []
+    pool = futures.ProcessPoolExecutor(8) 
+    fs = [] 
     for host in list_of_hosts:
-        fs.append(
-            pool.submit(
-                execute_command_with_output_single_host,
-                host, command,
-                timeout=per_host_timeout,
-                username=username
-            )
+        fs.append( 
+            pool.submit( 
+                execute_command_with_output_single_host, 
+                host, command, 
+                timeout=per_host_timeout, 
+                username=username 
+            ) 
         )
-
-    for f in fs:
-        retcode, output = f.result()
+ 
+    for f in fs: 
+        retcode, output = f.result() 
         if retcode:
             full_retcode = retcode
         full_output.extend(output)

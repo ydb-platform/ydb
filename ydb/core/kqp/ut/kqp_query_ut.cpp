@@ -240,9 +240,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         NDataShard::gSkipRepliesFailPoint.Disable();
 
-        // Check session is ready or busy
+        // Check session is ready or busy 
         result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
-        UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, result.GetIssues().ToString());
+        UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, result.GetIssues().ToString()); 
     }
 
     Y_UNIT_TEST_NEW_ENGINE(QueryTimeoutImmediate) {
@@ -270,9 +270,9 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         NDataShard::gSkipRepliesFailPoint.Disable();
 
-        // Check session is ready or busy (both possible)
+        // Check session is ready or busy (both possible) 
         result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, true, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus() == EStatus::SUCCESS || result.GetStatus() == EStatus::SESSION_BUSY, true, result.GetIssues().ToString()); 
     }
 
     Y_UNIT_TEST_NEW_ENGINE(QueryClientTimeout) {

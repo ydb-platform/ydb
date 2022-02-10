@@ -13,7 +13,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-
+ 
 inline TString DecodePreparedQueryId(const TString& in) {
     if (in.empty()) {
         throw NYql::TErrorException(NKikimrIssues::TIssuesIds::DEFAULT_ERROR)
@@ -131,13 +131,13 @@ protected:
     }
 
     template<typename TKqpResponse>
-    void AddServerHintsIfAny(const TKqpResponse& kqpResponse) {
-        if (kqpResponse.GetWorkerIsClosing()) {
-            this->Request_->AddServerHint(TString(NYdb::YDB_SESSION_CLOSE));
-        }
-    }
-
-    template<typename TKqpResponse>
+    void AddServerHintsIfAny(const TKqpResponse& kqpResponse) { 
+        if (kqpResponse.GetWorkerIsClosing()) { 
+            this->Request_->AddServerHint(TString(NYdb::YDB_SESSION_CLOSE)); 
+        } 
+    } 
+ 
+    template<typename TKqpResponse> 
     void OnGenericQueryResponseError(const TKqpResponse& kqpResponse, const TActorContext& ctx) {
         RaiseIssuesFromKqp(kqpResponse);
 

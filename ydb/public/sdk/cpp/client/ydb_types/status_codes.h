@@ -32,17 +32,17 @@ enum class EStatus : size_t {
     SESSION_BUSY =        400190,
 
     // Client statuses
-    // Cannot connect or unrecoverable network error. (map from gRPC UNAVAILABLE)
+    // Cannot connect or unrecoverable network error. (map from gRPC UNAVAILABLE) 
     TRANSPORT_UNAVAILABLE =      TRANSPORT_STATUSES_FIRST + 10,
     // No more resources to accept RPC call
     CLIENT_RESOURCE_EXHAUSTED =  TRANSPORT_STATUSES_FIRST + 20,
-    // Network layer does not receive response in given time
+    // Network layer does not receive response in given time 
     CLIENT_DEADLINE_EXCEEDED =   TRANSPORT_STATUSES_FIRST + 30,
     // Unknown client error
     CLIENT_INTERNAL_ERROR =      TRANSPORT_STATUSES_FIRST + 50,
     CLIENT_CANCELLED =           TRANSPORT_STATUSES_FIRST + 60,
     CLIENT_UNAUTHENTICATED =     TRANSPORT_STATUSES_FIRST + 70,
-    // Unknown gRPC call
+    // Unknown gRPC call 
     CLIENT_CALL_UNIMPLEMENTED =  TRANSPORT_STATUSES_FIRST + 80,
     // Attempt to read out of stream
     CLIENT_OUT_OF_RANGE =        TRANSPORT_STATUSES_FIRST + 90,

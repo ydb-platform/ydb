@@ -1291,7 +1291,7 @@ def _channel_managed_call_management(state):
 class _ChannelConnectivityState(object):
 
     def __init__(self, channel):
-        self.lock = threading.RLock()
+        self.lock = threading.RLock() 
         self.channel = channel
         self.polling = False
         self.connectivity = None

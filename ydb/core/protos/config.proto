@@ -478,9 +478,9 @@ message TMonitoringConfig {
     optional string MonitoringAddress = 6;
     optional TDatabaseLabels DatabaseLabels = 7;
     optional TDatabaseAttributeLabels DatabaseAttributeLabels = 8;
-    optional string DataCenter = 9;
-    optional string HostLabelOverride = 10;
-    optional string ProcessLocation = 11;
+    optional string DataCenter = 9; 
+    optional string HostLabelOverride = 10; 
+    optional string ProcessLocation = 11; 
     optional string AllowOrigin = 12;
     optional string RedirectMainPageTo = 13 [default = "monitoring/"];
 }
@@ -558,7 +558,7 @@ message TMemoryLogConfig {
 }
 
 message TGRpcConfig {
-    optional bool   StartGRpcProxy = 1 [default = true];
+    optional bool   StartGRpcProxy = 1 [default = true]; 
     optional string Host = 2 [default = "[::]"];
     optional uint32 Port = 3;
     optional uint32 WorkerThreads = 4 [default = 2];
@@ -589,10 +589,10 @@ message TGRpcConfig {
     repeated string ServicesDisabled = 23;
 
     // server socket options
-    optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
-    optional uint32 KeepAliveIdleTimeoutTriggerSec = 101 [default = 90]; // TCP_KEEPIDLE
-    optional uint32 KeepAliveMaxProbeCount = 102 [default = 3]; // TCP_KEEPCNT
-    optional uint32 KeepAliveProbeIntervalSec = 103 [default = 10]; // TCP_KEEPINTVL
+    optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE 
+    optional uint32 KeepAliveIdleTimeoutTriggerSec = 101 [default = 90]; // TCP_KEEPIDLE 
+    optional uint32 KeepAliveMaxProbeCount = 102 [default = 3]; // TCP_KEEPCNT 
+    optional uint32 KeepAliveProbeIntervalSec = 103 [default = 10]; // TCP_KEEPINTVL 
 
     repeated TGRpcConfig ExtEndpoints = 200; // run specific services on separate endpoints
 }
@@ -648,8 +648,8 @@ message TFeatureFlags {
     optional bool DisableLegacyYql = 33 [default = true]; // deprecated: always true
     optional bool EnableDataColumnForIndexTable = 34 [default = true];
     optional bool AllowServerlessStorageBillingForSchemeShard = 35 [default = false];
-    optional bool EnableGracefulShutdown = 36 [default = true];
-    optional bool EnableDrainOnShutdown = 37 [default = true];
+    optional bool EnableGracefulShutdown = 36 [default = true]; 
+    optional bool EnableDrainOnShutdown = 37 [default = true]; 
     optional bool EnableConfigurationCache = 38 [default = false];
     optional bool EnableDbCounters = 39 [default = false];
     optional bool EnableClockGettimeForUserCpuAccounting = 40 [default = false];
@@ -997,64 +997,64 @@ message TTableServiceConfig {
         optional uint32 ResultRowsLimit = 5;
     }
 
-    message TShutdownSettings {
-        optional uint32 ShutdownTimeoutMs = 1 [default = 30000];
-        optional uint32 HardTimeoutMs = 2 [default = 10000];
-        optional uint32 SoftTimeoutMs = 3 [default = 2000];
-    }
-
-    message TSessionBalancerSettings {
-        optional bool Enabled = 1 [default = false];
-        // MaxSessionsShutdownInFlightSize option determines the number of sessions
+    message TShutdownSettings { 
+        optional uint32 ShutdownTimeoutMs = 1 [default = 30000]; 
+        optional uint32 HardTimeoutMs = 2 [default = 10000]; 
+        optional uint32 SoftTimeoutMs = 3 [default = 2000]; 
+    } 
+ 
+    message TSessionBalancerSettings { 
+        optional bool Enabled = 1 [default = false]; 
+        // MaxSessionsShutdownInFlightSize option determines the number of sessions 
         // that we can keep in shutdown state at the moment.
-        optional uint32 MaxSessionsShutdownInFlightSize = 2 [default = 3];
-        //         GREEN ZONE         YELLOW ZONE               RED ZONE
-        //                     MinCV                   MaxCV
-        //    < MinCV           |                        |     > MaxCV
-        //                      |                        |
-        //        .....................................................
-        //
-        //  GREEN ZONE  -  balancer doesn't kick sessions in GREEN ZONE
-        //  RED ZONE    -  balancer kick sessions until GREEN ZONE reached.
-        //  YELLOW ZONE -  balancer kick sessions only if node was in the RED ZONE.
-        //  If node was in the GREEN ZONE balancer doesn't kick sessions.
-        optional uint32 MinCVTreshold = 3 [default = 10];
-        optional uint32 MaxCVTreshold = 4 [default = 20];
-        // timeout (in milliseconds)
-        // After HardSessionShutdownTimeoutMs session will be terminated.
-        optional uint32 HardSessionShutdownTimeoutMs = 5 [default = 5000];
-        // timeout (in milliseconds)
-        // After SoftSessionShutdownTimeoutMs milliseconds
-        // session will not accept new query requests.
-        optional uint32 SoftSessionShutdownTimeoutMs = 6 [default = 1000];
+        optional uint32 MaxSessionsShutdownInFlightSize = 2 [default = 3]; 
+        //         GREEN ZONE         YELLOW ZONE               RED ZONE 
+        //                     MinCV                   MaxCV 
+        //    < MinCV           |                        |     > MaxCV 
+        //                      |                        | 
+        //        ..................................................... 
+        // 
+        //  GREEN ZONE  -  balancer doesn't kick sessions in GREEN ZONE 
+        //  RED ZONE    -  balancer kick sessions until GREEN ZONE reached. 
+        //  YELLOW ZONE -  balancer kick sessions only if node was in the RED ZONE. 
+        //  If node was in the GREEN ZONE balancer doesn't kick sessions. 
+        optional uint32 MinCVTreshold = 3 [default = 10]; 
+        optional uint32 MaxCVTreshold = 4 [default = 20]; 
+        // timeout (in milliseconds) 
+        // After HardSessionShutdownTimeoutMs session will be terminated. 
+        optional uint32 HardSessionShutdownTimeoutMs = 5 [default = 5000]; 
+        // timeout (in milliseconds) 
+        // After SoftSessionShutdownTimeoutMs milliseconds 
+        // session will not accept new query requests. 
+        optional uint32 SoftSessionShutdownTimeoutMs = 6 [default = 1000]; 
         // Minimum number of sessions on node to start balancing. If number of sessions on node
-        // less than MinNodeSessions, balancer will not be able to kick session from node.
-        optional uint32 MinNodeSessions = 7 [default = 10];
-        // If LocalDatacenterPolicy is true, balancer will count only local datacenter
-        // proxies in the statistics.
-        optional bool LocalDatacenterPolicy = 8 [default = true];
-
-        optional double MinCpuBalancerThreshold = 9 [default = 0.5];
-    }
-
-    message TQueryReplayConfig {
-        // Flag that enables QueryReplay
-        optional bool Enabled = 1 [default = false];
-
-        // Unified Agent URI to collect messages
-        optional string UnifiedAgentUri = 2 [default = "unix:///tmp/ydb-cp-replay-log.sock"];
-        // Unified Agent Client setting: MaxMessageSizeMB
-        optional uint32 GrpcMaxMessageSizeMB = 3 [default = 8];
-        // Unified Agent Client setting: InflightLimitMB
-        optional uint32 InflightLimitMB = 4 [default = 8];
-
-        // Leaky bucket settings: size of bucket and bucket bucket duration.
-        // We allow to log LeakyBucketQuotaBucketSize queries
-        // per LeakyBucketQuotaBucketDurationSeconds.
-        optional uint32 LeakyBucketQuotaBucketSize = 5 [ default = 1000];
-        optional uint32 LeakyBucketQuotaBucketDurationSeconds = 6 [default = 60];
-    }
-
+        // less than MinNodeSessions, balancer will not be able to kick session from node. 
+        optional uint32 MinNodeSessions = 7 [default = 10]; 
+        // If LocalDatacenterPolicy is true, balancer will count only local datacenter 
+        // proxies in the statistics. 
+        optional bool LocalDatacenterPolicy = 8 [default = true]; 
+ 
+        optional double MinCpuBalancerThreshold = 9 [default = 0.5]; 
+    } 
+ 
+    message TQueryReplayConfig { 
+        // Flag that enables QueryReplay 
+        optional bool Enabled = 1 [default = false]; 
+ 
+        // Unified Agent URI to collect messages 
+        optional string UnifiedAgentUri = 2 [default = "unix:///tmp/ydb-cp-replay-log.sock"]; 
+        // Unified Agent Client setting: MaxMessageSizeMB 
+        optional uint32 GrpcMaxMessageSizeMB = 3 [default = 8]; 
+        // Unified Agent Client setting: InflightLimitMB 
+        optional uint32 InflightLimitMB = 4 [default = 8]; 
+ 
+        // Leaky bucket settings: size of bucket and bucket bucket duration. 
+        // We allow to log LeakyBucketQuotaBucketSize queries 
+        // per LeakyBucketQuotaBucketDurationSeconds. 
+        optional uint32 LeakyBucketQuotaBucketSize = 5 [ default = 1000]; 
+        optional uint32 LeakyBucketQuotaBucketDurationSeconds = 6 [default = 60]; 
+    } 
+ 
     optional uint32 QueryLimitBytes = 1;
     optional uint32 ParametersLimitBytes = 2;
     optional uint32 SessionsLimitPerNode = 3;
@@ -1071,8 +1071,8 @@ message TTableServiceConfig {
     optional TQueryLimits QueryLimits = 14;
     optional uint32 SqlVersion = 15;
     optional TSpillingServiceConfig SpillingServiceConfig = 16;
-    optional TShutdownSettings ShutdownSettings = 17;
-    optional TSessionBalancerSettings SessionBalancerSettings = 18;
+    optional TShutdownSettings ShutdownSettings = 17; 
+    optional TSessionBalancerSettings SessionBalancerSettings = 18; 
     optional uint32 ForceNewEnginePercent = 19 [default = 0];
     // level:
     //   0 - Non interactive, read-only queries without joins, sql in and secondary indexes. With fallback to old engine.
@@ -1081,7 +1081,7 @@ message TTableServiceConfig {
     //   3 - New engine for all queries.
     optional uint32 ForceNewEngineLevel = 22 [default = 0];
     optional uint32 CompileQueryCacheTTLSec = 20 [default = 0];
-    optional TQueryReplayConfig QueryReplayConfig = 21;
+    optional TQueryReplayConfig QueryReplayConfig = 21; 
 };
 
 // Config describes immediate controls and allows

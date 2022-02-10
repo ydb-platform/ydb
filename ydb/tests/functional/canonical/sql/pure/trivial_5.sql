@@ -1,2 +1,2 @@
-select null as x;
-
+select null as x; 
+ 

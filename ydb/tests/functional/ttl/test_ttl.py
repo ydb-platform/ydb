@@ -13,10 +13,10 @@ from hamcrest import (
     not_none,
 )
 
-from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.library.harness.util import LogLevels
-import ydb
+from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory 
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator 
+from ydb.tests.library.harness.util import LogLevels 
+import ydb 
 
 
 class TestTTL(object):
@@ -76,14 +76,14 @@ class TestTTL(object):
 
                     self.upsert(session, table)
 
-                    # conditional erase runs every 60 second
-                    for i in range(60):
-                        time.sleep(4)
+                    # conditional erase runs every 60 second 
+                    for i in range(60): 
+                        time.sleep(4) 
 
-                        content = list(self._read_table(session, table, columns=('id',)))
+                        content = list(self._read_table(session, table, columns=('id',))) 
                         if len(content) == 1:
                             break
-
+ 
                     content = list(self._read_table(session, table, columns=('id',)))
                     assert_that(content, has_length(1))
                     assert_that(content, has_item(has_properties(id=3)))

@@ -1,61 +1,61 @@
 # -*- coding: utf-8 -*-
-import abc
+import abc 
 import os
-import ydb.tests.library.common.yatest_common as yatest_common
+import ydb.tests.library.common.yatest_common as yatest_common 
 
 
 class KikimrNodePortAllocatorInterface(object):
-    __metaclass__ = abc.ABCMeta
+    __metaclass__ = abc.ABCMeta 
 
     def __init__(self):
         pass
 
-    @abc.abstractproperty
-    def grpc_ssl_port(self):
-        pass
-
-    @abc.abstractproperty
+    @abc.abstractproperty 
+    def grpc_ssl_port(self): 
+        pass 
+ 
+    @abc.abstractproperty 
     def mon_port(self):
         pass
 
-    @abc.abstractproperty
+    @abc.abstractproperty 
     def grpc_port(self):
         pass
 
-    @abc.abstractproperty
+    @abc.abstractproperty 
     def mbus_port(self):
         pass
 
-    @abc.abstractproperty
+    @abc.abstractproperty 
     def ic_port(self):
         pass
 
-    @abc.abstractproperty
+    @abc.abstractproperty 
     def sqs_port(self):
         pass
 
 
 class KikimrPortAllocatorInterface(object):
-    __metaclass__ = abc.ABCMeta
+    __metaclass__ = abc.ABCMeta 
 
     def __init__(self):
         pass
 
-    @abc.abstractmethod
+    @abc.abstractmethod 
     def get_node_port_allocator(self, node_index):
         """
             Returns KikimrNodePortAllocatorInterface object
         """
         pass
 
-    @abc.abstractmethod
+    @abc.abstractmethod 
     def get_slot_port_allocator(self, slot_index):
         """
             Returns KikimrNodePortAllocatorInterface object
         """
         pass
 
-    @abc.abstractmethod
+    @abc.abstractmethod 
     def release_ports(self):
         pass
 
@@ -63,52 +63,52 @@ class KikimrPortAllocatorInterface(object):
 # Port manager allocator
 #
 
-
+ 
 class KikimrPortManagerNodePortAllocator(KikimrNodePortAllocatorInterface):
     def __init__(self, port_manager):
         super(KikimrPortManagerNodePortAllocator, self).__init__()
         self.__port_manager = port_manager
-        self.__mon_port = None
-        self.__grpc_port = None
-        self.__mbus_port = None
-        self.__ic_port = None
-        self.__sqs_port = None
-        self.__grpc_ssl_port = None
+        self.__mon_port = None 
+        self.__grpc_port = None 
+        self.__mbus_port = None 
+        self.__ic_port = None 
+        self.__sqs_port = None 
+        self.__grpc_ssl_port = None 
 
     @property
     def mon_port(self):
-        if self.__mon_port is None:
-            self.__mon_port = self.__port_manager.get_port()
+        if self.__mon_port is None: 
+            self.__mon_port = self.__port_manager.get_port() 
         return self.__mon_port
 
     @property
     def grpc_port(self):
-        if self.__grpc_port is None:
-            self.__grpc_port = self.__port_manager.get_port()
+        if self.__grpc_port is None: 
+            self.__grpc_port = self.__port_manager.get_port() 
         return self.__grpc_port
 
     @property
     def mbus_port(self):
-        if self.__mbus_port is None:
-            self.__mbus_port = self.__port_manager.get_port()
+        if self.__mbus_port is None: 
+            self.__mbus_port = self.__port_manager.get_port() 
         return self.__mbus_port
 
     @property
     def ic_port(self):
-        if self.__ic_port is None:
-            self.__ic_port = self.__port_manager.get_port()
+        if self.__ic_port is None: 
+            self.__ic_port = self.__port_manager.get_port() 
         return self.__ic_port
 
     @property
-    def grpc_ssl_port(self):
-        if self.__grpc_ssl_port is None:
-            self.__grpc_ssl_port = self.__port_manager.get_port()
-        return self.__grpc_ssl_port
-
-    @property
+    def grpc_ssl_port(self): 
+        if self.__grpc_ssl_port is None: 
+            self.__grpc_ssl_port = self.__port_manager.get_port() 
+        return self.__grpc_ssl_port 
+ 
+    @property 
     def sqs_port(self):
-        if self.__sqs_port is None:
-            self.__sqs_port = self.__port_manager.get_port()
+        if self.__sqs_port is None: 
+            self.__sqs_port = self.__port_manager.get_port() 
         return self.__sqs_port
 
 
@@ -138,7 +138,7 @@ class KikimrPortManagerPortAllocator(KikimrPortAllocatorInterface):
 #
 
 class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
-    def __init__(self, mon_port=8765, grpc_port=2135, mbus_port=2134, ic_port=19001, sqs_port=8771, grpc_ssl_port=2137):
+    def __init__(self, mon_port=8765, grpc_port=2135, mbus_port=2134, ic_port=19001, sqs_port=8771, grpc_ssl_port=2137): 
         super(KikimrFixedNodePortAllocator, self).__init__()
         if os.getenv('MON_PORT') is not None:
             self.__mon_port = int(os.getenv('MON_PORT'))
@@ -154,20 +154,20 @@ class KikimrFixedNodePortAllocator(KikimrNodePortAllocatorInterface):
         else:
             self.__ic_port = ic_port
         self.__sqs_port = sqs_port
-        if os.getenv('GRPC_TLS_PORT') is not None:
-            self.__grpc_ssl_port = int(os.getenv('GRPC_TLS_PORT'))
-        else:
-            self.__grpc_ssl_port = grpc_ssl_port
+        if os.getenv('GRPC_TLS_PORT') is not None: 
+            self.__grpc_ssl_port = int(os.getenv('GRPC_TLS_PORT')) 
+        else: 
+            self.__grpc_ssl_port = grpc_ssl_port 
 
     @property
     def mon_port(self):
         return self.__mon_port
 
     @property
-    def grpc_ssl_port(self):
-        return self.__grpc_ssl_port
-
-    @property
+    def grpc_ssl_port(self): 
+        return self.__grpc_ssl_port 
+ 
+    @property 
     def grpc_port(self):
         return self.__grpc_port
 
@@ -194,14 +194,14 @@ class KikimrFixedPortAllocator(KikimrPortAllocatorInterface):
         self.__default_value = KikimrFixedNodePortAllocator()
 
     def get_node_port_allocator(self, node_index):
-        if node_index <= len(self.__nodes_port_allocators_list):
-            return self.__nodes_port_allocators_list[node_index - 1]
+        if node_index <= len(self.__nodes_port_allocators_list): 
+            return self.__nodes_port_allocators_list[node_index - 1] 
         else:
             return self.__default_value
 
     def get_slot_port_allocator(self, slot_index):
-        if slot_index <= len(self.__slots_port_allocators_list):
-            return self.__slots_port_allocators_list[slot_index - 1]
+        if slot_index <= len(self.__slots_port_allocators_list): 
+            return self.__slots_port_allocators_list[slot_index - 1] 
         else:
             return self.__default_value
 

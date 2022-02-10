@@ -1,45 +1,45 @@
-{
-    "meta": {
-        "version": "0.1",
-        "type": "query"
-    },
-    "tables": [
-        {
-            "name": "/local/base_simple_multi_select_sql_plan/Input",
-            "reads": [
-                {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "key",
-                        "subkey"
-                    ],
-                    "limit": "\"2\"",
-                    "columns": [
-                        "key",
-                        "subkey",
-                        "value"
-                    ]
-                }
-            ]
-        },
-        {
-            "name": "/local/base_simple_multi_select_sql_plan/Input1",
-            "reads": [
-                {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"1\")"
-                    ],
-                    "scan_by": [
-                        "Name"
-                    ],
-                    "columns": [
-                        "Amount",
-                        "Group",
-                        "Name"
-                    ]
-                }
-            ]
-        }
-    ]
-}
+{ 
+    "meta": { 
+        "version": "0.1", 
+        "type": "query" 
+    }, 
+    "tables": [ 
+        { 
+            "name": "/local/base_simple_multi_select_sql_plan/Input", 
+            "reads": [ 
+                { 
+                    "type": "FullScan", 
+                    "scan_by": [ 
+                        "key", 
+                        "subkey" 
+                    ], 
+                    "limit": "\"2\"", 
+                    "columns": [ 
+                        "key", 
+                        "subkey", 
+                        "value" 
+                    ] 
+                } 
+            ] 
+        }, 
+        { 
+            "name": "/local/base_simple_multi_select_sql_plan/Input1", 
+            "reads": [ 
+                { 
+                    "type": "Lookup", 
+                    "lookup_by": [ 
+                        "Group (\"1\")" 
+                    ], 
+                    "scan_by": [ 
+                        "Name" 
+                    ], 
+                    "columns": [ 
+                        "Amount", 
+                        "Group", 
+                        "Name" 
+                    ] 
+                } 
+            ] 
+        } 
+    ] 
+} 

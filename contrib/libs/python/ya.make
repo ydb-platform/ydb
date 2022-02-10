@@ -19,7 +19,7 @@ IF (USE_ARCADIA_PYTHON)
         library/python/symbols/libc
         library/python/symbols/python
     )
-    IF (NOT OS_WINDOWS AND NOT OPENSOURCE)
+    IF (NOT OS_WINDOWS AND NOT OPENSOURCE) 
         PEERDIR(
             library/python/symbols/uuid
         )

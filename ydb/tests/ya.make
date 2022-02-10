@@ -1,8 +1,8 @@
-OWNER(g:kikimr)
-
-RECURSE(
-    functional
-    library
-    tools
-    supp
-)
+OWNER(g:kikimr) 
+ 
+RECURSE( 
+    functional 
+    library 
+    tools 
+    supp 
+) 

@@ -3,7 +3,7 @@
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/driver_lib/run/run.h>
-#include <ydb/library/yaml_config/yaml_config_parser.h>
+#include <ydb/library/yaml_config/yaml_config_parser.h> 
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <util/digest/city.h>
 #include <util/random/random.h>
@@ -30,12 +30,12 @@ protected:
     ui32 LogSamplingRate; // log settings
     TString LogFormat;// log settings
     TString SysLogServiceTag; //unique tags for sys logs
-    TString LogFileName; // log file name to initialize file log backend
+    TString LogFileName; // log file name to initialize file log backend 
     TString ClusterName; // log settings
 
     ui32 NodeId;
     TString NodeIdValue;
-    ui32 DefaultInterconnectPort = 19001;
+    ui32 DefaultInterconnectPort = 19001; 
     ui32 BusProxyPort;
     NBus::TBusQueueConfig ProxyBusQueueConfig;
     NBus::TBusServerSessionConfig ProxyBusSessionConfig;
@@ -48,7 +48,7 @@ protected:
     size_t CompileInflightLimit; // MiniKQLCompileService
     TString UDFsDir;
     TVector<TString> UDFsPaths;
-    TString HostLabelOverride;
+    TString HostLabelOverride; 
     TString TenantName;
     TString TenantDomain;
     TString TenantSlotType;
@@ -56,7 +56,7 @@ protected:
     ui64 TenantCPU;
     ui64 TenantMemory;
     ui64 TenantNetwork;
-    TVector<TString> NodeBrokerAddresses;
+    TVector<TString> NodeBrokerAddresses; 
     ui32 NodeBrokerPort;
     bool NodeBrokerUseTls;
     bool FixedNodeID;
@@ -83,7 +83,7 @@ protected:
     TString PathToCert;
     TString PathToPKey;
     TString PathToCA;
-    TVector<TString> YamlConfigFiles;
+    TVector<TString> YamlConfigFiles; 
 
     TClientCommandServerBase(const char *cmd, const char *description)
         : TClientCommand(cmd, {}, description)
@@ -142,12 +142,12 @@ protected:
             .DefaultValue("full").OptionalArgument("full|short|json").StoreResult(&LogFormat);
         config.Opts->AddLongOption("syslog", "send to syslog instead of stderr").NoArgument();
         config.Opts->AddLongOption("syslog-service-tag", "unique tag for syslog").RequiredArgument("NAME").StoreResult(&SysLogServiceTag);
-        config.Opts->AddLongOption("log-file-name", "file name for log backend").RequiredArgument("NAME").StoreResult(&LogFileName);
+        config.Opts->AddLongOption("log-file-name", "file name for log backend").RequiredArgument("NAME").StoreResult(&LogFileName); 
         config.Opts->AddLongOption("tcp", "start tcp interconnect").NoArgument();
         config.Opts->AddLongOption('n', "node", "Node ID or 'static' to auto-detect using naming file and ic-port, or 'dynamic' for dynamic nodes, or 'dynamic-fixed' for dynamic nodes with infinite node ID lease (for dynamic storage nodes)")
             .RequiredArgument("[NUM|static|dynamic]").StoreResult(&NodeIdValue);
         config.Opts->AddLongOption("node-broker", "node broker address host:port")
-                .RequiredArgument("ADDR").AppendTo(&NodeBrokerAddresses);
+                .RequiredArgument("ADDR").AppendTo(&NodeBrokerAddresses); 
         config.Opts->AddLongOption("node-broker-port", "node broker port (hosts from naming file are used)")
                 .RequiredArgument("PORT").StoreResult(&NodeBrokerPort);
         config.Opts->AddLongOption("node-broker-use-tls", "use tls for node broker (hosts from naming file are used)")
@@ -165,7 +165,7 @@ protected:
         config.Opts->AddLongOption("sqs-port", "sqs port")
                 .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
         config.Opts->AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&ProxyBindToProxy);
-        config.Opts->AddLongOption("host-label-override", "overrides host label for slot").RequiredArgument("NAME").StoreResult(&HostLabelOverride);
+        config.Opts->AddLongOption("host-label-override", "overrides host label for slot").RequiredArgument("NAME").StoreResult(&HostLabelOverride); 
         config.Opts->AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'no', 'dynamic', '/<root>', '/<root>/<path_to_user>'}")
             .RequiredArgument("NAME").StoreResult(&TenantName);
         config.Opts->AddLongOption("tenant-slot-type", "set tenant slot type for dynamic tenant")
@@ -243,7 +243,7 @@ protected:
                 .RequiredArgument("NAME").StoreResult(&Rack);
         config.Opts->AddLongOption("body", "body name (used to describe dynamic node location)")
                 .RequiredArgument("NUM").StoreResult(&Body);
-        config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").AppendTo(&YamlConfigFiles);
+        config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").AppendTo(&YamlConfigFiles); 
         config.Opts->AddLongOption("cms-config-cache-file", "Path to CMS cache config file").OptionalArgument("PATH")
             .StoreResult(&RunConfig.PathToConfigCacheFile);
         config.Opts->AddHelpOption('h');
@@ -311,7 +311,7 @@ protected:
         OPTION_MERGE("auth-token-file", AuthConfig);
 
         LoadBaseConfig(config);
-        LoadYamlConfig();
+        LoadYamlConfig(); 
 
         // start memorylog as soon as possible
         if (auto mem = OPTION("memorylog-file", MemoryLogConfig)) {
@@ -371,8 +371,8 @@ protected:
 
         MaybeRegisterAndLoadConfigs();
 
-        LoadYamlConfig();
-
+        LoadYamlConfig(); 
+ 
         OPTION("sys-file", ActorSystemConfig);
         if (!AppConfig.HasActorSystemConfig()) {
             AppConfig.MutableActorSystemConfig()->CopyFrom(*DummyActorSystemConfig());
@@ -400,9 +400,9 @@ protected:
             && !AppConfig.GetLogConfig().GetSysLogService())
             AppConfig.MutableLogConfig()->SetSysLogService(SysLogServiceTag);
 
-        if (config.ParseResult->Has("log-file-name"))
-            AppConfig.MutableLogConfig()->SetBackendFileName(LogFileName);
-
+        if (config.ParseResult->Has("log-file-name")) 
+            AppConfig.MutableLogConfig()->SetBackendFileName(LogFileName); 
+ 
         if (auto interconnectConfig = OPTION("ic-file", InterconnectConfig)) {
             if (config.ParseResult->Has("tcp")) {
                 interconnectConfig->SetStartTcp(true);
@@ -436,7 +436,7 @@ protected:
         OPTION("incrhuge-file", IncrHugeConfig);
         OPTION("alloc-file", AllocatorConfig);
         OPTION("yq-file", YandexQueryConfig);
-
+ 
         if (!AppConfig.HasAllocatorConfig()) {
             AppConfig.MutableAllocatorConfig()->CopyFrom(*DummyAllocatorConfig());
         }
@@ -534,7 +534,7 @@ protected:
         if (GRpcsPort) {
             auto& conf = *AppConfig.MutableGRpcConfig();
             conf.SetStartGRpcProxy(true);
-            conf.SetSslPort(GRpcsPort);
+            conf.SetSslPort(GRpcsPort); 
         }
         if (GRpcPublicHost) {
             auto& conf = *AppConfig.MutableGRpcConfig();
@@ -560,24 +560,24 @@ protected:
         if (config.ParseResult->Has("node-type"))
             AppConfig.MutableTenantPoolConfig()->SetNodeType(NodeType);
 
-        if (config.ParseResult->Has("host-label-override")) {
-            AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostLabelOverride);
-        } else {
-            if (config.ParseResult->Has("tenant")) {
-                if (TenantName != "no" && TenantName != "dynamic" && InterconnectPort != DefaultInterconnectPort) {
-                    AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort());
-                }
-            }
-        }
-
-        if (config.ParseResult->Has("data-center")) {
-            AppConfig.MutableMonitoringConfig()->SetDataCenter(to_lower(DataCenter));
-        }
-
-        if (config.ParseResult->Has("tenant")) {
-            AppConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort());
-        }
-
+        if (config.ParseResult->Has("host-label-override")) { 
+            AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostLabelOverride); 
+        } else { 
+            if (config.ParseResult->Has("tenant")) { 
+                if (TenantName != "no" && TenantName != "dynamic" && InterconnectPort != DefaultInterconnectPort) { 
+                    AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort()); 
+                } 
+            } 
+        } 
+ 
+        if (config.ParseResult->Has("data-center")) { 
+            AppConfig.MutableMonitoringConfig()->SetDataCenter(to_lower(DataCenter)); 
+        } 
+ 
+        if (config.ParseResult->Has("tenant")) { 
+            AppConfig.MutableMonitoringConfig()->SetProcessLocation(HostAndICPort()); 
+        } 
+ 
         // Add binding.
         if (!AppConfig.HasTenantPoolConfig() && config.ParseResult->Has("tenant")) {
             if (TenantName == "no") {
@@ -732,36 +732,36 @@ protected:
         return false;
     }
 
-    inline void LoadYamlConfig() {
-        for(const TString& yamlConfigFile: YamlConfigFiles) {
-            auto yamlConfig = TFileInput(yamlConfigFile);
-            NKikimrConfig::TAppConfig parsedConfig;
-            NKikimr::NYaml::Parse(yamlConfig.ReadAll(), parsedConfig);
-            const google::protobuf::Descriptor* descriptor = AppConfig.GetDescriptor();
-            const google::protobuf::Reflection* reflection = AppConfig.GetReflection();
-            for(int fieldIdx = 0; fieldIdx < descriptor->field_count(); ++fieldIdx) {
-                const google::protobuf::FieldDescriptor* fieldDescriptor = descriptor->field(fieldIdx);
-                if (!fieldDescriptor)
-                    continue;
-
-                if (fieldDescriptor->is_repeated()) {
-                    continue;
-                }
-
-                if (reflection->HasField(AppConfig, fieldDescriptor)) {
-                    // field is already set in app config
-                    continue;
-                }
-
-                if (reflection->HasField(parsedConfig, fieldDescriptor)) {
-                    reflection->SwapFields(&AppConfig, &parsedConfig, {fieldDescriptor});
-                }
-            }
-        }
-    }
-
-    inline bool LoadBootstrapConfig(TConfig& config) {
-        bool res = false;
+    inline void LoadYamlConfig() { 
+        for(const TString& yamlConfigFile: YamlConfigFiles) { 
+            auto yamlConfig = TFileInput(yamlConfigFile); 
+            NKikimrConfig::TAppConfig parsedConfig; 
+            NKikimr::NYaml::Parse(yamlConfig.ReadAll(), parsedConfig); 
+            const google::protobuf::Descriptor* descriptor = AppConfig.GetDescriptor(); 
+            const google::protobuf::Reflection* reflection = AppConfig.GetReflection(); 
+            for(int fieldIdx = 0; fieldIdx < descriptor->field_count(); ++fieldIdx) { 
+                const google::protobuf::FieldDescriptor* fieldDescriptor = descriptor->field(fieldIdx); 
+                if (!fieldDescriptor) 
+                    continue; 
+ 
+                if (fieldDescriptor->is_repeated()) { 
+                    continue; 
+                } 
+ 
+                if (reflection->HasField(AppConfig, fieldDescriptor)) { 
+                    // field is already set in app config 
+                    continue; 
+                } 
+ 
+                if (reflection->HasField(parsedConfig, fieldDescriptor)) { 
+                    reflection->SwapFields(&AppConfig, &parsedConfig, {fieldDescriptor}); 
+                } 
+            } 
+        } 
+    } 
+ 
+    inline bool LoadBootstrapConfig(TConfig& config) { 
+        bool res = false; 
         for (const TString& path : config.ParseResult->GetFreeArgs()) {
             NKikimrConfig::TAppConfig parsedConfig;
             const bool result = ParsePBFromFile(path, &parsedConfig);
@@ -842,7 +842,7 @@ protected:
     void MaybeRegisterAndLoadConfigs()
     {
         // static node
-        if (NodeBrokerAddresses.empty() && !NodeBrokerPort) {
+        if (NodeBrokerAddresses.empty() && !NodeBrokerPort) { 
             if (!NodeId)
                 ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
 
@@ -893,10 +893,10 @@ protected:
     }
 
     void FillClusterEndpoints(TVector<TString> &addrs) {
-        if (!NodeBrokerAddresses.empty()) {
-            for (auto addr: NodeBrokerAddresses) {
-                addrs.push_back(addr);
-            }
+        if (!NodeBrokerAddresses.empty()) { 
+            for (auto addr: NodeBrokerAddresses) { 
+                addrs.push_back(addr); 
+            } 
         } else {
             Y_VERIFY(NodeBrokerPort);
             for (auto &node : RunConfig.AppConfig.MutableNameserviceConfig()->GetNode()) {
@@ -906,16 +906,16 @@ protected:
         ShuffleRange(addrs);
     }
 
-    TString HostAndICPort() {
-        try {
-            auto hostname = to_lower(HostName());
-            hostname = hostname.substr(0, hostname.find('.'));
-            return TStringBuilder() << hostname << ":" << InterconnectPort;
-        } catch (TSystemError& error) {
-            return "";
-        }
-    }
-
+    TString HostAndICPort() { 
+        try { 
+            auto hostname = to_lower(HostName()); 
+            hostname = hostname.substr(0, hostname.find('.')); 
+            return TStringBuilder() << hostname << ":" << InterconnectPort; 
+        } catch (TSystemError& error) { 
+            return ""; 
+        } 
+    } 
+ 
     TMaybe<TString> GetSchemePath() {
         if (TenantName.StartsWith('/')) {
             return TenantName; // TODO(alexvru): fix it
@@ -1092,7 +1092,7 @@ protected:
                 Cerr << "WARNING: option --cms-config-cache-file was not set, ";
                 Cerr << "couldn't load config from cache file" << Endl;
             }
-        }
+        } 
     }
 
 private:

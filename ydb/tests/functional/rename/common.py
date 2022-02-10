@@ -4,7 +4,7 @@ import six
 import ydb
 
 from tornado import gen
-from ydb.tornado import as_tornado_future
+from ydb.tornado import as_tornado_future 
 
 
 logger = logging.getLogger(__name__)

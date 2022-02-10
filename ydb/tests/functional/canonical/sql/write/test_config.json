@@ -1,13 +1,13 @@
-{
-  "delete_by_pk.sql": {
-    "compare_tables": ["Input"]
+{ 
+  "delete_by_pk.sql": { 
+    "compare_tables": ["Input"] 
   },
   "delete_on.sql": {
     "compare_tables": ["Input", "Input1"]
   },
   "delete_same.sql": {
-    "compare_tables": ["Input1"],
-    "check_new_engine_plan": false
+    "compare_tables": ["Input1"], 
+    "check_new_engine_plan": false 
   },
   "insert_revert.sql": {
     "compare_tables": ["Input", "Input1"]
@@ -52,5 +52,5 @@
       "$Name1": "Name1",
       "$Name2": ""
     }
-  }
-}
+  } 
+} 

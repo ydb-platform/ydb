@@ -1,20 +1,20 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python 
+# -*- coding: utf-8 -*- 
 import base64
-import logging
-import time
+import logging 
+import time 
 from collections import OrderedDict
-
+ 
 import pytest
 from hamcrest import assert_that, equal_to, not_none, greater_than, has_item, has_items, raises, is_not, not_, empty, instance_of
-
-from sqs_requests_client import SqsMessageAttribute, SqsSendMessageParams, SqsChangeMessageVisibilityParams
+ 
+from sqs_requests_client import SqsMessageAttribute, SqsSendMessageParams, SqsChangeMessageVisibilityParams 
 
 from sqs_matchers import ReadResponseMatcher, extract_message_ids
-from sqs_test_base import to_bytes
+from sqs_test_base import to_bytes 
 from sqs_test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, IS_FIFO_PARAMS
-
-
+ 
+ 
 class SqsGenericMessagingTest(KikimrSqsTestBase):
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     def test_send_message(self, is_fifo):
@@ -23,7 +23,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
         self.seq_no += 1
         self._send_message_and_assert(created_queue_url, 'test_send_message', seq_no=self.seq_no if is_fifo else None, group_id='group' if is_fifo else None)
-
+ 
         # break a queue and check failure
         self._break_queue(self._username, self.queue_name, is_fifo)
 
@@ -78,7 +78,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             send_message_batch_result[2]['SendMessageBatchResultEntry']['MessageId'],
             send_message_batch_result[3]['SendMessageBatchResultEntry']['MessageId'],
         )
-        for i in range(3):
+        for i in range(3): 
             msgs = self._sqs_api.receive_message(created_queue_url, max_number_of_messages=1,
                                                  visibility_timeout=1000)
             assert_that(len(msgs), equal_to(1))
@@ -105,7 +105,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         # Test error handling
         def call_send_message_batch_with_greater_than_ten_messages():
             requests = []
-            for i in range(11):
+            for i in range(11): 
                 requests.append(SqsSendMessageParams('body', attributes=[], group_id=group_id))
             self._sqs_api.send_message_batch(created_queue_url, requests)
 
@@ -139,7 +139,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         attributes = {
             SqsMessageAttribute('a', 'String', 'xyz'),
             SqsMessageAttribute('b', 'Number', 42),
-            SqsMessageAttribute('c', 'Binary', base64.b64encode(to_bytes('binary_data'))),
+            SqsMessageAttribute('c', 'Binary', base64.b64encode(to_bytes('binary_data'))), 
         }
         if is_fifo:
             self.seq_no += 1
@@ -147,11 +147,11 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         else:
             message_id = self._send_message_and_assert(created_queue_url, body, attributes=attributes)
         read_message_result = self._read_while_not_empty(created_queue_url, 1)
-
-        assert_that(
-            read_message_result, ReadResponseMatcher().with_message_ids([message_id, ])
-        )
-
+ 
+        assert_that( 
+            read_message_result, ReadResponseMatcher().with_message_ids([message_id, ]) 
+        ) 
+ 
         message_attributes = read_message_result[0]['MessageAttribute']
         message_attributes_by_name = {}
         for ma in message_attributes:
@@ -184,8 +184,8 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             equal_to('Binary')
         )
         assert_that(
-            to_bytes(message_attributes_by_name['c']['Value']['BinaryValue']),
-            equal_to(base64.b64encode(to_bytes('binary_data')))
+            to_bytes(message_attributes_by_name['c']['Value']['BinaryValue']), 
+            equal_to(base64.b64encode(to_bytes('binary_data'))) 
         )
 
         attributes = read_message_result[0]['Attribute']
@@ -281,7 +281,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
 
         def call_send():
             self._sqs_api.send_message(
-                to_bytes(created_queue_url) + to_bytes('1'), to_bytes('42')
+                to_bytes(created_queue_url) + to_bytes('1'), to_bytes('42') 
             )
 
         assert_that(
@@ -311,20 +311,20 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         self.seq_no += 1
         message_id = self._send_message_and_assert(created_queue_url, self._msg_body_template, seq_no=self.seq_no if is_fifo else None, group_id='group' if is_fifo else None)
         second_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
-        assert_that(second_url, equal_to(created_queue_url))
-
+        assert_that(second_url, equal_to(created_queue_url)) 
+ 
         self._read_messages_and_assert(
-            created_queue_url,
-            messages_count=1,
-            visibility_timeout=1000, matcher=ReadResponseMatcher().with_message_ids([message_id, ])
+            created_queue_url, 
+            messages_count=1, 
+            visibility_timeout=1000, matcher=ReadResponseMatcher().with_message_ids([message_id, ]) 
         )
-
+ 
     def test_send_and_read_multiple_messages(self):
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=False)
         first_message_id = self._send_message_and_assert(
             queue_url, self._msg_body_template.format('0')
         )
-        time.sleep(5)
+        time.sleep(5) 
         second_message_id = self._send_message_and_assert(
             queue_url, self._msg_body_template.format('1')
         )
@@ -333,8 +333,8 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             matcher=ReadResponseMatcher().with_message_ids(
                 [first_message_id, second_message_id]
             ).with_messages_data([self._msg_body_template.format('0'), self._msg_body_template.format('1')])
-        )
-
+        ) 
+ 
     def test_read_dont_stall(self):
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=False)
         first_pack_size = 5
@@ -380,7 +380,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         self._create_queue_send_x_messages_read_y_messages(
             self.queue_name, send_count=total_msg_count, read_count=1, visibility_timeout=visibility_timeout,
             msg_body_template=self._msg_body_template, is_fifo=False
-        )
+        ) 
         msg_data = [self._msg_body_template.format(i) for i in range(total_msg_count)]
 
         already_read_id = extract_message_ids(self.read_result)[0]
@@ -388,7 +388,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             self.queue_url, messages_count=5, visibility_timeout=visibility_timeout, wait_timeout=1,
             matcher=ReadResponseMatcher().with_some_of_message_ids(self.message_ids)
                 .with_n_messages(5)
-        )
+        ) 
 
         read_time_2 = time.time()
         if read_time_2 - before_read_time < visibility_timeout:
@@ -399,8 +399,8 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         self._read_messages_and_assert(
             self.queue_url, messages_count=10, visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids(self.message_ids).with_messages_data(msg_data)
-        )
-
+        ) 
+ 
     def test_visibility_timeout_expires_on_wait_timeout(self):
         queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=False)
         message_ids = self._send_messages(
@@ -519,7 +519,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         # Test error handling
         def call_change_message_visibility_batch_with_greater_than_ten_handles():
             requests = []
-            for i in range(11):
+            for i in range(11): 
                 requests.append(SqsChangeMessageVisibilityParams('Handle{}'.format(i), 1))
             self._sqs_api.change_message_visibility_batch(self.queue_url, requests)
 
@@ -637,13 +637,13 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         self._create_queue_send_x_messages_read_y_messages(
             self.queue_name, send_count=10, read_count=2, visibility_timeout=0,
             msg_body_template=self._msg_body_template
-        )
-        handle = self.read_result[0]['ReceiptHandle']
+        ) 
+        handle = self.read_result[0]['ReceiptHandle'] 
         self.message_ids.remove(self.read_result[0]['MessageId'])
 
-        assert_that(
+        assert_that( 
             self._sqs_api.delete_message(self.queue_url, handle), not_none()
-        )
+        ) 
         # check double deletion
         assert_that(
             self._sqs_api.delete_message(self.queue_url, handle), not_none()
@@ -651,8 +651,8 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         self._read_messages_and_assert(
             self.queue_url, messages_count=10, visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids(self.message_ids)
-        )
-
+        ) 
+ 
         counters = self._get_sqs_counters()
         delete_counter_labels = {
             'subsystem': 'core',
@@ -690,7 +690,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         delete_message_batch_result = self._sqs_api.delete_message_batch(self.queue_url, handles)
         assert_that(len(delete_message_batch_result), equal_to(10))
 
-        for i in range(len(delete_message_batch_result)):
+        for i in range(len(delete_message_batch_result)): 
             res = delete_message_batch_result[i]
             if i == 5:
                 assert_that(res['BatchResultErrorEntry']['Code'], equal_to('ReceiptHandleIsInvalid'))
@@ -705,7 +705,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         # Test error handling
         def call_delete_message_batch_with_greater_than_ten_handles():
             handles = []
-            for i in range(11):
+            for i in range(11): 
                 handles.append('Handle{}'.format(i))
             self._sqs_api.delete_message_batch(self.queue_url, handles)
 
@@ -748,12 +748,12 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
             msg_body_template=self._msg_body_template, is_fifo=is_fifo
         )
         handle = self.read_result[0]['ReceiptHandle']
-        handles = [handle for i in range(5)]
+        handles = [handle for i in range(5)] 
 
         delete_message_batch_result = self._sqs_api.delete_message_batch(self.queue_url, handles)
         assert_that(len(delete_message_batch_result), equal_to(5))
 
-        for i in range(len(delete_message_batch_result)):
+        for i in range(len(delete_message_batch_result)): 
             res = delete_message_batch_result[i]
             assert_that(res, has_item('DeleteMessageBatchResultEntry'))
 
@@ -779,15 +779,15 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         self._create_queue_send_x_messages_read_y_messages(
             self.queue_name, send_count=7, read_count=4, visibility_timeout=visibility_timeout,
             msg_body_template=self._msg_body_template
-        )
-        begin_time = time.time()
+        ) 
+        begin_time = time.time() 
         first_pack_ids = self.message_ids
         second_pack_ids = self._send_messages(
             self.queue_url, message_count=3, msg_body_template=self._msg_body_template
         )
         message_ids = set(first_pack_ids) - set(extract_message_ids(self.read_result))
         message_ids.update(second_pack_ids)
-
+ 
         visibility_timeout_2 = 15
         self._read_messages_and_assert(
             self.queue_url, messages_count=10, visibility_timeout=visibility_timeout_2,
@@ -800,23 +800,23 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
                 first_pack_ids + second_pack_ids
             )
         )
-
+ 
     def test_partial_delete_works(self):
         self._create_queue_send_x_messages_read_y_messages(
             self.queue_name, send_count=10, read_count=5, visibility_timeout=5,
             msg_body_template=self._msg_body_template
-        )
+        ) 
         handle = self.read_result[4]['ReceiptHandle']  # select the last read message to avoid race with visibility timeout while reading
         self.message_ids.remove(self.read_result[4]['MessageId'])
-        assert_that(
-            self._sqs_api.delete_message(self.queue_url, handle),
-            not_none()
-        )
-        time.sleep(6)
+        assert_that( 
+            self._sqs_api.delete_message(self.queue_url, handle), 
+            not_none() 
+        ) 
+        time.sleep(6) 
         self._read_messages_and_assert(
             self.queue_url, messages_count=10, visibility_timeout=1000,
             matcher=ReadResponseMatcher().with_message_ids(self.message_ids)
-        )
+        ) 
 
     def test_wrong_delete_fails(self):
         self._create_queue_send_x_messages_read_y_messages(
@@ -935,7 +935,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         queue_urls = [self._create_queue_and_assert("{}-{}".format(self.queue_name, i)) for i in range(10)]
         created_queue_url2 = self._create_queue_and_assert(self.queue_name + '1.fifo', is_fifo=True)
         queue_urls.append(created_queue_url2)
-        queue_urls.append(created_queue_url2 + to_bytes('_nonexistent_queue_url'))
+        queue_urls.append(created_queue_url2 + to_bytes('_nonexistent_queue_url')) 
         batch_result = self._sqs_api.private_get_queue_attributes_batch(queue_urls)
         assert_that(
             batch_result['GetQueueAttributesBatchResultEntry'], instance_of(list)
@@ -1084,7 +1084,7 @@ class TestYandexAttributesPrefix(KikimrSqsTestBase):
     @classmethod
     def _setup_config_generator(cls):
         config_generator = super(TestYandexAttributesPrefix, cls)._setup_config_generator()
-        config_generator.yaml_config['sqs_config']['allow_yandex_attribute_prefix'] = True
+        config_generator.yaml_config['sqs_config']['allow_yandex_attribute_prefix'] = True 
         return config_generator
 
     def test_allows_yandex_message_attribute_prefix(self):

@@ -4,8 +4,8 @@ OWNER(ienkovich g:kikimr)
 
 FORK_SUBTESTS()
 
-TIMEOUT(600)
-SIZE(MEDIUM)
+TIMEOUT(600) 
+SIZE(MEDIUM) 
 
 PEERDIR(
     library/cpp/testing/unittest

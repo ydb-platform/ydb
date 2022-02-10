@@ -39,14 +39,14 @@ protected:
     NMonitoring::TDynamicCounterPtr Counters;
     NMonitoring::TIndexMonPage *ActorsMonPage = nullptr;
 
-    bool EnabledGrpcService = false;
-    bool GracefulShutdownSupported = false;
+    bool EnabledGrpcService = false; 
+    bool GracefulShutdownSupported = false; 
     THolder<NSQS::TAsyncHttpServer> SqsHttp;
 
     THolder<NYdb::TDriver> YdbDriver;
 
-    THolder<NKqp::TKqpShutdownController> KqpShutdownController;
-
+    THolder<NKqp::TKqpShutdownController> KqpShutdownController; 
+ 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
     TAutoPtr<TAppData> AppData;
 
@@ -88,10 +88,10 @@ protected:
 
     void InitializeGRpc(const TKikimrRunConfig& runConfig);
 
-    void InitializeKqpController(const TKikimrRunConfig& runConfig);
-
-    void InitializeGracefulShutdown(const TKikimrRunConfig& runConfig);
-
+    void InitializeKqpController(const TKikimrRunConfig& runConfig); 
+ 
+    void InitializeGracefulShutdown(const TKikimrRunConfig& runConfig); 
+ 
     void InitializeAppData(const TKikimrRunConfig& runConfig);
 
     void InitializeActorSystem(

@@ -353,9 +353,9 @@ public:
         if (prepareResult.PreparingQuery->GetVersion() == NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1) {
             prepareResult.QueryPlan = SerializeExplainPlan(prepareResult.PreparingQuery->GetPhysicalQuery());
             prepareResult.QueryAst = prepareResult.PreparingQuery->GetPhysicalQuery().GetQueryAst();
-        } else {
+        } else { 
             FillAstAndPlan(prepareResult, *prepareResult.PreparingQuery);
-        }
+        } 
 
         prepareResult.QueryTraits = QueryCtx->QueryTraits;
     }
@@ -1723,10 +1723,10 @@ private:
 
     IAsyncQueryResultPtr ExplainDataQueryInternal(const TString& query, bool isSql, TExprContext& ctx) {
         if (isSql) {
-            return PrepareDataQueryInternal(query, {}, ctx);
+            return PrepareDataQueryInternal(query, {}, ctx); 
         }
 
-        auto prepareResult = PrepareDataQueryAstInternal(query, {}, ctx);
+        auto prepareResult = PrepareDataQueryAstInternal(query, {}, ctx); 
         if (!prepareResult) {
             return nullptr;
         }
@@ -1754,7 +1754,7 @@ private:
         auto prepareResult = isSql
             ? PrepareScanQueryInternal(query, ctx)
             : PrepareScanQueryAstInternal(query, ctx);
-        return prepareResult;
+        return prepareResult; 
     }
 
     IAsyncQueryResultPtr PrepareDataQueryInternal(const TString& query, const TPrepareSettings& settings,

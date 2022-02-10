@@ -14,7 +14,7 @@ message TStreamingConfig {
         optional uint64 InactiveServerTimeout = 7 [default = 60000000];
     }
 
-    optional bool EnableInputStreams = 1 [default = true];
+    optional bool EnableInputStreams = 1 [default = true]; 
     optional bool EnableOutputStreams = 2 [default = true];
     optional TOutputStreamConfig OutputStreamConfig = 3;
 }

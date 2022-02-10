@@ -176,60 +176,60 @@ static size_t Base64DecodePlain(void* dst, const char* b, const char* e) {
 
     return n;
 }
- 
-// Table for Base64StrictDecode 
-static const char base64_bkw_strict[] = 
-    "\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100" 
-    "\100\100\100\100\100\100\100\100\100\100\100\76\101\76\100\77\64\65\66\67\70\71\72\73\74\75\100\100\100\101\100\100" 
-    "\100\0\1\2\3\4\5\6\7\10\11\12\13\14\15\16\17\20\21\22\23\24\25\26\27\30\31\100\100\100\100\77" 
-    "\100\32\33\34\35\36\37\40\41\42\43\44\45\46\47\50\51\52\53\54\55\56\57\60\61\62\63\100\100\100\100\100" 
-    "\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100" 
-    "\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100" 
-    "\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100" 
-    "\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100"; 
- 
-size_t Base64StrictDecode(void* out, const char* b, const char* e) { 
+
+// Table for Base64StrictDecode
+static const char base64_bkw_strict[] =
+    "\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100"
+    "\100\100\100\100\100\100\100\100\100\100\100\76\101\76\100\77\64\65\66\67\70\71\72\73\74\75\100\100\100\101\100\100"
+    "\100\0\1\2\3\4\5\6\7\10\11\12\13\14\15\16\17\20\21\22\23\24\25\26\27\30\31\100\100\100\100\77"
+    "\100\32\33\34\35\36\37\40\41\42\43\44\45\46\47\50\51\52\53\54\55\56\57\60\61\62\63\100\100\100\100\100"
+    "\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100"
+    "\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100"
+    "\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100"
+    "\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100\100";
+
+size_t Base64StrictDecode(void* out, const char* b, const char* e) {
     char* dst = (char*)out;
     const unsigned char* src = (unsigned char*)b;
     const unsigned char* const end = (unsigned char*)e;
- 
+
     Y_ENSURE(!((e - b) % 4), "incorrect input length for base64 decode");
- 
-    while (src < end) { 
-        const char zeroth = base64_bkw_strict[src[0]]; 
-        const char first = base64_bkw_strict[src[1]]; 
-        const char second = base64_bkw_strict[src[2]]; 
-        const char third = base64_bkw_strict[src[3]]; 
- 
-        constexpr char invalid = 64; 
-        constexpr char padding = 65; 
+
+    while (src < end) {
+        const char zeroth = base64_bkw_strict[src[0]];
+        const char first = base64_bkw_strict[src[1]];
+        const char second = base64_bkw_strict[src[2]];
+        const char third = base64_bkw_strict[src[3]];
+
+        constexpr char invalid = 64;
+        constexpr char padding = 65;
         if (Y_UNLIKELY(zeroth == invalid || first == invalid ||
                        second == invalid || third == invalid ||
                        zeroth == padding || first == padding))
         {
-            ythrow yexception() << "invalid character in input"; 
-        } 
- 
-        dst[0] = char((zeroth << 2) | (first >> 4)); 
-        dst[1] = char((first << 4) | (second >> 2)); 
-        dst[2] = char((second << 6) | third); 
- 
-        src += 4; 
-        dst += 3; 
- 
-        if (src[-1] == ',' || src[-1] == '=') { 
-            --dst; 
- 
-            if (src[-2] == ',' || src[-2] == '=') { 
-                --dst; 
-            } 
+            ythrow yexception() << "invalid character in input";
+        }
+
+        dst[0] = char((zeroth << 2) | (first >> 4));
+        dst[1] = char((first << 4) | (second >> 2));
+        dst[2] = char((second << 6) | third);
+
+        src += 4;
+        dst += 3;
+
+        if (src[-1] == ',' || src[-1] == '=') {
+            --dst;
+
+            if (src[-2] == ',' || src[-2] == '=') {
+                --dst;
+            }
         } else if (Y_UNLIKELY(src[-2] == ',' || src[-2] == '=')) {
-            ythrow yexception() << "incorrect padding"; 
-        } 
-    } 
- 
+            ythrow yexception() << "incorrect padding";
+        }
+    }
+
     return dst - (char*)out;
-} 
+}
 
 size_t Base64Decode(void* dst, const char* b, const char* e) {
     static const TImpl IMPL = GetImpl();

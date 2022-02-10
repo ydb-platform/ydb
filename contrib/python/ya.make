@@ -51,7 +51,7 @@ RECURSE(
     ansiwrap
     anyconfig
     anyio
-    anytree 
+    anytree
     apipkg
     apispec
     apispec-flask-restful
@@ -679,8 +679,8 @@ RECURSE(
     Office365-REST-Python-Client
     olefile
     openapi-codec
-    openapi-core 
-    openapi-schema-validator 
+    openapi-core
+    openapi-schema-validator
     openapi-spec-validator
     opencv-python
     openpyxl

@@ -28,6 +28,6 @@ The idea of the algorithm for constructing DS:
 - Going along the original sequence, for the current member x in the list of its DS we find the leftmost, such that its last term is not less than x.
 - If there is one, then add x to the end.
 - If not, add a new DS consisting of x to the DS list.
-
+ 
 It can be shown that the DS list constructed this way will be SC.
 

@@ -1,9 +1,9 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(alzobnin)
-
-SRCS(
-    enumbitset.cpp
-)
-
-END()
+ 
+SRCS( 
+    enumbitset.cpp 
+) 
+ 
+END() 

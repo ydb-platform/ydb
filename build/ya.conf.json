@@ -5305,12 +5305,12 @@
                         "os": "LINUX"
                     },
                     "default": true
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
                 }
             ]
         },

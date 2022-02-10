@@ -1107,7 +1107,7 @@ RECURSE(
     ujson
     ulid2
     umalqurra
-    umongo 
+    umongo
     unicodecsv
     Unidecode
     unidiff

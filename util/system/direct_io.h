@@ -47,11 +47,11 @@ public:
 
 private:
     inline bool IsAligned(i64 value) {
-        return Alignment ? value == AlignDown<i64>(value, Alignment) : true; 
+        return Alignment ? value == AlignDown<i64>(value, Alignment) : true;
     }
 
     inline bool IsAligned(const void* value) {
-        return Alignment ? value == AlignDown(value, Alignment) : true; 
+        return Alignment ? value == AlignDown(value, Alignment) : true;
     }
 
     size_t PreadSafe(void* buffer, size_t byteCount, ui64 offset);

@@ -55,7 +55,7 @@ static inline void Sort(TContainer& container, TCompare compare) {
 
 template <class TIterator, typename TGetKey>
 static inline void SortBy(TIterator begin, TIterator end, const TGetKey& getKey) {
-    Sort(begin, end, [&](auto&& left, auto&& right) { return getKey(left) < getKey(right); }); 
+    Sort(begin, end, [&](auto&& left, auto&& right) { return getKey(left) < getKey(right); });
 }
 
 template <class TContainer, typename TGetKey>
@@ -64,12 +64,12 @@ static inline void SortBy(TContainer& container, const TGetKey& getKey) {
 }
 
 template <class T>
-static inline void StableSort(T f, T l) { 
+static inline void StableSort(T f, T l) {
     std::stable_sort(f, l);
 }
 
 template <class T, class C>
-static inline void StableSort(T f, T l, C c) { 
+static inline void StableSort(T f, T l, C c) {
     std::stable_sort(f, l, c);
 }
 
@@ -85,7 +85,7 @@ static inline void StableSort(TContainer& container, TCompare compare) {
 
 template <class TIterator, typename TGetKey>
 static inline void StableSortBy(TIterator begin, TIterator end, const TGetKey& getKey) {
-    StableSort(begin, end, [&](auto&& left, auto&& right) { return getKey(left) < getKey(right); }); 
+    StableSort(begin, end, [&](auto&& left, auto&& right) { return getKey(left) < getKey(right); });
 }
 
 template <class TContainer, typename TGetKey>
@@ -118,14 +118,14 @@ static inline I Find(I f, I l, const T& v) {
     return std::find(f, l, v);
 }
 
-template <class C, class T> 
-static inline auto Find(C&& c, const T& v) { 
-    using std::begin; 
-    using std::end; 
- 
-    return std::find(begin(c), end(c), v); 
-} 
- 
+template <class C, class T>
+static inline auto Find(C&& c, const T& v) {
+    using std::begin;
+    using std::end;
+
+    return std::find(begin(c), end(c), v);
+}
+
 // FindPtr - return NULL if not found. Works for arrays, containers, iterators
 template <class I, class T>
 static inline auto FindPtr(I f, I l, const T& v) -> decltype(&*f) {
@@ -155,7 +155,7 @@ static inline auto FindIf(C&& c, P p) {
 
 template <class I, class P>
 static inline bool AllOf(I f, I l, P pred) {
-    return std::all_of(f, l, pred); 
+    return std::all_of(f, l, pred);
 }
 
 template <class C, class P>
@@ -167,7 +167,7 @@ static inline bool AllOf(const C& c, P pred) {
 
 template <class I, class P>
 static inline bool AnyOf(I f, I l, P pred) {
-    return std::any_of(f, l, pred); 
+    return std::any_of(f, l, pred);
 }
 
 template <class C, class P>
@@ -185,7 +185,7 @@ static inline auto FindIfPtr(I f, I l, P pred) -> decltype(&*f) {
 }
 
 template <class C, class P>
-static inline auto FindIfPtr(C&& c, P pred) { 
+static inline auto FindIfPtr(C&& c, P pred) {
     using std::begin;
     using std::end;
     return FindIfPtr(begin(c), end(c), pred);
@@ -529,7 +529,7 @@ auto MaxElementBy(C& c, F&& func) {
 }
 
 template <class C, class F>
-auto MaxElementBy(const C& c, F&& func) { 
+auto MaxElementBy(const C& c, F&& func) {
     return MaxElementBy(std::begin(c), std::end(c), std::forward<F>(func));
 }
 
@@ -545,7 +545,7 @@ auto MinElementBy(C& c, F&& func) {
 }
 
 template <class C, class F>
-auto MinElementBy(const C& c, F&& func) { 
+auto MinElementBy(const C& c, F&& func) {
     return MinElementBy(std::begin(c), std::end(c), std::forward<F>(func));
 }
 
@@ -644,12 +644,12 @@ static inline auto Count(const TContainer& container, const TValue& value) {
 }
 
 template <class It, class P>
-static inline auto CountIf(It first, It last, P p) { 
+static inline auto CountIf(It first, It last, P p) {
     return std::count_if(first, last, p);
 }
 
 template <class C, class P>
-static inline auto CountIf(const C& c, P pred) { 
+static inline auto CountIf(const C& c, P pred) {
     using std::begin;
     using std::end;
     return CountIf(begin(c), end(c), pred);
@@ -713,16 +713,16 @@ template <class It, class Val, class Comp>
 static inline std::pair<It, It> EqualRange(It begin, It end, const Val& val, Comp comp) {
     return std::equal_range(begin, end, val, comp);
 }
- 
-template <class ForwardIt> 
-bool IsSorted(ForwardIt begin, ForwardIt end) { 
+
+template <class ForwardIt>
+bool IsSorted(ForwardIt begin, ForwardIt end) {
     return std::is_sorted(begin, end);
-} 
- 
-template <class ForwardIt, class Compare> 
-bool IsSorted(ForwardIt begin, ForwardIt end, Compare comp) { 
+}
+
+template <class ForwardIt, class Compare>
+bool IsSorted(ForwardIt begin, ForwardIt end, Compare comp) {
     return std::is_sorted(begin, end, comp);
-} 
+}
 
 template <class TIterator, typename TGetKey>
 bool IsSortedBy(TIterator begin, TIterator end, const TGetKey& getKey) {

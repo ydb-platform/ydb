@@ -484,7 +484,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     Y_UNIT_TEST(TestSplitValue) {
         TOptsNoDefault opts;
         TVector<TString> vals;
-        opts.AddLongOption('s', "split").SplitHandler(&vals, ','); 
+        opts.AddLongOption('s', "split").SplitHandler(&vals, ',');
         TOptsParseResultTestWrapper r(&opts, V({"prog", "--split=a,b,c"}));
         UNIT_ASSERT_EQUAL(vals.size(), 3);
         UNIT_ASSERT_EQUAL(vals[0], "a");
@@ -495,7 +495,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     Y_UNIT_TEST(TestRangeSplitValue) {
         TOptsNoDefault opts;
         TVector<ui32> vals;
-        opts.AddLongOption('s', "split").RangeSplitHandler(&vals, ',', '-'); 
+        opts.AddLongOption('s', "split").RangeSplitHandler(&vals, ',', '-');
         TOptsParseResultTestWrapper r(&opts, V({"prog", "--split=1,8-10", "--split=12-14"}));
         UNIT_ASSERT_EQUAL(vals.size(), 7);
         UNIT_ASSERT_EQUAL(vals[0], 1);

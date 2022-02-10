@@ -5,7 +5,7 @@
 #include <util/generic/string.h>
 #include <util/generic/string_hash.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/typetraits.h> 
+#include <util/generic/typetraits.h>
 
 #include <functional>
 #include <typeindex>
@@ -13,13 +13,13 @@
 
 namespace std {
     template <>
-    struct less<const char*> { 
+    struct less<const char*> {
         bool operator()(const char* x, const char* y) const {
             return strcmp(x, y) < 0;
         }
     };
     template <>
-    struct equal_to<const char*> { 
+    struct equal_to<const char*> {
         bool operator()(const char* x, const char* y) const {
             return strcmp(x, y) == 0;
         }
@@ -145,42 +145,42 @@ template <class T>
 struct THash: public ::hash<T> {
 };
 
-namespace NHashPrivate { 
+namespace NHashPrivate {
     template <class TFirst, class TSecond, bool IsEmpty = std::is_empty<THash<TFirst>>::value&& std::is_empty<THash<TSecond>>::value>
-    struct TPairHash { 
-    private: 
-        THash<TFirst> FirstHash; 
-        THash<TSecond> SecondHash; 
+    struct TPairHash {
+    private:
+        THash<TFirst> FirstHash;
+        THash<TSecond> SecondHash;
 
-    public: 
+    public:
         template <class T>
         inline size_t operator()(const T& pair) const {
-            return CombineHashes(FirstHash(pair.first), SecondHash(pair.second)); 
-        } 
-    }; 
- 
-    /** 
-     * Specialization for the case where both hash functors are empty. Basically the 
-     * only one we care about. We don't introduce additional specializations for 
-     * cases where only one of the functors is empty as the code bloat is just not worth it. 
-     */ 
-    template <class TFirst, class TSecond> 
-    struct TPairHash<TFirst, TSecond, true> { 
+            return CombineHashes(FirstHash(pair.first), SecondHash(pair.second));
+        }
+    };
+
+    /**
+     * Specialization for the case where both hash functors are empty. Basically the
+     * only one we care about. We don't introduce additional specializations for
+     * cases where only one of the functors is empty as the code bloat is just not worth it.
+     */
+    template <class TFirst, class TSecond>
+    struct TPairHash<TFirst, TSecond, true> {
         template <class T>
         inline size_t operator()(const T& pair) const {
             // maps have TFirst = const TFoo, which would make for an undefined specialization
             using TFirstClean = std::remove_cv_t<TFirst>;
             using TSecondClean = std::remove_cv_t<TSecond>;
             return CombineHashes(THash<TFirstClean>()(pair.first), THash<TSecondClean>()(pair.second));
-        } 
-    }; 
+        }
+    };
 }
- 
-template <class TFirst, class TSecond> 
+
+template <class TFirst, class TSecond>
 struct hash<std::pair<TFirst, TSecond>>: public NHashPrivate::TPairHash<TFirst, TSecond> {
 };
 
-template <class T> 
+template <class T>
 struct TEqualTo: public std::equal_to<T> {
 };
 
@@ -233,7 +233,7 @@ struct TCIEqualTo<TString> {
     }
 };
 
-template <class T> 
+template <class T>
 struct TLess: public std::less<T> {
 };
 
@@ -252,7 +252,7 @@ struct TLess<TUtf32String>: public TLess<TUtf32StringBuf> {
     using is_transparent = void;
 };
 
-template <class T> 
+template <class T>
 struct TGreater: public std::greater<T> {
 };
 

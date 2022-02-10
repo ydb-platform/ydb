@@ -2,7 +2,7 @@
 
 #include "session_impl.h"
 
-#include <util/generic/object_counter.h> 
+#include <util/generic/object_counter.h>
 
 namespace NBus {
     namespace NPrivate {

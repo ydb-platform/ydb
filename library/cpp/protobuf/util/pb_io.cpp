@@ -1,5 +1,5 @@
-#include "pb_io.h" 
- 
+#include "pb_io.h"
+
 #include <library/cpp/binsaver/bin_saver.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
@@ -95,7 +95,7 @@ int operator&(NProtoBuf::Message& m, IBinSaver& f) {
 
 void SerializeToTextFormat(const NProtoBuf::Message& m, IOutputStream& out) {
     NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
- 
+
     if (!NProtoBuf::TextFormat::Print(m, &adaptor)) {
         ythrow yexception() << "SerializeToTextFormat failed on Print";
     }

@@ -381,7 +381,7 @@ void RemoveDirWithContents(TString dirName) {
 
     TDirIterator dir(dirName, TDirIterator::TOptions(FTS_NOSTAT));
 
-    for (auto it = dir.begin(); it != dir.end(); ++it) { 
+    for (auto it = dir.begin(); it != dir.end(); ++it) {
         switch (it->fts_info) {
             case FTS_F:
             case FTS_DEFAULT:

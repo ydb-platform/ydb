@@ -8,21 +8,21 @@
 #include <util/system/compiler.h>
 #include <util/system/yassert.h>
 
-/** 
- * @addtogroup Streams 
- * @{ 
+/**
+ * @addtogroup Streams
+ * @{
  */
- 
-/** 
- * Simple stream tokenizer. Splits the stream into tokens that are available 
- * via iterator interface. 
- * 
- * @tparam TEndOfToken                  Predicate for token delimiter characters. 
- * @see TEol 
- */ 
+
+/**
+ * Simple stream tokenizer. Splits the stream into tokens that are available
+ * via iterator interface.
+ *
+ * @tparam TEndOfToken                  Predicate for token delimiter characters.
+ * @see TEol
+ */
 template <typename TEndOfToken>
 class TStreamTokenizer {
-public: 
+public:
     class TIterator {
     public:
         inline TIterator(TStreamTokenizer* const parent)
@@ -143,15 +143,15 @@ public:
                 Y_ASSERT(blen == Buf_.Capacity());
 
                 /*
-                 * do reallocate 
-                 */ 
+                 * do reallocate
+                 */
 
                 Buf_.Reserve(Buf_.Capacity() * 4);
                 CheckBuf();
             } else {
                 /*
-                 * do move 
-                 */ 
+                 * do move
+                 */
 
                 MemMove(BufBegin(), Cur_, blen);
             }
@@ -202,8 +202,8 @@ private:
     TEndOfToken Eot_;
 };
 
-/** 
- * Predicate for `TStreamTokenizer` that uses '\\n' as a delimiter. 
+/**
+ * Predicate for `TStreamTokenizer` that uses '\\n' as a delimiter.
  */
 struct TEol {
     inline bool operator()(char ch) const noexcept {
@@ -211,4 +211,4 @@ struct TEol {
     }
 };
 
-/** @} */ 
+/** @} */

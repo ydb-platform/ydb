@@ -11,16 +11,16 @@ TNullInput::TNullInput() noexcept {
 
 TNullInput::~TNullInput() = default;
 
-size_t TNullInput::DoRead(void*, size_t) { 
+size_t TNullInput::DoRead(void*, size_t) {
     return 0;
 }
 
-size_t TNullInput::DoSkip(size_t) { 
-    return 0; 
-} 
- 
-size_t TNullInput::DoNext(const void**, size_t) { 
-    return 0; 
+size_t TNullInput::DoSkip(size_t) {
+    return 0;
+}
+
+size_t TNullInput::DoNext(const void**, size_t) {
+    return 0;
 }
 
 TNullOutput::TNullOutput() noexcept = default;

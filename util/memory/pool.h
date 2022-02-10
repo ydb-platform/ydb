@@ -14,15 +14,15 @@
 #include <string>
 #include <utility>
 
-/** 
- * Memory pool implements a memory allocation scheme that is very fast, but 
- * limited in its usage. 
- * 
- * A common use case is when you want to allocate a bunch of small objects, and 
- * then release them all at some point of your program. Using memory pool, you 
- * can just drop them off into oblivion without calling any destructors, 
- * provided that all associated memory was allocated on the pool. 
- */ 
+/**
+ * Memory pool implements a memory allocation scheme that is very fast, but
+ * limited in its usage.
+ *
+ * A common use case is when you want to allocate a bunch of small objects, and
+ * then release them all at some point of your program. Using memory pool, you
+ * can just drop them off into oblivion without calling any destructors,
+ * provided that all associated memory was allocated on the pool.
+ */
 class TMemoryPool {
 private:
     using TBlock = IAllocator::TBlock;
@@ -50,16 +50,16 @@ private:
         }
 
         inline void* Allocate(size_t len, size_t align) noexcept {
-            size_t pad = AlignUp(Cur_, align) - Cur_; 
- 
-            void* ret = Allocate(pad + len); 
-            if (ret) { 
-                return static_cast<char*>(ret) + pad; 
-            } 
- 
+            size_t pad = AlignUp(Cur_, align) - Cur_;
+
+            void* ret = Allocate(pad + len);
+            if (ret) {
+                return static_cast<char*>(ret) + pad;
+            }
+
             return nullptr;
-        } 
- 
+        }
+
         inline size_t BlockLength() const noexcept {
             return (Cur_ + Left_) - (char*)this;
         }
@@ -151,30 +151,30 @@ public:
         return RawAllocate(AlignUp<size_t>(len, PLATFORM_DATA_ALIGN));
     }
 
-    inline void* Allocate(size_t len, size_t align) { 
-        return RawAllocate(AlignUp<size_t>(len, PLATFORM_DATA_ALIGN), align); 
-    } 
- 
+    inline void* Allocate(size_t len, size_t align) {
+        return RawAllocate(AlignUp<size_t>(len, PLATFORM_DATA_ALIGN), align);
+    }
+
     template <typename T>
     inline T* Allocate() {
         return (T*)this->Allocate(sizeof(T), alignof(T));
     }
 
     template <typename T>
-    inline T* Allocate(size_t align) { 
+    inline T* Allocate(size_t align) {
         return (T*)this->Allocate(sizeof(T), Max(align, alignof(T)));
-    } 
- 
-    template <typename T> 
+    }
+
+    template <typename T>
     inline T* AllocateArray(size_t count) {
         return (T*)this->Allocate(sizeof(T) * count, alignof(T));
     }
 
-    template <typename T> 
-    inline T* AllocateArray(size_t count, size_t align) { 
+    template <typename T>
+    inline T* AllocateArray(size_t count, size_t align) {
         return (T*)this->Allocate(sizeof(T) * count, Max(align, alignof(T)));
-    } 
- 
+    }
+
     template <typename T>
     inline T* AllocateZeroArray(size_t count) {
         T* ptr = AllocateArray<T>(count);
@@ -219,17 +219,17 @@ public:
     }
 
     template <typename TChar>
-    inline TBasicStringBuf<TChar> AppendString(const TBasicStringBuf<TChar>& buf) { 
-        return TBasicStringBuf<TChar>(Append(buf.data(), buf.size()), buf.size()); 
+    inline TBasicStringBuf<TChar> AppendString(const TBasicStringBuf<TChar>& buf) {
+        return TBasicStringBuf<TChar>(Append(buf.data(), buf.size()), buf.size());
     }
 
     template <typename TChar>
-    inline TBasicStringBuf<TChar> AppendCString(const TBasicStringBuf<TChar>& buf) { 
+    inline TBasicStringBuf<TChar> AppendCString(const TBasicStringBuf<TChar>& buf) {
         TChar* ret = static_cast<TChar*>(Allocate((buf.size() + 1) * sizeof(TChar)));
 
         std::char_traits<TChar>::copy(ret, buf.data(), buf.size());
         *(ret + buf.size()) = 0;
-        return TBasicStringBuf<TChar>(ret, buf.size()); 
+        return TBasicStringBuf<TChar>(ret, buf.size());
     }
 
     inline size_t Available() const noexcept {
@@ -276,19 +276,19 @@ protected:
         return Current_->Allocate(len);
     }
 
-    inline void* RawAllocate(size_t len, size_t align) { 
+    inline void* RawAllocate(size_t len, size_t align) {
         Y_ASSERT(align > 0);
-        void* ret = Current_->Allocate(len, align); 
- 
-        if (ret) { 
-            return ret; 
-        } 
- 
+        void* ret = Current_->Allocate(len, align);
+
+        if (ret) {
+            return ret;
+        }
+
         AddChunk(len + align - 1);
- 
-        return Current_->Allocate(len, align); 
-    } 
- 
+
+        return Current_->Allocate(len, align);
+    }
+
 private:
     void AddChunk(size_t hint);
     void DoClear(bool keepfirst) noexcept;
@@ -373,7 +373,7 @@ public:
     }
 
     inline T* allocate(size_t n) {
-        return (T*)Pool_->Allocate(n * sizeof(T), alignof(T)); 
+        return (T*)Pool_->Allocate(n * sizeof(T), alignof(T));
     }
 
     inline void deallocate(pointer /*p*/, size_t /*n*/) {
@@ -402,14 +402,14 @@ public:
         return Pool_;
     }
 
-    inline friend bool operator==(const TPoolAllocBase& l, const TPoolAllocBase& r) { 
-        return l.Pool_ == r.Pool_; 
-    } 
- 
-    inline friend bool operator!=(const TPoolAllocBase& l, const TPoolAllocBase& r) { 
-        return !(l == r); 
-    } 
- 
+    inline friend bool operator==(const TPoolAllocBase& l, const TPoolAllocBase& r) {
+        return l.Pool_ == r.Pool_;
+    }
+
+    inline friend bool operator!=(const TPoolAllocBase& l, const TPoolAllocBase& r) {
+        return !(l == r);
+    }
+
 private:
     TPool* Pool_;
 };

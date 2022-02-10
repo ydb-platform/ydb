@@ -66,15 +66,15 @@ TBufferOutput::TBufferOutput(TBuffer& buffer)
 {
 }
 
-TBufferOutput::TBufferOutput(TBufferOutput&&) noexcept = default; 
-TBufferOutput& TBufferOutput::operator=(TBufferOutput&&) noexcept = default; 
- 
+TBufferOutput::TBufferOutput(TBufferOutput&&) noexcept = default;
+TBufferOutput& TBufferOutput::operator=(TBufferOutput&&) noexcept = default;
+
 TBufferOutput::~TBufferOutput() = default;
 
 TBuffer& TBufferOutput::Buffer() const noexcept {
-    return Impl_->Buffer(); 
-} 
- 
+    return Impl_->Buffer();
+}
+
 size_t TBufferOutput::DoNext(void** ptr) {
     return Impl_->DoNext(ptr);
 }
@@ -91,28 +91,28 @@ void TBufferOutput::DoWriteC(char c) {
     Impl_->DoWriteC(c);
 }
 
-TBufferInput::TBufferInput(const TBuffer& buffer) 
-    : Buf_(buffer) 
-    , Readed_(0) 
-{ 
+TBufferInput::TBufferInput(const TBuffer& buffer)
+    : Buf_(buffer)
+    , Readed_(0)
+{
 }
 
 TBufferInput::~TBufferInput() = default;
- 
+
 const TBuffer& TBufferInput::Buffer() const noexcept {
-    return Buf_; 
-} 
- 
+    return Buf_;
+}
+
 void TBufferInput::Rewind() noexcept {
-    Readed_ = 0; 
-} 
- 
-size_t TBufferInput::DoNext(const void** ptr, size_t len) { 
-    len = Min(Buf_.Size() - Readed_, len); 
+    Readed_ = 0;
+}
+
+size_t TBufferInput::DoNext(const void** ptr, size_t len) {
+    len = Min(Buf_.Size() - Readed_, len);
     *ptr = Buf_.data() + Readed_;
-    Readed_ += len; 
-    return len; 
-} 
+    Readed_ += len;
+    return len;
+}
 
 void TBufferInput::DoUndo(size_t len) {
     Y_VERIFY(len <= Readed_);

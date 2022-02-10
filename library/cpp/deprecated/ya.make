@@ -1,15 +1,15 @@
-RECURSE( 
+RECURSE(
     abstract_iterator
     abstract_iterator/ut
-    accessors 
-    accessors/ut 
-    autoarray 
+    accessors
+    accessors/ut
+    autoarray
     base64
     datafile
     dater_old
     dater_old/ut
-    enum_codegen 
-    enum_codegen/ut 
+    enum_codegen
+    enum_codegen/ut
     fgood
     fgood/ut
     histogram
@@ -30,13 +30,13 @@ RECURSE(
     omni/ut
     prog_options
     prog_options/ut
-    sgi_hash 
-    threadable 
+    sgi_hash
+    threadable
     transgene
     datawork
     datawork/conf
     calc_module
-    iterators_heap 
+    iterators_heap
     parse_utils
     parse_utils/ut
     small_array
@@ -46,4 +46,4 @@ RECURSE(
     solartrie/test/tests
     solartrie/ut
     split
-) 
+)

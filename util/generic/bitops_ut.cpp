@@ -65,7 +65,7 @@ Y_UNIT_TEST_SUITE(TBitOpsTest) {
         UNIT_ASSERT(IsPowerOf2(0x1000000000000000ull));
         UNIT_ASSERT(!IsPowerOf2(0x1000000000000001ull));
     }
- 
+
     Y_UNIT_TEST(TestFastClp2) {
         TestFastClp2ForEachPowerOf2<unsigned>();
         TestFastClp2ForEachPowerOf2<unsigned long>();
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(TBitOpsTest) {
         for (ui32 i = 0; i < 64; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(i, MostSignificantBit(ui64{1} << i));
         }
- 
+
         for (ui32 i = 0; i < 63; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(i + 1, MostSignificantBit(ui64{3} << i));
         }
@@ -99,17 +99,17 @@ Y_UNIT_TEST_SUITE(TBitOpsTest) {
         for (ui32 i = 0; i < 64; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(i, LeastSignificantBit(ui64{1} << i));
         }
- 
+
         for (ui32 i = 0; i < 63; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(i, LeastSignificantBit(ui64{3} << i));
         }
- 
+
         for (ui32 i = 0; i < 64; ++i) {
             ui64 value = (ui64(-1)) << i;
             UNIT_ASSERT_VALUES_EQUAL(i, LeastSignificantBit(value));
         }
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestCeilLog2) {
         UNIT_ASSERT_VALUES_EQUAL(CeilLog2(ui64{1}), 1);
 

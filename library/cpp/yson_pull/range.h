@@ -5,7 +5,7 @@
 #include <util/generic/iterator.h>
 
 namespace NYsonPull {
-    class TStreamEventsRange: public TInputRangeAdaptor<TStreamEventsRange> { 
+    class TStreamEventsRange: public TInputRangeAdaptor<TStreamEventsRange> {
         TReader Reader_;
         bool AtEnd;
 

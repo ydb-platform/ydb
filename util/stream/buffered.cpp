@@ -15,12 +15,12 @@ public:
 
     inline ~TImpl() = default;
 
-    inline size_t Next(const void** ptr, size_t len) { 
+    inline size_t Next(const void** ptr, size_t len) {
         if (MemInput_.Exhausted()) {
             MemInput_.Reset(Buf(), Slave_->Read(Buf(), BufLen()));
         }
 
-        return MemInput_.Next(ptr, len); 
+        return MemInput_.Next(ptr, len);
     }
 
     inline size_t Read(void* buf, size_t len) {
@@ -67,7 +67,7 @@ public:
 
         TString s_tmp;
 
-        size_t ret = 0; 
+        size_t ret = 0;
 
         while (true) {
             if (MemInput_.Exhausted()) {
@@ -135,7 +135,7 @@ size_t TBufferedInput::DoSkip(size_t len) {
     return Impl_->Skip(len);
 }
 
-size_t TBufferedInput::DoNext(const void** ptr, size_t len) { 
+size_t TBufferedInput::DoNext(const void** ptr, size_t len) {
     return Impl_->Next(ptr, len);
 }
 

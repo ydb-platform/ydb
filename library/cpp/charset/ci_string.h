@@ -62,7 +62,7 @@ public:
     static int compare(const TCiString& s1, const char* p, const CodePage& cp = csYandex);
     static int compare(const TStringBuf& p1, const TStringBuf& p2, const CodePage& cp = csYandex);
 
-    // TODO: implement properly in TString via enum ECaseSensitivity 
+    // TODO: implement properly in TString via enum ECaseSensitivity
     static bool is_prefix(const TStringBuf& what, const TStringBuf& of, const CodePage& cp = csYandex);
     static bool is_suffix(const TStringBuf& what, const TStringBuf& of, const CodePage& cp = csYandex);
 

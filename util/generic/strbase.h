@@ -124,9 +124,9 @@ public:
     }
 
     /**
-     * @param                           Pointer to character inside the string, or nullptr. 
-     * @return                          Offset from string beginning (in chars), or npos on nullptr. 
-     */ 
+     * @param                           Pointer to character inside the string, or nullptr.
+     * @return                          Offset from string beginning (in chars), or npos on nullptr.
+     */
     inline size_t off(const TCharType* ret) const noexcept {
         return ret ? (size_t)(ret - Ptr()) : npos;
     }
@@ -168,7 +168,7 @@ public:
     }
 
     inline TCharType back() const noexcept {
-        Y_ASSERT(!this->empty()); 
+        Y_ASSERT(!this->empty());
         return Ptr()[Len() - 1];
     }
 
@@ -177,10 +177,10 @@ public:
         return Ptr()[0];
     }
 
-    constexpr const TCharType* data() const noexcept { 
-        return Ptr(); 
-    } 
- 
+    constexpr const TCharType* data() const noexcept {
+        return Ptr();
+    }
+
     constexpr inline size_t size() const noexcept {
         return Len();
     }
@@ -253,10 +253,10 @@ public:
         return compare(LegacySubString(*this, p, n), LegacySubString(t, 0, n1));
     }
 
-    inline int compare(const TCharType* p, size_t len) const noexcept { 
+    inline int compare(const TCharType* p, size_t len) const noexcept {
         return compare(*this, TStringView(p, len));
-    } 
- 
+    }
+
     static bool equal(const TSelf& s1, const TSelf& s2) noexcept {
         return s1.AsStringView() == s2.AsStringView();
     }
@@ -441,13 +441,13 @@ public:
     inline TCharType operator[](size_t pos) const noexcept {
         Y_ASSERT(pos < this->size());
 
-        return Ptr()[pos]; 
+        return Ptr()[pos];
     }
 
     //~~~~Search~~~~
-    /** 
-     * @return                          Position of the substring inside this string, or `npos` if not found. 
-     */ 
+    /**
+     * @return                          Position of the substring inside this string, or `npos` if not found.
+     */
     inline size_t find(const TStringView s, size_t pos = 0) const noexcept {
         return find(s.data(), pos, s.size());
     }
@@ -476,9 +476,9 @@ public:
     }
 
     //~~~~Contains~~~~
-    /** 
-     * @returns                         Whether this string contains the provided substring. 
-     */ 
+    /**
+     * @returns                         Whether this string contains the provided substring.
+     */
     inline bool Contains(const TStringView s, size_t pos = 0) const noexcept {
         return !s.length() || find(s, pos) != npos;
     }
@@ -493,33 +493,33 @@ public:
 
     //~~~~Character Set Search~~~
     inline size_t find_first_of(TCharType c) const noexcept {
-        return find_first_of(c, 0); 
+        return find_first_of(c, 0);
     }
 
     inline size_t find_first_of(TCharType c, size_t pos) const noexcept {
-        return find(c, pos); 
-    } 
- 
+        return find(c, pos);
+    }
+
     inline size_t find_first_of(const TStringView set) const noexcept {
-        return find_first_of(set, 0); 
-    } 
- 
+        return find_first_of(set, 0);
+    }
+
     inline size_t find_first_of(const TStringView set, size_t pos) const noexcept {
         return AsStringView().find_first_of(set.data(), pos, set.size());
     }
 
     inline size_t find_first_not_of(TCharType c) const noexcept {
-        return find_first_not_of(c, 0); 
-    } 
- 
+        return find_first_not_of(c, 0);
+    }
+
     inline size_t find_first_not_of(TCharType c, size_t pos) const noexcept {
         return find_first_not_of(TStringView(&c, 1), pos);
-    } 
- 
+    }
+
     inline size_t find_first_not_of(const TStringView set) const noexcept {
-        return find_first_not_of(set, 0); 
-    } 
- 
+        return find_first_not_of(set, 0);
+    }
+
     inline size_t find_first_not_of(const TStringView set, size_t pos) const noexcept {
         return AsStringView().find_first_not_of(set.data(), pos, set.size());
     }

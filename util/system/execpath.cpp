@@ -158,15 +158,15 @@ static TString GetExecPathImpl() {
 static bool GetPersistentExecPathImpl(TString& to) {
 #if defined(_solaris_)
     to = TString("/proc/self/object/a.out");
-    return true; 
+    return true;
 #elif defined(_linux_) || defined(_cygwin_)
     to = TString("/proc/self/exe");
-    return true; 
+    return true;
 #elif defined(_freebsd_)
     to = TString("/proc/curproc/file");
-    return true; 
+    return true;
 #else // defined(_win_) || defined(_darwin_)  or unknown
-    Y_UNUSED(to); 
+    Y_UNUSED(to);
     return false;
 #endif
 }

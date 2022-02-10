@@ -49,7 +49,7 @@ namespace NSorted {
 
     // Sorted vector, which is order by the key. The key is extracted from the value by the provided key-extractor
     template <typename TValueType, typename TKeyType = TValueType, class TKeyExtractor = TIdentity,
-              class TPredicate = TLess<TKeyType>, class A = std::allocator<TValueType>> 
+              class TPredicate = TLess<TKeyType>, class A = std::allocator<TValueType>>
     class TSortedVector: public TVector<TValueType, A> {
     private:
         typedef TVector<TValueType, A> TBase;
@@ -327,7 +327,7 @@ namespace NSorted {
     // This structure has the side-effect: if you keep a reference to an existing element
     // and then inserts a new one, the existing reference can be broken (due to reallocation).
     // Please keep this in mind when using this structure.
-    template <typename TKeyType, typename TValueType, class TPredicate = TLess<TKeyType>, class A = std::allocator<TValueType>> 
+    template <typename TKeyType, typename TValueType, class TPredicate = TLess<TKeyType>, class A = std::allocator<TValueType>>
     class TSimpleMap:
         public TSortedVector<std::pair<TKeyType, TValueType>, TKeyType, TSelect1st, TPredicate, A>,
         public TMapOps<TSimpleMap<TKeyType, TValueType, TPredicate, A>>
@@ -401,7 +401,7 @@ namespace NSorted {
     // This structure has the same side-effect as TSimpleMap.
     // The value type must have TValueType(TKeyType) constructor in order to use [] operator
     template <typename TValueType, typename TKeyType = TValueType, class TKeyExtractor = TIdentity,
-              class TPredicate = TLess<TKeyType>, class A = std::allocator<TValueType>> 
+              class TPredicate = TLess<TKeyType>, class A = std::allocator<TValueType>>
     class TSimpleSet: public TSortedVector<TValueType, TKeyType, TKeyExtractor, TPredicate, A> {
     private:
         typedef TSortedVector<TValueType, TKeyType, TKeyExtractor, TPredicate, A> TBase;

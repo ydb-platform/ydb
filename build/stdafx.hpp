@@ -187,7 +187,7 @@
 #include <util/draft/enum.h>
 #include <util/draft/memory.h>
 #include <util/draft/holder_vector.h>
-#include <util/generic/object_counter.h> 
+#include <util/generic/object_counter.h>
 #include <util/draft/datetime.h>
 #include <library/cpp/deprecated/estimators/estimators.h>
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>

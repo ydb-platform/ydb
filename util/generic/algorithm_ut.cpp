@@ -415,21 +415,21 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
             UNIT_ASSERT_EQUAL(tmpR.second - tmpR.first, 2);
         }
     }
- 
+
     Y_UNIT_TEST(IsSortedTest) {
         TVector<int> v0;
-        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v0.begin(), v0.end()), true); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v0.begin(), v0.end()), true);
+
         TVector<int> v1 = {1, 2, 3, 4, 5, 5, 5, 6, 6, 7, 8};
-        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v1.begin(), v1.end()), true); 
-        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v1.begin(), v1.end(), TLess<int>()), true); 
-        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v1.begin(), v1.end(), TGreater<int>()), false); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v1.begin(), v1.end()), true);
+        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v1.begin(), v1.end(), TLess<int>()), true);
+        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v1.begin(), v1.end(), TGreater<int>()), false);
+
         TVector<int> v2 = {1, 2, 1};
-        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v2.begin(), v2.end()), false); 
-        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v2.begin(), v2.end(), TLess<int>()), false); 
-        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v2.begin(), v2.end(), TGreater<int>()), false); 
-    } 
+        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v2.begin(), v2.end()), false);
+        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v2.begin(), v2.end(), TLess<int>()), false);
+        UNIT_ASSERT_VALUES_EQUAL(IsSorted(v2.begin(), v2.end(), TGreater<int>()), false);
+    }
 
     Y_UNIT_TEST(IsSortedByTest) {
         TVector<int> v0;
@@ -835,13 +835,13 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
 
         UNIT_ASSERT((it + 1) == data.end());
     }
- 
+
     Y_UNIT_TEST(TestFindInContainer) {
-        std::vector<int> v = {1, 2, 1000, 15, 100}; 
-        UNIT_ASSERT(Find(v, 5) == v.end()); 
-        UNIT_ASSERT(Find(v, 1) == v.begin()); 
-        UNIT_ASSERT(Find(v, 100) == v.end() - 1); 
-    } 
+        std::vector<int> v = {1, 2, 1000, 15, 100};
+        UNIT_ASSERT(Find(v, 5) == v.end());
+        UNIT_ASSERT(Find(v, 1) == v.begin());
+        UNIT_ASSERT(Find(v, 100) == v.end() - 1);
+    }
 
     Y_UNIT_TEST(AccumulateWithBinOp) {
         std::vector<int> v = {1, 2, 777};

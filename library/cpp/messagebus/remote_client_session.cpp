@@ -71,7 +71,7 @@ void TRemoteClientSession::FillStatus() {
     StatusData.Status.InputPaused = false;
 }
 
-void TRemoteClientSession::AcquireInFlight(TArrayRef<TBusMessage* const> messages) { 
+void TRemoteClientSession::AcquireInFlight(TArrayRef<TBusMessage* const> messages) {
     for (auto message : messages) {
         Y_ASSERT(!(message->LocalFlags & MESSAGE_IN_FLIGHT_ON_CLIENT));
         message->LocalFlags |= MESSAGE_IN_FLIGHT_ON_CLIENT;
@@ -79,7 +79,7 @@ void TRemoteClientSession::AcquireInFlight(TArrayRef<TBusMessage* const> message
     ClientRemoteInFlight.IncrementMultiple(messages.size());
 }
 
-void TRemoteClientSession::ReleaseInFlight(TArrayRef<TBusMessage* const> messages) { 
+void TRemoteClientSession::ReleaseInFlight(TArrayRef<TBusMessage* const> messages) {
     for (auto message : messages) {
         Y_ASSERT(message->LocalFlags & MESSAGE_IN_FLIGHT_ON_CLIENT);
         message->LocalFlags &= ~MESSAGE_IN_FLIGHT_ON_CLIENT;
@@ -88,7 +88,7 @@ void TRemoteClientSession::ReleaseInFlight(TArrayRef<TBusMessage* const> message
 }
 
 void TRemoteClientSession::ReleaseInFlightAndCallOnReply(TNonDestroyingAutoPtr<TBusMessage> request, TBusMessagePtrAndHeader& response) {
-    ReleaseInFlight({request.Get()}); 
+    ReleaseInFlight({request.Get()});
     if (Y_UNLIKELY(AtomicGet(Down))) {
         InvokeOnError(request, MESSAGE_SHUTDOWN);
         InvokeOnError(response.MessagePtr.Release(), MESSAGE_SHUTDOWN);

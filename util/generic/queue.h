@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fwd.h" 
+#include "fwd.h"
 #include "deque.h"
 #include "vector.h"
 #include "utility.h"
@@ -9,7 +9,7 @@
 
 #include <queue>
 
-template <class T, class S> 
+template <class T, class S>
 class TQueue: public std::queue<T, S> {
     using TBase = std::queue<T, S>;
 
@@ -33,7 +33,7 @@ public:
     }
 };
 
-template <class T, class S, class C> 
+template <class T, class S, class C>
 class TPriorityQueue: public std::priority_queue<T, S, C> {
     using TBase = std::priority_queue<T, S, C>;
 

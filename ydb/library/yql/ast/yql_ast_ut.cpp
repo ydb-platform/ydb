@@ -120,7 +120,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
     template <typename TCharType>
     void TestGoodArbitraryAtom(
                 const TString& program,
-                const TBasicStringBuf<TCharType>& expectedValue) 
+                const TBasicStringBuf<TCharType>& expectedValue)
     {
         TAstParseResult ast = ParseAst(program);
         UNIT_ASSERT(ast.IsOk());

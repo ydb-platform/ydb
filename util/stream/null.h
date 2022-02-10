@@ -1,16 +1,16 @@
 #pragma once
 
-#include "zerocopy.h" 
-#include "output.h" 
+#include "zerocopy.h"
+#include "output.h"
 
-/** 
- * @addtogroup Streams 
- * @{ 
- */ 
- 
-/** 
- * Null input stream. Does nothing, contains no data. 
- */ 
+/**
+ * @addtogroup Streams
+ * @{
+ */
+
+/**
+ * Null input stream. Does nothing, contains no data.
+ */
 class TNullInput: public IZeroCopyInput {
 public:
     TNullInput() noexcept;
@@ -22,9 +22,9 @@ private:
     size_t DoNext(const void** ptr, size_t len) override;
 };
 
-/** 
- * Null output stream. Just ignores whatever is written into it. 
- */ 
+/**
+ * Null output stream. Just ignores whatever is written into it.
+ */
 class TNullOutput: public IOutputStream {
 public:
     TNullOutput() noexcept;
@@ -37,25 +37,25 @@ private:
     void DoWrite(const void* buf, size_t len) override;
 };
 
-/** 
- * Null input-output stream. 
- * 
- * @see TNullInput 
- * @see TNullOutput 
- */ 
+/**
+ * Null input-output stream.
+ *
+ * @see TNullInput
+ * @see TNullOutput
+ */
 class TNullIO: public TNullInput, public TNullOutput {
 public:
     TNullIO() noexcept;
     ~TNullIO() override;
 };
 
-namespace NPrivate { 
+namespace NPrivate {
     TNullIO& StdNullStream() noexcept;
-} 
+}
 
-/** 
- * Standard null stream. 
- */ 
-#define Cnull (::NPrivate::StdNullStream()) 
+/**
+ * Standard null stream.
+ */
+#define Cnull (::NPrivate::StdNullStream())
 
-/** @} */ 
+/** @} */

@@ -250,7 +250,7 @@ TString WriteYsonValue(const NUdf::TUnboxedValuePod& value, TType* type, const T
     TStringStream str;
     NYson::TYsonWriter writer(&str, format);
     WriteYsonValue(writer, value, type, structPositions);
-    return str.Str(); 
+    return str.Str();
 }
 
 TCodecContext::TCodecContext(

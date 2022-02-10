@@ -133,9 +133,9 @@ TFileStat::TFileStat(const char* fileName, bool nofollow) {
 }
 
 bool TFileStat::IsNull() const noexcept {
-    return *this == TFileStat(); 
-} 
- 
+    return *this == TFileStat();
+}
+
 bool TFileStat::IsFile() const noexcept {
     return S_ISREG(Mode);
 }
@@ -157,12 +157,12 @@ bool operator==(const TFileStat& l, const TFileStat& r) noexcept {
            l.ATime == r.ATime &&
            l.MTime == r.MTime &&
            l.CTime == r.CTime;
-} 
- 
+}
+
 bool operator!=(const TFileStat& l, const TFileStat& r) noexcept {
-    return !(l == r); 
-} 
- 
+    return !(l == r);
+}
+
 i64 GetFileLength(FHANDLE fd) {
 #if defined(_win_)
     LARGE_INTEGER pos;
@@ -184,32 +184,32 @@ i64 GetFileLength(FHANDLE fd) {
     #error unsupported platform
 #endif
 }
- 
-i64 GetFileLength(const char* name) { 
-#if defined(_win_) 
-    WIN32_FIND_DATA fData; 
-    HANDLE h = FindFirstFileA(name, &fData); 
-    if (h == INVALID_HANDLE_VALUE) 
-        return -1; 
-    FindClose(h); 
-    return (((i64)fData.nFileSizeHigh) * (i64(MAXDWORD) + 1)) + (i64)fData.nFileSizeLow; 
-#elif defined(_unix_) 
-    struct stat buf; 
-    int r = ::stat(name, &buf); 
+
+i64 GetFileLength(const char* name) {
+#if defined(_win_)
+    WIN32_FIND_DATA fData;
+    HANDLE h = FindFirstFileA(name, &fData);
+    if (h == INVALID_HANDLE_VALUE)
+        return -1;
+    FindClose(h);
+    return (((i64)fData.nFileSizeHigh) * (i64(MAXDWORD) + 1)) + (i64)fData.nFileSizeLow;
+#elif defined(_unix_)
+    struct stat buf;
+    int r = ::stat(name, &buf);
     if (r == -1) {
-        return -1; 
+        return -1;
     }
     if (!(buf.st_mode & (S_IFREG | S_IFBLK | S_IFCHR))) {
         // st_size only makes sense for regular files or devices
         errno = EINVAL;
         return -1;
     }
-    return (i64)buf.st_size; 
-#else 
+    return (i64)buf.st_size;
+#else
     #error unsupported platform
-#endif 
-} 
- 
+#endif
+}
+
 i64 GetFileLength(const TString& name) {
     return GetFileLength(name.data());
-} 
+}

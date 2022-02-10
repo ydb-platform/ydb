@@ -17,7 +17,7 @@
 #include <util/generic/strbuf.h>
 
 #include <util/system/align.h>
-#include <util/stream/buffer.h> 
+#include <util/stream/buffer.h>
 
 #define CONSTEXPR_MAX2(a, b) (a) > (b) ? (a) : (b)
 #define CONSTEXPR_MAX3(a, b, c) CONSTEXPR_MAX2(CONSTEXPR_MAX2(a, b), c)

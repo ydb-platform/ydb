@@ -2,14 +2,14 @@
 
 #include "output.h"
 
-/** 
- * @addtogroup Streams_Multi 
- * @{ 
- */ 
- 
-/** 
- * A proxy output stream that writes into two slave streams simultaneously. 
- */ 
+/**
+ * @addtogroup Streams_Multi
+ * @{
+ */
+
+/**
+ * A proxy output stream that writes into two slave streams simultaneously.
+ */
 class TTeeOutput: public IOutputStream {
 public:
     TTeeOutput(IOutputStream* l, IOutputStream* r) noexcept;
@@ -25,4 +25,4 @@ private:
     IOutputStream* R_;
 };
 
-/** @} */ 
+/** @} */

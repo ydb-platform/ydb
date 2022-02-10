@@ -89,7 +89,7 @@ public:
         stats.SearchSkipCount = SearchSkipCount;
         AtomicUnlock(&WriteFlag);
 
-        Sort(hits.begin(), hits.end(), TCompareFirst()); 
+        Sort(hits.begin(), hits.end(), TCompareFirst());
 
         sampleVector.swap(hits);
     }

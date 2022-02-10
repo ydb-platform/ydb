@@ -1,13 +1,13 @@
 #pragma once
 
-#include <util/generic/array_ref.h> 
+#include <util/generic/array_ref.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/utility.h>
 #include <util/system/yassert.h>
 
 #include <stdlib.h>
 
-template <typename T, class A = std::allocator<T>> 
+template <typename T, class A = std::allocator<T>>
 class TVectorSwaps : TNonCopyable {
 private:
     T* Start;
@@ -40,12 +40,12 @@ public:
         free(Start);
     }
 
-    operator TArrayRef<const T>() const { 
-        return MakeArrayRef(data(), size()); 
+    operator TArrayRef<const T>() const {
+        return MakeArrayRef(data(), size());
     }
 
-    operator TArrayRef<T>() { 
-        return MakeArrayRef(data(), size()); 
+    operator TArrayRef<T>() {
+        return MakeArrayRef(data(), size());
     }
 
     size_t capacity() const {
@@ -166,6 +166,6 @@ public:
     }
 
     void push_back(T& elem) {
-        insert(end(), &elem, &elem + 1); 
+        insert(end(), &elem, &elem + 1);
     }
 };

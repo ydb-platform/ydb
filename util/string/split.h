@@ -102,21 +102,21 @@ static inline I* FastStrStr(I* str, I* f, size_t l) noexcept {
     }
 }
 
-template <class Char> 
+template <class Char>
 struct TStringDelimiter {
-    inline TStringDelimiter(Char* delim) noexcept 
+    inline TStringDelimiter(Char* delim) noexcept
         : Delim(delim)
         , Len(std::char_traits<Char>::length(delim))
     {
     }
 
-    inline TStringDelimiter(Char* delim, size_t len) noexcept 
+    inline TStringDelimiter(Char* delim, size_t len) noexcept
         : Delim(delim)
         , Len(len)
     {
     }
 
-    inline Char* Find(Char*& b, Char* e) const noexcept { 
+    inline Char* Find(Char*& b, Char* e) const noexcept {
         const auto ret = std::basic_string_view<Char>(b, e - b).find(Delim, 0, Len);
 
         if (ret != std::string::npos) {
@@ -128,26 +128,26 @@ struct TStringDelimiter {
         return (b = e);
     }
 
-    inline Char* Find(Char*& b) const noexcept { 
-        Char* ret = FastStrStr(b, Delim, Len); 
+    inline Char* Find(Char*& b) const noexcept {
+        Char* ret = FastStrStr(b, Delim, Len);
 
         b = *ret ? ret + Len : ret;
 
         return ret;
     }
 
-    Char* Delim; 
+    Char* Delim;
     const size_t Len;
 };
 
-template <class Char> 
+template <class Char>
 struct TCharDelimiter {
-    inline TCharDelimiter(Char ch) noexcept 
+    inline TCharDelimiter(Char ch) noexcept
         : Ch(ch)
     {
     }
 
-    inline Char* Find(Char*& b, Char* e) const noexcept { 
+    inline Char* Find(Char*& b, Char* e) const noexcept {
         const auto ret = std::basic_string_view<Char>(b, e - b).find(Ch);
 
         if (ret != std::string::npos) {
@@ -159,8 +159,8 @@ struct TCharDelimiter {
         return (b = e);
     }
 
-    inline Char* Find(Char*& b) const noexcept { 
-        Char* ret = FastStrChr(b, Ch); 
+    inline Char* Find(Char*& b) const noexcept {
+        Char* ret = FastStrChr(b, Ch);
 
         if (*ret) {
             b = ret + 1;
@@ -171,19 +171,19 @@ struct TCharDelimiter {
         return ret;
     }
 
-    Char Ch; 
+    Char Ch;
 };
 
-template <class Iterator, class Condition> 
+template <class Iterator, class Condition>
 struct TFuncDelimiter {
 public:
     template <class... Args>
-    TFuncDelimiter(Args&&... args) 
-        : Fn(std::forward<Args>(args)...) 
+    TFuncDelimiter(Args&&... args)
+        : Fn(std::forward<Args>(args)...)
     {
     }
 
-    inline Iterator Find(Iterator& b, Iterator e) const noexcept { 
+    inline Iterator Find(Iterator& b, Iterator e) const noexcept {
         if ((b = std::find_if(b, e, Fn)) != e) {
             return b++;
         }
@@ -192,18 +192,18 @@ public:
     }
 
 private:
-    Condition Fn; 
+    Condition Fn;
 };
 
-template <class Char> 
+template <class Char>
 struct TFindFirstOf {
-    inline TFindFirstOf(Char* set) 
+    inline TFindFirstOf(Char* set)
         : Set(set)
     {
     }
 
-    inline Char* FindFirstOf(Char* b, Char* e) const noexcept { 
-        Char* ret = b; 
+    inline Char* FindFirstOf(Char* b, Char* e) const noexcept {
+        Char* ret = b;
         for (; ret != e; ++ret) {
             if (NStringSplitPrivate::Find(Set, *ret))
                 break;
@@ -211,13 +211,13 @@ struct TFindFirstOf {
         return ret;
     }
 
-    inline Char* FindFirstOf(Char* b) const noexcept { 
+    inline Char* FindFirstOf(Char* b) const noexcept {
         const std::basic_string_view<Char> bView(b);
         const auto ret = bView.find_first_of(Set);
         return ret != std::string::npos ? b + ret : b + bView.size();
     }
 
-    Char* Set; 
+    Char* Set;
 };
 
 template <>
@@ -233,12 +233,12 @@ struct TFindFirstOf<const char>: public TCompactStrSpn {
     }
 };
 
-template <class Char> 
-struct TSetDelimiter: private TFindFirstOf<const Char> { 
-    using TFindFirstOf<const Char>::TFindFirstOf; 
+template <class Char>
+struct TSetDelimiter: private TFindFirstOf<const Char> {
+    using TFindFirstOf<const Char>::TFindFirstOf;
 
-    inline Char* Find(Char*& b, Char* e) const noexcept { 
-        Char* ret = const_cast<Char*>(this->FindFirstOf(b, e)); 
+    inline Char* Find(Char*& b, Char* e) const noexcept {
+        Char* ret = const_cast<Char*>(this->FindFirstOf(b, e));
 
         if (ret != e) {
             b = ret + 1;
@@ -248,8 +248,8 @@ struct TSetDelimiter: private TFindFirstOf<const Char> {
         return (b = e);
     }
 
-    inline Char* Find(Char*& b) const noexcept { 
-        Char* ret = const_cast<Char*>(this->FindFirstOf(b)); 
+    inline Char* Find(Char*& b) const noexcept {
+        Char* ret = const_cast<Char*>(this->FindFirstOf(b));
 
         if (*ret) {
             b = ret + 1;

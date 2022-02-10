@@ -248,7 +248,7 @@ void TRemoteClientConnection::ScheduleTimeoutMessages() {
     ScheduleWrite();
 }
 
-void TRemoteClientConnection::ReaderProcessMessageUnknownVersion(TArrayRef<const char>) { 
+void TRemoteClientConnection::ReaderProcessMessageUnknownVersion(TArrayRef<const char>) {
     LWPROBE(Error, ToString(MESSAGE_INVALID_VERSION), ToString(PeerAddr), "");
     ReaderData.Status.Incremental.StatusCounter[MESSAGE_INVALID_VERSION] += 1;
     // TODO: close connection
@@ -265,7 +265,7 @@ void TRemoteClientConnection::ClearOutgoingQueue(TMessagesPtrs& result, bool rec
     GetSession()->ReleaseInFlight(result);
 }
 
-void TRemoteClientConnection::MessageSent(TArrayRef<TBusMessagePtrAndHeader> messages) { 
+void TRemoteClientConnection::MessageSent(TArrayRef<TBusMessagePtrAndHeader> messages) {
     for (auto& message : messages) {
         bool oneWay = message.LocalFlags & MESSAGE_ONE_WAY_INTERNAL;
 
@@ -281,7 +281,7 @@ void TRemoteClientConnection::MessageSent(TArrayRef<TBusMessagePtrAndHeader> mes
                 // TODO: non-unique id?
             }
 
-            GetSession()->ReleaseInFlight({message.MessagePtr.Get()}); 
+            GetSession()->ReleaseInFlight({message.MessagePtr.Get()});
             ClientHandler->OnMessageSentOneWay(message.MessagePtr.Release());
         } else {
             ClientHandler->OnMessageSent(message.MessagePtr.Get());
@@ -314,7 +314,7 @@ EMessageStatus TRemoteClientConnection::SendMessageImpl(TBusMessage* msg, bool w
         }
     }
 
-    GetSession()->AcquireInFlight({msg}); 
+    GetSession()->AcquireInFlight({msg});
 
     EMessageStatus ret = MESSAGE_OK;
 
@@ -334,7 +334,7 @@ EMessageStatus TRemoteClientConnection::SendMessageImpl(TBusMessage* msg, bool w
     return MESSAGE_OK;
 clean:
     msg->LocalFlags &= ~MESSAGE_ONE_WAY_INTERNAL;
-    GetSession()->ReleaseInFlight({msg}); 
+    GetSession()->ReleaseInFlight({msg});
     return ret;
 }
 

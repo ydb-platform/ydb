@@ -6,8 +6,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
-#include <iterator> 
- 
+#include <iterator>
+
 namespace NBitIO {
     // Based on junk/solar/codecs/bitstream.h
 
@@ -15,7 +15,7 @@ namespace NBitIO {
     public:
         template <typename TVec>
         explicit TBitInput(const TVec& vec)
-            : TBitInputImpl(std::begin(vec), std::end(vec)) 
+            : TBitInputImpl(std::begin(vec), std::end(vec))
         {
         }
 

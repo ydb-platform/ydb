@@ -8,7 +8,7 @@
 /*
  * file log
  */
-class TFileLogBackend::TImpl { 
+class TFileLogBackend::TImpl {
 public:
     inline TImpl(const TString& path)
         : File_(OpenFile(path))

@@ -1,11 +1,11 @@
 LIBRARY()
 
-OWNER( 
-    vvvv 
-    g:kikimr 
-    g:yql 
+OWNER(
+    vvvv
+    g:kikimr
+    g:yql
     g:yql_ydb_core
-) 
+)
 
 SRCS(
     yql_ast.cpp

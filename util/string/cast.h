@@ -15,10 +15,10 @@ template <class T>
 size_t ToStringImpl(T t, char* buf, size_t len);
 
 /**
- * Converts @c t to string writing not more than @c len bytes to output buffer @c buf. 
- * No NULL terminator appended! Throws exception on buffer overflow. 
- * @return number of bytes written 
- */ 
+ * Converts @c t to string writing not more than @c len bytes to output buffer @c buf.
+ * No NULL terminator appended! Throws exception on buffer overflow.
+ * @return number of bytes written
+ */
 template <class T>
 inline size_t ToString(const T& t, char* buf, size_t len) {
     using TParam = typename TTypeTraits<T>::TFuncParam;
@@ -26,20 +26,20 @@ inline size_t ToString(const T& t, char* buf, size_t len) {
     return ToStringImpl<TParam>(t, buf, len);
 }
 
-/** 
- * Floating point to string conversion mode, values are enforced by `dtoa_impl.cpp`. 
- */ 
+/**
+ * Floating point to string conversion mode, values are enforced by `dtoa_impl.cpp`.
+ */
 enum EFloatToStringMode {
-    /** 0.1f -> "0.1", 0.12345678f -> "0.12345678", ignores ndigits. */ 
-    PREC_AUTO = 0, 
- 
-    /** "%g" mode, writes up to the given number of significant digits: 
-     *  0.1f -> "0.1", 0.12345678f -> "0.123457" for ndigits=6, 1.2e-06f -> "1.2e-06" */ 
-    PREC_NDIGITS = 2, 
- 
-    /** "%f" mode, writes the given number of digits after decimal point: 
-     *  0.1f -> "0.100000", 1.2e-06f -> "0.000001" for ndigits=6 */ 
-    PREC_POINT_DIGITS = 3, 
+    /** 0.1f -> "0.1", 0.12345678f -> "0.12345678", ignores ndigits. */
+    PREC_AUTO = 0,
+
+    /** "%g" mode, writes up to the given number of significant digits:
+     *  0.1f -> "0.1", 0.12345678f -> "0.123457" for ndigits=6, 1.2e-06f -> "1.2e-06" */
+    PREC_NDIGITS = 2,
+
+    /** "%f" mode, writes the given number of digits after decimal point:
+     *  0.1f -> "0.100000", 1.2e-06f -> "0.000001" for ndigits=6 */
+    PREC_POINT_DIGITS = 3,
 
     /** same as PREC_POINT_DIGITS, but stripping trailing zeroes:
      * 0.1f for ndgigits=6 -> "0.1" */
@@ -177,7 +177,7 @@ inline T FromString(const TWtringBuf& s) {
 
 template <class T>
 inline T FromString(const TUtf16String& s) {
-    return ::FromString<T, wchar16>(s.data(), s.size()); 
+    return ::FromString<T, wchar16>(s.data(), s.size());
 }
 
 namespace NPrivate {

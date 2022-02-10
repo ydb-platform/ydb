@@ -1480,7 +1480,7 @@ void TDataSnapshot::PutCorresponding(const NKikimr::TLogoBlobID &id, const TStri
 
 void TDataSnapshot::SortAndCheck() {
     // check that we can work with this data
-    Sort(Data.begin(), Data.end(), TDataSnapshot::TLess()); 
+    Sort(Data.begin(), Data.end(), TDataSnapshot::TLess());
 
     TVDiskID disk;
     TLogoBlobID id;

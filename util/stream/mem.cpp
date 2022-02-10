@@ -22,13 +22,13 @@ TMemoryInput::TMemoryInput(const TStringBuf buf) noexcept
 
 TMemoryInput::~TMemoryInput() = default;
 
-size_t TMemoryInput::DoNext(const void** ptr, size_t len) { 
-    len = Min(Len_, len); 
- 
-    *ptr = Buf_; 
-    Len_ -= len; 
-    Buf_ += len; 
-    return len; 
+size_t TMemoryInput::DoNext(const void** ptr, size_t len) {
+    len = Min(Len_, len);
+
+    *ptr = Buf_;
+    Len_ -= len;
+    Buf_ += len;
+    return len;
 }
 
 void TMemoryInput::DoUndo(size_t len) {

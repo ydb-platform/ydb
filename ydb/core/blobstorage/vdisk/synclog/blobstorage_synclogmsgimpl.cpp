@@ -101,7 +101,7 @@ namespace NKikimr {
                 auto lessRestore = [] (const TLogoBlobRecWithSerial &x, const TLogoBlobRecWithSerial &y) {
                     return x.Counter < y.Counter;
                 };
-                Sort(logoBlobs.begin(), logoBlobs.end(), lessRestore); 
+                Sort(logoBlobs.begin(), logoBlobs.end(), lessRestore);
             }
 
             ui32 Size() const {

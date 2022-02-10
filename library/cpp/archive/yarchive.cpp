@@ -244,7 +244,7 @@ namespace {
     public:
         inline TArchiveInputStream(const TBlob& b)
             : TArchiveInputStreamBase(b)
-            , TZLibDecompress(&Input_) 
+            , TZLibDecompress(&Input_)
         {
         }
 
@@ -278,7 +278,7 @@ public:
 
         const char* beg = ptr - dictlen;
         TMemoryInput mi(beg, dictlen);
-        TZLibDecompress d(&mi); 
+        TZLibDecompress d(&mi);
         const ui32 count = ESLoad<ui32>(&d);
 
         for (size_t i = 0; i < count; ++i) {

@@ -59,7 +59,7 @@ namespace NXml {
         TString ToString(TZtStringBuf enc = "", bool shouldFormat = true) const {
             TStringStream s;
             Save(s, enc, shouldFormat);
-            return s.Str(); 
+            return s.Str();
         }
 
         void Swap(TDocument& that) {
@@ -424,7 +424,7 @@ namespace NXml {
         TString ToString(TZtStringBuf enc = "") const {
             TStringStream s;
             Save(s, enc);
-            return s.Str(); 
+            return s.Str();
         }
         void Save(IOutputStream& stream, TZtStringBuf enc = "", bool shouldFormat = false) const;
         void SaveAsHtml(IOutputStream& stream, TZtStringBuf enc = "", bool shouldFormat = false) const;

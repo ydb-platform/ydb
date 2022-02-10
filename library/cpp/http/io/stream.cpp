@@ -161,11 +161,11 @@ public:
     }
 
     inline size_t Read(void* buf, size_t len) {
-        return Perform(len, [this, buf](size_t toRead) { return Input_->Read(buf, toRead); }); 
+        return Perform(len, [this, buf](size_t toRead) { return Input_->Read(buf, toRead); });
     }
- 
-    inline size_t Skip(size_t len) { 
-        return Perform(len, [this](size_t toSkip) { return Input_->Skip(toSkip); }); 
+
+    inline size_t Skip(size_t len) {
+        return Perform(len, [this](size_t toSkip) { return Input_->Skip(toSkip); });
     }
 
     inline const TString& FirstLine() const noexcept {
@@ -210,8 +210,8 @@ public:
 
 private:
     template <class Operation>
-    inline size_t Perform(size_t len, const Operation& operation) { 
-        size_t processed = operation(len); 
+    inline size_t Perform(size_t len, const Operation& operation) {
+        size_t processed = operation(len);
         if (processed == 0 && len > 0) {
             if (!ChunkedInput_) {
                 Trailers_.ConstructInPlace();
@@ -222,11 +222,11 @@ private:
                 if (ChunkedInput_->Read(&symbol, 1) != 0) {
                     ythrow THttpParseException() << "some data remaining in TChunkedInput";
                 }
-            } 
-        } 
-        return processed; 
-    } 
- 
+            }
+        }
+        return processed;
+    }
+
     struct TParsedHeaders {
         bool Chunked = false;
         bool KeepAlive = false;
@@ -403,10 +403,10 @@ size_t THttpInput::DoRead(void* buf, size_t len) {
     return Impl_->Read(buf, len);
 }
 
-size_t THttpInput::DoSkip(size_t len) { 
-    return Impl_->Skip(len); 
-} 
- 
+size_t THttpInput::DoSkip(size_t len) {
+    return Impl_->Skip(len);
+}
+
 const THttpHeaders& THttpInput::Headers() const noexcept {
     return Impl_->Headers();
 }

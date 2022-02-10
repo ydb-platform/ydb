@@ -7,14 +7,14 @@
 #include <util/generic/vector.h>
 #include <util/generic/strbuf.h>
 
-#include <memory> 
+#include <memory>
 #include <cstdio>
 #include <cstdlib>
 
 /*
  * Non-reallocated storage for the objects of POD type
  */
-template <class T, class Alloc = std::allocator<T>> 
+template <class T, class Alloc = std::allocator<T>>
 class segmented_pool: TNonCopyable {
 protected:
     Alloc seg_allocator;

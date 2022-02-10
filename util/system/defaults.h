@@ -134,12 +134,12 @@ constexpr bool Y_IS_DEBUG_BUILD = true;
 #undef Y_ARRAY_END
 #define Y_ARRAY_END(arr) ((arr) + Y_ARRAY_SIZE(arr))
 
-/** 
- * Concatenates two symbols, even if one of them is itself a macro. 
- */ 
-#define Y_CAT(X, Y) Y_CAT_I(X, Y) 
-#define Y_CAT_I(X, Y) Y_CAT_II(X, Y) 
-#define Y_CAT_II(X, Y) X##Y 
+/**
+ * Concatenates two symbols, even if one of them is itself a macro.
+ */
+#define Y_CAT(X, Y) Y_CAT_I(X, Y)
+#define Y_CAT_I(X, Y) Y_CAT_II(X, Y)
+#define Y_CAT_II(X, Y) X##Y
 
 #define Y_STRINGIZE(X) UTIL_PRIVATE_STRINGIZE_AUX(X)
 #define UTIL_PRIVATE_STRINGIZE_AUX(X) #X

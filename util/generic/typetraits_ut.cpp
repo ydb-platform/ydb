@@ -16,29 +16,29 @@ namespace {
         TNonPodClass() {
         }
     };
- 
-    class TEmptyClass { 
+
+    class TEmptyClass {
         void operator()() const {
         }
-    }; 
- 
-    class TAnotherEmptyClass { 
-    }; 
- 
+    };
+
+    class TAnotherEmptyClass {
+    };
+
     class TEmptyDerivedClass: public TEmptyClass {
-    }; 
- 
+    };
+
     class TEmptyMultiDerivedClass: public TEmptyDerivedClass, public TAnotherEmptyClass {
-        /* Not empty under MSVC. 
-         * MSVC's EBCO implementation can handle only one empty base class. */ 
-    }; 
- 
+        /* Not empty under MSVC.
+         * MSVC's EBCO implementation can handle only one empty base class. */
+    };
+
     struct TNonEmptyClass {
-        TEmptyClass member; 
-    }; 
- 
+        TEmptyClass member;
+    };
+
     class TNonEmptyDerivedClass: public TNonEmptyClass {
-    }; 
+    };
 
     class TStdLayoutClass1: public TEmptyClass {
     public:
@@ -80,10 +80,10 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
     Y_UNIT_TEST(TestIsSame) {
-        UNIT_ASSERT((std::is_same<int, int>::value)); 
-        UNIT_ASSERT(!(std::is_same<signed int, unsigned int>::value)); 
-    } 
- 
+        UNIT_ASSERT((std::is_same<int, int>::value));
+        UNIT_ASSERT(!(std::is_same<signed int, unsigned int>::value));
+    }
+
     Y_UNIT_TEST(TestRemoveReference) {
         ASSERT_SAME_TYPE(std::remove_reference_t<int>, int);
         ASSERT_SAME_TYPE(std::remove_reference_t<const int>, const int);
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         a = std::is_same<typename TTypeTraits<const volatile T>::TFuncParam, const volatile T>::value;
         UNIT_ASSERT(a);
     }
- 
+
     template <class T>
     inline void TestUnsignedIntType() {
         UNIT_ASSERT(std::is_unsigned<T>::value);
@@ -174,28 +174,28 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
     }
 
     Y_UNIT_TEST(TestUnsignedChar) {
-        TestArithmeticType<unsigned char>(); 
+        TestArithmeticType<unsigned char>();
         TestUnsignedIntType<unsigned char>();
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestSizeT) {
-        TestArithmeticType<size_t>(); 
+        TestArithmeticType<size_t>();
         TestUnsignedIntType<size_t>();
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestInt) {
         TestArithmeticType<int>();
         TestSignedIntType<int>();
     }
 
     Y_UNIT_TEST(TestDouble) {
-        TestArithmeticType<double>(); 
-    } 
- 
+        TestArithmeticType<double>();
+    }
+
     Y_UNIT_TEST(TestLongDouble) {
-        TestArithmeticType<long double>(); 
-    } 
- 
+        TestArithmeticType<long double>();
+    }
+
     Y_UNIT_TEST(TestAddRValueReference) {
         ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int>, int&&);
         ASSERT_SAME_TYPE(std::add_rvalue_reference_t<int const&>, int const&);
@@ -209,11 +209,11 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         UNIT_ASSERT(std::is_empty<TEmptyClass>::value);
         UNIT_ASSERT(std::is_empty<TEmptyDerivedClass>::value);
         UNIT_ASSERT(std::is_empty<TAnotherEmptyClass>::value);
-#ifdef _MSC_VER 
-        UNIT_ASSERT(!std::is_empty<TEmptyMultiDerivedClass>::value); 
-#else 
+#ifdef _MSC_VER
+        UNIT_ASSERT(!std::is_empty<TEmptyMultiDerivedClass>::value);
+#else
         UNIT_ASSERT(std::is_empty<TEmptyMultiDerivedClass>::value);
-#endif 
+#endif
         UNIT_ASSERT(!std::is_empty<TNonEmptyClass>::value);
         UNIT_ASSERT(!std::is_empty<TNonEmptyDerivedClass>::value);
     }
@@ -234,29 +234,29 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
         struct TPod {
             int value;
         };
- 
-        struct TNontriviallyCopyAssignable { 
-            TNontriviallyCopyAssignable(const TNontriviallyCopyAssignable&) = default; 
-            TNontriviallyCopyAssignable& operator=(const TNontriviallyCopyAssignable&); 
-        }; 
- 
-        struct TNonTriviallyCopyConstructible { 
-            TNonTriviallyCopyConstructible(const TNonTriviallyCopyConstructible&); 
-            TNonTriviallyCopyConstructible& operator=(const TNonTriviallyCopyConstructible&) = default; 
-        }; 
- 
-        struct TNonTriviallyDestructible { 
-            TNonTriviallyDestructible(const TNonTriviallyDestructible&) = default; 
-            TNonTriviallyDestructible& operator=(const TNonTriviallyDestructible&) = default; 
-            ~TNonTriviallyDestructible(); 
-        }; 
- 
-        UNIT_ASSERT(std::is_trivially_copyable<int>::value); 
-        UNIT_ASSERT(std::is_trivially_copyable<TPod>::value); 
-        UNIT_ASSERT(!std::is_trivially_copyable<TNontriviallyCopyAssignable>::value); 
-        UNIT_ASSERT(!std::is_trivially_copyable<TNonTriviallyCopyConstructible>::value); 
-        UNIT_ASSERT(!std::is_trivially_copyable<TNonTriviallyDestructible>::value); 
-    } 
+
+        struct TNontriviallyCopyAssignable {
+            TNontriviallyCopyAssignable(const TNontriviallyCopyAssignable&) = default;
+            TNontriviallyCopyAssignable& operator=(const TNontriviallyCopyAssignable&);
+        };
+
+        struct TNonTriviallyCopyConstructible {
+            TNonTriviallyCopyConstructible(const TNonTriviallyCopyConstructible&);
+            TNonTriviallyCopyConstructible& operator=(const TNonTriviallyCopyConstructible&) = default;
+        };
+
+        struct TNonTriviallyDestructible {
+            TNonTriviallyDestructible(const TNonTriviallyDestructible&) = default;
+            TNonTriviallyDestructible& operator=(const TNonTriviallyDestructible&) = default;
+            ~TNonTriviallyDestructible();
+        };
+
+        UNIT_ASSERT(std::is_trivially_copyable<int>::value);
+        UNIT_ASSERT(std::is_trivially_copyable<TPod>::value);
+        UNIT_ASSERT(!std::is_trivially_copyable<TNontriviallyCopyAssignable>::value);
+        UNIT_ASSERT(!std::is_trivially_copyable<TNonTriviallyCopyConstructible>::value);
+        UNIT_ASSERT(!std::is_trivially_copyable<TNonTriviallyDestructible>::value);
+    }
 };
 
 namespace {

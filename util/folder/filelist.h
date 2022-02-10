@@ -3,21 +3,21 @@
 #include <util/generic/buffer.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/flags.h> 
+#include <util/generic/flags.h>
 
 class TFileEntitiesList {
 public:
-    enum EMaskFlag { 
+    enum EMaskFlag {
         EM_FILES = 1,
         EM_DIRS = 2,
         EM_SLINKS = 4,
- 
-        EM_FILES_DIRS = EM_FILES | EM_DIRS, 
-        EM_FILES_SLINKS = EM_FILES | EM_SLINKS, 
-        EM_DIRS_SLINKS = EM_DIRS | EM_SLINKS, 
-        EM_FILES_DIRS_SLINKS = EM_FILES | EM_DIRS | EM_SLINKS 
+
+        EM_FILES_DIRS = EM_FILES | EM_DIRS,
+        EM_FILES_SLINKS = EM_FILES | EM_SLINKS,
+        EM_DIRS_SLINKS = EM_DIRS | EM_SLINKS,
+        EM_FILES_DIRS_SLINKS = EM_FILES | EM_DIRS | EM_SLINKS
     };
-    Y_DECLARE_FLAGS(EMask, EMaskFlag) 
+    Y_DECLARE_FLAGS(EMask, EMaskFlag)
 
     TFileEntitiesList(EMask mask)
         : Mask(mask)
@@ -62,8 +62,8 @@ protected:
     EMask Mask;
 };
 
-Y_DECLARE_OPERATORS_FOR_FLAGS(TFileEntitiesList::EMask) 
- 
+Y_DECLARE_OPERATORS_FOR_FLAGS(TFileEntitiesList::EMask)
+
 class TFileList: public TFileEntitiesList {
 public:
     TFileList()

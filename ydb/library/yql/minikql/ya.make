@@ -1,11 +1,11 @@
 LIBRARY()
 
-OWNER( 
-    vvvv 
+OWNER(
+    vvvv
     g:kikimr
-    g:yql 
+    g:yql
     g:yql_ydb_core
-) 
+)
 
 SRCS(
     aligned_page_pool.cpp

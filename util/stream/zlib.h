@@ -1,19 +1,19 @@
 #pragma once
 
 #include "fwd.h"
-#include "input.h" 
-#include "output.h" 
-#include "buffered.h" 
+#include "input.h"
+#include "output.h"
+#include "buffered.h"
 
 #include <util/system/defaults.h>
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
 
-/** 
- * @addtogroup Streams_Archs 
- * @{ 
- */ 
- 
+/**
+ * @addtogroup Streams_Archs
+ * @{
+ */
+
 struct TZLibError: public yexception {
 };
 
@@ -31,20 +31,20 @@ namespace ZLib {
         Raw = 3,
         Invalid = 4
     };
- 
-    enum { 
-        ZLIB_BUF_LEN = 8 * 1024 
-    }; 
+
+    enum {
+        ZLIB_BUF_LEN = 8 * 1024
+    };
 }
 
 /**
- * Non-buffered ZLib decompressing stream. 
+ * Non-buffered ZLib decompressing stream.
  *
- * Please don't use `TZLibDecompress` if you read text data from stream using 
- * `ReadLine`, it is VERY slow (approx 10 times slower, according to synthetic 
- * benchmark). For fast buffered ZLib stream reading use `TBufferedZLibDecompress` 
- * aka `TZDecompress`. 
- */ 
+ * Please don't use `TZLibDecompress` if you read text data from stream using
+ * `ReadLine`, it is VERY slow (approx 10 times slower, according to synthetic
+ * benchmark). For fast buffered ZLib stream reading use `TBufferedZLibDecompress`
+ * aka `TZDecompress`.
+ */
 class TZLibDecompress: public IInputStream {
 public:
     TZLibDecompress(IZeroCopyInput* input, ZLib::StreamType type = ZLib::Auto, TStringBuf dict = {});
@@ -63,18 +63,18 @@ public:
     void SetAllowMultipleStreams(bool allowMultipleStreams);
 
     ~TZLibDecompress() override;
- 
-protected: 
+
+protected:
     size_t DoRead(void* buf, size_t size) override;
- 
+
 public:
     class TImpl;
     THolder<TImpl> Impl_;
 };
 
-/** 
- * Non-buffered ZLib compressing stream. 
- */ 
+/**
+ * Non-buffered ZLib compressing stream.
+ */
 class TZLibCompress: public IOutputStream {
 public:
     struct TParams {
@@ -82,7 +82,7 @@ public:
             : Out(out)
             , Type(ZLib::ZLib)
             , CompressionLevel(6)
-            , BufLen(ZLib::ZLIB_BUF_LEN) 
+            , BufLen(ZLib::ZLIB_BUF_LEN)
         {
         }
 
@@ -145,7 +145,7 @@ private:
 public:
     class TImpl;
 
-    /** To allow inline constructors. */ 
+    /** To allow inline constructors. */
     struct TDestruct {
         static void Destroy(TImpl* impl);
     };
@@ -153,12 +153,12 @@ public:
     THolder<TImpl, TDestruct> Impl_;
 };
 
-/** 
- * Buffered ZLib decompressing stream. 
- * 
- * Supports efficient `ReadLine` calls and similar "reading in small pieces" 
- * usage patterns. 
- */ 
+/**
+ * Buffered ZLib decompressing stream.
+ *
+ * Supports efficient `ReadLine` calls and similar "reading in small pieces"
+ * usage patterns.
+ */
 class TBufferedZLibDecompress: public TBuffered<TZLibDecompress> {
 public:
     template <class T>
@@ -170,4 +170,4 @@ public:
     ~TBufferedZLibDecompress() override;
 };
 
-/** @} */ 
+/** @} */

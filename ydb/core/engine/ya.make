@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER( 
-    vvvv 
-    g:kikimr 
-    g:yql 
-) 
+OWNER(
+    vvvv
+    g:kikimr
+    g:yql
+)
 
 SRCS(
     kikimr_program_builder.cpp

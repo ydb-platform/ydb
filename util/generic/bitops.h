@@ -269,7 +269,7 @@ Y_FORCE_INLINE ui64 InverseMaskLowerBits(ui64 bits, ui64 skipbits) {
 }
 
 /*
- * Returns 0-based position of the most significant bit that is set. 0 for 0. 
+ * Returns 0-based position of the most significant bit that is set. 0 for 0.
  */
 Y_FORCE_INLINE ui64 MostSignificantBit(ui64 v) {
 #ifdef __GNUC__
@@ -287,28 +287,28 @@ Y_FORCE_INLINE ui64 MostSignificantBit(ui64 v) {
     return res;
 }
 
-/** 
- * Returns 0-based position of the least significant bit that is set. 0 for 0. 
- */ 
-Y_FORCE_INLINE ui64 LeastSignificantBit(ui64 v) { 
-#ifdef __GNUC__ 
-    ui64 res = v ? __builtin_ffsll(v) - 1 : 0; 
-#elif defined(_MSC_VER) && defined(_64_) 
-    unsigned long res = 0; 
-    if (v) 
-        _BitScanForward64(&res, v); 
-#else 
-    ui64 res = 0; 
-    if (v) { 
-        while (!(v & 1)) { 
+/**
+ * Returns 0-based position of the least significant bit that is set. 0 for 0.
+ */
+Y_FORCE_INLINE ui64 LeastSignificantBit(ui64 v) {
+#ifdef __GNUC__
+    ui64 res = v ? __builtin_ffsll(v) - 1 : 0;
+#elif defined(_MSC_VER) && defined(_64_)
+    unsigned long res = 0;
+    if (v)
+        _BitScanForward64(&res, v);
+#else
+    ui64 res = 0;
+    if (v) {
+        while (!(v & 1)) {
             ++res;
-            v >>= 1; 
-        } 
-    } 
-#endif 
-    return res; 
-} 
- 
+            v >>= 1;
+        }
+    }
+#endif
+    return res;
+}
+
 /*
  * Returns 0 - based position of the most significant bit (compile time)
  * 0 for 0.

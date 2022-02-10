@@ -160,7 +160,7 @@ Y_UNIT_TEST_SUITE(FloatHuffmanTest) {
             line << factors[i] << ", ";
             if (line.Str().size() > 80) {
                 result << line.Str() << Endl;
-                line.Clear(); 
+                line.Clear();
             }
         }
         Cerr << result.Str() << Endl;

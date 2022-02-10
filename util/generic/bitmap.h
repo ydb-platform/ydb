@@ -1,6 +1,6 @@
 #pragma once
 
-#include "fwd.h" 
+#include "fwd.h"
 #include "ptr.h"
 #include "bitops.h"
 #include "typetraits.h"
@@ -1077,7 +1077,7 @@ inline TBitMapOps<X> operator~(const TBitMapOps<X>& x) {
 
 /////////////////// Specialization ///////////////////////////
 
-template <size_t BitCount, typename TChunkType /*= ui64*/> 
+template <size_t BitCount, typename TChunkType /*= ui64*/>
 class TBitMap: public TBitMapOps<TFixedBitMapTraits<BitCount, TChunkType>> {
 private:
     using TBase = TBitMapOps<TFixedBitMapTraits<BitCount, TChunkType>>;

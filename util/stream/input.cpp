@@ -1,6 +1,6 @@
 #include "input.h"
-#include "output.h" 
-#include "str.h" 
+#include "output.h"
+#include "str.h"
 
 #include <util/charset/wide.h>
 #include <util/memory/tempbuf.h>
@@ -21,15 +21,15 @@ size_t IInputStream::DoReadTo(TString& st, char to) {
     char ch;
 
     if (!Read(&ch, 1)) {
-        return 0; 
+        return 0;
     }
 
     st.clear();
 
-    size_t result = 0; 
+    size_t result = 0;
     do {
         ++result;
- 
+
         if (ch == to) {
             break;
         }
@@ -37,23 +37,23 @@ size_t IInputStream::DoReadTo(TString& st, char to) {
         st += ch;
     } while (Read(&ch, 1));
 
-    return result; 
+    return result;
 }
 
 ui64 IInputStream::DoReadAll(IOutputStream& out) {
-    TTempBuf buffer; 
-    void* ptr = buffer.Data(); 
-    size_t size = buffer.Size(); 
- 
-    ui64 result = 0; 
-    while (size_t read = Read(ptr, size)) { 
-        out.Write(ptr, read); 
-        result += read; 
-    } 
- 
-    return result; 
-} 
- 
+    TTempBuf buffer;
+    void* ptr = buffer.Data();
+    size_t size = buffer.Size();
+
+    ui64 result = 0;
+    while (size_t read = Read(ptr, size)) {
+        out.Write(ptr, read);
+        result += read;
+    }
+
+    return result;
+}
+
 size_t IInputStream::Load(void* buf_in, size_t len) {
     char* buf = (char*)buf_in;
 
@@ -79,24 +79,24 @@ void IInputStream::LoadOrFail(void* buf, size_t len) {
 }
 
 size_t IInputStream::ReadLine(TString& st) {
-    const size_t ret = ReadTo(st, '\n'); 
+    const size_t ret = ReadTo(st, '\n');
 
     if (ret && !st.empty() && st.back() == '\r') {
         st.pop_back();
     }
 
-    return ret; 
+    return ret;
 }
 
 size_t IInputStream::ReadLine(TUtf16String& w) {
     TString s;
-    size_t result = ReadLine(s); 
+    size_t result = ReadLine(s);
 
-    if (result) { 
-        UTF8ToWide(s, w); 
-    } 
- 
-    return result; 
+    if (result) {
+        UTF8ToWide(s, w);
+    }
+
+    return result;
 }
 
 TString IInputStream::ReadLine() {
@@ -147,21 +147,21 @@ size_t IInputStream::DoSkip(size_t sz) {
 
 TString IInputStream::ReadAll() {
     TString result;
-    TStringOutput stream(result); 
+    TStringOutput stream(result);
 
-    DoReadAll(stream); 
- 
-    return result; 
-} 
+    DoReadAll(stream);
+
+    return result;
+}
 
 ui64 IInputStream::ReadAll(IOutputStream& out) {
-    return DoReadAll(out); 
+    return DoReadAll(out);
 }
 
 ui64 TransferData(IInputStream* in, IOutputStream* out) {
-    return in->ReadAll(*out); 
-} 
- 
+    return in->ReadAll(*out);
+}
+
 namespace {
     struct TStdIn: public IInputStream {
         ~TStdIn() override = default;

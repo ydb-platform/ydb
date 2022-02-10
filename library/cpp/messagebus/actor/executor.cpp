@@ -210,7 +210,7 @@ void TExecutor::Stop() {
     ProcessWorkQueueHere();
 }
 
-void TExecutor::EnqueueWork(TArrayRef<IWorkItem* const> wis) { 
+void TExecutor::EnqueueWork(TArrayRef<IWorkItem* const> wis) {
     if (wis.empty())
         return;
 

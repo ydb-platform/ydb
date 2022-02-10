@@ -12,10 +12,10 @@ static void SetErrno() {
     _dosmaperr(GetLastError());
 }
     #else
-void __cdecl __acrt_errno_map_os_error(unsigned long const oserrno); 
- 
-static void SetErrno() { 
-    __acrt_errno_map_os_error(GetLastError()); 
+void __cdecl __acrt_errno_map_os_error(unsigned long const oserrno);
+
+static void SetErrno() {
+    __acrt_errno_map_os_error(GetLastError());
 }
     #endif
 

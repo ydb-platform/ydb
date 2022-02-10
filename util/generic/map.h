@@ -1,15 +1,15 @@
 #pragma once
 
-#include "fwd.h" 
+#include "fwd.h"
 #include "mapfindptr.h"
 
-#include <util/str_stl.h> 
+#include <util/str_stl.h>
 #include <util/memory/alloc.h>
- 
+
 #include <utility>
 #include <initializer_list>
 #include <map>
-#include <memory> 
+#include <memory>
 
 template <class K, class V, class Less, class A>
 class TMap: public std::map<K, V, Less, TReboundAllocator<A, std::pair<const K, V>>>, public TMapOps<TMap<K, V, Less, A>> {

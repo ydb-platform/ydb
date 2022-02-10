@@ -4,7 +4,7 @@
 
 #include <util/system/defaults.h>
 #include <util/generic/ylimits.h>
-#include <util/generic/buffer.h> 
+#include <util/generic/buffer.h>
 #include <util/stream/mem.h>
 #include <util/stream/buffer.h>
 

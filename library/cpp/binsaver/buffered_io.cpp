@@ -1,4 +1,4 @@
-#include "buffered_io.h" 
+#include "buffered_io.h"
 
 i64 IBinaryStream::LongWrite(const void* userBuffer, i64 size) {
     Y_VERIFY(size >= 0, "IBinaryStream::Write() called with a negative buffer size.");

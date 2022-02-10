@@ -4,51 +4,51 @@
 
 #include <util/stream/output.h>
 
-class TCheckedAllocator: public TDefaultAllocator { 
-public: 
-    inline TCheckedAllocator() 
-        : Alloced_(0) 
-        , Released_(0) 
-        , Allocs_(0) 
+class TCheckedAllocator: public TDefaultAllocator {
+public:
+    inline TCheckedAllocator()
+        : Alloced_(0)
+        , Released_(0)
+        , Allocs_(0)
         , Frees_(0)
     {
-    } 
+    }
 
     TBlock Allocate(size_t len) override {
-        Check(); 
+        Check();
 
-        Alloced_ += len; 
-        ++Allocs_; 
+        Alloced_ += len;
+        ++Allocs_;
 
-        return TDefaultAllocator::Allocate(len); 
-    } 
+        return TDefaultAllocator::Allocate(len);
+    }
 
     void Release(const TBlock& block) override {
-        Released_ += block.Len; 
-        ++Frees_; 
+        Released_ += block.Len;
+        ++Frees_;
 
-        Check(); 
+        Check();
 
-        TDefaultAllocator::Release(block); 
-    } 
+        TDefaultAllocator::Release(block);
+    }
 
-    inline void CheckAtEnd() { 
-        UNIT_ASSERT_EQUAL(Alloced_, Released_); 
-        UNIT_ASSERT_EQUAL(Allocs_, Frees_); 
-    } 
+    inline void CheckAtEnd() {
+        UNIT_ASSERT_EQUAL(Alloced_, Released_);
+        UNIT_ASSERT_EQUAL(Allocs_, Frees_);
+    }
 
-private: 
-    inline void Check() { 
-        UNIT_ASSERT(Alloced_ >= Released_); 
-        UNIT_ASSERT(Allocs_ >= Frees_); 
-    } 
+private:
+    inline void Check() {
+        UNIT_ASSERT(Alloced_ >= Released_);
+        UNIT_ASSERT(Allocs_ >= Frees_);
+    }
 
-private: 
-    size_t Alloced_; 
-    size_t Released_; 
-    size_t Allocs_; 
-    size_t Frees_; 
-}; 
+private:
+    size_t Alloced_;
+    size_t Released_;
+    size_t Allocs_;
+    size_t Frees_;
+};
 
 class TErrorOnCopy {
 public:
@@ -76,20 +76,20 @@ public:
     TNoMove(TNoMove&&) = delete;
 };
 
-class TMemPoolTest: public TTestBase { 
-    UNIT_TEST_SUITE(TMemPoolTest); 
-    UNIT_TEST(TestMemPool) 
-    UNIT_TEST(TestAlign) 
+class TMemPoolTest: public TTestBase {
+    UNIT_TEST_SUITE(TMemPoolTest);
+    UNIT_TEST(TestMemPool)
+    UNIT_TEST(TestAlign)
     UNIT_TEST(TestZeroArray)
-    UNIT_TEST(TestLargeStartingAlign) 
+    UNIT_TEST(TestLargeStartingAlign)
     UNIT_TEST(TestMoveAlloc)
     UNIT_TEST(TestRoundUpToNextPowerOfTwoOption)
-    UNIT_TEST_SUITE_END(); 
+    UNIT_TEST_SUITE_END();
 
-private: 
-    inline void TestMemPool() { 
-        TCheckedAllocator alloc; 
- 
+private:
+    inline void TestMemPool() {
+        TCheckedAllocator alloc;
+
         {
             TMemoryPool pool(123, TMemoryPool::TExpGrow::Instance(), &alloc);
 
@@ -168,18 +168,18 @@ private:
 
         alloc.CheckAtEnd();
     }
- 
-    inline void TestAlign() { 
-        TMemoryPool pool(1); 
- 
-        void* aligned16 = pool.Allocate(3, 16); 
-        void* aligned2 = pool.Allocate(3, 2); 
-        void* aligned128 = pool.Allocate(3, 128); 
-        void* aligned4 = pool.Allocate(3, 4); 
-        void* aligned256 = pool.Allocate(3, 256); 
-        void* aligned8 = pool.Allocate(3, 8); 
-        void* aligned1024 = pool.Allocate(3, 1024); 
- 
+
+    inline void TestAlign() {
+        TMemoryPool pool(1);
+
+        void* aligned16 = pool.Allocate(3, 16);
+        void* aligned2 = pool.Allocate(3, 2);
+        void* aligned128 = pool.Allocate(3, 128);
+        void* aligned4 = pool.Allocate(3, 4);
+        void* aligned256 = pool.Allocate(3, 256);
+        void* aligned8 = pool.Allocate(3, 8);
+        void* aligned1024 = pool.Allocate(3, 1024);
+
         UNIT_ASSERT_VALUES_UNEQUAL(aligned16, nullptr);
         UNIT_ASSERT_VALUES_UNEQUAL(aligned2, nullptr);
         UNIT_ASSERT_VALUES_UNEQUAL(aligned128, nullptr);
@@ -188,14 +188,14 @@ private:
         UNIT_ASSERT_VALUES_UNEQUAL(aligned8, nullptr);
         UNIT_ASSERT_VALUES_UNEQUAL(aligned1024, nullptr);
 
-        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned2) & 1, 0); 
-        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned4) & 3, 0); 
-        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned8) & 7, 0); 
-        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned16) & 15, 0); 
-        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned128) & 127, 0); 
-        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned256) & 255, 0); 
-        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned1024) & 1023, 0); 
-    } 
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned2) & 1, 0);
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned4) & 3, 0);
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned8) & 7, 0);
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned16) & 15, 0);
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned128) & 127, 0);
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned256) & 255, 0);
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned1024) & 1023, 0);
+    }
 
     void TestZeroArray() {
         TMemoryPool pool(1);
@@ -205,24 +205,24 @@ private:
             UNIT_ASSERT(intArray[i] == 0);
         }
 
-        size_t align = 256; 
+        size_t align = 256;
         ui8* byteArray = pool.AllocateZeroArray<ui8>(size, align);
         UNIT_ASSERT(size_t(byteArray) % align == 0);
         for (size_t i = 0; i < size; ++i) {
             UNIT_ASSERT(byteArray[i] == 0);
-        } 
+        }
     }
- 
-    void TestLargeStartingAlign() { 
-        TMemoryPool pool(1); 
- 
-        void* aligned4k1 = pool.Allocate(1, 4096); 
-        void* aligned4k2 = pool.Allocate(1, 4096); 
-        UNIT_ASSERT_VALUES_UNEQUAL(aligned4k1, nullptr); 
-        UNIT_ASSERT_VALUES_UNEQUAL(aligned4k2, nullptr); 
-        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned4k1) & 4095, 0); 
-        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned4k2) & 4095, 0); 
-    } 
+
+    void TestLargeStartingAlign() {
+        TMemoryPool pool(1);
+
+        void* aligned4k1 = pool.Allocate(1, 4096);
+        void* aligned4k2 = pool.Allocate(1, 4096);
+        UNIT_ASSERT_VALUES_UNEQUAL(aligned4k1, nullptr);
+        UNIT_ASSERT_VALUES_UNEQUAL(aligned4k2, nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned4k1) & 4095, 0);
+        UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned4k2) & 4095, 0);
+    }
 
     template <typename T>
     void CheckMoveAlloc() {

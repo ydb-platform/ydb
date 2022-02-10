@@ -60,9 +60,9 @@ public:
     using const_pointer = const value_type*;
     using const_iterator = const_pointer;
 
-    /** 
+    /**
      * Constructs a null blob (data array points to nullptr).
-     */ 
+     */
     TBlob() noexcept
         : S_(nullptr, 0, nullptr)
     {
@@ -213,43 +213,43 @@ public:
     static TBlob FromFile(const TFile& file, EMappingMode);
 
     /// Creates a blob with a single-threaded (non atomic) refcounter. It maps the file on the path as data.
-    static TBlob FromFileSingleThreaded(const TString& path); 
+    static TBlob FromFileSingleThreaded(const TString& path);
 
     /// Creates a blob with a multi-threaded (atomic) refcounter. It maps the file on the path as data.
-    static TBlob FromFile(const TString& path); 
+    static TBlob FromFile(const TString& path);
 
     /// Creates a blob with a single-threaded (non atomic) refcounter. It maps the file on the path as data.
-    static TBlob FromFileSingleThreaded(const TFile& file); 
+    static TBlob FromFileSingleThreaded(const TFile& file);
 
     /// Creates a blob with a multi-threaded (atomic) refcounter. It maps the file on the path as data.
-    static TBlob FromFile(const TFile& file); 
+    static TBlob FromFile(const TFile& file);
 
-    // TODO: drop Precharged* functions. 
- 
+    // TODO: drop Precharged* functions.
+
     /// Creates a precharged blob with a single-threaded (non atomic) refcounter. It maps the file on the path as data.
-    static TBlob PrechargedFromFileSingleThreaded(const TString& path); 
+    static TBlob PrechargedFromFileSingleThreaded(const TString& path);
 
     /// Creates a precharged blob with a multi-threaded (atomic) refcounter. It maps the file on the path as data.
-    static TBlob PrechargedFromFile(const TString& path); 
+    static TBlob PrechargedFromFile(const TString& path);
 
     /// Creates a precharged blob with a single-threaded (non atomic) refcounter. It maps the file content as data.
-    static TBlob PrechargedFromFileSingleThreaded(const TFile& file); 
+    static TBlob PrechargedFromFileSingleThreaded(const TFile& file);
 
     /// Creates a precharged blob with a multi-threaded (atomic) refcounter. It maps the file content as data.
-    static TBlob PrechargedFromFile(const TFile& file); 
+    static TBlob PrechargedFromFile(const TFile& file);
 
-    /// Creates a locked blob with a single-threaded (non atomic) refcounter. It maps the file on the path as data. 
-    static TBlob LockedFromFileSingleThreaded(const TString& path); 
- 
-    /// Creates a locked blob with a multi-threaded (atomic) refcounter. It maps the file on the path as data. 
-    static TBlob LockedFromFile(const TString& path); 
- 
-    /// Creates a locked blob with a single-threaded (non atomic) refcounter. It maps the file content as data. 
-    static TBlob LockedFromFileSingleThreaded(const TFile& file); 
- 
-    /// Creates a locked blob with a multi-threaded (atomic) refcounter. It maps the file content as data. 
-    static TBlob LockedFromFile(const TFile& file); 
- 
+    /// Creates a locked blob with a single-threaded (non atomic) refcounter. It maps the file on the path as data.
+    static TBlob LockedFromFileSingleThreaded(const TString& path);
+
+    /// Creates a locked blob with a multi-threaded (atomic) refcounter. It maps the file on the path as data.
+    static TBlob LockedFromFile(const TString& path);
+
+    /// Creates a locked blob with a single-threaded (non atomic) refcounter. It maps the file content as data.
+    static TBlob LockedFromFileSingleThreaded(const TFile& file);
+
+    /// Creates a locked blob with a multi-threaded (atomic) refcounter. It maps the file content as data.
+    static TBlob LockedFromFile(const TFile& file);
+
     /// Creates a locked blob with a single-threaded (non atomic) refcounter from the mapped memory.
     static TBlob LockedFromMemoryMapSingleThreaded(const TMemoryMap& map, ui64 offset, size_t length);
 

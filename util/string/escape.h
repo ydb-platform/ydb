@@ -52,7 +52,7 @@ static inline TBasicString<TChar> EscapeC(const TChar* str) {
 TString& EscapeC(const TStringBuf str, TString& res);
 TUtf16String& EscapeC(const TWtringBuf str, TUtf16String& res);
 
-// these two need to be methods, because of TBasicString::Quote implementation 
+// these two need to be methods, because of TBasicString::Quote implementation
 TString EscapeC(const TString& str);
 TUtf16String EscapeC(const TUtf16String& str);
 

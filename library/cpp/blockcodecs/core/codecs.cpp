@@ -3,7 +3,7 @@
 #include "register.h"
 
 #include <util/ysaveload.h>
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 #include <util/stream/mem.h>
 #include <util/string/cast.h>
 #include <util/string/join.h>

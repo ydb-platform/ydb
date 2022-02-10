@@ -2,20 +2,20 @@
 
 #include <util/system/atomic.h>
 
-/** 
- * Simple thread-safe per-class counter that can be used to make sure you don't 
- * have any leaks in your code, or for statistical purposes. 
- * 
- * Example usage: 
- * \code 
- * class TMyClass: public TObjectCounter<TMyClass> { 
- *     // ... 
- * }; 
- * 
- * // In your code: 
- * Cerr << "TMyClass instances in use: " << TMyClass::ObjectCount() << Endl; 
- * \endcode 
- */ 
+/**
+ * Simple thread-safe per-class counter that can be used to make sure you don't
+ * have any leaks in your code, or for statistical purposes.
+ *
+ * Example usage:
+ * \code
+ * class TMyClass: public TObjectCounter<TMyClass> {
+ *     // ...
+ * };
+ *
+ * // In your code:
+ * Cerr << "TMyClass instances in use: " << TMyClass::ObjectCount() << Endl;
+ * \endcode
+ */
 template <class T>
 class TObjectCounter {
 public:
@@ -35,12 +35,12 @@ public:
         return AtomicGet(Count_);
     }
 
-    /** 
-     * Resets object count. Mainly for tests, as you don't want to do this in 
-     * your code and then end up with negative counts. 
-     * 
-     * \returns                         Current object count. 
-     */ 
+    /**
+     * Resets object count. Mainly for tests, as you don't want to do this in
+     * your code and then end up with negative counts.
+     *
+     * \returns                         Current object count.
+     */
     static inline long ResetObjectCount() noexcept {
         return AtomicSwap(&Count_, 0);
     }

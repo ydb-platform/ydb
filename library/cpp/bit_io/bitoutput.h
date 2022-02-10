@@ -110,11 +110,11 @@ namespace NBitIO {
         virtual ~TBitOutputBase() {
             Flush();
         }
- 
-    private: 
-        static Y_FORCE_INLINE ui64 FastZeroIfFalse(bool cond, ui64 iftrue) { 
-            return -i64(cond) & iftrue; 
-        } 
+
+    private:
+        static Y_FORCE_INLINE ui64 FastZeroIfFalse(bool cond, ui64 iftrue) {
+            return -i64(cond) & iftrue;
+        }
     };
 
     template <typename TVec>

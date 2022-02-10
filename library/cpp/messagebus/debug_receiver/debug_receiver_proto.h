@@ -23,5 +23,5 @@ struct TDebugReceiverProtocol: public NBus::TBusProtocol {
 
     void Serialize(const NBus::TBusMessage* mess, TBuffer& data) override;
 
-    TAutoPtr<NBus::TBusMessage> Deserialize(ui16 messageType, TArrayRef<const char> payload) override; 
+    TAutoPtr<NBus::TBusMessage> Deserialize(ui16 messageType, TArrayRef<const char> payload) override;
 };

@@ -1,7 +1,7 @@
-#include "hash_primes.h" 
-#include "array_size.h" 
+#include "hash_primes.h"
+#include "array_size.h"
 #include "algorithm.h"
- 
+
 /// Order of fields: reciprocal, reciprocal shift, adjacent hint, divisor
 #if defined(_32_)
 static constexpr ::NPrivate::THashDivisor PRIME_DIVISORS_HOLDER[]{

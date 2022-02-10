@@ -5,7 +5,7 @@
 #include <util/memory/pool.h>
 #include <util/stream/buffer.h>
 #include <util/memory/blob.h>
-#include <util/generic/list.h> 
+#include <util/generic/list.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
@@ -26,7 +26,7 @@ class TSaveLoadTest: public TTestBase {
     UNIT_TEST(TestSaveLoad)
     UNIT_TEST(TestNewStyle)
     UNIT_TEST(TestNewNewStyle)
-    UNIT_TEST(TestList) 
+    UNIT_TEST(TestList)
     UNIT_TEST(TestTuple)
     UNIT_TEST(TestVariant)
     UNIT_TEST(TestInheritNonVirtualClass)
@@ -375,21 +375,21 @@ private:
             UNIT_ASSERT_EQUAL((++twoIter)->second, 22);
         }
     }
- 
-    void TestList() { 
-        TBufferStream s; 
- 
+
+    void TestList() {
+        TBufferStream s;
+
         TList<int> list = {0, 1, 10};
-        Save(&s, list); 
- 
-        list.clear(); 
-        Load(&s, list); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(list.size(), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(*std::next(list.begin(), 0), 0); 
-        UNIT_ASSERT_VALUES_EQUAL(*std::next(list.begin(), 1), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(*std::next(list.begin(), 2), 10); 
-    } 
+        Save(&s, list);
+
+        list.clear();
+        Load(&s, list);
+
+        UNIT_ASSERT_VALUES_EQUAL(list.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(*std::next(list.begin(), 0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(*std::next(list.begin(), 1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(*std::next(list.begin(), 2), 10);
+    }
 
     void TestTuple() {
         TBufferStream s;

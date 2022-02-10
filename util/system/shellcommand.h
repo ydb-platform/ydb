@@ -408,7 +408,7 @@ public:
 
     /**
      * @brief get id of underlying process
-     * @note depends on os: pid_t on UNIX, HANDLE on win 
+     * @note depends on os: pid_t on UNIX, HANDLE on win
      *
      * @return pid or handle
      */

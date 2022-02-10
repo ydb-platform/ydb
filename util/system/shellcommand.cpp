@@ -24,7 +24,7 @@
     #include <grp.h>
     #include <sys/wait.h>
 
-using TPid = pid_t; 
+using TPid = pid_t;
 using TWaitResult = pid_t;
 using TExitStatus = int;
     #define WAIT_PROCEED 0
@@ -39,7 +39,7 @@ using TGetGroupListGid = gid_t;
 
     #include "winint.h"
 
-using TPid = HANDLE; 
+using TPid = HANDLE;
 using TWaitResult = DWORD;
 using TExitStatus = DWORD;
     #define WAIT_PROCEED WAIT_TIMEOUT
@@ -190,7 +190,7 @@ using REALPIPEHANDLE = PIPEHANDLE;
 class TShellCommand::TImpl
     : public TAtomicRefCount<TShellCommand::TImpl> {
 private:
-    TPid Pid; 
+    TPid Pid;
     TString Command;
     TList<TString> Arguments;
     TString WorkDir;
@@ -367,11 +367,11 @@ public:
     }
 
     inline TProcessId GetPid() const {
-#if defined(_win_) 
-        return GetProcessId(Pid); 
-#else 
+#if defined(_win_)
+        return GetProcessId(Pid);
+#else
         return Pid;
-#endif 
+#endif
     }
 
     inline TFileHandle& GetInputHandle() {
@@ -949,10 +949,10 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
             }
 /// @todo factor out (poll + wfmo)
 #if defined(_unix_)
-            bool haveIn = false; 
-            bool haveOut = false; 
-            bool haveErr = false; 
- 
+            bool haveIn = false;
+            bool haveOut = false;
+            bool haveErr = false;
+
             if (!input && pi->InputFd.IsOpen()) {
                 DBG(Cerr << "closing input stream..." << Endl);
                 pi->InputFd.Close();

@@ -12,8 +12,8 @@ namespace {
                 return LOCK_EX;
             case EFileLockType::Shared:
                 return LOCK_SH;
-            default: 
-                Y_UNREACHABLE(); 
+            default:
+                Y_UNREACHABLE();
         }
         Y_UNREACHABLE();
     }

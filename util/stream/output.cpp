@@ -17,7 +17,7 @@
 
 #include <cerrno>
 #include <string>
-#include <string_view> 
+#include <string_view>
 #include <cstdio>
 
 #if defined(_win_)
@@ -71,14 +71,14 @@ void Out<wchar32>(IOutputStream& o, wchar32 ch) {
 
 static void WriteString(IOutputStream& o, const wchar16* w, size_t n) {
     const size_t buflen = (n * MAX_UTF8_BYTES); // * 4 because the conversion functions can convert unicode character into maximum 4 bytes of UTF8
-    TTempBuf buffer(buflen + 1); 
-    char* const data = buffer.Data(); 
-    size_t written = 0; 
-    WideToUTF8(w, n, data, written); 
-    data[written] = 0; 
-    o.Write(data, written); 
-} 
- 
+    TTempBuf buffer(buflen + 1);
+    char* const data = buffer.Data();
+    size_t written = 0;
+    WideToUTF8(w, n, data, written);
+    data[written] = 0;
+    o.Write(data, written);
+}
+
 static void WriteString(IOutputStream& o, const wchar32* w, size_t n) {
     const size_t buflen = (n * MAX_UTF8_BYTES); // * 4 because the conversion functions can convert unicode character into maximum 4 bytes of UTF8
     TTempBuf buffer(buflen + 1);
@@ -100,11 +100,11 @@ void Out<std::string>(IOutputStream& o, const std::string& p) {
 }
 
 template <>
-void Out<std::string_view>(IOutputStream& o, const std::string_view& p) { 
-    o.Write(p.data(), p.length()); 
-} 
- 
-template <> 
+void Out<std::string_view>(IOutputStream& o, const std::string_view& p) {
+    o.Write(p.data(), p.length());
+}
+
+template <>
 void Out<std::u16string_view>(IOutputStream& o, const std::u16string_view& p) {
     WriteString(o, p.data(), p.length());
 }
@@ -131,14 +131,14 @@ void Out<TUtf32StringBuf>(IOutputStream& o, const TUtf32StringBuf& p) {
 
 template <>
 void Out<const wchar16*>(IOutputStream& o, const wchar16* w) {
-    if (w) { 
+    if (w) {
         WriteString(o, w, std::char_traits<wchar16>::length(w));
-    } else { 
-        o.Write("(null)"); 
-    } 
+    } else {
+        o.Write("(null)");
+    }
 }
 
-template <> 
+template <>
 void Out<const wchar32*>(IOutputStream& o, const wchar32* w) {
     if (w) {
         WriteString(o, w, std::char_traits<wchar32>::length(w));
@@ -149,9 +149,9 @@ void Out<const wchar32*>(IOutputStream& o, const wchar32* w) {
 
 template <>
 void Out<TUtf16String>(IOutputStream& o, const TUtf16String& w) {
-    WriteString(o, w.c_str(), w.size()); 
-} 
- 
+    WriteString(o, w.c_str(), w.size());
+}
+
 template <>
 void Out<TUtf32String>(IOutputStream& o, const TUtf32String& w) {
     WriteString(o, w.c_str(), w.size());
@@ -217,7 +217,7 @@ void Out<TBasicCharRef<TString>>(IOutputStream& o, const TBasicCharRef<TString>&
 
 template <>
 void Out<TBasicCharRef<TUtf16String>>(IOutputStream& o, const TBasicCharRef<TUtf16String>& c) {
-    o << static_cast<wchar16>(c); 
+    o << static_cast<wchar16>(c);
 }
 
 template <>

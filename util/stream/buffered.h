@@ -1,6 +1,6 @@
 #pragma once
 
-#include "zerocopy.h" 
+#include "zerocopy.h"
 #include "zerocopy_output.h"
 
 #include <utility>
@@ -8,18 +8,18 @@
 #include <util/generic/typetraits.h>
 #include <util/generic/store_policy.h>
 
-/** 
- * @addtogroup Streams_Buffered 
- * @{ 
- */ 
- 
-/** 
- * Input stream that wraps the given stream and adds a buffer on top of it, 
- * thus making sure that data is read from the underlying stream in big chunks. 
- * 
- * Note that it does not claim ownership of the underlying stream, so it's up 
- * to the user to free it. 
- */ 
+/**
+ * @addtogroup Streams_Buffered
+ * @{
+ */
+
+/**
+ * Input stream that wraps the given stream and adds a buffer on top of it,
+ * thus making sure that data is read from the underlying stream in big chunks.
+ *
+ * Note that it does not claim ownership of the underlying stream, so it's up
+ * to the user to free it.
+ */
 class TBufferedInput: public IZeroCopyInput {
 public:
     TBufferedInput(IInputStream* slave, size_t buflen = 8192);
@@ -29,11 +29,11 @@ public:
 
     ~TBufferedInput() override;
 
-    /** 
-     * Switches the underlying stream to the one provided. Does not clear the 
-     * data that was already buffered. 
-     * 
-     * @param slave                     New underlying stream. 
+    /**
+     * Switches the underlying stream to the one provided. Does not clear the
+     * data that was already buffered.
+     *
+     * @param slave                     New underlying stream.
      */
     void Reset(IInputStream* slave);
 
@@ -48,64 +48,64 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/** 
- * Output stream that wraps the given stream and adds a buffer on top of it, 
- * thus making sure that data is written to the underlying stream in big chunks. 
- * 
- * Note that by default this stream does not propagate `Flush` and `Finish` 
- * calls to the underlying stream, instead simply flushing out the buffer. 
- * You can change this behavior by using propagation mode setters. 
- * 
- * Also note that this stream does not claim ownership of the underlying stream, 
- * so it's up to the user to free it. 
- */ 
+/**
+ * Output stream that wraps the given stream and adds a buffer on top of it,
+ * thus making sure that data is written to the underlying stream in big chunks.
+ *
+ * Note that by default this stream does not propagate `Flush` and `Finish`
+ * calls to the underlying stream, instead simply flushing out the buffer.
+ * You can change this behavior by using propagation mode setters.
+ *
+ * Also note that this stream does not claim ownership of the underlying stream,
+ * so it's up to the user to free it.
+ */
 class TBufferedOutputBase: public IZeroCopyOutput {
 public:
-    /** 
-     * Constructs a buffered stream that dynamically adjusts the size of the 
-     * buffer. This works best when the amount of data that will be passed 
-     * through this stream is not known and can range in size from several 
-     * kilobytes to several gigabytes. 
-     * 
-     * @param slave                     Underlying stream. 
-     */ 
+    /**
+     * Constructs a buffered stream that dynamically adjusts the size of the
+     * buffer. This works best when the amount of data that will be passed
+     * through this stream is not known and can range in size from several
+     * kilobytes to several gigabytes.
+     *
+     * @param slave                     Underlying stream.
+     */
     TBufferedOutputBase(IOutputStream* slave);
- 
-    /** 
-     * Constructs a buffered stream with the given size of the buffer. 
-     * 
-     * @param slave                     Underlying stream. 
-     * @param buflen                    Size of the buffer. 
-     */ 
+
+    /**
+     * Constructs a buffered stream with the given size of the buffer.
+     *
+     * @param slave                     Underlying stream.
+     * @param buflen                    Size of the buffer.
+     */
     TBufferedOutputBase(IOutputStream* slave, size_t buflen);
- 
+
     TBufferedOutputBase(TBufferedOutputBase&&) noexcept;
     TBufferedOutputBase& operator=(TBufferedOutputBase&&) noexcept;
 
     ~TBufferedOutputBase() override;
 
-    /** 
-     * @param propagate                 Whether `Flush` and `Finish` calls should 
-     *                                  be propagated to the underlying stream. 
-     *                                  By default they are not. 
+    /**
+     * @param propagate                 Whether `Flush` and `Finish` calls should
+     *                                  be propagated to the underlying stream.
+     *                                  By default they are not.
      */
     inline void SetPropagateMode(bool propagate) noexcept {
         SetFlushPropagateMode(propagate);
         SetFinishPropagateMode(propagate);
     }
 
-    /** 
-     * @param propagate                 Whether `Flush` calls should be propagated 
-     *                                  to the underlying stream. By default they 
-     *                                  are not. 
-     */ 
+    /**
+     * @param propagate                 Whether `Flush` calls should be propagated
+     *                                  to the underlying stream. By default they
+     *                                  are not.
+     */
     void SetFlushPropagateMode(bool propagate) noexcept;
- 
-    /** 
-     * @param propagate                 Whether `Finish` calls should be propagated 
-     *                                  to the underlying stream. By default they 
-     *                                  are not. 
-     */ 
+
+    /**
+     * @param propagate                 Whether `Finish` calls should be propagated
+     *                                  to the underlying stream. By default they
+     *                                  are not.
+     */
     void SetFinishPropagateMode(bool propagate) noexcept;
 
     class TImpl;
@@ -122,11 +122,11 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/** 
- * Buffered output stream with a fixed-size buffer. 
- * 
- * @see TBufferedOutputBase 
- */ 
+/**
+ * Buffered output stream with a fixed-size buffer.
+ *
+ * @see TBufferedOutputBase
+ */
 class TBufferedOutput: public TBufferedOutputBase {
 public:
     TBufferedOutput(IOutputStream* slave, size_t buflen = 8192);
@@ -136,12 +136,12 @@ public:
     TBufferedOutput& operator=(TBufferedOutput&&) noexcept = default;
 };
 
-/** 
- * Buffered output stream that dynamically adjusts the size of the buffer based 
- * on the amount of data that's passed through it. 
- * 
- * @see TBufferedOutputBase 
- */ 
+/**
+ * Buffered output stream that dynamically adjusts the size of the buffer based
+ * on the amount of data that's passed through it.
+ *
+ * @see TBufferedOutputBase
+ */
 class TAdaptiveBufferedOutput: public TBufferedOutputBase {
 public:
     TAdaptiveBufferedOutput(IOutputStream* slave);
@@ -166,19 +166,19 @@ namespace NPrivate {
     };
 }
 
-/** 
- * A mixin class that turns unbuffered stream into a buffered one. 
- * 
- * Note that using this mixin with a stream that is already buffered won't 
+/**
+ * A mixin class that turns unbuffered stream into a buffered one.
+ *
+ * Note that using this mixin with a stream that is already buffered won't
  * result in double buffering, e.g. `TBuffered<TBuffered<TUnbufferedFileInput>>` and
  * `TBuffered<TUnbufferedFileInput>` are basically the same types.
- * 
- * Example usage: 
- * @code 
+ *
+ * Example usage:
+ * @code
  * TBuffered<TUnbufferedFileInput> file_input(1024, "/path/to/file");
  * TBuffered<TUnbufferedFileOutput> file_output(1024, "/path/to/file");
- * @endcode 
- * Here 1024 is the size of the buffer. 
+ * @endcode
+ * Here 1024 is the size of the buffer.
  */
 template <class TSlave>
 class TBuffered: private TEmbedPolicy<TSlave>, public ::NPrivate::TBufferedStreamFor<TSlave>::TResult {
@@ -203,17 +203,17 @@ public:
     TBuffered& operator=(TBuffered&&) = delete;
 };
 
-/** 
- * A mixin class that turns unbuffered stream into an adaptively buffered one. 
- * Created stream differs from the one created via `TBuffered` template in that 
- * it dynamically adjusts the size of the buffer based on the amount of data 
- * that's passed through it. 
- * 
- * Example usage: 
- * @code 
+/**
+ * A mixin class that turns unbuffered stream into an adaptively buffered one.
+ * Created stream differs from the one created via `TBuffered` template in that
+ * it dynamically adjusts the size of the buffer based on the amount of data
+ * that's passed through it.
+ *
+ * Example usage:
+ * @code
  * TAdaptivelyBuffered<TUnbufferedFileOutput> file_output("/path/to/file");
- * @endcode 
- */ 
+ * @endcode
+ */
 template <class TSlave>
 class TAdaptivelyBuffered: private TEmbedPolicy<TSlave>, public TAdaptiveBufferedOutput {
     using TSlaveBase = TEmbedPolicy<TSlave>;
@@ -232,4 +232,4 @@ public:
     TAdaptivelyBuffered& operator=(TAdaptivelyBuffered&& other) = delete;
 };
 
-/** @} */ 
+/** @} */

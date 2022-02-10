@@ -1,11 +1,11 @@
-#include "input.h" 
-#include "output.h" 
- 
+#include "input.h"
+#include "output.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/system/file.h>
-#include <util/system/yassert.h> 
- 
+#include <util/system/yassert.h>
+
 #ifdef _win_
     #include <io.h>
 #endif
@@ -42,94 +42,94 @@ private:
 };
 
 class TNoInput: public IInputStream {
-public: 
+public:
     TNoInput(ui64 size)
         : Size_(size)
     {
     }
- 
-protected: 
+
+protected:
     size_t DoRead(void*, size_t len) override {
-        len = Min(static_cast<ui64>(len), Size_); 
-        Size_ -= len; 
-        return len; 
-    } 
- 
-private: 
-    ui64 Size_; 
-}; 
- 
+        len = Min(static_cast<ui64>(len), Size_);
+        Size_ -= len;
+        return len;
+    }
+
+private:
+    ui64 Size_;
+};
+
 class TNoOutput: public IOutputStream {
-public: 
+public:
     TNoOutput() = default;
- 
-protected: 
+
+protected:
     void DoWrite(const void*, size_t) override {
     }
-}; 
- 
+};
+
 class TSimpleStringInput: public IInputStream {
-public: 
+public:
     TSimpleStringInput(const TString& string)
         : String_(string)
     {
     }
- 
-protected: 
+
+protected:
     size_t DoRead(void* buf, size_t len) override {
         Y_ASSERT(len != 0);
- 
+
         if (String_.empty()) {
-            return 0; 
+            return 0;
         }
- 
-        *static_cast<char*>(buf) = String_[0]; 
-        String_.remove(0, 1); 
-        return 1; 
-    } 
- 
-private: 
+
+        *static_cast<char*>(buf) = String_[0];
+        String_.remove(0, 1);
+        return 1;
+    }
+
+private:
     TString String_;
-}; 
- 
+};
+
 Y_UNIT_TEST_SUITE(TInputTest) {
     Y_UNIT_TEST(BigTransfer) {
-        ui64 size = 1024ull * 1024ull * 1024ull * 5; 
-        TNoInput input(size); 
-        TNoOutput output; 
- 
-        ui64 transferred = TransferData(&input, &output); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(transferred, size); 
-    } 
- 
+        ui64 size = 1024ull * 1024ull * 1024ull * 5;
+        TNoInput input(size);
+        TNoOutput output;
+
+        ui64 transferred = TransferData(&input, &output);
+
+        UNIT_ASSERT_VALUES_EQUAL(transferred, size);
+    }
+
     Y_UNIT_TEST(TestReadTo) {
-        /* This one tests default implementation of ReadTo. */ 
- 
-        TSimpleStringInput in("0123456789abc"); 
- 
+        /* This one tests default implementation of ReadTo. */
+
+        TSimpleStringInput in("0123456789abc");
+
         TString t;
-        UNIT_ASSERT_VALUES_EQUAL(in.ReadTo(t, '7'), 8); 
-        UNIT_ASSERT_VALUES_EQUAL(t, "0123456"); 
-        UNIT_ASSERT_VALUES_EQUAL(in.ReadTo(t, 'z'), 5); 
-        UNIT_ASSERT_VALUES_EQUAL(t, "89abc"); 
-        UNIT_ASSERT_VALUES_EQUAL(in.ReadTo(t, 'z'), 0); 
-        UNIT_ASSERT_VALUES_EQUAL(t, "89abc"); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(in.ReadTo(t, '7'), 8);
+        UNIT_ASSERT_VALUES_EQUAL(t, "0123456");
+        UNIT_ASSERT_VALUES_EQUAL(in.ReadTo(t, 'z'), 5);
+        UNIT_ASSERT_VALUES_EQUAL(t, "89abc");
+        UNIT_ASSERT_VALUES_EQUAL(in.ReadTo(t, 'z'), 0);
+        UNIT_ASSERT_VALUES_EQUAL(t, "89abc");
+    }
+
     Y_UNIT_TEST(TestReadLine) {
-        TSimpleStringInput in("1\n22\n333"); 
- 
+        TSimpleStringInput in("1\n22\n333");
+
         TString t;
-        UNIT_ASSERT_VALUES_EQUAL(in.ReadLine(t), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(t, "1"); 
-        UNIT_ASSERT_VALUES_EQUAL(in.ReadLine(t), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(t, "22"); 
-        UNIT_ASSERT_VALUES_EQUAL(in.ReadLine(t), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(t, "333"); 
-        UNIT_ASSERT_VALUES_EQUAL(in.ReadLine(t), 0); 
-        UNIT_ASSERT_VALUES_EQUAL(t, "333"); 
-    } 
+        UNIT_ASSERT_VALUES_EQUAL(in.ReadLine(t), 2);
+        UNIT_ASSERT_VALUES_EQUAL(t, "1");
+        UNIT_ASSERT_VALUES_EQUAL(in.ReadLine(t), 3);
+        UNIT_ASSERT_VALUES_EQUAL(t, "22");
+        UNIT_ASSERT_VALUES_EQUAL(in.ReadLine(t), 3);
+        UNIT_ASSERT_VALUES_EQUAL(t, "333");
+        UNIT_ASSERT_VALUES_EQUAL(in.ReadLine(t), 0);
+        UNIT_ASSERT_VALUES_EQUAL(t, "333");
+    }
 
     Y_UNIT_TEST(TestStdInReadTo) {
         std::pair<std::pair<TStringBuf, char>, TStringBuf> testPairs[] = {
@@ -154,4 +154,4 @@ Y_UNIT_TEST_SUITE(TInputTest) {
                            });
         }
     }
-} 
+}

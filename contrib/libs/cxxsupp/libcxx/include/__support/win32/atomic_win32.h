@@ -405,7 +405,7 @@ static inline char __msvc_atomic_exchange8(volatile char* __a, char __val,
         __result = _InterlockedExchange8(__a, __val);
     }
 #else
-  (void)__order; 
+  (void)__order;
   __result = _InterlockedExchange8(__a, __val);
 #endif
   return __result;
@@ -426,7 +426,7 @@ static inline short __msvc_atomic_exchange16(volatile short* __a, short __val,
         __result = _InterlockedExchange16(__a, __val);
     }
 #else
-  (void)__order; 
+  (void)__order;
   __result = _InterlockedExchange16(__a, __val);
 #endif
   return __result;
@@ -447,7 +447,7 @@ static inline long __msvc_atomic_exchange32(volatile long* __a, long __val,
         __result = _InterlockedExchange(__a, __val);
     }
 #else
-  (void)__order; 
+  (void)__order;
   __result = _InterlockedExchange(__a, __val);
 #endif
   return __result;
@@ -472,7 +472,7 @@ static inline __int64 __msvc_atomic_exchange64(volatile __int64* __a, __int64 __
         __result = _InterlockedExchange64(__a, __val);
     }
 #else
-  (void)__order; 
+  (void)__order;
   __result = _InterlockedExchange64(__a, __val);
 #endif
   return __result;
@@ -524,7 +524,7 @@ static inline bool __msvc_atomic_compare_exchange8(volatile char* __a, char __va
         __before = _InterlockedCompareExchange8(__a, __value, __compare);
     }
 #else
-    (void)__order; 
+    (void)__order;
     __before = _InterlockedCompareExchange8(__a, __value, __compare);
 #endif
     if (__before == __compare) {
@@ -549,7 +549,7 @@ static inline bool __msvc_atomic_compare_exchange16(volatile short* __a, short _
         __before = _InterlockedCompareExchange16(__a, __value, __compare);
     }
 #else
-    (void)__order; 
+    (void)__order;
     __before = _InterlockedCompareExchange16(__a, __value, __compare);
 #endif
     if (__before == __compare) {
@@ -574,7 +574,7 @@ static inline bool __msvc_atomic_compare_exchange32(volatile long* __a, long __v
         __before = _InterlockedCompareExchange(__a, __value, __compare);
     }
 #else
-    (void)__order; 
+    (void)__order;
     __before = _InterlockedCompareExchange(__a, __value, __compare);
 #endif
     if (__before == __compare) {
@@ -599,7 +599,7 @@ static inline bool __msvc_atomic_compare_exchange64(volatile __int64* __a, __int
         __before = _InterlockedCompareExchange64(__a, __value, __compare);
     }
 #else
-    (void)__order; 
+    (void)__order;
     __before = _InterlockedCompareExchange64(__a, __value, __compare);
 #endif
     if (__before == __compare) {
@@ -707,7 +707,7 @@ static inline char __msvc_atomic_fetch_add8(volatile char* __a, char __delta,
         return _InterlockedExchangeAdd8(__a, __delta);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedExchangeAdd8(__a, __delta);
 #endif
 }
@@ -725,7 +725,7 @@ static inline short __msvc_atomic_fetch_add16(volatile short* __a, short __delta
         return _InterlockedExchangeAdd16(__a, __delta);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedExchangeAdd16(__a, __delta);
 #endif
 }
@@ -743,7 +743,7 @@ static inline long __msvc_atomic_fetch_add32(volatile long* __a, long __delta,
         return _InterlockedExchangeAdd(__a, __delta);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedExchangeAdd(__a, __delta);
 #endif
 }
@@ -767,7 +767,7 @@ static inline __int64 __msvc_atomic_fetch_add64(volatile __int64* __a, __int64 _
         return _InterlockedExchangeAdd64(__a, __delta);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedExchangeAdd64(__a, __delta);
 #endif
 }
@@ -840,7 +840,7 @@ static inline char __msvc_atomic_fetch_and8(volatile char* __a, char __value,
         return _InterlockedAnd8(__a, __value);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedAnd8(__a, __value);
 #endif
 }
@@ -858,7 +858,7 @@ static inline short __msvc_atomic_fetch_and16(volatile short* __a, short __value
         return _InterlockedAnd16(__a, __value);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedAnd16(__a, __value);
 #endif
 }
@@ -876,7 +876,7 @@ static inline long __msvc_atomic_fetch_and32(volatile long* __a, long __value,
         return _InterlockedAnd(__a, __value);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedAnd(__a, __value);
 #endif
 }
@@ -900,7 +900,7 @@ static inline __int64 __msvc_atomic_fetch_and64(volatile __int64* __a, __int64 _
         return _InterlockedAnd64(__a, __value);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedAnd64(__a, __value);
 #endif
 }
@@ -944,7 +944,7 @@ static inline char __msvc_atomic_fetch_or8(volatile char* __a, char __value,
         return _InterlockedOr8(__a, __value);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedOr8(__a, __value);
 #endif
 }
@@ -962,7 +962,7 @@ static inline short __msvc_atomic_fetch_or16(volatile short* __a, short __value,
         return _InterlockedOr16(__a, __value);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedOr16(__a, __value);
 #endif
 }
@@ -980,7 +980,7 @@ static inline long __msvc_atomic_fetch_or32(volatile long* __a, long __value,
         return _InterlockedOr(__a, __value);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedOr(__a, __value);
 #endif
 }
@@ -1004,7 +1004,7 @@ static inline __int64 __msvc_atomic_fetch_or64(volatile __int64* __a, __int64 __
         return _InterlockedOr64(__a, __value);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedOr64(__a, __value);
 #endif
 }
@@ -1048,7 +1048,7 @@ static inline char __msvc_atomic_fetch_xor8(volatile char* __a, char __value,
         return _InterlockedXor8(__a, __value);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedXor8(__a, __value);
 #endif
 }
@@ -1066,7 +1066,7 @@ static inline short __msvc_atomic_fetch_xor16(volatile short* __a, short __value
         return _InterlockedXor16(__a, __value);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedXor16(__a, __value);
 #endif
 }
@@ -1084,7 +1084,7 @@ static inline long __msvc_atomic_fetch_xor32(volatile long* __a, long __value,
         return _InterlockedXor(__a, __value);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedXor(__a, __value);
 #endif
 }
@@ -1108,7 +1108,7 @@ static inline __int64 __msvc_atomic_fetch_xor64(volatile __int64* __a, __int64 _
         return _InterlockedXor64(__a, __value);
     }
 #else
-    (void)__order; 
+    (void)__order;
     return _InterlockedXor64(__a, __value);
 #endif
 }

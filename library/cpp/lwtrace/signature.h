@@ -304,7 +304,7 @@ namespace NLWTrace {
     class TLiteral {
     private:
         TTypedParam Values[EParamTypePb_ARRAYSIZE];
- 
+
     public:
         explicit TLiteral(const TString& text) {
             Y_UNUSED(text); /* That's for windows, where we have lwtrace disabled. */

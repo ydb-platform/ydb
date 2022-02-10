@@ -46,8 +46,8 @@ struct THash<TIp6> {
 static inline TIp6 Ip6FromIp4(TIp4 addr) {
     TIp6 res;
     memset(res.Data, 0, sizeof(res.Data));
-    res.Data[10] = '\xFF'; 
-    res.Data[11] = '\xFF'; 
+    res.Data[10] = '\xFF';
+    res.Data[11] = '\xFF';
     memcpy(res.Data + 12, &addr, 4);
     return res;
 }

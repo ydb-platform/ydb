@@ -36,7 +36,7 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestSizeOf);
     UNIT_TEST(TestInvariants);
     UNIT_TEST(TestAllocation);
-    UNIT_TEST(TestInsertCopy); 
+    UNIT_TEST(TestInsertCopy);
     UNIT_TEST(TestEmplace);
     UNIT_TEST(TestEmplaceNoresize);
     UNIT_TEST(TestEmplaceDirect);
@@ -49,9 +49,9 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestHSetEmplaceNoresize);
     UNIT_TEST(TestHSetEmplaceDirect);
     UNIT_TEST(TestNonCopyable);
-    UNIT_TEST(TestValueInitialization); 
-    UNIT_TEST(TestAssignmentClear); 
-    UNIT_TEST(TestReleaseNodes); 
+    UNIT_TEST(TestValueInitialization);
+    UNIT_TEST(TestAssignmentClear);
+    UNIT_TEST(TestReleaseNodes);
     UNIT_TEST(TestAt);
     UNIT_TEST(TestHMapInitializerList);
     UNIT_TEST(TestHMMapInitializerList);
@@ -87,7 +87,7 @@ protected:
     void TestSizeOf();
     void TestInvariants();
     void TestAllocation();
-    void TestInsertCopy(); 
+    void TestInsertCopy();
     void TestEmplace();
     void TestEmplaceNoresize();
     void TestEmplaceDirect();
@@ -100,9 +100,9 @@ protected:
     void TestHMMapEmplaceNoresize();
     void TestHMMapEmplaceDirect();
     void TestNonCopyable();
-    void TestValueInitialization(); 
-    void TestAssignmentClear(); 
-    void TestReleaseNodes(); 
+    void TestValueInitialization();
+    void TestAssignmentClear();
+    void TestReleaseNodes();
     void TestAt();
     void TestHMapInitializerList();
     void TestHMMapInitializerList();
@@ -218,11 +218,11 @@ void THashTest::TestHMapEqualityOperator() {
     UNIT_ASSERT(c2 == base);
 
     c2["three"] = 3;
-    UNIT_ASSERT(c2 != base); 
+    UNIT_ASSERT(c2 != base);
 
     container c3(base);
     c3["one"] = 0;
-    UNIT_ASSERT(c3 != base); 
+    UNIT_ASSERT(c3 != base);
 }
 
 void THashTest::TestHMMapEqualityOperator() {
@@ -399,9 +399,9 @@ void THashTest::TestHSetConstructorsAndAssignments() {
     UNIT_ASSERT_VALUES_EQUAL(0, c2.size());
     UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
     UNIT_ASSERT(c3.contains(400));
- 
-    container c4 = {1, 2, 3}; 
-    UNIT_ASSERT_VALUES_EQUAL(c4.size(), 3); 
+
+    container c4 = {1, 2, 3};
+    UNIT_ASSERT_VALUES_EQUAL(c4.size(), 3);
     UNIT_ASSERT(c4.contains(1));
     UNIT_ASSERT(c4.contains(2));
     UNIT_ASSERT(c4.contains(3));
@@ -423,7 +423,7 @@ void THashTest::TestHSetSize() {
 
 void THashTest::TestHSet2() {
     THashSet<int, THash<int>, TEqualTo<int>> s;
-    auto p = s.insert(42); 
+    auto p = s.insert(42);
     UNIT_ASSERT(p.second);
     UNIT_ASSERT(*(p.first) == 42);
 
@@ -445,7 +445,7 @@ void THashTest::TestHSetEqualityOperator() {
     UNIT_ASSERT(c1 == base);
 
     c1.insert(3);
-    UNIT_ASSERT(c1 != base); 
+    UNIT_ASSERT(c1 != base);
 
     container c2;
     c2.insert(2);
@@ -454,7 +454,7 @@ void THashTest::TestHSetEqualityOperator() {
 
     container c3;
     c3.insert(1);
-    UNIT_ASSERT(c3 != base); 
+    UNIT_ASSERT(c3 != base);
 }
 
 void THashTest::TestHMSetConstructorsAndAssignments() {
@@ -513,7 +513,7 @@ void THashTest::TestHMSet1() {
     UNIT_ASSERT(s.count(star) == 1);
     s.insert(star);
     UNIT_ASSERT(s.count(star) == 2);
-    auto i = s.find(char(40)); 
+    auto i = s.find(char(40));
     UNIT_ASSERT(i == s.end());
 
     i = s.find(star);
@@ -659,7 +659,7 @@ namespace {
         THash<TString>,
         TSelectKey,
         TEqualTo<TString>,
-        std::allocator<TItemPtr>>; 
+        std::allocator<TItemPtr>>;
 
     struct TItemMap: public TItemMapBase {
         TItemMap()
@@ -705,188 +705,188 @@ void THashTest::TestEmpty() {
     EmptyAndInsertTest<THashMap<int, int>>(std::pair<int, int>(1, 2));
     EmptyAndInsertTest<THashMultiMap<int, int>>(std::pair<int, int>(1, 2));
 }
- 
-void THashTest::TestDefaultConstructor() { 
+
+void THashTest::TestDefaultConstructor() {
     THashSet<int> set;
- 
-    UNIT_ASSERT(set.begin() == set.end()); 
- 
-    UNIT_ASSERT(set.find(0) == set.end()); 
- 
-    auto range = set.equal_range(0); 
-    UNIT_ASSERT(range.first == range.second); 
-} 
- 
-void THashTest::TestSizeOf() { 
-    /* This test checks that we don't waste memory when all functors passed to 
+
+    UNIT_ASSERT(set.begin() == set.end());
+
+    UNIT_ASSERT(set.find(0) == set.end());
+
+    auto range = set.equal_range(0);
+    UNIT_ASSERT(range.first == range.second);
+}
+
+void THashTest::TestSizeOf() {
+    /* This test checks that we don't waste memory when all functors passed to
      * THashTable are empty. It does rely on knowledge of THashTable internals,
-     * so if those change, the test will have to be adjusted accordingly. */ 
- 
+     * so if those change, the test will have to be adjusted accordingly. */
+
     size_t expectedSize = sizeof(uintptr_t) + 3 * sizeof(size_t);
- 
+
     UNIT_ASSERT_VALUES_EQUAL(sizeof(THashMap<int, int>), expectedSize);
     UNIT_ASSERT_VALUES_EQUAL(sizeof(THashMap<std::pair<int, int>, std::pair<int, int>>), expectedSize);
-} 
- 
-void THashTest::TestInvariants() { 
+}
+
+void THashTest::TestInvariants() {
     std::set<int> reference_set;
     THashSet<int> set;
- 
-    for (int i = 0; i < 1000; i++) { 
-        set.insert(i); 
-        reference_set.insert(i); 
-    } 
-    UNIT_ASSERT_VALUES_EQUAL(set.size(), 1000); 
- 
-    int count0 = 0; 
+
     for (int i = 0; i < 1000; i++) {
-        count0 += (set.find(i) != set.end()) ? 1 : 0; 
+        set.insert(i);
+        reference_set.insert(i);
     }
-    UNIT_ASSERT_VALUES_EQUAL(count0, 1000); 
- 
-    int count1 = 0; 
+    UNIT_ASSERT_VALUES_EQUAL(set.size(), 1000);
+
+    int count0 = 0;
+    for (int i = 0; i < 1000; i++) {
+        count0 += (set.find(i) != set.end()) ? 1 : 0;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(count0, 1000);
+
+    int count1 = 0;
     for (auto pos = set.begin(); pos != set.end(); pos++) {
         ++count1;
     }
-    UNIT_ASSERT_VALUES_EQUAL(count1, 1000); 
- 
-    int count2 = 0; 
+    UNIT_ASSERT_VALUES_EQUAL(count1, 1000);
+
+    int count2 = 0;
     for (const int& value : set) {
-        count2 += (reference_set.find(value) != reference_set.end()) ? 1 : 0; 
+        count2 += (reference_set.find(value) != reference_set.end()) ? 1 : 0;
     }
-    UNIT_ASSERT_VALUES_EQUAL(count2, 1000); 
-} 
- 
-struct TAllocatorCounters { 
-    TAllocatorCounters() 
-        : Allocations(0) 
-        , Deallocations(0) 
+    UNIT_ASSERT_VALUES_EQUAL(count2, 1000);
+}
+
+struct TAllocatorCounters {
+    TAllocatorCounters()
+        : Allocations(0)
+        , Deallocations(0)
     {
     }
- 
-    ~TAllocatorCounters() { 
+
+    ~TAllocatorCounters() {
         std::allocator<char> allocator;
- 
-        /* Release whatever was (intentionally) leaked. */ 
+
+        /* Release whatever was (intentionally) leaked. */
         for (const auto& chunk : Chunks) {
-            allocator.deallocate(static_cast<char*>(chunk.first), chunk.second); 
+            allocator.deallocate(static_cast<char*>(chunk.first), chunk.second);
         }
-    } 
- 
-    size_t Allocations; 
-    size_t Deallocations; 
+    }
+
+    size_t Allocations;
+    size_t Deallocations;
     TSet<std::pair<void*, size_t>> Chunks;
-}; 
- 
+};
+
 template <class T>
 class TCountingAllocator: public std::allocator<T> {
     using base_type = std::allocator<T>;
 
-public: 
+public:
     using size_type = typename base_type::size_type;
- 
+
     template <class Other>
-    struct rebind { 
-        using other = TCountingAllocator<Other>; 
-    }; 
- 
-    TCountingAllocator() 
+    struct rebind {
+        using other = TCountingAllocator<Other>;
+    };
+
+    TCountingAllocator()
         : Counters_(nullptr)
     {
     }
- 
-    TCountingAllocator(TAllocatorCounters* counters) 
+
+    TCountingAllocator(TAllocatorCounters* counters)
         : Counters_(counters)
     {
         Y_ASSERT(counters);
-    } 
- 
+    }
+
     template <class Other>
-    TCountingAllocator(const TCountingAllocator<Other>& other) 
+    TCountingAllocator(const TCountingAllocator<Other>& other)
         : Counters_(other.Counters)
     {
     }
- 
+
     T* allocate(size_type n) {
         auto result = base_type::allocate(n);
- 
+
         if (Counters_) {
             ++Counters_->Allocations;
             Counters_->Chunks.emplace(result, n * sizeof(T));
-        } 
- 
-        return result; 
-    } 
- 
+        }
+
+        return result;
+    }
+
     void deallocate(T* p, size_type n) {
         if (Counters_) {
             ++Counters_->Deallocations;
             Counters_->Chunks.erase(std::make_pair(p, n * sizeof(T)));
-        } 
- 
-        base_type::deallocate(p, n); 
-    } 
- 
-private: 
-    TAllocatorCounters* Counters_;
-}; 
- 
-void THashTest::TestAllocation() { 
-    TAllocatorCounters counters; 
- 
-    using int_set = THashSet<int, THash<int>, TEqualTo<int>, TCountingAllocator<int>>;
- 
-    { 
-        int_set set0(&counters); 
-        int_set set1(set0); 
-        set0.clear(); 
-        int_set set2(&counters); 
-        set2 = set1; 
-        UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 0); /* Copying around null sets should not trigger allocations. */ 
- 
-        set0.insert(0); 
-        UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 2); /* One for buckets array, one for a new node. */ 
- 
-        set0.clear(); 
-        set1 = set0; 
-        int_set set3(set0); 
-        UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 2); /* Copying from an empty set with allocated buckets should not trigger allocations. */ 
- 
-        for (int i = 0; i < 1000; i++) {
-            set0.insert(i); 
         }
-        size_t allocations = counters.Allocations; 
-        set0.clear(); 
-        UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, allocations); /* clear() should not trigger allocations. */ 
-    } 
- 
-    UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, counters.Deallocations); 
-} 
- 
+
+        base_type::deallocate(p, n);
+    }
+
+private:
+    TAllocatorCounters* Counters_;
+};
+
+void THashTest::TestAllocation() {
+    TAllocatorCounters counters;
+
+    using int_set = THashSet<int, THash<int>, TEqualTo<int>, TCountingAllocator<int>>;
+
+    {
+        int_set set0(&counters);
+        int_set set1(set0);
+        set0.clear();
+        int_set set2(&counters);
+        set2 = set1;
+        UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 0); /* Copying around null sets should not trigger allocations. */
+
+        set0.insert(0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 2); /* One for buckets array, one for a new node. */
+
+        set0.clear();
+        set1 = set0;
+        int_set set3(set0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 2); /* Copying from an empty set with allocated buckets should not trigger allocations. */
+
+        for (int i = 0; i < 1000; i++) {
+            set0.insert(i);
+        }
+        size_t allocations = counters.Allocations;
+        set0.clear();
+        UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, allocations); /* clear() should not trigger allocations. */
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, counters.Deallocations);
+}
+
 template <int Value>
-class TNonCopyableInt { 
-public: 
+class TNonCopyableInt {
+public:
     explicit TNonCopyableInt(int) {
     }
- 
-    TNonCopyableInt() = delete; 
-    TNonCopyableInt(const TNonCopyableInt&) = delete; 
-    TNonCopyableInt(TNonCopyable&&) = delete; 
+
+    TNonCopyableInt() = delete;
+    TNonCopyableInt(const TNonCopyableInt&) = delete;
+    TNonCopyableInt(TNonCopyable&&) = delete;
     TNonCopyableInt& operator=(const TNonCopyable&) = delete;
     TNonCopyableInt& operator=(TNonCopyable&&) = delete;
- 
-    operator int() const { 
-        return Value; 
-    } 
-}; 
- 
-void THashTest::TestInsertCopy() { 
+
+    operator int() const {
+        return Value;
+    }
+};
+
+void THashTest::TestInsertCopy() {
     THashMap<int, int> hash;
- 
-    /* Insertion should not make copies of the provided key. */ 
-    hash[TNonCopyableInt<0>(0)] = 0; 
-} 
- 
+
+    /* Insertion should not make copies of the provided key. */
+    hash[TNonCopyableInt<0>(0)] = 0;
+}
+
 void THashTest::TestEmplace() {
     using hash_t = THashMap<int, TNonCopyableInt<0>>;
     hash_t hash;
@@ -1057,60 +1057,60 @@ void THashTest::TestNonCopyable() {
     UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(not_inserted), 0);
 }
 
-void THashTest::TestValueInitialization() { 
+void THashTest::TestValueInitialization() {
     THashMap<int, int> hash;
- 
+
     int& value = hash[0];
- 
-    /* Implicitly inserted values should be value-initialized. */ 
-    UNIT_ASSERT_VALUES_EQUAL(value, 0); 
-} 
- 
-void THashTest::TestAssignmentClear() { 
-    /* This one tests that assigning an empty hash resets the buckets array. 
-     * See operator= for details. */ 
- 
+
+    /* Implicitly inserted values should be value-initialized. */
+    UNIT_ASSERT_VALUES_EQUAL(value, 0);
+}
+
+void THashTest::TestAssignmentClear() {
+    /* This one tests that assigning an empty hash resets the buckets array.
+     * See operator= for details. */
+
     THashMap<int, int> hash;
-    size_t emptyBucketCount = hash.bucket_count(); 
- 
-    for (int i = 0; i < 100; i++) { 
-        hash[i] = i; 
-    } 
- 
+    size_t emptyBucketCount = hash.bucket_count();
+
+    for (int i = 0; i < 100; i++) {
+        hash[i] = i;
+    }
+
     hash = THashMap<int, int>();
- 
-    UNIT_ASSERT_VALUES_EQUAL(hash.bucket_count(), emptyBucketCount); 
-} 
- 
-void THashTest::TestReleaseNodes() { 
-    TAllocatorCounters counters; 
+
+    UNIT_ASSERT_VALUES_EQUAL(hash.bucket_count(), emptyBucketCount);
+}
+
+void THashTest::TestReleaseNodes() {
+    TAllocatorCounters counters;
     using TIntSet = THashSet<int, THash<int>, TEqualTo<int>, TCountingAllocator<int>>;
- 
-    TIntSet set(&counters); 
+
+    TIntSet set(&counters);
     for (int i = 0; i < 3; i++) {
-        set.insert(i); 
+        set.insert(i);
     }
-    UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 4); 
- 
-    set.release_nodes(); 
-    UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 4); 
-    UNIT_ASSERT_VALUES_EQUAL(set.size(), 0); 
- 
+    UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 4);
+
+    set.release_nodes();
+    UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 4);
+    UNIT_ASSERT_VALUES_EQUAL(set.size(), 0);
+
     for (int i = 10; i < 13; i++) {
-        set.insert(i); 
+        set.insert(i);
     }
-    UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 7); 
+    UNIT_ASSERT_VALUES_EQUAL(counters.Allocations, 7);
     UNIT_ASSERT(set.contains(10));
     UNIT_ASSERT(!set.contains(0));
- 
-    set.basic_clear(); 
-    UNIT_ASSERT_VALUES_EQUAL(counters.Deallocations, 3); 
- 
-    TIntSet set2; 
-    set2.release_nodes(); 
-    set2.insert(1); 
-    UNIT_ASSERT_VALUES_EQUAL(set2.size(), 1); 
-} 
+
+    set.basic_clear();
+    UNIT_ASSERT_VALUES_EQUAL(counters.Deallocations, 3);
+
+    TIntSet set2;
+    set2.release_nodes();
+    set2.insert(1);
+    UNIT_ASSERT_VALUES_EQUAL(set2.size(), 1);
+}
 
 void THashTest::TestAt() {
 #define TEST_AT_THROWN_EXCEPTION(SRC_TYPE, DST_TYPE, KEY_TYPE, KEY, MESSAGE)                                                                               \
@@ -1121,7 +1121,7 @@ void THashTest::TestAt() {
             testMap.at(testKey);                                                                                                                           \
             UNIT_ASSERT_C(false, "THashMap::at(\"" << KEY << "\") should throw");                                                                          \
         } catch (const yexception& e) {                                                                                                                    \
-            UNIT_ASSERT_C(e.AsStrBuf().Contains(MESSAGE), "Incorrect exception description: got \"" << e.what() << "\", expected: \"" << MESSAGE << "\""); \ 
+            UNIT_ASSERT_C(e.AsStrBuf().Contains(MESSAGE), "Incorrect exception description: got \"" << e.what() << "\", expected: \"" << MESSAGE << "\""); \
         } catch (...) {                                                                                                                                    \
             UNIT_ASSERT_C(false, "THashMap::at(\"" << KEY << "\") should throw yexception");                                                               \
         }                                                                                                                                                  \
@@ -1132,14 +1132,14 @@ void THashTest::TestAt() {
     TEST_AT_THROWN_EXCEPTION(TString, TString, TStringBuf, "111", "111");
     TEST_AT_THROWN_EXCEPTION(TString, TString, const TStringBuf, "111", "111");
     TEST_AT_THROWN_EXCEPTION(TStringBuf, TStringBuf, const char*, "111", "111");
-    TEST_AT_THROWN_EXCEPTION(int, int, short, 11, "11"); 
-    TEST_AT_THROWN_EXCEPTION(int, int, int, -1, "-1"); 
-    TEST_AT_THROWN_EXCEPTION(int, int, long, 111, "111"); 
-    TEST_AT_THROWN_EXCEPTION(int, int, long long, -1000000000000ll, "-1000000000000"); 
-    TEST_AT_THROWN_EXCEPTION(int, int, unsigned short, 11, "11"); 
-    TEST_AT_THROWN_EXCEPTION(int, int, unsigned int, 2, "2"); 
-    TEST_AT_THROWN_EXCEPTION(int, int, unsigned long, 131, "131"); 
-    TEST_AT_THROWN_EXCEPTION(int, int, unsigned long long, 1000000000000ll, "1000000000000"); 
+    TEST_AT_THROWN_EXCEPTION(int, int, short, 11, "11");
+    TEST_AT_THROWN_EXCEPTION(int, int, int, -1, "-1");
+    TEST_AT_THROWN_EXCEPTION(int, int, long, 111, "111");
+    TEST_AT_THROWN_EXCEPTION(int, int, long long, -1000000000000ll, "-1000000000000");
+    TEST_AT_THROWN_EXCEPTION(int, int, unsigned short, 11, "11");
+    TEST_AT_THROWN_EXCEPTION(int, int, unsigned int, 2, "2");
+    TEST_AT_THROWN_EXCEPTION(int, int, unsigned long, 131, "131");
+    TEST_AT_THROWN_EXCEPTION(int, int, unsigned long long, 1000000000000ll, "1000000000000");
 
     char key[] = {11, 12, 0, 1, 2, 11, 0};
     TEST_AT_THROWN_EXCEPTION(TString, TString, char*, key, "\\x0B\\x0C");

@@ -13,7 +13,7 @@
 #include "ptr.h"
 #include "utility.h"
 #include "bitops.h"
-#include "explicit_type.h" 
+#include "explicit_type.h"
 #include "reserve.h"
 #include "singleton.h"
 #include "strbase.h"
@@ -158,7 +158,7 @@ private:
 template <typename TCharType, typename TTraits>
 class TBasicString: public TStringBase<TBasicString<TCharType, TTraits>, TCharType, TTraits> {
 public:
-    // TODO: Move to private section 
+    // TODO: Move to private section
     using TBase = TStringBase<TBasicString, TCharType, TTraits>;
     using TStringType = std::basic_string<TCharType, TTraits>;
 #ifdef TSTRING_IS_STD_STRING
@@ -169,7 +169,7 @@ public:
     using TStorage = TIntrusivePtr<TStdStr, TStringPtrOps<TStdStr>>;
     using reference = TBasicCharRef<TBasicString>;
 #endif
-    using char_type = TCharType; // TODO: DROP 
+    using char_type = TCharType; // TODO: DROP
     using value_type = TCharType;
     using traits_type = TTraits;
 
@@ -179,15 +179,15 @@ public:
     using typename TBase::const_reference;
     using typename TBase::const_reverse_iterator;
 
-    struct TUninitialized { 
+    struct TUninitialized {
         explicit TUninitialized(size_t size)
             : Size(size)
         {
         }
- 
-        size_t Size; 
-    }; 
- 
+
+        size_t Size;
+    };
+
     static size_t max_size() noexcept {
         static size_t res = TStringType().max_size();
 
@@ -217,11 +217,11 @@ protected:
         return *S_;
     }
 
-    /** 
-     * Makes a distinct copy of this string. `IsDetached()` is always true after this call. 
-     * 
-     * @throw std::length_error 
-     */ 
+    /**
+     * Makes a distinct copy of this string. `IsDetached()` is always true after this call.
+     *
+     * @throw std::length_error
+     */
     void Clone() {
         Construct(StdStr()).Swap(S_);
     }
@@ -253,7 +253,7 @@ public:
     inline const_reference operator[](size_t pos) const noexcept {
         Y_ASSERT(pos <= length());
 
-        return this->data()[pos]; 
+        return this->data()[pos];
     }
 
     inline reference operator[](size_t pos) noexcept {
@@ -269,8 +269,8 @@ public:
     using TBase::back;
 
     inline reference back() noexcept {
-        Y_ASSERT(!this->empty()); 
- 
+        Y_ASSERT(!this->empty());
+
 #ifdef TSTRING_IS_STD_STRING
         return Storage_.back();
 #else
@@ -302,10 +302,10 @@ public:
         return ConstRef().data();
     }
 
-    inline const TCharType* c_str() const noexcept { 
+    inline const TCharType* c_str() const noexcept {
         return ConstRef().c_str();
-    } 
- 
+    }
+
     // ~~~ STL compatible method to obtain data pointer ~~~
     iterator begin() {
         return &*MutRef().begin();
@@ -344,19 +344,19 @@ public:
 #endif
     }
 
-    TCharType* Detach() { 
+    TCharType* Detach() {
 #ifdef TSTRING_IS_STD_STRING
         return Storage_.data();
 #else
         if (Y_UNLIKELY(!IsDetached())) {
             Clone();
-        } 
- 
+        }
+
         return (TCharType*)S_->data();
 #endif
-    } 
- 
-    bool IsDetached() const { 
+    }
+
+    bool IsDetached() const {
 #ifdef TSTRING_IS_STD_STRING
         return true;
 #else
@@ -371,7 +371,7 @@ public:
         return *this;
     }
 
-    // ~~~ Constructor ~~~ : FAMILY0(,TBasicString) 
+    // ~~~ Constructor ~~~ : FAMILY0(,TBasicString)
     TBasicString() noexcept
 #ifndef TSTRING_IS_STD_STRING
         : S_(Construct())
@@ -410,7 +410,7 @@ public:
     }
 
     template <typename T, typename A>
-    explicit inline TBasicString(const std::basic_string<TCharType, T, A>& s) 
+    explicit inline TBasicString(const std::basic_string<TCharType, T, A>& s)
         : TBasicString(s.data(), s.size())
     {
     }
@@ -457,7 +457,7 @@ public:
     }
 
 #ifdef TSTRING_IS_STD_STRING
-    explicit TBasicString(TExplicitType<TCharType> c) { 
+    explicit TBasicString(TExplicitType<TCharType> c) {
         Storage_.push_back(c);
     }
 #else
@@ -480,13 +480,13 @@ public:
     {
     }
 
-    /** 
-     * Constructs an uninitialized string of size `uninitialized.Size`. The proper 
-     * way to use this ctor is via `TBasicString::Uninitialized` factory function. 
-     * 
-     * @throw std::length_error 
-     */ 
-    TBasicString(TUninitialized uninitialized) { 
+    /**
+     * Constructs an uninitialized string of size `uninitialized.Size`. The proper
+     * way to use this ctor is via `TBasicString::Uninitialized` factory function.
+     *
+     * @throw std::length_error
+     */
+    TBasicString(TUninitialized uninitialized) {
 #if !defined(TSTRING_IS_STD_STRING)
         S_ = Construct();
 #endif
@@ -503,12 +503,12 @@ public:
     {
     }
 
-    template <typename Traits> 
+    template <typename Traits>
     explicit inline TBasicString(const std::basic_string_view<TCharType, Traits>& s)
         : TBasicString(s.data(), s.size())
     {
-    } 
- 
+    }
+
     /**
      * WARN:
      *    Certain invocations of this method will result in link-time error.
@@ -528,8 +528,8 @@ public:
 
     static TBasicString Uninitialized(size_t n) {
         return TBasicString(TUninitialized(n));
-    } 
- 
+    }
+
 private:
     template <typename... R>
     static size_t SumLength(const TBasicStringBuf<TCharType, TTraits> s1, const R&... r) noexcept {
@@ -565,7 +565,7 @@ public:
 #ifdef TSTRING_IS_STD_STRING
         Storage_.clear();
 #else
-        if (IsDetached()) { 
+        if (IsDetached()) {
             S_->clear();
 
             return;
@@ -584,7 +584,7 @@ public:
         return s;
     }
 
-    // ~~~ Assignment ~~~ : FAMILY0(TBasicString&, assign); 
+    // ~~~ Assignment ~~~ : FAMILY0(TBasicString&, assign);
     TBasicString& assign(size_t size, TCharType ch) {
         ReserveAndResize(size);
         std::fill(begin(), vend(), ch);
@@ -711,7 +711,7 @@ public:
         MutRef().reserve(len);
     }
 
-    // ~~~ Appending ~~~ : FAMILY0(TBasicString&, append); 
+    // ~~~ Appending ~~~ : FAMILY0(TBasicString&, append);
     inline TBasicString& append(size_t count, TCharType ch) {
         MutRef().append(count, ch);
 
@@ -1011,7 +1011,7 @@ public:
 
         return *this;
 #else
-        return insert(this->off(pos), b, e - b); 
+        return insert(this->off(pos), b, e - b);
 #endif
     }
 
@@ -1022,11 +1022,11 @@ public:
     }
 
     TBasicString& insert(const_iterator pos, size_t len, TCharType ch) {
-        return this->insert(this->off(pos), len, ch); 
+        return this->insert(this->off(pos), len, ch);
     }
 
     TBasicString& insert(const_iterator pos, TCharType ch) {
-        return this->insert(pos, 1, ch); 
+        return this->insert(pos, 1, ch);
     }
 
     TBasicString& insert(size_t pos, const TBasicStringBuf<TCharType, TTraits> s, size_t spos = 0, size_t sn = TBase::npos) {
@@ -1125,10 +1125,10 @@ public:
 #endif
     }
 
-    /** 
-     * @returns                         String suitable for debug printing (like Python's `repr()`). 
-     *                                  Format of the string is unspecified and may be changed over time. 
-     */ 
+    /**
+     * @returns                         String suitable for debug printing (like Python's `repr()`).
+     *                                  Format of the string is unspecified and may be changed over time.
+     */
     TBasicString Quote() const {
         extern TBasicString EscapeC(const TBasicString&);
 

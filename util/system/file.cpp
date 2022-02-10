@@ -105,7 +105,7 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
         // WrOnly or RdWr
         faMode |= GENERIC_WRITE;
     }
-    if (oMode & ::ForAppend) { 
+    if (oMode & ::ForAppend) {
         faMode |= GENERIC_WRITE;
         faMode |= FILE_APPEND_DATA;
         faMode &= ~FILE_WRITE_DATA;
@@ -171,7 +171,7 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
         fcMode |= O_WRONLY;
     }
 
-    if (oMode & ::ForAppend) { 
+    if (oMode & ::ForAppend) {
         fcMode |= O_APPEND;
     }
 
@@ -1243,60 +1243,60 @@ TFile TFile::Temporary(const TString& prefix) {
 }
 
 TFile TFile::ForAppend(const TString& path) {
-    return TFile(path, OpenAlways | WrOnly | Seq | ::ForAppend); 
-} 
- 
+    return TFile(path, OpenAlways | WrOnly | Seq | ::ForAppend);
+}
+
 TFile Duplicate(FILE* f) {
     return Duplicate(fileno(f));
 }
 
 TFile Duplicate(int fd) {
 #if defined(_win_)
-    /* There are two options of how to duplicate a file descriptor on Windows: 
-     * 
-     * 1: 
-     * - Call dup. 
-     * - Call _get_osfhandle on the result. 
-     * - Use returned handle. 
-     * - Call _close on file descriptor returned by dup. This will also close 
-     *   the handle. 
-     * 
-     * 2: 
-     * - Call _get_osfhandle. 
-     * - Call DuplicateHandle on the result. 
-     * - Use returned handle. 
-     * - Call CloseHandle. 
-     * 
-     * TFileHandle calls CloseHandle when destroyed, leaving us with option #2. */ 
-    FHANDLE handle = reinterpret_cast<FHANDLE>(::_get_osfhandle(fd)); 
- 
-    FHANDLE dupHandle; 
+    /* There are two options of how to duplicate a file descriptor on Windows:
+     *
+     * 1:
+     * - Call dup.
+     * - Call _get_osfhandle on the result.
+     * - Use returned handle.
+     * - Call _close on file descriptor returned by dup. This will also close
+     *   the handle.
+     *
+     * 2:
+     * - Call _get_osfhandle.
+     * - Call DuplicateHandle on the result.
+     * - Use returned handle.
+     * - Call CloseHandle.
+     *
+     * TFileHandle calls CloseHandle when destroyed, leaving us with option #2. */
+    FHANDLE handle = reinterpret_cast<FHANDLE>(::_get_osfhandle(fd));
+
+    FHANDLE dupHandle;
     if (!::DuplicateHandle(GetCurrentProcess(), handle, GetCurrentProcess(), &dupHandle, 0, TRUE, DUPLICATE_SAME_ACCESS)) {
         ythrow TFileError() << "can not duplicate file descriptor " << LastSystemError() << Endl;
     }
- 
-    return TFile(dupHandle); 
+
+    return TFile(dupHandle);
 #elif defined(_unix_)
     return TFile(::dup(fd));
 #else
     #error unsupported platform
 #endif
 }
- 
+
 bool PosixDisableReadAhead(FHANDLE fileHandle, void* addr) noexcept {
-    int ret = -1; 
- 
-#if HAVE_POSIX_FADVISE 
+    int ret = -1;
+
+#if HAVE_POSIX_FADVISE
     #if defined(_linux_)
     Y_UNUSED(fileHandle);
-    ret = madvise(addr, 0, MADV_RANDOM); // according to klamm@ posix_fadvise does not work under linux, madvise does work 
+    ret = madvise(addr, 0, MADV_RANDOM); // according to klamm@ posix_fadvise does not work under linux, madvise does work
     #else
     Y_UNUSED(addr);
     ret = ::posix_fadvise(fileHandle, 0, 0, POSIX_FADV_RANDOM);
     #endif
-#else 
+#else
     Y_UNUSED(fileHandle);
     Y_UNUSED(addr);
-#endif 
-    return ret == 0; 
-} 
+#endif
+    return ret == 0;
+}

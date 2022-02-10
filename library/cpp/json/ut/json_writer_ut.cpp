@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
         json.Write((i32)2);
         json.Write("key3", (ui64)3);
 
-        UNIT_ASSERT(out.Empty()); 
+        UNIT_ASSERT(out.Empty());
         json.Flush();
         UNIT_ASSERT_VALUES_EQUAL(out.Str(), expected1);
 

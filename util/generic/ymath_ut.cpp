@@ -31,7 +31,7 @@ class TMathTest: public TTestBase {
     UNIT_TEST(TestErf);
     UNIT_TEST(TestLogGamma);
     UNIT_TEST(TestIsValidFloat);
-    UNIT_TEST(TestAbs); 
+    UNIT_TEST(TestAbs);
     UNIT_TEST(TestPower);
     UNIT_TEST(TestSigmoid);
     UNIT_TEST(TestCeilDiv);
@@ -42,7 +42,7 @@ private:
     void TestSqr();
     void TestErf();
     void TestLogGamma();
-    void TestAbs(); 
+    void TestAbs();
     void TestPower();
     void TestSigmoid();
     void TestCeilDiv();
@@ -63,8 +63,8 @@ private:
 
     inline void TestLog2() {
         UNIT_ASSERT_DOUBLES_EQUAL(Log2(2.0), 1.0, 1e-10);
-        UNIT_ASSERT_DOUBLES_EQUAL(Log2(2ull), 1.0, 1e-10); 
-        UNIT_ASSERT_DOUBLES_EQUAL(Log2(2.0f), 1.0f, 1e-7f); 
+        UNIT_ASSERT_DOUBLES_EQUAL(Log2(2ull), 1.0, 1e-10);
+        UNIT_ASSERT_DOUBLES_EQUAL(Log2(2.0f), 1.0f, 1e-7f);
     }
 
     inline void ValueBitCount() {
@@ -162,16 +162,16 @@ void TMathTest::TestLogGamma() {
         curVal += log(i - 0.5);
     }
 }
- 
-void TMathTest::TestAbs() { 
-    UNIT_ASSERT_VALUES_EQUAL(Abs(1), 1); 
-    UNIT_ASSERT_VALUES_EQUAL(Abs(-1), 1); 
-    UNIT_ASSERT_VALUES_EQUAL(Abs(-1000000000000ll), 1000000000000ll); 
-    UNIT_ASSERT_VALUES_EQUAL(Abs(0), 0); 
-    UNIT_ASSERT_VALUES_EQUAL(Abs(1.0), 1.0); 
-    UNIT_ASSERT_VALUES_EQUAL(Abs(-1.0), 1.0); 
-    UNIT_ASSERT_VALUES_EQUAL(Abs(0.0), 0.0); 
-} 
+
+void TMathTest::TestAbs() {
+    UNIT_ASSERT_VALUES_EQUAL(Abs(1), 1);
+    UNIT_ASSERT_VALUES_EQUAL(Abs(-1), 1);
+    UNIT_ASSERT_VALUES_EQUAL(Abs(-1000000000000ll), 1000000000000ll);
+    UNIT_ASSERT_VALUES_EQUAL(Abs(0), 0);
+    UNIT_ASSERT_VALUES_EQUAL(Abs(1.0), 1.0);
+    UNIT_ASSERT_VALUES_EQUAL(Abs(-1.0), 1.0);
+    UNIT_ASSERT_VALUES_EQUAL(Abs(0.0), 0.0);
+}
 
 void TMathTest::TestPower() {
     UNIT_ASSERT_VALUES_EQUAL(Power(0, 0), 1);

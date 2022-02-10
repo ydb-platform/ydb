@@ -16,7 +16,7 @@ SRCS(
     generic/cast_ut.cpp
     generic/deque_ut.cpp
     generic/explicit_type_ut.cpp
-    generic/flags_ut.cpp 
+    generic/flags_ut.cpp
     generic/function_ut.cpp
     generic/guid_ut.cpp
     generic/hash_primes_ut.cpp

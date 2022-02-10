@@ -1,7 +1,7 @@
-OWNER( 
-    g:ymake 
-    somov 
-) 
+OWNER(
+    g:ymake
+    somov
+)
 
 NEED_CHECK()
 
@@ -11,12 +11,12 @@ PY_SRCS(
     ymake_conf.py
 )
 
-PEERDIR( 
+PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/deprecated/split
     library/cpp/string_utils/scan
-) 
- 
+)
+
 END()
 
 RECURSE(

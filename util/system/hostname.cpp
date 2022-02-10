@@ -89,7 +89,7 @@ bool IsFQDN(const TString& name) {
     try {
         // ResolveHost() can't be used since it is ipv4-only, port is not important
         TNetworkAddress addr(absName, 0);
-    } catch (const TNetworkResolutionError&) { 
+    } catch (const TNetworkResolutionError&) {
         return false;
     }
     return true;

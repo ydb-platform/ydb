@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(TChaCha)
                 "1111111122222222333333334444444455555555666666667777777788888888"
                 "qqqqqqqqwwwwwwwweeeeeeeerrrrrrrrttttttttyyyyyyyyuuuuuuuuiiiiiiii";
 
-        TSecuredBlock<> buf(plaintext.data(), plaintext.size()); 
+        TSecuredBlock<> buf(plaintext.data(), plaintext.size());
 
         ChaCha cipher;
         ui64 offset = 0;
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TChaCha)
         cipher.Decipher((ui8*)buf + 64, (ui8*)buf + 64, 64);
 
         for (size_t i = 64; i < 64 * 2; ++i) {
-            UNIT_ASSERT_EQUAL(((ui8*)buf)[i], plaintext.data()[i]); 
+            UNIT_ASSERT_EQUAL(((ui8*)buf)[i], plaintext.data()[i]);
         }
     }
 }

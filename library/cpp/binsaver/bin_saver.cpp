@@ -1,4 +1,4 @@
-#include "bin_saver.h" 
+#include "bin_saver.h"
 
 TClassFactory<IObjectBase>* pSaverClasses;
 void StartRegisterSaveload() {

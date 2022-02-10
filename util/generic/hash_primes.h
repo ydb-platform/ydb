@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/system/compiler.h>
 #include <util/system/types.h>
 
@@ -7,14 +7,14 @@
     #include <intrin.h>
 #endif
 
-/** 
- * Calculates the number of buckets for the hash table that will hold the given 
- * number of elements. 
- * 
- * @param elementCount                  Number of elements that the hash table will hold. 
- * @returns                             Number of buckets, a prime number that is 
- *                                      greater or equal to `elementCount`. 
- */ 
+/**
+ * Calculates the number of buckets for the hash table that will hold the given
+ * number of elements.
+ *
+ * @param elementCount                  Number of elements that the hash table will hold.
+ * @returns                             Number of buckets, a prime number that is
+ *                                      greater or equal to `elementCount`.
+ */
 Y_CONST_FUNCTION
 unsigned long HashBucketCount(unsigned long elementCount);
 

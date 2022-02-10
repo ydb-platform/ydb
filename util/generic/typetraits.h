@@ -7,7 +7,7 @@
 #include <iterator>
 #include <type_traits>
 #include <stlfwd>
- 
+
 #if _LIBCPP_STD_VER >= 17
 template <bool B>
 using TBoolConstant = std::bool_constant<B>;

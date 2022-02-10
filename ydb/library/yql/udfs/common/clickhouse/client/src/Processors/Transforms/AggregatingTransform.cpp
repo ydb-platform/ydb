@@ -562,9 +562,9 @@ void AggregatingTransform::initGenerate()
 
     LOG_DEBUG(log, "Aggregated. {} to {} rows (from {}) in {} sec. ({:.3f} rows/sec., {}/sec.)",
         src_rows, rows, ReadableSize(src_bytes),
-        elapsed_seconds, src_rows / elapsed_seconds, 
+        elapsed_seconds, src_rows / elapsed_seconds,
         ReadableSize(src_bytes / elapsed_seconds));
- 
+
     if (params->aggregator.hasTemporaryFiles())
     {
         if (variants.isConvertibleToTwoLevel())

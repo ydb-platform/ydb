@@ -14,7 +14,7 @@
 #define FULLURL_MAX (URL_MAX + HOST_MAX)
 
 #define LINKTEXT_MAX 1024
-
+ 
 #ifdef WIN32
     #ifndef PATH_MAX
         #define PATH_MAX _MAX_PATH

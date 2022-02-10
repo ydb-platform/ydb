@@ -95,7 +95,7 @@ public:
     void SetSequential();
     void Evict(void* ptr, size_t len);
     void Evict();
-
+ 
     /*
      * deprecated
      */

@@ -33,11 +33,11 @@ static constexpr TStringBuf DefaultJoinToStringDelimiter = ", ";
 static constexpr TStringBuf DefaultKeyValueDelimiter = ": ";
 static constexpr TStringBuf DefaultRangeEllipsisFormat = "...";
 
-// ASCII characters from 0x20 = ' ' to 0x7e = '~' are printable.
-static constexpr char PrintableASCIILow = 0x20;
-static constexpr char PrintableASCIIHigh = 0x7e;
-static constexpr TStringBuf Int2Hex = "0123456789abcdef";
-
+// ASCII characters from 0x20 = ' ' to 0x7e = '~' are printable. 
+static constexpr char PrintableASCIILow = 0x20; 
+static constexpr char PrintableASCIIHigh = 0x7e; 
+static constexpr TStringBuf Int2Hex = "0123456789abcdef"; 
+ 
 //! Joins a range of items into a string intermixing them with the delimiter.
 /*!
  *  \param builder String builder where the output goes.

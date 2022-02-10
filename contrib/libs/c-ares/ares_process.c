@@ -898,27 +898,27 @@ void ares__send_query(ares_channel channel, struct query *query,
       }
     }
 
-    if (channel->maxtimeout != -1 && timeplus > channel->maxtimeout)
-      timeplus = channel->maxtimeout;
-
-    if (channel->jitter != -1)
-      {
-        int r;
-        #ifdef WIN32
-        /* Windows does not have rand_r function, so we use regular rand(). 
-         * It is thread-unsafe, but it is better than nothing. 
-         */
-        r = rand();
-        #else
-        r = rand_r(&channel->jitter_rand_state);
-        #endif
-        long long delta = (long long)(r - (RAND_MAX >> 1)) * timeplus * channel->jitter;
-        delta /= RAND_MAX;
-        /* Recall that jitter is expressed in .001 */
-        delta /= 1000;
-        timeplus += delta;
-      }
-
+    if (channel->maxtimeout != -1 && timeplus > channel->maxtimeout) 
+      timeplus = channel->maxtimeout; 
+ 
+    if (channel->jitter != -1) 
+      { 
+        int r; 
+        #ifdef WIN32 
+        /* Windows does not have rand_r function, so we use regular rand().  
+         * It is thread-unsafe, but it is better than nothing.  
+         */ 
+        r = rand(); 
+        #else 
+        r = rand_r(&channel->jitter_rand_state); 
+        #endif 
+        long long delta = (long long)(r - (RAND_MAX >> 1)) * timeplus * channel->jitter; 
+        delta /= RAND_MAX; 
+        /* Recall that jitter is expressed in .001 */ 
+        delta /= 1000; 
+        timeplus += delta; 
+      } 
+ 
     query->timeout = *now;
     timeadd(&query->timeout, timeplus);
     /* Keep track of queries bucketed by timeout, so we can process

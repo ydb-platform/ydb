@@ -70,12 +70,12 @@ struct TGuid
 
     //! Parses guid from TStringBuf, returns |true| if everything was ok.
     static bool FromString(TStringBuf str, TGuid* guid);
-
-    //! Same as FromString, but expects exactly 32 hex digits without dashes.
-    static TGuid FromStringHex32(TStringBuf str);
-
-    //! Same as TryFromString, but expects exactly 32 hex digits without dashes.
-    static bool FromStringHex32(TStringBuf str, TGuid* guid);
+ 
+    //! Same as FromString, but expects exactly 32 hex digits without dashes. 
+    static TGuid FromStringHex32(TStringBuf str); 
+ 
+    //! Same as TryFromString, but expects exactly 32 hex digits without dashes. 
+    static bool FromStringHex32(TStringBuf str, TGuid* guid); 
 };
 
 bool operator == (TGuid lhs, TGuid rhs);

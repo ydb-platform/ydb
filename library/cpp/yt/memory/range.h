@@ -527,19 +527,19 @@ struct TIsPod<TMutableRange<T>>
 
 } // namespace NYT
 
-template <class T>
-struct hash<NYT::TRange<T>>
-{
-    size_t operator()(const NYT::TRange<T>& range) const
-    {
-        size_t result = 0;
-        for (const auto& element : range) {
-            NYT::HashCombine(result, element);
-        }
-        return result;
-    }
-};
-
+template <class T> 
+struct hash<NYT::TRange<T>> 
+{ 
+    size_t operator()(const NYT::TRange<T>& range) const 
+    { 
+        size_t result = 0; 
+        for (const auto& element : range) { 
+            NYT::HashCombine(result, element); 
+        } 
+        return result; 
+    } 
+}; 
+ 
 template <class T>
 struct hash<NYT::TMutableRange<T>>
 {
@@ -552,5 +552,5 @@ struct hash<NYT::TMutableRange<T>>
         return result;
     }
 };
-
+ 
 

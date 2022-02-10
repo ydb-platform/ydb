@@ -11,10 +11,10 @@
 // various insightful information on memory usage and object creation patterns.
 #define YT_ENABLE_REF_COUNTED_TRACKING
 
-// This define enables logging with TRACE level. You can still disable trace logging
-// for particular TU by discarding this macro identifier.
-#define YT_ENABLE_TRACE_LOGGING
-
+// This define enables logging with TRACE level. You can still disable trace logging 
+// for particular TU by discarding this macro identifier. 
+#define YT_ENABLE_TRACE_LOGGING 
+ 
 #ifndef NDEBUG
     // This define enables thread affinity check -- a user-defined verification ensuring
     // that some functions are called from particular threads.

@@ -85,11 +85,11 @@ inline void FormatValue(TStringBuilderBase* builder, TStringBuf value, TStringBu
     if (singleQuotes || doubleQuotes) {
         for (const char* valueCurrent = value.begin(); valueCurrent < value.end(); ++valueCurrent) {
             char ch = *valueCurrent;
-            if (ch == '\n') {
-                builder->AppendString("\\n");
-            } else if (ch == '\t') {
-                builder->AppendString("\\t");
-            } else if (ch < PrintableASCIILow || ch > PrintableASCIIHigh) {
+            if (ch == '\n') { 
+                builder->AppendString("\\n"); 
+            } else if (ch == '\t') { 
+                builder->AppendString("\\t"); 
+            } else if (ch < PrintableASCIILow || ch > PrintableASCIIHigh) { 
                 builder->AppendString("\\x");
                 builder->AppendChar(Int2Hex[static_cast<ui8>(ch) >> 4]);
                 builder->AppendChar(Int2Hex[static_cast<ui8>(ch) & 0xf]);
@@ -288,10 +288,10 @@ struct TValueFormatter<TFormatterWrapper<TFormatter>>
 };
 
 // std::vector
-template <class T, class TAllocator>
-struct TValueFormatter<std::vector<T, TAllocator>>
+template <class T, class TAllocator> 
+struct TValueFormatter<std::vector<T, TAllocator>> 
 {
-    static void Do(TStringBuilderBase* builder, const std::vector<T, TAllocator>& collection, TStringBuf /*format*/)
+    static void Do(TStringBuilderBase* builder, const std::vector<T, TAllocator>& collection, TStringBuf /*format*/) 
     {
         FormatRange(builder, collection, TDefaultFormatter());
     }
@@ -398,20 +398,20 @@ struct TValueFormatter<TEnumIndexedVector<E, T>>
     }
 };
 
-// std::pair
-template <class T1, class T2>
-struct TValueFormatter<std::pair<T1, T2>>
-{
-    static void Do(TStringBuilderBase* builder, const std::pair<T1, T2>& value, TStringBuf format)
-    {
-        builder->AppendChar('{');
-        FormatValue(builder, value.first, format);
+// std::pair 
+template <class T1, class T2> 
+struct TValueFormatter<std::pair<T1, T2>> 
+{ 
+    static void Do(TStringBuilderBase* builder, const std::pair<T1, T2>& value, TStringBuf format) 
+    { 
+        builder->AppendChar('{'); 
+        FormatValue(builder, value.first, format); 
         builder->AppendString(TStringBuf(", "));
-        FormatValue(builder, value.second, format);
-        builder->AppendChar('}');
-    }
-};
-
+        FormatValue(builder, value.second, format); 
+        builder->AppendChar('}'); 
+    } 
+}; 
+ 
 // std::optional
 inline void FormatValue(TStringBuilderBase* builder, std::nullopt_t, TStringBuf /*format*/)
 {

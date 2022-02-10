@@ -19,7 +19,7 @@ public:
     TRefCountedBase() = default;
 
     // Make destructor protected
-    virtual ~TRefCountedBase() noexcept = default;
+    virtual ~TRefCountedBase() noexcept = default; 
 
     virtual void DestroyRefCounted() = 0;
 

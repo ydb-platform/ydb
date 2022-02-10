@@ -165,7 +165,7 @@ public:
     T* operator->() const noexcept
     {
         YT_ASSERT(T_);
-        return T_;
+        return T_; 
     }
 
     explicit operator bool() const noexcept

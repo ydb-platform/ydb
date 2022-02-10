@@ -5,7 +5,7 @@ cdef extern from "library/cpp/svnversion/svnversion.h":
     cdef int GetProgramSvnRevision() except +;
     cdef int GetArcadiaLastChangeNum() except +;
     cdef const char* GetProgramCommitId() except +;
-    cdef const char* GetProgramHash() except +;
+    cdef const char* GetProgramHash() except +; 
     cdef const char* GetBranch() except +;
     cdef const char* GetTag() except +;
     cdef int GetArcadiaPatchNumber() except +;
@@ -22,9 +22,9 @@ def svn_last_revision():
 def commit_id():
     return fu.bytes_to_native_str(GetProgramCommitId())
 
-def hash():
-    return fu.bytes_to_native_str(GetProgramHash())
-
+def hash(): 
+    return fu.bytes_to_native_str(GetProgramHash()) 
+ 
 def svn_branch():
     return fu.bytes_to_native_str(GetBranch())
 

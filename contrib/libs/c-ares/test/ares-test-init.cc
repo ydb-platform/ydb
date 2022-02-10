@@ -242,32 +242,32 @@ TEST_F(LibraryTest, EnvInit) {
   ares_destroy(channel);
 }
 
-TEST_F(LibraryTest, EnvInitYt) {
-  ares_channel channel = nullptr;
-  EnvValue v1("LOCALDOMAIN", "this.is.local");
-  EnvValue v2("RES_OPTIONS", "options debug timeout:5 attempts:6");
-  EXPECT_EQ(ARES_SUCCESS, ares_init(&channel));
-  struct ares_options opts;
-  int optmask = 0;
-  ares_save_options(channel, &opts, &optmask);
-  EXPECT_EQ(5000, opts.timeout);
-  EXPECT_EQ(6, opts.tries);
-  ares_destroy(channel);
-}
-
-TEST_F(LibraryTest, EnvInitYtTimeouts) {
-  ares_channel channel = nullptr;
-  EnvValue v1("LOCALDOMAIN", "this.is.local");
-  EnvValue v2("RES_OPTIONS", "options debug jitter:42 maxtimeout:10");
-  EXPECT_EQ(ARES_SUCCESS, ares_init(&channel));
-  struct ares_options opts;
-  int optmask = 0;
-  ares_save_options(channel, &opts, &optmask);
-  EXPECT_EQ(42, opts.jitter);
-  EXPECT_EQ(10000, opts.maxtimeout);
-  ares_destroy(channel);
-}
-
+TEST_F(LibraryTest, EnvInitYt) { 
+  ares_channel channel = nullptr; 
+  EnvValue v1("LOCALDOMAIN", "this.is.local"); 
+  EnvValue v2("RES_OPTIONS", "options debug timeout:5 attempts:6"); 
+  EXPECT_EQ(ARES_SUCCESS, ares_init(&channel)); 
+  struct ares_options opts; 
+  int optmask = 0; 
+  ares_save_options(channel, &opts, &optmask); 
+  EXPECT_EQ(5000, opts.timeout); 
+  EXPECT_EQ(6, opts.tries); 
+  ares_destroy(channel); 
+} 
+ 
+TEST_F(LibraryTest, EnvInitYtTimeouts) { 
+  ares_channel channel = nullptr; 
+  EnvValue v1("LOCALDOMAIN", "this.is.local"); 
+  EnvValue v2("RES_OPTIONS", "options debug jitter:42 maxtimeout:10"); 
+  EXPECT_EQ(ARES_SUCCESS, ares_init(&channel)); 
+  struct ares_options opts; 
+  int optmask = 0; 
+  ares_save_options(channel, &opts, &optmask); 
+  EXPECT_EQ(42, opts.jitter); 
+  EXPECT_EQ(10000, opts.maxtimeout); 
+  ares_destroy(channel); 
+} 
+ 
 TEST_F(LibraryTest, EnvInitAllocFail) {
   ares_channel channel;
   EnvValue v1("LOCALDOMAIN", "this.is.local");

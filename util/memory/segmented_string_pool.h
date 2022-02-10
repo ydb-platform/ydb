@@ -179,9 +179,9 @@ public:
         last_free -= t - curseg->freepos;
         curseg->freepos = t;
     }
-    char* Allocate(size_t len) {
+    char* Allocate(size_t len) { 
         return append(nullptr, len);
-    }
+    } 
 };
 
 template <typename T, typename C>

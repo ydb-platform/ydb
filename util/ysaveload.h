@@ -297,7 +297,7 @@ static inline void LoadSizeAndResize(IInputStream* rh, C& c) {
 
 template <class TStorage>
 static inline char* AllocateFromPool(TStorage& pool, size_t len) {
-    return static_cast<char*>(pool.Allocate(len));
+    return static_cast<char*>(pool.Allocate(len)); 
 }
 
 template <>

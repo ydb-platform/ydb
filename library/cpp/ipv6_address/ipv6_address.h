@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/hash_set.h>
+#include <util/generic/hash_set.h> 
 #include <util/network/ip.h>
 #include <util/stream/input.h>
 
@@ -61,7 +61,7 @@ public:
     explicit TIpv6Address(const in_addr& addr);
 
     static TIpv6Address FromString(TStringBuf srcStr, bool& ok) noexcept;
-
+ 
     constexpr bool IsNull() const noexcept {
         return Ip == 0;
     }
@@ -204,7 +204,7 @@ std::tuple<THostAddressAndPort, TString, TIpPort> ParseHostAndMayBePortFromStrin
                                                                                   bool& Ok) noexcept;
 
 using TIpv6AddressesSet = THashSet<TIpv6Address>;
-
+ 
 template <>
 struct THash<TIpv6Address> {
     inline size_t operator()(const TIpv6Address& ip) const {

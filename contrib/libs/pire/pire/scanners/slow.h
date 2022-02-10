@@ -81,8 +81,8 @@ public:
 
 	size_t GetLettersCount() const {return m.lettersCount; };
 
-	size_t Size() const { return GetSize(); } 
-	size_t GetSize() const { return m.statesCount; } 
+	size_t Size() const { return GetSize(); }
+	size_t GetSize() const { return m.statesCount; }
 	bool Empty() const { return m_finals == Null().m_finals; }
 
 	size_t Id() const {return (size_t) -1;}

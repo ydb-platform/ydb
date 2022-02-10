@@ -128,14 +128,14 @@ ALLOW taxi/graph/libs/shortest_path -> maps/libs/mms
 ALLOW taxi/graph/libs/shortest_path -> maps/routing/common
 ALLOW taxi/graph/libs/shortest_path -> maps/routing/turn_penalties
 ALLOW taxi/graph/libs/tests/graph -> maps/libs/jams/static-graph
-ALLOW taxi/graph/libs/tests/mapmatcher -> maps/analyzer/libs/track_generator 
+ALLOW taxi/graph/libs/tests/mapmatcher -> maps/analyzer/libs/track_generator
 ALLOW taxi/graph/libs/tests/mapmatcher -> maps/libs/mms
 ALLOW taxi/graph/libs/tests/nearest_edges -> maps/libs/jams/static-graph
 ALLOW taxi/graph/libs/tests/routing -> maps/libs/road_graph
 ALLOW taxi/graph/tools/bench-nearest-edges -> maps/libs/jams/static-graph
 ALLOW taxi/graph/tools/bench-nearest-edges -> maps/libs/road_graph
 ALLOW taxi/graph/tools/find-one-way-gates -> maps/tools/easyview/lib/io
-ALLOW taxi/graph/tools/generate-graph-tracks -> maps/analyzer/libs/track_generator 
+ALLOW taxi/graph/tools/generate-graph-tracks -> maps/analyzer/libs/track_generator
 ALLOW taxi/graph/tools/generate-graph-tracks -> maps/libs/mms
 ALLOW taxi/graph/tools/lib -> maps/libs/road_graph
 ALLOW taxi/graph/tools/ -> maps/tools/easyview/pylib

@@ -363,7 +363,7 @@ private:
 
     void WritePlanNodeToJson(const TQueryPlanNode& planNode, NJsonWriter::TBuf& writer) const {
         writer.BeginObject();
- 
+
         writer.WriteKey("PlanNodeId").WriteInt(planNode.NodeId);
         writer.WriteKey("Node Type").WriteString(planNode.TypeName);
         writer.WriteKey("StageGuid").WriteString(planNode.Guid);

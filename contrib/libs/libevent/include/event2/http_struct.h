@@ -78,8 +78,8 @@ struct {
 /** The request should be freed upstack */
 #define EVHTTP_REQ_NEEDS_FREE		0x0010
 
-#define EVHTTP_REQ_PROCESS_CHUNKS_END 0x0024 
- 
+#define EVHTTP_REQ_PROCESS_CHUNKS_END 0x0024
+
 	struct evkeyvalq *input_headers;
 	struct evkeyvalq *output_headers;
 
@@ -122,7 +122,7 @@ struct {
 	 * the regular callback.
 	 */
 	void (*chunk_cb)(struct evhttp_request *, void *);
-	void *chunk_cb_arg; 
+	void *chunk_cb_arg;
 
 	/*
 	 * Callback added for forked-daapd so they can collect ICY

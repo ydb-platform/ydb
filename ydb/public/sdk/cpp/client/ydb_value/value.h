@@ -82,11 +82,11 @@ public:
         Struct,
         Dict,
         Variant,
-        Void, 
-        Null, 
-        EmptyList, 
-        EmptyDict, 
-        Tagged 
+        Void,
+        Null,
+        EmptyList,
+        EmptyDict,
+        Tagged
     };
 
 public:
@@ -127,14 +127,14 @@ public:
 
     // Variant
     void OpenVariant(size_t index);
-    void OpenVariant(); 
+    void OpenVariant();
     void CloseVariant();
 
-    // Tagged 
-    void OpenTagged(); 
-    const TString& GetTag(); 
-    void CloseTagged(); 
- 
+    // Tagged
+    void OpenTagged();
+    const TString& GetTag();
+    void CloseTagged();
+
 private:
     class TImpl;
     std::unique_ptr<TImpl> Impl_;
@@ -318,11 +318,11 @@ public:
     void OpenVariant();
     void CloseVariant();
 
-    // Tagged 
-    void OpenTagged(); 
-    const TString& GetTag() const; 
-    void CloseTagged(); 
- 
+    // Tagged
+    void OpenTagged();
+    const TString& GetTag() const;
+    void CloseTagged();
+
 private:
     TValueParser(const TType& type);
     void Reset(const Ydb::Value& value);

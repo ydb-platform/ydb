@@ -9,16 +9,16 @@ using namespace NYql::NNodes;
 
 namespace NYql::NDq {
 
-TDqStageSettings TDqStageSettings::Parse(const TDqStageBase& node) { 
-    TDqStageSettings settings{}; 
+TDqStageSettings TDqStageSettings::Parse(const TDqStageBase& node) {
+    TDqStageSettings settings{};
 
     for (const auto& tuple : node.Settings()) {
         if (const auto name = tuple.Name().Value(); name == IdSettingName) {
             YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
             settings.Id = tuple.Value().Cast<TCoAtom>().Value();
-        } else if (name == LogicalIdSettingName) { 
-            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>()); 
-            settings.LogicalId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value()); 
+        } else if (name == LogicalIdSettingName) {
+            YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+            settings.LogicalId = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
         } else if (name == SinglePartitionSettingName) {
             settings.SinglePartition = true;
         } else if (name == IsExternalSetting) {
@@ -41,28 +41,28 @@ TDqStageSettings TDqStageSettings::Parse(const TDqStageBase& node) {
     return settings;
 }
 
-TDqStageSettings TDqStageSettings::New(const NNodes::TDqStageBase& node) { 
-    auto settings = Parse(node); 
- 
-    if (!settings.Id) { 
-        settings.Id = CreateGuidAsString(); 
-    } 
- 
-    return settings; 
-} 
- 
-NNodes::TCoNameValueTupleList TDqStageSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const { 
-    TVector<TCoNameValueTuple> settings;
-    auto logicalId = LogicalId; 
-    if (!logicalId) { 
-        logicalId = ctx.NextUniqueId; 
-    } 
+TDqStageSettings TDqStageSettings::New(const NNodes::TDqStageBase& node) {
+    auto settings = Parse(node);
 
-    settings.push_back(Build<TCoNameValueTuple>(ctx, pos) 
-        .Name().Build(LogicalIdSettingName) 
-        .Value<TCoAtom>().Build(logicalId) 
-        .Done()); 
- 
+    if (!settings.Id) {
+        settings.Id = CreateGuidAsString();
+    }
+
+    return settings;
+}
+
+NNodes::TCoNameValueTupleList TDqStageSettings::BuildNode(TExprContext& ctx, TPositionHandle pos) const {
+    TVector<TCoNameValueTuple> settings;
+    auto logicalId = LogicalId;
+    if (!logicalId) {
+        logicalId = ctx.NextUniqueId;
+    }
+
+    settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+        .Name().Build(LogicalIdSettingName)
+        .Value<TCoAtom>().Build(logicalId)
+        .Done());
+
     if (Id) {
         settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(IdSettingName)

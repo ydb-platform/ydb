@@ -6,7 +6,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
- 
+
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -21,7 +21,7 @@ class TNodesScan : public TScanActorBase<TNodesScan> {
 public:
     using TBase  = TScanActorBase<TNodesScan>;
 
-    static constexpr auto ActorActivityType() { 
+    static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 

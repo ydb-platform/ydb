@@ -301,7 +301,7 @@ class TPDiskLogWriterTestLoadActor : public TActorBootstrapped<TPDiskLogWriterTe
     NMonitoring::TPercentileTrackerLg<6, 5, 15> LogResponseTimes;
 
 public:
-    static constexpr auto ActorActivityType() { 
+    static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::BS_LOAD_PDISK_LOG_WRITE;
     }
 

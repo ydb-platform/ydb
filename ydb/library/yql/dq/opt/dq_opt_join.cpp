@@ -59,12 +59,12 @@ TExprBase BuildSkipNullKeys(TExprContext& ctx, TPositionHandle pos,
 TMaybe<TJoinInputDesc> BuildDqJoin(const TCoEquiJoinTuple& joinTuple,
     const THashMap<TStringBuf, TJoinInputDesc>& inputs, TExprContext& ctx)
 {
-    auto options = joinTuple.Options(); 
-    auto linkSettings = GetEquiJoinLinkSettings(options.Ref()); 
-    if (linkSettings.LeftHints.contains("any") || linkSettings.RightHints.contains("any")) { 
-        return {}; 
-    } 
- 
+    auto options = joinTuple.Options();
+    auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
+    if (linkSettings.LeftHints.contains("any") || linkSettings.RightHints.contains("any")) {
+        return {};
+    }
+
     TMaybe<TJoinInputDesc> left;
     if (joinTuple.LeftScope().Maybe<TCoAtom>()) {
         left = inputs.at(joinTuple.LeftScope().Cast<TCoAtom>().Value());
@@ -252,50 +252,50 @@ TDqPhyMapJoin DqMakePhyMapJoin(const TDqJoin& join, const TExprBase& leftInput, 
 
 } // namespace
 
-// used in yql_dq_recapture.cpp 
-bool CheckJoinColumns(const TExprBase& node) { 
-    try { 
-        auto equiJoin = node.Cast<TCoEquiJoin>(); 
+// used in yql_dq_recapture.cpp
+bool CheckJoinColumns(const TExprBase& node) {
+    try {
+        auto equiJoin = node.Cast<TCoEquiJoin>();
         THashMap<TStringBuf, TVector<TStringBuf>> columnsToRename;
-        THashSet<TStringBuf> columnsToDrop; 
+        THashSet<TStringBuf> columnsToDrop;
         CollectJoinColumns(equiJoin.Arg(equiJoin.ArgCount() - 1), &columnsToRename, &columnsToDrop);
         return true;
-    } catch (...) { 
-        return false; 
-    } 
-} 
- 
-bool CheckJoinTupleLinkSettings(const TCoEquiJoinTuple& joinTuple) { 
-    auto options = joinTuple.Options(); 
-    auto linkSettings = GetEquiJoinLinkSettings(options.Ref()); 
-    if (linkSettings.LeftHints.contains("any") || linkSettings.RightHints.contains("any")) { 
-        return false; 
-    } 
- 
-    bool result = true; 
-    if (!joinTuple.LeftScope().Maybe<TCoAtom>()) { 
-        result &= CheckJoinTupleLinkSettings(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>()); 
-    } 
-    if (!result) { 
-        return result; 
-    } 
- 
-    if (!joinTuple.RightScope().Maybe<TCoAtom>()) { 
-        result &= CheckJoinTupleLinkSettings(joinTuple.RightScope().Cast<TCoEquiJoinTuple>()); 
-    } 
-    return result; 
-} 
- 
-bool CheckJoinLinkSettings(const TExprBase& node) { 
-    if (!node.Maybe<TCoEquiJoin>()) { 
-        return true; 
-    } 
-    auto equiJoin = node.Cast<TCoEquiJoin>(); 
-    YQL_ENSURE(equiJoin.ArgCount() >= 4); 
-    auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>(); 
-    return CheckJoinTupleLinkSettings(joinTuple); 
-} 
- 
+    } catch (...) {
+        return false;
+    }
+}
+
+bool CheckJoinTupleLinkSettings(const TCoEquiJoinTuple& joinTuple) {
+    auto options = joinTuple.Options();
+    auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
+    if (linkSettings.LeftHints.contains("any") || linkSettings.RightHints.contains("any")) {
+        return false;
+    }
+
+    bool result = true;
+    if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
+        result &= CheckJoinTupleLinkSettings(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>());
+    }
+    if (!result) {
+        return result;
+    }
+
+    if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
+        result &= CheckJoinTupleLinkSettings(joinTuple.RightScope().Cast<TCoEquiJoinTuple>());
+    }
+    return result;
+}
+
+bool CheckJoinLinkSettings(const TExprBase& node) {
+    if (!node.Maybe<TCoEquiJoin>()) {
+        return true;
+    }
+    auto equiJoin = node.Cast<TCoEquiJoin>();
+    YQL_ENSURE(equiJoin.ArgCount() >= 4);
+    auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
+    return CheckJoinTupleLinkSettings(joinTuple);
+}
+
 /**
  * Rewrite `EquiJoin` to a number of `DqJoin` callables. This is done to simplify next step of building
  * physical stages with join operators.
@@ -632,7 +632,7 @@ TExprBase DqBuildPhyJoin(const TDqJoin& join, bool pushLeftStage, TExprContext& 
                 .Args({leftInputArg, rightInputArg})
                 .Body(phyJoin.Cast())
                 .Build()
-            .Settings(TDqStageSettings().BuildNode(ctx, join.Pos())) 
+            .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
             .Done();
 
         newConnection = Build<TDqCnUnionAll>(ctx, join.Pos())

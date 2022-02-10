@@ -5,8 +5,8 @@
 
 namespace NYq {
 
-using namespace NYdb::NYq; 
- 
+using namespace NYdb::NYq;
+
 void UpdateConnections(
     TClient& client,
     const TString& folderId,

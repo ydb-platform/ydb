@@ -1,8 +1,8 @@
-#include "proxy.h" 
+#include "proxy.h"
 #include "clusters_from_connections.h"
 #include "system_clusters.h"
 #include "table_bindings_from_bindings.h"
- 
+
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/dq.h>
@@ -41,23 +41,23 @@
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
- 
+
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/core/protos/services.pb.h>
- 
-#include <library/cpp/yson/node/node_io.h> 
-#include <library/cpp/actors/core/events.h> 
-#include <library/cpp/actors/core/hfunc.h> 
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
-#include <library/cpp/actors/core/log.h> 
+
+#include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/actors/core/events.h>
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/log.h>
 #include <ydb/core/yq/libs/common/entity_id.h>
 #include <ydb/core/yq/libs/actors/nodes_manager.h>
 #include <ydb/core/yq/libs/gateway/empty_gateway.h>
 #include <ydb/core/yq/libs/read_rule/read_rule_creator.h>
 #include <ydb/core/yq/libs/read_rule/read_rule_deleter.h>
-#include <ydb/core/yq/libs/tasks_packer/tasks_packer.h> 
-#include <util/system/hostname.h> 
- 
+#include <ydb/core/yq/libs/tasks_packer/tasks_packer.h>
+#include <util/system/hostname.h>
+
 #include <library/cpp/json/yson/json2yson.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
@@ -74,16 +74,16 @@
 
 #define LOG_E(stream) \
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, Params.QueryId << " RunActor : " << stream)
- 
+
 #define LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, Params.QueryId << " RunActor : " << stream)
- 
+
 namespace NYq {
- 
-using namespace NActors; 
-using namespace NYql; 
+
+using namespace NActors;
+using namespace NYql;
 using namespace NDqs;
- 
+
 class TDeferredCountersCleanupActor : public NActors::TActorBootstrapped<TDeferredCountersCleanupActor> {
 public:
      TDeferredCountersCleanupActor(
@@ -135,30 +135,30 @@ public:
         , MaxTasksPerOperation(Params.CommonConfig.GetMaxTasksPerOperation() ? Params.CommonConfig.GetMaxTasksPerOperation() : 40)
     {
     }
- 
+
     static constexpr char ActorName[] = "YQ_RUN_ACTOR";
- 
+
     void Bootstrap() {
         LOG_D("Start run actor. Compute state: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status));
         LogReceivedParams();
-        Pinger = Register( 
-            CreatePingerActor( 
-                Params.Scope, 
-                Params.UserId, 
+        Pinger = Register(
+            CreatePingerActor(
+                Params.Scope,
+                Params.UserId,
                 Params.QueryId,
-                Params.Owner, 
-                TPrivateClient( 
-                    Params.Driver, 
-                    NYdb::TCommonClientSettings() 
+                Params.Owner,
+                TPrivateClient(
+                    Params.Driver,
+                    NYdb::TCommonClientSettings()
                     .DiscoveryEndpoint(Params.PrivateApiConfig.GetTaskServiceEndpoint())
                     .EnableSsl(Params.PrivateApiConfig.GetSecureTaskService())
-                    .AuthToken(Params.AuthToken) 
+                    .AuthToken(Params.AuthToken)
                     .Database(Params.PrivateApiConfig.GetTaskServiceDatabase() ? Params.PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
                     Params.ClientCounters),
                 SelfId(),
                 Params.PingerConfig,
                 Params.Deadline
-                )); 
+                ));
         Become(&TRunActor::StateFuncWrapper<&TRunActor::StateFunc>);
         try {
             Run();
@@ -166,7 +166,7 @@ public:
             FailOnException();
         }
     }
- 
+
 private:
     template <void (TRunActor::* DelegatedStateFunc)(STFUNC_SIG)>
     STFUNC(StateFuncWrapper) {
@@ -186,8 +186,8 @@ private:
         hFunc(TEvents::TEvQueryActionResult, Handle);
         hFunc(TEvents::TEvForwardPingResponse, Handle);
         hFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
-    ) 
- 
+    )
+
     STRICT_STFUNC(FinishStateFunc,
         hFunc(NYq::TEvents::TEvDataStreamsReadRulesCreationResult, HandleFinish);
         hFunc(TEvents::TEvDataStreamsReadRulesDeletionResult, HandleFinish);
@@ -270,9 +270,9 @@ private:
         default:
             Abort("Fail to start query from unexpected status " + YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status), YandexQuery::QueryMeta::FAILED);
             break;
-        } 
-    } 
- 
+        }
+    }
+
     void HandleConnections() {
         LOG_D("HandleConnections");
 
@@ -285,8 +285,8 @@ private:
             Connections[connection.content().name()] = connection; // Necessary for TDatabaseAsyncResolverWithMeta
             YqConnections.emplace(connection.meta().id(), connection);
         }
-    } 
- 
+    }
+
     void RunProgram() {
         LOG_D("RunProgram");
         if (!CompileQuery()) {
@@ -308,8 +308,8 @@ private:
         if (!Finishing) {
             Abort("Internal Error", YandexQuery::QueryMeta::FAILED);
             return;
-        } 
- 
+        }
+
         // Already finishing. Fail instantly.
         Issues.AddIssue("Internal Error");
 
@@ -326,8 +326,8 @@ private:
         }
 
         SendPingAndPassAway();
-    } 
- 
+    }
+
     void Handle(TEvents::TEvQueryActionResult::TPtr& ev) {
         Action = ev->Get()->Action;
         LOG_D("New query action received: " << YandexQuery::QueryAction_Name(Action));
@@ -903,7 +903,7 @@ private:
         *request.MutableSettings() = dqGraphParams.GetSettings();
         *request.MutableSecureParams() = dqGraphParams.GetSecureParams();
         *request.MutableColumns() = dqGraphParams.GetColumns();
-        NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram()); 
+        NTasksPacker::UnPack(*request.MutableTask(), dqGraphParams.GetTasks(), dqGraphParams.GetStageProgram());
         NActors::TActivationContext::Send(new IEventHandle(ExecuterId, SelfId(), new NYql::NDqs::TEvGraphRequest(request, ControlId, resultId, CheckpointCoordinatorId)));
         LOG_D("Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId << ", CheckPointCoordinatior " << CheckpointCoordinatorId);
     }
@@ -1113,9 +1113,9 @@ private:
         LOG_D("Compiling query ...");
         NYql::TGatewaysConfig gatewaysConfig;
         SetupDqSettings(*gatewaysConfig.MutableDq()->MutableDefaultSettings());
- 
+
         THashMap<TString, TString> clusters;
- 
+
         //todo: consider cluster name clashes
         AddClustersFromConfig(gatewaysConfig, clusters);
         AddSystemClusters(gatewaysConfig, clusters, Params.AuthToken);
@@ -1138,15 +1138,15 @@ private:
             QueryStateUpdateRequest.set_owner_id(Params.Owner);
             dataProvidersInit.push_back(GetDqDataProviderInitializer(&CreateInMemoryExecTransformer, NYq::CreateEmptyGateway(SelfId()), Params.DqCompFactory, {}, nullptr));
         }
- 
+
         {
             dataProvidersInit.push_back(GetYdbDataProviderInitializer(Params.Driver, Params.CredentialsFactory, dbResolver));
         }
- 
+
         {
             dataProvidersInit.push_back(GetClickHouseDataProviderInitializer(Params.S3Gateway, dbResolver));
         }
- 
+
         {
             dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory));
         }
@@ -1173,14 +1173,14 @@ private:
         progFactory.SetModules(Params.ModuleResolver);
         progFactory.SetUdfResolver(NYql::NCommon::CreateSimpleUdfResolver(Params.FunctionRegistry, nullptr));
         progFactory.SetGatewaysConfig(&gatewaysConfig);
- 
+
         SessionId = TStringBuilder()
             << Params.QueryId << '#'
             << Params.ResultId << '#'
             << Params.Scope.ToString() << '#'
             << Params.Owner << '#'
             << Params.CloudId;
- 
+
         Program = progFactory.Create("-stdin-", Params.Sql, SessionId);
         Program->EnableResultPosition();
 
@@ -1207,7 +1207,7 @@ private:
             if (Params.ExecuteMode == YandexQuery::ExecuteMode::PARSE) {
                 return true;
             }
-        } 
+        }
 
         // compile phase
         {
@@ -1237,7 +1237,7 @@ private:
             Issues.AddIssue(TStringBuilder() << "Unexpected execute mode " << static_cast<int>(Params.ExecuteMode));
             return false;
         }
- 
+
         futureStatus.Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId()](const TProgram::TFutureStatus& f) {
             actorSystem->Send(selfId, new TEvents::TEvAsyncContinue(f));
         });
@@ -1270,11 +1270,11 @@ private:
             Abort(TStringBuilder() << "Run query failed: " << ToString(status), YandexQuery::QueryMeta::FAILED, Program->Issues());
         }
     }
- 
+
     void Handle(NActors::TEvents::TEvUndelivered::TPtr&) {
         Fail("TRunActor::OnUndelivered");
     }
- 
+
     TString FindTokenByName(const TString& tokenName) const {
         for (auto& graphParams : DqGraphParams) {
             const auto& secureParams = graphParams.GetSecureParams();
@@ -1318,13 +1318,13 @@ private:
 private:
     TRunActorParams Params;
     THashMap<TString, YandexQuery::Connection> YqConnections;
- 
+
     TProgramPtr Program;
     TIssues Issues;
     TIssues TransientIssues;
     TQueryResult QueryResult;
     TInstant Deadline;
-    TActorId Pinger; 
+    TActorId Pinger;
     TInstant CreatedAt;
     YandexQuery::QueryAction Action = YandexQuery::QueryAction::QUERY_ACTION_UNSPECIFIED;
     std::vector<NYq::NProto::TGraphParams> DqGraphParams;
@@ -1373,6 +1373,6 @@ IActor* CreateRunActor(
     TRunActorParams&& params
 ) {
     return new TRunActor(serviceCounters, std::move(params));
-} 
- 
+}
+
 } /* NYq */

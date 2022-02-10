@@ -167,10 +167,10 @@ message TIssuesIds {
         STAT_DEPRECATED_STRING_TREE = 5000;
         STAT_ACCESS_DENIED = 5001;
 
-// dq 
-        DQ_GATEWAY_ERROR = 6000; 
-        DQ_GATEWAY_NEED_FALLBACK_ERROR = 6001; 
- 
+// dq
+        DQ_GATEWAY_ERROR = 6000;
+        DQ_GATEWAY_NEED_FALLBACK_ERROR = 6001;
+
 // range [200000, 399999) reserved for KiKiMR issue codes, do not use!
 
     }

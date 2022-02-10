@@ -13,7 +13,7 @@
 
 namespace NYql {
 
-struct TDqSettings; 
+struct TDqSettings;
 
 namespace NCommon {
     class TMkqlCallableCompilerBase;
@@ -32,7 +32,7 @@ public:
     virtual TExprNode::TPtr WrapRead(const TDqSettings& config, const TExprNode::TPtr& read, TExprContext& ctx) = 0;
     virtual TMaybe<bool> CanWrite(const TDqSettings& config, const TExprNode& write, TExprContext& ctx) = 0;
     virtual void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) = 0;
-    virtual bool CanFallback() = 0; 
+    virtual bool CanFallback() = 0;
     virtual void FillSourceSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sourceType) = 0;
     virtual void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& settings, TString& sinkType) = 0;
     virtual void Annotate(const TExprNode& node, THashMap<TString, TString>& params) = 0;

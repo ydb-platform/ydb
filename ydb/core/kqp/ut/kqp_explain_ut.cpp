@@ -2,7 +2,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
- 
+
 namespace NKikimr {
 namespace NKqp {
 

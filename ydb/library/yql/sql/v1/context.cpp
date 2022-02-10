@@ -45,7 +45,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"AnsiOptionalAs", &TContext::AnsiOptionalAs},
     {"WarnOnAnsiAliasShadowing", &TContext::WarnOnAnsiAliasShadowing},
     {"PullUpFlatMapOverJoin", &TContext::PragmaPullUpFlatMapOverJoin},
-    {"DqEngineEnable", &TContext::DqEngineEnable}, 
+    {"DqEngineEnable", &TContext::DqEngineEnable},
     {"DqEngineForce", &TContext::DqEngineForce},
     {"RegexUseRe2", &TContext::PragmaRegexUseRe2},
     {"OrderedColumns", &TContext::OrderedColumns},
@@ -75,7 +75,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , Issues(issues)
     , IncrementMonCounterFunction(settings.IncrementCounter)
     , HasPendingErrors(false)
-    , DqEngineEnable(Settings.DqDefaultAuto->Allow()) 
+    , DqEngineEnable(Settings.DqDefaultAuto->Allow())
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
 {
     for (auto lib : settings.Libraries) {

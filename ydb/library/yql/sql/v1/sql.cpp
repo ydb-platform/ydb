@@ -9473,25 +9473,25 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableansiinforemptyornullableitemscollections") {
             Ctx.AnsiInForEmptyOrNullableItemsCollections = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiInForEmptyOrNullableItemsCollections");
-        } else if (normalizedPragma == "dqengine") { 
-            Ctx.IncrementMonCounter("sql_pragma", "DqEngine"); 
+        } else if (normalizedPragma == "dqengine") {
+            Ctx.IncrementMonCounter("sql_pragma", "DqEngine");
             if (values.size() != 1 || !values[0].GetLiteral()
-                || ! (*values[0].GetLiteral() == "disable" || *values[0].GetLiteral() == "auto" || *values[0].GetLiteral() == "force")) 
-            { 
-                Error() << "Expected `disable|auto|force' argument for: " << pragma; 
+                || ! (*values[0].GetLiteral() == "disable" || *values[0].GetLiteral() == "auto" || *values[0].GetLiteral() == "force"))
+            {
+                Error() << "Expected `disable|auto|force' argument for: " << pragma;
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 return {};
-            } 
-            if (*values[0].GetLiteral() == "disable") { 
-                Ctx.DqEngineEnable = false; 
-                Ctx.DqEngineForce = false; 
-            } else if (*values[0].GetLiteral() == "force") { 
-                Ctx.DqEngineEnable = true; 
-                Ctx.DqEngineForce = true; 
-            } else if (*values[0].GetLiteral() == "auto") { 
-                Ctx.DqEngineEnable = true; 
-                Ctx.DqEngineForce = false; 
-            } 
+            }
+            if (*values[0].GetLiteral() == "disable") {
+                Ctx.DqEngineEnable = false;
+                Ctx.DqEngineForce = false;
+            } else if (*values[0].GetLiteral() == "force") {
+                Ctx.DqEngineEnable = true;
+                Ctx.DqEngineForce = true;
+            } else if (*values[0].GetLiteral() == "auto") {
+                Ctx.DqEngineEnable = true;
+                Ctx.DqEngineForce = false;
+            }
         } else if (normalizedPragma == "ansirankfornullablekeys") {
             Ctx.AnsiRankForNullableKeys = true;
             Ctx.IncrementMonCounter("sql_pragma", "AnsiRankForNullableKeys");

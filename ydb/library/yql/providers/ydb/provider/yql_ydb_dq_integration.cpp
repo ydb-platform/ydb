@@ -66,7 +66,7 @@ public:
             TStringOutput out(partitions.back());
             range.Save(&out);
         }
-        return 0; 
+        return 0;
     }
 
     TMaybe<ui64> CanRead(const TDqSettings&, const TExprNode& read, TExprContext&, bool ) override {

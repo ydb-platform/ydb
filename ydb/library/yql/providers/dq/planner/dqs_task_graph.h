@@ -17,7 +17,7 @@ namespace NYql::NDqs {
 
     struct TTaskMeta {
         THashMap<TString, TString> TaskParams;
-        TString ClusterNameHint; 
+        TString ClusterNameHint;
     };
 
     using TStageInfo = NYql::NDq::TStageInfo<TStageInfoMeta>;

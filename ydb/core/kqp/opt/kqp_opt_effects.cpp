@@ -69,7 +69,7 @@ TDqPhyPrecompute BuildPrecomputeStage(TExprBase expr, TExprContext& ctx) {
                     .Build()
                 .Build()
             .Build()
-        .Settings().Build() 
+        .Settings().Build()
         .Done();
 
     auto dqValue = Build<TDqCnValue>(ctx, expr.Pos())
@@ -248,7 +248,7 @@ bool BuildEffects(TPositionHandle pos, const TVector<TKqlTableEffect>& effects,
                 .Add(newEffects)
                 .Build()
             .Build()
-        .Settings().Build() 
+        .Settings().Build()
         .Done();
 
     for (ui32 i = 0; i < newEffects.size(); ++i) {

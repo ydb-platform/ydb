@@ -20,16 +20,16 @@ struct TDqInputChannelStats : TDqInputStats {
 
 class IDqInputChannel : public IDqInput {
 public:
-    using TPtr = TIntrusivePtr<IDqInputChannel>; 
+    using TPtr = TIntrusivePtr<IDqInputChannel>;
 
-    virtual ui64 GetChannelId() const = 0; 
+    virtual ui64 GetChannelId() const = 0;
 
-    virtual void Push(NDqProto::TData&& data) = 0; 
+    virtual void Push(NDqProto::TData&& data) = 0;
 
-    virtual void Finish() = 0; 
+    virtual void Finish() = 0;
 
-    virtual const TDqInputChannelStats* GetStats() const = 0; 
-}; 
+    virtual const TDqInputChannelStats* GetStats() const = 0;
+};
 
 IDqInputChannel::TPtr CreateDqInputChannel(ui64 channelId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,
     bool collectProfileStats, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,

@@ -28,7 +28,7 @@ namespace NKikimr {
 namespace NYql {
 
 struct TTypeAnnotationContext;
-struct TOperationStatistics; 
+struct TOperationStatistics;
 
 namespace NCommon {
 
@@ -119,6 +119,6 @@ void WriteStreams(NYson::TYsonWriter& writer, TStringBuf name, const NNodes::TCo
 double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx);
 
 void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics);
- 
+
 } // namespace NCommon
 } // namespace NYql

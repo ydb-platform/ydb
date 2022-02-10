@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 #include <ydb/core/yq/libs/config/protos/common.pb.h>
 #include <ydb/core/yq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
@@ -33,11 +33,11 @@ struct TRunActorParams { // TODO2 : Change name
         const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
         const ::NYq::NConfig::TPingerConfig& pingerConfig,
         const TString& sql,
-        const TScope& scope, 
+        const TScope& scope,
         const TString& authToken,
         const NActors::TActorId& databaseResolver,
         const TString& queryId,
-        const TString& userId, 
+        const TString& userId,
         const TString& owner,
         const int64_t previousQueryRevision,
         TVector<YandexQuery::Connection> connections,
@@ -79,12 +79,12 @@ struct TRunActorParams { // TODO2 : Change name
     const ::NYq::NConfig::TGatewaysConfig GatewaysConfig;
     const ::NYq::NConfig::TPingerConfig PingerConfig;
     const TString Sql;
-    const TScope Scope; 
+    const TScope Scope;
     const TString AuthToken;
     const NActors::TActorId DatabaseResolver;
     const TString QueryId;
-    const TString UserId; 
-    const TString Owner; 
+    const TString UserId;
+    const TString Owner;
     const int64_t PreviousQueryRevision;
     const TVector<YandexQuery::Connection> Connections;
     const TVector<YandexQuery::Binding> Bindings;

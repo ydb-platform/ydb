@@ -14,9 +14,9 @@ namespace {
     }
 
     using namespace NSQLTranslation;
-    class TAlwaysDiallowPolicy : public ISqlFeaturePolicy { 
+    class TAlwaysDiallowPolicy : public ISqlFeaturePolicy {
     public:
-        TAlwaysDiallowPolicy() = default; 
+        TAlwaysDiallowPolicy() = default;
         bool Allow() const override {
             return false;
         }
@@ -24,8 +24,8 @@ namespace {
 }
 
 namespace NSQLTranslation {
-    ISqlFeaturePolicy::TPtr ISqlFeaturePolicy::MakeAlwaysDisallow() { 
-        return new TAlwaysDiallowPolicy; 
+    ISqlFeaturePolicy::TPtr ISqlFeaturePolicy::MakeAlwaysDisallow() {
+        return new TAlwaysDiallowPolicy;
     }
 
     TTranslationSettings::TTranslationSettings()
@@ -41,8 +41,8 @@ namespace NSQLTranslation {
         , V0Behavior(EV0Behavior::Silent)
         , V0ForceDisable(InTestEnvironment())
         , WarnOnV0(true)
-        , V0WarnAsError(ISqlFeaturePolicy::MakeAlwaysDisallow()) 
-        , DqDefaultAuto(ISqlFeaturePolicy::MakeAlwaysDisallow()) 
+        , V0WarnAsError(ISqlFeaturePolicy::MakeAlwaysDisallow())
+        , DqDefaultAuto(ISqlFeaturePolicy::MakeAlwaysDisallow())
         , AssumeYdbOnClusterWithSlash(false)
     {}
 

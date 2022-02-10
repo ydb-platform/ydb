@@ -7,7 +7,7 @@ OWNER(
 
 SRCS(
     yq.cpp
-    scope.cpp 
+    scope.cpp
 )
 
 PEERDIR(

@@ -99,7 +99,7 @@ public:
     }
 
 private:
-    virtual TStatus HandleStatus(TStatus status) { 
+    virtual TStatus HandleStatus(TStatus status) {
         if (status.Level == IGraphTransformer::TStatus::Error) {
             return status;
         }
@@ -133,7 +133,7 @@ private:
         }
     }
 
-protected: 
+protected:
     TVector<TTransformStage> Stages;
     const bool UseIssueScopes;
     const bool DoCheckArguments;
@@ -159,75 +159,75 @@ TAutoPtr<IGraphTransformer> CreateCompositeGraphTransformerWithNoArgChecks(const
     return new TCompositeGraphTransformer(stages, useIssueScopes, /* doCheckArguments = */ false);
 }
 
-namespace { 
- 
-class TChoiceGraphTransformer : public TCompositeGraphTransformer { 
-public: 
-    TChoiceGraphTransformer( 
-        const std::function<bool(const TExprNode::TPtr& input, TExprContext& ctx)>& condition, 
-        const TTransformStage& left, 
-        const TTransformStage& right) 
-        : TCompositeGraphTransformer( 
-            {WrapCondition(condition), left, right}, 
-            /* useIssueScopes = */ false, 
-            /* doCheckArgumentstrue = */ true) 
-    { } 
- 
-private: 
-    void Rewind() override { 
-        Condition.Clear(); 
-        TCompositeGraphTransformer::Rewind(); 
-    } 
- 
-    TStatus HandleStatus(TStatus status) override { 
-        if (status.Level == IGraphTransformer::TStatus::Error) { 
-            return status; 
-        } 
- 
-        if (status.HasRestart) { 
-            // ignore Async status in this case 
-            Index = 0; 
-            status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true); 
-        } else if (status.Level == IGraphTransformer::TStatus::Ok) { 
-            status = IGraphTransformer::TStatus::Repeat; 
-            YQL_ENSURE(!Condition.Empty(), "Condition must be set"); 
-            if (Index == 0 && *Condition) { 
-                Index = 1; // left 
-            } else if (Index == 0) { 
-                Index = 2; // right 
-            } else { 
-                Index = 3; // end 
-            } 
-        } 
- 
-        return status; 
-    } 
- 
-    TTransformStage WrapCondition(const std::function<bool(const TExprNode::TPtr& input, TExprContext& ctx)>& condition) 
-    { 
-        auto transformer = CreateFunctorTransformer([this, condition](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
-            output = input; 
-            if (Condition.Empty()) { 
-                Condition = condition(input, ctx); 
-            } 
-            return TStatus::Ok; 
-        }); 
- 
-        return TTransformStage(transformer, "Condition", TIssuesIds::DEFAULT_ERROR); 
-    } 
- 
-    TMaybe<bool> Condition; 
-}; 
- 
-} // namespace 
- 
-TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer( 
-    const std::function<bool(const TExprNode::TPtr& input, TExprContext& ctx)>& condition, 
-    const TTransformStage& left, const TTransformStage& right) 
-{ 
-    return new TChoiceGraphTransformer(condition, left, right); 
-} 
- 
+namespace {
+
+class TChoiceGraphTransformer : public TCompositeGraphTransformer {
+public:
+    TChoiceGraphTransformer(
+        const std::function<bool(const TExprNode::TPtr& input, TExprContext& ctx)>& condition,
+        const TTransformStage& left,
+        const TTransformStage& right)
+        : TCompositeGraphTransformer(
+            {WrapCondition(condition), left, right},
+            /* useIssueScopes = */ false,
+            /* doCheckArgumentstrue = */ true)
+    { }
+
+private:
+    void Rewind() override {
+        Condition.Clear();
+        TCompositeGraphTransformer::Rewind();
+    }
+
+    TStatus HandleStatus(TStatus status) override {
+        if (status.Level == IGraphTransformer::TStatus::Error) {
+            return status;
+        }
+
+        if (status.HasRestart) {
+            // ignore Async status in this case
+            Index = 0;
+            status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+        } else if (status.Level == IGraphTransformer::TStatus::Ok) {
+            status = IGraphTransformer::TStatus::Repeat;
+            YQL_ENSURE(!Condition.Empty(), "Condition must be set");
+            if (Index == 0 && *Condition) {
+                Index = 1; // left
+            } else if (Index == 0) {
+                Index = 2; // right
+            } else {
+                Index = 3; // end
+            }
+        }
+
+        return status;
+    }
+
+    TTransformStage WrapCondition(const std::function<bool(const TExprNode::TPtr& input, TExprContext& ctx)>& condition)
+    {
+        auto transformer = CreateFunctorTransformer([this, condition](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+            output = input;
+            if (Condition.Empty()) {
+                Condition = condition(input, ctx);
+            }
+            return TStatus::Ok;
+        });
+
+        return TTransformStage(transformer, "Condition", TIssuesIds::DEFAULT_ERROR);
+    }
+
+    TMaybe<bool> Condition;
+};
+
+} // namespace
+
+TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer(
+    const std::function<bool(const TExprNode::TPtr& input, TExprContext& ctx)>& condition,
+    const TTransformStage& left, const TTransformStage& right)
+{
+    return new TChoiceGraphTransformer(condition, left, right);
+}
+
 IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx) {
     try {
         for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) {

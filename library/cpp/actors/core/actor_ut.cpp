@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
 
     class TSendReceiveActor : public TActorBootstrapped<TSendReceiveActor> {
     public:
-        static constexpr auto ActorActivityType() { 
+        static constexpr auto ActorActivityType() {
             return ACTORLIB_COMMON;
         }
 
@@ -525,12 +525,12 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         }
     };
 
-    struct TTestActor : TActorBootstrapped<TTestActor> { 
-        static constexpr char ActorName[] = "TestActor"; 
+    struct TTestActor : TActorBootstrapped<TTestActor> {
+        static constexpr char ActorName[] = "TestActor";
 
         void Bootstrap()
         {
-            const auto& activityTypeIndex = GetActivityType(); 
+            const auto& activityTypeIndex = GetActivityType();
             Y_ENSURE(activityTypeIndex < GetActivityTypeCount());
             Y_ENSURE(GetActivityTypeName(activityTypeIndex) == "TestActor");
             PassAway();
@@ -566,13 +566,13 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
         actorSystem.Stop();
         UNIT_ASSERT(pongCounter == 2 && pingCounter == 2);
     }
- 
-    Y_UNIT_TEST(LocalProcessKey) { 
-        static constexpr char ActorName[] = "TestActor"; 
- 
-        UNIT_ASSERT((TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetName(IActor::INTERCONNECT_PROXY_TCP) == "INTERCONNECT_PROXY_TCP")); 
- 
-        UNIT_ASSERT((TLocalProcessKey<TActorActivityTag, ActorName>::GetName() == ActorName)); 
-        UNIT_ASSERT((TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetIndex(IActor::INTERCONNECT_PROXY_TCP) == IActor::INTERCONNECT_PROXY_TCP)); 
-    } 
+
+    Y_UNIT_TEST(LocalProcessKey) {
+        static constexpr char ActorName[] = "TestActor";
+
+        UNIT_ASSERT((TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetName(IActor::INTERCONNECT_PROXY_TCP) == "INTERCONNECT_PROXY_TCP"));
+
+        UNIT_ASSERT((TLocalProcessKey<TActorActivityTag, ActorName>::GetName() == ActorName));
+        UNIT_ASSERT((TEnumProcessKey<TActorActivityTag, IActor::EActorActivity>::GetIndex(IActor::INTERCONNECT_PROXY_TCP) == IActor::INTERCONNECT_PROXY_TCP));
+    }
 }

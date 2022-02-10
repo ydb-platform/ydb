@@ -19,11 +19,11 @@ TRunActorParams::TRunActorParams(
     const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
     const ::NYq::NConfig::TPingerConfig& pingerConfig,
     const TString& sql,
-    const TScope& scope, 
+    const TScope& scope,
     const TString& authToken,
-    const TActorId& databaseResolver, 
+    const TActorId& databaseResolver,
     const TString& queryId,
-    const TString& userId, 
+    const TString& userId,
     const TString& owner,
     const int64_t previousQueryRevision,
     TVector<YandexQuery::Connection> connections,
@@ -60,12 +60,12 @@ TRunActorParams::TRunActorParams(
     , GatewaysConfig(gatewaysConfig)
     , PingerConfig(pingerConfig)
     , Sql(sql)
-    , Scope(scope) 
+    , Scope(scope)
     , AuthToken(authToken)
-    , DatabaseResolver(databaseResolver) 
+    , DatabaseResolver(databaseResolver)
     , QueryId(queryId)
-    , UserId(userId) 
-    , Owner(owner) 
+    , UserId(userId)
+    , Owner(owner)
     , PreviousQueryRevision(previousQueryRevision)
     , Connections(std::move(connections))
     , Bindings(std::move(bindings))

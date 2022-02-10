@@ -38,7 +38,7 @@ extern "C" {
 /* In case we haven't included the right headers yet. */
 struct evbuffer;
 struct event_base;
-struct bufferevent; 
+struct bufferevent;
 struct evhttp_connection;
 
 /** @file event2/http.h
@@ -72,7 +72,7 @@ struct evhttp_request;
 struct evkeyvalq;
 struct evhttp_bound_socket;
 struct evconnlistener;
-struct evdns_base; 
+struct evdns_base;
 
 /**
  * Create a new HTTP server.
@@ -265,9 +265,9 @@ int evhttp_set_cb(struct evhttp *http, const char *path,
     void (*cb)(struct evhttp_request *, void *), void *cb_arg);
 
 EVENT2_EXPORT_SYMBOL
-int evhttp_set_chunk_cb(struct evhttp *http, const char *path, 
-    void (*chunk_cb)(struct evhttp_request *, void *), void *cb_arg); 
- 
+int evhttp_set_chunk_cb(struct evhttp *http, const char *path,
+    void (*chunk_cb)(struct evhttp_request *, void *), void *cb_arg);
+
 /** Removes the callback for a specified URI */
 EVENT2_EXPORT_SYMBOL
 int evhttp_del_cb(struct evhttp *, const char *);
@@ -302,9 +302,9 @@ void evhttp_set_gencb(struct evhttp *http,
    @param arg an context argument for the callback
  */
 EVENT2_EXPORT_SYMBOL
-void evhttp_set_bevcb(struct evhttp *http, 
+void evhttp_set_bevcb(struct evhttp *http,
     struct bufferevent *(*cb)(struct event_base *, void *), void *arg);
- 
+
 /**
    Adds a virtual host to the http server.
 
@@ -537,38 +537,38 @@ struct evhttp_connection *evhttp_connection_base_bufferevent_new(
 	struct event_base *base, struct evdns_base *dnsbase, struct bufferevent* bev, const char *address, ev_uint16_t port);
 
 /**
- * Creates and returns a new bufferevent object. 
- */ 
-typedef struct bufferevent* (*bev_factory_cb)(void *); 
- 
-/** 
- * Create and return a connection object that can be used for making HTTP 
- * requests.  The connection object tries to resolve address and establish the 
- * connection when it is given an http request object.  The specified factory 
- * function is called with the user-supplied argument to retrieve a new 
- * bufferevent whenever the underlying HTTP connection needs to be 
- * reestablished.  This is what you want if, for example, you have a bufferevent 
- * that needs to perform some setup for new connections, such as an SSL 
- * bufferevent. 
- * 
- * @param base the event_base to use for handling the connection 
- * @param dnsbase the dns_base to use for resolving host names; if not 
- *     specified host name resolution will block. 
- * @param cb a callback that returns a new bufferevent to use for connecting to 
- *     the server; if NULL, behavior is the same as in calling 
- *     evhttp_connection_base_bufferevent_new with a NULL bufferevent.  The 
- *     returned bufferevents will be freed as necessary.  The returned 
- *     bufferevents must have no fd set on them. 
- * @param arg the argument to supply to the callback 
- * @param address the address to which to connect 
- * @param port the port to connect to 
- * @return an evhttp_connection object that can be used for making requests 
- */ 
-struct evhttp_connection *evhttp_connection_base_bufferevent_factory_new( 
-	struct event_base *base, struct evdns_base *dnsbase, 
-	bev_factory_cb cb, void * arg, const char *address, unsigned short port); 
- 
-/** 
+ * Creates and returns a new bufferevent object.
+ */
+typedef struct bufferevent* (*bev_factory_cb)(void *);
+
+/**
+ * Create and return a connection object that can be used for making HTTP
+ * requests.  The connection object tries to resolve address and establish the
+ * connection when it is given an http request object.  The specified factory
+ * function is called with the user-supplied argument to retrieve a new
+ * bufferevent whenever the underlying HTTP connection needs to be
+ * reestablished.  This is what you want if, for example, you have a bufferevent
+ * that needs to perform some setup for new connections, such as an SSL
+ * bufferevent.
+ *
+ * @param base the event_base to use for handling the connection
+ * @param dnsbase the dns_base to use for resolving host names; if not
+ *     specified host name resolution will block.
+ * @param cb a callback that returns a new bufferevent to use for connecting to
+ *     the server; if NULL, behavior is the same as in calling
+ *     evhttp_connection_base_bufferevent_new with a NULL bufferevent.  The
+ *     returned bufferevents will be freed as necessary.  The returned
+ *     bufferevents must have no fd set on them.
+ * @param arg the argument to supply to the callback
+ * @param address the address to which to connect
+ * @param port the port to connect to
+ * @return an evhttp_connection object that can be used for making requests
+ */
+struct evhttp_connection *evhttp_connection_base_bufferevent_factory_new(
+	struct event_base *base, struct evdns_base *dnsbase,
+	bev_factory_cb cb, void * arg, const char *address, unsigned short port);
+
+/**
  * Return the bufferevent that an evhttp_connection is using.
  */
 EVENT2_EXPORT_SYMBOL

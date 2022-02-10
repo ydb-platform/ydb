@@ -253,10 +253,10 @@ public:
         TouchFile(storageFile.c_str());
         SetCacheFilePermissionsNoThrow(hardlinkFile);
 
-        const i64 fileSize = GetFileLength(hardlinkFile); 
-        if (fileSize < 0) { 
-            ythrow yexception() << "Unable to get size for file " << hardlinkFile.GetPath().Quote(); 
-        } 
+        const i64 fileSize = GetFileLength(hardlinkFile);
+        if (fileSize < 0) {
+            ythrow yexception() << "Unable to get size for file " << hardlinkFile.GetPath().Quote();
+        }
         TString md5 = storageFileMd5;
         if (!md5) {
             // could happen rarely

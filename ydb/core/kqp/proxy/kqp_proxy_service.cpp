@@ -1242,7 +1242,7 @@ private:
         for (auto &entry : LogConfig.GetEntry()) {
             if (entry.GetComponent() == kqpYqlName && entry.HasLevel()) {
                 auto yqlPriority = static_cast<NActors::NLog::EPriority>(entry.GetLevel());
-                NYql::NDq::SetYqlLogLevels(yqlPriority); 
+                NYql::NDq::SetYqlLogLevels(yqlPriority);
                 KQP_PROXY_LOG_D("Updated YQL logs priority: " << (ui32)yqlPriority);
                 return;
             }
@@ -1253,7 +1253,7 @@ private:
         auto yqlPriority = static_cast<NActors::NLog::EPriority>(currentLevel);
 
         KQP_PROXY_LOG_D("Updated YQL logs priority to current level: " << (ui32)yqlPriority);
-        NYql::NDq::SetYqlLogLevels(yqlPriority); 
+        NYql::NDq::SetYqlLogLevels(yqlPriority);
     }
 
     TKqpDbCountersPtr GetDbCountersForSession(const TString& sessionId) const {

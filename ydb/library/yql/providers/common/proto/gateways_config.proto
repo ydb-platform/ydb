@@ -391,22 +391,22 @@ message TMysqlGatewayConfig {
 }
 
 
-/////////////////////////////// Dq ///////////////////////////////////// 
-message TDqGatewayConfig { 
-    message TDefaultAutoByHourPercentage { 
-        required uint32 Hour = 1; 
-        required uint32 Percentage = 2; 
-    } 
- 
-    optional uint32 DefaultAutoPercentage = 1 [default = 0]; // Probability of 'DqEngine="auto"' 
-    repeated TDefaultAutoByHourPercentage DefaultAutoByHour = 2; 
-    repeated string NoDefaultAutoForUsers = 3; 
- 
-    repeated string DefaultAnalyzeQueryForUsers = 4; 
- 
-    repeated TAttr DefaultSettings = 102; 
-} 
- 
+/////////////////////////////// Dq /////////////////////////////////////
+message TDqGatewayConfig {
+    message TDefaultAutoByHourPercentage {
+        required uint32 Hour = 1;
+        required uint32 Percentage = 2;
+    }
+
+    optional uint32 DefaultAutoPercentage = 1 [default = 0]; // Probability of 'DqEngine="auto"'
+    repeated TDefaultAutoByHourPercentage DefaultAutoByHour = 2;
+    repeated string NoDefaultAutoForUsers = 3;
+
+    repeated string DefaultAnalyzeQueryForUsers = 4;
+
+    repeated TAttr DefaultSettings = 102;
+}
+
 /////////////////////////////// Yql Core ///////////////////////////////
 
 message TCoreAttr {
@@ -448,7 +448,7 @@ message TGatewaysConfig {
     optional TYqlCoreConfig YqlCore = 10;
     optional TPostgresqlGatewayConfig Postgresql = 11;
     optional TSqlCoreConfig SqlCore = 12;
-    optional TDqGatewayConfig Dq = 13; 
+    optional TDqGatewayConfig Dq = 13;
     optional TMysqlGatewayConfig Mysql = 14;
     optional TYdbGatewayConfig Ydb = 15;
     optional TPqGatewayConfig Pq = 16;

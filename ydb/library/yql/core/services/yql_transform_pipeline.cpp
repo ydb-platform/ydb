@@ -15,7 +15,7 @@
 #include <ydb/library/yql/core/yql_opt_rewrite_io.h>
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
- 
+
 namespace NYql {
 
 TTransformationPipeline::TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx)

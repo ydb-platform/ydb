@@ -5,7 +5,7 @@ namespace NKikimr::NSysView {
 
 template<> void SetField<0>(NKikimrSysView::TStoragePoolKey& key, ui64 value) { key.SetBoxId(value); }
 template<> void SetField<1>(NKikimrSysView::TStoragePoolKey& key, ui64 value) { key.SetStoragePoolId(value); }
- 
+
 class TStoragePoolsScan : public TStorageScanBase<TStoragePoolsScan, TEvSysView::TEvGetStoragePoolsResponse> {
 public:
     using TStorageScanBase::TStorageScanBase;

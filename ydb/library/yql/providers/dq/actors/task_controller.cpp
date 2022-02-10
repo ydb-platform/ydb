@@ -1,9 +1,9 @@
 #include "task_controller.h"
-#include "execution_helpers.h" 
-#include "events.h" 
+#include "execution_helpers.h"
+#include "events.h"
 #include "proto_builder.h"
-#include "actor_helpers.h" 
-#include "executer_actor.h" 
+#include "actor_helpers.h"
+#include "executer_actor.h"
 
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 
@@ -138,8 +138,8 @@ private:
             }
             case NDqProto::COMPUTE_STATE_FAILURE: {
                 // TODO: don't convert issues to string
-                NYql::IssuesFromMessage(state.GetIssues(), Issues); 
-                OnError(Issues.ToString(), false, false); 
+                NYql::IssuesFromMessage(state.GetIssues(), Issues);
+                OnError(Issues.ToString(), false, false);
                 break;
             }
             case NDqProto::COMPUTE_STATE_EXECUTING: {
@@ -526,7 +526,7 @@ private:
     NYq::NCommon::TServiceCounters ServiceCounters;
     TDuration PingPeriod = TDuration::Zero();
     TDuration AggrPeriod = TDuration::Zero();
-    TIssues Issues; 
+    TIssues Issues;
     ui64 PingCookie = 0;
 };
 

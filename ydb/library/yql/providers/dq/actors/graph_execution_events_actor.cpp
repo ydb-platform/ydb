@@ -37,11 +37,11 @@ private:
         YQL_LOG_CTX_SCOPE(TraceID);
         YQL_LOG(DEBUG)  << __FUNCTION__ << ' ' << NYql::NDqProto::EGraphExecutionEventType_Name(ev->Get()->Record.GetEventType());
 
-        try { 
-            switch (ev->Get()->Record.GetEventType()) { 
+        try {
+            switch (ev->Get()->Record.GetEventType()) {
             case NYql::NDqProto::EGraphExecutionEventType::START: {
-                NDqProto::TGraphExecutionEvent::TExecuteGraphDescriptor payload; 
-                ev->Get()->Record.GetMessage().UnpackTo(&payload); 
+                NDqProto::TGraphExecutionEvent::TExecuteGraphDescriptor payload;
+                ev->Get()->Record.GetMessage().UnpackTo(&payload);
                 OnStart(ev->Sender, payload);
                 break;
             }
@@ -60,10 +60,10 @@ private:
             default:
                 Reply(ev->Sender);
                 break;
-            } 
-        } catch (...) { 
-            TString message = TStringBuilder() << "Error on TEvGraphExecutionEvent: " << CurrentExceptionMessage(); 
-            YQL_LOG(ERROR) << message; 
+            }
+        } catch (...) {
+            TString message = TStringBuilder() << "Error on TEvGraphExecutionEvent: " << CurrentExceptionMessage();
+            YQL_LOG(ERROR) << message;
             Reply(ev->Sender, message);
         }
     }
@@ -94,9 +94,9 @@ private:
     void Reply(NActors::TActorId replyTo, TString msg = "") const {
         NYql::NDqProto::TGraphExecutionEvent sync;
         sync.SetEventType(NDqProto::EGraphExecutionEventType::SYNC);
-        if (msg) { 
-            sync.SetErrorMessage(msg); 
-        } 
+        if (msg) {
+            sync.SetErrorMessage(msg);
+        }
         Send(replyTo, MakeHolder<NDqs::TEvGraphExecutionEvent>(sync));
     }
 

@@ -1,16 +1,16 @@
 #include <ydb/core/yq/libs/config/protos/pinger.pb.h>
 #include <ydb/core/yq/libs/config/protos/yq_config.pb.h>
-#include "proxy.h" 
+#include "proxy.h"
 #include "nodes_manager.h"
- 
-#include "database_resolver.h" 
- 
-#include <library/cpp/actors/core/events.h> 
-#include <library/cpp/actors/core/hfunc.h> 
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
+
+#include "database_resolver.h"
+
+#include <library/cpp/actors/core/events.h>
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/protobuf/interop/cast.h>
 #include <ydb/core/protos/services.pb.h>
- 
+
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
@@ -26,7 +26,7 @@
 #include <ydb/library/yql/providers/ydb/provider/yql_ydb_provider.h>
 #include <ydb/library/yql/providers/clickhouse/provider/yql_clickhouse_provider.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
-#include <library/cpp/yson/node/node_io.h> 
+#include <library/cpp/yson/node/node_io.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
@@ -36,38 +36,38 @@
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/library/yql/public/issue/protos/issue_message.pb.h>
- 
+
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
- 
+
 #include <ydb/core/yq/libs/common/entity_id.h>
 #include <ydb/core/yq/libs/events/events.h>
- 
+
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
 
-#include <library/cpp/actors/core/log.h> 
- 
+#include <library/cpp/actors/core/log.h>
+
 #include <ydb/library/security/util.h>
 
-#include <util/generic/deque.h> 
-#include <util/generic/guid.h> 
-#include <util/system/hostname.h> 
- 
+#include <util/generic/deque.h>
+#include <util/generic/guid.h>
+#include <util/system/hostname.h>
+
 #define LOG_E(stream) \
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
 #define LOG_I(stream) \
     LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
 #define LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
- 
+
 namespace NYq {
- 
-using namespace NActors; 
- 
+
+using namespace NActors;
+
 namespace {
 
 struct TEvGetTaskInternalResponse : public NActors::TEventLocal<TEvGetTaskInternalResponse, NActors::TEvents::TSystem::Completed> {
@@ -92,35 +92,35 @@ TVector<TElement> VectorFromProto(const ::google::protobuf::RepeatedPtrField<TEl
 
 } // namespace
 
-class TYqlPendingFetcher : public NActors::TActorBootstrapped<TYqlPendingFetcher> { 
-public: 
-    TYqlPendingFetcher( 
+class TYqlPendingFetcher : public NActors::TActorBootstrapped<TYqlPendingFetcher> {
+public:
+    TYqlPendingFetcher(
         const NYq::TYqSharedResources::TPtr& yqSharedResources,
         const ::NYq::NConfig::TCommonConfig& commonConfig,
         const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
         const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
         const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
         const ::NYq::NConfig::TPingerConfig& pingerConfig,
-        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
-        TIntrusivePtr<ITimeProvider> timeProvider, 
-        TIntrusivePtr<IRandomProvider> randomProvider, 
-        NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory, 
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+        TIntrusivePtr<ITimeProvider> timeProvider,
+        TIntrusivePtr<IRandomProvider> randomProvider,
+        NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
         const ::NYq::NCommon::TServiceCounters& serviceCounters,
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr s3Gateway,
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
         const NMonitoring::TDynamicCounterPtr& clientCounters
-        ) 
+        )
         : YqSharedResources(yqSharedResources)
         , CommonConfig(commonConfig)
         , CheckpointCoordinatorConfig(checkpointCoordinatorConfig)
         , PrivateApiConfig(privateApiConfig)
         , GatewaysConfig(gatewaysConfig)
         , PingerConfig(pingerConfig)
-        , FunctionRegistry(functionRegistry) 
-        , TimeProvider(timeProvider) 
-        , RandomProvider(randomProvider) 
-        , DqCompFactory(dqCompFactory) 
+        , FunctionRegistry(functionRegistry)
+        , TimeProvider(timeProvider)
+        , RandomProvider(randomProvider)
+        , DqCompFactory(dqCompFactory)
         , ServiceCounters(serviceCounters, "pending_fetcher")
         , CredentialsFactory(credentialsFactory)
         , S3Gateway(s3Gateway)
@@ -133,48 +133,48 @@ public:
                 .DiscoveryEndpoint(PrivateApiConfig.GetTaskServiceEndpoint())
                 .Database(PrivateApiConfig.GetTaskServiceDatabase() ? PrivateApiConfig.GetTaskServiceDatabase() : TMaybe<TString>()),
             ClientCounters)
-    { 
+    {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
-    } 
- 
+    }
+
     static constexpr char ActorName[] = "YQ_PENDING_FETCHER";
- 
-    void PassAway() final { 
+
+    void PassAway() final {
         LOG_D("Stop Fetcher");
-        Send(DatabaseResolver, new NActors::TEvents::TEvPoison()); 
-        NActors::IActor::PassAway(); 
-    } 
- 
-    void Bootstrap(const TActorContext& ctx) { 
-        Become(&TYqlPendingFetcher::StateFunc); 
- 
-        Y_UNUSED(ctx); 
- 
+        Send(DatabaseResolver, new NActors::TEvents::TEvPoison());
+        NActors::IActor::PassAway();
+    }
+
+    void Bootstrap(const TActorContext& ctx) {
+        Become(&TYqlPendingFetcher::StateFunc);
+
+        Y_UNUSED(ctx);
+
         DatabaseResolver = Register(CreateDatabaseResolver(MakeYqlAnalyticsHttpProxyId(), CredentialsFactory));
         Send(SelfId(), new NActors::TEvents::TEvWakeup());
- 
+
         LOG_I("STARTED");
         LogScope.ConstructInPlace(NActors::TActivationContext::ActorSystem(), NKikimrServices::YQL_PROXY, Guid);
-    } 
- 
-private: 
-    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&, const NActors::TActorContext&) { 
-        LOG_E("TYqlPendingFetcher::OnUndelivered"); 
- 
-        HasRunningRequest = false; 
-    } 
- 
-    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&, const NActors::TActorContext&) { 
-        Schedule(PendingFetchPeriod, new NActors::TEvents::TEvWakeup()); 
- 
-        if (!HasRunningRequest) { 
-            HasRunningRequest = true; 
-            GetPendingTask(); 
-        } 
-    } 
- 
+    }
+
+private:
+    void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&, const NActors::TActorContext&) {
+        LOG_E("TYqlPendingFetcher::OnUndelivered");
+
+        HasRunningRequest = false;
+    }
+
+    void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&, const NActors::TActorContext&) {
+        Schedule(PendingFetchPeriod, new NActors::TEvents::TEvWakeup());
+
+        if (!HasRunningRequest) {
+            HasRunningRequest = true;
+            GetPendingTask();
+        }
+    }
+
     void HandleResponse(TEvGetTaskInternalResponse::TPtr& ev) {
-        HasRunningRequest = false; 
+        HasRunningRequest = false;
         LOG_D("Got GetTask response from PrivateApi");
         if (!ev->Get()->Success) {
             LOG_E("Error with GetTask: "<< ev->Get()->Issues.ToString());
@@ -190,7 +190,7 @@ private:
             GetPendingTask();
         }
     }
- 
+
     void GetPendingTask() {
         LOG_D("Request Private::GetTask" << ", Owner: " << Guid << ", Host: " << HostName());
         Yq::Private::GetTaskRequest request;
@@ -233,7 +233,7 @@ private:
             serviceAccounts[identity.value()] = identity.signature();
         }
 
-        TRunActorParams params( 
+        TRunActorParams params(
             YqSharedResources->YdbDriver, S3Gateway,
             FunctionRegistry, RandomProvider,
             ModuleResolver, ModuleResolver->GetNextUniqueId(),
@@ -265,37 +265,37 @@ private:
 
         NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE);
         Register(CreateRunActor(ServiceCounters, std::move(params)));
-    } 
- 
-    STRICT_STFUNC( 
-        StateFunc, 
- 
-        HFunc(NActors::TEvents::TEvWakeup, HandleWakeup) 
-        HFunc(NActors::TEvents::TEvUndelivered, OnUndelivered) 
+    }
+
+    STRICT_STFUNC(
+        StateFunc,
+
+        HFunc(NActors::TEvents::TEvWakeup, HandleWakeup)
+        HFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
         hFunc(TEvGetTaskInternalResponse, HandleResponse)
-        ); 
- 
+        );
+
     NYq::TYqSharedResources::TPtr YqSharedResources;
     NYq::NConfig::TCommonConfig CommonConfig;
     NYq::NConfig::TCheckpointCoordinatorConfig CheckpointCoordinatorConfig;
     NYq::NConfig::TPrivateApiConfig PrivateApiConfig;
     NYq::NConfig::TGatewaysConfig GatewaysConfig;
     NYq::NConfig::TPingerConfig PingerConfig;
- 
-    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry; 
-    TIntrusivePtr<ITimeProvider> TimeProvider; 
-    TIntrusivePtr<IRandomProvider> RandomProvider; 
-    NKikimr::NMiniKQL::TComputationNodeFactory DqCompFactory; 
-    TIntrusivePtr<IDqGateway> DqGateway; 
+
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
+    TIntrusivePtr<ITimeProvider> TimeProvider;
+    TIntrusivePtr<IRandomProvider> RandomProvider;
+    NKikimr::NMiniKQL::TComputationNodeFactory DqCompFactory;
+    TIntrusivePtr<IDqGateway> DqGateway;
     ::NYq::NCommon::TServiceCounters ServiceCounters;
- 
-    IModuleResolver::TPtr ModuleResolver; 
- 
-    bool HasRunningRequest = false; 
-    const TDuration PendingFetchPeriod = TDuration::Seconds(1); 
- 
-    TActorId DatabaseResolver; 
- 
+
+    IModuleResolver::TPtr ModuleResolver;
+
+    bool HasRunningRequest = false;
+    const TDuration PendingFetchPeriod = TDuration::Seconds(1);
+
+    TActorId DatabaseResolver;
+
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     const IHTTPGateway::TPtr S3Gateway;
     const ::NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
@@ -305,47 +305,47 @@ private:
     TPrivateClient Client;
 
     TMaybe<NYql::NLog::TScopedBackend<NYql::NDq::TYqlLogScope>> LogScope;
-}; 
- 
- 
-NActors::IActor* CreatePendingFetcher( 
+};
+
+
+NActors::IActor* CreatePendingFetcher(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const ::NYq::NConfig::TCommonConfig& commonConfig,
     const ::NYq::NConfig::TCheckpointCoordinatorConfig& checkpointCoordinatorConfig,
     const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
     const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
     const ::NYq::NConfig::TPingerConfig& pingerConfig,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
-    TIntrusivePtr<ITimeProvider> timeProvider, 
-    TIntrusivePtr<IRandomProvider> randomProvider, 
-    NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory, 
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+    TIntrusivePtr<ITimeProvider> timeProvider,
+    TIntrusivePtr<IRandomProvider> randomProvider,
+    NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
     const ::NYq::NCommon::TServiceCounters& serviceCounters,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr s3Gateway,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const NMonitoring::TDynamicCounterPtr& clientCounters)
-{ 
-    return new TYqlPendingFetcher( 
+{
+    return new TYqlPendingFetcher(
         yqSharedResources,
         commonConfig,
         checkpointCoordinatorConfig,
         privateApiConfig,
         gatewaysConfig,
         pingerConfig,
-        functionRegistry, 
-        timeProvider, 
-        randomProvider, 
-        dqCompFactory, 
+        functionRegistry,
+        timeProvider,
+        randomProvider,
+        dqCompFactory,
         serviceCounters,
         credentialsFactory,
         s3Gateway,
         std::move(pqCmConnections),
         clientCounters);
-} 
- 
-TActorId MakeYqlAnalyticsFetcherId(ui32 nodeId) { 
-    constexpr TStringBuf name = "YQLFETCHER"; 
-    return NActors::TActorId(nodeId, name); 
-} 
- 
+}
+
+TActorId MakeYqlAnalyticsFetcherId(ui32 nodeId) {
+    constexpr TStringBuf name = "YQLFETCHER";
+    return NActors::TActorId(nodeId, name);
+}
+
 } /* NYq */

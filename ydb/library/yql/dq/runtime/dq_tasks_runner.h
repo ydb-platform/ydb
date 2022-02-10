@@ -158,7 +158,7 @@ public:
 
     virtual bool HasEffects() const = 0;
 
-    virtual IDqInputChannel::TPtr GetInputChannel(ui64 channelId) = 0; 
+    virtual IDqInputChannel::TPtr GetInputChannel(ui64 channelId) = 0;
     virtual IDqSource::TPtr GetSource(ui64 inputIndex) = 0;
     virtual IDqOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
     virtual IDqSink::TPtr GetSink(ui64 outputIndex) = 0;

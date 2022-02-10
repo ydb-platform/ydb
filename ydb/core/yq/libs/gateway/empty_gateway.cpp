@@ -2,7 +2,7 @@
 
 #include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h>
 #include <ydb/core/yq/libs/events/events.h>
-#include <ydb/core/yq/libs/tasks_packer/tasks_packer.h> 
+#include <ydb/core/yq/libs/tasks_packer/tasks_packer.h>
 
 #include <library/cpp/actors/core/actor.h>
 
@@ -42,14 +42,14 @@ public:
         Y_UNUSED(queryParams);
 
         NProto::TGraphParams params;
-        THashMap<i64, TString> stagePrograms; 
-        NTasksPacker::Pack(plan.GetTasks(), stagePrograms); 
+        THashMap<i64, TString> stagePrograms;
+        NTasksPacker::Pack(plan.GetTasks(), stagePrograms);
         for (auto&& task : plan.GetTasks()) {
             *params.AddTasks() = std::move(task);
         }
-        for (const auto& [id, program]: stagePrograms) { 
-            (*params.MutableStageProgram())[id] = program; 
-        } 
+        for (const auto& [id, program]: stagePrograms) {
+            (*params.MutableStageProgram())[id] = program;
+        }
         for (auto&& col : columns) {
             *params.AddColumns() = col;
         }

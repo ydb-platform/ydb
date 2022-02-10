@@ -15,9 +15,9 @@ namespace {
 //////////////////////////////////////////////////////////////////////////////
 class TCountersPhotographer: public NMonitoring::ICountableConsumer {
 public:
-    TCountersPhotographer(NProto::TCounterGroup* groupProto, bool invalidate) 
+    TCountersPhotographer(NProto::TCounterGroup* groupProto, bool invalidate)
         : HasAnyCounters_(false)
-        , Invalidate_(invalidate) 
+        , Invalidate_(invalidate)
     {
         GroupsProto_.push(groupProto);
     }
@@ -37,9 +37,9 @@ private:
         counterProto->SetDerivative(counter->ForDerivative());
         auto counterVal = counter->Val();
         counterProto->SetValue(counterVal);
-        if (Invalidate_) { 
+        if (Invalidate_) {
             const_cast<TSensorCounter*>(counter)->Sub(counterVal);
-        } 
+        }
 
         auto* label = counterProto->MutableLabel();
         label->SetName(labelName);
@@ -47,23 +47,23 @@ private:
     }
 
     void OnHistogram(const TString& labelName, const TString& labelValue, NMonitoring::IHistogramSnapshotPtr snapshot, bool) override {
-        if (Invalidate_) { 
-            return; 
-        } 
-        auto* counterProto = GroupsProto_.top()->AddCounters(); 
-        auto* label = counterProto->MutableLabel(); 
-        label->SetName(labelName); 
-        label->SetValue(labelValue); 
- 
-        auto bucketsCount = snapshot->Count(); 
-        for (ui32 i = 0; i < bucketsCount; i += 1) { 
-            auto upperBound = snapshot->UpperBound(i); 
-            auto value = snapshot->Value(i); 
- 
-            auto* bucket = counterProto->AddBucket(); 
-            bucket->SetUpperBound(upperBound); 
-            bucket->SetValue(value); 
-        } 
+        if (Invalidate_) {
+            return;
+        }
+        auto* counterProto = GroupsProto_.top()->AddCounters();
+        auto* label = counterProto->MutableLabel();
+        label->SetName(labelName);
+        label->SetValue(labelValue);
+
+        auto bucketsCount = snapshot->Count();
+        for (ui32 i = 0; i < bucketsCount; i += 1) {
+            auto upperBound = snapshot->UpperBound(i);
+            auto value = snapshot->Value(i);
+
+            auto* bucket = counterProto->AddBucket();
+            bucket->SetUpperBound(upperBound);
+            bucket->SetValue(value);
+        }
     }
 
     void OnGroupBegin(
@@ -90,7 +90,7 @@ private:
 private:
     TStack<NProto::TCounterGroup*> GroupsProto_;
     bool HasAnyCounters_;
-    bool Invalidate_; 
+    bool Invalidate_;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -150,31 +150,31 @@ public:
         }
     }
 
-    void AddCounter( 
-            const TString& labelName, 
-            const TString& labelValue, 
-            i64 value, 
-            bool derivative) override 
-    { 
-        // total aggregate counter 
-        auto totalCnt = GetCounter(labelName, labelValue, nullptr, derivative); 
-        if (totalCnt) { 
-            totalCnt->Add(value); 
-        } 
- 
-        if (UserName_) { 
-            // per user counter 
-            auto userCnt = GetCounter(labelName, labelValue, UserName_.Get(), 
-                                      derivative); 
-            if (userCnt) { 
-                userCnt->Add(value); 
-            } 
-        } 
-    } 
- 
+    void AddCounter(
+            const TString& labelName,
+            const TString& labelValue,
+            i64 value,
+            bool derivative) override
+    {
+        // total aggregate counter
+        auto totalCnt = GetCounter(labelName, labelValue, nullptr, derivative);
+        if (totalCnt) {
+            totalCnt->Add(value);
+        }
+
+        if (UserName_) {
+            // per user counter
+            auto userCnt = GetCounter(labelName, labelValue, UserName_.Get(),
+                                      derivative);
+            if (userCnt) {
+                userCnt->Add(value);
+            }
+        }
+    }
+
     bool TakeSnapshot(NProto::TMetricsRegistrySnapshot* snapshot) const override {
         bool hasRootGroupBefore = snapshot->HasRootGroup();
-        TCountersPhotographer photographer(snapshot->MutableRootGroup(), snapshot->GetDontIncrement() == false); 
+        TCountersPhotographer photographer(snapshot->MutableRootGroup(), snapshot->GetDontIncrement() == false);
         Sensors_->Accept(TString(), TString(), photographer);
         if (!photographer.HasAnyCounters() && !hasRootGroupBefore) {
             // remove prematurely allocated group
@@ -190,9 +190,9 @@ public:
                 ? GetSensorsRootGroup().Get()
                 : Sensors_.Get(),
             snapshot.GetRootGroup(),
-            snapshot.HasDontIncrement() 
-                ? snapshot.GetDontIncrement() 
-                : false); 
+            snapshot.HasDontIncrement()
+                ? snapshot.GetDontIncrement()
+                : false);
     }
 
     IMetricsRegistryPtr Personalized(const TString& userName) const override {
@@ -225,57 +225,57 @@ private:
     }
 
     void MergeFromGroupProto(
-            TSensorsGroup* group, const NProto::TCounterGroup& groupProto, bool asIs) 
+            TSensorsGroup* group, const NProto::TCounterGroup& groupProto, bool asIs)
     {
         for (const auto& counterProto: groupProto.GetCounters()) {
             const auto& label = counterProto.GetLabel();
- 
-            if (!counterProto.GetBucket().empty()) { 
-                NMonitoring::TBucketBounds bounds; 
-                auto histSnapshot = NMonitoring::TExplicitHistogramSnapshot::New(counterProto.GetBucket().size()); 
-                bounds.reserve(counterProto.GetBucket().size()); 
-                int i = 0; 
-                for (const auto& b : counterProto.GetBucket()) { 
-                    if (i < counterProto.GetBucket().size() - 1) { 
-                        // skip inf 
-                        bounds.push_back(b.GetUpperBound()); 
-                    } 
-                    (*histSnapshot)[i].first = b.GetUpperBound(); 
-                    (*histSnapshot)[i].second = b.GetValue(); 
-                    i += 1; 
-                } 
- 
-                auto collector = NMonitoring::ExplicitHistogram(bounds).Release(); 
-                auto histogram = group->GetNamedHistogram( 
-                    label.GetName(), label.GetValue(), 
+
+            if (!counterProto.GetBucket().empty()) {
+                NMonitoring::TBucketBounds bounds;
+                auto histSnapshot = NMonitoring::TExplicitHistogramSnapshot::New(counterProto.GetBucket().size());
+                bounds.reserve(counterProto.GetBucket().size());
+                int i = 0;
+                for (const auto& b : counterProto.GetBucket()) {
+                    if (i < counterProto.GetBucket().size() - 1) {
+                        // skip inf
+                        bounds.push_back(b.GetUpperBound());
+                    }
+                    (*histSnapshot)[i].first = b.GetUpperBound();
+                    (*histSnapshot)[i].second = b.GetValue();
+                    i += 1;
+                }
+
+                auto collector = NMonitoring::ExplicitHistogram(bounds).Release();
+                auto histogram = group->GetNamedHistogram(
+                    label.GetName(), label.GetValue(),
                     THolder(collector));
-                Histograms.insert(std::make_pair(histogram, collector)); 
-                Histograms[histogram]->Collect(*histSnapshot); 
-            } else { 
-                auto counter = group->GetNamedCounter( 
-                            label.GetName(), label.GetValue(), 
-                            counterProto.GetDerivative()); 
-                if (asIs) { 
-                    *counter = counterProto.GetValue(); 
-                } else { 
-                    *counter += counterProto.GetValue(); 
-                } 
-            } 
+                Histograms.insert(std::make_pair(histogram, collector));
+                Histograms[histogram]->Collect(*histSnapshot);
+            } else {
+                auto counter = group->GetNamedCounter(
+                            label.GetName(), label.GetValue(),
+                            counterProto.GetDerivative());
+                if (asIs) {
+                    *counter = counterProto.GetValue();
+                } else {
+                    *counter += counterProto.GetValue();
+                }
+            }
         }
 
         for (const auto& subGroupProto: groupProto.GetGroups()) {
             const auto& label = subGroupProto.GetLabel();
             auto subGroup = group->GetSubgroup(
                         label.GetName(), label.GetValue());
-            MergeFromGroupProto(subGroup.Get(), subGroupProto, asIs); 
+            MergeFromGroupProto(subGroup.Get(), subGroupProto, asIs);
         }
     }
 
 private:
     TSensorsGroupPtr Sensors_;
     const TMaybe<TString> UserName_;
- 
-    THashMap<NMonitoring::THistogramPtr, NMonitoring::IHistogramCollector*> Histograms; 
+
+    THashMap<NMonitoring::THistogramPtr, NMonitoring::IHistogramCollector*> Histograms;
 };
 
 } // namespace

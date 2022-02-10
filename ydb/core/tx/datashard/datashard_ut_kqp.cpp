@@ -8,7 +8,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
- 
+
 using namespace NKikimr;
 using namespace NKikimr::NDataShard;
 using namespace NKikimr::NDataShard::NKqpHelpers;

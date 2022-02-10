@@ -18,7 +18,7 @@ PEERDIR(
     ydb/library/yql/dq/comp_nodes
     ydb/library/yql/providers/common/comp_nodes
     ydb/library/yql/providers/dq/provider
-    ydb/library/yql/providers/dq/local_gateway 
+    ydb/library/yql/providers/dq/local_gateway
     ydb/library/yql/providers/pq/gateway/dummy
     ydb/library/yql/providers/pq/provider
     ydb/library/yql/providers/solomon/gateway

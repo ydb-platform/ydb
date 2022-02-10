@@ -1,27 +1,27 @@
-LIBRARY() 
- 
-OWNER(g:yql) 
- 
-SRCS( 
+LIBRARY()
+
+OWNER(g:yql)
+
+SRCS(
     yql_dq_control.cpp
     yql_dq_control.h
     yql_dq_datasink_type_ann.cpp
     yql_dq_datasink_type_ann.h
     yql_dq_datasource_type_ann.cpp
     yql_dq_datasource_type_ann.h
-    yql_dq_gateway.cpp 
-    yql_dq_gateway.h 
-    yql_dq_provider.cpp 
-    yql_dq_provider.h 
-    yql_dq_datasink.cpp 
-    yql_dq_datasink.h 
-    yql_dq_datasource.cpp 
-    yql_dq_datasource.h 
+    yql_dq_gateway.cpp
+    yql_dq_gateway.h
+    yql_dq_provider.cpp
+    yql_dq_provider.h
+    yql_dq_datasink.cpp
+    yql_dq_datasink.h
+    yql_dq_datasource.cpp
+    yql_dq_datasource.h
     yql_dq_recapture.cpp
     yql_dq_recapture.h
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/grpc/client
     library/cpp/threading/task_scheduler
     ydb/public/lib/yson_value
@@ -43,8 +43,8 @@ PEERDIR(
     ydb/library/yql/providers/dq/opt
     ydb/library/yql/providers/dq/planner
     ydb/library/yql/providers/result/expr_nodes
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
 
-END() 
+END()

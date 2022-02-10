@@ -10,47 +10,47 @@
 
 #include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/utils/log/log.h>
- 
+
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 
-#include "worker_manager_common.h" 
- 
+#include "worker_manager_common.h"
+
 #include <util/generic/vector.h>
 #include <util/system/mutex.h>
-#include <util/random/random.h> 
-#include <util/system/rusage.h> 
+#include <util/random/random.h>
+#include <util/system/rusage.h>
 
-using namespace NActors; 
- 
+using namespace NActors;
+
 namespace NYql::NDqs {
- 
-union TDqLocalResourceId { 
-    struct { 
-        ui32 Counter; 
-        ui16 Seed; 
-        ui16 NodeId; 
-    }; 
-    ui64 Data; 
-}; 
- 
-static_assert(sizeof(TDqLocalResourceId) == 8); 
- 
-class TLocalWorkerManager: public TWorkerManagerCommon<TLocalWorkerManager> { 
- 
-public: 
-    static constexpr char ActorName[] = "YQL_DQ_LWM";
- 
-    TLocalWorkerManager(const TLocalWorkerManagerOptions& options) 
-        : TWorkerManagerCommon<TLocalWorkerManager>(&TLocalWorkerManager::Handler) 
-        , Options(options) 
-        , MemoryQuoter(std::make_shared<NDq::TResourceQuoter>(Options.MkqlTotalMemoryLimit)) 
-    {
-        Options.Counters.MkqlMemoryLimit->Set(Options.MkqlTotalMemoryLimit); 
-        Options.Counters.MkqlMemoryAllocated->Set(0); 
 
-        MemoryQuoter->SetNotifier([limitCounter = Options.Counters.MkqlMemoryLimit, allocatedCounter = Options.Counters.MkqlMemoryAllocated](const ui64 limit, ui64 allocated) { 
+union TDqLocalResourceId {
+    struct {
+        ui32 Counter;
+        ui16 Seed;
+        ui16 NodeId;
+    };
+    ui64 Data;
+};
+
+static_assert(sizeof(TDqLocalResourceId) == 8);
+
+class TLocalWorkerManager: public TWorkerManagerCommon<TLocalWorkerManager> {
+
+public:
+    static constexpr char ActorName[] = "YQL_DQ_LWM";
+
+    TLocalWorkerManager(const TLocalWorkerManagerOptions& options)
+        : TWorkerManagerCommon<TLocalWorkerManager>(&TLocalWorkerManager::Handler)
+        , Options(options)
+        , MemoryQuoter(std::make_shared<NDq::TResourceQuoter>(Options.MkqlTotalMemoryLimit))
+    {
+        Options.Counters.MkqlMemoryLimit->Set(Options.MkqlTotalMemoryLimit);
+        Options.Counters.MkqlMemoryAllocated->Set(0);
+
+        MemoryQuoter->SetNotifier([limitCounter = Options.Counters.MkqlMemoryLimit, allocatedCounter = Options.Counters.MkqlMemoryAllocated](const ui64 limit, ui64 allocated) {
             limitCounter->Set(limit);
             allocatedCounter->Set(allocated);
         });
@@ -66,72 +66,72 @@ public:
         };
     }
 
-private: 
-    STRICT_STFUNC(Handler, { 
+private:
+    STRICT_STFUNC(Handler, {
         hFunc(TEvAllocateWorkersRequest, OnAllocateWorkersRequest)
         hFunc(TEvFreeWorkersNotify, OnFreeWorkers)
-        cFunc(TEvents::TEvPoison::EventType, PassAway) 
-        cFunc(TEvents::TEvBootstrap::EventType, Bootstrap) 
-        cFunc(TEvents::TEvWakeup::EventType, WakeUp) 
-        IgnoreFunc(TEvInterconnect::TEvNodeConnected) 
+        cFunc(TEvents::TEvPoison::EventType, PassAway)
+        cFunc(TEvents::TEvBootstrap::EventType, Bootstrap)
+        cFunc(TEvents::TEvWakeup::EventType, WakeUp)
+        IgnoreFunc(TEvInterconnect::TEvNodeConnected)
         hFunc(TEvInterconnect::TEvNodeDisconnected, OnDisconnected)
         hFunc(TEvents::TEvUndelivered, OnUndelivered)
         hFunc(TEvConfigureFailureInjectorRequest, OnConfigureFailureInjector)
-        HFunc(TEvRoutesRequest, OnRoutesRequest) 
+        HFunc(TEvRoutesRequest, OnRoutesRequest)
         hFunc(TEvQueryStatus, OnQueryStatus)
-    }) 
- 
+    })
+
     TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) override {
-        return new IEventHandle(self, parentId, new TEvents::TEvBootstrap(), 0); 
-    } 
- 
-    void Bootstrap() { 
-        ResourceId.Seed = static_cast<ui16>(RandomNumber<ui64>()); 
-        ResourceId.Counter = 0; 
- 
-        Send(SelfId(), new TEvents::TEvWakeup()); 
-    } 
- 
-    void WakeUp() { 
-        auto currentRusage = TRusage::Get(); 
-        TRusage delta; 
-        delta.Utime = currentRusage.Utime - Rusage.Utime; 
-        delta.Stime = currentRusage.Stime - Rusage.Stime; 
-        delta.MajorPageFaults = currentRusage.MajorPageFaults - Rusage.MajorPageFaults; 
-        if (Options.RuntimeData) { 
-            Options.RuntimeData->AddRusageDelta(delta); 
-        } 
-        Rusage = currentRusage; 
- 
-        FreeOnDeadline(); 
- 
-        TActivationContext::Schedule(TDuration::MilliSeconds(800), new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup(), 0)); 
-    } 
- 
-    void DoPassAway() override { 
-        for (const auto& [resourceId, _] : AllocatedWorkers) { 
-            FreeGroup(resourceId); 
+        return new IEventHandle(self, parentId, new TEvents::TEvBootstrap(), 0);
+    }
+
+    void Bootstrap() {
+        ResourceId.Seed = static_cast<ui16>(RandomNumber<ui64>());
+        ResourceId.Counter = 0;
+
+        Send(SelfId(), new TEvents::TEvWakeup());
+    }
+
+    void WakeUp() {
+        auto currentRusage = TRusage::Get();
+        TRusage delta;
+        delta.Utime = currentRusage.Utime - Rusage.Utime;
+        delta.Stime = currentRusage.Stime - Rusage.Stime;
+        delta.MajorPageFaults = currentRusage.MajorPageFaults - Rusage.MajorPageFaults;
+        if (Options.RuntimeData) {
+            Options.RuntimeData->AddRusageDelta(delta);
+        }
+        Rusage = currentRusage;
+
+        FreeOnDeadline();
+
+        TActivationContext::Schedule(TDuration::MilliSeconds(800), new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup(), 0));
+    }
+
+    void DoPassAway() override {
+        for (const auto& [resourceId, _] : AllocatedWorkers) {
+            FreeGroup(resourceId);
         }
 
         AllocatedWorkers.clear();
-        _exit(0); 
+        _exit(0);
     }
 
-    void Deallocate(ui32 nodeId) { 
-        TVector<ui64> toDeallocate; 
- 
-        YQL_LOG(DEBUG) << "Deallocate " << nodeId; 
-        for (const auto& [k, v] : AllocatedWorkers) { 
+    void Deallocate(ui32 nodeId) {
+        TVector<ui64> toDeallocate;
+
+        YQL_LOG(DEBUG) << "Deallocate " << nodeId;
+        for (const auto& [k, v] : AllocatedWorkers) {
             if (v.Sender.NodeId() == nodeId) {
-                toDeallocate.push_back(k); 
-            } 
-        } 
- 
-        for (const auto& k : toDeallocate) { 
-            FreeGroup(k); 
-        } 
-    } 
- 
+                toDeallocate.push_back(k);
+            }
+        }
+
+        for (const auto& k : toDeallocate) {
+            FreeGroup(k);
+        }
+    }
+
     void Deallocate(const NActors::TActorId& senderId) {
         TVector<ui64> toDeallocate;
 
@@ -148,17 +148,17 @@ private:
     }
 
     void OnDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev)
-    { 
-        YQL_LOG(DEBUG) << "Disconnected " << ev->Get()->NodeId; 
-        Unsubscribe(ev->Get()->NodeId); 
-        Deallocate(ev->Get()->NodeId); 
-    } 
- 
+    {
+        YQL_LOG(DEBUG) << "Disconnected " << ev->Get()->NodeId;
+        Unsubscribe(ev->Get()->NodeId);
+        Deallocate(ev->Get()->NodeId);
+    }
+
     void OnUndelivered(TEvents::TEvUndelivered::TPtr& ev)
-    { 
-        Y_VERIFY(ev->Get()->Reason == TEvents::TEvUndelivered::Disconnected 
-            || ev->Get()->Reason == TEvents::TEvUndelivered::ReasonActorUnknown); 
- 
+    {
+        Y_VERIFY(ev->Get()->Reason == TEvents::TEvUndelivered::Disconnected
+            || ev->Get()->Reason == TEvents::TEvUndelivered::ReasonActorUnknown);
+
         YQL_LOG(DEBUG) << "Undelivered " << ev->Sender;
 
         switch (ev->Get()->Reason) {
@@ -171,8 +171,8 @@ private:
         default:
             break;
         }
-    } 
- 
+    }
+
     void OnConfigureFailureInjector(TEvConfigureFailureInjectorRequest::TPtr& ev) {
         YQL_LOG(DEBUG) << "TEvConfigureFailureInjectorRequest ";
 
@@ -190,108 +190,108 @@ private:
     }
 
     void OnAllocateWorkersRequest(TEvAllocateWorkersRequest::TPtr& ev) {
-        ui64 resourceId; 
-        if (ev->Get()->Record.GetResourceId()) { 
-            resourceId = ev->Get()->Record.GetResourceId(); 
-        } else { 
-            auto resource = ResourceId; 
-            resource.NodeId = ev->Sender.NodeId(); 
-            resourceId = resource.Data; 
-            ResourceId.Counter ++; 
-        } 
-        bool createComputeActor = ev->Get()->Record.GetCreateComputeActor(); 
-        TString computeActorType = ev->Get()->Record.GetComputeActorType(); 
- 
-        if (createComputeActor && !Options.CanUseComputeActor) { 
-            Send(ev->Sender, MakeHolder<TEvAllocateWorkersResponse>("Compute Actor Disabled"), 0, ev->Cookie); 
-            return; 
-        } 
- 
-        YQL_LOG_CTX_SCOPE(ev->Get()->Record.GetTraceId()); 
-        YQL_LOG(DEBUG) << "TLocalWorkerManager::TEvAllocateWorkersRequest " << resourceId; 
+        ui64 resourceId;
+        if (ev->Get()->Record.GetResourceId()) {
+            resourceId = ev->Get()->Record.GetResourceId();
+        } else {
+            auto resource = ResourceId;
+            resource.NodeId = ev->Sender.NodeId();
+            resourceId = resource.Data;
+            ResourceId.Counter ++;
+        }
+        bool createComputeActor = ev->Get()->Record.GetCreateComputeActor();
+        TString computeActorType = ev->Get()->Record.GetComputeActorType();
+
+        if (createComputeActor && !Options.CanUseComputeActor) {
+            Send(ev->Sender, MakeHolder<TEvAllocateWorkersResponse>("Compute Actor Disabled"), 0, ev->Cookie);
+            return;
+        }
+
+        YQL_LOG_CTX_SCOPE(ev->Get()->Record.GetTraceId());
+        YQL_LOG(DEBUG) << "TLocalWorkerManager::TEvAllocateWorkersRequest " << resourceId;
         TFailureInjector::Reach("allocate_workers_failure", [] { ::_exit(1); });
- 
-        auto& allocationInfo = AllocatedWorkers[resourceId]; 
+
+        auto& allocationInfo = AllocatedWorkers[resourceId];
         auto traceId = ev->Get()->Record.GetTraceId();
         allocationInfo.TxId = traceId;
 
         auto count = ev->Get()->Record.GetCount();
- 
-        Y_VERIFY(count > 0); 
- 
-        bool canAllocate = MemoryQuoter->Allocate(traceId, 0, count * Options.MkqlInitialMemoryLimit); 
+
+        Y_VERIFY(count > 0);
+
+        bool canAllocate = MemoryQuoter->Allocate(traceId, 0, count * Options.MkqlInitialMemoryLimit);
 
         if (!canAllocate) {
             Send(ev->Sender, MakeHolder<TEvAllocateWorkersResponse>("Not enough memory to allocate tasks"), 0, ev->Cookie);
             return;
         }
 
-        if (allocationInfo.WorkerActors.empty()) { 
-            allocationInfo.WorkerActors.reserve(count); 
+        if (allocationInfo.WorkerActors.empty()) {
+            allocationInfo.WorkerActors.reserve(count);
             allocationInfo.Sender = ev->Sender;
-            if (ev->Get()->Record.GetFreeWorkerAfterMs()) { 
-                allocationInfo.Deadline = 
-                    TInstant::Now() + TDuration::MilliSeconds(ev->Get()->Record.GetFreeWorkerAfterMs()); 
-            } 
+            if (ev->Get()->Record.GetFreeWorkerAfterMs()) {
+                allocationInfo.Deadline =
+                    TInstant::Now() + TDuration::MilliSeconds(ev->Get()->Record.GetFreeWorkerAfterMs());
+            }
 
-            auto& tasks = *ev->Get()->Record.MutableTask(); 
- 
-            if (createComputeActor) { 
-                Y_VERIFY(static_cast<int>(tasks.size()) == static_cast<int>(count)); 
-            } 
-            auto resultId = ActorIdFromProto(ev->Get()->Record.GetResultActorId()); 
- 
-            for (ui32 i = 0; i < count; i++) { 
-                THolder<NActors::IActor> actor; 
- 
-                if (createComputeActor) { 
-                    YQL_LOG(DEBUG) << "Create compute actor: " << computeActorType; 
-                    actor.Reset( 
-                        NYql::CreateComputeActor( 
-                            Options, 
-                            Options.MkqlTotalMemoryLimit ? AllocateMemoryFn : nullptr, 
-                            Options.MkqlTotalMemoryLimit ? FreeMemoryFn : nullptr, 
-                            resultId, 
-                            traceId, 
-                            std::move(tasks[i]), 
-                            computeActorType, 
-                            Options.TaskRunnerActorFactory)); 
-                } else { 
+            auto& tasks = *ev->Get()->Record.MutableTask();
+
+            if (createComputeActor) {
+                Y_VERIFY(static_cast<int>(tasks.size()) == static_cast<int>(count));
+            }
+            auto resultId = ActorIdFromProto(ev->Get()->Record.GetResultActorId());
+
+            for (ui32 i = 0; i < count; i++) {
+                THolder<NActors::IActor> actor;
+
+                if (createComputeActor) {
+                    YQL_LOG(DEBUG) << "Create compute actor: " << computeActorType;
+                    actor.Reset(
+                        NYql::CreateComputeActor(
+                            Options,
+                            Options.MkqlTotalMemoryLimit ? AllocateMemoryFn : nullptr,
+                            Options.MkqlTotalMemoryLimit ? FreeMemoryFn : nullptr,
+                            resultId,
+                            traceId,
+                            std::move(tasks[i]),
+                            computeActorType,
+                            Options.TaskRunnerActorFactory));
+                } else {
                     actor.Reset(CreateWorkerActor(
-                        Options.RuntimeData, 
+                        Options.RuntimeData,
                         traceId,
-                        Options.TaskRunnerActorFactory, 
-                        Options.SourceActorFactory, 
-                        Options.SinkActorFactory)); 
-                } 
-                allocationInfo.WorkerActors.emplace_back(RegisterChild( 
+                        Options.TaskRunnerActorFactory,
+                        Options.SourceActorFactory,
+                        Options.SinkActorFactory));
+                }
+                allocationInfo.WorkerActors.emplace_back(RegisterChild(
                     actor.Release(), createComputeActor ? NYql::NDq::TEvDq::TEvAbortExecution::Unavailable("Aborted by LWM").Release() : nullptr
-                )); 
-            } 
+                ));
+            }
 
-            Options.Counters.ActiveWorkers->Add(count); 
+            Options.Counters.ActiveWorkers->Add(count);
         }
 
-        Send(ev->Sender, 
-            MakeHolder<TEvAllocateWorkersResponse>(resourceId, allocationInfo.WorkerActors), 
-            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, 
-            ev->Cookie); 
-        Subscribe(ev->Sender.NodeId()); 
+        Send(ev->Sender,
+            MakeHolder<TEvAllocateWorkersResponse>(resourceId, allocationInfo.WorkerActors),
+            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
+            ev->Cookie);
+        Subscribe(ev->Sender.NodeId());
     }
 
     void OnFreeWorkers(TEvFreeWorkersNotify::TPtr& ev) {
-        ui64 resourceId = ev->Get()->Record.GetResourceId(); 
-        YQL_LOG(DEBUG) << "TEvFreeWorkersNotify " << resourceId; 
-        FreeGroup(resourceId, ev->Sender); 
+        ui64 resourceId = ev->Get()->Record.GetResourceId();
+        YQL_LOG(DEBUG) << "TEvFreeWorkersNotify " << resourceId;
+        FreeGroup(resourceId, ev->Sender);
     }
 
     void OnQueryStatus(TEvQueryStatus::TPtr& ev) {
-        auto response = MakeHolder<TEvQueryStatusResponse>(); 
-        Send(ev->Sender, response.Release()); 
-    } 
- 
+        auto response = MakeHolder<TEvQueryStatusResponse>();
+        Send(ev->Sender, response.Release());
+    }
+
     void FreeGroup(ui64 id, NActors::TActorId sender = NActors::TActorId()) {
-        YQL_LOG(DEBUG) << "Free Group " << id; 
+        YQL_LOG(DEBUG) << "Free Group " << id;
         auto it = AllocatedWorkers.find(id);
         if (it != AllocatedWorkers.end()) {
             for (const auto& actorId : it->second.WorkerActors) {
@@ -301,49 +301,49 @@ private:
             if (sender) {
                 Y_VERIFY(it->second.Sender == sender);
             }
- 
+
             MemoryQuoter->Free(it->second.TxId, 0);
-            Options.Counters.ActiveWorkers->Sub(it->second.WorkerActors.size()); 
+            Options.Counters.ActiveWorkers->Sub(it->second.WorkerActors.size());
             AllocatedWorkers.erase(it);
         }
     }
- 
-    void FreeOnDeadline() { 
-        auto now = TInstant::Now(); 
-        THashSet<ui32> todelete; 
-        for (const auto& [id, info] : AllocatedWorkers) { 
-            if (info.Deadline && info.Deadline < now) { 
-                todelete.insert(id); 
-            } 
-        } 
-        for (const auto& id : todelete) { 
-            YQL_LOG(DEBUG) << "Free on deadline: " << id; 
-            FreeGroup(id); 
-        } 
-    } 
- 
-    TLocalWorkerManagerOptions Options; 
- 
-    struct TAllocationInfo { 
-        TVector<NActors::TActorId> WorkerActors; 
+
+    void FreeOnDeadline() {
+        auto now = TInstant::Now();
+        THashSet<ui32> todelete;
+        for (const auto& [id, info] : AllocatedWorkers) {
+            if (info.Deadline && info.Deadline < now) {
+                todelete.insert(id);
+            }
+        }
+        for (const auto& id : todelete) {
+            YQL_LOG(DEBUG) << "Free on deadline: " << id;
+            FreeGroup(id);
+        }
+    }
+
+    TLocalWorkerManagerOptions Options;
+
+    struct TAllocationInfo {
+        TVector<NActors::TActorId> WorkerActors;
         NActors::TActorId Sender;
-        TInstant Deadline; 
+        TInstant Deadline;
         NDq::TTxId TxId;
-    }; 
-    THashMap<ui64, TAllocationInfo> AllocatedWorkers; 
-    TDqLocalResourceId ResourceId; 
- 
-    TRusage Rusage; 
- 
+    };
+    THashMap<ui64, TAllocationInfo> AllocatedWorkers;
+    TDqLocalResourceId ResourceId;
+
+    TRusage Rusage;
+
     NDq::TAllocateMemoryCallback AllocateMemoryFn;
     NDq::TFreeMemoryCallback FreeMemoryFn;
     std::shared_ptr<NDq::TResourceQuoter> MemoryQuoter;
-}; 
- 
- 
-NActors::IActor* CreateLocalWorkerManager(const TLocalWorkerManagerOptions& options) 
-{ 
-    return new TLocalWorkerManager(options); 
-} 
- 
-} // namespace NYql::NDqs 
+};
+
+
+NActors::IActor* CreateLocalWorkerManager(const TLocalWorkerManagerOptions& options)
+{
+    return new TLocalWorkerManager(options);
+}
+
+} // namespace NYql::NDqs

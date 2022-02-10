@@ -4,12 +4,12 @@ OWNER(g:yql)
 
 SRCS(
     service.proto
-    dqs.proto 
-    task_command_executor.proto 
+    dqs.proto
+    task_command_executor.proto
 )
 
 PEERDIR(
-    library/cpp/actors/protos 
+    library/cpp/actors/protos
     ydb/public/api/protos
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/proto

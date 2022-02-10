@@ -10,14 +10,14 @@ namespace NActors {
 
 namespace {
 
-struct TEvPing: public TEventLocal<TEvPing, TEvents::THelloWorld::Ping> { 
-    TEvPing(double timeStart) 
-        : TimeStart(timeStart) 
-    {} 
- 
-    const double TimeStart; 
-}; 
- 
+struct TEvPing: public TEventLocal<TEvPing, TEvents::THelloWorld::Ping> {
+    TEvPing(double timeStart)
+        : TimeStart(timeStart)
+    {}
+
+    const double TimeStart;
+};
+
 template <class TValueType_>
 struct TAvgOperation {
     struct TValueType {
@@ -70,8 +70,8 @@ private:
     THPTimer Timer;
 
 public:
-    static constexpr auto ActorActivityType() { 
-        return SELF_PING_ACTOR; 
+    static constexpr auto ActorActivityType() {
+        return SELF_PING_ACTOR;
     }
 
     TSelfPingActor(TDuration sendInterval, const NMonitoring::TDynamicCounters::TCounterPtr& counter,
@@ -93,7 +93,7 @@ public:
     STFUNC(RunningState)
     {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPing, HandlePing); 
+            HFunc(TEvPing, HandlePing);
         default:
             Y_FAIL("TSelfPingActor::RunningState: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
         }
@@ -146,7 +146,7 @@ public:
         return (ui64)d;
     }
 
-    void HandlePing(TEvPing::TPtr &ev, const TActorContext &ctx) 
+    void HandlePing(TEvPing::TPtr &ev, const TActorContext &ctx)
     {
         const auto now = ctx.Now();
         const double hpNow = Timer.Passed();
@@ -166,7 +166,7 @@ public:
 private:
     void SchedulePing(const TActorContext &ctx, double hpNow) const
     {
-        ctx.Schedule(SendInterval, new TEvPing(hpNow)); 
+        ctx.Schedule(SendInterval, new TEvPing(hpNow));
     }
 };
 

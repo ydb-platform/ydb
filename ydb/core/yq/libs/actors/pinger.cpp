@@ -1,48 +1,48 @@
 #include <ydb/core/yq/libs/config/protos/pinger.pb.h>
-#include "proxy.h" 
+#include "proxy.h"
 #include <util/datetime/base.h>
- 
+
 #include <ydb/core/yq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/events/events.h>
 
-#include <library/cpp/actors/core/actor_bootstrapped.h> 
-#include <library/cpp/actors/core/hfunc.h> 
-#include <library/cpp/actors/core/events.h> 
-#include <library/cpp/actors/core/log.h> 
+#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/events.h>
+#include <library/cpp/actors/core/log.h>
 #include <library/cpp/protobuf/interop/cast.h>
- 
+
 #include <util/generic/utility.h>
 
 #include <deque>
 
 #define LOG_E(stream) \
     LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Pinger - " <<  "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
- 
+
 #define LOG_W(stream) \
     LOG_WARN_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Pinger - " <<  "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
 
 #define LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Pinger - " <<  "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
- 
+
 #define LOG_T(stream) \
     LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Pinger - " <<  "QueryId: " << Id << ", Owner: " << OwnerId  << " " << stream)
 
 namespace NYq {
- 
-using namespace NActors; 
+
+using namespace NActors;
 using namespace NYql;
- 
+
 struct TEvPingResponse : public NActors::TEventLocal<TEvPingResponse, NActors::TEvents::TSystem::CallbackCompletion> {
     TPingTaskResult Result;
     YandexQuery::QueryAction Action = YandexQuery::QUERY_ACTION_UNSPECIFIED;
- 
+
     explicit TEvPingResponse(TPingTaskResult&& result)
         : Result(std::move(result))
         , Action(Result.IsResultSet() ? Result.GetResult().action() : YandexQuery::QUERY_ACTION_UNSPECIFIED)
-    { 
-    } 
- 
+    {
+    }
+
     explicit TEvPingResponse(const TString& errorMessage)
         : TEvPingResponse(MakeResultFromErrorMessage(errorMessage))
     {
@@ -54,9 +54,9 @@ private:
         issues.AddIssue(errorMessage);
         return TPingTaskResult(NYdb::TStatus(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), nullptr);
     }
-}; 
- 
-class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> { 
+};
+
+class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
     class TRetryState {
     public:
         void Init(const TInstant& now, const TInstant& startLeaseTime, const TDuration& maxRetryTime) {
@@ -140,50 +140,50 @@ class TPingerActor : public NActors::TActorBootstrapped<TPingerActor> {
         }
     };
 
-public: 
-    TPingerActor( 
-        const TScope& scope, 
-        const TString& userId, 
-        const TString& id, 
-        const TString& ownerId, 
+public:
+    TPingerActor(
+        const TScope& scope,
+        const TString& userId,
+        const TString& id,
+        const TString& ownerId,
         const TPrivateClient& client,
         const TActorId parent,
         const NConfig::TPingerConfig& config,
         const TInstant& deadline)
         : Config(config)
         , Scope(scope)
-        , UserId(userId) 
-        , Id(id) 
-        , OwnerId(ownerId) 
-        , Client(client) 
+        , UserId(userId)
+        , Id(id)
+        , OwnerId(ownerId)
+        , Client(client)
         , Parent(parent)
         , Deadline(deadline)
     {
     }
- 
+
     static constexpr char ActorName[] = "YQ_PINGER";
- 
+
     void Bootstrap() {
-        LOG_D("Start Pinger"); 
+        LOG_D("Start Pinger");
         StartLeaseTime = TActivationContext::Now(); // Not accurate value, but it allows us to retry the first unsuccessful ping request.
         ScheduleNextPing();
-        Become(&TPingerActor::StateFunc); 
-    } 
- 
-private: 
-    STRICT_STFUNC( 
-        StateFunc, 
+        Become(&TPingerActor::StateFunc);
+    }
+
+private:
+    STRICT_STFUNC(
+        StateFunc,
         cFunc(NActors::TEvents::TEvPoison::EventType, PassAway)
         hFunc(NActors::TEvents::TEvWakeup, Wakeup)
         hFunc(TEvPingResponse, Handle)
         hFunc(TEvents::TEvForwardPingRequest, Handle)
     )
- 
-    void PassAway() override { 
-        LOG_D("Stop Pinger"); 
+
+    void PassAway() override {
+        LOG_D("Stop Pinger");
         NActors::TActorBootstrapped<TPingerActor>::PassAway();
-    } 
- 
+    }
+
     void ScheduleNextPing() {
         if (!Finishing) {
             SchedulerCookieHolder.Reset(ISchedulerCookie::Make2Way());
@@ -213,12 +213,12 @@ private:
     }
 
     void WakeupContinueLease() {
-        SchedulerCookieHolder.Reset(nullptr); 
+        SchedulerCookieHolder.Reset(nullptr);
         if (!Finishing) {
             Ping();
         }
     }
- 
+
     void WakeupRetryContinueLease() {
         Ping(true);
     }
@@ -248,14 +248,14 @@ private:
             ForwardRequests.emplace_back(std::move(ev));
             ForwardPing();
         }
-    } 
- 
+    }
+
     void SendQueryAction(YandexQuery::QueryAction action) {
         if (!Finishing) {
             Send(Parent, new TEvents::TEvQueryActionResult(action));
-        } 
-    } 
- 
+        }
+    }
+
     static bool Retryable(TEvPingResponse::TPtr& ev) {
         if (ev->Get()->Result.IsTransportError()) {
             return true;
@@ -342,14 +342,14 @@ private:
             Send(Parent, new TEvents::TEvForwardPingResponse(false, ev->Get()->Action), 0, ev->Cookie);
             FatalError = true;
             ForwardRequests.clear();
-        } 
- 
+        }
+
         if (Finishing && ForwardRequests.empty() && !Requested) {
             LOG_D("Query finished");
             PassAway();
-        } 
-    } 
- 
+        }
+    }
+
     void ForwardPing(bool retry = false) {
         Y_VERIFY(!ForwardRequests.empty());
         auto& reqInfo = ForwardRequests.front();
@@ -360,7 +360,7 @@ private:
                 reqInfo.RetryState.Init(TActivationContext::Now(), StartLeaseTime, Config.PingPeriod);
             }
             LOG_D((retry ? "Retry forward" : "Forward") << " request Private::PingTask");
- 
+
             Ping(reqInfo.Request->Get()->Request, reqInfo.Request->Cookie);
         }
     }
@@ -391,19 +391,19 @@ private:
         future.Subscribe(
             [actorSystem, selfId, cookie, future](const NThreading::TFuture<TPingTaskResult>&) mutable {
                 std::unique_ptr<TEvPingResponse> ev;
-                try { 
+                try {
                     auto result = future.ExtractValue();
                     ev = std::make_unique<TEvPingResponse>(std::move(result));
-                } catch (...) { 
+                } catch (...) {
                     ev = std::make_unique<TEvPingResponse>(TStringBuilder()
                         << "Exception on ping response: "
                         << CurrentExceptionMessage());
-                } 
+                }
                 actorSystem->Send(new IEventHandle(selfId, selfId, ev.release(), 0, cookie));
             }
         );
-    } 
- 
+    }
+
     static constexpr ui64 ContinueLeaseRequestCookie = Max();
 
     enum : ui64 {
@@ -414,44 +414,44 @@ private:
 
     TConfig Config;
 
-    const TScope Scope; 
-    const TString UserId; 
-    const TString Id; 
-    const TString OwnerId; 
-    TPrivateClient Client; 
- 
-    bool Requested = false; 
+    const TScope Scope;
+    const TString UserId;
+    const TString Id;
+    const TString OwnerId;
+    TPrivateClient Client;
+
+    bool Requested = false;
     TInstant StartLeaseTime;
     TRetryState RetryState;
     const TActorId Parent;
     const TInstant Deadline;
- 
+
     std::deque<TForwardPingReqInfo> ForwardRequests;
     bool Finishing = false;
     bool FatalError = false; // Nonretryable error from PingTask or all retries finished.
 
-    TSchedulerCookieHolder SchedulerCookieHolder; 
-}; 
- 
-IActor* CreatePingerActor( 
-    const TScope& scope, 
-    const TString& userId, 
-    const TString& id, 
-    const TString& ownerId, 
+    TSchedulerCookieHolder SchedulerCookieHolder;
+};
+
+IActor* CreatePingerActor(
+    const TScope& scope,
+    const TString& userId,
+    const TString& id,
+    const TString& ownerId,
     const TPrivateClient& client,
     const TActorId parent,
     const NConfig::TPingerConfig& config,
     const TInstant& deadline)
-{ 
-    return new TPingerActor( 
-        scope, 
-        userId, 
-        id, 
-        ownerId, 
+{
+    return new TPingerActor(
+        scope,
+        userId,
+        id,
+        ownerId,
         client,
         parent,
         config,
         deadline);
-} 
- 
+}
+
 } /* NYq */

@@ -50,9 +50,9 @@ public:
         AddHandler(0, &TCoAggregate::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin));
-        AddHandler(0, &TCoCalcOverWindow::Match, HNDL(ExpandWindowFunctions)); 
-        AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions)); 
-        AddHandler(0, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend)); 
+        AddHandler(0, &TCoCalcOverWindow::Match, HNDL(ExpandWindowFunctions));
+        AddHandler(0, &TCoCalcOverWindowGroup::Match, HNDL(ExpandWindowFunctions));
+        AddHandler(0, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
         AddHandler(0, &TDqQuery::Match, HNDL(MergeQueriesWithSinks));
         AddHandler(0, &TDqStageBase::Match, HNDL(UnorderedInStage));
 #undef HNDL
@@ -68,10 +68,10 @@ protected:
         return node;
     }
 
-    TMaybeNode<TExprBase> FlatMapOverExtend(TExprBase node, TExprContext& ctx) { 
-        return DqFlatMapOverExtend(node, ctx); 
-    } 
- 
+    TMaybeNode<TExprBase> FlatMapOverExtend(TExprBase node, TExprContext& ctx) {
+        return DqFlatMapOverExtend(node, ctx);
+    }
+
     TMaybeNode<TExprBase> RewriteAggregate(TExprBase node, TExprContext& ctx) {
         auto aggregate = node.Cast<TCoAggregate>();
         auto input = aggregate.Input().Maybe<TDqConnection>();
@@ -110,13 +110,13 @@ protected:
         }
         return DqRewriteEquiJoin(node, ctx);
     }
- 
-    TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) { 
+
+    TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
         if (node.Cast<TCoInputBase>().Input().Maybe<TDqConnection>()) {
             return DqExpandWindowFunctions(node, ctx, true);
         }
         return node;
-    } 
+    }
 
     TMaybeNode<TExprBase> MergeQueriesWithSinks(TExprBase node, TExprContext& ctx) {
         return DqMergeQueriesWithSinks(node, ctx);

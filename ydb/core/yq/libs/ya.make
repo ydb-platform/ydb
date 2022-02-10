@@ -18,14 +18,14 @@ RECURSE(
     hmac
     init
     logs
-    mock 
+    mock
     pretty_printers
     private_client
     read_rule
     result_formatter
     shared_resources
     signer
-    tasks_packer 
+    tasks_packer
     test_connection
     ydb
 )

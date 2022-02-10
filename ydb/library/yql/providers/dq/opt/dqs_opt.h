@@ -12,5 +12,5 @@ namespace NYql::NDqs {
     THolder<IGraphTransformer> CreateDqsBuildTransformer();
     THolder<IGraphTransformer> CreateDqsRewritePhyCallablesTransformer();
     THolder<IGraphTransformer> CreateDqsPeepholeTransformer(THolder<IGraphTransformer>&& typeAnnTransformer, TTypeAnnotationContext& typesCtx);
- 
-} // namespace NYql::NDqs 
+
+} // namespace NYql::NDqs

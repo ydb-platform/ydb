@@ -8,7 +8,7 @@
 #include <ydb/core/mind/hive/tablet_info.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
- 
+
 #include <library/cpp/actors/core/hfunc.h>
 
 namespace NKikimr::NSysView {
@@ -19,7 +19,7 @@ class TTabletsScan : public TScanActorBase<TTabletsScan> {
 public:
     using TBase = TScanActorBase<TTabletsScan>;
 
-    static constexpr auto ActorActivityType() { 
+    static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 

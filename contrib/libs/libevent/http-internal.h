@@ -13,7 +13,7 @@
 #include "event2/event_struct.h"
 #include "util-internal.h"
 #include "defer-internal.h"
-#include "event2/http.h" 
+#include "event2/http.h"
 
 #define HTTP_CONNECT_TIMEOUT	45
 #define HTTP_WRITE_TIMEOUT	50
@@ -56,8 +56,8 @@ struct evhttp_connection {
 
 	evutil_socket_t fd;
 	struct bufferevent *bufev;
-	bev_factory_cb bufcb; 
-	void *bufcb_arg; 
+	bev_factory_cb bufcb;
+	void *bufcb_arg;
 
 	struct event retry_ev;		/* for retrying connects */
 
@@ -112,7 +112,7 @@ struct evhttp_cb {
 	TAILQ_ENTRY(evhttp_cb) next;
 
 	char *what;
-	int chunked; 
+	int chunked;
 
 	void (*cb)(struct evhttp_request *req, void *);
 	void *cbarg;
@@ -169,8 +169,8 @@ struct evhttp {
 	   don't match. */
 	void (*gencb)(struct evhttp_request *req, void *);
 	void *gencbarg;
-	struct bufferevent* (*bevcb)(struct event_base *, void *); 
-	void *bevcbarg; 
+	struct bufferevent* (*bevcb)(struct event_base *, void *);
+	void *bevcbarg;
 
 	struct event_base *base;
 };

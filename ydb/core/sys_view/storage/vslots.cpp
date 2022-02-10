@@ -6,7 +6,7 @@ namespace NKikimr::NSysView {
 template<> void SetField<0>(NKikimrSysView::TVSlotKey& key, ui32 value) { key.SetNodeId(value); }
 template<> void SetField<1>(NKikimrSysView::TVSlotKey& key, ui32 value) { key.SetPDiskId(value); }
 template<> void SetField<2>(NKikimrSysView::TVSlotKey& key, ui32 value) { key.SetVSlotId(value); }
- 
+
 class TVSlotsScan : public TStorageScanBase<TVSlotsScan, TEvSysView::TEvGetVSlotsResponse> {
 public:
     using TStorageScanBase::TStorageScanBase;

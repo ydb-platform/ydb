@@ -65,7 +65,7 @@ public:
                 return PartitionTopicRead(topicSource.Cast().Topic(), maxPartitions, partitions);
             }
         }
-        return 0; 
+        return 0;
     }
 
     TExprNode::TPtr WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) override {

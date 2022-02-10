@@ -16,7 +16,7 @@
 #include <ydb/library/aclib/aclib.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
- 
+
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -31,7 +31,7 @@ namespace NKqp {
 using namespace NKikimrConfig;
 using namespace NThreading;
 using namespace NYql;
-using namespace NYql::NDq; 
+using namespace NYql::NDq;
 using namespace NRuCalc;
 
 static std::atomic<bool> FailForcedNewEngineExecution = false;
@@ -569,7 +569,7 @@ public:
         }
 
         Y_VERIFY(QueryState);
-        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, SessionId, QueryState->TraceId); 
+        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, SessionId, QueryState->TraceId);
 
         if (ev->Get()->Finished) {
             QueryState->QueryResult = QueryState->AsyncQueryResult->GetResult();
@@ -684,7 +684,7 @@ public:
             return;
         }
 
-        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, SessionId); 
+        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, SessionId);
 
         if (ev->Get()->Finished) {
             Y_VERIFY(CleanupState);
@@ -886,7 +886,7 @@ private:
     void PerformQuery(const TActorContext& ctx) {
         Y_VERIFY(QueryState);
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
-        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, SessionId, QueryState->TraceId); 
+        TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, SessionId, QueryState->TraceId);
 
         Gateway->SetToken(Settings.Cluster, QueryState->UserToken);
         auto& queryRequest = QueryState->Request;

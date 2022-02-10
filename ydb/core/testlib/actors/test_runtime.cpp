@@ -171,7 +171,7 @@ namespace NActors {
     }
 
     void TTestActorRuntime::InitActorSystemSetup(TActorSystemSetup& setup) {
-        setup.MaxActivityType = GetActivityTypeCount(); 
+        setup.MaxActivityType = GetActivityTypeCount();
     }
 
     NKikimr::TAppData& TTestActorRuntime::GetAppData(ui32 nodeIndex) {

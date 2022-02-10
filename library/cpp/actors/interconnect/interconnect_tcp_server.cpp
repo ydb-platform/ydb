@@ -7,21 +7,21 @@
 #include "interconnect_common.h"
 
 namespace NActors {
-    TInterconnectListenerTCP::TInterconnectListenerTCP(const TString& address, ui16 port, TInterconnectProxyCommon::TPtr common, const TMaybe<SOCKET>& socket) 
+    TInterconnectListenerTCP::TInterconnectListenerTCP(const TString& address, ui16 port, TInterconnectProxyCommon::TPtr common, const TMaybe<SOCKET>& socket)
         : TActor(&TThis::Initial)
         , TInterconnectLoggingBase(Sprintf("ICListener: %s", SelfId().ToString().data()))
         , Address(address.c_str(), port)
-        , Listener( 
-            socket 
-            ? new NInterconnect::TStreamSocket(*socket) 
-            : nullptr) 
-        , ExternalSocket(!!Listener) 
+        , Listener(
+            socket
+            ? new NInterconnect::TStreamSocket(*socket)
+            : nullptr)
+        , ExternalSocket(!!Listener)
         , ProxyCommonCtx(std::move(common))
-    { 
-        if (ExternalSocket) { 
-            SetNonBlock(*Listener); 
-        } 
-    } 
+    {
+        if (ExternalSocket) {
+            SetNonBlock(*Listener);
+        }
+    }
 
     TAutoPtr<IEventHandle> TInterconnectListenerTCP::AfterRegister(const TActorId& self, const TActorId& parentId) {
         return new IEventHandle(self, parentId, new TEvents::TEvBootstrap, 0);
@@ -102,7 +102,7 @@ namespace NActors {
                 ctx.Register(CreateIncomingHandshakeActor(ProxyCommonCtx, std::move(socket)));
                 continue;
             } else if (-r != EAGAIN && -r != EWOULDBLOCK) {
-                Y_VERIFY(-r != ENFILE && -r != EMFILE && !ExternalSocket); 
+                Y_VERIFY(-r != ENFILE && -r != EMFILE && !ExternalSocket);
                 LOG_ERROR_IC("ICL06", "Listen failed: %s (%s)", strerror(-r), Address.ToString().data());
                 Listener.Reset();
                 PollerToken.Reset();

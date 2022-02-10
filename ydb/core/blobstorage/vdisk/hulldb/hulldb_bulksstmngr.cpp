@@ -32,7 +32,7 @@ namespace NKikimr {
             TActiveActors ActiveActors;
 
         public:
-            static constexpr auto ActorActivityType() { 
+            static constexpr auto ActorActivityType() {
                 return NKikimrServices::TActivity::BS_BULK_SST_LOADER;
             }
 

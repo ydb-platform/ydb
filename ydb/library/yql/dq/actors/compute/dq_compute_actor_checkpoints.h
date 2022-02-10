@@ -25,10 +25,10 @@ NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NDqProto::TDqTask& t
 class TDqComputeActorCheckpoints : public NActors::TActor<TDqComputeActorCheckpoints>
 {
     struct TCheckpointCoordinatorId {
-        NActors::TActorId ActorId; 
+        NActors::TActorId ActorId;
         ui64 Generation;
 
-        TCheckpointCoordinatorId(NActors::TActorId actorId, ui64 generation) 
+        TCheckpointCoordinatorId(NActors::TActorId actorId, ui64 generation)
             : ActorId(actorId)
             , Generation(generation) {
         }
@@ -122,7 +122,7 @@ private:
     const NDqProto::TDqTask Task;
     const bool IngressTask;
 
-    const NActors::TActorId CheckpointStorage; 
+    const NActors::TActorId CheckpointStorage;
     TString GraphId;
 
     ICallbacks* ComputeActor = nullptr;

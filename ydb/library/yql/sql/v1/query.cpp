@@ -1660,7 +1660,7 @@ public:
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos, "DiscoveryMode"))));
                 }
- 
+
                 if (ctx.DqEngineEnable) {
                     TString mode = "auto";
                     if (ctx.PqReadByRtmrCluster && ctx.PqReadByRtmrCluster != "dq") {
@@ -1668,10 +1668,10 @@ public:
                     } else if (ctx.DqEngineForce) {
                         mode = "force";
                     }
-                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, 
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos, "DqEngine"), BuildQuotedAtom(Pos, mode))));
-                } 
- 
+                }
+
                 if (ctx.JsonQueryReturnsJsonDocument.Defined()) {
                     TString pragmaName = "DisableJsonQueryReturnsJsonDocument";
                     if (*ctx.JsonQueryReturnsJsonDocument) {

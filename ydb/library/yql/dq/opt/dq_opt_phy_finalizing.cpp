@@ -108,7 +108,7 @@ std::pair<TDqStage, TVector<TCoAtom>> ReplicateStageOutput(const TDqStage& stage
             .Args(newStageArgs)
             .Body(ctx.ReplaceNodes(std::move(newResult), stageArgsReplaces))
             .Build()
-        .Settings(TDqStageSettings().BuildNode(ctx, stage.Pos())) 
+        .Settings(TDqStageSettings().BuildNode(ctx, stage.Pos()))
         .Done();
 
     YQL_CLOG(TRACE, CoreDq) << "new stage #" << newStage.Ref().UniqueId();

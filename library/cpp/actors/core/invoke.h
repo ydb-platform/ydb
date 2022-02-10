@@ -77,14 +77,14 @@ namespace NActors {
     // actor's class. But `complete` handler is invoked in parent context and can use its contents. Do not forget to
     // handle TEvInvokeResult event by calling Process/GetResult method, whichever is necessary.
 
-    template<typename TCallback, typename TCompletion, ui32 Activity> 
+    template<typename TCallback, typename TCompletion, ui32 Activity>
     class TInvokeActor : public TActorBootstrapped<TInvokeActor<TCallback, TCompletion, Activity>> {
         TCallback Callback;
         TCompletion Complete;
 
     public:
-        static constexpr auto ActorActivityType() { 
-            return static_cast<IActor::EActorActivity>(Activity); 
+        static constexpr auto ActorActivityType() {
+            return static_cast<IActor::EActorActivity>(Activity);
         }
 
         TInvokeActor(TCallback&& callback, TCompletion&& complete)
@@ -101,7 +101,7 @@ namespace NActors {
         }
     };
 
-    template<ui32 Activity, typename TCallback, typename TCompletion> 
+    template<ui32 Activity, typename TCallback, typename TCompletion>
     std::unique_ptr<IActor> CreateInvokeActor(TCallback&& callback, TCompletion&& complete) {
         return std::make_unique<TInvokeActor<std::decay_t<TCallback>, std::decay_t<TCompletion>, Activity>>(
             std::forward<TCallback>(callback), std::forward<TCompletion>(complete));

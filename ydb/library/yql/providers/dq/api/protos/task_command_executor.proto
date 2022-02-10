@@ -1,34 +1,34 @@
-syntax = "proto3"; 
-option cc_enable_arenas = true; 
- 
-package NYql.NDqProto; 
- 
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYql.NDqProto;
+
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_transport.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/library/yql/providers/dq/api/protos/dqs.proto";
- 
-message TCommandHeader { 
-    enum ECommand { 
-        VERSION = 0; 
-        PUSH = 1; 
-        FINISH = 2; 
-        POP = 3; 
-        IS_FINISHED = 4; 
-        RUN = 5; 
-        PREPARE = 6; 
-        STOP = 7; 
-        GET_INPUT_TYPE = 8; 
-        GET_FREE_SPACE = 9; 
- 
-        FINISH_OUTPUT = 10; 
-        DROP_OUTPUT = 11; 
-        TERMINATE_OUTPUT = 12; 
-        GET_STORED_BYTES = 13; 
- 
-        GET_STATS = 14; 
-        GET_STATS_INPUT = 15; 
-        GET_STATS_OUTPUT = 16; 
+
+message TCommandHeader {
+    enum ECommand {
+        VERSION = 0;
+        PUSH = 1;
+        FINISH = 2;
+        POP = 3;
+        IS_FINISHED = 4;
+        RUN = 5;
+        PREPARE = 6;
+        STOP = 7;
+        GET_INPUT_TYPE = 8;
+        GET_FREE_SPACE = 9;
+
+        FINISH_OUTPUT = 10;
+        DROP_OUTPUT = 11;
+        TERMINATE_OUTPUT = 12;
+        GET_STORED_BYTES = 13;
+
+        GET_STATS = 14;
+        GET_STATS_INPUT = 15;
+        GET_STATS_OUTPUT = 16;
         GET_STATS_SOURCE = 17;
 
         GET_FREE_SPACE_SOURCE = 18;
@@ -36,113 +36,113 @@ message TCommandHeader {
         PUSH_SOURCE = 20;
         GET_SOURCE_TYPE = 21;
         FINISH_SOURCE = 22;
- 
-        // Sink 
-        SINK_POP = 23; // TSinkPopRequest -> TSinkPopResponse 
-        SINK_IS_FINISHED = 24; // Header -> TIsFinishedResponse 
-        SINK_OUTPUT_TYPE = 25; // Header -> TGetTypeResponse 
-        SINK_STATS = 26; // Header -> TGetSinkStatsResponse 
-    }; 
- 
-    int32 Version = 1; 
-    ECommand Command = 2; 
-    uint64 TaskId = 3; 
-    uint64 ChannelId = 4; 
-} 
- 
-message TGetVersionResponse { 
-    int32 Version = 1; 
-} 
- 
-message TGetFreeSpaceResponse { 
-    int64 FreeSpace = 1; 
-} 
- 
-message TPopResponse { 
-    bool Result = 1; 
-    TData Data = 2; 
-    repeated TMetric Metric = 3; 
-} 
- 
-message TSinkPopRequest { 
-    uint64 Bytes = 1; 
-    bool Raw = 2; 
-}; 
- 
-message TSinkPopResponse { 
-    uint64 Bytes = 1; 
-    TData Data = 2; 
-    repeated TMetric Metric = 3; 
-    repeated bytes String = 4; 
-} 
- 
-message TIsFinishedResponse { 
-    bool Result = 1; 
-} 
- 
-message TRunResponse { 
-    int32 Result = 1; 
-    repeated TMetric Metric = 2; 
-    TRusage Rusage = 3; 
-} 
- 
-message TPrepareResponse { 
-    bool Result = 1; // unused 
-    repeated TMetric Metric = 2; 
-} 
- 
+
+        // Sink
+        SINK_POP = 23; // TSinkPopRequest -> TSinkPopResponse
+        SINK_IS_FINISHED = 24; // Header -> TIsFinishedResponse
+        SINK_OUTPUT_TYPE = 25; // Header -> TGetTypeResponse
+        SINK_STATS = 26; // Header -> TGetSinkStatsResponse
+    };
+
+    int32 Version = 1;
+    ECommand Command = 2;
+    uint64 TaskId = 3;
+    uint64 ChannelId = 4;
+}
+
+message TGetVersionResponse {
+    int32 Version = 1;
+}
+
+message TGetFreeSpaceResponse {
+    int64 FreeSpace = 1;
+}
+
+message TPopResponse {
+    bool Result = 1;
+    TData Data = 2;
+    repeated TMetric Metric = 3;
+}
+
+message TSinkPopRequest {
+    uint64 Bytes = 1;
+    bool Raw = 2;
+};
+
+message TSinkPopResponse {
+    uint64 Bytes = 1;
+    TData Data = 2;
+    repeated TMetric Metric = 3;
+    repeated bytes String = 4;
+}
+
+message TIsFinishedResponse {
+    bool Result = 1;
+}
+
+message TRunResponse {
+    int32 Result = 1;
+    repeated TMetric Metric = 2;
+    TRusage Rusage = 3;
+}
+
+message TPrepareResponse {
+    bool Result = 1; // unused
+    repeated TMetric Metric = 2;
+}
+
 message TGetTypeResponse {
-    bytes Result = 1; 
-} 
- 
-message TDropOutputResponse { 
-    uint64 Result = 1; 
-} 
- 
-message TGetStoredBytesResponse { 
-    uint64 Result = 1; 
-} 
- 
-message TGetStatsResponse { 
+    bytes Result = 1;
+}
+
+message TDropOutputResponse {
+    uint64 Result = 1;
+}
+
+message TGetStoredBytesResponse {
+    uint64 Result = 1;
+}
+
+message TGetStatsResponse {
     reserved 1; // NKqpProto.TKqpStatsTask Stats = 1;
     NDqProto.TDqTaskStats Stats = 2;
-} 
- 
-message TGetStatsInputResponse { 
+}
+
+message TGetStatsInputResponse {
     reserved 1; // NKqpProto.TKqpStatsTask.TInputChannelStats Stats = 1;
     NDqProto.TDqInputChannelStats Stats = 2;
-} 
- 
-message TGetStatsOutputResponse { 
+}
+
+message TGetStatsOutputResponse {
     reserved 1; // NKqpProto.TKqpStatsTask.TOutputChannelStats Stats = 1;
     NDqProto.TDqOutputChannelStats Stats = 2;
-} 
- 
+}
+
 message TGetStatsSourceResponse {
     reserved 1; // NKqpProto.TKqpStatsTask.TSourceStats Stats = 1;
     NDqProto.TDqSourceStats Stats = 2;
 }
 
-message TSinkStatsResponse { 
-    NDqProto.TDqSinkStats Stats = 1; 
-} 
- 
-message TPrepareRequest { 
-    NYql.NDqProto.TDqTask Task = 1; 
-} 
+message TSinkStatsResponse {
+    NDqProto.TDqSinkStats Stats = 1;
+}
+
+message TPrepareRequest {
+    NYql.NDqProto.TDqTask Task = 1;
+}
 
 message TSourcePushRequest {
     TData Data = 1;
-    int64 Space = 2; 
-    repeated bytes String = 3; 
-    int32 Chunks = 4; 
+    int64 Space = 2;
+    repeated bytes String = 3;
+    int32 Chunks = 4;
 }
- 
-message TSourcePushChunk { 
-    int64 Parts = 1; 
-    bytes String = 2; 
-} 
- 
-message TSourcePushPart { 
-    bytes String = 1; 
-} 
+
+message TSourcePushChunk {
+    int64 Parts = 1;
+    bytes String = 2;
+}
+
+message TSourcePushPart {
+    bytes String = 1;
+}

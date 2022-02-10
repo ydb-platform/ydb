@@ -204,43 +204,43 @@ NNodes::TMaybeNode<NNodes::TExprBase> DqUnorderedInStage(NNodes::TExprBase node,
     return node;
 }
 
-NNodes::TExprBase DqFlatMapOverExtend(NNodes::TExprBase node, TExprContext& ctx) 
-{ 
-    auto maybeFlatMap = node.Maybe<TCoFlatMapBase>(); 
-    if (!maybeFlatMap) { 
-        return node; 
-    } 
-    auto flatMap = maybeFlatMap.Cast(); 
-    if (!flatMap.Input().Maybe<TCoExtendBase>()) { 
-        return node; 
-    } 
- 
-    bool hasDqConnection = false;; 
-    auto input = flatMap.Input(); 
-    for (auto child: input.Ref().Children()) { 
-        hasDqConnection |= !!TExprBase{child}.Maybe<TDqConnection>(); 
-    } 
- 
-    if (!hasDqConnection) { 
-        return node; 
-    } 
- 
-    const bool ordered = flatMap.Maybe<TCoOrderedFlatMap>() && !input.Maybe<TCoExtend>(); 
-    TExprNode::TListType extendChildren; 
-    for (auto child: input.Ref().Children()) { 
-        extendChildren.push_back(ctx.Builder(child->Pos()) 
-            .Callable(ordered ? TCoOrderedFlatMap::CallableName() : TCoFlatMap::CallableName()) 
-                .Add(0, child) 
-                .Add(1, flatMap.Lambda().Ptr()) 
-            .Seal() 
-            .Build()); 
-    } 
-    TStringBuf extendName = input.Maybe<TCoMerge>() 
-        ? TCoMerge::CallableName() 
-        : (ordered ? TCoOrderedExtend::CallableName() : TCoExtend::CallableName()); 
- 
-    auto res = ctx.NewCallable(node.Pos(), extendName, std::move(extendChildren)); 
-    return TExprBase(res); 
+NNodes::TExprBase DqFlatMapOverExtend(NNodes::TExprBase node, TExprContext& ctx)
+{
+    auto maybeFlatMap = node.Maybe<TCoFlatMapBase>();
+    if (!maybeFlatMap) {
+        return node;
+    }
+    auto flatMap = maybeFlatMap.Cast();
+    if (!flatMap.Input().Maybe<TCoExtendBase>()) {
+        return node;
+    }
+
+    bool hasDqConnection = false;;
+    auto input = flatMap.Input();
+    for (auto child: input.Ref().Children()) {
+        hasDqConnection |= !!TExprBase{child}.Maybe<TDqConnection>();
+    }
+
+    if (!hasDqConnection) {
+        return node;
+    }
+
+    const bool ordered = flatMap.Maybe<TCoOrderedFlatMap>() && !input.Maybe<TCoExtend>();
+    TExprNode::TListType extendChildren;
+    for (auto child: input.Ref().Children()) {
+        extendChildren.push_back(ctx.Builder(child->Pos())
+            .Callable(ordered ? TCoOrderedFlatMap::CallableName() : TCoFlatMap::CallableName())
+                .Add(0, child)
+                .Add(1, flatMap.Lambda().Ptr())
+            .Seal()
+            .Build());
+    }
+    TStringBuf extendName = input.Maybe<TCoMerge>()
+        ? TCoMerge::CallableName()
+        : (ordered ? TCoOrderedExtend::CallableName() : TCoExtend::CallableName());
+
+    auto res = ctx.NewCallable(node.Pos(), extendName, std::move(extendChildren));
+    return TExprBase(res);
 }
- 
-} 
+
+}

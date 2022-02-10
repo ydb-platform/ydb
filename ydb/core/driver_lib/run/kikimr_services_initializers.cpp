@@ -159,8 +159,8 @@
 #include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/core/io_dispatcher.h>
 #include <library/cpp/actors/dnsresolver/dnsresolver.h>
-#include <library/cpp/actors/helpers/selfping_actor.h> 
-#include <library/cpp/actors/http/http_proxy.h> 
+#include <library/cpp/actors/helpers/selfping_actor.h>
+#include <library/cpp/actors/http/http_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect_mon.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
@@ -516,7 +516,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters = appData->Counters;
 
     setup->NodeId = NodeId;
-    setup->MaxActivityType = GetActivityTypeCount(); 
+    setup->MaxActivityType = GetActivityTypeCount();
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, setup->MaxActivityType);
     for (ui32 poolId = 0; poolId != setup->GetExecutorsCount(); ++poolId) {
         const auto &execConfig = systemConfig.GetExecutor(poolId);
@@ -2227,18 +2227,18 @@ void TSchemeBoardMonitoringInitializer::InitializeServices(TActorSystemSetup* se
         TActorSetupCmd(CreateSchemeBoardMonitoring(), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-TYqlLogsInitializer::TYqlLogsInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) 
-{ 
-} 
- 
-void TYqlLogsInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData) { 
-    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>( 
-        MakeYqlLogsUpdaterId(), 
-        TActorSetupCmd(CreateYqlLogsUpdater(Config.GetLogConfig()), TMailboxType::HTSwap, appData->UserPoolId) 
-    )); 
-} 
- 
+TYqlLogsInitializer::TYqlLogsInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TYqlLogsInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData) {
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        MakeYqlLogsUpdaterId(),
+        TActorSetupCmd(CreateYqlLogsUpdater(Config.GetLogConfig()), TMailboxType::HTSwap, appData->UserPoolId)
+    ));
+}
+
 THealthCheckInitializer::THealthCheckInitializer(const TKikimrRunConfig& runConfig)
     : IKikimrServicesInitializer(runConfig)
 {

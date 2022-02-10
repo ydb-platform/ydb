@@ -24,7 +24,7 @@ constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
 class TColumnShardScan : public TActorBootstrapped<TColumnShardScan>, NArrow::IRowWriter {
 public:
-    static constexpr auto ActorActivityType() { 
+    static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_OLAP_SCAN;
     }
 

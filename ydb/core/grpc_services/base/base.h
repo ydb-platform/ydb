@@ -137,7 +137,7 @@ struct TRpcServices {
         EvLongTxRead,
         EvExplainYqlScript,
         EvImportData,
-        EvAnalyticsReserved, 
+        EvAnalyticsReserved,
         EvDataStreamsCreateStream,
         EvDataStreamsDeleteStream,
         EvDataStreamsDescribeStream,

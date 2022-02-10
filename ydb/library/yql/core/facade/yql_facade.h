@@ -332,8 +332,8 @@ private:
     TString GetSessionId() const;
     TString TakeSessionId();
 
-    NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransformWithFallback(bool applyAsyncChanges); 
- 
+    NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransformWithFallback(bool applyAsyncChanges);
+
 private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
@@ -360,7 +360,7 @@ private:
     TAutoPtr<TExprContext> ExprCtx_;
     const IModuleResolver::TPtr Modules_;
     TExprNode::TPtr ExprRoot_;
-    TExprNode::TPtr SavedExprRoot_; 
+    TExprNode::TPtr SavedExprRoot_;
     mutable TAdaptiveLock SessionIdLock_;
     TString SessionId_;
     TTypeAnnotationContextPtr TypeCtx_;

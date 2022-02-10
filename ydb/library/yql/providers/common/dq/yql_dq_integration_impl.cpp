@@ -8,16 +8,16 @@ ui64 TDqIntegrationBase::Partition(const TDqSettings& config, size_t maxPartitio
     Y_UNUSED(maxPartitions);
     Y_UNUSED(node);
     Y_UNUSED(partitions);
-    Y_UNUSED(clusterName); 
-    Y_UNUSED(ctx); 
+    Y_UNUSED(clusterName);
+    Y_UNUSED(ctx);
     Y_UNUSED(canFallback);
-    return 0; 
+    return 0;
 }
 
 TMaybe<ui64> TDqIntegrationBase::CanRead(const TDqSettings&, const TExprNode& read, TExprContext& ctx, bool skipIssues) {
     Y_UNUSED(read);
-    Y_UNUSED(ctx); 
-    Y_UNUSED(skipIssues); 
+    Y_UNUSED(ctx);
+    Y_UNUSED(skipIssues);
     return Nothing();
 }
 

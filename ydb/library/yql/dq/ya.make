@@ -1,5 +1,5 @@
 RECURSE(
-    actors 
+    actors
     common
     comp_nodes
     expr_nodes

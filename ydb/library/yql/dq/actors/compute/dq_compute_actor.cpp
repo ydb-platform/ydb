@@ -1,12 +1,12 @@
-#include "dq_compute_actor_impl.h" 
-#include "dq_compute_actor.h" 
+#include "dq_compute_actor_impl.h"
+#include "dq_compute_actor.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 
 namespace NYql {
 namespace NDq {
 
-using namespace NActors; 
+using namespace NActors;
 
 namespace {
 TDqExecutionSettings ExecutionSettings;
@@ -37,8 +37,8 @@ public:
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         const TTaskRunnerFactory& taskRunnerFactory)
         : TBase(executerId, txId, std::move(task), std::move(sourceActorFactory), std::move(sinkActorFactory), settings, memoryLimits)
-        , TaskRunnerFactory(taskRunnerFactory) 
-    {} 
+        , TaskRunnerFactory(taskRunnerFactory)
+    {}
 
     void DoBootstrap() {
         const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
@@ -57,22 +57,22 @@ public:
 
         ContinueExecute();
     }
- 
+
     void FillExtraStats(NDqProto::TDqComputeActorStats* /* dst */, bool /* last */) {
     }
 
-private: 
-    const TTaskRunnerFactory TaskRunnerFactory; 
+private:
+    const TTaskRunnerFactory TaskRunnerFactory;
 };
 
 
-IActor* CreateDqComputeActor(const TActorId& executerId, const TTxId& txId, NYql::NDqProto::TDqTask&& task, 
+IActor* CreateDqComputeActor(const TActorId& executerId, const TTxId& txId, NYql::NDqProto::TDqTask&& task,
     IDqSourceActorFactory::TPtr sourceActorFactory, IDqSinkActorFactory::TPtr sinkActorFactory,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, const TTaskRunnerFactory& taskRunnerFactory)
-{ 
+{
     return new TDqComputeActor(executerId, txId, std::move(task), std::move(sourceActorFactory),
         std::move(sinkActorFactory), settings, memoryLimits, taskRunnerFactory);
-} 
- 
+}
+
 } // namespace NDq
 } // namespace NYql

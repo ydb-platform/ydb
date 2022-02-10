@@ -472,13 +472,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TYqlLogsInitializer : public IKikimrServicesInitializer { 
-public: 
-    TYqlLogsInitializer(const TKikimrRunConfig& runConfig); 
- 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
-}; 
- 
+class TYqlLogsInitializer : public IKikimrServicesInitializer {
+public:
+    TYqlLogsInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class THealthCheckInitializer : public IKikimrServicesInitializer {
 public:
     THealthCheckInitializer(const TKikimrRunConfig& runConfig);

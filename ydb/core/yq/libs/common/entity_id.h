@@ -1,10 +1,10 @@
-#pragma once 
- 
-#include <util/generic/string.h> 
+#pragma once
+
+#include <util/generic/string.h>
 #include <util/datetime/base.h>
- 
+
 namespace NYq {
- 
+
 enum class EEntityType : char {
     UNDEFINED = 'u',
     QUERY = 'q',
@@ -14,7 +14,7 @@ enum class EEntityType : char {
     BINDING = 'b',
     CHECKPOINT_GRAPH_DESCRIPTION = 'g',
 };
- 
+
 TString GetEntityIdAsString(const TString& prefix, EEntityType type);
 TString GetEntityIdAsString(const TString& prefix, EEntityType type, TInstant now, ui32 rnd);
 

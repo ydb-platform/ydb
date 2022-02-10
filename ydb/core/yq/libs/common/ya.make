@@ -4,7 +4,7 @@ LIBRARY()
 
 SRCS(
     database_token_builder.cpp
-    entity_id.cpp 
+    entity_id.cpp
     rows_proto_splitter.cpp
 )
 
@@ -19,8 +19,8 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-END() 
- 
+END()
+
 RECURSE_FOR_TESTS(
     ut
 )

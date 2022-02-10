@@ -9,7 +9,7 @@ namespace NActors {
 
 class TDestructActor: public TActor<TDestructActor> {
 public:
-    static constexpr auto ActorActivityType() { 
+    static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::INTERCONNECT_DESTRUCT_ACTOR;
     }
 

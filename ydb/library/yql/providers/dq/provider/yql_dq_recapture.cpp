@@ -13,8 +13,8 @@
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 
-#include <util/generic/scope.h> 
- 
+#include <util/generic/scope.h>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -27,11 +27,11 @@ const THashSet<TStringBuf> UNSUPPORTED_CALLABLE = { TCoForwardList::CallableName
 
 }
 
-namespace NDq { 
-    bool CheckJoinColumns(const TExprBase& node); 
-    bool CheckJoinLinkSettings(const TExprBase& node); 
-} // namespace NDq 
- 
+namespace NDq {
+    bool CheckJoinColumns(const TExprBase& node);
+    bool CheckJoinLinkSettings(const TExprBase& node);
+} // namespace NDq
+
 class TDqsRecaptureTransformer : public TSyncTransformerBase {
 public:
     TDqsRecaptureTransformer(TDqStatePtr state)
@@ -45,58 +45,58 @@ public:
             return TStatus::Ok;
         }
 
-        Y_SCOPE_EXIT(&) { 
-            FlushStatistics(); 
-        }; 
- 
-        if (State_->ExternalUser) { 
-            Statistics_["DqExternalUser"]++; 
-            return TStatus::Ok; 
-        } 
- 
-        if (State_->TypeCtx->ForceDq) { 
-            Statistics_["DqForce"]++; 
-        } 
- 
+        Y_SCOPE_EXIT(&) {
+            FlushStatistics();
+        };
+
+        if (State_->ExternalUser) {
+            Statistics_["DqExternalUser"]++;
+            return TStatus::Ok;
+        }
+
+        if (State_->TypeCtx->ForceDq) {
+            Statistics_["DqForce"]++;
+        }
+
         if (!State_->TypeCtx->ForceDq) {
-            if (!State_->Settings->AnalyzeQuery.Get().GetOrElse(false)) { 
-                Statistics_["DqAnalyzerOff"]++; 
-            } 
- 
-            if (State_->TypeCtx->PureResultDataSource != DqProviderName) { 
-                Statistics_["DqPureResultDataSourceMismatch"]++; 
-            } 
- 
+            if (!State_->Settings->AnalyzeQuery.Get().GetOrElse(false)) {
+                Statistics_["DqAnalyzerOff"]++;
+            }
+
+            if (State_->TypeCtx->PureResultDataSource != DqProviderName) {
+                Statistics_["DqPureResultDataSourceMismatch"]++;
+            }
+
             if (State_->TypeCtx->PureResultDataSource != DqProviderName || !State_->Settings->AnalyzeQuery.Get().GetOrElse(false)) {
                 return TStatus::Ok;
             }
 
-            Statistics_["DqAnalyzerOn"]++; 
- 
+            Statistics_["DqAnalyzerOn"]++;
+
             ui64 dataSize = 0;
             bool good = true;
-            bool hasJoin = false; 
+            bool hasJoin = false;
             TNodeSet visited;
-            Scan(*input, ctx, good, dataSize, visited, hasJoin); 
+            Scan(*input, ctx, good, dataSize, visited, hasJoin);
 
-            if (good) { 
-                Statistics_["DqAnalyzerOk"]++; 
-            } else { 
-                Statistics_["DqAnalyzerFail"] ++; 
-            } 
- 
-            if ((hasJoin && dataSize > State_->Settings->MaxDataSizePerQuery.Get().GetOrElse(10_GB))) { 
-                Statistics_["DqAnalyzerBigJoin"]++; 
-            } 
- 
-            if (!good || (hasJoin && dataSize > State_->Settings->MaxDataSizePerQuery.Get().GetOrElse(10_GB))) { 
-                YQL_LOG(DEBUG) << "good: " << good << " hasJoin: " << hasJoin << " dataSize: " << dataSize; 
+            if (good) {
+                Statistics_["DqAnalyzerOk"]++;
+            } else {
+                Statistics_["DqAnalyzerFail"] ++;
+            }
+
+            if ((hasJoin && dataSize > State_->Settings->MaxDataSizePerQuery.Get().GetOrElse(10_GB))) {
+                Statistics_["DqAnalyzerBigJoin"]++;
+            }
+
+            if (!good || (hasJoin && dataSize > State_->Settings->MaxDataSizePerQuery.Get().GetOrElse(10_GB))) {
+                YQL_LOG(DEBUG) << "good: " << good << " hasJoin: " << hasJoin << " dataSize: " << dataSize;
                 return TStatus::Ok;
             }
         }
 
-        State_->TypeCtx->DqFallbackPolicy = State_->Settings->FallbackPolicy.Get().GetOrElse("default"); 
- 
+        State_->TypeCtx->DqFallbackPolicy = State_->Settings->FallbackPolicy.Get().GetOrElse("default");
+
         auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) {
             if (auto maybeRead = TMaybeNode<TCoRight>(node).Input()) {
                 if (maybeRead.Raw()->ChildrenSize() > 1 && TCoDataSource::Match(maybeRead.Raw()->Child(1))) {
@@ -116,8 +116,8 @@ public:
         }, ctx, TOptimizeExprSettings{State_->TypeCtx});
 
         if (input != output) {
-            // TODO: Add before/after recapture transformers 
-            State_->TypeCtx->DqCaptured = true; 
+            // TODO: Add before/after recapture transformers
+            State_->TypeCtx->DqCaptured = true;
             // TODO: drop this after implementing DQS ConstraintTransformer
             State_->TypeCtx->ExpectedConstraints.clear();
         }
@@ -128,27 +128,27 @@ public:
     }
 
 private:
-    void AddInfo(TExprContext& ctx, const TString& message) const { 
-        YQL_LOG(DEBUG) << message; 
-        TIssue info("DQ cannot execute the query. Cause: " + message); 
-        info.Severity = TSeverityIds::S_INFO; 
+    void AddInfo(TExprContext& ctx, const TString& message) const {
+        YQL_LOG(DEBUG) << message;
+        TIssue info("DQ cannot execute the query. Cause: " + message);
+        info.Severity = TSeverityIds::S_INFO;
         ctx.IssueManager.RaiseIssue(info);
-    } 
- 
+    }
+
     void Scan(const TExprNode& node, TExprContext& ctx, bool& good, ui64& dataSize, TNodeSet& visited, bool& hasJoin) const {
         if (!visited.insert(&node).second) {
             return;
         }
 
-        TExprBase expr(&node); 
-        if (TMaybeNode<TCoEquiJoin>(&node)) { 
-            hasJoin = true; 
-        } 
- 
+        TExprBase expr(&node);
+        if (TMaybeNode<TCoEquiJoin>(&node)) {
+            hasJoin = true;
+        }
+
         if (TCoCommit::Match(&node)) {
             for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
                 if (i != TCoCommit::idx_DataSink) {
-                    Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin); 
+                    Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin);
                 }
             }
         } else if (node.IsCallable(UNSUPPORTED_CALLABLE)) {
@@ -169,12 +169,12 @@ private:
                 AddInfo(ctx, TStringBuilder() << "sink '" << datasink.Cast().Value() << "' is not supported by DQ");
                 good = false;
             }
-        } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinColumns(expr)) { 
-            AddInfo(ctx, TStringBuilder() << "unsupported join column"); 
-            good = false; 
-        } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinLinkSettings(expr)) { 
-            AddInfo(ctx, TStringBuilder() << "unsupported join any"); 
-            good = false; 
+        } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinColumns(expr)) {
+            AddInfo(ctx, TStringBuilder() << "unsupported join column");
+            good = false;
+        } else if (TMaybeNode<TCoEquiJoin>(&node) && !NDq::CheckJoinLinkSettings(expr)) {
+            AddInfo(ctx, TStringBuilder() << "unsupported join any");
+            good = false;
         } else if (node.ChildrenSize() > 1 && TCoDataSource::Match(node.Child(1))) {
             auto dataSourceName = node.Child(1)->Child(0)->Content();
             if (dataSourceName != DqProviderName && !node.IsCallable(ConfigureName)) {
@@ -193,7 +193,7 @@ private:
             }
 
             if (good) {
-                Scan(node.Head(), ctx,good, dataSize, visited, hasJoin); 
+                Scan(node.Head(), ctx,good, dataSize, visited, hasJoin);
             }
         } else if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World
             && !TCoCommit::Match(&node)
@@ -214,7 +214,7 @@ private:
             }
             if (good) {
                 for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
-                    Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin); 
+                    Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin);
                 }
             }
         }
@@ -231,29 +231,29 @@ private:
         }
         else {
             for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
-                Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin); 
+                Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin);
             }
         }
     }
 
 private:
     TDqStatePtr State_;
- 
-    THashMap<TString, int> Statistics_; 
- 
-    void FlushStatistics() { 
-        TOperationStatistics statistics; 
-        for (const auto& [k, v] : Statistics_) { 
-            if (v == 1) { 
-                statistics.Entries.push_back(TOperationStatistics::TEntry(k, 0, 0, 0, 0, 1)); 
-            } 
-        } 
- 
-        TGuard<TMutex> lock(State_->Mutex); 
-        if (!statistics.Entries.empty()) { 
-            State_->Statistics[State_->MetricId++] = statistics; 
-        } 
-    } 
+
+    THashMap<TString, int> Statistics_;
+
+    void FlushStatistics() {
+        TOperationStatistics statistics;
+        for (const auto& [k, v] : Statistics_) {
+            if (v == 1) {
+                statistics.Entries.push_back(TOperationStatistics::TEntry(k, 0, 0, 0, 0, 1));
+            }
+        }
+
+        TGuard<TMutex> lock(State_->Mutex);
+        if (!statistics.Entries.empty()) {
+            State_->Statistics[State_->MetricId++] = statistics;
+        }
+    }
 };
 
 THolder<IGraphTransformer> CreateDqsRecaptureTransformer(TDqStatePtr state) {

@@ -13,102 +13,102 @@ import "library/cpp/actors/protos/actors.proto";
 
 message TAllocateWorkersRequest {
     uint32 Count = 1;
-    // Yql.DqsProto.ExecuteQueryRequest Request = 2; // unused 
- 
-    bool IsForwarded = 3; 
-    uint64 ResourceId = 4; // debug resource allocation on worker nodes 
- 
-    repeated Yql.DqsProto.TFile Files = 5; // deprecated 
- 
-    string TraceId = 6; 
- 
-    // repeated Yql.DqsProto.DatabaseDescription Databases = 7; // unused 
+    // Yql.DqsProto.ExecuteQueryRequest Request = 2; // unused
+
+    bool IsForwarded = 3;
+    uint64 ResourceId = 4; // debug resource allocation on worker nodes
+
+    repeated Yql.DqsProto.TFile Files = 5; // deprecated
+
+    string TraceId = 6;
+
+    // repeated Yql.DqsProto.DatabaseDescription Databases = 7; // unused
 
     string User = 8;
 
-    repeated Yql.DqsProto.TWorkerFilter WorkerFilterPerTask = 9; 
- 
-    uint32 WorkersCount = 10; 
- 
-    bool CreateComputeActor = 11;    // false 
-    string ComputeActorType = 15; 
-    repeated NYql.NDqProto.TDqTask Task = 12; // used for compute actor 
-    NActorsProto.TActorId ResultActorId = 13; // used for compute actor 
+    repeated Yql.DqsProto.TWorkerFilter WorkerFilterPerTask = 9;
 
-    uint64 FreeWorkerAfterMs = 14; 
+    uint32 WorkersCount = 10;
+
+    bool CreateComputeActor = 11;    // false
+    string ComputeActorType = 15;
+    repeated NYql.NDqProto.TDqTask Task = 12; // used for compute actor
+    NActorsProto.TActorId ResultActorId = 13; // used for compute actor
+
+    uint64 FreeWorkerAfterMs = 14;
 }
 
 message TWorkerGroup {
-    uint64 ResourceId = 1; 
+    uint64 ResourceId = 1;
     repeated NActorsProto.TActorId WorkerActor = 2;
-    repeated Yql.DqsProto.TWorkerInfo Worker = 3; 
+    repeated Yql.DqsProto.TWorkerInfo Worker = 3;
 }
 
-enum EErrorCode { 
-    EUNKNOWN = 0; 
-    EMISMATCH = 1; 
-    ETERMINATING = 2; 
-    EFOLLOWER = 3; 
-    EINITIALIZATION = 4; 
-} 
- 
-message TDqError { 
-    string Message = 1; 
-    EErrorCode ErrorCode = 2; 
+enum EErrorCode {
+    EUNKNOWN = 0;
+    EMISMATCH = 1;
+    ETERMINATING = 2;
+    EFOLLOWER = 3;
+    EINITIALIZATION = 4;
+}
+
+message TDqError {
+    string Message = 1;
+    EErrorCode ErrorCode = 2;
 }
 
 message TAllocateWorkersResponse {
     oneof TResponse {
-        TWorkerGroup Workers = 1; // contains actorIds 
-        TDqError Error = 2; 
-        TWorkerGroup Nodes = 3; // contains nodeIds 
-    }; 
- 
-    repeated TMetric Metric = 4; 
+        TWorkerGroup Workers = 1; // contains actorIds
+        TDqError Error = 2;
+        TWorkerGroup Nodes = 3; // contains nodeIds
+    };
+
+    repeated TMetric Metric = 4;
 }
 
 message TFreeWorkersNotify {
-    uint64 ResourceId = 1; 
-    bool IsForwarded = 2; 
- 
-    string TraceId = 6; 
-    // repeated TWorker.TGuid FailedWorker = 7; // reserved 
-    repeated string FailedWorkerGuid = 8; 
+    uint64 ResourceId = 1;
+    bool IsForwarded = 2;
+
+    string TraceId = 6;
+    // repeated TWorker.TGuid FailedWorker = 7; // reserved
+    repeated string FailedWorkerGuid = 8;
 }
 
-message TEvRegisterNode { 
-    Yql.DqsProto.RegisterNodeRequest Request = 1; 
-    bool IsForwarded = 4; 
-} 
- 
-message TEvRegisterNodeResponse { 
-    Yql.DqsProto.RegisterNodeResponse Response = 1; 
-} 
- 
-message TEvJobStop { 
-    Yql.DqsProto.JobStopRequest Request = 1; 
-    bool IsForwarded = 2; 
-} 
- 
-message TEvJobStopResponse { 
-} 
- 
-message TEvClusterStatus { 
-    bool IsForwarded = 4; 
-} 
- 
-message TEvClusterStatusResponse { 
-    Yql.DqsProto.ClusterStatusResponse Response = 1; 
-} 
- 
-message TEvOperationStop { 
-    Yql.DqsProto.OperationStopRequest Request = 1; 
-    bool IsForwarded = 2; 
-} 
- 
-message TEvOperationStopResponse { 
-} 
- 
+message TEvRegisterNode {
+    Yql.DqsProto.RegisterNodeRequest Request = 1;
+    bool IsForwarded = 4;
+}
+
+message TEvRegisterNodeResponse {
+    Yql.DqsProto.RegisterNodeResponse Response = 1;
+}
+
+message TEvJobStop {
+    Yql.DqsProto.JobStopRequest Request = 1;
+    bool IsForwarded = 2;
+}
+
+message TEvJobStopResponse {
+}
+
+message TEvClusterStatus {
+    bool IsForwarded = 4;
+}
+
+message TEvClusterStatusResponse {
+    Yql.DqsProto.ClusterStatusResponse Response = 1;
+}
+
+message TEvOperationStop {
+    Yql.DqsProto.OperationStopRequest Request = 1;
+    bool IsForwarded = 2;
+}
+
+message TEvOperationStopResponse {
+}
+
 message TEvQueryStatus {
   Yql.DqsProto.QueryStatusRequest Request = 1;
   bool IsForwarded = 2;
@@ -127,13 +127,13 @@ message TEvIsReadyResponse {
     bool IsReady = 1;
 }
 
-message TEvRoutesRequest { 
-} 
- 
-message TEvRoutesResponse { 
-    Yql.DqsProto.RoutesResponse Response = 1; 
-} 
- 
+message TEvRoutesRequest {
+}
+
+message TEvRoutesResponse {
+    Yql.DqsProto.RoutesResponse Response = 1;
+}
+
 message TPullRequest {
     uint32 RowThreshold = 1;
 }
@@ -143,68 +143,68 @@ enum EPullResponseType {
     CONTINUE = 1;
     FINISH = 2;
     YIELD = 3;
-    ERROR = 4; 
+    ERROR = 4;
 }
 
-message TMetric { 
-    string Name = 1; 
-    int64 Sum = 2; 
-    int64 Max = 3; 
-    int64 Min = 4; 
-    int64 Avg = 5; 
-    int64 Count = 6; 
-} 
- 
-message TRusage { 
-    int64 Utime = 1; 
-    int64 Stime = 2; 
-    int64 MajorPageFaults = 3; 
-} 
- 
+message TMetric {
+    string Name = 1;
+    int64 Sum = 2;
+    int64 Max = 3;
+    int64 Min = 4;
+    int64 Avg = 5;
+    int64 Count = 6;
+}
+
+message TRusage {
+    int64 Utime = 1;
+    int64 Stime = 2;
+    int64 MajorPageFaults = 3;
+}
+
 message TPullResponse {
     EPullResponseType ResponseType = 1;
     TData Data = 2;
-    repeated TMetric Metric = 3; 
-    string ErrorMessage = 4; 
+    repeated TMetric Metric = 3;
+    string ErrorMessage = 4;
 }
 
 message TQueryResponse {
     Ydb.ResultSet ResultSet = 1;
     repeated Ydb.Issue.IssueMessage Issues = 2;
-    bytes Yson = 3; 
-    bool Retriable = 4; 
-    bool NeedFallback = 6; 
-    repeated TMetric Metric = 5; 
-    bool Truncated = 7; 
+    bytes Yson = 3;
+    bool Retriable = 4;
+    bool NeedFallback = 6;
+    repeated TMetric Metric = 5;
+    bool Truncated = 7;
     uint64 RowsCount = 8;
 }
 
-message TDqFailure { 
+message TDqFailure {
     repeated Ydb.Issue.IssueMessage Issues = 4;
-    repeated TMetric Metric = 5; 
-    bool Retriable = 6; 
-    bool NeedFallback = 7; 
-}; 
- 
-message TGraphRequest { 
-    Yql.DqsProto.ExecuteGraphRequest Request = 1; 
+    repeated TMetric Metric = 5;
+    bool Retriable = 6;
+    bool NeedFallback = 7;
+};
+
+message TGraphRequest {
+    Yql.DqsProto.ExecuteGraphRequest Request = 1;
     NActorsProto.TActorId ControlId = 2;
     NActorsProto.TActorId ResultId = 3;
     NActorsProto.TActorId CheckPointCoordinatorId = 4; // may be empty
-} 
- 
-message TDqTaskRequest { 
-    NYql.NDqProto.TDqTask Task = 1; 
-} 
- 
+}
+
+message TDqTaskRequest {
+    NYql.NDqProto.TDqTask Task = 1;
+}
+
 message TReadyState {
     NActorsProto.TActorId SourceId = 1;
     string ResultType = 2;
-    repeated TMetric Metric = 3; 
-    repeated NYql.NDqProto.TDqTask Task = 4; // used for compute actor 
-    repeated NActorsProto.TActorId ActorId = 5; // used for compute actor 
+    repeated TMetric Metric = 3;
+    repeated NYql.NDqProto.TDqTask Task = 4; // used for compute actor
+    repeated NActorsProto.TActorId ActorId = 5; // used for compute actor
 }
- 
+
 enum EGraphExecutionEventType {
     SYNC = 0;
     START = 1;
@@ -216,7 +216,7 @@ enum EGraphExecutionEventType {
 message TGraphExecutionEvent {
     EGraphExecutionEventType EventType = 1;
     google.protobuf.Any Message = 2;
-    optional string ErrorMessage = 3; 
+    optional string ErrorMessage = 3;
 
     message TMap {
         map<string, bytes> Data = 1;
@@ -240,10 +240,10 @@ message TFullResultWriterStatusResponse {
     optional string ErrorMessage = 2;
 }
 
-message TDqTaskPrepareResult { 
-    bool Result = 1; 
-    repeated TMetric Metric = 2; 
-} 
+message TDqTaskPrepareResult {
+    bool Result = 1;
+    repeated TMetric Metric = 2;
+}
 
 message TEvGetMasterRequest {
     bool IsForwarded = 1;
@@ -260,11 +260,11 @@ message TEvConfigureFailureInjectorRequest {
 message TEvConfigureFailureInjectorRequestResponse {
     Yql.DqsProto.ConfigureFailureInjectorResponse Response = 1;
 }
- 
-message TPingRequest { 
- 
-} 
- 
-message TPingResponse { 
- 
-} 
+
+message TPingRequest {
+
+}
+
+message TPingResponse {
+
+}

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "events.h"
-#include "actor_helpers.h" 
+#include "actor_helpers.h"
 
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
@@ -14,18 +14,18 @@
 #include <library/cpp/actors/core/actor.h>
 
 #include <ydb/library/yql/providers/dq/counters/counters.h>
- 
-namespace NYql { 
-    struct TWorkerRuntimeData; 
-} 
- 
+
+namespace NYql {
+    struct TWorkerRuntimeData;
+}
+
 namespace NYql::NDqs {
 
-    NActors::IActor* CreateWorkerActor( 
-        TWorkerRuntimeData* runtimeData, 
-        const TString& traceId, 
-        const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory, 
-        const NDq::IDqSourceActorFactory::TPtr& sourceActorFactory, 
-        const NDq::IDqSinkActorFactory::TPtr& sinkActorFactory); 
+    NActors::IActor* CreateWorkerActor(
+        TWorkerRuntimeData* runtimeData,
+        const TString& traceId,
+        const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
+        const NDq::IDqSourceActorFactory::TPtr& sourceActorFactory,
+        const NDq::IDqSinkActorFactory::TPtr& sinkActorFactory);
 
-} // namespace NYql::NDqs 
+} // namespace NYql::NDqs

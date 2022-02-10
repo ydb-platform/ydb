@@ -50,14 +50,14 @@ static TTypeParser::ETypeKind GetKind(const Ydb::Type& type) {
             return ETypeKind::Variant;
         case Ydb::Type::kVoidType:
             return ETypeKind::Void;
-        case Ydb::Type::kNullType: 
-            return ETypeKind::Null; 
-        case Ydb::Type::kEmptyListType: 
-            return ETypeKind::EmptyList; 
-        case Ydb::Type::kEmptyDictType: 
-            return ETypeKind::EmptyDict; 
-        case Ydb::Type::kTaggedType: 
-            return ETypeKind::Tagged; 
+        case Ydb::Type::kNullType:
+            return ETypeKind::Null;
+        case Ydb::Type::kEmptyListType:
+            return ETypeKind::EmptyList;
+        case Ydb::Type::kEmptyDictType:
+            return ETypeKind::EmptyDict;
+        case Ydb::Type::kTaggedType:
+            return ETypeKind::Tagged;
         default:
             break;
     }
@@ -203,11 +203,11 @@ public:
         ForwardStep();
     }
 
-    const TString& GetTag() { 
-        CheckPreviousKind(ETypeKind::Tagged, "GetTag"); 
-        return GetProto(1).tagged_type().tag(); 
-    } 
- 
+    const TString& GetTag() {
+        CheckPreviousKind(ETypeKind::Tagged, "GetTag");
+        return GetProto(1).tagged_type().tag();
+    }
+
     bool ForwardStep() {
         auto& idx = Path_.back().Idx;
         const google::protobuf::Message* nextPtr = nullptr;
@@ -265,33 +265,33 @@ public:
                 break;
             }
 
-            case ETypeKind::Variant: { 
-                const Ydb::VariantType& variantType = GetProto().variant_type(); 
-                auto wrappedVariant = std::make_unique<Ydb::Type>(); 
-                switch (variantType.type_case()) { 
-                    case Ydb::VariantType::kTupleItems: { 
-                        *wrappedVariant->mutable_tuple_type() = variantType.tuple_items(); 
-                        break; 
-                    } 
-                    case Ydb::VariantType::kStructItems: { 
-                        *wrappedVariant->mutable_struct_type() = variantType.struct_items(); 
-                        break; 
-                    } 
-                    default: { 
-                        FatalError(TStringBuilder() << "Unexpected variant type kind: " << variantType); 
-                        break; 
-                    } 
-                } 
-                WrappedVariants_.emplace_back(std::move(wrappedVariant)); 
-                nextPtr = WrappedVariants_.back().get(); 
-                break; 
-            } 
- 
-            case ETypeKind::Tagged: { 
-                nextPtr = &GetProto().tagged_type().type(); 
-                break; 
-            } 
- 
+            case ETypeKind::Variant: {
+                const Ydb::VariantType& variantType = GetProto().variant_type();
+                auto wrappedVariant = std::make_unique<Ydb::Type>();
+                switch (variantType.type_case()) {
+                    case Ydb::VariantType::kTupleItems: {
+                        *wrappedVariant->mutable_tuple_type() = variantType.tuple_items();
+                        break;
+                    }
+                    case Ydb::VariantType::kStructItems: {
+                        *wrappedVariant->mutable_struct_type() = variantType.struct_items();
+                        break;
+                    }
+                    default: {
+                        FatalError(TStringBuilder() << "Unexpected variant type kind: " << variantType);
+                        break;
+                    }
+                }
+                WrappedVariants_.emplace_back(std::move(wrappedVariant));
+                nextPtr = WrappedVariants_.back().get();
+                break;
+            }
+
+            case ETypeKind::Tagged: {
+                nextPtr = &GetProto().tagged_type().type();
+                break;
+            }
+
             default:
                 FatalError(TStringBuilder() << "Unexpected type kind: " << GetKind());
                 break;
@@ -336,7 +336,7 @@ private:
 private:
     TType Type_;
     TStackVec<TProtoPosition, 8> Path_;
-    TStackVec<std::unique_ptr<Ydb::Type>, 8> WrappedVariants_; 
+    TStackVec<std::unique_ptr<Ydb::Type>, 8> WrappedVariants_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -423,26 +423,26 @@ void TTypeParser::OpenVariant(size_t index) {
     Impl_->OpenVariant(index);
 }
 
-void TTypeParser::OpenVariant() { 
-    Impl_->Open<ETypeKind::Variant>(); 
-} 
- 
+void TTypeParser::OpenVariant() {
+    Impl_->Open<ETypeKind::Variant>();
+}
+
 void TTypeParser::CloseVariant() {
     Impl_->Close<ETypeKind::Variant>();
 }
 
-void TTypeParser::OpenTagged() { 
-    Impl_->Open<ETypeKind::Tagged>(); 
-} 
- 
-const TString& TTypeParser::GetTag() { 
-    return Impl_->GetTag(); 
-} 
- 
-void TTypeParser::CloseTagged() { 
-    Impl_->Close<ETypeKind::Tagged>(); 
-} 
- 
+void TTypeParser::OpenTagged() {
+    Impl_->Open<ETypeKind::Tagged>();
+}
+
+const TString& TTypeParser::GetTag() {
+    return Impl_->GetTag();
+}
+
+void TTypeParser::CloseTagged() {
+    Impl_->Close<ETypeKind::Tagged>();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void FormatTypeInternal(TTypeParser& parser, IOutputStream& out) {
@@ -1218,18 +1218,18 @@ public:
         TypeParser_.CloseVariant();
     }
 
-    void OpenTagged() { 
-        TypeParser_.OpenTagged(); 
-    } 
- 
-    const TString& GetTag() { 
-        return TypeParser_.GetTag(); 
-    } 
- 
-    void CloseTagged() { 
-        TypeParser_.CloseTagged(); 
-    } 
- 
+    void OpenTagged() {
+        TypeParser_.OpenTagged();
+    }
+
+    const TString& GetTag() {
+        return TypeParser_.GetTag();
+    }
+
+    void CloseTagged() {
+        TypeParser_.CloseTagged();
+    }
+
 private:
     const TProtoPosition& GetPathBack() const {
         if (Path_.empty()) {
@@ -1749,18 +1749,18 @@ void TValueParser::CloseVariant() {
     Impl_->CloseVariant();
 }
 
-void TValueParser::OpenTagged() { 
-    Impl_->OpenTagged(); 
-} 
- 
-const TString& TValueParser::GetTag() const { 
-    return Impl_->GetTag(); 
-} 
- 
-void TValueParser::CloseTagged() { 
-    Impl_->CloseTagged(); 
-} 
- 
+void TValueParser::OpenTagged() {
+    Impl_->OpenTagged();
+}
+
+const TString& TValueParser::GetTag() const {
+    return Impl_->GetTag();
+}
+
+void TValueParser::CloseTagged() {
+    Impl_->CloseTagged();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TValueBuilderImpl {

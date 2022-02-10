@@ -226,13 +226,13 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
             return;
         }
 
-    case TType::EKind::Tagged: 
-        { 
-            auto underlyingType = AS_TYPE(TTaggedType, type)->GetBaseType(); 
-            WriteYsonValueImpl(writer, value, underlyingType, structPositions); 
-            return; 
-        } 
- 
+    case TType::EKind::Tagged:
+        {
+            auto underlyingType = AS_TYPE(TTaggedType, type)->GetBaseType();
+            WriteYsonValueImpl(writer, value, underlyingType, structPositions);
+            return;
+        }
+
     default:
         YQL_ENSURE(false, "unknown type " << type->GetKindAsStr());
     }

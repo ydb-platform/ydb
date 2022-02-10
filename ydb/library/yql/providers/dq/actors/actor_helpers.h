@@ -1,15 +1,15 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/events.h>
-#include <library/cpp/actors/core/interconnect.h> 
-#include <library/cpp/actors/core/hfunc.h> 
+#include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/actors/core/hfunc.h>
 #include <ydb/library/yql/utils/actors/rich_actor.h>
- 
+
 #include <ydb/library/yql/utils/log/log.h>
 
-namespace NYql { 
- 
+namespace NYql {
+
 enum EExecutorPoolType {
     Main,
     FullResultWriter,
@@ -18,67 +18,67 @@ enum EExecutorPoolType {
 };
 
 template <typename EventType>
-struct TRichActorFutureCallback : public TRichActor<TRichActorFutureCallback<EventType>> { 
-    using TCallback = std::function<void(TAutoPtr<NActors::TEventHandle<EventType>>&)>; 
-    using TFailure = std::function<void(void)>; 
-    using TBase = TRichActor<TRichActorFutureCallback<EventType>>; 
- 
+struct TRichActorFutureCallback : public TRichActor<TRichActorFutureCallback<EventType>> {
+    using TCallback = std::function<void(TAutoPtr<NActors::TEventHandle<EventType>>&)>;
+    using TFailure = std::function<void(void)>;
+    using TBase = TRichActor<TRichActorFutureCallback<EventType>>;
+
     static constexpr char ActorName[] = "YQL_DQ_ACTOR_FUTURE_CALLBACK";
- 
-    TRichActorFutureCallback(TCallback&& callback, TFailure&& failure, TDuration timeout) 
-        : TBase(&TRichActorFutureCallback::StateWaitForEvent) 
-        , Callback(std::move(callback)) 
-        , Failure(std::move(failure)) 
-        , Timeout(timeout) 
-    { } 
- 
-private: 
-    const TCallback Callback; 
-    const TFailure Failure; 
-    const TDuration Timeout; 
-    bool TimerStarted = false; 
-    NActors::TSchedulerCookieHolder TimerCookieHolder; 
- 
-    STRICT_STFUNC(StateWaitForEvent, 
-        HFunc(EventType, Handle) 
-        cFunc(NActors::TEvents::TEvBootstrap::EventType, OnFailure) 
-        hFunc(NActors::TEvInterconnect::TEvNodeConnected, [this] (NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) mutable { 
-            this->Subscribe(ev->Get()->NodeId); 
-        }) 
-        hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, [this] (NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) mutable { 
-            this->Unsubscribe(ev->Get()->NodeId); 
-            TimerStarted = true; 
-            OnFailure(); 
-        }) 
-        hFunc(NActors::TEvents::TEvUndelivered, [this] (NActors::TEvents::TEvUndelivered::TPtr& ev) mutable { 
-            this->Unsubscribe(ev->Sender.NodeId()); 
-            TimerStarted = true; 
-            OnFailure(); 
-        }) 
-    ) 
- 
-    void Handle(typename EventType::TPtr ev, const NActors::TActorContext& ctx) { 
-        Y_UNUSED(ctx); 
-        Callback(ev); 
-        this->PassAway(); 
-    } 
- 
+
+    TRichActorFutureCallback(TCallback&& callback, TFailure&& failure, TDuration timeout)
+        : TBase(&TRichActorFutureCallback::StateWaitForEvent)
+        , Callback(std::move(callback))
+        , Failure(std::move(failure))
+        , Timeout(timeout)
+    { }
+
+private:
+    const TCallback Callback;
+    const TFailure Failure;
+    const TDuration Timeout;
+    bool TimerStarted = false;
+    NActors::TSchedulerCookieHolder TimerCookieHolder;
+
+    STRICT_STFUNC(StateWaitForEvent,
+        HFunc(EventType, Handle)
+        cFunc(NActors::TEvents::TEvBootstrap::EventType, OnFailure)
+        hFunc(NActors::TEvInterconnect::TEvNodeConnected, [this] (NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev) mutable {
+            this->Subscribe(ev->Get()->NodeId);
+        })
+        hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, [this] (NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) mutable {
+            this->Unsubscribe(ev->Get()->NodeId);
+            TimerStarted = true;
+            OnFailure();
+        })
+        hFunc(NActors::TEvents::TEvUndelivered, [this] (NActors::TEvents::TEvUndelivered::TPtr& ev) mutable {
+            this->Unsubscribe(ev->Sender.NodeId());
+            TimerStarted = true;
+            OnFailure();
+        })
+    )
+
+    void Handle(typename EventType::TPtr ev, const NActors::TActorContext& ctx) {
+        Y_UNUSED(ctx);
+        Callback(ev);
+        this->PassAway();
+    }
+
     TAutoPtr<NActors::IEventHandle> AfterRegister(const NActors::TActorId& self, const NActors::TActorId& parentId) override {
-        return new NActors::IEventHandle(self, parentId, new NActors::TEvents::TEvBootstrap, 0); 
-    } 
- 
-    void OnFailure() { 
-        if (TimerStarted) { 
-            Failure(); 
-            this->PassAway(); 
-        } else { 
-            TimerStarted = true; 
-            TimerCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way()); 
-            this->Schedule(Timeout, new NActors::TEvents::TEvBootstrap, TimerCookieHolder.Get()); 
-        } 
-    } 
-}; 
- 
+        return new NActors::IEventHandle(self, parentId, new NActors::TEvents::TEvBootstrap, 0);
+    }
+
+    void OnFailure() {
+        if (TimerStarted) {
+            Failure();
+            this->PassAway();
+        } else {
+            TimerStarted = true;
+            TimerCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
+            this->Schedule(Timeout, new NActors::TEvents::TEvBootstrap, TimerCookieHolder.Get());
+        }
+    }
+};
+
 template <class TDerived>
 class TSynchronizableRichActor : public TRichActor<TDerived> {
 public:
@@ -173,4 +173,4 @@ private:
     }
 };
 
-} // namespace NYql 
+} // namespace NYql

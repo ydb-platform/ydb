@@ -23,7 +23,7 @@
 
 #include <ydb/library/yql/providers/dq/provider/exec/yql_dq_exectransformer.h>
 
-#include <ydb/library/yql/providers/dq/local_gateway/yql_dq_gateway_local.h> 
+#include <ydb/library/yql/providers/dq/local_gateway/yql_dq_gateway_local.h>
 
 #include <ydb/library/yql/core/facade/yql_facade.h>
 #include <ydb/library/yql/utils/log/log.h>

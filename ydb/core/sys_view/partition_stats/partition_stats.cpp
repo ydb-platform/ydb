@@ -6,7 +6,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
- 
+
 #include <library/cpp/actors/core/hfunc.h>
 
 namespace NKikimr {
@@ -16,7 +16,7 @@ using namespace NActors;
 
 class TPartitionStatsCollector : public TActor<TPartitionStatsCollector> {
 public:
-    static constexpr auto ActorActivityType() { 
+    static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::SYSTEM_VIEW_PART_STATS_COLLECTOR;
     }
 
@@ -315,7 +315,7 @@ class TPartitionStatsScan : public TScanActorBase<TPartitionStatsScan> {
 public:
     using TBase = TScanActorBase<TPartitionStatsScan>;
 
-    static constexpr auto ActorActivityType() { 
+    static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 

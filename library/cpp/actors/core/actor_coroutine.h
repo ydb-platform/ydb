@@ -154,7 +154,7 @@ namespace NActors {
         THolder<TActorCoroImpl> Impl;
 
     public:
-        TActorCoro(THolder<TActorCoroImpl> impl, ui32 activityType = IActor::ACTORLIB_COMMON) 
+        TActorCoro(THolder<TActorCoroImpl> impl, ui32 activityType = IActor::ACTORLIB_COMMON)
             : IActor(static_cast<TReceiveFunc>(&TActorCoro::StateFunc), activityType)
             , Impl(std::move(impl))
         {}

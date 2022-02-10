@@ -1,15 +1,15 @@
-#include "log.h" 
+#include "log.h"
 
 #include <library/cpp/actors/core/log.h>
 
-namespace NYql { 
-namespace NDq { 
+namespace NYql {
+namespace NDq {
 
-using namespace NActors; 
- 
+using namespace NActors;
+
 namespace {
 
-NActors::NLog::EPriority GetActorLogPriority(ELogPriority priority) { 
+NActors::NLog::EPriority GetActorLogPriority(ELogPriority priority) {
     switch (priority) {
         case TLOG_EMERG:
             return NActors::NLog::PRI_EMERG;
@@ -56,7 +56,7 @@ NYql::NLog::ELevel GetYqlLogLevel(NActors::NLog::EPriority priority) {
 
 } // namespace
 
-void TActorYqlLogBackend::WriteData(const TLogRecord& rec) { 
+void TActorYqlLogBackend::WriteData(const TLogRecord& rec) {
     std::visit([&](const auto* actorCtxOrSystem){
         Y_VERIFY(actorCtxOrSystem);
         if (TraceId.empty()) {
@@ -77,5 +77,5 @@ void SetYqlLogLevels(const NActors::NLog::EPriority& priority) {
     });
 }
 
-} // namespace NDq 
-} // namespace NYql 
+} // namespace NDq
+} // namespace NYql

@@ -222,18 +222,18 @@ void ExportTypeToProtoImpl(TType* type, Ydb::Type& res) {
             res.set_void_type(::google::protobuf::NULL_VALUE);
             break;
 
-        case TType::EKind::Null: 
-            res.set_null_type(::google::protobuf::NULL_VALUE); 
-            break; 
- 
-        case TType::EKind::EmptyList: 
-            res.set_empty_list_type(::google::protobuf::NULL_VALUE); 
-            break; 
- 
-        case TType::EKind::EmptyDict: 
-            res.set_empty_dict_type(::google::protobuf::NULL_VALUE); 
-            break; 
- 
+        case TType::EKind::Null:
+            res.set_null_type(::google::protobuf::NULL_VALUE);
+            break;
+
+        case TType::EKind::EmptyList:
+            res.set_empty_list_type(::google::protobuf::NULL_VALUE);
+            break;
+
+        case TType::EKind::EmptyDict:
+            res.set_empty_dict_type(::google::protobuf::NULL_VALUE);
+            break;
+
         case TType::EKind::Data: {
             auto dataType = static_cast<TDataType*>(type);
             auto schemeType = dataType->GetSchemeType();
@@ -317,15 +317,15 @@ void ExportTypeToProtoImpl(TType* type, Ydb::Type& res) {
             break;
         }
 
-        case TType::EKind::Tagged: { 
-            auto taggedType = static_cast<TTaggedType*>(type); 
-            TType* innerType = taggedType->GetBaseType(); 
-            auto& resType = *res.mutable_tagged_type(); 
-            resType.set_tag(TString(taggedType->GetTag())); 
-            ExportTypeToProtoImpl(innerType, *resType.mutable_type()); 
-            break; 
-        } 
- 
+        case TType::EKind::Tagged: {
+            auto taggedType = static_cast<TTaggedType*>(type);
+            TType* innerType = taggedType->GetBaseType();
+            auto& resType = *res.mutable_tagged_type();
+            resType.set_tag(TString(taggedType->GetTag()));
+            ExportTypeToProtoImpl(innerType, *resType.mutable_type());
+            break;
+        }
+
         default:
             MKQL_ENSURE(false, TStringBuilder() << "Unknown kind: " << type->GetKindAsStr());
     }
@@ -615,12 +615,12 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, Yd
             break;
         }
 
-        case TType::EKind::Tagged: { 
-            auto taggedType = static_cast<TTaggedType*>(type); 
-            ExportValueToProtoImpl(taggedType->GetBaseType(), value, res); 
-            break; 
-        } 
- 
+        case TType::EKind::Tagged: {
+            auto taggedType = static_cast<TTaggedType*>(type);
+            ExportValueToProtoImpl(taggedType->GetBaseType(), value, res);
+            break;
+        }
+
         default: {
             MKQL_ENSURE(false, TStringBuilder() << "Unknown kind: " << type->GetKindAsStr());
         }

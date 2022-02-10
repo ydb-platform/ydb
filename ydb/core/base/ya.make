@@ -14,7 +14,7 @@ IF (KIKIMR_DEFAULT_SHARDED_COMPACTION)
 ENDIF()
 
 SRCS(
-    actor_activity_names.cpp 
+    actor_activity_names.cpp
     appdata.h
     appdata.cpp
     board_lookup.cpp

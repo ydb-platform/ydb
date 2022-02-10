@@ -7,7 +7,7 @@
 namespace NYql {
 namespace NTaskRunnerProxy {
 
-int CreateTaskCommandExecutor(NKikimr::NMiniKQL::TComputationNodeFactory compFactory, TTaskTransformFactory taskTransformFactory, NKikimr::NMiniKQL::IStatsRegistry* jobStats, bool terminateOnError = false); 
+int CreateTaskCommandExecutor(NKikimr::NMiniKQL::TComputationNodeFactory compFactory, TTaskTransformFactory taskTransformFactory, NKikimr::NMiniKQL::IStatsRegistry* jobStats, bool terminateOnError = false);
 
 } // namespace NTaskRunnerProxy
 } // namespace NYql

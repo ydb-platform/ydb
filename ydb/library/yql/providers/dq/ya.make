@@ -1,19 +1,19 @@
-RECURSE( 
-    actors 
-    api 
+RECURSE(
+    actors
+    api
     backtrace
-    common 
+    common
     config
     counters
-    expr_nodes 
+    expr_nodes
     interface
     mkql
-    opt 
-    planner 
-    provider 
+    opt
+    planner
+    provider
     provider/exec
     runtime
     task_runner
-    task_runner_actor 
-    worker_manager 
-) 
+    task_runner_actor
+    worker_manager
+)

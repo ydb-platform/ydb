@@ -34,7 +34,7 @@ public:
         AddHandler(0, &TCoSort::Match, HNDL(BuildSortStage<false>));
         AddHandler(0, &TCoTake::Match, HNDL(BuildTakeOrTakeSkipStage<false>));
         AddHandler(0, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput));
-        AddHandler(0, &TCoExtendBase::Match, HNDL(BuildExtendStage)); 
+        AddHandler(0, &TCoExtendBase::Match, HNDL(BuildExtendStage));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteRightJoinToLeft));
         AddHandler(0, &TDqJoin::Match, HNDL(PushJoinToStage<false>));
         AddHandler(0, &TDqJoin::Match, HNDL(BuildJoin<false>));
@@ -181,7 +181,7 @@ protected:
                 .Stage<TDqStage>()
                     .Inputs().Build()
                     .Program(narrow)
-                    .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
+                    .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
                 .Build()
                 .Index().Build("0")
             .Build() .Done();
@@ -245,12 +245,12 @@ protected:
     }
 
     template <bool IsGlobal>
-    TMaybeNode<TExprBase> BuildTakeOrTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) { 
-        if (node.Maybe<TCoTake>().Input().Maybe<TCoSkip>()) { 
+    TMaybeNode<TExprBase> BuildTakeOrTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+        if (node.Maybe<TCoTake>().Input().Maybe<TCoSkip>()) {
             return DqBuildTakeSkipStage(node, ctx, optCtx, *getParents(), IsGlobal);
-        } else { 
+        } else {
             return DqBuildTakeStage(node, ctx, optCtx, *getParents(), IsGlobal);
-        } 
+        }
     }
 
     TMaybeNode<TExprBase> RewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
@@ -290,7 +290,7 @@ protected:
         if (!JoinPrerequisitesVerify(join, parentsMap, IsGlobal)) {
             return node;
         }
- 
+
         return DqBuildJoinDict(join, ctx); // , optCtx);
     }
 

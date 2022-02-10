@@ -129,7 +129,7 @@ public:
     virtual IGraphTransformer& GetPhysicalOptProposalTransformer() = 0;
     virtual IGraphTransformer& GetPhysicalFinalizingTransformer() = 0;
     virtual void PostRewriteIO() = 0;
-    virtual void Reset() = 0; 
+    virtual void Reset() = 0;
 
     //-- metadata loading
     virtual IGraphTransformer& GetLoadTableMetadataTransformer() = 0;

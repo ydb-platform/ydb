@@ -214,7 +214,7 @@ RECURSE(
     distro
     django
     django-admin-inline-paginator
-    django-admin-rangefilter 
+    django-admin-rangefilter
     django-admin-view-permission
     django-advanced-filters
     django-ajax-selects
@@ -237,7 +237,7 @@ RECURSE(
     django-cron
     django-csp
     django-cte
-    django-datetime-widget 
+    django-datetime-widget
     django-db-geventpool
     django-dbtemplates
     django-debug-panel

@@ -97,15 +97,15 @@ void SlowScanner::Save(yostream* s) const
 				size += sizeof(unsigned) * i.size();
 			}
 		Impl::AlignSave(s, size);
-		if (need_actions) { 
-			size_t pos = 0; 
-			for (TVector< TVector< Action > >::const_iterator i = m_actionsvec.begin(), ie = m_actionsvec.end(); i != ie; ++i) 
-				if (!i->empty()) { 
-					SavePodArray(s, &(*i)[0], i->size()); 
-					pos += sizeof(Action) * i->size(); 
-				} 
-			Impl::AlignSave(s, pos); 
-		} 
+		if (need_actions) {
+			size_t pos = 0;
+			for (TVector< TVector< Action > >::const_iterator i = m_actionsvec.begin(), ie = m_actionsvec.end(); i != ie; ++i)
+				if (!i->empty()) {
+					SavePodArray(s, &(*i)[0], i->size());
+					pos += sizeof(Action) * i->size();
+				}
+			Impl::AlignSave(s, pos);
+		}
 	}
 }
 
@@ -118,13 +118,13 @@ void SlowScanner::Load(yistream* s)
 	bool empty;
 	LoadPodType(s, empty);
 	Impl::AlignLoad(s, sizeof(empty));
-	sc.need_actions = need_actions; 
+	sc.need_actions = need_actions;
 	if (empty) {
 		sc.Alias(Null());
 	} else {
 		sc.m_vec.resize(sc.m.lettersCount * sc.m.statesCount);
-		if (sc.need_actions) 
-			sc.m_actionsvec.resize(sc.m.lettersCount * sc.m.statesCount); 
+		if (sc.need_actions)
+			sc.m_actionsvec.resize(sc.m.lettersCount * sc.m.statesCount);
 		sc.m_vecptr = &sc.m_vec;
 
 		sc.alloc(sc.m_letters, MaxChar);
@@ -140,10 +140,10 @@ void SlowScanner::Load(yistream* s)
 			size_t n;
 			LoadPodType(s, n);
 			i.resize(n - c);
-			if (sc.need_actions) { 
-				act->resize(n - c); 
-				++act; 
-			} 
+			if (sc.need_actions) {
+				act->resize(n - c);
+				++act;
+			}
 			c = n;
 		}
 		Impl::AlignLoad(s, (m_vec.size() + 1) * sizeof(size_t));
@@ -155,16 +155,16 @@ void SlowScanner::Load(yistream* s)
 				size += sizeof(unsigned) * i.size();
 			}
 		Impl::AlignLoad(s, size);
-		size_t actSize = 0; 
-		if (sc.need_actions) { 
+		size_t actSize = 0;
+		if (sc.need_actions) {
 			for (auto&& i : sc.m_actionsvec) {
 				if (!i.empty()) {
 					LoadPodArray(s, &(i)[0], i.size());
 					actSize += sizeof(Action) * i.size();
-				} 
-			} 
-			Impl::AlignLoad(s, actSize); 
-		} 
+				}
+			}
+			Impl::AlignLoad(s, actSize);
+		}
 	}
 	Swap(sc);
 }

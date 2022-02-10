@@ -216,95 +216,95 @@ Y_UNIT_TEST_SUITE(TRegExp) {
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("xx"));
     }
 
-    Y_UNIT_TEST(SlowCapture) { 
-        TSlowCapturingFsm fsm("^http://vk(ontakte[.]ru|[.]com)/id(\\d+)([^0-9]|$)", 
-                              TFsm::TOptions().SetCapture(2)); 
-        TSlowSearcher searcher(fsm); 
-        searcher.Search("http://vkontakte.ru/id100500"); 
-        UNIT_ASSERT(searcher.Captured()); 
+    Y_UNIT_TEST(SlowCapture) {
+        TSlowCapturingFsm fsm("^http://vk(ontakte[.]ru|[.]com)/id(\\d+)([^0-9]|$)",
+                              TFsm::TOptions().SetCapture(2));
+        TSlowSearcher searcher(fsm);
+        searcher.Search("http://vkontakte.ru/id100500");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("100500"));
-    } 
- 
-    Y_UNIT_TEST(SlowCaptureGreedy) { 
-        TSlowCapturingFsm fsm(".*(pref.*suff)"); 
-        TSlowSearcher searcher(fsm); 
-        searcher.Search("pref ala bla pref cla suff dla"); 
-        UNIT_ASSERT(searcher.Captured()); 
+    }
+
+    Y_UNIT_TEST(SlowCaptureGreedy) {
+        TSlowCapturingFsm fsm(".*(pref.*suff)");
+        TSlowSearcher searcher(fsm);
+        searcher.Search("pref ala bla pref cla suff dla");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("pref cla suff"));
-    } 
- 
-    Y_UNIT_TEST(SlowCaptureNonGreedy) { 
-        TSlowCapturingFsm fsm(".*?(pref.*suff)"); 
-        TSlowSearcher searcher(fsm); 
-        searcher.Search("pref ala bla pref cla suff dla"); 
-        UNIT_ASSERT(searcher.Captured()); 
+    }
+
+    Y_UNIT_TEST(SlowCaptureNonGreedy) {
+        TSlowCapturingFsm fsm(".*?(pref.*suff)");
+        TSlowSearcher searcher(fsm);
+        searcher.Search("pref ala bla pref cla suff dla");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("pref ala bla pref cla suff"));
-    } 
- 
-    Y_UNIT_TEST(SlowCapture2) { 
-        TSlowCapturingFsm fsm("Здравствуйте, ((\\s|\\w|[()]|-)+)!", 
-                              TFsm::TOptions().SetCharset(CODES_UTF8)); 
- 
-        TSlowSearcher searcher(fsm); 
-        searcher.Search("   Здравствуйте, Уважаемый (-ая)!   "); 
-        UNIT_ASSERT(searcher.Captured()); 
+    }
+
+    Y_UNIT_TEST(SlowCapture2) {
+        TSlowCapturingFsm fsm("Здравствуйте, ((\\s|\\w|[()]|-)+)!",
+                              TFsm::TOptions().SetCharset(CODES_UTF8));
+
+        TSlowSearcher searcher(fsm);
+        searcher.Search("   Здравствуйте, Уважаемый (-ая)!   ");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("Уважаемый (-ая)"));
-    } 
- 
-    Y_UNIT_TEST(SlowCapture3) { 
-        TSlowCapturingFsm fsm("here we have user_id=([a-z0-9]+);"); 
-        TSlowSearcher searcher(fsm); 
-        searcher.Search("in db and here we have user_id=0x0d0a; same as CRLF"); 
-        UNIT_ASSERT(searcher.Captured()); 
+    }
+
+    Y_UNIT_TEST(SlowCapture3) {
+        TSlowCapturingFsm fsm("here we have user_id=([a-z0-9]+);");
+        TSlowSearcher searcher(fsm);
+        searcher.Search("in db and here we have user_id=0x0d0a; same as CRLF");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("0x0d0a"));
-    } 
- 
-    Y_UNIT_TEST(SlowCapture4) { 
-        TSlowCapturingFsm fsm("away\\.php\\?to=http:([^\"]+)\""); 
-        TSlowSearcher searcher(fsm); 
-        searcher.Search("\"/away.php?to=http:some.addr\"&id=1"); 
-        UNIT_ASSERT(searcher.Captured()); 
+    }
+
+    Y_UNIT_TEST(SlowCapture4) {
+        TSlowCapturingFsm fsm("away\\.php\\?to=http:([^\"]+)\"");
+        TSlowSearcher searcher(fsm);
+        searcher.Search("\"/away.php?to=http:some.addr\"&id=1");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf("some.addr"));
-    } 
- 
-    Y_UNIT_TEST(CapturedEmptySlow) { 
-        TSlowCapturingFsm fsm("Comments=(.*)$"); 
-        TSlowSearcher searcher(fsm); 
-        searcher.Search("And Comments="); 
-        UNIT_ASSERT(searcher.Captured()); 
+    }
+
+    Y_UNIT_TEST(CapturedEmptySlow) {
+        TSlowCapturingFsm fsm("Comments=(.*)$");
+        TSlowSearcher searcher(fsm);
+        searcher.Search("And Comments=");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf(""));
-    } 
- 
-    Y_UNIT_TEST(CaptureInOrFirst) { 
-        TSlowCapturingFsm fsm("(A)|A"); 
-        TSlowSearcher searcher(fsm); 
-        searcher.Search("A"); 
-        UNIT_ASSERT(searcher.Captured()); 
-    } 
- 
-    Y_UNIT_TEST(CaptureInOrSecond) { 
-        TSlowCapturingFsm fsm("A|(A)"); 
-        TSlowSearcher searcher(fsm); 
-        searcher.Search("A"); 
-        UNIT_ASSERT(!searcher.Captured()); 
-    } 
- 
-    Y_UNIT_TEST(CaptureOutside) { 
-        TSlowCapturingFsm fsm("((ID=([0-9]+))?)"); 
-        TSlowSearcher searcher(fsm); 
-        searcher.Search("ID="); 
-        UNIT_ASSERT(searcher.Captured()); 
+    }
+
+    Y_UNIT_TEST(CaptureInOrFirst) {
+        TSlowCapturingFsm fsm("(A)|A");
+        TSlowSearcher searcher(fsm);
+        searcher.Search("A");
+        UNIT_ASSERT(searcher.Captured());
+    }
+
+    Y_UNIT_TEST(CaptureInOrSecond) {
+        TSlowCapturingFsm fsm("A|(A)");
+        TSlowSearcher searcher(fsm);
+        searcher.Search("A");
+        UNIT_ASSERT(!searcher.Captured());
+    }
+
+    Y_UNIT_TEST(CaptureOutside) {
+        TSlowCapturingFsm fsm("((ID=([0-9]+))?)");
+        TSlowSearcher searcher(fsm);
+        searcher.Search("ID=");
+        UNIT_ASSERT(searcher.Captured());
         UNIT_ASSERT_VALUES_EQUAL(searcher.GetCaptured(), TStringBuf(""));
-    } 
- 
-    Y_UNIT_TEST(CaptureInside) { 
-        TSlowCapturingFsm fsm("((ID=([0-9]+))?)", 
-                              TFsm::TOptions().SetCapture(2)); 
-        TSlowSearcher searcher(fsm); 
-        searcher.Search("ID="); 
-        UNIT_ASSERT(!searcher.Captured()); 
-    } 
- 
+    }
+
+    Y_UNIT_TEST(CaptureInside) {
+        TSlowCapturingFsm fsm("((ID=([0-9]+))?)",
+                              TFsm::TOptions().SetCapture(2));
+        TSlowSearcher searcher(fsm);
+        searcher.Search("ID=");
+        UNIT_ASSERT(!searcher.Captured());
+    }
+
     Y_UNIT_TEST(Pcre2PireTest) {
         UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:fake)"), "(fake)");
         UNIT_ASSERT_VALUES_EQUAL(Pcre2Pire("(?:fake)??"), "(fake)?");

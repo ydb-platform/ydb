@@ -48,7 +48,7 @@ namespace NRegExp {
         };
 
         static inline NPire::TFsm Parse(const TStringBuf& regexp,
-                                        const TOptions& opts, const bool needDetermine = true) { 
+                                        const TOptions& opts, const bool needDetermine = true) {
             NPire::TLexer lexer;
             if (opts.Charset == CODES_UNKNOWN) {
                 lexer.Assign(regexp.data(), regexp.data() + regexp.size());
@@ -98,9 +98,9 @@ namespace NRegExp {
                 ret.Surround();
             }
 
-            if (needDetermine) { 
-                ret.Determine(); 
-            } 
+            if (needDetermine) {
+                ret.Determine();
+            }
 
             return ret;
         }
@@ -113,8 +113,8 @@ namespace NRegExp {
 
     public:
         inline explicit TFsmParser(const TStringBuf& regexp,
-                                   const TOptions& opts = TOptions(), bool needDetermine = true) 
-            : Scanner(Parse(regexp, opts, needDetermine).template Compile<TScanner>()) 
+                                   const TOptions& opts = TOptions(), bool needDetermine = true)
+            : Scanner(Parse(regexp, opts, needDetermine).template Compile<TScanner>())
         {
         }
 
@@ -177,19 +177,19 @@ namespace NRegExp {
         }
     };
 
-    struct TSlowCapturingFsm : TFsmParser<NPire::TSlowCapturingScanner> { 
+    struct TSlowCapturingFsm : TFsmParser<NPire::TSlowCapturingScanner> {
         inline explicit TSlowCapturingFsm(const TStringBuf& regexp,
-                                          TOptions opts = TOptions()) 
-                : TFsmParser<TScanner>(regexp, 
-                                       opts.SetSurround(true).CapturePos ? opts : opts.SetCapture(1), false) { 
-        } 
- 
-        inline TSlowCapturingFsm(const TFsmParser<TScanner>& fsm) 
-                : TFsmParser<TScanner>(fsm) 
-        { 
-        } 
-    }; 
- 
+                                          TOptions opts = TOptions())
+                : TFsmParser<TScanner>(regexp,
+                                       opts.SetSurround(true).CapturePos ? opts : opts.SetCapture(1), false) {
+        }
+
+        inline TSlowCapturingFsm(const TFsmParser<TScanner>& fsm)
+                : TFsmParser<TScanner>(fsm)
+        {
+        }
+    };
+
     template <class TFsm>
     class TMatcherBase {
     public:
@@ -285,53 +285,53 @@ namespace NRegExp {
     private:
         TStringBuf Data;
     };
- 
-    class TSlowSearcher : TMatcherBase<TSlowCapturingFsm>{ 
-    public: 
-        typedef typename TSlowCapturingFsm::TScanner::State TState; 
-        inline explicit TSlowSearcher(const TSlowCapturingFsm& fsm) 
-                : TMatcherBase<TSlowCapturingFsm>(fsm) 
-                , HasCaptured(false) 
-        { 
-        } 
- 
-        inline bool Captured() const noexcept { 
-            return HasCaptured; 
-        } 
- 
-        inline TSlowSearcher& Search(const char* data, size_t len, bool addBegin = false, bool addEnd = false) noexcept { 
-            TStringBuf textData(data, len); 
-            Data = textData; 
+
+    class TSlowSearcher : TMatcherBase<TSlowCapturingFsm>{
+    public:
+        typedef typename TSlowCapturingFsm::TScanner::State TState;
+        inline explicit TSlowSearcher(const TSlowCapturingFsm& fsm)
+                : TMatcherBase<TSlowCapturingFsm>(fsm)
+                , HasCaptured(false)
+        {
+        }
+
+        inline bool Captured() const noexcept {
+            return HasCaptured;
+        }
+
+        inline TSlowSearcher& Search(const char* data, size_t len, bool addBegin = false, bool addEnd = false) noexcept {
+            TStringBuf textData(data, len);
+            Data = textData;
             Run(Data.begin(), Data.size(), addBegin, addEnd);
-            return GetAns(); 
-        } 
- 
+            return GetAns();
+        }
+
         inline TSlowSearcher& Search(const TStringBuf& s) noexcept {
             return Search(s.data(), s.size());
-        } 
- 
-        inline TStringBuf GetCaptured() const noexcept { 
-            return Ans; 
-        } 
- 
-    private: 
-        TStringBuf Data; 
-        TStringBuf Ans; 
-        bool HasCaptured; 
- 
-        inline TSlowSearcher& GetAns() { 
-            auto state = GetState(); 
-            Pire::SlowCapturingScanner::SingleState final; 
-            if (!GetScanner().GetCapture(state, final)) { 
-                HasCaptured = false; 
-            } else { 
-                if (!final.HasEnd()) { 
-                    final.SetEnd(Data.size()); 
-                } 
-                Ans = TStringBuf(Data, final.GetBegin(), final.GetEnd() - final.GetBegin()); 
-                HasCaptured = true; 
-            } 
-            return *this; 
-        } 
-    }; 
+        }
+
+        inline TStringBuf GetCaptured() const noexcept {
+            return Ans;
+        }
+
+    private:
+        TStringBuf Data;
+        TStringBuf Ans;
+        bool HasCaptured;
+
+        inline TSlowSearcher& GetAns() {
+            auto state = GetState();
+            Pire::SlowCapturingScanner::SingleState final;
+            if (!GetScanner().GetCapture(state, final)) {
+                HasCaptured = false;
+            } else {
+                if (!final.HasEnd()) {
+                    final.SetEnd(Data.size());
+                }
+                Ans = TStringBuf(Data, final.GetBegin(), final.GetEnd() - final.GetBegin());
+                HasCaptured = true;
+            }
+            return *this;
+        }
+    };
 }

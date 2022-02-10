@@ -38,7 +38,7 @@ namespace NYql::NDq {
 struct IDqSourceActor {
     struct ICallbacks {
         virtual void OnNewSourceDataArrived(ui64 inputIndex) = 0;
-        virtual void OnSourceError(ui64 inputIndex, const TIssues& issues, bool isFatal) = 0; 
+        virtual void OnSourceError(ui64 inputIndex, const TIssues& issues, bool isFatal) = 0;
 
         virtual ~ICallbacks() = default;
     };
@@ -63,21 +63,21 @@ struct IDqSourceActor {
 struct IDqSourceActorFactory : public TThrRefBase {
     using TPtr = TIntrusivePtr<IDqSourceActorFactory>;
 
-    struct TArguments { 
-        const NDqProto::TTaskInput& InputDesc; 
-        ui64 InputIndex; 
-        TTxId TxId; 
-        const THashMap<TString, TString>& SecureParams; 
-        const THashMap<TString, TString>& TaskParams; 
-        IDqSourceActor::ICallbacks* Callback; 
-        const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv; 
-        const NKikimr::NMiniKQL::THolderFactory& HolderFactory; 
-    }; 
- 
+    struct TArguments {
+        const NDqProto::TTaskInput& InputDesc;
+        ui64 InputIndex;
+        TTxId TxId;
+        const THashMap<TString, TString>& SecureParams;
+        const THashMap<TString, TString>& TaskParams;
+        IDqSourceActor::ICallbacks* Callback;
+        const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
+        const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+    };
+
     // Creates source actor.
     // Could throw YQL errors.
     // IActor* and IDqSourceActor* returned by method must point to the objects with consistent lifetime.
-    virtual std::pair<IDqSourceActor*, NActors::IActor*> CreateDqSourceActor(TArguments&& args) const = 0; 
+    virtual std::pair<IDqSourceActor*, NActors::IActor*> CreateDqSourceActor(TArguments&& args) const = 0;
 };
 
 } // namespace NYql::NDq

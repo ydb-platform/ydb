@@ -552,8 +552,8 @@ class TCheckpointStorage : public ICheckpointStorage {
     const NConfig::TYdbStorageConfig Config;
 
 public:
-    explicit TCheckpointStorage( 
-        const NConfig::TYdbStorageConfig& config, 
+    explicit TCheckpointStorage(
+        const NConfig::TYdbStorageConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const IEntityIdGenerator::TPtr& entityIdGenerator);
 
@@ -621,11 +621,11 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCheckpointStorage::TCheckpointStorage( 
-    const NConfig::TYdbStorageConfig& config, 
+TCheckpointStorage::TCheckpointStorage(
+    const NConfig::TYdbStorageConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const IEntityIdGenerator::TPtr& entityIdGenerator)
-    : YdbConnection(NewYdbConnection(config, credentialsProviderFactory)) 
+    : YdbConnection(NewYdbConnection(config, credentialsProviderFactory))
     , Config(config)
     , EntityIdGenerator(entityIdGenerator)
 {
@@ -1181,8 +1181,8 @@ TExecDataQuerySettings NYq::TCheckpointStorage::DefaultExecDataQuerySettings() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCheckpointStoragePtr NewYdbCheckpointStorage( 
-    const NConfig::TYdbStorageConfig& config, 
+TCheckpointStoragePtr NewYdbCheckpointStorage(
+    const NConfig::TYdbStorageConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const IEntityIdGenerator::TPtr& entityIdGenerator)
 {

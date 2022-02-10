@@ -647,9 +647,9 @@ private:
             TUploadList uploadList;
             auto lambdaResult = GetLambda(&lambda, &untrustedUdfFlag, &level, &uploadList, result, ctx, hasGraphParams);
             if (lambdaResult.first.Level == TStatus::Error) {
-                if (State->Settings->FallbackPolicy.Get().GetOrElse("default") == "never" || State->TypeCtx->ForceDq) { 
-                    return SyncError(); 
-                } 
+                if (State->Settings->FallbackPolicy.Get().GetOrElse("default") == "never" || State->TypeCtx->ForceDq) {
+                    return SyncError();
+                }
                 return Fallback();
             }
             if (lambdaResult.first.Level != TStatus::Ok) {

@@ -999,7 +999,7 @@ THoppingWindowSpecPtr THoppingWindowSpec::Clone() const {
     res->Hop = Hop->Clone();
     res->Interval = Interval->Clone();
     res->Delay = Delay->Clone();
-    res->DataWatermarks = DataWatermarks; 
+    res->DataWatermarks = DataWatermarks;
     return res;
 }
 
@@ -1780,8 +1780,8 @@ TNodePtr ISource::BuildAggregation(const TString& label) {
             BuildLambda(Pos, Y("row"), HoppingWindowSpec->TimeExtractor),
             HoppingWindowSpec->Hop,
             HoppingWindowSpec->Interval,
-            HoppingWindowSpec->Delay, 
-            HoppingWindowSpec->DataWatermarks ? Q("true") : Q("false")); 
+            HoppingWindowSpec->Delay,
+            HoppingWindowSpec->DataWatermarks ? Q("true") : Q("false"));
 
         options = L(options, Q(Y(Q("hopping"), hoppingTraits)));
     }

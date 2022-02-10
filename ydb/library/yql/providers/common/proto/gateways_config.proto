@@ -334,25 +334,25 @@ message TS3GatewayConfig {
 ///////////////////////////// Solomon /////////////////////////////
 
 message TSolomonClusterConfig {
-    enum ESolomonClusterType { 
-        SCT_UNSPECIFIED = 0; 
-        SCT_SOLOMON = 1; 
-        SCT_MONITORING = 2; 
-    } 
- 
-    message TShardPath { 
-        required string Project = 1; // CloudId for YC 
-        required string Cluster = 2; // FolderId for YC 
-    } 
- 
+    enum ESolomonClusterType {
+        SCT_UNSPECIFIED = 0;
+        SCT_SOLOMON = 1;
+        SCT_MONITORING = 2;
+    }
+
+    message TShardPath {
+        required string Project = 1; // CloudId for YC
+        required string Cluster = 2; // FolderId for YC
+    }
+
     optional string Name = 1;
     optional string Cluster = 2;
     optional bool UseSsl = 3;
-    optional ESolomonClusterType ClusterType = 4 [default = SCT_SOLOMON]; 
+    optional ESolomonClusterType ClusterType = 4 [default = SCT_SOLOMON];
     optional string Token = 5;
     optional string ServiceAccountId = 6;
     optional string ServiceAccountIdSignature = 7;
-    optional TShardPath Path = 8; 
+    optional TShardPath Path = 8;
 
     repeated TAttr Settings = 100;
 }

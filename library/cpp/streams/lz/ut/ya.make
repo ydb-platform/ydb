@@ -8,7 +8,7 @@ OWNER(
 RESOURCE(
     random.data /random.data
     request.data /request.data
-    yq_609.data /yq_609.data 
+    yq_609.data /yq_609.data
 )
 
 SRCS(

@@ -221,22 +221,22 @@ static void PrepareConfig(NYq::NConfig::TDbPoolConfig& config) {
     }
 }
 
-TDbPoolMap::TDbPoolMap( 
+TDbPoolMap::TDbPoolMap(
     const NYq::NConfig::TDbPoolConfig& config,
-    NYdb::TDriver driver, 
+    NYdb::TDriver driver,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NMonitoring::TDynamicCounterPtr& counters)
     : Config(config)
     , Driver(driver)
-    , CredentialsProviderFactory(credentialsProviderFactory) 
+    , CredentialsProviderFactory(credentialsProviderFactory)
     , Counters(counters)
 {
     PrepareConfig(Config);
 }
 
-TDbPoolHolder::TDbPoolHolder( 
+TDbPoolHolder::TDbPoolHolder(
     const NYq::NConfig::TDbPoolConfig& config,
-    const NYdb::TDriver& driver, 
+    const NYdb::TDriver& driver,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NMonitoring::TDynamicCounterPtr& counters)
     : Driver(driver)
@@ -286,12 +286,12 @@ TDbPool::TPtr TDbPoolMap::GetOrCreate(EDbPoolId dbPoolId, ui32 sessionsCount) {
             .Database(Config.GetStorage().GetDatabase())
             .DiscoveryEndpoint(Config.GetStorage().GetEndpoint())
             .DiscoveryMode(NYdb::EDiscoveryMode::Async);
-        NKikimr::TYdbCredentialsSettings credSettings; 
+        NKikimr::TYdbCredentialsSettings credSettings;
         credSettings.UseLocalMetadata = Config.GetStorage().GetUseLocalMetadataService();
         credSettings.OAuthToken = Config.GetStorage().GetToken();
- 
-        clientSettings.CredentialsProviderFactory(CredentialsProviderFactory(credSettings)); 
- 
+
+        clientSettings.CredentialsProviderFactory(CredentialsProviderFactory(credSettings));
+
         clientSettings.EnableSsl(Config.GetStorage().GetUseSsl());
 
         TableClient = MakeHolder<NYdb::NTable::TTableClient>(Driver, clientSettings);

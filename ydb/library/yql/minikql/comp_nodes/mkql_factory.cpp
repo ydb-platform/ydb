@@ -51,7 +51,7 @@
 #include "mkql_lookup.h"
 #include "mkql_map.h"
 #include "mkql_map_join.h"
-#include "mkql_multihopping.h" 
+#include "mkql_multihopping.h"
 #include "mkql_multimap.h"
 #include "mkql_next_value.h"
 #include "mkql_now.h"
@@ -220,7 +220,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"CombineCore", &WrapCombineCore},
         {"GroupingCore", &WrapGroupingCore},
         {"HoppingCore", &WrapHoppingCore},
-        {"MultiHoppingCore", &WrapMultiHoppingCore}, 
+        {"MultiHoppingCore", &WrapMultiHoppingCore},
         {"ToBytes", &WrapToBytes},
         {"FromBytes", &WrapFromBytes},
         {"NewMTRand", &WrapNewMTRand},

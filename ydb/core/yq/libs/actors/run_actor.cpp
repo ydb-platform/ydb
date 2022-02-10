@@ -856,7 +856,7 @@ private:
         TDqConfiguration::TPtr dqConfiguration = MakeIntrusive<TDqConfiguration>();
         dqConfiguration->Dispatch(dqGraphParams.GetSettings());
         dqConfiguration->FreezeDefaults();
-        dqConfiguration->FallbackPolicy = "never"; 
+        dqConfiguration->FallbackPolicy = "never";
 
         ExecuterId = NActors::TActivationContext::Register(NYql::NDq::MakeDqExecuter(MakeYqlNodesManagerId(), SelfId(), Params.QueryId, "", dqConfiguration, ServiceCounters.Counters, TInstant::Now(), EnableCheckpointCoordinator));
 
@@ -937,12 +937,12 @@ private:
             attr->SetName("_OneGraphPerQuery");
             attr->SetValue("1");
         }
- 
-        if (Params.QueryType == YandexQuery::QueryContent_QueryType_ANALYTICS) { 
-            attr = dqSettings.Add(); 
-            attr->SetName("AnalyticsHopping"); 
-            attr->SetValue("1"); 
-        } 
+
+        if (Params.QueryType == YandexQuery::QueryContent_QueryType_ANALYTICS) {
+            attr = dqSettings.Add();
+            attr->SetName("AnalyticsHopping");
+            attr->SetValue("1");
+        }
     }
 
     void AddClustersFromConfig(NYql::TGatewaysConfig& gatewaysConfig, THashMap<TString, TString>& clusters) const {
@@ -1163,12 +1163,12 @@ private:
             dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver));
         }
 
-        { 
-            auto solomonConfig = gatewaysConfig.GetSolomon(); 
-            auto solomonGateway = NYql::CreateSolomonGateway(solomonConfig); 
-            dataProvidersInit.push_back(GetSolomonDataProviderInitializer(solomonGateway, false)); 
-        } 
- 
+        {
+            auto solomonConfig = gatewaysConfig.GetSolomon();
+            auto solomonGateway = NYql::CreateSolomonGateway(solomonConfig);
+            dataProvidersInit.push_back(GetSolomonDataProviderInitializer(solomonGateway, false));
+        }
+
         TProgramFactory progFactory(false, Params.FunctionRegistry, Params.NextUniqueId, dataProvidersInit, "yq");
         progFactory.SetModules(Params.ModuleResolver);
         progFactory.SetUdfResolver(NYql::NCommon::CreateSimpleUdfResolver(Params.FunctionRegistry, nullptr));

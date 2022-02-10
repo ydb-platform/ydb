@@ -19,16 +19,16 @@ void AddSystemClusters(TGatewaysConfig& gatewaysConfig, THashMap<TString, TStrin
     }
     {
         const auto clusterCfg = gatewaysConfig.MutablePq()->AddClusterMapping();
-        clusterCfg->SetName("logbroker_iam_no_sa"); 
-        clusterCfg->SetEndpoint("logbroker.yandex.net:2135"); 
-        clusterCfg->SetConfigManagerEndpoint("cm.logbroker.yandex.net:1111"); 
-        clusterCfg->SetAddBearerToToken(true); 
-        clusterCfg->SetClusterType(TPqClusterConfig::CT_PERS_QUEUE); 
-        clusterCfg->SetToken(authToken); 
-        clusters.emplace(clusterCfg->GetName(), PqProviderName); 
-    } 
-    { 
-        const auto clusterCfg = gatewaysConfig.MutablePq()->AddClusterMapping(); 
+        clusterCfg->SetName("logbroker_iam_no_sa");
+        clusterCfg->SetEndpoint("logbroker.yandex.net:2135");
+        clusterCfg->SetConfigManagerEndpoint("cm.logbroker.yandex.net:1111");
+        clusterCfg->SetAddBearerToToken(true);
+        clusterCfg->SetClusterType(TPqClusterConfig::CT_PERS_QUEUE);
+        clusterCfg->SetToken(authToken);
+        clusters.emplace(clusterCfg->GetName(), PqProviderName);
+    }
+    {
+        const auto clusterCfg = gatewaysConfig.MutablePq()->AddClusterMapping();
         clusterCfg->SetName("lbkx");
         clusterCfg->SetEndpoint("lbkx.logbroker.yandex.net:2135");
         clusterCfg->SetConfigManagerEndpoint("cm.lbkx.logbroker.yandex.net:1111");
@@ -89,7 +89,7 @@ void AddSystemClusters(TGatewaysConfig& gatewaysConfig, THashMap<TString, TStrin
         clusterCfg->SetEndpoint("lb.cc8035oc71oh9um52mv3.ydb.mdb.cloud-preprod.yandex.net:2135");
         clusterCfg->SetConfigManagerEndpoint("cm.global.logbroker.cloud-preprod.yandex.net:1111");
         clusterCfg->SetDatabase("/pre-prod_global/aoeb66ftj1tbt1b2eimn/cc8035oc71oh9um52mv3");
-        clusterCfg->SetUseSsl(true); 
+        clusterCfg->SetUseSsl(true);
         clusterCfg->SetServiceAccountId("bfbf4nc8c849ej11k3aq"); // audit-trails-reader-sa
         clusterCfg->SetServiceAccountIdSignature("SyFk1SpKdQa6L8IJxnwvgC57yMQ=");
         clusterCfg->SetClusterType(TPqClusterConfig::CT_PERS_QUEUE);
@@ -101,7 +101,7 @@ void AddSystemClusters(TGatewaysConfig& gatewaysConfig, THashMap<TString, TStrin
         clusterCfg->SetEndpoint("lb.etn03iai600jur7pipla.ydb.mdb.yandexcloud.net:2135");
         clusterCfg->SetConfigManagerEndpoint("cm.global.logbroker.cloud.yandex.net:1111");
         clusterCfg->SetDatabase("/global/b1gvcqr959dbmi1jltep/etn03iai600jur7pipla");
-        clusterCfg->SetUseSsl(true); 
+        clusterCfg->SetUseSsl(true);
         clusterCfg->SetServiceAccountId("aje0ir9755dd4ia9mpu5");
         clusterCfg->SetServiceAccountIdSignature("xxx");
         clusterCfg->SetClusterType(TPqClusterConfig::CT_PERS_QUEUE);

@@ -14,7 +14,7 @@
 
 namespace NYql::NDq {
 
-struct TDqOutputChannelStats : TDqOutputStats { 
+struct TDqOutputChannelStats : TDqOutputStats {
     ui64 ChannelId = 0;
 
     // profile stats

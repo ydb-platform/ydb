@@ -723,7 +723,7 @@ namespace Tests {
                 auto& controlPlaneProxyConfig = *protoConfig.MutableControlPlaneProxy();
                 controlPlaneProxyConfig.SetEnabled(true);
             }
- 
+
             {
                 auto& testConnectionConfig = *protoConfig.MutableTestConnection();
                 testConnectionConfig.SetEnabled(true);
@@ -752,7 +752,7 @@ namespace Tests {
                 commonConfig.SetYdbMvpCloudEndpoint(ydbMvpEndpoint);
                 commonConfig.SetIdsPrefix("ut");
             }
- 
+
             {
                 auto& privateApiConfig = *protoConfig.MutablePrivateApi();
                 privateApiConfig.SetEnabled(true);
@@ -800,7 +800,7 @@ namespace Tests {
                 Runtime->RegisterService(serviceActorId, actorId, nodeIdx);
             };
 
-            const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory; 
+            const auto ydbCredFactory = NKikimr::CreateYdbCredentialsProviderFactory;
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             auto yqSharedResources = NYq::CreateYqSharedResources(protoConfig, ydbCredFactory, counters);
             NYq::Init(
@@ -811,8 +811,8 @@ namespace Tests {
                 "TestTenant",
                 nullptr, // MakeIntrusive<NPq::NConfigurationManager::TConnections>(),
                 yqSharedResources,
-                NKikimr::NFolderService::CreateMockFolderServiceActor, 
-                NYq::CreateMockYqAuditServiceActor, 
+                NKikimr::NFolderService::CreateMockFolderServiceActor,
+                NYq::CreateMockYqAuditServiceActor,
                 ydbCredFactory,
                 /*IcPort = */0
                 );

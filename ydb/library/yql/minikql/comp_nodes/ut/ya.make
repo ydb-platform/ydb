@@ -27,8 +27,8 @@ SRCS(
     mkql_chopper_ut.cpp
     mkql_filters_ut.cpp
     mkql_flatmap_ut.cpp
-    mkql_multihopping_saveload_ut.cpp 
-    mkql_multihopping_ut.cpp 
+    mkql_multihopping_saveload_ut.cpp
+    mkql_multihopping_ut.cpp
     mkql_multimap_ut.cpp
     mkql_fold_ut.cpp
     mkql_heap_ut.cpp

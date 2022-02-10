@@ -14,10 +14,10 @@ void RegisterDqS3MkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
     compiler.ChainCallable(TDqSourceWideWrap::CallableName(),
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             if (const auto wrapper = TDqSourceWideWrap(&node); wrapper.DataSource().Category().Value() == S3ProviderName) {
-                const auto wrapped = TryWrapWithParser(wrapper, ctx); 
-                if (wrapped) { 
-                    return *wrapped; 
-                } 
+                const auto wrapped = TryWrapWithParser(wrapper, ctx);
+                if (wrapped) {
+                    return *wrapped;
+                }
             }
 
             return TRuntimeNode();

@@ -5,7 +5,7 @@
 #include "dq_compute_actor_checkpoints.h"
 #include "dq_compute_actor_sinks.h"
 #include "dq_compute_actor_sources.h"
-#include "dq_compute_issues_buffer.h" 
+#include "dq_compute_issues_buffer.h"
 
 #include <ydb/core/scheme/scheme_tabledefs.h> // TODO: TTableId
 #include <ydb/core/base/kikimr_issue.h>
@@ -54,7 +54,7 @@ enum : ui64 {
     ComputeActorCurrentStateVersion = 2,
 };
 
-constexpr ui32 IssuesBufferSize = 16; 
+constexpr ui32 IssuesBufferSize = 16;
 
 template<typename TDerived>
 class TDqComputeActorBase : public NActors::TActorBootstrapped<TDerived>
@@ -257,7 +257,7 @@ protected:
     virtual void DoExecuteImpl() {
         auto sourcesState = GetSourcesState();
 
-        PollSourceActors(); 
+        PollSourceActors();
         ERunStatus status = TaskRunner->Run();
 
         CA_LOG_D("Resume execution, run status: " << status);
@@ -338,9 +338,9 @@ protected:
 
         if (status == ERunStatus::PendingInput && ProcessOutputsState.AllOutputsFinished) {
             CA_LOG_D("All outputs have been finished. Consider finished");
-            status = ERunStatus::Finished; 
-        } 
- 
+            status = ERunStatus::Finished;
+        }
+
         if (status != ERunStatus::Finished) {
             // If the incoming channel's buffer was full at the moment when last ChannelDataAck event had been sent,
             // there will be no attempts to send a new piece of data from the other side of this channel.
@@ -670,7 +670,7 @@ protected:
     struct TInputChannelInfo {
         ui64 ChannelId;
         IDqInputChannel::TPtr Channel;
-        bool HasPeer = false; 
+        bool HasPeer = false;
         std::optional<NDqProto::TCheckpoint> PendingCheckpoint;
         const NDqProto::ECheckpointingMode CheckpointingMode;
         ui64 FreeSpace = 0;
@@ -703,11 +703,11 @@ protected:
         IDqSource::TPtr Source;
         IDqSourceActor* SourceActor = nullptr;
         NActors::IActor* Actor = nullptr;
-        TIssuesBuffer IssuesBuffer; 
+        TIssuesBuffer IssuesBuffer;
         bool Finished = false;
         i64 FreeSpace = 1;
         bool PushStarted = false;
- 
+
         TSourceInfo(ui64 index) : Index(index), IssuesBuffer(IssuesBufferSize) {}
     };
 
@@ -734,11 +734,11 @@ protected:
         IDqSinkActor* SinkActor = nullptr;
         NActors::IActor* Actor = nullptr;
         bool Finished = false; // If sink is in finished state, it receives only checkpoints.
-        TIssuesBuffer IssuesBuffer; 
+        TIssuesBuffer IssuesBuffer;
         bool PopStarted = false;
         i64 SinkActorFreeSpaceBeforeSend = 0;
- 
-        TSinkInfo() : IssuesBuffer(IssuesBufferSize) {} 
+
+        TSinkInfo() : IssuesBuffer(IssuesBufferSize) {}
     };
 
 protected:
@@ -796,31 +796,31 @@ protected:
         CA_LOG_D("Received channels info: " << record.ShortDebugString());
 
         for (auto& channelUpdate : record.GetUpdate()) {
-            TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(channelUpdate.GetId()); 
-            if (inputChannel && !inputChannel->HasPeer && channelUpdate.GetSrcEndpoint().HasActorId()) { 
+            TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(channelUpdate.GetId());
+            if (inputChannel && !inputChannel->HasPeer && channelUpdate.GetSrcEndpoint().HasActorId()) {
                 auto peer = NActors::ActorIdFromProto(channelUpdate.GetSrcEndpoint().GetActorId());
- 
-                CA_LOG_D("Update input channelId: " << channelUpdate.GetId() << ", peer: " << peer); 
- 
-                Channels->SetInputChannelPeer(channelUpdate.GetId(), peer); 
-                inputChannel->HasPeer = true; 
- 
-                continue; 
-            } 
- 
+
+                CA_LOG_D("Update input channelId: " << channelUpdate.GetId() << ", peer: " << peer);
+
+                Channels->SetInputChannelPeer(channelUpdate.GetId(), peer);
+                inputChannel->HasPeer = true;
+
+                continue;
+            }
+
             TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelUpdate.GetId());
-            if (outputChannel && !outputChannel->HasPeer && channelUpdate.GetDstEndpoint().HasActorId()) { 
+            if (outputChannel && !outputChannel->HasPeer && channelUpdate.GetDstEndpoint().HasActorId()) {
                 auto peer = NActors::ActorIdFromProto(channelUpdate.GetDstEndpoint().GetActorId());
 
                 CA_LOG_D("Update output channelId: " << channelUpdate.GetId() << ", peer: " << peer);
 
                 Channels->SetOutputChannelPeer(channelUpdate.GetId(), peer);
                 outputChannel->HasPeer = true;
- 
-                continue; 
+
+                continue;
             }
- 
-            YQL_ENSURE(inputChannel || outputChannel, "Unknown channelId: " << channelUpdate.GetId() << ", task: " << Task.GetId()); 
+
+            YQL_ENSURE(inputChannel || outputChannel, "Unknown channelId: " << channelUpdate.GetId() << ", task: " << Task.GetId());
         }
 
         DoExecute();
@@ -1171,16 +1171,16 @@ protected:
             const ui64 i = inputIndex; // Crutch for clang
             CA_LOG_D("Create source actor for input " << i << " " << inputDesc);
             std::tie(source.SourceActor, source.Actor) = SourceActorFactory->CreateDqSourceActor(
-                IDqSourceActorFactory::TArguments{ 
-                    .InputDesc = inputDesc, 
-                    .InputIndex = inputIndex, 
-                    .TxId = TxId, 
+                IDqSourceActorFactory::TArguments{
+                    .InputDesc = inputDesc,
+                    .InputIndex = inputIndex,
+                    .TxId = TxId,
                     .SecureParams = secureParams,
                     .TaskParams = taskParams,
-                    .Callback = this, 
+                    .Callback = this,
                     .TypeEnv = typeEnv,
                     .HolderFactory = holderFactory
-                }); 
+                });
             this->RegisterWithSameMailbox(source.Actor);
         }
         if (TaskRunner) {
@@ -1195,15 +1195,15 @@ protected:
             const ui64 i = outputIndex; // Crutch for clang
             CA_LOG_D("Create sink actor for output " << i << " " << outputDesc);
             std::tie(sink.SinkActor, sink.Actor) = SinkActorFactory->CreateDqSinkActor(
-                IDqSinkActorFactory::TArguments { 
-                    .OutputDesc = outputDesc, 
-                    .OutputIndex = outputIndex, 
-                    .TxId = TxId, 
+                IDqSinkActorFactory::TArguments {
+                    .OutputDesc = outputDesc,
+                    .OutputIndex = outputIndex,
+                    .TxId = TxId,
                     .SecureParams = secureParams,
-                    .Callback = this, 
+                    .Callback = this,
                     .TypeEnv = typeEnv,
                     .HolderFactory = holderFactory
-                }); 
+                });
             this->RegisterWithSameMailbox(sink.Actor);
         }
     }
@@ -1242,23 +1242,23 @@ protected:
         ContinueExecute();
     }
 
-    void OnSourceError(ui64 inputIndex, const TIssues& issues, bool isFatal) override { 
-        if (!isFatal) { 
-            SourcesMap.at(inputIndex).IssuesBuffer.Push(issues); 
-            return; 
-        } 
- 
+    void OnSourceError(ui64 inputIndex, const TIssues& issues, bool isFatal) override {
+        if (!isFatal) {
+            SourcesMap.at(inputIndex).IssuesBuffer.Push(issues);
+            return;
+        }
+
         TString desc = issues.ToString();
         CA_LOG_E("Source[" << inputIndex << "] fatal error: " << desc);
         InternalError(TIssuesIds::DEFAULT_ERROR, desc);
     }
 
-    void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) override { 
-        if (!isFatal) { 
-            SinksMap.at(outputIndex).IssuesBuffer.Push(issues); 
-            return; 
-        } 
- 
+    void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
+        if (!isFatal) {
+            SinksMap.at(outputIndex).IssuesBuffer.Push(issues);
+            return;
+        }
+
         TString desc = issues.ToString();
         CA_LOG_E("Sink[" << outputIndex << "] fatal error: " << desc);
         InternalError(TIssuesIds::DEFAULT_ERROR, desc);
@@ -1413,13 +1413,13 @@ private:
                 }
             }
         }
- 
+
         static_cast<TDerived*>(this)->FillExtraStats(dst, last);
- 
+
         if (last) {
             BasicStats.reset();
             ProfileStats.reset();
-        } 
+        }
     }
 
     void ReportStats(TInstant now) {

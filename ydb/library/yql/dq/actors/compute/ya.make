@@ -12,7 +12,7 @@ SRCS(
     dq_compute_actor_checkpoints.cpp
     dq_compute_actor_io_actors_factory.cpp
     dq_compute_actor_stats.cpp
-    dq_compute_issues_buffer.cpp 
+    dq_compute_issues_buffer.cpp
     retry_queue.cpp
 )
 
@@ -32,10 +32,10 @@ PEERDIR(
     ydb/library/yql/minikql/computation
 )
 
-YQL_LAST_ABI_VERSION() 
+YQL_LAST_ABI_VERSION()
 
-END() 
+END()
 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+RECURSE_FOR_TESTS(
+    ut
+)

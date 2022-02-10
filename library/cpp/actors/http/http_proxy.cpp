@@ -1,4 +1,4 @@
-#include <library/cpp/actors/core/events.h> 
+#include <library/cpp/actors/core/events.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include "http_proxy.h"
 
@@ -43,19 +43,19 @@ protected:
             HFunc(TEvHttpProxy::TEvHttpConnectionClosed, Handle);
             HFunc(TEvHttpProxy::TEvResolveHostRequest, Handle);
             HFunc(TEvHttpProxy::TEvReportSensors, Handle);
-            HFunc(NActors::TEvents::TEvPoison, Handle); 
+            HFunc(NActors::TEvents::TEvPoison, Handle);
         }
     }
 
-    void PassAway() override { 
-        Send(Poller, new NActors::TEvents::TEvPoisonPill()); 
+    void PassAway() override {
+        Send(Poller, new NActors::TEvents::TEvPoisonPill());
         for (const NActors::TActorId& connection : Connections) {
-            Send(connection, new NActors::TEvents::TEvPoisonPill()); 
+            Send(connection, new NActors::TEvents::TEvPoisonPill());
         }
         for (const NActors::TActorId& acceptor : Acceptors) {
-            Send(acceptor, new NActors::TEvents::TEvPoisonPill()); 
+            Send(acceptor, new NActors::TEvents::TEvPoisonPill());
         }
-        NActors::TActorBootstrapped<THttpProxy>::PassAway(); 
+        NActors::TActorBootstrapped<THttpProxy>::PassAway();
     }
 
     void Handle(TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const NActors::TActorContext& ctx) {
@@ -200,10 +200,10 @@ protected:
                               NMonitoring::ExplicitHistogram({1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000}))->Record(sensors.Time.MilliSeconds());
     }
 
-    void Handle(NActors::TEvents::TEvPoison::TPtr, const NActors::TActorContext&) { 
-        PassAway(); 
-    } 
- 
+    void Handle(NActors::TEvents::TEvPoison::TPtr, const NActors::TActorContext&) {
+        PassAway();
+    }
+
     NActors::TActorId Poller;
     TVector<TActorId> Acceptors;
 

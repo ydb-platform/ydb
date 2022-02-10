@@ -4660,89 +4660,89 @@ TRuntimeNode TProgramBuilder::HoppingCore(TRuntimeNode list,
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list, 
-    const TUnaryLambda& keyExtractor, 
-    const TUnaryLambda& timeExtractor, 
-    const TUnaryLambda& init, 
-    const TBinaryLambda& update, 
-    const TUnaryLambda& save, 
-    const TUnaryLambda& load, 
-    const TBinaryLambda& merge, 
-    const TTernaryLambda& finish, 
-    TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay, TRuntimeNode dataWatermarks) 
-{ 
-    if constexpr (RuntimeVersion < 22U) { 
-        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__; 
-    } 
- 
-    auto streamType = AS_TYPE(TStreamType, list); 
-    auto itemType = AS_TYPE(TStructType, streamType->GetItemType()); 
-    auto timestampType = TOptionalType::Create(TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, Env), Env); 
- 
-    TRuntimeNode itemArg = Arg(itemType); 
- 
-    auto keyExtract = keyExtractor(itemArg); 
-    auto keyType = keyExtract.GetStaticType(); 
-    TRuntimeNode keyArg = Arg(keyType); 
- 
-    auto outTime = timeExtractor(itemArg); 
-    auto outStateInit = init(itemArg); 
- 
-    auto stateType = outStateInit.GetStaticType(); 
-    TRuntimeNode stateArg = Arg(stateType); 
- 
-    auto outStateUpdate = update(itemArg, stateArg); 
- 
-    auto hasSaveLoad = (bool)save; 
-    TRuntimeNode saveArg, outSave, loadArg, outLoad; 
-    if (hasSaveLoad) { 
-        saveArg = Arg(stateType); 
-        outSave = save(saveArg); 
- 
-        loadArg = Arg(outSave.GetStaticType()); 
-        outLoad = load(loadArg); 
- 
-        MKQL_ENSURE(outLoad.GetStaticType()->IsSameType(*stateType), "Loaded type is changed by the load handler"); 
-    } else { 
-        saveArg = outSave = loadArg = outLoad = NewVoid(); 
-    } 
- 
-    TRuntimeNode state2Arg = Arg(stateType); 
-    TRuntimeNode timeArg = Arg(timestampType); 
- 
-    auto outStateMerge = merge(stateArg, state2Arg); 
-    auto outItemFinish = finish(keyArg, stateArg, timeArg); 
- 
-    auto finishType = outItemFinish.GetStaticType(); 
-    MKQL_ENSURE(finishType->IsStruct(), "Expected struct type as finish lambda output"); 
- 
-    auto resultType = TStreamType::Create(outItemFinish.GetStaticType(), Env); 
- 
-    TCallableBuilder callableBuilder(Env, __func__, resultType); 
-    callableBuilder.Add(list); 
-    callableBuilder.Add(itemArg); 
-    callableBuilder.Add(keyArg); 
-    callableBuilder.Add(stateArg); 
-    callableBuilder.Add(state2Arg); 
-    callableBuilder.Add(timeArg); 
-    callableBuilder.Add(saveArg); 
-    callableBuilder.Add(loadArg); 
-    callableBuilder.Add(keyExtract); 
-    callableBuilder.Add(outTime); 
-    callableBuilder.Add(outStateInit); 
-    callableBuilder.Add(outStateUpdate); 
-    callableBuilder.Add(outSave); 
-    callableBuilder.Add(outLoad); 
-    callableBuilder.Add(outStateMerge); 
-    callableBuilder.Add(outItemFinish); 
-    callableBuilder.Add(hop); 
-    callableBuilder.Add(interval); 
-    callableBuilder.Add(delay); 
-    callableBuilder.Add(dataWatermarks); 
- 
-    return TRuntimeNode(callableBuilder.Build(), false); 
-} 
- 
+TRuntimeNode TProgramBuilder::MultiHoppingCore(TRuntimeNode list,
+    const TUnaryLambda& keyExtractor,
+    const TUnaryLambda& timeExtractor,
+    const TUnaryLambda& init,
+    const TBinaryLambda& update,
+    const TUnaryLambda& save,
+    const TUnaryLambda& load,
+    const TBinaryLambda& merge,
+    const TTernaryLambda& finish,
+    TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay, TRuntimeNode dataWatermarks)
+{
+    if constexpr (RuntimeVersion < 22U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    auto streamType = AS_TYPE(TStreamType, list);
+    auto itemType = AS_TYPE(TStructType, streamType->GetItemType());
+    auto timestampType = TOptionalType::Create(TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, Env), Env);
+
+    TRuntimeNode itemArg = Arg(itemType);
+
+    auto keyExtract = keyExtractor(itemArg);
+    auto keyType = keyExtract.GetStaticType();
+    TRuntimeNode keyArg = Arg(keyType);
+
+    auto outTime = timeExtractor(itemArg);
+    auto outStateInit = init(itemArg);
+
+    auto stateType = outStateInit.GetStaticType();
+    TRuntimeNode stateArg = Arg(stateType);
+
+    auto outStateUpdate = update(itemArg, stateArg);
+
+    auto hasSaveLoad = (bool)save;
+    TRuntimeNode saveArg, outSave, loadArg, outLoad;
+    if (hasSaveLoad) {
+        saveArg = Arg(stateType);
+        outSave = save(saveArg);
+
+        loadArg = Arg(outSave.GetStaticType());
+        outLoad = load(loadArg);
+
+        MKQL_ENSURE(outLoad.GetStaticType()->IsSameType(*stateType), "Loaded type is changed by the load handler");
+    } else {
+        saveArg = outSave = loadArg = outLoad = NewVoid();
+    }
+
+    TRuntimeNode state2Arg = Arg(stateType);
+    TRuntimeNode timeArg = Arg(timestampType);
+
+    auto outStateMerge = merge(stateArg, state2Arg);
+    auto outItemFinish = finish(keyArg, stateArg, timeArg);
+
+    auto finishType = outItemFinish.GetStaticType();
+    MKQL_ENSURE(finishType->IsStruct(), "Expected struct type as finish lambda output");
+
+    auto resultType = TStreamType::Create(outItemFinish.GetStaticType(), Env);
+
+    TCallableBuilder callableBuilder(Env, __func__, resultType);
+    callableBuilder.Add(list);
+    callableBuilder.Add(itemArg);
+    callableBuilder.Add(keyArg);
+    callableBuilder.Add(stateArg);
+    callableBuilder.Add(state2Arg);
+    callableBuilder.Add(timeArg);
+    callableBuilder.Add(saveArg);
+    callableBuilder.Add(loadArg);
+    callableBuilder.Add(keyExtract);
+    callableBuilder.Add(outTime);
+    callableBuilder.Add(outStateInit);
+    callableBuilder.Add(outStateUpdate);
+    callableBuilder.Add(outSave);
+    callableBuilder.Add(outLoad);
+    callableBuilder.Add(outStateMerge);
+    callableBuilder.Add(outItemFinish);
+    callableBuilder.Add(hop);
+    callableBuilder.Add(interval);
+    callableBuilder.Add(delay);
+    callableBuilder.Add(dataWatermarks);
+
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::Default(TType* type) {
     bool isOptional;
     const auto targetType = UnpackOptionalData(type, isOptional);

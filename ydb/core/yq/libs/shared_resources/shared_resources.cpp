@@ -84,7 +84,7 @@ struct TActorSystemPtrMixin {
 };
 
 struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedResources {
-    explicit TYqSharedResourcesImpl( 
+    explicit TYqSharedResourcesImpl(
         const NYq::NConfig::TConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const NMonitoring::TDynamicCounterPtr& counters)
@@ -118,7 +118,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
         return cfg;
     }
 
-    void CreateDbPoolHolder( 
+    void CreateDbPoolHolder(
         const NYq::NConfig::TDbPoolConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const NMonitoring::TDynamicCounterPtr& counters) {
@@ -128,7 +128,7 @@ struct TYqSharedResourcesImpl : public TActorSystemPtrMixin, public TYqSharedRes
 
 } // namespace
 
-TYqSharedResources::TPtr CreateYqSharedResourcesImpl( 
+TYqSharedResources::TPtr CreateYqSharedResourcesImpl(
         const NYq::NConfig::TConfig& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const NMonitoring::TDynamicCounterPtr& counters) {

@@ -24,7 +24,7 @@ struct TYqEventSubspace {
         ConfigUpdater,
         ControlPlaneStorage,
         ControlPlaneProxy,
-        AuditService, 
+        AuditService,
         TestConnection,
 
         SubspacesEnd,

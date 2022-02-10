@@ -192,7 +192,7 @@ private:
             RequestsDone = true;
             while(!Blocks.empty())
                 Blocks.pop();
-            Callbacks->OnSourceError(InputIndex, res.GetIssues(), true); 
+            Callbacks->OnSourceError(InputIndex, res.GetIssues(), true);
         } else {
             WakeUpTime = TMonotonic::Now() + Min(TDuration::Seconds(3), TDuration::MilliSeconds(0x30U * (1U << ++Retried)));
             ActorSystem->Schedule(WakeUpTime, new IEventHandle(SelfId(), TActorId(), new TEvPrivate::TEvRetryTime));

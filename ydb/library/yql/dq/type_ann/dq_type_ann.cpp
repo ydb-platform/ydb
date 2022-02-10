@@ -151,10 +151,10 @@ TStatus AnnotateStage(const TExprNode::TPtr& stage, TExprContext& ctx) {
 
     if (TDqStageBase::idx_Sinks < stage->ChildrenSize()) {
         for (const auto& sink: stage->Child(TDqStageBase::idx_Sinks)->Children()) {
-            sink->SetTypeAnn(resultType); 
-        } 
-    } 
- 
+            sink->SetTypeAnn(resultType);
+        }
+    }
+
     stage->SetTypeAnn(ctx.MakeType<TTupleExprType>(resultTypesTuple));
     return TStatus::Ok;
 }

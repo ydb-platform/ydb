@@ -58,7 +58,7 @@ enum ExecuteMode {
 enum QueryAction {
     QUERY_ACTION_UNSPECIFIED = 0;
     PAUSE = 1; // Pause the query, with the possibility of its quick resumption
-    PAUSE_GRACEFULLY = 2; // Similar to PAUSE, only suspends the query allowing it to pause in checkpoint. Can work for a long time 
+    PAUSE_GRACEFULLY = 2; // Similar to PAUSE, only suspends the query allowing it to pause in checkpoint. Can work for a long time
     ABORT = 3; // Stop the query
     ABORT_GRACEFULLY = 4; // Similar to ABORT, only stops the query in checkpoint
     RESUME = 5; // Resumes the execution of the query. Works only for PAUSE queries
@@ -66,7 +66,7 @@ enum QueryAction {
 
 enum StateLoadMode {
     STATE_LOAD_MODE_UNSPECIFIED = 0;
-    EMPTY = 1; // Start the query with an empty state 
+    EMPTY = 1; // Start the query with an empty state
     FROM_LAST_CHECKPOINT = 2; // Start the query with the state that is saved in the last checkpoint
 }
 
@@ -89,8 +89,8 @@ message StreamingDisposition {
     }
 
     oneof disposition {
-        google.protobuf.Empty oldest = 1; // Start processing with the oldest offset 
-        google.protobuf.Empty fresh = 2; // Start processing with the fresh offset 
+        google.protobuf.Empty oldest = 1; // Start processing with the oldest offset
+        google.protobuf.Empty fresh = 2; // Start processing with the fresh offset
         FromTime from_time = 3; // Start processing with offset from the specified time
         TimeAgo time_ago = 4; // Start processing with offset some time ago
         FromLastCheckpoint from_last_checkpoint = 5; // Start processing with offset which corresponds to the last checkpoint
@@ -418,12 +418,12 @@ message DataStreams {
     bool secure = 5;
 }
 
-message Monitoring { 
-    string project = 1 [(Ydb.length).le = 200]; 
-    string cluster = 2 [(Ydb.length).le = 200]; 
-    IamAuth auth = 3; 
-} 
- 
+message Monitoring {
+    string project = 1 [(Ydb.length).le = 200];
+    string cluster = 2 [(Ydb.length).le = 200];
+    IamAuth auth = 3;
+}
+
 message YdbDatabase {
     string database_id = 1 [(Ydb.length).le = 1024];
     IamAuth auth = 2;
@@ -466,7 +466,7 @@ message ConnectionSetting {
         ClickHouseCluster clickhouse_cluster = 2;
         DataStreams data_streams = 3;
         ObjectStorageConnection object_storage = 4;
-        Monitoring monitoring = 5; 
+        Monitoring monitoring = 5;
     }
 }
 

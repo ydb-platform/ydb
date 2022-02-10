@@ -9,8 +9,8 @@ NPq::NConfigurationManager::TClientOptions GetCmClientOptions(const NYql::TPqClu
     NPq::NConfigurationManager::TClientOptions opts;
     opts
         .SetEndpoint(cfg.GetConfigManagerEndpoint())
-        .SetCredentialsProviderFactory(credentialsProviderFactory) 
-        .SetEnableSsl(cfg.GetUseSsl()); 
+        .SetCredentialsProviderFactory(credentialsProviderFactory)
+        .SetEnableSsl(cfg.GetUseSsl());
 
     return opts;
 }
@@ -19,7 +19,7 @@ NYdb::NPersQueue::TPersQueueClientSettings GetYdbPqClientOptions(const TString& 
     NYdb::NPersQueue::TPersQueueClientSettings opts;
     opts
         .DiscoveryEndpoint(cfg.GetEndpoint())
-        .Database(database) 
+        .Database(database)
         .EnableSsl(cfg.GetUseSsl())
         .CredentialsProviderFactory(credentialsProviderFactory);
 

@@ -21,7 +21,7 @@ namespace NYq {
 
 using TActorRegistrator = std::function<void(NActors::TActorId, NActors::IActor*)>;
 
-IYqSharedResources::TPtr CreateYqSharedResources( 
+IYqSharedResources::TPtr CreateYqSharedResources(
     const NYq::NConfig::TConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NMonitoring::TDynamicCounterPtr& counters);
@@ -34,7 +34,7 @@ void Init(
     const TString& tenant,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const IYqSharedResources::TPtr& yqSharedResources,
-    const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory, 
+    const std::function<IActor*(const NKikimrProto::NFolderService::TFolderServiceConfig& authConfig)>& folderServiceFactory,
     const std::function<IActor*(const NYq::NConfig::TAuditConfig& auditConfig)>& auditServiceFactory,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const ui32& icPort

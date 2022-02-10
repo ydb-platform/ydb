@@ -6,7 +6,7 @@
 #include <ydb/core/yq/libs/shared_resources/interface/shared_resources.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
- 
+
 #include <library/cpp/actors/core/actorsystem.h>
 
 namespace NYq {
@@ -23,7 +23,7 @@ protected:
     explicit TYqSharedResources(NYdb::TDriver driver);
 };
 
-TYqSharedResources::TPtr CreateYqSharedResourcesImpl( 
+TYqSharedResources::TPtr CreateYqSharedResourcesImpl(
     const NYq::NConfig::TConfig& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const NMonitoring::TDynamicCounterPtr& counters);

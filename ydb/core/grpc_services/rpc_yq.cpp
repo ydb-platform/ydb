@@ -35,13 +35,13 @@ public:
     using TBase::GetProtoRequest;
 
 protected:
-    TString Token; 
-    TString FolderId; 
-    TString User; 
-    TString PeerName; 
-    TString UserAgent; 
-    TString RequestId; 
- 
+    TString Token;
+    TString FolderId;
+    TString User;
+    TString PeerName;
+    TString UserAgent;
+    TString RequestId;
+
 public:
     TYandexQueryRequestRPC(IRequestOpCtx* request)
         : TBase(request) {}
@@ -51,7 +51,7 @@ public:
 
         auto request = dynamic_cast<RpcRequestType*>(requestCtx);
         Y_VERIFY(request);
- 
+
         auto proxyCtx = dynamic_cast<IRequestProxyCtx*>(requestCtx);
         Y_VERIFY(proxyCtx);
 
@@ -78,13 +78,13 @@ public:
             return;
         }
 
-        FolderId = path.back(); 
-        if (!FolderId) { 
+        FolderId = path.back();
+        if (!FolderId) {
             ReplyWithStatus("Folder id is empty", StatusIds::BAD_REQUEST);
             return;
         }
 
-        if (FolderId.length() > 1024) { 
+        if (FolderId.length() > 1024) {
             ReplyWithStatus("Folder id length greater than 1024 characters: " + FolderId, StatusIds::BAD_REQUEST);
             return;
         }
@@ -93,7 +93,7 @@ public:
         TVector<TString> permissions;
         if (internalToken) {
             NACLib::TUserToken userToken(internalToken);
-            User = userToken.GetUserSID(); 
+            User = userToken.GetUserSID();
             for (const auto& sid: request->Sids) {
                 if (userToken.IsExist(sid)) {
                     permissions.push_back(sid);
@@ -101,7 +101,7 @@ public:
             }
         }
 
-        if (!User) { 
+        if (!User) {
             ReplyWithStatus("Authorization error. Permission denied", StatusIds::UNAUTHORIZED);
             return;
         }
@@ -142,20 +142,20 @@ protected:
             req.SendResult(response.Result, StatusIds::SUCCESS);
         }
 
-        NYq::TEvAuditService::TExtraInfo extraInfo{ 
-            .Token = Token, 
-            .FolderId = FolderId, 
-            .User = User, 
-            .PeerName = PeerName, 
-            .UserAgent = UserAgent, 
-            .RequestId = RequestId, 
-        }; 
- 
-        Send(NYq::YqAuditServiceActorId(), NYq::TEvAuditService::MakeAuditEvent( 
-            std::move(extraInfo), 
-            *GetProtoRequest(), 
-            response.Issues, 
-            response.AuditDetails)); 
+        NYq::TEvAuditService::TExtraInfo extraInfo{
+            .Token = Token,
+            .FolderId = FolderId,
+            .User = User,
+            .PeerName = PeerName,
+            .UserAgent = UserAgent,
+            .RequestId = RequestId,
+        };
+
+        Send(NYq::YqAuditServiceActorId(), NYq::TEvAuditService::MakeAuditEvent(
+            std::move(extraInfo),
+            *GetProtoRequest(),
+            response.Issues,
+            response.AuditDetails));
     }
 
     void Handle(typename EvResponseType::TPtr& ev) {

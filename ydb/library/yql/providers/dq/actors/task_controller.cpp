@@ -221,8 +221,8 @@ private:
                         publicCounterName = "query.cpu_usage_us";
                         isDeriv = true;
                     } else if (name == "Bytes") {
-                        if (labels.find("Source") != labels.end()) publicCounterName = "query.input_bytes"; 
-                        else if (labels.find("Sink") != labels.end()) publicCounterName = "query.output_bytes"; 
+                        if (labels.find("Source") != labels.end()) publicCounterName = "query.input_bytes";
+                        else if (labels.find("Sink") != labels.end()) publicCounterName = "query.output_bytes";
                         isDeriv = true;
                     }
                     if (publicCounterName) {
@@ -273,10 +273,10 @@ private:
             TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "MkqlMaxMemoryUsage"), v);
         }
 
-        for (const auto& stat : s.GetMkqlStats()) { 
-            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, stat.GetName()), stat.GetValue()); 
-        } 
- 
+        for (const auto& stat : s.GetMkqlStats()) {
+            TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, stat.GetName()), stat.GetValue());
+        }
+
         if (stats.ComputeCpuTimeByRunSize()) {
             auto& hist = TaskStat.GetHistogram(TaskStat.GetCounterName("TaskRunner", labels, "ComputeTimeByRunMs"));
             for (const auto& bucket : s.GetComputeCpuTimeByRun()) {
@@ -340,44 +340,44 @@ private:
 //            }
         }
 
-        for (const auto& stats : s.GetSources()) { 
-            std::map<TString, TString> labels = { 
-                {"Task", ToString(taskId)}, 
+        for (const auto& stats : s.GetSources()) {
+            std::map<TString, TString> labels = {
+                {"Task", ToString(taskId)},
                 {"Source", ToString(stats.GetInputIndex())}
-            }; 
- 
-            ADD_COUNTER(Chunks); 
-            ADD_COUNTER(Bytes); 
-            ADD_COUNTER(RowsIn); 
-            ADD_COUNTER(RowsOut); 
-            ADD_COUNTER(MaxMemoryUsage); 
- 
-            ADD_COUNTER(ErrorsCount); 
- 
+            };
+
+            ADD_COUNTER(Chunks);
+            ADD_COUNTER(Bytes);
+            ADD_COUNTER(RowsIn);
+            ADD_COUNTER(RowsOut);
+            ADD_COUNTER(MaxMemoryUsage);
+
+            ADD_COUNTER(ErrorsCount);
+
 //            if (stats.GetFinishTs() >= stats.GetStartTs()) {
 //                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs());
 //            }
-        } 
- 
-        for (const auto& stats : s.GetSinks()) { 
-            std::map<TString, TString> labels = { 
-                {"Task", ToString(taskId)}, 
+        }
+
+        for (const auto& stats : s.GetSinks()) {
+            std::map<TString, TString> labels = {
+                {"Task", ToString(taskId)},
                 {"Sink", ToString(stats.GetOutputIndex())}
-            }; 
- 
-            ADD_COUNTER(Chunks) 
-            ADD_COUNTER(Bytes); 
-            ADD_COUNTER(RowsIn); 
-            ADD_COUNTER(RowsOut); 
-            ADD_COUNTER(MaxMemoryUsage); 
- 
-            ADD_COUNTER(ErrorsCount); 
- 
+            };
+
+            ADD_COUNTER(Chunks)
+            ADD_COUNTER(Bytes);
+            ADD_COUNTER(RowsIn);
+            ADD_COUNTER(RowsOut);
+            ADD_COUNTER(MaxMemoryUsage);
+
+            ADD_COUNTER(ErrorsCount);
+
 //            if (stats.GetFinishTs() >= stats.GetStartTs()) {
 //                TaskStat.SetCounter(TaskStat.GetCounterName("TaskRunner", labels, "Total"), stats.GetFinishTs() - stats.GetStartTs());
 //            }
-        } 
- 
+        }
+
 #undef ADD_COUNTER
     }
 
@@ -441,13 +441,13 @@ private:
         YQL_LOG(DEBUG) << "Update channels";
         for (const auto& [task, actorId] : Tasks) {
             auto ev = MakeHolder<NDq::TEvDqCompute::TEvChannelsInfo>();
- 
-            for (const auto& input : task.GetInputs()) { 
-                for (const auto& channel : input.GetChannels()) { 
-                    *ev->Record.AddUpdate() = channel; 
-                } 
-            } 
- 
+
+            for (const auto& input : task.GetInputs()) {
+                for (const auto& channel : input.GetChannels()) {
+                    *ev->Record.AddUpdate() = channel;
+                }
+            }
+
             for (const auto& output : task.GetOutputs()) {
                 for (const auto& channel : output.GetChannels()) {
                     *ev->Record.AddUpdate() = channel;

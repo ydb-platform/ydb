@@ -61,11 +61,11 @@ private:
     TDuration StatusTime[StatusesCount];
 };
 
-struct TMkqlStat { 
-    NKikimr::NMiniKQL::TStatKey Key; 
-    i64 Value = 0; 
-}; 
- 
+struct TMkqlStat {
+    NKikimr::NMiniKQL::TStatKey Key;
+    i64 Value = 0;
+};
+
 struct TDqTaskRunnerStats {
     // basic stats
     TDuration BuildCpuTime;
@@ -83,8 +83,8 @@ struct TDqTaskRunnerStats {
     THashMap<ui64, const TDqInputChannelStats*> InputChannels; // Channel id -> Channel stats
     THashMap<ui64, const TDqSourceStats*> Sources; // Input index -> Source stats
     THashMap<ui64, const TDqOutputChannelStats*> OutputChannels; // Channel id -> Channel stats
- 
-    TVector<TMkqlStat> MkqlStats; 
+
+    TVector<TMkqlStat> MkqlStats;
 };
 
 struct TDqTaskRunnerContext {

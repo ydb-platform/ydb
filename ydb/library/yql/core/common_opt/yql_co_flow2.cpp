@@ -67,11 +67,11 @@ TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprCon
         auto traits = TCoHoppingTraits(hoppingSetting->Child(1));
         auto timeExtractor = traits.TimeExtractor();
 
-        auto usedType = traits.ItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>(); 
-        for (const auto& usedField : usedType->GetItems()) { 
-            usedFields.insert(usedField->GetName()); 
-        } 
- 
+        auto usedType = traits.ItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+        for (const auto& usedField : usedType->GetItems()) {
+            usedFields.insert(usedField->GetName());
+        }
+
         TSet<TStringBuf> lambdaSubset;
         if (!HaveFieldsSubset(timeExtractor.Body().Ptr(), *timeExtractor.Args().Arg(0).Raw(), lambdaSubset, parentsMap)) {
             return node.Ptr();
@@ -2019,42 +2019,42 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             .Build();
     };
 
-    map[TCoHoppingTraits::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) { 
-        TCoHoppingTraits self(node); 
- 
-        auto structType = node->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>(); 
- 
-        const auto lambdaBody = self.TimeExtractor().Body().Ptr(); 
-        const auto& arg = self.TimeExtractor().Args().Arg(0).Ref(); 
- 
-        TSet<TStringBuf> usedFields; 
-        if (!HaveFieldsSubset(lambdaBody, arg, usedFields, *optCtx.ParentsMap)) { 
-            return node; 
-        } 
- 
-        if (usedFields.size() == structType->GetSize()) { 
-            return node; 
-        } 
- 
-        TVector<const TItemExprType*> subsetItems; 
-        for (const auto& item : structType->GetItems()) { 
-            if (usedFields.contains(item->GetName())) { 
-                subsetItems.push_back(item); 
-            } 
-        } 
- 
-        auto subsetType = ctx.MakeType<TStructExprType>(subsetItems); 
-        YQL_CLOG(DEBUG, Core) << "FieldSubset for HoppingTraits"; 
-        return Build<TCoHoppingTraits>(ctx, node->Pos()) 
-            .ItemType(ExpandType(node->Pos(), *subsetType, ctx)) 
-            .TimeExtractor(ctx.DeepCopyLambda(self.TimeExtractor().Ref())) 
-            .Hop(self.Hop()) 
-            .Interval(self.Interval()) 
-            .Delay(self.Delay()) 
-            .DataWatermarks(self.DataWatermarks()) 
-            .Done().Ptr(); 
-    }; 
- 
+    map[TCoHoppingTraits::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        TCoHoppingTraits self(node);
+
+        auto structType = node->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+
+        const auto lambdaBody = self.TimeExtractor().Body().Ptr();
+        const auto& arg = self.TimeExtractor().Args().Arg(0).Ref();
+
+        TSet<TStringBuf> usedFields;
+        if (!HaveFieldsSubset(lambdaBody, arg, usedFields, *optCtx.ParentsMap)) {
+            return node;
+        }
+
+        if (usedFields.size() == structType->GetSize()) {
+            return node;
+        }
+
+        TVector<const TItemExprType*> subsetItems;
+        for (const auto& item : structType->GetItems()) {
+            if (usedFields.contains(item->GetName())) {
+                subsetItems.push_back(item);
+            }
+        }
+
+        auto subsetType = ctx.MakeType<TStructExprType>(subsetItems);
+        YQL_CLOG(DEBUG, Core) << "FieldSubset for HoppingTraits";
+        return Build<TCoHoppingTraits>(ctx, node->Pos())
+            .ItemType(ExpandType(node->Pos(), *subsetType, ctx))
+            .TimeExtractor(ctx.DeepCopyLambda(self.TimeExtractor().Ref()))
+            .Hop(self.Hop())
+            .Interval(self.Interval())
+            .Delay(self.Delay())
+            .DataWatermarks(self.DataWatermarks())
+            .Done().Ptr();
+    };
+
     map["AggregationTraits"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         auto type = node->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         if (type->GetKind() != ETypeAnnotationKind::Struct) {

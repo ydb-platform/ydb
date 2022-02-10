@@ -498,11 +498,11 @@ void TDqComputeActorChannels::PassAway() {
     IActor::PassAway();
 }
 
-void TDqComputeActorChannels::SetInputChannelPeer(ui64 channelId, const TActorId& peer) { 
-    TInputChannelState& inputChannel = InCh(channelId); 
-    inputChannel.Peer = peer; 
-} 
- 
+void TDqComputeActorChannels::SetInputChannelPeer(ui64 channelId, const TActorId& peer) {
+    TInputChannelState& inputChannel = InCh(channelId);
+    inputChannel.Peer = peer;
+}
+
 void TDqComputeActorChannels::SetOutputChannelPeer(ui64 channelId, const TActorId& peer) {
     TOutputChannelState& outputChannel = OutCh(channelId);
     outputChannel.Peer = peer;

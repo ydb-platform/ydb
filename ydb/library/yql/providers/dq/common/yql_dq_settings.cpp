@@ -9,7 +9,7 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, MaxTasksPerOperation);
     REGISTER_SETTING(*this, WorkersPerOperation);
     REGISTER_SETTING(*this, MaxDataSizePerQuery);
-    REGISTER_SETTING(*this, AnalyticsHopping); 
+    REGISTER_SETTING(*this, AnalyticsHopping);
     REGISTER_SETTING(*this, AnalyzeQuery);
     REGISTER_SETTING(*this, _AnalyzeQueryPercentage);
     REGISTER_SETTING(*this, MaxRetries);

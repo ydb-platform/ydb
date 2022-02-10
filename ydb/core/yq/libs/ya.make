@@ -2,7 +2,7 @@ OWNER(g:yq)
 
 RECURSE(
     actors
-    audit 
+    audit
     checkpoint_storage
     checkpointing
     checkpointing_common

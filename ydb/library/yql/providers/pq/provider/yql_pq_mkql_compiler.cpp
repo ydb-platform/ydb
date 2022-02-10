@@ -13,17 +13,17 @@ void RegisterDqPqMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
     compiler.ChainCallable(TDqSourceWideWrap::CallableName(),
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             if (const auto wrapper = TDqSourceWideWrap(&node); wrapper.DataSource().Category().Value() == PqProviderName) {
-                const auto wrapped = TryWrapWithParser(wrapper, ctx); 
-                if (wrapped) { 
-                    return *wrapped; 
+                const auto wrapped = TryWrapWithParser(wrapper, ctx);
+                if (wrapped) {
+                    return *wrapped;
                 }
 
-                const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx); 
+                const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx);
                 auto flow = ctx.ProgramBuilder.ToFlow(input);
                 return ctx.ProgramBuilder.ExpandMap(flow,
-                    [&](TRuntimeNode item) -> TRuntimeNode::TList { 
-                        return {item}; 
-                    }); 
+                    [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                        return {item};
+                    });
             }
 
             return TRuntimeNode();

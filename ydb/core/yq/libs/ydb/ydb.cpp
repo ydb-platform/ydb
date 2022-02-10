@@ -205,14 +205,14 @@ NYdb::TDriverConfig GetDriverConfig(const NConfig::TYdbStorageConfig& config,
         .SetEndpoint(config.GetEndpoint())
         .SetDatabase(config.GetDatabase());
 
-    NKikimr::TYdbCredentialsSettings credSettings; 
-    credSettings.UseLocalMetadata = config.GetUseLocalMetadataService(); 
-    credSettings.OAuthToken = oauth; 
-    credSettings.SaKeyFile = config.GetSaKeyFile(); 
-    credSettings.IamEndpoint = config.GetIamEndpoint(); 
- 
-    driverConfig.SetCredentialsProviderFactory(credProviderFactory(credSettings)); 
- 
+    NKikimr::TYdbCredentialsSettings credSettings;
+    credSettings.UseLocalMetadata = config.GetUseLocalMetadataService();
+    credSettings.OAuthToken = oauth;
+    credSettings.SaKeyFile = config.GetSaKeyFile();
+    credSettings.IamEndpoint = config.GetIamEndpoint();
+
+    driverConfig.SetCredentialsProviderFactory(credProviderFactory(credSettings));
+
     if (config.GetUseLocalMetadataService()) {
         driverConfig.UseSecureConnection();
     }
@@ -227,7 +227,7 @@ NYdb::TDriverConfig GetDriverConfig(const NConfig::TYdbStorageConfig& config,
 
 TYdbConnectionPtr NewYdbConnection(const NConfig::TYdbStorageConfig& config,
                                    const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory) {
-    auto driverConfig = GetDriverConfig(config, credProviderFactory); 
+    auto driverConfig = GetDriverConfig(config, credProviderFactory);
     return MakeIntrusive<TYdbConnection>(driverConfig, config);
 }
 

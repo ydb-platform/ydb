@@ -19,6 +19,6 @@ THolder<TExecTransformerBase> CreateSolomonDataSourceExecTransformer(TSolomonSta
 THolder<TVisitorTransformerBase> CreateSolomonDataSinkTypeAnnotationTransformer(TSolomonState::TPtr state);
 THolder<TExecTransformerBase> CreateSolomonDataSinkExecTransformer(TSolomonState::TPtr state);
 
-THolder<IGraphTransformer> CreateSoPhysicalOptProposalTransformer(TSolomonState::TPtr state); 
- 
+THolder<IGraphTransformer> CreateSoPhysicalOptProposalTransformer(TSolomonState::TPtr state);
+
 } // namespace NYql

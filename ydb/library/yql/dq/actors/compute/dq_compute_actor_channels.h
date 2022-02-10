@@ -67,7 +67,7 @@ private:
 
 public:
     void SetCheckpointsSupport(); // Finished channels will be polled for checkpoints.
-    void SetInputChannelPeer(ui64 channelId, const NActors::TActorId& peer); 
+    void SetInputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
     void SetOutputChannelPeer(ui64 channelId, const NActors::TActorId& peer);
     bool CanSendChannelData(ui64 channelId);
     void SendChannelData(NDqProto::TChannelData&& channelData);

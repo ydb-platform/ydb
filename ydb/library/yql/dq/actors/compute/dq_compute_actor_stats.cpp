@@ -35,13 +35,13 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
                 protoBucket->SetValue(snapshot->Value(i));
             }
         }
- 
-        for (const auto& stat : taskStats.MkqlStats) { 
-            auto* s = protoTask->MutableMkqlStats()->Add(); 
-            s->SetName(TString(stat.Key.GetName())); 
-            s->SetValue(stat.Value); 
-            s->SetDeriv(stat.Key.IsDeriv()); 
-        } 
+
+        for (const auto& stat : taskStats.MkqlStats) {
+            auto* s = protoTask->MutableMkqlStats()->Add();
+            s->SetName(TString(stat.Key.GetName()));
+            s->SetValue(stat.Value);
+            s->SetDeriv(stat.Key.IsDeriv());
+        }
     }
 
     ui64 firstRowTs = std::numeric_limits<ui64>::max();

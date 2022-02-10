@@ -120,7 +120,7 @@ public:
     void InvalidateMemInfo() { MyState_.InvalidateMemInfo(); }
 
     bool IsAttached() const { return AttachedCount_ > 0; }
- 
+
 private:
     TAllocState MyState_;
     size_t AttachedCount_ = 0;

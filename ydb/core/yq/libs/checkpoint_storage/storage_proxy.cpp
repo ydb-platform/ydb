@@ -40,13 +40,13 @@ class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
     TCheckpointStoragePtr CheckpointStorage;
     TStateStoragePtr StateStorage;
     TActorId ActorGC;
-    NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory; 
+    NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
 
 public:
-    explicit TStorageProxy( 
+    explicit TStorageProxy(
         const NConfig::TCheckpointCoordinatorConfig& config,
         const NConfig::TCommonConfig& commonConfig,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory); 
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
 
     void Bootstrap();
 
@@ -97,10 +97,10 @@ static void FillDefaultParameters(NConfig::TCheckpointCoordinatorConfig& checkpo
     }
 }
 
-TStorageProxy::TStorageProxy( 
+TStorageProxy::TStorageProxy(
     const NConfig::TCheckpointCoordinatorConfig& config,
     const NConfig::TCommonConfig& commonConfig,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) 
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
     : Config(config)
     , CommonConfig(commonConfig)
     , StorageConfig(Config.GetStorage())
@@ -390,11 +390,11 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<NActors::IActor> NewStorageProxy( 
+std::unique_ptr<NActors::IActor> NewStorageProxy(
     const NConfig::TCheckpointCoordinatorConfig& config,
     const NConfig::TCommonConfig& commonConfig,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) 
-{ 
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
+{
     return std::unique_ptr<NActors::IActor>(new TStorageProxy(config, commonConfig, credentialsProviderFactory));
 }
 

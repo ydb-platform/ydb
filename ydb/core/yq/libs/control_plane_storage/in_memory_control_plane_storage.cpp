@@ -79,18 +79,18 @@ private:
         hFunc(TEvControlPlaneStorage::TEvDescribeBindingRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvModifyBindingRequest, Handle);
         hFunc(TEvControlPlaneStorage::TEvDeleteBindingRequest, Handle);
-        hFunc(TEvControlPlaneStorage::TEvDescribeJobRequest, Handle); 
-        hFunc(TEvControlPlaneStorage::TEvWriteResultDataRequest, Handle); 
-        hFunc(TEvControlPlaneStorage::TEvGetTaskRequest, Handle); 
-        hFunc(TEvControlPlaneStorage::TEvPingTaskRequest, Handle); 
-        hFunc(TEvControlPlaneStorage::TEvNodesHealthCheckRequest, Handle); 
-        hFunc(NActors::NMon::TEvHttpInfo, Handle); 
+        hFunc(TEvControlPlaneStorage::TEvDescribeJobRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvWriteResultDataRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvGetTaskRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvPingTaskRequest, Handle);
+        hFunc(TEvControlPlaneStorage::TEvNodesHealthCheckRequest, Handle);
+        hFunc(NActors::NMon::TEvHttpInfo, Handle);
     )
 
     void Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev)
     {
-        CPS_LOG_I("CreateQueryRequest"); 
- 
+        CPS_LOG_I("CreateQueryRequest");
+
         const YandexQuery::CreateQueryRequest& request = ev->Get()->Request;
         CPS_LOG_D("CreateQueryRequest: " << request.DebugString());
         CleanupIndempotencyKeys();
@@ -138,25 +138,25 @@ private:
 
     void Handle(TEvControlPlaneStorage::TEvListQueriesRequest::TPtr& ev)
     {
-        SendEmptyResponse< 
-            TEvControlPlaneStorage::TEvListQueriesRequest::TPtr, 
-            YandexQuery::ListQueriesResult, 
-            TEvControlPlaneStorage::TEvListQueriesResponse>(ev, "ListQueriesRequest"); 
+        SendEmptyResponse<
+            TEvControlPlaneStorage::TEvListQueriesRequest::TPtr,
+            YandexQuery::ListQueriesResult,
+            TEvControlPlaneStorage::TEvListQueriesResponse>(ev, "ListQueriesRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvDescribeQueryRequest::TPtr& ev)
     {
-        SendEmptyResponse< 
-            TEvControlPlaneStorage::TEvDescribeQueryRequest::TPtr, 
-            YandexQuery::DescribeQueryResult, 
-            TEvControlPlaneStorage::TEvDescribeQueryResponse>(ev, "DescribeQueryRequest"); 
+        SendEmptyResponse<
+            TEvControlPlaneStorage::TEvDescribeQueryRequest::TPtr,
+            YandexQuery::DescribeQueryResult,
+            TEvControlPlaneStorage::TEvDescribeQueryResponse>(ev, "DescribeQueryRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr, 
-            YandexQuery::ModifyQueryResult, 
+            TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr,
+            YandexQuery::ModifyQueryResult,
             TEvControlPlaneStorage::TEvModifyQueryResponse,
             TAuditDetails<YandexQuery::Query>>(ev, "ModifyQueryRequest");
     }
@@ -164,8 +164,8 @@ private:
     void Handle(TEvControlPlaneStorage::TEvDeleteQueryRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvDeleteQueryRequest::TPtr, 
-            YandexQuery::DeleteQueryResult, 
+            TEvControlPlaneStorage::TEvDeleteQueryRequest::TPtr,
+            YandexQuery::DeleteQueryResult,
             TEvControlPlaneStorage::TEvDeleteQueryResponse,
             TAuditDetails<YandexQuery::Query>>(ev, "DeleteQueryRequest");
     }
@@ -173,58 +173,58 @@ private:
     void Handle(TEvControlPlaneStorage::TEvControlQueryRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvControlQueryRequest::TPtr, 
-            YandexQuery::ControlQueryResult, 
+            TEvControlPlaneStorage::TEvControlQueryRequest::TPtr,
+            YandexQuery::ControlQueryResult,
             TEvControlPlaneStorage::TEvControlQueryResponse,
             TAuditDetails<YandexQuery::Query>>(ev, "ControlQueryRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvGetResultDataRequest::TPtr& ev)
     {
-        SendEmptyResponse< 
-            TEvControlPlaneStorage::TEvGetResultDataRequest::TPtr, 
-            YandexQuery::GetResultDataResult, 
-            TEvControlPlaneStorage::TEvGetResultDataResponse>(ev, "GetResultDataRequest"); 
+        SendEmptyResponse<
+            TEvControlPlaneStorage::TEvGetResultDataRequest::TPtr,
+            YandexQuery::GetResultDataResult,
+            TEvControlPlaneStorage::TEvGetResultDataResponse>(ev, "GetResultDataRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvListJobsRequest::TPtr& ev)
     {
-        SendEmptyResponse< 
-            TEvControlPlaneStorage::TEvListJobsRequest::TPtr, 
-            YandexQuery::ListJobsResult, 
-            TEvControlPlaneStorage::TEvListJobsResponse>(ev, "ListJobsRequest"); 
+        SendEmptyResponse<
+            TEvControlPlaneStorage::TEvListJobsRequest::TPtr,
+            YandexQuery::ListJobsResult,
+            TEvControlPlaneStorage::TEvListJobsResponse>(ev, "ListJobsRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvCreateConnectionRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvCreateConnectionRequest::TPtr, 
-            YandexQuery::CreateConnectionResult, 
+            TEvControlPlaneStorage::TEvCreateConnectionRequest::TPtr,
+            YandexQuery::CreateConnectionResult,
             TEvControlPlaneStorage::TEvCreateConnectionResponse,
             TAuditDetails<YandexQuery::Connection>>(ev, "CreateConnectionRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr& ev)
     {
-        SendEmptyResponse< 
-            TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr, 
-            YandexQuery::ListConnectionsResult, 
-            TEvControlPlaneStorage::TEvListConnectionsResponse>(ev, "ListConnectionsRequest"); 
+        SendEmptyResponse<
+            TEvControlPlaneStorage::TEvListConnectionsRequest::TPtr,
+            YandexQuery::ListConnectionsResult,
+            TEvControlPlaneStorage::TEvListConnectionsResponse>(ev, "ListConnectionsRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr& ev)
     {
-        SendEmptyResponse< 
-            TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr, 
-            YandexQuery::DescribeConnectionResult, 
-            TEvControlPlaneStorage::TEvDescribeConnectionResponse>(ev, "DescribeConnectionRequest"); 
+        SendEmptyResponse<
+            TEvControlPlaneStorage::TEvDescribeConnectionRequest::TPtr,
+            YandexQuery::DescribeConnectionResult,
+            TEvControlPlaneStorage::TEvDescribeConnectionResponse>(ev, "DescribeConnectionRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvModifyConnectionRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvModifyConnectionRequest::TPtr, 
-            YandexQuery::ModifyConnectionResult, 
+            TEvControlPlaneStorage::TEvModifyConnectionRequest::TPtr,
+            YandexQuery::ModifyConnectionResult,
             TEvControlPlaneStorage::TEvModifyConnectionResponse,
             TAuditDetails<YandexQuery::Connection>>(ev, "ModifyConnectionRequest");
     }
@@ -232,8 +232,8 @@ private:
     void Handle(TEvControlPlaneStorage::TEvDeleteConnectionRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvDeleteConnectionRequest::TPtr, 
-            YandexQuery::DeleteConnectionResult, 
+            TEvControlPlaneStorage::TEvDeleteConnectionRequest::TPtr,
+            YandexQuery::DeleteConnectionResult,
             TEvControlPlaneStorage::TEvDeleteConnectionResponse,
             TAuditDetails<YandexQuery::Connection>>(ev, "DeleteConnectionRequest");
     }
@@ -241,33 +241,33 @@ private:
     void Handle(TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr, 
-            YandexQuery::CreateBindingResult, 
+            TEvControlPlaneStorage::TEvCreateBindingRequest::TPtr,
+            YandexQuery::CreateBindingResult,
             TEvControlPlaneStorage::TEvCreateBindingResponse,
             TAuditDetails<YandexQuery::Binding>>(ev, "CreateBindingRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvListBindingsRequest::TPtr& ev)
     {
-        SendEmptyResponse< 
-            TEvControlPlaneStorage::TEvListBindingsRequest::TPtr, 
-            YandexQuery::ListBindingsResult, 
-            TEvControlPlaneStorage::TEvListBindingsResponse>(ev, "ListBindingsRequest"); 
+        SendEmptyResponse<
+            TEvControlPlaneStorage::TEvListBindingsRequest::TPtr,
+            YandexQuery::ListBindingsResult,
+            TEvControlPlaneStorage::TEvListBindingsResponse>(ev, "ListBindingsRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr& ev)
     {
-        SendEmptyResponse< 
-            TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr, 
-            YandexQuery::DescribeBindingResult, 
-            TEvControlPlaneStorage::TEvDescribeBindingResponse>(ev, "DescribeBindingRequest"); 
+        SendEmptyResponse<
+            TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr,
+            YandexQuery::DescribeBindingResult,
+            TEvControlPlaneStorage::TEvDescribeBindingResponse>(ev, "DescribeBindingRequest");
     }
 
     void Handle(TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr, 
-            YandexQuery::ModifyBindingResult, 
+            TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr,
+            YandexQuery::ModifyBindingResult,
             TEvControlPlaneStorage::TEvModifyBindingResponse,
             TAuditDetails<YandexQuery::Binding>>(ev, "ModifyBindingRequest");
     }
@@ -275,67 +275,67 @@ private:
     void Handle(TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr& ev)
     {
         SendEmptyAuditResponse<
-            TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr, 
-            YandexQuery::DeleteBindingResult, 
+            TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr,
+            YandexQuery::DeleteBindingResult,
             TEvControlPlaneStorage::TEvDeleteBindingResponse,
             TAuditDetails<YandexQuery::Binding>>(ev, "DeleteBindingRequest");
     }
 
-    void Handle(TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr& ev) 
-    { 
-        SendEmptyResponse< 
-            TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr, 
-            YandexQuery::DescribeJobResult, 
-            TEvControlPlaneStorage::TEvDescribeJobResponse>(ev, "DescribeJobRequest"); 
-    } 
- 
-    void Handle(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev) 
-    { 
-        SendEmptyResponse< 
-            TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr, 
-            NYql::TIssues, 
-            TEvControlPlaneStorage::TEvWriteResultDataResponse>(ev, "WriteResultDataRequest"); 
-    } 
- 
-    void Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev) 
-    { 
-        CPS_LOG_I("GetTaskRequest"); 
-        TVector<TEvControlPlaneStorage::TTask> tasks; 
-        TString owner; 
-        auto event = std::make_unique<TEvControlPlaneStorage::TEvGetTaskResponse>(tasks, owner); 
-        NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(ev->Sender, SelfId(), event.release(), 0, ev->Cookie)); 
-    } 
- 
-    void Handle(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev) 
-    { 
-        SendEmptyResponse< 
-            TEvControlPlaneStorage::TEvPingTaskRequest::TPtr, 
-            YandexQuery::QueryAction, 
-            TEvControlPlaneStorage::TEvPingTaskResponse>(ev, "PingTaskRequest"); 
-    } 
- 
-    void Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev) 
-    { 
-        SendEmptyResponse< 
-            TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr, 
+    void Handle(TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr& ev)
+    {
+        SendEmptyResponse<
+            TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr,
+            YandexQuery::DescribeJobResult,
+            TEvControlPlaneStorage::TEvDescribeJobResponse>(ev, "DescribeJobRequest");
+    }
+
+    void Handle(TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr& ev)
+    {
+        SendEmptyResponse<
+            TEvControlPlaneStorage::TEvWriteResultDataRequest::TPtr,
+            NYql::TIssues,
+            TEvControlPlaneStorage::TEvWriteResultDataResponse>(ev, "WriteResultDataRequest");
+    }
+
+    void Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev)
+    {
+        CPS_LOG_I("GetTaskRequest");
+        TVector<TEvControlPlaneStorage::TTask> tasks;
+        TString owner;
+        auto event = std::make_unique<TEvControlPlaneStorage::TEvGetTaskResponse>(tasks, owner);
+        NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
+    }
+
+    void Handle(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev)
+    {
+        SendEmptyResponse<
+            TEvControlPlaneStorage::TEvPingTaskRequest::TPtr,
+            YandexQuery::QueryAction,
+            TEvControlPlaneStorage::TEvPingTaskResponse>(ev, "PingTaskRequest");
+    }
+
+    void Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev)
+    {
+        SendEmptyResponse<
+            TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr,
             Yq::Private::NodesHealthCheckResult,
-            TEvControlPlaneStorage::TEvNodesHealthCheckResponse>(ev, "NodesHealthCheckRequest"); 
-    } 
- 
-    void Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) { 
-        TStringStream str; 
-        Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(str.Str())); 
-    } 
- 
-    template<typename TRequest, typename TResult, typename TEvResult> 
-    void SendEmptyResponse(TRequest& ev, std::string logText) { 
-        CPS_LOG_I(logText); 
- 
+            TEvControlPlaneStorage::TEvNodesHealthCheckResponse>(ev, "NodesHealthCheckRequest");
+    }
+
+    void Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
+        TStringStream str;
+        Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(str.Str()));
+    }
+
+    template<typename TRequest, typename TResult, typename TEvResult>
+    void SendEmptyResponse(TRequest& ev, std::string logText) {
+        CPS_LOG_I(logText);
+
         TResult result = {};
-        auto event = std::make_unique<TEvResult>(result); 
-        NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(ev->Sender, SelfId(), event.release(), 0, ev->Cookie)); 
-    } 
- 
+        auto event = std::make_unique<TEvResult>(result);
+        NActors::TActivationContext::ActorSystem()->Send(new IEventHandle(ev->Sender, SelfId(), event.release(), 0, ev->Cookie));
+    }
+
     template<typename TRequest, typename TResult, typename TEvResult, typename TAuditDetails>
     void SendEmptyAuditResponse(TRequest& ev, std::string logText) {
         CPS_LOG_I(logText);

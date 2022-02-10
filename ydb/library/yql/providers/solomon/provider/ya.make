@@ -7,21 +7,21 @@ OWNER(
 
 SRCS(
     yql_solomon_config.cpp
-    yql_solomon_datasink_execution.cpp 
-    yql_solomon_datasink_type_ann.cpp 
-    yql_solomon_datasink.cpp 
-    yql_solomon_datasource_execution.cpp 
-    yql_solomon_datasource_type_ann.cpp 
-    yql_solomon_datasource.cpp 
-    yql_solomon_dq_integration.cpp 
+    yql_solomon_datasink_execution.cpp
+    yql_solomon_datasink_type_ann.cpp
+    yql_solomon_datasink.cpp
+    yql_solomon_datasource_execution.cpp
+    yql_solomon_datasource_type_ann.cpp
+    yql_solomon_datasource.cpp
+    yql_solomon_dq_integration.cpp
     yql_solomon_io_discovery.cpp
     yql_solomon_load_meta.cpp
-    yql_solomon_physical_optimize.cpp 
-    yql_solomon_provider.cpp 
+    yql_solomon_physical_optimize.cpp
+    yql_solomon_provider.cpp
 )
 
 PEERDIR(
-    library/cpp/actors/protos 
+    library/cpp/actors/protos
     ydb/library/yql/dq/expr_nodes
     ydb/library/yql/providers/common/config
     ydb/library/yql/providers/common/proto

@@ -82,7 +82,7 @@ bool EnsureVariantType(const TExprNode& node, TExprContext& ctx);
 bool EnsureVariantType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureDataType(const TExprNode& node, TExprContext& ctx);
 bool EnsureDataType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
-bool EnsureSpecificDataType(const TExprNode& node, EDataSlot expectedDataSlot, TExprContext& ctx, bool allowOptional = false); 
+bool EnsureSpecificDataType(const TExprNode& node, EDataSlot expectedDataSlot, TExprContext& ctx, bool allowOptional = false);
 bool EnsureSpecificDataType(TPositionHandle position, const TTypeAnnotationNode& type, EDataSlot expectedDataSlot, TExprContext& ctx);
 bool EnsureStringOrUtf8Type(const TExprNode& node, TExprContext& ctx);
 bool EnsureStringOrUtf8Type(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);

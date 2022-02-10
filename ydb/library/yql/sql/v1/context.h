@@ -246,7 +246,7 @@ namespace NSQLTranslationV1 {
         bool PositionalUnionAll = false;
         bool BogousStarInGroupByOverJoin = false;
         bool UnorderedSubqueries = true;
-        bool PragmaDataWatermarks = true; 
+        bool PragmaDataWatermarks = true;
         bool WarnOnAnsiAliasShadowing = true;
         ui32 ResultRowsLimit = 0;
         ui64 ResultSizeLimit = 0;

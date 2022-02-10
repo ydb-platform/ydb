@@ -111,12 +111,12 @@ void AddClustersFromConnections(const THashMap<TString, YandexQuery::Connection>
             if (solomonEndpoint.empty()) {
                 if (connectionName.StartsWith("pre")) {
                     solomonEndpoint = "monitoring.api.cloud-preprod.yandex.net";
-                    clusterCfg->SetUseSsl(true); 
+                    clusterCfg->SetUseSsl(true);
                 } else if (connectionName.StartsWith("so")) {
                     solomonEndpoint = "solomon.yandex.net";
                 } else {
                     solomonEndpoint = "monitoring.api.cloud.yandex.net";
-                    clusterCfg->SetUseSsl(true); 
+                    clusterCfg->SetUseSsl(true);
                 }
             }
 

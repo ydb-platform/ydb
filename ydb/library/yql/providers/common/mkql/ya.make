@@ -7,8 +7,8 @@ OWNER(
 )
 
 SRCS(
-    parser.cpp 
-    parser.h 
+    parser.cpp
+    parser.h
     yql_provider_mkql.cpp
     yql_provider_mkql.h
     yql_type_mkql.cpp
@@ -16,7 +16,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/json 
+    library/cpp/json
     ydb/library/yql/ast
     ydb/library/yql/minikql
     ydb/library/yql/public/decimal
@@ -30,5 +30,5 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-END() 
+END()
 

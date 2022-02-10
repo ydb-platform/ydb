@@ -425,16 +425,16 @@ public:
         const TBinaryLambda& merge,
         const TBinaryLambda& finish,
         TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay);
-    TRuntimeNode MultiHoppingCore(TRuntimeNode list, 
-        const TUnaryLambda& keyExtractor, 
-        const TUnaryLambda& timeExtractor, 
-        const TUnaryLambda& init, 
-        const TBinaryLambda& update, 
-        const TUnaryLambda& save, 
-        const TUnaryLambda& load, 
-        const TBinaryLambda& merge, 
-        const TTernaryLambda& finish, 
-        TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay, TRuntimeNode dataWatermarks); 
+    TRuntimeNode MultiHoppingCore(TRuntimeNode list,
+        const TUnaryLambda& keyExtractor,
+        const TUnaryLambda& timeExtractor,
+        const TUnaryLambda& init,
+        const TBinaryLambda& update,
+        const TUnaryLambda& save,
+        const TUnaryLambda& load,
+        const TBinaryLambda& merge,
+        const TTernaryLambda& finish,
+        TRuntimeNode hop, TRuntimeNode interval, TRuntimeNode delay, TRuntimeNode dataWatermarks);
 
     TRuntimeNode Chopper(TRuntimeNode flow, const TUnaryLambda& keyExtractor, const TBinaryLambda& groupSwitch, const TBinaryLambda& groupHandler);
 

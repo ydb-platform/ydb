@@ -445,8 +445,8 @@ public:
 
             TVector<IDqOutput::TPtr> outputs{Reserve(std::max<ui64>(outputDesc.ChannelsSize(), 1))};
             if (outputDesc.HasSink()) {
-                auto sink = CreateDqSink(i, ProgramParsed.OutputItemTypes[i], memoryLimits.ChannelBufferSize, 
-                    Settings.CollectProfileStats); 
+                auto sink = CreateDqSink(i, ProgramParsed.OutputItemTypes[i], memoryLimits.ChannelBufferSize,
+                    Settings.CollectProfileStats);
                 auto [_, inserted] = Sinks.emplace(i, sink);
                 Y_VERIFY(inserted);
                 outputs.emplace_back(sink);
@@ -523,13 +523,13 @@ public:
 
         if (Y_UNLIKELY(CollectProfileStats)) {
             Stats->ComputeCpuTimeByRun->Collect(RunComputeTime.MilliSeconds());
- 
-            if (ProgramParsed.StatsRegistry) { 
-                Stats->MkqlStats.clear(); 
-                ProgramParsed.StatsRegistry->ForEachStat([this](const TStatKey& key, i64 value) { 
-                    Stats->MkqlStats.emplace_back(TMkqlStat{key, value}); 
-                }); 
-            } 
+
+            if (ProgramParsed.StatsRegistry) {
+                Stats->MkqlStats.clear();
+                ProgramParsed.StatsRegistry->ForEachStat([this](const TStatKey& key, i64 value) {
+                    Stats->MkqlStats.emplace_back(TMkqlStat{key, value});
+                });
+            }
         }
 
         if (runStatus == ERunStatus::Finished) {

@@ -5,7 +5,7 @@
 #include <ydb/core/yq/libs/events/events.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
- 
+
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -57,16 +57,16 @@ private:
     NYdb::TDriver Driver;
     THashMap<EDbPoolId, TDbPool::TPtr> Pools;
     THolder<NYdb::NTable::TTableClient> TableClient;
-    NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory; 
+    NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     const NMonitoring::TDynamicCounterPtr Counters;
 };
 
 class TDbPoolHolder: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TDbPoolHolder>;
-    TDbPoolHolder( 
+    TDbPoolHolder(
         const NYq::NConfig::TDbPoolConfig& config,
-        const NYdb::TDriver& driver, 
+        const NYdb::TDriver& driver,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const NMonitoring::TDynamicCounterPtr& counters);
 

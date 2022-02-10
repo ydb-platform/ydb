@@ -14,7 +14,7 @@ public:
     {
         using TSelf = TSolomonDataSinkTypeAnnotationTransformer;
         AddHandler({TSoWriteToShard::CallableName()}, Hndl(&TSelf::HandleWriteToShard));
-        AddHandler({TSoShard::CallableName()}, Hndl(&TSelf::HandleSoShard)); 
+        AddHandler({TSoShard::CallableName()}, Hndl(&TSelf::HandleSoShard));
         AddHandler({TCoCommit::CallableName()}, Hndl(&TSelf::HandleCommit));
     }
 
@@ -37,39 +37,39 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus HandleSoShard(TExprBase input, TExprContext& ctx) { 
-        YQL_ENSURE(!State_->IsRtmrMode(), "SoShard can't be used in rtmr mode"); 
- 
-        if (!EnsureMinArgsCount(input.Ref(), 4, ctx) || !EnsureMaxArgsCount(input.Ref(), 5, ctx)) { 
-            return TStatus::Error; 
-        } 
- 
-        const TSoShard shard = input.Cast<TSoShard>(); 
- 
-        if (!EnsureAtom(shard.SolomonCluster().Ref(), ctx)) { 
-            return TStatus::Error; 
-        } 
- 
-        if (!EnsureAtom(shard.Project().Ref(), ctx)) { 
-            return TStatus::Error; 
-        } 
- 
-        if (!EnsureAtom(shard.Cluster().Ref(), ctx)) { 
-            return TStatus::Error; 
-        } 
- 
-        if (!EnsureAtom(shard.Service().Ref(), ctx)) { 
-            return TStatus::Error; 
-        } 
- 
-        if (shard.Token() && !EnsureCallable(shard.Token().Ref(), ctx)) { 
-            return TStatus::Error; 
-        } 
- 
-        input.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>()); 
-        return TStatus::Ok; 
-    } 
- 
+    TStatus HandleSoShard(TExprBase input, TExprContext& ctx) {
+        YQL_ENSURE(!State_->IsRtmrMode(), "SoShard can't be used in rtmr mode");
+
+        if (!EnsureMinArgsCount(input.Ref(), 4, ctx) || !EnsureMaxArgsCount(input.Ref(), 5, ctx)) {
+            return TStatus::Error;
+        }
+
+        const TSoShard shard = input.Cast<TSoShard>();
+
+        if (!EnsureAtom(shard.SolomonCluster().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(shard.Project().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(shard.Cluster().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(shard.Service().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (shard.Token() && !EnsureCallable(shard.Token().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+        return TStatus::Ok;
+    }
+
     TStatus HandleCommit(TExprBase input, TExprContext& ctx) {
         Y_UNUSED(ctx);
         auto commit = input.Cast<TCoCommit>();

@@ -3191,21 +3191,21 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     auto byShardBackupStatus = db.Table<Schema::ShardBackupStatus>().Range(operationId.GetTxId()).Select();
                     auto byMigratedShardBackupStatus = db.Table<Schema::MigratedShardBackupStatus>().Range(operationId.GetTxId()).Select();
                     auto byTxShardStatus = db.Table<Schema::TxShardStatus>().Range(operationId.GetTxId()).Select();
-
+ 
                     TShardBackupStatusRows statuses;
                     if (!LoadBackupStatusesImpl(statuses, byShardBackupStatus, byMigratedShardBackupStatus, byTxShardStatus)) {
-                        return false;
-                    }
-
+                        return false; 
+                    } 
+ 
                     for (auto& rec : statuses) {
                         auto shardIdx = std::get<1>(rec);
                         auto success = std::get<2>(rec);
                         auto error = std::get<3>(rec);
                         auto bytes = std::get<4>(rec);
                         auto rows = std::get<5>(rec);
-
+ 
                         txState.ShardStatuses[shardIdx] = TTxState::TShardStatus(success, error, bytes, rows);
-                    }
+                    } 
                 } else if (txState.TxType == TTxState::TxForceDropSubDomain || txState.TxType == TTxState::TxForceDropExtSubDomain) {
                     forceDropOpIds.push_back(operationId);
                 } else if (txState.TxType == TTxState::TxAlterUserAttributes) {
@@ -3249,7 +3249,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                 << ", txId: " << operationId.GetTxId()
                                 << ", TxType: " << TTxState::TypeName(txState.TxType)
                                 << ", LastTxId: " << path->LastTxId);
-
+ 
                 if (!Self->Operations.contains(operationId.GetTxId())) {
                     Self->Operations[operationId.GetTxId()] = new TOperation(operationId.GetTxId());
                 }
@@ -3419,12 +3419,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Read backup settings
-        {
+        // Read backup settings 
+        { 
             TBackupSettingsRows backupSettings;
             if (!LoadBackupSettings(db, backupSettings)) {
-                return false;
-            }
+                return false; 
+            } 
 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for BackupSettings"
@@ -3442,14 +3442,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 nRetries = std::get<7>(rec);
 
                 Y_VERIFY(tableName.size() > 0);
-
+ 
                 TTableInfo::TPtr tableInfo = Self->Tables.at(pathId);
-                Y_VERIFY(tableInfo.Get() != nullptr);
+                Y_VERIFY(tableInfo.Get() != nullptr); 
 
-                tableInfo->BackupSettings.SetTableName(tableName);
+                tableInfo->BackupSettings.SetTableName(tableName); 
                 tableInfo->BackupSettings.SetNeedToBill(needToBill);
                 tableInfo->BackupSettings.SetNumberOfRetries(nRetries);
-
+ 
                 if (ytSerializedSettings) {
                     auto settings = tableInfo->BackupSettings.MutableYTSettings();
                     Y_VERIFY(ParseFromStringNoSizeLimit(*settings, ytSerializedSettings));
@@ -3473,11 +3473,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded backup settings"
                                 << ", pathId: " << pathId
                                 << ", tablename: " << tableName.data());
-            }
-        }
-
+            } 
+        } 
+ 
         // Read restore tasks
-        {
+        { 
             auto rowSet = db.Table<Schema::RestoreTasks>().Range().Select();
             if (!rowSet.IsReady()) {
                 return false;
@@ -3565,25 +3565,25 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         {
             TShardBackupStatusRows backupStatuses;
             if (!LoadBackupStatuses(db, backupStatuses)) {
-                return false;
-            }
-
+                return false; 
+            } 
+ 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for ShardBackupStatus"
                              << ", readed records: " << backupStatuses.size()
                              << ", at schemeshard: " << Self->TabletID());
-
+ 
             THashMap<TTxId, TShardBackupStatusRows> statusesByTxId;
             for (auto& rec: backupStatuses) {
                 TTxId txId = std::get<0>(rec);
                 statusesByTxId[txId].push_back(rec);
             }
-
+ 
             TCompletedBackupRestoreRows history;
             if (!LoadBackupRestoreHistory(db, history)) {
                 return false;
             }
-
+ 
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                          "TTxInit for CompletedBackup"
                              << ", readed records: " << history.size()
@@ -3606,17 +3606,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 info.SuccessShardCount = successShardsCount;
                 info.StartDateTime = startTime;
                 info.DataTotalSize = dataSize;
-
-                if (!Self->Tables.FindPtr(pathId)) {
+ 
+                if (!Self->Tables.FindPtr(pathId)) { 
                     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                                 "Skip record in CompletedBackups"
                                     << ", pathId: " << pathId
                                     << ", txid: " << txId);
-                    continue;
-                }
+                    continue; 
+                } 
 
                 TTableInfo::TPtr tableInfo = Self->Tables.at(pathId);
-
+ 
                 if (statusesByTxId.contains(txId)) {
                     for (auto& recByTxId: statusesByTxId.at(txId)) {
                         auto shardIdx = std::get<1>(recByTxId);
@@ -3624,11 +3624,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         auto error = std::get<3>(recByTxId);
                         auto bytes = std::get<4>(recByTxId);
                         auto rows = std::get<5>(recByTxId);
-
+ 
                         info.ShardStatuses[shardIdx] = TTxState::TShardStatus(success, error, bytes, rows);
-                    }
-                }
-
+                    } 
+                } 
+ 
                 switch (kind) {
                 case TTableInfo::TBackupRestoreResult::EKind::Backup:
                     tableInfo->BackupHistory[txId] = std::move(info);
@@ -3637,14 +3637,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     tableInfo->RestoreHistory[txId] = std::move(info);
                     break;
                 }
-
+ 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Loaded completed backup status"
                                 << ", pathId: " << pathId
                                 << ", txid: " << txId);
-            }
-        }
-
+            } 
+        } 
+ 
         // Other persistent params
         for (const auto& si : Self->ShardInfos) {
             auto shardIdx = si.first;

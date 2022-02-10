@@ -197,7 +197,7 @@ struct TEvDataShard {
         EvUpdateConfig,
         EvSchemaChanged,
         EvStateChanged,
-        EvCancelBackup,
+        EvCancelBackup, 
         EvMigrateSchemeShardRequest,
         EvMigrateSchemeShardResponse,
         EvCancelRestore,
@@ -606,22 +606,22 @@ struct TEvDataShard {
             return std::make_pair(Record.GetStep(), Record.GetOrderId());
         }
 
-        TString GetError() const {
-            if (Record.ErrorSize() > 0) {
-                TString result;
-                for (ui32 i = 0; i < Record.ErrorSize(); ++i) {
-                    if (Record.GetError(i).HasReason()) {
-                        result += Record.GetError(i).GetReason() + "|";
-                    } else {
-                        result += "no reason|";
-                    }
-                }
-                return result;
-            } else {
-                return TString();
-            }
-        }
-
+        TString GetError() const { 
+            if (Record.ErrorSize() > 0) { 
+                TString result; 
+                for (ui32 i = 0; i < Record.ErrorSize(); ++i) { 
+                    if (Record.GetError(i).HasReason()) { 
+                        result += Record.GetError(i).GetReason() + "|"; 
+                    } else { 
+                        result += "no reason|"; 
+                    } 
+                } 
+                return result; 
+            } else { 
+                return TString(); 
+            } 
+        } 
+ 
         void AddError(NKikimrTxDataShard::TError::EKind kind, const TStringBuf& reason, const TStringBuf& keyBuffer = TStringBuf()) {
             auto error = Record.MutableError()->Add();
             error->SetKind(kind);
@@ -761,20 +761,20 @@ struct TEvDataShard {
             Record.SetTabletId(tabletId);
         }
     };
-
-    struct TEvCancelBackup
-        : public TEventPB<TEvCancelBackup,
-                          NKikimrTxDataShard::TEvCancelBackup,
-                          TEvDataShard::EvCancelBackup>
-    {
-        TEvCancelBackup() = default;
-
+ 
+    struct TEvCancelBackup 
+        : public TEventPB<TEvCancelBackup, 
+                          NKikimrTxDataShard::TEvCancelBackup, 
+                          TEvDataShard::EvCancelBackup> 
+    { 
+        TEvCancelBackup() = default; 
+ 
         explicit TEvCancelBackup(ui64 txid, ui64 tableId) {
-            Record.SetBackupTxId(txid);
-            Record.SetTableId(tableId);
-        }
+            Record.SetBackupTxId(txid); 
+            Record.SetTableId(tableId); 
+        } 
     };
-
+ 
     struct TEvCancelRestore
         : public TEventPB<TEvCancelRestore,
                           NKikimrTxDataShard::TEvCancelRestore,
@@ -799,7 +799,7 @@ struct TEvDataShard {
             Record.SetCollectKeySample(collectKeySample);
         }
     };
-
+ 
     struct TEvGetTableStatsResult : public TEventPB<TEvGetTableStatsResult,
                                                         NKikimrTxDataShard::TEvGetTableStatsResult,
                                                         TEvDataShard::EvGetTableStatsResult> {
@@ -809,7 +809,7 @@ struct TEvDataShard {
             Record.SetTableOwnerId(tableOwnerId);
             Record.SetTableLocalId(tableLocalId);
         }
-    };
+    }; 
 
     struct TEvPeriodicTableStats : public TEventPB<TEvPeriodicTableStats,
                                                         NKikimrTxDataShard::TEvPeriodicTableStats,

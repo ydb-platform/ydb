@@ -346,9 +346,9 @@ protected:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
             HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
-            HFunc(TEvWhiteboard::TEvNodeStateUpdate, Handle);
-            HFunc(TEvWhiteboard::TEvNodeStateDelete, Handle);
-            HFunc(TEvWhiteboard::TEvNodeStateRequest, Handle);
+            HFunc(TEvWhiteboard::TEvNodeStateUpdate, Handle); 
+            HFunc(TEvWhiteboard::TEvNodeStateDelete, Handle); 
+            HFunc(TEvWhiteboard::TEvNodeStateRequest, Handle); 
             HFunc(TEvWhiteboard::TEvPDiskStateUpdate, Handle);
             HFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
             HFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle);
@@ -384,14 +384,14 @@ protected:
         }
     }
 
-    void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvNodeStateUpdate::TPtr &ev, const TActorContext &ctx) { 
         auto& nodeStateInfo = NodeStateInfo[ev->Get()->Record.GetPeerName()];
         if (CheckedMerge(nodeStateInfo, ev->Get()->Record) >= 100) {
             nodeStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
         }
     }
 
-    void Handle(TEvWhiteboard::TEvNodeStateDelete::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvNodeStateDelete::TPtr &ev, const TActorContext &ctx) { 
         auto& nodeStateInfo = NodeStateInfo[ev->Get()->Record.GetPeerName()];
         if (nodeStateInfo.HasConnected()) {
             nodeStateInfo.ClearConnected();
@@ -600,10 +600,10 @@ protected:
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev, const TActorContext &ctx) {
+    void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev, const TActorContext &ctx) { 
         const auto& request = ev->Get()->Record;
         ui64 changedSince = request.HasChangedSince() ? request.GetChangedSince() : 0;
-        TAutoPtr<TEvWhiteboard::TEvNodeStateResponse> response = new TEvWhiteboard::TEvNodeStateResponse();
+        TAutoPtr<TEvWhiteboard::TEvNodeStateResponse> response = new TEvWhiteboard::TEvNodeStateResponse(); 
         auto& record = response->Record;
         for (const auto& pr : NodeStateInfo) {
             if (pr.second.GetChangeTime() >= changedSince) {
@@ -615,8 +615,8 @@ protected:
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-//    void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev, const TActorContext &ctx) {
-//        TAutoPtr<TEvWhiteboard::TEvNodeStateResponse> response = new TEvWhiteboard::TEvNodeStateResponse();
+//    void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev, const TActorContext &ctx) { 
+//        TAutoPtr<TEvWhiteboard::TEvNodeStateResponse> response = new TEvWhiteboard::TEvNodeStateResponse(); 
 //        auto& record = response->Record;
 //        const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters = AppData(ctx)->Counters;
 //        TIntrusivePtr<NMonitoring::TDynamicCounters> interconnectCounters = GetServiceCounters(counters, "interconnect");

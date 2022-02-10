@@ -1,6 +1,6 @@
-#include "event_pb.h"
-
-namespace NActors {
+#include "event_pb.h" 
+ 
+namespace NActors { 
     bool TRopeStream::Next(const void** data, int* size) {
         *data = Iter.ContiguousData();
         *size = Iter.ContiguousSize();
@@ -13,13 +13,13 @@ namespace NActors {
         TotalByteCount += *size;
         return *size != 0;
     }
-
+ 
     void TRopeStream::BackUp(int count) {
         Y_VERIFY(count <= TotalByteCount);
         Iter -= count;
         TotalByteCount -= count;
     }
-
+ 
     bool TRopeStream::Skip(int count) {
         if (static_cast<size_t>(TotalByteCount + count) > Size) {
             count = Size - TotalByteCount;
@@ -27,20 +27,20 @@ namespace NActors {
         Iter += count;
         TotalByteCount += count;
         return static_cast<size_t>(TotalByteCount) != Size;
-    }
-
+    } 
+ 
     TCoroutineChunkSerializer::TCoroutineChunkSerializer()
         : TotalSerializedDataSize(0)
         , Stack(64 * 1024)
         , SelfClosure{this, TArrayRef(Stack.Begin(), Stack.End())}
         , InnerContext(SelfClosure)
     {}
-
+ 
     TCoroutineChunkSerializer::~TCoroutineChunkSerializer() {
         CancelFlag = true;
         Resume();
         Y_VERIFY(Finished);
-    }
+    } 
 
     bool TCoroutineChunkSerializer::AllowsAliasing() const {
         return true;
@@ -85,10 +85,10 @@ namespace NActors {
             } else {
                 InnerContext.SwitchTo(BufFeedContext);
             }
-        }
+        } 
         return true;
-    }
-
+    } 
+ 
     bool TCoroutineChunkSerializer::Next(void** data, int* size) {
         if (CancelFlag || AbortFlag) {
             return false;
@@ -122,15 +122,15 @@ namespace NActors {
         BufferPtr -= count;
         SizeRemain += count;
         TotalSerializedDataSize -= count;
-    }
-
+    } 
+ 
     void TCoroutineChunkSerializer::Resume() {
         TContMachineContext feedContext;
         BufFeedContext = &feedContext;
         feedContext.SwitchTo(&InnerContext);
         BufFeedContext = nullptr;
-    }
-
+    } 
+ 
     bool TCoroutineChunkSerializer::WriteRope(const TRope *rope) {
         for (auto iter = rope->Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
             if (!WriteAliasedRaw(iter.ContiguousData(), iter.ContiguousSize())) {
@@ -156,14 +156,14 @@ namespace NActors {
 
         return {Chunks, Chunks + NumChunks};
     }
-
+ 
     void TCoroutineChunkSerializer::SetSerializingEvent(const IEventBase *event) {
         Y_VERIFY(Event == nullptr);
         Event = event;
         TotalSerializedDataSize = 0;
         AbortFlag = false;
     }
-
+ 
     void TCoroutineChunkSerializer::Abort() {
         Y_VERIFY(Event);
         AbortFlag = true;
@@ -181,8 +181,8 @@ namespace NActors {
         }
         Finished = true;
         InnerContext.SwitchTo(BufFeedContext);
-    }
-
+    } 
+ 
     bool TAllocChunkSerializer::Next(void** pdata, int* psize) {
         if (Backup) {
             // we have some data in backup rope -- move the first chunk from the backup rope to the buffer and return
@@ -200,12 +200,12 @@ namespace NActors {
             Buffers->Append(TRope(std::move(item)));
         }
         return true;
-    }
-
+    } 
+ 
     void TAllocChunkSerializer::BackUp(int count) {
         Backup.Insert(Backup.Begin(), Buffers->EraseBack(count));
     }
-
+ 
     bool TAllocChunkSerializer::WriteAliasedRaw(const void*, int) {
         Y_VERIFY(false);
         return false;

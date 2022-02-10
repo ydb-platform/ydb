@@ -7,8 +7,8 @@ enum EServiceCommon {
 
     GLOBAL = 0;
     INTERCONNECT = 1;
-    TEST = 2;
-    PROTOCOLS = 3;
+    TEST = 2; 
+    PROTOCOLS = 3; 
     INTERCONNECT_SPEED_TEST = 4;
     INTERCONNECT_STATUS = 5;
     INTERCONNECT_NETWORK = 6;

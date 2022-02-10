@@ -1,7 +1,7 @@
 #include "event.h"
-#include "event_pb.h"
-
-namespace NActors {
+#include "event_pb.h" 
+ 
+namespace NActors { 
 
     const TScopeId TScopeId::LocallyGenerated{
         Max<ui64>(), Max<ui64>()
@@ -22,8 +22,8 @@ namespace NActors {
             return chainBuf;
         }
         return new TEventSerializedData;
-    }
-
+    } 
+ 
     TIntrusivePtr<TEventSerializedData> IEventHandle::GetChainBuffer() {
         if (Buffer)
             return Buffer;
@@ -34,5 +34,5 @@ namespace NActors {
             return Buffer;
         }
         return new TEventSerializedData;
-    }
-}
+    } 
+} 

@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
     };
 
     static const TString CrLf = "\r\n";
-
+ 
     struct TTestRequest {
         TTestRequest(ui16 port, TString content = TString())
             : Port(port)
@@ -145,23 +145,23 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         {
         }
 
-        void CheckContinue(TSocketInput& si) {
-            if (Expect100Continue) {
-                TStringStream ss;
+        void CheckContinue(TSocketInput& si) { 
+            if (Expect100Continue) { 
+                TStringStream ss; 
                 TString firstLine;
-                si.ReadLine(firstLine);
-                for (;;) {
+                si.ReadLine(firstLine); 
+                for (;;) { 
                     TString buf;
-                    si.ReadLine(buf);
+                    si.ReadLine(buf); 
                     if (buf.size() == 0) {
-                        break;
-                    }
-                    ss << buf << CrLf;
-                }
-                UNIT_ASSERT_EQUAL(firstLine, "HTTP/1.1 100 Continue");
-            }
-        }
-
+                        break; 
+                    } 
+                    ss << buf << CrLf; 
+                } 
+                UNIT_ASSERT_EQUAL(firstLine, "HTTP/1.1 100 Continue"); 
+            } 
+        } 
+ 
         TString Execute() {
             TSocket* s = nullptr;
             THolder<TSocket> singleReqSocket;
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 s = singleReqSocket.Get();
             }
             bool isPost = Type == "POST";
-            TSocketInput si(*s);
+            TSocketInput si(*s); 
 
             if (UseHttpOutput) {
                 TSocketOutput so(*s);
@@ -194,21 +194,21 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                     } else {
                         r << "Transfer-Encoding: chunked" << CrLf;
                     }
-                    if (Expect100Continue) {
-                        r << "Expect: 100-continue" << CrLf;
-                    }
+                    if (Expect100Continue) { 
+                        r << "Expect: 100-continue" << CrLf; 
+                    } 
                 }
 
                 r << CrLf;
                 if (isPost) {
-                    output.Write(r.Str());
-                    output.Flush();
-                    CheckContinue(si);
-                    output.Write(Content);
-                    output.Finish();
-                } else {
-                    output.Write(r.Str());
-                    output.Finish();
+                    output.Write(r.Str()); 
+                    output.Flush(); 
+                    CheckContinue(si); 
+                    output.Write(Content); 
+                    output.Finish(); 
+                } else { 
+                    output.Write(r.Str()); 
+                    output.Finish(); 
                 }
             } else {
                 TStringStream r;
@@ -222,9 +222,9 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 if (EnableResponseEncoding) {
                     r << "Accept-Encoding: gzip, deflate, x-gzip, x-deflate, y-lzo, y-lzf, y-lzq, y-bzip2, y-lzma" << CrLf;
                 }
-                if (isPost && Expect100Continue) {
-                    r << "Expect: 100-continue" << CrLf;
-                }
+                if (isPost && Expect100Continue) { 
+                    r << "Expect: 100-continue" << CrLf; 
+                } 
                 if (isPost && ContentEncoding.size() && Content.size()) {
                     r << "Content-Encoding: " << ContentEncoding << CrLf;
                     TStringStream compressedContent;
@@ -237,7 +237,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                     r << "Content-Length: " << compressedContent.Size() << CrLf;
                     r << CrLf;
                     s->Send(r.Data(), r.Size());
-                    CheckContinue(si);
+                    CheckContinue(si); 
                     Hdr = r.Str();
                     TString tosend = compressedContent.Str();
                     s->Send(tosend.data(), tosend.size());
@@ -246,7 +246,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                         r << "Content-Length: " << Content.size() << CrLf;
                         r << CrLf;
                         s->Send(r.Data(), r.Size());
-                        CheckContinue(si);
+                        CheckContinue(si); 
                         Hdr = r.Str();
                         s->Send(Content.data(), Content.size());
                     } else {
@@ -286,7 +286,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         THolder<TSocket> KeepAlivedSocket;
         bool EnableResponseEncoding = false;
         TString Hdr;
-        bool Expect100Continue = false;
+        bool Expect100Continue = false; 
     };
 
     class TFailingMtpQueue: public TSimpleThreadPool {
@@ -354,10 +354,10 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                                 r.ContentEncoding = encoder;
 
                                 for (bool expect100Continue : trueFalse) {
-                                    r.Expect100Continue = expect100Continue;
+                                    r.Expect100Continue = expect100Continue; 
                                     TString resp = r.Execute();
-                                    UNIT_ASSERT_C(resp == res, "diff echo response for request:\n" + r.GetDescription());
-                                }
+                                    UNIT_ASSERT_C(resp == res, "diff echo response for request:\n" + r.GetDescription()); 
+                                } 
                             }
                         }
                     }

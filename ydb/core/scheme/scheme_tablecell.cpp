@@ -76,7 +76,7 @@ TString DbgPrintCell(const TCell& r, NScheme::TTypeId typeId, const NScheme::TTy
 
 void DbgPrintValue(TString &res, const TCell &r, ui32 type) {
     if (r.IsNull()) {
-        res += "NULL";
+        res += "NULL"; 
     } else {
         switch (type) {
         case NScheme::NTypeIds::Bool:

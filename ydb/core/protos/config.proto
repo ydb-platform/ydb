@@ -52,9 +52,9 @@ message TActorSystemConfig {
         optional TAffinity Affinity = 4;
         optional uint32 InjectMadSquirrels = 5;
         optional string Name = 6;
-        optional uint32 TimePerMailboxMicroSecs = 7;
-        optional uint32 EventsPerMailbox = 8;
-        optional uint32 RealtimePriority = 9;
+        optional uint32 TimePerMailboxMicroSecs = 7; 
+        optional uint32 EventsPerMailbox = 8; 
+        optional uint32 RealtimePriority = 9; 
 
         // Actorsystem 2.0: cpu sharing by different pools with preemption
         optional uint32 Concurrency = 10; // Limits simultaneously running mailboxes of UNITED pool
@@ -82,15 +82,15 @@ message TActorSystemConfig {
     optional uint32 UserExecutor = 4;
     optional uint32 IoExecutor = 5;
     optional uint32 BatchExecutor = 6;
-
-    message TServiceExecutor {
-        required string ServiceName = 1;
-        required uint32 ExecutorId = 2;
-    }
-
-    repeated TServiceExecutor ServiceExecutor = 7;
-    optional uint32 TimePerMailboxMicroSecs = 8;
-    optional uint32 EventsPerMailbox = 9;
+ 
+    message TServiceExecutor { 
+        required string ServiceName = 1; 
+        required uint32 ExecutorId = 2; 
+    } 
+ 
+    repeated TServiceExecutor ServiceExecutor = 7; 
+    optional uint32 TimePerMailboxMicroSecs = 8; 
+    optional uint32 EventsPerMailbox = 9; 
     optional uint32 SelfPingInterval = 10; // in microseconds
 
     message TUnitedWorkers {
@@ -141,9 +141,9 @@ message TStaticNameserviceConfig {
     }
 
     repeated TNode Node = 1;
-
-    optional string ClusterUUID = 2;
-    repeated string AcceptUUID = 3;
+ 
+    optional string ClusterUUID = 2; 
+    repeated string AcceptUUID = 3; 
     optional bool SuppressVersionCheck = 4;
     optional ENameserviceType Type = 5;
 }
@@ -375,16 +375,16 @@ message TInterconnectConfig {
     optional bool FirstTryBeforePoll = 2; // DEPRECATED
     optional bool StartTcp = 3 [default = false];
     optional uint32 SelfKickDelay = 4; // DEPRECATED
-    optional uint32 HandshakeTimeout = 5;
-    optional uint32 HeartbeatInterval = 6;
-    optional uint32 DeadPeerTimeout = 7;
-    optional uint32 SendBufferDieLimitInMB = 8;
-    optional uint32 CloseOnIdleTimeout = 9;
-    optional uint32 MaxInflightAmountOfDataInKB = 10;
-    optional bool MergePerPeerCounters = 11;
+    optional uint32 HandshakeTimeout = 5; 
+    optional uint32 HeartbeatInterval = 6; 
+    optional uint32 DeadPeerTimeout = 7; 
+    optional uint32 SendBufferDieLimitInMB = 8; 
+    optional uint32 CloseOnIdleTimeout = 9; 
+    optional uint32 MaxInflightAmountOfDataInKB = 10; 
+    optional bool MergePerPeerCounters = 11; 
     optional EMergeMode CounterMergeMode = 15 [default = AUTO];
-    optional uint32 TCPSocketBufferSize = 12;
-    optional uint32 MaxTimePerEventInMks = 13;
+    optional uint32 TCPSocketBufferSize = 12; 
+    optional uint32 MaxTimePerEventInMks = 13; 
     optional bool BindOnAllAddresses = 16 [default = true];
     optional EEncryptionMode EncryptionMode = 17 [default = DISABLED];
     optional bool TlsAuthOnly = 38; // do not encrypt traffic
@@ -552,11 +552,11 @@ message TKQPConfig {
     repeated NKikimrKqp.TKqpSetting Settings = 10;
 }
 
-message TMemoryLogConfig {
-    optional uint64 LogBufferSize = 1;
-    optional uint64 LogGrainSize = 2;
-}
-
+message TMemoryLogConfig { 
+    optional uint64 LogBufferSize = 1; 
+    optional uint64 LogGrainSize = 2; 
+} 
+ 
 message TGRpcConfig {
     optional bool   StartGRpcProxy = 1 [default = true];
     optional string Host = 2 [default = "[::]"];
@@ -1349,7 +1349,7 @@ message TAppConfig {
     optional string UDFsDir = 15;
     repeated string UDFsPaths = 16;
     optional TKQPConfig KQPConfig = 17;
-    optional TMemoryLogConfig MemoryLogConfig = 19;
+    optional TMemoryLogConfig MemoryLogConfig = 19; 
     optional TGRpcConfig GRpcConfig = 20;
     optional TDynamicNameserviceConfig DynamicNameserviceConfig = 22;
     //optional TLocalConfig LocalConfig = 23; DEPRECATED

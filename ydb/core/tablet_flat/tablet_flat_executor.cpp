@@ -25,13 +25,13 @@ namespace NFlatExecutorSetup {
     }
 
     void ITablet::ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx)
-    {
+    { 
         Y_UNUSED(status);
         Y_UNUSED(prod);
         Y_UNUSED(cookie);
-        Y_UNUSED(ctx);
-    }
-
+        Y_UNUSED(ctx); 
+    } 
+ 
     bool ITablet::ReassignChannelsEnabled() const {
         // By default channels are reassigned automatically
         return true;

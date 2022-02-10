@@ -599,12 +599,12 @@ int TFileHandle::Duplicate2Posix(int dstHandle) const noexcept {
 
 bool TFileHandle::LinkTo(const TFileHandle& fh) const noexcept {
 #if defined(_unix_)
-    while (dup2(fh.Fd_, Fd_) == -1) {
-        if (errno != EINTR) {
-            return false;
-        }
-    }
-    return true;
+    while (dup2(fh.Fd_, Fd_) == -1) { 
+        if (errno != EINTR) { 
+            return false; 
+        } 
+    } 
+    return true; 
 #elif defined(_win_)
     TFileHandle nh(fh.Duplicate());
 

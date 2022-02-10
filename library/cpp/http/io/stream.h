@@ -84,8 +84,8 @@ public:
     /// Returns true if Content-Length or Transfer-Encoding header received
     bool HasContent() const noexcept;
 
-    bool HasExpect100Continue() const noexcept;
-
+    bool HasExpect100Continue() const noexcept; 
+ 
 private:
     size_t DoRead(void* buf, size_t len) override;
     size_t DoSkip(size_t len) override;
@@ -145,8 +145,8 @@ public:
     /// не завершается после окончания транзакции.
     bool CanBeKeepAlive() const noexcept;
 
-    void SendContinue();
-
+    void SendContinue(); 
+ 
     /*
      * first line - response or request
      */

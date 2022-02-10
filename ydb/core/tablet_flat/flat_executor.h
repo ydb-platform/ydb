@@ -516,7 +516,7 @@ class TExecutor
     void Handle(NBlockIO::TEvStat::TPtr &ev, const TActorContext &ctx);
     void Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled);
     void Handle(TEvBlobStorage::TEvGetResult::TPtr&, const TActorContext&);
-
+ 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);
     void UpdateYellow();
@@ -587,7 +587,7 @@ public:
     ui64 CompactMemTable(ui32 tableId) override;
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
-
+ 
     void FollowerAttached() override;
     void FollowerSyncComplete() override;
     void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) override;

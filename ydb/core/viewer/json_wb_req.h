@@ -202,7 +202,7 @@ public:
             }
         }
         NodesRequestedTime = AppData()->TimeProvider->Now();
-        const TEvWhiteboard::TEvNodeStateResponse* nodesInfo = ev->Get();
+        const TEvWhiteboard::TEvNodeStateResponse* nodesInfo = ev->Get(); 
         for (const auto& ni : nodesInfo->Record.GetNodeStateInfo()) {
             if (ni.GetConnected()) {
                 TNodeId nodeId = GetNodeIdFromPeerName(ni.GetPeerName());

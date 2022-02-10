@@ -1,12 +1,12 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-
+ 
 #include <ydb/library/yql/minikql/mkql_node.h>
 
-using namespace NKikimr;
+using namespace NKikimr; 
 using namespace NKikimr::NMiniKQL;
 using namespace NSchemeShard;
-using namespace NSchemeShardUT_Private;
-
+using namespace NSchemeShardUT_Private; 
+ 
 Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
     Y_UNIT_TEST(Test) {
     }

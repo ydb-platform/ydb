@@ -11,11 +11,11 @@ namespace NKikimr {
 
 struct TKikimrEvents : TEvents {
     enum EEventSpaceKikimr {
-        /* WARNING:
-           Please mind that you should never change the order
-           for the following keywords, you should consider
-           issues about "rolling update".
-        */
+        /* WARNING: 
+           Please mind that you should never change the order 
+           for the following keywords, you should consider 
+           issues about "rolling update". 
+        */ 
         ES_KIKIMR_ES_BEGIN = ES_USERSPACE,  //4096
         ES_STATESTORAGE, //4097
         ES_DEPRECATED_4098, //4098

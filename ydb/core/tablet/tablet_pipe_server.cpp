@@ -136,10 +136,10 @@ namespace NTabletPipe {
             if (ev->HasEvent()) {
                 result = new IEventHandle(ctx.SelfID, originalSender, ev->ReleaseBase().Release(), 0, ev->Cookie);
             } else {
-                result = new IEventHandle(ev->Type, 0, ctx.SelfID,
-                                          originalSender,
-                                          ev->ReleaseChainBuffer(),
-                                          ev->Cookie);
+                result = new IEventHandle(ev->Type, 0, ctx.SelfID, 
+                                          originalSender, 
+                                          ev->ReleaseChainBuffer(), 
+                                          ev->Cookie); 
             }
 
             result->Rewrite(ev->Type, RecipientId);

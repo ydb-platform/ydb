@@ -10,19 +10,19 @@ class TAtomicTest
     UNIT_TEST_SUITE(TAtomicTest);
     UNIT_TEST(TestAtomicInc1)
     UNIT_TEST(TestAtomicInc2)
-    UNIT_TEST(TestAtomicGetAndInc)
+    UNIT_TEST(TestAtomicGetAndInc) 
     UNIT_TEST(TestAtomicDec)
-    UNIT_TEST(TestAtomicGetAndDec)
+    UNIT_TEST(TestAtomicGetAndDec) 
     UNIT_TEST(TestAtomicAdd)
-    UNIT_TEST(TestAtomicGetAndAdd)
+    UNIT_TEST(TestAtomicGetAndAdd) 
     UNIT_TEST(TestAtomicSub)
-    UNIT_TEST(TestAtomicGetAndSub)
+    UNIT_TEST(TestAtomicGetAndSub) 
     UNIT_TEST(TestAtomicSwap)
     UNIT_TEST(TestAtomicOr)
     UNIT_TEST(TestAtomicAnd)
     UNIT_TEST(TestAtomicXor)
     UNIT_TEST(TestCAS)
-    UNIT_TEST(TestGetAndCAS)
+    UNIT_TEST(TestGetAndCAS) 
     UNIT_TEST(TestLockUnlock)
     UNIT_TEST_SUITE_END();
 
@@ -49,18 +49,18 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(v, Max<intptr_t>());
     }
 
-    inline void TestGetAndCAS() {
-        TAtomic v = 0;
-
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndCas(&v, 1, 0), 0);
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndCas(&v, 2, 0), 1);
-        UNIT_ASSERT_VALUES_EQUAL(v, 1);
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndCas(&v, 0, 1), 1);
-        UNIT_ASSERT_VALUES_EQUAL(v, 0);
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndCas(&v, Max<intptr_t>(), 0), 0);
-        UNIT_ASSERT_VALUES_EQUAL(v, Max<intptr_t>());
-    }
-
+    inline void TestGetAndCAS() { 
+        TAtomic v = 0; 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndCas(&v, 1, 0), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndCas(&v, 2, 0), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(v, 1); 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndCas(&v, 0, 1), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(v, 0); 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndCas(&v, Max<intptr_t>(), 0), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(v, Max<intptr_t>()); 
+    } 
+ 
     inline void TestAtomicInc1() {
         TAtomic v = 0;
 
@@ -79,15 +79,15 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(v, 2);
     }
 
-    inline void TestAtomicGetAndInc() {
-        TAtomic v = 0;
-
-        UNIT_ASSERT_EQUAL(AtomicGetAndIncrement(v), 0);
-        UNIT_ASSERT_VALUES_EQUAL(v, 1);
-        UNIT_ASSERT_EQUAL(AtomicGetAndIncrement(v), 1);
-        UNIT_ASSERT_VALUES_EQUAL(v, 2);
-    }
-
+    inline void TestAtomicGetAndInc() { 
+        TAtomic v = 0; 
+ 
+        UNIT_ASSERT_EQUAL(AtomicGetAndIncrement(v), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(v, 1); 
+        UNIT_ASSERT_EQUAL(AtomicGetAndIncrement(v), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(v, 2); 
+    } 
+ 
     inline void TestAtomicDec() {
         TAtomic v = 2;
 
@@ -97,15 +97,15 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(v, 0);
     }
 
-    inline void TestAtomicGetAndDec() {
-        TAtomic v = 2;
-
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndDecrement(v), 2);
-        UNIT_ASSERT_VALUES_EQUAL(v, 1);
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndDecrement(v), 1);
-        UNIT_ASSERT_VALUES_EQUAL(v, 0);
-    }
-
+    inline void TestAtomicGetAndDec() { 
+        TAtomic v = 2; 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndDecrement(v), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(v, 1); 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndDecrement(v), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(v, 0); 
+    } 
+ 
     inline void TestAtomicAdd() {
         TAtomic v = 0;
 
@@ -115,15 +115,15 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(v, -1);
     }
 
-    inline void TestAtomicGetAndAdd() {
-        TAtomic v = 0;
-
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndAdd(v, 1), 0);
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndAdd(v, 2), 1);
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndAdd(v, -4), 3);
-        UNIT_ASSERT_VALUES_EQUAL(v, -1);
-    }
-
+    inline void TestAtomicGetAndAdd() { 
+        TAtomic v = 0; 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndAdd(v, 1), 0); 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndAdd(v, 2), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndAdd(v, -4), 3); 
+        UNIT_ASSERT_VALUES_EQUAL(v, -1); 
+    } 
+ 
     inline void TestAtomicSub() {
         TAtomic v = 4;
 
@@ -133,15 +133,15 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(v, -2);
     }
 
-    inline void TestAtomicGetAndSub() {
-        TAtomic v = 4;
-
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndSub(v, 1), 4);
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndSub(v, 2), 3);
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndSub(v, 3), 1);
-        UNIT_ASSERT_VALUES_EQUAL(v, -2);
-    }
-
+    inline void TestAtomicGetAndSub() { 
+        TAtomic v = 4; 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndSub(v, 1), 4); 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndSub(v, 2), 3); 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGetAndSub(v, 3), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(v, -2); 
+    } 
+ 
     inline void TestAtomicSwap() {
         TAtomic v = 0;
 

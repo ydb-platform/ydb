@@ -58,7 +58,7 @@ void TRunCommandConfigParser::SetupLastGetOptForConfigFiles(NLastGetopt::TOpts& 
     opts.AddLongOption("drivemodel-file", "drive model config file").OptionalArgument("PATH");
     opts.AddLongOption("kqp-file", "Kikimr Query Processor config file").OptionalArgument("PATH");
     opts.AddLongOption("incrhuge-file", "incremental huge blob keeper config file").OptionalArgument("PATH");
-    opts.AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH");
+    opts.AddLongOption("memorylog-file", "set buffer size for memory log").OptionalArgument("PATH"); 
     opts.AddLongOption("grpc-file", "gRPC config file").OptionalArgument("PATH");
     opts.AddLongOption("grpc-port", "enable gRPC server on port").RequiredArgument("PORT");
     opts.AddLongOption("grpcs-port", "enable gRPC SSL server on port").RequiredArgument("PORT");

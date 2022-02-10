@@ -10,8 +10,8 @@ OWNER(
 SRCS(
     actor_helpers.cpp
     actor_helpers.h
-    fake_coordinator.cpp
-    fake_coordinator.h
+    fake_coordinator.cpp 
+    fake_coordinator.h 
     fake_scheme_shard.h
     minikql_compile.h
     mock_pq_metacache.h

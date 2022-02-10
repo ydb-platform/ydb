@@ -1,6 +1,6 @@
-#include "tag.h"
+#include "tag.h" 
 #include "tcmalloc.h"
-
+ 
 #include <library/cpp/charset/ci_string.h>
 #include <library/cpp/containers/atomizer/atomizer.h>
 #include <library/cpp/malloc/api/malloc.h>
@@ -13,9 +13,9 @@
 #include <util/generic/singleton.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/system/mutex.h>
-
-namespace NProfiling {
+#include <util/system/mutex.h> 
+ 
+namespace NProfiling { 
     class TStringAtoms {
     private:
         TMutex Mutex;
@@ -59,19 +59,19 @@ namespace NProfiling {
             }
         }
     };
-
+ 
     ui32 MakeTag(const char* s) {
         return TStringAtoms::Instance().MakeTag(s);
     }
-
+ 
     ui32 MakeTags(const TVector<const char*>& ss) {
         return TStringAtoms::Instance().MakeTags(ss);
     }
-
+ 
     const char* GetTag(ui32 tag) {
         return TStringAtoms::Instance().GetTag(tag);
-    }
-
+    } 
+ 
     size_t GetTagsCount() {
         return TStringAtoms::Instance().GetTagsCount();
     }

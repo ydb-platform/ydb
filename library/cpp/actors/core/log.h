@@ -42,7 +42,7 @@
                 actorCtxOrSystem, priority, component, __VA_ARGS__);                                                           \
         }                                                                                                                      \
     } while (0) /**/
-
+ 
 #define LOG_LOG_S_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, stream)  \
     LOG_LOG_SAMPLED_BY(actorCtxOrSystem, priority, component, sampleBy, "%s", [&]() { \
         TStringBuilder logStringBuilder;                                               \
@@ -304,7 +304,7 @@ namespace NActors {
     /////////////////////////////////////////////////////////////////////
     //  Logging adaptors for memory log and logging into filesystem
     /////////////////////////////////////////////////////////////////////
-
+ 
     namespace NDetail {
         inline void Y_PRINTF_FORMAT(2, 3) PrintfV(TString& dst, const char* format, ...) {
             va_list params;
@@ -318,7 +318,7 @@ namespace NActors {
         }
     } // namespace NDetail
 
-    template <typename TCtx>
+    template <typename TCtx> 
     inline void DeliverLogMessage(TCtx& ctx, NLog::EPriority mPriority, NLog::EComponent mComponent, TString &&str)
     {
         const NLog::TSettings *mSettings = ctx.LoggerSettings();
@@ -327,14 +327,14 @@ namespace NActors {
     }
 
     template <typename TCtx, typename... TArgs>
-    inline void MemLogAdapter(
+    inline void MemLogAdapter( 
         TCtx& actorCtxOrSystem,
         NLog::EPriority mPriority,
         NLog::EComponent mComponent,
         const char* format, TArgs&&... params) {
         TString Formatted;
-
-
+ 
+ 
         if constexpr (sizeof... (params) > 0) {
             NDetail::PrintfV(Formatted, format, std::forward<TArgs>(params)...);
         } else {
@@ -343,9 +343,9 @@ namespace NActors {
 
         MemLogWrite(Formatted.data(), Formatted.size(), true);
         DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, std::move(Formatted));
-    }
-
-    template <typename TCtx>
+    } 
+ 
+    template <typename TCtx> 
     Y_WRAPPER inline void MemLogAdapter(
         TCtx& actorCtxOrSystem,
         NLog::EPriority mPriority,
@@ -355,7 +355,7 @@ namespace NActors {
         MemLogWrite(str.data(), str.size(), true);
         DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, TString(str));
     }
-
+ 
     template <typename TCtx>
     Y_WRAPPER inline void MemLogAdapter(
         TCtx& actorCtxOrSystem,
@@ -365,5 +365,5 @@ namespace NActors {
 
         MemLogWrite(str.data(), str.size(), true);
         DeliverLogMessage(actorCtxOrSystem, mPriority, mComponent, std::move(str));
-    }
+    } 
 }

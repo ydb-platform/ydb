@@ -121,7 +121,7 @@ void TExecutor::PassAway() {
     if (Broker || Scans || Memory) {
         Send(NResourceBroker::MakeResourceBrokerID(), new NResourceBroker::TEvResourceBroker::TEvNotifyActorDied);
     }
-
+ 
     Scans->Drop();
     Owner = nullptr;
 
@@ -2741,7 +2741,7 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
     TIntrusivePtr<TBarrier> barrier = new TBarrier(commit->Step);
 
     CommitManager->Commit(commit);
-
+ 
     TAutoPtr<NTable::TSubset> subset;
 
     if (params) {
@@ -2907,7 +2907,7 @@ void TExecutor::Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx) {
 
 void TExecutor::Handle(NOps::TEvResult::TPtr &ev) {
     auto *msg = ev->Get();
-
+ 
     const auto outcome = Scans->Release(msg->Serial, msg->Status, msg->Result);
     if (outcome.System) {
         /* System scans are used for compactions and specially handled */
@@ -3452,7 +3452,7 @@ void TExecutor::DropScanSnapshot(ui64 snap)
 }
 
 ui64 TExecutor::QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cookie, const TScanOptions& options)
-{
+{ 
     THolder<TScanSnapshot> snapshot;
 
     if (const auto* byId = std::get_if<TScanOptions::TSnapshotById>(&options.Snapshot)) {
@@ -3473,9 +3473,9 @@ ui64 TExecutor::QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cooki
         }
         snapshot = PrepareScanSnapshot(tableId, nullptr, rowVersion);
     }
-
+ 
     ui64 serial = Scans->Queue(tableId, scan, cookie, options, std::move(snapshot));
-
+ 
     if (options.IsResourceBrokerDisabled()) {
         StartScan(serial, tableId);
     }
@@ -3492,8 +3492,8 @@ bool TExecutor::CancelScan(ui32, ui64 serial) {
     }
 
     return false;
-}
-
+} 
+ 
 TFinishedCompactionInfo TExecutor::GetFinishedCompactionInfo(ui32 tableId) const {
     if (CompactionLogic) {
         return CompactionLogic->GetFinishedCompactionInfo(tableId);

@@ -1253,7 +1253,7 @@ public:
     void SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext, const TActorContext &ctx) override;
     void CompactionComplete(ui32 tableId, const TActorContext &ctx) override;
     void CompletedLoansChanged(const TActorContext &ctx) override;
-
+ 
     void ReplyCompactionWaiters(ui32 tableId, ui64 edge, const TActorContext &ctx);
 
     TUserTable::TSpecialUpdate SpecialUpdates(const NTable::TDatabase& db, const TTableId& tableId) const;
@@ -1271,7 +1271,7 @@ public:
     void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx) override;
     bool ReassignChannelsEnabled() const override;
     ui64 GetMemoryUsage() const override;
-
+ 
     bool HasSharedBlobs() const;
     void CheckInitiateBorrowedPartsReturn(const TActorContext& ctx);
     void CheckStateChange(const TActorContext& ctx);
@@ -2137,7 +2137,7 @@ protected:
             HFuncTraced(TEvDataShard::TEvStateChangedResult, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransaction, Handle);
             HFuncTraced(TEvDataShard::TEvProposeTransactionAttach, Handle);
-            HFuncTraced(TEvDataShard::TEvCancelBackup, Handle);
+            HFuncTraced(TEvDataShard::TEvCancelBackup, Handle); 
             HFuncTraced(TEvDataShard::TEvCancelRestore, Handle);
             HFuncTraced(TEvDataShard::TEvGetS3Upload, Handle);
             HFuncTraced(TEvDataShard::TEvStoreS3UploadId, Handle);

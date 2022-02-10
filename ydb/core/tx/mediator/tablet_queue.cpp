@@ -89,7 +89,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
                 x->SetModerator(tx.Moderator);
             ActorIdToProto(tx.AckTo, x->MutableAckTo());
             LOG_DEBUG(ctx, NKikimrServices::TX_MEDIATOR_PRIVATE, "Send from %" PRIu64 " to tablet %" PRIu64 ", step# %"
-                PRIu64 ", txid# %" PRIu64 ", marker M5" PRIu64, Mediator, tablet, tabletStep->StepRef->Step, tx.TxId);
+                PRIu64 ", txid# %" PRIu64 ", marker M5" PRIu64, Mediator, tablet, tabletStep->StepRef->Step, tx.TxId); 
         }
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " SEND to# " << tablet << " " << evx->ToString());

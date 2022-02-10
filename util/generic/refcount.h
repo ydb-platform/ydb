@@ -19,21 +19,21 @@ public:
         Check();
     }
 
-    inline TAtomicBase Add(TAtomicBase d) noexcept {
+    inline TAtomicBase Add(TAtomicBase d) noexcept { 
         Check();
-        return Counter_ += d;
+        return Counter_ += d; 
     }
 
-    inline TAtomicBase Inc() noexcept {
-        return Add(1);
+    inline TAtomicBase Inc() noexcept { 
+        return Add(1); 
     }
 
-    inline TAtomicBase Sub(TAtomicBase d) noexcept {
+    inline TAtomicBase Sub(TAtomicBase d) noexcept { 
         Check();
         return Counter_ -= d;
     }
 
-    inline TAtomicBase Dec() noexcept {
+    inline TAtomicBase Dec() noexcept { 
         return Sub(1);
     }
 
@@ -43,17 +43,17 @@ public:
         }
 
         Inc();
-        Y_ASSERT(Counter_ != 0);
-
+        Y_ASSERT(Counter_ != 0); 
+ 
         return true;
     }
 
-    inline TAtomicBase Val() const noexcept {
+    inline TAtomicBase Val() const noexcept { 
         return Counter_;
     }
 
 private:
-    TAtomicBase Counter_;
+    TAtomicBase Counter_; 
 };
 
 class TNoCheckPolicy {
@@ -109,12 +109,12 @@ public:
 
     inline ~TAtomicCounter() = default;
 
-    inline TAtomicBase Add(TAtomicBase d) noexcept {
-        return AtomicAdd(Counter_, d);
+    inline TAtomicBase Add(TAtomicBase d) noexcept { 
+        return AtomicAdd(Counter_, d); 
     }
 
-    inline TAtomicBase Inc() noexcept {
-        return Add(1);
+    inline TAtomicBase Inc() noexcept { 
+        return Add(1); 
     }
 
     inline TAtomicBase Sub(TAtomicBase d) noexcept {
@@ -138,7 +138,7 @@ public:
             }
 
             intptr_t newValue = curValue + 1;
-            Y_ASSERT(newValue != 0);
+            Y_ASSERT(newValue != 0); 
 
             if (AtomicCas(&Counter_, newValue, curValue)) {
                 return true;

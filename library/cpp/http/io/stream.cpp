@@ -145,7 +145,7 @@ public:
         , HasContentLength_(false)
         , ContentLength_(0)
         , ContentEncoded_(false)
-        , Expect100Continue_(false)
+        , Expect100Continue_(false) 
     {
         BuildInputChain();
         Y_ASSERT(Input_);
@@ -204,10 +204,10 @@ public:
         return HasContentLength_ || ChunkedInput_;
     }
 
-    inline bool HasExpect100Continue() const noexcept {
-        return Expect100Continue_;
-    }
-
+    inline bool HasExpect100Continue() const noexcept { 
+        return Expect100Continue_; 
+    } 
+ 
 private:
     template <class Operation>
     inline size_t Perform(size_t len, const Operation& operation) {
@@ -324,14 +324,14 @@ private:
                     }
                 }
                 [[fallthrough]];
-                HEADERCMP(header, "expect") {
-                    auto findContinue = [&](const TStringBuf& s) {
+                HEADERCMP(header, "expect") { 
+                    auto findContinue = [&](const TStringBuf& s) { 
                         if (strnicmp(s.data(), "100-continue", 13) == 0) {
-                            Expect100Continue_ = true;
-                        }
-                    };
-                    ForEach(header.Value(), findContinue);
-                }
+                            Expect100Continue_ = true; 
+                        } 
+                    }; 
+                    ForEach(header.Value(), findContinue); 
+                } 
                 break;
             }
         }
@@ -386,7 +386,7 @@ private:
     ui64 ContentLength_;
 
     bool ContentEncoded_;
-    bool Expect100Continue_;
+    bool Expect100Continue_; 
 };
 
 THttpInput::THttpInput(IInputStream* slave)
@@ -452,10 +452,10 @@ bool THttpInput::HasContent() const noexcept {
     return Impl_->HasContent();
 }
 
-bool THttpInput::HasExpect100Continue() const noexcept {
-    return Impl_->HasExpect100Continue();
-}
-
+bool THttpInput::HasExpect100Continue() const noexcept { 
+    return Impl_->HasExpect100Continue(); 
+} 
+ 
 class THttpOutput::TImpl {
     class TSizeCalculator: public IOutputStream {
     public:
@@ -512,11 +512,11 @@ public:
     inline ~TImpl() {
     }
 
-    inline void SendContinue() {
-        Output_->Write("HTTP/1.1 100 Continue\r\n\r\n");
-        Output_->Flush();
-    }
-
+    inline void SendContinue() { 
+        Output_->Write("HTTP/1.1 100 Continue\r\n\r\n"); 
+        Output_->Flush(); 
+    } 
+ 
     inline void Write(const void* buf, size_t len) {
         if (Finished_) {
             ythrow THttpException() << "can not write to finished stream";
@@ -954,10 +954,10 @@ bool THttpOutput::CanBeKeepAlive() const noexcept {
     return Impl_->CanBeKeepAlive();
 }
 
-void THttpOutput::SendContinue() {
-    Impl_->SendContinue();
-}
-
+void THttpOutput::SendContinue() { 
+    Impl_->SendContinue(); 
+} 
+ 
 const TString& THttpOutput::FirstLine() const noexcept {
     return Impl_->FirstLine();
 }

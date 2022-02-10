@@ -28,8 +28,8 @@ namespace NActors {
             } else {
                 static_assert(dependent_false<TDerived>::value, "No correct Bootstrap() signature");
             }
-        }
-
+        } 
+ 
         TActorBootstrapped()
             : TActor<TDerived>(&TDerived::StateBootstrap)
         {}

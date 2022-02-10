@@ -44,7 +44,7 @@ struct TEvTxUserProxy {
 
         EvCancelBackupRequestDeprecated,
         EvCancelBackupResultDeprecated,
-
+ 
         EvProposeKqpTransaction,
 
         EvAllocateTxId,
@@ -170,7 +170,7 @@ struct TEvTxUserProxy {
     };
 
     struct TEvInvalidateTableResult : public TEventSimple<TEvInvalidateTableResult, EvInvalidateTableResult> {};
-
+ 
     struct TEvProposeKqpTransaction : public TEventLocal<TEvProposeKqpTransaction, EvProposeKqpTransaction> {
         TActorId ExecuterId;
 

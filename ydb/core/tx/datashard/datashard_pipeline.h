@@ -154,7 +154,7 @@ public:
     bool HasCreate() const { return SchemaTx && SchemaTx->IsCreate(); }
     bool HasAlter() const { return SchemaTx && SchemaTx->IsAlter(); }
     bool HasDrop() const { return SchemaTx && SchemaTx->IsDrop(); }
-    bool HasBackup() const { return SchemaTx && SchemaTx->IsBackup(); }
+    bool HasBackup() const { return SchemaTx && SchemaTx->IsBackup(); } 
     bool HasRestore() const { return SchemaTx && SchemaTx->IsRestore(); }
     bool HasCopy() const { return SchemaTx && SchemaTx->IsCopy(); }
     bool HasCreatePersistentSnapshot() const { return SchemaTx && SchemaTx->IsCreatePersistentSnapshot(); }

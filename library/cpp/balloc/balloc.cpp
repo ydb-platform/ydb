@@ -32,21 +32,21 @@ namespace NBalloc {
     static void Y_FORCE_INLINE Free(void* ptr) {
         if (ptr == nullptr) {
             return;
-        }
-        TAllocHeader* allocHeader = ((TAllocHeader*)ptr) - 1;
-        size_t size = allocHeader->AllocSize;
+        } 
+        TAllocHeader* allocHeader = ((TAllocHeader*)ptr) - 1; 
+        size_t size = allocHeader->AllocSize; 
         const size_t signature = size & SIGNATURE_MASK;
         if (Y_LIKELY(signature == ALIVE_SIGNATURE)) {
-            allocHeader->AllocSize = 0; // abort later on double free
+            allocHeader->AllocSize = 0; // abort later on double free 
 #ifdef DBG_FILL_MEMORY
             memset(ptr, 0xde, size - signature);
 #endif
-            FreeRaw(allocHeader->Block);
+            FreeRaw(allocHeader->Block); 
             if (NAllocStats::IsEnabled()) {
                 NAllocStats::DecThreadAllocStats(size - signature);
             }
         } else if (signature == DISABLED_SIGNATURE) {
-            LibcFree(allocHeader->Block);
+            LibcFree(allocHeader->Block); 
         } else {
             NMalloc::AbortFromCorruptedAllocator();
         }

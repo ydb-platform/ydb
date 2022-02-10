@@ -53,12 +53,12 @@ message TEvGetShardStateResult {
 }
 
 message TShardOpResult {
-    optional bool Success = 1;
-    optional string Explain = 2;
+    optional bool Success = 1; 
+    optional string Explain = 2; 
     optional uint64 BytesProcessed = 3;
     optional uint64 RowsProcessed = 4;
-}
-
+} 
+ 
 message TEvSchemaChanged {
     optional NActorsProto.TActorId Source = 1;
     optional uint64 Origin = 2;
@@ -66,7 +66,7 @@ message TEvSchemaChanged {
     optional uint64 TxId = 4;
     optional uint64 Step = 5;
     optional uint32 Generation = 6;
-
+ 
     optional TShardOpResult OpResult = 7;
 }
 
@@ -706,11 +706,11 @@ message TEvSplitPartitioningChangedAck {
     optional uint64 OperationCookie = 1;
     optional uint64 TabletId = 2;
 }
-
-message TEvCancelBackup {
-    optional uint64 BackupTxId = 1;
+ 
+message TEvCancelBackup { 
+    optional uint64 BackupTxId = 1; 
     optional uint64 TableId = 2;
-}
+} 
 
 message TEvCancelRestore {
     optional uint64 RestoreTxId = 1;

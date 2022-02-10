@@ -8,7 +8,7 @@
 #include <util/memory/blob.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
-#include <util/system/atomic.h>
+#include <util/system/atomic.h> 
 
 class IThreadFactory;
 class TClientRequest;
@@ -90,8 +90,8 @@ public:
     const IThreadPool& GetRequestQueue() const;
     const IThreadPool& GetFailQueue() const;
 
-    static TAtomicBase AcceptReturnsInvalidSocketCounter();
-
+    static TAtomicBase AcceptReturnsInvalidSocketCounter(); 
+ 
 private:
     bool MaxRequestsReached() const;
 
@@ -120,7 +120,7 @@ public:
     THttpServer* HttpServ() const noexcept;
     const TSocket& Socket() const noexcept;
     NAddr::IRemoteAddrRef GetListenerSockAddrRef() const noexcept;
-    TInstant AcceptMoment() const noexcept;
+    TInstant AcceptMoment() const noexcept; 
 
     bool IsLocal() const;
     bool CheckLoopback();

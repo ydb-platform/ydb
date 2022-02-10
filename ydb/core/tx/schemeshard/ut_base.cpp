@@ -1,15 +1,15 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_utils.h>
-
+ 
 #include <ydb/core/base/compile_time_flags.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/cast.h>
 
-using namespace NKikimr;
+using namespace NKikimr; 
 using namespace NSchemeShard;
-using namespace NSchemeShardUT_Private;
-
+using namespace NSchemeShardUT_Private; 
+ 
 Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(Boot) {
         TTestBasicRuntime runtime;
@@ -3781,7 +3781,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
-        Cdbg << "AlterTable: add column" << Endl;
+        Cdbg << "AlterTable: add column" << Endl; 
         cols.insert("add_1");
         cols.insert("add_2");
         cols.insert("add_50");
@@ -3796,7 +3796,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
-        Cdbg << "AlterTable: add existed column" << Endl;
+        Cdbg << "AlterTable: add existed column" << Endl; 
         TestAlterTable(runtime, ++txId, "/MyRoot",
                 R"(Name: "Table" Columns { Name: "value"  Type: "Utf8"})",
                 {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
@@ -3830,7 +3830,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
-        Cdbg << "AlterTable: drop column" << Endl;
+        Cdbg << "AlterTable: drop column" << Endl; 
         cols.erase("value");
         cols.erase("add_2");
         dropCols.insert("value");
@@ -3851,12 +3851,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
-        Cdbg << "AlterTable: drop dropped column" << Endl;
+        Cdbg << "AlterTable: drop dropped column" << Endl; 
         TestAlterTable(runtime, ++txId, "/MyRoot",
                 R"(Name: "Table" DropColumns { Name: "add_2"})",
                 {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
 
-        Cdbg << "AlterTable: drop key column" << Endl;
+        Cdbg << "AlterTable: drop key column" << Endl; 
         TestAlterTable(runtime, ++txId, "/MyRoot",
                 R"(Name: "Table" DropColumns { Name: "key1" })",
                 {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
@@ -3866,7 +3866,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 R"(Name: "Table" DropColumns { Id: 3 })",
                 {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
 
-        Cdbg << "AlterTable: add + drop different column" << Endl;
+        Cdbg << "AlterTable: add + drop different column" << Endl; 
         cols.insert("add_3");
         dropCols.insert("add_1");
         TestAlterTable(runtime, ++txId, "/MyRoot",
@@ -3879,14 +3879,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::CheckColumns("Table", cols, dropCols, keyCol)});
 
-        Cdbg << "AlterTable: add + drop same column (exist)" << Endl;
+        Cdbg << "AlterTable: add + drop same column (exist)" << Endl; 
         TestAlterTable(runtime, ++txId, "/MyRoot",
                 R"(Name: "Table"
                     Columns { Name: "add_3"  Type: "Uint32"}
                     DropColumns { Name: "add_3" }
                 )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
 
-        Cdbg << "AlterTable: add + drop same column (not exist)" << Endl;
+        Cdbg << "AlterTable: add + drop same column (not exist)" << Endl; 
         TestAlterTable(runtime, ++txId, "/MyRoot",
                 R"(Name: "Table"
                     Columns { Name: "add_4"  Type: "Uint32"}
@@ -6258,7 +6258,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TestDropTable(runtime, ++txId, "/MyRoot/Ops", "Table", {NKikimrScheme::StatusPathDoesNotExist});
 
-        Cdbg << "Create, Drop (simple table)" << Endl;
+        Cdbg << "Create, Drop (simple table)" << Endl; 
         TestCreateTable(runtime, ++txId, "/MyRoot/Ops", tcfg1);
         env.TestWaitNotification(runtime, txId);
 
@@ -6278,7 +6278,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets);
 
 
-        Cdbg << "Create, Drop (partitioned table)" << Endl;
+        Cdbg << "Create, Drop (partitioned table)" << Endl; 
         TestCreateTable(runtime, ++txId, "/MyRoot/Ops", tcfg2);
         env.TestWaitNotification(runtime, txId);
 
@@ -6417,7 +6417,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         //
 
-        Cdbg << "Create + Drop + Drop" << Endl;
+        Cdbg << "Create + Drop + Drop" << Endl; 
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot/Ops", pqGroupConfig);
         auto pVer = TestDescribeResult(DescribePath(runtime, "/MyRoot/Ops/DropMeBaby"));
         AsyncDropPQGroup(runtime, ++txId, "/MyRoot/Ops", "DropMeBaby");
@@ -6463,7 +6463,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TString pqGroupAlter = "Name: \"Isolda\""
             "TotalGroupCount: 100 ";
 
-        Cdbg << "Create + Drop + Create" << Endl;
+        Cdbg << "Create + Drop + Create" << Endl; 
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
         AsyncDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
@@ -6475,7 +6475,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
 
-        Cdbg << "Create + Create + Drop" << Endl;
+        Cdbg << "Create + Create + Drop" << Endl; 
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
         AsyncDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
@@ -6487,7 +6487,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
 
-        Cdbg << "Create + Alter + Drop" << Endl;
+        Cdbg << "Create + Alter + Drop" << Endl; 
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
         AsyncAlterPQGroup(runtime, ++txId, "/MyRoot", pqGroupAlter);
         AsyncDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
@@ -6499,7 +6499,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
 
-        Cdbg << "Create + Drop + Alter" << Endl;
+        Cdbg << "Create + Drop + Alter" << Endl; 
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
         AsyncDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         AsyncAlterPQGroup(runtime, ++txId, "/MyRoot", pqGroupAlter);
@@ -6511,7 +6511,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
 
-        Cdbg << "Create + Drop + Drop" << Endl;
+        Cdbg << "Create + Drop + Drop" << Endl; 
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
         AsyncDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         AsyncDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
@@ -6523,7 +6523,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
 
-        Cdbg << "Create + Alter + Create + Drop" << Endl;
+        Cdbg << "Create + Alter + Create + Drop" << Endl; 
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
         AsyncAlterPQGroup(runtime, ++txId, "/MyRoot", pqGroupAlter);
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
@@ -6537,7 +6537,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDropPQGroup(runtime, ++txId, "/MyRoot", "Isolda");
         env.TestWaitNotification(runtime, txId);
 
-        Cdbg << "Create + Alter + Alter + Drop" << Endl;
+        Cdbg << "Create + Alter + Alter + Drop" << Endl; 
         AsyncCreatePQGroup(runtime, ++txId, "/MyRoot", pqGroupConfig);
         AsyncAlterPQGroup(runtime, ++txId, "/MyRoot", pqGroupAlter);
         AsyncAlterPQGroup(runtime, ++txId, "/MyRoot", pqGroupAlter);
@@ -7024,7 +7024,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         if (!a.IsNull()) {
             TString aVal(a.Data(), a.Size());
             TString bVal(b.Data(), b.Size());
-//            Cdbg << aVal << Endl;
+//            Cdbg << aVal << Endl; 
             UNIT_ASSERT_VALUES_EQUAL_C(aVal, bVal, "data mismatch");
         }
     }

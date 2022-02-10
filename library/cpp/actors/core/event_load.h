@@ -1,24 +1,24 @@
-#pragma once
+#pragma once 
 
 #include <util/stream/walk.h>
-#include <util/system/types.h>
+#include <util/system/types.h> 
 #include <util/generic/string.h>
 #include <library/cpp/actors/util/rope.h>
 #include <library/cpp/actors/wilson/wilson_trace.h>
-
-namespace NActors {
+ 
+namespace NActors { 
     class IEventHandle;
-
+ 
     struct TConstIoVec {
         const void* Data;
         size_t Size;
     };
-
+ 
     struct TIoVec {
         void* Data;
         size_t Size;
     };
-
+ 
     class TEventSerializedData
        : public TThrRefBase
     {
@@ -70,7 +70,7 @@ namespace NActors {
             }
             return result;
         }
-
+ 
         TRope EraseBack(size_t count) {
             Y_VERIFY(count <= Rope.GetSize());
             TRope::TIterator iter = Rope.End();
@@ -81,25 +81,25 @@ namespace NActors {
         void Append(TRope&& from) {
             Rope.Insert(Rope.End(), std::move(from));
         }
-
+ 
         void Append(TString buffer) {
             if (buffer) {
                 Rope.Insert(Rope.End(), TRope(std::move(buffer)));
             }
         }
     };
-}
-
+} 
+ 
 class TChainBufWalk : public IWalkInput {
     TIntrusivePtr<NActors::TEventSerializedData> Buffer;
     TRope::TConstIterator Iter;
-
+ 
 public:
     TChainBufWalk(TIntrusivePtr<NActors::TEventSerializedData> buffer)
         : Buffer(std::move(buffer))
         , Iter(Buffer->GetBeginIter())
     {}
-
+ 
 private:
     size_t DoUnboundedNext(const void **ptr) override {
         const size_t size = Iter.ContiguousSize();
@@ -108,5 +108,5 @@ private:
             Iter.AdvanceToNextContiguousBlock();
         }
         return size;
-    }
+    } 
 };

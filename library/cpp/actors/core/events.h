@@ -1,11 +1,11 @@
 #pragma once
 
 #include "event.h"
-#include "event_pb.h"
+#include "event_pb.h" 
 
 #include <library/cpp/actors/protos/actors.pb.h>
 #include <util/system/unaligned_mem.h>
-
+ 
 namespace NActors {
     struct TEvents {
         enum EEventSpace {
@@ -213,7 +213,7 @@ namespace NActors {
 
         using TEvPoisonPill = TEvPoison; // Legacy name, deprecated
         using TEvActorDied = TEvGone;
-    };
+    }; 
 }
 
 template <>

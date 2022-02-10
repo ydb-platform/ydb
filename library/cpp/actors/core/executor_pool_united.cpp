@@ -14,7 +14,7 @@
 
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
-
+ 
 #include <algorithm>
 
 namespace NActors {
@@ -1315,7 +1315,7 @@ namespace NActors {
             if (Y_UNLIKELY(result == CpuStopped) || TryAcquireToken(result)) {
                 break; // token acquired (or stop)
             }
-        }
+        } 
 
         wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, timeTracker.Elapsed());
         return result;

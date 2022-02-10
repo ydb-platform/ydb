@@ -1,17 +1,17 @@
-#pragma once
-
+#pragma once 
+ 
 #include <ydb/core/control/immediate_control_board_impl.h>
 
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
+ 
 namespace NActors {
     class TMon;
 }
 
-namespace NKikimr {
+namespace NKikimr { 
     inline NActors::TActorId MakeMemProfMonitorID(ui32 node = 0) {
         char x[12] = {'m', 'e', 'm', 'p', 'r', 'o', 'f', 'm', 'o', 'n', 'i', 't'};
         return NActors::TActorId(node, TStringBuf(x, 12));
@@ -47,4 +47,4 @@ namespace NKikimr {
     NActors::IActor* CreateMemProfMonitor(
         ui32 intervalSec,
         TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
-}
+} 

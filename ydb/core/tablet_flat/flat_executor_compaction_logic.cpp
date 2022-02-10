@@ -114,14 +114,14 @@ void TCompactionLogic::PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, 
     tableInfo->SnapRequests.emplace_back(TCompactionLogicState::TSnapRequest(edge, snapContext));
 
     switch (inMem.State) {
-    case ECompactionState::Free:
+    case ECompactionState::Free: 
         SubmitCompactionTask(table, 0,
                              tableInfo->Policy->SnapshotResourceBrokerTask,
                              tableInfo->Policy->DefaultTaskPriority,
                              inMem.CompactionTask);
         inMem.State = ECompactionState::SnapshotPending;
         break;
-    case ECompactionState::Pending:
+    case ECompactionState::Pending: 
         inMem.State = ECompactionState::SnapshotPending;
         break;
     case ECompactionState::PendingBackground:
@@ -465,16 +465,16 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
         "Unexpected BeginMemTableCompaction(%" PRIu64 ", %" PRIu32 ") for a dropped table",
         taskId, tableId);
 
-    TCompactionLogicState::TInMem &inMem = tableInfo->InMem;
+    TCompactionLogicState::TInMem &inMem = tableInfo->InMem; 
     Y_VERIFY(taskId == inMem.CompactionTask.TaskId);
 
     NTable::TSnapEdge edge;
 
-    switch (inMem.State) {
-    case ECompactionState::Pending:
+    switch (inMem.State) { 
+    case ECompactionState::Pending: 
     case ECompactionState::PendingBackground:
         inMem.CompactingSteps = inMem.Steps;
-        inMem.State = ECompactionState::Compaction;
+        inMem.State = ECompactionState::Compaction; 
         edge.Head = NTable::TEpoch::Max();
         break;
 
@@ -483,10 +483,10 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
         inMem.State = ECompactionState::SnapshotCompaction;
         edge = tableInfo->SnapRequests.front().Edge;
         break;
-
-    default:
-        Y_FAIL("Invalid inMem.State");
-    }
+ 
+    default: 
+        Y_FAIL("Invalid inMem.State"); 
+    } 
 
     ui64 forcedCompactionId = 0;
     if (edge.Head == NTable::TEpoch::Max() &&
@@ -511,14 +511,14 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
 
     inMem.CompactionTask.CompactionId = tableInfo->Strategy->BeginMemCompaction(taskId, edge, forcedCompactionId);
     return true;
-}
-
+} 
+ 
 TCompactionLogicState::TTableInfo*
 TCompactionLogic::HandleCompaction(
         ui64 compactionId,
         const NTable::TCompactionParams* params,
         TTableCompactionResult* ret)
-{
+{ 
     const ui32 tableId = params->Table;
     const auto edge = params->Edge;
 
@@ -530,9 +530,9 @@ TCompactionLogic::HandleCompaction(
         Y_VERIFY(params->TaskId == inMem.CompactionTask.TaskId);
 
         switch (inMem.State) {
-        case ECompactionState::Compaction:
+        case ECompactionState::Compaction: 
             inMem.Steps -= std::exchange(inMem.CompactingSteps, 0);
-            inMem.State = ECompactionState::Free;
+            inMem.State = ECompactionState::Free; 
             inMem.CompactionTask.TaskId = 0;
             inMem.CompactionTask.CompactionId = 0;
             break;
@@ -544,7 +544,7 @@ TCompactionLogic::HandleCompaction(
                 tableInfo->SnapRequests.pop_front();
             }
             inMem.Steps -= std::exchange(inMem.CompactingSteps, 0);
-            inMem.State = ECompactionState::Free;
+            inMem.State = ECompactionState::Free; 
             inMem.CompactionTask.TaskId = 0;
             inMem.CompactionTask.CompactionId = 0;
             break;
@@ -604,9 +604,9 @@ TCompactionLogic::CompleteCompaction(
     ret.Changes = tableInfo->Strategy->CompactionFinished(compactionId, std::move(params), std::move(result));
     ret.Strategy = tableInfo->StrategyType;
 
-    return ret;
-}
-
+    return ret; 
+} 
+ 
 void
 TCompactionLogic::CancelledCompaction(
         ui64 compactionId,

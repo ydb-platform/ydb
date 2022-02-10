@@ -17,7 +17,7 @@ namespace NTable{
 
 namespace NTabletFlatExecutor {
 
-class TTableSnapshotContext;
+class TTableSnapshotContext; 
 
 using TCompactionPolicy = NLocalDb::TCompactionPolicy;
 
@@ -27,16 +27,16 @@ enum class EForceCompaction {
     Full,
 };
 
-enum class ECompactionState {
-    Unknown,
-    Free,
-    Pending,
+enum class ECompactionState { 
+    Unknown, 
+    Free, 
+    Pending, 
     PendingBackground,
-    Compaction,
+    Compaction, 
     SnapshotPending,
     SnapshotCompaction,
-};
-
+}; 
+ 
 enum class EForcedCompactionState {
     None,
     PendingMem,
@@ -78,7 +78,7 @@ struct TCompactionLogicState {
         ui32 TableId = Max<ui32>();
 
         TInMem InMem;
-
+ 
         // This identifies currently active strategy type
         // The default value is used as a marker for uninitialized strategies
         NKikimrSchemeOp::ECompactionStrategy StrategyType = NKikimrSchemeOp::CompactionStrategyUnset;
@@ -127,8 +127,8 @@ struct TCompactionLogicState {
 
     TMap<ui32, TTableInfo> Tables;
     THashMap<ui32, TSnapshotState> Snapshots;
-};
-
+}; 
+ 
 class TFlatTableScan;
 
 struct TTableCompactionResult {
@@ -230,7 +230,7 @@ public:
         ui64 compactionId,
         THolder<NTable::TCompactionParams> params,
         THolder<NTable::TCompactionResult> result);
-
+ 
     void CancelledCompaction(
         ui64 compactionId,
         THolder<NTable::TCompactionParams> params);

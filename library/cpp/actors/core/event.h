@@ -3,7 +3,7 @@
 #include "defs.h"
 #include "actorid.h"
 #include "callstack.h"
-#include "event_load.h"
+#include "event_load.h" 
 
 #include <library/cpp/actors/wilson/wilson_trace.h>
 
@@ -17,13 +17,13 @@ namespace NActors {
     public:
         virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
     };
-
+ 
     class IEventBase
         : TNonCopyable,
           public ISerializerToStream {
     public:
         // actual typing is performed by IEventHandle
-
+ 
         virtual ~IEventBase() {
         }
 
@@ -87,7 +87,7 @@ namespace NActors {
             Buffer.Reset();
             return x;
         }
-
+ 
         enum EFlags {
             FlagTrackDelivery = 1 << 0,
             FlagForwardOnNondelivery = 1 << 1,
@@ -236,7 +236,7 @@ namespace NActors {
             , RewriteType(Type)
         {
         }
-
+ 
         TIntrusivePtr<TEventSerializedData> GetChainBuffer();
         TIntrusivePtr<TEventSerializedData> ReleaseChainBuffer();
 
@@ -248,15 +248,15 @@ namespace NActors {
             } else {
                 return 0;
             }
-        }
+        } 
 
         bool HasBuffer() const {
             return bool(Buffer);
-        }
+        } 
 
         bool HasEvent() const {
             return bool(Event);
-        }
+        } 
 
         IEventBase* GetBase() {
             if (!Event) {
@@ -326,7 +326,7 @@ namespace NActors {
     }                                                                   \
     bool IsSerializable() const override {                              \
         return false;                                                   \
-    }
+    } 
 
 #define DEFINE_SIMPLE_NONLOCAL_EVENT(eventType, header)                 \
     TString ToStringHeader() const override {                           \
@@ -340,5 +340,5 @@ namespace NActors {
     }                                                                   \
     bool IsSerializable() const override {                              \
         return true;                                                    \
-    }
+    } 
 }

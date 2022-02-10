@@ -15,7 +15,7 @@ TAppData::TAppData(
     , UserPoolId(userPoolId)
     , IOPoolId(ioPoolId)
     , BatchPoolId(batchPoolId)
-    , ServicePools(servicePools)
+    , ServicePools(servicePools) 
     , TypeRegistry(typeRegistry)
     , FunctionRegistry(functionRegistry)
     , FormatFactory(formatFactory)

@@ -11,8 +11,8 @@ namespace NKikimr {
 namespace NViewer {
 
 template <>
-struct TWhiteboardInfo<TEvWhiteboard::TEvNodeStateResponse> {
-    using TResponseType = TEvWhiteboard::TEvNodeStateResponse;
+struct TWhiteboardInfo<TEvWhiteboard::TEvNodeStateResponse> { 
+    using TResponseType = TEvWhiteboard::TEvNodeStateResponse; 
     using TElementType = NKikimrWhiteboard::TNodeStateInfo;
     using TElementKeyType = TString;
 
@@ -42,7 +42,7 @@ struct TWhiteboardInfo<TEvWhiteboard::TEvNodeStateResponse> {
     }
 };
 
-using TJsonNodeInfo = TJsonWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest, TEvWhiteboard::TEvNodeStateResponse>;
+using TJsonNodeInfo = TJsonWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest, TEvWhiteboard::TEvNodeStateResponse>; 
 
 template <>
 struct TJsonRequestSummary<TJsonNodeInfo> {

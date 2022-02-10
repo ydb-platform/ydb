@@ -808,8 +808,8 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     optional bool OmitIndexes = 3 [default = false];
     optional bool OmitFollowers = 4 [default = false];
     optional bool IsBackup = 5 [default = false];
-}
-
+} 
+ 
 message TConsistentTableCopyingConfig {
     repeated TCopyTableConfig CopyTableDescriptions = 1;
 }
@@ -817,7 +817,7 @@ message TConsistentTableCopyingConfig {
 message TYTSettings {
     optional string Host = 1;
     optional string TablePattern = 2;
-    optional string Token = 3;
+    optional string Token = 3; 
     optional uint32 Port = 4 [default = 80];
 
     reserved 5; // YSONasText
@@ -825,8 +825,8 @@ message TYTSettings {
     reserved 7; // CreateYTTable
 
     optional bool UseTypeV3 = 8;
-};
-
+}; 
+ 
 message TS3Settings {
     enum EScheme {
         HTTP = 0;
@@ -849,11 +849,11 @@ message TS3Settings {
     optional TLimits Limits = 100;
 };
 
-message TBackupTask {
-    optional string TableName = 1;
+message TBackupTask { 
+    optional string TableName = 1; 
     optional uint64 TableId = 2;
-    optional uint32 ShardNum = 3;
-    optional uint32 NumberOfRetries = 5;
+    optional uint32 ShardNum = 3; 
+    optional uint32 NumberOfRetries = 5; 
 
     reserved 6; // IfFailedBeforeTxId
     reserved 7; // UserProvidedId
@@ -873,8 +873,8 @@ message TBackupTask {
 
     optional TScanSettings ScanSettings = 11;
     optional bool NeedToBill = 12;
-}
-
+} 
+ 
 message TRestoreTask {
     optional string TableName = 1;
     optional uint64 TableId = 2;
@@ -1077,7 +1077,7 @@ enum EOperationType {
     ESchemeOpModifyACL = 8;
     ESchemeOpRmDir = 9;
     ESchemeOpSplitMergeTablePartitions = 10;
-    ESchemeOpBackup = 11;
+    ESchemeOpBackup = 11; 
     ESchemeOpCreateSubDomain = 12;
     ESchemeOpDropSubDomain = 13;
     ESchemeOpCreateRtmrVolume = 14;
@@ -1233,7 +1233,7 @@ message TModifyScheme {
     optional TModifyACL ModifyACL = 8;
     optional TTableDescription AlterTable = 9;
     optional TSplitMergeTablePartitions SplitMergeTablePartitions = 10;
-    optional TBackupTask Backup = 11;
+    optional TBackupTask Backup = 11; 
     optional NKikimrSubDomains.TSubDomainSettings SubDomain = 12;
     optional TRtmrVolumeDescription CreateRtmrVolume = 13;
     optional TBlockStoreVolumeDescription CreateBlockStoreVolume = 14;
@@ -1280,17 +1280,17 @@ message TModifyScript {
     repeated TModifyScheme ModifyScheme = 1;
 }
 
-message TDescribeOptions {
-    optional bool ReturnPartitioningInfo = 1 [default = true];
-    optional bool ReturnPartitionConfig = 2 [default = true];
-    optional bool BackupInfo = 3 [default = false];
+message TDescribeOptions { 
+    optional bool ReturnPartitioningInfo = 1 [default = true]; 
+    optional bool ReturnPartitionConfig = 2 [default = true]; 
+    optional bool BackupInfo = 3 [default = false]; 
     optional bool ReturnPartitionStats = 4 [default = false];
     optional bool ReturnChildren = 5 [default = true];
     optional bool ReturnBoundaries = 6 [default = false];
     optional bool ShowPrivateTable = 7 [default = false];
     optional bool ReturnChannelsBinding = 8 [default = false];
-}
-
+} 
+ 
 // Request to read scheme for a specific path
 // Path can be specified in two ways:
 // 1. full path
@@ -1299,12 +1299,12 @@ message TDescribePath {
     optional string Path = 1;
     optional uint64 PathId = 2;
     optional uint64 SchemeshardId = 3;
-
-    optional bool ReturnPartitioningInfo = 4 [default = true]; // deprecated
-    optional bool ReturnPartitionConfig = 5 [default = true]; //  deprecated
-    optional bool BackupInfo = 6 [default = false];           //  deprecated
-
-    optional TDescribeOptions Options = 7;
+ 
+    optional bool ReturnPartitioningInfo = 4 [default = true]; // deprecated 
+    optional bool ReturnPartitionConfig = 5 [default = true]; //  deprecated 
+    optional bool BackupInfo = 6 [default = false];           //  deprecated 
+ 
+    optional TDescribeOptions Options = 7; 
 }
 
 // Must be sync with Ydb::EntryType
@@ -1342,7 +1342,7 @@ enum EPathState {
     EPathStateAlter = 4;
     EPathStateDrop = 5;
     EPathStateCopying = 6;
-    EPathStateBackup = 7;
+    EPathStateBackup = 7; 
     EPathStateUpgrade = 8;
     EPathStateMigrated = 9;
     EPathStateRestore = 10;
@@ -1407,32 +1407,32 @@ message TTablePartition {
     optional uint64 DatashardId = 4;
 }
 
-message TShardError {
-    optional uint64 ShardId = 1;
-    optional string Explain = 2;
-};
-
+message TShardError { 
+    optional uint64 ShardId = 1; 
+    optional string Explain = 2; 
+}; 
+ 
 message TBackupProgress {
     optional uint32 NotCompleteYet = 1;
     optional uint32 Total = 2;
-    optional uint32 ErrorCount = 3;
-    optional uint64 StartTime = 4;
-    repeated TShardError Errors = 5;
+    optional uint32 ErrorCount = 3; 
+    optional uint64 StartTime = 4; 
+    repeated TShardError Errors = 5; 
     optional TYTSettings YTSettings = 6;
-    optional uint64 DataTotalSize = 7;
+    optional uint64 DataTotalSize = 7; 
     optional uint64 TxId = 8;
 }
 
-message TLastBackupResult {
-    optional uint32 ErrorCount = 1;
-    optional uint64 CompleteTimeStamp = 2;
+message TLastBackupResult { 
+    optional uint32 ErrorCount = 1; 
+    optional uint64 CompleteTimeStamp = 2; 
     optional uint64 StartTimeStamp = 3;
-    repeated TShardError Errors = 4;
+    repeated TShardError Errors = 4; 
     optional TYTSettings YTSettings = 5;
-    optional uint64 DataTotalSize = 6;
+    optional uint64 DataTotalSize = 6; 
     optional uint64 TxId = 7;
-};
-
+}; 
+ 
 // Result for TDescribePath request
 message TPathDescription {
     optional TDirEntry Self = 1;                    // info about the path itself
@@ -1441,7 +1441,7 @@ message TPathDescription {
     repeated TTablePartition TablePartitions = 4;   // for table
     optional TPersQueueGroupDescription PersQueueGroup = 5; // for pq group
     optional TBackupProgress BackupProgress = 6;
-    repeated TLastBackupResult LastBackupResult = 7;
+    repeated TLastBackupResult LastBackupResult = 7; 
     optional NKikimrTableStats.TTableStats TableStats = 8;
     optional NKikimrTabletBase.TMetrics TabletMetrics = 9;
     optional NKikimrSubDomains.TDomainDescription DomainDescription = 10;

@@ -384,7 +384,7 @@ RECURSE(
     Flask
     Flask-Admin
     flask-appconfig
-    Flask-Babel
+    Flask-Babel 
     Flask-Bootstrap
     Flask-Bootstrap/example
     Flask-Caching
@@ -412,7 +412,7 @@ RECURSE(
     Flask-SSLify
     flask-swagger
     flask-swagger-ui
-    Flask-Table
+    Flask-Table 
     Flask-UUID
     Flask-WTF
     flatbuffers

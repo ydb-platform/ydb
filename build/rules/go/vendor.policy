@@ -63,10 +63,10 @@ ALLOW .* -> vendor/k8s.io/apimachinery/pkg/util/wait
 ALLOW .* -> vendor/k8s.io/apimachinery/pkg/watch
 ALLOW .* -> vendor/k8s.io/apimachinery/pkg/api/resource
 
-# CONTRIB-2279 
-ALLOW .* -> vendor/sigs.k8s.io/controller-runtime 
-ALLOW .* -> vendor/github.com/go-logr/logr 
- 
+# CONTRIB-2279
+ALLOW .* -> vendor/sigs.k8s.io/controller-runtime
+ALLOW .* -> vendor/github.com/go-logr/logr
+
 # CONTRIB-2195
 ALLOW .* -> vendor/github.com/timakin/bodyclose
 # github.com/gostaticanalysis/comment tests depends on the unlicensed package https://github.com/tenntenn/text
@@ -75,20 +75,20 @@ DENY .* -> vendor/github.com/gostaticanalysis/comment;test
 # CONTRIB-2196
 ALLOW .* -> vendor/github.com/jingyugao/rowserrcheck
 
-# CONTRIB-2163 
-ALLOW .* -> vendor/go.temporal.io/sdk 
-ALLOW .* -> vendor/go.temporal.io/api 
- 
-# CONTRIB-2468 
-ALLOW .* -> vendor/github.com/DataDog/temporalite 
- 
-# CONTRIB-2353 
-ALLOW vendor -> vendor/github.com/aromanovich/thrift 
-ALLOW .* -> vendor/go.temporal.io/server 
-ALLOW infra/temporal/swat/server -> vendor/github.com/urfave/cli 
-ALLOW infra/temporal/swat/tctl -> vendor/github.com/urfave/cli 
-ALLOW infra/temporal -> vendor/github.com/uber-go/tally 
- 
+# CONTRIB-2163
+ALLOW .* -> vendor/go.temporal.io/sdk
+ALLOW .* -> vendor/go.temporal.io/api
+
+# CONTRIB-2468
+ALLOW .* -> vendor/github.com/DataDog/temporalite
+
+# CONTRIB-2353
+ALLOW vendor -> vendor/github.com/aromanovich/thrift
+ALLOW .* -> vendor/go.temporal.io/server
+ALLOW infra/temporal/swat/server -> vendor/github.com/urfave/cli
+ALLOW infra/temporal/swat/tctl -> vendor/github.com/urfave/cli
+ALLOW infra/temporal -> vendor/github.com/uber-go/tally
+
 # CONTRIB-2116
 ALLOW .* -> vendor/github.com/google/licensecheck
 

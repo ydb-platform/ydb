@@ -237,13 +237,13 @@
     Y_PASS_VA_ARGS(__Y_MAP_ARGS_49(ACTION, __VA_ARGS__))
 
 /**
- * Expands a macro for each of the variable arguments with it's sequence number and value. 
- * Corresponding sequence numbers will expand in descending order. 
- * Doesn't work with empty arguments list. 
- */ 
-#define Y_MAP_ARGS_N(ACTION, ...) Y_PASS_VA_ARGS(Y_PASS_VA_ARGS(Y_CAT(__Y_MAP_ARGS_N_, Y_COUNT_ARGS(__VA_ARGS__)))(ACTION, __VA_ARGS__)) 
-#define __Y_MAP_ARGS_N_0(...) 
-#define __Y_MAP_ARGS_N_1(ACTION, x, ...) ACTION(1, x) 
+ * Expands a macro for each of the variable arguments with it's sequence number and value.
+ * Corresponding sequence numbers will expand in descending order.
+ * Doesn't work with empty arguments list.
+ */
+#define Y_MAP_ARGS_N(ACTION, ...) Y_PASS_VA_ARGS(Y_PASS_VA_ARGS(Y_CAT(__Y_MAP_ARGS_N_, Y_COUNT_ARGS(__VA_ARGS__)))(ACTION, __VA_ARGS__))
+#define __Y_MAP_ARGS_N_0(...)
+#define __Y_MAP_ARGS_N_1(ACTION, x, ...) ACTION(1, x)
 #define __Y_MAP_ARGS_N_2(ACTION, x, ...) \
     ACTION(2, x)                         \
     Y_PASS_VA_ARGS(__Y_MAP_ARGS_N_1(ACTION, __VA_ARGS__))
@@ -391,8 +391,8 @@
 #define __Y_MAP_ARGS_N_50(ACTION, x, ...) \
     ACTION(50, x)                         \
     Y_PASS_VA_ARGS(__Y_MAP_ARGS_N_49(ACTION, __VA_ARGS__))
- 
-/** 
+
+/**
  * Expands a macro for each of the variable arguments.
  * Doesn't work with empty arguments list.
  */
@@ -548,13 +548,13 @@
     Y_PASS_VA_ARGS(__Y_MAP_ARGS_WITH_LAST_49(ACTION, LAST_ACTION, __VA_ARGS__))
 
 /**
- * Expands a macro for each of the variable arguments with it's sequence number and value. 
- * Corresponding sequence numbers will expand in descending order. 
- * Doesn't work with empty arguments list. 
- */ 
-#define Y_MAP_ARGS_WITH_LAST_N(ACTION, LAST_ACTION, ...) Y_PASS_VA_ARGS(Y_PASS_VA_ARGS(Y_CAT(__Y_MAP_ARGS_WITH_LAST_N_, Y_COUNT_ARGS(__VA_ARGS__)))(ACTION, LAST_ACTION, __VA_ARGS__)) 
-#define __Y_MAP_ARGS_WITH_LAST_N_0(...) 
-#define __Y_MAP_ARGS_WITH_LAST_N_1(ACTION, LAST_ACTION, x, ...) LAST_ACTION(1, x) 
+ * Expands a macro for each of the variable arguments with it's sequence number and value.
+ * Corresponding sequence numbers will expand in descending order.
+ * Doesn't work with empty arguments list.
+ */
+#define Y_MAP_ARGS_WITH_LAST_N(ACTION, LAST_ACTION, ...) Y_PASS_VA_ARGS(Y_PASS_VA_ARGS(Y_CAT(__Y_MAP_ARGS_WITH_LAST_N_, Y_COUNT_ARGS(__VA_ARGS__)))(ACTION, LAST_ACTION, __VA_ARGS__))
+#define __Y_MAP_ARGS_WITH_LAST_N_0(...)
+#define __Y_MAP_ARGS_WITH_LAST_N_1(ACTION, LAST_ACTION, x, ...) LAST_ACTION(1, x)
 #define __Y_MAP_ARGS_WITH_LAST_N_2(ACTION, LAST_ACTION, x, ...) \
     ACTION(2, x)                                                \
     Y_PASS_VA_ARGS(__Y_MAP_ARGS_WITH_LAST_N_1(ACTION, LAST_ACTION, __VA_ARGS__))
@@ -702,8 +702,8 @@
 #define __Y_MAP_ARGS_WITH_LAST_N_50(ACTION, LAST_ACTION, x, ...) \
     ACTION(50, x)                                                \
     Y_PASS_VA_ARGS(__Y_MAP_ARGS_WITH_LAST_N_49(ACTION, LAST_ACTION, __VA_ARGS__))
- 
-/** 
+
+/**
  * Get all elements but the last one from `__VA_ARGS__`.
  * Doesn't work with empty arguments list.
  */

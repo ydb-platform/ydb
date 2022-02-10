@@ -601,9 +601,9 @@ ALLOW library/go/core/log/compat/golog -> vendor/github.com/siddontang/go-log/lo
 # CONTRIB-1656 golang sftp server library
 ALLOW .* -> vendor/github.com/pkg/sftp
 
-# CONTRIB-1670
-ALLOW .* -> vendor/github.com/soniah/gosnmp
-
+# CONTRIB-1670 
+ALLOW .* -> vendor/github.com/soniah/gosnmp 
+ 
 # CONTRIB-1686 markdown parser
 ALLOW .* -> vendor/github.com/yuin/goldmark
 

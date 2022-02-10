@@ -1,18 +1,18 @@
-#pragma once 
- 
-#include "defaults.h" 
- 
+#pragma once
+
+#include "defaults.h"
+
 #include <util/generic/flags.h>
 
-//on some systems (not win, freebd, linux, but darwin (Mac OS X) 
-//multiple mlock calls on the same address range 
-//require the corresponding number of munlock calls to actually unlock the pages 
- 
-//on some systems you must have privilege and resource limit 
- 
+//on some systems (not win, freebd, linux, but darwin (Mac OS X)
+//multiple mlock calls on the same address range
+//require the corresponding number of munlock calls to actually unlock the pages
+
+//on some systems you must have privilege and resource limit
+
 void LockMemory(const void* addr, size_t len);
 void UnlockMemory(const void* addr, size_t len);
- 
+
 enum ELockAllMemoryFlag {
     /** Lock all pages which are currently mapped into the address space of the process. */
     LockCurrentMemory = 1,
@@ -40,4 +40,4 @@ void LockAllMemory(ELockAllMemoryFlags flags);
  *
  * Does nothing on windows.
  */
-void UnlockAllMemory(); 
+void UnlockAllMemory();

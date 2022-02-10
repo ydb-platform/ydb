@@ -52,7 +52,7 @@ namespace {
 
 class TClientConnection: public IPollAble, public TIntrusiveListItem<TClientConnection> {
 public:
-    TClientConnection(const TSocket& s, THttpServer::TImpl* serv, NAddr::IRemoteAddrRef listenerSockAddrRef); 
+    TClientConnection(const TSocket& s, THttpServer::TImpl* serv, NAddr::IRemoteAddrRef listenerSockAddrRef);
     ~TClientConnection() override;
 
     void OnPollEvent(TInstant now) override;
@@ -63,7 +63,7 @@ public:
 
 public:
     TSocket Socket_;
-    NAddr::IRemoteAddrRef ListenerSockAddrRef_; 
+    NAddr::IRemoteAddrRef ListenerSockAddrRef_;
     THttpServer::TImpl* HttpServ_ = nullptr;
     bool Reject_ = false;
     TInstant LastUsed;
@@ -153,17 +153,17 @@ public:
         return obj;
     }
 
-    void AddRequestFromSocket(const TSocket& s, TInstant now, NAddr::IRemoteAddrRef listenerSockAddrRef) { 
+    void AddRequestFromSocket(const TSocket& s, TInstant now, NAddr::IRemoteAddrRef listenerSockAddrRef) {
         if (MaxRequestsReached()) {
             Cb_->OnMaxConn();
             bool wasRemoved = Connections->RemoveOld(TInstant::Max());
             if (!wasRemoved && Options_.RejectExcessConnections) {
-                (new TClientConnection(s, this, listenerSockAddrRef))->Reject(); 
+                (new TClientConnection(s, this, listenerSockAddrRef))->Reject();
                 return;
             }
         }
 
-        auto connection = new TClientConnection(s, this, listenerSockAddrRef); 
+        auto connection = new TClientConnection(s, this, listenerSockAddrRef);
         connection->LastUsed = now;
         connection->DeActivate();
     }
@@ -293,7 +293,7 @@ public:
         inline TListenSocket(const TSocket& s, TImpl* parent)
             : S_(s)
             , Server_(parent)
-            , SockAddrRef_(GetSockAddr(S_)) 
+            , SockAddrRef_(GetSockAddr(S_))
         {
         }
 
@@ -307,7 +307,7 @@ public:
                 ythrow yexception() << "accept: " << LastSystemErrorText();
             }
 
-            Server_->AddRequestFromSocket(s, TInstant::Now(), SockAddrRef_); 
+            Server_->AddRequestFromSocket(s, TInstant::Now(), SockAddrRef_);
         }
 
         SOCKET GetSocket() const noexcept {
@@ -317,7 +317,7 @@ public:
     private:
         TSocket S_;
         TImpl* Server_ = nullptr;
-        NAddr::IRemoteAddrRef SockAddrRef_; 
+        NAddr::IRemoteAddrRef SockAddrRef_;
     };
 
     void ListenSocket() {
@@ -551,9 +551,9 @@ bool THttpServer::MaxRequestsReached() const {
     return Impl_->MaxRequestsReached();
 }
 
-TClientConnection::TClientConnection(const TSocket& s, THttpServer::TImpl* serv, NAddr::IRemoteAddrRef listenerSockAddrRef) 
+TClientConnection::TClientConnection(const TSocket& s, THttpServer::TImpl* serv, NAddr::IRemoteAddrRef listenerSockAddrRef)
     : Socket_(s)
-    , ListenerSockAddrRef_(listenerSockAddrRef) 
+    , ListenerSockAddrRef_(listenerSockAddrRef)
     , HttpServ_(serv)
 {
     SetNoDelay(Socket_, true);
@@ -772,10 +772,10 @@ const TSocket& TClientRequest::Socket() const noexcept {
     return Conn_->Socket_;
 }
 
-NAddr::IRemoteAddrRef TClientRequest::GetListenerSockAddrRef() const noexcept { 
-    return Conn_->ListenerSockAddrRef_; 
-} 
- 
+NAddr::IRemoteAddrRef TClientRequest::GetListenerSockAddrRef() const noexcept {
+    return Conn_->ListenerSockAddrRef_;
+}
+
 TInstant TClientRequest::AcceptMoment() const noexcept {
     return Conn_->AcceptMoment;
 }

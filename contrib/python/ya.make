@@ -335,7 +335,7 @@ RECURSE(
     elasticsearch-dsl
     email-validator
     emoji
-    entrypoints
+    entrypoints 
     enum34
     environ-config
     environs
@@ -528,7 +528,7 @@ RECURSE(
     ipaddress
     ipadic
     ipdb
-    ipykernel
+    ipykernel 
     ipython
     ipython-genutils
     ipython-sql
@@ -563,8 +563,8 @@ RECURSE(
     juggler_sdk
     juggler_sdk/cli
     junitparser
-    jupyter_client
-    jupyter_core
+    jupyter_client 
+    jupyter_core 
     jupyter-telemetry
     jupyterhub
     jupyterhub-traefik-proxy

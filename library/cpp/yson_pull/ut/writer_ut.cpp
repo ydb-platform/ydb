@@ -123,14 +123,14 @@ Y_UNIT_TEST_SUITE(Writer) {
 
     Y_UNIT_TEST(TextFloat64) {
         UNIT_ASSERT_VALUES_EQUAL(
-            "%inf", 
+            "%inf",
             to_yson_text_string(NYsonPull::TScalar{std::numeric_limits<double>::infinity()}));
         UNIT_ASSERT_VALUES_EQUAL(
-            "%-inf", 
+            "%-inf",
             to_yson_text_string(NYsonPull::TScalar{-std::numeric_limits<double>::infinity()}));
-        UNIT_ASSERT_VALUES_EQUAL( 
-            "%nan", 
-            to_yson_text_string(NYsonPull::TScalar{std::numeric_limits<double>::quiet_NaN()})); 
+        UNIT_ASSERT_VALUES_EQUAL(
+            "%nan",
+            to_yson_text_string(NYsonPull::TScalar{std::numeric_limits<double>::quiet_NaN()}));
     }
 
     Y_UNIT_TEST(TextString) {
@@ -230,15 +230,15 @@ Y_UNIT_TEST_SUITE(Writer) {
         UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\xff"sv),
             to_yson_binary_string(NYsonPull::TScalar{-std::numeric_limits<double>::infinity()}));
-        UNIT_ASSERT_VALUES_EQUAL( 
+        UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf8\x7f"sv),
-            to_yson_binary_string(NYsonPull::TScalar{std::numeric_limits<double>::quiet_NaN()})); 
-        UNIT_ASSERT_VALUES_EQUAL( 
+            to_yson_binary_string(NYsonPull::TScalar{std::numeric_limits<double>::quiet_NaN()}));
+        UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x03\x9a\x99\x99\x99\x99\x99\xf1\x3f"),
-            to_yson_binary_string(NYsonPull::TScalar{double{1.1}})); 
-        UNIT_ASSERT_VALUES_EQUAL( 
+            to_yson_binary_string(NYsonPull::TScalar{double{1.1}}));
+        UNIT_ASSERT_VALUES_EQUAL(
             TStringBuf("\x03\x9a\x99\x99\x99\x99\x99\xf1\xbf"),
-            to_yson_binary_string(NYsonPull::TScalar{double{-1.1}})); 
+            to_yson_binary_string(NYsonPull::TScalar{double{-1.1}}));
     }
 
     Y_UNIT_TEST(BinaryString) {

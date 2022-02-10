@@ -2992,84 +2992,84 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         }
     } else if (ns == "datetime2" && (name == "Format" || name == "Parse")) {
         return BuildUdf(ctx, pos, nameSpace, name, args);
-    } else if (name == "MakeLibraPreprocessor") { 
-        if (args.size() != 1) { 
-            return new TInvalidBuiltin(pos, TStringBuilder() << name << " requires exactly one argument"); 
-        } 
+    } else if (name == "MakeLibraPreprocessor") {
+        if (args.size() != 1) {
+            return new TInvalidBuiltin(pos, TStringBuilder() << name << " requires exactly one argument");
+        }
 
-        auto settings = NYT::TNode::CreateMap(); 
- 
-        auto makeUdfArgs = [&args, &pos, &settings]() { 
-            return TVector<TNodePtr> { 
-                args[0], 
-                new TCallNodeImpl(pos, "Void", {}), 
-                BuildQuotedAtom(pos, NYT::NodeToYsonString(settings)) 
-            }; 
-        }; 
- 
-        auto structNode = dynamic_cast<TStructNode*>(args[0].Get()); 
-        if (!structNode) { 
-            if (auto callNode = dynamic_cast<TCallNode*>(args[0].Get())) { 
-                if (callNode->GetOpName() == "AsStruct") { 
-                    return BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs()); 
-                } 
-            } 
- 
-            return new TInvalidBuiltin(pos, TStringBuilder() << name << " requires struct as argument"); 
-        } 
- 
-        for (const auto& item : structNode->GetExprs()) { 
-            const auto& label = item->GetLabel(); 
-            if (label == "Entities") { 
-                auto callNode = dynamic_cast<TCallNode*>(item.Get()); 
-                if (!callNode || callNode->GetOpName() != "AsList") { 
-                    return new TInvalidBuiltin(pos, TStringBuilder() << name << " entities must be list of strings"); 
-                } 
- 
-                auto entities = NYT::TNode::CreateList(); 
-                for (const auto& entity : callNode->GetArgs()) { 
-                    if (!entity->IsLiteral() || entity->GetLiteralType() != "String") { 
-                        return new TInvalidBuiltin(pos, TStringBuilder() << name << " entity must be string literal"); 
-                    } 
-                    entities.Add(entity->GetLiteralValue()); 
-                } 
- 
-                settings(label, std::move(entities)); 
-            } else if (label == "EntitiesStrategy") { 
-                if (!item->IsLiteral() || item->GetLiteralType() != "String") { 
-                    return new TInvalidBuiltin( 
-                        pos, TStringBuilder() << name << " entities strategy must be string literal" 
-                    ); 
-                } 
- 
-                if (!EqualToOneOf(item->GetLiteralValue(), "whitelist", "blacklist")) { 
-                    return new TInvalidBuiltin( 
-                        pos, 
-                        TStringBuilder() << name << " got invalid entities strategy: expected 'whitelist' or 'blacklist'" 
-                    ); 
-                } 
- 
-                settings(label, item->GetLiteralValue()); 
-            } else if (label == "Mode") { 
-                if (!item->IsLiteral() || item->GetLiteralType() != "String") { 
-                    return new TInvalidBuiltin( 
-                        pos, TStringBuilder() << name << " mode must be string literal" 
-                    ); 
-                } 
- 
-                settings(label, item->GetLiteralValue()); 
-            } else if (EqualToOneOf(label, "BlockstatDict", "ParseWithFat")) { 
-                continue; 
-            } else { 
-                return new TInvalidBuiltin( 
-                    pos, 
-                    TStringBuilder() 
-                        << name << " got unsupported setting: " << label 
-                        << "; supported: Entities, EntitiesStrategy, BlockstatDict, ParseWithFat" ); 
-            } 
-        } 
- 
-        return BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs()); 
+        auto settings = NYT::TNode::CreateMap();
+
+        auto makeUdfArgs = [&args, &pos, &settings]() {
+            return TVector<TNodePtr> {
+                args[0],
+                new TCallNodeImpl(pos, "Void", {}),
+                BuildQuotedAtom(pos, NYT::NodeToYsonString(settings))
+            };
+        };
+
+        auto structNode = dynamic_cast<TStructNode*>(args[0].Get());
+        if (!structNode) {
+            if (auto callNode = dynamic_cast<TCallNode*>(args[0].Get())) {
+                if (callNode->GetOpName() == "AsStruct") {
+                    return BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs());
+                }
+            }
+
+            return new TInvalidBuiltin(pos, TStringBuilder() << name << " requires struct as argument");
+        }
+
+        for (const auto& item : structNode->GetExprs()) {
+            const auto& label = item->GetLabel();
+            if (label == "Entities") {
+                auto callNode = dynamic_cast<TCallNode*>(item.Get());
+                if (!callNode || callNode->GetOpName() != "AsList") {
+                    return new TInvalidBuiltin(pos, TStringBuilder() << name << " entities must be list of strings");
+                }
+
+                auto entities = NYT::TNode::CreateList();
+                for (const auto& entity : callNode->GetArgs()) {
+                    if (!entity->IsLiteral() || entity->GetLiteralType() != "String") {
+                        return new TInvalidBuiltin(pos, TStringBuilder() << name << " entity must be string literal");
+                    }
+                    entities.Add(entity->GetLiteralValue());
+                }
+
+                settings(label, std::move(entities));
+            } else if (label == "EntitiesStrategy") {
+                if (!item->IsLiteral() || item->GetLiteralType() != "String") {
+                    return new TInvalidBuiltin(
+                        pos, TStringBuilder() << name << " entities strategy must be string literal"
+                    );
+                }
+
+                if (!EqualToOneOf(item->GetLiteralValue(), "whitelist", "blacklist")) {
+                    return new TInvalidBuiltin(
+                        pos,
+                        TStringBuilder() << name << " got invalid entities strategy: expected 'whitelist' or 'blacklist'"
+                    );
+                }
+
+                settings(label, item->GetLiteralValue());
+            } else if (label == "Mode") {
+                if (!item->IsLiteral() || item->GetLiteralType() != "String") {
+                    return new TInvalidBuiltin(
+                        pos, TStringBuilder() << name << " mode must be string literal"
+                    );
+                }
+
+                settings(label, item->GetLiteralValue());
+            } else if (EqualToOneOf(label, "BlockstatDict", "ParseWithFat")) {
+                continue;
+            } else {
+                return new TInvalidBuiltin(
+                    pos,
+                    TStringBuilder()
+                        << name << " got unsupported setting: " << label
+                        << "; supported: Entities, EntitiesStrategy, BlockstatDict, ParseWithFat" );
+            }
+        }
+
+        return BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs());
     } else if (scriptType != NKikimr::NMiniKQL::EScriptType::Unknown) {
         auto scriptName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
         return new TScriptUdf(pos, TString(scriptName), name, args);

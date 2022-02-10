@@ -4,7 +4,7 @@
 #include "cescape.h"
 #include "macros.h"
 #include "number.h"
-#include "percent_scalar.h" 
+#include "percent_scalar.h"
 #include "stream_counter.h"
 #include "varint.h"
 
@@ -199,17 +199,17 @@ namespace NYsonPull {
                 return token_buffer();
             }
 
-            percent_scalar read_percent_scalar() { 
-                auto throw_incorrect_percent_scalar = [&]() { 
-                    Base::fail("Incorrect %-literal prefix ", NCEscape::quote(token_buffer())); 
+            percent_scalar read_percent_scalar() {
+                auto throw_incorrect_percent_scalar = [&]() {
+                    Base::fail("Incorrect %-literal prefix ", NCEscape::quote(token_buffer()));
                 };
 
-                auto assert_literal = [&](TStringBuf literal) -> void { 
-                    for (size_t i = 2; i < literal.size(); ++i) { 
+                auto assert_literal = [&](TStringBuf literal) -> void {
+                    for (size_t i = 2; i < literal.size(); ++i) {
                         token_buffer_.push_back(this->Base::template get_byte<false>());
                         Base::advance(1);
                         if (Y_UNLIKELY(token_buffer_.back() != literal[i])) {
-                            throw_incorrect_percent_scalar(); 
+                            throw_incorrect_percent_scalar();
                         }
                     }
                 };
@@ -217,25 +217,25 @@ namespace NYsonPull {
                 token_buffer_.clear();
                 token_buffer_.push_back(this->Base::template get_byte<false>());
                 Base::advance(1);
- 
-                switch (token_buffer_[0]) { 
-                    case 't': 
-                        assert_literal(percent_scalar::true_literal); 
-                        return percent_scalar(true); 
-                    case 'f': 
-                        assert_literal(percent_scalar::false_literal); 
-                        return percent_scalar(false); 
-                    case 'n': 
-                        assert_literal(percent_scalar::nan_literal); 
-                        return percent_scalar(std::numeric_limits<double>::quiet_NaN()); 
-                    case 'i': 
-                        assert_literal(percent_scalar::positive_inf_literal); 
-                        return percent_scalar(std::numeric_limits<double>::infinity()); 
-                    case '-': 
-                        assert_literal(percent_scalar::negative_inf_literal); 
-                        return percent_scalar(-std::numeric_limits<double>::infinity()); 
-                    default: 
-                        throw_incorrect_percent_scalar(); 
+
+                switch (token_buffer_[0]) {
+                    case 't':
+                        assert_literal(percent_scalar::true_literal);
+                        return percent_scalar(true);
+                    case 'f':
+                        assert_literal(percent_scalar::false_literal);
+                        return percent_scalar(false);
+                    case 'n':
+                        assert_literal(percent_scalar::nan_literal);
+                        return percent_scalar(std::numeric_limits<double>::quiet_NaN());
+                    case 'i':
+                        assert_literal(percent_scalar::positive_inf_literal);
+                        return percent_scalar(std::numeric_limits<double>::infinity());
+                    case '-':
+                        assert_literal(percent_scalar::negative_inf_literal);
+                        return percent_scalar(-std::numeric_limits<double>::infinity());
+                    default:
+                        throw_incorrect_percent_scalar();
                 }
 
                 Y_UNREACHABLE();

@@ -126,8 +126,8 @@ public:
                     } else {
                         return size - Z()->avail_out;
                     }
-
-                    [[fallthrough]];
+ 
+                    [[fallthrough]]; 
                 }
 
                 case Z_OK: {

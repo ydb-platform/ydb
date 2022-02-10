@@ -178,7 +178,7 @@ namespace NSc {
         switch (otherCore.ValueType) {
             default:
                 Y_ASSERT(false);
-                [[fallthrough]];
+                [[fallthrough]]; 
             case EType::Null:
                 break;
             case EType::Bool:

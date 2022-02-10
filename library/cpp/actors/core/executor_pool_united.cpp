@@ -546,7 +546,7 @@ namespace NActors {
                     switch (SlowWorkerAction(wctx.PoolId)) {
                     case WakeFast:
                         WakeFastWorker();
-                        [[fallthrough]]; // no break; pass through
+                        [[fallthrough]]; // no break; pass through 
                     case BecameIdle:
                         wctx.Lease = wctx.Lease.NeverExpire();
                         wctx.PoolId = MaxPools;

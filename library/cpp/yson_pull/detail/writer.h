@@ -223,14 +223,14 @@ namespace NYsonPull {
                             default:
                                 break;
                         }
-                        [[fallthrough]];
+                        [[fallthrough]]; 
                     case state::value:
                         if (event == EEventType::BeginAttributes) {
                             push(EEventType::BeginAttributes);
                             next_state();
                             return;
                         }
-                        [[fallthrough]];
+                        [[fallthrough]]; 
                     case state::value_noattr:
                         switch (event) {
                             case EEventType::Scalar:

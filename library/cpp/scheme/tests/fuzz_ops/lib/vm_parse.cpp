@@ -75,7 +75,7 @@ namespace NSc::NUt {
             if (!DoParsePos(state, ref)) {
                 return Nothing();
             }
-            [[fallthrough]];
+            [[fallthrough]]; 
         case TRef::T_CREATE_FRONT:
         case TRef::T_CREATE_BACK:
             return ref;
@@ -116,7 +116,7 @@ namespace NSc::NUt {
             if (!DoParsePos(state, dst)) {
                 return Nothing();
             }
-            [[fallthrough]];
+            [[fallthrough]]; 
         case TDst::T_CREATE_FRONT_LREF:
         case TDst::T_CREATE_FRONT_CREF:
         case TDst::T_CREATE_FRONT_RREF:

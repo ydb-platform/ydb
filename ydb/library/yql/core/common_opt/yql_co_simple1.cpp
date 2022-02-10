@@ -1614,7 +1614,7 @@ TExprNode::TPtr BuildSqlInCollectionEmptyPred(const TCoSqlIn& sqlIn, TExprContex
                     .Add(0, collection)
                 .Seal()
                 .Build();
-            [[fallthrough]];
+            [[fallthrough]]; 
         case ETypeAnnotationKind::List:
             collectionEmptyPred = BuildCollectionEmptyPred(sqlIn.Pos(), collection, ctx);
             break;

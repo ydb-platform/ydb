@@ -33,7 +33,7 @@ namespace NHyperscan {
             switch (runtime) {
                 default:
                     Y_ASSERT(false);
-                    [[fallthrough]];
+                    [[fallthrough]]; 
                 case ERuntime::Core2:
                 case ERuntime::Corei7:
                     return 0;
@@ -57,7 +57,7 @@ namespace NHyperscan {
             switch (runtime) {
                 default:
                     Y_ASSERT(false);
-                    [[fallthrough]];
+                    [[fallthrough]]; 
                 case ERuntime::Core2:
                     AllocScratch = core2_hs_alloc_scratch;
                     Scan = core2_hs_scan;

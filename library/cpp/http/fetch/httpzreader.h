@@ -114,7 +114,7 @@ public:
                     // there is no data in next_out yet
                     if (BufSize == Stream.avail_out)
                         continue;
-                    [[fallthrough]]; // don't break or return; continue with Z_STREAM_END case
+                    [[fallthrough]]; // don't break or return; continue with Z_STREAM_END case 
 
                 case Z_STREAM_END:
                     if (Stream.total_out > MaxContSize) {

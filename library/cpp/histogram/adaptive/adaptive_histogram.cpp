@@ -190,7 +190,7 @@ namespace NKiwiAggr {
             case HT_ADAPTIVE_HISTOGRAM:
                 if (CalcQuality != nullptr)
                     break; // ok
-                [[fallthrough]];
+                [[fallthrough]]; 
             default:       // not ok
                 ythrow yexception() << "Attempt to parse TAdaptiveHistogram from THistogram protobuf record of type = " << (ui32)histo.GetType();
         }

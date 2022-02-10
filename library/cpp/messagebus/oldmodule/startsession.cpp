@@ -48,7 +48,7 @@ namespace NBus {
     }
 
     void TBusStarter::Starter() {
-        TGuard<TMutex> g(ExitLock);
+        TGuard<TMutex> g(ExitLock); 
         while (!Exiting) {
             TAutoPtr<TBusMessage> empty(new TBusMessage(0));
 

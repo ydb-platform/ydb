@@ -395,7 +395,7 @@ namespace NBus {
     }
 
     int TBusLocator::Register(TBusService service, TBusKey start, TBusKey end, const TNetAddr& addr) {
-        TGuard<TMutex> G(Lock);
+        TGuard<TMutex> G(Lock); 
 
         TServiceId serviceId = GetServiceId(service);
         TItems::const_iterator it;

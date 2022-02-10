@@ -93,7 +93,7 @@ namespace NBitOps {
             Y_ASSERT(value); // because __builtin_ctz* have undefined result for zero.
             return __builtin_ctz(value);
         }
-
+ 
         inline unsigned CountTrailingZeroBitsImpl(unsigned long value) noexcept {
             Y_ASSERT(value); // because __builtin_ctz* have undefined result for zero.
             return __builtin_ctzl(value);
@@ -211,7 +211,7 @@ static inline T FastClp2(T t) noexcept {
     using TCvt = typename ::TUnsignedInts::template TSelectBy<TSizeOfPredicate<sizeof(T)>::template TResult>::type;
     return 1 + ::NBitOps::NPrivate::TClp2Helper<sizeof(TCvt) * 4, T>::Calc(static_cast<TCvt>(t));
 }
-
+ 
 /**
  * Check if integer is a power of 2.
  */

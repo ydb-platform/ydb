@@ -57,18 +57,18 @@ Y_UNIT_TEST_SUITE(TJsonWriterTest) {
 
     Y_UNIT_TEST(FormatOutput) {
         TString expected = "{\n  \"key1\":null,\n  \"key2\":\n    {\n      \"subkey1\":\n        [\n          1,\n          {\n            \"subsubkey\":\"test2\"\n          },\n          null,\n          true\n        ],\n      \"subkey2\":\"test\"\n    }\n}";
-        TJsonValue v;
-        v["key1"] = JSON_NULL;
-        v["key2"]["subkey1"].AppendValue(1);
-        v["key2"]["subkey1"].AppendValue(JSON_MAP)["subsubkey"] = "test2";
-        v["key2"]["subkey1"].AppendValue(JSON_NULL);
-        v["key2"]["subkey1"].AppendValue(true);
-        v["key2"]["subkey2"] = "test";
-        TStringStream out;
-        WriteJson(&out, &v, true);
-        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), expected);
-    }
-
+        TJsonValue v; 
+        v["key1"] = JSON_NULL; 
+        v["key2"]["subkey1"].AppendValue(1); 
+        v["key2"]["subkey1"].AppendValue(JSON_MAP)["subsubkey"] = "test2"; 
+        v["key2"]["subkey1"].AppendValue(JSON_NULL); 
+        v["key2"]["subkey1"].AppendValue(true); 
+        v["key2"]["subkey2"] = "test"; 
+        TStringStream out; 
+        WriteJson(&out, &v, true); 
+        UNIT_ASSERT_STRINGS_EQUAL(out.Str(), expected); 
+    } 
+ 
     Y_UNIT_TEST(SortKeys) {
         TString expected = "{\"a\":null,\"j\":null,\"n\":null,\"y\":null,\"z\":null}";
         TJsonValue v;

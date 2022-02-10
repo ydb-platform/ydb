@@ -1,7 +1,7 @@
-#include "bitops.h"
-
+#include "bitops.h" 
+ 
 #include <library/cpp/testing/unittest/registar.h>
-
+ 
 #include <util/string/builder.h>
 
 template <typename T>
@@ -46,11 +46,11 @@ static T ReverseBitsSlow(T v) {
 // DO_NOT_STYLE
 Y_UNIT_TEST_SUITE(TBitOpsTest) {
     Y_UNIT_TEST(TestCountTrailingZeroBits) {
-        TestCTZ<unsigned int>();
+        TestCTZ<unsigned int>(); 
         TestCTZ<unsigned long>();
         TestCTZ<unsigned long long>();
     }
-
+ 
     Y_UNIT_TEST(TestIsPowerOf2) {
         UNIT_ASSERT(!IsPowerOf2(-2));
         UNIT_ASSERT(!IsPowerOf2(-1));

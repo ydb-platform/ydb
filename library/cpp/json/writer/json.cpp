@@ -136,12 +136,12 @@ namespace NJsonWriter {
         NeedComma = false;
         NeedNewline = false;
     }
-
+ 
     inline void TBuf::EndValue() {
         if (StackTop() == JE_PAIR) {
             StackPop();
         }
-    }
+    } 
 
     TValueContext TBuf::BeginList() {
         NeedNewline = true;

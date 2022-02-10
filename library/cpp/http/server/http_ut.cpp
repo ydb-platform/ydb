@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         TEchoServer serverImpl(res);
         THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true));
 
-        for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 2; ++i) { 
             UNIT_ASSERT(server.Start());
 
             TTestRequest r(port);
@@ -362,9 +362,9 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                         }
                     }
                 }
-            }
-
-            server.Stop();
+            } 
+ 
+            server.Stop(); 
         }
     }
 

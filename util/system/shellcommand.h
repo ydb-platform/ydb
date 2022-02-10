@@ -67,33 +67,33 @@ public:
 
     /**
      * @brief clear signal mask from parent process. If true, child process
-     * clears the signal mask inherited from the parent process; otherwise
-     * child process retains the signal mask of the parent process.
-     *
-     * @param clearSignalMask true if child process should clear signal mask
-     * @note in default child process inherits signal mask.
-     * @return self
-     */
-    inline TShellCommandOptions& SetClearSignalMask(bool clearSignalMask) {
-        ClearSignalMask = clearSignalMask;
-        return *this;
-    }
-
-    /**
+     * clears the signal mask inherited from the parent process; otherwise 
+     * child process retains the signal mask of the parent process. 
+     * 
+     * @param clearSignalMask true if child process should clear signal mask 
+     * @note in default child process inherits signal mask. 
+     * @return self 
+     */ 
+    inline TShellCommandOptions& SetClearSignalMask(bool clearSignalMask) { 
+        ClearSignalMask = clearSignalMask; 
+        return *this; 
+    } 
+ 
+    /** 
      * @brief set close-on-exec mode. If true, all file descriptors
-     * from the parent process, except stdin, stdout, stderr, will be closed
-     * in the child process upon exec().
-     *
-     * @param closeAllFdsOnExec true if close-on-exec mode is needed
-     * @note in default close-on-exec mode is off.
-     * @return self
-     */
+     * from the parent process, except stdin, stdout, stderr, will be closed 
+     * in the child process upon exec(). 
+     * 
+     * @param closeAllFdsOnExec true if close-on-exec mode is needed 
+     * @note in default close-on-exec mode is off. 
+     * @return self 
+     */ 
     inline TShellCommandOptions& SetCloseAllFdsOnExec(bool closeAllFdsOnExec) {
-        CloseAllFdsOnExec = closeAllFdsOnExec;
-        return *this;
-    }
-
-    /**
+        CloseAllFdsOnExec = closeAllFdsOnExec; 
+        return *this; 
+    } 
+ 
+    /** 
      * @brief set asynchronous mode. If true, task will be run
      * in separate thread, and control will be returned immediately
      *
@@ -443,14 +443,14 @@ public:
     TShellCommand& Run();
 
     /**
-     * @brief terminate the execution
-     * @note if DetachSession is set, it terminates all procs in command's new process group
-     *
-     * @return self
-     */
+     * @brief terminate the execution 
+     * @note if DetachSession is set, it terminates all procs in command's new process group 
+     * 
+     * @return self 
+     */ 
     TShellCommand& Terminate();
-
-    /**
+ 
+    /** 
      * @brief wait until the execution is finished
      *
      * @return self

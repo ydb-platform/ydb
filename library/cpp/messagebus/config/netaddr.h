@@ -25,8 +25,8 @@ namespace NBus {
             return false;
         }
         return true;
-    }
-
+    } 
+ 
     const char* ToCString(EIpVersion);
     int ToAddrFamily(EIpVersion);
 

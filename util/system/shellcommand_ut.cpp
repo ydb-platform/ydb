@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
         options.SetAsync(true);
         options.SetQuoteArguments(false);
         options.SetLatency(10);
-        options.SetClearSignalMask(true);
+        options.SetClearSignalMask(true); 
         options.SetCloseAllFdsOnExec(true);
         options.SetCloseInput(false);
         TGuardedStringStream write;
@@ -308,66 +308,66 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
             cmd.Run();
             sleep(1);
             UNIT_ASSERT(TShellCommand::SHELL_RUNNING == cmd.GetStatus());
-            // Async mode requires Terminate() + Wait() to send kill to child proc!
-            cmd.Terminate();
-            cmd.Wait();
-            UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus());
+            // Async mode requires Terminate() + Wait() to send kill to child proc! 
+            cmd.Terminate(); 
+            cmd.Wait(); 
+            UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus()); 
             UNIT_ASSERT(cmd.GetExitCode().Defined() && -15 == cmd.GetExitCode());
         }
         sleep(1);
         UNIT_ASSERT(!NFs::Exists(tmpfile));
     }
-    // this ut is unix-only (win has no signal mask)
+    // this ut is unix-only (win has no signal mask) 
     Y_UNIT_TEST(TestSignalMask) {
-        // block SIGTERM
-        int rc;
-        sigset_t newmask, oldmask;
-        SigEmptySet(&newmask);
-        SigAddSet(&newmask, SIGTERM);
-        rc = SigProcMask(SIG_SETMASK, &newmask, &oldmask);
-        UNIT_ASSERT(rc == 0);
-
+        // block SIGTERM 
+        int rc; 
+        sigset_t newmask, oldmask; 
+        SigEmptySet(&newmask); 
+        SigAddSet(&newmask, SIGTERM); 
+        rc = SigProcMask(SIG_SETMASK, &newmask, &oldmask); 
+        UNIT_ASSERT(rc == 0); 
+ 
         TString tmpfile = TString("shellcommand_ut.interrupt.") + ToString(RandomNumber<ui32>());
-
-        TShellCommandOptions options;
-        options.SetAsync(true);
-        options.SetQuoteArguments(false);
-
-        // child proc should not receive SIGTERM anymore
-        {
-            TShellCommand cmd("/bin/sleep", options);
-            // touch file only if sleep not interrupted by SIGTERM
+ 
+        TShellCommandOptions options; 
+        options.SetAsync(true); 
+        options.SetQuoteArguments(false); 
+ 
+        // child proc should not receive SIGTERM anymore 
+        { 
+            TShellCommand cmd("/bin/sleep", options); 
+            // touch file only if sleep not interrupted by SIGTERM 
             cmd << " 10 & wait; [ $? == 0 ] || /usr/bin/touch " << tmpfile;
-            cmd.Run();
-            sleep(1);
-            UNIT_ASSERT(TShellCommand::SHELL_RUNNING == cmd.GetStatus());
-            cmd.Terminate();
-            cmd.Wait();
+            cmd.Run(); 
+            sleep(1); 
+            UNIT_ASSERT(TShellCommand::SHELL_RUNNING == cmd.GetStatus()); 
+            cmd.Terminate(); 
+            cmd.Wait(); 
             UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus() || TShellCommand::SHELL_FINISHED == cmd.GetStatus());
-        }
-        sleep(1);
+        } 
+        sleep(1); 
         UNIT_ASSERT(!NFs::Exists(tmpfile));
-
-        // child proc should receive SIGTERM
-        options.SetClearSignalMask(true);
-        {
-            TShellCommand cmd("/bin/sleep", options);
-            // touch file regardless -- it will be interrupted
+ 
+        // child proc should receive SIGTERM 
+        options.SetClearSignalMask(true); 
+        { 
+            TShellCommand cmd("/bin/sleep", options); 
+            // touch file regardless -- it will be interrupted 
             cmd << " 10 & wait; /usr/bin/touch " << tmpfile;
-            cmd.Run();
-            sleep(1);
-            UNIT_ASSERT(TShellCommand::SHELL_RUNNING == cmd.GetStatus());
-            cmd.Terminate();
-            cmd.Wait();
-            UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus());
-        }
-        sleep(1);
+            cmd.Run(); 
+            sleep(1); 
+            UNIT_ASSERT(TShellCommand::SHELL_RUNNING == cmd.GetStatus()); 
+            cmd.Terminate(); 
+            cmd.Wait(); 
+            UNIT_ASSERT(TShellCommand::SHELL_ERROR == cmd.GetStatus()); 
+        } 
+        sleep(1); 
         UNIT_ASSERT(!NFs::Exists(tmpfile));
-
-        // restore signal mask
+ 
+        // restore signal mask 
         rc = SigProcMask(SIG_SETMASK, &oldmask, nullptr);
-        UNIT_ASSERT(rc == 0);
-    }
+        UNIT_ASSERT(rc == 0); 
+    } 
 #else
     // This ut is windows-only
     Y_UNIT_TEST(TestStdinProperlyConstructed) {

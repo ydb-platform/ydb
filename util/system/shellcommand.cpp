@@ -291,8 +291,8 @@ public:
         , ErrorStream(options.ErrorStream)
         , WatchThread(nullptr)
         , TerminateFlag(false)
-        , ClearSignalMask(options.ClearSignalMask)
-        , CloseAllFdsOnExec(options.CloseAllFdsOnExec)
+        , ClearSignalMask(options.ClearSignalMask) 
+        , CloseAllFdsOnExec(options.CloseAllFdsOnExec) 
         , AsyncMode(options.AsyncMode)
         , PollDelayMs(options.PollDelayMs)
         , UseShell(options.UseShell)
@@ -389,25 +389,25 @@ public:
     // start child process
     void Run();
 
-    inline void Terminate() {
+    inline void Terminate() { 
         if (!!Pid && (AtomicGet(ExecutionStatus) == SHELL_RUNNING)) {
             bool ok =
 #if defined(_unix_)
                 kill(DetachSession ? -1 * Pid : Pid, SIGTERM) == 0;
-            if (!ok && (errno == ESRCH) && DetachSession) {
-                // this could fail when called before child proc completes setsid().
-                ok = kill(Pid, SIGTERM) == 0;
+            if (!ok && (errno == ESRCH) && DetachSession) { 
+                // this could fail when called before child proc completes setsid(). 
+                ok = kill(Pid, SIGTERM) == 0; 
                 kill(-Pid, SIGTERM); // between a failed kill(-Pid) and a successful kill(Pid) a grandchild could have been spawned
-            }
+            } 
 #else
                 TerminateProcess(Pid, 1 /* exit code */);
 #endif
             if (!ok) {
                 ythrow TSystemError() << "cannot terminate " << Pid;
             }
-        }
-    }
-
+        } 
+    } 
+ 
     inline void Wait() {
         if (WatchThread) {
             WatchThread->Join();
@@ -670,24 +670,24 @@ void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* 
         if (DetachSession) {
             setsid();
         }
-
-        // reset signal handlers from parent
-        struct sigaction sa;
-        sa.sa_handler = SIG_DFL;
-        sa.sa_flags = 0;
-        SigEmptySet(&sa.sa_mask);
-        for (int i = 0; i < NSIG; ++i) {
-            // some signals cannot be caught, so just ignore return value
+ 
+        // reset signal handlers from parent 
+        struct sigaction sa; 
+        sa.sa_handler = SIG_DFL; 
+        sa.sa_flags = 0; 
+        SigEmptySet(&sa.sa_mask); 
+        for (int i = 0; i < NSIG; ++i) { 
+            // some signals cannot be caught, so just ignore return value 
             sigaction(i, &sa, nullptr);
-        }
-        if (ClearSignalMask) {
-            SigEmptySet(&oldmask);
-        }
-        // clear / restore signal mask
+        } 
+        if (ClearSignalMask) { 
+            SigEmptySet(&oldmask); 
+        } 
+        // clear / restore signal mask 
         if (SigProcMask(SIG_SETMASK, &oldmask, nullptr) != 0) {
-            ythrow TSystemError() << "Cannot " << (ClearSignalMask ? "clear" : "restore") << " signal mask in child";
-        }
-
+            ythrow TSystemError() << "Cannot " << (ClearSignalMask ? "clear" : "restore") << " signal mask in child"; 
+        } 
+ 
         TFileHandle sIn(0);
         TFileHandle sOut(1);
         TFileHandle sErr(2);
@@ -775,13 +775,13 @@ void TShellCommand::TImpl::Run() {
     AtomicSet(ExecutionStatus, SHELL_RUNNING);
 
 #if defined(_unix_)
-    // block all signals to avoid signal handler race after fork()
-    sigset_t oldmask, newmask;
-    SigFillSet(&newmask);
-    if (SigProcMask(SIG_SETMASK, &newmask, &oldmask) != 0) {
-        ythrow TSystemError() << "Cannot block all signals in parent";
-    }
-
+    // block all signals to avoid signal handler race after fork() 
+    sigset_t oldmask, newmask; 
+    SigFillSet(&newmask); 
+    if (SigProcMask(SIG_SETMASK, &newmask, &oldmask) != 0) { 
+        ythrow TSystemError() << "Cannot block all signals in parent"; 
+    } 
+ 
     /* arguments holders */
     TString shellArg;
     TVector<char*> qargv;
@@ -828,11 +828,11 @@ void TShellCommand::TImpl::Run() {
         } else {
             OnFork(pipes, oldmask, qargv.data(), nullptr, FuncAfterFork);
         }
-    } else { // parent
-        // restore signal mask
+    } else { // parent 
+        // restore signal mask 
         if (SigProcMask(SIG_SETMASK, &oldmask, nullptr) != 0) {
-            ythrow TSystemError() << "Cannot restore signal mask in parent";
-        }
+            ythrow TSystemError() << "Cannot restore signal mask in parent"; 
+        } 
     }
     Pid = pid;
 #else
@@ -1181,10 +1181,10 @@ TShellCommand& TShellCommand::Run() {
 }
 
 TShellCommand& TShellCommand::Terminate() {
-    Impl->Terminate();
-    return *this;
-}
-
+    Impl->Terminate(); 
+    return *this; 
+} 
+ 
 TShellCommand& TShellCommand::Wait() {
     Impl->Wait();
     return *this;

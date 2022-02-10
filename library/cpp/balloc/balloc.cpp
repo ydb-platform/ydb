@@ -6,7 +6,7 @@ namespace NBalloc {
     static constexpr size_t ALIVE_SIGNATURE = 0xaULL << 56;
     static constexpr size_t DISABLED_SIGNATURE = 0xbULL << 56;
     static constexpr size_t SIGNATURE_MASK = 0xfULL << 56;
-
+ 
     static constexpr size_t MINIMAL_ALIGNMENT = sizeof(NBalloc::TAllocHeader);
     static_assert(((MINIMAL_ALIGNMENT - 1) & MINIMAL_ALIGNMENT) == 0,
         "invalid BALLOC_MINIMAL_ALIGNMENT");
@@ -63,7 +63,7 @@ namespace NBalloc {
         }
         NMalloc::AbortFromCorruptedAllocator();
         Y_UNREACHABLE();
-    }
+    } 
 
     static void Y_FORCE_INLINE Disable() {
 #if defined(_musl_)
@@ -224,7 +224,7 @@ extern "C" void cfree(void* ptr) {
 #if defined(Y_COVER_PTR)
     free(ptr);
 #else
-    NBalloc::Free(ptr);
+    NBalloc::Free(ptr); 
 #endif
 }
 
@@ -238,7 +238,7 @@ extern "C" void* realloc(void* oldPtr, size_t newSize) {
         return result;
     }
     if (newSize == 0) {
-        NBalloc::Free(oldPtr);
+        NBalloc::Free(oldPtr); 
         return nullptr;
     }
     void* newPtr = NBalloc::Malloc(newSize);
@@ -249,14 +249,14 @@ extern "C" void* realloc(void* oldPtr, size_t newSize) {
     const size_t oldSize = header->AllocSize & ~NBalloc::SIGNATURE_MASK;
     const size_t signature = header->AllocSize & NBalloc::SIGNATURE_MASK;
     if (Y_LIKELY((signature == NBalloc::ALIVE_SIGNATURE) || (signature == NBalloc::DISABLED_SIGNATURE))) {
-        memcpy(newPtr, oldPtr, oldSize < newSize ? oldSize : newSize);
-        NBalloc::Free(oldPtr);
-        return newPtr;
-    }
+        memcpy(newPtr, oldPtr, oldSize < newSize ? oldSize : newSize); 
+        NBalloc::Free(oldPtr); 
+        return newPtr; 
+    } 
     NMalloc::AbortFromCorruptedAllocator();
     return nullptr;
 }
-
+ 
 #if defined(Y_COVER_PTR)
 extern "C" void* realloc(void* oldPtr, size_t newSize) {
     if (!oldPtr) {
@@ -282,9 +282,9 @@ extern "C" bool BallocDisabled() {
     return NBalloc::IsDisabled();
 }
 
-extern "C" void DisableBalloc() {
-    NBalloc::Disable();
-}
+extern "C" void DisableBalloc() { 
+    NBalloc::Disable(); 
+} 
 
 extern "C" void EnableBalloc() {
     NBalloc::Enable();

@@ -152,7 +152,7 @@ namespace NJsonWriter {
 
         TVector<EJsonEntity> Stack;
         bool NeedComma;
-        bool NeedNewline;
+        bool NeedNewline; 
         const EHtmlEscapeMode EscapeMode;
         int IndentSpaces;
         bool WriteNanAsString;

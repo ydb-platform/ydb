@@ -279,7 +279,7 @@ namespace NKikimr {
                             }
                             return;
                         }
-                        items.emplace_back(std::move(probe), Nothing(), hitCount); 
+                        items.emplace_back(std::move(probe), Nothing(), hitCount);
                         if (pos < queue.size()) {
                             ++pos;
                         } else {

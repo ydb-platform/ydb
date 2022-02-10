@@ -733,7 +733,7 @@ public:
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
         }
         if (params.contains("allowedMetrics")) {
-            TVector<TString> allowedMetrics = SplitString(params.Get("allowedMetrics"), ";"); 
+            TVector<TString> allowedMetrics = SplitString(params.Get("allowedMetrics"), ";");
             for (TStringBuf tabletAllowedMetrics : allowedMetrics) {
                 TStringBuf tabletType = tabletAllowedMetrics.NextTok(':');
                 TTabletTypes::EType type = GetShortTabletType(TString(tabletType));
@@ -2129,7 +2129,7 @@ public:
     {
         TabletId = FromStringWithDefault<TTabletId>(Event->Cgi().Get("tablet"), TabletId);
         TabletType = (TTabletTypes::EType)FromStringWithDefault<int>(Event->Cgi().Get("type"), TabletType);
-        TabletChannels = Scan<ui32>(SplitString(Event->Cgi().Get("channel"), ",")); 
+        TabletChannels = Scan<ui32>(SplitString(Event->Cgi().Get("channel"), ","));
         TabletPercent = FromStringWithDefault<int>(Event->Cgi().Get("percent"), TabletPercent);
         GroupId = FromStringWithDefault(Event->Cgi().Get("group"), GroupId);
         ForcedGroupIds = Scan<ui32>(SplitString(Event->Cgi().Get("forcedGroup"), ","));

@@ -22,20 +22,20 @@
 // NOTE: Check StringSplitter below to get more convenient split string interface.
 
 namespace NStringSplitPrivate {
- 
-    template <class T, class I, class = void> 
+
+    template <class T, class I, class = void>
     struct TIsConsumer: std::false_type {};
- 
-    template <class T, class I> 
-    struct TIsConsumer< 
-        T, I, 
-        TVoidT<decltype(std::declval<T>().Consume( 
-            std::declval<I>(), std::declval<I>(), std::declval<I>()))>> 
-        : std::true_type {}; 
- 
-    template <class T, class I> 
-    constexpr bool TIsConsumerV = TIsConsumer<T, I>::value; 
- 
+
+    template <class T, class I>
+    struct TIsConsumer<
+        T, I,
+        TVoidT<decltype(std::declval<T>().Consume(
+            std::declval<I>(), std::declval<I>(), std::declval<I>()))>>
+        : std::true_type {};
+
+    template <class T, class I>
+    constexpr bool TIsConsumerV = TIsConsumer<T, I>::value;
+
     template <class T>
     T* Find(T* str, std::common_type_t<T> ch) {
         for (; *str; ++str) {
@@ -47,11 +47,11 @@ namespace NStringSplitPrivate {
         return nullptr;
     }
 
-} 
- 
+}
+
 template <class I, class TDelim, class TConsumer>
 std::enable_if_t<::NStringSplitPrivate::TIsConsumerV<TConsumer, I>>
-SplitString(I b, I e, const TDelim& d, TConsumer&& c) { 
+SplitString(I b, I e, const TDelim& d, TConsumer&& c) {
     I l, i;
 
     do {
@@ -62,7 +62,7 @@ SplitString(I b, I e, const TDelim& d, TConsumer&& c) {
 
 template <class I, class TDelim, class TConsumer>
 std::enable_if_t<::NStringSplitPrivate::TIsConsumerV<TConsumer, I>>
-SplitString(I b, const TDelim& d, TConsumer&& c) { 
+SplitString(I b, const TDelim& d, TConsumer&& c) {
     I l, i;
 
     do {
@@ -404,7 +404,7 @@ static inline void Split(char* buf, char ch, T* res) {
     TCharDelimiter<char> delim(ch);
     TSimplePusher<T> pusher = {res};
 
-    SplitString(buf, delim, pusher); 
+    SplitString(buf, delim, pusher);
 }
 
 /// Split string into res vector. Res vector is cleared before split.

@@ -352,7 +352,7 @@ private:
 
     void ParseQuery(const TString& s)
     {
-        auto parts = SplitString(s, "."); 
+        auto parts = SplitString(s, ".");
         WWW_CHECK(parts.size() <= 3, "too many name specifiers");
         ParseParamSelector(parts.back());
         if (parts.size() >= 2) {
@@ -575,12 +575,12 @@ struct TAdHocTraceConfig {
     bool ParseId(const TString& id)
     {
         if (IsAdHocId(id)) {
-            for (const TString& block : SplitString(id, "/")) { 
+            for (const TString& block : SplitString(id, "/")) {
                 if (block.empty()) {
                     continue;
                 }
                 size_t cutPos = (block[0] == '.'? 1: 0);
-                TVector<TString> parts = SplitString(block.substr(cutPos), "."); 
+                TVector<TString> parts = SplitString(block.substr(cutPos), ".");
                 WWW_CHECK(parts.size() >= 2, "too few parts in adhoc trace id '%s' block '%s'", id.data(), block.data());
                 auto blockPb = Cfg.AddBlocks();
                 auto pdescPb = blockPb->MutableProbeDesc();
@@ -666,7 +666,7 @@ private:
         // NOTE: checks for longer action names should go first, your captain.
         if (a.substr(0, 3) == "lsr") {
             auto pb = action->MutableRunLogShuttleAction();
-            for (const TString& opt : SplitString(a.substr(3), "-")) { 
+            for (const TString& opt : SplitString(a.substr(3), "-")) {
                 if (!opt.empty()) {
                     switch (opt[0]) {
                     case 'i': pb->SetIgnore(true); break;
@@ -678,7 +678,7 @@ private:
             }
         } else if (a.substr(0, 3) == "lse") {
             auto pb = action->MutableEditLogShuttleAction();
-            for (const TString& opt : SplitString(a.substr(3), "-")) { 
+            for (const TString& opt : SplitString(a.substr(3), "-")) {
                 if (!opt.empty()) {
                     switch (opt[0]) {
                     case 'i': pb->SetIgnore(true); break;
@@ -690,7 +690,7 @@ private:
             action->MutableDropLogShuttleAction();
         } else if (a.substr(0, 1) == "l") {
             auto pb = action->MutableLogAction();
-            for (const TString& opt : SplitString(a.substr(1), "-")) { 
+            for (const TString& opt : SplitString(a.substr(1), "-")) {
                 if (!opt.empty()) {
                     switch (opt[0]) {
                     case 't': pb->SetLogTimestamp(true); break;
@@ -1027,7 +1027,7 @@ TVector<TString> Subvalues(const TCgiParameters& e, const TString& key)
         return TVector<TString>();
     } else {
         TVector<TString> ret;
-        for (const TString& s : SplitString(e.Get(key), ":", 0, KEEP_EMPTY_TOKENS)) { 
+        for (const TString& s : SplitString(e.Get(key), ":", 0, KEEP_EMPTY_TOKENS)) {
             ret.push_back(UnescapeSubvalue(s));
         }
         if (ret.empty()) {
@@ -1039,7 +1039,7 @@ TVector<TString> Subvalues(const TCgiParameters& e, const TString& key)
 
 TString ParseTagsOut(const TString& taggedStr, TTags& tags)
 {
-    auto vec = SplitString(taggedStr, "-"); 
+    auto vec = SplitString(taggedStr, "-");
     if (vec.empty()) {
         return "";
     }
@@ -4363,12 +4363,12 @@ private:
                 SeriesSelectors(out, e, "xn", "yns", data);
                 out.Clear();
                 out << NMonitoring::HTTPOKJSON;
-                out << ToJsonFlot(data, xn, SplitString(e.Get("yns"), ":")); 
+                out << ToJsonFlot(data, xn, SplitString(e.Get("yns"), ":"));
             } else if (outFormat == "flot") {
                 SeriesSelectors(out, e, "xn", "yns", data);
                 TString selectors = out.Str();
 
-                TVector<TString> ynos = SplitString(e.Get("yns"), ":"); 
+                TVector<TString> ynos = SplitString(e.Get("yns"), ":");
                 out.Clear();
                 out << NMonitoring::HTTPOKHTML;
                 out << "<!DOCTYPE html>" << Endl;

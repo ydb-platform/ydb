@@ -16,7 +16,7 @@ WRAPPER = {
     'js': 'TJsWrapper("{impl}")',
     'go': 'TGoWrapper("{impl}")',
     'py': 'TPythonWrapper("{impl}")',
-    'java': 'TJavaWrapper("{impl}", "{py_wrapper}")',
+    'java': 'TJavaWrapper("{impl}", "{py_wrapper}")', 
 }
 
 
@@ -26,7 +26,7 @@ def parse_args():
     parser.add_argument('output')
     parser.add_argument('-l', '--lang', choices=WRAPPER, required=True)
     parser.add_argument('-i', '--impl', required=True)
-    parser.add_argument('-w', '--wrapper', required=False)
+    parser.add_argument('-w', '--wrapper', required=False) 
     parser.add_argument('includes', nargs='*')
 
     return parser.parse_args()
@@ -44,7 +44,7 @@ if __name__ == '__main__':
         includes=includes,
         language=args.lang,
         name=args.name,
-        wrapper=WRAPPER[args.lang].format(impl=args.impl, py_wrapper=args.wrapper),
+        wrapper=WRAPPER[args.lang].format(impl=args.impl, py_wrapper=args.wrapper), 
     )
 
     with open(args.output, 'w') as f:

@@ -15,10 +15,10 @@ namespace NLastGetoptPrivate {
         static TString data;
         return data;
     }
-    TString& ShortVersionString() {
-        static TString data;
-        return data;
-    }
+    TString& ShortVersionString() { 
+        static TString data; 
+        return data; 
+    } 
 }
 
 namespace NLastGetopt {
@@ -29,11 +29,11 @@ namespace NLastGetopt {
         exit(NLastGetoptPrivate::VersionString().empty());
     }
 
-    void PrintShortVersionAndExit(const TString& appName) {
+    void PrintShortVersionAndExit(const TString& appName) { 
         Cout << appName << " version " << (NLastGetoptPrivate::ShortVersionString() ? NLastGetoptPrivate::ShortVersionString() : "not linked with library/cpp/getopt") << Endl;
-        exit(NLastGetoptPrivate::ShortVersionString().empty());
-    }
-
+        exit(NLastGetoptPrivate::ShortVersionString().empty()); 
+    } 
+ 
     // Like TString::Quote(), but does not quote digits-only string
     static TString QuoteForHelp(const TString& str) {
         if (str.empty())

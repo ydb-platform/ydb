@@ -540,7 +540,7 @@ namespace NUri {
                         upCount++;
                         continue;
                     }
-                } 
+                }
             }
 
             if (upCount) {

@@ -30,7 +30,7 @@ void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringB
             continue;
         }
 
-        if (((Mask & EM_FILES) && file->fts_info == FTS_F) || ((Mask & EM_DIRS) && file->fts_info == FTS_D) || ((Mask & EM_SLINKS) && file->fts_info == FTS_SL)) { 
+        if (((Mask & EM_FILES) && file->fts_info == FTS_F) || ((Mask & EM_DIRS) && file->fts_info == FTS_D) || ((Mask & EM_SLINKS) && file->fts_info == FTS_SL)) {
             ++FileNamesSize;
             FileNames.Append(filename.data(), filename.size() + 1);
         }

@@ -175,7 +175,7 @@ namespace NUri {
             "_",
             "yandex.ru:443",
             nullptr};
- 
+
         static TState::EParsed answersForCheckHost[] = {
             TState::ParsedOK,
             TState::ParsedOK,
@@ -186,14 +186,14 @@ namespace NUri {
             TState::ParsedBadHost,
             TState::ParsedBadHost,
         };
- 
+
         Y_UNIT_TEST(test_httpURLCheckHost) {
             for (size_t index = 0; hostsForCheckHost[index]; ++index) {
                 TState::EParsed state = TUri::CheckHost(hostsForCheckHost[index]);
                 UNIT_ASSERT_VALUES_EQUAL(state, answersForCheckHost[index]);
             }
         }
- 
+
         Y_UNIT_TEST(test_httpURLSet) {
             // set port
             {
@@ -203,7 +203,7 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL(parsedUrl.GetPort(), 8080);
                 UNIT_ASSERT_VALUES_EQUAL(parsedUrl.PrintS(), "http://www.host.com:8080/script.cgi?param1=value1&param2=value2");
             }
- 
+
             // clear port
             {
                 TUri parsedUrl;
@@ -212,7 +212,7 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL(parsedUrl.GetPort(), 80);
                 UNIT_ASSERT_VALUES_EQUAL(parsedUrl.PrintS(), "http://www.host.com/script.cgi?param1=value1&param2=value2");
             }
- 
+
             // change scheme with default port
             {
                 TUri parsedUrl;

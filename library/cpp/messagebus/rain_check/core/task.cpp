@@ -203,10 +203,10 @@ TTaskRunnerBase* TTaskRunnerBase::CurrentTask() {
     return ThreadCurrentTask;
 }
 
-ITaskBase* TTaskRunnerBase::CurrentTaskImpl() { 
-    return CurrentTask()->GetImplBase(); 
-} 
- 
+ITaskBase* TTaskRunnerBase::CurrentTaskImpl() {
+    return CurrentTask()->GetImplBase();
+}
+
 TString TTaskRunnerBase::GetStatusSingleLine() {
     return TypeName(*Impl);
 }

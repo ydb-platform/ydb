@@ -146,7 +146,7 @@ namespace NUri {
         const TSection& scheme = Sections[TField::FieldScheme];
         Scheme = scheme.IsSet() ? TSchemeInfo::GetKind(scheme.Get()) : TScheme::SchemeEmpty;
         const TSchemeInfo& schemeInfo = TSchemeInfo::Get(Scheme);
- 
+
         if (IsRootless()) {
             // opaque case happens
             if (schemeInfo.FldReq & TField::FlagHost)

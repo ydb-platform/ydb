@@ -352,8 +352,8 @@ namespace NUri {
             if (Sections[fld1].IsSet() && Sections[fld2].IsSet() && Sections[fld1].Beg == Sections[fld2].Beg) {
                 Sections[fld1].Reset();
             }
-        } 
- 
+        }
+
         bool doParse(const char* str_beg, size_t length);
         TState::EParsed ParseImpl();
     };

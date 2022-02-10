@@ -312,7 +312,7 @@ RECURSE(
     djangorestframework-filters
     djangorestframework-jsonp
     djangorestframework-xml
-    dm.xmlsec.binding
+    dm.xmlsec.binding 
     dnspython
     docker
     docopt
@@ -911,11 +911,11 @@ RECURSE(
     python-pptx
     python-prctl
     python-rapidjson
-    python-saml
+    python-saml 
     python-slugify
     python-telegram-bot
     python-utils
-    python3-saml
+    python3-saml 
     pytils
     pytracemalloc
     pytz
@@ -1168,7 +1168,7 @@ RECURSE(
     XlsxWriter
     xlutils
     xlwt
-    xmlsec
+    xmlsec 
     xmltodict
     xxhash
     yandex-pgmigrate

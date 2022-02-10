@@ -181,8 +181,8 @@ ALLOW .* -> vendor/github.com/DATA-DOG/godog
 # pretty printer for GO
 ALLOW .* -> vendor/github.com/davecgh/go-spew/spew
 
-# CONTRIB-425 implementation of JSON Web Tokens (JWT)
-ALLOW .* -> vendor/github.com/golang-jwt/jwt
+# CONTRIB-425 implementation of JSON Web Tokens (JWT) 
+ALLOW .* -> vendor/github.com/golang-jwt/jwt 
 
 # Docker API client
 # docker tests depends on broken package: gotest.tools
@@ -252,7 +252,7 @@ ALLOW .* -> vendor/github.com/iancoleman/strcase
 ALLOW .* -> vendor/github.com/jackc/pgx/v4
 ALLOW .* -> vendor/github.com/jackc/pgconn
 ALLOW .* -> vendor/github.com/jackc/pgtype
-ALLOW .* -> vendor/github.com/jackc/pgerrcode
+ALLOW .* -> vendor/github.com/jackc/pgerrcode 
 ALLOW .* -> vendor/github.com/jackc/pgproto3/v2
 ALLOW .* -> vendor/github.com/jackc/pgio
 ALLOW .* -> vendor/github.com/jackc/pglogrepl
@@ -279,7 +279,7 @@ ALLOW .* -> vendor/github.com/kentik/patricia
 ALLOW .* -> vendor/github.com/ClickHouse/clickhouse-go
 
 # High performance, minimalist web framework
-ALLOW .* -> vendor/github.com/labstack/echo/v4
+ALLOW .* -> vendor/github.com/labstack/echo/v4 
 
 # fluent SQL builder
 ALLOW .* -> vendor/github.com/Masterminds/squirrel
@@ -299,9 +299,9 @@ ALLOW .* -> vendor/github.com/mitchellh/copystructure
 # decoding generic map values to structures and vice versa
 ALLOW .* -> vendor/github.com/mitchellh/mapstructure
 
-# library for detecting and expanding the user's home directory without cgo
-ALLOW .* -> vendor/github.com/mitchellh/go-homedir
-
+# library for detecting and expanding the user's home directory without cgo 
+ALLOW .* -> vendor/github.com/mitchellh/go-homedir 
+ 
 # A well tested and comprehensive Golang statistics library package with no dependencies
 ALLOW .* -> vendor/github.com/montanaflynn/stats
 
@@ -332,7 +332,7 @@ ALLOW .* -> vendor/github.com/prometheus/client_model
 ALLOW .* -> vendor/github.com/prometheus/common
 
 # ZooKeeper client
-ALLOW .* -> vendor/github.com/go-zookeeper/zk
+ALLOW .* -> vendor/github.com/go-zookeeper/zk 
 
 # Consistent hashring implementation (using the same algorithm as libketama)
 ALLOW .* -> vendor/github.com/serialx/hashring
@@ -398,9 +398,9 @@ ALLOW .* -> vendor/golang.org/x/text
 # golang.org/x/time
 ALLOW .* -> vendor/golang.org/x/time
 
-# golang.org/x/image/webp
-ALLOW .* -> vendor/golang.org/x/image/webp
-
+# golang.org/x/image/webp 
+ALLOW .* -> vendor/golang.org/x/image/webp 
+ 
 # less experimental implementation of Go error inspection
 ALLOW .* -> vendor/golang.org/x/xerrors
 
@@ -413,7 +413,7 @@ ALLOW .* -> vendor/golang.org/x/mod
 ALLOW .* -> vendor/gopkg.in/ldap.v3
 
 # simple HTTP and REST client library
-ALLOW .* -> vendor/github.com/go-resty/resty/v2
+ALLOW .* -> vendor/github.com/go-resty/resty/v2 
 
 # YAML support for Go
 ALLOW .* -> vendor/gopkg.in/yaml.v2
@@ -453,24 +453,24 @@ ALLOW .* -> vendor/github.com/jhump/protoreflect
 ALLOW .* -> vendor/github.com/opentracing-contrib/go-grpc
 
 # Job Scheduling Package
-ALLOW .* -> vendor/github.com/jasonlvhit/gocron
+ALLOW .* -> vendor/github.com/jasonlvhit/gocron 
 
-# The MongoDB supported driver for Go
-ALLOW .* -> vendor/go.mongodb.org/mongo-driver
-
-# Package for comparing Go values in tests
-ALLOW .* -> vendor/github.com/google/go-cmp
-
+# The MongoDB supported driver for Go 
+ALLOW .* -> vendor/go.mongodb.org/mongo-driver 
+ 
+# Package for comparing Go values in tests 
+ALLOW .* -> vendor/github.com/google/go-cmp 
+ 
 # CORS is a net/http handler implementing Cross Origin Resource Sharing W3 specification
 ALLOW .* -> vendor/github.com/rs/cors
 
 # read and write from the serial port as a stream of bytes
 ALLOW .* -> vendor/github.com/tarm/serial
 
-# generation tool and serialization library for MessagePack
-ALLOW .* -> vendor/github.com/tinylib/msgp
+# generation tool and serialization library for MessagePack 
+ALLOW .* -> vendor/github.com/tinylib/msgp 
 ALLOW .* -> vendor/github.com/vmihailenco/msgpack
-
+ 
 # Generate fancy REST API from grpc api
 ALLOW .* -> vendor/github.com/grpc-ecosystem/grpc-gateway
 
@@ -480,9 +480,9 @@ ALLOW .* -> vendor/github.com/tus/tusd
 # Fast, fully fledged murmur3 in Go.
 ALLOW .* -> vendor/github.com/twmb/murmur3
 
-# gopsutil: psutil for golang
+# gopsutil: psutil for golang 
 ALLOW .* -> vendor/github.com/shirou/gopsutil/v3
-
+ 
 # Go Imagick is a Go bind to ImageMagick's MagickWand C API
 ALLOW .* -> vendor/gopkg.in/gographics/imagick.v2
 
@@ -507,12 +507,12 @@ ALLOW .* -> vendor/github.com/opentracing-contrib/go-stdlib
 # CONTRIB-1299. Date parser. resposible: tserakhau@
 ALLOW .* -> vendor/github.com/araddon/dateparse
 
-# Semantic versioning parsing and comparision library
+# Semantic versioning parsing and comparision library 
 ALLOW .* -> vendor/github.com/blang/semver/v4
-
-# Go implementation of SipHash-2-4
-ALLOW .* -> vendor/github.com/dchest/siphash
-
+ 
+# Go implementation of SipHash-2-4 
+ALLOW .* -> vendor/github.com/dchest/siphash 
+ 
 # CONTRIB-1415. Atomic.
 ALLOW .* -> vendor/go.uber.org/atomic
 
@@ -619,15 +619,15 @@ ALLOW .* -> vendor/gopkg.in/tucnak/telebot.v2
 # CONTRIB-1726 helpers for working with protobuf field masks
 ALLOW .* -> vendor/github.com/mennanov/fieldmask-utils
 
-# CONTRIB-1810 Fast directory traversal for Golang
-ALLOW .* -> vendor/github.com/karrick/godirwalk
-
+# CONTRIB-1810 Fast directory traversal for Golang 
+ALLOW .* -> vendor/github.com/karrick/godirwalk 
+ 
 # CONTRIB-1864 Zstandard (zstd) data compression algorithm
 ALLOW .* -> vendor/github.com/klauspost/compress/zstd
 
-# CONTRIB-1865 Decorated Syntax Tree for Go AST
-ALLOW .* -> vendor/github.com/dave/dst
-
+# CONTRIB-1865 Decorated Syntax Tree for Go AST 
+ALLOW .* -> vendor/github.com/dave/dst 
+ 
 # CONTRIB-1874 Parse and demux MPEG Transport Streams
 ALLOW .* -> vendor/github.com/asticode/go-astits
 

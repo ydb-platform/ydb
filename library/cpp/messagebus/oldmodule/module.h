@@ -204,10 +204,10 @@ namespace NBus {
                     }
                     return call;
                 }
-            } 
+            }
             return nullptr;
-        } 
- 
+        }
+
         /// helper function to find response for previously sent messages
         template <class MessageType>
         MessageType* Get(int* startFrom = nullptr) {

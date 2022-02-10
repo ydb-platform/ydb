@@ -14,7 +14,7 @@ RECURSE(
     aiodocker
     aiofiles
     aioftp
-    aiogram 
+    aiogram
     aiographite
     aiohttp
     aiohttp-apispec

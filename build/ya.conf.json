@@ -4561,7 +4561,7 @@
                     "default": true
                 }
             ]
-        },
+        }, 
         "contexts_difference": {
             "tools": {
                 "contexts_difference": {
@@ -4668,14 +4668,14 @@
                 }
             ]
         },
-        "crypta": {
-            "tools": {
+        "crypta": { 
+            "tools": { 
                 "crypta": {
                     "bottle": "crypta",
                     "executable": "crypta"
                 }
-            },
-            "platforms": [
+            }, 
+            "platforms": [ 
                 {
                     "host": {
                         "os": "LINUX"
@@ -4688,7 +4688,7 @@
                     },
                     "default": true
                 }
-            ]
+            ] 
         },
         "apphost": {
             "tools": {
@@ -7270,7 +7270,7 @@
                     "graphs_difference"
                 ]
             }
-        },
+        }, 
         "contexts_difference": {
             "formula": {
                 "sandbox_id": 1128937263,
@@ -7315,16 +7315,16 @@
                 ]
             }
         },
-        "crypta": {
-            "formula": {
+        "crypta": { 
+            "formula": { 
                 "sandbox_id": 550700694,
-                "match": "crypta"
-            },
-            "executable": {
+                "match": "crypta" 
+            }, 
+            "executable": { 
                 "crypta": [
                     "crypta"
                 ]
-            }
+            } 
         },
         "apphost": {
             "formula": {

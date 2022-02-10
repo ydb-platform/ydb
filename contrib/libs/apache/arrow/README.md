@@ -1,35 +1,35 @@
-<!---
-  Licensed to the Apache Software Foundation (ASF) under one
-  or more contributor license agreements.  See the NOTICE file
-  distributed with this work for additional information
-  regarding copyright ownership.  The ASF licenses this file
-  to you under the Apache License, Version 2.0 (the
-  "License"); you may not use this file except in compliance
-  with the License.  You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-  Unless required by applicable law or agreed to in writing,
-  software distributed under the License is distributed on an
-  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-  KIND, either express or implied.  See the License for the
-  specific language governing permissions and limitations
-  under the License.
--->
-
+<!--- 
+  Licensed to the Apache Software Foundation (ASF) under one 
+  or more contributor license agreements.  See the NOTICE file 
+  distributed with this work for additional information 
+  regarding copyright ownership.  The ASF licenses this file 
+  to you under the Apache License, Version 2.0 (the 
+  "License"); you may not use this file except in compliance 
+  with the License.  You may obtain a copy of the License at 
+ 
+    http://www.apache.org/licenses/LICENSE-2.0 
+ 
+  Unless required by applicable law or agreed to in writing, 
+  software distributed under the License is distributed on an 
+  "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY 
+  KIND, either express or implied.  See the License for the 
+  specific language governing permissions and limitations 
+  under the License. 
+--> 
+ 
 # Apache Arrow
-
+ 
 [![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/arrow.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:arrow)
 [![License](http://img.shields.io/:license-Apache%202-blue.svg)](https://github.com/apache/arrow/blob/master/LICENSE.txt)
 [![Twitter Follow](https://img.shields.io/twitter/follow/apachearrow.svg?style=social&label=Follow)](https://twitter.com/apachearrow)
-
+ 
 ## Powering In-Memory Analytics
-
+ 
 Apache Arrow is a development platform for in-memory analytics. It contains a
 set of technologies that enable big data systems to process and move data fast.
-
+ 
 Major components of the project include:
-
+ 
  - [The Arrow Columnar In-Memory Format](https://github.com/apache/arrow/blob/master/docs/source/format/Columnar.rst):
    a standard and efficient in-memory representation of various datatypes, plain or nested
  - [The Arrow IPC Format](https://github.com/apache/arrow/blob/master/docs/source/format/Columnar.rst#serialization-and-interprocess-communication-ipc):
@@ -52,7 +52,7 @@ Major components of the project include:
  - [R libraries](https://github.com/apache/arrow/tree/master/r)
  - [Ruby libraries](https://github.com/apache/arrow/tree/master/ruby)
  - [Rust libraries](https://github.com/apache/arrow-rs)
-
+ 
 Arrow is an [Apache Software Foundation](https://www.apache.org) project. Learn more at
 [arrow.apache.org](https://arrow.apache.org).
 

@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     svc
-    g:kikimr
+    g:kikimr 
 )
 
 PEERDIR(

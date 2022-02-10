@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(
     a-romanov
     ddoarn
-    g:kikimr
+    g:kikimr 
 )
 
 SRCS(

@@ -5,7 +5,7 @@ OWNER(
     cthulhu
     ddoarn
     fomichev
-    g:kikimr
+    g:kikimr 
 )
 
 SRCS(

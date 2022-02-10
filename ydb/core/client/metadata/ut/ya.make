@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/client/metadata)
 
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
 
 SRCS(
     functions_metadata_ut.cpp

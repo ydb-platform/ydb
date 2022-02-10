@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/core/base)
 
-OWNER(fomichev g:kikimr)
+OWNER(fomichev g:kikimr) 
 
 FORK_SUBTESTS()
 TIMEOUT(600)

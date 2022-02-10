@@ -7,8 +7,8 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 VERSION(0.5.3)
 
 OWNER(
-    g:antiinfra
-    g:contrib
+    g:antiinfra 
+    g:contrib 
     g:cpp-contrib
 )
 

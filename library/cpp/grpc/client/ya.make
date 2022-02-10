@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     ddoarn
-    g:kikimr
+    g:kikimr 
 )
 
 SRCS(

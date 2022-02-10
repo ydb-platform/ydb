@@ -1,6 +1,6 @@
 OWNER(
     yazevnul
-    g:contrib
+    g:contrib 
     g:cpp-contrib
 )
 
@@ -21,7 +21,7 @@ SRCS(
 )
 
 IF (OS_LINUX OR OS_DARWIN)
-    CONLYFLAGS(-std=c11)
+    CONLYFLAGS(-std=c11) 
 ENDIF()
 
 END()

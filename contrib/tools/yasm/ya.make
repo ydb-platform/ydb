@@ -5,7 +5,7 @@
 
 OWNER(
     somov
-    g:contrib
+    g:contrib 
     g:ymake
 )
 

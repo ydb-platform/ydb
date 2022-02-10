@@ -1,6 +1,6 @@
 LIBRARY(messagebus_test_example_common)
 
-OWNER(g:messagebus)
+OWNER(g:messagebus) 
 
 PEERDIR(
     library/cpp/messagebus

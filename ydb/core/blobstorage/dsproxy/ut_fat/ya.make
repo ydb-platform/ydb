@@ -3,7 +3,7 @@ UNITTEST()
 OWNER(
     alexvru
     cthulhu
-    g:kikimr
+    g:kikimr 
 )
 
 FORK_SUBTESTS()

@@ -1,6 +1,6 @@
 PROGRAM(messagebus_debug_receiver)
 
-OWNER(g:messagebus)
+OWNER(g:messagebus) 
 
 SRCS(
     debug_receiver.cpp

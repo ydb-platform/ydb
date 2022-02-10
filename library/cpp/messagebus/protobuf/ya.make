@@ -1,6 +1,6 @@
 LIBRARY(messagebus_protobuf)
 
-OWNER(g:messagebus)
+OWNER(g:messagebus) 
 
 SRCS(
     ybusbuf.cpp

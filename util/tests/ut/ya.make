@@ -1,6 +1,6 @@
 UNITTEST_FOR(util)
 
-OWNER(g:util)
+OWNER(g:util) 
 SUBSCRIBER(g:util-subscribers)
 
 SRCS(

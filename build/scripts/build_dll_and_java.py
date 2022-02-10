@@ -36,7 +36,7 @@ def just_do_it(argv):
                 inp = os.path.join(build_root, inp)
             if sys.platform == 'win32':
                 inp = inp.replace('\\', '/')
-            dll_cmd.remove(inp)
+            dll_cmd.remove(inp) 
     java_cmd.insert(java_cmd.index(dll_out), java_out)
     java_cmd.remove(dll_out)
     subprocess.check_call(java_cmd)

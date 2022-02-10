@@ -1,5 +1,5 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 LICENSE(
     MIT AND
     Unicode
@@ -11,25 +11,25 @@ OWNER(
     g:contrib
     g:cpp-contrib
 )
-
-VERSION(2.1.1)
-
-NO_UTIL()
-
-NO_COMPILER_WARNINGS()
-
+ 
+VERSION(2.1.1) 
+ 
+NO_UTIL() 
+ 
+NO_COMPILER_WARNINGS() 
+ 
 CFLAGS(
     GLOBAL -DUTF8PROC_STATIC
 )
-
-IF (NOT OS_WINDOWS)
+ 
+IF (NOT OS_WINDOWS) 
     CFLAGS(
         -std=c99
     )
-ENDIF()
-
-SRCS(
-    utf8proc.c
-)
-
-END()
+ENDIF() 
+ 
+SRCS( 
+    utf8proc.c 
+) 
+ 
+END() 

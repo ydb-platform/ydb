@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/library/aclib)
 
-OWNER(xenoxeno g:kikimr)
+OWNER(xenoxeno g:kikimr) 
 
 PEERDIR()
 

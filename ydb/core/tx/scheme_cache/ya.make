@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(
     ilnaz
     svc
-    g:kikimr
+    g:kikimr 
 )
 
 PEERDIR(

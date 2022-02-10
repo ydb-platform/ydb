@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/public/issue)
 
-OWNER(g:yql)
+OWNER(g:yql) 
 
 FORK_SUBTESTS()
 

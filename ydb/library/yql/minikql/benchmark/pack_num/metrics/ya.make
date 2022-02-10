@@ -1,6 +1,6 @@
 OWNER(
-    g:kikimr
-    g:yql
+    g:kikimr 
+    g:yql 
     udovichenko-r
 )
 

@@ -26,7 +26,7 @@ RECURSE(
     aiohttp-xmlrpc
     aioitertools
     aiojobs
-    aiomysql
+    aiomysql 
     aiopg
     aioredis
     aioredis-lock
@@ -36,7 +36,7 @@ RECURSE(
     aiosmtpd
     aiosmtplib
     aiosocksy
-    aiosqlite
+    aiosqlite 
     aiotg
     aiounittest
     aiozipkin
@@ -194,7 +194,7 @@ RECURSE(
     daphne
     dask
     daphne
-    databases
+    databases 
     dataclasses-json
     datadiff
     dateparser
@@ -216,13 +216,13 @@ RECURSE(
     django-admin-inline-paginator
     django-admin-rangefilter
     django-admin-view-permission
-    django-advanced-filters
+    django-advanced-filters 
     django-ajax-selects
     django-alive
     django-autoconfig
     django-appconf
     django-bootstrap3
-    django-braces
+    django-braces 
     django-bulk-update
     django-cachalot
     django-cache-memoize
@@ -623,7 +623,7 @@ RECURSE(
     mistune
     mitmproxy
     mkdocs
-    mkdocs-material
+    mkdocs-material 
     mock
     model-mommy
     Momoko
@@ -718,7 +718,7 @@ RECURSE(
     partd
     passlib
     patch
-    patched
+    patched 
     path.py
     pathlib2
     pathspec
@@ -804,7 +804,7 @@ RECURSE(
     pycurl
     pycurl/example
     pydantic
-    pydash
+    pydash 
     PyDispatcher
     pyDOE
     pydocstyle
@@ -851,7 +851,7 @@ RECURSE(
     pyrsistent
     pysctp
     pysendfile
-    pyserial
+    pyserial 
     PySocks
     pystan
     pystan/pystan_model
@@ -869,7 +869,7 @@ RECURSE(
     pytest-fixture-config
     pytest-flake8
     pytest-flakes
-    pytest-flask
+    pytest-flask 
     pytest-forked
     pytest-freezegun
     pytest-httpretty
@@ -881,7 +881,7 @@ RECURSE(
     pytest-responses
     pytest-server-fixtures
     pytest-shutil
-    pytest-timeout
+    pytest-timeout 
     pytest-tornado
     pytest-twisted
     pytest-vcr

@@ -1,4 +1,4 @@
-OWNER(g:yql)
+OWNER(g:yql) 
 
 PROTO_LIBRARY()
 

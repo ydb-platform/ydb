@@ -2764,8 +2764,8 @@ class MSVCLinker(MSVC, Linker):
         emit("GENERATE_MF_CMD", '$YMAKE_PYTHON ${input:"build/scripts/generate_mf.py"}',
              '--build-root $ARCADIA_BUILD_ROOT --module-name $REALPRJNAME -o ${output;pre=$MODULE_PREFIX;suf=$MODULE_SUFFIX.mf:REALPRJNAME}',
              '-t $MODULE_TYPE --ya-start-command-file -Ya,lics $LICENSE_NAMES -Ya,peers ${rootrel:PEERS} -Ya,credits ${input:CREDITS_TEXTS_FILE} $CREDITS_FLAGS --ya-end-command-file',
-             )
-
+             ) 
+ 
         # we split srcs_global into two groups: libs and objs
         # # each group can be in its own command file
         # first group need /WHOLEARCHIVE: prefix which will be added in fix_msvc_output.py or run_msvc_wine.py

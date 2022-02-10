@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/pop_count)
 
-OWNER(g:util)
+OWNER(g:util) 
 
 SRCS(
     popcount_ut.cpp

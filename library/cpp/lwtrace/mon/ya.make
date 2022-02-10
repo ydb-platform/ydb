@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(serxa g:kikimr)
+OWNER(serxa g:kikimr) 
 
 RESOURCE(
     static/common.css lwtrace/mon/static/common.css

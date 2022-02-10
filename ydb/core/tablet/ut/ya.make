@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/tablet)
 
 OWNER(
     vvvv
-    g:kikimr
+    g:kikimr 
 )
 
 FORK_SUBTESTS()

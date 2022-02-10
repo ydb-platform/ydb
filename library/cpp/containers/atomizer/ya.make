@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:util)
+OWNER(g:util) 
 
 PEERDIR(
     library/cpp/containers/str_map

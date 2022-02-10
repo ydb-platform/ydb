@@ -1,6 +1,6 @@
 PY23_LIBRARY()
 
-OWNER(g:yatool)
+OWNER(g:yatool) 
 
 PY_SRCS(__init__.py)
 

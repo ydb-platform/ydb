@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     ienkovich
-    g:kikimr
+    g:kikimr 
 )
 
 SRCS(

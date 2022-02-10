@@ -12,7 +12,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-OWNER(ddoarn cthulhu fomichev g:kikimr)
+OWNER(ddoarn cthulhu fomichev g:kikimr) 
 
 PEERDIR(
     library/cpp/digest/crc32c

@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:messagebus)
+OWNER(g:messagebus) 
 
 PEERDIR(
     library/cpp/coroutine/engine

@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:images-robot)
+OWNER(g:images-robot) 
 
 SRCS(
     parse_size.cpp

@@ -215,7 +215,7 @@ def hardlink_or_copy(src, lnk):
     try:
         hardlink(src, lnk)
     except Exception as e:
-        logger.debug('Failed to hardlink %s to %s with error %s, will copy it', src, lnk, repr(e))
+        logger.debug('Failed to hardlink %s to %s with error %s, will copy it', src, lnk, repr(e)) 
         if should_fallback_to_copy(e):
             copy2(src, lnk, follow_symlinks=False)
         else:
@@ -310,13 +310,13 @@ def read_file_unicode(path, binary=True, enc='utf-8'):
         return f.read()
 
 
-@errorfix_win
-def open_file(*args, **kwargs):
+@errorfix_win 
+def open_file(*args, **kwargs): 
     return (
         library.python.windows.open_file(*args, **kwargs) if library.python.windows.on_win() else open(*args, **kwargs)
     )
-
-
+ 
+ 
 # Atomic file write
 # Throws OSError
 @errorfix_win
@@ -325,7 +325,7 @@ def write_file(path, data, binary=True):
     if dir_path:
         ensure_dir(dir_path)
     tmp_path = path + '.tmp.' + str(random.random())
-    with open_file(tmp_path, 'w' + ('b' if binary else '')) as f:
+    with open_file(tmp_path, 'w' + ('b' if binary else '')) as f: 
         if not isinstance(data, bytes) and binary:
             data = data.encode('UTF-8')
         f.write(data)

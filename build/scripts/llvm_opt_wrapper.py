@@ -1,4 +1,4 @@
-import subprocess
+import subprocess 
 import sys
 
 
@@ -14,5 +14,5 @@ if __name__ == '__main__':
     path = sys.argv[1]
     args = [fix(s) for s in [path] + sys.argv[2:]]
 
-    rc = subprocess.call(args, shell=False, stderr=sys.stderr, stdout=sys.stdout)
-    sys.exit(rc)
+    rc = subprocess.call(args, shell=False, stderr=sys.stderr, stdout=sys.stdout) 
+    sys.exit(rc) 

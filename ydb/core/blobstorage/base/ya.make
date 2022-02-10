@@ -4,7 +4,7 @@ OWNER(
     alexvru
     cthulhu
     fomichev
-    g:kikimr
+    g:kikimr 
 )
 
 PEERDIR(

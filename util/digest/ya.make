@@ -1,4 +1,4 @@
-OWNER(g:util)
+OWNER(g:util) 
 SUBSCRIBER(g:util-subscribers)
 
 PROVIDES(cityhash)

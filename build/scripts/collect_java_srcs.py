@@ -44,7 +44,7 @@ if __name__ == '__main__':
                 tf.extractall(dst)
 
         elif src.endswith('-sources.jar'):
-            with zipfile.ZipFile(src) as zf:
+            with zipfile.ZipFile(src) as zf: 
                 zf.extractall(dst)
 
         else:

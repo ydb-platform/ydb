@@ -1,5 +1,5 @@
 OWNER(
-    g:util
+    g:util 
     yazevnul
 )
 SUBSCRIBER(g:util-subscribers)

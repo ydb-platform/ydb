@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(
     ddoarn
     xenoxeno
-    g:kikimr
+    g:kikimr 
 )
 
 SRCS(

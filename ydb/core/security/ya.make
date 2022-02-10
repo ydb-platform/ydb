@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(
     xenoxeno
-    g:kikimr
+    g:kikimr 
 )
 
 SRCS(

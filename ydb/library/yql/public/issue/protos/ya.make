@@ -1,6 +1,6 @@
 PROTO_LIBRARY()
 
-OWNER(g:yql)
+OWNER(g:yql) 
 
 SRCS(
     issue_message.proto

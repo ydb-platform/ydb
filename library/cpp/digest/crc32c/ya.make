@@ -7,8 +7,8 @@ OWNER(
     pg
     gulin
     dcherednik
-    g:yamr
-    g:rtmr
+    g:yamr 
+    g:rtmr 
 )
 
 PEERDIR(

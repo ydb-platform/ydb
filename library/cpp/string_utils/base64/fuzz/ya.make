@@ -1,6 +1,6 @@
 OWNER(
     yazevnul
-    g:util
+    g:util 
 )
 
 RECURSE(

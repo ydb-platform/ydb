@@ -2,7 +2,7 @@ UNITTEST_FOR(library/cpp/yson/node)
 
 OWNER(
     ermolovd
-    g:yt
+    g:yt 
 )
 
 SRCS(

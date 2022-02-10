@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/library/yql/utils/log)
 
-OWNER(g:yql)
+OWNER(g:yql) 
 
 SRCS(
     log_ut.cpp

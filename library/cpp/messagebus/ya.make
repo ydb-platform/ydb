@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:messagebus)
+OWNER(g:messagebus) 
 
 IF (SANITIZER_TYPE == "undefined")
     NO_SANITIZE()

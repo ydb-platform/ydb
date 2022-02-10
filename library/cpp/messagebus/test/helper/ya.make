@@ -1,6 +1,6 @@
 LIBRARY(messagebus_test_helper)
 
-OWNER(g:messagebus)
+OWNER(g:messagebus) 
 
 SRCS(
     example.cpp

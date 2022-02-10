@@ -1,4 +1,4 @@
-OWNER(g:kikimr)
+OWNER(g:kikimr) 
 
 RECURSE(
     grpc

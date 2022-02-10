@@ -1,6 +1,6 @@
 OWNER(
     yazevnul
-    g:util
+    g:util 
 )
 SUBSCRIBER(g:util-subscribers)
 

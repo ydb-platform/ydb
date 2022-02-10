@@ -4,7 +4,7 @@ OWNER(
     ddoarn
     fomichev
     vvvv
-    g:kikimr
+    g:kikimr 
 )
 
 SRCS(

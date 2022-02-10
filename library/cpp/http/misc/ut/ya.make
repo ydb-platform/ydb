@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/http/misc)
 
-OWNER(g:util)
+OWNER(g:util) 
 
 SRCS(
     httpdate_ut.cpp

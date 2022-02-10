@@ -24,7 +24,7 @@ def parse_args():
     parser.add_argument('--resource-id', type=int, required=True)
     parser.add_argument('--custom-fetcher')
     parser.add_argument('--resource-file')
-    return parser.parse_args()
+    return parser.parse_args() 
 
 
 class ResourceInfoError(Exception):

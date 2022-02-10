@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(g:geosaas)
+OWNER(g:geosaas) 
 
 PEERDIR(
     library/cpp/logger

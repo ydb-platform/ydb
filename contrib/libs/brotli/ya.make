@@ -6,5 +6,5 @@ RECURSE(
     enc
     tools
     python
-    java 
+    java
 )

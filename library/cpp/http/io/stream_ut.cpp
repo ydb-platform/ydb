@@ -613,57 +613,57 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
     Y_UNIT_TEST(TestHttpInputHeadRequest) {
         class THeadOnlyInput: public IInputStream {
-        public: 
-            THeadOnlyInput() = default; 
+        public:
+            THeadOnlyInput() = default;
 
-        private: 
-            size_t DoRead(void* buf, size_t len) override { 
-                if (Eof_) { 
-                    ythrow yexception() << "should not read after EOF"; 
-                } 
- 
+        private:
+            size_t DoRead(void* buf, size_t len) override {
+                if (Eof_) {
+                    ythrow yexception() << "should not read after EOF";
+                }
+
                 const size_t toWrite = Min(len, Data_.size() - Pos_);
-                if (toWrite == 0) { 
-                    Eof_ = true; 
-                    return 0; 
-                } 
- 
-                memcpy(buf, Data_.data() + Pos_, toWrite); 
-                Pos_ += toWrite; 
-                return toWrite; 
-            } 
- 
-        private: 
+                if (toWrite == 0) {
+                    Eof_ = true;
+                    return 0;
+                }
+
+                memcpy(buf, Data_.data() + Pos_, toWrite);
+                Pos_ += toWrite;
+                return toWrite;
+            }
+
+        private:
             TString Data_{TStringBuf("HEAD / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n")};
             size_t Pos_{0};
             bool Eof_{false};
-        }; 
-        THeadOnlyInput input; 
-        THttpInput httpInput(&input); 
- 
-        UNIT_ASSERT(!httpInput.HasContent()); 
-        UNIT_ASSERT_VALUES_EQUAL(httpInput.ReadAll(), ""); 
-    } 
- 
+        };
+        THeadOnlyInput input;
+        THttpInput httpInput(&input);
+
+        UNIT_ASSERT(!httpInput.HasContent());
+        UNIT_ASSERT_VALUES_EQUAL(httpInput.ReadAll(), "");
+    }
+
     Y_UNIT_TEST(TestHttpOutputResponseToHeadRequestNoZeroChunk) {
-        TStringStream request; 
+        TStringStream request;
         request << "HEAD / HTTP/1.1\r\n"
                    "Host: yandex.ru\r\n"
                    "Connection: Keep-Alive\r\n"
                    "\r\n";
- 
-        TStringInput input(request.Str()); 
-        THttpInput httpInput(&input); 
- 
-        TStringStream outBuf; 
-        THttpOutput out(&outBuf, &httpInput); 
-        out.EnableKeepAlive(true); 
-        out << "HTTP/1.1 200 OK\r\nConnection: Keep-Alive\r\n\r\n"; 
-        out << ""; 
-        out.Finish(); 
+
+        TStringInput input(request.Str());
+        THttpInput httpInput(&input);
+
+        TStringStream outBuf;
+        THttpOutput out(&outBuf, &httpInput);
+        out.EnableKeepAlive(true);
+        out << "HTTP/1.1 200 OK\r\nConnection: Keep-Alive\r\n\r\n";
+        out << "";
+        out.Finish();
         TString result = outBuf.Str();
         UNIT_ASSERT(!result.Contains(TStringBuf("0\r\n")));
-    } 
+    }
 
     Y_UNIT_TEST(TestHttpOutputDisableCompressionHeader) {
         TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip\r\n\r\n");

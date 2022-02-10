@@ -65,18 +65,18 @@ private:
 
             FixIPv6ListenSocket(ListenSocket_);
             CheckedSetSockOpt(ListenSocket_, SOL_SOCKET, SO_REUSEADDR, 1, "reuse addr");
- 
-            const TOptions& opts = Parent_->Opts_; 
-            if (opts.SendBufSize) { 
-                SetOutputBuffer(ListenSocket_, opts.SendBufSize); 
-            } 
-            if (opts.RecvBufSize) { 
-                SetInputBuffer(ListenSocket_, opts.RecvBufSize); 
-            } 
+
+            const TOptions& opts = Parent_->Opts_;
+            if (opts.SendBufSize) {
+                SetOutputBuffer(ListenSocket_, opts.SendBufSize);
+            }
+            if (opts.RecvBufSize) {
+                SetInputBuffer(ListenSocket_, opts.RecvBufSize);
+            }
             if (opts.ReusePort) {
                 SetReusePort(ListenSocket_, opts.ReusePort);
             }
- 
+
             SetNonBlock(ListenSocket_);
 
             if (bind(ListenSocket_, Addr_->Addr(), Addr_->Len()) < 0) {

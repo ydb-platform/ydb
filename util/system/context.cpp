@@ -1,4 +1,4 @@
-#include "compiler.h" 
+#include "compiler.h"
 #include "defaults.h"
 #include "event.h"
 #include "thread.h"
@@ -195,7 +195,7 @@ TContMachineContext::TContMachineContext(const TContClosure& c)
 }
 
 void TContMachineContext::SwitchTo(TContMachineContext* next) noexcept {
-    if (Y_LIKELY(__mysetjmp(Buf_) == 0)) { 
+    if (Y_LIKELY(__mysetjmp(Buf_) == 0)) {
     #if defined(_asan_enabled_) || defined(_tsan_enabled_)
         next->San_.BeforeSwitch(&San_);
     #endif

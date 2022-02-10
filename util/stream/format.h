@@ -201,7 +201,7 @@ namespace NFormatPrivate {
  * @param value                         Value to output.
  * @param width                         Target total width.
  * @param padc                          Character to use for padding.
- * @see RightPad 
+ * @see RightPad
  */
 template <typename T>
 static constexpr ::NFormatPrivate::TLeftPad<T> LeftPad(const T& value, const size_t width, const char padc = ' ') noexcept {
@@ -221,7 +221,7 @@ static constexpr ::NFormatPrivate::TLeftPad<const T*> LeftPad(const T (&value)[N
  *
  * Example usage:
  * @code
- * stream << RightPad("column1", 10, ' '); // Will output "column1   " 
+ * stream << RightPad("column1", 10, ' '); // Will output "column1   "
  * @endcode
  *
  * @param value                         Value to output.

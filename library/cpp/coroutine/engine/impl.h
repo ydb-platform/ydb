@@ -92,9 +92,9 @@ public:
     }
 
     bool Scheduled() const noexcept {
-        return Scheduled_; 
-    } 
- 
+        return Scheduled_;
+    }
+
     bool Join(TCont* c, TInstant deadLine = TInstant::Max()) noexcept;
 
     void ReSchedule() noexcept;
@@ -116,7 +116,7 @@ private:
 
     NCoro::TTrampoline Trampoline_;
 
-    TIntrusiveList<TJoinWait> Waiters_; 
+    TIntrusiveList<TJoinWait> Waiters_;
     bool Cancelled_ = false;
     bool Scheduled_ = false;
 };

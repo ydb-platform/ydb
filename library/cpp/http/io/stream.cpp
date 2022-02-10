@@ -649,8 +649,8 @@ private:
             return true;
         }
         return false;
-    } 
- 
+    }
+
     inline bool IsHttpResponse() const noexcept {
         return IsResponse(FirstLine_);
     }

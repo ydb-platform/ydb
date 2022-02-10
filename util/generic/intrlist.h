@@ -348,11 +348,11 @@ public:
         this->Swap(right);
     }
 
-    inline TIntrusiveList& operator=(TIntrusiveList&& rhs) noexcept { 
-        this->Swap(rhs); 
-        return *this; 
-    } 
- 
+    inline TIntrusiveList& operator=(TIntrusiveList&& rhs) noexcept {
+        this->Swap(rhs);
+        return *this;
+    }
+
     inline explicit operator bool() const noexcept {
         return !Empty();
     }
@@ -611,16 +611,16 @@ public:
         this->Clear();
     }
 
-    TIntrusiveListWithAutoDelete& operator=(TIntrusiveListWithAutoDelete&& rhs) noexcept { 
+    TIntrusiveListWithAutoDelete& operator=(TIntrusiveListWithAutoDelete&& rhs) noexcept {
         TIntrusiveList<T, Tag>::operator=(std::move(rhs));
-        return *this; 
-    } 
- 
+        return *this;
+    }
+
 public:
     inline void Clear() noexcept {
-        this->ForEach([](auto* item) { 
-            D::Destroy(item); 
-        }); 
+        this->ForEach([](auto* item) {
+            D::Destroy(item);
+        });
     }
 
     inline static void Cut(TIterator begin, TIterator end) noexcept {

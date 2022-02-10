@@ -168,7 +168,7 @@ struct TSchemeTraits {
     INTEGER_OPS(ui8, true)
     INTEGER_OPS(ui16, true)
     INTEGER_OPS(ui32, true)
-    INTEGER_OPS_EX(ui64, 0, (i64)(Max<i64>() >> 1), true)
+    INTEGER_OPS_EX(ui64, 0, (i64)(Max<i64>() >> 1), true) 
 
 #undef INTEGER_OPS
 #undef INTEGER_OPS_EX

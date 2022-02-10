@@ -146,12 +146,12 @@ private:
             return TStatus::Error;
         }
 
-        if (!EnsureSpecificDataSource(*input->Child(TCoConfigure::idx_DataSource), DqProviderName, ctx)) { 
+        if (!EnsureSpecificDataSource(*input->Child(TCoConfigure::idx_DataSource), DqProviderName, ctx)) {
             return TStatus::Error;
         }
 
         input->SetTypeAnn(input->Child(TCoConfigure::idx_World)->GetTypeAnn());
- 
+
         return TStatus::Ok;
     }
 };

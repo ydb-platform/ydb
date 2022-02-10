@@ -22,7 +22,7 @@ using namespace NNodes;
 namespace {
 
 const THashSet<TStringBuf> VALID_SOURCES = {DqProviderName, ConfigProviderName, YtProviderName, ClickHouseProviderName, YdbProviderName};
-const THashSet<TStringBuf> VALID_SINKS = {ResultProviderName, YtProviderName}; 
+const THashSet<TStringBuf> VALID_SINKS = {ResultProviderName, YtProviderName};
 const THashSet<TStringBuf> UNSUPPORTED_CALLABLE = { TCoForwardList::CallableName() };
 
 }
@@ -67,7 +67,7 @@ public:
                 Statistics_["DqPureResultDataSourceMismatch"]++;
             }
 
-            if (State_->TypeCtx->PureResultDataSource != DqProviderName || !State_->Settings->AnalyzeQuery.Get().GetOrElse(false)) { 
+            if (State_->TypeCtx->PureResultDataSource != DqProviderName || !State_->Settings->AnalyzeQuery.Get().GetOrElse(false)) {
                 return TStatus::Ok;
             }
 
@@ -101,9 +101,9 @@ public:
             if (auto maybeRead = TMaybeNode<TCoRight>(node).Input()) {
                 if (maybeRead.Raw()->ChildrenSize() > 1 && TCoDataSource::Match(maybeRead.Raw()->Child(1))) {
                     auto dataSourceName = maybeRead.Raw()->Child(1)->Child(0)->Content();
-                    auto dataSource = State_->TypeCtx->DataSourceMap.FindPtr(dataSourceName); 
-                    YQL_ENSURE(dataSource); 
-                    if (auto dqIntegration = (*dataSource)->GetDqIntegration()) { 
+                    auto dataSource = State_->TypeCtx->DataSourceMap.FindPtr(dataSourceName);
+                    YQL_ENSURE(dataSource);
+                    if (auto dqIntegration = (*dataSource)->GetDqIntegration()) {
                         auto newRead = dqIntegration->WrapRead(*State_->Settings, maybeRead.Cast().Ptr(), ctx);
                         if (newRead.Get() != maybeRead.Raw()) {
                             return newRead;
@@ -111,7 +111,7 @@ public:
                     }
                 }
             }
- 
+
             return node;
         }, ctx, TOptimizeExprSettings{State_->TypeCtx});
 
@@ -195,29 +195,29 @@ private:
             if (good) {
                 Scan(node.Head(), ctx,good, dataSize, visited, hasJoin);
             }
-        } else if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World 
-            && !TCoCommit::Match(&node) 
-            && node.ChildrenSize() > 1 
-            && TCoDataSink::Match(node.Child(1))) { 
-            auto dataSinkName = node.Child(1)->Child(0)->Content(); 
-            auto dataSink = State_->TypeCtx->DataSinkMap.FindPtr(dataSinkName); 
-            YQL_ENSURE(dataSink); 
-            if (auto dqIntegration = dataSink->Get()->GetDqIntegration()) { 
+        } else if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World
+            && !TCoCommit::Match(&node)
+            && node.ChildrenSize() > 1
+            && TCoDataSink::Match(node.Child(1))) {
+            auto dataSinkName = node.Child(1)->Child(0)->Content();
+            auto dataSink = State_->TypeCtx->DataSinkMap.FindPtr(dataSinkName);
+            YQL_ENSURE(dataSink);
+            if (auto dqIntegration = dataSink->Get()->GetDqIntegration()) {
                 if (auto canWrite = dqIntegration->CanWrite(*State_->Settings, node, ctx)) {
                     if (!canWrite.GetRef()) {
-                        good = false; 
+                        good = false;
                     } else if (!State_->Settings->EnableInsert.Get().GetOrElse(false)) {
                         AddInfo(ctx, TStringBuilder() << "'insert' support is disabled. Use PRAGMA dq.EnableInsert to explicitly enable it");
                         good = false;
-                    } 
-                } 
-            } 
-            if (good) { 
-                for (size_t i = 0; i != node.ChildrenSize() && good; ++i) { 
+                    }
+                }
+            }
+            if (good) {
+                for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
                     Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin);
-                } 
-            } 
-        } 
+                }
+            }
+        }
         else if (!State_->TypeCtx->UdfSupportsYield && TCoScriptUdf::Match(&node)) {
             if (IsCallableTypeHasStreams(node.GetTypeAnn()->Cast<TCallableExprType>())) {
                 AddInfo(ctx, TStringBuilder() << "script udf with streams");
@@ -229,7 +229,7 @@ private:
                 }
             }
         }
-        else { 
+        else {
             for (size_t i = 0; i != node.ChildrenSize() && good; ++i) {
                 Scan(*node.Child(i), ctx, good, dataSize, visited, hasJoin);
             }

@@ -14,7 +14,7 @@ service DqService {
     rpc PingSession (PingSessionRequest) returns (PingSessionResponse);
     rpc ClusterStatus (ClusterStatusRequest) returns (ClusterStatusResponse);
     rpc OperationStop (OperationStopRequest) returns (OperationStopResponse);
-    rpc QueryStatus (QueryStatusRequest) returns (QueryStatusResponse); 
+    rpc QueryStatus (QueryStatusRequest) returns (QueryStatusResponse);
     rpc JobStop (JobStopRequest) returns (JobStopResponse);
     rpc GetMaster (GetMasterRequest) returns (GetMasterResponse);
     rpc ConfigureFailureInjector (ConfigureFailureInjectorRequest) returns (ConfigureFailureInjectorResponse);

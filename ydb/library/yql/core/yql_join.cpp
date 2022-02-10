@@ -1113,14 +1113,14 @@ TMap<TStringBuf, TVector<TStringBuf>> UpdateUsedFieldsInRenameMap(
         bool needRemove = !usedFields.contains(item->GetName());
         if (auto renamed = reversedRenameMap.FindPtr(item->GetName())) {
             if (needRemove) {
-                if (newRenameMap[*renamed].empty()) { 
-                    newRenameMap[*renamed].push_back(""); 
-                } 
+                if (newRenameMap[*renamed].empty()) {
+                    newRenameMap[*renamed].push_back("");
+                }
             }
             else {
-                if (!newRenameMap[*renamed].empty() && newRenameMap[*renamed][0].empty()) { 
-                    newRenameMap[*renamed].clear(); // Do not remove column because it will be renamed. 
-                } 
+                if (!newRenameMap[*renamed].empty() && newRenameMap[*renamed][0].empty()) {
+                    newRenameMap[*renamed].clear(); // Do not remove column because it will be renamed.
+                }
                 newRenameMap[*renamed].push_back(item->GetName());
             }
         }

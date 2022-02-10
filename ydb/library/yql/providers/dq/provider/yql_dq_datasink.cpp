@@ -23,14 +23,14 @@ namespace NYql {
 
 using namespace NNodes;
 
-class TDqDataProviderSink: public TDataProviderBase { 
+class TDqDataProviderSink: public TDataProviderBase {
 public:
-    TDqDataProviderSink(const TDqStatePtr& state) 
+    TDqDataProviderSink(const TDqStatePtr& state)
         : State(state)
         , LogOptTransformer([state] () { return CreateDqsLogOptTransformer(/*TODO: State->TypeCtx);*/nullptr, state->Settings); })
         , PhyOptTransformer([] () { return CreateDqsPhyOptTransformer(/*TODO: State->TypeCtx*/nullptr); })
         , PhysicalFinalizingTransformer([] () { return CreateDqsFinalizingOptTransformer(); })
-        , TypeAnnotationTransformer([state] () { return CreateDqsDataSinkTypeAnnotationTransformer(state->TypeCtx); }) 
+        , TypeAnnotationTransformer([state] () { return CreateDqsDataSinkTypeAnnotationTransformer(state->TypeCtx); })
         , RecaptureTransformer([state] () { return CreateDqsRecaptureTransformer(state); })
     { }
 
@@ -157,7 +157,7 @@ public:
                 return false;
             }
 
-            if (node.Child(0)->Content() == DqProviderName) { 
+            if (node.Child(0)->Content() == DqProviderName) {
                 if (node.ChildrenSize() == 2) {
                     if (!EnsureAtom(*node.Child(1), ctx)) {
                         return false;
@@ -203,26 +203,26 @@ public:
     }
 
     TStringBuf GetName() const override {
-        return DqProviderName; 
+        return DqProviderName;
     }
 
-    bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override { 
-        Y_UNUSED(compact); 
- 
-        if (TDqConnection::Match(&node)) { 
-            children.push_back(node.ChildPtr(TDqConnection::idx_Output)->ChildPtr(TDqOutput::idx_Stage)); 
+    bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
+        Y_UNUSED(compact);
+
+        if (TDqConnection::Match(&node)) {
+            children.push_back(node.ChildPtr(TDqConnection::idx_Output)->ChildPtr(TDqOutput::idx_Stage));
             return false;
-        } 
- 
-        if (TDqStageBase::Match(&node)) { 
-            auto inputs = node.ChildPtr(TDqStageBase::idx_Inputs); 
-            for (size_t i = 0; i < inputs->ChildrenSize(); ++i) { 
-                children.push_back(inputs->ChildPtr(i)); 
-            } 
-            ScanPlanDependencies(node.ChildPtr(TDqStageBase::idx_Program), children); 
-            return true; 
-        } 
- 
+        }
+
+        if (TDqStageBase::Match(&node)) {
+            auto inputs = node.ChildPtr(TDqStageBase::idx_Inputs);
+            for (size_t i = 0; i < inputs->ChildrenSize(); ++i) {
+                children.push_back(inputs->ChildPtr(i));
+            }
+            ScanPlanDependencies(node.ChildPtr(TDqStageBase::idx_Program), children);
+            return true;
+        }
+
         if (TDqQuery::Match(&node)) {
             auto stagesList = node.ChildPtr(TDqQuery::idx_SinkStages);
             for (size_t i = 0; i < stagesList->ChildrenSize(); ++i) {
@@ -231,40 +231,40 @@ public:
             return true;
         }
 
-        return false; 
-    } 
- 
-    void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& children) { 
-        VisitExpr(input, [&children](const TExprNode::TPtr& node) { 
-            if (TMaybeNode<TDqReadWrapBase>(node)) { 
-                children.push_back(node->ChildPtr(TDqReadWrapBase::idx_Input)); 
-                return false; 
-            } 
-            return true; 
-        }); 
-    } 
- 
-    TString GetOperationDisplayName(const TExprNode& node) override { 
-        if (auto maybeStage = TMaybeNode<TDqStageBase>(&node)) { 
-            TStringBuilder builder; 
-            builder << TPlanFormatterBase::GetOperationDisplayName(node); 
-            if (auto publicId = State->TypeCtx->TranslateOperationId(maybeStage.Raw()->UniqueId())) { 
-                builder << " #" << publicId; 
-            } 
-            return builder; 
-        } 
-        return TPlanFormatterBase::GetOperationDisplayName(node); 
-    } 
- 
+        return false;
+    }
+
+    void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& children) {
+        VisitExpr(input, [&children](const TExprNode::TPtr& node) {
+            if (TMaybeNode<TDqReadWrapBase>(node)) {
+                children.push_back(node->ChildPtr(TDqReadWrapBase::idx_Input));
+                return false;
+            }
+            return true;
+        });
+    }
+
+    TString GetOperationDisplayName(const TExprNode& node) override {
+        if (auto maybeStage = TMaybeNode<TDqStageBase>(&node)) {
+            TStringBuilder builder;
+            builder << TPlanFormatterBase::GetOperationDisplayName(node);
+            if (auto publicId = State->TypeCtx->TranslateOperationId(maybeStage.Raw()->UniqueId())) {
+                builder << " #" << publicId;
+            }
+            return builder;
+        }
+        return TPlanFormatterBase::GetOperationDisplayName(node);
+    }
+
     void WritePlanDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
-        if (auto maybeStage = TMaybeNode<TDqStageBase>(&node)) { 
-            writer.OnKeyedItem("Streams"); 
-            writer.OnBeginMap(); 
-            NCommon::WriteStreams(writer, "Program", maybeStage.Cast().Program()); 
-            writer.OnEndMap(); 
-        } 
-    } 
- 
+        if (auto maybeStage = TMaybeNode<TDqStageBase>(&node)) {
+            writer.OnKeyedItem("Streams");
+            writer.OnBeginMap();
+            NCommon::WriteStreams(writer, "Program", maybeStage.Cast().Program());
+            writer.OnEndMap();
+        }
+    }
+
     TDqStatePtr State;
 
     TLazyInitHolder<IGraphTransformer> LogOptTransformer;
@@ -274,8 +274,8 @@ public:
     TLazyInitHolder<IGraphTransformer> RecaptureTransformer;
 };
 
-TIntrusivePtr<IDataProvider> CreateDqDataSink(const TDqStatePtr& state) { 
-    return new TDqDataProviderSink(state); 
+TIntrusivePtr<IDataProvider> CreateDqDataSink(const TDqStatePtr& state) {
+    return new TDqDataProviderSink(state);
 }
 
 } // namespace NYql

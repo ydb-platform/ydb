@@ -363,15 +363,15 @@ public:
             YQL_ENSURE(datasink);
             info.Provider = (*datasink).Get();
             info.IsVisible = (*datasink)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
-        } 
-        else if (node->IsCallable("DqStage") || 
-            node->IsCallable("DqPhyStage") || 
+        }
+        else if (node->IsCallable("DqStage") ||
+            node->IsCallable("DqPhyStage") ||
             node->IsCallable("DqQuery!") ||
-            node->ChildrenSize() >= 1 && node->Child(0)->IsCallable("TDqOutput")) { 
-            auto provider = Types_.DataSinkMap.FindPtr(DqProviderName); 
-            YQL_ENSURE(provider); 
-            info.Provider = (*provider).Get(); 
-            info.IsVisible = (*provider)->GetPlanFormatter().GetDependencies(*node, dependencies, true); 
+            node->ChildrenSize() >= 1 && node->Child(0)->IsCallable("TDqOutput")) {
+            auto provider = Types_.DataSinkMap.FindPtr(DqProviderName);
+            YQL_ENSURE(provider);
+            info.Provider = (*provider).Get();
+            info.IsVisible = (*provider)->GetPlanFormatter().GetDependencies(*node, dependencies, true);
         } else {
             info.IsVisible = false;
             for (auto& child : node->Children()) {

@@ -12,7 +12,7 @@
 
 namespace NYql {
 
-TDataProviderInitializer GetDqDataProviderInitializer( 
+TDataProviderInitializer GetDqDataProviderInitializer(
     TExecTransformerFactory execTransformerFactory,
     const IDqGateway::TPtr& dqGateway,
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
@@ -50,10 +50,10 @@ TDataProviderInitializer GetDqDataProviderInitializer(
         );
 
         TDataProviderInfo info;
-        info.Names.insert(TString{DqProviderName}); 
+        info.Names.insert(TString{DqProviderName});
 
         info.Source = CreateDqDataSource(state, execTransformerFactory);
-        info.Sink = CreateDqDataSink(state); 
+        info.Sink = CreateDqDataSink(state);
         info.OpenSession = [dqGateway, metrics, gatewaysConfig, state](
             const TString& sessionId,
             const TString& username,

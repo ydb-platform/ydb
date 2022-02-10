@@ -1,30 +1,30 @@
-#pragma once 
- 
-#include <utility> 
-#include <util/generic/hash.h> 
-#include <util/generic/guid.h> 
-#include <util/generic/hash_set.h> 
+#pragma once
+
+#include <utility>
+#include <util/generic/hash.h>
+#include <util/generic/guid.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 #include <ydb/library/yql/providers/common/metrics/sensors_group.h>
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
- 
- 
-namespace NYql::NDqs { 
- 
+
+
+namespace NYql::NDqs {
+
 class TInflightLimiter: public TThrRefBase {
-public: 
+public:
     using TPtr = TIntrusivePtr<TInflightLimiter>;
 
-    TInflightLimiter(i32 inflightLimit); 
-    bool CanDownload(const TString& id); 
-    void MarkDownloadStarted(const TString& id); 
-    void MarkDownloadFinished(const TString& id); 
- 
-private: 
-    THashMap<TString, i32> InflightResources; 
-    i32 InflightLimit; 
-}; 
- 
+    TInflightLimiter(i32 inflightLimit);
+    bool CanDownload(const TString& id);
+    void MarkDownloadStarted(const TString& id);
+    void MarkDownloadFinished(const TString& id);
+
+private:
+    THashMap<TString, i32> InflightResources;
+    i32 InflightLimit;
+};
+
 struct TGlobalResources {
     TGlobalResources(TSensorsGroupPtr metrics)
         : Metrics(metrics)
@@ -95,30 +95,30 @@ private:
 
 struct TWorkerInfo: public TThrRefBase {
     using TPtr = TIntrusivePtr<TWorkerInfo>;
-    using TFileResource = Yql::DqsProto::TFile; 
- 
-    const ui32 NodeId; 
-    const TGUID WorkerId; 
-    TInstant LastPingTime; 
-    const TString Revision; 
-    const TString ClusterName; 
-    const TString Address; 
+    using TFileResource = Yql::DqsProto::TFile;
+
+    const ui32 NodeId;
+    const TGUID WorkerId;
+    TInstant LastPingTime;
+    const TString Revision;
+    const TString ClusterName;
+    const TString Address;
     const TString StartTime;
-    const ui32 Port; 
-    ui32 Epoch; 
-    THashMap<TString, TString> Attributes; 
+    const ui32 Port;
+    ui32 Epoch;
+    THashMap<TString, TString> Attributes;
     THashSet<TString> Operations;
- 
-    ui64 UseCount = 0; 
+
+    ui64 UseCount = 0;
     TInstant RequestStartTime;
-    TDuration UseTime; 
-    bool IsDead = false; 
-    bool Stopping = false; 
- 
-    const ui32 Capabilities = 0; 
- 
-    i64 FreeDiskSize = 0; 
-    i64 UsedDiskSize = 0; 
+    TDuration UseTime;
+    bool IsDead = false;
+    bool Stopping = false;
+
+    const ui32 Capabilities = 0;
+
+    i64 FreeDiskSize = 0;
+    i64 UsedDiskSize = 0;
     const int Capacity;
     const int CpuCores = 1; // unused yet
 
@@ -130,76 +130,76 @@ struct TWorkerInfo: public TThrRefBase {
     i64 MajorPageFaults = 0;
 
     int RunningRequests = 0;
-    int RunningWorkerActors = 0; 
- 
-    TWorkerInfo( 
+    int RunningWorkerActors = 0;
+
+    TWorkerInfo(
         const TString& startTime,
-        ui32 nodeId, 
-        TGUID workerId, 
-        const Yql::DqsProto::RegisterNodeRequest& request, 
-        NYql::TSensorsGroupPtr metrics, 
+        ui32 nodeId,
+        TGUID workerId,
+        const Yql::DqsProto::RegisterNodeRequest& request,
+        NYql::TSensorsGroupPtr metrics,
         const TInflightLimiter::TPtr& inflightLimiter,
         TGlobalResources& globalResources
-    ); 
- 
-    ~TWorkerInfo(); 
- 
-    bool Update(const Yql::DqsProto::RegisterNodeRequest& request); 
- 
-    void RemoveFromDownloadList(const TString& objectId); 
- 
-    void AddToDownloadList(const THashMap<TString, TFileResource>& downloadList); 
- 
+    );
+
+    ~TWorkerInfo();
+
+    bool Update(const Yql::DqsProto::RegisterNodeRequest& request);
+
+    void RemoveFromDownloadList(const TString& objectId);
+
+    void AddToDownloadList(const THashMap<TString, TFileResource>& downloadList);
+
     bool AddToDownloadList(const TString& key, const TFileResource& value);
- 
-    const THashMap<TString, TFileResource>& GetDownloadList(); 
- 
-    THashMap<TString, TFileResource> GetResourcesForDownloading(); 
- 
-    const THashSet<TString>& GetResources(); 
- 
-    const auto& GetResourcesOrdered() { 
-        return ResourcesOrdered; 
-    } 
- 
+
+    const THashMap<TString, TFileResource>& GetDownloadList();
+
+    THashMap<TString, TFileResource> GetResourcesForDownloading();
+
+    const THashSet<TString>& GetResources();
+
+    const auto& GetResourcesOrdered() {
+        return ResourcesOrdered;
+    }
+
     const auto& GetActiveDownloads() {
         return ActiveDownloads;
     }
 
-    void OnDead(); 
- 
+    void OnDead();
+
     bool Acquire();
 
     bool Release();
 
-private: 
-    THashSet<TString> Resources; 
-    google::protobuf::RepeatedPtrField<::Yql::DqsProto::RegisterNodeRequest_LocalFile> ResourcesOrdered; 
-    THashMap<TString, TFileResource> DownloadList; 
-    TSensorsGroupPtr Metrics; 
+private:
+    THashSet<TString> Resources;
+    google::protobuf::RepeatedPtrField<::Yql::DqsProto::RegisterNodeRequest_LocalFile> ResourcesOrdered;
+    THashMap<TString, TFileResource> DownloadList;
+    TSensorsGroupPtr Metrics;
     TInflightLimiter::TPtr InflightLimiter;
     TClusterResources ClusterResources;
     THashMap<TString, TFileResource> ActiveDownloads;
- 
-    TSensorCounterPtr CurrentDownloadsSum; 
-    TSensorCounterPtr CurrentDownloadsMax; 
-    TSensorCounterPtr CurrentDownloadsArgMax; 
- 
+
+    TSensorCounterPtr CurrentDownloadsSum;
+    TSensorCounterPtr CurrentDownloadsMax;
+    TSensorCounterPtr CurrentDownloadsArgMax;
+
     TSensorCounterPtr ActiveDownloadsSum;
 
     TSensorCounterPtr DeadWorkers;
 
-    TSensorCounterPtr FilesCountSum; 
-    TSensorCounterPtr FilesCountMax; 
-    TSensorCounterPtr FilesCountArgMax; 
- 
-    TSensorCounterPtr FreeDiskSizeSum; 
-    TSensorCounterPtr FreeDiskSizeMin; 
-    TSensorCounterPtr FreeDiskSizeArgMin; 
- 
-    TSensorCounterPtr UsedDiskSizeSum; 
-    TSensorCounterPtr UsedDiskSizeMax; 
-    TSensorCounterPtr UsedDiskSizeArgMax; 
+    TSensorCounterPtr FilesCountSum;
+    TSensorCounterPtr FilesCountMax;
+    TSensorCounterPtr FilesCountArgMax;
+
+    TSensorCounterPtr FreeDiskSizeSum;
+    TSensorCounterPtr FreeDiskSizeMin;
+    TSensorCounterPtr FreeDiskSizeArgMin;
+
+    TSensorCounterPtr UsedDiskSizeSum;
+    TSensorCounterPtr UsedDiskSizeMax;
+    TSensorCounterPtr UsedDiskSizeArgMax;
 
     TSensorCounterPtr CpuTotalSum;
     TSensorCounterPtr MajorPageFaultsSum;
@@ -208,8 +208,8 @@ private:
     TSensorCounterPtr FileAddCounter;
 
     TSensorCounterPtr RunningActors;
-}; 
- 
+};
+
 struct TWorkerInfoPtrComparator {
     bool operator()(const TWorkerInfo::TPtr& a, const TWorkerInfo::TPtr& b) const {
         auto scoreA = (a->CpuTotal+1) * (a->RunningRequests + a->RunningWorkerActors + 1);
@@ -223,5 +223,5 @@ struct TWorkerInfoPtrComparator {
         }
     }
 };
- 
+
 } // namespace NYql::NDqs

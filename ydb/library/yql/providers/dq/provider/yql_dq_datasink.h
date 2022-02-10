@@ -6,5 +6,5 @@ namespace NYql {
     struct TDqState;
     using TDqStatePtr = TIntrusivePtr<TDqState>;
 
-    TIntrusivePtr<IDataProvider> CreateDqDataSink(const TDqStatePtr& state); 
+    TIntrusivePtr<IDataProvider> CreateDqDataSink(const TDqStatePtr& state);
 } // namespace NYql

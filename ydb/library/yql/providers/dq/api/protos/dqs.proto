@@ -25,7 +25,7 @@ message TAllocateWorkersRequest {
     // repeated Yql.DqsProto.DatabaseDescription Databases = 7; // unused
 
     string User = 8;
- 
+
     repeated Yql.DqsProto.TWorkerFilter WorkerFilterPerTask = 9;
 
     uint32 WorkersCount = 10;
@@ -109,15 +109,15 @@ message TEvOperationStop {
 message TEvOperationStopResponse {
 }
 
-message TEvQueryStatus { 
-  Yql.DqsProto.QueryStatusRequest Request = 1; 
-  bool IsForwarded = 2; 
-} 
- 
-message TEvQueryStatusResponse { 
-  Yql.DqsProto.QueryStatusResponse Response = 1; 
-} 
- 
+message TEvQueryStatus {
+  Yql.DqsProto.QueryStatusRequest Request = 1;
+  bool IsForwarded = 2;
+}
+
+message TEvQueryStatusResponse {
+  Yql.DqsProto.QueryStatusResponse Response = 1;
+}
+
 message TEvIsReady {
     Yql.DqsProto.IsReadyRequest Request = 1;
     bool IsForwarded = 2;

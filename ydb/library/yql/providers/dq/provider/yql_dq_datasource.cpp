@@ -34,19 +34,19 @@ using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
 using namespace NDq;
 
-class TDqDataProviderSource: public TDataProviderBase { 
+class TDqDataProviderSource: public TDataProviderBase {
 public:
     TDqDataProviderSource(const TDqStatePtr& state, TExecTransformerFactory execTransformerFactory)
         : State(state)
         , ConfigurationTransformer([this]() {
-            return MakeHolder<NCommon::TProviderConfigurationTransformer>(State->Settings, *State->TypeCtx, TString{DqProviderName}); 
+            return MakeHolder<NCommon::TProviderConfigurationTransformer>(State->Settings, *State->TypeCtx, TString{DqProviderName});
         })
         , ExecTransformer([this, execTransformerFactory] () { return THolder<IGraphTransformer>(execTransformerFactory(State)); })
         , TypeAnnotationTransformer([] () { return CreateDqsDataSourceTypeAnnotationTransformer(); })
     { }
 
     TStringBuf GetName() const override {
-        return DqProviderName; 
+        return DqProviderName;
     }
 
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
@@ -141,7 +141,7 @@ public:
                 return false;
             }
 
-            if (node.Child(0)->Content() == DqProviderName) { 
+            if (node.Child(0)->Content() == DqProviderName) {
                 if (node.ChildrenSize() == 2) {
                     if (!EnsureAtom(*node.Child(1), ctx)) {
                         return false;

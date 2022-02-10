@@ -629,28 +629,28 @@ namespace NYql::NDqs {
             ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, ev.Release(), IEventHandle::FlagTrackDelivery));
         });
 
-        ADD_REQUEST(QueryStatus, QueryStatusRequest, QueryStatusResponse, { 
-            auto* request = dynamic_cast<const Yql::DqsProto::QueryStatusRequest*>(ctx->GetRequest()); 
- 
-            auto ev = MakeHolder<TEvQueryStatus>(*request); 
- 
-            auto callback = MakeHolder<TRichActorFutureCallback<TEvQueryStatusResponse>>( 
-                [ctx] (TAutoPtr<TEventHandle<TEvQueryStatusResponse>>& event) mutable { 
-                    auto* result = google::protobuf::Arena::CreateMessage<Yql::DqsProto::QueryStatusResponse>(ctx->GetArena()); 
-                    result->MergeFrom(event->Get()->Record.GetResponse()); 
-                    ctx->Reply(result, Ydb::StatusIds::SUCCESS); 
-                }, 
-                [ctx] () mutable { 
-                    YQL_LOG(DEBUG) << "QueryStatus failed"; 
-                    ctx->ReplyError(grpc::UNAVAILABLE, "Error"); 
-                }, 
-                TDuration::MilliSeconds(2000)); 
- 
-            TActorId callbackId = ActorSystem.Register(callback.Release()); 
- 
+        ADD_REQUEST(QueryStatus, QueryStatusRequest, QueryStatusResponse, {
+            auto* request = dynamic_cast<const Yql::DqsProto::QueryStatusRequest*>(ctx->GetRequest());
+
+            auto ev = MakeHolder<TEvQueryStatus>(*request);
+
+            auto callback = MakeHolder<TRichActorFutureCallback<TEvQueryStatusResponse>>(
+                [ctx] (TAutoPtr<TEventHandle<TEvQueryStatusResponse>>& event) mutable {
+                    auto* result = google::protobuf::Arena::CreateMessage<Yql::DqsProto::QueryStatusResponse>(ctx->GetArena());
+                    result->MergeFrom(event->Get()->Record.GetResponse());
+                    ctx->Reply(result, Ydb::StatusIds::SUCCESS);
+                },
+                [ctx] () mutable {
+                    YQL_LOG(DEBUG) << "QueryStatus failed";
+                    ctx->ReplyError(grpc::UNAVAILABLE, "Error");
+                },
+                TDuration::MilliSeconds(2000));
+
+            TActorId callbackId = ActorSystem.Register(callback.Release());
+
             ActorSystem.Send(new IEventHandle(MakeWorkerManagerActorID(ActorSystem.NodeId), callbackId, ev.Release(), IEventHandle::FlagTrackDelivery));
-        }); 
- 
+        });
+
         ADD_REQUEST(RegisterNode, RegisterNodeRequest, RegisterNodeResponse, {
             auto* request = dynamic_cast<const Yql::DqsProto::RegisterNodeRequest*>(ctx->GetRequest());
             Y_VERIFY(!!request);

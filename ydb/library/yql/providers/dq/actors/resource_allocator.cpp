@@ -64,12 +64,12 @@ public:
         , RetryCounter(counters->GetSubgroup("component", "ServiceProxyActor")->GetCounter("RetryCreateActor", /*derivative=*/ true))
         , Tasks(tasks)
         , ComputeActorType(computeActorType)
-    { 
-        AllocatedWorkers.resize(workerCount); 
+    {
+        AllocatedWorkers.resize(workerCount);
         if (!Tasks.empty()) {
             Y_VERIFY(workerCount == Tasks.size());
         }
-    } 
+    }
 
 private:
     STRICT_STFUNC(Handle, {
@@ -177,17 +177,17 @@ private:
         YQL_ENSURE(RequestedNodes.contains(cookie));
         auto& requestedNode = RequestedNodes[cookie];
         if (!requestedNode.RequestedFlag) {
-            TDqResourceId resourceId{}; 
-            resourceId.Data = cookie; 
-            AllocatedWorkers[resourceId.u3 - 1] = ev->Get()->Record.GetWorkers(); 
-            AllocatedCount++; 
+            TDqResourceId resourceId{};
+            resourceId.Data = cookie;
+            AllocatedWorkers[resourceId.u3 - 1] = ev->Get()->Record.GetWorkers();
+            AllocatedCount++;
             requestedNode.RequestedFlag = true;
             auto delta = TInstant::Now() - requestedNode.StartTime;
             // catched and grpc_service
             QueryStat.AddCounter(QueryStat.GetCounterName("Actor", {{"ClusterName", requestedNode.ClusterName}}, "ActorCreateTime"), delta);
         }
 
-        if (AllocatedCount == RequestedCount) { 
+        if (AllocatedCount == RequestedCount) {
             TVector<NActors::TActorId> workerIds;
             for (auto& group : AllocatedWorkers) {
                 for (const auto& actorIdProto : group.GetWorkerActor()) {
@@ -199,15 +199,15 @@ private:
             QueryStat.FlushCounters(response->Record);
             auto* workerGroup = response->Record.MutableWorkers();
             TVector<Yql::DqsProto::TWorkerInfo> workers;
-            workers.resize(AllocatedCount); 
-            for (const auto& [resourceId, requestInfo] : RequestedNodes) { 
-                TDqResourceId dqResourceId{}; 
-                dqResourceId.Data = resourceId; 
-                workers[dqResourceId.u3 - 1] = requestInfo.WorkerInfo; 
+            workers.resize(AllocatedCount);
+            for (const auto& [resourceId, requestInfo] : RequestedNodes) {
+                TDqResourceId dqResourceId{};
+                dqResourceId.Data = resourceId;
+                workers[dqResourceId.u3 - 1] = requestInfo.WorkerInfo;
             }
-            for (const auto& worker : workers) { 
-                *workerGroup->AddWorker() = worker; 
-            } 
+            for (const auto& worker : workers) {
+                *workerGroup->AddWorker() = worker;
+            }
             Send(SenderId, response.Release());
             Answered = true;
         }
@@ -306,7 +306,7 @@ private:
     bool LocalMode = false;
 
     TVector<NDqProto::TWorkerGroup> AllocatedWorkers;
-    ui32 AllocatedCount = 0; 
+    ui32 AllocatedCount = 0;
 
     bool FailState = false;
     bool Answered = false;

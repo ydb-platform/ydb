@@ -3113,11 +3113,11 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus HeadWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) { 
-        output = ctx.Expr.RenameNode(*input, "ToOptional"); 
-        return IGraphTransformer::TStatus::Repeat; 
-    } 
- 
+    IGraphTransformer::TStatus HeadWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        output = ctx.Expr.RenameNode(*input, "ToOptional");
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus ToFlowWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -12802,7 +12802,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ToList"] = &ToListWrapper;
         Functions["ToOptional"] = &ToOptionalWrapper;
         Functions["Iterable"] = &IterableWrapper;
-        Functions["Head"] = &HeadWrapper; 
+        Functions["Head"] = &HeadWrapper;
         Functions["Last"] = &ToOptionalWrapper;
         Functions["AsTagged"] = &AsTaggedWrapper;
         Functions["Untag"] = &UntagWrapper;

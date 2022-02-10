@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
-#include "worker_info.h" 
+#include "worker_info.h"
 #include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <ydb/library/yql/utils/log/log.h>
@@ -11,11 +11,11 @@
 
 #include <util/generic/guid.h>
 
-#include <utility> 
- 
+#include <utility>
+
 namespace NYql::NDqs {
 
-using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::ES_USERSPACE>; 
+using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::ES_USERSPACE>;
 
     struct TEvAllocateWorkersRequest : NActors::TEventPB<TEvAllocateWorkersRequest, NYql::NDqProto::TAllocateWorkersRequest,
                                                          TDqResManEvents::ES_ALLOCATE_WORKERS_REQUEST> {
@@ -89,19 +89,19 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         TEvClusterStatusResponse() = default;
     };
 
-    struct TEvQueryStatus 
-        : NActors::TEventPB<TEvQueryStatus, NYql::NDqProto::TEvQueryStatus, TDqResManEvents::ES_QUERY_STATUS> { 
- 
-        TEvQueryStatus() = default; 
-        TEvQueryStatus(const Yql::DqsProto::QueryStatusRequest& request); 
-    }; 
- 
-    struct TEvQueryStatusResponse 
-        : NActors::TEventPB<TEvQueryStatusResponse, NYql::NDqProto::TEvQueryStatusResponse, TDqResManEvents::ES_QUERY_STATUS_RESPONSE> { 
- 
-        TEvQueryStatusResponse() = default; 
-    }; 
- 
+    struct TEvQueryStatus
+        : NActors::TEventPB<TEvQueryStatus, NYql::NDqProto::TEvQueryStatus, TDqResManEvents::ES_QUERY_STATUS> {
+
+        TEvQueryStatus() = default;
+        TEvQueryStatus(const Yql::DqsProto::QueryStatusRequest& request);
+    };
+
+    struct TEvQueryStatusResponse
+        : NActors::TEventPB<TEvQueryStatusResponse, NYql::NDqProto::TEvQueryStatusResponse, TDqResManEvents::ES_QUERY_STATUS_RESPONSE> {
+
+        TEvQueryStatusResponse() = default;
+    };
+
     struct TEvIsReady
             : NActors::TEventPB<TEvIsReady, NYql::NDqProto::TEvIsReady, TDqResManEvents::ES_IS_READY> {
 

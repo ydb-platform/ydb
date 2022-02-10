@@ -1,14 +1,14 @@
-#pragma once
+#pragma once 
 
 #include <util/generic/array_ref.h>
 #include <util/generic/vector.h>
 #include <util/generic/strbuf.h>
-
+ 
 #include <array>
 
 namespace NCodecs::NFloatHuff {
     TString Encode(TArrayRef<const float> factors);
-
+ 
     class TDecoder {
     public:
         explicit TDecoder(TStringBuf data);

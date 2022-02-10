@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/system/defaults.h>
 #include <util/generic/yexception.h>
 #include <util/generic/ptr.h>
@@ -7,8 +7,8 @@
 #include <util/stream/input.h>
 #include <util/stream/str.h>
 
-#include "compressor.h"
-
+#include "compressor.h" 
+ 
 namespace NCompProto {
     const size_t MAX_ELEMENTS = 32;
 
@@ -25,7 +25,7 @@ namespace NCompProto {
         EType Type;
         ui32 Value;
     };
-
+ 
     template <class X>
     struct TMetaInfo {
         X Index;
@@ -42,7 +42,7 @@ namespace NCompProto {
         TString ChildName[MAX_ELEMENTS];
         size_t Id;
         TMetaInfo* Parent;
-
+ 
         struct TCheck {
             ui32 Count;
             ui32 Mask;
@@ -74,7 +74,7 @@ namespace NCompProto {
                 ClearAll();
             }
         };
-
+ 
         TCheck Serializer;
 
         void SetDefaults(TMetaInfo* parent) {
@@ -108,12 +108,12 @@ namespace NCompProto {
                     info->Parent = this;
                     Repeated[i].Reset(info.Release());
                 }
-            }
-        }
+            } 
+        } 
 
         TMetaInfo(TMetaInfo* parent) {
             SetDefaults(parent);
-        }
+        } 
 
         template <class T>
         TMetaInfo& BeginRepeated(size_t id, T& functor) {
@@ -121,13 +121,13 @@ namespace NCompProto {
             TMetaInfo& res = *Repeated[id].Get();
             res.Count.BeginElement(functor);
             return res;
-        }
+        } 
 
         template <class T>
         void BeginSelf(T& functor) {
             Serializer.ClearAll();
             Count.BeginElement(functor);
-        }
+        } 
 
         template <class T>
         void EndRepeated(T& functor) {
@@ -135,7 +135,7 @@ namespace NCompProto {
             Serializer.ClearCount();
             Serializer.ClearIndex();
             Y_ENSURE(Serializer.Mask == 0, "Serializer.Mask != 0");
-        }
+        } 
 
         template <class T>
         void BeginElement(ui32 index, T& functor) {
@@ -147,7 +147,7 @@ namespace NCompProto {
             Serializer.LastIndex = index;
             ++Serializer.Count;
         }
-
+ 
         template <class TFunctor>
         void Iterate(TFunctor& functor) {
             Cout << Name << " "
@@ -157,7 +157,7 @@ namespace NCompProto {
             functor.Process(Count);
             Cout << "Mask" << Endl;
             functor.Process(Mask);
-
+ 
             for (size_t i = 0; i < Size; ++i) {
                 ui32 index = (1UL << i);
                 if (ScalarMask & index) {
@@ -170,15 +170,15 @@ namespace NCompProto {
                          << " " << i << Endl;
                     Repeated[i]->Iterate(functor);
                 }
-            }
-        }
-
+            } 
+        } 
+ 
         template <class T>
         void EndElement(T& functor) {
             Mask.AddDelayed(Serializer.Mask, functor);
             Serializer.ClearMask();
         }
-
+ 
         template <class T>
         void SetScalar(size_t id, ui32 value, T& functor) {
             if (Default[id].Type != TScalarDefaultValue::Fixed || value != Default[id].Value) {
@@ -186,32 +186,32 @@ namespace NCompProto {
                 Scalar[id].Add(value, functor);
             }
         }
-
+ 
         ui32 Check(size_t id) {
             Y_ENSURE(id < MAX_ELEMENTS, "id >= MAX_ELEMENTS");
-
+ 
             ui32 mask = 1UL << id;
             if (ScalarMask & mask) {
                 ythrow yexception() << "ScalarMask & mask";
-            }
+            } 
             if (RepeatedMask & mask) {
                 ythrow yexception() << "RepeatedMask & mask";
-            }
+            } 
             Size = Max(id + 1, Size);
             return mask;
-        }
-
+        } 
+ 
         TMetaInfo(IInputStream& stream) {
             SetDefaults(nullptr);
             Load(stream);
-        }
-
+        } 
+ 
         TMetaInfo(const TString& str) {
             SetDefaults(nullptr);
             TStringInput stream(str);
             Load(stream);
-        }
-
+        } 
+ 
         void Save(IOutputStream& stream, const TString& offset = TString()) {
             stream << offset << "repeated " << Name << " id " << Id << Endl;
             TString step = "    ";
@@ -221,7 +221,7 @@ namespace NCompProto {
             Count.Save(stream, step + offset);
             stream << step << offset << "mask" << Endl;
             Mask.Save(stream, step + offset);
-
+ 
             for (size_t i = 0; i < MAX_ELEMENTS; ++i) {
                 ui32 mask = 1UL << i;
                 if (mask & RepeatedMask) {
@@ -237,13 +237,13 @@ namespace NCompProto {
                            << "id " << i << Endl;
                     Scalar[i].Save(stream, step + offset);
                 }
-            }
+            } 
             stream << offset << "end" << Endl;
-        }
-
+        } 
+ 
         void Load(IInputStream& stream) {
             TString name;
-            stream >> name;
+            stream >> name; 
             if (name == "repeated") {
                 stream >> name;
             }
@@ -251,9 +251,9 @@ namespace NCompProto {
             stream >> name;
             Y_ENSURE(name == "id", "Name mismatch: " << name.Quote() << " != id. ");
             stream >> Id;
-
+ 
             while (1) {
-                stream >> name;
+                stream >> name; 
                 if (name == "index") {
                     Index.Load(stream);
                 } else if (name == "count") {
@@ -297,8 +297,8 @@ namespace NCompProto {
                 } else if (name == "end" /* || stream.IsEOF()*/) {
                     return;
                 }
-            }
-        }
+            } 
+        } 
     };
 
 }

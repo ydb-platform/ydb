@@ -1,5 +1,5 @@
 //do not use directly
-#pragma once
+#pragma once 
 #include "platform.h"
 
 #if defined(_win_)

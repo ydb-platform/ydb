@@ -4,7 +4,7 @@
                                                        :  \
                                                        :  \
                                                        : "memory")
-
+ 
 static inline TAtomicBase AtomicGet(const TAtomic& a) {
     TAtomicBase tmp;
 #if defined(_arm64_)

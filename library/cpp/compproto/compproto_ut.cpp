@@ -66,7 +66,7 @@ void TestWithParams(const TString& metainfo, const ECompMode mode, const TTestPa
 
     ui64 codedSize = buffer.Position;
 
-    TMetaInfo<TTable> decompressor(*meta, THuffToTable::Instance());
+    TMetaInfo<TTable> decompressor(*meta, THuffToTable::Instance()); 
 
     // verify that no memory read beyond buffer occurs
     const size_t byteSize = buffer.ByteLength();
@@ -87,7 +87,7 @@ void TestWithParams(const TString& metainfo, const ECompMode mode, const TTestPa
     memcpy(dataStart, buffer.Out.data(), byteSize);
 
     ui64 position = 0;
-    TMetaIterator<TDecompressor> instance;
+    TMetaIterator<TDecompressor> instance; 
     // we should not read beyond dataEnd here
     instance.Decompress(&decompressor, dataStart, position);
     const ui64 decodedSize = position;
@@ -177,70 +177,70 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
         struct TRegClicks: public TParentHold<TRegClicks> {
             const TData* Data;
             const TRegInfo* Elem;
-            TRegClicks()
+            TRegClicks() 
                 : Data(nullptr)
                 , Elem(nullptr)
-            {
-            }
+            { 
+            } 
             void BeginSelf(ui32 /*count*/, ui32 /*id*/) {
-            }
-            void EndSelf() {
-            }
-            void BeginElement(ui32 element) {
+            } 
+            void EndSelf() { 
+            } 
+            void BeginElement(ui32 element) { 
                 TMap<ui32, TRegInfo>::const_iterator it = Data->RegClicks.find(element);
-                if (it == Data->RegClicks.end()) {
-                    UNIT_ASSERT(0);
-                }
-                Elem = &it->second;
-            }
-            void EndElement() {
-            }
-            void SetScalar(size_t index, ui32 val) {
-                if (index == 0)
-                    UNIT_ASSERT_EQUAL(val, Elem->Clicks);
-                if (index == 1)
-                    UNIT_ASSERT_EQUAL(val, Elem->Shows);
-            }
+                if (it == Data->RegClicks.end()) { 
+                    UNIT_ASSERT(0); 
+                } 
+                Elem = &it->second; 
+            } 
+            void EndElement() { 
+            } 
+            void SetScalar(size_t index, ui32 val) { 
+                if (index == 0) 
+                    UNIT_ASSERT_EQUAL(val, Elem->Clicks); 
+                if (index == 1) 
+                    UNIT_ASSERT_EQUAL(val, Elem->Shows); 
+            } 
             IDecompressor& GetDecompressor(size_t) {
-                UNIT_ASSERT(0);
-                return GetEmptyDecompressor();
-            }
-        };
-
+                UNIT_ASSERT(0); 
+                return GetEmptyDecompressor(); 
+            } 
+        }; 
+ 
         const TData* Elem;
-        TMetaIterator<TRegClicks> RegClicks;
+        TMetaIterator<TRegClicks> RegClicks; 
         void BeginSelf(ui32 /*count*/, ui32 /*id*/) {
-        }
-        void EndSelf() {
-        }
-        void BeginElement(ui32 element) {
-            UNIT_ASSERT(element < data.size());
-            Elem = &data[element];
-        }
-        void EndElement() {
-        }
-        void SetScalar(size_t index, ui32 val) {
-            if (index == 0)
-                UNIT_ASSERT_EQUAL(val, Elem->Clicks);
-            if (index == 1)
-                UNIT_ASSERT_EQUAL(val, Elem->Shows);
+        } 
+        void EndSelf() { 
+        } 
+        void BeginElement(ui32 element) { 
+            UNIT_ASSERT(element < data.size()); 
+            Elem = &data[element]; 
+        } 
+        void EndElement() { 
+        } 
+        void SetScalar(size_t index, ui32 val) { 
+            if (index == 0) 
+                UNIT_ASSERT_EQUAL(val, Elem->Clicks); 
+            if (index == 1) 
+                UNIT_ASSERT_EQUAL(val, Elem->Shows); 
             if (index == 31)
                 UNIT_ASSERT_EQUAL(val, Elem->Extra);
-        }
+        } 
         IDecompressor& GetDecompressor(size_t index) {
-            if (index == 2) {
-                RegClicks.Self.Data = Elem;
-                return RegClicks;
-            }
-            UNIT_ASSERT(0);
-            return GetEmptyDecompressor();
-        }
-        TMultiDecompressor()
+            if (index == 2) { 
+                RegClicks.Self.Data = Elem; 
+                return RegClicks; 
+            } 
+            UNIT_ASSERT(0); 
+            return GetEmptyDecompressor(); 
+        } 
+        TMultiDecompressor() 
             : Elem(nullptr)
-        {
-        }
-    };
-
+        { 
+        } 
+    }; 
+ 
     struct TVerifyingDecompressor: public TParentHold<TVerifyingDecompressor> {
         enum EState {
             Startstop,
@@ -255,14 +255,14 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
 
         TMetaIterator<TVerifyingDecompressor>& GetDecompressor(size_t index) {
             Y_UNUSED(index);
-            return *Parent;
-        }
-
+            return *Parent; 
+        } 
+ 
         TVerifyingDecompressor()
             : State(Startstop)
             , DataInd(0)
-        {
-        }
+        { 
+        } 
         void BeginSelf(ui32 /*count*/, ui32 id) {
             switch (State) {
                 case Startstop:
@@ -361,14 +361,14 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
     Y_UNIT_TEST(VerifyHistDecompression) {
         Test<TVerifyingDecompressor, TSerialize>(metainfo, CM_TWOPASS);
     }
-
+ 
     Y_UNIT_TEST(VerifyDecompressionMulti) {
-        Test<TMultiDecompressor, TSerialize>(metainfo, CM_SINGLEPASS);
-    }
-
+        Test<TMultiDecompressor, TSerialize>(metainfo, CM_SINGLEPASS); 
+    } 
+ 
     Y_UNIT_TEST(VerifyHistDecompressionMulti) {
-        Test<TMultiDecompressor, TSerialize>(metainfo, CM_TWOPASS);
-    }
+        Test<TMultiDecompressor, TSerialize>(metainfo, CM_TWOPASS); 
+    } 
 }
 
 Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
@@ -443,14 +443,14 @@ Y_UNIT_TEST_SUITE(CompProtoTestExtended) {
             : State(Startstop)
             , DataInd(0)
             , ArrayInd(0)
-        {
-        }
+        { 
+        } 
 
         TMetaIterator<TVerifyingDecompressor>& GetDecompressor(size_t index) {
             Y_UNUSED(index);
-            return *Parent;
-        }
-
+            return *Parent; 
+        } 
+ 
         void BeginSelf(ui32 /*count*/, ui32 id) {
             switch (State) {
                 case Startstop:

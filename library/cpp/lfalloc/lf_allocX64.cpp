@@ -1,5 +1,5 @@
 #include "lf_allocX64.h"
-
+ 
 //////////////////////////////////////////////////////////////////////////
 // hooks
 #if defined(USE_INTELCC) || defined(_darwin_) || defined(_freebsd_) || defined(_STLPORT_VERSION)

@@ -255,9 +255,9 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
         if (oMode & NoReadAhead) {
             ::posix_fadvise(Fd_, 0, 0, POSIX_FADV_RANDOM);
         }
-    }
+    } 
     #endif
-
+ 
     //temp file
     if (Fd_ >= 0 && (oMode & Transient)) {
         unlink(fName.data());

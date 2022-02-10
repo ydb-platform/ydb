@@ -34,4 +34,4 @@ namespace NMalloc {
         IsAllocatorCorrupted = true;
         abort();
     }
-}
+} 

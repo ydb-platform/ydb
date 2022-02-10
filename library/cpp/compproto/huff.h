@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include <util/system/defaults.h>
 #include <util/generic/yexception.h>
 #include <util/generic/ptr.h>
@@ -9,8 +9,8 @@
 
 #include <queue>
 
-#include "compressor.h"
-
+#include "compressor.h" 
+ 
 namespace NCompProto {
     template <size_t CacheSize, typename TEntry>
     struct TCache {
@@ -47,17 +47,17 @@ namespace NCompProto {
             , Start(start)
             , Bits(bits)
         {
-        }
-
+        } 
+ 
         bool operator<(const TCode& code) const {
             return Probability < code.Probability;
         }
-
+ 
         bool operator>(const TCode& code) const {
             return Probability > code.Probability;
         }
     };
-
+ 
     struct TAccum {
         struct TTable {
             TAutoPtr<TTable> Tables[16];
@@ -74,25 +74,25 @@ namespace NCompProto {
                 for (auto& count : Counts)
                     count = 0;
             }
-
+ 
             i64 GetCellCount(size_t i) {
                 i64 count = Counts[i];
                 if (Tables[i].Get()) {
                     for (size_t j = 0; j < 16; ++j) {
                         count += Tables[i]->GetCellCount(j);
                     }
-                }
+                } 
                 return count;
-            }
-
+            } 
+ 
             i64 GetCount() {
                 i64 count = 0;
-                for (size_t j = 0; j < 16; ++j) {
+                for (size_t j = 0; j < 16; ++j) { 
                     count += GetCellCount(j);
-                }
+                } 
                 return count;
-            }
-
+            } 
+ 
             void GenerateFreqs(TVector<std::pair<i64, TCode>>& codes, int depth, int termDepth, ui32 code, i64 cnt) {
                 if (depth == termDepth) {
                     for (size_t i = 0; i < 16; ++i) {
@@ -101,7 +101,7 @@ namespace NCompProto {
                             Counts[i] = iCount;
                             Tables[i].Reset(nullptr);
                         }
-
+ 
                         if (iCount > cnt || (termDepth == 0 && iCount > 0)) {
                             std::pair<i64, TCode> codep;
                             codep.first = iCount;
@@ -113,32 +113,32 @@ namespace NCompProto {
                         }
                     }
                 }
-                for (size_t i = 0; i < 16; ++i) {
+                for (size_t i = 0; i < 16; ++i) { 
                     if (Tables[i].Get()) {
                         Tables[i]->GenerateFreqs(codes, depth + 4, termDepth, code + (i << (28 - depth)), cnt);
-                    }
-                }
-            }
+                    } 
+                } 
+            } 
         };
-
+ 
         TTable Root;
         int TableCount;
         i64 Total;
         ui64 Max;
-
+ 
         TAccum() {
             TableCount = 0;
             Total = 0;
             Max = 0;
         }
-
+ 
         void GenerateFreqs(TVector<std::pair<i64, TCode>>& codes, int mul) const {
             TTable root(Root);
-
+ 
             for (int i = 28; i > 0; i -= 4) {
                 root.GenerateFreqs(codes, 0, i, 0, Total / mul);
             }
-
+ 
             i64 iCount = root.GetCount();
             if (iCount == 0)
                 return;
@@ -154,10 +154,10 @@ namespace NCompProto {
             }
             codep.second.Bits = bits;
             codes.push_back(codep);
-        }
-
+        } 
+ 
         TCache<256, i64*> Cache;
-
+ 
         void AddMap(ui32 value, i64 weight = 1) {
             ui32 index = Cache.Hash(value);
             if (Cache.CacheKey[index] == value) {
@@ -177,22 +177,22 @@ namespace NCompProto {
                         root->Counts[index2] += weight;
                         return;
                     }
-                }
+                } 
                 root = root->Tables[index2].Get();
-            }
+            } 
 
             Cache.CacheKey[index] = value;
             Cache.CacheVal[index] = &root->Counts[value & 0xf];
             root->Counts[value & 0xf] += weight;
-        }
-
+        } 
+ 
         void Add(ui32 value, i64 weight = 1) {
             Max = ::Max(Max, (ui64)value);
             Total += weight;
             AddMap(value, weight);
         };
-    };
-
+    }; 
+ 
     struct THuffNode {
         i64 Weight;
         i64 Priority;
@@ -206,7 +206,7 @@ namespace NCompProto {
             Nodes[0] = nullptr;
             Nodes[1] = nullptr;
         }
-
+ 
         void BuildPrefixes(ui32 depth, ui32 prefix) {
             if (Code) {
                 Code->Prefix = prefix;
@@ -216,44 +216,44 @@ namespace NCompProto {
             Nodes[0]->BuildPrefixes(depth + 1, prefix + (0UL << depth));
             Nodes[1]->BuildPrefixes(depth + 1, prefix + (1UL << depth));
         }
-
+ 
         i64 Iterate(size_t depth) const {
             if (Code) {
                 return (depth + Code->Bits) * Code->Probability;
             }
             return Nodes[0]->Iterate(depth + 1) + Nodes[1]->Iterate(depth + 1);
-        }
-
+        } 
+ 
         size_t Depth() const {
             if (Code) {
                 return 0;
             }
             return Max(Nodes[0]->Depth(), Nodes[1]->Depth()) + 1;
-        }
+        } 
     };
-
+ 
     struct THLess {
         bool operator()(const THuffNode* a, const THuffNode* b) {
             if (a->Weight > b->Weight)
                 return 1;
             if (a->Weight == b->Weight && a->Priority > b->Priority)
                 return 1;
-            return 0;
-        }
+            return 0; 
+        } 
     };
-
+ 
     inline i64 BuildHuff(TVector<TCode>& codes) {
         TVector<TSimpleSharedPtr<THuffNode>> hold;
         std::priority_queue<THuffNode*, TVector<THuffNode*>, THLess> nodes;
         i64 ret = 0;
-
+ 
         int priority = 0;
         for (size_t i = 0; i < codes.size(); ++i) {
             TSimpleSharedPtr<THuffNode> node(new THuffNode(codes[i].Probability, priority++, &codes[i]));
             hold.push_back(node);
             nodes.push(node.Get());
         }
-
+ 
         while (nodes.size() > 1) {
             THuffNode* nodea = nodes.top();
             nodes.pop();
@@ -265,27 +265,27 @@ namespace NCompProto {
             hold.push_back(node);
             nodes.push(node.Get());
         }
-
+ 
         if (nodes.size()) {
             THuffNode* node = nodes.top();
             node->BuildPrefixes(0, 0);
             ret = node->Iterate(0);
         }
-
+ 
         return ret;
     };
-
+ 
     struct TCoderEntry {
         ui32 MinValue;
         ui16 Prefix;
         ui8 PrefixBits;
         ui8 AllBits;
-
+ 
         ui64 MaxValue() const {
             return MinValue + (1ULL << (AllBits - PrefixBits));
         }
     };
-
+ 
     inline i64 Analyze(const TAccum& acc, TVector<TCoderEntry>& retCodes) {
         i64 ret;
         for (int k = 256; k > 0; --k) {
@@ -296,9 +296,9 @@ namespace NCompProto {
             for (size_t i = 0; i < pairs.size(); ++i) {
                 codes.push_back(pairs[i].second);
             }
-
+ 
             StableSort(codes.begin(), codes.end(), std::greater<TCode>());
-
+ 
             ret = BuildHuff(codes);
             bool valid = true;
             for (size_t i = 0; i < codes.size(); ++i) {
@@ -313,17 +313,17 @@ namespace NCompProto {
             }
             if (valid)
                 return ret;
-        }
-
+        } 
+ 
         return ret;
     }
-
+ 
     struct TComparer {
         bool operator()(const TCoderEntry& e0, const TCoderEntry& e1) const {
             return e0.AllBits < e1.AllBits;
-        }
+        } 
     };
-
+ 
     struct TCoder {
         TVector<TCoderEntry> Entries;
         void Normalize() {
@@ -355,14 +355,14 @@ namespace NCompProto {
                 }
             };
         }
-
+ 
         TCache<1024, TCoderEntry> Cache;
-
+ 
         ui64 RealCode(ui32 value, const TCoderEntry& entry, size_t& length) {
             length = entry.AllBits;
             return (ui64(value - entry.MinValue) << entry.PrefixBits) + entry.Prefix;
         }
-
+ 
         bool Empty() const {
             return Entries.empty();
         }
@@ -374,17 +374,17 @@ namespace NCompProto {
                     id = ui8(i);
                     return entry;
                 }
-            }
+            } 
             ythrow yexception() << "bad entry";
             return Entries[0];
-        }
-
+        } 
+ 
         ui64 Code(ui32 entry, size_t& length) {
             ui32 index = Cache.Hash(entry);
             if (Cache.CacheKey[index] == entry) {
                 ++Cache.Hits;
-                return RealCode(entry, Cache.CacheVal[index], length);
-            }
+                return RealCode(entry, Cache.CacheVal[index], length); 
+            } 
             ++Cache.Misses;
             for (size_t i = 0; i < Entries.size(); ++i) {
                 if (entry >= Entries[i].MinValue && entry < Entries[i].MaxValue()) {
@@ -396,7 +396,7 @@ namespace NCompProto {
 
             ythrow yexception() << "bad huff tree";
             return 0;
-        }
+        } 
     };
-
+ 
 }

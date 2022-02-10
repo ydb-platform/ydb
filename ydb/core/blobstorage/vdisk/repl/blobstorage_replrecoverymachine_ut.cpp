@@ -2,7 +2,7 @@
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <util/random/fast.h>
 
 namespace NKikimr {

@@ -15,7 +15,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/testing/unittest
+    library/cpp/testing/unittest 
     ydb/library/yql/public/udf/service/exception_policy
 )
 

@@ -3,7 +3,7 @@
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 namespace NKikimr {
 
@@ -177,7 +177,7 @@ namespace NKikimr {
             *result.MutableTimestamps() = GetMaxTTimestamps();
 
             for (ui64 idx = 0; idx < defaultQueryCount; ++idx) {
-                Y_PROTOBUF_SUPPRESS_NODISCARD result.ParseFromString(result.SerializeAsString());
+                Y_PROTOBUF_SUPPRESS_NODISCARD result.ParseFromString(result.SerializeAsString()); 
                 *result.AddResult() = GetMaxTQueryResult();
             }
             *result.AddResult() = GetMaxTQueryResult(lastDataSize);
@@ -185,7 +185,7 @@ namespace NKikimr {
 
             NKikimrBlobStorage::TEvVGetResult desResult;
             TArrayHolder<char> buffer(new char[protobufSize]);
-            Y_PROTOBUF_SUPPRESS_NODISCARD result.SerializeToArray(buffer.Get(), protobufSize);
+            Y_PROTOBUF_SUPPRESS_NODISCARD result.SerializeToArray(buffer.Get(), protobufSize); 
             UNIT_ASSERT(desResult.ParseFromArray(buffer.Get(), protobufSize));
         }
 

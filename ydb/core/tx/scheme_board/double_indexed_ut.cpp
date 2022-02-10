@@ -1,6 +1,6 @@
 #include "double_indexed.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/string.h>
 #include <util/string/vector.h>

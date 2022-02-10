@@ -7,7 +7,7 @@ TIMEOUT(600)
 SIZE(MEDIUM)
 
 PEERDIR(
-    library/cpp/getopt
+    library/cpp/getopt 
     library/cpp/svnversion
 )
 

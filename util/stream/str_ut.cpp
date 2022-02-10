@@ -1,6 +1,6 @@
 #include "str.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <util/generic/typetraits.h>
 
 template <typename T>
@@ -136,17 +136,17 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
 
         UNIT_ASSERT_STRINGS_EQUAL(str, "1234567890");
     }
-
-    Y_UNIT_TEST(MoveConstructor) {
-        TString str;
-        TStringOutput output1(str);
-        output1 << "foo";
-
-        TStringOutput output2 = std::move(output1);
-        output2 << "bar";
-        UNIT_ASSERT_STRINGS_EQUAL(str, "foobar");
-
-        // Check old stream is in a valid state
-        output1 << "baz";
-    }
+ 
+    Y_UNIT_TEST(MoveConstructor) { 
+        TString str; 
+        TStringOutput output1(str); 
+        output1 << "foo"; 
+ 
+        TStringOutput output2 = std::move(output1); 
+        output2 << "bar"; 
+        UNIT_ASSERT_STRINGS_EQUAL(str, "foobar"); 
+ 
+        // Check old stream is in a valid state 
+        output1 << "baz"; 
+    } 
 }

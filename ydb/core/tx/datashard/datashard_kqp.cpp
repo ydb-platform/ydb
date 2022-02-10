@@ -113,7 +113,7 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
 
             for (auto& data : dataList) {
                 NKikimrTxDataShard::TKqpReadset kqpReadset;
-                Y_PROTOBUF_SUPPRESS_NODISCARD kqpReadset.ParseFromString(data.Body);
+                Y_PROTOBUF_SUPPRESS_NODISCARD kqpReadset.ParseFromString(data.Body); 
 
                 for (int outputId = 0; outputId < kqpReadset.GetOutputs().size(); ++outputId) {
                     auto* channelData = kqpReadset.MutableOutputs()->Mutable(outputId);
@@ -465,7 +465,7 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
 
     TString replyStr;
     NKikimrTxDataShard::TKqpReply reply;
-    Y_PROTOBUF_SUPPRESS_NODISCARD reply.SerializeToString(&replyStr);
+    Y_PROTOBUF_SUPPRESS_NODISCARD reply.SerializeToString(&replyStr); 
 
     result->SetTxResult(replyStr);
     return result;
@@ -533,7 +533,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrT
 
     for (auto& [key, data] : readsetData) {
         TString bodyStr;
-        Y_PROTOBUF_SUPPRESS_NODISCARD data.SerializeToString(&bodyStr);
+        Y_PROTOBUF_SUPPRESS_NODISCARD data.SerializeToString(&bodyStr); 
 
         outReadSets[key] = bodyStr;
     }
@@ -571,7 +571,7 @@ bool KqpValidateLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) 
     for (auto& readSet : tx->InReadSets()) {
         for (auto& data : readSet.second) {
             NKikimrTxDataShard::TKqpReadset kqpReadset;
-            Y_PROTOBUF_SUPPRESS_NODISCARD kqpReadset.ParseFromString(data.Body);
+            Y_PROTOBUF_SUPPRESS_NODISCARD kqpReadset.ParseFromString(data.Body); 
 
             if (kqpReadset.HasValidateLocksResult()) {
                 auto& validateResult = kqpReadset.GetValidateLocksResult();

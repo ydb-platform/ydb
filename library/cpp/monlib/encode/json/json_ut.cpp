@@ -5,7 +5,7 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/stream/str.h>
 #include <util/string/builder.h>

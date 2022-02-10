@@ -1,7 +1,7 @@
 #include <library/cpp/scheme/scheme.h>
 #include <library/cpp/scheme/scheme_cast.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/stream/null.h>
 #include <util/string/subst.h>

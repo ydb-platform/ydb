@@ -671,7 +671,7 @@ bool IThreadPool::AddAndOwn(THolder<IObjectInQueue> obj) {
     auto owner = MakeHolder<TOwnedObjectInQueue>(std::move(obj));
     bool added = Add(owner.Get());
     if (added) {
-        Y_UNUSED(owner.Release());
+        Y_UNUSED(owner.Release()); 
     }
     return added;
 }

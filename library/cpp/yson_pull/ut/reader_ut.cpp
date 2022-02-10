@@ -4,7 +4,7 @@
 #include <library/cpp/yson_pull/detail/cescape.h>
 #include <library/cpp/yson_pull/detail/macros.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 namespace {
     NYsonPull::TReader memory_reader(TStringBuf data, NYsonPull::EStreamType mode) {

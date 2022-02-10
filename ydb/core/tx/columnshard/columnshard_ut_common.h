@@ -198,7 +198,7 @@ struct TTestSchema {
         }
 
         TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out); 
         return out;
     }
 
@@ -227,7 +227,7 @@ struct TTestSchema {
         }
 
         TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out); 
         return out;
     }
 
@@ -249,7 +249,7 @@ struct TTestSchema {
         }
 
         TString txBody;
-        Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&txBody);
+        Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&txBody); 
         return txBody;
     }
 
@@ -262,7 +262,7 @@ struct TTestSchema {
         }
 
         TString txBody;
-        Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&txBody);
+        Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&txBody); 
         return txBody;
     }
 

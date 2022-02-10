@@ -2,7 +2,7 @@ RECURSE(
     acceleo
     arcdocidstrip
     archiver
-    archiver/alignment_test
+    archiver/alignment_test 
     archiver/tests
     base64
     bigram_compiler

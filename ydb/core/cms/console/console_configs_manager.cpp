@@ -353,7 +353,7 @@ bool TConfigsManager::DbLoadState(TTransactionContext &txc,
         item->UsageScope.NodeType = nodeType;
         item->UsageScope.Order = order;
         item->MergeStrategy = merge;
-        Y_PROTOBUF_SUPPRESS_NODISCARD item->Config.ParseFromArray(config.data(), config.size());
+        Y_PROTOBUF_SUPPRESS_NODISCARD item->Config.ParseFromArray(config.data(), config.size()); 
         item->Cookie = cookie;
         ConfigIndex.AddItem(item);
 
@@ -443,7 +443,7 @@ void TConfigsManager::DbUpdateItem(TConfigItem::TPtr item,
                 << (ConfigIndex.GetItem(item->Id) ? "updating " : "adding ") << item->ToString());
 
     TString config;
-    Y_PROTOBUF_SUPPRESS_NODISCARD item->Config.SerializeToString(&config);
+    Y_PROTOBUF_SUPPRESS_NODISCARD item->Config.SerializeToString(&config); 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::ConfigItems>().Key(item->Id)
         .Update(NIceDb::TUpdate<Schema::ConfigItems::Generation>(item->Generation))

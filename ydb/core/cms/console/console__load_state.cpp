@@ -42,7 +42,7 @@ public:
         if (configRow.IsValid()) {
             auto configString = configRow.GetValue<Schema::Config::Value>();
             NKikimrConsole::TConfig config;
-            Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size());
+            Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size()); 
             Self->LoadConfigFromProto(config);
 
             LOG_DEBUG_S(ctx, NKikimrServices::CMS,

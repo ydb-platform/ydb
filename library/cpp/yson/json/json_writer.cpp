@@ -17,21 +17,21 @@ namespace NYT {
         EJsonFormat format,
         EJsonAttributesMode attributesMode,
         ESerializedBoolFormat booleanFormat)
-        : TJsonWriter(
-            output,
-            NJson::TJsonWriterConfig{}.SetFormatOutput(format == JF_PRETTY),
-            type,
-            attributesMode,
-            booleanFormat
-        )
-    {}
-
-    TJsonWriter::TJsonWriter(
-        IOutputStream* output,
-        NJson::TJsonWriterConfig config,
+        : TJsonWriter( 
+            output, 
+            NJson::TJsonWriterConfig{}.SetFormatOutput(format == JF_PRETTY), 
+            type, 
+            attributesMode, 
+            booleanFormat 
+        ) 
+    {} 
+ 
+    TJsonWriter::TJsonWriter( 
+        IOutputStream* output, 
+        NJson::TJsonWriterConfig config, 
         ::NYson::EYsonType type,
-        EJsonAttributesMode attributesMode,
-        ESerializedBoolFormat booleanFormat)
+        EJsonAttributesMode attributesMode, 
+        ESerializedBoolFormat booleanFormat) 
         : Output(output)
         , Type(type)
         , AttributesMode(attributesMode)
@@ -44,7 +44,7 @@ namespace NYT {
 
         UnderlyingJsonWriter.Reset(new NJson::TJsonWriter(
             output,
-            config));
+            config)); 
         JsonWriter = UnderlyingJsonWriter.Get();
         HasAttributes = false;
         InAttributesBalance = 0;

@@ -38,7 +38,7 @@
 #include <util/system/sanitizers.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <ydb/core/kesus/tablet/tablet.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>

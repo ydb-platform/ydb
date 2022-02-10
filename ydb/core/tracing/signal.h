@@ -77,7 +77,7 @@ public:
     }
 
     TTraceSignal(const TString& serializedSignal) {
-        Y_PROTOBUF_SUPPRESS_NODISCARD PbSignal.ParseFromString(serializedSignal);
+        Y_PROTOBUF_SUPPRESS_NODISCARD PbSignal.ParseFromString(serializedSignal); 
     }
 
     bool SerializeToString(TString& str) const override {

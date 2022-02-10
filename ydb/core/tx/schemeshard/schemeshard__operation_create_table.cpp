@@ -191,7 +191,7 @@ public:
             context.SS->FillTableDescription(txState->TargetPathId, i, NEW_TABLE_ALTER_VERSION, tableDesc);
 
             TString txBody;
-            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody); 
 
             THolder<TEvDataShard::TEvProposeTransaction> event =
                 THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME,

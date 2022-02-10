@@ -1,6 +1,6 @@
 #include "accessors.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/buffer.h>
 #include <util/generic/vector.h>

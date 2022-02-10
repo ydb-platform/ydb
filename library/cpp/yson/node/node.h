@@ -79,21 +79,21 @@ public:
     TNode(TString s);
     TNode(int i);
 
-    //this case made speccially for prevent mess cast of EType into TNode through TNode(int) constructor
+    //this case made speccially for prevent mess cast of EType into TNode through TNode(int) constructor 
     //usual case of error SomeNode == TNode::Undefined <-- SomeNode indeed will be compared with TNode(0) without this method
     //correct way is SomeNode.GetType() == TNode::Undefined
-    template<class T = EType>
-    Y_FORCE_INLINE TNode(EType)
-    {
-        static_assert(!std::is_same<T, EType>::value, "looks like a mistake, may be you forget .GetType()");
-    }
-
-    //this case made speccially for prevent mess cast of T* into TNode through implicit bool ctr
-    template<class T = int>
-    Y_FORCE_INLINE TNode(const T*) : TNode() {
-        static_assert(!std::is_same<T,T>::value, "looks like a mistake, and pointer have converted to bool");
-    }
-
+    template<class T = EType> 
+    Y_FORCE_INLINE TNode(EType) 
+    { 
+        static_assert(!std::is_same<T, EType>::value, "looks like a mistake, may be you forget .GetType()"); 
+    } 
+ 
+    //this case made speccially for prevent mess cast of T* into TNode through implicit bool ctr 
+    template<class T = int> 
+    Y_FORCE_INLINE TNode(const T*) : TNode() { 
+        static_assert(!std::is_same<T,T>::value, "looks like a mistake, and pointer have converted to bool"); 
+    } 
+ 
     TNode(unsigned int ui);
     TNode(long i);
     TNode(unsigned long ui);

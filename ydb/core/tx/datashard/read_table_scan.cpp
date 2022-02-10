@@ -209,7 +209,7 @@ private:
             meta->mutable_type()->mutable_optional_type()->mutable_item()->mutable_data_type()->set_id(id);
         }
         res.set_truncated(true);
-        Y_PROTOBUF_SUPPRESS_NODISCARD res.SerializeToString(&ResultCommon);
+        Y_PROTOBUF_SUPPRESS_NODISCARD res.SerializeToString(&ResultCommon); 
     }
 
     YdbOld::ResultSet OldResultSet;
@@ -258,7 +258,7 @@ private:
             }
         }
         res.set_truncated(true);
-        Y_PROTOBUF_SUPPRESS_NODISCARD res.SerializeToString(&ResultCommon);
+        Y_PROTOBUF_SUPPRESS_NODISCARD res.SerializeToString(&ResultCommon); 
     }
 
     Ydb::ResultSet YdbResultSet;

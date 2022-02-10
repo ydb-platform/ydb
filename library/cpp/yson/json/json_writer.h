@@ -36,13 +36,13 @@ namespace NYT {
             EJsonAttributesMode attributesMode = JAM_ON_DEMAND,
             ESerializedBoolFormat booleanFormat = SBF_STRING);
 
-        TJsonWriter(
-            IOutputStream* output,
-            NJson::TJsonWriterConfig config,
+        TJsonWriter( 
+            IOutputStream* output, 
+            NJson::TJsonWriterConfig config, 
             ::NYson::EYsonType type = ::NYson::EYsonType::Node,
-            EJsonAttributesMode attributesMode = JAM_ON_DEMAND,
-            ESerializedBoolFormat booleanFormat = SBF_STRING);
-
+            EJsonAttributesMode attributesMode = JAM_ON_DEMAND, 
+            ESerializedBoolFormat booleanFormat = SBF_STRING); 
+ 
         void Flush();
 
         void OnStringScalar(TStringBuf value) override;

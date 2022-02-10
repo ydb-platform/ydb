@@ -1,6 +1,6 @@
 #include "event_pb.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <library/cpp/actors/protos/unittests.pb.h>
 
 Y_UNIT_TEST_SUITE(TEventSerialization) {
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TEventSerialization) {
         bm.SetYANumber(394143);
 
         TString bmSerialized;
-        Y_PROTOBUF_SUPPRESS_NODISCARD bm.SerializeToString(&bmSerialized);
+        Y_PROTOBUF_SUPPRESS_NODISCARD bm.SerializeToString(&bmSerialized); 
         UNIT_ASSERT_UNEQUAL(bmSerialized.size(), 0);
 
         NActors::TCoroutineChunkSerializer chunker;

@@ -7,7 +7,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/map.h>
 

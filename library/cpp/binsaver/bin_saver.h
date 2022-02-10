@@ -3,7 +3,7 @@
 #include "buffered_io.h"
 #include "class_factory.h"
 
-#include <library/cpp/containers/2d_array/2d_array.h>
+#include <library/cpp/containers/2d_array/2d_array.h> 
 
 #include <util/generic/hash_set.h>
 #include <util/generic/buffer.h>
@@ -630,7 +630,7 @@ struct TRegisterSaveLoadType {
         f.AddMulti(__VA_ARGS__);            \
         return 0;                           \
     }
-
+ 
 #define SAVELOAD_OVERRIDE(base, ...)       \
     int operator&(IBinSaver& f) override { \
         base::operator&(f);                \
@@ -643,4 +643,4 @@ struct TRegisterSaveLoadType {
         TBase::operator&(f);      \
         f.AddMulti(__VA_ARGS__);  \
         return 0;                 \
-    }
+    } 

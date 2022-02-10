@@ -14,7 +14,7 @@
 
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <google/protobuf/text_format.h>
 
 #include <util/system/valgrind.h>
@@ -421,7 +421,7 @@ NKikimrMiniKQL::TResult TFakeProxyTx::GetResult() const {
 
 ui32 TFakeScanTx::SetProgram(TTester& tester) {
     NKikimrTxDataShard::TDataTransaction dataTransaction;
-    Y_PROTOBUF_SUPPRESS_NODISCARD dataTransaction.ParseFromArray(TxBody_.data(), TxBody_.size());
+    Y_PROTOBUF_SUPPRESS_NODISCARD dataTransaction.ParseFromArray(TxBody_.data(), TxBody_.size()); 
     ActorIdToProto(tester.Sender, dataTransaction.MutableSink());
     TxBody_ = dataTransaction.SerializeAsString();
 

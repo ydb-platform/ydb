@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include "blobstorage_groupinfo_iter.h"
 
 using namespace NKikimr;

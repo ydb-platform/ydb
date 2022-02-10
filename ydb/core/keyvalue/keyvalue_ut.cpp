@@ -3,7 +3,7 @@
 #include "keyvalue_state.h"
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <util/random/fast.h>
 
 const bool ENABLE_DETAILED_KV_LOG = false;

@@ -11,7 +11,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/filestore/core/filestore.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 
 static const bool ENABLE_SCHEMESHARD_LOG = true;

@@ -117,7 +117,7 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
 
             rsBody.reserve(SnapshotTransferReadSetMagic.size() + rs.ByteSizeLong());
             rsBody.append(SnapshotTransferReadSetMagic);
-            Y_PROTOBUF_SUPPRESS_NODISCARD rs.AppendToString(&rsBody);
+            Y_PROTOBUF_SUPPRESS_NODISCARD rs.AppendToString(&rsBody); 
         } else {
             // Legacy format, no additional protobuf layer
             rsBody = snapBody;

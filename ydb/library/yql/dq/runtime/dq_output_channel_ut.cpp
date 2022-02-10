@@ -6,7 +6,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_value_builder.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 using namespace NActors;
 using namespace NKikimr;

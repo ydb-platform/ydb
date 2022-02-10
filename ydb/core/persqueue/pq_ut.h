@@ -19,7 +19,7 @@
 #include <ydb/core/testlib/fake_scheme_shard.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
@@ -1077,7 +1077,7 @@ void FillUserInfo(NKikimrClient::TKeyValueRequest_TCmdWrite* write, TString& cli
     userInfo.SetOffsetRewindSum(10);
     userInfo.SetReadRuleGeneration(1);
     TString out;
-    Y_PROTOBUF_SUPPRESS_NODISCARD userInfo.SerializeToString(&out);
+    Y_PROTOBUF_SUPPRESS_NODISCARD userInfo.SerializeToString(&out); 
 
     TBuffer idata;
     idata.Append(out.c_str(), out.size());

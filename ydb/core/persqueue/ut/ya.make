@@ -20,7 +20,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/getopt
+    library/cpp/getopt 
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/testlib

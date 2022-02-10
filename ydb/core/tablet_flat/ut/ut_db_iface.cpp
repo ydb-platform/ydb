@@ -2,7 +2,7 @@
 #include <ydb/core/tablet_flat/test/libs/table/test_dbase.h>
 #include <ydb/core/tablet_flat/test/libs/rows/cook.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <util/stream/file.h>
 
 namespace NKikimr {

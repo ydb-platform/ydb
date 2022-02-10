@@ -110,7 +110,7 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
                     return false;
                 } else if (table.IsValid()) {
                     TString pdiskConfig;
-                    Y_PROTOBUF_SUPPRESS_NODISCARD pdisk.GetPDiskConfig().SerializeToString(&pdiskConfig);
+                    Y_PROTOBUF_SUPPRESS_NODISCARD pdisk.GetPDiskConfig().SerializeToString(&pdiskConfig); 
                     updates.emplace_back(key.GetKey(), TUpdateItem(pdisk.GetPDiskCategory(), pdisk.GetPDiskGuid(), pdiskConfig));
                 }
             }

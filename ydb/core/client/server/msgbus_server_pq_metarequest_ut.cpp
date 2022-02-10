@@ -12,7 +12,7 @@
 #include <ydb/core/testlib/mock_pq_metacache.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/is_in.h>
 #include <util/string/join.h>

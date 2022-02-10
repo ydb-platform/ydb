@@ -21,7 +21,7 @@ TTraceID GetPbTraceID(const NKikimrTracing::TTraceID& proto) {
 
 TTrace::TTrace(const TString& serializedTrace) {
     NKikimrTracing::TTraceSignal pbTraceSignal;
-    Y_PROTOBUF_SUPPRESS_NODISCARD pbTraceSignal.ParseFromString(serializedTrace);
+    Y_PROTOBUF_SUPPRESS_NODISCARD pbTraceSignal.ParseFromString(serializedTrace); 
     Type = static_cast<ITrace::EType>(pbTraceSignal.GetType());
     SelfID = GetPbTraceID(pbTraceSignal.GetSelfID());
     ParentID = GetPbTraceID(pbTraceSignal.GetParentID());

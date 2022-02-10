@@ -10,7 +10,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/actor_helpers.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 namespace NKikimr {
 

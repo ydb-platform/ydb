@@ -1,4 +1,4 @@
-UNITTEST_FOR(library/cpp/threading/light_rw_lock)
+UNITTEST_FOR(library/cpp/threading/light_rw_lock) 
 
 OWNER(agri)
 

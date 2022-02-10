@@ -1,6 +1,6 @@
 #include "helpers.h"
 
-#include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/string_utils/base64/base64.h> 
 
 #include <util/charset/utf8.h>
 #include <util/generic/array_size.h>
@@ -122,7 +122,7 @@ bool ValidateQueueNameOrUserName(TStringBuf name) {
 
 static TString ProtobufToString(const NProtoBuf::Message& proto) {
     TString ret;
-    Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&ret);
+    Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&ret); 
     return ret;
 }
 

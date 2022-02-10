@@ -5,7 +5,7 @@
 #include <util/string/cast.h>
 #include <util/system/thread.h>
 #include <util/system/event.h>
-#include <util/system/env.h>
+#include <util/system/env.h> 
 
 #include <cstdlib>
 
@@ -28,7 +28,7 @@ public:
     TTimeKeeper()
         : Thread(&TTimeKeeper::Worker, this)
     {
-        ConstTime = !!GetEnv("TEST_TIME");
+        ConstTime = !!GetEnv("TEST_TIME"); 
         if (ConstTime) {
             try {
                 CurrentTime.tv_sec = FromString<ui32>(GetEnv("TEST_TIME"));

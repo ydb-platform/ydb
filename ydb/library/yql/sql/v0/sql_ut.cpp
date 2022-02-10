@@ -3,7 +3,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <util/generic/map.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/string/split.h>
 

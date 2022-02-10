@@ -461,7 +461,7 @@ void TMessageBusServer::InitSession(TActorSystem *actorSystem, const TActorId &p
 }
 
 void TMessageBusServer::ShutdownSession() {
-    HttpServer.Reset();
+    HttpServer.Reset(); 
     if (Session) {
         Session->Shutdown();
     }

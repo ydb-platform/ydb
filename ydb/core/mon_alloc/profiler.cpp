@@ -11,7 +11,7 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 
 #if defined(PROFILE_MEMORY_ALLOCATIONS)
-#include <library/cpp/lfalloc/alloc_profiler/profiler.h>
+#include <library/cpp/lfalloc/alloc_profiler/profiler.h> 
 #include <library/cpp/ytalloc/api/ytalloc.h>
 #endif
 

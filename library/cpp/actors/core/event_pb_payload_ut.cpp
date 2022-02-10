@@ -1,7 +1,7 @@
 #include "event_pb.h"
 #include "events.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <library/cpp/actors/protos/unittests.pb.h>
 
 using namespace NActors;
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         msg.AddSomeData("xyzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz");
 
         TEvMessageWithPayloadPreSerialized e1;
-        Y_PROTOBUF_SUPPRESS_NODISCARD msg.SerializeToString(&e1.PreSerializedData);
+        Y_PROTOBUF_SUPPRESS_NODISCARD msg.SerializeToString(&e1.PreSerializedData); 
 
         auto serializer1 = MakeHolder<TAllocChunkSerializer>();
         e1.SerializeToArcadiaStream(serializer1.Get());

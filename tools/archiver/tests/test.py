@@ -64,5 +64,5 @@ class TestArchiver(object):
         with open('result_dedup', 'rb') as f_dedup, open('result_no_dedup', 'rb') as f_no_dedup:
             archive_dedup = f_dedup.read()
             archive_no_dedup = f_no_dedup.read()
-        assert len(archive_dedup) == 58
-        assert len(archive_no_dedup) == 75
+        assert len(archive_dedup) == 58 
+        assert len(archive_no_dedup) == 75 

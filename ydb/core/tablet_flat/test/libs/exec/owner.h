@@ -11,7 +11,7 @@
 #include <ydb/core/tablet/tablet_setup.h>
 #include <ydb/core/tablet_flat/util_fmt_logger.h>
 #include <ydb/core/tablet_flat/util_fmt_abort.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 namespace NKikimr {
 namespace NFake {

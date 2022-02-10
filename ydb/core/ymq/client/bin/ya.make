@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/getopt
+    library/cpp/getopt 
     ydb/core/ymq/client/cpp
     ydb/core/ymq/proto
 )

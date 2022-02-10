@@ -1,7 +1,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/stream/str.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include "maybe.h"
 
@@ -150,11 +150,11 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
 
         UNIT_ASSERT(m == 1);
 
-        auto& x = m.ConstructInPlace(2);
+        auto& x = m.ConstructInPlace(2); 
 
         UNIT_ASSERT(m == 2);
-        x = 7;
-        UNIT_ASSERT(m == 7);
+        x = 7; 
+        UNIT_ASSERT(m == 7); 
     }
 
     Y_UNIT_TEST(TestMove) {

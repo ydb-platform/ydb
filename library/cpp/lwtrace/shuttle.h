@@ -2,7 +2,7 @@
 
 #include "event.h"
 
-#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h> 
 
 #include <util/generic/ptr.h>
 #include <util/system/spinlock.h>

@@ -14,9 +14,9 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/getopt
+    library/cpp/getopt 
     library/cpp/svnversion
-    library/cpp/threading/future
+    library/cpp/threading/future 
 )
 
 SRCS(

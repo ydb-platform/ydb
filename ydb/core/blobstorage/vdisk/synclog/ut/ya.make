@@ -9,9 +9,9 @@ TIMEOUT(600)
 SIZE(MEDIUM)
 
 PEERDIR(
-    library/cpp/getopt
+    library/cpp/getopt 
     library/cpp/svnversion
-    library/cpp/testing/unittest
+    library/cpp/testing/unittest 
     ydb/core/base
     ydb/core/blobstorage
 )

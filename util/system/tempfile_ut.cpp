@@ -1,6 +1,6 @@
 #include "tempfile.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/folder/dirut.h>
 #include <util/generic/yexception.h>
@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TTempFileHandle) {
             tmp.FlushData();
             UNIT_ASSERT_STRINGS_EQUAL(TUnbufferedFileInput(tmp.Name()).ReadAll(), "hello world\n");
         }
-        UNIT_ASSERT(!NFs::Exists(path));
+        UNIT_ASSERT(!NFs::Exists(path)); 
     }
 
     Y_UNIT_TEST(InCurrentDir) {

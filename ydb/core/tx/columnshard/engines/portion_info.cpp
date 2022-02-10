@@ -185,7 +185,7 @@ TString TPortionInfo::GetMetadata(const TColumnRecord& rec) const {
     }
 
     TString out;
-    Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out);
+    Y_PROTOBUF_SUPPRESS_NODISCARD meta.SerializeToString(&out); 
     return out;
 }
 

@@ -1,7 +1,7 @@
 #include "merge.h"
 #include <library/cpp/protobuf/util/ut/common_ut.pb.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 using namespace NProtoBuf;
 

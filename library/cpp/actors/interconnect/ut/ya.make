@@ -30,7 +30,7 @@ PEERDIR(
     library/cpp/actors/interconnect/ut/protos
     library/cpp/actors/testlib
     library/cpp/digest/md5
-    library/cpp/testing/unittest
+    library/cpp/testing/unittest 
 )
 
 END()

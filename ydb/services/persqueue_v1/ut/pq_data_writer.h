@@ -5,7 +5,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/string.h>
 

@@ -4,7 +4,7 @@
 #include <library/cpp/actors/core/event_load.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/actor.h>
-#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h> 
 #include <library/cpp/actors/util/rope.h>
 #include <library/cpp/actors/prof/tag.h>
 #include <library/cpp/digest/crc32c/crc32c.h>

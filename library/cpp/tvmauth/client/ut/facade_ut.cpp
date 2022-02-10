@@ -3,7 +3,7 @@
 #include <library/cpp/tvmauth/client/facade.h>
 #include <library/cpp/tvmauth/client/mocked_updater.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/vector.h>
 

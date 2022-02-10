@@ -30,7 +30,7 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
     library/cpp/scheme
-    library/cpp/string_utils/base64
+    library/cpp/string_utils/base64 
     ydb/core/base
     ydb/core/protos
     ydb/core/ymq/proto

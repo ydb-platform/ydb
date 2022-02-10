@@ -91,29 +91,29 @@ int cmp_dird(dird fd1, dird fd2) {
 #else // ndef _win_
 
 int stat64UTF(const char* path, struct _stat64* _Stat) {
-    int len_converted = MultiByteToWideChar(CP_UTF8, 0, path, -1, 0, 0);
-    if (len_converted == 0) {
-        return -1;
-    }
+    int len_converted = MultiByteToWideChar(CP_UTF8, 0, path, -1, 0, 0); 
+    if (len_converted == 0) { 
+        return -1; 
+    } 
     WCHAR* buf = (WCHAR*)malloc(sizeof(WCHAR) * (len_converted));
-    if (buf == nullptr) {
-        return -1;
-    }
-    MultiByteToWideChar(CP_UTF8, 0, path, -1, buf, len_converted);
-
-    int ret = _wstat64(buf, _Stat);
-    free(buf);
-    return ret;
-}
-
-int stat64UTF(dird path, struct _stat64* _Stat) {
-    return _wstat64(path, _Stat);
-}
-
+    if (buf == nullptr) { 
+        return -1; 
+    } 
+    MultiByteToWideChar(CP_UTF8, 0, path, -1, buf, len_converted); 
+ 
+    int ret = _wstat64(buf, _Stat); 
+    free(buf); 
+    return ret; 
+} 
+ 
+int stat64UTF(dird path, struct _stat64* _Stat) { 
+    return _wstat64(path, _Stat); 
+} 
+ 
 const dird invalidDirD = nullptr;
 
 dird get_cwdd() {
-    return _wgetcwd(nullptr, 0);
+    return _wgetcwd(nullptr, 0); 
 }
 
 int valid_dird(dird fd) {
@@ -125,42 +125,42 @@ void close_dird(dird fd) {
 }
 
 int chdir_dird(dird fd) {
-    return _wchdir(fd);
+    return _wchdir(fd); 
 }
 
-int chdir_dird(const char* path) {
-    int len_converted = MultiByteToWideChar(CP_UTF8, 0, path, -1, 0, 0);
-    if (len_converted == 0) {
-        return -1;
-    }
+int chdir_dird(const char* path) { 
+    int len_converted = MultiByteToWideChar(CP_UTF8, 0, path, -1, 0, 0); 
+    if (len_converted == 0) { 
+        return -1; 
+    } 
     WCHAR* buf = (WCHAR*)malloc(sizeof(WCHAR) * (len_converted));
-    if (buf == nullptr) {
-        return -1;
-    }
-    MultiByteToWideChar(CP_UTF8, 0, path, -1, buf, len_converted);
-    int ret = _wchdir(buf);
-    free(buf);
-    return ret;
-}
-
+    if (buf == nullptr) { 
+        return -1; 
+    } 
+    MultiByteToWideChar(CP_UTF8, 0, path, -1, buf, len_converted); 
+    int ret = _wchdir(buf); 
+    free(buf); 
+    return ret; 
+} 
+ 
 int cmp_dird(dird fd1, dird fd2) {
-    return lstrcmpW(fd1, fd2);
+    return lstrcmpW(fd1, fd2); 
 }
 
 dird get_dird(char* path) {
-    int len_converted = MultiByteToWideChar(CP_UTF8, 0, path, -1, 0, 0);
-    if (len_converted == 0) {
-        return nullptr;
-    }
+    int len_converted = MultiByteToWideChar(CP_UTF8, 0, path, -1, 0, 0); 
+    if (len_converted == 0) { 
+        return nullptr; 
+    } 
     WCHAR* buf = (WCHAR*)malloc(sizeof(WCHAR) * (len_converted));
-    if (buf == nullptr) {
-        return nullptr;
-    }
-    MultiByteToWideChar(CP_UTF8, 0, path, -1, buf, len_converted);
-
+    if (buf == nullptr) { 
+        return nullptr; 
+    } 
+    MultiByteToWideChar(CP_UTF8, 0, path, -1, buf, len_converted); 
+ 
     WCHAR* ret = _wfullpath(0, buf, 0);
-
-    free(buf);
+ 
+    free(buf); 
     return ret;
 }
 
@@ -1404,29 +1404,29 @@ fts_safe_changedir(FTS* sp, FTSENT* p, int /*fd*/, const char* path)
         ret = -1;
         goto bail;
     }
-    ret = chdir_dird(path);
+    ret = chdir_dird(path); 
 bail:
     return (ret);
 }
-
-static int
-fts_safe_changedir(FTS* sp, FTSENT* p, int /*fd*/, dird path) {
-    int ret;
-    stat_struct sb;
-
-    if (ISSET(FTS_NOCHDIR))
-        return (0);
-    if (STAT_FUNC(path, &sb)) {
-        ret = -1;
-        goto bail;
-    }
-    if (p->fts_dev != sb.st_dev) {
+ 
+static int 
+fts_safe_changedir(FTS* sp, FTSENT* p, int /*fd*/, dird path) { 
+    int ret; 
+    stat_struct sb; 
+ 
+    if (ISSET(FTS_NOCHDIR)) 
+        return (0); 
+    if (STAT_FUNC(path, &sb)) { 
+        ret = -1; 
+        goto bail; 
+    } 
+    if (p->fts_dev != sb.st_dev) { 
         errno = ENOENT; /* disinformation */
-        ret = -1;
-        goto bail;
-    }
-    ret = chdir_dird(path);
-bail:
-    return (ret);
-}
+        ret = -1; 
+        goto bail; 
+    } 
+    ret = chdir_dird(path); 
+bail: 
+    return (ret); 
+} 
 #endif

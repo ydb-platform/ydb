@@ -269,8 +269,8 @@ namespace NKikimr::NBsController {
                 // update operation log for write transaction
                 NIceDb::TNiceDb db(txc.DB);
                 TString requestBuffer, responseBuffer;
-                Y_PROTOBUF_SUPPRESS_NODISCARD Cmd.SerializeToString(&requestBuffer);
-                Y_PROTOBUF_SUPPRESS_NODISCARD Response->SerializeToString(&responseBuffer);
+                Y_PROTOBUF_SUPPRESS_NODISCARD Cmd.SerializeToString(&requestBuffer); 
+                Y_PROTOBUF_SUPPRESS_NODISCARD Response->SerializeToString(&responseBuffer); 
                 db.Table<Schema::OperationLog>().Key(Self->NextOperationLogIndex).Update(
                     NIceDb::TUpdate<Schema::OperationLog::Timestamp>(TActivationContext::Now()),
                     NIceDb::TUpdate<Schema::OperationLog::Request>(requestBuffer),

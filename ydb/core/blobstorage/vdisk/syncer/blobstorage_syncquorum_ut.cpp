@@ -1,5 +1,5 @@
 #include "blobstorage_syncquorum.h"
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <util/random/shuffle.h>
 #include <util/stream/null.h>
 

@@ -1,6 +1,6 @@
 #include "defs.h"
 #include "vdisk_outofspace.h"
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <util/generic/ptr.h>
 #include <util/stream/null.h>
 #include <util/system/thread.h>

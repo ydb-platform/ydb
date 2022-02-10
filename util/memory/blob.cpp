@@ -179,7 +179,7 @@ static inline TBlob CopyConstruct(const void* data, size_t len) {
     memcpy(base->Data(), data, len);
 
     TBlob ret(base->Data(), len, base.Get());
-    Y_UNUSED(base.Release());
+    Y_UNUSED(base.Release()); 
 
     return ret;
 }
@@ -201,7 +201,7 @@ static inline TBlob ConstructFromMap(const TMemoryMap& map, ui64 offset, size_t 
     using TBase = TMappedBlobBase<TCounter>;
     THolder<TBase> base(new TBase(map, offset, length, mode));
     TBlob ret(base->Data(), base->Length(), base.Get());
-    Y_UNUSED(base.Release());
+    Y_UNUSED(base.Release()); 
 
     return ret;
 }
@@ -310,7 +310,7 @@ static inline TBlob ReadFromFile(const TFile& file, ui64 offset, size_t length) 
     file.Pload(base->Data(), length, offset);
 
     TBlob ret(base->Data(), length, base.Get());
-    Y_UNUSED(base.Release());
+    Y_UNUSED(base.Release()); 
 
     return ret;
 }
@@ -356,7 +356,7 @@ static inline TBlob ConstructFromBuffer(TBuffer& in) {
     THolder<TBase> base(new TBase(in));
 
     TBlob ret(base->Buffer().Data(), base->Buffer().Size(), base.Get());
-    Y_UNUSED(base.Release());
+    Y_UNUSED(base.Release()); 
 
     return ret;
 }
@@ -396,7 +396,7 @@ TBlob ConstructFromString(S&& s) {
     auto base = MakeHolder<TBase>(std::forward<S>(s));
 
     TBlob ret(base->String().data(), base->String().size(), base.Get());
-    Y_UNUSED(base.Release());
+    Y_UNUSED(base.Release()); 
 
     return ret;
 }

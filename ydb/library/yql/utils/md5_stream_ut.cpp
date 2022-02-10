@@ -1,7 +1,7 @@
 #include "md5_stream.h"
 #include <util/stream/input.h>
 #include <util/stream/str.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 using namespace NYql;
 

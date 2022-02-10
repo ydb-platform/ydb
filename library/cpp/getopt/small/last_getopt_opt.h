@@ -1,25 +1,25 @@
-#pragma once
-
+#pragma once 
+ 
 #include "completer.h"
-#include "last_getopt_handlers.h"
-
-#include <util/string/split.h>
-#include <util/generic/ptr.h>
+#include "last_getopt_handlers.h" 
+ 
+#include <util/string/split.h> 
+#include <util/generic/ptr.h> 
 #include <util/generic/string.h>
-#include <util/generic/maybe.h>
-#include <util/generic/vector.h>
+#include <util/generic/maybe.h> 
+#include <util/generic/vector.h> 
 #include <util/string/cast.h>
-
-#include <stdarg.h>
-
-namespace NLastGetopt {
+ 
+#include <stdarg.h> 
+ 
+namespace NLastGetopt { 
     enum EHasArg {
         NO_ARGUMENT,
         REQUIRED_ARGUMENT,
         OPTIONAL_ARGUMENT,
         DEFAULT_HAS_ARG = REQUIRED_ARGUMENT
     };
-
+ 
     /**
      * NLastGetopt::TOpt is a storage of data about exactly one program option.
      * The data is: parse politics and help information.
@@ -44,25 +44,25 @@ namespace NLastGetopt {
     public:
         typedef TVector<char> TShortNames;
         typedef TVector<TString> TLongNames;
-
+ 
     protected:
         TShortNames Chars_;
         TLongNames LongNames_;
-
+ 
     private:
         typedef TMaybe<TString> TdOptVal;
         typedef TVector<TSimpleSharedPtr<IOptHandler>> TOptHandlers;
-
+ 
     public:
         bool Hidden_ = false;       // is visible in help
         TString ArgTitle_;          // the name of argument in help output
         TString Help_;              // the help string
         TString CompletionHelp_;    // the help string that's used in completion script, a shorter version of Help_
         TString CompletionArgHelp_; // the description of argument in completion script
-
+ 
         EHasArg HasArg_ = DEFAULT_HAS_ARG; // the argument parsing politics
         bool Required_ = false;            // option existence politics
-
+ 
         bool AllowMultipleCompletion_ = false; // let the completer know that this option can occur more than once
 
         bool DisableCompletionForOptions_ = false;
@@ -78,48 +78,48 @@ namespace NLastGetopt {
         TdOptVal OptionalValue_;
         TdOptVal DefaultValue_;
         TOptHandlers Handlers_;
-
+ 
     public:
         /**
          *  Checks if given char can be a short name
          *  @param c               char to check
          */
         static bool IsAllowedShortName(unsigned char c);
-
+ 
         /**
          *  Checks if given string can be a long name
          *  @param name            string to check
          *  @param c               if given, the first bad charecter will be saved in c
          */
         static bool IsAllowedLongName(const TString& name, unsigned char* c = nullptr);
-
+ 
         /**
          *  @return one of the expected representations of the option.
          *  If the option has short names, will return "-<char>"
          *  Otherwise will return "--<long name>"
          */
         TString ToShortString() const;
-
+ 
         /**
          *  check if given string is one of the long names
          *
          *  @param name               string to check
          */
         bool NameIs(const TString& name) const;
-
+ 
         /**
          *  check if given char is one of the short names
          *
          *  @param c               char to check
          */
         bool CharIs(char c) const;
-
+ 
         /**
          *  If string has long names - will return one of them
          *  Otherwise will throw
          */
         TString GetName() const;
-
+ 
         /**
          *  adds short alias for the option
          *
@@ -128,14 +128,14 @@ namespace NLastGetopt {
          *  @return self
          */
         TOpt& AddShortName(unsigned char c);
-
+ 
         /**
          *  return all short names of the option
          */
         const TShortNames& GetShortNames() const {
             return Chars_;
         }
-
+ 
         /**
          *  adds long alias for the option
          *
@@ -144,31 +144,31 @@ namespace NLastGetopt {
          *  @return self
          */
         TOpt& AddLongName(const TString& name);
-
+ 
         /**
          *  return all long names of the option
          */
         const TLongNames& GetLongNames() const {
             return LongNames_;
         }
-
+ 
         /**
          *  @return one of short names of the opt. If there is no short names exception is raised.
          */
         char GetChar() const;
-
+ 
         /**
          *  @return one of short names of the opt. If there is no short names '\0' returned.
          */
         char GetCharOr0() const;
-
+ 
         /**
          *  @returns argument parsing politics
          */
         const EHasArg& GetHasArg() const {
             return HasArg_;
         }
-
+ 
         /**
          *  sets argument parsing politics
          *
@@ -181,14 +181,14 @@ namespace NLastGetopt {
             HasArg_ = hasArg;
             return *this;
         }
-
+ 
         /**
          *  @returns argument title
          */
         TString GetArgTitle() const {
             return ArgTitle_;
         }
-
+ 
         /**
          *  sets argument parsing politics into REQUIRED_ARGUMENT
          *
@@ -199,7 +199,7 @@ namespace NLastGetopt {
             ArgTitle_ = title;
             return HasArg(REQUIRED_ARGUMENT);
         }
-
+ 
         /**
          *  sets argument parsing politics into NO_ARGUMENT
          *
@@ -208,7 +208,7 @@ namespace NLastGetopt {
         TOpt& NoArgument() {
             return HasArg(NO_ARGUMENT);
         }
-
+ 
         /**
          *  sets argument parsing politics into OPTIONAL_ARGUMENT
          *  for details see NLastGetopt::TOpt
@@ -220,7 +220,7 @@ namespace NLastGetopt {
             ArgTitle_ = title;
             return HasArg(OPTIONAL_ARGUMENT);
         }
-
+ 
         /**
          *  sets argument parsing politics into OPTIONAL_ARGUMENT
          *  sets the <optional value> into given
@@ -235,14 +235,14 @@ namespace NLastGetopt {
             OptionalValue_ = val;
             return OptionalArgument(title);
         }
-
+ 
         /**
          *  checks if "argument parsing politics" is OPTIONAL_ARGUMENT and the <optional value> is set.
          */
         bool HasOptionalValue() const {
             return OPTIONAL_ARGUMENT == HasArg_ && OptionalValue_;
         }
-
+ 
         /**
          *  @return optional value
          *  throws exception if optional value wasn't set
@@ -250,7 +250,7 @@ namespace NLastGetopt {
         const TString& GetOptionalValue() const {
             return *OptionalValue_;
         }
-
+ 
         /**
          *  sets <default value>
          *  @return self
@@ -260,14 +260,14 @@ namespace NLastGetopt {
             DefaultValue_ = ToString(val);
             return *this;
         }
-
+ 
         /**
          *  checks if default value is set.
          */
         bool HasDefaultValue() const {
             return DefaultValue_.Defined();
         }
-
+ 
         /**
          *  @return default value
          *  throws exception if <default value> wasn't set
@@ -275,7 +275,7 @@ namespace NLastGetopt {
         const TString& GetDefaultValue() const {
             return *DefaultValue_;
         }
-
+ 
         /**
          *  sets the option to be required
          *  @return self
@@ -284,7 +284,7 @@ namespace NLastGetopt {
             Required_ = true;
             return *this;
         }
-
+ 
         /**
          *  sets the option to be optional
          *  @return self
@@ -293,14 +293,14 @@ namespace NLastGetopt {
             Required_ = false;
             return *this;
         }
-
+ 
         /**
          *  @return true if the option is required
          */
         bool IsRequired() const {
             return Required_;
         }
-
+ 
         /**
          *  sets the option to be hidden (invisible in help)
          *  @return self
@@ -309,14 +309,14 @@ namespace NLastGetopt {
             Hidden_ = true;
             return *this;
         }
-
+ 
         /**
          *  @return true if the option is hidden
          */
         bool IsHidden() const {
             return Hidden_;
         }
-
+ 
         /**
          *  sets the <user value>
          *  @return self
@@ -326,14 +326,14 @@ namespace NLastGetopt {
             UserValue_ = userval;
             return *this;
         }
-
+ 
         /**
          *  @return user value
          */
         const void* UserValue() const {
             return UserValue_;
         }
-
+ 
         /**
          * Set help string that appears with `--help`. Unless `CompletionHelp` is given, this message will also be used
          * in completion script. In this case, don't make it too long, don't start it with a capital letter and don't
@@ -371,14 +371,14 @@ namespace NLastGetopt {
             Help_ = help;
             return *this;
         }
-
+ 
         /**
          * Get help string.
          */
         const TString& GetHelp() const {
             return Help_;
         }
-
+ 
         /**
          * Set help string that appears when argument completer lists available options.
          *
@@ -546,19 +546,19 @@ namespace NLastGetopt {
          * Run handlers for this option.
          */
         void FireHandlers(const TOptsParser* parser) const;
-
+ 
     private:
         TOpt& HandlerImpl(IOptHandler* handler) {
             Handlers_.push_back(handler);
             return *this;
         }
-
+ 
     public:
         template <typename TpFunc>
         TOpt& Handler0(TpFunc func) { // functor taking no parameters
             return HandlerImpl(new NPrivate::THandlerFunctor0<TpFunc>(func));
         }
-
+ 
         template <typename TpFunc>
         TOpt& Handler1(TpFunc func) { // functor taking one parameter
             return HandlerImpl(new NPrivate::THandlerFunctor1<TpFunc>(func));
@@ -575,35 +575,35 @@ namespace NLastGetopt {
         TOpt& Handler1T2(const TpArg2& def, TpFunc func) {
             return HandlerImpl(new NPrivate::THandlerFunctor1<TpFunc, TpArg>(func, def));
         }
-
+ 
         TOpt& Handler(void (*f)()) {
             return Handler0(f);
         }
         TOpt& Handler(void (*f)(const TOptsParser*)) {
             return Handler1(f);
         }
-
+ 
         TOpt& Handler(TAutoPtr<IOptHandler> handler) {
             return HandlerImpl(handler.Release());
         }
-
+ 
         template <typename T> // T extends IOptHandler
         TOpt& Handler(TAutoPtr<T> handler) {
             return HandlerImpl(handler.Release());
         }
-
+ 
         // Stores FromString<T>(arg) in *target
         // T maybe anything with FromString<T>(const TStringBuf&) defined
         template <typename TpVal, typename T>
         TOpt& StoreResultT(T* target) {
             return Handler1T<TpVal>(NPrivate::TStoreResultFunctor<T, TpVal>(target));
         }
-
+ 
         template <typename T>
         TOpt& StoreResult(T* target) {
             return StoreResultT<T>(target);
         }
-
+ 
         // Uses TMaybe<T> to store FromString<T>(arg)
         template <typename T>
         TOpt& StoreResult(TMaybe<T>* target) {
@@ -614,12 +614,12 @@ namespace NLastGetopt {
         TOpt& StoreResultT(T* target, const TpDef& def) {
             return Handler1T<TpVal>(def, NPrivate::TStoreResultFunctor<T, TpVal>(target));
         }
-
+ 
         template <typename T, typename TpDef>
         TOpt& StoreResult(T* target, const TpDef& def) {
             return StoreResultT<T>(target, def);
         }
-
+ 
         template <typename T>
         TOpt& StoreResultDef(T* target) {
             DefaultValue_ = ToString(*target);
@@ -636,7 +636,7 @@ namespace NLastGetopt {
         TOpt& SetFlag(bool* target) {
             return DefaultValue("0").StoreResult(target, true);
         }
-
+ 
         // Similar to store_true in Python's argparse
         TOpt& StoreTrue(bool* target) {
             return NoArgument().SetFlag(target);
@@ -646,12 +646,12 @@ namespace NLastGetopt {
         TOpt& StoreMappedResultT(T* target, const TpFunc& func) {
             return Handler1T<TpVal>(NPrivate::TStoreMappedResultFunctor<T, TpFunc, TpVal>(target, func));
         }
-
+ 
         template <typename T, typename TpFunc>
         TOpt& StoreMappedResult(T* target, const TpFunc& func) {
             return StoreMappedResultT<T>(target, func);
         }
-
+ 
         // Stores given value in *target if the option is present.
         // TValue must be a copyable type, constructible from TParam.
         // T must be a copyable type, assignable from TValue.
@@ -659,25 +659,25 @@ namespace NLastGetopt {
         TOpt& StoreValueT(T* target, const TParam& value) {
             return Handler1(NPrivate::TStoreValueFunctor<T, TValue>(target, value));
         }
-
+ 
         // save value as target type
         template <typename T, typename TParam>
         TOpt& StoreValue(T* target, const TParam& value) {
             return StoreValueT<T>(target, value);
         }
-
+ 
         // save value as its original type (2nd template parameter)
         template <typename T, typename TValue>
         TOpt& StoreValue2(T* target, const TValue& value) {
             return StoreValueT<TValue>(target, value);
         }
-
+ 
         // Appends FromString<T>(arg) to *target for each argument
         template <typename T>
         TOpt& AppendTo(TVector<T>* target) {
             return Handler1T<T>([target](auto&& value) { target->push_back(std::move(value)); });
         }
-
+ 
         // Appends FromString<T>(arg) to *target for each argument
         template <typename T>
         TOpt& InsertTo(THashSet<T>* target) {
@@ -694,7 +694,7 @@ namespace NLastGetopt {
         TOpt& SplitHandler(Container* target, const char delim) {
             return Handler(new NLastGetopt::TOptSplitHandler<Container>(target, delim));
         }
-
+ 
         template <class Container>
         TOpt& RangeSplitHandler(Container* target, const char elementsDelim, const char rangesDelim) {
             return Handler(new NLastGetopt::TOptRangeSplitHandler<Container>(target, elementsDelim, rangesDelim));
@@ -705,7 +705,7 @@ namespace NLastGetopt {
             return Handler(new NLastGetopt::TOptKVHandler<TpFunc>(func, kvdelim));
         }
     };
-
+ 
     /**
      * NLastGetopt::TFreeArgSpec is a storage of data about free argument.
      * The data is help information and (maybe) linked named argument.
@@ -722,7 +722,7 @@ namespace NLastGetopt {
             , Optional_(optional)
         {
         }
-
+ 
         TString Title_;
         TString Help_;
         TString CompletionArgHelp_;

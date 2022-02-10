@@ -9,7 +9,7 @@
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/build_info/build_info.h>
 
-namespace NLastGetoptPrivate {
+namespace NLastGetoptPrivate { 
     TString InitVersionString() {
         TString ts = GetProgramSvnVersion();
         ts += "\n";
@@ -21,7 +21,7 @@ namespace NLastGetoptPrivate {
         }
         return ts;
     }
-
+ 
     TString InitShortVersionString() {
         TString ts = GetProgramShortVersionData();
         return ts;
@@ -29,12 +29,12 @@ namespace NLastGetoptPrivate {
 
     TString& VersionString();
     TString& ShortVersionString();
-
-    struct TInit {
+ 
+    struct TInit { 
         TInit() {
-            VersionString() = InitVersionString();
+            VersionString() = InitVersionString(); 
             ShortVersionString() = InitShortVersionString();
-        }
-    } Init;
-
+        } 
+    } Init; 
+ 
 }

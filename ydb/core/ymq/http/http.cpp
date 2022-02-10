@@ -25,9 +25,9 @@
 #include <util/network/init.h>
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
-#include <library/cpp/string_utils/quote/quote.h>
+#include <library/cpp/string_utils/quote/quote.h> 
 #include <util/string/split.h>
-#include <library/cpp/string_utils/url/url.h>
+#include <library/cpp/string_utils/url/url.h> 
 
 namespace NKikimr::NSQS {
 

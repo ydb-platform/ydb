@@ -28,11 +28,11 @@ RECURSE(
     bloom_filter/ut
     bucket_quoter
     build_info
-    cache
+    cache 
     case_insensitive_string
-    cgiparam
-    cgiparam/fuzz
-    cgiparam/ut
+    cgiparam 
+    cgiparam/fuzz 
+    cgiparam/ut 
     charset
     charset/ut
     chromium_trace
@@ -72,8 +72,8 @@ RECURSE(
     dbg_output
     dbg_output/ut
     deprecated
-    diff
-    diff/ut
+    diff 
+    diff/ut 
     digest
     disjoint_sets
     disjoint_sets/ut
@@ -83,9 +83,9 @@ RECURSE(
     dolbilo/ut
     domtree
     domtree/tool
-    dot_product
-    dot_product/bench
-    dot_product/ut
+    dot_product 
+    dot_product/bench 
+    dot_product/ut 
     dwarf_backtrace
     dwarf_backtrace/registry
     edit_distance
@@ -122,8 +122,8 @@ RECURSE(
     file_checker/ut
     flatbuffers64_introspection
     flatbuffers64_introspection/example
-    float16
-    float16/ut
+    float16 
+    float16/ut 
     framing
     framing/ut
     fuid
@@ -138,10 +138,10 @@ RECURSE(
     geohash/ut
     geolocation
     geotarget
-    getopt
-    getopt/last_getopt_demo
-    getopt/small
-    getopt/ut
+    getopt 
+    getopt/last_getopt_demo 
+    getopt/small 
+    getopt/ut 
     getoptpb
     gettimeofday
     gradient_optimize
@@ -262,7 +262,7 @@ RECURSE(
     object_factory
     object_factory/ut
     offroad
-    on_disk
+    on_disk 
     online_hnsw
     online_hnsw/ut
     openssl
@@ -340,7 +340,7 @@ RECURSE(
     sorter/ut
     sqlite3
     sqlite3/ut
-    sse
+    sse 
     ssh
     ssh/ut
     ssh_sign
@@ -358,8 +358,8 @@ RECURSE(
     svnversion
     telfinder
     telfinder/ut
-    terminate_handler
-    terminate_handler/sample
+    terminate_handler 
+    terminate_handler/sample 
     testing
     text_processing
     threading
@@ -438,7 +438,7 @@ IF (OS_WINDOWS)
 ELSE()
     RECURSE(
         fuse
-        sse/ut
+        sse/ut 
         tf
         xdelta3
         zookeeper

@@ -10,7 +10,7 @@ SRCS(
 PEERDIR(
     library/cpp/grpc/client
     library/cpp/regex/pcre
-    library/cpp/testing/unittest
+    library/cpp/testing/unittest 
     ydb/core/base
     ydb/core/client
     ydb/core/client/minikql_compile

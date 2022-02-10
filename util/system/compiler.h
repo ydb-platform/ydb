@@ -187,15 +187,15 @@
     #define Y_PUBLIC
 #endif
 
-#if !defined(Y_UNUSED) && !defined(__cplusplus)
+#if !defined(Y_UNUSED) && !defined(__cplusplus) 
     #define Y_UNUSED(var) (void)(var)
 #endif
-#if !defined(Y_UNUSED) && defined(__cplusplus)
+#if !defined(Y_UNUSED) && defined(__cplusplus) 
 template <class... Types>
 constexpr Y_FORCE_INLINE int Y_UNUSED(Types&&...) {
     return 0;
 };
-#endif
+#endif 
 
 /**
  * @def Y_ASSUME
@@ -553,15 +553,15 @@ _YandexAbort();
 // Memory sanitizer sometimes doesn't correctly set parameter shadow of constant functions.
 #if (defined(__clang__) || defined(__GNUC__)) && !defined(_msan_enabled_)
     /**
- * @def Y_CONST_FUNCTION
-   methods and functions, marked with this method are promised to:
-     1. do not have side effects
-     2. this method do not read global memory
-   NOTE: this attribute can't be set for methods that depend on data, pointed by this
-   this allow compilers to do hard optimization of that functions
-   NOTE: in common case this attribute can't be set if method have pointer-arguments
-   NOTE: as result there no any reason to discard result of such method
-*/
+ * @def Y_CONST_FUNCTION 
+   methods and functions, marked with this method are promised to: 
+     1. do not have side effects 
+     2. this method do not read global memory 
+   NOTE: this attribute can't be set for methods that depend on data, pointed by this 
+   this allow compilers to do hard optimization of that functions 
+   NOTE: in common case this attribute can't be set if method have pointer-arguments 
+   NOTE: as result there no any reason to discard result of such method 
+*/ 
     #define Y_CONST_FUNCTION [[gnu::const]]
 #endif
 
@@ -571,13 +571,13 @@ _YandexAbort();
 
 #if defined(__clang__) || defined(__GNUC__)
     /**
- * @def Y_PURE_FUNCTION
-   methods and functions, marked with this method are promised to:
-     1. do not have side effects
-     2. result will be the same if no global memory changed
-   this allow compilers to do hard optimization of that functions
-   NOTE: as result there no any reason to discard result of such method
-*/
+ * @def Y_PURE_FUNCTION 
+   methods and functions, marked with this method are promised to: 
+     1. do not have side effects 
+     2. result will be the same if no global memory changed 
+   this allow compilers to do hard optimization of that functions 
+   NOTE: as result there no any reason to discard result of such method 
+*/ 
     #define Y_PURE_FUNCTION [[gnu::pure]]
 #endif
 

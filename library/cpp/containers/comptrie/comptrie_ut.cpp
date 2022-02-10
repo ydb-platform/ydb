@@ -1,5 +1,5 @@
 #include <util/random/shuffle.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/stream/output.h>
 #include <utility>
@@ -206,7 +206,7 @@ public:
     void TestMergeFromBuffer();
     void TestUnique();
     void TestAddRetValue();
-    void TestClear();
+    void TestClear(); 
 
     void TestIterateEmptyKey();
 
@@ -983,27 +983,27 @@ void TCompactTrieTest::TestAddRetValue() {
 }
 
 void TCompactTrieTest::TestClear() {
-    TCompactTrieBuilder<char, ui32> builder;
-    const char* data[] = {
-        "Kazan",
-        "Moscow",
-        "Monino",
-        "Murmansk",
-        "Fryanovo",
-        "Fryazino",
-        "Fryazevo",
-        "Fry",
-        "Tumen",
-    };
+    TCompactTrieBuilder<char, ui32> builder; 
+    const char* data[] = { 
+        "Kazan", 
+        "Moscow", 
+        "Monino", 
+        "Murmansk", 
+        "Fryanovo", 
+        "Fryazino", 
+        "Fryazevo", 
+        "Fry", 
+        "Tumen", 
+    }; 
     for (size_t i = 0; i < Y_ARRAY_SIZE(data); ++i) {
-        builder.Add(data[i], strlen(data[i]), i + 1);
-    }
+        builder.Add(data[i], strlen(data[i]), i + 1); 
+    } 
     UNIT_ASSERT(builder.GetEntryCount() == Y_ARRAY_SIZE(data));
-    builder.Clear();
-    UNIT_ASSERT(builder.GetEntryCount() == 0);
-    UNIT_ASSERT(builder.GetNodeCount() == 1);
-}
-
+    builder.Clear(); 
+    UNIT_ASSERT(builder.GetEntryCount() == 0); 
+    UNIT_ASSERT(builder.GetNodeCount() == 1); 
+} 
+ 
 void TCompactTrieTest::TestFindTails() {
     TestFindTailsImpl("aa");
     TestFindTailsImpl("bb");

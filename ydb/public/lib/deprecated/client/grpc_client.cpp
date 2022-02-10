@@ -262,7 +262,7 @@ namespace NKikimr {
                         THolder<IStreamRequestReadProcessor> processor(static_cast<IStreamRequestReadProcessor*>(tag));
                         if (ok) {
                             processor->InvokeProcess();
-                            Y_UNUSED(processor.Release()); // keep processor alive
+                            Y_UNUSED(processor.Release()); // keep processor alive 
                             finished = false;
                         } else {
                             processor->InvokeFinish();
@@ -290,7 +290,7 @@ namespace NKikimr {
 
             void Start(THolder<IProcessorBase> &&processor) {
                 processor->Start();
-                Y_UNUSED(processor.Release());
+                Y_UNUSED(processor.Release()); 
                 ++InFlight;
             }
         };

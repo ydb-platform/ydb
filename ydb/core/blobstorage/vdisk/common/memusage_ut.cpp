@@ -1,5 +1,5 @@
 #include "memusage.h"
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 using namespace NKikimr;
 

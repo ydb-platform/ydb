@@ -1,5 +1,5 @@
 #include <ydb/core/blobstorage/crypto/crypto.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <util/datetime/cputimer.h>
 #include <util/generic/buffer.h>
 #include <util/generic/string.h>

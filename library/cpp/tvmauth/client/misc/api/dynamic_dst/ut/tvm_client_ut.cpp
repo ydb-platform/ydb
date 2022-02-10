@@ -4,7 +4,7 @@
 
 #include <library/cpp/tvmauth/unittest.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/stream/file.h>
 #include <util/system/fs.h>

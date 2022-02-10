@@ -26,7 +26,7 @@
 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/folder/dirut.h>
 

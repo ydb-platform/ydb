@@ -1,6 +1,6 @@
 #include <library/cpp/int128/int128.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 // from https://a.yandex-team.ru/arc/trunk/arcadia/library/ticket_parser/c/src/ut/utils_ut.cpp?rev=4221861
 

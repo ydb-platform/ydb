@@ -1,19 +1,19 @@
-#pragma once
-
-#include "last_getopt_opt.h"
-
+#pragma once 
+ 
+#include "last_getopt_opt.h" 
+ 
 #include <library/cpp/colorizer/fwd.h>
 
-#include <util/generic/map.h>
-
-namespace NLastGetopt {
+#include <util/generic/map.h> 
+ 
+namespace NLastGetopt { 
     enum EArgPermutation {
         REQUIRE_ORDER,
         PERMUTE,
         RETURN_IN_ORDER,
         DEFAULT_ARG_PERMUTATION = PERMUTE
     };
-
+ 
     /**
      * NLastGetopt::TOpts is a storage of program options' parse rules.
      * It contains information about all options, free args, some parsing options
@@ -37,36 +37,36 @@ namespace NLastGetopt {
     class TOpts {
         friend class TOptsParseResult;
         friend class TOptsParser;
-
+ 
     public:
         static constexpr const ui32 UNLIMITED_ARGS = Max<ui32>();
 
         typedef TVector<TSimpleSharedPtr<TOpt>> TOptsVector;
         TOptsVector Opts_; // infomation about named (short and long) options
         TVector<std::function<void(TStringBuf)>> ArgBindings_;
-
+ 
         EArgPermutation ArgPermutation_ = DEFAULT_ARG_PERMUTATION; // determines how to parse positions of named and free options. See information below.
         bool AllowSingleDashForLong_ = false;                      //
         bool AllowPlusForLong_ = false;                            // using '+' instead '--' for long options
-
+ 
         //Allows unknwon options:
         bool AllowUnknownCharOptions_ = false;
         bool AllowUnknownLongOptions_ = false;
-
+ 
         ui32 Wrap_ = 80;
 
     private:
         ui32 FreeArgsMin_; // minimal number of free args
         ui32 FreeArgsMax_; // maximal number of free args
-
+ 
         TMap<ui32, TFreeArgSpec> FreeArgSpecs_; // mapping [free arg position] -> [free arg specification]
         TFreeArgSpec TrailingArgSpec_;          // spec for the trailing argument (when arguments are unlimited)
         TString DefaultFreeArgTitle_ = "ARG"; // title that's used for free args without a title
-
+ 
         TString Title;              // title of the help string
         TString CustomCmdLineDescr; // user defined help string
         TString CustomUsage;        // user defined usage string
-
+ 
         TVector<std::pair<TString, TString>> Sections;  // additional help entries to print after usage
 
     public:
@@ -74,7 +74,7 @@ namespace NLastGetopt {
          * Constructs TOpts from string as in getopt(3)
          */
         TOpts(const TStringBuf& optstring = TStringBuf());
-
+ 
         /**
          * Constructs TOpts from string as in getopt(3) and
          * additionally adds help option (for '?') and svn-verstion option (for 'V')
@@ -85,7 +85,7 @@ namespace NLastGetopt {
             opts.AddVersionOption();
             return opts;
         }
-
+ 
         /**
          * Checks correctness of options' descriptions.
          * Throws TConfException if validation failed.
@@ -94,35 +94,35 @@ namespace NLastGetopt {
          *    -compability of settings, that responsable for freeArgs parsing
          */
         void Validate() const;
-
+ 
         /**
          * Search for the option with given long name
          * @param name     long name for search
          * @return         ptr on result (nullptr if not found)
          */
         const TOpt* FindLongOption(const TStringBuf& name) const;
-
+ 
         /**
          * Search for the option with given short name
          * @param c        short name for search
          * @return         ptr on result (nullptr if not found)
          */
         const TOpt* FindCharOption(char c) const;
-
+ 
         /**
          * Search for the option with given long name
          * @param name     long name for search
          * @return         ptr on result (nullptr if not found)
          */
         TOpt* FindLongOption(const TStringBuf& name);
-
+ 
         /**
          * Search for the option with given short name
          * @param c        short name for search
          * @return         ptr on result (nullptr if not found)
          */
         TOpt* FindCharOption(char c);
-
+ 
         /**
          * Search for the option with given name
          * @param name     name for search
@@ -155,7 +155,7 @@ namespace NLastGetopt {
         void SetTitle(const TString& title) {
             Title = title;
         }
-
+ 
         /**
          * @return true if there is an option with given long name
          *
@@ -164,7 +164,7 @@ namespace NLastGetopt {
         bool HasLongOption(const TString& name) const {
             return FindLongOption(name) != nullptr;
         }
-
+ 
         /**
          * @return true if there is an option with given short name
          *
@@ -173,35 +173,35 @@ namespace NLastGetopt {
         bool HasCharOption(char c) const {
             return FindCharOption(c) != nullptr;
         }
-
+ 
         /**
          * Search for the option with given long name
          * @param name     long name for search
          * @return         ref on result (throw exception if not found)
          */
         const TOpt& GetLongOption(const TStringBuf& name) const;
-
+ 
         /**
          * Search for the option with given long name
          * @param name     long name for search
          * @return         ref on result (throw exception if not found)
          */
         TOpt& GetLongOption(const TStringBuf& name);
-
+ 
         /**
          * Search for the option with given short name
          * @param c        short name for search
          * @return         ref on result (throw exception if not found)
          */
         const TOpt& GetCharOption(char c) const;
-
+ 
         /**
          * Search for the option with given short name
          * @param c        short name for search
          * @return         ref on result (throw exception if not found)
          */
         TOpt& GetCharOption(char c);
-
+ 
         /**
          * Search for the option with given name
          * @param name     name for search
@@ -231,19 +231,19 @@ namespace NLastGetopt {
          * @return true if short options exist
          */
         bool HasAnyShortOption() const;
-
+ 
         /**
          * @return true if long options exist
          */
         bool HasAnyLongOption() const;
-
+ 
         /**
          * Creates new [option description (TOpt)] as a copy of given one
          * @param option   source
          * @return         reference for created option
          */
         TOpt& AddOption(const TOpt& option);
-
+ 
         /**
          * Creates new free argument handling
          * @param name   name of free arg to show in help
@@ -266,7 +266,7 @@ namespace NLastGetopt {
          * @param optstring   source
          */
         void AddCharOptions(const TStringBuf& optstring);
-
+ 
         /**
          * Creates new [option description (TOpt)] with given short name and given help string
          *
@@ -277,7 +277,7 @@ namespace NLastGetopt {
         TOpt& AddCharOption(char c, const TString& help = "") {
             return AddCharOption(c, DEFAULT_HAS_ARG, help);
         }
-
+ 
         /**
          * Creates new [option description (TOpt)] with given short name and given help string
          *
@@ -292,7 +292,7 @@ namespace NLastGetopt {
             option.HasArg(hasArg);
             return AddOption(option);
         }
-
+ 
         /**
          * Creates new [option description (TOpt)] with given long name and given help string
          *
@@ -303,7 +303,7 @@ namespace NLastGetopt {
         TOpt& AddLongOption(const TString& name, const TString& help = "") {
             return AddLongOption(0, name, help);
         }
-
+ 
         /**
          * Creates new [option description (TOpt)] with given long and short names and given help string
          *
@@ -320,7 +320,7 @@ namespace NLastGetopt {
             option.Help(help);
             return AddOption(option);
         }
-
+ 
         /**
          * Creates new [option description (TOpt)] for help printing,
          *   adds appropriate handler for it
@@ -338,8 +338,8 @@ namespace NLastGetopt {
                 .HasArg(NO_ARGUMENT)
                 .IfPresentDisableCompletion()
                 .Handler(&PrintUsageAndExit);
-        }
-
+        } 
+ 
         /**
          * Creates new [option description (TOpt)] for svn-revision printing,
          *   adds appropriate handler for it.
@@ -357,8 +357,8 @@ namespace NLastGetopt {
                 .HasArg(NO_ARGUMENT)
                 .IfPresentDisableCompletion()
                 .Handler(&PrintVersionAndExit);
-        }
-
+        } 
+ 
         /**
          * Creates new option for generating completion shell scripts.
          *
@@ -379,8 +379,8 @@ namespace NLastGetopt {
                 AddCharOption(c);
                 return const_cast<TOpt&>(GetCharOption(c));
             }
-        }
-
+        } 
+ 
         /**
          * Indicate that some options can't appear together.
          *
@@ -405,7 +405,7 @@ namespace NLastGetopt {
          * @param opt        pointer of option to search
          */
         size_t IndexOf(const TOpt* opt) const;
-
+ 
         /**
          * Replace help string with given
          *
@@ -414,7 +414,7 @@ namespace NLastGetopt {
         void SetCmdLineDescr(const TString& descr) {
             CustomCmdLineDescr = descr;
         }
-
+ 
         /**
          * Replace usage string with given
          *
@@ -448,7 +448,7 @@ namespace NLastGetopt {
         void SetFreeArgsMin(size_t min) {
             FreeArgsMin_ = ui32(min);
         }
-
+ 
 
         /**
          * Get current minimal number of free args
@@ -466,7 +466,7 @@ namespace NLastGetopt {
             FreeArgsMax_ = ui32(max);
             FreeArgsMax_ = Max<ui32>(FreeArgsMax_, ArgBindings_.size());
         }
-
+ 
         /**
          * Get current maximal number of free args
          */
@@ -490,7 +490,7 @@ namespace NLastGetopt {
             FreeArgsMin_ = ui32(count);
             FreeArgsMax_ = ui32(count);
         }
-
+ 
         /**
          * Set minimal and maximal number of free args
          *
@@ -501,7 +501,7 @@ namespace NLastGetopt {
             FreeArgsMin_ = ui32(min);
             FreeArgsMax_ = ui32(max);
         }
-
+ 
         /**
          * Set title and help string of free argument
          *
@@ -512,7 +512,7 @@ namespace NLastGetopt {
          *                     does not affect actual flags parsing
          */
         void SetFreeArgTitle(size_t pos, const TString& title, const TString& help = TString(), bool optional = false);
-
+ 
         /**
          * Get free argument's spec for further modification.
          */
@@ -555,7 +555,7 @@ namespace NLastGetopt {
             TrailingArgSpec_.Help(std::move(help));
         }
         /// @}
-
+ 
         /**
          * Get spec for the trailing argument.
          *
@@ -578,7 +578,7 @@ namespace NLastGetopt {
         void SetAllowSingleDashForLong(bool value) {
             AllowSingleDashForLong_ = value;
         }
-
+ 
         /**
          * Wrap help text at this number of characters. 0 to disable wrapping.
          */
@@ -613,7 +613,7 @@ namespace NLastGetopt {
             }
             return ret;
         }
-
+ 
     private:
         /**
          * @return argument title of a free argument
@@ -621,7 +621,7 @@ namespace NLastGetopt {
          * @param pos     position of the argument
          */
         TStringBuf GetFreeArgTitle(size_t pos) const;
-
+ 
         /**
          * Print usage helper
          *
@@ -630,7 +630,7 @@ namespace NLastGetopt {
          * @param colors     colorizer
          */
         void PrintCmdLine(const TStringBuf& program, IOutputStream& os, const NColorizer::TColors& colors) const;
-
+ 
         /**
          * Print usage helper
          *
@@ -639,5 +639,5 @@ namespace NLastGetopt {
          */
         void PrintFreeArgsDesc(IOutputStream& os, const NColorizer::TColors& colors) const;
     };
-
+ 
 }

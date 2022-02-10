@@ -1447,7 +1447,7 @@ public:
         FillNotice(pathId, tx, context);
 
         TString txBody;
-        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody); 
 
         txState->ClearShardsInProgress();
         Y_VERIFY(txState->Shards.size());

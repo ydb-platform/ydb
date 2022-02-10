@@ -11,7 +11,7 @@
 #include <ydb/core/tablet_flat/util_fmt_desc.h>
 #include <ydb/core/tablet_flat/util_basics.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 namespace NKikimr {
 namespace NTable {

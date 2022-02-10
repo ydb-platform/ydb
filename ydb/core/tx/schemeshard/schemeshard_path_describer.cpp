@@ -173,7 +173,7 @@ void TPathDescriber::DescribeChildren(const TPath& path) {
                 FillChildDescr(entry, childEl);
             }
         }
-        Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pathEl->PreSerializedChildrenListing);
+        Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pathEl->PreSerializedChildrenListing); 
     }
     Result->PreSerializedData += pathEl->PreSerializedChildrenListing;
 
@@ -225,7 +225,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
                 part->SetIsInclusive(false);
                 part->SetEndOfRangeKeyPrefix(p.EndOfRange);
             }
-            Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&tableInfo->PreSerializedPathDescription);
+            Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&tableInfo->PreSerializedPathDescription); 
         }
         Result->PreSerializedData += tableInfo->PreSerializedPathDescription;
         if (!pathEl->IsCreateFinished()) {
@@ -410,13 +410,13 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
         entry->SetTotalGroupCount(pqGroupInfo->TotalGroupCount);
         entry->SetPartitionPerTablet(pqGroupInfo->MaxPartsPerTablet);
         entry->SetAlterVersion(pqGroupInfo->AlterVersion);
-        Y_PROTOBUF_SUPPRESS_NODISCARD entry->MutablePQTabletConfig()->ParseFromString(pqGroupInfo->TabletConfig);
+        Y_PROTOBUF_SUPPRESS_NODISCARD entry->MutablePQTabletConfig()->ParseFromString(pqGroupInfo->TabletConfig); 
 
         if (pqGroupInfo->HasBalancer()) {
             entry->SetBalancerTabletID(ui64(pqGroupInfo->BalancerTabletID));
         }
 
-        Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pqGroupInfo->PreSerializedPathDescription);
+        Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pqGroupInfo->PreSerializedPathDescription); 
     }
 
     Y_VERIFY_DEBUG(!pqGroupInfo->PreSerializedPathDescription.empty());
@@ -463,7 +463,7 @@ void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr p
                 }
             }
 
-            Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pqGroupInfo->PreSerializedPartitionsDescription);
+            Y_PROTOBUF_SUPPRESS_NODISCARD preSerializedResult.SerializeToString(&pqGroupInfo->PreSerializedPartitionsDescription); 
         }
 
         Y_VERIFY_DEBUG(!pqGroupInfo->PreSerializedPartitionsDescription.empty());

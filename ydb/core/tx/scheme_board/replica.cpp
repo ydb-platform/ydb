@@ -414,7 +414,7 @@ public:
             if (!isDeletion) {
                 if (!PreSerializedDescribeSchemeResult) {
                     TString serialized;
-                    Y_PROTOBUF_SUPPRESS_NODISCARD DescribeSchemeResult.SerializeToString(&serialized);
+                    Y_PROTOBUF_SUPPRESS_NODISCARD DescribeSchemeResult.SerializeToString(&serialized); 
                     if (TrackNotify) {
                         UntrackMemory();
                     }

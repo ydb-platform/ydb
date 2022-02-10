@@ -902,7 +902,7 @@ TMaybe<TString> GetTableListResult(const IKikimrGateway::TListPathResult& res,
         YQL_ENSURE(fillSettings.FormatDetails == KikimrMkqlProtoFormat);
 
         TVector<char> buffer(packedResult->ByteSize());
-        Y_PROTOBUF_SUPPRESS_NODISCARD packedResult->SerializeToArray(buffer.data(), buffer.size());
+        Y_PROTOBUF_SUPPRESS_NODISCARD packedResult->SerializeToArray(buffer.data(), buffer.size()); 
         return TString(buffer.data(), buffer.size());
     }
 }
@@ -939,7 +939,7 @@ TMaybe<TString> GetTableMetadataResult(const TKikimrTableDescription& table,
         YQL_ENSURE(fillSettings.FormatDetails == KikimrMkqlProtoFormat);
 
         TVector<char> buffer(packedResult->ByteSize());
-        Y_PROTOBUF_SUPPRESS_NODISCARD packedResult->SerializeToArray(buffer.data(), buffer.size());
+        Y_PROTOBUF_SUPPRESS_NODISCARD packedResult->SerializeToArray(buffer.data(), buffer.size()); 
         return TString(buffer.data(), buffer.size());
     }
 }

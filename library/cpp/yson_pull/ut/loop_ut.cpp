@@ -3,7 +3,7 @@
 #include <library/cpp/yson_pull/reader.h>
 #include <library/cpp/yson_pull/writer.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <cerrno>
 #include <cmath>

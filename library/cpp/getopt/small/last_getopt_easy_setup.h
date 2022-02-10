@@ -1,8 +1,8 @@
-#pragma once
-
-#include "last_getopt_opts.h"
-
-namespace NLastGetopt {
+#pragma once 
+ 
+#include "last_getopt_opts.h" 
+ 
+namespace NLastGetopt { 
     /**
      * Wrapper for TOpts class to make the life a bit easier.
      * Usual usage:
@@ -21,25 +21,25 @@ namespace NLastGetopt {
         TEasySetup(const TStringBuf& optstring = TStringBuf());
         TEasySetup& operator()(char shortName, const char* longName, const char* help, bool required = false);
         TEasySetup& operator()(char shortName, const char* longName, const char* argName, const char* help, bool required = false);
-
+ 
         template <class TpFunc>
         TEasySetup& operator()(char shortName, const char* longName, TpFunc handler, const char* help, bool required = false) {
             AdjustParam(longName, help, nullptr, handler, required).AddShortName(shortName);
             return *this;
         }
-
+ 
         TEasySetup& operator()(const char* longName, const char* help, bool required = false);
         TEasySetup& operator()(const char* longName, const char* argName, const char* help, bool required = false);
-
+ 
         template <class TpFunc>
         TEasySetup& operator()(const char* longName, TpFunc handler, const char* help, bool required = false) {
             AdjustParam(longName, help, nullptr, handler, required);
             return *this;
         }
-
+ 
     private:
         TOpt& AdjustParam(const char* longName, const char* help, const char* argName, bool required);
-
+ 
         template <class TpFunc>
         TOpt& AdjustParam(const char* longName, const char* help, const char* argName, TpFunc handler, bool required) {
             TOpt& o = AdjustParam(longName, help, argName, required);
@@ -47,5 +47,5 @@ namespace NLastGetopt {
             return o;
         }
     };
-
-}
+ 
+} 

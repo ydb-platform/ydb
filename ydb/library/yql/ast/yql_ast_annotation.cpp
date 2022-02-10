@@ -3,7 +3,7 @@
 #include <util/string/split.h>
 #include <util/string/cast.h>
 #include <util/string/builder.h>
-#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h> 
 
 namespace NYql {
 

@@ -14,7 +14,7 @@
 #include <library/cpp/messagebus/actor/queue_in_actor.h>
 #include <library/cpp/messagebus/monitoring/mon_proto.pb.h>
 
-#include <library/cpp/threading/future/legacy_future.h>
+#include <library/cpp/threading/future/legacy_future.h> 
 
 #include <util/generic/array_ref.h>
 #include <util/generic/string.h>

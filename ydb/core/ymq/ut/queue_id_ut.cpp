@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <ydb/core/ymq/base/queue_id.h>
 
 using namespace NKikimr::NSQS;

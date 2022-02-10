@@ -113,7 +113,7 @@ PEERDIR(
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
     library/cpp/svnversion
-    library/cpp/threading/future
+    library/cpp/threading/future 
 )
 
 END()

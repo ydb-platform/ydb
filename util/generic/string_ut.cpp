@@ -908,191 +908,191 @@ private:
 UNIT_TEST_SUITE_REGISTRATION(TWideStringTest);
 
 class TUtf32StringTest: public TTestBase, private TStringTestImpl<TUtf32String, TTestData<wchar32>> {
-public:
-    UNIT_TEST_SUITE(TUtf32StringTest);
-    UNIT_TEST(TestConstructors);
-    UNIT_TEST(TestReplace);
+public: 
+    UNIT_TEST_SUITE(TUtf32StringTest); 
+    UNIT_TEST(TestConstructors); 
+    UNIT_TEST(TestReplace); 
 #ifndef TSTRING_IS_STD_STRING
-    UNIT_TEST(TestRefCount);
+    UNIT_TEST(TestRefCount); 
 #endif
-    UNIT_TEST(TestFind);
-    UNIT_TEST(TestContains);
-    UNIT_TEST(TestOperators);
-    UNIT_TEST(TestLetOperator)
-    UNIT_TEST(TestMulOperators);
-    UNIT_TEST(TestFuncs);
-    UNIT_TEST(TestUtils);
-    UNIT_TEST(TestEmpty);
-    UNIT_TEST(TestJoin);
-    UNIT_TEST(TestCopy);
-    UNIT_TEST(TestStrCpy);
-    UNIT_TEST(TestPrefixSuffix);
+    UNIT_TEST(TestFind); 
+    UNIT_TEST(TestContains); 
+    UNIT_TEST(TestOperators); 
+    UNIT_TEST(TestLetOperator) 
+    UNIT_TEST(TestMulOperators); 
+    UNIT_TEST(TestFuncs); 
+    UNIT_TEST(TestUtils); 
+    UNIT_TEST(TestEmpty); 
+    UNIT_TEST(TestJoin); 
+    UNIT_TEST(TestCopy); 
+    UNIT_TEST(TestStrCpy); 
+    UNIT_TEST(TestPrefixSuffix); 
 #ifndef TSTRING_IS_STD_STRING
-    UNIT_TEST(TestCharRef);
+    UNIT_TEST(TestCharRef); 
 #endif
-    UNIT_TEST(TestBack);
-    UNIT_TEST(TestFront)
-    UNIT_TEST(TestDecodingMethods);
-    UNIT_TEST(TestDecodingMethodsMixedStr);
+    UNIT_TEST(TestBack); 
+    UNIT_TEST(TestFront) 
+    UNIT_TEST(TestDecodingMethods); 
+    UNIT_TEST(TestDecodingMethodsMixedStr); 
     UNIT_TEST(TestIterators);
     UNIT_TEST(TestReverseIterators);
     UNIT_TEST(TestStringLiterals);
-    UNIT_TEST_SUITE_END();
-
-private:
-    void TestDecodingMethods() {
-        UNIT_ASSERT(TUtf32String::FromAscii("").empty());
-        UNIT_ASSERT(TUtf32String::FromAscii("abc") == ASCIIToUTF32("abc"));
-
-        const char* text = "123kx83abcd ej)#$%ddja&%J&";
-        TUtf32String wtext = ASCIIToUTF32(text);
-
-        UNIT_ASSERT(wtext == TUtf32String::FromAscii(text));
-
-        TString strtext(text);
-        UNIT_ASSERT(wtext == TUtf32String::FromAscii(strtext));
-
-        TStringBuf strbuftext(text);
-        UNIT_ASSERT(wtext == TUtf32String::FromAscii(strbuftext));
-
-        UNIT_ASSERT(wtext.substr(5) == TUtf32String::FromAscii(text + 5));
-
-        const wchar32 wideCyrillicAlphabet[] = {
-            0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417, 0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F,
-            0x0420, 0x0421, 0x0422, 0x0423, 0x0424, 0x0425, 0x0426, 0x0427, 0x0428, 0x0429, 0x042A, 0x042B, 0x042C, 0x042D, 0x042E, 0x042F,
-            0x0430, 0x0431, 0x0432, 0x0433, 0x0434, 0x0435, 0x0436, 0x0437, 0x0438, 0x0439, 0x043A, 0x043B, 0x043C, 0x043D, 0x043E, 0x043F,
-            0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447, 0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F,
-            0x00};
-
-        TUtf32String strWide(wideCyrillicAlphabet);
-        TString strUtf8 = WideToUTF8(strWide);
-
-        UNIT_ASSERT(strWide == TUtf32String::FromUtf8(strUtf8.c_str()));
-        UNIT_ASSERT(strWide == TUtf32String::FromUtf8(strUtf8));
-        UNIT_ASSERT(strWide == TUtf32String::FromUtf8(TStringBuf(strUtf8)));
-
-        // assign
-
-        TUtf32String s1;
-        s1.AssignAscii("1234");
-        UNIT_ASSERT(s1 == ASCIIToUTF32("1234"));
-
-        s1.AssignUtf8(strUtf8);
-        UNIT_ASSERT(s1 == strWide);
-
-        s1.AssignAscii(text);
-        UNIT_ASSERT(s1 == wtext);
-
-        // append
-
-        TUtf32String s2;
-        TUtf32String testAppend = strWide;
-        s2.AppendUtf8(strUtf8);
-        UNIT_ASSERT(testAppend == s2);
-
-        testAppend += ' ';
-        s2.AppendAscii(" ");
-        UNIT_ASSERT(testAppend == s2);
-
-        testAppend += '_';
-        s2.AppendUtf8("_");
-        UNIT_ASSERT(testAppend == s2);
-
-        testAppend += wtext;
-        s2.AppendAscii(text);
-        UNIT_ASSERT(testAppend == s2);
-
-        testAppend += wtext;
-        s2.AppendUtf8(text);
-
-        UNIT_ASSERT(testAppend == s2);
-    }
-
-    void TestDecodingMethodsMixedStr() {
-        UNIT_ASSERT(TUtf32String::FromAscii("").empty());
-        UNIT_ASSERT(TUtf32String::FromAscii("abc") == ASCIIToUTF32("abc"));
-
-        const char* text = "123kx83abcd ej)#$%ddja&%J&";
-        TUtf32String wtext = ASCIIToUTF32(text);
-
-        UNIT_ASSERT(wtext == TUtf32String::FromAscii(text));
-
-        TString strtext(text);
-        UNIT_ASSERT(wtext == TUtf32String::FromAscii(strtext));
-
-        TStringBuf strbuftext(text);
-        UNIT_ASSERT(wtext == TUtf32String::FromAscii(strbuftext));
-
-        UNIT_ASSERT(wtext.substr(5) == TUtf32String::FromAscii(text + 5));
-
-        const wchar32 cyrilicAndLatinWide[] = {
-            0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417, 0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F,
-            0x0420, 0x0421, 0x0422, 0x0423, 0x0424, 0x0425, 0x0426, 0x0427, 0x0428, 0x0429, 0x042A, 0x042B, 0x042C, 0x042D, 0x042E, 0x042F,
-            0x0430, 0x0431, 0x0432, 0x0433, 0x0434, 0x0435, 0x0436, 0x0437, 0x0438, 0x0439, 0x043A, 0x043B, 0x043C, 0x043D, 0x043E, 0x043F,
-            wchar32('z'),
-            0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447, 0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F,
-            wchar32('z'),
-            0x00};
-
-        TUtf32String strWide(cyrilicAndLatinWide);
-        TString strUtf8 = WideToUTF8(strWide);
-
-        UNIT_ASSERT(strWide == TUtf32String::FromUtf8(strUtf8.c_str()));
-        UNIT_ASSERT(strWide == TUtf32String::FromUtf8(strUtf8));
-        UNIT_ASSERT(strWide == UTF8ToUTF32<true>(strUtf8));
-        UNIT_ASSERT(strWide == UTF8ToUTF32<false>(strUtf8));
-        UNIT_ASSERT(strWide == TUtf32String::FromUtf8(TStringBuf(strUtf8)));
-
-        // assign
-
-        TUtf32String s1;
-        s1.AssignAscii("1234");
-        UNIT_ASSERT(s1 == ASCIIToUTF32("1234"));
-
-        s1.AssignUtf8(strUtf8);
-        UNIT_ASSERT(s1 == strWide);
-
-        s1.AssignAscii(text);
-        UNIT_ASSERT(s1 == wtext);
-
-        // append
-
-        TUtf32String s2;
-        TUtf32String testAppend = strWide;
-        s2.AppendUtf16(UTF8ToWide(strUtf8));
-        UNIT_ASSERT(testAppend == s2);
-
-        testAppend += ' ';
-        s2.AppendAscii(" ");
-        UNIT_ASSERT(testAppend == s2);
-
-        testAppend += '_';
-        s2.AppendUtf8("_");
-        UNIT_ASSERT(testAppend == s2);
-
-        testAppend += wtext;
-        s2.AppendAscii(text);
-        UNIT_ASSERT(testAppend == s2);
-
-        testAppend += wtext;
-        s2.AppendUtf8(text);
-
-        UNIT_ASSERT(testAppend == s2);
-    }
-
-    void TestLetOperator() {
-        TUtf32String str;
-
+    UNIT_TEST_SUITE_END(); 
+ 
+private: 
+    void TestDecodingMethods() { 
+        UNIT_ASSERT(TUtf32String::FromAscii("").empty()); 
+        UNIT_ASSERT(TUtf32String::FromAscii("abc") == ASCIIToUTF32("abc")); 
+ 
+        const char* text = "123kx83abcd ej)#$%ddja&%J&"; 
+        TUtf32String wtext = ASCIIToUTF32(text); 
+ 
+        UNIT_ASSERT(wtext == TUtf32String::FromAscii(text)); 
+ 
+        TString strtext(text); 
+        UNIT_ASSERT(wtext == TUtf32String::FromAscii(strtext)); 
+ 
+        TStringBuf strbuftext(text); 
+        UNIT_ASSERT(wtext == TUtf32String::FromAscii(strbuftext)); 
+ 
+        UNIT_ASSERT(wtext.substr(5) == TUtf32String::FromAscii(text + 5)); 
+ 
+        const wchar32 wideCyrillicAlphabet[] = { 
+            0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417, 0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F, 
+            0x0420, 0x0421, 0x0422, 0x0423, 0x0424, 0x0425, 0x0426, 0x0427, 0x0428, 0x0429, 0x042A, 0x042B, 0x042C, 0x042D, 0x042E, 0x042F, 
+            0x0430, 0x0431, 0x0432, 0x0433, 0x0434, 0x0435, 0x0436, 0x0437, 0x0438, 0x0439, 0x043A, 0x043B, 0x043C, 0x043D, 0x043E, 0x043F, 
+            0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447, 0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F, 
+            0x00}; 
+ 
+        TUtf32String strWide(wideCyrillicAlphabet); 
+        TString strUtf8 = WideToUTF8(strWide); 
+ 
+        UNIT_ASSERT(strWide == TUtf32String::FromUtf8(strUtf8.c_str())); 
+        UNIT_ASSERT(strWide == TUtf32String::FromUtf8(strUtf8)); 
+        UNIT_ASSERT(strWide == TUtf32String::FromUtf8(TStringBuf(strUtf8))); 
+ 
+        // assign 
+ 
+        TUtf32String s1; 
+        s1.AssignAscii("1234"); 
+        UNIT_ASSERT(s1 == ASCIIToUTF32("1234")); 
+ 
+        s1.AssignUtf8(strUtf8); 
+        UNIT_ASSERT(s1 == strWide); 
+ 
+        s1.AssignAscii(text); 
+        UNIT_ASSERT(s1 == wtext); 
+ 
+        // append 
+ 
+        TUtf32String s2; 
+        TUtf32String testAppend = strWide; 
+        s2.AppendUtf8(strUtf8); 
+        UNIT_ASSERT(testAppend == s2); 
+ 
+        testAppend += ' '; 
+        s2.AppendAscii(" "); 
+        UNIT_ASSERT(testAppend == s2); 
+ 
+        testAppend += '_'; 
+        s2.AppendUtf8("_"); 
+        UNIT_ASSERT(testAppend == s2); 
+ 
+        testAppend += wtext; 
+        s2.AppendAscii(text); 
+        UNIT_ASSERT(testAppend == s2); 
+ 
+        testAppend += wtext; 
+        s2.AppendUtf8(text); 
+ 
+        UNIT_ASSERT(testAppend == s2); 
+    } 
+ 
+    void TestDecodingMethodsMixedStr() { 
+        UNIT_ASSERT(TUtf32String::FromAscii("").empty()); 
+        UNIT_ASSERT(TUtf32String::FromAscii("abc") == ASCIIToUTF32("abc")); 
+ 
+        const char* text = "123kx83abcd ej)#$%ddja&%J&"; 
+        TUtf32String wtext = ASCIIToUTF32(text); 
+ 
+        UNIT_ASSERT(wtext == TUtf32String::FromAscii(text)); 
+ 
+        TString strtext(text); 
+        UNIT_ASSERT(wtext == TUtf32String::FromAscii(strtext)); 
+ 
+        TStringBuf strbuftext(text); 
+        UNIT_ASSERT(wtext == TUtf32String::FromAscii(strbuftext)); 
+ 
+        UNIT_ASSERT(wtext.substr(5) == TUtf32String::FromAscii(text + 5)); 
+ 
+        const wchar32 cyrilicAndLatinWide[] = { 
+            0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417, 0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F, 
+            0x0420, 0x0421, 0x0422, 0x0423, 0x0424, 0x0425, 0x0426, 0x0427, 0x0428, 0x0429, 0x042A, 0x042B, 0x042C, 0x042D, 0x042E, 0x042F, 
+            0x0430, 0x0431, 0x0432, 0x0433, 0x0434, 0x0435, 0x0436, 0x0437, 0x0438, 0x0439, 0x043A, 0x043B, 0x043C, 0x043D, 0x043E, 0x043F, 
+            wchar32('z'), 
+            0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447, 0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F, 
+            wchar32('z'), 
+            0x00}; 
+ 
+        TUtf32String strWide(cyrilicAndLatinWide); 
+        TString strUtf8 = WideToUTF8(strWide); 
+ 
+        UNIT_ASSERT(strWide == TUtf32String::FromUtf8(strUtf8.c_str())); 
+        UNIT_ASSERT(strWide == TUtf32String::FromUtf8(strUtf8)); 
+        UNIT_ASSERT(strWide == UTF8ToUTF32<true>(strUtf8)); 
+        UNIT_ASSERT(strWide == UTF8ToUTF32<false>(strUtf8)); 
+        UNIT_ASSERT(strWide == TUtf32String::FromUtf8(TStringBuf(strUtf8))); 
+ 
+        // assign 
+ 
+        TUtf32String s1; 
+        s1.AssignAscii("1234"); 
+        UNIT_ASSERT(s1 == ASCIIToUTF32("1234")); 
+ 
+        s1.AssignUtf8(strUtf8); 
+        UNIT_ASSERT(s1 == strWide); 
+ 
+        s1.AssignAscii(text); 
+        UNIT_ASSERT(s1 == wtext); 
+ 
+        // append 
+ 
+        TUtf32String s2; 
+        TUtf32String testAppend = strWide; 
+        s2.AppendUtf16(UTF8ToWide(strUtf8)); 
+        UNIT_ASSERT(testAppend == s2); 
+ 
+        testAppend += ' '; 
+        s2.AppendAscii(" "); 
+        UNIT_ASSERT(testAppend == s2); 
+ 
+        testAppend += '_'; 
+        s2.AppendUtf8("_"); 
+        UNIT_ASSERT(testAppend == s2); 
+ 
+        testAppend += wtext; 
+        s2.AppendAscii(text); 
+        UNIT_ASSERT(testAppend == s2); 
+ 
+        testAppend += wtext; 
+        s2.AppendUtf8(text); 
+ 
+        UNIT_ASSERT(testAppend == s2); 
+    } 
+ 
+    void TestLetOperator() { 
+        TUtf32String str; 
+ 
         str = wchar32('X');
-        UNIT_ASSERT(str == TUtf32String::FromAscii("X"));
-
-        const TUtf32String hello = TUtf32String::FromAscii("hello");
+        UNIT_ASSERT(str == TUtf32String::FromAscii("X")); 
+ 
+        const TUtf32String hello = TUtf32String::FromAscii("hello"); 
         str = hello.data();
-        UNIT_ASSERT(str == hello);
-
-        str = hello;
-        UNIT_ASSERT(str == hello);
-    }
+        UNIT_ASSERT(str == hello); 
+ 
+        str = hello; 
+        UNIT_ASSERT(str == hello); 
+    } 
 
     void TestStringLiterals() {
         TUtf32String s1 = U"hello";
@@ -1101,10 +1101,10 @@ private:
         TUtf32String s2 = U"привет";
         UNIT_ASSERT_VALUES_EQUAL(s2, TUtf32String::FromUtf8("привет"));
     }
-};
-
-UNIT_TEST_SUITE_REGISTRATION(TUtf32StringTest);
-
+}; 
+ 
+UNIT_TEST_SUITE_REGISTRATION(TUtf32StringTest); 
+ 
 class TStringStdTest: public TTestBase, private TStringStdTestImpl<TString, TTestData<char>> {
 public:
     UNIT_TEST_SUITE(TStringStdTest);

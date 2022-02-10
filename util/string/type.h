@@ -11,12 +11,12 @@ Y_PURE_FUNCTION static inline bool IsSpace(const TStringBuf s) noexcept {
 
 /// Returns "true" if the given string is an arabic number ([0-9]+)
 Y_PURE_FUNCTION bool IsNumber(const TStringBuf s) noexcept;
-
+ 
 Y_PURE_FUNCTION bool IsNumber(const TWtringBuf s) noexcept;
 
 /// Returns "true" if the given string is a hex number ([0-9a-fA-F]+)
 Y_PURE_FUNCTION bool IsHexNumber(const TStringBuf s) noexcept;
-
+ 
 Y_PURE_FUNCTION bool IsHexNumber(const TWtringBuf s) noexcept;
 
 /* Tests if the given string is case insensitive equal to one of:

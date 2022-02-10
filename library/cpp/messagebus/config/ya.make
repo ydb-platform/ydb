@@ -3,7 +3,7 @@ LIBRARY()
 OWNER(g:messagebus)
 
 PEERDIR(
-    library/cpp/getopt
+    library/cpp/getopt 
     library/cpp/deprecated/enum_codegen
 )
 

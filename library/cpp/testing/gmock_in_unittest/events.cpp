@@ -1,6 +1,6 @@
 #include "events.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>

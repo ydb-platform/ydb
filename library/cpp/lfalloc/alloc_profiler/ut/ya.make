@@ -1,9 +1,9 @@
-UNITTEST_FOR(library/cpp/lfalloc/alloc_profiler)
+UNITTEST_FOR(library/cpp/lfalloc/alloc_profiler) 
 
 OWNER(g:rtmr g:kikimr)
 
 PEERDIR(
-    library/cpp/testing/unittest
+    library/cpp/testing/unittest 
 )
 
 IF (ARCH_AARCH64)

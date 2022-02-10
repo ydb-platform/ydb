@@ -4,7 +4,7 @@
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/testlib/minikql_compile.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 namespace NYql {
 

@@ -483,14 +483,14 @@ public:
         return !s.length() || find(s, pos) != npos;
     }
 
-    inline bool Contains(TChar c, size_t pos = 0) const noexcept {
+    inline bool Contains(TChar c, size_t pos = 0) const noexcept { 
         return find(c, pos) != npos;
     }
 
-    inline void Contains(std::enable_if<std::is_unsigned<TCharType>::value, char> c, size_t pos = 0) const noexcept {
-        return find(ui8(c), pos) != npos;
-    }
-
+    inline void Contains(std::enable_if<std::is_unsigned<TCharType>::value, char> c, size_t pos = 0) const noexcept { 
+        return find(ui8(c), pos) != npos; 
+    } 
+ 
     //~~~~Character Set Search~~~
     inline size_t find_first_of(TCharType c) const noexcept {
         return find_first_of(c, 0);
@@ -569,12 +569,12 @@ public:
         return n;
     }
 
-    inline TDerived copy() const Y_WARN_UNUSED_RESULT {
+    inline TDerived copy() const Y_WARN_UNUSED_RESULT { 
         return TDerived(Ptr(), Len());
     }
 
     // ~~~ Partial copy ~~~~
-    TDerived substr(size_t pos, size_t n = npos) const Y_WARN_UNUSED_RESULT {
+    TDerived substr(size_t pos, size_t n = npos) const Y_WARN_UNUSED_RESULT { 
         return TDerived(*This(), pos, n);
     }
 

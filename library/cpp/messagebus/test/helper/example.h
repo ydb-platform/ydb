@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include "alloc_counter.h"
 #include "message_handler_error.h"

@@ -1,7 +1,7 @@
 #include "hullds_sstvec_it.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_ut.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_logoblob.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 
 namespace NKikimr {

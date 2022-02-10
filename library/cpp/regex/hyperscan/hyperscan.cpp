@@ -223,7 +223,7 @@ namespace NHyperscan {
         hs_scratch_t* rawScratch = scratch.Get();
         hs_error_t status = Singleton<NPrivate::TImpl>()->AllocScratch(db.Get(), &rawScratch);
         if (rawScratch != scratch.Get()) {
-            Y_UNUSED(scratch.Release()); // freed by hs_alloc_scratch
+            Y_UNUSED(scratch.Release()); // freed by hs_alloc_scratch 
             scratch.Reset(rawScratch);
         }
         if (status != HS_SUCCESS) {

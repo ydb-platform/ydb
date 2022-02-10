@@ -1,6 +1,6 @@
 #include "defs.h"
 #include "logoblob.h"
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <util/generic/ptr.h>
 
 namespace NKikimr {

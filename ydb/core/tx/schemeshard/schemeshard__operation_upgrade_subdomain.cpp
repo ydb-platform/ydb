@@ -206,7 +206,7 @@ public:
         descr.SetNextColId(tableInfo->NextColumnId);
 
         TString partitionConfig;
-        Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PartitionConfig().SerializeToString(&partitionConfig);
+        Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PartitionConfig().SerializeToString(&partitionConfig); 
         descr.SetPartitionConfig(partitionConfig);
 
         descr.SetAlterVersion(tableInfo->AlterVersion);
@@ -241,7 +241,7 @@ public:
             partDescr->MutableShardIdx()->SetLocalId(ui64(partition.ShardIdx.GetLocalId()));
             if (tableInfo->PerShardPartitionConfig.contains(partition.ShardIdx)) {
                 TString partitionConfig;
-                Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PerShardPartitionConfig.at(partition.ShardIdx).SerializeToString(&partitionConfig);
+                Y_PROTOBUF_SUPPRESS_NODISCARD tableInfo->PerShardPartitionConfig.at(partition.ShardIdx).SerializeToString(&partitionConfig); 
                 partDescr->SetPartitionConfig(partitionConfig);
             }
         }
@@ -274,7 +274,7 @@ public:
         descr.SetVersion(kesusInfo->Version);
 
         TString config;
-        Y_PROTOBUF_SUPPRESS_NODISCARD kesusInfo->Config.SerializeToString(&config);
+        Y_PROTOBUF_SUPPRESS_NODISCARD kesusInfo->Config.SerializeToString(&config); 
         descr.SetConfig(config);
 
         return descr;

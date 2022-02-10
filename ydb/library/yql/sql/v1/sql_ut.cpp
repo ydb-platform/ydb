@@ -3,7 +3,7 @@
 #include <ydb/library/yql/sql/sql.h>
 #include <util/generic/map.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/string/split.h>
 

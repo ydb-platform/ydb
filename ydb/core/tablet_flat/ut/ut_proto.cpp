@@ -1,6 +1,6 @@
 #include <ydb/core/tablet_flat/flat_sausage_solid.h>
 #include <ydb/core/tablet_flat/flat_store_solid.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

@@ -83,7 +83,7 @@ namespace NActors {
         template <typename T>
         TAutoPtr<T> Release() {
             TAutoPtr<T> x = Get<T>();
-            Y_UNUSED(Event.Release());
+            Y_UNUSED(Event.Release()); 
             Buffer.Reset();
             return x;
         }
@@ -271,7 +271,7 @@ namespace NActors {
 
         TAutoPtr<IEventBase> ReleaseBase() {
             TAutoPtr<IEventBase> x = GetBase();
-            Y_UNUSED(Event.Release());
+            Y_UNUSED(Event.Release()); 
             Buffer.Reset();
             return x;
         }

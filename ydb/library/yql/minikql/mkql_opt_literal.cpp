@@ -5,7 +5,7 @@
 #include "mkql_program_builder.h"
 #include "mkql_node_printer.h"
 
-#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h> 
 
 #include <util/generic/singleton.h>
 

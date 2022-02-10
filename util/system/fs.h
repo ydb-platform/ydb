@@ -1,11 +1,11 @@
 #pragma once
 
-#include <util/generic/flags.h>
+#include <util/generic/flags.h> 
 #include <util/generic/string.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 
 namespace NFs {
-    enum EFilePermission {
+    enum EFilePermission { 
         FP_ALL_EXEC = 01,
         FP_ALL_WRITE = 02,
         FP_ALL_READ = 04,
@@ -15,14 +15,14 @@ namespace NFs {
         FP_OWNER_READ = 0400,
         FP_OWNER_WRITE = 0200,
         FP_OWNER_EXEC = 0100,
-
+ 
         FP_COMMON_FILE = 0777,
         FP_SECRET_FILE = 0700,
-        FP_NONSECRET_FILE = 0744,
-    };
-
-    Y_DECLARE_FLAGS(EFilePermissions, EFilePermission);
-
+        FP_NONSECRET_FILE = 0744, 
+    }; 
+ 
+    Y_DECLARE_FLAGS(EFilePermissions, EFilePermission); 
+ 
     /// Remove a file or empty directory
     ///
     /// @param[in] path  Path to file or directory
@@ -30,53 +30,53 @@ namespace NFs {
     /// LastSystemError() is set in case of failure
     bool Remove(const TString& path);
 
-    /// Remove a file or directory with contents
-    ///
-    /// @param[in] path  Path to file or directory
-    /// @throws
+    /// Remove a file or directory with contents 
+    /// 
+    /// @param[in] path  Path to file or directory 
+    /// @throws 
     void RemoveRecursive(const TString& path);
-
-    /// Creates directory
-    ///
-    /// @param[in] path  Path to the directory
-    /// @param[in] mode  Access permissions field; NOTE: ignored on win
-    /// @returns         true on success or false otherwise
+ 
+    /// Creates directory 
+    /// 
+    /// @param[in] path  Path to the directory 
+    /// @param[in] mode  Access permissions field; NOTE: ignored on win 
+    /// @returns         true on success or false otherwise 
     bool MakeDirectory(const TString& path, EFilePermissions mode);
-
-    /// Creates directory
-    ///
-    /// @param[in] path  Path to the directory
-    /// @returns         true on success or false otherwise
-    /// NOTE: access permissions is set to 0777
+ 
+    /// Creates directory 
+    /// 
+    /// @param[in] path  Path to the directory 
+    /// @returns         true on success or false otherwise 
+    /// NOTE: access permissions is set to 0777 
     inline bool MakeDirectory(const TString& path) {
-        return MakeDirectory(path, FP_COMMON_FILE);
-    }
-
-    /// Creates directory and all non-existings parents
-    ///
-    /// @param[in] path          Path to be created
-    /// @param[in] mode          Access permissions field; NOTE: ignored on win
-    /// @param[in] alwaysCreate  Throw if path already exists or failed to create
-    /// @returns                 true if target path created or exists (and directory)
+        return MakeDirectory(path, FP_COMMON_FILE); 
+    } 
+ 
+    /// Creates directory and all non-existings parents 
+    /// 
+    /// @param[in] path          Path to be created 
+    /// @param[in] mode          Access permissions field; NOTE: ignored on win 
+    /// @param[in] alwaysCreate  Throw if path already exists or failed to create 
+    /// @returns                 true if target path created or exists (and directory) 
     bool MakeDirectoryRecursive(const TString& path, EFilePermissions mode, bool alwaysCreate);
-
-    /// Creates directory and all non-existings parents
-    ///
-    /// @param[in] path          Path to be created
-    /// @param[in] mode          Access permissions field; NOTE: ignored on win
+ 
+    /// Creates directory and all non-existings parents 
+    /// 
+    /// @param[in] path          Path to be created 
+    /// @param[in] mode          Access permissions field; NOTE: ignored on win 
     /// @returns                 true if target path created or exists (and directory)
     inline bool MakeDirectoryRecursive(const TString& path, EFilePermissions mode) {
-        return MakeDirectoryRecursive(path, mode, false);
-    }
-
-    /// Creates directory and all non-existings parents
-    ///
-    /// @param[in] path          Path to be created
-    /// @returns                 true if target path created or exists (and directory)
+        return MakeDirectoryRecursive(path, mode, false); 
+    } 
+ 
+    /// Creates directory and all non-existings parents 
+    /// 
+    /// @param[in] path          Path to be created 
+    /// @returns                 true if target path created or exists (and directory) 
     inline bool MakeDirectoryRecursive(const TString& path) {
-        return MakeDirectoryRecursive(path, FP_COMMON_FILE, false);
-    }
-
+        return MakeDirectoryRecursive(path, FP_COMMON_FILE, false); 
+    } 
+ 
     /// Rename a file or directory.
     /// Removes newPath if it exists
     ///
@@ -126,31 +126,31 @@ namespace NFs {
     /// @param[in] existingPath  Path to an existing file
     /// @param[in] newPath       New path of file
     void Copy(const TString& existingPath, const TString& newPath);
-
-    /// Returns path to the current working directory
-    ///
-    /// Note: is not threadsafe
+ 
+    /// Returns path to the current working directory 
+    /// 
+    /// Note: is not threadsafe 
     TString CurrentWorkingDirectory();
-
-    /// Changes current working directory
-    ///
-    /// @param[in] path          Path for new cwd
-    /// Note: is not threadsafe
+ 
+    /// Changes current working directory 
+    /// 
+    /// @param[in] path          Path for new cwd 
+    /// Note: is not threadsafe 
     void SetCurrentWorkingDirectory(TString path);
-
-    /// Checks if file exists
-    ///
-    /// @param[in] path          Path to check
+ 
+    /// Checks if file exists 
+    /// 
+    /// @param[in] path          Path to check 
     bool Exists(const TString& path);
-
-    /// Ensures that file exists
-    ///
-    /// @param[in] path          Path to check
-    /// @returns                 input argument
+ 
+    /// Ensures that file exists 
+    /// 
+    /// @param[in] path          Path to check 
+    /// @returns                 input argument 
     inline const TString& EnsureExists(const TString& path) {
         Y_ENSURE_EX(Exists(path), TFileError{} << "Path " << path << " does not exists (checked from cwd:" << NFs::CurrentWorkingDirectory() << ")");
-        return path;
-    }
+        return path; 
+    } 
 }
-
-Y_DECLARE_OPERATORS_FOR_FLAGS(NFs::EFilePermissions)
+ 
+Y_DECLARE_OPERATORS_FOR_FLAGS(NFs::EFilePermissions) 

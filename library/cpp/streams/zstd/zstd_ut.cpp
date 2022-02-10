@@ -1,6 +1,6 @@
 #include "zstd.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/random/fast.h>
 #include <util/stream/null.h>

@@ -1,6 +1,6 @@
 #include "longs.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <library/cpp/digest/old_crc/crc.h>
 #include <util/string/util.h>

@@ -3,7 +3,7 @@
 #include "filelist.h"
 #include "fts.h"
 #include "pathsplit.h"
-#include "path.h"
+#include "path.h" 
 
 #include <util/generic/yexception.h>
 #include <util/system/compiler.h>
@@ -396,7 +396,7 @@ void RemoveDirWithContents(TString dirName) {
 }
 
 int mkpath(char* path, int mode) {
-    return NFs::MakeDirectoryRecursive(path, NFs::EFilePermission(mode)) ? 0 : -1;
+    return NFs::MakeDirectoryRecursive(path, NFs::EFilePermission(mode)) ? 0 : -1; 
 }
 
 // Implementation of realpath in FreeBSD (version 9.0 and less) and GetFullPathName in Windows
@@ -415,10 +415,10 @@ TString RealPath(const TString& path) {
 }
 
 TString RealLocation(const TString& path) {
-    if (NFs::Exists(path))
+    if (NFs::Exists(path)) 
         return RealPath(path);
     TString dirpath = GetDirName(path);
-    if (NFs::Exists(dirpath))
+    if (NFs::Exists(dirpath)) 
         return RealPath(dirpath) + GetDirectorySeparatorS() + GetFileNameComponent(path.data());
     ythrow TFileError() << "RealLocation failed \"" << path << "\"";
 }
@@ -439,8 +439,8 @@ int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix) {
 
     if ((ret = ResolvePath(prefix, nullptr, path, 1)) != 0)
         return ret;
-    if (!TFileStat(path).IsDir())
-        return ENOENT;
+    if (!TFileStat(path).IsDir()) 
+        return ENOENT; 
     if ((strlcat(path, "tmpXXXXXX", FILENAME_MAX) > FILENAME_MAX - 100))
         return EINVAL;
     if (!(mkdtemp(path)))
@@ -450,7 +450,7 @@ int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix) {
 }
 
 bool IsDir(const TString& path) {
-    return TFileStat(path).IsDir();
+    return TFileStat(path).IsDir(); 
 }
 
 TString GetHomeDir() {
@@ -483,9 +483,9 @@ void MakeDirIfNotExist(const char* path, int mode) {
 }
 
 void MakePathIfNotExist(const char* path, int mode) {
-    NFs::MakeDirectoryRecursive(path, NFs::EFilePermission(mode));
-    if (!NFs::Exists(path) || !TFileStat(path).IsDir()) {
-        ythrow TSystemError() << "failed to create directory " << path;
+    NFs::MakeDirectoryRecursive(path, NFs::EFilePermission(mode)); 
+    if (!NFs::Exists(path) || !TFileStat(path).IsDir()) { 
+        ythrow TSystemError() << "failed to create directory " << path; 
     }
 }
 
@@ -536,7 +536,7 @@ bool SafeResolveDir(const char* path, TString& result) {
 }
 
 TString GetDirName(const TString& path) {
-    return TFsPath(path).Dirname();
+    return TFsPath(path).Dirname(); 
 }
 
 #ifdef _win32_
@@ -549,13 +549,13 @@ char* realpath(const char* pathname, char resolved_path[MAXPATHLEN]) {
 #endif
 
 TString GetBaseName(const TString& path) {
-    return TFsPath(path).Basename();
+    return TFsPath(path).Basename(); 
 }
 
-static bool IsAbsolutePath(const char* str) {
+static bool IsAbsolutePath(const char* str) { 
     return str && TPathSplitTraitsLocal::IsAbsolutePath(TStringBuf(str, NStringPrivate::GetStringLengthWithLimit(str, 3)));
-}
-
+} 
+ 
 int ResolvePath(const char* rel, const char* abs, char res[/*MAXPATHLEN*/], bool isdir) {
     char t[MAXPATHLEN * 2 + 3];
     size_t len;

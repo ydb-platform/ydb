@@ -3,7 +3,7 @@
 #include "hash_set.h"
 
 #include <library/cpp/testing/common/probe.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <utility>
 #include <util/str_stl.h>

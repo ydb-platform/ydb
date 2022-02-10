@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-#include <library/cpp/threading/local_executor/local_executor.h>
+#include <library/cpp/threading/local_executor/local_executor.h> 
 
 #include <util/string/printf.h>
 

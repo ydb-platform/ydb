@@ -1,6 +1,6 @@
 #include "fresh_appendix.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_ut.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/stream/null.h>
 

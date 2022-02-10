@@ -12,7 +12,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/tvmauth/unittest.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/string/printf.h>
 #include <util/system/tempfile.h>

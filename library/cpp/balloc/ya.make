@@ -10,7 +10,7 @@ NO_COMPILER_WARNINGS()
 
 IF (OS_WINDOWS)
     PEERDIR(
-        library/cpp/lfalloc
+        library/cpp/lfalloc 
     )
 ELSE()
     SRCS(

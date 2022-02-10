@@ -17,7 +17,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/containers/stack_vector
+    library/cpp/containers/stack_vector 
     library/cpp/deprecated/enum_codegen
     library/cpp/random_provider
     library/cpp/time_provider

@@ -14,7 +14,7 @@
 #include "utility.h"
 #include "bitops.h"
 #include "explicit_type.h"
-#include "reserve.h"
+#include "reserve.h" 
 #include "singleton.h"
 #include "strbase.h"
 #include "strbuf.h"
@@ -379,7 +379,7 @@ public:
     {
     }
 
-    inline explicit TBasicString(::NDetail::TReserveTag rt)
+    inline explicit TBasicString(::NDetail::TReserveTag rt) 
 #ifndef TSTRING_IS_STD_STRING
         : S_(Construct())
 #endif

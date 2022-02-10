@@ -6,7 +6,7 @@ OWNER(
 FUZZ()
 
 PEERDIR(
-    library/cpp/string_utils/base64/fuzz/lib
+    library/cpp/string_utils/base64/fuzz/lib 
 )
 
 END()

@@ -16,7 +16,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/util/pb.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -1416,7 +1416,7 @@ Y_UNIT_TEST_SUITE(TShardedCompactionScenarios) {
             header.SetLastShardId(2);
             header.AddShards(1);
             header.AddShards(2);
-            Y_PROTOBUF_SUPPRESS_NODISCARD header.SerializeToString(&initialState.StateSnapshot[0]);
+            Y_PROTOBUF_SUPPRESS_NODISCARD header.SerializeToString(&initialState.StateSnapshot[0]); 
         }
 
         TShardedCompactionStrategy strategy(1, &backend, &broker, &logger, &time, "suffix");

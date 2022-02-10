@@ -1,6 +1,6 @@
 #include <library/cpp/digest/argonish/argon2.h>
 #include <library/cpp/digest/argonish/blake2b.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 Y_UNIT_TEST_SUITE(ArgonishTest) {
     const ui8 GenKatPassword[32] = {

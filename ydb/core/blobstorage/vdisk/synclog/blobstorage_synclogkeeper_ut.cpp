@@ -1,6 +1,6 @@
 #include "blobstorage_synclogkeeper_state.h"
 #include "blobstorage_synclogreader.h"
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/stream/null.h>
 

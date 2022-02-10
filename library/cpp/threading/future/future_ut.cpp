@@ -1,6 +1,6 @@
 #include "future.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <list>
 #include <type_traits>
@@ -293,23 +293,23 @@ namespace {
         }
 
         Y_UNIT_TEST(ShouldWaitExceptionOrAllVectorWithValueType) {
-            TPromise<int> promise1 = NewPromise<int>();
-            TPromise<int> promise2 = NewPromise<int>();
-
-            TVector<TFuture<int>> promises;
-            promises.push_back(promise1);
-            promises.push_back(promise2);
-
+            TPromise<int> promise1 = NewPromise<int>(); 
+            TPromise<int> promise2 = NewPromise<int>(); 
+ 
+            TVector<TFuture<int>> promises; 
+            promises.push_back(promise1); 
+            promises.push_back(promise2); 
+ 
             TFuture<void> future = WaitExceptionOrAll(promises);
-            UNIT_ASSERT(!future.HasValue());
-
-            promise1.SetValue(0);
-            UNIT_ASSERT(!future.HasValue());
-
-            promise2.SetValue(0);
-            UNIT_ASSERT(future.HasValue());
-        }
-
+            UNIT_ASSERT(!future.HasValue()); 
+ 
+            promise1.SetValue(0); 
+            UNIT_ASSERT(!future.HasValue()); 
+ 
+            promise2.SetValue(0); 
+            UNIT_ASSERT(future.HasValue()); 
+        } 
+ 
         Y_UNIT_TEST(ShouldWaitExceptionOrAllList) {
             TPromise<void> promise1 = NewPromise();
             TPromise<void> promise2 = NewPromise();
@@ -353,25 +353,25 @@ namespace {
             UNIT_ASSERT(future.HasValue());
         }
 
-
-        Y_UNIT_TEST(ShouldWaitAnyVectorWithValueType) {
-            TPromise<int> promise1 = NewPromise<int>();
-            TPromise<int> promise2 = NewPromise<int>();
-
-            TVector<TFuture<int>> promises;
-            promises.push_back(promise1);
-            promises.push_back(promise2);
-
-            TFuture<void> future = WaitAny(promises);
-            UNIT_ASSERT(!future.HasValue());
-
-            promise1.SetValue(0);
-            UNIT_ASSERT(future.HasValue());
-
-            promise2.SetValue(0);
-            UNIT_ASSERT(future.HasValue());
-        }
-
+ 
+        Y_UNIT_TEST(ShouldWaitAnyVectorWithValueType) { 
+            TPromise<int> promise1 = NewPromise<int>(); 
+            TPromise<int> promise2 = NewPromise<int>(); 
+ 
+            TVector<TFuture<int>> promises; 
+            promises.push_back(promise1); 
+            promises.push_back(promise2); 
+ 
+            TFuture<void> future = WaitAny(promises); 
+            UNIT_ASSERT(!future.HasValue()); 
+ 
+            promise1.SetValue(0); 
+            UNIT_ASSERT(future.HasValue()); 
+ 
+            promise2.SetValue(0); 
+            UNIT_ASSERT(future.HasValue()); 
+        } 
+ 
         Y_UNIT_TEST(ShouldWaitAnyList) {
             TPromise<void> promise1 = NewPromise();
             TPromise<void> promise2 = NewPromise();

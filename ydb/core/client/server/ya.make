@@ -72,7 +72,7 @@ PEERDIR(
     library/cpp/monlib/messagebus
     library/cpp/protobuf/json
     library/cpp/protobuf/util
-    library/cpp/threading/future
+    library/cpp/threading/future 
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blobstorage/base

@@ -2,7 +2,7 @@
 
 #include <util/system/defaults.h>
 #include <util/system/sysstat.h>
-#include <util/system/fs.h>
+#include <util/system/fs.h> 
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 
@@ -108,8 +108,8 @@ public:
         if (!fname || !*fname)
             return nullptr;
         if (Strict) {
-            NFs::EnsureExists(fname);
-        } else if (!NFs::Exists(fname))
+            NFs::EnsureExists(fname); 
+        } else if (!NFs::Exists(fname)) 
             fname = nullptr;
         return fname;
     }

@@ -3,7 +3,7 @@
 #include "dirut.h"
 #include "tempdir.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/scope.h>
 #include <util/system/platform.h>
@@ -444,9 +444,9 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
 
         TFsPath(link).ForceDelete();
 
-        UNIT_ASSERT(!NFs::Exists(link));
-        UNIT_ASSERT(NFs::Exists(originFile));
-        UNIT_ASSERT(NFs::Exists(originDir));
+        UNIT_ASSERT(!NFs::Exists(link)); 
+        UNIT_ASSERT(NFs::Exists(originFile)); 
+        UNIT_ASSERT(NFs::Exists(originDir)); 
     }
 
     Y_UNIT_TEST(TestRemoveSymlinkToFile) {
@@ -467,9 +467,9 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
 
         TFsPath(link).ForceDelete();
 
-        UNIT_ASSERT(!NFs::Exists(link));
-        UNIT_ASSERT(NFs::Exists(originFile));
-        UNIT_ASSERT(NFs::Exists(originDir));
+        UNIT_ASSERT(!NFs::Exists(link)); 
+        UNIT_ASSERT(NFs::Exists(originFile)); 
+        UNIT_ASSERT(NFs::Exists(originDir)); 
     }
 
     Y_UNIT_TEST(TestRemoveDirWithSymlinkToDir) {
@@ -493,10 +493,10 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
 
         TFsPath(symlinkedDir).ForceDelete();
 
-        UNIT_ASSERT(!NFs::Exists(symlinkedFile));
-        UNIT_ASSERT(!NFs::Exists(symlinkedDir));
-        UNIT_ASSERT(NFs::Exists(originFile));
-        UNIT_ASSERT(NFs::Exists(originDir));
+        UNIT_ASSERT(!NFs::Exists(symlinkedFile)); 
+        UNIT_ASSERT(!NFs::Exists(symlinkedDir)); 
+        UNIT_ASSERT(NFs::Exists(originFile)); 
+        UNIT_ASSERT(NFs::Exists(originDir)); 
     }
 
     Y_UNIT_TEST(TestRemoveDirWithSymlinkToFile) {
@@ -520,10 +520,10 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
 
         TFsPath(symlinkedDir).ForceDelete();
 
-        UNIT_ASSERT(!NFs::Exists(symlinkedFile));
-        UNIT_ASSERT(!NFs::Exists(symlinkedDir));
-        UNIT_ASSERT(NFs::Exists(originFile));
-        UNIT_ASSERT(NFs::Exists(originDir));
+        UNIT_ASSERT(!NFs::Exists(symlinkedFile)); 
+        UNIT_ASSERT(!NFs::Exists(symlinkedDir)); 
+        UNIT_ASSERT(NFs::Exists(originFile)); 
+        UNIT_ASSERT(NFs::Exists(originDir)); 
     }
 #endif
 

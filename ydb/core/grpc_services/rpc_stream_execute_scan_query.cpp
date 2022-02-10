@@ -407,7 +407,7 @@ private:
                         response.mutable_result()->mutable_query_stats()->set_query_ast(kqpResponse.GetQueryAst());
                     }
 
-                    Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+                    Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out); 
                     Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
                 }
             } else {
@@ -422,7 +422,7 @@ private:
                     response.mutable_result()->set_query_plan(kqpResponse.GetQueryPlan());
                 }
 
-                Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+                Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out); 
                 Request_->SendSerializedResult(std::move(out), record.GetYdbStatus());
             }
         }
@@ -457,7 +457,7 @@ private:
         response.mutable_result()->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
 
         TString out;
-        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+        Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out); 
 
         GRpcResponsesSizeQueue_.push(out.size());
         GRpcResponsesSize_ += out.size();
@@ -586,7 +586,7 @@ private:
             TResponse response;
             response.set_status(status);
             response.mutable_issues()->CopyFrom(message);
-            Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+            Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out); 
             Request_->SendSerializedResult(std::move(out), status);
         } else {
             for (auto& profile : ExecutionProfiles_) {
@@ -596,7 +596,7 @@ private:
                 }
 
                 TString out;
-                Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
+                Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out); 
                 Request_->SendSerializedResult(std::move(out), status);
             }
         }

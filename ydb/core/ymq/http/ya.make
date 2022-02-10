@@ -20,9 +20,9 @@ PEERDIR(
     library/cpp/http/misc
     library/cpp/http/server
     library/cpp/protobuf/json
-    library/cpp/string_utils/base64
-    library/cpp/string_utils/quote
-    library/cpp/string_utils/url
+    library/cpp/string_utils/base64 
+    library/cpp/string_utils/quote 
+    library/cpp/string_utils/url 
     ydb/core/protos
     ydb/core/ymq/actor
     ydb/core/ymq/base

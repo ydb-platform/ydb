@@ -10,7 +10,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 
 namespace NKikimr {

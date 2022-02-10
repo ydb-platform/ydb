@@ -255,7 +255,7 @@ public:
     Y_PURE_FUNCTION bool empty() const noexcept {
         return Empty();
     }
-
+ 
     Y_PURE_FUNCTION bool Empty() const noexcept {
         return 0 == Size_;
     }

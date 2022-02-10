@@ -7,7 +7,7 @@
 #include "flat_stat_table.h"
 #include "flat_page_other.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/stream/null.h>
 #include <util/random/mersenne.h>

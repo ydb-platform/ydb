@@ -9,7 +9,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
-#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h> 
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/datetime/base.h>

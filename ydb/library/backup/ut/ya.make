@@ -12,7 +12,7 @@ TIMEOUT(60)
 SRC(ut.cpp)
 
 PEERDIR(
-    library/cpp/string_utils/quote
+    library/cpp/string_utils/quote 
     ydb/library/backup
 )
 

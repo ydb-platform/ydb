@@ -1,6 +1,6 @@
 #include <ydb/core/grpc_services/validation/ut/protos/validation_test.pb.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 Y_UNIT_TEST_SUITE(ValidationTests) {
     using namespace Ydb::ValidationTest;

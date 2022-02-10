@@ -3,10 +3,10 @@
 #include <contrib/libs/re2/re2/re2.h>
 
 #include <library/cpp/colorizer/output.h>
-#include <library/cpp/getopt/small/last_getopt.h>
+#include <library/cpp/getopt/small/last_getopt.h> 
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/linear_regression/linear_regression.h>
-#include <library/cpp/threading/poor_man_openmp/thread_helper.h>
+#include <library/cpp/threading/poor_man_openmp/thread_helper.h> 
 
 #include <util/system/hp_timer.h>
 #include <util/system/info.h>
@@ -22,7 +22,7 @@
 #include <util/generic/maybe.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/intrlist.h>
-#include <util/stream/format.h>
+#include <util/stream/format.h> 
 #include <util/system/yield.h>
 
 using re2::RE2;
@@ -128,11 +128,11 @@ namespace {
             }
 
             TString hr;
-            if (t > 10 * 1000) {
-                hr = " (" + ToString(HumanReadableSize(t, ESizeFormat::SF_QUANTITY)) + ")";
-            }
-
-            return ToString(t) + hr + " cycles";
+            if (t > 10 * 1000) { 
+                hr = " (" + ToString(HumanReadableSize(t, ESizeFormat::SF_QUANTITY)) + ")"; 
+            } 
+ 
+            return ToString(t) + hr + " cycles"; 
         }
 
         const ui64 N = GetCycleCount();
@@ -312,7 +312,7 @@ namespace {
     class TCSVReporter: public IReporter {
     public:
         TCSVReporter() {
-            Cout << "Name\tSamples\tIterations\tRun_time\tPer_iteration_sec\tPer_iteration_cycles" << Endl;
+            Cout << "Name\tSamples\tIterations\tRun_time\tPer_iteration_sec\tPer_iteration_cycles" << Endl; 
         }
 
         ~TCSVReporter() override {
@@ -469,7 +469,7 @@ void Out<TResult>(IOutputStream& out, const TResult& r) {
     out << "----------- " << LightRed() << r.TestName << Old() << " ---------------" << Endl
         << " samples:       " << White() << r.Samples << Old() << Endl
         << " iterations:    " << White() << r.Iterations << Old() << Endl
-        << " iterations hr:    " << White() << HumanReadableSize(r.Iterations, SF_QUANTITY) << Old() << Endl
+        << " iterations hr:    " << White() << HumanReadableSize(r.Iterations, SF_QUANTITY) << Old() << Endl 
         << " run time:      " << White() << r.RunTime << Old() << Endl;
 
     if (r.CyclesPerIteration) {

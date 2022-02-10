@@ -1,6 +1,6 @@
 #include "blobstorage_synclogdsk.h"
 #include "blobstorage_synclogdata.h"
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 
 namespace NKikimr {

@@ -2,7 +2,7 @@
 
 #include "defaults.h"
 #include "src_root.h"
-#include "backtrace.h"
+#include "backtrace.h" 
 
 #if defined(_MSC_VER)
     #include <new>
@@ -55,7 +55,7 @@ inline void YaDebugBreak() {
 }
 
 #undef Y_ASSERT
-
+ 
 #if !defined(NDEBUG) && !defined(__GCCXML__)
     #define Y_ASSERT(a)                                         \
         do {                                                    \

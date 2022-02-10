@@ -350,7 +350,7 @@ private:
             YQL_ENSURE(fillSettings.FormatDetails == KikimrMkqlProtoFormat);
 
             TVector<char> buffer(protoValue->ByteSize());
-            Y_PROTOBUF_SUPPRESS_NODISCARD protoValue->SerializeToArray(buffer.data(), buffer.size());
+            Y_PROTOBUF_SUPPRESS_NODISCARD protoValue->SerializeToArray(buffer.data(), buffer.size()); 
             resultNode = ctx.NewAtom(node.Pos(), TStringBuf(buffer.data(), buffer.size()));
         }
 

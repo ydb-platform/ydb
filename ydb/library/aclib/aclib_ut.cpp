@@ -1,5 +1,5 @@
-#include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/testing/unittest/registar.h> 
+#include <library/cpp/string_utils/base64/base64.h> 
 #include "aclib.h"
 
 using namespace NACLib;
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(ACLib) {
     Y_UNIT_TEST(CheckACL) {
         TString ACL = "CiEIARD/DxoYcm9ib3QtcWxvdWQta2lraW1yQHN0YWZmIAMKGggBEP8PGhFyb2JvdC1xbG91ZEBzdGFmZiADCiEIARD/DxoYcm9ib3QtcWxvdWQtY2xpZW50QHN0YWZmIAMKFwgBEP8PGg54ZW5veGVub0BzdGFmZiAD";
         TSecurityObject securityObject("owner@builtin", false);
-        Y_PROTOBUF_SUPPRESS_NODISCARD securityObject.MutableACL()->ParseFromString(Base64Decode(ACL));
+        Y_PROTOBUF_SUPPRESS_NODISCARD securityObject.MutableACL()->ParseFromString(Base64Decode(ACL)); 
         TUserToken user("xenoxeno@staff", {});
         ui32 access = EAccessRights::DescribeSchema;
         UNIT_ASSERT(securityObject.CheckAccess(access, user));

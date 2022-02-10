@@ -228,7 +228,7 @@ struct TStructRecord {
 
     static TStructRecord Parse(const TString& serializedProto, const THashMap<NTable::TTag, TString>& tagToName) {
         NKikimrChangeExchange::TChangeRecord::TDataChange proto;
-        Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromArray(serializedProto.data(), serializedProto.size());
+        Y_PROTOBUF_SUPPRESS_NODISCARD proto.ParseFromArray(serializedProto.data(), serializedProto.size()); 
         return Parse(proto, tagToName);
     }
 

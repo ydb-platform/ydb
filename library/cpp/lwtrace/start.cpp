@@ -7,7 +7,7 @@
 #include <util/generic/singleton.h>
 #include <util/stream/file.h>
 #include <util/stream/output.h>
-#include <util/system/env.h>
+#include <util/system/env.h> 
 
 #include <stdlib.h>
 
@@ -40,8 +40,8 @@ void NLWTrace::StartLwtraceFromEnv() {
         started = true;
     }
 
-    TString path = GetEnv("LWTRACE");
-    if (!path) {
+    TString path = GetEnv("LWTRACE"); 
+    if (!path) { 
         return;
     }
 
@@ -54,8 +54,8 @@ void NLWTrace::StartLwtraceFromEnv() {
 }
 
 void NLWTrace::StartLwtraceFromEnv(std::function<void(TManager&)> prepare) {
-    TString path = GetEnv("LWTRACE");
-    if (Y_LIKELY(!path)) {
+    TString path = GetEnv("LWTRACE"); 
+    if (Y_LIKELY(!path)) { 
         return;
     }
 

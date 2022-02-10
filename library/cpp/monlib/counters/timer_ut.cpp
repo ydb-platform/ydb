@@ -1,6 +1,6 @@
 #include "timer.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 using namespace NMonitoring;
 using namespace std::literals::chrono_literals;

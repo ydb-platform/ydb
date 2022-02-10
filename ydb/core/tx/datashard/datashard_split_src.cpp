@@ -357,7 +357,7 @@ public:
 
                 // Persist snapshot data so that it can be sent if this datashard restarts
                 TString snapshotMeta;
-                Y_PROTOBUF_SUPPRESS_NODISCARD snapshot->SerializeToString(&snapshotMeta);
+                Y_PROTOBUF_SUPPRESS_NODISCARD snapshot->SerializeToString(&snapshotMeta); 
                 db.Table<Schema::SplitSrcSnapshots>()
                         .Key(dstTablet)
                         .Update(NIceDb::TUpdate<Schema::SplitSrcSnapshots::SnapshotMeta>(snapshotMeta));

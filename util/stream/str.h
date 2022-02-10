@@ -79,7 +79,7 @@ public:
     }
 
     TStringOutput(TStringOutput&& s) noexcept = default;
-
+ 
     ~TStringOutput() override;
 
     /**

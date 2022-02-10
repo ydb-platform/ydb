@@ -11,7 +11,7 @@
 #include <util/string/builder.h>
 
 #include <util/generic/list.h>
-#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h> 
 
 namespace NKikimr {
 

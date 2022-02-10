@@ -1,6 +1,6 @@
 #include "udf_tz.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 using namespace NYql::NUdf;
 

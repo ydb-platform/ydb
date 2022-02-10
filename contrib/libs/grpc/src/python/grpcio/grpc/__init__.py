@@ -1473,7 +1473,7 @@ class Server(six.with_metaclass(abc.ABCMeta)):
         2) A timeout occurs if timeout is not `None`.
 
         The timeout argument works in the same way as `threading.Event.wait()`.
-        https://docs.python.org/3/library/threading.html#threading.Event.wait
+        https://docs.python.org/3/library/threading.html#threading.Event.wait 
 
         Args:
           timeout: A floating point number specifying a timeout for the

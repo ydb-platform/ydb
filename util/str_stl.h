@@ -84,14 +84,14 @@ template <>
 struct hash<TString>: ::NHashPrivate::TStringHash<char> {
 };
 
-template <>
+template <> 
 struct hash<TUtf16String>: ::NHashPrivate::TStringHash<wchar16> {
-};
-
+}; 
+ 
 template <>
 struct THash<TWtringBuf>: ::NHashPrivate::TStringHash<wchar16> {
 };
-
+ 
 template <>
 struct hash<TUtf32String>: ::NHashPrivate::TStringHash<wchar32> {
 };
@@ -194,11 +194,11 @@ struct TEqualTo<TUtf16String>: public TEqualTo<TWtringBuf> {
     using is_transparent = void;
 };
 
-template <>
+template <> 
 struct TEqualTo<TUtf32String>: public TEqualTo<TUtf32StringBuf> {
-    using is_transparent = void;
-};
-
+    using is_transparent = void; 
+}; 
+ 
 template <class TFirst, class TSecond>
 struct TEqualTo<std::pair<TFirst, TSecond>> {
     template <class TOther>
@@ -247,11 +247,11 @@ struct TLess<TUtf16String>: public TLess<TWtringBuf> {
     using is_transparent = void;
 };
 
-template <>
+template <> 
 struct TLess<TUtf32String>: public TLess<TUtf32StringBuf> {
-    using is_transparent = void;
-};
-
+    using is_transparent = void; 
+}; 
+ 
 template <class T>
 struct TGreater: public std::greater<T> {
 };
@@ -265,8 +265,8 @@ template <>
 struct TGreater<TUtf16String>: public TGreater<TWtringBuf> {
     using is_transparent = void;
 };
-
-template <>
+ 
+template <> 
 struct TGreater<TUtf32String>: public TGreater<TUtf32StringBuf> {
-    using is_transparent = void;
-};
+    using is_transparent = void; 
+}; 

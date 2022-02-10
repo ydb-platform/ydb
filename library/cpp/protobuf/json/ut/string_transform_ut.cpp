@@ -1,6 +1,6 @@
 #include "json.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <library/cpp/protobuf/json/proto2json.h>
 
 Y_UNIT_TEST_SUITE(TDoubleEscapeTransform) {

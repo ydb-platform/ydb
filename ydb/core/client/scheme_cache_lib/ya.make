@@ -11,7 +11,7 @@ PEERDIR(
     contrib/libs/protobuf
     library/cpp/actors/core
     library/cpp/grpc/client
-    library/cpp/threading/future
+    library/cpp/threading/future 
     ydb/core/base
     ydb/core/client/minikql_compile
     ydb/core/protos

@@ -99,7 +99,7 @@ public:
             newShardTx.MutableReceiveSnapshot()->MutableTableId()->SetTableId(txState->TargetPathId.LocalPathId);
             newShardTx.MutableReceiveSnapshot()->AddReceiveFrom()->SetShard(ui64(srcDatashardId));
             TString txBody;
-            Y_PROTOBUF_SUPPRESS_NODISCARD newShardTx.SerializeToString(&txBody);
+            Y_PROTOBUF_SUPPRESS_NODISCARD newShardTx.SerializeToString(&txBody); 
 
             THolder<TEvDataShard::TEvProposeTransaction> dstEvent =
                 THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME,
@@ -120,7 +120,7 @@ public:
             oldShardTx.MutableSendSnapshot()->AddSendTo()->SetShard(ui64(dstDatashardId));
             oldShardTx.SetReadOnly(true);
             txBody.clear();
-            Y_PROTOBUF_SUPPRESS_NODISCARD oldShardTx.SerializeToString(&txBody);
+            Y_PROTOBUF_SUPPRESS_NODISCARD oldShardTx.SerializeToString(&txBody); 
             THolder<TEvDataShard::TEvProposeTransaction> srcEvent =
                 THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME,
                                                     context.SS->TabletID(),

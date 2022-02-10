@@ -14,7 +14,7 @@ PY_SRCS(
 PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/deprecated/split
-    library/cpp/string_utils/scan
+    library/cpp/string_utils/scan 
 )
 
 END()

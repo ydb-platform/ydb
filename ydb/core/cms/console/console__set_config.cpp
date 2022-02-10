@@ -60,7 +60,7 @@ public:
         // Modify state.
         NIceDb::TNiceDb db(txc.DB);
         TString config;
-        Y_PROTOBUF_SUPPRESS_NODISCARD NewConfig.SerializeToString(&config);
+        Y_PROTOBUF_SUPPRESS_NODISCARD NewConfig.SerializeToString(&config); 
         db.Table<Schema::Config>().Key(ConfigKeyConfig)
             .Update(NIceDb::TUpdate<Schema::Config::Value>(config));
 

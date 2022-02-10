@@ -717,7 +717,7 @@ void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* 
         }
 
         if (WorkDir.size()) {
-            NFs::SetCurrentWorkingDirectory(WorkDir);
+            NFs::SetCurrentWorkingDirectory(WorkDir); 
         }
 
         if (CloseAllFdsOnExec) {

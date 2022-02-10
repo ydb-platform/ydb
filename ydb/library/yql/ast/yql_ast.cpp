@@ -3,7 +3,7 @@
 
 #include <util/string/builder.h>
 #include <util/system/compiler.h>
-#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h> 
 #include <ydb/library/yql/utils/utf8.h>
 
 #include <cstdlib>

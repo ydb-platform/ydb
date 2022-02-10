@@ -3,7 +3,7 @@
 #include <library/cpp/codecs/static/builder.h>
 #include <library/cpp/codecs/codecs.h>
 
-#include <library/cpp/getopt/small/last_getopt.h>
+#include <library/cpp/getopt/small/last_getopt.h> 
 
 #include <util/generic/yexception.h>
 #include <util/stream/file.h>

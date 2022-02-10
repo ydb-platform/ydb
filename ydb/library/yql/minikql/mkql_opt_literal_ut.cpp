@@ -3,7 +3,7 @@
 #include "mkql_node_printer.h"
 #include "mkql_function_registry.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {

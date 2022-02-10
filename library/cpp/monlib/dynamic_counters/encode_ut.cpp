@@ -5,7 +5,7 @@
 #include <library/cpp/monlib/encode/protobuf/protobuf.h>
 
 #include <library/cpp/monlib/encode/protobuf/protos/samples.pb.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/buffer.h>
 #include <util/stream/buffer.h>

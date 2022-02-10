@@ -7,7 +7,7 @@
 #include "flat_range_cache.h"
 #include "util_fmt_cell.h"
 
-#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h> 
 
 #include <util/draft/holder_vector.h>
 #include <util/generic/vector.h>

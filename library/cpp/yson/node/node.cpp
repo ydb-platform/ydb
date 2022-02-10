@@ -123,7 +123,7 @@ TNode::TNode(int i)
 TNode::TNode(unsigned int ui)
     : Value_(static_cast<ui64>(ui))
 { }
-
+ 
 TNode::TNode(long i)
     : Value_(static_cast<i64>(i))
 { }
@@ -849,7 +849,7 @@ void TNode::CreateAttributes()
     Attributes_ = MakeHolder<TNode>();
     Attributes_->Value_ = TMapType();
 }
-
+ 
 void TNode::Save(IOutputStream* out) const
 {
     NodeToYsonStream(*this, out, NYson::EYsonFormat::Binary);

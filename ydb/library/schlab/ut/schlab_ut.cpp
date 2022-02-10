@@ -1,7 +1,7 @@
 #include <ydb/library/schlab/schoot/schoot_gen_cfg.h>
 #include <ydb/library/schlab/schoot/schoot_gen.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 Y_UNIT_TEST_SUITE(SchLab) {
     Y_UNIT_TEST(TestSchootGenCfgSet1) {

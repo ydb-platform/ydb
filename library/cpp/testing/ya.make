@@ -1,9 +1,9 @@
 RECURSE(
     common
-    benchmark
-    benchmark/examples
-    benchmark/examples/metrics
-    benchmark/main
+    benchmark 
+    benchmark/examples 
+    benchmark/examples/metrics 
+    benchmark/main 
     boost_test
     boost_test_main
     dump_clang_coverage
@@ -18,7 +18,7 @@ RECURSE(
     gtest_protobuf
     hook
     mock_server
-    unittest
-    unittest_main
+    unittest 
+    unittest_main 
     urlnorm
 )

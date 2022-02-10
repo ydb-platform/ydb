@@ -4,7 +4,7 @@
 
 #include <util/generic/ptr.h>
 #include <library/cpp/charset/doccodes.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 class THttpHeaderParserTestSuite: public TTestBase {
     UNIT_TEST_SUITE(THttpHeaderParserTestSuite);

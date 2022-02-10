@@ -1,6 +1,6 @@
 #include "selfping_actor.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <library/cpp/actors/testlib/test_runtime.h>
 
 namespace NActors {

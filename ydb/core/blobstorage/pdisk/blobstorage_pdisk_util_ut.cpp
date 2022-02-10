@@ -16,7 +16,7 @@
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/library/pdisk_io/aio.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <util/stream/null.h>
 #include <util/system/tempfile.h>
 #include <cstring>

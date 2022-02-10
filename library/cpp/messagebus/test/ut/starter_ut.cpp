@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <library/cpp/messagebus/test/helper/example_module.h>
 #include <library/cpp/messagebus/test/helper/object_count_check.h>

@@ -7,7 +7,7 @@
 #include <ydb/core/tablet_flat/test/libs/exec/runner.h>
 #include <ydb/core/tablet_flat/ut/flat_database_ut_common.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {

@@ -17,7 +17,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    library/cpp/getopt
+    library/cpp/getopt 
     library/cpp/protobuf/util
     library/cpp/regex/pcre
     library/cpp/svnversion

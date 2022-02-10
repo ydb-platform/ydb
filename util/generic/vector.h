@@ -1,7 +1,7 @@
 #pragma once
 
 #include "fwd.h"
-#include "reserve.h"
+#include "reserve.h" 
 
 #include <util/memory/alloc.h>
 
@@ -26,17 +26,17 @@ public:
     }
 
     inline explicit TVector(::NDetail::TReserveTag rt)
-        : TBase()
-    {
-        this->reserve(rt.Capacity);
-    }
-
+        : TBase() 
+    { 
+        this->reserve(rt.Capacity); 
+    } 
+ 
     inline explicit TVector(::NDetail::TReserveTag rt, const typename TBase::allocator_type& a)
-        : TBase(a)
-    {
-        this->reserve(rt.Capacity);
-    }
-
+        : TBase(a) 
+    { 
+        this->reserve(rt.Capacity); 
+    } 
+ 
     inline explicit TVector(size_type count)
         : TBase(count)
     {
@@ -103,9 +103,9 @@ public:
     }
 
     Y_PURE_FUNCTION inline bool empty() const noexcept {
-        return TBase::empty();
-    }
-
+        return TBase::empty(); 
+    } 
+ 
     inline yssize_t ysize() const noexcept {
         return (yssize_t)TBase::size();
     }

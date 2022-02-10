@@ -80,7 +80,7 @@ template <>
 bool TBasicString<wchar16, std::char_traits<wchar16>>::to_title(size_t pos, size_t n) {
     return ToTitle(*this, pos, n);
 }
-
+ 
 template <>
 TUtf32String&
 TBasicString<wchar32, std::char_traits<wchar32>>::AppendAscii(const ::TStringBuf& s) {
@@ -112,9 +112,9 @@ TBasicString<char, std::char_traits<char>>::AppendUtf16(const ::TWtringBuf& s) {
 template <>
 TUtf32String&
 TBasicString<wchar32, std::char_traits<wchar32>>::AppendUtf8(const ::TStringBuf& s) {
-    size_t oldSize = size();
+    size_t oldSize = size(); 
     ReserveAndResize(size() + s.size() * 4);
-    size_t written = 0;
+    size_t written = 0; 
     size_t pos = UTF8ToWideImpl(s.data(), s.size(), begin() + oldSize, written);
     if (pos != s.size()) {
         ythrow yexception() << "failed to decode UTF-8 string at pos " << pos << ::NDetail::InStringMsg(s.data(), s.size());
@@ -122,35 +122,35 @@ TBasicString<wchar32, std::char_traits<wchar32>>::AppendUtf8(const ::TStringBuf&
     resize(oldSize + written);
 
     return *this;
-}
-
+} 
+ 
 template <>
 TUtf32String&
 TBasicString<wchar32, std::char_traits<wchar32>>::AppendUtf16(const ::TWtringBuf& s) {
-    size_t oldSize = size();
+    size_t oldSize = size(); 
     ReserveAndResize(size() + s.size() * 2);
-
-    wchar32* oldEnd = begin() + oldSize;
-    wchar32* end = oldEnd;
+ 
+    wchar32* oldEnd = begin() + oldSize; 
+    wchar32* end = oldEnd; 
     NDetail::UTF16ToUTF32ImplScalar(s.data(), s.data() + s.size(), end);
-    size_t written = end - oldEnd;
-
+    size_t written = end - oldEnd; 
+ 
     resize(oldSize + written);
-
+ 
     return *this;
-}
-
+} 
+ 
 template <>
 bool TBasicString<wchar32, std::char_traits<wchar32>>::to_lower(size_t pos, size_t n) {
     return ToLower(*this, pos, n);
-}
-
+} 
+ 
 template <>
 bool TBasicString<wchar32, std::char_traits<wchar32>>::to_upper(size_t pos, size_t n) {
     return ToUpper(*this, pos, n);
-}
-
+} 
+ 
 template <>
 bool TBasicString<wchar32, std::char_traits<wchar32>>::to_title(size_t pos, size_t n) {
     return ToTitle(*this, pos, n);
-}
+} 

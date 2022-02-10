@@ -14,7 +14,7 @@ SIZE(MEDIUM)
 PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/interconnect
-    library/cpp/testing/unittest
+    library/cpp/testing/unittest 
     util
     ydb/core/base
     ydb/core/mind

@@ -23,32 +23,32 @@ struct DIR* opendir(const char* dirname) {
     struct DIR* dir = (struct DIR*)malloc(sizeof(struct DIR));
     if (!dir) {
         return NULL;
-    }
+    } 
     dir->sh = INVALID_HANDLE_VALUE;
     dir->fff_templ = NULL;
     dir->file_no = 0;
     dir->readdir_buf = NULL;
-
+ 
     int len = strlen(dirname);
     //Remove trailing slashes
     while (len && (dirname[len - 1] == '\\' || dirname[len - 1] == '/')) {
         --len;
     }
-    int len_converted = MultiByteToWideChar(CP_UTF8, 0, dirname, len, 0, 0);
-    if (len_converted == 0) {
+    int len_converted = MultiByteToWideChar(CP_UTF8, 0, dirname, len, 0, 0); 
+    if (len_converted == 0) { 
         closedir(dir);
         return NULL;
-    }
+    } 
     dir->fff_templ = (WCHAR*)malloc((len_converted + 5) * sizeof(WCHAR));
     if (!dir->fff_templ) {
         closedir(dir);
         return NULL;
-    }
-    MultiByteToWideChar(CP_UTF8, 0, dirname, len, dir->fff_templ, len_converted);
-
-    WCHAR append[] = {'\\', '*', '.', '*', 0};
-    memcpy(dir->fff_templ + len_converted, append, sizeof(append));
-    dir->sh = FindFirstFileW(dir->fff_templ, &dir->wfd);
+    } 
+    MultiByteToWideChar(CP_UTF8, 0, dirname, len, dir->fff_templ, len_converted); 
+ 
+    WCHAR append[] = {'\\', '*', '.', '*', 0}; 
+    memcpy(dir->fff_templ + len_converted, append, sizeof(append)); 
+    dir->sh = FindFirstFileW(dir->fff_templ, &dir->wfd); 
     if (dir->sh == INVALID_HANDLE_VALUE) {
         SetErrno();
         closedir(dir);
@@ -68,7 +68,7 @@ int closedir(struct DIR* dir) {
 }
 
 int readdir_r(struct DIR* dir, struct dirent* entry, struct dirent** result) {
-    if (!FindNextFileW(dir->sh, &dir->wfd)) {
+    if (!FindNextFileW(dir->sh, &dir->wfd)) { 
         int err = GetLastError();
         *result = 0;
         if (err == ERROR_NO_MORE_FILES) {
@@ -89,36 +89,36 @@ int readdir_r(struct DIR* dir, struct dirent* entry, struct dirent** result) {
     } else {
         entry->d_type = DT_REG;
     }
-    int len = lstrlenW(dir->wfd.cFileName);
-    int conv_len = WideCharToMultiByte(CP_UTF8, 0, dir->wfd.cFileName, len, 0, 0, 0, 0);
-    if (conv_len == 0) {
-        return -1;
-    }
-    if (conv_len > sizeof(entry->d_name) - 1) {
-        SetLastError(ERROR_INSUFFICIENT_BUFFER);
-        return ERROR_INSUFFICIENT_BUFFER;
-    }
-    entry->d_namlen = conv_len;
-    WideCharToMultiByte(CP_UTF8, 0, dir->wfd.cFileName, len, entry->d_name, conv_len, 0, 0);
-    entry->d_name[conv_len] = 0;
+    int len = lstrlenW(dir->wfd.cFileName); 
+    int conv_len = WideCharToMultiByte(CP_UTF8, 0, dir->wfd.cFileName, len, 0, 0, 0, 0); 
+    if (conv_len == 0) { 
+        return -1; 
+    } 
+    if (conv_len > sizeof(entry->d_name) - 1) { 
+        SetLastError(ERROR_INSUFFICIENT_BUFFER); 
+        return ERROR_INSUFFICIENT_BUFFER; 
+    } 
+    entry->d_namlen = conv_len; 
+    WideCharToMultiByte(CP_UTF8, 0, dir->wfd.cFileName, len, entry->d_name, conv_len, 0, 0); 
+    entry->d_name[conv_len] = 0; 
     *result = entry;
     return 0;
 }
 
 struct dirent* readdir(struct DIR* dir) {
     struct dirent* res;
-    if (!dir->readdir_buf) {
+    if (!dir->readdir_buf) { 
         dir->readdir_buf = (struct dirent*)malloc(sizeof(struct dirent));
-        if (dir->readdir_buf == 0)
-            return 0;
-    }
+        if (dir->readdir_buf == 0) 
+            return 0; 
+    } 
     readdir_r(dir, dir->readdir_buf, &res);
     return res;
 }
 
 void rewinddir(struct DIR* dir) {
     FindClose(dir->sh);
-    dir->sh = FindFirstFileW(dir->fff_templ, &dir->wfd);
+    dir->sh = FindFirstFileW(dir->fff_templ, &dir->wfd); 
     dir->file_no = 0;
 }
 

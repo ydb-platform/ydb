@@ -8,7 +8,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/lwtrace
-    library/cpp/getopt
+    library/cpp/getopt 
 )
 
 END()

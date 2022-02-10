@@ -7,7 +7,7 @@
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 
 #include <google/protobuf/text_format.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <functional>
 

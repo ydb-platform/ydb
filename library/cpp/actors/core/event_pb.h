@@ -233,7 +233,7 @@ namespace NActors {
         static IEventBase* Load(TIntrusivePtr<TEventSerializedData> input) {
             THolder<TEventPBBase> ev(new TEv());
             if (!input->GetSize()) {
-                Y_PROTOBUF_SUPPRESS_NODISCARD ev->Record.ParseFromString(TString());
+                Y_PROTOBUF_SUPPRESS_NODISCARD ev->Record.ParseFromString(TString()); 
             } else {
                 TRope::TConstIterator iter = input->GetBeginIter();
                 ui64 size = input->GetSize();
@@ -450,7 +450,7 @@ namespace NActors {
             TRecord& base(TBase::Record);
             if (!PreSerializedData.empty()) {
                 TRecord copy;
-                Y_PROTOBUF_SUPPRESS_NODISCARD copy.ParseFromString(PreSerializedData);
+                Y_PROTOBUF_SUPPRESS_NODISCARD copy.ParseFromString(PreSerializedData); 
                 copy.MergeFrom(base);
                 base.Swap(&copy);
                 PreSerializedData.clear();

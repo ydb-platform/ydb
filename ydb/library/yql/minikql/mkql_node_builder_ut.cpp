@@ -3,7 +3,7 @@
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
 #include "mkql_type_builder.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 namespace NKikimr {
 namespace NMiniKQL {

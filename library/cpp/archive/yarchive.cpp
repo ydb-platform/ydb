@@ -153,15 +153,15 @@ public:
             TransferData(src, &compress);
             compress.Finish();
         } else {
-            size_t skip_size = ArchiveWriterDefaultDataAlignment - Off_ % ArchiveWriterDefaultDataAlignment;
-            if (skip_size == ArchiveWriterDefaultDataAlignment) {
-                skip_size = 0;
-            }
-            while(skip_size > 0) {
-                Out_->Write(char(0));
-                Off_ += 1;
-                skip_size -= 1;
-            }
+            size_t skip_size = ArchiveWriterDefaultDataAlignment - Off_ % ArchiveWriterDefaultDataAlignment; 
+            if (skip_size == ArchiveWriterDefaultDataAlignment) { 
+                skip_size = 0; 
+            } 
+            while(skip_size > 0) { 
+                Out_->Write(char(0)); 
+                Off_ += 1; 
+                skip_size -= 1; 
+            } 
             TransferData(src, &out);
             out.Finish();
         }

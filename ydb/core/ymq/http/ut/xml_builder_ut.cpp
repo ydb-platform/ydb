@@ -1,6 +1,6 @@
 #include <ydb/core/ymq/http/xml_builder.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 Y_UNIT_TEST_SUITE(XmlBuilderTest) {
     Y_UNIT_TEST(WritesProperly) {

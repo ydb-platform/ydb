@@ -42,14 +42,14 @@ static void NullSerializeReadTableResponse(const TString& input, Ydb::StatusIds:
     readTableResponse.set_status(status);
 
     readTableResponse.mutable_result()->set_result_set(input.Data(), input.Size());
-    Y_PROTOBUF_SUPPRESS_NODISCARD readTableResponse.SerializeToString(output);
+    Y_PROTOBUF_SUPPRESS_NODISCARD readTableResponse.SerializeToString(output); 
 }
 
 static void NullSerializeReadTableResponse(const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message, Ydb::StatusIds::StatusCode status, TString* output) {
     Ydb::Impl::ReadTableResponse readTableResponse;
     readTableResponse.set_status(status);
     readTableResponse.mutable_issues()->CopyFrom(message);
-    Y_PROTOBUF_SUPPRESS_NODISCARD readTableResponse.SerializeToString(output);
+    Y_PROTOBUF_SUPPRESS_NODISCARD readTableResponse.SerializeToString(output); 
 }
 
 static NKikimrMiniKQL::TParams ConvertKey(const Ydb::TypedValue& key) {

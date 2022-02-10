@@ -1,7 +1,7 @@
 #include "intrusive_stack.h"
 
 #include <util/random/random.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 namespace NKikimr {
 

@@ -122,7 +122,7 @@ public:
             tx.MutableDropTable()->SetId_Deprecated(pathId.LocalPathId);
             PathIdFromPathId(pathId, tx.MutableDropTable()->MutablePathId());
             tx.MutableDropTable()->SetName(path->Name);
-            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
+            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody); 
         }
 
         Y_VERIFY(txState->Shards.size());

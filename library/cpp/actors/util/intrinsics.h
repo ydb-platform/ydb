@@ -4,7 +4,7 @@
 #include <util/system/atomic.h>
 #include <util/system/spinlock.h>
 
-#include <library/cpp/sse/sse.h> // The header chooses appropriate SSE support
+#include <library/cpp/sse/sse.h> // The header chooses appropriate SSE support 
 
 static_assert(sizeof(TAtomic) == 8, "expect sizeof(TAtomic) == 8");
 

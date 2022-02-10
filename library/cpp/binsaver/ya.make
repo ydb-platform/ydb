@@ -12,7 +12,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/containers/2d_array
+    library/cpp/containers/2d_array 
 )
 
 END()

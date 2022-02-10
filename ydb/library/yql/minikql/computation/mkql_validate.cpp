@@ -1,4 +1,4 @@
-#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h> 
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 
 #include "mkql_validate.h"

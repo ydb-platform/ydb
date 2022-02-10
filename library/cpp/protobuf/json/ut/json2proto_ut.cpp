@@ -10,7 +10,7 @@
 
 #include <library/cpp/protobuf/json/json2proto.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/hash_set.h>
 #include <util/generic/string.h>

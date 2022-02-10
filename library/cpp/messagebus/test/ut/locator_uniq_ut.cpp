@@ -1,4 +1,4 @@
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <library/cpp/messagebus/test_utils.h>
 #include <library/cpp/messagebus/ybus.h>

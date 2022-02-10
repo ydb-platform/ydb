@@ -1,6 +1,6 @@
 #include "type_name.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/yexception.h>
 #include <util/generic/fwd.h>

@@ -1,6 +1,6 @@
 #include "query_history.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/xrange.h>
 #include <util/digest/murmur.h>

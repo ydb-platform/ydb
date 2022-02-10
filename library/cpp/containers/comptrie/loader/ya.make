@@ -9,7 +9,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/archive
-    library/cpp/containers/comptrie
+    library/cpp/containers/comptrie 
 )
 
 END()

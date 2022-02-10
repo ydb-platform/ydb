@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <library/cpp/threading/local_executor/local_executor.h>
+#include <library/cpp/threading/local_executor/local_executor.h> 
 
 namespace NKikimr {
 namespace NKqp {

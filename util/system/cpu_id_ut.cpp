@@ -2,7 +2,7 @@
 
 #include "platform.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 // There are no tests yet for instructions that use 512-bit wide registers because they are not
 // supported by some compilers yet.
@@ -18,7 +18,7 @@ static void ExecuteSSE3Instruction();
 static void ExecuteSSSE3Instruction();
 static void ExecuteSSE41Instruction();
 static void ExecuteSSE42Instruction();
-static void ExecuteF16CInstruction();
+static void ExecuteF16CInstruction(); 
 static void ExecuteAVXInstruction();
 static void ExecuteAVX2Instruction();
 static void ExecutePOPCNTInstruction();
@@ -134,13 +134,13 @@ void ExecuteSSE42Instruction() {
                          : "eax");
 }
 
-void ExecuteF16CInstruction() {
-    __asm__ __volatile__("vcvtph2ps %%xmm0, %%ymm0\n"
-                         :
-                         :
-                         : "xmm0");
-}
-
+void ExecuteF16CInstruction() { 
+    __asm__ __volatile__("vcvtph2ps %%xmm0, %%ymm0\n" 
+                         : 
+                         : 
+                         : "xmm0"); 
+} 
+ 
 void ExecuteAVXInstruction() {
     __asm__ __volatile__("vzeroupper\n"
                          :
@@ -276,9 +276,9 @@ void ExecuteSSE41Instruction() {
 void ExecuteSSE42Instruction() {
 }
 
-void ExecuteF16CInstruction() {
-}
-
+void ExecuteF16CInstruction() { 
+} 
+ 
 void ExecuteAVXInstruction() {
 }
 
@@ -373,9 +373,9 @@ void ExecuteSSE41Instruction() {
 void ExecuteSSE42Instruction() {
 }
 
-void ExecuteF16CInstruction() {
-}
-
+void ExecuteF16CInstruction() { 
+} 
+ 
 void ExecuteAVXInstruction() {
 }
 

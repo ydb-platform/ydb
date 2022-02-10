@@ -94,7 +94,7 @@ const YdbOld::ResultSet &TReadTableResult::GetResultSet() const {
     if (!Parsed) {
         const NKikimrClient::TResponse& response = GetResult<NKikimrClient::TResponse>();
         const auto& result = response.GetSerializedReadTableResponse();
-        Y_PROTOBUF_SUPPRESS_NODISCARD Result.ParseFromArray(result.data(), result.size());
+        Y_PROTOBUF_SUPPRESS_NODISCARD Result.ParseFromArray(result.data(), result.size()); 
     }
     return Result;
 }

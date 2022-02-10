@@ -1,7 +1,7 @@
 LIBRARY()
 
 PEERDIR(
-    library/cpp/string_utils/base64
+    library/cpp/string_utils/base64 
 )
 
 OWNER(alexvru)

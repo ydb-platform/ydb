@@ -6,8 +6,8 @@ PEERDIR(
     library/cpp/protobuf/util
     library/cpp/scheme/tests/fuzz_ops/lib
     library/cpp/scheme/ut_utils
-    library/cpp/string_utils/quote
-    library/cpp/testing/unittest
+    library/cpp/string_utils/quote 
+    library/cpp/testing/unittest 
 )
 
 SRCS(

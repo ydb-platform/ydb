@@ -5,7 +5,7 @@
  */
 /* Author: Vitaliy Manushkin <agri@yandex-team.ru */
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/generic/typetraits.h>
 #include <util/string/hex.h>
@@ -38,13 +38,13 @@ struct T_mm_CallWrapper {
 };
 
 #if defined(_arm64_)
-#include "library/cpp/sse/sse2neon.h"
+#include "library/cpp/sse/sse2neon.h" 
 #elif defined(_i386_) || defined(_x86_64_)
 #include <xmmintrin.h>
 #include <emmintrin.h>
 #include <smmintrin.h>
 #elif defined(_ppc64_)
-#include "library/cpp/sse/powerpc.h"
+#include "library/cpp/sse/powerpc.h" 
 #else
 #error "Unsupported platform"
 #endif

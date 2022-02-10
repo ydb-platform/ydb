@@ -20,11 +20,11 @@ namespace NFsPrivate {
     }
 
     static TString WCHARToUTF8(const LPWSTR wstr, size_t len) {
-        static_assert(sizeof(WCHAR) == sizeof(wchar16), "expect sizeof(WCHAR) == sizeof(wchar16)");
-
+        static_assert(sizeof(WCHAR) == sizeof(wchar16), "expect sizeof(WCHAR) == sizeof(wchar16)"); 
+ 
         return WideToUTF8((wchar16*)wstr, len);
-    }
-
+    } 
+ 
     HANDLE CreateFileWithUtf8Name(const TStringBuf fName, ui32 accessMode, ui32 shareMode, ui32 createMode, ui32 attributes, bool inheritHandle) {
         TUtf16String wstr;
         LPCWSTR wname = UTF8ToWCHAR(fName, wstr);
@@ -37,8 +37,8 @@ namespace NFsPrivate {
         secAttrs.lpSecurityDescriptor = nullptr;
         secAttrs.nLength = sizeof(secAttrs);
         return ::CreateFileW(wname, accessMode, shareMode, &secAttrs, createMode, attributes, nullptr);
-    }
-
+    } 
+ 
     bool WinRename(const TString& oldPath, const TString& newPath) {
         TUtf16String op, np;
         LPCWSTR opPtr = UTF8ToWCHAR(oldPath, op);
@@ -47,10 +47,10 @@ namespace NFsPrivate {
             ::SetLastError(ERROR_INVALID_NAME);
             return false;
         }
-
+ 
         return MoveFileExW(opPtr, npPtr, MOVEFILE_REPLACE_EXISTING) != 0;
     }
-
+ 
     bool WinRemove(const TString& path) {
         TUtf16String wstr;
         LPCWSTR wname = UTF8ToWCHAR(path, wstr);
@@ -67,10 +67,10 @@ namespace NFsPrivate {
 
         return false;
     }
-
+ 
     bool WinSymLink(const TString& targetName, const TString& linkName) {
         TString tName(targetName);
-        {
+        { 
             size_t pos;
             while ((pos = tName.find('/')) != TString::npos)
                 tName.replace(pos, 1, LOCSLASH_S);
@@ -79,7 +79,7 @@ namespace NFsPrivate {
         LPCWSTR wname = UTF8ToWCHAR(tName, tstr);
         TUtf16String lstr;
         LPCWSTR lname = UTF8ToWCHAR(linkName, lstr);
-
+ 
         // we can't create a dangling link to a dir in this way
         ui32 attr = ::GetFileAttributesW(wname);
         if (attr == INVALID_FILE_ATTRIBUTES) {
@@ -111,38 +111,38 @@ namespace NFsPrivate {
         }
 
         return (CreateHardLinkW(npPtr, epPtr, nullptr) != 0);
-    }
-
+    } 
+ 
     bool WinExists(const TString& path) {
         TUtf16String buf;
         LPCWSTR ptr = UTF8ToWCHAR(path, buf);
         return ::GetFileAttributesW(ptr) != INVALID_FILE_ATTRIBUTES;
     }
-
+ 
     TString WinCurrentWorkingDirectory() {
-        TTempBuf result;
-        LPWSTR buf = reinterpret_cast<LPWSTR>(result.Data());
-        int r = GetCurrentDirectoryW(result.Size() / sizeof(WCHAR), buf);
-        if (r == 0)
-            throw TIoSystemError() << "failed to GetCurrentDirectory";
-        return WCHARToUTF8(buf, r);
-    }
-
+        TTempBuf result; 
+        LPWSTR buf = reinterpret_cast<LPWSTR>(result.Data()); 
+        int r = GetCurrentDirectoryW(result.Size() / sizeof(WCHAR), buf); 
+        if (r == 0) 
+            throw TIoSystemError() << "failed to GetCurrentDirectory"; 
+        return WCHARToUTF8(buf, r); 
+    } 
+ 
     bool WinSetCurrentWorkingDirectory(const TString& path) {
         TUtf16String wstr;
-        LPCWSTR wname = UTF8ToWCHAR(path, wstr);
-        if (!wname) {
-            ::SetLastError(ERROR_INVALID_NAME);
-            return false;
-        }
-        return SetCurrentDirectoryW(wname);
-    }
-
+        LPCWSTR wname = UTF8ToWCHAR(path, wstr); 
+        if (!wname) { 
+            ::SetLastError(ERROR_INVALID_NAME); 
+            return false; 
+        } 
+        return SetCurrentDirectoryW(wname); 
+    } 
+ 
     bool WinMakeDirectory(const TString path) {
         TUtf16String buf;
-        LPCWSTR ptr = UTF8ToWCHAR(path, buf);
-        return CreateDirectoryW(ptr, (LPSECURITY_ATTRIBUTES) nullptr);
-    }
+        LPCWSTR ptr = UTF8ToWCHAR(path, buf); 
+        return CreateDirectoryW(ptr, (LPSECURITY_ATTRIBUTES) nullptr); 
+    } 
     // edited part of <Ntifs.h> from Windows DDK
 
 #define SYMLINK_FLAG_RELATIVE 1
@@ -229,5 +229,5 @@ bool GetObjectId(const char* path, GUID* id) {
     return false;
 }
 */
-
+ 
 }

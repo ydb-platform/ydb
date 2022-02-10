@@ -7,7 +7,7 @@
 #include "event_local.h"
 #include "hfunc.h"
 #include <library/cpp/actors/interconnect/poller_actor.h>
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/system/sanitizers.h>
 

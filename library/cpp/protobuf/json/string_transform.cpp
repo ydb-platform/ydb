@@ -2,7 +2,7 @@
 
 #include <google/protobuf/stubs/strutil.h>
 
-#include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/string_utils/base64/base64.h> 
 
 namespace NProtobufJson {
     void TCEscapeTransform::Transform(TString& str) const {

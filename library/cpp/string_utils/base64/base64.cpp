@@ -31,14 +31,14 @@ namespace {
             const bool haveNEON64 = false;
 #endif
 
-# ifdef _windows_
-            // msvc does something wrong in release-build, so we temprorary  disable this branch on windows
-            // https://developercommunity.visualstudio.com/content/problem/334085/release-build-has-made-wrong-optimizaion-in-base64.html
-            const bool isWin = true;
-# else
-            const bool isWin = false;
-# endif
-            if (!isWin && NX86::HaveAVX() && NX86::HaveAVX2()) {
+# ifdef _windows_ 
+            // msvc does something wrong in release-build, so we temprorary  disable this branch on windows 
+            // https://developercommunity.visualstudio.com/content/problem/334085/release-build-has-made-wrong-optimizaion-in-base64.html 
+            const bool isWin = true; 
+# else 
+            const bool isWin = false; 
+# endif 
+            if (!isWin && NX86::HaveAVX() && NX86::HaveAVX2()) { 
                 Encode = avx2_base64_encode;
                 Decode = avx2_base64_decode;
             } else if (NX86::HaveSSSE3()) {

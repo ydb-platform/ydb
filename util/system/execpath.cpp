@@ -84,7 +84,7 @@ static inline TString FreeBSDGetArgv0() {
 }
 
 static inline bool FreeBSDGuessExecPath(const TString& guessPath, TString& execPath) {
-    if (NFs::Exists(guessPath)) {
+    if (NFs::Exists(guessPath)) { 
         // now it should work for real
         execPath = FreeBSDGetExecPath();
         if (RealPath(execPath) == RealPath(guessPath)) {

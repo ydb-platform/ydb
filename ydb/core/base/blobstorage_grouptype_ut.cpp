@@ -2,7 +2,7 @@
 
 #include "blobstorage_grouptype.h"
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 #include <util/string/printf.h>
 #include <util/stream/null.h>
 

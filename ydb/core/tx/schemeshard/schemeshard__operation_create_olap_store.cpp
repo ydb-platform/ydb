@@ -328,7 +328,7 @@ public:
             auto* init = tx.MutableInitShard();
             init->SetDataChannelCount(storeInfo->Description.GetStorageConfig().GetDataChannelCount());
 
-            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&columnShardTxBody);
+            Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&columnShardTxBody); 
         }
 
         for (auto& shard : txState->Shards) {

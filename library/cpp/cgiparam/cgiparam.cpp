@@ -1,7 +1,7 @@
 #include "cgiparam.h"
 
-#include <library/cpp/string_utils/scan/scan.h>
-#include <library/cpp/string_utils/quote/quote.h>
+#include <library/cpp/string_utils/scan/scan.h> 
+#include <library/cpp/string_utils/quote/quote.h> 
 
 #include <util/generic/singleton.h>
 
@@ -11,7 +11,7 @@ TCgiParameters::TCgiParameters(std::initializer_list<std::pair<TString, TString>
     }
 }
 
-const TString& TCgiParameters::Get(const TStringBuf name, size_t numOfValue) const noexcept {
+const TString& TCgiParameters::Get(const TStringBuf name, size_t numOfValue) const noexcept { 
     const auto it = Find(name, numOfValue);
 
     return end() == it ? Default<TString>() : it->second;
@@ -204,7 +204,7 @@ TString TCgiParameters::QuotedPrint(const char* safe) const {
     return res;
 }
 
-TCgiParameters::const_iterator TCgiParameters::Find(const TStringBuf name, size_t pos) const noexcept {
+TCgiParameters::const_iterator TCgiParameters::Find(const TStringBuf name, size_t pos) const noexcept { 
     const auto pair = equal_range(name);
 
     for (auto it = pair.first; it != pair.second; ++it, --pos) {
@@ -216,7 +216,7 @@ TCgiParameters::const_iterator TCgiParameters::Find(const TStringBuf name, size_
     return end();
 }
 
-bool TCgiParameters::Has(const TStringBuf name, const TStringBuf value) const noexcept {
+bool TCgiParameters::Has(const TStringBuf name, const TStringBuf value) const noexcept { 
     const auto pair = equal_range(name);
 
     for (auto it = pair.first; it != pair.second; ++it) {
@@ -248,7 +248,7 @@ TQuickCgiParam::TQuickCgiParam(const TStringBuf cgiParamStr) {
     }
 }
 
-const TStringBuf& TQuickCgiParam::Get(const TStringBuf name, size_t pos) const noexcept {
+const TStringBuf& TQuickCgiParam::Get(const TStringBuf name, size_t pos) const noexcept { 
     const auto pair = equal_range(name);
 
     for (auto it = pair.first; it != pair.second; ++it, --pos) {
@@ -260,7 +260,7 @@ const TStringBuf& TQuickCgiParam::Get(const TStringBuf name, size_t pos) const n
     return Default<TStringBuf>();
 }
 
-bool TQuickCgiParam::Has(const TStringBuf name, const TStringBuf value) const noexcept {
+bool TQuickCgiParam::Has(const TStringBuf name, const TStringBuf value) const noexcept { 
     const auto pair = equal_range(name);
 
     for (auto it = pair.first; it != pair.second; ++it) {

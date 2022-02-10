@@ -14,7 +14,7 @@
 #include <ydb/core/util/btree_cow.h>
 #include <ydb/core/util/yverify_stream.h>
 
-#include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <library/cpp/containers/stack_vector/stack_vec.h> 
 
 #include <util/generic/vector.h>
 #include <util/memory/pool.h>

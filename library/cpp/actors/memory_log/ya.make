@@ -12,7 +12,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/threading/queue
+    library/cpp/threading/queue 
     contrib/libs/linuxvdso
 )
 

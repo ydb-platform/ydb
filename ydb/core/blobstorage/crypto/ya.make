@@ -24,7 +24,7 @@ ENDIF()
 
 PEERDIR(
     contrib/libs/t1ha
-    library/cpp/sse
+    library/cpp/sse 
 )
 
 END()

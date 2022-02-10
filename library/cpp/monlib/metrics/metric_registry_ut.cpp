@@ -4,7 +4,7 @@
 #include <library/cpp/monlib/encode/json/json.h>
 #include <library/cpp/resource/resource.h>
 
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 #include <util/stream/str.h>
 

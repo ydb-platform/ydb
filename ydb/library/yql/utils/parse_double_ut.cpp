@@ -1,5 +1,5 @@
 #include "parse_double.h"
-#include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/unittest/registar.h> 
 
 namespace NYql {
 

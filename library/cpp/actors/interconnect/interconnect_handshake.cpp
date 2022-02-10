@@ -724,7 +724,7 @@ namespace NActors {
         template <typename T>
         void SendExBlock(const T& proto, const char* what) {
             TString data;
-            Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&data);
+            Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&data); 
             Y_VERIFY(data.size() <= TExHeader::MaxSize);
 
             ReportProto(proto, Sprintf("SendExBlock %s", what).data());

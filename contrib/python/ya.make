@@ -79,7 +79,7 @@ RECURSE(
     asyncpg
     asyncssh
     asynctest
-    asyncwhois 
+    asyncwhois
     atomicwrites
     atpublic
     AttrDict

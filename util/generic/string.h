@@ -127,7 +127,7 @@ public:
     }
 
     TBasicCharRef& operator=(TChar c) {
-        Y_ASSERT(Pos_ < S_.size() || (Pos_ == S_.size() && !c)); 
+        Y_ASSERT(Pos_ < S_.size() || (Pos_ == S_.size() && !c));
 
         S_.Detach()[Pos_] = c;
 

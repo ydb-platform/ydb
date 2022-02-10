@@ -1,11 +1,11 @@
-#include "uri_ut.h"
-#include "other.h"
+#include "uri_ut.h" 
+#include "other.h" 
 #include "qargs.h"
 #include <library/cpp/html/entity/htmlentity.h>
 
-#include <util/system/maxlen.h>
+#include <util/system/maxlen.h> 
 
-namespace NUri {
+namespace NUri { 
     Y_UNIT_TEST_SUITE(URLTest) {
         static const char* urls[] = {
             "http://a/b/c/d;p?q#r",
@@ -59,7 +59,7 @@ namespace NUri {
             "%20y", "http://a/b/c/%20y",
             // "%2zy",          "http://a/b/c/%2zy",
             nullptr};
-
+ 
         Y_UNIT_TEST(test_httpURL) {
             TUri rel, base, abs;
             TState::EParsed er = base.Parse(urls[0]);
@@ -90,7 +90,7 @@ namespace NUri {
                 UNIT_ASSERT_EQUAL_C(rel, abs, errbuf);
             }
         }
-
+ 
         Y_UNIT_TEST(test_Schemes) {
             TUri url;
             UNIT_ASSERT_VALUES_EQUAL(url.Parse("www.ya.ru/index.html"), TState::ParsedOK);
@@ -113,7 +113,7 @@ namespace NUri {
             UNIT_ASSERT_VALUES_EQUAL(url.Parse("httpsssss://www.ya.ru", TFeature::FeaturesDefault | TFeature::FeatureSchemeFlexible), TState::ParsedOK);
             UNIT_ASSERT_EQUAL(url.GetScheme(), TScheme::SchemeUnknown);
         }
-
+ 
         struct Link4Norm {
             const char* const base;
             const char* const link;
@@ -296,7 +296,7 @@ namespace NUri {
             URL_TEST(url, test);
             UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "host:8080");
         }
-
+ 
         Y_UNIT_TEST(test06) {
             TTest test = {
                 "http://user:pass@host?q", TFeature::FeaturesAll, TState::ParsedOK, "http", "user", "pass", "host", 80, "/", "q", ""};
@@ -306,7 +306,7 @@ namespace NUri {
             UNIT_ASSERT(!url.FldIsDirty());
             UNIT_ASSERT_VALUES_EQUAL(url.GetField(TField::FieldScheme), "https");
             UNIT_ASSERT_VALUES_EQUAL(url.GetPort(), 443);
-
+ 
             // test copying
             TUri url2(url);
             // make sure strings are equal...
@@ -319,13 +319,13 @@ namespace NUri {
                 url2.GetField(TField::FieldUser));
             // and urls compare the same
             URL_EQ(url, url2);
-
+ 
             // cause a dirty field
             url.FldMemSet(TField::FieldUser, "use"); // it is now shorter
             UNIT_ASSERT(!url.FldIsDirty());
             url.FldMemSet(TField::FieldUser, TStringBuf("user"));
             UNIT_ASSERT(url.FldIsDirty());
-
+ 
             // copy again
             url2 = url;
             UNIT_ASSERT(url.FldIsDirty());
@@ -340,7 +340,7 @@ namespace NUri {
                 url.GetField(TField::FieldUser).data(),
                 url2.GetField(TField::FieldUser).data());
             URL_EQ(url, url2);
-
+ 
             // make query empty
             url.FldMemSet(TField::FieldQuery, "");
             url2 = url;
@@ -358,7 +358,7 @@ namespace NUri {
             url2.FldMemSet(TField::FieldPort, "443");
             URL_EQ(url, url2);
         }
-
+ 
         Y_UNIT_TEST(test07) {
             {
                 TTest test = {
@@ -372,7 +372,7 @@ namespace NUri {
                 UNIT_ASSERT_EQUAL(TScheme::SchemeHTTP, url.GetScheme());
                 UNIT_ASSERT_EQUAL("http", url.GetField(TField::FieldScheme));
             }
-
+ 
             {
                 const TString scheme = "http";
                 const TString host = "host.com";
@@ -384,7 +384,7 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), urlstr + "/");
             }
         }
-
+ 
         Y_UNIT_TEST(test08) {
             {
                 TTest test = {
@@ -471,7 +471,7 @@ namespace NUri {
                 URL_TEST(url, test);
             }
         }
-
+ 
         Y_UNIT_TEST(test09) {
             {
                 TTest test = {
@@ -492,7 +492,7 @@ namespace NUri {
                 URL_TEST(url, test);
             }
         }
-
+ 
         Y_UNIT_TEST(test10) {
             // test some escaping madness, note the ehost vs host
             {
@@ -504,7 +504,7 @@ namespace NUri {
                 TUri url;
                 URL_TEST(url, test);
             }
-
+ 
             {
                 TString host = "%D0%BF%D1%80%D0%B5%D0%B7%D0%B8%D0%B4%D0%B5%D0%BD%D1%82.%D1%80%D1%84";
                 const TString urlstr = TString::Join("http://", host, "/");
@@ -513,7 +513,7 @@ namespace NUri {
                 TUri url;
                 URL_TEST(url, test);
             }
-
+ 
             {
                 TString host = "Фilip.ru";
                 TString ehost = "%D0%A4ilip.ru";
@@ -523,7 +523,7 @@ namespace NUri {
                 TUri url;
                 URL_TEST(url, test);
             }
-
+ 
             {
                 TString host = "%D0%A4ilip.ru";
                 const TString urlstr = TString::Join("http://", host);
@@ -532,7 +532,7 @@ namespace NUri {
                 TUri url;
                 URL_TEST(url, test);
             }
-
+ 
             {
                 TString host = "Filip%90.rЯ";
                 TString ehost = "Filip%90.r%D0%AF";
@@ -542,7 +542,7 @@ namespace NUri {
                 TUri url;
                 URL_TEST(url, test);
             }
-
+ 
             {
                 TString host = "Filip%90.r%D0%AF";
                 const TString urlstr = TString::Join(host, ":8080");
@@ -560,7 +560,7 @@ namespace NUri {
                 TUri url;
                 URL_TEST(url, test);
             }
-
+ 
             {
                 TTest test = {
                     "HtTp://HoSt/%50a%54h/?Query#Frag", TParseFlags(TFeature::FeaturesAll | TFeature::FeatureNoRelPath, TFeature::FeatureToLower), TState::ParsedOK, "http", "", "", "host", 80, "/path/", "query", "frag"};
@@ -572,62 +572,62 @@ namespace NUri {
         Y_UNIT_TEST(test12) {
             // test characters which are not always safe
             {
-#define RAW "/:"
-#define DEC "%2F:"
-#define ENC "%2F%3A"
+#define RAW "/:" 
+#define DEC "%2F:" 
+#define ENC "%2F%3A" 
                 TTest test = {
                     "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC, TFeature::FeaturesAll, TState::ParsedOK, "http", RAW, RAW, "host", 80, "/" DEC, RAW, RAW};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" ENC ":" ENC "@host/" DEC "?" RAW "#" RAW);
-#undef RAW
-#undef DEC
-#undef ENC
+#undef RAW 
+#undef DEC 
+#undef ENC 
             }
             {
-#define RAW "?@"
-#define DEC "%3F@"
-#define ENC "%3F%40"
+#define RAW "?@" 
+#define DEC "%3F@" 
+#define ENC "%3F%40" 
                 TTest test = {
                     "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC, TFeature::FeaturesAll, TState::ParsedOK, "http", RAW, RAW, "host", 80, "/" DEC, RAW, RAW};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" ENC ":" ENC "@host/" DEC "?" RAW "#" RAW);
-#undef RAW
-#undef DEC
-#undef ENC
+#undef RAW 
+#undef DEC 
+#undef ENC 
             }
             {
-#define RAW "%&;="
-#define DEC "%25&;="
-#define ENC "%25%26%3B%3D"
+#define RAW "%&;=" 
+#define DEC "%25&;=" 
+#define ENC "%25%26%3B%3D" 
                 TTest test = {
                     "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC, TFeature::FeaturesAll, TState::ParsedOK, "http", RAW, RAW, "host", 80, "/" ENC, ENC, ENC};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC);
-#undef RAW
-#undef DEC
-#undef ENC
+#undef RAW 
+#undef DEC 
+#undef ENC 
             }
             {
-#define RAW "!$'()*,"
-#define DEC "!$%27()*,"
-#define ENC "%21%24%27%28%29%2A%2C"
+#define RAW "!$'()*," 
+#define DEC "!$%27()*," 
+#define ENC "%21%24%27%28%29%2A%2C" 
                 TTest test = {
                     "http://" ENC ":" ENC "@host/" ENC "?" ENC "#" ENC, TFeature::FeaturesAll, TState::ParsedOK, "http", RAW, RAW, "host", 80, "/" ENC, DEC, DEC};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" ENC ":" ENC "@host/" ENC "?" DEC "#" DEC);
-#undef RAW
-#undef DEC
-#undef ENC
+#undef RAW 
+#undef DEC 
+#undef ENC 
             }
             {
-#define DEC "Череповец。рф"
-#define ENC "%D0%A7%D0%B5%D1%80%D0%B5%D0%BF%D0%BE%D0%B2%D0%B5%D1%86%E3%80%82%D1%80%D1%84"
-// punycode corresponds to lowercase
-#define PNC "xn--b1afab7bff7cb.xn--p1ai"
+#define DEC "Череповец。рф" 
+#define ENC "%D0%A7%D0%B5%D1%80%D0%B5%D0%BF%D0%BE%D0%B2%D0%B5%D1%86%E3%80%82%D1%80%D1%84" 
+// punycode corresponds to lowercase 
+#define PNC "xn--b1afab7bff7cb.xn--p1ai" 
                 TTest test = {
                     "http://" ENC "/" ENC "?" ENC "#" ENC, TParseFlags(TFeature::FeaturesAll | TFeature::FeatureAllowHostIDN, TFeature::FeatureDecodeExtendedASCII), TState::ParsedOK, "http", "", "", DEC, 80, "/" ENC, ENC, ENC};
                 TUri url;
@@ -635,23 +635,23 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL(url.GetField(TField::FieldHostAscii), PNC);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" DEC "/" ENC "?" ENC "#" ENC);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(TField::FlagHostAscii), "http://" PNC "/" ENC "?" ENC "#" ENC);
-#undef PNC
-#undef DEC
-#undef ENC
+#undef PNC 
+#undef DEC 
+#undef ENC 
             }
             {
-#define DEC "Череповец。рф"
-#define ENC "%D0%A7%D0%B5%D1%80%D0%B5%D0%BF%D0%BE%D0%B2%D0%B5%D1%86%E3%80%82%D1%80%D1%84"
-// punycode corresponds to lowercase
-#define PNC "xn--b1afab7bff7cb.xn--p1ai"
+#define DEC "Череповец。рф" 
+#define ENC "%D0%A7%D0%B5%D1%80%D0%B5%D0%BF%D0%BE%D0%B2%D0%B5%D1%86%E3%80%82%D1%80%D1%84" 
+// punycode corresponds to lowercase 
+#define PNC "xn--b1afab7bff7cb.xn--p1ai" 
                 TTest test = {
                     "http://" DEC "/" DEC "?" DEC "#" DEC, TParseFlags(TFeature::FeaturesRobot | TFeature::FeatureEncodeExtendedASCII), TState::ParsedOK, "http", "", "", PNC, 80, "/" ENC, ENC, ENC};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" PNC "/" ENC "?" ENC "#" ENC);
-#undef PNC
-#undef DEC
-#undef ENC
+#undef PNC 
+#undef DEC 
+#undef ENC 
             }
             {
 #define DEC "независимая-экспертиза-оценка-ущерба-авто-дтп.рф"
@@ -665,7 +665,7 @@ namespace NUri {
 #undef DEC
             }
         }
-
+ 
         Y_UNIT_TEST(testFlexibleAuthority) {
             TUri uri;
             UNIT_ASSERT_EQUAL(uri.Parse("http://hello_world", TFeature::FeatureCheckHost), TState::ParsedBadHost);
@@ -728,21 +728,21 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://host/pa%thA");
             }
         }
-
+ 
         Y_UNIT_TEST(testIPv6) {
             {
-#define RAW "[1080:0:0:0:8:800:200C:417A]"
-#define DEC "[1080:0:0:0:8:800:200c:417a]"
+#define RAW "[1080:0:0:0:8:800:200C:417A]" 
+#define DEC "[1080:0:0:0:8:800:200c:417a]" 
                 TTest test = {
                     "http://" RAW "/" RAW "?" RAW "#" RAW, TParseFlags(TFeature::FeaturesAll), TState::ParsedOK, "http", "", "", DEC, 80, "/" RAW, RAW, RAW};
                 TUri url;
                 URL_TEST(url, test);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" DEC "/" RAW "?" RAW "#" RAW);
-#undef DEC
-#undef RAW
+#undef DEC 
+#undef RAW 
             }
         }
-
+ 
         Y_UNIT_TEST(testEscapedFragment) {
             {
                 TTest test = {
@@ -759,7 +759,7 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://host.com/#!a=b&c=d#e+g%25");
             }
         }
-
+ 
         Y_UNIT_TEST(testReEncode) {
             {
                 TStringStream out;
@@ -767,7 +767,7 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL(out.Str(), "foo%20bar");
             }
         }
-
+ 
         static const TStringBuf NonRfcUrls[] = {
             "http://deshevle.ru/price/price=&SrchTp=1&clID=24&BL=SrchTp=0|clID=24&frmID=75&SortBy=P&PreSort=&NmDir=0&VndDir=0&PrDir=0&SPP=44",
             "http://secure.rollerwarehouse.com/skates/aggressive/skates/c/11[03]/tx/$$$+11[03][a-z]",
@@ -781,7 +781,7 @@ namespace NUri {
             "http://www.trinity.by/?section_id=46,47,48&cat=1&filters[]=2^_^Sony",
             "http://translate.yandex.net/api/v1/tr.json/translate?lang=en-ru&text=>",
             nullptr};
-
+ 
         Y_UNIT_TEST(test_NonRfcUrls) {
             TUri url;
             const long flags = TFeature::FeaturesRobot;
@@ -792,11 +792,11 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL(TState::ParsedOK, url.Parse(buf, flags));
             }
         }
-
+ 
         static const TStringBuf CheckParseException[] = {
             "http://www.'>'.com/?.net/",
             nullptr};
-
+ 
         Y_UNIT_TEST(test_CheckParseException) {
             TUri url;
             const long flags = TFeature::FeaturesRobot | TFeature::FeaturesEncode;
@@ -816,8 +816,8 @@ namespace NUri {
                 }
                 ythrow yexception() << "failed to parse URL [" << buf << "]: " << what;
             }
-        }
-
+        } 
+ 
         Y_UNIT_TEST(test_PrintPort) {
             TUri uri;
             {
@@ -900,7 +900,7 @@ namespace NUri {
            UNIT_ASSERT_VALUES_EQUAL(url.GetField(TField::FieldPath), "/path");
         }
     }
-
+ 
     Y_UNIT_TEST_SUITE(TInvertDomainTest) {
         Y_UNIT_TEST(TestInvert) {
             TString a;
@@ -925,24 +925,24 @@ namespace NUri {
             TString h("www.yandex.ru:8080/redir.pl?url=https://google.com/");
             UNIT_ASSERT_EQUAL(InvertDomain(h), "ru.yandex.www:8080/redir.pl?url=https://google.com/");
         }
-    }
-
+    } 
+ 
     TQueryArg::EProcessed ProcessQargs(TString url, TString& processed, TQueryArgFilter filter = 0, void* filterData = 0) {
         TUri uri;
         uri.Parse(url, NUri::TFeature::FeaturesRecommended);
-
+ 
         TQueryArgProcessing processing(TQueryArg::FeatureSortByName | (filter ? TQueryArg::FeatureFilter : 0) | TQueryArg::FeatureRewriteDirty, filter, filterData);
         auto result = processing.Process(uri);
         processed = uri.PrintS();
         return result;
     }
-
+ 
     TString SortQargs(TString url) {
         TString r;
         ProcessQargs(url, r);
         return r;
     }
-
+ 
     bool QueryArgsFilter(const TQueryArg& arg, void* filterData) {
         const char* skipName = static_cast<const char*>(filterData);
         return arg.Name != skipName;

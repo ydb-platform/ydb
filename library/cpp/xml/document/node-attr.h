@@ -3,7 +3,7 @@
 #include "xml-document-decl.h"
 #include "libxml-guards.h"
 #include <util/stream/str.h>
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 
 namespace NXml {
 #define THROW(x, y) ythrow yexception() << #x << ": " << y

@@ -2,11 +2,11 @@
 
 #include <cstdlib>
 
-// http://support.microsoft.com/kb/208427
-#ifndef URL_MAXLEN
+// http://support.microsoft.com/kb/208427 
+#ifndef URL_MAXLEN 
     #define URL_MAXLEN 2083
-#endif
-
+#endif 
+ 
 #define HOST_MAX 260
 #ifndef URL_MAX
     #define URL_MAX 1024

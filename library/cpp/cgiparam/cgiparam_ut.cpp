@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
         TCgiParameters c;
         c.ScanAddAll("qw");
 
-        UNIT_ASSERT_VALUES_EQUAL(c.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(c.size(), 1u); 
         UNIT_ASSERT(c.Get("qw").empty());
     }
 
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
         TCgiParameters c;
         c.ScanAddAll("qw&");
 
-        UNIT_ASSERT_VALUES_EQUAL(c.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(c.size(), 1u); 
         UNIT_ASSERT(c.Get("qw").empty());
     }
 
@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
         TCgiParameters c;
         c.ScanAddAll("qw=1&x");
 
-        UNIT_ASSERT_VALUES_EQUAL(c.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(c.size(), 2u); 
         UNIT_ASSERT_VALUES_EQUAL(c.Get("qw"), "1");
         UNIT_ASSERT(c.Get("x").empty());
     }
@@ -182,7 +182,7 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
         TCgiParameters c;
         c.ScanAddAll("par=1&aaa=1&par=2&bbb&par=3");
 
-        UNIT_ASSERT_VALUES_EQUAL(c.NumOfValues("par"), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(c.NumOfValues("par"), 3u); 
     }
 
     Y_UNIT_TEST(TestUnscape) {
@@ -193,16 +193,16 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
     Y_UNIT_TEST(TestEmpty) {
         UNIT_ASSERT(TCgiParameters().Print().empty());
     }
-
+ 
     Y_UNIT_TEST(TestJoinUnescaped) {
-        TCgiParameters c;
-
+        TCgiParameters c; 
+ 
         c.Scan("foo=1&foo=2");
         c.JoinUnescaped("foo", ';', "0");
-
-        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "foo=1;2;0");
-    }
-
+ 
+        UNIT_ASSERT_VALUES_EQUAL(c.Print(), "foo=1;2;0"); 
+    } 
+ 
     Y_UNIT_TEST(TestContInit) {
         TCgiParameters c = {std::make_pair("a", "a1"), std::make_pair("b", "b1"), std::make_pair("a", "a2")};
 

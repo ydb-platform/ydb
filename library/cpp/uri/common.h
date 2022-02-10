@@ -1,10 +1,10 @@
 #pragma once
 
-#include <util/stream/output.h>
-#include <util/system/compat.h>
+#include <util/stream/output.h> 
+#include <util/system/compat.h> 
 #include <util/generic/strbuf.h>
 
-namespace NUri {
+namespace NUri { 
     namespace NEncode {
         class TEncoder;
         class TEncodeMapperBase;
@@ -14,13 +14,13 @@ namespace NUri {
     namespace NParse {
         class TRange;
     }
-
+ 
     class TParser;
-
+ 
     struct TField {
 #define FIELD_NAME(f) Field##f
 #define FIELD_FLAG(f) Flag##f = 1U << FIELD_NAME(f)
-
+ 
         enum EField {
             FIELD_NAME(Scheme),
             FIELD_NAME(User),
@@ -30,24 +30,24 @@ namespace NUri {
             FIELD_NAME(Path),
             FIELD_NAME(Query),
             FIELD_NAME(Frag),
-
+ 
             // add fields above
             FieldUrlMAX,
             // reset count so actual field offsets are not interrupted
             FieldUrlLast = FieldUrlMAX - 1,
             // add extra fields below
-
+ 
             FIELD_NAME(HostAscii),
-
+ 
             // add extra fields above
             FieldAllMAX,
             // add aliases below
-
+ 
             FieldUsername = FieldUser,
             FieldPassword = FieldPass,
             FieldFragment = FieldFrag,
         };
-
+ 
         enum EFlags {
             FIELD_FLAG(Scheme),
             FIELD_FLAG(User),
@@ -70,11 +70,11 @@ namespace NUri {
             FlagAll = FlagUrlFields, // obsolete, for backwards compatibility
             FlagAllFields = FlagAllMAX - 1
         };
-
-#undef FIELD_NAME
-#undef FIELD_FLAG
+ 
+#undef FIELD_NAME 
+#undef FIELD_FLAG 
     };
-
+ 
     struct TState {
         enum EParsed {
             ParsedOK = 0,
@@ -88,7 +88,7 @@ namespace NUri {
             ParsedBadAuth,
             ParsedBadScheme,
             ParsedBadHost,
-
+ 
             // add before this line
             ParsedMAX
         };
@@ -121,17 +121,17 @@ namespace NUri {
 
 #define FEATURE_NAME(f) _BitFeature##f
 #define FEATURE_FLAG_NAME(f) Feature##f
-#define FEATURE_FLAG(f) FEATURE_FLAG_NAME(f) = 1UL << FEATURE_NAME(f)
+#define FEATURE_FLAG(f) FEATURE_FLAG_NAME(f) = 1UL << FEATURE_NAME(f) 
 
     protected:
         enum EBit {
             //==============================
             // Cases interpreted as errors:
             //==============================
-
+ 
             // allows authorization user/password in URL
             FEATURE_NAME(AuthSupported),
-
+ 
             // allows all known schemes in URL
             FEATURE_NAME(SchemeKnown),
 
@@ -140,7 +140,7 @@ namespace NUri {
 
             // allow opaque (RFC 2396) or rootless (RFC 3986) urls
             FEATURE_NAME(AllowRootless),
-
+ 
             //==============================
             // Cases interpreted for processing (if required):
             //  (effects on result of Parse method)
@@ -149,70 +149,70 @@ namespace NUri {
             // path needs normalization
             // (simplification of directory tree: /../, /./, etc.
             FEATURE_NAME(PathOperation),
-
+ 
             // don't force empty path to "/"
             FEATURE_NAME(AllowEmptyPath),
-
+ 
             // in scheme and host segments:
             // change upper case letters onto lower case ones
             FEATURE_NAME(ToLower),
 
             // decode unreserved symbols
             FEATURE_NAME(DecodeUnreserved),
-
+ 
             // legacy: decode standard symbols which may be safe for some fields
             FEATURE_NAME(DecodeStandardExtra),
-
+ 
             // decode symbols allowed (not necessarily safe to decode) only for a given field
             // (do not use directly, instead use FeatureDecodeSafe mask below)
             FEATURE_NAME(DecodeFieldAllowed),
-
+ 
             // handling of spaces
             FEATURE_NAME(EncodeSpace),
-
+ 
             // in query segment: change escaped space to '+'
             FEATURE_NAME(EncodeSpaceAsPlus),
-
+ 
             // escape all string 'markup' symbols
             FEATURE_NAME(EncodeForSQL),
-
+ 
             // encoding of extended ascii symbols (8-bit)
             FEATURE_NAME(EncodeExtendedASCII),
-
+ 
             // decoding of extended ascii symbols (8-bit)
             FEATURE_NAME(DecodeExtendedASCII),
-
+ 
             // encoding of extended delimiter set
             FEATURE_NAME(EncodeExtendedDelim),
-
+ 
             // decoding of extended delimiter set
             FEATURE_NAME(DecodeExtendedDelim),
-
+ 
             // control characters [0x00 .. 0x20)
             FEATURE_NAME(EncodeCntrl),
-
+ 
             // raw percent character
             FEATURE_NAME(EncodePercent),
-
+ 
             // hash fragments
             // https://developers.google.com/webmasters/ajax-crawling/docs/specification
             // move and encode #! fragments to the query
             FEATURE_NAME(HashBangToEscapedFragment),
             // move and decode _escaped_fragment_ to the fragment
             FEATURE_NAME(EscapedToHashBangFragment),
-
+ 
             // reject absolute paths started by "/../"
             FEATURE_NAME(PathDenyRootParent),
-
+ 
             // paths started by "/../" - ignore head
             FEATURE_NAME(PathStripRootParent),
-
+ 
             // tries to fix errors (in particular, in fragment)
             FEATURE_NAME(TryToFix),
 
             // check host for DNS compliance
             FEATURE_NAME(CheckHost),
-
+ 
             // allow IDN hosts
             // host is converted to punycode and stored in FieldHostAscii
             // @note host contains characters in the charset of the document
@@ -221,47 +221,47 @@ namespace NUri {
             //       percent-decoding cannot be converted from UTF-8 to UCS-4,
             //       try to recode from the document charset (if not UTF-8)
             FEATURE_NAME(AllowHostIDN),
-
+ 
             // forces AllowHostIDN, but host is replaced with punycode
             // forces CheckHost since this replacement is irreversible
             FEATURE_NAME(ConvertHostIDN),
-
+ 
             // robot interpreted network paths as BadFormat urls
             FEATURE_NAME(DenyNetworkPath),
 
             // robot interprets URLs without a host as BadFormat
             FEATURE_NAME(RemoteOnly),
-
+ 
             /* non-RFC use case:
-         * 1. do not allow relative-path-only URIs when they can conflict with
-         *    "host/path" (that is, only "./path" or "../path" are allowed);
-         * 2. if neither scheme nor userinfo are present but port is, it must
-         *    be non-empty, to avoid conflict with "scheme:/...";
-         * 3. if AllowRootless is not specified, rootless (or opaque) URIs are
-         *    not recognized;
-         * 4. if AllowRootless is specified, disallow userinfo, preferring
-         *    "scheme:pa@th" over "user:pass@host", and even "host:port" when
-         *    host contains only scheme-legal characters.
-         */
+         * 1. do not allow relative-path-only URIs when they can conflict with 
+         *    "host/path" (that is, only "./path" or "../path" are allowed); 
+         * 2. if neither scheme nor userinfo are present but port is, it must 
+         *    be non-empty, to avoid conflict with "scheme:/..."; 
+         * 3. if AllowRootless is not specified, rootless (or opaque) URIs are 
+         *    not recognized; 
+         * 4. if AllowRootless is specified, disallow userinfo, preferring 
+         *    "scheme:pa@th" over "user:pass@host", and even "host:port" when 
+         *    host contains only scheme-legal characters. 
+         */ 
             FEATURE_NAME(NoRelPath),
 
             // standard prefers that all hex escapes were using uppercase A-F
             FEATURE_NAME(UpperEncoded),
-
+ 
             // internal usage: decode all encoded symbols
             FEATURE_NAME(DecodeANY),
-
+ 
             // add before this line
             _FeatureMAX
         };
-
+ 
     protected:
         enum EPrivate : ui32 {
             FEATURE_FLAG(DecodeANY),
             FEATURE_FLAG(DecodeFieldAllowed),
             FEATURE_FLAG(DecodeStandardExtra),
         };
-
+ 
     public:
         enum EPublic : ui32 {
             FeatureMAX = _FeatureMAX,
@@ -297,27 +297,27 @@ namespace NUri {
             FEATURE_FLAG_NAME(HierURI) = FEATURE_FLAG_NAME(NoRelPath),
             FEATURE_FLAG(UpperEncoded),
         };
-
-#undef FEATURE_NAME
-#undef FEATURE_FLAG
-
+ 
+#undef FEATURE_NAME 
+#undef FEATURE_FLAG 
+ 
     public:
         //==============================
         enum ESets {
             // these are guaranteed and will change buffer size
-
+ 
             FeatureDecodeStandard = 0 | FeatureDecodeUnreserved | FeatureDecodeStandardExtra,
-
+ 
             FeaturesDecodeExtended = 0 | FeatureDecodeExtendedASCII | FeatureDecodeExtendedDelim,
-
+ 
             FeaturesDecode = 0 | FeatureDecodeUnreserved | FeatureDecodeStandard | FeaturesDecodeExtended,
-
+ 
             FeaturesEncodeExtended = 0 | FeatureEncodeExtendedASCII | FeatureEncodeExtendedDelim,
-
+ 
             FeaturesEncode = 0 | FeatureEncodeForSQL | FeatureEncodeSpace | FeatureEncodeCntrl | FeatureEncodePercent | FeaturesEncodeExtended,
 
             // these are not guaranteed to apply to a given field
-
+ 
             FeatureDecodeAllowed = 0 | FeatureDecodeUnreserved | FeatureDecodeFieldAllowed,
 
             FeaturesMaybeDecode = 0 | FeaturesDecode | FeatureDecodeAllowed,
@@ -325,18 +325,18 @@ namespace NUri {
             FeaturesMaybeEncode = 0 | FeaturesEncode,
 
             FeaturesEncodeDecode = 0 | FeaturesMaybeEncode | FeaturesMaybeDecode,
-
+ 
             FeaturesAllEncoder = 0 | FeaturesEncodeDecode | FeatureDecodeANY | FeatureToLower | FeatureUpperEncoded | FeatureEncodeSpaceAsPlus,
-
+ 
             //==============================
             FeaturesNormalizeSet = 0 | FeaturePathOperation | FeatureToLower | FeatureDecodeAllowed | FeatureEncodeSpaceAsPlus | FeatureEncodeForSQL | FeaturePathStripRootParent | FeatureTryToFix | FeatureUpperEncoded,
-
+ 
             FeaturesDefault = 0 // it reproduces old parsedURL
                               | FeaturePathOperation | FeaturePathDenyRootParent | FeatureCheckHost,
 
             // essentially allows all valid RFC urls and keeps them as-is
             FeaturesBare = 0 | FeatureAuthSupported | FeatureSchemeFlexible | FeatureAllowEmptyPath,
-
+ 
             FeaturesAll = 0 | FeatureAuthSupported | FeatureSchemeFlexible | FeatureCheckHost | FeaturesNormalizeSet,
 
             // Deprecated, use FeaturesRecommended
@@ -347,14 +347,14 @@ namespace NUri {
                                | FeatureDecodeUnreserved // 6.2.2.2
                                | FeaturePathOperation    // 6.2.2.3
                                | FeaturePathDenyRootParent | FeatureSchemeKnown | FeatureConvertHostIDN | FeatureRemoteOnly | FeatureHashBangToEscapedFragment | FeatureCheckHost,
-
+ 
             // these are mutually exclusive
             FeaturesPath = 0 | FeaturePathDenyRootParent | FeaturePathStripRootParent,
-
+ 
             FeaturesEscapedFragment = 0 | FeatureEscapedToHashBangFragment | FeatureHashBangToEscapedFragment,
-
+ 
             FeaturesCheckSpecialChar = 0 | FeatureEncodeSpace | FeatureEncodeCntrl | FeatureEncodePercent,
-
+ 
             FeaturesEncodePChar = 0 | FeatureUpperEncoded | FeaturesEncodeDecode | FeaturesCheckSpecialChar,
 
             // http://wiki.yandex-team.ru/robot/newDesign/dups/normolization
@@ -362,8 +362,8 @@ namespace NUri {
 
             FeaturesRobot = FeaturesRecommended
         };
-    };
-
+    }; 
+ 
     static inline int strnicmp(const char* lt, const char* rt, size_t len) {
         return lt == rt ? 0 : ::strnicmp(lt, rt, len);
     }
@@ -371,16 +371,16 @@ namespace NUri {
     static inline int CompareNoCasePrefix(const TStringBuf& lt, const TStringBuf& rt) {
         return strnicmp(lt.data(), rt.data(), rt.length());
     }
-
+ 
     static inline bool EqualNoCase(const TStringBuf& lt, const TStringBuf& rt) {
         return lt.length() == rt.length() && 0 == CompareNoCasePrefix(lt, rt);
-    }
-
+    } 
+ 
     static inline int CompareNoCase(const TStringBuf& lt, const TStringBuf& rt) {
         if (lt.length() == rt.length())
             return CompareNoCasePrefix(lt, rt);
         return lt.length() < rt.length() ? -1 : 1;
-    }
+    } 
 
     class TSchemeInfo {
     public:
@@ -398,7 +398,7 @@ namespace NUri {
         bool Matches(const TStringBuf& scheme) const {
             return EqualNoCase(scheme, Str);
         }
-
+ 
     public:
         static const TSchemeInfo& Get(const TStringBuf& scheme);
         static const TSchemeInfo& Get(TScheme::EKind scheme) {
@@ -488,24 +488,24 @@ namespace NUri {
     const char* ParsedStateToString(const TState::EParsed& t);
     const char* SchemeKindToString(const TScheme::EKind& t);
 
-}
-
+} 
+ 
 Y_DECLARE_OUT_SPEC(inline, NUri::TField::EField, out, t) {
-    out << NUri::FieldToString(t);
+    out << NUri::FieldToString(t); 
 }
 
 Y_DECLARE_OUT_SPEC(inline, NUri::TScheme::EKind, out, t) {
-    out << NUri::SchemeKindToString(t);
+    out << NUri::SchemeKindToString(t); 
 }
 
 Y_DECLARE_OUT_SPEC(inline, NUri::TState::EParsed, out, t) {
-    out << NUri::ParsedStateToString(t);
+    out << NUri::ParsedStateToString(t); 
 }
 
 static inline ui16 DefaultPort(NUri::TScheme::EKind scheme) {
-    return NUri::TSchemeInfo::GetDefaultPort(scheme);
+    return NUri::TSchemeInfo::GetDefaultPort(scheme); 
 }
 
 static inline NUri::TScheme::EKind SchemeKind(const TStringBuf& scheme) {
-    return NUri::TSchemeInfo::GetKind(scheme);
+    return NUri::TSchemeInfo::GetKind(scheme); 
 }

@@ -27,13 +27,13 @@ void Opt::Init(int argc, char* argv[], const char* optString, const Ion* longOpt
         TOpt* opt;
         if ((unsigned)o->val < 0x80 && isalnum(o->val)) {
             opt = &Opts_->CharOption(char(o->val));
-            opt->AddLongName(o->name);
+            opt->AddLongName(o->name); 
         } else {
             Opts_->AddLongOption(o->name);
             opt = const_cast<TOpt*>(&Opts_->GetLongOption(o->name));
         }
         opt->HasArg_ = EHasArg(o->has_arg);
-        opt->UserValue(o);
+        opt->UserValue(o); 
     }
     Opts_->AllowSingleDashForLong_ = longOnly;
     Opts_->AllowPlusForLong_ = true;
@@ -68,7 +68,7 @@ int Opt::Get(int* longOptionIndex) {
             return EOF;
         } else {
             Arg = (char*)OptsParser_->CurVal();
-            if (!OptsParser_->CurOpt()) {
+            if (!OptsParser_->CurOpt()) { 
                 // possible if RETURN_IN_ORDER
                 return 1;
             } else {
@@ -76,7 +76,7 @@ int Opt::Get(int* longOptionIndex) {
                 if (longOptionIndex) {
                     *longOptionIndex = int(ion - Ions_);
                 }
-                char c = OptsParser_->CurOpt()->GetCharOr0();
+                char c = OptsParser_->CurOpt()->GetCharOr0(); 
                 return c != 0 ? c : ion->val;
             }
         }
@@ -89,7 +89,7 @@ int Opt::Get(int* longOptionIndex) {
 }
 
 void Opt::DummyHelp(IOutputStream& os) {
-    Opts_->PrintUsage(GetProgramName(), os);
+    Opts_->PrintUsage(GetProgramName(), os); 
 }
 
 int Opt::GetArgC() const {

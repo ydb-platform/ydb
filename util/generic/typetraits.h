@@ -161,7 +161,7 @@ class TTypeTraits<void>: public TTypeTraitsBase<void> {};
     template <class T>                                                                    \
     struct THas##name                                                                     \
         : TBaseHas##name<T, std::is_class<T>::value || std::is_union<T>::value> {}
-
+ 
 #define Y_HAS_MEMBER_IMPL_1(name) Y_HAS_MEMBER_IMPL_2(name, name)
 
 /* @def Y_HAS_MEMBER

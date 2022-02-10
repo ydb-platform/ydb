@@ -185,10 +185,10 @@ inline bool WriteSymbol(wchar32 s, wchar16*& dest, const wchar16* destEnd) noexc
 }
 
 inline size_t WriteSymbol(wchar32 s, wchar32*& dest) noexcept {
-    *(dest++) = s;
-    return 1;
-}
-
+    *(dest++) = s; 
+    return 1; 
+} 
+ 
 inline bool WriteSymbol(wchar32 s, wchar32*& dest, const wchar32* destEnd) noexcept {
     Y_ASSERT(dest < destEnd);
 
@@ -299,11 +299,11 @@ namespace NDetail {
 }
 
 //! @return len if robust and position where encoding stopped if not
-template <bool robust, typename TCharType>
+template <bool robust, typename TCharType> 
 inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size_t& written) noexcept {
     const unsigned char* cur = reinterpret_cast<const unsigned char*>(text);
     const unsigned char* last = cur + len;
-    TCharType* p = dest;
+    TCharType* p = dest; 
 #ifdef _sse_ //can't check for sse4, as we build most of arcadia without sse4 support even on platforms that support it
     if (cur + 16 <= last && NX86::CachedHaveSSE41()) {
         ::NDetail::UTF8ToWideImplSSE41(cur, last, p);
@@ -315,8 +315,8 @@ inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size
     return cur - reinterpret_cast<const unsigned char*>(text);
 }
 
-template <typename TCharType>
-inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size_t& written) {
+template <typename TCharType> 
+inline size_t UTF8ToWideImpl(const char* text, size_t len, TCharType* dest, size_t& written) { 
     return UTF8ToWideImpl<false>(text, len, dest, written);
 }
 
@@ -332,7 +332,7 @@ inline TUtf16String UTF8ToWide(const char* text, size_t len) {
     return w;
 }
 
-template <bool robust, typename TCharType>
+template <bool robust, typename TCharType> 
 inline bool UTF8ToWide(const char* text, size_t len, TCharType* dest, size_t& written) noexcept {
     return UTF8ToWideImpl<robust>(text, len, dest, written) == len;
 }
@@ -341,7 +341,7 @@ inline bool UTF8ToWide(const char* text, size_t len, TCharType* dest, size_t& wr
 //! @attention destination buffer must be long enough to fit all characters of the text,
 //!            conversion stops if a broken symbol is met
 //! @return @c true if all the text converted successfully, @c false - a broken symbol was found
-template <typename TCharType>
+template <typename TCharType> 
 inline bool UTF8ToWide(const char* text, size_t len, TCharType* dest, size_t& written) noexcept {
     return UTF8ToWide<false>(text, len, dest, written);
 }
@@ -659,10 +659,10 @@ inline TUtf32String ASCIIToUTF32(const TStringBuf s) {
 }
 
 //! returns @c true if string contains whitespace characters only
-inline bool IsSpace(const wchar16* s, size_t n) {
+inline bool IsSpace(const wchar16* s, size_t n) { 
     if (n == 0)
         return false;
-
+ 
     Y_ASSERT(s);
 
     const wchar16* const e = s + n;

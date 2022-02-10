@@ -16,15 +16,15 @@
 //! converts text from unicode to yandex codepage
 //! @attention destination buffer must be long enough to fit all characters of the text
 //! @note @c dest buffer must fit at least @c len number of characters
-template <typename TCharType>
+template <typename TCharType> 
 inline size_t WideToChar(const TCharType* text, size_t len, char* dest, ECharset enc) {
     Y_ASSERT(SingleByteCodepage(enc));
 
     const char* start = dest;
 
     const Encoder* const encoder = &EncoderByCharset(enc);
-    const TCharType* const last = text + len;
-    for (const TCharType* cur = text; cur != last; ++dest) {
+    const TCharType* const last = text + len; 
+    for (const TCharType* cur = text; cur != last; ++dest) { 
         *dest = encoder->Tr(ReadSymbolAndAdvance(cur, last));
     }
 
@@ -38,12 +38,12 @@ inline size_t WideToChar(const TCharType* text, size_t len, char* dest, ECharset
 //!       string using the @c strlen function and pass as the @c len parameter;
 //!       it does not make sense to create an additional version of this function because
 //!       it will call to @c strlen anyway in order to allocate destination buffer
-template <typename TCharType>
+template <typename TCharType> 
 inline void CharToWide(const char* text, size_t len, TCharType* dest, const CodePage& cp) {
     const unsigned char* cur = reinterpret_cast<const unsigned char*>(text);
     const unsigned char* const last = cur + len;
     for (; cur != last; ++cur, ++dest) {
-        *dest = static_cast<TCharType>(cp.unicode[*cur]); // static_cast is safe as no 1char codepage contains non-BMP symbols
+        *dest = static_cast<TCharType>(cp.unicode[*cur]); // static_cast is safe as no 1char codepage contains non-BMP symbols 
     }
 }
 
@@ -55,21 +55,21 @@ namespace NDetail {
 
         // Depending on template params, perform conversion of single-byte/multi-byte/utf8 string to/from wide string.
 
-        template <typename TCharType>
+        template <typename TCharType> 
         inline TBasicStringBuf<TCharType> RecodeSingleByteChar(const TStringBuf src, TCharType* dst, const CodePage& cp) {
             Y_ASSERT(cp.SingleByteCodepage());
             ::CharToWide(src.data(), src.size(), dst, cp);
             return TBasicStringBuf<TCharType>(dst, src.size());
         }
 
-        template <typename TCharType>
+        template <typename TCharType> 
         inline TStringBuf RecodeSingleByteChar(const TBasicStringBuf<TCharType> src, char* dst, const CodePage& cp) {
             Y_ASSERT(cp.SingleByteCodepage());
             ::WideToChar(src.data(), src.size(), dst, cp.CPEnum);
             return TStringBuf(dst, src.size());
         }
 
-        template <typename TCharType>
+        template <typename TCharType> 
         inline TBasicStringBuf<TCharType> RecodeMultiByteChar(const TStringBuf src, TCharType* dst, ECharset encoding) {
             Y_ASSERT(!NCodepagePrivate::NativeCodepage(encoding));
             size_t read = 0;
@@ -78,7 +78,7 @@ namespace NDetail {
             return TBasicStringBuf<TCharType>(dst, written);
         }
 
-        template <typename TCharType>
+        template <typename TCharType> 
         inline TStringBuf RecodeMultiByteChar(const TBasicStringBuf<TCharType> src, char* dst, ECharset encoding) {
             Y_ASSERT(!NCodepagePrivate::NativeCodepage(encoding));
             size_t read = 0;
@@ -87,7 +87,7 @@ namespace NDetail {
             return TStringBuf(dst, written);
         }
 
-        template <typename TCharType>
+        template <typename TCharType> 
         inline TBasicStringBuf<TCharType> RecodeUtf8(const TStringBuf src, TCharType* dst) {
             size_t len = 0;
             if (!::UTF8ToWide(src.data(), src.size(), dst, len))
@@ -95,25 +95,25 @@ namespace NDetail {
             return TBasicStringBuf<TCharType>(dst, len);
         }
 
-        template <typename TCharType>
+        template <typename TCharType> 
         inline TStringBuf RecodeUtf8(const TBasicStringBuf<TCharType> src, char* dst) {
             size_t len = 0;
             ::WideToUTF8(src.data(), src.size(), dst, len);
             return TStringBuf(dst, len);
         }
 
-        // Select one of re-coding methods from above, based on provided @encoding
-
-        template <typename TCharFrom, typename TCharTo>
+        // Select one of re-coding methods from above, based on provided @encoding 
+ 
+        template <typename TCharFrom, typename TCharTo> 
         TBasicStringBuf<TCharTo> Recode(const TBasicStringBuf<TCharFrom> src, TCharTo* dst, ECharset encoding) {
-            if (encoding == CODES_UTF8)
-                return RecodeUtf8(src, dst);
-            else if (SingleByteCodepage(encoding))
-                return RecodeSingleByteChar(src, dst, *CodePageByCharset(encoding));
-            else
-                return RecodeMultiByteChar(src, dst, encoding);
-        }
-
+            if (encoding == CODES_UTF8) 
+                return RecodeUtf8(src, dst); 
+            else if (SingleByteCodepage(encoding)) 
+                return RecodeSingleByteChar(src, dst, *CodePageByCharset(encoding)); 
+            else 
+                return RecodeMultiByteChar(src, dst, encoding); 
+        } 
+ 
     }
 
     template <typename TCharFrom>

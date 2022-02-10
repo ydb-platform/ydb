@@ -240,7 +240,7 @@
 #define SIZEOF_LONG_LONG 8
 #define SIZEOF_UNSIGNED_LONG_LONG 8
 
-#undef SIZEOF_SIZE_T // in case we include <Python.h> which defines it, too
+#undef SIZEOF_SIZE_T // in case we include <Python.h> which defines it, too 
 #define SIZEOF_SIZE_T SIZEOF_PTR
 
 // clang-format on

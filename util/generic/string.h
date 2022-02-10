@@ -248,7 +248,7 @@ public:
 
         return StdStr();
 #endif
-    }
+    } 
 
     inline const_reference operator[](size_t pos) const noexcept {
         Y_ASSERT(pos <= length());
@@ -362,8 +362,8 @@ public:
 #else
         return 1 == RefCount();
 #endif
-    }
-
+    } 
+ 
     // ~~~ Size and capacity ~~~
     TBasicString& resize(size_t n, TCharType c = ' ') { // remove or append
         MutRef().resize(n, c);
@@ -500,9 +500,9 @@ public:
 
     explicit TBasicString(const TBasicStringBuf<TCharType, TTraits> s)
         : TBasicString(s.data(), s.size())
-    {
-    }
-
+    { 
+    } 
+ 
     template <typename Traits>
     explicit inline TBasicString(const std::basic_string_view<TCharType, Traits>& s)
         : TBasicString(s.data(), s.size())
@@ -648,12 +648,12 @@ public:
 
     TBasicString& AssignNoAlias(const TBasicStringBuf<TCharType, TTraits> s) {
         return AssignNoAlias(s.data(), s.size());
-    }
-
+    } 
+ 
     TBasicString& AssignNoAlias(const TBasicStringBuf<TCharType, TTraits> s, size_t spos, size_t sn = TBase::npos) {
-        return AssignNoAlias(s.SubString(spos, sn));
-    }
-
+        return AssignNoAlias(s.SubString(spos, sn)); 
+    } 
+ 
     /**
      * WARN:
      *    Certain invocations of this method will result in link-time error.
@@ -675,9 +675,9 @@ public:
     }
 
     TBasicString& operator=(const TBasicString& s) {
-        return assign(s);
-    }
-
+        return assign(s); 
+    } 
+ 
     TBasicString& operator=(TBasicString&& s) noexcept {
         swap(s);
         return *this;
@@ -691,18 +691,18 @@ public:
     }
 
     TBasicString& operator=(const TBasicStringBuf<TCharType, TTraits> s) {
-        return assign(s);
-    }
-
+        return assign(s); 
+    } 
+ 
     TBasicString& operator=(std::initializer_list<TCharType> il) {
         return assign(il.begin(), il.end());
     }
 
     TBasicString& operator=(const TCharType* s) {
-        return assign(s);
-    }
+        return assign(s); 
+    } 
     TBasicString& operator=(std::nullptr_t) = delete;
-
+ 
     TBasicString& operator=(TExplicitType<TCharType> ch) {
         return assign(ch);
     }
@@ -771,20 +771,20 @@ public:
 
     TBasicString& AppendNoAlias(const TBasicStringBuf<TCharType, TTraits> s) {
         return AppendNoAlias(s.data(), s.size());
-    }
-
+    } 
+ 
     TBasicString& AppendNoAlias(const TBasicStringBuf<TCharType, TTraits> s, size_t spos, size_t sn = TBase::npos) {
-        return AppendNoAlias(s.SubString(spos, sn));
-    }
-
+        return AppendNoAlias(s.SubString(spos, sn)); 
+    } 
+ 
     TBasicString& append(const TBasicStringBuf<TCharType, TTraits> s) {
         return append(s.data(), s.size());
-    }
-
+    } 
+ 
     TBasicString& append(const TBasicStringBuf<TCharType, TTraits> s, size_t spos, size_t sn = TBase::npos) {
-        return append(s.SubString(spos, sn));
-    }
-
+        return append(s.SubString(spos, sn)); 
+    } 
+ 
     TBasicString& append(const TCharType* pc, size_t pos, size_t n, size_t pc_len = TBase::npos) {
         return append(pc + pos, Min(n, pc_len - pos));
     }
@@ -882,8 +882,8 @@ public:
 #endif
         s1 += s2;
         return std::move(s1);
-    }
-
+    } 
+ 
     friend TBasicString operator+(TBasicString&& s1, const TBasicStringBuf<TCharType, TTraits> s2) Y_WARN_UNUSED_RESULT {
         s1 += s2;
         return std::move(s1);
@@ -968,8 +968,8 @@ public:
         MutRef().insert(size_t(0), n, c);
 
         return *this;
-    }
-
+    } 
+ 
     TBasicString& prepend(TCharType c) {
         MutRef().insert(size_t(0), 1, c);
 
@@ -977,9 +977,9 @@ public:
     }
 
     TBasicString& prepend(const TBasicStringBuf<TCharType, TTraits> s, size_t spos = 0, size_t sn = TBase::npos) {
-        return insert(0, s, spos, sn);
-    }
-
+        return insert(0, s, spos, sn); 
+    } 
+ 
     // ~~~ Insertion ~~~ : FAMILY1(TBasicString&, insert, size_t pos);
     TBasicString& insert(size_t pos, const TBasicString& s) {
         MutRef().insert(pos, s.ConstRef());
@@ -1033,8 +1033,8 @@ public:
         MutRef().insert(pos, s, spos, sn);
 
         return *this;
-    }
-
+    } 
+ 
     // ~~~ Removing ~~~
     TBasicString& remove(size_t pos, size_t n) Y_NOEXCEPT {
         if (pos < length()) {
@@ -1097,14 +1097,14 @@ public:
         MutRef().replace(pos, n, s, len);
 
         return *this;
-    }
-
+    } 
+ 
     TBasicString& replace(size_t pos, size_t n, const TCharType* s, size_t spos, size_t sn) Y_NOEXCEPT {
         MutRef().replace(pos, n, s + spos, sn - spos);
 
         return *this;
-    }
-
+    } 
+ 
     TBasicString& replace(size_t pos, size_t n1, size_t n2, TCharType c) Y_NOEXCEPT {
         MutRef().replace(pos, n1, n2, c);
 
@@ -1113,7 +1113,7 @@ public:
 
     TBasicString& replace(size_t pos, size_t n, const TBasicStringBuf<TCharType, TTraits> s, size_t spos = 0, size_t sn = TBase::npos) Y_NOEXCEPT {
         MutRef().replace(pos, n, s, spos, sn);
-
+ 
         return *this;
     }
 
@@ -1131,7 +1131,7 @@ public:
      */
     TBasicString Quote() const {
         extern TBasicString EscapeC(const TBasicString&);
-
+ 
         return TBasicString() + '"' + EscapeC(*this) + '"';
     }
 

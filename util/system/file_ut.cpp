@@ -175,7 +175,7 @@ void TFileTest::TestRW() {
     f1.Flush();
     ui32 v;
     f1.Load(&v, sizeof(v));
-    UNIT_ASSERT_VALUES_EQUAL(v, 3u);
+    UNIT_ASSERT_VALUES_EQUAL(v, 3u); 
     UNIT_ASSERT_VALUES_EQUAL(f1.GetPosition(), 16);
 
     TFile f2 = f1;
@@ -189,7 +189,7 @@ void TFileTest::TestRW() {
     UNIT_ASSERT_VALUES_EQUAL(f1.Seek(-4, sCur), 16);
     v = 0;
     f1.Load(&v, sizeof(v));
-    UNIT_ASSERT_VALUES_EQUAL(v, 3u);
+    UNIT_ASSERT_VALUES_EQUAL(v, 3u); 
     f1.Close();
     UNIT_ASSERT(!f1.IsOpen());
     UNIT_ASSERT(!f2.IsOpen());

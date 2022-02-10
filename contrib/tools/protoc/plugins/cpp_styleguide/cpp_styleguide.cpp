@@ -110,8 +110,8 @@ namespace NPlugins {
                 printer->Print(Variables_,
                     "inline const $type$& Get$rname$() const { return $name$(); }\n"
                     "inline $type$* Mutable$rname$() { return mutable_$name$(); }\n");
-                if (Variables_.end() != Variables_.find("RName"))
-                    printer->Print(Variables_,
+                if (Variables_.end() != Variables_.find("RName")) 
+                    printer->Print(Variables_, 
                         "inline const $type$& Get$RName$() const { return $name$(); }\n"
                         "inline $type$* Mutable$RName$() { return mutable_$name$(); }\n");
             }
@@ -218,9 +218,9 @@ namespace NPlugins {
                     "    Get$rname$() const { return $name$(); }\n"
                     "inline ::google::protobuf::RepeatedPtrField< $type$ >*\n"
                     "    Mutable$rname$() { return mutable_$name$(); }\n");
-
-                if (Variables_.end() != Variables_.find("RName"))
-                    printer->Print(Variables_,
+ 
+                if (Variables_.end() != Variables_.find("RName")) 
+                    printer->Print(Variables_, 
                         "inline const $type$& Get$RName$(size_t _index) const {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return $name$(int(_index)); }\n"
                         "inline $type$* Mutable$RName$(size_t _index) {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return mutable_$name$(int(_index)); }\n"
                         "inline $type$* Add$RName$() { return add_$name$(); }\n"
@@ -228,7 +228,7 @@ namespace NPlugins {
                         "    Get$RName$() const { return $name$(); }\n"
                         "inline ::google::protobuf::RepeatedPtrField< $type$ >*\n"
                         "    Mutable$RName$() { return mutable_$name$(); }\n"
-                    );
+                    ); 
             }
 
             void GenerateJSONPrinting(io::Printer* printer) override {
@@ -262,16 +262,16 @@ namespace NPlugins {
                     "inline void Set$rname$(const $pointer_type$* value, size_t size) { set_$name$(value, size); }\n"
                     "inline TProtoStringType* Mutable$rname$() { return mutable_$name$(); }\n");
 
-                if (Variables_.end() != Variables_.find("RName"))
-                    printer->Print(Variables_,
+                if (Variables_.end() != Variables_.find("RName")) 
+                    printer->Print(Variables_, 
                         "inline const TProtoStringType& Get$RName$() const { return $name$(); }\n"
                         "inline void Set$RName$(const TProtoStringType& value) { set_$name$(value); }\n"
                         "inline void Set$RName$(TProtoStringType&& value) { set_$name$(std::move(value)); }\n"
                         "inline void Set$RName$(const char* value) { set_$name$(value); }\n"
                         "inline void Set$RName$(const $pointer_type$* value, size_t size) { set_$name$(value, size); }\n"
                         "inline TProtoStringType* Mutable$RName$() { return mutable_$name$(); }\n"
-                    );
-
+                    ); 
+ 
                 if (Field_->options().ctype() != FieldOptions::STRING) {
                     printer->Outdent();
                     printer->Print(" public:\n");
@@ -317,14 +317,14 @@ namespace NPlugins {
                     "inline void Add$rname$(const $pointer_type$* value, size_t size) { add_$name$(value, size); }\n"
                     "inline const TProtoStringType& get_idx_$name$(int _index) const { return $name$(_index); }\n"
                     "inline const ::google::protobuf::RepeatedPtrField<TProtoStringType>& get_arr_$name$() const"
-                    "{ return $name$(); }\n"
+                    "{ return $name$(); }\n" 
                     "inline const ::google::protobuf::RepeatedPtrField<TProtoStringType>& Get$rname$() const"
                     "{ return $name$(); }\n"
                     "inline ::google::protobuf::RepeatedPtrField<TProtoStringType>* Mutable$rname$()"
                     "{ return mutable_$name$(); }\n");
 
-                if (Variables_.end() != Variables_.find("RName"))
-                    printer->Print(Variables_,
+                if (Variables_.end() != Variables_.find("RName")) 
+                    printer->Print(Variables_, 
                         "inline const TProtoStringType& Get$RName$(size_t _index) const {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return $name$(_index); }\n"
                         "inline TProtoStringType* Mutable$RName$(size_t _index) {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return mutable_$name$(_index); }\n"
                         "inline void Set$RName$(size_t _index, const TProtoStringType& value) {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); set_$name$(_index, value); }\n"
@@ -337,11 +337,11 @@ namespace NPlugins {
                         "inline void Add$RName$(const char* value) { add_$name$(value); }\n"
                         "inline void Add$RName$(const $pointer_type$* value, size_t size) { add_$name$(value, size); }\n"
                         "inline const ::google::protobuf::RepeatedPtrField<TProtoStringType>& Get$RName$() const"
-                        "{ return $name$(); }\n"
+                        "{ return $name$(); }\n" 
                         "inline ::google::protobuf::RepeatedPtrField<TProtoStringType>* Mutable$RName$()"
-                        "{ return mutable_$name$(); }\n"
-                    );
-
+                        "{ return mutable_$name$(); }\n" 
+                    ); 
+ 
                 if (Field_->options().ctype() != FieldOptions::STRING) {
                     printer->Outdent();
                     printer->Print(" public:\n");
@@ -371,11 +371,11 @@ namespace NPlugins {
                     "inline $type$ Get$rname$() const { return $name$(); }\n"
                     "inline void Set$rname$($type$ value) { set_$name$(value); }\n");
 
-                if (Variables_.end() != Variables_.find("RName"))
-                    printer->Print(Variables_,
+                if (Variables_.end() != Variables_.find("RName")) 
+                    printer->Print(Variables_, 
                         "inline $type$ Get$RName$() const { return $name$(); } \n"
                         "inline void Set$RName$($type$ value) { set_$name$(value); }\n"
-                    );
+                    ); 
             }
 
             void GenerateJSONPrinting(io::Printer* printer) override {
@@ -401,14 +401,14 @@ namespace NPlugins {
                     "inline const ::google::protobuf::RepeatedField<int>& get_arr_$name$() const { return $name$(); }\n"
                     "inline const ::google::protobuf::RepeatedField<int>& Get$rname$() const { return $name$(); }\n"
                     "inline ::google::protobuf::RepeatedField<int>* Mutable$rname$() { return mutable_$name$(); }\n");
-                if (Variables_.end() != Variables_.find("RName"))
-                    printer->Print(Variables_,
+                if (Variables_.end() != Variables_.find("RName")) 
+                    printer->Print(Variables_, 
                         "inline $type$ Get$RName$(size_t _index) const {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return $name$(_index); }\n"
                         "inline void Set$RName$(size_t _index, $type$ value) {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); set_$name$(_index, value); }\n"
                         "inline void Add$RName$($type$ value) { add_$name$(value); }\n"
                         "inline const ::google::protobuf::RepeatedField<int>& Get$RName$() const { return $name$(); }\n"
                         "inline ::google::protobuf::RepeatedField<int>* Mutable$RName$() { return mutable_$name$(); }\n"
-                    );
+                    ); 
             }
 
             void GenerateJSONPrinting(io::Printer* printer) override {
@@ -429,11 +429,11 @@ namespace NPlugins {
                 printer->Print(Variables_,
                     "inline $type$ Get$rname$() const { return $name$();}\n"
                     "inline void Set$rname$($type$ value) { set_$name$(value); }\n");
-                if (Variables_.end() != Variables_.find("RName"))
-                    printer->Print(Variables_,
+                if (Variables_.end() != Variables_.find("RName")) 
+                    printer->Print(Variables_, 
                         "inline $type$ Get$RName$() const { return $name$();}\n"
                         "inline void Set$RName$($type$ value) { set_$name$(value); }\n"
-                    );
+                    ); 
             }
 
             void GenerateJSONPrinting(io::Printer* printer) override {
@@ -462,8 +462,8 @@ namespace NPlugins {
                     "    Get$rname$() const { return $name$(); }\n"
                     "inline ::google::protobuf::RepeatedField< $type$ >*\n"
                     "    Mutable$rname$() { return mutable_$name$(); }\n");
-                if (Variables_.end() != Variables_.find("RName"))
-                    printer->Print(Variables_,
+                if (Variables_.end() != Variables_.find("RName")) 
+                    printer->Print(Variables_, 
                         "inline $type$ Get$RName$(size_t _index) const {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); return $name$(_index); }\n"
                         "inline void Set$RName$(size_t _index, $type$ value) {Y_ASSERT(_index < static_cast<size_t>(::Max<int>())); set_$name$(_index, value); }\n"
                         "inline void Add$RName$($type$ value) { add_$name$(value); }\n"
@@ -471,7 +471,7 @@ namespace NPlugins {
                         "    Get$RName$() const { return $name$(); }\n"
                         "inline ::google::protobuf::RepeatedField< $type$ >*\n"
                         "    Mutable$RName$() { return mutable_$name$(); }\n"
-                    );
+                    ); 
             }
 
             void GenerateJSONPrinting(io::Printer* printer) override {
@@ -527,63 +527,63 @@ namespace NPlugins {
             }
     };
 
-    // borrowed mostly from protobuf/compiler/cpp/cpp_extension.cc
-    class TExtensionGenerator {
-    public:
-        TExtensionGenerator(const FieldDescriptor* descriptor)
-            : Descriptor_(descriptor)
-        {
-            if (Descriptor_->is_repeated()) {
-                type_traits_ = "Repeated";
-            }
-
-            TProtoStringType clsName;
-            switch (Descriptor_->cpp_type()) {
-            case FieldDescriptor::CPPTYPE_ENUM:
-                type_traits_.append("EnumTypeTraits< ");
-                clsName = ClassName(Descriptor_->enum_type(), true);
-                type_traits_.append(clsName);
-                type_traits_.append(", ");
-                type_traits_.append(clsName);
-                type_traits_.append("_IsValid>");
-                break;
-            case FieldDescriptor::CPPTYPE_STRING:
-                type_traits_.append("StringTypeTraits");
-                break;
-            case FieldDescriptor::CPPTYPE_MESSAGE:
-                type_traits_.append("MessageTypeTraits< ");
-                type_traits_.append(ClassName(Descriptor_->message_type(), true));
-                type_traits_.append(" >");
-                break;
-            default:
-                type_traits_.append("PrimitiveTypeTraits< ");
-                type_traits_.append(PrimitiveTypeName(Descriptor_->cpp_type()));
-                type_traits_.append(" >");
-                break;
-            }
-        }
-
-        void GenerateDeclaration(io::Printer* printer) const
-        {
-            TVariables vars;
-            vars["extendee"     ] = ClassName(Descriptor_->containing_type(), true);
-            vars["type_traits"  ] = type_traits_;
-            vars["name"         ] = Descriptor_->name();
-            vars["field_type"   ] = SimpleItoa(static_cast<int>(Descriptor_->type()));
-            vars["packed"       ] = Descriptor_->options().packed() ? "true" : "false";
-
-            printer->Print(vars,
-              "typedef ::google::protobuf::internal::ExtensionIdentifier< $extendee$,\n"
-              "    ::google::protobuf::internal::$type_traits$, $field_type$, $packed$ >\n"
-              "  Td$name$;\n"
-              );
-        }
-
-    private:
-        const FieldDescriptor* Descriptor_;
-        TProtoStringType type_traits_;
-    };
-
+    // borrowed mostly from protobuf/compiler/cpp/cpp_extension.cc 
+    class TExtensionGenerator { 
+    public: 
+        TExtensionGenerator(const FieldDescriptor* descriptor) 
+            : Descriptor_(descriptor) 
+        { 
+            if (Descriptor_->is_repeated()) { 
+                type_traits_ = "Repeated"; 
+            } 
+ 
+            TProtoStringType clsName; 
+            switch (Descriptor_->cpp_type()) { 
+            case FieldDescriptor::CPPTYPE_ENUM: 
+                type_traits_.append("EnumTypeTraits< "); 
+                clsName = ClassName(Descriptor_->enum_type(), true); 
+                type_traits_.append(clsName); 
+                type_traits_.append(", "); 
+                type_traits_.append(clsName); 
+                type_traits_.append("_IsValid>"); 
+                break; 
+            case FieldDescriptor::CPPTYPE_STRING: 
+                type_traits_.append("StringTypeTraits"); 
+                break; 
+            case FieldDescriptor::CPPTYPE_MESSAGE: 
+                type_traits_.append("MessageTypeTraits< "); 
+                type_traits_.append(ClassName(Descriptor_->message_type(), true)); 
+                type_traits_.append(" >"); 
+                break; 
+            default: 
+                type_traits_.append("PrimitiveTypeTraits< "); 
+                type_traits_.append(PrimitiveTypeName(Descriptor_->cpp_type())); 
+                type_traits_.append(" >"); 
+                break; 
+            } 
+        } 
+ 
+        void GenerateDeclaration(io::Printer* printer) const 
+        { 
+            TVariables vars; 
+            vars["extendee"     ] = ClassName(Descriptor_->containing_type(), true); 
+            vars["type_traits"  ] = type_traits_; 
+            vars["name"         ] = Descriptor_->name(); 
+            vars["field_type"   ] = SimpleItoa(static_cast<int>(Descriptor_->type())); 
+            vars["packed"       ] = Descriptor_->options().packed() ? "true" : "false"; 
+ 
+            printer->Print(vars, 
+              "typedef ::google::protobuf::internal::ExtensionIdentifier< $extendee$,\n" 
+              "    ::google::protobuf::internal::$type_traits$, $field_type$, $packed$ >\n" 
+              "  Td$name$;\n" 
+              ); 
+        } 
+ 
+    private: 
+        const FieldDescriptor* Descriptor_; 
+        TProtoStringType type_traits_; 
+    }; 
+ 
     class TOneofGenerator {
     public:
         TOneofGenerator(const OneofDescriptor* Descriptor_)
@@ -670,11 +670,11 @@ namespace NPlugins {
                 for (int i = 0; i < descriptor->field_count(); i++) {
                     FieldGenerators_.emplace_back(MakeGenerator(descriptor->field(i)));
                 }
-
+ 
                 ExtensionGenerators_.reserve(descriptor->extension_count());
-                for (int i = 0; i < descriptor->extension_count(); i++) {
+                for (int i = 0; i < descriptor->extension_count(); i++) { 
                     ExtensionGenerators_.emplace_back(descriptor->extension(i));
-                }
+                } 
 
                 OneofGenerators_.reserve(descriptor->real_oneof_decl_count());
                 for (int i = 0; i < descriptor->real_oneof_decl_count(); i++) {
@@ -737,31 +737,31 @@ namespace NPlugins {
                     OutputDirectory_->OpenForInsert(fileName, scope));
                 io::Printer printer(output.get(), '$');
 
-                printer.Print("// Yandex cpp-styleguide extension\n");
+                printer.Print("// Yandex cpp-styleguide extension\n"); 
                 for (int i = 0; i < Descriptor_->field_count(); i++) {
                     const FieldDescriptor* field = Descriptor_->field(i);
 
                     TVariables vars;
                     SetCommonFieldVariables(field, &vars);
 
-                    const bool hasRName = (vars.end() != vars.find("RName"));
+                    const bool hasRName = (vars.end() != vars.find("RName")); 
                     if (field->is_repeated()) {
                         printer.Print(vars,
                             "inline size_t $rname$Size() const { return (size_t)$name$_size(); }\n");
-                        if (hasRName)
-                            printer.Print(vars,
+                        if (hasRName) 
+                            printer.Print(vars, 
                                 "inline size_t $RName$Size() const { return (size_t)$name$_size(); }\n");
                     } else if (field->has_presence()) {
                         printer.Print(vars,
                             "inline bool Has$rname$() const { return has_$name$(); }\n");
-                        if (hasRName)
-                            printer.Print(vars,
+                        if (hasRName) 
+                            printer.Print(vars, 
                                 "inline bool Has$RName$() const { return has_$name$(); }\n");
                     }
 
                     printer.Print(vars, "inline void Clear$rname$() { clear_$name$(); }\n");
-                    if (hasRName)
-                        printer.Print(vars,
+                    if (hasRName) 
+                        printer.Print(vars, 
                             "inline void Clear$RName$() { clear_$name$(); }\n");
 
                     // Generate type-specific accessor declarations.
@@ -771,7 +771,7 @@ namespace NPlugins {
                 }
                 for (auto& extensionGenerator: ExtensionGenerators_) {
                     extensionGenerator.GenerateDeclaration(&printer);
-                }
+                } 
                 for (auto& oneofGenerator: OneofGenerators_) {
                     oneofGenerator.GenerateDeclarations(&printer);
                 }

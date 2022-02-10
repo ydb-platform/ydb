@@ -30,8 +30,8 @@ inline RECODE_RESULT RecodeFromUnicode(ECharset to, const TCharType* in, char* o
 
 inline RECODE_RESULT RecodeFromUnicode(ECharset to, wchar32 rune, char* out, size_t outSize, size_t& outWritten) {
     return NCodepagePrivate::_recodeFromUnicode(to, rune, out, outSize, outWritten);
-}
-
+} 
+ 
 template <class TCharType>
 inline RECODE_RESULT RecodeToUnicode(ECharset from, const char* in, TCharType* out, size_t inSize, size_t outSize) {
     size_t inRead = 0;
@@ -101,36 +101,36 @@ inline RECODE_RESULT Recode(ECharset from, ECharset to, const char* in, char* ou
     return Recode(from, to, in, out, inSize, outSize, inRead, outWritten);
 }
 
-/**
- * Recode from one charset to another; throw an exception if conversion failed
+/** 
+ * Recode from one charset to another; throw an exception if conversion failed 
  * @param[in] from the source character set
  * @param[in] to the target character set
- * @param[in] in    the input string buffer
- * @param[out] out  the output string object if conversion was successful
- * @return false if conversion was not attempted (charsets were the same),
- *         true if successful
- */
+ * @param[in] in    the input string buffer 
+ * @param[out] out  the output string object if conversion was successful 
+ * @return false if conversion was not attempted (charsets were the same), 
+ *         true if successful 
+ */ 
 inline bool Recode(ECharset from, ECharset to, const TStringBuf& in, TString& out) {
     if (to == from)
-        return false;
-
+        return false; 
+ 
     const size_t inSize = in.length();
     const size_t outSize = SingleByteCodepage(to) ? inSize : 3 * inSize;
-    out.clear(); // so we don't copy stuff around when resizing
+    out.clear(); // so we don't copy stuff around when resizing 
     out.ReserveAndResize(outSize);
-
+ 
     size_t inRead = 0;
     size_t outWritten = 0;
     const RECODE_RESULT res = Recode(from, to, in.data(), out.begin(), inSize, outSize, inRead, outWritten);
     Y_ENSURE(RECODE_OK == res, "Recode failed. ");
     if (outWritten > outSize)
-        ythrow yexception() << "Recode overrun the buffer: size="
+        ythrow yexception() << "Recode overrun the buffer: size=" 
                             << outSize << " need=" << outWritten;
-
+ 
     out.remove(outWritten);
-    return true;
-}
-
+    return true; 
+} 
+ 
 ///////////////////////////////////////////////////////////////////////////////////////
 //     TString -> TString                                                              //
 ///////////////////////////////////////////////////////////////////////////////////////

@@ -1,9 +1,9 @@
-#include "uri_ut.h"
+#include "uri_ut.h" 
 #include <library/cpp/charset/recyr.hh>
 #include <library/cpp/html/entity/htmlentity.h>
 #include <util/system/maxlen.h>
 
-namespace NUri {
+namespace NUri { 
     namespace {
         TString AsWin1251(const TString& s) {
             return Recode(CODES_UTF8, CODES_WIN, s);
@@ -36,10 +36,10 @@ namespace NUri {
             UNIT_ASSERT(url.IsNull(TField::FlagHost));
             UNIT_ASSERT(!url.IsNull(TField::FlagPath));
             UNIT_ASSERT_VALUES_EQUAL(url.PrintS(TField::FlagPath), "www.ya.ru/index.html");
-
+ 
             UNIT_ASSERT_VALUES_EQUAL(url.Parse(AsWin1251("www.TEST.Ru/ФЕУФ\\'\".html?ФЕУФ\\'\"=ФЕУФ+\\'\"%10")), TState::ParsedOK);
             UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), AsWin1251("www.TEST.Ru/ФЕУФ\\'\".html?ФЕУФ\\'\"=ФЕУФ+\\'\"%10"));
-
+ 
             UNIT_ASSERT_VALUES_EQUAL(url.Parse(AsWin1251("www.TEST.Ru/ФЕУФ\\'\".html?ФЕУФ\\'\"=ФЕУФ+\\'\"%10"),
                                                TFeature::FeaturesDefault | TFeature::FeatureEncodeExtendedASCII),
                                      TState::ParsedOK);
@@ -131,9 +131,9 @@ namespace NUri {
         Y_UNIT_TEST(testRuIDNA) {
             {
 #define DEC "\xD7\xE5\xF0\xE5\xEf\xEE\xE2\xE5\xF6.\xF0\xF4" /* "Череповец.рф" in Windows-1251 */
-#define ENC "%D7%E5%F0%E5%EF%EE%E2%E5%F6.%F0%F4"
-// punycode corresponds to lowercase
-#define PNC "xn--b1afab7bff7cb.xn--p1ai"
+#define ENC "%D7%E5%F0%E5%EF%EE%E2%E5%F6.%F0%F4" 
+// punycode corresponds to lowercase 
+#define PNC "xn--b1afab7bff7cb.xn--p1ai" 
                 TTest test = {
                     "http://" ENC "/" ENC "?" ENC "#" ENC, TParseFlags(TFeature::FeaturesAll | TFeature::FeatureAllowHostIDN, TFeature::FeatureDecodeExtendedASCII), TState::ParsedOK, "http", "", "", DEC, 80, "/" ENC, ENC, ENC};
                 TUri url;
@@ -141,9 +141,9 @@ namespace NUri {
                 UNIT_ASSERT_VALUES_EQUAL(url.GetField(TField::FieldHostAscii), PNC);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(), "http://" DEC "/" ENC "?" ENC "#" ENC);
                 UNIT_ASSERT_VALUES_EQUAL(url.PrintS(TField::FlagHostAscii), "http://" PNC "/" ENC "?" ENC "#" ENC);
-#undef PNC
-#undef DEC
-#undef ENC
+#undef PNC 
+#undef DEC 
+#undef ENC 
             }
         }
 
@@ -158,6 +158,6 @@ namespace NUri {
             // Should be properly null-terminated
             UNIT_ASSERT_VALUES_EQUAL(host.size(), strlen(host.data()));
         }
-    }
-
+    } 
+ 
 }

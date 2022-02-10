@@ -129,7 +129,7 @@ int opt_get_number(int& argc, char* argv[]);
     }                     \
     break;
 
-#define OPTION_HANDLE(opt, handle) \
+#define OPTION_HANDLE(opt, handle) \ 
     OPTION_HANDLE_BEGIN(opt)       \
     handle;                        \
     OPTION_HANDLE_END

@@ -82,7 +82,7 @@ public:
     inline void Write(const TStringBuf st) {
         Write(st.data(), st.size());
     }
-
+ 
     /**
      * Writes several data blocks into this stream.
      *
@@ -191,7 +191,7 @@ void Out(IOutputStream& out, typename TTypeTraits<T>::TFuncParam value);
 #define Y_DECLARE_OUT_SPEC(MODIF, T, stream, value) \
     template <>                                     \
     MODIF void Out<T>(IOutputStream & stream, TTypeTraits<T>::TFuncParam value)
-
+ 
 template <>
 inline void Out<const char*>(IOutputStream& o, const char* t) {
     if (t) {

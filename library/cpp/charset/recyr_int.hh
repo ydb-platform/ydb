@@ -172,7 +172,7 @@ namespace NCodepagePrivate {
     inline RECODE_RESULT _recodeUnicodeToUTF8(wchar32 rune, char* out, size_t out_size, size_t& nwritten) {
         return SafeWriteUTF8Char(rune, nwritten, (unsigned char*)out, out_size);
     }
-
+ 
     template <class TCharType, int Size = sizeof(TCharType)>
     struct TCharTypeSwitch;
 
@@ -223,7 +223,7 @@ namespace NCodepagePrivate {
         nwritten = 1;
         return RECODE_OK;
     }
-
+ 
     inline RECODE_RESULT _rune2hex(wchar32 in, char* out, size_t out_size, size_t& out_writed) {
         static const char hex_digs[] = "0123456789ABCDEF";
         out_writed = 0;
@@ -301,17 +301,17 @@ namespace NCodepagePrivate {
             return NCodepagePrivate::_recodeUnicodeToUTF8(in, out, in_size, out_size, in_readed, out_writed);
 
         return NCodepagePrivate::_recodeUnicodeToSB(To, in, out, in_size, out_size, in_readed, out_writed);
-    }
-
+    } 
+ 
     inline RECODE_RESULT _recodeFromUnicode(ECharset To, wchar32 rune, char* out, size_t out_size, size_t& nwritten) {
         if (!ValidCodepage(To))
             return RECODE_ERROR;
-
+ 
         if (!NCodepagePrivate::NativeCodepage(To)) {
             size_t nread = 0;
             return NICONVPrivate::RecodeFromUnicodeNoThrow(To, &rune, out, 1, out_size, nread, nwritten);
         }
-
+ 
         if (To == CODES_UTF8)
             return NCodepagePrivate::_recodeUnicodeToUTF8(rune, out, out_size, nwritten);
 

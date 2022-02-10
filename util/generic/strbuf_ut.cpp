@@ -10,10 +10,10 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
 
         UNIT_ASSERT_EQUAL(*str.data(), 'q');
         UNIT_ASSERT_EQUAL(str.size(), 6);
-
+ 
         TStringBuf str1("qwe\0rty"sv);
-        TStringBuf str2(str1.data());
-        UNIT_ASSERT_VALUES_UNEQUAL(str1, str2);
+        TStringBuf str2(str1.data()); 
+        UNIT_ASSERT_VALUES_UNEQUAL(str1, str2); 
         UNIT_ASSERT_VALUES_EQUAL(str1.size(), 7);
         UNIT_ASSERT_VALUES_EQUAL(str2.size(), 3);
 
@@ -139,33 +139,33 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         UNIT_ASSERT(TStringBuf().empty());
         UNIT_ASSERT(!TStringBuf("q").empty());
     }
-
+ 
     Y_UNIT_TEST(TestShift) {
-        TStringBuf qw("qwerty");
-        TStringBuf str;
-
-        str = qw;
-        str.Chop(10);
+        TStringBuf qw("qwerty"); 
+        TStringBuf str; 
+ 
+        str = qw; 
+        str.Chop(10); 
         UNIT_ASSERT(str.empty());
-
-        str = qw;
+ 
+        str = qw; 
         UNIT_ASSERT_EQUAL(str.SubStr(2), TStringBuf("erty"));
         UNIT_ASSERT_EQUAL(str.Skip(3), qw.SubStr(3));
-        str.Chop(1);
+        str.Chop(1); 
         UNIT_ASSERT_EQUAL(str, TStringBuf("rt"));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestSplit) {
-        TStringBuf qw("qwerty");
-        TStringBuf lt, rt;
-
-        rt = qw;
-        lt = rt.NextTok('r');
+        TStringBuf qw("qwerty"); 
+        TStringBuf lt, rt; 
+ 
+        rt = qw; 
+        lt = rt.NextTok('r'); 
         UNIT_ASSERT_EQUAL(lt, TStringBuf("qwe"));
         UNIT_ASSERT_EQUAL(rt, TStringBuf("ty"));
-
-        lt = qw;
-        rt = lt.SplitOff('r');
+ 
+        lt = qw; 
+        rt = lt.SplitOff('r'); 
         UNIT_ASSERT_EQUAL(lt, TStringBuf("qwe"));
         UNIT_ASSERT_EQUAL(rt, TStringBuf("ty"));
 
@@ -174,8 +174,8 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         TStringBuf ty = rt.NextTok('r'); // no 'r' in "ty"
         UNIT_ASSERT_EQUAL(rt.size(), 0);
         UNIT_ASSERT_EQUAL(ty, TStringBuf("ty"));
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestNextTok) {
         TStringBuf buf("12q45q");
         TStringBuf tok;

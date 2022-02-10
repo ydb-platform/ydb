@@ -1,32 +1,32 @@
-#include "uri.h"
-#include "parse.h"
+#include "uri.h" 
+#include "parse.h" 
 
-#include <util/string/cast.h>
-#include <util/string/util.h>
+#include <util/string/cast.h> 
+#include <util/string/util.h> 
 #include <util/system/yassert.h>
 
-namespace NUri {
+namespace NUri { 
     TState::EParsed TUri::CheckHost(const TStringBuf& host) {
         if (host.empty())
             return ParsedOK;
-
+ 
         unsigned domainLevel = 0;
         unsigned domainLevelOfUnderscore = 0;
-
+ 
         bool isAlnum = false;
         bool startLabel = true;
         for (size_t i = 0; i != host.length(); ++i) {
             const char ch = host[i];
-
+ 
             if ('.' == ch) {                // label separator
                 if (!isAlnum || startLabel) // previous label must end in alnum
                     return ParsedBadHost;
                 startLabel = true;
                 continue;
             }
-
+ 
             isAlnum = isalnum((const unsigned char)ch);
-
+ 
             if (startLabel) {              // label is starting
                 if (!isAlnum && '_' != ch) // new label must start with alnum or '_'
                     return ParsedBadHost;
@@ -36,7 +36,7 @@ namespace NUri {
                     domainLevelOfUnderscore = domainLevel;
                 continue;
             }
-
+ 
             if (isAlnum || '-' == ch)
                 continue;
 
@@ -46,11 +46,11 @@ namespace NUri {
             }
 
             return ParsedBadHost;
-        }
-
+        } 
+ 
         if (0 < domainLevelOfUnderscore && domainLevel < 2 + domainLevelOfUnderscore)
             return ParsedBadHost;
-
+ 
         return ParsedOK;
     }
 
@@ -65,40 +65,40 @@ namespace NUri {
         if (!scheme.empty()) {
             if (SetSchemeImpl(TSchemeInfo::Get(scheme)).Str.empty())
                 FldSet(FieldScheme, scheme);
-        }
-
+        } 
+ 
         if (0 < defaultPort) // override the scheme's default port
             DefaultPort = static_cast<ui16>(defaultPort);
-
+ 
         char sport[6]; // enough for ui16
         if (0 != port) {
             const size_t len = ToString(port, sport, sizeof(sport));
             FldSet(FieldPort, TStringBuf(sport, len));
         }
-
+ 
         FldTrySet(FieldHost, host);
         FldTrySet(FieldPath, path);
         FldTrySet(FieldQuery, query);
 
         Rewrite();
-    }
-
+    } 
+ 
     /********************************************************/
     bool TUri::FldSetImpl(
         EField field, TStringBuf value, bool strconst, bool nocopy) {
         if (!FldIsValid(field))
             return false;
-
+ 
         switch (field) {
             case FieldScheme:
                 if (!SetScheme(TSchemeInfo::Get(value)).Str.empty())
                     return false;
                 break;
-
+ 
             case FieldPort:
                 Port = value.empty() ? 0 : FromString<ui16>(value);
                 break;
-
+ 
             default:
                 break;
         }
@@ -107,18 +107,18 @@ namespace NUri {
             FldClr(field);
             return false;
         }
-
+ 
         if (strconst) { // string constants don't need to be saved in the buffer
             FldMarkClean(field);
             FldSetNoDirty(field, value);
-            return false;
+            return false; 
         }
-
+ 
         if (nocopy) {
             FldSet(field, value);
             return true;
         }
-
+ 
         return FldTryCpy(field, value);
     }
 
@@ -128,7 +128,7 @@ namespace NUri {
             do {
                 if (!FldIsSet(field))
                     break;
-
+ 
                 TStringBuf& fld = Fields[field];
                 if (fld.length() < value.length())
                     break;
@@ -146,10 +146,10 @@ namespace NUri {
             FldMarkDirty(field);
         }
 
-        FldSetNoDirty(field, value);
-        return true;
-    }
-
+        FldSetNoDirty(field, value); 
+        return true; 
+    } 
+ 
     /********************************************************/
     void TUri::RewriteImpl() {
         size_t len = 0;
@@ -169,7 +169,7 @@ namespace NUri {
                 const EField fld = EField(i);
                 if (!FldIsSet(fld))
                     continue;
-
+ 
                 const char* beg = out.Buf();
                 const TStringBuf& val = Fields[fld];
                 out << val;
@@ -178,12 +178,12 @@ namespace NUri {
             }
             Buffer = std::move(newbuf);
         }
-
+ 
         CheckMissingFields();
 
         FieldsDirty = 0;
-    }
-
+    } 
+ 
     void TUri::CheckMissingFields() {
         // if host is set but path is not...
         if (FldSetCmp(FlagPath | FlagHost, FlagHost))
@@ -197,7 +197,7 @@ namespace NUri {
     void TUri::Merge(const TUri& base, int correctAbs) {
         if (base.Scheme == SchemeUnknown)
             return;
-
+ 
         if (!base.IsValidGlobal())
             return;
 
@@ -207,11 +207,11 @@ namespace NUri {
         const bool noscheme = !selfscheme.IsInited();
         if (!noscheme && !EqualNoCase(selfscheme, basescheme))
             return;
-
+ 
         const ui32 cleanFields = ~FieldsDirty;
         do {
             static constexpr TStringBuf rootPath = "/";
-
+ 
             if (noscheme) {
                 if (!basescheme.empty()) {
                     FldSetNoDirty(FieldScheme, basescheme);
@@ -222,7 +222,7 @@ namespace NUri {
                 Scheme = base.Scheme;
                 DefaultPort = base.DefaultPort;
             }
-
+ 
             if (!IsNull(FlagHost))
                 break; // no merge
 
@@ -232,15 +232,15 @@ namespace NUri {
 
             if (noscheme && IsNull(FlagQuery) && IsNull(FlagPath))
                 FldTrySet(FieldQuery, base);
-
+ 
             if (IsNull(FlagAuth) && !base.IsNull(FlagAuth)) {
                 FldChkSet(FieldUser, base);
                 FldChkSet(FieldPass, base);
-            }
-
+            } 
+ 
             if (IsValidAbs())
                 break;
-
+ 
             TStringBuf p0 = base.GetField(FieldPath);
             if (!p0.IsInited())
                 p0 = rootPath;
@@ -265,33 +265,33 @@ namespace NUri {
             else if (p1.empty() || '.' != p1[0])
                 pathop = false;
             out << p1;
-
+ 
             char* beg = out.Data();
             char* end = beg + out.Filled();
             if (pathop && !PathOperation(beg, end, correctAbs)) {
                 Clear();
                 break;
             }
-
+ 
             // Needs immediate forced rewrite because of TTempBuf
             FldSetNoDirty(FieldPath, TStringBuf(beg, end));
             RewriteImpl();
         } while (false);
-
+ 
         CheckMissingFields();
-
+ 
         // rewrite only if borrowed fields from base
         if (cleanFields & FieldsDirty)
             RewriteImpl();
     }
-
+ 
     /********************************************************/
     TUri::TLinkType TUri::Normalize(const TUri& base,
                                     const TStringBuf& link, const TStringBuf& codebase, long careFlags, ECharset enc) {
         // parse URL
         if (ParsedOK != ParseImpl(link, careFlags, 0, SchemeEmpty, enc))
             return LinkIsBad;
-
+ 
         const TStringBuf& host = GetHost();
 
         // merge with base URL
@@ -343,7 +343,7 @@ namespace NUri {
                     else
                         len += v.length() + 1;
                 }
-            }
+            } 
         }
 
         return len;
@@ -362,7 +362,7 @@ namespace NUri {
             if (!v.empty())
                 out << v << ':';
         }
-
+ 
         TStringBuf host;
         if (flags & FlagHost) {
             const EField fldhost =
@@ -373,11 +373,11 @@ namespace NUri {
         TStringBuf port;
         if ((flags & FlagPort) && 0 != Port && Port != DefaultPort)
             port = Fields[FieldPort];
-
+ 
         if (host) {
             if (wantFlags & FlagScheme)
                 out << "//";
-
+ 
             if (flags & FlagAuth) {
                 if (flags & FlagUser) {
                     v = Fields[FieldUser];
@@ -392,7 +392,7 @@ namespace NUri {
                         TEncoder::EncodeAll(out, v);
                     }
                 }
-
+ 
                 out << '@';
             }
 
@@ -476,11 +476,11 @@ namespace NUri {
             return false;
         if (pathPtr == pathEnd)
             return true;
-
+ 
         if ((pathEnd - pathPtr) >= 2 && *(pathEnd - 2) == '/' && *(pathEnd - 1) == '.') {
             --pathEnd;
         }
-
+ 
         char* p_wr = pathEnd;
         int upCount = 0;
 

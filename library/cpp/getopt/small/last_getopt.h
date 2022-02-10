@@ -22,14 +22,14 @@ namespace NLastGetopt {
     public:
         using TContainer = Container;
         using TValue = typename TContainer::value_type;
-
+ 
         explicit TOptRangeSplitHandler(TContainer* target, const char elementsDelim, const char rangesDelim)
             : Target(target)
             , ElementsDelim(elementsDelim)
             , RangesDelim(rangesDelim)
         {
         }
-
+ 
         void HandleOpt(const TOptsParser* parser) override {
             const TStringBuf curval(parser->CurValOrDef());
             if (curval.IsInited()) {
@@ -54,7 +54,7 @@ namespace NLastGetopt {
         TContainer* Target;
         char ElementsDelim;
         char RangesDelim;
-    };
+    }; 
 
     template <class Container>
     struct TOptSplitHandler: public IOptHandler {

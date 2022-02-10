@@ -7,7 +7,7 @@
 
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
-#include <util/generic/strbuf.h>
+#include <util/generic/strbuf.h> 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
@@ -277,13 +277,13 @@ public:
         return Split.Next(Pos);
     }
 
-    TStringBuf NextTok() {
-        if (Eof())
-            return TStringBuf();
-        TSizeTRegion region = Next();
-        return TStringBuf(Split.Str + region.Begin, region.End - region.Begin);
-    }
-
+    TStringBuf NextTok() { 
+        if (Eof()) 
+            return TStringBuf(); 
+        TSizeTRegion region = Next(); 
+        return TStringBuf(Split.Str + region.Begin, region.End - region.Begin); 
+    } 
+ 
     const TString& NextString() {
         if (!CurrentStroka)
             CurrentStroka = new TString();

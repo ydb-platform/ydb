@@ -50,35 +50,35 @@ struct TOptsParserTester {
 
     void AcceptOption() {
         Accept();
-        UNIT_ASSERT(!!Parser_->CurOpt());
+        UNIT_ASSERT(!!Parser_->CurOpt()); 
     }
 
     void AcceptOption(char c) {
         AcceptOption();
-        UNIT_ASSERT(Parser_->CurOpt()->CharIs(c));
+        UNIT_ASSERT(Parser_->CurOpt()->CharIs(c)); 
     }
 
     void AcceptOption(const TString& optName) {
         AcceptOption();
-        UNIT_ASSERT(Parser_->CurOpt()->NameIs(optName));
+        UNIT_ASSERT(Parser_->CurOpt()->NameIs(optName)); 
     }
 
     template <typename TOpt>
     void AcceptOptionWithValue(TOpt optName, const TString& value) {
         AcceptOption(optName);
-        UNIT_ASSERT_VALUES_EQUAL_C(value, Parser_->CurValStr(), "; option " << optName);
+        UNIT_ASSERT_VALUES_EQUAL_C(value, Parser_->CurValStr(), "; option " << optName); 
     }
 
     template <typename TOpt>
     void AcceptOptionWithoutValue(TOpt optName) {
         AcceptOption(optName);
-        UNIT_ASSERT_C(!Parser_->CurVal(), ": opt " << optName << " must have no param");
+        UNIT_ASSERT_C(!Parser_->CurVal(), ": opt " << optName << " must have no param"); 
     }
 
     void AcceptFreeArgInOrder(const TString& expected) {
         Accept();
-        UNIT_ASSERT(!Parser_->CurOpt());
-        UNIT_ASSERT_VALUES_EQUAL(expected, Parser_->CurValStr());
+        UNIT_ASSERT(!Parser_->CurOpt()); 
+        UNIT_ASSERT_VALUES_EQUAL(expected, Parser_->CurValStr()); 
     }
 
     size_t Pos_;
@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT(r.Has('l'));
         UNIT_ASSERT(!r.Has('h'));
 
-        UNIT_ASSERT_VALUES_EQUAL(2u, r.GetFreeArgs().size());
+        UNIT_ASSERT_VALUES_EQUAL(2u, r.GetFreeArgs().size()); 
         UNIT_ASSERT_VALUES_EQUAL(2u, r.GetFreeArgCount());
         UNIT_ASSERT_VALUES_EQUAL("/etc", r.GetFreeArgs()[0]);
         UNIT_ASSERT_VALUES_EQUAL("/tmp/etc", r.GetFreeArgs()[1]);
@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
 
         tester.AcceptEndOfOptions();
 
-        UNIT_ASSERT_VALUES_EQUAL(1u, tester.Parser_->Pos_);
+        UNIT_ASSERT_VALUES_EQUAL(1u, tester.Parser_->Pos_); 
     }
 
     Y_UNIT_TEST(TestExpectedUnknownCharOption) {
@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         UNIT_ASSERT_VALUES_EQUAL(42, a);
         UNIT_ASSERT_VALUES_EQUAL(0, b);
         UNIT_ASSERT(e == REQUIRED_ARGUMENT);
-        UNIT_ASSERT_VALUES_EQUAL(12345u, c);
+        UNIT_ASSERT_VALUES_EQUAL(12345u, c); 
     }
 
     Y_UNIT_TEST(TestSetFlag) {
@@ -519,61 +519,61 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
 
     Y_UNIT_TEST(TestRequiredOpts) {
         TOptsNoDefault opts;
-        TOpt& opt_d = opts.AddCharOption('d');
-
-        // test 'not required'
-        // makes sure that the problem will only be in 'required'
+        TOpt& opt_d = opts.AddCharOption('d'); 
+ 
+        // test 'not required' 
+        // makes sure that the problem will only be in 'required' 
         TOptsParseResultTestWrapper r1(&opts, V({"cmd"}));
-
-        // test 'required'
-        opt_d.Required();
+ 
+        // test 'required' 
+        opt_d.Required(); 
         UNIT_ASSERT_EXCEPTION(
             TOptsParseResultTestWrapper(&opts, V({"cmd"})),
             TUsageException);
-
+ 
         TOptsParseResultTestWrapper r3(&opts, V({"cmd", "-d11"}));
-        UNIT_ASSERT_VALUES_EQUAL("11", r3.Get('d'));
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL("11", r3.Get('d')); 
+    } 
+ 
     class HandlerStoreTrue {
         bool* Flag;
 
-    public:
+    public: 
         HandlerStoreTrue(bool* flag)
-            : Flag(flag)
+            : Flag(flag) 
         {
         }
         void operator()() {
-            *Flag = true;
-        }
-    };
+            *Flag = true; 
+        } 
+    }; 
     Y_UNIT_TEST(TestHandlers) {
-        {
+        { 
             TOptsNoDefault opts;
-            bool flag = false;
-            opts.AddLongOption("flag").Handler0(HandlerStoreTrue(&flag)).NoArgument();
+            bool flag = false; 
+            opts.AddLongOption("flag").Handler0(HandlerStoreTrue(&flag)).NoArgument(); 
             TOptsParseResultTestWrapper r(&opts, V({"cmd", "--flag"}));
-            UNIT_ASSERT(flag);
-        }
-        {
+            UNIT_ASSERT(flag); 
+        } 
+        { 
             TOptsNoDefault opts;
-            unsigned uval = 5;
-            double fval = 0.0;
-            opts.AddLongOption("flag1").RequiredArgument().StoreResult(&uval);
-            opts.AddLongOption("flag2").RequiredArgument().StoreResultT<int>(&uval);
+            unsigned uval = 5; 
+            double fval = 0.0; 
+            opts.AddLongOption("flag1").RequiredArgument().StoreResult(&uval); 
+            opts.AddLongOption("flag2").RequiredArgument().StoreResultT<int>(&uval); 
             opts.AddLongOption("flag3").RequiredArgument().StoreMappedResult(&fval, (double (*)(double))fabs);
             opts.AddLongOption("flag4").RequiredArgument().StoreMappedResult(&fval, (double (*)(double))sqrt);
             UNIT_ASSERT_EXCEPTION(
                 TOptsParseResultTestWrapper(&opts, V({"cmd", "--flag3", "-2.0", "--flag1", "-1"})),
                 yexception);
-            UNIT_ASSERT_VALUES_EQUAL(uval, 5u);
-            UNIT_ASSERT_VALUES_EQUAL(fval, 2.0);
+            UNIT_ASSERT_VALUES_EQUAL(uval, 5u); 
+            UNIT_ASSERT_VALUES_EQUAL(fval, 2.0); 
             TOptsParseResultTestWrapper r1(&opts, V({"cmd", "--flag4", "9.0", "--flag2", "-1"}));
-            UNIT_ASSERT_VALUES_EQUAL(uval, Max<unsigned>());
-            UNIT_ASSERT_VALUES_EQUAL(fval, 3.0);
-        }
-    }
-
+            UNIT_ASSERT_VALUES_EQUAL(uval, Max<unsigned>()); 
+            UNIT_ASSERT_VALUES_EQUAL(fval, 3.0); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestTitleAndPrintUsage) {
         TOpts opts;
         const char* prog = "my_program";

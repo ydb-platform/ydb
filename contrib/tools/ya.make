@@ -11,7 +11,7 @@ RECURSE(
     flex
     flex-old
     flex-old/fl
-    fluent-bit
+    fluent-bit 
     fusermount
     gperf
     gprof2dot

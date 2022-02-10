@@ -27,17 +27,17 @@ get_string_method "stpcpy.c"
 
 mkdir -p include/windows/sys
 curl "https://raw.githubusercontent.com/openbsd/src/master/sys/sys/queue.h" --output "include/windows/sys/queue.h"
-
+ 
 mkdir -p include/readpassphrase
 curl "https://raw.githubusercontent.com/openbsd/src/master/include/readpassphrase.h" --output "include/readpassphrase/readpassphrase.h" && fix_decls "include/readpassphrase/readpassphrase.h"
 curl "https://raw.githubusercontent.com/openbsd/src/master/lib/libc/gen/readpassphrase.c" --output "readpassphrase.c" && unweak "readpassphrase.c" && fix_tabs "readpassphrase.c"
 
-curl "https://raw.githubusercontent.com/freebsd/freebsd/master/include/glob.h" --output "glob.h"
-curl "https://raw.githubusercontent.com/freebsd/freebsd/master/lib/libc/gen/glob.c" --output "glob.c"
+curl "https://raw.githubusercontent.com/freebsd/freebsd/master/include/glob.h" --output "glob.h" 
+curl "https://raw.githubusercontent.com/freebsd/freebsd/master/lib/libc/gen/glob.c" --output "glob.c" 
 curl "https://raw.githubusercontent.com/openbsd/src/master/lib/libc/stdlib/reallocarray.c" --output "reallocarray.c" && unweak "reallocarray.c"
-> "collate.h"
-> "stdlib.h"
-> "unistd.h"
+> "collate.h" 
+> "stdlib.h" 
+> "unistd.h" 
 
 mkdir -p include/uchar
 curl "https://git.musl-libc.org/cgit/musl/plain/include/uchar.h" --output "include/uchar/uchar.h"

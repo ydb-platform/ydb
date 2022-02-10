@@ -197,12 +197,12 @@ class Recipe(object):
         except Exception:
             pass
 
-    def write_connection_string(self, connection_string): 
-        self.setenv('YDB_CONNECTION_STRING', connection_string) 
- 
-    def write_certificates_path(self, certificates_path): 
-        self.setenv('YDB_SSL_ROOT_CERTIFICATES_FILE', certificates_path) 
- 
+    def write_connection_string(self, connection_string):
+        self.setenv('YDB_CONNECTION_STRING', connection_string)
+
+    def write_certificates_path(self, certificates_path):
+        self.setenv('YDB_SSL_ROOT_CERTIFICATES_FILE', certificates_path)
+
     def read_metafile(self):
         return json.loads(self.read(self.metafile_path()))
 
@@ -322,9 +322,9 @@ def deploy(arguments):
     recipe.write_metafile(info)
     recipe.write_endpoint(endpoints[0])
     recipe.write_database(cluster.domain_name)
-    recipe.write_connection_string(("grpcs://" if enable_tls() else "grpc://") + endpoints[0] + "?database=/" + cluster.domain_name) 
-    if enable_tls(): 
-        recipe.write_certificates_path(configuration.grpc_tls_ca()) 
+    recipe.write_connection_string(("grpcs://" if enable_tls() else "grpc://") + endpoints[0] + "?database=/" + cluster.domain_name)
+    if enable_tls():
+        recipe.write_certificates_path(configuration.grpc_tls_ca())
 
 
 def _stop_instances(arguments):

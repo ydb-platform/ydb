@@ -70,7 +70,7 @@ public:
 	int code() const;
 		/// Returns the exception code if defined.
 		
-	virtual std::string displayText() const;
+	virtual std::string displayText() const; 
 		/// Returns a string consisting of the
 		/// message name and the message text.
 

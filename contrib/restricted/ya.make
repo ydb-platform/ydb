@@ -16,7 +16,7 @@ RECURSE(
     cpuinfo
     exiv2
     expected-lite
-    fast_float
+    fast_float 
     dragonbox
     gemmlowp
     glib

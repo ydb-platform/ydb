@@ -20,11 +20,11 @@ ALLOW ydb/library/yql/udfs/common/clickhouse/client -> contrib/restricted/boost
 ALLOW ydb/library/yql/udfs/common/clickhouse/client -> contrib/restricted/dragonbox
 ALLOW ydb/library/yql/udfs/common/clickhouse/client -> contrib/restricted/fast_float
 
-# fast_float is a faster alternative to double-conversion for float parsing.
+# fast_float is a faster alternative to double-conversion for float parsing. 
 # ClickHouse uses the best libraries for performance, that's why it changes them with insane speed.
-# Arcadia is not ready for this, that's why we added this library in restricted.
-ALLOW clickhouse -> contrib/restricted/fast_float
-
+# Arcadia is not ready for this, that's why we added this library in restricted. 
+ALLOW clickhouse -> contrib/restricted/fast_float 
+ 
 # ClickHouse uses hash-table from abseil-cpp for better performance in CacheDictionaries and SSDCacheDictionaries,
 # because it the best best open source hash table framework (swiss hash tables, hash functions)
 ALLOW clickhouse -> contrib/restricted/abseil-cpp

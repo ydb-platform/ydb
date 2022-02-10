@@ -51,17 +51,17 @@ Y_UNIT_TEST_SUITE(ProtobufWalk) {
         return true;
     }
 
-    struct TestStruct { 
-        bool Ok = false; 
-         
-        TestStruct() = default; 
-        bool operator()(Message&, const FieldDescriptor*) { 
-            Ok = true; 
-            return false; 
-        } 
-    }; 
- 
-    Y_UNIT_TEST(TestWalkRefl) { 
+    struct TestStruct {
+        bool Ok = false;
+        
+        TestStruct() = default;
+        bool operator()(Message&, const FieldDescriptor*) {
+            Ok = true;
+            return false;
+        }
+    };
+
+    Y_UNIT_TEST(TestWalkRefl) {
         NProtobufUtilUt::TWalkTest p;
         InitProto(p);
 
@@ -123,36 +123,36 @@ Y_UNIT_TEST_SUITE(ProtobufWalk) {
             UNIT_ASSERT(p.RepSubSize() == 2);
         }
     }
- 
-    Y_UNIT_TEST(TestMutableCallable) { 
-        TestStruct testStruct; 
-        NProtobufUtilUt::TWalkTest p; 
-        InitProto(p); 
- 
-        WalkReflection(p, testStruct); 
-        UNIT_ASSERT(testStruct.Ok); 
-    } 
- 
-    Y_UNIT_TEST(TestWalkDescr) { 
-        NProtobufUtilUt::TWalkTestCyclic p; 
- 
-        TStringBuilder printedSchema; 
-        auto func = [&](const FieldDescriptor* desc) mutable { 
-            printedSchema << desc->DebugString(); 
-            return true; 
-        }; 
-        WalkSchema(p.GetDescriptor(), func); 
- 
-        TString schema =  
-            "optional .NProtobufUtilUt.TWalkTestCyclic.TNested OptNested = 1;\n" 
-            "optional uint32 OptInt32 = 1;\n" 
-            "optional .NProtobufUtilUt.TWalkTestCyclic OptSubNested = 2;\n" 
-            "repeated string RepStr = 3;\n" 
-            "optional .NProtobufUtilUt.TWalkTestCyclic.TNested OptNested = 4;\n" 
-            "repeated uint64 OptInt64 = 2;\n" 
-            "optional .NProtobufUtilUt.TWalkTestCyclic OptSub = 3;\n" 
-            "optional .NProtobufUtilUt.TWalkTestCyclic.TEnum OptEnum = 4;\n"; 
-         
-        UNIT_ASSERT_STRINGS_EQUAL(printedSchema, schema); 
-    } 
+
+    Y_UNIT_TEST(TestMutableCallable) {
+        TestStruct testStruct;
+        NProtobufUtilUt::TWalkTest p;
+        InitProto(p);
+
+        WalkReflection(p, testStruct);
+        UNIT_ASSERT(testStruct.Ok);
+    }
+
+    Y_UNIT_TEST(TestWalkDescr) {
+        NProtobufUtilUt::TWalkTestCyclic p;
+
+        TStringBuilder printedSchema;
+        auto func = [&](const FieldDescriptor* desc) mutable {
+            printedSchema << desc->DebugString();
+            return true;
+        };
+        WalkSchema(p.GetDescriptor(), func);
+
+        TString schema = 
+            "optional .NProtobufUtilUt.TWalkTestCyclic.TNested OptNested = 1;\n"
+            "optional uint32 OptInt32 = 1;\n"
+            "optional .NProtobufUtilUt.TWalkTestCyclic OptSubNested = 2;\n"
+            "repeated string RepStr = 3;\n"
+            "optional .NProtobufUtilUt.TWalkTestCyclic.TNested OptNested = 4;\n"
+            "repeated uint64 OptInt64 = 2;\n"
+            "optional .NProtobufUtilUt.TWalkTestCyclic OptSub = 3;\n"
+            "optional .NProtobufUtilUt.TWalkTestCyclic.TEnum OptEnum = 4;\n";
+        
+        UNIT_ASSERT_STRINGS_EQUAL(printedSchema, schema);
+    }
 }

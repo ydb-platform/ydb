@@ -8,19 +8,19 @@ namespace NGRpcService {
 void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::TQueryResponse& kqpResponse) {
     const auto& kqpStats = kqpResponse.GetQueryStats();
 
-    uint64_t totalCpuTimeUs = 0;
-    uint64_t totalDurationUs = 0;
-
+    uint64_t totalCpuTimeUs = 0; 
+    uint64_t totalDurationUs = 0; 
+ 
     for (auto& exec : kqpStats.GetExecutions()) {
-        auto durationUs = exec.GetDurationUs();
-        auto cpuTimeUs = exec.GetCpuTimeUs();
-
-        totalDurationUs += durationUs;
-        totalCpuTimeUs += cpuTimeUs;
-
+        auto durationUs = exec.GetDurationUs(); 
+        auto cpuTimeUs = exec.GetCpuTimeUs(); 
+ 
+        totalDurationUs += durationUs; 
+        totalCpuTimeUs += cpuTimeUs; 
+ 
         auto& toPhase = *queryStats.add_query_phases();
-        toPhase.set_duration_us(durationUs);
-        toPhase.set_cpu_time_us(cpuTimeUs);
+        toPhase.set_duration_us(durationUs); 
+        toPhase.set_cpu_time_us(cpuTimeUs); 
 
         for (auto& table : exec.GetTables()) {
             auto& toTable = *toPhase.add_table_access();
@@ -63,8 +63,8 @@ void FillQueryStats(Ydb::TableStats::QueryStats& queryStats, const NKikimrKqp::T
     }
 
     queryStats.set_process_cpu_time_us(kqpStats.GetWorkerCpuTimeUs());
-    queryStats.set_total_cpu_time_us(totalCpuTimeUs);
-    queryStats.set_total_duration_us(totalDurationUs);
+    queryStats.set_total_cpu_time_us(totalCpuTimeUs); 
+    queryStats.set_total_duration_us(totalDurationUs); 
 
     queryStats.set_query_plan(kqpResponse.GetQueryPlan());
 }

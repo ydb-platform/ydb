@@ -15,7 +15,7 @@ IGraphTransformer::TStatus AnnotateDqCnValue(const TExprNode::TPtr& input, TExpr
 IGraphTransformer::TStatus AnnotateDqCnResult(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqConnection(const TExprNode::TPtr& input, TExprContext& ctx);
-IGraphTransformer::TStatus AnnotateDqCnMerge(const TExprNode::TPtr& input, TExprContext& ctx);
+IGraphTransformer::TStatus AnnotateDqCnMerge(const TExprNode::TPtr& input, TExprContext& ctx); 
 IGraphTransformer::TStatus AnnotateDqJoin(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqMapOrDictJoin(const TExprNode::TPtr& input, TExprContext& ctx);
 IGraphTransformer::TStatus AnnotateDqCrossJoin(const TExprNode::TPtr& input, TExprContext& ctx);
@@ -25,10 +25,10 @@ IGraphTransformer::TStatus AnnotateDqQuery(const TExprNode::TPtr& input, TExprCo
 
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(NYql::TTypeAnnotationContext& typesCtx);
 
-bool IsTypeSupportedInMergeCn(EDataSlot type);
-bool IsTypeSupportedInMergeCn(const TDataExprType* dataType);
-bool IsMergeConnectionApplicable(const TVector<const TTypeAnnotationNode*>& sortKeyTypes);
-
+bool IsTypeSupportedInMergeCn(EDataSlot type); 
+bool IsTypeSupportedInMergeCn(const TDataExprType* dataType); 
+bool IsMergeConnectionApplicable(const TVector<const TTypeAnnotationNode*>& sortKeyTypes); 
+ 
 TString PrintDqStageOnly(const NNodes::TDqStageBase& stage, TExprContext& ctx);
 
 } // namespace NYql::NDq

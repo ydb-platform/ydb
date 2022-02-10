@@ -1833,47 +1833,47 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             return issue.Message.Contains("ATOM evaluation is not supported in YDB queries.");
         }));
     }
-
-    Y_UNIT_TEST(CrossJoinOneColumn) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        CreateSampleTables(kikimr);
-
-        auto result = db.StreamExecuteScanQuery(R"(
-            SELECT COUNT(left.Key)
-            FROM `/Root/EightShard` as left
-            CROSS JOIN `/Root/FourShard` as right
-            WHERE left.Key = 101u;
-        )").GetValueSync();
-
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson(R"([[8u]])", StreamResultToYson(result));
-
-        result = db.StreamExecuteScanQuery(R"(
-            SELECT COUNT(right.Key)
-            FROM `/Root/EightShard` as left
-            CROSS JOIN `/Root/FourShard` as right
-            WHERE right.Key = 1
-        )").GetValueSync();
-
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson(R"([[24u]])", StreamResultToYson(result));
-    }
-
-    Y_UNIT_TEST(CrossJoinCount) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        CreateSampleTables(kikimr);
-
-        auto result = db.StreamExecuteScanQuery(R"(
-            SELECT COUNT(*)
-            FROM `/Root/EightShard` as left
-            CROSS JOIN `/Root/FourShard` as right
-        )").GetValueSync();
-
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        CompareYson(R"([[192u]])", StreamResultToYson(result));
-    }
+ 
+    Y_UNIT_TEST(CrossJoinOneColumn) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        CreateSampleTables(kikimr); 
+ 
+        auto result = db.StreamExecuteScanQuery(R"( 
+            SELECT COUNT(left.Key) 
+            FROM `/Root/EightShard` as left 
+            CROSS JOIN `/Root/FourShard` as right 
+            WHERE left.Key = 101u; 
+        )").GetValueSync(); 
+ 
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        CompareYson(R"([[8u]])", StreamResultToYson(result)); 
+ 
+        result = db.StreamExecuteScanQuery(R"( 
+            SELECT COUNT(right.Key) 
+            FROM `/Root/EightShard` as left 
+            CROSS JOIN `/Root/FourShard` as right 
+            WHERE right.Key = 1 
+        )").GetValueSync(); 
+ 
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        CompareYson(R"([[24u]])", StreamResultToYson(result)); 
+    } 
+ 
+    Y_UNIT_TEST(CrossJoinCount) { 
+        TKikimrRunner kikimr; 
+        auto db = kikimr.GetTableClient(); 
+        CreateSampleTables(kikimr); 
+ 
+        auto result = db.StreamExecuteScanQuery(R"( 
+            SELECT COUNT(*) 
+            FROM `/Root/EightShard` as left 
+            CROSS JOIN `/Root/FourShard` as right 
+        )").GetValueSync(); 
+ 
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+        CompareYson(R"([[192u]])", StreamResultToYson(result)); 
+    } 
 
     Y_UNIT_TEST(SelectExistsUnexpected) {
         TKikimrRunner kikimr;

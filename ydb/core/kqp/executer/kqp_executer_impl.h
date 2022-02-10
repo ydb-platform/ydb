@@ -356,33 +356,33 @@ protected:
     // void FillEndpointDesc(NYql::NDqProto::TEndpoint& endpoint, const TTask& task);
     // void FillChannelDesc(NYql::NDqProto::TChannel& channelDesc, const TChannel& channel);
 
-    void FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input) {
-        switch (input.Type()) {
-            case NYql::NDq::TTaskInputType::UnionAll: {
-                inputDesc.MutableUnionAll();
-                break;
-            }
-            case NYql::NDq::TTaskInputType::Merge: {
-                auto& mergeProto = *inputDesc.MutableMerge();
-                YQL_ENSURE(std::holds_alternative<NYql::NDq::TMergeTaskInput>(input.ConnectionInfo));
-                auto& sortColumns = std::get<NYql::NDq::TMergeTaskInput>(input.ConnectionInfo).SortColumns;
-                for (const auto& sortColumn : sortColumns) {
-                    auto newSortCol = mergeProto.AddSortColumns();
-                    newSortCol->SetColumn(sortColumn.Column.c_str());
-                    newSortCol->SetAscending(sortColumn.Ascending);
-                }
-                break;
-            }
-            default:
-                YQL_ENSURE(false, "Unexpected task input type: " + ToString(static_cast<int>(input.Type())));
-        }
-
-        for (ui64 channel : input.Channels) {
-            auto& channelDesc = *inputDesc.AddChannels();
-            static_cast<TDerived*>(this)->FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel));
-        }
-    }
-
+    void FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const TTaskInput& input) { 
+        switch (input.Type()) { 
+            case NYql::NDq::TTaskInputType::UnionAll: { 
+                inputDesc.MutableUnionAll(); 
+                break; 
+            } 
+            case NYql::NDq::TTaskInputType::Merge: { 
+                auto& mergeProto = *inputDesc.MutableMerge(); 
+                YQL_ENSURE(std::holds_alternative<NYql::NDq::TMergeTaskInput>(input.ConnectionInfo)); 
+                auto& sortColumns = std::get<NYql::NDq::TMergeTaskInput>(input.ConnectionInfo).SortColumns; 
+                for (const auto& sortColumn : sortColumns) { 
+                    auto newSortCol = mergeProto.AddSortColumns(); 
+                    newSortCol->SetColumn(sortColumn.Column.c_str()); 
+                    newSortCol->SetAscending(sortColumn.Ascending); 
+                } 
+                break; 
+            } 
+            default: 
+                YQL_ENSURE(false, "Unexpected task input type: " + ToString(static_cast<int>(input.Type()))); 
+        } 
+ 
+        for (ui64 channel : input.Channels) { 
+            auto& channelDesc = *inputDesc.AddChannels(); 
+            static_cast<TDerived*>(this)->FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel)); 
+        } 
+    } 
+ 
     void FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output) {
         switch (output.Type) {
             case TTaskOutputType::Map:

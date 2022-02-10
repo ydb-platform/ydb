@@ -5,8 +5,8 @@
 
 #include <library/cpp/actors/core/actorid.h>
 
-#include <variant>
-
+#include <variant> 
+ 
 namespace NYql::NDq {
 
 struct TStageId {
@@ -92,41 +92,41 @@ struct TChannel {
 
 using TChannelList = TVector<ui64>;
 
-struct TSortColumn {
-    std::string Column;
-    bool Ascending;
-
-    TSortColumn(const std::string& column, bool ascending)
-        : Column(column)
-        , Ascending(ascending)
-    {}
-};
-
-struct TMergeTaskInput {
-    TVector<TSortColumn> SortColumns;
-
-    TMergeTaskInput(const TVector<TSortColumn>& sortColumns)
-        : SortColumns(sortColumns)
-    {}
-};
-
-// Enum values must match to ConnectionInfo variant alternatives
-enum class TTaskInputType {
-    UnionAll,
-    Merge
-};
-
+struct TSortColumn { 
+    std::string Column; 
+    bool Ascending; 
+ 
+    TSortColumn(const std::string& column, bool ascending) 
+        : Column(column) 
+        , Ascending(ascending) 
+    {} 
+}; 
+ 
+struct TMergeTaskInput { 
+    TVector<TSortColumn> SortColumns; 
+ 
+    TMergeTaskInput(const TVector<TSortColumn>& sortColumns) 
+        : SortColumns(sortColumns) 
+    {} 
+}; 
+ 
+// Enum values must match to ConnectionInfo variant alternatives 
+enum class TTaskInputType { 
+    UnionAll, 
+    Merge 
+}; 
+ 
 template <class TInputMeta>
 struct TTaskInput {
-    std::variant<std::monostate, TMergeTaskInput> ConnectionInfo;
+    std::variant<std::monostate, TMergeTaskInput> ConnectionInfo; 
     TChannelList Channels;
     TMaybe<::google::protobuf::Any> SourceSettings;
     TString SourceType;
     TInputMeta Meta;
-
-    TTaskInputType Type() const {
-        return static_cast<TTaskInputType>(ConnectionInfo.index());
-    }
+ 
+    TTaskInputType Type() const { 
+        return static_cast<TTaskInputType>(ConnectionInfo.index()); 
+    } 
 };
 
 struct TTaskOutputType {

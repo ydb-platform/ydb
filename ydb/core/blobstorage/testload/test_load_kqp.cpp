@@ -14,8 +14,8 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <ydb/library/workload/workload_factory.h>
-#include <ydb/library/workload/stock_workload.h>
-
+#include <ydb/library/workload/stock_workload.h> 
+ 
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
@@ -65,11 +65,11 @@ class TKqpWriterTestLoadActor : public TActorBootstrapped<TKqpWriterTestLoadActo
     bool SequentialWrite;
     TString StringValue;
     TString WorkingDir;
-    size_t ProductCount;
-    size_t Quantity;
+    size_t ProductCount; 
+    size_t Quantity; 
     bool DeleteTableOnFinish;
     std::vector<TString> preparedQuery;
-    std::shared_ptr<NYdbWorkload::IWorkloadQueryGenerator> WorkloadQueryGen;
+    std::shared_ptr<NYdbWorkload::IWorkloadQueryGenerator> WorkloadQueryGen; 
 
     TReallyFastRng32 Rng;
 
@@ -88,7 +88,7 @@ class TKqpWriterTestLoadActor : public TActorBootstrapped<TKqpWriterTestLoadActo
 
 public:
     static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_TEST_WORKLOAD;
+        return NKikimrServices::TActivity::KQP_TEST_WORKLOAD; 
     }
 
     TKqpWriterTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TKqpLoadStart& cmd,
@@ -111,22 +111,22 @@ public:
         SequentialWrite = cmd.GetSequentialWrite();
         StringValue = TString(StringValueSize, 'a');
         WorkingDir = cmd.GetWorkingDir();
-
-        if (cmd.Workload_case() == NKikimrBlobStorage::TEvTestLoadRequest_TKqpLoadStart::WorkloadCase::kStock) {
-            ProductCount = cmd.GetStock().GetProductCount();
-            Quantity = cmd.GetStock().GetQuantity();
-        }
-
-        NYdbWorkload::TWorkloadParams* workloadParams = nullptr;
-        if (cmd.GetWorkloadName() == "stock") {
-            NYdbWorkload::TStockWorkloadParams params;
-            params.DbPath = WorkingDir;
-            params.PartitionsByLoad = true;
-            workloadParams = &params;
-        }
-        NYdbWorkload::TWorkloadFactory factory;
-        WorkloadQueryGen = factory.GetWorkloadQueryGenerator(cmd.GetWorkloadName(), workloadParams);
-        Y_ASSERT(WorkloadQueryGen.get() != nullptr);
+ 
+        if (cmd.Workload_case() == NKikimrBlobStorage::TEvTestLoadRequest_TKqpLoadStart::WorkloadCase::kStock) { 
+            ProductCount = cmd.GetStock().GetProductCount(); 
+            Quantity = cmd.GetStock().GetQuantity(); 
+        } 
+ 
+        NYdbWorkload::TWorkloadParams* workloadParams = nullptr; 
+        if (cmd.GetWorkloadName() == "stock") { 
+            NYdbWorkload::TStockWorkloadParams params; 
+            params.DbPath = WorkingDir; 
+            params.PartitionsByLoad = true; 
+            workloadParams = &params; 
+        } 
+        NYdbWorkload::TWorkloadFactory factory; 
+        WorkloadQueryGen = factory.GetWorkloadQueryGenerator(cmd.GetWorkloadName(), workloadParams); 
+        Y_ASSERT(WorkloadQueryGen.get() != nullptr); 
         Y_ASSERT(DurationSeconds > DelayBeforeMeasurements.Seconds());
 
         // Monitoring initialization
@@ -144,16 +144,16 @@ public:
 
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag 
                 << " TKqpWriterTestLoadActor Bootstrap called");
         Become(&TKqpWriterTestLoadActor::StateFunc);
-        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
+        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill"); 
         ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
 
-        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Bootstrap");
+        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Bootstrap"); 
 
-        CreateSession(ctx);
+        CreateSession(ctx); 
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -161,13 +161,13 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void HandlePoisonPill(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " HandlePoisonPill, "
+        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " HandlePoisonPill, " 
                 << "all workers is initialized, so starting death process");
         StartDeathProcess(ctx);
     }
 
     void StartDeathProcess(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag 
                 << " TKqpWriterTestLoadActor StartDeathProcess called");
         for(const auto& session : Sessions) {
             auto request = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
@@ -203,54 +203,54 @@ public:
 
 private:
 
-    void CreateSession(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Creating session to run tables DDL.");
-        auto request = Ydb::Table::CreateSessionRequest();
-        auto cb = [this, &ctx](const Ydb::Table::CreateSessionResponse& resp) {
-            auto op = resp.Getoperation();
-            if (op.Getready()) {
-                auto status = op.Getstatus();
-                if (status == Ydb::StatusIds_StatusCode_SUCCESS) {
-                    Ydb::Table::CreateSessionResult result;
-                    op.result().UnpackTo(&result);
-                    TString sessionId = result.session_id();
-                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Session is created: " + sessionId);
-                    CreateShardedTable(ctx, sessionId);
-                } else {
-                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Session creation failed " + std::to_string((int)status)
-                        + " Issue: " + op.Getissues(0).Getmessage());
-                }
-            }
-        };
-        using namespace NGRpcService;
-        using TEvCreateSessionRequest = TGRpcRequestWrapper<TRpcServices::EvCreateSession, Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse, true, TRateLimiterMode::Rps>;
-        NKikimr::NRpcService::DoLocalRpcSameMailbox<TEvCreateSessionRequest>(
-            std::move(request), std::move(cb), WorkingDir, TString(), ctx
-        );
+    void CreateSession(const TActorContext& ctx) { 
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Creating session to run tables DDL."); 
+        auto request = Ydb::Table::CreateSessionRequest(); 
+        auto cb = [this, &ctx](const Ydb::Table::CreateSessionResponse& resp) { 
+            auto op = resp.Getoperation(); 
+            if (op.Getready()) { 
+                auto status = op.Getstatus(); 
+                if (status == Ydb::StatusIds_StatusCode_SUCCESS) { 
+                    Ydb::Table::CreateSessionResult result; 
+                    op.result().UnpackTo(&result); 
+                    TString sessionId = result.session_id(); 
+                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Session is created: " + sessionId); 
+                    CreateShardedTable(ctx, sessionId); 
+                } else { 
+                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Session creation failed " + std::to_string((int)status) 
+                        + " Issue: " + op.Getissues(0).Getmessage()); 
+                } 
+            } 
+        }; 
+        using namespace NGRpcService; 
+        using TEvCreateSessionRequest = TGRpcRequestWrapper<TRpcServices::EvCreateSession, Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse, true, TRateLimiterMode::Rps>; 
+        NKikimr::NRpcService::DoLocalRpcSameMailbox<TEvCreateSessionRequest>( 
+            std::move(request), std::move(cb), WorkingDir, TString(), ctx 
+        ); 
     }
 
-    void CreateShardedTable(const TActorContext& ctx, const TString& sessionId) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Creating tables for workload.");
-        auto request = Ydb::Table::ExecuteSchemeQueryRequest();
-        request.set_session_id(sessionId);
-        request.set_yql_text(WorkloadQueryGen->GetDDLQueries());
-        auto cb = [&ctx](const Ydb::Table::ExecuteSchemeQueryResponse& resp) {
-            auto op = resp.Getoperation();
-            if (op.Getready()) {
-                auto status = op.Getstatus();
-                if (status == Ydb::StatusIds_StatusCode_SUCCESS) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tables are created.");
-                } else {
-                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tables creation failed " + std::to_string((int)status)
-                        + " Issue: " + op.Getissues(0).Getmessage());
-                }
-            }
-        };
-        using namespace NGRpcService;
-        using TEvExecuteSchemeQueryRequest = TGRpcRequestWrapper<TRpcServices::EvExecuteSchemeQuery, Ydb::Table::ExecuteSchemeQueryRequest, Ydb::Table::ExecuteSchemeQueryResponse, true, TRateLimiterMode::Rps>;
-        NKikimr::NRpcService::DoLocalRpcSameMailbox<TEvExecuteSchemeQueryRequest>(
-            std::move(request), std::move(cb), WorkingDir, TString(), ctx
-        );
+    void CreateShardedTable(const TActorContext& ctx, const TString& sessionId) { 
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Creating tables for workload."); 
+        auto request = Ydb::Table::ExecuteSchemeQueryRequest(); 
+        request.set_session_id(sessionId); 
+        request.set_yql_text(WorkloadQueryGen->GetDDLQueries()); 
+        auto cb = [&ctx](const Ydb::Table::ExecuteSchemeQueryResponse& resp) { 
+            auto op = resp.Getoperation(); 
+            if (op.Getready()) { 
+                auto status = op.Getstatus(); 
+                if (status == Ydb::StatusIds_StatusCode_SUCCESS) { 
+                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tables are created."); 
+                } else { 
+                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tables creation failed " + std::to_string((int)status) 
+                        + " Issue: " + op.Getissues(0).Getmessage()); 
+                } 
+            } 
+        }; 
+        using namespace NGRpcService; 
+        using TEvExecuteSchemeQueryRequest = TGRpcRequestWrapper<TRpcServices::EvExecuteSchemeQuery, Ydb::Table::ExecuteSchemeQueryRequest, Ydb::Table::ExecuteSchemeQueryResponse, true, TRateLimiterMode::Rps>; 
+        NKikimr::NRpcService::DoLocalRpcSameMailbox<TEvExecuteSchemeQueryRequest>( 
+            std::move(request), std::move(cb), WorkingDir, TString(), ctx 
+        ); 
     }
 
 };

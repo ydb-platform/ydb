@@ -5,8 +5,8 @@
 
 #include <memory>
 
-class TDuration;
-
+class TDuration; 
+ 
 namespace Ydb {
     namespace TableStats {
         class QueryStats;
@@ -46,8 +46,8 @@ class TQueryStats {
 public:
     TString ToString(bool withPlan = false) const;
     TMaybe<TString> GetPlan() const;
-    TDuration GetTotalDuration() const;
-    TDuration GetTotalCpuTime() const;
+    TDuration GetTotalDuration() const; 
+    TDuration GetTotalCpuTime() const; 
 
 private:
     explicit TQueryStats(const Ydb::TableStats::QueryStats& proto);

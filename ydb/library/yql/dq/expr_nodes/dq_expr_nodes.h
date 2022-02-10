@@ -8,11 +8,11 @@ namespace NYql::NNodes {
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.decl.inl.h>
 
-struct TTopSortSettings {
-    static inline const TString AscendingSort = "Asc";
-    static inline const TString DescendingSort = "Desc";
-};
-
+struct TTopSortSettings { 
+    static inline const TString AscendingSort = "Asc"; 
+    static inline const TString DescendingSort = "Desc"; 
+}; 
+ 
 class TDqConnection : public NGenerated::TDqConnectionStub<TExprBase, TCallable, TDqOutput> {
 public:
     explicit TDqConnection(const TExprNode* node)

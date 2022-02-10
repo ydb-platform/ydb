@@ -68,21 +68,21 @@ message TSourceInput {
     google.protobuf.Any Settings = 2;
 }
 
-message TSortColumn {
-    string Column = 1;
-    bool Ascending = 2;
-}
-
-message TMergeInput {
-    repeated TSortColumn SortColumns = 1;
-}
-
+message TSortColumn { 
+    string Column = 1; 
+    bool Ascending = 2; 
+} 
+ 
+message TMergeInput { 
+    repeated TSortColumn SortColumns = 1; 
+} 
+ 
 message TTaskInput {
     repeated TChannel Channels = 1;
     oneof Type {
         TUnionAllInput UnionAll = 10;
         TSourceInput Source = 11;
-        TMergeInput Merge = 12;
+        TMergeInput Merge = 12; 
     }
 }
 

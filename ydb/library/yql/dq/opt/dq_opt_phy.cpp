@@ -301,18 +301,18 @@ TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& o
 
     optCtx.RemapNode(stage.Ref(), newStage.Ptr());
 
-    return newStage;
-}
-
+    return newStage; 
+} 
+ 
 TMaybeNode<TDqConnection> DqPushLambdaToStageUnionAll(const TDqConnection& connection, TCoLambda& lambda,
     const TVector<TDqConnection>& lambdaInputs, TExprContext& ctx, IOptimizationContext& optCtx)
-{
-    auto stage = connection.Output().Stage().Cast<TDqStage>();
+{ 
+    auto stage = connection.Output().Stage().Cast<TDqStage>(); 
     auto newStage = DqPushLambdaToStage(stage, connection.Output().Index(), lambda, lambdaInputs, ctx, optCtx);
     if (!newStage) {
         return {};
     }
-
+ 
     auto output = Build<TDqOutput>(ctx, connection.Pos())
         .Stage(newStage.Cast())
         .Index(connection.Output().Index())
@@ -802,43 +802,43 @@ TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOpti
         .Done();
 }
 
-namespace {
-template <typename TBuilder>
-bool AddSortColumn(const TExprBase& key, const TExprBase& ascending, TExprContext& ctx, const TExprBase& node,
-    const TCoLambda& sortKeySelector, TBuilder& sortColumnList, TVector<const TTypeAnnotationNode*>& sortKeyTypes)
-{
-    if (!key.Maybe<TCoMember>() || !ascending.Maybe<TCoBool>()) {
-        return false;
-    }
-
-    auto member = key.Cast<TCoMember>();
-    if (member.Struct().Raw() != sortKeySelector.Args().Arg(0).Raw()) {
-        return false;
-    }
-
-    sortKeyTypes.push_back(member.Ref().GetTypeAnn());
-    bool isAsc = FromString<bool>(ascending.Cast<TCoBool>().Literal().Value());
-    sortColumnList.template Add<TDqSortColumn>()
-        .Column(member.Name())
-        .SortDirection(Build<TCoAtom>(ctx, node.Pos())
-            .Value(isAsc ? TTopSortSettings::AscendingSort : TTopSortSettings::DescendingSort).Done()
-        )
-        .Build();
-    return true;
-}
-
-TExprBase GetSortDirection(TExprBase& sortDirections, size_t index) {
-    TExprNode::TPtr sortDirection;
-    if (sortDirections.Maybe<TExprList>()) {
-        YQL_ENSURE(index < sortDirections.Cast<TExprList>().Size());
-        sortDirection = sortDirections.Cast<TExprList>().Item(index).Ptr();
-    } else {
-        sortDirection = sortDirections.Ptr();
-    }
-    return TExprBase(sortDirection);
-}
-} // End of anonymous namespace
-
+namespace { 
+template <typename TBuilder> 
+bool AddSortColumn(const TExprBase& key, const TExprBase& ascending, TExprContext& ctx, const TExprBase& node, 
+    const TCoLambda& sortKeySelector, TBuilder& sortColumnList, TVector<const TTypeAnnotationNode*>& sortKeyTypes) 
+{ 
+    if (!key.Maybe<TCoMember>() || !ascending.Maybe<TCoBool>()) { 
+        return false; 
+    } 
+ 
+    auto member = key.Cast<TCoMember>(); 
+    if (member.Struct().Raw() != sortKeySelector.Args().Arg(0).Raw()) { 
+        return false; 
+    } 
+ 
+    sortKeyTypes.push_back(member.Ref().GetTypeAnn()); 
+    bool isAsc = FromString<bool>(ascending.Cast<TCoBool>().Literal().Value()); 
+    sortColumnList.template Add<TDqSortColumn>() 
+        .Column(member.Name()) 
+        .SortDirection(Build<TCoAtom>(ctx, node.Pos()) 
+            .Value(isAsc ? TTopSortSettings::AscendingSort : TTopSortSettings::DescendingSort).Done() 
+        ) 
+        .Build(); 
+    return true; 
+} 
+ 
+TExprBase GetSortDirection(TExprBase& sortDirections, size_t index) { 
+    TExprNode::TPtr sortDirection; 
+    if (sortDirections.Maybe<TExprList>()) { 
+        YQL_ENSURE(index < sortDirections.Cast<TExprList>().Size()); 
+        sortDirection = sortDirections.Cast<TExprList>().Item(index).Ptr(); 
+    } else { 
+        sortDirection = sortDirections.Ptr(); 
+    } 
+    return TExprBase(sortDirection); 
+} 
+} // End of anonymous namespace 
+ 
 TExprBase DqBuildTopSortStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
@@ -858,14 +858,14 @@ TExprBase DqBuildTopSortStage(TExprBase node, TExprContext& ctx, IOptimizationCo
 
     auto result = dqUnion.Output().Stage().Program().Body();
 
-    auto sortKeySelector = topSort.KeySelectorLambda();
-    auto sortDirections = topSort.SortDirections();
+    auto sortKeySelector = topSort.KeySelectorLambda(); 
+    auto sortDirections = topSort.SortDirections(); 
     auto lambda = Build<TCoLambda>(ctx, topSort.Pos())
             .Args({"stream"})
             .Body<TCoTopSort>()
                 .Input("stream")
                 .KeySelectorLambda(ctx.DeepCopyLambda(topSort.KeySelectorLambda().Ref()))
-                .SortDirections(sortDirections)
+                .SortDirections(sortDirections) 
                 .Count(topSort.Count())
                 .Build()
             .Done();
@@ -877,79 +877,79 @@ TExprBase DqBuildTopSortStage(TExprBase node, TExprContext& ctx, IOptimizationCo
     }
 
     bool canMerge = true;
-    auto sortColumnList = Build<TDqSortColumnList>(ctx, node.Pos());
-    TVector<const TTypeAnnotationNode*> sortKeyTypes;
-
-    auto lambdaBody = sortKeySelector.Body();
-    if (auto maybeColTuple = lambdaBody.Maybe<TExprList>()) {
-        auto tuple = maybeColTuple.Cast();
-        sortKeyTypes.reserve(tuple.Size());
-
-        for (size_t i = 0; i < tuple.Size(); ++i) {
-            auto sortDirection = GetSortDirection(sortDirections, i);
+    auto sortColumnList = Build<TDqSortColumnList>(ctx, node.Pos()); 
+    TVector<const TTypeAnnotationNode*> sortKeyTypes; 
+ 
+    auto lambdaBody = sortKeySelector.Body(); 
+    if (auto maybeColTuple = lambdaBody.Maybe<TExprList>()) { 
+        auto tuple = maybeColTuple.Cast(); 
+        sortKeyTypes.reserve(tuple.Size()); 
+ 
+        for (size_t i = 0; i < tuple.Size(); ++i) { 
+            auto sortDirection = GetSortDirection(sortDirections, i); 
             if (!AddSortColumn(tuple.Item(i), sortDirection, ctx, node, sortKeySelector, sortColumnList,
-                sortKeyTypes))
-            {
+                sortKeyTypes)) 
+            { 
                 canMerge = false;
                 break;
-            }
-        }
-    } else {
-        canMerge = AddSortColumn(lambdaBody, sortDirections, ctx, node, sortKeySelector, sortColumnList, sortKeyTypes);
-    }
-
-    TMaybeNode<TDqStage> outerStage;
+            } 
+        } 
+    } else { 
+        canMerge = AddSortColumn(lambdaBody, sortDirections, ctx, node, sortKeySelector, sortColumnList, sortKeyTypes); 
+    } 
+ 
+    TMaybeNode<TDqStage> outerStage; 
     if (canMerge && IsMergeConnectionApplicable(sortKeyTypes)) {
-        auto mergeCn = Build<TDqCnMerge>(ctx, node.Pos())
-            .Output()
-                .Stage(newStage.Cast())
-                .Index(dqUnion.Output().Index())
+        auto mergeCn = Build<TDqCnMerge>(ctx, node.Pos()) 
+            .Output() 
+                .Stage(newStage.Cast()) 
+                .Index(dqUnion.Output().Index()) 
                 .Build()
-            .SortColumns(sortColumnList.Done())
-            .Done();
+            .SortColumns(sortColumnList.Done()) 
+            .Done(); 
 
-        // make outer stage to collect all inner stages
-        outerStage = Build<TDqStage>(ctx, node.Pos())
-            .Inputs()
-                .Add(mergeCn)
-                .Build()
-            .Program()
-                .Args({"stream"})
-                .Body<TCoTake>()
-                    .Input("stream")
-                    .Count(topSort.Count())
-                    .Build()
-                .Build()
-            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
-            .Done();
-    } else {
-        auto unionAll = Build<TDqCnUnionAll>(ctx, node.Pos())
-            .Output()
-                .Stage(newStage.Cast())
-                .Index(dqUnion.Output().Index())
-                .Build()
-            .Done();
-        // make outer stage to collect all inner stages
-        outerStage = Build<TDqStage>(ctx, node.Pos())
-            .Inputs()
-                .Add(unionAll)
-                .Build()
-            .Program()
-                .Args({"stream"})
-                .Body<TCoTopSort>()
-                    .Input("stream")
-                    .KeySelectorLambda(ctx.DeepCopyLambda(topSort.KeySelectorLambda().Ref()))
-                    .SortDirections(topSort.SortDirections())
-                    .Count(topSort.Count())
-                    .Build()
-                .Build()
-            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
-            .Done();
-    }
-
+        // make outer stage to collect all inner stages 
+        outerStage = Build<TDqStage>(ctx, node.Pos()) 
+            .Inputs() 
+                .Add(mergeCn) 
+                .Build() 
+            .Program() 
+                .Args({"stream"}) 
+                .Body<TCoTake>() 
+                    .Input("stream") 
+                    .Count(topSort.Count()) 
+                    .Build() 
+                .Build() 
+            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
+            .Done(); 
+    } else { 
+        auto unionAll = Build<TDqCnUnionAll>(ctx, node.Pos()) 
+            .Output() 
+                .Stage(newStage.Cast()) 
+                .Index(dqUnion.Output().Index()) 
+                .Build() 
+            .Done(); 
+        // make outer stage to collect all inner stages 
+        outerStage = Build<TDqStage>(ctx, node.Pos()) 
+            .Inputs() 
+                .Add(unionAll) 
+                .Build() 
+            .Program() 
+                .Args({"stream"}) 
+                .Body<TCoTopSort>() 
+                    .Input("stream") 
+                    .KeySelectorLambda(ctx.DeepCopyLambda(topSort.KeySelectorLambda().Ref())) 
+                    .SortDirections(topSort.SortDirections()) 
+                    .Count(topSort.Count()) 
+                    .Build() 
+                .Build() 
+            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
+            .Done(); 
+    } 
+ 
     return Build<TDqCnUnionAll>(ctx, node.Pos())
         .Output()
-            .Stage(outerStage.Cast())
+            .Stage(outerStage.Cast()) 
             .Index().Build("0")
             .Build()
         .Done();
@@ -971,38 +971,38 @@ TExprBase DqBuildSortStage(TExprBase node, TExprContext& ctx, IOptimizationConte
 
     auto result = dqUnion.Output().Stage().Program().Body();
 
-    auto sortKeySelector = sort.KeySelectorLambda();
-    auto sortDirections = sort.SortDirections();
-
-    bool canMerge = true;
-    auto sortColumnList = Build<TDqSortColumnList>(ctx, node.Pos());
-    TVector<const TTypeAnnotationNode*> sortKeyTypes;
-
-    auto lambdaBody = sortKeySelector.Body();
-    if (IsDqPureExpr(sortKeySelector)) {
-        if (auto maybeColTuple = lambdaBody.Maybe<TExprList>()) {
-            auto tuple = maybeColTuple.Cast();
-            sortKeyTypes.reserve(tuple.Size());
-
-            for (size_t i = 0; i < tuple.Size(); ++i) {
-                auto sortDirection = GetSortDirection(sortDirections, i);
+    auto sortKeySelector = sort.KeySelectorLambda(); 
+    auto sortDirections = sort.SortDirections(); 
+ 
+    bool canMerge = true; 
+    auto sortColumnList = Build<TDqSortColumnList>(ctx, node.Pos()); 
+    TVector<const TTypeAnnotationNode*> sortKeyTypes; 
+ 
+    auto lambdaBody = sortKeySelector.Body(); 
+    if (IsDqPureExpr(sortKeySelector)) { 
+        if (auto maybeColTuple = lambdaBody.Maybe<TExprList>()) { 
+            auto tuple = maybeColTuple.Cast(); 
+            sortKeyTypes.reserve(tuple.Size()); 
+ 
+            for (size_t i = 0; i < tuple.Size(); ++i) { 
+                auto sortDirection = GetSortDirection(sortDirections, i); 
                 if (!AddSortColumn(tuple.Item(i), TExprBase(sortDirection), ctx, node, sortKeySelector, sortColumnList,
-                    sortKeyTypes))
-                {
-                    canMerge = false;
-                    break;
-                }
-            }
-        } else {
-            canMerge = AddSortColumn(lambdaBody, sortDirections, ctx, node, sortKeySelector, sortColumnList, sortKeyTypes);
-        }
-    } else {
-        canMerge = false;
-    }
-
-    TMaybeNode<TDqStage> outerStage;
-    if (canMerge && IsMergeConnectionApplicable(sortKeyTypes)) {
-        auto lambda = Build<TCoLambda>(ctx, sort.Pos())
+                    sortKeyTypes)) 
+                { 
+                    canMerge = false; 
+                    break; 
+                } 
+            } 
+        } else { 
+            canMerge = AddSortColumn(lambdaBody, sortDirections, ctx, node, sortKeySelector, sortColumnList, sortKeyTypes); 
+        } 
+    } else { 
+        canMerge = false; 
+    } 
+ 
+    TMaybeNode<TDqStage> outerStage; 
+    if (canMerge && IsMergeConnectionApplicable(sortKeyTypes)) { 
+        auto lambda = Build<TCoLambda>(ctx, sort.Pos()) 
             .Args({"stream"})
             .Body<TCoSort>()
                 .Input("stream")
@@ -1011,38 +1011,38 @@ TExprBase DqBuildSortStage(TExprBase node, TExprContext& ctx, IOptimizationConte
                 .Build()
             .Done();
 
-        auto stage = dqUnion.Output().Stage().Cast<TDqStage>();
+        auto stage = dqUnion.Output().Stage().Cast<TDqStage>(); 
         auto newStage = DqPushLambdaToStage(stage, dqUnion.Output().Index(), lambda, {}, ctx, optCtx);
-        if (!newStage) {
-            return node;
-        }
+        if (!newStage) { 
+            return node; 
+        } 
 
-        auto mergeCn = Build<TDqCnMerge>(ctx, node.Pos())
-            .Output()
-                .Stage(newStage.Cast())
-                .Index(dqUnion.Output().Index())
-                .Build()
-            .SortColumns(sortColumnList.Done())
-            .Done();
-
-        // make outer stage to collect all inner stages
-        outerStage = Build<TDqStage>(ctx, node.Pos())
+        auto mergeCn = Build<TDqCnMerge>(ctx, node.Pos()) 
+            .Output() 
+                .Stage(newStage.Cast()) 
+                .Index(dqUnion.Output().Index()) 
+                .Build() 
+            .SortColumns(sortColumnList.Done()) 
+            .Done(); 
+ 
+        // make outer stage to collect all inner stages 
+        outerStage = Build<TDqStage>(ctx, node.Pos()) 
             .Inputs()
-                .Add(mergeCn)
+                .Add(mergeCn) 
                 .Build()
             .Program()
                 .Args({"stream"})
-                .Body("stream")
-                .Build()
-            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
-            .Done();
-    } else {
-        outerStage = Build<TDqStage>(ctx, node.Pos())
-            .Inputs()
-                .Add(dqUnion)
-                .Build()
-            .Program()
-                .Args({"stream"})
+                .Body("stream") 
+                .Build() 
+            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
+            .Done(); 
+    } else { 
+        outerStage = Build<TDqStage>(ctx, node.Pos()) 
+            .Inputs() 
+                .Add(dqUnion) 
+                .Build() 
+            .Program() 
+                .Args({"stream"}) 
                 .Body<TCoSort>()
                     .Input("stream")
                     .SortDirections(sort.SortDirections())
@@ -1051,11 +1051,11 @@ TExprBase DqBuildSortStage(TExprBase node, TExprContext& ctx, IOptimizationConte
                 .Build()
             .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
             .Done();
-    }
+    } 
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())
         .Output()
-            .Stage(outerStage.Cast())
+            .Stage(outerStage.Cast()) 
             .Index().Build("0")
             .Build()
         .Done();

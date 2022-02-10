@@ -242,57 +242,57 @@ void BuildBroadcastChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui3
     BuildBroadcastChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, false, logFunc);
 }
 
-template <typename TGraph>
-void BuildMergeChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex,
-    const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, const TVector<TSortColumn>& sortColumns,
-    const TChannelLogFunc& logFunc)
-{
-    YQL_ENSURE(stageInfo.Tasks.size() == 1, "Multiple tasks on merge input. StageId: " << stageInfo.Id);
-    auto& targetTask = graph.GetTask(stageInfo.Tasks[0]);
-
-    for (auto& originTaskId : inputStageInfo.Tasks) {
-        auto& originTask = graph.GetTask(originTaskId);
-
-        auto& channel = graph.AddChannel();
-        channel.SrcTask = originTaskId;
-        channel.SrcOutputIndex = outputIndex;
-        channel.DstTask = targetTask.Id;
-        channel.DstInputIndex = inputIndex;
-        channel.InMemory = true;
-
-        auto& taskInput = targetTask.Inputs[inputIndex];
-        TMergeTaskInput mergeTaskInput(sortColumns);
-        taskInput.ConnectionInfo = std::move(mergeTaskInput);
-        taskInput.Channels.push_back(channel.Id);
-
-        auto& taskOutput = originTask.Outputs[outputIndex];
-        taskOutput.Type = TTaskOutputType::Map;
-        taskOutput.Channels.push_back(channel.Id);
-
-        logFunc(channel.Id, originTaskId, targetTask.Id, "Merge/Map", !channel.InMemory);
-    }
+template <typename TGraph> 
+void BuildMergeChannels(TGraph& graph, const typename TGraph::TStageInfoType& stageInfo, ui32 inputIndex, 
+    const typename TGraph::TStageInfoType& inputStageInfo, ui32 outputIndex, const TVector<TSortColumn>& sortColumns, 
+    const TChannelLogFunc& logFunc) 
+{ 
+    YQL_ENSURE(stageInfo.Tasks.size() == 1, "Multiple tasks on merge input. StageId: " << stageInfo.Id); 
+    auto& targetTask = graph.GetTask(stageInfo.Tasks[0]); 
+ 
+    for (auto& originTaskId : inputStageInfo.Tasks) { 
+        auto& originTask = graph.GetTask(originTaskId); 
+ 
+        auto& channel = graph.AddChannel(); 
+        channel.SrcTask = originTaskId; 
+        channel.SrcOutputIndex = outputIndex; 
+        channel.DstTask = targetTask.Id; 
+        channel.DstInputIndex = inputIndex; 
+        channel.InMemory = true; 
+ 
+        auto& taskInput = targetTask.Inputs[inputIndex]; 
+        TMergeTaskInput mergeTaskInput(sortColumns); 
+        taskInput.ConnectionInfo = std::move(mergeTaskInput); 
+        taskInput.Channels.push_back(channel.Id); 
+ 
+        auto& taskOutput = originTask.Outputs[outputIndex]; 
+        taskOutput.Type = TTaskOutputType::Map; 
+        taskOutput.Channels.push_back(channel.Id); 
+ 
+        logFunc(channel.Id, originTaskId, targetTask.Id, "Merge/Map", !channel.InMemory); 
+    } 
 }
-
-template <typename TGraph>
-void BuildMergeChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inputIndex,
-    const TChannelLogFunc& logFunc)
-{
-    auto& stageInfo = graph.GetStageInfo(stage);
-    auto cnMerge = stage.Inputs().Item(inputIndex).Cast<NNodes::TDqCnMerge>();
-    auto& originStageInfo = graph.GetStageInfo(cnMerge.Output().Stage());
-    auto outputIndex = FromString<ui32>(cnMerge.Output().Index().Value());
-
-    TVector<TSortColumn> sortColumns;
-    for (const auto& sortKeyColumn : cnMerge.SortColumns()) {
-        auto sortDirection = sortKeyColumn.SortDirection().Value();
+ 
+template <typename TGraph> 
+void BuildMergeChannels(TGraph& graph, const NNodes::TDqPhyStage& stage, ui32 inputIndex, 
+    const TChannelLogFunc& logFunc) 
+{ 
+    auto& stageInfo = graph.GetStageInfo(stage); 
+    auto cnMerge = stage.Inputs().Item(inputIndex).Cast<NNodes::TDqCnMerge>(); 
+    auto& originStageInfo = graph.GetStageInfo(cnMerge.Output().Stage()); 
+    auto outputIndex = FromString<ui32>(cnMerge.Output().Index().Value()); 
+ 
+    TVector<TSortColumn> sortColumns; 
+    for (const auto& sortKeyColumn : cnMerge.SortColumns()) { 
+        auto sortDirection = sortKeyColumn.SortDirection().Value(); 
         YQL_ENSURE(sortDirection == NNodes::TTopSortSettings::AscendingSort
-            || sortDirection == NNodes::TTopSortSettings::DescendingSort);
-        sortColumns.emplace_back(
-            TSortColumn(sortKeyColumn.Column().StringValue(), sortDirection == NNodes::TTopSortSettings::AscendingSort)
-        );
-    }
-
-    BuildMergeChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, sortColumns, logFunc);
-}
-
-}
+            || sortDirection == NNodes::TTopSortSettings::DescendingSort); 
+        sortColumns.emplace_back( 
+            TSortColumn(sortKeyColumn.Column().StringValue(), sortDirection == NNodes::TTopSortSettings::AscendingSort) 
+        ); 
+    } 
+ 
+    BuildMergeChannels(graph, stageInfo, inputIndex, originStageInfo, outputIndex, sortColumns, logFunc); 
+} 
+ 
+} 

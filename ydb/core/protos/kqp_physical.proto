@@ -196,15 +196,15 @@ message TKqpPhyCnResult {
 message TKqpPhyCnValue {
 }
 
-message TKqpPhySortColumn {
-    string Column = 1;
-    bool Ascending = 2;
-}
-
-message TKqpPhyCnMerge {
-    repeated TKqpPhySortColumn SortColumns = 1;
-}
-
+message TKqpPhySortColumn { 
+    string Column = 1; 
+    bool Ascending = 2; 
+} 
+ 
+message TKqpPhyCnMerge { 
+    repeated TKqpPhySortColumn SortColumns = 1; 
+} 
+ 
 message TKqpPhyConnection {
     uint32 StageIndex = 1;
     uint32 OutputIndex = 2;
@@ -218,7 +218,7 @@ message TKqpPhyConnection {
         TKqpPhyCnShuffleShard ShuffleShard = 8;
         TKqpPhyCnResult Result = 9;
         TKqpPhyCnValue Value = 10;
-        TKqpPhyCnMerge Merge = 11;
+        TKqpPhyCnMerge Merge = 11; 
     };
 }
 

@@ -243,19 +243,19 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tabl
                 BuildShuffleShardChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx, tableKeys,
                     enableSpilling, log);
                 break;
-            case NKqpProto::TKqpPhyConnection::kMerge: {
-                TVector<TSortColumn> sortColumns;
-                sortColumns.reserve(input.GetMerge().SortColumnsSize());
+            case NKqpProto::TKqpPhyConnection::kMerge: { 
+                TVector<TSortColumn> sortColumns; 
+                sortColumns.reserve(input.GetMerge().SortColumnsSize()); 
 
-                for (const auto& sortColumn : input.GetMerge().GetSortColumns()) {
-                    sortColumns.emplace_back(
-                        TSortColumn(sortColumn.GetColumn(), sortColumn.GetAscending())
-                    );
-                }
+                for (const auto& sortColumn : input.GetMerge().GetSortColumns()) { 
+                    sortColumns.emplace_back( 
+                        TSortColumn(sortColumn.GetColumn(), sortColumn.GetAscending()) 
+                    ); 
+                } 
                 // TODO: spilling?
-                BuildMergeChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx, sortColumns, log);
-                break;
-            }
+                BuildMergeChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx, sortColumns, log); 
+                break; 
+            } 
             default:
                 YQL_ENSURE(false, "Unexpected stage input type: " << (ui32)input.GetTypeCase());
         }

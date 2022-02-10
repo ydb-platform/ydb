@@ -372,7 +372,7 @@ RECURSE(
     fido2
     filelock
     fingerprints
-    fire
+    fire 
     flake8
     flake8-bandit
     flake8-commas
@@ -1054,7 +1054,7 @@ RECURSE(
     Telethon
     tenacity
     tensorflow-estimator
-    termcolor
+    termcolor 
     terminado
     terminaltables
     testpath

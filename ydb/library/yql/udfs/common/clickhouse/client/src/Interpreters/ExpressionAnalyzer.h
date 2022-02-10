@@ -32,9 +32,9 @@ class ASTExpressionList;
 class ASTSelectQuery;
 struct ASTTablesInSelectQueryElement;
 
-struct StorageInMemoryMetadata;
-using StorageMetadataPtr = std::shared_ptr<const StorageInMemoryMetadata>;
-
+struct StorageInMemoryMetadata; 
+using StorageMetadataPtr = std::shared_ptr<const StorageInMemoryMetadata>; 
+ 
 class ArrayJoinAction;
 using ArrayJoinActionPtr = std::shared_ptr<ArrayJoinAction>;
 
@@ -253,7 +253,7 @@ struct ExpressionAnalysisResult
 
     ExpressionAnalysisResult(
         SelectQueryExpressionAnalyzer & query_analyzer,
-        const StorageMetadataPtr & metadata_snapshot,
+        const StorageMetadataPtr & metadata_snapshot, 
         bool first_stage,
         bool second_stage,
         bool only_types,
@@ -284,7 +284,7 @@ public:
         const ASTPtr & query_,
         const TreeRewriterResultPtr & syntax_analyzer_result_,
         ContextPtr context_,
-        const StorageMetadataPtr & metadata_snapshot_,
+        const StorageMetadataPtr & metadata_snapshot_, 
         const NameSet & required_result_columns_ = {},
         bool do_global_ = false,
         const SelectQueryOptions & options_ = {},
@@ -298,9 +298,9 @@ public:
             do_global_,
             std::move(subqueries_for_sets_),
             std::move(prepared_sets_))
-        , metadata_snapshot(metadata_snapshot_)
-        , required_result_columns(required_result_columns_)
-        , query_options(options_)
+        , metadata_snapshot(metadata_snapshot_) 
+        , required_result_columns(required_result_columns_) 
+        , query_options(options_) 
     {
     }
 
@@ -331,7 +331,7 @@ public:
     void makeSetsForIndex(const ASTPtr & node);
 
 private:
-    StorageMetadataPtr metadata_snapshot;
+    StorageMetadataPtr metadata_snapshot; 
     /// If non-empty, ignore all expressions not from this list.
     NameSet required_result_columns;
     SelectQueryOptions query_options;

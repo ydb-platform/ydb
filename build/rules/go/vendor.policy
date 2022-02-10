@@ -95,12 +95,12 @@ ALLOW .* -> vendor/github.com/google/licensecheck
 # CONTRIB-2087
 ALLOW .* -> vendor/github.com/armon/go-radix
 
-# CONTRIB-1972 stomp protocol 
+# CONTRIB-1972 stomp protocol
 ALLOW .* -> vendor/github.com/go-stomp/stomp
- 
-# CONTRIB-1946 htmp tag selecting / parsing 
-ALLOW .* -> vendor/github.com/andybalholm/cascadia 
- 
+
+# CONTRIB-1946 htmp tag selecting / parsing
+ALLOW .* -> vendor/github.com/andybalholm/cascadia
+
 # CONTRIB-2082 prometheus-libvirt-exporter
 ALLOW .* -> vendor/github.com/zhangjianweibj/prometheus-libvirt-exporter
 
@@ -202,9 +202,9 @@ ALLOW .* -> vendor/github.com/go-chi/chi/v5
 # a pure Go MySQL driver
 ALLOW .* -> vendor/github.com/go-sql-driver/mysql
 
-# a Go MSSQL driver 
-ALLOW .* -> vendor/github.com/denisenkom/go-mssqldb 
- 
+# a Go MSSQL driver
+ALLOW .* -> vendor/github.com/denisenkom/go-mssqldb
+
 # thread-safe file locking library
 ALLOW .* -> vendor/github.com/gofrs/flock
 

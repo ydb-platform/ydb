@@ -1025,7 +1025,7 @@ RECURSE(
     SQLAlchemy-Continuum
     sqlalchemy-stubs
     SQLAlchemy-Utils
-    sqlparse 
+    sqlparse
     sqltap
     srptools
     srsly

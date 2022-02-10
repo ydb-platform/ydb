@@ -89,11 +89,6 @@ private:
         } else if (!oldLastModified.empty()) {
             headers.AddHeader(THttpInputHeader("If-Modified-Since", oldLastModified));
         }
-        if (url.GetHost() == "yt.yandex-team.ru" || url.GetHost().EndsWith(".yt.yandex-team.ru")) {
-            auto guid = CreateGuidAsString();
-            headers.AddHeader(THttpInputHeader("X-YT-Correlation-Id", guid));
-            YQL_LOG(INFO) << "Use Correlation-Id=" << guid << " for " << url.PrintS();
-        }
 
         try {
             return Fetch(url, headers, TDuration::MilliSeconds(socketTimeoutMs));
@@ -120,12 +115,6 @@ private:
         if (!httpStream.ContentEncoded() && httpStream.GetContentLength(contentLength) && contentLength != size) {
             // let's retry this error
             ythrow TDownloadError() << "Size mismatch while downloading url " << url << ", downloaded size: " << size << ", ContentLength: " << contentLength;
-        }
-
-        if (auto trailers = httpStream.Trailers()) {
-            if (auto header = trailers->FindHeader("X-YT-Error")) {
-                ythrow TDownloadError() << "X-YT-Error=" << header->Value();
-            }
         }
 
         i64 dstFileLen = GetFileLength(dstFile.c_str());

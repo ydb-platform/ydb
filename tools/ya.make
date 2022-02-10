@@ -124,7 +124,7 @@ RECURSE(
     refaww_index_print
     refdmap_index_print
     reflerf_index_print
-    releaser
+    releaser 
     relev_fml_codegen
     relev_fml_unused
     remorphc

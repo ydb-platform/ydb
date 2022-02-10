@@ -398,7 +398,7 @@ RECURSE(
     Flask-Menu
     flask_migrate
     flask-mongoengine
-    Flask-OpenTracing 
+    Flask-OpenTracing
     Flask-Principal
     Flask-Pydantic
     Flask-PyMongo
@@ -834,7 +834,7 @@ RECURSE(
     pymongo
     pymorphy2
     pymorphy2-dicts-ru
-    pymqi 
+    pymqi
     PyMySQL
     pynacl
     pynetbox
@@ -977,7 +977,7 @@ RECURSE(
     scikit-image
     scikit-learn
     scipy
-    scour 
+    scour
     scp
     Scrapy
     seaborn
@@ -1076,7 +1076,7 @@ RECURSE(
     toposort
     toredis
     tornado
-    tornado-opentracing 
+    tornado-opentracing
     toro
     tqdm
     trace_event

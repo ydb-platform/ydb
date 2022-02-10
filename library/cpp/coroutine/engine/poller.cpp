@@ -82,9 +82,9 @@ namespace {
         }
 
         void Reserve(size_t size) {
-            E_.Reserve(size);
-        }
-
+            E_.Reserve(size); 
+        } 
+ 
         void Wait(TEvents& events, TInstant deadLine) {
             const size_t ret = P_.WaitD(~E_, +E_, deadLine);
 
@@ -220,8 +220,8 @@ namespace {
             for (TFds::TConstIterator it = S_.Begin(); it != S_.End(); ++it) {
                 t.Set(*it);
             }
-
-            t.Reserve(Size());
+ 
+            t.Reserve(Size()); 
         }
 
         void Set(const TChange& c) {

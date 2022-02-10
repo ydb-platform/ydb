@@ -448,48 +448,48 @@ bool HasLocalAddress(SOCKET socket) {
     return IsSame(localAddr, remoteAddr);
 }
 
-namespace {
-#if defined(_linux_)
+namespace { 
+#if defined(_linux_) 
     #if !defined(TCP_FASTOPEN)
         #define TCP_FASTOPEN 23
     #endif
-#endif
-
-#if defined(TCP_FASTOPEN)
-    struct TTcpFastOpenFeature {
-        inline TTcpFastOpenFeature()
-            : HasFastOpen_(false)
-        {
-            TSocketHolder tmp(socket(AF_INET, SOCK_STREAM, 0));
-            int val = 1;
-            int ret = SetSockOpt(tmp, IPPROTO_TCP, TCP_FASTOPEN, val);
-            HasFastOpen_ = (ret == 0);
-        }
-
-        inline void SetFastOpen(SOCKET s, int qlen) const {
-            if (HasFastOpen_) {
-                CheckedSetSockOpt(s, IPPROTO_TCP, TCP_FASTOPEN, qlen, "setting TCP_FASTOPEN");
-            }
-        }
-
-        static inline const TTcpFastOpenFeature* Instance() noexcept {
-            return Singleton<TTcpFastOpenFeature>();
-        }
-
-        bool HasFastOpen_;
-    };
-#endif
-}
-
-void SetTcpFastOpen(SOCKET s, int qlen) {
-#if defined(TCP_FASTOPEN)
-    TTcpFastOpenFeature::Instance()->SetFastOpen(s, qlen);
-#else
+#endif 
+ 
+#if defined(TCP_FASTOPEN) 
+    struct TTcpFastOpenFeature { 
+        inline TTcpFastOpenFeature() 
+            : HasFastOpen_(false) 
+        { 
+            TSocketHolder tmp(socket(AF_INET, SOCK_STREAM, 0)); 
+            int val = 1; 
+            int ret = SetSockOpt(tmp, IPPROTO_TCP, TCP_FASTOPEN, val); 
+            HasFastOpen_ = (ret == 0); 
+        } 
+ 
+        inline void SetFastOpen(SOCKET s, int qlen) const { 
+            if (HasFastOpen_) { 
+                CheckedSetSockOpt(s, IPPROTO_TCP, TCP_FASTOPEN, qlen, "setting TCP_FASTOPEN"); 
+            } 
+        } 
+ 
+        static inline const TTcpFastOpenFeature* Instance() noexcept { 
+            return Singleton<TTcpFastOpenFeature>(); 
+        } 
+ 
+        bool HasFastOpen_; 
+    }; 
+#endif 
+} 
+ 
+void SetTcpFastOpen(SOCKET s, int qlen) { 
+#if defined(TCP_FASTOPEN) 
+    TTcpFastOpenFeature::Instance()->SetFastOpen(s, qlen); 
+#else 
     Y_UNUSED(s);
     Y_UNUSED(qlen);
-#endif
-}
-
+#endif 
+} 
+ 
 static bool IsBlocked(int lasterr) noexcept {
     return lasterr == EAGAIN || lasterr == EWOULDBLOCK;
 }
@@ -953,7 +953,7 @@ namespace {
             insert("localhost.localdomain");
             insert("localhost6");
             insert("localhost6.localdomain6");
-            insert("::1");
+            insert("::1"); 
         }
 
         inline bool IsLocalName(const char* name) const noexcept {

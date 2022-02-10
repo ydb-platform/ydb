@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(TDateTimeParseTest) {
         UNIT_ASSERT_VALUES_EQUAL(
             TInstant::ParseHttp("Sun Nov  6 08:49:37 1994"),
             TInstant::ParseIso8601("1994-11-06T08:49:37Z"));
-        UNIT_ASSERT_VALUES_EQUAL(
+        UNIT_ASSERT_VALUES_EQUAL( 
             TInstant::ParseHttp("Mon, 19 Jan 2037 08:49:37 GMT"),
             TInstant::ParseIso8601("2037-01-19T08:49:37Z"));
     }

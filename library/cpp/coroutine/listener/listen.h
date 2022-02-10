@@ -17,8 +17,8 @@ public:
     struct TOptions {
         inline TOptions() noexcept
             : ListenQueue(Max<size_t>())
-            , SendBufSize(0)
-            , RecvBufSize(0)
+            , SendBufSize(0) 
+            , RecvBufSize(0) 
             , EnableDeferAccept(false)
             , ReusePort(false)
         {
@@ -37,17 +37,17 @@ public:
         }
 
         inline TOptions& SetSendBufSize(unsigned size) noexcept {
-            SendBufSize = size;
-
-            return *this;
-        }
-
+            SendBufSize = size; 
+ 
+            return *this; 
+        } 
+ 
         inline TOptions& SetRecvBufSize(unsigned size) noexcept {
-            RecvBufSize = size;
-
-            return *this;
-        }
-
+            RecvBufSize = size; 
+ 
+            return *this; 
+        } 
+ 
         inline TOptions& SetReusePort(bool reusePort) noexcept {
             ReusePort = reusePort;
 
@@ -55,8 +55,8 @@ public:
         }
 
         size_t ListenQueue;
-        unsigned SendBufSize;
-        unsigned RecvBufSize;
+        unsigned SendBufSize; 
+        unsigned RecvBufSize; 
         bool EnableDeferAccept;
         bool ReusePort;
     };

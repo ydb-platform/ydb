@@ -14,12 +14,12 @@ class TListTest: public TTestBase {
     UNIT_TEST(TestQuickSort);
     UNIT_TEST(TestCut);
     UNIT_TEST(TestAppend);
-    UNIT_TEST(TestMoveCtor);
-    UNIT_TEST(TestMoveOpEq);
-    UNIT_TEST(TestListWithAutoDelete);
-    UNIT_TEST(TestListWithAutoDeleteMoveCtor);
-    UNIT_TEST(TestListWithAutoDeleteMoveOpEq);
-    UNIT_TEST(TestListWithAutoDeleteClear);
+    UNIT_TEST(TestMoveCtor); 
+    UNIT_TEST(TestMoveOpEq); 
+    UNIT_TEST(TestListWithAutoDelete); 
+    UNIT_TEST(TestListWithAutoDeleteMoveCtor); 
+    UNIT_TEST(TestListWithAutoDeleteMoveOpEq); 
+    UNIT_TEST(TestListWithAutoDeleteClear); 
     UNIT_TEST(TestSecondTag);
     UNIT_TEST_SUITE_END();
 
@@ -32,12 +32,12 @@ private:
     void TestQuickSort();
     void TestCut();
     void TestAppend();
-    void TestMoveCtor();
-    void TestMoveOpEq();
-    void TestListWithAutoDelete();
-    void TestListWithAutoDeleteMoveCtor();
-    void TestListWithAutoDeleteMoveOpEq();
-    void TestListWithAutoDeleteClear();
+    void TestMoveCtor(); 
+    void TestMoveOpEq(); 
+    void TestListWithAutoDelete(); 
+    void TestListWithAutoDeleteMoveCtor(); 
+    void TestListWithAutoDeleteMoveOpEq(); 
+    void TestListWithAutoDeleteClear(); 
     void TestSecondTag();
 };
 
@@ -50,18 +50,18 @@ public:
     {
     }
 
-    TInt(TInt&& rhs) noexcept
-        : Value_(rhs.Value_)
-    {
-        rhs.Value_ = 0xDEAD;
-    }
-
-    TInt& operator=(TInt&& rhs) noexcept {
-        Value_ = rhs.Value_;
-        rhs.Value_ = 0xBEEF;
-        return *this;
-    }
-
+    TInt(TInt&& rhs) noexcept 
+        : Value_(rhs.Value_) 
+    { 
+        rhs.Value_ = 0xDEAD; 
+    } 
+ 
+    TInt& operator=(TInt&& rhs) noexcept { 
+        Value_ = rhs.Value_; 
+        rhs.Value_ = 0xBEEF; 
+        return *this; 
+    } 
+ 
     inline operator int&() noexcept {
         return Value_;
     }
@@ -82,12 +82,12 @@ public:
         }
     }
 
-    //TMyList(const TMyList& rhs) = default;
-    TMyList(TMyList&& rhs) noexcept = default;
-
-    //operator=(const TMyList& rhs) = default;
-    TMyList& operator=(TMyList&& rhs) noexcept = default;
-
+    //TMyList(const TMyList& rhs) = default; 
+    TMyList(TMyList&& rhs) noexcept = default; 
+ 
+    //operator=(const TMyList& rhs) = default; 
+    TMyList& operator=(TMyList&& rhs) noexcept = default; 
+ 
     inline ~TMyList() {
         while (!Empty()) {
             delete PopBack();
@@ -307,174 +307,174 @@ void TListTest::TestAppend() {
     ::TestAppend(0, 1);
     ::TestAppend(1, 1);
 }
-
+ 
 template <typename TListType>
-static void CheckList(const TListType& lst) {
-    int i = 1;
-    for (typename TListType::TConstIterator it = lst.Begin(); it != lst.End(); ++it, ++i) {
-        UNIT_ASSERT_EQUAL(*it, i);
-    }
-}
-
-void TListTest::TestMoveCtor() {
+static void CheckList(const TListType& lst) { 
+    int i = 1; 
+    for (typename TListType::TConstIterator it = lst.Begin(); it != lst.End(); ++it, ++i) { 
+        UNIT_ASSERT_EQUAL(*it, i); 
+    } 
+} 
+ 
+void TListTest::TestMoveCtor() { 
     const int N{42};
     TMyList lst{N};
-    UNIT_ASSERT(!lst.Empty());
-    UNIT_ASSERT_EQUAL(lst.Size(), N);
-
-    CheckList(lst);
+    UNIT_ASSERT(!lst.Empty()); 
+    UNIT_ASSERT_EQUAL(lst.Size(), N); 
+ 
+    CheckList(lst); 
     TMyList nextLst{std::move(lst)};
-    UNIT_ASSERT(lst.Empty());
-    CheckList(nextLst);
-}
-
-void TListTest::TestMoveOpEq() {
+    UNIT_ASSERT(lst.Empty()); 
+    CheckList(nextLst); 
+} 
+ 
+void TListTest::TestMoveOpEq() { 
     const int N{42};
     TMyList lst{N};
-    UNIT_ASSERT(!lst.Empty());
-    UNIT_ASSERT_EQUAL(lst.Size(), N);
-    CheckList(lst);
-
+    UNIT_ASSERT(!lst.Empty()); 
+    UNIT_ASSERT_EQUAL(lst.Size(), N); 
+    CheckList(lst); 
+ 
     const int M{2};
-    TMyList nextLst(M);
-    UNIT_ASSERT(!nextLst.Empty());
-    UNIT_ASSERT_EQUAL(nextLst.Size(), M);
-    CheckList(nextLst);
-
-    nextLst = std::move(lst);
-    UNIT_ASSERT(!nextLst.Empty());
-    UNIT_ASSERT_EQUAL(nextLst.Size(), N);
-    CheckList(nextLst);
-}
-
-class TSelfCountingInt: public TIntrusiveListItem<TSelfCountingInt> {
-public:
-    TSelfCountingInt(int& counter, int value) noexcept
+    TMyList nextLst(M); 
+    UNIT_ASSERT(!nextLst.Empty()); 
+    UNIT_ASSERT_EQUAL(nextLst.Size(), M); 
+    CheckList(nextLst); 
+ 
+    nextLst = std::move(lst); 
+    UNIT_ASSERT(!nextLst.Empty()); 
+    UNIT_ASSERT_EQUAL(nextLst.Size(), N); 
+    CheckList(nextLst); 
+} 
+ 
+class TSelfCountingInt: public TIntrusiveListItem<TSelfCountingInt> { 
+public: 
+    TSelfCountingInt(int& counter, int value) noexcept 
         : Counter_(counter)
         , Value_(value)
     {
-        ++Counter_;
-    }
-
-    TSelfCountingInt(TSelfCountingInt&& rhs) noexcept
+        ++Counter_; 
+    } 
+ 
+    TSelfCountingInt(TSelfCountingInt&& rhs) noexcept 
         : Counter_(rhs.Counter_)
         , Value_(rhs.Value_)
     {
-        rhs.Value_ = 0xDEAD;
-    }
-
-    TSelfCountingInt& operator=(TSelfCountingInt&& rhs) noexcept {
-        Value_ = rhs.Value_;
-        rhs.Value_ = 0xBEEF;
-        return *this;
-    }
-
-    ~TSelfCountingInt() noexcept {
-        --Counter_;
-    }
-
-    inline operator int&() noexcept {
-        return Value_;
-    }
-
-    inline operator const int&() const noexcept {
-        return Value_;
-    }
-
-private:
-    int& Counter_;
-    int Value_;
-};
-
-struct TSelfCountingIntDelete {
-    static void Destroy(TSelfCountingInt* i) noexcept {
-        delete i;
-    }
-};
-
-void TListTest::TestListWithAutoDelete() {
+        rhs.Value_ = 0xDEAD; 
+    } 
+ 
+    TSelfCountingInt& operator=(TSelfCountingInt&& rhs) noexcept { 
+        Value_ = rhs.Value_; 
+        rhs.Value_ = 0xBEEF; 
+        return *this; 
+    } 
+ 
+    ~TSelfCountingInt() noexcept { 
+        --Counter_; 
+    } 
+ 
+    inline operator int&() noexcept { 
+        return Value_; 
+    } 
+ 
+    inline operator const int&() const noexcept { 
+        return Value_; 
+    } 
+ 
+private: 
+    int& Counter_; 
+    int Value_; 
+}; 
+ 
+struct TSelfCountingIntDelete { 
+    static void Destroy(TSelfCountingInt* i) noexcept { 
+        delete i; 
+    } 
+}; 
+ 
+void TListTest::TestListWithAutoDelete() { 
     using TListType = TIntrusiveListWithAutoDelete<TSelfCountingInt, TSelfCountingIntDelete>;
     int counter{0};
-    {
+    { 
         TListType lst;
-        UNIT_ASSERT(lst.Empty());
-        lst.PushFront(new TSelfCountingInt(counter, 2));
-        UNIT_ASSERT_EQUAL(lst.Size(), 1);
-        UNIT_ASSERT_EQUAL(counter, 1);
-        lst.PushFront(new TSelfCountingInt(counter, 1));
-        UNIT_ASSERT_EQUAL(lst.Size(), 2);
-        UNIT_ASSERT_EQUAL(counter, 2);
-        CheckList(lst);
-    }
-
-    UNIT_ASSERT_EQUAL(counter, 0);
-}
-
-void TListTest::TestListWithAutoDeleteMoveCtor() {
+        UNIT_ASSERT(lst.Empty()); 
+        lst.PushFront(new TSelfCountingInt(counter, 2)); 
+        UNIT_ASSERT_EQUAL(lst.Size(), 1); 
+        UNIT_ASSERT_EQUAL(counter, 1); 
+        lst.PushFront(new TSelfCountingInt(counter, 1)); 
+        UNIT_ASSERT_EQUAL(lst.Size(), 2); 
+        UNIT_ASSERT_EQUAL(counter, 2); 
+        CheckList(lst); 
+    } 
+ 
+    UNIT_ASSERT_EQUAL(counter, 0); 
+} 
+ 
+void TListTest::TestListWithAutoDeleteMoveCtor() { 
     using TListType = TIntrusiveListWithAutoDelete<TSelfCountingInt, TSelfCountingIntDelete>;
     int counter{0};
-    {
+    { 
         TListType lst;
-        lst.PushFront(new TSelfCountingInt(counter, 2));
-        lst.PushFront(new TSelfCountingInt(counter, 1));
-        UNIT_ASSERT_EQUAL(lst.Size(), 2);
-        UNIT_ASSERT_EQUAL(counter, 2);
-        CheckList(lst);
-
+        lst.PushFront(new TSelfCountingInt(counter, 2)); 
+        lst.PushFront(new TSelfCountingInt(counter, 1)); 
+        UNIT_ASSERT_EQUAL(lst.Size(), 2); 
+        UNIT_ASSERT_EQUAL(counter, 2); 
+        CheckList(lst); 
+ 
         TListType nextList(std::move(lst));
-        UNIT_ASSERT_EQUAL(nextList.Size(), 2);
-        CheckList(nextList);
-        UNIT_ASSERT_EQUAL(counter, 2);
-    }
-
-    UNIT_ASSERT_EQUAL(counter, 0);
-}
-
-void TListTest::TestListWithAutoDeleteMoveOpEq() {
+        UNIT_ASSERT_EQUAL(nextList.Size(), 2); 
+        CheckList(nextList); 
+        UNIT_ASSERT_EQUAL(counter, 2); 
+    } 
+ 
+    UNIT_ASSERT_EQUAL(counter, 0); 
+} 
+ 
+void TListTest::TestListWithAutoDeleteMoveOpEq() { 
     using TListType = TIntrusiveListWithAutoDelete<TSelfCountingInt, TSelfCountingIntDelete>;
     int counter{0};
-    {
+    { 
         TListType lst;
-        lst.PushFront(new TSelfCountingInt(counter, 2));
-        lst.PushFront(new TSelfCountingInt(counter, 1));
-        UNIT_ASSERT_EQUAL(lst.Size(), 2);
-        UNIT_ASSERT_EQUAL(counter, 2);
-        CheckList(lst);
-
+        lst.PushFront(new TSelfCountingInt(counter, 2)); 
+        lst.PushFront(new TSelfCountingInt(counter, 1)); 
+        UNIT_ASSERT_EQUAL(lst.Size(), 2); 
+        UNIT_ASSERT_EQUAL(counter, 2); 
+        CheckList(lst); 
+ 
         TListType nextList;
-        UNIT_ASSERT(nextList.Empty());
-        nextList = std::move(lst);
-        UNIT_ASSERT_EQUAL(nextList.Size(), 2);
-        CheckList(nextList);
-        UNIT_ASSERT_EQUAL(counter, 2);
-    }
-
-    UNIT_ASSERT_EQUAL(counter, 0);
-}
-
-void TListTest::TestListWithAutoDeleteClear() {
+        UNIT_ASSERT(nextList.Empty()); 
+        nextList = std::move(lst); 
+        UNIT_ASSERT_EQUAL(nextList.Size(), 2); 
+        CheckList(nextList); 
+        UNIT_ASSERT_EQUAL(counter, 2); 
+    } 
+ 
+    UNIT_ASSERT_EQUAL(counter, 0); 
+} 
+ 
+void TListTest::TestListWithAutoDeleteClear() { 
     using TListType = TIntrusiveListWithAutoDelete<TSelfCountingInt, TSelfCountingIntDelete>;
-    int counter{0};
-    {
+    int counter{0}; 
+    { 
         TListType lst;
-        UNIT_ASSERT(lst.Empty());
-        lst.PushFront(new TSelfCountingInt(counter, 2));
-        UNIT_ASSERT_EQUAL(lst.Size(), 1);
-        UNIT_ASSERT_EQUAL(counter, 1);
-        lst.PushFront(new TSelfCountingInt(counter, 1));
-        UNIT_ASSERT_EQUAL(lst.Size(), 2);
-        UNIT_ASSERT_EQUAL(counter, 2);
-        CheckList(lst);
-
-        lst.Clear();
-        UNIT_ASSERT(lst.Empty());
-        UNIT_ASSERT_EQUAL(counter, 0);
-        lst.PushFront(new TSelfCountingInt(counter, 1));
-        UNIT_ASSERT_EQUAL(lst.Size(), 1);
-    }
-
-    UNIT_ASSERT_EQUAL(counter, 0);
-}
+        UNIT_ASSERT(lst.Empty()); 
+        lst.PushFront(new TSelfCountingInt(counter, 2)); 
+        UNIT_ASSERT_EQUAL(lst.Size(), 1); 
+        UNIT_ASSERT_EQUAL(counter, 1); 
+        lst.PushFront(new TSelfCountingInt(counter, 1)); 
+        UNIT_ASSERT_EQUAL(lst.Size(), 2); 
+        UNIT_ASSERT_EQUAL(counter, 2); 
+        CheckList(lst); 
+ 
+        lst.Clear(); 
+        UNIT_ASSERT(lst.Empty()); 
+        UNIT_ASSERT_EQUAL(counter, 0); 
+        lst.PushFront(new TSelfCountingInt(counter, 1)); 
+        UNIT_ASSERT_EQUAL(lst.Size(), 1); 
+    } 
+ 
+    UNIT_ASSERT_EQUAL(counter, 0); 
+} 
 
 struct TSecondTag {};
 

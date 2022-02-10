@@ -287,9 +287,9 @@
         "apphost": {
             "description": "Run local apphost instance"
         },
-        "renderer": {
-            "description": "Run local renderer instance"
-        },
+        "renderer": { 
+            "description": "Run local renderer instance" 
+        }, 
         "appteka": {
             "description": "Run local appteka instance"
         },
@@ -4712,28 +4712,28 @@
                 }
             ]
         },
-        "renderer": {
-            "tools": {
-                "renderer": {
-                    "bottle": "renderer",
-                    "executable": "renderer"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
+        "renderer": { 
+            "tools": { 
+                "renderer": { 
+                    "bottle": "renderer", 
+                    "executable": "renderer" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
         "appteka": {
             "tools": {
                 "appteka": {
@@ -7337,20 +7337,20 @@
                 ]
             }
         },
-        "renderer": {
-            "formula": {
-                "sandbox_id": [
+        "renderer": { 
+            "formula": { 
+                "sandbox_id": [ 
                     1085349224,
                     1088353208
-                ],
-                "match": ""
-            },
-            "executable": {
-                "renderer": [
-                    "report-renderer/bin/run"
-                ]
-            }
-        },
+                ], 
+                "match": "" 
+            }, 
+            "executable": { 
+                "renderer": [ 
+                    "report-renderer/bin/run" 
+                ] 
+            } 
+        }, 
         "appteka": {
             "formula": {
                 "sandbox_id": [

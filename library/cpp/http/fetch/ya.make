@@ -29,8 +29,8 @@ SRCS(
     sockhandler.h
 )
 
-GENERATE_ENUM_SERIALIZATION(httpheader.h)
-
+GENERATE_ENUM_SERIALIZATION(httpheader.h) 
+ 
 SET(RAGEL6_FLAGS -CF1)
 
 END()

@@ -49,7 +49,7 @@ namespace NJson {
     void TJsonWriter::Flush() {
         if (Out) {
             Buf.FlushTo(Out);
-        }
+        } 
     }
 
     void TJsonWriter::OpenMap() {

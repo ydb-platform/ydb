@@ -322,7 +322,7 @@ action set_hreflang {
         *(hreflangpos++) = ' ';
         memcpy(hreflangpos, buf, buflen);
         hreflangpos += buflen;
-        *(hreflangpos) = 0;
+        *(hreflangpos) = 0; 
         hreflangspace -= len2;
     }
 }
@@ -334,9 +334,9 @@ action start_lang {
 action end_lang {
     langlen = fpc - langstart;
 }
-hreflang_token = (token_char - ['])+;
+hreflang_token = (token_char - ['])+; 
 quote = ['"]?; #"
-lang = hreflang_token >start_lang %end_lang;
+lang = hreflang_token >start_lang %end_lang; 
 
 hreflang = "link"i def '<' url '>' lws ";" lws
     ( ( "rel"i lws '=' lws quote "alternate" quote lws ';' lws "hreflang"i lws '=' lws quote lang quote )

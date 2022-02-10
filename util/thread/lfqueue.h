@@ -393,14 +393,14 @@ public:
         Y_UNUSED(t.Release());
     }
 
-    inline bool IsEmpty() {
-        return Queue.IsEmpty();
-    }
-
-    inline TCounter GetCounter() {
-        return Queue.GetCounter();
-    }
-
+    inline bool IsEmpty() { 
+        return Queue.IsEmpty(); 
+    } 
+ 
+    inline TCounter GetCounter() { 
+        return Queue.GetCounter(); 
+    } 
+ 
 private:
     TLockFreeQueue<T*, TCounter> Queue;
 };

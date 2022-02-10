@@ -1,6 +1,6 @@
-#pragma once
-
-char hreflang_ut_in[] = "HTTP/1.1 200 OK\n"
+#pragma once 
+ 
+char hreflang_ut_in[] = "HTTP/1.1 200 OK\n" 
                         "Date: Thu, 15 Nov 2012 22:38:28 GMT\n"
                         "Server: Apache/2\n"
                         "X-Powered-By: PHP/5.2.17\n"

@@ -82,12 +82,12 @@ TModChooser::~TModChooser() = default;
 
 void TModChooser::AddMode(const TString& mode, const TMainFunctionRawPtr func, const TString& description, bool hidden, bool noCompletion) {
     AddMode(mode, TMainFunctionPtr(func), description, hidden, noCompletion);
-}
+} 
 
 void TModChooser::AddMode(const TString& mode, const TMainFunctionRawPtrV func, const TString& description, bool hidden, bool noCompletion) {
     AddMode(mode, TMainFunctionPtrV(func), description, hidden, noCompletion);
-}
-
+} 
+ 
 void TModChooser::AddMode(const TString& mode, const TMainFunctionPtr func, const TString& description, bool hidden, bool noCompletion) {
     Wrappers.push_back(MakeHolder<PtrWrapper>(func));
     AddMode(mode, Wrappers.back().Get(), description, hidden, noCompletion);

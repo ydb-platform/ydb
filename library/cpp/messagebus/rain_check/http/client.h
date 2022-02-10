@@ -10,8 +10,8 @@
 #include <util/system/defaults.h>
 #include <util/system/yassert.h>
 
-class THttpHeaders;
-
+class THttpHeaders; 
+ 
 namespace NNeh {
     class IProtocol;
     struct TResponse;
@@ -28,14 +28,14 @@ namespace NRainCheck {
 
             CantResolveNameError = 1,
             BadHttpCodeError = 2,
-
+ 
             OtherError = 100
         };
-
+ 
     private:
         friend class THttpCallback;
         friend class THttpClientService;
-
+ 
     public:
         THttpFuture();
         ~THttpFuture() override;
@@ -53,7 +53,7 @@ namespace NRainCheck {
     private:
         void SetDoneAndSchedule(TAutoPtr<NNeh::TResponse> response);
         void SetFail(EError errorCode, const TStringBuf& errorDescription);
-
+ 
     private:
         TTaskRunnerBase* Task;
         TMaybe<HttpCodes> HttpCode;

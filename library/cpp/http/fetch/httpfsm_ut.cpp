@@ -1,6 +1,6 @@
 #include "httpfsm.h"
-#include "library-htfetch_ut_hreflang_in.h"
-#include "library-htfetch_ut_hreflang_out.h"
+#include "library-htfetch_ut_hreflang_in.h" 
+#include "library-htfetch_ut_hreflang_out.h" 
 
 #include <util/generic/ptr.h>
 #include <library/cpp/charset/doccodes.h>
@@ -59,7 +59,7 @@ public:
     void TestXRobotsTagAllowsMultiline();
     void TestRelCanonical();
     void TestHreflang();
-    void TestHreflangOnLongInput();
+    void TestHreflangOnLongInput(); 
     void TestMimeType();
     void TestRepeatedContentEncoding();
 };
@@ -398,18 +398,18 @@ void THttpHeaderParserTestSuite::TestHreflang() {
     TestFinish();
 }
 
-void THttpHeaderParserTestSuite::TestHreflangOnLongInput() {
-    TestStart();
-    THttpHeader httpHeader;
-    httpHeaderParser->Init(&httpHeader);
-    TStringBuf testInput(hreflang_ut_in);
-    TStringBuf testOut(hreflang_ut_out);
+void THttpHeaderParserTestSuite::TestHreflangOnLongInput() { 
+    TestStart(); 
+    THttpHeader httpHeader; 
+    httpHeaderParser->Init(&httpHeader); 
+    TStringBuf testInput(hreflang_ut_in); 
+    TStringBuf testOut(hreflang_ut_out); 
     i32 result = httpHeaderParser->Execute(testInput.data(), testInput.size());
-    UNIT_ASSERT_VALUES_EQUAL(result, 2);
-    UNIT_ASSERT_VALUES_EQUAL(httpHeader.hreflangs, testOut);
-    TestFinish();
-}
-
+    UNIT_ASSERT_VALUES_EQUAL(result, 2); 
+    UNIT_ASSERT_VALUES_EQUAL(httpHeader.hreflangs, testOut); 
+    TestFinish(); 
+} 
+ 
 void THttpHeaderParserTestSuite::TestRelCanonical() {
     TestStart();
     THttpHeader httpHeader;

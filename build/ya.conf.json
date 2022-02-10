@@ -269,10 +269,10 @@
             "description": "Run contexts_difference tool",
             "visible": false
         },
-        "ycmerge": { 
-            "description": "Run ycmerge tool", 
-            "visible": false 
-        }, 
+        "ycmerge": {
+            "description": "Run ycmerge tool",
+            "visible": false
+        },
         "ygdiff": {
             "description": "Run ygdiff tool",
             "visible": false
@@ -4590,42 +4590,14 @@
                 }
             ]
         },
-        "ycmerge": { 
-            "tools": { 
-                "ycmerge": { 
-                    "bottle": "ycmerge", 
-                    "executable": "ycmerge" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "WIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
-        "ygdiff": { 
-            "tools": { 
-                "ygdiff": {
-                    "bottle": "ygdiff",
-                    "executable": "ygdiff"
+        "ycmerge": {
+            "tools": {
+                "ycmerge": {
+                    "bottle": "ycmerge",
+                    "executable": "ycmerge"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4644,8 +4616,36 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
+            ]
+        },
+        "ygdiff": {
+            "tools": {
+                "ygdiff": {
+                    "bottle": "ygdiff",
+                    "executable": "ygdiff"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "WIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "ya-tc": {
             "tools": {
                 "ya-tc": {
@@ -6589,7 +6589,7 @@
         },
         "uc": {
             "formula": {
-                "sandbox_id": 505682252, 
+                "sandbox_id": 505682252,
                 "match": "UC"
             },
             "executable": {
@@ -7282,28 +7282,28 @@
                 ]
             }
         },
-        "ycmerge": { 
-            "formula": { 
+        "ycmerge": {
+            "formula": {
                 "sandbox_id": 1164600398,
-                "match": "ycmerge" 
-            }, 
-            "executable": { 
-                "ycmerge": [ 
-                    "ycmerge" 
-                ] 
-            } 
-        }, 
-        "ygdiff": { 
-            "formula": { 
+                "match": "ycmerge"
+            },
+            "executable": {
+                "ycmerge": [
+                    "ycmerge"
+                ]
+            }
+        },
+        "ygdiff": {
+            "formula": {
                 "sandbox_id": 982695480,
-                "match": "ygdiff" 
-            }, 
-            "executable": { 
+                "match": "ygdiff"
+            },
+            "executable": {
                 "ygdiff": [
                     "ygdiff"
                 ]
-            } 
-        }, 
+            }
+        },
         "ya-tc": {
             "formula": {
                 "sandbox_id": 981372621,

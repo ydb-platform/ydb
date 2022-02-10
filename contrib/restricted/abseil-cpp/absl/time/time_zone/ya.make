@@ -12,10 +12,10 @@ ADDINCL(
     GLOBAL contrib/restricted/abseil-cpp
 )
 
-IF (OS_DARWIN) 
-    EXTRALIBS("-framework CoreFoundation") 
-ENDIF() 
- 
+IF (OS_DARWIN)
+    EXTRALIBS("-framework CoreFoundation")
+ENDIF()
+
 NO_COMPILER_WARNINGS()
 
 NO_UTIL()

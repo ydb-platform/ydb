@@ -85,7 +85,7 @@ def onjava_module(unit, *args):
             return
 
     data = {
-        'BUNDLE_NAME': unit.name(), 
+        'BUNDLE_NAME': unit.name(),
         'PATH': unit.path(),
         'IDEA_ONLY': 'yes' if idea_only else 'no',
         'MODULE_TYPE': unit.get('MODULE_TYPE'),

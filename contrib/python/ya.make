@@ -644,7 +644,7 @@ RECURSE(
     mujson
     multidict
     multitasking
-    munch
+    munch 
     murmurhash
     mutablerecords
     mypy
@@ -959,7 +959,7 @@ RECURSE(
     ruamel.std.pathlib
     ruamel.yaml
     Rx
-    s3-tests
+    s3-tests 
     s3transfer
     sacrebleu
     salt-pepper

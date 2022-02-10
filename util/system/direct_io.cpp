@@ -54,8 +54,8 @@ TDirectIOBufferedFile::TDirectIOBufferedFile(const TString& path, EOpenMode oMod
     , WritePosition(0)
     , DirectIO(false)
 {
-    if (buflen == 0) {
-        ythrow TFileError() << "unbuffered usage is not supported";
+    if (buflen == 0) { 
+        ythrow TFileError() << "unbuffered usage is not supported"; 
     }
 
     if (oMode & Direct) {
@@ -80,9 +80,9 @@ void TDirectIOBufferedFile::SetDirectIO(bool value) {
     }
 
     if (!!Alignment && value) {
-        (void)fcntl(File.GetHandle(), F_SETFL, fcntl(File.GetHandle(), F_GETFL) | DIRECT_IO_FLAGS);
+        (void)fcntl(File.GetHandle(), F_SETFL, fcntl(File.GetHandle(), F_GETFL) | DIRECT_IO_FLAGS); 
     } else {
-        (void)fcntl(File.GetHandle(), F_SETFL, fcntl(File.GetHandle(), F_GETFL) & ~DIRECT_IO_FLAGS);
+        (void)fcntl(File.GetHandle(), F_SETFL, fcntl(File.GetHandle(), F_GETFL) & ~DIRECT_IO_FLAGS); 
     }
 
     DirectIO = value;
@@ -92,27 +92,27 @@ void TDirectIOBufferedFile::SetDirectIO(bool value) {
 }
 
 TDirectIOBufferedFile::~TDirectIOBufferedFile() {
-    try {
-        Finish();
-    } catch (...) {
-    }
+    try { 
+        Finish(); 
+    } catch (...) { 
+    } 
 }
 
 void TDirectIOBufferedFile::FlushData() {
-    WriteToFile(Buffer, DataLen, FlushedBytes);
-    DataLen = 0;
-    File.FlushData();
+    WriteToFile(Buffer, DataLen, FlushedBytes); 
+    DataLen = 0; 
+    File.FlushData(); 
 }
 
 void TDirectIOBufferedFile::Finish() {
-    FlushData();
-    File.Flush();
-    File.Close();
+    FlushData(); 
+    File.Flush(); 
+    File.Close(); 
 }
 
 void TDirectIOBufferedFile::Write(const void* buffer, size_t byteCount) {
-    WriteToBuffer(buffer, byteCount, DataLen);
-    WritePosition += byteCount;
+    WriteToBuffer(buffer, byteCount, DataLen); 
+    WritePosition += byteCount; 
 }
 
 void TDirectIOBufferedFile::WriteToBuffer(const void* buf, size_t len, ui64 position) {
@@ -139,7 +139,7 @@ void TDirectIOBufferedFile::WriteToFile(const void* buf, size_t len, ui64 positi
     if (!!len) {
         SetDirectIO(IsAligned(buf) && IsAligned(len) && IsAligned(position));
 
-        File.Pwrite(buf, len, position);
+        File.Pwrite(buf, len, position); 
 
         FlushedBytes = Max(FlushedBytes, position + len);
         FlushedToDisk = Min(FlushedToDisk, position);
@@ -246,21 +246,21 @@ size_t TDirectIOBufferedFile::Pread(void* buffer, size_t byteCount, ui64 offset)
 }
 
 void TDirectIOBufferedFile::Pwrite(const void* buffer, size_t byteCount, ui64 offset) {
-    if (offset > WritePosition) {
-        ythrow yexception() << "cannot frite to position" << offset;
-    }
+    if (offset > WritePosition) { 
+        ythrow yexception() << "cannot frite to position" << offset; 
+    } 
 
     size_t writeToBufer = byteCount;
     size_t writeToFile = 0;
 
-    if (FlushedBytes > offset) {
-        writeToFile = Min<ui64>(byteCount, FlushedBytes - offset);
-        WriteToFile(buffer, writeToFile, offset);
-        writeToBufer -= writeToFile;
-    }
+    if (FlushedBytes > offset) { 
+        writeToFile = Min<ui64>(byteCount, FlushedBytes - offset); 
+        WriteToFile(buffer, writeToFile, offset); 
+        writeToBufer -= writeToFile; 
+    } 
 
-    if (writeToBufer > 0) {
-        ui64 bufferOffset = offset + writeToFile - FlushedBytes;
-        WriteToBuffer((const char*)buffer + writeToFile, writeToBufer, bufferOffset);
+    if (writeToBufer > 0) { 
+        ui64 bufferOffset = offset + writeToFile - FlushedBytes; 
+        WriteToBuffer((const char*)buffer + writeToFile, writeToBufer, bufferOffset); 
     }
 }

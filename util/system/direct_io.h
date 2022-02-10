@@ -22,7 +22,7 @@ public:
     void Pwrite(const void* buffer, size_t byteCount, ui64 offset);
 
     inline bool IsOpen() const {
-        return true;
+        return true; 
     }
 
     inline ui64 GetWritePosition() const {
@@ -33,8 +33,8 @@ public:
         return FlushedBytes + DataLen;
     }
 
-    inline FHANDLE GetHandle() {
-        return File.GetHandle();
+    inline FHANDLE GetHandle() { 
+        return File.GetHandle(); 
     }
 
     inline void FallocateNoResize(ui64 length) {
@@ -61,7 +61,7 @@ private:
     void SetDirectIO(bool value);
 
 private:
-    TFile File;
+    TFile File; 
     size_t Alignment;
     size_t BufLen;
     size_t DataLen;

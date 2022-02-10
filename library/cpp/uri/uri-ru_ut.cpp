@@ -146,18 +146,18 @@ namespace NUri {
 #undef ENC
             }
         }
-
-        // Regression test for SEARCH-11283
-        Y_UNIT_TEST(RegressionTest11283) {
-            TStringBuf url = "http://xn--n1aaa.пидорасы.com/";
-
-            TUri uri;
-            TState::EParsed er = uri.Parse(url, NUri::TParseFlags(NUri::TFeature::FeaturesRobot | NUri::TFeature::FeatureNoRelPath));
-            UNIT_ASSERT_VALUES_EQUAL(er, TState::ParsedOK);
-            TStringBuf host = uri.GetHost();
-            // Should be properly null-terminated
-            UNIT_ASSERT_VALUES_EQUAL(host.size(), strlen(host.data()));
-        }
+ 
+        // Regression test for SEARCH-11283 
+        Y_UNIT_TEST(RegressionTest11283) { 
+            TStringBuf url = "http://xn--n1aaa.пидорасы.com/"; 
+ 
+            TUri uri; 
+            TState::EParsed er = uri.Parse(url, NUri::TParseFlags(NUri::TFeature::FeaturesRobot | NUri::TFeature::FeatureNoRelPath)); 
+            UNIT_ASSERT_VALUES_EQUAL(er, TState::ParsedOK); 
+            TStringBuf host = uri.GetHost(); 
+            // Should be properly null-terminated 
+            UNIT_ASSERT_VALUES_EQUAL(host.size(), strlen(host.data())); 
+        } 
     }
 
 }

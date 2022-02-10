@@ -278,7 +278,7 @@ RECURSE(
     protobuf
     protobuf/python
     protobuf-mutator
-    protobuf_std
+    protobuf_std 
     protoc_std
     psimd
     pthreadpool

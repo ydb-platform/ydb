@@ -163,8 +163,8 @@
 
   # OSX frameworks
   - Accelerate/Accelerate.h
-  - AppKit/AppKit.h
-  - AppKit/NSView.h
+  - AppKit/AppKit.h 
+  - AppKit/NSView.h 
   - ApplicationServices/ApplicationServices.h
   - AudioToolbox/AudioToolbox.h
   - AVFoundation/AVFoundation.h
@@ -194,8 +194,8 @@
   - Foundation/Foundation.h
   - Foundation/NSException.h
   - Foundation/NSString.h
-  - Foundation/NSKeyValueObserving.h
-  - Foundation/NSObject.h
+  - Foundation/NSKeyValueObserving.h 
+  - Foundation/NSObject.h 
   - GLKit/GLKit.h
   - IOKit/IOBSD.h
   - IOKit/IOKitLib.h
@@ -207,17 +207,17 @@
   - IOKit/ps/IOPowerSources.h
   - IOKit/storage/IOBlockStorageDriver.h
   - IOKit/storage/IOMedia.h
-  - IOSurface/IOSurfaceRef.h
-  - Metal/Metal.h
-  - metal_stdlib
+  - IOSurface/IOSurfaceRef.h 
+  - Metal/Metal.h 
+  - metal_stdlib 
   - OpenCL/cl.h
   - OpenCL/cl_gl.h
   - OpenCL/opencl.h
-  - OpenGLES/ES2/gl.h
+  - OpenGLES/ES2/gl.h 
   - Speech/Speech.h
   - QuartzCore/QuartzCore.h
-  - QuartzCore/CAEAGLLayer.h
-  - QuartzCore/CAMetalLayer.h
+  - QuartzCore/CAEAGLLayer.h 
+  - QuartzCore/CAMetalLayer.h 
   - Security/SecCertificate.h
   - Security/SecKey.h
   - Security/SecRandom.h
@@ -228,8 +228,8 @@
   - UIKit/UIKit.h
   - UIKit/UIScreen.h
   - UIKit/UIWebView.h
-  - UIKit/UIView.h
+  - UIKit/UIView.h 
   - VideoDecodeAcceleration/VDADecoder.h
   - VideoToolbox/VideoToolbox.h
   - XCTest/XCTest.h
-  - CoreFoundation/CFByteOrder.h
+  - CoreFoundation/CFByteOrder.h 

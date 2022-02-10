@@ -27,7 +27,7 @@ RECURSE(
     plantuml
     protoc
     protoc-c
-    protoc_std
+    protoc_std 
     python
     python3
     python3/pycc

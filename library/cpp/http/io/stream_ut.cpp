@@ -27,10 +27,10 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
                 if (!ProcessHeaders()) {
                     return true;
                 }
- 
-                // Check that function will not hang on 
-                Input().ReadAll(); 
- 
+
+                // Check that function will not hang on
+                Input().ReadAll();
+
                 // "lo" is for "local"
                 if (RD.ServerName() == "yandex.lo") {
                     // do redirect
@@ -129,51 +129,51 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
     }
 
     Y_UNIT_TEST(TestHttpInputDelete) {
-        TString res = "I'm a teapot"; 
-        TPortManager pm; 
-        const ui16 port = pm.GetPort(); 
- 
-        TTestHttpServer serverImpl(res); 
-        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true)); 
- 
-        UNIT_ASSERT(server.Start()); 
- 
-        TNetworkAddress addr("localhost", port); 
-        TSocket s(addr); 
- 
-        //TDebugOutput dbg; 
-        TNullOutput dbg; 
- 
-        { 
-            TSocketOutput so(s); 
-            TTeeOutput out(&so, &dbg); 
-            THttpOutput output(&out); 
- 
-            output.EnableKeepAlive(true); 
-            output.EnableCompression(true); 
- 
-            TString r; 
-            r += "DELETE / HTTP/1.1"; 
-            r += "\r\n"; 
-            r += "Host: yandex.lo"; 
-            r += "\r\n"; 
-            r += "\r\n"; 
- 
+        TString res = "I'm a teapot";
+        TPortManager pm;
+        const ui16 port = pm.GetPort();
+
+        TTestHttpServer serverImpl(res);
+        THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true));
+
+        UNIT_ASSERT(server.Start());
+
+        TNetworkAddress addr("localhost", port);
+        TSocket s(addr);
+
+        //TDebugOutput dbg;
+        TNullOutput dbg;
+
+        {
+            TSocketOutput so(s);
+            TTeeOutput out(&so, &dbg);
+            THttpOutput output(&out);
+
+            output.EnableKeepAlive(true);
+            output.EnableCompression(true);
+
+            TString r;
+            r += "DELETE / HTTP/1.1";
+            r += "\r\n";
+            r += "Host: yandex.lo";
+            r += "\r\n";
+            r += "\r\n";
+
             output.Write(r.data(), r.size());
-            output.Finish(); 
-        } 
- 
-        { 
-            TSocketInput si(s); 
-            THttpInput input(&si); 
-            unsigned httpCode = ParseHttpRetCode(input.FirstLine()); 
-            UNIT_ASSERT_VALUES_EQUAL(httpCode / 10, 30u); 
- 
-            TransferData(&input, &dbg); 
-        } 
-        server.Stop(); 
-    } 
- 
+            output.Finish();
+        }
+
+        {
+            TSocketInput si(s);
+            THttpInput input(&si);
+            unsigned httpCode = ParseHttpRetCode(input.FirstLine());
+            UNIT_ASSERT_VALUES_EQUAL(httpCode / 10, 30u);
+
+            TransferData(&input, &dbg);
+        }
+        server.Stop();
+    }
+
     Y_UNIT_TEST(TestParseHttpRetCode) {
         UNIT_ASSERT_VALUES_EQUAL(ParseHttpRetCode("HTTP/1.1 301"), 301u);
     }

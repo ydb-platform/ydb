@@ -33,7 +33,7 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
         Post,
         Put,
         Patch,
-        Delete, 
+        Delete,
     };
 
     enum EMethod foundMethod;
@@ -51,9 +51,9 @@ bool THttpClientRequestExtension::ProcessHeaders(TBaseServerRequestData& rd, TBl
     } else if (strnicmp(s, "PATCH ", 6) == 0) {
         foundMethod = Patch;
         urlStart = s + 6;
-    } else if (strnicmp(s, "DELETE ", 7) == 0) { 
-        foundMethod = Delete; 
-        urlStart = s + 7; 
+    } else if (strnicmp(s, "DELETE ", 7) == 0) {
+        foundMethod = Delete;
+        urlStart = s + 7;
     } else {
         foundMethod = NotImplemented;
     }

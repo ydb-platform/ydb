@@ -12,18 +12,18 @@
 //THIS CODE LOOKS LIKE A TRASH, BUT WORKS.
 
 #define NMATCHES 100
-#define REGEXP_GLOBAL 0x0080 // use this if you want to find all occurences 
- 
+#define REGEXP_GLOBAL 0x0080 // use this if you want to find all occurences
+
 class TRegExBaseImpl;
 
-class TRegExBase { 
+class TRegExBase {
 protected:
     TSimpleIntrusivePtr<TRegExBaseImpl> Impl;
 
 public:
     TRegExBase(const char* regExpr = nullptr, int cflags = REG_EXTENDED);
     TRegExBase(const TString& regExpr, int cflags = REG_EXTENDED);
- 
+
     virtual ~TRegExBase();
 
     int Exec(const char* str, regmatch_t pmatch[], int eflags, int nmatches = NMATCHES) const;

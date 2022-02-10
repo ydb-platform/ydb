@@ -91,7 +91,7 @@ public:
     inline bool IsOpen() const noexcept {
         return nullptr != Backend_.Get();
     }
- 
+
     inline void CloseLog() noexcept {
         Backend_.Destroy();
 
@@ -194,8 +194,8 @@ void TLog::CloseLog() {
 
 void TLog::SetDefaultPriority(ELogPriority priority) noexcept {
     Impl_->SetDefaultPriority(priority);
-} 
- 
+}
+
 ELogPriority TLog::FiltrationLevel() const noexcept {
     return Impl_->FiltrationLevel();
 }

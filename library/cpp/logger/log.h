@@ -82,7 +82,7 @@ public:
     void SetDefaultPriority(ELogPriority priority) noexcept;
     // Get default priority
     ELogPriority DefaultPriority() const noexcept;
- 
+
     // Call `FiltrationLevel()` of the underlying backend.
     ELogPriority FiltrationLevel() const noexcept;
 

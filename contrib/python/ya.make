@@ -518,7 +518,7 @@ RECURSE(
     inflection
     influxdb
     iniconfig
-    iniherit
+    iniherit 
     Inject
     inlinestyler
     intbitset
@@ -1176,7 +1176,7 @@ RECURSE(
     yarl
     yfinance
     youtube-dl
-    yoyo-migrations
+    yoyo-migrations 
     yt-dlp
     zake
     zeep

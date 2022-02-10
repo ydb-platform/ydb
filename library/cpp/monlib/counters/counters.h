@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/list.h>
@@ -8,27 +8,27 @@
 #include <util/generic/singleton.h>
 #include <util/generic/vector.h>
 #include <util/str_stl.h>
-#include <util/stream/output.h>
+#include <util/stream/output.h> 
 #include <util/string/util.h>
-#include <util/system/atomic.h>
+#include <util/system/atomic.h> 
 #include <util/system/defaults.h>
 #include <util/system/guard.h>
 #include <util/system/sem.h>
 #include <util/system/spinlock.h>
-
+ 
 #include <array>
 
-namespace NMonitoring {
+namespace NMonitoring { 
 #define BEGIN_OUTPUT_COUNTERS             \
     void OutputImpl(IOutputStream& out) { \
         char prettyBuf[32];
 #define END_OUTPUT_COUNTERS \
     out.Flush();            \
     }
-
+ 
 #define OUTPUT_NAMED_COUNTER(var, name) out << name << ": \t" << var << NMonitoring::PrettyNum(var, prettyBuf, 32) << '\n'
 #define OUTPUT_COUNTER(var) OUTPUT_NAMED_COUNTER(var, #var);
-
+ 
     char* PrettyNumShort(i64 val, char* buf, size_t size);
     char* PrettyNum(i64 val, char* buf, size_t size);
 
@@ -39,13 +39,13 @@ namespace NMonitoring {
     public:
         using TValue = TAtomic;
         using TValueBase = TAtomicBase;
-
+ 
         TDeprecatedCounter()
             : Value()
             , Derivative(false)
         {
         }
-
+ 
         TDeprecatedCounter(TValue value, bool derivative = false)
             : Value(value)
             , Derivative(derivative)
@@ -62,7 +62,7 @@ namespace NMonitoring {
         TValueBase Val() const {
             return AtomicGet(Value);
         }
-
+ 
         void Set(TValue val) {
             AtomicSet(Value, val);
         }
@@ -73,7 +73,7 @@ namespace NMonitoring {
         TValueBase Dec() {
             return AtomicDecrement(Value);
         }
-
+ 
         TValueBase Add(const TValue val) {
             return AtomicAdd(Value, val);
         }
@@ -88,21 +88,21 @@ namespace NMonitoring {
         void operator++(int) {
             Inc();
         }
-
+ 
         void operator--() {
             Dec();
         }
         void operator--(int) {
             Dec();
         }
-
+ 
         void operator+=(TValue rhs) {
             Add(rhs);
         }
         void operator-=(TValue rhs) {
             Sub(rhs);
         }
-
+ 
         TValueBase operator=(TValue rhs) {
             AtomicSwap(&Value, rhs);
             return rhs;
@@ -111,7 +111,7 @@ namespace NMonitoring {
         bool operator!() const {
             return AtomicGet(Value) == 0;
         }
-
+ 
         TAtomic& GetAtomic() {
             return Value;
         }
@@ -120,14 +120,14 @@ namespace NMonitoring {
         TAtomic Value;
         bool Derivative;
     };
-
+ 
     template <typename T>
     struct TDeprecatedCountersBase {
         virtual ~TDeprecatedCountersBase() {
         }
-
+ 
         virtual void OutputImpl(IOutputStream&) = 0;
-
+ 
         static T& Instance() {
             return *Singleton<T>();
         }
@@ -337,14 +337,14 @@ namespace NMonitoring {
 }
 
 static inline IOutputStream& operator<<(IOutputStream& o, const NMonitoring::TDeprecatedCounter& rhs) {
-    return o << rhs.Val();
-}
-
-template <size_t N>
+    return o << rhs.Val(); 
+} 
+ 
+template <size_t N> 
 static inline IOutputStream& operator<<(IOutputStream& o, const std::array<NMonitoring::TDeprecatedCounter, N>& rhs) {
     for (typename std::array<NMonitoring::TDeprecatedCounter, N>::const_iterator it = rhs.begin(); it != rhs.end(); ++it) {
-        if (!!*it)
-            o << *it << Endl;
-    }
-    return o;
-}
+        if (!!*it) 
+            o << *it << Endl; 
+    } 
+    return o; 
+} 

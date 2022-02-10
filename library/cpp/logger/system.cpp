@@ -32,14 +32,14 @@ TSysLogBackend::TSysLogBackend(const char* ident, EFacility facility, int flags)
         LOG_LOCAL6,
         LOG_LOCAL7};
 
-    int sysflags = LOG_NDELAY | LOG_PID;
+    int sysflags = LOG_NDELAY | LOG_PID; 
 
     if (flags & LogPerror) {
-        sysflags |= LOG_PERROR;
+        sysflags |= LOG_PERROR; 
     }
 
     if (flags & LogCons) {
-        sysflags |= LOG_CONS;
+        sysflags |= LOG_CONS; 
     }
 
     openlog(Ident.data(), sysflags, f2sf[(size_t)facility]);

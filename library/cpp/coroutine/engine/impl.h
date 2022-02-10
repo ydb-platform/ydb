@@ -130,10 +130,10 @@ static void ContHelperFunc(TCont* cont, void* arg) {
 }
 
 template <typename T, void (T::*M)(TCont*)>
-static void ContHelperMemberFunc(TCont* c, void* arg) {
+static void ContHelperMemberFunc(TCont* c, void* arg) { 
     ((reinterpret_cast<T*>(arg))->*M)(c);
-}
-
+} 
+ 
 class IUserEvent
     : public TIntrusiveListItem<IUserEvent>
 {
@@ -176,7 +176,7 @@ public:
     void Execute(T* obj) noexcept {
         Execute(ContHelperMemberFunc<T, M>, obj);
     }
-
+ 
     template <class Functor>
     TCont* Create(
         Functor& f,
@@ -194,7 +194,7 @@ public:
     ) noexcept {
         return Create(ContHelperMemberFunc<T, M>, obj, name, customStackSize);
     }
-
+ 
     TCont* Create(
         TContFunc func,
         void* arg,

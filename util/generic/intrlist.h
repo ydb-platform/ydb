@@ -99,7 +99,7 @@ public:
     inline void SetPrev(TListItem* item) noexcept {
         Prev_ = item;
     }
-
+ 
 public:
     inline T* Node() noexcept {
         return static_cast<T*>(this);

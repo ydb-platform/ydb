@@ -32,7 +32,7 @@ public:
         LogPerror = 1,
         LogCons = 2
     };
-
+ 
     TSysLogBackend(const char* ident, EFacility facility, int flags = 0);
     ~TSysLogBackend() override;
 

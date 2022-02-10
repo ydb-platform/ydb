@@ -189,18 +189,18 @@ public:
     void RunTask2(TCont*) {
         j = 2;
     }
-};
-
-void TCoroTest::TestMemFun() {
+}; 
+ 
+void TCoroTest::TestMemFun() { 
     i0 = 0;
-    TContExecutor e(32000);
-    TTestObject obj;
-    e.Create<TTestObject, &TTestObject::RunTask1>(&obj, "test1");
-    e.Execute<TTestObject, &TTestObject::RunTask2>(&obj);
-    UNIT_ASSERT_EQUAL(obj.i, 1);
-    UNIT_ASSERT_EQUAL(obj.j, 2);
-}
-
+    TContExecutor e(32000); 
+    TTestObject obj; 
+    e.Create<TTestObject, &TTestObject::RunTask1>(&obj, "test1"); 
+    e.Execute<TTestObject, &TTestObject::RunTask2>(&obj); 
+    UNIT_ASSERT_EQUAL(obj.i, 1); 
+    UNIT_ASSERT_EQUAL(obj.j, 2); 
+} 
+ 
 void TCoroTest::TestSimpleX2() {
     {
         i0 = 0;

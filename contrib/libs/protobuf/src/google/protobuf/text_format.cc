@@ -524,16 +524,16 @@ class TextFormat::Parser::ParserImpl {
       // start with "{" or "<" which indicates the beginning of a message body.
       // If there is no ":" or there is a "{" or "<" after ":", this field has
       // to be a message or the input is ill-formed.
-      bool skipResult; 
+      bool skipResult;
       if (TryConsume(":") && !LookingAt("{") && !LookingAt("<")) {
-        skipResult = SkipFieldValue(); 
+        skipResult = SkipFieldValue();
       } else {
-        skipResult = SkipFieldMessage(); 
+        skipResult = SkipFieldMessage();
       }
-      // For historical reasons, fields may optionally be separated by commas or 
-      // semicolons. 
-      TryConsume(";") || TryConsume(","); 
-      return skipResult; 
+      // For historical reasons, fields may optionally be separated by commas or
+      // semicolons.
+      TryConsume(";") || TryConsume(",");
+      return skipResult;
     }
 
     if (singular_overwrite_policy_ == FORBID_SINGULAR_OVERWRITES) {

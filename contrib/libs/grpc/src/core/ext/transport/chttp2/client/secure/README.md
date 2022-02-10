@@ -1,1 +1,1 @@
-Plugin for creating secure channels using chttp2 
+Plugin for creating secure channels using chttp2

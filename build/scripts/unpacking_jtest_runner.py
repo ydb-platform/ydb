@@ -3,25 +3,25 @@ import json
 import optparse
 import os
 import sys
-import subprocess 
+import subprocess
 import time
 import zipfile
 import platform
- 
-# This script changes test run classpath by unpacking tests.jar -> tests-dir. The goal 
-# is to launch tests with the same classpath as maven does. 
- 
- 
-def parse_args(): 
-    parser = optparse.OptionParser() 
-    parser.disable_interspersed_args() 
+
+# This script changes test run classpath by unpacking tests.jar -> tests-dir. The goal
+# is to launch tests with the same classpath as maven does.
+
+
+def parse_args():
+    parser = optparse.OptionParser()
+    parser.disable_interspersed_args()
     parser.add_option('--trace-file')
-    parser.add_option('--jar-binary') 
-    parser.add_option('--tests-jar-path') 
+    parser.add_option('--jar-binary')
+    parser.add_option('--tests-jar-path')
     parser.add_option('--classpath-option-type', choices=('manifest', 'command_file', 'list'), default='manifest')
-    return parser.parse_args() 
- 
- 
+    return parser.parse_args()
+
+
 # temporary, for jdk8/jdk9+ compatibility
 def fix_cmd(cmd):
     if not cmd:
@@ -88,18 +88,18 @@ def make_command_file_from_cp(class_path, out):
         cp_file.write(os.pathsep.join(class_path))
 
 
-def main(): 
+def main():
     s = time.time()
-    opts, args = parse_args() 
- 
-    # unpack tests jar 
-    try: 
+    opts, args = parse_args()
+
+    # unpack tests jar
+    try:
         build_root = args[args.index('--build-root') + 1]
         dest = os.path.join(build_root, 'test-classes')
-    except Exception: 
+    except Exception:
         build_root = ''
-        dest = os.path.abspath('test-classes') 
- 
+        dest = os.path.abspath('test-classes')
+
     extract_jars(dest, opts.tests_jar_path)
 
     metrics = {
@@ -107,7 +107,7 @@ def main():
     }
 
     s = time.time()
-    # fix java classpath 
+    # fix java classpath
     cp_idx = args.index('-classpath')
     if args[cp_idx + 1].startswith('@'):
         real_name = args[cp_idx + 1][1:]
@@ -137,12 +137,12 @@ def main():
     if opts.trace_file:
         dump_chunk_event({'metrics': metrics}, opts.trace_file)
 
-    # run java cmd 
+    # run java cmd
     if platform.system() == 'Windows':
         sys.exit(subprocess.Popen(args).wait())
     else:
         os.execv(args[0], args)
- 
- 
-if __name__ == '__main__': 
-    main() 
+
+
+if __name__ == '__main__':
+    main()

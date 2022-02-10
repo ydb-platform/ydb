@@ -1,30 +1,30 @@
-import os 
-import tarfile 
-import contextlib 
- 
+import os
+import tarfile
+import contextlib
+
 from . import runtime
- 
+
 _JAVA_DIR = []
 
 
-def get_java_path(jdk_dir): 
+def get_java_path(jdk_dir):
     # deprecated - to be deleted
-    java_paths = (os.path.join(jdk_dir, 'bin', 'java'), os.path.join(jdk_dir, 'bin', 'java.exe')) 
- 
-    for p in java_paths: 
-        if os.path.exists(p): 
-            return p 
- 
-    for f in os.listdir(jdk_dir): 
-        if f.endswith('.tar'): 
-            with contextlib.closing(tarfile.open(os.path.join(jdk_dir, f))) as tf: 
-                tf.extractall(jdk_dir) 
- 
-    for p in java_paths: 
-        if os.path.exists(p): 
-            return p 
- 
-    return '' 
+    java_paths = (os.path.join(jdk_dir, 'bin', 'java'), os.path.join(jdk_dir, 'bin', 'java.exe'))
+
+    for p in java_paths:
+        if os.path.exists(p):
+            return p
+
+    for f in os.listdir(jdk_dir):
+        if f.endswith('.tar'):
+            with contextlib.closing(tarfile.open(os.path.join(jdk_dir, f))) as tf:
+                tf.extractall(jdk_dir)
+
+    for p in java_paths:
+        if os.path.exists(p):
+            return p
+
+    return ''
 
 
 def get_build_java_dir(jdk_dir):

@@ -55,7 +55,7 @@ class Platform(object):
         self.is_intel = self.is_x86 or self.is_x86_64
 
         self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7a_neon', 'arm', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
-        self.is_armv8 = self.arch in ('armv8', 'armv8a', 'arm64', 'aarch64', 'armv8a_cortex_a35', 'armv8a_cortex_a53') 
+        self.is_armv8 = self.arch in ('armv8', 'armv8a', 'arm64', 'aarch64', 'armv8a_cortex_a35', 'armv8a_cortex_a53')
         self.is_armv8m = self.arch in ('armv8m_cortex_m33',)
         self.is_arm64 = self.arch in ('arm64',)
         self.is_arm = self.is_armv7 or self.is_armv8 or self.is_armv8m
@@ -70,10 +70,10 @@ class Platform(object):
                 self.armv7_float_abi = 'softfp'
 
         self.is_cortex_a9 = self.arch in ('armv7a_cortex_a9',)
-        self.is_cortex_a35 = self.arch in ('armv7ahf_cortex_a35', 'armv8a_cortex_a35') 
-        self.is_cortex_a53 = self.arch in ('armv7ahf_cortex_a53', 'armv8a_cortex_a53') 
+        self.is_cortex_a35 = self.arch in ('armv7ahf_cortex_a35', 'armv8a_cortex_a35')
+        self.is_cortex_a53 = self.arch in ('armv7ahf_cortex_a53', 'armv8a_cortex_a53')
         self.is_cortex_m33 = self.arch in ('armv8m_cortex_m33',)
- 
+
         self.is_power8le = self.arch == 'ppc64le'
         self.is_power9le = self.arch == 'power9le'
         self.is_powerpc = self.is_power8le or self.is_power9le
@@ -150,7 +150,7 @@ class Platform(object):
             (self.is_i686, 'ARCH_I686'),
             (self.is_x86_64, 'ARCH_X86_64'),
             (self.is_armv7, 'ARCH_ARM7'),
-            (self.is_armv7_neon, 'ARCH_ARM7_NEON'), 
+            (self.is_armv7_neon, 'ARCH_ARM7_NEON'),
             (self.is_armv8, 'ARCH_ARM64'),
             (self.is_armv8m, 'ARCH_ARM8M'),
             (self.is_arm, 'ARCH_ARM'),
@@ -783,7 +783,7 @@ when (($USEMPROF == "yes") || ($USE_MPROF == "yes")) {
 
         for variable in self.platform.os_variables:
             emit(variable, 'yes')
- 
+
         if self.platform.is_armv7:
             emit('ARM7_FLOAT_ABI', self.platform.armv7_float_abi)
 
@@ -796,7 +796,7 @@ when (($USEMPROF == "yes") || ($USE_MPROF == "yes")) {
                 self.print_linux_const()
         elif self.platform.is_windows:
             self.print_windows_target_const()
- 
+
     def print_host_settings(self):
         emit('HOST_PLATFORM', self.platform.os_compat)
         if not self.platform.is_windows:
@@ -1168,13 +1168,13 @@ class GnuToolchain(Toolchain):
                     (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
                     (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
                     (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'),
-                    (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'), 
+                    (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'),
                     (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'),
                     (target.is_android and target.is_x86, 'i686-linux-android'),
                     (target.is_android and target.is_x86_64, 'x86_64-linux-android'),
                     (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
                     (target.is_android and target.is_armv8, 'aarch64-linux-android'),
-                ]) 
+                ])
 
             if target.is_android:
                 # Android NDK allows specification of API level in target triple, e.g.:
@@ -1194,18 +1194,18 @@ class GnuToolchain(Toolchain):
         if target.is_cortex_a9:
             self.c_flags_platform.append('-mcpu=cortex-a9')
 
-        if target.is_cortex_a35: 
-            self.c_flags_platform.append('-mcpu=cortex-a35') 
- 
-        elif target.is_cortex_a53: 
-            self.c_flags_platform.append('-mcpu=cortex-a53') 
- 
+        if target.is_cortex_a35:
+            self.c_flags_platform.append('-mcpu=cortex-a35')
+
+        elif target.is_cortex_a53:
+            self.c_flags_platform.append('-mcpu=cortex-a53')
+
         elif target.is_cortex_m33:
             self.c_flags_platform.append('-mcpu=cortex-m33 -mfpu=fpv5-sp-d16')
 
-        elif target.is_armv7_neon: 
-            self.c_flags_platform.append('-mfpu=neon') 
- 
+        elif target.is_armv7_neon:
+            self.c_flags_platform.append('-mfpu=neon')
+
         if (target.is_armv7 or target.is_armv8m) and build.is_size_optimized:
             # Enable ARM Thumb2 variable-length instruction encoding
             # to reduce code size

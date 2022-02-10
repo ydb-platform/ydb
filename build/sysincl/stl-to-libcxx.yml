@@ -48,7 +48,7 @@
   - __config:                  contrib/libs/cxxsupp/libcxx/include/__config
   - __undef_macros:            contrib/libs/cxxsupp/libcxx/include/__undef_macros
   - algorithm:                 contrib/libs/cxxsupp/libcxx/include/algorithm
-  - any:                       contrib/libs/cxxsupp/libcxx/include/any 
+  - any:                       contrib/libs/cxxsupp/libcxx/include/any
   - array:                     contrib/libs/cxxsupp/libcxx/include/array
   - atomic:                    contrib/libs/cxxsupp/libcxx/include/atomic
   - bit:                       contrib/libs/cxxsupp/libcxx/include/bit

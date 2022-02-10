@@ -1,39 +1,39 @@
 # Copyright 2016 gRPC authors.
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Invocation-side implementation of gRPC Python.""" 
- 
+"""Invocation-side implementation of gRPC Python."""
+
 import copy
 import functools
 import logging
 import os
-import sys 
-import threading 
-import time 
- 
-import grpc 
+import sys
+import threading
+import time
+
+import grpc
 import grpc.experimental
 from grpc import _compression
-from grpc import _common 
-from grpc import _grpcio_metadata 
-from grpc._cython import cygrpc 
- 
+from grpc import _common
+from grpc import _grpcio_metadata
+from grpc._cython import cygrpc
+
 _LOGGER = logging.getLogger(__name__)
 
-_USER_AGENT = 'grpc-python/{}'.format(_grpcio_metadata.__version__) 
- 
-_EMPTY_FLAGS = 0 
- 
+_USER_AGENT = 'grpc-python/{}'.format(_grpcio_metadata.__version__)
+
+_EMPTY_FLAGS = 0
+
 # NOTE(rbellevi): No guarantees are given about the maintenance of this
 # environment variable.
 _DEFAULT_SINGLE_THREADED_UNARY_STREAM = os.getenv(
@@ -65,15 +65,15 @@ _STREAM_STREAM_INITIAL_DUE = (
     cygrpc.OperationType.receive_initial_metadata,
     cygrpc.OperationType.receive_status_on_client,
 )
- 
-_CHANNEL_SUBSCRIPTION_CALLBACK_ERROR_LOG_MESSAGE = ( 
-    'Exception calling channel subscription callback!') 
- 
+
+_CHANNEL_SUBSCRIPTION_CALLBACK_ERROR_LOG_MESSAGE = (
+    'Exception calling channel subscription callback!')
+
 _OK_RENDEZVOUS_REPR_FORMAT = ('<{} of RPC that terminated with:\n'
                               '\tstatus = {}\n'
                               '\tdetails = "{}"\n'
                               '>')
- 
+
 _NON_OK_RENDEZVOUS_REPR_FORMAT = ('<{} of RPC that terminated with:\n'
                                   '\tstatus = {}\n'
                                   '\tdetails = "{}"\n'
@@ -81,92 +81,92 @@ _NON_OK_RENDEZVOUS_REPR_FORMAT = ('<{} of RPC that terminated with:\n'
                                   '>')
 
 
-def _deadline(timeout): 
+def _deadline(timeout):
     return None if timeout is None else time.time() + timeout
- 
- 
-def _unknown_code_details(unknown_cygrpc_code, details): 
-    return 'Server sent unknown code {} and details "{}"'.format( 
-        unknown_cygrpc_code, details) 
- 
- 
-class _RPCState(object): 
- 
-    def __init__(self, due, initial_metadata, trailing_metadata, code, details): 
-        self.condition = threading.Condition() 
-        # The cygrpc.OperationType objects representing events due from the RPC's 
-        # completion queue. 
-        self.due = set(due) 
-        self.initial_metadata = initial_metadata 
-        self.response = None 
-        self.trailing_metadata = trailing_metadata 
-        self.code = code 
-        self.details = details 
+
+
+def _unknown_code_details(unknown_cygrpc_code, details):
+    return 'Server sent unknown code {} and details "{}"'.format(
+        unknown_cygrpc_code, details)
+
+
+class _RPCState(object):
+
+    def __init__(self, due, initial_metadata, trailing_metadata, code, details):
+        self.condition = threading.Condition()
+        # The cygrpc.OperationType objects representing events due from the RPC's
+        # completion queue.
+        self.due = set(due)
+        self.initial_metadata = initial_metadata
+        self.response = None
+        self.trailing_metadata = trailing_metadata
+        self.code = code
+        self.details = details
         self.debug_error_string = None
-        # The semantics of grpc.Future.cancel and grpc.Future.cancelled are 
-        # slightly wonky, so they have to be tracked separately from the rest of the 
-        # result of the RPC. This field tracks whether cancellation was requested 
-        # prior to termination of the RPC. 
-        self.cancelled = False 
-        self.callbacks = [] 
+        # The semantics of grpc.Future.cancel and grpc.Future.cancelled are
+        # slightly wonky, so they have to be tracked separately from the rest of the
+        # result of the RPC. This field tracks whether cancellation was requested
+        # prior to termination of the RPC.
+        self.cancelled = False
+        self.callbacks = []
         self.fork_epoch = cygrpc.get_fork_epoch()
- 
+
     def reset_postfork_child(self):
         self.condition = threading.Condition()
- 
 
-def _abort(state, code, details): 
-    if state.code is None: 
-        state.code = code 
-        state.details = details 
-        if state.initial_metadata is None: 
+
+def _abort(state, code, details):
+    if state.code is None:
+        state.code = code
+        state.details = details
+        if state.initial_metadata is None:
             state.initial_metadata = ()
         state.trailing_metadata = ()
- 
- 
-def _handle_event(event, state, response_deserializer): 
-    callbacks = [] 
-    for batch_operation in event.batch_operations: 
+
+
+def _handle_event(event, state, response_deserializer):
+    callbacks = []
+    for batch_operation in event.batch_operations:
         operation_type = batch_operation.type()
-        state.due.remove(operation_type) 
-        if operation_type == cygrpc.OperationType.receive_initial_metadata: 
+        state.due.remove(operation_type)
+        if operation_type == cygrpc.OperationType.receive_initial_metadata:
             state.initial_metadata = batch_operation.initial_metadata()
-        elif operation_type == cygrpc.OperationType.receive_message: 
+        elif operation_type == cygrpc.OperationType.receive_message:
             serialized_response = batch_operation.message()
-            if serialized_response is not None: 
-                response = _common.deserialize(serialized_response, 
-                                               response_deserializer) 
-                if response is None: 
-                    details = 'Exception deserializing response!' 
-                    _abort(state, grpc.StatusCode.INTERNAL, details) 
-                else: 
-                    state.response = response 
-        elif operation_type == cygrpc.OperationType.receive_status_on_client: 
+            if serialized_response is not None:
+                response = _common.deserialize(serialized_response,
+                                               response_deserializer)
+                if response is None:
+                    details = 'Exception deserializing response!'
+                    _abort(state, grpc.StatusCode.INTERNAL, details)
+                else:
+                    state.response = response
+        elif operation_type == cygrpc.OperationType.receive_status_on_client:
             state.trailing_metadata = batch_operation.trailing_metadata()
-            if state.code is None: 
-                code = _common.CYGRPC_STATUS_CODE_TO_STATUS_CODE.get( 
+            if state.code is None:
+                code = _common.CYGRPC_STATUS_CODE_TO_STATUS_CODE.get(
                     batch_operation.code())
-                if code is None: 
-                    state.code = grpc.StatusCode.UNKNOWN 
-                    state.details = _unknown_code_details( 
+                if code is None:
+                    state.code = grpc.StatusCode.UNKNOWN
+                    state.details = _unknown_code_details(
                         code, batch_operation.details())
-                else: 
-                    state.code = code 
+                else:
+                    state.code = code
                     state.details = batch_operation.details()
                     state.debug_error_string = batch_operation.error_string()
-            callbacks.extend(state.callbacks) 
-            state.callbacks = None 
-    return callbacks 
- 
- 
+            callbacks.extend(state.callbacks)
+            state.callbacks = None
+    return callbacks
+
+
 def _event_handler(state, response_deserializer):
- 
-    def handle_event(event): 
-        with state.condition: 
-            callbacks = _handle_event(event, state, response_deserializer) 
-            state.condition.notify_all() 
-            done = not state.due 
-        for callback in callbacks: 
+
+    def handle_event(event):
+        with state.condition:
+            callbacks = _handle_event(event, state, response_deserializer)
+            state.condition.notify_all()
+            done = not state.due
+        for callback in callbacks:
             try:
                 callback()
             except Exception as e:  # pylint: disable=broad-except
@@ -175,26 +175,26 @@ def _event_handler(state, response_deserializer):
                 logging.error('Exception in callback %s: %s',
                               repr(callback.func), repr(e))
         return done and state.fork_epoch >= cygrpc.get_fork_epoch()
- 
-    return handle_event 
- 
- 
+
+    return handle_event
+
+
 #pylint: disable=too-many-statements
 def _consume_request_iterator(request_iterator, state, call, request_serializer,
                               event_handler):
     """Consume a request iterator supplied by the user."""
- 
+
     def consume_request_iterator():  # pylint: disable=too-many-branches
         # Iterate over the request iterator until it is exhausted or an error
         # condition is encountered.
-        while True: 
+        while True:
             return_from_user_request_generator_invoked = False
-            try: 
+            try:
                 # The thread may die in user-code. Do not block fork for this.
                 cygrpc.enter_user_request_generator()
-                request = next(request_iterator) 
-            except StopIteration: 
-                break 
+                request = next(request_iterator)
+            except StopIteration:
+                break
             except Exception:  # pylint: disable=broad-except
                 cygrpc.return_from_user_request_generator()
                 return_from_user_request_generator_invoked = True
@@ -204,24 +204,24 @@ def _consume_request_iterator(request_iterator, state, call, request_serializer,
                 call.cancel(_common.STATUS_CODE_TO_CYGRPC_STATUS_CODE[code],
                             details)
                 _abort(state, code, details)
-                return 
+                return
             finally:
                 if not return_from_user_request_generator_invoked:
                     cygrpc.return_from_user_request_generator()
-            serialized_request = _common.serialize(request, request_serializer) 
-            with state.condition: 
-                if state.code is None and not state.cancelled: 
-                    if serialized_request is None: 
+            serialized_request = _common.serialize(request, request_serializer)
+            with state.condition:
+                if state.code is None and not state.cancelled:
+                    if serialized_request is None:
                         code = grpc.StatusCode.INTERNAL
-                        details = 'Exception serializing request!' 
+                        details = 'Exception serializing request!'
                         call.cancel(
                             _common.STATUS_CODE_TO_CYGRPC_STATUS_CODE[code],
                             details)
                         _abort(state, code, details)
-                        return 
-                    else: 
+                        return
+                    else:
                         operations = (cygrpc.SendMessageOperation(
-                            serialized_request, _EMPTY_FLAGS),) 
+                            serialized_request, _EMPTY_FLAGS),)
                         operating = call.operate(operations, event_handler)
                         if operating:
                             state.due.add(cygrpc.OperationType.send_message)
@@ -240,22 +240,22 @@ def _consume_request_iterator(request_iterator, state, call, request_serializer,
                                          state))
                         if state.code is not None:
                             return
-                else: 
-                    return 
-        with state.condition: 
-            if state.code is None: 
-                operations = ( 
+                else:
+                    return
+        with state.condition:
+            if state.code is None:
+                operations = (
                     cygrpc.SendCloseFromClientOperation(_EMPTY_FLAGS),)
                 operating = call.operate(operations, event_handler)
                 if operating:
                     state.due.add(cygrpc.OperationType.send_close_from_client)
- 
+
     consumption_thread = cygrpc.ForkManagedThread(
         target=consume_request_iterator)
     consumption_thread.setDaemon(True)
-    consumption_thread.start() 
- 
- 
+    consumption_thread.start()
+
+
 def _rpc_state_string(class_name, rpc_state):
     """Calculates error string for RPC."""
     with rpc_state.condition:
@@ -268,7 +268,7 @@ def _rpc_state_string(class_name, rpc_state):
             return _NON_OK_RENDEZVOUS_REPR_FORMAT.format(
                 class_name, rpc_state.code, rpc_state.details,
                 rpc_state.debug_error_string)
- 
+
 
 class _InactiveRpcError(grpc.RpcError, grpc.Call, grpc.Future):
     """An RPC error not tied to the execution of a particular RPC.
@@ -362,13 +362,13 @@ class _Rendezvous(grpc.RpcError, grpc.RpcContext):
         possibly None, to represent an RPC with no deadline at all.
     """
 
-    def __init__(self, state, call, response_deserializer, deadline): 
-        super(_Rendezvous, self).__init__() 
-        self._state = state 
-        self._call = call 
-        self._response_deserializer = response_deserializer 
-        self._deadline = deadline 
- 
+    def __init__(self, state, call, response_deserializer, deadline):
+        super(_Rendezvous, self).__init__()
+        self._state = state
+        self._call = call
+        self._response_deserializer = response_deserializer
+        self._deadline = deadline
+
     def is_active(self):
         """See grpc.RpcContext.is_active"""
         with self._state.condition:
@@ -382,21 +382,21 @@ class _Rendezvous(grpc.RpcError, grpc.RpcContext):
             else:
                 return max(self._deadline - time.time(), 0)
 
-    def cancel(self): 
+    def cancel(self):
         """See grpc.RpcContext.cancel"""
-        with self._state.condition: 
-            if self._state.code is None: 
+        with self._state.condition:
+            if self._state.code is None:
                 code = grpc.StatusCode.CANCELLED
                 details = 'Locally cancelled by application!'
                 self._call.cancel(
                     _common.STATUS_CODE_TO_CYGRPC_STATUS_CODE[code], details)
-                self._state.cancelled = True 
+                self._state.cancelled = True
                 _abort(self._state, code, details)
-                self._state.condition.notify_all() 
+                self._state.condition.notify_all()
                 return True
             else:
                 return False
- 
+
     def add_callback(self, callback):
         """See grpc.RpcContext.add_callback"""
         with self._state.condition:
@@ -687,27 +687,27 @@ class _MultiThreadedRendezvous(_Rendezvous, grpc.Call, grpc.Future):  # pylint: 
             _common.wait(self._state.condition.wait, _done)
             return _common.decode(self._state.debug_error_string)
 
-    def cancelled(self): 
-        with self._state.condition: 
-            return self._state.cancelled 
- 
-    def running(self): 
-        with self._state.condition: 
-            return self._state.code is None 
- 
-    def done(self): 
-        with self._state.condition: 
-            return self._state.code is not None 
- 
+    def cancelled(self):
+        with self._state.condition:
+            return self._state.cancelled
+
+    def running(self):
+        with self._state.condition:
+            return self._state.code is None
+
+    def done(self):
+        with self._state.condition:
+            return self._state.code is not None
+
     def _is_complete(self):
         return self._state.code is not None
 
-    def result(self, timeout=None): 
+    def result(self, timeout=None):
         """Returns the result of the computation or raises its exception.
 
         See grpc.Future.result for the full API contract.
         """
-        with self._state.condition: 
+        with self._state.condition:
             timed_out = _common.wait(self._state.condition.wait,
                                      self._is_complete,
                                      timeout=timeout)
@@ -715,18 +715,18 @@ class _MultiThreadedRendezvous(_Rendezvous, grpc.Call, grpc.Future):  # pylint: 
                 raise grpc.FutureTimeoutError()
             else:
                 if self._state.code is grpc.StatusCode.OK:
-                    return self._state.response 
-                elif self._state.cancelled: 
-                    raise grpc.FutureCancelledError() 
-                else: 
-                    raise self 
- 
-    def exception(self, timeout=None): 
+                    return self._state.response
+                elif self._state.cancelled:
+                    raise grpc.FutureCancelledError()
+                else:
+                    raise self
+
+    def exception(self, timeout=None):
         """Return the exception raised by the computation.
 
         See grpc.Future.exception for the full API contract.
         """
-        with self._state.condition: 
+        with self._state.condition:
             timed_out = _common.wait(self._state.condition.wait,
                                      self._is_complete,
                                      timeout=timeout)
@@ -734,18 +734,18 @@ class _MultiThreadedRendezvous(_Rendezvous, grpc.Call, grpc.Future):  # pylint: 
                 raise grpc.FutureTimeoutError()
             else:
                 if self._state.code is grpc.StatusCode.OK:
-                    return None 
-                elif self._state.cancelled: 
-                    raise grpc.FutureCancelledError() 
-                else: 
-                    return self 
- 
-    def traceback(self, timeout=None): 
+                    return None
+                elif self._state.cancelled:
+                    raise grpc.FutureCancelledError()
+                else:
+                    return self
+
+    def traceback(self, timeout=None):
         """Access the traceback of the exception raised by the computation.
 
         See grpc.future.traceback for the full API contract.
         """
-        with self._state.condition: 
+        with self._state.condition:
             timed_out = _common.wait(self._state.condition.wait,
                                      self._is_complete,
                                      timeout=timeout)
@@ -753,44 +753,44 @@ class _MultiThreadedRendezvous(_Rendezvous, grpc.Call, grpc.Future):  # pylint: 
                 raise grpc.FutureTimeoutError()
             else:
                 if self._state.code is grpc.StatusCode.OK:
-                    return None 
-                elif self._state.cancelled: 
-                    raise grpc.FutureCancelledError() 
-                else: 
-                    try: 
-                        raise self 
-                    except grpc.RpcError: 
-                        return sys.exc_info()[2] 
- 
-    def add_done_callback(self, fn): 
-        with self._state.condition: 
-            if self._state.code is None: 
+                    return None
+                elif self._state.cancelled:
+                    raise grpc.FutureCancelledError()
+                else:
+                    try:
+                        raise self
+                    except grpc.RpcError:
+                        return sys.exc_info()[2]
+
+    def add_done_callback(self, fn):
+        with self._state.condition:
+            if self._state.code is None:
                 self._state.callbacks.append(functools.partial(fn, self))
-                return 
- 
-        fn(self) 
- 
-    def _next(self): 
-        with self._state.condition: 
-            if self._state.code is None: 
+                return
+
+        fn(self)
+
+    def _next(self):
+        with self._state.condition:
+            if self._state.code is None:
                 event_handler = _event_handler(self._state,
-                                               self._response_deserializer) 
+                                               self._response_deserializer)
                 operating = self._call.operate(
                     (cygrpc.ReceiveMessageOperation(_EMPTY_FLAGS),),
-                    event_handler) 
+                    event_handler)
                 if operating:
                     self._state.due.add(cygrpc.OperationType.receive_message)
-            elif self._state.code is grpc.StatusCode.OK: 
-                raise StopIteration() 
-            else: 
-                raise self 
- 
+            elif self._state.code is grpc.StatusCode.OK:
+                raise StopIteration()
+            else:
+                raise self
+
             def _response_ready():
                 return (
                     self._state.response is not None or
                     (cygrpc.OperationType.receive_message not in self._state.due
                      and self._state.code is not None))
- 
+
             _common.wait(self._state.condition.wait, _response_ready)
             if self._state.response is not None:
                 response = self._state.response
@@ -801,31 +801,31 @@ class _MultiThreadedRendezvous(_Rendezvous, grpc.Call, grpc.Future):  # pylint: 
                     raise StopIteration()
                 elif self._state.code is not None:
                     raise self
- 
- 
-def _start_unary_request(request, timeout, request_serializer): 
+
+
+def _start_unary_request(request, timeout, request_serializer):
     deadline = _deadline(timeout)
-    serialized_request = _common.serialize(request, request_serializer) 
-    if serialized_request is None: 
+    serialized_request = _common.serialize(request, request_serializer)
+    if serialized_request is None:
         state = _RPCState((), (), (), grpc.StatusCode.INTERNAL,
-                          'Exception serializing request!') 
+                          'Exception serializing request!')
         error = _InactiveRpcError(state)
         return deadline, None, error
-    else: 
+    else:
         return deadline, serialized_request, None
- 
- 
+
+
 def _end_unary_response_blocking(state, call, with_call, deadline):
-    if state.code is grpc.StatusCode.OK: 
-        if with_call: 
+    if state.code is grpc.StatusCode.OK:
+        if with_call:
             rendezvous = _MultiThreadedRendezvous(state, call, None, deadline)
-            return state.response, rendezvous 
-        else: 
-            return state.response 
-    else: 
+            return state.response, rendezvous
+        else:
+            return state.response
+    else:
         raise _InactiveRpcError(state)
- 
- 
+
+
 def _stream_unary_invocation_operationses(metadata, initial_metadata_flags):
     return (
         (
@@ -859,18 +859,18 @@ def _determine_deadline(user_deadline):
         return min(parent_deadline, user_deadline)
 
 
-class _UnaryUnaryMultiCallable(grpc.UnaryUnaryMultiCallable): 
- 
+class _UnaryUnaryMultiCallable(grpc.UnaryUnaryMultiCallable):
+
     # pylint: disable=too-many-arguments
-    def __init__(self, channel, managed_call, method, request_serializer, 
-                 response_deserializer): 
-        self._channel = channel 
-        self._managed_call = managed_call 
-        self._method = method 
-        self._request_serializer = request_serializer 
-        self._response_deserializer = response_deserializer 
+    def __init__(self, channel, managed_call, method, request_serializer,
+                 response_deserializer):
+        self._channel = channel
+        self._managed_call = managed_call
+        self._method = method
+        self._request_serializer = request_serializer
+        self._response_deserializer = response_deserializer
         self._context = cygrpc.build_census_context()
- 
+
     def _prepare(self, request, timeout, metadata, wait_for_ready, compression):
         deadline, serialized_request, rendezvous = _start_unary_request(
             request, timeout, self._request_serializer)
@@ -878,11 +878,11 @@ class _UnaryUnaryMultiCallable(grpc.UnaryUnaryMultiCallable):
             wait_for_ready)
         augmented_metadata = _compression.augment_metadata(
             metadata, compression)
-        if serialized_request is None: 
+        if serialized_request is None:
             return None, None, None, rendezvous
-        else: 
-            state = _RPCState(_UNARY_UNARY_INITIAL_DUE, None, None, None, None) 
-            operations = ( 
+        else:
+            state = _RPCState(_UNARY_UNARY_INITIAL_DUE, None, None, None, None)
+            operations = (
                 cygrpc.SendInitialMetadataOperation(augmented_metadata,
                                                     initial_metadata_flags),
                 cygrpc.SendMessageOperation(serialized_request, _EMPTY_FLAGS),
@@ -892,14 +892,14 @@ class _UnaryUnaryMultiCallable(grpc.UnaryUnaryMultiCallable):
                 cygrpc.ReceiveStatusOnClientOperation(_EMPTY_FLAGS),
             )
             return state, operations, deadline, None
- 
+
     def _blocking(self, request, timeout, metadata, credentials, wait_for_ready,
                   compression):
         state, operations, deadline, rendezvous = self._prepare(
             request, timeout, metadata, wait_for_ready, compression)
         if state is None:
             raise rendezvous  # pylint: disable-msg=raising-bad-type
-        else: 
+        else:
             call = self._channel.segregated_call(
                 cygrpc.PropagationConstants.GRPC_PROPAGATE_DEFAULTS,
                 self._method, None, _determine_deadline(deadline), metadata,
@@ -910,7 +910,7 @@ class _UnaryUnaryMultiCallable(grpc.UnaryUnaryMultiCallable):
             event = call.next_event()
             _handle_event(event, state, self._response_deserializer)
             return state, call
- 
+
     def __call__(self,
                  request,
                  timeout=None,
@@ -921,7 +921,7 @@ class _UnaryUnaryMultiCallable(grpc.UnaryUnaryMultiCallable):
         state, call, = self._blocking(request, timeout, metadata, credentials,
                                       wait_for_ready, compression)
         return _end_unary_response_blocking(state, call, False, None)
- 
+
     def with_call(self,
                   request,
                   timeout=None,
@@ -932,7 +932,7 @@ class _UnaryUnaryMultiCallable(grpc.UnaryUnaryMultiCallable):
         state, call, = self._blocking(request, timeout, metadata, credentials,
                                       wait_for_ready, compression)
         return _end_unary_response_blocking(state, call, True, None)
- 
+
     def future(self,
                request,
                timeout=None,
@@ -944,7 +944,7 @@ class _UnaryUnaryMultiCallable(grpc.UnaryUnaryMultiCallable):
             request, timeout, metadata, wait_for_ready, compression)
         if state is None:
             raise rendezvous  # pylint: disable-msg=raising-bad-type
-        else: 
+        else:
             event_handler = _event_handler(state, self._response_deserializer)
             call = self._managed_call(
                 cygrpc.PropagationConstants.GRPC_PROPAGATE_DEFAULTS,
@@ -954,8 +954,8 @@ class _UnaryUnaryMultiCallable(grpc.UnaryUnaryMultiCallable):
             return _MultiThreadedRendezvous(state, call,
                                             self._response_deserializer,
                                             deadline)
- 
- 
+
+
 class _SingleThreadedUnaryStreamMultiCallable(grpc.UnaryStreamMultiCallable):
 
     # pylint: disable=too-many-arguments
@@ -1006,18 +1006,18 @@ class _SingleThreadedUnaryStreamMultiCallable(grpc.UnaryStreamMultiCallable):
                                          self._response_deserializer, deadline)
 
 
-class _UnaryStreamMultiCallable(grpc.UnaryStreamMultiCallable): 
- 
+class _UnaryStreamMultiCallable(grpc.UnaryStreamMultiCallable):
+
     # pylint: disable=too-many-arguments
-    def __init__(self, channel, managed_call, method, request_serializer, 
-                 response_deserializer): 
-        self._channel = channel 
-        self._managed_call = managed_call 
-        self._method = method 
-        self._request_serializer = request_serializer 
-        self._response_deserializer = response_deserializer 
+    def __init__(self, channel, managed_call, method, request_serializer,
+                 response_deserializer):
+        self._channel = channel
+        self._managed_call = managed_call
+        self._method = method
+        self._request_serializer = request_serializer
+        self._response_deserializer = response_deserializer
         self._context = cygrpc.build_census_context()
- 
+
     def __call__(  # pylint: disable=too-many-locals
             self,
             request,
@@ -1030,12 +1030,12 @@ class _UnaryStreamMultiCallable(grpc.UnaryStreamMultiCallable):
             request, timeout, self._request_serializer)
         initial_metadata_flags = _InitialMetadataFlags().with_wait_for_ready(
             wait_for_ready)
-        if serialized_request is None: 
+        if serialized_request is None:
             raise rendezvous  # pylint: disable-msg=raising-bad-type
-        else: 
+        else:
             augmented_metadata = _compression.augment_metadata(
                 metadata, compression)
-            state = _RPCState(_UNARY_STREAM_INITIAL_DUE, None, None, None, None) 
+            state = _RPCState(_UNARY_STREAM_INITIAL_DUE, None, None, None, None)
             operationses = (
                 (
                     cygrpc.SendInitialMetadataOperation(augmented_metadata,
@@ -1057,24 +1057,24 @@ class _UnaryStreamMultiCallable(grpc.UnaryStreamMultiCallable):
             return _MultiThreadedRendezvous(state, call,
                                             self._response_deserializer,
                                             deadline)
- 
- 
-class _StreamUnaryMultiCallable(grpc.StreamUnaryMultiCallable): 
- 
+
+
+class _StreamUnaryMultiCallable(grpc.StreamUnaryMultiCallable):
+
     # pylint: disable=too-many-arguments
-    def __init__(self, channel, managed_call, method, request_serializer, 
-                 response_deserializer): 
-        self._channel = channel 
-        self._managed_call = managed_call 
-        self._method = method 
-        self._request_serializer = request_serializer 
-        self._response_deserializer = response_deserializer 
+    def __init__(self, channel, managed_call, method, request_serializer,
+                 response_deserializer):
+        self._channel = channel
+        self._managed_call = managed_call
+        self._method = method
+        self._request_serializer = request_serializer
+        self._response_deserializer = response_deserializer
         self._context = cygrpc.build_census_context()
- 
+
     def _blocking(self, request_iterator, timeout, metadata, credentials,
                   wait_for_ready, compression):
         deadline = _deadline(timeout)
-        state = _RPCState(_STREAM_UNARY_INITIAL_DUE, None, None, None, None) 
+        state = _RPCState(_STREAM_UNARY_INITIAL_DUE, None, None, None, None)
         initial_metadata_flags = _InitialMetadataFlags().with_wait_for_ready(
             wait_for_ready)
         augmented_metadata = _compression.augment_metadata(
@@ -1087,46 +1087,46 @@ class _StreamUnaryMultiCallable(grpc.StreamUnaryMultiCallable):
                 augmented_metadata, initial_metadata_flags), self._context)
         _consume_request_iterator(request_iterator, state, call,
                                   self._request_serializer, None)
-        while True: 
+        while True:
             event = call.next_event()
-            with state.condition: 
-                _handle_event(event, state, self._response_deserializer) 
-                state.condition.notify_all() 
-                if not state.due: 
-                    break 
+            with state.condition:
+                _handle_event(event, state, self._response_deserializer)
+                state.condition.notify_all()
+                if not state.due:
+                    break
         return state, call
- 
-    def __call__(self, 
-                 request_iterator, 
-                 timeout=None, 
-                 metadata=None, 
+
+    def __call__(self,
+                 request_iterator,
+                 timeout=None,
+                 metadata=None,
                  credentials=None,
                  wait_for_ready=None,
                  compression=None):
         state, call, = self._blocking(request_iterator, timeout, metadata,
                                       credentials, wait_for_ready, compression)
         return _end_unary_response_blocking(state, call, False, None)
- 
-    def with_call(self, 
-                  request_iterator, 
-                  timeout=None, 
-                  metadata=None, 
+
+    def with_call(self,
+                  request_iterator,
+                  timeout=None,
+                  metadata=None,
                   credentials=None,
                   wait_for_ready=None,
                   compression=None):
         state, call, = self._blocking(request_iterator, timeout, metadata,
                                       credentials, wait_for_ready, compression)
         return _end_unary_response_blocking(state, call, True, None)
- 
-    def future(self, 
-               request_iterator, 
-               timeout=None, 
-               metadata=None, 
+
+    def future(self,
+               request_iterator,
+               timeout=None,
+               metadata=None,
                credentials=None,
                wait_for_ready=None,
                compression=None):
         deadline = _deadline(timeout)
-        state = _RPCState(_STREAM_UNARY_INITIAL_DUE, None, None, None, None) 
+        state = _RPCState(_STREAM_UNARY_INITIAL_DUE, None, None, None, None)
         event_handler = _event_handler(state, self._response_deserializer)
         initial_metadata_flags = _InitialMetadataFlags().with_wait_for_ready(
             wait_for_ready)
@@ -1143,29 +1143,29 @@ class _StreamUnaryMultiCallable(grpc.StreamUnaryMultiCallable):
                                   self._request_serializer, event_handler)
         return _MultiThreadedRendezvous(state, call,
                                         self._response_deserializer, deadline)
- 
- 
-class _StreamStreamMultiCallable(grpc.StreamStreamMultiCallable): 
- 
+
+
+class _StreamStreamMultiCallable(grpc.StreamStreamMultiCallable):
+
     # pylint: disable=too-many-arguments
-    def __init__(self, channel, managed_call, method, request_serializer, 
-                 response_deserializer): 
-        self._channel = channel 
-        self._managed_call = managed_call 
-        self._method = method 
-        self._request_serializer = request_serializer 
-        self._response_deserializer = response_deserializer 
+    def __init__(self, channel, managed_call, method, request_serializer,
+                 response_deserializer):
+        self._channel = channel
+        self._managed_call = managed_call
+        self._method = method
+        self._request_serializer = request_serializer
+        self._response_deserializer = response_deserializer
         self._context = cygrpc.build_census_context()
- 
-    def __call__(self, 
-                 request_iterator, 
-                 timeout=None, 
-                 metadata=None, 
+
+    def __call__(self,
+                 request_iterator,
+                 timeout=None,
+                 metadata=None,
                  credentials=None,
                  wait_for_ready=None,
                  compression=None):
         deadline = _deadline(timeout)
-        state = _RPCState(_STREAM_STREAM_INITIAL_DUE, None, None, None, None) 
+        state = _RPCState(_STREAM_STREAM_INITIAL_DUE, None, None, None, None)
         initial_metadata_flags = _InitialMetadataFlags().with_wait_for_ready(
             wait_for_ready)
         augmented_metadata = _compression.augment_metadata(
@@ -1188,8 +1188,8 @@ class _StreamStreamMultiCallable(grpc.StreamStreamMultiCallable):
                                   self._request_serializer, event_handler)
         return _MultiThreadedRendezvous(state, call,
                                         self._response_deserializer, deadline)
- 
- 
+
+
 class _InitialMetadataFlags(int):
     """Stores immutable initial metadata flags"""
 
@@ -1208,17 +1208,17 @@ class _InitialMetadataFlags(int):
         return self
 
 
-class _ChannelCallState(object): 
- 
-    def __init__(self, channel): 
-        self.lock = threading.Lock() 
-        self.channel = channel 
+class _ChannelCallState(object):
+
+    def __init__(self, channel):
+        self.lock = threading.Lock()
+        self.channel = channel
         self.managed_calls = 0
         self.threading = False
- 
+
     def reset_postfork_child(self):
         self.managed_calls = 0
- 
+
     def __del__(self):
         try:
             self.channel.close(cygrpc.StatusCode.cancelled,
@@ -1227,33 +1227,33 @@ class _ChannelCallState(object):
             pass
 
 
-def _run_channel_spin_thread(state): 
- 
-    def channel_spin(): 
-        while True: 
+def _run_channel_spin_thread(state):
+
+    def channel_spin():
+        while True:
             cygrpc.block_if_fork_in_progress(state)
             event = state.channel.next_call_event()
             if event.completion_type == cygrpc.CompletionType.queue_timeout:
                 continue
             call_completed = event.tag(event)
             if call_completed:
-                with state.lock: 
+                with state.lock:
                     state.managed_calls -= 1
                     if state.managed_calls == 0:
-                        return 
- 
+                        return
+
     channel_spin_thread = cygrpc.ForkManagedThread(target=channel_spin)
     channel_spin_thread.setDaemon(True)
-    channel_spin_thread.start() 
- 
- 
-def _channel_managed_call_management(state): 
- 
+    channel_spin_thread.start()
+
+
+def _channel_managed_call_management(state):
+
     # pylint: disable=too-many-arguments
     def create(flags, method, host, deadline, metadata, credentials,
                operationses, event_handler, context):
         """Creates a cygrpc.IntegratedCall.
- 
+
         Args:
           flags: An integer bitfield of call flags.
           method: The RPC method.
@@ -1284,60 +1284,60 @@ def _channel_managed_call_management(state):
             else:
                 state.managed_calls += 1
             return call
- 
-    return create 
- 
- 
-class _ChannelConnectivityState(object): 
- 
-    def __init__(self, channel): 
+
+    return create
+
+
+class _ChannelConnectivityState(object):
+
+    def __init__(self, channel):
         self.lock = threading.RLock()
-        self.channel = channel 
-        self.polling = False 
-        self.connectivity = None 
-        self.try_to_connect = False 
-        self.callbacks_and_connectivities = [] 
-        self.delivering = False 
- 
+        self.channel = channel
+        self.polling = False
+        self.connectivity = None
+        self.try_to_connect = False
+        self.callbacks_and_connectivities = []
+        self.delivering = False
+
     def reset_postfork_child(self):
         self.polling = False
         self.connectivity = None
         self.try_to_connect = False
         self.callbacks_and_connectivities = []
         self.delivering = False
- 
 
-def _deliveries(state): 
-    callbacks_needing_update = [] 
-    for callback_and_connectivity in state.callbacks_and_connectivities: 
-        callback, callback_connectivity, = callback_and_connectivity 
-        if callback_connectivity is not state.connectivity: 
-            callbacks_needing_update.append(callback) 
-            callback_and_connectivity[1] = state.connectivity 
-    return callbacks_needing_update 
- 
- 
-def _deliver(state, initial_connectivity, initial_callbacks): 
-    connectivity = initial_connectivity 
-    callbacks = initial_callbacks 
-    while True: 
-        for callback in callbacks: 
+
+def _deliveries(state):
+    callbacks_needing_update = []
+    for callback_and_connectivity in state.callbacks_and_connectivities:
+        callback, callback_connectivity, = callback_and_connectivity
+        if callback_connectivity is not state.connectivity:
+            callbacks_needing_update.append(callback)
+            callback_and_connectivity[1] = state.connectivity
+    return callbacks_needing_update
+
+
+def _deliver(state, initial_connectivity, initial_callbacks):
+    connectivity = initial_connectivity
+    callbacks = initial_callbacks
+    while True:
+        for callback in callbacks:
             cygrpc.block_if_fork_in_progress(state)
             try:
                 callback(connectivity)
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception(
                     _CHANNEL_SUBSCRIPTION_CALLBACK_ERROR_LOG_MESSAGE)
-        with state.lock: 
-            callbacks = _deliveries(state) 
-            if callbacks: 
-                connectivity = state.connectivity 
-            else: 
-                state.delivering = False 
-                return 
- 
- 
-def _spawn_delivery(state, callbacks): 
+        with state.lock:
+            callbacks = _deliveries(state)
+            if callbacks:
+                connectivity = state.connectivity
+            else:
+                state.delivering = False
+                return
+
+
+def _spawn_delivery(state, callbacks):
     delivering_thread = cygrpc.ForkManagedThread(target=_deliver,
                                                  args=(
                                                      state,
@@ -1345,85 +1345,85 @@ def _spawn_delivery(state, callbacks):
                                                      callbacks,
                                                  ))
     delivering_thread.setDaemon(True)
-    delivering_thread.start() 
-    state.delivering = True 
- 
- 
-# NOTE(https://github.com/grpc/grpc/issues/3064): We'd rather not poll. 
-def _poll_connectivity(state, channel, initial_try_to_connect): 
-    try_to_connect = initial_try_to_connect 
-    connectivity = channel.check_connectivity_state(try_to_connect) 
-    with state.lock: 
-        state.connectivity = ( 
+    delivering_thread.start()
+    state.delivering = True
+
+
+# NOTE(https://github.com/grpc/grpc/issues/3064): We'd rather not poll.
+def _poll_connectivity(state, channel, initial_try_to_connect):
+    try_to_connect = initial_try_to_connect
+    connectivity = channel.check_connectivity_state(try_to_connect)
+    with state.lock:
+        state.connectivity = (
             _common.
             CYGRPC_CONNECTIVITY_STATE_TO_CHANNEL_CONNECTIVITY[connectivity])
         callbacks = tuple(
             callback for callback, unused_but_known_to_be_none_connectivity in
             state.callbacks_and_connectivities)
-        for callback_and_connectivity in state.callbacks_and_connectivities: 
-            callback_and_connectivity[1] = state.connectivity 
-        if callbacks: 
-            _spawn_delivery(state, callbacks) 
-    while True: 
+        for callback_and_connectivity in state.callbacks_and_connectivities:
+            callback_and_connectivity[1] = state.connectivity
+        if callbacks:
+            _spawn_delivery(state, callbacks)
+    while True:
         event = channel.watch_connectivity_state(connectivity,
                                                  time.time() + 0.2)
         cygrpc.block_if_fork_in_progress(state)
-        with state.lock: 
-            if not state.callbacks_and_connectivities and not state.try_to_connect: 
-                state.polling = False 
-                state.connectivity = None 
-                break 
-            try_to_connect = state.try_to_connect 
-            state.try_to_connect = False 
-        if event.success or try_to_connect: 
-            connectivity = channel.check_connectivity_state(try_to_connect) 
-            with state.lock: 
-                state.connectivity = ( 
-                    _common.CYGRPC_CONNECTIVITY_STATE_TO_CHANNEL_CONNECTIVITY[ 
-                        connectivity]) 
-                if not state.delivering: 
+        with state.lock:
+            if not state.callbacks_and_connectivities and not state.try_to_connect:
+                state.polling = False
+                state.connectivity = None
+                break
+            try_to_connect = state.try_to_connect
+            state.try_to_connect = False
+        if event.success or try_to_connect:
+            connectivity = channel.check_connectivity_state(try_to_connect)
+            with state.lock:
+                state.connectivity = (
+                    _common.CYGRPC_CONNECTIVITY_STATE_TO_CHANNEL_CONNECTIVITY[
+                        connectivity])
+                if not state.delivering:
                     callbacks = _deliveries(state)
-                    if callbacks: 
-                        _spawn_delivery(state, callbacks) 
- 
- 
-def _subscribe(state, callback, try_to_connect): 
-    with state.lock: 
-        if not state.callbacks_and_connectivities and not state.polling: 
+                    if callbacks:
+                        _spawn_delivery(state, callbacks)
+
+
+def _subscribe(state, callback, try_to_connect):
+    with state.lock:
+        if not state.callbacks_and_connectivities and not state.polling:
             polling_thread = cygrpc.ForkManagedThread(
-                target=_poll_connectivity, 
-                args=(state, state.channel, bool(try_to_connect))) 
+                target=_poll_connectivity,
+                args=(state, state.channel, bool(try_to_connect)))
             polling_thread.setDaemon(True)
-            polling_thread.start() 
-            state.polling = True 
-            state.callbacks_and_connectivities.append([callback, None]) 
-        elif not state.delivering and state.connectivity is not None: 
-            _spawn_delivery(state, (callback,)) 
-            state.try_to_connect |= bool(try_to_connect) 
-            state.callbacks_and_connectivities.append( 
-                [callback, state.connectivity]) 
-        else: 
-            state.try_to_connect |= bool(try_to_connect) 
-            state.callbacks_and_connectivities.append([callback, None]) 
- 
- 
-def _unsubscribe(state, callback): 
-    with state.lock: 
+            polling_thread.start()
+            state.polling = True
+            state.callbacks_and_connectivities.append([callback, None])
+        elif not state.delivering and state.connectivity is not None:
+            _spawn_delivery(state, (callback,))
+            state.try_to_connect |= bool(try_to_connect)
+            state.callbacks_and_connectivities.append(
+                [callback, state.connectivity])
+        else:
+            state.try_to_connect |= bool(try_to_connect)
+            state.callbacks_and_connectivities.append([callback, None])
+
+
+def _unsubscribe(state, callback):
+    with state.lock:
         for index, (subscribed_callback, unused_connectivity) in enumerate(
                 state.callbacks_and_connectivities):
-            if callback == subscribed_callback: 
-                state.callbacks_and_connectivities.pop(index) 
-                break 
- 
- 
+            if callback == subscribed_callback:
+                state.callbacks_and_connectivities.pop(index)
+                break
+
+
 def _augment_options(base_options, compression):
     compression_option = _compression.create_channel_option(compression)
     return tuple(base_options) + compression_option + ((
         cygrpc.ChannelArgKey.primary_user_agent_string,
         _USER_AGENT,
     ),)
- 
- 
+
+
 def _separate_channel_options(options):
     """Separates core channel options from Python channel options."""
     core_options = []
@@ -1436,12 +1436,12 @@ def _separate_channel_options(options):
     return python_options, core_options
 
 
-class Channel(grpc.Channel): 
-    """A cygrpc.Channel-backed implementation of grpc.Channel.""" 
- 
+class Channel(grpc.Channel):
+    """A cygrpc.Channel-backed implementation of grpc.Channel."""
+
     def __init__(self, target, options, credentials, compression):
-        """Constructor. 
- 
+        """Constructor.
+
         Args:
           target: The target to which to connect.
           options: Configuration options for the channel.
@@ -1452,37 +1452,37 @@ class Channel(grpc.Channel):
         python_options, core_options = _separate_channel_options(options)
         self._single_threaded_unary_stream = _DEFAULT_SINGLE_THREADED_UNARY_STREAM
         self._process_python_options(python_options)
-        self._channel = cygrpc.Channel( 
+        self._channel = cygrpc.Channel(
             _common.encode(target), _augment_options(core_options, compression),
             credentials)
-        self._call_state = _ChannelCallState(self._channel) 
-        self._connectivity_state = _ChannelConnectivityState(self._channel) 
+        self._call_state = _ChannelCallState(self._channel)
+        self._connectivity_state = _ChannelConnectivityState(self._channel)
         cygrpc.fork_register_channel(self)
- 
+
     def _process_python_options(self, python_options):
         """Sets channel attributes according to python-only channel options."""
         for pair in python_options:
             if pair[0] == grpc.experimental.ChannelOptions.SingleThreadedUnaryStream:
                 self._single_threaded_unary_stream = True
 
-    def subscribe(self, callback, try_to_connect=None): 
-        _subscribe(self._connectivity_state, callback, try_to_connect) 
- 
-    def unsubscribe(self, callback): 
-        _unsubscribe(self._connectivity_state, callback) 
- 
-    def unary_unary(self, 
-                    method, 
-                    request_serializer=None, 
-                    response_deserializer=None): 
-        return _UnaryUnaryMultiCallable( 
+    def subscribe(self, callback, try_to_connect=None):
+        _subscribe(self._connectivity_state, callback, try_to_connect)
+
+    def unsubscribe(self, callback):
+        _unsubscribe(self._connectivity_state, callback)
+
+    def unary_unary(self,
+                    method,
+                    request_serializer=None,
+                    response_deserializer=None):
+        return _UnaryUnaryMultiCallable(
             self._channel, _channel_managed_call_management(self._call_state),
-            _common.encode(method), request_serializer, response_deserializer) 
- 
-    def unary_stream(self, 
-                     method, 
-                     request_serializer=None, 
-                     response_deserializer=None): 
+            _common.encode(method), request_serializer, response_deserializer)
+
+    def unary_stream(self,
+                     method,
+                     request_serializer=None,
+                     response_deserializer=None):
         # NOTE(rbellevi): Benchmarks have shown that running a unary-stream RPC
         # on a single Python thread results in an appreciable speed-up. However,
         # due to slight differences in capability, the multi-threaded variant
@@ -1497,23 +1497,23 @@ class Channel(grpc.Channel):
                 _channel_managed_call_management(self._call_state),
                 _common.encode(method), request_serializer,
                 response_deserializer)
- 
-    def stream_unary(self, 
-                     method, 
-                     request_serializer=None, 
-                     response_deserializer=None): 
-        return _StreamUnaryMultiCallable( 
+
+    def stream_unary(self,
+                     method,
+                     request_serializer=None,
+                     response_deserializer=None):
+        return _StreamUnaryMultiCallable(
             self._channel, _channel_managed_call_management(self._call_state),
-            _common.encode(method), request_serializer, response_deserializer) 
- 
-    def stream_stream(self, 
-                      method, 
-                      request_serializer=None, 
-                      response_deserializer=None): 
-        return _StreamStreamMultiCallable( 
+            _common.encode(method), request_serializer, response_deserializer)
+
+    def stream_stream(self,
+                      method,
+                      request_serializer=None,
+                      response_deserializer=None):
+        return _StreamStreamMultiCallable(
             self._channel, _channel_managed_call_management(self._call_state),
-            _common.encode(method), request_serializer, response_deserializer) 
- 
+            _common.encode(method), request_serializer, response_deserializer)
+
     def _unsubscribe_all(self):
         state = self._connectivity_state
         if state:
@@ -1540,7 +1540,7 @@ class Channel(grpc.Channel):
     def close(self):
         self._close()
 
-    def __del__(self): 
+    def __del__(self):
         # TODO(https://github.com/grpc/grpc/issues/12531): Several releases
         # after 1.12 (1.16 or thereabouts?) add a "self._channel.close" call
         # here (or more likely, call self._close() here). We don't do this today

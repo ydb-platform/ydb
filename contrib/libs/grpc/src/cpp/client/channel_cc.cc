@@ -1,30 +1,30 @@
-/* 
- * 
+/*
+ *
  * Copyright 2015 gRPC authors.
- * 
+ *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *     http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- * 
- */ 
- 
+ *
+ */
+
 #include <grpcpp/channel.h>
- 
+
 #include <cstring>
-#include <memory> 
- 
-#include <grpc/grpc.h> 
-#include <grpc/slice.h> 
-#include <grpc/support/alloc.h> 
-#include <grpc/support/log.h> 
+#include <memory>
+
+#include <grpc/grpc.h>
+#include <grpc/slice.h>
+#include <grpc/support/alloc.h>
+#include <grpc/support/log.h>
 #include <grpc/support/sync.h>
 #include <grpc/support/time.h>
 #include <grpcpp/client_context.h>
@@ -40,28 +40,28 @@
 #include <grpcpp/support/status.h>
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/surface/completion_queue.h"
- 
+
 namespace grpc {
- 
+
 static ::grpc::internal::GrpcLibraryInitializer g_gli_initializer;
 Channel::Channel(const TString& host, grpc_channel* channel,
                  std::vector<std::unique_ptr<
                      ::grpc::experimental::ClientInterceptorFactoryInterface>>
                      interceptor_creators)
-    : host_(host), c_channel_(channel) { 
+    : host_(host), c_channel_(channel) {
   interceptor_creators_ = std::move(interceptor_creators);
-  g_gli_initializer.summon(); 
-} 
- 
+  g_gli_initializer.summon();
+}
+
 Channel::~Channel() {
   grpc_channel_destroy(c_channel_);
   if (callback_cq_ != nullptr) {
     callback_cq_->Shutdown();
   }
 }
- 
-namespace { 
- 
+
+namespace {
+
 inline grpc_slice SliceFromArray(const char* arr, size_t len) {
   return g_core_codegen_interface->grpc_slice_from_copied_buffer(arr, len);
 }
@@ -70,29 +70,29 @@ TString GetChannelInfoField(grpc_channel* channel,
                                 grpc_channel_info* channel_info,
                                 char*** channel_info_field) {
   char* value = nullptr;
-  memset(channel_info, 0, sizeof(*channel_info)); 
-  *channel_info_field = &value; 
-  grpc_channel_get_info(channel, channel_info); 
+  memset(channel_info, 0, sizeof(*channel_info));
+  *channel_info_field = &value;
+  grpc_channel_get_info(channel, channel_info);
   if (value == nullptr) return "";
   TString result = value;
-  gpr_free(value); 
-  return result; 
-} 
- 
-}  // namespace 
- 
+  gpr_free(value);
+  return result;
+}
+
+}  // namespace
+
 TString Channel::GetLoadBalancingPolicyName() const {
-  grpc_channel_info channel_info; 
-  return GetChannelInfoField(c_channel_, &channel_info, 
-                             &channel_info.lb_policy_name); 
-} 
- 
+  grpc_channel_info channel_info;
+  return GetChannelInfoField(c_channel_, &channel_info,
+                             &channel_info.lb_policy_name);
+}
+
 TString Channel::GetServiceConfigJSON() const {
-  grpc_channel_info channel_info; 
-  return GetChannelInfoField(c_channel_, &channel_info, 
-                             &channel_info.service_config_json); 
-} 
- 
+  grpc_channel_info channel_info;
+  return GetChannelInfoField(c_channel_, &channel_info,
+                             &channel_info.service_config_json);
+}
+
 namespace experimental {
 
 void ChannelResetConnectionBackoff(Channel* channel) {
@@ -104,20 +104,20 @@ void ChannelResetConnectionBackoff(Channel* channel) {
 ::grpc::internal::Call Channel::CreateCallInternal(
     const ::grpc::internal::RpcMethod& method, ::grpc::ClientContext* context,
     ::grpc::CompletionQueue* cq, size_t interceptor_pos) {
-  const bool kRegistered = method.channel_tag() && context->authority().empty(); 
+  const bool kRegistered = method.channel_tag() && context->authority().empty();
   grpc_call* c_call = nullptr;
-  if (kRegistered) { 
-    c_call = grpc_channel_create_registered_call( 
-        c_channel_, context->propagate_from_call_, 
-        context->propagation_options_.c_bitmask(), cq->cq(), 
-        method.channel_tag(), context->raw_deadline(), nullptr); 
-  } else { 
+  if (kRegistered) {
+    c_call = grpc_channel_create_registered_call(
+        c_channel_, context->propagate_from_call_,
+        context->propagation_options_.c_bitmask(), cq->cq(),
+        method.channel_tag(), context->raw_deadline(), nullptr);
+  } else {
     const ::TString* host_str = nullptr;
     if (!context->authority_.empty()) {
       host_str = &context->authority_;
-    } else if (!host_.empty()) { 
+    } else if (!host_.empty()) {
       host_str = &host_;
-    } 
+    }
     grpc_slice method_slice =
         SliceFromArray(method.name(), strlen(method.name()));
     grpc_slice host_slice;
@@ -133,8 +133,8 @@ void ChannelResetConnectionBackoff(Channel* channel) {
     if (host_str != nullptr) {
       grpc_slice_unref(host_slice);
     }
-  } 
-  grpc_census_call_set_context(c_call, context->census_context()); 
+  }
+  grpc_census_call_set_context(c_call, context->census_context());
 
   // ClientRpcInfo should be set before call because set_call also checks
   // whether the call has been cancelled, and if the call was cancelled, we
@@ -142,11 +142,11 @@ void ChannelResetConnectionBackoff(Channel* channel) {
   auto* info =
       context->set_client_rpc_info(method.name(), method.method_type(), this,
                                    interceptor_creators_, interceptor_pos);
-  context->set_call(c_call, shared_from_this()); 
+  context->set_call(c_call, shared_from_this());
 
   return ::grpc::internal::Call(c_call, this, cq, info);
-} 
- 
+}
+
 ::grpc::internal::Call Channel::CreateCall(
     const ::grpc::internal::RpcMethod& method, ::grpc::ClientContext* context,
     CompletionQueue* cq) {
@@ -157,54 +157,54 @@ void Channel::PerformOpsOnCall(::grpc::internal::CallOpSetInterface* ops,
                                ::grpc::internal::Call* call) {
   ops->FillOps(
       call);  // Make a copy of call. It's fine since Call just has pointers
-} 
- 
-void* Channel::RegisterMethod(const char* method) { 
-  return grpc_channel_register_call( 
+}
+
+void* Channel::RegisterMethod(const char* method) {
+  return grpc_channel_register_call(
       c_channel_, method, host_.empty() ? nullptr : host_.c_str(), nullptr);
-} 
- 
-grpc_connectivity_state Channel::GetState(bool try_to_connect) { 
-  return grpc_channel_check_connectivity_state(c_channel_, try_to_connect); 
-} 
- 
-namespace { 
+}
+
+grpc_connectivity_state Channel::GetState(bool try_to_connect) {
+  return grpc_channel_check_connectivity_state(c_channel_, try_to_connect);
+}
+
+namespace {
 
 class TagSaver final : public ::grpc::internal::CompletionQueueTag {
- public: 
-  explicit TagSaver(void* tag) : tag_(tag) {} 
-  ~TagSaver() override {} 
+ public:
+  explicit TagSaver(void* tag) : tag_(tag) {}
+  ~TagSaver() override {}
   bool FinalizeResult(void** tag, bool* /*status*/) override {
-    *tag = tag_; 
-    delete this; 
-    return true; 
-  } 
- 
- private: 
-  void* tag_; 
-}; 
- 
-}  // namespace 
- 
-void Channel::NotifyOnStateChangeImpl(grpc_connectivity_state last_observed, 
-                                      gpr_timespec deadline, 
+    *tag = tag_;
+    delete this;
+    return true;
+  }
+
+ private:
+  void* tag_;
+};
+
+}  // namespace
+
+void Channel::NotifyOnStateChangeImpl(grpc_connectivity_state last_observed,
+                                      gpr_timespec deadline,
                                       ::grpc::CompletionQueue* cq, void* tag) {
-  TagSaver* tag_saver = new TagSaver(tag); 
-  grpc_channel_watch_connectivity_state(c_channel_, last_observed, deadline, 
-                                        cq->cq(), tag_saver); 
-} 
- 
-bool Channel::WaitForStateChangeImpl(grpc_connectivity_state last_observed, 
-                                     gpr_timespec deadline) { 
+  TagSaver* tag_saver = new TagSaver(tag);
+  grpc_channel_watch_connectivity_state(c_channel_, last_observed, deadline,
+                                        cq->cq(), tag_saver);
+}
+
+bool Channel::WaitForStateChangeImpl(grpc_connectivity_state last_observed,
+                                     gpr_timespec deadline) {
   ::grpc::CompletionQueue cq;
-  bool ok = false; 
+  bool ok = false;
   void* tag = nullptr;
   NotifyOnStateChangeImpl(last_observed, deadline, &cq, nullptr);
-  cq.Next(&tag, &ok); 
+  cq.Next(&tag, &ok);
   GPR_ASSERT(tag == nullptr);
-  return ok; 
-} 
- 
+  return ok;
+}
+
 namespace {
 class ShutdownCallback : public grpc_experimental_completion_queue_functor {
  public:

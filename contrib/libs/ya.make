@@ -42,7 +42,7 @@ RECURSE(
     courgette_bsdiff
     cppkafka
     crcutil
-    crfsuite 
+    crfsuite
     croaring
     ctemplate
     curl
@@ -93,8 +93,8 @@ RECURSE(
     googleapis-common-protos
     gost-engine
     gpsd
-    grpc 
-    grpc/python 
+    grpc
+    grpc/python
     grpc/src/proto
     gtfs_realtime
     h3
@@ -116,7 +116,7 @@ RECURSE(
     isa-l
     isa-l/ut
     jansson
-    jdk 
+    jdk
     jemalloc
     jemalloc/dynamic
     jerasure
@@ -129,7 +129,7 @@ RECURSE(
     kissfft
     kyotocabinet
     lang_detect
-    lbfgs 
+    lbfgs
     lcms2
     lepton
     leveldb
@@ -182,7 +182,7 @@ RECURSE(
     libsavi
     libsodium
     libspf2
-    libsrtp 
+    libsrtp
     libssh2
     libtapi
     libtess2
@@ -201,7 +201,7 @@ RECURSE(
     libxml/dynamic
     libxslt
     libyang
-    libyuv 
+    libyuv
     linenoise
     linux-headers
     linuxvdso
@@ -266,7 +266,7 @@ RECURSE(
     pcre
     pcre2
     pdqsort
-    pffft 
+    pffft
     pfr
     picohttpparser
     #pire/ut
@@ -305,7 +305,7 @@ RECURSE(
     sparrowhawk
     sparsehash
     spdk
-    speex 
+    speex
     spirv_cross
     spirv_headers
     spirv_tools
@@ -343,14 +343,14 @@ RECURSE(
     tralics
     tree_sitter
     uatraits
-    usrsctp 
+    usrsctp
     utf8proc
     util-linux
     valgrind
     vlfeat
     vmaf
     wapiti
-    webrtc 
+    webrtc
     websocketpp
     woff2
     xdelta3

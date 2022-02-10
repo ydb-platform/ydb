@@ -247,7 +247,7 @@ def build_pom_and_export_to_maven(**kwargs):
 
     _indent(project)
 
-    et.ElementTree(project).write(pom_path) 
+    et.ElementTree(project).write(pom_path)
     sys.stderr.write("[MAVEN EXPORT] Generated {} file for target {}\n".format(os.path.basename(pom_path), target_path))
 
 

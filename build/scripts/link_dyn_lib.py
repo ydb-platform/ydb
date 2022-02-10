@@ -3,7 +3,7 @@ import os
 import subprocess
 import tempfile
 import collections
-import optparse 
+import optparse
 import pipes
 
 from process_whole_archive_option import ProcessWholeArchiveOption
@@ -158,26 +158,26 @@ def fix_cmd(arch, musl, c):
     return sum((do_fix(x) for x in c), [])
 
 
-def parse_args(): 
-    parser = optparse.OptionParser() 
-    parser.disable_interspersed_args() 
-    parser.add_option('--arch') 
-    parser.add_option('--target') 
-    parser.add_option('--soname') 
-    parser.add_option('--fix-elf') 
+def parse_args():
+    parser = optparse.OptionParser()
+    parser.disable_interspersed_args()
+    parser.add_option('--arch')
+    parser.add_option('--target')
+    parser.add_option('--soname')
+    parser.add_option('--fix-elf')
     parser.add_option('--linker-output')
     parser.add_option('--musl', action='store_true')
     parser.add_option('--whole-archive-peers', action='append')
     parser.add_option('--whole-archive-libs', action='append')
-    return parser.parse_args() 
+    return parser.parse_args()
 
 
-if __name__ == '__main__': 
-    opts, args = parse_args() 
- 
-    assert opts.arch 
-    assert opts.target 
- 
+if __name__ == '__main__':
+    opts, args = parse_args()
+
+    assert opts.arch
+    assert opts.target
+
     cmd = fix_cmd(opts.arch, opts.musl, args)
     cmd = ProcessWholeArchiveOption(opts.arch, opts.whole_archive_peers, opts.whole_archive_libs).construct_cmd(cmd)
 
@@ -187,27 +187,27 @@ if __name__ == '__main__':
         stdout = sys.stdout
 
     proc = subprocess.Popen(cmd, shell=False, stderr=sys.stderr, stdout=stdout)
-    proc.communicate() 
- 
-    if proc.returncode: 
+    proc.communicate()
+
+    if proc.returncode:
         print >>sys.stderr, 'linker has failed with retcode:', proc.returncode
         print >>sys.stderr, 'linker command:', shlex_join(cmd)
-        sys.exit(proc.returncode) 
- 
-    if opts.fix_elf: 
-        cmd = [opts.fix_elf, opts.target] 
-        proc = subprocess.Popen(cmd, shell=False, stderr=sys.stderr, stdout=sys.stdout) 
-        proc.communicate() 
- 
-        if proc.returncode: 
+        sys.exit(proc.returncode)
+
+    if opts.fix_elf:
+        cmd = [opts.fix_elf, opts.target]
+        proc = subprocess.Popen(cmd, shell=False, stderr=sys.stderr, stdout=sys.stdout)
+        proc.communicate()
+
+        if proc.returncode:
             print >>sys.stderr, 'fix_elf has failed with retcode:', proc.returncode
             print >>sys.stderr, 'fix_elf command:', shlex_join(cmd)
-            sys.exit(proc.returncode) 
- 
-    if opts.soname and opts.soname != opts.target: 
+            sys.exit(proc.returncode)
+
+    if opts.soname and opts.soname != opts.target:
         if os.path.exists(opts.soname):
             os.unlink(opts.soname)
-        os.link(opts.target, opts.soname) 
+        os.link(opts.target, opts.soname)
 
 
 # -----------------Test---------------- #

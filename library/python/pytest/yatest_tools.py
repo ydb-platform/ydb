@@ -51,34 +51,34 @@ class Subtest(object):
 
 class SubtestInfo(object):
 
-    skipped_prefix = '[SKIPPED] ' 
- 
+    skipped_prefix = '[SKIPPED] '
+
     @classmethod
     def from_str(cls, s):
-        if s.startswith(SubtestInfo.skipped_prefix): 
-            s = s[len(SubtestInfo.skipped_prefix):] 
-            skipped = True 
+        if s.startswith(SubtestInfo.skipped_prefix):
+            s = s[len(SubtestInfo.skipped_prefix):]
+            skipped = True
 
-        else: 
-            skipped = False 
- 
-        return SubtestInfo(*s.rsplit(TEST_SUBTEST_SEPARATOR, 1), skipped=skipped) 
- 
-    def __init__(self, test, subtest="", skipped=False, **kwargs): 
+        else:
+            skipped = False
+
+        return SubtestInfo(*s.rsplit(TEST_SUBTEST_SEPARATOR, 1), skipped=skipped)
+
+    def __init__(self, test, subtest="", skipped=False, **kwargs):
         self.test = test
         self.subtest = subtest
-        self.skipped = skipped 
+        self.skipped = skipped
         for key, value in kwargs.iteritems():
             setattr(self, key, value)
 
     def __str__(self):
-        s = '' 
+        s = ''
 
-        if self.skipped: 
-            s += SubtestInfo.skipped_prefix 
- 
-        return s + TEST_SUBTEST_SEPARATOR.join([self.test, self.subtest]) 
- 
+        if self.skipped:
+            s += SubtestInfo.skipped_prefix
+
+        return s + TEST_SUBTEST_SEPARATOR.join([self.test, self.subtest])
+
     def __repr__(self):
         return str(self)
 
@@ -229,7 +229,7 @@ def escape_for_fnmatch(s):
 
 
 def get_python_cmd(opts=None, use_huge=True, suite=None):
-    if opts and getattr(opts, 'flags', {}).get("USE_ARCADIA_PYTHON") == "no": 
+    if opts and getattr(opts, 'flags', {}).get("USE_ARCADIA_PYTHON") == "no":
         return ["python"]
     if suite and not suite._use_arcadia_python:
         return ["python"]

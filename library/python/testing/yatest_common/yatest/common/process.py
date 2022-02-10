@@ -29,8 +29,8 @@ MAX_MESSAGE_LEN = 1500
 SANITIZER_ERROR_PATTERN = br": ([A-Z][\w]+Sanitizer)"
 GLIBC_PATTERN = re.compile(r"\S+@GLIBC_([0-9.]+)")
 yatest_logger = logging.getLogger("ya.test")
- 
- 
+
+
 def truncate(s, size):
     if s is None:
         return None
@@ -625,7 +625,7 @@ def wait_for(check_function, timeout, fail_message="", sleep_time=1.0, on_check_
         message += ": {}".format(fail_message)
     raise TimeoutError(truncate(message, MAX_MESSAGE_LEN))
 
- 
+
 def _kill_process_tree(process_pid, target_pid_signal=None):
     """
     Kills child processes, req. Note that psutil should be installed

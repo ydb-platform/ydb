@@ -164,8 +164,8 @@
   - oleacc.h
   - oleauto.h
   - olectl.h
-  - packon.h 
-  - packoff.h 
+  - packon.h
+  - packoff.h
   - pathcch.h
   - p2p.h
   - pdh.h
@@ -305,7 +305,7 @@
   - ws2bth.h
   - ws2def.h
   - ws2ipdef.h
-  - ws2spi.h 
+  - ws2spi.h
   - ws2tcpip.h
   - wscapi.h
   - wspiapi.h

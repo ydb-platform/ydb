@@ -70,11 +70,11 @@ namespace python {
 namespace {
 
 TProtoStringType FixEv(const TProtoStringType& filename) {
-  if (HasSuffixString(filename, ".ev")) { 
-    return StripSuffixString(filename, ".ev") + "_ev.proto"; 
-  } 
-  return filename; 
-} 
+  if (HasSuffixString(filename, ".ev")) {
+    return StripSuffixString(filename, ".ev") + "_ev.proto";
+  }
+  return filename;
+}
 
 // Returns the Python module name expected for a given .proto filename.
 TProtoStringType ModuleName(const TProtoStringType& filename) {

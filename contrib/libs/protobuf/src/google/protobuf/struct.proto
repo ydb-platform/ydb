@@ -50,7 +50,7 @@ option objc_class_prefix = "GPB";
 // The JSON representation for `Struct` is JSON object.
 message Struct {
   // Unordered map of dynamically typed values.
-  map<string, Value> fields = 1; 
+  map<string, Value> fields = 1;
 }
 
 // `Value` represents a dynamically typed value which can be either

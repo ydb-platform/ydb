@@ -1,14 +1,14 @@
 # gRPC C++
- 
+
 This directory contains the C++ implementation of gRPC.
- 
+
 # To start using gRPC C++
- 
+
 This section describes how to add gRPC as a dependency to your C++ project.
 
 In the C++ world, there's no universally accepted standard for managing project dependencies.
 Therefore, gRPC supports several major build systems, which should satisfy most users.
- 
+
 ## Bazel
 
 Bazel is the primary build system used by the core gRPC development team. Bazel
@@ -159,22 +159,22 @@ The gRPC port in vcpkg is kept up to date by Microsoft team members and communit
 
 ## Examples & Additional Documentation
 
-You can find out how to build and run our simplest gRPC C++ example in our 
-[C++ quick start](../../examples/cpp). 
- 
-For more detailed documentation on using gRPC in C++ , see our main 
+You can find out how to build and run our simplest gRPC C++ example in our
+[C++ quick start](../../examples/cpp).
+
+For more detailed documentation on using gRPC in C++ , see our main
 documentation site at [grpc.io](https://grpc.io), specifically:
- 
+
 * [Overview](https://grpc.io/docs): An introduction to gRPC with a simple
-  Hello World example in all our supported languages, including C++. 
+  Hello World example in all our supported languages, including C++.
 * [gRPC Basics - C++](https://grpc.io/docs/languages/cpp/basics):
-  A tutorial that steps you through creating a simple gRPC C++ example 
-  application. 
+  A tutorial that steps you through creating a simple gRPC C++ example
+  application.
 * [Asynchronous Basics - C++](https://grpc.io/docs/languages/cpp/async):
-  A tutorial that shows you how to use gRPC C++'s asynchronous/non-blocking 
-  APIs. 
- 
- 
+  A tutorial that shows you how to use gRPC C++'s asynchronous/non-blocking
+  APIs.
+
+
 # To start developing gRPC C++
- 
+
 For instructions on how to build gRPC C++ from source, follow the [Building gRPC C++](../../BUILDING.md) instructions.

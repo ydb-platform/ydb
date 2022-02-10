@@ -1,26 +1,26 @@
 # Copyright 2015 gRPC authors.
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Reference implementation for health checking in gRPC Python.""" 
- 
+"""Reference implementation for health checking in gRPC Python."""
+
 import collections
-import threading 
+import threading
 import sys
-import grpc 
- 
+import grpc
+
 from grpc_health.v1 import health_pb2 as _health_pb2
 from grpc_health.v1 import health_pb2_grpc as _health_pb2_grpc
- 
+
 if sys.version_info[0] >= 3 and sys.version_info[1] >= 6:
     # Exposes AsyncHealthServicer as public API.
     from . import _async as aio  # pylint: disable=unused-import
@@ -29,7 +29,7 @@ if sys.version_info[0] >= 3 and sys.version_info[1] >= 6:
 SERVICE_NAME = _health_pb2.DESCRIPTOR.services_by_name['Health'].full_name
 # The entry of overall health for the entire server.
 OVERALL_HEALTH = ''
- 
+
 
 class _Watcher():
 
@@ -79,8 +79,8 @@ def _watcher_to_send_response_callback_adapter(watcher):
 
 
 class HealthServicer(_health_pb2_grpc.HealthServicer):
-    """Servicer handling RPCs for service statuses.""" 
- 
+    """Servicer handling RPCs for service statuses."""
+
     def __init__(self,
                  experimental_non_blocking=True,
                  experimental_thread_pool=None):
@@ -90,7 +90,7 @@ class HealthServicer(_health_pb2_grpc.HealthServicer):
         self.Watch.__func__.experimental_non_blocking = experimental_non_blocking
         self.Watch.__func__.experimental_thread_pool = experimental_thread_pool
         self._gracefully_shutting_down = False
- 
+
     def _on_close_callback(self, send_response_callback, service):
 
         def callback():
@@ -101,15 +101,15 @@ class HealthServicer(_health_pb2_grpc.HealthServicer):
 
         return callback
 
-    def Check(self, request, context): 
+    def Check(self, request, context):
         with self._lock:
-            status = self._server_status.get(request.service) 
-            if status is None: 
-                context.set_code(grpc.StatusCode.NOT_FOUND) 
+            status = self._server_status.get(request.service)
+            if status is None:
+                context.set_code(grpc.StatusCode.NOT_FOUND)
                 return _health_pb2.HealthCheckResponse()
-            else: 
+            else:
                 return _health_pb2.HealthCheckResponse(status=status)
- 
+
     # pylint: disable=arguments-differ
     def Watch(self, request, context, send_response_callback=None):
         blocking_watcher = None
@@ -134,9 +134,9 @@ class HealthServicer(_health_pb2_grpc.HealthServicer):
                 self._on_close_callback(send_response_callback, service))
         return blocking_watcher
 
-    def set(self, service, status): 
-        """Sets the status of a service. 
- 
+    def set(self, service, status):
+        """Sets the status of a service.
+
         Args:
           service: string, the name of the service.
           status: HealthCheckResponse.status enum value indicating the status of

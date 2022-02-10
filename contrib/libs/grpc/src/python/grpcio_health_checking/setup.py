@@ -1,31 +1,31 @@
 # Copyright 2015 gRPC authors.
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Setup module for the GRPC Python package's optional health checking.""" 
- 
-import os 
- 
-import setuptools 
- 
+"""Setup module for the GRPC Python package's optional health checking."""
+
+import os
+
+import setuptools
+
 _PACKAGE_PATH = os.path.realpath(os.path.dirname(__file__))
 _README_PATH = os.path.join(_PACKAGE_PATH, 'README.rst')
 
-# Ensure we're in the proper directory whether or not we're being used by pip. 
-os.chdir(os.path.dirname(os.path.abspath(__file__))) 
- 
+# Ensure we're in the proper directory whether or not we're being used by pip.
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
 # Break import-style to ensure we can actually find our local modules.
-import grpc_version 
- 
+import grpc_version
+
 
 class _NoOpCommand(setuptools.Command):
     """No-op command."""
@@ -58,15 +58,15 @@ CLASSIFIERS = [
     'License :: OSI Approved :: Apache Software License',
 ]
 
-PACKAGE_DIRECTORIES = { 
-    '': '.', 
-} 
- 
+PACKAGE_DIRECTORIES = {
+    '': '.',
+}
+
 INSTALL_REQUIRES = (
     'protobuf>=3.6.0',
     'grpcio>={version}'.format(version=grpc_version.VERSION),
 )
- 
+
 try:
     import health_commands as _health_commands
     # we are in the build environment, otherwise the above import fails
@@ -84,7 +84,7 @@ except ImportError:
         'preprocess': _NoOpCommand,
         'build_package_protos': _NoOpCommand,
     }
- 
+
 setuptools.setup(name='grpcio-health-checking',
                  version=grpc_version.VERSION,
                  description='Standard Health Checking Service for gRPC',

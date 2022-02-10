@@ -13,10 +13,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
- 
-#ifndef GRPC_CORE_LIB_SURFACE_SERVER_H 
-#define GRPC_CORE_LIB_SURFACE_SERVER_H 
- 
+
+#ifndef GRPC_CORE_LIB_SURFACE_SERVER_H
+#define GRPC_CORE_LIB_SURFACE_SERVER_H
+
 #include <grpc/support/port_platform.h>
 
 #include <list>
@@ -24,28 +24,28 @@
 
 #include "y_absl/types/optional.h"
 
-#include <grpc/grpc.h> 
+#include <grpc/grpc.h>
 
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/channel/channel_stack.h" 
+#include "src/core/lib/channel/channel_stack.h"
 #include "src/core/lib/channel/channelz.h"
 #include "src/core/lib/debug/trace.h"
 #include "src/core/lib/gprpp/atomic.h"
 #include "src/core/lib/surface/completion_queue.h"
-#include "src/core/lib/transport/transport.h" 
- 
+#include "src/core/lib/transport/transport.h"
+
 namespace grpc_core {
- 
+
 extern TraceFlag grpc_server_channel_trace;
- 
+
 class Server : public InternallyRefCounted<Server> {
  public:
   // Filter vtable.
   static const grpc_channel_filter kServerTopFilter;
- 
+
   // Opaque type used for registered methods.
   struct RegisteredMethod;
- 
+
   // An object to represent the most relevant characteristics of a
   // newly-allocated call object when using an AllocatingRequestMatcherBatch.
   struct BatchCallAllocation {
@@ -65,7 +65,7 @@ class Server : public InternallyRefCounted<Server> {
     gpr_timespec* deadline;
     grpc_byte_buffer** optional_payload;
   };
- 
+
   /// Interface for listeners.
   /// Implementations must override the Orphan() method, which should stop
   /// listening and initiate destruction of the listener.
@@ -77,11 +77,11 @@ class Server : public InternallyRefCounted<Server> {
     /// this call, so it is a pointer rather than a reference.
     virtual void Start(Server* server,
                        const std::vector<grpc_pollset*>* pollsets) = 0;
- 
+
     /// Returns the channelz node for the listen socket, or null if not
     /// supported.
     virtual channelz::ListenSocketNode* channelz_listen_socket_node() const = 0;
- 
+
     /// Sets a closure to be invoked by the listener when its destruction
     /// is complete.
     virtual void SetOnDestroyDone(grpc_closure* on_destroy_done) = 0;
@@ -394,4 +394,4 @@ struct grpc_server {
   grpc_core::OrphanablePtr<grpc_core::Server> core_server;
 };
 
-#endif /* GRPC_CORE_LIB_SURFACE_SERVER_H */ 
+#endif /* GRPC_CORE_LIB_SURFACE_SERVER_H */

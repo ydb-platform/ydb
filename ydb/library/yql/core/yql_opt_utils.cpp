@@ -591,24 +591,24 @@ TExprNode::TPtr ExpandRemovePrefixMembers(const TExprNode::TPtr& node, TExprCont
     auto rebuildStruct = [&](const TExprNode::TPtr& srcStruct, const TStructExprType* targetType) -> TExprNode::TPtr {
         TExprNode::TListType nonSystemMembers;
         for (auto item : targetType->GetItems()) {
-            nonSystemMembers.push_back( 
+            nonSystemMembers.push_back(
                 Build<TCoNameValueTuple>(ctx, srcStruct->Pos())
-                    .Name() 
-                        .Value(item->GetName()) 
+                    .Name()
+                        .Value(item->GetName())
                     .Build()
                     .Value<TCoMember>()
                         .Struct(srcStruct)
                         .Name()
                             .Value(item->GetName())
-                        .Build() 
-                    .Build() 
+                        .Build()
+                    .Build()
                 .Done().Ptr()
-            ); 
-        } 
+            );
+        }
         return Build<TCoAsStruct>(ctx, srcStruct->Pos())
-            .Add(std::move(nonSystemMembers)) 
-            .Done() 
-            .Ptr(); 
+            .Add(std::move(nonSystemMembers))
+            .Done()
+            .Ptr();
     };
 
     if (targetItemType->GetKind() == ETypeAnnotationKind::Struct) {
@@ -624,10 +624,10 @@ TExprNode::TPtr ExpandRemovePrefixMembers(const TExprNode::TPtr& node, TExprCont
                     .Add(nonSystemMembers)
                 .Build()
                 .Done().Ptr();
-        } 
- 
+        }
+
         return rebuildStruct(node->HeadPtr(), targetItemType->Cast<TStructExprType>());
-    } 
+    }
 
     YQL_ENSURE(targetItemType->GetKind() == ETypeAnnotationKind::Variant);
 
@@ -734,8 +734,8 @@ TExprNode::TPtr ExpandRemovePrefixMembers(const TExprNode::TPtr& node, TExprCont
             })
         .Seal()
         .Build();
-} 
- 
+}
+
 TExprNode::TPtr ExpandFlattenMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
     TExprNode::TListType members;
     for (auto& child : node->Children()) {

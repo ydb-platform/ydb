@@ -37,10 +37,10 @@ private:
 
 using TAsyncStatus = NThreading::TFuture<TStatus>;
 
-class TStreamPartStatus : public TStatus { 
-public: 
-    TStreamPartStatus(TStatus&& status); 
-    bool EOS() const; 
-}; 
- 
+class TStreamPartStatus : public TStatus {
+public:
+    TStreamPartStatus(TStatus&& status);
+    bool EOS() const;
+};
+
 } // namespace NYdb

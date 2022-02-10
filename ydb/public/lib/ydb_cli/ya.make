@@ -1,10 +1,10 @@
- 
-OWNER(g:kikimr) 
- 
-RECURSE( 
-    commands 
-    common 
+
+OWNER(g:kikimr)
+
+RECURSE(
+    commands
+    common
     dump
     import
-) 
- 
+)
+

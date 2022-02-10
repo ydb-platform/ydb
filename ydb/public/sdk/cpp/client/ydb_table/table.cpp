@@ -173,41 +173,41 @@ const TBuildIndexOperation::TMetadata& TBuildIndexOperation::Metadata() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPartitioningSettings::TImpl { 
-public: 
-    TImpl() { } 
- 
-    explicit TImpl(const Ydb::Table::PartitioningSettings& proto) 
-        : Proto_(proto) 
-    { } 
- 
-public: 
-    const Ydb::Table::PartitioningSettings Proto_; 
-}; 
- 
-TPartitioningSettings::TPartitioningSettings() 
-    : Impl_(std::make_shared<TImpl>()) 
-{ } 
- 
-TPartitioningSettings::TPartitioningSettings(const Ydb::Table::PartitioningSettings& proto) 
-    : Impl_(std::make_shared<TImpl>(proto)) 
-{ } 
- 
-const Ydb::Table::PartitioningSettings& TPartitioningSettings::GetProto() const { 
-    return Impl_->Proto_; 
-} 
- 
-TMaybe<bool> TPartitioningSettings::GetPartitioningBySize() const { 
-    switch (GetProto().partitioning_by_size()) { 
-    case Ydb::FeatureFlag::ENABLED: 
-        return true; 
-    case Ydb::FeatureFlag::DISABLED: 
-        return false; 
-    default: 
-        return { }; 
-    } 
-} 
- 
+class TPartitioningSettings::TImpl {
+public:
+    TImpl() { }
+
+    explicit TImpl(const Ydb::Table::PartitioningSettings& proto)
+        : Proto_(proto)
+    { }
+
+public:
+    const Ydb::Table::PartitioningSettings Proto_;
+};
+
+TPartitioningSettings::TPartitioningSettings()
+    : Impl_(std::make_shared<TImpl>())
+{ }
+
+TPartitioningSettings::TPartitioningSettings(const Ydb::Table::PartitioningSettings& proto)
+    : Impl_(std::make_shared<TImpl>(proto))
+{ }
+
+const Ydb::Table::PartitioningSettings& TPartitioningSettings::GetProto() const {
+    return Impl_->Proto_;
+}
+
+TMaybe<bool> TPartitioningSettings::GetPartitioningBySize() const {
+    switch (GetProto().partitioning_by_size()) {
+    case Ydb::FeatureFlag::ENABLED:
+        return true;
+    case Ydb::FeatureFlag::DISABLED:
+        return false;
+    default:
+        return { };
+    }
+}
+
 TMaybe<bool> TPartitioningSettings::GetPartitioningByLoad() const {
     switch (GetProto().partitioning_by_load()) {
     case Ydb::FeatureFlag::ENABLED:
@@ -219,20 +219,20 @@ TMaybe<bool> TPartitioningSettings::GetPartitioningByLoad() const {
     }
 }
 
-ui64 TPartitioningSettings::GetPartitionSizeMb() const { 
-    return GetProto().partition_size_mb(); 
-} 
- 
-ui64 TPartitioningSettings::GetMinPartitionsCount() const { 
-    return GetProto().min_partitions_count(); 
-} 
- 
-ui64 TPartitioningSettings::GetMaxPartitionsCount() const { 
-    return GetProto().max_partitions_count(); 
-} 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+ui64 TPartitioningSettings::GetPartitionSizeMb() const {
+    return GetProto().partition_size_mb();
+}
+
+ui64 TPartitioningSettings::GetMinPartitionsCount() const {
+    return GetProto().min_partitions_count();
+}
+
+ui64 TPartitioningSettings::GetMaxPartitionsCount() const {
+    return GetProto().max_partitions_count();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TTableStats {
     ui64 Rows = 0;
     ui64 Size = 0;
@@ -256,7 +256,7 @@ class TTableDescription::TImpl {
         , PartitioningSettings_(proto.partitioning_settings())
         , HasStorageSettings_(proto.has_storage_settings())
         , HasPartitioningSettings_(proto.has_partitioning_settings())
-    { 
+    {
         // primary key
         for (const auto& pk : proto.primary_key()) {
             PrimaryKey_.push_back(pk);
@@ -342,12 +342,12 @@ public:
     {
         Proto_ = std::move(desc);
 
-        Owner_ = Proto_.self().owner(); 
-        PermissionToSchemeEntry(Proto_.self().permissions(), &Permissions_); 
-        PermissionToSchemeEntry(Proto_.self().effective_permissions(), &EffectivePermissions_); 
+        Owner_ = Proto_.self().owner();
+        PermissionToSchemeEntry(Proto_.self().permissions(), &Permissions_);
+        PermissionToSchemeEntry(Proto_.self().effective_permissions(), &EffectivePermissions_);
 
         TMaybe<TValue> leftValue;
-        for (const auto& bound : Proto_.shard_key_bounds()) { 
+        for (const auto& bound : Proto_.shard_key_bounds()) {
             TMaybe<TKeyBound> fromBound = leftValue
                 ? TKeyBound::Inclusive(*leftValue)
                 : TMaybe<TKeyBound>();
@@ -359,18 +359,18 @@ public:
             leftValue = value;
         }
 
-        for (const auto& shardStats : Proto_.table_stats().partition_stats()) { 
+        for (const auto& shardStats : Proto_.table_stats().partition_stats()) {
             PartitionStats_.emplace_back(
                 TPartitionStats{shardStats.rows_estimate(), shardStats.store_size()}
             );
         }
 
-        TableStats.Rows = Proto_.table_stats().rows_estimate(); 
-        TableStats.Size = Proto_.table_stats().store_size(); 
-        TableStats.Partitions = Proto_.table_stats().partitions(); 
+        TableStats.Rows = Proto_.table_stats().rows_estimate();
+        TableStats.Size = Proto_.table_stats().store_size();
+        TableStats.Partitions = Proto_.table_stats().partitions();
 
-        TableStats.ModificationTime = ProtobufTimestampToTInstant(Proto_.table_stats().modification_time()); 
-        TableStats.CreationTime = ProtobufTimestampToTInstant(Proto_.table_stats().creation_time()); 
+        TableStats.ModificationTime = ProtobufTimestampToTInstant(Proto_.table_stats().modification_time());
+        TableStats.CreationTime = ProtobufTimestampToTInstant(Proto_.table_stats().creation_time());
 
         if (describeSettings.WithKeyShardBoundary_) {
             Ranges_.emplace_back(TKeyRange(
@@ -387,12 +387,12 @@ public:
         if (request.compaction_policy()) {
             SetCompactionPolicy(request.compaction_policy());
         }
- 
+
         switch (request.partitions_case()) {
             case Ydb::Table::CreateTableRequest::kUniformPartitions:
                 SetUniformPartitions(request.uniform_partitions());
                 break;
- 
+
             case Ydb::Table::CreateTableRequest::kPartitionAtKeys: {
                 TExplicitPartitions partitionAtKeys;
                 for (const auto& splitPoint : request.partition_at_keys().split_points()) {
@@ -401,20 +401,20 @@ public:
                 }
 
                 SetPartitionAtKeys(partitionAtKeys);
-                break; 
+                break;
             }
 
-            default: 
-                break; 
-        } 
+            default:
+                break;
+        }
     }
 
     TImpl() = default;
 
-    const Ydb::Table::DescribeTableResult& GetProto() const { 
-        return Proto_; 
-    } 
- 
+    const Ydb::Table::DescribeTableResult& GetProto() const {
+        return Proto_;
+    }
+
     void AddColumn(const TString& name, const Ydb::Type& type, const TString& family) {
         Columns_.emplace_back(name, type, family);
     }
@@ -460,31 +460,31 @@ public:
         Attributes_ = std::move(attrs);
     }
 
-    void SetCompactionPolicy(const TString& name) { 
-        CompactionPolicy_ = name; 
-    } 
- 
-    void SetUniformPartitions(ui64 partitionsCount) { 
-        UniformPartitions_ = partitionsCount; 
-    } 
- 
-    void SetPartitionAtKeys(const TExplicitPartitions& keys) { 
-        PartitionAtKeys_ = keys; 
-    } 
- 
-    void SetPartitioningSettings(const TPartitioningSettings& settings) { 
-        PartitioningSettings_ = settings; 
-        HasPartitioningSettings_ = true; 
-    } 
- 
-    void SetKeyBloomFilter(bool enabled) { 
-        KeyBloomFilter_ = enabled; 
-    } 
- 
-    void SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount) { 
-        ReadReplicasSettings_ = TReadReplicasSettings(mode, readReplicasCount); 
-    } 
- 
+    void SetCompactionPolicy(const TString& name) {
+        CompactionPolicy_ = name;
+    }
+
+    void SetUniformPartitions(ui64 partitionsCount) {
+        UniformPartitions_ = partitionsCount;
+    }
+
+    void SetPartitionAtKeys(const TExplicitPartitions& keys) {
+        PartitionAtKeys_ = keys;
+    }
+
+    void SetPartitioningSettings(const TPartitioningSettings& settings) {
+        PartitioningSettings_ = settings;
+        HasPartitioningSettings_ = true;
+    }
+
+    void SetKeyBloomFilter(bool enabled) {
+        KeyBloomFilter_ = enabled;
+    }
+
+    void SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount) {
+        ReadReplicasSettings_ = TReadReplicasSettings(mode, readReplicasCount);
+    }
+
     const TVector<TString>& GetPrimaryKeyColumns() const {
         return PrimaryKey_;
     }
@@ -505,10 +505,10 @@ public:
         return Owner_;
     }
 
-    const TVector<NScheme::TPermissions>& GetPermissions() const { 
-        return Permissions_; 
-    } 
- 
+    const TVector<NScheme::TPermissions>& GetPermissions() const {
+        return Permissions_;
+    }
+
     const TVector<NScheme::TPermissions>& GetEffectivePermissions() const {
         return EffectivePermissions_;
     }
@@ -557,41 +557,41 @@ public:
         return HasPartitioningSettings_;
     }
 
-    const TPartitioningSettings& GetPartitioningSettings() const { 
-        return PartitioningSettings_; 
-    } 
- 
-    TMaybe<bool> GetKeyBloomFilter() const { 
-        return KeyBloomFilter_; 
-    } 
- 
-    const TMaybe<TReadReplicasSettings>& GetReadReplicasSettings() const { 
-        return ReadReplicasSettings_; 
-    } 
- 
+    const TPartitioningSettings& GetPartitioningSettings() const {
+        return PartitioningSettings_;
+    }
+
+    TMaybe<bool> GetKeyBloomFilter() const {
+        return KeyBloomFilter_;
+    }
+
+    const TMaybe<TReadReplicasSettings>& GetReadReplicasSettings() const {
+        return ReadReplicasSettings_;
+    }
+
 private:
-    Ydb::Table::DescribeTableResult Proto_; 
+    Ydb::Table::DescribeTableResult Proto_;
     TStorageSettings StorageSettings_;
     TVector<TString> PrimaryKey_;
     TVector<TTableColumn> Columns_;
     TVector<TIndexDescription> Indexes_;
     TMaybe<TTtlSettings> TtlSettings_;
     TString Owner_;
-    TVector<NScheme::TPermissions> Permissions_; 
+    TVector<NScheme::TPermissions> Permissions_;
     TVector<NScheme::TPermissions> EffectivePermissions_;
     TVector<TKeyRange> Ranges_;
     TVector<TPartitionStats> PartitionStats_;
     TTableStats TableStats;
     TVector<TColumnFamilyDescription> ColumnFamilies_;
     THashMap<TString, TString> Attributes_;
-    TString CompactionPolicy_; 
-    TMaybe<ui64> UniformPartitions_; 
-    TMaybe<TExplicitPartitions> PartitionAtKeys_; 
-    TPartitioningSettings PartitioningSettings_; 
-    TMaybe<bool> KeyBloomFilter_; 
-    TMaybe<TReadReplicasSettings> ReadReplicasSettings_; 
+    TString CompactionPolicy_;
+    TMaybe<ui64> UniformPartitions_;
+    TMaybe<TExplicitPartitions> PartitionAtKeys_;
+    TPartitioningSettings PartitioningSettings_;
+    TMaybe<bool> KeyBloomFilter_;
+    TMaybe<TReadReplicasSettings> ReadReplicasSettings_;
     bool HasStorageSettings_ = false;
-    bool HasPartitioningSettings_ = false; 
+    bool HasPartitioningSettings_ = false;
 };
 
 TTableDescription::TTableDescription()
@@ -640,10 +640,10 @@ const TString& TTableDescription::GetOwner() const {
     return Impl_->GetOwner();
 }
 
-const TVector<NScheme::TPermissions>& TTableDescription::GetPermissions() const { 
-    return Impl_->GetPermissions(); 
-} 
- 
+const TVector<NScheme::TPermissions>& TTableDescription::GetPermissions() const {
+    return Impl_->GetPermissions();
+}
+
 const TVector<NScheme::TPermissions>& TTableDescription::GetEffectivePermissions() const {
     return Impl_->GetEffectivePermissions();
 }
@@ -720,30 +720,30 @@ void TTableDescription::SetAttributes(THashMap<TString, TString>&& attrs) {
     Impl_->SetAttributes(std::move(attrs));
 }
 
-void TTableDescription::SetCompactionPolicy(const TString& name) { 
-    Impl_->SetCompactionPolicy(name); 
-} 
- 
-void TTableDescription::SetUniformPartitions(ui64 partitionsCount) { 
-    Impl_->SetUniformPartitions(partitionsCount); 
-} 
- 
-void TTableDescription::SetPartitionAtKeys(const TExplicitPartitions& keys) { 
-    Impl_->SetPartitionAtKeys(keys); 
-} 
- 
-void TTableDescription::SetPartitioningSettings(const TPartitioningSettings& settings) { 
-    Impl_->SetPartitioningSettings(settings); 
-} 
- 
-void TTableDescription::SetKeyBloomFilter(bool enabled) { 
-    Impl_->SetKeyBloomFilter(enabled); 
-} 
- 
-void TTableDescription::SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount) { 
-    Impl_->SetReadReplicasSettings(mode, readReplicasCount); 
-} 
- 
+void TTableDescription::SetCompactionPolicy(const TString& name) {
+    Impl_->SetCompactionPolicy(name);
+}
+
+void TTableDescription::SetUniformPartitions(ui64 partitionsCount) {
+    Impl_->SetUniformPartitions(partitionsCount);
+}
+
+void TTableDescription::SetPartitionAtKeys(const TExplicitPartitions& keys) {
+    Impl_->SetPartitionAtKeys(keys);
+}
+
+void TTableDescription::SetPartitioningSettings(const TPartitioningSettings& settings) {
+    Impl_->SetPartitioningSettings(settings);
+}
+
+void TTableDescription::SetKeyBloomFilter(bool enabled) {
+    Impl_->SetKeyBloomFilter(enabled);
+}
+
+void TTableDescription::SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount) {
+    Impl_->SetReadReplicasSettings(mode, readReplicasCount);
+}
+
 const TVector<TPartitionStats>& TTableDescription::GetPartitionStats() const {
     return Impl_->GetPartitionStats();
 }
@@ -780,22 +780,22 @@ const THashMap<TString, TString>& TTableDescription::GetAttributes() const {
     return Impl_->GetAttributes();
 }
 
-const TPartitioningSettings& TTableDescription::GetPartitioningSettings() const { 
-    return Impl_->GetPartitioningSettings(); 
-} 
- 
-TMaybe<bool> TTableDescription::GetKeyBloomFilter() const { 
-    return Impl_->GetKeyBloomFilter(); 
-} 
- 
-TMaybe<TReadReplicasSettings> TTableDescription::GetReadReplicasSettings() const { 
-    return Impl_->GetReadReplicasSettings(); 
-} 
- 
-const Ydb::Table::DescribeTableResult& TTableDescription::GetProto() const { 
-    return Impl_->GetProto(); 
-} 
- 
+const TPartitioningSettings& TTableDescription::GetPartitioningSettings() const {
+    return Impl_->GetPartitioningSettings();
+}
+
+TMaybe<bool> TTableDescription::GetKeyBloomFilter() const {
+    return Impl_->GetKeyBloomFilter();
+}
+
+TMaybe<TReadReplicasSettings> TTableDescription::GetReadReplicasSettings() const {
+    return Impl_->GetReadReplicasSettings();
+}
+
+const Ydb::Table::DescribeTableResult& TTableDescription::GetProto() const {
+    return Impl_->GetProto();
+}
+
 void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) const {
     for (const auto& column : Impl_->GetColumns()) {
         auto& protoColumn = *request.add_columns();
@@ -914,50 +914,50 @@ TStorageSettings TStorageSettingsBuilder::Build() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPartitioningSettingsBuilder::TImpl { 
-public: 
-    Ydb::Table::PartitioningSettings Proto; 
-}; 
- 
-TPartitioningSettingsBuilder::TPartitioningSettingsBuilder() 
-    : Impl_(new TImpl) 
-{ } 
- 
-TPartitioningSettingsBuilder::~TPartitioningSettingsBuilder() { } 
- 
-TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitioningBySize(bool enabled) { 
-    Impl_->Proto.set_partitioning_by_size( 
-        enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED); 
-    return *this; 
-} 
- 
+class TPartitioningSettingsBuilder::TImpl {
+public:
+    Ydb::Table::PartitioningSettings Proto;
+};
+
+TPartitioningSettingsBuilder::TPartitioningSettingsBuilder()
+    : Impl_(new TImpl)
+{ }
+
+TPartitioningSettingsBuilder::~TPartitioningSettingsBuilder() { }
+
+TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitioningBySize(bool enabled) {
+    Impl_->Proto.set_partitioning_by_size(
+        enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+    return *this;
+}
+
 TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitioningByLoad(bool enabled) {
     Impl_->Proto.set_partitioning_by_load(
         enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
     return *this;
 }
 
-TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitionSizeMb(ui64 sizeMb) { 
-    Impl_->Proto.set_partition_size_mb(sizeMb); 
-    return *this; 
-} 
- 
-TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetMinPartitionsCount(ui64 count) { 
-    Impl_->Proto.set_min_partitions_count(count); 
-    return *this; 
-} 
- 
-TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetMaxPartitionsCount(ui64 count) { 
-    Impl_->Proto.set_max_partitions_count(count); 
-    return *this; 
-} 
- 
-TPartitioningSettings TPartitioningSettingsBuilder::Build() const { 
-    return TPartitioningSettings(Impl_->Proto); 
-} 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitionSizeMb(ui64 sizeMb) {
+    Impl_->Proto.set_partition_size_mb(sizeMb);
+    return *this;
+}
+
+TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetMinPartitionsCount(ui64 count) {
+    Impl_->Proto.set_min_partitions_count(count);
+    return *this;
+}
+
+TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetMaxPartitionsCount(ui64 count) {
+    Impl_->Proto.set_max_partitions_count(count);
+    return *this;
+}
+
+TPartitioningSettings TPartitioningSettingsBuilder::Build() const {
+    return TPartitioningSettings(Impl_->Proto);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TColumnFamilyBuilder::TImpl {
 public:
     Ydb::Table::ColumnFamily Proto;
@@ -1137,36 +1137,36 @@ TTableBuilder& TTableBuilder::SetAttributes(THashMap<TString, TString>&& attrs) 
     return *this;
 }
 
-TTableBuilder& TTableBuilder::SetCompactionPolicy(const TString& name) { 
-    TableDescription_.SetCompactionPolicy(name); 
-    return *this; 
-} 
- 
-TTableBuilder& TTableBuilder::SetUniformPartitions(ui64 partitionsCount) { 
-    TableDescription_.SetUniformPartitions(partitionsCount); 
-    return *this; 
-} 
- 
-TTableBuilder& TTableBuilder::SetPartitionAtKeys(const TExplicitPartitions& keys) { 
-    TableDescription_.SetPartitionAtKeys(keys); 
-    return *this; 
-} 
- 
-TTableBuilder& TTableBuilder::SetPartitioningSettings(const TPartitioningSettings& settings) { 
-    TableDescription_.SetPartitioningSettings(settings); 
-    return *this; 
-} 
- 
-TTableBuilder& TTableBuilder::SetKeyBloomFilter(bool enabled) { 
-    TableDescription_.SetKeyBloomFilter(enabled); 
-    return *this; 
-} 
- 
-TTableBuilder& TTableBuilder::SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount) { 
-    TableDescription_.SetReadReplicasSettings(mode, readReplicasCount); 
-    return *this; 
-} 
- 
+TTableBuilder& TTableBuilder::SetCompactionPolicy(const TString& name) {
+    TableDescription_.SetCompactionPolicy(name);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::SetUniformPartitions(ui64 partitionsCount) {
+    TableDescription_.SetUniformPartitions(partitionsCount);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::SetPartitionAtKeys(const TExplicitPartitions& keys) {
+    TableDescription_.SetPartitionAtKeys(keys);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::SetPartitioningSettings(const TPartitioningSettings& settings) {
+    TableDescription_.SetPartitioningSettings(settings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::SetKeyBloomFilter(bool enabled) {
+    TableDescription_.SetKeyBloomFilter(enabled);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount) {
+    TableDescription_.SetReadReplicasSettings(mode, readReplicasCount);
+    return *this;
+}
+
 TTableDescription TTableBuilder::Build() {
     return TableDescription_;
 }
@@ -3632,29 +3632,29 @@ static void ConvertCreateTableSettingsToProto(const TCreateTableSettings& settin
             }
         }
     }
-    if (settings.ReplicationPolicy_) { 
-        const auto& policy = settings.ReplicationPolicy_.GetRef(); 
-        if (policy.PresetName_) { 
-            proto->mutable_replication_policy()->set_preset_name(policy.PresetName_.GetRef()); 
-        } 
-        if (policy.ReplicasCount_) { 
-            proto->mutable_replication_policy()->set_replicas_count(policy.ReplicasCount_.GetRef()); 
-        } 
-        if (policy.CreatePerAvailabilityZone_) { 
-            proto->mutable_replication_policy()->set_create_per_availability_zone( 
-                policy.CreatePerAvailabilityZone_.GetRef() 
+    if (settings.ReplicationPolicy_) {
+        const auto& policy = settings.ReplicationPolicy_.GetRef();
+        if (policy.PresetName_) {
+            proto->mutable_replication_policy()->set_preset_name(policy.PresetName_.GetRef());
+        }
+        if (policy.ReplicasCount_) {
+            proto->mutable_replication_policy()->set_replicas_count(policy.ReplicasCount_.GetRef());
+        }
+        if (policy.CreatePerAvailabilityZone_) {
+            proto->mutable_replication_policy()->set_create_per_availability_zone(
+                policy.CreatePerAvailabilityZone_.GetRef()
                 ? Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED
                 : Ydb::FeatureFlag_Status::FeatureFlag_Status_DISABLED
-            ); 
-        } 
-        if (policy.AllowPromotion_) { 
-            proto->mutable_replication_policy()->set_allow_promotion( 
-                policy.AllowPromotion_.GetRef() 
+            );
+        }
+        if (policy.AllowPromotion_) {
+            proto->mutable_replication_policy()->set_allow_promotion(
+                policy.AllowPromotion_.GetRef()
                 ? Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED
                 : Ydb::FeatureFlag_Status::FeatureFlag_Status_DISABLED
-            ); 
-        } 
-    } 
+            );
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3762,35 +3762,35 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
         (*request.mutable_alter_attributes())[key] = value;
     }
 
-    if (settings.SetCompactionPolicy_) { 
-        request.set_set_compaction_policy(settings.SetCompactionPolicy_); 
-    } 
- 
-    if (settings.AlterPartitioningSettings_) { 
-        request.mutable_alter_partitioning_settings()->CopyFrom(settings.AlterPartitioningSettings_->GetProto()); 
-    } 
- 
-    if (settings.SetKeyBloomFilter_.Defined()) { 
-        request.set_set_key_bloom_filter( 
-            settings.SetKeyBloomFilter_.GetRef() ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED); 
-    } 
- 
-    if (settings.SetReadReplicasSettings_.Defined()) { 
-        const auto& replSettings = settings.SetReadReplicasSettings_.GetRef(); 
-        switch (replSettings.GetMode()) { 
-        case TReadReplicasSettings::EMode::PerAz: 
-            request.mutable_set_read_replicas_settings()->set_per_az_read_replicas_count( 
-                replSettings.GetReadReplicasCount()); 
-            break; 
-        case TReadReplicasSettings::EMode::AnyAz: 
-            request.mutable_set_read_replicas_settings()->set_any_az_read_replicas_count( 
-                replSettings.GetReadReplicasCount()); 
-            break; 
-        default: 
-            break; 
-        } 
-    } 
- 
+    if (settings.SetCompactionPolicy_) {
+        request.set_set_compaction_policy(settings.SetCompactionPolicy_);
+    }
+
+    if (settings.AlterPartitioningSettings_) {
+        request.mutable_alter_partitioning_settings()->CopyFrom(settings.AlterPartitioningSettings_->GetProto());
+    }
+
+    if (settings.SetKeyBloomFilter_.Defined()) {
+        request.set_set_key_bloom_filter(
+            settings.SetKeyBloomFilter_.GetRef() ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+    }
+
+    if (settings.SetReadReplicasSettings_.Defined()) {
+        const auto& replSettings = settings.SetReadReplicasSettings_.GetRef();
+        switch (replSettings.GetMode()) {
+        case TReadReplicasSettings::EMode::PerAz:
+            request.mutable_set_read_replicas_settings()->set_per_az_read_replicas_count(
+                replSettings.GetReadReplicasCount());
+            break;
+        case TReadReplicasSettings::EMode::AnyAz:
+            request.mutable_set_read_replicas_settings()->set_any_az_read_replicas_count(
+                replSettings.GetReadReplicasCount());
+            break;
+        default:
+            break;
+        }
+    }
+
     return request;
 }
 
@@ -4653,21 +4653,21 @@ const TMaybe<TAlterTtlSettings>& TAlterTableSettings::GetAlterTtlSettings() cons
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TReadReplicasSettings::TReadReplicasSettings(EMode mode, ui64 readReplicasCount) 
-    : Mode_(mode) 
-    , ReadReplicasCount_(readReplicasCount) 
-{} 
- 
-TReadReplicasSettings::EMode TReadReplicasSettings::GetMode() const { 
-    return Mode_; 
-} 
- 
-ui64 TReadReplicasSettings::GetReadReplicasCount() const { 
-    return ReadReplicasCount_; 
-} 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+TReadReplicasSettings::TReadReplicasSettings(EMode mode, ui64 readReplicasCount)
+    : Mode_(mode)
+    , ReadReplicasCount_(readReplicasCount)
+{}
+
+TReadReplicasSettings::EMode TReadReplicasSettings::GetMode() const {
+    return Mode_;
+}
+
+ui64 TReadReplicasSettings::GetReadReplicasCount() const {
+    return ReadReplicasCount_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TBulkUpsertResult::TBulkUpsertResult(TStatus&& status)
     : TStatus(std::move(status))
 {}

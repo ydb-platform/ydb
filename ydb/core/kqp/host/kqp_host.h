@@ -101,9 +101,9 @@ public:
     virtual IAsyncQueryResultPtr ExplainScanQuery(const TString& query, bool isSql) = 0;
 
     /* Scripting */
-    virtual IAsyncQueryResultPtr ValidateYqlScript(const TString& script) = 0; 
-    virtual TQueryResult SyncValidateYqlScript(const TString& script) = 0; 
- 
+    virtual IAsyncQueryResultPtr ValidateYqlScript(const TString& script) = 0;
+    virtual TQueryResult SyncValidateYqlScript(const TString& script) = 0;
+
     virtual IAsyncQueryResultPtr ExplainYqlScript(const TString& script) = 0;
     virtual TQueryResult SyncExplainYqlScript(const TString& script) = 0;
 
@@ -111,9 +111,9 @@ public:
         const TExecScriptSettings& settings) = 0;
     virtual TQueryResult SyncExecuteYqlScript(const TString& script, NKikimrMiniKQL::TParams&& parameters,
         const TExecScriptSettings& settings) = 0;
- 
-    virtual IAsyncQueryResultPtr StreamExecuteYqlScript(const TString& script, NKikimrMiniKQL::TParams&& parameters, 
-        const NActors::TActorId& target, const TExecScriptSettings& settings) = 0; 
+
+    virtual IAsyncQueryResultPtr StreamExecuteYqlScript(const TString& script, NKikimrMiniKQL::TParams&& parameters,
+        const NActors::TActorId& target, const TExecScriptSettings& settings) = 0;
 };
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,

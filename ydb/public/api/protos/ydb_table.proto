@@ -352,47 +352,47 @@ message ColumnFamily {
     Ydb.FeatureFlag.Status keep_in_memory = 4;
 }
 
-message PartitioningSettings { 
-    // List of columns (primary key prefix) to partition by 
-    reserved 1; // partition_by 
-    // Enable auto partitioning on reaching upper or lower partition size bound 
-    Ydb.FeatureFlag.Status partitioning_by_size = 2; 
-    // Preferred partition size for auto partitioning by size, Mb 
-    uint64 partition_size_mb = 3; 
-    // Enable auto partitioning based on load on each partition 
+message PartitioningSettings {
+    // List of columns (primary key prefix) to partition by
+    reserved 1; // partition_by
+    // Enable auto partitioning on reaching upper or lower partition size bound
+    Ydb.FeatureFlag.Status partitioning_by_size = 2;
+    // Preferred partition size for auto partitioning by size, Mb
+    uint64 partition_size_mb = 3;
+    // Enable auto partitioning based on load on each partition
     Ydb.FeatureFlag.Status partitioning_by_load = 4;
-    reserved 5; // partitioning_by_load settings 
-    // Minimum partitions count auto merge would stop working at 
-    uint64 min_partitions_count = 6; 
-    // Maximum partitions count auto split would stop working at 
-    uint64 max_partitions_count = 7; 
-} 
- 
-message AzReadReplicasSettings { 
-    // AZ name 
-    string name = 1; 
-    // Read replicas count in this AZ 
-    uint64 read_replicas_count = 2; 
-} 
- 
-message ClusterReplicasSettings { 
-    // List of read replicas settings for each AZ 
-    repeated AzReadReplicasSettings az_read_replicas_settings  = 2; 
-} 
- 
-message ReadReplicasSettings { 
-    oneof settings { 
-        // Set equal read replicas count for every AZ 
-        uint64 per_az_read_replicas_count = 1; 
- 
-        // Set total replicas count between all AZs 
-        uint64 any_az_read_replicas_count = 2; 
-    } 
+    reserved 5; // partitioning_by_load settings
+    // Minimum partitions count auto merge would stop working at
+    uint64 min_partitions_count = 6;
+    // Maximum partitions count auto split would stop working at
+    uint64 max_partitions_count = 7;
+}
 
-    // Specify read replicas count for each AZ in cluster 
-    reserved 3; // cluster_replicas_settings (part of oneof settings) 
-} 
- 
+message AzReadReplicasSettings {
+    // AZ name
+    string name = 1;
+    // Read replicas count in this AZ
+    uint64 read_replicas_count = 2;
+}
+
+message ClusterReplicasSettings {
+    // List of read replicas settings for each AZ
+    repeated AzReadReplicasSettings az_read_replicas_settings  = 2;
+}
+
+message ReadReplicasSettings {
+    oneof settings {
+        // Set equal read replicas count for every AZ
+        uint64 per_az_read_replicas_count = 1;
+
+        // Set total replicas count between all AZs
+        uint64 any_az_read_replicas_count = 2;
+    }
+
+    // Specify read replicas count for each AZ in cluster
+    reserved 3; // cluster_replicas_settings (part of oneof settings)
+}
+
 message CreateTableRequest {
     // Session identifier
     string session_id = 1;
@@ -415,22 +415,22 @@ message CreateTableRequest {
     repeated ColumnFamily column_families = 10;
     // Attributes. Total size is limited to 10 KB.
     map<string, string> attributes = 11 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
-    // Predefined named set of settings for table compaction ["default", "small_table", "log_table"]. 
-    string compaction_policy = 12; 
-    // Either one of the following partitions options can be specified 
-    oneof partitions { 
-        // Enable uniform partitioning using given partitions count. 
-        // The first components of primary key must have Uint32/Uint64 type. 
-        uint64 uniform_partitions = 13; 
-        // Explicitly specify key values which are used as borders for created partitions. 
-        ExplicitPartitions partition_at_keys = 14; 
-    } 
-    // Partitioning settings for table 
-    PartitioningSettings partitioning_settings = 15; 
-    // Bloom filter by key 
-    Ydb.FeatureFlag.Status key_bloom_filter = 16; 
-    // Read replicas settings for table 
-    ReadReplicasSettings read_replicas_settings = 17; 
+    // Predefined named set of settings for table compaction ["default", "small_table", "log_table"].
+    string compaction_policy = 12;
+    // Either one of the following partitions options can be specified
+    oneof partitions {
+        // Enable uniform partitioning using given partitions count.
+        // The first components of primary key must have Uint32/Uint64 type.
+        uint64 uniform_partitions = 13;
+        // Explicitly specify key values which are used as borders for created partitions.
+        ExplicitPartitions partition_at_keys = 14;
+    }
+    // Partitioning settings for table
+    PartitioningSettings partitioning_settings = 15;
+    // Bloom filter by key
+    Ydb.FeatureFlag.Status key_bloom_filter = 16;
+    // Read replicas settings for table
+    ReadReplicasSettings read_replicas_settings = 17;
 }
 
 message CreateTableResponse {
@@ -481,15 +481,15 @@ message AlterTableRequest {
     // Alter attributes. Leave the value blank to drop an attribute.
     // Cannot be used in combination with other fields (except session_id and path) at the moment.
     map<string, string> alter_attributes = 14 [(map_key).length.range = {min: 1, max: 100}, (length).le = 4096];
-    // Set predefined named set of settings for table compaction ["default", "small_table", "log_table"]. 
-    // Set "default" to use default preset. 
-    string set_compaction_policy = 15; 
-    // Change table partitioning settings 
-    PartitioningSettings alter_partitioning_settings = 16; 
-    // Enable/disable bloom filter by key 
-    Ydb.FeatureFlag.Status set_key_bloom_filter = 17; 
-    // Set read replicas settings for table 
-    ReadReplicasSettings set_read_replicas_settings = 18; 
+    // Set predefined named set of settings for table compaction ["default", "small_table", "log_table"].
+    // Set "default" to use default preset.
+    string set_compaction_policy = 15;
+    // Change table partitioning settings
+    PartitioningSettings alter_partitioning_settings = 16;
+    // Enable/disable bloom filter by key
+    Ydb.FeatureFlag.Status set_key_bloom_filter = 17;
+    // Set read replicas settings for table
+    ReadReplicasSettings set_read_replicas_settings = 18;
 }
 
 message AlterTableResponse {
@@ -596,14 +596,14 @@ message DescribeTableResult {
     repeated ColumnFamily column_families = 9;
     // Attributes
     map<string, string> attributes = 10;
-    // Predefined named set of settings for table compaction 
-    reserved 11; // compaction_policy 
-    // Partitioning settings for table 
-    PartitioningSettings partitioning_settings = 12; 
-    // Bloom filter by key 
-    Ydb.FeatureFlag.Status key_bloom_filter = 13; 
-    // Read replicas settings for table 
-    ReadReplicasSettings read_replicas_settings = 14; 
+    // Predefined named set of settings for table compaction
+    reserved 11; // compaction_policy
+    // Partitioning settings for table
+    PartitioningSettings partitioning_settings = 12;
+    // Bloom filter by key
+    Ydb.FeatureFlag.Status key_bloom_filter = 13;
+    // Read replicas settings for table
+    ReadReplicasSettings read_replicas_settings = 14;
 }
 
 message Query {

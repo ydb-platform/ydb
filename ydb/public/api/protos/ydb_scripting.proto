@@ -30,34 +30,34 @@ message ExecuteYqlResult {
     Ydb.TableStats.QueryStats query_stats = 2;
 }
 
-// Response for StreamExecuteYql is a stream of ExecuteYqlPartialResponse messages. 
-// These responses can contain ExecuteYqlPartialResult messages with 
-// results (or result parts) for data or scan queries in the script. 
-// YqlScript can have multiple results (result sets). 
-// Each result set has an index (starting at 0). 
-message ExecuteYqlPartialResponse { 
-    StatusIds.StatusCode status = 1; 
-    repeated Ydb.Issue.IssueMessage issues = 2; 
-    ExecuteYqlPartialResult result = 3; 
-} 
- 
-// Contains result set (or a result set part) for one data or scan query in the script. 
-// One result set can be split into several responses with same result_index. 
-// Only the final response can contain query stats. 
-message ExecuteYqlPartialResult { 
-    // Index of current result 
-    uint32 result_set_index = 1; 
-    // Result set (or a result set part) for one data or scan query 
-    Ydb.ResultSet result_set = 2; 
-    Ydb.TableStats.QueryStats query_stats = 3; 
-} 
- 
+// Response for StreamExecuteYql is a stream of ExecuteYqlPartialResponse messages.
+// These responses can contain ExecuteYqlPartialResult messages with
+// results (or result parts) for data or scan queries in the script.
+// YqlScript can have multiple results (result sets).
+// Each result set has an index (starting at 0).
+message ExecuteYqlPartialResponse {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+    ExecuteYqlPartialResult result = 3;
+}
+
+// Contains result set (or a result set part) for one data or scan query in the script.
+// One result set can be split into several responses with same result_index.
+// Only the final response can contain query stats.
+message ExecuteYqlPartialResult {
+    // Index of current result
+    uint32 result_set_index = 1;
+    // Result set (or a result set part) for one data or scan query
+    Ydb.ResultSet result_set = 2;
+    Ydb.TableStats.QueryStats query_stats = 3;
+}
+
 message ExplainYqlRequest {
     enum Mode {
-        MODE_UNSPECIFIED = 0; 
-        // PARSE = 1; 
-        VALIDATE = 2; 
-        PLAN = 3; 
+        MODE_UNSPECIFIED = 0;
+        // PARSE = 1;
+        VALIDATE = 2;
+        PLAN = 3;
     }
 
     Ydb.Operations.OperationParams operation_params = 1;

@@ -246,11 +246,11 @@ struct TEvKqp {
         }
     };
 
-    struct TEvDataQueryStreamPart : public TEventPB<TEvDataQueryStreamPart, 
-        NKikimrKqp::TEvDataQueryStreamPart, TKqpEvents::EvDataQueryStreamPart> {}; 
- 
-    struct TEvDataQueryStreamPartAck : public TEventLocal<TEvDataQueryStreamPartAck, TKqpEvents::EvDataQueryStreamPartAck> {}; 
- 
+    struct TEvDataQueryStreamPart : public TEventPB<TEvDataQueryStreamPart,
+        NKikimrKqp::TEvDataQueryStreamPart, TKqpEvents::EvDataQueryStreamPart> {};
+
+    struct TEvDataQueryStreamPartAck : public TEventLocal<TEvDataQueryStreamPartAck, TKqpEvents::EvDataQueryStreamPartAck> {};
+
     // Wrapper to use Arena allocated protobuf with ActorSystem (for serialization path).
     // Arena deserialization is not supported.
     // TODO: Add arena support to actor system TEventPB?

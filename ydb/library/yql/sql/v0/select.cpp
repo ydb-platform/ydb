@@ -644,10 +644,10 @@ public:
     TPtr DoClone() const final {
         return new TTableSource(Pos, Table, Stream, GetLabel());
     }
- 
-    bool IsTableSource() const override { 
-        return true; 
-    } 
+
+    bool IsTableSource() const override {
+        return true;
+    }
 protected:
     TTableRef Table;
     const bool Stream;
@@ -1428,7 +1428,7 @@ private:
                 GroupBy.push_back(BuildColumn(Pos, columnName));
             }
             TString label(term->GetLabel());
-            bool hasName = true; 
+            bool hasName = true;
             if (label.empty()) {
                 auto source = term->GetSourceName();
                 if (term->IsAsterisk() && !source->empty()) {
@@ -1438,10 +1438,10 @@ private:
                     label = isJoin && source && *source ? DotJoin(*source, *column) : *column;
                 } else {
                     label = TStringBuilder() << "column" << Columns.List.size();
-                    hasName = false; 
+                    hasName = false;
                 }
             }
-            if (!Columns.Add(&label, false, false, true, hasName)) { 
+            if (!Columns.Add(&label, false, false, true, hasName)) {
                 ctx.Error(Pos) << "Duplicate column: " << label;
                 hasError = true;
                 continue;
@@ -1518,11 +1518,11 @@ private:
         if (Columns.All) {
             Y_VERIFY_DEBUG(Columns.List.empty());
             terms = PrepareWithout(Y());
-            if (ctx.EnableSystemColumns) { 
-                terms = L(terms, Y("let", "res", Y("AsList", Y("RemoveSystemMembers", "row")))); 
-            } else { 
-                terms = L(terms, (Y("let", "res", Y("AsList", "row")))); 
-            } 
+            if (ctx.EnableSystemColumns) {
+                terms = L(terms, Y("let", "res", Y("AsList", Y("RemoveSystemMembers", "row"))));
+            } else {
+                terms = L(terms, (Y("let", "res", Y("AsList", "row"))));
+            }
         } else if (!Columns.List.empty()) {
             Y_VERIFY_DEBUG(Columns.List.size() == Terms.size());
             const bool isJoin = Source->GetJoin();

@@ -65,7 +65,7 @@ namespace NLastGetopt {
 
         TString Title;              // title of the help string
         TString CustomCmdLineDescr; // user defined help string
-        TString CustomUsage;        // user defined usage string 
+        TString CustomUsage;        // user defined usage string
 
         TVector<std::pair<TString, TString>> Sections;  // additional help entries to print after usage
 
@@ -420,11 +420,11 @@ namespace NLastGetopt {
          *
          * @param usage        new usage string
          */
-        void SetCustomUsage(const TString& usage) { 
-            CustomUsage = usage; 
-        } 
- 
-        /** 
+        void SetCustomUsage(const TString& usage) {
+            CustomUsage = usage;
+        }
+
+        /**
          * Add a section to print after the main usage spec.
          */
         void AddSection(TString title, TString text) {

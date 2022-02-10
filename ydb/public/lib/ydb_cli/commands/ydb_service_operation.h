@@ -32,7 +32,7 @@ class TCommandGetOperation : public TCommandWithOperationId,
 public:
     TCommandGetOperation();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override; 
+    virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 
@@ -53,8 +53,8 @@ class TCommandListOperations : public TYdbCommand,
 
     using THandler = std::function<void(NOperation::TOperationClient&, ui64, const TString&, EOutputFormat)>;
 
-    void InitializeKindToHandler(TConfig& config); 
-    TString KindChoices(); 
+    void InitializeKindToHandler(TConfig& config);
+    TString KindChoices();
 
 public:
     TCommandListOperations();
@@ -66,7 +66,7 @@ private:
     TString Kind;
     ui64 PageSize = 0;
     TString PageToken;
-    THashMap<TString, THandler> KindToHandler; 
+    THashMap<TString, THandler> KindToHandler;
 };
 
 }

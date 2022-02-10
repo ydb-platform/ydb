@@ -6,7 +6,7 @@ OWNER(
 )
 
 SRCS(
-    import.cpp 
+    import.cpp
 )
 
 PEERDIR(

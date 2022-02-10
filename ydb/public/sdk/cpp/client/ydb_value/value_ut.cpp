@@ -315,8 +315,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([[10u;[1000u]];[20u;[2000u]]])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([[10,{"Member1":"1972-09-27"}],[20,{"Member1":"1975-06-24"}]])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([[10,{"Member1":"1972-09-27"}],[20,{"Member1":"1975-06-24"}]])");
     }
 
     Y_UNIT_TEST(ParseValueMaybe) {
@@ -539,8 +539,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([17;19;21])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([17,19,21])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([17,19,21])");
     }
 
     Y_UNIT_TEST(BuildValueListEmpty) {
@@ -552,8 +552,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             R"(List<Uint32>)");
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([])");
     }
 
     Y_UNIT_TEST(BuildValueListEmpty2) {
@@ -571,8 +571,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([[10u];[]])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([[10],[]])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([[10],[]])");
     }
 
     Y_UNIT_TEST(BuildValueListEmpty3) {
@@ -590,8 +590,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([[];[10u]])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([[],[10]])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([[],[10]])");
     }
 
     Y_UNIT_TEST(BuildValueBadCall) {
@@ -627,8 +627,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             R"(List<Int32?>)");
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([[1];#;[57];#])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([1,null,57,null])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([1,null,57,null])");
 
         auto expectedProtoValueStr =
             "items {\n"
@@ -683,8 +683,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             R"(Tuple<Int32??,Int64???,String??,Utf8???>)");
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([[[10]];[[[-1]]];[#];[[#]]])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([10,-1,null,null])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([10,-1,null,null])");
 
         auto expectedProtoValueStr =
             "items {\n"
@@ -782,11 +782,11 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([[1u;"Anna";-100;#];[2u;"Paul";-200;["Some details"]]])");
-        UNIT_ASSERT_NO_DIFF( 
-            FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([{"Id":1,"Name":"Anna","Value":-100,"Description":null},)" 
-            R"({"Id":2,"Name":"Paul","Value":-200,"Description":"Some details"}])" 
-        ); 
+        UNIT_ASSERT_NO_DIFF(
+            FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([{"Id":1,"Name":"Anna","Value":-100,"Description":null},)"
+            R"({"Id":2,"Name":"Paul","Value":-200,"Description":"Some details"}])"
+        );
     }
 
     Y_UNIT_TEST(BuildValueStructMissingMember) {
@@ -850,11 +850,11 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             R"(Tuple<Bool,Int8,Uint8,Int16,Uint16,Int32,Uint32,Int64,Uint64,Float,Double,Date,Datetime,Timestamp,Interval,TzDate,TzDatetime,TzTimestamp,String,Utf8,Yson,Json>)");
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([%true;-1;1u;-2;2u;-3;3u;-4;4u;-5.5;6.6;7u;8u;9u;-10;"2018-02-02,Europe/Moscow";"2018-02-03T15:00:00,Europe/Moscow";"2018-02-07T15:00:00,Europe/Moscow";"TestString";"TestUtf8";"[]";"{}"])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([true,-1,1,-2,2,-3,3,-4,4,-5.5,6.6,"1970-01-08","1970-01-01T00:00:08Z",)" 
-            R"("1970-01-01T00:00:00.000009Z",-10,"2018-02-02,Europe/Moscow",)" 
-            R"("2018-02-03T15:00:00,Europe/Moscow","2018-02-07T15:00:00,Europe/Moscow",)" 
-            R"("TestString","TestUtf8","[]","{}"])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([true,-1,1,-2,2,-3,3,-4,4,-5.5,6.6,"1970-01-08","1970-01-01T00:00:08Z",)"
+            R"("1970-01-01T00:00:00.000009Z",-10,"2018-02-02,Europe/Moscow",)"
+            R"("2018-02-03T15:00:00,Europe/Moscow","2018-02-07T15:00:00,Europe/Moscow",)"
+            R"("TestString","TestUtf8","[]","{}"])");
     }
 
     Y_UNIT_TEST(BuildValueTuple1) {
@@ -878,8 +878,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([[10;"Str1"];[20;"Str2"]])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([[10,"Str1"],[20,"Str2"]])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([[10,"Str1"],[20,"Str2"]])");
     }
 
     Y_UNIT_TEST(BuildValueTuple2) {
@@ -902,8 +902,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([[-10;"Utf1"];[-20;"Utf2"]])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([[-10,"Utf1"],[-20,"Utf2"]])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([[-10,"Utf1"],[-20,"Utf2"]])");
     }
 
     Y_UNIT_TEST(BuildValueTupleElementsMismatch1) {
@@ -1003,8 +1003,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([[1;"Str1"];[2;"Str2"]])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([[1,"Str1"],[2,"Str2"]])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([[1,"Str1"],[2,"Str2"]])");
     }
 
     Y_UNIT_TEST(BuildValueDict2) {
@@ -1023,8 +1023,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([[1;"Str1"];[2;"Str2"]])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([[1,"Str1"],[2,"Str2"]])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([[1,"Str1"],[2,"Str2"]])");
     }
 
     Y_UNIT_TEST(BuildValueDictTypeMismatch1) {
@@ -1080,8 +1080,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             R"(Dict<Uint32,String>)");
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([])");
     }
 
     Y_UNIT_TEST(BuildValueDictEmpty2) {
@@ -1108,8 +1108,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             R"(List<Dict<Int32,String>>)");
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([[[1;"Str1"]];[];[]])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
-            R"([[[1,"Str1"]],[],[]])"); 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"([[[1,"Str1"]],[],[]])");
     }
 
     Y_UNIT_TEST(BuildValueDictEmptyNoType) {
@@ -1217,7 +1217,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             R"(Tuple<Struct<'Name':String,'Value':Uint64>,Utf8?,List<Bool>,Dict<Int32,Uint8?>,DyNumber?>)");
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
             R"([["Sergey";1u];#;[%true];[[10;#]];["12.345"]])");
-        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode), 
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
             R"([{"Name":"Sergey","Value":1},null,[true],[[10,null]],"12.345"])");
     }
 }

@@ -4,7 +4,7 @@
 #include "rpc_scheme_base.h"
 #include "rpc_common.h"
 #include "table_profiles.h"
-#include "table_settings.h" 
+#include "table_settings.h"
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
@@ -89,15 +89,15 @@ private:
                  IEventHandle::FlagTrackDelivery);
     }
 
-    // Mutually exclusive settings 
-    void MEWarning(const TString& settingName) { 
-        Request_->RaiseIssue( 
-            NYql::TIssue(TStringBuilder() << "Table profile and " << settingName 
-                << " are set. They are mutually exclusive. Use either one of them.") 
-            .SetCode(NKikimrIssues::TIssuesIds::WARNING, NYql::TSeverityIds::S_WARNING) 
-        ); 
-    } 
- 
+    // Mutually exclusive settings
+    void MEWarning(const TString& settingName) {
+        Request_->RaiseIssue(
+            NYql::TIssue(TStringBuilder() << "Table profile and " << settingName
+                << " are set. They are mutually exclusive. Use either one of them.")
+            .SetCode(NKikimrIssues::TIssuesIds::WARNING, NYql::TSeverityIds::S_WARNING)
+        );
+    }
+
     void SendProposeRequest(const TActorContext &ctx) {
         const auto req = GetProtoRequest();
         std::pair<TString, TString> pathPair;
@@ -154,13 +154,13 @@ private:
             return Reply(code, issues, ctx);
         }
 
-        bool tableProfileSet = false; 
-        if (req->has_profile()) { 
-            const auto& profile = req->profile(); 
-            tableProfileSet = profile.preset_name() || profile.has_compaction_policy() || profile.has_execution_policy() 
-                || profile.has_partitioning_policy() || profile.has_storage_policy() || profile.has_replication_policy() 
-                || profile.has_caching_policy(); 
-        } 
+        bool tableProfileSet = false;
+        if (req->has_profile()) {
+            const auto& profile = req->profile();
+            tableProfileSet = profile.preset_name() || profile.has_compaction_policy() || profile.has_execution_policy()
+                || profile.has_partitioning_policy() || profile.has_storage_policy() || profile.has_replication_policy()
+                || profile.has_caching_policy();
+        }
 
         if (!Profiles.ApplyTableProfile(req->profile(), *tableDesc, code, error)) {
             NYql::TIssues issues;
@@ -172,9 +172,9 @@ private:
 
         // Apply storage settings to the default column family
         if (req->has_storage_settings()) {
-            if (tableProfileSet) { 
-                MEWarning("StorageSettings"); 
-            } 
+            if (tableProfileSet) {
+                MEWarning("StorageSettings");
+            }
             if (!families.ApplyStorageSettings(req->storage_settings(), &code, &error)) {
                 NYql::TIssues issues;
                 issues.AddIssue(NYql::TIssue(error));
@@ -182,9 +182,9 @@ private:
             }
         }
 
-        if (tableProfileSet && req->column_familiesSize()) { 
-            MEWarning("ColumnFamilies"); 
-        } 
+        if (tableProfileSet && req->column_familiesSize()) {
+            MEWarning("ColumnFamilies");
+        }
         for (const auto& familySettings : req->column_families()) {
             if (!families.ApplyFamilySettings(familySettings, &code, &error)) {
                 NYql::TIssues issues;
@@ -206,19 +206,19 @@ private:
             attr.SetValue(value);
         }
 
-        TList<TString> warnings; 
+        TList<TString> warnings;
         if (!FillCreateTableSettingsDesc(*tableDesc, *req, Profiles, code, error, warnings)) {
-            NYql::TIssues issues; 
-            issues.AddIssue(NYql::TIssue(error)); 
-            return Reply(code, issues, ctx); 
-        } 
-        for (const auto& warning : warnings) { 
-            Request_->RaiseIssue( 
-                NYql::TIssue(warning) 
-                .SetCode(NKikimrIssues::TIssuesIds::WARNING, NYql::TSeverityIds::S_WARNING) 
-            ); 
-        } 
- 
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::TIssue(error));
+            return Reply(code, issues, ctx);
+        }
+        for (const auto& warning : warnings) {
+            Request_->RaiseIssue(
+                NYql::TIssue(warning)
+                .SetCode(NKikimrIssues::TIssuesIds::WARNING, NYql::TSeverityIds::S_WARNING)
+            );
+        }
+
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
 

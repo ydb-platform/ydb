@@ -70,17 +70,17 @@ int MainRun(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories>
         configParser.SetupGlobalOpts(opts);
         NMsgBusProxy::TMsgBusClientConfig mbusConfig;
         mbusConfig.ConfigureLastGetopt(opts, "mb-");
-        NDriverClient::HideOptions(opts); 
-        opts.AddLongOption('s', "server", "Server address to connect (default $KIKIMR_SERVER)").RequiredArgument("ADDR[:NUM]"); 
-        opts.AddLongOption('k', "token", "Security token").RequiredArgument("TOKEN"); 
-        opts.AddLongOption('f', "token-file", "Security token file").RequiredArgument("PATH"); 
-        opts.AddLongOption('d', "dump", "Dump requests to error log").NoArgument(); 
-        opts.AddLongOption('t', "time", "Show request execution time").NoArgument(); 
-        opts.AddLongOption('o', "progress", "Show progress of long requests").NoArgument(); 
-        opts.AddLongOption(0,  "allocator-info", "Print the name of allocator linked to the binary and exit") 
+        NDriverClient::HideOptions(opts);
+        opts.AddLongOption('s', "server", "Server address to connect (default $KIKIMR_SERVER)").RequiredArgument("ADDR[:NUM]");
+        opts.AddLongOption('k', "token", "Security token").RequiredArgument("TOKEN");
+        opts.AddLongOption('f', "token-file", "Security token file").RequiredArgument("PATH");
+        opts.AddLongOption('d', "dump", "Dump requests to error log").NoArgument();
+        opts.AddLongOption('t', "time", "Show request execution time").NoArgument();
+        opts.AddLongOption('o', "progress", "Show progress of long requests").NoArgument();
+        opts.AddLongOption(0,  "allocator-info", "Print the name of allocator linked to the binary and exit")
                 .NoArgument().Handler(&PrintAllocatorInfoAndExit);
-        opts.SetFreeArgsMin(1); 
-        opts.SetFreeArgTitle(0, "<command>", TDriverModeParser::CommandsCsv()); 
+        opts.SetFreeArgsMin(1);
+        opts.SetFreeArgTitle(0, "<command>", TDriverModeParser::CommandsCsv());
         opts.SetCmdLineDescr(NDriverClient::NewClientCommandsDescription(factories));
 
         opts.AddHelpOption('h');
@@ -174,13 +174,13 @@ void SetupTerminateHandler() {
 int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFactories> factories) {
     try {
         return NKikimr::Main(argc, argv, std::move(factories));
-    } 
-    catch (const NYdb::NConsoleClient::TMissUseException& e) { 
-        Cerr << e.what() << Endl; 
-        Cerr << "Try \"--help\" option for more info." << Endl; 
-        return 1; 
-    } 
-    catch (const yexception& e) { 
+    }
+    catch (const NYdb::NConsoleClient::TMissUseException& e) {
+        Cerr << e.what() << Endl;
+        Cerr << "Try \"--help\" option for more info." << Endl;
+        return 1;
+    }
+    catch (const yexception& e) {
         Cerr << "Caught exception: " << e.what() << Endl;
         return 1;
     }

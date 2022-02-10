@@ -50,7 +50,7 @@ struct TKikimrSettings {
     NCommon::TConfSetting<bool, false> UseNewEngine;
     NCommon::TConfSetting<bool, false> UnwrapReadTableValues;
     NCommon::TConfSetting<bool, false> AllowNullCompareInIndex;
-    NCommon::TConfSetting<bool, false> EnableSystemColumns; 
+    NCommon::TConfSetting<bool, false> EnableSystemColumns;
     NCommon::TConfSetting<bool, false> EnableLlvm;
 
     /* Disable optimizer rules */
@@ -80,7 +80,7 @@ struct TKikimrSettings {
     bool AllowReverseRange() const;
     bool HasDefaultCluster() const;
     bool HasAllowKqpUnsafeCommit() const;
-    bool SystemColumnsEnabled() const; 
+    bool SystemColumnsEnabled() const;
     bool SpillingEnabled() const;
     bool DisableLlvmForUdfStages() const;
     bool PushOlapProcess() const;

@@ -157,7 +157,7 @@ struct TAppData {
     TResourceProfilesPtr ResourceProfiles;
 
     TProgramShouldContinue * const KikimrShouldContinue;
-    bool EnableIntrospection = true; 
+    bool EnableIntrospection = true;
 
     // Used to allow column families for testing
     bool AllowColumnFamiliesForTest = false;

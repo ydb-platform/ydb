@@ -34,7 +34,7 @@ enum EQueryType {
     QUERY_TYPE_SQL_SCRIPT = 8;
     QUERY_TYPE_SQL_SCAN = 9;
     QUERY_TYPE_AST_SCAN = 10;
-    QUERY_TYPE_SQL_SCRIPT_STREAMING = 11; 
+    QUERY_TYPE_SQL_SCRIPT_STREAMING = 11;
 };
 
 enum EQueryAction {
@@ -343,11 +343,11 @@ message TEvPingSessionResponse {
     optional bool WorkerIsClosing = 4 [default = false];
 }
 
-message TEvDataQueryStreamPart { 
-    optional NActorsProto.TActorId GatewayActorId = 1; 
-    repeated NKikimrMiniKQL.TResult Results = 2; 
-}; 
- 
+message TEvDataQueryStreamPart {
+    optional NActorsProto.TActorId GatewayActorId = 1;
+    repeated NKikimrMiniKQL.TResult Results = 2;
+};
+
 // Executer
 
 message TExecuterTxRequest {

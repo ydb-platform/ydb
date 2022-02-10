@@ -28,10 +28,10 @@ namespace NDriverClient {
             switch (endpoint.ServerType) {
             case TCommandConfig::EServerType::GRpc:
                 ClientConfig = NGrpc::TGRpcClientConfig(endpoint.Address);
-                if (endpoint.EnableSsl.Defined()) { 
+                if (endpoint.EnableSsl.Defined()) {
                     auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&ClientConfig.GetRef());
-                    p->EnableSsl = endpoint.EnableSsl.GetRef(); 
-                } 
+                    p->EnableSsl = endpoint.EnableSsl.GetRef();
+                }
                 break;
             case TCommandConfig::EServerType::MessageBus:
                 if (!endpoint.Address.empty()) {

@@ -31,7 +31,7 @@ void TToolsCommand::Config(TConfig& config) {
 //  Dump
 ////////////////////////////////////////////////////////////////////////////////
 TCommandDump::TCommandDump()
-    : TToolsCommand("dump", {}, "Dump specified database directory or table into local directory") 
+    : TToolsCommand("dump", {}, "Dump specified database directory or table into local directory")
 {}
 
 void TCommandDump::Config(TConfig& config) {
@@ -39,41 +39,41 @@ void TCommandDump::Config(TConfig& config) {
 
     config.SetFreeArgsNum(0);
 
-    config.Opts->AddLongOption('p', "path", "Database path to a directory or a table to be dumped.") 
-        .DefaultValue(".").StoreResult(&Path); 
-    config.Opts->AddLongOption("exclude", "Pattern(s) (PCRE) for paths excluded from dump." 
-            " Option can be used several times - one for each pattern.") 
+    config.Opts->AddLongOption('p', "path", "Database path to a directory or a table to be dumped.")
+        .DefaultValue(".").StoreResult(&Path);
+    config.Opts->AddLongOption("exclude", "Pattern(s) (PCRE) for paths excluded from dump."
+            " Option can be used several times - one for each pattern.")
         .RequiredArgument("STRING").Handler1T<TString>([this](const TString& arg) {
             ExclusionPatterns.emplace_back(TRegExMatch(arg));
         });
-    config.Opts->AddLongOption('o', "output", "[Required] Path in a local filesystem to a directory to place dump into." 
-            " Directory should either not exist or be empty.") 
+    config.Opts->AddLongOption('o', "output", "[Required] Path in a local filesystem to a directory to place dump into."
+            " Directory should either not exist or be empty.")
         .StoreResult(&FilePath);
-    config.Opts->AddLongOption("scheme-only", "Dump only scheme") 
+    config.Opts->AddLongOption("scheme-only", "Dump only scheme")
         .StoreTrue(&IsSchemeOnly);
-    config.Opts->AddLongOption("avoid-copy", "Avoid copying." 
-            " By default, YDB makes a copy of a table before dumping it to reduce impact on workload and ensure consistency.\n" 
-            "In some cases (e.g. for tables with external blobs) copying should be disabled.") 
+    config.Opts->AddLongOption("avoid-copy", "Avoid copying."
+            " By default, YDB makes a copy of a table before dumping it to reduce impact on workload and ensure consistency.\n"
+            "In some cases (e.g. for tables with external blobs) copying should be disabled.")
         .StoreTrue(&AvoidCopy);
-    config.Opts->AddLongOption("save-partial-result", "Do not remove partial dump result." 
-            " If this option is not enabled, all files that have already been created will be removed in case of error.") 
+    config.Opts->AddLongOption("save-partial-result", "Do not remove partial dump result."
+            " If this option is not enabled, all files that have already been created will be removed in case of error.")
         .StoreTrue(&SavePartialResult);
-    config.Opts->AddLongOption("preserve-pool-kinds", "Preserve storage pool kind settings." 
-            " If this option is enabled, storage pool kind will be saved to dump." 
-            " In this case, if there will be no such storage pool kind in database on restore, error will occur." 
-            " By default this option is disabled and any existing storage pool kind will be used on restore.") 
+    config.Opts->AddLongOption("preserve-pool-kinds", "Preserve storage pool kind settings."
+            " If this option is enabled, storage pool kind will be saved to dump."
+            " In this case, if there will be no such storage pool kind in database on restore, error will occur."
+            " By default this option is disabled and any existing storage pool kind will be used on restore.")
         .StoreTrue(&PreservePoolKinds);
-    config.Opts->AddLongOption("consistency-level", "Consistency level." 
-            " Options: database, table\n" 
-            "database - take one consistent snapshot of all tables specified for dump." 
-            " Takes more time and is more likely to impact workload;\n" 
-            "table - take consistent snapshot per each table independently.") 
+    config.Opts->AddLongOption("consistency-level", "Consistency level."
+            " Options: database, table\n"
+            "database - take one consistent snapshot of all tables specified for dump."
+            " Takes more time and is more likely to impact workload;\n"
+            "table - take consistent snapshot per each table independently.")
         .DefaultValue("database").StoreResult(&ConsistencyLevel);
 }
 
 void TCommandDump::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    AdjustPath(config); 
+    AdjustPath(config);
 }
 
 int TCommandDump::Run(TConfig& config) {
@@ -84,7 +84,7 @@ int TCommandDump::Run(TConfig& config) {
     } else if (ConsistencyLevel == "table") {
         useConsistentCopyTable = false;
     } else {
-        throw yexception() << "Incorrect consistency level. Available options: \"database\", \"table\"" << Endl; 
+        throw yexception() << "Incorrect consistency level. Available options: \"database\", \"table\"" << Endl;
     }
 
     NYdb::SetVerbosity(config.IsVerbose);
@@ -116,16 +116,16 @@ void TCommandRestore::Config(TConfig& config) {
     config.SetFreeArgsNum(0);
 
     config.Opts->AddLongOption('p', "path",
-            "[Required] Database path to a destination directory where restored directory or table will be placed.") 
+            "[Required] Database path to a destination directory where restored directory or table will be placed.")
         .StoreResult(&Path);
     config.Opts->AddLongOption('i', "input",
-            "[Required] Path in a local filesystem to a directory with dump.") 
+            "[Required] Path in a local filesystem to a directory with dump.")
         .StoreResult(&FilePath);
 
     config.Opts->AddLongOption("dry-run", TStringBuilder()
             << "Do not restore tables, only check that:" << Endl
-            << "  - all dumped tables exist in database;" << Endl 
-            << "  - all dumped table schemes are the same as in database.") 
+            << "  - all dumped tables exist in database;" << Endl
+            << "  - all dumped table schemes are the same as in database.")
         .StoreTrue(&IsDryRun);
 
     NDump::TRestoreSettings defaults;
@@ -142,9 +142,9 @@ void TCommandRestore::Config(TConfig& config) {
         .DefaultValue(defaults.SkipDocumentTables_).StoreResult(&SkipDocumentTables)
         .Hidden(); // Deprecated
 
-    config.Opts->AddLongOption("save-partial-result", "Do not remove partial restore result." 
-            " If this option is not enabled, all changes in database that have already been applied during restore" 
-            " will be reverted in case of error.") 
+    config.Opts->AddLongOption("save-partial-result", "Do not remove partial restore result."
+            " If this option is not enabled, all changes in database that have already been applied during restore"
+            " will be reverted in case of error.")
         .StoreTrue(&SavePartialResult);
 
     config.Opts->AddLongOption("bandwidth", "Limit data upload bandwidth, bytes per second (example: 2MiB)")
@@ -162,16 +162,16 @@ void TCommandRestore::Config(TConfig& config) {
     config.Opts->AddLongOption("upload-batch-rus", "Limit upload batch size in request units (example: 100)")
         .DefaultValue(defaults.RequestUnitsPerRequest_).StoreResult(&RequestUnitsPerRequest);
 
-    config.Opts->AddLongOption("in-flight", "Limit in-flight request count") 
+    config.Opts->AddLongOption("in-flight", "Limit in-flight request count")
         .DefaultValue(defaults.InFly_).StoreResult(&InFly);
 
-    config.Opts->AddLongOption("bulk-upsert", "Use BulkUpsert - a more efficient way to upload data with lower consistency level." 
-        " Global secondary indexes are not supported in this mode.") 
-        .StoreTrue(&UseBulkUpsert) 
-        .Hidden(); // Deprecated. Using ImportData should be more effective. 
+    config.Opts->AddLongOption("bulk-upsert", "Use BulkUpsert - a more efficient way to upload data with lower consistency level."
+        " Global secondary indexes are not supported in this mode.")
+        .StoreTrue(&UseBulkUpsert)
+        .Hidden(); // Deprecated. Using ImportData should be more effective.
 
-    config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data with lower consistency level." 
-        " Global secondary indexes are not supported in this mode.") 
+    config.Opts->AddLongOption("import-data", "Use ImportData - a more efficient way to upload data with lower consistency level."
+        " Global secondary indexes are not supported in this mode.")
         .StoreTrue(&UseImportData);
 
     config.Opts->MutuallyExclusive("bandwidth", "rps");
@@ -180,7 +180,7 @@ void TCommandRestore::Config(TConfig& config) {
 
 void TCommandRestore::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    AdjustPath(config); 
+    AdjustPath(config);
 }
 
 int TCommandRestore::Run(TConfig& config) {
@@ -227,61 +227,61 @@ int TCommandRestore::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-//////////////////////////////////////////////////////////////////////////////// 
-//  Copy 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-TCommandCopy::TCommandCopy() 
-    : TTableCommand("copy", {}, "Copy table(s)") 
+////////////////////////////////////////////////////////////////////////////////
+//  Copy
+////////////////////////////////////////////////////////////////////////////////
+
+TCommandCopy::TCommandCopy()
+    : TTableCommand("copy", {}, "Copy table(s)")
 {
     TItem::DefineFields({
         {"Source", {{"source", "src", "s"}, "Source table path", true}},
         {"Destination", {{"destination", "dst", "d"}, "Destination table path", true}}
     });
 }
- 
-void TCommandCopy::Config(TConfig& config) { 
-    TTableCommand::Config(config); 
- 
-    config.SetFreeArgsNum(0); 
- 
-    TStringBuilder itemHelp; 
-    itemHelp << "[At least one] Item specification" << Endl 
-        << "  Possible property names:" << Endl 
+
+void TCommandCopy::Config(TConfig& config) {
+    TTableCommand::Config(config);
+
+    config.SetFreeArgsNum(0);
+
+    TStringBuilder itemHelp;
+    itemHelp << "[At least one] Item specification" << Endl
+        << "  Possible property names:" << Endl
         << TItem::FormatHelp(2);
-    config.Opts->AddLongOption("item", itemHelp) 
-        .RequiredArgument("PROPERTY=VALUE,..."); 
-} 
- 
-void TCommandCopy::Parse(TConfig& config) { 
-    TClientCommand::Parse(config); 
- 
-    Items = TItem::Parse(config, "item"); 
-    if (Items.empty()) { 
-        throw TMissUseException() << "At least one item should be provided"; 
-    } 
+    config.Opts->AddLongOption("item", itemHelp)
+        .RequiredArgument("PROPERTY=VALUE,...");
+}
+
+void TCommandCopy::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+
+    Items = TItem::Parse(config, "item");
+    if (Items.empty()) {
+        throw TMissUseException() << "At least one item should be provided";
+    }
 
     for (auto& item : Items) {
         NConsoleClient::AdjustPath(item.Source, config);
         NConsoleClient::AdjustPath(item.Destination, config);
     }
-} 
- 
-int TCommandCopy::Run(TConfig& config) { 
-    TVector<NYdb::NTable::TCopyItem> copyItems; 
-    copyItems.reserve(Items.size()); 
-    for (auto& item : Items) { 
-        copyItems.emplace_back(item.Source, item.Destination); 
-    } 
-    ThrowOnError( 
-        GetSession(config).CopyTables( 
-            copyItems, 
-            FillSettings(NTable::TCopyTablesSettings()) 
-        ).GetValueSync() 
-    ); 
-    return EXIT_SUCCESS; 
-} 
- 
+}
+
+int TCommandCopy::Run(TConfig& config) {
+    TVector<NYdb::NTable::TCopyItem> copyItems;
+    copyItems.reserve(Items.size());
+    for (auto& item : Items) {
+        copyItems.emplace_back(item.Source, item.Destination);
+    }
+    ThrowOnError(
+        GetSession(config).CopyTables(
+            copyItems,
+            FillSettings(NTable::TCopyTablesSettings())
+        ).GetValueSync()
+    );
+    return EXIT_SUCCESS;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Rename

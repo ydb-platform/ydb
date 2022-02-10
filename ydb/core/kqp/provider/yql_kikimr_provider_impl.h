@@ -34,12 +34,12 @@ private:
     virtual TStatus HandleCreateTable(NNodes::TKiCreateTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterTable(NNodes::TKiAlterTable node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropTable(NNodes::TKiDropTable node, TExprContext& ctx) = 0;
-    virtual TStatus HandleCreateUser(NNodes::TKiCreateUser node, TExprContext& ctx) = 0; 
-    virtual TStatus HandleAlterUser(NNodes::TKiAlterUser node, TExprContext& ctx) = 0; 
-    virtual TStatus HandleDropUser(NNodes::TKiDropUser node, TExprContext& ctx) = 0; 
-    virtual TStatus HandleCreateGroup(NNodes::TKiCreateGroup node, TExprContext& ctx) = 0; 
-    virtual TStatus HandleAlterGroup(NNodes::TKiAlterGroup node, TExprContext& ctx) = 0; 
-    virtual TStatus HandleDropGroup(NNodes::TKiDropGroup node, TExprContext& ctx) = 0; 
+    virtual TStatus HandleCreateUser(NNodes::TKiCreateUser node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterUser(NNodes::TKiAlterUser node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropUser(NNodes::TKiDropUser node, TExprContext& ctx) = 0;
+    virtual TStatus HandleCreateGroup(NNodes::TKiCreateGroup node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterGroup(NNodes::TKiAlterGroup node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropGroup(NNodes::TKiDropGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleWrite(NNodes::TExprBase node, TExprContext& ctx) = 0;
     virtual TStatus HandleCommit(NNodes::TCoCommit node, TExprContext& ctx) = 0;
     virtual TStatus HandleKql(NNodes::TCallable node, TExprContext& ctx) = 0;
@@ -53,8 +53,8 @@ public:
     enum class Type {
         Table,
         TableList,
-        TableScheme, 
-        Role 
+        TableScheme,
+        Role
     };
 
 public:
@@ -69,21 +69,21 @@ public:
     TString GetTablePath() const {
         Y_VERIFY_DEBUG(KeyType.Defined());
         Y_VERIFY_DEBUG(KeyType == Type::Table || KeyType == Type::TableScheme);
-        return Target; 
+        return Target;
     }
 
     TString GetFolderPath() const {
         Y_VERIFY_DEBUG(KeyType.Defined());
         Y_VERIFY_DEBUG(KeyType == Type::TableList);
-        return Target; 
+        return Target;
     }
 
-    TString GetRoleName() const { 
-        Y_VERIFY_DEBUG(KeyType.Defined()); 
-        Y_VERIFY_DEBUG(KeyType == Type::Role); 
-        return Target; 
-    } 
- 
+    TString GetRoleName() const {
+        Y_VERIFY_DEBUG(KeyType.Defined());
+        Y_VERIFY_DEBUG(KeyType == Type::Role);
+        return Target;
+    }
+
     const TMaybe<TString>& GetView() const {
         return View;
     }
@@ -93,7 +93,7 @@ public:
 private:
     TExprContext& Ctx;
     TMaybe<Type> KeyType;
-    TString Target; 
+    TString Target;
     TMaybe<TString> View;
 };
 
@@ -206,11 +206,11 @@ NNodes::TExprBase UnwrapKiReadTableValues(NNodes::TExprBase input, const TKikimr
 
 NNodes::TKiVersionedTable BuildVersionedTable(const TKikimrTableMetadata& metadata, TPositionHandle pos, TExprContext& ctx);
 NNodes::TCoAtomList BuildColumnsList(
-    const TKikimrTableDescription& table, 
-    TPositionHandle pos, 
-    TExprContext& ctx, 
-    bool withSystemColumns = false 
-); 
+    const TKikimrTableDescription& table,
+    TPositionHandle pos,
+    TExprContext& ctx,
+    bool withSystemColumns = false
+);
 NNodes::TCoAtomList BuildKeyColumnsList(
     const TKikimrTableDescription& table,
     TPositionHandle pos,
@@ -227,12 +227,12 @@ NNodes::TCoNameValueTupleList ExtractNamedKeyTuples(NNodes::TCoArgument arg,
     const TKikimrTableDescription& desc, TExprContext& ctx, const TString& tablePrefix = TString());
 
 const TTypeAnnotationNode* GetReadTableRowType(TExprContext& ctx, const TKikimrTablesData& tablesData,
-    const TString& cluster, const TString& table, NNodes::TCoAtomList select, bool withSystemColumns = false); 
+    const TString& cluster, const TString& table, NNodes::TCoAtomList select, bool withSystemColumns = false);
 
 NKikimrKqp::EIsolationLevel GetIsolationLevel(const TMaybe<TString>& isolationLevel);
 TMaybe<TString> GetIsolationLevel(const NKikimrKqp::EIsolationLevel& isolationLevel);
 
-TYdbOperation GetTableOp(const NNodes::TKiWriteTable& write); 
+TYdbOperation GetTableOp(const NNodes::TKiWriteTable& write);
 TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const NNodes::TCoNameValueTupleList& operations, TExprContext& ctx);
 TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const NNodes::TKiOperationList& operations, TExprContext& ctx);
 void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, NKqpProto::TKqpTableInfo* info);
@@ -257,8 +257,8 @@ NNodes::TMaybeNode<NNodes::TExprBase> KiTableLookupGetValue(NNodes::TExprBase no
     TExprContext& ctx);
 NCommon::TTableLookup::TCompareResult KiTableLookupCompare(NNodes::TExprBase left, NNodes::TExprBase right);
 
-NNodes::TKiProgram BuildKiProgram(NNodes::TKiDataQuery query, const TKikimrTablesData& tablesData, TExprContext& ctx, 
-    bool withSystemColumns); 
+NNodes::TKiProgram BuildKiProgram(NNodes::TKiDataQuery query, const TKikimrTablesData& tablesData, TExprContext& ctx,
+    bool withSystemColumns);
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions();
 const THashSet<TStringBuf>& KikimrDataSinkFunctions();
@@ -270,15 +270,15 @@ const TStringBuf& KikimrCommitModeFlush();
 const TStringBuf& KikimrCommitModeRollback();
 const TStringBuf& KikimrCommitModeScheme();
 
-const TYdbOperations& KikimrSchemeOps(); 
-const TYdbOperations& KikimrDataOps(); 
-const TYdbOperations& KikimrModifyOps(); 
-const TYdbOperations& KikimrReadOps(); 
-const TYdbOperations& KikimrRequireUnmodifiedOps(); 
+const TYdbOperations& KikimrSchemeOps();
+const TYdbOperations& KikimrDataOps();
+const TYdbOperations& KikimrModifyOps();
+const TYdbOperations& KikimrReadOps();
+const TYdbOperations& KikimrRequireUnmodifiedOps();
 
-const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns(); 
-bool IsKikimrSystemColumn(const TStringBuf columnName); 
- 
+const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns();
+bool IsKikimrSystemColumn(const TStringBuf columnName);
+
 bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos);
 
 } // namespace NYql

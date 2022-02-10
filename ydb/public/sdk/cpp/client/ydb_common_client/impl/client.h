@@ -19,7 +19,7 @@ public:
         const TMaybe<TString>& discoveryEndpoint,
         const TMaybe<EDiscoveryMode>& discoveryMode,
         const TMaybe<bool>& enableSsl,
-        const TMaybe<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory) 
+        const TMaybe<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory)
         : Connections_(std::move(connections))
         , DbDriverState_(Connections_->GetDriverState(database, discoveryEndpoint, discoveryMode, enableSsl, credentialsProviderFactory))
     {

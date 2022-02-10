@@ -381,26 +381,26 @@ private:
 
         for (auto& tupleItem : selectTuple.Children()) {
             auto columnName = tupleItem->Content();
-            const TTypeAnnotationNode *columnDataType; 
+            const TTypeAnnotationNode *columnDataType;
 
-            auto systemColumnType = KikimrSystemColumns().find(columnName); 
-            if (systemColumnType != KikimrSystemColumns().end()) { 
-                columnDataType = ctx.MakeType<TDataExprType>(systemColumnType->second); 
+            auto systemColumnType = KikimrSystemColumns().find(columnName);
+            if (systemColumnType != KikimrSystemColumns().end()) {
+                columnDataType = ctx.MakeType<TDataExprType>(systemColumnType->second);
             } else {
-                auto column = lookup->Columns.FindPtr(columnName); 
-                YQL_ENSURE(column); 
- 
-                // Decimal type is transformed into parametrized Decimal(22, 9). 
-                if (column->Type == NYql::NProto::TypeIds::Decimal) { 
-                    columnDataType = ctx.MakeType<TDataExprParamsType>( 
-                        NUdf::GetDataSlot(column->Type), 
-                        ToString(NScheme::DECIMAL_PRECISION), 
-                        ToString(NScheme::DECIMAL_SCALE)); 
-                } else { 
-                    columnDataType = GetMkqlDataTypeAnnotation( 
-                        TDataType::Create(column->Type, *MkqlCtx->TypeEnv), 
-                        ctx); 
-                } 
+                auto column = lookup->Columns.FindPtr(columnName);
+                YQL_ENSURE(column);
+
+                // Decimal type is transformed into parametrized Decimal(22, 9).
+                if (column->Type == NYql::NProto::TypeIds::Decimal) {
+                    columnDataType = ctx.MakeType<TDataExprParamsType>(
+                        NUdf::GetDataSlot(column->Type),
+                        ToString(NScheme::DECIMAL_PRECISION),
+                        ToString(NScheme::DECIMAL_SCALE));
+                } else {
+                    columnDataType = GetMkqlDataTypeAnnotation(
+                        TDataType::Create(column->Type, *MkqlCtx->TypeEnv),
+                        ctx);
+                }
             }
             auto columnOptType = ctx.MakeType<TOptionalExprType>(columnDataType);
 
@@ -503,13 +503,13 @@ private:
         ui32 selectIndex = 0;
         for (auto selectItem : selectTuple->Children()) {
             auto columnName = selectItem->Content();
-            if (!NKikimr::IsSystemColumn(columnName)) { 
-                auto column = lookup->Columns.FindPtr(columnName); 
-                Y_ENSURE_EX(column, TNodeException(node) 
-                    << "Unknown column '" << columnName 
-                    << "' for table [" << lookup->Table.TableName 
-                    << "] at select position #" << selectIndex); 
-            } 
+            if (!NKikimr::IsSystemColumn(columnName)) {
+                auto column = lookup->Columns.FindPtr(columnName);
+                Y_ENSURE_EX(column, TNodeException(node)
+                    << "Unknown column '" << columnName
+                    << "' for table [" << lookup->Table.TableName
+                    << "] at select position #" << selectIndex);
+            }
 
             ++selectIndex;
         }
@@ -829,20 +829,20 @@ TRuntimeNode GetReadTargetNode(const TExprNode& callable, ui32 index, TMkqlBuild
     return mkqlContext->PgmBuilder->ReadTarget(readTarget);
 }
 
-void FillColumnsToRead(IDbSchemeResolver::TTableResult* lookup, TExprNode* selectTuple, TVector<TSelectColumn>& columnsToRead) { 
-    for (ui32 i = 0; i < selectTuple->ChildrenSize(); ++i) { 
-        auto columnName = selectTuple->Child(i)->Content(); 
-        const auto& systemColumn = GetSystemColumns().find(columnName); 
-        if (systemColumn != GetSystemColumns().end()) { 
-            columnsToRead.emplace_back(columnName, systemColumn->second.ColumnId, systemColumn->second.TypeId); 
-        } else { 
-            auto column = lookup->Columns.FindPtr(columnName); 
-            YQL_ENSURE(column); 
-            columnsToRead.emplace_back(columnName, column->Column, column->Type); 
-        } 
-    } 
-} 
- 
+void FillColumnsToRead(IDbSchemeResolver::TTableResult* lookup, TExprNode* selectTuple, TVector<TSelectColumn>& columnsToRead) {
+    for (ui32 i = 0; i < selectTuple->ChildrenSize(); ++i) {
+        auto columnName = selectTuple->Child(i)->Content();
+        const auto& systemColumn = GetSystemColumns().find(columnName);
+        if (systemColumn != GetSystemColumns().end()) {
+            columnsToRead.emplace_back(columnName, systemColumn->second.ColumnId, systemColumn->second.TypeId);
+        } else {
+            auto column = lookup->Columns.FindPtr(columnName);
+            YQL_ENSURE(column);
+            columnsToRead.emplace_back(columnName, column->Column, column->Type);
+        }
+    }
+}
+
 void ValidateCompiledTable(const TExprNode& node, const TTableId& tableId) {
     auto currentVersion = ToString(tableId.SchemaVersion);
     auto programVersion = node.Child(0)->Child(1)->Content();
@@ -927,7 +927,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
             }
 
             TVector<TSelectColumn> columnsToRead;
-            FillColumnsToRead(lookup, node.Child(2), columnsToRead); 
+            FillColumnsToRead(lookup, node.Child(2), columnsToRead);
 
             auto readTargetNode = GetReadTargetNode(node, 3, ctx, mkqlContext);
 
@@ -1032,7 +1032,7 @@ TIntrusivePtr<NCommon::IMkqlCallableCompiler> CreateMkqlCompiler(TContext::TPtr 
             options.ForbidNullArgsTo = forbidNullArgsTo;
 
             TVector<TSelectColumn> columnsToRead;
-            FillColumnsToRead(lookup, node.Child(2), columnsToRead); 
+            FillColumnsToRead(lookup, node.Child(2), columnsToRead);
 
             auto optionsNode = node.Child(3);
             for (auto optionsItem : optionsNode->Children()) {

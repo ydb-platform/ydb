@@ -287,21 +287,21 @@ namespace NKikimr {
             ++begin;
         }
     }
- 
-    template<typename TContainer> 
-    void LogoBlobIDRepatedFromLogoBlobIDUniversal( 
-        ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID> *proto, 
-        TContainer& container) 
-    { 
-        auto begin = container.begin(); 
-        auto end = container.end(); 
-        proto->Reserve(container.size()); 
-        proto->Clear(); 
-        while (begin != end) { 
-            LogoBlobIDFromLogoBlobID(*begin, proto->Add()); 
-            ++begin; 
-        } 
-    } 
+
+    template<typename TContainer>
+    void LogoBlobIDRepatedFromLogoBlobIDUniversal(
+        ::google::protobuf::RepeatedPtrField<NKikimrProto::TLogoBlobID> *proto,
+        TContainer& container)
+    {
+        auto begin = container.begin();
+        auto end = container.end();
+        proto->Reserve(container.size());
+        proto->Clear();
+        while (begin != end) {
+            LogoBlobIDFromLogoBlobID(*begin, proto->Add());
+            ++begin;
+        }
+    }
 }
 
 template<>

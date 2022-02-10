@@ -2141,24 +2141,24 @@ void TConfigsCacheInitializer::InitializeServices(NActors::TActorSystemSetup* se
     }
 }
 
-// TTabletInfoInitializer 
+// TTabletInfoInitializer
 
-TTabletInfoInitializer::TTabletInfoInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) { 
-} 
- 
-void TTabletInfoInitializer::InitializeServices( 
-    NActors::TActorSystemSetup* setup, 
-    const NKikimr::TAppData* appData) { 
-    TActorSetupCmd tabletInfoSetup(NTabletInfo::CreateTabletInfo(), TMailboxType::ReadAsFilled, appData->UserPoolId); 
+TTabletInfoInitializer::TTabletInfoInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TTabletInfoInitializer::InitializeServices(
+    NActors::TActorSystemSetup* setup,
+    const NKikimr::TAppData* appData) {
+    TActorSetupCmd tabletInfoSetup(NTabletInfo::CreateTabletInfo(), TMailboxType::ReadAsFilled, appData->UserPoolId);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NTabletInfo::MakeTabletInfoID(), tabletInfoSetup));
-} 
- 
+}
+
 TConfigValidatorsInitializer::TConfigValidatorsInitializer(const TKikimrRunConfig& runConfig)
    : IKikimrServicesInitializer(runConfig)
 {
 }
- 
+
 void TConfigValidatorsInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     Y_UNUSED(setup);
     Y_UNUSED(appData);

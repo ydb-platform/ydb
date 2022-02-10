@@ -563,7 +563,7 @@ public:
     }
 
     bool IsMergeBySizeEnabled() const {
-        return IsSplitBySizeEnabled() && PartitionConfig().GetPartitioningPolicy().GetMinPartitionsCount() != 0; 
+        return IsSplitBySizeEnabled() && PartitionConfig().GetPartitioningPolicy().GetMinPartitionsCount() != 0;
     }
 
     bool IsSplitByLoadEnabled() const {

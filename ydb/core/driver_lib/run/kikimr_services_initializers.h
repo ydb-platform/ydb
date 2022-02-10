@@ -437,17 +437,17 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TTabletInfoInitializer : public IKikimrServicesInitializer { 
-public: 
-    TTabletInfoInitializer(const TKikimrRunConfig& runConfig); 
+class TTabletInfoInitializer : public IKikimrServicesInitializer {
+public:
+    TTabletInfoInitializer(const TKikimrRunConfig& runConfig);
 
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
-}; 
- 
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TConfigValidatorsInitializer : public IKikimrServicesInitializer {
 public:
     TConfigValidatorsInitializer(const TKikimrRunConfig& runConfig);
- 
+
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 

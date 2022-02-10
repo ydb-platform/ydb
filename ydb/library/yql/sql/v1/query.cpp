@@ -562,10 +562,10 @@ TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubque
 
 class TCreateTableNode final: public TAstListNode {
 public:
-    TCreateTableNode(TPosition pos, const TTableRef& tr, const TCreateTableParameters& params, TScopedStatePtr scoped) 
+    TCreateTableNode(TPosition pos, const TTableRef& tr, const TCreateTableParameters& params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Table(tr)
-        , Params(params) 
+        , Params(params)
         , Scoped(scoped)
     {
         scoped->UseCluster(Table.Service, Table.Cluster);
@@ -584,23 +584,23 @@ public:
             || !Params.Changefeeds.empty())
         {
             THashSet<TString> columnsSet;
-            for (auto& col : Params.Columns) { 
+            for (auto& col : Params.Columns) {
                 columnsSet.insert(col.Name);
             }
 
-            for (auto& keyColumn : Params.PkColumns) { 
+            for (auto& keyColumn : Params.PkColumns) {
                 if (!columnsSet.contains(keyColumn.Name)) {
                     ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
                     return false;
                 }
             }
-            for (auto& keyColumn : Params.PartitionByColumns) { 
+            for (auto& keyColumn : Params.PartitionByColumns) {
                 if (!columnsSet.contains(keyColumn.Name)) {
                     ctx.Error(keyColumn.Pos) << "Undefined column: " << keyColumn.Name;
                     return false;
                 }
             }
-            for (auto& keyColumn : Params.OrderByColumns) { 
+            for (auto& keyColumn : Params.OrderByColumns) {
                 if (!columnsSet.contains(keyColumn.first.Name)) {
                     ctx.Error(keyColumn.first.Pos) << "Undefined column: " << keyColumn.first.Name;
                     return false;
@@ -638,22 +638,22 @@ public:
             }
         }
         auto columns = Y();
-        for (auto& col : Params.Columns) { 
-            auto columnDesc = Y(); 
-            columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name)); 
+        for (auto& col : Params.Columns) {
+            auto columnDesc = Y();
+            columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
             auto type = col.Type;
             if (col.Nullable) {
                 type = Y("OptionalType", type);
             }
-            columnDesc = L(columnDesc, type); 
-            if (col.Families) { 
-                auto familiesDesc = Y(); 
-                for (const auto& family : col.Families) { 
-                    familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name)); 
-                } 
-                columnDesc = L(columnDesc, Q(familiesDesc)); 
-            } 
-            columns = L(columns, Q(columnDesc)); 
+            columnDesc = L(columnDesc, type);
+            if (col.Families) {
+                auto familiesDesc = Y();
+                for (const auto& family : col.Families) {
+                    familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
+                }
+                columnDesc = L(columnDesc, Q(familiesDesc));
+            }
+            columns = L(columns, Q(columnDesc));
         }
 
         auto opts = Y();
@@ -667,43 +667,43 @@ public:
         opts = L(opts, Q(Y(Q("columns"), Q(columns))));
 
         if (Table.Service == RtmrProviderName) {
-            if (!Params.PkColumns.empty() && !Params.PartitionByColumns.empty()) { 
+            if (!Params.PkColumns.empty() && !Params.PartitionByColumns.empty()) {
                 ctx.Error() << "Only one of PRIMARY KEY or PARTITION BY constraints may be specified";
                 return false;
             }
         } else {
-            if (!Params.OrderByColumns.empty()) { 
-                ctx.Error() << "ORDER BY is supported only for " << RtmrProviderName << " provider"; 
+            if (!Params.OrderByColumns.empty()) {
+                ctx.Error() << "ORDER BY is supported only for " << RtmrProviderName << " provider";
                 return false;
             }
         }
 
-        if (!Params.PkColumns.empty()) { 
+        if (!Params.PkColumns.empty()) {
             auto primaryKey = Y();
-            for (auto& col : Params.PkColumns) { 
+            for (auto& col : Params.PkColumns) {
                 primaryKey = L(primaryKey, BuildQuotedAtom(col.Pos, col.Name));
             }
             opts = L(opts, Q(Y(Q("primarykey"), Q(primaryKey))));
-            if (!Params.OrderByColumns.empty()) { 
+            if (!Params.OrderByColumns.empty()) {
                 ctx.Error() << "PRIMARY KEY cannot be used with ORDER BY, use PARTITION BY instead";
                 return false;
             }
-        } 
- 
-        if (!Params.PartitionByColumns.empty()) { 
-            auto partitionBy = Y(); 
-            for (auto& col : Params.PartitionByColumns) { 
-                partitionBy = L(partitionBy, BuildQuotedAtom(col.Pos, col.Name)); 
+        }
+
+        if (!Params.PartitionByColumns.empty()) {
+            auto partitionBy = Y();
+            for (auto& col : Params.PartitionByColumns) {
+                partitionBy = L(partitionBy, BuildQuotedAtom(col.Pos, col.Name));
             }
-            opts = L(opts, Q(Y(Q("partitionby"), Q(partitionBy)))); 
-        } 
- 
-        if (!Params.OrderByColumns.empty()) { 
-            auto orderBy = Y(); 
-            for (auto& col : Params.OrderByColumns) { 
-                orderBy = L(orderBy, Q(Y(BuildQuotedAtom(col.first.Pos, col.first.Name), col.second ? Q("1") : Q("0")))); 
+            opts = L(opts, Q(Y(Q("partitionby"), Q(partitionBy))));
+        }
+
+        if (!Params.OrderByColumns.empty()) {
+            auto orderBy = Y();
+            for (auto& col : Params.OrderByColumns) {
+                orderBy = L(orderBy, Q(Y(BuildQuotedAtom(col.first.Pos, col.first.Name), col.second ? Q("1") : Q("0"))));
             }
-            opts = L(opts, Q(Y(Q("orderby"), Q(orderBy)))); 
+            opts = L(opts, Q(Y(Q("orderby"), Q(orderBy))));
         }
 
         for (const auto& index : Params.Indexes) {
@@ -716,66 +716,66 @@ public:
             opts = L(opts, Q(Y(Q("changefeed"), Q(desc))));
         }
 
-        if (Params.ColumnFamilies) { 
-            auto columnFamilies = Y(); 
-            for (const auto& family : Params.ColumnFamilies) { 
-                auto familyDesc = Y(); 
-                familyDesc = L(familyDesc, Q(Y(Q("name"), BuildQuotedAtom(family.Name.Pos, family.Name.Name)))); 
-                if (family.Data) { 
-                    familyDesc = L(familyDesc, Q(Y(Q("data"), family.Data))); 
-                } 
-                if (family.Compression) { 
-                    familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression))); 
-                } 
-                columnFamilies = L(columnFamilies, Q(familyDesc)); 
-            } 
-            opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies)))); 
-        } 
+        if (Params.ColumnFamilies) {
+            auto columnFamilies = Y();
+            for (const auto& family : Params.ColumnFamilies) {
+                auto familyDesc = Y();
+                familyDesc = L(familyDesc, Q(Y(Q("name"), BuildQuotedAtom(family.Name.Pos, family.Name.Name))));
+                if (family.Data) {
+                    familyDesc = L(familyDesc, Q(Y(Q("data"), family.Data)));
+                }
+                if (family.Compression) {
+                    familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression)));
+                }
+                columnFamilies = L(columnFamilies, Q(familyDesc));
+            }
+            opts = L(opts, Q(Y(Q("columnFamilies"), Q(columnFamilies))));
+        }
 
-        if (Params.TableSettings.IsSet()) { 
-            auto settings = Y(); 
- 
-            if (Params.TableSettings.CompactionPolicy) { 
-                settings = L(settings, Q(Y(Q("compactionPolicy"), Params.TableSettings.CompactionPolicy))); 
-            } 
-            if (Params.TableSettings.AutoPartitioningBySize) { 
-                const auto& ref = Params.TableSettings.AutoPartitioningBySize.GetRef(); 
-                settings = L(settings, Q(Y(Q("autoPartitioningBySize"), BuildQuotedAtom(ref.Pos, ref.Name)))); 
-            } 
-            if (Params.TableSettings.UniformPartitions) { 
-                settings = L(settings, Q(Y(Q("uniformPartitions"), Params.TableSettings.UniformPartitions))); 
-            } 
-            if (Params.TableSettings.PartitionAtKeys) { 
-                auto keysDesc = Y(); 
-                for (const auto& key : Params.TableSettings.PartitionAtKeys) { 
-                    auto columnsDesc = Y(); 
-                    for (auto column : key) { 
-                        columnsDesc = L(columnsDesc, column); 
-                    } 
-                    keysDesc = L(keysDesc, Q(columnsDesc)); 
-                } 
-                settings = L(settings, Q(Y(Q("partitionAtKeys"), Q(keysDesc)))); 
-            } 
-            if (Params.TableSettings.PartitionSizeMb) { 
-                settings = L(settings, Q(Y(Q("partitionSizeMb"), Params.TableSettings.PartitionSizeMb))); 
-            } 
-            if (Params.TableSettings.AutoPartitioningByLoad) { 
-                const auto& ref = Params.TableSettings.AutoPartitioningByLoad.GetRef(); 
-                settings = L(settings, Q(Y(Q("autoPartitioningByLoad"), BuildQuotedAtom(ref.Pos, ref.Name)))); 
-            } 
-            if (Params.TableSettings.MinPartitions) { 
-                settings = L(settings, Q(Y(Q("minPartitions"), Params.TableSettings.MinPartitions))); 
-            } 
-            if (Params.TableSettings.MaxPartitions) { 
-                settings = L(settings, Q(Y(Q("maxPartitions"), Params.TableSettings.MaxPartitions))); 
-            } 
-            if (Params.TableSettings.KeyBloomFilter) { 
-                const auto& ref = Params.TableSettings.KeyBloomFilter.GetRef(); 
-                settings = L(settings, Q(Y(Q("keyBloomFilter"), BuildQuotedAtom(ref.Pos, ref.Name)))); 
-            } 
-            if (Params.TableSettings.ReadReplicasSettings) { 
-                settings = L(settings, Q(Y(Q("readReplicasSettings"), Params.TableSettings.ReadReplicasSettings))); 
-            } 
+        if (Params.TableSettings.IsSet()) {
+            auto settings = Y();
+
+            if (Params.TableSettings.CompactionPolicy) {
+                settings = L(settings, Q(Y(Q("compactionPolicy"), Params.TableSettings.CompactionPolicy)));
+            }
+            if (Params.TableSettings.AutoPartitioningBySize) {
+                const auto& ref = Params.TableSettings.AutoPartitioningBySize.GetRef();
+                settings = L(settings, Q(Y(Q("autoPartitioningBySize"), BuildQuotedAtom(ref.Pos, ref.Name))));
+            }
+            if (Params.TableSettings.UniformPartitions) {
+                settings = L(settings, Q(Y(Q("uniformPartitions"), Params.TableSettings.UniformPartitions)));
+            }
+            if (Params.TableSettings.PartitionAtKeys) {
+                auto keysDesc = Y();
+                for (const auto& key : Params.TableSettings.PartitionAtKeys) {
+                    auto columnsDesc = Y();
+                    for (auto column : key) {
+                        columnsDesc = L(columnsDesc, column);
+                    }
+                    keysDesc = L(keysDesc, Q(columnsDesc));
+                }
+                settings = L(settings, Q(Y(Q("partitionAtKeys"), Q(keysDesc))));
+            }
+            if (Params.TableSettings.PartitionSizeMb) {
+                settings = L(settings, Q(Y(Q("partitionSizeMb"), Params.TableSettings.PartitionSizeMb)));
+            }
+            if (Params.TableSettings.AutoPartitioningByLoad) {
+                const auto& ref = Params.TableSettings.AutoPartitioningByLoad.GetRef();
+                settings = L(settings, Q(Y(Q("autoPartitioningByLoad"), BuildQuotedAtom(ref.Pos, ref.Name))));
+            }
+            if (Params.TableSettings.MinPartitions) {
+                settings = L(settings, Q(Y(Q("minPartitions"), Params.TableSettings.MinPartitions)));
+            }
+            if (Params.TableSettings.MaxPartitions) {
+                settings = L(settings, Q(Y(Q("maxPartitions"), Params.TableSettings.MaxPartitions)));
+            }
+            if (Params.TableSettings.KeyBloomFilter) {
+                const auto& ref = Params.TableSettings.KeyBloomFilter.GetRef();
+                settings = L(settings, Q(Y(Q("keyBloomFilter"), BuildQuotedAtom(ref.Pos, ref.Name))));
+            }
+            if (Params.TableSettings.ReadReplicasSettings) {
+                settings = L(settings, Q(Y(Q("readReplicasSettings"), Params.TableSettings.ReadReplicasSettings)));
+            }
             if (const auto& ttl = Params.TableSettings.TtlSettings) {
                 if (ttl.IsSet()) {
                     const auto& ttlSettings = ttl.GetValueSet();
@@ -789,10 +789,10 @@ public:
                     YQL_ENSURE(false, "Can't reset TTL settings");
                 }
             }
- 
-            opts = L(opts, Q(Y(Q("tableSettings"), Q(settings)))); 
-        } 
- 
+
+            opts = L(opts, Q(Y(Q("tableSettings"), Q(settings))));
+        }
+
         Add("block", Q(Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.Service), Scoped->WrapCluster(Table.Cluster, ctx))),
             Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
@@ -807,21 +807,21 @@ public:
     }
 private:
     const TTableRef Table;
-    const TCreateTableParameters Params; 
+    const TCreateTableParameters Params;
     TScopedStatePtr Scoped;
 };
 
-TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TCreateTableParameters& params, TScopedStatePtr scoped) 
+TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, const TCreateTableParameters& params, TScopedStatePtr scoped)
 {
-    return new TCreateTableNode(pos, tr, params, scoped); 
+    return new TCreateTableNode(pos, tr, params, scoped);
 }
 
 class TAlterTableNode final: public TAstListNode {
 public:
-    TAlterTableNode(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped) 
+    TAlterTableNode(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Table(tr)
-        , Params(params) 
+        , Params(params)
         , Scoped(scoped)
     {
         scoped->UseCluster(Table.Service, Table.Cluster);
@@ -833,114 +833,114 @@ public:
             return false;
         }
 
-        auto actions = Y(); 
- 
-        if (Params.AddColumns) { 
-            auto columns = Y(); 
-            for (auto& col : Params.AddColumns) { 
-                auto columnDesc = Y(); 
-                columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name)); 
+        auto actions = Y();
+
+        if (Params.AddColumns) {
+            auto columns = Y();
+            for (auto& col : Params.AddColumns) {
+                auto columnDesc = Y();
+                columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
                 auto type = col.Type;
                 if (col.Nullable) {
                     type = Y("OptionalType", type);
                 }
-                columnDesc = L(columnDesc, type); 
-                if (col.Families) { 
-                    auto familiesDesc = Y(); 
-                    for (const auto& family : col.Families) { 
-                        familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name)); 
-                    } 
-                    columnDesc = L(columnDesc, Q(familiesDesc)); 
-                } 
-                columns = L(columns, Q(columnDesc)); 
+                columnDesc = L(columnDesc, type);
+                if (col.Families) {
+                    auto familiesDesc = Y();
+                    for (const auto& family : col.Families) {
+                        familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
+                    }
+                    columnDesc = L(columnDesc, Q(familiesDesc));
+                }
+                columns = L(columns, Q(columnDesc));
             }
-            actions = L(actions, Q(Y(Q("addColumns"), Q(columns)))); 
+            actions = L(actions, Q(Y(Q("addColumns"), Q(columns))));
         }
 
-        if (Params.DropColumns) { 
-            auto columns = Y(); 
-            for (auto& colName : Params.DropColumns) { 
-                columns = L(columns, BuildQuotedAtom(Pos, colName)); 
-            } 
-            actions = L(actions, Q(Y(Q("dropColumns"), Q(columns)))); 
+        if (Params.DropColumns) {
+            auto columns = Y();
+            for (auto& colName : Params.DropColumns) {
+                columns = L(columns, BuildQuotedAtom(Pos, colName));
+            }
+            actions = L(actions, Q(Y(Q("dropColumns"), Q(columns))));
         }
 
-        if (Params.AlterColumns) { 
-            auto columns = Y(); 
-            for (auto& col : Params.AlterColumns) { 
-                auto columnDesc = Y(); 
-                columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name)); 
-                auto familiesDesc = Y(); 
-                for (const auto& family : col.Families) { 
-                    familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name)); 
-                } 
-                columnDesc = L(columnDesc, Q(familiesDesc)); 
-                columns = L(columns, Q(columnDesc)); 
-            } 
-            actions = L(actions, Q(Y(Q("alterColumns"), Q(columns)))); 
-        } 
- 
-        if (Params.AddColumnFamilies) { 
-            auto columnFamilies = Y(); 
-            for (const auto& family : Params.AddColumnFamilies) { 
-                auto familyDesc = Y(); 
-                familyDesc = L(familyDesc, Q(Y(Q("name"), BuildQuotedAtom(family.Name.Pos, family.Name.Name)))); 
-                if (family.Data) { 
-                    familyDesc = L(familyDesc, Q(Y(Q("data"), family.Data))); 
-                } 
-                if (family.Compression) { 
-                    familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression))); 
-                } 
-                columnFamilies = L(columnFamilies, Q(familyDesc)); 
-            } 
-            actions = L(actions, Q(Y(Q("addColumnFamilies"), Q(columnFamilies)))); 
-        } 
- 
-        if (Params.AlterColumnFamilies) { 
-            auto columnFamilies = Y(); 
-            for (const auto& family : Params.AlterColumnFamilies) { 
-                auto familyDesc = Y(); 
-                familyDesc = L(familyDesc, Q(Y(Q("name"), BuildQuotedAtom(family.Name.Pos, family.Name.Name)))); 
-                if (family.Data) { 
-                    familyDesc = L(familyDesc, Q(Y(Q("data"), family.Data))); 
-                } 
-                if (family.Compression) { 
-                    familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression))); 
-                } 
-                columnFamilies = L(columnFamilies, Q(familyDesc)); 
-            } 
-            actions = L(actions, Q(Y(Q("alterColumnFamilies"), Q(columnFamilies)))); 
-        } 
- 
-        if (Params.TableSettings.IsSet()) { 
-            auto settings = Y(); 
-            if (Params.TableSettings.CompactionPolicy) { 
-                settings = L(settings, Q(Y(Q("compactionPolicy"), Params.TableSettings.CompactionPolicy))); 
-            } 
-            if (Params.TableSettings.AutoPartitioningBySize) { 
-                const auto& ref = Params.TableSettings.AutoPartitioningBySize.GetRef(); 
-                settings = L(settings, Q(Y(Q("autoPartitioningBySize"), BuildQuotedAtom(ref.Pos, ref.Name)))); 
-            } 
-            if (Params.TableSettings.PartitionSizeMb) { 
-                settings = L(settings, Q(Y(Q("partitionSizeMb"), Params.TableSettings.PartitionSizeMb))); 
-            } 
-            if (Params.TableSettings.AutoPartitioningByLoad) { 
-                const auto& ref = Params.TableSettings.AutoPartitioningByLoad.GetRef(); 
-                settings = L(settings, Q(Y(Q("autoPartitioningByLoad"), BuildQuotedAtom(ref.Pos, ref.Name)))); 
-            } 
-            if (Params.TableSettings.MinPartitions) { 
-                settings = L(settings, Q(Y(Q("minPartitions"), Params.TableSettings.MinPartitions))); 
-            } 
-            if (Params.TableSettings.MaxPartitions) { 
-                settings = L(settings, Q(Y(Q("maxPartitions"), Params.TableSettings.MaxPartitions))); 
-            } 
-            if (Params.TableSettings.KeyBloomFilter) { 
-                const auto& ref = Params.TableSettings.KeyBloomFilter.GetRef(); 
-                settings = L(settings, Q(Y(Q("keyBloomFilter"), BuildQuotedAtom(ref.Pos, ref.Name)))); 
-            } 
-            if (Params.TableSettings.ReadReplicasSettings) { 
-                settings = L(settings, Q(Y(Q("readReplicasSettings"), Params.TableSettings.ReadReplicasSettings))); 
-            } 
+        if (Params.AlterColumns) {
+            auto columns = Y();
+            for (auto& col : Params.AlterColumns) {
+                auto columnDesc = Y();
+                columnDesc = L(columnDesc, BuildQuotedAtom(Pos, col.Name));
+                auto familiesDesc = Y();
+                for (const auto& family : col.Families) {
+                    familiesDesc = L(familiesDesc, BuildQuotedAtom(family.Pos, family.Name));
+                }
+                columnDesc = L(columnDesc, Q(familiesDesc));
+                columns = L(columns, Q(columnDesc));
+            }
+            actions = L(actions, Q(Y(Q("alterColumns"), Q(columns))));
+        }
+
+        if (Params.AddColumnFamilies) {
+            auto columnFamilies = Y();
+            for (const auto& family : Params.AddColumnFamilies) {
+                auto familyDesc = Y();
+                familyDesc = L(familyDesc, Q(Y(Q("name"), BuildQuotedAtom(family.Name.Pos, family.Name.Name))));
+                if (family.Data) {
+                    familyDesc = L(familyDesc, Q(Y(Q("data"), family.Data)));
+                }
+                if (family.Compression) {
+                    familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression)));
+                }
+                columnFamilies = L(columnFamilies, Q(familyDesc));
+            }
+            actions = L(actions, Q(Y(Q("addColumnFamilies"), Q(columnFamilies))));
+        }
+
+        if (Params.AlterColumnFamilies) {
+            auto columnFamilies = Y();
+            for (const auto& family : Params.AlterColumnFamilies) {
+                auto familyDesc = Y();
+                familyDesc = L(familyDesc, Q(Y(Q("name"), BuildQuotedAtom(family.Name.Pos, family.Name.Name))));
+                if (family.Data) {
+                    familyDesc = L(familyDesc, Q(Y(Q("data"), family.Data)));
+                }
+                if (family.Compression) {
+                    familyDesc = L(familyDesc, Q(Y(Q("compression"), family.Compression)));
+                }
+                columnFamilies = L(columnFamilies, Q(familyDesc));
+            }
+            actions = L(actions, Q(Y(Q("alterColumnFamilies"), Q(columnFamilies))));
+        }
+
+        if (Params.TableSettings.IsSet()) {
+            auto settings = Y();
+            if (Params.TableSettings.CompactionPolicy) {
+                settings = L(settings, Q(Y(Q("compactionPolicy"), Params.TableSettings.CompactionPolicy)));
+            }
+            if (Params.TableSettings.AutoPartitioningBySize) {
+                const auto& ref = Params.TableSettings.AutoPartitioningBySize.GetRef();
+                settings = L(settings, Q(Y(Q("autoPartitioningBySize"), BuildQuotedAtom(ref.Pos, ref.Name))));
+            }
+            if (Params.TableSettings.PartitionSizeMb) {
+                settings = L(settings, Q(Y(Q("partitionSizeMb"), Params.TableSettings.PartitionSizeMb)));
+            }
+            if (Params.TableSettings.AutoPartitioningByLoad) {
+                const auto& ref = Params.TableSettings.AutoPartitioningByLoad.GetRef();
+                settings = L(settings, Q(Y(Q("autoPartitioningByLoad"), BuildQuotedAtom(ref.Pos, ref.Name))));
+            }
+            if (Params.TableSettings.MinPartitions) {
+                settings = L(settings, Q(Y(Q("minPartitions"), Params.TableSettings.MinPartitions)));
+            }
+            if (Params.TableSettings.MaxPartitions) {
+                settings = L(settings, Q(Y(Q("maxPartitions"), Params.TableSettings.MaxPartitions)));
+            }
+            if (Params.TableSettings.KeyBloomFilter) {
+                const auto& ref = Params.TableSettings.KeyBloomFilter.GetRef();
+                settings = L(settings, Q(Y(Q("keyBloomFilter"), BuildQuotedAtom(ref.Pos, ref.Name))));
+            }
+            if (Params.TableSettings.ReadReplicasSettings) {
+                settings = L(settings, Q(Y(Q("readReplicasSettings"), Params.TableSettings.ReadReplicasSettings)));
+            }
             if (const auto& ttl = Params.TableSettings.TtlSettings) {
                 if (ttl.IsSet()) {
                     const auto& ttlSettings = ttl.GetValueSet();
@@ -954,9 +954,9 @@ public:
                     settings = L(settings, Q(Y(Q("resetTtlSettings"), Q(Y()))));
                 }
             }
-            actions = L(actions, Q(Y(Q("setTableSettings"), Q(settings)))); 
-        } 
- 
+            actions = L(actions, Q(Y(Q("setTableSettings"), Q(settings))));
+        }
+
         for (const auto& index : Params.AddIndexes) {
             const auto& desc = CreateIndexDesc(index, *this);
             actions = L(actions, Q(Y(Q("addIndex"), Q(desc))));
@@ -988,11 +988,11 @@ public:
             actions = L(actions, Q(Y(Q("dropChangefeed"), name)));
         }
 
-        auto opts = Y(); 
- 
-        opts = L(opts, Q(Y(Q("mode"), Q("alter")))); 
-        opts = L(opts, Q(Y(Q("actions"), Q(actions)))); 
- 
+        auto opts = Y();
+
+        opts = L(opts, Q(Y(Q("mode"), Q("alter"))));
+        opts = L(opts, Q(Y(Q("actions"), Q(actions))));
+
         Add("block", Q(Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.Service), Scoped->WrapCluster(Table.Cluster, ctx))),
             Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(opts))),
@@ -1006,13 +1006,13 @@ public:
     }
 private:
     TTableRef Table;
-    const TAlterTableParameters Params; 
+    const TAlterTableParameters Params;
     TScopedStatePtr Scoped;
 };
 
-TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped) 
+TNodePtr BuildAlterTable(TPosition pos, const TTableRef& tr, const TAlterTableParameters& params, TScopedStatePtr scoped)
 {
-    return new TAlterTableNode(pos, tr, params, scoped); 
+    return new TAlterTableNode(pos, tr, params, scoped);
 }
 
 class TDropTableNode final: public TAstListNode {

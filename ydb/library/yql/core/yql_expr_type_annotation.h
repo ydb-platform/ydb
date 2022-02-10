@@ -268,7 +268,7 @@ TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& 
 TExprNode::TPtr ExpandType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 
 bool IsSystemMember(const TStringBuf& memberName);
- 
+
 IGraphTransformer::TStatus NormalizeTupleOfAtoms(const TExprNode::TPtr& input, ui32 index, TExprNode::TPtr& output, TExprContext& ctx,
     bool deduplicte = true);
 IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input, ui32 startIndex, TExprNode::TPtr& output,

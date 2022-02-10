@@ -43,7 +43,7 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommandTree::Config(config);
-        config.SetFreeArgsMin(0); 
+        config.SetFreeArgsMin(0);
     }
 
     NKikimrClient::TResponse BusResponse;

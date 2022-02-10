@@ -68,12 +68,12 @@ namespace {
 
 } // anonymous namespace
 
-TCommandExport::TCommandExport(bool useExportToYt) 
+TCommandExport::TCommandExport(bool useExportToYt)
     : TClientCommandTree("export", {}, "Export service operations")
 {
-    if (useExportToYt) { 
+    if (useExportToYt) {
         AddCommand(std::make_unique<TCommandExportToYt>());
-    } 
+    }
     AddCommand(std::make_unique<TCommandExportToS3>());
 }
 
@@ -132,13 +132,13 @@ void TCommandExportToYt::Config(TConfig& config) {
         .NoArgument().StoreTrue(&UseTypeV3);
 
     AddJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 }); 
-    config.Opts->MutuallyExclusive("json", "format"); 
+    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    config.Opts->MutuallyExclusive("json", "format");
 }
 
 void TCommandExportToYt::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats(); 
+    ParseFormats();
 
     ParseYtProxy(config, "proxy");
     ParseYtToken(config, "token");
@@ -263,13 +263,13 @@ void TCommandExportToS3::Config(TConfig& config) {
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
     AddJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 }); 
-    config.Opts->MutuallyExclusive("json", "format"); 
+    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    config.Opts->MutuallyExclusive("json", "format");
 }
 
 void TCommandExportToS3::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats(); 
+    ParseFormats();
 
     ParseAwsAccessKey(config, "access-key");
     ParseAwsSecretKey(config, "secret-key");

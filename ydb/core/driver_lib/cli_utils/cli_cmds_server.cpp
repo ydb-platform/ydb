@@ -58,7 +58,7 @@ protected:
     ui64 TenantNetwork;
     TVector<TString> NodeBrokerAddresses;
     ui32 NodeBrokerPort;
-    bool NodeBrokerUseTls; 
+    bool NodeBrokerUseTls;
     bool FixedNodeID;
     bool IgnoreCmsConfigs;
     bool HierarchicalCfg;
@@ -111,7 +111,7 @@ protected:
         TenantMemory = 0;
         TenantNetwork = 0;
         NodeBrokerPort = 0;
-        NodeBrokerUseTls = false; 
+        NodeBrokerUseTls = false;
         FixedNodeID = false;
         InterconnectPort = 0;
         SqsHttpPort = 0;
@@ -150,8 +150,8 @@ protected:
                 .RequiredArgument("ADDR").AppendTo(&NodeBrokerAddresses);
         config.Opts->AddLongOption("node-broker-port", "node broker port (hosts from naming file are used)")
                 .RequiredArgument("PORT").StoreResult(&NodeBrokerPort);
-        config.Opts->AddLongOption("node-broker-use-tls", "use tls for node broker (hosts from naming file are used)") 
-                .RequiredArgument("PORT").StoreResult(&NodeBrokerUseTls); 
+        config.Opts->AddLongOption("node-broker-use-tls", "use tls for node broker (hosts from naming file are used)")
+                .RequiredArgument("PORT").StoreResult(&NodeBrokerUseTls);
         config.Opts->AddLongOption("node-address", "address for dynamic node")
                 .RequiredArgument("ADDR").StoreResult(&NodeAddress);
         config.Opts->AddLongOption("node-host", "hostname for dynamic node")
@@ -259,7 +259,7 @@ protected:
         config.Opts->AddLongOption("hierarchic-cfg", "Use hierarchical approach for configuration parts overriding")
         .NoArgument().SetFlag(&HierarchicalCfg);
 
-        config.SetFreeArgsMin(0); 
+        config.SetFreeArgsMin(0);
         config.Opts->SetFreeArgDefaultTitle("PATH", "path to protobuf file; files are merged in order in which they are enlisted");
     }
 
@@ -681,7 +681,7 @@ protected:
                 if (attempts > 0)
                     Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
 
-                NClient::TKikimr kikimr(GetKikimr(addr)); 
+                NClient::TKikimr kikimr(GetKikimr(addr));
                 auto configurator = kikimr.GetNodeConfigurator();
 
                 Cout << "Trying to get configs from " << addr << Endl;
@@ -841,7 +841,7 @@ protected:
 
     void MaybeRegisterAndLoadConfigs()
     {
-        // static node 
+        // static node
         if (NodeBrokerAddresses.empty() && !NodeBrokerPort) {
             if (!NodeId)
                 ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
@@ -862,8 +862,8 @@ protected:
             const TString &nodeHost,
             const TString &nodeAddress,
             const TString &nodeResolveHost,
-        const TMaybe<TString>& path) { 
-        NClient::TKikimr kikimr(GetKikimr(addr)); 
+        const TMaybe<TString>& path) {
+        NClient::TKikimr kikimr(GetKikimr(addr));
         auto registrant = kikimr.GetNodeRegistrant();
 
         NActorsInterconnect::TNodeLocation location;
@@ -900,7 +900,7 @@ protected:
         } else {
             Y_VERIFY(NodeBrokerPort);
             for (auto &node : RunConfig.AppConfig.MutableNameserviceConfig()->GetNode()) {
-                addrs.emplace_back(TStringBuilder() << (NodeBrokerUseTls ? "grpcs://" : "") << node.GetHost() << ':' << NodeBrokerPort); 
+                addrs.emplace_back(TStringBuilder() << (NodeBrokerUseTls ? "grpcs://" : "") << node.GetHost() << ':' << NodeBrokerPort);
             }
         }
         ShuffleRange(addrs);
@@ -1017,7 +1017,7 @@ protected:
     }
 
     bool TryToLoadConfigForDynamicNodeFromCMS(const TString &addr, TString &error) {
-        NClient::TKikimr kikimr(GetKikimr(addr)); 
+        NClient::TKikimr kikimr(GetKikimr(addr));
         auto configurator = kikimr.GetNodeConfigurator();
 
         Cout << "Trying to get configs from " << addr << Endl;
@@ -1094,20 +1094,20 @@ protected:
             }
         }
     }
- 
-private: 
-    NClient::TKikimr GetKikimr(const TString& addr) { 
-        TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr); 
+
+private:
+    NClient::TKikimr GetKikimr(const TString& addr) {
+        TCommandConfig::TServerEndpoint endpoint = TCommandConfig::ParseServerAddress(addr);
         NGrpc::TGRpcClientConfig grpcConfig(endpoint.Address, TDuration::Seconds(5));
         grpcConfig.LoadBalancingPolicy = "round_robin";
-        if (endpoint.EnableSsl.Defined()) { 
-            grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef(); 
-            if (PathToCA) { 
-                grpcConfig.SslCaCert = ReadFromFile(PathToCA, "CA certificates"); 
-            } 
-        } 
-        return NClient::TKikimr(grpcConfig); 
-    } 
+        if (endpoint.EnableSsl.Defined()) {
+            grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef();
+            if (PathToCA) {
+                grpcConfig.SslCaCert = ReadFromFile(PathToCA, "CA certificates");
+            }
+        }
+        return NClient::TKikimr(grpcConfig);
+    }
 };
 
 class TClientCommandServerConfig : public TClientCommandServerBase {

@@ -184,8 +184,8 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpFinalizeTransformer(TIntrusivePtr<IKq
     TIntrusivePtr<TKqlTransformContext> transformCtx);
 
 TAutoPtr<NYql::IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cluster,
-    TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TTypeAnnotationContext& typesCtx, 
-    NYql::TKikimrConfiguration::TPtr config); 
+    TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TTypeAnnotationContext& typesCtx,
+    NYql::TKikimrConfiguration::TPtr config);
 TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckKiProgramTransformer();
 TAutoPtr<NYql::IGraphTransformer> CreateKqpCheckQueryTransformer();
 

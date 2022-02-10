@@ -1468,7 +1468,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 
     // Check that total load doesn't exceed the limits
     float shardLoad = stats->GetCurrentRawCpuUsage() * 0.000001;
-    if (IsMergeByLoadEnabled()) { 
+    if (IsMergeByLoadEnabled()) {
         const auto& settings = PartitionConfig().GetPartitioningPolicy().GetSplitByLoadSettings();
         i64 cpuPercentage = settings.GetCpuPercentageThreshold();
         float cpuUsageThreshold = 0.01 * (cpuPercentage ? cpuPercentage : (i64)splitSettings.FastSplitCpuPercentageThreshold);

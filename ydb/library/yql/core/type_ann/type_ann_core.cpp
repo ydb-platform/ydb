@@ -1705,20 +1705,20 @@ namespace NTypeAnnImpl {
 
     IGraphTransformer::TStatus RemovePrefixMembersWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error; 
-        } 
-        auto& firstChild = input->Head(); 
-        auto firstChildType = firstChild.GetTypeAnn(); 
- 
-        if (HasError(firstChildType, ctx.Expr) || !firstChildType) { 
-            YQL_ENSURE(firstChild.Type() == TExprNode::Lambda); 
-            ctx.Expr.AddError(TIssue( 
-                ctx.Expr.GetPosition(firstChild.Pos()), 
+            return IGraphTransformer::TStatus::Error;
+        }
+        auto& firstChild = input->Head();
+        auto firstChildType = firstChild.GetTypeAnn();
+
+        if (HasError(firstChildType, ctx.Expr) || !firstChildType) {
+            YQL_ENSURE(firstChild.Type() == TExprNode::Lambda);
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(firstChild.Pos()),
                 TStringBuilder() << "Expected struct, variant, or sequence type, but got lambda"
-            )); 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
+            ));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         auto status = NormalizeAtomListForDiveOrSelect(input, output, ctx);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
@@ -1734,13 +1734,13 @@ namespace NTypeAnnImpl {
 
         auto prefixes = input->Child(1);
         auto rebuildStructType = [&ctx, prefixes](const TTypeAnnotationNode* structType) {
-            TVector<const TItemExprType*> newItems; 
+            TVector<const TItemExprType*> newItems;
             for (auto& field : structType->Cast<TStructExprType>()->GetItems()) {
                 if (!AnyOf(prefixes->Children(), [field](const auto& prefixNode) { return field->GetName().StartsWith(prefixNode->Content()); })) {
-                    newItems.push_back(field); 
-                } 
-            } 
- 
+                    newItems.push_back(field);
+                }
+            }
+
             return ctx.Expr.MakeType<TStructExprType>(newItems);
         };
 
@@ -1749,10 +1749,10 @@ namespace NTypeAnnImpl {
             if (resultType == itemType) {
                 output = input->HeadPtr();
                 return IGraphTransformer::TStatus::Repeat;
-            } 
+            }
             if (!resultType->Cast<TStructExprType>()->Validate(input->Pos(), ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error; 
-            } 
+                return IGraphTransformer::TStatus::Error;
+            }
         } else if (itemType->GetKind() == ETypeAnnotationKind::Variant) {
             auto varType = itemType->Cast<TVariantExprType>();
             if (varType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
@@ -1765,7 +1765,7 @@ namespace NTypeAnnImpl {
                         return IGraphTransformer::TStatus::Repeat;
                     }
                     newTupleItems.push_back(rebuildStructType(tupleItemType));
-                } 
+                }
                 resultType = ctx.Expr.MakeType<TVariantExprType>(ctx.Expr.MakeType<TTupleExprType>(newTupleItems));
             } else {
                 YQL_ENSURE(varType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Struct);
@@ -1780,24 +1780,24 @@ namespace NTypeAnnImpl {
                     newStructItems.push_back(ctx.Expr.MakeType<TItemExprType>(structItemType->GetName(), rebuildStructType(structItemType->GetItemType())));
                 }
                 resultType = ctx.Expr.MakeType<TVariantExprType>(ctx.Expr.MakeType<TStructExprType>(newStructItems));
-            } 
+            }
             if (resultType == itemType) {
                 output = input->HeadPtr();
                 return IGraphTransformer::TStatus::Repeat;
             }
-        } else { 
+        } else {
             output = input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
-        } 
- 
+        }
+
         if (isSequence) {
             resultType = MakeSequenceType(firstChildType->GetKind(), *resultType, ctx.Expr);
         }
         input->SetTypeAnn(resultType);
 
-        return IGraphTransformer::TStatus::Ok; 
-    } 
- 
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus RemoveSystemMembersWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -12824,7 +12824,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ForceRemoveMember"] = &RemoveMemberWrapper<true>;
         Functions["ReplaceMember"] = &ReplaceMemberWrapper;
         Functions["RemovePrefixMembers"] = &RemovePrefixMembersWrapper;
-        Functions["RemoveSystemMembers"] = &RemoveSystemMembersWrapper; 
+        Functions["RemoveSystemMembers"] = &RemoveSystemMembersWrapper;
         Functions["FlatMap"] = &FlatMapWrapper<false>;
         Functions["OrderedFlatMap"] = &FlatMapWrapper<false>;
         Functions["OrderedFlatMapWarn"] = &FlatMapWrapper<true>;
@@ -13382,8 +13382,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         IGraphTransformer::TStatus ProcessUnknown(const TExprNode::TPtr& input, TExprContext& ctx) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() 
-                << "(Core type annotation) Unsupported function: " << input->Content())); 
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                << "(Core type annotation) Unsupported function: " << input->Content()));
             return TStatus::Error;
         }
 

@@ -58,9 +58,9 @@ TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system,
      ADD_REQUEST(ListEndpoints, ListEndpointsRequest, ListEndpointsResponse, {
          ActorSystem_->Send(GRpcRequestProxyId_, new TEvListEndpointsRequest(reqCtx));
      })
-     ADD_REQUEST(WhoAmI, WhoAmIRequest, WhoAmIResponse, { 
-         ActorSystem_->Send(GRpcRequestProxyId_, new TEvWhoAmIRequest(reqCtx)); 
-     }) 
+     ADD_REQUEST(WhoAmI, WhoAmIRequest, WhoAmIResponse, {
+         ActorSystem_->Send(GRpcRequestProxyId_, new TEvWhoAmIRequest(reqCtx));
+     })
 
  #undef ADD_REQUEST
  }

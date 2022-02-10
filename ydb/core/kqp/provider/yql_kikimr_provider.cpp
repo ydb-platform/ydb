@@ -25,14 +25,14 @@ struct TKikimrData {
     THashSet<TStringBuf> CommitModes;
     THashSet<TStringBuf> SupportedEffects;
 
-    TYdbOperations SchemeOps; 
-    TYdbOperations DataOps; 
-    TYdbOperations ModifyOps; 
-    TYdbOperations ReadOps; 
-    TYdbOperations RequireUnmodifiedOps; 
+    TYdbOperations SchemeOps;
+    TYdbOperations DataOps;
+    TYdbOperations ModifyOps;
+    TYdbOperations ReadOps;
+    TYdbOperations RequireUnmodifiedOps;
 
-    TMap<TString, NKikimr::NUdf::EDataSlot> SystemColumns; 
- 
+    TMap<TString, NKikimr::NUdf::EDataSlot> SystemColumns;
+
     TKikimrData() {
         DataSourceNames.insert(TKiReadTable::CallableName());
         DataSourceNames.insert(TKiReadTableScheme::CallableName());
@@ -45,12 +45,12 @@ struct TKikimrData {
         DataSinkNames.insert(TKiCreateTable::CallableName());
         DataSinkNames.insert(TKiAlterTable::CallableName());
         DataSinkNames.insert(TKiDropTable::CallableName());
-        DataSinkNames.insert(TKiCreateUser::CallableName()); 
-        DataSinkNames.insert(TKiAlterUser::CallableName()); 
-        DataSinkNames.insert(TKiDropUser::CallableName()); 
-        DataSinkNames.insert(TKiCreateGroup::CallableName()); 
-        DataSinkNames.insert(TKiAlterGroup::CallableName()); 
-        DataSinkNames.insert(TKiDropGroup::CallableName()); 
+        DataSinkNames.insert(TKiCreateUser::CallableName());
+        DataSinkNames.insert(TKiAlterUser::CallableName());
+        DataSinkNames.insert(TKiDropUser::CallableName());
+        DataSinkNames.insert(TKiCreateGroup::CallableName());
+        DataSinkNames.insert(TKiAlterGroup::CallableName());
+        DataSinkNames.insert(TKiDropGroup::CallableName());
         DataSinkNames.insert(TKiDataQuery::CallableName());
         DataSinkNames.insert(TKiExecDataQuery::CallableName());
         DataSinkNames.insert(TKiEffects::CallableName());
@@ -77,41 +77,41 @@ struct TKikimrData {
         SupportedEffects.insert(TKiDeleteTable::CallableName());
 
         ModifyOps =
-            TYdbOperation::Upsert | 
-            TYdbOperation::Replace | 
-            TYdbOperation::Update | 
-            TYdbOperation::UpdateOn | 
-            TYdbOperation::Delete | 
-            TYdbOperation::DeleteOn | 
-            TYdbOperation::InsertRevert | 
-            TYdbOperation::InsertAbort; 
+            TYdbOperation::Upsert |
+            TYdbOperation::Replace |
+            TYdbOperation::Update |
+            TYdbOperation::UpdateOn |
+            TYdbOperation::Delete |
+            TYdbOperation::DeleteOn |
+            TYdbOperation::InsertRevert |
+            TYdbOperation::InsertAbort;
 
         ReadOps =
-            TYdbOperation::Select | 
-            TYdbOperation::Update | 
-            TYdbOperation::Delete; 
+            TYdbOperation::Select |
+            TYdbOperation::Update |
+            TYdbOperation::Delete;
 
         DataOps = ModifyOps | ReadOps;
 
         SchemeOps =
-            TYdbOperation::CreateTable | 
-            TYdbOperation::DropTable | 
-            TYdbOperation::AlterTable | 
-            TYdbOperation::CreateUser | 
-            TYdbOperation::AlterUser | 
-            TYdbOperation::DropUser | 
-            TYdbOperation::CreateGroup | 
-            TYdbOperation::AlterGroup | 
-            TYdbOperation::DropGroup; 
+            TYdbOperation::CreateTable |
+            TYdbOperation::DropTable |
+            TYdbOperation::AlterTable |
+            TYdbOperation::CreateUser |
+            TYdbOperation::AlterUser |
+            TYdbOperation::DropUser |
+            TYdbOperation::CreateGroup |
+            TYdbOperation::AlterGroup |
+            TYdbOperation::DropGroup;
 
         RequireUnmodifiedOps =
-            TYdbOperation::InsertRevert | 
-            TYdbOperation::InsertAbort | 
-            TYdbOperation::UpdateOn; // TODO: KIKIMR-3206 
- 
-        SystemColumns = { 
-            {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64} 
-        }; 
+            TYdbOperation::InsertRevert |
+            TYdbOperation::InsertAbort |
+            TYdbOperation::UpdateOn; // TODO: KIKIMR-3206
+
+        SystemColumns = {
+            {"_yql_partition_id", NKikimr::NUdf::EDataSlot::Uint64}
+        };
     }
 };
 
@@ -165,7 +165,7 @@ const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf
     return *desc;
 }
 
-bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) { 
+bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
     ColumnTypes.clear();
 
     TVector<const TItemExprType*> items;
@@ -194,16 +194,16 @@ bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {
         YQL_ENSURE(insertResult.second);
     }
 
-    if (withSystemColumns) { 
-        for (const auto& [name, type] : KikimrSystemColumns()) { 
-            const TOptionalExprType* optType = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(type)); 
-            items.push_back(ctx.MakeType<TItemExprType>(name, optType)); 
- 
-            auto insertResult = ColumnTypes.insert(std::make_pair(name, optType)); 
-            YQL_ENSURE(insertResult.second); 
-        } 
-    } 
- 
+    if (withSystemColumns) {
+        for (const auto& [name, type] : KikimrSystemColumns()) {
+            const TOptionalExprType* optType = ctx.MakeType<TOptionalExprType>(ctx.MakeType<TDataExprType>(type));
+            items.push_back(ctx.MakeType<TItemExprType>(name, optType));
+
+            auto insertResult = ColumnTypes.insert(std::make_pair(name, optType));
+            YQL_ENSURE(insertResult.second);
+        }
+    }
+
     SchemeNode = ctx.MakeType<TStructExprType>(items);
     return true;
 }
@@ -340,18 +340,18 @@ bool TKikimrKey::Extract(const TExprNode& key) {
             return false;
         }
 
-        Target = nameNode->Child(0)->Content(); 
+        Target = nameNode->Child(0)->Content();
     } else if (tagName == "tablescheme") {
         KeyType = Type::TableScheme;
-        Target = key.Child(0)->Child(1)->Child(0)->Content(); 
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
     } else if (tagName == "tablelist") {
         KeyType = Type::TableList;
-        Target = key.Child(0)->Child(1)->Child(0)->Content(); 
-    } else if (tagName == "role") { 
-        KeyType = Type::Role; 
-        Target = key.Child(0)->Child(1)->Child(0)->Content(); 
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
+    } else if (tagName == "role") {
+        KeyType = Type::Role;
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
     } else {
-        Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName)); 
+        Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;
     }
 
@@ -376,7 +376,7 @@ bool TKikimrKey::Extract(const TExprNode& key) {
                 View = viewNode->Child(0)->Content();
 
             } else {
-                Ctx.AddError(TIssue(Ctx.GetPosition(tag->Pos()), TStringBuilder() << "Unexpected tag for kikimr key child: " << tag->Content())); 
+                Ctx.AddError(TIssue(Ctx.GetPosition(tag->Pos()), TStringBuilder() << "Unexpected tag for kikimr key child: " << tag->Content()));
                 return false;
             }
         }
@@ -393,30 +393,30 @@ NNodes::TKiVersionedTable BuildVersionedTable(const TKikimrTableMetadata& metada
 }
 
 NNodes::TCoAtomList BuildColumnsList(
-    const TKikimrTableDescription& table, 
-    TPositionHandle pos, 
-    TExprContext& ctx, 
-    bool withSystemColumns 
-) { 
+    const TKikimrTableDescription& table,
+    TPositionHandle pos,
+    TExprContext& ctx,
+    bool withSystemColumns
+) {
     TVector<TExprBase> columnsToSelect;
-    for (const auto& pair : table.Metadata->Columns) { 
+    for (const auto& pair : table.Metadata->Columns) {
         auto atom = Build<TCoAtom>(ctx, pos)
             .Value(pair.second.Name)
             .Done();
 
-        columnsToSelect.emplace_back(std::move(atom)); 
+        columnsToSelect.emplace_back(std::move(atom));
     }
 
-    if (withSystemColumns) { 
-        for (const auto& pair : KikimrSystemColumns()) { 
-            auto atom = Build<TCoAtom>(ctx, pos) 
-                .Value(pair.first) 
-                .Done(); 
- 
-            columnsToSelect.emplace_back(std::move(atom)); 
-        } 
-    } 
- 
+    if (withSystemColumns) {
+        for (const auto& pair : KikimrSystemColumns()) {
+            auto atom = Build<TCoAtom>(ctx, pos)
+                .Value(pair.first)
+                .Done();
+
+            columnsToSelect.emplace_back(std::move(atom));
+        }
+    }
+
     return Build<TCoAtomList>(ctx, pos)
         .Add(columnsToSelect)
         .Done();
@@ -488,7 +488,7 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TCoNameValueTupleLi
     TVector<NKqpProto::TKqpTableOp> protoOps;
     for (const auto& op : operations) {
         auto table = TString(op.Name());
-        auto tableOp = FromString<TYdbOperation>(TString(op.Value().Cast<TCoAtom>())); 
+        auto tableOp = FromString<TYdbOperation>(TString(op.Value().Cast<TCoAtom>()));
         auto pos = ctx.GetPosition(op.Pos());
 
         NKqpProto::TKqpTableOp protoOp;
@@ -507,7 +507,7 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TKiOperationList& o
     TVector<NKqpProto::TKqpTableOp> protoOps;
     for (const auto& op : operations) {
         auto table = TString(op.Table());
-        auto tableOp = FromString<TYdbOperation>(TString(op.Operation())); 
+        auto tableOp = FromString<TYdbOperation>(TString(op.Operation()));
         auto pos = ctx.GetPosition(op.Pos());
 
         NKqpProto::TKqpTableOp protoOp;
@@ -565,7 +565,7 @@ bool TKikimrTransactionContextBase::ApplyTableOperations(const TVector<NKqpProto
     for (const auto& op : operations) {
         const auto& table = op.GetTable();
 
-        auto newOp = TYdbOperation(op.GetOperation()); 
+        auto newOp = TYdbOperation(op.GetOperation());
         TPosition pos(op.GetPosition().GetColumn(), op.GetPosition().GetRow());
 
         const auto info = tableInfoMap.FindPtr(table);
@@ -644,8 +644,8 @@ bool TKikimrTransactionContextBase::ApplyTableOperations(const TVector<NKqpProto
         }
 
         // TODO: KIKIMR-3206
-        bool currentDelete = currentOps & (TYdbOperation::Delete | TYdbOperation::DeleteOn); 
-        bool newUpdate = newOp == TYdbOperation::Update; 
+        bool currentDelete = currentOps & (TYdbOperation::Delete | TYdbOperation::DeleteOn);
+        bool newUpdate = newOp == TYdbOperation::Update;
         if (currentDelete && newUpdate) {
             TString message = TStringBuilder() << "Operation '" << newOp
                 << "' may lead to unexpected results when applied to table with deleted rows: " << table;
@@ -692,34 +692,34 @@ const TStringBuf& KikimrCommitModeScheme() {
     return CommitModeScheme;
 }
 
-const TYdbOperations& KikimrSchemeOps() { 
+const TYdbOperations& KikimrSchemeOps() {
     return Singleton<TKikimrData>()->SchemeOps;
 }
 
-const TYdbOperations& KikimrDataOps() { 
+const TYdbOperations& KikimrDataOps() {
     return Singleton<TKikimrData>()->DataOps;
 }
 
-const TYdbOperations& KikimrModifyOps() { 
+const TYdbOperations& KikimrModifyOps() {
     return Singleton<TKikimrData>()->ModifyOps;
 }
 
-const TYdbOperations& KikimrReadOps() { 
+const TYdbOperations& KikimrReadOps() {
     return Singleton<TKikimrData>()->ReadOps;
 }
 
-const TYdbOperations& KikimrRequireUnmodifiedOps() { 
+const TYdbOperations& KikimrRequireUnmodifiedOps() {
     return Singleton<TKikimrData>()->RequireUnmodifiedOps;
 }
 
-const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns() { 
-    return Singleton<TKikimrData>()->SystemColumns; 
-} 
- 
-bool IsKikimrSystemColumn(const TStringBuf columnName) { 
-    return KikimrSystemColumns().FindPtr(columnName); 
-} 
- 
+const TMap<TString, NKikimr::NUdf::EDataSlot>& KikimrSystemColumns() {
+    return Singleton<TKikimrData>()->SystemColumns;
+}
+
+bool IsKikimrSystemColumn(const TStringBuf columnName) {
+    return KikimrSystemColumns().FindPtr(columnName);
+}
+
 bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, const TPositionHandle& pos) {
     if (metadata->Indexes.empty()) {
         ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()

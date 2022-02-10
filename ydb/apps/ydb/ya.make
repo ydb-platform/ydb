@@ -1,19 +1,19 @@
-PROGRAM(ydb) 
- 
-OWNER( 
-    g:kikimr 
-) 
- 
-STRIP() 
- 
-SRCS( 
-    main.cpp 
-) 
- 
-PEERDIR( 
+PROGRAM(ydb)
+
+OWNER(
+    g:kikimr
+)
+
+STRIP()
+
+SRCS(
+    main.cpp
+)
+
+PEERDIR(
     ydb/apps/ydb/commands
-) 
- 
+)
+
 #
 # DON'T ALLOW NEW DEPENDENCIES WITHOUT EXPLICIT APPROVE FROM  kikimr-dev@ or fomichev@
 #
@@ -37,5 +37,5 @@ CHECK_DEPENDENT_DIRS(
     ydb/library/yql/public/issue
     ydb/library/yql/public/issue/protos
 )
-END() 
- 
+END()
+

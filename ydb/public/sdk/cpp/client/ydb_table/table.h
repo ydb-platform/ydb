@@ -12,23 +12,23 @@
 #include <util/generic/maybe.h>
 #include <util/generic/variant.h>
 
-namespace Ydb { 
-namespace Table { 
- 
+namespace Ydb {
+namespace Table {
+
 class StorageSettings;
 class ColumnFamily;
 class CreateTableRequest;
-class DescribeTableResult; 
-class PartitioningSettings; 
+class DescribeTableResult;
+class PartitioningSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
 class TableIndex;
 class TableIndexDescription;
 class ValueSinceUnixEpochModeSettings;
- 
-} 
-} 
- 
+
+}
+}
+
 namespace NYdb {
 
 namespace NScheme {
@@ -342,50 +342,50 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-//! Represents table partitioning settings 
-class TPartitioningSettings { 
-public: 
-    TPartitioningSettings(); 
-    explicit TPartitioningSettings(const Ydb::Table::PartitioningSettings& proto); 
- 
-    const Ydb::Table::PartitioningSettings& GetProto() const; 
- 
-    TMaybe<bool> GetPartitioningBySize() const; 
+//! Represents table partitioning settings
+class TPartitioningSettings {
+public:
+    TPartitioningSettings();
+    explicit TPartitioningSettings(const Ydb::Table::PartitioningSettings& proto);
+
+    const Ydb::Table::PartitioningSettings& GetProto() const;
+
+    TMaybe<bool> GetPartitioningBySize() const;
     TMaybe<bool> GetPartitioningByLoad() const;
-    ui64 GetPartitionSizeMb() const; 
-    ui64 GetMinPartitionsCount() const; 
-    ui64 GetMaxPartitionsCount() const; 
- 
-private: 
-    class TImpl; 
-    std::shared_ptr<TImpl> Impl_; 
-}; 
- 
-//! Represents table read replicas settings 
-class TReadReplicasSettings { 
-public: 
-    enum class EMode { 
-        PerAz = 0, 
-        AnyAz = 1 
-    }; 
- 
-    TReadReplicasSettings(EMode mode, ui64 readReplicasCount); 
- 
-    EMode GetMode() const; 
-    ui64 GetReadReplicasCount() const; 
- 
-private: 
-    EMode Mode_; 
-    ui64 ReadReplicasCount_; 
-}; 
- 
-struct TExplicitPartitions; 
+    ui64 GetPartitionSizeMb() const;
+    ui64 GetMinPartitionsCount() const;
+    ui64 GetMaxPartitionsCount() const;
+
+private:
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+};
+
+//! Represents table read replicas settings
+class TReadReplicasSettings {
+public:
+    enum class EMode {
+        PerAz = 0,
+        AnyAz = 1
+    };
+
+    TReadReplicasSettings(EMode mode, ui64 readReplicasCount);
+
+    EMode GetMode() const;
+    ui64 GetReadReplicasCount() const;
+
+private:
+    EMode Mode_;
+    ui64 ReadReplicasCount_;
+};
+
+struct TExplicitPartitions;
 struct TDescribeTableSettings;
- 
+
 //! Represents table description
 class TTableDescription {
     friend class TTableBuilder;
-    friend class NYdb::TProtoAccessor; 
+    friend class NYdb::TProtoAccessor;
 
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
@@ -400,7 +400,7 @@ public:
     TMaybe<TTtlSettings> GetTtlSettings() const;
 
     const TString& GetOwner() const;
-    const TVector<NScheme::TPermissions>& GetPermissions() const; 
+    const TVector<NScheme::TPermissions>& GetPermissions() const;
     const TVector<NScheme::TPermissions>& GetEffectivePermissions() const;
     const TVector<TKeyRange>& GetKeyRanges() const;
 
@@ -431,15 +431,15 @@ public:
     // Attributes
     const THashMap<TString, TString>& GetAttributes() const;
 
-    // Returns partitioning settings of the table 
-    const TPartitioningSettings& GetPartitioningSettings() const; 
- 
-    // Bloom filter by key 
-    TMaybe<bool> GetKeyBloomFilter() const; 
- 
-    // Returns read replicas settings of the table 
-    TMaybe<TReadReplicasSettings> GetReadReplicasSettings() const; 
- 
+    // Returns partitioning settings of the table
+    const TPartitioningSettings& GetPartitioningSettings() const;
+
+    // Bloom filter by key
+    TMaybe<bool> GetKeyBloomFilter() const;
+
+    // Returns read replicas settings of the table
+    TMaybe<TReadReplicasSettings> GetReadReplicasSettings() const;
+
     // Fills CreateTableRequest proto from this description
     void SerializeTo(Ydb::Table::CreateTableRequest& request) const;
 
@@ -471,13 +471,13 @@ private:
     void AddAttribute(const TString& key, const TString& value);
     void SetAttributes(const THashMap<TString, TString>& attrs);
     void SetAttributes(THashMap<TString, TString>&& attrs);
-    void SetCompactionPolicy(const TString& name); 
-    void SetUniformPartitions(ui64 partitionsCount); 
-    void SetPartitionAtKeys(const TExplicitPartitions& keys); 
-    void SetPartitioningSettings(const TPartitioningSettings& settings); 
-    void SetKeyBloomFilter(bool enabled); 
-    void SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount); 
-    const Ydb::Table::DescribeTableResult& GetProto() const; 
+    void SetCompactionPolicy(const TString& name);
+    void SetUniformPartitions(ui64 partitionsCount);
+    void SetPartitionAtKeys(const TExplicitPartitions& keys);
+    void SetPartitioningSettings(const TPartitioningSettings& settings);
+    void SetKeyBloomFilter(bool enabled);
+    void SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount);
+    const Ydb::Table::DescribeTableResult& GetProto() const;
 
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
@@ -504,26 +504,26 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TPartitioningSettingsBuilder { 
-public: 
-    TPartitioningSettingsBuilder(); 
-    ~TPartitioningSettingsBuilder(); 
- 
-    TPartitioningSettingsBuilder& SetPartitioningBySize(bool enabled); 
+class TPartitioningSettingsBuilder {
+public:
+    TPartitioningSettingsBuilder();
+    ~TPartitioningSettingsBuilder();
+
+    TPartitioningSettingsBuilder& SetPartitioningBySize(bool enabled);
     TPartitioningSettingsBuilder& SetPartitioningByLoad(bool enabled);
-    TPartitioningSettingsBuilder& SetPartitionSizeMb(ui64 sizeMb); 
-    TPartitioningSettingsBuilder& SetMinPartitionsCount(ui64 count); 
-    TPartitioningSettingsBuilder& SetMaxPartitionsCount(ui64 count); 
- 
-    TPartitioningSettings Build() const; 
- 
-private: 
-    class TImpl; 
-    std::unique_ptr<TImpl> Impl_; 
-}; 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+    TPartitioningSettingsBuilder& SetPartitionSizeMb(ui64 sizeMb);
+    TPartitioningSettingsBuilder& SetMinPartitionsCount(ui64 count);
+    TPartitioningSettingsBuilder& SetMaxPartitionsCount(ui64 count);
+
+    TPartitioningSettings Build() const;
+
+private:
+    class TImpl;
+    std::unique_ptr<TImpl> Impl_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TColumnFamilyBuilder {
 public:
     explicit TColumnFamilyBuilder(const TString& name);
@@ -600,44 +600,44 @@ private:
     TColumnFamilyBuilder Builder_;
 };
 
-class TTablePartitioningSettingsBuilder { 
-public: 
-    explicit TTablePartitioningSettingsBuilder(TTableBuilder& parent) 
-        : Parent_(parent) 
-    { } 
- 
-    TTablePartitioningSettingsBuilder& SetPartitioningBySize(bool enabled) { 
-        Builder_.SetPartitioningBySize(enabled); 
-        return *this; 
-    } 
- 
+class TTablePartitioningSettingsBuilder {
+public:
+    explicit TTablePartitioningSettingsBuilder(TTableBuilder& parent)
+        : Parent_(parent)
+    { }
+
+    TTablePartitioningSettingsBuilder& SetPartitioningBySize(bool enabled) {
+        Builder_.SetPartitioningBySize(enabled);
+        return *this;
+    }
+
     TTablePartitioningSettingsBuilder& SetPartitioningByLoad(bool enabled) {
         Builder_.SetPartitioningByLoad(enabled);
         return *this;
     }
 
-    TTablePartitioningSettingsBuilder& SetPartitionSizeMb(ui64 sizeMb) { 
-        Builder_.SetPartitionSizeMb(sizeMb); 
-        return *this; 
-    } 
- 
-    TTablePartitioningSettingsBuilder& SetMinPartitionsCount(ui64 count) { 
-        Builder_.SetMinPartitionsCount(count); 
-        return *this; 
-    } 
- 
-    TTablePartitioningSettingsBuilder& SetMaxPartitionsCount(ui64 count) { 
-        Builder_.SetMaxPartitionsCount(count); 
-        return *this; 
-    } 
- 
-    TTableBuilder& EndPartitioningSettings(); 
- 
-private: 
-    TTableBuilder& Parent_; 
-    TPartitioningSettingsBuilder Builder_; 
-}; 
- 
+    TTablePartitioningSettingsBuilder& SetPartitionSizeMb(ui64 sizeMb) {
+        Builder_.SetPartitionSizeMb(sizeMb);
+        return *this;
+    }
+
+    TTablePartitioningSettingsBuilder& SetMinPartitionsCount(ui64 count) {
+        Builder_.SetMinPartitionsCount(count);
+        return *this;
+    }
+
+    TTablePartitioningSettingsBuilder& SetMaxPartitionsCount(ui64 count) {
+        Builder_.SetMaxPartitionsCount(count);
+        return *this;
+    }
+
+    TTableBuilder& EndPartitioningSettings();
+
+private:
+    TTableBuilder& Parent_;
+    TPartitioningSettingsBuilder Builder_;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TTableBuilder {
@@ -686,18 +686,18 @@ public:
     TTableBuilder& SetAttributes(const THashMap<TString, TString>& attrs);
     TTableBuilder& SetAttributes(THashMap<TString, TString>&& attrs);
 
-    TTableBuilder& SetCompactionPolicy(const TString& name); 
- 
-    // UniformPartitions and PartitionAtKeys are mutually exclusive 
-    TTableBuilder& SetUniformPartitions(ui64 partitionsCount); 
-    TTableBuilder& SetPartitionAtKeys(const TExplicitPartitions& keys); 
- 
-    TTableBuilder& SetPartitioningSettings(const TPartitioningSettings& settings); 
- 
-    TTableBuilder& SetKeyBloomFilter(bool enabled); 
- 
-    TTableBuilder& SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount); 
- 
+    TTableBuilder& SetCompactionPolicy(const TString& name);
+
+    // UniformPartitions and PartitionAtKeys are mutually exclusive
+    TTableBuilder& SetUniformPartitions(ui64 partitionsCount);
+    TTableBuilder& SetPartitionAtKeys(const TExplicitPartitions& keys);
+
+    TTableBuilder& SetPartitioningSettings(const TPartitioningSettings& settings);
+
+    TTableBuilder& SetKeyBloomFilter(bool enabled);
+
+    TTableBuilder& SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount);
+
     TTableStorageSettingsBuilder BeginStorageSettings() {
         return TTableStorageSettingsBuilder(*this);
     }
@@ -706,10 +706,10 @@ public:
         return TTableColumnFamilyBuilder(*this, name);
     }
 
-    TTablePartitioningSettingsBuilder BeginPartitioningSettings() { 
-        return TTablePartitioningSettingsBuilder(*this); 
-    } 
- 
+    TTablePartitioningSettingsBuilder BeginPartitioningSettings() {
+        return TTablePartitioningSettingsBuilder(*this);
+    }
+
     TTableDescription Build();
 
 private:
@@ -724,10 +724,10 @@ inline TTableBuilder& TTableColumnFamilyBuilder::EndColumnFamily() {
     return Parent_.AddColumnFamily(Builder_.Build());
 }
 
-inline TTableBuilder& TTablePartitioningSettingsBuilder::EndPartitioningSettings() { 
-    return Parent_.SetPartitioningSettings(Builder_.Build()); 
-} 
- 
+inline TTableBuilder& TTablePartitioningSettingsBuilder::EndPartitioningSettings() {
+    return Parent_.SetPartitioningSettings(Builder_.Build());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TCopyItem {
@@ -1150,18 +1150,18 @@ struct TPartitioningPolicy {
     FLUENT_SETTING_OPTIONAL(TExplicitPartitions, ExplicitPartitions);
 };
 
-struct TReplicationPolicy { 
-    using TSelf = TReplicationPolicy; 
- 
-    FLUENT_SETTING_OPTIONAL(TString, PresetName); 
- 
-    FLUENT_SETTING_OPTIONAL(ui32, ReplicasCount); 
- 
-    FLUENT_SETTING_OPTIONAL(bool, CreatePerAvailabilityZone); 
- 
-    FLUENT_SETTING_OPTIONAL(bool, AllowPromotion); 
-}; 
- 
+struct TReplicationPolicy {
+    using TSelf = TReplicationPolicy;
+
+    FLUENT_SETTING_OPTIONAL(TString, PresetName);
+
+    FLUENT_SETTING_OPTIONAL(ui32, ReplicasCount);
+
+    FLUENT_SETTING_OPTIONAL(bool, CreatePerAvailabilityZone);
+
+    FLUENT_SETTING_OPTIONAL(bool, AllowPromotion);
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TCreateTableSettings : public TOperationRequestSettings<TCreateTableSettings> {
@@ -1176,8 +1176,8 @@ struct TCreateTableSettings : public TOperationRequestSettings<TCreateTableSetti
     FLUENT_SETTING_OPTIONAL(TPartitioningPolicy, PartitioningPolicy);
 
     FLUENT_SETTING_OPTIONAL(TStoragePolicy, StoragePolicy);
- 
-    FLUENT_SETTING_OPTIONAL(TReplicationPolicy, ReplicationPolicy); 
+
+    FLUENT_SETTING_OPTIONAL(TReplicationPolicy, ReplicationPolicy);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1293,44 +1293,44 @@ private:
     THashMap<TString, TString> AlterAttributes_;
 };
 
-class TAlterPartitioningSettingsBuilder { 
-public: 
-    explicit TAlterPartitioningSettingsBuilder(TAlterTableSettings& parent) 
-        : Parent_(parent) 
-    { } 
- 
-    TAlterPartitioningSettingsBuilder& SetPartitioningBySize(bool enabled) { 
-        Builder_.SetPartitioningBySize(enabled); 
-        return *this; 
-    } 
- 
+class TAlterPartitioningSettingsBuilder {
+public:
+    explicit TAlterPartitioningSettingsBuilder(TAlterTableSettings& parent)
+        : Parent_(parent)
+    { }
+
+    TAlterPartitioningSettingsBuilder& SetPartitioningBySize(bool enabled) {
+        Builder_.SetPartitioningBySize(enabled);
+        return *this;
+    }
+
     TAlterPartitioningSettingsBuilder& SetPartitioningByLoad(bool enabled) {
         Builder_.SetPartitioningByLoad(enabled);
         return *this;
     }
 
-    TAlterPartitioningSettingsBuilder& SetPartitionSizeMb(ui64 sizeMb) { 
-        Builder_.SetPartitionSizeMb(sizeMb); 
-        return *this; 
-    } 
- 
-    TAlterPartitioningSettingsBuilder& SetMinPartitionsCount(ui64 count) { 
-        Builder_.SetMinPartitionsCount(count); 
-        return *this; 
-    } 
- 
-    TAlterPartitioningSettingsBuilder& SetMaxPartitionsCount(ui64 count) { 
-        Builder_.SetMaxPartitionsCount(count); 
-        return *this; 
-    } 
- 
-    TAlterTableSettings& EndAlterPartitioningSettings(); 
- 
-private: 
-    TAlterTableSettings& Parent_; 
-    TPartitioningSettingsBuilder Builder_; 
-}; 
- 
+    TAlterPartitioningSettingsBuilder& SetPartitionSizeMb(ui64 sizeMb) {
+        Builder_.SetPartitionSizeMb(sizeMb);
+        return *this;
+    }
+
+    TAlterPartitioningSettingsBuilder& SetMinPartitionsCount(ui64 count) {
+        Builder_.SetMinPartitionsCount(count);
+        return *this;
+    }
+
+    TAlterPartitioningSettingsBuilder& SetMaxPartitionsCount(ui64 count) {
+        Builder_.SetMaxPartitionsCount(count);
+        return *this;
+    }
+
+    TAlterTableSettings& EndAlterPartitioningSettings();
+
+private:
+    TAlterTableSettings& Parent_;
+    TPartitioningSettingsBuilder Builder_;
+};
+
 struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSettings> {
     using TSelf = TAlterTableSettings;
     using TAlterAttributes = THashMap<TString, TString>;
@@ -1363,18 +1363,18 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
 
     FLUENT_SETTING(TAlterAttributes, AlterAttributes);
 
-    FLUENT_SETTING(TString, SetCompactionPolicy); 
- 
-    FLUENT_SETTING_OPTIONAL(TPartitioningSettings, AlterPartitioningSettings); 
- 
-    FLUENT_SETTING_OPTIONAL(bool, SetKeyBloomFilter); 
- 
-    FLUENT_SETTING_OPTIONAL(TReadReplicasSettings, SetReadReplicasSettings); 
-    TSelf& SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount) { 
-        SetReadReplicasSettings_ = TReadReplicasSettings(mode, readReplicasCount); 
-        return *this; 
-    } 
- 
+    FLUENT_SETTING(TString, SetCompactionPolicy);
+
+    FLUENT_SETTING_OPTIONAL(TPartitioningSettings, AlterPartitioningSettings);
+
+    FLUENT_SETTING_OPTIONAL(bool, SetKeyBloomFilter);
+
+    FLUENT_SETTING_OPTIONAL(TReadReplicasSettings, SetReadReplicasSettings);
+    TSelf& SetReadReplicasSettings(TReadReplicasSettings::EMode mode, ui64 readReplicasCount) {
+        SetReadReplicasSettings_ = TReadReplicasSettings(mode, readReplicasCount);
+        return *this;
+    }
+
     TAlterStorageSettingsBuilder BeginAlterStorageSettings() {
         return TAlterStorageSettingsBuilder(*this);
     }
@@ -1394,10 +1394,10 @@ struct TAlterTableSettings : public TOperationRequestSettings<TAlterTableSetting
     TAlterAttributesBuilder BeginAlterAttributes() {
         return TAlterAttributesBuilder(*this);
     }
- 
-    TAlterPartitioningSettingsBuilder BeginAlterPartitioningSettings() { 
-        return TAlterPartitioningSettingsBuilder(*this); 
-    } 
+
+    TAlterPartitioningSettingsBuilder BeginAlterPartitioningSettings() {
+        return TAlterPartitioningSettingsBuilder(*this);
+    }
 
 private:
     class TImpl;
@@ -1420,10 +1420,10 @@ inline TAlterTableSettings& TAlterAttributesBuilder::EndAlterAttributes() {
     return Parent_.AlterAttributes(AlterAttributes_);
 }
 
-inline TAlterTableSettings& TAlterPartitioningSettingsBuilder::EndAlterPartitioningSettings() { 
-    return Parent_.AlterPartitioningSettings(Builder_.Build()); 
-} 
- 
+inline TAlterTableSettings& TAlterPartitioningSettingsBuilder::EndAlterPartitioningSettings() {
+    return Parent_.AlterPartitioningSettings(Builder_.Build());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TCopyTableSettings : public TOperationRequestSettings<TCopyTableSettings> {};

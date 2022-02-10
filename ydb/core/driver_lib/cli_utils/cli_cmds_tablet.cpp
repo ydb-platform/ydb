@@ -4,10 +4,10 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-class TClientCommandKeyValueRequest : public TClientCommandConfig { 
+class TClientCommandKeyValueRequest : public TClientCommandConfig {
 public:
     TClientCommandKeyValueRequest()
-        : TClientCommandConfig("request", { "req" }, "Request to KV tablet") 
+        : TClientCommandConfig("request", { "req" }, "Request to KV tablet")
     {}
 
     TString ProtoBuf;
@@ -47,8 +47,8 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.SetFreeArgsNum(1); 
-        SetFreeArgTitle(0, "<REQUEST>", "Request protobuf or file with request protobuf"); 
+        config.SetFreeArgsNum(1);
+        SetFreeArgTitle(0, "<REQUEST>", "Request protobuf or file with request protobuf");
         config.Opts->AddLongOption("of", "output file path, protobuf must contain single read command!").Optional()
             .RequiredArgument("PATH").StoreResult(&OutputFile);
         config.Opts->AddLongOption("if", "input file path, protobuf must contain single write command!").Optional()
@@ -81,10 +81,10 @@ public:
     }
 };
 
-class TClientCommandTabletExec : public TClientCommandConfig { 
+class TClientCommandTabletExec : public TClientCommandConfig {
 public:
     TClientCommandTabletExec()
-        : TClientCommandConfig("execute", { "exec" }) 
+        : TClientCommandConfig("execute", { "exec" })
     {
     }
 
@@ -97,9 +97,9 @@ public:
         config.Opts->AddLongOption("follower", "connect to follower").NoArgument();
         config.Opts->AddLongOption("json-ui64-as-string", "json output ui64 as string").NoArgument();
         config.Opts->AddLongOption("json-binary-as-base64", "json output binary data in base64").NoArgument();
-        config.SetFreeArgsNum(1, 2); 
-        SetFreeArgTitle(0, "<PROGRAM>", "Program to execute"); 
-        SetFreeArgTitle(1, "<PARAMS>", "Parameters of the program"); 
+        config.SetFreeArgsNum(1, 2);
+        SetFreeArgTitle(0, "<PROGRAM>", "Program to execute");
+        SetFreeArgTitle(1, "<PARAMS>", "Parameters of the program");
     }
 
     virtual void Parse(TConfig& config) override {
@@ -147,7 +147,7 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.SetFreeArgsNum(0); 
+        config.SetFreeArgsNum(0);
     }
 
     virtual void Parse(TConfig& config) override {
@@ -175,8 +175,8 @@ public:
         TClientCommand::Config(config);
         config.Opts->AddLongOption("follower",     "connect to follower");
         config.Opts->AddLongOption("dry-run",   "test changes without applying");
-        config.SetFreeArgsNum(1, 1); 
-        SetFreeArgTitle(0, "<SCHEME CHANGES>", "Scheme changes to apply"); 
+        config.SetFreeArgsNum(1, 1);
+        SetFreeArgTitle(0, "<SCHEME CHANGES>", "Scheme changes to apply");
     }
 
     virtual void Parse(TConfig& config) override {
@@ -209,8 +209,8 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.SetFreeArgsNum(1); 
-        SetFreeArgTitle(0, "<NODE ID>", "Node ID to drain tablets from"); 
+        config.SetFreeArgsNum(1);
+        SetFreeArgTitle(0, "<NODE ID>", "Node ID to drain tablets from");
     }
 
     ui32 NodeId;
@@ -235,8 +235,8 @@ public:
 
     virtual void Config(TConfig& config) override {
         TClientCommand::Config(config);
-        config.SetFreeArgsNum(1); 
-        SetFreeArgTitle(0, "<NODE ID>", "Node ID to fill tablets to"); 
+        config.SetFreeArgsNum(1);
+        SetFreeArgTitle(0, "<NODE ID>", "Node ID to fill tablets to");
     }
 
     ui32 NodeId;

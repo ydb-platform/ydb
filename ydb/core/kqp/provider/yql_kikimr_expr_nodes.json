@@ -113,9 +113,9 @@
                 {"Index": 3, "Name": "Columns", "Type": "TExprList"},
                 {"Index": 4, "Name": "PrimaryKey", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"},
-                {"Index": 6, "Name": "Indexes", "Type": "TCoIndexList"}, 
-                {"Index": 7, "Name": "PartitionBy", "Type": "TCoAtomList"}, 
-                {"Index": 8, "Name": "ColumnFamilies", "Type": "TExprList"}, 
+                {"Index": 6, "Name": "Indexes", "Type": "TCoIndexList"},
+                {"Index": 7, "Name": "PartitionBy", "Type": "TCoAtomList"},
+                {"Index": 8, "Name": "ColumnFamilies", "Type": "TExprList"},
                 {"Index": 9, "Name": "TableSettings", "Type": "TCoNameValueTupleList"},
                 {"Index": 10, "Name": "Changefeeds", "Type": "TCoChangefeedList"}
             ]
@@ -128,7 +128,7 @@
                 {"Index": 0, "Name": "World", "Type": "TExprBase"},
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "Actions", "Type": "TCoNameValueTupleList"} 
+                {"Index": 3, "Name": "Actions", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
@@ -143,72 +143,72 @@
             ]
         },
         {
-            "Name": "TKiCreateUser", 
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "KiCreateUser!"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"}, 
-                {"Index": 2, "Name": "UserName", "Type": "TCoAtom"}, 
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"} 
-            ] 
-        }, 
-        { 
-            "Name": "TKiAlterUser", 
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "KiAlterUser!"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"}, 
-                {"Index": 2, "Name": "UserName", "Type": "TCoAtom"}, 
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"} 
-            ] 
-        }, 
-        { 
-            "Name": "TKiDropUser", 
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "KiDropUser!"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"}, 
-                {"Index": 2, "Name": "UserName", "Type": "TCoAtom"}, 
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"} 
-            ] 
-        }, 
-        { 
-            "Name": "TKiCreateGroup", 
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "KiCreateGroup!"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"}, 
-                {"Index": 2, "Name": "GroupName", "Type": "TCoAtom"} 
-            ] 
-        }, 
-        { 
-            "Name": "TKiAlterGroup", 
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "KiAlterGroup!"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"}, 
-                {"Index": 2, "Name": "GroupName", "Type": "TCoAtom"}, 
-                {"Index": 3, "Name": "Action", "Type": "TCoAtom"}, 
-                {"Index": 4, "Name": "Roles", "Type": "TCoAtomList"} 
-            ] 
-        }, 
-        { 
-            "Name": "TKiDropGroup", 
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "KiDropGroup!"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "World", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"}, 
-                {"Index": 2, "Name": "GroupName", "Type": "TCoAtom"}, 
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"} 
-            ] 
-        }, 
-        { 
+            "Name": "TKiCreateUser",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiCreateUser!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "UserName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKiAlterUser",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiAlterUser!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "UserName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKiDropUser",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiDropUser!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "UserName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TKiCreateGroup",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiCreateGroup!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "GroupName", "Type": "TCoAtom"}
+            ]
+        },
+        {
+            "Name": "TKiAlterGroup",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiAlterGroup!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "GroupName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Action", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "Roles", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TKiDropGroup",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiDropGroup!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "GroupName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
             "Name": "TKiOperation",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},

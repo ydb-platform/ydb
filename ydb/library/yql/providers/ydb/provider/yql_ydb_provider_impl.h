@@ -31,8 +31,8 @@ public:
     enum class Type {
         Table,
         TableList,
-        TableScheme, 
-        Role 
+        TableScheme,
+        Role
     };
 
 public:
@@ -44,12 +44,12 @@ public:
 
     std::string_view GetTablePath() const {
         Y_VERIFY_DEBUG(KeyType == Type::Table || KeyType == Type::TableScheme);
-        return Target; 
+        return Target;
     }
 
     std::string_view GetFolderPath() const {
         Y_VERIFY_DEBUG(KeyType == Type::TableList);
-        return Target; 
+        return Target;
     }
 
     const std::optional<std::string_view>& GetView() const {
@@ -60,7 +60,7 @@ public:
 
 private:
     std::optional<Type> KeyType;
-    std::string_view Target; 
+    std::string_view Target;
     std::optional<std::string_view> View;
 };
 

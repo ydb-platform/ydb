@@ -55,29 +55,29 @@ struct TEvTabletBase {
         TIntrusivePtr<TEvTablet::TDependencyGraph> DependencyGraph;
         NMetrics::TTabletThroughputRawValue GroupReadBytes;
         NMetrics::TTabletIopsRawValue GroupReadOps;
-        THolder<NTracing::ITrace> Trace; 
+        THolder<NTracing::ITrace> Trace;
 
-        TEvRebuildGraphResult( 
-            NKikimrProto::EReplyStatus status, 
-            NTracing::ITrace *trace, 
-            const TString &reason = TString() 
-        ) 
+        TEvRebuildGraphResult(
+            NKikimrProto::EReplyStatus status,
+            NTracing::ITrace *trace,
+            const TString &reason = TString()
+        )
             : Status(status)
             , ErrorReason(reason)
-            , Trace(trace) 
+            , Trace(trace)
         {}
 
-        TEvRebuildGraphResult( 
-            const TIntrusivePtr<TEvTablet::TDependencyGraph> &graph, 
-            NMetrics::TTabletThroughputRawValue &&read, 
+        TEvRebuildGraphResult(
+            const TIntrusivePtr<TEvTablet::TDependencyGraph> &graph,
+            NMetrics::TTabletThroughputRawValue &&read,
             NMetrics::TTabletIopsRawValue &&readOps,
-            NTracing::ITrace *trace 
-        ) 
+            NTracing::ITrace *trace
+        )
             : Status(NKikimrProto::OK)
             , DependencyGraph(graph)
             , GroupReadBytes(std::move(read))
             , GroupReadOps(std::move(readOps))
-            , Trace(trace) 
+            , Trace(trace)
         {}
     };
 

@@ -73,15 +73,15 @@ TCommandGetOperation::TCommandGetOperation()
 void TCommandGetOperation::Config(TConfig& config) {
     TCommandWithOperationId::Config(config);
     AddJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 }); 
-    config.Opts->MutuallyExclusive("json", "format"); 
+    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    config.Opts->MutuallyExclusive("json", "format");
 }
 
-void TCommandGetOperation::Parse(TConfig& config) { 
-    TCommandWithOperationId::Parse(config); 
-    ParseFormats(); 
-} 
- 
+void TCommandGetOperation::Parse(TConfig& config) {
+    TCommandWithOperationId::Parse(config);
+    ParseFormats();
+}
+
 int TCommandGetOperation::Run(TConfig& config) {
     NOperation::TOperationClient client(CreateDriver(config));
 
@@ -129,17 +129,17 @@ int TCommandForgetOperation::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-void TCommandListOperations::InitializeKindToHandler(TConfig& config) { 
-    KindToHandler = { 
-        {"export/s3", &ListOperations<NExport::TExportToS3Response>}, 
-        {"import/s3", &ListOperations<NImport::TImportFromS3Response>}, 
-        {"buildindex", &ListOperations<NTable::TBuildIndexOperation>}, 
-    }; 
-    if (config.UseExportToYt) { 
-        KindToHandler.emplace("export", &ListOperations<NExport::TExportToYtResponse>); // deprecated 
-        KindToHandler.emplace("export/yt", &ListOperations<NExport::TExportToYtResponse>); 
-    } 
-} 
+void TCommandListOperations::InitializeKindToHandler(TConfig& config) {
+    KindToHandler = {
+        {"export/s3", &ListOperations<NExport::TExportToS3Response>},
+        {"import/s3", &ListOperations<NImport::TImportFromS3Response>},
+        {"buildindex", &ListOperations<NTable::TBuildIndexOperation>},
+    };
+    if (config.UseExportToYt) {
+        KindToHandler.emplace("export", &ListOperations<NExport::TExportToYtResponse>); // deprecated
+        KindToHandler.emplace("export/yt", &ListOperations<NExport::TExportToYtResponse>);
+    }
+}
 
 TString TCommandListOperations::KindChoices() {
     TStringBuilder help;
@@ -157,22 +157,22 @@ TString TCommandListOperations::KindChoices() {
 }
 
 TCommandListOperations::TCommandListOperations()
-    : TYdbCommand("list", {}, "List operations of specified kind") 
+    : TYdbCommand("list", {}, "List operations of specified kind")
 {
 }
 
 void TCommandListOperations::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
-    InitializeKindToHandler(config); 
- 
+    InitializeKindToHandler(config);
+
     config.Opts->AddLongOption('s', "page-size", "Page size")
         .RequiredArgument("NUM").StoreResult(&PageSize);
     config.Opts->AddLongOption('t', "page-token", "Page token")
         .RequiredArgument("STRING").StoreResult(&PageToken);
     AddJsonOption(config);
-    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 }); 
-    config.Opts->MutuallyExclusive("json", "format"); 
+    AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
+    config.Opts->MutuallyExclusive("json", "format");
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<kind>", KindChoices());
@@ -180,7 +180,7 @@ void TCommandListOperations::Config(TConfig& config) {
 
 void TCommandListOperations::Parse(TConfig& config) {
     TYdbCommand::Parse(config);
-    ParseFormats(); 
+    ParseFormats();
 
     Kind = config.ParseResult->GetFreeArgs()[0];
     if (!KindToHandler.contains(Kind)) {

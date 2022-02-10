@@ -88,9 +88,9 @@ bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTi
 
         for (size_t i = 0; i < key.Columns.size(); i++) {
             const TKeyDesc::TColumnOp& cop = key.Columns[i];
-            if (IsSystemColumn(cop.Column)) { 
-                continue; 
-            } 
+            if (IsSystemColumn(cop.Column)) {
+                continue;
+            }
             auto* cinfo = Scheme.GetColumnInfo(tableInfo, cop.Column);
             EH_VALIDATE(cinfo, TypeCheckFailed); // Unknown column
             NScheme::TTypeId vtype = cinfo->PType;
@@ -279,8 +279,8 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     ConvertKeys(tableInfo, row, key);
 
     TSmallVec<NTable::TTag> tags;
-    TSmallVec<NTable::TTag> systemColumnTags; 
-    AnalyzeRowType(columnIds, tags, systemColumnTags); 
+    TSmallVec<NTable::TTag> systemColumnTags;
+    AnalyzeRowType(columnIds, tags, systemColumnTags);
 
     TSmallVec<NScheme::TTypeId> cellTypes;
     cellTypes.reserve(tags.size());
@@ -296,7 +296,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     Settings.KeyAccessSampler->AddSample(tableId, row);
 
     NTable::TSelectStats stats;
-    ui64 flags = Settings.DisableByKeyFilter ? (ui64)NTable::NoByKey : 0; 
+    ui64 flags = Settings.DisableByKeyFilter ? (ui64)NTable::NoByKey : 0;
     const auto ready = Db.Select(localTid, key, tags, dbRow, stats, flags, GetReadVersion(tableId));
 
     Counters.InvisibleRowSkips += stats.Invisible;
@@ -320,15 +320,15 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
         rowItems[i] = GetCellValue(dbRow.Get(i), cellTypes[i]);
         rowBytes += dbRow.Get(i).IsNull() ? 1 : dbRow.Get(i).Size();
     }
-    for (ui32 i = 0; i < systemColumnTags.size(); ++i) { 
-        switch (systemColumnTags[i]) { 
-        case TKeyDesc::EColumnIdDataShard: 
-            rowItems[tags.size() + i] = NUdf::TUnboxedValuePod(GetShardId()); 
-            break; 
-        default: 
-            ythrow yexception() << "Unknown system column tag: " << systemColumnTags[i]; 
-        } 
-    } 
+    for (ui32 i = 0; i < systemColumnTags.size(); ++i) {
+        switch (systemColumnTags[i]) {
+        case TKeyDesc::EColumnIdDataShard:
+            rowItems[tags.size() + i] = NUdf::TUnboxedValuePod(GetShardId());
+            break;
+        default:
+            ythrow yexception() << "Unknown system column tag: " << systemColumnTags[i];
+        }
+    }
     rowBytes = std::max(rowBytes, (ui64)8);
 
     Counters.SelectRowBytes += rowBytes;
@@ -361,16 +361,16 @@ public:
 
     void operator delete[](void *mem, std::size_t sz) = delete;
 
-    static NUdf::TUnboxedValue Create(const TDbTupleRef& dbData, const THolderFactory& holderFactory, 
-        const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId) { 
-        ui32 size = dbData.ColumnCount + systemColumnTags.size(); 
+    static NUdf::TUnboxedValue Create(const TDbTupleRef& dbData, const THolderFactory& holderFactory,
+        const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId) {
+        ui32 size = dbData.ColumnCount + systemColumnTags.size();
 
         ui32 maskSize = size > 0 ? (size - 1) / 64 + 1 : 0;
         void* buffer = MKQLAllocWithSize(sizeof(TSelectRangeLazyRow)
             + size * sizeof(NUdf::TUnboxedValue)
             + maskSize * sizeof(ui64));
 
-        return NUdf::TUnboxedValuePod(::new(buffer) TSelectRangeLazyRow(dbData, holderFactory, maskSize, systemColumnTags, shardId)); 
+        return NUdf::TUnboxedValuePod(::new(buffer) TSelectRangeLazyRow(dbData, holderFactory, maskSize, systemColumnTags, shardId));
     }
 
     void InvalidateDb() {
@@ -390,14 +390,14 @@ public:
     }
 
 private:
-    TSelectRangeLazyRow(const TDbTupleRef& dbData, const THolderFactory& holderFactory, ui32 maskSize, 
-        const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId) 
+    TSelectRangeLazyRow(const TDbTupleRef& dbData, const THolderFactory& holderFactory, ui32 maskSize,
+        const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId)
         : TComputationValue<TSelectRangeLazyRow<TTableIt>>(&holderFactory.GetMemInfo())
         , Iter()
         , DbData(dbData)
         , MaskSize(maskSize)
-        , SystemColumnTags(systemColumnTags) 
-        , ShardId(shardId) 
+        , SystemColumnTags(systemColumnTags)
+        , ShardId(shardId)
     {
         ClearMask();
         for (ui32 i = 0; i < Size(); ++i) {
@@ -415,7 +415,7 @@ private:
     }
 
     inline ui32 Size() const {
-        return DbData.ColumnCount + SystemColumnTags.size(); 
+        return DbData.ColumnCount + SystemColumnTags.size();
     }
 
     inline ui32 GetMaskSize() const {
@@ -426,17 +426,17 @@ private:
         Y_VERIFY_DEBUG(MaskSize > 0);
 
         if (!TestMask(index)) {
-            if (index < DbData.ColumnCount) { 
-                GetPtr()[index] = GetCellValue(DbData.Columns[index], DbData.Types[index]); 
-            } else { 
-                switch (SystemColumnTags[index - DbData.ColumnCount]) { 
-                case TKeyDesc::EColumnIdDataShard: 
-                    GetPtr()[index] = NUdf::TUnboxedValuePod(ShardId); 
-                    break; 
-                default: 
-                    throw TSchemeErrorTabletException(); 
-                } 
-            } 
+            if (index < DbData.ColumnCount) {
+                GetPtr()[index] = GetCellValue(DbData.Columns[index], DbData.Types[index]);
+            } else {
+                switch (SystemColumnTags[index - DbData.ColumnCount]) {
+                case TKeyDesc::EColumnIdDataShard:
+                    GetPtr()[index] = NUdf::TUnboxedValuePod(ShardId);
+                    break;
+                default:
+                    throw TSchemeErrorTabletException();
+                }
+            }
             SetMask(index);
         }
         Y_VERIFY_DEBUG(TestMask(index));
@@ -460,8 +460,8 @@ private:
     THolder<TTableIt> Iter;
     TDbTupleRef DbData;
     ui32 MaskSize;
-    TSmallVec<NTable::TTag> SystemColumnTags; 
-    ui64 ShardId; 
+    TSmallVec<NTable::TTag> SystemColumnTags;
+    ui64 ShardId;
 };
 
 class TSelectRangeLazyRowsList : public TCustomListValue {
@@ -477,16 +477,16 @@ public:
 
     public:
         TIterator(TMemoryUsageInfo* memInfo, const TSelectRangeLazyRowsList& list, TAutoPtr<TTableIt>&& iter,
-            const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId) 
+            const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId)
             : TBase(memInfo)
             , List(list)
             , Iter(iter.Release())
             , HasCurrent(false)
             , Iterations(0)
             , Items(0)
-            , Bytes(0) 
-            , SystemColumnTags(systemColumnTags) 
-            , ShardId(shardId) {} 
+            , Bytes(0)
+            , SystemColumnTags(systemColumnTags)
+            , ShardId(shardId) {}
 
         bool Next(NUdf::TUnboxedValue& value) override {
             bool truncated = false;
@@ -560,7 +560,7 @@ public:
                 if (HasCurrent && CurrentRowValue.UniqueBoxed()) {
                     CurrentRow()->Reuse(rowValues);
                 } else {
-                    CurrentRowValue = TSelectRangeLazyRow<TTableIt>::Create(rowValues, List.HolderFactory, SystemColumnTags, ShardId); 
+                    CurrentRowValue = TSelectRangeLazyRow<TTableIt>::Create(rowValues, List.HolderFactory, SystemColumnTags, ShardId);
                 }
 
                 value = CurrentRowValue;
@@ -619,8 +619,8 @@ public:
         ui64 Items;
         ui64 Bytes;
         NUdf::TUnboxedValue CurrentRowValue;
-        TSmallVec<NTable::TTag> SystemColumnTags; 
-        ui64 ShardId; 
+        TSmallVec<NTable::TTag> SystemColumnTags;
+        ui64 ShardId;
     };
 
 public:
@@ -635,8 +635,8 @@ public:
         , TableId(tableId)
         , LocalTid(localTid)
         , Tags(tags)
-        , SystemColumnTags(systemColumnTags) 
-        , ShardId(shardId) 
+        , SystemColumnTags(systemColumnTags)
+        , ShardId(shardId)
         , SkipNullKeys(skipNullKeys)
         , ItemsLimit(itemsLimit)
         , BytesLimit(bytesLimit)
@@ -663,15 +663,15 @@ public:
         if (Reverse) {
             auto read = Db.IterateRangeReverse(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId));
 
-            return NUdf::TUnboxedValuePod( 
-                new TIterator<NTable::TTableReverseIt>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId) 
-            ); 
+            return NUdf::TUnboxedValuePod(
+                new TIterator<NTable::TTableReverseIt>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId)
+            );
         } else {
             auto read = Db.IterateRange(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId));
 
-            return NUdf::TUnboxedValuePod( 
-                new TIterator<NTable::TTableIt>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId) 
-            ); 
+            return NUdf::TUnboxedValuePod(
+                new TIterator<NTable::TTableIt>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId)
+            );
         }
     }
 
@@ -711,8 +711,8 @@ private:
     TTableId TableId;
     ui64 LocalTid;
     TSmallVec<NTable::TTag> Tags;
-    TSmallVec<NTable::TTag> SystemColumnTags; 
-    ui64 ShardId; 
+    TSmallVec<NTable::TTag> SystemColumnTags;
+    ui64 ShardId;
     TSmallVec<bool> SkipNullKeys;
     ui64 ItemsLimit;
     ui64 BytesLimit;
@@ -817,8 +817,8 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
         "Unexpected type structure of returnType in TEngineHost::SelectRange()");
 
     TSmallVec<NTable::TTag> tags;
-    TSmallVec<NTable::TTag> systemColumnTags; 
-    AnalyzeRowType(columnIds, tags, systemColumnTags); 
+    TSmallVec<NTable::TTag> systemColumnTags;
+    AnalyzeRowType(columnIds, tags, systemColumnTags);
 
     TSmallVec<bool> skipNullKeysFlags = CreateBoolVec(skipNullKeys);
     TSmallVec<bool> forbidNullArgsFrom = CreateBoolVec(forbidNullArgs.first);
@@ -946,16 +946,16 @@ void TEngineHost::SetPeriodicCallback(TPeriodicCallback&& callback) {
     PeriodicCallback = std::move(callback);
 }
 
-void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TSmallVec<NTable::TTag>& systemColumnTags) { 
+void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TSmallVec<NTable::TTag>& systemColumnTags) {
     // Find out tags that should be read in Select*() functions
     tags.reserve(columnIds->GetValuesCount());
     for (ui32 i = 0; i < columnIds->GetValuesCount(); i++) {
-        NTable::TTag columnId = AS_VALUE(TDataLiteral, columnIds->GetValue(i))->AsValue().Get<ui32>(); 
-        if (IsSystemColumn(columnId)) { 
-            systemColumnTags.push_back(columnId); 
-        } else { 
-            tags.push_back(columnId); 
-        } 
+        NTable::TTag columnId = AS_VALUE(TDataLiteral, columnIds->GetValue(i))->AsValue().Get<ui32>();
+        if (IsSystemColumn(columnId)) {
+            systemColumnTags.push_back(columnId);
+        } else {
+            tags.push_back(columnId);
+        }
     }
 }
 

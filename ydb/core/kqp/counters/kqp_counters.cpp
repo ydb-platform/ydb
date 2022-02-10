@@ -96,8 +96,8 @@ void TKqpCountersBase::Init() {
         KqpGroup->GetCounter("Request/QueryTypeAstDml", true);
     QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_SCRIPT] =
         KqpGroup->GetCounter("Request/QueryTypeSqlScript", true);
-    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_SCRIPT_STREAMING] = 
-        KqpGroup->GetCounter("Request/QueryTypeSqlScriptStreaming", true); 
+    QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_SCRIPT_STREAMING] =
+        KqpGroup->GetCounter("Request/QueryTypeSqlScriptStreaming", true);
     QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_SQL_SCAN] =
         KqpGroup->GetCounter("Request/QueryTypeSqlScan", true);
     QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_AST_SCAN] =

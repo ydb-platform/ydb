@@ -989,11 +989,11 @@ private:
                 break;
             }
 
-            case NKikimrKqp::QUERY_ACTION_PARSE: { 
-                onBadRequest("Parse mode is not supported yet"); 
-                return; 
-            } 
- 
+            case NKikimrKqp::QUERY_ACTION_PARSE: {
+                onBadRequest("Parse mode is not supported yet");
+                return;
+            }
+
             case NKikimrKqp::QUERY_ACTION_VALIDATE: {
                 if (!ValidateQuery(ctx, queryRequest.GetQuery(), queryType)) {
                     onBadRequest(QueryState->Error);
@@ -1309,15 +1309,15 @@ private:
                 break;
             }
 
-            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: { 
-                IKqpHost::TExecScriptSettings execSettings; 
-                execSettings.Deadlines = QueryState->QueryDeadlines; 
-                execSettings.StatsMode = statsMode; 
-                QueryState->AsyncQueryResult = KqpHost->StreamExecuteYqlScript(query, std::move(*parameters), 
-                    requestActorId, execSettings); 
-                break; 
-            } 
- 
+            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
+                IKqpHost::TExecScriptSettings execSettings;
+                execSettings.Deadlines = QueryState->QueryDeadlines;
+                execSettings.StatsMode = statsMode;
+                QueryState->AsyncQueryResult = KqpHost->StreamExecuteYqlScript(query, std::move(*parameters),
+                    requestActorId, execSettings);
+                break;
+            }
+
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
             case NKikimrKqp::QUERY_TYPE_AST_SCAN: {
                 bool isSql = (type == NKikimrKqp::QUERY_TYPE_SQL_SCAN);
@@ -1359,8 +1359,8 @@ private:
                 break;
             }
 
-            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT: 
-            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: { 
+            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
+            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
                 QueryState->AsyncQueryResult = KqpHost->ExplainYqlScript(query);
                 break;
             }
@@ -1374,16 +1374,16 @@ private:
     }
 
     bool ValidateQuery(const TActorContext&, const TString& query, NKikimrKqp::EQueryType type) {
-        switch (type) { 
-            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT: 
-            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: { 
-                QueryState->AsyncQueryResult = KqpHost->ValidateYqlScript(query); 
-                break; 
-            } 
- 
-            default: 
-                QueryState->Error = "Unexpected query type."; 
-                return false; 
+        switch (type) {
+            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
+            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
+                QueryState->AsyncQueryResult = KqpHost->ValidateYqlScript(query);
+                break;
+            }
+
+            default:
+                QueryState->Error = "Unexpected query type.";
+                return false;
         }
 
         return true;
@@ -1805,8 +1805,8 @@ private:
             case NKikimrKqp::QUERY_TYPE_SQL_DML:
             case NKikimrKqp::QUERY_TYPE_PREPARED_DML:
             case NKikimrKqp::QUERY_TYPE_SQL_SCAN:
-            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT: 
-            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: { 
+            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
+            case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING: {
                 auto userSID = NACLib::TUserToken(QueryState->UserToken).GetUserSID();
                 NSysView::CollectQueryStats(ctx, stats, queryDuration, ExtractQueryText(),
                     userSID, QueryState->ParametersSize, database, type, requestUnits);
@@ -1965,43 +1965,43 @@ private:
             }
         }
 
-        /* 
-         * TODO: 
-         * For Scan/NewEngine plan will be set later on rpc_* level from stats and execution profiles, so 
-         * QUERY_REPLY_FLAG_PLAN doesn't matter much. However it's may be a good idea to move FillQueryStats here, 
-         * but for that we need to set QueryStats for scan query earlier in pipeline (now ExecutionProfiles are 
-         * handled in rpc_stream_execute_scan_query). Other option is to remove REPLY_FLAGs at all. 
-         */ 
-        if (replyAst && !queryResult.QueryAst.empty()) { 
-            ev.MutableResponse()->SetQueryAst(queryResult.QueryAst); 
-        } 
-        if (replyPlan && !queryResult.QueryPlan.empty()) { 
-            ev.MutableResponse()->SetQueryPlan(queryResult.QueryPlan); 
-        } 
- 
+        /*
+         * TODO:
+         * For Scan/NewEngine plan will be set later on rpc_* level from stats and execution profiles, so
+         * QUERY_REPLY_FLAG_PLAN doesn't matter much. However it's may be a good idea to move FillQueryStats here,
+         * but for that we need to set QueryStats for scan query earlier in pipeline (now ExecutionProfiles are
+         * handled in rpc_stream_execute_scan_query). Other option is to remove REPLY_FLAGs at all.
+         */
+        if (replyAst && !queryResult.QueryAst.empty()) {
+            ev.MutableResponse()->SetQueryAst(queryResult.QueryAst);
+        }
+        if (replyPlan && !queryResult.QueryPlan.empty()) {
+            ev.MutableResponse()->SetQueryPlan(queryResult.QueryPlan);
+        }
+
         if (ydbStatus != Ydb::StatusIds::SUCCESS) {
-            return; 
-        } 
- 
+            return;
+        }
+
         bool replyQueryId = false;
-        bool replyQueryParameters = false; 
+        bool replyQueryParameters = false;
         switch (queryRequest.GetAction()) {
-        case NKikimrKqp::QUERY_ACTION_PREPARE: 
-            replyQueryId = true; 
-            replyQueryParameters = true; 
-            break; 
+        case NKikimrKqp::QUERY_ACTION_PREPARE:
+            replyQueryId = true;
+            replyQueryParameters = true;
+            break;
 
-        case NKikimrKqp::QUERY_ACTION_EXECUTE: 
-            replyQueryParameters = replyQueryId = queryRequest.GetQueryCachePolicy().keep_in_cache(); 
-            break; 
+        case NKikimrKqp::QUERY_ACTION_EXECUTE:
+            replyQueryParameters = replyQueryId = queryRequest.GetQueryCachePolicy().keep_in_cache();
+            break;
 
-        case NKikimrKqp::QUERY_ACTION_PARSE: 
-        case NKikimrKqp::QUERY_ACTION_VALIDATE: 
-            replyQueryParameters = true; 
-            break; 
- 
-        default: 
-            break; 
+        case NKikimrKqp::QUERY_ACTION_PARSE:
+        case NKikimrKqp::QUERY_ACTION_VALIDATE:
+            replyQueryParameters = true;
+            break;
+
+        default:
+            break;
         }
 
         if (replyQueryParameters) {
@@ -2015,7 +2015,7 @@ private:
             }
         }
 
-        if (replyQueryId) { 
+        if (replyQueryId) {
             TString queryId;
             if (QueryState->QueryCompileResult) {
                 queryId = QueryState->QueryCompileResult->Uid;

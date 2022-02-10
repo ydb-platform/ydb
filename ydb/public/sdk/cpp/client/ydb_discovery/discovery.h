@@ -16,10 +16,10 @@ namespace NDiscovery {
 
 class TListEndpointsSettings : public TSimpleRequestSettings<TListEndpointsSettings> {};
 
-struct TWhoAmISettings : public TSimpleRequestSettings<TWhoAmISettings> { 
-    FLUENT_SETTING_DEFAULT(bool, WithGroups, false); 
-}; 
- 
+struct TWhoAmISettings : public TSimpleRequestSettings<TWhoAmISettings> {
+    FLUENT_SETTING_DEFAULT(bool, WithGroups, false);
+};
+
 struct TEndpointInfo {
     TString Address;
     ui32 Port = 0;
@@ -42,18 +42,18 @@ private:
 
 using TAsyncListEndpointsResult = NThreading::TFuture<TListEndpointsResult>;
 
-class TWhoAmIResult : public TStatus { 
-public: 
-    TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResult& proto); 
-    const TString& GetUserName() const; 
-    const TVector<TString>& GetGroups() const; 
-private: 
-    TString UserName_; 
-    TVector<TString> Groups_; 
-}; 
- 
-using TAsyncWhoAmIResult = NThreading::TFuture<TWhoAmIResult>; 
- 
+class TWhoAmIResult : public TStatus {
+public:
+    TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResult& proto);
+    const TString& GetUserName() const;
+    const TVector<TString>& GetGroups() const;
+private:
+    TString UserName_;
+    TVector<TString> Groups_;
+};
+
+using TAsyncWhoAmIResult = NThreading::TFuture<TWhoAmIResult>;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TDiscoveryClient {
@@ -61,7 +61,7 @@ public:
     explicit TDiscoveryClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
     TAsyncListEndpointsResult ListEndpoints(const TListEndpointsSettings& settings = TListEndpointsSettings());
-    TAsyncWhoAmIResult WhoAmI(const TWhoAmISettings& settings = TWhoAmISettings()); 
+    TAsyncWhoAmIResult WhoAmI(const TWhoAmISettings& settings = TWhoAmISettings());
 
 private:
     class TImpl;

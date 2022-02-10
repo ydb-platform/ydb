@@ -18,7 +18,7 @@ struct TParseReadTableResultBase {
     TTableId TableId;
 
     TSmallVec<TKqpComputeContextBase::TColumn> Columns;
-    TSmallVec<TKqpComputeContextBase::TColumn> SystemColumns; 
+    TSmallVec<TKqpComputeContextBase::TColumn> SystemColumns;
     TSmallVec<bool> SkipNullKeys;
     TNode* ItemsLimit = nullptr;
     bool Reverse = false;

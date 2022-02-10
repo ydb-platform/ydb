@@ -63,14 +63,14 @@ class TTableProxyActor : public TActorBootstrapped<TTableProxyActor> {
                     replyColumns.insert(reply.Table.ColumnNames.begin(), reply.Table.ColumnNames.end());
 
                     for (const auto &column : replyColumns) {
-                        auto systemColumn = GetSystemColumns().find(column); 
-                        if (systemColumn != GetSystemColumns().end()) { 
-                            reply.Columns.insert({ 
-                                column, 
-                                {systemColumn->second.ColumnId, -1, systemColumn->second.TypeId, 0} 
-                            }); 
-                            continue; 
-                        } 
+                        auto systemColumn = GetSystemColumns().find(column);
+                        if (systemColumn != GetSystemColumns().end()) {
+                            reply.Columns.insert({
+                                column,
+                                {systemColumn->second.ColumnId, -1, systemColumn->second.TypeId, 0}
+                            });
+                            continue;
+                        }
                         const auto *x = backindex.FindPtr(column);
                         if (x == nullptr) {
                             reply.Status = TTableResult::Error;

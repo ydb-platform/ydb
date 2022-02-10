@@ -348,7 +348,7 @@ message TBootstrap {
     optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 7;
     repeated NKikimrSchemeOp.TResourceProfile ResourceProfiles = 8;
     optional TCompileServiceConfig CompileServiceConfig = 9; //may be need special file with resource limits?
-    optional bool EnableIntrospection = 10; 
+    optional bool EnableIntrospection = 10;
 }
 
 message TInterconnectConfig {
@@ -654,7 +654,7 @@ message TFeatureFlags {
     optional bool EnableDbCounters = 39 [default = false];
     optional bool EnableClockGettimeForUserCpuAccounting = 40 [default = false];
     optional bool EnableAsyncIndexes = 41 [default = true];
-    optional bool AllowStreamExecuteYqlScript = 42 [default = true]; 
+    optional bool AllowStreamExecuteYqlScript = 42 [default = true];
     optional bool EnableKqpScanOverPersistentSnapshot = 43 [default = true]; // deprecated: always true
     optional bool EnableOlapSchemaOperations = 44 [default = false];
     optional bool EnableVPatch = 45 [default = false];

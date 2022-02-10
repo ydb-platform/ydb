@@ -159,9 +159,9 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TVector<TCoNameValueTuple> other;
     TVector<TCoIndex> indexes;
     TVector<TCoChangefeed> changefeeds;
-    TMaybeNode<TExprList> columnFamilies; 
-    TVector<TCoNameValueTuple> tableSettings; 
-    TVector<TCoNameValueTuple> alterActions; 
+    TMaybeNode<TExprList> columnFamilies;
+    TVector<TCoNameValueTuple> tableSettings;
+    TVector<TCoNameValueTuple> alterActions;
     for (auto child : node) {
         if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
             auto tuple = maybeTuple.Cast();
@@ -223,19 +223,19 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                     }
                 }
                 changefeeds.push_back(cf.Done());
-            } else if (name == "columnFamilies") { 
-                YQL_ENSURE(tuple.Value().Maybe<TExprList>()); 
-                columnFamilies = tuple.Value().Cast<TExprList>(); 
-            } else if (name == "tableSettings") { 
-                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>()); 
-                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) { 
-                    tableSettings.push_back(item); 
-                } 
-            } else if (name == "actions") { 
-                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>()); 
-                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) { 
-                    alterActions.push_back(item); 
-                } 
+            } else if (name == "columnFamilies") {
+                YQL_ENSURE(tuple.Value().Maybe<TExprList>());
+                columnFamilies = tuple.Value().Cast<TExprList>();
+            } else if (name == "tableSettings") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    tableSettings.push_back(item);
+                }
+            } else if (name == "actions") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    alterActions.push_back(item);
+                }
             } else {
                 other.push_back(tuple);
             }
@@ -254,18 +254,18 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
         .Add(changefeeds)
         .Done();
 
-    const auto& tableProfileSettings = Build<TCoNameValueTupleList>(ctx, node.Pos()) 
-        .Add(tableSettings) 
-        .Done(); 
- 
-    const auto& alterTableActions = Build<TCoNameValueTupleList>(ctx, node.Pos()) 
-        .Add(alterActions) 
-        .Done(); 
- 
-    if (!columnFamilies.IsValid()) { 
-        columnFamilies = Build<TExprList>(ctx, node.Pos()).Done(); 
-    } 
- 
+    const auto& tableProfileSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(tableSettings)
+        .Done();
+
+    const auto& alterTableActions = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(alterActions)
+        .Done();
+
+    if (!columnFamilies.IsValid()) {
+        columnFamilies = Build<TExprList>(ctx, node.Pos()).Done();
+    }
+
     TWriteTableSettings ret(otherSettings);
     ret.Mode = mode;
     ret.Columns = columns;
@@ -276,45 +276,45 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     ret.Update = update;
     ret.Indexes = idx;
     ret.Changefeeds = cfs;
-    ret.ColumnFamilies = columnFamilies; 
-    ret.TableSettings = tableProfileSettings; 
-    ret.AlterActions = alterTableActions; 
+    ret.ColumnFamilies = columnFamilies;
+    ret.TableSettings = tableProfileSettings;
+    ret.AlterActions = alterTableActions;
 
     return ret;
 }
 
-TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) { 
-    TMaybeNode<TCoAtom> mode; 
-    TMaybeNode<TCoAtomList> roles; 
-    TVector<TCoNameValueTuple> other; 
-    for (auto child : node) { 
-        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) { 
-            auto tuple = maybeTuple.Cast(); 
-            auto name = tuple.Name().Value(); 
- 
-            if (name == "mode") { 
-                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>()); 
-                mode = tuple.Value().Cast<TCoAtom>(); 
-            } else if (name == "roles") { 
-                YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>()); 
-                roles = tuple.Value().Cast<TCoAtomList>(); 
-            } else { 
-                other.push_back(tuple); 
-            } 
-        } 
-    } 
- 
-    const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos()) 
-        .Add(other) 
-        .Done(); 
- 
-    TWriteRoleSettings ret(otherSettings); 
-    ret.Roles = roles; 
-    ret.Mode = mode; 
- 
-    return ret; 
-} 
- 
+TWriteRoleSettings ParseWriteRoleSettings(TExprList node, TExprContext& ctx) {
+    TMaybeNode<TCoAtom> mode;
+    TMaybeNode<TCoAtomList> roles;
+    TVector<TCoNameValueTuple> other;
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "roles") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtomList>());
+                roles = tuple.Value().Cast<TCoAtomList>();
+            } else {
+                other.push_back(tuple);
+            }
+        }
+    }
+
+    const auto& otherSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
+        .Add(other)
+        .Done();
+
+    TWriteRoleSettings ret(otherSettings);
+    ret.Roles = roles;
+    ret.Mode = mode;
+
+    return ret;
+}
+
 TCommitSettings ParseCommitSettings(NNodes::TCoCommit node, TExprContext& ctx) {
     if (!node.Settings()) {
         return TCommitSettings(Build<TCoNameValueTupleList>(ctx, node.Pos()).Done());

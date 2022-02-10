@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NDriverClient {
 
-class TConsoleClientCommand : public TClientCommandConfig { 
+class TConsoleClientCommand : public TClientCommandConfig {
 public:
     TString Domain;
     ui32 Retries;
@@ -17,7 +17,7 @@ public:
     TConsoleClientCommand(const TString &name,
                          const std::initializer_list<TString> &aliases,
                          const TString &description)
-        : TClientCommandConfig(name, aliases, description) 
+        : TClientCommandConfig(name, aliases, description)
         , Retries(0)
     {
     }
@@ -329,8 +329,8 @@ public:
 
     virtual void Config(TConfig& config) override {
         TConsoleClientCommand::Config(config);
-        config.SetFreeArgsNum(1); 
-        SetFreeArgTitle(0, "<SCHEMA-PROTO>", "Console request protobuf or file with protobuf"); 
+        config.SetFreeArgsNum(1);
+        SetFreeArgTitle(0, "<SCHEMA-PROTO>", "Console request protobuf or file with protobuf");
     }
 
     virtual void Parse(TConfig& config) override {
@@ -383,8 +383,8 @@ public:
         config.Opts->AddLongOption("merge-overwrite-repeated", "Merge provided config with the current one"
                                    " but overwrite those repeated field which are not empty in provided config")
             .NoArgument().SetFlag(&MergeOverwriteRepeated);
-        config.SetFreeArgsNum(1); 
-        SetFreeArgTitle(0, "<CONFIG-PROTO>", "Console config protobuf or file with protobuf"); 
+        config.SetFreeArgsNum(1);
+        SetFreeArgTitle(0, "<CONFIG-PROTO>", "Console config protobuf or file with protobuf");
     }
 
     virtual void Parse(TConfig& config) override {

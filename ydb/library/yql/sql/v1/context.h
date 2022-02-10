@@ -233,7 +233,7 @@ namespace NSQLTranslationV1 {
         bool PragmaPullUpFlatMapOverJoin = true;
         bool WarnUnnamedColumns = false;
         bool DiscoveryMode = false;
-        bool EnableSystemColumns = true; 
+        bool EnableSystemColumns = true;
         bool DqEngineEnable = false;
         bool DqEngineForce = false;
         TMaybe<bool> JsonQueryReturnsJsonDocument;

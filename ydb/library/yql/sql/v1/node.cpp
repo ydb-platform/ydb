@@ -44,13 +44,13 @@ TString TTableRef::ShortName() const {
     return TString();
 }
 
-TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable, 
-        TVector<TIdentifier> families) 
+TColumnSchema::TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
+        TVector<TIdentifier> families)
     : Pos(pos)
     , Name(name)
     , Type(type)
     , Nullable(nullable)
-    , Families(families) 
+    , Families(families)
 {
 }
 
@@ -867,7 +867,7 @@ TNodePtr BuildQuotedAtom(TPosition pos, const TString& content, ui32 flags) {
     return new TQuotedAtomNode(pos, content, flags);
 }
 
-bool TColumns::Add(const TString* column, bool countHint, bool isArtificial, bool isReliable, bool hasName) { 
+bool TColumns::Add(const TString* column, bool countHint, bool isArtificial, bool isReliable, bool hasName) {
     if (!column || *column == "*") {
         if (!countHint) {
             SetAll();
@@ -888,7 +888,7 @@ bool TColumns::Add(const TString* column, bool countHint, bool isArtificial, boo
         }
         if (std::find(List.begin(), List.end(), *column) == List.end()) {
             List.push_back(*column);
-            NamedColumns.push_back(hasName); 
+            NamedColumns.push_back(hasName);
         }
         return inserted;
     }
@@ -2005,10 +2005,10 @@ bool ISource::IsSelect() const {
     return true;
 }
 
-bool ISource::IsTableSource() const { 
-    return false; 
-} 
- 
+bool ISource::IsTableSource() const {
+    return false;
+}
+
 bool ISource::ShouldUseSourceAsColumn(const TString& source) const {
     Y_UNUSED(source);
     return false;

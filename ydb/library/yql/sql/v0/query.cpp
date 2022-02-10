@@ -595,16 +595,16 @@ public:
         }
         keys = ctx.GroundBlockShortcutsForExpr(keys);
 
-        auto actions = Y(); 
- 
+        auto actions = Y();
+
         if (Intent == EAlterTableIntentnt::DropColumn) {
-            auto columns = Y(); 
-            for (auto& col : Columns) { 
-                columns = L(columns, BuildQuotedAtom(Pos, col.Name)); 
+            auto columns = Y();
+            for (auto& col : Columns) {
+                columns = L(columns, BuildQuotedAtom(Pos, col.Name));
             }
-            actions = L(actions, Q(Y(Q("dropColumns"), Q(columns)))); 
+            actions = L(actions, Q(Y(Q("dropColumns"), Q(columns))));
         } else {
-            auto columns = Y(); 
+            auto columns = Y();
             for (auto& col: Columns) {
                 auto type = ParseType(TypeByAlias(col.Type, !col.IsTypeString), *ctx.Pool, ctx.Issues, col.Pos);
                 if (!type) {
@@ -632,13 +632,13 @@ public:
                 }
                 columns = L(columns, Q(Y(BuildQuotedAtom(Pos, col.Name), AstNode(type))));
             }
-            actions = L(actions, Q(Y(Q("addColumns"), Q(columns)))); 
+            actions = L(actions, Q(Y(Q("addColumns"), Q(columns))));
         }
 
-        auto opts = Y(); 
- 
+        auto opts = Y();
+
         opts = L(opts, Q(Y(Q("mode"), Q("alter"))));
-        opts = L(opts, Q(Y(Q("actions"), Q(actions)))); 
+        opts = L(opts, Q(Y(Q("actions"), Q(actions))));
 
         Add("block", Q(Y(
             Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos, Table.ServiceName(ctx)), BuildQuotedAtom(Pos, Table.Cluster))),

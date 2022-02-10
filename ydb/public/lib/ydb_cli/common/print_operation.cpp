@@ -221,8 +221,8 @@ namespace {
     template <typename T>
     void PrintOperationImpl(const T& operation, EOutputFormat format) {
         switch (format) {
-        case EOutputFormat::Default: 
-        case EOutputFormat::Pretty: 
+        case EOutputFormat::Default:
+        case EOutputFormat::Pretty:
         {
             auto table = MakeTable(operation);
             PrettyPrint(operation, table);
@@ -231,10 +231,10 @@ namespace {
         }
 
         case EOutputFormat::Json:
-            Cerr << "Warning! Option --json is deprecated and will be removed soon. " 
-                << "Use \"--format proto-json-base64\" option instead." << Endl; 
+            Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+                << "Use \"--format proto-json-base64\" option instead." << Endl;
             [[fallthrough]];
-        case EOutputFormat::ProtoJsonBase64: 
+        case EOutputFormat::ProtoJsonBase64:
             Cout << operation.ToJsonString() << Endl;
             break;
 
@@ -246,8 +246,8 @@ namespace {
     template <typename T>
     void PrintOperationsListImpl(const T& operations, EOutputFormat format) {
         switch (format) {
-        case EOutputFormat::Default: 
-        case EOutputFormat::Pretty: 
+        case EOutputFormat::Default:
+        case EOutputFormat::Pretty:
             if (operations.GetList()) {
                 auto table = MakeTable(operations.GetList().front());
                 for (const auto& operation : operations.GetList()) {
@@ -259,10 +259,10 @@ namespace {
             break;
 
         case EOutputFormat::Json:
-            Cerr << "Warning! Option --json is deprecated and will be removed soon. " 
-                << "Use \"--format proto-json-base64\" option instead." << Endl; 
+            Cerr << "Warning! Option --json is deprecated and will be removed soon. "
+                << "Use \"--format proto-json-base64\" option instead." << Endl;
             [[fallthrough]];
-        case EOutputFormat::ProtoJsonBase64: 
+        case EOutputFormat::ProtoJsonBase64:
             Cout << operations.ToJsonString() << Endl;
             break;
 

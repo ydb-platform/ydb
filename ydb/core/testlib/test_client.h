@@ -220,7 +220,7 @@ namespace Tests {
         void EnableGRpc(const NGrpc::TServerOptions& options);
         void EnableGRpc(ui16 port);
 
-        void SetupDefaultProfiles(); 
+        void SetupDefaultProfiles();
 
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetGRpcServerRootCounters() const {
             return GRpcServerRootCounters;

@@ -3,8 +3,8 @@ PY3TEST()
 
 TEST_SRCS(
     test_ydb_backup.py
-    test_ydb_table.py 
-    test_ydb_scripting.py 
+    test_ydb_table.py
+    test_ydb_scripting.py
 )
 
 ENV(YDB_TOKEN="root@builtin")

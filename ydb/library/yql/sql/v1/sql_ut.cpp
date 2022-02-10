@@ -196,13 +196,13 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("USE plato; SELECT * FROM COMPACT").IsOk());
     }
 
-    Y_UNIT_TEST(FamilyKeywordNotReservedForNames) { 
+    Y_UNIT_TEST(FamilyKeywordNotReservedForNames) {
         // FIXME: check if we can get old behaviour
         //UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE FAMILY (FAMILY Uint32, PRIMARY KEY (FAMILY));").IsOk());
         //UNIT_ASSERT(SqlToYql("USE plato; SELECT FAMILY FROM FAMILY").IsOk());
         UNIT_ASSERT(SqlToYql("USE plato; SELECT FAMILY FROM Input").IsOk());
-    } 
- 
+    }
+
     Y_UNIT_TEST(ResetKeywordNotReservedForNames) {
         UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE RESET (RESET Uint32, PRIMARY KEY (RESET));").IsOk());
         UNIT_ASSERT(SqlToYql("USE plato; SELECT RESET FROM RESET").IsOk());
@@ -1329,69 +1329,69 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         auto expected = "(Apply (lambda '(\"$foo bar\" \"$x\")";
         UNIT_ASSERT(programm.find(expected) != TString::npos);
     }
- 
-    Y_UNIT_TEST(CompactionPolicyParseCorrect) { 
-        NYql::TAstParseResult res = SqlToYql( 
-            R"( USE plato; 
-                CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key)) 
-                WITH ( COMPACTION_POLICY = "SomeCompactionPreset" );)" 
-        ); 
-        UNIT_ASSERT(res.Root); 
- 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
-            if (word == "Write") { 
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("compactionPolicy")); 
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("SomeCompactionPreset")); 
-            } 
-        }; 
- 
-        TWordCountHive elementStat = { {TString("Write"), 0} }; 
-        VerifyProgram(res, elementStat, verifyLine); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]); 
-    } 
- 
-    Y_UNIT_TEST(AutoPartitioningBySizeParseCorrect) { 
-        NYql::TAstParseResult res = SqlToYql( 
-            R"( USE plato; 
-                CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key)) 
-                WITH ( AUTO_PARTITIONING_BY_SIZE = ENABLED );)" 
-        ); 
-        UNIT_ASSERT(res.Root); 
- 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
-            if (word == "Write") { 
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("autoPartitioningBySize")); 
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ENABLED")); 
-            } 
-        }; 
- 
-        TWordCountHive elementStat = { {TString("Write"), 0} }; 
-        VerifyProgram(res, elementStat, verifyLine); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]); 
-    } 
- 
-    Y_UNIT_TEST(UniformPartitionsParseCorrect) { 
-        NYql::TAstParseResult res = SqlToYql( 
-            R"( USE plato; 
-                CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key)) 
-                WITH ( UNIFORM_PARTITIONS = 16 );)" 
-        ); 
-        UNIT_ASSERT(res.Root); 
- 
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) { 
-            if (word == "Write") { 
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("uniformPartitions")); 
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("16")); 
-            } 
-        }; 
- 
-        TWordCountHive elementStat = { {TString("Write"), 0} }; 
-        VerifyProgram(res, elementStat, verifyLine); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]); 
-    } 
+
+    Y_UNIT_TEST(CompactionPolicyParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+                WITH ( COMPACTION_POLICY = "SomeCompactionPreset" );)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("compactionPolicy"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("SomeCompactionPreset"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(AutoPartitioningBySizeParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+                WITH ( AUTO_PARTITIONING_BY_SIZE = ENABLED );)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("autoPartitioningBySize"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("ENABLED"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(UniformPartitionsParseCorrect) {
+        NYql::TAstParseResult res = SqlToYql(
+            R"( USE plato;
+                CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+                WITH ( UNIFORM_PARTITIONS = 16 );)"
+        );
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("uniformPartitions"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("16"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
 
     Y_UNIT_TEST(TtlParseCorrect) {
         NYql::TAstParseResult res = SqlToYql(
@@ -2682,13 +2682,13 @@ select FormatType($f());
         UNIT_ASSERT(res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:3:28: Warning: Autogenerated column name column2 will be used for expression, code: 4516\n");
     }
- 
-    Y_UNIT_TEST(WarnSourceColumnMismatch) { 
-        NYql::TAstParseResult res = SqlToYql( 
-            "insert into plato.Output (key, subkey, new_value, one_more_value) select key as Key, subkey, value, \"x\" from plato.Input;"); 
-        UNIT_ASSERT(res.Root); 
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:51: Warning: Column names in SELECT don't match column specification in parenthesis. \"key\" doesn't match \"Key\". \"new_value\" doesn't match \"value\", code: 4517\n"); 
-    } 
+
+    Y_UNIT_TEST(WarnSourceColumnMismatch) {
+        NYql::TAstParseResult res = SqlToYql(
+            "insert into plato.Output (key, subkey, new_value, one_more_value) select key as Key, subkey, value, \"x\" from plato.Input;");
+        UNIT_ASSERT(res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:51: Warning: Column names in SELECT don't match column specification in parenthesis. \"key\" doesn't match \"Key\". \"new_value\" doesn't match \"value\", code: 4517\n");
+    }
 
     Y_UNIT_TEST(YtCaseInsensitive) {
         NYql::TAstParseResult res = SqlToYql("select * from PlatO.foo;");

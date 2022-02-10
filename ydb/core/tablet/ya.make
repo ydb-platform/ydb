@@ -25,8 +25,8 @@ SRCS(
     tablet_counters_protobuf.h
     tablet_exception.h
     tablet_impl.h
-    tablet_tracing_signals.cpp 
-    tablet_tracing_signals.h 
+    tablet_tracing_signals.cpp
+    tablet_tracing_signals.h
     tablet_list_renderer.cpp
     tablet_list_renderer.h
     tablet_metrics.h

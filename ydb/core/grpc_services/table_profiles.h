@@ -23,10 +23,10 @@ public:
                            NKikimrSchemeOp::TTableDescription &tableDesc,
                            Ydb::StatusIds::StatusCode &code,
                            TString &error) const;
- 
+
     bool ApplyCompactionPolicy(const TString &name, NKikimrSchemeOp::TPartitionConfig &partitionConfig,
-        Ydb::StatusIds::StatusCode &code, TString &error, const TAppData* appData = nullptr) const; 
- 
+        Ydb::StatusIds::StatusCode &code, TString &error, const TAppData* appData = nullptr) const;
+
 private:
     NKikimrSchemeOp::TFamilyDescription *GetNamedFamilyDescription(NKikimrConfig::TStoragePolicy &policy, const TString& name) const;
     NKikimrSchemeOp::TFamilyDescription *GetDefaultFamilyDescription(NKikimrConfig::TStoragePolicy &policy) const;

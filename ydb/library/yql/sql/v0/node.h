@@ -458,12 +458,12 @@ namespace NSQLTranslationV0 {
         TSet<TString> Real;
         TSet<TString> Artificial;
         TVector<TString> List;
-        TVector<bool> NamedColumns; 
+        TVector<bool> NamedColumns;
         bool All = false;
         bool QualifiedAll = false;
         bool HasUnreliable = false;
 
-        bool Add(const TString* column, bool countHint, bool isArtificial = false, bool isReliable = true, bool hasName = true); 
+        bool Add(const TString* column, bool countHint, bool isArtificial = false, bool isReliable = true, bool hasName = true);
         void Merge(const TColumns& columns);
         void SetPrefix(const TString& prefix);
         void SetAll();
@@ -742,7 +742,7 @@ namespace NSQLTranslationV0 {
         virtual IJoin* GetJoin();
         virtual ISource* GetCompositeSource();
         virtual bool IsSelect() const;
-        virtual bool IsTableSource() const; 
+        virtual bool IsTableSource() const;
         virtual bool ShouldUseSourceAsColumn(const TString& source);
         virtual bool IsJoinKeysInitializing() const;
         virtual const TString* GetWindowName() const;

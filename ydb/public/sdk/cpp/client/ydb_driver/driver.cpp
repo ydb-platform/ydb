@@ -32,10 +32,10 @@ public:
     size_t GetNetworkThreadsNum() const override { return NetworkThreadsNum; }
     size_t GetClientThreadsNum() const override { return ClientThreadsNum; }
     size_t GetMaxQueuedResponses() const override { return MaxQueuedResponses; }
-    bool IsSslEnabled() const override { return EnableSsl; } 
+    bool IsSslEnabled() const override { return EnableSsl; }
     TStringType GetCaCert() const override { return CaCert; }
     TStringType GetDatabase() const override { return Database; }
-    std::shared_ptr<ICredentialsProviderFactory> GetCredentialsProviderFactory() const override { return CredentialsProviderFactory; } 
+    std::shared_ptr<ICredentialsProviderFactory> GetCredentialsProviderFactory() const override { return CredentialsProviderFactory; }
     EDiscoveryMode GetDiscoveryMode() const override { return DiscoveryMode; }
     size_t GetMaxQueuedRequests() const override { return MaxQueuedRequests; }
     TTcpKeepAliveSettings GetTcpKeepAliveSettings() const override { return TcpKeepAliveSettings; }
@@ -51,10 +51,10 @@ public:
     size_t NetworkThreadsNum = 2;
     size_t ClientThreadsNum = 0;
     size_t MaxQueuedResponses = 0;
-    bool EnableSsl = false; 
+    bool EnableSsl = false;
     TStringType CaCert;
     TStringType Database;
-    std::shared_ptr<ICredentialsProviderFactory> CredentialsProviderFactory = CreateInsecureCredentialsProviderFactory(); 
+    std::shared_ptr<ICredentialsProviderFactory> CredentialsProviderFactory = CreateInsecureCredentialsProviderFactory();
     EDiscoveryMode DiscoveryMode = EDiscoveryMode::Sync;
     size_t MaxQueuedRequests = 100;
     NGrpc::TTcpKeepAliveSettings TcpKeepAliveSettings =
@@ -104,13 +104,13 @@ TDriverConfig& TDriverConfig::SetMaxClientQueueSize(size_t sz) {
 }
 
 TDriverConfig& TDriverConfig::UseSecureConnection(const TStringType& cert) {
-    Impl_->EnableSsl = true; 
+    Impl_->EnableSsl = true;
     Impl_->CaCert = cert;
     return *this;
 }
 
 TDriverConfig& TDriverConfig::SetAuthToken(const TStringType& token) {
-    return SetCredentialsProviderFactory(CreateOAuthCredentialsProviderFactory(token)); 
+    return SetCredentialsProviderFactory(CreateOAuthCredentialsProviderFactory(token));
 }
 
 TDriverConfig& TDriverConfig::SetDatabase(const TStringType& database) {
@@ -119,11 +119,11 @@ TDriverConfig& TDriverConfig::SetDatabase(const TStringType& database) {
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetCredentialsProviderFactory(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) { 
-    Impl_->CredentialsProviderFactory = credentialsProviderFactory; 
-    return *this; 
-} 
- 
+TDriverConfig& TDriverConfig::SetCredentialsProviderFactory(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory) {
+    Impl_->CredentialsProviderFactory = credentialsProviderFactory;
+    return *this;
+}
+
 TDriverConfig& TDriverConfig::SetDiscoveryMode(EDiscoveryMode discoveryMode) {
     Impl_->DiscoveryMode = discoveryMode;
     return *this;

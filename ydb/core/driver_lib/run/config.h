@@ -51,7 +51,7 @@ union TBasicKikimrServicesMask {
         bool EnableSqs:1;
         bool EnableConfigsDispatcher:1;
         bool EnableSecurityServices:1;
-        bool EnableTabletInfo:1; 
+        bool EnableTabletInfo:1;
         bool EnableQuoterService:1;
         bool EnablePersQueueClusterDiscovery:1;
         bool EnableNetClassifier:1;

@@ -220,7 +220,7 @@ inline NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSess
 
 TString StreamResultToYson(NYdb::NExperimental::TStreamPartIterator& it, TVector<TString>* profiles = nullptr);
 TString StreamResultToYson(NYdb::NTable::TScanQueryPartIterator& it);
-TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it); 
+TString StreamResultToYson(NYdb::NScripting::TYqlResultPartIterator& it);
 
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);

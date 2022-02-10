@@ -7,9 +7,9 @@ import "ydb/public/api/protos/ydb_scripting.proto";
 
 service ScriptingService {
     rpc ExecuteYql(Scripting.ExecuteYqlRequest) returns (Scripting.ExecuteYqlResponse);
- 
-    // Executes yql request with streaming result. 
-    rpc StreamExecuteYql(Scripting.ExecuteYqlRequest) returns (stream Scripting.ExecuteYqlPartialResponse); 
- 
+
+    // Executes yql request with streaming result.
+    rpc StreamExecuteYql(Scripting.ExecuteYqlRequest) returns (stream Scripting.ExecuteYqlPartialResponse);
+
     rpc ExplainYql(Scripting.ExplainYqlRequest) returns (Scripting.ExplainYqlResponse);
 }

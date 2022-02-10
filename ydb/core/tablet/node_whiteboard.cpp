@@ -36,10 +36,10 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> tabletsGroup = GetServiceCounters(AppData(ctx)->Counters, "tablets"); 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> introspectionGroup = tabletsGroup->GetSubgroup("type", "introspection"); 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> tabletsGroup = GetServiceCounters(AppData(ctx)->Counters, "tablets");
+        TIntrusivePtr<NMonitoring::TDynamicCounters> introspectionGroup = tabletsGroup->GetSubgroup("type", "introspection");
         TabletIntrospectionData.Reset(NTracing::CreateTraceCollection(introspectionGroup));
- 
+
         SystemStateInfo.SetNumberOfCpus(NSystemInfo::NumberOfCpus());
         TString branch = GetTag();
         if (branch.empty()) {
@@ -76,7 +76,7 @@ protected:
     std::unordered_map<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, THash<TVDiskID>> VDiskStateInfo;
     std::unordered_map<ui32, NKikimrWhiteboard::TBSGroupStateInfo> BSGroupStateInfo;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
-    THolder<NTracing::ITraceCollection> TabletIntrospectionData; 
+    THolder<NTracing::ITraceCollection> TabletIntrospectionData;
     TProcStat ProcessStats;
 
     template <typename PropertyType>
@@ -363,11 +363,11 @@ protected:
             HFunc(TEvWhiteboard::TEvSystemStateAddRole, Handle);
             HFunc(TEvWhiteboard::TEvSystemStateSetTenant, Handle);
             HFunc(TEvWhiteboard::TEvSystemStateRequest, Handle);
-            hFunc(TEvWhiteboard::TEvIntrospectionData, Handle); 
-            HFunc(TEvWhiteboard::TEvTabletLookupRequest, Handle); 
-            HFunc(TEvWhiteboard::TEvTraceLookupRequest, Handle); 
-            HFunc(TEvWhiteboard::TEvTraceRequest, Handle); 
-            HFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle); 
+            hFunc(TEvWhiteboard::TEvIntrospectionData, Handle);
+            HFunc(TEvWhiteboard::TEvTabletLookupRequest, Handle);
+            HFunc(TEvWhiteboard::TEvTraceLookupRequest, Handle);
+            HFunc(TEvWhiteboard::TEvTraceRequest, Handle);
+            HFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
             HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
             HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
         }
@@ -699,86 +699,86 @@ protected:
         ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
     }
 
-    void Handle(TEvWhiteboard::TEvIntrospectionData::TPtr &ev) { 
-        TEvWhiteboard::TEvIntrospectionData *msg = ev->Get(); 
-        TabletIntrospectionData->AddTrace(msg->TabletId, msg->Trace.Release()); 
-    } 
- 
-    void Handle(TEvWhiteboard::TEvTabletLookupRequest::TPtr &ev, const TActorContext &ctx) { 
+    void Handle(TEvWhiteboard::TEvIntrospectionData::TPtr &ev) {
+        TEvWhiteboard::TEvIntrospectionData *msg = ev->Get();
+        TabletIntrospectionData->AddTrace(msg->TabletId, msg->Trace.Release());
+    }
+
+    void Handle(TEvWhiteboard::TEvTabletLookupRequest::TPtr &ev, const TActorContext &ctx) {
         THolder<TEvWhiteboard::TEvTabletLookupResponse> response = MakeHolder<TEvWhiteboard::TEvTabletLookupResponse>();
-        auto& record = response->Record; 
-        TVector<ui64> tabletIDs; 
-        TabletIntrospectionData->GetTabletIDs(tabletIDs); 
-        for (auto id : tabletIDs) { 
-            record.AddTabletIDs(id); 
-        } 
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie); 
-    } 
- 
-    void Handle(TEvWhiteboard::TEvTraceLookupRequest::TPtr &ev, const TActorContext &ctx) { 
-        ui64 tabletID = ev->Get()->Record.GetTabletID(); 
+        auto& record = response->Record;
+        TVector<ui64> tabletIDs;
+        TabletIntrospectionData->GetTabletIDs(tabletIDs);
+        for (auto id : tabletIDs) {
+            record.AddTabletIDs(id);
+        }
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
+
+    void Handle(TEvWhiteboard::TEvTraceLookupRequest::TPtr &ev, const TActorContext &ctx) {
+        ui64 tabletID = ev->Get()->Record.GetTabletID();
         THolder<TEvWhiteboard::TEvTraceLookupResponse> response = MakeHolder<TEvWhiteboard::TEvTraceLookupResponse>();
-        auto& record = response->Record; 
-        TVector<NTracing::TTraceID> tabletTraces; 
-        TabletIntrospectionData->GetTraces(tabletID, tabletTraces); 
-        for (auto& tabletTrace : tabletTraces) { 
-            TraceIDFromTraceID(tabletTrace, record.AddTraceIDs()); 
-        } 
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie); 
-    } 
- 
-    void Handle(TEvWhiteboard::TEvTraceRequest::TPtr &ev, const TActorContext &ctx) { 
-        auto& requestRecord = ev->Get()->Record; 
-        ui64 tabletID = requestRecord.GetTabletID(); 
-        NTracing::TTraceID traceID = NTracing::TraceIDFromTraceID(requestRecord.GetTraceID()); 
- 
+        auto& record = response->Record;
+        TVector<NTracing::TTraceID> tabletTraces;
+        TabletIntrospectionData->GetTraces(tabletID, tabletTraces);
+        for (auto& tabletTrace : tabletTraces) {
+            TraceIDFromTraceID(tabletTrace, record.AddTraceIDs());
+        }
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
+
+    void Handle(TEvWhiteboard::TEvTraceRequest::TPtr &ev, const TActorContext &ctx) {
+        auto& requestRecord = ev->Get()->Record;
+        ui64 tabletID = requestRecord.GetTabletID();
+        NTracing::TTraceID traceID = NTracing::TraceIDFromTraceID(requestRecord.GetTraceID());
+
         THolder<TEvWhiteboard::TEvTraceResponse> response = MakeHolder<TEvWhiteboard::TEvTraceResponse>();
-        auto& responseRecord = response->Record; 
-        auto trace = TabletIntrospectionData->GetTrace(tabletID, traceID); 
-        NTracing::TTraceInfo traceInfo = { 
-            ctx.SelfID.NodeId(), 
-            tabletID, 
-            traceID, 
-            NTracing::TTimestampInfo( 
-                static_cast<NTracing::TTimestampInfo::EMode>(requestRecord.GetMode()), 
-                static_cast<NTracing::TTimestampInfo::EPrecision>(requestRecord.GetPrecision()) 
-            ) 
-        }; 
-        TStringStream str; 
-        if (trace) { 
-            trace->OutHtml(str, traceInfo); 
-        } else { 
-            str << "Trace not found."; 
-        } 
-        responseRecord.SetTrace(str.Str()); 
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie); 
-    } 
- 
-    void Handle(TEvWhiteboard::TEvSignalBodyRequest::TPtr &ev, const TActorContext &ctx) { 
-        auto& requestRecord = ev->Get()->Record; 
-        ui64 tabletID = requestRecord.GetTabletID(); 
-        NTracing::TTraceID traceID = NTracing::TraceIDFromTraceID(requestRecord.GetTraceID()); 
-        TString signalID = requestRecord.GetSignalID(); 
- 
+        auto& responseRecord = response->Record;
+        auto trace = TabletIntrospectionData->GetTrace(tabletID, traceID);
+        NTracing::TTraceInfo traceInfo = {
+            ctx.SelfID.NodeId(),
+            tabletID,
+            traceID,
+            NTracing::TTimestampInfo(
+                static_cast<NTracing::TTimestampInfo::EMode>(requestRecord.GetMode()),
+                static_cast<NTracing::TTimestampInfo::EPrecision>(requestRecord.GetPrecision())
+            )
+        };
+        TStringStream str;
+        if (trace) {
+            trace->OutHtml(str, traceInfo);
+        } else {
+            str << "Trace not found.";
+        }
+        responseRecord.SetTrace(str.Str());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
+
+    void Handle(TEvWhiteboard::TEvSignalBodyRequest::TPtr &ev, const TActorContext &ctx) {
+        auto& requestRecord = ev->Get()->Record;
+        ui64 tabletID = requestRecord.GetTabletID();
+        NTracing::TTraceID traceID = NTracing::TraceIDFromTraceID(requestRecord.GetTraceID());
+        TString signalID = requestRecord.GetSignalID();
+
         THolder<TEvWhiteboard::TEvSignalBodyResponse> response = MakeHolder<TEvWhiteboard::TEvSignalBodyResponse>();
-        auto& responseRecord = response->Record; 
-        auto trace = TabletIntrospectionData->GetTrace(tabletID, traceID); 
-        TStringStream str; 
-        if (trace) { 
-            trace->OutSignalHtmlBody( 
-                str, 
-                NTracing::TTimestampInfo( 
-                    static_cast<NTracing::TTimestampInfo::EMode>(requestRecord.GetMode()), 
-                    static_cast<NTracing::TTimestampInfo::EPrecision>(requestRecord.GetPrecision()) 
-                ), 
-                signalID); 
-        } else { 
-            str << "Trace not found."; 
-        } 
-        responseRecord.SetSignalBody(str.Str()); 
-        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie); 
-    } 
- 
+        auto& responseRecord = response->Record;
+        auto trace = TabletIntrospectionData->GetTrace(tabletID, traceID);
+        TStringStream str;
+        if (trace) {
+            trace->OutSignalHtmlBody(
+                str,
+                NTracing::TTimestampInfo(
+                    static_cast<NTracing::TTimestampInfo::EMode>(requestRecord.GetMode()),
+                    static_cast<NTracing::TTimestampInfo::EPrecision>(requestRecord.GetPrecision())
+                ),
+                signalID);
+        } else {
+            str << "Trace not found.";
+        }
+        responseRecord.SetSignalBody(str.Str());
+        ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+    }
+
     static TVector<double> GetLoadAverage() {
         TVector<double> loadAvg(3);
         loadAvg.resize(NSystemInfo::LoadAverage(loadAvg.data(), loadAvg.size()));

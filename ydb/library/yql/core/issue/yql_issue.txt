@@ -281,14 +281,14 @@ ids {
   severity: S_ERROR
 }
 ids {
-  code: KIKIMR_UNSUPPORTED 
-  severity: S_ERROR 
-} 
-ids { 
-  code: KIKIMR_BAD_COLUMN_TYPE 
-  severity: S_ERROR 
-} 
-ids { 
+  code: KIKIMR_UNSUPPORTED
+  severity: S_ERROR
+}
+ids {
+  code: KIKIMR_BAD_COLUMN_TYPE
+  severity: S_ERROR
+}
+ids {
   code: KIKIMR_NO_COLUMN_DEFAULT_VALUE
   severity: S_ERROR
 }
@@ -435,10 +435,10 @@ ids {
 ids {
   code: YQL_UNNAMED_COLUMN
   severity: S_WARNING
-} 
-ids { 
-  code: YQL_SOURCE_SELECT_COLUMN_MISMATCH 
-  severity: S_WARNING 
+}
+ids {
+  code: YQL_SOURCE_SELECT_COLUMN_MISMATCH
+  severity: S_WARNING
 }
 ids {
   code: YQL_NOT_ALLOWED_IN_DISCOVERY
@@ -575,7 +575,7 @@ ids {
 ids {
   code: YQL_MIXED_TZ
   severity: S_WARNING
-} 
+}
 ids {
   code: YQL_OPERATION_WILL_RETURN_NULL
   severity: S_WARNING

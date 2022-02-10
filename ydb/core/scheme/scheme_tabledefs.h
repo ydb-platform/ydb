@@ -11,7 +11,7 @@
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
 #include <util/generic/maybe.h>
-#include <util/generic/map.h> 
+#include <util/generic/map.h>
 
 namespace NKikimr {
 
@@ -598,12 +598,12 @@ public:
         InplaceUpdate = 3,
     };
 
-    enum ESystemColumnIds : ui32 { 
-        EColumnIdInvalid = Max<ui32>(), 
-        EColumnIdSystemStart = EColumnIdInvalid - 1000, 
-        EColumnIdDataShard = EColumnIdSystemStart + 1 
-    }; 
- 
+    enum ESystemColumnIds : ui32 {
+        EColumnIdInvalid = Max<ui32>(),
+        EColumnIdSystemStart = EColumnIdInvalid - 1000,
+        EColumnIdDataShard = EColumnIdSystemStart + 1
+    };
+
 #define SCHEME_KEY_DESCRIPTION_STATUS_MAP(XX) \
     XX(Unknown, 0) \
     XX(Ok, 1) \
@@ -695,16 +695,16 @@ public:
     {}
 };
 
-struct TSystemColumnInfo { 
-    TKeyDesc::ESystemColumnIds ColumnId; 
-    NKikimr::NScheme::TTypeId TypeId; 
-}; 
- 
-const TMap<TString, TSystemColumnInfo>& GetSystemColumns(); 
- 
-bool IsSystemColumn(ui32 columnId); 
-bool IsSystemColumn(const TStringBuf columnName); 
- 
+struct TSystemColumnInfo {
+    TKeyDesc::ESystemColumnIds ColumnId;
+    NKikimr::NScheme::TTypeId TypeId;
+};
+
+const TMap<TString, TSystemColumnInfo>& GetSystemColumns();
+
+bool IsSystemColumn(ui32 columnId);
+bool IsSystemColumn(const TStringBuf columnName);
+
 inline int ComparePointKeys(const TKeyDesc& point1, const TKeyDesc& point2) {
     Y_VERIFY(point1.Range.Point);
     Y_VERIFY(point2.Range.Point);

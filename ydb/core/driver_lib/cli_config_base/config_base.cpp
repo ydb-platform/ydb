@@ -2,8 +2,8 @@
 
 namespace NKikimr {
 
-TCommandConfig CommandConfig; 
- 
+TCommandConfig CommandConfig;
+
 TDuration ParseDuration(const TStringBuf& str) {
     TDuration result;
     if (TDuration::TryParse(str, result))
@@ -22,12 +22,12 @@ TCommandConfig::TServerEndpoint TCommandConfig::ParseServerAddress(const TString
         endpoint.ServerType = EServerType::GRpc;
         endpoint.Address = endpoint.Address.substr(7);
         port = 2135;
-        endpoint.EnableSsl = false; 
-    } else if (address.StartsWith("grpcs://")) { 
-        endpoint.ServerType = EServerType::GRpc; 
-        endpoint.Address = endpoint.Address.substr(8); 
-        port = 2135; 
-        endpoint.EnableSsl = true; 
+        endpoint.EnableSsl = false;
+    } else if (address.StartsWith("grpcs://")) {
+        endpoint.ServerType = EServerType::GRpc;
+        endpoint.Address = endpoint.Address.substr(8);
+        port = 2135;
+        endpoint.EnableSsl = true;
     } else if (address.StartsWith("mbus://")) {
         endpoint.ServerType = EServerType::MessageBus;
         endpoint.Address = endpoint.Address.substr(7);

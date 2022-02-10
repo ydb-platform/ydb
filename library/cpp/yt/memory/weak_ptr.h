@@ -102,7 +102,7 @@ public:
     template <class U>
     TWeakPtr& operator=(const TIntrusivePtr<U>& ptr) noexcept
     {
-        static_assert( 
+        static_assert(
             std::is_convertible_v<U*, T*>,
             "U* must be convertible to T*");
         TWeakPtr(ptr).Swap(*this);
@@ -120,7 +120,7 @@ public:
     template <class U>
     TWeakPtr& operator=(const TWeakPtr<U>& other) noexcept
     {
-        static_assert( 
+        static_assert(
             std::is_convertible_v<U*, T*>,
             "U* must be convertible to T*");
         TWeakPtr(other).Swap(*this);
@@ -141,7 +141,7 @@ public:
         static_assert(
             std::is_convertible_v<U*, T*>,
             "U* must be convertible to T*");
-        TWeakPtr(std::move(other)).Swap(*this); 
+        TWeakPtr(std::move(other)).Swap(*this);
         return *this;
     }
 
@@ -161,7 +161,7 @@ public:
     template <class U>
     void Reset(const TIntrusivePtr<U>& ptr) // noexcept
     {
-        static_assert( 
+        static_assert(
             std::is_convertible_v<U*, T*>,
             "U* must be convertible to T*");
         TWeakPtr(ptr).Swap(*this);
@@ -267,7 +267,7 @@ int ResetAndGetResidualRefCount(TIntrusivePtr<T>& pointer)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// TODO(sandello): Kill comparsions. 
+// TODO(sandello): Kill comparsions.
 template <class T>
 bool operator<(const TWeakPtr<T>& lhs, const TWeakPtr<T>& rhs)
 {
@@ -283,7 +283,7 @@ bool operator>(const TWeakPtr<T>& lhs, const TWeakPtr<T>& rhs)
 template <class T, class U>
 bool operator==(const TWeakPtr<T>& lhs, const TWeakPtr<U>& rhs)
 {
-    static_assert( 
+    static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
     return lhs.Lock().Get() == rhs.Lock().Get();
@@ -292,7 +292,7 @@ bool operator==(const TWeakPtr<T>& lhs, const TWeakPtr<U>& rhs)
 template <class T, class U>
 bool operator!=(const TWeakPtr<T>& lhs, const TWeakPtr<U>& rhs)
 {
-    static_assert( 
+    static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
     return lhs.Lock().Get() != rhs.Lock().Get();

@@ -99,7 +99,7 @@ public:
     template <class U>
     TIntrusivePtr& operator=(const TIntrusivePtr<U>& other) noexcept
     {
-        static_assert( 
+        static_assert(
             std::is_convertible_v<U*, T*>,
             "U* must be convertible to T*");
         static_assert(
@@ -112,7 +112,7 @@ public:
     //! Move assignment operator.
     TIntrusivePtr& operator=(TIntrusivePtr&& other) noexcept
     {
-        TIntrusivePtr(std::move(other)).Swap(*this); 
+        TIntrusivePtr(std::move(other)).Swap(*this);
         return *this;
     }
 
@@ -120,13 +120,13 @@ public:
     template <class U>
     TIntrusivePtr& operator=(TIntrusivePtr<U>&& other) noexcept
     {
-        static_assert( 
+        static_assert(
             std::is_convertible_v<U*, T*>,
             "U* must be convertible to T*");
         static_assert(
             std::is_base_of_v<TRefCountedBase, T>,
             "Cast allowed only for types derived from TRefCountedBase");
-        TIntrusivePtr(std::move(other)).Swap(*this); 
+        TIntrusivePtr(std::move(other)).Swap(*this);
         return *this;
     }
 
@@ -270,7 +270,7 @@ bool operator>(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<T>& rhs)
 template <class T, class U>
 bool operator==(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<U>& rhs)
 {
-    static_assert( 
+    static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
     return lhs.Get() == rhs.Get();
@@ -279,7 +279,7 @@ bool operator==(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<U>& rhs)
 template <class T, class U>
 bool operator!=(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<U>& rhs)
 {
-    static_assert( 
+    static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
     return lhs.Get() != rhs.Get();
@@ -288,7 +288,7 @@ bool operator!=(const TIntrusivePtr<T>& lhs, const TIntrusivePtr<U>& rhs)
 template <class T, class U>
 bool operator==(const TIntrusivePtr<T>& lhs, U* rhs)
 {
-    static_assert( 
+    static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
     return lhs.Get() == rhs;
@@ -297,7 +297,7 @@ bool operator==(const TIntrusivePtr<T>& lhs, U* rhs)
 template <class T, class U>
 bool operator!=(const TIntrusivePtr<T>& lhs, U* rhs)
 {
-    static_assert( 
+    static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
     return lhs.Get() != rhs;
@@ -306,7 +306,7 @@ bool operator!=(const TIntrusivePtr<T>& lhs, U* rhs)
 template <class T, class U>
 bool operator==(T* lhs, const TIntrusivePtr<U>& rhs)
 {
-    static_assert( 
+    static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
     return lhs == rhs.Get();
@@ -315,7 +315,7 @@ bool operator==(T* lhs, const TIntrusivePtr<U>& rhs)
 template <class T, class U>
 bool operator!=(T* lhs, const TIntrusivePtr<U>& rhs)
 {
-    static_assert( 
+    static_assert(
         std::is_convertible_v<U*, T*>,
         "U* must be convertible to T*");
     return lhs != rhs.Get();

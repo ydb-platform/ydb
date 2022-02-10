@@ -91,10 +91,10 @@ public:
     // lies if some key was added at least twice
     size_t GetEntryCount() const;
     size_t GetNodeCount() const;
- 
-    size_t MeasureByteSize() const { 
-        return NodeMeasureSubtree(Root); 
-    } 
+
+    size_t MeasureByteSize() const {
+        return NodeMeasureSubtree(Root);
+    }
 };
 
 template <class T, class D, class S>

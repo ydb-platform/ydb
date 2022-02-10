@@ -93,10 +93,10 @@ public:
     size_t GetEntryCount() const;
     size_t GetNodeCount() const;
 
-    // Exact output file size in bytes. 
-    size_t MeasureByteSize() const { 
-        return Impl->MeasureByteSize(); 
-    } 
+    // Exact output file size in bytes.
+    size_t MeasureByteSize() const {
+        return Impl->MeasureByteSize();
+    }
 
 protected:
     class TCompactTrieBuilderImpl;

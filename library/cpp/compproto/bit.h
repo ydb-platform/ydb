@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/array_ref.h>
-#include <util/generic/vector.h> 
+#include <util/generic/vector.h>
 #include <util/stream/output.h>
 #include <util/stream/input.h>
 
@@ -25,7 +25,7 @@ namespace NCompProto {
             ui8 shift = position & 7;
             return ((1ULL << size) - 1) & (outCode >> shift);
         }
- 
+
         ui64 Read(ui64 position, size_t size) {
             return Read(&Out[0], position, size);
         }
@@ -68,12 +68,12 @@ namespace NCompProto {
         size_t ByteLength() const {
             return (Position + 7) / 8;
         }
- 
+
         void ResetPosition() {
             Position = 0;
             Size = 0;
         }
- 
+
         void Clear() {
             Counter = 0;
             Position = 0;
@@ -81,12 +81,12 @@ namespace NCompProto {
             Out.clear();
             Junk();
         }
- 
+
         TArrayRef<const char> AsDataRegion() const {
             return TArrayRef<const char>(reinterpret_cast<const char*>(Out.data()), ByteLength());
         }
     };
- 
+
     struct THuff {
         TCoder Coder;
         ui64 Position;
@@ -165,7 +165,7 @@ namespace NCompProto {
         // TODO: why not const TString& ???
         void Save(IOutputStream& /*stream*/, TString /*offset*/) {
         }
- 
+
         void Add(ui32 value, TEmpty& /*empty*/) {
             Accum.Add(value);
         }
@@ -235,18 +235,18 @@ namespace NCompProto {
             size_t index = 0;
             while (scalarMask) {
                 if (mask & 1) {
-                    ui32 val = table->Scalar[index].Decompress(codes, offset); 
+                    ui32 val = table->Scalar[index].Decompress(codes, offset);
                     Self.SetScalar(index, val);
                 } else if (table->Default[index].Type == TScalarDefaultValue::Fixed) {
                     Self.SetScalar(index, table->Default[index].Value);
-                } 
+                }
                 mask = mask >> 1;
                 scalarMask = scalarMask >> 1;
                 ++index;
-            } 
+            }
             Self.EndElement();
-        } 
- 
+        }
+
     public:
         void Decompress(const TMetaInfo<TTable>* table, const ui8* codes, ui64& offset) override {
             ui64 locOffset = offset;
@@ -263,11 +263,11 @@ namespace NCompProto {
                     repeatedIndex += table->Index.Decompress(codes, locOffset);
                     DecompressSingleScalarsOnly(repeatedIndex, table, codes, locOffset);
                 }
-            } 
+            }
             offset = locOffset;
             Self.EndSelf();
-        } 
- 
+        }
+
         // XXX: iterator needed?
         //
         // Following two functions serves the purpose of decompressing outer repeated-structure(such structure is mandatory now).
@@ -276,12 +276,12 @@ namespace NCompProto {
             table->Index.Decompress(codes, offset);
             DecompressSingle(prevIndex, table, codes, offset);
         }
- 
+
         ui32 DecompressCount(const TMetaInfo<TTable>* table, const ui8* codes, ui64& offset) {
             return table->Count.Decompress(codes, offset);
         }
     };
- 
+
     template <class X>
     struct TParentHold {
         TMetaIterator<X>* Parent;
@@ -344,5 +344,5 @@ namespace NCompProto {
             THuffToTable::Build(table, huff);
         }
     };
- 
+
 }

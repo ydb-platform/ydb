@@ -24,7 +24,7 @@ namespace NCompProto {
         };
         EType Type;
         ui32 Value;
-    }; 
+    };
 
     template <class X>
     struct TMetaInfo {
@@ -34,7 +34,7 @@ namespace NCompProto {
         X Scalar[MAX_ELEMENTS];
         TAtomicSharedPtr<TMetaInfo> Repeated[MAX_ELEMENTS];
         TScalarDefaultValue Default[MAX_ELEMENTS];
- 
+
         ui32 ScalarMask;
         ui32 RepeatedMask;
         size_t Size;
@@ -146,7 +146,7 @@ namespace NCompProto {
             Mask.BeginElement(functor);
             Serializer.LastIndex = index;
             ++Serializer.Count;
-        } 
+        }
 
         template <class TFunctor>
         void Iterate(TFunctor& functor) {
@@ -236,7 +236,7 @@ namespace NCompProto {
                     stream << step << offset << "table "
                            << "id " << i << Endl;
                     Scalar[i].Save(stream, step + offset);
-                } 
+                }
             }
             stream << offset << "end" << Endl;
         }
@@ -296,7 +296,7 @@ namespace NCompProto {
                     }
                 } else if (name == "end" /* || stream.IsEOF()*/) {
                     return;
-                } 
+                }
             }
         }
     };

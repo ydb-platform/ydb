@@ -411,20 +411,20 @@ public:
         }
         return 0;
     }
- 
-    template <size_t N> 
+
+    template <size_t N>
     int Add(const chunk_id, std::bitset<N>* pData) {
-        if (IsReading()) { 
-            std::string s; 
-            Add(1, &s); 
-            *pData = std::bitset<N>(s); 
-        } else { 
+        if (IsReading()) {
+            std::string s;
+            Add(1, &s);
+            *pData = std::bitset<N>(s);
+        } else {
             std::string s = pData->template to_string<char, std::char_traits<char>, std::allocator<char>>();
-            Add(1, &s); 
-        } 
-        return 0; 
-    } 
- 
+            Add(1, &s);
+        }
+        return 0;
+    }
+
     int Add(const chunk_id, TDynBitMap* pData) {
         if (IsReading()) {
             ui64 count = 0;

@@ -172,5 +172,5 @@ private:
     using TClientRequest::Input;
     using TClientRequest::Output;
 };
- 
+
 bool TryToBindAddresses(const THttpServerOptions& options, const std::function<void(TSocket)>* callbackOnBoundAddress = nullptr);

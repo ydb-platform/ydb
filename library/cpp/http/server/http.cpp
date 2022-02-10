@@ -326,17 +326,17 @@ public:
         ErrorCode = 0;
         TIntrusiveListWithAutoDelete<TListenSocket, TDelete> Reqs;
 
-        std::function<void(TSocket)> callback = [&](TSocket socket) { 
-            THolder<TListenSocket> ls(new TListenSocket(socket, this)); 
-            Poller->WaitRead(socket, static_cast<IPollAble*>(ls.Get())); 
-            Reqs.PushBack(ls.Release()); 
-        }; 
+        std::function<void(TSocket)> callback = [&](TSocket socket) {
+            THolder<TListenSocket> ls(new TListenSocket(socket, this));
+            Poller->WaitRead(socket, static_cast<IPollAble*>(ls.Get()));
+            Reqs.PushBack(ls.Release());
+        };
         bool addressesBound = TryToBindAddresses(Options_, &callback);
         if (!addressesBound) {
             SaveErrorCode();
-            ListenStartEvent.Signal(); 
+            ListenStartEvent.Signal();
 
-            return; 
+            return;
         }
 
         Requests->Start(Options_.nThreads, Options_.MaxQueueSize);
@@ -795,49 +795,49 @@ bool TRequestReplier::Reply(void* threadSpecificResource) {
 
     return DoReply(params);
 }
- 
+
 bool TryToBindAddresses(const THttpServerOptions& options, const std::function<void(TSocket)>* callbackOnBoundAddress) {
-    THttpServerOptions::TBindAddresses addrs; 
+    THttpServerOptions::TBindAddresses addrs;
     try {
         options.BindAddresses(addrs);
     } catch (const std::exception&) {
         return false;
     }
- 
-    for (const auto& na : addrs) { 
-        for (TNetworkAddress::TIterator ai = na.Begin(); ai != na.End(); ++ai) { 
-            NAddr::TAddrInfo addr(&*ai); 
- 
-            TSocket socket(::socket(addr.Addr()->sa_family, SOCK_STREAM, 0)); 
- 
-            if (socket == INVALID_SOCKET) { 
+
+    for (const auto& na : addrs) {
+        for (TNetworkAddress::TIterator ai = na.Begin(); ai != na.End(); ++ai) {
+            NAddr::TAddrInfo addr(&*ai);
+
+            TSocket socket(::socket(addr.Addr()->sa_family, SOCK_STREAM, 0));
+
+            if (socket == INVALID_SOCKET) {
                 return false;
-            } 
- 
-            FixIPv6ListenSocket(socket); 
- 
+            }
+
+            FixIPv6ListenSocket(socket);
+
             if (options.ReuseAddress) {
                 int yes = 1;
                 ::setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, (const char*)&yes, sizeof(yes));
             }
- 
-            if (options.ReusePort) { 
-                SetReusePort(socket, true); 
-            } 
- 
-            if (::bind(socket, addr.Addr(), addr.Len()) == SOCKET_ERROR) { 
+
+            if (options.ReusePort) {
+                SetReusePort(socket, true);
+            }
+
+            if (::bind(socket, addr.Addr(), addr.Len()) == SOCKET_ERROR) {
                 return false;
-            } 
- 
-            if (::listen(socket, options.ListenBacklog) == SOCKET_ERROR) { 
+            }
+
+            if (::listen(socket, options.ListenBacklog) == SOCKET_ERROR) {
                 return false;
-            } 
- 
+            }
+
             if (callbackOnBoundAddress != nullptr) {
-                (*callbackOnBoundAddress)(socket); 
-            } 
-        } 
-    } 
- 
+                (*callbackOnBoundAddress)(socket);
+            }
+        }
+    }
+
     return true;
-} 
+}

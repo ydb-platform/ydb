@@ -15,8 +15,8 @@ namespace NPrivate {
     template <class Key, class Value, template <class, class> class List, EGettersPromotionPolicy GettersPromotionPolicy, class... TArgs>
     class TThreadSafeCache {
     public:
-        using TPtr = TAtomicSharedPtr<Value>; 
- 
+        using TPtr = TAtomicSharedPtr<Value>;
+
         class ICallbacks {
         public:
             using TKey = Key;
@@ -30,9 +30,9 @@ namespace NPrivate {
         };
 
     public:
-        TThreadSafeCache(const ICallbacks& callbacks, size_t maxSize = Max<size_t>()) 
+        TThreadSafeCache(const ICallbacks& callbacks, size_t maxSize = Max<size_t>())
             : Callbacks(callbacks)
-            , Cache(maxSize) 
+            , Cache(maxSize)
         {
         }
 
@@ -49,7 +49,7 @@ namespace NPrivate {
             Cache.Update(key, value);
         }
 
-        const TPtr Get(TArgs... args) const { 
+        const TPtr Get(TArgs... args) const {
             return GetValue<true>(args...);
         }
 
@@ -82,7 +82,7 @@ namespace NPrivate {
         }
 
         template <class TCallbacks>
-        static const TPtr Get(TArgs... args) { 
+        static const TPtr Get(TArgs... args) {
             return TThreadSafeCacheSingleton<TCallbacks>::Get(args...);
         }
 
@@ -140,7 +140,7 @@ namespace NPrivate {
         template <class TCallbacks>
         class TThreadSafeCacheSingleton {
         public:
-            static const TPtr Get(TArgs... args) { 
+            static const TPtr Get(TArgs... args) {
                 return Singleton<TThreadSafeCacheSingleton>()->Cache.Get(args...);
             }
 

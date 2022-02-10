@@ -377,8 +377,8 @@ Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
 
     Y_UNIT_TEST(SimpleTest) {
         for (ui32 i = 0; i < Y_ARRAY_SIZE(VALS); ++i) {
-            const TString data = *TCache::Get<TCallbacks>(i); 
-            UNIT_ASSERT(data == VALS[i]); 
+            const TString data = *TCache::Get<TCallbacks>(i);
+            UNIT_ASSERT(data == VALS[i]);
         }
     }
 

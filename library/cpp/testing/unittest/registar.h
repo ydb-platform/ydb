@@ -794,25 +794,25 @@ public:                       \
         }
     };
 
-    struct TBaseTestCase { 
+    struct TBaseTestCase {
         // NOTE: since EACH test case is instantiated for listing tests, its
         // ctor/dtor are not the best place to do heavy preparations in test fixtures.
         //
         // Consider using SetUp()/TearDown() methods instead
 
-        inline TBaseTestCase() 
-            : TBaseTestCase(nullptr, nullptr, false) 
+        inline TBaseTestCase()
+            : TBaseTestCase(nullptr, nullptr, false)
         {
         }
 
         inline TBaseTestCase(const char* name, std::function<void(TTestContext&)> body, bool forceFork)
-            : Name_(name) 
+            : Name_(name)
             , Body_(std::move(body))
-            , ForceFork_(forceFork) 
+            , ForceFork_(forceFork)
         {
         }
 
-        virtual ~TBaseTestCase() = default; 
+        virtual ~TBaseTestCase() = default;
 
         // Each test case is executed in 3 steps:
         //
@@ -822,24 +822,24 @@ public:                       \
         //
         // Both SetUp() and TearDown() may use UNIT_* check macros and are only
         // called when the test is executed.
- 
+
         virtual void SetUp(TTestContext& /* context */) {
         }
 
         virtual void TearDown(TTestContext& /* context */) {
         }
 
-        virtual void Execute_(TTestContext& context) { 
-            Body_(context); 
-        } 
- 
-        const char* Name_; 
-        std::function<void(TTestContext&)> Body_; 
-        bool ForceFork_; 
+        virtual void Execute_(TTestContext& context) {
+            Body_(context);
+        }
+
+        const char* Name_;
+        std::function<void(TTestContext&)> Body_;
+        bool ForceFork_;
     };
 
-    using TBaseFixture = TBaseTestCase; 
- 
+    using TBaseFixture = TBaseTestCase;
+
     // Class for checking that code raises unittest failure
     class TUnitTestFailChecker {
     public:
@@ -916,12 +916,12 @@ public:                       \
 
 #define Y_UNIT_TEST_SUITE_IMPL_F(N, T, F)                                                                          \
     namespace NTestSuite##N {                                                                                           \
-        class TCurrentTestCase: public F {                                                                              \ 
-        };                                                                                                              \ 
+        class TCurrentTestCase: public F {                                                                              \
+        };                                                                                                              \
         class TCurrentTest: public T {                                                                                  \
         private:                                                                                                        \
-            typedef std::function<THolder<NUnitTest::TBaseTestCase>()> TTestCaseFactory;                                \ 
-            typedef TVector<TTestCaseFactory> TTests;                                                                   \ 
+            typedef std::function<THolder<NUnitTest::TBaseTestCase>()> TTestCaseFactory;                                \
+            typedef TVector<TTestCaseFactory> TTests;                                                                   \
                                                                                                                         \
             static TTests& Tests() {                                                                                    \
                 static TTests tests;                                                                                    \
@@ -942,20 +942,20 @@ public:                       \
                 Tests().push_back([=]{ return MakeHolder<NUnitTest::TBaseTestCase>(name, body, forceFork); });          \
             }                                                                                                           \
                                                                                                                         \
-            static void AddTest(TTestCaseFactory testCaseFactory) {                                                     \ 
-                Tests().push_back(std::move(testCaseFactory));                                                          \ 
-            }                                                                                                           \ 
-                                                                                                                        \ 
+            static void AddTest(TTestCaseFactory testCaseFactory) {                                                     \
+                Tests().push_back(std::move(testCaseFactory));                                                          \
+            }                                                                                                           \
+                                                                                                                        \
             virtual void Execute() {                                                                                    \
                 this->AtStart();                                                                                        \
-                for (TTests::iterator it = Tests().begin(), ie = Tests().end(); it != ie; ++it) {                       \ 
-                    const auto i = (*it)();                                                                             \ 
-                    if (!this->CheckAccessTest(i->Name_)) {                                                             \ 
+                for (TTests::iterator it = Tests().begin(), ie = Tests().end(); it != ie; ++it) {                       \
+                    const auto i = (*it)();                                                                             \
+                    if (!this->CheckAccessTest(i->Name_)) {                                                             \
                         continue;                                                                                       \
                     }                                                                                                   \
                     NUnitTest::TTestContext context(this->TTestBase::Processor());                                      \
                     try {                                                                                               \
-                        this->BeforeTest(i->Name_);                                                                     \ 
+                        this->BeforeTest(i->Name_);                                                                     \
                         {                                                                                               \
                             TCleanUp cleaner(this);                                                                     \
                             auto testCase = [&i, &context] {                                                            \
@@ -967,13 +967,13 @@ public:                       \
                         }                                                                                               \
                     } catch (const ::NUnitTest::TAssertException&) {                                                    \
                     } catch (const yexception& e) {                                                                     \
-                        CATCH_REACTION_BT(i->Name_, e, &context);                                                       \ 
+                        CATCH_REACTION_BT(i->Name_, e, &context);                                                       \
                     } catch (const std::exception& e) {                                                                 \
-                        CATCH_REACTION(i->Name_, e, &context);                                                          \ 
+                        CATCH_REACTION(i->Name_, e, &context);                                                          \
                     } catch (...) {                                                                                     \
                         this->AddError("non-std exception!", &context);                                                 \
                     }                                                                                                   \
-                    this->Finish(i->Name_, &context);                                                                   \ 
+                    this->Finish(i->Name_, &context);                                                                   \
                 }                                                                                                       \
                 this->AtEnd();                                                                                          \
             }                                                                                                           \
@@ -988,23 +988,23 @@ public:                       \
 #define RUSAGE_UNIT_TEST_SUITE(N) Y_UNIT_TEST_SUITE_IMPL(N, NUnitTest::TRusageTest, ::NUnitTest::TBaseTestCase)
 
 #define Y_UNIT_TEST_IMPL_REGISTER(N, FF, F)            \
-    struct TTestCase##N : public F {                        \ 
-        TTestCase##N()                                      \ 
-            : F()                                           \ 
-        {                                                   \ 
-            Name_ = #N;                                     \ 
-            ForceFork_ = FF;                                \ 
-        }                                                   \ 
-        static THolder<NUnitTest::TBaseTestCase> Create() { \ 
-            return ::MakeHolder<TTestCase##N>();            \ 
-        }                                                   \ 
-        void Execute_(NUnitTest::TTestContext&) override;   \ 
-    };                                                      \ 
-    struct TTestRegistration##N {                           \ 
-        TTestRegistration##N() {                            \ 
-            TCurrentTest::AddTest(TTestCase##N::Create);    \ 
-        }                                                   \ 
-    };                                                      \ 
+    struct TTestCase##N : public F {                        \
+        TTestCase##N()                                      \
+            : F()                                           \
+        {                                                   \
+            Name_ = #N;                                     \
+            ForceFork_ = FF;                                \
+        }                                                   \
+        static THolder<NUnitTest::TBaseTestCase> Create() { \
+            return ::MakeHolder<TTestCase##N>();            \
+        }                                                   \
+        void Execute_(NUnitTest::TTestContext&) override;   \
+    };                                                      \
+    struct TTestRegistration##N {                           \
+        TTestRegistration##N() {                            \
+            TCurrentTest::AddTest(TTestCase##N::Create);    \
+        }                                                   \
+    };                                                      \
     static const TTestRegistration##N testRegistration##N;
 
 #define Y_UNIT_TEST_IMPL(N, FF, F)      \
@@ -1019,10 +1019,10 @@ public:                       \
     namespace NTestSuite##N
 
 #define Y_UNIT_TEST_DECLARE(N) \
-    struct TTestCase##N 
+    struct TTestCase##N
 
 #define Y_UNIT_TEST_FRIEND(N, T) \
-    friend NTestSuite##N::TTestCase##T \ 
+    friend NTestSuite##N::TTestCase##T \
 
     TString RandomString(size_t len, ui32 seed = 0);
 }

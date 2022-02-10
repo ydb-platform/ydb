@@ -144,7 +144,7 @@ namespace boost { namespace proto
         // actually defined:
         #include <boost/proto/detail/expr.hpp>
 
-        #if defined(__GNUC__) && __GNUC__ >= 9 || defined(__clang__) && __clang_major__ >= 10 && !defined(__apple_build_version__) 
+        #if defined(__GNUC__) && __GNUC__ >= 9 || defined(__clang__) && __clang_major__ >= 10 && !defined(__apple_build_version__)
             #pragma GCC diagnostic pop
         #endif
     }

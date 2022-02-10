@@ -23,7 +23,7 @@ namespace NObjectFactory {
         virtual ~IFactoryObjectCreator() {
         }
     };
-
+ 
 #define FACTORY_OBJECT_NAME(Name)              \
     static TString GetTypeName() {             \
         return #Name;                          \
@@ -31,7 +31,7 @@ namespace NObjectFactory {
     virtual TString GetType() const override { \
         return #Name;                          \
     }
-
+ 
     template <class TBaseProduct, class TDerivedProduct, class... TArgs>
     class TFactoryObjectCreator: public IFactoryObjectCreator<TBaseProduct, TArgs...> {
         TDerivedProduct* Create(TArgs... args) const override {
@@ -45,13 +45,13 @@ namespace NObjectFactory {
             return new TDerivedProduct();
         }
     };
-
+ 
     template <class P, class K, class... TArgs>
     class IObjectFactory {
     public:
         typedef P TProduct;
         typedef K TKey;
-
+ 
     public:
         template <class TDerivedProduct>
         void Register(const TKey& key, IFactoryObjectCreator<TProduct, TArgs...>* creator) {
@@ -102,7 +102,7 @@ namespace NObjectFactory {
             IFactoryObjectCreator<TProduct, void>* creator = IObjectFactory<TProduct, TKey, void>::GetCreator(key);
             return creator == nullptr ? nullptr : creator->Create();
         }
-
+ 
         static TString KeysDebugString() {
             TSet<TString> keys;
             Singleton<TObjectFactory<TProduct, TKey>>()->GetKeys(keys);
@@ -112,7 +112,7 @@ namespace NObjectFactory {
             }
             return keysStr;
         }
-
+ 
         static TProduct* Construct(const TKey& key, const TKey& defKey) {
             TProduct* result = Singleton<TObjectFactory<TProduct, TKey>>()->Create(key);
             if (!result && !!defKey) {
@@ -195,7 +195,7 @@ namespace NObjectFactory {
         static TProduct* Construct(const TKey& key, TArgs... args) {
             return Singleton<TParametrizedObjectFactory<TProduct, TKey, TArgs...>>()->Create(key, std::forward<TArgs>(args)...);
         }
-
+ 
         template <class... Args>
         static THolder<TProduct> VerifiedConstruct(Args&&... args) {
             auto result = MakeHolder(std::forward<Args>(args)...);
@@ -211,7 +211,7 @@ namespace NObjectFactory {
         static void GetRegisteredKeys(TSet<TKey>& keys) {
             return Singleton<TParametrizedObjectFactory<TProduct, TKey, TArgs...>>()->GetKeys(keys);
         }
-
+ 
         static TSet<TKey> GetRegisteredKeys() {
             TSet<TKey> keys;
             Singleton<TParametrizedObjectFactory<TProduct, TKey, TArgs...>>()->GetKeys(keys);

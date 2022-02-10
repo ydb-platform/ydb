@@ -13,7 +13,7 @@ RECURSE(
     calendar_extractor
     check_formula_md5
     check_json
-    check_yaml 
+    check_yaml
     checktrigrams
     clustermaster
     coldiff

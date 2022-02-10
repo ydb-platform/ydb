@@ -162,7 +162,7 @@ namespace NTvmAuth::NTvmApi {
             }
 
             RetrySettingsFilepath_ = path + "retry_settings";
-        } else {
+        } else { 
             LogInfo("Disk cache disabled. Please set disk cache directory in settings for best reliability");
         }
     }

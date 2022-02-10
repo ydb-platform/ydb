@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE_IMPLEMENTATION(ServiceTestSuite) {
 
     Y_UNIT_TEST(TicketProtoTest) {
         ticket2::Ticket protobufTicket;
-        UNIT_ASSERT(protobufTicket.ParseFromString(NUtils::Base64url2bin(SERVICE_TICKET_PROTOBUF)));
+        UNIT_ASSERT(protobufTicket.ParseFromString(NUtils::Base64url2bin(SERVICE_TICKET_PROTOBUF))); 
         TTestServiceTicketImpl checkedTicket(ETicketStatus::Ok, std::move(protobufTicket));
         UNIT_ASSERT_EQUAL(ETicketStatus::Ok, checkedTicket.GetStatus());
         UNIT_ASSERT_VALUES_EQUAL(std::numeric_limits<time_t>::max(), checkedTicket.GetExpirationTime());

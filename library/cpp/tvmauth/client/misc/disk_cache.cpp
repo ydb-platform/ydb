@@ -10,7 +10,7 @@
 #include <util/stream/file.h>
 #include <util/stream/str.h>
 #include <util/system/fs.h>
-#include <util/system/sysstat.h>
+#include <util/system/sysstat.h> 
 #include <util/system/tempfile.h>
 
 #include <exception>
@@ -122,12 +122,12 @@ namespace NTvmAuth {
 
         try {
             {
-                if (NFs::Exists(Filename_)) {
-                    Chmod(Filename_.c_str(),
-                          S_IRUSR | S_IWUSR); // 600
-                }
-
-                TFile file(Filename_, CreateAlways | WrOnly | Seq | AWUser | ARUser);
+                if (NFs::Exists(Filename_)) { 
+                    Chmod(Filename_.c_str(), 
+                          S_IRUSR | S_IWUSR); // 600 
+                } 
+ 
+                TFile file(Filename_, CreateAlways | WrOnly | Seq | AWUser | ARUser); 
                 file.Flock(LOCK_EX | LOCK_NB);
 
                 TFileOutput output(file);

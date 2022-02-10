@@ -233,7 +233,7 @@ RECURSE(
     django-constance
     django-cors-headers
     django-cors-middleware
-    django-crispy-forms 
+    django-crispy-forms
     django-cron
     django-csp
     django-cte
@@ -920,7 +920,7 @@ RECURSE(
     pytracemalloc
     pytz
     pyudev
-    pyusb 
+    pyusb
     PyWavelets
     PyYAML
     pyzmq

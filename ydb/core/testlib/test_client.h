@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 #include "tablet_helpers.h"
 
 #include <ydb/core/base/appdata.h>
@@ -29,10 +29,10 @@
 
 #include <functional>
 #include <algorithm>
- 
-namespace NKikimr { 
-namespace Tests { 
- 
+
+namespace NKikimr {
+namespace Tests {
+
 #ifdef WITH_VALGRIND
     const ui64 TIME_LIMIT_MS = TDuration::Seconds(600).MilliSeconds();
 #else
@@ -53,7 +53,7 @@ namespace Tests {
     const ui64 TxAllocator = 0x820001;
     const ui64 SchemeRoot = 0x850100;
     const ui64 Hive = 0xA001;
- 
+
     struct TServerSetup {
         TString IpAddress;
         ui16 Port = 0;
@@ -260,8 +260,8 @@ namespace Tests {
         TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
     };
 
-    class TClient { 
-    public: 
+    class TClient {
+    public:
         struct TFlatQueryOptions {
             TString Params;
             bool IsQueryCompiled = false;
@@ -277,11 +277,11 @@ namespace Tests {
 
         TClient(const TServerSettings& settings);
         virtual ~TClient();
- 
-        const NMsgBusProxy::TMsgBusClientConfig& GetClientConfig() const; 
+
+        const NMsgBusProxy::TMsgBusClientConfig& GetClientConfig() const;
         std::shared_ptr<NMsgBusProxy::TMsgBusClient> GetClient() const;
         bool LoadTypes();
-        const NScheme::TTypeRegistry& GetTypeRegistry() const; 
+        const NScheme::TTypeRegistry& GetTypeRegistry() const;
         const NScheme::TTypeMetadataRegistry& GetTypeMetadataRegistry() const;
         const NMiniKQL::IFunctionRegistry& GetFunctionRegistry() const;
 
@@ -337,7 +337,7 @@ namespace Tests {
         TAutoPtr<NBus::TBusMessage> InitRootSchemeWithReply(const TString& root);
         void InitRootScheme();
         void InitRootScheme(const TString& root);
- 
+
         void ExecuteTraceCommand(NKikimrClient::TMessageBusTraceRequest::ECommand command, const TString &path = TString());
         TString StartTrace(const TString &path);
         void StopTrace();
@@ -513,14 +513,14 @@ namespace Tests {
         const TStoragePoolKinds StoragePoolTypes;
         NScheme::TKikimrTypeRegistry TypeRegistry;
         TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
-        NMsgBusProxy::TMsgBusClientConfig ClientConfig; 
+        NMsgBusProxy::TMsgBusClientConfig ClientConfig;
         std::shared_ptr<NMsgBusProxy::TMsgBusClient> Client;
         TMaybe<ui64> TypesEtag;
         NScheme::TTypeMetadataRegistry LoadedTypeMetadataRegistry;
         TIntrusivePtr<NMiniKQL::IFunctionRegistry> LoadedFunctionRegistry;
         TString SecurityToken;
-    }; 
- 
+    };
+
     struct TTenants {
     private:
         Tests::TServer::TPtr Server;
@@ -560,5 +560,5 @@ namespace Tests {
         void FreeNodeIdx(ui32 nodeIdx);
     };
 
-} 
-} 
+}
+}

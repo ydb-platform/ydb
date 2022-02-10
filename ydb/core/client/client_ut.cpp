@@ -25,7 +25,7 @@ namespace NKikimr {
 
 using NClient::TValue;
 
-namespace Tests { 
+namespace Tests {
     using namespace NMiniKQL;
 //    const ui32 TestDomain = 1;
 

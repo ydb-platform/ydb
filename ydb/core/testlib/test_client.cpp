@@ -1,4 +1,4 @@
-#include "test_client.h" 
+#include "test_client.h"
 
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/appdata.h>
@@ -97,9 +97,9 @@
 #include <util/system/valgrind.h>
 #include <util/system/env.h>
 
-namespace NKikimr { 
- 
-namespace Tests { 
+namespace NKikimr {
+
+namespace Tests {
 
 
 
@@ -120,7 +120,7 @@ namespace Tests {
         NValgrind::PlainOrUnderValgrind(TDuration::Seconds(60), TDuration::Seconds(120)),
         TDuration::Seconds(120)
     ).MilliSeconds();
- 
+
     NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
         Y_UNUSED(typeRegistry);
         // register test UDFs
@@ -140,7 +140,7 @@ namespace Tests {
     TServer::TServer(TServerSettings::TConstPtr settings, bool init)
         : Settings(settings)
         , UseStoragePools(!Settings->StoragePoolTypes.empty())
-    { 
+    {
         if (Settings->SupportsRedirect && IsServerRedirected())
             return;
 
@@ -357,7 +357,7 @@ namespace Tests {
                                                                                   Settings->StoragePoolTypes);
         app.AddDomain(domain.Release());
     }
- 
+
     void TServer::CreateBootstrapTablets() {
         const ui32 domainId = Settings->Domain;
         Y_VERIFY(TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1) == ChangeStateStorage(TxAllocator, domainId));
@@ -848,8 +848,8 @@ namespace Tests {
         if (Settings->LoggerInitializer) {
             Settings->LoggerInitializer(*Runtime);
         }
-    } 
- 
+    }
+
     void TServer::StartDummyTablets() {
         if (!Runtime)
             ythrow TWithBackTrace<yexception>() << "Server is redirected";
@@ -891,9 +891,9 @@ namespace Tests {
             Bus->Stop();
             Bus.Drop();
         }
-    } 
- 
- 
+    }
+
+
     TClient::TClient(const TServerSettings& settings)
         : Domain(settings.Domain)
         , DomainName(settings.DomainName)
@@ -915,26 +915,26 @@ namespace Tests {
         ClientConfig.BusSessionConfig.ConnectTimeout = ConnectTimeoutMilliSeconds;
         ClientConfig.BusSessionConfig.NumRetries = 10;
         Client.reset(new NMsgBusProxy::TMsgBusClient(ClientConfig));
-        Client->Init(); 
-    } 
- 
-    const NMsgBusProxy::TMsgBusClientConfig& TClient::GetClientConfig() const { 
-        return ClientConfig; 
-    } 
- 
-    TClient::~TClient() { 
-        Client->Shutdown(); 
-    } 
- 
- 
+        Client->Init();
+    }
+
+    const NMsgBusProxy::TMsgBusClientConfig& TClient::GetClientConfig() const {
+        return ClientConfig;
+    }
+
+    TClient::~TClient() {
+        Client->Shutdown();
+    }
+
+
     std::shared_ptr<NMsgBusProxy::TMsgBusClient> TClient::GetClient() const {
-        return Client; 
-    } 
- 
+        return Client;
+    }
+
     const NScheme::TTypeRegistry& TClient::GetTypeRegistry() const {
-        return TypeRegistry; 
-    } 
- 
+        return TypeRegistry;
+    }
+
     bool TClient::LoadTypes() {
         TAutoPtr<NMsgBusProxy::TBusTypesRequest> request(new NMsgBusProxy::TBusTypesRequest());
         if (TypesEtag.Defined()) {
@@ -971,26 +971,26 @@ namespace Tests {
         return *FunctionRegistry;
     }
 
-    ui64 TClient::GetPatchedSchemeRoot(ui64 schemeRoot, ui32 domain, bool supportsRedirect) { 
-        if (!supportsRedirect || !IsServerRedirected()) 
+    ui64 TClient::GetPatchedSchemeRoot(ui64 schemeRoot, ui32 domain, bool supportsRedirect) {
+        if (!supportsRedirect || !IsServerRedirected())
             return ChangeStateStorage(schemeRoot, domain);
 
         TString domainRedirect = GetEnv(DomainRedirectEnvVar);
-        if (!domainRedirect) 
-            ythrow TWithBackTrace<yexception>() << "Please set domain redirect, format: KIKIMR_TEST_DOMAIN=domain/RootShardTabletId"; 
+        if (!domainRedirect)
+            ythrow TWithBackTrace<yexception>() << "Please set domain redirect, format: KIKIMR_TEST_DOMAIN=domain/RootShardTabletId";
 
-        TStringBuf domainUidStr; 
-        TStringBuf tabletIdStr; 
-        TStringBuf(domainRedirect).Split('/', domainUidStr, tabletIdStr); 
-        const ui32 domainUid = FromString<ui32>(domainUidStr); 
-        if (domainUid != domain) { 
-            ythrow TWithBackTrace<yexception>() << "Mismatch domain redirect, expected domain: " << domain 
-                << ", redirected domain: " << domainUid; 
+        TStringBuf domainUidStr;
+        TStringBuf tabletIdStr;
+        TStringBuf(domainRedirect).Split('/', domainUidStr, tabletIdStr);
+        const ui32 domainUid = FromString<ui32>(domainUidStr);
+        if (domainUid != domain) {
+            ythrow TWithBackTrace<yexception>() << "Mismatch domain redirect, expected domain: " << domain
+                << ", redirected domain: " << domainUid;
         }
 
-        return FromString<ui64>(tabletIdStr); 
-    } 
- 
+        return FromString<ui64>(tabletIdStr);
+    }
+
     void TClient::WaitRootIsUp(const TString& root) {
         while (true) {
             TAutoPtr<NMsgBusProxy::TBusResponse> resp = Ls(root);
@@ -2476,5 +2476,5 @@ namespace Tests {
     }
 
 
-} 
-} 
+}
+}

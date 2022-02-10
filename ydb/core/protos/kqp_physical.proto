@@ -10,21 +10,21 @@ import "ydb/library/yql/dq/proto/dq_tasks.proto";
 message TKqpPhyExternalBinding {
 }
 
-message TKqpPhyInternalBinding { 
-    enum EType { 
-        PARAM_UNSPECIFIED = 0; 
-        PARAM_NOW = 1; 
-        PARAM_CURRENT_DATE = 2; 
-        PARAM_CURRENT_DATETIME = 3; 
-        PARAM_CURRENT_TIMESTAMP = 4; 
-        PARAM_RANDOM_NUMBER = 5; 
-        PARAM_RANDOM = 6; 
-        PARAM_RANDOM_UUID = 7; 
-    }; 
- 
-    EType Type = 1; 
-} 
- 
+message TKqpPhyInternalBinding {
+    enum EType {
+        PARAM_UNSPECIFIED = 0;
+        PARAM_NOW = 1;
+        PARAM_CURRENT_DATE = 2;
+        PARAM_CURRENT_DATETIME = 3;
+        PARAM_CURRENT_TIMESTAMP = 4;
+        PARAM_RANDOM_NUMBER = 5;
+        PARAM_RANDOM = 6;
+        PARAM_RANDOM_UUID = 7;
+    };
+
+    EType Type = 1;
+}
+
 message TKqpPhyTxResultBinding {
     uint32 TxIndex = 1;
     uint32 ResultIndex = 2;
@@ -36,7 +36,7 @@ message TKqpPhyParamBinding {
     oneof Type {
         TKqpPhyExternalBinding ExternalBinding = 2;
         TKqpPhyTxResultBinding TxResultBinding = 3;
-        TKqpPhyInternalBinding InternalBinding = 4; 
+        TKqpPhyInternalBinding InternalBinding = 4;
     }
 }
 

@@ -158,9 +158,9 @@ public:
     virtual NThreading::TFuture<TExecPhysicalResult> ExecuteScanQuery(TExecPhysicalRequest&& request,
         const NActors::TActorId& target) = 0;
 
-    virtual NThreading::TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request, 
-        const NActors::TActorId& target) = 0; 
- 
+    virtual NThreading::TFuture<TExecPhysicalResult> ExecutePure(TExecPhysicalRequest&& request,
+        const NActors::TActorId& target) = 0;
+
     /* Scripting */
     virtual NThreading::TFuture<TQueryResult> ExplainDataQueryAst(const TString& cluster, const TString& query) = 0;
 

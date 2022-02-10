@@ -75,13 +75,13 @@ public:
 
         auto& compileResult = *DeferredResponse->CompileResult;
 
-        LOG_INFO_S(ctx, NKikimrServices::KQP_COMPILE_REQUEST, "Recompiling query due to scheme error" 
+        LOG_INFO_S(ctx, NKikimrServices::KQP_COMPILE_REQUEST, "Recompiling query due to scheme error"
             << ", self: " << ctx.SelfID
             << ", queryUid: " << compileResult.Uid);
 
-        auto recompileEv = MakeHolder<TEvKqp::TEvRecompileRequest>(UserToken, compileResult.Uid, compileResult.Query, 
+        auto recompileEv = MakeHolder<TEvKqp::TEvRecompileRequest>(UserToken, compileResult.Uid, compileResult.Query,
             Deadline, DbCounters);
-        ctx.Send(MakeKqpCompileServiceID(ctx.SelfID.NodeId()), recompileEv.Release()); 
+        ctx.Send(MakeKqpCompileServiceID(ctx.SelfID.NodeId()), recompileEv.Release());
 
         DeferredResponse.Reset();
     }

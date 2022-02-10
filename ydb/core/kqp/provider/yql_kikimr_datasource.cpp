@@ -55,7 +55,7 @@ private:
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table:
             case TKikimrKey::Type::TableScheme: {
-                auto& table = SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath()); 
+                auto& table = SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
 
                 if (key.GetKeyType() == TKikimrKey::Type::TableScheme) {
                     table.RequireStats();
@@ -171,7 +171,7 @@ public:
                 YQL_ENSURE(res.Metadata->Indexes.size() == res.Metadata->SecondaryGlobalIndexMetadata.size());
                 for (const auto& indexMeta : res.Metadata->SecondaryGlobalIndexMetadata) {
                     YQL_ENSURE(indexMeta);
-                    auto& desc = SessionCtx->Tables().GetOrAddTable(indexMeta->Cluster, SessionCtx->GetDatabase(), indexMeta->Name); 
+                    auto& desc = SessionCtx->Tables().GetOrAddTable(indexMeta->Cluster, SessionCtx->GetDatabase(), indexMeta->Name);
                     desc.Metadata = indexMeta;
                     desc.Load(ctx, sysColumnsEnabled);
                 }
@@ -281,7 +281,7 @@ public:
         , ConfigurationTransformer(new TKikimrConfigurationTransformer(sessionCtx, types))
         , IntentDeterminationTransformer(new TKiSourceIntentDeterminationTransformer(sessionCtx))
         , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx))
-        , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types)) 
+        , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types))
         , CallableExecutionTransformer(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx))
 
     {

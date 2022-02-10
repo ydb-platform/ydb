@@ -5758,19 +5758,19 @@ struct TPeepHoleRules {
         {"PgCall", &ExpandPgCall},
     };
 
-    static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> SimplifyStageRulesInit = { 
+    static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> SimplifyStageRulesInit = {
         {"Map", &OptimizeMap<false, EnableNewOptimizers>},
         {"OrderedMap", &OptimizeMap<true, EnableNewOptimizers>},
         {"FlatMap", &ExpandFlatMap<false, EnableNewOptimizers>},
         {"OrderedFlatMap", &ExpandFlatMap<true, EnableNewOptimizers>},
-        {"ListIf", &ExpandContainerIf<false, true>}, 
-        {"OptionalIf", &ExpandContainerIf<false, false>}, 
-        {"FlatListIf", &ExpandContainerIf<true, true>}, 
-        {"FlatOptionalIf", &ExpandContainerIf<true, false>}, 
-        {"IfPresent", &OptimizeIfPresent<false, EnableNewOptimizers>} 
-    }; 
- 
-    static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> FinalStageRulesInit = { 
+        {"ListIf", &ExpandContainerIf<false, true>},
+        {"OptionalIf", &ExpandContainerIf<false, false>},
+        {"FlatListIf", &ExpandContainerIf<true, true>},
+        {"FlatOptionalIf", &ExpandContainerIf<true, false>},
+        {"IfPresent", &OptimizeIfPresent<false, EnableNewOptimizers>}
+    };
+
+    static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> FinalStageRulesInit = {
         {"Take", &OptimizeTake<EnableNewOptimizers>},
         {"Skip", &OptimizeSkip},
         {"Likely", &LikelyExclude},
@@ -5830,7 +5830,7 @@ struct TPeepHoleRules {
     TPeepHoleRules()
         : CommonStageRules(CommonStageRulesInit)
         , FinalStageRules(FinalStageRulesInit)
-        , SimplifyStageRules(SimplifyStageRulesInit) 
+        , SimplifyStageRules(SimplifyStageRulesInit)
         , FinalStageNonDetRules(FinalStageNonDetRulesInit)
     {}
 
@@ -5840,22 +5840,22 @@ struct TPeepHoleRules {
 
     const TPeepHoleOptimizerMap CommonStageRules;
     const TPeepHoleOptimizerMap FinalStageRules;
-    const TPeepHoleOptimizerMap SimplifyStageRules; 
+    const TPeepHoleOptimizerMap SimplifyStageRules;
     const TNonDeterministicOptimizerMap FinalStageNonDetRules;
 };
 
 template <bool EnableNewOptimizers>
 THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationContext& types,
-    IGraphTransformer* typeAnnotator, const TPeepholeSettings& peepholeSettings) 
+    IGraphTransformer* typeAnnotator, const TPeepholeSettings& peepholeSettings)
 {
     TTransformationPipeline pipeline(&types);
-    if (peepholeSettings.CommonConfig) { 
-        peepholeSettings.CommonConfig->AfterCreate(&pipeline); 
+    if (peepholeSettings.CommonConfig) {
+        peepholeSettings.CommonConfig->AfterCreate(&pipeline);
     }
 
     AddStandardTransformers(pipeline, typeAnnotator);
-    if (peepholeSettings.CommonConfig) { 
-        peepholeSettings.CommonConfig->AfterTypeAnnotation(&pipeline); 
+    if (peepholeSettings.CommonConfig) {
+        peepholeSettings.CommonConfig->AfterTypeAnnotation(&pipeline);
     }
 
     auto issueCode = TIssuesIds::CORE_EXEC;
@@ -5869,8 +5869,8 @@ THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationC
         "PeepHoleCommon",
         issueCode);
 
-    if (peepholeSettings.CommonConfig) { 
-        peepholeSettings.CommonConfig->AfterOptimize(&pipeline); 
+    if (peepholeSettings.CommonConfig) {
+        peepholeSettings.CommonConfig->AfterOptimize(&pipeline);
     }
 
     return pipeline.BuildWithNoArgChecks(false);
@@ -5878,43 +5878,43 @@ THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationC
 
 template <bool EnableNewOptimizers>
 THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationContext& types,
-                                                               IGraphTransformer* typeAnnotator, 
-                                                               bool* hasNonDeterministicFunctions, 
-                                                               const TPeepholeSettings& peepholeSettings) 
+                                                               IGraphTransformer* typeAnnotator,
+                                                               bool* hasNonDeterministicFunctions,
+                                                               const TPeepholeSettings& peepholeSettings)
 {
     TTransformationPipeline pipeline(&types);
-    if (peepholeSettings.FinalConfig) { 
-        peepholeSettings.FinalConfig->AfterCreate(&pipeline); 
+    if (peepholeSettings.FinalConfig) {
+        peepholeSettings.FinalConfig->AfterCreate(&pipeline);
     }
 
     AddStandardTransformers(pipeline, typeAnnotator);
-    if (peepholeSettings.FinalConfig) { 
-        peepholeSettings.FinalConfig->AfterTypeAnnotation(&pipeline); 
+    if (peepholeSettings.FinalConfig) {
+        peepholeSettings.FinalConfig->AfterTypeAnnotation(&pipeline);
     }
 
     auto issueCode = TIssuesIds::CORE_EXEC;
 
     pipeline.Add(
         CreateFunctorTransformer(
-            [&types, hasNonDeterministicFunctions, withFinalRules = peepholeSettings.WithFinalStageRules, 
-            withNonDeterministicRules = peepholeSettings.WithNonDeterministicRules](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
-                auto stageRules = TPeepHoleRules<EnableNewOptimizers>::Instance().SimplifyStageRules; 
-                if (withFinalRules) { 
-                    const auto& finalRules = TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageRules; 
-                    stageRules.insert(finalRules.begin(), finalRules.end()); 
-                } 
- 
-                const auto& nonDetStageRules = withNonDeterministicRules ? 
-                    TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageNonDetRules : TNonDeterministicOptimizerMap{}; 
- 
-                return PeepHoleFinalStage(input, output, ctx, types, hasNonDeterministicFunctions, stageRules, nonDetStageRules); 
+            [&types, hasNonDeterministicFunctions, withFinalRules = peepholeSettings.WithFinalStageRules,
+            withNonDeterministicRules = peepholeSettings.WithNonDeterministicRules](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                auto stageRules = TPeepHoleRules<EnableNewOptimizers>::Instance().SimplifyStageRules;
+                if (withFinalRules) {
+                    const auto& finalRules = TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageRules;
+                    stageRules.insert(finalRules.begin(), finalRules.end());
+                }
+
+                const auto& nonDetStageRules = withNonDeterministicRules ?
+                    TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageNonDetRules : TNonDeterministicOptimizerMap{};
+
+                return PeepHoleFinalStage(input, output, ctx, types, hasNonDeterministicFunctions, stageRules, nonDetStageRules);
             }
         ),
         "PeepHoleFinal",
         issueCode);
 
-    if (peepholeSettings.FinalConfig) { 
-        peepholeSettings.FinalConfig->AfterOptimize(&pipeline); 
+    if (peepholeSettings.FinalConfig) {
+        peepholeSettings.FinalConfig->AfterOptimize(&pipeline);
     }
 
     return pipeline.BuildWithNoArgChecks(false);
@@ -5946,20 +5946,20 @@ IGraphTransformer::TStatus DoPeepHoleOptimizeNode(const TExprNode::TPtr& input, 
 template <bool EnableNewOptimizers>
 IGraphTransformer::TStatus PeepHoleOptimizeNode(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
-    bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings) 
+    bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings)
 {
     hasNonDeterministicFunctions = false;
-    const auto commonTransformer = CreatePeepHoleCommonStageTransformer<EnableNewOptimizers>(types, typeAnnotator, peepholeSettings); 
-    const auto finalTransformer = CreatePeepHoleFinalStageTransformer<EnableNewOptimizers>(types, typeAnnotator, 
-        &hasNonDeterministicFunctions, peepholeSettings); 
+    const auto commonTransformer = CreatePeepHoleCommonStageTransformer<EnableNewOptimizers>(types, typeAnnotator, peepholeSettings);
+    const auto finalTransformer = CreatePeepHoleFinalStageTransformer<EnableNewOptimizers>(types, typeAnnotator,
+        &hasNonDeterministicFunctions, peepholeSettings);
     return DoPeepHoleOptimizeNode(input, output, ctx, *commonTransformer, *finalTransformer);
 }
 
 THolder<IGraphTransformer> MakePeepholeOptimization(TTypeAnnotationContextPtr typeAnnotationContext, const IPipelineConfigurator* config) {
-    TPeepholeSettings peepholeSettings; 
-    peepholeSettings.CommonConfig = peepholeSettings.FinalConfig = config; 
-    auto commonTransformer = CreatePeepHoleCommonStageTransformer<true>(*typeAnnotationContext, nullptr, peepholeSettings); 
-    auto finalTransformer = CreatePeepHoleFinalStageTransformer<true>(*typeAnnotationContext, nullptr, nullptr, peepholeSettings); 
+    TPeepholeSettings peepholeSettings;
+    peepholeSettings.CommonConfig = peepholeSettings.FinalConfig = config;
+    auto commonTransformer = CreatePeepHoleCommonStageTransformer<true>(*typeAnnotationContext, nullptr, peepholeSettings);
+    auto finalTransformer = CreatePeepHoleFinalStageTransformer<true>(*typeAnnotationContext, nullptr, nullptr, peepholeSettings);
     return CreateFunctorTransformer(
             [common = std::move(commonTransformer), final = std::move(finalTransformer)](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                 return DoPeepHoleOptimizeNode(input, output, ctx, *common, *final);
@@ -5968,9 +5968,9 @@ THolder<IGraphTransformer> MakePeepholeOptimization(TTypeAnnotationContextPtr ty
 
 template IGraphTransformer::TStatus PeepHoleOptimizeNode<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
-    bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings); 
+    bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings);
 
 template IGraphTransformer::TStatus PeepHoleOptimizeNode<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, IGraphTransformer* typeAnnotator,
-    bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings); 
+    bool& hasNonDeterministicFunctions, const TPeepholeSettings& peepholeSettings);
 }

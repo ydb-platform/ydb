@@ -43,15 +43,15 @@ protected:
     void ReportCloseSession(ui64 requestSize);
     void ReportQueryRequest(const NKikimrKqp::TQueryRequest& request);
 
-    void ReportQueryWithRangeScan(); 
-    void ReportQueryWithFullScan(); 
-    void ReportQueryAffectedShards(ui64 shardsCount); 
-    void ReportQueryReadSets(ui64 readSetsCount); 
-    void ReportQueryReadBytes(ui64 bytesCount); 
-    void ReportQueryReadRows(ui64 rowsCount); 
-    void ReportQueryMaxShardReplySize(ui64 replySize); 
-    void ReportQueryMaxShardProgramSize(ui64 programSize); 
- 
+    void ReportQueryWithRangeScan();
+    void ReportQueryWithFullScan();
+    void ReportQueryAffectedShards(ui64 shardsCount);
+    void ReportQueryReadSets(ui64 readSetsCount);
+    void ReportQueryReadBytes(ui64 bytesCount);
+    void ReportQueryReadRows(ui64 rowsCount);
+    void ReportQueryMaxShardReplySize(ui64 replySize);
+    void ReportQueryMaxShardProgramSize(ui64 programSize);
+
     void ReportResponseStatus(ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus);
     void ReportResultsBytes(ui64 resultsSize);
 
@@ -90,7 +90,7 @@ protected:
     void ReportCompileRequestRejected();
     void ReportCompileRequestTimeout();
     void ReportCompileDurations(TDuration duration, TDuration cpuTime);
-    void ReportRecompileRequestGet(); 
+    void ReportRecompileRequestGet();
     NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
 
 protected:
@@ -119,15 +119,15 @@ protected:
     THashMap<NKikimrKqp::EQueryType, NMonitoring::TDynamicCounters::TCounterPtr> QueryTypes;
     NMonitoring::TDynamicCounters::TCounterPtr OtherQueryTypes;
 
-    NMonitoring::TDynamicCounters::TCounterPtr QueriesWithRangeScan; 
-    NMonitoring::TDynamicCounters::TCounterPtr QueriesWithFullScan; 
-    NMonitoring::THistogramPtr QueryAffectedShardsCount; 
-    NMonitoring::THistogramPtr QueryReadSetsCount; 
-    NMonitoring::THistogramPtr QueryReadBytes; 
-    NMonitoring::THistogramPtr QueryReadRows; 
-    NMonitoring::THistogramPtr QueryMaxShardReplySize; 
-    NMonitoring::THistogramPtr QueryMaxShardProgramSize; 
- 
+    NMonitoring::TDynamicCounters::TCounterPtr QueriesWithRangeScan;
+    NMonitoring::TDynamicCounters::TCounterPtr QueriesWithFullScan;
+    NMonitoring::THistogramPtr QueryAffectedShardsCount;
+    NMonitoring::THistogramPtr QueryReadSetsCount;
+    NMonitoring::THistogramPtr QueryReadBytes;
+    NMonitoring::THistogramPtr QueryReadRows;
+    NMonitoring::THistogramPtr QueryMaxShardReplySize;
+    NMonitoring::THistogramPtr QueryMaxShardProgramSize;
+
     // Request latency
     THashMap<NKikimrKqp::EQueryAction, NMonitoring::THistogramPtr> QueryLatencies;
     NMonitoring::THistogramPtr YdbQueryExecuteLatency;
@@ -178,7 +178,7 @@ protected:
     NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsInvalidate;
     NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsRejected;
     NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsTimeout;
-    NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsRecompile; 
+    NMonitoring::TDynamicCounters::TCounterPtr CompileRequestsRecompile;
     NMonitoring::TDynamicCounters::TCounterPtr CompileTotal;
     NMonitoring::TDynamicCounters::TCounterPtr CompileErrors;
     NMonitoring::TDynamicCounters::TCounterPtr CompileActive;
@@ -253,7 +253,7 @@ public:
     void ReportResponseStatus(TKqpDbCountersPtr dbCounters, ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus);
     void ReportResultsBytes(TKqpDbCountersPtr dbCounters, ui64 resultsSize);
     void ReportIssues(TKqpDbCountersPtr dbCounters, const Ydb::Issue::IssueMessage& issue);
- 
+
     void ReportQueryWithRangeScan(TKqpDbCountersPtr dbCounters);
     void ReportQueryWithFullScan(TKqpDbCountersPtr dbCounters);
     void ReportQueryAffectedShards(TKqpDbCountersPtr dbCounters, ui64 shardsCount);
@@ -300,9 +300,9 @@ public:
     void ReportCompileDurations(TKqpDbCountersPtr dbCounters, TDuration duration, TDuration cpuTime);
     void ReportRecompileRequestGet(TKqpDbCountersPtr dbCounters);
 
-    const NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const; 
+    const NMonitoring::TDynamicCounters::TCounterPtr RecompileRequestGet() const;
     NMonitoring::TDynamicCounterPtr GetQueryReplayCounters() const;
- 
+
     NMonitoring::TDynamicCounters::TCounterPtr GetQueryTypeCounter(NKikimrKqp::EQueryType queryType);
 
     TKqpDbCountersPtr GetDbCounters(const TString& database);

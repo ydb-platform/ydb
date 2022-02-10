@@ -24,13 +24,13 @@ public:
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
     void PrintResponse(NScripting::TExecuteYqlResult& result);
-    void PrintExplainResult(NScripting::TExplainYqlResult& result); 
+    void PrintExplainResult(NScripting::TExplainYqlResult& result);
 
 private:
     TString CollectStatsMode;
     TString Script;
     TString ScriptFile;
-    bool Explain = false; 
+    bool Explain = false;
 };
 
 }

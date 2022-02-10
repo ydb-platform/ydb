@@ -74,7 +74,7 @@ public:
         ServerSettings->SetKqpSettings(kqpSettings);
         ServerSettings->SetEnableAsyncIndexes(true);
         ServerSettings->SetEnableDataColumnForIndexTable(true);
-        ServerSettings->SetEnableNotNullColumns(true); 
+        ServerSettings->SetEnableNotNullColumns(true);
         ServerSettings->SetEnableSystemViews(TestSettings::EnableSystemViews);
         ServerSettings->SetEnableSchemeTransactionsAtSchemeShard(true);
         ServerSettings->SetEnableYq(enableYq);

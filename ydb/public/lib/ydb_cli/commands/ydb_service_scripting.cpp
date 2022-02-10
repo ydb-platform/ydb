@@ -26,7 +26,7 @@ void TCommandExecuteYqlScript::Config(TConfig& config) {
         .RequiredArgument("[String]").StoreResult(&CollectStatsMode);
     config.Opts->AddLongOption('s', "script", "Text of script to execute").RequiredArgument("[String]").StoreResult(&Script);
     config.Opts->AddLongOption('f', "file", "[Required] Script file").RequiredArgument("PATH").StoreResult(&ScriptFile);
-    config.Opts->AddLongOption("explain", "Explain query").Optional().StoreTrue(&Explain); 
+    config.Opts->AddLongOption("explain", "Explain query").Optional().StoreTrue(&Explain);
     config.Opts->AddLongOption("show-response-metadata", ResponseHeadersHelp).Optional().StoreTrue(&ShowHeaders);
 
     AddParametersOption(config);
@@ -82,37 +82,37 @@ int TCommandExecuteYqlScript::Run(TConfig& config) {
     }
     NScripting::TScriptingClient client(CreateDriver(config));
 
-    if (Explain) { 
-        NScripting::TExplainYqlRequestSettings settings; 
-        settings.Mode(NScripting::ExplainYqlRequestMode::Plan); 
+    if (Explain) {
+        NScripting::TExplainYqlRequestSettings settings;
+        settings.Mode(NScripting::ExplainYqlRequestMode::Plan);
 
-        auto result = client.ExplainYqlScript(Script, settings).GetValueSync(); 
- 
-        ThrowOnError(result); 
-        PrintExplainResult(result); 
+        auto result = client.ExplainYqlScript(Script, settings).GetValueSync();
+
+        ThrowOnError(result);
+        PrintExplainResult(result);
     } else {
-        NScripting::TExecuteYqlRequestSettings settings; 
-        settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, NTable::ECollectQueryStatsMode::None)); 
- 
-        NScripting::TAsyncExecuteYqlResult asyncResult; 
-        if (Parameters.size()) { 
-            auto validateResult = ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate); 
-            asyncResult = client.ExecuteYqlScript( 
-                    Script, 
-                    BuildParams(validateResult.GetParameterTypes(), InputFormat), 
-                    FillSettings(settings) 
-            ); 
-        } else { 
-            asyncResult = client.ExecuteYqlScript( 
-                    Script, 
-                    FillSettings(settings) 
-            ); 
-        } 
-        auto result = asyncResult.GetValueSync(); 
- 
-        ThrowOnError(result); 
-        PrintResponseHeader(result); 
-        PrintResponse(result); 
+        NScripting::TExecuteYqlRequestSettings settings;
+        settings.CollectQueryStats(ParseQueryStatsMode(CollectStatsMode, NTable::ECollectQueryStatsMode::None));
+
+        NScripting::TAsyncExecuteYqlResult asyncResult;
+        if (Parameters.size()) {
+            auto validateResult = ExplainQuery(config, Script, NScripting::ExplainYqlRequestMode::Validate);
+            asyncResult = client.ExecuteYqlScript(
+                    Script,
+                    BuildParams(validateResult.GetParameterTypes(), InputFormat),
+                    FillSettings(settings)
+            );
+        } else {
+            asyncResult = client.ExecuteYqlScript(
+                    Script,
+                    FillSettings(settings)
+            );
+        }
+        auto result = asyncResult.GetValueSync();
+
+        ThrowOnError(result);
+        PrintResponseHeader(result);
+        PrintResponse(result);
     }
 
     return EXIT_SUCCESS;
@@ -136,10 +136,10 @@ void TCommandExecuteYqlScript::PrintResponse(NScripting::TExecuteYqlResult& resu
     }
 }
 
-void TCommandExecuteYqlScript::PrintExplainResult(NScripting::TExplainYqlResult& result) { 
-    TQueryPlanPrinter queryPlanPrinter(OutputFormat); 
-    queryPlanPrinter.Print(result.GetPlan()); 
+void TCommandExecuteYqlScript::PrintExplainResult(NScripting::TExplainYqlResult& result) {
+    TQueryPlanPrinter queryPlanPrinter(OutputFormat);
+    queryPlanPrinter.Print(result.GetPlan());
 }
- 
+
 }
-} 
+}

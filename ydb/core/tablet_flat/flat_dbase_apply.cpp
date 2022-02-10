@@ -32,7 +32,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         }
 
         changes = AddColumn(table, delta.GetColumnName(), delta.GetColumnId(),
-                     delta.GetColumnType(), delta.GetNotNull(), null); 
+                     delta.GetColumnType(), delta.GetNotNull(), null);
     } else if (action == TAlterRecord::DropColumn) {
         changes = DropColumn(table, delta.GetColumnId());
     } else if (action == TAlterRecord::AddColumnToKey) {
@@ -175,12 +175,12 @@ bool TSchemeModifier::DropTable(ui32 id)
     return false;
 }
 
-bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, TCell null) 
+bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, TCell null)
 {
     auto *table = Table(tid);
     auto itName = table->ColumnNames.find(name);
     bool haveName = itName != table->ColumnNames.end();
-    auto it = table->Columns.emplace(id, TColumn(name, id, type, notNull)); 
+    auto it = table->Columns.emplace(id, TColumn(name, id, type, notNull));
 
     if (it.second)
         it.first->second.SetDefault(null);

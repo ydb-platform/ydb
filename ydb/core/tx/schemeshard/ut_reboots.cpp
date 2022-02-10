@@ -599,61 +599,61 @@ Y_UNIT_TEST_SUITE(TConsistentOpsWithReboots) {
             }
         });
     }
- 
-    Y_UNIT_TEST(CreateNotNullColumnTableWithReboots) { 
-        TTestWithReboots t; 
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) { 
-            TestMkDir(runtime, ++t.TxId, "/MyRoot", "DirB"); 
-            TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirB", R"( 
-                Name: "TestNotNullTable" 
-                Columns { Name: "key" Type: "Uint64" NotNull: true} 
-                Columns { Name: "value" Type: "Utf8" NotNull: true} 
-                KeyColumnNames: ["key"] 
-            )"); 
- 
-            t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId}); 
- 
-            { 
-                TInactiveZone inactive(activeZone); 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"), 
-                                   { NLs::Finished, 
-                                     NLs::ChildrenCount(1) }); 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/TestNotNullTable"), 
-                                   { NLs::Finished, 
-                                     NLs::PathExist }); 
-            } 
-        }); 
-    } 
- 
-    Y_UNIT_TEST(DropNotNullColumnTableWithReboots) { 
-        TTestWithReboots t; 
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) { 
-            { 
-                TInactiveZone inactive(activeZone); 
-                TestMkDir(runtime, ++t.TxId, "/MyRoot", "DirB"); 
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirB", R"( 
-                    Name: "TestNotNullTable" 
-                    Columns { Name: "key" Type: "Uint64" NotNull: true} 
-                    Columns { Name: "value" Type: "Utf8" NotNull: true} 
-                    KeyColumnNames: ["key"] 
-                )"); 
-                t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId}); 
-            } 
- 
-            TestDropTable(runtime, ++t.TxId, "/MyRoot/DirB", "TestNotNullTable"); 
-            t.TestEnv->TestWaitNotification(runtime, t.TxId); 
+
+    Y_UNIT_TEST(CreateNotNullColumnTableWithReboots) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TestMkDir(runtime, ++t.TxId, "/MyRoot", "DirB");
+            TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirB", R"(
+                Name: "TestNotNullTable"
+                Columns { Name: "key" Type: "Uint64" NotNull: true}
+                Columns { Name: "value" Type: "Utf8" NotNull: true}
+                KeyColumnNames: ["key"]
+            )");
+
+            t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
+                                   { NLs::Finished,
+                                     NLs::ChildrenCount(1) });
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/TestNotNullTable"),
+                                   { NLs::Finished,
+                                     NLs::PathExist });
+            }
+        });
+    }
+
+    Y_UNIT_TEST(DropNotNullColumnTableWithReboots) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", "DirB");
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot/DirB", R"(
+                    Name: "TestNotNullTable"
+                    Columns { Name: "key" Type: "Uint64" NotNull: true}
+                    Columns { Name: "value" Type: "Utf8" NotNull: true}
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});
+            }
+
+            TestDropTable(runtime, ++t.TxId, "/MyRoot/DirB", "TestNotNullTable");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
             t.TestEnv->TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets + 10});
- 
-            { 
-                TInactiveZone inactive(activeZone); 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"), 
-                                   { NLs::Finished, 
-                                     NLs::ChildrenCount(0) }); 
-                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/TestNotNullTable"), 
-                                   { NLs::PathNotExist }); 
-            } 
-        }); 
-    } 
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB"),
+                                   { NLs::Finished,
+                                     NLs::ChildrenCount(0) });
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/DirB/TestNotNullTable"),
+                                   { NLs::PathNotExist });
+            }
+        });
+    }
 }
 
 Y_UNIT_TEST_SUITE(TSolomonReboots) {

@@ -1002,7 +1002,7 @@ private:
 
 class TKqpHost : public IKqpHost {
 public:
-    TKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster, const TString& database, 
+    TKqpHost(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster, const TString& database,
         TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
         const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges)
         : Gateway(gateway)
@@ -1026,10 +1026,10 @@ public:
             FuncRegistry = FuncRegistryHolder.Get();
         }
 
-        SessionCtx->SetDatabase(database); 
-        SessionCtx->QueryPtr()->TimeProvider = TAppData::TimeProvider; 
-        SessionCtx->QueryPtr()->RandomProvider = TAppData::RandomProvider; 
- 
+        SessionCtx->SetDatabase(database);
+        SessionCtx->QueryPtr()->TimeProvider = TAppData::TimeProvider;
+        SessionCtx->QueryPtr()->RandomProvider = TAppData::RandomProvider;
+
         KqpRunner = CreateKqpRunner(Gateway, Cluster, TypesCtx, SessionCtx, *FuncRegistry);
 
         ExprCtx->NodesAllocationLimit = SessionCtx->Config()._KqpExprNodesAllocationLimit.Get().GetRef();
@@ -2255,10 +2255,10 @@ TKqpTransactionInfo TKqpTransactionContext::GetInfo() const {
 }
 
 TIntrusivePtr<IKqpHost> CreateKqpHost(TIntrusivePtr<IKqpGateway> gateway,
-    const TString& cluster, const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver, 
+    const TString& cluster, const TString& database, TKikimrConfiguration::TPtr config, IModuleResolver::TPtr moduleResolver,
     const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry, bool keepConfigChanges)
 {
-    return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, funcRegistry, 
+    return MakeIntrusive<TKqpHost>(gateway, cluster, database, config, moduleResolver, funcRegistry,
         keepConfigChanges);
 }
 

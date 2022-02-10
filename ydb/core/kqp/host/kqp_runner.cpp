@@ -188,10 +188,10 @@ public:
             .Add(CreateKqpFinalizeTransformer(Gateway, Cluster, TxState, TransformCtx), "Finalize")
             .Build(false);
 
-        PreparedExplainTransformer = TTransformationPipeline(typesCtx) 
-            .Add(CreateKqpExplainPreparedTransformer(Gateway, Cluster, TransformCtx), "ExplainQuery") 
-            .Build(false); 
- 
+        PreparedExplainTransformer = TTransformationPipeline(typesCtx)
+            .Add(CreateKqpExplainPreparedTransformer(Gateway, Cluster, TransformCtx), "ExplainQuery")
+            .Build(false);
+
         PhysicalOptimizeTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(TLogExprTransformer::Sync("PhysicalOptimizeTransformer", logComp, logLevel), "LogPhysicalOptimize")
@@ -225,18 +225,18 @@ public:
                 "BuildPhysicalTxs")
             .Build(false);
 
-        PhysicalPeepholeTransformer = TTransformationPipeline(typesCtx) 
-            .AddServiceTransformers() 
-            .Add(TLogExprTransformer::Sync("PhysicalPeepholeTransformer", logComp, logLevel), "LogPhysicalPeephole") 
-            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config)) 
-            .AddPostTypeAnnotation() 
-            .Add( 
-                CreateKqpTxsPeepholeTransformer( 
-                    CreateTypeAnnotationTransformer( 
-                        CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config), 
-                    *typesCtx), *typesCtx, Config), "Peephole") 
-            .Build(false); 
- 
+        PhysicalPeepholeTransformer = TTransformationPipeline(typesCtx)
+            .AddServiceTransformers()
+            .Add(TLogExprTransformer::Sync("PhysicalPeepholeTransformer", logComp, logLevel), "LogPhysicalPeephole")
+            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
+            .AddPostTypeAnnotation()
+            .Add(
+                CreateKqpTxsPeepholeTransformer(
+                    CreateTypeAnnotationTransformer(
+                        CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config),
+                    *typesCtx), *typesCtx, Config), "Peephole")
+            .Build(false);
+
         PhysicalRunQueryTransformer = TTransformationPipeline(typesCtx)
             .Add(CreateKqpAcquireMvccSnapshotTransformer(Gateway, TxState, TransformCtx, true), "AcquireMvccSnapshot")
             .Add(CreateKqpExecutePhysicalDataTransformer(Gateway, Cluster, TxState, TransformCtx), "ExecutePhysical")
@@ -438,22 +438,22 @@ private:
 
         TExprNode::TPtr finalProgram;
         bool hasNonDeterministicFunctions;
-        TPeepholeSettings peepholeSettings; 
-        peepholeSettings.WithNonDeterministicRules = false; 
+        TPeepholeSettings peepholeSettings;
+        peepholeSettings.WithNonDeterministicRules = false;
         status = PeepHoleOptimizeNode<false>(optimizedProgram, finalProgram, ctx, TypesCtx, KqlTypeAnnTransformer.Get(),
-            hasNonDeterministicFunctions, peepholeSettings); 
+            hasNonDeterministicFunctions, peepholeSettings);
         if (status != IGraphTransformer::TStatus::Ok) {
             ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), "Failed to peephole optimize KQL query."));
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
 
-        status = ReplaceNonDetFunctionsWithParams(finalProgram, ctx); 
-        if (status != IGraphTransformer::TStatus::Ok) { 
-            ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()), 
-                "Failed to replace non deterministic functions with params for KQL query.")); 
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues())); 
-        } 
- 
+        status = ReplaceNonDetFunctionsWithParams(finalProgram, ctx);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            ctx.AddError(TIssue(ctx.GetPosition(dataQuery.Pos()),
+                "Failed to replace non deterministic functions with params for KQL query."));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
+        }
+
         KqlPrepareTransformer->Rewind();
 
         NKikimrKqp::TKqlSettings kqlSettings;
@@ -540,19 +540,19 @@ private:
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
 
-        PhysicalPeepholeTransformer->Rewind(); 
-        auto transformedQuery = builtQuery; 
-        status = InstantTransform(*PhysicalPeepholeTransformer, transformedQuery, ctx); 
-        if (status != IGraphTransformer::TStatus::Ok) { 
-            ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed peephole.")); 
-            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>( 
-                ctx.IssueManager.GetIssues())); 
-        } 
- 
+        PhysicalPeepholeTransformer->Rewind();
+        auto transformedQuery = builtQuery;
+        status = InstantTransform(*PhysicalPeepholeTransformer, transformedQuery, ctx);
+        if (status != IGraphTransformer::TStatus::Ok) {
+            ctx.AddError(TIssue(ctx.GetPosition(query->Pos()), "Failed peephole."));
+            return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(
+                ctx.IssueManager.GetIssues()));
+        }
+
         YQL_CLOG(INFO, ProviderKqp) << "Physical KQL query: " << KqpExprToPrettyString(*builtQuery, ctx);
 
         auto& preparedQuery = *TransformCtx->QueryCtx->PreparingQuery;
-        TKqpPhysicalQuery physicalQuery(transformedQuery); 
+        TKqpPhysicalQuery physicalQuery(transformedQuery);
         auto compiler = CreateKqpQueryCompiler(Cluster, OptimizeCtx->Tables, FuncRegistry);
         auto ret = compiler->CompilePhysicalQuery(physicalQuery, dataQuery.Operations(),
             *preparedQuery.MutablePhysicalQuery(), ctx);
@@ -562,8 +562,8 @@ private:
         }
         preparedQuery.SetVersion(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1);
         // TODO(sk): only on stats mode or if explain-only
-        PreparedExplainTransformer->Rewind(); 
-        return MakeIntrusive<TPhysicalAsyncRunResult>(builtQuery, ctx, *PreparedExplainTransformer, *TransformCtx); 
+        PreparedExplainTransformer->Rewind();
+        return MakeIntrusive<TPhysicalAsyncRunResult>(builtQuery, ctx, *PreparedExplainTransformer, *TransformCtx);
     }
 
     TIntrusivePtr<TAsyncQueryResult> ExecutePhysicalDataQuery(const TExprNode::TPtr& world,
@@ -631,11 +631,11 @@ private:
     TAutoPtr<IGraphTransformer> KqlOptimizeTransformer;
     TAutoPtr<IGraphTransformer> KqlPrepareTransformer;
     TAutoPtr<IGraphTransformer> PreparedRunTransformer;
-    TAutoPtr<IGraphTransformer> PreparedExplainTransformer; 
+    TAutoPtr<IGraphTransformer> PreparedExplainTransformer;
 
     TAutoPtr<IGraphTransformer> PhysicalOptimizeTransformer;
     TAutoPtr<IGraphTransformer> PhysicalBuildQueryTransformer;
-    TAutoPtr<IGraphTransformer> PhysicalPeepholeTransformer; 
+    TAutoPtr<IGraphTransformer> PhysicalPeepholeTransformer;
     TAutoPtr<IGraphTransformer> PhysicalRunQueryTransformer;
     TAutoPtr<IGraphTransformer> ScanRunQueryTransformer;
 };

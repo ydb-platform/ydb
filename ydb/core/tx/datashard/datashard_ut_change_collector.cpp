@@ -344,8 +344,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     TShardedTableOptions SimpleTable() {
         return TShardedTableOptions()
             .Columns({
-                {"pkey", "Uint32", true, false}, 
-                {"ikey", "Uint32", false, false}, 
+                {"pkey", "Uint32", true, false},
+                {"ikey", "Uint32", false, false},
             })
             .Indexes({
                 {"by_ikey", {"ikey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
@@ -411,9 +411,9 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     TShardedTableOptions MultiIndexedTable() {
         return TShardedTableOptions()
             .Columns({
-                {"pkey", "Uint32", true, false}, 
-                {"ikey1", "Uint32", false, false}, 
-                {"ikey2", "Uint32", false, false}, 
+                {"pkey", "Uint32", true, false},
+                {"ikey1", "Uint32", false, false},
+                {"ikey2", "Uint32", false, false},
             })
             .Indexes({
                 {"by_ikey1", {"ikey1"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
@@ -465,8 +465,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     TShardedTableOptions IndexedPrimaryKey() {
         return TShardedTableOptions()
             .Columns({
-                {"pkey", "Uint32", true, false}, 
-                {"ikey", "Uint32", false, false}, 
+                {"pkey", "Uint32", true, false},
+                {"ikey", "Uint32", false, false},
             })
             .Indexes({
                 {"by_ikey_pkey", {"ikey", "pkey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
@@ -494,9 +494,9 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
     TShardedTableOptions CoveredIndex() {
         return TShardedTableOptions()
             .Columns({
-                {"pkey", "Uint32", true, false}, 
-                {"ikey", "Uint32", false, false}, 
-                {"value", "Uint32", false, false}, 
+                {"pkey", "Uint32", true, false},
+                {"ikey", "Uint32", false, false},
+                {"value", "Uint32", false, false},
             })
             .Indexes({
                 {"by_ikey", {"ikey"}, {"value"}, NKikimrSchemeOp::EIndexTypeGlobalAsync},
@@ -637,8 +637,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     TShardedTableOptions SimpleTable() {
         return TShardedTableOptions()
             .Columns({
-                {"key", "Uint32", true, false}, 
-                {"value", "Uint32", false, false}, 
+                {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
             });
     }
 
@@ -743,8 +743,8 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
     TShardedTableOptions IndexedTable() {
         return TShardedTableOptions()
             .Columns({
-                {"pkey", "Uint32", true, false}, 
-                {"ikey", "Uint32", false, false}, 
+                {"pkey", "Uint32", true, false},
+                {"ikey", "Uint32", false, false},
             })
             .Indexes({
                 {"by_ikey", {"ikey"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},

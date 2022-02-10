@@ -181,17 +181,17 @@ struct TKikimrColumnMetadata {
     TString Name;
     ui32 Id = 0;
     TString Type;
-    bool NotNull = false; 
+    bool NotNull = false;
     ui32 TypeId = 0;
     TVector<TString> Families;
 
     TKikimrColumnMetadata() = default;
 
-    TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull, ui32 typeId = 0) 
+    TKikimrColumnMetadata(const TString& name, ui32 id, const TString& type, bool notNull, ui32 typeId = 0)
         : Name(name)
         , Id(id)
         , Type(type)
-        , NotNull(notNull) 
+        , NotNull(notNull)
         , TypeId(typeId)
     {}
 
@@ -199,7 +199,7 @@ struct TKikimrColumnMetadata {
         : Name(message->GetName())
         , Id(message->GetId())
         , Type(message->GetType())
-        , NotNull(message->GetNotNull()) 
+        , NotNull(message->GetNotNull())
         , TypeId(message->GetTypeId())
         , Families(message->GetFamily().begin(), message->GetFamily().end())
     {}
@@ -208,7 +208,7 @@ struct TKikimrColumnMetadata {
         message->SetName(Name);
         message->SetId(Id);
         message->SetType(Type);
-        message->SetNotNull(NotNull); 
+        message->SetNotNull(NotNull);
         message->SetTypeId(TypeId);
         for(auto& family: Families) {
             message->AddFamily(family);
@@ -216,12 +216,12 @@ struct TKikimrColumnMetadata {
     }
 
     bool IsSameScheme(const TKikimrColumnMetadata& other) const {
-        return Name == other.Name && Type == other.Type && NotNull == other.NotNull; 
+        return Name == other.Name && Type == other.Type && NotNull == other.NotNull;
     }
- 
-    void SetNotNull() { 
-        NotNull = true; 
-    } 
+
+    void SetNotNull() {
+        NotNull = true;
+    }
 };
 
 struct TKikimrPathId {
@@ -290,7 +290,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
 
     TMap<TString, TKikimrColumnMetadata> Columns;
     TVector<TString> KeyColumnNames;
-    TVector<TString> ColumnOrder; 
+    TVector<TString> ColumnOrder;
 
     // Indexes and SecondaryGlobalIndexMetadata must be in same order
     TVector<TIndexDescription> Indexes;
@@ -644,7 +644,7 @@ public:
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus);
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value);
 
-void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull); 
+void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull);
 bool ConvertReadReplicasSettingsToProto(const TString settings, Ydb::Table::ReadReplicasSettings& proto,
     Ydb::StatusIds::StatusCode& code, TString& error);
 void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::TtlSettings& proto);

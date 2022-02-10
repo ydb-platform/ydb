@@ -28,7 +28,7 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
         for(const auto& it : itTable.second.Columns) {
             const auto &col = it.second;
 
-            delta.AddColumn(table, col.Name, it.first, col.PType, col.NotNull, col.Null); 
+            delta.AddColumn(table, col.Name, it.first, col.PType, col.NotNull, col.Null);
             delta.AddColumnToFamily(table, it.first, col.Family);
         }
 
@@ -85,7 +85,7 @@ TAlter& TAlter::DropTable(ui32 id)
     return *this;
 }
 
-TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null) 
+TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null)
 {
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::AddColumn);
@@ -93,7 +93,7 @@ TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, b
     delta.SetTableId(table);
     delta.SetColumnId(id);
     delta.SetColumnType(type);
-    delta.SetNotNull(notNull); 
+    delta.SetNotNull(notNull);
 
     if (!null.IsNull())
         delta.SetDefault(null.Data(), null.Size());

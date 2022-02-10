@@ -96,7 +96,7 @@ public:
     explicit TEngineHost(NTable::TDatabase& db, TEngineHostCounters& counters,
         const TEngineHostSettings& settings = TEngineHostSettings());
     ui64 GetShardId() const override;
-    const TScheme::TTableInfo* GetTableInfo(const TTableId& tableId) const override; 
+    const TScheme::TTableInfo* GetTableInfo(const TTableId& tableId) const override;
     bool IsReadonly() const override;
     bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override;
     ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const override;

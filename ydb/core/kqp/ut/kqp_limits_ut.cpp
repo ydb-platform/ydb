@@ -373,9 +373,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
         auto dataQuery = prepareResult.GetQuery();
 
-        auto settings = TExecDataQuerySettings() 
-            .OperationTimeout(TDuration::MilliSeconds(500)); 
-        auto result = dataQuery.Execute(TTxControl::BeginTx().CommitTx(), settings).GetValueSync(); 
+        auto settings = TExecDataQuerySettings()
+            .OperationTimeout(TDuration::MilliSeconds(500));
+        auto result = dataQuery.Execute(TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
 
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::TIMEOUT);

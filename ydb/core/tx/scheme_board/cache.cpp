@@ -198,7 +198,7 @@ namespace {
             entry.ListNodeEntry.Drop();
             entry.DomainDescription.Drop();
             entry.Columns.clear();
-            entry.NotNullColumns.clear(); 
+            entry.NotNullColumns.clear();
             entry.Indexes.clear();
             entry.CdcStreams.clear();
             entry.RTMRVolumeInfo.Drop();
@@ -692,7 +692,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
             Columns.clear();
             KeyColumnTypes.clear();
-            NotNullColumns.clear(); 
+            NotNullColumns.clear();
             Indexes.clear();
             CdcStreams.clear();
             Partitioning.clear();
@@ -719,10 +719,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 column.Id = columnDesc.GetId();
                 column.Name = columnDesc.GetName();
                 column.PType = columnDesc.GetTypeId();
- 
-                if (columnDesc.GetNotNull()) { 
-                    NotNullColumns.insert(columnDesc.GetName()); 
-                } 
+
+                if (columnDesc.GetNotNull()) {
+                    NotNullColumns.insert(columnDesc.GetName());
+                }
             }
 
             KeyColumnTypes.resize(tableDesc.KeyColumnIdsSize());
@@ -1667,7 +1667,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             // specific (it's safe to fill them all)
             entry.Self = Self;
             entry.Columns = Columns;
-            entry.NotNullColumns = NotNullColumns; 
+            entry.NotNullColumns = NotNullColumns;
             entry.Indexes = Indexes;
             entry.CdcStreams = CdcStreams;
             entry.DomainDescription = DomainDescription;
@@ -1911,7 +1911,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         // table specific
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         TVector<NScheme::TTypeId> KeyColumnTypes;
-        THashSet<TString> NotNullColumns; 
+        THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<TKeyDesc::TPartitionInfo> Partitioning;

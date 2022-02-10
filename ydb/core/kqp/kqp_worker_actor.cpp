@@ -21,7 +21,7 @@
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/json/json_reader.h> 
+#include <library/cpp/json/json_reader.h>
 
 #include <util/string/escape.h>
 
@@ -116,12 +116,12 @@ struct TKqpCleanupState {
     TIntrusivePtr<IKqpHost::IAsyncQueryResult> AsyncResult;
 };
 
-enum ETableReadType { 
-    Other = 0, 
-    Scan = 1, 
-    FullScan = 2, 
-}; 
- 
+enum ETableReadType {
+    Other = 0,
+    Scan = 1,
+    FullScan = 2,
+};
+
 EKikimrStatsMode GetStatsMode(const NKikimrKqp::TQueryRequest& queryRequest, EKikimrStatsMode minMode) {
     if (queryRequest.GetProfile()) {
         // TODO: Deprecate, StatsMode is the new way to enable stats.
@@ -187,7 +187,7 @@ public:
 
         Config->FeatureFlags = AppData(ctx)->FeatureFlags;
 
-        KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver, 
+        KqpHost = CreateKqpHost(Gateway, Settings.Cluster, Settings.Database, Config, ModuleResolverState->ModuleResolver,
             AppData(ctx)->FunctionRegistry, !Settings.LongSession);
 
         Become(&TKqpWorkerActor::ReadyState);
@@ -1573,38 +1573,38 @@ private:
         return Reply(std::move(responseEv), ctx);
     }
 
-    ETableReadType ExtractMostHeavyReadType(const TString& queryPlan) { 
-        ETableReadType maxReadType = ETableReadType::Other; 
- 
-        if (queryPlan.empty()) { 
-            return maxReadType; 
-        } 
- 
-        NJson::TJsonValue root; 
-        NJson::ReadJsonTree(queryPlan, &root, false); 
- 
-        if (root.Has("tables")) { 
-            for (const auto& table : root["tables"].GetArray()) { 
-                if (!table.Has("reads")) { 
-                    continue; 
-                } 
- 
-                for (const auto& read : table["reads"].GetArray()) { 
-                    Y_VERIFY(read.Has("type")); 
-                    const auto& type = read["type"].GetString(); 
- 
-                    if (type == "Scan") { 
-                        maxReadType = Max(maxReadType, ETableReadType::Scan); 
-                    } else if (type == "FullScan") { 
-                        return ETableReadType::FullScan; 
-                    } 
-                } 
-            } 
-        } 
- 
-        return maxReadType; 
-    } 
- 
+    ETableReadType ExtractMostHeavyReadType(const TString& queryPlan) {
+        ETableReadType maxReadType = ETableReadType::Other;
+
+        if (queryPlan.empty()) {
+            return maxReadType;
+        }
+
+        NJson::TJsonValue root;
+        NJson::ReadJsonTree(queryPlan, &root, false);
+
+        if (root.Has("tables")) {
+            for (const auto& table : root["tables"].GetArray()) {
+                if (!table.Has("reads")) {
+                    continue;
+                }
+
+                for (const auto& read : table["reads"].GetArray()) {
+                    Y_VERIFY(read.Has("type"));
+                    const auto& type = read["type"].GetString();
+
+                    if (type == "Scan") {
+                        maxReadType = Max(maxReadType, ETableReadType::Scan);
+                    } else if (type == "FullScan") {
+                        return ETableReadType::FullScan;
+                    }
+                }
+            }
+        }
+
+        return maxReadType;
+    }
+
     bool ReplyQueryResult(const TActorContext& ctx) {
         Y_VERIFY(QueryState);
         auto& queryRequest = QueryState->Request;
@@ -1622,31 +1622,31 @@ private:
         if (status == Ydb::StatusIds::SUCCESS) {
             Counters->ReportQueryLatency(Settings.DbCounters, queryRequest.GetAction(), queryDuration);
 
-            auto maxReadType = ExtractMostHeavyReadType(queryResult.QueryPlan); 
-            if (maxReadType == ETableReadType::FullScan) { 
+            auto maxReadType = ExtractMostHeavyReadType(queryResult.QueryPlan);
+            if (maxReadType == ETableReadType::FullScan) {
                 Counters->ReportQueryWithFullScan(Settings.DbCounters);
-            } else if (maxReadType == ETableReadType::Scan) { 
+            } else if (maxReadType == ETableReadType::Scan) {
                 Counters->ReportQueryWithRangeScan(Settings.DbCounters);
-            } 
+            }
 
             ui32 affectedShardsCount = 0;
-            ui64 readBytesCount = 0; 
-            ui64 readRowsCount = 0; 
-            for (const auto& exec : queryResult.QueryStats.GetExecutions()) { 
-                for (const auto& table : exec.GetTables()) { 
+            ui64 readBytesCount = 0;
+            ui64 readRowsCount = 0;
+            for (const auto& exec : queryResult.QueryStats.GetExecutions()) {
+                for (const auto& table : exec.GetTables()) {
                     affectedShardsCount = std::max(affectedShardsCount, table.GetAffectedPartitions());
-                    readBytesCount += table.GetReadBytes(); 
-                    readRowsCount += table.GetReadRows(); 
-                } 
-            } 
- 
+                    readBytesCount += table.GetReadBytes();
+                    readRowsCount += table.GetReadRows();
+                }
+            }
+
             Counters->ReportQueryAffectedShards(Settings.DbCounters, affectedShardsCount);
             Counters->ReportQueryReadRows(Settings.DbCounters, readRowsCount);
             Counters->ReportQueryReadBytes(Settings.DbCounters, readBytesCount);
             Counters->ReportQueryReadSets(Settings.DbCounters, queryResult.QueryStats.GetReadSetsCount());
             Counters->ReportQueryMaxShardReplySize(Settings.DbCounters, queryResult.QueryStats.GetMaxShardReplySize());
             Counters->ReportQueryMaxShardProgramSize(Settings.DbCounters, queryResult.QueryStats.GetMaxShardProgramSize());
- 
+
             if (QueryState->QueryCompileResult && QueryState->QueryCompileResult->PreparedQueryNewEngine
                 && QueryState->NewEngineCompatibleQuery)
             {

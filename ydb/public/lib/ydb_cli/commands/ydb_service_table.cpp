@@ -559,18 +559,18 @@ void TCommandExplain::Config(TConfig& config) {
     config.Opts->AddLongOption("analyze", "Run query and collect execution statistics")
         .NoArgument().SetFlag(&Analyze);
 
-    AddFormats(config, { 
-            EOutputFormat::Pretty, 
-            EOutputFormat::JsonUnicode, 
-            EOutputFormat::JsonBase64 
-    }); 
- 
+    AddFormats(config, {
+            EOutputFormat::Pretty,
+            EOutputFormat::JsonUnicode,
+            EOutputFormat::JsonBase64
+    });
+
     config.SetFreeArgsNum(0);
 }
 
 void TCommandExplain::Parse(TConfig& config) {
     TClientCommand::Parse(config);
-    ParseFormats(); 
+    ParseFormats();
     CheckQueryOptions();
 }
 
@@ -602,7 +602,7 @@ int TCommandExplain::Run(TConfig& config) {
                 ThrowOnError(tablePart);
             }
             if (tablePart.HasQueryStats() ) {
-                auto proto = NYdb::TProtoAccessor::GetProto(tablePart.GetQueryStats()); 
+                auto proto = NYdb::TProtoAccessor::GetProto(tablePart.GetQueryStats());
                 planJson = proto.query_plan();
                 ast = proto.query_ast();
             }
@@ -623,7 +623,7 @@ int TCommandExplain::Run(TConfig& config) {
         ).ExtractValueSync();
         ThrowOnError(result);
         planJson = result.GetQueryPlan();
-        if (auto stats = result.GetStats()) { 
+        if (auto stats = result.GetStats()) {
             auto proto = NYdb::TProtoAccessor::GetProto(*stats);
             ast = proto.query_ast();
         }
@@ -641,11 +641,11 @@ int TCommandExplain::Run(TConfig& config) {
     }
 
     if (PrintAst) {
-        Cout << "Query AST:" << Endl << ast << Endl; 
+        Cout << "Query AST:" << Endl << ast << Endl;
     } else {
-        Cout << "Query Plan:" << Endl; 
-        TQueryPlanPrinter queryPlanPrinter(OutputFormat, Analyze); 
-        queryPlanPrinter.Print(planJson); 
+        Cout << "Query Plan:" << Endl;
+        TQueryPlanPrinter queryPlanPrinter(OutputFormat, Analyze);
+        queryPlanPrinter.Print(planJson);
     }
 
     return EXIT_SUCCESS;

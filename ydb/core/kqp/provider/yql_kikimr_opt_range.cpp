@@ -743,10 +743,10 @@ TExprList TKikimrKeyRange::ToRangeExpr(TExprBase owner, TExprContext& ctx) {
     };
 
     auto nInf = [owner, &ctx] (const TTypeAnnotationNode* type) -> TExprBase {
-        /* required optional type for TCoNothing */ 
-        if (type->GetKind() != ETypeAnnotationKind::Optional) { 
-            type = ctx.MakeType<TOptionalExprType>(type); 
-        } 
+        /* required optional type for TCoNothing */
+        if (type->GetKind() != ETypeAnnotationKind::Optional) {
+            type = ctx.MakeType<TOptionalExprType>(type);
+        }
         return Build<TCoNothing>(ctx, owner.Pos())
             .OptionalType(BuildTypeExpr(owner.Pos(), *type, ctx))
             .Done();

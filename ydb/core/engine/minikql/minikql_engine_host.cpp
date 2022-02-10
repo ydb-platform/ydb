@@ -46,10 +46,10 @@ ui64 TEngineHost::GetShardId() const {
     return Settings.ShardId;
 }
 
-const TScheme::TTableInfo* TEngineHost::GetTableInfo(const TTableId& tableId) const { 
-    return Scheme.GetTableInfo(LocalTableId(tableId)); 
-} 
- 
+const TScheme::TTableInfo* TEngineHost::GetTableInfo(const TTableId& tableId) const {
+    return Scheme.GetTableInfo(LocalTableId(tableId));
+}
+
 bool TEngineHost::IsReadonly() const {
     return Settings.IsReadonly;
 }

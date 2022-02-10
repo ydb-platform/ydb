@@ -23,9 +23,9 @@ public:
     // Returns shard id of the host.
     virtual ui64 GetShardId() const = 0;
 
-    // Returns table info 
-    virtual const NTable::TScheme::TTableInfo* GetTableInfo(const TTableId& tableId) const = 0; 
- 
+    // Returns table info
+    virtual const NTable::TScheme::TTableInfo* GetTableInfo(const TTableId& tableId) const = 0;
+
     // Returns whether shard is read only.
     virtual bool IsReadonly() const = 0;
 

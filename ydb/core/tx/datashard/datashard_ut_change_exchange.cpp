@@ -55,8 +55,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
     TShardedTableOptions TableWoIndexes() {
         return TShardedTableOptions()
             .Columns({
-                {"pkey", "Uint32", true, false}, 
-                {"ikey", "Uint32", false, false}, 
+                {"pkey", "Uint32", true, false},
+                {"ikey", "Uint32", false, false},
             });
     }
 
@@ -75,8 +75,8 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
     TShardedTableOptions TableWithIndex(const TShardedTableOptions::TIndex& index) {
         return TShardedTableOptions()
             .Columns({
-                {"pkey", "Uint32", true, false}, 
-                {"ikey", "Uint32", false, false}, 
+                {"pkey", "Uint32", true, false},
+                {"ikey", "Uint32", false, false},
             })
             .Indexes({
                 index
@@ -151,9 +151,9 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeExchange) {
     Y_UNIT_TEST(SenderShouldShakeHandsTwice) {
         SenderShouldShakeHands("/Root/Table", 2, TShardedTableOptions()
             .Columns({
-                {"pkey", "Uint32", true, false}, 
-                {"i1key", "Uint32", false, false}, 
-                {"i2key", "Uint32", false, false}, 
+                {"pkey", "Uint32", true, false},
+                {"i1key", "Uint32", false, false},
+                {"i2key", "Uint32", false, false},
             })
             .Indexes({
                 {"by_i1key", {"i1key"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync},

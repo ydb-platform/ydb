@@ -500,7 +500,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableTtlOnAsyncIndexedTables(opts.EnableTtlOnAsyncIndexedTables_);
     app.SetAllowUpdateChannelsBindingOfSolomonPartitions(opts.AllowUpdateChannelsBindingOfSolomonPartitions_);
     app.SetEnableAsyncIndexes(opts.EnableAsyncIndexes_);
-    app.SetEnableNotNullColumns(opts.EnableNotNullColumns_); 
+    app.SetEnableNotNullColumns(opts.EnableNotNullColumns_);
     app.SetEnableSchemeTransactionsAtSchemeShard(opts.EnableSchemeTransactionsAtSchemeShard_);
     app.SetEnableOlapSchemaOperations(opts.EnableOlapSchemaOperations_);
     app.SetEnableProtoSourceIdInfo(opts.EnableProtoSourceIdInfo_);

@@ -176,7 +176,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         ui64 DeleteVersion;
         ETableColumnDefaultKind DefaultKind = ETableColumnDefaultKind::None;
         TString DefaultValue;
-        bool NotNull = false; 
+        bool NotNull = false;
 
         TColumn(const TString& name, ui32 id, NScheme::TTypeId type)
             : NTable::TScheme::TColumn(name, id, type)

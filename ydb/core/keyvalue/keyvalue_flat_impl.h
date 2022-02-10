@@ -58,9 +58,9 @@ protected:
                 // Init the scheme
                 auto &alter = txc.DB.Alter();
                 alter.AddTable("kvtable", TABLE_ID);
-                alter.AddColumn(TABLE_ID, "key", KEY_TAG, NScheme::TSmallBoundedString::TypeId, false); 
+                alter.AddColumn(TABLE_ID, "key", KEY_TAG, NScheme::TSmallBoundedString::TypeId, false);
                 alter.AddColumnToKey(TABLE_ID, KEY_TAG);
-                alter.AddColumn(TABLE_ID, "value", VALUE_TAG, NScheme::TString::TypeId, false); 
+                alter.AddColumn(TABLE_ID, "value", VALUE_TAG, NScheme::TString::TypeId, false);
                 // Init log batching settings
                 alter.SetExecutorAllowLogBatching(true);
                 alter.SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));

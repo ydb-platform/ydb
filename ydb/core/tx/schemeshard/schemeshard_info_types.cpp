@@ -148,7 +148,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             TTableInfo::TColumn& column = alterData->Columns[colId];
             column = TTableInfo::TColumn(colName, colId, type->GetTypeId());
             column.Family = columnFamily ? columnFamily->GetId() : 0;
-            column.NotNull = col.GetNotNull(); 
+            column.NotNull = col.GetNotNull();
             if (source)
                 column.CreateVersion = alterData->AlterVersion;
             if (col.HasDefaultFromSequence()) {

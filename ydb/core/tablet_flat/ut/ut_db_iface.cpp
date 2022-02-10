@@ -17,9 +17,9 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         alter
             .AddTable(Sprintf("me_%02u", table), table)
-            .AddColumn(table, "key",    1, ETypes::String, false) 
-            .AddColumn(table, "arg1",   4, ETypes::Uint64, false, Cimple(77_u64)) 
-            .AddColumn(table, "arg2",   5, ETypes::String, false) 
+            .AddColumn(table, "key",    1, ETypes::String, false)
+            .AddColumn(table, "arg1",   4, ETypes::Uint64, false, Cimple(77_u64))
+            .AddColumn(table, "arg2",   5, ETypes::String, false)
             .AddColumnToKey(table, 1);
 
         return alter;
@@ -144,10 +144,10 @@ Y_UNIT_TEST_SUITE(DBase) {
 
         me.To(12).Begin().Apply(
             *TAlter()
-                .AddColumn(1, "sub", 2, ETypes::Uint32, false, Cimple(77_u32)) 
-                .AddColumn(1, "en0", 6, ETypes::String, false, TCell("", 0)) 
-                .AddColumn(1, "en1", 7, ETypes::String, false, TCell(large30)) 
-                .AddColumn(1, "en2", 8, ETypes::String, false, TCell(large35)) 
+                .AddColumn(1, "sub", 2, ETypes::Uint32, false, Cimple(77_u32))
+                .AddColumn(1, "en0", 6, ETypes::String, false, TCell("", 0))
+                .AddColumn(1, "en1", 7, ETypes::String, false, TCell(large30))
+                .AddColumn(1, "en2", 8, ETypes::String, false, TCell(large35))
                 .DropColumn(1, 5)
                 .AddColumnToKey(1, 2));
 
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(14).Compact(1, false).Iter(1).Has(ro3);
 
         { /*_ Ressurect column, ** hack allowed only in this UT ** */
-            auto raw = TAlter().AddColumn(1, "new", 4, ETypes::Uint64, false).Flush(); 
+            auto raw = TAlter().AddColumn(1, "new", 4, ETypes::Uint64, false).Flush();
 
             me.Begin().Apply(*raw).Add(1, ro4).Commit();
         }
@@ -330,7 +330,7 @@ Y_UNIT_TEST_SUITE(DBase) {
 
             for (auto sub : xrange(keys)) {
                 auto name = Sprintf("sub_%04u", sub);
-                alter.AddColumn(1, name, 6 + sub, ETypes::Uint32, false); 
+                alter.AddColumn(1, name, 6 + sub, ETypes::Uint32, false);
                 alter.AddColumnToKey(1, 6 + sub);
             }
 
@@ -592,9 +592,9 @@ Y_UNIT_TEST_SUITE(DBase) {
             .Begin()
             .Apply(*TAlter()
                 .AddTable("me_1", table)
-                .AddColumn(table, "key",    1, ETypes::Uint64, false) 
-                .AddColumn(table, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64)) 
-                .AddColumn(table, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64)) 
+                .AddColumn(table, "key",    1, ETypes::Uint64, false)
+                .AddColumn(table, "arg1",   4, ETypes::Uint64, false, Cimple(10004_u64))
+                .AddColumn(table, "arg2",   5, ETypes::Uint64, false, Cimple(10005_u64))
                 .AddColumnToKey(table, 1))
             .Commit();
 

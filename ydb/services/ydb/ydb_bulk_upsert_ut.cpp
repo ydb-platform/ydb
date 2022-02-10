@@ -218,117 +218,117 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         }
     }
 
-    Y_UNIT_TEST(NotNulls) { 
-        TKikimrWithGrpcAndRootSchema server; 
-        ui16 grpc = server.GetPort(); 
- 
-        TString location = TStringBuilder() << "localhost:" << grpc; 
- 
-        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location)); 
-        NYdb::NTable::TTableClient client(connection); 
-        auto session = client.GetSession().ExtractValueSync().GetSession(); 
- 
-        TString tableName = "/Root/TestNotNullColumns"; 
- 
-        { 
-            auto tableBuilder = client.GetTableBuilder(); 
-            tableBuilder 
-                    .AddNonNullableColumn("Key", EPrimitiveType::Uint64) 
-                    .AddNonNullableColumn("Value", EPrimitiveType::Uint64) 
-                .SetPrimaryKeyColumns({"Key"}); 
-            auto result = session.CreateTable(tableName, tableBuilder.Build()).ExtractValueSync(); 
- 
-            Cerr << result.GetIssues().ToString(); 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        { 
-            TValueBuilder rows; 
-            rows.BeginList(); 
-            rows.AddListItem() 
-                .BeginStruct() 
-                    .AddMember("Key").Uint64(1) 
-                    .AddMember("Value").Uint64(10) 
-                .EndStruct(); 
-            rows.EndList(); 
- 
-            auto res = client.BulkUpsert(tableName, rows.Build()).GetValueSync(); 
-            Cerr << res.GetIssues().ToString(); 
-            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS); 
-        } 
- 
-        {  /* missing not null primary key column */ 
-            TValueBuilder rows; 
-            rows.BeginList(); 
-            rows.AddListItem() 
-                .BeginStruct() 
-                    .AddMember("Value").Uint64(20) 
-                .EndStruct(); 
-            rows.EndList(); 
- 
-            auto res = client.BulkUpsert(tableName, rows.Build()).GetValueSync(); 
-            Cerr << res.GetIssues().ToString(); 
-            Cerr << res.GetStatus(); 
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Missing key columns: Key"); 
-            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR); 
-        } 
- 
-        {  /* missing not null value column */ 
-            TValueBuilder rows; 
-            rows.BeginList(); 
-            rows.AddListItem() 
-                .BeginStruct() 
-                    .AddMember("Key").Uint64(2) 
-                .EndStruct(); 
-            rows.EndList(); 
- 
-            auto res = client.BulkUpsert(tableName, rows.Build()).GetValueSync(); 
-            Cerr << res.GetIssues().ToString(); 
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Missing not null columns: Value"); 
-            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR); 
-        } 
- 
-        {  /* set null to not null primary key column */ 
-            TValueBuilder rows; 
-            rows.BeginList(); 
-            rows.AddListItem() 
-                .BeginStruct() 
-                    .AddMember("Key").EmptyOptional(EPrimitiveType::Uint64) 
-                    .AddMember("Value").Uint64(20) 
-                .EndStruct(); 
-            rows.EndList(); 
- 
-            auto res = client.BulkUpsert(tableName, rows.Build()).GetValueSync(); 
-            Cerr << res.GetIssues().ToString(); 
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Received NULL value for not null column"); 
-            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST); 
-        } 
- 
-        {  /* set null to not null value column */ 
-            TValueBuilder rows; 
-            rows.BeginList(); 
-            rows.AddListItem() 
-                .BeginStruct() 
-                    .AddMember("Key").Uint64(2) 
-                    .AddMember("Value").EmptyOptional(EPrimitiveType::Uint64) 
-                .EndStruct(); 
-            rows.EndList(); 
- 
-            auto res = client.BulkUpsert(tableName, rows.Build()).GetValueSync(); 
-            Cerr << res.GetIssues().ToString(); 
-            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Received NULL value for not null column"); 
-            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST); 
-        } 
- 
-        { 
-            auto result = session.DropTable(tableName).ExtractValueSync(); 
- 
-            UNIT_ASSERT_EQUAL(result.IsTransportError(), false); 
-            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        } 
-    } 
- 
+    Y_UNIT_TEST(NotNulls) {
+        TKikimrWithGrpcAndRootSchema server;
+        ui16 grpc = server.GetPort();
+
+        TString location = TStringBuilder() << "localhost:" << grpc;
+
+        auto connection = NYdb::TDriver(TDriverConfig().SetEndpoint(location));
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.GetSession().ExtractValueSync().GetSession();
+
+        TString tableName = "/Root/TestNotNullColumns";
+
+        {
+            auto tableBuilder = client.GetTableBuilder();
+            tableBuilder
+                    .AddNonNullableColumn("Key", EPrimitiveType::Uint64)
+                    .AddNonNullableColumn("Value", EPrimitiveType::Uint64)
+                .SetPrimaryKeyColumns({"Key"});
+            auto result = session.CreateTable(tableName, tableBuilder.Build()).ExtractValueSync();
+
+            Cerr << result.GetIssues().ToString();
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(1)
+                    .AddMember("Value").Uint64(10)
+                .EndStruct();
+            rows.EndList();
+
+            auto res = client.BulkUpsert(tableName, rows.Build()).GetValueSync();
+            Cerr << res.GetIssues().ToString();
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {  /* missing not null primary key column */
+            TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Value").Uint64(20)
+                .EndStruct();
+            rows.EndList();
+
+            auto res = client.BulkUpsert(tableName, rows.Build()).GetValueSync();
+            Cerr << res.GetIssues().ToString();
+            Cerr << res.GetStatus();
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Missing key columns: Key");
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
+        }
+
+        {  /* missing not null value column */
+            TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(2)
+                .EndStruct();
+            rows.EndList();
+
+            auto res = client.BulkUpsert(tableName, rows.Build()).GetValueSync();
+            Cerr << res.GetIssues().ToString();
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Missing not null columns: Value");
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
+        }
+
+        {  /* set null to not null primary key column */
+            TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").EmptyOptional(EPrimitiveType::Uint64)
+                    .AddMember("Value").Uint64(20)
+                .EndStruct();
+            rows.EndList();
+
+            auto res = client.BulkUpsert(tableName, rows.Build()).GetValueSync();
+            Cerr << res.GetIssues().ToString();
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Received NULL value for not null column");
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {  /* set null to not null value column */
+            TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(2)
+                    .AddMember("Value").EmptyOptional(EPrimitiveType::Uint64)
+                .EndStruct();
+            rows.EndList();
+
+            auto res = client.BulkUpsert(tableName, rows.Build()).GetValueSync();
+            Cerr << res.GetIssues().ToString();
+            UNIT_ASSERT_STRING_CONTAINS(res.GetIssues().ToString(), "Received NULL value for not null column");
+            UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto result = session.DropTable(tableName).ExtractValueSync();
+
+            UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+    }
+
     Y_UNIT_TEST(Errors) {
         TKikimrWithGrpcAndRootSchema server;
         ui16 grpc = server.GetPort();

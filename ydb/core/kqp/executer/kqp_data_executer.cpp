@@ -968,7 +968,7 @@ private:
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto columns = BuildKqpColumns(op, table);
-            THashMap<ui64, TShardInfo> partitions; 
+            THashMap<ui64, TShardInfo> partitions;
 
             switch (op.GetTypeCase()) {
                 case NKqpProto::TKqpPhyTableOperation::kReadRanges:
@@ -980,21 +980,21 @@ private:
                     NDqProto::TData itemsLimitBytes;
                     NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
 
-                    if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRanges) { 
-                        partitions = PrunePartitions(TableKeys, op.GetReadRanges(), stageInfo, holderFactory, typeEnv); 
-                        ExtractItemsLimit(stageInfo, op.GetReadRanges().GetItemsLimit(), holderFactory, typeEnv, 
-                            itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType); 
-                        reverse = op.GetReadRanges().GetReverse(); 
-                    } else if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) { 
-                        partitions = PrunePartitions(TableKeys, op.GetReadRange(), stageInfo, holderFactory, typeEnv); 
+                    if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRanges) {
+                        partitions = PrunePartitions(TableKeys, op.GetReadRanges(), stageInfo, holderFactory, typeEnv);
+                        ExtractItemsLimit(stageInfo, op.GetReadRanges().GetItemsLimit(), holderFactory, typeEnv,
+                            itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
+                        reverse = op.GetReadRanges().GetReverse();
+                    } else if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadRange) {
+                        partitions = PrunePartitions(TableKeys, op.GetReadRange(), stageInfo, holderFactory, typeEnv);
                         ExtractItemsLimit(stageInfo, op.GetReadRange().GetItemsLimit(), holderFactory, typeEnv,
                             itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
                         reverse = op.GetReadRange().GetReverse();
-                    } else if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kLookup) { 
-                        partitions = PrunePartitions(TableKeys, op.GetLookup(), stageInfo, holderFactory, typeEnv); 
+                    } else if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kLookup) {
+                        partitions = PrunePartitions(TableKeys, op.GetLookup(), stageInfo, holderFactory, typeEnv);
                     }
 
-                    for (auto& [shardId, shardInfo] : partitions) { 
+                    for (auto& [shardId, shardInfo] : partitions) {
                         YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
                         auto& task = getShardTask(shardId);

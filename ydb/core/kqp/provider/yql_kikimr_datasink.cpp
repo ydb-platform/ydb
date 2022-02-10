@@ -13,8 +13,8 @@ using namespace NNodes;
 
 class TKiSinkIntentDeterminationTransformer: public TKiSinkVisitorTransformer {
 public:
-    TKiSinkIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx) 
-        : SessionCtx(sessionCtx) {} 
+    TKiSinkIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+        : SessionCtx(sessionCtx) {}
 
 private:
     TStatus HandleClusterConfig(TKiClusterConfig node, TExprContext& ctx) override {
@@ -30,7 +30,7 @@ private:
         auto cluster = node.DataSink().Cluster();
         auto table = node.Table();
 
-        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table)); 
+        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table));
         return TStatus::Ok;
     }
 
@@ -40,7 +40,7 @@ private:
         auto cluster = node.DataSink().Cluster();
         auto table = node.Table();
 
-        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table)); 
+        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table));
         return TStatus::Ok;
     }
 
@@ -50,7 +50,7 @@ private:
         auto cluster = node.DataSink().Cluster();
         auto table = node.Table();
 
-        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table)); 
+        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table));
         return TStatus::Ok;
     }
 
@@ -60,7 +60,7 @@ private:
         auto cluster = node.DataSink().Cluster();
         auto table = node.Table();
 
-        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table)); 
+        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table));
         return TStatus::Ok;
     }
 
@@ -70,7 +70,7 @@ private:
         auto cluster = node.DataSink().Cluster();
         auto table = node.Table();
 
-        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table)); 
+        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table));
         return TStatus::Ok;
     }
 
@@ -80,7 +80,7 @@ private:
         auto cluster = node.DataSink().Cluster();
         auto table = node.Table();
 
-        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table)); 
+        SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table));
         return TStatus::Ok;
     }
 
@@ -139,7 +139,7 @@ private:
                 auto mode = settings.Mode.Cast();
 
                 if (mode == "drop") {
-                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath()); 
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (
                     mode == "upsert" ||
@@ -149,7 +149,7 @@ private:
                     mode == "delete_on" ||
                     mode == "update_on")
                 {
-                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath()); 
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "insert_ignore") {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
@@ -164,14 +164,14 @@ private:
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Update option is required for table update."));
                         return TStatus::Error;
                     }
-                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath()); 
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "delete") {
                     if (!settings.Filter) {
                         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Filter option is required for table delete."));
                         return TStatus::Error;
                     }
-                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath()); 
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
@@ -197,7 +197,7 @@ private:
                         return TStatus::Error;
                     }
 
-                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath()); 
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 } else if (mode == "alter") {
                     if (!settings.AlterActions) {
@@ -206,7 +206,7 @@ private:
                         return TStatus::Error;
                     }
 
-                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath()); 
+                    SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
                     return TStatus::Ok;
                 }
 
@@ -236,7 +236,7 @@ private:
     TStatus HandleDataQuery(TKiDataQuery node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         for (const auto& op : node.Operations()) {
-            SessionCtx->Tables().GetOrAddTable(TString(op.Cluster()), SessionCtx->GetDatabase(), TString(op.Table())); 
+            SessionCtx->Tables().GetOrAddTable(TString(op.Cluster()), SessionCtx->GetDatabase(), TString(op.Table()));
         }
         return TStatus::Ok;
     }
@@ -262,7 +262,7 @@ private:
             auto cluster = call.Cast().Cluster().Value();
             auto table = call.Cast().Table();
 
-            SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table.Path())); 
+            SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table.Path()));
             return TStatus::Ok;
         }
 
@@ -270,7 +270,7 @@ private:
             auto cluster = call.Cast().Cluster().Value();
             auto table = call.Cast().Table();
 
-            SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table.Path())); 
+            SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table.Path()));
             return TStatus::Ok;
         }
 
@@ -279,7 +279,7 @@ private:
             auto cluster = call.Cast().Cluster().Value();
             auto table = call.Cast().Table();
 
-            SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table.Path())); 
+            SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table.Path()));
             return TStatus::Ok;
         }
 
@@ -287,7 +287,7 @@ private:
             auto cluster = call.Cast().Cluster().Value();
             auto table = call.Cast().Table();
 
-            SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table.Path())); 
+            SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), TString(table.Path()));
             return TStatus::Ok;
         }
 
@@ -295,7 +295,7 @@ private:
     }
 
 private:
-    TIntrusivePtr<TKikimrSessionContext> SessionCtx; 
+    TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 };
 
 class TKikimrDataSink : public TDataProviderBase
@@ -792,7 +792,7 @@ TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
 TAutoPtr<IGraphTransformer> CreateKiSinkIntentDeterminationTransformer(
     TIntrusivePtr<TKikimrSessionContext> sessionCtx)
 {
-    return new TKiSinkIntentDeterminationTransformer(sessionCtx); 
+    return new TKiSinkIntentDeterminationTransformer(sessionCtx);
 }
 
 } // namespace NYql

@@ -103,7 +103,7 @@ void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
 
 bool ExtractColumnTypeId(ui32& outTypeId, const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error) {
     ui32 typeId;
-    auto itemType = inType.has_optional_type() ? inType.optional_type().item() : inType; 
+    auto itemType = inType.has_optional_type() ? inType.optional_type().item() : inType;
     switch (itemType.type_case()) {
         case Ydb::Type::kTypeId:
             typeId = (ui32)itemType.type_id();
@@ -154,12 +154,12 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
         cd->SetName(column.name());
         if (!column.type().has_optional_type()) {
             if (!AppData()->FeatureFlags.GetEnableNotNullColumns()) {
-                status = Ydb::StatusIds::UNSUPPORTED; 
-                error = "Not null columns feature is not supported yet"; 
-                return false; 
-            } 
- 
-            cd->SetNotNull(true); 
+                status = Ydb::StatusIds::UNSUPPORTED;
+                error = "Not null columns feature is not supported yet";
+                return false;
+            }
+
+            cd->SetNotNull(true);
         }
 
         ui32 typeId;

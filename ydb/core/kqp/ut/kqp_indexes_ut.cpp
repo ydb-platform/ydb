@@ -11,8 +11,8 @@
 #include <ydb/library/yql/core/services/mounts/yql_mounts.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
-#include <library/cpp/json/json_reader.h> 
- 
+#include <library/cpp/json/json_reader.h>
+
 #include <util/string/printf.h>
 
 namespace NKikimr {
@@ -51,7 +51,7 @@ TIntrusivePtr<IKqpHost> CreateKikimrQueryProcessor(TIntrusivePtr<IKqpGateway> ga
     UNIT_ASSERT(TryParseFromTextFormat(defaultSettingsStream, defaultSettings));
     kikimrConfig->Init(defaultSettings.GetDefaultSettings(), cluster, settings, true);
 
-    return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver, funcRegistry, 
+    return NKqp::CreateKqpHost(gateway, cluster, "/Root", kikimrConfig, moduleResolver, funcRegistry,
         keepConfigChanges);
 }
 
@@ -74,10 +74,10 @@ void CreateTableWithIndexWithState(
     using NYql::TKikimrColumnMetadata;
 
     TKikimrTableMetadataPtr metadata = new TKikimrTableMetadata(TestCluster, server.GetSettings().DomainName + "/IndexedTableWithState");
-    metadata->Columns["key"] = TKikimrColumnMetadata("key", 0, "Uint32", false); 
-    metadata->Columns["value"] = TKikimrColumnMetadata("value", 0, "String", false); 
-    metadata->Columns["value2"] = TKikimrColumnMetadata("value2", 0, "String", false); 
-    metadata->ColumnOrder = {"key", "value", "value2"}; 
+    metadata->Columns["key"] = TKikimrColumnMetadata("key", 0, "Uint32", false);
+    metadata->Columns["value"] = TKikimrColumnMetadata("value", 0, "String", false);
+    metadata->Columns["value2"] = TKikimrColumnMetadata("value2", 0, "String", false);
+    metadata->ColumnOrder = {"key", "value", "value2"};
     metadata->Indexes.push_back(
         NYql::TIndexDescription(
             indexName,
@@ -3160,19 +3160,19 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             ("Primary1", "Val1", "Val2");
         )"));
 
-        auto explainResult = session.ExplainDataQuery(query1).ExtractValueSync(); 
-        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString()); 
- 
-        NJson::TJsonValue plan; 
-        NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true); 
- 
-        UNIT_ASSERT(plan.GetMapSafe().contains("tables")); 
-        const auto& tables = plan.GetMapSafe().at("tables").GetArraySafe(); 
-        UNIT_ASSERT(tables.size() == 3); 
-        UNIT_ASSERT(tables.at(0).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable"); 
-        UNIT_ASSERT(tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index1/indexImplTable"); 
-        UNIT_ASSERT(tables.at(2).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index2/indexImplTable"); 
- 
+        auto explainResult = session.ExplainDataQuery(query1).ExtractValueSync();
+        UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
+
+        UNIT_ASSERT(plan.GetMapSafe().contains("tables"));
+        const auto& tables = plan.GetMapSafe().at("tables").GetArraySafe();
+        UNIT_ASSERT(tables.size() == 3);
+        UNIT_ASSERT(tables.at(0).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable");
+        UNIT_ASSERT(tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index1/indexImplTable");
+        UNIT_ASSERT(tables.at(2).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index2/indexImplTable");
+
         auto result = session.ExecuteDataQuery(
                 query1,
                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
@@ -4438,18 +4438,18 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
                     SELECT Key, Index2, Value FROM AS_TABLE($rows);
             )"));
 
-            auto explainResult = session.ExplainDataQuery(query).ExtractValueSync(); 
-            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString()); 
- 
-            NJson::TJsonValue plan; 
-            NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true); 
- 
-            UNIT_ASSERT(plan.GetMapSafe().contains("tables")); 
-            const auto& tables = plan.GetMapSafe().at("tables").GetArraySafe(); 
-            UNIT_ASSERT(tables.size() == 2); 
-            UNIT_ASSERT(tables.at(0).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable"); 
-            UNIT_ASSERT(tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index/indexImplTable"); 
- 
+            auto explainResult = session.ExplainDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_C(explainResult.IsSuccess(), explainResult.GetIssues().ToString());
+
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
+
+            UNIT_ASSERT(plan.GetMapSafe().contains("tables"));
+            const auto& tables = plan.GetMapSafe().at("tables").GetArraySafe();
+            UNIT_ASSERT(tables.size() == 2);
+            UNIT_ASSERT(tables.at(0).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable");
+            UNIT_ASSERT(tables.at(1).GetMapSafe().at("name").GetStringSafe() == "/Root/TestTable/Index/indexImplTable");
+
             auto qId = session.PrepareDataQuery(query).ExtractValueSync().GetQuery();
 
             auto params = qId.GetParamsBuilder()

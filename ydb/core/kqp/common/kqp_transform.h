@@ -18,15 +18,15 @@ const TStringBuf LocksTxIdParamName = "%kqp%locks_txid";
 const TStringBuf LocksListParamName = "%kqp%locks_list";
 const TStringBuf ReadTargetParamName = "%kqp%read_target";
 
-/* Non-deterministic internal params */ 
-const std::string_view NowParamName = "%kqp%now"; 
-const std::string_view CurrentDateParamName = "%kqp%current_utc_date"; 
-const std::string_view CurrentDatetimeParamName = "%kqp%current_utc_datetime"; 
-const std::string_view CurrentTimestampParamName = "%kqp%current_utc_timestamp"; 
-const std::string_view RandomParamName = "%kqp%random"; 
-const std::string_view RandomNumberParamName = "%kqp%random_number"; 
-const std::string_view RandomUuidParamName = "%kqp%random_uuid"; 
- 
+/* Non-deterministic internal params */
+const std::string_view NowParamName = "%kqp%now";
+const std::string_view CurrentDateParamName = "%kqp%current_utc_date";
+const std::string_view CurrentDatetimeParamName = "%kqp%current_utc_datetime";
+const std::string_view CurrentTimestampParamName = "%kqp%current_utc_timestamp";
+const std::string_view RandomParamName = "%kqp%random";
+const std::string_view RandomNumberParamName = "%kqp%random_number";
+const std::string_view RandomUuidParamName = "%kqp%random_uuid";
+
 class TKqpTxLock {
 public:
     using TKey = std::tuple<ui64, ui64, ui64, ui64>;

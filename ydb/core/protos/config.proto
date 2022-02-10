@@ -666,7 +666,7 @@ message TFeatureFlags {
     optional bool EnableBackgroundCompaction = 51 [default = true];
     optional bool EnableArrowFormatInChannels = 52 [default = false];
     optional bool EnableBackgroundCompactionServerless = 53 [default = false];
-    optional bool EnableNotNullColumns = 54 [default = false]; 
+    optional bool EnableNotNullColumns = 54 [default = false];
     optional bool EnableTtlOnAsyncIndexedTables = 55 [default = false];
     optional bool EnableBulkUpsertToAsyncIndexedTables = 56 [default = false];
     optional bool EnableNodeBrokerSingleDomainMode = 57 [default = false];
@@ -1080,7 +1080,7 @@ message TTableServiceConfig {
     //   2 - All read-only queries. Without fallback to new engine (in case of rw tx, read queries will be executed with new engine, write queries - with old one).
     //   3 - New engine for all queries.
     optional uint32 ForceNewEngineLevel = 22 [default = 0];
-    optional uint32 CompileQueryCacheTTLSec = 20 [default = 0]; 
+    optional uint32 CompileQueryCacheTTLSec = 20 [default = 0];
     optional TQueryReplayConfig QueryReplayConfig = 21;
 };
 

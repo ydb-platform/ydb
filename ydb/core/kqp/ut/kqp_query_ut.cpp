@@ -50,10 +50,10 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         } while (result.GetStatus() == EStatus::UNAVAILABLE || result.GetStatus() == EStatus::ABORTED);
 
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
-        TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters); 
-        UNIT_ASSERT_VALUES_EQUAL(counters.RecompileRequestGet()->Val(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        UNIT_ASSERT_VALUES_EQUAL(counters.RecompileRequestGet()->Val(), 1);
     }
 
     Y_UNIT_TEST_NEW_ENGINE(QueryCache) {
@@ -84,53 +84,53 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(QueryCacheTtl) {
-        NKikimrConfig::TAppConfig appConfig; 
-        appConfig.MutableTableServiceConfig()->SetCompileQueryCacheTTLSec(2); 
- 
-        TKikimrRunner kikimr(appConfig); 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetCompileQueryCacheTTLSec(2);
+
+        TKikimrRunner kikimr(appConfig);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         auto query = Q_(R"(
             SELECT * FROM `/Root/Test`;
         )");
- 
-        auto txControl = TTxControl::BeginTx().CommitTx(); 
- 
-        TExecDataQuerySettings execSettings; 
-        execSettings.KeepInQueryCache(true); 
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic); 
- 
-        auto result = session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
-        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false); 
- 
-        result = session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
-        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true); 
- 
-        execSettings.KeepInQueryCache(false); 
- 
-        auto delay = TDuration::Seconds(appConfig.GetTableServiceConfig().GetCompileQueryCacheTTLSec()); 
-        for (int i = 0; i < 10; ++i) { 
-            Sleep(delay); 
- 
-            result = session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
-            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
-            if (!stats.compilation().from_cache()) 
-                break; 
-        } 
- 
-        result = session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
-        stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
-        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false); 
-    } 
- 
+
+        auto txControl = TTxControl::BeginTx().CommitTx();
+
+        TExecDataQuerySettings execSettings;
+        execSettings.KeepInQueryCache(true);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto result = session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+
+        result = session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), true);
+
+        execSettings.KeepInQueryCache(false);
+
+        auto delay = TDuration::Seconds(appConfig.GetTableServiceConfig().GetCompileQueryCacheTTLSec());
+        for (int i = 0; i < 10; ++i) {
+            Sleep(delay);
+
+            result = session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            if (!stats.compilation().from_cache())
+                break;
+        }
+
+        result = session.ExecuteDataQuery(query, txControl, execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+        UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(QueryCacheInvalidate) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -154,13 +154,13 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
 
         result = dataQuery->Execute(txControl).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(query, txControl).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
- 
-        TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters); 
-        UNIT_ASSERT_VALUES_EQUAL(counters.RecompileRequestGet()->Val(), 1); 
+
+        TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        UNIT_ASSERT_VALUES_EQUAL(counters.RecompileRequestGet()->Val(), 1);
     }
 
     Y_UNIT_TEST_NEW_ENGINE(QueryCachePermissionsLoss) {
@@ -613,22 +613,22 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(YqlTableSample) {
-        auto setting = NKikimrKqp::TKqpSetting(); 
-        setting.SetName("_KqpYqlSyntaxVersion"); 
-        setting.SetValue("1"); 
- 
-        TKikimrRunner kikimr({setting}); 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_KqpYqlSyntaxVersion");
+        setting.SetValue("1");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         const TString query(Q_(R"(SELECT * FROM `/Root/Test` TABLESAMPLE SYSTEM(1.0);)"));
-        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) { 
-            return issue.Message.Contains("ATOM evaluation is not supported in YDB queries."); 
-        })); 
-    } 
- 
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
+            return issue.Message.Contains("ATOM evaluation is not supported in YDB queries.");
+        }));
+    }
+
     Y_UNIT_TEST(YqlSyntaxServiceOverride) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_KqpYqlSyntaxVersion");
@@ -737,14 +737,14 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(Now) { 
+    Y_UNIT_TEST_NEW_ENGINE(Now) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto query = Q_(R"( 
-            SELECT YQL::Now(), YQL::Now(); 
-        )"); 
+        auto query = Q_(R"(
+            SELECT YQL::Now(), YQL::Now();
+        )");
 
         const ui32 QueriesCount = 5;
 
@@ -761,7 +761,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT(parser.TryNextRow());
 
             auto value = parser.ColumnParser(0).GetUint64();
-            UNIT_ASSERT(value == parser.ColumnParser(1).GetUint64()); 
+            UNIT_ASSERT(value == parser.ColumnParser(1).GetUint64());
             timestamps.insert(value);
         }
 
@@ -781,82 +781,82 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             UNIT_ASSERT(parser.TryNextRow());
 
             auto value = parser.ColumnParser(0).GetUint64();
-            UNIT_ASSERT(value == parser.ColumnParser(1).GetUint64()); 
+            UNIT_ASSERT(value == parser.ColumnParser(1).GetUint64());
             timestamps.insert(value);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), QueriesCount); 
+        UNIT_ASSERT_VALUES_EQUAL(timestamps.size(), QueriesCount);
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(RandomNumber) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto query = Q_(R"( 
-            SELECT YQL::RandomNumber(), YQL::RandomNumber(), RandomNumber(1); 
-        )"); 
- 
-        auto result = session.ExecuteDataQuery( 
-            query, 
-            TTxControl::BeginTx().CommitTx() 
-        ).ExtractValueSync(); 
- 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-        TResultSetParser parser(result.GetResultSet(0)); 
-        UNIT_ASSERT(parser.TryNextRow()); 
- 
-        auto value = parser.ColumnParser(0).GetUint64(); 
-        UNIT_ASSERT(value == parser.ColumnParser(1).GetUint64()); 
-        UNIT_ASSERT(value != parser.ColumnParser(2).GetUint64()); 
-    } 
- 
-    Y_UNIT_TEST_NEW_ENGINE(CurrentUtcTimestamp) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        auto query = Q_(R"( 
-            SELECT YQL::CurrentUtcTimestamp(), YQL::CurrentUtcTimestamp(); 
-        )"); 
- 
-        TInstant timestamp; 
- 
-        { 
-            auto result = session.ExecuteDataQuery( 
-                query, 
-                TTxControl::BeginTx().CommitTx(), 
-                TExecDataQuerySettings().KeepInQueryCache(true) 
-            ).ExtractValueSync(); 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-            TResultSetParser parser(result.GetResultSet(0)); 
-            UNIT_ASSERT(parser.TryNextRow()); 
- 
-            timestamp = parser.ColumnParser(0).GetTimestamp(); 
-            UNIT_ASSERT(timestamp == parser.ColumnParser(1).GetTimestamp()); 
-        } 
- 
-        { 
-            auto result = session.ExecuteDataQuery( 
-                query, 
-                TTxControl::BeginTx().CommitTx(), 
-                TExecDataQuerySettings().KeepInQueryCache(true) 
-            ).ExtractValueSync(); 
- 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-            TResultSetParser parser(result.GetResultSet(0)); 
-            UNIT_ASSERT(parser.TryNextRow()); 
- 
-            auto value = parser.ColumnParser(0).GetTimestamp(); 
-            UNIT_ASSERT(value == parser.ColumnParser(1).GetTimestamp()); 
-            UNIT_ASSERT(timestamp != value); 
-        } 
-    } 
- 
+    Y_UNIT_TEST_NEW_ENGINE(RandomNumber) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = Q_(R"(
+            SELECT YQL::RandomNumber(), YQL::RandomNumber(), RandomNumber(1);
+        )");
+
+        auto result = session.ExecuteDataQuery(
+            query,
+            TTxControl::BeginTx().CommitTx()
+        ).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+
+        auto value = parser.ColumnParser(0).GetUint64();
+        UNIT_ASSERT(value == parser.ColumnParser(1).GetUint64());
+        UNIT_ASSERT(value != parser.ColumnParser(2).GetUint64());
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(CurrentUtcTimestamp) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto query = Q_(R"(
+            SELECT YQL::CurrentUtcTimestamp(), YQL::CurrentUtcTimestamp();
+        )");
+
+        TInstant timestamp;
+
+        {
+            auto result = session.ExecuteDataQuery(
+                query,
+                TTxControl::BeginTx().CommitTx(),
+                TExecDataQuerySettings().KeepInQueryCache(true)
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+
+            timestamp = parser.ColumnParser(0).GetTimestamp();
+            UNIT_ASSERT(timestamp == parser.ColumnParser(1).GetTimestamp());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(
+                query,
+                TTxControl::BeginTx().CommitTx(),
+                TExecDataQuerySettings().KeepInQueryCache(true)
+            ).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+
+            auto value = parser.ColumnParser(0).GetTimestamp();
+            UNIT_ASSERT(value == parser.ColumnParser(1).GetTimestamp());
+            UNIT_ASSERT(timestamp != value);
+        }
+    }
+
     Y_UNIT_TEST(UnsafeTimestampCastV0) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

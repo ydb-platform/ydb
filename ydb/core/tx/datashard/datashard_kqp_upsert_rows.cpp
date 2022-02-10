@@ -1,5 +1,5 @@
 #include "datashard_kqp_compute.h"
-#include "datashard_user_table.h" 
+#include "datashard_user_table.h"
 
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
@@ -171,11 +171,11 @@ IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeF
     MKQL_ENSURE_S(localTableId);
     auto tableKeyTypes = computeCtx.GetKeyColumnsInfo(tableId);
 
-    auto tableInfo = computeCtx.GetTable(tableId); 
-    MKQL_ENSURE(tableInfo, "Table not found: " << tableId.PathId.ToString()); 
- 
+    auto tableInfo = computeCtx.GetTable(tableId);
+    MKQL_ENSURE(tableInfo, "Table not found: " << tableId.PathId.ToString());
+
     auto rowType = AS_TYPE(TStructType, AS_TYPE(TStreamType, rowsNode.GetStaticType())->GetItemType());
- 
+
     MKQL_ENSURE_S(tableKeyTypes.size() <= rowType->GetMembersCount(), "not enough columns in the runtime node");
 
     THashMap<TString, ui32> inputIndex;

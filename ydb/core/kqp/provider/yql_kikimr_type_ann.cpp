@@ -99,9 +99,9 @@ IGraphTransformer::TStatus ConvertTableRowType(TExprNode::TPtr& input, const TKi
 
 class TKiSourceTypeAnnotationTransformer : public TKiSourceVisitorTransformer {
 public:
-    TKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types) 
-        : SessionCtx(sessionCtx) 
-        , Types(types) {} 
+    TKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types)
+        : SessionCtx(sessionCtx)
+        , Types(types) {}
 
 private:
     TStatus HandleKiRead(TKiReadBase node, TExprContext& ctx) override {
@@ -162,9 +162,9 @@ private:
                 children.push_back(listSelectType);
                 auto tupleAnn = ctx.MakeType<TTupleExprType>(children);
                 node.Ptr()->SetTypeAnn(tupleAnn);
- 
-                YQL_ENSURE(tableDesc->Metadata->ColumnOrder.size() == tableDesc->Metadata->Columns.size()); 
-                return Types.SetColumnOrder(node.Ref(), tableDesc->Metadata->ColumnOrder, ctx); 
+
+                YQL_ENSURE(tableDesc->Metadata->ColumnOrder.size() == tableDesc->Metadata->Columns.size());
+                return Types.SetColumnOrder(node.Ref(), tableDesc->Metadata->ColumnOrder, ctx);
             }
 
             case TKikimrKey::Type::TableList:
@@ -222,7 +222,7 @@ private:
 
 private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
-    TTypeAnnotationContext& Types; 
+    TTypeAnnotationContext& Types;
 };
 
 namespace {
@@ -322,8 +322,8 @@ private:
 
                 TExprNode::TPtr node = value.Ptr();
                 if (TryConvertTo(node, *expectedType, ctx) == TStatus::Error) {
-                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder() 
-                        << "Failed to convert input columns types to scheme types")); 
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Failed to convert input columns types to scheme types"));
                     return TStatus::Error;
                 }
 
@@ -363,43 +363,43 @@ private:
 
         for (auto& keyColumnName : table->Metadata->KeyColumnNames) {
             if (!rowType->FindItem(keyColumnName)) {
-                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder() 
+                ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                     << "Missing key column in input: " << keyColumnName
                     << " for table: " << table->Metadata->Name));
                 return TStatus::Error;
             }
         }
 
-        auto op = GetTableOp(node); 
+        auto op = GetTableOp(node);
         if (op == TYdbOperation::InsertAbort || op == TYdbOperation::InsertRevert ||
             op == TYdbOperation::Upsert || op == TYdbOperation::Replace) {
-            for (const auto& [name, meta] : table->Metadata->Columns) { 
-                if (meta.NotNull && !rowType->FindItem(name)) { 
-                    ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder() 
-                        << "Missing not null column in input: " << name 
-                        << ". All not null columns should be initialized")); 
-                    return TStatus::Error; 
-                } 
- 
-                if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) { 
-                    ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder() 
-                        << "Can't set NULL or optional value to not null column: " << name 
-                        << ". All not null columns should be initialized")); 
-                    return TStatus::Error; 
-                } 
-            } 
+            for (const auto& [name, meta] : table->Metadata->Columns) {
+                if (meta.NotNull && !rowType->FindItem(name)) {
+                    ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                        << "Missing not null column in input: " << name
+                        << ". All not null columns should be initialized"));
+                    return TStatus::Error;
+                }
+
+                if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) {
+                    ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set NULL or optional value to not null column: " << name
+                        << ". All not null columns should be initialized"));
+                    return TStatus::Error;
+                }
+            }
         } else if (op == TYdbOperation::UpdateOn) {
-            for (const auto& item : rowType->GetItems()) { 
-                auto column = table->Metadata->Columns.FindPtr(TString(item->GetName())); 
-                YQL_ENSURE(column); 
-                if (column->NotNull && item->HasOptionalOrNull()) { 
-                    ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder() 
-                        << "Can't set NULL or optional value to not null column: " << column->Name)); 
-                    return TStatus::Error; 
-                } 
-            } 
-        } 
- 
+            for (const auto& item : rowType->GetItems()) {
+                auto column = table->Metadata->Columns.FindPtr(TString(item->GetName()));
+                YQL_ENSURE(column);
+                if (column->NotNull && item->HasOptionalOrNull()) {
+                    ctx.AddError(YqlIssue(pos, TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set NULL or optional value to not null column: " << column->Name));
+                    return TStatus::Error;
+                }
+            }
+        }
+
         auto inputColumns = GetSetting(node.Settings().Ref(), "input_columns");
         if (!inputColumns) {
             TExprNode::TListType columns;
@@ -486,16 +486,16 @@ private:
             }
         }
 
-        for (const auto& item : updateResultType->GetItems()) { 
-            auto column = table->Metadata->Columns.FindPtr(TString(item->GetName())); 
-            YQL_ENSURE(column); 
-            if (column->NotNull && item->HasOptionalOrNull()) { 
-                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder() 
-                    << "Can't set NULL or optional value to not null column: " << column->Name)); 
-                return TStatus::Error; 
-            } 
-        } 
- 
+        for (const auto& item : updateResultType->GetItems()) {
+            auto column = table->Metadata->Columns.FindPtr(TString(item->GetName()));
+            YQL_ENSURE(column);
+            if (column->NotNull && item->HasOptionalOrNull()) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node.Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                    << "Can't set NULL or optional value to not null column: " << column->Name));
+                return TStatus::Error;
+            }
+        }
+
         auto updateBody = node.Update().Body().Ptr();
         auto status = ConvertTableRowType(updateBody, *table, ctx);
         if (status != IGraphTransformer::TStatus::Ok) {
@@ -558,7 +558,7 @@ private:
 
         TKikimrTableMetadataPtr meta = new TKikimrTableMetadata(cluster, table);
         meta->DoesExist = true;
-        meta->ColumnOrder.reserve(create.Columns().Size()); 
+        meta->ColumnOrder.reserve(create.Columns().Size());
 
         for (auto atom : create.PrimaryKey()) {
             meta->KeyColumnNames.emplace_back(atom.Value());
@@ -578,8 +578,8 @@ private:
             YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
 
             auto type = columnType->Cast<TTypeExprType>()->GetType();
-            auto notNull = type->GetKind() != ETypeAnnotationKind::Optional; 
-            auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType(); 
+            auto notNull = type->GetKind() != ETypeAnnotationKind::Optional;
+            auto actualType = notNull ? type : type->Cast<TOptionalExprType>()->GetItemType();
             if (actualType->GetKind() != ETypeAnnotationKind::Data) {
                 columnTypeError(typeNode.Pos(), columnName, "Only core YQL data types are currently supported");
                 return TStatus::Error;
@@ -594,7 +594,7 @@ private:
             TKikimrColumnMetadata columnMeta;
             columnMeta.Name = columnName;
             columnMeta.Type = dataType->GetName();
-            columnMeta.NotNull = notNull; 
+            columnMeta.NotNull = notNull;
 
             if (columnTuple.Size() > 2) {
                 auto families = columnTuple.Item(2).Cast<TCoAtomList>();
@@ -603,7 +603,7 @@ private:
                 }
             }
 
-            meta->ColumnOrder.push_back(columnName); 
+            meta->ColumnOrder.push_back(columnName);
             auto insertRes = meta->Columns.insert(std::make_pair(columnName, columnMeta));
             if (!insertRes.second) {
                 ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), TStringBuilder()
@@ -903,9 +903,9 @@ private:
                     auto columnType = typeNode.Ref().GetTypeAnn();
                     YQL_ENSURE(columnType && columnType->GetKind() == ETypeAnnotationKind::Type);
                     auto type = columnType->Cast<TTypeExprType>()->GetType();
-                    auto actualType = (type->GetKind() == ETypeAnnotationKind::Optional) ? 
-                        type->Cast<TOptionalExprType>()->GetItemType() : type; 
- 
+                    auto actualType = (type->GetKind() == ETypeAnnotationKind::Optional) ?
+                        type->Cast<TOptionalExprType>()->GetItemType() : type;
+
                     if (actualType->GetKind() != ETypeAnnotationKind::Data) {
                         columnTypeError(typeNode.Pos(), name, "Only core YQL data types are currently supported");
                         return TStatus::Error;
@@ -1435,10 +1435,10 @@ private:
 
 } // namespace
 
-TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx, 
-    TTypeAnnotationContext& types) 
-{ 
-    return new TKiSourceTypeAnnotationTransformer(sessionCtx, types); 
+TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    TTypeAnnotationContext& types)
+{
+    return new TKiSourceTypeAnnotationTransformer(sessionCtx, types);
 }
 
 TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,

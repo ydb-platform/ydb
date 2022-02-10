@@ -80,7 +80,7 @@ message TColumnDescription {
     oneof DefaultValue {
         string DefaultFromSequence = 7; // Path to sequence for default values
     }
-    optional bool NotNull = 8; 
+    optional bool NotNull = 8;
 }
 
 message TStorageSettings {

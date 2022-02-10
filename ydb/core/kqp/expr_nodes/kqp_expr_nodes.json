@@ -247,15 +247,15 @@
             ]
         },
         {
-            "Name": "TKqpTxInternalBinding", 
-            "Base": "TCallable", 
-            "Match": {"Type": "Callable", "Name": "KqpTxInternalBinding"}, 
-            "Children": [ 
-                {"Index": 0, "Name": "Type", "Type": "TExprBase"}, 
-                {"Index": 1, "Name": "Kind", "Type": "TCoAtom"} 
-            ] 
-        }, 
-        { 
+            "Name": "TKqpTxInternalBinding",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpTxInternalBinding"},
+            "Children": [
+                {"Index": 0, "Name": "Type", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Kind", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqpPhysicalTx",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpPhysicalTx"},

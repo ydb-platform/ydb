@@ -47,30 +47,30 @@ NKqpProto::TKqpPhyQuery::EType GetPhyQueryType(const EPhysicalQueryType& type) {
     YQL_ENSURE(false, "Unexpected physical query type: " << type);
 }
 
-NKqpProto::TKqpPhyInternalBinding::EType GetPhyInternalBindingType(const std::string_view type) { 
-    NKqpProto::TKqpPhyInternalBinding::EType bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_UNSPECIFIED; 
- 
-    if (type == "Now"sv) { 
-        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_NOW; 
-    } else if (type == "CurrentUtcDate"sv) { 
-        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_DATE; 
-    } else if (type == "CurrentUtcDatetime"sv) { 
-        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_DATETIME; 
-    } else if (type == "CurrentUtcTimestamp"sv) { 
-        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_TIMESTAMP; 
-    } else if (type == "Random"sv) { 
-        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM; 
-    } else if (type == "RandomNumber"sv) { 
-        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_NUMBER; 
-    } else if (type == "RandomUuid"sv) { 
-        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_UUID; 
-    } 
- 
-    YQL_ENSURE(bindingType != NKqpProto::TKqpPhyInternalBinding::PARAM_UNSPECIFIED, 
-        "Unexpected internal binding type: " << type); 
-    return bindingType; 
-} 
- 
+NKqpProto::TKqpPhyInternalBinding::EType GetPhyInternalBindingType(const std::string_view type) {
+    NKqpProto::TKqpPhyInternalBinding::EType bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_UNSPECIFIED;
+
+    if (type == "Now"sv) {
+        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_NOW;
+    } else if (type == "CurrentUtcDate"sv) {
+        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_DATE;
+    } else if (type == "CurrentUtcDatetime"sv) {
+        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_DATETIME;
+    } else if (type == "CurrentUtcTimestamp"sv) {
+        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_CURRENT_TIMESTAMP;
+    } else if (type == "Random"sv) {
+        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM;
+    } else if (type == "RandomNumber"sv) {
+        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_NUMBER;
+    } else if (type == "RandomUuid"sv) {
+        bindingType = NKqpProto::TKqpPhyInternalBinding::PARAM_RANDOM_UUID;
+    }
+
+    YQL_ENSURE(bindingType != NKqpProto::TKqpPhyInternalBinding::PARAM_UNSPECIFIED,
+        "Unexpected internal binding type: " << type);
+    return bindingType;
+}
+
 void FillTable(const TKqpTable& table, NKqpProto::TKqpPhyTable& tableProto) {
     auto pathId = TKikimrPathId::Parse(table.PathId());
 
@@ -608,10 +608,10 @@ private:
                 auto& txResultProto = *bindingProto.MutableTxResultBinding();
                 txResultProto.SetTxIndex(txIndex);
                 txResultProto.SetResultIndex(resultIndex);
-            } else if (auto maybeInternalBinding = binding.Maybe<TKqpTxInternalBinding>()) { 
-                auto internalBinding = maybeInternalBinding.Cast(); 
-                auto& internalBindingProto = *bindingProto.MutableInternalBinding(); 
-                internalBindingProto.SetType(GetPhyInternalBindingType(internalBinding.Kind().Value())); 
+            } else if (auto maybeInternalBinding = binding.Maybe<TKqpTxInternalBinding>()) {
+                auto internalBinding = maybeInternalBinding.Cast();
+                auto& internalBindingProto = *bindingProto.MutableInternalBinding();
+                internalBindingProto.SetType(GetPhyInternalBindingType(internalBinding.Kind().Value()));
             } else {
                 YQL_ENSURE(false, "Unknown parameter binding type: " << binding.Cast().CallableName());
             }

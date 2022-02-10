@@ -1734,7 +1734,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto settings = TStreamExecScanQuerySettings()
             .Explain(true);
 
-        auto test = [&](const TString& table, const TString& tableRlPath, const TVector<TString>& keys, bool top, bool expectSort) { 
+        auto test = [&](const TString& table, const TString& tableRlPath, const TVector<TString>& keys, bool top, bool expectSort) {
             auto query = TStringBuilder()
                 << "SELECT * FROM `" << table << "` "
                 << "ORDER BY " << JoinSeq(", ", keys)
@@ -1749,24 +1749,24 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             NJson::TJsonValue plan;
             NJson::ReadJsonTree(*res.PlanJson, &plan, /* throwOnError */ true);
 
-            auto node = FindPlanNodeByKv(plan, "Tables", NJson::TJsonArray({tableRlPath}).GetStringRobust()); 
-            UNIT_ASSERT_C(node.IsDefined(), query); 
-            UNIT_ASSERT_EQUAL_C(node.GetMapSafe().at("Node Type").GetStringSafe().Contains("Sort"), expectSort, query); 
+            auto node = FindPlanNodeByKv(plan, "Tables", NJson::TJsonArray({tableRlPath}).GetStringRobust());
+            UNIT_ASSERT_C(node.IsDefined(), query);
+            UNIT_ASSERT_EQUAL_C(node.GetMapSafe().at("Node Type").GetStringSafe().Contains("Sort"), expectSort, query);
         };
 
         // simple key
         for (bool top : {false, true}) {
-            test("/Root/KeyValue", "KeyValue", {"Key"}, top, false);  // key 
-            test("/Root/KeyValue", "KeyValue", {"Value"}, top, true); // not key 
+            test("/Root/KeyValue", "KeyValue", {"Key"}, top, false);  // key
+            test("/Root/KeyValue", "KeyValue", {"Value"}, top, true); // not key
         }
 
         // complex key
         for (bool top : {false, true}) {
-            test("/Root/Logs", "Logs", {"App", "Ts", "Host"}, top, false); // full key 
-            test("/Root/Logs", "Logs", {"App", "Ts"}, top, false);         // key prefix 
-            test("/Root/Logs", "Logs", {"App"}, top, false);               // key prefix 
-            test("/Root/Logs", "Logs", {"Ts", "Host"}, top, true);         // not key prefix 
-            test("/Root/Logs", "Logs", {"Message"}, top, true);            // not key 
+            test("/Root/Logs", "Logs", {"App", "Ts", "Host"}, top, false); // full key
+            test("/Root/Logs", "Logs", {"App", "Ts"}, top, false);         // key prefix
+            test("/Root/Logs", "Logs", {"App"}, top, false);               // key prefix
+            test("/Root/Logs", "Logs", {"Ts", "Host"}, top, true);         // not key prefix
+            test("/Root/Logs", "Logs", {"Message"}, top, true);            // not key
         }
     }
 
@@ -1814,25 +1814,25 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         std::cerr << result << std::endl;
         CompareYson(result, R"([[[2];[1000];["Dogecoin"]];[[4];[1];["XTC"]];[[5];[2];["Cardano"]];[[6];[3];["Tether"]]])");
     }
- 
-    Y_UNIT_TEST(YqlTableSample) { 
-        auto setting = NKikimrKqp::TKqpSetting(); 
-        setting.SetName("_KqpYqlSyntaxVersion"); 
-        setting.SetValue("1"); 
- 
-        TKikimrRunner kikimr({setting}); 
-        auto db = kikimr.GetTableClient(); 
- 
-        const TString query(R"(SELECT * FROM `/Root/Test` TABLESAMPLE SYSTEM(1.0);)"); 
-        auto it = db.StreamExecuteScanQuery(query).ExtractValueSync(); 
- 
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
-        auto result = it.ReadNext().GetValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED); 
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) { 
-            return issue.Message.Contains("ATOM evaluation is not supported in YDB queries."); 
-        })); 
-    } 
+
+    Y_UNIT_TEST(YqlTableSample) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_KqpYqlSyntaxVersion");
+        setting.SetValue("1");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetTableClient();
+
+        const TString query(R"(SELECT * FROM `/Root/Test` TABLESAMPLE SYSTEM(1.0);)");
+        auto it = db.StreamExecuteScanQuery(query).ExtractValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto result = it.ReadNext().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_UNSUPPORTED, [](const NYql::TIssue& issue) {
+            return issue.Message.Contains("ATOM evaluation is not supported in YDB queries.");
+        }));
+    }
 
     Y_UNIT_TEST(CrossJoinOneColumn) {
         TKikimrRunner kikimr;

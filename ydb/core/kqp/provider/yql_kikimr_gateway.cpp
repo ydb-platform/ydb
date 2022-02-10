@@ -273,19 +273,19 @@ EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
     }
 }
 
-void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull) { 
+void SetColumnType(Ydb::Type& protoType, const TString& typeName, bool notNull) {
     NUdf::EDataSlot dataSlot = NUdf::GetDataSlot(typeName);
     if (dataSlot == NUdf::EDataSlot::Decimal) {
-        auto decimal = notNull ? protoType.mutable_decimal_type() : 
-            protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type(); 
+        auto decimal = notNull ? protoType.mutable_decimal_type() :
+            protoType.mutable_optional_type()->mutable_item()->mutable_decimal_type();
         // We have no params right now
         // TODO: Fix decimal params support for kikimr
         decimal->set_precision(22);
         decimal->set_scale(9);
     } else {
-        auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item(); 
+        auto& primitive = notNull ? protoType : *protoType.mutable_optional_type()->mutable_item();
         auto id = NUdf::GetDataTypeInfo(dataSlot).TypeId;
-        primitive.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id)); 
+        primitive.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(id));
     }
 }
 

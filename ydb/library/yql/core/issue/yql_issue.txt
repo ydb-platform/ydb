@@ -289,10 +289,10 @@ ids {
   severity: S_ERROR
 }
 ids {
-  code: KIKIMR_NO_COLUMN_DEFAULT_VALUE 
-  severity: S_ERROR 
-} 
-ids { 
+  code: KIKIMR_NO_COLUMN_DEFAULT_VALUE
+  severity: S_ERROR
+}
+ids {
   code: YQL_PRAGMA_WARNING_MSG
   severity: S_WARNING
 }

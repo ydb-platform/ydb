@@ -285,9 +285,9 @@ TAutoPtr<NYql::IGraphTransformer> CreateKqpExecutePhysicalDataTransformer(TIntru
     const TString& cluster, TIntrusivePtr<TKqpTransactionState> txState,
     TIntrusivePtr<TKqlTransformContext> transformCtx);
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway, 
-    const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx); 
- 
+TAutoPtr<NYql::IGraphTransformer> CreateKqpExplainPreparedTransformer(TIntrusivePtr<IKqpGateway> gateway,
+    const TString& cluster, TIntrusivePtr<TKqlTransformContext> transformCtx);
+
 TAutoPtr<NYql::IGraphTransformer> CreateKqpExecuteScanTransformer(TIntrusivePtr<IKqpGateway> gateway,
     const TString& cluster, TIntrusivePtr<TKqpTransactionState> txState,
     TIntrusivePtr<TKqlTransformContext> transformCtx);

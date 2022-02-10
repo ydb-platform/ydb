@@ -66,9 +66,9 @@ message TKqpStatsQuery {
     reserved 3; // repeated TKqpStatsExecution Executions = 3;
 
     uint64 WorkerCpuTimeUs = 4;
-    uint64 ReadSetsCount = 5; 
-    uint64 MaxShardProgramSize = 6; 
-    uint64 MaxShardReplySize = 7; 
+    uint64 ReadSetsCount = 5;
+    uint64 MaxShardProgramSize = 6;
+    uint64 MaxShardReplySize = 7;
 
     repeated NYql.NDqProto.TDqExecutionStats Executions = 8;
 }

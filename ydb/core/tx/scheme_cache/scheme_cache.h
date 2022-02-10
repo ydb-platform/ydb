@@ -230,7 +230,7 @@ struct TSchemeCacheNavigate {
         // table specific
         THashMap<TString, TString> Attributes;
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
-        THashSet<TString> NotNullColumns; 
+        THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
 

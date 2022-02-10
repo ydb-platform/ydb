@@ -116,7 +116,7 @@ message TKqpColumnMetadataProto {
     optional string Type = 3;
     optional uint32 TypeId = 4;
     repeated string Family = 5;
-    optional bool NotNull = 6 [default = false]; 
+    optional bool NotNull = 6 [default = false];
 };
 
 message TKqpTableMetadataProto {

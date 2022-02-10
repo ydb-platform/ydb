@@ -385,9 +385,9 @@ public:
         }
 
         auto buildTime = TInstant::Now() - startTime;
-        if (Stats) { 
-            Stats->BuildCpuTime = buildTime; 
-        } 
+        if (Stats) {
+            Stats->BuildCpuTime = buildTime;
+        }
         LOG(TStringBuilder() << "Build task: " << TaskId << " takes " << buildTime.MicroSeconds() << " us");
     }
 
@@ -496,18 +496,18 @@ public:
         }
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId << ", takes " << prepareTime.MicroSeconds() << " us");
-        if (Stats) { 
-            Stats->BuildCpuTime += prepareTime; 
+        if (Stats) {
+            Stats->BuildCpuTime += prepareTime;
 
-            for (auto&[channelId, inputChannel] : InputChannels) { 
-                Stats->InputChannels.emplace(channelId, inputChannel->GetStats()); 
-            } 
-            for (auto&[inputIndex, source] : Sources) { 
-                Stats->Sources.emplace(inputIndex, source->GetStats()); 
-            } 
-            for (auto&[channelId, outputChannel] : OutputChannels) { 
-                Stats->OutputChannels.emplace(channelId, outputChannel->GetStats()); 
-            } 
+            for (auto&[channelId, inputChannel] : InputChannels) {
+                Stats->InputChannels.emplace(channelId, inputChannel->GetStats());
+            }
+            for (auto&[inputIndex, source] : Sources) {
+                Stats->Sources.emplace(inputIndex, source->GetStats());
+            }
+            for (auto&[channelId, outputChannel] : OutputChannels) {
+                Stats->OutputChannels.emplace(channelId, outputChannel->GetStats());
+            }
         }
     }
 
@@ -517,9 +517,9 @@ public:
         RunComputeTime = TDuration::Zero();
 
         auto runStatus = FetchAndDispatch();
-        if (Stats) { 
-            Stats->RunStatusTimeMetrics.SetCurrentStatus(runStatus, RunComputeTime); 
-        } 
+        if (Stats) {
+            Stats->RunStatusTimeMetrics.SetCurrentStatus(runStatus, RunComputeTime);
+        }
 
         if (Y_UNLIKELY(CollectProfileStats)) {
             Stats->ComputeCpuTimeByRun->Collect(RunComputeTime.MilliSeconds());
@@ -533,9 +533,9 @@ public:
         }
 
         if (runStatus == ERunStatus::Finished) {
-            if (Stats) { 
-                Stats->FinishTs = TInstant::Now(); 
-            } 
+            if (Stats) {
+                Stats->FinishTs = TInstant::Now();
+            }
             if (Y_UNLIKELY(CollectProfileStats)) {
                 StopWaiting(Stats->FinishTs);
             }

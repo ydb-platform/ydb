@@ -14,18 +14,18 @@ namespace {
 TType* GetRowType(const TProgramBuilder& builder, const TArrayRef<TKqpTableColumn>& columns) {
     TStructTypeBuilder rowTypeBuilder(builder.GetTypeEnvironment());
     for (auto& column : columns) {
-        TType* type = nullptr; 
+        TType* type = nullptr;
         if (column.Type == NUdf::TDataType<NUdf::TDecimal>::Id) {
-            type = TDataDecimalType::Create(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE, builder.GetTypeEnvironment()); 
+            type = TDataDecimalType::Create(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE, builder.GetTypeEnvironment());
         } else {
-            type = TDataType::Create(column.Type, builder.GetTypeEnvironment()); 
+            type = TDataType::Create(column.Type, builder.GetTypeEnvironment());
         }
- 
-        if (!column.NotNull) { 
-            type = TOptionalType::Create(type, builder.GetTypeEnvironment()); 
-        } 
- 
-        rowTypeBuilder.Add(column.Name, type); 
+
+        if (!column.NotNull) {
+            type = TOptionalType::Create(type, builder.GetTypeEnvironment());
+        }
+
+        rowTypeBuilder.Add(column.Name, type);
     }
 
     return rowTypeBuilder.Build();

@@ -47,8 +47,8 @@ RECURSE(
     noc
     openal-soft
     patched
-    protobuf-c 
-    protoc-c 
+    protobuf-c
+    protoc-c
     protozero
     range-v3
     rnnoise

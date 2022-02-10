@@ -26,7 +26,7 @@ RECURSE(
     open-vcdiff/bin
     plantuml
     protoc
-    protoc-c 
+    protoc-c
     protoc_std
     python
     python3
@@ -41,8 +41,8 @@ RECURSE(
     tpce-benchmark
     tpch-benchmark
     tre
-    unbound 
-    unbound/build 
+    unbound
+    unbound/build
     vowpal_wabbit
     wapiti
     word2vec

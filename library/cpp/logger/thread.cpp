@@ -58,9 +58,9 @@ class TThreadedLogBackend::TImpl {
     };
 
 public:
-    inline TImpl(TLogBackend* slave, size_t queuelen, std::function<void()> queueOverflowCallback = {}) 
+    inline TImpl(TLogBackend* slave, size_t queuelen, std::function<void()> queueOverflowCallback = {})
         : Slave_(slave)
-        , QueueOverflowCallback_(std::move(queueOverflowCallback)) 
+        , QueueOverflowCallback_(std::move(queueOverflowCallback))
     {
         Queue_.Start(1, queuelen);
     }
@@ -72,14 +72,14 @@ public:
     inline void WriteData(const TLogRecord& rec) {
         THolder<TRec> obj(new (rec.Len) TRec(this, rec));
 
-        if (Queue_.Add(obj.Get())) { 
-            Y_UNUSED(obj.Release()); 
-            return; 
-        } 
- 
-        if (QueueOverflowCallback_) { 
-            QueueOverflowCallback_(); 
-        } else { 
+        if (Queue_.Add(obj.Get())) {
+            Y_UNUSED(obj.Release());
+            return;
+        }
+
+        if (QueueOverflowCallback_) {
+            QueueOverflowCallback_();
+        } else {
             ythrow yexception() << "log queue exhausted";
         }
     }
@@ -113,7 +113,7 @@ public:
 private:
     TLogBackend* Slave_;
     TThreadPool Queue_{"ThreadedLogBack"};
-    const std::function<void()> QueueOverflowCallback_; 
+    const std::function<void()> QueueOverflowCallback_;
 };
 
 TThreadedLogBackend::TThreadedLogBackend(TLogBackend* slave)
@@ -121,8 +121,8 @@ TThreadedLogBackend::TThreadedLogBackend(TLogBackend* slave)
 {
 }
 
-TThreadedLogBackend::TThreadedLogBackend(TLogBackend* slave, size_t queuelen, std::function<void()> queueOverflowCallback) 
-    : Impl_(new TImpl(slave, queuelen, std::move(queueOverflowCallback))) 
+TThreadedLogBackend::TThreadedLogBackend(TLogBackend* slave, size_t queuelen, std::function<void()> queueOverflowCallback)
+    : Impl_(new TImpl(slave, queuelen, std::move(queueOverflowCallback)))
 {
 }
 
@@ -155,9 +155,9 @@ TOwningThreadedLogBackend::TOwningThreadedLogBackend(TLogBackend* slave)
 {
 }
 
-TOwningThreadedLogBackend::TOwningThreadedLogBackend(TLogBackend* slave, size_t queuelen, std::function<void()> queueOverflowCallback) 
+TOwningThreadedLogBackend::TOwningThreadedLogBackend(TLogBackend* slave, size_t queuelen, std::function<void()> queueOverflowCallback)
     : THolder<TLogBackend>(slave)
-    , TThreadedLogBackend(Get(), queuelen, std::move(queueOverflowCallback)) 
+    , TThreadedLogBackend(Get(), queuelen, std::move(queueOverflowCallback))
 {
 }
 

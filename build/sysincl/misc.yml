@@ -434,7 +434,7 @@
   - alloc.h: contrib/libs/libsrtp/crypto/include/alloc.h
   - err.h: contrib/libs/libsrtp/crypto/include/err.h
   - stat.h: contrib/libs/libsrtp/crypto/include/stat.h
- 
+
 - source_filter: "^contrib/restricted/openal-soft"
   includes:
     - threads.h: contrib/restricted/openal-soft/common/threads.h

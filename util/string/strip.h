@@ -62,53 +62,53 @@ inline void StripRangeEnd(const It& b, It& e) noexcept {
     StripRangeEnd(b, e, IsAsciiSpaceAdapter(b));
 }
 
-template <bool stripBeg, bool stripEnd> 
-struct TStripImpl { 
+template <bool stripBeg, bool stripEnd>
+struct TStripImpl {
     template <class It, class TStripCriterion>
     static inline bool StripRange(It& b, It& e, TStripCriterion&& criterion) noexcept {
-        const size_t oldLen = e - b; 
- 
-        if (stripBeg) { 
+        const size_t oldLen = e - b;
+
+        if (stripBeg) {
             StripRangeBegin(b, e, criterion);
-        } 
- 
-        if (stripEnd) { 
+        }
+
+        if (stripEnd) {
             StripRangeEnd(b, e, criterion);
-        } 
- 
-        const size_t newLen = e - b; 
-        return newLen != oldLen; 
-    } 
- 
+        }
+
+        const size_t newLen = e - b;
+        return newLen != oldLen;
+    }
+
     template <class T, class TStripCriterion>
     static inline bool StripString(const T& from, T& to, TStripCriterion&& criterion) {
         auto b = from.begin();
         auto e = from.end();
- 
+
         if (StripRange(b, e, criterion)) {
             to = T(b, e - b);
- 
-            return true; 
-        } 
- 
-        to = from; 
- 
-        return false; 
-    } 
- 
+
+            return true;
+        }
+
+        to = from;
+
+        return false;
+    }
+
     template <class T, class TStripCriterion>
     static inline T StripString(const T& from, TStripCriterion&& criterion) {
-        T ret; 
+        T ret;
         StripString(from, ret, criterion);
-        return ret; 
-    } 
- 
-    template <class T> 
-    static inline T StripString(const T& from) { 
-        return StripString(from, IsAsciiSpaceAdapter(from.begin())); 
-    } 
-}; 
- 
+        return ret;
+    }
+
+    template <class T>
+    static inline T StripString(const T& from) {
+        return StripString(from, IsAsciiSpaceAdapter(from.begin()));
+    }
+};
+
 template <class It, class TStripCriterion>
 inline bool StripRange(It& b, It& e, TStripCriterion&& criterion) noexcept {
     return TStripImpl<true, true>::StripRange(b, e, criterion);
@@ -154,19 +154,19 @@ static inline T StripString(const T& from, TStripCriterion&& criterion) {
 
 template <class T>
 static inline T StripString(const T& from) {
-    return TStripImpl<true, true>::StripString(from); 
+    return TStripImpl<true, true>::StripString(from);
 }
 
-template <class T> 
-static inline T StripStringLeft(const T& from) { 
-    return TStripImpl<true, false>::StripString(from); 
-} 
- 
-template <class T> 
-static inline T StripStringRight(const T& from) { 
-    return TStripImpl<false, true>::StripString(from); 
-} 
- 
+template <class T>
+static inline T StripStringLeft(const T& from) {
+    return TStripImpl<true, false>::StripString(from);
+}
+
+template <class T>
+static inline T StripStringRight(const T& from) {
+    return TStripImpl<false, true>::StripString(from);
+}
+
 template <class T, class TStripCriterion>
 static inline T StripStringLeft(const T& from, TStripCriterion&& criterion) {
     return TStripImpl<true, false>::StripString(from, criterion);

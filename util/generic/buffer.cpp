@@ -73,18 +73,18 @@ void TBuffer::Fill(char ch, size_t len) {
 }
 
 void TBuffer::DoReserve(size_t realLen) {
-    // FastClp2<T>(x) returns 0 on x from [Max<T>/2 + 2, Max<T>] 
-    const size_t len = Max<size_t>(FastClp2(realLen), realLen); 
+    // FastClp2<T>(x) returns 0 on x from [Max<T>/2 + 2, Max<T>]
+    const size_t len = Max<size_t>(FastClp2(realLen), realLen);
 
     Y_ASSERT(realLen > Len_);
     Y_ASSERT(len >= realLen);
 
-    Realloc(len); 
-} 
- 
-void TBuffer::Realloc(size_t len) { 
+    Realloc(len);
+}
+
+void TBuffer::Realloc(size_t len) {
     Y_ASSERT(Pos_ <= len);
- 
+
     Data_ = (char*)y_reallocate(Data_, len);
     Len_ = len;
 }

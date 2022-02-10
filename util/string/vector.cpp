@@ -81,8 +81,8 @@ void ::NPrivate::SplitStringImpl(TVector<TUtf16String>* res, const wchar16* ptr,
 
 TUtf16String JoinStrings(const TVector<TUtf16String>& v, const TWtringBuf delim) {
     return JoinStrings(v.begin(), v.end(), delim);
-} 
- 
+}
+
 TUtf16String JoinStrings(const TVector<TUtf16String>& v, size_t index, size_t count, const TWtringBuf delim) {
     const size_t f = Min(index, v.size());
     const size_t l = f + Min(count, v.size() - f);

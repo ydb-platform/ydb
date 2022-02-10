@@ -165,20 +165,20 @@ void Out<NB64Etalon::TImpls::EImpl>(IOutputStream& o, typename TTypeTraits<NB64E
 
 static void TestEncodeDecodeIntoString(const TString& plain, const TString& encoded, const TString& encodedUrl) {
     TString a, b;
- 
-    Base64Encode(plain, a); 
-    UNIT_ASSERT_VALUES_EQUAL(a, encoded); 
- 
-    Base64Decode(a, b); 
-    UNIT_ASSERT_VALUES_EQUAL(b, plain); 
- 
-    Base64EncodeUrl(plain, a); 
-    UNIT_ASSERT_VALUES_EQUAL(a, encodedUrl); 
- 
-    Base64Decode(a, b); 
-    UNIT_ASSERT_VALUES_EQUAL(b, plain); 
-} 
- 
+
+    Base64Encode(plain, a);
+    UNIT_ASSERT_VALUES_EQUAL(a, encoded);
+
+    Base64Decode(a, b);
+    UNIT_ASSERT_VALUES_EQUAL(b, plain);
+
+    Base64EncodeUrl(plain, a);
+    UNIT_ASSERT_VALUES_EQUAL(a, encodedUrl);
+
+    Base64Decode(a, b);
+    UNIT_ASSERT_VALUES_EQUAL(b, plain);
+}
+
 static void TestEncodeStrictDecodeIntoString(const TString& plain, const TString& encoded, const TString& encodedUrl) {
     TString a, b;
 
@@ -204,11 +204,11 @@ Y_UNIT_TEST_SUITE(TBase64) {
     }
 
     Y_UNIT_TEST(TestIntoString) {
-        { 
+        {
             TString str;
-            for (size_t i = 0; i < 256; ++i) 
-                str += char(i); 
- 
+            for (size_t i = 0; i < 256; ++i)
+                str += char(i);
+
             const TString base64 =
                 "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJy"
                 "gpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9Q"
@@ -225,22 +225,22 @@ Y_UNIT_TEST_SUITE(TBase64) {
                 "oqOkpaanqKmqq6ytrq-wsbKztLW2t7i5uru8vb6_wMHCw8TFxsfIyc"
                 "rLzM3Oz9DR0tPU1dbX2Nna29zd3t_g4eLj5OXm5-jp6uvs7e7v8PHy"
                 "8_T19vf4-fr7_P3-_w,,";
- 
-            TestEncodeDecodeIntoString(str, base64, base64Url); 
+
+            TestEncodeDecodeIntoString(str, base64, base64Url);
             TestEncodeStrictDecodeIntoString(str, base64, base64Url);
-        } 
- 
-        { 
+        }
+
+        {
             const TString str = "http://yandex.ru:1234/request?param=value&lll=fff#fragment";
- 
+
             const TString base64 = "aHR0cDovL3lhbmRleC5ydToxMjM0L3JlcXVlc3Q/cGFyYW09dmFsdWUmbGxsPWZmZiNmcmFnbWVudA==";
             const TString base64Url = "aHR0cDovL3lhbmRleC5ydToxMjM0L3JlcXVlc3Q_cGFyYW09dmFsdWUmbGxsPWZmZiNmcmFnbWVudA,,";
- 
-            TestEncodeDecodeIntoString(str, base64, base64Url); 
+
+            TestEncodeDecodeIntoString(str, base64, base64Url);
             TestEncodeStrictDecodeIntoString(str, base64, base64Url);
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST(TestDecode) {
         UNIT_ASSERT_EXCEPTION(Base64Decode("a"), yexception);
         UNIT_ASSERT_EXCEPTION(Base64StrictDecode("a"), yexception);

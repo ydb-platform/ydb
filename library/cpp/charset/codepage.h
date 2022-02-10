@@ -199,7 +199,7 @@ struct Encoder {
             return 0;
         return (unsigned char)Table[(ch >> 8) & 255][ch & 255];
     }
- 
+
     inline char Tr(wchar32 ch) const {
         char code = Code(ch);
         if (code == 0 && ch != 0)
@@ -211,7 +211,7 @@ struct Encoder {
     inline unsigned char operator[](wchar32 ch) const {
         return Tr(ch);
     }
- 
+
     void Tr(const wchar32* in, char* out, size_t len) const;
     void Tr(const wchar32* in, char* out) const;
     char* DefaultPlane;

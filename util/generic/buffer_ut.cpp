@@ -74,46 +74,46 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
 
         buf.Reserve(4);
         UNIT_ASSERT_EQUAL(buf.Capacity(), 4);
- 
+
         buf.Reserve(6);
         UNIT_ASSERT_EQUAL(buf.Capacity(), 8);
- 
+
         buf.Reserve(32);
         UNIT_ASSERT_EQUAL(buf.Capacity(), 32);
- 
+
         buf.Reserve(33);
         UNIT_ASSERT_EQUAL(buf.Capacity(), 64);
         buf.Reserve(64);
         UNIT_ASSERT_EQUAL(buf.Capacity(), 64);
- 
+
         buf.Resize(128);
         UNIT_ASSERT_EQUAL(buf.Capacity(), 128);
- 
+
         buf.Append('a');
         UNIT_ASSERT_EQUAL(buf.Capacity(), 256);
         TString tmp1 = "abcdef";
         buf.Append(tmp1.data(), tmp1.size());
         UNIT_ASSERT_EQUAL(buf.Capacity(), 256);
- 
+
         TString tmp2 = "30498290sfokdsflj2308w";
         buf.Resize(1020);
         buf.Append(tmp2.data(), tmp2.size());
         UNIT_ASSERT_EQUAL(buf.Capacity(), 2048);
     }
- 
+
     Y_UNIT_TEST(TestShrinkToFit) {
         TBuffer buf;
- 
+
         TString content = "some text";
         buf.Append(content.data(), content.size());
         UNIT_ASSERT_EQUAL(buf.Size(), 9);
         UNIT_ASSERT_EQUAL(buf.Capacity(), 16);
- 
+
         buf.ShrinkToFit();
         UNIT_ASSERT_EQUAL(buf.Size(), 9);
         UNIT_ASSERT_EQUAL(buf.Capacity(), 9);
         UNIT_ASSERT_EQUAL(TString(buf.data(), buf.size()), content);
- 
+
         const size_t MB = 1024 * 1024;
         buf.Resize(MB);
         UNIT_ASSERT_EQUAL(buf.Capacity(), MB);
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
         buf.ShrinkToFit();
         UNIT_ASSERT_EQUAL(buf.Capacity(), MB + 100);
     }
- 
+
 #if 0
 Y_UNIT_TEST(TestAlignUp) {
     char content[] = "some text";

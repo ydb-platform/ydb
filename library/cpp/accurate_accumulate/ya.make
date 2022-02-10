@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(alex-sh) 
+OWNER(alex-sh)
 
 SRCS(
     accurate_accumulate.h

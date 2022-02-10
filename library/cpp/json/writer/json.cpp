@@ -28,8 +28,8 @@ namespace NJsonWriter {
 
         Stack.reserve(64); // should be enough for most cases
         StackPush(JE_OUTER_SPACE);
-    } 
- 
+    }
+
     static const char* EntityToStr(EJsonEntity e) {
         switch (e) {
             case JE_OUTER_SPACE:
@@ -44,7 +44,7 @@ namespace NJsonWriter {
                 return "JE_unknown";
         }
     }
- 
+
     inline void TBuf::StackPush(EJsonEntity e) {
         Stack.push_back(e);
     }
@@ -74,7 +74,7 @@ namespace NJsonWriter {
         NeedComma = true;
         NeedNewline = true;
     }
- 
+
     inline void TBuf::CheckAndPop(EJsonEntity e) {
         if (Y_UNLIKELY(StackTop() != e)) {
             ythrow TError() << "JSON writer: unexpected value "
@@ -91,8 +91,8 @@ namespace NJsonWriter {
             return;
 
         PrintWhitespaces(Max(0, indentation), true);
-    } 
- 
+    }
+
     void TBuf::PrintWhitespaces(size_t count, bool prependWithNewLine) {
         static constexpr TStringBuf whitespacesTemplate = "\n                                ";
         static_assert(whitespacesTemplate[0] == '\n');
@@ -112,13 +112,13 @@ namespace NJsonWriter {
             RawWriteChar(',');
         }
         NeedComma = true;
- 
+
         if (NeedNewline) {
             PrintIndentation(false);
         }
         NeedNewline = true;
     }
- 
+
     inline void TBuf::BeginValue() {
         if (Y_UNLIKELY(KeyExpected())) {
             ythrow TError() << "JSON writer: value written, "
@@ -375,9 +375,9 @@ namespace NJsonWriter {
 
         return false;
     }
- 
-#undef MATCH 
- 
+
+#undef MATCH
+
     static bool LessStrPtr(const TString* a, const TString* b) {
         return *a < *b;
     }

@@ -353,8 +353,8 @@ inline TWtringBuf UTF8ToWide(const TStringBuf src, TUtf16String& dst) {
     UTF8ToWideImpl<robust>(src.data(), src.size(), dst.begin(), written);
     dst.resize(written);
     return dst;
-} 
- 
+}
+
 //! if not robust will stop at first error position
 template <bool robust>
 inline TUtf32StringBuf UTF8ToUTF32(const TStringBuf src, TUtf32String& dst) {
@@ -371,8 +371,8 @@ inline TWtringBuf UTF8ToWide(const TStringBuf src, TUtf16String& dst) {
 
 inline TUtf16String UTF8ToWide(const char* text, size_t len) {
     return UTF8ToWide<false>(text, len);
-} 
- 
+}
+
 template <bool robust>
 inline TUtf16String UTF8ToWide(const TStringBuf s) {
     return UTF8ToWide<robust>(s.data(), s.size());
@@ -387,8 +387,8 @@ inline TUtf32String UTF8ToUTF32(const TStringBuf s) {
 
 inline TUtf16String UTF8ToWide(const TStringBuf s) {
     return UTF8ToWide<false>(s.data(), s.size());
-} 
- 
+}
+
 //! converts text from unicode to UTF8
 //! @attention destination buffer must be long enough to fit all characters of the text,
 //!            @c WriteUTF8Char converts @c wchar32 into maximum 4 bytes of UTF8 so
@@ -417,8 +417,8 @@ inline TStringBuf WideToUTF8(const TWtringBuf src, TString& dst) {
     Y_ASSERT(dst.size() >= written);
     dst.remove(written);
     return dst;
-} 
- 
+}
+
 inline TString WideToUTF8(const wchar16* text, size_t len) {
     TString s = TString::Uninitialized(WideToUTF8BufferSize(len));
     size_t written = 0;

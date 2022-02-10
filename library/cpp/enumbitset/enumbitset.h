@@ -8,9 +8,9 @@
 #include <util/string/printf.h>
 #include <util/system/yassert.h>
 
-// Stack memory bitmask for TEnum values [begin, end). 
-// @end value is not included in the mask and is not necessarily defined as enum value. 
-// For example: enum EType { A, B, C } ==> TEnumBitSet<EType, A, C + 1> 
+// Stack memory bitmask for TEnum values [begin, end).
+// @end value is not included in the mask and is not necessarily defined as enum value.
+// For example: enum EType { A, B, C } ==> TEnumBitSet<EType, A, C + 1>
 template <typename TEnum, int mbegin, int mend>
 class TEnumBitSet: private TBitMap<mend - mbegin> {
 public:
@@ -227,10 +227,10 @@ public:
     using TParent::Count;
     using TParent::Empty;
 
-    explicit operator bool() const { 
-        return !Empty(); 
-    } 
- 
+    explicit operator bool() const {
+        return !Empty();
+    }
+
     void Swap(TThis& bitmap) {
         TParent::Swap(bitmap);
     }

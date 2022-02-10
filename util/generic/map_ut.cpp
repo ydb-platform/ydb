@@ -389,7 +389,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
             UNIT_ASSERT(ccont.equal_range(2) != std::make_pair(ccont.begin(), ccont.end()));
         }
     }
- 
+
     template <typename T>
     static void EmptyAndInsertTest(typename T::value_type v) {
         T c;
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
         c.insert(v);
         UNIT_ASSERT(c);
     }
- 
+
     Y_UNIT_TEST(TestEmpty) {
         EmptyAndInsertTest<TMap<char, int, TLess<char>>>(std::pair<char, int>('a', 1));
         EmptyAndInsertTest<TMultiMap<char, int, TLess<char>>>(std::pair<char, int>('a', 1));
@@ -493,4 +493,4 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
         UNIT_ASSERT(movedM.contains(0));
         UNIT_ASSERT_VALUES_EQUAL(1, movedM[0]);
     }
-} 
+}

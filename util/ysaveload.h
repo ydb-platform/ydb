@@ -455,21 +455,21 @@ public:
 
 template <class TSetOrMap, class TValue>
 class TSetSerializerInserterBase {
-public: 
+public:
     inline TSetSerializerInserterBase(TSetOrMap& s)
-        : S_(s) 
-    { 
-        S_.clear(); 
-    } 
+        : S_(s)
+    {
+        S_.clear();
+    }
 
-    inline void Insert(const TValue& v) { 
-        S_.insert(v); 
-    } 
- 
+    inline void Insert(const TValue& v) {
+        S_.insert(v);
+    }
+
 protected:
     TSetOrMap& S_;
-}; 
- 
+};
+
 template <class TSetOrMap, class TValue, bool sorted>
 class TSetSerializerInserter: public TSetSerializerInserterBase<TSetOrMap, TValue> {
     using TBase = TSetSerializerInserterBase<TSetOrMap, TValue>;
@@ -486,22 +486,22 @@ template <class TSetType, class TValue>
 class TSetSerializerInserter<TSetType, TValue, true>: public TSetSerializerInserterBase<TSetType, TValue> {
     using TBase = TSetSerializerInserterBase<TSetType, TValue>;
 
-public: 
+public:
     inline TSetSerializerInserter(TSetType& s, size_t cnt)
         : TBase(s)
-    { 
+    {
         Y_UNUSED(cnt);
         P_ = this->S_.begin();
-    } 
+    }
 
-    inline void Insert(const TValue& v) { 
+    inline void Insert(const TValue& v) {
         P_ = this->S_.insert(P_, v);
-    } 
- 
-private: 
+    }
+
+private:
     typename TSetType::iterator P_;
-}; 
- 
+};
+
 template <class T1, class T2, class T3, class T4, class T5, class TValue>
 class TSetSerializerInserter<THashMap<T1, T2, T3, T4, T5>, TValue, false>: public TSetSerializerInserterBase<THashMap<T1, T2, T3, T4, T5>, TValue> {
     using TMapType = THashMap<T1, T2, T3, T4, T5>;
@@ -605,17 +605,17 @@ template <class T1, class T2, class T3, class T4, class T5>
 class TSerializer<THashMultiMap<T1, T2, T3, T4, T5>>: public TMapSerializer<THashMultiMap<T1, T2, T3, T4, T5>, false> {
 };
 
-template <class K, class C, class A> 
+template <class K, class C, class A>
 class TSerializer<TSet<K, C, A>>: public TSetSerializer<TSet<K, C, A>, true> {
 };
- 
+
 template <class K, class C, class A>
 class TSerializer<std::set<K, C, A>>: public TSetSerializer<std::set<K, C, A>, true> {
 };
 
 template <class T1, class T2, class T3, class T4>
 class TSerializer<THashSet<T1, T2, T3, T4>>: public TSetSerializer<THashSet<T1, T2, T3, T4>, false> {
-}; 
+};
 
 template <class T1, class T2>
 class TSerializer<TQueue<T1, T2>> {

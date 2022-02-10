@@ -34,18 +34,18 @@ Y_UNIT_TEST_SUITE(TEnumBitSetTest) {
 
         ebs.SafeSet(TE_OVERFLOW);
         UNIT_ASSERT(!ebs.SafeTest(TE_OVERFLOW));
-    } 
+    }
 
     Y_UNIT_TEST(TestEmpty) {
-        TTestBitSet mask; 
-        UNIT_ASSERT(mask.Empty()); 
-        if (mask) 
-            UNIT_ASSERT(false && "should be empty"); 
- 
-        mask.Set(TE_FIRST); 
-        UNIT_ASSERT(!mask.Empty()); 
-        UNIT_ASSERT(mask.Count() == 1); 
-        if (!mask) 
+        TTestBitSet mask;
+        UNIT_ASSERT(mask.Empty());
+        if (mask)
+            UNIT_ASSERT(false && "should be empty");
+
+        mask.Set(TE_FIRST);
+        UNIT_ASSERT(!mask.Empty());
+        UNIT_ASSERT(mask.Count() == 1);
+        if (!mask)
             UNIT_ASSERT(false && "should not be empty");
     }
 

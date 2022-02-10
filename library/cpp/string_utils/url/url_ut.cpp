@@ -49,19 +49,19 @@ Y_UNIT_TEST_SUITE(TUtilUrlTest) {
     }
 
     Y_UNIT_TEST(TestGetParentDomain) {
-        UNIT_ASSERT_VALUES_EQUAL("", GetParentDomain("www.ya.ru", 0)); 
-        UNIT_ASSERT_VALUES_EQUAL("ru", GetParentDomain("www.ya.ru", 1)); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetParentDomain("www.ya.ru", 2)); 
-        UNIT_ASSERT_VALUES_EQUAL("www.ya.ru", GetParentDomain("www.ya.ru", 3)); 
-        UNIT_ASSERT_VALUES_EQUAL("www.ya.ru", GetParentDomain("www.ya.ru", 4)); 
-        UNIT_ASSERT_VALUES_EQUAL("com", GetParentDomain("ya.com", 1)); 
-        UNIT_ASSERT_VALUES_EQUAL("ya.com", GetParentDomain("ya.com", 2)); 
-        UNIT_ASSERT_VALUES_EQUAL("RU", GetParentDomain("RU", 1)); 
-        UNIT_ASSERT_VALUES_EQUAL("RU", GetParentDomain("RU", 2)); 
-        UNIT_ASSERT_VALUES_EQUAL("", GetParentDomain("", 0)); 
-        UNIT_ASSERT_VALUES_EQUAL("", GetParentDomain("", 1)); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL("", GetParentDomain("www.ya.ru", 0));
+        UNIT_ASSERT_VALUES_EQUAL("ru", GetParentDomain("www.ya.ru", 1));
+        UNIT_ASSERT_VALUES_EQUAL("ya.ru", GetParentDomain("www.ya.ru", 2));
+        UNIT_ASSERT_VALUES_EQUAL("www.ya.ru", GetParentDomain("www.ya.ru", 3));
+        UNIT_ASSERT_VALUES_EQUAL("www.ya.ru", GetParentDomain("www.ya.ru", 4));
+        UNIT_ASSERT_VALUES_EQUAL("com", GetParentDomain("ya.com", 1));
+        UNIT_ASSERT_VALUES_EQUAL("ya.com", GetParentDomain("ya.com", 2));
+        UNIT_ASSERT_VALUES_EQUAL("RU", GetParentDomain("RU", 1));
+        UNIT_ASSERT_VALUES_EQUAL("RU", GetParentDomain("RU", 2));
+        UNIT_ASSERT_VALUES_EQUAL("", GetParentDomain("", 0));
+        UNIT_ASSERT_VALUES_EQUAL("", GetParentDomain("", 1));
+    }
+
     Y_UNIT_TEST(TestGetZone) {
         UNIT_ASSERT_VALUES_EQUAL("ru", GetZone("www.ya.ru"));
         UNIT_ASSERT_VALUES_EQUAL("com", GetZone("ya.com"));

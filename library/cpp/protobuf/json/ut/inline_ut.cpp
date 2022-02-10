@@ -4,11 +4,11 @@
 #include <library/cpp/protobuf/json/field_option.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/generic/string.h>
- 
-using namespace NProtobufJson; 
- 
+
+using namespace NProtobufJson;
+
 static NProtobufJsonUt::TInlineTest GetTestMsg() {
     NProtobufJsonUt::TInlineTest msg;
     msg.SetOptJson(R"({"a":1,"b":"000"})");
@@ -59,7 +59,7 @@ Y_UNIT_TEST(TestNoValues) {
     NProtobufJsonUt::TInlineTest msg;
     msg.MutableInner()->AddNumber(100);
     msg.MutableInner()->AddNumber(200);
- 
+
     TString expInlined = R"({"Inner":{"Number":[100,200]}})";
 
     TString myInlined = PrintInlined(msg, MakeFieldOptionFunctor(NProtobufJsonUt::inline_test));

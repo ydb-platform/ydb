@@ -45,12 +45,12 @@ TBasicString<wchar16, std::char_traits<wchar16>>::AppendAscii(const ::TStringBuf
     auto dst = begin() + size() - s.size();
 
     for (const char* src = s.data(); dst != end(); ++dst, ++src) {
-        *dst = static_cast<wchar16>(*src); 
-    } 
+        *dst = static_cast<wchar16>(*src);
+    }
 
     return *this;
-} 
- 
+}
+
 template <>
 TUtf16String&
 TBasicString<wchar16, std::char_traits<wchar16>>::AppendUtf8(const ::TStringBuf& s) {

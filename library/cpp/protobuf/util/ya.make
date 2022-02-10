@@ -1,7 +1,7 @@
 LIBRARY()
 
-OWNER(mowgli) 
- 
+OWNER(mowgli)
+
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/binsaver
@@ -12,7 +12,7 @@ PEERDIR(
 SRCS(
     is_equal.cpp
     iterators.h
-    merge.cpp 
+    merge.cpp
     path.cpp
     pb_io.cpp
     pb_utils.h

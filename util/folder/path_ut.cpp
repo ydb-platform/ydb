@@ -1,5 +1,5 @@
 #include "path.h"
-#include "pathsplit.h" 
+#include "pathsplit.h"
 #include "dirut.h"
 #include "tempdir.h"
 
@@ -103,18 +103,18 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("/etc/passwd").Parent(), TFsPath("/etc"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("/etc").Parent(), TFsPath("/"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("/").Parent(), TFsPath("/"));
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("etc/passwd").Parent(), TFsPath("etc"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("etc").Parent(), TFsPath("."));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("./etc").Parent(), TFsPath("."));
 #endif
- 
-#if 0 
+
+#if 0
             UNIT_ASSERT_VALUES_EQUAL(TFsPath("./etc/passwd").Parent(), TFsPath("./etc"));
             UNIT_ASSERT_VALUES_EQUAL(TFsPath("./").Parent(), TFsPath(".."));
             UNIT_ASSERT_VALUES_EQUAL(TFsPath(".").Parent(), TFsPath(".."));
             UNIT_ASSERT_VALUES_EQUAL(TFsPath("..").Parent(), TFsPath("../.."));
-#endif 
+#endif
     }
 
     Y_UNIT_TEST(GetName) {
@@ -269,30 +269,30 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
 
     Y_UNIT_TEST(TestSubpathOf) {
         UNIT_ASSERT(TFsPath("/a/b/c/d").IsSubpathOf("/a/b"));
- 
+
         UNIT_ASSERT(TFsPath("/a").IsSubpathOf("/"));
         UNIT_ASSERT(!TFsPath("/").IsSubpathOf("/a"));
         UNIT_ASSERT(!TFsPath("/a").IsSubpathOf("/a"));
- 
+
         UNIT_ASSERT(TFsPath("/a/b").IsSubpathOf("/a"));
         UNIT_ASSERT(TFsPath("a/b").IsSubpathOf("a"));
         UNIT_ASSERT(!TFsPath("/a/b").IsSubpathOf("/b"));
         UNIT_ASSERT(!TFsPath("a/b").IsSubpathOf("b"));
- 
+
         // mixing absolute/relative
         UNIT_ASSERT(!TFsPath("a").IsSubpathOf("/"));
         UNIT_ASSERT(!TFsPath("a").IsSubpathOf("/a"));
         UNIT_ASSERT(!TFsPath("/a").IsSubpathOf("a"));
         UNIT_ASSERT(!TFsPath("a/b").IsSubpathOf("/a"));
         UNIT_ASSERT(!TFsPath("/a/b").IsSubpathOf("a"));
- 
-#ifdef _win_ 
+
+#ifdef _win_
         UNIT_ASSERT(TFsPath("x:/a/b").IsSubpathOf("x:/a"));
         UNIT_ASSERT(!TFsPath("x:/a/b").IsSubpathOf("y:/a"));
         UNIT_ASSERT(!TFsPath("x:/a/b").IsSubpathOf("a"));
-#endif 
+#endif
     }
- 
+
     Y_UNIT_TEST(TestNonStrictSubpathOf) {
         UNIT_ASSERT(TFsPath("/a/b/c/d").IsNonStrictSubpathOf("/a/b"));
 
@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
     Y_UNIT_TEST(TestUndefined) {
         UNIT_ASSERT_VALUES_EQUAL(TFsPath(), TFsPath(""));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath(), TFsPath().Fix());
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TFsPath() / TFsPath(), TFsPath());
 #ifdef _win_
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("a\\b"), TFsPath() / TString("a\\b"));
@@ -363,20 +363,20 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
 #endif
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("."), TFsPath() / ".");
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("."), "." / TFsPath());
- 
+
         UNIT_ASSERT(TFsPath().PathSplit().empty());
         UNIT_ASSERT(!TFsPath().PathSplit().IsAbsolute);
         UNIT_ASSERT(TFsPath().IsRelative()); // undefined path is relative
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TFsPath().GetPath(), "");
         UNIT_ASSERT_VALUES_EQUAL(TFsPath().GetName(), "");
         UNIT_ASSERT_VALUES_EQUAL(TFsPath().GetExtension(), "");
- 
+
         UNIT_ASSERT_VALUES_EQUAL(TFsPath().Parent(), TFsPath());
         UNIT_ASSERT_VALUES_EQUAL(TFsPath().Child("a"), TFsPath("a"));
         UNIT_ASSERT_VALUES_EQUAL(TFsPath().Basename(), "");
         UNIT_ASSERT_VALUES_EQUAL(TFsPath().Dirname(), "");
- 
+
         UNIT_ASSERT(!TFsPath().IsSubpathOf("a/b"));
         UNIT_ASSERT(TFsPath().IsContainerOf("a/b"));
         UNIT_ASSERT(!TFsPath().IsContainerOf("/a/b"));
@@ -385,14 +385,14 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
 #else
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("a/b").RelativeTo(TFsPath()), TFsPath("a/b"));
 #endif
- 
+
         UNIT_ASSERT(!TFsPath().Exists());
         UNIT_ASSERT(!TFsPath().IsFile());
         UNIT_ASSERT(!TFsPath().IsDirectory());
         TFileStat stat;
         UNIT_ASSERT(!TFsPath().Stat(stat));
     }
- 
+
     Y_UNIT_TEST(TestJoinFsPaths) {
 #ifdef _win_
         UNIT_ASSERT_VALUES_EQUAL(JoinFsPaths("a\\b", "c\\d"), "a\\b\\c\\d");

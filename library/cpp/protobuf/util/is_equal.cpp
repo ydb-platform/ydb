@@ -1,16 +1,16 @@
-#include "is_equal.h" 
-#include "traits.h" 
- 
+#include "is_equal.h"
+#include "traits.h"
+
 #include <google/protobuf/descriptor.h>
- 
-#include <util/generic/yexception.h> 
+
+#include <util/generic/yexception.h>
 #include <util/string/cast.h>
 #include <util/string/vector.h>
- 
-namespace NProtoBuf { 
+
+namespace NProtoBuf {
     template <bool useDefault>
     static bool IsEqualImpl(const Message& m1, const Message& m2, TVector<TString>* differentPath);
- 
+
     namespace {
         template <FieldDescriptor::CppType CppType, bool useDefault>
         struct TCompareValue {
@@ -26,12 +26,12 @@ namespace NProtoBuf {
                 return NProtoBuf::IsEqualImpl<useDefault>(*value1, *value2, differentPath);
             }
         };
- 
+
         template <FieldDescriptor::CppType CppType, bool useDefault>
         class TCompareField {
             typedef TCppTypeTraits<CppType> TTraits;
             typedef TCompareValue<CppType, useDefault> TCompare;
- 
+
         public:
             static inline bool IsEqual(const Message& m1, const Message& m2, const FieldDescriptor& field, TVector<TString>* differentPath) {
                 if (field.is_repeated())
@@ -39,12 +39,12 @@ namespace NProtoBuf {
                 else
                     return IsEqualSingle(m1, m2, &field, differentPath);
             }
- 
+
         private:
             static bool IsEqualSingle(const Message& m1, const Message& m2, const FieldDescriptor* field, TVector<TString>* differentPath) {
                 bool has1 = m1.GetReflection()->HasField(m1, field);
                 bool has2 = m2.GetReflection()->HasField(m2, field);
- 
+
                 if (has1 != has2) {
                     if (!useDefault || field->is_required()) {
                         return false;
@@ -60,7 +60,7 @@ namespace NProtoBuf {
             static bool IsEqualRepeated(const Message& m1, const Message& m2, const FieldDescriptor* field, TVector<TString>* differentPath) {
                 int fieldSize = m1.GetReflection()->FieldSize(m1, field);
                 if (fieldSize != m2.GetReflection()->FieldSize(m2, field))
-                    return false; 
+                    return false;
                 for (int i = 0; i < fieldSize; ++i)
                     if (!IsEqualRepeatedValue(m1, m2, field, i, differentPath)) {
                         if (!!differentPath) {
@@ -68,16 +68,16 @@ namespace NProtoBuf {
                         }
                         return false;
                     }
-                return true; 
+                return true;
             }
- 
+
             static inline bool IsEqualRepeatedValue(const Message& m1, const Message& m2, const FieldDescriptor* field, int index, TVector<TString>* differentPath) {
                 return TCompare::IsEqual(TTraits::GetRepeated(m1, field, index),
                                          TTraits::GetRepeated(m2, field, index),
                                          differentPath);
             }
         };
- 
+
         template <bool useDefault>
         bool IsEqualField(const Message& m1, const Message& m2, const FieldDescriptor& field, TVector<TString>* differentPath) {
 #define CASE_CPPTYPE(cpptype)                                                                                          \
@@ -88,7 +88,7 @@ namespace NProtoBuf {
         }                                                                                                              \
         return r;                                                                                                      \
     }
- 
+
             switch (field.cpp_type()) {
                 CASE_CPPTYPE(INT32)
                 CASE_CPPTYPE(INT64)
@@ -105,10 +105,10 @@ namespace NProtoBuf {
             }
 
 #undef CASE_CPPTYPE
-        } 
+        }
     }
- 
-    template <bool useDefault> 
+
+    template <bool useDefault>
     bool IsEqualImpl(const Message& m1, const Message& m2, TVector<TString>* differentPath) {
         const Descriptor* descr = m1.GetDescriptor();
         if (descr != m2.GetDescriptor()) {
@@ -120,7 +120,7 @@ namespace NProtoBuf {
             }
         return true;
     }
- 
+
     bool IsEqual(const Message& m1, const Message& m2) {
         return IsEqualImpl<false>(m1, m2, nullptr);
     }
@@ -131,14 +131,14 @@ namespace NProtoBuf {
         bool r = IsEqualImpl<false>(m1, m2, differentPathVectorPtr);
         if (!r && differentPath) {
             *differentPath = JoinStrings(differentPathVector.rbegin(), differentPathVector.rend(), "/");
-        } 
+        }
         return r;
     }
- 
+
     bool IsEqualDefault(const Message& m1, const Message& m2) {
         return IsEqualImpl<true>(m1, m2, nullptr);
-    } 
- 
+    }
+
     template <bool useDefault>
     static bool IsEqualFieldImpl(
         const Message& m1,
@@ -147,11 +147,11 @@ namespace NProtoBuf {
         TVector<TString>* differentPath) {
         const Descriptor* descr = m1.GetDescriptor();
         if (descr != m2.GetDescriptor()) {
-            return false; 
+            return false;
         }
         return IsEqualField<useDefault>(m1, m2, field, differentPath);
     }
- 
+
     bool IsEqualField(const Message& m1, const Message& m2, const FieldDescriptor& field) {
         return IsEqualFieldImpl<false>(m1, m2, field, nullptr);
     }

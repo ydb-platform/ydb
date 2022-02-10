@@ -26,10 +26,10 @@ namespace NCompactTrie {
         return (sizeof(T) - 1) * 8;
     }
 
-    static inline bool IsEpsilonLink(const char flags) { 
-        return !(flags & (MT_FINAL | MT_NEXT)); 
-    } 
- 
+    static inline bool IsEpsilonLink(const char flags) {
+        return !(flags & (MT_FINAL | MT_NEXT));
+    }
+
     static inline void TraverseEpsilon(const char*& datapos) {
         const char flags = *datapos;
         if (!IsEpsilonLink(flags)) {
@@ -41,14 +41,14 @@ namespace NCompactTrie {
         datapos += offset;
     }
 
-    static inline size_t LeftOffsetLen(const char flags) { 
-        return (flags >> MT_LEFTSHIFT) & MT_SIZEMASK; 
-    } 
- 
-    static inline size_t RightOffsetLen(const char flags) { 
-        return flags & MT_SIZEMASK; 
-    } 
- 
+    static inline size_t LeftOffsetLen(const char flags) {
+        return (flags >> MT_LEFTSHIFT) & MT_SIZEMASK;
+    }
+
+    static inline size_t RightOffsetLen(const char flags) {
+        return flags & MT_SIZEMASK;
+    }
+
     void ShowProgress(size_t n); // just print dots
 }
 
@@ -100,82 +100,82 @@ namespace NCompactTrie {
         os.Write(buf, len);
         return len;
     }
- 
-    // Unpack the offset to the next node. The encoding scheme can store offsets 
-    // up to 7 bytes; whether they fit into size_t is another issue. 
+
+    // Unpack the offset to the next node. The encoding scheme can store offsets
+    // up to 7 bytes; whether they fit into size_t is another issue.
     Y_FORCE_INLINE size_t UnpackOffset(const char* p, size_t len) {
-        size_t result = 0; 
- 
-        while (len--) 
-            result = ((result << 8) | (*(p++) & 0xFF)); 
- 
-        return result; 
-    } 
- 
-    // Auxiliary function: consumes one character from the input. Advances the data pointer 
-    // to the position immediately preceding the value for the link just traversed (if any); 
-    // returns flags associated with the link. If no arc with the required label is present, 
-    // zeroes the data pointer. 
+        size_t result = 0;
+
+        while (len--)
+            result = ((result << 8) | (*(p++) & 0xFF));
+
+        return result;
+    }
+
+    // Auxiliary function: consumes one character from the input. Advances the data pointer
+    // to the position immediately preceding the value for the link just traversed (if any);
+    // returns flags associated with the link. If no arc with the required label is present,
+    // zeroes the data pointer.
     Y_FORCE_INLINE char LeapByte(const char*& datapos, const char* dataend, char label) {
-        while (datapos < dataend) { 
-            size_t offsetlength, offset; 
-            const char* startpos = datapos; 
-            char flags = *(datapos++); 
- 
-            if (IsEpsilonLink(flags)) { 
-                // Epsilon link - jump to the specified offset without further checks. 
-                // These links are created during minimization: original uncompressed 
-                // tree does not need them. (If we find a way to package 3 offset lengths 
-                // into 1 byte, we could get rid of them; but it looks like they do no harm. 
+        while (datapos < dataend) {
+            size_t offsetlength, offset;
+            const char* startpos = datapos;
+            char flags = *(datapos++);
+
+            if (IsEpsilonLink(flags)) {
+                // Epsilon link - jump to the specified offset without further checks.
+                // These links are created during minimization: original uncompressed
+                // tree does not need them. (If we find a way to package 3 offset lengths
+                // into 1 byte, we could get rid of them; but it looks like they do no harm.
                 Y_ASSERT(datapos < dataend);
-                offsetlength = flags & MT_SIZEMASK; 
-                offset = UnpackOffset(datapos, offsetlength); 
-                if (!offset) 
-                    break; 
-                datapos = startpos + offset; 
- 
-                continue; 
-            } 
- 
-            char ch = *(datapos++); 
- 
-            // Left branch 
-            offsetlength = LeftOffsetLen(flags); 
-            if ((unsigned char)label < (unsigned char)ch) { 
-                offset = UnpackOffset(datapos, offsetlength); 
-                if (!offset) 
-                    break; 
- 
-                datapos = startpos + offset; 
- 
-                continue; 
-            } 
- 
-            datapos += offsetlength; 
- 
-            // Right branch 
-            offsetlength = RightOffsetLen(flags); 
-            if ((unsigned char)label > (unsigned char)ch) { 
-                offset = UnpackOffset(datapos, offsetlength); 
- 
-                if (!offset) 
-                    break; 
- 
-                datapos = startpos + offset; 
- 
-                continue; 
-            } 
- 
-            // Got a match; return position right before the contents for the label 
-            datapos += offsetlength; 
-            return flags; 
-        } 
- 
-        // if we got here, we're past the dataend - bail out ASAP 
+                offsetlength = flags & MT_SIZEMASK;
+                offset = UnpackOffset(datapos, offsetlength);
+                if (!offset)
+                    break;
+                datapos = startpos + offset;
+
+                continue;
+            }
+
+            char ch = *(datapos++);
+
+            // Left branch
+            offsetlength = LeftOffsetLen(flags);
+            if ((unsigned char)label < (unsigned char)ch) {
+                offset = UnpackOffset(datapos, offsetlength);
+                if (!offset)
+                    break;
+
+                datapos = startpos + offset;
+
+                continue;
+            }
+
+            datapos += offsetlength;
+
+            // Right branch
+            offsetlength = RightOffsetLen(flags);
+            if ((unsigned char)label > (unsigned char)ch) {
+                offset = UnpackOffset(datapos, offsetlength);
+
+                if (!offset)
+                    break;
+
+                datapos = startpos + offset;
+
+                continue;
+            }
+
+            // Got a match; return position right before the contents for the label
+            datapos += offsetlength;
+            return flags;
+        }
+
+        // if we got here, we're past the dataend - bail out ASAP
         datapos = nullptr;
-        return 0; 
-    } 
- 
+        return 0;
+    }
+
     // Auxiliary function: consumes one (multibyte) symbol from the input.
     // Advances the data pointer to the root of the subtrie beginning after the symbol,
     // zeroes it if this subtrie is empty.

@@ -166,28 +166,28 @@ public:
         : Slave_(OpenLzDecompressor(input).Release())
     {
     }
- 
+
 private:
     size_t DoRead(void* buf, size_t len) override {
         return Slave_->Read(buf, len);
     }
- 
+
 private:
     THolder<IInputStream> Slave_;
-}; 
- 
-template <class C> 
-static inline void TestMixedDecompress() { 
-    TestCompress<C>(); 
-    TestDecompress<TMixedDecompress>(); 
-} 
- 
-template <class D, class C> 
-static inline void TestDecompressError() { 
-    TestCompress<C>(); 
-    UNIT_ASSERT_EXCEPTION(TestDecompress<D>(), TDecompressorError); 
-} 
- 
+};
+
+template <class C>
+static inline void TestMixedDecompress() {
+    TestCompress<C>();
+    TestDecompress<TMixedDecompress>();
+}
+
+template <class D, class C>
+static inline void TestDecompressError() {
+    TestCompress<C>();
+    UNIT_ASSERT_EXCEPTION(TestDecompress<D>(), TDecompressorError);
+}
+
 Y_UNIT_TEST_SUITE(TLzTest) {
     Y_UNIT_TEST(TestLzo) {
         TestCompress<TLzoCompress>();
@@ -243,23 +243,23 @@ Y_UNIT_TEST_SUITE(TLzTest) {
         TestCompress<TSnappyCompress>();
         TestDecompress<TSnappyDecompress>();
     }
- 
+
     Y_UNIT_TEST(TestGeneric) {
-        TestMixedDecompress<TLzoCompress>(); 
-        TestMixedDecompress<TLzfCompress>(); 
-        TestMixedDecompress<TLzqCompress>(); 
-        TestMixedDecompress<TLz4Compress>(); 
-        TestMixedDecompress<TSnappyCompress>(); 
-    } 
- 
+        TestMixedDecompress<TLzoCompress>();
+        TestMixedDecompress<TLzfCompress>();
+        TestMixedDecompress<TLzqCompress>();
+        TestMixedDecompress<TLz4Compress>();
+        TestMixedDecompress<TSnappyCompress>();
+    }
+
     Y_UNIT_TEST(TestDecompressorError) {
-        TestDecompressError<TLzoDecompress, TLzfCompress>(); 
-        TestDecompressError<TLzfDecompress, TLzqCompress>(); 
-        TestDecompressError<TLzqDecompress, TLz4Compress>(); 
-        TestDecompressError<TLz4Decompress, TSnappyCompress>(); 
-        TestDecompressError<TSnappyDecompress, TBufferedOutput>(); 
-        TestDecompressError<TMixedDecompress, TBufferedOutput>(); 
-    } 
+        TestDecompressError<TLzoDecompress, TLzfCompress>();
+        TestDecompressError<TLzfDecompress, TLzqCompress>();
+        TestDecompressError<TLzqDecompress, TLz4Compress>();
+        TestDecompressError<TLz4Decompress, TSnappyCompress>();
+        TestDecompressError<TSnappyDecompress, TBufferedOutput>();
+        TestDecompressError<TMixedDecompress, TBufferedOutput>();
+    }
 
     Y_UNIT_TEST(TestFactory) {
         TStringStream ss;

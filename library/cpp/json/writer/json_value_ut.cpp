@@ -8,34 +8,34 @@ using namespace NJson;
 
 Y_UNIT_TEST_SUITE(TJsonValueTest) {
     Y_UNIT_TEST(UndefTest) {
-        TJsonValue undef; 
-        TJsonValue null(JSON_NULL); 
-        TJsonValue _false(false); 
-        TJsonValue zeroInt(0); 
-        TJsonValue zeroDouble(0.0); 
-        TJsonValue emptyStr(""); 
-        TJsonValue emptyArray(JSON_ARRAY); 
-        TJsonValue emptyMap(JSON_MAP); 
- 
-        UNIT_ASSERT(!undef.IsDefined()); 
+        TJsonValue undef;
+        TJsonValue null(JSON_NULL);
+        TJsonValue _false(false);
+        TJsonValue zeroInt(0);
+        TJsonValue zeroDouble(0.0);
+        TJsonValue emptyStr("");
+        TJsonValue emptyArray(JSON_ARRAY);
+        TJsonValue emptyMap(JSON_MAP);
+
+        UNIT_ASSERT(!undef.IsDefined());
         UNIT_ASSERT(!null.IsDefined()); // json NULL is undefined too!
-        UNIT_ASSERT(_false.IsDefined()); 
-        UNIT_ASSERT(zeroInt.IsDefined()); 
-        UNIT_ASSERT(zeroDouble.IsDefined()); 
-        UNIT_ASSERT(emptyStr.IsDefined()); 
-        UNIT_ASSERT(emptyArray.IsDefined()); 
-        UNIT_ASSERT(emptyMap.IsDefined()); 
- 
-        UNIT_ASSERT(undef == TJsonValue()); 
-        UNIT_ASSERT(undef != null); 
-        UNIT_ASSERT(undef != _false); 
-        UNIT_ASSERT(undef != zeroInt); 
-        UNIT_ASSERT(undef != zeroDouble); 
-        UNIT_ASSERT(undef != emptyStr); 
-        UNIT_ASSERT(undef != emptyArray); 
-        UNIT_ASSERT(undef != emptyMap); 
-    } 
- 
+        UNIT_ASSERT(_false.IsDefined());
+        UNIT_ASSERT(zeroInt.IsDefined());
+        UNIT_ASSERT(zeroDouble.IsDefined());
+        UNIT_ASSERT(emptyStr.IsDefined());
+        UNIT_ASSERT(emptyArray.IsDefined());
+        UNIT_ASSERT(emptyMap.IsDefined());
+
+        UNIT_ASSERT(undef == TJsonValue());
+        UNIT_ASSERT(undef != null);
+        UNIT_ASSERT(undef != _false);
+        UNIT_ASSERT(undef != zeroInt);
+        UNIT_ASSERT(undef != zeroDouble);
+        UNIT_ASSERT(undef != emptyStr);
+        UNIT_ASSERT(undef != emptyArray);
+        UNIT_ASSERT(undef != emptyMap);
+    }
+
     Y_UNIT_TEST(DefaultCompareTest) {
         {
             TJsonValue lhs;
@@ -208,31 +208,31 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
             UNIT_ASSERT(rhs != lhs);
         }
     }
- 
+
     Y_UNIT_TEST(SwapTest) {
-        { 
-            TJsonValue lhs; 
-            lhs.InsertValue("a", "b"); 
-            TJsonValue lhsCopy = lhs; 
- 
-            TJsonValue rhs(JSON_NULL); 
-            TJsonValue rhsCopy = rhs; 
- 
-            UNIT_ASSERT(lhs == lhsCopy); 
-            UNIT_ASSERT(rhs == rhsCopy); 
- 
-            lhs.Swap(rhs); 
- 
-            UNIT_ASSERT(rhs == lhsCopy); 
-            UNIT_ASSERT(lhs == rhsCopy); 
- 
-            lhs.Swap(rhs); 
- 
-            UNIT_ASSERT(lhs == lhsCopy); 
-            UNIT_ASSERT(rhs == rhsCopy); 
-        } 
-    } 
- 
+        {
+            TJsonValue lhs;
+            lhs.InsertValue("a", "b");
+            TJsonValue lhsCopy = lhs;
+
+            TJsonValue rhs(JSON_NULL);
+            TJsonValue rhsCopy = rhs;
+
+            UNIT_ASSERT(lhs == lhsCopy);
+            UNIT_ASSERT(rhs == rhsCopy);
+
+            lhs.Swap(rhs);
+
+            UNIT_ASSERT(rhs == lhsCopy);
+            UNIT_ASSERT(lhs == rhsCopy);
+
+            lhs.Swap(rhs);
+
+            UNIT_ASSERT(lhs == lhsCopy);
+            UNIT_ASSERT(rhs == rhsCopy);
+        }
+    }
+
     Y_UNIT_TEST(GetValueByPathTest) {
         {
             TJsonValue lhs;
@@ -250,15 +250,15 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
             UNIT_ASSERT(!lhs.GetValueByPath("l/a/c/se", result, '/'));
             UNIT_ASSERT(lhs.GetValueByPath("l/a/c", result, '/'));
             UNIT_ASSERT(result.GetStringRobust() == "{\"e\":\"f\"}");
- 
-            // faster TStringBuf version 
-            UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("l", '/'), last); 
-            UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("l/a", '/'), second); 
-            UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("l/a/c", '/'), first); 
-            UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("l.a.c.e", '.'), "f"); 
-            UNIT_ASSERT_EQUAL(lhs.GetValueByPath("l/a/c/e/x", '/'), NULL); 
-            UNIT_ASSERT_EQUAL(lhs.GetValueByPath("a/c/e/x", '/'), NULL); 
-            UNIT_ASSERT_EQUAL(lhs.GetValueByPath("nokey", '/'), NULL); 
+
+            // faster TStringBuf version
+            UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("l", '/'), last);
+            UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("l/a", '/'), second);
+            UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("l/a/c", '/'), first);
+            UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("l.a.c.e", '.'), "f");
+            UNIT_ASSERT_EQUAL(lhs.GetValueByPath("l/a/c/e/x", '/'), NULL);
+            UNIT_ASSERT_EQUAL(lhs.GetValueByPath("a/c/e/x", '/'), NULL);
+            UNIT_ASSERT_EQUAL(lhs.GetValueByPath("nokey", '/'), NULL);
             UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("", '/'), lhs); // itself
 
             TJsonValue array;

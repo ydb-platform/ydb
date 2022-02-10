@@ -132,21 +132,21 @@ namespace NPackers {
     }
 
     extern const ui8 SkipTable[];
- 
+
     template <>
     inline void TIntegralPacker<ui64>::UnpackLeaf(const char* p, ui64& result) const {
         unsigned char ch = *(p++);
         size_t taillen = SkipTable[ch] - 1;
- 
+
         result = (ch & (0x7F >> taillen));
- 
+
         while (taillen--)
             result = ((result << 8) | (*(p++) & 0xFF));
     }
 
     template <>
     inline size_t TIntegralPacker<ui64>::SkipLeaf(const char* p) const {
-        return SkipTable[(ui8)*p]; 
+        return SkipTable[(ui8)*p];
     }
 
     namespace NImpl {
@@ -182,17 +182,17 @@ namespace NPackers {
     }
 
     template <class T>
-    inline void TIntegralPacker<T>::PackLeaf(char* buffer, const T& data, size_t size) const { 
+    inline void TIntegralPacker<T>::PackLeaf(char* buffer, const T& data, size_t size) const {
         TIntegralPacker<ui64>().PackLeaf(buffer, ConvertIntegral<T>(data), size);
     }
 
     template <class T>
-    inline size_t TIntegralPacker<T>::MeasureLeaf(const T& data) const { 
+    inline size_t TIntegralPacker<T>::MeasureLeaf(const T& data) const {
         return TIntegralPacker<ui64>().MeasureLeaf(ConvertIntegral<T>(data));
     }
 
     template <class T>
-    inline size_t TIntegralPacker<T>::SkipLeaf(const char* p) const { 
+    inline size_t TIntegralPacker<T>::SkipLeaf(const char* p) const {
         return TIntegralPacker<ui64>().SkipLeaf(p);
     }
 

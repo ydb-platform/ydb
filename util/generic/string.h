@@ -249,7 +249,7 @@ public:
         return StdStr();
 #endif
     }
- 
+
     inline const_reference operator[](size_t pos) const noexcept {
         Y_ASSERT(pos <= length());
 
@@ -627,7 +627,7 @@ public:
     }
 
     TBasicString& assign(const TCharType* pc, size_t pos, size_t n) {
-        return assign(pc + pos, n); 
+        return assign(pc + pos, n);
     }
 
     TBasicString& assign(const TBasicStringBuf<TCharType, TTraits> s) {

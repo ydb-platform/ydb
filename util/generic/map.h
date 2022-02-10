@@ -18,10 +18,10 @@ class TMap: public std::map<K, V, Less, TReboundAllocator<A, std::pair<const K, 
 public:
     using TBase::TBase;
 
-    inline explicit operator bool() const noexcept { 
-        return !this->empty(); 
-    } 
- 
+    inline explicit operator bool() const noexcept {
+        return !this->empty();
+    }
+
     inline bool contains(const K& key) const {
         return this->find(key) != this->end();
     }
@@ -34,9 +34,9 @@ class TMultiMap: public std::multimap<K, V, Less, TReboundAllocator<A, std::pair
 public:
     using TBase::TBase;
 
-    inline explicit operator bool() const noexcept { 
-        return !this->empty(); 
-    } 
+    inline explicit operator bool() const noexcept {
+        return !this->empty();
+    }
 
     inline bool contains(const K& key) const {
         return this->find(key) != this->end();

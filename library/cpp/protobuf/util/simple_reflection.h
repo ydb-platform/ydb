@@ -1,18 +1,18 @@
-#pragma once 
- 
+#pragma once
+
 #include "cast.h"
 #include "path.h"
-#include "traits.h" 
- 
+#include "traits.h"
+
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/message.h>
- 
+
 #include <util/generic/maybe.h>
 #include <util/generic/typetraits.h>
 #include <util/generic/vector.h>
 #include <util/system/defaults.h>
 
-namespace NProtoBuf { 
+namespace NProtoBuf {
     class TConstField {
     public:
         TConstField(const Message& msg, const FieldDescriptor* fd)
@@ -21,11 +21,11 @@ namespace NProtoBuf {
         {
             Y_ASSERT(Fd && Fd->containing_type() == Msg.GetDescriptor());
         }
- 
+
         static TMaybe<TConstField> ByPath(const Message& msg, const TStringBuf& path);
         static TMaybe<TConstField> ByPath(const Message& msg, const TVector<const FieldDescriptor*>& fieldsPath);
         static TMaybe<TConstField> ByPath(const Message& msg, const TFieldPath& fieldsPath);
- 
+
         const Message& Parent() const {
             return Msg;
         }
@@ -33,50 +33,50 @@ namespace NProtoBuf {
         const FieldDescriptor* Field() const {
             return Fd;
         }
- 
+
         bool HasValue() const {
             return IsRepeated() ? Refl().FieldSize(Msg, Fd) > 0
                                 : Refl().HasField(Msg, Fd);
         }
- 
+
         // deprecated, use HasValue() instead
         bool Has() const {
             return HasValue();
         }
- 
+
         size_t Size() const {
             return IsRepeated() ? Refl().FieldSize(Msg, Fd)
                                 : (Refl().HasField(Msg, Fd) ? 1 : 0);
         }
- 
+
         template <typename T>
         inline typename TSelectCppType<T>::T Get(size_t index = 0) const;
- 
+
         template <typename TMsg>
         inline const TMsg* GetAs(size_t index = 0) const {
             // casting version of Get
             return IsMessageInstance<TMsg>() ? CheckedCast<const TMsg*>(Get<const Message*>(index)) : nullptr;
         }
- 
+
         template <typename T>
         bool IsInstance() const {
             return CppType() == TSelectCppType<T>::Result;
         }
- 
+
         template <typename TMsg>
         bool IsMessageInstance() const {
             return IsMessage() && Fd->message_type() == TMsg::descriptor();
         }
- 
+
         template <typename TMsg>
         bool IsInstance(std::enable_if_t<std::is_base_of<Message, TMsg>::value && !std::is_same<Message, TMsg>::value, void>* = NULL) const { // template will be selected when specifying Message children types
             return IsMessage() && Fd->message_type() == TMsg::descriptor();
         }
- 
+
         bool IsString() const {
             return CppType() == FieldDescriptor::CPPTYPE_STRING;
         }
- 
+
         bool IsMessage() const {
             return CppType() == FieldDescriptor::CPPTYPE_MESSAGE;
         }
@@ -95,11 +95,11 @@ namespace NProtoBuf {
         bool IsRepeated() const {
             return Fd->is_repeated();
         }
- 
+
         FieldDescriptor::CppType CppType() const {
             return Fd->cpp_type();
         }
- 
+
         const Reflection& Refl() const {
             return *Msg.GetReflection();
         }
@@ -107,23 +107,23 @@ namespace NProtoBuf {
         [[noreturn]] void RaiseUnknown() const {
             ythrow yexception() << "Unknown field cpp-type: " << (size_t)CppType();
         }
- 
+
         bool IsSameField(const TConstField& other) const {
             return &Parent() == &other.Parent() && Field() == other.Field();
         }
- 
+
     protected:
         const Message& Msg;
         const FieldDescriptor* Fd;
     };
- 
+
     class TMutableField: public TConstField {
     public:
         TMutableField(Message& msg, const FieldDescriptor* fd)
             : TConstField(msg, fd)
         {
         }
- 
+
         static TMaybe<TMutableField> ByPath(Message& msg, const TStringBuf& path, bool createPath = false);
         static TMaybe<TMutableField> ByPath(Message& msg, const TVector<const FieldDescriptor*>& fieldsPath, bool createPath = false);
         static TMaybe<TMutableField> ByPath(Message& msg, const TFieldPath& fieldsPath, bool createPath = false);
@@ -131,26 +131,26 @@ namespace NProtoBuf {
         Message* MutableParent() {
             return Mut();
         }
- 
+
         template <typename T>
         inline void Set(T value, size_t index = 0);
- 
+
         template <typename T>
         inline void Add(T value);
 
         inline void MergeFrom(const TConstField& src);
- 
+
         inline void Clear() {
             Refl().ClearField(Mut(), Fd);
         }
         /*
-    void Swap(TMutableField& f) { 
+    void Swap(TMutableField& f) {
         Y_ASSERT(Field() == f.Field());
- 
-        // not implemented yet, TODO: implement when Reflection::Mutable(Ptr)RepeatedField 
-        // is ported into arcadia protobuf library from up-stream. 
-    } 
-*/ 
+
+        // not implemented yet, TODO: implement when Reflection::Mutable(Ptr)RepeatedField
+        // is ported into arcadia protobuf library from up-stream.
+    }
+*/
         inline void RemoveLast() {
             Y_ASSERT(HasValue());
             if (IsRepeated())
@@ -158,7 +158,7 @@ namespace NProtoBuf {
             else
                 Clear();
         }
- 
+
         inline void SwapElements(size_t index1, size_t index2) {
             Y_ASSERT(IsRepeated());
             Y_ASSERT(index1 < Size());
@@ -188,7 +188,7 @@ namespace NProtoBuf {
                 return Refl().MutableMessage(Mut(), Fd);
             }
         }
- 
+
         template <typename TMsg>
         inline TMsg* AddMessage() {
             return CheckedCast<TMsg*>(AddMessage());
@@ -207,9 +207,9 @@ namespace NProtoBuf {
         template <typename T>
         inline void MergeValue(T srcValue);
     };
- 
+
     // template implementations
- 
+
     template <typename T>
     inline typename TSelectCppType<T>::T TConstField::Get(size_t index) const {
         Y_ASSERT(index < Size() || !Fd->is_repeated() && index == 0); // Get for single fields is always allowed because of default values
@@ -222,8 +222,8 @@ namespace NProtoBuf {
                 RaiseUnknown();
         }
 #undef TMP_MACRO_FOR_CPPTYPE
-    } 
- 
+    }
+
     template <typename T>
     inline void TMutableField::Set(T value, size_t index) {
         Y_ASSERT(!IsRepeated() && index == 0 || index < Size());
@@ -237,8 +237,8 @@ namespace NProtoBuf {
                 RaiseUnknown();
         }
 #undef TMP_MACRO_FOR_CPPTYPE
-    } 
- 
+    }
+
     template <typename T>
     inline void TMutableField::Add(T value) {
 #define TMP_MACRO_FOR_CPPTYPE(CPPTYPE)                                                                       \
@@ -251,13 +251,13 @@ namespace NProtoBuf {
                 RaiseUnknown();
         }
 #undef TMP_MACRO_FOR_CPPTYPE
-    } 
- 
+    }
+
     template <typename T>
     inline void TMutableField::MergeValue(T srcValue) {
         Add(srcValue);
     }
- 
+
     template <>
     inline void TMutableField::MergeValue<const Message*>(const Message* srcValue) {
         if (IsRepeated()) {

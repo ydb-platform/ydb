@@ -47,61 +47,61 @@ inline void CharToWide(const char* text, size_t len, TCharType* dest, const Code
     }
 }
 
-namespace NDetail { 
-    namespace NBaseOps { 
-        // Template interface base recoding drivers, do not perform any memory management, 
-        // do not care about buffer size, so supplied @dst 
-        // should have enough room for the result (with proper reserve for the worst case) 
- 
-        // Depending on template params, perform conversion of single-byte/multi-byte/utf8 string to/from wide string. 
- 
+namespace NDetail {
+    namespace NBaseOps {
+        // Template interface base recoding drivers, do not perform any memory management,
+        // do not care about buffer size, so supplied @dst
+        // should have enough room for the result (with proper reserve for the worst case)
+
+        // Depending on template params, perform conversion of single-byte/multi-byte/utf8 string to/from wide string.
+
         template <typename TCharType>
         inline TBasicStringBuf<TCharType> RecodeSingleByteChar(const TStringBuf src, TCharType* dst, const CodePage& cp) {
             Y_ASSERT(cp.SingleByteCodepage());
             ::CharToWide(src.data(), src.size(), dst, cp);
             return TBasicStringBuf<TCharType>(dst, src.size());
-        } 
- 
+        }
+
         template <typename TCharType>
         inline TStringBuf RecodeSingleByteChar(const TBasicStringBuf<TCharType> src, char* dst, const CodePage& cp) {
             Y_ASSERT(cp.SingleByteCodepage());
             ::WideToChar(src.data(), src.size(), dst, cp.CPEnum);
             return TStringBuf(dst, src.size());
-        } 
- 
+        }
+
         template <typename TCharType>
         inline TBasicStringBuf<TCharType> RecodeMultiByteChar(const TStringBuf src, TCharType* dst, ECharset encoding) {
             Y_ASSERT(!NCodepagePrivate::NativeCodepage(encoding));
-            size_t read = 0; 
-            size_t written = 0; 
+            size_t read = 0;
+            size_t written = 0;
             ::NICONVPrivate::RecodeToUnicode(encoding, src.data(), dst, src.size(), src.size(), read, written);
             return TBasicStringBuf<TCharType>(dst, written);
-        } 
- 
+        }
+
         template <typename TCharType>
         inline TStringBuf RecodeMultiByteChar(const TBasicStringBuf<TCharType> src, char* dst, ECharset encoding) {
             Y_ASSERT(!NCodepagePrivate::NativeCodepage(encoding));
-            size_t read = 0; 
-            size_t written = 0; 
+            size_t read = 0;
+            size_t written = 0;
             ::NICONVPrivate::RecodeFromUnicode(encoding, src.data(), dst, src.size(), src.size() * 3, read, written);
-            return TStringBuf(dst, written); 
-        } 
- 
+            return TStringBuf(dst, written);
+        }
+
         template <typename TCharType>
         inline TBasicStringBuf<TCharType> RecodeUtf8(const TStringBuf src, TCharType* dst) {
-            size_t len = 0; 
+            size_t len = 0;
             if (!::UTF8ToWide(src.data(), src.size(), dst, len))
-                ythrow yexception() << "Invalid UTF8: \"" << src.SubStr(0, 50) << (src.size() > 50 ? "...\"" : "\""); 
+                ythrow yexception() << "Invalid UTF8: \"" << src.SubStr(0, 50) << (src.size() > 50 ? "...\"" : "\"");
             return TBasicStringBuf<TCharType>(dst, len);
-        } 
- 
+        }
+
         template <typename TCharType>
         inline TStringBuf RecodeUtf8(const TBasicStringBuf<TCharType> src, char* dst) {
-            size_t len = 0; 
+            size_t len = 0;
             ::WideToUTF8(src.data(), src.size(), dst, len);
-            return TStringBuf(dst, len); 
-        } 
- 
+            return TStringBuf(dst, len);
+        }
+
         // Select one of re-coding methods from above, based on provided @encoding
 
         template <typename TCharFrom, typename TCharTo>
@@ -115,73 +115,73 @@ namespace NDetail {
         }
 
     }
- 
-    template <typename TCharFrom> 
-    struct TRecodeTraits; 
- 
-    template <> 
-    struct TRecodeTraits<char> { 
+
+    template <typename TCharFrom>
+    struct TRecodeTraits;
+
+    template <>
+    struct TRecodeTraits<char> {
         using TCharTo = wchar16;
         using TStringBufTo = TWtringBuf;
         using TStringTo = TUtf16String;
         enum { ReserveSize = 4 }; // How many TCharFrom characters we should reserve for one TCharTo character in worst case
                                   // Here an unicode character can be converted up to 4 bytes of UTF8
-    }; 
- 
-    template <> 
-    struct TRecodeTraits<wchar16> { 
+    };
+
+    template <>
+    struct TRecodeTraits<wchar16> {
         using TCharTo = char;
         using TStringBufTo = TStringBuf;
         using TStringTo = TString;
         enum { ReserveSize = 2 }; // possible surrogate pairs ?
-    }; 
- 
-    // Operations with destination buffer where recoded string will be written 
-    template <typename TResult> 
-    struct TRecodeResultOps { 
+    };
+
+    // Operations with destination buffer where recoded string will be written
+    template <typename TResult>
+    struct TRecodeResultOps {
         // default implementation will work with TString and TUtf16String - 99% of usage
         using TResultChar = typename TResult::char_type;
- 
-        static inline size_t Size(const TResult& dst) { 
-            return dst.size(); 
-        } 
- 
-        static inline TResultChar* Reserve(TResult& dst, size_t len) { 
-            dst.ReserveAndResize(len); 
-            return dst.begin(); 
-        } 
- 
-        static inline void Truncate(TResult& dst, size_t len) { 
-            dst.resize(len); 
-        } 
-    }; 
- 
-    // Main template interface for recoding in both directions 
- 
-    template <typename TCharFrom, typename TResult> 
+
+        static inline size_t Size(const TResult& dst) {
+            return dst.size();
+        }
+
+        static inline TResultChar* Reserve(TResult& dst, size_t len) {
+            dst.ReserveAndResize(len);
+            return dst.begin();
+        }
+
+        static inline void Truncate(TResult& dst, size_t len) {
+            dst.resize(len);
+        }
+    };
+
+    // Main template interface for recoding in both directions
+
+    template <typename TCharFrom, typename TResult>
     typename TRecodeTraits<TCharFrom>::TStringBufTo Recode(const TBasicStringBuf<TCharFrom> src, TResult& dst, ECharset encoding) {
         using TCharTo = typename TRecodeTraits<TCharFrom>::TCharTo;
-        // make enough room for re-coded string 
-        TCharTo* dstbuf = TRecodeResultOps<TResult>::Reserve(dst, src.size() * TRecodeTraits<TCharTo>::ReserveSize); 
-        // do re-coding 
+        // make enough room for re-coded string
+        TCharTo* dstbuf = TRecodeResultOps<TResult>::Reserve(dst, src.size() * TRecodeTraits<TCharTo>::ReserveSize);
+        // do re-coding
         TBasicStringBuf<TCharTo> res = NBaseOps::Recode(src, dstbuf, encoding);
-        // truncate result back to proper size 
-        TRecodeResultOps<TResult>::Truncate(dst, res.size()); 
-        return res; 
-    } 
- 
-    // appending version of Recode() 
-    template <typename TCharFrom, typename TResult> 
+        // truncate result back to proper size
+        TRecodeResultOps<TResult>::Truncate(dst, res.size());
+        return res;
+    }
+
+    // appending version of Recode()
+    template <typename TCharFrom, typename TResult>
     typename TRecodeTraits<TCharFrom>::TStringBufTo RecodeAppend(const TBasicStringBuf<TCharFrom> src, TResult& dst, ECharset encoding) {
         using TCharTo = typename TRecodeTraits<TCharFrom>::TCharTo;
-        size_t dstOrigSize = TRecodeResultOps<TResult>::Size(dst); 
-        TCharTo* dstbuf = TRecodeResultOps<TResult>::Reserve(dst, dstOrigSize + src.size() * TRecodeTraits<TCharTo>::ReserveSize); 
+        size_t dstOrigSize = TRecodeResultOps<TResult>::Size(dst);
+        TCharTo* dstbuf = TRecodeResultOps<TResult>::Reserve(dst, dstOrigSize + src.size() * TRecodeTraits<TCharTo>::ReserveSize);
         TBasicStringBuf<TCharTo> appended = NBaseOps::Recode(src, dstbuf + dstOrigSize, encoding);
-        size_t dstFinalSize = dstOrigSize + appended.size(); 
-        TRecodeResultOps<TResult>::Truncate(dst, dstFinalSize); 
+        size_t dstFinalSize = dstOrigSize + appended.size();
+        TRecodeResultOps<TResult>::Truncate(dst, dstFinalSize);
         return TBasicStringBuf<TCharTo>(dstbuf, dstFinalSize);
-    } 
- 
+    }
+
     // special implementation for robust utf8 functions
     template <typename TResult>
     TWtringBuf RecodeUTF8Robust(const TStringBuf src, TResult& dst) {
@@ -197,31 +197,31 @@ namespace NDetail {
         return TWtringBuf(dstbuf, written);
     }
 
-    template <typename TCharFrom> 
+    template <typename TCharFrom>
     inline typename TRecodeTraits<TCharFrom>::TStringTo Recode(const TBasicStringBuf<TCharFrom> src, ECharset encoding) {
-        typename TRecodeTraits<TCharFrom>::TStringTo res; 
-        Recode<TCharFrom>(src, res, encoding); 
-        return res; 
-    } 
+        typename TRecodeTraits<TCharFrom>::TStringTo res;
+        Recode<TCharFrom>(src, res, encoding);
+        return res;
+    }
 }
- 
-// Write result into @dst. Return string-buffer pointing to re-coded content of @dst. 
- 
+
+// Write result into @dst. Return string-buffer pointing to re-coded content of @dst.
+
 template <bool robust>
 inline TWtringBuf CharToWide(const TStringBuf src, TUtf16String& dst, ECharset encoding) {
     if (robust && CODES_UTF8 == encoding)
         return ::NDetail::RecodeUTF8Robust(src, dst);
     return ::NDetail::Recode<char>(src, dst, encoding);
-} 
- 
+}
+
 inline TWtringBuf CharToWide(const TStringBuf src, TUtf16String& dst, ECharset encoding) {
     return ::NDetail::Recode<char>(src, dst, encoding);
 }
 
 inline TStringBuf WideToChar(const TWtringBuf src, TString& dst, ECharset encoding) {
     return ::NDetail::Recode<wchar16>(src, dst, encoding);
-} 
- 
+}
+
 //! calls either to @c WideToUTF8 or @c WideToChar depending on the encoding type
 inline TString WideToChar(const wchar16* text, size_t len, ECharset enc) {
     if (NCodepagePrivate::NativeCodepage(enc)) {
@@ -301,6 +301,6 @@ inline TUtf16String CharToWide(const TStringBuf s, const CodePage& cp) {
     return CharToWide(s.data(), s.size(), cp);
 }
 
-// true if @text can be fully encoded to specified @encoding, 
-// with possibility to recover exact original text after decoding 
-bool CanBeEncoded(TWtringBuf text, ECharset encoding); 
+// true if @text can be fully encoded to specified @encoding,
+// with possibility to recover exact original text after decoding
+bool CanBeEncoded(TWtringBuf text, ECharset encoding);

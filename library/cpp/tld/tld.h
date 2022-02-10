@@ -17,12 +17,12 @@ namespace NTld {
     inline bool InTld(const TStringBuf& host) {
         return IsTld(FindTld(host));
     }
- 
+
     // check if @s belongs to a "good" subset of reliable TLDs, defined in tld.cpp
     bool IsVeryGoodTld(const TStringBuf& tld);
- 
+
     inline bool InVeryGoodTld(const TStringBuf& host) {
         return IsVeryGoodTld(FindTld(host));
     }
- 
-} 
+
+}

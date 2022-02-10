@@ -637,7 +637,7 @@ template <class T, class V>
 inline typename std::iterator_traits<T>::difference_type Count(T first, T last, const V& value) {
     return std::count(first, last, value);
 }
- 
+
 template <class TContainer, class TValue>
 static inline auto Count(const TContainer& container, const TValue& value) {
     return Count(std::cbegin(container), std::cend(container), value);
@@ -658,13 +658,13 @@ static inline auto CountIf(const C& c, P pred) {
 template <class I1, class I2>
 static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2) {
     return std::mismatch(b1, e1, b2);
-} 
- 
+}
+
 template <class I1, class I2, class P>
 static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2, P p) {
     return std::mismatch(b1, e1, b2, p);
-} 
- 
+}
+
 template <class RandomIterator>
 static inline void NthElement(RandomIterator begin, RandomIterator nth, RandomIterator end) {
     std::nth_element(begin, nth, end);
@@ -675,30 +675,30 @@ static inline void NthElement(RandomIterator begin, RandomIterator nth, RandomIt
     std::nth_element(begin, nth, end, compare);
 }
 
-// no standard implementation until C++14 
+// no standard implementation until C++14
 template <class I1, class I2>
 static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2, I2 e2) {
-    while (b1 != e1 && b2 != e2 && *b1 == *b2) { 
-        ++b1; 
-        ++b2; 
-    } 
+    while (b1 != e1 && b2 != e2 && *b1 == *b2) {
+        ++b1;
+        ++b2;
+    }
     return std::make_pair(b1, b2);
-} 
- 
+}
+
 template <class I1, class I2, class P>
 static inline std::pair<I1, I2> Mismatch(I1 b1, I1 e1, I2 b2, I2 e2, P p) {
-    while (b1 != e1 && b2 != e2 && p(*b1, *b2)) { 
-        ++b1; 
-        ++b2; 
-    } 
+    while (b1 != e1 && b2 != e2 && p(*b1, *b2)) {
+        ++b1;
+        ++b2;
+    }
     return std::make_pair(b1, b2);
-} 
- 
+}
+
 template <class It, class Val>
 static inline bool BinarySearch(It begin, It end, const Val& val) {
     return std::binary_search(begin, end, val);
 }
- 
+
 template <class It, class Val, class Comp>
 static inline bool BinarySearch(It begin, It end, const Val& val, Comp comp) {
     return std::binary_search(begin, end, val, comp);

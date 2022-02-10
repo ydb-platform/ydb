@@ -15,10 +15,10 @@ public:
     using TBase = std::set<K, L, TReboundAllocator<A, K>>;
     using TBase::TBase;
 
-    inline explicit operator bool() const noexcept { 
-        return !this->empty(); 
-    } 
- 
+    inline explicit operator bool() const noexcept {
+        return !this->empty();
+    }
+
     template <class TheKey>
     inline bool contains(const TheKey& key) const {
         return this->find(key) != this->end();
@@ -31,9 +31,9 @@ public:
     using TBase = std::multiset<K, L, TReboundAllocator<A, K>>;
     using TBase::TBase;
 
-    inline explicit operator bool() const noexcept { 
-        return !this->empty(); 
-    } 
+    inline explicit operator bool() const noexcept {
+        return !this->empty();
+    }
 
     template <class TheKey>
     inline bool contains(const TheKey& key) const {

@@ -222,7 +222,7 @@ private:
 };
 
 /** @} */
- 
+
 /**
  * Reads a compression signature from the provided input stream and returns a
  * corresponding decompressing stream.

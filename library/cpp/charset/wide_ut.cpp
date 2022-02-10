@@ -9,7 +9,7 @@
 #include <util/generic/hash_set.h>
 
 #include <algorithm>
- 
+
 namespace {
     //! three UTF8 encoded russian letters (A, B, V)
     const char yandexCyrillicAlphabet[] =
@@ -143,8 +143,8 @@ public:
     void TestCharToWide();
     void TestWideToChar();
     void TestYandexEncoding();
-    void TestRecodeIntoString(); 
-    void TestRecodeAppend(); 
+    void TestRecodeIntoString();
+    void TestRecodeAppend();
     void TestRecode();
     void TestUnicodeLimit();
 };
@@ -228,114 +228,114 @@ void TConversionTest::TestYandexEncoding() {
     }
 }
 
-void TConversionTest::TestRecodeIntoString() { 
+void TConversionTest::TestRecodeIntoString() {
     TString sYandex(UnicodeText.size() * 4, 'x');
     const char* sdata = sYandex.data();
-    TStringBuf sres = NDetail::Recode<wchar16>(UnicodeText, sYandex, CODES_YANDEX); 
+    TStringBuf sres = NDetail::Recode<wchar16>(UnicodeText, sYandex, CODES_YANDEX);
     UNIT_ASSERT(sYandex == YandexText); // same content
     UNIT_ASSERT(sYandex.data() == sdata);     // reserved buffer reused
     UNIT_ASSERT(sYandex.data() == sres.data());     // same buffer
     UNIT_ASSERT(sYandex.size() == sres.size());     // same size
     TEST_WCHAR32(sYandex, UnicodeText, CODES_YANDEX);
- 
+
     TUtf16String sUnicode;
-    sUnicode.reserve(YandexText.size() * 4); 
+    sUnicode.reserve(YandexText.size() * 4);
     const wchar16* wdata = sUnicode.data();
-    TWtringBuf wres = NDetail::Recode<char>(YandexText, sUnicode, CODES_YANDEX); 
+    TWtringBuf wres = NDetail::Recode<char>(YandexText, sUnicode, CODES_YANDEX);
     UNIT_ASSERT(sUnicode == UnicodeText); // same content
     UNIT_ASSERT(sUnicode.data() == wdata);      // reserved buffer reused
     UNIT_ASSERT(sUnicode.data() == wres.data());      // same buffer
     UNIT_ASSERT(sUnicode.size() == wres.size());      // same size
- 
+
     TString sUtf8 = " ";
-    size_t scap = sUtf8.capacity(); 
-    sres = NDetail::Recode<wchar16>(UnicodeText, sUtf8, CODES_UTF8); 
+    size_t scap = sUtf8.capacity();
+    sres = NDetail::Recode<wchar16>(UnicodeText, sUtf8, CODES_UTF8);
     UNIT_ASSERT(sUtf8 == UTF8Text);       // same content
     UNIT_ASSERT(sUtf8.capacity() > scap); // increased buffer capacity (supplied was too small)
     UNIT_ASSERT(sUtf8.data() == sres.data());         // same buffer
     UNIT_ASSERT(sUtf8.size() == sres.size());         // same size
     TEST_WCHAR32(sUtf8, UnicodeText, CODES_UTF8);
- 
-    sUnicode.clear(); 
+
+    sUnicode.clear();
     wdata = sUnicode.data();
     TUtf16String copy = sUnicode; // increase ref-counter
-    wres = NDetail::Recode<char>(UTF8Text, sUnicode, CODES_UTF8); 
+    wres = NDetail::Recode<char>(UTF8Text, sUnicode, CODES_UTF8);
     UNIT_ASSERT(sUnicode == UnicodeText); // same content
 #ifndef TSTRING_IS_STD_STRING
     UNIT_ASSERT(sUnicode.data() != wdata);      // re-allocated (shared buffer supplied)
     UNIT_ASSERT(sUnicode.data() == wres.data());      // same buffer
 #endif
     UNIT_ASSERT(sUnicode.size() == wres.size());      // same content
-} 
- 
+}
+
 static TString GenerateJunk(size_t seed) {
     TString res;
-    size_t hash = NumericHash(seed); 
-    size_t size = hash % 1024; 
-    res.reserve(size); 
-    for (size_t i = 0; i < size; ++i) 
-        res += static_cast<char>(NumericHash(hash + i) % 256); 
-    return res; 
-} 
- 
-void TConversionTest::TestRecodeAppend() { 
-    { 
+    size_t hash = NumericHash(seed);
+    size_t size = hash % 1024;
+    res.reserve(size);
+    for (size_t i = 0; i < size; ++i)
+        res += static_cast<char>(NumericHash(hash + i) % 256);
+    return res;
+}
+
+void TConversionTest::TestRecodeAppend() {
+    {
         TString s1, s2;
         NDetail::RecodeAppend<wchar16>(TUtf16String(), s1, CODES_YANDEX);
-        UNIT_ASSERT(s1.empty()); 
- 
-        NDetail::RecodeAppend<wchar16>(UnicodeText, s1, CODES_WIN); 
-        s2 += WideToChar(UnicodeText, CODES_WIN); 
-        UNIT_ASSERT_EQUAL(s1, s2); 
- 
-        NDetail::RecodeAppend<wchar16>(UnicodeText, s1, CODES_YANDEX); 
-        s2 += WideToChar(UnicodeText, CODES_YANDEX); 
-        UNIT_ASSERT_EQUAL(s1, s2); 
- 
-        NDetail::RecodeAppend<wchar16>(TUtf16String(), s1, CODES_YANDEX);
-        UNIT_ASSERT_EQUAL(s1, s2); 
- 
-        NDetail::RecodeAppend<wchar16>(UnicodeText, s1, CODES_UTF8); 
-        s2 += WideToUTF8(UnicodeText);
-        UNIT_ASSERT_EQUAL(s1, s2); 
+        UNIT_ASSERT(s1.empty());
 
-        for (size_t i = 0; i < 100; ++i) { 
+        NDetail::RecodeAppend<wchar16>(UnicodeText, s1, CODES_WIN);
+        s2 += WideToChar(UnicodeText, CODES_WIN);
+        UNIT_ASSERT_EQUAL(s1, s2);
+
+        NDetail::RecodeAppend<wchar16>(UnicodeText, s1, CODES_YANDEX);
+        s2 += WideToChar(UnicodeText, CODES_YANDEX);
+        UNIT_ASSERT_EQUAL(s1, s2);
+
+        NDetail::RecodeAppend<wchar16>(TUtf16String(), s1, CODES_YANDEX);
+        UNIT_ASSERT_EQUAL(s1, s2);
+
+        NDetail::RecodeAppend<wchar16>(UnicodeText, s1, CODES_UTF8);
+        s2 += WideToUTF8(UnicodeText);
+        UNIT_ASSERT_EQUAL(s1, s2);
+
+        for (size_t i = 0; i < 100; ++i) {
             TUtf16String junk = CharToWide(GenerateJunk(i), CODES_YANDEX);
-            NDetail::RecodeAppend<wchar16>(junk, s1, CODES_UTF8); 
+            NDetail::RecodeAppend<wchar16>(junk, s1, CODES_UTF8);
             s2 += WideToUTF8(junk);
-            UNIT_ASSERT_EQUAL(s1, s2); 
-        } 
-    } 
- 
-    { 
+            UNIT_ASSERT_EQUAL(s1, s2);
+        }
+    }
+
+    {
         TUtf16String s1, s2;
         NDetail::RecodeAppend<char>(TString(), s1, CODES_YANDEX);
-        UNIT_ASSERT(s1.empty()); 
- 
-        NDetail::RecodeAppend<char>(YandexText, s1, CODES_WIN); 
-        s2 += CharToWide(YandexText, CODES_WIN); 
-        UNIT_ASSERT_EQUAL(s1, s2); 
- 
-        NDetail::RecodeAppend<char>(YandexText, s1, CODES_YANDEX); 
-        s2 += CharToWide(YandexText, CODES_YANDEX); 
-        UNIT_ASSERT_EQUAL(s1, s2); 
- 
-        NDetail::RecodeAppend<char>(TString(), s1, CODES_YANDEX);
-        UNIT_ASSERT_EQUAL(s1, s2); 
+        UNIT_ASSERT(s1.empty());
 
-        NDetail::RecodeAppend<char>(UTF8Text, s1, CODES_UTF8); 
+        NDetail::RecodeAppend<char>(YandexText, s1, CODES_WIN);
+        s2 += CharToWide(YandexText, CODES_WIN);
+        UNIT_ASSERT_EQUAL(s1, s2);
+
+        NDetail::RecodeAppend<char>(YandexText, s1, CODES_YANDEX);
+        s2 += CharToWide(YandexText, CODES_YANDEX);
+        UNIT_ASSERT_EQUAL(s1, s2);
+
+        NDetail::RecodeAppend<char>(TString(), s1, CODES_YANDEX);
+        UNIT_ASSERT_EQUAL(s1, s2);
+
+        NDetail::RecodeAppend<char>(UTF8Text, s1, CODES_UTF8);
         s2 += UTF8ToWide(UTF8Text);
-        UNIT_ASSERT_EQUAL(s1, s2); 
- 
-        for (size_t i = 0; i < 100; ++i) { 
+        UNIT_ASSERT_EQUAL(s1, s2);
+
+        for (size_t i = 0; i < 100; ++i) {
             TString junk = GenerateJunk(i);
-            NDetail::RecodeAppend<char>(junk, s1, CODES_YANDEX); 
-            s2 += CharToWide(junk, CODES_YANDEX); 
-            UNIT_ASSERT_EQUAL(s1, s2); 
-        } 
-    } 
-} 
- 
+            NDetail::RecodeAppend<char>(junk, s1, CODES_YANDEX);
+            s2 += CharToWide(junk, CODES_YANDEX);
+            UNIT_ASSERT_EQUAL(s1, s2);
+        }
+    }
+}
+
 template <>
 void Out<RECODE_RESULT>(IOutputStream& out, RECODE_RESULT val) {
     out << int(val);

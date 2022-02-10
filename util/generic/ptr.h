@@ -294,7 +294,7 @@ public:
     inline void Reset(TAutoPtr<T, D> t) noexcept {
         Reset(t.Release());
     }
- 
+
     inline void Reset() noexcept {
         Destroy();
     }
@@ -1054,50 +1054,50 @@ private:
     T* T_;
 };
 
-// Copy-on-write pointer 
+// Copy-on-write pointer
 template <class TPtr, class TCopy>
-class TCowPtr: public TPointerBase<TCowPtr<TPtr, TCopy>, const typename TPtr::TValueType> { 
+class TCowPtr: public TPointerBase<TCowPtr<TPtr, TCopy>, const typename TPtr::TValueType> {
     using T = typename TPtr::TValueType;
 
-public: 
+public:
     inline TCowPtr() = default;
- 
-    inline TCowPtr(const TPtr& p) 
-        : T_(p) 
-    { 
-    } 
- 
-    inline TCowPtr(T* p) 
-        : T_(p) 
-    { 
-    } 
- 
+
+    inline TCowPtr(const TPtr& p)
+        : T_(p)
+    {
+    }
+
+    inline TCowPtr(T* p)
+        : T_(p)
+    {
+    }
+
     inline const T* Get() const noexcept {
-        return Const(); 
-    } 
- 
+        return Const();
+    }
+
     inline const T* Const() const noexcept {
-        return T_.Get(); 
-    } 
- 
+        return T_.Get();
+    }
+
     inline T* Mutable() {
-        Unshare(); 
- 
-        return T_.Get(); 
-    } 
- 
+        Unshare();
+
+        return T_.Get();
+    }
+
     inline bool Shared() const noexcept {
-        return T_.RefCount() > 1; 
-    } 
- 
+        return T_.RefCount() > 1;
+    }
+
     inline void Swap(TCowPtr& r) noexcept {
-        T_.Swap(r.T_); 
-    } 
- 
-    inline void Reset(TCowPtr p) { 
-        p.Swap(*this); 
-    } 
- 
+        T_.Swap(r.T_);
+    }
+
+    inline void Reset(TCowPtr p) {
+        p.Swap(*this);
+    }
+
     inline void Reset() {
         T_.Reset();
     }
@@ -1108,17 +1108,17 @@ public:
         return (p == Get());
     }
 #endif
-private: 
+private:
     inline void Unshare() {
-        if (Shared()) { 
-            Reset(TCopy::Copy(T_.Get())); 
-        } 
-    } 
- 
-private: 
-    TPtr T_; 
-}; 
- 
+        if (Shared()) {
+            Reset(TCopy::Copy(T_.Get()));
+        }
+    }
+
+private:
+    TPtr T_;
+};
+
 // saves .Get() on argument passing. Intended usage: Func(TPtrArg<X> p); ... TIntrusivePtr<X> p2;  Func(p2);
 template <class T>
 class TPtrArg {

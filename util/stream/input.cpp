@@ -91,7 +91,7 @@ size_t IInputStream::ReadLine(TString& st) {
 size_t IInputStream::ReadLine(TUtf16String& w) {
     TString s;
     size_t result = ReadLine(s);
- 
+
     if (result) {
         UTF8ToWide(s, w);
     }

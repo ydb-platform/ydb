@@ -5,27 +5,27 @@
 
 #include <util/stream/output.h>
 
-struct TCustomData { 
+struct TCustomData {
     TVector<int> Ints;
-}; 
- 
+};
+
 TString ToString(const TCustomData& d) {
-    return JoinSeq("__", d.Ints); 
-} 
- 
+    return JoinSeq("__", d.Ints);
+}
+
 Y_UNIT_TEST_SUITE(JoinStringTest) {
     Y_UNIT_TEST(ScalarItems) {
-        UNIT_ASSERT_EQUAL(Join(',', 10, 11.1, "foobar"), "10,11.1,foobar"); 
+        UNIT_ASSERT_EQUAL(Join(',', 10, 11.1, "foobar"), "10,11.1,foobar");
         UNIT_ASSERT_EQUAL(Join(", ", 10, 11.1, "foobar"), "10, 11.1, foobar");
         UNIT_ASSERT_EQUAL(Join(", ", 10, 11.1, TString("foobar")), "10, 11.1, foobar");
- 
+
         UNIT_ASSERT_EQUAL(Join('#', 0, "a", "foobar", -1.4, TStringBuf("aaa")), "0#a#foobar#-1.4#aaa");
-        UNIT_ASSERT_EQUAL(Join("", "", ""), ""); 
-        UNIT_ASSERT_EQUAL(Join("", "a", "b", "c"), "abc"); 
-        UNIT_ASSERT_EQUAL(Join("", "a", "b", "", "c"), "abc"); 
-        UNIT_ASSERT_EQUAL(Join(" ", "a", "b", "", "c"), "a b  c"); 
+        UNIT_ASSERT_EQUAL(Join("", "", ""), "");
+        UNIT_ASSERT_EQUAL(Join("", "a", "b", "c"), "abc");
+        UNIT_ASSERT_EQUAL(Join("", "a", "b", "", "c"), "abc");
+        UNIT_ASSERT_EQUAL(Join(" ", "a", "b", "", "c"), "a b  c");
     }
- 
+
     Y_UNIT_TEST(IntContainerItems) {
         int v[] = {1, 2, 3};
         TVector<int> vv(v, v + 3);
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
         UNIT_ASSERT_EQUAL(JoinSeq(" ", {1, 2, 3}), "1 2 3");
         UNIT_ASSERT_VALUES_EQUAL(JoinSeq(" ", v), "1 2 3");
     }
- 
+
     Y_UNIT_TEST(StrContainerItems) {
         // try various overloads and template type arguments
         static const char* const result = "1 22 333";
@@ -151,13 +151,13 @@ Y_UNIT_TEST_SUITE(JoinStringTest) {
     Y_UNIT_TEST(CustomToString) {
         TCustomData d1{{1, 2, 3, 4, 5}};
         TCustomData d2{{0, -1, -2}};
-        UNIT_ASSERT_EQUAL(Join(" ", d1, d2), "1__2__3__4__5 0__-1__-2"); 
-    } 
- 
+        UNIT_ASSERT_EQUAL(Join(" ", d1, d2), "1__2__3__4__5 0__-1__-2");
+    }
+
     Y_UNIT_TEST(JoinChars) {
-        // Note that char delimeter is printed as single char string, 
-        // but joined char values are printed as their numeric codes! O_o 
-        UNIT_ASSERT_EQUAL(Join('a', 'a', 'a'), "97a97"); 
-        UNIT_ASSERT_EQUAL(Join("a", "a", "a"), "aaa"); 
-    } 
+        // Note that char delimeter is printed as single char string,
+        // but joined char values are printed as their numeric codes! O_o
+        UNIT_ASSERT_EQUAL(Join('a', 'a', 'a'), "97a97");
+        UNIT_ASSERT_EQUAL(Join("a", "a", "a"), "aaa");
+    }
 }

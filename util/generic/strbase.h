@@ -194,7 +194,7 @@ public:
     }
 
     constexpr inline explicit operator bool() const noexcept {
-        return !empty(); 
+        return !empty();
     }
 
 public: // style-guide compliant methods

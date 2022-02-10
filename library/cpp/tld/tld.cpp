@@ -5,7 +5,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/singleton.h>
 
-namespace NTld { 
+namespace NTld {
     namespace {
 #include <library/cpp/tld/tld.inc>
 
@@ -18,18 +18,18 @@ namespace NTld {
                 }
             }
         };
- 
+
         struct TVeryGoodTld: public TCiHash {
             TVeryGoodTld() {
                 auto domains = {
                     "am", "az", "biz", "by", "com", "cz", "de", "ec", "fr", "ge", "gov",
                     "gr", "il", "info", "kg", "kz", "mobi", "net", "nu", "org", "lt", "lv",
                     "md", "ru", "su", "tr", "ua", "uk", "uz", "ws", "xn--p1ai", "рф"};
- 
+
                 for (auto d : domains) {
                     insert(d);
                 }
-            } 
+            }
         };
     }
 

@@ -16,10 +16,10 @@ class TQueue: public std::queue<T, S> {
 public:
     using TBase::TBase;
 
-    inline explicit operator bool() const noexcept { 
-        return !this->empty(); 
-    } 
- 
+    inline explicit operator bool() const noexcept {
+        return !this->empty();
+    }
+
     inline void clear() {
         this->c.clear();
     }
@@ -40,10 +40,10 @@ class TPriorityQueue: public std::priority_queue<T, S, C> {
 public:
     using TBase::TBase;
 
-    inline explicit operator bool() const noexcept { 
-        return !this->empty(); 
-    } 
- 
+    inline explicit operator bool() const noexcept {
+        return !this->empty();
+    }
+
     inline void clear() {
         this->c.clear();
     }

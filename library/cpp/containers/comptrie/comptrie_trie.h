@@ -1,11 +1,11 @@
 #pragma once
-
+ 
 #include "comptrie_impl.h"
 #include "comptrie_packer.h"
 #include "opaque_trie_iterator.h"
 #include "leaf_skipper.h"
 #include "key_selector.h"
-
+ 
 #include <util/generic/buffer.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
@@ -30,12 +30,12 @@ class TPrefixIterator;
 
 // in case of <char> specialization cannot distinguish between "" and "\0" keys
 template <class T = char, class D = ui64, class S = TCompactTriePacker<D>>
-class TCompactTrie {
-public:
-    typedef T TSymbol;
+class TCompactTrie { 
+public: 
+    typedef T TSymbol; 
     typedef D TData;
     typedef S TPacker;
-
+ 
     typedef typename TCompactTrieKeySelector<TSymbol>::TKey TKey;
     typedef typename TCompactTrieKeySelector<TSymbol>::TKeyBuf TKeyBuf;
 
@@ -50,8 +50,8 @@ protected:
     const char* EmptyValue = nullptr;
     TPacker Packer;
     NCompactTrie::TPackerLeafSkipper<TPacker> Skipper = &Packer; // This should be true for every constructor.
-
-public:
+ 
+public: 
     TCompactTrie() = default;
 
     TCompactTrie(const char* d, size_t len, TPacker packer);
@@ -76,7 +76,7 @@ public:
 
     void Init(const char* d, size_t len, TPacker packer = TPacker());
     void Init(const TBlob& data, TPacker packer = TPacker());
-
+ 
     bool IsInitialized() const;
     bool IsEmpty() const;
 
@@ -142,14 +142,14 @@ public:
     inline bool FindTails(TSymbol label, TCompactTrie<T, D, S>& res) const;
 
     class TConstIterator {
-    private:
+    private: 
         typedef NCompactTrie::TOpaqueTrieIterator TOpaqueTrieIterator;
         typedef NCompactTrie::TOpaqueTrie TOpaqueTrie;
-        friend class TCompactTrie;
+        friend class TCompactTrie; 
         TConstIterator(const TOpaqueTrie& trie, const char* emptyValue, bool atend, TPacker packer);         // only usable from Begin() and End() methods
         TConstIterator(const TOpaqueTrie& trie, const char* emptyValue, const TKeyBuf& key, TPacker packer); // only usable from UpperBound() method
 
-    public:
+    public: 
         TConstIterator() = default;
         bool IsEmpty() const {
             return !Impl;
@@ -162,7 +162,7 @@ public:
         TConstIterator& operator--();
         TConstIterator operator--(int /*unused*/);
         TValueType operator*();
-
+ 
         TKey GetKey() const;
         size_t GetKeySize() const;
         TData GetValue() const;
@@ -172,13 +172,13 @@ public:
     private:
         TPacker Packer;
         TCopyPtr<TOpaqueTrieIterator> Impl;
-    };
-
+    }; 
+ 
     TConstIterator Begin() const;
     TConstIterator begin() const;
     TConstIterator End() const;
     TConstIterator end() const;
-
+ 
     // Returns an iterator pointing to the smallest key in the trie >= the argument.
     // TODO: misleading name. Should be called LowerBound for consistency with stl.
     // No. It is the STL that has a misleading name.
@@ -203,22 +203,22 @@ protected:
         return LookupLongestPrefix(key, keylen, prefixLen, valuepos, hasNext);
     }
     void LookupPhrases(const char* datapos, size_t len, const TSymbol* key, size_t keylen, TVector<TPhraseMatch>& matches, TSymbol separator) const;
-};
-
+}; 
+ 
 template <class T = char, class D = ui64, class S = TCompactTriePacker<D>>
 class TCompactTrieHolder: public TCompactTrie<T, D, S>, NNonCopyable::TNonCopyable {
 private:
     typedef TCompactTrie<T, D, S> TBase;
     TArrayHolder<char> Storage;
-
+ 
 public:
     TCompactTrieHolder(IInputStream& is, size_t len);
 };
-
+ 
 //------------------------//
 // Implementation section //
 //------------------------//
-
+ 
 // TCompactTrie
 
 template <class T, class D, class S>

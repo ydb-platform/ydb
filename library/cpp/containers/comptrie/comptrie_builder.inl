@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "comptrie_impl.h"
 #include "comptrie_trie.h"
 #include "make_fast_layout.h"
@@ -618,7 +618,7 @@ typename TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::TNode*
     } else {
         ConvertSymbolArrayToChar(key, keylen, ckeybuf, ckeylen);
     }
-
+ 
     char* ckey = ckeybuf.Data();
 
     TNode* next;
@@ -907,9 +907,9 @@ ui64 TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::ArcMeasure(
     size_t leftoffsetsize = leftsize ? MeasureOffset(coresize + treesize) : 0;
     size_t rightoffsetsize = rightsize ? MeasureOffset(coresize + treesize + leftsize) : 0;
     leftoffsetsize = leftsize ? MeasureOffset(coresize + treesize + leftoffsetsize + rightoffsetsize) : 0;
-    rightoffsetsize = rightsize ? MeasureOffset(coresize + treesize + leftsize + leftoffsetsize + rightoffsetsize) : 0;
+    rightoffsetsize = rightsize ? MeasureOffset(coresize + treesize + leftsize + leftoffsetsize + rightoffsetsize) : 0; 
     leftoffsetsize = leftsize ? MeasureOffset(coresize + treesize + leftoffsetsize + rightoffsetsize) : 0;
-    rightoffsetsize = rightsize ? MeasureOffset(coresize + treesize + leftsize + leftoffsetsize + rightoffsetsize) : 0;
+    rightoffsetsize = rightsize ? MeasureOffset(coresize + treesize + leftsize + leftoffsetsize + rightoffsetsize) : 0; 
 
     coresize += leftoffsetsize + rightoffsetsize;
     thiz->LeftOffset = leftsize ? coresize + treesize : 0;

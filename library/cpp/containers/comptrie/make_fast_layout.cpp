@@ -146,7 +146,7 @@ namespace NCompactTrie {
             explicit TOffsetIndex(TTrieNodeCounts& counts) {
                 ParentCounts.Swap(counts);
             }
-
+ 
             void Add(size_t key, size_t value) {
                 Data[key] = value;
             }
@@ -154,7 +154,7 @@ namespace NCompactTrie {
             size_t Size() const {
                 return Data.size();
             }
-
+ 
             size_t Get(size_t key) {
                 auto pos = Data.find(key);
                 if (pos == Data.end()) {
@@ -167,14 +167,14 @@ namespace NCompactTrie {
                 }
                 return result;
             }
-
+ 
         private:
             TTrieNodeCounts ParentCounts;
             THashMap<size_t, size_t> Data;
         };
 
         //---------------------------------------------------------------------------------------
-
+ 
         class TTrieMeasurer {
         public:
             TTrieMeasurer(const TOpaqueTrie& trie, bool verbose);
@@ -226,7 +226,7 @@ namespace NCompactTrie {
         {
             Y_ASSERT(Trie.Data);
         }
-
+ 
         void TTrieMeasurer::Measure() {
             if (Verbose) {
                 Cerr << "Measuring the trie..." << Endl;
@@ -308,7 +308,7 @@ namespace NCompactTrie {
                 , Verbose(verbose)
             {
             }
-
+ 
             bool Move() override {
                 if (!Fresh) {
                     CentralWord.pop_back();
@@ -318,11 +318,11 @@ namespace NCompactTrie {
                 }
                 return true;
             }
-
+ 
             const TNode& Get() const {
                 return CentralWord.back();
             }
-
+ 
             size_t GetLeafLength() const override {
                 return Get().GetLeafLength();
             }
@@ -333,7 +333,7 @@ namespace NCompactTrie {
                     return NPOS;
                 return resultLength - BackIndex.Get(absoffset);
             }
-
+ 
             size_t RecreateNode(char* buffer, size_t resultLength) override {
                 TWriteableNode newNode(Get(), Trie.Data);
                 newNode.ForwardOffset = PrepareOffset(Get().GetForwardOffset(), resultLength);
@@ -346,7 +346,7 @@ namespace NCompactTrie {
                 MaxIndexSize = Max(MaxIndexSize, BackIndex.Size());
                 return len;
             }
-
+ 
         private:
             bool Fresh;
             TOpaqueTrie Trie;
@@ -382,7 +382,7 @@ namespace NCompactTrie {
                     }
                 }
             }
-
+ 
             void FillCentralWord() {
                 CentralWord.clear();
                 CentralWord.push_back(TNode(Trie.Data, Trace.back().Nodes.back(), Trie.SkipFunction));
@@ -462,6 +462,6 @@ namespace NCompactTrie {
         mes.Measure();
         TVanEmdeBoasReverseNodeEnumerator enumerator(mes, verbose);
         return WriteTrieBackwards(os, enumerator, verbose);
-    }
+    } 
 
 }

@@ -66,13 +66,13 @@ enum WC_TYPE {        // TODO move no NUnicode
     Sc_CURRENCY = 49, // '$' [$]       DOLLAR SIGN
     Sk_MODIFIER = 50, // '`' [^`]      CIRCUMFLEX ACCENT ... GRAVE ACCENT
     So_OTHER = 51,    // '°' [°]       DEGREE SIGN (00B0)
-
-    Ps_SINGLE_QUOTE = 52, // '\'' [']   OPENING SINGLE QUOTE
-    Pe_SINGLE_QUOTE = 53, // '\'' [']   CLOSING SINGLE QUOTE
-    Pi_SINGLE_QUOTE = 54, // '\'' [']   INITIAL SINGLE QUOTE
-    Pf_SINGLE_QUOTE = 55, // '\'' [']   FINAL SINGLE QUOTE
-    Po_SINGLE_QUOTE = 56, // '\'' [']   APOSTROPHE and PRIME
-
+ 
+    Ps_SINGLE_QUOTE = 52, // '\'' [']   OPENING SINGLE QUOTE 
+    Pe_SINGLE_QUOTE = 53, // '\'' [']   CLOSING SINGLE QUOTE 
+    Pi_SINGLE_QUOTE = 54, // '\'' [']   INITIAL SINGLE QUOTE 
+    Pf_SINGLE_QUOTE = 55, // '\'' [']   FINAL SINGLE QUOTE 
+    Po_SINGLE_QUOTE = 56, // '\'' [']   APOSTROPHE and PRIME 
+ 
     CCL_NUM = 57,
     CCL_MASK = 0x3F,
 
@@ -94,8 +94,8 @@ enum WC_TYPE {        // TODO move no NUnicode
     SVAL_OFFSET = 22,
 };
 
-const size_t DEFCHAR_BUF = 58; // CCL_NUM + 1
-
+const size_t DEFCHAR_BUF = 58; // CCL_NUM + 1 
+ 
 #define SHIFT(i) (ULL(1) << (i))
 
 namespace NUnicode {

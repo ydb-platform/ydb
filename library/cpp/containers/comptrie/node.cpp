@@ -1,7 +1,7 @@
 #include "node.h"
 #include "leaf_skipper.h"
 #include "comptrie_impl.h"
-
+ 
 #include <util/system/yassert.h>
 #include <util/generic/yexception.h>
 
@@ -16,7 +16,7 @@ namespace NCompactTrie {
             offset = 0;
         }
     }
-
+ 
     // We believe that epsilon links are found only on the forward-position and that afer jumping an epsilon link you come to an ordinary node.
 
     TNode::TNode(const char* data, size_t offset, const ILeafSkipper& skipFunction)
@@ -35,7 +35,7 @@ namespace NCompactTrie {
         char flags = *(datapos++);
         Y_ASSERT(!IsEpsilonLink(flags));
         Label = *(datapos++);
-
+ 
         size_t leftsize = LeftOffsetLen(flags);
         size_t& leftOffset = Offsets[D_LEFT];
         leftOffset = UnpackOffset(datapos, leftsize);
@@ -43,7 +43,7 @@ namespace NCompactTrie {
             leftOffset += Offset;
         }
         datapos += leftsize;
-
+ 
         size_t rightsize = RightOffsetLen(flags);
         size_t& rightOffset = Offsets[D_RIGHT];
         rightOffset = UnpackOffset(datapos, rightsize);
@@ -72,8 +72,8 @@ namespace NCompactTrie {
                     ythrow yexception() << "Corrupted epsilon link";
                 }
                 forwardOffset += epsilonOffset;
-            }
-        }
-    }
+            } 
+        } 
+    } 
 
-}
+} 

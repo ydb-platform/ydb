@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include "comptrie_packer.h"
 #include "minimize.h"
 #include "key_selector.h"
@@ -12,7 +12,7 @@
 // is created incrementally. It actually helps a lot to have the input data prefix-grouped
 // by key; otherwise, memory consumption becomes a tough issue.
 // NOTE: building and serializing the automaton may be lengthy, and takes lots of memory.
-
+ 
 // PREFIX_GROUPED means that if we, while constructing a trie, add to the builder two keys with the same prefix,
 // then all the keys that we add between these two also have the same prefix.
 // Actually in this mode the builder can accept even more freely ordered input,
@@ -45,16 +45,16 @@ public:
     typedef S TPacker;
     typedef typename TCompactTrieKeySelector<TSymbol>::TKey TKey;
     typedef typename TCompactTrieKeySelector<TSymbol>::TKeyBuf TKeyBuf;
-
+ 
     explicit TCompactTrieBuilder(TCompactTrieBuilderFlags flags = CTBF_NONE, TPacker packer = TPacker(), IAllocator* alloc = TDefaultAllocator::Instance());
-
+ 
     // All Add.. methods return true if it was a new key, false if the key already existed.
 
     bool Add(const TSymbol* key, size_t keylen, const TData& value);
     bool Add(const TKeyBuf& key, const TData& value) {
         return Add(key.data(), key.size(), value);
     }
-
+ 
     // add already serialized data
     bool AddPtr(const TSymbol* key, size_t keylen, const char* data);
     bool AddPtr(const TKeyBuf& key, const char* data) {
@@ -80,14 +80,14 @@ public:
     bool FindLongestPrefix(const TKeyBuf& key, size_t* prefixLen, TData* value = nullptr) const {
         return FindLongestPrefix(key.data(), key.size(), prefixLen, value);
     }
-
+ 
     size_t Save(IOutputStream& os) const;
     size_t SaveAndDestroy(IOutputStream& os);
     size_t SaveToFile(const TString& fileName) const {
         TFixedBufferFileOutput out(fileName);
         return Save(out);
     }
-
+ 
     void Clear(); // Returns all memory to the system and resets the builder state.
 
     size_t GetEntryCount() const;
@@ -101,8 +101,8 @@ public:
 protected:
     class TCompactTrieBuilderImpl;
     THolder<TCompactTrieBuilderImpl> Impl;
-};
-
+}; 
+ 
 //----------------------------------------------------------------------------------------------------------------------
 // Minimize the trie. The result is equivalent to the original
 // trie, except that it takes less space (and has marginally lower
@@ -119,7 +119,7 @@ protected:
 
 template <class TPacker>
 size_t CompactTrieMinimize(IOutputStream& os, const char* data, size_t datalength, bool verbose = false, const TPacker& packer = TPacker(), NCompactTrie::EMinimizeMode mode = NCompactTrie::MM_DEFAULT);
-
+ 
 template <class TTrieBuilder>
 size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool verbose = false);
 

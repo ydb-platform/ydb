@@ -12,7 +12,7 @@ namespace NCompactTrie {
         , Label(0)
     {
     }
-
+ 
     static size_t GetOffsetFromEnd(const TNode& node, size_t absOffset) {
         return absOffset ? absOffset - node.GetOffset() - node.GetCoreLength() : NPOS;
     }
@@ -36,7 +36,7 @@ namespace NCompactTrie {
         do {
             lastLen = len;
             lastFwdLen = fwdLen;
-
+ 
             len = 2 + LeafLength;
             len += MeasureOffset(LeftOffset != NPOS ? LeftOffset + lastLen : 0);
             len += MeasureOffset(RightOffset != NPOS ? RightOffset + lastLen : 0);
@@ -48,15 +48,15 @@ namespace NCompactTrie {
                 fwdLen = MeasureOffset(ForwardOffset + lastFwdLen) + 1;
                 len += fwdLen;
             }
-
+ 
         } while (lastLen != len || lastFwdLen != fwdLen);
-
+ 
         return len;
     }
-
+ 
     size_t TWriteableNode::Pack(char* buffer) const {
         const size_t length = Measure();
-
+ 
         char flags = 0;
         if (LeafPos) {
             flags |= MT_FINAL;
@@ -64,14 +64,14 @@ namespace NCompactTrie {
         if (ForwardOffset != NPOS) {
             flags |= MT_NEXT;
         }
-
+ 
         const size_t leftOffset = LeftOffset != NPOS ? LeftOffset + length : 0;
         const size_t rightOffset = RightOffset != NPOS ? RightOffset + length : 0;
         const size_t leftOffsetSize = MeasureOffset(leftOffset);
         const size_t rightOffsetSize = MeasureOffset(rightOffset);
         flags |= (leftOffsetSize << MT_LEFTSHIFT);
         flags |= (rightOffsetSize << MT_RIGHTSHIFT);
-
+ 
         buffer[0] = flags;
         buffer[1] = Label;
         size_t usedLen = 2;
@@ -91,6 +91,6 @@ namespace NCompactTrie {
         }
         Y_ASSERT(usedLen == length);
         return usedLen;
-    }
-
-}
+    } 
+ 
+} 

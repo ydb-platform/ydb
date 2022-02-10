@@ -372,7 +372,7 @@ static TAtomic mtp_queue_counter = 0;
 class TAdaptiveThreadPool::TImpl {
 public:
     class TThread: public IThreadFactory::IThreadAble {
-    public:
+    public: 
         inline TThread(TImpl* parent)
             : Impl_(parent)
             , Thread_(Impl_->Parent_->Pool()->Run(this))

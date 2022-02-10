@@ -31,14 +31,14 @@ public:
 };
 
 template <typename T>
-class TAsIsPacker { // this packer is not really a packer...
+class TAsIsPacker { // this packer is not really a packer... 
 public:
     void UnpackLeaf(const char* p, T& t) const {
-        memcpy(&t, p, sizeof(T));
+        memcpy(&t, p, sizeof(T)); 
     }
     void PackLeaf(char* buffer, const T& data, size_t computedSize) const {
         Y_ASSERT(computedSize == sizeof(data));
-        memcpy(buffer, &data, sizeof(T));
+        memcpy(buffer, &data, sizeof(T)); 
     }
     size_t MeasureLeaf(const T& data) const {
         Y_UNUSED(data);

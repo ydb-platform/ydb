@@ -1,7 +1,7 @@
 #include "opaque_trie_iterator.h"
 #include "comptrie_impl.h"
 #include "node.h"
-
+ 
 namespace NCompactTrie {
     TOpaqueTrieIterator::TOpaqueTrieIterator(const TOpaqueTrie& trie, const char* emptyValue, bool atend,
                                              size_t maxKeyLength)

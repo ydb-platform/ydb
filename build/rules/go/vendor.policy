@@ -566,9 +566,9 @@ ALLOW .* -> vendor/github.com/vishvananda/netlink
 # CONTRIB-1542 Simple network namespace handling for go.
 ALLOW .* -> vendor/github.com/vishvananda/netns
 
-# CONTRIB-1545 Go bindings for creating BPF programs. 
-ALLOW .* -> vendor/github.com/iovisor/gobpf 
- 
+# CONTRIB-1545 Go bindings for creating BPF programs.
+ALLOW .* -> vendor/github.com/iovisor/gobpf
+
 # CONTRIB-1878 pure Go library for loading, compiling, and debugging eBPF programs
 ALLOW .* -> vendor/github.com/cilium/ebpf
 
@@ -752,9 +752,9 @@ ALLOW .* -> vendor/github.com/antlr/antlr4/runtime/Go/antlr
 # CONTRIB-2216: CGO-based library for fast ZSTD compression and decompression.
 ALLOW .* -> vendor/github.com/DataDog/zstd
 
-# CONTRIB-2234 
-ALLOW .* -> vendor/github.com/google/gopacket 
- 
+# CONTRIB-2234
+ALLOW .* -> vendor/github.com/google/gopacket
+
 # CONTRIB-2235 library for building interactive prompts on terminals.
 ALLOW .* -> vendor/github.com/AlecAivazis/survey/v2
 

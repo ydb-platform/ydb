@@ -88,10 +88,10 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: CORE_NON_PERSISTABLE_ENTITY 
-  severity: S_WARNING 
-} 
-ids { 
+  code: CORE_NON_PERSISTABLE_ENTITY
+  severity: S_WARNING
+}
+ids {
   code: CORE_NON_STREAM_BATCH_UDF
   severity: S_WARNING
 }

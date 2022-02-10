@@ -1163,11 +1163,11 @@ public:
         }
         HavingGround = ctx.GroundBlockShortcuts(Pos);
         src->AddWindowSpecs(WinSpecs);
- 
+
         if (!InitSelect(ctx, src, isJoin, hasError)) {
             return false;
-        } 
- 
+        }
+
         src->FinishColumns();
         Aggregate = src->BuildAggregation("core");
         if (src->IsFlattenByColumns() || src->IsFlattenColumns()) {
@@ -1234,87 +1234,87 @@ public:
             return nullptr;
         }
 
-        TNodePtr terms = BuildColumnsTerms(ctx); 
- 
+        TNodePtr terms = BuildColumnsTerms(ctx);
+
         bool ordered = ctx.UseUnordered(*this);
-        auto block(Y(Y("let", "core", input))); 
-        if (Flatten) { 
+        auto block(Y(Y("let", "core", input)));
+        if (Flatten) {
             block = L(block, Y("let", "core", Y(ordered ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos, Y("row"), Flatten, "res"))));
-        } 
-        if (PreaggregatedMap) { 
-            block = L(block, Y("let", "core", Y("FlatMap", "core", BuildLambda(Pos, Y("row"), PreaggregatedMap)))); 
-            if (Source->IsCompositeSource() && !Columns.QualifiedAll) { 
-                block = L(block, Y("let", "preaggregated", "core")); 
-            } 
-        } else if (Source->IsCompositeSource() && !Columns.QualifiedAll) { 
-            block = L(block, Y("let", "origcore", "core")); 
-        } 
+        }
+        if (PreaggregatedMap) {
+            block = L(block, Y("let", "core", Y("FlatMap", "core", BuildLambda(Pos, Y("row"), PreaggregatedMap))));
+            if (Source->IsCompositeSource() && !Columns.QualifiedAll) {
+                block = L(block, Y("let", "preaggregated", "core"));
+            }
+        } else if (Source->IsCompositeSource() && !Columns.QualifiedAll) {
+            block = L(block, Y("let", "origcore", "core"));
+        }
         auto filter = Source->BuildFilter(ctx, "core", FiltersGround);
-        if (filter) { 
-            block = L(block, Y("let", "core", filter)); 
-        } 
-        if (Aggregate) { 
-            block = L(block, Y("let", "core", Aggregate)); 
+        if (filter) {
+            block = L(block, Y("let", "core", filter));
+        }
+        if (Aggregate) {
+            block = L(block, Y("let", "core", Aggregate));
             ordered = false;
-        } 
-        if (PrewindowMap) { 
-            block = L(block, Y("let", "core", PrewindowMap)); 
-        } 
-        if (CalcOverWindow) { 
-            block = L(block, Y("let", "core", CalcOverWindow)); 
-        } 
+        }
+        if (PrewindowMap) {
+            block = L(block, Y("let", "core", PrewindowMap));
+        }
+        if (CalcOverWindow) {
+            block = L(block, Y("let", "core", CalcOverWindow));
+        }
         block = L(block, Y("let", "core", Y("EnsurePersistable", Y(ordered ? "OrderedFlatMap" : "FlatMap", "core", BuildLambda(Pos, Y("row"), terms, "res")))));
-        return Y("block", Q(L(block, Y("return", "core")))); 
-    } 
- 
-    TNodePtr BuildSort(TContext& ctx, const TString& label) override { 
-        Y_UNUSED(ctx); 
-        if (OrderBy.empty()) { 
-            return nullptr; 
-        } 
- 
-        return Y("let", label, BuildSortSpec(OrderBy, label, OrderByGround)); 
-    } 
- 
-    bool IsSelect() const override { 
+        return Y("block", Q(L(block, Y("return", "core"))));
+    }
+
+    TNodePtr BuildSort(TContext& ctx, const TString& label) override {
+        Y_UNUSED(ctx);
+        if (OrderBy.empty()) {
+            return nullptr;
+        }
+
+        return Y("let", label, BuildSortSpec(OrderBy, label, OrderByGround));
+    }
+
+    bool IsSelect() const override {
         return true;
-    } 
- 
-    bool IsStream() const override { 
-        return Stream; 
-    } 
- 
+    }
+
+    bool IsStream() const override {
+        return Stream;
+    }
+
     bool IsOrdered() const override {
         return !OrderBy.empty();
     }
 
     TWriteSettings GetWriteSettings() const override {
         return Settings;
-    } 
- 
-    TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override { 
-        if (OrderByInit && Source->GetJoin()) { 
-            column.SetAsNotReliable(); 
-            auto maybeExist = IRealSource::AddColumn(ctx, column); 
-            if (maybeExist && maybeExist.GetRef()) { 
-                return true; 
-            } 
-            return Source->AddColumn(ctx, column); 
-        } 
-        return IRealSource::AddColumn(ctx, column); 
-    } 
- 
-    TNodePtr PrepareWithout(const TNodePtr& base) { 
-        auto terms = base; 
-        if (Without) { 
-            for (auto without: Without) { 
-                auto name = *without->GetColumnName(); 
-                if (Source && Source->GetJoin()) { 
-                    name = DotJoin(*without->GetSourceName(), name); 
-                } 
+    }
+
+    TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
+        if (OrderByInit && Source->GetJoin()) {
+            column.SetAsNotReliable();
+            auto maybeExist = IRealSource::AddColumn(ctx, column);
+            if (maybeExist && maybeExist.GetRef()) {
+                return true;
+            }
+            return Source->AddColumn(ctx, column);
+        }
+        return IRealSource::AddColumn(ctx, column);
+    }
+
+    TNodePtr PrepareWithout(const TNodePtr& base) {
+        auto terms = base;
+        if (Without) {
+            for (auto without: Without) {
+                auto name = *without->GetColumnName();
+                if (Source && Source->GetJoin()) {
+                    name = DotJoin(*without->GetSourceName(), name);
+                }
                 terms = L(terms, Y("let", "row", Y("RemoveMember", "row", Q(name))));
-            } 
-        } 
+            }
+        }
 
         if (Source) {
             for (auto column : Source->GetTmpWindowColumns()) {
@@ -1322,198 +1322,198 @@ public:
             }
         }
 
-        return terms; 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        TWinSpecs newSpecs; 
-        for (auto cur: WinSpecs) { 
-            newSpecs.emplace(cur.first, cur.second->Clone()); 
-        } 
+        return terms;
+    }
+
+    TNodePtr DoClone() const final {
+        TWinSpecs newSpecs;
+        for (auto cur: WinSpecs) {
+            newSpecs.emplace(cur.first, cur.second->Clone());
+        }
         return new TSelectCore(Pos, Source->CloneSource(), CloneContainer(GroupByExpr),
-                CloneContainer(GroupBy), CloneContainer(OrderBy), SafeClone(Having), newSpecs, SafeClone(HoppingWindowSpec), 
+                CloneContainer(GroupBy), CloneContainer(OrderBy), SafeClone(Having), newSpecs, SafeClone(HoppingWindowSpec),
                 CloneContainer(Terms), Distinct, Without, Stream, Settings);
-    } 
- 
-private: 
-    bool InitSelect(TContext& ctx, ISource* src, bool isJoin, bool& hasError) { 
-        for (auto iter: WinSpecs) { 
-            auto winSpec = *iter.second; 
-            ctx.PushBlockShortcuts(); 
-            for (auto& partitionNode: winSpec.Partitions) { 
-                auto invalidPartitionNodeFunc = [&]() { 
-                    ctx.Error(partitionNode->GetPos()) << "Expected either column name, either alias" << 
-                        " or expression with alias for PARTITION BY expression in WINDOWS clause"; 
-                    hasError = true; 
-                }; 
-                if (!partitionNode->GetLabel() && !partitionNode->GetColumnName()) { 
-                    invalidPartitionNodeFunc(); 
-                    continue; 
-                } 
-                if (!partitionNode->Init(ctx, src)) { 
-                    hasError = true; 
-                    continue; 
-                } 
-                if (!partitionNode->GetLabel() && !partitionNode->GetColumnName()) { 
-                    invalidPartitionNodeFunc(); 
-                    continue; 
-                } 
-            } 
-            WinSpecsPartitionByGround = ctx.GroundBlockShortcuts(Pos, WinSpecsPartitionByGround); 
-            if (!src->AddExpressions(ctx, winSpec.Partitions, EExprSeat::WindowPartitionBy)) { 
-                hasError = true; 
-            } 
- 
-            ctx.PushBlockShortcuts(); 
-            for (auto orderSpec: winSpec.OrderBy) { 
-                if (!orderSpec->OrderExpr->Init(ctx, src)) { 
-                    hasError = true; 
-                } 
-            } 
-            WinSpecsOrderByGround = ctx.GroundBlockShortcuts(Pos, WinSpecsOrderByGround); 
-        } 
- 
-        if (HoppingWindowSpec) { 
-            ctx.PushBlockShortcuts(); 
-            if (!HoppingWindowSpec->TimeExtractor->Init(ctx, src)) { 
-                hasError = true; 
-            } 
-            HoppingWindowSpec->TimeExtractor = ctx.GroundBlockShortcutsForExpr(HoppingWindowSpec->TimeExtractor); 
-            src->SetHoppingWindowSpec(HoppingWindowSpec); 
-        } 
- 
-        ctx.PushBlockShortcuts(); 
-        for (auto& term: Terms) { 
-            if (!term->Init(ctx, src)) { 
-                hasError = true; 
-                continue; 
-            } 
-            auto column = term->GetColumnName(); 
-            if (Distinct) { 
-                if (!column) { 
-                    ctx.Error(Pos) << "SELECT DISTINCT requires a list of column references"; 
-                    hasError = true; 
-                    continue; 
-                } 
-                if (term->IsAsterisk()) { 
-                    ctx.Error(Pos) << "SELECT DISTINCT * is not implemented yet"; 
-                    hasError = true; 
-                    continue; 
-                } 
-                auto columnName = *column; 
-                if (isJoin) { 
-                    auto sourceNamePtr = term->GetSourceName(); 
-                    if (!sourceNamePtr || sourceNamePtr->empty()) { 
-                        if (src->IsGroupByColumn(columnName)) { 
-                            ctx.Error(term->GetPos()) << ErrorDistinctByGroupKey(columnName); 
-                            hasError = true; 
-                            continue; 
-                        } else { 
-                            ctx.Error(term->GetPos()) << ErrorDistinctWithoutCorrelation(columnName); 
-                            hasError = true; 
-                            continue; 
-                        } 
-                    } 
-                    columnName = DotJoin(*sourceNamePtr, columnName); 
-                } 
-                if (src->IsGroupByColumn(columnName)) { 
-                    ctx.Error(term->GetPos()) << ErrorDistinctByGroupKey(columnName); 
-                    hasError = true; 
-                    continue; 
-                } 
-                if (!src->AddGroupKey(ctx, columnName)) { 
-                    hasError = true; 
-                    continue; 
-                } 
-                GroupBy.push_back(BuildColumn(Pos, columnName)); 
-            } 
-            TString label(term->GetLabel()); 
+    }
+
+private:
+    bool InitSelect(TContext& ctx, ISource* src, bool isJoin, bool& hasError) {
+        for (auto iter: WinSpecs) {
+            auto winSpec = *iter.second;
+            ctx.PushBlockShortcuts();
+            for (auto& partitionNode: winSpec.Partitions) {
+                auto invalidPartitionNodeFunc = [&]() {
+                    ctx.Error(partitionNode->GetPos()) << "Expected either column name, either alias" <<
+                        " or expression with alias for PARTITION BY expression in WINDOWS clause";
+                    hasError = true;
+                };
+                if (!partitionNode->GetLabel() && !partitionNode->GetColumnName()) {
+                    invalidPartitionNodeFunc();
+                    continue;
+                }
+                if (!partitionNode->Init(ctx, src)) {
+                    hasError = true;
+                    continue;
+                }
+                if (!partitionNode->GetLabel() && !partitionNode->GetColumnName()) {
+                    invalidPartitionNodeFunc();
+                    continue;
+                }
+            }
+            WinSpecsPartitionByGround = ctx.GroundBlockShortcuts(Pos, WinSpecsPartitionByGround);
+            if (!src->AddExpressions(ctx, winSpec.Partitions, EExprSeat::WindowPartitionBy)) {
+                hasError = true;
+            }
+
+            ctx.PushBlockShortcuts();
+            for (auto orderSpec: winSpec.OrderBy) {
+                if (!orderSpec->OrderExpr->Init(ctx, src)) {
+                    hasError = true;
+                }
+            }
+            WinSpecsOrderByGround = ctx.GroundBlockShortcuts(Pos, WinSpecsOrderByGround);
+        }
+
+        if (HoppingWindowSpec) {
+            ctx.PushBlockShortcuts();
+            if (!HoppingWindowSpec->TimeExtractor->Init(ctx, src)) {
+                hasError = true;
+            }
+            HoppingWindowSpec->TimeExtractor = ctx.GroundBlockShortcutsForExpr(HoppingWindowSpec->TimeExtractor);
+            src->SetHoppingWindowSpec(HoppingWindowSpec);
+        }
+
+        ctx.PushBlockShortcuts();
+        for (auto& term: Terms) {
+            if (!term->Init(ctx, src)) {
+                hasError = true;
+                continue;
+            }
+            auto column = term->GetColumnName();
+            if (Distinct) {
+                if (!column) {
+                    ctx.Error(Pos) << "SELECT DISTINCT requires a list of column references";
+                    hasError = true;
+                    continue;
+                }
+                if (term->IsAsterisk()) {
+                    ctx.Error(Pos) << "SELECT DISTINCT * is not implemented yet";
+                    hasError = true;
+                    continue;
+                }
+                auto columnName = *column;
+                if (isJoin) {
+                    auto sourceNamePtr = term->GetSourceName();
+                    if (!sourceNamePtr || sourceNamePtr->empty()) {
+                        if (src->IsGroupByColumn(columnName)) {
+                            ctx.Error(term->GetPos()) << ErrorDistinctByGroupKey(columnName);
+                            hasError = true;
+                            continue;
+                        } else {
+                            ctx.Error(term->GetPos()) << ErrorDistinctWithoutCorrelation(columnName);
+                            hasError = true;
+                            continue;
+                        }
+                    }
+                    columnName = DotJoin(*sourceNamePtr, columnName);
+                }
+                if (src->IsGroupByColumn(columnName)) {
+                    ctx.Error(term->GetPos()) << ErrorDistinctByGroupKey(columnName);
+                    hasError = true;
+                    continue;
+                }
+                if (!src->AddGroupKey(ctx, columnName)) {
+                    hasError = true;
+                    continue;
+                }
+                GroupBy.push_back(BuildColumn(Pos, columnName));
+            }
+            TString label(term->GetLabel());
             bool hasName = true;
-            if (label.empty()) { 
-                auto source = term->GetSourceName(); 
+            if (label.empty()) {
+                auto source = term->GetSourceName();
                 if (term->IsAsterisk() && !source->empty()) {
-                    Columns.QualifiedAll = true; 
-                    label = DotJoin(*source, "*"); 
-                } else if (column) { 
-                    label = isJoin && source && *source ? DotJoin(*source, *column) : *column; 
-                } else { 
-                    label = TStringBuilder() << "column" << Columns.List.size(); 
+                    Columns.QualifiedAll = true;
+                    label = DotJoin(*source, "*");
+                } else if (column) {
+                    label = isJoin && source && *source ? DotJoin(*source, *column) : *column;
+                } else {
+                    label = TStringBuilder() << "column" << Columns.List.size();
                     hasName = false;
-                } 
-            } 
+                }
+            }
             if (!Columns.Add(&label, false, false, true, hasName)) {
-                ctx.Error(Pos) << "Duplicate column: " << label; 
-                hasError = true; 
-                continue; 
-            } 
-        } 
-        TermsGround = ctx.GroundBlockShortcuts(Pos); 
- 
-        if (Columns.All || Columns.QualifiedAll) { 
-            Source->AllColumns(); 
-            if (Columns.All && isJoin && ctx.SimpleColumns) { 
-                Columns.All = false; 
-                Columns.QualifiedAll = true; 
-                const auto pos = Terms.front()->GetPos(); 
-                Terms.clear(); 
-                for (const auto& source: Source->GetJoin()->GetJoinLabels()) { 
+                ctx.Error(Pos) << "Duplicate column: " << label;
+                hasError = true;
+                continue;
+            }
+        }
+        TermsGround = ctx.GroundBlockShortcuts(Pos);
+
+        if (Columns.All || Columns.QualifiedAll) {
+            Source->AllColumns();
+            if (Columns.All && isJoin && ctx.SimpleColumns) {
+                Columns.All = false;
+                Columns.QualifiedAll = true;
+                const auto pos = Terms.front()->GetPos();
+                Terms.clear();
+                for (const auto& source: Source->GetJoin()->GetJoinLabels()) {
                     auto withDot = DotJoin(source, "*");
                     Columns.Add(&withDot, false);
-                    Terms.push_back(BuildColumn(pos, "*", source)); 
-                } 
-            } 
-        } 
-        for (const auto& without: Without) { 
-            auto namePtr = without->GetColumnName(); 
-            auto sourcePtr = without->GetSourceName(); 
-            YQL_ENSURE(namePtr && *namePtr); 
-            if (isJoin && !(sourcePtr && *sourcePtr)) { 
-                ctx.Error(without->GetPos()) << "Expected correlation name for WITHOUT in JOIN"; 
-                hasError = true; 
-                continue; 
-            } 
-        } 
-        if (Having && !Having->Init(ctx, src)) { 
-            hasError = true; 
-        } 
-        if (!src->IsCompositeSource() && !Distinct && !Columns.All && src->HasAggregations()) { 
-            /// verify select aggregation compatibility 
-            TVector<TNodePtr> exprs(Terms); 
-            if (Having) { 
-                exprs.push_back(Having); 
-            } 
-            for (const auto& iter: WinSpecs) { 
-                for (const auto& sortSpec: iter.second->OrderBy) { 
-                    exprs.push_back(sortSpec->OrderExpr); 
-                } 
-            } 
-            if (!ValidateAllNodesForAggregation(ctx, exprs)) { 
-                hasError = true; 
-            } 
-        } 
-        const auto label = GetLabel(); 
-        ctx.PushBlockShortcuts(); 
-        for (const auto& sortSpec: OrderBy) { 
-            auto& expr = sortSpec->OrderExpr; 
-            SetLabel(Source->GetLabel()); 
-            OrderByInit = true; 
-            if (!expr->Init(ctx, this)) { 
-                hasError = true; 
-                continue; 
-            } 
-            OrderByInit = false; 
-            if (!IsComparableExpression(ctx, expr, "ORDER BY")) { 
-                hasError = true; 
-                continue; 
-            } 
-        } 
-        OrderByGround = ctx.GroundBlockShortcuts(Pos); 
-        SetLabel(label); 
- 
-        return true; 
-    } 
- 
-    TNodePtr BuildColumnsTerms(TContext& ctx) { 
+                    Terms.push_back(BuildColumn(pos, "*", source));
+                }
+            }
+        }
+        for (const auto& without: Without) {
+            auto namePtr = without->GetColumnName();
+            auto sourcePtr = without->GetSourceName();
+            YQL_ENSURE(namePtr && *namePtr);
+            if (isJoin && !(sourcePtr && *sourcePtr)) {
+                ctx.Error(without->GetPos()) << "Expected correlation name for WITHOUT in JOIN";
+                hasError = true;
+                continue;
+            }
+        }
+        if (Having && !Having->Init(ctx, src)) {
+            hasError = true;
+        }
+        if (!src->IsCompositeSource() && !Distinct && !Columns.All && src->HasAggregations()) {
+            /// verify select aggregation compatibility
+            TVector<TNodePtr> exprs(Terms);
+            if (Having) {
+                exprs.push_back(Having);
+            }
+            for (const auto& iter: WinSpecs) {
+                for (const auto& sortSpec: iter.second->OrderBy) {
+                    exprs.push_back(sortSpec->OrderExpr);
+                }
+            }
+            if (!ValidateAllNodesForAggregation(ctx, exprs)) {
+                hasError = true;
+            }
+        }
+        const auto label = GetLabel();
+        ctx.PushBlockShortcuts();
+        for (const auto& sortSpec: OrderBy) {
+            auto& expr = sortSpec->OrderExpr;
+            SetLabel(Source->GetLabel());
+            OrderByInit = true;
+            if (!expr->Init(ctx, this)) {
+                hasError = true;
+                continue;
+            }
+            OrderByInit = false;
+            if (!IsComparableExpression(ctx, expr, "ORDER BY")) {
+                hasError = true;
+                continue;
+            }
+        }
+        OrderByGround = ctx.GroundBlockShortcuts(Pos);
+        SetLabel(label);
+
+        return true;
+    }
+
+    TNodePtr BuildColumnsTerms(TContext& ctx) {
         TNodePtr terms;
         if (Columns.All) {
             Y_VERIFY_DEBUG(Columns.List.empty());

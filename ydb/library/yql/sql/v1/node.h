@@ -132,7 +132,7 @@ namespace NSQLTranslationV1 {
         bool IsConstant() const;
         bool MaybeConstant() const;
         bool IsAggregated() const;
-        bool IsAggregationKey() const; 
+        bool IsAggregationKey() const;
         bool IsOverWindow() const;
         bool HasState(ENodeState state) const {
             PrecacheState();

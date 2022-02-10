@@ -126,19 +126,19 @@ message TKikimrGatewayConfig {
     repeated TAttr DefaultSettings = 2;
 }
 
-/////////////////////////////// Kikimr MVP /////////////////////////////// 
- 
-message TKikimrMvpProxyConfig { 
-    optional string Host = 1; 
-    optional uint32 Port = 2; 
-    optional string BasePath = 3; 
+/////////////////////////////// Kikimr MVP ///////////////////////////////
+
+message TKikimrMvpProxyConfig {
+    optional string Host = 1;
+    optional uint32 Port = 2;
+    optional string BasePath = 3;
     optional uint32 TvmId = 4 [default = 0];
-} 
- 
-message TKikimrMvpGatewayConfig { 
-    repeated TKikimrMvpProxyConfig ProxyMapping = 1; 
-} 
- 
+}
+
+message TKikimrMvpGatewayConfig {
+    repeated TKikimrMvpProxyConfig ProxyMapping = 1;
+}
+
 ///////////////////////////// Ydb /////////////////////////////
 
 message TYdbClusterConfig {
@@ -440,7 +440,7 @@ message TGatewaysConfig {
     optional TKikimrGatewayConfig Kikimr = 2;
     optional TClickHouseGatewayConfig ClickHouse = 3;
     optional TRtmrGatewayConfig Rtmr = 4;
-    optional TKikimrMvpGatewayConfig KikimrMvp = 5; 
+    optional TKikimrMvpGatewayConfig KikimrMvp = 5;
     optional TStatGatewayConfig Stat = 6;
     optional TChytGatewayConfig Chyt = 7;
     optional TSolomonGatewayConfig Solomon = 8;

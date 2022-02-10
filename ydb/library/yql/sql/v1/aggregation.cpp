@@ -105,7 +105,7 @@ protected:
         if (!Expr->Init(ctx, src)) {
             return false;
         }
-        if (Expr->IsAggregated() && !Expr->IsAggregationKey() && !IsOverWindow()) { 
+        if (Expr->IsAggregated() && !Expr->IsAggregationKey() && !IsOverWindow()) {
             ctx.Error(Pos) << "Aggregation of aggregated values is forbidden for no window functions";
             return false;
         }

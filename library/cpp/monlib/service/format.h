@@ -19,7 +19,7 @@ namespace NMonitoring {
         constexpr auto isPlainPair = NPrivate::THasSecond<std::decay_t<decltype(*headers.begin())>>::value;
 
         auto it = FindIf(std::begin(headers), std::end(headers),
-            [=] (const auto& h) {
+            [=] (const auto& h) { 
                 if constexpr (NPrivate::THasName<std::decay_t<decltype(h)>>::value) {
                     return AsciiCompareIgnoreCase(h.Name(), TStringBuf("accept-encoding")) == 0;
                 } else if (isPlainPair) {
@@ -64,7 +64,7 @@ namespace NMonitoring {
         constexpr auto isPlainPair = NPrivate::THasSecond<std::decay_t<decltype(*headers.begin())>>::value;
 
         auto it = FindIf(std::begin(headers), std::end(headers),
-            [=] (const auto& h) {
+            [=] (const auto& h) { 
                 if constexpr (NPrivate::THasName<std::decay_t<decltype(h)>>::value) {
                     return AsciiCompareIgnoreCase(h.Name(), TStringBuf("accept")) == 0;
                 } else if (isPlainPair) {

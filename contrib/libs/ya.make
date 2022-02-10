@@ -134,7 +134,7 @@ RECURSE(
     lepton
     leveldb
     libarchive
-    libbpf 
+    libbpf
     libbz2
     libc_compat
     libc_userver_workarounds

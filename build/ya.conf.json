@@ -384,15 +384,15 @@
         "atop": {
             "description": "Advanced System & Process Monitor"
         },
-        "bpftool": { 
-            "description": "tool for inspection and simple manipulation of eBPF programs and maps" 
-        }, 
-        "bpftrace": { 
-            "description": "High-level tracing language for Linux eBPF" 
-        }, 
-        "strace": { 
-            "description": "the linux syscall tracer" 
-        }, 
+        "bpftool": {
+            "description": "tool for inspection and simple manipulation of eBPF programs and maps"
+        },
+        "bpftrace": {
+            "description": "High-level tracing language for Linux eBPF"
+        },
+        "strace": {
+            "description": "the linux syscall tracer"
+        },
         "iperf": {
             "description": "network load tester"
         },
@@ -5040,54 +5040,54 @@
                 }
             ]
         },
-        "bpftool": { 
-            "tools": { 
-                "bpftool": { 
-                    "bottle": "bpftool", 
-                    "executable": "bpftool" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
-        "bpftrace": { 
-            "tools": { 
-                "bpftrace": { 
+        "bpftool": {
+            "tools": {
+                "bpftool": {
+                    "bottle": "bpftool",
+                    "executable": "bpftool"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                }
+            ]
+        },
+        "bpftrace": {
+            "tools": {
+                "bpftrace": {
                     "bottle": "sre",
-                    "executable": "bpftrace" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
-        "strace": { 
-            "tools": { 
-                "strace": { 
-                    "bottle": "strace", 
-                    "executable": "strace" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+                    "executable": "bpftrace"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                }
+            ]
+        },
+        "strace": {
+            "tools": {
+                "strace": {
+                    "bottle": "strace",
+                    "executable": "strace"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "stress-ng": {
             "tools": {
                 "stress-ng": {
@@ -7536,48 +7536,48 @@
                 ]
             }
         },
-        "bpftool": { 
-            "formula": { 
-                "sandbox_id": [ 
+        "bpftool": {
+            "formula": {
+                "sandbox_id": [
                     1130914217
-                ], 
-                "match": "infra/kernel/tools/bpftool/build/bpftool-static.tar.gz" 
-            }, 
-            "executable": { 
-                "bpftool": [ 
-                    "bpftool", 
-                    "bpftool" 
-                ] 
-            } 
-        }, 
-        "bpftrace": { 
-            "formula": { 
-                "sandbox_id": [ 
-                    866596155 
-                ], 
-                "match": "infra/kernel/tools/bpftrace/build/bpftrace-static.tar.gz" 
-            }, 
-            "executable": { 
-                "bpftrace": [ 
-                    "bpftrace", 
-                    "bpftrace" 
-                ] 
-            } 
-        }, 
-        "strace": { 
-            "formula": { 
-                "sandbox_id": [ 
-                    654255646 
-                ], 
-                "match": "infra/kernel/tools/strace/build/strace-static.tar.gz" 
-            }, 
-            "executable": { 
-                "strace": [ 
-                    "strace", 
-                    "strace" 
-                ] 
-            } 
-        }, 
+                ],
+                "match": "infra/kernel/tools/bpftool/build/bpftool-static.tar.gz"
+            },
+            "executable": {
+                "bpftool": [
+                    "bpftool",
+                    "bpftool"
+                ]
+            }
+        },
+        "bpftrace": {
+            "formula": {
+                "sandbox_id": [
+                    866596155
+                ],
+                "match": "infra/kernel/tools/bpftrace/build/bpftrace-static.tar.gz"
+            },
+            "executable": {
+                "bpftrace": [
+                    "bpftrace",
+                    "bpftrace"
+                ]
+            }
+        },
+        "strace": {
+            "formula": {
+                "sandbox_id": [
+                    654255646
+                ],
+                "match": "infra/kernel/tools/strace/build/strace-static.tar.gz"
+            },
+            "executable": {
+                "strace": [
+                    "strace",
+                    "strace"
+                ]
+            }
+        },
         "stress-ng": {
             "formula": {
                 "sandbox_id": [

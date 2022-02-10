@@ -30,7 +30,7 @@ RECURSE(
     gstreamer
     http-parser
     keyutils
-    libelf 
+    libelf
     libffi
     libiscsi
     libntirpc

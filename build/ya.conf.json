@@ -1,120 +1,120 @@
 {
     "tools": {
-        "cc": {
-            "description": "Run C compiler"
-        },
-        "c++": {
-            "description": "Run C++ compiler"
-        },
-        "clang-format": {
+        "cc": { 
+            "description": "Run C compiler" 
+        }, 
+        "c++": { 
+            "description": "Run C++ compiler" 
+        }, 
+        "clang-format": { 
             "description": "Run Clang-Format source code formatter"
-        },
+        }, 
         "clang-rename": {
             "description": "Run Clang-Rename refactoring tool"
         },
-        "clang-tidy": {
+        "clang-tidy": { 
             "description": "Run Clang-Tidy source code linter"
-        },
+        }, 
         "clang-apply-replacements": {
             "description": "Run clang-apply-replacements companion for clang-tidy"
         },
-        "cling": {
-            "description": "Run cling"
-        },
+        "cling": { 
+            "description": "Run cling" 
+        }, 
         "cue": {
             "description": "Validate and define text-based and dynamic configuration"
         },
-        "dctl": {
-            "description": "Run Yandex.Deploy CLI"
-        },
-        "llvm-profdata": {
-            "description": "Run llvm-profdata Clang utility"
-        },
-        "llvm-symbolizer": {
-            "description": "Run llvm-symbolizer Clang utility"
-        },
-        "llvm-cov": {
-            "description": "Run llvm-cov Clang utility"
-        },
-        "strip": {
-            "description": "Run strip utility"
-        },
-        "c++filt": {
-            "description": "Run c++filt"
-        },
-        "nm": {
-            "description": "Run nm"
-        },
+        "dctl": { 
+            "description": "Run Yandex.Deploy CLI" 
+        }, 
+        "llvm-profdata": { 
+            "description": "Run llvm-profdata Clang utility" 
+        }, 
+        "llvm-symbolizer": { 
+            "description": "Run llvm-symbolizer Clang utility" 
+        }, 
+        "llvm-cov": { 
+            "description": "Run llvm-cov Clang utility" 
+        }, 
+        "strip": { 
+            "description": "Run strip utility" 
+        }, 
+        "c++filt": { 
+            "description": "Run c++filt" 
+        }, 
+        "nm": { 
+            "description": "Run nm" 
+        }, 
         "objcopy": {
             "description": "Run objcopy"
         },
-        "svn": {
-            "description": "Subversion command-line client"
-        },
-        "zipatcher": {
-            "description": "Apply zipatch from file or Arcanum pull request"
-        },
-        "ymake": {
-            "description": "Run ymake",
-            "visible": false
-        },
-        "maven_import_sandbox_uploader": {
-            "description": "Sandbox uploader for maven-import cmd",
-            "visible": false
-        },
-        "cmake": {
-            "description": "Run cmake"
-        },
-        "ninja": {
-            "description": "Run ninja"
-        },
+        "svn": { 
+            "description": "Subversion command-line client" 
+        }, 
+        "zipatcher": { 
+            "description": "Apply zipatch from file or Arcanum pull request" 
+        }, 
+        "ymake": { 
+            "description": "Run ymake", 
+            "visible": false 
+        }, 
+        "maven_import_sandbox_uploader": { 
+            "description": "Sandbox uploader for maven-import cmd", 
+            "visible": false 
+        }, 
+        "cmake": { 
+            "description": "Run cmake" 
+        }, 
+        "ninja": { 
+            "description": "Run ninja" 
+        }, 
         "pprof": {
             "description": "Run pprof"
         },
         "ytexec": {
             "description": "Run ytexec"
         },
-        "gdb": {
-            "description": "Run gdb"
-        },
-        "gdbserver": {
-            "description": "Run gdbserver"
-        },
-        "ag": {
-            "description": "Run ag (super fast source-code grep)"
-        },
-        "valgrind": {
-            "description": "Run valgrind"
-        },
-        "python": {
-            "description": "Run pseudo-python",
-            "visible": false
-        },
-        "python3": {
-            "description": "Run Python 3",
-            "visible": false
-        },
+        "gdb": { 
+            "description": "Run gdb" 
+        }, 
+        "gdbserver": { 
+            "description": "Run gdbserver" 
+        }, 
+        "ag": { 
+            "description": "Run ag (super fast source-code grep)" 
+        }, 
+        "valgrind": { 
+            "description": "Run valgrind" 
+        }, 
+        "python": { 
+            "description": "Run pseudo-python", 
+            "visible": false 
+        }, 
+        "python3": { 
+            "description": "Run Python 3", 
+            "visible": false 
+        }, 
         "jar": {
             "description": "Run jar"
         },
-        "java": {
-            "description": "Run java"
-        },
-        "javac": {
-            "description": "Run javac"
-        },
-        "java10": {
-            "description": "Run java 10"
-        },
-        "javac10": {
-            "description": "Run javac 10"
-        },
-        "java11": {
-            "description": "Run java 11"
-        },
-        "javac11": {
-            "description": "Run javac 11"
-        },
+        "java": { 
+            "description": "Run java" 
+        }, 
+        "javac": { 
+            "description": "Run javac" 
+        }, 
+        "java10": { 
+            "description": "Run java 10" 
+        }, 
+        "javac10": { 
+            "description": "Run javac 10" 
+        }, 
+        "java11": { 
+            "description": "Run java 11" 
+        }, 
+        "javac11": { 
+            "description": "Run javac 11" 
+        }, 
         "jar15": {
             "description": "Run jar from jdk15"
         },
@@ -133,157 +133,157 @@
         "javac17": {
             "description": "Run javac 15"
         },
-        "jq": {
-            "description": "Run jq"
-        },
-        "vim": {
-            "description": "Run vim"
-        },
-        "nvim": {
-            "description": "Run neovim"
-        },
-        "ctags": {
-            "description": "Run ctags"
-        },
-        "emacs": {
-            "description": "Run emacs"
-        },
-        "tmux": {
-            "description": "Run Tmux"
-        },
-        "gpt_perf": {
-            "description": "Google performance tools: performance checker"
-        },
-        "gpt_heap": {
-            "description": "Google performance tools: heap checker"
-        },
-        "wine": {
-            "description": "Run wine64",
-            "visible": false
-        },
+        "jq": { 
+            "description": "Run jq" 
+        }, 
+        "vim": { 
+            "description": "Run vim" 
+        }, 
+        "nvim": { 
+            "description": "Run neovim" 
+        }, 
+        "ctags": { 
+            "description": "Run ctags" 
+        }, 
+        "emacs": { 
+            "description": "Run emacs" 
+        }, 
+        "tmux": { 
+            "description": "Run Tmux" 
+        }, 
+        "gpt_perf": { 
+            "description": "Google performance tools: performance checker" 
+        }, 
+        "gpt_heap": { 
+            "description": "Google performance tools: heap checker" 
+        }, 
+        "wine": { 
+            "description": "Run wine64", 
+            "visible": false 
+        }, 
         "wine32": {
             "description": "Run wine",
             "visible": false
         },
-        "deploy": {
-            "description": "Run Samogon",
-            "visible": false
-        },
-        "uc": {
-            "description": "Run Uber Compressor"
-        },
-        "perf": {
-            "description": "Run Perf"
-        },
+        "deploy": { 
+            "description": "Run Samogon", 
+            "visible": false 
+        }, 
+        "uc": { 
+            "description": "Run Uber Compressor" 
+        }, 
+        "perf": { 
+            "description": "Run Perf" 
+        }, 
         "cuda-check": {
             "description": "Run cuda-check"
         },
         "sre": {
             "description": "Run sretool"
         },
-        "samogonctl": {
-            "description": "Run Samogon Controller"
-        },
-        "ant": {
-            "description": "Ant build system",
-            "visible": false
-        },
-        "mvn": {
-            "description": "Maven build system",
-            "visible": false
-        },
-        "gcov": {
-            "description": "Run gcov"
-        },
-        "bloat": {
+        "samogonctl": { 
+            "description": "Run Samogon Controller" 
+        }, 
+        "ant": { 
+            "description": "Ant build system", 
+            "visible": false 
+        }, 
+        "mvn": { 
+            "description": "Maven build system", 
+            "visible": false 
+        }, 
+        "gcov": { 
+            "description": "Run gcov" 
+        }, 
+        "bloat": { 
             "description": "Run bloat tool",
-            "visible": false
-        },
-        "ipython": {
-            "description": "Run IPython console",
-            "visible": false
-        },
-        "ptpython": {
-            "description": "Run PTPython console",
-            "visible": false
-        },
-        "allure": {
-            "description": "Run Allure commandline"
-        },
-        "rsync": {
-            "description": "Run RSync"
-        },
+            "visible": false 
+        }, 
+        "ipython": { 
+            "description": "Run IPython console", 
+            "visible": false 
+        }, 
+        "ptpython": { 
+            "description": "Run PTPython console", 
+            "visible": false 
+        }, 
+        "allure": { 
+            "description": "Run Allure commandline" 
+        }, 
+        "rsync": { 
+            "description": "Run RSync" 
+        }, 
         "yf": {
             "description": "Run YF client"
         },
         "rtmr-deploy": {
             "description": "Run RTMR deploy"
         },
-        "yt": {
-            "description": "Run YT client"
-        },
-        "yp-util": {
-            "description": "Run YP useful stuff"
-        },
-        "yp": {
-            "description": "Run low level YP client"
-        },
-        "yndexer": {
-            "description": "Run Yndexer"
-        },
-        "ytyndexer": {
-            "description": "Run YtYndexer"
-        },
-        "ymakeyndexer": {
-            "description": "Run ymake ydx converter"
-        },
-        "transfer-manager": {
-            "description": "Run Transfer Manager client"
-        },
-        "rem-tool": {
-            "description": "Run REM cli client"
-        },
-        "afl-fuzz": {
-            "description": "Run afl-fuzz"
-        },
-        "horadric": {
-            "description": "Run horadric generator"
-        },
+        "yt": { 
+            "description": "Run YT client" 
+        }, 
+        "yp-util": { 
+            "description": "Run YP useful stuff" 
+        }, 
+        "yp": { 
+            "description": "Run low level YP client" 
+        }, 
+        "yndexer": { 
+            "description": "Run Yndexer" 
+        }, 
+        "ytyndexer": { 
+            "description": "Run YtYndexer" 
+        }, 
+        "ymakeyndexer": { 
+            "description": "Run ymake ydx converter" 
+        }, 
+        "transfer-manager": { 
+            "description": "Run Transfer Manager client" 
+        }, 
+        "rem-tool": { 
+            "description": "Run REM cli client" 
+        }, 
+        "afl-fuzz": { 
+            "description": "Run afl-fuzz" 
+        }, 
+        "horadric": { 
+            "description": "Run horadric generator" 
+        }, 
         "logbroker": {
             "description": "Logbroker configuration utility"
         },
-        "zcli": {
-            "description": "Run zcli (console client for zephyr)"
-        },
-        "run_python_udf": {
-            "description": "run_python_udf tool"
-        },
-        "arc": {
-            "description": "Arcadia command-line client"
-        },
-        "graphs_difference": {
-            "description": "Run graphs_difference tool",
-            "visible": false
-        },
-        "contexts_difference": {
-            "description": "Run contexts_difference tool",
-            "visible": false
-        },
+        "zcli": { 
+            "description": "Run zcli (console client for zephyr)" 
+        }, 
+        "run_python_udf": { 
+            "description": "run_python_udf tool" 
+        }, 
+        "arc": { 
+            "description": "Arcadia command-line client" 
+        }, 
+        "graphs_difference": { 
+            "description": "Run graphs_difference tool", 
+            "visible": false 
+        }, 
+        "contexts_difference": { 
+            "description": "Run contexts_difference tool", 
+            "visible": false 
+        }, 
         "ycmerge": {
             "description": "Run ycmerge tool",
             "visible": false
         },
-        "ygdiff": {
-            "description": "Run ygdiff tool",
-            "visible": false
-        },
-        "ya-tc": {
-            "description": "Run ya-tc tool",
-            "visible": false
-        },
-        "crypta": {
-            "description": "Run Crypta client"
-        },
+        "ygdiff": { 
+            "description": "Run ygdiff tool", 
+            "visible": false 
+        }, 
+        "ya-tc": { 
+            "description": "Run ya-tc tool", 
+            "visible": false 
+        }, 
+        "crypta": { 
+            "description": "Run Crypta client" 
+        }, 
         "apphost": {
             "description": "Run local apphost instance"
         },
@@ -308,12 +308,12 @@
         "gofmt_1.18beta2": {
             "description": "Run gofmt tool (1.18beta2)"
         },
-        "godoc": {
-            "description": "Arcadia version of godoc"
-        },
-        "yo": {
-            "description": "Tool for managing vendor/ directory"
-        },
+        "godoc": { 
+            "description": "Arcadia version of godoc" 
+        }, 
+        "yo": { 
+            "description": "Tool for managing vendor/ directory" 
+        }, 
         "mockgen": {
             "description": "Run GoMock (go mocking framework)"
         },
@@ -330,44 +330,44 @@
         "releaser": {
             "description": "Release tool"
         },
-        "tvmknife": {
-            "description": "Tool for debugging and testing with TVM tickets"
-        },
-        "sandboxctl": {
-            "description": "Tool to run tasks in Sandbox"
-        },
-        "qemu": {
-            "description": "QEMU x86_64 machine emulator and virtualizer"
-        },
-        "qemu-i386": {
-            "description": "QEMU i386 machine emulator and virtualizer"
-        },
-        "qemu-img": {
-            "description": "QEMU disk image utility"
-        },
-        "qemu-nbd": {
-            "description": "QEMU disk network block device server"
-        },
-        "qyp": {
-            "description": "QYP tool"
-        },
-        "vmexec": {
-            "description": "VMEXEC run script inside qemu-vm"
-        },
+        "tvmknife": { 
+            "description": "Tool for debugging and testing with TVM tickets" 
+        }, 
+        "sandboxctl": { 
+            "description": "Tool to run tasks in Sandbox" 
+        }, 
+        "qemu": { 
+            "description": "QEMU x86_64 machine emulator and virtualizer" 
+        }, 
+        "qemu-i386": { 
+            "description": "QEMU i386 machine emulator and virtualizer" 
+        }, 
+        "qemu-img": { 
+            "description": "QEMU disk image utility" 
+        }, 
+        "qemu-nbd": { 
+            "description": "QEMU disk network block device server" 
+        }, 
+        "qyp": { 
+            "description": "QYP tool" 
+        }, 
+        "vmexec": { 
+            "description": "VMEXEC run script inside qemu-vm" 
+        }, 
         "yd-migrate": {
             "description": "Run deploy migration"
         },
         "yfm-docs": {
             "description": "YFM-extended markdown processor for Cloud deploy (v3)"
         },
-        "aws": {
-            "description": "Run aws"
-        },
-        "sedem": {
-            "description": "SEDEM tool - Service management tool for Maps services"
-        },
-        "fio": {
-            "description": "flexible I/O tester"
+        "aws": { 
+            "description": "Run aws" 
+        }, 
+        "sedem": { 
+            "description": "SEDEM tool - Service management tool for Maps services" 
+        }, 
+        "fio": { 
+            "description": "flexible I/O tester" 
         },
         "amduprof-cli": {
             "description": "AMDuProfCLI is a command-line tool for AMD uProf Profiler"
@@ -758,27 +758,27 @@
         "msvc2019-i686": {
             "name": "msvc2019",
             "tools": {
-                "cc": {
-                    "bottle": "msvc2019",
-                    "executable": "msvc"
-                },
-                "c++": {
-                    "bottle": "msvc2019",
-                    "executable": "msvc"
-                }
+                "cc": { 
+                    "bottle": "msvc2019", 
+                    "executable": "msvc" 
+                }, 
+                "c++": { 
+                    "bottle": "msvc2019", 
+                    "executable": "msvc" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "target": {
-                        "os": "WIN",
-                        "arch": "i686"
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "target": { 
+                        "os": "WIN", 
+                        "arch": "i686" 
                     },
                     "default": true
-                }
-            ],
+                } 
+            ], 
             "params": {
                 "type": "msvc",
                 "match_root": "MSVC",
@@ -792,23 +792,23 @@
         "msvc2019-x86_64": {
             "name": "msvc2019",
             "tools": {
-                "cc": {
-                    "bottle": "msvc2019",
-                    "executable": "msvc"
-                },
-                "c++": {
-                    "bottle": "msvc2019",
-                    "executable": "msvc"
-                }
+                "cc": { 
+                    "bottle": "msvc2019", 
+                    "executable": "msvc" 
+                }, 
+                "c++": { 
+                    "bottle": "msvc2019", 
+                    "executable": "msvc" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "WIN"
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "WIN" 
                     },
                     "default": true
-                }
-            ],
+                } 
+            ], 
             "params": {
                 "type": "msvc",
                 "match_root": "MSVC",
@@ -823,27 +823,27 @@
         "msvc2019-arm": {
             "name": "msvc2019",
             "tools": {
-                "cc": {
-                    "bottle": "msvc2019",
-                    "executable": "msvc"
-                },
-                "c++": {
-                    "bottle": "msvc2019",
-                    "executable": "msvc"
-                }
+                "cc": { 
+                    "bottle": "msvc2019", 
+                    "executable": "msvc" 
+                }, 
+                "c++": { 
+                    "bottle": "msvc2019", 
+                    "executable": "msvc" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "target": {
-                        "os": "WIN",
-                        "arch": "arm"
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "target": { 
+                        "os": "WIN", 
+                        "arch": "arm" 
                     },
                     "default": true
-                }
-            ],
+                } 
+            ], 
             "params": {
                 "type": "msvc",
                 "match_root": "MSVC",
@@ -857,27 +857,27 @@
         "wine-msvc2019-i686": {
             "name": "msvc2019",
             "tools": {
-                "cc": {
-                    "bottle": "msvc2019",
-                    "executable": "msvc"
-                },
-                "c++": {
-                    "bottle": "msvc2019",
-                    "executable": "msvc"
-                }
+                "cc": { 
+                    "bottle": "msvc2019", 
+                    "executable": "msvc" 
+                }, 
+                "c++": { 
+                    "bottle": "msvc2019", 
+                    "executable": "msvc" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "os": "WIN",
-                        "arch": "i686"
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "target": { 
+                        "os": "WIN", 
+                        "arch": "i686" 
                     },
                     "default": true
-                }
-            ],
+                } 
+            ], 
             "params": {
                 "type": "msvc",
                 "match_root": "MSVC",
@@ -892,26 +892,26 @@
         "wine-msvc2019-x86_64": {
             "name": "msvc2019",
             "tools": {
-                "cc": {
-                    "bottle": "msvc2019",
-                    "executable": "msvc"
-                },
-                "c++": {
-                    "bottle": "msvc2019",
-                    "executable": "msvc"
-                }
+                "cc": { 
+                    "bottle": "msvc2019", 
+                    "executable": "msvc" 
+                }, 
+                "c++": { 
+                    "bottle": "msvc2019", 
+                    "executable": "msvc" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "os": "WIN"
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "target": { 
+                        "os": "WIN" 
                     },
                     "default": true
-                }
-            ],
+                } 
+            ], 
             "params": {
                 "type": "msvc",
                 "match_root": "MSVC",
@@ -926,27 +926,27 @@
         "wine-msvc2019-arm": {
             "name": "msvc2019",
             "tools": {
-                "cc": {
-                    "bottle": "msvc2019",
-                    "executable": "msvc"
-                },
-                "c++": {
-                    "bottle": "msvc2019",
-                    "executable": "msvc"
-                }
+                "cc": { 
+                    "bottle": "msvc2019", 
+                    "executable": "msvc" 
+                }, 
+                "c++": { 
+                    "bottle": "msvc2019", 
+                    "executable": "msvc" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "os": "WIN",
-                        "arch": "arm"
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "target": { 
+                        "os": "WIN", 
+                        "arch": "arm" 
                     },
                     "default": true
-                }
-            ],
+                } 
+            ], 
             "params": {
                 "type": "msvc",
                 "match_root": "MSVC",
@@ -1027,32 +1027,32 @@
         },
         "ymake": {
             "tools": {
-                "ymake": {
-                    "bottle": "ymake",
-                    "executable": "ymake"
-                }
+                "ymake": { 
+                    "bottle": "ymake", 
+                    "executable": "ymake" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
                         "os": "DARWIN",
                         "arch": "arm64"
                     },
@@ -1060,10 +1060,10 @@
                 },
                 {
                     "host": {
-                        "os": "LINUX",
-                        "arch": "aarch64"
-                    },
-                    "default": true
+                        "os": "LINUX", 
+                        "arch": "aarch64" 
+                    }, 
+                    "default": true 
                 },
                 {
                     "host": {
@@ -1071,92 +1071,92 @@
                         "arch": "ppc64le"
                     },
                     "default": true
-                }
+                } 
             ]
         },
         "maven_import_sandbox_uploader": {
             "tools": {
-                "maven_import_sandbox_uploader": {
-                    "bottle": "maven_import_sandbox_uploader",
-                    "executable": "maven_import_sandbox_uploader"
-                }
+                "maven_import_sandbox_uploader": { 
+                    "bottle": "maven_import_sandbox_uploader", 
+                    "executable": "maven_import_sandbox_uploader" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "LINUX",
-                        "arch": "aarch64"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "LINUX", 
+                        "arch": "aarch64" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "arc": {
             "tools": {
-                "arc": {
-                    "bottle": "arc",
-                    "executable": "arc"
-                }
+                "arc": { 
+                    "bottle": "arc", 
+                    "executable": "arc" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "yo": {
             "tools": {
-                "yo": {
-                    "bottle": "yo",
-                    "executable": "yo"
-                }
+                "yo": { 
+                    "bottle": "yo", 
+                    "executable": "yo" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "mockgen": {
@@ -1324,98 +1324,98 @@
         },
         "tvmknife": {
             "tools": {
-                "tvmknife": {
-                    "bottle": "tvmknife",
-                    "executable": "tvmknife"
-                }
+                "tvmknife": { 
+                    "bottle": "tvmknife", 
+                    "executable": "tvmknife" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "sandboxctl": {
             "tools": {
-                "sandboxctl": {
-                    "bottle": "sandboxctl",
-                    "executable": "sandboxctl"
-                }
+                "sandboxctl": { 
+                    "bottle": "sandboxctl", 
+                    "executable": "sandboxctl" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "gcc82": {
             "tools": {
-                "cc": {
-                    "bottle": "gcc82",
-                    "executable": "cc"
-                },
-                "c++": {
-                    "bottle": "gcc82",
-                    "executable": "c++"
-                },
-                "gcov": {
-                    "bottle": "gcc82",
-                    "executable": "gcov"
-                },
-                "c++filt": {
-                    "bottle": "gcc82",
-                    "executable": "c++filt"
-                },
-                "nm": {
-                    "bottle": "gcc82",
-                    "executable": "nm"
-                },
-                "strip": {
-                    "bottle": "gcc82",
-                    "executable": "strip"
-                }
+                "cc": { 
+                    "bottle": "gcc82", 
+                    "executable": "cc" 
+                }, 
+                "c++": { 
+                    "bottle": "gcc82", 
+                    "executable": "c++" 
+                }, 
+                "gcov": { 
+                    "bottle": "gcc82", 
+                    "executable": "gcov" 
+                }, 
+                "c++filt": { 
+                    "bottle": "gcc82", 
+                    "executable": "c++filt" 
+                }, 
+                "nm": { 
+                    "bottle": "gcc82", 
+                    "executable": "nm" 
+                }, 
+                "strip": { 
+                    "bottle": "gcc82", 
+                    "executable": "strip" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    }
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    } 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    } 
+                } 
             ],
             "params": {
                 "type": "gnu",
@@ -1425,9 +1425,9 @@
                 "cxx_compiler": "$(GCC)/gcc/bin/g++",
                 "cxx_std": "c++17",
                 "gcc_version": "8.2.0",
-                "arch_opt": [
-                    "-w"
-                ],
+                "arch_opt": [ 
+                    "-w" 
+                ], 
                 "dwarf_tool": {
                     "DARWIN": "dsymutil -f"
                 }
@@ -2648,24 +2648,24 @@
         },
         "bloat": {
             "tools": {
-                "bloat": {
-                    "bottle": "bloat",
+                "bloat": { 
+                    "bottle": "bloat", 
                     "executable": "bloat"
-                }
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "pprof": {
@@ -2708,29 +2708,29 @@
         },
         "gdb": {
             "tools": {
-                "gdb": {
-                    "bottle": "gdb",
-                    "executable": "gdb"
-                }
+                "gdb": { 
+                    "bottle": "gdb", 
+                    "executable": "gdb" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
                 },
                 {
                     "host": {
@@ -2745,7 +2745,7 @@
                         "arch": "ppc64le"
                     },
                     "default": true
-                }
+                } 
             ],
             "env": {
                 "TERMINFO": [
@@ -2755,29 +2755,29 @@
         },
         "gdbserver": {
             "tools": {
-                "gdbserver": {
-                    "bottle": "gdb",
-                    "executable": "gdbserver"
-                }
+                "gdbserver": { 
+                    "bottle": "gdb", 
+                    "executable": "gdbserver" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
                 },
                 {
                     "host": {
@@ -2785,37 +2785,37 @@
                         "arch": "ppc64le"
                     },
                     "default": true
-                }
+                } 
             ]
         },
         "python": {
             "tools": {
-                "python": {
-                    "bottle": "python",
-                    "executable": "python"
-                }
+                "python": { 
+                    "bottle": "python", 
+                    "executable": "python" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
                         "os": "DARWIN",
                         "arch": "arm64"
                     },
@@ -2823,10 +2823,10 @@
                 },
                 {
                     "host": {
-                        "os": "LINUX",
-                        "arch": "aarch64"
-                    },
-                    "default": true
+                        "os": "LINUX", 
+                        "arch": "aarch64" 
+                    }, 
+                    "default": true 
                 },
                 {
                     "host": {
@@ -2834,80 +2834,80 @@
                         "arch": "ppc64le"
                     },
                     "default": true
-                }
+                } 
             ]
         },
         "ipython": {
             "tools": {
-                "ipython": {
-                    "bottle": "ptipython",
-                    "executable": "ptipython"
-                }
+                "ipython": { 
+                    "bottle": "ptipython", 
+                    "executable": "ptipython" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "ptpython": {
             "tools": {
-                "ptpython": {
-                    "bottle": "ptpython",
-                    "executable": "ptpython"
-                }
+                "ptpython": { 
+                    "bottle": "ptpython", 
+                    "executable": "ptpython" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "wine": {
             "tools": {
-                "wine": {
-                    "bottle": "wine",
-                    "executable": "wine"
-                }
+                "wine": { 
+                    "bottle": "wine", 
+                    "executable": "wine" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "wine32": {
             "tools": {
@@ -2927,189 +2927,189 @@
         },
         "deploy": {
             "tools": {
-                "deploy": {
-                    "bottle": "deploy",
-                    "executable": "deploy"
-                }
+                "deploy": { 
+                    "bottle": "deploy", 
+                    "executable": "deploy" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "yt": {
             "tools": {
-                "yt": {
-                    "bottle": "yt",
-                    "executable": "yt"
-                }
+                "yt": { 
+                    "bottle": "yt", 
+                    "executable": "yt" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "yndexer": {
             "tools": {
-                "yndexer": {
-                    "bottle": "yndexer",
-                    "executable": "yndexer"
-                }
+                "yndexer": { 
+                    "bottle": "yndexer", 
+                    "executable": "yndexer" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "ytyndexer": {
             "tools": {
-                "ytyndexer": {
-                    "bottle": "ytyndexer",
-                    "executable": "ytyndexer"
-                }
+                "ytyndexer": { 
+                    "bottle": "ytyndexer", 
+                    "executable": "ytyndexer" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "ymakeyndexer": {
             "tools": {
-                "ymakeyndexer": {
-                    "bottle": "ymakeyndexer",
-                    "executable": "ymakeyndexer"
-                }
+                "ymakeyndexer": { 
+                    "bottle": "ymakeyndexer", 
+                    "executable": "ymakeyndexer" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "transfer-manager": {
             "tools": {
-                "transfer-manager": {
-                    "bottle": "transfer-manager",
-                    "executable": "transfer-manager"
-                }
+                "transfer-manager": { 
+                    "bottle": "transfer-manager", 
+                    "executable": "transfer-manager" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "rem-tool": {
             "tools": {
-                "rem-tool": {
-                    "bottle": "rem-tool",
-                    "executable": "rem-tool"
-                }
+                "rem-tool": { 
+                    "bottle": "rem-tool", 
+                    "executable": "rem-tool" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "uc": {
             "tools": {
-                "uc": {
-                    "bottle": "uc",
-                    "executable": "uc"
-                }
+                "uc": { 
+                    "bottle": "uc", 
+                    "executable": "uc" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "perf": {
             "tools": {
-                "perf": {
-                    "bottle": "perf",
-                    "executable": "perf"
-                }
+                "perf": { 
+                    "bottle": "perf", 
+                    "executable": "perf" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "cuda-check": {
             "tools": {
@@ -3145,132 +3145,132 @@
         },
         "samogonctl": {
             "tools": {
-                "samogonctl": {
-                    "bottle": "samogonctl",
-                    "executable": "samogonctl"
-                }
+                "samogonctl": { 
+                    "bottle": "samogonctl", 
+                    "executable": "samogonctl" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "jdk": {
             "tools": {
-                "javac": {
-                    "bottle": "jdk",
-                    "executable": "javac"
-                },
-                "java": {
-                    "bottle": "jdk",
-                    "executable": "java"
-                },
-                "jar": {
-                    "bottle": "jdk",
-                    "executable": "jar"
-                }
+                "javac": { 
+                    "bottle": "jdk", 
+                    "executable": "javac" 
+                }, 
+                "java": { 
+                    "bottle": "jdk", 
+                    "executable": "java" 
+                }, 
+                "jar": { 
+                    "bottle": "jdk", 
+                    "executable": "jar" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "jdk10": {
             "tools": {
-                "javac10": {
-                    "bottle": "jdk10",
-                    "executable": "javac10"
-                },
-                "java10": {
-                    "bottle": "jdk10",
-                    "executable": "java10"
-                },
-                "jar10": {
-                    "bottle": "jdk10",
-                    "executable": "jar10"
-                }
+                "javac10": { 
+                    "bottle": "jdk10", 
+                    "executable": "javac10" 
+                }, 
+                "java10": { 
+                    "bottle": "jdk10", 
+                    "executable": "java10" 
+                }, 
+                "jar10": { 
+                    "bottle": "jdk10", 
+                    "executable": "jar10" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "jdk11": {
             "tools": {
-                "javac11": {
-                    "bottle": "jdk11",
-                    "executable": "javac11"
-                },
-                "java11": {
-                    "bottle": "jdk11",
-                    "executable": "java11"
-                },
-                "jar11": {
-                    "bottle": "jdk11",
-                    "executable": "jar11"
-                }
+                "javac11": { 
+                    "bottle": "jdk11", 
+                    "executable": "javac11" 
+                }, 
+                "java11": { 
+                    "bottle": "jdk11", 
+                    "executable": "java11" 
+                }, 
+                "jar11": { 
+                    "bottle": "jdk11", 
+                    "executable": "jar11" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "jdk15": {
@@ -3354,175 +3354,175 @@
         },
         "svn110": {
             "tools": {
-                "svn": {
-                    "bottle": "svn110",
-                    "executable": "svn"
-                },
-                "svnadmin": {
-                    "bottle": "svn110",
-                    "executable": "svnadmin"
-                },
-                "svnlook": {
-                    "bottle": "svn110",
-                    "executable": "svnlook"
-                },
-                "svnversion": {
-                    "bottle": "svn110",
-                    "executable": "svnversion"
-                }
+                "svn": { 
+                    "bottle": "svn110", 
+                    "executable": "svn" 
+                }, 
+                "svnadmin": { 
+                    "bottle": "svn110", 
+                    "executable": "svnadmin" 
+                }, 
+                "svnlook": { 
+                    "bottle": "svn110", 
+                    "executable": "svnlook" 
+                }, 
+                "svnversion": { 
+                    "bottle": "svn110", 
+                    "executable": "svnversion" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN",
-                        "default": true
-                    }
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN", 
+                        "default": true 
+                    } 
+                } 
             ]
         },
         "zipatcher": {
             "tools": {
-                "zipatcher": {
-                    "bottle": "zipatcher",
-                    "executable": "zipatcher"
-                }
+                "zipatcher": { 
+                    "bottle": "zipatcher", 
+                    "executable": "zipatcher" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
                 },
                 {
                     "host": {
                         "os": "darwin"
                     },
                     "default": true
-                }
+                } 
             ]
         },
         "cmake": {
             "tools": {
-                "cmake": {
-                    "bottle": "cmake",
-                    "executable": "cmake"
-                }
+                "cmake": { 
+                    "bottle": "cmake", 
+                    "executable": "cmake" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "cling": {
             "tools": {
-                "cling": {
-                    "bottle": "cling",
-                    "executable": "cling"
-                }
+                "cling": { 
+                    "bottle": "cling", 
+                    "executable": "cling" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "ninja": {
             "tools": {
-                "ninja": {
-                    "bottle": "ninja",
-                    "executable": "ninja"
-                }
+                "ninja": { 
+                    "bottle": "ninja", 
+                    "executable": "ninja" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "valgrind": {
             "tools": {
-                "valgrind": {
-                    "bottle": "valgrind",
-                    "executable": "valgrind"
-                }
+                "valgrind": { 
+                    "bottle": "valgrind", 
+                    "executable": "valgrind" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "ag": {
             "tools": {
-                "ag": {
-                    "bottle": "ag",
-                    "executable": "ag"
-                }
+                "ag": { 
+                    "bottle": "ag", 
+                    "executable": "ag" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "yf": {
             "tools": {
@@ -3564,46 +3564,46 @@
         },
         "yp-util": {
             "tools": {
-                "yp-util": {
-                    "bottle": "yp-util",
-                    "executable": "yp-util"
-                }
+                "yp-util": { 
+                    "bottle": "yp-util", 
+                    "executable": "yp-util" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "yp": {
             "tools": {
-                "yp": {
-                    "bottle": "yp",
-                    "executable": "yp"
-                }
+                "yp": { 
+                    "bottle": "yp", 
+                    "executable": "yp" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "yd-migrate": {
@@ -3630,184 +3630,184 @@
         },
         "dctl": {
             "tools": {
-                "dctl": {
-                    "bottle": "dctl",
-                    "executable": "dctl"
-                }
+                "dctl": { 
+                    "bottle": "dctl", 
+                    "executable": "dctl" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "jq": {
             "tools": {
-                "jq": {
-                    "bottle": "jq",
-                    "executable": "jq"
-                }
+                "jq": { 
+                    "bottle": "jq", 
+                    "executable": "jq" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "vim": {
             "tools": {
-                "vim": {
-                    "bottle": "vim",
-                    "executable": "vim"
-                }
+                "vim": { 
+                    "bottle": "vim", 
+                    "executable": "vim" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "nvim": {
             "tools": {
-                "nvim": {
-                    "bottle": "nvim",
-                    "executable": "nvim"
-                }
+                "nvim": { 
+                    "bottle": "nvim", 
+                    "executable": "nvim" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "emacs": {
             "tools": {
-                "emacs": {
-                    "bottle": "emacs",
-                    "executable": "emacs"
-                }
+                "emacs": { 
+                    "bottle": "emacs", 
+                    "executable": "emacs" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "tmux": {
             "tools": {
-                "tmux": {
-                    "bottle": "tmux",
-                    "executable": "tmux"
-                }
+                "tmux": { 
+                    "bottle": "tmux", 
+                    "executable": "tmux" 
+                } 
             },
             "env": {
                 "TERMINFO": [
                     "$(ROOT)/share/terminfo"
                 ]
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "rsync": {
             "tools": {
-                "rsync": {
-                    "bottle": "rsync",
-                    "executable": "rsync"
-                }
+                "rsync": { 
+                    "bottle": "rsync", 
+                    "executable": "rsync" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "kiwi": {
             "tools": {
-                "kwmktorrent": {
-                    "bottle": "kwmktorrent",
-                    "executable": "kwmktorrent"
-                },
-                "kwmqbuild": {
-                    "bottle": "kwmqbuild",
-                    "executable": "kwmqbuild"
-                },
-                "kwfeed": {
-                    "bottle": "kwfeed",
-                    "executable": "kwfeed"
-                },
-                "metaquery.sh": {
-                    "bottle": "kwfeed",
-                    "executable": "metaquery.sh"
-                },
-                "protobin_diff": {
-                    "bottle": "protobin_diff",
-                    "executable": "protobin_diff"
-                },
-                "multipb_convert": {
-                    "bottle": "multipb_convert",
-                    "executable": "multipb_convert"
-                },
-                "kwworm": {
-                    "bottle": "kwworm",
-                    "executable": "kwworm"
-                }
+                "kwmktorrent": { 
+                    "bottle": "kwmktorrent", 
+                    "executable": "kwmktorrent" 
+                }, 
+                "kwmqbuild": { 
+                    "bottle": "kwmqbuild", 
+                    "executable": "kwmqbuild" 
+                }, 
+                "kwfeed": { 
+                    "bottle": "kwfeed", 
+                    "executable": "kwfeed" 
+                }, 
+                "metaquery.sh": { 
+                    "bottle": "kwfeed", 
+                    "executable": "metaquery.sh" 
+                }, 
+                "protobin_diff": { 
+                    "bottle": "protobin_diff", 
+                    "executable": "protobin_diff" 
+                }, 
+                "multipb_convert": { 
+                    "bottle": "multipb_convert", 
+                    "executable": "multipb_convert" 
+                }, 
+                "kwworm": { 
+                    "bottle": "kwworm", 
+                    "executable": "kwworm" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "optrace": {
             "tools": {
@@ -3867,7 +3867,7 @@
                     "PPROF_PATH": [
                         "$(GPT_PERF)/gpt/bin/pprof"
                     ]
-                },
+                }, 
                 "gpt_heap": {
                     "LD_PRELOAD": [
                         "$(GPT_HEAP)/gpt/lib/libtcmalloc.so"
@@ -3875,391 +3875,391 @@
                     "PPROF_PATH": [
                         "$(GPT_HEAP)/gpt/bin/pprof"
                     ]
-                }
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "ant": {
             "tools": {
-                "ant": {
-                    "bottle": "ant",
-                    "executable": "ant"
-                }
+                "ant": { 
+                    "bottle": "ant", 
+                    "executable": "ant" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "mvn": {
             "tools": {
-                "mvn": {
-                    "bottle": "maven",
-                    "executable": "mvn"
-                }
+                "mvn": { 
+                    "bottle": "maven", 
+                    "executable": "mvn" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "fast_diff": {
             "tools": {
-                "fast_diff": {
-                    "bottle": "fast_diff",
-                    "executable": "fast_diff"
-                }
+                "fast_diff": { 
+                    "bottle": "fast_diff", 
+                    "executable": "fast_diff" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "cuda": {
             "tools": {
-                "cuda": {
-                    "bottle": "cuda"
-                }
+                "cuda": { 
+                    "bottle": "cuda" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "idea_run_plugin": {
             "tools": {
-                "idea_run_plugin": {
-                    "bottle": "idea_run_plugin"
-                }
+                "idea_run_plugin": { 
+                    "bottle": "idea_run_plugin" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "idea_style_config": {
             "tools": {
-                "idea_style_config": {
-                    "bottle": "idea_style_config"
-                }
+                "idea_style_config": { 
+                    "bottle": "idea_style_config" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "error_prone": {
             "tools": {
-                "error_prone": {
-                    "bottle": "error_prone"
-                }
+                "error_prone": { 
+                    "bottle": "error_prone" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "jstyle_runner": {
             "tools": {
-                "jstyle_runner": {
-                    "bottle": "jstyle_runner"
-                }
+                "jstyle_runner": { 
+                    "bottle": "jstyle_runner" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "sonar_scanner": {
             "tools": {
-                "sonar_scanner": {
-                    "bottle": "sonar_scanner"
-                }
+                "sonar_scanner": { 
+                    "bottle": "sonar_scanner" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "gcovr": {
             "tools": {
-                "gcovr": {
-                    "bottle": "gcovr",
-                    "executable": "gcovr"
-                }
+                "gcovr": { 
+                    "bottle": "gcovr", 
+                    "executable": "gcovr" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "lcov_cobertura": {
             "tools": {
-                "lcov_cobertura": {
-                    "bottle": "lcov_cobertura",
-                    "executable": "lcov_cobertura"
-                }
+                "lcov_cobertura": { 
+                    "bottle": "lcov_cobertura", 
+                    "executable": "lcov_cobertura" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "uber_jar": {
             "tools": {
-                "uber_jar": {
-                    "bottle": "uber_jar"
-                }
+                "uber_jar": { 
+                    "bottle": "uber_jar" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "uber_jar10": {
             "tools": {
-                "uber_jar10": {
-                    "bottle": "uber_jar10"
-                }
+                "uber_jar10": { 
+                    "bottle": "uber_jar10" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "kythe": {
             "tools": {
-                "kythe": {
-                    "bottle": "kythe"
-                }
+                "kythe": { 
+                    "bottle": "kythe" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "kythe_to_proto": {
             "tools": {
-                "kythe_to_proto": {
-                    "bottle": "kythe_to_proto"
-                }
+                "kythe_to_proto": { 
+                    "bottle": "kythe_to_proto" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "scriptgen": {
             "tools": {
-                "scriptgen": {
-                    "bottle": "scriptgen"
-                }
+                "scriptgen": { 
+                    "bottle": "scriptgen" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
                 },
                 {
                     "host": {
@@ -4267,158 +4267,158 @@
                         "arch": "arm64"
                     },
                     "default": true
-                }
+                } 
             ]
         },
         "kiwi_protos": {
             "tools": {
-                "kiwi_protos": {
-                    "bottle": "kiwi_protos"
-                }
+                "kiwi_protos": { 
+                    "bottle": "kiwi_protos" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
         },
         "allure_commandline": {
             "tools": {
-                "allure": {
-                    "bottle": "allure_commandline",
-                    "executable": "allure"
-                }
+                "allure": { 
+                    "bottle": "allure_commandline", 
+                    "executable": "allure" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "ctags": {
             "tools": {
-                "ctags": {
-                    "bottle": "ctags",
-                    "executable": "ctags"
-                }
+                "ctags": { 
+                    "bottle": "ctags", 
+                    "executable": "ctags" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "you_complete_me": {
             "tools": {
-                "you_complete_me": {
-                    "bottle": "you_complete_me"
-                }
+                "you_complete_me": { 
+                    "bottle": "you_complete_me" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "rtags": {
             "tools": {
-                "rtags": {
-                    "bottle": "rtags"
-                }
+                "rtags": { 
+                    "bottle": "rtags" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "afl-fuzz": {
             "tools": {
-                "afl-fuzz": {
-                    "bottle": "afl-fuzz",
-                    "executable": "afl-fuzz"
-                }
+                "afl-fuzz": { 
+                    "bottle": "afl-fuzz", 
+                    "executable": "afl-fuzz" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "horadric": {
             "tools": {
-                "horadric": {
-                    "bottle": "horadric",
-                    "executable": "horadric"
-                }
+                "horadric": { 
+                    "bottle": "horadric", 
+                    "executable": "horadric" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "logbroker": {
@@ -4443,59 +4443,59 @@
                 }
             ]
         },
-        "zcli": {
-            "tools": {
-                "zcli": {
-                    "bottle": "zcli",
-                    "executable": "zcli"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
+        "zcli": { 
+            "tools": { 
+                "zcli": { 
+                    "bottle": "zcli", 
+                    "executable": "zcli" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
         "python3": {
             "tools": {
-                "python3": {
-                    "bottle": "python3",
-                    "executable": "python3"
-                }
+                "python3": { 
+                    "bottle": "python3", 
+                    "executable": "python3" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
                 },
                 {
                     "host": {
@@ -4503,91 +4503,91 @@
                         "arch": "arm64"
                     },
                     "default": true
-                }
+                } 
             ]
         },
         "run_python_udf": {
             "tools": {
-                "run_python_udf": {
-                    "bottle": "run_python_udf",
-                    "executable": "run_python_udf"
-                }
+                "run_python_udf": { 
+                    "bottle": "run_python_udf", 
+                    "executable": "run_python_udf" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "graphs_difference": {
             "tools": {
-                "graphs_difference": {
-                    "bottle": "graphs_difference",
-                    "executable": "graphs_difference"
-                }
+                "graphs_difference": { 
+                    "bottle": "graphs_difference", 
+                    "executable": "graphs_difference" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "contexts_difference": {
             "tools": {
-                "contexts_difference": {
-                    "bottle": "contexts_difference",
-                    "executable": "contexts_difference"
-                }
+                "contexts_difference": { 
+                    "bottle": "contexts_difference", 
+                    "executable": "contexts_difference" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "ycmerge": {
@@ -4620,74 +4620,74 @@
         },
         "ygdiff": {
             "tools": {
-                "ygdiff": {
-                    "bottle": "ygdiff",
-                    "executable": "ygdiff"
-                }
+                "ygdiff": { 
+                    "bottle": "ygdiff", 
+                    "executable": "ygdiff" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "ya-tc": {
             "tools": {
-                "ya-tc": {
-                    "bottle": "ya-tc",
-                    "executable": "ya-tc"
-                }
+                "ya-tc": { 
+                    "bottle": "ya-tc", 
+                    "executable": "ya-tc" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "crypta": {
             "tools": {
-                "crypta": {
-                    "bottle": "crypta",
-                    "executable": "crypta"
-                }
+                "crypta": { 
+                    "bottle": "crypta", 
+                    "executable": "crypta" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "apphost": {
@@ -4783,31 +4783,31 @@
                 "golang": {
                     "bottle": "golang_1.17.6",
                     "executable": "golang"
-                },
+                }, 
                 "go": {
                     "bottle": "golang_1.17.6",
                     "executable": "go"
-                },
+                }, 
                 "gofmt": {
                     "bottle": "golang_1.17.6",
                     "executable": "gofmt"
-                }
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
                         "os": "DARWIN",
                         "arch": "arm64"
                     },
@@ -4815,10 +4815,10 @@
                 },
                 {
                     "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ],
             "params": {
                 "type": "golang",
@@ -4830,31 +4830,31 @@
                 "golang_1.18beta2": {
                     "bottle": "golang_1.18beta2",
                     "executable": "golang_1.18beta2"
-                },
+                }, 
                 "go_1.18beta2": {
                     "bottle": "golang_1.18beta2",
                     "executable": "go_1.18beta2"
-                },
+                }, 
                 "gofmt_1.18beta2": {
                     "bottle": "golang_1.18beta2",
                     "executable": "gofmt_1.18beta2"
-                }
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
                         "os": "DARWIN",
                         "arch": "arm64"
                     },
@@ -4862,10 +4862,10 @@
                 },
                 {
                     "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ],
             "params": {
                 "type": "golang",
@@ -4874,86 +4874,86 @@
         },
         "godoc": {
             "tools": {
-                "godoc": {
-                    "bottle": "godoc",
-                    "executable": "godoc"
-                }
+                "godoc": { 
+                    "bottle": "godoc", 
+                    "executable": "godoc" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "qemu": {
             "tools": {
-                "qemu": {
-                    "bottle": "qemu",
-                    "executable": "qemu"
-                },
-                "qemu-i386": {
-                    "bottle": "qemu",
-                    "executable": "qemu-i386"
-                },
-                "qemu-img": {
-                    "bottle": "qemu",
-                    "executable": "qemu-img"
-                },
-                "qemu-nbd": {
-                    "bottle": "qemu",
-                    "executable": "qemu-nbd"
-                }
+                "qemu": { 
+                    "bottle": "qemu", 
+                    "executable": "qemu" 
+                }, 
+                "qemu-i386": { 
+                    "bottle": "qemu", 
+                    "executable": "qemu-i386" 
+                }, 
+                "qemu-img": { 
+                    "bottle": "qemu", 
+                    "executable": "qemu-img" 
+                }, 
+                "qemu-nbd": { 
+                    "bottle": "qemu", 
+                    "executable": "qemu-nbd" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "qyp": {
             "tools": {
-                "qyp": {
-                    "bottle": "qyp",
-                    "executable": "vmctl"
-                }
+                "qyp": { 
+                    "bottle": "qyp", 
+                    "executable": "vmctl" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "rtcdiag": {
@@ -4974,18 +4974,18 @@
         },
         "fio": {
             "tools": {
-                "fio": {
-                    "bottle": "fio",
-                    "executable": "fio"
-                }
+                "fio": { 
+                    "bottle": "fio", 
+                    "executable": "fio" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "amduprof": {
@@ -5222,18 +5222,18 @@
         },
         "vmexec": {
             "tools": {
-                "vmexec": {
-                    "bottle": "vmexec",
-                    "executable": "vmexec"
-                }
+                "vmexec": { 
+                    "bottle": "vmexec", 
+                    "executable": "vmexec" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "yfm-docs": {
@@ -5266,53 +5266,53 @@
         },
         "aws": {
             "tools": {
-                "aws": {
-                    "bottle": "aws",
-                    "executable": "aws"
-                }
+                "aws": { 
+                    "bottle": "aws", 
+                    "executable": "aws" 
+                } 
             },
             "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                }
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                } 
             ]
         },
         "sedem": {
             "tools": {
-                "sedem": {
-                    "bottle": "sedem",
-                    "executable": "sedem"
-                }
+                "sedem": { 
+                    "bottle": "sedem", 
+                    "executable": "sedem" 
+                } 
             },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
                 },
                 {
                     "host": {
                         "os": "DARWIN"
                     },
                     "default": true
-                }
-            ]
+                } 
+            ] 
         },
         "jstyle_bundle": {
             "tools": {
@@ -5730,12 +5730,12 @@
                 "match": "Microsoft Visual C++"
             },
             "executable": {
-                "msvc": [
-                    "bin",
-                    "Hostx64",
-                    "x64",
-                    "cl.exe"
-                ]
+                "msvc": [ 
+                    "bin", 
+                    "Hostx64", 
+                    "x64", 
+                    "cl.exe" 
+                ] 
             }
         },
         "ymake": {
@@ -5746,9 +5746,9 @@
                 "match": "ymake"
             },
             "executable": {
-                "ymake": [
-                    "ymake"
-                ]
+                "ymake": [ 
+                    "ymake" 
+                ] 
             }
         },
         "clang-format": {
@@ -5790,22 +5790,22 @@
                 "match": "uploader"
             },
             "executable": {
-                "maven_import_sandbox_uploader": [
-                    "uploader"
-                ]
+                "maven_import_sandbox_uploader": [ 
+                    "uploader" 
+                ] 
             }
         },
         "arc": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     1205199935
-                ],
+                ], 
                 "match": "arc"
             },
             "executable": {
-                "arc": [
-                    "arc"
-                ]
+                "arc": [ 
+                    "arc" 
+                ] 
             }
         },
         "godoc": {
@@ -5814,9 +5814,9 @@
                 "match": "godoc"
             },
             "executable": {
-                "godoc": [
-                    "godoc"
-                ]
+                "godoc": [ 
+                    "godoc" 
+                ] 
             }
         },
         "yo": {
@@ -5825,9 +5825,9 @@
                 "match": "yo"
             },
             "executable": {
-                "yo": [
-                    "yo"
-                ]
+                "yo": [ 
+                    "yo" 
+                ] 
             }
         },
         "mockgen": {
@@ -5915,22 +5915,22 @@
                 "match": "tvmknife"
             },
             "executable": {
-                "tvmknife": [
-                    "tvmknife"
-                ]
+                "tvmknife": [ 
+                    "tvmknife" 
+                ] 
             }
         },
         "sandboxctl": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     832226067
-                ],
+                ], 
                 "match": "tools/sandboxctl/bin/sandboxctl"
             },
             "executable": {
-                "sandboxctl": [
-                    "sandboxctl"
-                ]
+                "sandboxctl": [ 
+                    "sandboxctl" 
+                ] 
             }
         },
         "python": {
@@ -5939,95 +5939,95 @@
                 "match": "Python"
             },
             "executable": {
-                "python": [
-                    "python"
-                ]
+                "python": [ 
+                    "python" 
+                ] 
             }
         },
         "bloat": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     801218211
-                ],
+                ], 
                 "match": "Bloat"
             },
             "executable": {
                 "bloat": [
                     "bloat"
-                ]
+                ] 
             }
         },
         "jdk": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     854293674,
                     854378931,
                     854302209,
                     1054292521
-                ],
+                ], 
                 "match": "jdk"
             },
             "executable": {
-                "javac": [
-                    "bin",
-                    "javac"
-                ],
-                "java": [
-                    "bin",
-                    "java"
-                ],
-                "jar": [
-                    "bin",
-                    "jar"
-                ]
+                "javac": [ 
+                    "bin", 
+                    "javac" 
+                ], 
+                "java": [ 
+                    "bin", 
+                    "java" 
+                ], 
+                "jar": [ 
+                    "bin", 
+                    "jar" 
+                ] 
             }
         },
         "jdk10": {
             "formula": {
-                "sandbox_id": [
-                    240834225,
-                    240834934,
-                    240835020
-                ],
+                "sandbox_id": [ 
+                    240834225, 
+                    240834934, 
+                    240835020 
+                ], 
                 "match": "jdk"
             },
             "executable": {
-                "javac10": [
-                    "bin",
-                    "javac"
-                ],
-                "java10": [
-                    "bin",
-                    "java"
-                ],
-                "jar10": [
-                    "bin",
-                    "jar"
-                ]
+                "javac10": [ 
+                    "bin", 
+                    "javac" 
+                ], 
+                "java10": [ 
+                    "bin", 
+                    "java" 
+                ], 
+                "jar10": [ 
+                    "bin", 
+                    "jar" 
+                ] 
             }
         },
         "jdk11": {
             "formula": {
-                "sandbox_id": [
-                    365362175,
-                    365387897,
-                    365361227
-                ],
+                "sandbox_id": [ 
+                    365362175, 
+                    365387897, 
+                    365361227 
+                ], 
                 "match": "jdk"
             },
             "executable": {
-                "javac11": [
-                    "bin",
-                    "javac"
-                ],
-                "java11": [
-                    "bin",
-                    "java"
-                ],
-                "jar11": [
-                    "bin",
-                    "jar"
-                ]
+                "javac11": [ 
+                    "bin", 
+                    "javac" 
+                ], 
+                "java11": [ 
+                    "bin", 
+                    "java" 
+                ], 
+                "jar11": [ 
+                    "bin", 
+                    "jar" 
+                ] 
             }
         },
         "jdk15": {
@@ -6305,12 +6305,12 @@
                     "llvm-toolchain",
                     "bin",
                     "llvm-nm"
-                ],
+                ], 
                 "objcopy": [
                     "llvm-toolchain",
                     "bin",
                     "llvm-objcopy"
-                ]
+                ] 
             }
         },
         "android-ndk-r24": {
@@ -6371,115 +6371,115 @@
         },
         "cuda": {
             "formula": {
-                "sandbox_id": [
-                    29625981
-                ],
+                "sandbox_id": [ 
+                    29625981 
+                ], 
                 "match": "CUDA"
             }
         },
         "idea_run_plugin": {
             "formula": {
-                "sandbox_id": [
-                    98817148
-                ],
+                "sandbox_id": [ 
+                    98817148 
+                ], 
                 "match": "ya runner idea plugin"
             }
         },
         "idea_style_config": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     874273162
-                ],
+                ], 
                 "match": "Intellij IDEA codestyle config"
             }
         },
         "error_prone": {
             "formula": {
-                "sandbox_id": [
-                    273389189
-                ],
+                "sandbox_id": [ 
+                    273389189 
+                ], 
                 "match": "ERRORPRONE"
             }
         },
         "jstyle_runner": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     623847348
-                ],
+                ], 
                 "match": "JSTYLERUNNER"
             }
         },
         "sonar_scanner": {
             "formula": {
-                "sandbox_id": [
-                    142526229
-                ],
+                "sandbox_id": [ 
+                    142526229 
+                ], 
                 "match": "sonar_scanner"
             }
         },
         "gcovr": {
             "formula": {
-                "sandbox_id": [
-                    145238992
-                ],
+                "sandbox_id": [ 
+                    145238992 
+                ], 
                 "match": "gcovr"
             },
             "executable": {
-                "gcovr": [
-                    "gcovr"
-                ]
+                "gcovr": [ 
+                    "gcovr" 
+                ] 
             }
         },
         "lcov_cobertura": {
             "formula": {
-                "sandbox_id": [
-                    151814389
-                ],
+                "sandbox_id": [ 
+                    151814389 
+                ], 
                 "match": "lcov_cobertura"
             },
             "executable": {
-                "lcov_cobertura": [
-                    "lcovcob"
-                ]
+                "lcov_cobertura": [ 
+                    "lcovcob" 
+                ] 
             }
         },
         "uber_jar": {
             "formula": {
-                "sandbox_id": [
-                    147123506
-                ],
+                "sandbox_id": [ 
+                    147123506 
+                ], 
                 "match": "uber_jar"
             }
         },
         "uber_jar10": {
             "formula": {
-                "sandbox_id": [
-                    260182938
-                ],
+                "sandbox_id": [ 
+                    260182938 
+                ], 
                 "match": "uber_jar10"
             }
         },
         "kythe": {
             "formula": {
-                "sandbox_id": [
-                    377918568
-                ],
+                "sandbox_id": [ 
+                    377918568 
+                ], 
                 "match": "KYTHE"
             }
         },
         "kythe_to_proto": {
             "formula": {
-                "sandbox_id": [
-                    403346294
-                ],
+                "sandbox_id": [ 
+                    403346294 
+                ], 
                 "match": "KYTHETOPROTO"
             }
         },
         "scriptgen": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     1164520637
-                ],
+                ], 
                 "match": "SCRIPTGEN"
             }
         },
@@ -6489,10 +6489,10 @@
                 "match": "Wine"
             },
             "executable": {
-                "wine": [
-                    "bin",
-                    "wine64"
-                ]
+                "wine": [ 
+                    "bin", 
+                    "wine64" 
+                ] 
             }
         },
         "wine32": {
@@ -6513,10 +6513,10 @@
                 "match": "DEPLOY"
             },
             "executable": {
-                "deploy": [
-                    "samogon",
-                    "deploy"
-                ]
+                "deploy": [ 
+                    "samogon", 
+                    "deploy" 
+                ] 
             }
         },
         "yt": {
@@ -6527,9 +6527,9 @@
                 "match": "YT"
             },
             "executable": {
-                "yt": [
-                    "yt"
-                ]
+                "yt": [ 
+                    "yt" 
+                ] 
             }
         },
         "yndexer": {
@@ -6538,9 +6538,9 @@
                 "match": "YNDEXER"
             },
             "executable": {
-                "yndexer": [
-                    "yndexer"
-                ]
+                "yndexer": [ 
+                    "yndexer" 
+                ] 
             }
         },
         "ytyndexer": {
@@ -6549,9 +6549,9 @@
                 "match": "YTYNDEXER"
             },
             "executable": {
-                "ytyndexer": [
-                    "ytyndexer"
-                ]
+                "ytyndexer": [ 
+                    "ytyndexer" 
+                ] 
             }
         },
         "ymakeyndexer": {
@@ -6560,9 +6560,9 @@
                 "match": "YMAKEYNDEXER"
             },
             "executable": {
-                "ymakeyndexer": [
-                    "ymakeyndexer"
-                ]
+                "ymakeyndexer": [ 
+                    "ymakeyndexer" 
+                ] 
             }
         },
         "transfer-manager": {
@@ -6571,9 +6571,9 @@
                 "match": "transfer-manager"
             },
             "executable": {
-                "transfer-manager": [
-                    "transfer-manager"
-                ]
+                "transfer-manager": [ 
+                    "transfer-manager" 
+                ] 
             }
         },
         "rem-tool": {
@@ -6582,9 +6582,9 @@
                 "match": "rem-tool"
             },
             "executable": {
-                "rem-tool": [
-                    "rem-tool"
-                ]
+                "rem-tool": [ 
+                    "rem-tool" 
+                ] 
             }
         },
         "uc": {
@@ -6593,9 +6593,9 @@
                 "match": "UC"
             },
             "executable": {
-                "uc": [
-                    "uc"
-                ]
+                "uc": [ 
+                    "uc" 
+                ] 
             }
         },
         "perf": {
@@ -6604,9 +6604,9 @@
                 "match": "infra/kernel/tools/perf/build/perf-static.tar.gz"
             },
             "executable": {
-                "perf": [
-                    "perf"
-                ]
+                "perf": [ 
+                    "perf" 
+                ] 
             }
         },
         "cuda-check": {
@@ -6641,9 +6641,9 @@
                 "match": "SAMOGONCTL"
             },
             "executable": {
-                "samogonctl": [
-                    "samogonctl"
-                ]
+                "samogonctl": [ 
+                    "samogonctl" 
+                ] 
             }
         },
         "gcc61": {
@@ -6652,36 +6652,36 @@
                 "match": "GCC"
             },
             "executable": {
-                "c++": [
-                    "gcc",
-                    "bin",
-                    "g++-6.1"
-                ],
-                "cc": [
-                    "gcc",
-                    "bin",
-                    "gcc-6.1"
-                ],
-                "gcov": [
-                    "gcc",
-                    "bin",
-                    "gcov-6.1"
-                ],
-                "c++filt": [
-                    "gcc",
-                    "bin",
-                    "c++filt"
-                ],
-                "nm": [
-                    "gcc",
-                    "bin",
-                    "nm"
-                ],
-                "strip": [
-                    "gcc",
-                    "bin",
-                    "strip"
-                ]
+                "c++": [ 
+                    "gcc", 
+                    "bin", 
+                    "g++-6.1" 
+                ], 
+                "cc": [ 
+                    "gcc", 
+                    "bin", 
+                    "gcc-6.1" 
+                ], 
+                "gcov": [ 
+                    "gcc", 
+                    "bin", 
+                    "gcov-6.1" 
+                ], 
+                "c++filt": [ 
+                    "gcc", 
+                    "bin", 
+                    "c++filt" 
+                ], 
+                "nm": [ 
+                    "gcc", 
+                    "bin", 
+                    "nm" 
+                ], 
+                "strip": [ 
+                    "gcc", 
+                    "bin", 
+                    "strip" 
+                ] 
             }
         },
         "gcc82": {
@@ -6690,59 +6690,59 @@
                 "match": "GCC"
             },
             "executable": {
-                "c++": [
-                    "gcc",
-                    "bin",
-                    "g++"
-                ],
-                "cc": [
-                    "gcc",
-                    "bin",
-                    "gcc"
-                ],
-                "gcov": [
-                    "gcc",
-                    "bin",
-                    "gcov"
-                ],
-                "c++filt": [
-                    "gcc",
-                    "bin",
-                    "c++filt"
-                ],
-                "nm": [
-                    "gcc",
-                    "bin",
-                    "nm"
-                ],
-                "strip": [
-                    "gcc",
-                    "bin",
-                    "strip"
-                ]
+                "c++": [ 
+                    "gcc", 
+                    "bin", 
+                    "g++" 
+                ], 
+                "cc": [ 
+                    "gcc", 
+                    "bin", 
+                    "gcc" 
+                ], 
+                "gcov": [ 
+                    "gcc", 
+                    "bin", 
+                    "gcov" 
+                ], 
+                "c++filt": [ 
+                    "gcc", 
+                    "bin", 
+                    "c++filt" 
+                ], 
+                "nm": [ 
+                    "gcc", 
+                    "bin", 
+                    "nm" 
+                ], 
+                "strip": [ 
+                    "gcc", 
+                    "bin", 
+                    "strip" 
+                ] 
             }
         },
         "gdb": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     1037272933,
                     1032891985,
                     717207102,
                     1032896450
-                ],
+                ], 
                 "match": "GDB"
             },
             "executable": {
-                "gdb": [
-                    "gdb",
-                    "bin",
-                    "gdb"
-                ],
-                "gdbserver": [
-                    "gdb",
-                    "bin",
-                    "gdbserver"
-                ]
+                "gdb": [ 
+                    "gdb", 
+                    "bin", 
+                    "gdb" 
+                ], 
+                "gdbserver": [ 
+                    "gdb", 
+                    "bin", 
+                    "gdbserver" 
+                ] 
             }
         },
         "pprof": {
@@ -6774,9 +6774,9 @@
                 "match": "Ag"
             },
             "executable": {
-                "ag": [
-                    "ag"
-                ]
+                "ag": [ 
+                    "ag" 
+                ] 
             }
         },
         "valgrind": {
@@ -6785,24 +6785,24 @@
                 "match": "Valgrind"
             },
             "executable": {
-                "valgrind": [
-                    "valgrind"
-                ]
+                "valgrind": [ 
+                    "valgrind" 
+                ] 
             }
         },
         "jq": {
             "formula": {
-                "sandbox_id": [
-                    38336932,
-                    38337150,
-                    38337983
-                ],
+                "sandbox_id": [ 
+                    38336932, 
+                    38337150, 
+                    38337983 
+                ], 
                 "match": "jq"
             },
             "executable": {
-                "jq": [
-                    "jq"
-                ]
+                "jq": [ 
+                    "jq" 
+                ] 
             }
         },
         "yf": {
@@ -6826,28 +6826,28 @@
         },
         "yp-util": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     1204918529
-                ],
+                ], 
                 "match": "yp_util"
             },
             "executable": {
-                "yp-util": [
-                    "yp_util"
-                ]
+                "yp-util": [ 
+                    "yp_util" 
+                ] 
             }
         },
         "yp": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     1204919943
-                ],
+                ], 
                 "match": "YP"
             },
             "executable": {
-                "yp": [
-                    "yp"
-                ]
+                "yp": [ 
+                    "yp" 
+                ] 
             }
         },
         "yd-migrate": {
@@ -6865,15 +6865,15 @@
         },
         "dctl": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     1198127186
-                ],
+                ], 
                 "match": "dctl"
             },
             "executable": {
-                "dctl": [
-                    "dctl"
-                ]
+                "dctl": [ 
+                    "dctl" 
+                ] 
             }
         },
         "vim": {
@@ -6882,9 +6882,9 @@
                 "match": "vim"
             },
             "executable": {
-                "vim": [
-                    "vim"
-                ]
+                "vim": [ 
+                    "vim" 
+                ] 
             }
         },
         "nvim": {
@@ -6893,9 +6893,9 @@
                 "match": "nvim"
             },
             "executable": {
-                "nvim": [
-                    "nvim"
-                ]
+                "nvim": [ 
+                    "nvim" 
+                ] 
             }
         },
         "emacs": {
@@ -6904,9 +6904,9 @@
                 "match": "emacs"
             },
             "executable": {
-                "emacs": [
-                    "emacs"
-                ]
+                "emacs": [ 
+                    "emacs" 
+                ] 
             }
         },
         "tmux": {
@@ -6917,10 +6917,10 @@
                 "match": "tmux"
             },
             "executable": {
-                "tmux": [
-                    "bin",
-                    "tmux"
-                ]
+                "tmux": [ 
+                    "bin", 
+                    "tmux" 
+                ] 
             }
         },
         "optrace": {
@@ -6951,16 +6951,16 @@
         },
         "rsync": {
             "formula": {
-                "sandbox_id": [
-                    65088954
-                ],
+                "sandbox_id": [ 
+                    65088954 
+                ], 
                 "match": "rsync"
             },
             "executable": {
-                "rsync": [
-                    "bin",
-                    "rsync"
-                ]
+                "rsync": [ 
+                    "bin", 
+                    "rsync" 
+                ] 
             }
         },
         "svn110": {
@@ -6969,18 +6969,18 @@
                 "match": "svn"
             },
             "executable": {
-                "svn": [
-                    "svn"
-                ],
-                "svnadmin": [
-                    "svnadmin"
-                ],
-                "svnlook": [
-                    "svnlook"
-                ],
-                "svnversion": [
-                    "svnversion"
-                ]
+                "svn": [ 
+                    "svn" 
+                ], 
+                "svnadmin": [ 
+                    "svnadmin" 
+                ], 
+                "svnlook": [ 
+                    "svnlook" 
+                ], 
+                "svnversion": [ 
+                    "svnversion" 
+                ] 
             }
         },
         "zipatcher": {
@@ -6989,9 +6989,9 @@
                 "match": "zipatcher"
             },
             "executable": {
-                "zipatcher": [
-                    "zipatcher"
-                ]
+                "zipatcher": [ 
+                    "zipatcher" 
+                ] 
             }
         },
         "cmake": {
@@ -7000,10 +7000,10 @@
                 "match": "cmake"
             },
             "executable": {
-                "cmake": [
-                    "bin",
-                    "cmake"
-                ]
+                "cmake": [ 
+                    "bin", 
+                    "cmake" 
+                ] 
             }
         },
         "cling": {
@@ -7012,9 +7012,9 @@
                 "match": "cling"
             },
             "executable": {
-                "cling": [
-                    "cling"
-                ]
+                "cling": [ 
+                    "cling" 
+                ] 
             }
         },
         "ninja": {
@@ -7030,12 +7030,12 @@
                 "match": "KWFeed"
             },
             "executable": {
-                "kwfeed": [
-                    "kwfeed"
-                ],
-                "metaquery.sh": [
-                    "metaquery.sh"
-                ]
+                "kwfeed": [ 
+                    "kwfeed" 
+                ], 
+                "metaquery.sh": [ 
+                    "metaquery.sh" 
+                ] 
             }
         },
         "protobin_diff": {
@@ -7044,9 +7044,9 @@
                 "match": "protobin_diff"
             },
             "executable": {
-                "protobin_diff": [
-                    "protobin_diff"
-                ]
+                "protobin_diff": [ 
+                    "protobin_diff" 
+                ] 
             }
         },
         "multipb_convert": {
@@ -7055,9 +7055,9 @@
                 "match": "Multipb_convert"
             },
             "executable": {
-                "multipb_convert": [
-                    "multipb_convert"
-                ]
+                "multipb_convert": [ 
+                    "multipb_convert" 
+                ] 
             }
         },
         "kwworm": {
@@ -7066,9 +7066,9 @@
                 "match": "Kwworm"
             },
             "executable": {
-                "kwworm": [
-                    "kwworm"
-                ]
+                "kwworm": [ 
+                    "kwworm" 
+                ] 
             }
         },
         "kwmktorrent": {
@@ -7077,9 +7077,9 @@
                 "match": "KWMKTorrent"
             },
             "executable": {
-                "kwmktorrent": [
-                    "kwmktorrent"
-                ]
+                "kwmktorrent": [ 
+                    "kwmktorrent" 
+                ] 
             }
         },
         "kwmqbuild": {
@@ -7088,9 +7088,9 @@
                 "match": "KWMQBuild"
             },
             "executable": {
-                "kwmqbuild": [
-                    "kwmqbuild"
-                ]
+                "kwmqbuild": [ 
+                    "kwmqbuild" 
+                ] 
             }
         },
         "gpt": {
@@ -7105,11 +7105,11 @@
                 "match": "ant"
             },
             "executable": {
-                "ant": [
-                    "apache-ant-1.9.6",
-                    "bin",
-                    "ant"
-                ]
+                "ant": [ 
+                    "apache-ant-1.9.6", 
+                    "bin", 
+                    "ant" 
+                ] 
             }
         },
         "maven": {
@@ -7118,80 +7118,80 @@
                 "match": "maven"
             },
             "executable": {
-                "mvn": [
-                    "bin",
-                    "mvn"
-                ]
+                "mvn": [ 
+                    "bin", 
+                    "mvn" 
+                ] 
             }
         },
-        "fast_diff": {
+        "fast_diff": { 
             "formula": {
                 "sandbox_id": 42519064,
                 "match": "fast_diff"
             }
         },
-        "kiwi_protos": {
+        "kiwi_protos": { 
             "formula": {
                 "sandbox_id": 32521995,
                 "match": "KiWi python protos"
             }
         },
-        "allure_commandline": {
+        "allure_commandline": { 
             "formula": {
                 "sandbox_id": 569859192,
                 "match": "Allure Commandline"
             },
             "executable": {
-                "allure": [
-                    "bin",
-                    "allure"
-                ]
+                "allure": [ 
+                    "bin", 
+                    "allure" 
+                ] 
             }
         },
-        "ctags": {
+        "ctags": { 
             "formula": {
                 "sandbox_id": 55229519,
                 "match": "ctags"
             },
             "executable": {
-                "ctags": [
-                    "bin",
-                    "ctags"
-                ]
+                "ctags": [ 
+                    "bin", 
+                    "ctags" 
+                ] 
             }
         },
-        "you_complete_me": {
+        "you_complete_me": { 
             "formula": {
                 "sandbox_id": 121751471,
                 "match": "YouCompleteMe"
             }
         },
-        "rtags": {
+        "rtags": { 
             "formula": {
                 "sandbox_id": 84460170,
                 "match": "rtags"
             }
         },
-        "afl-fuzz": {
+        "afl-fuzz": { 
             "formula": {
                 "sandbox_id": 80600007,
                 "match": "afl-fuzz"
             },
             "executable": {
-                "afl-fuzz": [
-                    "afl-fuzz"
-                ]
+                "afl-fuzz": [ 
+                    "afl-fuzz" 
+                ] 
             }
         },
-        "horadric": {
+        "horadric": { 
             "formula": {
                 "sandbox_id": 1210601101,
                 "match": "horadric"
             },
             "executable": {
-                "horadric": [
-                    "horadric"
-                ]
+                "horadric": [ 
+                    "horadric" 
+                ] 
             }
         },
         "logbroker": {
@@ -7205,37 +7205,37 @@
                 ]
             }
         },
-        "zcli": {
-            "formula": {
+        "zcli": { 
+            "formula": { 
                 "sandbox_id": 948535797,
-                "match": "zcli"
-            },
-            "executable": {
-                "zcli": [
-                    "zcli"
-                ]
-            }
-        },
-        "ptpython": {
+                "match": "zcli" 
+            }, 
+            "executable": { 
+                "zcli": [ 
+                    "zcli" 
+                ] 
+            } 
+        }, 
+        "ptpython": { 
             "formula": {
                 "sandbox_id": 50746186,
                 "match": "PTPython"
             },
             "executable": {
-                "ptpython": [
-                    "ptpython"
-                ]
+                "ptpython": [ 
+                    "ptpython" 
+                ] 
             }
         },
-        "ptipython": {
+        "ptipython": { 
             "formula": {
                 "sandbox_id": 50746160,
                 "match": "PTIPython"
             },
             "executable": {
-                "ptipython": [
-                    "ptipython"
-                ]
+                "ptipython": [ 
+                    "ptipython" 
+                ] 
             }
         },
         "python3": {
@@ -7244,9 +7244,9 @@
                 "match": "python3"
             },
             "executable": {
-                "python3": [
-                    "python3"
-                ]
+                "python3": [ 
+                    "python3" 
+                ] 
             }
         },
         "run_python_udf": {
@@ -7255,9 +7255,9 @@
                 "match": "RUN_PYTHON_UDF"
             },
             "executable": {
-                "run_python_udf": [
-                    "run_python_udf"
-                ]
+                "run_python_udf": [ 
+                    "run_python_udf" 
+                ] 
             }
         },
         "graphs_difference": {
@@ -7266,9 +7266,9 @@
                 "match": "graphs_difference"
             },
             "executable": {
-                "graphs_difference": [
-                    "graphs_difference"
-                ]
+                "graphs_difference": [ 
+                    "graphs_difference" 
+                ] 
             }
         },
         "contexts_difference": {
@@ -7277,9 +7277,9 @@
                 "match": "contexts_difference"
             },
             "executable": {
-                "contexts_difference": [
-                    "contexts_difference"
-                ]
+                "contexts_difference": [ 
+                    "contexts_difference" 
+                ] 
             }
         },
         "ycmerge": {
@@ -7299,9 +7299,9 @@
                 "match": "ygdiff"
             },
             "executable": {
-                "ygdiff": [
-                    "ygdiff"
-                ]
+                "ygdiff": [ 
+                    "ygdiff" 
+                ] 
             }
         },
         "ya-tc": {
@@ -7310,9 +7310,9 @@
                 "match": "ya-tc"
             },
             "executable": {
-                "ya-tc": [
-                    "ya-tc"
-                ]
+                "ya-tc": [ 
+                    "ya-tc" 
+                ] 
             }
         },
         "crypta": {
@@ -7321,9 +7321,9 @@
                 "match": "crypta"
             },
             "executable": {
-                "crypta": [
-                    "crypta"
-                ]
+                "crypta": [ 
+                    "crypta" 
+                ] 
             }
         },
         "apphost": {
@@ -7378,87 +7378,87 @@
         },
         "golang_1.17.6": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     1178356987,
                     1178357306,
                     1178357717,
                     1178358055
-                ],
+                ], 
                 "match": "GOLANG"
             },
             "executable": {
                 "go": [
-                    "bin",
-                    "go"
-                ],
+                    "bin", 
+                    "go" 
+                ], 
                 "gofmt": [
-                    "bin",
-                    "gofmt"
-                ]
+                    "bin", 
+                    "gofmt" 
+                ] 
             }
         },
         "golang_1.18beta2": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     1206631393,
                     1206631765,
                     1206632232,
                     1206632597
-                ],
+                ], 
                 "match": "GOLANG"
             },
             "executable": {
                 "go_1.18beta2": [
-                    "bin",
-                    "go"
-                ],
+                    "bin", 
+                    "go" 
+                ], 
                 "gofmt_1.18beta2": [
-                    "bin",
-                    "gofmt"
-                ]
+                    "bin", 
+                    "gofmt" 
+                ] 
             }
         },
         "qemu": {
             "formula": {
-                "sandbox_id": [
-                    504011268
-                ],
+                "sandbox_id": [ 
+                    504011268 
+                ], 
                 "match": "Build executable"
             },
             "executable": {
-                "qemu": [
-                    "qemu",
-                    "bin",
-                    "qemu-system-x86_64"
-                ],
-                "qemu-i386": [
-                    "qemu",
-                    "bin",
-                    "qemu-system-i386"
-                ],
-                "qemu-img": [
-                    "qemu",
-                    "bin",
-                    "qemu-img"
-                ],
-                "qemu-nbd": [
-                    "qemu",
-                    "bin",
-                    "qemu-nbd"
-                ]
+                "qemu": [ 
+                    "qemu", 
+                    "bin", 
+                    "qemu-system-x86_64" 
+                ], 
+                "qemu-i386": [ 
+                    "qemu", 
+                    "bin", 
+                    "qemu-system-i386" 
+                ], 
+                "qemu-img": [ 
+                    "qemu", 
+                    "bin", 
+                    "qemu-img" 
+                ], 
+                "qemu-nbd": [ 
+                    "qemu", 
+                    "bin", 
+                    "qemu-nbd" 
+                ] 
             }
         },
         "qyp": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     1197649240
-                ],
+                ], 
                 "match": "infra/qyp/vmctl/bin/vmctl"
             },
             "executable": {
-                "vmctl": [
-                    "vmctl"
-                ]
+                "vmctl": [ 
+                    "vmctl" 
+                ] 
             }
         },
         "rtcdiag": {
@@ -7476,17 +7476,17 @@
         },
         "fio": {
             "formula": {
-                "sandbox_id": [
+                "sandbox_id": [ 
                     1136887344
-                ],
+                ], 
                 "match": "infra/kernel/tools/fio/build/fio-static.tar.gz"
             },
             "executable": {
-                "fio": [
-                    "fio",
-                    "bin",
-                    "fio"
-                ]
+                "fio": [ 
+                    "fio", 
+                    "bin", 
+                    "fio" 
+                ] 
             }
         },
         "amduprof": {
@@ -7718,9 +7718,9 @@
                 "match": "infra/qemu/vmexec/vmexec"
             },
             "executable": {
-                "vmexec": [
-                    "vmexec"
-                ]
+                "vmexec": [ 
+                    "vmexec" 
+                ] 
             }
         },
         "yfm-docs": {
@@ -7740,9 +7740,9 @@
                 "match": "aws"
             },
             "executable": {
-                "aws": [
-                    "aws"
-                ]
+                "aws": [ 
+                    "aws" 
+                ] 
             }
         },
         "sedem": {
@@ -7751,9 +7751,9 @@
                 "match": "SEDEM archive"
             },
             "executable": {
-                "sedem": [
-                    "sedem"
-                ]
+                "sedem": [ 
+                    "sedem" 
+                ] 
             }
         },
         "jstyle_bundle": {

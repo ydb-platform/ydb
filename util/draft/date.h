@@ -87,8 +87,8 @@ public:
     friend IOutputStream& operator<<(IOutputStream& left, const TDate& right);
 };
 
-Y_DECLARE_PODTYPE(TDate); 
- 
+Y_DECLARE_PODTYPE(TDate);
+
 inline bool operator<(const TDate& left, const TDate& right) {
     return left.Timestamp < right.Timestamp;
 }

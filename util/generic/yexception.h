@@ -18,7 +18,7 @@
 #include <exception>
 
 #include <cstdio>
- 
+
 class TBackTrace;
 
 namespace NPrivateException {

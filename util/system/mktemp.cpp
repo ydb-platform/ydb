@@ -36,7 +36,7 @@ TString MakeTempName(const char* wrkDir, const char* prefix, const char* extensi
     }
 
     filePath += "XXXXXX"; // mkstemps requirement
- 
+
     size_t extensionPartLength = 0;
     if (extension && *extension) {
         if (extension[0] != '.') {
@@ -49,7 +49,7 @@ TString MakeTempName(const char* wrkDir, const char* prefix, const char* extensi
 
     int fd = mkstemps(const_cast<char*>(filePath.data()), extensionPartLength);
     if (fd >= 0) {
-        close(fd); 
+        close(fd);
         return filePath;
     }
 #else

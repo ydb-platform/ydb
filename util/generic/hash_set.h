@@ -15,7 +15,7 @@ private:
     ht rep;
 
     using mutable_iterator = typename ht::iterator;
- 
+
 public:
     using key_type = typename ht::key_type;
     using value_type = typename ht::value_type;

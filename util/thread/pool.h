@@ -379,8 +379,8 @@ private:
 
 inline void Delete(THolder<IThreadPool> q) {
     if (q.Get()) {
-        q->Stop(); 
-    } 
+        q->Stop();
+    }
 }
 
 /**

@@ -1,19 +1,19 @@
 #include "longs.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <library/cpp/digest/old_crc/crc.h>
 #include <util/string/util.h>
 #include <util/stream/output.h>
 #include <util/system/hi_lo.h>
- 
+
 Y_UNIT_TEST_SUITE(TLongsTest) {
     Y_UNIT_TEST(TestLongs) {
         i16 x16 = 40;
         i64 x64 = 40;
         i64 y64;
         TString s;
- 
+
         s += Sprintf("x16=0x%x\n", (int)x16);
         s += Sprintf("LO_8(x16)=0x%x HI_8(x16)=0x%x\n\n", (int)Lo8(x16), (int)Hi8(x16));
 

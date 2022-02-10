@@ -2,7 +2,7 @@
 
 #ifdef _win_
     #include <malloc.h>
-#elif defined(_sun) 
+#elif defined(_sun)
     #include <alloca.h>
 #endif
 
@@ -166,7 +166,7 @@ namespace {
 #endif
         }
     };
- 
+
 #if defined(_unix_)
     /*
     Disable errors/warnings about deprecated sem_* in Darwin
@@ -209,7 +209,7 @@ namespace {
     #ifdef _darwin_
     Y_PRAGMA_DIAGNOSTIC_POP
     #endif
-#endif 
+#endif
 }
 
 class TSemaphore::TImpl: public TSemaphoreImpl {
@@ -223,7 +223,7 @@ public:
 TSemaphore::TSemaphore(const char* name, ui32 maxFreeCount)
     : Impl_(new TImpl(name, maxFreeCount))
 {
-} 
+}
 
 TSemaphore::~TSemaphore() = default;
 

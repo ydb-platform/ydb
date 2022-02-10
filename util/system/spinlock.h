@@ -44,7 +44,7 @@ static inline void AcquireSpinLock(TAtomic* l) {
         } while (!AtomicTryAndTryLock(l));
     }
 }
- 
+
 static inline void ReleaseSpinLock(TAtomic* l) {
     AtomicUnlock(l);
 }

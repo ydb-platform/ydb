@@ -2,7 +2,7 @@
 #include "progname.h"
 #include "compat.h"
 #include "error.h"
- 
+
 #include <util/generic/scope.h>
 
 #include <util/stream/printf.h>

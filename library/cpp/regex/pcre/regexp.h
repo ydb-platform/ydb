@@ -1,6 +1,6 @@
 #pragma once
- 
-#include <sys/types.h> 
+
+#include <sys/types.h>
 
 #include <util/system/defaults.h>
 #include <util/generic/string.h>
@@ -11,7 +11,7 @@
 
 //THIS CODE LOOKS LIKE A TRASH, BUT WORKS.
 
-#define NMATCHES 100 
+#define NMATCHES 100
 #define REGEXP_GLOBAL 0x0080 // use this if you want to find all occurences
 
 class TRegExBaseImpl;
@@ -31,22 +31,22 @@ public:
     bool IsCompiled() const;
     int GetCompileOptions() const;
     TString GetRegExpr() const;
-}; 
- 
+};
+
 class TRegExMatch: public TRegExBase {
 public:
     TRegExMatch(const char* regExpr = nullptr, int cflags = REG_NOSUB | REG_EXTENDED);
     TRegExMatch(const TString& regExpr, int cflags = REG_NOSUB | REG_EXTENDED);
- 
+
     bool Match(const char* str) const;
 };
- 
+
 struct TBackReferences {
     int Beg;
     int End;
     int Refer;
 };
- 
+
 class TRegExSubst: public TRegExBase {
 private:
     const char* Replacement;
@@ -60,4 +60,4 @@ public:
 
     TString Replace(const char* str, int eflags = 0);
     int ParseReplacement(const char* replacement);
-}; 
+};

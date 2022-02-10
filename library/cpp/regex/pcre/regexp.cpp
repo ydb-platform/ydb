@@ -193,8 +193,8 @@ private:
 
 bool TRegExBase::IsCompiled() const {
     return Impl && Impl->IsCompiled();
-} 
- 
+}
+
 TRegExBase::TRegExBase(const char* re, int cflags) {
     if (re) {
         Compile(re, cflags);
@@ -206,8 +206,8 @@ TRegExBase::TRegExBase(const TString& re, int cflags) {
 }
 
 TRegExBase::~TRegExBase() {
-} 
- 
+}
+
 void TRegExBase::Compile(const TString& re, int cflags) {
     Impl = new TRegExBaseImpl(re, cflags);
 }
@@ -216,20 +216,20 @@ int TRegExBase::Exec(const char* str, regmatch_t pmatch[], int eflags, int nmatc
     if (!Impl)
         ythrow yexception() << "!Regular expression is not compiled";
     return Impl->Exec(str, pmatch, eflags, nmatches);
-} 
- 
+}
+
 int TRegExBase::GetCompileOptions() const {
     if (!Impl)
         ythrow yexception() << "!Regular expression is not compiled";
     return Impl->CompileOptions;
-} 
- 
+}
+
 TString TRegExBase::GetRegExpr() const {
     if (!Impl)
         ythrow yexception() << "!Regular expression is not compiled";
     return Impl->RegExpr;
-} 
- 
+}
+
 TRegExMatch::TRegExMatch(const char* re, int cflags)
     : TRegExBase(re, cflags)
 {
@@ -255,21 +255,21 @@ TString TRegExSubst::Replace(const char* str, int eflags) {
     TString s;
     if (BrfsCount) {
         if (Exec(str, PMatch, eflags) == 0) {
-            int i; 
+            int i;
             for (i = 0; i < BrfsCount; i++) {
                 s += TString(Replacement, Brfs[i].Beg, Brfs[i].End - Brfs[i].Beg);
                 if (Brfs[i].Refer >= 0 && Brfs[i].Refer < NMATCHES)
                     s += TString(str, PMatch[Brfs[i].Refer].rm_so, int(PMatch[Brfs[i].Refer].rm_eo - PMatch[Brfs[i].Refer].rm_so));
-            } 
+            }
             s += TString(Replacement, Brfs[i].Beg, Brfs[i].End - Brfs[i].Beg);
-        } 
-    } else { 
+        }
+    } else {
         s = Replacement;
-    } 
-    return s; 
-} 
- 
-//*** 
+    }
+    return s;
+}
+
+//***
 // ��� ������������ ������ aaa.$1.$$$$.$2.bbb.$$$ccc Brfs ����� �����:
 // {beg = 0,  end = 4,  Refer =  1} => "aaa." + $1_match
 // {beg = 6,  end = 8,  Refer = -1} => ".$"
@@ -279,39 +279,39 @@ TString TRegExSubst::Replace(const char* str, int eflags) {
 // {beg = 21, end = 22, Refer = -1} => "$"
 // {beg = 22, end = 25, Refer = -1} => "ccc"
 // {beg = 0,  end = 0,  Refer =  0}
-//*** 
+//***
 int TRegExSubst::ParseReplacement(const char* repl) {
     Replacement = repl;
     if (!Replacement || *Replacement == 0)
-        return 0; 
+        return 0;
     char* pos = (char*)Replacement;
     char* pos1 = nullptr;
     char* pos2 = nullptr;
-    int i = 0; 
+    int i = 0;
     while (pos && *pos && i < NMATCHES) {
-        pos1 = strchr(pos, '$'); 
+        pos1 = strchr(pos, '$');
         Brfs[i].Refer = -1;
-        pos2 = pos1; 
-        if (pos1) { 
-            pos2 = pos1 + 1; 
+        pos2 = pos1;
+        if (pos1) {
+            pos2 = pos1 + 1;
             while (IsAsciiDigit(*pos2))
-                pos2++; 
+                pos2++;
             if (pos2 > pos1 + 1) {
                 Brfs[i].Refer = atol(TString(Replacement, pos1 + 1 - Replacement, pos2 - (pos1 + 1)).data());
-            } else { 
-                pos1++; 
+            } else {
+                pos1++;
                 if (*pos2 == '$')
-                    pos2++; 
+                    pos2++;
                 Brfs[i].Refer = -1;
-            } 
-        } 
+            }
+        }
         Brfs[i].Beg = int(pos - (char*)Replacement);
         Brfs[i].End = (pos1 == nullptr ? (int)strlen(Replacement) : int(pos1 - Replacement));
-        pos = pos2; 
-        i++; 
-    } 
+        pos = pos2;
+        i++;
+    }
     Brfs[i].Beg = Brfs[i].End = 0;
     Brfs[i].Refer = -1;
     BrfsCount = i;
     return BrfsCount;
-} 
+}

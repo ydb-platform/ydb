@@ -64,7 +64,7 @@ namespace {
                 void* Data_;
                 TDtor Dtor_;
             };
- 
+
             inline TStoredValue* Value(const TKey* key) {
                 TStoredValue*& ret = *ValuePtr((size_t)key->Key);
 

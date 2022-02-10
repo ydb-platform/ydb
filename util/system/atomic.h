@@ -9,7 +9,7 @@ using TAtomic = volatile TAtomicBase;
     #include "atomic_gcc.h"
 #elif defined(_MSC_VER)
     #include "atomic_win.h"
-#else 
+#else
     #error unsupported platform
 #endif
 

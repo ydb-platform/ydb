@@ -382,34 +382,34 @@ namespace {
         return TUnboxedValuePod(result);
     }
 
-    SIMPLE_UDF_OPTIONS(TRightPad, char*(TAutoMap<char*>, ui64, TOptional<char*>), builder.OptionalArgs(1)) { 
+    SIMPLE_UDF_OPTIONS(TRightPad, char*(TAutoMap<char*>, ui64, TOptional<char*>), builder.OptionalArgs(1)) {
         TStringStream result;
         const TStringBuf input(args[0].AsStringRef());
-        char paddingSymbol = ' '; 
-        if (args[2]) { 
-            if (args[2].AsStringRef().Size() != 1) { 
-                ythrow yexception() << "Not 1 symbol in paddingSymbol"; 
-            } 
-            paddingSymbol = TString(args[2].AsStringRef())[0]; 
-        } 
-        result << RightPad(input, args[1].Get<ui64>(), paddingSymbol); 
+        char paddingSymbol = ' ';
+        if (args[2]) {
+            if (args[2].AsStringRef().Size() != 1) {
+                ythrow yexception() << "Not 1 symbol in paddingSymbol";
+            }
+            paddingSymbol = TString(args[2].AsStringRef())[0];
+        }
+        result << RightPad(input, args[1].Get<ui64>(), paddingSymbol);
         return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
     }
 
-    SIMPLE_UDF_OPTIONS(TLeftPad, char*(TAutoMap<char*>, ui64, TOptional<char*>), builder.OptionalArgs(1)) { 
-        TStringStream result; 
-        const TStringBuf input(args[0].AsStringRef()); 
-        char paddingSymbol = ' '; 
-        if (args[2]) { 
-            if (args[2].AsStringRef().Size() != 1) { 
-                ythrow yexception() << "Not 1 symbol in paddingSymbol"; 
-            } 
-            paddingSymbol = TString(args[2].AsStringRef())[0]; 
-        } 
-        result << LeftPad(input, args[1].Get<ui64>(), paddingSymbol); 
-        return valueBuilder->NewString(TStringRef(result.Data(), result.Size())); 
-    } 
- 
+    SIMPLE_UDF_OPTIONS(TLeftPad, char*(TAutoMap<char*>, ui64, TOptional<char*>), builder.OptionalArgs(1)) {
+        TStringStream result;
+        const TStringBuf input(args[0].AsStringRef());
+        char paddingSymbol = ' ';
+        if (args[2]) {
+            if (args[2].AsStringRef().Size() != 1) {
+                ythrow yexception() << "Not 1 symbol in paddingSymbol";
+            }
+            paddingSymbol = TString(args[2].AsStringRef())[0];
+        }
+        result << LeftPad(input, args[1].Get<ui64>(), paddingSymbol);
+        return valueBuilder->NewString(TStringRef(result.Data(), result.Size()));
+    }
+
     SIMPLE_UDF(THex, char*(TAutoMap<ui64>)) {
         TStringStream result;
         result << Hex(args[0].Get<ui64>());
@@ -541,7 +541,7 @@ namespace {
         TJoinFromList,
         TLevensteinDistance,
         TRightPad,
-        TLeftPad, 
+        TLeftPad,
         THex,
         TSHex,
         TBin,

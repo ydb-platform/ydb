@@ -709,7 +709,7 @@ RECURSE(
     parameterized
     paramiko
     paramz
-    parse 
+    parse
     parse-type
     parsedatetime
     parsel
@@ -860,7 +860,7 @@ RECURSE(
     pytest
     pytest-allure-adaptor
     pytest-asyncio
-    pytest-bdd 
+    pytest-bdd
     pytest-datadir
     pytest-datafixtures
     pytest-django

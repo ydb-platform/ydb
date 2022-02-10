@@ -338,7 +338,7 @@ RECURSE(
     entrypoints
     enum34
     environ-config
-    environs
+    environs 
     envoy
     ephem
     escapism
@@ -876,7 +876,7 @@ RECURSE(
     pytest-lazy-fixture
     pytest-localserver
     pytest-mock
-    pytest-randomly
+    pytest-randomly 
     pytest-responsemock
     pytest-responses
     pytest-server-fixtures

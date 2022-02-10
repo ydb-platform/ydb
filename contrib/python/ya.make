@@ -209,7 +209,7 @@ RECURSE(
     demjson
     Deprecated
     dictpath
-    diff-match-patch
+    diff-match-patch 
     directio
     distro
     django
@@ -257,7 +257,7 @@ RECURSE(
     django-guardian
     django-hosts
     django-http-proxy
-    django-import-export
+    django-import-export 
     django-introspection
     django-jinja
     django-js-asset
@@ -675,7 +675,7 @@ RECURSE(
     oauthlib
     objgraph
     observable
-    odfpy
+    odfpy 
     Office365-REST-Python-Client
     olefile
     openapi-codec
@@ -1048,7 +1048,7 @@ RECURSE(
     sympy
     sysv-ipc
     tableauserverclient
-    tablib
+    tablib 
     tabulate
     tblib
     Telethon

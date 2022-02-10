@@ -589,14 +589,14 @@ template <class K, class T, class C, class A>
 class TSerializer<std::map<K, T, C, A>>: public TMapSerializer<std::map<K, T, C, A>, true> {
 };
 
-template <class T1, class T2, class T3, class T4> 
+template <class T1, class T2, class T3, class T4>
 class TSerializer<TMultiMap<T1, T2, T3, T4>>: public TMapSerializer<TMultiMap<T1, T2, T3, T4>, true> {
-}; 
- 
-template <class K, class T, class C, class A> 
-class TSerializer<std::multimap<K, T, C, A>>: public TMapSerializer<std::multimap<K, T, C, A>, true> { 
-}; 
- 
+};
+
+template <class K, class T, class C, class A>
+class TSerializer<std::multimap<K, T, C, A>>: public TMapSerializer<std::multimap<K, T, C, A>, true> {
+};
+
 template <class T1, class T2, class T3, class T4, class T5>
 class TSerializer<THashMap<T1, T2, T3, T4, T5>>: public TMapSerializer<THashMap<T1, T2, T3, T4, T5>, false> {
 };

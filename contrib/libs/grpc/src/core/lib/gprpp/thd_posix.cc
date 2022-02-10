@@ -19,7 +19,7 @@
 /* Posix implementation for gpr threads. */
 
 #include <grpc/support/port_platform.h>
-#include <util/system/thread.h>
+#include <util/system/thread.h> 
 
 #ifdef GPR_POSIX_SYNC
 

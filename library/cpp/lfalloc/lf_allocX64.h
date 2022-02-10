@@ -43,7 +43,7 @@ static inline long AtomicSub(TAtomic& a, long b) {
 
 #pragma comment(lib, "synchronization.lib")
 
-#ifndef NDEBUG 
+#ifndef NDEBUG
 #define Y_ASSERT_NOBT(x)           \
     {                              \
         if (IsDebuggerPresent()) { \
@@ -119,7 +119,7 @@ static inline long AtomicSub(TAtomic& a, long b) {
 #define Y_ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #endif
 
-#ifndef NDEBUG 
+#ifndef NDEBUG
 #define DBG_FILL_MEMORY
 static bool FillMemoryOnAllocation = true;
 #endif

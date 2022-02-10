@@ -106,7 +106,7 @@ static const bool chars_to_url_escape[256] = {
 template <class It1, class It2, class It3>
 static inline It1 Escape(It1 to, It2 from, It3 end, const bool* escape_map = chars_to_url_escape) {
     while (from != end) {
-        if (escape_map[(unsigned char)*from]) { 
+        if (escape_map[(unsigned char)*from]) {
             *to++ = '%';
             *to++ = d2x((unsigned char)*from >> 4);
             *to++ = d2x((unsigned char)*from & 0xF);
@@ -144,13 +144,13 @@ static inline It1 Unescape(It1 to, It2 from, It3 end, FromHex fromHex) {
     return to;
 }
 
-// CGIEscape returns pointer to the end of the result string 
-// so as it could be possible to populate single long buffer 
-// with several calls to CGIEscape in a row. 
+// CGIEscape returns pointer to the end of the result string
+// so as it could be possible to populate single long buffer
+// with several calls to CGIEscape in a row.
 char* CGIEscape(char* to, const char* from) {
     return Escape(to, FixZero(from), TCStringEndIterator());
-} 
- 
+}
+
 char* CGIEscape(char* to, const char* from, size_t len) {
     return Escape(to, from, from + len);
 }
@@ -176,29 +176,29 @@ TString& AppendCgiEscaped(const TStringBuf value, TString& to) {
     return to;
 }
 
-// More general version of CGIEscape. The optional safe parameter specifies 
-// additional characters that should not be quoted — its default value is '/'. 
+// More general version of CGIEscape. The optional safe parameter specifies
+// additional characters that should not be quoted — its default value is '/'.
 
-// Also returns pointer to the end of result string. 
+// Also returns pointer to the end of result string.
 
 template <class It1, class It2, class It3>
 static inline It1 Quote(It1 to, It2 from, It3 end, const char* safe) {
-    bool escape_map[256]; 
-    memcpy(escape_map, chars_to_url_escape, 256); 
-    // RFC 3986 Uniform Resource Identifiers (URI): Generic Syntax 
-    // lists following reserved characters: 
-    const char* reserved = ":/?#[]@!$&\'()*+,;="; 
-    for (const char* p = reserved; *p; ++p) { 
-        escape_map[(unsigned char)*p] = 1; 
-    } 
-    // characters we think are safe at the moment 
-    for (const char* p = safe; *p; ++p) { 
-        escape_map[(unsigned char)*p] = 0; 
-    } 
- 
+    bool escape_map[256];
+    memcpy(escape_map, chars_to_url_escape, 256);
+    // RFC 3986 Uniform Resource Identifiers (URI): Generic Syntax
+    // lists following reserved characters:
+    const char* reserved = ":/?#[]@!$&\'()*+,;=";
+    for (const char* p = reserved; *p; ++p) {
+        escape_map[(unsigned char)*p] = 1;
+    }
+    // characters we think are safe at the moment
+    for (const char* p = safe; *p; ++p) {
+        escape_map[(unsigned char)*p] = 0;
+    }
+
     return Escape(to, from, end, escape_map);
-} 
- 
+}
+
 char* Quote(char* to, const char* from, const char* safe) {
     return Quote(to, FixZero(from), TCStringEndIterator(), safe);
 }
@@ -209,11 +209,11 @@ char* Quote(char* to, const TStringBuf s, const char* safe) {
 
 void Quote(TString& url, const char* safe) {
     TTempBuf tempBuf(CgiEscapeBufLen(url.size()));
-    char* to = tempBuf.Data(); 
+    char* to = tempBuf.Data();
 
     url.AssignNoAlias(to, Quote(to, url, safe));
-} 
- 
+}
+
 char* CGIUnescape(char* to, const char* from) {
     return Unescape(to, FixZero(from), TCStringEndIterator(), TFromHexZeroTerm());
 }

@@ -1,16 +1,16 @@
-#include "async_signals_handler.h" 
+#include "async_signals_handler.h"
 
 #include <util/system/platform.h>
- 
+
 #if !defined(_win_)
- 
+
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <string.h>
 
 #include <unistd.h>
- 
+
 #if defined(_linux_)
 #include <dlfcn.h>
 #endif
@@ -57,13 +57,13 @@ namespace {
         typedef TAutoPtr<TEventHandler> TEventHandlerPtr;
         THashMap<int, TEventHandlerPtr> Handlers;
         TRWMutex HandlersLock;
- 
+
         TAtomic ShouldDie;
         TSystemEvent DieEvent;
 
         static void* ThreadFunc(void* data) {
             reinterpret_cast<TAsyncSignalsHandler*>(data)->RealThreadFunc();
- 
+
             return nullptr;
         }
 
@@ -71,7 +71,7 @@ namespace {
             for (;;) {
                 ui8 signum;
                 const ssize_t bytesRead = read(SignalPipeReadFd, &signum, 1);
- 
+
                 Y_VERIFY(bytesRead >= 0 || (bytesRead == -1 && errno == EINTR), "read failed: %s (errno = %d)", strerror(errno), errno);
 
                 if (AtomicAdd(ShouldDie, 0) != 0) {
@@ -79,7 +79,7 @@ namespace {
 
                     break;
                 }
- 
+
                 if (bytesRead == 0) {
                     break;
                 } else if (bytesRead == -1) {
@@ -94,8 +94,8 @@ namespace {
                     handler->Get()->Handle(signum);
                 }
             }
-        } 
- 
+        }
+
     public:
         TAsyncSignalsHandler()
             : Thread(TThread::TParams(ThreadFunc, this).SetName("sighandler"))
@@ -103,7 +103,7 @@ namespace {
             , ShouldDie(0)
         {
             int filedes[2] = {-1};
- 
+
 #ifdef _linux_
             int result;
 
@@ -145,20 +145,20 @@ namespace {
             Thread.Start();
             Thread.Detach();
         }
- 
+
         ~TAsyncSignalsHandler() {
             AtomicSwap(&ShouldDie, TAtomic(1));
             ui8 fakeSignal = 0;
             WriteAllOrDie(SIGNAL_PIPE_WRITE_FD, &fakeSignal, 1);
- 
+
             DieEvent.WaitT(TDuration::Seconds(15));
- 
+
             /* may cause VERIFY failure in signal handler, propably we should leave it to process clean procedure
         close(SIGNAL_PIPE_WRITE_FD);
         close(SignalPipeReadFd);
 */
         }
- 
+
         bool DoInstall(int signum, TAutoPtr<TEventHandler> handler) {
             TWriteGuard dnd(HandlersLock);
             TEventHandlerPtr& ev = Handlers[signum];
@@ -181,7 +181,7 @@ namespace {
             }
         }
     };
- 
+
     // This pointer is never deleted - yeah, it's intended memory leak.
     // It is necessary to prevent problems when user's signal handler calls exit function
     // which destroys all global variables including this one.
@@ -204,16 +204,16 @@ void SetAsyncSignalHandler(int signum, TAutoPtr<TEventHandler> handler) {
     }
 
     SIGNALS_HANDLER->Install(signum, handler);
-} 
- 
+}
+
 #else //_win_
- 
+
 void SetAsyncSignalHandler(int, TAutoPtr<TEventHandler>) {
     // TODO: it's really easy to port using _pipe, _read and _write, but it must be tested properly.
 }
- 
-#endif 
- 
+
+#endif
+
 namespace {
     template <typename TFunc>
     class TFunctionEventHandler: public TEventHandler {

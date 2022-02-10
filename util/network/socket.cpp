@@ -244,12 +244,12 @@ bool GetRemoteAddr(SOCKET Socket, char* str, socklen_t size) {
     if (!size) {
         return false;
     }
- 
+
     TOpaqueAddr addr;
- 
+
     if (getpeername(Socket, addr.MutableAddr(), addr.LenPtr()) != 0) {
         return false;
-    } 
+    }
 
     try {
         TMemoryOutput out(str, size - 1);
@@ -262,7 +262,7 @@ bool GetRemoteAddr(SOCKET Socket, char* str, socklen_t size) {
         // ¯\_(ツ)_/¯
     }
 
-    return false; 
+    return false;
 }
 
 void SetSocketTimeout(SOCKET s, long timeout) {
@@ -637,12 +637,12 @@ void Out<TNetworkAddress>(IOutputStream& os, const TNetworkAddress& addr) {
     os << &*addr.Begin();
 }
 
-static inline const struct addrinfo* Iterate(const struct addrinfo* addr, const struct addrinfo* addr0, const int sockerr) { 
+static inline const struct addrinfo* Iterate(const struct addrinfo* addr, const struct addrinfo* addr0, const int sockerr) {
     if (addr->ai_next) {
         return addr->ai_next;
     }
 
-    ythrow TSystemError(sockerr) << "can not connect to " << addr0; 
+    ythrow TSystemError(sockerr) << "can not connect to " << addr0;
 }
 
 static inline SOCKET DoConnectImpl(const struct addrinfo* res, const TInstant& deadLine) {
@@ -652,7 +652,7 @@ static inline SOCKET DoConnectImpl(const struct addrinfo* res, const TInstant& d
         TSocketHolder s(socket(res->ai_family, res->ai_socktype, res->ai_protocol));
 
         if (s.Closed()) {
-            res = Iterate(res, addr0, LastSystemError()); 
+            res = Iterate(res, addr0, LastSystemError());
 
             continue;
         }
@@ -660,7 +660,7 @@ static inline SOCKET DoConnectImpl(const struct addrinfo* res, const TInstant& d
         SetNonBlock(s, true);
 
         if (connect(s, res->ai_addr, (int)res->ai_addrlen)) {
-            int err = LastSystemError(); 
+            int err = LastSystemError();
 
             if (err == EINPROGRESS || err == EAGAIN || err == EWOULDBLOCK) {
                 /*
@@ -680,14 +680,14 @@ static inline SOCKET DoConnectImpl(const struct addrinfo* res, const TInstant& d
                     ythrow TSystemError(-(int)n) << "can not connect";
                 }
 
-                CheckedGetSockOpt(s, SOL_SOCKET, SO_ERROR, err, "socket error"); 
- 
+                CheckedGetSockOpt(s, SOL_SOCKET, SO_ERROR, err, "socket error");
+
                 if (!err) {
                     return s.Release();
                 }
             }
 
-            res = Iterate(res, addr0, err); 
+            res = Iterate(res, addr0, err);
 
             continue;
         }

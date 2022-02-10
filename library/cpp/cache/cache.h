@@ -406,18 +406,18 @@ public:
         }
 
         TIterator& operator++() {
-            ++Iter;
-            return *this;
-        }
-
-        const TKey& Key() const {
-            return Iter->Key;
-        }
-
-        const TValue& Value() const {
-            return Iter->Value;
-        }
-
+            ++Iter; 
+            return *this; 
+        } 
+ 
+        const TKey& Key() const { 
+            return Iter->Key; 
+        } 
+ 
+        const TValue& Value() const { 
+            return Iter->Value; 
+        } 
+ 
         friend class TCache<TKey, TValue, TListType, TDeleter>;
 
     private:
@@ -439,10 +439,10 @@ public:
         return Index.size();
     }
 
-    TIterator Begin() const {
-        return TIterator(Index.begin());
-    }
-
+    TIterator Begin() const { 
+        return TIterator(Index.begin()); 
+    } 
+ 
     TIterator End() const {
         return TIterator(Index.end());
     }
@@ -454,10 +454,10 @@ public:
         return TIterator(it);
     }
 
-    TIterator FindWithoutPromote(const TKey& key) const {
-        return TIterator(Index.find(TItem(key)));
-    }
-
+    TIterator FindWithoutPromote(const TKey& key) const { 
+        return TIterator(Index.find(TItem(key))); 
+    } 
+ 
     // note: it shouldn't touch 'value' if it returns false.
     bool PickOut(const TKey& key, TValue* value) {
         Y_ASSERT(value);

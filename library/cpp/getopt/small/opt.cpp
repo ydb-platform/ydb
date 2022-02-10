@@ -20,7 +20,7 @@ void Opt::Init(int argc, char* argv[], const char* optString, const Ion* longOpt
     Ions_ = longOptions;
     Err = true;
     GotError_ = false;
-    Ind = argc;
+    Ind = argc; 
 
     Opts_.Reset(new TOptsNoDefault(optString));
     for (const Ion* o = longOptions; o != nullptr && o->name != nullptr; ++o) {

@@ -120,9 +120,9 @@ protected:
 template <class TPacker>
 size_t CompactTrieMinimize(IOutputStream& os, const char* data, size_t datalength, bool verbose = false, const TPacker& packer = TPacker(), NCompactTrie::EMinimizeMode mode = NCompactTrie::MM_DEFAULT);
 
-template <class TTrieBuilder>
+template <class TTrieBuilder> 
 size_t CompactTrieMinimize(IOutputStream& os, const TTrieBuilder& builder, bool verbose = false);
-
+ 
 //----------------------------------------------------------------------------------------------------------------
 // Lay the trie in memory in such a way that there are less cache misses when jumping from root to leaf.
 // The trie becomes about 2% larger, but the access became about 25% faster in our experiments.

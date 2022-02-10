@@ -53,11 +53,11 @@
     #include <sys/param.h>
     #define HAVE_POSIX_FADVISE (__FreeBSD_version >= 900501)
     #define HAVE_SYNC_FILE_RANGE 0
-#else 
+#else
     #define HAVE_POSIX_FADVISE 0
     #define HAVE_SYNC_FILE_RANGE 0
-#endif 
- 
+#endif
+
 static bool IsStupidFlagCombination(EOpenMode oMode) {
     // ForAppend will actually not be applied in the following combinations:
     return (oMode & (CreateAlways | ForAppend)) == (CreateAlways | ForAppend) || (oMode & (TruncExisting | ForAppend)) == (TruncExisting | ForAppend) || (oMode & (CreateNew | ForAppend)) == (CreateNew | ForAppend);
@@ -246,11 +246,11 @@ TFileHandle::TFileHandle(const TString& fName, EOpenMode oMode) noexcept {
     if (Fd_ >= 0) {
         if (oMode & NoReuse) {
             ::posix_fadvise(Fd_, 0, 0, POSIX_FADV_NOREUSE);
-        } 
+        }
 
         if (oMode & Seq) {
             ::posix_fadvise(Fd_, 0, 0, POSIX_FADV_SEQUENTIAL);
-        } 
+        }
 
         if (oMode & NoReadAhead) {
             ::posix_fadvise(Fd_, 0, 0, POSIX_FADV_RANDOM);

@@ -1,7 +1,7 @@
 #pragma once
 
 enum ECharset {
-    CODES_UNSUPPORTED = -2, // valid but unsupported encoding 
+    CODES_UNSUPPORTED = -2, // valid but unsupported encoding
     CODES_UNKNOWN = -1,     // invalid or unspecified encoding
     CODES_WIN,              // [ 0] WINDOWS_1251     Windows
     CODES_KOI8,             // [ 1] KOI8_U           Koi8-u

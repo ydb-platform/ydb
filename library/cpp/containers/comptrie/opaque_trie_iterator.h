@@ -1,10 +1,10 @@
 #pragma once
- 
+
 #include "comptrie_impl.h"
 #include "node.h"
 #include "key_selector.h"
 #include "leaf_skipper.h"
- 
+
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
@@ -17,7 +17,7 @@ namespace NCompactTrie {
         const char* Data;
         size_t Limit; // valid data is in range [Data + Node.GetOffset(), Data + Limit)
         TDirection CurrentDirection;
- 
+
     public:
         TFork(const char* data, size_t offset, size_t limit, const ILeafSkipper& skipper);
 

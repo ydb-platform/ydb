@@ -1,7 +1,7 @@
 #pragma once
- 
+
 #include <cstddef>
- 
+
 namespace NCompactTrie {
     class ILeafSkipper {
     public:

@@ -4,7 +4,7 @@
 
 namespace NCompactTrie {
     class ILeafSkipper;
- 
+
     enum TDirection {
         D_LEFT,
         D_FINAL,
@@ -42,11 +42,11 @@ namespace NCompactTrie {
         size_t GetCoreLength() const {
             return CoreLength;
         }
- 
+
         size_t GetOffsetByDirection(TDirection direction) const {
             return Offsets[direction];
         }
- 
+
         size_t GetForwardOffset() const {
             return Offsets[D_NEXT];
         }
@@ -63,7 +63,7 @@ namespace NCompactTrie {
         bool IsFinal() const {
             return GetLeafOffset() != 0;
         }
- 
+
         bool HasEpsilonLinkForward() const {
             return GetForwardOffset() > Offset + CoreLength;
         }
@@ -76,5 +76,5 @@ namespace NCompactTrie {
 
         char Label;
     };
- 
+
 }

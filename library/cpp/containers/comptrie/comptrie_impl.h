@@ -1,7 +1,7 @@
 #pragma once
- 
+
 #include <util/stream/output.h>
- 
+
 #ifndef COMPTRIE_DATA_CHECK
 #define COMPTRIE_DATA_CHECK 1
 #endif

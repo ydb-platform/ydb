@@ -6,7 +6,7 @@
 
 #include <util/charset/utf8.h>
 #include <util/system/yassert.h>
- 
+
 #if defined(_MSC_VER)
 #pragma warning(disable : 4309) /*truncation of constant value*/
 #endif
@@ -30,8 +30,8 @@ namespace {
 }
 
 class TCodepageTest: public TTestBase {
-private: 
-    UNIT_TEST_SUITE(TCodepageTest); 
+private:
+    UNIT_TEST_SUITE(TCodepageTest);
     UNIT_TEST(TestUTF);
     UNIT_TEST(TestUTFFromUnknownPlane);
     UNIT_TEST(TestBrokenMultibyte);
@@ -42,14 +42,14 @@ private:
     UNIT_TEST(TestUpperLower);
     UNIT_TEST(TestBrokenRune);
     UNIT_TEST(TestCanEncode);
-    UNIT_TEST_SUITE_END(); 
- 
-public: 
-    void TestUTF(); 
-    void TestUTFFromUnknownPlane(); 
+    UNIT_TEST_SUITE_END();
+
+public:
+    void TestUTF();
+    void TestUTFFromUnknownPlane();
     void TestBrokenMultibyte();
     void TestSurrogatePairs();
-    void TestEncodingHints(); 
+    void TestEncodingHints();
     void TestToLower();
     void TestToUpper();
 
@@ -71,55 +71,55 @@ public:
     void TestBrokenRune() {
         UNIT_ASSERT_VALUES_EQUAL(BROKEN_RUNE, 0xFFFDu);
     }
-}; 
- 
-UNIT_TEST_SUITE_REGISTRATION(TCodepageTest); 
- 
-void TCodepageTest::TestUTF() { 
+};
+
+UNIT_TEST_SUITE_REGISTRATION(TCodepageTest);
+
+void TCodepageTest::TestUTF() {
     for (wchar32 i = 0; i <= 0x10FFFF; i++) {
-        unsigned char buffer[32]; 
+        unsigned char buffer[32];
         Zero(buffer);
-        size_t rune_len; 
-        size_t ref_len = 0; 
- 
-        if (i < 0x80) 
-            ref_len = 1; 
-        else if (i < 0x800) 
-            ref_len = 2; 
-        else if (i < 0x10000) 
-            ref_len = 3; 
-        else 
-            ref_len = 4; 
- 
+        size_t rune_len;
+        size_t ref_len = 0;
+
+        if (i < 0x80)
+            ref_len = 1;
+        else if (i < 0x800)
+            ref_len = 2;
+        else if (i < 0x10000)
+            ref_len = 3;
+        else
+            ref_len = 4;
+
         RECODE_RESULT res = SafeWriteUTF8Char(i, rune_len, buffer, buffer + 32);
-        UNIT_ASSERT(res == RECODE_OK); 
-        UNIT_ASSERT(rune_len == ref_len); 
- 
+        UNIT_ASSERT(res == RECODE_OK);
+        UNIT_ASSERT(rune_len == ref_len);
+
         res = SafeWriteUTF8Char(i, rune_len, buffer, buffer + ref_len - 1);
-        UNIT_ASSERT(res == RECODE_EOOUTPUT); 
- 
-        wchar32 rune; 
+        UNIT_ASSERT(res == RECODE_EOOUTPUT);
+
+        wchar32 rune;
         res = SafeReadUTF8Char(rune, rune_len, buffer, buffer + 32);
-        UNIT_ASSERT(res == RECODE_OK); 
-        UNIT_ASSERT(rune == i); 
-        UNIT_ASSERT(rune_len == ref_len); 
- 
+        UNIT_ASSERT(res == RECODE_OK);
+        UNIT_ASSERT(rune == i);
+        UNIT_ASSERT(rune_len == ref_len);
+
         res = SafeReadUTF8Char(rune, rune_len, buffer, buffer + ref_len - 1);
-        UNIT_ASSERT(res == RECODE_EOINPUT); 
- 
-        if (ref_len > 1) { 
+        UNIT_ASSERT(res == RECODE_EOINPUT);
+
+        if (ref_len > 1) {
             res = SafeReadUTF8Char(rune, rune_len, buffer + 1, buffer + ref_len);
-            UNIT_ASSERT(res == RECODE_BROKENSYMBOL); 
- 
-            buffer[1] |= 0xC0; 
+            UNIT_ASSERT(res == RECODE_BROKENSYMBOL);
+
+            buffer[1] |= 0xC0;
             res = SafeReadUTF8Char(rune, rune_len, buffer, buffer + ref_len);
-            UNIT_ASSERT(res == RECODE_BROKENSYMBOL); 
- 
-            buffer[1] &= 0x3F; 
+            UNIT_ASSERT(res == RECODE_BROKENSYMBOL);
+
+            buffer[1] &= 0x3F;
             res = SafeReadUTF8Char(rune, rune_len, buffer, buffer + ref_len);
-            UNIT_ASSERT(res == RECODE_BROKENSYMBOL); 
-        } 
-    } 
+            UNIT_ASSERT(res == RECODE_BROKENSYMBOL);
+        }
+    }
     const char* badStrings[] = {
         "\xfe",
         "\xff",
@@ -158,8 +158,8 @@ void TCodepageTest::TestUTF() {
         RECODE_RESULT res = SafeReadUTF8Char(rune, len, p, p + strlen(badStrings[i]));
         UNIT_ASSERT(res == RECODE_BROKENSYMBOL);
     }
-} 
- 
+}
+
 void TCodepageTest::TestBrokenMultibyte() {
     const ECharset cp = CODES_EUC_JP;
 
@@ -180,24 +180,24 @@ void TCodepageTest::TestBrokenMultibyte() {
     UNIT_ASSERT(nread == Y_ARRAY_SIZE(bigSample));
 }
 
-void TCodepageTest::TestUTFFromUnknownPlane() { 
+void TCodepageTest::TestUTFFromUnknownPlane() {
     static const wchar32 sampletext[] = {0x61, 0x62, 0x63, 0x20,
                                          0x430, 0x431, 0x432, 0x20,
                                          0x1001, 0x1002, 0x1003, 0x20,
                                          0x10001, 0x10002, 0x10003};
- 
-    static const size_t BUFFER_SIZE = 1024; 
-    char bytebuffer[BUFFER_SIZE]; 
- 
-    size_t readchars = 0; 
-    size_t writtenbytes = 0; 
+
+    static const size_t BUFFER_SIZE = 1024;
+    char bytebuffer[BUFFER_SIZE];
+
+    size_t readchars = 0;
+    size_t writtenbytes = 0;
     size_t samplelen = Y_ARRAY_SIZE(sampletext);
 
     RECODE_RESULT res = RecodeFromUnicode(CODES_UTF8, sampletext, bytebuffer, samplelen, BUFFER_SIZE, readchars, writtenbytes);
- 
+
     UNIT_ASSERT(res == RECODE_OK);
     UNIT_ASSERT(samplelen == readchars);
- 
+
     size_t writtenbytes2 = 0;
     char bytebuffer2[BUFFER_SIZE];
     for (size_t i = 0; i != samplelen; ++i) {
@@ -209,45 +209,45 @@ void TCodepageTest::TestUTFFromUnknownPlane() {
     }
     UNIT_ASSERT_VALUES_EQUAL(TStringBuf(bytebuffer, writtenbytes), TStringBuf(bytebuffer2, writtenbytes2));
 
-    wchar32 charbuffer[BUFFER_SIZE]; 
-    size_t readbytes = 0; 
-    size_t writtenchars = 0; 
- 
+    wchar32 charbuffer[BUFFER_SIZE];
+    size_t readbytes = 0;
+    size_t writtenchars = 0;
+
     res = RecodeToUnicode(CODES_UNKNOWNPLANE, bytebuffer, charbuffer, writtenbytes, BUFFER_SIZE, readbytes, writtenchars);
- 
+
     UNIT_ASSERT(res == RECODE_OK);
     UNIT_ASSERT(readbytes == writtenbytes);
- 
-    wchar32* charbufferend = charbuffer + writtenchars; 
+
+    wchar32* charbufferend = charbuffer + writtenchars;
     DecodeUnknownPlane(charbuffer, charbufferend, CODES_UTF8);
- 
+
     UNIT_ASSERT(charbufferend == charbuffer + samplelen);
     for (size_t i = 0; i < samplelen; ++i)
         UNIT_ASSERT(sampletext[i] == charbuffer[i]);
- 
-    // Now, concatenate the thing with an explicit character and retest 
+
+    // Now, concatenate the thing with an explicit character and retest
     res = RecodeToUnicode(CODES_UNKNOWNPLANE, bytebuffer, charbuffer, writtenbytes, BUFFER_SIZE, readbytes, writtenchars);
     UNIT_ASSERT(res == RECODE_OK);
     UNIT_ASSERT(readbytes == writtenbytes);
- 
-    charbuffer[writtenchars] = 0x1234; 
- 
-    size_t morewrittenchars = 0; 
+
+    charbuffer[writtenchars] = 0x1234;
+
+    size_t morewrittenchars = 0;
     res = RecodeToUnicode(CODES_UNKNOWNPLANE, bytebuffer, charbuffer + writtenchars + 1, writtenbytes, BUFFER_SIZE, readbytes, morewrittenchars);
     UNIT_ASSERT(res == RECODE_OK);
     UNIT_ASSERT(readbytes == writtenbytes);
     UNIT_ASSERT(writtenchars == morewrittenchars);
- 
-    charbuffer[2 * writtenchars + 1] = 0x5678; 
- 
-    charbufferend = charbuffer + 2 * writtenchars + 2; 
+
+    charbuffer[2 * writtenchars + 1] = 0x5678;
+
+    charbufferend = charbuffer + 2 * writtenchars + 2;
     DecodeUnknownPlane(charbuffer, charbufferend, CODES_UTF8);
- 
+
     UNIT_ASSERT(charbufferend == charbuffer + 2 * samplelen + 2);
-    for (size_t i = 0; i < samplelen; ++i) { 
+    for (size_t i = 0; i < samplelen; ++i) {
         UNIT_ASSERT(sampletext[i] == charbuffer[i]);
         UNIT_ASSERT(sampletext[i] == charbuffer[samplelen + 1 + i]);
-    } 
+    }
     UNIT_ASSERT(0x1234 == charbuffer[samplelen]);
     UNIT_ASSERT(0x5678 == charbuffer[2 * samplelen + 1]);
 
@@ -265,8 +265,8 @@ void TCodepageTest::TestUTFFromUnknownPlane() {
             UNIT_ASSERT_VALUES_EQUAL(wtr[i], sampletext[i]);
         }
     }
-} 
- 
+}
+
 static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize) {
     size_t sSize = strlen(str);
     size_t wSize = sSize * 2;
@@ -298,24 +298,24 @@ void TCodepageTest::TestSurrogatePairs() {
     TestSurrogates(utf8NonBMP2, wNonBMPDummy2, Y_ARRAY_SIZE(wNonBMPDummy2));
 }
 
-void TCodepageTest::TestEncodingHints() { 
-    UNIT_ASSERT(CODES_WIN == EncodingHintByName("windows-1251")); 
-    UNIT_ASSERT(CODES_WIN == EncodingHintByName("Windows1251")); 
-    UNIT_ASSERT(CODES_WIN == EncodingHintByName("WIN1251")); 
-    UNIT_ASSERT(CODES_WIN == EncodingHintByName("window-cp1251")); 
-    UNIT_ASSERT(CODES_WIN == EncodingHintByName("!!!CP1251???")); 
-    UNIT_ASSERT(CODES_WIN == EncodingHintByName("'ansi-cp1251;'")); 
-    UNIT_ASSERT(CODES_WIN == EncodingHintByName("charset=Microsoft-CP1251;")); 
- 
-    UNIT_ASSERT(CODES_ISO_EAST == EncodingHintByName("iso-8859-2")); 
-    UNIT_ASSERT(CODES_ISO_EAST == EncodingHintByName("iso-2")); 
-    UNIT_ASSERT(CODES_ISO_EAST == EncodingHintByName("iso-latin-2")); 
-    UNIT_ASSERT(CODES_ISO_EAST == EncodingHintByName("charset=\"Latin2\";")); 
- 
-    UNIT_ASSERT(CODES_UNKNOWN == EncodingHintByName("widow1251")); 
-    UNIT_ASSERT(CODES_UNKNOWN == EncodingHintByName("default")); 
-    UNIT_ASSERT(CODES_UNKNOWN == EncodingHintByName("$phpcharset")); 
- 
+void TCodepageTest::TestEncodingHints() {
+    UNIT_ASSERT(CODES_WIN == EncodingHintByName("windows-1251"));
+    UNIT_ASSERT(CODES_WIN == EncodingHintByName("Windows1251"));
+    UNIT_ASSERT(CODES_WIN == EncodingHintByName("WIN1251"));
+    UNIT_ASSERT(CODES_WIN == EncodingHintByName("window-cp1251"));
+    UNIT_ASSERT(CODES_WIN == EncodingHintByName("!!!CP1251???"));
+    UNIT_ASSERT(CODES_WIN == EncodingHintByName("'ansi-cp1251;'"));
+    UNIT_ASSERT(CODES_WIN == EncodingHintByName("charset=Microsoft-CP1251;"));
+
+    UNIT_ASSERT(CODES_ISO_EAST == EncodingHintByName("iso-8859-2"));
+    UNIT_ASSERT(CODES_ISO_EAST == EncodingHintByName("iso-2"));
+    UNIT_ASSERT(CODES_ISO_EAST == EncodingHintByName("iso-latin-2"));
+    UNIT_ASSERT(CODES_ISO_EAST == EncodingHintByName("charset=\"Latin2\";"));
+
+    UNIT_ASSERT(CODES_UNKNOWN == EncodingHintByName("widow1251"));
+    UNIT_ASSERT(CODES_UNKNOWN == EncodingHintByName("default"));
+    UNIT_ASSERT(CODES_UNKNOWN == EncodingHintByName("$phpcharset"));
+
     UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("ShiftJIS"));
     UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("Shift_JIS"));
     UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("Big5"));
@@ -324,7 +324,7 @@ void TCodepageTest::TestEncodingHints() {
     UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("charset='Shift_JIS';;"));
     UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("ISO-2022-KR"));
     UNIT_ASSERT(CODES_UNSUPPORTED != EncodingHintByName("ISO-2022-jp"));
-} 
+}
 
 void TCodepageTest::TestToLower() {
     TTempBuf buf;

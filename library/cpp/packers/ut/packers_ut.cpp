@@ -34,7 +34,7 @@ private:
     template <class TData, class TPacker>
     void TestPacker(const TData* test, size_t size);
 
-public: 
+public:
     void TestPackers();
 };
 

@@ -264,10 +264,10 @@ void DoDecodeUnknownPlane(TxChar* str, TxChar*& ee, const ECharset enc) {
         TxChar* d;
 
         for (s = d = str; s < e;) {
-            size_t l = 0; 
+            size_t l = 0;
 
-            if (utf8_read_rune_from_unknown_plane(*d, l, s, e) == RECODE_OK) { 
-                d++, s += l; 
+            if (utf8_read_rune_from_unknown_plane(*d, l, s, e) == RECODE_OK) {
+                d++, s += l;
             } else {
                 *d++ = BROKEN_RUNE;
                 ++s;
@@ -317,7 +317,7 @@ void DecodeUnknownPlane(wchar16* str, wchar16*& ee, const ECharset enc) {
 void DecodeUnknownPlane(wchar32* str, wchar32*& ee, const ECharset enc) {
     DoDecodeUnknownPlane(str, ee, enc);
 }
- 
+
 namespace {
     class THashSetType: public THashSet<TString> {
     public:
@@ -332,37 +332,37 @@ namespace {
 }
 
 class TWindowsPrefixesHashSet: public THashSetType {
-public: 
-    inline TWindowsPrefixesHashSet() { 
+public:
+    inline TWindowsPrefixesHashSet() {
         Add("win");
         Add("wincp");
         Add("window");
-        Add("windowcp"); 
+        Add("windowcp");
         Add("windows");
         Add("windowscp");
-        Add("ansi"); 
-        Add("ansicp"); 
-    } 
-}; 
- 
+        Add("ansi");
+        Add("ansicp");
+    }
+};
+
 class TCpPrefixesHashSet: public THashSetType {
-public: 
-    inline TCpPrefixesHashSet() { 
-        Add("microsoft"); 
-        Add("microsoftcp"); 
-        Add("cp"); 
-    } 
-}; 
- 
+public:
+    inline TCpPrefixesHashSet() {
+        Add("microsoft");
+        Add("microsoftcp");
+        Add("cp");
+    }
+};
+
 class TIsoPrefixesHashSet: public THashSetType {
-public: 
-    inline TIsoPrefixesHashSet() { 
-        Add("iso"); 
-        Add("isolatin"); 
-        Add("latin"); 
-    } 
-}; 
- 
+public:
+    inline TIsoPrefixesHashSet() {
+        Add("iso");
+        Add("isolatin");
+        Add("latin");
+    }
+};
+
 class TLatinToIsoHash: public THashMap<const char*, TString, ci_hash, ci_equal_to> {
 public:
     inline TLatinToIsoHash() {
@@ -377,57 +377,57 @@ public:
         insert(value_type("latin9", "iso-8859-15"));
         insert(value_type("latin10", "iso-8859-16"));
     }
-}; 
- 
+};
+
 static inline void NormalizeEncodingPrefixes(TString& enc) {
-    size_t preflen = enc.find_first_of("0123456789"); 
+    size_t preflen = enc.find_first_of("0123456789");
     if (preflen == TString::npos)
-        return; 
- 
+        return;
+
     TString prefix = enc.substr(0, preflen);
-    for (size_t i = 0; i < prefix.length(); ++i) { 
-        if (prefix[i] == '-') { 
-            prefix.remove(i--); 
-        } 
-    } 
- 
+    for (size_t i = 0; i < prefix.length(); ++i) {
+        if (prefix[i] == '-') {
+            prefix.remove(i--);
+        }
+    }
+
     if (Singleton<TWindowsPrefixesHashSet>()->Has(prefix)) {
-        enc.remove(0, preflen); 
-        enc.prepend("windows-"); 
-        return; 
-    } 
- 
+        enc.remove(0, preflen);
+        enc.prepend("windows-");
+        return;
+    }
+
     if (Singleton<TCpPrefixesHashSet>()->Has(prefix)) {
         if (enc.length() > preflen + 3 && !strncmp(enc.c_str() + preflen, "125", 3) && isdigit(enc[preflen + 3])) {
-            enc.remove(0, preflen); 
-            enc.prepend("windows-"); 
-            return; 
-        } 
-        enc.remove(0, preflen); 
-        enc.prepend("cp"); 
-        return; 
-    } 
- 
+            enc.remove(0, preflen);
+            enc.prepend("windows-");
+            return;
+        }
+        enc.remove(0, preflen);
+        enc.prepend("cp");
+        return;
+    }
+
     if (Singleton<TIsoPrefixesHashSet>()->Has(prefix)) {
-        if (enc.length() == preflen + 1 || enc.length() == preflen + 2) { 
+        if (enc.length() == preflen + 1 || enc.length() == preflen + 2) {
             TString enccopy = enc.substr(preflen);
-            enccopy.prepend("latin"); 
-            const TLatinToIsoHash* latinhash = Singleton<TLatinToIsoHash>(); 
+            enccopy.prepend("latin");
+            const TLatinToIsoHash* latinhash = Singleton<TLatinToIsoHash>();
             TLatinToIsoHash::const_iterator it = latinhash->find(enccopy.data());
-            if (it != latinhash->end()) 
-                enc.assign(it->second); 
-            return; 
-        } else if (enc.length() > preflen + 5 && enc[preflen] == '8') { 
-            enc.remove(0, preflen); 
-            enc.prepend("iso-"); 
-            return; 
-        } 
-    } 
-} 
- 
+            if (it != latinhash->end())
+                enc.assign(it->second);
+            return;
+        } else if (enc.length() > preflen + 5 && enc[preflen] == '8') {
+            enc.remove(0, preflen);
+            enc.prepend("iso-");
+            return;
+        }
+    }
+}
+
 class TEncodingNamesHashSet: public THashSetType {
-public: 
-    TEncodingNamesHashSet() { 
+public:
+    TEncodingNamesHashSet() {
         Add("iso-8859-1");
         Add("iso-8859-2");
         Add("iso-8859-3");
@@ -468,44 +468,44 @@ public:
         Add("big5");
         Add("tis-620");
         Add("tis620");
-    } 
-}; 
- 
+    }
+};
+
 ECharset EncodingHintByName(const char* encname) {
-    if (!encname) 
-        return CODES_UNKNOWN; // safety check 
- 
-    // Common trouble: spurious "charset=" in the encoding name 
-    if (!strnicmp(encname, "charset=", 8)) { 
-        encname += 8; 
-    } 
- 
-    // Strip everything up to the first alphanumeric, and after the last one 
-    while (*encname && !isalnum(*encname)) 
-        ++encname; 
- 
-    if (!*encname) 
-        return CODES_UNKNOWN; 
- 
-    const char* lastpos = encname + strlen(encname) - 1; 
-    while (lastpos > encname && !isalnum(*lastpos)) 
-        --lastpos; 
- 
-    // Do some normalization 
+    if (!encname)
+        return CODES_UNKNOWN; // safety check
+
+    // Common trouble: spurious "charset=" in the encoding name
+    if (!strnicmp(encname, "charset=", 8)) {
+        encname += 8;
+    }
+
+    // Strip everything up to the first alphanumeric, and after the last one
+    while (*encname && !isalnum(*encname))
+        ++encname;
+
+    if (!*encname)
+        return CODES_UNKNOWN;
+
+    const char* lastpos = encname + strlen(encname) - 1;
+    while (lastpos > encname && !isalnum(*lastpos))
+        --lastpos;
+
+    // Do some normalization
     TString enc(encname, lastpos - encname + 1);
-    enc.to_lower(); 
+    enc.to_lower();
     for (char* p = enc.begin(); p != enc.end(); ++p) {
-        if (*p == ' ' || *p == '=' || *p == '_') 
-            *p = '-'; 
-    } 
- 
-    NormalizeEncodingPrefixes(enc); 
- 
+        if (*p == ' ' || *p == '=' || *p == '_')
+            *p = '-';
+    }
+
+    NormalizeEncodingPrefixes(enc);
+
     ECharset hint = CharsetByName(enc.c_str());
-    if (hint != CODES_UNKNOWN) 
-        return hint; 
- 
+    if (hint != CODES_UNKNOWN)
+        return hint;
+
     if (Singleton<TEncodingNamesHashSet>()->Has(enc))
-        return CODES_UNSUPPORTED; 
-    return CODES_UNKNOWN; 
-} 
+        return CODES_UNSUPPORTED;
+    return CODES_UNKNOWN;
+}

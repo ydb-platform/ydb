@@ -1,5 +1,5 @@
 #include <util/charset/unidata.h>
- 
+
 namespace { namespace NUnidataTableGenerated {
     using TV = const NUnicode::NPrivate::TUnidataTable::TStored;
 
@@ -7521,7 +7521,7 @@ namespace { namespace NUnidataTableGenerated {
 
     static const size_t Size = 1114110;
 }} // namespace NUnidataTableGenerated
- 
+
 namespace NUnicode {
     namespace NPrivate {
         const NUnicode::NPrivate::TUnidataTable& UnidataTable() {

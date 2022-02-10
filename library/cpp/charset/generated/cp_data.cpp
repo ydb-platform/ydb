@@ -1,7 +1,7 @@
 #include <library/cpp/charset/codepage.h>
- 
-extern const char defchars[][DEFCHAR_BUF]; 
- 
+
+extern const char defchars[][DEFCHAR_BUF];
+
 static const CodePage CODES_ALT_CODE_PAGE = {
     CODES_ALT,
     {"IBM866", "csIBM866", "cp866", "866", "dos-866", "alt", "windows-866",},
@@ -3244,9 +3244,9 @@ static const CodePage CODES_TIS620_CODE_PAGE = {
 }; // generated from tis620.txt
 
 static const CodePage CODES_UNKNOWNPLANE_CODE_PAGE = {
-    CODES_UNKNOWNPLANE, 
+    CODES_UNKNOWNPLANE,
     {"unknownplane", "unknown-plane",},
-    { 
+    {
         0x0000, 0xF001, 0xF002, 0xF003, 0xF004, 0xF005, 0xF006, 0xF007,
         0xF008, 0xF009, 0xF00A, 0xF00B, 0xF00C, 0xF00D, 0xF00E, 0xF00F,
         0xF010, 0xF011, 0xF012, 0xF013, 0xF014, 0xF015, 0xF016, 0xF017,
@@ -3279,10 +3279,10 @@ static const CodePage CODES_UNKNOWNPLANE_CODE_PAGE = {
         0xF0E8, 0xF0E9, 0xF0EA, 0xF0EB, 0xF0EC, 0xF0ED, 0xF0EE, 0xF0EF,
         0xF0F0, 0xF0F1, 0xF0F2, 0xF0F3, 0xF0F4, 0xF0F5, 0xF0F6, 0xF0F7,
         0xF0F8, 0xF0F9, 0xF0FA, 0xF0FB, 0xF0FC, 0xF0FD, 0xF0FE, 0xF0FF,
-    }, 
-    defchars[0], 
+    },
+    defchars[0],
 }; // generated from unknown.txt
- 
+
 static const CodePage CODES_UTF8_CODE_PAGE = {
     CODES_UTF8,
     {"utf-8",},
@@ -3307,7 +3307,7 @@ static const CodePage CODES_UTF_16LE_CODE_PAGE = {
 static const CodePage CODES_VISCII_CODE_PAGE = {
     CODES_VISCII,
     {"VISCII", "VISCII1.1-1", "CSVISCII",},
-    { 
+    {
         0x0000, 0x0001, 0x1EB2, 0x0003, 0x0004, 0x1EB4, 0x1EAA, 0x0007,
         0x0008, 0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x000F,
         0x0010, 0x0011, 0x0012, 0x0013, 0x1EF6, 0x0015, 0x0016, 0x0017,
@@ -3660,15 +3660,15 @@ static const CodePage CODES_YANDEX_CODE_PAGE = {
         0x0438, 0x0439, 0x043A, 0x043B, 0x043C, 0x043D, 0x043E, 0x043F,
         0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447,
         0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F,
-    }, 
+    },
     defchars[1],
 }; // generated from yandex.txt
- 
+
 const char defchars[][DEFCHAR_BUF] = {
     {"\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077\077"}, // generated from ascii_dc.txt
     {"\077\xA6\xB6\xA6\055\xB6\x9F\x9F\x9F\x9F\x9F\x9F\x9F\200\200\200\071\130\077\071\040\040\n\n\x1A\x1A\x1A\x1A\x1A\x1A\x1A\077\077\055\055\050\042\051\042\042\042\137\052\042\056\055\055\075\055\044\140\xB0\047\047\047\047\047"}, // generated from yandex_dc.txt
-}; 
- 
+};
+
 const CodePage* const NCodepagePrivate::TCodePageData::AllCodePages[] = {
     &CODES_ALT_CODE_PAGE,
     &CODES_ARMSCII_CODE_PAGE,
@@ -3783,6 +3783,6 @@ const CodePage* const NCodepagePrivate::TCodePageData::AllCodePages[] = {
     &CODES_WINDOWS_1257_CODE_PAGE,
     &CODES_WIN_EAST_CODE_PAGE,
     &CODES_YANDEX_CODE_PAGE,
-}; 
+};
 
 const CodePage& csYandex = CODES_YANDEX_CODE_PAGE;

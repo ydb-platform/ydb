@@ -80,7 +80,7 @@ class TPipedBase {
 protected:
     TPipedBase(PIPEHANDLE fd);
     virtual ~TPipedBase();
- 
+
 protected:
     TPipeHandle Handle_;
 };

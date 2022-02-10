@@ -94,7 +94,7 @@ public:
     void Zero() {
         memset((void*)Arr, 0, M * N * sizeof(T));
     }
- 
+
     void Fill(T value) {
         for (T *p = Arr, *end = Arr + M * N; p < end; ++p)
             *p = value;

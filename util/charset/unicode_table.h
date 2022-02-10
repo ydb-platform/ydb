@@ -5,7 +5,7 @@
 #include <util/generic/typetraits.h>
 
 namespace NUnicodeTable {
-    template <class Value> 
+    template <class Value>
     struct TValueSelector;
 
     template <class Value>

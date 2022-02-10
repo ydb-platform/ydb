@@ -815,13 +815,13 @@ public:
     UNIT_TEST_SUITE_END();
 
 private:
-    void TestDecodingMethods() { 
+    void TestDecodingMethods() {
         UNIT_ASSERT(TUtf16String::FromAscii("").empty());
         UNIT_ASSERT(TUtf16String::FromAscii("abc") == ASCIIToWide("abc"));
 
         const char* text = "123kx83abcd ej)#$%ddja&%J&";
         TUtf16String wtext = ASCIIToWide(text);
- 
+
         UNIT_ASSERT(wtext == TUtf16String::FromAscii(text));
 
         TString strtext(text);
@@ -829,7 +829,7 @@ private:
 
         TStringBuf strbuftext(text);
         UNIT_ASSERT(wtext == TUtf16String::FromAscii(strbuftext));
- 
+
         UNIT_ASSERT(wtext.substr(5) == TUtf16String::FromAscii(text + 5));
 
         const wchar16 wideCyrillicAlphabet[] = {
@@ -859,12 +859,12 @@ private:
         UNIT_ASSERT(s1 == wtext);
 
         // append
- 
+
         TUtf16String s2;
         TUtf16String testAppend = strWide;
         s2.AppendUtf8(strUtf8);
         UNIT_ASSERT(testAppend == s2);
- 
+
         testAppend += ' ';
         s2.AppendAscii(" ");
         UNIT_ASSERT(testAppend == s2);

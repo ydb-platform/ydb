@@ -70,7 +70,7 @@ public:
         (*this)[i] = nullptr;
         return t;
     }
- 
+
     void Resize(size_t newSize) {
         for (size_t i = newSize; i < size(); ++i) {
             D::Destroy((*this)[i]);

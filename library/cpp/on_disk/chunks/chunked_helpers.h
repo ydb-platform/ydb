@@ -164,7 +164,7 @@ protected:
         TPackedPair() {
             Init(TKey(), TValue());
         }
- 
+
         typename TTypeTraits<TKey>::TFuncParam First() const {
             return Key;
         }
@@ -187,7 +187,7 @@ protected:
 
 protected:
     static const ui16 VERSION_ID = 2;
- 
+
 #pragma pack(push, 8)
     struct TInterval {
         static const ui32 INVALID = (ui32)-1;
@@ -218,12 +218,12 @@ protected:
     };
 #pragma pack(pop)
     static_assert(8 == sizeof(TInterval), "expect 8 == sizeof(TInterval)");
- 
+
     template <typename TKey>
     static ui32 KeyHash(typename TTypeTraits<TKey>::TFuncParam key, ui16 bits) {
         Y_ASSERT(bits < 32);
         const ui32 res = ui32(key) & ((ui32(1) << bits) - 1);
- 
+
         Y_ASSERT(res < (ui32(1) << bits));
         return res;
     }
@@ -255,11 +255,11 @@ public:
 
     void Save(IOutputStream& out) const {
         Y_ASSERT(Data.size() < Max<ui32>());
- 
+
         WriteBin<ui16>(&out, VERSION_ID);
         static const ui32 PAIR_SIZE = sizeof(TKeyValuePair);
         WriteBin<ui32>(&out, PAIR_SIZE);
- 
+
         ui16 bits;
         if (!Data.empty()) {
             bits = (ui16)(log((float)Data.size()) / log(2.f));
@@ -270,12 +270,12 @@ public:
         }
         WriteBin<ui16>(&out, bits);
         WriteBin<ui32>(&out, (ui32)Data.size());
- 
+
         const ui32 nBuckets = ui32(1) << bits;
         TData2 data2(nBuckets);
         for (size_t i = 0; i < Data.size(); ++i)
             data2[KeyHash<TKey>(TKeyValuePair::GetFirst(&Data[i]), bits)].push_back(Data[i]);
- 
+
         typedef TVector<TInterval> TIntervals;
         TIntervals intervals(nBuckets);
         ui32 offset = 0;
@@ -302,21 +302,21 @@ template <typename TKey, typename TValue>
 class TPlainHash : TPlainHashCommon {
 private:
     typedef TPackedPair<TKey, TValue> TKeyValuePair;
- 
+
     const char* P;
- 
+
     ui16 GetBits() const {
         return ReadUnaligned<ui16>(P + 6);
     }
- 
+
     ui32 GetSize() const {
         return ReadUnaligned<ui32>(P + 8);
     }
- 
+
     const TInterval* GetIntervals() const {
         return (const TInterval*)(P + 12);
     }
- 
+
     const TKeyValuePair* GetData() const {
         return (const TKeyValuePair*)(GetIntervals() + (1ULL << GetBits()));
     }
@@ -342,7 +342,7 @@ public:
     TPlainHash(const char* p) {
         Init(p);
     }
- 
+
     TPlainHash(const TBlob& blob) {
         Init(blob.Begin());
     }
@@ -377,7 +377,7 @@ public:
     TConstIterator End() const {
         return GetData() + GetSize();
     }
- 
+
     const char* ByteEnd() const {
         return (const char*)(GetData() + GetSize());
     }

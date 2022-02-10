@@ -70,7 +70,7 @@ TFsPath TFsPath::RelativeTo(const TFsPath& root) const {
     if (!this->IsSubpathOf(root)) {
         ythrow TIoException() << "path " << *this << " is not subpath of " << root;
     }
- 
+
     split.erase(split.begin(), split.begin() + rsplit.size());
     split.IsAbsolute = false;
 

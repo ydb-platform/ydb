@@ -38,7 +38,7 @@ template <class T, class Policy /*= ::NMaybe::TPolicyUndefinedExcept*/>
 class TMaybe: private TMaybeBase<T> {
 public:
     using TInPlace = NMaybe::TInPlace;
- 
+
 private:
     static_assert(!std::is_same<std::remove_cv_t<T>, TNothing>::value,
                   "Instantiation of TMaybe with a TNothing type is ill-formed");

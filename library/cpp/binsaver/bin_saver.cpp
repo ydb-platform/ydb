@@ -16,7 +16,7 @@ struct SBasicChunkInit {
 void IBinSaver::StoreObject(IObjectBase* pObject) {
     if (pObject) {
         Y_ASSERT(pSaverClasses->GetObjectTypeID(pObject) != -1 && "trying to save unregistered object");
-    } 
+    }
 
     ui64 ptrId = ((char*)pObject) - ((char*)nullptr);
     if (StableOutput) {

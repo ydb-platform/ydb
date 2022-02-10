@@ -73,7 +73,7 @@ namespace {
             TBackTraceContext* bt = (TBackTraceContext*)h;
 
             if (bt->cnt != 0) {
-                bt->sym[bt->cnt - 1] = (void*)_Unwind_GetIP(c); 
+                bt->sym[bt->cnt - 1] = (void*)_Unwind_GetIP(c);
             }
 
             if (bt->cnt == bt->size) {

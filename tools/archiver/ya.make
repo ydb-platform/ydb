@@ -12,7 +12,7 @@ PEERDIR(
 )
 
 SRCS(
-    main.cpp 
+    main.cpp
 )
 
 SET(IDE_FOLDER "_Builders")

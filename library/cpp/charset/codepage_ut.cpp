@@ -52,7 +52,7 @@ public:
     void TestEncodingHints();
     void TestToLower();
     void TestToUpper();
- 
+
     void TestCanEncode();
 
     inline void TestUpperLower() {
@@ -168,7 +168,7 @@ void TCodepageTest::TestBrokenMultibyte() {
 
     size_t nwritten = 0;
     size_t nread = 0;
- 
+
     RECODE_RESULT res = RecodeToUnicode(cp, sampletext, recodeResult, Y_ARRAY_SIZE(sampletext), Y_ARRAY_SIZE(recodeResult), nread, nwritten);
     UNIT_ASSERT(res == RECODE_OK);
     UNIT_ASSERT(nread == 1);

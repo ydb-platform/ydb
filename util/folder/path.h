@@ -87,7 +87,7 @@ public:
 
     bool IsAbsolute() const;
     bool IsRelative() const;
- 
+
     /**
      * TFsPath("/a/b").IsSubpathOf("/a")        -> true
      *
@@ -125,7 +125,7 @@ public:
      * Never fails. Returns this if already a root.
      */
     TFsPath Parent() const;
- 
+
     TString Basename() const {
         return GetName();
     }

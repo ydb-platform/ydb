@@ -201,7 +201,7 @@ const int nSizeIdxToSize[N_SIZES] = {
     96,
     128,
 #endif
-    192, 256, 384, 512, 768, 1024, 1536, 2048, 
+    192, 256, 384, 512, 768, 1024, 1536, 2048,
     3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768,
 #ifdef LFALLOC_YT
     49152, 65536
@@ -1115,13 +1115,13 @@ struct TThreadAllocInfo {
 #endif
 
     void Init(TThreadAllocInfo** pHead) {
-        memset(this, 0, sizeof(*this)); 
+        memset(this, 0, sizeof(*this));
         for (auto& i : FreePtrIndex)
             i = THREAD_BUF;
 #ifdef _win_
         BOOL b = DuplicateHandle(
             GetCurrentProcess(), GetCurrentThread(),
-            GetCurrentProcess(), &hThread, 
+            GetCurrentProcess(), &hThread,
             0, FALSE, DUPLICATE_SAME_ACCESS);
         Y_ASSERT_NOBT(b);
 #endif
@@ -1671,7 +1671,7 @@ static void DebugTraceMMgr(const char* pszFormat, ...) // __cdecl
 {
     static char buff[20000];
     va_list va;
-    // 
+    //
     va_start(va, pszFormat);
     vsprintf(buff, pszFormat, va);
     va_end(va);

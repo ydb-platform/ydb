@@ -793,7 +793,7 @@ public:
 
     void TestIsSpace() {
         UNIT_ASSERT(!IsSpace(TUtf16String()));
- 
+
         UNIT_ASSERT(IsSpace(ws, Y_ARRAY_SIZE(ws)));
 
         TUtf16String w;
@@ -886,11 +886,11 @@ public:
         temp = original;
         temp.to_lower();
         UNIT_ASSERT(temp == lower);
- 
+
         temp = original;
         ToLower(temp.begin(), temp.size());
         UNIT_ASSERT(temp == lower);
- 
+
         temp = original;
         temp.to_upper();
         UNIT_ASSERT(temp == upper);

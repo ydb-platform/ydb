@@ -5,20 +5,20 @@
  * Powerdog Industries kindly requests feedback from anyone modifying
  * this function:
  *
- * Date: Thu, 05 Jun 1997 23:17:17 -0400 
+ * Date: Thu, 05 Jun 1997 23:17:17 -0400
  * From: Kevin Ruddy <kevin.ruddy@powerdog.com>
  * To: James FitzGibbon <james@nexis.net>
  * Subject: Re: Use of your strptime(3) code (fwd)
- * 
+ *
  * The reason for the "no mod" clause was so that modifications would
- * come back and we could integrate them and reissue so that a wider 
- * audience could use it (thereby spreading the wealth).  This has 
+ * come back and we could integrate them and reissue so that a wider
+ * audience could use it (thereby spreading the wealth).  This has
  * made it possible to get strptime to work on many operating systems.
  * I'm not sure why that's "plain unacceptable" to the FreeBSD team.
- * 
+ *
  * Anyway, you can change it to "with or without modification" as
- * you see fit.  Enjoy. 
- * 
+ * you see fit.  Enjoy.
+ *
  * Kevin Ruddy
  * Powerdog Industries, Inc.
  */

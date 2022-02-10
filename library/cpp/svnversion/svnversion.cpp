@@ -1,7 +1,7 @@
-#include <string.h> 
-#include <stdlib.h> 
-#include <stdio.h> 
- 
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+
 #define FROM_IMPL
 #include "svnversion.h"
 
@@ -23,8 +23,8 @@ extern "C" void PrintSvnVersionAndExitEx(int argc, char* argv[], const char* opt
                 PrintSvnVersionAndExit0();
             }
         }
-    } 
-} 
+    }
+}
 
 extern "C" void PrintSvnVersionAndExit(int argc, char* argv[]) {
     PrintSvnVersionAndExitEx(argc, argv, "--version");

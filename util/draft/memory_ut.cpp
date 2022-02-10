@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TUtilDraftMemoryTest) {
         UNIT_ASSERT(IsZero(a1));
         a1 = 0xF0;
         UNIT_ASSERT(!IsZero(a1));
- 
+
         i32 a2 = -1;
         UNIT_ASSERT(!IsZero(a2));
         a2 = 0;
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TUtilDraftMemoryTest) {
         UNIT_ASSERT(IsZero(a3));
         a3 = 1.e-13;
         UNIT_ASSERT(!IsZero(a3));
- 
+
         TSampleStruct1 ss1;
         ss1.A = 0;
         ss1.B = 0;

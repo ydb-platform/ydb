@@ -93,7 +93,7 @@ TPipedBase::~TPipedBase() {
     }
 }
 
-TPipedInput::TPipedInput(PIPEHANDLE fd) 
+TPipedInput::TPipedInput(PIPEHANDLE fd)
     : TPipedBase(fd)
 {
 }
@@ -104,7 +104,7 @@ size_t TPipedInput::DoRead(void* buf, size_t len) {
     if (!Handle_.IsOpen()) {
         return 0;
     }
-    return Handle_.Read(buf, len); 
+    return Handle_.Read(buf, len);
 }
 
 TPipedOutput::TPipedOutput(PIPEHANDLE fd)

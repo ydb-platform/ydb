@@ -42,7 +42,7 @@
 
 template <class A>
 struct TRet {
-    template <int base> 
+    template <int base>
     inline A IntFromStringForCheck(const TString& str) {
         return IntFromString<A, base>(str);
     }

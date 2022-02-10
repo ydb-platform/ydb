@@ -610,28 +610,28 @@ private:
     TOps* Ops_;
 };
 
-template <> 
+template <>
 void Out<const struct addrinfo*>(IOutputStream& os, const struct addrinfo* ai) {
     if (ai->ai_flags & AI_CANONNAME) {
-        os << "`" << ai->ai_canonname << "' "; 
+        os << "`" << ai->ai_canonname << "' ";
     }
- 
-    os << '['; 
+
+    os << '[';
     for (int i = 0; ai; ++i, ai = ai->ai_next) {
         if (i > 0) {
-            os << ", "; 
+            os << ", ";
         }
- 
+
         os << (const IRemoteAddr&)TAddrInfo(ai);
-    } 
-    os << ']'; 
-} 
- 
-template <> 
+    }
+    os << ']';
+}
+
+template <>
 void Out<struct addrinfo*>(IOutputStream& os, struct addrinfo* ai) {
     Out<const struct addrinfo*>(os, static_cast<const struct addrinfo*>(ai));
-} 
- 
+}
+
 template <>
 void Out<TNetworkAddress>(IOutputStream& os, const TNetworkAddress& addr) {
     os << &*addr.Begin();
@@ -647,7 +647,7 @@ static inline const struct addrinfo* Iterate(const struct addrinfo* addr, const 
 
 static inline SOCKET DoConnectImpl(const struct addrinfo* res, const TInstant& deadLine) {
     const struct addrinfo* addr0 = res;
- 
+
     while (res) {
         TSocketHolder s(socket(res->ai_family, res->ai_socktype, res->ai_protocol));
 

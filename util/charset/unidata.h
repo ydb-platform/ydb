@@ -195,7 +195,7 @@ inline bool IsHyphen(wchar32 ch) {
     return NUnicode::CharHasType(ch, SHIFT(Pd_HYPHEN) | SHIFT(Po_HYPHEN));
 }
 inline bool IsQuotation(wchar32 ch) {
-    return NUnicode::CharHasType(ch, 
+    return NUnicode::CharHasType(ch,
                                  SHIFT(Po_QUOTE) | SHIFT(Ps_QUOTE) | SHIFT(Pe_QUOTE) | SHIFT(Pi_QUOTE) |
                                      SHIFT(Pf_QUOTE) | SHIFT(Po_SINGLE_QUOTE) | SHIFT(Ps_SINGLE_QUOTE) |
                                      SHIFT(Pe_SINGLE_QUOTE) | SHIFT(Pi_SINGLE_QUOTE) | SHIFT(Pf_SINGLE_QUOTE));
@@ -211,7 +211,7 @@ inline bool IsTerminal(wchar32 ch) {
     return NUnicode::CharHasType(ch, SHIFT(Po_TERMINAL));
 }
 inline bool IsPairedPunct(wchar32 ch) {
-    return NUnicode::CharHasType(ch, 
+    return NUnicode::CharHasType(ch,
                                  SHIFT(Ps_START) | SHIFT(Pe_END) | SHIFT(Ps_QUOTE) | SHIFT(Pe_QUOTE) |
                                      SHIFT(Pi_QUOTE) | SHIFT(Pf_QUOTE) | SHIFT(Ps_SINGLE_QUOTE) |
                                      SHIFT(Pe_SINGLE_QUOTE) | SHIFT(Pi_SINGLE_QUOTE) | SHIFT(Pf_SINGLE_QUOTE));
@@ -229,7 +229,7 @@ inline bool IsNonspacing(wchar32 ch) {
     return NUnicode::CharHasType(ch, SHIFT(Mn_NONSPACING) | SHIFT(Me_ENCLOSING));
 }
 inline bool IsAlphabetic(wchar32 ch) {
-    return NUnicode::CharHasType(ch, 
+    return NUnicode::CharHasType(ch,
                                  SHIFT(Lu_UPPER) | SHIFT(Ll_LOWER) | SHIFT(Lt_TITLE) | SHIFT(Lm_EXTENDER) | SHIFT(Lm_LETTER) | SHIFT(Lo_OTHER) | SHIFT(Nl_LETTER));
 }
 inline bool IsIdeographic(wchar32 ch) {

@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TPackedTest) {
         const TBuffer& buf = out.Buffer();
         UNIT_ASSERT_VALUES_EQUAL(buf.Size(), p.size());
         UNIT_ASSERT(!memcmp(buf.Data(), &p[0], buf.Size()));
- 
+
         {
             TBufferInput in(buf);
             ui32 v2;
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TPackedTest) {
             UNIT_ASSERT_VALUES_EQUAL(v, v2);
         }
 
-        { 
+        {
             TZCMemoryInput in(buf.Data(), buf.Size());
             ui32 v2;
             UnPackUI32(in, v2);

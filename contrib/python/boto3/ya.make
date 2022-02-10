@@ -6,12 +6,12 @@ VERSION(1.17.112)
 
 LICENSE(Apache-2.0)
 
-PEERDIR( 
-    contrib/python/botocore 
+PEERDIR(
+    contrib/python/botocore
     contrib/python/jmespath
     contrib/python/s3transfer
-) 
- 
+)
+
 NO_LINT()
 
 PY_SRCS(

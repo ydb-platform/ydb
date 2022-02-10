@@ -239,7 +239,7 @@ RECURSE(
     nghttp2
     node-addon-api
     nodejs_12
-    node_nan 
+    node_nan
     nsync
     numa
     nvidia

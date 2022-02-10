@@ -123,59 +123,59 @@ Y_UNIT_TEST_SUITE(TCGIUnescapeTest) {
         CGIUnescape(r, "%3u1234", 4);
         UNIT_ASSERT_VALUES_EQUAL(r, "%3u1");
     }
-
+ 
     Y_UNIT_TEST(StrokaOutParameterInplace) {
         TString s;
-
-        s = "hello%3dworld";
-        CGIUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello=world");
-
-        s = "+%23+";
-        CGIUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, " # ");
-
-        s = "hello%3u";
-        CGIUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3u");
-
-        s = "0123456789012345";
-        CGIUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "0123456789012345");
-
-        s = "";
-        CGIUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "");
-    }
-
+ 
+        s = "hello%3dworld"; 
+        CGIUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "hello=world"); 
+ 
+        s = "+%23+"; 
+        CGIUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, " # "); 
+ 
+        s = "hello%3u"; 
+        CGIUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3u"); 
+ 
+        s = "0123456789012345"; 
+        CGIUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "0123456789012345"); 
+ 
+        s = ""; 
+        CGIUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, ""); 
+    } 
+ 
     Y_UNIT_TEST(StrokaOutParameterNotInplace) {
         TString s, sCopy;
-
-        s = "hello%3dworld";
-        sCopy = s;
-        CGIUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello=world");
-
-        s = "+%23+";
-        sCopy = s;
-        CGIUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, " # ");
-
-        s = "hello%3u";
-        sCopy = s;
-        CGIUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3u");
-
-        s = "0123456789012345";
-        sCopy = s;
-        CGIUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "0123456789012345");
-
-        s = "";
-        sCopy = s;
-        CGIUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "");
-    }
+ 
+        s = "hello%3dworld"; 
+        sCopy = s; 
+        CGIUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "hello=world"); 
+ 
+        s = "+%23+"; 
+        sCopy = s; 
+        CGIUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, " # "); 
+ 
+        s = "hello%3u"; 
+        sCopy = s; 
+        CGIUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3u"); 
+ 
+        s = "0123456789012345"; 
+        sCopy = s; 
+        CGIUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "0123456789012345"); 
+ 
+        s = ""; 
+        sCopy = s; 
+        CGIUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, ""); 
+    } 
 }
 
 Y_UNIT_TEST_SUITE(TUrlEscapeTest) {
@@ -233,58 +233,58 @@ Y_UNIT_TEST_SUITE(TUrlEscapeTest) {
 Y_UNIT_TEST_SUITE(TUrlUnescapeTest) {
     Y_UNIT_TEST(StrokaOutParameterInplace) {
         TString s;
-
-        s = "hello%3dworld";
-        UrlUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello=world");
-
-        s = "+%23+";
-        UrlUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "+#+");
-
-        s = "hello%3u";
-        UrlUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3u");
-
-        s = "0123456789012345";
-        UrlUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "0123456789012345");
-
-        s = "";
-        UrlUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "");
-    }
-
+ 
+        s = "hello%3dworld"; 
+        UrlUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "hello=world"); 
+ 
+        s = "+%23+"; 
+        UrlUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "+#+"); 
+ 
+        s = "hello%3u"; 
+        UrlUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3u"); 
+ 
+        s = "0123456789012345"; 
+        UrlUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "0123456789012345"); 
+ 
+        s = ""; 
+        UrlUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, ""); 
+    } 
+ 
     Y_UNIT_TEST(StrokaOutParameterNotInplace) {
         TString s, sCopy;
-
-        s = "hello%3dworld";
-        sCopy = s;
-        UrlUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello=world");
-
-        s = "+%23+";
-        sCopy = s;
-        UrlUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "+#+");
-
-        s = "hello%3u";
-        sCopy = s;
-        UrlUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3u");
-
-        s = "0123456789012345";
-        sCopy = s;
-        UrlUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "0123456789012345");
-
-        s = "";
-        sCopy = s;
-        UrlUnescape(s);
-        UNIT_ASSERT_VALUES_EQUAL(s, "");
-    }
-}
-
+ 
+        s = "hello%3dworld"; 
+        sCopy = s; 
+        UrlUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "hello=world"); 
+ 
+        s = "+%23+"; 
+        sCopy = s; 
+        UrlUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "+#+"); 
+ 
+        s = "hello%3u"; 
+        sCopy = s; 
+        UrlUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "hello%3u"); 
+ 
+        s = "0123456789012345"; 
+        sCopy = s; 
+        UrlUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, "0123456789012345"); 
+ 
+        s = ""; 
+        sCopy = s; 
+        UrlUnescape(s); 
+        UNIT_ASSERT_VALUES_EQUAL(s, ""); 
+    } 
+} 
+ 
 Y_UNIT_TEST_SUITE(TQuoteTest) {
     Y_UNIT_TEST(ReturnsEndOfTo) {
         char r[10];

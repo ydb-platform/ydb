@@ -99,9 +99,9 @@ public:
         AddOrReplaceHeader(THttpInputHeader(std::move(name), ToString(value)));
     }
 
-    // Проверяет, есть ли такой заголовок
+    // Проверяет, есть ли такой заголовок 
     bool HasHeader(TStringBuf header) const;
-
+ 
     /// Удаляет заголовок, если он есть.
     void RemoveHeader(TStringBuf header);
 

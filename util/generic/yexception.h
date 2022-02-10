@@ -22,21 +22,21 @@
 class TBackTrace;
 
 namespace NPrivateException {
-    class TTempBufCuttingWrapperOutput: public IOutputStream {
-    public:
-        TTempBufCuttingWrapperOutput(TTempBuf& tempbuf)
-            : TempBuf_(tempbuf)
-        {
-        }
-
-        void DoWrite(const void* data, size_t len) override {
-            TempBuf_.Append(data, Min(len, TempBuf_.Left()));
-        }
-
-    private:
-        TTempBuf& TempBuf_;
-    };
-
+    class TTempBufCuttingWrapperOutput: public IOutputStream { 
+    public: 
+        TTempBufCuttingWrapperOutput(TTempBuf& tempbuf) 
+            : TempBuf_(tempbuf) 
+        { 
+        } 
+ 
+        void DoWrite(const void* data, size_t len) override { 
+            TempBuf_.Append(data, Min(len, TempBuf_.Left())); 
+        } 
+ 
+    private: 
+        TTempBuf& TempBuf_; 
+    }; 
+ 
     class yexception: public std::exception {
     public:
         yexception();
@@ -51,7 +51,7 @@ namespace NPrivateException {
 
         template <class T>
         inline void Append(const T& t) {
-            TTempBufCuttingWrapperOutput tempBuf(Buf_);
+            TTempBufCuttingWrapperOutput tempBuf(Buf_); 
             static_cast<IOutputStream&>(tempBuf) << t;
             ZeroTerminate();
         }

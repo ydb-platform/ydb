@@ -4,17 +4,17 @@
 
 #include <util/memory/tempbuf.h>
 
-class TTempBufOutput: public IOutputStream, public TTempBuf {
+class TTempBufOutput: public IOutputStream, public TTempBuf { 
 public:
-    inline TTempBufOutput() = default;
+    inline TTempBufOutput() = default; 
 
-    explicit TTempBufOutput(size_t size)
+    explicit TTempBufOutput(size_t size) 
         : TTempBuf(size)
     {
     }
 
-    TTempBufOutput(TTempBufOutput&&) noexcept = default;
-    TTempBufOutput& operator=(TTempBufOutput&&) noexcept = default;
+    TTempBufOutput(TTempBufOutput&&) noexcept = default; 
+    TTempBufOutput& operator=(TTempBufOutput&&) noexcept = default; 
 
 protected:
     void DoWrite(const void* data, size_t len) override;

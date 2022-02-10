@@ -11,8 +11,8 @@ static inline void Throw2DontMove() {
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/algorithm.h>
-#include <util/memory/tempbuf.h>
-#include <util/random/mersenne.h>
+#include <util/memory/tempbuf.h> 
+#include <util/random/mersenne.h> 
 #include <util/stream/output.h>
 #include <util/string/subst.h>
 
@@ -50,7 +50,7 @@ class TExceptionTest: public TTestBase {
     UNIT_TEST(TestEnsureWithBackTrace2)
     UNIT_TEST(TestRethrowAppend)
     UNIT_TEST(TestMacroOverload)
-    UNIT_TEST(TestMessageCrop)
+    UNIT_TEST(TestMessageCrop) 
     UNIT_TEST(TestTIoSystemErrorSpecialMethods)
     UNIT_TEST(TestCurrentExceptionTypeNameMethod)
     UNIT_TEST_SUITE_END();
@@ -280,22 +280,22 @@ private:
             UNIT_ASSERT(e.AsStrBuf().Contains("10 > 20"));
         }
     }
-
-    void TestMessageCrop() {
-        TTempBuf tmp;
-        size_t size = tmp.Size() * 1.5;
-        TString s;
-        s.reserve(size);
-        TMersenne<ui64> generator(42);
-        for (int j = 0; j < 50; ++j) {
-            for (size_t i = 0; i < size; ++i) {
-                s += static_cast<char>('a' + generator() % 26);
-            }
-            yexception e;
-            e << s;
+ 
+    void TestMessageCrop() { 
+        TTempBuf tmp; 
+        size_t size = tmp.Size() * 1.5; 
+        TString s; 
+        s.reserve(size); 
+        TMersenne<ui64> generator(42); 
+        for (int j = 0; j < 50; ++j) { 
+            for (size_t i = 0; i < size; ++i) { 
+                s += static_cast<char>('a' + generator() % 26); 
+            } 
+            yexception e; 
+            e << s; 
             UNIT_ASSERT_EQUAL(e.AsStrBuf(), s.substr(0, tmp.Size() - 1));
-        }
-    }
+        } 
+    } 
 
     void TestTIoSystemErrorSpecialMethods() {
         TString testStr{"systemError"};

@@ -50,8 +50,8 @@ namespace NProtobufJson {
             FieldNameLowerCase,
             FieldNameUpperCase,
             FieldNameCamelCase,
-            FieldNameSnakeCase,     // ABC -> a_b_c,    UserID -> user_i_d 
-            FieldNameSnakeCaseDense // ABC -> abc,      UserID -> user_id 
+            FieldNameSnakeCase,     // ABC -> a_b_c,    UserID -> user_i_d
+            FieldNameSnakeCaseDense // ABC -> abc,      UserID -> user_id
         };
         FldNameMode FieldNameMode = FieldNameOriginalCase;
 
@@ -79,7 +79,7 @@ namespace NProtobufJson {
             StringifyLongNumbersForDouble,
         };
         EStringifyLongNumbersMode StringifyLongNumbers = StringifyLongNumbersNever;
- 
+
         /// Custom field names generator.
         TNameGenerator NameGenerator = {};
 
@@ -139,7 +139,7 @@ namespace NProtobufJson {
             MapAsObject = value;
             return *this;
         }
- 
+
         TSelf& SetStringifyLongNumbers(EStringifyLongNumbersMode stringify) {
             StringifyLongNumbers = stringify;
             return *this;

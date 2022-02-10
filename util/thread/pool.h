@@ -5,7 +5,7 @@
 
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/generic/ptr.h>
 #include <util/generic/noncopyable.h>
 #include <functional>
@@ -51,8 +51,8 @@ private:
 };
 
 class TThreadPoolException: public yexception {
-}; 
- 
+};
+
 template <class T>
 class TThrFuncObj: public IObjectInQueue {
 public:

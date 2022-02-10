@@ -133,11 +133,11 @@ Y_UNIT_TEST_SUITE(TThreadPoolTest) {
         UNIT_ASSERT_VALUES_EQUAL(added, false);
     }
 
-    Y_UNIT_TEST(TestSafeAddFuncThrows) { 
-        TFailAddQueue queue; 
+    Y_UNIT_TEST(TestSafeAddFuncThrows) {
+        TFailAddQueue queue;
         UNIT_CHECK_GENERATED_EXCEPTION(queue.SafeAddFunc([] {}), TThreadPoolException);
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestFunctionNotCopied) {
         struct TFailOnCopy {
             TFailOnCopy() {

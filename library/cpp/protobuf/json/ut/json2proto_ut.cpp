@@ -23,7 +23,7 @@
 using namespace NProtobufJson;
 using namespace NProtobufJsonTest;
 
-namespace google { 
+namespace google {
     namespace protobuf {
         namespace internal {
             void MapTestForceDeterministic() {
@@ -31,16 +31,16 @@ namespace google {
             }
         }
     }     // namespace protobuf
-} 
- 
+}
+
 namespace {
-    class TInit { 
-    public: 
-        TInit() { 
-            ::google::protobuf::internal::MapTestForceDeterministic(); 
-        } 
-    } Init; 
- 
+    class TInit {
+    public:
+        TInit() {
+            ::google::protobuf::internal::MapTestForceDeterministic();
+        }
+    } Init;
+
     template <typename T>
     TString ConvertToString(T value) {
         return ToString(value);
@@ -55,19 +55,19 @@ namespace {
         NJsonWriter::TBuf buf(NJsonWriter::HEM_UNSAFE);
         return buf.WriteJsonValue(&json).Str();
     }
- 
+
     void TestComplexMapAsObject(std::function<void(TComplexMapType&)>&& init, const TString& json, const TJson2ProtoConfig& config = TJson2ProtoConfig().SetMapAsObject(true)) {
-        TComplexMapType modelProto; 
- 
-        init(modelProto); 
- 
-        TString modelStr(json); 
- 
-        TComplexMapType proto; 
-        UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TComplexMapType>(modelStr, config)); 
- 
-        UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto); 
-    } 
+        TComplexMapType modelProto;
+
+        init(modelProto);
+
+        TString modelStr(json);
+
+        TComplexMapType proto;
+        UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TComplexMapType>(modelStr, config));
+
+        UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TJson2ProtoTest) {
@@ -398,38 +398,38 @@ Y_UNIT_TEST(TestFieldNameMode) {
         UNIT_ASSERT(proto.GetOneTwoString() == "value");
     }
 
-    // snake_case 
-    { 
-        TString modelStr(R"_({"string":"value"})_"); 
- 
-        TFlatOptional proto; 
-        TJson2ProtoConfig config; 
-        config.FieldNameMode = TJson2ProtoConfig::FieldNameSnakeCase; 
- 
-        UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config)); 
-        UNIT_ASSERT(proto.GetString() == "value"); 
-    } 
-    { 
-        TString modelStr(R"_({"one_string":"value"})_"); 
- 
-        TFlatOptional proto; 
-        TJson2ProtoConfig config; 
-        config.FieldNameMode = TJson2ProtoConfig::FieldNameSnakeCase; 
- 
-        UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config)); 
-        UNIT_ASSERT(proto.GetOneString() == "value"); 
-    } 
-    { 
-        TString modelStr(R"_({"one_two_string":"value"})_"); 
- 
-        TFlatOptional proto; 
-        TJson2ProtoConfig config; 
-        config.FieldNameMode = TJson2ProtoConfig::FieldNameSnakeCase; 
- 
-        UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config)); 
-        UNIT_ASSERT(proto.GetOneTwoString() == "value"); 
-    } 
- 
+    // snake_case
+    {
+        TString modelStr(R"_({"string":"value"})_");
+
+        TFlatOptional proto;
+        TJson2ProtoConfig config;
+        config.FieldNameMode = TJson2ProtoConfig::FieldNameSnakeCase;
+
+        UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config));
+        UNIT_ASSERT(proto.GetString() == "value");
+    }
+    {
+        TString modelStr(R"_({"one_string":"value"})_");
+
+        TFlatOptional proto;
+        TJson2ProtoConfig config;
+        config.FieldNameMode = TJson2ProtoConfig::FieldNameSnakeCase;
+
+        UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config));
+        UNIT_ASSERT(proto.GetOneString() == "value");
+    }
+    {
+        TString modelStr(R"_({"one_two_string":"value"})_");
+
+        TFlatOptional proto;
+        TJson2ProtoConfig config;
+        config.FieldNameMode = TJson2ProtoConfig::FieldNameSnakeCase;
+
+        UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config));
+        UNIT_ASSERT(proto.GetOneTwoString() == "value");
+    }
+
     // Original case, repeated
     {
         TString modelStr(R"_({"I32":[1,2]})_");
@@ -743,22 +743,22 @@ Y_UNIT_TEST(TestValueVectorizer) {
 
 Y_UNIT_TEST(TestMapAsObject) {
     TMapType modelProto;
- 
+
     auto& items = *modelProto.MutableItems();
     items["key1"] = "value1";
     items["key2"] = "value2";
     items["key3"] = "value3";
- 
+
     TString modelStr(R"_({"Items":{"key1":"value1","key2":"value2","key3":"value3"}})_");
- 
+
     TJson2ProtoConfig config;
     config.MapAsObject = true;
     TMapType proto;
     UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TMapType>(modelStr, config));
- 
+
     UNIT_ASSERT_PROTOS_EQUAL(proto, modelProto);
 } // TestMapAsObject
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_I32) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -769,7 +769,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_I32) {
         },
         R"_({"I32":{"1":1,"-2":-2,"3":3}})_");
 } // TestComplexMapAsObject_I32
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_I64) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -780,7 +780,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_I64) {
         },
         R"_({"I64":{"2147483649":2147483649,"-2147483650":-2147483650,"2147483651":2147483651}})_");
 } // TestComplexMapAsObject_I64
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_UI32) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -791,7 +791,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_UI32) {
         },
         R"_({"UI32":{"1073741825":1073741825,"1073741826":1073741826,"1073741827":1073741827}})_");
 } // TestComplexMapAsObject_UI32
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_UI64) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -802,7 +802,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_UI64) {
         },
         R"_({"UI64":{"9223372036854775809":9223372036854775809,"9223372036854775810":9223372036854775810,"9223372036854775811":9223372036854775811}})_");
 } // TestComplexMapAsObject_UI64
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_SI32) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -813,7 +813,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_SI32) {
         },
         R"_({"SI32":{"1":1,"-2":-2,"3":3}})_");
 } // TestComplexMapAsObject_SI32
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_SI64) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -824,7 +824,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_SI64) {
         },
         R"_({"SI64":{"2147483649":2147483649,"-2147483650":-2147483650,"2147483651":2147483651}})_");
 } // TestComplexMapAsObject_SI64
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_FI32) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -835,7 +835,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_FI32) {
         },
         R"_({"FI32":{"1073741825":1073741825,"1073741826":1073741826,"1073741827":1073741827}})_");
 } // TestComplexMapAsObject_FI32
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_FI64) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -846,7 +846,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_FI64) {
         },
         R"_({"FI64":{"9223372036854775809":9223372036854775809,"9223372036854775810":9223372036854775810,"9223372036854775811":9223372036854775811}})_");
 } // TestComplexMapAsObject_FI64
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_SFI32) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -857,7 +857,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_SFI32) {
         },
         R"_({"SFI32":{"1":1,"-2":-2,"3":3}})_");
 } // TestComplexMapAsObject_SFI32
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_SFI64) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -868,7 +868,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_SFI64) {
         },
         R"_({"SFI64":{"2147483649":2147483649,"-2147483650":-2147483650,"2147483651":2147483651}})_");
 } // TestComplexMapAsObject_SFI64
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_Bool) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -878,7 +878,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_Bool) {
         },
         R"_({"Bool":{"true":true,"false":false}})_");
 } // TestComplexMapAsObject_Bool
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_String) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -890,7 +890,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_String) {
         },
         R"_({"String":{"key1":"value1","key2":"value2","key3":"value3","":"value4"}})_");
 } // TestComplexMapAsObject_String
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_Enum) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -901,7 +901,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_Enum) {
         },
         R"_({"Enum":{"key1":1,"key2":2,"key3":3}})_");
 } // TestComplexMapAsObject_Enum
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_EnumString) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -953,7 +953,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_Float) {
         },
         R"_({"Float":{"key1":0.1,"key2":0.2,"key3":0.3}})_");
 } // TestComplexMapAsObject_Float
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_Double) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -964,7 +964,7 @@ Y_UNIT_TEST(TestComplexMapAsObject_Double) {
         },
         R"_({"Double":{"key1":0.1,"key2":0.2,"key3":0.3}})_");
 } // TestComplexMapAsObject_Double
- 
+
 Y_UNIT_TEST(TestComplexMapAsObject_Nested) {
     TestComplexMapAsObject(
         [](TComplexMapType& proto) {
@@ -978,10 +978,10 @@ Y_UNIT_TEST(TestComplexMapAsObject_Nested) {
         },
         R"_({"Nested":{"key1":{"String":{"key":"value"}},"key2":{"String":{"key":"value"}},"key3":{"String":{"key":"value"}}}})_");
 } // TestComplexMapAsObject_Nested
- 
+
 Y_UNIT_TEST(TestMapAsObjectConfigNotSet) {
     TString modelStr(R"_({"Items":{"key":"value"}})_");
- 
+
     TJson2ProtoConfig config;
     UNIT_ASSERT_EXCEPTION_CONTAINS(
         Json2Proto<TMapType>(modelStr, config), yexception,

@@ -87,9 +87,9 @@ public:
     size_t GetRequestQueueSize() const;
     size_t GetFailQueueSize() const;
 
-    const IThreadPool& GetRequestQueue() const; 
-    const IThreadPool& GetFailQueue() const; 
- 
+    const IThreadPool& GetRequestQueue() const;
+    const IThreadPool& GetFailQueue() const;
+
     static TAtomicBase AcceptReturnsInvalidSocketCounter();
 
 private:

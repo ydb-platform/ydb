@@ -11,8 +11,8 @@ SRCS(
     proto2json.cpp
     proto2json_printer.cpp
     string_transform.cpp
-    util.h 
-    util.cpp 
+    util.h
+    util.cpp
 )
 
 PEERDIR(

@@ -22,7 +22,7 @@ public:
     // buffering effects.
     virtual void ReopenLogNoFlush();
 
-    virtual ELogPriority FiltrationLevel() const; 
+    virtual ELogPriority FiltrationLevel() const;
 
     static void ReopenAllBackends(bool flush = true);
 

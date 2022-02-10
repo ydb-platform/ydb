@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         Y_ARRAY_SIZE(expectedMetric7) +
         Y_ARRAY_SIZE(expectedMetric8);
 
-    const TInstant now = TInstant::ParseIso8601Deprecated("2017-11-05T01:02:03Z"); 
+    const TInstant now = TInstant::ParseIso8601Deprecated("2017-11-05T01:02:03Z");
 
     // {1: 1, 2: 1, 4: 2, 8: 4, 16: 8, inf: 83}
     IHistogramSnapshotPtr TestHistogram() {

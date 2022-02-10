@@ -12,7 +12,7 @@
 #include <functional>
 #include <cstdarg>
 
-using TLogFormatter = std::function<TString(ELogPriority priority, TStringBuf)>; 
+using TLogFormatter = std::function<TString(ELogPriority priority, TStringBuf)>;
 
 // Logging facilities interface.
 //
@@ -35,7 +35,7 @@ public:
     // Construct empty logger all writes will be spilled.
     TLog();
     // Construct file logger.
-    TLog(const TString& fname, ELogPriority priority = LOG_MAX_PRIORITY); 
+    TLog(const TString& fname, ELogPriority priority = LOG_MAX_PRIORITY);
     // Construct any type of logger
     TLog(THolder<TLogBackend> backend);
 
@@ -63,7 +63,7 @@ public:
     // Write message to the log using `DefaultPriority()`.
     void Write(const char* data, size_t len) const;
     // Write message to the log, but pass the message in a c-style.
-    void Write(ELogPriority priority, const char* data, size_t len) const; 
+    void Write(ELogPriority priority, const char* data, size_t len) const;
 
     // Write message to the log in a c-like printf style.
     void Y_PRINTF_FORMAT(3, 4) AddLog(ELogPriority priority, const char* format, ...) const;
@@ -79,12 +79,12 @@ public:
 
     // Set log default priority.
     // NOTE: not thread safe.
-    void SetDefaultPriority(ELogPriority priority) noexcept; 
+    void SetDefaultPriority(ELogPriority priority) noexcept;
     // Get default priority
-    ELogPriority DefaultPriority() const noexcept; 
+    ELogPriority DefaultPriority() const noexcept;
 
     // Call `FiltrationLevel()` of the underlying backend.
-    ELogPriority FiltrationLevel() const noexcept; 
+    ELogPriority FiltrationLevel() const noexcept;
 
     // Set current log formatter.
     void SetFormatter(TLogFormatter formatter) noexcept;

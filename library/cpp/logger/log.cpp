@@ -29,7 +29,7 @@ THolder<TOwningThreadedLogBackend> CreateOwningThreadedLogBackend(const TString&
 class TLog::TImpl: public TAtomicRefCount<TImpl> {
     class TPriorityLogStream final: public IOutputStream {
     public:
-        inline TPriorityLogStream(ELogPriority p, const TImpl* parent) 
+        inline TPriorityLogStream(ELogPriority p, const TImpl* parent)
             : Priority_(p)
             , Parent_(parent)
         {
@@ -66,7 +66,7 @@ public:
         Backend_->ReopenLogNoFlush();
     }
 
-    inline void AddLog(ELogPriority priority, const char* format, va_list args) const { 
+    inline void AddLog(ELogPriority priority, const char* format, va_list args) const {
         if (!IsOpen()) {
             return;
         }
@@ -98,21 +98,21 @@ public:
         Y_ASSERT(!IsOpen());
     }
 
-    inline void WriteData(ELogPriority priority, const char* data, size_t len) const { 
+    inline void WriteData(ELogPriority priority, const char* data, size_t len) const {
         if (IsOpen()) {
             Backend_->WriteData(TLogRecord(priority, data, len));
         }
     }
 
-    inline ELogPriority DefaultPriority() noexcept { 
+    inline ELogPriority DefaultPriority() noexcept {
         return DefaultPriority_;
     }
 
-    inline void SetDefaultPriority(ELogPriority priority) noexcept { 
+    inline void SetDefaultPriority(ELogPriority priority) noexcept {
         DefaultPriority_ = priority;
     }
 
-    inline ELogPriority FiltrationLevel() const noexcept { 
+    inline ELogPriority FiltrationLevel() const noexcept {
         return Backend_->FiltrationLevel();
     }
 
@@ -161,7 +161,7 @@ void TLog::AddLog(const char* format, ...) const {
     Impl_->AddLog(Impl_->DefaultPriority(), format, args);
 }
 
-void TLog::AddLog(ELogPriority priority, const char* format, ...) const { 
+void TLog::AddLog(ELogPriority priority, const char* format, ...) const {
     va_list args;
     va_start(args, format);
 
@@ -192,19 +192,19 @@ void TLog::CloseLog() {
     Impl_->CloseLog();
 }
 
-void TLog::SetDefaultPriority(ELogPriority priority) noexcept { 
+void TLog::SetDefaultPriority(ELogPriority priority) noexcept {
     Impl_->SetDefaultPriority(priority);
 }
 
-ELogPriority TLog::FiltrationLevel() const noexcept { 
+ELogPriority TLog::FiltrationLevel() const noexcept {
     return Impl_->FiltrationLevel();
 }
 
-ELogPriority TLog::DefaultPriority() const noexcept { 
+ELogPriority TLog::DefaultPriority() const noexcept {
     return Impl_->DefaultPriority();
 }
 
-bool TLog::OpenLog(const char* path, ELogPriority lp) { 
+bool TLog::OpenLog(const char* path, ELogPriority lp) {
     if (path) {
         ResetBackend(CreateLogBackend(path, lp));
     } else {
@@ -226,7 +226,7 @@ THolder<TLogBackend> TLog::ReleaseBackend() noexcept {
     return Impl_->ReleaseBackend();
 }
 
-void TLog::Write(ELogPriority priority, const char* data, size_t len) const { 
+void TLog::Write(ELogPriority priority, const char* data, size_t len) const {
     if (Formatter_) {
         const auto formated = Formatter_(priority, TStringBuf{data, len});
         Impl_->WriteData(priority, formated.data(), formated.size());

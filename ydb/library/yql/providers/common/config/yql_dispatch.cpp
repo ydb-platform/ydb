@@ -51,10 +51,10 @@ template<>
 TParser<TInstant> GetDefaultParser<TInstant>() {
     return [] (const TString& str) {
         TInstant val;
-        if (!TInstant::TryParseIso8601(str, val) 
-            && !TInstant::TryParseRfc822(str, val) 
-            && !TInstant::TryParseHttp(str, val) 
-            && !TInstant::TryParseX509(str, val) 
+        if (!TInstant::TryParseIso8601(str, val)
+            && !TInstant::TryParseRfc822(str, val)
+            && !TInstant::TryParseHttp(str, val)
+            && !TInstant::TryParseX509(str, val)
         ) {
             throw yexception() << "Bad date/time format";
         }

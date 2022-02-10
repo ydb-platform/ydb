@@ -44,7 +44,7 @@ static TLogRow ParseLogRow(const TString& str) {
     UNIT_ASSERT_EQUAL_C(match.size(), 10, "expected 10 groups in log row: '" << str << '\'');
 
     TLogRow logRow;
-    logRow.Time = TInstant::ParseIso8601(match[1].str()) - TDuration::Hours(4); 
+    logRow.Time = TInstant::ParseIso8601(match[1].str()) - TDuration::Hours(4);
     logRow.Level = ELevelHelpers::FromString(match[2].str());
     logRow.ProcName = match[3].str();
     logRow.ProcId = FromString<pid_t>(match[4].str());

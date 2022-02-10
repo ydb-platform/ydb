@@ -10,7 +10,7 @@ TLogElement::TLogElement(const TLog* parent)
     Reset();
 }
 
-TLogElement::TLogElement(const TLog* parent, ELogPriority priority) 
+TLogElement::TLogElement(const TLog* parent, ELogPriority priority)
     : Parent_(parent)
     , Priority_(priority)
 {

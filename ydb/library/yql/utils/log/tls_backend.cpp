@@ -35,7 +35,7 @@ void TTlsLogBackend::ReopenLog() {
     }
 }
 
-ELogPriority TTlsLogBackend::FiltrationLevel() const { 
+ELogPriority TTlsLogBackend::FiltrationLevel() const {
     TLogBackend* backend = *(&CurrentBackend);
     if (backend) {
         return backend->FiltrationLevel();

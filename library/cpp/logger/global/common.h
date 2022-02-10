@@ -86,7 +86,7 @@ struct TLogRecordContext {
 
     TSourceLocation SourceLocation;
     TStringBuf CustomMessage;
-    ELogPriority Priority; 
+    ELogPriority Priority;
 };
 
 template <class... R>

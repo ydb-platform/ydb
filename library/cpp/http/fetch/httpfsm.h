@@ -47,7 +47,7 @@ struct THttpHeaderParser {
     THttpHeader* hd;
     long I;
     int Dc;
-    TDateTimeFieldsDeprecated DateTimeFields; 
+    TDateTimeFieldsDeprecated DateTimeFields;
     char buf[FETCHER_URL_MAX];
     size_t buflen;
     char* lastchar;

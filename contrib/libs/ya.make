@@ -51,7 +51,7 @@ RECURSE(
     djvulibre
     dlib
     dpdk
-    dr_wav
+    dr_wav 
     dwarflib
     earcut
     eccodes

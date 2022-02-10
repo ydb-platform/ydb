@@ -115,7 +115,7 @@ class ProfileDir(LoggingConfigurable):
 
         if not os.path.exists(readme):
             import pkgutil
-            with open(readme, 'wb') as f:
+            with open(readme, 'wb') as f: 
                 f.write(pkgutil.get_data(__name__, 'profile/README_STARTUP'))
 
     @observe('security_dir')

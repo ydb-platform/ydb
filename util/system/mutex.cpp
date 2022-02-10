@@ -21,7 +21,7 @@ public:
             inline T() {
                 int result;
 
-                memset(&Attr, 0, sizeof(Attr));
+                memset(&Attr, 0, sizeof(Attr)); 
                 result = pthread_mutexattr_init(&Attr);
                 if (result != 0) {
                     ythrow yexception() << "mutexattr init failed(" << LastSystemErrorText(result) << ")";

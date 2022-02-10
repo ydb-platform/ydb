@@ -1,8 +1,8 @@
 #pragma once
- 
+
 #include "bin_saver.h"
 #include "buffered_io.h"
- 
+
 #include <util/memory/blob.h>
 
 class TYaBlobStream: public IBinaryStream {

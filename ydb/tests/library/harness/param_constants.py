@@ -17,7 +17,7 @@ kikimr_cluster_yaml_deploy_path = '/Berkanavt/kikimr/cfg/cluster.yaml'
 blockstore_configs_deploy_path = '/Berkanavt/nbs-server/cfg'
 kikimr_next_version_deploy_path = '/Berkanavt/kikimr/bin/kikimr_next'
 kikimr_last_version_deploy_path = '/Berkanavt/kikimr/bin/kikimr_last'
-kikimr_home = '/Berkanavt/kikimr' 
+kikimr_home = '/Berkanavt/kikimr'
 
 
 def generate_configs_cmd(configs_type="", deploy_path=None):

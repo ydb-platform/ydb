@@ -10,7 +10,7 @@ namespace NConsole {
  */
 IActor *CreateLogSettingsConfigurator();
 
-IActor *CreateLogSettingsConfigurator(const TString &pathToConfigCacheFile); 
- 
+IActor *CreateLogSettingsConfigurator(const TString &pathToConfigCacheFile);
+
 } // namespace NConsole
 } // namespace NKikimr

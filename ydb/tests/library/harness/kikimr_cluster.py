@@ -135,7 +135,7 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
         self._run_on(
             self.nodes,
             lambda x: x.ssh_command(
-                "sudo ln -f /Berkanavt/kikimr/secrets/auth.txt /Berkanavt/kikimr/cfg/auth.txt" 
+                "sudo ln -f /Berkanavt/kikimr/secrets/auth.txt /Berkanavt/kikimr/cfg/auth.txt"
             )
         )
 

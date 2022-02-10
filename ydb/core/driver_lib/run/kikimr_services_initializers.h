@@ -101,7 +101,7 @@ public:
 class TLoggerInitializer : public IKikimrServicesInitializer {
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
     std::shared_ptr<TLogBackend> LogBackend;
-    TString PathToConfigCacheFile; 
+    TString PathToConfigCacheFile;
 
 public:
     TLoggerInitializer(const TKikimrRunConfig& runConfig,

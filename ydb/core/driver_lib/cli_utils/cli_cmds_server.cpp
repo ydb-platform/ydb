@@ -6,10 +6,10 @@
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <util/digest/city.h>
-#include <util/random/random.h> 
+#include <util/random/random.h>
 #include <util/string/cast.h>
-#include <util/system/file.h> 
-#include <util/system/fs.h> 
+#include <util/system/file.h>
+#include <util/system/fs.h>
 #include <util/system/hostname.h>
 #include <google/protobuf/text_format.h>
 
@@ -244,8 +244,8 @@ protected:
         config.Opts->AddLongOption("body", "body name (used to describe dynamic node location)")
                 .RequiredArgument("NUM").StoreResult(&Body);
         config.Opts->AddLongOption("yaml-config", "Yaml config").OptionalArgument("PATH").AppendTo(&YamlConfigFiles);
-        config.Opts->AddLongOption("cms-config-cache-file", "Path to CMS cache config file").OptionalArgument("PATH") 
-            .StoreResult(&RunConfig.PathToConfigCacheFile); 
+        config.Opts->AddLongOption("cms-config-cache-file", "Path to CMS cache config file").OptionalArgument("PATH")
+            .StoreResult(&RunConfig.PathToConfigCacheFile);
         config.Opts->AddHelpOption('h');
 
         // add messagebus proxy options
@@ -816,29 +816,29 @@ protected:
         return "";
     }
 
-    bool GetCachedConfig(NKikimrConfig::TAppConfig &appConfig) { 
+    bool GetCachedConfig(NKikimrConfig::TAppConfig &appConfig) {
         Y_VERIFY_DEBUG(RunConfig.PathToConfigCacheFile, "GetCachedConfig called with a cms config cache file set");
 
-        try { 
-            auto cacheFile = TFileInput(RunConfig.PathToConfigCacheFile); 
-            if (!google::protobuf::TextFormat::ParseFromString(cacheFile.ReadAll(), &appConfig)) 
-                ythrow yexception() << "Failed to parse config protobuf from string"; 
-            return true; 
-        } catch (const yexception &ex) { 
-            Cerr << "WARNING: an exception occurred while getting config from cache file: " << ex.what() << Endl; 
-        } 
-        return false; 
-    } 
- 
-    void LoadCachedConfigsForStaticNode() { 
-        NKikimrConfig::TAppConfig appConfig; 
- 
-        // log config 
-        if (GetCachedConfig(appConfig) && appConfig.HasLogConfig()) { 
-            AppConfig.MutableLogConfig()->CopyFrom(appConfig.GetLogConfig()); 
-        } 
-    } 
- 
+        try {
+            auto cacheFile = TFileInput(RunConfig.PathToConfigCacheFile);
+            if (!google::protobuf::TextFormat::ParseFromString(cacheFile.ReadAll(), &appConfig))
+                ythrow yexception() << "Failed to parse config protobuf from string";
+            return true;
+        } catch (const yexception &ex) {
+            Cerr << "WARNING: an exception occurred while getting config from cache file: " << ex.what() << Endl;
+        }
+        return false;
+    }
+
+    void LoadCachedConfigsForStaticNode() {
+        NKikimrConfig::TAppConfig appConfig;
+
+        // log config
+        if (GetCachedConfig(appConfig) && appConfig.HasLogConfig()) {
+            AppConfig.MutableLogConfig()->CopyFrom(appConfig.GetLogConfig());
+        }
+    }
+
     void MaybeRegisterAndLoadConfigs()
     {
         // static node
@@ -847,13 +847,13 @@ protected:
                 ythrow yexception() << "Either --node [NUM|'static'] or --node-broker[-port] should be specified";
 
             if (!HierarchicalCfg && RunConfig.PathToConfigCacheFile)
-                LoadCachedConfigsForStaticNode(); 
+                LoadCachedConfigsForStaticNode();
             return;
         }
 
         RegisterDynamicNode();
         if (!HierarchicalCfg && !IgnoreCmsConfigs)
-            LoadConfigForDynamicNode(); 
+            LoadConfigForDynamicNode();
     }
 
     THolder<NClient::TRegistrationResult> TryToRegisterDynamicNode(
@@ -981,42 +981,42 @@ protected:
         }
     }
 
-    void ApplyConfigForNode(NKikimrConfig::TAppConfig &appConfig) { 
-        AppConfig.Swap(&appConfig); 
-        // Dynamic node config is defined by options and Node Broker response. 
-        AppConfig.MutableDynamicNodeConfig()->Swap(appConfig.MutableDynamicNodeConfig()); 
-        // By now naming config should be loaded and probably replaced with 
-        // info from registration response. Don't lose it in case CMS has no 
-        // config for naming service. 
-        if (!AppConfig.HasNameserviceConfig()) 
-            AppConfig.MutableNameserviceConfig()->Swap(appConfig.MutableNameserviceConfig()); 
-    } 
- 
-    bool SaveConfigForNodeToCache(const NKikimrConfig::TAppConfig &appConfig) { 
+    void ApplyConfigForNode(NKikimrConfig::TAppConfig &appConfig) {
+        AppConfig.Swap(&appConfig);
+        // Dynamic node config is defined by options and Node Broker response.
+        AppConfig.MutableDynamicNodeConfig()->Swap(appConfig.MutableDynamicNodeConfig());
+        // By now naming config should be loaded and probably replaced with
+        // info from registration response. Don't lose it in case CMS has no
+        // config for naming service.
+        if (!AppConfig.HasNameserviceConfig())
+            AppConfig.MutableNameserviceConfig()->Swap(appConfig.MutableNameserviceConfig());
+    }
+
+    bool SaveConfigForNodeToCache(const NKikimrConfig::TAppConfig &appConfig) {
         Y_VERIFY_DEBUG(RunConfig.PathToConfigCacheFile, "SaveConfigForNodeToCache called without a cms config cache file set");
 
-        // Ensure "atomicity" by writing to temp file and renaming it 
-        const TString pathToTempFile = RunConfig.PathToConfigCacheFile + ".tmp"; 
-        TString proto; 
-        bool status; 
-        try { 
-            TFileOutput tempFile(pathToTempFile); 
-            status = google::protobuf::TextFormat::PrintToString(appConfig, &proto); 
-            if (status) { 
-                tempFile << proto; 
-                if (!NFs::Rename(pathToTempFile, RunConfig.PathToConfigCacheFile)) { 
-                    ythrow yexception() << "Failed to rename temporary file " << LastSystemError() << " " << LastSystemErrorText(); 
-                } 
-            } 
-        } catch (const yexception& ex) { 
-            Cerr << "WARNING: an exception occured while saving config to cache file: " << ex.what() << Endl; 
-            status = false; 
-        } 
- 
-        return status; 
-    } 
- 
-    bool TryToLoadConfigForDynamicNodeFromCMS(const TString &addr, TString &error) { 
+        // Ensure "atomicity" by writing to temp file and renaming it
+        const TString pathToTempFile = RunConfig.PathToConfigCacheFile + ".tmp";
+        TString proto;
+        bool status;
+        try {
+            TFileOutput tempFile(pathToTempFile);
+            status = google::protobuf::TextFormat::PrintToString(appConfig, &proto);
+            if (status) {
+                tempFile << proto;
+                if (!NFs::Rename(pathToTempFile, RunConfig.PathToConfigCacheFile)) {
+                    ythrow yexception() << "Failed to rename temporary file " << LastSystemError() << " " << LastSystemErrorText();
+                }
+            }
+        } catch (const yexception& ex) {
+            Cerr << "WARNING: an exception occured while saving config to cache file: " << ex.what() << Endl;
+            status = false;
+        }
+
+        return status;
+    }
+
+    bool TryToLoadConfigForDynamicNodeFromCMS(const TString &addr, TString &error) {
         NClient::TKikimr kikimr(GetKikimr(addr));
         auto configurator = kikimr.GetNodeConfigurator();
 
@@ -1045,53 +1045,53 @@ protected:
                 Cout << "Failed to save config to cache file" << Endl;
             }
         }
- 
-        ApplyConfigForNode(appConfig); 
- 
+
+        ApplyConfigForNode(appConfig);
+
         return true;
     }
 
-    bool LoadConfigForDynamicNodeFromCache() { 
-        NKikimrConfig::TAppConfig config; 
-        if (GetCachedConfig(config)) { 
-            ApplyConfigForNode(config); 
-            return true; 
-        } 
-        return false; 
-    } 
- 
-    void LoadConfigForDynamicNode() { 
+    bool LoadConfigForDynamicNodeFromCache() {
+        NKikimrConfig::TAppConfig config;
+        if (GetCachedConfig(config)) {
+            ApplyConfigForNode(config);
+            return true;
+        }
+        return false;
+    }
+
+    void LoadConfigForDynamicNode() {
         auto res = false;
         TString error;
         TVector<TString> addrs;
 
         FillClusterEndpoints(addrs);
 
-        SetRandomSeed(TInstant::Now().MicroSeconds()); 
+        SetRandomSeed(TInstant::Now().MicroSeconds());
         int minAttempts = 10;
         int attempts = 0;
         while (!res && attempts < minAttempts) {
             for (auto addr : addrs) {
-                res = TryToLoadConfigForDynamicNodeFromCMS(addr, error); 
+                res = TryToLoadConfigForDynamicNodeFromCMS(addr, error);
                 ++attempts;
                 if (res)
                     break;
             }
-            // Randomized backoff 
+            // Randomized backoff
             if (!res)
-                Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000))); 
+                Sleep(TDuration::MilliSeconds(500 + RandomNumber<ui64>(1000)));
         }
 
-        if (!res) { 
-            Cerr << "WARNING: couldn't load config from CMS: " << error << Endl; 
-            if (RunConfig.PathToConfigCacheFile) { 
-                Cout << "Loading config from cache file " << RunConfig.PathToConfigCacheFile << Endl; 
-                if (!LoadConfigForDynamicNodeFromCache()) 
-                    Cerr << "WARNING: couldn't load config from cache file" << Endl; 
-            } else { 
-                Cerr << "WARNING: option --cms-config-cache-file was not set, "; 
-                Cerr << "couldn't load config from cache file" << Endl; 
-            } 
+        if (!res) {
+            Cerr << "WARNING: couldn't load config from CMS: " << error << Endl;
+            if (RunConfig.PathToConfigCacheFile) {
+                Cout << "Loading config from cache file " << RunConfig.PathToConfigCacheFile << Endl;
+                if (!LoadConfigForDynamicNodeFromCache())
+                    Cerr << "WARNING: couldn't load config from cache file" << Endl;
+            } else {
+                Cerr << "WARNING: option --cms-config-cache-file was not set, ";
+                Cerr << "couldn't load config from cache file" << Endl;
+            }
         }
     }
 

@@ -115,7 +115,7 @@ RECURSE(
     blinker
     blis
     bokeh
-    boltons
+    boltons 
     boolean.py
     bootstrapped
     boto
@@ -157,7 +157,7 @@ RECURSE(
     click-repl
     clickhouse-cityhash
     clickhouse-driver
-    clickhouse-sqlalchemy
+    clickhouse-sqlalchemy 
     cloudpickle
     color
     colorama
@@ -349,7 +349,7 @@ RECURSE(
     ExifRead
     extractcode
     fabric
-    face
+    face 
     facebook-business
     factory-boy
     Faker
@@ -442,16 +442,16 @@ RECURSE(
     github3.py
     GitPython
     glob2
-    glom
+    glom 
     goerr
     google-api-core
     google-api-python-client
     google-auth
     google-auth-httplib2
-    google-auth-oauthlib
+    google-auth-oauthlib 
     google-cloud-speech
     google-pasta
-    googleads
+    googleads 
     gpxpy
     GPy
     GPyOpt

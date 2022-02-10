@@ -30,7 +30,7 @@ void LockMemory(const void* addr, size_t len) {
         ythrow yexception() << LastSystemErrorText();
     if (!SetProcessWorkingSetSize(hndl, min + len, max + len))
         ythrow yexception() << LastSystemErrorText();
-    if (!VirtualLock((LPVOID)addr, len)) 
+    if (!VirtualLock((LPVOID)addr, len))
         ythrow yexception() << LastSystemErrorText();
 #endif
 }
@@ -47,7 +47,7 @@ void UnlockMemory(const void* addr, size_t len) {
         ythrow yexception() << LastSystemErrorText();
     if (!SetProcessWorkingSetSize(hndl, min - len, max - len))
         ythrow yexception() << LastSystemErrorText();
-    if (!VirtualUnlock((LPVOID)addr, len)) 
+    if (!VirtualUnlock((LPVOID)addr, len))
         ythrow yexception() << LastSystemErrorText();
 #endif
 }

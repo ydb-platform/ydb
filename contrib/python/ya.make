@@ -49,7 +49,7 @@ RECURSE(
     annoy
     antlr4
     ansiwrap
-    anyconfig 
+    anyconfig
     anyio
     anytree
     apipkg
@@ -494,7 +494,7 @@ RECURSE(
     humanfriendly
     humanize
     humongous
-    hurry.filesize 
+    hurry.filesize
     Hydra
     hypercorn
     hyperframe
@@ -866,7 +866,7 @@ RECURSE(
     pytest-django
     pytest-falcon
     pytest-falcon-client
-    pytest-fixture-config 
+    pytest-fixture-config
     pytest-flake8
     pytest-flakes
     pytest-flask
@@ -879,8 +879,8 @@ RECURSE(
     pytest-randomly
     pytest-responsemock
     pytest-responses
-    pytest-server-fixtures 
-    pytest-shutil 
+    pytest-server-fixtures
+    pytest-shutil
     pytest-timeout
     pytest-tornado
     pytest-twisted

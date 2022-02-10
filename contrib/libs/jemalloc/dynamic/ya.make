@@ -2,4 +2,4 @@
 
 OWNER(g:contrib g:cpp-contrib)
 
-DLL_FOR(contrib/libs/jemalloc jemalloc) 
+DLL_FOR(contrib/libs/jemalloc jemalloc)

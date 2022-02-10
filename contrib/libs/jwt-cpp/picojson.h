@@ -75,11 +75,11 @@ extern "C" {
 
 // experimental support for int64_t (see README.mkdn for detail)
 #ifdef PICOJSON_USE_INT64
- 
-#ifndef __STDC_FORMAT_MACROS 
+
+#ifndef __STDC_FORMAT_MACROS
 #define __STDC_FORMAT_MACROS
-#endif 
- 
+#endif
+
 #include <errno.h>
 #include <inttypes.h>
 #endif
@@ -1169,4 +1169,4 @@ inline std::ostream &operator<<(std::ostream &os, const picojson::value &x) {
 #pragma warning(pop)
 #endif
 
-#endif 
+#endif

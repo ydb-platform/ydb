@@ -462,7 +462,7 @@ RECURSE(
     graphql-core
     graphql-relay
     graphviz
-    greenify 
+    greenify
     greenlet
     grequests
     grpcio-opentracing

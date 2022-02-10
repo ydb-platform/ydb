@@ -6,11 +6,11 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_primitive.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type_traits.h> 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <memory>
+#include <memory> 
 
 #define Y_VERIFY_OK(status) Y_VERIFY(status.ok(), "%s", status.ToString().c_str())
 
@@ -386,8 +386,8 @@ std::shared_ptr<arrow::RecordBatch> ExtractColumns(const std::shared_ptr<arrow::
     return arrow::RecordBatch::Make(dstSchema, srcBatch->num_rows(), columns);
 }
 
-
-
+ 
+ 
 std::shared_ptr<arrow::Table> CombineInTable(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
     auto res = arrow::Table::FromRecordBatches(batches);
     if (!res.ok()) {
@@ -1001,41 +1001,41 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
     return true;
 }
 
-std::shared_ptr<arrow::Array> NumVecToArray(const std::shared_ptr<arrow::DataType>& type,
-                                            const std::vector<double>& vec) {
-    std::shared_ptr<arrow::Array> out;
-    SwitchType(type->id(), [&](const auto& type) {
-        using TWrap = std::decay_t<decltype(type)>;
-        if constexpr (arrow::is_number_type<typename TWrap::T>::value) {
-            typename arrow::TypeTraits<typename TWrap::T>::BuilderType builder;
-            for (const auto val : vec) {
-                Y_VERIFY(builder.Append(static_cast<typename TWrap::T::c_type>(val)).ok());
-            }
-            Y_VERIFY(builder.Finish(&out).ok());
-            return true;
-        }
-        return false;
-    });
-    return out;
-}
-
-std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec) {
-    std::shared_ptr<arrow::Array> out;
-    arrow::BooleanBuilder builder;
-    for (const auto val : vec) {
-        Y_VERIFY(builder.Append(val).ok());
-    }
-    Y_VERIFY(builder.Finish(&out).ok());
-    return out;
-}
-
-
-bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs) {
-    bool res = lhs->length() == rhs->length();
-    for (int64_t i = 0; i < lhs->length() && res; ++i) {
-        res &= arrow::ScalarEquals(*lhs->GetScalar(i).ValueOrDie(), *rhs->GetScalar(i).ValueOrDie());
-    }
-    return res;
-}
-
+std::shared_ptr<arrow::Array> NumVecToArray(const std::shared_ptr<arrow::DataType>& type, 
+                                            const std::vector<double>& vec) { 
+    std::shared_ptr<arrow::Array> out; 
+    SwitchType(type->id(), [&](const auto& type) { 
+        using TWrap = std::decay_t<decltype(type)>; 
+        if constexpr (arrow::is_number_type<typename TWrap::T>::value) { 
+            typename arrow::TypeTraits<typename TWrap::T>::BuilderType builder; 
+            for (const auto val : vec) { 
+                Y_VERIFY(builder.Append(static_cast<typename TWrap::T::c_type>(val)).ok()); 
+            } 
+            Y_VERIFY(builder.Finish(&out).ok()); 
+            return true; 
+        } 
+        return false; 
+    }); 
+    return out; 
+} 
+ 
+std::shared_ptr<arrow::Array> BoolVecToArray(const std::vector<bool>& vec) { 
+    std::shared_ptr<arrow::Array> out; 
+    arrow::BooleanBuilder builder; 
+    for (const auto val : vec) { 
+        Y_VERIFY(builder.Append(val).ok()); 
+    } 
+    Y_VERIFY(builder.Finish(&out).ok()); 
+    return out; 
+} 
+ 
+ 
+bool ArrayScalarsEqual(const std::shared_ptr<arrow::Array>& lhs, const std::shared_ptr<arrow::Array>& rhs) { 
+    bool res = lhs->length() == rhs->length(); 
+    for (int64_t i = 0; i < lhs->length() && res; ++i) { 
+        res &= arrow::ScalarEquals(*lhs->GetScalar(i).ValueOrDie(), *rhs->GetScalar(i).ValueOrDie()); 
+    } 
+    return res; 
+} 
+ 
 }

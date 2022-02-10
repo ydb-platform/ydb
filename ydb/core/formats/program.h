@@ -1,5 +1,5 @@
 #pragma once
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h> 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <util/system/types.h>
 
@@ -38,17 +38,17 @@ enum class EOperation {
     And,
     Or,
     Xor,
-    //
+    // 
     Add,
     Subtract,
     Multiply,
     Divide,
-    Abs,
-    Negate,
-    Gcd,
-    Lcm,
-    Modulo,
-    ModuloOrZero,
+    Abs, 
+    Negate, 
+    Gcd, 
+    Lcm, 
+    Modulo, 
+    ModuloOrZero, 
     AddNotNull,
     SubtractNotNull,
     MultiplyNotNull,
@@ -56,30 +56,30 @@ enum class EOperation {
     //
     BinaryLength,
     MatchSubstring,
-    // math
-    Acosh,
-    Atanh,
-    Cbrt,
-    Cosh,
-    E,
-    Erf,
-    Erfc,
-    Exp,
-    Exp2,
-    Exp10,
-    Hypot,
-    Lgamma,
-    Pi,
-    Sinh,
-    Sqrt,
-    Tgamma,
-    // round
-    Floor,
-    Ceil,
-    Trunc,
-    Round,
-    RoundBankers,
-    RoundToExp2
+    // math 
+    Acosh, 
+    Atanh, 
+    Cbrt, 
+    Cosh, 
+    E, 
+    Erf, 
+    Erfc, 
+    Exp, 
+    Exp2, 
+    Exp10, 
+    Hypot, 
+    Lgamma, 
+    Pi, 
+    Sinh, 
+    Sqrt, 
+    Tgamma, 
+    // round 
+    Floor, 
+    Ceil, 
+    Trunc, 
+    Round, 
+    RoundBankers, 
+    RoundToExp2 
 };
 
 const char * GetFunctionName(EOperation op);
@@ -174,29 +174,29 @@ struct TProgramStep {
     std::vector<std::string> Projection; // Step's result columns (remove others)
     // TODO: group by
 
-    struct TDatumBatch {
-        std::shared_ptr<arrow::Schema> fields;
-        int64_t rows;
-        std::vector<arrow::Datum> datums;
-    };
-
+    struct TDatumBatch { 
+        std::shared_ptr<arrow::Schema> fields; 
+        int64_t rows; 
+        std::vector<arrow::Datum> datums; 
+    }; 
+ 
     bool Empty() const {
         return Assignes.empty() && Filters.empty() && Projection.empty();
     }
 
-    void Apply(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const;
+    void Apply(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const; 
 
-    void ApplyAssignes(std::shared_ptr<TDatumBatch>& batch, arrow::compute::ExecContext* ctx) const;
-    void ApplyFilters(std::shared_ptr<TDatumBatch>& batch) const;
+    void ApplyAssignes(std::shared_ptr<TDatumBatch>& batch, arrow::compute::ExecContext* ctx) const; 
+    void ApplyFilters(std::shared_ptr<TDatumBatch>& batch) const; 
     void ApplyProjection(std::shared_ptr<arrow::RecordBatch>& batch) const;
-    void ApplyProjection(std::shared_ptr<TDatumBatch>& batch) const;
+    void ApplyProjection(std::shared_ptr<TDatumBatch>& batch) const; 
 };
 
 inline void ApplyProgram(std::shared_ptr<arrow::RecordBatch>& batch,
-                         const std::vector<std::shared_ptr<TProgramStep>>& program,
-                         arrow::compute::ExecContext* ctx = nullptr) {
+                         const std::vector<std::shared_ptr<TProgramStep>>& program, 
+                         arrow::compute::ExecContext* ctx = nullptr) { 
     for (auto& step : program) {
-        step->Apply(batch, ctx);
+        step->Apply(batch, ctx); 
     }
 }
 

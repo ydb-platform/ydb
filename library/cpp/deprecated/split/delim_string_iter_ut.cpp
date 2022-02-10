@@ -50,50 +50,50 @@ Y_UNIT_TEST_SUITE(TDelimStrokaIterTestSuite) {
         UNIT_ASSERT_EQUAL(got, expected);
     }
 }
- 
-static void AssertKeyValueStringSplit( 
+
+static void AssertKeyValueStringSplit(
     const TStringBuf str,
     const TStringBuf delim,
     const TVector<std::pair<TStringBuf, TStringBuf>>& expected) {
     TKeyValueDelimStringIter it(str, delim);
- 
-    for (const auto& expectedKeyValue : expected) { 
-        UNIT_ASSERT(it.Valid()); 
-        UNIT_ASSERT_STRINGS_EQUAL(it.Key(), expectedKeyValue.first); 
-        UNIT_ASSERT_STRINGS_EQUAL(it.Value(), expectedKeyValue.second); 
-        ++it; 
-    } 
-    UNIT_ASSERT(!it.Valid()); 
-} 
- 
+
+    for (const auto& expectedKeyValue : expected) {
+        UNIT_ASSERT(it.Valid());
+        UNIT_ASSERT_STRINGS_EQUAL(it.Key(), expectedKeyValue.first);
+        UNIT_ASSERT_STRINGS_EQUAL(it.Value(), expectedKeyValue.second);
+        ++it;
+    }
+    UNIT_ASSERT(!it.Valid());
+}
+
 Y_UNIT_TEST_SUITE(TKeyValueDelimStringIterTestSuite) {
     Y_UNIT_TEST(SingleCharacterAsDelimiter) {
-        AssertKeyValueStringSplit( 
-            "abc=123,cde=qwer", ",", 
+        AssertKeyValueStringSplit(
+            "abc=123,cde=qwer", ",",
             {{"abc", "123"},
              {"cde", "qwer"}});
-    } 
- 
+    }
+
     Y_UNIT_TEST(MultipleCharactersAsDelimiter) {
-        AssertKeyValueStringSplit( 
-            "abc=xyz@@qwerty=zxcv", "@@", 
+        AssertKeyValueStringSplit(
+            "abc=xyz@@qwerty=zxcv", "@@",
             {{"abc", "xyz"},
              {"qwerty", "zxcv"}});
-    } 
- 
+    }
+
     Y_UNIT_TEST(NoDelimiters) {
-        AssertKeyValueStringSplit( 
-            "abc=zz", ",", 
+        AssertKeyValueStringSplit(
+            "abc=zz", ",",
             {{"abc", "zz"}});
-    } 
- 
+    }
+
     Y_UNIT_TEST(EmptyElements) {
-        AssertKeyValueStringSplit( 
-            "@@abc=zxy@@@@qwerty=y@@", "@@", 
+        AssertKeyValueStringSplit(
+            "@@abc=zxy@@@@qwerty=y@@", "@@",
             {{"", ""},
              {"abc", "zxy"},
              {"", ""},
              {"qwerty", "y"},
              {"", ""}});
-    } 
-} 
+    }
+}

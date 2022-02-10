@@ -42,7 +42,7 @@ namespace NActors {
 
         return true;
     }
-
+ 
     void TEventOutputChannel::DropConfirmed(ui64 confirm) {
         LOG_DEBUG_IC_SESSION("ICOCH98", "Dropping confirmed messages");
         for (auto it = NotYetConfirmed.begin(); it != NotYetConfirmed.end() && it->Serial <= confirm; ) {

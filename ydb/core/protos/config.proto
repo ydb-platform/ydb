@@ -354,8 +354,8 @@ message TBootstrap {
 message TInterconnectConfig {
     message TChannel {
         optional uint32 Index = 1;
-        optional uint32 Quota = 2; // deprecated
-        optional uint32 Weight = 3; // use this instead of field "Quota"
+        optional uint32 Quota = 2; // deprecated 
+        optional uint32 Weight = 3; // use this instead of field "Quota" 
     }
 
     enum EMergeMode {

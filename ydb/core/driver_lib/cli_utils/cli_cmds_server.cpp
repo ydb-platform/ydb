@@ -472,31 +472,31 @@ protected:
         }
         if (NodeId)
             RunConfig.NodeId = NodeId;
-        if (AppConfig.HasNameserviceConfig() && NodeId) {
-            bool nodeIdMatchesConfig = false;
-            TString localhost("localhost");
-            TString hostname;
-            try {
-                hostname = HostName();
-                hostname.to_lower();
-                const NKikimrConfig::TStaticNameserviceConfig& nameserviceConfig = AppConfig.GetNameserviceConfig();
-                for (const auto& node : nameserviceConfig.GetNode()) {
-                    Y_VERIFY(node.HasPort());
-                    Y_VERIFY(node.HasHost());
-                    Y_VERIFY(node.HasNodeId());
-                    if (node.GetNodeId() == NodeId) {
-                        if ((node.GetHost() != hostname && node.GetHost() != localhost) ||
-                            (InterconnectPort && InterconnectPort != node.GetPort())) {
-                            continue;
-                        }
-                        nodeIdMatchesConfig = true;
-                        break;
-                    }
-                }
-            } catch(TSystemError& e) {
-            }
+        if (AppConfig.HasNameserviceConfig() && NodeId) { 
+            bool nodeIdMatchesConfig = false; 
+            TString localhost("localhost"); 
+            TString hostname; 
+            try { 
+                hostname = HostName(); 
+                hostname.to_lower(); 
+                const NKikimrConfig::TStaticNameserviceConfig& nameserviceConfig = AppConfig.GetNameserviceConfig(); 
+                for (const auto& node : nameserviceConfig.GetNode()) { 
+                    Y_VERIFY(node.HasPort()); 
+                    Y_VERIFY(node.HasHost()); 
+                    Y_VERIFY(node.HasNodeId()); 
+                    if (node.GetNodeId() == NodeId) { 
+                        if ((node.GetHost() != hostname && node.GetHost() != localhost) || 
+                            (InterconnectPort && InterconnectPort != node.GetPort())) { 
+                            continue; 
+                        } 
+                        nodeIdMatchesConfig = true; 
+                        break; 
+                    } 
+                } 
+            } catch(TSystemError& e) { 
+            } 
             Y_VERIFY(nodeIdMatchesConfig, "Cannot find passed NodeId = %" PRIu32 " for hostname %s", NodeId, hostname.data());
-        }
+        } 
         if (config.ParseResult->Has("suppress-version-check")) {
             if (AppConfig.HasNameserviceConfig()) {
                 AppConfig.MutableNameserviceConfig()->SetSuppressVersionCheck(true);

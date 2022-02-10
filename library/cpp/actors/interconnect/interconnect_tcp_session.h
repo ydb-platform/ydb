@@ -21,7 +21,7 @@
 #include "poller_tcp.h"
 #include "poller_actor.h"
 #include "interconnect_channel.h"
-#include "logging.h"
+#include "logging.h" 
 #include "watchdog_timer.h"
 #include "event_holder_pool.h"
 #include "channel_scheduler.h"
@@ -188,7 +188,7 @@ namespace NActors {
                          ui64 lastConfirmed,
                          TDuration deadPeerTimeout,
                          TSessionParams params);
-
+ 
     private:
         friend class TActorBootstrapped<TInputSessionTCP>;
 
@@ -323,7 +323,7 @@ namespace NActors {
 
         TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy, TSessionParams params);
         ~TInterconnectSessionTCP();
-
+ 
         void Init();
         void CloseInputSession();
 
@@ -516,7 +516,7 @@ namespace NActors {
         TActorId LargestSession = TActorId();
         ui64 MaxBufferSize = 0;
         TInterconnectProxyCommon::TPtr Common;
-
+ 
     public:
         static constexpr EActivityType ActorActivityType() {
             return INTERCONNECT_SESSION_KILLER;
@@ -526,7 +526,7 @@ namespace NActors {
             : Common(common)
         {
         }
-
+ 
         void Bootstrap() {
             auto sender = SelfId();
             const auto eventFabric = [&sender](const TActorId& recp) -> IEventHandle* {
@@ -536,7 +536,7 @@ namespace NActors {
             RepliesNumber = TlsActivationContext->ExecutorThread.ActorSystem->BroadcastToProxies(eventFabric);
             Become(&TInterconnectSessionKiller::StateFunc);
         }
-
+ 
         STRICT_STFUNC(StateFunc,
             hFunc(TEvSessionBufferSizeResponse, ProcessResponse)
             cFunc(TEvents::TEvUndelivered::EventType, ProcessUndelivered)
@@ -553,13 +553,13 @@ namespace NActors {
                 AtomicUnlock(&Common->StartedSessionKiller);
                 PassAway();
             }
-        }
+        } 
 
         void ProcessUndelivered() {
             RepliesReceived++;
-        }
+        } 
     };
-
+ 
     void CreateSessionKillingActor(TInterconnectProxyCommon::TPtr common);
-
+ 
 }

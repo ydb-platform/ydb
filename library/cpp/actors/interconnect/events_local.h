@@ -63,7 +63,7 @@ namespace NActors {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+ 
         // interconnect load test message
         EvLoadMessage = Start + 256,
     };
@@ -364,18 +364,18 @@ namespace NActors {
         //DEFINE_SIMPLE_LOCAL_EVENT(TEvSessionBufferSizeRequest, "Session: TEvSessionBufferSizeRequest")
         DEFINE_SIMPLE_LOCAL_EVENT(TEvSessionBufferSizeRequest, "Network: TEvSessionBufferSizeRequest");
     };
-
+ 
     struct TEvSessionBufferSizeResponse : TEventLocal<TEvSessionBufferSizeResponse, static_cast<ui32>(ENetwork::EvSessionBufferSizeResponse)> {
         TEvSessionBufferSizeResponse(const TActorId& sessionId, ui64 outputBufferSize)
             : SessionID(sessionId)
             , BufferSize(outputBufferSize)
         {
         }
-
+ 
         TActorId SessionID;
         ui64 BufferSize;
     };
-
+ 
     struct TEvProcessPingRequest : TEventLocal<TEvProcessPingRequest, static_cast<ui32>(ENetwork::EvProcessPingRequest)> {
         const ui64 Payload;
 

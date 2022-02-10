@@ -391,7 +391,7 @@ bool TProgram::ParseYql() {
     YQL_PROFILE_FUNC(TRACE);
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Yql;
-    SyntaxVersion_ = 1; 
+    SyntaxVersion_ = 1;
     return FillParseResult(ParseAst(SourceCode_));
 }
 

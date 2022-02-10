@@ -50,7 +50,7 @@ public:
 
         return ret;
     }
- 
+
     inline size_t Bytes() const noexcept {
         return Bytes(Parts_, Count_);
     }

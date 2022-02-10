@@ -1,7 +1,7 @@
 LIBRARY()
 
-LICENSE(BSL-1.0) 
- 
+LICENSE(BSL-1.0)
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 OWNER(

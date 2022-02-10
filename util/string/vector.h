@@ -64,8 +64,8 @@ TVector<typename ::NPrivate::TStringDeducer<C>::type>
 SplitString(const typename ::NPrivate::TStringDeducer<C>::type& str, const C* delimiter,
             size_t maxFields = 0, int options = 0) {
     return SplitString(str.data(), str.size(), delimiter, maxFields, options);
-} 
- 
+}
+
 template <class TIter>
 inline TString JoinStrings(TIter begin, TIter end, const TStringBuf delim) {
     if (begin == end)

@@ -6,7 +6,7 @@ OWNER(
 
 PY23_LIBRARY()
 
-LICENSE(YandexOpen) 
+LICENSE(YandexOpen)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 

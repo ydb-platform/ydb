@@ -351,7 +351,7 @@ RECURSE(
     fabric
     face
     facebook-business
-    factory-boy 
+    factory-boy
     Faker
     fakeredis
     falcon
@@ -403,7 +403,7 @@ RECURSE(
     Flask-Pydantic
     Flask-PyMongo
     Flask-RESTful
-    flask-restplus 
+    flask-restplus
     flask-restx
     Flask-Script
     flask-shell-ipython
@@ -995,7 +995,7 @@ RECURSE(
     sh
     Shapely
     shortuuid
-    simplediff 
+    simplediff
     simplegeneric
     simplejson
     singledispatch

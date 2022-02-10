@@ -808,7 +808,7 @@ TUtf32String ToUpperRet(const TUtf32StringBuf text, size_t pos = 0, size_t count
 TUtf32String ToTitleRet(const TUtf32StringBuf text, size_t pos = 0, size_t count = TWtringBuf::npos) Y_WARN_UNUSED_RESULT;
 
 //! replaces the '<', '>' and '&' characters in string with '&lt;', '&gt;' and '&amp;' respectively
-// insertBr=true - replace '\r' and '\n' with "<BR>" 
+// insertBr=true - replace '\r' and '\n' with "<BR>"
 template <bool insertBr>
 void EscapeHtmlChars(TUtf16String& str);
 

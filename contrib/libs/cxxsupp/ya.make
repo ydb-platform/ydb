@@ -2,7 +2,7 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-# Proxy library 
+# Proxy library
 LICENSE(Not-Applicable)
 
 OWNER(

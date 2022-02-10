@@ -2,7 +2,7 @@ NO_COMPILER_WARNINGS()
 
 NO_UTIL()
 
-LICENSE(BSL-1.0) 
+LICENSE(BSL-1.0)
 
 SET(BOOST_ROOT contrib/restricted/boost)
 

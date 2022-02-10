@@ -1,6 +1,6 @@
 RESOURCES_LIBRARY()
 
-LICENSE(BSD-3-Clause) 
+LICENSE(BSD-3-Clause)
 
 OWNER(g:contrib)
 

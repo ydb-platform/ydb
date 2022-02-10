@@ -1,4 +1,4 @@
-OWNER(g:python-contrib) 
+OWNER(g:python-contrib)
 
 RECURSE(
     aho_corasick

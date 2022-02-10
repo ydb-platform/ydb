@@ -2,8 +2,8 @@ PY23_NATIVE_LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-LICENSE(BSL-1.0) 
- 
+LICENSE(BSL-1.0)
+
 OWNER(
     antoshkka
     g:cpp-committee

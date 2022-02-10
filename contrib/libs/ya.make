@@ -185,7 +185,7 @@ RECURSE(
     libsrtp
     libssh2
     libtapi
-    libtess2
+    libtess2 
     libtiff
     libunistring
     libunwind

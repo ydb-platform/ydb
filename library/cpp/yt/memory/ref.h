@@ -29,7 +29,7 @@ public:
 
     //! Creates an empty TRef.
     static TRef MakeEmpty();
- 
+
     //! Creates a non-owning TRef for a given blob.
     static TRef FromBlob(const TBlob& blob);
 

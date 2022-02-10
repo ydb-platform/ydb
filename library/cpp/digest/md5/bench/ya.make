@@ -1,4 +1,4 @@
-G_BENCHMARK() 
+G_BENCHMARK()
 
 OWNER(
     pg

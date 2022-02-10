@@ -2,10 +2,10 @@
 
 from __future__ import print_function, absolute_import, division
 
-from util.generic.deque_ut import TestDeque 
+from util.generic.deque_ut import TestDeque
 from util.generic.hash_ut import TestHash
-from util.generic.hash_set_ut import TestHashSet 
-from util.generic.list_ut import TestList 
+from util.generic.hash_set_ut import TestHashSet
+from util.generic.list_ut import TestList
 from util.generic.maybe_ut import TestMaybe
 from util.generic.ptr_ut import TestHolder
 from util.generic.string_ut import TestStroka
@@ -16,11 +16,11 @@ from util.string.cast_ut import TestFromString, TestToString
 # Reexporting test classes here to satisfy pylint and pytest.
 
 __all__ = [
-    'TestDeque', 
+    'TestDeque',
     'TestHash',
-    'TestHashSet', 
-    'TestHolder', 
-    'TestList', 
+    'TestHashSet',
+    'TestHolder',
+    'TestList',
     'TestMaybe',
     'TestStroka',
     'TestVector',

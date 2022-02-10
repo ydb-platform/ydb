@@ -23,9 +23,9 @@ import six
 
 import _pytest
 import _pytest._io
-import _pytest.mark 
+import _pytest.mark
 import _pytest.outcomes
-import _pytest.skipping 
+import _pytest.skipping
 
 from _pytest.warning_types import PytestUnhandledCoroutineWarning
 
@@ -293,38 +293,38 @@ def pytest_configure(config):
         signal.signal(signal.SIGUSR2, _graceful_shutdown)
 
 
-session_should_exit = False 
- 
- 
-def _graceful_shutdown_on_log(should_exit): 
-    if should_exit: 
-        pytest.exit("Graceful shutdown requested") 
- 
- 
-def pytest_runtest_logreport(report): 
-    _graceful_shutdown_on_log(session_should_exit) 
- 
- 
-def pytest_runtest_logstart(nodeid, location): 
-    _graceful_shutdown_on_log(session_should_exit) 
- 
- 
-def pytest_runtest_logfinish(nodeid, location): 
-    _graceful_shutdown_on_log(session_should_exit) 
- 
- 
+session_should_exit = False
+
+
+def _graceful_shutdown_on_log(should_exit):
+    if should_exit:
+        pytest.exit("Graceful shutdown requested")
+
+
+def pytest_runtest_logreport(report):
+    _graceful_shutdown_on_log(session_should_exit)
+
+
+def pytest_runtest_logstart(nodeid, location):
+    _graceful_shutdown_on_log(session_should_exit)
+
+
+def pytest_runtest_logfinish(nodeid, location):
+    _graceful_shutdown_on_log(session_should_exit)
+
+
 def _graceful_shutdown(*args):
-    global session_should_exit 
-    session_should_exit = True 
+    global session_should_exit
+    session_should_exit = True
     try:
         import library.python.coverage
         library.python.coverage.stop_coverage_tracing()
     except ImportError:
         pass
     traceback.print_stack(file=sys.stderr)
-    capman = pytest_config.pluginmanager.getplugin("capturemanager") 
-    capman.suspend(in_=True) 
-    _graceful_shutdown_on_log(not capman.is_globally_capturing()) 
+    capman = pytest_config.pluginmanager.getplugin("capturemanager")
+    capman.suspend(in_=True)
+    _graceful_shutdown_on_log(not capman.is_globally_capturing())
 
 
 def _get_rusage():
@@ -368,7 +368,7 @@ def _collect_test_rusage(item):
 def _get_item_tags(item):
     tags = []
     for key, value in item.keywords.items():
-        if key == 'pytestmark' and isinstance(value, list): 
+        if key == 'pytestmark' and isinstance(value, list):
             for mark in value:
                 tags.append(mark.name)
         elif isinstance(value, _pytest.mark.MarkDecorator):
@@ -541,7 +541,7 @@ def pytest_pyfunc_call(pyfuncitem):
     return True
 
 
-@pytest.hookimpl(hookwrapper=True) 
+@pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     def logreport(report, result, call):
         test_item = TestItem(report, result, pytest_config.option.test_suffix)
@@ -550,10 +550,10 @@ def pytest_runtest_makereport(item, call):
             pytest_config.ya_trace_reporter.dump_suite_metrics()
 
         pytest_config.ya_trace_reporter.on_log_report(test_item)
- 
-        if report.outcome == "failed": 
-            yatest_logger.error(report.longrepr) 
- 
+
+        if report.outcome == "failed":
+            yatest_logger.error(report.longrepr)
+
         if report.when == "call":
             _collect_test_rusage(item)
             pytest_config.ya_trace_reporter.on_finish_test_case(test_item)
@@ -572,16 +572,16 @@ def pytest_runtest_makereport(item, call):
                 pytest_config.ya_trace_reporter.on_finish_test_case(test_item, duration_only=True)
             pytest_config.ya_trace_reporter.on_finish_test_class(test_item)
 
-    outcome = yield 
-    rep = outcome.get_result() 
-    result = None 
+    outcome = yield
+    rep = outcome.get_result()
+    result = None
     if hasattr(item, 'retval') and item.retval is not None:
         result = item.retval
         if not pytest_config.from_ya_test:
             ti = TestItem(rep, result, pytest_config.option.test_suffix)
             tr = pytest_config.pluginmanager.getplugin('terminalreporter')
             tr.write_line("{} - Validating canonical data is not supported when running standalone binary".format(ti), yellow=True, bold=True)
-    logreport(rep, result, call) 
+    logreport(rep, result, call)
 
 
 def pytest_make_parametrize_id(config, val, argname):
@@ -652,25 +652,25 @@ class TestItem(object):
                 self.set_error(report.when + " failed:\n" + self._error)
         else:
             self.set_error("")
- 
-        report_teststatus = _pytest.skipping.pytest_report_teststatus(report) 
-        if report_teststatus is not None: 
-            report_teststatus = report_teststatus[0] 
- 
-        if report_teststatus == 'xfailed': 
-            self._status = 'xfail' 
-            self.set_error(report.wasxfail, 'imp') 
-        elif report_teststatus == 'xpassed': 
-            self._status = 'xpass' 
-            self.set_error("Test unexpectedly passed") 
-        elif report.skipped: 
-            self._status = 'skipped' 
-            self.set_error(yatest_lib.tools.to_utf8(report.longrepr[-1])) 
-        elif report.passed: 
+
+        report_teststatus = _pytest.skipping.pytest_report_teststatus(report)
+        if report_teststatus is not None:
+            report_teststatus = report_teststatus[0]
+
+        if report_teststatus == 'xfailed':
+            self._status = 'xfail'
+            self.set_error(report.wasxfail, 'imp')
+        elif report_teststatus == 'xpassed':
+            self._status = 'xpass'
+            self.set_error("Test unexpectedly passed")
+        elif report.skipped:
+            self._status = 'skipped'
+            self.set_error(yatest_lib.tools.to_utf8(report.longrepr[-1]))
+        elif report.passed:
             self._status = 'good'
             self.set_error("")
-        else: 
-            self._status = 'fail' 
+        else:
+            self._status = 'fail'
 
     @property
     def status(self):

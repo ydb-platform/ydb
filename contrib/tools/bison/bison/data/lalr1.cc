@@ -307,8 +307,8 @@ b4_location_define])])[
       typedef basic_symbol<by_state> super_type;
       /// Construct an empty symbol.
       stack_symbol_type ();
-      /// Copy construct. 
-      stack_symbol_type (const stack_symbol_type& that); 
+      /// Copy construct.
+      stack_symbol_type (const stack_symbol_type& that);
       /// Steal the contents from \a sym to build this.
       stack_symbol_type (state_type s, symbol_type& sym);
       /// Assignment, needed by push_back.
@@ -566,13 +566,13 @@ m4_if(b4_prefix, [yy], [],
   ]b4_parser_class_name[::stack_symbol_type::stack_symbol_type ()
   {}
 
-  ]b4_parser_class_name[::stack_symbol_type::stack_symbol_type (const stack_symbol_type& that) 
-    : super_type (that.state]b4_locations_if([, that.location])[) 
-  { 
-    ]b4_variant_if([b4_symbol_variant([that.type_get ()], 
-                                      [value], [copy], [that.value])], 
-                   [[value = that.value;]])[ 
-  } 
+  ]b4_parser_class_name[::stack_symbol_type::stack_symbol_type (const stack_symbol_type& that)
+    : super_type (that.state]b4_locations_if([, that.location])[)
+  {
+    ]b4_variant_if([b4_symbol_variant([that.type_get ()],
+                                      [value], [copy], [that.value])],
+                   [[value = that.value;]])[
+  }
 
   inline
   ]b4_parser_class_name[::stack_symbol_type::stack_symbol_type (state_type s, symbol_type& that)

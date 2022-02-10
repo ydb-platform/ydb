@@ -10,12 +10,12 @@ try:
     import importlib.util
 except ImportError:
     pass
- 
-try: 
-    from pathlib import Path 
-except ImportError: 
-    pass 
- 
+
+try:
+    from pathlib import Path
+except ImportError:
+    pass
+
 from __res import importer
 import sys
 import six
@@ -49,10 +49,10 @@ class AssertionRewritingHook(rewrite.AssertionRewritingHook):
         except ImportError:
             return None
 
-        if hasattr(self._rewritten_names, 'add'): 
-            self._rewritten_names.add(name) 
-        else: 
-            self._rewritten_names[name] = Path(path[0]) 
+        if hasattr(self._rewritten_names, 'add'):
+            self._rewritten_names.add(name)
+        else:
+            self._rewritten_names[name] = Path(path[0])
 
         state.trace("rewriting %s" % name)
         co = _rewrite_test(self.config, name)

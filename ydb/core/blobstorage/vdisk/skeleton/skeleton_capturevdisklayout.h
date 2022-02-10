@@ -3,8 +3,8 @@
 namespace NKikimr {
 
     class TCaptureVDiskLayoutActor : public TActorBootstrapped<TCaptureVDiskLayoutActor> {
-        using TRes = TEvBlobStorage::TEvCaptureVDiskLayoutResult; 
- 
+        using TRes = TEvBlobStorage::TEvCaptureVDiskLayoutResult;
+
         TEvBlobStorage::TEvCaptureVDiskLayout::TPtr Ev;
         THullDsSnap Snap;
 

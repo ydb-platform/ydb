@@ -64,8 +64,8 @@ namespace NKikimr::NStLog {
             auto getPrio = [&] { using namespace NActors::NLog; return (PRIO); }; \
             auto getComp = [&] { using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }; \
             auto makeMessage = [&] { \
-                struct MARKER {}; \ 
-                using Tag = MARKER; \ 
+                struct MARKER {}; \
+                using Tag = MARKER; \
                 return ::NKikimr::NStLog::TMessage<Tag>(__FILE__, __LINE__, #MARKER, TStringBuilder() << TEXT) \
                     STLOG_PARAMS(__VA_ARGS__); \
             }; \

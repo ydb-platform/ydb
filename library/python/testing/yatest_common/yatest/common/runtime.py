@@ -212,7 +212,7 @@ def test_output_path(path=None):
     """
     Get dir in the suite output_path for the current test case
     """
-    test_out_dir = os.path.splitext(_get_ya_config().current_test_log_path)[0] 
+    test_out_dir = os.path.splitext(_get_ya_config().current_test_log_path)[0]
     try:
         os.makedirs(test_out_dir)
     except OSError as e:
@@ -313,7 +313,7 @@ class Context(object):
 
     @property
     def test_name(self):
-        return _get_ya_config().current_test_name 
+        return _get_ya_config().current_test_name
 
     @property
     def sanitize(self):

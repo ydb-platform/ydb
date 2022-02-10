@@ -56,7 +56,7 @@ RECURSE(
     hostpire
     html2cpp
     html2text
-    idl 
+    idl
     idx_relemmatizer
     inflector
     is_holiday

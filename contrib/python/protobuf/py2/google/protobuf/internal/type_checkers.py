@@ -100,9 +100,9 @@ def GetTypeChecker(field):
     An instance of TypeChecker which can be used to verify the types
     of values assigned to a field of the specified type.
   """
-  if (field.cpp_type == _FieldDescriptor.CPPTYPE_STRING and
+  if (field.cpp_type == _FieldDescriptor.CPPTYPE_STRING and 
       field.type == _FieldDescriptor.TYPE_STRING):
-    return UnicodeValueChecker()
+    return UnicodeValueChecker() 
   if field.cpp_type == _FieldDescriptor.CPPTYPE_ENUM:
     if SupportsOpenEnums(field):
       # When open enums are supported, any int32 can be assigned.

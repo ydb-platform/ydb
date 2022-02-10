@@ -67,7 +67,7 @@ namespace NUri {
             "./viewtopic.php?p=74&amp;sid=6#p74", "./viewtopic.php?p=74&sid=6#p74",
             "viewtopic.php?p=9313&amp;sid=8#9313", "viewtopic.php?p=9313&sid=8#9313",
             "profile.php?mode=viewprofile&u=-1#drafts&amp;sid=a6e5989cee27adb5996bfff044af04ca", "profile.php?mode=viewprofile&u=-1#drafts&sid=a6e5989cee27adb5996bfff044af04ca",
- 
+
             "images\nil.jpg", "images%0Ail.jpg",
             "http://caedebaturque.termez.su\r\n/?article=218", "http://caedebaturque.termez.su%0D%0A/?article=218",
 

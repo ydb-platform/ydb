@@ -18,7 +18,7 @@ class TPointerTest: public TTestBase {
     UNIT_TEST(TestHolderPtrMoveConstructorInheritance);
     UNIT_TEST(TestHolderPtrMoveAssignment);
     UNIT_TEST(TestHolderPtrMoveAssignmentInheritance);
-    UNIT_TEST(TestMakeHolder);
+    UNIT_TEST(TestMakeHolder); 
     UNIT_TEST(TestTrulePtr);
     UNIT_TEST(TestAutoToHolder);
     UNIT_TEST(TestCopyPtr);
@@ -30,7 +30,7 @@ class TPointerTest: public TTestBase {
     UNIT_TEST(TestCopyOnWritePtr1);
     UNIT_TEST(TestCopyOnWritePtr2);
     UNIT_TEST(TestOperatorBool);
-    UNIT_TEST(TestMakeShared);
+    UNIT_TEST(TestMakeShared); 
     UNIT_TEST(TestComparison);
     UNIT_TEST(TestSimpleIntrusivePtrCtorTsan);
     UNIT_TEST(TestRefCountedPtrsInHashSet)
@@ -70,7 +70,7 @@ private:
     void TestHolderPtrMoveConstructorInheritance();
     void TestHolderPtrMoveAssignment();
     void TestHolderPtrMoveAssignmentInheritance();
-    void TestMakeHolder();
+    void TestMakeHolder(); 
     void TestTrulePtr();
     void TestAutoToHolder();
     void TestCopyPtr();
@@ -82,7 +82,7 @@ private:
     void TestCopyOnWritePtr1();
     void TestCopyOnWritePtr2();
     void TestOperatorBool();
-    void TestMakeShared();
+    void TestMakeShared(); 
     void TestComparison();
     template <class T, class TRefCountedPtr>
     void TestRefCountedPtrsInHashSetImpl();
@@ -148,97 +148,97 @@ void TPointerTest::TestHolderPtr() {
     UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
 }
 
-THolder<int> CreateInt(int value) {
-    THolder<int> res(new int);
-    *res = value;
-    return res;
-}
-
+THolder<int> CreateInt(int value) { 
+    THolder<int> res(new int); 
+    *res = value; 
+    return res; 
+} 
+ 
 void TPointerTest::TestHolderPtrMoveConstructor() {
-    THolder<int> h = CreateInt(42);
-    UNIT_ASSERT_VALUES_EQUAL(*h, 42);
-}
-
+    THolder<int> h = CreateInt(42); 
+    UNIT_ASSERT_VALUES_EQUAL(*h, 42); 
+} 
+ 
 void TPointerTest::TestHolderPtrMoveAssignment() {
-    THolder<int> h(new int);
-    h = CreateInt(42);
-    UNIT_ASSERT_VALUES_EQUAL(*h, 42);
-}
-
-struct TBase {
+    THolder<int> h(new int); 
+    h = CreateInt(42); 
+    UNIT_ASSERT_VALUES_EQUAL(*h, 42); 
+} 
+ 
+struct TBase { 
     virtual ~TBase() = default;
-};
-
+}; 
+ 
 struct TDerived: public TBase {
-};
-
+}; 
+ 
 void TPointerTest::TestHolderPtrMoveConstructorInheritance() {
-    // compileability test
-    THolder<TBase> basePtr(THolder<TDerived>(new TDerived));
-}
-
+    // compileability test 
+    THolder<TBase> basePtr(THolder<TDerived>(new TDerived)); 
+} 
+ 
 void TPointerTest::TestHolderPtrMoveAssignmentInheritance() {
-    // compileability test
-    THolder<TBase> basePtr;
-    basePtr = THolder<TDerived>(new TDerived);
-}
-
+    // compileability test 
+    THolder<TBase> basePtr; 
+    basePtr = THolder<TDerived>(new TDerived); 
+} 
+ 
 void TPointerTest::TestMakeHolder() {
-    {
-        auto ptr = MakeHolder<int>(5);
-        UNIT_ASSERT_VALUES_EQUAL(*ptr, 5);
-    }
-    {
-        struct TRec {
-            int X, Y;
+    { 
+        auto ptr = MakeHolder<int>(5); 
+        UNIT_ASSERT_VALUES_EQUAL(*ptr, 5); 
+    } 
+    { 
+        struct TRec { 
+            int X, Y; 
             TRec()
                 : X(1)
                 , Y(2)
             {
-            }
-        };
-        THolder<TRec> ptr = MakeHolder<TRec>();
-        UNIT_ASSERT_VALUES_EQUAL(ptr->X, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ptr->Y, 2);
-    }
-    {
-        struct TRec {
-            int X, Y;
+            } 
+        }; 
+        THolder<TRec> ptr = MakeHolder<TRec>(); 
+        UNIT_ASSERT_VALUES_EQUAL(ptr->X, 1); 
+        UNIT_ASSERT_VALUES_EQUAL(ptr->Y, 2); 
+    } 
+    { 
+        struct TRec { 
+            int X, Y; 
             TRec(int x, int y)
                 : X(x)
                 , Y(y)
             {
             }
-        };
-        auto ptr = MakeHolder<TRec>(1, 2);
-        UNIT_ASSERT_VALUES_EQUAL(ptr->X, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ptr->Y, 2);
-    }
-    {
-        class TRec {
-        private:
+        }; 
+        auto ptr = MakeHolder<TRec>(1, 2); 
+        UNIT_ASSERT_VALUES_EQUAL(ptr->X, 1); 
+        UNIT_ASSERT_VALUES_EQUAL(ptr->Y, 2); 
+    } 
+    { 
+        class TRec { 
+        private: 
             int X_, Y_;
 
-        public:
+        public: 
             TRec(int x, int y)
                 : X_(x)
                 , Y_(y)
             {
-            }
-
+            } 
+ 
             int GetX() const {
                 return X_;
             }
             int GetY() const {
                 return Y_;
             }
-        };
-        auto ptr = MakeHolder<TRec>(1, 2);
-        UNIT_ASSERT_VALUES_EQUAL(ptr->GetX(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(ptr->GetY(), 2);
-    }
-}
-
+        }; 
+        auto ptr = MakeHolder<TRec>(1, 2); 
+        UNIT_ASSERT_VALUES_EQUAL(ptr->GetX(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(ptr->GetY(), 2); 
+    } 
+} 
+ 
 void TPointerTest::TestTrulePtr() {
     {
         TAutoPtr<A> a1(MakeA());
@@ -620,94 +620,94 @@ void TPointerTest::TestOperatorBool() {
         // bool c = (a < b);   // does not compile
     }
 }
-
+ 
 void TPointerTest::TestMakeShared() {
-    {
-        TSimpleSharedPtr<int> ptr = MakeSimpleShared<int>(5);
-        UNIT_ASSERT_VALUES_EQUAL(*ptr, 5);
-    }
-    {
-        struct TRec {
-            int X, Y;
+    { 
+        TSimpleSharedPtr<int> ptr = MakeSimpleShared<int>(5); 
+        UNIT_ASSERT_VALUES_EQUAL(*ptr, 5); 
+    } 
+    { 
+        struct TRec { 
+            int X, Y; 
             TRec()
                 : X(1)
                 , Y(2)
             {
-            }
-        };
-        auto ptr = MakeAtomicShared<TRec>();
-        UNIT_ASSERT_VALUES_EQUAL(ptr->X, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ptr->Y, 2);
-    }
-    {
-        struct TRec {
-            int X, Y;
-        };
-        TAtomicSharedPtr<TRec> ptr = MakeAtomicShared<TRec>(1, 2);
-        UNIT_ASSERT_VALUES_EQUAL(ptr->X, 1);
-        UNIT_ASSERT_VALUES_EQUAL(ptr->Y, 2);
-    }
-    {
-        class TRec {
-        private:
+            } 
+        }; 
+        auto ptr = MakeAtomicShared<TRec>(); 
+        UNIT_ASSERT_VALUES_EQUAL(ptr->X, 1); 
+        UNIT_ASSERT_VALUES_EQUAL(ptr->Y, 2); 
+    } 
+    { 
+        struct TRec { 
+            int X, Y; 
+        }; 
+        TAtomicSharedPtr<TRec> ptr = MakeAtomicShared<TRec>(1, 2); 
+        UNIT_ASSERT_VALUES_EQUAL(ptr->X, 1); 
+        UNIT_ASSERT_VALUES_EQUAL(ptr->Y, 2); 
+    } 
+    { 
+        class TRec { 
+        private: 
             int X_, Y_;
 
-        public:
+        public: 
             TRec(int x, int y)
                 : X_(x)
                 , Y_(y)
             {
-            }
-
+            } 
+ 
             int GetX() const {
                 return X_;
             }
             int GetY() const {
                 return Y_;
             }
-        };
-        TSimpleSharedPtr<TRec> ptr = MakeSimpleShared<TRec>(1, 2);
-        UNIT_ASSERT_VALUES_EQUAL(ptr->GetX(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(ptr->GetY(), 2);
-    }
-    {
-        enum EObjectState {
-            OS_NOT_CREATED,
-            OS_CREATED,
-            OS_DESTROYED,
-        };
-
-        struct TObject {
-            EObjectState& State;
-
-            TObject(EObjectState& state)
-                : State(state)
-            {
-                State = OS_CREATED;
-            }
-
-            ~TObject() {
-                State = OS_DESTROYED;
-            }
-        };
-
-        auto throwsException = []() {
-            throw yexception();
-            return 5;
-        };
-
-        auto testFunction = [](TSimpleSharedPtr<TObject>, int) {
-        };
-
-        EObjectState state = OS_NOT_CREATED;
-        try {
-            testFunction(MakeSimpleShared<TObject>(state), throwsException());
-        } catch (yexception&) {
-        }
-
-        UNIT_ASSERT(state == OS_NOT_CREATED || state == OS_DESTROYED);
-    }
-}
+        }; 
+        TSimpleSharedPtr<TRec> ptr = MakeSimpleShared<TRec>(1, 2); 
+        UNIT_ASSERT_VALUES_EQUAL(ptr->GetX(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(ptr->GetY(), 2); 
+    } 
+    { 
+        enum EObjectState { 
+            OS_NOT_CREATED, 
+            OS_CREATED, 
+            OS_DESTROYED, 
+        }; 
+ 
+        struct TObject { 
+            EObjectState& State; 
+ 
+            TObject(EObjectState& state) 
+                : State(state) 
+            { 
+                State = OS_CREATED; 
+            } 
+ 
+            ~TObject() { 
+                State = OS_DESTROYED; 
+            } 
+        }; 
+ 
+        auto throwsException = []() { 
+            throw yexception(); 
+            return 5; 
+        }; 
+ 
+        auto testFunction = [](TSimpleSharedPtr<TObject>, int) { 
+        }; 
+ 
+        EObjectState state = OS_NOT_CREATED; 
+        try { 
+            testFunction(MakeSimpleShared<TObject>(state), throwsException()); 
+        } catch (yexception&) { 
+        } 
+ 
+        UNIT_ASSERT(state == OS_NOT_CREATED || state == OS_DESTROYED); 
+    } 
+} 
 
 template <class TPtr>
 void TestPtrComparison(const TPtr& ptr) {

@@ -42,22 +42,22 @@
 #define PIRE_HOT_FUNCTION
 #endif
 
-#ifndef PIRE_LIKELY
-#ifdef __GNUC__
-#define PIRE_LIKELY(x) (__builtin_expect((x), 1))
-#else
-#define PIRE_LIKELY(x) (x)
-#endif
-#endif
-
-#ifndef PIRE_UNLIKELY
-#ifdef __GNUC__
-#define PIRE_UNLIKELY(x) (__builtin_expect((x), 0))
-#else
-#define PIRE_UNLIKELY(x) (x)
-#endif
-#endif
-
+#ifndef PIRE_LIKELY 
+#ifdef __GNUC__ 
+#define PIRE_LIKELY(x) (__builtin_expect((x), 1)) 
+#else 
+#define PIRE_LIKELY(x) (x) 
+#endif 
+#endif 
+ 
+#ifndef PIRE_UNLIKELY 
+#ifdef __GNUC__ 
+#define PIRE_UNLIKELY(x) (__builtin_expect((x), 0)) 
+#else 
+#define PIRE_UNLIKELY(x) (x) 
+#endif 
+#endif 
+ 
 #ifdef _MSC_VER
 #include <stdio.h>
 #include <stdarg.h>

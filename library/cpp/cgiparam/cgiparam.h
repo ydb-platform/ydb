@@ -46,11 +46,11 @@ public:
     void ScanAddAllUnescaped(const TStringBuf cgiParStr);
     void ScanAddAll(const TStringBuf cgiParStr);
 
-    /// Returns the string representation of all the stored parameters
-    /**
-     * @note The returned string has format <name1>=<value1>&<name2>=<value2>&...
-     * @note Names and values in the returned string are CGI-escaped.
-     */
+    /// Returns the string representation of all the stored parameters 
+    /** 
+     * @note The returned string has format <name1>=<value1>&<name2>=<value2>&... 
+     * @note Names and values in the returned string are CGI-escaped. 
+     */ 
     TString Print() const;
     char* Print(char* res) const;
 
@@ -78,10 +78,10 @@ public:
         const auto pair = equal_range(name);
         return pair.first != pair.second;
     }
-    /// Returns value by name
-    /**
-     * @note The returned value is CGI-unescaped.
-     */
+    /// Returns value by name 
+    /** 
+     * @note The returned value is CGI-unescaped. 
+     */ 
     Y_PURE_FUNCTION
     const TString& Get(const TStringBuf name, size_t numOfValue = 0) const noexcept;
 

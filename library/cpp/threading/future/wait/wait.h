@@ -7,7 +7,7 @@
 
 #include <util/generic/array_ref.h>
 
-namespace NThreading {
+namespace NThreading { 
     namespace NImpl {
         template <class TContainer>
         using EnableGenericWait = std::enable_if_t<

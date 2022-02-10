@@ -4,35 +4,35 @@
 #include "utility.h"
 
 #include <util/system/defaults.h>
-#include <util/generic/fwd.h>
+#include <util/generic/fwd.h> 
 
 #include <numeric>
 #include <algorithm>
 #include <iterator>
 #include <utility>
 
-namespace NPrivate {
-    template <class I, class F, class P>
-    I ExtremeElementBy(I begin, I end, F func, P pred) {
-        if (begin == end) {
-            return end;
-        }
-
-        auto bestValue = func(*begin);
-        auto bestPos = begin;
-
-        for (auto i = ++begin; i != end; ++i) {
-            auto curValue = func(*i);
-            if (pred(curValue, bestValue)) {
-                bestValue = curValue;
-                bestPos = i;
-            }
-        }
-
-        return bestPos;
-    }
-}
-
+namespace NPrivate { 
+    template <class I, class F, class P> 
+    I ExtremeElementBy(I begin, I end, F func, P pred) { 
+        if (begin == end) { 
+            return end; 
+        } 
+ 
+        auto bestValue = func(*begin); 
+        auto bestPos = begin; 
+ 
+        for (auto i = ++begin; i != end; ++i) { 
+            auto curValue = func(*i); 
+            if (pred(curValue, bestValue)) { 
+                bestValue = curValue; 
+                bestPos = i; 
+            } 
+        } 
+ 
+        return bestPos; 
+    } 
+} 
+ 
 template <class T>
 static inline void Sort(T f, T l) {
     std::sort(f, l);
@@ -145,14 +145,14 @@ static inline I FindIf(I f, I l, P p) {
     return std::find_if(f, l, p);
 }
 
-template <class C, class P>
-static inline auto FindIf(C&& c, P p) {
-    using std::begin;
-    using std::end;
-
-    return FindIf(begin(c), end(c), p);
-}
-
+template <class C, class P> 
+static inline auto FindIf(C&& c, P p) { 
+    using std::begin; 
+    using std::end; 
+ 
+    return FindIf(begin(c), end(c), p); 
+} 
+ 
 template <class I, class P>
 static inline bool AllOf(I f, I l, P pred) {
     return std::all_of(f, l, pred);
@@ -517,38 +517,38 @@ static inline T MaxElement(T begin, T end, C comp) {
     return std::max_element(begin, end, comp);
 }
 
-template <class I, class F>
-I MaxElementBy(I begin, I end, F&& func) {
-    using TValue = decltype(func(*begin));
-    return ::NPrivate::ExtremeElementBy(begin, end, std::forward<F>(func), TGreater<TValue>());
-}
-
-template <class C, class F>
+template <class I, class F> 
+I MaxElementBy(I begin, I end, F&& func) { 
+    using TValue = decltype(func(*begin)); 
+    return ::NPrivate::ExtremeElementBy(begin, end, std::forward<F>(func), TGreater<TValue>()); 
+} 
+ 
+template <class C, class F> 
 auto MaxElementBy(C& c, F&& func) {
     return MaxElementBy(std::begin(c), std::end(c), std::forward<F>(func));
 }
 
 template <class C, class F>
 auto MaxElementBy(const C& c, F&& func) {
-    return MaxElementBy(std::begin(c), std::end(c), std::forward<F>(func));
-}
-
-template <class I, class F>
-I MinElementBy(I begin, I end, F&& func) {
-    using TValue = decltype(func(*begin));
-    return ::NPrivate::ExtremeElementBy(begin, end, std::forward<F>(func), TLess<TValue>());
-}
-
-template <class C, class F>
+    return MaxElementBy(std::begin(c), std::end(c), std::forward<F>(func)); 
+} 
+ 
+template <class I, class F> 
+I MinElementBy(I begin, I end, F&& func) { 
+    using TValue = decltype(func(*begin)); 
+    return ::NPrivate::ExtremeElementBy(begin, end, std::forward<F>(func), TLess<TValue>()); 
+} 
+ 
+template <class C, class F> 
 auto MinElementBy(C& c, F&& func) {
     return MinElementBy(std::begin(c), std::end(c), std::forward<F>(func));
 }
 
 template <class C, class F>
 auto MinElementBy(const C& c, F&& func) {
-    return MinElementBy(std::begin(c), std::end(c), std::forward<F>(func));
-}
-
+    return MinElementBy(std::begin(c), std::end(c), std::forward<F>(func)); 
+} 
+ 
 template <class TOp, class... TArgs>
 void ApplyToMany(TOp op, TArgs&&... args) {
     int dummy[] = {((void)op(std::forward<TArgs>(args)), 0)...};

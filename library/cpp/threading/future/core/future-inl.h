@@ -4,7 +4,7 @@
 #error "you should never include future-inl.h directly"
 #endif // INCLUDE_FUTURE_INL_H
 
-namespace NThreading {
+namespace NThreading { 
     namespace NImpl {
         ////////////////////////////////////////////////////////////////////////////////
 

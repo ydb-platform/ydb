@@ -15,7 +15,7 @@
 #include <util/generic/buffer.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
-#include <util/generic/variant.h>
+#include <util/generic/variant.h> 
 
 static inline char* AllocateFromPool(TMemoryPool& pool, size_t len) {
     return (char*)pool.Allocate(len);
@@ -28,7 +28,7 @@ class TSaveLoadTest: public TTestBase {
     UNIT_TEST(TestNewNewStyle)
     UNIT_TEST(TestList)
     UNIT_TEST(TestTuple)
-    UNIT_TEST(TestVariant)
+    UNIT_TEST(TestVariant) 
     UNIT_TEST(TestInheritNonVirtualClass)
     UNIT_TEST(TestInheritVirtualClass)
     UNIT_TEST_SUITE_END();
@@ -406,30 +406,30 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(std::get<2>(toLoad), std::get<2>(toSave));
     }
 
-    template <class TVariant, class T>
-    void TestVariantImpl(TVariant& v, const T& expected) {
-        v = expected;
-
-        TBufferStream s;
-        ::Save(&s, v);
-        ::Load(&s, v);
+    template <class TVariant, class T> 
+    void TestVariantImpl(TVariant& v, const T& expected) { 
+        v = expected; 
+ 
+        TBufferStream s; 
+        ::Save(&s, v); 
+        ::Load(&s, v); 
         UNIT_ASSERT_VALUES_EQUAL(std::get<T>(v), expected);
-    }
-
-    void TestVariant() {
+    } 
+ 
+    void TestVariant() { 
         std::variant<int, bool, TString, TVector<char>> v(1);
-        TestVariantImpl(v, 42);
-        TestVariantImpl(v, true);
-        TestVariantImpl(v, TString("foo"));
+        TestVariantImpl(v, 42); 
+        TestVariantImpl(v, true); 
+        TestVariantImpl(v, TString("foo")); 
         TestVariantImpl(v, TVector<char>{'b', 'a', 'r'});
-
-        v = TString("baz");
-        TBufferStream s;
-        ::Save(&s, v);
-
+ 
+        v = TString("baz"); 
+        TBufferStream s; 
+        ::Save(&s, v); 
+ 
         std::variant<char, bool> v2 = false;
-        UNIT_ASSERT_EXCEPTION(::Load(&s, v2), TLoadEOF);
-    }
+        UNIT_ASSERT_EXCEPTION(::Load(&s, v2), TLoadEOF); 
+    } 
 
     //  tests serialization of class with three public string members
     template <class TDerived, class TInterface = TDerived>

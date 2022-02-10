@@ -99,9 +99,9 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/**
- * @deprecated Use TRequestReplier instead
- */
+/** 
+ * @deprecated Use TRequestReplier instead 
+ */ 
 class TClientRequest: public IObjectInQueue {
     friend class THttpServer::TImpl;
 
@@ -149,28 +149,28 @@ private:
 };
 
 class TRequestReplier: public TClientRequest {
-public:
-    TRequestReplier();
+public: 
+    TRequestReplier(); 
     ~TRequestReplier() override;
-
-    struct TReplyParams {
-        void* ThreadSpecificResource;
-        THttpInput& Input;
-        THttpOutput& Output;
-    };
-
-    /*
-     * Processes the request after 'connection' been created and 'Headers' been read
-     * Returns 'false' if the processing must be continued by the next handler,
-     * 'true' otherwise ('this' will be deleted)
-     */
-    virtual bool DoReply(const TReplyParams& params) = 0;
-
-private:
+ 
+    struct TReplyParams { 
+        void* ThreadSpecificResource; 
+        THttpInput& Input; 
+        THttpOutput& Output; 
+    }; 
+ 
+    /* 
+     * Processes the request after 'connection' been created and 'Headers' been read 
+     * Returns 'false' if the processing must be continued by the next handler, 
+     * 'true' otherwise ('this' will be deleted) 
+     */ 
+    virtual bool DoReply(const TReplyParams& params) = 0; 
+ 
+private: 
     bool Reply(void* threadSpecificResource) final;
-
-    using TClientRequest::Input;
-    using TClientRequest::Output;
-};
+ 
+    using TClientRequest::Input; 
+    using TClientRequest::Output; 
+}; 
 
 bool TryToBindAddresses(const THttpServerOptions& options, const std::function<void(TSocket)>* callbackOnBoundAddress = nullptr);

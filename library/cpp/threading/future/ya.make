@@ -2,10 +2,10 @@ OWNER(
     g:rtmr
 )
 
-LIBRARY()
-
+LIBRARY() 
+ 
 SRCS(
-    async.cpp
+    async.cpp 
     core/future.cpp
     core/fwd.cpp
     fwd.cpp
@@ -15,7 +15,7 @@ SRCS(
     wait/wait_policy.cpp
 )
 
-END()
+END() 
 
 RECURSE_FOR_TESTS(
     mt_ut

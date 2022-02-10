@@ -258,16 +258,16 @@ static inline void MakeHeap(I f, I l, C c) {
     std::make_heap(f, l, c);
 }
 
-template <class I> 
-static inline void SortHeap(I f, I l) { 
+template <class I>
+static inline void SortHeap(I f, I l) {
     std::sort_heap(f, l);
-} 
- 
-template <class I, class C> 
-static inline void SortHeap(I f, I l, C c) { 
+}
+
+template <class I, class C>
+static inline void SortHeap(I f, I l, C c) {
     std::sort_heap(f, l, c);
-} 
- 
+}
+
 template <class I, class T>
 static inline I LowerBound(I f, I l, const T& v) {
     return std::lower_bound(f, l, v);

@@ -139,7 +139,7 @@ public:
         } else {
             Mapping_ = MAP_FAILED;
         }
-#elif defined(_unix_) 
+#elif defined(_unix_)
         if (!(Mode_ & oNotGreedy)) {
             PtrStart_ = mmap((caddr_t) nullptr, Length_, ModeToMmapProt(Mode_), ModeToMmapFlags(Mode_), File_.GetHandle(), 0);
 
@@ -300,7 +300,7 @@ public:
 
     void Evict() {
 #if defined(_unix_)
-//        Evict(PtrStart_, Length_); 
+//        Evict(PtrStart_, Length_);
 #endif
     }
 
@@ -310,7 +310,7 @@ public:
             ::CloseHandle(Mapping_); // != FALSE
             Mapping_ = nullptr;
         }
-#elif defined(_unix_) 
+#elif defined(_unix_)
         if (PtrStart_) {
             munmap((caddr_t)PtrStart_, Length_);
         }
@@ -341,7 +341,7 @@ private:
 
 #if defined(_win_)
     void* Mapping_;
-#elif defined(_unix_) 
+#elif defined(_unix_)
     void* PtrStart_;
 #endif
 };

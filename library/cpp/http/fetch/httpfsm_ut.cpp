@@ -57,8 +57,8 @@ public:
     void TestXRobotsTagOverridePriority();
     void TestXRobotsTagDoesNotBreakCharset();
     void TestXRobotsTagAllowsMultiline();
-    void TestRelCanonical(); 
-    void TestHreflang(); 
+    void TestRelCanonical();
+    void TestHreflang();
     void TestHreflangOnLongInput();
     void TestMimeType();
     void TestRepeatedContentEncoding();
@@ -232,20 +232,20 @@ void THttpHeaderParserTestSuite::TestLastModifiedCorrupted() {
 }
 
 void THttpHeaderParserTestSuite::TestXRobotsTagUnknownTags() {
-    TestStart(); 
-    THttpHeader httpHeader; 
-    httpHeaderParser->Init(&httpHeader); 
+    TestStart();
+    THttpHeader httpHeader;
+    httpHeaderParser->Init(&httpHeader);
     const char* headers =
-        "HTTP/1.1 200 OK\r\n" 
-        "Content-Type: text/html\r\n" 
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html\r\n"
         "x-robots-tag: asdfasdf asdf asdf,,, , noindex,noodpXXX , NOFOLLOW ,noodpnofollow\r\n\r\n";
-    i32 result = httpHeaderParser->Execute(headers, strlen(headers)); 
-    UNIT_ASSERT_EQUAL(result, 2); 
+    i32 result = httpHeaderParser->Execute(headers, strlen(headers));
+    UNIT_ASSERT_EQUAL(result, 2);
     UNIT_ASSERT_EQUAL(httpHeader.x_robots_tag, 3);
     UNIT_ASSERT_EQUAL(httpHeader.x_robots_state, "00xxx");
-    TestFinish(); 
-} 
- 
+    TestFinish();
+}
+
 void THttpHeaderParserTestSuite::TestXRobotsTagMyBot() {
     TestStart();
     THttpHeader httpHeader;
@@ -380,24 +380,24 @@ void THttpHeaderParserTestSuite::TestXRobotsTagAllowsMultiline() {
     TestFinish();
 }
 
-void THttpHeaderParserTestSuite::TestHreflang() { 
-    TestStart(); 
-    THttpHeader httpHeader; 
-    httpHeaderParser->Init(&httpHeader); 
+void THttpHeaderParserTestSuite::TestHreflang() {
+    TestStart();
+    THttpHeader httpHeader;
+    httpHeaderParser->Init(&httpHeader);
     const char* headers =
-        "HTTP/1.1 200 OK\r\n" 
-        "Content-Type: text/html\r\n" 
-        "link: <http://www.high.ru/>; rel='alternate'; hreflang='x-default'\r\n" 
-        "link:  <http://www.high.ru/en.html> ;rel  =  'alternate'  ;hreflang =   en_GB  \r\n" 
-        "link:  <http://www.high.ru/ru.html>;hreflang =   ru_RU.KOI8-r   ;rel  =  'alternate'  \r\n" 
-        "\r\n"; 
-    i32 result = httpHeaderParser->Execute(headers, strlen(headers)); 
-    UNIT_ASSERT_VALUES_EQUAL(result, 2); 
-    // UNIT_ASSERT_VALUES_EQUAL(strcmp(httpHeader.hreflangs, "x-default http://www.high.ru/;"), 0); 
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html\r\n"
+        "link: <http://www.high.ru/>; rel='alternate'; hreflang='x-default'\r\n"
+        "link:  <http://www.high.ru/en.html> ;rel  =  'alternate'  ;hreflang =   en_GB  \r\n"
+        "link:  <http://www.high.ru/ru.html>;hreflang =   ru_RU.KOI8-r   ;rel  =  'alternate'  \r\n"
+        "\r\n";
+    i32 result = httpHeaderParser->Execute(headers, strlen(headers));
+    UNIT_ASSERT_VALUES_EQUAL(result, 2);
+    // UNIT_ASSERT_VALUES_EQUAL(strcmp(httpHeader.hreflangs, "x-default http://www.high.ru/;"), 0);
     UNIT_ASSERT_VALUES_EQUAL(httpHeader.hreflangs, "x-default http://www.high.ru/\ten_GB http://www.high.ru/en.html\tru_RU.KOI8-r http://www.high.ru/ru.html");
-    TestFinish(); 
-} 
- 
+    TestFinish();
+}
+
 void THttpHeaderParserTestSuite::TestHreflangOnLongInput() {
     TestStart();
     THttpHeader httpHeader;
@@ -410,20 +410,20 @@ void THttpHeaderParserTestSuite::TestHreflangOnLongInput() {
     TestFinish();
 }
 
-void THttpHeaderParserTestSuite::TestRelCanonical() { 
-    TestStart(); 
-    THttpHeader httpHeader; 
-    httpHeaderParser->Init(&httpHeader); 
+void THttpHeaderParserTestSuite::TestRelCanonical() {
+    TestStart();
+    THttpHeader httpHeader;
+    httpHeaderParser->Init(&httpHeader);
     const char* headers =
-        "HTTP/1.1 200 OK\r\n" 
-        "Content-Type: text/html\r\n" 
-        "Link: <http://yandex.ru>; rel = \"canonical\"\r\n\r\n"; 
-    i32 result = httpHeaderParser->Execute(headers, strlen(headers)); 
-    UNIT_ASSERT_EQUAL(result, 2); 
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/html\r\n"
+        "Link: <http://yandex.ru>; rel = \"canonical\"\r\n\r\n";
+    i32 result = httpHeaderParser->Execute(headers, strlen(headers));
+    UNIT_ASSERT_EQUAL(result, 2);
     UNIT_ASSERT_EQUAL(httpHeader.rel_canonical, "http://yandex.ru");
-    TestFinish(); 
-} 
- 
+    TestFinish();
+}
+
 void THttpHeaderParserTestSuite::TestResponseHeaderOnRequest() {
     TestStart();
     THttpHeader httpHeader;

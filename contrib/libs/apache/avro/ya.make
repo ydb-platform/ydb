@@ -9,8 +9,8 @@ OWNER(
 
 VERSION(1.10.2)
 
-ORIGINAL_SOURCE(https://github.com/apache/avro/archive/release-1.10.2.tar.gz)
-
+ORIGINAL_SOURCE(https://github.com/apache/avro/archive/release-1.10.2.tar.gz) 
+ 
 LICENSE(
     Apache-2.0 AND
     BSL-1.0 AND
@@ -22,7 +22,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 PEERDIR(
     contrib/libs/snappy
     contrib/restricted/boost
-    contrib/restricted/boost/libs/iostreams
+    contrib/restricted/boost/libs/iostreams 
 )
 
 ADDINCL(

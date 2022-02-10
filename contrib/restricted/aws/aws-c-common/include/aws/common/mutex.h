@@ -1,15 +1,15 @@
 #ifndef AWS_COMMON_MUTEX_H
 #define AWS_COMMON_MUTEX_H
 
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #include <aws/common/common.h>
 #ifdef _WIN32
 /* NOTE: Do not use this macro before including Windows.h */
-#    define AWSMUTEX_TO_WINDOWS(pMutex) (PSRWLOCK) & (pMutex)->mutex_handle
+#    define AWSMUTEX_TO_WINDOWS(pMutex) (PSRWLOCK) & (pMutex)->mutex_handle 
 #else
 #    include <pthread.h>
 #endif
@@ -20,15 +20,15 @@ struct aws_mutex {
 #else
     pthread_mutex_t mutex_handle;
 #endif
-    bool initialized;
+    bool initialized; 
 };
 
 #ifdef _WIN32
 #    define AWS_MUTEX_INIT                                                                                             \
-        { .mutex_handle = NULL, .initialized = true }
+        { .mutex_handle = NULL, .initialized = true } 
 #else
 #    define AWS_MUTEX_INIT                                                                                             \
-        { .mutex_handle = PTHREAD_MUTEX_INITIALIZER, .initialized = true }
+        { .mutex_handle = PTHREAD_MUTEX_INITIALIZER, .initialized = true } 
 #endif
 
 AWS_EXTERN_C_BEGIN

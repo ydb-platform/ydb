@@ -271,12 +271,12 @@ TProtoStringType UniqueFileScopeIdentifier(const Descriptor* descriptor) {
 
 TProtoStringType CamelCaseFieldName(const FieldDescriptor* field) {
   TProtoStringType fieldName = UnderscoresToCamelCase(field);
-  if ('0' <= fieldName[0] && fieldName[0] <= '9') {
+  if ('0' <= fieldName[0] && fieldName[0] <= '9') { 
     return '_' + fieldName;
-  }
-  return fieldName;
-}
-
+  } 
+  return fieldName; 
+} 
+ 
 TProtoStringType FileClassName(const FileDescriptor* file, bool immutable) {
   ClassNameResolver name_resolver;
   return name_resolver.GetFileClassName(file, immutable);
@@ -328,7 +328,7 @@ TProtoStringType ClassName(const FileDescriptor* descriptor) {
   return name_resolver.GetClassName(descriptor, true);
 }
 
-
+ 
 TProtoStringType ExtraMessageInterfaces(const Descriptor* descriptor) {
   TProtoStringType interfaces = "// @@protoc_insertion_point(message_implements:" +
                            descriptor->full_name() + ")";
@@ -469,7 +469,7 @@ const char* BoxedPrimitiveTypeName(JavaType type) {
 const char* BoxedPrimitiveTypeName(const FieldDescriptor* descriptor) {
   return BoxedPrimitiveTypeName(GetJavaType(descriptor));
 }
-
+ 
 const char* KotlinTypeName(JavaType type) {
   switch (type) {
     case JAVATYPE_INT:

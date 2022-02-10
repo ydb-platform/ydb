@@ -287,7 +287,7 @@ class Recompiler:
             self.write_c_source_to_f(f, preamble)
 
     def _rel_readlines(self, filename):
-        import pkgutil
+        import pkgutil 
         return pkgutil.get_data('cffi', filename).decode('utf-8').splitlines(True)
 
     def write_c_source_to_f(self, f, preamble):

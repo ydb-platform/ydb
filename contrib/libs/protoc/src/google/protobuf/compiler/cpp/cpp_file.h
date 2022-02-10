@@ -71,9 +71,9 @@ class FileGenerator {
   FileGenerator(const FileDescriptor* file, const Options& options);
   ~FileGenerator();
 
-  // Shared code between the two header generators below.
-  void GenerateHeader(io::Printer* printer);
-
+  // Shared code between the two header generators below. 
+  void GenerateHeader(io::Printer* printer); 
+ 
   // info_path, if non-empty, should be the path (relative to printer's
   // output) to the metadata file describing this proto header.
   void GenerateProtoHeader(io::Printer* printer, const TProtoStringType& info_path);
@@ -160,8 +160,8 @@ class FileGenerator {
   // undef the macro for these few platforms, or rename the field name for all
   // platforms. Since these names are part of protobuf public API, renaming is
   // generally a breaking change so we prefer the #undef approach.
-  void GenerateMacroUndefs(io::Printer* printer);
-
+  void GenerateMacroUndefs(io::Printer* printer); 
+ 
   bool IsDepWeak(const FileDescriptor* dep) const {
     if (weak_deps_.count(dep) != 0) {
       GOOGLE_CHECK(!options_.opensource_runtime);
@@ -176,11 +176,11 @@ class FileGenerator {
   const Options options_;
 
   MessageSCCAnalyzer scc_analyzer_;
-
+ 
   std::map<TProtoStringType, TProtoStringType> variables_;
 
-  // Contains the post-order walk of all the messages (and child messages) in
-  // this file. If you need a pre-order walk just reverse iterate.
+  // Contains the post-order walk of all the messages (and child messages) in 
+  // this file. If you need a pre-order walk just reverse iterate. 
   std::vector<std::unique_ptr<MessageGenerator>> message_generators_;
   std::vector<std::unique_ptr<EnumGenerator>> enum_generators_;
   std::vector<std::unique_ptr<ServiceGenerator>> service_generators_;

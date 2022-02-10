@@ -191,10 +191,10 @@ util::Status ProtoStreamObjectSource::WriteMessage(
       field = FindAndVerifyField(type, tag);
       if (field != nullptr) {
         if (render_options_.preserve_proto_field_names) {
-          field_name = field->name();
-        } else {
-          field_name = field->json_name();
-        }
+          field_name = field->name(); 
+        } else { 
+          field_name = field->json_name(); 
+        } 
       }
     }
     if (field == nullptr) {
@@ -226,7 +226,7 @@ util::Status ProtoStreamObjectSource::WriteMessage(
   if (include_start_and_end) {
     ow->EndObject();
   }
-  return util::Status();
+  return util::Status(); 
 }
 
 util::StatusOr<uint32_t> ProtoStreamObjectSource::RenderList(
@@ -307,7 +307,7 @@ util::Status ProtoStreamObjectSource::RenderPacked(
     RETURN_IF_ERROR(RenderField(field, StringPiece(), ow));
   }
   stream_->PopLimit(old_limit);
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderTimestamp(
@@ -329,7 +329,7 @@ util::Status ProtoStreamObjectSource::RenderTimestamp(
   ow->RenderString(field_name,
                    ::google::protobuf::internal::FormatTime(seconds, nanos));
 
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderDuration(
@@ -369,9 +369,9 @@ util::Status ProtoStreamObjectSource::RenderDuration(
           nanos,
           false
           )
-          .c_str());
+          .c_str()); 
   ow->RenderString(field_name, formatted_duration);
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderDouble(
@@ -384,7 +384,7 @@ util::Status ProtoStreamObjectSource::RenderDouble(
     os->stream_->ReadTag();
   }
   ow->RenderDouble(field_name, bit_cast<double>(buffer64));
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderFloat(
@@ -397,7 +397,7 @@ util::Status ProtoStreamObjectSource::RenderFloat(
     os->stream_->ReadTag();
   }
   ow->RenderFloat(field_name, bit_cast<float>(buffer32));
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderInt64(
@@ -410,7 +410,7 @@ util::Status ProtoStreamObjectSource::RenderInt64(
     os->stream_->ReadTag();
   }
   ow->RenderInt64(field_name, bit_cast<int64_t>(buffer64));
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderUInt64(
@@ -423,7 +423,7 @@ util::Status ProtoStreamObjectSource::RenderUInt64(
     os->stream_->ReadTag();
   }
   ow->RenderUint64(field_name, bit_cast<uint64_t>(buffer64));
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderInt32(
@@ -436,7 +436,7 @@ util::Status ProtoStreamObjectSource::RenderInt32(
     os->stream_->ReadTag();
   }
   ow->RenderInt32(field_name, bit_cast<int32_t>(buffer32));
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderUInt32(
@@ -449,7 +449,7 @@ util::Status ProtoStreamObjectSource::RenderUInt32(
     os->stream_->ReadTag();
   }
   ow->RenderUint32(field_name, bit_cast<uint32_t>(buffer32));
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderBool(
@@ -463,7 +463,7 @@ util::Status ProtoStreamObjectSource::RenderBool(
     os->stream_->ReadTag();
   }
   ow->RenderBool(field_name, buffer64 != 0);
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderString(
@@ -478,7 +478,7 @@ util::Status ProtoStreamObjectSource::RenderString(
     os->stream_->ReadTag();
   }
   ow->RenderString(field_name, str);
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderBytes(
@@ -493,7 +493,7 @@ util::Status ProtoStreamObjectSource::RenderBytes(
     os->stream_->ReadTag();
   }
   ow->RenderBytes(field_name, str);
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderStruct(
@@ -516,7 +516,7 @@ util::Status ProtoStreamObjectSource::RenderStruct(
     }
   }
   ow->EndObject();
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderStructValue(
@@ -532,7 +532,7 @@ util::Status ProtoStreamObjectSource::RenderStructValue(
     }
     RETURN_IF_ERROR(os->RenderField(field, field_name, ow));
   }
-  return util::Status();
+  return util::Status(); 
 }
 
 // TODO(skarvaje): Avoid code duplication of for loops and SkipField logic.
@@ -545,7 +545,7 @@ util::Status ProtoStreamObjectSource::RenderStructListValue(
   if (tag == 0) {
     ow->StartList(field_name);
     ow->EndList();
-    return util::Status();
+    return util::Status(); 
   }
 
   while (tag != 0) {
@@ -557,7 +557,7 @@ util::Status ProtoStreamObjectSource::RenderStructListValue(
     }
     ASSIGN_OR_RETURN(tag, os->RenderList(field, field_name, tag, ow));
   }
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderAny(
@@ -598,7 +598,7 @@ util::Status ProtoStreamObjectSource::RenderAny(
       ow->RenderString("@type", type_url);
     }
     ow->EndObject();
-    return util::Status();
+    return util::Status(); 
   }
 
   // If there is a value but no type, we cannot render it, so report an error.
@@ -661,7 +661,7 @@ util::Status ProtoStreamObjectSource::RenderFieldMask(
     combined.append(ConvertFieldMaskPath(str, &ToCamelCase));
   }
   ow->RenderString(field_name, combined);
-  return util::Status();
+  return util::Status(); 
 }
 
 
@@ -759,7 +759,7 @@ util::Status ProtoStreamObjectSource::RenderField(
     // Render all other non-message types.
     return RenderNonMessageField(field, field_name, ow);
   }
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status ProtoStreamObjectSource::RenderNonMessageField(
@@ -849,25 +849,25 @@ util::Status ProtoStreamObjectSource::RenderNonMessageField(
       // up.
       const google::protobuf::Enum* en =
           typeinfo_->GetEnumByTypeUrl(field->type_url());
-      // Lookup the name of the enum, and render that. Unknown enum values
-      // are printed as integers.
+      // Lookup the name of the enum, and render that. Unknown enum values 
+      // are printed as integers. 
       if (en != nullptr) {
         const google::protobuf::EnumValue* enum_value =
             FindEnumValueByNumber(*en, buffer32);
         if (enum_value != nullptr) {
           if (render_options_.use_ints_for_enums) {
-            ow->RenderInt32(field_name, buffer32);
+            ow->RenderInt32(field_name, buffer32); 
           } else if (render_options_.use_lower_camel_for_enums) {
             ow->RenderString(field_name,
                              EnumValueNameToLowerCamelCase(enum_value->name()));
-          } else {
+          } else { 
             ow->RenderString(field_name, enum_value->name());
-          }
+          } 
         } else {
             ow->RenderInt32(field_name, buffer32);
         }
       } else {
-          ow->RenderInt32(field_name, buffer32);
+          ow->RenderInt32(field_name, buffer32); 
       }
       break;
     }
@@ -886,7 +886,7 @@ util::Status ProtoStreamObjectSource::RenderNonMessageField(
     default:
       break;
   }
-  return util::Status();
+  return util::Status(); 
 }
 
 // TODO(skarvaje): Fix this to avoid code duplication.
@@ -1054,7 +1054,7 @@ util::Status ProtoStreamObjectSource::IncrementRecursionDepth(
         StrCat("Message too deep. Max recursion depth reached for type '",
                      type_name, "', field '", field_name, "'"));
   }
-  return util::Status();
+  return util::Status(); 
 }
 
 namespace {
@@ -1092,10 +1092,10 @@ const google::protobuf::EnumValue* FindEnumValueByNumber(
 // TODO(skarvaje): Look into optimizing this by not doing computation on
 // double.
 const TProtoStringType FormatNanos(uint32_t nanos, bool with_trailing_zeros) {
-  if (nanos == 0) {
-    return with_trailing_zeros ? ".000" : "";
-  }
-
+  if (nanos == 0) { 
+    return with_trailing_zeros ? ".000" : ""; 
+  } 
+ 
   const char* format = (nanos % 1000 != 0)      ? "%.9f"
                        : (nanos % 1000000 != 0) ? "%.6f"
                                                 : "%.3f";

@@ -1,26 +1,26 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
 #ifndef GRPC_CORE_LIB_JSON_JSON_H
 #define GRPC_CORE_LIB_JSON_JSON_H
 
-#include <grpc/support/port_platform.h>
-
+#include <grpc/support/port_platform.h> 
+ 
 #include <stdlib.h>
 
 #include <map>
@@ -33,7 +33,7 @@
 #include "src/core/lib/iomgr/error.h"
 
 namespace grpc_core {
-
+ 
 // A JSON value, which can be any one of object, array, string,
 // number, true, false, or null.
 class Json {
@@ -67,14 +67,14 @@ class Json {
     CopyFrom(other);
     return *this;
   }
-
+ 
   // Moveable.
   Json(Json&& other) { MoveFrom(std::move(other)); }
   Json& operator=(Json&& other) {
     MoveFrom(std::move(other));
     return *this;
   }
-
+ 
   // Construct from copying a string.
   // If is_number is true, the type will be NUMBER instead of STRING.
   Json(const TString& string, bool is_number = false)

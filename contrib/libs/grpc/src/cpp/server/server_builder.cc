@@ -1,34 +1,34 @@
 /*
  *
- * Copyright 2015-2016 gRPC authors.
+ * Copyright 2015-2016 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
-#include <grpcpp/server_builder.h>
+#include <grpcpp/server_builder.h> 
 
 #include <grpc/support/cpu.h>
 #include <grpc/support/log.h>
-#include <grpcpp/impl/service_type.h>
-#include <grpcpp/resource_quota.h>
-#include <grpcpp/server.h>
+#include <grpcpp/impl/service_type.h> 
+#include <grpcpp/resource_quota.h> 
+#include <grpcpp/server.h> 
 
 #include <utility>
 
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/gpr/string.h"
-#include "src/core/lib/gpr/useful.h"
+#include "src/core/lib/gpr/useful.h" 
 #include "src/cpp/server/external_connection_acceptor_impl.h"
 #include "src/cpp/server/thread_pool_interface.h"
 
@@ -207,11 +207,11 @@ ServerBuilder& ServerBuilder::AddListeningPort(
     int* selected_port) {
   const TString uri_scheme = "dns:";
   TString addr = addr_uri;
-  if (addr_uri.compare(0, uri_scheme.size(), uri_scheme) == 0) {
-    size_t pos = uri_scheme.size();
-    while (addr_uri[pos] == '/') ++pos;  // Skip slashes.
-    addr = addr_uri.substr(pos);
-  }
+  if (addr_uri.compare(0, uri_scheme.size(), uri_scheme) == 0) { 
+    size_t pos = uri_scheme.size(); 
+    while (addr_uri[pos] == '/') ++pos;  // Skip slashes. 
+    addr = addr_uri.substr(pos); 
+  } 
   Port port = {addr, std::move(creds), selected_port};
   ports_.push_back(port);
   return *this;
@@ -285,9 +285,9 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
     if (cq->IsFrequentlyPolled()) {
       has_frequently_polled_cqs = true;
       break;
-    }
-  }
-
+    } 
+  } 
+ 
   // == Determine if the server has any callback methods ==
   bool has_callback_methods = false;
   for (const auto& service : services_) {
@@ -297,12 +297,12 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
       break;
     }
   }
-
+ 
   const bool is_hybrid_server = has_sync_methods && has_frequently_polled_cqs;
 
   if (has_sync_methods) {
-    grpc_cq_polling_type polling_type =
-        is_hybrid_server ? GRPC_CQ_NON_POLLING : GRPC_CQ_DEFAULT_POLLING;
+    grpc_cq_polling_type polling_type = 
+        is_hybrid_server ? GRPC_CQ_NON_POLLING : GRPC_CQ_DEFAULT_POLLING; 
 
     // Create completion queues to listen to incoming rpc requests
     for (int i = 0; i < sync_server_settings_.num_cqs; i++) {
@@ -314,16 +314,16 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
   // TODO(vjpai): Add a section here for plugins once they can support callback
   // methods
 
-  if (has_sync_methods) {
-    // This is a Sync server
-    gpr_log(GPR_INFO,
-            "Synchronous server. Num CQs: %d, Min pollers: %d, Max Pollers: "
-            "%d, CQ timeout (msec): %d",
-            sync_server_settings_.num_cqs, sync_server_settings_.min_pollers,
-            sync_server_settings_.max_pollers,
-            sync_server_settings_.cq_timeout_msec);
-  }
-
+  if (has_sync_methods) { 
+    // This is a Sync server 
+    gpr_log(GPR_INFO, 
+            "Synchronous server. Num CQs: %d, Min pollers: %d, Max Pollers: " 
+            "%d, CQ timeout (msec): %d", 
+            sync_server_settings_.num_cqs, sync_server_settings_.min_pollers, 
+            sync_server_settings_.max_pollers, 
+            sync_server_settings_.cq_timeout_msec); 
+  } 
+ 
   if (has_callback_methods) {
     gpr_log(GPR_INFO, "Callback server.");
   }
@@ -396,17 +396,17 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
 
   for (auto& port : ports_) {
     int r = server->AddListeningPort(port.addr, port.creds.get());
-    if (!r) {
+    if (!r) { 
       server->Shutdown();
-      return nullptr;
-    }
+      return nullptr; 
+    } 
     if (port.selected_port != nullptr) {
       *port.selected_port = r;
     }
   }
 
   auto cqs_data = cqs_.empty() ? nullptr : &cqs_[0];
-  server->Start(cqs_data, cqs_.size());
+  server->Start(cqs_data, cqs_.size()); 
 
   for (const auto& value : plugins_) {
     value->Finish(initializer);
@@ -421,14 +421,14 @@ void ServerBuilder::InternalAddPluginFactory(
   (*g_plugin_factory_list).push_back(CreatePlugin);
 }
 
-ServerBuilder& ServerBuilder::EnableWorkaround(grpc_workaround_list id) {
-  switch (id) {
-    case GRPC_WORKAROUND_ID_CRONET_COMPRESSION:
-      return AddChannelArgument(GRPC_ARG_WORKAROUND_CRONET_COMPRESSION, 1);
-    default:
-      gpr_log(GPR_ERROR, "Workaround %u does not exist or is obsolete.", id);
-      return *this;
-  }
-}
-
+ServerBuilder& ServerBuilder::EnableWorkaround(grpc_workaround_list id) { 
+  switch (id) { 
+    case GRPC_WORKAROUND_ID_CRONET_COMPRESSION: 
+      return AddChannelArgument(GRPC_ARG_WORKAROUND_CRONET_COMPRESSION, 1); 
+    default: 
+      gpr_log(GPR_ERROR, "Workaround %u does not exist or is obsolete.", id); 
+      return *this; 
+  } 
+} 
+ 
 }  // namespace grpc

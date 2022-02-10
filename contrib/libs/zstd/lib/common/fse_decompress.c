@@ -1,15 +1,15 @@
 /* ******************************************************************
- * FSE : Finite State Entropy decoder
+ * FSE : Finite State Entropy decoder 
  * Copyright (c) Yann Collet, Facebook, Inc.
- *
- *  You can contact the author at :
- *  - FSE source repository : https://github.com/Cyan4973/FiniteStateEntropy
- *  - Public forum : https://groups.google.com/forum/#!forum/lz4c
- *
- * This source code is licensed under both the BSD-style license (found in the
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found
- * in the COPYING file in the root directory of this source tree).
- * You may select, at your option, one of the above-listed licenses.
+ * 
+ *  You can contact the author at : 
+ *  - FSE source repository : https://github.com/Cyan4973/FiniteStateEntropy 
+ *  - Public forum : https://groups.google.com/forum/#!forum/lz4c 
+ * 
+ * This source code is licensed under both the BSD-style license (found in the 
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
+ * in the COPYING file in the root directory of this source tree). 
+ * You may select, at your option, one of the above-listed licenses. 
 ****************************************************************** */
 
 
@@ -243,7 +243,7 @@ FORCE_INLINE_TEMPLATE size_t FSE_decompress_usingDTable_generic(
     FSE_DState_t state2;
 
     /* Init */
-    CHECK_F(BIT_initDStream(&bitD, cSrc, cSrcSize));
+    CHECK_F(BIT_initDStream(&bitD, cSrc, cSrcSize)); 
 
     FSE_initDState(&state1, &bitD, dt);
     FSE_initDState(&state2, &bitD, dt);
@@ -251,7 +251,7 @@ FORCE_INLINE_TEMPLATE size_t FSE_decompress_usingDTable_generic(
 #define FSE_GETSYMBOL(statePtr) fast ? FSE_decodeSymbolFast(statePtr, &bitD) : FSE_decodeSymbol(statePtr, &bitD)
 
     /* 4 symbols per loop */
-    for ( ; (BIT_reloadDStream(&bitD)==BIT_DStream_unfinished) & (op<olimit) ; op+=4) {
+    for ( ; (BIT_reloadDStream(&bitD)==BIT_DStream_unfinished) & (op<olimit) ; op+=4) { 
         op[0] = FSE_GETSYMBOL(&state1);
 
         if (FSE_MAX_TABLELOG*2+7 > sizeof(bitD.bitContainer)*8)    /* This test must be static */
@@ -383,7 +383,7 @@ size_t FSE_decompress_wksp_bmi2(void* dst, size_t dstCapacity, const void* cSrc,
 }
 
 
-typedef FSE_DTable DTable_max_t[FSE_DTABLE_SIZE_U32(FSE_MAX_TABLELOG)];
+typedef FSE_DTable DTable_max_t[FSE_DTABLE_SIZE_U32(FSE_MAX_TABLELOG)]; 
 
 #ifndef ZSTD_NO_UNUSED_FUNCTIONS
 size_t FSE_buildDTable(FSE_DTable* dt, const short* normalizedCounter, unsigned maxSymbolValue, unsigned tableLog) {
@@ -391,13 +391,13 @@ size_t FSE_buildDTable(FSE_DTable* dt, const short* normalizedCounter, unsigned 
     return FSE_buildDTable_wksp(dt, normalizedCounter, maxSymbolValue, tableLog, wksp, sizeof(wksp));
 }
 
-size_t FSE_decompress(void* dst, size_t dstCapacity, const void* cSrc, size_t cSrcSize)
-{
+size_t FSE_decompress(void* dst, size_t dstCapacity, const void* cSrc, size_t cSrcSize) 
+{ 
     /* Static analyzer seems unable to understand this table will be properly initialized later */
     U32 wksp[FSE_DECOMPRESS_WKSP_SIZE_U32(FSE_MAX_TABLELOG, FSE_MAX_SYMBOL_VALUE)];
     return FSE_decompress_wksp(dst, dstCapacity, cSrc, cSrcSize, FSE_MAX_TABLELOG, wksp, sizeof(wksp));
-}
+} 
 #endif
-
-
+ 
+ 
 #endif   /* FSE_COMMONDEFS_ONLY */

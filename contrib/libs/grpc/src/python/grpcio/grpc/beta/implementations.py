@@ -1,51 +1,51 @@
-# Copyright 2015-2016 gRPC authors.
+# Copyright 2015-2016 gRPC authors. 
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0 
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License. 
 """Entry points into the Beta API of gRPC Python."""
 
 # threading is referenced from specification in this module.
 import threading  # pylint: disable=unused-import
 
-# interfaces, cardinality, and face are referenced from specification in this
-# module.
+# interfaces, cardinality, and face are referenced from specification in this 
+# module. 
 import grpc
 from grpc import _auth
 from grpc.beta import _client_adaptations
-from grpc.beta import _metadata
+from grpc.beta import _metadata 
 from grpc.beta import _server_adaptations
-from grpc.beta import interfaces  # pylint: disable=unused-import
+from grpc.beta import interfaces  # pylint: disable=unused-import 
 from grpc.framework.common import cardinality  # pylint: disable=unused-import
 from grpc.framework.interfaces.face import face  # pylint: disable=unused-import
 
-# pylint: disable=too-many-arguments
-
+# pylint: disable=too-many-arguments 
+ 
 ChannelCredentials = grpc.ChannelCredentials
 ssl_channel_credentials = grpc.ssl_channel_credentials
 CallCredentials = grpc.CallCredentials
 
 
-def metadata_call_credentials(metadata_plugin, name=None):
-
-    def plugin(context, callback):
-
-        def wrapped_callback(beta_metadata, error):
-            callback(_metadata.unbeta(beta_metadata), error)
-
-        metadata_plugin(context, wrapped_callback)
-
-    return grpc.metadata_call_credentials(plugin, name=name)
-
-
+def metadata_call_credentials(metadata_plugin, name=None): 
+ 
+    def plugin(context, callback): 
+ 
+        def wrapped_callback(beta_metadata, error): 
+            callback(_metadata.unbeta(beta_metadata), error) 
+ 
+        metadata_plugin(context, wrapped_callback) 
+ 
+    return grpc.metadata_call_credentials(plugin, name=name) 
+ 
+ 
 def google_call_credentials(credentials):
     """Construct CallCredentials from GoogleCredentials.
 
@@ -216,7 +216,7 @@ def dynamic_stub(channel, service, cardinalities, options=None):
   Returns:
     A face.DynamicStub with which RPCs can be invoked.
   """
-    effective_options = _EMPTY_STUB_OPTIONS if options is None else options
+    effective_options = _EMPTY_STUB_OPTIONS if options is None else options 
     return _client_adaptations.dynamic_stub(
         channel._channel,  # pylint: disable=protected-access
         service,

@@ -106,7 +106,7 @@ static CURLcode randit(struct Curl_easy *data, unsigned int *rnd)
  * 'rndptr' points to.
  *
  * If libcurl is built without TLS support or with a TLS backend that lacks a
- * proper random API (Gskit or mbedTLS), this function will use "weak" random.
+ * proper random API (Gskit or mbedTLS), this function will use "weak" random. 
  *
  * When built *with* TLS support and a backend that offers strong random, it
  * will return error if it cannot provide strong random values.

@@ -1,48 +1,48 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #include <aws/common/task_scheduler.h>
 
-#include <aws/common/logging.h>
-
-#include <inttypes.h>
-
+#include <aws/common/logging.h> 
+ 
+#include <inttypes.h> 
+ 
 static const size_t DEFAULT_QUEUE_SIZE = 7;
 
-void aws_task_init(struct aws_task *task, aws_task_fn *fn, void *arg, const char *type_tag) {
-    AWS_ZERO_STRUCT(*task);
-    task->fn = fn;
-    task->arg = arg;
-    task->type_tag = type_tag;
-}
-
-const char *aws_task_status_to_c_str(enum aws_task_status status) {
-    switch (status) {
-        case AWS_TASK_STATUS_RUN_READY:
-            return "<Running>";
-
-        case AWS_TASK_STATUS_CANCELED:
-            return "<Canceled>";
-
-        default:
-            return "<Unknown>";
-    }
-}
-
-void aws_task_run(struct aws_task *task, enum aws_task_status status) {
-    AWS_ASSERT(task->fn);
-    AWS_LOGF_DEBUG(
-        AWS_LS_COMMON_TASK_SCHEDULER,
-        "id=%p: Running %s task with %s status",
-        (void *)task,
-        task->type_tag,
-        aws_task_status_to_c_str(status));
-
-    task->fn(task, task->arg, status);
-}
-
+void aws_task_init(struct aws_task *task, aws_task_fn *fn, void *arg, const char *type_tag) { 
+    AWS_ZERO_STRUCT(*task); 
+    task->fn = fn; 
+    task->arg = arg; 
+    task->type_tag = type_tag; 
+} 
+ 
+const char *aws_task_status_to_c_str(enum aws_task_status status) { 
+    switch (status) { 
+        case AWS_TASK_STATUS_RUN_READY: 
+            return "<Running>"; 
+ 
+        case AWS_TASK_STATUS_CANCELED: 
+            return "<Canceled>"; 
+ 
+        default: 
+            return "<Unknown>"; 
+    } 
+} 
+ 
+void aws_task_run(struct aws_task *task, enum aws_task_status status) { 
+    AWS_ASSERT(task->fn); 
+    AWS_LOGF_DEBUG( 
+        AWS_LS_COMMON_TASK_SCHEDULER, 
+        "id=%p: Running %s task with %s status", 
+        (void *)task, 
+        task->type_tag, 
+        aws_task_status_to_c_str(status)); 
+ 
+    task->fn(task, task->arg, status); 
+} 
+ 
 static int s_compare_timestamps(const void *a, const void *b) {
     uint64_t a_time = (*(struct aws_task **)a)->timestamp;
     uint64_t b_time = (*(struct aws_task **)b)->timestamp;
@@ -54,41 +54,41 @@ static void s_run_all(struct aws_task_scheduler *scheduler, uint64_t current_tim
 int aws_task_scheduler_init(struct aws_task_scheduler *scheduler, struct aws_allocator *alloc) {
     AWS_ASSERT(alloc);
 
-    AWS_ZERO_STRUCT(*scheduler);
-
-    if (aws_priority_queue_init_dynamic(
-            &scheduler->timed_queue, alloc, DEFAULT_QUEUE_SIZE, sizeof(struct aws_task *), &s_compare_timestamps)) {
-        return AWS_OP_ERR;
-    };
-
+    AWS_ZERO_STRUCT(*scheduler); 
+ 
+    if (aws_priority_queue_init_dynamic( 
+            &scheduler->timed_queue, alloc, DEFAULT_QUEUE_SIZE, sizeof(struct aws_task *), &s_compare_timestamps)) { 
+        return AWS_OP_ERR; 
+    }; 
+ 
     scheduler->alloc = alloc;
     aws_linked_list_init(&scheduler->timed_list);
     aws_linked_list_init(&scheduler->asap_list);
-
-    AWS_POSTCONDITION(aws_task_scheduler_is_valid(scheduler));
-    return AWS_OP_SUCCESS;
+ 
+    AWS_POSTCONDITION(aws_task_scheduler_is_valid(scheduler)); 
+    return AWS_OP_SUCCESS; 
 }
 
 void aws_task_scheduler_clean_up(struct aws_task_scheduler *scheduler) {
     AWS_ASSERT(scheduler);
 
-    if (aws_task_scheduler_is_valid(scheduler)) {
-        /* Execute all remaining tasks as CANCELED.
-         * Do this in a loop so that tasks scheduled by other tasks are executed */
-        while (aws_task_scheduler_has_tasks(scheduler, NULL)) {
-            s_run_all(scheduler, UINT64_MAX, AWS_TASK_STATUS_CANCELED);
-        }
+    if (aws_task_scheduler_is_valid(scheduler)) { 
+        /* Execute all remaining tasks as CANCELED. 
+         * Do this in a loop so that tasks scheduled by other tasks are executed */ 
+        while (aws_task_scheduler_has_tasks(scheduler, NULL)) { 
+            s_run_all(scheduler, UINT64_MAX, AWS_TASK_STATUS_CANCELED); 
+        } 
     }
 
     aws_priority_queue_clean_up(&scheduler->timed_queue);
-    AWS_ZERO_STRUCT(*scheduler);
+    AWS_ZERO_STRUCT(*scheduler); 
 }
 
-bool aws_task_scheduler_is_valid(const struct aws_task_scheduler *scheduler) {
-    return scheduler && scheduler->alloc && aws_priority_queue_is_valid(&scheduler->timed_queue) &&
-           aws_linked_list_is_valid(&scheduler->asap_list) && aws_linked_list_is_valid(&scheduler->timed_list);
-}
-
+bool aws_task_scheduler_is_valid(const struct aws_task_scheduler *scheduler) { 
+    return scheduler && scheduler->alloc && aws_priority_queue_is_valid(&scheduler->timed_queue) && 
+           aws_linked_list_is_valid(&scheduler->asap_list) && aws_linked_list_is_valid(&scheduler->timed_list); 
+} 
+ 
 bool aws_task_scheduler_has_tasks(const struct aws_task_scheduler *scheduler, uint64_t *next_task_time) {
     AWS_ASSERT(scheduler);
 
@@ -128,12 +128,12 @@ void aws_task_scheduler_schedule_now(struct aws_task_scheduler *scheduler, struc
     AWS_ASSERT(task);
     AWS_ASSERT(task->fn);
 
-    AWS_LOGF_DEBUG(
-        AWS_LS_COMMON_TASK_SCHEDULER,
-        "id=%p: Scheduling %s task for immediate execution",
-        (void *)task,
-        task->type_tag);
-
+    AWS_LOGF_DEBUG( 
+        AWS_LS_COMMON_TASK_SCHEDULER, 
+        "id=%p: Scheduling %s task for immediate execution", 
+        (void *)task, 
+        task->type_tag); 
+ 
     task->priority_queue_node.current_index = SIZE_MAX;
     aws_linked_list_node_reset(&task->node);
     task->timestamp = 0;
@@ -150,13 +150,13 @@ void aws_task_scheduler_schedule_future(
     AWS_ASSERT(task);
     AWS_ASSERT(task->fn);
 
-    AWS_LOGF_DEBUG(
-        AWS_LS_COMMON_TASK_SCHEDULER,
-        "id=%p: Scheduling %s task for future execution at time %" PRIu64,
-        (void *)task,
-        task->type_tag,
-        time_to_run);
-
+    AWS_LOGF_DEBUG( 
+        AWS_LS_COMMON_TASK_SCHEDULER, 
+        "id=%p: Scheduling %s task for future execution at time %" PRIu64, 
+        (void *)task, 
+        task->type_tag, 
+        time_to_run); 
+ 
     task->timestamp = time_to_run;
 
     task->priority_queue_node.current_index = SIZE_MAX;
@@ -256,9 +256,9 @@ void aws_task_scheduler_cancel_task(struct aws_task_scheduler *scheduler, struct
     } else {
         aws_priority_queue_remove(&scheduler->timed_queue, &task, &task->priority_queue_node);
     }
-
-    /*
-     * No need to log cancellation specially; it will get logged during the run call with the canceled status
-     */
+ 
+    /* 
+     * No need to log cancellation specially; it will get logged during the run call with the canceled status 
+     */ 
     aws_task_run(task, AWS_TASK_STATUS_CANCELED);
 }

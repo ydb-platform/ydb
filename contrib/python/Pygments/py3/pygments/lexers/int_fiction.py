@@ -921,7 +921,7 @@ class Tads3Lexer(RegexLexer):
         'block?/root': [
             (r'\{', Punctuation, ('#pop', 'block')),
             include('whitespace'),
-            (r'(?=[\[\'"<(:])', Text,  # It might be a VerbRule macro.
+            (r'(?=[\[\'"<(:])', Text,  # It might be a VerbRule macro. 
              ('#pop', 'object-body/no-braces', 'grammar', 'grammar-rules')),
             # It might be a macro like DefineAction.
             default(('#pop', 'object-body/no-braces'))

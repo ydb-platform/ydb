@@ -1,5 +1,5 @@
-#ifndef CURLINC_STDCHEADERS_H
-#define CURLINC_STDCHEADERS_H
+#ifndef CURLINC_STDCHEADERS_H 
+#define CURLINC_STDCHEADERS_H 
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -30,4 +30,4 @@ size_t fwrite(const void *, size_t, size_t, FILE *);
 int strcasecmp(const char *, const char *);
 int strncasecmp(const char *, const char *, size_t);
 
-#endif /* CURLINC_STDCHEADERS_H */
+#endif /* CURLINC_STDCHEADERS_H */ 

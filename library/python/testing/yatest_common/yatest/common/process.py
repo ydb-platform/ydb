@@ -475,7 +475,7 @@ def execute(
 
         if isinstance(stream, six.string_types):
             # User filename is supplied: open file for writing
-            return open(stream, 'wb+'), stream.startswith('/dev/')
+            return open(stream, 'wb+'), stream.startswith('/dev/') 
 
         # Open file or PIPE sentinel is supplied
         is_pipe = stream == subprocess.PIPE
@@ -626,7 +626,7 @@ def wait_for(check_function, timeout, fail_message="", sleep_time=1.0, on_check_
     raise TimeoutError(truncate(message, MAX_MESSAGE_LEN))
 
 
-def _kill_process_tree(process_pid, target_pid_signal=None):
+def _kill_process_tree(process_pid, target_pid_signal=None): 
     """
     Kills child processes, req. Note that psutil should be installed
     @param process_pid: parent id to search for descendants
@@ -653,7 +653,7 @@ def _get_binname(pid):
         return "error({})".format(e)
 
 
-def _nix_kill_process_tree(pid, target_pid_signal=None):
+def _nix_kill_process_tree(pid, target_pid_signal=None): 
     """
     Kills the process tree.
     """
@@ -680,7 +680,7 @@ def _nix_kill_process_tree(pid, target_pid_signal=None):
             yatest_logger.debug("Killing child pid {pid} failed: {error}".format(pid=child_pid, error=e))
             continue
 
-    try_to_send_signal(pid, target_pid_signal or signal.SIGKILL)  # Kill the root process.
+    try_to_send_signal(pid, target_pid_signal or signal.SIGKILL)  # Kill the root process. 
 
     # sometimes on freebsd sigkill cannot kill the process and either sigkill or sigcont should be sent
     # https://www.mail-archive.com/freebsd-hackers@freebsd.org/msg159646.html

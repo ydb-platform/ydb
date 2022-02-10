@@ -28,7 +28,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace container_internal {
 
 // A common base class for btree_set, btree_map, btree_multiset, and
@@ -156,7 +156,7 @@ class btree_container {
   iterator erase(const_iterator iter) { return tree_.erase(iterator(iter)); }
   iterator erase(iterator iter) { return tree_.erase(iter); }
   iterator erase(const_iterator first, const_iterator last) {
-    return tree_.erase_range(iterator(first), iterator(last)).second;
+    return tree_.erase_range(iterator(first), iterator(last)).second; 
   }
   template <typename K = key_type>
   size_type erase(const key_arg<K> &key) {
@@ -320,10 +320,10 @@ class btree_set_container : public btree_container<Tree> {
   insert_return_type insert(node_type &&node) {
     if (!node) return {this->end(), false, node_type()};
     std::pair<iterator, bool> res =
-        this->tree_.insert_unique(params_type::key(CommonAccess::GetSlot(node)),
-                                  CommonAccess::GetSlot(node));
+        this->tree_.insert_unique(params_type::key(CommonAccess::GetSlot(node)), 
+                                  CommonAccess::GetSlot(node)); 
     if (res.second) {
-      CommonAccess::Destroy(&node);
+      CommonAccess::Destroy(&node); 
       return {res.first, true, node_type()};
     } else {
       return {res.first, false, std::move(node)};
@@ -333,8 +333,8 @@ class btree_set_container : public btree_container<Tree> {
     if (!node) return this->end();
     std::pair<iterator, bool> res = this->tree_.insert_hint_unique(
         iterator(hint), params_type::key(CommonAccess::GetSlot(node)),
-        CommonAccess::GetSlot(node));
-    if (res.second) CommonAccess::Destroy(&node);
+        CommonAccess::GetSlot(node)); 
+    if (res.second) CommonAccess::Destroy(&node); 
     return res.first;
   }
 
@@ -391,7 +391,7 @@ class btree_map_container : public btree_set_container<Tree> {
   using params_type = typename Tree::params_type;
   friend class BtreeNodePeer;
 
- private:
+ private: 
   template <class K>
   using key_arg = typename super_type::template key_arg<K>;
 
@@ -409,43 +409,43 @@ class btree_map_container : public btree_set_container<Tree> {
   btree_map_container() {}
 
   // Insertion routines.
-  // Note: the nullptr template arguments and extra `const M&` overloads allow
-  // for supporting bitfield arguments.
+  // Note: the nullptr template arguments and extra `const M&` overloads allow 
+  // for supporting bitfield arguments. 
   template <typename K = key_type, class M>
   std::pair<iterator, bool> insert_or_assign(const key_arg<K> &k,
                                              const M &obj) {
     return insert_or_assign_impl(k, obj);
-  }
+  } 
   template <typename K = key_type, class M, K * = nullptr>
   std::pair<iterator, bool> insert_or_assign(key_arg<K> &&k, const M &obj) {
     return insert_or_assign_impl(std::forward<K>(k), obj);
-  }
+  } 
   template <typename K = key_type, class M, M * = nullptr>
   std::pair<iterator, bool> insert_or_assign(const key_arg<K> &k, M &&obj) {
     return insert_or_assign_impl(k, std::forward<M>(obj));
-  }
+  } 
   template <typename K = key_type, class M, K * = nullptr, M * = nullptr>
   std::pair<iterator, bool> insert_or_assign(key_arg<K> &&k, M &&obj) {
     return insert_or_assign_impl(std::forward<K>(k), std::forward<M>(obj));
-  }
+  } 
   template <typename K = key_type, class M>
   iterator insert_or_assign(const_iterator hint, const key_arg<K> &k,
-                            const M &obj) {
+                            const M &obj) { 
     return insert_or_assign_hint_impl(hint, k, obj);
-  }
+  } 
   template <typename K = key_type, class M, K * = nullptr>
   iterator insert_or_assign(const_iterator hint, key_arg<K> &&k, const M &obj) {
     return insert_or_assign_hint_impl(hint, std::forward<K>(k), obj);
-  }
+  } 
   template <typename K = key_type, class M, M * = nullptr>
   iterator insert_or_assign(const_iterator hint, const key_arg<K> &k, M &&obj) {
     return insert_or_assign_hint_impl(hint, k, std::forward<M>(obj));
-  }
+  } 
   template <typename K = key_type, class M, K * = nullptr, M * = nullptr>
   iterator insert_or_assign(const_iterator hint, key_arg<K> &&k, M &&obj) {
     return insert_or_assign_hint_impl(hint, std::forward<K>(k),
                                       std::forward<M>(obj));
-  }
+  } 
 
   template <typename K = key_type, typename... Args,
             typename y_absl::enable_if_t<
@@ -603,21 +603,21 @@ class btree_multiset_container : public btree_container<Tree> {
     return this->tree_.insert_hint_multi(
         iterator(hint), init_type(std::forward<Args>(args)...));
   }
-  iterator insert(node_type &&node) {
+  iterator insert(node_type &&node) { 
     if (!node) return this->end();
     iterator res =
-        this->tree_.insert_multi(params_type::key(CommonAccess::GetSlot(node)),
-                                 CommonAccess::GetSlot(node));
-    CommonAccess::Destroy(&node);
+        this->tree_.insert_multi(params_type::key(CommonAccess::GetSlot(node)), 
+                                 CommonAccess::GetSlot(node)); 
+    CommonAccess::Destroy(&node); 
     return res;
   }
   iterator insert(const_iterator hint, node_type &&node) {
-    if (!node) return this->end();
-    iterator res = this->tree_.insert_hint_multi(
-        iterator(hint),
-        std::move(params_type::element(CommonAccess::GetSlot(node))));
-    CommonAccess::Destroy(&node);
-    return res;
+    if (!node) return this->end(); 
+    iterator res = this->tree_.insert_hint_multi( 
+        iterator(hint), 
+        std::move(params_type::element(CommonAccess::GetSlot(node)))); 
+    CommonAccess::Destroy(&node); 
+    return res; 
   }
 
   // Node extraction routines.
@@ -677,7 +677,7 @@ class btree_multimap_container : public btree_multiset_container<Tree> {
 };
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_BTREE_CONTAINER_H_

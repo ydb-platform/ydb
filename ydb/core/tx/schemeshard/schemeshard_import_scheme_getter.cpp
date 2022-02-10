@@ -20,7 +20,7 @@ using namespace Aws::Client;
 using namespace Aws::S3;
 using namespace Aws;
 
-class TSchemeGetter: public TActorBootstrapped<TSchemeGetter>, private TS3User {
+class TSchemeGetter: public TActorBootstrapped<TSchemeGetter>, private TS3User { 
     static ClientConfiguration ConfigFromSettings(const Ydb::Import::ImportFromS3Settings& settings) {
         ClientConfiguration config;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 1999-2019 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1999-2019 The OpenSSL Project Authors. All Rights Reserved. 
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -143,7 +143,7 @@ int RSA_padding_check_PKCS1_OAEP_mgf1(unsigned char *to, int tlen,
      * |num| is the length of the modulus; |flen| is the length of the
      * encoded message. Therefore, for any |from| that was obtained by
      * decrypting a ciphertext, we must have |flen| <= |num|. Similarly,
-     * |num| >= 2 * |mdlen| + 2 must hold for the modulus irrespective of
+     * |num| >= 2 * |mdlen| + 2 must hold for the modulus irrespective of 
      * the ciphertext, see PKCS #1 v2.2, section 7.1.2.
      * This does not leak any side-channel information.
      */
@@ -185,10 +185,10 @@ int RSA_padding_check_PKCS1_OAEP_mgf1(unsigned char *to, int tlen,
      * true. See James H. Manger, "A Chosen Ciphertext  Attack on RSA
      * Optimal Asymmetric Encryption Padding (OAEP) [...]", CRYPTO 2001).
      */
-    good = constant_time_is_zero(em[0]);
+    good = constant_time_is_zero(em[0]); 
 
-    maskedseed = em + 1;
-    maskeddb = em + 1 + mdlen;
+    maskedseed = em + 1; 
+    maskeddb = em + 1 + mdlen; 
 
     if (PKCS1_MGF1(seed, mdlen, maskeddb, dblen, mgf1md))
         goto cleanup;
@@ -229,31 +229,31 @@ int RSA_padding_check_PKCS1_OAEP_mgf1(unsigned char *to, int tlen,
     mlen = dblen - msg_index;
 
     /*
-     * For good measure, do this check in constant time as well.
+     * For good measure, do this check in constant time as well. 
      */
     good &= constant_time_ge(tlen, mlen);
 
     /*
-     * Move the result in-place by |dblen|-|mdlen|-1-|mlen| bytes to the left.
-     * Then if |good| move |mlen| bytes from |db|+|mdlen|+1 to |to|.
-     * Otherwise leave |to| unchanged.
-     * Copy the memory back in a way that does not reveal the size of
-     * the data being copied via a timing side channel. This requires copying
-     * parts of the buffer multiple times based on the bits set in the real
-     * length. Clear bits do a non-copy with identical access pattern.
-     * The loop below has overall complexity of O(N*log(N)).
+     * Move the result in-place by |dblen|-|mdlen|-1-|mlen| bytes to the left. 
+     * Then if |good| move |mlen| bytes from |db|+|mdlen|+1 to |to|. 
+     * Otherwise leave |to| unchanged. 
+     * Copy the memory back in a way that does not reveal the size of 
+     * the data being copied via a timing side channel. This requires copying 
+     * parts of the buffer multiple times based on the bits set in the real 
+     * length. Clear bits do a non-copy with identical access pattern. 
+     * The loop below has overall complexity of O(N*log(N)). 
      */
-    tlen = constant_time_select_int(constant_time_lt(dblen - mdlen - 1, tlen),
-                                    dblen - mdlen - 1, tlen);
-    for (msg_index = 1; msg_index < dblen - mdlen - 1; msg_index <<= 1) {
-        mask = ~constant_time_eq(msg_index & (dblen - mdlen - 1 - mlen), 0);
-        for (i = mdlen + 1; i < dblen - msg_index; i++)
-            db[i] = constant_time_select_8(mask, db[i + msg_index], db[i]);
+    tlen = constant_time_select_int(constant_time_lt(dblen - mdlen - 1, tlen), 
+                                    dblen - mdlen - 1, tlen); 
+    for (msg_index = 1; msg_index < dblen - mdlen - 1; msg_index <<= 1) { 
+        mask = ~constant_time_eq(msg_index & (dblen - mdlen - 1 - mlen), 0); 
+        for (i = mdlen + 1; i < dblen - msg_index; i++) 
+            db[i] = constant_time_select_8(mask, db[i + msg_index], db[i]); 
     }
-    for (i = 0; i < tlen; i++) {
-        mask = good & constant_time_lt(i, mlen);
-        to[i] = constant_time_select_8(mask, db[i + mdlen + 1], to[i]);
-    }
+    for (i = 0; i < tlen; i++) { 
+        mask = good & constant_time_lt(i, mlen); 
+        to[i] = constant_time_select_8(mask, db[i + mdlen + 1], to[i]); 
+    } 
 
     /*
      * To avoid chosen ciphertext attacks, the error message should not

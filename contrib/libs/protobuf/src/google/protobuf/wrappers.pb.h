@@ -114,19 +114,19 @@ class PROTOBUF_EXPORT DoubleValue final :
     CopyFrom(from);
     return *this;
   }
-  inline DoubleValue& operator=(DoubleValue&& from) noexcept {
+  inline DoubleValue& operator=(DoubleValue&& from) noexcept { 
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
+    } else { 
+      CopyFrom(from); 
+    } 
+    return *this; 
+  } 
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  }
+  } 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
   }
@@ -136,16 +136,16 @@ class PROTOBUF_EXPORT DoubleValue final :
   static const DoubleValue& default_instance() {
     return *internal_default_instance();
   }
-  static inline const DoubleValue* internal_default_instance() {
-    return reinterpret_cast<const DoubleValue*>(
-               &_DoubleValue_default_instance_);
-  }
+  static inline const DoubleValue* internal_default_instance() { 
+    return reinterpret_cast<const DoubleValue*>( 
+               &_DoubleValue_default_instance_); 
+  } 
   static constexpr int kIndexInFileMessages =
-    0;
-
-  friend void swap(DoubleValue& a, DoubleValue& b) {
-    a.Swap(&b);
-  }
+    0; 
+ 
+  friend void swap(DoubleValue& a, DoubleValue& b) { 
+    a.Swap(&b); 
+  } 
   inline void Swap(DoubleValue* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -214,7 +214,7 @@ class PROTOBUF_EXPORT DoubleValue final :
   enum : int {
     kValueFieldNumber = 1,
   };
-  // double value = 1;
+  // double value = 1; 
   void clear_value();
   double value() const;
   void set_value(double value);
@@ -253,19 +253,19 @@ class PROTOBUF_EXPORT FloatValue final :
     CopyFrom(from);
     return *this;
   }
-  inline FloatValue& operator=(FloatValue&& from) noexcept {
+  inline FloatValue& operator=(FloatValue&& from) noexcept { 
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
+    } else { 
+      CopyFrom(from); 
+    } 
+    return *this; 
+  } 
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  }
+  } 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
   }
@@ -275,16 +275,16 @@ class PROTOBUF_EXPORT FloatValue final :
   static const FloatValue& default_instance() {
     return *internal_default_instance();
   }
-  static inline const FloatValue* internal_default_instance() {
-    return reinterpret_cast<const FloatValue*>(
-               &_FloatValue_default_instance_);
-  }
+  static inline const FloatValue* internal_default_instance() { 
+    return reinterpret_cast<const FloatValue*>( 
+               &_FloatValue_default_instance_); 
+  } 
   static constexpr int kIndexInFileMessages =
-    1;
-
-  friend void swap(FloatValue& a, FloatValue& b) {
-    a.Swap(&b);
-  }
+    1; 
+ 
+  friend void swap(FloatValue& a, FloatValue& b) { 
+    a.Swap(&b); 
+  } 
   inline void Swap(FloatValue* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -353,7 +353,7 @@ class PROTOBUF_EXPORT FloatValue final :
   enum : int {
     kValueFieldNumber = 1,
   };
-  // float value = 1;
+  // float value = 1; 
   void clear_value();
   float value() const;
   void set_value(float value);
@@ -392,19 +392,19 @@ class PROTOBUF_EXPORT Int64Value final :
     CopyFrom(from);
     return *this;
   }
-  inline Int64Value& operator=(Int64Value&& from) noexcept {
+  inline Int64Value& operator=(Int64Value&& from) noexcept { 
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
+    } else { 
+      CopyFrom(from); 
+    } 
+    return *this; 
+  } 
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  }
+  } 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
   }
@@ -414,16 +414,16 @@ class PROTOBUF_EXPORT Int64Value final :
   static const Int64Value& default_instance() {
     return *internal_default_instance();
   }
-  static inline const Int64Value* internal_default_instance() {
-    return reinterpret_cast<const Int64Value*>(
-               &_Int64Value_default_instance_);
-  }
+  static inline const Int64Value* internal_default_instance() { 
+    return reinterpret_cast<const Int64Value*>( 
+               &_Int64Value_default_instance_); 
+  } 
   static constexpr int kIndexInFileMessages =
-    2;
-
-  friend void swap(Int64Value& a, Int64Value& b) {
-    a.Swap(&b);
-  }
+    2; 
+ 
+  friend void swap(Int64Value& a, Int64Value& b) { 
+    a.Swap(&b); 
+  } 
   inline void Swap(Int64Value* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -492,7 +492,7 @@ class PROTOBUF_EXPORT Int64Value final :
   enum : int {
     kValueFieldNumber = 1,
   };
-  // int64 value = 1;
+  // int64 value = 1; 
   void clear_value();
   ::PROTOBUF_NAMESPACE_ID::int64 value() const;
   void set_value(::PROTOBUF_NAMESPACE_ID::int64 value);
@@ -531,19 +531,19 @@ class PROTOBUF_EXPORT UInt64Value final :
     CopyFrom(from);
     return *this;
   }
-  inline UInt64Value& operator=(UInt64Value&& from) noexcept {
+  inline UInt64Value& operator=(UInt64Value&& from) noexcept { 
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
+    } else { 
+      CopyFrom(from); 
+    } 
+    return *this; 
+  } 
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  }
+  } 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
   }
@@ -553,16 +553,16 @@ class PROTOBUF_EXPORT UInt64Value final :
   static const UInt64Value& default_instance() {
     return *internal_default_instance();
   }
-  static inline const UInt64Value* internal_default_instance() {
-    return reinterpret_cast<const UInt64Value*>(
-               &_UInt64Value_default_instance_);
-  }
+  static inline const UInt64Value* internal_default_instance() { 
+    return reinterpret_cast<const UInt64Value*>( 
+               &_UInt64Value_default_instance_); 
+  } 
   static constexpr int kIndexInFileMessages =
-    3;
-
-  friend void swap(UInt64Value& a, UInt64Value& b) {
-    a.Swap(&b);
-  }
+    3; 
+ 
+  friend void swap(UInt64Value& a, UInt64Value& b) { 
+    a.Swap(&b); 
+  } 
   inline void Swap(UInt64Value* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -631,7 +631,7 @@ class PROTOBUF_EXPORT UInt64Value final :
   enum : int {
     kValueFieldNumber = 1,
   };
-  // uint64 value = 1;
+  // uint64 value = 1; 
   void clear_value();
   ::PROTOBUF_NAMESPACE_ID::uint64 value() const;
   void set_value(::PROTOBUF_NAMESPACE_ID::uint64 value);
@@ -670,19 +670,19 @@ class PROTOBUF_EXPORT Int32Value final :
     CopyFrom(from);
     return *this;
   }
-  inline Int32Value& operator=(Int32Value&& from) noexcept {
+  inline Int32Value& operator=(Int32Value&& from) noexcept { 
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
+    } else { 
+      CopyFrom(from); 
+    } 
+    return *this; 
+  } 
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  }
+  } 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
   }
@@ -692,16 +692,16 @@ class PROTOBUF_EXPORT Int32Value final :
   static const Int32Value& default_instance() {
     return *internal_default_instance();
   }
-  static inline const Int32Value* internal_default_instance() {
-    return reinterpret_cast<const Int32Value*>(
-               &_Int32Value_default_instance_);
-  }
+  static inline const Int32Value* internal_default_instance() { 
+    return reinterpret_cast<const Int32Value*>( 
+               &_Int32Value_default_instance_); 
+  } 
   static constexpr int kIndexInFileMessages =
-    4;
-
-  friend void swap(Int32Value& a, Int32Value& b) {
-    a.Swap(&b);
-  }
+    4; 
+ 
+  friend void swap(Int32Value& a, Int32Value& b) { 
+    a.Swap(&b); 
+  } 
   inline void Swap(Int32Value* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -770,7 +770,7 @@ class PROTOBUF_EXPORT Int32Value final :
   enum : int {
     kValueFieldNumber = 1,
   };
-  // int32 value = 1;
+  // int32 value = 1; 
   void clear_value();
   ::PROTOBUF_NAMESPACE_ID::int32 value() const;
   void set_value(::PROTOBUF_NAMESPACE_ID::int32 value);
@@ -809,19 +809,19 @@ class PROTOBUF_EXPORT UInt32Value final :
     CopyFrom(from);
     return *this;
   }
-  inline UInt32Value& operator=(UInt32Value&& from) noexcept {
+  inline UInt32Value& operator=(UInt32Value&& from) noexcept { 
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
+    } else { 
+      CopyFrom(from); 
+    } 
+    return *this; 
+  } 
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  }
+  } 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
   }
@@ -831,16 +831,16 @@ class PROTOBUF_EXPORT UInt32Value final :
   static const UInt32Value& default_instance() {
     return *internal_default_instance();
   }
-  static inline const UInt32Value* internal_default_instance() {
-    return reinterpret_cast<const UInt32Value*>(
-               &_UInt32Value_default_instance_);
-  }
+  static inline const UInt32Value* internal_default_instance() { 
+    return reinterpret_cast<const UInt32Value*>( 
+               &_UInt32Value_default_instance_); 
+  } 
   static constexpr int kIndexInFileMessages =
-    5;
-
-  friend void swap(UInt32Value& a, UInt32Value& b) {
-    a.Swap(&b);
-  }
+    5; 
+ 
+  friend void swap(UInt32Value& a, UInt32Value& b) { 
+    a.Swap(&b); 
+  } 
   inline void Swap(UInt32Value* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -909,7 +909,7 @@ class PROTOBUF_EXPORT UInt32Value final :
   enum : int {
     kValueFieldNumber = 1,
   };
-  // uint32 value = 1;
+  // uint32 value = 1; 
   void clear_value();
   ::PROTOBUF_NAMESPACE_ID::uint32 value() const;
   void set_value(::PROTOBUF_NAMESPACE_ID::uint32 value);
@@ -948,19 +948,19 @@ class PROTOBUF_EXPORT BoolValue final :
     CopyFrom(from);
     return *this;
   }
-  inline BoolValue& operator=(BoolValue&& from) noexcept {
+  inline BoolValue& operator=(BoolValue&& from) noexcept { 
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
+    } else { 
+      CopyFrom(from); 
+    } 
+    return *this; 
+  } 
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  }
+  } 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
   }
@@ -970,16 +970,16 @@ class PROTOBUF_EXPORT BoolValue final :
   static const BoolValue& default_instance() {
     return *internal_default_instance();
   }
-  static inline const BoolValue* internal_default_instance() {
-    return reinterpret_cast<const BoolValue*>(
-               &_BoolValue_default_instance_);
-  }
+  static inline const BoolValue* internal_default_instance() { 
+    return reinterpret_cast<const BoolValue*>( 
+               &_BoolValue_default_instance_); 
+  } 
   static constexpr int kIndexInFileMessages =
-    6;
-
-  friend void swap(BoolValue& a, BoolValue& b) {
-    a.Swap(&b);
-  }
+    6; 
+ 
+  friend void swap(BoolValue& a, BoolValue& b) { 
+    a.Swap(&b); 
+  } 
   inline void Swap(BoolValue* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -1048,7 +1048,7 @@ class PROTOBUF_EXPORT BoolValue final :
   enum : int {
     kValueFieldNumber = 1,
   };
-  // bool value = 1;
+  // bool value = 1; 
   void clear_value();
   bool value() const;
   void set_value(bool value);
@@ -1087,19 +1087,19 @@ class PROTOBUF_EXPORT StringValue final :
     CopyFrom(from);
     return *this;
   }
-  inline StringValue& operator=(StringValue&& from) noexcept {
+  inline StringValue& operator=(StringValue&& from) noexcept { 
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
+    } else { 
+      CopyFrom(from); 
+    } 
+    return *this; 
+  } 
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  }
+  } 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
   }
@@ -1109,16 +1109,16 @@ class PROTOBUF_EXPORT StringValue final :
   static const StringValue& default_instance() {
     return *internal_default_instance();
   }
-  static inline const StringValue* internal_default_instance() {
-    return reinterpret_cast<const StringValue*>(
-               &_StringValue_default_instance_);
-  }
+  static inline const StringValue* internal_default_instance() { 
+    return reinterpret_cast<const StringValue*>( 
+               &_StringValue_default_instance_); 
+  } 
   static constexpr int kIndexInFileMessages =
-    7;
-
-  friend void swap(StringValue& a, StringValue& b) {
-    a.Swap(&b);
-  }
+    7; 
+ 
+  friend void swap(StringValue& a, StringValue& b) { 
+    a.Swap(&b); 
+  } 
   inline void Swap(StringValue* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -1187,7 +1187,7 @@ class PROTOBUF_EXPORT StringValue final :
   enum : int {
     kValueFieldNumber = 1,
   };
-  // string value = 1;
+  // string value = 1; 
   void clear_value();
   const TProtoStringType& value() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
@@ -1231,19 +1231,19 @@ class PROTOBUF_EXPORT BytesValue final :
     CopyFrom(from);
     return *this;
   }
-  inline BytesValue& operator=(BytesValue&& from) noexcept {
+  inline BytesValue& operator=(BytesValue&& from) noexcept { 
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
+    } else { 
+      CopyFrom(from); 
+    } 
+    return *this; 
+  } 
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  }
+  } 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
   }
@@ -1253,16 +1253,16 @@ class PROTOBUF_EXPORT BytesValue final :
   static const BytesValue& default_instance() {
     return *internal_default_instance();
   }
-  static inline const BytesValue* internal_default_instance() {
-    return reinterpret_cast<const BytesValue*>(
-               &_BytesValue_default_instance_);
-  }
+  static inline const BytesValue* internal_default_instance() { 
+    return reinterpret_cast<const BytesValue*>( 
+               &_BytesValue_default_instance_); 
+  } 
   static constexpr int kIndexInFileMessages =
-    8;
-
-  friend void swap(BytesValue& a, BytesValue& b) {
-    a.Swap(&b);
-  }
+    8; 
+ 
+  friend void swap(BytesValue& a, BytesValue& b) { 
+    a.Swap(&b); 
+  } 
   inline void Swap(BytesValue* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -1331,7 +1331,7 @@ class PROTOBUF_EXPORT BytesValue final :
   enum : int {
     kValueFieldNumber = 1,
   };
-  // bytes value = 1;
+  // bytes value = 1; 
   void clear_value();
   const TProtoStringType& value() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
@@ -1361,13 +1361,13 @@ class PROTOBUF_EXPORT BytesValue final :
 
 // ===================================================================
 
-#ifdef __GNUC__
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
-#endif  // __GNUC__
+#ifdef __GNUC__ 
+  #pragma GCC diagnostic push 
+  #pragma GCC diagnostic ignored "-Wstrict-aliasing" 
+#endif  // __GNUC__ 
 // DoubleValue
 
-// double value = 1;
+// double value = 1; 
 inline void DoubleValue::clear_value() {
   value_ = 0;
 }
@@ -1391,7 +1391,7 @@ inline void DoubleValue::set_value(double value) {
 
 // FloatValue
 
-// float value = 1;
+// float value = 1; 
 inline void FloatValue::clear_value() {
   value_ = 0;
 }
@@ -1415,7 +1415,7 @@ inline void FloatValue::set_value(float value) {
 
 // Int64Value
 
-// int64 value = 1;
+// int64 value = 1; 
 inline void Int64Value::clear_value() {
   value_ = int64_t{0};
 }
@@ -1439,7 +1439,7 @@ inline void Int64Value::set_value(::PROTOBUF_NAMESPACE_ID::int64 value) {
 
 // UInt64Value
 
-// uint64 value = 1;
+// uint64 value = 1; 
 inline void UInt64Value::clear_value() {
   value_ = uint64_t{0u};
 }
@@ -1463,7 +1463,7 @@ inline void UInt64Value::set_value(::PROTOBUF_NAMESPACE_ID::uint64 value) {
 
 // Int32Value
 
-// int32 value = 1;
+// int32 value = 1; 
 inline void Int32Value::clear_value() {
   value_ = 0;
 }
@@ -1487,7 +1487,7 @@ inline void Int32Value::set_value(::PROTOBUF_NAMESPACE_ID::int32 value) {
 
 // UInt32Value
 
-// uint32 value = 1;
+// uint32 value = 1; 
 inline void UInt32Value::clear_value() {
   value_ = 0u;
 }
@@ -1511,7 +1511,7 @@ inline void UInt32Value::set_value(::PROTOBUF_NAMESPACE_ID::uint32 value) {
 
 // BoolValue
 
-// bool value = 1;
+// bool value = 1; 
 inline void BoolValue::clear_value() {
   value_ = false;
 }
@@ -1535,7 +1535,7 @@ inline void BoolValue::set_value(bool value) {
 
 // StringValue
 
-// string value = 1;
+// string value = 1; 
 inline void StringValue::clear_value() {
   value_.ClearToEmpty();
 }
@@ -1585,7 +1585,7 @@ inline void StringValue::set_allocated_value(TProtoStringType* value) {
 
 // BytesValue
 
-// bytes value = 1;
+// bytes value = 1; 
 inline void BytesValue::clear_value() {
   value_.ClearToEmpty();
 }
@@ -1631,9 +1631,9 @@ inline void BytesValue::set_allocated_value(TProtoStringType* value) {
   // @@protoc_insertion_point(field_set_allocated:google.protobuf.BytesValue.value)
 }
 
-#ifdef __GNUC__
-  #pragma GCC diagnostic pop
-#endif  // __GNUC__
+#ifdef __GNUC__ 
+  #pragma GCC diagnostic pop 
+#endif  // __GNUC__ 
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------
@@ -1654,7 +1654,7 @@ inline void BytesValue::set_allocated_value(TProtoStringType* value) {
 // @@protoc_insertion_point(namespace_scope)
 
 PROTOBUF_NAMESPACE_CLOSE
-
+ 
 // @@protoc_insertion_point(global_scope)
 
 #include <google/protobuf/port_undef.inc>

@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #include <aws/core/utils/memory/stl/SimpleStringStream.h>
 
@@ -20,7 +20,7 @@ SimpleStringStream::SimpleStringStream(const Aws::String& value) :
 {
 }
 
-void SimpleStringStream::str(const Aws::String& value)
+void SimpleStringStream::str(const Aws::String& value) 
 {
     m_streamBuffer.str(value);
 }
@@ -39,7 +39,7 @@ SimpleIStringStream::SimpleIStringStream(const Aws::String& value) :
 {
 }
 
-void SimpleIStringStream::str(const Aws::String& value)
+void SimpleIStringStream::str(const Aws::String& value) 
 {
     m_streamBuffer.str(value);
 }
@@ -58,9 +58,9 @@ SimpleOStringStream::SimpleOStringStream(const Aws::String& value) :
 {
 }
 
-void SimpleOStringStream::str(const Aws::String& value)
+void SimpleOStringStream::str(const Aws::String& value) 
 {
     m_streamBuffer.str(value);
 }
 
-} // namespace Aws
+} // namespace Aws 

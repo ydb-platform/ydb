@@ -1,8 +1,8 @@
-PY23_LIBRARY()
+PY23_LIBRARY() 
 
 LICENSE(BSD-3-Clause)
 
-OWNER(g:python-contrib)
+OWNER(g:python-contrib) 
 
 VERSION(1.9.0)
 

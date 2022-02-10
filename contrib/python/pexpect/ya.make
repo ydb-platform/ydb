@@ -1,4 +1,4 @@
-PY23_LIBRARY()
+PY23_LIBRARY() 
 
 LICENSE(ISC)
 
@@ -10,8 +10,8 @@ PEERDIR(
     contrib/python/ptyprocess
 )
 
-NO_LINT()
-
+NO_LINT() 
+ 
 PY_SRCS(
     TOP_LEVEL
     pexpect/ANSI.py
@@ -30,17 +30,17 @@ PY_SRCS(
     pexpect/utils.py
 )
 
-IF (PYTHON3)
-    PY_SRCS(
-        TOP_LEVEL
-        pexpect/_async.py
-    )
-ENDIF()
+IF (PYTHON3) 
+    PY_SRCS( 
+        TOP_LEVEL 
+        pexpect/_async.py 
+    ) 
+ENDIF() 
 
 RESOURCE_FILES(
     PREFIX contrib/python/pexpect/
     .dist-info/METADATA
     .dist-info/top_level.txt
 )
-
+ 
 END()

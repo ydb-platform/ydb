@@ -33,9 +33,9 @@ using std::cerr;
 using std::endl;
 
 /* Override this so that write statement processing is ignored */
-bool GraphvizDotGen::writeStatement( InputLoc &, int, char ** )
+bool GraphvizDotGen::writeStatement( InputLoc &, int, char ** ) 
 {
-	return false;
+	return false; 
 }
 
 std::ostream &GraphvizDotGen::KEY( Key key )

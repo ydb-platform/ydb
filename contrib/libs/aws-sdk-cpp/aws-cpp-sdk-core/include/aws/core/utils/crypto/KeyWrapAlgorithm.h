@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 #pragma once
 #include <aws/core/Core_EXPORTS.h>
 #include <aws/core/utils/memory/stl/AWSString.h>
@@ -14,10 +14,10 @@ namespace Aws
         {
             enum class KeyWrapAlgorithm
             {
-                KMS, // Deprecated
-                KMS_CONTEXT,
-                AES_KEY_WRAP, // Deprecated
-                AES_GCM,
+                KMS, // Deprecated 
+                KMS_CONTEXT, 
+                AES_KEY_WRAP, // Deprecated 
+                AES_GCM, 
                 NONE
             };
 

@@ -24,11 +24,11 @@ PEERDIR(
 
 NO_LINT()
 
-NO_CHECK_IMPORTS(
-    __tests__.*  # all test modules get imported when tests are run
-    _pytest.*
-)
-
+NO_CHECK_IMPORTS( 
+    __tests__.*  # all test modules get imported when tests are run 
+    _pytest.* 
+) 
+ 
 PY_SRCS(
     TOP_LEVEL
     _pytest/__init__.py

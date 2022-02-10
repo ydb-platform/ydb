@@ -1,11 +1,11 @@
-//===- LoopPassManager.cpp - Loop pass management -------------------------===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-
+//===- LoopPassManager.cpp - Loop pass management -------------------------===// 
+// 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// 
+//===----------------------------------------------------------------------===// 
+ 
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/BasicAliasAnalysis.h"
@@ -14,22 +14,22 @@
 #include "llvm/Analysis/MemorySSA.h"
 #include "llvm/Analysis/ScalarEvolutionAliasAnalysis.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
-#include "llvm/Support/TimeProfiler.h"
-
-using namespace llvm;
-
-namespace llvm {
-
-/// Explicitly specialize the pass manager's run method to handle loop nest
-/// structure updates.
-PreservedAnalyses
-PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &,
-            LPMUpdater &>::run(Loop &L, LoopAnalysisManager &AM,
-                               LoopStandardAnalysisResults &AR, LPMUpdater &U) {
-
-  if (DebugLogging)
-    dbgs() << "Starting Loop pass manager run.\n";
-
+#include "llvm/Support/TimeProfiler.h" 
+ 
+using namespace llvm; 
+ 
+namespace llvm { 
+ 
+/// Explicitly specialize the pass manager's run method to handle loop nest 
+/// structure updates. 
+PreservedAnalyses 
+PassManager<Loop, LoopAnalysisManager, LoopStandardAnalysisResults &, 
+            LPMUpdater &>::run(Loop &L, LoopAnalysisManager &AM, 
+                               LoopStandardAnalysisResults &AR, LPMUpdater &U) { 
+ 
+  if (DebugLogging) 
+    dbgs() << "Starting Loop pass manager run.\n"; 
+ 
   // Runs loop-nest passes only when the current loop is a top-level one.
   PreservedAnalyses PA = (L.isOutermost() && !LoopNestPasses.empty())
                              ? runWithLoopNestPasses(L, AM, AR, U)
@@ -59,12 +59,12 @@ LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
          "Loop-nest passes should only run on top-level loops.");
   PreservedAnalyses PA = PreservedAnalyses::all();
 
-  // Request PassInstrumentation from analysis manager, will use it to run
-  // instrumenting callbacks for the passes later.
-  PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(L, AR);
-
+  // Request PassInstrumentation from analysis manager, will use it to run 
+  // instrumenting callbacks for the passes later. 
+  PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(L, AR); 
+ 
   unsigned LoopPassIndex = 0, LoopNestPassIndex = 0;
-
+ 
   // `LoopNestPtr` points to the `LoopNest` object for the current top-level
   // loop and `IsLoopNestPtrValid` indicates whether the pointer is still valid.
   // The `LoopNest` object will have to be re-constructed if the pointer is
@@ -89,24 +89,24 @@ LoopPassManager::runWithLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
         IsLoopNestPtrValid = true;
       }
       PassPA = runSinglePass(*LoopNestPtr, Pass, AM, AR, U, PI);
-    }
-
+    } 
+ 
     // `PassPA` is `None` means that the before-pass callbacks in
     // `PassInstrumentation` return false. The pass does not run in this case,
     // so we can skip the following procedure.
     if (!PassPA)
       continue;
-
-    // If the loop was deleted, abort the run and return to the outer walk.
-    if (U.skipCurrentLoop()) {
+ 
+    // If the loop was deleted, abort the run and return to the outer walk. 
+    if (U.skipCurrentLoop()) { 
       PA.intersect(std::move(*PassPA));
-      break;
-    }
-
+      break; 
+    } 
+ 
     // Update the analysis manager as each pass runs and potentially
     // invalidates analyses.
     AM.invalidate(L, *PassPA);
-
+ 
     // Finally, we intersect the final preserved analyses to compute the
     // aggregate preserved set for this pass manager.
     PA.intersect(std::move(*PassPA));
@@ -150,24 +150,24 @@ LoopPassManager::runWithoutLoopNestPasses(Loop &L, LoopAnalysisManager &AM,
       break;
     }
 
-    // Update the analysis manager as each pass runs and potentially
-    // invalidates analyses.
+    // Update the analysis manager as each pass runs and potentially 
+    // invalidates analyses. 
     AM.invalidate(L, *PassPA);
-
-    // Finally, we intersect the final preserved analyses to compute the
-    // aggregate preserved set for this pass manager.
+ 
+    // Finally, we intersect the final preserved analyses to compute the 
+    // aggregate preserved set for this pass manager. 
     PA.intersect(std::move(*PassPA));
-
-    // FIXME: Historically, the pass managers all called the LLVM context's
-    // yield function here. We don't have a generic way to acquire the
-    // context and it isn't yet clear what the right pattern is for yielding
-    // in the new pass manager so it is currently omitted.
-    // ...getContext().yield();
-  }
+ 
+    // FIXME: Historically, the pass managers all called the LLVM context's 
+    // yield function here. We don't have a generic way to acquire the 
+    // context and it isn't yet clear what the right pattern is for yielding 
+    // in the new pass manager so it is currently omitted. 
+    // ...getContext().yield(); 
+  } 
   return PA;
 }
 } // namespace llvm
-
+ 
 PreservedAnalyses FunctionToLoopPassAdaptor::run(Function &F,
                                                  FunctionAnalysisManager &AM) {
   // Before we even compute any loop analyses, first run a miniature function
@@ -175,7 +175,7 @@ PreservedAnalyses FunctionToLoopPassAdaptor::run(Function &F,
   // directly build up function analyses after this as the function pass
   // manager handles all the invalidation at that layer.
   PassInstrumentation PI = AM.getResult<PassInstrumentationAnalysis>(F);
-
+ 
   PreservedAnalyses PA = PreservedAnalyses::all();
   // Check the PassInstrumentation's BeforePass callbacks before running the
   // canonicalization pipeline.
@@ -183,7 +183,7 @@ PreservedAnalyses FunctionToLoopPassAdaptor::run(Function &F,
     PA = LoopCanonicalizationFPM.run(F, AM);
     PI.runAfterPass<Function>(LoopCanonicalizationFPM, F, PA);
   }
-
+ 
   // Get the loop structure for this function
   LoopInfo &LI = AM.getResult<LoopAnalysis>(F);
 
@@ -320,16 +320,16 @@ PreservedAnalyses FunctionToLoopPassAdaptor::run(Function &F,
   PA.preserve<BasicAA>();
   PA.preserve<GlobalsAA>();
   PA.preserve<SCEVAA>();
-  return PA;
-}
-
-PrintLoopPass::PrintLoopPass() : OS(dbgs()) {}
-PrintLoopPass::PrintLoopPass(raw_ostream &OS, const std::string &Banner)
-    : OS(OS), Banner(Banner) {}
-
-PreservedAnalyses PrintLoopPass::run(Loop &L, LoopAnalysisManager &,
-                                     LoopStandardAnalysisResults &,
-                                     LPMUpdater &) {
-  printLoop(L, OS, Banner);
-  return PreservedAnalyses::all();
-}
+  return PA; 
+} 
+ 
+PrintLoopPass::PrintLoopPass() : OS(dbgs()) {} 
+PrintLoopPass::PrintLoopPass(raw_ostream &OS, const std::string &Banner) 
+    : OS(OS), Banner(Banner) {} 
+ 
+PreservedAnalyses PrintLoopPass::run(Loop &L, LoopAnalysisManager &, 
+                                     LoopStandardAnalysisResults &, 
+                                     LPMUpdater &) { 
+  printLoop(L, OS, Banner); 
+  return PreservedAnalyses::all(); 
+} 

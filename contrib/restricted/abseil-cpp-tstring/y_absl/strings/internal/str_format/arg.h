@@ -23,7 +23,7 @@
 #include <limits>
 #include <memory>
 #include <sstream>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <util/stream/str.h>
 #include <type_traits>
 
@@ -34,9 +34,9 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
-class Cord;
+class Cord; 
 class FormatCountCapture;
 class FormatSink;
 
@@ -157,17 +157,17 @@ StringConvertResult FormatConvertImpl(const AbslCord& value,
 
   if (space_remaining > 0 && !is_left) sink->Append(space_remaining, ' ');
 
-  for (string_view piece : value.Chunks()) {
-    if (piece.size() > to_write) {
-      piece.remove_suffix(piece.size() - to_write);
-      to_write = 0;
-    } else {
-      to_write -= piece.size();
-    }
+  for (string_view piece : value.Chunks()) { 
+    if (piece.size() > to_write) { 
+      piece.remove_suffix(piece.size() - to_write); 
+      to_write = 0; 
+    } else { 
+      to_write -= piece.size(); 
+    } 
     sink->Append(piece);
-    if (to_write == 0) {
-      break;
-    }
+    if (to_write == 0) { 
+      break; 
+    } 
   }
 
   if (space_remaining > 0 && is_left) sink->Append(space_remaining, ' ');
@@ -522,7 +522,7 @@ ABSL_INTERNAL_FORMAT_DISPATCH_OVERLOADS_EXPAND_(extern);
 
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_ARG_H_

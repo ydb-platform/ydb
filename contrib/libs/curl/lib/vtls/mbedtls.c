@@ -63,7 +63,7 @@
 #include "parsedate.h"
 #include "connect.h" /* for the connect timeout */
 #include "select.h"
-#include "multiif.h"
+#include "multiif.h" 
 #error #include "mbedtls_threadlock.h"
 
 /* The last 3 #include files should be in this order */
@@ -386,7 +386,7 @@ mbed_connect_step1(struct connectdata *conn,
     }
   }
 
-  infof(data, "mbedTLS: Connecting to %s:%ld\n", hostname, port);
+  infof(data, "mbedTLS: Connecting to %s:%ld\n", hostname, port); 
 
   mbedtls_ssl_config_init(&backend->config);
 
@@ -572,8 +572,8 @@ mbed_connect_step2(struct connectdata *conn,
     return CURLE_OK;
   }
   else if(ret) {
-    char errorbuf[128];
-    errorbuf[0] = 0;
+    char errorbuf[128]; 
+    errorbuf[0] = 0; 
 #ifdef MBEDTLS_ERROR_C
     mbedtls_strerror(ret, errorbuf, sizeof(errorbuf));
 #endif /* MBEDTLS_ERROR_C */
@@ -588,21 +588,21 @@ mbed_connect_step2(struct connectdata *conn,
 
   ret = mbedtls_ssl_get_verify_result(&backend->ssl);
 
-  if(!SSL_CONN_CONFIG(verifyhost))
-    /* Ignore hostname errors if verifyhost is disabled */
-    ret &= ~MBEDTLS_X509_BADCERT_CN_MISMATCH;
-
+  if(!SSL_CONN_CONFIG(verifyhost)) 
+    /* Ignore hostname errors if verifyhost is disabled */ 
+    ret &= ~MBEDTLS_X509_BADCERT_CN_MISMATCH; 
+ 
   if(ret && SSL_CONN_CONFIG(verifypeer)) {
     if(ret & MBEDTLS_X509_BADCERT_EXPIRED)
       failf(data, "Cert verify failed: BADCERT_EXPIRED");
 
-    else if(ret & MBEDTLS_X509_BADCERT_REVOKED)
+    else if(ret & MBEDTLS_X509_BADCERT_REVOKED) 
       failf(data, "Cert verify failed: BADCERT_REVOKED");
 
-    else if(ret & MBEDTLS_X509_BADCERT_CN_MISMATCH)
+    else if(ret & MBEDTLS_X509_BADCERT_CN_MISMATCH) 
       failf(data, "Cert verify failed: BADCERT_CN_MISMATCH");
 
-    else if(ret & MBEDTLS_X509_BADCERT_NOT_TRUSTED)
+    else if(ret & MBEDTLS_X509_BADCERT_NOT_TRUSTED) 
       failf(data, "Cert verify failed: BADCERT_NOT_TRUSTED");
 
     else if(ret & MBEDTLS_X509_BADCERT_FUTURE)
@@ -701,8 +701,8 @@ mbed_connect_step2(struct connectdata *conn,
     else {
       infof(data, "ALPN, server did not agree to a protocol\n");
     }
-    Curl_multiuse_state(conn, conn->negnpn == CURL_HTTP_VERSION_2 ?
-                        BUNDLE_MULTIPLEX : BUNDLE_NO_MULTIUSE);
+    Curl_multiuse_state(conn, conn->negnpn == CURL_HTTP_VERSION_2 ? 
+                        BUNDLE_MULTIPLEX : BUNDLE_NO_MULTIUSE); 
   }
 #endif
 
@@ -736,8 +736,8 @@ mbed_connect_step3(struct connectdata *conn,
 
     ret = mbedtls_ssl_get_session(&backend->ssl, our_ssl_sessionid);
     if(ret) {
-      if(ret != MBEDTLS_ERR_SSL_ALLOC_FAILED)
-        mbedtls_ssl_session_free(our_ssl_sessionid);
+      if(ret != MBEDTLS_ERR_SSL_ALLOC_FAILED) 
+        mbedtls_ssl_session_free(our_ssl_sessionid); 
       free(our_ssl_sessionid);
       failf(data, "mbedtls_ssl_get_session returned -0x%x", -ret);
       return CURLE_SSL_CONNECT_ERROR;
@@ -751,7 +751,7 @@ mbed_connect_step3(struct connectdata *conn,
     retcode = Curl_ssl_addsessionid(conn, our_ssl_sessionid, 0, sockindex);
     Curl_ssl_sessionid_unlock(conn);
     if(retcode) {
-      mbedtls_ssl_session_free(our_ssl_sessionid);
+      mbedtls_ssl_session_free(our_ssl_sessionid); 
       free(our_ssl_sessionid);
       failf(data, "failed to store ssl session");
       return retcode;
@@ -839,14 +839,14 @@ static void Curl_mbedtls_session_free(void *ptr)
 
 static size_t Curl_mbedtls_version(char *buffer, size_t size)
 {
-#ifdef MBEDTLS_VERSION_C
-  /* if mbedtls_version_get_number() is available it is better */
+#ifdef MBEDTLS_VERSION_C 
+  /* if mbedtls_version_get_number() is available it is better */ 
   unsigned int version = mbedtls_version_get_number();
   return msnprintf(buffer, size, "mbedTLS/%u.%u.%u", version>>24,
                    (version>>16)&0xff, (version>>8)&0xff);
-#else
-  return msnprintf(buffer, size, "mbedTLS/%s", MBEDTLS_VERSION_STRING);
-#endif
+#else 
+  return msnprintf(buffer, size, "mbedTLS/%s", MBEDTLS_VERSION_STRING); 
+#endif 
 }
 
 static CURLcode Curl_mbedtls_random(struct Curl_easy *data,

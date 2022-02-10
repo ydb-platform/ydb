@@ -26,28 +26,28 @@ struct EmptyDefaultTypeInternal {
   union {
     Empty _instance;
   };
-};
+}; 
 PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT EmptyDefaultTypeInternal _Empty_default_instance_;
 PROTOBUF_NAMESPACE_CLOSE
 static ::PROTOBUF_NAMESPACE_ID::Metadata file_level_metadata_google_2fprotobuf_2fempty_2eproto[1];
 static constexpr ::PROTOBUF_NAMESPACE_ID::EnumDescriptor const** file_level_enum_descriptors_google_2fprotobuf_2fempty_2eproto = nullptr;
 static constexpr ::PROTOBUF_NAMESPACE_ID::ServiceDescriptor const** file_level_service_descriptors_google_2fprotobuf_2fempty_2eproto = nullptr;
-
+ 
 const ::PROTOBUF_NAMESPACE_ID::uint32 TableStruct_google_2fprotobuf_2fempty_2eproto::offsets[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
-  ~0u,  // no _has_bits_
+  ~0u,  // no _has_bits_ 
   PROTOBUF_FIELD_OFFSET(PROTOBUF_NAMESPACE_ID::Empty, _internal_metadata_),
-  ~0u,  // no _extensions_
-  ~0u,  // no _oneof_case_
-  ~0u,  // no _weak_field_map_
-};
+  ~0u,  // no _extensions_ 
+  ~0u,  // no _oneof_case_ 
+  ~0u,  // no _weak_field_map_ 
+}; 
 static const ::PROTOBUF_NAMESPACE_ID::internal::MigrationSchema schemas[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) = {
   { 0, -1, sizeof(PROTOBUF_NAMESPACE_ID::Empty)},
-};
+}; 
 
 static ::PROTOBUF_NAMESPACE_ID::Message const * const file_default_instances[] = {
   reinterpret_cast<const ::PROTOBUF_NAMESPACE_ID::Message*>(&PROTOBUF_NAMESPACE_ID::_Empty_default_instance_),
-};
-
+}; 
+ 
 const char descriptor_table_protodef_google_2fprotobuf_2fempty_2eproto[] PROTOBUF_SECTION_VARIABLE(protodesc_cold) =
   "\n\033google/protobuf/empty.proto\022\017google.pr"
   "otobuf\"\007\n\005EmptyB}\n\023com.google.protobufB\n"
@@ -64,8 +64,8 @@ const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_google
 };
 PROTOBUF_ATTRIBUTE_WEAK const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable* descriptor_table_google_2fprotobuf_2fempty_2eproto_getter() {
   return &descriptor_table_google_2fprotobuf_2fempty_2eproto;
-}
-
+} 
+ 
 // Force running AddDescriptors() at dynamic initialization time.
 PROTOBUF_ATTRIBUTE_INIT_PRIORITY static ::PROTOBUF_NAMESPACE_ID::internal::AddDescriptorsRunner dynamic_init_dummy_google_2fprotobuf_2fempty_2eproto(&descriptor_table_google_2fprotobuf_2fempty_2eproto);
 PROTOBUF_NAMESPACE_OPEN
@@ -118,9 +118,9 @@ void Empty::SetCachedSize(int size) const {
 void Empty::Clear() {
 // @@protoc_insertion_point(message_clear_start:google.protobuf.Empty)
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
-  // Prevent compiler warnings about cached_has_bits being unused
-  (void) cached_has_bits;
-
+  // Prevent compiler warnings about cached_has_bits being unused 
+  (void) cached_has_bits; 
+ 
   _internal_metadata_.Clear<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>();
 }
 
@@ -152,19 +152,19 @@ failure:
     ::PROTOBUF_NAMESPACE_ID::uint8* target, ::PROTOBUF_NAMESPACE_ID::io::EpsCopyOutputStream* stream) const {
   // @@protoc_insertion_point(serialize_to_array_start:google.protobuf.Empty)
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
-  (void) cached_has_bits;
-
+  (void) cached_has_bits; 
+ 
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     target = ::PROTOBUF_NAMESPACE_ID::internal::WireFormat::InternalSerializeUnknownFieldsToArray(
         _internal_metadata_.unknown_fields<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(::PROTOBUF_NAMESPACE_ID::UnknownFieldSet::default_instance), target, stream);
-  }
+  } 
   // @@protoc_insertion_point(serialize_to_array_end:google.protobuf.Empty)
   return target;
 }
 
-size_t Empty::ByteSizeLong() const {
+size_t Empty::ByteSizeLong() const { 
 // @@protoc_insertion_point(message_byte_size_start:google.protobuf.Empty)
-  size_t total_size = 0;
+  size_t total_size = 0; 
 
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
   // Prevent compiler warnings about cached_has_bits being unused
@@ -173,7 +173,7 @@ size_t Empty::ByteSizeLong() const {
   if (PROTOBUF_PREDICT_FALSE(_internal_metadata_.have_unknown_fields())) {
     return ::PROTOBUF_NAMESPACE_ID::internal::ComputeUnknownFieldsSize(
         _internal_metadata_, total_size, &_cached_size_);
-  }
+  } 
   int cached_size = ::PROTOBUF_NAMESPACE_ID::internal::ToCachedSize(total_size);
   SetCachedSize(cached_size);
   return total_size;
@@ -194,10 +194,10 @@ void Empty::MergeImpl(::PROTOBUF_NAMESPACE_ID::Message*to,
 
 void Empty::MergeFrom(const Empty& from) {
 // @@protoc_insertion_point(class_specific_merge_from_start:google.protobuf.Empty)
-  GOOGLE_DCHECK_NE(&from, this);
+  GOOGLE_DCHECK_NE(&from, this); 
   ::PROTOBUF_NAMESPACE_ID::uint32 cached_has_bits = 0;
-  (void) cached_has_bits;
-
+  (void) cached_has_bits; 
+ 
   _internal_metadata_.MergeFrom<::PROTOBUF_NAMESPACE_ID::UnknownFieldSet>(from._internal_metadata_);
 }
 
@@ -205,7 +205,7 @@ void Empty::CopyFrom(const Empty& from) {
 // @@protoc_insertion_point(class_specific_copy_from_start:google.protobuf.Empty)
   if (&from == this) return;
   Clear();
-  MergeFrom(from);
+  MergeFrom(from); 
 }
 
 bool Empty::IsInitialized() const {
@@ -213,7 +213,7 @@ bool Empty::IsInitialized() const {
 }
 
 void Empty::InternalSwap(Empty* other) {
-  using std::swap;
+  using std::swap; 
   _internal_metadata_.InternalSwap(&other->_internal_metadata_);
 }
 

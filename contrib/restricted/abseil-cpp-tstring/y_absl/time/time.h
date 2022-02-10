@@ -79,7 +79,7 @@ struct timeval;
 #include <cstdint>
 #include <ctime>
 #include <ostream>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <type_traits>
 #include <utility>
 
@@ -89,7 +89,7 @@ struct timeval;
 #include "y_absl/time/internal/cctz/include/cctz/time_zone.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 class Duration;  // Defined below
 class Time;      // Defined below
@@ -1610,7 +1610,7 @@ constexpr Time FromTimeT(time_t t) {
   return time_internal::FromUnixDuration(Seconds(t));
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_TIME_TIME_H_

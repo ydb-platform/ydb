@@ -28,7 +28,7 @@
 #include "strcase.h"
 #include "vauth/vauth.h"
 #include "http_digest.h"
-
+ 
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
 #include "curl_memory.h"
@@ -176,7 +176,7 @@ CURLcode Curl_output_digest(struct connectdata *conn,
   return CURLE_OK;
 }
 
-void Curl_http_auth_cleanup_digest(struct Curl_easy *data)
+void Curl_http_auth_cleanup_digest(struct Curl_easy *data) 
 {
   Curl_auth_digest_cleanup(&data->state.digest);
   Curl_auth_digest_cleanup(&data->state.proxydigest);

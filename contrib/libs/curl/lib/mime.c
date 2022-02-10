@@ -30,8 +30,8 @@
 #include "urldata.h"
 #include "sendf.h"
 
-#if (!defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_MIME)) || \
-  !defined(CURL_DISABLE_SMTP) || !defined(CURL_DISABLE_IMAP)
+#if (!defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_MIME)) || \ 
+  !defined(CURL_DISABLE_SMTP) || !defined(CURL_DISABLE_IMAP) 
 
 #if defined(HAVE_LIBGEN_H) && defined(HAVE_BASENAME)
 #include <libgen.h>
@@ -911,10 +911,10 @@ static size_t readback_part(curl_mimepart *part,
     struct curl_slist *hdr = (struct curl_slist *) part->state.ptr;
     switch(part->state.state) {
     case MIMESTATE_BEGIN:
-      mimesetstate(&part->state,
-                   (part->flags & MIME_BODY_ONLY)?
-                     MIMESTATE_BODY: MIMESTATE_CURLHEADERS,
-                   part->curlheaders);
+      mimesetstate(&part->state, 
+                   (part->flags & MIME_BODY_ONLY)? 
+                     MIMESTATE_BODY: MIMESTATE_CURLHEADERS, 
+                   part->curlheaders); 
       break;
     case MIMESTATE_USERHEADERS:
       if(!hdr) {
@@ -1316,7 +1316,7 @@ curl_mime *curl_mime_init(struct Curl_easy *easy)
     mime->lastpart = NULL;
 
     memset(mime->boundary, '-', 24);
-    if(Curl_rand_hex(easy, (unsigned char *) &mime->boundary[24],
+    if(Curl_rand_hex(easy, (unsigned char *) &mime->boundary[24], 
                      MIME_RAND_BOUNDARY_CHARS + 1)) {
       /* failed to get random separator, bail out */
       free(mime);
@@ -2056,4 +2056,4 @@ CURLcode Curl_mime_add_header(struct curl_slist **slp, const char *fmt, ...)
   return CURLE_NOT_BUILT_IN;
 }
 
-#endif /* if disabled */
+#endif /* if disabled */ 

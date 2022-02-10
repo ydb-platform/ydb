@@ -1,28 +1,28 @@
 /* ******************************************************************
- * FSE : Finite State Entropy encoder
+ * FSE : Finite State Entropy encoder 
  * Copyright (c) Yann Collet, Facebook, Inc.
- *
- *  You can contact the author at :
- *  - FSE source repository : https://github.com/Cyan4973/FiniteStateEntropy
- *  - Public forum : https://groups.google.com/forum/#!forum/lz4c
- *
- * This source code is licensed under both the BSD-style license (found in the
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found
- * in the COPYING file in the root directory of this source tree).
- * You may select, at your option, one of the above-listed licenses.
+ * 
+ *  You can contact the author at : 
+ *  - FSE source repository : https://github.com/Cyan4973/FiniteStateEntropy 
+ *  - Public forum : https://groups.google.com/forum/#!forum/lz4c 
+ * 
+ * This source code is licensed under both the BSD-style license (found in the 
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
+ * in the COPYING file in the root directory of this source tree). 
+ * You may select, at your option, one of the above-listed licenses. 
 ****************************************************************** */
 
 /* **************************************************************
 *  Includes
 ****************************************************************/
-#include "../common/compiler.h"
-#include "../common/mem.h"        /* U32, U16, etc. */
-#include "../common/debug.h"      /* assert, DEBUGLOG */
+#include "../common/compiler.h" 
+#include "../common/mem.h"        /* U32, U16, etc. */ 
+#include "../common/debug.h"      /* assert, DEBUGLOG */ 
 #include "hist.h"       /* HIST_count_wksp */
-#include "../common/bitstream.h"
+#include "../common/bitstream.h" 
 #define FSE_STATIC_LINKING_ONLY
-#include "../common/fse.h"
-#include "../common/error_private.h"
+#include "../common/fse.h" 
+#include "../common/error_private.h" 
 #define ZSTD_DEPS_NEED_MALLOC
 #define ZSTD_DEPS_NEED_MATH64
 #include "../common/zstd_deps.h"  /* ZSTD_malloc, ZSTD_free, ZSTD_memcpy, ZSTD_memset */
@@ -58,12 +58,12 @@
 
 
 /* Function templates */
-
-/* FSE_buildCTable_wksp() :
- * Same as FSE_buildCTable(), but using an externally allocated scratch buffer (`workSpace`).
- * wkspSize should be sized to handle worst case situation, which is `1<<max_tableLog * sizeof(FSE_FUNCTION_TYPE)`
- * workSpace must also be properly aligned with FSE_FUNCTION_TYPE requirements
- */
+ 
+/* FSE_buildCTable_wksp() : 
+ * Same as FSE_buildCTable(), but using an externally allocated scratch buffer (`workSpace`). 
+ * wkspSize should be sized to handle worst case situation, which is `1<<max_tableLog * sizeof(FSE_FUNCTION_TYPE)` 
+ * workSpace must also be properly aligned with FSE_FUNCTION_TYPE requirements 
+ */ 
 size_t FSE_buildCTable_wksp(FSE_CTable* ct,
                       const short* normalizedCounter, unsigned maxSymbolValue, unsigned tableLog,
                             void* workSpace, size_t wkspSize)
@@ -213,7 +213,7 @@ size_t FSE_buildCTable_wksp(FSE_CTable* ct,
 }
 
 
-
+ 
 #ifndef FSE_COMMONDEFS_ONLY
 
 /*-**************************************************************
@@ -392,7 +392,7 @@ static size_t FSE_normalizeM2(short* norm, U32 tableLog, const unsigned* count, 
     U32 ToDistribute;
 
     /* Init */
-    U32 const lowThreshold = (U32)(total >> tableLog);
+    U32 const lowThreshold = (U32)(total >> tableLog); 
     U32 lowOne = (U32)((total * 3) >> (tableLog + 1));
 
     for (s=0; s<=maxSymbolValue; s++) {
@@ -451,16 +451,16 @@ static size_t FSE_normalizeM2(short* norm, U32 tableLog, const unsigned* count, 
         return 0;
     }
 
-    {   U64 const vStepLog = 62 - tableLog;
+    {   U64 const vStepLog = 62 - tableLog; 
         U64 const mid = (1ULL << (vStepLog-1)) - 1;
         U64 const rStep = ZSTD_div64((((U64)1<<vStepLog) * ToDistribute) + mid, (U32)total);   /* scale on remaining */
         U64 tmpTotal = mid;
         for (s=0; s<=maxSymbolValue; s++) {
             if (norm[s]==NOT_YET_ASSIGNED) {
-                U64 const end = tmpTotal + (count[s] * rStep);
-                U32 const sStart = (U32)(tmpTotal >> vStepLog);
-                U32 const sEnd = (U32)(end >> vStepLog);
-                U32 const weight = sEnd - sStart;
+                U64 const end = tmpTotal + (count[s] * rStep); 
+                U32 const sStart = (U32)(tmpTotal >> vStepLog); 
+                U32 const sEnd = (U32)(end >> vStepLog); 
+                U32 const weight = sEnd - sStart; 
                 if (weight < 1)
                     return ERROR(GENERIC);
                 norm[s] = (short)weight;
@@ -566,7 +566,7 @@ size_t FSE_buildCTable_raw (FSE_CTable* ct, unsigned nbBits)
     return 0;
 }
 
-/* fake FSE_CTable, for rle input (always same symbol) */
+/* fake FSE_CTable, for rle input (always same symbol) */ 
 size_t FSE_buildCTable_rle (FSE_CTable* ct, BYTE symbolValue)
 {
     void* ptr = ct;
@@ -603,8 +603,8 @@ static size_t FSE_compress_usingCTable_generic (void* dst, size_t dstSize,
 
     /* init */
     if (srcSize <= 2) return 0;
-    { size_t const initError = BIT_initCStream(&bitC, dst, dstSize);
-      if (FSE_isError(initError)) return 0; /* not enough space available to write a bitstream */ }
+    { size_t const initError = BIT_initCStream(&bitC, dst, dstSize); 
+      if (FSE_isError(initError)) return 0; /* not enough space available to write a bitstream */ } 
 
 #define FSE_FLUSHBITS(s)  (fast ? BIT_flushBitsFast(s) : BIT_flushBits(s))
 
@@ -627,7 +627,7 @@ static size_t FSE_compress_usingCTable_generic (void* dst, size_t dstSize,
     }
 
     /* 2 or 4 encoding per loop */
-    while ( ip>istart ) {
+    while ( ip>istart ) { 
 
         FSE_encodeSymbol(&bitC, &CState2, *--ip);
 
@@ -653,7 +653,7 @@ size_t FSE_compress_usingCTable (void* dst, size_t dstSize,
                            const void* src, size_t srcSize,
                            const FSE_CTable* ct)
 {
-    unsigned const fast = (dstSize >= FSE_BLOCKBOUND(srcSize));
+    unsigned const fast = (dstSize >= FSE_BLOCKBOUND(srcSize)); 
 
     if (fast)
         return FSE_compress_usingCTable_generic(dst, dstSize, src, srcSize, ct, 1);
@@ -665,11 +665,11 @@ size_t FSE_compress_usingCTable (void* dst, size_t dstSize,
 size_t FSE_compressBound(size_t size) { return FSE_COMPRESSBOUND(size); }
 
 #ifndef ZSTD_NO_UNUSED_FUNCTIONS
-/* FSE_compress_wksp() :
- * Same as FSE_compress2(), but using an externally allocated scratch buffer (`workSpace`).
- * `wkspSize` size must be `(1<<tableLog)`.
- */
-size_t FSE_compress_wksp (void* dst, size_t dstSize, const void* src, size_t srcSize, unsigned maxSymbolValue, unsigned tableLog, void* workSpace, size_t wkspSize)
+/* FSE_compress_wksp() : 
+ * Same as FSE_compress2(), but using an externally allocated scratch buffer (`workSpace`). 
+ * `wkspSize` size must be `(1<<tableLog)`. 
+ */ 
+size_t FSE_compress_wksp (void* dst, size_t dstSize, const void* src, size_t srcSize, unsigned maxSymbolValue, unsigned tableLog, void* workSpace, size_t wkspSize) 
 {
     BYTE* const ostart = (BYTE*) dst;
     BYTE* op = ostart;
@@ -677,65 +677,65 @@ size_t FSE_compress_wksp (void* dst, size_t dstSize, const void* src, size_t src
 
     unsigned count[FSE_MAX_SYMBOL_VALUE+1];
     S16   norm[FSE_MAX_SYMBOL_VALUE+1];
-    FSE_CTable* CTable = (FSE_CTable*)workSpace;
-    size_t const CTableSize = FSE_CTABLE_SIZE_U32(tableLog, maxSymbolValue);
-    void* scratchBuffer = (void*)(CTable + CTableSize);
-    size_t const scratchBufferSize = wkspSize - (CTableSize * sizeof(FSE_CTable));
+    FSE_CTable* CTable = (FSE_CTable*)workSpace; 
+    size_t const CTableSize = FSE_CTABLE_SIZE_U32(tableLog, maxSymbolValue); 
+    void* scratchBuffer = (void*)(CTable + CTableSize); 
+    size_t const scratchBufferSize = wkspSize - (CTableSize * sizeof(FSE_CTable)); 
 
     /* init conditions */
     if (wkspSize < FSE_COMPRESS_WKSP_SIZE_U32(tableLog, maxSymbolValue)) return ERROR(tableLog_tooLarge);
-    if (srcSize <= 1) return 0;  /* Not compressible */
+    if (srcSize <= 1) return 0;  /* Not compressible */ 
     if (!maxSymbolValue) maxSymbolValue = FSE_MAX_SYMBOL_VALUE;
     if (!tableLog) tableLog = FSE_DEFAULT_TABLELOG;
 
     /* Scan input and build symbol stats */
     {   CHECK_V_F(maxCount, HIST_count_wksp(count, &maxSymbolValue, src, srcSize, scratchBuffer, scratchBufferSize) );
-        if (maxCount == srcSize) return 1;   /* only a single symbol in src : rle */
-        if (maxCount == 1) return 0;         /* each symbol present maximum once => not compressible */
-        if (maxCount < (srcSize >> 7)) return 0;   /* Heuristic : not compressible enough */
-    }
+        if (maxCount == srcSize) return 1;   /* only a single symbol in src : rle */ 
+        if (maxCount == 1) return 0;         /* each symbol present maximum once => not compressible */ 
+        if (maxCount < (srcSize >> 7)) return 0;   /* Heuristic : not compressible enough */ 
+    } 
 
     tableLog = FSE_optimalTableLog(tableLog, srcSize, maxSymbolValue);
     CHECK_F( FSE_normalizeCount(norm, tableLog, count, srcSize, maxSymbolValue, /* useLowProbCount */ srcSize >= 2048) );
 
     /* Write table description header */
-    {   CHECK_V_F(nc_err, FSE_writeNCount(op, oend-op, norm, maxSymbolValue, tableLog) );
-        op += nc_err;
-    }
+    {   CHECK_V_F(nc_err, FSE_writeNCount(op, oend-op, norm, maxSymbolValue, tableLog) ); 
+        op += nc_err; 
+    } 
 
     /* Compress */
-    CHECK_F( FSE_buildCTable_wksp(CTable, norm, maxSymbolValue, tableLog, scratchBuffer, scratchBufferSize) );
-    {   CHECK_V_F(cSize, FSE_compress_usingCTable(op, oend - op, src, srcSize, CTable) );
-        if (cSize == 0) return 0;   /* not enough space for compressed data */
-        op += cSize;
-    }
+    CHECK_F( FSE_buildCTable_wksp(CTable, norm, maxSymbolValue, tableLog, scratchBuffer, scratchBufferSize) ); 
+    {   CHECK_V_F(cSize, FSE_compress_usingCTable(op, oend - op, src, srcSize, CTable) ); 
+        if (cSize == 0) return 0;   /* not enough space for compressed data */ 
+        op += cSize; 
+    } 
 
     /* check compressibility */
-    if ( (size_t)(op-ostart) >= srcSize-1 ) return 0;
+    if ( (size_t)(op-ostart) >= srcSize-1 ) return 0; 
 
     return op-ostart;
 }
 
-typedef struct {
-    FSE_CTable CTable_max[FSE_CTABLE_SIZE_U32(FSE_MAX_TABLELOG, FSE_MAX_SYMBOL_VALUE)];
+typedef struct { 
+    FSE_CTable CTable_max[FSE_CTABLE_SIZE_U32(FSE_MAX_TABLELOG, FSE_MAX_SYMBOL_VALUE)]; 
     union {
       U32 hist_wksp[HIST_WKSP_SIZE_U32];
       BYTE scratchBuffer[1 << FSE_MAX_TABLELOG];
     } workspace;
-} fseWkspMax_t;
-
-size_t FSE_compress2 (void* dst, size_t dstCapacity, const void* src, size_t srcSize, unsigned maxSymbolValue, unsigned tableLog)
+} fseWkspMax_t; 
+ 
+size_t FSE_compress2 (void* dst, size_t dstCapacity, const void* src, size_t srcSize, unsigned maxSymbolValue, unsigned tableLog) 
 {
-    fseWkspMax_t scratchBuffer;
+    fseWkspMax_t scratchBuffer; 
     DEBUG_STATIC_ASSERT(sizeof(scratchBuffer) >= FSE_COMPRESS_WKSP_SIZE_U32(FSE_MAX_TABLELOG, FSE_MAX_SYMBOL_VALUE));   /* compilation failures here means scratchBuffer is not large enough */
-    if (tableLog > FSE_MAX_TABLELOG) return ERROR(tableLog_tooLarge);
-    return FSE_compress_wksp(dst, dstCapacity, src, srcSize, maxSymbolValue, tableLog, &scratchBuffer, sizeof(scratchBuffer));
+    if (tableLog > FSE_MAX_TABLELOG) return ERROR(tableLog_tooLarge); 
+    return FSE_compress_wksp(dst, dstCapacity, src, srcSize, maxSymbolValue, tableLog, &scratchBuffer, sizeof(scratchBuffer)); 
 }
 
-size_t FSE_compress (void* dst, size_t dstCapacity, const void* src, size_t srcSize)
-{
-    return FSE_compress2(dst, dstCapacity, src, srcSize, FSE_MAX_SYMBOL_VALUE, FSE_DEFAULT_TABLELOG);
-}
+size_t FSE_compress (void* dst, size_t dstCapacity, const void* src, size_t srcSize) 
+{ 
+    return FSE_compress2(dst, dstCapacity, src, srcSize, FSE_MAX_SYMBOL_VALUE, FSE_DEFAULT_TABLELOG); 
+} 
 #endif
 
 #endif   /* FSE_COMMONDEFS_ONLY */

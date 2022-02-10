@@ -244,7 +244,7 @@ static PyObject* GetOrBuildOptions(const DescriptorClass *descriptor) {
   const Message& options(descriptor->options());
   const Descriptor *message_type = options.GetDescriptor();
   CMessageClass* message_class = message_factory::GetOrCreateMessageClass(
-      message_factory, message_type);
+      message_factory, message_type); 
   if (message_class == NULL) {
     PyErr_Format(PyExc_TypeError, "Could not retrieve class for Options: %s",
                  message_type->full_name().c_str());
@@ -490,9 +490,9 @@ static PyObject* GetConcreteClass(PyBaseDescriptor* self, void *closure) {
   // which contains this descriptor.
   // This might not be the one you expect! For example the returned object does
   // not know about extensions defined in a custom pool.
-  CMessageClass* concrete_class(message_factory::GetMessageClass(
-      GetDescriptorPool_FromPool(
-          _GetDescriptor(self)->file()->pool())->py_message_factory,
+  CMessageClass* concrete_class(message_factory::GetMessageClass( 
+      GetDescriptorPool_FromPool( 
+          _GetDescriptor(self)->file()->pool())->py_message_factory, 
       _GetDescriptor(self)));
   Py_XINCREF(concrete_class);
   return concrete_class->AsPyObject();
@@ -758,14 +758,14 @@ static PyObject* GetCamelcaseName(PyBaseDescriptor* self, void *closure) {
   return PyString_FromCppString(_GetDescriptor(self)->camelcase_name());
 }
 
-static PyObject* GetJsonName(PyBaseDescriptor* self, void *closure) {
-  return PyString_FromCppString(_GetDescriptor(self)->json_name());
-}
-
-static PyObject* GetFile(PyBaseDescriptor *self, void *closure) {
-  return PyFileDescriptor_FromDescriptor(_GetDescriptor(self)->file());
-}
-
+static PyObject* GetJsonName(PyBaseDescriptor* self, void *closure) { 
+  return PyString_FromCppString(_GetDescriptor(self)->json_name()); 
+} 
+ 
+static PyObject* GetFile(PyBaseDescriptor *self, void *closure) { 
+  return PyFileDescriptor_FromDescriptor(_GetDescriptor(self)->file()); 
+} 
+ 
 static PyObject* GetType(PyBaseDescriptor *self, void *closure) {
   return PyInt_FromLong(_GetDescriptor(self)->type());
 }
@@ -968,8 +968,8 @@ static PyGetSetDef Getters[] = {
   { "full_name", (getter)GetFullName, NULL, "Full name"},
   { "name", (getter)GetName, NULL, "Unqualified name"},
   { "camelcase_name", (getter)GetCamelcaseName, NULL, "Camelcase name"},
-  { "json_name", (getter)GetJsonName, NULL, "Json name"},
-  { "file", (getter)GetFile, NULL, "File Descriptor"},
+  { "json_name", (getter)GetJsonName, NULL, "Json name"}, 
+  { "file", (getter)GetFile, NULL, "File Descriptor"}, 
   { "type", (getter)GetType, NULL, "C++ Type"},
   { "cpp_type", (getter)GetCppType, NULL, "C++ Type"},
   { "label", (getter)GetLabel, NULL, "Label"},
@@ -1670,10 +1670,10 @@ static PyObject* GetFullName(PyBaseDescriptor* self, void *closure) {
   return PyString_FromCppString(_GetDescriptor(self)->full_name());
 }
 
-static PyObject* GetFile(PyBaseDescriptor *self, void *closure) {
-  return PyFileDescriptor_FromDescriptor(_GetDescriptor(self)->file());
-}
-
+static PyObject* GetFile(PyBaseDescriptor *self, void *closure) { 
+  return PyFileDescriptor_FromDescriptor(_GetDescriptor(self)->file()); 
+} 
+ 
 static PyObject* GetIndex(PyBaseDescriptor *self, void *closure) {
   return PyInt_FromLong(_GetDescriptor(self)->index());
 }
@@ -1715,7 +1715,7 @@ static PyObject* CopyToProto(PyBaseDescriptor *self, PyObject *target) {
 static PyGetSetDef Getters[] = {
   { "name", (getter)GetName, NULL, "Name", NULL},
   { "full_name", (getter)GetFullName, NULL, "Full name", NULL},
-  { "file", (getter)GetFile, NULL, "File descriptor"},
+  { "file", (getter)GetFile, NULL, "File descriptor"}, 
   { "index", (getter)GetIndex, NULL, "Index", NULL},
 
   { "methods", (getter)GetMethods, NULL, "Methods", NULL},
@@ -1772,15 +1772,15 @@ PyObject* PyServiceDescriptor_FromDescriptor(
       &PyServiceDescriptor_Type, service_descriptor, NULL);
 }
 
-const ServiceDescriptor* PyServiceDescriptor_AsDescriptor(PyObject* obj) {
-  if (!PyObject_TypeCheck(obj, &PyServiceDescriptor_Type)) {
-    PyErr_SetString(PyExc_TypeError, "Not a ServiceDescriptor");
-    return NULL;
-  }
-  return reinterpret_cast<const ServiceDescriptor*>(
-      reinterpret_cast<PyBaseDescriptor*>(obj)->descriptor);
-}
-
+const ServiceDescriptor* PyServiceDescriptor_AsDescriptor(PyObject* obj) { 
+  if (!PyObject_TypeCheck(obj, &PyServiceDescriptor_Type)) { 
+    PyErr_SetString(PyExc_TypeError, "Not a ServiceDescriptor"); 
+    return NULL; 
+  } 
+  return reinterpret_cast<const ServiceDescriptor*>( 
+      reinterpret_cast<PyBaseDescriptor*>(obj)->descriptor); 
+} 
+ 
 namespace method_descriptor {
 
 // Unchecked accessor to the C++ pointer.

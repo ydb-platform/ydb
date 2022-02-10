@@ -1,58 +1,58 @@
-/*
- *
- * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
-#include <grpc/support/port_platform.h>
-
-#include "src/core/ext/transport/chttp2/server/chttp2_server.h"
-
-#include <inttypes.h>
-#include <limits.h>
-#include <string.h>
+/* 
+ * 
+ * Copyright 2015 gRPC authors. 
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ * 
+ */ 
+ 
+#include <grpc/support/port_platform.h> 
+ 
+#include "src/core/ext/transport/chttp2/server/chttp2_server.h" 
+ 
+#include <inttypes.h> 
+#include <limits.h> 
+#include <string.h> 
 #include <vector>
-
+ 
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/strings/str_format.h"
 
 #include <grpc/grpc.h>
 #include <grpc/impl/codegen/grpc_types.h>
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
-#include <grpc/support/sync.h>
-
-#include "src/core/ext/filters/http/server/http_server_filter.h"
-#include "src/core/ext/transport/chttp2/transport/chttp2_transport.h"
-#include "src/core/ext/transport/chttp2/transport/internal.h"
-#include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/channel/handshaker.h"
-#include "src/core/lib/channel/handshaker_registry.h"
+#include <grpc/support/alloc.h> 
+#include <grpc/support/log.h> 
+#include <grpc/support/sync.h> 
+ 
+#include "src/core/ext/filters/http/server/http_server_filter.h" 
+#include "src/core/ext/transport/chttp2/transport/chttp2_transport.h" 
+#include "src/core/ext/transport/chttp2/transport/internal.h" 
+#include "src/core/lib/channel/channel_args.h" 
+#include "src/core/lib/channel/handshaker.h" 
+#include "src/core/lib/channel/handshaker_registry.h" 
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/iomgr/endpoint.h"
-#include "src/core/lib/iomgr/resolve_address.h"
+#include "src/core/lib/iomgr/endpoint.h" 
+#include "src/core/lib/iomgr/resolve_address.h" 
 #include "src/core/lib/iomgr/resource_quota.h"
-#include "src/core/lib/iomgr/tcp_server.h"
-#include "src/core/lib/slice/slice_internal.h"
-#include "src/core/lib/surface/api_trace.h"
-#include "src/core/lib/surface/server.h"
-
+#include "src/core/lib/iomgr/tcp_server.h" 
+#include "src/core/lib/slice/slice_internal.h" 
+#include "src/core/lib/surface/api_trace.h" 
+#include "src/core/lib/surface/server.h" 
+ 
 namespace grpc_core {
 namespace {
-
+ 
 class Chttp2ServerListener : public Server::ListenerInterface {
  public:
   static grpc_error* Create(Server* server, const char* addr,
@@ -126,7 +126,7 @@ class Chttp2ServerListener : public Server::ListenerInterface {
   HandshakeManager* pending_handshake_mgrs_ = nullptr;
   RefCountedPtr<channelz::ListenSocketNode> channelz_listen_socket_;
 };
-
+ 
 //
 // Chttp2ServerListener::ConnectionState
 //
@@ -159,34 +159,34 @@ Chttp2ServerListener::ConnectionState::ConnectionState(
 Chttp2ServerListener::ConnectionState::~ConnectionState() {
   if (transport_ != nullptr) {
     GRPC_CHTTP2_UNREF_TRANSPORT(transport_, "receive settings timeout");
-  }
+  } 
   grpc_pollset_set_del_pollset(interested_parties_, accepting_pollset_);
   grpc_pollset_set_destroy(interested_parties_);
-}
-
+} 
+ 
 void Chttp2ServerListener::ConnectionState::OnTimeout(void* arg,
                                                       grpc_error* error) {
   ConnectionState* self = static_cast<ConnectionState*>(arg);
-  // Note that we may be called with GRPC_ERROR_NONE when the timer fires
-  // or with an error indicating that the timer system is being shut down.
-  if (error != GRPC_ERROR_CANCELLED) {
-    grpc_transport_op* op = grpc_make_transport_op(nullptr);
-    op->disconnect_with_error = GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-        "Did not receive HTTP/2 settings before handshake timeout");
+  // Note that we may be called with GRPC_ERROR_NONE when the timer fires 
+  // or with an error indicating that the timer system is being shut down. 
+  if (error != GRPC_ERROR_CANCELLED) { 
+    grpc_transport_op* op = grpc_make_transport_op(nullptr); 
+    op->disconnect_with_error = GRPC_ERROR_CREATE_FROM_STATIC_STRING( 
+        "Did not receive HTTP/2 settings before handshake timeout"); 
     grpc_transport_perform_op(&self->transport_->base, op);
-  }
+  } 
   self->Unref();
-}
-
+} 
+ 
 void Chttp2ServerListener::ConnectionState::OnReceiveSettings(
     void* arg, grpc_error* error) {
   ConnectionState* self = static_cast<ConnectionState*>(arg);
-  if (error == GRPC_ERROR_NONE) {
+  if (error == GRPC_ERROR_NONE) { 
     grpc_timer_cancel(&self->timer_);
-  }
+  } 
   self->Unref();
-}
-
+} 
+ 
 void Chttp2ServerListener::ConnectionState::OnHandshakeDone(void* arg,
                                                             grpc_error* error) {
   auto* args = static_cast<HandshakerArgs*>(arg);
@@ -253,16 +253,16 @@ void Chttp2ServerListener::ConnectionState::OnHandshakeDone(void* arg,
                                   GRPC_RESOURCE_QUOTA_CHANNEL_SIZE);
         }
       }
-    }
+    } 
     self->handshake_mgr_->RemoveFromPendingMgrList(
         &self->listener_->pending_handshake_mgrs_);
-  }
+  } 
   self->handshake_mgr_.reset();
   gpr_free(self->acceptor_);
   grpc_tcp_server_unref(self->listener_->tcp_server_);
   self->Unref();
-}
-
+} 
+ 
 //
 // Chttp2ServerListener
 //
@@ -329,7 +329,7 @@ grpc_error* Chttp2ServerListener::Create(Server* server, const char* addr,
   }();
   if (resolved != nullptr) {
     grpc_resolved_addresses_destroy(resolved);
-  }
+  } 
   if (error != GRPC_ERROR_NONE) {
     if (listener != nullptr) {
       if (listener->tcp_server_ != nullptr) {
@@ -424,12 +424,12 @@ void Chttp2ServerListener::OnAccept(void* arg, grpc_endpoint* tcp,
   // Deletes itself when done.
   new ConnectionState(self, accepting_pollset, acceptor,
                       std::move(handshake_mgr), self->args_, tcp);
-}
-
+} 
+ 
 void Chttp2ServerListener::TcpServerShutdownComplete(void* arg,
                                                      grpc_error* error) {
   Chttp2ServerListener* self = static_cast<Chttp2ServerListener*>(arg);
-  /* ensure all threads have unlocked */
+  /* ensure all threads have unlocked */ 
   grpc_closure* destroy_done = nullptr;
   {
     MutexLock lock(&self->mu_);
@@ -440,18 +440,18 @@ void Chttp2ServerListener::TcpServerShutdownComplete(void* arg,
     }
     self->channelz_listen_socket_.reset();
   }
-  // Flush queued work before destroying handshaker factory, since that
-  // may do a synchronous unref.
+  // Flush queued work before destroying handshaker factory, since that 
+  // may do a synchronous unref. 
   ExecCtx::Get()->Flush();
-  if (destroy_done != nullptr) {
+  if (destroy_done != nullptr) { 
     ExecCtx::Run(DEBUG_LOCATION, destroy_done, GRPC_ERROR_REF(error));
     ExecCtx::Get()->Flush();
-  }
+  } 
   delete self;
-}
-
-/* Server callback: destroy the tcp listener (so we don't generate further
-   callbacks) */
+} 
+ 
+/* Server callback: destroy the tcp listener (so we don't generate further 
+   callbacks) */ 
 void Chttp2ServerListener::Orphan() {
   grpc_tcp_server* tcp_server;
   {
@@ -459,10 +459,10 @@ void Chttp2ServerListener::Orphan() {
     shutdown_ = true;
     tcp_server = tcp_server_;
   }
-  grpc_tcp_server_shutdown_listeners(tcp_server);
-  grpc_tcp_server_unref(tcp_server);
-}
-
+  grpc_tcp_server_shutdown_listeners(tcp_server); 
+  grpc_tcp_server_unref(tcp_server); 
+} 
+ 
 }  // namespace
 
 //

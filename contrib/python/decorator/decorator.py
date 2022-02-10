@@ -1,6 +1,6 @@
 # #########################     LICENSE     ############################ #
 
-# Copyright (c) 2005-2018, Michele Simionato
+# Copyright (c) 2005-2018, Michele Simionato 
 # All rights reserved.
 
 # Redistribution and use in source and binary forms, with or without
@@ -48,23 +48,23 @@ if sys.version_info >= (3,):
     def get_init(cls):
         return cls.__init__
 else:
-    FullArgSpec = collections.namedtuple(
-        'FullArgSpec', 'args varargs varkw defaults '
-        'kwonlyargs kwonlydefaults annotations')
-
-    def getfullargspec(f):
+    FullArgSpec = collections.namedtuple( 
+        'FullArgSpec', 'args varargs varkw defaults ' 
+        'kwonlyargs kwonlydefaults annotations') 
+ 
+    def getfullargspec(f): 
         "A quick and dirty replacement for getfullargspec for Python 2.X"
-        return FullArgSpec._make(inspect.getargspec(f) + ([], None, {}))
+        return FullArgSpec._make(inspect.getargspec(f) + ([], None, {})) 
 
     def get_init(cls):
         return cls.__init__.__func__
 
-try:
-    iscoroutinefunction = inspect.iscoroutinefunction
-except AttributeError:
-    # let's assume there are no coroutine functions in old Python
-    def iscoroutinefunction(f):
-        return False
+try: 
+    iscoroutinefunction = inspect.iscoroutinefunction 
+except AttributeError: 
+    # let's assume there are no coroutine functions in old Python 
+    def iscoroutinefunction(f): 
+        return False 
 try:
     from inspect import isgeneratorfunction
 except ImportError:
@@ -73,7 +73,7 @@ except ImportError:
         return False
 
 
-DEF = re.compile(r'\s*def\s*([_\w][_\w\d]*)\s*\(')
+DEF = re.compile(r'\s*def\s*([_\w][_\w\d]*)\s*\(') 
 
 
 # basic functionality
@@ -87,9 +87,9 @@ class FunctionMaker(object):
     # Atomic get-and-increment provided by the GIL
     _compile_count = itertools.count()
 
-    # make pylint happy
-    args = varargs = varkw = defaults = kwonlyargs = kwonlydefaults = ()
-
+    # make pylint happy 
+    args = varargs = varkw = defaults = kwonlyargs = kwonlydefaults = () 
+ 
     def __init__(self, func=None, name=None, signature=None,
                  defaults=None, doc=None, module=None, funcdict=None):
         self.shortsignature = signature
@@ -108,21 +108,21 @@ class FunctionMaker(object):
                     setattr(self, a, getattr(argspec, a))
                 for i, arg in enumerate(self.args):
                     setattr(self, 'arg%d' % i, arg)
-                allargs = list(self.args)
-                allshortargs = list(self.args)
-                if self.varargs:
-                    allargs.append('*' + self.varargs)
-                    allshortargs.append('*' + self.varargs)
-                elif self.kwonlyargs:
-                    allargs.append('*')  # single star syntax
-                for a in self.kwonlyargs:
-                    allargs.append('%s=None' % a)
-                    allshortargs.append('%s=%s' % (a, a))
-                if self.varkw:
-                    allargs.append('**' + self.varkw)
-                    allshortargs.append('**' + self.varkw)
-                self.signature = ', '.join(allargs)
-                self.shortsignature = ', '.join(allshortargs)
+                allargs = list(self.args) 
+                allshortargs = list(self.args) 
+                if self.varargs: 
+                    allargs.append('*' + self.varargs) 
+                    allshortargs.append('*' + self.varargs) 
+                elif self.kwonlyargs: 
+                    allargs.append('*')  # single star syntax 
+                for a in self.kwonlyargs: 
+                    allargs.append('%s=None' % a) 
+                    allshortargs.append('%s=%s' % (a, a)) 
+                if self.varkw: 
+                    allargs.append('**' + self.varkw) 
+                    allshortargs.append('**' + self.varkw) 
+                self.signature = ', '.join(allargs) 
+                self.shortsignature = ', '.join(allshortargs) 
                 self.dict = func.__dict__.copy()
         # func=None happens when decorating a caller
         if name:
@@ -147,8 +147,8 @@ class FunctionMaker(object):
         func.__name__ = self.name
         func.__doc__ = getattr(self, 'doc', None)
         func.__dict__ = getattr(self, 'dict', {})
-        func.__defaults__ = self.defaults
-        func.__kwdefaults__ = self.kwonlydefaults or None
+        func.__defaults__ = self.defaults 
+        func.__kwdefaults__ = self.kwonlydefaults or None 
         func.__annotations__ = getattr(self, 'annotations', None)
         try:
             frame = sys._getframe(3)
@@ -163,7 +163,7 @@ class FunctionMaker(object):
         "Make a new function from a given template and update the signature"
         src = src_templ % vars(self)  # expand name and signature
         evaldict = evaldict or {}
-        mo = DEF.search(src)
+        mo = DEF.search(src) 
         if mo is None:
             raise SyntaxError('not a valid function template\n%s' % src)
         name = mo.group(1)  # extract the function name
@@ -173,9 +173,9 @@ class FunctionMaker(object):
             if n in ('_func_', '_call_'):
                 raise NameError('%s is overridden in\n%s' % (n, src))
 
-        if not src.endswith('\n'):  # add a newline for old Pythons
-            src += '\n'
-
+        if not src.endswith('\n'):  # add a newline for old Pythons 
+            src += '\n' 
+ 
         # Ensure each generated function has a unique filename for profilers
         # (such as cProfile) that depend on the tuple of (<filename>,
         # <definition line>, <function name>) being unique.
@@ -183,7 +183,7 @@ class FunctionMaker(object):
         try:
             code = compile(src, filename, 'single')
             exec(code, evaldict)
-        except Exception:
+        except Exception: 
             print('Error in generated code:', file=sys.stderr)
             print(src, file=sys.stderr)
             raise
@@ -212,27 +212,27 @@ class FunctionMaker(object):
             func = obj
         self = cls(func, name, signature, defaults, doc, module)
         ibody = '\n'.join('    ' + line for line in body.splitlines())
-        caller = evaldict.get('_call_')  # when called from `decorate`
-        if caller and iscoroutinefunction(caller):
-            body = ('async def %(name)s(%(signature)s):\n' + ibody).replace(
-                'return', 'return await')
-        else:
-            body = 'def %(name)s(%(signature)s):\n' + ibody
-        return self.make(body, evaldict, addsource, **attrs)
+        caller = evaldict.get('_call_')  # when called from `decorate` 
+        if caller and iscoroutinefunction(caller): 
+            body = ('async def %(name)s(%(signature)s):\n' + ibody).replace( 
+                'return', 'return await') 
+        else: 
+            body = 'def %(name)s(%(signature)s):\n' + ibody 
+        return self.make(body, evaldict, addsource, **attrs) 
 
 
-def decorate(func, caller, extras=()):
+def decorate(func, caller, extras=()): 
     """
     decorate(func, caller) decorates a function using a caller.
     If the caller is a generator function, the resulting function
     will be a generator function.
     """
     evaldict = dict(_call_=caller, _func_=func)
-    es = ''
-    for i, extra in enumerate(extras):
-        ex = '_e%d_' % i
-        evaldict[ex] = extra
-        es += ex + ', '
+    es = '' 
+    for i, extra in enumerate(extras): 
+        ex = '_e%d_' % i 
+        evaldict[ex] = extra 
+        es += ex + ', ' 
 
     if '3.5' <= sys.version < '3.6':
         # with Python 3.5 isgeneratorfunction returns True for all coroutines
@@ -261,7 +261,7 @@ def decorator(caller, _func=None):
         # this is obsolete behavior; you should use decorate instead
         return decorate(_func, caller)
     # else return a decorator function
-    defaultargs, defaults = '', ()
+    defaultargs, defaults = '', () 
     if inspect.isclass(caller):
         name = caller.__name__.lower()
         doc = 'decorator(%s) converts functions/generators into ' \
@@ -272,24 +272,24 @@ def decorator(caller, _func=None):
         else:
             name = caller.__name__
         doc = caller.__doc__
-        nargs = caller.__code__.co_argcount
-        ndefs = len(caller.__defaults__ or ())
-        defaultargs = ', '.join(caller.__code__.co_varnames[nargs-ndefs:nargs])
-        if defaultargs:
-            defaultargs += ','
-        defaults = caller.__defaults__
+        nargs = caller.__code__.co_argcount 
+        ndefs = len(caller.__defaults__ or ()) 
+        defaultargs = ', '.join(caller.__code__.co_varnames[nargs-ndefs:nargs]) 
+        if defaultargs: 
+            defaultargs += ',' 
+        defaults = caller.__defaults__ 
     else:  # assume caller is an object with a __call__ method
         name = caller.__class__.__name__.lower()
         doc = caller.__call__.__doc__
-    evaldict = dict(_call=caller, _decorate_=decorate)
-    dec = FunctionMaker.create(
+    evaldict = dict(_call=caller, _decorate_=decorate) 
+    dec = FunctionMaker.create( 
         '%s(func, %s)' % (name, defaultargs),
-        'if func is None: return lambda func:  _decorate_(func, _call, (%s))\n'
-        'return _decorate_(func, _call, (%s))' % (defaultargs, defaultargs),
-        evaldict, doc=doc, module=caller.__module__, __wrapped__=caller)
-    if defaults:
+        'if func is None: return lambda func:  _decorate_(func, _call, (%s))\n' 
+        'return _decorate_(func, _call, (%s))' % (defaultargs, defaultargs), 
+        evaldict, doc=doc, module=caller.__module__, __wrapped__=caller) 
+    if defaults: 
         dec.__defaults__ = (None,) + defaults
-    return dec
+    return dec 
 
 
 # ####################### contextmanager ####################### #
@@ -307,7 +307,7 @@ class ContextManager(_GeneratorContextManager):
             func, "with _self_: return _func_(%(shortsignature)s)",
             dict(_self_=self, _func_=func), __wrapped__=func)
 
-
+ 
 init = getfullargspec(_GeneratorContextManager.__init__)
 n_args = len(init.args)
 if n_args == 2 and not init.varargs:  # (self, genobj) Python 2.7
@@ -321,14 +321,14 @@ elif n_args == 4:  # (self, gen, args, kwds) Python 3.5
         return _GeneratorContextManager.__init__(self, g, a, k)
     ContextManager.__init__ = __init__
 
-_contextmanager = decorator(ContextManager)
+_contextmanager = decorator(ContextManager) 
 
 
-def contextmanager(func):
-    # Enable Pylint config: contextmanager-decorators=decorator.contextmanager
-    return _contextmanager(func)
-
-
+def contextmanager(func): 
+    # Enable Pylint config: contextmanager-decorators=decorator.contextmanager 
+    return _contextmanager(func) 
+ 
+ 
 # ############################ dispatch_on ############################ #
 
 def append(a, vancestors):
@@ -381,7 +381,7 @@ def dispatch_on(*dispatch_args):
             ras = [[] for _ in range(len(dispatch_args))]
             for types_ in typemap:
                 for t, type_, ra in zip(types, types_, ras):
-                    if issubclass(t, type_) and type_ not in t.mro():
+                    if issubclass(t, type_) and type_ not in t.mro(): 
                         append(type_, ra)
             return [set(ra) for ra in ras]
 
@@ -398,9 +398,9 @@ def dispatch_on(*dispatch_args):
                         'Ambiguous dispatch for %s: %s' % (t, vas))
                 elif n_vas == 1:
                     va, = vas
-                    mro = type('t', (t, va), {}).mro()[1:]
+                    mro = type('t', (t, va), {}).mro()[1:] 
                 else:
-                    mro = t.mro()
+                    mro = t.mro() 
                 lists.append(mro[:-1])  # discard t and object
             return lists
 
@@ -409,7 +409,7 @@ def dispatch_on(*dispatch_args):
             Decorator to register an implementation for the given types
             """
             check(types)
-
+ 
             def dec(f):
                 check(getfullargspec(f).args, operator.lt, ' in ' + f.__name__)
                 typemap[types] = f

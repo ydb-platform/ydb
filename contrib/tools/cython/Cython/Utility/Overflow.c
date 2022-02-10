@@ -47,12 +47,12 @@ static int __Pyx_check_twos_complement(void) {
 #define __Pyx_div_const_no_overflow(a, b, overflow) ((a) / (b))
 
 /////////////// Common.init ///////////////
-//@substitute: naming
+//@substitute: naming 
 
-// FIXME: Propagate the error here instead of just printing it.
-if (unlikely(__Pyx_check_twos_complement())) {
-    PyErr_WriteUnraisable($module_cname);
-}
+// FIXME: Propagate the error here instead of just printing it. 
+if (unlikely(__Pyx_check_twos_complement())) { 
+    PyErr_WriteUnraisable($module_cname); 
+} 
 
 /////////////// BaseCaseUnsigned.proto ///////////////
 
@@ -87,13 +87,13 @@ static CYTHON_INLINE {{UINT}} __Pyx_mul_{{NAME}}_checking_overflow({{UINT}} a, {
         {{UINT}} r = ({{UINT}}) big_r;
         *overflow |= big_r != r;
         return r;
-#ifdef HAVE_LONG_LONG
+#ifdef HAVE_LONG_LONG 
     } else if ((sizeof({{UINT}}) < sizeof(unsigned PY_LONG_LONG))) {
-        unsigned PY_LONG_LONG big_r = ((unsigned PY_LONG_LONG) a) * ((unsigned PY_LONG_LONG) b);
+        unsigned PY_LONG_LONG big_r = ((unsigned PY_LONG_LONG) a) * ((unsigned PY_LONG_LONG) b); 
         {{UINT}} r = ({{UINT}}) big_r;
         *overflow |= big_r != r;
         return r;
-#endif
+#endif 
     } else {
         {{UINT}} prod = a * b;
         double dprod = ((double) a) * ((double) b);
@@ -143,13 +143,13 @@ static CYTHON_INLINE {{INT}} __Pyx_add_{{NAME}}_checking_overflow({{INT}} a, {{I
         {{INT}} r = ({{INT}}) big_r;
         *overflow |= big_r != r;
         return r;
-#ifdef HAVE_LONG_LONG
+#ifdef HAVE_LONG_LONG 
     } else if ((sizeof({{INT}}) < sizeof(PY_LONG_LONG))) {
-        PY_LONG_LONG big_r = ((PY_LONG_LONG) a) + ((PY_LONG_LONG) b);
+        PY_LONG_LONG big_r = ((PY_LONG_LONG) a) + ((PY_LONG_LONG) b); 
         {{INT}} r = ({{INT}}) big_r;
         *overflow |= big_r != r;
         return r;
-#endif
+#endif 
     } else {
         // Signed overflow undefined, but unsigned overflow is well defined.
         {{INT}} r = ({{INT}}) ((unsigned {{INT}}) a + (unsigned {{INT}}) b);
@@ -189,13 +189,13 @@ static CYTHON_INLINE {{INT}} __Pyx_mul_{{NAME}}_checking_overflow({{INT}} a, {{I
         {{INT}} r = ({{INT}}) big_r;
         *overflow |= big_r != r;
         return ({{INT}}) r;
-#ifdef HAVE_LONG_LONG
+#ifdef HAVE_LONG_LONG 
     } else if ((sizeof({{INT}}) < sizeof(PY_LONG_LONG))) {
-        PY_LONG_LONG big_r = ((PY_LONG_LONG) a) * ((PY_LONG_LONG) b);
+        PY_LONG_LONG big_r = ((PY_LONG_LONG) a) * ((PY_LONG_LONG) b); 
         {{INT}} r = ({{INT}}) big_r;
         *overflow |= big_r != r;
         return ({{INT}}) r;
-#endif
+#endif 
     } else {
         {{INT}} prod = a * b;
         double dprod = ((double) a) * ((double) b);
@@ -230,20 +230,20 @@ static CYTHON_INLINE {{INT}} __Pyx_div_{{NAME}}_checking_overflow({{INT}} a, {{I
 
 
 /////////////// SizeCheck.init ///////////////
-//@substitute: naming
+//@substitute: naming 
 
-// FIXME: Propagate the error here instead of just printing it.
-if (unlikely(__Pyx_check_sane_{{NAME}}())) {
-    PyErr_WriteUnraisable($module_cname);
-}
+// FIXME: Propagate the error here instead of just printing it. 
+if (unlikely(__Pyx_check_sane_{{NAME}}())) { 
+    PyErr_WriteUnraisable($module_cname); 
+} 
 
 /////////////// SizeCheck.proto ///////////////
 
 static int __Pyx_check_sane_{{NAME}}(void) {
     if (((sizeof({{TYPE}}) <= sizeof(int)) ||
-#ifdef HAVE_LONG_LONG
+#ifdef HAVE_LONG_LONG 
             (sizeof({{TYPE}}) == sizeof(PY_LONG_LONG)) ||
-#endif
+#endif 
             (sizeof({{TYPE}}) == sizeof(long)))) {
         return 0;
     } else {
@@ -268,10 +268,10 @@ static CYTHON_INLINE {{TYPE}} __Pyx_{{BINOP}}_{{NAME}}_checking_overflow({{TYPE}
             return ({{TYPE}}) __Pyx_{{BINOP}}_unsigned_int_checking_overflow(a, b, overflow);
         } else if ((sizeof({{TYPE}}) == sizeof(unsigned long))) {
             return ({{TYPE}}) __Pyx_{{BINOP}}_unsigned_long_checking_overflow(a, b, overflow);
-#ifdef HAVE_LONG_LONG
+#ifdef HAVE_LONG_LONG 
         } else if ((sizeof({{TYPE}}) == sizeof(unsigned PY_LONG_LONG))) {
             return ({{TYPE}}) __Pyx_{{BINOP}}_unsigned_long_long_checking_overflow(a, b, overflow);
-#endif
+#endif 
         } else {
             abort(); return 0; /* handled elsewhere */
         }
@@ -280,10 +280,10 @@ static CYTHON_INLINE {{TYPE}} __Pyx_{{BINOP}}_{{NAME}}_checking_overflow({{TYPE}
             return ({{TYPE}}) __Pyx_{{BINOP}}_int_checking_overflow(a, b, overflow);
         } else if ((sizeof({{TYPE}}) == sizeof(long))) {
             return ({{TYPE}}) __Pyx_{{BINOP}}_long_checking_overflow(a, b, overflow);
-#ifdef HAVE_LONG_LONG
+#ifdef HAVE_LONG_LONG 
         } else if ((sizeof({{TYPE}}) == sizeof(PY_LONG_LONG))) {
             return ({{TYPE}}) __Pyx_{{BINOP}}_long_long_checking_overflow(a, b, overflow);
-#endif
+#endif 
         } else {
             abort(); return 0; /* handled elsewhere */
         }
@@ -302,10 +302,10 @@ static CYTHON_INLINE {{TYPE}} __Pyx_lshift_{{NAME}}_checking_overflow({{TYPE}} a
 }
 #define __Pyx_lshift_const_{{NAME}}_checking_overflow __Pyx_lshift_{{NAME}}_checking_overflow
 
-
-/////////////// UnaryNegOverflows.proto ///////////////
-
-//FIXME: shouldn't the macro name be prefixed by "__Pyx_" ?  Too late now, I guess...
-// from intobject.c
-#define UNARY_NEG_WOULD_OVERFLOW(x)    \
-        (((x) < 0) & ((unsigned long)(x) == 0-(unsigned long)(x)))
+ 
+/////////////// UnaryNegOverflows.proto /////////////// 
+ 
+//FIXME: shouldn't the macro name be prefixed by "__Pyx_" ?  Too late now, I guess... 
+// from intobject.c 
+#define UNARY_NEG_WOULD_OVERFLOW(x)    \ 
+        (((x) < 0) & ((unsigned long)(x) == 0-(unsigned long)(x))) 

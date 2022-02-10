@@ -26,10 +26,10 @@
 #include <iterator>
 #include <type_traits>
 
-#include "y_absl/base/config.h"
-
+#include "y_absl/base/config.h" 
+ 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 namespace algorithm_internal {
 
@@ -153,7 +153,7 @@ ForwardIterator rotate(ForwardIterator first, ForwardIterator middle,
                    ForwardIterator>());
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_ALGORITHM_ALGORITHM_H_

@@ -189,9 +189,9 @@ class PhpLexer(RegexLexer):
         ],
         'php': [
             (r'\?>', Comment.Preproc, '#pop'),
-            (r'(<<<)([\'"]?)(' + _ident_inner + r')(\2\n.*?\n\s*)(\3)(;?)(\n)',
-             bygroups(String, String, String.Delimiter, String, String.Delimiter,
-                      Punctuation, Text)),
+            (r'(<<<)([\'"]?)(' + _ident_inner + r')(\2\n.*?\n\s*)(\3)(;?)(\n)', 
+             bygroups(String, String, String.Delimiter, String, String.Delimiter, 
+                      Punctuation, Text)), 
             (r'\s+', Text),
             (r'#.*?\n', Comment.Single),
             (r'//.*?\n', Comment.Single),
@@ -216,15 +216,15 @@ class PhpLexer(RegexLexer):
              r'FALSE|print|for|require|continue|foreach|require_once|'
              r'declare|return|default|static|do|switch|die|stdClass|'
              r'echo|else|TRUE|elseif|var|empty|if|xor|enddeclare|include|'
-             r'virtual|endfor|include_once|while|endforeach|global|'
-             r'endif|list|endswitch|new|endwhile|not|'
-             r'array|E_ALL|NULL|final|php_user_filter|interface|'
+             r'virtual|endfor|include_once|while|endforeach|global|' 
+             r'endif|list|endswitch|new|endwhile|not|' 
+             r'array|E_ALL|NULL|final|php_user_filter|interface|' 
              r'implements|public|private|protected|abstract|clone|try|'
              r'catch|throw|this|use|namespace|trait|yield|'
              r'finally)\b', Keyword),
             (r'(true|false|null)\b', Keyword.Constant),
-            include('magicconstants'),
-            (r'\$\{\$+' + _ident_inner + r'\}', Name.Variable),
+            include('magicconstants'), 
+            (r'\$\{\$+' + _ident_inner + r'\}', Name.Variable), 
             (r'\$+' + _ident_inner, Name.Variable),
             (_ident_inner, Name.Other),
             (r'(\d+\.\d*|\d*\.\d+)(e[+-]?[0-9]+)?', Number.Float),
@@ -237,35 +237,35 @@ class PhpLexer(RegexLexer):
             (r'`([^`\\]*(?:\\.[^`\\]*)*)`', String.Backtick),
             (r'"', String.Double, 'string'),
         ],
-        'magicfuncs': [
-            # source: http://php.net/manual/en/language.oop5.magic.php
-            (words((
-                '__construct', '__destruct', '__call', '__callStatic', '__get', '__set',
-                '__isset', '__unset', '__sleep', '__wakeup', '__toString', '__invoke',
-                '__set_state', '__clone', '__debugInfo',), suffix=r'\b'),
-             Name.Function.Magic),
-        ],
-        'magicconstants': [
-            # source: http://php.net/manual/en/language.constants.predefined.php
-            (words((
-                '__LINE__', '__FILE__', '__DIR__', '__FUNCTION__', '__CLASS__',
-                '__TRAIT__', '__METHOD__', '__NAMESPACE__',),
-                suffix=r'\b'),
-             Name.Constant),
-        ],
+        'magicfuncs': [ 
+            # source: http://php.net/manual/en/language.oop5.magic.php 
+            (words(( 
+                '__construct', '__destruct', '__call', '__callStatic', '__get', '__set', 
+                '__isset', '__unset', '__sleep', '__wakeup', '__toString', '__invoke', 
+                '__set_state', '__clone', '__debugInfo',), suffix=r'\b'), 
+             Name.Function.Magic), 
+        ], 
+        'magicconstants': [ 
+            # source: http://php.net/manual/en/language.constants.predefined.php 
+            (words(( 
+                '__LINE__', '__FILE__', '__DIR__', '__FUNCTION__', '__CLASS__', 
+                '__TRAIT__', '__METHOD__', '__NAMESPACE__',), 
+                suffix=r'\b'), 
+             Name.Constant), 
+        ], 
         'classname': [
             (_ident_inner, Name.Class, '#pop')
         ],
         'functionname': [
-            include('magicfuncs'),
-            (_ident_inner, Name.Function, '#pop'),
-            default('#pop')
+            include('magicfuncs'), 
+            (_ident_inner, Name.Function, '#pop'), 
+            default('#pop') 
         ],
         'string': [
             (r'"', String.Double, '#pop'),
             (r'[^{$"\\]+', String.Double),
             (r'\\([nrt"$\\]|[0-7]{1,3}|x[0-9a-f]{1,2})', String.Escape),
-            (r'\$' + _ident_inner + r'(\[\S+?\]|->' + _ident_inner + ')?',
+            (r'\$' + _ident_inner + r'(\[\S+?\]|->' + _ident_inner + ')?', 
              String.Interpol),
             (r'(\{\$\{)(.*?)(\}\})',
              bygroups(String.Interpol, using(this, _startinline=True),
@@ -275,7 +275,7 @@ class PhpLexer(RegexLexer):
                       String.Interpol)),
             (r'(\$\{)(\S+)(\})',
              bygroups(String.Interpol, Name.Variable, String.Interpol)),
-            (r'[${\\]', String.Double)
+            (r'[${\\]', String.Double) 
         ],
     }
 
@@ -312,8 +312,8 @@ class PhpLexer(RegexLexer):
             yield index, token, value
 
     def analyse_text(text):
-        if shebang_matches(text, r'php'):
-            return True
+        if shebang_matches(text, r'php'): 
+            return True 
         rv = 0.0
         if re.search(r'<\?(?!xml)', text):
             rv += 0.3

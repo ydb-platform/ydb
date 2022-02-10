@@ -17,8 +17,8 @@ class TestInline(CythonTest):
     def setUp(self):
         CythonTest.setUp(self)
         self.test_kwds = dict(test_kwds)
-        if os.path.isdir('TEST_TMP'):
-            lib_dir = os.path.join('TEST_TMP','inline')
+        if os.path.isdir('TEST_TMP'): 
+            lib_dir = os.path.join('TEST_TMP','inline') 
         else:
             lib_dir = tempfile.mkdtemp(prefix='cython_inline_')
         self.test_kwds['lib_dir'] = lib_dir
@@ -45,35 +45,35 @@ class TestInline(CythonTest):
             a = 1
             cdef double b = 2
             cdef c = []
-        """, **self.test_kwds), dict(a=1, b=2.0, c=[]))
+        """, **self.test_kwds), dict(a=1, b=2.0, c=[])) 
 
     def test_def_node(self):
-        foo = inline("def foo(x): return x * x", **self.test_kwds)['foo']
+        foo = inline("def foo(x): return x * x", **self.test_kwds)['foo'] 
         self.assertEqual(foo(7), 49)
 
-    def test_class_ref(self):
-        class Type(object):
-            pass
-        tp = inline("Type")['Type']
-        self.assertEqual(tp, Type)
-
+    def test_class_ref(self): 
+        class Type(object): 
+            pass 
+        tp = inline("Type")['Type'] 
+        self.assertEqual(tp, Type) 
+ 
     def test_pure(self):
         import cython as cy
         b = inline("""
         b = cy.declare(float, a)
         c = cy.declare(cy.pointer(cy.float), &b)
         return b
-        """, a=3, **self.test_kwds)
+        """, a=3, **self.test_kwds) 
         self.assertEqual(type(b), float)
 
-    def test_compiler_directives(self):
-        self.assertEqual(
-            inline('return sum(x)',
-                   x=[1, 2, 3],
-                   cython_compiler_directives={'boundscheck': False}),
-            6
-        )
-
+    def test_compiler_directives(self): 
+        self.assertEqual( 
+            inline('return sum(x)', 
+                   x=[1, 2, 3], 
+                   cython_compiler_directives={'boundscheck': False}), 
+            6 
+        ) 
+ 
     def test_lang_version(self):
         # GH-3419. Caching for inline code didn't always respect compiler directives.
         inline_divcode = "def f(int a, int b): return a/b"

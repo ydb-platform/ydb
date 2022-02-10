@@ -12,7 +12,7 @@ cdef class ControlBlock:
      cdef public dict gen
      cdef public set bounded
 
-     # Big integer bitsets
+     # Big integer bitsets 
      cdef public object i_input
      cdef public object i_output
      cdef public object i_gen
@@ -87,11 +87,11 @@ cdef class Uninitialized:
 cdef class Unknown:
     pass
 
-
-cdef class MessageCollection:
-    cdef set messages
-
-
+ 
+cdef class MessageCollection: 
+    cdef set messages 
+ 
+ 
 @cython.locals(dirty=bint, block=ControlBlock, parent=ControlBlock,
                assmt=NameAssignment)
 cdef check_definitions(ControlFlow flow, dict compiler_directives)
@@ -99,7 +99,7 @@ cdef check_definitions(ControlFlow flow, dict compiler_directives)
 @cython.final
 cdef class ControlFlowAnalysis(CythonTransform):
     cdef object gv_ctx
-    cdef object constant_folder
+    cdef object constant_folder 
     cdef set reductions
     cdef list env_stack
     cdef list stack

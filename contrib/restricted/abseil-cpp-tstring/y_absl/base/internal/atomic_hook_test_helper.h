@@ -18,7 +18,7 @@
 #include "y_absl/base/internal/atomic_hook.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace atomic_hook_internal {
 
 using VoidF = void (*)();
@@ -28,7 +28,7 @@ void DefaultFunc();
 void RegisterFunc(VoidF func);
 
 }  // namespace atomic_hook_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_BASE_ATOMIC_HOOK_TEST_HELPER_H_

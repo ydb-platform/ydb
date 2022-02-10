@@ -17,10 +17,10 @@
 #include <cerrno>
 #include <limits>
 #include <sstream>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace str_format_internal {
 
 namespace {
@@ -80,21 +80,21 @@ inline bool ArgContext::Bind(const UnboundConversion* unbound,
         return false;
     }
 
-    FormatConversionSpecImplFriend::SetWidth(width, bound);
-    FormatConversionSpecImplFriend::SetPrecision(precision, bound);
-
-    if (force_left) {
+    FormatConversionSpecImplFriend::SetWidth(width, bound); 
+    FormatConversionSpecImplFriend::SetPrecision(precision, bound); 
+ 
+    if (force_left) { 
       FormatConversionSpecImplFriend::SetFlags(unbound->flags | Flags::kLeft,
                                                bound);
-    } else {
-      FormatConversionSpecImplFriend::SetFlags(unbound->flags, bound);
-    }
+    } else { 
+      FormatConversionSpecImplFriend::SetFlags(unbound->flags, bound); 
+    } 
   } else {
-    FormatConversionSpecImplFriend::SetFlags(unbound->flags, bound);
-    FormatConversionSpecImplFriend::SetWidth(-1, bound);
-    FormatConversionSpecImplFriend::SetPrecision(-1, bound);
+    FormatConversionSpecImplFriend::SetFlags(unbound->flags, bound); 
+    FormatConversionSpecImplFriend::SetWidth(-1, bound); 
+    FormatConversionSpecImplFriend::SetPrecision(-1, bound); 
   }
-  FormatConversionSpecImplFriend::SetConversionChar(unbound->conv, bound);
+  FormatConversionSpecImplFriend::SetConversionChar(unbound->conv, bound); 
   bound->set_arg(arg);
   return true;
 }
@@ -156,8 +156,8 @@ class SummarizingConverter {
     UntypedFormatSpecImpl spec("%d");
 
     std::ostringstream ss;
-    ss << "{" << Streamable(spec, {*bound.arg()}) << ":"
-       << FormatConversionSpecImplFriend::FlagsToString(bound);
+    ss << "{" << Streamable(spec, {*bound.arg()}) << ":" 
+       << FormatConversionSpecImplFriend::FlagsToString(bound); 
     if (bound.width() >= 0) ss << bound.width();
     if (bound.precision() >= 0) ss << "." << bound.precision();
     ss << bound.conversion_char() << "}";
@@ -254,5 +254,5 @@ int SnprintF(char* output, size_t size, const UntypedFormatSpecImpl format,
 }
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl

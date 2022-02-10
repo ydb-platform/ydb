@@ -185,9 +185,9 @@ void ImmutableServiceGenerator::GenerateAbstractMethods(io::Printer* printer) {
 
 TProtoStringType ImmutableServiceGenerator::GetOutput(
     const MethodDescriptor* method) {
-  return name_resolver_->GetImmutableClassName(method->output_type());
-}
-
+  return name_resolver_->GetImmutableClassName(method->output_type()); 
+} 
+ 
 void ImmutableServiceGenerator::GenerateCallMethod(io::Printer* printer) {
   printer->Print(
       "\n"
@@ -212,7 +212,7 @@ void ImmutableServiceGenerator::GenerateCallMethod(io::Printer* printer) {
     vars["index"] = StrCat(i);
     vars["method"] = UnderscoresToCamelCase(method);
     vars["input"] = name_resolver_->GetImmutableClassName(method->input_type());
-    vars["output"] = GetOutput(method);
+    vars["output"] = GetOutput(method); 
     printer->Print(
         vars,
         "case $index$:\n"
@@ -259,7 +259,7 @@ void ImmutableServiceGenerator::GenerateCallBlockingMethod(
     vars["index"] = StrCat(i);
     vars["method"] = UnderscoresToCamelCase(method);
     vars["input"] = name_resolver_->GetImmutableClassName(method->input_type());
-    vars["output"] = GetOutput(method);
+    vars["output"] = GetOutput(method); 
     printer->Print(vars,
                    "case $index$:\n"
                    "  return impl.$method$(controller, ($input$)request);\n");
@@ -357,7 +357,7 @@ void ImmutableServiceGenerator::GenerateStub(io::Printer* printer) {
 
     std::map<TProtoStringType, TProtoStringType> vars;
     vars["index"] = StrCat(i);
-    vars["output"] = GetOutput(method);
+    vars["output"] = GetOutput(method); 
     printer->Print(vars,
                    "channel.callMethod(\n"
                    "  getDescriptor().getMethods().get($index$),\n"
@@ -421,7 +421,7 @@ void ImmutableServiceGenerator::GenerateBlockingStub(io::Printer* printer) {
 
     std::map<TProtoStringType, TProtoStringType> vars;
     vars["index"] = StrCat(i);
-    vars["output"] = GetOutput(method);
+    vars["output"] = GetOutput(method); 
     printer->Print(vars,
                    "return ($output$) channel.callBlockingMethod(\n"
                    "  getDescriptor().getMethods().get($index$),\n"
@@ -445,7 +445,7 @@ void ImmutableServiceGenerator::GenerateMethodSignature(
   std::map<TProtoStringType, TProtoStringType> vars;
   vars["name"] = UnderscoresToCamelCase(method);
   vars["input"] = name_resolver_->GetImmutableClassName(method->input_type());
-  vars["output"] = GetOutput(method);
+  vars["output"] = GetOutput(method); 
   vars["abstract"] = (is_abstract == IS_ABSTRACT) ? "abstract" : "";
   printer->Print(vars,
                  "public $abstract$ void $name$(\n"
@@ -459,7 +459,7 @@ void ImmutableServiceGenerator::GenerateBlockingMethodSignature(
   std::map<TProtoStringType, TProtoStringType> vars;
   vars["method"] = UnderscoresToCamelCase(method);
   vars["input"] = name_resolver_->GetImmutableClassName(method->input_type());
-  vars["output"] = GetOutput(method);
+  vars["output"] = GetOutput(method); 
   printer->Print(vars,
                  "\n"
                  "public $output$ $method$(\n"

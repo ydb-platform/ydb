@@ -16,7 +16,7 @@ def list_all_files(directory, prefix='/', hidden_files=False):
 
 def pattern_to_regexp(p):
     return '^' + \
-           ('/' if not p.startswith('**') else '') + \
+           ('/' if not p.startswith('**') else '') + \ 
            re.escape(p).replace(
                r'\*\*\/', '[_DIR_]'
            ).replace(

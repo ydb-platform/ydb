@@ -185,7 +185,7 @@ bool Message::ParseFromArcadiaStream(IInputStream* input) {
   }
   return res && !proxy.HasError();
 }
-
+ 
 bool Message::ParsePartialFromArcadiaStream(IInputStream* input) {
   bool res = false;
   io::TInputStreamProxy proxy(input);
@@ -195,7 +195,7 @@ bool Message::ParsePartialFromArcadiaStream(IInputStream* input) {
   }
   return res && !proxy.HasError();
 }
-
+ 
 bool Message::SerializeToArcadiaStream(IOutputStream* output) const {
   bool res = false;
   io::TOutputStreamProxy proxy(output);
@@ -205,7 +205,7 @@ bool Message::SerializeToArcadiaStream(IOutputStream* output) const {
   }
   return res && !proxy.HasError();
 }
-
+ 
 bool Message::SerializePartialToArcadiaStream(IOutputStream* output) const {
   bool res = false;
   io::TOutputStreamProxy proxy(output);
@@ -400,7 +400,7 @@ const internal::RepeatedFieldAccessor* Reflection::RepeatedFieldAccessor(
 
 namespace internal {
 template <>
-#if defined(_MSC_VER) && (_MSC_VER >= 1800)
+#if defined(_MSC_VER) && (_MSC_VER >= 1800) 
 // Note: force noinline to workaround MSVC compiler bug with /Zc:inline, issue
 // #240
 PROTOBUF_NOINLINE
@@ -411,7 +411,7 @@ PROTOBUF_NOINLINE
   return prototype->New(arena);
 }
 template <>
-#if defined(_MSC_VER) && (_MSC_VER >= 1800)
+#if defined(_MSC_VER) && (_MSC_VER >= 1800) 
 // Note: force noinline to workaround MSVC compiler bug with /Zc:inline, issue
 // #240
 PROTOBUF_NOINLINE

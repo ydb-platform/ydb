@@ -1,8 +1,8 @@
 #ifndef AWS_COMMON_TIME_H
 #define AWS_COMMON_TIME_H
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 #include <aws/common/common.h>
 
@@ -27,4 +27,4 @@ AWS_COMMON_API void aws_gmtime(time_t time, struct tm *t);
 
 AWS_EXTERN_C_END
 
-#endif /* AWS_COMMON_TIME_H */
+#endif /* AWS_COMMON_TIME_H */ 

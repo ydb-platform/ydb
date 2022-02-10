@@ -1,6 +1,6 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #pragma once
@@ -25,7 +25,7 @@ namespace Aws
                 /**
                  * Whether or not the decoder is in good state. Return false if the decoder encounters errors.
                  */
-                inline explicit operator bool() const { return *m_eventStreamHandler; }
+                inline explicit operator bool() const { return *m_eventStreamHandler; } 
 
                 /**
                  * A wrapper of aws_event_stream_streaming_decoder_pump in aws-c-event-stream.
@@ -99,7 +99,7 @@ namespace Aws
 
                 /**
                  * The underlying decoder defined in aws-c-event-stream.
-                 * The decoder will invoke callback functions when the streaming messages received.
+                 * The decoder will invoke callback functions when the streaming messages received. 
                  */
                 aws_event_stream_streaming_decoder m_decoder;
                 EventStreamHandler* m_eventStreamHandler;

@@ -12,8 +12,8 @@ from pygments.lexer import RegexLexer, include, words, bygroups
 from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
     Number, Punctuation, Error, Whitespace
 
-__all__ = ['BrainfuckLexer', 'BefungeLexer', 'RedcodeLexer', 'CAmkESLexer',
-           'CapDLLexer', 'AheuiLexer']
+__all__ = ['BrainfuckLexer', 'BefungeLexer', 'RedcodeLexer', 'CAmkESLexer', 
+           'CapDLLexer', 'AheuiLexer'] 
 
 
 class BrainfuckLexer(RegexLexer):
@@ -115,7 +115,7 @@ class CAmkESLexer(RegexLexer):
     filenames = ['*.camkes', '*.idl4']
 
     tokens = {
-        'root': [
+        'root': [ 
             # C pre-processor directive
             (r'^(\s*)(#.*)(\n)', bygroups(Whitespace, Comment.Preproc, 
                 Whitespace)),
@@ -125,25 +125,25 @@ class CAmkESLexer(RegexLexer):
             (r'/\*(.|\n)*?\*/', Comment),
             (r'//.*$', Comment),
 
-            (r'[\[(){},.;\]]', Punctuation),
-            (r'[~!%^&*+=|?:<>/-]', Operator),
+            (r'[\[(){},.;\]]', Punctuation), 
+            (r'[~!%^&*+=|?:<>/-]', Operator), 
 
             (words(('assembly', 'attribute', 'component', 'composition',
                     'configuration', 'connection', 'connector', 'consumes',
-                    'control', 'dataport', 'Dataport', 'Dataports', 'emits',
-                    'event', 'Event', 'Events', 'export', 'from', 'group',
-                    'hardware', 'has', 'interface', 'Interface', 'maybe',
-                    'procedure', 'Procedure', 'Procedures', 'provides',
-                    'template', 'thread', 'threads', 'to', 'uses', 'with'),
-                   suffix=r'\b'), Keyword),
+                    'control', 'dataport', 'Dataport', 'Dataports', 'emits', 
+                    'event', 'Event', 'Events', 'export', 'from', 'group', 
+                    'hardware', 'has', 'interface', 'Interface', 'maybe', 
+                    'procedure', 'Procedure', 'Procedures', 'provides', 
+                    'template', 'thread', 'threads', 'to', 'uses', 'with'), 
+                   suffix=r'\b'), Keyword), 
 
             (words(('bool', 'boolean', 'Buf', 'char', 'character', 'double',
                     'float', 'in', 'inout', 'int', 'int16_6', 'int32_t',
                     'int64_t', 'int8_t', 'integer', 'mutex', 'out', 'real',
-                    'refin', 'semaphore', 'signed', 'string', 'struct',
-                    'uint16_t', 'uint32_t', 'uint64_t', 'uint8_t', 'uintptr_t',
-                    'unsigned', 'void'),
-                   suffix=r'\b'), Keyword.Type),
+                    'refin', 'semaphore', 'signed', 'string', 'struct', 
+                    'uint16_t', 'uint32_t', 'uint64_t', 'uint8_t', 'uintptr_t', 
+                    'unsigned', 'void'), 
+                   suffix=r'\b'), Keyword.Type), 
 
             # Recognised attributes
             (r'[a-zA-Z_]\w*_(priority|domain|buffer)', Keyword.Reserved),
@@ -163,7 +163,7 @@ class CAmkESLexer(RegexLexer):
             (r'-?[\d]+', Number),
             (r'-?[\d]+\.[\d]+', Number.Float),
             (r'"[^"]*"', String),
-            (r'[Tt]rue|[Ff]alse', Name.Builtin),
+            (r'[Tt]rue|[Ff]alse', Name.Builtin), 
 
             # Identifiers
             (r'[a-zA-Z_]\w*', Name),
@@ -171,66 +171,66 @@ class CAmkESLexer(RegexLexer):
     }
 
 
-class CapDLLexer(RegexLexer):
-    """
-    Basic lexer for
-    `CapDL <https://ssrg.nicta.com.au/publications/nictaabstracts/Kuz_KLW_10.abstract.pml>`_.
-
-    The source of the primary tool that reads such specifications is available
-    at https://github.com/seL4/capdl/tree/master/capDL-tool. Note that this
-    lexer only supports a subset of the grammar. For example, identifiers can
-    shadow type names, but these instances are currently incorrectly
-    highlighted as types. Supporting this would need a stateful lexer that is
-    considered unnecessarily complex for now.
-
-    .. versionadded:: 2.2
-    """
-    name = 'CapDL'
-    aliases = ['capdl']
-    filenames = ['*.cdl']
-
-    tokens = {
-        'root': [
-            # C pre-processor directive
+class CapDLLexer(RegexLexer): 
+    """ 
+    Basic lexer for 
+    `CapDL <https://ssrg.nicta.com.au/publications/nictaabstracts/Kuz_KLW_10.abstract.pml>`_. 
+ 
+    The source of the primary tool that reads such specifications is available 
+    at https://github.com/seL4/capdl/tree/master/capDL-tool. Note that this 
+    lexer only supports a subset of the grammar. For example, identifiers can 
+    shadow type names, but these instances are currently incorrectly 
+    highlighted as types. Supporting this would need a stateful lexer that is 
+    considered unnecessarily complex for now. 
+ 
+    .. versionadded:: 2.2 
+    """ 
+    name = 'CapDL' 
+    aliases = ['capdl'] 
+    filenames = ['*.cdl'] 
+ 
+    tokens = { 
+        'root': [ 
+            # C pre-processor directive 
             (r'^(\s*)(#.*)(\n)',
                 bygroups(Whitespace, Comment.Preproc, Whitespace)),
-
-            # Whitespace, comments
+ 
+            # Whitespace, comments 
             (r'\s+', Whitespace),
-            (r'/\*(.|\n)*?\*/', Comment),
+            (r'/\*(.|\n)*?\*/', Comment), 
             (r'(//|--).*$', Comment),
-
-            (r'[<>\[(){},:;=\]]', Punctuation),
-            (r'\.\.', Punctuation),
-
-            (words(('arch', 'arm11', 'caps', 'child_of', 'ia32', 'irq', 'maps',
-                    'objects'), suffix=r'\b'), Keyword),
-
-            (words(('aep', 'asid_pool', 'cnode', 'ep', 'frame', 'io_device',
-                    'io_ports', 'io_pt', 'notification', 'pd', 'pt', 'tcb',
-                    'ut', 'vcpu'), suffix=r'\b'), Keyword.Type),
-
-            # Properties
-            (words(('asid', 'addr', 'badge', 'cached', 'dom', 'domainID', 'elf',
-                    'fault_ep', 'G', 'guard', 'guard_size', 'init', 'ip',
-                    'prio', 'sp', 'R', 'RG', 'RX', 'RW', 'RWG', 'RWX', 'W',
-                    'WG', 'WX', 'level', 'masked', 'master_reply', 'paddr',
-                    'ports', 'reply', 'uncached'), suffix=r'\b'),
-             Keyword.Reserved),
-
-            # Literals
-            (r'0[xX][\da-fA-F]+', Number.Hex),
-            (r'\d+(\.\d+)?(k|M)?', Number),
-            (words(('bits',), suffix=r'\b'), Number),
-            (words(('cspace', 'vspace', 'reply_slot', 'caller_slot',
-                    'ipc_buffer_slot'), suffix=r'\b'), Number),
-
-            # Identifiers
-            (r'[a-zA-Z_][-@\.\w]*', Name),
-        ],
-    }
-
-
+ 
+            (r'[<>\[(){},:;=\]]', Punctuation), 
+            (r'\.\.', Punctuation), 
+ 
+            (words(('arch', 'arm11', 'caps', 'child_of', 'ia32', 'irq', 'maps', 
+                    'objects'), suffix=r'\b'), Keyword), 
+ 
+            (words(('aep', 'asid_pool', 'cnode', 'ep', 'frame', 'io_device', 
+                    'io_ports', 'io_pt', 'notification', 'pd', 'pt', 'tcb', 
+                    'ut', 'vcpu'), suffix=r'\b'), Keyword.Type), 
+ 
+            # Properties 
+            (words(('asid', 'addr', 'badge', 'cached', 'dom', 'domainID', 'elf', 
+                    'fault_ep', 'G', 'guard', 'guard_size', 'init', 'ip', 
+                    'prio', 'sp', 'R', 'RG', 'RX', 'RW', 'RWG', 'RWX', 'W', 
+                    'WG', 'WX', 'level', 'masked', 'master_reply', 'paddr', 
+                    'ports', 'reply', 'uncached'), suffix=r'\b'), 
+             Keyword.Reserved), 
+ 
+            # Literals 
+            (r'0[xX][\da-fA-F]+', Number.Hex), 
+            (r'\d+(\.\d+)?(k|M)?', Number), 
+            (words(('bits',), suffix=r'\b'), Number), 
+            (words(('cspace', 'vspace', 'reply_slot', 'caller_slot', 
+                    'ipc_buffer_slot'), suffix=r'\b'), Number), 
+ 
+            # Identifiers 
+            (r'[a-zA-Z_][-@\.\w]*', Name), 
+        ], 
+    } 
+ 
+ 
 class RedcodeLexer(RegexLexer):
     """
     A simple Redcode lexer based on ICWS'94.
@@ -267,20 +267,20 @@ class RedcodeLexer(RegexLexer):
     }
 
 
-class AheuiLexer(RegexLexer):
+class AheuiLexer(RegexLexer): 
     """
-    Aheui_ Lexer.
+    Aheui_ Lexer. 
 
-    Aheui_ is esoteric language based on Korean alphabets.
-
-    .. _Aheui: http://aheui.github.io/
-
+    Aheui_ is esoteric language based on Korean alphabets. 
+ 
+    .. _Aheui: http://aheui.github.io/ 
+ 
     """
 
-    name = 'Aheui'
-    aliases = ['aheui']
-    filenames = ['*.aheui']
-
+    name = 'Aheui' 
+    aliases = ['aheui'] 
+    filenames = ['*.aheui'] 
+ 
     tokens = {
         'root': [
             ('['
@@ -300,6 +300,6 @@ class AheuiLexer(RegexLexer):
              '파-팧퍄-퍟퍼-펗펴-폏포-퐇표-풓퓨-픻'
              '하-핳햐-햫허-헣혀-혛호-홓효-훟휴-힇'
              ']', Operator),
-            ('.', Comment),
+            ('.', Comment), 
         ],
     }

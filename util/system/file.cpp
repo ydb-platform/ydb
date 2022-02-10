@@ -512,7 +512,7 @@ i32 TFileHandle::Pread(void* buffer, ui32 byteCount, i64 offset) const noexcept 
         return bytesRead;
     }
     if (::GetLastError() == ERROR_HANDLE_EOF) {
-        return 0;
+        return 0; 
     }
     return -1;
 #elif defined(_unix_)

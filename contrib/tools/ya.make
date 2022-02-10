@@ -8,18 +8,18 @@ RECURSE(
     flame-graph
     flatc
     flatc64
-    flex
+    flex 
     flex-old
     flex-old/fl
     fluent-bit
-    fusermount
+    fusermount 
     gperf
     gprof2dot
-    grpc_cli
+    grpc_cli 
     kyotocabinet
     langid
     leveldb
-    lld
+    lld 
     lldb
     mp4viewer
     open-vcdiff
@@ -29,9 +29,9 @@ RECURSE(
     protoc-c
     protoc_std
     python
-    python3
-    python3/pycc
-    python3/src/Lib/lib2to3
+    python3 
+    python3/pycc 
+    python3/src/Lib/lib2to3 
     ragel5
     ragel6
     sancov
@@ -49,7 +49,7 @@ RECURSE(
     xdelta3
     xsltproc
     yasm
-    ycmd
+    ycmd 
     zookeeper
     jdk
     jdk/test

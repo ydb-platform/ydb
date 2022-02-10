@@ -167,12 +167,12 @@ void SharedCodeGenerator::GenerateDescriptors(io::Printer* printer) {
     TProtoStringType classname =
         name_resolver_->GetDescriptorClassName(file_->dependency(i));
     TProtoStringType full_name;
-    if (package.empty()) {
-      full_name = classname;
-    } else {
-      full_name = package + "." + classname;
-    }
-    dependencies.push_back(std::make_pair(filename, full_name));
+    if (package.empty()) { 
+      full_name = classname; 
+    } else { 
+      full_name = package + "." + classname; 
+    } 
+    dependencies.push_back(std::make_pair(filename, full_name)); 
   }
 
   // -----------------------------------------------------------------

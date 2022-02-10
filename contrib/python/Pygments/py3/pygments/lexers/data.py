@@ -13,7 +13,7 @@ from pygments.lexer import Lexer, ExtendedRegexLexer, LexerContext, \
 from pygments.token import Text, Comment, Keyword, Name, String, Number, \
     Punctuation, Literal, Error, Whitespace
 
-__all__ = ['YamlLexer', 'JsonLexer', 'JsonBareObjectLexer', 'JsonLdLexer']
+__all__ = ['YamlLexer', 'JsonLexer', 'JsonBareObjectLexer', 'JsonLdLexer'] 
 
 
 class YamlLexerContext(LexerContext):
@@ -202,7 +202,7 @@ class YamlLexer(ExtendedRegexLexer):
              bygroups(Whitespace, Number), 'ignored-line'),
         ],
 
-        # the %TAG directive
+        # the %TAG directive 
         'tag-directive': [
             # a tag handle and the corresponding prefix
             (r'([ ]+)(!|![\w-]*!)'
@@ -215,7 +215,7 @@ class YamlLexer(ExtendedRegexLexer):
         'indentation': [
             # trailing whitespaces are ignored
             (r'[ ]*$', something(Whitespace), '#pop:2'),
-            # whitespaces preceding block collection indicators
+            # whitespaces preceding block collection indicators 
             (r'[ ]+(?=[?:-](?:[ ]|$))', save_indent(Whitespace)),
             # block collection indicators
             (r'[?:-](?=[ ]|$)', set_indent(Punctuation.Indicator)),
@@ -229,9 +229,9 @@ class YamlLexer(ExtendedRegexLexer):
             (r'[ ]*(?=#|$)', something(Whitespace), '#pop'),
             # whitespaces separating tokens
             (r'[ ]+', Whitespace),
-            # key with colon
+            # key with colon 
             (r'''([^#,:?\[\]{}"'\n]+)(:)(?=[ ]|$)''',
-             bygroups(Name.Tag, set_indent(Punctuation, implicit=True))),
+             bygroups(Name.Tag, set_indent(Punctuation, implicit=True))), 
             # tags, anchors and aliases,
             include('descriptors'),
             # block collections and scalars
@@ -247,10 +247,10 @@ class YamlLexer(ExtendedRegexLexer):
         # tags, anchors, aliases
         'descriptors': [
             # a full-form tag
-            (r'!<[\w#;/?:@&=+$,.!~*\'()\[\]%-]+>', Keyword.Type),
+            (r'!<[\w#;/?:@&=+$,.!~*\'()\[\]%-]+>', Keyword.Type), 
             # a tag in the form '!', '!suffix' or '!handle!suffix'
-            (r'!(?:[\w-]+!)?'
-             r'[\w#;/?:@&=+$,.!~*\'()\[\]%-]*', Keyword.Type),
+            (r'!(?:[\w-]+!)?' 
+             r'[\w#;/?:@&=+$,.!~*\'()\[\]%-]*', Keyword.Type), 
             # an anchor
             (r'&[\w-]+', Name.Label),
             # an alias
@@ -308,9 +308,9 @@ class YamlLexer(ExtendedRegexLexer):
 
         # a flow mapping indicated by '{' and '}'
         'flow-mapping': [
-            # key with colon
-            (r'''([^,:?\[\]{}"'\n]+)(:)(?=[ ]|$)''',
-             bygroups(Name.Tag, Punctuation)),
+            # key with colon 
+            (r'''([^,:?\[\]{}"'\n]+)(:)(?=[ ]|$)''', 
+             bygroups(Name.Tag, Punctuation)), 
             # include flow collection rules
             include('flow-collection'),
             # the closing indicator
@@ -536,7 +536,7 @@ class JsonLexer(Lexer):
             elif in_constant:
                 if character in self.constants:
                     continue
-
+ 
                 yield start, Keyword.Constant, text[start:stop]
                 in_constant = False
                 # Fall through so the new character can be evaluated.
@@ -635,23 +635,23 @@ class JsonLexer(Lexer):
             yield start, Punctuation, text[start:]
 
 
-class JsonBareObjectLexer(JsonLexer):
-    """
-    For JSON data structures (with missing object curly braces).
-
-    .. versionadded:: 2.2
+class JsonBareObjectLexer(JsonLexer): 
+    """ 
+    For JSON data structures (with missing object curly braces). 
+ 
+    .. versionadded:: 2.2 
 
     .. deprecated:: 2.8.0
 
        Behaves the same as `JsonLexer` now.
-    """
-
-    name = 'JSONBareObject'
+    """ 
+ 
+    name = 'JSONBareObject' 
     aliases = []
-    filenames = []
+    filenames = [] 
     mimetypes = []
-
-
+ 
+ 
 class JsonLdLexer(JsonLexer):
     """
     For `JSON-LD <https://json-ld.org/>`_ linked data.

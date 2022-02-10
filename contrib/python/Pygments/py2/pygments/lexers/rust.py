@@ -5,7 +5,7 @@
 
     Lexers for the Rust language.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -18,44 +18,44 @@ __all__ = ['RustLexer']
 
 class RustLexer(RegexLexer):
     """
-    Lexer for the Rust programming language (version 1.10).
+    Lexer for the Rust programming language (version 1.10). 
 
     .. versionadded:: 1.6
     """
     name = 'Rust'
     filenames = ['*.rs', '*.rs.in']
-    aliases = ['rust', 'rs']
+    aliases = ['rust', 'rs'] 
     mimetypes = ['text/rust']
 
-    keyword_types = (
-        words(('u8', 'u16', 'u32', 'u64', 'i8', 'i16', 'i32', 'i64',
-               'i128', 'u128', 'usize', 'isize', 'f32', 'f64', 'str', 'bool'),
-              suffix=r'\b'),
-        Keyword.Type)
-
-    builtin_types = (words((
-        # Reexported core operators
-        'Copy', 'Send', 'Sized', 'Sync',
-        'Drop', 'Fn', 'FnMut', 'FnOnce',
-
-        # Reexported types and traits
-        'Box',
-        'ToOwned',
-        'Clone',
-        'PartialEq', 'PartialOrd', 'Eq', 'Ord',
-        'AsRef', 'AsMut', 'Into', 'From',
-        'Default',
-        'Iterator', 'Extend', 'IntoIterator',
-        'DoubleEndedIterator', 'ExactSizeIterator',
-        'Option',
-        'Some', 'None',
-        'Result',
-        'Ok', 'Err',
-        'SliceConcatExt',
-        'String', 'ToString',
-        'Vec'), suffix=r'\b'),
-        Name.Builtin)
-
+    keyword_types = ( 
+        words(('u8', 'u16', 'u32', 'u64', 'i8', 'i16', 'i32', 'i64', 
+               'i128', 'u128', 'usize', 'isize', 'f32', 'f64', 'str', 'bool'), 
+              suffix=r'\b'), 
+        Keyword.Type) 
+ 
+    builtin_types = (words(( 
+        # Reexported core operators 
+        'Copy', 'Send', 'Sized', 'Sync', 
+        'Drop', 'Fn', 'FnMut', 'FnOnce', 
+ 
+        # Reexported types and traits 
+        'Box', 
+        'ToOwned', 
+        'Clone', 
+        'PartialEq', 'PartialOrd', 'Eq', 'Ord', 
+        'AsRef', 'AsMut', 'Into', 'From', 
+        'Default', 
+        'Iterator', 'Extend', 'IntoIterator', 
+        'DoubleEndedIterator', 'ExactSizeIterator', 
+        'Option', 
+        'Some', 'None', 
+        'Result', 
+        'Ok', 'Err', 
+        'SliceConcatExt', 
+        'String', 'ToString', 
+        'Vec'), suffix=r'\b'), 
+        Name.Builtin) 
+ 
     tokens = {
         'root': [
             # rust allows a file to start with a shebang, but if the first line
@@ -83,27 +83,27 @@ class RustLexer(RegexLexer):
                 'mut', 'pub', 'ref', 'return', 'static', 'super', 'trait',
                 'try', 'unsafe', 'use', 'where', 'while'), suffix=r'\b'),
              Keyword),
-            (words(('abstract', 'alignof', 'become', 'do', 'final', 'macro',
-                    'offsetof', 'override', 'priv', 'proc', 'pure', 'sizeof',
-                    'typeof', 'unsized', 'virtual', 'yield'), suffix=r'\b'),
+            (words(('abstract', 'alignof', 'become', 'do', 'final', 'macro', 
+                    'offsetof', 'override', 'priv', 'proc', 'pure', 'sizeof', 
+                    'typeof', 'unsized', 'virtual', 'yield'), suffix=r'\b'), 
              Keyword.Reserved),
             (r'(true|false)\b', Keyword.Constant),
-            (r'mod\b', Keyword, 'modname'),
+            (r'mod\b', Keyword, 'modname'), 
             (r'let\b', Keyword.Declaration),
-            (r'fn\b', Keyword, 'funcname'),
-            (r'(struct|enum|type|union)\b', Keyword, 'typename'),
-            (r'(default)(\s+)(type|fn)\b', bygroups(Keyword, Text, Keyword)),
-            keyword_types,
+            (r'fn\b', Keyword, 'funcname'), 
+            (r'(struct|enum|type|union)\b', Keyword, 'typename'), 
+            (r'(default)(\s+)(type|fn)\b', bygroups(Keyword, Text, Keyword)), 
+            keyword_types, 
             (r'self\b', Name.Builtin.Pseudo),
             # Prelude (taken from Rust's src/libstd/prelude.rs)
-            builtin_types,
-            # Path seperators, so types don't catch them.
-            (r'::\b', Text),
-            # Types in positions.
-            (r'(?::|->)', Text, 'typename'),
+            builtin_types, 
+            # Path seperators, so types don't catch them. 
+            (r'::\b', Text), 
+            # Types in positions. 
+            (r'(?::|->)', Text, 'typename'), 
             # Labels
-            (r'(break|continue)(\s*)(\'[A-Za-z_]\w*)?',
-             bygroups(Keyword, Text.Whitespace, Name.Label)),
+            (r'(break|continue)(\s*)(\'[A-Za-z_]\w*)?', 
+             bygroups(Keyword, Text.Whitespace, Name.Label)), 
             # Character Literal
             (r"""'(\\['"\\nrt]|\\x[0-7][0-9a-fA-F]|\\0"""
              r"""|\\u\{[0-9a-fA-F]{1,6}\}|.)'""",
@@ -119,8 +119,8 @@ class RustLexer(RegexLexer):
             (r'0[xX][0-9a-fA-F_]+', Number.Hex, 'number_lit'),
             # Decimal Literal
             (r'[0-9][0-9_]*(\.[0-9_]+[eE][+\-]?[0-9_]+|'
-             r'\.[0-9_]*(?!\.)|[eE][+\-]?[0-9_]+)', Number.Float,
-             'number_lit'),
+             r'\.[0-9_]*(?!\.)|[eE][+\-]?[0-9_]+)', Number.Float, 
+             'number_lit'), 
             (r'[0-9][0-9_]*', Number.Integer, 'number_lit'),
             # String Literal
             (r'b"', String, 'bytestring'),
@@ -160,24 +160,24 @@ class RustLexer(RegexLexer):
             (r'\*/', String.Doc, '#pop'),
             (r'[*/]', String.Doc),
         ],
-        'modname': [
-            (r'\s+', Text),
-            (r'[a-zA-Z_]\w*', Name.Namespace, '#pop'),
-            default('#pop'),
-        ],
-        'funcname': [
-            (r'\s+', Text),
-            (r'[a-zA-Z_]\w*', Name.Function, '#pop'),
-            default('#pop'),
-        ],
-        'typename': [
-            (r'\s+', Text),
-            (r'&', Keyword.Pseudo),
-            builtin_types,
-            keyword_types,
-            (r'[a-zA-Z_]\w*', Name.Class, '#pop'),
-            default('#pop'),
-        ],
+        'modname': [ 
+            (r'\s+', Text), 
+            (r'[a-zA-Z_]\w*', Name.Namespace, '#pop'), 
+            default('#pop'), 
+        ], 
+        'funcname': [ 
+            (r'\s+', Text), 
+            (r'[a-zA-Z_]\w*', Name.Function, '#pop'), 
+            default('#pop'), 
+        ], 
+        'typename': [ 
+            (r'\s+', Text), 
+            (r'&', Keyword.Pseudo), 
+            builtin_types, 
+            keyword_types, 
+            (r'[a-zA-Z_]\w*', Name.Class, '#pop'), 
+            default('#pop'), 
+        ], 
         'number_lit': [
             (r'[ui](8|16|32|64|size)', Keyword, '#pop'),
             (r'f(32|64)', Keyword, '#pop'),

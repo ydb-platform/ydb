@@ -66,9 +66,9 @@ void LockAllMemory(ELockAllMemoryFlags flags) {
     if (flags & LockFutureMemory) {
         sys_flags |= MCL_FUTURE;
     }
-    if (flags & LockMemoryOnFault) {
-        sys_flags |= MCL_ONFAULT;
-    }
+    if (flags & LockMemoryOnFault) { 
+        sys_flags |= MCL_ONFAULT; 
+    } 
     if (mlockall(sys_flags)) {
         ythrow yexception() << LastSystemErrorText();
     }

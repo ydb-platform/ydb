@@ -376,12 +376,12 @@ CURLcode Curl_auth_create_digest_md5_message(struct Curl_easy *data,
   char *spn         = NULL;
 
   /* Decode the challenge message */
-  CURLcode result = auth_decode_digest_md5_message(chlg64, nonce,
-                                                   sizeof(nonce), realm,
-                                                   sizeof(realm), algorithm,
-                                                   sizeof(algorithm),
-                                                   qop_options,
-                                                   sizeof(qop_options));
+  CURLcode result = auth_decode_digest_md5_message(chlg64, nonce, 
+                                                   sizeof(nonce), realm, 
+                                                   sizeof(realm), algorithm, 
+                                                   sizeof(algorithm), 
+                                                   qop_options, 
+                                                   sizeof(qop_options)); 
   if(result)
     return result;
 
@@ -786,7 +786,7 @@ static CURLcode auth_create_digest_http_message(
     return CURLE_OUT_OF_MEMORY;
 
   if(digest->qop && strcasecompare(digest->qop, "auth-int")) {
-    /* We don't support auth-int for PUT or POST */
+    /* We don't support auth-int for PUT or POST */ 
     char hashed[65];
     char *hashthis2;
 

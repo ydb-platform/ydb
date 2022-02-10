@@ -5,7 +5,7 @@ LIBRARY()
 WITHOUT_LICENSE_TEXTS()
 
 OWNER(g:cpp-contrib)
-
+ 
 LICENSE(Apache-2.0)
 
 PEERDIR(
@@ -14,7 +14,7 @@ PEERDIR(
     contrib/libs/grpc/src/core/lib
     contrib/libs/grpc/src/proto/grpc/reflection/v1alpha
     contrib/libs/grpc/third_party/address_sorting
-    contrib/libs/grpc/third_party/upb
+    contrib/libs/grpc/third_party/upb 
     contrib/libs/protobuf
 )
 
@@ -35,7 +35,7 @@ IF (OS_LINUX OR OS_DARWIN)
 ENDIF()
 
 SRCS(
-    GLOBAL cpp/ext/proto_server_reflection_plugin.cc
+    GLOBAL cpp/ext/proto_server_reflection_plugin.cc 
     cpp/ext/proto_server_reflection.cc
 )
 

@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 #pragma once
 
 #include <aws/core/utils/crypto/Cipher.h>
@@ -57,7 +57,7 @@ namespace Aws
                 /**
                  * stream to src from
                  * cipher to encrypt or decrypt the src stream with
-                 * mode to use cipher in. Encryption or Decryption
+                 * mode to use cipher in. Encryption or Decryption 
                  * buffersize, the size of the src buffers to read at a time. Defaults to 1kb
                  */
                 SymmetricCryptoBufSrc(Aws::IStream& stream, SymmetricCipher& cipher, CipherMode cipherMode, size_t bufferSize = DEFAULT_BUF_SIZE);

@@ -153,7 +153,7 @@ inline TProtoStringType StripSuffixString(const TProtoStringType& str,
 }
 
 // ----------------------------------------------------------------------
-// ReplaceCharacters
+// ReplaceCharacters 
 //    Replaces any occurrence of the character 'remove' (or the characters
 //    in 'remove') with the character 'replacewith'.
 //    Good for keeping html characters or protocol characters (\t) out

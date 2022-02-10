@@ -1,6 +1,6 @@
 PY2_LIBRARY()
 
-OWNER(g:python-contrib)
+OWNER(g:python-contrib) 
 
 VERSION(0.13.1)
 

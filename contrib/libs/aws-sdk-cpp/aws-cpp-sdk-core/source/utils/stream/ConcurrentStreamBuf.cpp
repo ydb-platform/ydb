@@ -1,6 +1,6 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 #include <aws/core/utils/stream/ConcurrentStreamBuf.h>
 #include <aws/core/utils/logging/LogMacros.h>
@@ -42,11 +42,11 @@ namespace Aws
                     // scope the lock
                     {
                         std::unique_lock<std::mutex> lock(m_lock);
-                        m_signal.wait(lock, [this, bitslen]{ return m_eof || bitslen <= (m_backbuf.capacity() - m_backbuf.size()); });
-                        if (m_eof)
-                        {
-                            return;
-                        }
+                        m_signal.wait(lock, [this, bitslen]{ return m_eof || bitslen <= (m_backbuf.capacity() - m_backbuf.size()); }); 
+                        if (m_eof) 
+                        { 
+                            return; 
+                        } 
                         std::copy(pbase(), pptr(), std::back_inserter(m_backbuf));
                     }
                     m_signal.notify_one();
@@ -104,16 +104,16 @@ namespace Aws
                 }
 
                 FlushPutArea();
-                {
-                    std::unique_lock<std::mutex> lock(m_lock);
-                    if (m_eof)
-                    {
-                        return eof;
-                    }
-                    *pptr() = static_cast<char>(ch);
-                    pbump(1);
-                    return ch;
-                }
+                { 
+                    std::unique_lock<std::mutex> lock(m_lock); 
+                    if (m_eof) 
+                    { 
+                        return eof; 
+                    } 
+                    *pptr() = static_cast<char>(ch); 
+                    pbump(1); 
+                    return ch; 
+                } 
             }
 
             int ConcurrentStreamBuf::sync()

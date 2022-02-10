@@ -10,13 +10,13 @@ class TLimitTest: public TTestBase {
     UNIT_TEST_SUITE(TLimitTest);
     UNIT_TEST(TestLimits);
     UNIT_TEST(TestNan);
-    UNIT_TEST(TestMaxDouble);
+    UNIT_TEST(TestMaxDouble); 
     UNIT_TEST_SUITE_END();
 
 protected:
     void TestLimits();
     void TestNan();
-    void TestMaxDouble();
+    void TestMaxDouble(); 
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TLimitTest);
@@ -142,16 +142,16 @@ void TLimitTest::TestNan() {
     using long_double = long double;
     UNIT_ASSERT(::TestNan(long_double()));
 }
-
-void TLimitTest::TestMaxDouble() {
-    UNIT_ASSERT_VALUES_EQUAL(MaxCeil<i8>(), 127.0);
-    UNIT_ASSERT_VALUES_EQUAL(MaxFloor<i8>(), 127.0);
-    UNIT_ASSERT_VALUES_EQUAL(MaxCeil<ui8>(), 255.0);
-    UNIT_ASSERT_VALUES_EQUAL(MaxFloor<ui8>(), 255.0);
-    double d = 1ull << 63;
-    UNIT_ASSERT_VALUES_EQUAL(MaxCeil<i64>(), d);
-    UNIT_ASSERT_VALUES_EQUAL(MaxFloor<i64>(), nextafter(d, 0));
-    d *= 2;
-    UNIT_ASSERT_VALUES_EQUAL(MaxCeil<ui64>(), d);
-    UNIT_ASSERT_VALUES_EQUAL(MaxFloor<ui64>(), nextafter(d, 0));
-}
+ 
+void TLimitTest::TestMaxDouble() { 
+    UNIT_ASSERT_VALUES_EQUAL(MaxCeil<i8>(), 127.0); 
+    UNIT_ASSERT_VALUES_EQUAL(MaxFloor<i8>(), 127.0); 
+    UNIT_ASSERT_VALUES_EQUAL(MaxCeil<ui8>(), 255.0); 
+    UNIT_ASSERT_VALUES_EQUAL(MaxFloor<ui8>(), 255.0); 
+    double d = 1ull << 63; 
+    UNIT_ASSERT_VALUES_EQUAL(MaxCeil<i64>(), d); 
+    UNIT_ASSERT_VALUES_EQUAL(MaxFloor<i64>(), nextafter(d, 0)); 
+    d *= 2; 
+    UNIT_ASSERT_VALUES_EQUAL(MaxCeil<ui64>(), d); 
+    UNIT_ASSERT_VALUES_EQUAL(MaxFloor<ui64>(), nextafter(d, 0)); 
+} 

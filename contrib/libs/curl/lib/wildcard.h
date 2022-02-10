@@ -22,9 +22,9 @@
  *
  ***************************************************************************/
 
-#include "curl_setup.h"
+#include "curl_setup.h" 
 
-#ifndef CURL_DISABLE_FTP
+#ifndef CURL_DISABLE_FTP 
 #include "llist.h"
 
 /* list of wildcard process states */
@@ -59,9 +59,9 @@ void Curl_wildcard_dtor(struct WildcardData *wc);
 
 struct Curl_easy;
 
-#else
-/* FTP is disabled */
-#define Curl_wildcard_dtor(x)
-#endif
-
+#else 
+/* FTP is disabled */ 
+#define Curl_wildcard_dtor(x) 
+#endif 
+ 
 #endif /* HEADER_CURL_WILDCARD_H */

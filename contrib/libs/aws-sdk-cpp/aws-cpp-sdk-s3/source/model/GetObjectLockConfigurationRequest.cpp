@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #include <aws/s3/model/GetObjectLockConfigurationRequest.h>
 #include <aws/core/utils/xml/XmlSerializer.h>
@@ -18,7 +18,7 @@ using namespace Aws::Http;
 
 GetObjectLockConfigurationRequest::GetObjectLockConfigurationRequest() : 
     m_bucketHasBeenSet(false),
-    m_expectedBucketOwnerHasBeenSet(false),
+    m_expectedBucketOwnerHasBeenSet(false), 
     m_customizedAccessLogTagHasBeenSet(false)
 {
 }
@@ -50,16 +50,16 @@ void GetObjectLockConfigurationRequest::AddQueryStringParameters(URI& uri) const
     }
 }
 
-Aws::Http::HeaderValueCollection GetObjectLockConfigurationRequest::GetRequestSpecificHeaders() const
-{
-  Aws::Http::HeaderValueCollection headers;
-  Aws::StringStream ss;
-  if(m_expectedBucketOwnerHasBeenSet)
-  {
-    ss << m_expectedBucketOwner;
-    headers.emplace("x-amz-expected-bucket-owner",  ss.str());
-    ss.str("");
-  }
-
-  return headers;
-}
+Aws::Http::HeaderValueCollection GetObjectLockConfigurationRequest::GetRequestSpecificHeaders() const 
+{ 
+  Aws::Http::HeaderValueCollection headers; 
+  Aws::StringStream ss; 
+  if(m_expectedBucketOwnerHasBeenSet) 
+  { 
+    ss << m_expectedBucketOwner; 
+    headers.emplace("x-amz-expected-bucket-owner",  ss.str()); 
+    ss.str(""); 
+  } 
+ 
+  return headers; 
+} 

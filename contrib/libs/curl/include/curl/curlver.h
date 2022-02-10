@@ -1,5 +1,5 @@
-#ifndef CURLINC_CURLVER_H
-#define CURLINC_CURLVER_H
+#ifndef CURLINC_CURLVER_H 
+#define CURLINC_CURLVER_H 
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -70,8 +70,8 @@
  */
 #define LIBCURL_TIMESTAMP "2020-12-09"
 
-#define CURL_VERSION_BITS(x,y,z) ((x)<<16|(y)<<8|(z))
+#define CURL_VERSION_BITS(x,y,z) ((x)<<16|(y)<<8|(z)) 
 #define CURL_AT_LEAST_VERSION(x,y,z) \
   (LIBCURL_VERSION_NUM >= CURL_VERSION_BITS(x, y, z))
 
-#endif /* CURLINC_CURLVER_H */
+#endif /* CURLINC_CURLVER_H */ 

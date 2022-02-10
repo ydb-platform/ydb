@@ -5,7 +5,7 @@
 
     Utility functions.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -14,7 +14,7 @@ import sys
 
 
 split_path_re = re.compile(r'[/\\ ]')
-doctype_lookup_re = re.compile(r'''
+doctype_lookup_re = re.compile(r''' 
     (<\?.*?\?>)?\s*
     <!DOCTYPE\s+(
      [a-zA-Z_][a-zA-Z0-9]*
@@ -23,9 +23,9 @@ doctype_lookup_re = re.compile(r'''
      "[^"]*")?
      )
      [^>]*>
-''', re.DOTALL | re.MULTILINE | re.VERBOSE)
-tag_re = re.compile(r'<(.+?)(\s.*?)?>.*?</.+?>',
-                    re.UNICODE | re.IGNORECASE | re.DOTALL | re.MULTILINE)
+''', re.DOTALL | re.MULTILINE | re.VERBOSE) 
+tag_re = re.compile(r'<(.+?)(\s.*?)?>.*?</.+?>', 
+                    re.UNICODE | re.IGNORECASE | re.DOTALL | re.MULTILINE) 
 xml_decl_re = re.compile(r'\s*<\?xml[^>]*\?>', re.I)
 
 

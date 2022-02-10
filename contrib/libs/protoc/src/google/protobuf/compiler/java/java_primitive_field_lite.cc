@@ -79,11 +79,11 @@ void SetPrimitiveVariables(const FieldDescriptor* descriptor,
   (*variables)["default"] = ImmutableDefaultValue(descriptor, name_resolver);
   (*variables)["capitalized_type"] =
       GetCapitalizedType(descriptor, /* immutable = */ true);
-  (*variables)["tag"] =
+  (*variables)["tag"] = 
       StrCat(static_cast<int32_t>(WireFormat::MakeTag(descriptor)));
   (*variables)["tag_size"] = StrCat(
       WireFormat::TagSize(descriptor->number(), GetType(descriptor)));
-  (*variables)["required"] = descriptor->is_required() ? "true" : "false";
+  (*variables)["required"] = descriptor->is_required() ? "true" : "false"; 
 
   TProtoStringType capitalized_type = UnderscoresToCamelCase(
       PrimitiveTypeName(javaType), true /* cap_next_letter */);
@@ -229,7 +229,7 @@ void ImmutablePrimitiveFieldLiteGenerator::GenerateMembers(
         "$deprecation$public boolean ${$has$capitalized_name$$}$() {\n"
         "  return $get_has_field_bit_message$;\n"
         "}\n");
-    printer->Annotate("{", "}", descriptor_);
+    printer->Annotate("{", "}", descriptor_); 
   }
 
   WriteFieldAccessorDocComment(printer, descriptor_, GETTER);
@@ -238,7 +238,7 @@ void ImmutablePrimitiveFieldLiteGenerator::GenerateMembers(
                  "$deprecation$public $type$ ${$get$capitalized_name$$}$() {\n"
                  "  return $name$_;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   WriteFieldAccessorDocComment(printer, descriptor_, SETTER);
   printer->Print(variables_,
@@ -275,7 +275,7 @@ void ImmutablePrimitiveFieldLiteGenerator::GenerateBuilderMembers(
         "$deprecation$public boolean ${$has$capitalized_name$$}$() {\n"
         "  return instance.has$capitalized_name$();\n"
         "}\n");
-    printer->Annotate("{", "}", descriptor_);
+    printer->Annotate("{", "}", descriptor_); 
   }
 
   WriteFieldAccessorDocComment(printer, descriptor_, GETTER);
@@ -284,7 +284,7 @@ void ImmutablePrimitiveFieldLiteGenerator::GenerateBuilderMembers(
                  "$deprecation$public $type$ ${$get$capitalized_name$$}$() {\n"
                  "  return instance.get$capitalized_name$();\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   WriteFieldAccessorDocComment(printer, descriptor_, SETTER,
                                /* builder */ true);
@@ -295,7 +295,7 @@ void ImmutablePrimitiveFieldLiteGenerator::GenerateBuilderMembers(
                  "  instance.set$capitalized_name$(value);\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   WriteFieldAccessorDocComment(printer, descriptor_, CLEARER,
                                /* builder */ true);
@@ -306,7 +306,7 @@ void ImmutablePrimitiveFieldLiteGenerator::GenerateBuilderMembers(
       "  instance.clear$capitalized_name$();\n"
       "  return this;\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 }
 
 void ImmutablePrimitiveFieldLiteGenerator::GenerateKotlinDslMembers(
@@ -398,7 +398,7 @@ void ImmutablePrimitiveOneofFieldLiteGenerator::GenerateMembers(
                  "  }\n"
                  "  return $default$;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   WriteFieldAccessorDocComment(printer, descriptor_, SETTER);
   printer->Print(variables_,
@@ -435,7 +435,7 @@ void ImmutablePrimitiveOneofFieldLiteGenerator::GenerateBuilderMembers(
                  "$deprecation$public boolean ${$has$capitalized_name$$}$() {\n"
                  "  return instance.has$capitalized_name$();\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   WriteFieldAccessorDocComment(printer, descriptor_, GETTER);
   printer->Print(variables_,
@@ -443,7 +443,7 @@ void ImmutablePrimitiveOneofFieldLiteGenerator::GenerateBuilderMembers(
                  "$deprecation$public $type$ ${$get$capitalized_name$$}$() {\n"
                  "  return instance.get$capitalized_name$();\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   WriteFieldAccessorDocComment(printer, descriptor_, SETTER,
                                /* builder */ true);
@@ -454,7 +454,7 @@ void ImmutablePrimitiveOneofFieldLiteGenerator::GenerateBuilderMembers(
                  "  instance.set$capitalized_name$(value);\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   WriteFieldAccessorDocComment(printer, descriptor_, CLEARER,
                                /* builder */ true);
@@ -514,7 +514,7 @@ void RepeatedImmutablePrimitiveFieldLiteGenerator::GenerateMembers(
                  "    ${$get$capitalized_name$List$}$() {\n"
                  "  return $name$_;\n"  // note:  unmodifiable list
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_COUNT);
   printer->Print(
       variables_,
@@ -522,7 +522,7 @@ void RepeatedImmutablePrimitiveFieldLiteGenerator::GenerateMembers(
       "$deprecation$public int ${$get$capitalized_name$Count$}$() {\n"
       "  return $name$_.size();\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_INDEXED_GETTER);
   printer->Print(
       variables_,
@@ -530,7 +530,7 @@ void RepeatedImmutablePrimitiveFieldLiteGenerator::GenerateMembers(
       "$deprecation$public $type$ ${$get$capitalized_name$$}$(int index) {\n"
       "  return $repeated_get$(index);\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   if (!EnableExperimentalRuntimeForLite() && descriptor_->is_packed() &&
       context_->HasGeneratedMethods(descriptor_->containing_type())) {
@@ -589,7 +589,7 @@ void RepeatedImmutablePrimitiveFieldLiteGenerator::GenerateBuilderMembers(
                  "  return java.util.Collections.unmodifiableList(\n"
                  "      instance.get$capitalized_name$List());\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_COUNT);
   printer->Print(
       variables_,
@@ -597,7 +597,7 @@ void RepeatedImmutablePrimitiveFieldLiteGenerator::GenerateBuilderMembers(
       "$deprecation$public int ${$get$capitalized_name$Count$}$() {\n"
       "  return instance.get$capitalized_name$Count();\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_INDEXED_GETTER);
   printer->Print(
       variables_,
@@ -605,7 +605,7 @@ void RepeatedImmutablePrimitiveFieldLiteGenerator::GenerateBuilderMembers(
       "$deprecation$public $type$ ${$get$capitalized_name$$}$(int index) {\n"
       "  return instance.get$capitalized_name$(index);\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, SETTER,
                                /* builder */ true);
   printer->Print(variables_,
@@ -615,7 +615,7 @@ void RepeatedImmutablePrimitiveFieldLiteGenerator::GenerateBuilderMembers(
                  "  instance.set$capitalized_name$(index, value);\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_ADDER,
                                /* builder */ true);
   printer->Print(variables_,
@@ -625,7 +625,7 @@ void RepeatedImmutablePrimitiveFieldLiteGenerator::GenerateBuilderMembers(
                  "  instance.add$capitalized_name$(value);\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_MULTI_ADDER,
                                /* builder */ true);
   printer->Print(variables_,
@@ -635,7 +635,7 @@ void RepeatedImmutablePrimitiveFieldLiteGenerator::GenerateBuilderMembers(
                  "  instance.addAll$capitalized_name$(values);\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, CLEARER,
                                /* builder */ true);
   printer->Print(
@@ -645,7 +645,7 @@ void RepeatedImmutablePrimitiveFieldLiteGenerator::GenerateBuilderMembers(
       "  instance.clear$capitalized_name$();\n"
       "  return this;\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 }
 
 void RepeatedImmutablePrimitiveFieldLiteGenerator::GenerateKotlinDslMembers(

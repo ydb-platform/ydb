@@ -3,7 +3,7 @@ import sys
 from itertools import product, starmap
 import distutils.command.install_lib as orig
 
-
+ 
 class install_lib(orig.install_lib):
     """Don't add compiled flags to filenames of non-Python files"""
 

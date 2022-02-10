@@ -5,7 +5,7 @@
 
     Lexers for Oberon family languages.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -47,11 +47,11 @@ class ComponentPascalLexer(RegexLexer):
             (r'\s+', Text),  # whitespace
         ],
         'comments': [
-            (r'\(\*([^$].*?)\*\)', Comment.Multiline),
+            (r'\(\*([^$].*?)\*\)', Comment.Multiline), 
             # TODO: nested comments (* (* ... *) ... (* ... *) *) not supported!
         ],
         'punctuation': [
-            (r'[()\[\]{},.:;|]', Punctuation),
+            (r'[()\[\]{},.:;|]', Punctuation), 
         ],
         'numliterals': [
             (r'[0-9A-F]+X\b', Number.Hex),                 # char code
@@ -83,7 +83,7 @@ class ComponentPascalLexer(RegexLexer):
             (r'\$', Operator),
         ],
         'identifiers': [
-            (r'([a-zA-Z_$][\w$]*)', Name),
+            (r'([a-zA-Z_$][\w$]*)', Name), 
         ],
         'builtins': [
             (words((

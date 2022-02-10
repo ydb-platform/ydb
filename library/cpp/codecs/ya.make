@@ -19,7 +19,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/zstd
+    contrib/libs/zstd 
     library/cpp/bit_io
     library/cpp/blockcodecs
     library/cpp/codecs/greedy_dict

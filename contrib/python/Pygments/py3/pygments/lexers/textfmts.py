@@ -123,11 +123,11 @@ class HttpLexer(RegexLexer):
 
     flags = re.DOTALL
 
-    def get_tokens_unprocessed(self, text, stack=('root',)):
-        """Reset the content-type state."""
-        self.content_type = None
-        return RegexLexer.get_tokens_unprocessed(self, text, stack)
-
+    def get_tokens_unprocessed(self, text, stack=('root',)): 
+        """Reset the content-type state.""" 
+        self.content_type = None 
+        return RegexLexer.get_tokens_unprocessed(self, text, stack) 
+ 
     def header_callback(self, match):
         if match.group(1).lower() == 'content-type':
             content_type = match.group(5).strip()
@@ -267,7 +267,7 @@ class TodotxtLexer(RegexLexer):
             # 5. Leading project
             (project_regex, Project, 'incomplete'),
             # 6. Non-whitespace catch-all
-            (r'\S+', IncompleteTaskText, 'incomplete'),
+            (r'\S+', IncompleteTaskText, 'incomplete'), 
         ],
 
         # Parse a complete task
@@ -278,9 +278,9 @@ class TodotxtLexer(RegexLexer):
             (context_regex, Context),
             (project_regex, Project),
             # Tokenize non-whitespace text
-            (r'\S+', CompleteTaskText),
+            (r'\S+', CompleteTaskText), 
             # Tokenize whitespace not containing a newline
-            (r'\s+', CompleteTaskText),
+            (r'\s+', CompleteTaskText), 
         ],
 
         # Parse an incomplete task
@@ -291,9 +291,9 @@ class TodotxtLexer(RegexLexer):
             (context_regex, Context),
             (project_regex, Project),
             # Tokenize non-whitespace text
-            (r'\S+', IncompleteTaskText),
+            (r'\S+', IncompleteTaskText), 
             # Tokenize whitespace not containing a newline
-            (r'\s+', IncompleteTaskText),
+            (r'\s+', IncompleteTaskText), 
         ],
     }
 

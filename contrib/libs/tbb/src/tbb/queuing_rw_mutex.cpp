@@ -1,58 +1,58 @@
-/*
+/* 
     Copyright (c) 2005-2021 Intel Corporation
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-        http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-*/
-
-/** Before making any changes in the implementation, please emulate algorithmic changes
-    with SPIN tool using <TBB directory>/tools/spin_models/ReaderWriterMutex.pml.
-    There could be some code looking as "can be restructured" but its structure does matter! */
-
+ 
+    Licensed under the Apache License, Version 2.0 (the "License"); 
+    you may not use this file except in compliance with the License. 
+    You may obtain a copy of the License at 
+ 
+        http://www.apache.org/licenses/LICENSE-2.0 
+ 
+    Unless required by applicable law or agreed to in writing, software 
+    distributed under the License is distributed on an "AS IS" BASIS, 
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+    See the License for the specific language governing permissions and 
+    limitations under the License. 
+*/ 
+ 
+/** Before making any changes in the implementation, please emulate algorithmic changes 
+    with SPIN tool using <TBB directory>/tools/spin_models/ReaderWriterMutex.pml. 
+    There could be some code looking as "can be restructured" but its structure does matter! */ 
+ 
 #include "oneapi/tbb/queuing_rw_mutex.h"
 #include "oneapi/tbb/detail/_assert.h"
 #include "oneapi/tbb/detail/_utils.h"
-#include "itt_notify.h"
-
-namespace tbb {
+#include "itt_notify.h" 
+ 
+namespace tbb { 
 namespace detail {
 namespace r1 {
-
-#if defined(_MSC_VER) && !defined(__INTEL_COMPILER)
-    // Workaround for overzealous compiler warnings
-    #pragma warning (push)
-    #pragma warning (disable: 4311 4312)
-#endif
-
-//! A view of a T* with additional functionality for twiddling low-order bits.
-template<typename T>
+ 
+#if defined(_MSC_VER) && !defined(__INTEL_COMPILER) 
+    // Workaround for overzealous compiler warnings 
+    #pragma warning (push) 
+    #pragma warning (disable: 4311 4312) 
+#endif 
+ 
+//! A view of a T* with additional functionality for twiddling low-order bits. 
+template<typename T> 
 class tricky_atomic_pointer {
-public:
+public: 
     using word = uintptr_t;
-
+ 
     static T* fetch_add( std::atomic<word>& location, word addend, std::memory_order memory_order ) {
         return reinterpret_cast<T*>(location.fetch_add(addend, memory_order));
-    }
+    } 
 
     static T* exchange( std::atomic<word>& location, T* value, std::memory_order memory_order ) {
         return reinterpret_cast<T*>(location.exchange(reinterpret_cast<word>(value), memory_order));
-    }
+    } 
 
     static T* compare_exchange_strong( std::atomic<word>& obj, const T* expected, const T* desired, std::memory_order memory_order ) {
         word expd = reinterpret_cast<word>(expected);
         obj.compare_exchange_strong(expd, reinterpret_cast<word>(desired), memory_order);
         return reinterpret_cast<T*>(expd);
-    }
-
+    } 
+ 
     static void store( std::atomic<word>& location, const T* value, std::memory_order memory_order ) {
         location.store(reinterpret_cast<word>(value), memory_order);
     }
@@ -65,25 +65,25 @@ public:
         tbb::detail::d0::spin_wait_while_eq(location, reinterpret_cast<word>(value) );
     }
 
-    T* & ref;
-    tricky_atomic_pointer( T*& original ) : ref(original) {};
+    T* & ref; 
+    tricky_atomic_pointer( T*& original ) : ref(original) {}; 
     tricky_atomic_pointer(const tricky_atomic_pointer&) = delete;
     tricky_atomic_pointer& operator=(const tricky_atomic_pointer&) = delete;
     T* operator&( const word operand2 ) const {
-        return reinterpret_cast<T*>( reinterpret_cast<word>(ref) & operand2 );
-    }
+        return reinterpret_cast<T*>( reinterpret_cast<word>(ref) & operand2 ); 
+    } 
     T* operator|( const word operand2 ) const {
-        return reinterpret_cast<T*>( reinterpret_cast<word>(ref) | operand2 );
-    }
-};
-
+        return reinterpret_cast<T*>( reinterpret_cast<word>(ref) | operand2 ); 
+    } 
+}; 
+ 
 using tricky_pointer = tricky_atomic_pointer<queuing_rw_mutex::scoped_lock>;
-
-#if defined(_MSC_VER) && !defined(__INTEL_COMPILER)
-    // Workaround for overzealous compiler warnings
-    #pragma warning (pop)
-#endif
-
+ 
+#if defined(_MSC_VER) && !defined(__INTEL_COMPILER) 
+    // Workaround for overzealous compiler warnings 
+    #pragma warning (pop) 
+#endif 
+ 
 //! Flag bits in a state_t that specify information about a locking request.
 enum state_t_flags : unsigned char {
     STATE_NONE                   = 0,
@@ -98,10 +98,10 @@ enum state_t_flags : unsigned char {
     STATE_COMBINED_READER        = STATE_COMBINED_WAITINGREADER | STATE_ACTIVEREADER,
     STATE_COMBINED_UPGRADING     = STATE_UPGRADE_WAITING | STATE_UPGRADE_LOSER
 };
-
+ 
 static const unsigned char RELEASED = 0;
 static const unsigned char ACQUIRED = 1;
-
+ 
 struct queuing_rw_mutex_impl {
     //! Try to acquire the internal lock
     /** Returns true if lock was successfully acquired. */
@@ -110,7 +110,7 @@ struct queuing_rw_mutex_impl {
         auto expected = RELEASED;
         return s.my_internal_lock.compare_exchange_strong(expected, ACQUIRED);
     }
-
+ 
     //! Acquire the internal lock
     static void acquire_internal_lock(d1::queuing_rw_mutex::scoped_lock& s)
     {
@@ -120,29 +120,29 @@ struct queuing_rw_mutex_impl {
             machine_pause(1);
         }
     }
-
+ 
     //! Release the internal lock
     static void release_internal_lock(d1::queuing_rw_mutex::scoped_lock& s)
     {
         s.my_internal_lock.store(RELEASED, std::memory_order_release);
     }
-
+ 
     //! Wait for internal lock to be released
     static void wait_for_release_of_internal_lock(d1::queuing_rw_mutex::scoped_lock& s)
     {
         spin_wait_until_eq(s.my_internal_lock, RELEASED);
     }
-
+ 
     //! A helper function
     static void unblock_or_wait_on_internal_lock(d1::queuing_rw_mutex::scoped_lock& s, uintptr_t flag ) {
         if( flag ) {
             wait_for_release_of_internal_lock(s);
-        }
+        } 
         else {
             release_internal_lock(s);
         }
     }
-
+ 
     //! Mask for low order bit of a pointer.
     static const tricky_pointer::word FLAG = 0x1;
 
@@ -182,7 +182,7 @@ struct queuing_rw_mutex_impl {
     #endif
                 tricky_pointer::store(predecessor->my_next, &s, std::memory_order_release);
                 spin_wait_until_eq(s.my_going, 1U);
-            }
+            } 
 
         } else {            // Acquiring for read
     #if __TBB_USE_ITT_NOTIFY
@@ -215,8 +215,8 @@ struct queuing_rw_mutex_impl {
     #endif
                     spin_wait_until_eq(s.my_going, 1U);
                 }
-            }
-
+            } 
+ 
             // The protected state must have been acquired here before it can be further released to any other reader(s):
             unsigned char old_state = STATE_READER;
             s.my_state.compare_exchange_strong(old_state, STATE_ACTIVEREADER, std::memory_order_acq_rel);
@@ -224,7 +224,7 @@ struct queuing_rw_mutex_impl {
 #if __TBB_USE_ITT_NOTIFY
                 if( !sync_prepare_done )
                     ITT_NOTIFY(sync_prepare, s.my_mutex);
-#endif
+#endif 
                 // Failed to become active reader -> need to unblock the next waiting reader first
                 __TBB_ASSERT( s.my_state==STATE_READER_UNBLOCKNEXT, "unexpected state" );
                 spin_wait_while_eq(s.my_next, 0U);
@@ -234,23 +234,23 @@ struct queuing_rw_mutex_impl {
                 tricky_pointer::load(s.my_next, std::memory_order_relaxed)->my_going.store(1U, std::memory_order_release);
             }
             __TBB_ASSERT( s.my_state==STATE_ACTIVEREADER, "unlocked reader is active reader" );
-        }
-
+        } 
+ 
         ITT_NOTIFY(sync_acquired, s.my_mutex);
-
+ 
         // Force acquire so that user's critical section receives correct values
         // from processor that was previously in the user's critical section.
         atomic_fence(std::memory_order_acquire);
     }
-
+ 
     //! A method to acquire queuing_rw_mutex if it is free
     static bool try_acquire(d1::queuing_rw_mutex& m, d1::queuing_rw_mutex::scoped_lock& s, bool write)
     {
         __TBB_ASSERT( !s.my_mutex, "scoped_lock is already holding a mutex");
-
+ 
         if( m.q_tail.load(std::memory_order_relaxed) )
             return false; // Someone already took the lock
-
+ 
         // Must set all fields before the exchange, because once the
         // exchange executes, *this becomes accessible to other threads.
         s.my_prev.store(0U, std::memory_order_relaxed);
@@ -258,7 +258,7 @@ struct queuing_rw_mutex_impl {
         s.my_going.store(0U, std::memory_order_relaxed); // TODO: remove dead assignment?
         s.my_state.store(d1::queuing_rw_mutex::scoped_lock::state_t(write ? STATE_WRITER : STATE_ACTIVEREADER), std::memory_order_relaxed);
         s.my_internal_lock.store(RELEASED, std::memory_order_relaxed);
-
+ 
         // The CAS must have release semantics, because we are
         // "sending" the fields initialized above to other processors.
         d1::queuing_rw_mutex::scoped_lock* expected = nullptr;
@@ -271,15 +271,15 @@ struct queuing_rw_mutex_impl {
         ITT_NOTIFY(sync_acquired, s.my_mutex);
         return true;
     }
-
+ 
     //! A method to release queuing_rw_mutex lock
     static void release(d1::queuing_rw_mutex::scoped_lock& s) {
         __TBB_ASSERT(s.my_mutex!=nullptr, "no lock acquired");
-
+ 
         ITT_NOTIFY(sync_releasing, s.my_mutex);
-
+ 
         if( s.my_state.load(std::memory_order_relaxed) == STATE_WRITER ) { // Acquired for write
-
+ 
             // The logic below is the same as "writerUnlock", but elides
             // "return" from the middle of the routine.
             // In the statement below, acquire semantics of reading my_next is required
@@ -293,7 +293,7 @@ struct queuing_rw_mutex_impl {
                 }
                 spin_wait_while_eq( s.my_next, 0U );
                 next = tricky_pointer::load(s.my_next, std::memory_order_acquire);
-            }
+            } 
             next->my_going.store(2U, std::memory_order_relaxed); // protect next queue node from being destroyed too early
             if( next->my_state==STATE_UPGRADE_WAITING ) {
                 // the next waiting for upgrade means this writer was upgraded before.
@@ -310,14 +310,14 @@ struct queuing_rw_mutex_impl {
                 tricky_pointer::store(next->my_prev, nullptr, std::memory_order_relaxed);
                 next->my_going.store(1U, std::memory_order_release);
             }
-
+ 
         } else { // Acquired for read
-
+ 
             queuing_rw_mutex::scoped_lock *tmp = nullptr;
     retry:
             // Addition to the original paper: Mark my_prev as in use
             queuing_rw_mutex::scoped_lock *predecessor = tricky_pointer::fetch_add(s.my_prev, FLAG, std::memory_order_acquire);
-
+ 
             if( predecessor ) {
                 if( !(try_acquire_internal_lock(*predecessor)) )
                 {
@@ -336,19 +336,19 @@ struct queuing_rw_mutex_impl {
 
                     tmp = nullptr;
                     goto retry;
-                }
+                } 
                 __TBB_ASSERT(predecessor && predecessor->my_internal_lock.load(std::memory_order_relaxed)==ACQUIRED, "predecessor's lock is not acquired");
                 tricky_pointer::store(s.my_prev, predecessor, std::memory_order_relaxed);
                 acquire_internal_lock(s);
-
+ 
                 tricky_pointer::store(predecessor->my_next, nullptr, std::memory_order_release);
-
+ 
                 d1::queuing_rw_mutex::scoped_lock* expected = &s;
                 if( !tricky_pointer::load(s.my_next, std::memory_order_relaxed) && !s.my_mutex->q_tail.compare_exchange_strong(expected, predecessor, std::memory_order_release) ) {
                     spin_wait_while_eq( s.my_next, 0U );
                 }
                 __TBB_ASSERT( !(s.my_next.load() & FLAG), "use of corrupted pointer" );
-
+ 
                 // ensure acquire semantics of reading 'my_next'
                 if(d1::queuing_rw_mutex::scoped_lock *const l_next = tricky_pointer::load(s.my_next, std::memory_order_acquire) ) { // I->next != nil, TODO: rename to next after clearing up and adapting the n in the comment two lines below
                     // Equivalent to I->next->prev = I->prev but protected against (prev[n]&FLAG)!=0
@@ -359,7 +359,7 @@ struct queuing_rw_mutex_impl {
                 }
                 // Safe to release in the order opposite to acquiring which makes the code simpler
                 release_internal_lock(*predecessor);
-
+ 
             } else { // No predecessor when we looked
                 acquire_internal_lock(s);  // "exclusiveLock(&I->EL)"
                 d1::queuing_rw_mutex::scoped_lock* next = tricky_pointer::load(s.my_next, std::memory_order_acquire);
@@ -371,24 +371,24 @@ struct queuing_rw_mutex_impl {
                     } else {
                         goto unlock_self;
                     }
-                }
+                } 
                 next->my_going.store(2U, std::memory_order_relaxed);
                 // Responsibility transition, the one who reads uncorrupted my_prev will do release.
                 tmp = tricky_pointer::exchange(next->my_prev, nullptr, std::memory_order_release);
                 next->my_going.store(1U, std::memory_order_release);
-            }
+            } 
     unlock_self:
             unblock_or_wait_on_internal_lock(s, get_flag(tmp));
-        }
+        } 
     done:
         spin_wait_while_eq( s.my_going, 2U );
 
         s.initialize();
-    }
-
+    } 
+ 
     static bool downgrade_to_reader(d1::queuing_rw_mutex::scoped_lock& s) {
         if ( s.my_state.load(std::memory_order_relaxed) == STATE_ACTIVEREADER ) return true; // Already a reader
-
+ 
         ITT_NOTIFY(sync_releasing, s.my_mutex);
         s.my_state.store(STATE_READER, std::memory_order_relaxed);
         if( ! tricky_pointer::load(s.my_next, std::memory_order_relaxed)) {
@@ -401,7 +401,7 @@ struct queuing_rw_mutex_impl {
             }
             /* wait for the next to register */
             spin_wait_while_eq( s.my_next, 0U );
-        }
+        } 
         d1::queuing_rw_mutex::scoped_lock *const next = tricky_pointer::load(s.my_next, std::memory_order_acquire);
         __TBB_ASSERT( next, "still no successor at this point!" );
         if( next->my_state & STATE_COMBINED_WAITINGREADER )
@@ -411,13 +411,13 @@ struct queuing_rw_mutex_impl {
             next->my_state.store(STATE_UPGRADE_LOSER, std::memory_order_relaxed);
         s.my_state.store(STATE_ACTIVEREADER, std::memory_order_relaxed);;
         return true;
-    }
-
+    } 
+ 
     static bool upgrade_to_writer(d1::queuing_rw_mutex::scoped_lock& s) {
         if ( s.my_state.load(std::memory_order_relaxed) == STATE_WRITER ) return true; // Already a writer
-
+ 
         __TBB_ASSERT( s.my_state==STATE_ACTIVEREADER, "only active reader can be updated" );
-
+ 
         queuing_rw_mutex::scoped_lock * tmp;
         queuing_rw_mutex::scoped_lock * me = &s;
 
@@ -447,22 +447,22 @@ struct queuing_rw_mutex_impl {
                             tricky_pointer::store(s.my_next, next, std::memory_order_relaxed);
                         goto waiting;
                     }
-                }
+                } 
                 __TBB_ASSERT(tricky_pointer::load(s.my_next, std::memory_order_relaxed) != (tricky_pointer(next)|FLAG), nullptr);
                 goto requested;
             } else {
                 __TBB_ASSERT( n_state & (STATE_WRITER | STATE_UPGRADE_WAITING), "unexpected state");
                 __TBB_ASSERT( (tricky_pointer(next)|FLAG) == tricky_pointer::load(s.my_next, std::memory_order_relaxed), nullptr);
                 tricky_pointer::store(s.my_next, next, std::memory_order_relaxed);
-            }
-        } else {
+            } 
+        } else { 
             /* We are in the tail; whoever comes next is blocked by q_tail&FLAG */
             release_internal_lock(s);
         } // if( this != my_mutex->q_tail... )
         {
             unsigned char old_state = STATE_UPGRADE_REQUESTED;
             s.my_state.compare_exchange_strong(old_state, STATE_UPGRADE_WAITING, std::memory_order_acquire);
-        }
+        } 
     waiting:
         __TBB_ASSERT( !( s.my_next.load(std::memory_order_relaxed) & FLAG ), "use of corrupted pointer!" );
         __TBB_ASSERT( s.my_state & STATE_COMBINED_UPGRADING, "wrong state at upgrade waiting_retry" );
@@ -493,17 +493,17 @@ struct queuing_rw_mutex_impl {
                     tricky_pointer::spin_wait_while_eq(s.my_prev, tricky_pointer(predecessor)|FLAG);
                     release_internal_lock(*predecessor);
                 }
-            } else {
+            } else { 
                 tricky_pointer::store(s.my_prev, predecessor, std::memory_order_relaxed);
                 release_internal_lock(*predecessor);
                 tricky_pointer::spin_wait_while_eq(s.my_prev, predecessor);
                 predecessor = tricky_pointer::load(s.my_prev, std::memory_order_relaxed);
-            }
+            } 
             if( predecessor )
                 goto waiting;
-        } else {
+        } else { 
             tricky_pointer::store(s.my_prev, nullptr, std::memory_order_relaxed);
-        }
+        } 
         __TBB_ASSERT( !predecessor && !s.my_prev, nullptr );
 
         // additional lifetime issue prevention checks
@@ -521,30 +521,30 @@ struct queuing_rw_mutex_impl {
 
         ITT_NOTIFY(sync_acquired, s.my_mutex);
         return result;
-    }
-
+    } 
+ 
     static void construct(d1::queuing_rw_mutex& m) {
         suppress_unused_warning(m);
         ITT_SYNC_CREATE(&m, _T("tbb::queuing_rw_mutex"), _T(""));
     }
 };
-
+ 
 void __TBB_EXPORTED_FUNC acquire(d1::queuing_rw_mutex& m, d1::queuing_rw_mutex::scoped_lock& s, bool write) {
     queuing_rw_mutex_impl::acquire(m, s, write);
 }
-
+ 
 bool __TBB_EXPORTED_FUNC try_acquire(d1::queuing_rw_mutex& m, d1::queuing_rw_mutex::scoped_lock& s, bool write) {
     return queuing_rw_mutex_impl::try_acquire(m, s, write);
 }
-
+ 
 void __TBB_EXPORTED_FUNC release(d1::queuing_rw_mutex::scoped_lock& s) {
     queuing_rw_mutex_impl::release(s);
-}
-
+} 
+ 
 bool __TBB_EXPORTED_FUNC upgrade_to_writer(d1::queuing_rw_mutex::scoped_lock& s) {
     return queuing_rw_mutex_impl::upgrade_to_writer(s);
-}
-
+} 
+ 
 bool __TBB_EXPORTED_FUNC downgrade_to_reader(d1::queuing_rw_mutex::scoped_lock& s) {
     return queuing_rw_mutex_impl::downgrade_to_reader(s);
 }
@@ -555,4 +555,4 @@ void __TBB_EXPORTED_FUNC construct(d1::queuing_rw_mutex& m) {
 
 } // namespace r1
 } // namespace detail
-} // namespace tbb
+} // namespace tbb 

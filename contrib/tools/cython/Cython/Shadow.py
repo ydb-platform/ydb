@@ -1,14 +1,14 @@
 # cython.* namespace for pure mode.
-from __future__ import absolute_import
+from __future__ import absolute_import 
 
 __version__ = "0.29.27"
 
-try:
-    from __builtin__ import basestring
-except ImportError:
-    basestring = str
-
-
+try: 
+    from __builtin__ import basestring 
+except ImportError: 
+    basestring = str 
+ 
+ 
 # BEGIN shameless copy from Cython/minivect/minitypes.py
 
 class _ArrayType(object):
@@ -65,13 +65,13 @@ def index_type(base_type, item):
         return _ArrayType(base_type, len(item),
                           is_c_contig=step_idx == len(item) - 1,
                           is_f_contig=step_idx == 0)
-    elif isinstance(item, slice):
+    elif isinstance(item, slice): 
         verify_slice(item)
         return _ArrayType(base_type, 1, is_c_contig=bool(item.step))
-    else:
-        # int[8] etc.
-        assert int(item) == item  # array size must be a plain integer
-        array(base_type, item)
+    else: 
+        # int[8] etc. 
+        assert int(item) == item  # array size must be a plain integer 
+        array(base_type, item) 
 
 # END shameless copy
 
@@ -102,47 +102,47 @@ class _EmptyDecoratorAndManager(object):
     def __exit__(self, exc_type, exc_value, traceback):
         pass
 
-class _Optimization(object):
-    pass
-
+class _Optimization(object): 
+    pass 
+ 
 cclass = ccall = cfunc = _EmptyDecoratorAndManager()
 
-returns = wraparound = boundscheck = initializedcheck = nonecheck = \
-    embedsignature = cdivision = cdivision_warnings = \
+returns = wraparound = boundscheck = initializedcheck = nonecheck = \ 
+    embedsignature = cdivision = cdivision_warnings = \ 
     always_allows_keywords = profile = linetrace = infer_types = \
-    unraisable_tracebacks = freelist = \
+    unraisable_tracebacks = freelist = \ 
         lambda _: _EmptyDecoratorAndManager()
 
 exceptval = lambda _=None, check=True: _EmptyDecoratorAndManager()
 
-overflowcheck = lambda _: _EmptyDecoratorAndManager()
-optimization = _Optimization()
+overflowcheck = lambda _: _EmptyDecoratorAndManager() 
+optimization = _Optimization() 
 
-overflowcheck.fold = optimization.use_switch = \
-    optimization.unpack_method_calls = lambda arg: _EmptyDecoratorAndManager()
-
-final = internal = type_version_tag = no_gc_clear = no_gc = _empty_decorator
-
+overflowcheck.fold = optimization.use_switch = \ 
+    optimization.unpack_method_calls = lambda arg: _EmptyDecoratorAndManager() 
+ 
+final = internal = type_version_tag = no_gc_clear = no_gc = _empty_decorator 
+ 
 binding = lambda _: _empty_decorator
+ 
 
-
-_cython_inline = None
+_cython_inline = None 
 def inline(f, *args, **kwds):
-    if isinstance(f, basestring):
-        global _cython_inline
-        if _cython_inline is None:
-            from Cython.Build.Inline import cython_inline as _cython_inline
-        return _cython_inline(f, *args, **kwds)
-    else:
-        assert len(args) == len(kwds) == 0
-        return f
+    if isinstance(f, basestring): 
+        global _cython_inline 
+        if _cython_inline is None: 
+            from Cython.Build.Inline import cython_inline as _cython_inline 
+        return _cython_inline(f, *args, **kwds) 
+    else: 
+        assert len(args) == len(kwds) == 0 
+        return f 
 
-
+ 
 def compile(f):
     from Cython.Build.Inline import RuntimeCompiledFunction
     return RuntimeCompiledFunction(f)
 
-
+ 
 # Special functions
 
 def cdiv(a, b):
@@ -160,9 +160,9 @@ def cmod(a, b):
 
 # Emulated language constructs
 
-def cast(type, *args, **kwargs):
-    kwargs.pop('typecheck', None)
-    assert not kwargs
+def cast(type, *args, **kwargs): 
+    kwargs.pop('typecheck', None) 
+    assert not kwargs 
     if hasattr(type, '__call__'):
         return type(*args)
     else:
@@ -188,15 +188,15 @@ def declare(type=None, value=_Unspecified, **kwds):
         return value
 
 class _nogil(object):
-    """Support for 'with nogil' statement and @nogil decorator.
+    """Support for 'with nogil' statement and @nogil decorator. 
     """
-    def __call__(self, x):
-        if callable(x):
-            # Used as function decorator => return the function unchanged.
-            return x
-        # Used as conditional context manager or to create an "@nogil(True/False)" decorator => keep going.
-        return self
-
+    def __call__(self, x): 
+        if callable(x): 
+            # Used as function decorator => return the function unchanged. 
+            return x 
+        # Used as conditional context manager or to create an "@nogil(True/False)" decorator => keep going. 
+        return self 
+ 
     def __enter__(self):
         pass
     def __exit__(self, exc_class, exc, tb):
@@ -206,7 +206,7 @@ nogil = _nogil()
 gil = _nogil()
 del _nogil
 
-
+ 
 # Emulated types
 
 class CythonMetaType(type):
@@ -274,7 +274,7 @@ class StructType(CythonType):
             for key, value in cast_from.__dict__.items():
                 setattr(self, key, value)
         else:
-            for key, value in data.items():
+            for key, value in data.items(): 
                 setattr(self, key, value)
 
     def __setattr__(self, key, value):
@@ -301,7 +301,7 @@ class UnionType(CythonType):
             datadict = data
         if len(datadict) > 1:
             raise AttributeError("Union can only store one field at a time.")
-        for key, value in datadict.items():
+        for key, value in datadict.items(): 
             setattr(self, key, value)
 
     def __setattr__(self, key, value):
@@ -385,7 +385,7 @@ def _specialized_from_args(signatures, args, kwargs):
 py_int = typedef(int, "int")
 try:
     py_long = typedef(long, "long")
-except NameError:  # Py3
+except NameError:  # Py3 
     py_long = typedef(int, "long")
 py_float = typedef(float, "float")
 py_complex = typedef(complex, "double complex")
@@ -408,15 +408,15 @@ to_repr = {
 
 gs = globals()
 
-# note: cannot simply name the unicode type here as 2to3 gets in the way and replaces it by str
-try:
-    import __builtin__ as builtins
-except ImportError:  # Py3
-    import builtins
-
-gs['unicode'] = typedef(getattr(builtins, 'unicode', str), 'unicode')
-del builtins
-
+# note: cannot simply name the unicode type here as 2to3 gets in the way and replaces it by str 
+try: 
+    import __builtin__ as builtins 
+except ImportError:  # Py3 
+    import builtins 
+ 
+gs['unicode'] = typedef(getattr(builtins, 'unicode', str), 'unicode') 
+del builtins 
+ 
 for name in int_types:
     reprname = to_repr(name, name)
     gs[name] = typedef(py_int, reprname)
@@ -457,7 +457,7 @@ class CythonDotParallel(object):
     def parallel(self, num_threads=None):
         return nogil
 
-    def prange(self, start=0, stop=None, step=1, nogil=False, schedule=None, chunksize=None, num_threads=None):
+    def prange(self, start=0, stop=None, step=1, nogil=False, schedule=None, chunksize=None, num_threads=None): 
         if stop is None:
             stop = start
             start = 0

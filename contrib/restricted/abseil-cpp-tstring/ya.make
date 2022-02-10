@@ -66,7 +66,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/random/internal/seed_material
     contrib/restricted/abseil-cpp-tstring/y_absl/random/seed_gen_exception
     contrib/restricted/abseil-cpp-tstring/y_absl/random/seed_sequences
-    contrib/restricted/abseil-cpp-tstring/y_absl/status
+    contrib/restricted/abseil-cpp-tstring/y_absl/status 
     contrib/restricted/abseil-cpp-tstring/y_absl/status/statusor
     contrib/restricted/abseil-cpp-tstring/y_absl/strings
     contrib/restricted/abseil-cpp-tstring/y_absl/strings/cord
@@ -91,7 +91,7 @@ PEERDIR(
 )
 
 NO_RUNTIME()
-
+ 
 END()
 
 RECURSE(
@@ -147,7 +147,7 @@ RECURSE(
     y_absl/random/internal/seed_material
     y_absl/random/seed_gen_exception
     y_absl/random/seed_sequences
-    y_absl/status
+    y_absl/status 
     y_absl/status/statusor
     y_absl/strings
     y_absl/strings/cord

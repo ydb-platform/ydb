@@ -15,13 +15,13 @@
 #include "y_absl/time/civil_time.h"
 
 #include <cstdlib>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 namespace {
 
@@ -169,5 +169,5 @@ std::ostream& operator<<(std::ostream& os, CivilSecond s) {
 
 }  // namespace time_internal
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl

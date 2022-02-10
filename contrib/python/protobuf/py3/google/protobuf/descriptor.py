@@ -465,7 +465,7 @@ class FieldDescriptor(DescriptorBase):
 
     containing_oneof (OneofDescriptor): If the field is a member of a oneof
       union, contains its descriptor. Otherwise, None.
-
+ 
     file (FileDescriptor): Reference to file descriptor.
   """
 
@@ -552,7 +552,7 @@ class FieldDescriptor(DescriptorBase):
                 default_value, message_type, enum_type, containing_type,
                 is_extension, extension_scope, options=None,
                 serialized_options=None,
-                has_default_value=True, containing_oneof=None, json_name=None,
+                has_default_value=True, containing_oneof=None, json_name=None, 
                 file=None, create_key=None):  # pylint: disable=redefined-builtin
       _message.Message._CheckCalledFromGeneratedFile()
       if is_extension:
@@ -564,7 +564,7 @@ class FieldDescriptor(DescriptorBase):
                default_value, message_type, enum_type, containing_type,
                is_extension, extension_scope, options=None,
                serialized_options=None,
-               has_default_value=True, containing_oneof=None, json_name=None,
+               has_default_value=True, containing_oneof=None, json_name=None, 
                file=None, create_key=None):  # pylint: disable=redefined-builtin
     """The arguments are as described in the description of FieldDescriptor
     attributes above.
@@ -580,12 +580,12 @@ class FieldDescriptor(DescriptorBase):
         options, serialized_options, 'FieldOptions')
     self.name = name
     self.full_name = full_name
-    self.file = file
+    self.file = file 
     self._camelcase_name = None
-    if json_name is None:
-      self.json_name = _ToJsonName(name)
-    else:
-      self.json_name = json_name
+    if json_name is None: 
+      self.json_name = _ToJsonName(name) 
+    else: 
+      self.json_name = json_name 
     self.index = index
     self.number = number
     self.type = type
@@ -1051,31 +1051,31 @@ def _ToCamelCase(name):
   return ''.join(result)
 
 
-def _OptionsOrNone(descriptor_proto):
-  """Returns the value of the field `options`, or None if it is not set."""
-  if descriptor_proto.HasField('options'):
-    return descriptor_proto.options
-  else:
-    return None
-
-
-def _ToJsonName(name):
-  """Converts name to Json name and returns it."""
-  capitalize_next = False
-  result = []
-
-  for c in name:
-    if c == '_':
-      capitalize_next = True
-    elif capitalize_next:
-      result.append(c.upper())
-      capitalize_next = False
-    else:
-      result += c
-
-  return ''.join(result)
-
-
+def _OptionsOrNone(descriptor_proto): 
+  """Returns the value of the field `options`, or None if it is not set.""" 
+  if descriptor_proto.HasField('options'): 
+    return descriptor_proto.options 
+  else: 
+    return None 
+ 
+ 
+def _ToJsonName(name): 
+  """Converts name to Json name and returns it.""" 
+  capitalize_next = False 
+  result = [] 
+ 
+  for c in name: 
+    if c == '_': 
+      capitalize_next = True 
+    elif capitalize_next: 
+      result.append(c.upper()) 
+      capitalize_next = False 
+    else: 
+      result += c 
+ 
+  return ''.join(result) 
+ 
+ 
 def MakeDescriptor(desc_proto, package='', build_file_if_cpp=True,
                    syntax=None):
   """Make a protobuf Descriptor given a DescriptorProto protobuf.
@@ -1154,10 +1154,10 @@ def MakeDescriptor(desc_proto, package='', build_file_if_cpp=True,
     full_name = '.'.join(full_message_name + [field_proto.name])
     enum_desc = None
     nested_desc = None
-    if field_proto.json_name:
-      json_name = field_proto.json_name
-    else:
-      json_name = None
+    if field_proto.json_name: 
+      json_name = field_proto.json_name 
+    else: 
+      json_name = None 
     if field_proto.HasField('type_name'):
       type_name = field_proto.type_name
       full_type_name = '.'.join(full_message_name +
@@ -1172,7 +1172,7 @@ def MakeDescriptor(desc_proto, package='', build_file_if_cpp=True,
         field_proto.number, field_proto.type,
         FieldDescriptor.ProtoTypeToCppProtoType(field_proto.type),
         field_proto.label, None, nested_desc, enum_desc, None, False, None,
-        options=_OptionsOrNone(field_proto), has_default_value=False,
+        options=_OptionsOrNone(field_proto), has_default_value=False, 
         json_name=json_name, create_key=_internal_create_key)
     fields.append(field)
 

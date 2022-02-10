@@ -19,7 +19,7 @@
 /* force inlining */
 
 #if !defined(ZSTD_NO_INLINE)
-#if (defined(__GNUC__) && !defined(__STRICT_ANSI__)) || defined(__cplusplus) || defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L   /* C99 */
+#if (defined(__GNUC__) && !defined(__STRICT_ANSI__)) || defined(__cplusplus) || defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L   /* C99 */ 
 #  define INLINE_KEYWORD inline
 #else
 #  define INLINE_KEYWORD
@@ -148,23 +148,23 @@
 #  else
 #    define DONT_VECTORIZE _Pragma("GCC optimize(\"no-tree-vectorize\")")
 #  endif
-#else
-#  define DONT_VECTORIZE
-#endif
-
-/* Tell the compiler that a branch is likely or unlikely.
- * Only use these macros if it causes the compiler to generate better code.
- * If you can remove a LIKELY/UNLIKELY annotation without speed changes in gcc
- * and clang, please do.
- */
-#if defined(__GNUC__)
-#define LIKELY(x) (__builtin_expect((x), 1))
-#define UNLIKELY(x) (__builtin_expect((x), 0))
-#else
-#define LIKELY(x) (x)
-#define UNLIKELY(x) (x)
-#endif
-
+#else 
+#  define DONT_VECTORIZE 
+#endif 
+ 
+/* Tell the compiler that a branch is likely or unlikely. 
+ * Only use these macros if it causes the compiler to generate better code. 
+ * If you can remove a LIKELY/UNLIKELY annotation without speed changes in gcc 
+ * and clang, please do. 
+ */ 
+#if defined(__GNUC__) 
+#define LIKELY(x) (__builtin_expect((x), 1)) 
+#define UNLIKELY(x) (__builtin_expect((x), 0)) 
+#else 
+#define LIKELY(x) (x) 
+#define UNLIKELY(x) (x) 
+#endif 
+ 
 /* disable warnings */
 #ifdef _MSC_VER    /* Visual Studio */
 #  include <intrin.h>                    /* For Visual 2005 */

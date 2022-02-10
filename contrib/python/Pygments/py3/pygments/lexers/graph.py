@@ -21,9 +21,9 @@ __all__ = ['CypherLexer']
 class CypherLexer(RegexLexer):
     """
     For `Cypher Query Language
-    <https://neo4j.com/docs/developer-manual/3.3/cypher/>`_
+    <https://neo4j.com/docs/developer-manual/3.3/cypher/>`_ 
 
-    For the Cypher version in Neo4j 3.3
+    For the Cypher version in Neo4j 3.3 
 
     .. versionadded:: 2.0
     """
@@ -48,10 +48,10 @@ class CypherLexer(RegexLexer):
         ],
         'keywords': [
             (r'(create|order|match|limit|set|skip|start|return|with|where|'
-             r'delete|foreach|not|by|true|false)\b', Keyword),
+             r'delete|foreach|not|by|true|false)\b', Keyword), 
         ],
         'clauses': [
-            # based on https://neo4j.com/docs/cypher-refcard/3.3/
+            # based on https://neo4j.com/docs/cypher-refcard/3.3/ 
             (r'(create)(\s+)(index|unique)\b',
                 bygroups(Keyword, Whitespace, Keyword)),
             (r'(drop)(\s+)(contraint|index)(\s+)(on)\b',

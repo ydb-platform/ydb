@@ -50,7 +50,7 @@ try:
 except Exception:  # pylint: disable=broad-except
   ctypes = None
   import struct
-import numbers
+import numbers 
 import six
 
 if six.PY3:
@@ -160,11 +160,11 @@ class IntValueChecker(object):
   """Checker used for integer fields.  Performs type-check and range check."""
 
   def CheckValue(self, proposed_value):
-    if not isinstance(proposed_value, numbers.Integral):
+    if not isinstance(proposed_value, numbers.Integral): 
       message = ('%.1024r has type %s, but expected one of: %s' %
                  (proposed_value, type(proposed_value), six.integer_types))
       raise TypeError(message)
-    if not self._MIN <= int(proposed_value) <= self._MAX:
+    if not self._MIN <= int(proposed_value) <= self._MAX: 
       raise ValueError('Value out of range: %d' % proposed_value)
     # We force 32-bit values to int and 64-bit values to long to make
     # alternate implementations where the distinction is more significant
@@ -184,11 +184,11 @@ class EnumValueChecker(object):
     self._enum_type = enum_type
 
   def CheckValue(self, proposed_value):
-    if not isinstance(proposed_value, numbers.Integral):
+    if not isinstance(proposed_value, numbers.Integral): 
       message = ('%.1024r has type %s, but expected one of: %s' %
                  (proposed_value, type(proposed_value), six.integer_types))
       raise TypeError(message)
-    if int(proposed_value) not in self._enum_type.values_by_number:
+    if int(proposed_value) not in self._enum_type.values_by_number: 
       raise ValueError('Unknown enum value: %d' % proposed_value)
     return proposed_value
 
@@ -196,28 +196,28 @@ class EnumValueChecker(object):
     return self._enum_type.values[0].number
 
 
-class UnicodeValueChecker(object):
+class UnicodeValueChecker(object): 
 
-  """Checker used for string fields.
+  """Checker used for string fields. 
 
-  Always returns a unicode value, even if the input is of type str.
-  """
-
-  def CheckValue(self, proposed_value):
-    if not isinstance(proposed_value, (bytes, six.text_type)):
-      message = ('%.1024r has type %s, but expected one of: %s' %
-                 (proposed_value, type(proposed_value), (bytes, six.text_type)))
-      raise TypeError(message)
-
-    # If the value is of type 'bytes' make sure that it is valid UTF-8 data.
-    if isinstance(proposed_value, bytes):
-      try:
-        proposed_value = proposed_value.decode('utf-8')
-      except UnicodeDecodeError:
-        raise ValueError('%.1024r has type bytes, but isn\'t valid UTF-8 '
-                         'encoding. Non-UTF-8 strings must be converted to '
-                         'unicode objects before being added.' %
-                         (proposed_value))
+  Always returns a unicode value, even if the input is of type str. 
+  """ 
+ 
+  def CheckValue(self, proposed_value): 
+    if not isinstance(proposed_value, (bytes, six.text_type)): 
+      message = ('%.1024r has type %s, but expected one of: %s' % 
+                 (proposed_value, type(proposed_value), (bytes, six.text_type))) 
+      raise TypeError(message) 
+ 
+    # If the value is of type 'bytes' make sure that it is valid UTF-8 data. 
+    if isinstance(proposed_value, bytes): 
+      try: 
+        proposed_value = proposed_value.decode('utf-8') 
+      except UnicodeDecodeError: 
+        raise ValueError('%.1024r has type bytes, but isn\'t valid UTF-8 ' 
+                         'encoding. Non-UTF-8 strings must be converted to ' 
+                         'unicode objects before being added.' % 
+                         (proposed_value)) 
     else:
       try:
         proposed_value.encode('utf8')
@@ -226,12 +226,12 @@ class UnicodeValueChecker(object):
                          'can\'t be encoded in UTF-8.'%
                          (proposed_value))
 
-    return proposed_value
-
-  def DefaultValue(self):
-    return u""
-
-
+    return proposed_value 
+ 
+  def DefaultValue(self): 
+    return u"" 
+ 
+ 
 class Int32ValueChecker(IntValueChecker):
   # We're sure to use ints instead of longs here since comparison may be more
   # efficient.
@@ -301,7 +301,7 @@ _VALUE_CHECKERS = {
         0.0, float, numbers.Real),
     _FieldDescriptor.CPPTYPE_FLOAT: FloatValueChecker(),
     _FieldDescriptor.CPPTYPE_BOOL: TypeCheckerWithDefault(
-        False, bool, numbers.Integral),
+        False, bool, numbers.Integral), 
     _FieldDescriptor.CPPTYPE_STRING: TypeCheckerWithDefault(b'', bytes),
     }
 

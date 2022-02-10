@@ -5,14 +5,14 @@ OWNER(
 
 LIBRARY()
 
-VERSION(1.13)
-
+VERSION(1.13) 
+ 
 LICENSE(Service-Dll-Harness)
 
 WITHOUT_LICENSE_TEXTS()
-
+ 
 NO_RUNTIME()
-
+ 
 IF (USE_DYNAMIC_ICONV)
     PEERDIR(
         contrib/libs/libiconv/dynamic

@@ -20,13 +20,13 @@
 #include <cstring>
 #include <iterator>
 #include <limits>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 #include "y_absl/base/internal/endian.h"
 #include "y_absl/base/internal/raw_logging.h"
 #include "y_absl/base/internal/unaligned_access.h"
 #include "y_absl/strings/internal/char_map.h"
-#include "y_absl/strings/internal/escaping.h"
+#include "y_absl/strings/internal/escaping.h" 
 #include "y_absl/strings/internal/resize_uninitialized.h"
 #include "y_absl/strings/internal/utf8.h"
 #include "y_absl/strings/str_cat.h"
@@ -34,7 +34,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace {
 
 // These are used for the leave_nulls_escaped argument to CUnescapeInternal().
@@ -796,7 +796,7 @@ bool Base64UnescapeInternal(const char* src, size_t slen, String* dest,
 }
 
 /* clang-format off */
-constexpr char kHexValueLenient[256] = {
+constexpr char kHexValueLenient[256] = { 
     0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -812,9 +812,9 @@ constexpr char kHexValueLenient[256] = {
     0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,  0,  0,  0,  0,  0,  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
 };
-
+ 
 /* clang-format on */
 
 // This is a templated function so that T can be either a char*
@@ -823,8 +823,8 @@ constexpr char kHexValueLenient[256] = {
 template <typename T>
 void HexStringToBytesInternal(const char* from, T to, ptrdiff_t num) {
   for (int i = 0; i < num; i++) {
-    to[i] = (kHexValueLenient[from[i * 2] & 0xFF] << 4) +
-            (kHexValueLenient[from[i * 2 + 1] & 0xFF]);
+    to[i] = (kHexValueLenient[from[i * 2] & 0xFF] << 4) + 
+            (kHexValueLenient[from[i * 2 + 1] & 0xFF]); 
   }
 }
 
@@ -902,30 +902,30 @@ bool WebSafeBase64Unescape(y_absl::string_view src, TString* dest) {
 }
 
 void Base64Escape(y_absl::string_view src, TString* dest) {
-  strings_internal::Base64EscapeInternal(
-      reinterpret_cast<const unsigned char*>(src.data()), src.size(), dest,
-      true, strings_internal::kBase64Chars);
+  strings_internal::Base64EscapeInternal( 
+      reinterpret_cast<const unsigned char*>(src.data()), src.size(), dest, 
+      true, strings_internal::kBase64Chars); 
 }
 
 void WebSafeBase64Escape(y_absl::string_view src, TString* dest) {
-  strings_internal::Base64EscapeInternal(
-      reinterpret_cast<const unsigned char*>(src.data()), src.size(), dest,
-      false, kWebSafeBase64Chars);
+  strings_internal::Base64EscapeInternal( 
+      reinterpret_cast<const unsigned char*>(src.data()), src.size(), dest, 
+      false, kWebSafeBase64Chars); 
 }
 
 TString Base64Escape(y_absl::string_view src) {
   TString dest;
-  strings_internal::Base64EscapeInternal(
-      reinterpret_cast<const unsigned char*>(src.data()), src.size(), &dest,
-      true, strings_internal::kBase64Chars);
+  strings_internal::Base64EscapeInternal( 
+      reinterpret_cast<const unsigned char*>(src.data()), src.size(), &dest, 
+      true, strings_internal::kBase64Chars); 
   return dest;
 }
 
 TString WebSafeBase64Escape(y_absl::string_view src) {
   TString dest;
-  strings_internal::Base64EscapeInternal(
-      reinterpret_cast<const unsigned char*>(src.data()), src.size(), &dest,
-      false, kWebSafeBase64Chars);
+  strings_internal::Base64EscapeInternal( 
+      reinterpret_cast<const unsigned char*>(src.data()), src.size(), &dest, 
+      false, kWebSafeBase64Chars); 
   return dest;
 }
 
@@ -945,5 +945,5 @@ TString BytesToHexString(y_absl::string_view from) {
   return result;
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl

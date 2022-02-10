@@ -34,4 +34,4 @@ def get_buffer(obj):
 
 
 def test_buffer():
-    assert get_buffer(b'test string')
+    assert get_buffer(b'test string') 

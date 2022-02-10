@@ -85,7 +85,7 @@ protected:
 	virtual void writeExec();
 
 	void initVarTypes();
-	string slenType, transType, indsType, condsType;
+	string slenType, transType, indsType, condsType; 
 };
 
 #endif

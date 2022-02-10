@@ -1,6 +1,6 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #pragma once
@@ -17,7 +17,7 @@ namespace Aws
         struct AWS_CORE_API CoreMetricsCollection
         {
             /**
-             * Metrics collected from underlying http client during execution of a request
+             * Metrics collected from underlying http client during execution of a request 
              */
             HttpClientMetricsCollection httpClientMetrics;
 

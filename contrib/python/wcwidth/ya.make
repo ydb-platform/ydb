@@ -1,11 +1,11 @@
-PY23_LIBRARY()
+PY23_LIBRARY() 
 
 LICENSE(MIT)
 
-OWNER(g:python-contrib blinkov)
+OWNER(g:python-contrib blinkov) 
 
 VERSION(0.2.5)
-
+ 
 PEERDIR(
     contrib/python/setuptools
 )

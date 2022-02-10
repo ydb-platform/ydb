@@ -1,8 +1,8 @@
 
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #include <aws/core/utils/stream/PreallocatedStreamBuf.h>
 #include <cassert>
@@ -13,7 +13,7 @@ namespace Aws
     {
         namespace Stream
         {
-            PreallocatedStreamBuf::PreallocatedStreamBuf(unsigned char* buffer, uint64_t lengthToRead) :
+            PreallocatedStreamBuf::PreallocatedStreamBuf(unsigned char* buffer, uint64_t lengthToRead) : 
                 m_underlyingBuffer(buffer), m_lengthToRead(lengthToRead)
             {
                 char* end = reinterpret_cast<char*>(m_underlyingBuffer + m_lengthToRead);
@@ -36,11 +36,11 @@ namespace Aws
                 {
                     if(which == std::ios_base::in)
                     { 
-                        return seekpos((gptr() - reinterpret_cast<char*>(m_underlyingBuffer)) + off, which);
+                        return seekpos((gptr() - reinterpret_cast<char*>(m_underlyingBuffer)) + off, which); 
                     }
                     else
                     {
-                        return seekpos((pptr() - reinterpret_cast<char*>(m_underlyingBuffer)) + off, which);
+                        return seekpos((pptr() - reinterpret_cast<char*>(m_underlyingBuffer)) + off, which); 
                     }
                 }
 

@@ -19,19 +19,19 @@ def shlex_join(cmd):
 
 def parse_export_file(p):
     with open(p, 'r') as f:
-        for l in f:
+        for l in f: 
             l = l.strip()
 
             if l and '#' not in l:
-                words = l.split()
-                if len(words) == 2 and words[0] == 'linux_version':
-                    yield {'linux_version': words[1]}
-                elif len(words) == 2:
-                    yield {'lang': words[0], 'sym': words[1]}
-                elif len(words) == 1:
-                    yield {'lang': 'C', 'sym': words[0]}
+                words = l.split() 
+                if len(words) == 2 and words[0] == 'linux_version': 
+                    yield {'linux_version': words[1]} 
+                elif len(words) == 2: 
+                    yield {'lang': words[0], 'sym': words[1]} 
+                elif len(words) == 1: 
+                    yield {'lang': 'C', 'sym': words[0]} 
                 else:
-                    raise Exception('unsupported exports line: ' + l)
+                    raise Exception('unsupported exports line: ' + l) 
 
 
 def to_c(sym):
@@ -124,10 +124,10 @@ def fix_windows_param(ex):
         return ['/DEF:{}'.format(def_file.name)]
 
 
-musl_libs = '-lc', '-lcrypt', '-ldl', '-lm', '-lpthread', '-lrt', '-lutil'
-
-
-def fix_cmd(arch, musl, c):
+musl_libs = '-lc', '-lcrypt', '-ldl', '-lm', '-lpthread', '-lrt', '-lutil' 
+ 
+ 
+def fix_cmd(arch, musl, c): 
     if arch == 'WINDOWS':
         prefix = '/DEF:'
         f = fix_windows_param
@@ -139,9 +139,9 @@ def fix_cmd(arch, musl, c):
             f = lambda x: fix_gnu_param(arch, x)
 
     def do_fix(p):
-        if musl and p in musl_libs:
-            return []
-
+        if musl and p in musl_libs: 
+            return [] 
+ 
         if p.startswith(prefix) and p.endswith('.exports'):
             fname = p[len(prefix):]
 
@@ -166,7 +166,7 @@ def parse_args():
     parser.add_option('--soname')
     parser.add_option('--fix-elf')
     parser.add_option('--linker-output')
-    parser.add_option('--musl', action='store_true')
+    parser.add_option('--musl', action='store_true') 
     parser.add_option('--whole-archive-peers', action='append')
     parser.add_option('--whole-archive-libs', action='append')
     return parser.parse_args()
@@ -178,7 +178,7 @@ if __name__ == '__main__':
     assert opts.arch
     assert opts.target
 
-    cmd = fix_cmd(opts.arch, opts.musl, args)
+    cmd = fix_cmd(opts.arch, opts.musl, args) 
     cmd = ProcessWholeArchiveOption(opts.arch, opts.whole_archive_peers, opts.whole_archive_libs).construct_cmd(cmd)
 
     if opts.linker_output:

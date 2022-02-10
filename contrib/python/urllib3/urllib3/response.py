@@ -618,10 +618,10 @@ class HTTPResponse(io.IOBase):
     def getheader(self, name, default=None):
         return self.headers.get(name, default)
 
-    # Backwards compatibility for http.cookiejar
-    def info(self):
-        return self.headers
-
+    # Backwards compatibility for http.cookiejar 
+    def info(self): 
+        return self.headers 
+ 
     # Overrides from io.IOBase
     def close(self):
         if not self.closed:

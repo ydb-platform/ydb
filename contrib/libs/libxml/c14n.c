@@ -43,7 +43,7 @@ typedef enum {
 
 typedef struct _xmlC14NVisibleNsStack {
     int nsCurEnd;           /* number of nodes in the set */
-    int nsPrevStart;        /* the beginning of the stack for previous visible node */
+    int nsPrevStart;        /* the beginning of the stack for previous visible node */ 
     int nsPrevEnd;          /* the end of the stack for previous visible node */
     int nsMax;              /* size of the array as allocated */
     xmlNsPtr	*nsTab;	    /* array of ns in no particular order */
@@ -89,7 +89,7 @@ static int			xmlExcC14NVisibleNsStackFind	(xmlC14NVisibleNsStackPtr cur,
 								 xmlNsPtr ns,
 								 xmlC14NCtxPtr ctx);
 
-static int			xmlC14NIsNodeInNodeset		(void *user_data,
+static int			xmlC14NIsNodeInNodeset		(void *user_data, 
 								 xmlNodePtr node,
 								 xmlNodePtr parent);
 
@@ -226,7 +226,7 @@ xmlC14NErrRelativeNamespace(const char *ns_uri)
  * xmlC14NErr:
  * @ctxt:  a C14N evaluation context
  * @node:  the context node
- * @error:  the error code
+ * @error:  the error code 
  * @msg:  the message
  * @extra:  extra informations
  *
@@ -252,8 +252,8 @@ xmlC14NErr(xmlC14NCtxPtr ctxt, xmlNodePtr node, int error,
 #define XML_NAMESPACES_DEFAULT		16
 
 static int
-xmlC14NIsNodeInNodeset(void *user_data, xmlNodePtr node, xmlNodePtr parent) {
-    xmlNodeSetPtr nodes = (xmlNodeSetPtr) user_data;
+xmlC14NIsNodeInNodeset(void *user_data, xmlNodePtr node, xmlNodePtr parent) { 
+    xmlNodeSetPtr nodes = (xmlNodeSetPtr) user_data; 
     if((nodes != NULL) && (node != NULL)) {
 	if(node->type != XML_NAMESPACE_DECL) {
 	    return(xmlXPathNodeSetContains(nodes, node));
@@ -514,10 +514,10 @@ xmlC14NIsXmlNs(xmlNsPtr ns)
  * Returns -1 if ns1 < ns2, 0 if ns1 == ns2 or 1 if ns1 > ns2.
  */
 static int
-xmlC14NNsCompare(const void *data1, const void *data2)
+xmlC14NNsCompare(const void *data1, const void *data2) 
 {
-    const xmlNsPtr ns1 = (const xmlNsPtr) data1;
-    const xmlNsPtr ns2 = (const xmlNsPtr) data2;
+    const xmlNsPtr ns1 = (const xmlNsPtr) data1; 
+    const xmlNsPtr ns2 = (const xmlNsPtr) data2; 
     if (ns1 == ns2)
         return (0);
     if (ns1 == NULL)
@@ -562,11 +562,11 @@ xmlC14NPrintNamespaces(const xmlNsPtr ns, xmlC14NCtxPtr ctx)
     return (1);
 }
 
-static int
-xmlC14NPrintNamespacesWalker(const void *ns, void *ctx) {
-    return xmlC14NPrintNamespaces((const xmlNsPtr) ns, (xmlC14NCtxPtr) ctx);
-}
-
+static int 
+xmlC14NPrintNamespacesWalker(const void *ns, void *ctx) { 
+    return xmlC14NPrintNamespaces((const xmlNsPtr) ns, (xmlC14NCtxPtr) ctx); 
+} 
+ 
 /**
  * xmlC14NProcessNamespacesAxis:
  * @ctx:		the C14N context
@@ -623,7 +623,7 @@ xmlC14NProcessNamespacesAxis(xmlC14NCtxPtr ctx, xmlNodePtr cur, int visible)
     /*
      * Create a sorted list to store element namespaces
      */
-    list = xmlListCreate(NULL, xmlC14NNsCompare);
+    list = xmlListCreate(NULL, xmlC14NNsCompare); 
     if (list == NULL) {
         xmlC14NErrInternal("creating namespaces list (c14n)");
         return (-1);
@@ -671,7 +671,7 @@ xmlC14NProcessNamespacesAxis(xmlC14NCtxPtr ctx, xmlNodePtr cur, int visible)
     /*
      * print out all elements from list
      */
-    xmlListWalk(list, xmlC14NPrintNamespacesWalker, (void *) ctx);
+    xmlListWalk(list, xmlC14NPrintNamespacesWalker, (void *) ctx); 
 
     /*
      * Cleanup
@@ -736,7 +736,7 @@ xmlExcC14NProcessNamespacesAxis(xmlC14NCtxPtr ctx, xmlNodePtr cur, int visible)
     /*
      * Create a sorted list to store element namespaces
      */
-    list = xmlListCreate(NULL, xmlC14NNsCompare);
+    list = xmlListCreate(NULL, xmlC14NNsCompare); 
     if (list == NULL) {
         xmlC14NErrInternal("creating namespaces list (exc c14n)");
         return (-1);
@@ -848,7 +848,7 @@ xmlExcC14NProcessNamespacesAxis(xmlC14NCtxPtr ctx, xmlNodePtr cur, int visible)
     /*
      * print out all elements from list
      */
-    xmlListWalk(list, xmlC14NPrintNamespacesWalker, (void *) ctx);
+    xmlListWalk(list, xmlC14NPrintNamespacesWalker, (void *) ctx); 
 
     /*
      * Cleanup
@@ -887,10 +887,10 @@ xmlC14NIsXmlAttr(xmlAttrPtr attr)
  * Returns -1 if attr1 < attr2, 0 if attr1 == attr2 or 1 if attr1 > attr2.
  */
 static int
-xmlC14NAttrsCompare(const void *data1, const void *data2)
+xmlC14NAttrsCompare(const void *data1, const void *data2) 
 {
-    const xmlAttrPtr attr1 = (const xmlAttrPtr) data1;
-    const xmlAttrPtr attr2 = (const xmlAttrPtr) data2;
+    const xmlAttrPtr attr1 = (const xmlAttrPtr) data1; 
+    const xmlAttrPtr attr2 = (const xmlAttrPtr) data2; 
     int ret = 0;
 
     /*
@@ -941,10 +941,10 @@ xmlC14NAttrsCompare(const void *data1, const void *data2)
  * Returns 1 on success or 0 on fail.
  */
 static int
-xmlC14NPrintAttrs(const void *data, void *user)
+xmlC14NPrintAttrs(const void *data, void *user) 
 {
-    const xmlAttrPtr attr = (const xmlAttrPtr) data;
-    xmlC14NCtxPtr ctx = (xmlC14NCtxPtr) user;
+    const xmlAttrPtr attr = (const xmlAttrPtr) data; 
+    xmlC14NCtxPtr ctx = (xmlC14NCtxPtr) user; 
     xmlChar *value;
     xmlChar *buffer;
 
@@ -1154,7 +1154,7 @@ xmlC14NProcessAttrsAxis(xmlC14NCtxPtr ctx, xmlNodePtr cur, int parent_visible)
     /*
      * Create a sorted list to store element attributes
      */
-    list = xmlListCreate(NULL, xmlC14NAttrsCompare);
+    list = xmlListCreate(NULL, xmlC14NAttrsCompare); 
     if (list == NULL) {
         xmlC14NErrInternal("creating attributes list");
         return (-1);
@@ -1343,7 +1343,7 @@ xmlC14NProcessAttrsAxis(xmlC14NCtxPtr ctx, xmlNodePtr cur, int parent_visible)
     /*
      * print out all elements from list
      */
-    xmlListWalk(list, xmlC14NPrintAttrs, (void *) ctx);
+    xmlListWalk(list, xmlC14NPrintAttrs, (void *) ctx); 
 
     /*
      * Cleanup
@@ -1827,7 +1827,7 @@ xmlC14NNewCtx(xmlDocPtr doc,
     }
 
     /*
-     * Set "mode" flag and remember list of inclusive prefixes
+     * Set "mode" flag and remember list of inclusive prefixes 
      * for exclusive c14n
      */
     ctx->mode = mode;
@@ -1967,7 +1967,7 @@ xmlC14NDocSaveTo(xmlDocPtr doc, xmlNodeSetPtr nodes,
                  int mode, xmlChar ** inclusive_ns_prefixes,
                  int with_comments, xmlOutputBufferPtr buf) {
     return(xmlC14NExecute(doc,
-			xmlC14NIsNodeInNodeset,
+			xmlC14NIsNodeInNodeset, 
 			nodes,
 			mode,
 			inclusive_ns_prefixes,
@@ -2039,7 +2039,7 @@ xmlC14NDocDumpMemory(xmlDocPtr doc, xmlNodeSetPtr nodes,
     (void) xmlOutputBufferClose(buf);
 
     if ((*doc_txt_ptr == NULL) && (ret > 0)) {
-        xmlC14NErrMemory("coping canonicalized document");
+        xmlC14NErrMemory("coping canonicalized document"); 
         return (-1);
     }
     return (ret);
@@ -2057,7 +2057,7 @@ xmlC14NDocDumpMemory(xmlDocPtr doc, xmlNodeSetPtr nodes,
  *			canonicalization, ignored otherwise)
  * @with_comments:	include comments in the result (!=0) or not (==0)
  * @filename:		the filename to store canonical XML image
- * @compression:	the compression level (zlib required):
+ * @compression:	the compression level (zlib required): 
  *				-1 - libxml default,
  *				 0 - uncompressed,
  *				>0 - compression level
@@ -2080,7 +2080,7 @@ xmlC14NDocSave(xmlDocPtr doc, xmlNodeSetPtr nodes,
         xmlC14NErrParam("saving doc");
         return (-1);
     }
-#ifdef LIBXML_ZLIB_ENABLED
+#ifdef LIBXML_ZLIB_ENABLED 
     if (compression < 0)
         compression = xmlGetCompressMode();
 #endif
@@ -2100,7 +2100,7 @@ xmlC14NDocSave(xmlDocPtr doc, xmlNodeSetPtr nodes,
     ret = xmlC14NDocSaveTo(doc, nodes, mode, inclusive_ns_prefixes,
                            with_comments, buf);
     if (ret < 0) {
-        xmlC14NErrInternal("canonize document to buffer");
+        xmlC14NErrInternal("canonize document to buffer"); 
         (void) xmlOutputBufferClose(buf);
         return (-1);
     }

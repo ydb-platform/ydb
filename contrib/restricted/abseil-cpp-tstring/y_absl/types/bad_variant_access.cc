@@ -23,7 +23,7 @@
 #include "y_absl/base/internal/raw_logging.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 //////////////////////////
 // [variant.bad.access] //
@@ -58,7 +58,7 @@ void Rethrow() {
 }
 
 }  // namespace variant_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_USES_STD_VARIANT

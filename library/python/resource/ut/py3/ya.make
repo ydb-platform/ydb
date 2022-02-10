@@ -1,9 +1,9 @@
 PY3TEST()
 
-OWNER(pg)
+OWNER(pg) 
 
 PEERDIR(
-    library/python/resource/ut/lib
+    library/python/resource/ut/lib 
 )
 
 END()

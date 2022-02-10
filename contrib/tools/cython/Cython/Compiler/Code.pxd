@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 
 cimport cython
-from ..StringIOTree cimport StringIOTree
+from ..StringIOTree cimport StringIOTree 
 
 
 cdef class UtilityCodeBase(object):
@@ -27,7 +27,7 @@ cdef class UtilityCode(UtilityCodeBase):
 cdef class FunctionState:
     cdef public set names_taken
     cdef public object owner
-    cdef public object scope
+    cdef public object scope 
 
     cdef public object error_label
     cdef public size_t label_counter
@@ -39,11 +39,11 @@ cdef class FunctionState:
 
     cdef public object return_from_error_cleanup_label # not used in __init__ ?
 
-    cdef public object exc_vars
+    cdef public object exc_vars 
     cdef public object current_except
     cdef public bint in_try_finally
     cdef public bint can_trace
-    cdef public bint gil_owned
+    cdef public bint gil_owned 
 
     cdef public list temps_allocated
     cdef public dict temps_free
@@ -97,28 +97,28 @@ cdef class StringConst:
 
 #def funccontext_property(name):
 
-cdef class CCodeWriter(object):
-    cdef readonly StringIOTree buffer
-    cdef readonly list pyclass_stack
-    cdef readonly object globalstate
-    cdef readonly object funcstate
-    cdef object code_config
-    cdef object last_pos
-    cdef object last_marked_pos
-    cdef Py_ssize_t level
-    cdef public Py_ssize_t call_level  # debug-only, see Nodes.py
-    cdef bint bol
+cdef class CCodeWriter(object): 
+    cdef readonly StringIOTree buffer 
+    cdef readonly list pyclass_stack 
+    cdef readonly object globalstate 
+    cdef readonly object funcstate 
+    cdef object code_config 
+    cdef object last_pos 
+    cdef object last_marked_pos 
+    cdef Py_ssize_t level 
+    cdef public Py_ssize_t call_level  # debug-only, see Nodes.py 
+    cdef bint bol 
 
-    cpdef write(self, s)
-    cpdef put(self, code)
-    cpdef put_safe(self, code)
-    cpdef putln(self, code=*, bint safe=*)
-    @cython.final
-    cdef increase_indent(self)
-    @cython.final
-    cdef decrease_indent(self)
-
-
+    cpdef write(self, s) 
+    cpdef put(self, code) 
+    cpdef put_safe(self, code) 
+    cpdef putln(self, code=*, bint safe=*) 
+    @cython.final 
+    cdef increase_indent(self) 
+    @cython.final 
+    cdef decrease_indent(self) 
+ 
+ 
 cdef class PyrexCodeWriter:
     cdef public object f
     cdef public Py_ssize_t level

@@ -1,27 +1,27 @@
 #ifndef AWS_EVENT_STREAM_H_
 #define AWS_EVENT_STREAM_H_
 
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #include <aws/common/array_list.h>
 #include <aws/common/byte_buf.h>
-#include <aws/common/logging.h>
+#include <aws/common/logging.h> 
 #include <aws/event-stream/event_stream_exports.h>
 
 #include <stdio.h>
 
-#define AWS_C_EVENT_STREAM_PACKAGE_ID 4
-/* max message size is 16MB */
-#define AWS_EVENT_STREAM_MAX_MESSAGE_SIZE (16 * 1024 * 1024)
-
-/* max header size is 128kb */
-#define AWS_EVENT_STREAM_MAX_HEADERS_SIZE (128 * 1024)
-
+#define AWS_C_EVENT_STREAM_PACKAGE_ID 4 
+/* max message size is 16MB */ 
+#define AWS_EVENT_STREAM_MAX_MESSAGE_SIZE (16 * 1024 * 1024) 
+ 
+/* max header size is 128kb */ 
+#define AWS_EVENT_STREAM_MAX_HEADERS_SIZE (128 * 1024) 
+ 
 enum aws_event_stream_errors {
-    AWS_ERROR_EVENT_STREAM_BUFFER_LENGTH_MISMATCH = AWS_ERROR_ENUM_BEGIN_RANGE(AWS_C_EVENT_STREAM_PACKAGE_ID),
+    AWS_ERROR_EVENT_STREAM_BUFFER_LENGTH_MISMATCH = AWS_ERROR_ENUM_BEGIN_RANGE(AWS_C_EVENT_STREAM_PACKAGE_ID), 
     AWS_ERROR_EVENT_STREAM_INSUFFICIENT_BUFFER_LEN,
     AWS_ERROR_EVENT_STREAM_MESSAGE_FIELD_SIZE_EXCEEDED,
     AWS_ERROR_EVENT_STREAM_PRELUDE_CHECKSUM_FAILURE,
@@ -29,23 +29,23 @@ enum aws_event_stream_errors {
     AWS_ERROR_EVENT_STREAM_MESSAGE_INVALID_HEADERS_LEN,
     AWS_ERROR_EVENT_STREAM_MESSAGE_UNKNOWN_HEADER_TYPE,
     AWS_ERROR_EVENT_STREAM_MESSAGE_PARSER_ILLEGAL_STATE,
-    AWS_ERROR_EVENT_STREAM_RPC_CONNECTION_CLOSED,
-    AWS_ERROR_EVENT_STREAM_RPC_PROTOCOL_ERROR,
-    AWS_ERROR_EVENT_STREAM_RPC_STREAM_CLOSED,
-    AWS_ERROR_EVENT_STREAM_RPC_STREAM_NOT_ACTIVATED,
-
-    AWS_ERROR_EVENT_STREAM_END_RANGE = AWS_ERROR_ENUM_END_RANGE(AWS_C_EVENT_STREAM_PACKAGE_ID),
+    AWS_ERROR_EVENT_STREAM_RPC_CONNECTION_CLOSED, 
+    AWS_ERROR_EVENT_STREAM_RPC_PROTOCOL_ERROR, 
+    AWS_ERROR_EVENT_STREAM_RPC_STREAM_CLOSED, 
+    AWS_ERROR_EVENT_STREAM_RPC_STREAM_NOT_ACTIVATED, 
+ 
+    AWS_ERROR_EVENT_STREAM_END_RANGE = AWS_ERROR_ENUM_END_RANGE(AWS_C_EVENT_STREAM_PACKAGE_ID), 
 };
 
-enum aws_event_stream_log_subject {
-    AWS_LS_EVENT_STREAM_GENERAL = AWS_LOG_SUBJECT_BEGIN_RANGE(AWS_C_EVENT_STREAM_PACKAGE_ID),
-    AWS_LS_EVENT_STREAM_CHANNEL_HANDLER,
-    AWS_LS_EVENT_STREAM_RPC_SERVER,
-    AWS_LS_EVENT_STREAM_RPC_CLIENT,
-
-    AWS_LS_EVENT_STREAM_LAST = AWS_LOG_SUBJECT_END_RANGE(AWS_C_EVENT_STREAM_PACKAGE_ID),
-};
-
+enum aws_event_stream_log_subject { 
+    AWS_LS_EVENT_STREAM_GENERAL = AWS_LOG_SUBJECT_BEGIN_RANGE(AWS_C_EVENT_STREAM_PACKAGE_ID), 
+    AWS_LS_EVENT_STREAM_CHANNEL_HANDLER, 
+    AWS_LS_EVENT_STREAM_RPC_SERVER, 
+    AWS_LS_EVENT_STREAM_RPC_CLIENT, 
+ 
+    AWS_LS_EVENT_STREAM_LAST = AWS_LOG_SUBJECT_END_RANGE(AWS_C_EVENT_STREAM_PACKAGE_ID), 
+}; 
+ 
 struct aws_event_stream_message_prelude {
     uint32_t total_len;
     uint32_t headers_len;
@@ -154,8 +154,8 @@ struct aws_event_stream_streaming_decoder {
     void *user_context;
 };
 
-AWS_EXTERN_C_BEGIN
-
+AWS_EXTERN_C_BEGIN 
+ 
 /**
  * Initializes with a list of headers, the payload, and a payload length. CRCs will be computed for you.
  * If headers or payload is NULL, then the fields will be appropriately set to indicate no headers and/or no payload.
@@ -241,21 +241,21 @@ AWS_EVENT_STREAM_API uint32_t aws_event_stream_message_message_crc(const struct 
  */
 AWS_EVENT_STREAM_API const uint8_t *aws_event_stream_message_buffer(const struct aws_event_stream_message *message);
 
-AWS_EVENT_STREAM_API uint32_t
-    aws_event_stream_compute_headers_required_buffer_len(const struct aws_array_list *headers);
-
-AWS_EVENT_STREAM_API size_t
-    aws_event_stream_write_headers_to_buffer(const struct aws_array_list *headers, uint8_t *buffer);
-
-/** Get the headers from the buffer, store them in the headers list.
- * the user's responsibility to cleanup the list when they are finished with it.
- * no buffer copies happen here, the lifetime of the buffer, must outlive the usage of the headers.
- * returns error codes defined in the public interface.
- */
-AWS_EVENT_STREAM_API int aws_event_stream_read_headers_from_buffer(
-    struct aws_array_list *headers,
-    const uint8_t *buffer,
-    size_t headers_len);
+AWS_EVENT_STREAM_API uint32_t 
+    aws_event_stream_compute_headers_required_buffer_len(const struct aws_array_list *headers); 
+ 
+AWS_EVENT_STREAM_API size_t 
+    aws_event_stream_write_headers_to_buffer(const struct aws_array_list *headers, uint8_t *buffer); 
+ 
+/** Get the headers from the buffer, store them in the headers list. 
+ * the user's responsibility to cleanup the list when they are finished with it. 
+ * no buffer copies happen here, the lifetime of the buffer, must outlive the usage of the headers. 
+ * returns error codes defined in the public interface. 
+ */ 
+AWS_EVENT_STREAM_API int aws_event_stream_read_headers_from_buffer( 
+    struct aws_array_list *headers, 
+    const uint8_t *buffer, 
+    size_t headers_len); 
 /**
  * Initialize a streaming decoder for messages with callbacks for usage and an optional user context pointer.
  */
@@ -299,14 +299,14 @@ AWS_EVENT_STREAM_API int aws_event_stream_add_string_header(
     uint16_t value_len,
     int8_t copy);
 
-AWS_EVENT_STREAM_API struct aws_event_stream_header_value_pair aws_event_stream_create_string_header(
-    struct aws_byte_cursor name,
-    struct aws_byte_cursor value);
-
-AWS_EVENT_STREAM_API struct aws_event_stream_header_value_pair aws_event_stream_create_int32_header(
-    struct aws_byte_cursor name,
-    int32_t value);
-
+AWS_EVENT_STREAM_API struct aws_event_stream_header_value_pair aws_event_stream_create_string_header( 
+    struct aws_byte_cursor name, 
+    struct aws_byte_cursor value); 
+ 
+AWS_EVENT_STREAM_API struct aws_event_stream_header_value_pair aws_event_stream_create_int32_header( 
+    struct aws_byte_cursor name, 
+    int32_t value); 
+ 
 /**
  * Adds a byte header to the list of headers.
  */
@@ -452,17 +452,17 @@ AWS_EVENT_STREAM_API int aws_event_stream_streaming_decoder_pump(
     const struct aws_byte_buf *data);
 
 /**
- * Initializes internal datastructures used by aws-c-event-stream.
- * Must be called before using any functionality in aws-c-event-stream.
+ * Initializes internal datastructures used by aws-c-event-stream. 
+ * Must be called before using any functionality in aws-c-event-stream. 
  */
-AWS_EVENT_STREAM_API void aws_event_stream_library_init(struct aws_allocator *allocator);
+AWS_EVENT_STREAM_API void aws_event_stream_library_init(struct aws_allocator *allocator); 
 
-/**
- * Clean up internal datastructures used by aws-c-event-stream.
- * Must not be called until application is done using functionality in aws-c-event-stream.
- */
-AWS_EVENT_STREAM_API void aws_event_stream_library_clean_up(void);
+/** 
+ * Clean up internal datastructures used by aws-c-event-stream. 
+ * Must not be called until application is done using functionality in aws-c-event-stream. 
+ */ 
+AWS_EVENT_STREAM_API void aws_event_stream_library_clean_up(void); 
 
-AWS_EXTERN_C_END
-
+AWS_EXTERN_C_END 
+ 
 #endif /* AWS_EVENT_STREAM_H_ */

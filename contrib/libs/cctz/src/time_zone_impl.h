@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//   https://www.apache.org/licenses/LICENSE-2.0
+//   https://www.apache.org/licenses/LICENSE-2.0 
 //
 //   Unless required by applicable law or agreed to in writing, software
 //   distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,8 +18,8 @@
 #include <memory>
 #include <string>
 
-#include "cctz/civil_time.h"
-#include "cctz/time_zone.h"
+#include "cctz/civil_time.h" 
+#include "cctz/time_zone.h" 
 #include "time_zone_if.h"
 #include "time_zone_info.h"
 
@@ -40,13 +40,13 @@ class time_zone::Impl {
   static void ClearTimeZoneMapTestOnly();
 
   // The primary key is the time-zone ID (e.g., "America/New_York").
-  const std::string& Name() const {
-    // TODO: It would nice if the zoneinfo data included the zone name.
-    return name_;
-  }
+  const std::string& Name() const { 
+    // TODO: It would nice if the zoneinfo data included the zone name. 
+    return name_; 
+  } 
 
   // Breaks a time_point down to civil-time components in this time zone.
-  time_zone::absolute_lookup BreakTime(const time_point<seconds>& tp) const {
+  time_zone::absolute_lookup BreakTime(const time_point<seconds>& tp) const { 
     return zone_->BreakTime(tp);
   }
 
@@ -58,21 +58,21 @@ class time_zone::Impl {
   }
 
   // Finds the time of the next/previous offset change in this time zone.
-  bool NextTransition(const time_point<seconds>& tp,
-                      time_zone::civil_transition* trans) const {
-    return zone_->NextTransition(tp, trans);
+  bool NextTransition(const time_point<seconds>& tp, 
+                      time_zone::civil_transition* trans) const { 
+    return zone_->NextTransition(tp, trans); 
   }
-  bool PrevTransition(const time_point<seconds>& tp,
-                      time_zone::civil_transition* trans) const {
-    return zone_->PrevTransition(tp, trans);
+  bool PrevTransition(const time_point<seconds>& tp, 
+                      time_zone::civil_transition* trans) const { 
+    return zone_->PrevTransition(tp, trans); 
   }
 
-  // Returns an implementation-defined version string for this time zone.
-  std::string Version() const { return zone_->Version(); }
-
-  // Returns an implementation-defined description of this time zone.
-  std::string Description() const { return zone_->Description(); }
-
+  // Returns an implementation-defined version string for this time zone. 
+  std::string Version() const { return zone_->Version(); } 
+ 
+  // Returns an implementation-defined description of this time zone. 
+  std::string Description() const { return zone_->Description(); } 
+ 
  private:
   explicit Impl(const std::string& name);
   static const Impl* UTCImpl();

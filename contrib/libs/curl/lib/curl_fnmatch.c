@@ -21,7 +21,7 @@
  ***************************************************************************/
 
 #include "curl_setup.h"
-#ifndef CURL_DISABLE_FTP
+#ifndef CURL_DISABLE_FTP 
 #include <curl/curl.h>
 
 #include "curl_fnmatch.h"
@@ -385,5 +385,5 @@ int Curl_fnmatch(void *ptr, const char *pattern, const char *string)
 }
 
 #endif
-
-#endif /* if FTP is disabled */
+ 
+#endif /* if FTP is disabled */ 

@@ -10,7 +10,7 @@ OWNER(
 )
 
 VERSION(5.4.0)
-
+ 
 ORIGINAL_SOURCE(https://github.com/intel/hyperscan/archive/v5.4.0.tar.gz)
 
 LICENSE(

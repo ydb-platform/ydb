@@ -38,7 +38,7 @@
 #ifndef ABSL_STRINGS_STR_REPLACE_H_
 #define ABSL_STRINGS_STR_REPLACE_H_
 
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <utility>
 #include <vector>
 
@@ -46,7 +46,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 // StrReplaceAll()
 //
@@ -213,7 +213,7 @@ int StrReplaceAll(const StrToStrMapping& replacements, TString* target) {
   return substitutions;
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_STR_REPLACE_H_

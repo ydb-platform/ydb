@@ -1,43 +1,43 @@
-/*
+/* 
     Copyright (c) 2005-2021 Intel Corporation
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-        http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-*/
-
-#include "governor.h"
+ 
+    Licensed under the Apache License, Version 2.0 (the "License"); 
+    you may not use this file except in compliance with the License. 
+    You may obtain a copy of the License at 
+ 
+        http://www.apache.org/licenses/LICENSE-2.0 
+ 
+    Unless required by applicable law or agreed to in writing, software 
+    distributed under the License is distributed on an "AS IS" BASIS, 
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+    See the License for the specific language governing permissions and 
+    limitations under the License. 
+*/ 
+ 
+#include "governor.h" 
 #include "main.h"
 #include "thread_data.h"
-#include "market.h"
-#include "arena.h"
+#include "market.h" 
+#include "arena.h" 
 #include "dynamic_link.h"
-
+ 
 #include "oneapi/tbb/task_group.h"
 #include "oneapi/tbb/global_control.h"
 #include "oneapi/tbb/tbb_allocator.h"
 #include "oneapi/tbb/info.h"
-
+ 
 #include "task_dispatcher.h"
-
+ 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <atomic>
 #include <algorithm>
 
-namespace tbb {
+namespace tbb { 
 namespace detail {
 namespace r1 {
-
+ 
 #if __TBB_SUPPORTS_WORKERS_WAITING_IN_TERMINATE
 //! global_control.cpp contains definition
 bool remove_and_check_if_empty(d1::global_control& gc);
@@ -48,57 +48,57 @@ namespace rml {
 tbb_server* make_private_server( tbb_client& client );
 } // namespace rml
 
-//------------------------------------------------------------------------
-// governor
-//------------------------------------------------------------------------
-
-void governor::acquire_resources () {
+//------------------------------------------------------------------------ 
+// governor 
+//------------------------------------------------------------------------ 
+ 
+void governor::acquire_resources () { 
 #if __TBB_USE_POSIX
-    int status = theTLS.create(auto_terminate);
-#else
-    int status = theTLS.create();
-#endif
-    if( status )
-        handle_perror(status, "TBB failed to initialize task scheduler TLS\n");
+    int status = theTLS.create(auto_terminate); 
+#else 
+    int status = theTLS.create(); 
+#endif 
+    if( status ) 
+        handle_perror(status, "TBB failed to initialize task scheduler TLS\n"); 
     detect_cpu_features(cpu_features);
-    is_rethrow_broken = gcc_rethrow_exception_broken();
-}
-
-void governor::release_resources () {
-    theRMLServerFactory.close();
-    destroy_process_mask();
+    is_rethrow_broken = gcc_rethrow_exception_broken(); 
+} 
+ 
+void governor::release_resources () { 
+    theRMLServerFactory.close(); 
+    destroy_process_mask(); 
 
     __TBB_ASSERT(!(__TBB_InitOnce::initialization_done() && theTLS.get()), "TBB is unloaded while thread data still alive?");
 
-    int status = theTLS.destroy();
-    if( status )
+    int status = theTLS.destroy(); 
+    if( status ) 
         runtime_warning("failed to destroy task scheduler TLS: %s", std::strerror(status));
-    dynamic_unlink_all();
-}
-
-rml::tbb_server* governor::create_rml_server ( rml::tbb_client& client ) {
-    rml::tbb_server* server = NULL;
-    if( !UsePrivateRML ) {
-        ::rml::factory::status_type status = theRMLServerFactory.make_server( server, client );
-        if( status != ::rml::factory::st_success ) {
-            UsePrivateRML = true;
-            runtime_warning( "rml::tbb_factory::make_server failed with status %x, falling back on private rml", status );
-        }
-    }
-    if ( !server ) {
-        __TBB_ASSERT( UsePrivateRML, NULL );
-        server = rml::make_private_server( client );
-    }
-    __TBB_ASSERT( server, "Failed to create RML server" );
-    return server;
-}
-
+    dynamic_unlink_all(); 
+} 
+ 
+rml::tbb_server* governor::create_rml_server ( rml::tbb_client& client ) { 
+    rml::tbb_server* server = NULL; 
+    if( !UsePrivateRML ) { 
+        ::rml::factory::status_type status = theRMLServerFactory.make_server( server, client ); 
+        if( status != ::rml::factory::st_success ) { 
+            UsePrivateRML = true; 
+            runtime_warning( "rml::tbb_factory::make_server failed with status %x, falling back on private rml", status ); 
+        } 
+    } 
+    if ( !server ) { 
+        __TBB_ASSERT( UsePrivateRML, NULL ); 
+        server = rml::make_private_server( client ); 
+    } 
+    __TBB_ASSERT( server, "Failed to create RML server" ); 
+    return server; 
+} 
+ 
 void governor::one_time_init() {
     if ( !__TBB_InitOnce::initialization_done() ) {
         DoOneTimeInitialization();
     }
-}
-
+} 
+ 
 /*
     There is no portable way to get stack base address in Posix, however the modern
     Linux versions provide pthread_attr_np API that can be used  to obtain thread's
@@ -131,7 +131,7 @@ static std::uintptr_t get_stack_base(std::size_t stack_size) {
     // non-portable method (on all modern Linux) or the simplified approach
     // based on the common sense assumptions. The most important assumption
     // is that the main thread's stack size is not less than that of other threads.
-
+ 
     // Points to the lowest addressable byte of a stack.
     void* stack_limit = nullptr;
 #if __linux__ && !__bg__
@@ -140,9 +140,9 @@ static std::uintptr_t get_stack_base(std::size_t stack_size) {
     if (0 == pthread_getattr_np(pthread_self(), &np_attr_stack)) {
         if (0 == pthread_attr_getstack(&np_attr_stack, &stack_limit, &np_stack_size)) {
             __TBB_ASSERT( &stack_limit > stack_limit, "stack size must be positive" );
-        }
+        } 
         pthread_attr_destroy(&np_attr_stack);
-    }
+    } 
 #endif /* __linux__ */
     std::uintptr_t stack_base{};
     if (stack_limit) {
@@ -154,8 +154,8 @@ static std::uintptr_t get_stack_base(std::size_t stack_size) {
     }
     return stack_base;
 #endif /* USE_PTHREAD */
-}
-
+} 
+ 
 void governor::init_external_thread() {
     one_time_init();
     // Create new scheduler instance with arena
@@ -170,29 +170,29 @@ void governor::init_external_thread() {
     // External thread always occupies the first slot
     thread_data& td = *new(cache_aligned_allocate(sizeof(thread_data))) thread_data(0, false);
     td.attach_arena(a, /*slot index*/ 0);
-
+ 
     stack_size = a.my_market->worker_stack_size();
     std::uintptr_t stack_base = get_stack_base(stack_size);
     task_dispatcher& task_disp = td.my_arena_slot->default_task_dispatcher();
     task_disp.set_stealing_threshold(calculate_stealing_threshold(stack_base, stack_size));
     td.attach_task_dispatcher(task_disp);
-
+ 
     td.my_arena_slot->occupy();
     a.my_market->add_external_thread(td);
     set_thread_data(td);
-}
-
+} 
+ 
 void governor::auto_terminate(void* tls) {
     __TBB_ASSERT(get_thread_data_if_initialized() == nullptr ||
         get_thread_data_if_initialized() == tls, NULL);
     if (tls) {
         thread_data* td = static_cast<thread_data*>(tls);
-
+ 
         // Only external thread can be inside an arena during termination.
         if (td->my_arena_slot) {
             arena* a = td->my_arena;
             market* m = a->my_market;
-
+ 
             a->my_observers.notify_exit_observers(td->my_last_observer, td->my_is_worker);
 
             td->my_task_dispatcher->m_stealing_threshold = 0;
@@ -204,21 +204,21 @@ void governor::auto_terminate(void* tls) {
             m->remove_external_thread(*td);
             // If there was an associated arena, it added a public market reference
             m->release( /*is_public*/ true, /*blocking_terminate*/ false);
-        }
-
+        } 
+ 
         td->~thread_data();
         cache_aligned_deallocate(td);
 
         clear_thread_data();
-    }
+    } 
     __TBB_ASSERT(get_thread_data_if_initialized() == nullptr, NULL);
-}
-
-void governor::initialize_rml_factory () {
-    ::rml::factory::status_type res = theRMLServerFactory.open();
-    UsePrivateRML = res != ::rml::factory::st_success;
-}
-
+} 
+ 
+void governor::initialize_rml_factory () { 
+    ::rml::factory::status_type res = theRMLServerFactory.open(); 
+    UsePrivateRML = res != ::rml::factory::st_success; 
+} 
+ 
 #if __TBB_SUPPORTS_WORKERS_WAITING_IN_TERMINATE
 void __TBB_EXPORTED_FUNC get(d1::task_scheduler_handle& handle) {
     handle.m_ctl = new(allocate_memory(sizeof(global_control))) global_control(global_control::scheduler_handle, 1);
@@ -246,12 +246,12 @@ bool finalize_impl(d1::task_scheduler_handle& handle) {
             if (task_disp->m_properties.outermost && !td->my_is_worker) { // is not inside a parallel region
                 governor::auto_terminate(td);
             }
-        }
+        } 
         if (remove_and_check_if_empty(*handle.m_ctl)) {
             ok = m->release(/*is_public*/ true, /*blocking_terminate*/ true);
         } else {
             ok = false;
-        }
+        } 
     }
     return ok;
 }
@@ -266,12 +266,12 @@ bool __TBB_EXPORTED_FUNC finalize(d1::task_scheduler_handle& handle, std::intptr
         release_impl(handle);
         if (mode == d1::finalize_throwing && !ok) {
             throw_exception(exception_id::unsafe_wait);
-        }
+        } 
         return ok;
-    }
-}
+    } 
+} 
 #endif // __TBB_SUPPORTS_WORKERS_WAITING_IN_TERMINATE
-
+ 
 #if __TBB_ARENA_BINDING
 
 #if __TBB_WEAK_SYMBOLS_PRESENT
@@ -491,36 +491,36 @@ void constraints_assertion(d1::constraints c) {
     bool is_topology_initialized = system_topology::initialization_state == do_once_state::initialized;
     __TBB_ASSERT_RELEASE(c.max_threads_per_core == system_topology::automatic || c.max_threads_per_core > 0,
         "Wrong max_threads_per_core constraints field value.");
-
+ 
     auto numa_nodes_begin = system_topology::numa_nodes_indexes;
     auto numa_nodes_end = system_topology::numa_nodes_indexes + system_topology::numa_nodes_count;
     __TBB_ASSERT_RELEASE(
         c.numa_id == system_topology::automatic ||
         (is_topology_initialized && std::find(numa_nodes_begin, numa_nodes_end, c.numa_id) != numa_nodes_end),
         "The constraints::numa_id value is not known to the library. Use tbb::info::numa_nodes() to get the list of possible values.");
-
+ 
     int* core_types_begin = system_topology::core_types_indexes;
     int* core_types_end = system_topology::core_types_indexes + system_topology::core_types_count;
     __TBB_ASSERT_RELEASE(c.core_type == system_topology::automatic ||
         (is_topology_initialized && std::find(core_types_begin, core_types_end, c.core_type) != core_types_end),
         "The constraints::core_type value is not known to the library. Use tbb::info::core_types() to get the list of possible values.");
-}
-
+} 
+ 
 int __TBB_EXPORTED_FUNC constraints_default_concurrency(const d1::constraints& c, intptr_t /*reserved*/) {
     constraints_assertion(c);
-
+ 
     if (c.numa_id >= 0 || c.core_type >= 0 || c.max_threads_per_core > 0) {
         system_topology::initialize();
         return get_default_concurrency_ptr(c.numa_id, c.core_type, c.max_threads_per_core);
-    }
+    } 
     return governor::default_num_threads();
-}
-
+} 
+ 
 int __TBB_EXPORTED_FUNC constraints_threads_per_core(const d1::constraints&, intptr_t /*reserved*/) {
     return system_topology::automatic;
-}
+} 
 #endif /* __TBB_ARENA_BINDING */
-
+ 
 } // namespace r1
 } // namespace detail
-} // namespace tbb
+} // namespace tbb 

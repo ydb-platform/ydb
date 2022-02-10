@@ -1,12 +1,12 @@
-PY23_LIBRARY()
-
+PY23_LIBRARY() 
+ 
 LICENSE(BSD-3-Clause)
 
 OWNER(g:python-contrib borman)
 
 VERSION(4.4.2)
 
-NO_LINT()
+NO_LINT() 
 
 PY_SRCS(
     TOP_LEVEL

@@ -83,7 +83,7 @@ unsigned short Curl_read16_be(const unsigned char *buf)
 
 #if (CURL_SIZEOF_CURL_OFF_T > 4)
 /*
- * write32_le()
+ * write32_le() 
  *
  * This function converts a 32-bit integer from the native endian format,
  * to little endian format ready for sending down the wire.
@@ -93,7 +93,7 @@ unsigned short Curl_read16_be(const unsigned char *buf)
  * value    [in]     - The 32-bit integer value.
  * buffer   [in]     - A pointer to the output buffer.
  */
-static void write32_le(const int value, unsigned char *buffer)
+static void write32_le(const int value, unsigned char *buffer) 
 {
   buffer[0] = (char)(value & 0x000000FF);
   buffer[1] = (char)((value & 0x0000FF00) >> 8);
@@ -118,7 +118,7 @@ void Curl_write64_le(const long long value, unsigned char *buffer)
 void Curl_write64_le(const __int64 value, unsigned char *buffer)
 #endif
 {
-  write32_le((int)value, buffer);
-  write32_le((int)(value >> 32), buffer + 4);
+  write32_le((int)value, buffer); 
+  write32_le((int)(value >> 32), buffer + 4); 
 }
 #endif /* CURL_SIZEOF_CURL_OFF_T > 4 */

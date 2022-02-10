@@ -44,7 +44,7 @@ __author__ = 'jieluo@google.com (Jie Luo)'
 
 # pylint: disable=g-statement-before-imports,g-import-not-at-top
 try:
-  from collections import OrderedDict
+  from collections import OrderedDict 
 except ImportError:
   from ordereddict import OrderedDict  # PY26
 # pylint: enable=g-statement-before-imports,g-import-not-at-top
@@ -82,9 +82,9 @@ _UNPAIRED_SURROGATE_PATTERN = re.compile(six.u(
     r'[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]'
 ))
 
-_VALID_EXTENSION_NAME = re.compile(r'\[[a-zA-Z0-9\._]*\]$')
-
-
+_VALID_EXTENSION_NAME = re.compile(r'\[[a-zA-Z0-9\._]*\]$') 
+ 
+ 
 class Error(Exception):
   """Top-level module error for json_format."""
 
@@ -114,12 +114,12 @@ def MessageToJson(
         repeated fields, and map fields will always be serialized.  If
         False, only serialize non-empty fields.  Singular message fields
         and oneof fields are not affected by this option.
-    preserving_proto_field_name: If True, use the original proto field
-        names as defined in the .proto file. If False, convert the field
-        names to lowerCamelCase.
-    indent: The JSON object will be pretty-printed with this indent level.
-        An indent level of 0 or negative will only insert newlines.
-    sort_keys: If True, then the output will be sorted by field names.
+    preserving_proto_field_name: If True, use the original proto field 
+        names as defined in the .proto file. If False, convert the field 
+        names to lowerCamelCase. 
+    indent: The JSON object will be pretty-printed with this indent level. 
+        An indent level of 0 or negative will only insert newlines. 
+    sort_keys: If True, then the output will be sorted by field names. 
     use_integers_for_enums: If true, print integers instead of enum names.
     descriptor_pool: A Descriptor Pool for resolving types. If None use the
         default.
@@ -134,7 +134,7 @@ def MessageToJson(
       use_integers_for_enums,
       descriptor_pool,
       float_precision=float_precision)
-  return printer.ToJsonString(message, indent, sort_keys)
+  return printer.ToJsonString(message, indent, sort_keys) 
 
 
 def MessageToDict(
@@ -144,37 +144,37 @@ def MessageToDict(
     use_integers_for_enums=False,
     descriptor_pool=None,
     float_precision=None):
-  """Converts protobuf message to a dictionary.
-
-  When the dictionary is encoded to JSON, it conforms to proto3 JSON spec.
-
-  Args:
-    message: The protocol buffers message instance to serialize.
-    including_default_value_fields: If True, singular primitive fields,
-        repeated fields, and map fields will always be serialized.  If
-        False, only serialize non-empty fields.  Singular message fields
-        and oneof fields are not affected by this option.
-    preserving_proto_field_name: If True, use the original proto field
-        names as defined in the .proto file. If False, convert the field
-        names to lowerCamelCase.
+  """Converts protobuf message to a dictionary. 
+ 
+  When the dictionary is encoded to JSON, it conforms to proto3 JSON spec. 
+ 
+  Args: 
+    message: The protocol buffers message instance to serialize. 
+    including_default_value_fields: If True, singular primitive fields, 
+        repeated fields, and map fields will always be serialized.  If 
+        False, only serialize non-empty fields.  Singular message fields 
+        and oneof fields are not affected by this option. 
+    preserving_proto_field_name: If True, use the original proto field 
+        names as defined in the .proto file. If False, convert the field 
+        names to lowerCamelCase. 
     use_integers_for_enums: If true, print integers instead of enum names.
     descriptor_pool: A Descriptor Pool for resolving types. If None use the
         default.
     float_precision: If set, use this to specify float field valid digits.
-
-  Returns:
-    A dict representation of the protocol buffer message.
-  """
+ 
+  Returns: 
+    A dict representation of the protocol buffer message. 
+  """ 
   printer = _Printer(
       including_default_value_fields,
       preserving_proto_field_name,
       use_integers_for_enums,
       descriptor_pool,
       float_precision=float_precision)
-  # pylint: disable=protected-access
-  return printer._MessageToJsonObject(message)
-
-
+  # pylint: disable=protected-access 
+  return printer._MessageToJsonObject(message) 
+ 
+ 
 def _IsMapEntry(field):
   return (field.type == descriptor.FieldDescriptor.TYPE_MESSAGE and
           field.message_type.has_options and
@@ -192,7 +192,7 @@ class _Printer(object):
       descriptor_pool=None,
       float_precision=None):
     self.including_default_value_fields = including_default_value_fields
-    self.preserving_proto_field_name = preserving_proto_field_name
+    self.preserving_proto_field_name = preserving_proto_field_name 
     self.use_integers_for_enums = use_integers_for_enums
     self.descriptor_pool = descriptor_pool
     if float_precision:
@@ -200,7 +200,7 @@ class _Printer(object):
     else:
       self.float_format = None
 
-  def ToJsonString(self, message, indent, sort_keys):
+  def ToJsonString(self, message, indent, sort_keys): 
     js = self._MessageToJsonObject(message)
     return json.dumps(js, indent=indent, sort_keys=sort_keys)
 
@@ -221,10 +221,10 @@ class _Printer(object):
 
     try:
       for field, value in fields:
-        if self.preserving_proto_field_name:
-          name = field.name
-        else:
-          name = field.json_name
+        if self.preserving_proto_field_name: 
+          name = field.name 
+        else: 
+          name = field.json_name 
         if _IsMapEntry(field):
           # Convert a map field.
           v_field = field.message_type.fields_by_name['value']
@@ -244,9 +244,9 @@ class _Printer(object):
           # Convert a repeated field.
           js[name] = [self._FieldToJsonObject(field, k)
                       for k in value]
-        elif field.is_extension:
+        elif field.is_extension: 
           name = '[%s]' % field.full_name
-          js[name] = self._FieldToJsonObject(field, value)
+          js[name] = self._FieldToJsonObject(field, value) 
         else:
           js[name] = self._FieldToJsonObject(field, value)
 
@@ -259,10 +259,10 @@ class _Printer(object):
                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE) or
               field.containing_oneof):
             continue
-          if self.preserving_proto_field_name:
-            name = field.name
-          else:
-            name = field.json_name
+          if self.preserving_proto_field_name: 
+            name = field.name 
+          else: 
+            name = field.json_name 
           if name in js:
             # Skip the field which has been serialized already.
             continue
@@ -415,7 +415,7 @@ def Parse(text, message, ignore_unknown_fields=False, descriptor_pool=None):
 
   Args:
     text: Message JSON representation.
-    message: A protocol buffer message to merge into.
+    message: A protocol buffer message to merge into. 
     ignore_unknown_fields: If True, do not raise errors for unknown fields.
     descriptor_pool: A Descriptor Pool for resolving types. If None use the
         default.
@@ -432,26 +432,26 @@ def Parse(text, message, ignore_unknown_fields=False, descriptor_pool=None):
   except ValueError as e:
     raise ParseError('Failed to load JSON: {0}.'.format(str(e)))
   return ParseDict(js, message, ignore_unknown_fields, descriptor_pool)
-
-
+ 
+ 
 def ParseDict(js_dict,
               message,
               ignore_unknown_fields=False,
               descriptor_pool=None):
-  """Parses a JSON dictionary representation into a message.
-
-  Args:
-    js_dict: Dict representation of a JSON message.
-    message: A protocol buffer message to merge into.
-    ignore_unknown_fields: If True, do not raise errors for unknown fields.
+  """Parses a JSON dictionary representation into a message. 
+ 
+  Args: 
+    js_dict: Dict representation of a JSON message. 
+    message: A protocol buffer message to merge into. 
+    ignore_unknown_fields: If True, do not raise errors for unknown fields. 
     descriptor_pool: A Descriptor Pool for resolving types. If None use the
       default.
-
-  Returns:
-    The same message passed as argument.
-  """
+ 
+  Returns: 
+    The same message passed as argument. 
+  """ 
   parser = _Parser(ignore_unknown_fields, descriptor_pool)
-  parser.ConvertMessage(js_dict, message)
+  parser.ConvertMessage(js_dict, message) 
   return message
 
 
@@ -496,21 +496,21 @@ class _Parser(object):
     """
     names = []
     message_descriptor = message.DESCRIPTOR
-    fields_by_json_name = dict((f.json_name, f)
-                               for f in message_descriptor.fields)
+    fields_by_json_name = dict((f.json_name, f) 
+                               for f in message_descriptor.fields) 
     for name in js:
       try:
-        field = fields_by_json_name.get(name, None)
+        field = fields_by_json_name.get(name, None) 
         if not field:
-          field = message_descriptor.fields_by_name.get(name, None)
-        if not field and _VALID_EXTENSION_NAME.match(name):
-          if not message_descriptor.is_extendable:
-            raise ParseError('Message type {0} does not have extensions'.format(
-                message_descriptor.full_name))
-          identifier = name[1:-1]  # strip [] brackets
-          # pylint: disable=protected-access
-          field = message.Extensions._FindExtensionByName(identifier)
-          # pylint: enable=protected-access
+          field = message_descriptor.fields_by_name.get(name, None) 
+        if not field and _VALID_EXTENSION_NAME.match(name): 
+          if not message_descriptor.is_extendable: 
+            raise ParseError('Message type {0} does not have extensions'.format( 
+                message_descriptor.full_name)) 
+          identifier = name[1:-1]  # strip [] brackets 
+          # pylint: disable=protected-access 
+          field = message.Extensions._FindExtensionByName(identifier) 
+          # pylint: enable=protected-access 
           if not field:
             # Try looking for extension by the message type name, dropping the
             # field name following the final . separator in full_name.
@@ -518,13 +518,13 @@ class _Parser(object):
             # pylint: disable=protected-access
             field = message.Extensions._FindExtensionByName(identifier)
             # pylint: enable=protected-access
-        if not field:
+        if not field: 
           if self.ignore_unknown_fields:
             continue
           raise ParseError(
-              ('Message type "{0}" has no field named "{1}".\n'
-               ' Available Fields(except extensions): {2}').format(
-                   message_descriptor.full_name, name,
+              ('Message type "{0}" has no field named "{1}".\n' 
+               ' Available Fields(except extensions): {2}').format( 
+                   message_descriptor.full_name, name, 
                    [f.json_name for f in message_descriptor.fields]))
         if name in names:
           raise ParseError('Message type "{0}" should not have multiple '
@@ -542,15 +542,15 @@ class _Parser(object):
           names.append(oneof_name)
 
         if value is None:
-          if (field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE
-              and field.message_type.full_name == 'google.protobuf.Value'):
-            sub_message = getattr(message, field.name)
-            sub_message.null_value = 0
+          if (field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE 
+              and field.message_type.full_name == 'google.protobuf.Value'): 
+            sub_message = getattr(message, field.name) 
+            sub_message.null_value = 0 
           elif (field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_ENUM
                 and field.enum_type.full_name == 'google.protobuf.NullValue'):
             setattr(message, field.name, 0)
-          else:
-            message.ClearField(field.name)
+          else: 
+            message.ClearField(field.name) 
           continue
 
         # Parse field value.
@@ -581,11 +581,11 @@ class _Parser(object):
               getattr(message, field.name).append(
                   _ConvertScalarFieldValue(item, field))
         elif field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
-          if field.is_extension:
-            sub_message = message.Extensions[field]
-          else:
-            sub_message = getattr(message, field.name)
-          sub_message.SetInParent()
+          if field.is_extension: 
+            sub_message = message.Extensions[field] 
+          else: 
+            sub_message = getattr(message, field.name) 
+          sub_message.SetInParent() 
           self.ConvertMessage(value, sub_message)
         else:
           if field.is_extension:
@@ -629,8 +629,8 @@ class _Parser(object):
 
   def _ConvertGenericMessage(self, value, message):
     """Convert a JSON representation into message with FromJsonString."""
-    # Duration, Timestamp, FieldMask have a FromJsonString method to do the
-    # conversion. Users can also call the method directly.
+    # Duration, Timestamp, FieldMask have a FromJsonString method to do the 
+    # conversion. Users can also call the method directly. 
     try:
       message.FromJsonString(value)
     except ValueError as e:
@@ -746,18 +746,18 @@ def _ConvertScalarFieldValue(value, field, require_str=False):
     # Convert an enum value.
     enum_value = field.enum_type.values_by_name.get(value, None)
     if enum_value is None:
-      try:
-        number = int(value)
-        enum_value = field.enum_type.values_by_number.get(number, None)
-      except ValueError:
-        raise ParseError('Invalid enum value {0} for enum type {1}.'.format(
-            value, field.enum_type.full_name))
-      if enum_value is None:
+      try: 
+        number = int(value) 
+        enum_value = field.enum_type.values_by_number.get(number, None) 
+      except ValueError: 
+        raise ParseError('Invalid enum value {0} for enum type {1}.'.format( 
+            value, field.enum_type.full_name)) 
+      if enum_value is None: 
         if field.file.syntax == 'proto3':
           # Proto3 accepts unknown enums.
           return number
-        raise ParseError('Invalid enum value {0} for enum type {1}.'.format(
-            value, field.enum_type.full_name))
+        raise ParseError('Invalid enum value {0} for enum type {1}.'.format( 
+            value, field.enum_type.full_name)) 
     return enum_value.number
 
 
@@ -773,7 +773,7 @@ def _ConvertInteger(value):
   Raises:
     ParseError: If an integer couldn't be consumed.
   """
-  if isinstance(value, float) and not value.is_integer():
+  if isinstance(value, float) and not value.is_integer(): 
     raise ParseError('Couldn\'t parse integer: {0}.'.format(value))
 
   if isinstance(value, six.text_type) and value.find(' ') != -1:

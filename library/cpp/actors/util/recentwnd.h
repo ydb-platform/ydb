@@ -63,5 +63,5 @@ public:
 
 private:
     TContainer<TElem> Window_;
-    ui32 MaxWndSize_;
+    ui32 MaxWndSize_; 
 };

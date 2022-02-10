@@ -276,7 +276,7 @@ namespace NLWTrace {
         struct TItem : TLogItem {
             TThread::TId ThreadId;
 
-            TItem() = default;
+            TItem() = default; 
 
             TItem(TThread::TId tid, const TLogItem& item)
                 : TLogItem(item)

@@ -1,16 +1,16 @@
-// Copyright 2015 gRPC authors.
+// Copyright 2015 gRPC authors. 
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+// Licensed under the Apache License, Version 2.0 (the "License"); 
+// you may not use this file except in compliance with the License. 
+// You may obtain a copy of the License at 
 //
-//     http://www.apache.org/licenses/LICENSE-2.0
+//     http://www.apache.org/licenses/LICENSE-2.0 
 //
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Unless required by applicable law or agreed to in writing, software 
+// distributed under the License is distributed on an "AS IS" BASIS, 
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+// See the License for the specific language governing permissions and 
+// limitations under the License. 
 
 syntax = "proto3";
 
@@ -39,9 +39,9 @@ enum ServerType {
 enum RpcType {
   UNARY = 0;
   STREAMING = 1;
-  STREAMING_FROM_CLIENT = 2;
-  STREAMING_FROM_SERVER = 3;
-  STREAMING_BOTH_WAYS = 4;
+  STREAMING_FROM_CLIENT = 2; 
+  STREAMING_FROM_SERVER = 3; 
+  STREAMING_BOTH_WAYS = 4; 
 }
 
 // Parameters of poisson process distribution, which is a good representation
@@ -66,7 +66,7 @@ message LoadParams {
 message SecurityParams {
   bool use_test_ca = 1;
   string server_host_override = 2;
-  string cred_type = 3;
+  string cred_type = 3; 
 }
 
 message ChannelArg {
@@ -104,15 +104,15 @@ message ClientConfig {
   string other_client_api = 15;
 
   repeated ChannelArg channel_args = 16;
-
-  // Number of threads that share each completion queue
-  int32 threads_per_cq = 17;
-
-  // Number of messages on a stream before it gets finished/restarted
-  int32 messages_per_stream = 18;
-
-  // Use coalescing API when possible.
-  bool use_coalesce_api = 19;
+ 
+  // Number of threads that share each completion queue 
+  int32 threads_per_cq = 17; 
+ 
+  // Number of messages on a stream before it gets finished/restarted 
+  int32 messages_per_stream = 18; 
+ 
+  // Use coalescing API when possible. 
+  bool use_coalesce_api = 19; 
 
   // If 0, disabled. Else, specifies the period between gathering latency
   // medians in milliseconds.
@@ -146,10 +146,10 @@ message ServerConfig {
   int32 async_server_threads = 7;
   // Specify the number of cores to limit server to, if desired
   int32 core_limit = 8;
-  // payload config, used in generic server.
-  // Note this must NOT be used in proto (non-generic) servers. For proto servers,
-  // 'response sizes' must be configured from the 'response_size' field of the
-  // 'SimpleRequest' objects in RPC requests.
+  // payload config, used in generic server. 
+  // Note this must NOT be used in proto (non-generic) servers. For proto servers, 
+  // 'response sizes' must be configured from the 'response_size' field of the 
+  // 'SimpleRequest' objects in RPC requests. 
   PayloadConfig payload_config = 9;
 
   // Specify the cores we should run the server on, if desired
@@ -158,14 +158,14 @@ message ServerConfig {
   // If we use an OTHER_SERVER client_type, this string gives more detail
   string other_server_api = 11;
 
-  // Number of threads that share each completion queue
-  int32 threads_per_cq = 12;
-
+  // Number of threads that share each completion queue 
+  int32 threads_per_cq = 12; 
+ 
   // c++-only options (for now) --------------------------------
 
   // Buffer pool size (no buffer pool specified if unset)
   int32 resource_quota_size = 1001;
-  repeated ChannelArg channel_args = 1002;
+  repeated ChannelArg channel_args = 1002; 
 
   // Number of server processes. 0 indicates no restriction.
   int32 server_processes = 21;
@@ -257,14 +257,14 @@ message ScenarioResultSummary
   // Number of requests that succeeded/failed
   double successful_requests_per_second = 13;
   double failed_requests_per_second = 14;
-
-  // Number of polls called inside completion queue per request
-  double client_polls_per_request = 15;
-  double server_polls_per_request = 16;
-
-  // Queries per CPU-sec over all servers or clients
-  double server_queries_per_cpu_sec = 17;
-  double client_queries_per_cpu_sec = 18;
+ 
+  // Number of polls called inside completion queue per request 
+  double client_polls_per_request = 15; 
+  double server_polls_per_request = 16; 
+ 
+  // Queries per CPU-sec over all servers or clients 
+  double server_queries_per_cpu_sec = 17; 
+  double client_queries_per_cpu_sec = 18; 
 }
 
 // Results of a single benchmark scenario.

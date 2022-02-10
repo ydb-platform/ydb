@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #pragma once
 
@@ -9,24 +9,24 @@
 
 namespace Aws
 {
-namespace Utils
-{
-namespace Xml
-{
-    class XmlDocument;
-}
-namespace Json
-{
-    class JsonValue;
-}
-} // namespace Utils
+namespace Utils 
+{ 
+namespace Xml 
+{ 
+    class XmlDocument; 
+} 
+namespace Json 
+{ 
+    class JsonValue; 
+} 
+} // namespace Utils 
 
-class AWS_CORE_API NoResult
-{
-public:
-    NoResult() {};
-    NoResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>&) {};
-    NoResult(const Aws::AmazonWebServiceResult<Aws::Utils::Json::JsonValue>&) {};
-};
+class AWS_CORE_API NoResult 
+{ 
+public: 
+    NoResult() {}; 
+    NoResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>&) {}; 
+    NoResult(const Aws::AmazonWebServiceResult<Aws::Utils::Json::JsonValue>&) {}; 
+}; 
 
 } // namespace Aws

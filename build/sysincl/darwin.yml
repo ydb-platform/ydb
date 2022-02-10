@@ -1,6 +1,6 @@
 - includes:
-  # These headers actually exist in arcadia, so we either should use them and
-  # add proper PEERDIR, or should #error them if they are not really used:
+  # These headers actually exist in arcadia, so we either should use them and 
+  # add proper PEERDIR, or should #error them if they are not really used: 
   # - bzlib.h
   # - db.h
   # - expat.h
@@ -28,7 +28,7 @@
   - CommonCrypto/CommonCryptor.h
   - CommonCrypto/CommonDigest.h
   - CommonCrypto/CommonHMAC.h
-  - CommonCrypto/CommonKeyDerivation.h
+  - CommonCrypto/CommonKeyDerivation.h 
   - ConditionalMacros.h
   - DiskArbitration/DiskArbitration.h
   - Endian.h
@@ -109,18 +109,18 @@
   - netinet/udp_var.h
   - netinet6/in6.h
   - nlist.h
-  - objc/objc-sync.h
+  - objc/objc-sync.h 
   - objc/runtime.h
   - os/lock.h
   - os/proc.h
-  - os/trace.h
+  - os/trace.h 
   - panel.h
   - pthread_spis.h
   - readline/history.h
   - readline/readline.h
   - readpassphrase.h
   - runetype.h
-  - simd/simd.h
+  - simd/simd.h 
   - strhash.h
   - sys/_types.h
   - sys/acl.h
@@ -159,7 +159,7 @@
   - tzfile.h
   - util.h
   - vis.h
-  - xpc/xpc.h
+  - xpc/xpc.h 
 
   # OSX frameworks
   - Accelerate/Accelerate.h

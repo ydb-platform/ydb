@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//   https://www.apache.org/licenses/LICENSE-2.0
+//   https://www.apache.org/licenses/LICENSE-2.0 
 //
 //   Unless required by applicable law or agreed to in writing, software
 //   distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,14 +31,14 @@ std::unique_ptr<TimeZoneIf> TimeZoneIf::Load(const std::string& name) {
   return std::unique_ptr<TimeZoneIf>(tz.release());
 }
 
-// Defined out-of-line to avoid emitting a weak vtable in all TUs.
-TimeZoneIf::~TimeZoneIf() {}
-
-time_point<seconds> UnixSecondsToTimePoint(std::int_fast64_t seconds) {
+// Defined out-of-line to avoid emitting a weak vtable in all TUs. 
+TimeZoneIf::~TimeZoneIf() {} 
+ 
+time_point<seconds> UnixSecondsToTimePoint(std::int_fast64_t seconds) { 
   return FromUnixSeconds(seconds);
 }
 
-std::int_fast64_t TimePointToUnixSeconds(const time_point<seconds>& tp) {
+std::int_fast64_t TimePointToUnixSeconds(const time_point<seconds>& tp) { 
   return ToUnixSeconds(tp);
 }
 

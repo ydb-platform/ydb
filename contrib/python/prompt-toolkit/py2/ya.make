@@ -8,31 +8,31 @@ LICENSE(BSD-3-Clause)
 
 PEERDIR(
     contrib/python/six
-    contrib/python/wcwidth
+    contrib/python/wcwidth 
 )
 
 NO_LINT()
 
-NO_CHECK_IMPORTS(
-    prompt_toolkit.clipboard.pyperclip
+NO_CHECK_IMPORTS( 
+    prompt_toolkit.clipboard.pyperclip 
     prompt_toolkit.contrib.telnet.*
-    prompt_toolkit.eventloop.asyncio_posix
-    prompt_toolkit.eventloop.asyncio_win32
+    prompt_toolkit.eventloop.asyncio_posix 
+    prompt_toolkit.eventloop.asyncio_win32 
     prompt_toolkit.eventloop.posix
-    prompt_toolkit.eventloop.win32
+    prompt_toolkit.eventloop.win32 
     prompt_toolkit.input.win32
     prompt_toolkit.input.win32_pipe
     prompt_toolkit.output.conemu
     prompt_toolkit.output.win32
     prompt_toolkit.output.windows10
-    prompt_toolkit.terminal.conemu_output
+    prompt_toolkit.terminal.conemu_output 
     prompt_toolkit.terminal.vt100_input
     prompt_toolkit.terminal.vt100_output
-    prompt_toolkit.terminal.win32_input
-    prompt_toolkit.terminal.win32_output
+    prompt_toolkit.terminal.win32_input 
+    prompt_toolkit.terminal.win32_output 
     prompt_toolkit.win32_types
-)
-
+) 
+ 
 PY_SRCS(
     TOP_LEVEL
     prompt_toolkit/__init__.py

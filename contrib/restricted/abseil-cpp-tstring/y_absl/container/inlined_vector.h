@@ -55,7 +55,7 @@
 #include "y_absl/memory/memory.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 // -----------------------------------------------------------------------------
 // InlinedVector
 // -----------------------------------------------------------------------------
@@ -849,7 +849,7 @@ H AbslHashValue(H h, const y_absl::InlinedVector<T, N, A>& a) {
   return H::combine(H::combine_contiguous(std::move(h), a.data(), size), size);
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INLINED_VECTOR_H_

@@ -11,13 +11,13 @@
 import re
 
 from pygments.lexer import RegexLexer, bygroups, default, words, include
-from pygments.token import Comment, Error, Keyword, Name, Number, \
-    Punctuation, Operator, String, Text, Whitespace
-from pygments.lexers import _vbscript_builtins
+from pygments.token import Comment, Error, Keyword, Name, Number, \ 
+    Punctuation, Operator, String, Text, Whitespace 
+from pygments.lexers import _vbscript_builtins 
 
-
+ 
 __all__ = ['BlitzBasicLexer', 'BlitzMaxLexer', 'MonkeyLexer', 'CbmBasicV2Lexer',
-           'QBasicLexer', 'VBScriptLexer', 'BBCBasicLexer']
+           'QBasicLexer', 'VBScriptLexer', 'BBCBasicLexer'] 
 
 
 class BlitzMaxLexer(RegexLexer):
@@ -499,163 +499,163 @@ class QBasicLexer(RegexLexer):
     def analyse_text(text):
         if '$DYNAMIC' in text or '$STATIC' in text:
             return 0.9
-
-
-class VBScriptLexer(RegexLexer):
-    """
-    VBScript is scripting language that is modeled on Visual Basic.
-
-    .. versionadded:: 2.4
-    """
-    name = 'VBScript'
-    aliases = ['vbscript']
-    filenames = ['*.vbs', '*.VBS']
-    flags = re.IGNORECASE
-
-    tokens = {
-        'root': [
-            (r"'[^\n]*", Comment.Single),
-            (r'\s+', Whitespace),
-            ('"', String.Double, 'string'),
-            ('&h[0-9a-f]+', Number.Hex),
-            # Float variant 1, for example: 1., 1.e2, 1.2e3
-            (r'[0-9]+\.[0-9]*(e[+-]?[0-9]+)?', Number.Float),
-            (r'\.[0-9]+(e[+-]?[0-9]+)?', Number.Float),  # Float variant 2, for example: .1, .1e2
-            (r'[0-9]+e[+-]?[0-9]+', Number.Float),  # Float variant 3, for example: 123e45
+ 
+ 
+class VBScriptLexer(RegexLexer): 
+    """ 
+    VBScript is scripting language that is modeled on Visual Basic. 
+ 
+    .. versionadded:: 2.4 
+    """ 
+    name = 'VBScript' 
+    aliases = ['vbscript'] 
+    filenames = ['*.vbs', '*.VBS'] 
+    flags = re.IGNORECASE 
+ 
+    tokens = { 
+        'root': [ 
+            (r"'[^\n]*", Comment.Single), 
+            (r'\s+', Whitespace), 
+            ('"', String.Double, 'string'), 
+            ('&h[0-9a-f]+', Number.Hex), 
+            # Float variant 1, for example: 1., 1.e2, 1.2e3 
+            (r'[0-9]+\.[0-9]*(e[+-]?[0-9]+)?', Number.Float), 
+            (r'\.[0-9]+(e[+-]?[0-9]+)?', Number.Float),  # Float variant 2, for example: .1, .1e2 
+            (r'[0-9]+e[+-]?[0-9]+', Number.Float),  # Float variant 3, for example: 123e45 
             (r'[0-9]+', Number.Integer),
-            ('#.+#', String),  # date or time value
-            (r'(dim)(\s+)([a-z_][a-z0-9_]*)',
-             bygroups(Keyword.Declaration, Whitespace, Name.Variable), 'dim_more'),
-            (r'(function|sub)(\s+)([a-z_][a-z0-9_]*)',
-             bygroups(Keyword.Declaration, Whitespace, Name.Function)),
+            ('#.+#', String),  # date or time value 
+            (r'(dim)(\s+)([a-z_][a-z0-9_]*)', 
+             bygroups(Keyword.Declaration, Whitespace, Name.Variable), 'dim_more'), 
+            (r'(function|sub)(\s+)([a-z_][a-z0-9_]*)', 
+             bygroups(Keyword.Declaration, Whitespace, Name.Function)), 
             (r'(class)(\s+)([a-z_][a-z0-9_]*)',
              bygroups(Keyword.Declaration, Whitespace, Name.Class)),
             (r'(const)(\s+)([a-z_][a-z0-9_]*)',
              bygroups(Keyword.Declaration, Whitespace, Name.Constant)),
             (r'(end)(\s+)(class|function|if|property|sub|with)',
              bygroups(Keyword, Whitespace, Keyword)),
-            (r'(on)(\s+)(error)(\s+)(goto)(\s+)(0)',
-             bygroups(Keyword, Whitespace, Keyword, Whitespace, Keyword, Whitespace, Number.Integer)),
-            (r'(on)(\s+)(error)(\s+)(resume)(\s+)(next)',
-             bygroups(Keyword, Whitespace, Keyword, Whitespace, Keyword, Whitespace, Keyword)),
-            (r'(option)(\s+)(explicit)', bygroups(Keyword, Whitespace, Keyword)),
-            (r'(property)(\s+)(get|let|set)(\s+)([a-z_][a-z0-9_]*)',
-             bygroups(Keyword.Declaration, Whitespace, Keyword.Declaration, Whitespace, Name.Property)),
-            (r'rem\s.*[^\n]*', Comment.Single),
-            (words(_vbscript_builtins.KEYWORDS, suffix=r'\b'), Keyword),
-            (words(_vbscript_builtins.OPERATORS), Operator),
-            (words(_vbscript_builtins.OPERATOR_WORDS, suffix=r'\b'), Operator.Word),
-            (words(_vbscript_builtins.BUILTIN_CONSTANTS, suffix=r'\b'), Name.Constant),
-            (words(_vbscript_builtins.BUILTIN_FUNCTIONS, suffix=r'\b'), Name.Builtin),
-            (words(_vbscript_builtins.BUILTIN_VARIABLES, suffix=r'\b'), Name.Builtin),
-            (r'[a-z_][a-z0-9_]*', Name),
-            (r'\b_\n', Operator),
-            (words(r'(),.:'), Punctuation),
-            (r'.+(\n)?', Error)
-        ],
-        'dim_more': [
+            (r'(on)(\s+)(error)(\s+)(goto)(\s+)(0)', 
+             bygroups(Keyword, Whitespace, Keyword, Whitespace, Keyword, Whitespace, Number.Integer)), 
+            (r'(on)(\s+)(error)(\s+)(resume)(\s+)(next)', 
+             bygroups(Keyword, Whitespace, Keyword, Whitespace, Keyword, Whitespace, Keyword)), 
+            (r'(option)(\s+)(explicit)', bygroups(Keyword, Whitespace, Keyword)), 
+            (r'(property)(\s+)(get|let|set)(\s+)([a-z_][a-z0-9_]*)', 
+             bygroups(Keyword.Declaration, Whitespace, Keyword.Declaration, Whitespace, Name.Property)), 
+            (r'rem\s.*[^\n]*', Comment.Single), 
+            (words(_vbscript_builtins.KEYWORDS, suffix=r'\b'), Keyword), 
+            (words(_vbscript_builtins.OPERATORS), Operator), 
+            (words(_vbscript_builtins.OPERATOR_WORDS, suffix=r'\b'), Operator.Word), 
+            (words(_vbscript_builtins.BUILTIN_CONSTANTS, suffix=r'\b'), Name.Constant), 
+            (words(_vbscript_builtins.BUILTIN_FUNCTIONS, suffix=r'\b'), Name.Builtin), 
+            (words(_vbscript_builtins.BUILTIN_VARIABLES, suffix=r'\b'), Name.Builtin), 
+            (r'[a-z_][a-z0-9_]*', Name), 
+            (r'\b_\n', Operator), 
+            (words(r'(),.:'), Punctuation), 
+            (r'.+(\n)?', Error) 
+        ], 
+        'dim_more': [ 
             (r'(\s*)(,)(\s*)([a-z_][a-z0-9]*)',
              bygroups(Whitespace, Punctuation, Whitespace, Name.Variable)),
-            default('#pop'),
-        ],
-        'string': [
-            (r'[^"\n]+', String.Double),
-            (r'\"\"', String.Double),
-            (r'"', String.Double, '#pop'),
-            (r'\n', Error, '#pop'),  # Unterminated string
-        ],
-    }
-
-
-class BBCBasicLexer(RegexLexer):
-    """
-    BBC Basic was supplied on the BBC Micro, and later Acorn RISC OS.
-    It is also used by BBC Basic For Windows.
-
-    .. versionadded:: 2.4
-    """
-    base_keywords = ['OTHERWISE', 'AND', 'DIV', 'EOR', 'MOD', 'OR', 'ERROR',
-                     'LINE', 'OFF', 'STEP', 'SPC', 'TAB', 'ELSE', 'THEN',
-                     'OPENIN', 'PTR', 'PAGE', 'TIME', 'LOMEM', 'HIMEM', 'ABS',
-                     'ACS', 'ADVAL', 'ASC', 'ASN', 'ATN', 'BGET', 'COS', 'COUNT',
-                     'DEG', 'ERL', 'ERR', 'EVAL', 'EXP', 'EXT', 'FALSE', 'FN',
-                     'GET', 'INKEY', 'INSTR', 'INT', 'LEN', 'LN', 'LOG', 'NOT',
-                     'OPENUP', 'OPENOUT', 'PI', 'POINT', 'POS', 'RAD', 'RND',
-                     'SGN', 'SIN', 'SQR', 'TAN', 'TO', 'TRUE', 'USR', 'VAL',
-                     'VPOS', 'CHR$', 'GET$', 'INKEY$', 'LEFT$', 'MID$',
-                     'RIGHT$', 'STR$', 'STRING$', 'EOF', 'PTR', 'PAGE', 'TIME',
-                     'LOMEM', 'HIMEM', 'SOUND', 'BPUT', 'CALL', 'CHAIN', 'CLEAR',
-                     'CLOSE', 'CLG', 'CLS', 'DATA', 'DEF', 'DIM', 'DRAW', 'END',
-                     'ENDPROC', 'ENVELOPE', 'FOR', 'GOSUB', 'GOTO', 'GCOL', 'IF',
-                     'INPUT', 'LET', 'LOCAL', 'MODE', 'MOVE', 'NEXT', 'ON',
-                     'VDU', 'PLOT', 'PRINT', 'PROC', 'READ', 'REM', 'REPEAT',
-                     'REPORT', 'RESTORE', 'RETURN', 'RUN', 'STOP', 'COLOUR',
-                     'TRACE', 'UNTIL', 'WIDTH', 'OSCLI']
-
-    basic5_keywords = ['WHEN', 'OF', 'ENDCASE', 'ENDIF', 'ENDWHILE', 'CASE',
-                       'CIRCLE', 'FILL', 'ORIGIN', 'POINT', 'RECTANGLE', 'SWAP',
-                       'WHILE', 'WAIT', 'MOUSE', 'QUIT', 'SYS', 'INSTALL',
-                       'LIBRARY', 'TINT', 'ELLIPSE', 'BEATS', 'TEMPO', 'VOICES',
-                       'VOICE', 'STEREO', 'OVERLAY', 'APPEND', 'AUTO', 'CRUNCH',
-                       'DELETE', 'EDIT', 'HELP', 'LIST', 'LOAD', 'LVAR', 'NEW',
-                       'OLD', 'RENUMBER', 'SAVE', 'TEXTLOAD', 'TEXTSAVE',
-                       'TWIN', 'TWINO', 'INSTALL', 'SUM', 'BEAT']
-
-
-    name = 'BBC Basic'
-    aliases = ['bbcbasic']
-    filenames = ['*.bbc']
-
-    tokens = {
-        'root': [
-            (r"[0-9]+", Name.Label),
-            (r"(\*)([^\n]*)",
-             bygroups(Keyword.Pseudo, Comment.Special)),
+            default('#pop'), 
+        ], 
+        'string': [ 
+            (r'[^"\n]+', String.Double), 
+            (r'\"\"', String.Double), 
+            (r'"', String.Double, '#pop'), 
+            (r'\n', Error, '#pop'),  # Unterminated string 
+        ], 
+    } 
+ 
+ 
+class BBCBasicLexer(RegexLexer): 
+    """ 
+    BBC Basic was supplied on the BBC Micro, and later Acorn RISC OS. 
+    It is also used by BBC Basic For Windows. 
+ 
+    .. versionadded:: 2.4 
+    """ 
+    base_keywords = ['OTHERWISE', 'AND', 'DIV', 'EOR', 'MOD', 'OR', 'ERROR', 
+                     'LINE', 'OFF', 'STEP', 'SPC', 'TAB', 'ELSE', 'THEN', 
+                     'OPENIN', 'PTR', 'PAGE', 'TIME', 'LOMEM', 'HIMEM', 'ABS', 
+                     'ACS', 'ADVAL', 'ASC', 'ASN', 'ATN', 'BGET', 'COS', 'COUNT', 
+                     'DEG', 'ERL', 'ERR', 'EVAL', 'EXP', 'EXT', 'FALSE', 'FN', 
+                     'GET', 'INKEY', 'INSTR', 'INT', 'LEN', 'LN', 'LOG', 'NOT', 
+                     'OPENUP', 'OPENOUT', 'PI', 'POINT', 'POS', 'RAD', 'RND', 
+                     'SGN', 'SIN', 'SQR', 'TAN', 'TO', 'TRUE', 'USR', 'VAL', 
+                     'VPOS', 'CHR$', 'GET$', 'INKEY$', 'LEFT$', 'MID$', 
+                     'RIGHT$', 'STR$', 'STRING$', 'EOF', 'PTR', 'PAGE', 'TIME', 
+                     'LOMEM', 'HIMEM', 'SOUND', 'BPUT', 'CALL', 'CHAIN', 'CLEAR', 
+                     'CLOSE', 'CLG', 'CLS', 'DATA', 'DEF', 'DIM', 'DRAW', 'END', 
+                     'ENDPROC', 'ENVELOPE', 'FOR', 'GOSUB', 'GOTO', 'GCOL', 'IF', 
+                     'INPUT', 'LET', 'LOCAL', 'MODE', 'MOVE', 'NEXT', 'ON', 
+                     'VDU', 'PLOT', 'PRINT', 'PROC', 'READ', 'REM', 'REPEAT', 
+                     'REPORT', 'RESTORE', 'RETURN', 'RUN', 'STOP', 'COLOUR', 
+                     'TRACE', 'UNTIL', 'WIDTH', 'OSCLI'] 
+ 
+    basic5_keywords = ['WHEN', 'OF', 'ENDCASE', 'ENDIF', 'ENDWHILE', 'CASE', 
+                       'CIRCLE', 'FILL', 'ORIGIN', 'POINT', 'RECTANGLE', 'SWAP', 
+                       'WHILE', 'WAIT', 'MOUSE', 'QUIT', 'SYS', 'INSTALL', 
+                       'LIBRARY', 'TINT', 'ELLIPSE', 'BEATS', 'TEMPO', 'VOICES', 
+                       'VOICE', 'STEREO', 'OVERLAY', 'APPEND', 'AUTO', 'CRUNCH', 
+                       'DELETE', 'EDIT', 'HELP', 'LIST', 'LOAD', 'LVAR', 'NEW', 
+                       'OLD', 'RENUMBER', 'SAVE', 'TEXTLOAD', 'TEXTSAVE', 
+                       'TWIN', 'TWINO', 'INSTALL', 'SUM', 'BEAT'] 
+ 
+ 
+    name = 'BBC Basic' 
+    aliases = ['bbcbasic'] 
+    filenames = ['*.bbc'] 
+ 
+    tokens = { 
+        'root': [ 
+            (r"[0-9]+", Name.Label), 
+            (r"(\*)([^\n]*)", 
+             bygroups(Keyword.Pseudo, Comment.Special)), 
             default('code'),
-        ],
-
-        'code': [
-            (r"(REM)([^\n]*)",
-             bygroups(Keyword.Declaration, Comment.Single)),
-            (r'\n', Whitespace, 'root'),
-            (r'\s+', Whitespace),
-            (r':', Comment.Preproc),
-
-            # Some special cases to make functions come out nicer
-            (r'(DEF)(\s*)(FN|PROC)([A-Za-z_@][\w@]*)',
-             bygroups(Keyword.Declaration, Whitespace, Keyword.Declaration, Name.Function)),
-            (r'(FN|PROC)([A-Za-z_@][\w@]*)',
-             bygroups(Keyword, Name.Function)),
-
-            (r'(GOTO|GOSUB|THEN|RESTORE)(\s*)(\d+)',
-             bygroups(Keyword, Whitespace, Name.Label)),
-
-            (r'(TRUE|FALSE)', Keyword.Constant),
-            (r'(PAGE|LOMEM|HIMEM|TIME|WIDTH|ERL|ERR|REPORT\$|POS|VPOS|VOICES)', Keyword.Pseudo),
-
-            (words(base_keywords), Keyword),
-            (words(basic5_keywords), Keyword),
-
-            ('"', String.Double, 'string'),
-
-            ('%[01]{1,32}', Number.Bin),
-            ('&[0-9a-f]{1,8}', Number.Hex),
-
-            (r'[+-]?[0-9]+\.[0-9]*(E[+-]?[0-9]+)?', Number.Float),
-            (r'[+-]?\.[0-9]+(E[+-]?[0-9]+)?', Number.Float),
-            (r'[+-]?[0-9]+E[+-]?[0-9]+', Number.Float),
-            (r'[+-]?\d+', Number.Integer),
-
-            (r'([A-Za-z_@][\w@]*[%$]?)', Name.Variable),
-            (r'([+\-]=|[$!|?+\-*/%^=><();]|>=|<=|<>|<<|>>|>>>|,)', Operator),
-        ],
-        'string': [
-            (r'[^"\n]+', String.Double),
-            (r'"', String.Double, '#pop'),
-            (r'\n', Error, 'root'),  # Unterminated string
-        ],
-    }
-
-    def analyse_text(text):
-        if text.startswith('10REM >') or text.startswith('REM >'):
-            return 0.9
+        ], 
+ 
+        'code': [ 
+            (r"(REM)([^\n]*)", 
+             bygroups(Keyword.Declaration, Comment.Single)), 
+            (r'\n', Whitespace, 'root'), 
+            (r'\s+', Whitespace), 
+            (r':', Comment.Preproc), 
+ 
+            # Some special cases to make functions come out nicer 
+            (r'(DEF)(\s*)(FN|PROC)([A-Za-z_@][\w@]*)', 
+             bygroups(Keyword.Declaration, Whitespace, Keyword.Declaration, Name.Function)), 
+            (r'(FN|PROC)([A-Za-z_@][\w@]*)', 
+             bygroups(Keyword, Name.Function)), 
+ 
+            (r'(GOTO|GOSUB|THEN|RESTORE)(\s*)(\d+)', 
+             bygroups(Keyword, Whitespace, Name.Label)), 
+ 
+            (r'(TRUE|FALSE)', Keyword.Constant), 
+            (r'(PAGE|LOMEM|HIMEM|TIME|WIDTH|ERL|ERR|REPORT\$|POS|VPOS|VOICES)', Keyword.Pseudo), 
+ 
+            (words(base_keywords), Keyword), 
+            (words(basic5_keywords), Keyword), 
+ 
+            ('"', String.Double, 'string'), 
+ 
+            ('%[01]{1,32}', Number.Bin), 
+            ('&[0-9a-f]{1,8}', Number.Hex), 
+ 
+            (r'[+-]?[0-9]+\.[0-9]*(E[+-]?[0-9]+)?', Number.Float), 
+            (r'[+-]?\.[0-9]+(E[+-]?[0-9]+)?', Number.Float), 
+            (r'[+-]?[0-9]+E[+-]?[0-9]+', Number.Float), 
+            (r'[+-]?\d+', Number.Integer), 
+ 
+            (r'([A-Za-z_@][\w@]*[%$]?)', Name.Variable), 
+            (r'([+\-]=|[$!|?+\-*/%^=><();]|>=|<=|<>|<<|>>|>>>|,)', Operator), 
+        ], 
+        'string': [ 
+            (r'[^"\n]+', String.Double), 
+            (r'"', String.Double, '#pop'), 
+            (r'\n', Error, 'root'),  # Unterminated string 
+        ], 
+    } 
+ 
+    def analyse_text(text): 
+        if text.startswith('10REM >') or text.startswith('REM >'): 
+            return 0.9 

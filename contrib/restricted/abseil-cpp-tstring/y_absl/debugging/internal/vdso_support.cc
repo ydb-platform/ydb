@@ -56,7 +56,7 @@ using Elf32_auxv_t = Elf32_Auxinfo;
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace debugging_internal {
 
 ABSL_CONST_INIT
@@ -185,7 +185,7 @@ int GetCPU() {
 }
 
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_HAVE_VDSO_SUPPORT

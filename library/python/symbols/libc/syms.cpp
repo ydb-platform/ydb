@@ -1,38 +1,38 @@
 #include <util/system/platform.h>
-
+ 
 #include <library/python/symbols/registry/syms.h>
 
 #if !defined(_MSC_VER)
-#if __has_include(<aio.h>)
-#include <aio.h>
-#endif
-#include <arpa/inet.h>
-#include <dirent.h>
-#include <ifaddrs.h>
-#include <netdb.h>
-#include <pthread.h>
-#include <pwd.h>
-#include <sched.h>
-#include <semaphore.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
+#if __has_include(<aio.h>) 
+#include <aio.h> 
+#endif 
+#include <arpa/inet.h> 
+#include <dirent.h> 
+#include <ifaddrs.h> 
+#include <netdb.h> 
+#include <pthread.h> 
+#include <pwd.h> 
+#include <sched.h> 
+#include <semaphore.h> 
+#include <signal.h> 
+#include <stdio.h> 
+#include <stdlib.h> 
+#include <string.h> 
+#include <time.h> 
 #include <errno.h>
 #include <sys/ipc.h>
 #include <dlfcn.h>
 
 #if defined(_linux_)
 #include <sys/prctl.h>
-#include <sys/ptrace.h>
+#include <sys/ptrace.h> 
 #include <sys/sendfile.h>
 #else
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #endif
-
+ 
 #if defined(_darwin_)
 #include <sys/types.h>
 #include <sys/sysctl.h>
@@ -97,61 +97,61 @@ namespace {
 }
 
 BEGIN_SYMS("c")
-
-SYM(calloc)
-SYM(clock_gettime)
+ 
+SYM(calloc) 
+SYM(clock_gettime) 
 SYM_2("clock_getres", ClockGetres)
-SYM(closedir)
+SYM(closedir) 
 SYM(fdopen)
 SYM(fflush)
-SYM(freeifaddrs)
-SYM(ftok)
-SYM(getifaddrs)
-SYM(getnameinfo)
-SYM(getpwnam)
-SYM(inet_ntop)
-SYM(opendir)
-SYM(printf)
-SYM(pthread_kill)
-SYM(pthread_self)
-SYM(readdir_r)
-SYM(sem_close)
-SYM(sem_getvalue)
-SYM(sem_open)
-SYM(sem_post)
-SYM(sem_trywait)
-SYM(sem_unlink)
-SYM(sem_wait)
-SYM(siginterrupt)
-SYM(strdup)
+SYM(freeifaddrs) 
+SYM(ftok) 
+SYM(getifaddrs) 
+SYM(getnameinfo) 
+SYM(getpwnam) 
+SYM(inet_ntop) 
+SYM(opendir) 
+SYM(printf) 
+SYM(pthread_kill) 
+SYM(pthread_self) 
+SYM(readdir_r) 
+SYM(sem_close) 
+SYM(sem_getvalue) 
+SYM(sem_open) 
+SYM(sem_post) 
+SYM(sem_trywait) 
+SYM(sem_unlink) 
+SYM(sem_wait) 
+SYM(siginterrupt) 
+SYM(strdup) 
 SYM(sendfile)
 SYM(strtod)
 SYM_2("__errno_location", ErrnoLocation)
-
-#if defined(_linux_)
-SYM(prctl)
-SYM(ptrace)
-SYM(sched_getaffinity)
-SYM(sched_setaffinity)
-SYM(sem_timedwait)
-SYM(inotify_init)
-SYM(inotify_add_watch)
-SYM(inotify_rm_watch)
+ 
+#if defined(_linux_) 
+SYM(prctl) 
+SYM(ptrace) 
+SYM(sched_getaffinity) 
+SYM(sched_setaffinity) 
+SYM(sem_timedwait) 
+SYM(inotify_init) 
+SYM(inotify_add_watch) 
+SYM(inotify_rm_watch) 
 SYM(mlockall)
-#endif
-
-#if defined(_darwin_)
-SYM(mach_absolute_time)
-SYM(mach_timebase_info)
-SYM(sysctlbyname)
-#endif
-
-#if __has_include(<aio.h>)
-SYM(aio_error)
-SYM(aio_read)
-SYM(aio_return)
-SYM(aio_suspend)
-#endif
-
-END_SYMS()
+#endif 
+ 
+#if defined(_darwin_) 
+SYM(mach_absolute_time) 
+SYM(mach_timebase_info) 
+SYM(sysctlbyname) 
+#endif 
+ 
+#if __has_include(<aio.h>) 
+SYM(aio_error) 
+SYM(aio_read) 
+SYM(aio_return) 
+SYM(aio_suspend) 
+#endif 
+ 
+END_SYMS() 
 #endif

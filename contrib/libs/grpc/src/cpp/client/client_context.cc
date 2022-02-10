@@ -1,22 +1,22 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
-#include <grpcpp/client_context.h>
+#include <grpcpp/client_context.h> 
 
 #include <grpc/compression.h>
 #include <grpc/grpc.h>
@@ -26,10 +26,10 @@
 
 #include <grpcpp/impl/codegen/interceptor_common.h>
 #include <grpcpp/impl/codegen/sync.h>
-#include <grpcpp/impl/grpc_library.h>
-#include <grpcpp/security/credentials.h>
-#include <grpcpp/server_context.h>
-#include <grpcpp/support/time.h>
+#include <grpcpp/impl/grpc_library.h> 
+#include <grpcpp/security/credentials.h> 
+#include <grpcpp/server_context.h> 
+#include <grpcpp/support/time.h> 
 
 namespace grpc {
 
@@ -59,15 +59,15 @@ ClientContext::ClientContext()
       call_canceled_(false),
       deadline_(gpr_inf_future(GPR_CLOCK_REALTIME)),
       census_context_(nullptr),
-      propagate_from_call_(nullptr),
+      propagate_from_call_(nullptr), 
       compression_algorithm_(GRPC_COMPRESS_NONE),
-      initial_metadata_corked_(false) {
+      initial_metadata_corked_(false) { 
   g_client_callbacks->DefaultConstructor(this);
 }
 
 ClientContext::~ClientContext() {
   if (call_) {
-    grpc_call_unref(call_);
+    grpc_call_unref(call_); 
   }
   g_client_callbacks->Destructor(this);
 }
@@ -132,8 +132,8 @@ void ClientContext::set_call(grpc_call* call,
 
 void ClientContext::set_compression_algorithm(
     grpc_compression_algorithm algorithm) {
-  compression_algorithm_ = algorithm;
-  const char* algorithm_name = nullptr;
+  compression_algorithm_ = algorithm; 
+  const char* algorithm_name = nullptr; 
   if (!grpc_compression_algorithm_name(algorithm, &algorithm_name)) {
     gpr_log(GPR_ERROR, "Name for compression algorithm '%d' unknown.",
             algorithm);
@@ -172,7 +172,7 @@ TString ClientContext::peer() const {
 
 void ClientContext::SetGlobalCallbacks(GlobalCallbacks* client_callbacks) {
   GPR_ASSERT(g_client_callbacks == g_default_client_callbacks);
-  GPR_ASSERT(client_callbacks != nullptr);
+  GPR_ASSERT(client_callbacks != nullptr); 
   GPR_ASSERT(client_callbacks != g_default_client_callbacks);
   g_client_callbacks = client_callbacks;
 }

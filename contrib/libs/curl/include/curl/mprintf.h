@@ -1,5 +1,5 @@
-#ifndef CURLINC_MPRINTF_H
-#define CURLINC_MPRINTF_H
+#ifndef CURLINC_MPRINTF_H 
+#define CURLINC_MPRINTF_H 
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -47,4 +47,4 @@ CURL_EXTERN char *curl_mvaprintf(const char *format, va_list args);
 }
 #endif
 
-#endif /* CURLINC_MPRINTF_H */
+#endif /* CURLINC_MPRINTF_H */ 

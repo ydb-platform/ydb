@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #include <aws/s3/model/PutPublicAccessBlockRequest.h>
 #include <aws/core/utils/xml/XmlSerializer.h>
@@ -20,7 +20,7 @@ PutPublicAccessBlockRequest::PutPublicAccessBlockRequest() :
     m_bucketHasBeenSet(false),
     m_contentMD5HasBeenSet(false),
     m_publicAccessBlockConfigurationHasBeenSet(false),
-    m_expectedBucketOwnerHasBeenSet(false),
+    m_expectedBucketOwnerHasBeenSet(false), 
     m_customizedAccessLogTagHasBeenSet(false)
 {
 }
@@ -74,12 +74,12 @@ Aws::Http::HeaderValueCollection PutPublicAccessBlockRequest::GetRequestSpecific
     ss.str("");
   }
 
-  if(m_expectedBucketOwnerHasBeenSet)
-  {
-    ss << m_expectedBucketOwner;
-    headers.emplace("x-amz-expected-bucket-owner",  ss.str());
-    ss.str("");
-  }
-
+  if(m_expectedBucketOwnerHasBeenSet) 
+  { 
+    ss << m_expectedBucketOwner; 
+    headers.emplace("x-amz-expected-bucket-owner",  ss.str()); 
+    ss.str(""); 
+  } 
+ 
   return headers;
 }

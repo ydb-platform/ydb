@@ -176,7 +176,7 @@ class PROTOBUF_EXPORT StringOutputStream : public ZeroCopyOutputStream {
 // in large blocks.
 class PROTOBUF_EXPORT CopyingInputStream {
  public:
-  virtual ~CopyingInputStream() {}
+  virtual ~CopyingInputStream() {} 
 
   // Reads up to "size" bytes into the given buffer.  Returns the number of
   // bytes read.  Read() waits until at least one byte is available, or
@@ -270,7 +270,7 @@ class PROTOBUF_EXPORT CopyingInputStreamAdaptor : public ZeroCopyInputStream {
 // in large blocks.
 class PROTOBUF_EXPORT CopyingOutputStream {
  public:
-  virtual ~CopyingOutputStream() {}
+  virtual ~CopyingOutputStream() {} 
 
   // Writes "size" bytes from the given buffer to the output.  Returns true
   // if successful, false on a write error.

@@ -38,16 +38,16 @@ typedef struct {
     #ifdef __PYX_DEBUG_ATOMICS
         #warning "Using GNU atomics"
     #endif
-#elif CYTHON_ATOMICS && defined(_MSC_VER) && 0
+#elif CYTHON_ATOMICS && defined(_MSC_VER) && 0 
     /* msvc */
     #include <Windows.h>
-    #undef __pyx_atomic_int_type
+    #undef __pyx_atomic_int_type 
     #define __pyx_atomic_int_type LONG
     #define __pyx_atomic_incr_aligned(value, lock) InterlockedIncrement(value)
     #define __pyx_atomic_decr_aligned(value, lock) InterlockedDecrement(value)
 
     #ifdef __PYX_DEBUG_ATOMICS
-        #pragma message ("Using MSVC atomics")
+        #pragma message ("Using MSVC atomics") 
     #endif
 #elif CYTHON_ATOMICS && (defined(__ICC) || defined(__INTEL_COMPILER)) && 0
     #define __pyx_atomic_incr_aligned(value, lock) _InterlockedIncrement(value)
@@ -713,7 +713,7 @@ static int
 __pyx_memviewslice_is_contig(const {{memviewslice_name}} mvs, char order, int ndim)
 {
     int i, index, step, start;
-    Py_ssize_t itemsize = mvs.memview->view.itemsize;
+    Py_ssize_t itemsize = mvs.memview->view.itemsize; 
 
     if (order == 'F') {
         step = 1;
@@ -725,10 +725,10 @@ __pyx_memviewslice_is_contig(const {{memviewslice_name}} mvs, char order, int nd
 
     for (i = 0; i < ndim; i++) {
         index = start + step * i;
-        if (mvs.suboffsets[index] >= 0 || mvs.strides[index] != itemsize)
+        if (mvs.suboffsets[index] >= 0 || mvs.strides[index] != itemsize) 
             return 0;
 
-        itemsize *= mvs.shape[index];
+        itemsize *= mvs.shape[index]; 
     }
 
     return 1;
@@ -752,11 +752,11 @@ __pyx_memviewslice_index_full(const char *bufp, Py_ssize_t idx,
 /////////////// MemviewDtypeToObject.proto ///////////////
 
 {{if to_py_function}}
-static CYTHON_INLINE PyObject *{{get_function}}(const char *itemp); /* proto */
+static CYTHON_INLINE PyObject *{{get_function}}(const char *itemp); /* proto */ 
 {{endif}}
 
 {{if from_py_function}}
-static CYTHON_INLINE int {{set_function}}(const char *itemp, PyObject *obj); /* proto */
+static CYTHON_INLINE int {{set_function}}(const char *itemp, PyObject *obj); /* proto */ 
 {{endif}}
 
 /////////////// MemviewDtypeToObject ///////////////
@@ -766,13 +766,13 @@ static CYTHON_INLINE int {{set_function}}(const char *itemp, PyObject *obj); /* 
 /* Convert a dtype to or from a Python object */
 
 {{if to_py_function}}
-static CYTHON_INLINE PyObject *{{get_function}}(const char *itemp) {
+static CYTHON_INLINE PyObject *{{get_function}}(const char *itemp) { 
     return (PyObject *) {{to_py_function}}(*({{dtype}} *) itemp);
 }
 {{endif}}
 
 {{if from_py_function}}
-static CYTHON_INLINE int {{set_function}}(const char *itemp, PyObject *obj) {
+static CYTHON_INLINE int {{set_function}}(const char *itemp, PyObject *obj) { 
     {{dtype}} value = {{from_py_function}}(obj);
     if ({{error_condition}})
         return 0;
@@ -813,7 +813,7 @@ if (unlikely(__pyx_memoryview_slice_memviewslice(
     {{src}}.shape[{{dim}}], {{src}}.strides[{{dim}}], {{src}}.suboffsets[{{dim}}],
     {{dim}},
     {{new_ndim}},
-    &{{get_suboffset_dim()}},
+    &{{get_suboffset_dim()}}, 
     {{start}},
     {{stop}},
     {{step}},
@@ -838,7 +838,7 @@ if (unlikely(__pyx_memoryview_slice_memviewslice(
 {{else}}
     {{dst}}.suboffsets[{{new_ndim}}] = {{src}}.suboffsets[{{dim}}];
     if ({{src}}.suboffsets[{{dim}}] >= 0)
-        {{get_suboffset_dim()}} = {{new_ndim}};
+        {{get_suboffset_dim()}} = {{new_ndim}}; 
 {{endif}}
 
 
@@ -849,42 +849,42 @@ if (unlikely(__pyx_memoryview_slice_memviewslice(
 
 {
     Py_ssize_t __pyx_tmp_idx = {{idx}};
-
-    {{if wraparound or boundscheck}}
-        Py_ssize_t __pyx_tmp_shape = {{src}}.shape[{{dim}}];
-    {{endif}}
-
+ 
+    {{if wraparound or boundscheck}} 
+        Py_ssize_t __pyx_tmp_shape = {{src}}.shape[{{dim}}]; 
+    {{endif}} 
+ 
     Py_ssize_t __pyx_tmp_stride = {{src}}.strides[{{dim}}];
-    {{if wraparound}}
-        if (__pyx_tmp_idx < 0)
-            __pyx_tmp_idx += __pyx_tmp_shape;
-    {{endif}}
+    {{if wraparound}} 
+        if (__pyx_tmp_idx < 0) 
+            __pyx_tmp_idx += __pyx_tmp_shape; 
+    {{endif}} 
 
-    {{if boundscheck}}
+    {{if boundscheck}} 
         if (unlikely(!__Pyx_is_valid_index(__pyx_tmp_idx, __pyx_tmp_shape))) {
-            {{if not have_gil}}
-                #ifdef WITH_THREAD
-                PyGILState_STATE __pyx_gilstate_save = PyGILState_Ensure();
-                #endif
-            {{endif}}
+            {{if not have_gil}} 
+                #ifdef WITH_THREAD 
+                PyGILState_STATE __pyx_gilstate_save = PyGILState_Ensure(); 
+                #endif 
+            {{endif}} 
 
-            PyErr_SetString(PyExc_IndexError,
-                            "Index out of bounds (axis {{dim}})");
+            PyErr_SetString(PyExc_IndexError, 
+                            "Index out of bounds (axis {{dim}})"); 
 
-            {{if not have_gil}}
-                #ifdef WITH_THREAD
-                PyGILState_Release(__pyx_gilstate_save);
-                #endif
-            {{endif}}
+            {{if not have_gil}} 
+                #ifdef WITH_THREAD 
+                PyGILState_Release(__pyx_gilstate_save); 
+                #endif 
+            {{endif}} 
 
-            {{error_goto}}
-        }
-    {{endif}}
+            {{error_goto}} 
+        } 
+    {{endif}} 
 
     {{if all_dimensions_direct}}
         {{dst}}.data += __pyx_tmp_idx * __pyx_tmp_stride;
     {{else}}
-        if ({{get_suboffset_dim()}} < 0) {
+        if ({{get_suboffset_dim()}} < 0) { 
             {{dst}}.data += __pyx_tmp_idx * __pyx_tmp_stride;
 
             /* This dimension is the first dimension, or is preceded by    */
@@ -906,7 +906,7 @@ if (unlikely(__pyx_memoryview_slice_memviewslice(
             {{endif}}
 
         } else {
-            {{dst}}.suboffsets[{{get_suboffset_dim()}}] += __pyx_tmp_idx * __pyx_tmp_stride;
+            {{dst}}.suboffsets[{{get_suboffset_dim()}}] += __pyx_tmp_idx * __pyx_tmp_stride; 
 
             /* Note: dimension can not be indirect, the compiler will have */
             /*       issued an error */

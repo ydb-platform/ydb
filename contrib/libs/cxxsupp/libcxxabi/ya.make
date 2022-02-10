@@ -11,7 +11,7 @@ OWNER(
 VERSION(2021-12-08)
 
 ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/c1a14a5c3e6fef181f920b66ec159b6bfac4d457.tar.gz)
-
+ 
 LICENSE(
     Apache-2.0 AND
     Apache-2.0 WITH LLVM-exception AND

@@ -1,42 +1,42 @@
-/*
- *
- * Copyright 2017 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
-#ifndef GRPC_CORE_LIB_GPRPP_REF_COUNTED_H
-#define GRPC_CORE_LIB_GPRPP_REF_COUNTED_H
-
-#include <grpc/support/port_platform.h>
-
+/* 
+ * 
+ * Copyright 2017 gRPC authors. 
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ * 
+ */ 
+ 
+#ifndef GRPC_CORE_LIB_GPRPP_REF_COUNTED_H 
+#define GRPC_CORE_LIB_GPRPP_REF_COUNTED_H 
+ 
+#include <grpc/support/port_platform.h> 
+ 
 #include <grpc/support/atm.h>
-#include <grpc/support/log.h>
-#include <grpc/support/sync.h>
-
+#include <grpc/support/log.h> 
+#include <grpc/support/sync.h> 
+ 
 #include <atomic>
 #include <cassert>
-#include <cinttypes>
-
-#include "src/core/lib/debug/trace.h"
+#include <cinttypes> 
+ 
+#include "src/core/lib/debug/trace.h" 
 #include "src/core/lib/gprpp/atomic.h"
-#include "src/core/lib/gprpp/debug_location.h"
-#include "src/core/lib/gprpp/memory.h"
-#include "src/core/lib/gprpp/ref_counted_ptr.h"
-
-namespace grpc_core {
-
+#include "src/core/lib/gprpp/debug_location.h" 
+#include "src/core/lib/gprpp/memory.h" 
+#include "src/core/lib/gprpp/ref_counted_ptr.h" 
+ 
+namespace grpc_core { 
+ 
 // RefCount is a simple atomic ref-count.
 //
 // This is a C++ implementation of gpr_refcount, with inline functions. Due to
@@ -48,7 +48,7 @@ namespace grpc_core {
 class RefCount {
  public:
   using Value = intptr_t;
-
+ 
   // `init` is the initial refcount stored in this object.
   //
   // TraceFlagT is defined to accept both DebugOnlyTraceFlag and TraceFlag.
@@ -195,15 +195,15 @@ class RefCount {
     return prior == 1;
   }
 
- private:
+ private: 
   Value get() const { return value_.Load(MemoryOrder::RELAXED); }
-
+ 
 #ifndef NDEBUG
   TraceFlag* trace_flag_;
 #endif
   Atomic<Value> value_;
-};
-
+}; 
+ 
 // PolymorphicRefCount enforces polymorphic destruction of RefCounted.
 class PolymorphicRefCount {
  public:
@@ -269,36 +269,36 @@ class Delete<T, false> {
 template <typename Child, typename Impl = PolymorphicRefCount,
           bool DeleteUponUnref = true>
 class RefCounted : public Impl {
- public:
+ public: 
   // Note: Depending on the Impl used, this dtor can be implicitly virtual.
   ~RefCounted() = default;
 
-  RefCountedPtr<Child> Ref() GRPC_MUST_USE_RESULT {
-    IncrementRefCount();
-    return RefCountedPtr<Child>(static_cast<Child*>(this));
-  }
-
-  RefCountedPtr<Child> Ref(const DebugLocation& location,
-                           const char* reason) GRPC_MUST_USE_RESULT {
+  RefCountedPtr<Child> Ref() GRPC_MUST_USE_RESULT { 
+    IncrementRefCount(); 
+    return RefCountedPtr<Child>(static_cast<Child*>(this)); 
+  } 
+ 
+  RefCountedPtr<Child> Ref(const DebugLocation& location, 
+                           const char* reason) GRPC_MUST_USE_RESULT { 
     IncrementRefCount(location, reason);
     return RefCountedPtr<Child>(static_cast<Child*>(this));
-  }
-
-  // TODO(roth): Once all of our code is converted to C++ and can use
+  } 
+ 
+  // TODO(roth): Once all of our code is converted to C++ and can use 
   // RefCountedPtr<> instead of manual ref-counting, make this method
   // private, since it will only be used by RefCountedPtr<>, which is a
-  // friend of this class.
-  void Unref() {
+  // friend of this class. 
+  void Unref() { 
     if (GPR_UNLIKELY(refs_.Unref())) {
       internal::Delete<Child, DeleteUponUnref>(static_cast<Child*>(this));
-    }
-  }
-  void Unref(const DebugLocation& location, const char* reason) {
+    } 
+  } 
+  void Unref(const DebugLocation& location, const char* reason) { 
     if (GPR_UNLIKELY(refs_.Unref(location, reason))) {
       internal::Delete<Child, DeleteUponUnref>(static_cast<Child*>(this));
-    }
-  }
-
+    } 
+  } 
+ 
   RefCountedPtr<Child> RefIfNonZero() GRPC_MUST_USE_RESULT {
     return RefCountedPtr<Child>(refs_.RefIfNonZero() ? static_cast<Child*>(this)
                                                      : nullptr);
@@ -310,11 +310,11 @@ class RefCounted : public Impl {
                                     : nullptr);
   }
 
-  // Not copyable nor movable.
+  // Not copyable nor movable. 
   RefCounted(const RefCounted&) = delete;
   RefCounted& operator=(const RefCounted&) = delete;
-
- protected:
+ 
+ protected: 
   // TraceFlagT is defined to accept both DebugOnlyTraceFlag and TraceFlag.
   // Note: RefCount tracing is only enabled on debug builds, even when a
   //       TraceFlag is used.
@@ -322,20 +322,20 @@ class RefCounted : public Impl {
   explicit RefCounted(TraceFlagT* trace_flag = nullptr,
                       intptr_t initial_refcount = 1)
       : refs_(initial_refcount, trace_flag) {}
-
- private:
-  // Allow RefCountedPtr<> to access IncrementRefCount().
+ 
+ private: 
+  // Allow RefCountedPtr<> to access IncrementRefCount(). 
   template <typename T>
   friend class RefCountedPtr;
-
+ 
   void IncrementRefCount() { refs_.Ref(); }
   void IncrementRefCount(const DebugLocation& location, const char* reason) {
     refs_.Ref(location, reason);
   }
-
+ 
   RefCount refs_;
-};
-
-}  // namespace grpc_core
-
-#endif /* GRPC_CORE_LIB_GPRPP_REF_COUNTED_H */
+}; 
+ 
+}  // namespace grpc_core 
+ 
+#endif /* GRPC_CORE_LIB_GPRPP_REF_COUNTED_H */ 

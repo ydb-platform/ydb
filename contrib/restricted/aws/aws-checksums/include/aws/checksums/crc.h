@@ -1,8 +1,8 @@
 #ifndef AWS_CHECKSUMS_CRC_H
 #define AWS_CHECKSUMS_CRC_H
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #include <aws/checksums/exports.h>

@@ -77,9 +77,9 @@ class ExtensionManager(Configurable):
         
         with self.shell.builtin_trap:
             if module_str not in sys.modules:
-                try:
-                    sys.modules[module_str] = __import__('IPython.extensions.' + module_str)
-                except ImportError:
+                try: 
+                    sys.modules[module_str] = __import__('IPython.extensions.' + module_str) 
+                except ImportError: 
                     __import__(module_str)
             mod = sys.modules[module_str]
             if self._call_load_ipython_extension(mod):

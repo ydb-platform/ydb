@@ -30,11 +30,11 @@
 
 #include <google/protobuf/util/internal/utility.h>
 
-#include <algorithm>
+#include <algorithm> 
 #include <cmath>
 #include <cstdint>
 #include <limits>
-
+ 
 #include <google/protobuf/stubs/callback.h>
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/stubs/logging.h>
@@ -45,8 +45,8 @@
 #include <google/protobuf/stubs/strutil.h>
 #include <google/protobuf/stubs/map_util.h>
 
-#include <util/string/util.h>
-
+#include <util/string/util.h> 
+ 
 // clang-format off
 #include <google/protobuf/port_def.inc>
 // clang-format on
@@ -132,10 +132,10 @@ const StringPiece GetTypeWithoutUrl(StringPiece type_url) {
     return type_url.substr(kTypeUrlSize + 1);
   } else {
     size_t idx = type_url.rfind('/');
-    if (idx != type_url.npos) {
-      type_url.remove_prefix(idx + 1);
-    }
-    return type_url;
+    if (idx != type_url.npos) { 
+      type_url.remove_prefix(idx + 1); 
+    } 
+    return type_url; 
   }
 }
 
@@ -181,19 +181,19 @@ const google::protobuf::Field* FindJsonFieldInTypeOrNull(
   return nullptr;
 }
 
-const google::protobuf::Field* FindFieldInTypeByNumberOrNull(
+const google::protobuf::Field* FindFieldInTypeByNumberOrNull( 
     const google::protobuf::Type* type, int32_t number) {
   if (type != nullptr) {
-    for (int i = 0; i < type->fields_size(); ++i) {
-      const google::protobuf::Field& field = type->fields(i);
-      if (field.number() == number) {
-        return &field;
-      }
-    }
-  }
+    for (int i = 0; i < type->fields_size(); ++i) { 
+      const google::protobuf::Field& field = type->fields(i); 
+      if (field.number() == number) { 
+        return &field; 
+      } 
+    } 
+  } 
   return nullptr;
-}
-
+} 
+ 
 const google::protobuf::EnumValue* FindEnumValueByNameOrNull(
     const google::protobuf::Enum* enum_type, StringPiece enum_name) {
   if (enum_type != nullptr) {
@@ -220,29 +220,29 @@ const google::protobuf::EnumValue* FindEnumValueByNumberOrNull(
   return nullptr;
 }
 
-const google::protobuf::EnumValue* FindEnumValueByNameWithoutUnderscoreOrNull(
-    const google::protobuf::Enum* enum_type, StringPiece enum_name) {
+const google::protobuf::EnumValue* FindEnumValueByNameWithoutUnderscoreOrNull( 
+    const google::protobuf::Enum* enum_type, StringPiece enum_name) { 
   if (enum_type != nullptr) {
-    for (int i = 0; i < enum_type->enumvalue_size(); ++i) {
-      const google::protobuf::EnumValue& enum_value = enum_type->enumvalue(i);
+    for (int i = 0; i < enum_type->enumvalue_size(); ++i) { 
+      const google::protobuf::EnumValue& enum_value = enum_type->enumvalue(i); 
       TProtoStringType enum_name_without_underscore = enum_value.name();
-
-      // Remove underscore from the name.
+ 
+      // Remove underscore from the name. 
 	   RemoveAll(enum_name_without_underscore, '_');
-      // Make the name uppercase.
+      // Make the name uppercase. 
       for (TProtoStringType::iterator it = enum_name_without_underscore.begin();
-           it != enum_name_without_underscore.end(); ++it) {
-        *it = ascii_toupper(*it);
-      }
-
-      if (enum_name_without_underscore == enum_name) {
-        return &enum_value;
-      }
-    }
-  }
+           it != enum_name_without_underscore.end(); ++it) { 
+        *it = ascii_toupper(*it); 
+      } 
+ 
+      if (enum_name_without_underscore == enum_name) { 
+        return &enum_value; 
+      } 
+    } 
+  } 
   return nullptr;
-}
-
+} 
+ 
 TProtoStringType EnumValueNameToLowerCamelCase(StringPiece input) {
   TProtoStringType input_string(input);
   input_string.to_lower();
@@ -363,18 +363,18 @@ bool IsValidBoolString(StringPiece bool_string) {
 bool IsMap(const google::protobuf::Field& field,
            const google::protobuf::Type& type) {
   return field.cardinality() == google::protobuf::Field::CARDINALITY_REPEATED &&
-         (GetBoolOptionOrDefault(type.options(), "map_entry", false) ||
+         (GetBoolOptionOrDefault(type.options(), "map_entry", false) || 
           GetBoolOptionOrDefault(type.options(),
-                                 "google.protobuf.MessageOptions.map_entry",
-                                 false));
+                                 "google.protobuf.MessageOptions.map_entry", 
+                                 false)); 
 }
 
 bool IsMessageSetWireFormat(const google::protobuf::Type& type) {
-  return GetBoolOptionOrDefault(type.options(), "message_set_wire_format",
-                                false) ||
-         GetBoolOptionOrDefault(
-             type.options(),
-             "google.protobuf.MessageOptions.message_set_wire_format", false);
+  return GetBoolOptionOrDefault(type.options(), "message_set_wire_format", 
+                                false) || 
+         GetBoolOptionOrDefault( 
+             type.options(), 
+             "google.protobuf.MessageOptions.message_set_wire_format", false); 
 }
 
 TProtoStringType DoubleAsString(double value) {

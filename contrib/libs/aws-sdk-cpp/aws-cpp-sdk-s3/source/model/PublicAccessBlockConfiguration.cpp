@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #include <aws/s3/model/PublicAccessBlockConfiguration.h>
 #include <aws/core/utils/xml/XmlSerializer.h>
@@ -54,25 +54,25 @@ PublicAccessBlockConfiguration& PublicAccessBlockConfiguration::operator =(const
     XmlNode blockPublicAclsNode = resultNode.FirstChild("BlockPublicAcls");
     if(!blockPublicAclsNode.IsNull())
     {
-      m_blockPublicAcls = StringUtils::ConvertToBool(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(blockPublicAclsNode.GetText()).c_str()).c_str());
+      m_blockPublicAcls = StringUtils::ConvertToBool(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(blockPublicAclsNode.GetText()).c_str()).c_str()); 
       m_blockPublicAclsHasBeenSet = true;
     }
     XmlNode ignorePublicAclsNode = resultNode.FirstChild("IgnorePublicAcls");
     if(!ignorePublicAclsNode.IsNull())
     {
-      m_ignorePublicAcls = StringUtils::ConvertToBool(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(ignorePublicAclsNode.GetText()).c_str()).c_str());
+      m_ignorePublicAcls = StringUtils::ConvertToBool(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(ignorePublicAclsNode.GetText()).c_str()).c_str()); 
       m_ignorePublicAclsHasBeenSet = true;
     }
     XmlNode blockPublicPolicyNode = resultNode.FirstChild("BlockPublicPolicy");
     if(!blockPublicPolicyNode.IsNull())
     {
-      m_blockPublicPolicy = StringUtils::ConvertToBool(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(blockPublicPolicyNode.GetText()).c_str()).c_str());
+      m_blockPublicPolicy = StringUtils::ConvertToBool(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(blockPublicPolicyNode.GetText()).c_str()).c_str()); 
       m_blockPublicPolicyHasBeenSet = true;
     }
     XmlNode restrictPublicBucketsNode = resultNode.FirstChild("RestrictPublicBuckets");
     if(!restrictPublicBucketsNode.IsNull())
     {
-      m_restrictPublicBuckets = StringUtils::ConvertToBool(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(restrictPublicBucketsNode.GetText()).c_str()).c_str());
+      m_restrictPublicBuckets = StringUtils::ConvertToBool(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(restrictPublicBucketsNode.GetText()).c_str()).c_str()); 
       m_restrictPublicBucketsHasBeenSet = true;
     }
   }

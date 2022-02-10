@@ -1,33 +1,33 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
 #ifndef GRPC_CORE_LIB_SECURITY_CONTEXT_SECURITY_CONTEXT_H
 #define GRPC_CORE_LIB_SECURITY_CONTEXT_SECURITY_CONTEXT_H
 
-#include <grpc/support/port_platform.h>
-
+#include <grpc/support/port_platform.h> 
+ 
 #include "src/core/lib/gprpp/arena.h"
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/iomgr/pollset.h"
 #include "src/core/lib/security/credentials/credentials.h"
 
-extern grpc_core::DebugOnlyTraceFlag grpc_trace_auth_context_refcount;
+extern grpc_core::DebugOnlyTraceFlag grpc_trace_auth_context_refcount; 
 
 /* --- grpc_auth_context ---
 
@@ -121,7 +121,7 @@ struct grpc_client_security_context {
 
 grpc_client_security_context* grpc_client_security_context_create(
     grpc_core::Arena* arena, grpc_call_credentials* creds);
-void grpc_client_security_context_destroy(void* ctx);
+void grpc_client_security_context_destroy(void* ctx); 
 
 /* --- grpc_server_security_context ---
 
@@ -137,14 +137,14 @@ struct grpc_server_security_context {
 
 grpc_server_security_context* grpc_server_security_context_create(
     grpc_core::Arena* arena);
-void grpc_server_security_context_destroy(void* ctx);
+void grpc_server_security_context_destroy(void* ctx); 
 
 /* --- Channel args for auth context --- */
 #define GRPC_AUTH_CONTEXT_ARG "grpc.auth_context"
 
-grpc_arg grpc_auth_context_to_arg(grpc_auth_context* c);
-grpc_auth_context* grpc_auth_context_from_arg(const grpc_arg* arg);
-grpc_auth_context* grpc_find_auth_context_in_args(
-    const grpc_channel_args* args);
+grpc_arg grpc_auth_context_to_arg(grpc_auth_context* c); 
+grpc_auth_context* grpc_auth_context_from_arg(const grpc_arg* arg); 
+grpc_auth_context* grpc_find_auth_context_in_args( 
+    const grpc_channel_args* args); 
 
 #endif /* GRPC_CORE_LIB_SECURITY_CONTEXT_SECURITY_CONTEXT_H */

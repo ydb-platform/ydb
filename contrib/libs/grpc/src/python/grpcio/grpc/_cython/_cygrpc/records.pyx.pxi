@@ -1,37 +1,37 @@
-# Copyright 2015 gRPC authors.
+# Copyright 2015 gRPC authors. 
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0 
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License. 
 
 
-cdef bytes _slice_bytes(grpc_slice slice):
-  cdef void *start = grpc_slice_start_ptr(slice)
-  cdef size_t length = grpc_slice_length(slice)
-  return (<const char *>start)[:length]
-
-cdef grpc_slice _copy_slice(grpc_slice slice) nogil:
-  cdef void *start = grpc_slice_start_ptr(slice)
-  cdef size_t length = grpc_slice_length(slice)
-  return grpc_slice_from_copied_buffer(<const char *>start, length)
-
-cdef grpc_slice _slice_from_bytes(bytes value) nogil:
-  cdef const char *value_ptr
-  cdef size_t length
-  with gil:
-    value_ptr = <const char *>value
-    length = len(value)
-  return grpc_slice_from_copied_buffer(value_ptr, length)
-
-
+cdef bytes _slice_bytes(grpc_slice slice): 
+  cdef void *start = grpc_slice_start_ptr(slice) 
+  cdef size_t length = grpc_slice_length(slice) 
+  return (<const char *>start)[:length] 
+ 
+cdef grpc_slice _copy_slice(grpc_slice slice) nogil: 
+  cdef void *start = grpc_slice_start_ptr(slice) 
+  cdef size_t length = grpc_slice_length(slice) 
+  return grpc_slice_from_copied_buffer(<const char *>start, length) 
+ 
+cdef grpc_slice _slice_from_bytes(bytes value) nogil: 
+  cdef const char *value_ptr 
+  cdef size_t length 
+  with gil: 
+    value_ptr = <const char *>value 
+    length = len(value) 
+  return grpc_slice_from_copied_buffer(value_ptr, length) 
+ 
+ 
 class ConnectivityState:
   idle = GRPC_CHANNEL_IDLE
   connecting = GRPC_CHANNEL_CONNECTING
@@ -141,15 +141,15 @@ cdef class CallDetails:
 
   @property
   def method(self):
-    return _slice_bytes(self.c_details.method)
+    return _slice_bytes(self.c_details.method) 
 
   @property
   def host(self):
-    return _slice_bytes(self.c_details.host)
+    return _slice_bytes(self.c_details.host) 
 
   @property
   def deadline(self):
-    return _time_from_timespec(self.c_details.deadline)
+    return _time_from_timespec(self.c_details.deadline) 
 
 
 cdef class SslPemKeyCertPair:
@@ -183,14 +183,14 @@ cdef class CompressionOptions:
     return result
 
   def to_channel_arg(self):
-    return (
-        GRPC_COMPRESSION_CHANNEL_ENABLED_ALGORITHMS_BITSET,
-        self.c_options.enabled_algorithms_bitset,
-    )
+    return ( 
+        GRPC_COMPRESSION_CHANNEL_ENABLED_ALGORITHMS_BITSET, 
+        self.c_options.enabled_algorithms_bitset, 
+    ) 
 
 
 def compression_algorithm_name(grpc_compression_algorithm algorithm):
-  cdef const char* name
+  cdef const char* name 
   with nogil:
     grpc_compression_algorithm_name(algorithm, &name)
   # Let Cython do the right thing with string casting

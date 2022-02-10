@@ -260,8 +260,8 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         };
 
         { /*_ Take the only blob page in middle */
-            const ui32 slice1[] = { 3 };
-            const ui32 slice2[] = { 4 };
+            const ui32 slice1[] = { 3 }; 
+            const ui32 slice2[] = { 4 }; 
             auto one = TPagesToBlobsConverter<TMyPageCollection>(myPageCollection, slice1).Grow(7500);
             auto two = TPagesToBlobsConverter<TMyPageCollection>(myPageCollection, slice2).Grow(7500);
 
@@ -270,16 +270,16 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         }
 
         { /*_ Read all pages in blobs page collection */
-            const ui32 slice[] = { 0, 1, 2, 3, 4, 5 };
+            const ui32 slice[] = { 0, 1, 2, 3, 4, 5 }; 
             TPagesToBlobsConverter<TMyPageCollection> flow(myPageCollection, slice);
 
             auto one = flow.Grow(7500);
             auto two = flow.Grow(7500);
             auto thr = flow.Grow(7500);
 
-            UNIT_ASSERT(one);
-            UNIT_ASSERT_VALUES_EQUAL(one.From, 0);
-            UNIT_ASSERT_VALUES_EQUAL(one.To, 3);
+            UNIT_ASSERT(one); 
+            UNIT_ASSERT_VALUES_EQUAL(one.From, 0); 
+            UNIT_ASSERT_VALUES_EQUAL(one.To, 3); 
             UNIT_ASSERT(one && one.From == 0 && one.To == 3);
             UNIT_ASSERT(two && two.From == 3 && two.To == 4);
             UNIT_ASSERT(thr && thr.From == 4 && thr.To == 6);
@@ -288,7 +288,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
         }
 
         { /*_ Read with limits on each package */
-            const ui32 slice[] = { 0, 1, 2, 3, 4, 5 };
+            const ui32 slice[] = { 0, 1, 2, 3, 4, 5 }; 
             TPagesToBlobsConverter<TMyPageCollection> flow(myPageCollection, slice);
 
             auto one = flow.Grow(40);

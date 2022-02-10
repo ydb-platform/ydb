@@ -51,7 +51,7 @@ class PerlLexer(RegexLexer):
             (words((
                 'case', 'continue', 'do', 'else', 'elsif', 'for', 'foreach',
                 'if', 'last', 'my', 'next', 'our', 'redo', 'reset', 'then',
-                'unless', 'until', 'while', 'print', 'new', 'BEGIN',
+                'unless', 'until', 'while', 'print', 'new', 'BEGIN', 
                 'CHECK', 'INIT', 'END', 'return'), suffix=r'\b'),
              Keyword),
             (r'(format)(\s+)(\w+)(\s*)(=)(\s*\n)',
@@ -93,10 +93,10 @@ class PerlLexer(RegexLexer):
                 'getservbyport', 'getservent', 'getsockname', 'getsockopt', 'glob', 'gmtime',
                 'goto', 'grep', 'hex', 'import', 'index', 'int', 'ioctl', 'join', 'keys', 'kill', 'last',
                 'lc', 'lcfirst', 'length', 'link', 'listen', 'local', 'localtime', 'log', 'lstat',
-                'map', 'mkdir', 'msgctl', 'msgget', 'msgrcv', 'msgsnd', 'my', 'next', 'oct', 'open',
-                'opendir', 'ord', 'our', 'pack', 'pipe', 'pop', 'pos', 'printf',
+                'map', 'mkdir', 'msgctl', 'msgget', 'msgrcv', 'msgsnd', 'my', 'next', 'oct', 'open', 
+                'opendir', 'ord', 'our', 'pack', 'pipe', 'pop', 'pos', 'printf', 
                 'prototype', 'push', 'quotemeta', 'rand', 'read', 'readdir',
-                'readline', 'readlink', 'readpipe', 'recv', 'redo', 'ref', 'rename',
+                'readline', 'readlink', 'readpipe', 'recv', 'redo', 'ref', 'rename', 
                 'reverse', 'rewinddir', 'rindex', 'rmdir', 'scalar', 'seek', 'seekdir',
                 'select', 'semctl', 'semget', 'semop', 'send', 'setgrent', 'sethostent', 'setnetent',
                 'setpgrp', 'setpriority', 'setprotoent', 'setpwent', 'setservent',
@@ -108,8 +108,8 @@ class PerlLexer(RegexLexer):
                 'utime', 'values', 'vec', 'wait', 'waitpid', 'wantarray', 'warn', 'write'), suffix=r'\b'),
              Name.Builtin),
             (r'((__(DATA|DIE|WARN)__)|(STD(IN|OUT|ERR)))\b', Name.Builtin.Pseudo),
-            (r'(<<)([\'"]?)([a-zA-Z_]\w*)(\2;?\n.*?\n)(\3)(\n)',
-             bygroups(String, String, String.Delimiter, String, String.Delimiter, Text)),
+            (r'(<<)([\'"]?)([a-zA-Z_]\w*)(\2;?\n.*?\n)(\3)(\n)', 
+             bygroups(String, String, String.Delimiter, String, String.Delimiter, Text)), 
             (r'__END__', Comment.Preproc, 'end-part'),
             (r'\$\^[ADEFHILMOPSTWX]', Name.Variable.Global),
             (r"\$[\\\"\[\]'&`+*.,;=%~?@$!<>(^|/-](?!\w)", Name.Variable.Global),
@@ -130,14 +130,14 @@ class PerlLexer(RegexLexer):
             (r'(q|qq|qw|qr|qx)\[', String.Other, 'sb-string'),
             (r'(q|qq|qw|qr|qx)\<', String.Other, 'lt-string'),
             (r'(q|qq|qw|qr|qx)([\W_])(.|\n)*?\2', String.Other),
-            (r'(package)(\s+)([a-zA-Z_]\w*(?:::[a-zA-Z_]\w*)*)',
-             bygroups(Keyword, Text, Name.Namespace)),
-            (r'(use|require|no)(\s+)([a-zA-Z_]\w*(?:::[a-zA-Z_]\w*)*)',
-             bygroups(Keyword, Text, Name.Namespace)),
-            (r'(sub)(\s+)', bygroups(Keyword, Text), 'funcname'),
-            (words((
-                'no', 'package', 'require', 'use'), suffix=r'\b'),
-             Keyword),
+            (r'(package)(\s+)([a-zA-Z_]\w*(?:::[a-zA-Z_]\w*)*)', 
+             bygroups(Keyword, Text, Name.Namespace)), 
+            (r'(use|require|no)(\s+)([a-zA-Z_]\w*(?:::[a-zA-Z_]\w*)*)', 
+             bygroups(Keyword, Text, Name.Namespace)), 
+            (r'(sub)(\s+)', bygroups(Keyword, Text), 'funcname'), 
+            (words(( 
+                'no', 'package', 'require', 'use'), suffix=r'\b'), 
+             Keyword), 
             (r'(\[\]|\*\*|::|<<|>>|>=|<=>|<=|={3}|!=|=~|'
              r'!~|&&?|\|\||\.{1,3})', Operator),
             (r'[-+/*%=<>&^|!\\~]=?', Operator),
@@ -157,8 +157,8 @@ class PerlLexer(RegexLexer):
             (r'[\w:]+', Name.Variable, '#pop'),
         ],
         'name': [
-            (r'[a-zA-Z_]\w*(::[a-zA-Z_]\w*)*(::)?(?=\s*->)', Name.Namespace, '#pop'),
-            (r'[a-zA-Z_]\w*(::[a-zA-Z_]\w*)*::', Name.Namespace, '#pop'),
+            (r'[a-zA-Z_]\w*(::[a-zA-Z_]\w*)*(::)?(?=\s*->)', Name.Namespace, '#pop'), 
+            (r'[a-zA-Z_]\w*(::[a-zA-Z_]\w*)*::', Name.Namespace, '#pop'), 
             (r'[\w:]+', Name, '#pop'),
             (r'[A-Z_]+(?=\W)', Name.Constant, '#pop'),
             (r'(?=\W)', Text, '#pop'),
@@ -210,7 +210,7 @@ class PerlLexer(RegexLexer):
 
         result = 0
 
-        if re.search(r'(?:my|our)\s+[$@%(]', text):
+        if re.search(r'(?:my|our)\s+[$@%(]', text): 
             result += 0.9
 
         if ':=' in text:
@@ -236,7 +236,7 @@ class Perl6Lexer(ExtendedRegexLexer):
     mimetypes = ['text/x-perl6', 'application/x-perl6']
     flags = re.MULTILINE | re.DOTALL | re.UNICODE
 
-    PERL6_IDENTIFIER_RANGE = r"['\w:-]"
+    PERL6_IDENTIFIER_RANGE = r"['\w:-]" 
 
     PERL6_KEYWORDS = (
         #Phasers
@@ -596,13 +596,13 @@ class Perl6Lexer(ExtendedRegexLexer):
         'common': [
             (r'#[`|=](?P<delimiter>(?P<first_char>[' + ''.join(PERL6_BRACKETS) + r'])(?P=first_char)*)',
              brackets_callback(Comment.Multiline)),
-            (r'#[^\n]*$', Comment.Single),
+            (r'#[^\n]*$', Comment.Single), 
             (r'^(\s*)=begin\s+(\w+)\b.*?^\1=end\s+\2', Comment.Multiline),
             (r'^(\s*)=for.*?\n\s*?\n', Comment.Multiline),
             (r'^=.*?\n\s*?\n', Comment.Multiline),
             (r'(regex|token|rule)(\s*' + PERL6_IDENTIFIER_RANGE + '+:sym)',
              bygroups(Keyword, Name), 'token-sym-brackets'),
-            (r'(regex|token|rule)(?!' + PERL6_IDENTIFIER_RANGE + r')(\s*' + PERL6_IDENTIFIER_RANGE + '+)?',
+            (r'(regex|token|rule)(?!' + PERL6_IDENTIFIER_RANGE + r')(\s*' + PERL6_IDENTIFIER_RANGE + '+)?', 
              bygroups(Keyword, Name), 'pre-token'),
             # deal with a special case in the Perl 6 grammar (role q { ... })
             (r'(role)(\s+)(q)(\s*)', bygroups(Keyword, Text, Name, Text)),
@@ -665,7 +665,7 @@ class Perl6Lexer(ExtendedRegexLexer):
             # make sure that '#' characters in quotes aren't treated as comments
             (r"(?<!\\)'(\\\\|\\[^\\]|[^'\\])*'", String.Regex),
             (r'(?<!\\)"(\\\\|\\[^\\]|[^"\\])*"', String.Regex),
-            (r'#.*?$', Comment.Single),
+            (r'#.*?$', Comment.Single), 
             (r'\{', embedded_perl6_callback),
             ('.+?', String.Regex),
         ],
@@ -698,21 +698,21 @@ class Perl6Lexer(ExtendedRegexLexer):
         rating = False
 
         # check for my/our/has declarations
-        if re.search(r"(?:my|our|has)\s+(?:" + Perl6Lexer.PERL6_IDENTIFIER_RANGE +
-                     r"+\s+)?[$@%&(]", text):
+        if re.search(r"(?:my|our|has)\s+(?:" + Perl6Lexer.PERL6_IDENTIFIER_RANGE + 
+                     r"+\s+)?[$@%&(]", text): 
             rating = 0.8
             saw_perl_decl = True
 
         for line in lines:
             line = re.sub('#.*', '', line)
-            if re.match(r'^\s*$', line):
+            if re.match(r'^\s*$', line): 
                 continue
 
             # match v6; use v6; use v6.0; use v6.0.0;
-            if re.match(r'^\s*(?:use\s+)?v6(?:\.\d(?:\.\d)?)?;', line):
+            if re.match(r'^\s*(?:use\s+)?v6(?:\.\d(?:\.\d)?)?;', line): 
                 return True
             # match class, module, role, enum, grammar declarations
-            class_decl = re.match(r'^\s*(?:(?P<scope>my|our)\s+)?(?:module|class|role|enum|grammar)', line)
+            class_decl = re.match(r'^\s*(?:(?P<scope>my|our)\s+)?(?:module|class|role|enum|grammar)', line) 
             if class_decl:
                 if saw_perl_decl or class_decl.group('scope') is not None:
                     return True

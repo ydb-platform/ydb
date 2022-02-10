@@ -1,12 +1,12 @@
 RECURSE(
     module
     registry
-    tests
-
-    crypto
+    tests 
+ 
+    crypto 
     libc
     libmagic
-    python
+    python 
     uuid
     win_unicode_console
 )

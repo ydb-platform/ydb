@@ -260,8 +260,8 @@ int (*EVP_CIPHER_meth_get_ctrl(const EVP_CIPHER *cipher))(EVP_CIPHER_CTX *,
 # define         EVP_CIPH_RAND_KEY               0x200
 /* cipher has its own additional copying logic */
 # define         EVP_CIPH_CUSTOM_COPY            0x400
-/* Don't use standard iv length function */
-# define         EVP_CIPH_CUSTOM_IV_LENGTH       0x800
+/* Don't use standard iv length function */ 
+# define         EVP_CIPH_CUSTOM_IV_LENGTH       0x800 
 /* Allow use default ASN1 get/set iv */
 # define         EVP_CIPH_FLAG_DEFAULT_ASN1      0x1000
 /* Buffer length in bits not bytes: CFB1 mode only */
@@ -351,8 +351,8 @@ int (*EVP_CIPHER_meth_get_ctrl(const EVP_CIPHER *cipher))(EVP_CIPHER_CTX *,
 /* Set the input buffer lengths to use for a pipelined operation */
 # define         EVP_CTRL_SET_PIPELINE_INPUT_LENS        0x24
 
-# define         EVP_CTRL_GET_IVLEN                      0x25
-
+# define         EVP_CTRL_GET_IVLEN                      0x25 
+ 
 /* Padding modes */
 #define EVP_PADDING_PKCS7       1
 #define EVP_PADDING_ISO7816_4   2
@@ -999,7 +999,7 @@ int EVP_PKEY_set_type_str(EVP_PKEY *pkey, const char *str, int len);
 int EVP_PKEY_set_alias_type(EVP_PKEY *pkey, int type);
 # ifndef OPENSSL_NO_ENGINE
 int EVP_PKEY_set1_engine(EVP_PKEY *pkey, ENGINE *e);
-ENGINE *EVP_PKEY_get0_engine(const EVP_PKEY *pkey);
+ENGINE *EVP_PKEY_get0_engine(const EVP_PKEY *pkey); 
 # endif
 int EVP_PKEY_assign(EVP_PKEY *pkey, int type, void *key);
 void *EVP_PKEY_get0(const EVP_PKEY *pkey);

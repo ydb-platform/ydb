@@ -1,75 +1,75 @@
-#pragma once
-
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#endif
-
-//===- StandardInstrumentations.h ------------------------------*- C++ -*--===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-/// \file
-///
-/// This header defines a class that provides bookkeeping for all standard
-/// (i.e in-tree) pass instrumentations.
-///
-//===----------------------------------------------------------------------===//
-
-#ifndef LLVM_PASSES_STANDARDINSTRUMENTATIONS_H
-#define LLVM_PASSES_STANDARDINSTRUMENTATIONS_H
-
-#include "llvm/ADT/SmallVector.h"
+#pragma once 
+ 
+#ifdef __GNUC__ 
+#pragma GCC diagnostic push 
+#pragma GCC diagnostic ignored "-Wunused-parameter" 
+#endif 
+ 
+//===- StandardInstrumentations.h ------------------------------*- C++ -*--===// 
+// 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// 
+//===----------------------------------------------------------------------===// 
+/// \file 
+/// 
+/// This header defines a class that provides bookkeeping for all standard 
+/// (i.e in-tree) pass instrumentations. 
+/// 
+//===----------------------------------------------------------------------===// 
+ 
+#ifndef LLVM_PASSES_STANDARDINSTRUMENTATIONS_H 
+#define LLVM_PASSES_STANDARDINSTRUMENTATIONS_H 
+ 
+#include "llvm/ADT/SmallVector.h" 
 #include "llvm/ADT/StringRef.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/OptBisect.h"
-#include "llvm/IR/PassTimingInfo.h"
+#include "llvm/IR/PassTimingInfo.h" 
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Transforms/IPO/SampleProfileProbe.h"
-
-#include <string>
-#include <utility>
-
-namespace llvm {
-
-class Module;
+ 
+#include <string> 
+#include <utility> 
+ 
+namespace llvm { 
+ 
+class Module; 
 class Function;
 class PassInstrumentationCallbacks;
-
-/// Instrumentation to print IR before/after passes.
-///
-/// Needs state to be able to print module after pass that invalidates IR unit
-/// (typically Loop or SCC).
-class PrintIRInstrumentation {
-public:
-  ~PrintIRInstrumentation();
-
-  void registerCallbacks(PassInstrumentationCallbacks &PIC);
-
-private:
+ 
+/// Instrumentation to print IR before/after passes. 
+/// 
+/// Needs state to be able to print module after pass that invalidates IR unit 
+/// (typically Loop or SCC). 
+class PrintIRInstrumentation { 
+public: 
+  ~PrintIRInstrumentation(); 
+ 
+  void registerCallbacks(PassInstrumentationCallbacks &PIC); 
+ 
+private: 
   void printBeforePass(StringRef PassID, Any IR);
-  void printAfterPass(StringRef PassID, Any IR);
-  void printAfterPassInvalidated(StringRef PassID);
-
+  void printAfterPass(StringRef PassID, Any IR); 
+  void printAfterPassInvalidated(StringRef PassID); 
+ 
   bool shouldPrintBeforePass(StringRef PassID);
   bool shouldPrintAfterPass(StringRef PassID);
 
-  using PrintModuleDesc = std::tuple<const Module *, std::string, StringRef>;
-
-  void pushModuleDesc(StringRef PassID, Any IR);
-  PrintModuleDesc popModuleDesc(StringRef PassID);
-
+  using PrintModuleDesc = std::tuple<const Module *, std::string, StringRef>; 
+ 
+  void pushModuleDesc(StringRef PassID, Any IR); 
+  PrintModuleDesc popModuleDesc(StringRef PassID); 
+ 
   PassInstrumentationCallbacks *PIC;
-  /// Stack of Module description, enough to print the module after a given
-  /// pass.
-  SmallVector<PrintModuleDesc, 2> ModuleDescStack;
-  bool StoreModuleDesc = false;
-};
-
+  /// Stack of Module description, enough to print the module after a given 
+  /// pass. 
+  SmallVector<PrintModuleDesc, 2> ModuleDescStack; 
+  bool StoreModuleDesc = false; 
+}; 
+ 
 class OptNoneInstrumentation {
 public:
   OptNoneInstrumentation(bool DebugLogging) : DebugLogging(DebugLogging) {}
@@ -271,36 +271,36 @@ public:
   void registerCallbacks(PassInstrumentationCallbacks &PIC);
 };
 
-/// This class provides an interface to register all the standard pass
-/// instrumentations and manages their state (if any).
-class StandardInstrumentations {
-  PrintIRInstrumentation PrintIR;
+/// This class provides an interface to register all the standard pass 
+/// instrumentations and manages their state (if any). 
+class StandardInstrumentations { 
+  PrintIRInstrumentation PrintIR; 
   PrintPassInstrumentation PrintPass;
-  TimePassesHandler TimePasses;
+  TimePassesHandler TimePasses; 
   OptNoneInstrumentation OptNone;
   OptBisectInstrumentation OptBisect;
   PreservedCFGCheckerInstrumentation PreservedCFGChecker;
   IRChangedPrinter PrintChangedIR;
   PseudoProbeVerifier PseudoProbeVerification;
   VerifyInstrumentation Verify;
-
+ 
   bool VerifyEach;
 
-public:
+public: 
   StandardInstrumentations(bool DebugLogging, bool VerifyEach = false);
-
-  void registerCallbacks(PassInstrumentationCallbacks &PIC);
-
-  TimePassesHandler &getTimePasses() { return TimePasses; }
-};
+ 
+  void registerCallbacks(PassInstrumentationCallbacks &PIC); 
+ 
+  TimePassesHandler &getTimePasses() { return TimePasses; } 
+}; 
 
 extern template class ChangeReporter<std::string>;
 extern template class TextChangeReporter<std::string>;
 
-} // namespace llvm
-
-#endif
-
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
+} // namespace llvm 
+ 
+#endif 
+ 
+#ifdef __GNUC__ 
+#pragma GCC diagnostic pop 
+#endif 

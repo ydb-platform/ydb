@@ -1,26 +1,26 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
 #ifndef GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_TABLE_H
 #define GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_TABLE_H
 
-#include <grpc/support/port_platform.h>
-
+#include <grpc/support/port_platform.h> 
+ 
 #include <grpc/slice.h>
 #include "src/core/lib/gprpp/memory.h"
 #include "src/core/lib/iomgr/error.h"
@@ -86,10 +86,10 @@ struct grpc_chttp2_hptbl {
   grpc_mdelem* ents = nullptr;
 };
 
-void grpc_chttp2_hptbl_destroy(grpc_chttp2_hptbl* tbl);
-void grpc_chttp2_hptbl_set_max_bytes(grpc_chttp2_hptbl* tbl,
+void grpc_chttp2_hptbl_destroy(grpc_chttp2_hptbl* tbl); 
+void grpc_chttp2_hptbl_set_max_bytes(grpc_chttp2_hptbl* tbl, 
                                      uint32_t max_bytes);
-grpc_error* grpc_chttp2_hptbl_set_current_table_size(grpc_chttp2_hptbl* tbl,
+grpc_error* grpc_chttp2_hptbl_set_current_table_size(grpc_chttp2_hptbl* tbl, 
                                                      uint32_t bytes);
 
 /* lookup a table entry based on its hpack index */
@@ -117,8 +117,8 @@ inline grpc_mdelem grpc_chttp2_hptbl_lookup(const grpc_chttp2_hptbl* tbl,
   }
 }
 /* add a table entry to the index */
-grpc_error* grpc_chttp2_hptbl_add(grpc_chttp2_hptbl* tbl,
-                                  grpc_mdelem md) GRPC_MUST_USE_RESULT;
+grpc_error* grpc_chttp2_hptbl_add(grpc_chttp2_hptbl* tbl, 
+                                  grpc_mdelem md) GRPC_MUST_USE_RESULT; 
 
 size_t grpc_chttp2_get_size_in_hpack_table(grpc_mdelem elem,
                                            bool use_true_binary_metadata);
@@ -143,6 +143,6 @@ struct grpc_chttp2_hptbl_find_result {
   int has_value;
 };
 grpc_chttp2_hptbl_find_result grpc_chttp2_hptbl_find(
-    const grpc_chttp2_hptbl* tbl, grpc_mdelem md);
+    const grpc_chttp2_hptbl* tbl, grpc_mdelem md); 
 
 #endif /* GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_TABLE_H */

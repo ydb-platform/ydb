@@ -1,15 +1,15 @@
 /* ******************************************************************
- * bitstream
- * Part of FSE library
+ * bitstream 
+ * Part of FSE library 
  * Copyright (c) Yann Collet, Facebook, Inc.
- *
- * You can contact the author at :
- * - Source repository : https://github.com/Cyan4973/FiniteStateEntropy
- *
- * This source code is licensed under both the BSD-style license (found in the
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found
- * in the COPYING file in the root directory of this source tree).
- * You may select, at your option, one of the above-listed licenses.
+ * 
+ * You can contact the author at : 
+ * - Source repository : https://github.com/Cyan4973/FiniteStateEntropy 
+ * 
+ * This source code is licensed under both the BSD-style license (found in the 
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
+ * in the COPYING file in the root directory of this source tree). 
+ * You may select, at your option, one of the above-listed licenses. 
 ****************************************************************** */
 #ifndef BITSTREAM_H_MODULE
 #define BITSTREAM_H_MODULE
@@ -27,7 +27,7 @@ extern "C" {
 *  Dependencies
 ******************************************/
 #include "mem.h"            /* unaligned access routines */
-#include "compiler.h"       /* UNLIKELY() */
+#include "compiler.h"       /* UNLIKELY() */ 
 #include "debug.h"          /* assert(), DEBUGLOG(), RAWLOG() */
 #include "error_private.h"  /* error codes and messages */
 
@@ -291,7 +291,7 @@ MEM_STATIC size_t BIT_initDStream(BIT_DStream_t* bitD, const void* srcBuffer, si
         bitD->ptr   = (const char*)srcBuffer + srcSize - sizeof(bitD->bitContainer);
         bitD->bitContainer = MEM_readLEST(bitD->ptr);
         { BYTE const lastByte = ((const BYTE*)srcBuffer)[srcSize-1];
-          bitD->bitsConsumed = lastByte ? 8 - BIT_highbit32(lastByte) : 0;  /* ensures bitsConsumed is always set */
+          bitD->bitsConsumed = lastByte ? 8 - BIT_highbit32(lastByte) : 0;  /* ensures bitsConsumed is always set */ 
           if (lastByte == 0) return ERROR(GENERIC); /* endMark not present */ }
     } else {
         bitD->ptr   = bitD->start;
@@ -415,23 +415,23 @@ MEM_STATIC size_t BIT_readBitsFast(BIT_DStream_t* bitD, unsigned nbBits)
     return value;
 }
 
-/*! BIT_reloadDStreamFast() :
- *  Similar to BIT_reloadDStream(), but with two differences:
- *  1. bitsConsumed <= sizeof(bitD->bitContainer)*8 must hold!
- *  2. Returns BIT_DStream_overflow when bitD->ptr < bitD->limitPtr, at this
- *     point you must use BIT_reloadDStream() to reload.
- */
-MEM_STATIC BIT_DStream_status BIT_reloadDStreamFast(BIT_DStream_t* bitD)
-{
-    if (UNLIKELY(bitD->ptr < bitD->limitPtr))
-        return BIT_DStream_overflow;
-    assert(bitD->bitsConsumed <= sizeof(bitD->bitContainer)*8);
-    bitD->ptr -= bitD->bitsConsumed >> 3;
-    bitD->bitsConsumed &= 7;
-    bitD->bitContainer = MEM_readLEST(bitD->ptr);
-    return BIT_DStream_unfinished;
-}
-
+/*! BIT_reloadDStreamFast() : 
+ *  Similar to BIT_reloadDStream(), but with two differences: 
+ *  1. bitsConsumed <= sizeof(bitD->bitContainer)*8 must hold! 
+ *  2. Returns BIT_DStream_overflow when bitD->ptr < bitD->limitPtr, at this 
+ *     point you must use BIT_reloadDStream() to reload. 
+ */ 
+MEM_STATIC BIT_DStream_status BIT_reloadDStreamFast(BIT_DStream_t* bitD) 
+{ 
+    if (UNLIKELY(bitD->ptr < bitD->limitPtr)) 
+        return BIT_DStream_overflow; 
+    assert(bitD->bitsConsumed <= sizeof(bitD->bitContainer)*8); 
+    bitD->ptr -= bitD->bitsConsumed >> 3; 
+    bitD->bitsConsumed &= 7; 
+    bitD->bitContainer = MEM_readLEST(bitD->ptr); 
+    return BIT_DStream_unfinished; 
+} 
+ 
 /*! BIT_reloadDStream() :
  *  Refill `bitD` from buffer previously set in BIT_initDStream() .
  *  This function is safe, it guarantees it will not read beyond src buffer.
@@ -443,7 +443,7 @@ MEM_STATIC BIT_DStream_status BIT_reloadDStream(BIT_DStream_t* bitD)
         return BIT_DStream_overflow;
 
     if (bitD->ptr >= bitD->limitPtr) {
-        return BIT_reloadDStreamFast(bitD);
+        return BIT_reloadDStreamFast(bitD); 
     }
     if (bitD->ptr == bitD->start) {
         if (bitD->bitsConsumed < sizeof(bitD->bitContainer)*8) return BIT_DStream_endOfBuffer;

@@ -253,10 +253,10 @@ class stable_vector_iterator
       >::type                                                                       pointer;
    typedef boost::intrusive::pointer_traits<pointer>                                ptr_traits;
    typedef typename ptr_traits::reference                                           reference;
-   class nat;
-   typedef typename dtl::if_c< IsConst
-                             , stable_vector_iterator<Pointer, false>
-                             , nat>::type                                           nonconst_iterator;
+   class nat; 
+   typedef typename dtl::if_c< IsConst 
+                             , stable_vector_iterator<Pointer, false> 
+                             , nat>::type                                           nonconst_iterator; 
 
    private:
    typedef typename non_const_ptr_traits::template
@@ -284,18 +284,18 @@ class stable_vector_iterator
       : m_pn() //Value initialization to achieve "null iterators" (N3644)
    {}
 
-   BOOST_CONTAINER_FORCEINLINE stable_vector_iterator(const stable_vector_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW
+   BOOST_CONTAINER_FORCEINLINE stable_vector_iterator(const stable_vector_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW 
       :  m_pn(other.node_pointer())
    {}
 
-   stable_vector_iterator(const nonconst_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW
-      :  m_pn(other.node_pointer())
-   {}
-
-   BOOST_CONTAINER_FORCEINLINE stable_vector_iterator & operator=(const stable_vector_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW
-   {  m_pn = other.node_pointer(); return *this;   }
-
-   BOOST_CONTAINER_FORCEINLINE node_ptr node_pointer() const BOOST_NOEXCEPT_OR_NOTHROW
+   stable_vector_iterator(const nonconst_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW 
+      :  m_pn(other.node_pointer()) 
+   {} 
+ 
+   BOOST_CONTAINER_FORCEINLINE stable_vector_iterator & operator=(const stable_vector_iterator& other) BOOST_NOEXCEPT_OR_NOTHROW 
+   {  m_pn = other.node_pointer(); return *this;   } 
+ 
+   BOOST_CONTAINER_FORCEINLINE node_ptr node_pointer() const BOOST_NOEXCEPT_OR_NOTHROW 
    {  return node_ptr_traits::static_cast_from(m_pn);  }
 
    public:

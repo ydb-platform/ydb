@@ -73,17 +73,17 @@ struct ssl_backend_data
 static Curl_recv mesalink_recv;
 static Curl_send mesalink_send;
 
-static int do_file_type(const char *type)
-{
-  if(!type || !type[0])
-    return SSL_FILETYPE_PEM;
-  if(strcasecompare(type, "PEM"))
-    return SSL_FILETYPE_PEM;
-  if(strcasecompare(type, "DER"))
-    return SSL_FILETYPE_ASN1;
-  return -1;
-}
-
+static int do_file_type(const char *type) 
+{ 
+  if(!type || !type[0]) 
+    return SSL_FILETYPE_PEM; 
+  if(strcasecompare(type, "PEM")) 
+    return SSL_FILETYPE_PEM; 
+  if(strcasecompare(type, "DER")) 
+    return SSL_FILETYPE_ASN1; 
+  return -1; 
+} 
+ 
 /*
  * This function loads all the client/CA certificates and CRLs. Setup the TLS
  * layer and do all necessary magic.
@@ -150,25 +150,25 @@ mesalink_connect_step1(struct connectdata *conn, int sockindex)
   }
 
   SSL_CTX_set_verify(
-    BACKEND->ctx, SSL_CONN_CONFIG(verifypeer) ?
-      SSL_VERIFY_PEER : SSL_VERIFY_NONE, NULL);
+    BACKEND->ctx, SSL_CONN_CONFIG(verifypeer) ? 
+      SSL_VERIFY_PEER : SSL_VERIFY_NONE, NULL); 
 
-  if(SSL_CONN_CONFIG(CAfile) || SSL_CONN_CONFIG(CApath)) {
-    if(!SSL_CTX_load_verify_locations(BACKEND->ctx, SSL_CONN_CONFIG(CAfile),
-                                                    SSL_CONN_CONFIG(CApath))) {
-      if(SSL_CONN_CONFIG(verifypeer)) {
+  if(SSL_CONN_CONFIG(CAfile) || SSL_CONN_CONFIG(CApath)) { 
+    if(!SSL_CTX_load_verify_locations(BACKEND->ctx, SSL_CONN_CONFIG(CAfile), 
+                                                    SSL_CONN_CONFIG(CApath))) { 
+      if(SSL_CONN_CONFIG(verifypeer)) { 
         failf(data,
               "error setting certificate verify locations: "
               " CAfile: %s CApath: %s",
-              SSL_CONN_CONFIG(CAfile) ?
-              SSL_CONN_CONFIG(CAfile) : "none",
-              SSL_CONN_CONFIG(CApath) ?
-              SSL_CONN_CONFIG(CApath) : "none");
+              SSL_CONN_CONFIG(CAfile) ? 
+              SSL_CONN_CONFIG(CAfile) : "none", 
+              SSL_CONN_CONFIG(CApath) ? 
+              SSL_CONN_CONFIG(CApath) : "none"); 
         return CURLE_SSL_CACERT_BADFILE;
       }
       infof(data,
-          "error setting certificate verify locations,"
-          " continuing anyway:\n");
+          "error setting certificate verify locations," 
+          " continuing anyway:\n"); 
     }
     else {
       infof(data, "successfully set certificate verify locations:\n");
@@ -180,28 +180,28 @@ mesalink_connect_step1(struct connectdata *conn, int sockindex)
   }
 
   if(SSL_SET_OPTION(primary.clientcert) && SSL_SET_OPTION(key)) {
-    int file_type = do_file_type(SSL_SET_OPTION(cert_type));
-
+    int file_type = do_file_type(SSL_SET_OPTION(cert_type)); 
+ 
     if(SSL_CTX_use_certificate_chain_file(BACKEND->ctx,
                                           SSL_SET_OPTION(primary.clientcert),
                                           file_type) != 1) {
-      failf(data, "unable to use client certificate (no key or wrong pass"
-            " phrase?)");
-      return CURLE_SSL_CONNECT_ERROR;
-    }
-
-    file_type = do_file_type(SSL_SET_OPTION(key_type));
-    if(SSL_CTX_use_PrivateKey_file(BACKEND->ctx, SSL_SET_OPTION(key),
-                                    file_type) != 1) {
-      failf(data, "unable to set private key");
-      return CURLE_SSL_CONNECT_ERROR;
-    }
-    infof(data,
-          "client cert: %s\n",
-          SSL_CONN_CONFIG(clientcert)?
-          SSL_CONN_CONFIG(clientcert): "none");
-  }
-
+      failf(data, "unable to use client certificate (no key or wrong pass" 
+            " phrase?)"); 
+      return CURLE_SSL_CONNECT_ERROR; 
+    } 
+ 
+    file_type = do_file_type(SSL_SET_OPTION(key_type)); 
+    if(SSL_CTX_use_PrivateKey_file(BACKEND->ctx, SSL_SET_OPTION(key), 
+                                    file_type) != 1) { 
+      failf(data, "unable to set private key"); 
+      return CURLE_SSL_CONNECT_ERROR; 
+    } 
+    infof(data, 
+          "client cert: %s\n", 
+          SSL_CONN_CONFIG(clientcert)? 
+          SSL_CONN_CONFIG(clientcert): "none"); 
+  } 
+ 
   ciphers = SSL_CONN_CONFIG(cipher_list);
   if(ciphers) {
 #ifdef MESALINK_HAVE_CIPHER
@@ -301,12 +301,12 @@ mesalink_connect_step2(struct connectdata *conn, int sockindex)
   if(ret != SSL_SUCCESS) {
     int detail = SSL_get_error(BACKEND->handle, ret);
 
-    if(SSL_ERROR_WANT_CONNECT == detail || SSL_ERROR_WANT_READ == detail) {
+    if(SSL_ERROR_WANT_CONNECT == detail || SSL_ERROR_WANT_READ == detail) { 
       connssl->connecting_state = ssl_connect_2_reading;
       return CURLE_OK;
     }
     else {
-      char error_buffer[MESALINK_MAX_ERROR_SZ];
+      char error_buffer[MESALINK_MAX_ERROR_SZ]; 
       failf(data,
             "SSL_connect failed with error %d: %s",
             detail,

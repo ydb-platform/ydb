@@ -307,8 +307,8 @@ class PROTOBUF_EXPORT MessageDifferencer {
     // Note this is a different function since the last SpecificField in field
     // path has a null field.  This could break existing Reporter.
     virtual void ReportUnknownFieldIgnored(
-        const Message& /* message1 */, const Message& /* message2 */,
-        const std::vector<SpecificField>& /* field_path */) {}
+        const Message& /* message1 */, const Message& /* message2 */, 
+        const std::vector<SpecificField>& /* field_path */) {} 
 
    private:
     GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(Reporter);
@@ -321,9 +321,9 @@ class PROTOBUF_EXPORT MessageDifferencer {
     MapKeyComparator();
     virtual ~MapKeyComparator();
 
-    virtual bool IsMatch(
+    virtual bool IsMatch( 
         const Message& /* message1 */, const Message& /* message2 */,
-        const std::vector<SpecificField>& /* parent_fields */) const {
+        const std::vector<SpecificField>& /* parent_fields */) const { 
       GOOGLE_CHECK(false) << "IsMatch() is not implemented.";
       return false;
     }
@@ -346,16 +346,16 @@ class PROTOBUF_EXPORT MessageDifferencer {
     // Returns true if the field should be ignored.
     virtual bool IsIgnored(
         const Message& /* message1 */, const Message& /* message2 */,
-        const FieldDescriptor* /* field */,
-        const std::vector<SpecificField>& /* parent_fields */) = 0;
+        const FieldDescriptor* /* field */, 
+        const std::vector<SpecificField>& /* parent_fields */) = 0; 
 
     // Returns true if the unknown field should be ignored.
     // Note: This will be called for unknown fields as well in which case
     //       field.field will be null.
     virtual bool IsUnknownFieldIgnored(
-        const Message& /* message1 */, const Message& /* message2 */,
-        const SpecificField& /* field */,
-        const std::vector<SpecificField>& /* parent_fields */) {
+        const Message& /* message1 */, const Message& /* message2 */, 
+        const SpecificField& /* field */, 
+        const std::vector<SpecificField>& /* parent_fields */) { 
       return false;
     }
   };
@@ -560,17 +560,17 @@ class PROTOBUF_EXPORT MessageDifferencer {
     report_matches_ = report_matches;
   }
 
-  // Tells the differencer whether or not to report moves (in a set or map
-  // repeated field). This method must be called before Compare. The default for
-  // a new differencer is true.
+  // Tells the differencer whether or not to report moves (in a set or map 
+  // repeated field). This method must be called before Compare. The default for 
+  // a new differencer is true. 
   void set_report_moves(bool report_moves) { report_moves_ = report_moves; }
 
   // Tells the differencer whether or not to report ignored values. This method
   // must be called before Compare. The default for a new differencer is true.
   void set_report_ignores(bool report_ignores) {
     report_ignores_ = report_ignores;
-  }
-
+  } 
+ 
   // Sets the scope of the comparison (as defined in the Scope enumeration
   // above) that is used by this differencer when determining which fields to
   // compare between the messages.
@@ -606,10 +606,10 @@ class PROTOBUF_EXPORT MessageDifferencer {
 
   // Same as above, except comparing only the list of fields specified by the
   // two vectors of FieldDescriptors.
-  bool CompareWithFields(
-      const Message& message1, const Message& message2,
-      const std::vector<const FieldDescriptor*>& message1_fields,
-      const std::vector<const FieldDescriptor*>& message2_fields);
+  bool CompareWithFields( 
+      const Message& message1, const Message& message2, 
+      const std::vector<const FieldDescriptor*>& message1_fields, 
+      const std::vector<const FieldDescriptor*>& message2_fields); 
 
   // Automatically creates a reporter that will output the differences
   // found (if any) to the specified output string pointer. Note that this
@@ -718,19 +718,19 @@ class PROTOBUF_EXPORT MessageDifferencer {
   // relies on some private methods of MessageDifferencer. That's why this
   // class is declared as a nested class of MessageDifferencer.
   class MultipleFieldsMapKeyComparator;
-
-  // A MapKeyComparator for use with map_entries.
+ 
+  // A MapKeyComparator for use with map_entries. 
   class PROTOBUF_EXPORT MapEntryKeyComparator : public MapKeyComparator {
-   public:
-    explicit MapEntryKeyComparator(MessageDifferencer* message_differencer);
+   public: 
+    explicit MapEntryKeyComparator(MessageDifferencer* message_differencer); 
     bool IsMatch(
         const Message& message1, const Message& message2,
         const std::vector<SpecificField>& parent_fields) const override;
-
-   private:
-    MessageDifferencer* message_differencer_;
-  };
-
+ 
+   private: 
+    MessageDifferencer* message_differencer_; 
+  }; 
+ 
   // Returns true if field1's number() is less than field2's.
   static bool FieldBefore(const FieldDescriptor* field1,
                           const FieldDescriptor* field2);
@@ -815,10 +815,10 @@ class PROTOBUF_EXPORT MessageDifferencer {
   // list of parent messages if it needs to recursively compare the given field.
   // To avoid confusing users you should not set it to NULL unless you modified
   // Reporter to handle the change of parent_fields correctly.
-  bool CompareFieldValueUsingParentFields(
+  bool CompareFieldValueUsingParentFields( 
       const Message& message1, const Message& message2,
       const FieldDescriptor* field, int index1, int index2,
-      std::vector<SpecificField>* parent_fields);
+      std::vector<SpecificField>* parent_fields); 
 
   // Compares the specified field on the two messages, returning comparison
   // result, as returned by appropriate FieldComparator.
@@ -866,10 +866,10 @@ class PROTOBUF_EXPORT MessageDifferencer {
                              const SpecificField& field,
                              const std::vector<SpecificField>& parent_fields);
 
-  // Returns MapKeyComparator* when this field has been configured to be treated
-  // as a map or its is_map() return true.  If not, returns NULL.
-  const MapKeyComparator* GetMapKeyComparator(
-      const FieldDescriptor* field) const;
+  // Returns MapKeyComparator* when this field has been configured to be treated 
+  // as a map or its is_map() return true.  If not, returns NULL. 
+  const MapKeyComparator* GetMapKeyComparator( 
+      const FieldDescriptor* field) const; 
 
   // Attempts to match indices of a repeated field, so that the contained values
   // match. Clears output vectors and sets their values to indices of paired
@@ -879,11 +879,11 @@ class PROTOBUF_EXPORT MessageDifferencer {
   // This method returns false if the match failed. However, it doesn't mean
   // that the comparison succeeds when this method returns true (you need to
   // double-check in this case).
-  bool MatchRepeatedFieldIndices(
+  bool MatchRepeatedFieldIndices( 
       const Message& message1, const Message& message2,
-      const FieldDescriptor* repeated_field,
+      const FieldDescriptor* repeated_field, 
       const MapKeyComparator* key_comparator,
-      const std::vector<SpecificField>& parent_fields,
+      const std::vector<SpecificField>& parent_fields, 
       std::vector<int>* match_list1, std::vector<int>* match_list2);
 
   // Checks if index is equal to new_index in all the specific fields.
@@ -920,7 +920,7 @@ class PROTOBUF_EXPORT MessageDifferencer {
   // MapKeyComparator is created for comparison purpose.
   std::vector<MapKeyComparator*> owned_key_comparators_;
   FieldKeyComparatorMap map_field_key_comparator_;
-  MapEntryKeyComparator map_entry_key_comparator_;
+  MapEntryKeyComparator map_entry_key_comparator_; 
   std::vector<IgnoreCriteria*> ignore_criteria_;
   // Reused multiple times in RetrieveFields to avoid extra allocations
   std::vector<const FieldDescriptor*> tmp_message_fields_;
@@ -934,7 +934,7 @@ class PROTOBUF_EXPORT MessageDifferencer {
   enum { kFCDefault, kFCBase } field_comparator_kind_ = kFCDefault;
 
   bool report_matches_;
-  bool report_moves_;
+  bool report_moves_; 
   bool report_ignores_;
 
   TProtoStringType* output_string_;

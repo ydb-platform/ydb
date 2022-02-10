@@ -37,7 +37,7 @@ struct TByteAt {
     {
         auto& context = ctx.Codegen->GetContext();
         const auto type = Type::getInt8Ty(context);
-        const auto embType = FixedVectorType::get(type, 16);
+        const auto embType = FixedVectorType::get(type, 16); 
         const auto cast = CastInst::Create(Instruction::BitCast, left, embType, "cast", block);
         const auto mark = ExtractElementInst::Create(cast, ConstantInt::get(type, 15), "mark", block);
         const auto index = GetterFor<ui32>(right, context, block);
@@ -46,7 +46,7 @@ struct TByteAt {
         const auto esize = CastInst::Create(Instruction::ZExt, bsize, index->getType(), "esize", block);
 
         const auto sizeType = Type::getInt32Ty(context);
-        const auto strType = FixedVectorType::get(sizeType, 4);
+        const auto strType = FixedVectorType::get(sizeType, 4); 
         const auto four = CastInst::Create(Instruction::BitCast, left, strType, "four", block);
         const auto ssize = ExtractElementInst::Create(four, ConstantInt::get(type, 2), "ssize", block);
 

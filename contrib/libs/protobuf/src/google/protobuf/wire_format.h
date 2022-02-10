@@ -89,7 +89,7 @@ class PROTOBUF_EXPORT WireFormat {
 
   // Compute the byte size of a tag.  For groups, this includes both the start
   // and end tags.
-  static inline size_t TagSize(int field_number, FieldDescriptor::Type type);
+  static inline size_t TagSize(int field_number, FieldDescriptor::Type type); 
 
   // These procedures can be used to implement the methods of Message which
   // handle parsing and serialization of the protocol buffer wire format
@@ -140,7 +140,7 @@ class PROTOBUF_EXPORT WireFormat {
   // will have their ByteSize() methods called, so their sizes will be cached.
   // Therefore, calling this method is sufficient to allow you to call
   // WireFormat::SerializeWithCachedSizes() on the same object.
-  static size_t ByteSize(const Message& message);
+  static size_t ByteSize(const Message& message); 
 
   // -----------------------------------------------------------------
   // Helpers for dealing with unknown fields
@@ -207,11 +207,11 @@ class PROTOBUF_EXPORT WireFormat {
       io::EpsCopyOutputStream* stream);
 
   // Compute the size of the UnknownFieldSet on the wire.
-  static size_t ComputeUnknownFieldsSize(const UnknownFieldSet& unknown_fields);
+  static size_t ComputeUnknownFieldsSize(const UnknownFieldSet& unknown_fields); 
 
   // Same thing except for messages that have the message_set_wire_format
   // option.
-  static size_t ComputeUnknownMessageSetItemsSize(
+  static size_t ComputeUnknownMessageSetItemsSize( 
       const UnknownFieldSet& unknown_fields);
 
   // Helper functions for encoding and decoding tags.  (Inlined below and in
@@ -265,7 +265,7 @@ class PROTOBUF_EXPORT WireFormat {
   // only includes the size of the raw data, and not the size of the total
   // length, but for other length-delimited types, the size of the length is
   // included.
-  static size_t FieldDataOnlyByteSize(
+  static size_t FieldDataOnlyByteSize( 
       const FieldDescriptor* field,  // Cannot be NULL
       const Message& message);
 
@@ -344,8 +344,8 @@ inline uint32 WireFormat::MakeTag(const FieldDescriptor* field) {
   return WireFormatLite::MakeTag(field->number(), WireTypeForField(field));
 }
 
-inline size_t WireFormat::TagSize(int field_number,
-                                  FieldDescriptor::Type type) {
+inline size_t WireFormat::TagSize(int field_number, 
+                                  FieldDescriptor::Type type) { 
   // Some compilers don't like enum -> enum casts, so we implicit_cast to
   // int first.
   return WireFormatLite::TagSize(
@@ -363,7 +363,7 @@ inline void WireFormat::VerifyUTF8String(const char* data, int size,
   (void)data;
   (void)size;
   (void)op;
-#endif
+#endif 
 }
 
 inline void WireFormat::VerifyUTF8StringNamedField(const char* data, int size,

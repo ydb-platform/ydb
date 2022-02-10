@@ -35,7 +35,7 @@
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace synchronization_internal {
 
 class Futex;
@@ -150,7 +150,7 @@ inline struct timespec KernelTimeout::MakeAbsTimespec() {
 }
 
 }  // namespace synchronization_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_SYNCHRONIZATION_INTERNAL_KERNEL_TIMEOUT_H_

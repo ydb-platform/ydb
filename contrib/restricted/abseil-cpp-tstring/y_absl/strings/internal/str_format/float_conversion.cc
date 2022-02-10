@@ -20,7 +20,7 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 #include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
@@ -35,7 +35,7 @@
 #include "y_absl/types/span.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace str_format_internal {
 
 namespace {
@@ -946,7 +946,7 @@ bool FallbackToSnprintf(const Float v, const FormatConversionSpecImpl &conv,
   {
     char *fp = fmt;
     *fp++ = '%';
-    fp = CopyStringTo(FormatConversionSpecImplFriend::FlagsToString(conv), fp);
+    fp = CopyStringTo(FormatConversionSpecImplFriend::FlagsToString(conv), fp); 
     fp = CopyStringTo("*.*", fp);
     if (std::is_same<long double, Float>()) {
       *fp++ = 'L';
@@ -1419,5 +1419,5 @@ bool ConvertFloatImpl(double v, const FormatConversionSpecImpl &conv,
 }
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl

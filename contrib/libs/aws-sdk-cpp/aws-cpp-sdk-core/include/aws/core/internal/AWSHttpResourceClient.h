@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #pragma once
 
@@ -9,19 +9,19 @@
 #include <aws/core/utils/memory/AWSMemory.h>
 #include <aws/core/utils/memory/stl/AWSString.h>
 #include <aws/core/client/ClientConfiguration.h>
-#include <aws/core/client/AWSErrorMarshaller.h>
-#include <aws/core/auth/AWSCredentials.h>
-#include <aws/core/AmazonWebServiceResult.h>
-#include <aws/core/utils/DateTime.h>
+#include <aws/core/client/AWSErrorMarshaller.h> 
+#include <aws/core/auth/AWSCredentials.h> 
+#include <aws/core/AmazonWebServiceResult.h> 
+#include <aws/core/utils/DateTime.h> 
 #include <memory>
-#include <mutex>
+#include <mutex> 
 namespace Aws
 {
     namespace Http
     {
         class HttpClient;
-        class HttpRequest;
-        enum class HttpResponseCode;
+        class HttpRequest; 
+        enum class HttpResponseCode; 
     } // namespace Http
 
     namespace Internal
@@ -57,38 +57,38 @@ namespace Aws
              */
             virtual Aws::String GetResource(const char* endpoint, const char* resourcePath, const char* authToken) const;
 
-            /**
-             * Connects to an HTTP endpoint to read the specified resource and returns the text contents.
-             * The resource URI = endpoint + resourcePath (e.g:http://domain/path/to/res)
-             * @param endpoint The HTTP resource to connect to.
-             * @param resourcePath A path appended to the endpoint to form the final URI.
-             * @param authToken An optional authorization token that will be passed as the value of the HTTP
-             * header 'Authorization'.
-             * @return The response from the HTTP endpoint as a string, together with the http response code.
-             */
-            virtual AmazonWebServiceResult<Aws::String> GetResourceWithAWSWebServiceResult(const char *endpoint, const char *resourcePath, const char *authToken) const;
-
-            /**
-             * Above Function: Aws::String GetResource(const char* endpoint, const char* resourcePath, const char* authToken) const;
-             * is limited to HTTP GET method and caller can't add wanted HTTP headers as well.
-             * This overload gives caller the flexibility to manipulate the request, as well returns the HttpResponseCode of the last attempt.
-             */
-            virtual AmazonWebServiceResult<Aws::String> GetResourceWithAWSWebServiceResult(const std::shared_ptr<Http::HttpRequest> &httpRequest) const;
-
-            /**
-             * Set an error marshaller so as to marshall error type from http response body if any.
-             * So that it can work with retry strategy to decide if a request should retry or not.
-             */
-            void SetErrorMarshaller(Aws::UniquePtr<Client::AWSErrorMarshaller> errorMarshaller) { m_errorMarshaller = std::move(errorMarshaller); }
-            const Client::AWSErrorMarshaller* GetErrorMarshaller() const { return m_errorMarshaller.get(); }
-
+            /** 
+             * Connects to an HTTP endpoint to read the specified resource and returns the text contents. 
+             * The resource URI = endpoint + resourcePath (e.g:http://domain/path/to/res) 
+             * @param endpoint The HTTP resource to connect to. 
+             * @param resourcePath A path appended to the endpoint to form the final URI. 
+             * @param authToken An optional authorization token that will be passed as the value of the HTTP 
+             * header 'Authorization'. 
+             * @return The response from the HTTP endpoint as a string, together with the http response code. 
+             */ 
+            virtual AmazonWebServiceResult<Aws::String> GetResourceWithAWSWebServiceResult(const char *endpoint, const char *resourcePath, const char *authToken) const; 
+ 
+            /** 
+             * Above Function: Aws::String GetResource(const char* endpoint, const char* resourcePath, const char* authToken) const; 
+             * is limited to HTTP GET method and caller can't add wanted HTTP headers as well. 
+             * This overload gives caller the flexibility to manipulate the request, as well returns the HttpResponseCode of the last attempt. 
+             */ 
+            virtual AmazonWebServiceResult<Aws::String> GetResourceWithAWSWebServiceResult(const std::shared_ptr<Http::HttpRequest> &httpRequest) const; 
+ 
+            /** 
+             * Set an error marshaller so as to marshall error type from http response body if any. 
+             * So that it can work with retry strategy to decide if a request should retry or not. 
+             */ 
+            void SetErrorMarshaller(Aws::UniquePtr<Client::AWSErrorMarshaller> errorMarshaller) { m_errorMarshaller = std::move(errorMarshaller); } 
+            const Client::AWSErrorMarshaller* GetErrorMarshaller() const { return m_errorMarshaller.get(); } 
+ 
         protected:
             Aws::String m_logtag;
 
         private:
             std::shared_ptr<Client::RetryStrategy> m_retryStrategy;
             std::shared_ptr<Http::HttpClient> m_httpClient;
-            Aws::UniquePtr<Client::AWSErrorMarshaller> m_errorMarshaller;
+            Aws::UniquePtr<Client::AWSErrorMarshaller> m_errorMarshaller; 
         };
 
         /**
@@ -125,12 +125,12 @@ namespace Aws
             virtual Aws::String GetDefaultCredentials() const;
 
             /**
-             * Connects to the Amazon EC2 Instance Metadata Service to retrieve the
-             * credential information (if any) in a more secure way.
-             */
-            virtual Aws::String GetDefaultCredentialsSecurely() const;
-
-            /**
+             * Connects to the Amazon EC2 Instance Metadata Service to retrieve the 
+             * credential information (if any) in a more secure way. 
+             */ 
+            virtual Aws::String GetDefaultCredentialsSecurely() const; 
+ 
+            /** 
              * connects to the Amazon EC2 Instance metadata Service to retrieve the region
              * the current EC2 instance is running in.
              */
@@ -138,18 +138,18 @@ namespace Aws
 
         private:
             Aws::String m_endpoint;
-            mutable std::recursive_mutex m_tokenMutex;
-            mutable Aws::String m_token;
-            mutable bool m_tokenRequired;
-            mutable Aws::String m_region;
+            mutable std::recursive_mutex m_tokenMutex; 
+            mutable Aws::String m_token; 
+            mutable bool m_tokenRequired; 
+            mutable Aws::String m_region; 
         };
 
-        void AWS_CORE_API InitEC2MetadataClient();
-        void AWS_CORE_API CleanupEC2MetadataClient();
-        std::shared_ptr<EC2MetadataClient> AWS_CORE_API GetEC2MetadataClient();
-
+        void AWS_CORE_API InitEC2MetadataClient(); 
+        void AWS_CORE_API CleanupEC2MetadataClient(); 
+        std::shared_ptr<EC2MetadataClient> AWS_CORE_API GetEC2MetadataClient(); 
+ 
         /**
-         * Derived class to support retrieving of ECS Credentials
+         * Derived class to support retrieving of ECS Credentials 
          */
         class AWS_CORE_API ECSCredentialsClient : public AWSHttpResourceClient
         {
@@ -183,43 +183,43 @@ namespace Aws
             Aws::String m_endpoint;
             Aws::String m_token;
         };
-
-        /**
-         * To support retrieving credentials from STS.
-         * Note that STS accepts request with protocol of queryxml. Calling GetResource() will trigger
-         * a query request using AWSHttpResourceClient under the hood.
-         */
-        class AWS_CORE_API STSCredentialsClient : public AWSHttpResourceClient
-        {
-        public:
-            /**
-             * Initializes the provider to retrieve credentials from STS when it expires.
-             */
-            STSCredentialsClient(const Client::ClientConfiguration& clientConfiguration);
-
-            STSCredentialsClient& operator =(STSCredentialsClient& rhs) = delete;
-            STSCredentialsClient(const STSCredentialsClient& rhs) = delete;
-            STSCredentialsClient& operator =(STSCredentialsClient&& rhs) = delete;
-            STSCredentialsClient(const STSCredentialsClient&& rhs) = delete;
-
-            // If you want to make an AssumeRoleWithWebIdentity call to sts. use these classes to pass data to and get info from STSCredentialsClient client.
-            // If you want to make an AssumeRole call to sts, define the request/result members class/struct like this.
-            struct STSAssumeRoleWithWebIdentityRequest
-            {
-                Aws::String roleSessionName;
-                Aws::String roleArn;
-                Aws::String webIdentityToken;
-            };
-
-            struct STSAssumeRoleWithWebIdentityResult
-            {
-                Aws::Auth::AWSCredentials creds;
-            };
-
-            STSAssumeRoleWithWebIdentityResult GetAssumeRoleWithWebIdentityCredentials(const STSAssumeRoleWithWebIdentityRequest& request);
-
-        private:
-            Aws::String m_endpoint;
-        };
+ 
+        /** 
+         * To support retrieving credentials from STS. 
+         * Note that STS accepts request with protocol of queryxml. Calling GetResource() will trigger 
+         * a query request using AWSHttpResourceClient under the hood. 
+         */ 
+        class AWS_CORE_API STSCredentialsClient : public AWSHttpResourceClient 
+        { 
+        public: 
+            /** 
+             * Initializes the provider to retrieve credentials from STS when it expires. 
+             */ 
+            STSCredentialsClient(const Client::ClientConfiguration& clientConfiguration); 
+ 
+            STSCredentialsClient& operator =(STSCredentialsClient& rhs) = delete; 
+            STSCredentialsClient(const STSCredentialsClient& rhs) = delete; 
+            STSCredentialsClient& operator =(STSCredentialsClient&& rhs) = delete; 
+            STSCredentialsClient(const STSCredentialsClient&& rhs) = delete; 
+ 
+            // If you want to make an AssumeRoleWithWebIdentity call to sts. use these classes to pass data to and get info from STSCredentialsClient client. 
+            // If you want to make an AssumeRole call to sts, define the request/result members class/struct like this. 
+            struct STSAssumeRoleWithWebIdentityRequest 
+            { 
+                Aws::String roleSessionName; 
+                Aws::String roleArn; 
+                Aws::String webIdentityToken; 
+            }; 
+ 
+            struct STSAssumeRoleWithWebIdentityResult 
+            { 
+                Aws::Auth::AWSCredentials creds; 
+            }; 
+ 
+            STSAssumeRoleWithWebIdentityResult GetAssumeRoleWithWebIdentityCredentials(const STSAssumeRoleWithWebIdentityRequest& request); 
+ 
+        private: 
+            Aws::String m_endpoint; 
+        }; 
     } // namespace Internal
 } // namespace Aws

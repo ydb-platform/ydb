@@ -18,12 +18,12 @@
 #include <cassert>
 #include <ostream>
 #include <streambuf>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 #include "y_absl/base/port.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace strings_internal {
 
 // The same as std::ostringstream but appends to a user-specified TString,
@@ -83,7 +83,7 @@ class OStringStream : private std::basic_streambuf<char>, public std::ostream {
 };
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_OSTRINGSTREAM_H_

@@ -6,12 +6,12 @@ The output is in a strict format, no whitespace or comments from the input
 is preserved (and it could not be as it is not present in the code tree).
 """
 
-from __future__ import absolute_import, print_function
+from __future__ import absolute_import, print_function 
 
-from .Compiler.Visitor import TreeVisitor
-from .Compiler.ExprNodes import *
-
-
+from .Compiler.Visitor import TreeVisitor 
+from .Compiler.ExprNodes import * 
+ 
+ 
 class LinesResult(object):
     def __init__(self):
         self.lines = []
@@ -32,7 +32,7 @@ class DeclarationWriter(TreeVisitor):
 
     indent_string = u"    "
 
-    def __init__(self, result=None):
+    def __init__(self, result=None): 
         super(DeclarationWriter, self).__init__()
         if result is None:
             result = LinesResult()
@@ -51,7 +51,7 @@ class DeclarationWriter(TreeVisitor):
     def dedent(self):
         self.numindents -= 1
 
-    def startline(self, s=u""):
+    def startline(self, s=u""): 
         self.result.put(self.indent_string * self.numindents + s)
 
     def put(self, s):
@@ -60,7 +60,7 @@ class DeclarationWriter(TreeVisitor):
     def putline(self, s):
         self.result.putline(self.indent_string * self.numindents + s)
 
-    def endline(self, s=u""):
+    def endline(self, s=u""): 
         self.result.putline(s)
 
     def line(self, s):
@@ -500,7 +500,7 @@ class CodeWriter(DeclarationWriter):
 
 class PxdWriter(DeclarationWriter):
     def __call__(self, node):
-        print(u'\n'.join(self.write(node).lines))
+        print(u'\n'.join(self.write(node).lines)) 
         return node
 
     def visit_CFuncDefNode(self, node):

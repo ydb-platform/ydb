@@ -9,7 +9,7 @@
 
     Do not alter the FORMATTERS dictionary by hand.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -77,7 +77,7 @@ if __name__ == '__main__':  # pragma: no cover
     footer = content[content.find("if __name__ == '__main__':"):]
 
     # write new file
-    with open(__file__, 'w') as fp:
+    with open(__file__, 'w') as fp: 
         fp.write(header)
         fp.write('FORMATTERS = {\n    %s\n}\n\n' % ',\n    '.join(found_formatters))
         fp.write(footer)

@@ -57,7 +57,7 @@ int Curl_blockread_all(struct connectdata *conn, /* connection data */
                        ssize_t buffersize,       /* max amount to read */
                        ssize_t *n)               /* amount bytes read */
 {
-  ssize_t nread = 0;
+  ssize_t nread = 0; 
   ssize_t allread = 0;
   int result;
   *n = 0;
@@ -682,24 +682,24 @@ CURLproxycode Curl_SOCKS5(const char *proxy_user,
     len = 0;
     socksreq[len++] = 1;    /* username/pw subnegotiation version */
     socksreq[len++] = (unsigned char) proxy_user_len;
-    if(proxy_user && proxy_user_len) {
-      /* the length must fit in a single byte */
-      if(proxy_user_len >= 255) {
-        failf(data, "Excessive user name length for proxy auth");
+    if(proxy_user && proxy_user_len) { 
+      /* the length must fit in a single byte */ 
+      if(proxy_user_len >= 255) { 
+        failf(data, "Excessive user name length for proxy auth"); 
         return CURLPX_LONG_USER;
-      }
+      } 
       memcpy(socksreq + len, proxy_user, proxy_user_len);
-    }
+    } 
     len += proxy_user_len;
     socksreq[len++] = (unsigned char) proxy_password_len;
-    if(proxy_password && proxy_password_len) {
-      /* the length must fit in a single byte */
-      if(proxy_password_len > 255) {
-        failf(data, "Excessive password length for proxy auth");
+    if(proxy_password && proxy_password_len) { 
+      /* the length must fit in a single byte */ 
+      if(proxy_password_len > 255) { 
+        failf(data, "Excessive password length for proxy auth"); 
         return CURLPX_LONG_PASSWD;
-      }
+      } 
       memcpy(socksreq + len, proxy_password, proxy_password_len);
-    }
+    } 
     len += proxy_password_len;
     sxstate(conn, CONNECT_AUTH_SEND);
     sx->outstanding = len;

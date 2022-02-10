@@ -7,13 +7,13 @@
             "description": "Run C++ compiler"
         },
         "clang-format": {
-            "description": "Run Clang-Format source code formatter"
+            "description": "Run Clang-Format source code formatter" 
         },
-        "clang-rename": {
-            "description": "Run Clang-Rename refactoring tool"
-        },
+        "clang-rename": { 
+            "description": "Run Clang-Rename refactoring tool" 
+        }, 
         "clang-tidy": {
-            "description": "Run Clang-Tidy source code linter"
+            "description": "Run Clang-Tidy source code linter" 
         },
         "clang-apply-replacements": {
             "description": "Run clang-apply-replacements companion for clang-tidy"
@@ -94,9 +94,9 @@
             "description": "Run Python 3",
             "visible": false
         },
-        "jar": {
-            "description": "Run jar"
-        },
+        "jar": { 
+            "description": "Run jar" 
+        }, 
         "java": {
             "description": "Run java"
         },
@@ -115,24 +115,24 @@
         "javac11": {
             "description": "Run javac 11"
         },
-        "jar15": {
-            "description": "Run jar from jdk15"
-        },
+        "jar15": { 
+            "description": "Run jar from jdk15" 
+        }, 
         "java15": {
             "description": "Run java 15"
         },
         "javac15": {
             "description": "Run javac 15"
         },
-        "jar17": {
+        "jar17": { 
             "description": "Run jar from jdk15"
         },
-        "java17": {
-            "description": "Run java 15"
-        },
-        "javac17": {
-            "description": "Run javac 15"
-        },
+        "java17": { 
+            "description": "Run java 15" 
+        }, 
+        "javac17": { 
+            "description": "Run javac 15" 
+        }, 
         "jq": {
             "description": "Run jq"
         },
@@ -3309,49 +3309,49 @@
                 }
             ]
         },
-        "jdk17": {
-            "tools": {
-                "jar17": {
-                    "bottle": "jdk17",
-                    "executable": "jar"
-                },
-                "java17": {
-                    "bottle": "jdk17",
-                    "executable": "java"
-                },
-                "javac17": {
-                    "bottle": "jdk17",
-                    "executable": "javac"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN",
-                        "arch": "arm64"
-                    },
-                    "default": true
-                }
-            ]
-        },
+        "jdk17": { 
+            "tools": { 
+                "jar17": { 
+                    "bottle": "jdk17", 
+                    "executable": "jar" 
+                }, 
+                "java17": { 
+                    "bottle": "jdk17", 
+                    "executable": "java" 
+                }, 
+                "javac17": { 
+                    "bottle": "jdk17", 
+                    "executable": "javac" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN", 
+                        "arch": "arm64" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
         "svn110": {
             "tools": {
                 "svn": {
@@ -3741,7 +3741,7 @@
             },
             "env": {
                 "TERMINFO": [
-                    "$(ROOT)/share/terminfo"
+                    "$(ROOT)/share/terminfo" 
                 ]
             },
             "platforms": [
@@ -6054,31 +6054,31 @@
                 ]
             }
         },
-        "jdk17": {
-            "formula": {
-                "sandbox_id": [
-                    1086829307,
-                    1086824941,
-                    1086822428,
-                    1086827917
-                ],
-                "match": "openjdk"
-            },
-            "executable": {
-                "jar": [
-                    "bin",
-                    "jar"
-                ],
-                "java": [
-                    "bin",
-                    "java"
-                ],
-                "javac": [
-                    "bin",
-                    "javac"
-                ]
-            }
-        },
+        "jdk17": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    1086829307, 
+                    1086824941, 
+                    1086822428, 
+                    1086827917 
+                ], 
+                "match": "openjdk" 
+            }, 
+            "executable": { 
+                "jar": [ 
+                    "bin", 
+                    "jar" 
+                ], 
+                "java": [ 
+                    "bin", 
+                    "java" 
+                ], 
+                "javac": [ 
+                    "bin", 
+                    "javac" 
+                ] 
+            } 
+        }, 
         "clang12": {
             "formula": {
                 "sandbox_id": [
@@ -6125,14 +6125,14 @@
                 ],
                 "llvm-nm": [
                     "bin",
-                    "llvm-nm"
-                ],
-                "llvm-strip": [
-                    "bin",
-                    "llvm-strip"
-                ],
-                "llvm-objcopy": [
-                    "bin",
+                    "llvm-nm" 
+                ], 
+                "llvm-strip": [ 
+                    "bin", 
+                    "llvm-strip" 
+                ], 
+                "llvm-objcopy": [ 
+                    "bin", 
                     "llvm-objcopy"
                 ]
             }
@@ -6781,7 +6781,7 @@
         },
         "valgrind": {
             "formula": {
-                "sandbox_id": 944969271,
+                "sandbox_id": 944969271, 
                 "match": "Valgrind"
             },
             "executable": {
@@ -6911,9 +6911,9 @@
         },
         "tmux": {
             "formula": {
-                "sandbox_id": [
-                    1105659071
-                ],
+                "sandbox_id": [ 
+                    1105659071 
+                ], 
                 "match": "tmux"
             },
             "executable": {

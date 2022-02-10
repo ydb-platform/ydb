@@ -47,7 +47,7 @@
 namespace cctz = y_absl::time_internal::cctz;
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 namespace {
 
@@ -496,5 +496,5 @@ struct tm ToTM(y_absl::Time t, y_absl::TimeZone tz) {
   return tm;
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl

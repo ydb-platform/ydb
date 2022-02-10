@@ -1,17 +1,17 @@
-p { i: "poco" x: "PocoCrypto" ix: true peerdir: "contrib/libs/poco/Crypto" }
-p { i: "poco" x: "PocoData" ix: true peerdir: "contrib/libs/poco/Data" }
-p { i: "poco" x: "PocoDataMySQL" ix: true peerdir: "contrib/libs/poco/Data/MySQL" }
-p { i: "poco" x: "PocoDataODBC" ix: true peerdir: "contrib/libs/poco/Data/ODBC" }
-p { i: "poco" x: "PocoDataSQLite" ix: true peerdir: "contrib/libs/poco/Data/SQLite" }
-p { i: "poco" x: "PocoEncodings" ix: true peerdir: "contrib/libs/poco/Encodings" }
-p { i: "poco" x: "PocoFoundation" ix: true peerdir: "contrib/libs/poco/Foundation" }
-p { i: "poco" x: "PocoJSON" ix: true peerdir: "contrib/libs/poco/JSON" }
-p { i: "poco" x: "PocoMongoDB" ix: true peerdir: "contrib/libs/poco/MongoDB" }
-p { i: "poco" x: "PocoNet" ix: true peerdir: "contrib/libs/poco/Net" }
-p { i: "poco" x: "PocoNetSSL" ix: true peerdir: "contrib/libs/poco/NetSSL_OpenSSL" }
-p { i: "poco" x: "PocoRedis" ix: true peerdir: "contrib/libs/poco/Redis" }
-p { i: "poco" x: "PocoUtil" ix: true peerdir: "contrib/libs/poco/Util" }
-p { i: "poco" x: "PocoXML" ix: true peerdir: "contrib/libs/poco/XML" }
-p { i: "poco" x: "PocoZip" ix: true peerdir: "contrib/libs/poco/Zip" }
-p { x: "cpspc" peerdir: "contrib/libs/poco/PageCompiler" }
-p { x: "f2cpsp" peerdir: "contrib/libs/poco/PageCompiler/File2Page" }
+p { i: "poco" x: "PocoCrypto" ix: true peerdir: "contrib/libs/poco/Crypto" } 
+p { i: "poco" x: "PocoData" ix: true peerdir: "contrib/libs/poco/Data" } 
+p { i: "poco" x: "PocoDataMySQL" ix: true peerdir: "contrib/libs/poco/Data/MySQL" } 
+p { i: "poco" x: "PocoDataODBC" ix: true peerdir: "contrib/libs/poco/Data/ODBC" } 
+p { i: "poco" x: "PocoDataSQLite" ix: true peerdir: "contrib/libs/poco/Data/SQLite" } 
+p { i: "poco" x: "PocoEncodings" ix: true peerdir: "contrib/libs/poco/Encodings" } 
+p { i: "poco" x: "PocoFoundation" ix: true peerdir: "contrib/libs/poco/Foundation" } 
+p { i: "poco" x: "PocoJSON" ix: true peerdir: "contrib/libs/poco/JSON" } 
+p { i: "poco" x: "PocoMongoDB" ix: true peerdir: "contrib/libs/poco/MongoDB" } 
+p { i: "poco" x: "PocoNet" ix: true peerdir: "contrib/libs/poco/Net" } 
+p { i: "poco" x: "PocoNetSSL" ix: true peerdir: "contrib/libs/poco/NetSSL_OpenSSL" } 
+p { i: "poco" x: "PocoRedis" ix: true peerdir: "contrib/libs/poco/Redis" } 
+p { i: "poco" x: "PocoUtil" ix: true peerdir: "contrib/libs/poco/Util" } 
+p { i: "poco" x: "PocoXML" ix: true peerdir: "contrib/libs/poco/XML" } 
+p { i: "poco" x: "PocoZip" ix: true peerdir: "contrib/libs/poco/Zip" } 
+p { x: "cpspc" peerdir: "contrib/libs/poco/PageCompiler" } 
+p { x: "f2cpsp" peerdir: "contrib/libs/poco/PageCompiler/File2Page" } 

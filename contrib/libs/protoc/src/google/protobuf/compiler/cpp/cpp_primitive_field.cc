@@ -193,8 +193,8 @@ void PrimitiveFieldGenerator::GenerateCopyConstructorCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_ = from.$name$_;\n");
-}
-
+} 
+ 
 void PrimitiveFieldGenerator::GenerateSerializeWithCachedSizesToArray(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -404,8 +404,8 @@ void RepeatedPrimitiveFieldGenerator::GenerateCopyConstructorCode(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
   format("$name$_.CopyFrom(from.$name$_);\n");
-}
-
+} 
+ 
 void RepeatedPrimitiveFieldGenerator::GenerateSerializeWithCachedSizesToArray(
     io::Printer* printer) const {
   Formatter format(printer, variables_);
@@ -426,7 +426,7 @@ void RepeatedPrimitiveFieldGenerator::GenerateSerializeWithCachedSizesToArray(
           "  target = stream->WriteFixedPacked($number$, _internal_$name$(), "
           "target);\n"
           "}\n");
-    }
+    } 
   } else {
     format(
         "for (int i = 0, n = this->_internal_$name$_size(); i < n; i++) {\n"

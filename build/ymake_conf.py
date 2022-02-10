@@ -1357,10 +1357,10 @@ class GnuCompiler(Compiler):
             '-Wall',
             '-Wextra',
         ]
-        self.cxx_warnings = [
+        self.cxx_warnings = [ 
             # Issue a warning if certain overload is hidden due to inheritance
             '-Woverloaded-virtual',
-        ]
+        ] 
 
         # Disable some warnings which will fail compilation at the time
         self.c_warnings += [
@@ -1377,8 +1377,8 @@ class GnuCompiler(Compiler):
         ])
 
         self.c_defines.extend([
-            '-D_THREAD_SAFE', '-D_PTHREADS', '-D_REENTRANT', '-D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES',
-            '-D_LARGEFILE_SOURCE', '-D__STDC_CONSTANT_MACROS', '-D__STDC_FORMAT_MACROS',
+            '-D_THREAD_SAFE', '-D_PTHREADS', '-D_REENTRANT', '-D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES', 
+            '-D_LARGEFILE_SOURCE', '-D__STDC_CONSTANT_MACROS', '-D__STDC_FORMAT_MACROS', 
         ])
 
         if not self.target.is_android:
@@ -1401,7 +1401,7 @@ class GnuCompiler(Compiler):
         self.extra_compile_opts = []
 
         self.c_flags = ['$CL_DEBUG_INFO', '$CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__']
-        self.c_flags += self.tc.arch_opt + ['-pipe']
+        self.c_flags += self.tc.arch_opt + ['-pipe'] 
 
         self.sfdl_flags = ['-E', '-C', '-x', 'c++']
 
@@ -1410,10 +1410,10 @@ class GnuCompiler(Compiler):
         if self.target.is_x86_64:
             self.c_flags.append('-m64')
 
-        self.debug_info_flags = ['-g']
-        if self.target.is_linux:
-            self.debug_info_flags.append('-ggnu-pubnames')
-
+        self.debug_info_flags = ['-g'] 
+        if self.target.is_linux: 
+            self.debug_info_flags.append('-ggnu-pubnames') 
+ 
         self.cross_suffix = '' if is_positive('FORCE_NO_PIC') else '.pic'
 
         self.optimize = None
@@ -1423,9 +1423,9 @@ class GnuCompiler(Compiler):
         if self.tc.is_clang:
             self.sfdl_flags.append('-Qunused-arguments')
 
-            self.cxx_warnings += [
-                '-Wimport-preprocessor-directive-pedantic',
-                '-Wno-undefined-var-template',
+            self.cxx_warnings += [ 
+                '-Wimport-preprocessor-directive-pedantic', 
+                '-Wno-undefined-var-template', 
                 '-Wno-return-std-move',
                 '-Wno-address-of-packed-member',
                 '-Wno-defaulted-function-deleted',
@@ -1436,17 +1436,17 @@ class GnuCompiler(Compiler):
                 '-Wno-deprecated-enum-float-conversion',
                 '-Wno-ambiguous-reversed-operator',
                 '-Wno-deprecated-volatile',
-            ]
+            ] 
 
             self.c_warnings += [
                 '-Wno-implicit-const-int-float-conversion',
                 # For nvcc to accept the above.
                 '-Wno-unknown-warning-option',
             ]
-
+ 
         elif self.tc.is_gcc:
-            self.c_foptions.append('-fno-delete-null-pointer-checks')
-            self.c_foptions.append('-fabi-version=8')
+            self.c_foptions.append('-fno-delete-null-pointer-checks') 
+            self.c_foptions.append('-fabi-version=8') 
 
         # Split all functions and data into separate sections for DCE and ICF linker passes
         # NOTE: iOS build uses -fembed-bitcode which conflicts with -ffunction-sections (only relevant for ELF targets)
@@ -1458,7 +1458,7 @@ class GnuCompiler(Compiler):
             self.c_defines.append('-DWITH_VALGRIND=1')
 
         if self.build.is_debug:
-            self.c_foptions.append('$FSTACK')
+            self.c_foptions.append('$FSTACK') 
 
         if self.build.is_fast_debug:
             self.c_flags.append('-Og')
@@ -1486,7 +1486,7 @@ class GnuCompiler(Compiler):
             self.c_defines.append('-UNDEBUG')
 
         if self.build.profiler_type in (Profiler.Generic, Profiler.GProf):
-            self.c_foptions.append('-fno-omit-frame-pointer')
+            self.c_foptions.append('-fno-omit-frame-pointer') 
 
         if self.build.profiler_type == Profiler.GProf:
             self.c_flags.append('-pg')
@@ -1499,11 +1499,11 @@ class GnuCompiler(Compiler):
         emit('OPTIMIZE', self.optimize)
         emit('WERROR_MODE', self.tc.werror_mode)
         emit('FSTACK', self.gcc_fstack)
-        append('C_DEFINES', self.c_defines)
+        append('C_DEFINES', self.c_defines) 
         emit('DUMP_DEPS')
         emit('GCC_PREPROCESSOR_OPTS', '$DUMP_DEPS', '$C_DEFINES')
-        append('C_WARNING_OPTS', self.c_warnings)
-        append('CXX_WARNING_OPTS', self.cxx_warnings)
+        append('C_WARNING_OPTS', self.c_warnings) 
+        append('CXX_WARNING_OPTS', self.cxx_warnings) 
 
         # PIE is only valid for executables, while PIC implies a shared library
         # `-pie` with a shared library is either ignored or fails to link
@@ -1527,24 +1527,24 @@ class GnuCompiler(Compiler):
         emit('WERROR_FLAG', '-Werror')
         # TODO(somov): Убрать чтение настройки из os.environ
         emit('USE_ARC_PROFILE', 'yes' if preset('USE_ARC_PROFILE') or os.environ.get('USE_ARC_PROFILE') else 'no')
-        emit('DEBUG_INFO_FLAGS', self.debug_info_flags)
+        emit('DEBUG_INFO_FLAGS', self.debug_info_flags) 
 
         emit_big('''
-            when ($NO_WSHADOW == "yes") {
-                C_WARNING_OPTS += -Wno-shadow
-            }
+            when ($NO_WSHADOW == "yes") { 
+                C_WARNING_OPTS += -Wno-shadow 
+            } 
             when ($NO_COMPILER_WARNINGS == "yes") {
-                C_WARNING_OPTS = -w
+                C_WARNING_OPTS = -w 
                 CXX_WARNING_OPTS = -Wno-everything
             }
             when ($NO_OPTIMIZE == "yes") {
-                OPTIMIZE = -O0
+                OPTIMIZE = -O0 
             }
             when ($SAVE_TEMPS ==  "yes") {
                 CXXFLAGS += -save-temps
             }
             when ($NOGCCSTACKCHECK != "yes") {
-                FSTACK += -fstack-check
+                FSTACK += -fstack-check 
             }''')
 
         c_builtins = [
@@ -1766,11 +1766,11 @@ class Linker(object):
             return Linker.LLD
 
         elif self.build.target.is_linux:
-            # DEVTOOLS-6782: LLD8 fails to link LTO builds with in-memory ELF objects larger than 4 GiB
-            blacklist_lld = is_positive('CLANG7') and is_positive('USE_LTO') and not is_positive('MUSL')
-            if self.tc.is_clang and not blacklist_lld:
-                return Linker.LLD
-            else:
+            # DEVTOOLS-6782: LLD8 fails to link LTO builds with in-memory ELF objects larger than 4 GiB 
+            blacklist_lld = is_positive('CLANG7') and is_positive('USE_LTO') and not is_positive('MUSL') 
+            if self.tc.is_clang and not blacklist_lld: 
+                return Linker.LLD 
+            else: 
                 # GCC et al.
 
                 if self.tc.is_gcc and is_positive('MUSL'):
@@ -1884,9 +1884,9 @@ class LD(Linker):
                 # https://github.com/android/ndk/issues/1196
                 self.ld_flags.append('-Wl,--no-rosegment')
         elif target.is_macos:
-            self.ld_flags.append('-Wl,-no_deduplicate')
-            if not self.tc.is_clang:
-                self.ld_flags.append('-Wl,-no_compact_unwind')
+            self.ld_flags.append('-Wl,-no_deduplicate') 
+            if not self.tc.is_clang: 
+                self.ld_flags.append('-Wl,-no_compact_unwind') 
 
         self.thread_library = select([
             (target.is_linux or target.is_macos, '-lpthread'),
@@ -2002,8 +2002,8 @@ class LD(Linker):
 
         dwarf_tool = self.tc.dwarf_tool
         if dwarf_tool is None and self.tc.is_clang and (self.target.is_macos or self.target.is_ios):
-            dsymutil = '{}/bin/{}dsymutil'.format(self.tc.name_marker, '' if self.tc.version_at_least(7) else 'llvm-')
-            dwarf_tool = '${YMAKE_PYTHON} ${input:"build/scripts/run_llvm_dsymutil.py"} ' + dsymutil
+            dsymutil = '{}/bin/{}dsymutil'.format(self.tc.name_marker, '' if self.tc.version_at_least(7) else 'llvm-') 
+            dwarf_tool = '${YMAKE_PYTHON} ${input:"build/scripts/run_llvm_dsymutil.py"} ' + dsymutil 
             if self.tc.version_at_least(5, 0):
                 dwarf_tool += ' -flat'
 
@@ -2037,7 +2037,7 @@ class LD(Linker):
             emit('LINKER_TIME_TRACE_FLAG')
 
         exe_flags = [
-            '$C_FLAGS_PLATFORM', '$BEFORE_PEERS', self.start_group, '${rootrel:PEERS}', self.end_group, '$AFTER_PEERS',
+            '$C_FLAGS_PLATFORM', '$BEFORE_PEERS', self.start_group, '${rootrel:PEERS}', self.end_group, '$AFTER_PEERS', 
             '$EXPORTS_VALUE $LINKER_SCRIPT_VALUE $LDFLAGS $LDFLAGS_GLOBAL $OBJADDE $OBJADDE_LIB',
             '$C_LIBRARY_PATH $C_SYSTEM_LIBRARIES_INTERCEPT $C_SYSTEM_LIBRARIES $STRIP_FLAG $DCE_FLAG $ICF_FLAG $LINKER_TIME_TRACE_FLAG']
 
@@ -2375,17 +2375,17 @@ class MSVCCompiler(MSVC, Compiler):
         defines = [
             '/DARCADIA_ROOT=${ARCADIA_ROOT}',
             '/DARCADIA_BUILD_ROOT=${ARCADIA_BUILD_ROOT}',
-            '/DFAKEID=$CPP_FAKEID',
-            '/DWIN32',
-            '/D_WIN32',
-            '/D_WINDOWS',
-            '/D_CRT_SECURE_NO_WARNINGS',
-            '/D_CRT_NONSTDC_NO_WARNINGS',
-            '/D_USE_MATH_DEFINES',
-            '/D__STDC_CONSTANT_MACROS',
-            '/D__STDC_FORMAT_MACROS',
-            '/D_USING_V110_SDK71_',
-            '/D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES',
+            '/DFAKEID=$CPP_FAKEID', 
+            '/DWIN32', 
+            '/D_WIN32', 
+            '/D_WINDOWS', 
+            '/D_CRT_SECURE_NO_WARNINGS', 
+            '/D_CRT_NONSTDC_NO_WARNINGS', 
+            '/D_USE_MATH_DEFINES', 
+            '/D__STDC_CONSTANT_MACROS', 
+            '/D__STDC_FORMAT_MACROS', 
+            '/D_USING_V110_SDK71_', 
+            '/D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES', 
             '/DNOMINMAX',
             '/DWIN32_LEAN_AND_MEAN',
         ]
@@ -2398,10 +2398,10 @@ class MSVCCompiler(MSVC, Compiler):
         ]
 
         if target.is_x86_64:
-            defines.extend(('/D_WIN64', '/DWIN64'))
+            defines.extend(('/D_WIN64', '/DWIN64')) 
 
         if target.is_armv7:
-            defines.extend(('/D_ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE', '/D__arm__'))
+            defines.extend(('/D_ARM_WINAPI_PARTITION_DESKTOP_SDK_AVAILABLE', '/D__arm__')) 
 
         winapi_unicode = False
 
@@ -2421,14 +2421,14 @@ class MSVCCompiler(MSVC, Compiler):
         ]
         flags += self.tc.arch_opt
 
-        c_warnings = ['/we{}'.format(code) for code in warns_as_error]
-        c_warnings += ['/w1{}'.format(code) for code in warns_enabled]
-        c_warnings += ['/wd{}'.format(code) for code in warns_disabled]
-        cxx_warnings = []
+        c_warnings = ['/we{}'.format(code) for code in warns_as_error] 
+        c_warnings += ['/w1{}'.format(code) for code in warns_enabled] 
+        c_warnings += ['/wd{}'.format(code) for code in warns_disabled] 
+        cxx_warnings = [] 
 
-        flags_debug = ['/Ob0', '/Od', '/D_DEBUG']
-        flags_release = ['/Ox', '/Ob2', '/Oi', '/DNDEBUG']
-
+        flags_debug = ['/Ob0', '/Od', '/D_DEBUG'] 
+        flags_release = ['/Ox', '/Ob2', '/Oi', '/DNDEBUG'] 
+ 
         flags_c_only = []
         cxx_flags = [
             # Provide proper __cplusplus value
@@ -2475,7 +2475,7 @@ class MSVCCompiler(MSVC, Compiler):
                 '-Wno-unknown-warning-option',
             ))
 
-            cxx_warnings += [
+            cxx_warnings += [ 
                 '-Woverloaded-virtual',
                 '-Wno-register',  # IGNIETFERRO-722 needed for contrib
                 '-Wimport-preprocessor-directive-pedantic',
@@ -2503,7 +2503,7 @@ class MSVCCompiler(MSVC, Compiler):
                     flags.append('-fms-compatibility-version=19.21')
 
             if self.tc.ide_msvs:
-                cxx_warnings += [
+                cxx_warnings += [ 
                     '-Wno-unused-command-line-argument',
                 ]
 
@@ -2515,12 +2515,12 @@ class MSVCCompiler(MSVC, Compiler):
         emit('OBJ_CROSS_SUF', '$OBJ_SUF')
         emit('OBJECT_SUF', '$OBJ_SUF.obj')
         emit('WIN32_WINNT', '{value}'.format(value=win32_winnt))
-        defines.append('/D{name}=$WIN32_WINNT'.format(name=self.WIN32_WINNT.Macro))
+        defines.append('/D{name}=$WIN32_WINNT'.format(name=self.WIN32_WINNT.Macro)) 
 
         if winapi_unicode:
-            defines += ['/DUNICODE', '/D_UNICODE']
+            defines += ['/DUNICODE', '/D_UNICODE'] 
         else:
-            defines += ['/D_MBCS']
+            defines += ['/D_MBCS'] 
 
         # https://msdn.microsoft.com/en-us/library/abx4dbyh.aspx
         if is_positive('DLL_RUNTIME'):  # XXX
@@ -2564,8 +2564,8 @@ class MSVCCompiler(MSVC, Compiler):
         emit('CFLAGS_RELEASE', flags_release)
         emit('MASMFLAGS', '')
         emit('DEBUG_INFO_FLAGS', debug_info_flags)
-        append('C_WARNING_OPTS', c_warnings)
-        append('CXX_WARNING_OPTS', cxx_warnings)
+        append('C_WARNING_OPTS', c_warnings) 
+        append('CXX_WARNING_OPTS', cxx_warnings) 
 
         if self.build.is_release:
             emit('CFLAGS_PER_TYPE', '$CFLAGS_RELEASE')
@@ -2574,12 +2574,12 @@ class MSVCCompiler(MSVC, Compiler):
         if self.build.is_ide:
             emit('CFLAGS_PER_TYPE', '@[debug|$CFLAGS_DEBUG]@[release|$CFLAGS_RELEASE]')
 
-        append('CFLAGS', flags, flags_msvs_only, '$CFLAGS_PER_TYPE', '$DEBUG_INFO_FLAGS', '$C_WARNING_OPTS', '$C_DEFINES', '$USER_CFLAGS', '$USER_CFLAGS_GLOBAL')
+        append('CFLAGS', flags, flags_msvs_only, '$CFLAGS_PER_TYPE', '$DEBUG_INFO_FLAGS', '$C_WARNING_OPTS', '$C_DEFINES', '$USER_CFLAGS', '$USER_CFLAGS_GLOBAL') 
         append('CXXFLAGS', '$CFLAGS', '/std:' + self.tc.cxx_std, cxx_flags, cxx_defines, '$CXX_WARNING_OPTS', '$USER_CXXFLAGS', '$USER_CXXFLAGS_GLOBAL')
         append('CONLYFLAGS', flags_c_only, '$USER_CONLYFLAGS', '$USER_CONLYFLAGS_GLOBAL')
 
-        append('BC_CFLAGS', '$CFLAGS')
-        append('BC_CXXFLAGS', '$BC_CFLAGS', '$CXXFLAGS')
+        append('BC_CFLAGS', '$CFLAGS') 
+        append('BC_CXXFLAGS', '$BC_CFLAGS', '$CXXFLAGS') 
 
         ucrt_include = os.path.join(self.tc.kit_includes, 'ucrt') if not self.tc.ide_msvs else "$(UniversalCRT_IncludePath.Split(';')[0].Replace('\\','/'))"
 
@@ -2589,19 +2589,19 @@ class MSVCCompiler(MSVC, Compiler):
             append('CFLAGS', '/DY_MSVC_INCLUDE="%s"' % vc_include)
 
         emit_big('''
-            when ($NO_WSHADOW == "yes") {
-                C_WARNING_OPTS += /wd4456 /wd4457
-            }
-            when ($NO_COMPILER_WARNINGS == "yes") {
-                C_WARNING_OPTS = /w
-                CXX_WARNING_OPTS =
-            }
-            when ($NO_OPTIMIZE == "yes") {
-                OPTIMIZE = /Od
-            }''')
+            when ($NO_WSHADOW == "yes") { 
+                C_WARNING_OPTS += /wd4456 /wd4457 
+            } 
+            when ($NO_COMPILER_WARNINGS == "yes") { 
+                C_WARNING_OPTS = /w 
+                CXX_WARNING_OPTS = 
+            } 
+            when ($NO_OPTIMIZE == "yes") { 
+                OPTIMIZE = /Od 
+            }''') 
 
         emit('SFDL_FLAG', ['/E', '/C', '/P', '/TP', '/Fi$SFDL_TMP_OUT'])
-        emit('WERROR_FLAG', '/WX')
+        emit('WERROR_FLAG', '/WX') 
         emit('WERROR_MODE', self.tc.werror_mode)
 
         if not self.tc.under_wine:
@@ -3005,10 +3005,10 @@ class Cuda(object):
         self.peerdirs = ['build/platform/cuda']
 
         self.nvcc_std = '-std=c++14'
-        if self.build.tc.type == 'msvc':
-            self.nvcc_std = self.nvcc_std.replace('-std=', '/std:')
-
-        self.nvcc_flags = []
+        if self.build.tc.type == 'msvc': 
+            self.nvcc_std = self.nvcc_std.replace('-std=', '/std:') 
+ 
+        self.nvcc_flags = [] 
 
         if not self.have_cuda.value:
             return
@@ -3049,9 +3049,9 @@ class Cuda(object):
 
         emit('NVCC_UNQUOTED', self.build.host.exe('$CUDA_ROOT', 'bin', 'nvcc'))
         emit('NVCC', '${quo:NVCC_UNQUOTED}')
-        emit('NVCC_STD', self.nvcc_std)
+        emit('NVCC_STD', self.nvcc_std) 
         emit('NVCC_FLAGS', self.nvcc_flags, '$CUDA_NVCC_FLAGS')
-        emit('NVCC_OBJ_EXT', '.o' if not self.build.target.is_windows else '.obj')
+        emit('NVCC_OBJ_EXT', '.o' if not self.build.target.is_windows else '.obj') 
 
     def print_macros(self):
         if not self.cuda_use_clang.value:

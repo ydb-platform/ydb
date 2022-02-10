@@ -1,5 +1,5 @@
 /* LzmaDec.h -- LZMA Decoder
-2018-04-21 : Igor Pavlov : Public domain */
+2018-04-21 : Igor Pavlov : Public domain */ 
 
 #ifndef __LZMA_DEC_H
 #define __LZMA_DEC_H
@@ -12,13 +12,13 @@ EXTERN_C_BEGIN
 /* _LZMA_PROB32 can increase the speed on some CPUs,
    but memory usage for CLzmaDec::probs will be doubled in that case */
 
-typedef
+typedef 
 #ifdef _LZMA_PROB32
-  UInt32
+  UInt32 
 #else
-  UInt16
+  UInt16 
 #endif
-  CLzmaProb;
+  CLzmaProb; 
 
 
 /* ---------- LZMA Properties ---------- */
@@ -27,10 +27,10 @@ typedef
 
 typedef struct _CLzmaProps
 {
-  Byte lc;
-  Byte lp;
-  Byte pb;
-  Byte _pad_;
+  Byte lc; 
+  Byte lp; 
+  Byte pb; 
+  Byte _pad_; 
   UInt32 dicSize;
 } CLzmaProps;
 
@@ -52,34 +52,34 @@ SRes LzmaProps_Decode(CLzmaProps *p, const Byte *data, unsigned size);
 
 typedef struct
 {
-  /* Don't change this structure. ASM code can use it. */
+  /* Don't change this structure. ASM code can use it. */ 
   CLzmaProps prop;
   CLzmaProb *probs;
-  CLzmaProb *probs_1664;
+  CLzmaProb *probs_1664; 
   Byte *dic;
-  SizeT dicBufSize;
-  SizeT dicPos;
+  SizeT dicBufSize; 
+  SizeT dicPos; 
   const Byte *buf;
-  UInt32 range;
-  UInt32 code;
+  UInt32 range; 
+  UInt32 code; 
   UInt32 processedPos;
   UInt32 checkDicSize;
   UInt32 reps[4];
-  UInt32 state;
-  UInt32 remainLen;
-
+  UInt32 state; 
+  UInt32 remainLen; 
+ 
   UInt32 numProbs;
   unsigned tempBufSize;
   Byte tempBuf[LZMA_REQUIRED_INPUT_MAX];
 } CLzmaDec;
 
-#define LzmaDec_Construct(p) { (p)->dic = NULL; (p)->probs = NULL; }
+#define LzmaDec_Construct(p) { (p)->dic = NULL; (p)->probs = NULL; } 
 
 void LzmaDec_Init(CLzmaDec *p);
 
 /* There are two types of LZMA streams:
-     - Stream with end mark. That end mark adds about 6 bytes to compressed size.
-     - Stream without end mark. You must know exact uncompressed size to decompress such stream. */
+     - Stream with end mark. That end mark adds about 6 bytes to compressed size. 
+     - Stream without end mark. You must know exact uncompressed size to decompress such stream. */ 
 
 typedef enum
 {
@@ -139,8 +139,8 @@ LzmaDec_Allocate* can return:
 SRes LzmaDec_AllocateProbs(CLzmaDec *p, const Byte *props, unsigned propsSize, ISzAllocPtr alloc);
 void LzmaDec_FreeProbs(CLzmaDec *p, ISzAllocPtr alloc);
 
-SRes LzmaDec_Allocate(CLzmaDec *p, const Byte *props, unsigned propsSize, ISzAllocPtr alloc);
-void LzmaDec_Free(CLzmaDec *p, ISzAllocPtr alloc);
+SRes LzmaDec_Allocate(CLzmaDec *p, const Byte *props, unsigned propsSize, ISzAllocPtr alloc); 
+void LzmaDec_Free(CLzmaDec *p, ISzAllocPtr alloc); 
 
 /* ---------- Dictionary Interface ---------- */
 
@@ -149,7 +149,7 @@ void LzmaDec_Free(CLzmaDec *p, ISzAllocPtr alloc);
    You must work with CLzmaDec variables directly in this interface.
 
    STEPS:
-     LzmaDec_Construct()
+     LzmaDec_Construct() 
      LzmaDec_Allocate()
      for (each new stream)
      {

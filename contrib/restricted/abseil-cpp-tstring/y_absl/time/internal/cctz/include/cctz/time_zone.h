@@ -23,14 +23,14 @@
 #include <chrono>
 #include <cstdint>
 #include <limits>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <utility>
 
-#include "y_absl/base/config.h"
+#include "y_absl/base/config.h" 
 #include "y_absl/time/internal/cctz/include/cctz/civil_time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace time_internal {
 namespace cctz {
 
@@ -186,13 +186,13 @@ class time_zone {
   bool next_transition(const time_point<seconds>& tp,
                        civil_transition* trans) const;
   template <typename D>
-  bool next_transition(const time_point<D>& tp, civil_transition* trans) const {
+  bool next_transition(const time_point<D>& tp, civil_transition* trans) const { 
     return next_transition(detail::split_seconds(tp).first, trans);
   }
   bool prev_transition(const time_point<seconds>& tp,
                        civil_transition* trans) const;
   template <typename D>
-  bool prev_transition(const time_point<D>& tp, civil_transition* trans) const {
+  bool prev_transition(const time_point<D>& tp, civil_transition* trans) const { 
     return prev_transition(detail::split_seconds(tp).first, trans);
   }
 
@@ -210,7 +210,7 @@ class time_zone {
   friend bool operator==(time_zone lhs, time_zone rhs) {
     return &lhs.effective_impl() == &rhs.effective_impl();
   }
-  friend bool operator!=(time_zone lhs, time_zone rhs) { return !(lhs == rhs); }
+  friend bool operator!=(time_zone lhs, time_zone rhs) { return !(lhs == rhs); } 
 
   template <typename H>
   friend H AbslHashValue(H h, time_zone tz) {
@@ -453,7 +453,7 @@ inline bool join_seconds(const time_point<seconds>& sec, const femtoseconds&,
 }  // namespace detail
 }  // namespace cctz
 }  // namespace time_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_TIME_INTERNAL_CCTZ_TIME_ZONE_H_

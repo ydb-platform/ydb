@@ -170,7 +170,7 @@ void MessageBuilderGenerator::Generate(io::Printer* printer) {
   // is needed to keep binary compatibility when we change generated code
   // to subclass a different GeneratedMessage class (e.g., in v3.0.0 release
   // we changed all generated code to subclass GeneratedMessageV3).
-  printer->Print(
+  printer->Print( 
       "@java.lang.Override\n"
       "public final Builder setUnknownFields(\n"
       "    final com.google.protobuf.UnknownFieldSet unknownFields) {\n"
@@ -440,11 +440,11 @@ void MessageBuilderGenerator::GenerateCommonBuilderMethods(
       "\n",
       "classname", name_resolver_->GetImmutableClassName(descriptor_));
 
-  // Override methods declared in GeneratedMessage to return the concrete
-  // generated type so callsites won't depend on GeneratedMessage. This
-  // is needed to keep binary compatibility when we change generated code
-  // to subclass a different GeneratedMessage class (e.g., in v3.0.0 release
-  // we changed all generated code to subclass GeneratedMessageV3).
+  // Override methods declared in GeneratedMessage to return the concrete 
+  // generated type so callsites won't depend on GeneratedMessage. This 
+  // is needed to keep binary compatibility when we change generated code 
+  // to subclass a different GeneratedMessage class (e.g., in v3.0.0 release 
+  // we changed all generated code to subclass GeneratedMessageV3). 
   printer->Print(
       "@java.lang.Override\n"
       "public Builder clone() {\n"

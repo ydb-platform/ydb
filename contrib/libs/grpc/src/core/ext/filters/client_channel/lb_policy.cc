@@ -1,30 +1,30 @@
-/*
- *
- * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
-#include <grpc/support/port_platform.h>
-
-#include "src/core/ext/filters/client_channel/lb_policy.h"
+/* 
+ * 
+ * Copyright 2015 gRPC authors. 
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ * 
+ */ 
+ 
+#include <grpc/support/port_platform.h> 
+ 
+#include "src/core/ext/filters/client_channel/lb_policy.h" 
 
 #include "src/core/ext/filters/client_channel/lb_policy_registry.h"
-#include "src/core/lib/iomgr/combiner.h"
-
-namespace grpc_core {
-
+#include "src/core/lib/iomgr/combiner.h" 
+ 
+namespace grpc_core { 
+ 
 DebugOnlyTraceFlag grpc_trace_lb_policy_refcount(false, "lb_policy_refcount");
 
 //
@@ -34,13 +34,13 @@ DebugOnlyTraceFlag grpc_trace_lb_policy_refcount(false, "lb_policy_refcount");
 LoadBalancingPolicy::LoadBalancingPolicy(Args args, intptr_t initial_refcount)
     : InternallyRefCounted(&grpc_trace_lb_policy_refcount, initial_refcount),
       work_serializer_(std::move(args.work_serializer)),
-      interested_parties_(grpc_pollset_set_create()),
+      interested_parties_(grpc_pollset_set_create()), 
       channel_control_helper_(std::move(args.channel_control_helper)) {}
-
-LoadBalancingPolicy::~LoadBalancingPolicy() {
-  grpc_pollset_set_destroy(interested_parties_);
-}
-
+ 
+LoadBalancingPolicy::~LoadBalancingPolicy() { 
+  grpc_pollset_set_destroy(interested_parties_); 
+} 
+ 
 void LoadBalancingPolicy::Orphan() {
   ShutdownLocked();
   Unref(DEBUG_LOCATION, "Orphan");
@@ -117,12 +117,12 @@ LoadBalancingPolicy::PickResult LoadBalancingPolicy::QueuePicker::Pick(
                      },
                      parent, nullptr),
                  GRPC_ERROR_NONE);
-  }
+  } 
   PickResult result;
   result.type = PickResult::PICK_QUEUE;
   return result;
-}
-
+} 
+ 
 //
 // LoadBalancingPolicy::TransientFailurePicker
 //
@@ -135,4 +135,4 @@ LoadBalancingPolicy::TransientFailurePicker::Pick(PickArgs /*args*/) {
   return result;
 }
 
-}  // namespace grpc_core
+}  // namespace grpc_core 

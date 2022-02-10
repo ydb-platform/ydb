@@ -407,7 +407,7 @@ TProtoStringType Namespace(const FileDescriptor* d, const Options& options) {
 
 TProtoStringType Namespace(const Descriptor* d, const Options& options) {
   return Namespace(d->file(), options);
-}
+} 
 
 TProtoStringType Namespace(const FieldDescriptor* d, const Options& options) {
   return Namespace(d->file(), options);
@@ -731,7 +731,7 @@ TProtoStringType DefaultValue(const Options& options, const FieldDescriptor* fie
              "\"";
     case FieldDescriptor::CPPTYPE_MESSAGE:
       return "*" + FieldMessageTypeName(field, options) +
-             "::internal_default_instance()";
+             "::internal_default_instance()"; 
   }
   // Can't actually get here; make compiler happy.  (We could add a default
   // case above but then we wouldn't get the nice compiler warning when a
@@ -1099,44 +1099,44 @@ void GenerateUtf8CheckCodeForCord(const FieldDescriptor* field,
                         "VerifyUTF8CordNamedField", format);
 }
 
-namespace {
-
-void Flatten(const Descriptor* descriptor,
-             std::vector<const Descriptor*>* flatten) {
-  for (int i = 0; i < descriptor->nested_type_count(); i++)
-    Flatten(descriptor->nested_type(i), flatten);
-  flatten->push_back(descriptor);
-}
-
-}  // namespace
-
+namespace { 
+ 
+void Flatten(const Descriptor* descriptor, 
+             std::vector<const Descriptor*>* flatten) { 
+  for (int i = 0; i < descriptor->nested_type_count(); i++) 
+    Flatten(descriptor->nested_type(i), flatten); 
+  flatten->push_back(descriptor); 
+} 
+ 
+}  // namespace 
+ 
 void FlattenMessagesInFile(const FileDescriptor* file,
                            std::vector<const Descriptor*>* result) {
-  for (int i = 0; i < file->message_type_count(); i++) {
+  for (int i = 0; i < file->message_type_count(); i++) { 
     Flatten(file->message_type(i), result);
-  }
-}
-
+  } 
+} 
+ 
 bool HasWeakFields(const Descriptor* descriptor, const Options& options) {
   for (int i = 0; i < descriptor->field_count(); i++) {
     if (IsWeak(descriptor->field(i), options)) return true;
   }
-  return false;
-}
-
+  return false; 
+} 
+ 
 bool HasWeakFields(const FileDescriptor* file, const Options& options) {
   for (int i = 0; i < file->message_type_count(); ++i) {
     if (HasWeakFields(file->message_type(i), options)) return true;
   }
-  return false;
-}
-
+  return false; 
+} 
+ 
 bool UsingImplicitWeakFields(const FileDescriptor* file,
                              const Options& options) {
   return options.lite_implicit_weak_fields &&
          GetOptimizeFor(file, options) == FileOptions::LITE_RUNTIME;
 }
-
+ 
 bool IsImplicitWeakField(const FieldDescriptor* field, const Options& options,
                          MessageSCCAnalyzer* scc_analyzer) {
   return UsingImplicitWeakFields(field->file(), options) &&
@@ -1150,67 +1150,67 @@ bool IsImplicitWeakField(const FieldDescriptor* field, const Options& options,
          // strongly-connected component.
          scc_analyzer->GetSCC(field->containing_type()) !=
              scc_analyzer->GetSCC(field->message_type());
-}
-
+} 
+ 
 MessageAnalysis MessageSCCAnalyzer::GetSCCAnalysis(const SCC* scc) {
-  if (analysis_cache_.count(scc)) return analysis_cache_[scc];
+  if (analysis_cache_.count(scc)) return analysis_cache_[scc]; 
   MessageAnalysis result{};
   if (UsingImplicitWeakFields(scc->GetFile(), options_)) {
     result.contains_weak = true;
   }
-  for (int i = 0; i < scc->descriptors.size(); i++) {
-    const Descriptor* descriptor = scc->descriptors[i];
-    if (descriptor->extension_range_count() > 0) {
-      result.contains_extension = true;
-    }
-    for (int i = 0; i < descriptor->field_count(); i++) {
-      const FieldDescriptor* field = descriptor->field(i);
-      if (field->is_required()) {
-        result.contains_required = true;
-      }
+  for (int i = 0; i < scc->descriptors.size(); i++) { 
+    const Descriptor* descriptor = scc->descriptors[i]; 
+    if (descriptor->extension_range_count() > 0) { 
+      result.contains_extension = true; 
+    } 
+    for (int i = 0; i < descriptor->field_count(); i++) { 
+      const FieldDescriptor* field = descriptor->field(i); 
+      if (field->is_required()) { 
+        result.contains_required = true; 
+      } 
       if (field->options().weak()) {
         result.contains_weak = true;
       }
-      switch (field->type()) {
-        case FieldDescriptor::TYPE_STRING:
-        case FieldDescriptor::TYPE_BYTES: {
-          if (field->options().ctype() == FieldOptions::CORD) {
-            result.contains_cord = true;
-          }
-          break;
-        }
-        case FieldDescriptor::TYPE_GROUP:
-        case FieldDescriptor::TYPE_MESSAGE: {
+      switch (field->type()) { 
+        case FieldDescriptor::TYPE_STRING: 
+        case FieldDescriptor::TYPE_BYTES: { 
+          if (field->options().ctype() == FieldOptions::CORD) { 
+            result.contains_cord = true; 
+          } 
+          break; 
+        } 
+        case FieldDescriptor::TYPE_GROUP: 
+        case FieldDescriptor::TYPE_MESSAGE: { 
           const SCC* child = analyzer_.GetSCC(field->message_type());
-          if (child != scc) {
-            MessageAnalysis analysis = GetSCCAnalysis(child);
-            result.contains_cord |= analysis.contains_cord;
-            result.contains_extension |= analysis.contains_extension;
-            if (!ShouldIgnoreRequiredFieldCheck(field, options_)) {
-              result.contains_required |= analysis.contains_required;
-            }
+          if (child != scc) { 
+            MessageAnalysis analysis = GetSCCAnalysis(child); 
+            result.contains_cord |= analysis.contains_cord; 
+            result.contains_extension |= analysis.contains_extension; 
+            if (!ShouldIgnoreRequiredFieldCheck(field, options_)) { 
+              result.contains_required |= analysis.contains_required; 
+            } 
             result.contains_weak |= analysis.contains_weak;
-          } else {
-            // This field points back into the same SCC hence the messages
-            // in the SCC are recursive. Note if SCC contains more than two
-            // nodes it has to be recursive, however this test also works for
-            // a single node that is recursive.
-            result.is_recursive = true;
-          }
-          break;
-        }
-        default:
-          break;
-      }
-    }
-  }
-  // We deliberately only insert the result here. After we contracted the SCC
-  // in the graph, the graph should be a DAG. Hence we shouldn't need to mark
-  // nodes visited as we can never return to them. By inserting them here
-  // we will go in an infinite loop if the SCC is not correct.
-  return analysis_cache_[scc] = result;
-}
-
+          } else { 
+            // This field points back into the same SCC hence the messages 
+            // in the SCC are recursive. Note if SCC contains more than two 
+            // nodes it has to be recursive, however this test also works for 
+            // a single node that is recursive. 
+            result.is_recursive = true; 
+          } 
+          break; 
+        } 
+        default: 
+          break; 
+      } 
+    } 
+  } 
+  // We deliberately only insert the result here. After we contracted the SCC 
+  // in the graph, the graph should be a DAG. Hence we shouldn't need to mark 
+  // nodes visited as we can never return to them. By inserting them here 
+  // we will go in an infinite loop if the SCC is not correct. 
+  return analysis_cache_[scc] = result; 
+} 
+ 
 void ListAllFields(const Descriptor* d,
                    std::vector<const FieldDescriptor*>* fields) {
   // Collect sub messages

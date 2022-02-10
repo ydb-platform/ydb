@@ -122,7 +122,7 @@
 #include <google/protobuf/generated_message_reflection.h>
 #include <google/protobuf/message_lite.h>
 #include <google/protobuf/port.h>
-
+ 
 #include <google/protobuf/json_util.h>
 #include <google/protobuf/messagext.h>
 
@@ -181,14 +181,14 @@ class MessageDifferencer;
 }
 
 
-namespace internal {
+namespace internal { 
 class ReflectionAccessor;      // message.cc
 class ReflectionOps;           // reflection_ops.h
 class MapKeySorter;            // wire_format.cc
 class WireFormat;              // wire_format.h
-class MapFieldReflectionTest;  // map_test.cc
+class MapFieldReflectionTest;  // map_test.cc 
 }  // namespace internal
-
+ 
 template <typename T>
 class RepeatedField;  // repeated_field.h
 
@@ -302,11 +302,11 @@ class PROTOBUF_EXPORT Message : public MessageLite {
   // using reflection (rather than the generated code implementation for
   // ByteSize()). Like ByteSize(), its CPU time is linear in the number of
   // fields defined for the proto.
-  virtual size_t SpaceUsedLong() const;
+  virtual size_t SpaceUsedLong() const; 
 
   PROTOBUF_DEPRECATED_MSG("Please use SpaceUsedLong() instead")
-  int SpaceUsed() const { return internal::ToIntSize(SpaceUsedLong()); }
-
+  int SpaceUsed() const { return internal::ToIntSize(SpaceUsedLong()); } 
+ 
   // Debugging & Testing----------------------------------------------
 
   // Generates a human readable form of this message, useful for debugging
@@ -487,10 +487,10 @@ class PROTOBUF_EXPORT Reflection final {
   size_t SpaceUsedLong(const Message& message) const;
 
   PROTOBUF_DEPRECATED_MSG("Please use SpaceUsedLong() instead")
-  int SpaceUsed(const Message& message) const {
-    return internal::ToIntSize(SpaceUsedLong(message));
-  }
-
+  int SpaceUsed(const Message& message) const { 
+    return internal::ToIntSize(SpaceUsedLong(message)); 
+  } 
+ 
   // Check if the given non-repeated field is set.
   bool HasField(const Message& message, const FieldDescriptor* field) const;
 
@@ -903,31 +903,31 @@ class PROTOBUF_EXPORT Reflection final {
   // downgrade to a compatible value or use the UnknownFieldSet if not. For
   // example:
   //
-  //   int new_value = GetValueFromApplicationLogic();
-  //   if (reflection->SupportsUnknownEnumValues()) {
+  //   int new_value = GetValueFromApplicationLogic(); 
+  //   if (reflection->SupportsUnknownEnumValues()) { 
   //     reflection->SetEnumValue(message, field, new_value);
-  //   } else {
+  //   } else { 
   //     if (field_descriptor->enum_type()->
   //             FindValueByNumber(new_value) != nullptr) {
-  //       reflection->SetEnumValue(message, field, new_value);
+  //       reflection->SetEnumValue(message, field, new_value); 
   //     } else if (emit_unknown_enum_values) {
-  //       reflection->MutableUnknownFields(message)->AddVarint(
-  //           field->number(), new_value);
+  //       reflection->MutableUnknownFields(message)->AddVarint( 
+  //           field->number(), new_value); 
   //     } else {
-  //       // convert value to a compatible/default value.
-  //       new_value = CompatibleDowngrade(new_value);
-  //       reflection->SetEnumValue(message, field, new_value);
+  //       // convert value to a compatible/default value. 
+  //       new_value = CompatibleDowngrade(new_value); 
+  //       reflection->SetEnumValue(message, field, new_value); 
   //     }
-  //   }
+  //   } 
   bool SupportsUnknownEnumValues() const;
 
   // Returns the MessageFactory associated with this message.  This can be
   // useful for determining if a message is a generated message or not, for
   // example:
-  //   if (message->GetReflection()->GetMessageFactory() ==
-  //       google::protobuf::MessageFactory::generated_factory()) {
-  //     // This is a generated message.
-  //   }
+  //   if (message->GetReflection()->GetMessageFactory() == 
+  //       google::protobuf::MessageFactory::generated_factory()) { 
+  //     // This is a generated message. 
+  //   } 
   // It can also be used to create more messages of this type, though
   // Message::New() is an easier way to accomplish this.
   MessageFactory* GetMessageFactory() const;
@@ -1039,10 +1039,10 @@ class PROTOBUF_EXPORT Reflection final {
   friend class util::MessageDifferencer;
 #define GOOGLE_PROTOBUF_HAS_CEL_MAP_REFLECTION_FRIEND
   friend class expr::CelMapReflectionFriend;
-  friend class internal::MapFieldReflectionTest;
-  friend class internal::MapKeySorter;
-  friend class internal::WireFormat;
-  friend class internal::ReflectionOps;
+  friend class internal::MapFieldReflectionTest; 
+  friend class internal::MapKeySorter; 
+  friend class internal::WireFormat; 
+  friend class internal::ReflectionOps; 
   friend class internal::SwapFieldHelper;
   // Needed for implementing text format for map.
   friend class internal::MapFieldPrinterHelper;

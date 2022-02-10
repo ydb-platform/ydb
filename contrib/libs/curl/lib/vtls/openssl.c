@@ -56,7 +56,7 @@
 #include "keylog.h"
 #include "strcase.h"
 #include "hostcheck.h"
-#include "multiif.h"
+#include "multiif.h" 
 #include "strerror.h"
 #include "curl_printf.h"
 
@@ -76,16 +76,16 @@
 #include <openssl/buffer.h>
 #include <openssl/pkcs12.h>
 
-#ifdef USE_AMISSL
-#include "amigaos.h"
-#endif
-
+#ifdef USE_AMISSL 
+#include "amigaos.h" 
+#endif 
+ 
 #if (OPENSSL_VERSION_NUMBER >= 0x0090808fL) && !defined(OPENSSL_NO_OCSP)
 #include <openssl/ocsp.h>
 #endif
 
 #if (OPENSSL_VERSION_NUMBER >= 0x0090700fL) && /* 0.9.7 or later */     \
-  !defined(OPENSSL_NO_ENGINE) && !defined(OPENSSL_NO_UI_CONSOLE)
+  !defined(OPENSSL_NO_ENGINE) && !defined(OPENSSL_NO_UI_CONSOLE) 
 #define USE_OPENSSL_ENGINE
 #include <openssl/engine.h>
 #endif
@@ -162,10 +162,10 @@
 #define HAVE_X509_GET0_SIGNATURE 1
 #endif
 
-#if (OPENSSL_VERSION_NUMBER >= 0x1000200fL) /* 1.0.2 or later */
-#define HAVE_SSL_GET_SHUTDOWN 1
-#endif
-
+#if (OPENSSL_VERSION_NUMBER >= 0x1000200fL) /* 1.0.2 or later */ 
+#define HAVE_SSL_GET_SHUTDOWN 1 
+#endif 
+ 
 #if OPENSSL_VERSION_NUMBER >= 0x10002003L && \
   OPENSSL_VERSION_NUMBER <= 0x10002FFFL && \
   !defined(OPENSSL_NO_COMP)
@@ -348,11 +348,11 @@ static char *ossl_strerror(unsigned long error, char *buf, size_t size)
   if(size)
     *buf = '\0';
 
-#ifdef OPENSSL_IS_BORINGSSL
-  ERR_error_string_n((uint32_t)error, buf, size);
-#else
+#ifdef OPENSSL_IS_BORINGSSL 
+  ERR_error_string_n((uint32_t)error, buf, size); 
+#else 
   ERR_error_string_n(error, buf, size);
-#endif
+#endif 
 
   if(size > 1 && !*buf) {
     strncpy(buf, (error ? "Unknown error" : "No error"), size);
@@ -927,11 +927,11 @@ int cert_stuff(struct connectdata *conn,
   fail:
       EVP_PKEY_free(pri);
       X509_free(x509);
-#ifdef USE_AMISSL
-      sk_X509_pop_free(ca, Curl_amiga_X509_free);
-#else
+#ifdef USE_AMISSL 
+      sk_X509_pop_free(ca, Curl_amiga_X509_free); 
+#else 
       sk_X509_pop_free(ca, X509_free);
-#endif
+#endif 
       if(!cert_done)
         return 0; /* failure! */
       break;
@@ -942,11 +942,11 @@ int cert_stuff(struct connectdata *conn,
     }
 
     if((!key_file) && (!key_bio)) {
-      key_file = cert_file;
+      key_file = cert_file; 
       key_bio = cert_bio;
     }
-    else
-      file_type = do_file_type(key_type);
+    else 
+      file_type = do_file_type(key_type); 
 
     switch(file_type) {
     case SSL_FILETYPE_PEM:
@@ -1136,8 +1136,8 @@ static int Curl_ossl_init(void)
   ENGINE_load_builtin_engines();
 #endif
 
-/* CONF_MFLAGS_DEFAULT_SECTION was introduced some time between 0.9.8b and
-   0.9.8e */
+/* CONF_MFLAGS_DEFAULT_SECTION was introduced some time between 0.9.8b and 
+   0.9.8e */ 
 #ifndef CONF_MFLAGS_DEFAULT_SECTION
 #define CONF_MFLAGS_DEFAULT_SECTION 0x0
 #endif
@@ -1391,7 +1391,7 @@ static int Curl_ossl_shutdown(struct connectdata *conn, int sockindex)
   bool done = FALSE;
   struct ssl_backend_data *backend = connssl->backend;
 
-#ifndef CURL_DISABLE_FTP
+#ifndef CURL_DISABLE_FTP 
   /* This has only been tested on the proftpd server, and the mod_tls code
      sends a close notify alert without waiting for a close notify alert in
      response. Thus we wait for a close notify alert from the server, but
@@ -1399,7 +1399,7 @@ static int Curl_ossl_shutdown(struct connectdata *conn, int sockindex)
 
   if(data->set.ftp_ccc == CURLFTPSSL_CCC_ACTIVE)
       (void)SSL_shutdown(backend->handle);
-#endif
+#endif 
 
   if(backend->handle) {
     buffsize = (int)sizeof(buf);
@@ -1617,13 +1617,13 @@ static CURLcode verifyhost(struct connectdata *conn, X509 *server_cert)
   altnames = X509_get_ext_d2i(server_cert, NID_subject_alt_name, NULL, NULL);
 
   if(altnames) {
-#ifdef OPENSSL_IS_BORINGSSL
-    size_t numalts;
-    size_t i;
-#else
+#ifdef OPENSSL_IS_BORINGSSL 
+    size_t numalts; 
+    size_t i; 
+#else 
     int numalts;
     int i;
-#endif
+#endif 
     bool dnsmatched = FALSE;
     bool ipmatched = FALSE;
 
@@ -1653,9 +1653,9 @@ static CURLcode verifyhost(struct connectdata *conn, X509 *server_cert)
              assumed that the data returned by ASN1_STRING_data() is null
              terminated or does not contain embedded nulls." But also that
              "The actual format of the data will depend on the actual string
-             type itself: for example for an IA5String the data will be ASCII"
+             type itself: for example for an IA5String the data will be ASCII" 
 
-             It has been however verified that in 0.9.6 and 0.9.7, IA5String
+             It has been however verified that in 0.9.6 and 0.9.7, IA5String 
              is always null-terminated.
           */
           if((altlen == strlen(altptr)) &&
@@ -1720,7 +1720,7 @@ static CURLcode verifyhost(struct connectdata *conn, X509 *server_cert)
       /* In OpenSSL 0.9.7d and earlier, ASN1_STRING_to_UTF8 fails if the input
          is already UTF-8 encoded. We check for this case and copy the raw
          string manually to avoid the problem. This code can be made
-         conditional in the future when OpenSSL has been fixed. */
+         conditional in the future when OpenSSL has been fixed. */ 
       if(tmp) {
         if(ASN1_STRING_type(tmp) == V_ASN1_UTF8STRING) {
           j = ASN1_STRING_length(tmp);
@@ -1786,7 +1786,7 @@ static CURLcode verifystatus(struct connectdata *conn,
                              struct ssl_connect_data *connssl)
 {
   int i, ocsp_status;
-  unsigned char *status;
+  unsigned char *status; 
   const unsigned char *p;
   CURLcode result = CURLE_OK;
   struct Curl_easy *data = conn->data;
@@ -1803,12 +1803,12 @@ static CURLcode verifystatus(struct connectdata *conn,
 
   long len = SSL_get_tlsext_status_ocsp_resp(backend->handle, &status);
 
-  if(!status) {
+  if(!status) { 
     failf(data, "No OCSP response received");
     result = CURLE_SSL_INVALIDCERTSTATUS;
     goto end;
   }
-  p = status;
+  p = status; 
   rsp = d2i_OCSP_RESPONSE(NULL, &p, len);
   if(!rsp) {
     failf(data, "Invalid OCSP response");
@@ -2266,101 +2266,101 @@ get_ssl_version_txt(SSL *ssl)
 }
 #endif
 
-#if (OPENSSL_VERSION_NUMBER >= 0x10100000L) /* 1.1.0 */
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L) /* 1.1.0 */ 
 static CURLcode
-set_ssl_version_min_max(SSL_CTX *ctx, struct connectdata *conn)
+set_ssl_version_min_max(SSL_CTX *ctx, struct connectdata *conn) 
 {
-  /* first, TLS min version... */
-  long curl_ssl_version_min = SSL_CONN_CONFIG(version);
-  long curl_ssl_version_max;
-
-  /* convert cURL min SSL version option to OpenSSL constant */
+  /* first, TLS min version... */ 
+  long curl_ssl_version_min = SSL_CONN_CONFIG(version); 
+  long curl_ssl_version_max; 
+ 
+  /* convert cURL min SSL version option to OpenSSL constant */ 
 #if defined(OPENSSL_IS_BORINGSSL) || defined(LIBRESSL_VERSION_NUMBER)
   uint16_t ossl_ssl_version_min = 0;
   uint16_t ossl_ssl_version_max = 0;
 #else
-  long ossl_ssl_version_min = 0;
-  long ossl_ssl_version_max = 0;
+  long ossl_ssl_version_min = 0; 
+  long ossl_ssl_version_max = 0; 
 #endif
-  switch(curl_ssl_version_min) {
-    case CURL_SSLVERSION_TLSv1: /* TLS 1.x */
-    case CURL_SSLVERSION_TLSv1_0:
-      ossl_ssl_version_min = TLS1_VERSION;
-      break;
-    case CURL_SSLVERSION_TLSv1_1:
-      ossl_ssl_version_min = TLS1_1_VERSION;
-      break;
-    case CURL_SSLVERSION_TLSv1_2:
-      ossl_ssl_version_min = TLS1_2_VERSION;
-      break;
-#ifdef TLS1_3_VERSION
-    case CURL_SSLVERSION_TLSv1_3:
-      ossl_ssl_version_min = TLS1_3_VERSION;
-      break;
-#endif
-  }
-
-  /* CURL_SSLVERSION_DEFAULT means that no option was selected.
+  switch(curl_ssl_version_min) { 
+    case CURL_SSLVERSION_TLSv1: /* TLS 1.x */ 
+    case CURL_SSLVERSION_TLSv1_0: 
+      ossl_ssl_version_min = TLS1_VERSION; 
+      break; 
+    case CURL_SSLVERSION_TLSv1_1: 
+      ossl_ssl_version_min = TLS1_1_VERSION; 
+      break; 
+    case CURL_SSLVERSION_TLSv1_2: 
+      ossl_ssl_version_min = TLS1_2_VERSION; 
+      break; 
+#ifdef TLS1_3_VERSION 
+    case CURL_SSLVERSION_TLSv1_3: 
+      ossl_ssl_version_min = TLS1_3_VERSION; 
+      break; 
+#endif 
+  } 
+ 
+  /* CURL_SSLVERSION_DEFAULT means that no option was selected. 
      We don't want to pass 0 to SSL_CTX_set_min_proto_version as
      it would enable all versions down to the lowest supported by
      the library.
      So we skip this, and stay with the OS default
-  */
-  if(curl_ssl_version_min != CURL_SSLVERSION_DEFAULT) {
-    if(!SSL_CTX_set_min_proto_version(ctx, ossl_ssl_version_min)) {
-      return CURLE_SSL_CONNECT_ERROR;
-    }
-  }
-
-  /* ... then, TLS max version */
-  curl_ssl_version_max = SSL_CONN_CONFIG(version_max);
-
-  /* convert cURL max SSL version option to OpenSSL constant */
-  switch(curl_ssl_version_max) {
-    case CURL_SSLVERSION_MAX_TLSv1_0:
-      ossl_ssl_version_max = TLS1_VERSION;
-      break;
-    case CURL_SSLVERSION_MAX_TLSv1_1:
-      ossl_ssl_version_max = TLS1_1_VERSION;
-      break;
-    case CURL_SSLVERSION_MAX_TLSv1_2:
-      ossl_ssl_version_max = TLS1_2_VERSION;
-      break;
-#ifdef TLS1_3_VERSION
-    case CURL_SSLVERSION_MAX_TLSv1_3:
-      ossl_ssl_version_max = TLS1_3_VERSION;
-      break;
-#endif
-    case CURL_SSLVERSION_MAX_NONE:  /* none selected */
-    case CURL_SSLVERSION_MAX_DEFAULT:  /* max selected */
-    default:
-      /* SSL_CTX_set_max_proto_version states that:
-        setting the maximum to 0 will enable
-        protocol versions up to the highest version
-        supported by the library */
-      ossl_ssl_version_max = 0;
-      break;
-  }
-
-  if(!SSL_CTX_set_max_proto_version(ctx, ossl_ssl_version_max)) {
-    return CURLE_SSL_CONNECT_ERROR;
-  }
-
-  return CURLE_OK;
-}
-#endif
-
-#ifdef OPENSSL_IS_BORINGSSL
-typedef uint32_t ctx_option_t;
-#else
-typedef long ctx_option_t;
-#endif
-
-#if (OPENSSL_VERSION_NUMBER < 0x10100000L) /* 1.1.0 */
-static CURLcode
-set_ssl_version_min_max_legacy(ctx_option_t *ctx_options,
-                              struct connectdata *conn, int sockindex)
-{
+  */ 
+  if(curl_ssl_version_min != CURL_SSLVERSION_DEFAULT) { 
+    if(!SSL_CTX_set_min_proto_version(ctx, ossl_ssl_version_min)) { 
+      return CURLE_SSL_CONNECT_ERROR; 
+    } 
+  } 
+ 
+  /* ... then, TLS max version */ 
+  curl_ssl_version_max = SSL_CONN_CONFIG(version_max); 
+ 
+  /* convert cURL max SSL version option to OpenSSL constant */ 
+  switch(curl_ssl_version_max) { 
+    case CURL_SSLVERSION_MAX_TLSv1_0: 
+      ossl_ssl_version_max = TLS1_VERSION; 
+      break; 
+    case CURL_SSLVERSION_MAX_TLSv1_1: 
+      ossl_ssl_version_max = TLS1_1_VERSION; 
+      break; 
+    case CURL_SSLVERSION_MAX_TLSv1_2: 
+      ossl_ssl_version_max = TLS1_2_VERSION; 
+      break; 
+#ifdef TLS1_3_VERSION 
+    case CURL_SSLVERSION_MAX_TLSv1_3: 
+      ossl_ssl_version_max = TLS1_3_VERSION; 
+      break; 
+#endif 
+    case CURL_SSLVERSION_MAX_NONE:  /* none selected */ 
+    case CURL_SSLVERSION_MAX_DEFAULT:  /* max selected */ 
+    default: 
+      /* SSL_CTX_set_max_proto_version states that: 
+        setting the maximum to 0 will enable 
+        protocol versions up to the highest version 
+        supported by the library */ 
+      ossl_ssl_version_max = 0; 
+      break; 
+  } 
+ 
+  if(!SSL_CTX_set_max_proto_version(ctx, ossl_ssl_version_max)) { 
+    return CURLE_SSL_CONNECT_ERROR; 
+  } 
+ 
+  return CURLE_OK; 
+} 
+#endif 
+ 
+#ifdef OPENSSL_IS_BORINGSSL 
+typedef uint32_t ctx_option_t; 
+#else 
+typedef long ctx_option_t; 
+#endif 
+ 
+#if (OPENSSL_VERSION_NUMBER < 0x10100000L) /* 1.1.0 */ 
+static CURLcode 
+set_ssl_version_min_max_legacy(ctx_option_t *ctx_options, 
+                              struct connectdata *conn, int sockindex) 
+{ 
 #if (OPENSSL_VERSION_NUMBER < 0x1000100FL) || !defined(TLS1_3_VERSION)
   /* convoluted #if condition just to avoid compiler warnings on unused
      variable */
@@ -2431,7 +2431,7 @@ set_ssl_version_min_max_legacy(ctx_option_t *ctx_options,
   }
   return CURLE_OK;
 }
-#endif
+#endif 
 
 /* The "new session" callback must return zero if the session can be removed
  * or non-zero if the session has been put into the session cache.
@@ -2498,8 +2498,8 @@ static CURLcode ossl_connect_step1(struct connectdata *conn, int sockindex)
   X509_LOOKUP *lookup = NULL;
   curl_socket_t sockfd = conn->sock[sockindex];
   struct ssl_connect_data *connssl = &conn->ssl[sockindex];
-  ctx_option_t ctx_options = 0;
-
+  ctx_option_t ctx_options = 0; 
+ 
 #ifdef SSL_CTRL_SET_TLSEXT_HOSTNAME
   bool sni;
   const char * const hostname = SSL_HOST_NAME();
@@ -2663,66 +2663,66 @@ static CURLcode ossl_connect_step1(struct connectdata *conn, int sockindex)
 #endif
 
   switch(ssl_version) {
-    /* "--sslv2" option means SSLv2 only, disable all others */
-    case CURL_SSLVERSION_SSLv2:
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L /* 1.1.0 */
+    /* "--sslv2" option means SSLv2 only, disable all others */ 
+    case CURL_SSLVERSION_SSLv2: 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L /* 1.1.0 */ 
       SSL_CTX_set_min_proto_version(backend->ctx, SSL2_VERSION);
       SSL_CTX_set_max_proto_version(backend->ctx, SSL2_VERSION);
-#else
-      ctx_options |= SSL_OP_NO_SSLv3;
-      ctx_options |= SSL_OP_NO_TLSv1;
-#  if OPENSSL_VERSION_NUMBER >= 0x1000100FL
-      ctx_options |= SSL_OP_NO_TLSv1_1;
-      ctx_options |= SSL_OP_NO_TLSv1_2;
-#    ifdef TLS1_3_VERSION
-      ctx_options |= SSL_OP_NO_TLSv1_3;
-#    endif
-#  endif
+#else 
+      ctx_options |= SSL_OP_NO_SSLv3; 
+      ctx_options |= SSL_OP_NO_TLSv1; 
+#  if OPENSSL_VERSION_NUMBER >= 0x1000100FL 
+      ctx_options |= SSL_OP_NO_TLSv1_1; 
+      ctx_options |= SSL_OP_NO_TLSv1_2; 
+#    ifdef TLS1_3_VERSION 
+      ctx_options |= SSL_OP_NO_TLSv1_3; 
+#    endif 
+#  endif 
 #endif
-      break;
-
-    /* "--sslv3" option means SSLv3 only, disable all others */
-    case CURL_SSLVERSION_SSLv3:
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L /* 1.1.0 */
+      break; 
+ 
+    /* "--sslv3" option means SSLv3 only, disable all others */ 
+    case CURL_SSLVERSION_SSLv3: 
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L /* 1.1.0 */ 
       SSL_CTX_set_min_proto_version(backend->ctx, SSL3_VERSION);
       SSL_CTX_set_max_proto_version(backend->ctx, SSL3_VERSION);
-#else
-      ctx_options |= SSL_OP_NO_SSLv2;
-      ctx_options |= SSL_OP_NO_TLSv1;
-#  if OPENSSL_VERSION_NUMBER >= 0x1000100FL
-      ctx_options |= SSL_OP_NO_TLSv1_1;
-      ctx_options |= SSL_OP_NO_TLSv1_2;
-#    ifdef TLS1_3_VERSION
-      ctx_options |= SSL_OP_NO_TLSv1_3;
-#    endif
-#  endif
+#else 
+      ctx_options |= SSL_OP_NO_SSLv2; 
+      ctx_options |= SSL_OP_NO_TLSv1; 
+#  if OPENSSL_VERSION_NUMBER >= 0x1000100FL 
+      ctx_options |= SSL_OP_NO_TLSv1_1; 
+      ctx_options |= SSL_OP_NO_TLSv1_2; 
+#    ifdef TLS1_3_VERSION 
+      ctx_options |= SSL_OP_NO_TLSv1_3; 
+#    endif 
+#  endif 
 #endif
-      break;
+      break; 
 
-    /* "--tlsv<x.y>" options mean TLS >= version <x.y> */
-    case CURL_SSLVERSION_DEFAULT:
-    case CURL_SSLVERSION_TLSv1: /* TLS >= version 1.0 */
-    case CURL_SSLVERSION_TLSv1_0: /* TLS >= version 1.0 */
-    case CURL_SSLVERSION_TLSv1_1: /* TLS >= version 1.1 */
-    case CURL_SSLVERSION_TLSv1_2: /* TLS >= version 1.2 */
-    case CURL_SSLVERSION_TLSv1_3: /* TLS >= version 1.3 */
-      /* asking for any TLS version as the minimum, means no SSL versions
-        allowed */
-      ctx_options |= SSL_OP_NO_SSLv2;
-      ctx_options |= SSL_OP_NO_SSLv3;
+    /* "--tlsv<x.y>" options mean TLS >= version <x.y> */ 
+    case CURL_SSLVERSION_DEFAULT: 
+    case CURL_SSLVERSION_TLSv1: /* TLS >= version 1.0 */ 
+    case CURL_SSLVERSION_TLSv1_0: /* TLS >= version 1.0 */ 
+    case CURL_SSLVERSION_TLSv1_1: /* TLS >= version 1.1 */ 
+    case CURL_SSLVERSION_TLSv1_2: /* TLS >= version 1.2 */ 
+    case CURL_SSLVERSION_TLSv1_3: /* TLS >= version 1.3 */ 
+      /* asking for any TLS version as the minimum, means no SSL versions 
+        allowed */ 
+      ctx_options |= SSL_OP_NO_SSLv2; 
+      ctx_options |= SSL_OP_NO_SSLv3; 
 
-#if (OPENSSL_VERSION_NUMBER >= 0x10100000L) /* 1.1.0 */
+#if (OPENSSL_VERSION_NUMBER >= 0x10100000L) /* 1.1.0 */ 
       result = set_ssl_version_min_max(backend->ctx, conn);
-#else
-      result = set_ssl_version_min_max_legacy(&ctx_options, conn, sockindex);
+#else 
+      result = set_ssl_version_min_max_legacy(&ctx_options, conn, sockindex); 
 #endif
-      if(result != CURLE_OK)
-        return result;
-      break;
+      if(result != CURLE_OK) 
+        return result; 
+      break; 
 
-    default:
-      failf(data, "Unrecognized parameter passed via CURLOPT_SSLVERSION");
-      return CURLE_SSL_CONNECT_ERROR;
+    default: 
+      failf(data, "Unrecognized parameter passed via CURLOPT_SSLVERSION"); 
+      return CURLE_SSL_CONNECT_ERROR; 
   }
 
   SSL_CTX_set_options(backend->ctx, ctx_options);
@@ -3273,12 +3273,12 @@ static CURLcode ossl_connect_step2(struct connectdata *conn, int sockindex)
       connssl->connecting_state = ssl_connect_2_writing;
       return CURLE_OK;
     }
-#ifdef SSL_ERROR_WANT_ASYNC
-    if(SSL_ERROR_WANT_ASYNC == detail) {
-      connssl->connecting_state = ssl_connect_2;
-      return CURLE_OK;
-    }
-#endif
+#ifdef SSL_ERROR_WANT_ASYNC 
+    if(SSL_ERROR_WANT_ASYNC == detail) { 
+      connssl->connecting_state = ssl_connect_2; 
+      return CURLE_OK; 
+    } 
+#endif 
     else {
       /* untreated error */
       unsigned long errdetail;
@@ -3384,9 +3384,9 @@ static CURLcode ossl_connect_step2(struct connectdata *conn, int sockindex)
       }
       else
         infof(data, "ALPN, server did not agree to a protocol\n");
-
-      Curl_multiuse_state(conn, conn->negnpn == CURL_HTTP_VERSION_2 ?
-                          BUNDLE_MULTIPLEX : BUNDLE_NO_MULTIUSE);
+ 
+      Curl_multiuse_state(conn, conn->negnpn == CURL_HTTP_VERSION_2 ? 
+                          BUNDLE_MULTIPLEX : BUNDLE_NO_MULTIUSE); 
     }
 #endif
 
@@ -3485,12 +3485,12 @@ static void X509V3_ext(struct Curl_easy *data,
   }
 }
 
-#ifdef OPENSSL_IS_BORINGSSL
-typedef size_t numcert_t;
-#else
-typedef int numcert_t;
-#endif
-
+#ifdef OPENSSL_IS_BORINGSSL 
+typedef size_t numcert_t; 
+#else 
+typedef int numcert_t; 
+#endif 
+ 
 static CURLcode get_cert_chain(struct connectdata *conn,
                                struct ssl_connect_data *connssl)
 {
@@ -3498,7 +3498,7 @@ static CURLcode get_cert_chain(struct connectdata *conn,
   STACK_OF(X509) *sk;
   int i;
   struct Curl_easy *data = conn->data;
-  numcert_t numcerts;
+  numcert_t numcerts; 
   BIO *mem;
   struct ssl_backend_data *backend = connssl->backend;
 
@@ -3509,14 +3509,14 @@ static CURLcode get_cert_chain(struct connectdata *conn,
 
   numcerts = sk_X509_num(sk);
 
-  result = Curl_ssl_init_certinfo(data, (int)numcerts);
+  result = Curl_ssl_init_certinfo(data, (int)numcerts); 
   if(result) {
     return result;
   }
 
   mem = BIO_new(BIO_s_mem());
 
-  for(i = 0; i < (int)numcerts; i++) {
+  for(i = 0; i < (int)numcerts; i++) { 
     ASN1_INTEGER *num;
     X509 *x = sk_X509_value(sk, i);
     EVP_PKEY *pubkey = NULL;
@@ -3542,25 +3542,25 @@ static CURLcode get_cert_chain(struct connectdata *conn,
 
 #if defined(HAVE_X509_GET0_SIGNATURE) && defined(HAVE_X509_GET0_EXTENSIONS)
     {
-      const X509_ALGOR *sigalg = NULL;
-      X509_PUBKEY *xpubkey = NULL;
-      ASN1_OBJECT *pubkeyoid = NULL;
+      const X509_ALGOR *sigalg = NULL; 
+      X509_PUBKEY *xpubkey = NULL; 
+      ASN1_OBJECT *pubkeyoid = NULL; 
 
-      X509_get0_signature(&psig, &sigalg, x);
-      if(sigalg) {
-        i2a_ASN1_OBJECT(mem, sigalg->algorithm);
-        push_certinfo("Signature Algorithm", i);
-      }
-
-      xpubkey = X509_get_X509_PUBKEY(x);
-      if(xpubkey) {
-        X509_PUBKEY_get0_param(&pubkeyoid, NULL, NULL, NULL, xpubkey);
-        if(pubkeyoid) {
-          i2a_ASN1_OBJECT(mem, pubkeyoid);
+      X509_get0_signature(&psig, &sigalg, x); 
+      if(sigalg) { 
+        i2a_ASN1_OBJECT(mem, sigalg->algorithm); 
+        push_certinfo("Signature Algorithm", i); 
+      } 
+ 
+      xpubkey = X509_get_X509_PUBKEY(x); 
+      if(xpubkey) { 
+        X509_PUBKEY_get0_param(&pubkeyoid, NULL, NULL, NULL, xpubkey); 
+        if(pubkeyoid) { 
+          i2a_ASN1_OBJECT(mem, pubkeyoid); 
           push_certinfo("Public Key Algorithm", i);
         }
       }
-
+ 
       X509V3_ext(data, i, X509_get0_extensions(x));
     }
 #else
@@ -3612,7 +3612,7 @@ static CURLcode get_cert_chain(struct connectdata *conn,
           const BIGNUM *e;
 
           RSA_get0_key(rsa, &n, &e, NULL);
-          BIO_printf(mem, "%d", BN_num_bits(n));
+          BIO_printf(mem, "%d", BN_num_bits(n)); 
           push_certinfo("RSA Public Key", i);
           print_pubkey_BN(rsa, n, i);
           print_pubkey_BN(rsa, e, i);
@@ -4234,9 +4234,9 @@ static ssize_t ossl_recv(struct connectdata *conn, /* connection data */
 
     switch(err) {
     case SSL_ERROR_NONE: /* this is not an error */
-      break;
+      break; 
     case SSL_ERROR_ZERO_RETURN: /* no more data */
-      /* close_notify alert */
+      /* close_notify alert */ 
       if(num == FIRSTSOCKET)
         /* mark the connection for close if it is indeed the control
            connection */
@@ -4324,12 +4324,12 @@ static size_t Curl_ossl_version(char *buffer, size_t size)
 #endif
 #elif defined(OPENSSL_IS_BORINGSSL)
   return msnprintf(buffer, size, OSSL_PACKAGE);
-#elif defined(HAVE_OPENSSL_VERSION) && defined(OPENSSL_VERSION_STRING)
-  return msnprintf(buffer, size, "%s/%s",
-                   OSSL_PACKAGE, OpenSSL_version(OPENSSL_VERSION_STRING));
-#else
+#elif defined(HAVE_OPENSSL_VERSION) && defined(OPENSSL_VERSION_STRING) 
+  return msnprintf(buffer, size, "%s/%s", 
+                   OSSL_PACKAGE, OpenSSL_version(OPENSSL_VERSION_STRING)); 
+#else 
   /* not LibreSSL, BoringSSL and not using OpenSSL_version */
-
+ 
   char sub[3];
   unsigned long ssleay_value;
   sub[2]='\0';
@@ -4355,11 +4355,11 @@ static size_t Curl_ossl_version(char *buffer, size_t size)
       sub[0]='\0';
   }
 
-  return msnprintf(buffer, size, "%s/%lx.%lx.%lx%s"
-#ifdef OPENSSL_FIPS
-                   "-fips"
-#endif
-                   ,
+  return msnprintf(buffer, size, "%s/%lx.%lx.%lx%s" 
+#ifdef OPENSSL_FIPS 
+                   "-fips" 
+#endif 
+                   , 
                    OSSL_PACKAGE,
                    (ssleay_value>>28)&0xf,
                    (ssleay_value>>20)&0xff,

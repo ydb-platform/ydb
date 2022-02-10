@@ -1,9 +1,9 @@
 # http://pubs.opengroup.org/onlinepubs/009695399/basedefs/sys/resource.h.html
 
-from posix.time  cimport timeval
+from posix.time  cimport timeval 
 from posix.types cimport id_t
 
-cdef extern from "<sys/resource.h>" nogil:
+cdef extern from "<sys/resource.h>" nogil: 
 
     enum: PRIO_PROCESS
     enum: PRIO_PGRP

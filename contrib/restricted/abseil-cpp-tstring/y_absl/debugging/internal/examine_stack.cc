@@ -34,7 +34,7 @@
 #include "y_absl/debugging/symbolize.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace debugging_internal {
 
 // Returns the program counter from signal context, nullptr if
@@ -65,8 +65,8 @@ void* GetProgramCounter(void* vuc) {
     return reinterpret_cast<void*>(context->uc_mcontext.gp_regs[32]);
 #elif defined(__powerpc__)
     return reinterpret_cast<void*>(context->uc_mcontext.uc_regs->gregs[32]);
-#elif defined(__riscv)
-    return reinterpret_cast<void*>(context->uc_mcontext.__gregs[REG_PC]);
+#elif defined(__riscv) 
+    return reinterpret_cast<void*>(context->uc_mcontext.__gregs[REG_PC]); 
 #elif defined(__s390__) && !defined(__s390x__)
     return reinterpret_cast<void*>(context->uc_mcontext.psw.addr & 0x7fffffff);
 #elif defined(__s390__) && defined(__s390x__)
@@ -199,5 +199,5 @@ void DumpPCAndFrameSizesAndStackTrace(
 }
 
 }  // namespace debugging_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl

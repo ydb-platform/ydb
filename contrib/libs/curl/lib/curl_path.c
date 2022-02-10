@@ -22,8 +22,8 @@
 
 #include "curl_setup.h"
 
-#if defined(USE_SSH)
-
+#if defined(USE_SSH) 
+ 
 #include <curl/curl.h>
 #include "curl_memory.h"
 #include "curl_path.h"
@@ -55,7 +55,7 @@ CURLcode Curl_getworkingpath(struct connectdata *conn,
     }
     if((working_path_len > 3) && (!memcmp(working_path, "/~/", 3)))
       /* It is referenced to the home directory, so strip the leading '/~/' */
-      memcpy(real_path, working_path + 3, working_path_len - 2);
+      memcpy(real_path, working_path + 3, working_path_len - 2); 
     else
       memcpy(real_path, working_path, 1 + working_path_len);
   }
@@ -195,5 +195,5 @@ CURLcode Curl_get_pathname(const char **cpp, char **path, char *homedir)
   Curl_safefree(*path);
   return CURLE_QUOTE_ERROR;
 }
-
-#endif /* if SSH is used */
+ 
+#endif /* if SSH is used */ 

@@ -20,8 +20,8 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 ADDINCL(
     GLOBAL contrib/libs/nghttp2/lib/includes
-    contrib/libs/nghttp2
-    contrib/libs/nghttp2/lib
+    contrib/libs/nghttp2 
+    contrib/libs/nghttp2/lib 
 )
 
 NO_COMPILER_WARNINGS()

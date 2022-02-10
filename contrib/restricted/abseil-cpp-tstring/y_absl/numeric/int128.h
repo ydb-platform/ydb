@@ -53,7 +53,7 @@
 #endif  // defined(_MSC_VER)
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 class int128;
 
@@ -238,7 +238,7 @@ class
 // Prefer to use the constexpr `Uint128Max()`.
 //
 // TODO(y_absl-team) deprecate kuint128max once migration tool is released.
-ABSL_DLL extern const uint128 kuint128max;
+ABSL_DLL extern const uint128 kuint128max; 
 
 // allow uint128 to be logged
 std::ostream& operator<<(std::ostream& os, uint128 v);
@@ -250,7 +250,7 @@ constexpr uint128 Uint128Max() {
                  (std::numeric_limits<uint64_t>::max)());
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 // Specialized numeric_limits for uint128.
@@ -299,7 +299,7 @@ class numeric_limits<y_absl::uint128> {
 }  // namespace std
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 // int128
 //
@@ -485,7 +485,7 @@ constexpr int128 Int128Min() {
   return int128((std::numeric_limits<int64_t>::min)(), 0);
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 // Specialized numeric_limits for int128.
@@ -537,7 +537,7 @@ class numeric_limits<y_absl::int128> {
 //                      Implementation details follow
 // --------------------------------------------------------------------------
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 constexpr uint128 MakeUint128(uint64_t high, uint64_t low) {
   return uint128(high, low);
@@ -1157,7 +1157,7 @@ constexpr int64_t BitCastToSigned(uint64_t v) {
 #include "y_absl/numeric/int128_no_intrinsic.inc"  // IWYU pragma: export
 #endif  // ABSL_HAVE_INTRINSIC_INT128
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #undef ABSL_INTERNAL_WCHAR_T

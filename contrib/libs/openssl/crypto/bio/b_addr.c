@@ -679,7 +679,7 @@ int BIO_lookup_ex(const char *host, const char *service, int lookup_type,
 
     if (1) {
 #ifdef AI_PASSIVE
-        int gai_ret = 0, old_ret = 0;
+        int gai_ret = 0, old_ret = 0; 
         struct addrinfo hints;
 
         memset(&hints, 0, sizeof(hints));
@@ -687,12 +687,12 @@ int BIO_lookup_ex(const char *host, const char *service, int lookup_type,
         hints.ai_family = family;
         hints.ai_socktype = socktype;
         hints.ai_protocol = protocol;
-# ifdef AI_ADDRCONFIG
-#  ifdef AF_UNSPEC
+# ifdef AI_ADDRCONFIG 
+#  ifdef AF_UNSPEC 
         if (host != NULL && family == AF_UNSPEC)
-#  endif
-            hints.ai_flags |= AI_ADDRCONFIG;
-# endif
+#  endif 
+            hints.ai_flags |= AI_ADDRCONFIG; 
+# endif 
 
         if (lookup_type == BIO_LOOKUP_SERVER)
             hints.ai_flags |= AI_PASSIVE;
@@ -701,7 +701,7 @@ int BIO_lookup_ex(const char *host, const char *service, int lookup_type,
          * macro magic in bio_local.h
          */
 # if defined(AI_ADDRCONFIG) && defined(AI_NUMERICHOST)
-      retry:
+      retry: 
 # endif
         switch ((gai_ret = getaddrinfo(host, service, &hints, res))) {
 # ifdef EAI_SYSTEM
@@ -710,25 +710,25 @@ int BIO_lookup_ex(const char *host, const char *service, int lookup_type,
             BIOerr(BIO_F_BIO_LOOKUP_EX, ERR_R_SYS_LIB);
             break;
 # endif
-# ifdef EAI_MEMORY
-        case EAI_MEMORY:
-            BIOerr(BIO_F_BIO_LOOKUP_EX, ERR_R_MALLOC_FAILURE);
-            break;
-# endif
+# ifdef EAI_MEMORY 
+        case EAI_MEMORY: 
+            BIOerr(BIO_F_BIO_LOOKUP_EX, ERR_R_MALLOC_FAILURE); 
+            break; 
+# endif 
         case 0:
             ret = 1;             /* Success */
             break;
         default:
-# if defined(AI_ADDRCONFIG) && defined(AI_NUMERICHOST)
-            if (hints.ai_flags & AI_ADDRCONFIG) {
-                hints.ai_flags &= ~AI_ADDRCONFIG;
-                hints.ai_flags |= AI_NUMERICHOST;
-                old_ret = gai_ret;
-                goto retry;
-            }
-# endif
+# if defined(AI_ADDRCONFIG) && defined(AI_NUMERICHOST) 
+            if (hints.ai_flags & AI_ADDRCONFIG) { 
+                hints.ai_flags &= ~AI_ADDRCONFIG; 
+                hints.ai_flags |= AI_NUMERICHOST; 
+                old_ret = gai_ret; 
+                goto retry; 
+            } 
+# endif 
             BIOerr(BIO_F_BIO_LOOKUP_EX, ERR_R_SYS_LIB);
-            ERR_add_error_data(1, gai_strerror(old_ret ? old_ret : gai_ret));
+            ERR_add_error_data(1, gai_strerror(old_ret ? old_ret : gai_ret)); 
             break;
         }
     } else {

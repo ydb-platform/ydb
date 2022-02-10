@@ -22,9 +22,9 @@
  *
  ***************************************************************************/
 
-#include "curl_setup.h"
-#ifndef CURL_DISABLE_NETRC
-
+#include "curl_setup.h" 
+#ifndef CURL_DISABLE_NETRC 
+ 
 /* returns -1 on failure, 0 if the host is found, 1 is the host isn't found */
 int Curl_parsenetrc(const char *host,
                     char **loginp,
@@ -37,9 +37,9 @@ int Curl_parsenetrc(const char *host,
    * section in the netrc.
    * If (*loginp)[0] != 0, search for password within machine and login.
    */
-#else
-/* disabled */
-#define Curl_parsenetrc(a,b,c,d,e,f) 1
-#endif
+#else 
+/* disabled */ 
+#define Curl_parsenetrc(a,b,c,d,e,f) 1 
+#endif 
 
 #endif /* HEADER_CURL_NETRC_H */

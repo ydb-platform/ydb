@@ -153,10 +153,10 @@ class PROTOBUF_EXPORT ProtoWriter : public StructuredObjectWriter {
     ignore_unknown_enum_values_ = ignore_unknown_enum_values;
   }
 
-  void set_use_lower_camel_for_enums(bool use_lower_camel_for_enums) {
-    use_lower_camel_for_enums_ = use_lower_camel_for_enums;
-  }
-
+  void set_use_lower_camel_for_enums(bool use_lower_camel_for_enums) { 
+    use_lower_camel_for_enums_ = use_lower_camel_for_enums; 
+  } 
+ 
   void set_case_insensitive_enum_parsing(bool case_insensitive_enum_parsing) {
     case_insensitive_enum_parsing_ = case_insensitive_enum_parsing;
   }
@@ -339,10 +339,10 @@ class PROTOBUF_EXPORT ProtoWriter : public StructuredObjectWriter {
   // If true, don't report unknown enum values to the listener.
   bool ignore_unknown_enum_values_;
 
-  // If true, check if enum name in camel case or without underscore matches the
-  // field name.
-  bool use_lower_camel_for_enums_;
-
+  // If true, check if enum name in camel case or without underscore matches the 
+  // field name. 
+  bool use_lower_camel_for_enums_; 
+ 
   // If true, check if enum name in UPPER_CASE matches the field name.
   bool case_insensitive_enum_parsing_;
 

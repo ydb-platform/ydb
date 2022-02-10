@@ -114,12 +114,12 @@ struct HostType
 	const char *data2;
 	const char *internalName;
 	bool isSigned;
-	bool isOrd;
-	bool isChar;
-	long long sMinVal;
-	long long sMaxVal;
-	unsigned long long uMinVal;
-	unsigned long long uMaxVal;
+	bool isOrd; 
+	bool isChar; 
+	long long sMinVal; 
+	long long sMaxVal; 
+	unsigned long long uMinVal; 
+	unsigned long long uMaxVal; 
 	unsigned int size;
 };
 
@@ -128,7 +128,7 @@ struct HostLang
 	/* Target language. */
 	enum Lang
 	{
-		C, D, D2, Go, Java, Ruby, CSharp, OCaml
+		C, D, D2, Go, Java, Ruby, CSharp, OCaml 
 	};
 
 	Lang lang;
@@ -142,12 +142,12 @@ extern HostLang *hostLang;
 
 extern HostLang hostLangC;
 extern HostLang hostLangD;
-extern HostLang hostLangD2;
-extern HostLang hostLangGo;
+extern HostLang hostLangD2; 
+extern HostLang hostLangGo; 
 extern HostLang hostLangJava;
 extern HostLang hostLangRuby;
 extern HostLang hostLangCSharp;
-extern HostLang hostLangOCaml;
+extern HostLang hostLangOCaml; 
 
 HostType *findAlphType( const char *s1 );
 HostType *findAlphType( const char *s1, const char *s2 );
@@ -176,12 +176,12 @@ struct KeyOps
 		this->alphType = alphType;
 		isSigned = alphType->isSigned;
 		if ( isSigned ) {
-			minKey = (long) alphType->sMinVal;
-			maxKey = (long) alphType->sMaxVal;
+			minKey = (long) alphType->sMinVal; 
+			maxKey = (long) alphType->sMaxVal; 
 		}
 		else {
-			minKey = (long) (unsigned long) alphType->uMinVal; 
-			maxKey = (long) (unsigned long) alphType->uMaxVal;
+			minKey = (long) (unsigned long) alphType->uMinVal;  
+			maxKey = (long) (unsigned long) alphType->uMaxVal; 
 		}
 	}
 
@@ -202,25 +202,25 @@ struct KeyOps
 
 	HostType *typeSubsumes( long long maxVal )
 	{
-		HostType *hostTypes = hostLang->hostTypes;
-
+		HostType *hostTypes = hostLang->hostTypes; 
+ 
 		for ( int i = 0; i < hostLang->numHostTypes; i++ ) {
-			long long typeMaxVal = hostTypes[i].isSigned ? hostTypes[i].sMaxVal : hostTypes[i].uMaxVal;
-			if ( maxVal <= typeMaxVal )
-				return &hostLang->hostTypes[i];
+			long long typeMaxVal = hostTypes[i].isSigned ? hostTypes[i].sMaxVal : hostTypes[i].uMaxVal; 
+			if ( maxVal <= typeMaxVal ) 
+				return &hostLang->hostTypes[i]; 
 		}
-
+ 
 		return 0;
 	}
 
 	HostType *typeSubsumes( bool isSigned, long long maxVal )
 	{
-		HostType *hostTypes = hostLang->hostTypes;
-
+		HostType *hostTypes = hostLang->hostTypes; 
+ 
 		for ( int i = 0; i < hostLang->numHostTypes; i++ ) {
-			long long typeMaxVal = hostTypes[i].isSigned ? hostTypes[i].sMaxVal : hostTypes[i].uMaxVal;
-			if ( ( ( isSigned && hostTypes[i].isSigned ) || !isSigned ) &&
-					maxVal <= typeMaxVal )
+			long long typeMaxVal = hostTypes[i].isSigned ? hostTypes[i].sMaxVal : hostTypes[i].uMaxVal; 
+			if ( ( ( isSigned && hostTypes[i].isSigned ) || !isSigned ) && 
+					maxVal <= typeMaxVal ) 
 				return hostLang->hostTypes + i;
 		}
 		return 0;

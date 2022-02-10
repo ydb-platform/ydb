@@ -23,8 +23,8 @@ PyAPI_FUNC(void) PySys_ResetWarnOptions(void);
 PyAPI_FUNC(void) PySys_AddWarnOption(char *);
 PyAPI_FUNC(int) PySys_HasWarnOptions(void);
 
-PyAPI_FUNC(size_t) _PySys_GetSizeOf(PyObject *);
-
+PyAPI_FUNC(size_t) _PySys_GetSizeOf(PyObject *); 
+ 
 #ifdef __cplusplus
 }
 #endif

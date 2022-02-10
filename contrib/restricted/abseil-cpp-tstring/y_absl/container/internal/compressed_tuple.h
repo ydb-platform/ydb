@@ -48,7 +48,7 @@
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace container_internal {
 
 template <typename... Ts>
@@ -282,7 +282,7 @@ template <>
 class ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC CompressedTuple<> {};
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #undef ABSL_INTERNAL_COMPRESSED_TUPLE_DECLSPEC

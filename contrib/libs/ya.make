@@ -4,11 +4,11 @@ OWNER(
 )
 
 RECURSE(
-    afl
+    afl 
     antlr4_cpp_runtime
     apache
-    apr
-    apr-util
+    apr 
+    apr-util 
     asio
     asmlib
     authparser
@@ -18,8 +18,8 @@ RECURSE(
     base64
     bdb
     bdb/ut
-    benchmark
-    bento4
+    benchmark 
+    bento4 
     bluez-clean-headers
     breakpad
     brotli
@@ -43,7 +43,7 @@ RECURSE(
     cppkafka
     crcutil
     crfsuite
-    croaring
+    croaring 
     ctemplate
     curl
     cxxsupp/libcxx
@@ -55,10 +55,10 @@ RECURSE(
     dwarflib
     earcut
     eccodes
-    eccodes/python
-    eccodes/tools
+    eccodes/python 
+    eccodes/tools 
     eigen
-    expat
+    expat 
     falconn
     farmhash
     farmhash/ut
@@ -74,28 +74,28 @@ RECURSE(
     flatbuffers64/flatc
     flatbuffers64/samples
     fmath
-    fmt
+    fmt 
     fontconfig
     fp16
     freetype
     fuse
-    fxdiv
+    fxdiv 
     gamma_function_apache_math_port
-    gdal
-    gdal/apps
+    gdal 
+    gdal/apps 
     gdk-pixbuf
     geos
-    geos/capi/ctypes
-    gflags
+    geos/capi/ctypes 
+    gflags 
     giflib
     glslang
-    google-compute-engine-oslogin
+    google-compute-engine-oslogin 
     googleapis-common-protos
     gost-engine
     gpsd
     grpc
     grpc/python
-    grpc/src/proto
+    grpc/src/proto 
     gtfs_realtime
     h3
     harfbuzz
@@ -103,8 +103,8 @@ RECURSE(
     hdr_histogram
     highwayhash
     hiredis
-    httpd24
-    hwloc
+    httpd24 
+    hwloc 
     hyperscan
     i18n
     i18n/ut
@@ -120,12 +120,12 @@ RECURSE(
     jemalloc
     jemalloc/dynamic
     jerasure
-    jinja2cpp
+    jinja2cpp 
     js-v8
-    json-c
-    jwt-cpp
+    json-c 
+    jwt-cpp 
     kaldi
-    kenlm
+    kenlm 
     kissfft
     kyotocabinet
     lang_detect
@@ -133,12 +133,12 @@ RECURSE(
     lcms2
     lepton
     leveldb
-    libarchive
+    libarchive 
     libbpf
     libbz2
     libc_compat
     libc_userver_workarounds
-    libcpuid
+    libcpuid 
     libcroco
     libde265
     libdivide
@@ -149,14 +149,14 @@ RECURSE(
     libexslt
     libfdk-aac
     libfuzzer12
-    libgeotiff
+    libgeotiff 
     libgit2
     libgraphqlparser
     libheif
     libical
     libiconv
     libidn
-    libidn2
+    libidn2 
     libjpeg-turbo
     libjwt
     liblinear
@@ -172,7 +172,7 @@ RECURSE(
     libphonenumber
     libpng
     libpq
-    libpqxx
+    libpqxx 
     libpsl
     libraw
     librdkafka
@@ -180,17 +180,17 @@ RECURSE(
     librsvg
     libsamplerate
     libsavi
-    libsodium
+    libsodium 
     libspf2
     libsrtp
     libssh2
     libtapi
     libtess2
     libtiff
-    libunistring
-    libunwind
+    libunistring 
+    libunwind 
     liburing
-    libuv
+    libuv 
     libvorbis
     libvorbis/libvorbisenc
     libvpx
@@ -198,17 +198,17 @@ RECURSE(
     libx264
     libx265
     libxml
-    libxml/dynamic
+    libxml/dynamic 
     libxslt
     libyang
     libyuv
     linenoise
-    linux-headers
+    linux-headers 
     linuxvdso
     liquidfun
-    llvm11
+    llvm11 
     llvm12
-    llvm8
+    llvm8 
     lmdbxx
     lmdbxx/check
     lmdbxx/example
@@ -216,27 +216,27 @@ RECURSE(
     lua-cjson
     luajit_21
     lz4
-    lz4/generated
+    lz4/generated 
     lzmasdk
     lzo2
     matrixssl
     mecab
-    metrohash
+    metrohash 
     mimalloc
     minilzo
     minizip
-    mlir11
+    mlir11 
     mms
     mongo-c-driver
     mongo-cxx-driver
     msgpack
     muparser
     muparser/tests
-    musl
+    musl 
     nanosvg
     nanosvg/ut
     nayuki_md5
-    nghttp2
+    nghttp2 
     node-addon-api
     nodejs_12
     node_nan
@@ -245,23 +245,23 @@ RECURSE(
     nvidia
     odpi
     onnx
-    opencl-headers
+    opencl-headers 
     opencv
     opencv/modules
     opencv/modules/python/src2
     openfst
     opengv
     openjpeg
-    openldap
-    openldap/libraries
+    openldap 
+    openldap/libraries 
     openmp
     openssl
     opentracing-cpp
     opus
     ortools
     ortools/proto
-    osrm
-    pam
+    osrm 
+    pam 
     pango
     pcre
     pcre2
@@ -274,14 +274,14 @@ RECURSE(
     poco
     portaudio
     porto_api
-    proj
+    proj 
     protobuf
     protobuf/python
     protobuf-mutator
     protobuf_std
     protoc_std
-    psimd
-    pthreadpool
+    psimd 
+    pthreadpool 
     pugixml
     pybind11
     pycxx
@@ -296,10 +296,10 @@ RECURSE(
     rocksdb
     rocksdb/tools/ldb
     rocksdb/tools/sst_dump
-    sasl
-    sctp
-    sentencepiece
-    serf
+    sasl 
+    sctp 
+    sentencepiece 
+    serf 
     snappy
     sophos
     sparrowhawk
@@ -311,19 +311,19 @@ RECURSE(
     spirv_tools
     sqlite3
     srt
-    stan
+    stan 
     stan-math
-    stan/stan/command
-    stxxl
+    stan/stan/command 
+    stxxl 
     subversion
-    sundials
+    sundials 
     svm
     svt-hevc
     svt-vp9
     szip
     t1ha
     taocrypt
-    tbb
+    tbb 
     tcmalloc
     tcmalloc/dynamic
     tensorboard
@@ -345,7 +345,7 @@ RECURSE(
     uatraits
     usrsctp
     utf8proc
-    util-linux
+    util-linux 
     valgrind
     vlfeat
     vmaf
@@ -356,7 +356,7 @@ RECURSE(
     xdelta3
     xmlsec
     xpdf-3.04
-    xxhash
+    xxhash 
     xz
     yajl
     yaml

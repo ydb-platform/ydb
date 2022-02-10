@@ -11,16 +11,16 @@ def expect_async(expecter, timeout=None):
     idx = expecter.existing_data()
     if idx is not None:
         return idx
-    if not expecter.spawn.async_pw_transport:
-        pw = PatternWaiter()
-        pw.set_expecter(expecter)
-        transport, pw = yield from asyncio.get_event_loop()\
-            .connect_read_pipe(lambda: pw, expecter.spawn)
-        expecter.spawn.async_pw_transport = pw, transport
-    else:
-        pw, transport = expecter.spawn.async_pw_transport
-        pw.set_expecter(expecter)
-        transport.resume_reading()
+    if not expecter.spawn.async_pw_transport: 
+        pw = PatternWaiter() 
+        pw.set_expecter(expecter) 
+        transport, pw = yield from asyncio.get_event_loop()\ 
+            .connect_read_pipe(lambda: pw, expecter.spawn) 
+        expecter.spawn.async_pw_transport = pw, transport 
+    else: 
+        pw, transport = expecter.spawn.async_pw_transport 
+        pw.set_expecter(expecter) 
+        transport.resume_reading() 
     try:
         return (yield from asyncio.wait_for(pw.fut, timeout))
     except asyncio.TimeoutError as e:
@@ -35,7 +35,7 @@ def repl_run_command_async(repl, cmdlines, timeout=-1):
         yield from repl._expect_prompt(timeout=timeout, async_=True)
         res.append(repl.child.before)
         repl.child.sendline(line)
-
+ 
     # Command was fully submitted, now wait for the next prompt
     prompt_idx = yield from repl._expect_prompt(timeout=timeout, async_=True)
     if prompt_idx == 1:
@@ -46,24 +46,24 @@ def repl_run_command_async(repl, cmdlines, timeout=-1):
     return u''.join(res + [repl.child.before])
 
 class PatternWaiter(asyncio.Protocol):
-    transport = None
-
-    def set_expecter(self, expecter):
+    transport = None 
+ 
+    def set_expecter(self, expecter): 
         self.expecter = expecter
         self.fut = asyncio.Future()
-
+ 
     def found(self, result):
         if not self.fut.done():
             self.fut.set_result(result)
-            self.transport.pause_reading()
+            self.transport.pause_reading() 
 
     def error(self, exc):
         if not self.fut.done():
             self.fut.set_exception(exc)
-            self.transport.pause_reading()
-
-    def connection_made(self, transport):
-        self.transport = transport
+            self.transport.pause_reading() 
+ 
+    def connection_made(self, transport): 
+        self.transport = transport 
 
     def data_received(self, data):
         spawn = self.expecter.spawn
@@ -72,11 +72,11 @@ class PatternWaiter(asyncio.Protocol):
 
         if self.fut.done():
             spawn._before.write(s)
-            spawn._buffer.write(s)
+            spawn._buffer.write(s) 
             return
 
         try:
-            index = self.expecter.new_data(s)
+            index = self.expecter.new_data(s) 
             if index is not None:
                 # Found a match
                 self.found(index)

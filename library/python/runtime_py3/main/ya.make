@@ -6,21 +6,21 @@ OWNER(
 )
 
 PEERDIR(
-    contrib/tools/python3/src
+    contrib/tools/python3/src 
     library/cpp/resource
 )
 
-ADDINCL(
-    contrib/tools/python3/src/Include
-)
+ADDINCL( 
+    contrib/tools/python3/src/Include 
+) 
 
 CFLAGS(
     -DPy_BUILD_CORE
 )
 
-SRCS(
-    main.c
+SRCS( 
+    main.c 
     get_py_main.cpp
-)
+) 
 
 END()

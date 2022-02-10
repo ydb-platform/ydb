@@ -182,7 +182,7 @@ class PROTOBUF_EXPORT Importer {
                                 bool is_error = false);
   void ClearUnusedImportTrackFiles();
 
-
+ 
  private:
   SourceTreeDescriptorDatabase database_;
   DescriptorPool pool_;

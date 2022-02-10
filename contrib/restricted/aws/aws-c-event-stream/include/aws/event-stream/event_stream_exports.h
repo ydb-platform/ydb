@@ -1,8 +1,8 @@
 #ifndef AWS_EVENT_STREAM_EXPORTS_H_
 #define AWS_EVENT_STREAM_EXPORTS_H_
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 #if defined(USE_WINDOWS_DLL_SEMANTICS) || defined(WIN32)
 #    ifdef AWS_EVENT_STREAM_USE_IMPORT_EXPORT

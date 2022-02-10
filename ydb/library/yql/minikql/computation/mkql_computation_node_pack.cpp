@@ -173,7 +173,7 @@ namespace {
             case TType::EKind::Optional: {
                 const auto optType = static_cast<const TOptionalType*>(type);
 
-                const auto item = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "item", block);
+                const auto item = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "item", block); 
                 const auto hasi = CallInst::Create(module.getFunction("GetOptionalValue"), {value, item, mask}, "has", block);
 
                 const auto done = BasicBlock::Create(context, "done", pack);
@@ -191,7 +191,7 @@ namespace {
             case TType::EKind::Struct: {
                 const auto structType = static_cast<const TStructType*>(type);
                 const auto getter = module.getFunction("GetElement");
-                const auto member = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "member", block);
+                const auto member = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "member", block); 
                 auto curr = block;
                 for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
                     const auto index = ConstantInt::get(Type::getInt32Ty(context), i);
@@ -204,7 +204,7 @@ namespace {
             case TType::EKind::Tuple: {
                 const auto tupleType = static_cast<const TTupleType*>(type);
                 const auto getter = module.getFunction("GetElement");
-                const auto element = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "item", block);
+                const auto element = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "item", block); 
                 auto curr = block;
                 for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
                     const auto index = ConstantInt::get(Type::getInt32Ty(context), i);
@@ -232,7 +232,7 @@ namespace {
                     THROW yexception() << "Unexpected underlying variant type: " << innerType->GetKindAsStr();
                 }
 
-                const auto variant = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "variant", block);
+                const auto variant = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "variant", block); 
                 const auto index = CallInst::Create(module.getFunction("GetVariantItem"), {value, variant, buffer}, "index", block);
 
                 const auto exit = BasicBlock::Create(context, "exit", pack);
@@ -253,10 +253,10 @@ namespace {
 
                 const auto iterType = Type::getInt64PtrTy(context);
                 const auto zero = ConstantInt::getFalse(context);
-                const auto iter = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "iter", block);
+                const auto iter = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "iter", block); 
 
                 const auto begin = CallInst::Create(module.getFunction("GetListIterator"), {value, iter, buffer}, "iterator", block);
-                const auto item = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "item", block);
+                const auto item = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "item", block); 
 
                 const auto loop = BasicBlock::Create(context, "loop", pack);
                 BranchInst::Create(loop, block);
@@ -279,11 +279,11 @@ namespace {
 
                 const auto iterType = Type::getInt64PtrTy(context);
                 const auto zero = ConstantInt::getFalse(context);
-                const auto iter = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "iter", block);
+                const auto iter = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "iter", block); 
 
                 const auto begin = CallInst::Create(module.getFunction("GetDictIterator"), {value, iter, buffer}, "iterator", block);
-                const auto first = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "first", block);
-                const auto second = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "second", block);
+                const auto first = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "first", block); 
+                const auto second = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "second", block); 
 
                 const auto loop = BasicBlock::Create(context, "loop", pack);
                 BranchInst::Create(loop, block);

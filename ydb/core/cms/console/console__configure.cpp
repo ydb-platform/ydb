@@ -218,7 +218,7 @@ public:
         switch (action.GetFilterCase()) {
         case NKikimrConsole::TRemoveConfigItems::kCookieFilter:
             return IsRemoveConfigItemsByCookieActionOk(action.GetCookieFilter(), ctx);
-        case NKikimrConsole::TRemoveConfigItems::FILTER_NOT_SET:
+        case NKikimrConsole::TRemoveConfigItems::FILTER_NOT_SET: 
             Error(Ydb::StatusIds::BAD_REQUEST, "empty filter in remove config items action", ctx);
             return false;
         default:

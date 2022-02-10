@@ -364,7 +364,7 @@ class BufferImpl : boost::noncopyable
     /// An uninstantiable function, this is if boost::is_fundamental check fails,
     /// and will compile-time assert.
     template<typename T>
-    void writeTo(T, const std::false_type&)
+    void writeTo(T, const std::false_type&) 
     {
         BOOST_STATIC_ASSERT(sizeof(T)==0);
     }

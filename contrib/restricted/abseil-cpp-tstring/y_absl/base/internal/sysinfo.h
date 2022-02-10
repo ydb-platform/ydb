@@ -28,13 +28,13 @@
 #include <sys/types.h>
 #endif
 
-#include <cstdint>
-
+#include <cstdint> 
+ 
 #include "y_absl/base/config.h"
 #include "y_absl/base/port.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace base_internal {
 
 // Nominal core processor cycles per second of each processor.   This is _not_
@@ -53,10 +53,10 @@ int NumCPUs();
 // On Linux, you may send a signal to the resulting ID with kill().  However,
 // it is recommended for portability that you use pthread_kill() instead.
 #ifdef _WIN32
-// On Windows, process id and thread id are of the same type according to the
-// return types of GetProcessId() and GetThreadId() are both DWORD, an unsigned
-// 32-bit type.
-using pid_t = uint32_t;
+// On Windows, process id and thread id are of the same type according to the 
+// return types of GetProcessId() and GetThreadId() are both DWORD, an unsigned 
+// 32-bit type. 
+using pid_t = uint32_t; 
 #endif
 pid_t GetTID();
 
@@ -68,7 +68,7 @@ pid_t GetTID();
 pid_t GetCachedTID();
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_SYSINFO_H_

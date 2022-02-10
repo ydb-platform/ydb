@@ -4,7 +4,7 @@
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//   https://www.apache.org/licenses/LICENSE-2.0
+//   https://www.apache.org/licenses/LICENSE-2.0 
 //
 //   Unless required by applicable law or agreed to in writing, software
 //   distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,15 +25,15 @@ namespace cctz {
 // A stdio-like interface for providing zoneinfo data for a particular zone.
 class ZoneInfoSource {
  public:
-  virtual ~ZoneInfoSource();
+  virtual ~ZoneInfoSource(); 
 
   virtual std::size_t Read(void* ptr, std::size_t size) = 0;  // like fread()
   virtual int Skip(std::size_t offset) = 0;  // like fseek()
-
-  // Until the zoneinfo data supports versioning information, we provide
-  // a way for a ZoneInfoSource to indicate it out-of-band.  The default
-  // implementation returns an empty string.
-  virtual std::string Version() const;
+ 
+  // Until the zoneinfo data supports versioning information, we provide 
+  // a way for a ZoneInfoSource to indicate it out-of-band.  The default 
+  // implementation returns an empty string. 
+  virtual std::string Version() const; 
 };
 
 }  // namespace cctz

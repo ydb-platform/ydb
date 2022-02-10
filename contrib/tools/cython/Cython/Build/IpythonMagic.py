@@ -14,7 +14,7 @@ Magic command interface for interactive work with Cython
 Usage
 =====
 
-To enable the magics below, execute ``%load_ext cython``.
+To enable the magics below, execute ``%load_ext cython``. 
 
 ``%%cython``
 
@@ -41,7 +41,7 @@ Parts of this code were taken from Cython.inline.
 #
 # Distributed under the terms of the Modified BSD License.
 #
-# The full license is in the file ipython-COPYING.rst, distributed with this software.
+# The full license is in the file ipython-COPYING.rst, distributed with this software. 
 #-----------------------------------------------------------------------------
 
 from __future__ import absolute_import, print_function
@@ -75,11 +75,11 @@ from distutils.command.build_ext import build_ext
 from IPython.core import display
 from IPython.core import magic_arguments
 from IPython.core.magic import Magics, magics_class, cell_magic
-try:
-    from IPython.paths import get_ipython_cache_dir
-except ImportError:
-    # older IPython version
-    from IPython.utils.path import get_ipython_cache_dir
+try: 
+    from IPython.paths import get_ipython_cache_dir 
+except ImportError: 
+    # older IPython version 
+    from IPython.utils.path import get_ipython_cache_dir 
 from IPython.utils.text import dedent
 
 from ..Shadow import __version__ as cython_version
@@ -175,15 +175,15 @@ class CythonMagics(Magics):
             f.write(cell)
         if 'pyximport' not in sys.modules or not self._pyximport_installed:
             import pyximport
-            pyximport.install()
+            pyximport.install() 
             self._pyximport_installed = True
         if module_name in self._reloads:
             module = self._reloads[module_name]
-            # Note: reloading extension modules is not actually supported
-            # (requires PEP-489 reinitialisation support).
-            # Don't know why this should ever have worked as it reads here.
-            # All we really need to do is to update the globals below.
-            #reload(module)
+            # Note: reloading extension modules is not actually supported 
+            # (requires PEP-489 reinitialisation support). 
+            # Don't know why this should ever have worked as it reads here. 
+            # All we really need to do is to update the globals below. 
+            #reload(module) 
         else:
             __import__(module_name)
             module = sys.modules[module_name]
@@ -200,14 +200,14 @@ class CythonMagics(Magics):
         help="Output a C++ rather than C file."
     )
     @magic_arguments.argument(
-        '-3', dest='language_level', action='store_const', const=3, default=None,
-        help="Select Python 3 syntax."
-    )
-    @magic_arguments.argument(
-        '-2', dest='language_level', action='store_const', const=2, default=None,
-        help="Select Python 2 syntax."
-    )
-    @magic_arguments.argument(
+        '-3', dest='language_level', action='store_const', const=3, default=None, 
+        help="Select Python 3 syntax." 
+    ) 
+    @magic_arguments.argument( 
+        '-2', dest='language_level', action='store_const', const=2, default=None, 
+        help="Select Python 2 syntax." 
+    ) 
+    @magic_arguments.argument( 
         '-f', '--force', action='store_true', default=False,
         help="Force the compilation of a new module, even if the source has been "
              "previously compiled."
@@ -233,7 +233,7 @@ class CythonMagics(Magics):
     )
     @magic_arguments.argument(
         '-L', dest='library_dirs', metavar='dir', action='append', default=[],
-        help="Add a path to the list of library directories (can be specified "
+        help="Add a path to the list of library directories (can be specified " 
              "multiple times)."
     )
     @magic_arguments.argument(

@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #include <aws/s3/model/SelectObjectContentHandler.h>
 #include <aws/s3/S3ErrorMarshaller.h>
@@ -26,7 +26,7 @@ namespace Model
 
     SelectObjectContentHandler::SelectObjectContentHandler() : EventStreamHandler()
     {
-        m_onRecordsEvent = [&](const RecordsEvent&)
+        m_onRecordsEvent = [&](const RecordsEvent&) 
         {
             AWS_LOGSTREAM_TRACE(SELECTOBJECTCONTENT_HANDLER_CLASS_TAG, "RecordsEvent received.");
         };
@@ -68,7 +68,7 @@ namespace Model
             return;
         }
 
-        const auto& headers = GetEventHeaders();
+        const auto& headers = GetEventHeaders(); 
         auto messageTypeHeaderIter = headers.find(MESSAGE_TYPE_HEADER);
         if (messageTypeHeaderIter == headers.end())
         {
@@ -76,13 +76,13 @@ namespace Model
             return;
         }
 
-        switch (Aws::Utils::Event::Message::GetMessageTypeForName(messageTypeHeaderIter->second.GetEventHeaderValueAsString()))
+        switch (Aws::Utils::Event::Message::GetMessageTypeForName(messageTypeHeaderIter->second.GetEventHeaderValueAsString())) 
         {
-        case Aws::Utils::Event::Message::MessageType::EVENT:
+        case Aws::Utils::Event::Message::MessageType::EVENT: 
             HandleEventInMessage();
             break;
-        case Aws::Utils::Event::Message::MessageType::REQUEST_LEVEL_ERROR:
-        case Aws::Utils::Event::Message::MessageType::REQUEST_LEVEL_EXCEPTION:
+        case Aws::Utils::Event::Message::MessageType::REQUEST_LEVEL_ERROR: 
+        case Aws::Utils::Event::Message::MessageType::REQUEST_LEVEL_EXCEPTION: 
         {
             HandleErrorInMessage();
             break;
@@ -96,7 +96,7 @@ namespace Model
 
     void SelectObjectContentHandler::HandleEventInMessage()
     {
-        const auto& headers = GetEventHeaders();
+        const auto& headers = GetEventHeaders(); 
         auto eventTypeHeaderIter = headers.find(EVENT_TYPE_HEADER);
         if (eventTypeHeaderIter == headers.end())
         {
@@ -136,57 +136,57 @@ namespace Model
             break;
         }
         case SelectObjectContentEventType::CONT:
-        {
+        { 
             m_onContinuationEvent();
             break;
-        }
+        } 
         case SelectObjectContentEventType::END:
-        {
+        { 
             m_onEndEvent();
             break;
-        }
+        } 
         default:
             AWS_LOGSTREAM_WARN(SELECTOBJECTCONTENT_HANDLER_CLASS_TAG,
-                "Unexpected event type: " << eventTypeHeaderIter->second.GetEventHeaderValueAsString());
+                "Unexpected event type: " << eventTypeHeaderIter->second.GetEventHeaderValueAsString()); 
             break;
         }
     }
 
     void SelectObjectContentHandler::HandleErrorInMessage()
     {
-        const auto& headers = GetEventHeaders();
-        Aws::String errorCode;
-        Aws::String errorMessage;
-        auto errorHeaderIter = headers.find(ERROR_CODE_HEADER);
-        if (errorHeaderIter == headers.end())
+        const auto& headers = GetEventHeaders(); 
+        Aws::String errorCode; 
+        Aws::String errorMessage; 
+        auto errorHeaderIter = headers.find(ERROR_CODE_HEADER); 
+        if (errorHeaderIter == headers.end()) 
         {
-            errorHeaderIter = headers.find(EXCEPTION_TYPE_HEADER);
-            if (errorHeaderIter == headers.end())
-            {
-                AWS_LOGSTREAM_WARN(SELECTOBJECTCONTENT_HANDLER_CLASS_TAG,
-                        "Error type was not found in the event message.");
-                return;
-            }
+            errorHeaderIter = headers.find(EXCEPTION_TYPE_HEADER); 
+            if (errorHeaderIter == headers.end()) 
+            { 
+                AWS_LOGSTREAM_WARN(SELECTOBJECTCONTENT_HANDLER_CLASS_TAG, 
+                        "Error type was not found in the event message."); 
+                return; 
+            } 
         }
-
-        errorCode = errorHeaderIter->second.GetEventHeaderValueAsString();
-        errorHeaderIter = headers.find(ERROR_MESSAGE_HEADER);
-        if (errorHeaderIter == headers.end())
+ 
+        errorCode = errorHeaderIter->second.GetEventHeaderValueAsString(); 
+        errorHeaderIter = headers.find(ERROR_MESSAGE_HEADER); 
+        if (errorHeaderIter == headers.end()) 
         {
-            errorHeaderIter = headers.find(EXCEPTION_TYPE_HEADER);
-            if (errorHeaderIter == headers.end())
-            {
-                AWS_LOGSTREAM_WARN(SELECTOBJECTCONTENT_HANDLER_CLASS_TAG,
-                        "Error description was not found in the event message.");
-                return;
-            }
+            errorHeaderIter = headers.find(EXCEPTION_TYPE_HEADER); 
+            if (errorHeaderIter == headers.end()) 
+            { 
+                AWS_LOGSTREAM_WARN(SELECTOBJECTCONTENT_HANDLER_CLASS_TAG, 
+                        "Error description was not found in the event message."); 
+                return; 
+            } 
         }
-        errorMessage = errorHeaderIter->second.GetEventHeaderValueAsString();
-        MarshallError(errorCode, errorMessage);
-    }
+        errorMessage = errorHeaderIter->second.GetEventHeaderValueAsString(); 
+        MarshallError(errorCode, errorMessage); 
+    } 
 
-    void SelectObjectContentHandler::MarshallError(const Aws::String& errorCode, const Aws::String& errorMessage)
-    {
+    void SelectObjectContentHandler::MarshallError(const Aws::String& errorCode, const Aws::String& errorMessage) 
+    { 
         S3ErrorMarshaller errorMarshaller;
         AWSError<CoreErrors> error;
 

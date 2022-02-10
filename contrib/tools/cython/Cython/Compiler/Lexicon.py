@@ -3,11 +3,11 @@
 #   Cython Scanner - Lexical Definitions
 #
 
-from __future__ import absolute_import, unicode_literals
+from __future__ import absolute_import, unicode_literals 
 
 raw_prefixes = "rR"
 bytes_prefixes = "bB"
-string_prefixes = "fFuU" + bytes_prefixes
+string_prefixes = "fFuU" + bytes_prefixes 
 char_prefixes = "cC"
 any_string_prefix = raw_prefixes + string_prefixes + char_prefixes
 IDENT = 'IDENT'
@@ -26,25 +26,25 @@ def make_lexicon():
     hexdigit = Any("0123456789ABCDEFabcdef")
     indentation = Bol + Rep(Any(" \t"))
 
-    def underscore_digits(d):
-        return Rep1(d) + Rep(Str("_") + Rep1(d))
-
-    decimal = underscore_digits(digit)
+    def underscore_digits(d): 
+        return Rep1(d) + Rep(Str("_") + Rep1(d)) 
+ 
+    decimal = underscore_digits(digit) 
     dot = Str(".")
     exponent = Any("Ee") + Opt(Any("+-")) + decimal
     decimal_fract = (decimal + dot + Opt(decimal)) | (dot + decimal)
 
     name = letter + Rep(letter | digit)
-    intconst = decimal | (Str("0") + ((Any("Xx") + underscore_digits(hexdigit)) |
-                                      (Any("Oo") + underscore_digits(octdigit)) |
-                                      (Any("Bb") + underscore_digits(bindigit)) ))
+    intconst = decimal | (Str("0") + ((Any("Xx") + underscore_digits(hexdigit)) | 
+                                      (Any("Oo") + underscore_digits(octdigit)) | 
+                                      (Any("Bb") + underscore_digits(bindigit)) )) 
     intsuffix = (Opt(Any("Uu")) + Opt(Any("Ll")) + Opt(Any("Ll"))) | (Opt(Any("Ll")) + Opt(Any("Ll")) + Opt(Any("Uu")))
     intliteral = intconst + intsuffix
     fltconst = (decimal_fract + Opt(exponent)) | (decimal + exponent)
     imagconst = (intconst | fltconst) + Any("jJ")
 
-    # invalid combinations of prefixes are caught in p_string_literal
-    beginstring = Opt(Rep(Any(string_prefixes + raw_prefixes)) |
+    # invalid combinations of prefixes are caught in p_string_literal 
+    beginstring = Opt(Rep(Any(string_prefixes + raw_prefixes)) | 
                       Any(char_prefixes)
                       ) + (Str("'") | Str('"') | Str("'''") | Str('"""'))
     two_oct = octdigit + octdigit
@@ -70,9 +70,9 @@ def make_lexicon():
 
     return Lexicon([
         (name, IDENT),
-        (intliteral, Method('strip_underscores', symbol='INT')),
-        (fltconst, Method('strip_underscores', symbol='FLOAT')),
-        (imagconst, Method('strip_underscores', symbol='IMAG')),
+        (intliteral, Method('strip_underscores', symbol='INT')), 
+        (fltconst, Method('strip_underscores', symbol='FLOAT')), 
+        (imagconst, Method('strip_underscores', symbol='IMAG')), 
         (punct | diphthong, TEXT),
 
         (bra, Method('open_bracket_action')),

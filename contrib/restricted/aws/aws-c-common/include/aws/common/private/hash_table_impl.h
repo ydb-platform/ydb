@@ -1,9 +1,9 @@
 #ifndef AWS_COMMON_PRIVATE_HASH_TABLE_IMPL_H
 #define AWS_COMMON_PRIVATE_HASH_TABLE_IMPL_H
 
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #include <aws/common/common.h>
@@ -45,11 +45,11 @@ struct hash_table_state {
 #endif
 
 /**
- * Best-effort check of hash_table_state data-structure invariants
- * Some invariants, such as that the number of entries is actually the
+ * Best-effort check of hash_table_state data-structure invariants 
+ * Some invariants, such as that the number of entries is actually the 
  * same as the entry_count field, would require a loop to check
  */
-bool hash_table_state_is_valid(const struct hash_table_state *map);
+bool hash_table_state_is_valid(const struct hash_table_state *map); 
 
 /**
  * Determine the total number of bytes needed for a hash-table with
@@ -57,6 +57,6 @@ bool hash_table_state_is_valid(const struct hash_table_state *map);
  * AWS_OP_ERR; otherwise, return AWS_OP_SUCCESS with the result in
  * "required_bytes".
  */
-int hash_table_state_required_bytes(size_t size, size_t *required_bytes);
+int hash_table_state_required_bytes(size_t size, size_t *required_bytes); 
 
 #endif /* AWS_COMMON_PRIVATE_HASH_TABLE_IMPL_H */

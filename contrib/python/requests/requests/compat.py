@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
 """
-requests.compat
-~~~~~~~~~~~~~~~
-
-This module handles import compatibility issues between Python 2 and
-Python 3.
+requests.compat 
+~~~~~~~~~~~~~~~ 
+ 
+This module handles import compatibility issues between Python 2 and 
+Python 3. 
 """
 
 try:
@@ -32,7 +32,7 @@ has_simplejson = False
 try:
     import simplejson as json
     has_simplejson = True
-except ImportError:
+except ImportError: 
     import json
 
 # ---------
@@ -40,9 +40,9 @@ except ImportError:
 # ---------
 
 if is_py2:
-    from urllib import (
-        quote, unquote, quote_plus, unquote_plus, urlencode, getproxies,
-        proxy_bypass, proxy_bypass_environment, getproxies_environment)
+    from urllib import ( 
+        quote, unquote, quote_plus, unquote_plus, urlencode, getproxies, 
+        proxy_bypass, proxy_bypass_environment, getproxies_environment) 
     from urlparse import urlparse, urlunparse, urljoin, urlsplit, urldefrag
     from urllib2 import parse_http_list
     import cookielib
@@ -56,12 +56,12 @@ if is_py2:
     str = unicode
     basestring = basestring
     numeric_types = (int, long, float)
-    integer_types = (int, long)
+    integer_types = (int, long) 
     JSONDecodeError = ValueError
 
 elif is_py3:
     from urllib.parse import urlparse, urlunparse, urljoin, urlsplit, urlencode, quote, unquote, quote_plus, unquote_plus, urldefrag
-    from urllib.request import parse_http_list, getproxies, proxy_bypass, proxy_bypass_environment, getproxies_environment
+    from urllib.request import parse_http_list, getproxies, proxy_bypass, proxy_bypass_environment, getproxies_environment 
     from http import cookiejar as cookielib
     from http.cookies import Morsel
     from io import StringIO
@@ -78,4 +78,4 @@ elif is_py3:
     bytes = bytes
     basestring = (str, bytes)
     numeric_types = (int, float)
-    integer_types = (int,)
+    integer_types = (int,) 

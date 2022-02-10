@@ -1,9 +1,9 @@
 #ifndef AWS_COMMON_CONDITION_VARIABLE_H
 #define AWS_COMMON_CONDITION_VARIABLE_H
 
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #include <aws/common/common.h>
@@ -23,7 +23,7 @@ struct aws_condition_variable {
 #else
     pthread_cond_t condition_handle;
 #endif
-    bool initialized;
+    bool initialized; 
 };
 
 /**
@@ -36,10 +36,10 @@ struct aws_condition_variable {
  */
 #ifdef _WIN32
 #    define AWS_CONDITION_VARIABLE_INIT                                                                                \
-        { .condition_handle = NULL, .initialized = true }
+        { .condition_handle = NULL, .initialized = true } 
 #else
 #    define AWS_CONDITION_VARIABLE_INIT                                                                                \
-        { .condition_handle = PTHREAD_COND_INITIALIZER, .initialized = true }
+        { .condition_handle = PTHREAD_COND_INITIALIZER, .initialized = true } 
 #endif
 
 AWS_EXTERN_C_BEGIN

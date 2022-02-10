@@ -43,7 +43,7 @@
 #include <string.h>
 
 #include <google/protobuf/stubs/platform_macros.h>
-
+ 
 #include <google/protobuf/port_def.inc>
 
 #undef PROTOBUF_LITTLE_ENDIAN
@@ -91,10 +91,10 @@
 // Legacy: some users reference these (internal-only) macros even though we
 // don't need them any more.
 #if defined(_MSC_VER) && defined(PROTOBUF_USE_DLLS)
-  #ifdef LIBPROTOBUF_EXPORTS
-    #define LIBPROTOBUF_EXPORT __declspec(dllexport)
+  #ifdef LIBPROTOBUF_EXPORTS 
+    #define LIBPROTOBUF_EXPORT __declspec(dllexport) 
   #else
-    #define LIBPROTOBUF_EXPORT __declspec(dllimport)
+    #define LIBPROTOBUF_EXPORT __declspec(dllimport) 
   #endif
   #ifdef LIBPROTOC_EXPORTS
     #define LIBPROTOC_EXPORT   __declspec(dllexport)
@@ -112,17 +112,17 @@
 
 // ===================================================================
 // from google3/base/port.h
-
-#if (defined(__GXX_EXPERIMENTAL_CXX0X__) || __cplusplus >= 201103L || \
-     (defined(_MSC_VER) && _MSC_VER >= 1900))
-// Define this to 1 if the code is compiled in C++11 mode; leave it
-// undefined otherwise.  Do NOT define it to 0 -- that causes
-// '#ifdef LANG_CXX11' to behave differently from '#if LANG_CXX11'.
-#define LANG_CXX11 1
+ 
+#if (defined(__GXX_EXPERIMENTAL_CXX0X__) || __cplusplus >= 201103L || \ 
+     (defined(_MSC_VER) && _MSC_VER >= 1900)) 
+// Define this to 1 if the code is compiled in C++11 mode; leave it 
+// undefined otherwise.  Do NOT define it to 0 -- that causes 
+// '#ifdef LANG_CXX11' to behave differently from '#if LANG_CXX11'. 
+#define LANG_CXX11 1 
 #else
 #error "Protobuf requires at least C++11."
-#endif
-
+#endif 
+ 
 using TProtoStringType = TString;
 
 namespace google {
@@ -286,69 +286,69 @@ static inline uint64 bswap_64(uint64 x) {
 #endif
 
 // ===================================================================
-// from google3/util/bits/bits.h
-
-class Bits {
- public:
-  static uint32 Log2FloorNonZero(uint32 n) {
-#if defined(__GNUC__)
-  return 31 ^ static_cast<uint32>(__builtin_clz(n));
+// from google3/util/bits/bits.h 
+ 
+class Bits { 
+ public: 
+  static uint32 Log2FloorNonZero(uint32 n) { 
+#if defined(__GNUC__) 
+  return 31 ^ static_cast<uint32>(__builtin_clz(n)); 
 #elif defined(_MSC_VER)
   unsigned long where;
   _BitScanReverse(&where, n);
   return where;
-#else
-  return Log2FloorNonZero_Portable(n);
-#endif
-  }
-
-  static uint32 Log2FloorNonZero64(uint64 n) {
+#else 
+  return Log2FloorNonZero_Portable(n); 
+#endif 
+  } 
+ 
+  static uint32 Log2FloorNonZero64(uint64 n) { 
     // Older versions of clang run into an instruction-selection failure when
     // it encounters __builtin_clzll:
-    // https://bugs.chromium.org/p/nativeclient/issues/detail?id=4395
+    // https://bugs.chromium.org/p/nativeclient/issues/detail?id=4395 
     // This includes arm-nacl-clang and clang in older Android NDK versions.
     // To work around this, when we build with those we use the portable
-    // implementation instead.
+    // implementation instead. 
 #if defined(__GNUC__) && !defined(GOOGLE_PROTOBUF_USE_PORTABLE_LOG2)
-  return 63 ^ static_cast<uint32>(__builtin_clzll(n));
+  return 63 ^ static_cast<uint32>(__builtin_clzll(n)); 
 #elif defined(_MSC_VER) && defined(_M_X64)
   unsigned long where;
   _BitScanReverse64(&where, n);
   return where;
-#else
-  return Log2FloorNonZero64_Portable(n);
-#endif
-  }
- private:
-  static int Log2FloorNonZero_Portable(uint32 n) {
-    if (n == 0)
-      return -1;
-    int log = 0;
-    uint32 value = n;
-    for (int i = 4; i >= 0; --i) {
-      int shift = (1 << i);
-      uint32 x = value >> shift;
-      if (x != 0) {
-        value = x;
-        log += shift;
-      }
-    }
-    assert(value == 1);
-    return log;
-  }
-
-  static int Log2FloorNonZero64_Portable(uint64 n) {
-    const uint32 topbits = static_cast<uint32>(n >> 32);
-    if (topbits == 0) {
-      // Top bits are zero, so scan in bottom bits
-      return static_cast<int>(Log2FloorNonZero(static_cast<uint32>(n)));
-    } else {
-      return 32 + static_cast<int>(Log2FloorNonZero(topbits));
-    }
-  }
-};
-
-// ===================================================================
+#else 
+  return Log2FloorNonZero64_Portable(n); 
+#endif 
+  } 
+ private: 
+  static int Log2FloorNonZero_Portable(uint32 n) { 
+    if (n == 0) 
+      return -1; 
+    int log = 0; 
+    uint32 value = n; 
+    for (int i = 4; i >= 0; --i) { 
+      int shift = (1 << i); 
+      uint32 x = value >> shift; 
+      if (x != 0) { 
+        value = x; 
+        log += shift; 
+      } 
+    } 
+    assert(value == 1); 
+    return log; 
+  } 
+ 
+  static int Log2FloorNonZero64_Portable(uint64 n) { 
+    const uint32 topbits = static_cast<uint32>(n >> 32); 
+    if (topbits == 0) { 
+      // Top bits are zero, so scan in bottom bits 
+      return static_cast<int>(Log2FloorNonZero(static_cast<uint32>(n))); 
+    } else { 
+      return 32 + static_cast<int>(Log2FloorNonZero(topbits)); 
+    } 
+  } 
+}; 
+ 
+// =================================================================== 
 // from google3/util/endian/endian.h
 PROTOBUF_EXPORT uint32 ghtonl(uint32 x);
 

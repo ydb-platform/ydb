@@ -112,10 +112,10 @@ bool CppGenerator::Generate(const FileDescriptor* file,
       file_options.eagerly_verified_lazy = true;
     } else if (options[i].first == "force_eagerly_verified_lazy") {
       file_options.force_eagerly_verified_lazy = true;
-    } else if (options[i].first == "table_driven_parsing") {
-      file_options.table_driven_parsing = true;
-    } else if (options[i].first == "table_driven_serialization") {
-      file_options.table_driven_serialization = true;
+    } else if (options[i].first == "table_driven_parsing") { 
+      file_options.table_driven_parsing = true; 
+    } else if (options[i].first == "table_driven_serialization") { 
+      file_options.table_driven_serialization = true; 
     } else if (options[i].first == "experimental_tail_call_table_mode") {
       if (options[i].second == "never") {
         file_options.tctable_mode = Options::kTCTableNever;

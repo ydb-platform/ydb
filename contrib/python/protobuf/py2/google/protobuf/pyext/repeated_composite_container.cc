@@ -81,10 +81,10 @@ PyObject* Add(RepeatedCompositeContainer* self, PyObject* args,
   Message* message = self->parent->message;
 
   Message* sub_message =
-      message->GetReflection()->AddMessage(
-          message,
-          self->parent_field_descriptor,
-          self->child_message_class->py_message_factory->message_factory);
+      message->GetReflection()->AddMessage( 
+          message, 
+          self->parent_field_descriptor, 
+          self->child_message_class->py_message_factory->message_factory); 
   CMessage* cmsg = self->parent->BuildSubMessageFromPointer(
       self->parent_field_descriptor, sub_message, self->child_message_class);
 
@@ -360,15 +360,15 @@ static PyObject* ToStr(PyObject* pself) {
   ScopedPyObjectPtr full_slice(PySlice_New(nullptr, nullptr, nullptr));
   if (full_slice == nullptr) {
     return nullptr;
-  }
+  } 
   ScopedPyObjectPtr list(Subscript(
       reinterpret_cast<RepeatedCompositeContainer*>(pself), full_slice.get()));
   if (list == nullptr) {
     return nullptr;
-  }
-  return PyObject_Repr(list.get());
-}
-
+  } 
+  return PyObject_Repr(list.get()); 
+} 
+ 
 // ---------------------------------------------------------------------
 // sort()
 
@@ -484,14 +484,14 @@ static PyObject* Pop(PyObject* pself, PyObject* args) {
   PyObject* item = GetItem(self, index, length);
   if (item == nullptr) {
     return nullptr;
-  }
+  } 
   ScopedPyObjectPtr py_index(PyLong_FromSsize_t(index));
   if (AssignSubscript(self, py_index.get(), nullptr) < 0) {
     return nullptr;
   }
   return item;
-}
-
+} 
+ 
 PyObject* DeepCopy(PyObject* pself, PyObject* arg) {
   return reinterpret_cast<RepeatedCompositeContainer*>(pself)->DeepCopy();
 }

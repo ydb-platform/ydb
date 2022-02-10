@@ -37,8 +37,8 @@
 // this, consider moving both to config.h instead.
 #if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || \
     defined(__Fuchsia__) || defined(__native_client__) || \
-    defined(__EMSCRIPTEN__) || defined(__ASYLO__)
-
+    defined(__EMSCRIPTEN__) || defined(__ASYLO__) 
+ 
 #include <unistd.h>
 
 #define ABSL_HAVE_POSIX_WRITE 1
@@ -226,8 +226,8 @@ bool RawLoggingFullySupported() {
 }
 
 ABSL_INTERNAL_ATOMIC_HOOK_ATTRIBUTES ABSL_DLL
-    y_absl::base_internal::AtomicHook<InternalLogFunction>
-        internal_log_function(DefaultInternalLog);
+    y_absl::base_internal::AtomicHook<InternalLogFunction> 
+        internal_log_function(DefaultInternalLog); 
 
 void RegisterLogPrefixHook(LogPrefixHook func) { log_prefix_hook.Store(func); }
 
@@ -238,5 +238,5 @@ void RegisterInternalLogFunction(InternalLogFunction func) {
 }
 
 }  // namespace raw_logging_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl

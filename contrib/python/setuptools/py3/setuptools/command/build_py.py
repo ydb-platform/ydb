@@ -10,7 +10,7 @@ import itertools
 import stat
 from setuptools.extern.more_itertools import unique_everseen
 
-
+ 
 def make_writable(target):
     os.chmod(target, os.stat(target).st_mode | stat.S_IWRITE)
 
@@ -93,19 +93,19 @@ class build_py(orig.build_py):
 
     def find_data_files(self, package, src_dir):
         """Return filenames for package's data files in 'src_dir'"""
-        patterns = self._get_platform_patterns(
-            self.package_data,
-            package,
-            src_dir,
-        )
-        globs_expanded = map(glob, patterns)
-        # flatten the expanded globs into an iterable of matches
-        globs_matches = itertools.chain.from_iterable(globs_expanded)
-        glob_files = filter(os.path.isfile, globs_matches)
-        files = itertools.chain(
-            self.manifest_files.get(package, []),
-            glob_files,
-        )
+        patterns = self._get_platform_patterns( 
+            self.package_data, 
+            package, 
+            src_dir, 
+        ) 
+        globs_expanded = map(glob, patterns) 
+        # flatten the expanded globs into an iterable of matches 
+        globs_matches = itertools.chain.from_iterable(globs_expanded) 
+        glob_files = filter(os.path.isfile, globs_matches) 
+        files = itertools.chain( 
+            self.manifest_files.get(package, []), 
+            glob_files, 
+        ) 
         return self.exclude_data_files(package, src_dir, files)
 
     def build_package_data(self):
@@ -188,39 +188,39 @@ class build_py(orig.build_py):
 
     def exclude_data_files(self, package, src_dir, files):
         """Filter filenames for package's data files in 'src_dir'"""
-        files = list(files)
-        patterns = self._get_platform_patterns(
-            self.exclude_package_data,
-            package,
-            src_dir,
+        files = list(files) 
+        patterns = self._get_platform_patterns( 
+            self.exclude_package_data, 
+            package, 
+            src_dir, 
         )
         match_groups = (fnmatch.filter(files, pattern) for pattern in patterns)
-        # flatten the groups of matches into an iterable of matches
-        matches = itertools.chain.from_iterable(match_groups)
-        bad = set(matches)
+        # flatten the groups of matches into an iterable of matches 
+        matches = itertools.chain.from_iterable(match_groups) 
+        bad = set(matches) 
         keepers = (fn for fn in files if fn not in bad)
-        # ditch dupes
+        # ditch dupes 
         return list(unique_everseen(keepers))
 
-    @staticmethod
-    def _get_platform_patterns(spec, package, src_dir):
-        """
-        yield platform-specific path patterns (suitable for glob
-        or fn_match) from a glob-based spec (such as
-        self.package_data or self.exclude_package_data)
-        matching package in src_dir.
-        """
-        raw_patterns = itertools.chain(
-            spec.get('', []),
-            spec.get(package, []),
-        )
-        return (
-            # Each pattern has to be converted to a platform-specific path
-            os.path.join(src_dir, convert_path(pattern))
-            for pattern in raw_patterns
-        )
+    @staticmethod 
+    def _get_platform_patterns(spec, package, src_dir): 
+        """ 
+        yield platform-specific path patterns (suitable for glob 
+        or fn_match) from a glob-based spec (such as 
+        self.package_data or self.exclude_package_data) 
+        matching package in src_dir. 
+        """ 
+        raw_patterns = itertools.chain( 
+            spec.get('', []), 
+            spec.get(package, []), 
+        ) 
+        return ( 
+            # Each pattern has to be converted to a platform-specific path 
+            os.path.join(src_dir, convert_path(pattern)) 
+            for pattern in raw_patterns 
+        ) 
 
-
+ 
 def assert_relative(path):
     if not os.path.isabs(path):
         return path

@@ -3567,7 +3567,7 @@ long ssl3_ctrl(SSL *s, int cmd, long larg, void *parg)
 
     case SSL_CTRL_GET_CHAIN_CERTS:
         *(STACK_OF(X509) **)parg = s->cert->key->chain;
-        ret = 1;
+        ret = 1; 
         break;
 
     case SSL_CTRL_SELECT_CURRENT_CERT:
@@ -3602,8 +3602,8 @@ long ssl3_ctrl(SSL *s, int cmd, long larg, void *parg)
 
             if (!s->session)
                 return 0;
-            clist = s->ext.peer_supportedgroups;
-            clistlen = s->ext.peer_supportedgroups_len;
+            clist = s->ext.peer_supportedgroups; 
+            clistlen = s->ext.peer_supportedgroups_len; 
             if (parg) {
                 size_t i;
                 int *cptr = parg;
@@ -3719,10 +3719,10 @@ long ssl3_ctrl(SSL *s, int cmd, long larg, void *parg)
         {
             const unsigned char **pformat = parg;
 
-            if (s->ext.peer_ecpointformats == NULL)
+            if (s->ext.peer_ecpointformats == NULL) 
                 return 0;
-            *pformat = s->ext.peer_ecpointformats;
-            return (int)s->ext.peer_ecpointformats_len;
+            *pformat = s->ext.peer_ecpointformats; 
+            return (int)s->ext.peer_ecpointformats_len; 
         }
 #endif
 

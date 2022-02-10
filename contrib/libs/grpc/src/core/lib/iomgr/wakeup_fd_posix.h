@@ -1,18 +1,18 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
@@ -31,7 +31,7 @@
  *
  * Setup:
  * 1. Before calling anything, call global_init() at least once.
- * 1. Call grpc_wakeup_fd_init() to set up a wakeup_fd.
+ * 1. Call grpc_wakeup_fd_init() to set up a wakeup_fd. 
  * 2. Add the result of GRPC_WAKEUP_FD_FD to the set of monitored file
  *    descriptors for the poll() style API you are using. Monitor the file
  *    descriptor for readability.
@@ -47,8 +47,8 @@
 #ifndef GRPC_CORE_LIB_IOMGR_WAKEUP_FD_POSIX_H
 #define GRPC_CORE_LIB_IOMGR_WAKEUP_FD_POSIX_H
 
-#include <grpc/support/port_platform.h>
-
+#include <grpc/support/port_platform.h> 
+ 
 #include "src/core/lib/iomgr/error.h"
 
 void grpc_wakeup_fd_global_init(void);

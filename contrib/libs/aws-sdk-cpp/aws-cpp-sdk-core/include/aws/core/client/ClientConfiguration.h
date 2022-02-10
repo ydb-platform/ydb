@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #pragma once
 
@@ -31,33 +31,33 @@ namespace Aws
         class RetryStrategy; // forward declare
 
         /**
-         * Sets the behaviors of the underlying HTTP clients handling response with 30x status code.
-         * By default, HTTP clients will always redirect the 30x response automatically, except when
-         * specifying aws-global as the client region, then SDK will handle 30x response and redirect
-         * the request manually.
-         */
-        enum class FollowRedirectsPolicy
-        {
-            DEFAULT,
-            ALWAYS,
-            NEVER
-        };
-
-        /**
-         * This mutable structure is used to configure any of the AWS clients.
-         * Default values can only be overwritten prior to passing to the client constructors.
-         */
+         * Sets the behaviors of the underlying HTTP clients handling response with 30x status code. 
+         * By default, HTTP clients will always redirect the 30x response automatically, except when 
+         * specifying aws-global as the client region, then SDK will handle 30x response and redirect 
+         * the request manually. 
+         */ 
+        enum class FollowRedirectsPolicy 
+        { 
+            DEFAULT, 
+            ALWAYS, 
+            NEVER 
+        }; 
+ 
+        /** 
+         * This mutable structure is used to configure any of the AWS clients. 
+         * Default values can only be overwritten prior to passing to the client constructors. 
+         */ 
         struct AWS_CORE_API ClientConfiguration
         {
             ClientConfiguration();
-
+ 
             /**
-             * Create a configuration based on settings in the aws configuration file for the given profile name.
-             * The configuration file location can be set via the environment variable AWS_CONFIG_FILE
-             */
-            ClientConfiguration(const char* profileName);
-
-            /**
+             * Create a configuration based on settings in the aws configuration file for the given profile name. 
+             * The configuration file location can be set via the environment variable AWS_CONFIG_FILE 
+             */ 
+            ClientConfiguration(const char* profileName); 
+ 
+            /** 
              * User Agent string user for http calls. This is filled in for you in the constructor. Don't override this unless you have a really good reason.
              */
             Aws::String userAgent;
@@ -78,17 +78,17 @@ namespace Aws
              */
             unsigned maxConnections;
             /**
-             * This is currently only applicable for Curl to set the http request level timeout, including possible dns lookup time, connection establish time, ssl handshake time and actual data transmission time.
-             * the corresponding Curl option is CURLOPT_TIMEOUT_MS
-             * defaults to 0, no http request level timeout.
-             */
-            long httpRequestTimeoutMs;
-            /**
-             * Socket read timeouts for HTTP clients on Windows. Default 3000 ms. This should be more than adequate for most services. However, if you are transfering large amounts of data
-             * or are worried about higher latencies, you should set to something that makes more sense for your use case.
-             * For Curl, it's the low speed time, which contains the time in number milliseconds that transfer speed should be below "lowSpeedLimit" for the library to consider it too slow and abort.
-             * Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the value is greater than 0 and less than 1000. In this case it is set to one second. When it's 0, low speed limit check will be disabled.
-             * Note that for Windows when this config is 0, the behavior is not specified by Windows.
+             * This is currently only applicable for Curl to set the http request level timeout, including possible dns lookup time, connection establish time, ssl handshake time and actual data transmission time. 
+             * the corresponding Curl option is CURLOPT_TIMEOUT_MS 
+             * defaults to 0, no http request level timeout. 
+             */ 
+            long httpRequestTimeoutMs; 
+            /** 
+             * Socket read timeouts for HTTP clients on Windows. Default 3000 ms. This should be more than adequate for most services. However, if you are transfering large amounts of data 
+             * or are worried about higher latencies, you should set to something that makes more sense for your use case. 
+             * For Curl, it's the low speed time, which contains the time in number milliseconds that transfer speed should be below "lowSpeedLimit" for the library to consider it too slow and abort. 
+             * Note that for Curl this config is converted to seconds by rounding down to the nearest whole second except when the value is greater than 0 and less than 1000. In this case it is set to one second. When it's 0, low speed limit check will be disabled. 
+             * Note that for Windows when this config is 0, the behavior is not specified by Windows. 
              */
             long requestTimeoutMs;
             /**
@@ -96,22 +96,22 @@ namespace Aws
              */
             long connectTimeoutMs;
             /**
-             * Enable TCP keep-alive. Default true;
-             * No-op for WinHTTP, WinINet and IXMLHTTPRequest2 client.
-             */
-            bool enableTcpKeepAlive;
-            /**
-             * Interval to send a keep-alive packet over the connection. Default 30 seconds. Minimum 15 seconds.
-             * WinHTTP & libcurl support this option. Note that for Curl, this value will be rounded to an integer with second granularity.
-             * No-op for WinINet and IXMLHTTPRequest2 client.
-             */
-            unsigned long tcpKeepAliveIntervalMs;
-            /**
-             * Average transfer speed in bytes per second that the transfer should be below during the request timeout interval for it to be considered too slow and abort.
-             * Default 1 byte/second. Only for CURL client currently.
-             */
-            unsigned long lowSpeedLimit;
-            /**
+             * Enable TCP keep-alive. Default true; 
+             * No-op for WinHTTP, WinINet and IXMLHTTPRequest2 client. 
+             */ 
+            bool enableTcpKeepAlive; 
+            /** 
+             * Interval to send a keep-alive packet over the connection. Default 30 seconds. Minimum 15 seconds. 
+             * WinHTTP & libcurl support this option. Note that for Curl, this value will be rounded to an integer with second granularity. 
+             * No-op for WinINet and IXMLHTTPRequest2 client. 
+             */ 
+            unsigned long tcpKeepAliveIntervalMs; 
+            /** 
+             * Average transfer speed in bytes per second that the transfer should be below during the request timeout interval for it to be considered too slow and abort. 
+             * Default 1 byte/second. Only for CURL client currently. 
+             */ 
+            unsigned long lowSpeedLimit; 
+            /** 
              * Strategy to use in case of failed requests. Default is DefaultRetryStrategy (e.g. exponential backoff)
              */
             std::shared_ptr<RetryStrategy> retryStrategy;
@@ -140,31 +140,31 @@ namespace Aws
             */
             Aws::String proxyPassword;
             /**
-            * SSL Certificate file to use for connecting to an HTTPS proxy.
-            * Used to set CURLOPT_PROXY_SSLCERT in libcurl. Example: client.pem
-            */
-            Aws::String proxySSLCertPath;
-            /**
-            * Type of proxy client SSL certificate.
-            * Used to set CURLOPT_PROXY_SSLCERTTYPE in libcurl. Example: PEM
-            */
-            Aws::String proxySSLCertType;
-            /**
-            * Private key file to use for connecting to an HTTPS proxy.
-            * Used to set CURLOPT_PROXY_SSLKEY in libcurl. Example: key.pem
-            */
-            Aws::String proxySSLKeyPath;
-            /**
-            * Type of private key file used to connect to an HTTPS proxy.
-            * Used to set CURLOPT_PROXY_SSLKEYTYPE in libcurl. Example: PEM
-            */
-            Aws::String proxySSLKeyType;
-            /**
-            * Passphrase to the private key file used to connect to an HTTPS proxy.
-            * Used to set CURLOPT_PROXY_KEYPASSWD in libcurl. Example: password1
-            */
-            Aws::String proxySSLKeyPassword;
-            /**
+            * SSL Certificate file to use for connecting to an HTTPS proxy. 
+            * Used to set CURLOPT_PROXY_SSLCERT in libcurl. Example: client.pem 
+            */ 
+            Aws::String proxySSLCertPath; 
+            /** 
+            * Type of proxy client SSL certificate. 
+            * Used to set CURLOPT_PROXY_SSLCERTTYPE in libcurl. Example: PEM 
+            */ 
+            Aws::String proxySSLCertType; 
+            /** 
+            * Private key file to use for connecting to an HTTPS proxy. 
+            * Used to set CURLOPT_PROXY_SSLKEY in libcurl. Example: key.pem 
+            */ 
+            Aws::String proxySSLKeyPath; 
+            /** 
+            * Type of private key file used to connect to an HTTPS proxy. 
+            * Used to set CURLOPT_PROXY_SSLKEYTYPE in libcurl. Example: PEM 
+            */ 
+            Aws::String proxySSLKeyType; 
+            /** 
+            * Passphrase to the private key file used to connect to an HTTPS proxy. 
+            * Used to set CURLOPT_PROXY_KEYPASSWD in libcurl. Example: password1 
+            */ 
+            Aws::String proxySSLKeyPassword; 
+            /** 
             * Threading Executor implementation. Default uses std::thread::detach()
             */
             std::shared_ptr<Aws::Utils::Threading::Executor> executor;
@@ -208,9 +208,9 @@ namespace Aws
              */
             Aws::Http::TransferLibType httpLibOverride;
             /**
-             * Sets the behavior how http stack handles 30x redirect codes.
+             * Sets the behavior how http stack handles 30x redirect codes. 
              */
-            FollowRedirectsPolicy followRedirects;
+            FollowRedirectsPolicy followRedirects; 
 
             /**
              * Only works for Curl http client.
@@ -229,26 +229,26 @@ namespace Aws
             bool enableClockSkewAdjustment;
 
             /**
-             * Enable host prefix injection.
+             * Enable host prefix injection. 
              * For services whose endpoint is injectable. e.g. servicediscovery, you can modify the http host's prefix so as to add "data-" prefix for DiscoverInstances request.
-             * Default to true, enabled. You can disable it for testing purpose.
+             * Default to true, enabled. You can disable it for testing purpose. 
              */
             bool enableHostPrefixInjection;
 
             /**
-             * Enable endpoint discovery
-             * For some services to dynamically set up their endpoints for different requests.
+             * Enable endpoint discovery 
+             * For some services to dynamically set up their endpoints for different requests. 
              * Defaults to false, it's an opt-in feature.
              * If disabled, regional or overriden endpoint will be used instead.
              * If a request requires endpoint discovery but you disabled it. The request will never succeed.
              */
             bool enableEndpointDiscovery;
-
-            /**
-             * profileName in config file that will be used by this object to reslove more configurations.
-             */
-            Aws::String profileName;
-
+ 
+            /** 
+             * profileName in config file that will be used by this object to reslove more configurations. 
+             */ 
+            Aws::String profileName; 
+ 
         };
 
     } // namespace Client

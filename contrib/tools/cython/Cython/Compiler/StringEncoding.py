@@ -8,10 +8,10 @@ import re
 import sys
 
 if sys.version_info[0] >= 3:
-    _unicode, _str, _bytes, _unichr = str, str, bytes, chr
+    _unicode, _str, _bytes, _unichr = str, str, bytes, chr 
     IS_PYTHON3 = True
 else:
-    _unicode, _str, _bytes, _unichr = unicode, str, str, unichr
+    _unicode, _str, _bytes, _unichr = unicode, str, str, unichr 
     IS_PYTHON3 = False
 
 empty_bytes = _bytes()
@@ -39,13 +39,13 @@ class UnicodeLiteralBuilder(object):
                 # wide Unicode character on narrow platform => replace
                 # by surrogate pair
                 char_number -= 0x10000
-                self.chars.append( _unichr((char_number // 1024) + 0xD800) )
-                self.chars.append( _unichr((char_number  % 1024) + 0xDC00) )
+                self.chars.append( _unichr((char_number // 1024) + 0xD800) ) 
+                self.chars.append( _unichr((char_number  % 1024) + 0xDC00) ) 
             else:
-                self.chars.append( _unichr(char_number) )
+                self.chars.append( _unichr(char_number) ) 
     else:
         def append_charval(self, char_number):
-            self.chars.append( _unichr(char_number) )
+            self.chars.append( _unichr(char_number) ) 
 
     def append_uescape(self, char_number, escape_string):
         self.append_charval(char_number)
@@ -71,14 +71,14 @@ class BytesLiteralBuilder(object):
         self.chars.append(characters)
 
     def append_charval(self, char_number):
-        self.chars.append( _unichr(char_number).encode('ISO-8859-1') )
+        self.chars.append( _unichr(char_number).encode('ISO-8859-1') ) 
 
     def append_uescape(self, char_number, escape_string):
         self.append(escape_string)
 
     def getstring(self):
         # this *must* return a byte string!
-        return bytes_literal(join_bytes(self.chars), self.target_encoding)
+        return bytes_literal(join_bytes(self.chars), self.target_encoding) 
 
     def getchar(self):
         # this *must* return a byte string!
@@ -135,10 +135,10 @@ class EncodedString(_unicode):
     def contains_surrogates(self):
         return string_contains_surrogates(self)
 
-    def as_utf8_string(self):
-        return bytes_literal(self.utf8encode(), 'utf8')
+    def as_utf8_string(self): 
+        return bytes_literal(self.utf8encode(), 'utf8') 
 
-
+ 
 def string_contains_surrogates(ustring):
     """
     Check if the unicode string contains surrogate code points
@@ -207,18 +207,18 @@ class BytesLiteral(_bytes):
 
     is_unicode = False
 
-    def as_c_string_literal(self):
-        value = split_string_literal(escape_byte_string(self))
-        return '"%s"' % value
+    def as_c_string_literal(self): 
+        value = split_string_literal(escape_byte_string(self)) 
+        return '"%s"' % value 
 
-
-def bytes_literal(s, encoding):
-    assert isinstance(s, bytes)
-    s = BytesLiteral(s)
-    s.encoding = encoding
-    return s
-
-
+ 
+def bytes_literal(s, encoding): 
+    assert isinstance(s, bytes) 
+    s = BytesLiteral(s) 
+    s.encoding = encoding 
+    return s 
+ 
+ 
 def encoded_string(s, encoding):
     assert isinstance(s, (_unicode, bytes))
     s = EncodedString(s)
@@ -338,7 +338,7 @@ def split_string_literal(s, limit=2000):
 def encode_pyunicode_string(s):
     """Create Py_UNICODE[] representation of a given unicode string.
     """
-    s = list(map(ord, s)) + [0]
+    s = list(map(ord, s)) + [0] 
 
     if sys.maxunicode >= 0x10000:  # Wide build or Py3.3
         utf16, utf32 = [], s
@@ -360,4 +360,4 @@ def encode_pyunicode_string(s):
 
     if utf16 == utf32:
         utf16 = []
-    return ",".join(map(_unicode, utf16)), ",".join(map(_unicode, utf32))
+    return ",".join(map(_unicode, utf16)), ",".join(map(_unicode, utf32)) 

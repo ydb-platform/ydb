@@ -1,16 +1,16 @@
-# Copyright 2016 gRPC authors.
+# Copyright 2016 gRPC authors. 
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0 
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License. 
 """Translates gRPC's server-side API into gRPC's server-side Beta API."""
 
 import collections
@@ -18,7 +18,7 @@ import threading
 
 import grpc
 from grpc import _common
-from grpc.beta import _metadata
+from grpc.beta import _metadata 
 from grpc.beta import interfaces
 from grpc.framework.common import cardinality
 from grpc.framework.common import style
@@ -27,8 +27,8 @@ from grpc.framework.foundation import logging_pool
 from grpc.framework.foundation import stream
 from grpc.framework.interfaces.face import face
 
-# pylint: disable=too-many-return-statements
-
+# pylint: disable=too-many-return-statements 
+ 
 _DEFAULT_POOL_SIZE = 8
 
 
@@ -66,15 +66,15 @@ class _FaceServicerContext(face.ServicerContext):
         return _ServerProtocolContext(self._servicer_context)
 
     def invocation_metadata(self):
-        return _metadata.beta(self._servicer_context.invocation_metadata())
+        return _metadata.beta(self._servicer_context.invocation_metadata()) 
 
     def initial_metadata(self, initial_metadata):
-        self._servicer_context.send_initial_metadata(
-            _metadata.unbeta(initial_metadata))
+        self._servicer_context.send_initial_metadata( 
+            _metadata.unbeta(initial_metadata)) 
 
     def terminal_metadata(self, terminal_metadata):
-        self._servicer_context.set_terminal_metadata(
-            _metadata.unbeta(terminal_metadata))
+        self._servicer_context.set_terminal_metadata( 
+            _metadata.unbeta(terminal_metadata)) 
 
     def code(self, code):
         self._servicer_context.set_code(code)
@@ -242,15 +242,15 @@ def _adapt_stream_stream_event(stream_stream_event):
 
 class _SimpleMethodHandler(
         collections.namedtuple('_MethodHandler', (
-            'request_streaming',
-            'response_streaming',
-            'request_deserializer',
-            'response_serializer',
-            'unary_unary',
-            'unary_stream',
-            'stream_unary',
-            'stream_stream',
-        )), grpc.RpcMethodHandler):
+            'request_streaming', 
+            'response_streaming', 
+            'request_deserializer', 
+            'response_serializer', 
+            'unary_unary', 
+            'unary_stream', 
+            'stream_unary', 
+            'stream_stream', 
+        )), grpc.RpcMethodHandler): 
     pass
 
 
@@ -344,27 +344,27 @@ class _GenericRpcHandler(grpc.GenericRpcHandler):
 
 class _Server(interfaces.Server):
 
-    def __init__(self, grpc_server):
-        self._grpc_server = grpc_server
+    def __init__(self, grpc_server): 
+        self._grpc_server = grpc_server 
 
     def add_insecure_port(self, address):
-        return self._grpc_server.add_insecure_port(address)
+        return self._grpc_server.add_insecure_port(address) 
 
     def add_secure_port(self, address, server_credentials):
-        return self._grpc_server.add_secure_port(address, server_credentials)
+        return self._grpc_server.add_secure_port(address, server_credentials) 
 
     def start(self):
-        self._grpc_server.start()
+        self._grpc_server.start() 
 
     def stop(self, grace):
-        return self._grpc_server.stop(grace)
+        return self._grpc_server.stop(grace) 
 
     def __enter__(self):
-        self._grpc_server.start()
+        self._grpc_server.start() 
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self._grpc_server.stop(None)
+        self._grpc_server.stop(None) 
         return False
 
 

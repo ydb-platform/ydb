@@ -5,7 +5,7 @@
 
     Lexers for Objective-C family languages.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -66,7 +66,7 @@ def objective(baselexer):
                     'copy', 'retain', 'assign', 'unsafe_unretained', 'atomic', 'nonatomic',
                     'readonly', 'readwrite', 'setter', 'getter', 'typeof', 'in',
                     'out', 'inout', 'release', 'class', '@dynamic', '@optional',
-                    '@required', '@autoreleasepool', '@import'), suffix=r'\b'),
+                    '@required', '@autoreleasepool', '@import'), suffix=r'\b'), 
                  Keyword),
                 (words(('id', 'instancetype', 'Class', 'IMP', 'SEL', 'BOOL',
                         'IBOutlet', 'IBAction', 'unichar'), suffix=r'\b'),
@@ -87,26 +87,26 @@ def objective(baselexer):
             ],
             'oc_classname': [
                 # interface definition that inherits
-                (r'([a-zA-Z$_][\w$]*)(\s*:\s*)([a-zA-Z$_][\w$]*)?(\s*)(\{)',
+                (r'([a-zA-Z$_][\w$]*)(\s*:\s*)([a-zA-Z$_][\w$]*)?(\s*)(\{)', 
                  bygroups(Name.Class, Text, Name.Class, Text, Punctuation),
                  ('#pop', 'oc_ivars')),
-                (r'([a-zA-Z$_][\w$]*)(\s*:\s*)([a-zA-Z$_][\w$]*)?',
+                (r'([a-zA-Z$_][\w$]*)(\s*:\s*)([a-zA-Z$_][\w$]*)?', 
                  bygroups(Name.Class, Text, Name.Class), '#pop'),
                 # interface definition for a category
-                (r'([a-zA-Z$_][\w$]*)(\s*)(\([a-zA-Z$_][\w$]*\))(\s*)(\{)',
+                (r'([a-zA-Z$_][\w$]*)(\s*)(\([a-zA-Z$_][\w$]*\))(\s*)(\{)', 
                  bygroups(Name.Class, Text, Name.Label, Text, Punctuation),
                  ('#pop', 'oc_ivars')),
-                (r'([a-zA-Z$_][\w$]*)(\s*)(\([a-zA-Z$_][\w$]*\))',
+                (r'([a-zA-Z$_][\w$]*)(\s*)(\([a-zA-Z$_][\w$]*\))', 
                  bygroups(Name.Class, Text, Name.Label), '#pop'),
                 # simple interface / implementation
-                (r'([a-zA-Z$_][\w$]*)(\s*)(\{)',
+                (r'([a-zA-Z$_][\w$]*)(\s*)(\{)', 
                  bygroups(Name.Class, Text, Punctuation), ('#pop', 'oc_ivars')),
-                (r'([a-zA-Z$_][\w$]*)', Name.Class, '#pop')
+                (r'([a-zA-Z$_][\w$]*)', Name.Class, '#pop') 
             ],
             'oc_forward_classname': [
-                (r'([a-zA-Z$_][\w$]*)(\s*,\s*)',
+                (r'([a-zA-Z$_][\w$]*)(\s*,\s*)', 
                  bygroups(Name.Class, Text), 'oc_forward_classname'),
-                (r'([a-zA-Z$_][\w$]*)(\s*;?)',
+                (r'([a-zA-Z$_][\w$]*)(\s*;?)', 
                  bygroups(Name.Class, Text), '#pop')
             ],
             'oc_ivars': [
@@ -244,17 +244,17 @@ class LogosLexer(ObjectiveCppLexer):
             inherit,
         ],
         'logos_init_directive': [
-            (r'\s+', Text),
+            (r'\s+', Text), 
             (',', Punctuation, ('logos_init_directive', '#pop')),
-            (r'([a-zA-Z$_][\w$]*)(\s*)(=)(\s*)([^);]*)',
+            (r'([a-zA-Z$_][\w$]*)(\s*)(=)(\s*)([^);]*)', 
              bygroups(Name.Class, Text, Punctuation, Text, Text)),
-            (r'([a-zA-Z$_][\w$]*)', Name.Class),
-            (r'\)', Punctuation, '#pop'),
+            (r'([a-zA-Z$_][\w$]*)', Name.Class), 
+            (r'\)', Punctuation, '#pop'), 
         ],
         'logos_classname': [
-            (r'([a-zA-Z$_][\w$]*)(\s*:\s*)([a-zA-Z$_][\w$]*)?',
+            (r'([a-zA-Z$_][\w$]*)(\s*:\s*)([a-zA-Z$_][\w$]*)?', 
              bygroups(Name.Class, Text, Name.Class), '#pop'),
-            (r'([a-zA-Z$_][\w$]*)', Name.Class, '#pop')
+            (r'([a-zA-Z$_][\w$]*)', Name.Class, '#pop') 
         ],
         'root': [
             (r'(%subclass)(\s+)', bygroups(Keyword, Text),
@@ -298,7 +298,7 @@ class SwiftLexer(RegexLexer):
             (r'\s+', Text),
             (r'//', Comment.Single, 'comment-single'),
             (r'/\*', Comment.Multiline, 'comment-multi'),
-            (r'#(if|elseif|else|endif|available)\b', Comment.Preproc, 'preproc'),
+            (r'#(if|elseif|else|endif|available)\b', Comment.Preproc, 'preproc'), 
 
             # Keywords
             include('keywords'),
@@ -413,26 +413,26 @@ class SwiftLexer(RegexLexer):
         ],
         'keywords': [
             (words((
-                'as', 'break', 'case', 'catch', 'continue', 'default', 'defer',
-                'do', 'else', 'fallthrough', 'for', 'guard', 'if', 'in', 'is',
-                'repeat', 'return', '#selector', 'switch', 'throw', 'try',
-                'where', 'while'), suffix=r'\b'),
+                'as', 'break', 'case', 'catch', 'continue', 'default', 'defer', 
+                'do', 'else', 'fallthrough', 'for', 'guard', 'if', 'in', 'is', 
+                'repeat', 'return', '#selector', 'switch', 'throw', 'try', 
+                'where', 'while'), suffix=r'\b'), 
              Keyword),
             (r'@availability\([^)]+\)', Keyword.Reserved),
             (words((
                 'associativity', 'convenience', 'dynamic', 'didSet', 'final',
-                'get', 'indirect', 'infix', 'inout', 'lazy', 'left', 'mutating',
-                'none', 'nonmutating', 'optional', 'override', 'postfix',
-                'precedence', 'prefix', 'Protocol', 'required', 'rethrows',
-                'right', 'set', 'throws', 'Type', 'unowned', 'weak', 'willSet',
-                '@availability', '@autoclosure', '@noreturn',
-                '@NSApplicationMain', '@NSCopying', '@NSManaged', '@objc',
-                '@UIApplicationMain', '@IBAction', '@IBDesignable',
+                'get', 'indirect', 'infix', 'inout', 'lazy', 'left', 'mutating', 
+                'none', 'nonmutating', 'optional', 'override', 'postfix', 
+                'precedence', 'prefix', 'Protocol', 'required', 'rethrows', 
+                'right', 'set', 'throws', 'Type', 'unowned', 'weak', 'willSet', 
+                '@availability', '@autoclosure', '@noreturn', 
+                '@NSApplicationMain', '@NSCopying', '@NSManaged', '@objc', 
+                '@UIApplicationMain', '@IBAction', '@IBDesignable', 
                 '@IBInspectable', '@IBOutlet'), suffix=r'\b'),
              Keyword.Reserved),
             (r'(as|dynamicType|false|is|nil|self|Self|super|true|__COLUMN__'
-             r'|__FILE__|__FUNCTION__|__LINE__|_'
-             r'|#(?:file|line|column|function))\b', Keyword.Constant),
+             r'|__FILE__|__FUNCTION__|__LINE__|_' 
+             r'|#(?:file|line|column|function))\b', Keyword.Constant), 
             (r'import\b', Keyword.Declaration, 'module'),
             (r'(class|enum|extension|struct|protocol)(\s+)([a-zA-Z_]\w*)',
              bygroups(Keyword.Declaration, Text, Name.Class)),

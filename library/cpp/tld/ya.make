@@ -2,7 +2,7 @@ LIBRARY()
 
 OWNER(abolkhovityanov)
 
-PYTHON(
+PYTHON( 
     gen_tld.py tlds-alpha-by-domain.txt
     IN tlds-alpha-by-domain.txt
     STDOUT tld.inc

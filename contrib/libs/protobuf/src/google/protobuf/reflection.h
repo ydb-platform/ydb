@@ -77,12 +77,12 @@ class RepeatedFieldRef<
 
   typedef IteratorType iterator;
   typedef IteratorType const_iterator;
-  typedef T value_type;
-  typedef T& reference;
-  typedef const T& const_reference;
-  typedef int size_type;
-  typedef ptrdiff_t difference_type;
-
+  typedef T value_type; 
+  typedef T& reference; 
+  typedef const T& const_reference; 
+  typedef int size_type; 
+  typedef ptrdiff_t difference_type; 
+ 
   iterator begin() const { return iterator(data_, accessor_, true); }
   iterator end() const { return iterator(data_, accessor_, false); }
 
@@ -179,17 +179,17 @@ class RepeatedFieldRef<
 
   typedef IteratorType iterator;
   typedef IteratorType const_iterator;
-  typedef T value_type;
-  typedef T& reference;
-  typedef const T& const_reference;
-  typedef int size_type;
-  typedef ptrdiff_t difference_type;
-
+  typedef T value_type; 
+  typedef T& reference; 
+  typedef const T& const_reference; 
+  typedef int size_type; 
+  typedef ptrdiff_t difference_type; 
+ 
   iterator begin() const {
     return iterator(data_, accessor_, true, NewMessage());
   }
   iterator end() const {
-    // The end iterator must not be dereferenced, no need for scratch space.
+    // The end iterator must not be dereferenced, no need for scratch space. 
     return iterator(data_, accessor_, false, nullptr);
   }
 
@@ -401,12 +401,12 @@ class RepeatedFieldRefIterator
  public:
   // Constructor for non-message fields.
   RepeatedFieldRefIterator(const void* data,
-                           const RepeatedFieldAccessor* accessor, bool begin)
-      : data_(data),
-        accessor_(accessor),
-        iterator_(begin ? accessor->BeginIterator(data)
-                        : accessor->EndIterator(data)),
-        // The end iterator must not be dereferenced, no need for scratch space.
+                           const RepeatedFieldAccessor* accessor, bool begin) 
+      : data_(data), 
+        accessor_(accessor), 
+        iterator_(begin ? accessor->BeginIterator(data) 
+                        : accessor->EndIterator(data)), 
+        // The end iterator must not be dereferenced, no need for scratch space. 
         scratch_space_(begin ? new AccessorValueType : nullptr) {}
   // Constructor for message fields.
   RepeatedFieldRefIterator(const void* data,

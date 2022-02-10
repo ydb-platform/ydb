@@ -28,12 +28,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// This file defines the map container and its helpers to support protobuf maps.
-//
-// The Map and MapIterator types are provided by this header file.
-// Please avoid using other types defined here, unless they are public
-// types within Map or MapIterator, such as Map::value_type.
-
+// This file defines the map container and its helpers to support protobuf maps. 
+// 
+// The Map and MapIterator types are provided by this header file. 
+// Please avoid using other types defined here, unless they are public 
+// types within Map or MapIterator, such as Map::value_type. 
+ 
 #ifndef GOOGLE_PROTOBUF_MAP_H__
 #define GOOGLE_PROTOBUF_MAP_H__
 
@@ -74,12 +74,12 @@ template <typename Enum>
 struct is_proto_enum;
 
 namespace internal {
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType key_wire_type,
           WireFormatLite::FieldType value_wire_type>
 class MapFieldLite;
 
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType key_wire_type,
           WireFormatLite::FieldType value_wire_type>
 class MapField;
@@ -384,9 +384,9 @@ class Map {
 
   constexpr Map() : elements_(nullptr) {}
   explicit Map(Arena* arena) : elements_(arena) {}
-
+ 
   Map(const Map& other) : Map() { insert(other.begin(), other.end()); }
-
+ 
   Map(Map&& other) noexcept : Map() {
     if (other.arena() != nullptr) {
       *this = other;
@@ -513,15 +513,15 @@ class Map {
       // can convert to const_iterator" is OK but the reverse direction is not.
       template <typename U>
       explicit iterator_base(const iterator_base<U>& it)
-          : node_(it.node_), m_(it.m_), bucket_index_(it.bucket_index_) {}
+          : node_(it.node_), m_(it.m_), bucket_index_(it.bucket_index_) {} 
 
       iterator_base(Node* n, const InnerMap* m, size_type index)
-          : node_(n), m_(m), bucket_index_(index) {}
+          : node_(n), m_(m), bucket_index_(index) {} 
 
       iterator_base(TreeIterator tree_it, const InnerMap* m, size_type index)
           : node_(NodeFromTreeIterator(tree_it)), m_(m), bucket_index_(index) {
-        // Invariant: iterators that use buckets with trees have an even
-        // bucket_index_.
+        // Invariant: iterators that use buckets with trees have an even 
+        // bucket_index_. 
         GOOGLE_DCHECK_EQ(bucket_index_ % 2, 0u);
       }
 
@@ -557,14 +557,14 @@ class Map {
 
       iterator_base& operator++() {
         if (node_->next == nullptr) {
-          TreeIterator tree_it;
-          const bool is_list = revalidate_if_necessary(&tree_it);
+          TreeIterator tree_it; 
+          const bool is_list = revalidate_if_necessary(&tree_it); 
           if (is_list) {
             SearchFrom(bucket_index_ + 1);
           } else {
             GOOGLE_DCHECK_EQ(bucket_index_ & 1, 0u);
             Tree* tree = static_cast<Tree*>(m_->table_[bucket_index_]);
-            if (++tree_it == tree->end()) {
+            if (++tree_it == tree->end()) { 
               SearchFrom(bucket_index_ + 2);
             } else {
               node_ = NodeFromTreeIterator(tree_it);
@@ -584,9 +584,9 @@ class Map {
 
       // Assumes node_ and m_ are correct and non-null, but other fields may be
       // stale.  Fix them as needed.  Then return true iff node_ points to a
-      // Node in a list.  If false is returned then *it is modified to be
-      // a valid iterator for node_.
-      bool revalidate_if_necessary(TreeIterator* it) {
+      // Node in a list.  If false is returned then *it is modified to be 
+      // a valid iterator for node_. 
+      bool revalidate_if_necessary(TreeIterator* it) { 
         GOOGLE_DCHECK(node_ != nullptr && m_ != nullptr);
         // Force bucket_index_ to be in range.
         bucket_index_ &= (m_->num_buckets_ - 1);
@@ -726,8 +726,8 @@ class Map {
 
     void erase(iterator it) {
       GOOGLE_DCHECK_EQ(it.m_, this);
-      typename Tree::iterator tree_it;
-      const bool is_list = it.revalidate_if_necessary(&tree_it);
+      typename Tree::iterator tree_it; 
+      const bool is_list = it.revalidate_if_necessary(&tree_it); 
       size_type b = it.bucket_index_;
       Node* const item = it.node_;
       if (is_list) {
@@ -763,16 +763,16 @@ class Map {
     }
 
    private:
-    const_iterator find(const Key& k, TreeIterator* it) const {
-      return FindHelper(k, it).first;
-    }
+    const_iterator find(const Key& k, TreeIterator* it) const { 
+      return FindHelper(k, it).first; 
+    } 
     template <typename K>
     std::pair<const_iterator, size_type> FindHelper(const K& k) const {
       return FindHelper(k, nullptr);
-    }
+    } 
     template <typename K>
     std::pair<const_iterator, size_type> FindHelper(const K& k,
-                                                    TreeIterator* it) const {
+                                                    TreeIterator* it) const { 
       size_type b = BucketNumber(k);
       if (TableEntryIsNonEmptyList(b)) {
         Node* node = static_cast<Node*>(table_[b]);
@@ -826,9 +826,9 @@ class Map {
         // index_of_first_non_null_, so we skip the code to update it.
         return InsertUniqueInTree(b, node);
       }
-      // parentheses around (std::min) prevents macro expansion of min(...)
+      // parentheses around (std::min) prevents macro expansion of min(...) 
       index_of_first_non_null_ =
-          (std::min)(index_of_first_non_null_, result.bucket_index_);
+          (std::min)(index_of_first_non_null_, result.bucket_index_); 
       return result;
     }
 
@@ -1038,9 +1038,9 @@ class Map {
     // Return a power of two no less than max(kMinTableSize, n).
     // Assumes either n < kMinTableSize or n is a power of two.
     size_type TableSize(size_type n) {
-      return n < static_cast<size_type>(kMinTableSize)
-                 ? static_cast<size_type>(kMinTableSize)
-                 : n;
+      return n < static_cast<size_type>(kMinTableSize) 
+                 ? static_cast<size_type>(kMinTableSize) 
+                 : n; 
     }
 
     // Use alloc_ to allocate an array of n objects of type U.
@@ -1111,7 +1111,7 @@ class Map {
 
  public:
   // Iterators
-  class const_iterator {
+  class const_iterator { 
     using InnerIt = typename InnerMap::const_iterator;
 
    public:
@@ -1120,21 +1120,21 @@ class Map {
     using difference_type = ptrdiff_t;
     using pointer = const value_type*;
     using reference = const value_type&;
-
-    const_iterator() {}
-    explicit const_iterator(const InnerIt& it) : it_(it) {}
+ 
+    const_iterator() {} 
+    explicit const_iterator(const InnerIt& it) : it_(it) {} 
 
     const_reference operator*() const { return *it_; }
     const_pointer operator->() const { return &(operator*()); }
 
     const_iterator& operator++() {
-      ++it_;
+      ++it_; 
       return *this;
     }
-    const_iterator operator++(int) { return const_iterator(it_++); }
+    const_iterator operator++(int) { return const_iterator(it_++); } 
 
     friend bool operator==(const const_iterator& a, const const_iterator& b) {
-      return a.it_ == b.it_;
+      return a.it_ == b.it_; 
     }
     friend bool operator!=(const const_iterator& a, const const_iterator& b) {
       return !(a == b);
@@ -1144,7 +1144,7 @@ class Map {
     InnerIt it_;
   };
 
-  class iterator {
+  class iterator { 
     using InnerIt = typename InnerMap::iterator;
 
    public:
@@ -1153,26 +1153,26 @@ class Map {
     using difference_type = ptrdiff_t;
     using pointer = value_type*;
     using reference = value_type&;
-
-    iterator() {}
-    explicit iterator(const InnerIt& it) : it_(it) {}
+ 
+    iterator() {} 
+    explicit iterator(const InnerIt& it) : it_(it) {} 
 
     reference operator*() const { return *it_; }
     pointer operator->() const { return &(operator*()); }
 
     iterator& operator++() {
-      ++it_;
+      ++it_; 
       return *this;
     }
-    iterator operator++(int) { return iterator(it_++); }
+    iterator operator++(int) { return iterator(it_++); } 
 
     // Allow implicit conversion to const_iterator.
     operator const_iterator() const {  // NOLINT(runtime/explicit)
-      return const_iterator(typename InnerMap::const_iterator(it_));
+      return const_iterator(typename InnerMap::const_iterator(it_)); 
     }
 
     friend bool operator==(const iterator& a, const iterator& b) {
-      return a.it_ == b.it_;
+      return a.it_ == b.it_; 
     }
     friend bool operator!=(const iterator& a, const iterator& b) {
       return !(a == b);
@@ -1267,12 +1267,12 @@ class Map {
 
   // insert
   std::pair<iterator, bool> insert(const value_type& value) {
-    std::pair<typename InnerMap::iterator, bool> p =
+    std::pair<typename InnerMap::iterator, bool> p = 
         elements_.insert(value.first);
-    if (p.second) {
+    if (p.second) { 
       p.first->second = value.second;
     }
-    return std::pair<iterator, bool>(iterator(p.first), p.second);
+    return std::pair<iterator, bool>(iterator(p.first), p.second); 
   }
   template <class InputIt>
   void insert(InputIt first, InputIt last) {
@@ -1350,7 +1350,7 @@ class Map {
   friend class Arena;
   using InternalArenaConstructable_ = void;
   using DestructorSkippable_ = void;
-  template <typename Derived, typename K, typename V,
+  template <typename Derived, typename K, typename V, 
             internal::WireFormatLite::FieldType key_wire_type,
             internal::WireFormatLite::FieldType value_wire_type>
   friend class internal::MapFieldLite;
@@ -1358,7 +1358,7 @@ class Map {
 
 }  // namespace protobuf
 }  // namespace google
-
+ 
 #include <google/protobuf/port_undef.inc>
 
 #endif  // GOOGLE_PROTOBUF_MAP_H__

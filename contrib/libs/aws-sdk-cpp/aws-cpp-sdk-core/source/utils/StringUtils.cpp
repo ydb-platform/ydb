@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 
 #include <aws/core/utils/StringUtils.h>
@@ -75,56 +75,56 @@ bool StringUtils::CaselessCompare(const char* value1, const char* value2)
 
 Aws::Vector<Aws::String> StringUtils::Split(const Aws::String& toSplit, char splitOn)
 {
-    return Split(toSplit, splitOn, SIZE_MAX, SplitOptions::NOT_SET);
+    return Split(toSplit, splitOn, SIZE_MAX, SplitOptions::NOT_SET); 
 }
 
-Aws::Vector<Aws::String> StringUtils::Split(const Aws::String& toSplit, char splitOn, SplitOptions option)
-{
-    return Split(toSplit, splitOn, SIZE_MAX, option);
-}
-
+Aws::Vector<Aws::String> StringUtils::Split(const Aws::String& toSplit, char splitOn, SplitOptions option) 
+{ 
+    return Split(toSplit, splitOn, SIZE_MAX, option); 
+} 
+ 
 Aws::Vector<Aws::String> StringUtils::Split(const Aws::String& toSplit, char splitOn, size_t numOfTargetParts)
 {
-    return Split(toSplit, splitOn, numOfTargetParts, SplitOptions::NOT_SET);
-}
-
-Aws::Vector<Aws::String> StringUtils::Split(const Aws::String& toSplit, char splitOn, size_t numOfTargetParts, SplitOptions option)
-{
+    return Split(toSplit, splitOn, numOfTargetParts, SplitOptions::NOT_SET); 
+} 
+ 
+Aws::Vector<Aws::String> StringUtils::Split(const Aws::String& toSplit, char splitOn, size_t numOfTargetParts, SplitOptions option) 
+{ 
     Aws::Vector<Aws::String> returnValues;
     Aws::StringStream input(toSplit);
     Aws::String item;
 
     while(returnValues.size() < numOfTargetParts - 1 && std::getline(input, item, splitOn))
     {
-        if (!item.empty() || option == SplitOptions::INCLUDE_EMPTY_ENTRIES)
+        if (!item.empty() || option == SplitOptions::INCLUDE_EMPTY_ENTRIES) 
         {
             returnValues.emplace_back(std::move(item));
         }
     }
 
-    if (std::getline(input, item, static_cast<char>(EOF)))
+    if (std::getline(input, item, static_cast<char>(EOF))) 
     {
-        if (option != SplitOptions::INCLUDE_EMPTY_ENTRIES)
-        {
-            // Trim all leading delimiters.
-            item.erase(item.begin(), std::find_if(item.begin(), item.end(), [splitOn](int ch) { return ch != splitOn; }));
-            if (!item.empty())
-            {
-                returnValues.emplace_back(std::move(item));
-            }
-        }
-        else
-        {
-            returnValues.emplace_back(std::move(item));
-        }
-
+        if (option != SplitOptions::INCLUDE_EMPTY_ENTRIES) 
+        { 
+            // Trim all leading delimiters. 
+            item.erase(item.begin(), std::find_if(item.begin(), item.end(), [splitOn](int ch) { return ch != splitOn; })); 
+            if (!item.empty()) 
+            { 
+                returnValues.emplace_back(std::move(item)); 
+            } 
+        } 
+        else 
+        { 
+            returnValues.emplace_back(std::move(item)); 
+        } 
+ 
     }
-    // To handle the case when there are trailing delimiters.
-    else if (!toSplit.empty() && toSplit.back() == splitOn && option == SplitOptions::INCLUDE_EMPTY_ENTRIES)
-    {
-        returnValues.emplace_back();
-    }
-
+    // To handle the case when there are trailing delimiters. 
+    else if (!toSplit.empty() && toSplit.back() == splitOn && option == SplitOptions::INCLUDE_EMPTY_ENTRIES) 
+    { 
+        returnValues.emplace_back(); 
+    } 
+ 
     return returnValues;
 }
 
@@ -282,20 +282,20 @@ Aws::String StringUtils::URLDecode(const char* safe)
     return unescaped;
 }
 
-static bool IsSpace(int ch)
-{
-    if (ch < -1 || ch > 255)
-    {
-        return false;
-    }
-
-    return ::isspace(ch) != 0;
-}
-
+static bool IsSpace(int ch) 
+{ 
+    if (ch < -1 || ch > 255) 
+    { 
+        return false; 
+    } 
+ 
+    return ::isspace(ch) != 0; 
+} 
+ 
 Aws::String StringUtils::LTrim(const char* source)
 {
     Aws::String copy(source);
-    copy.erase(copy.begin(), std::find_if(copy.begin(), copy.end(), [](int ch) { return !IsSpace(ch); }));
+    copy.erase(copy.begin(), std::find_if(copy.begin(), copy.end(), [](int ch) { return !IsSpace(ch); })); 
     return copy;
 }
 
@@ -303,7 +303,7 @@ Aws::String StringUtils::LTrim(const char* source)
 Aws::String StringUtils::RTrim(const char* source)
 {
     Aws::String copy(source);
-    copy.erase(std::find_if(copy.rbegin(), copy.rend(), [](int ch) { return !IsSpace(ch); }).base(), copy.end());
+    copy.erase(std::find_if(copy.rbegin(), copy.rend(), [](int ch) { return !IsSpace(ch); }).base(), copy.end()); 
     return copy;
 }
 

@@ -84,7 +84,7 @@ class AnnotationProtoCollector : public AnnotationCollector {
   // Override for AnnotationCollector::AddAnnotation.
   virtual void AddAnnotation(size_t begin_offset, size_t end_offset,
                              const TProtoStringType& file_path,
-                             const std::vector<int>& path) {
+                             const std::vector<int>& path) { 
     typename AnnotationProto::Annotation* annotation =
         annotation_proto_->add_annotation();
     for (int i = 0; i < path.size(); ++i) {
@@ -174,7 +174,7 @@ class AnnotationProtoCollector : public AnnotationCollector {
 //   vars["function"] = "call";
 //   vars["mark"] = "";
 //   printer.Print(vars, "$function$($foo$,$foo$)$mark$");
-//   printer.Annotate("function", "mark", call_);
+//   printer.Annotate("function", "mark", call_); 
 //
 // This code associates the span covering "call(bar,bar)" in the output with the
 // call_ descriptor.
@@ -312,9 +312,9 @@ class PROTOBUF_EXPORT Printer {
     PrintInternal(vars, text, args...);
   }
 
-  // Copy size worth of bytes from data to buffer_.
-  void CopyToBuffer(const char* data, int size);
-
+  // Copy size worth of bytes from data to buffer_. 
+  void CopyToBuffer(const char* data, int size); 
+ 
   void push_back(char c) {
     if (failed_) return;
     if (buffer_size_ == 0) {
@@ -357,17 +357,17 @@ class PROTOBUF_EXPORT Printer {
   // length of the substituted string).
   std::map<TProtoStringType, std::pair<size_t, size_t> > substitutions_;
 
-  // Keeps track of the keys in substitutions_ that need to be updated when
-  // indents are inserted. These are keys that refer to the beginning of the
-  // current line.
+  // Keeps track of the keys in substitutions_ that need to be updated when 
+  // indents are inserted. These are keys that refer to the beginning of the 
+  // current line. 
   std::vector<TProtoStringType> line_start_variables_;
-
+ 
   // Returns true and sets range to the substitution range in the output for
   // varname if varname was used once in the last call to Print. If varname
   // was not used, or if it was used multiple times, returns false (and
   // fails a debug assertion).
-  bool GetSubstitutionRange(const char* varname,
-                            std::pair<size_t, size_t>* range);
+  bool GetSubstitutionRange(const char* varname, 
+                            std::pair<size_t, size_t>* range); 
 
   // If non-null, annotation_collector_ is used to store annotations about
   // generated code.

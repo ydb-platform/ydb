@@ -11,9 +11,9 @@ OWNER(
 
 LICENSE(Apache-2.0)
 
-ADDINCL(
-    GLOBAL contrib/restricted/abseil-cpp-tstring
-)
+ADDINCL( 
+    GLOBAL contrib/restricted/abseil-cpp-tstring 
+) 
 
 NO_COMPILER_WARNINGS()
 

@@ -261,7 +261,7 @@ struct PROTOBUF_EXPORT ArenaStringPtr {
       const TProtoStringType* default_value, ArenaStringPtr* rhs, Arena* rhs_arena,
       ArenaStringPtr* lhs, Arena* lhs_arena);
 
-  // Frees storage (if not on an arena).
+  // Frees storage (if not on an arena). 
   void Destroy(const TProtoStringType* default_value, ::google::protobuf::Arena* arena);
   void Destroy(EmptyDefault, ::google::protobuf::Arena* arena);
   void Destroy(NonEmptyDefault, ::google::protobuf::Arena* arena);
@@ -297,7 +297,7 @@ struct PROTOBUF_EXPORT ArenaStringPtr {
   // If the value was donated, the contents are discarded.
   TProtoStringType* MutableNoCopy(const TProtoStringType* default_value,
                              ::google::protobuf::Arena* arena);
-
+ 
   // Destroy the string. Assumes `arena == nullptr`.
   void DestroyNoArena(const TProtoStringType* default_value);
 
@@ -396,9 +396,9 @@ inline TProtoStringType* ArenaStringPtr::MutableNoArenaNoDefault(
 inline void ArenaStringPtr::DestroyNoArena(const TProtoStringType* default_value) {
   if (!IsDefault(default_value)) {
     DestroyNoArenaSlowPath();
-  }
-}
-
+  } 
+} 
+ 
 inline TProtoStringType* ArenaStringPtr::UnsafeMutablePointer() {
   GOOGLE_DCHECK(!tagged_ptr_.IsTagged());
   GOOGLE_DCHECK(tagged_ptr_.UnsafeGet() != nullptr);
@@ -406,10 +406,10 @@ inline TProtoStringType* ArenaStringPtr::UnsafeMutablePointer() {
 }
 
 
-}  // namespace internal
-}  // namespace protobuf
+}  // namespace internal 
+}  // namespace protobuf 
 }  // namespace google
-
+ 
 #include <google/protobuf/port_undef.inc>
 
 #endif  // GOOGLE_PROTOBUF_ARENASTRING_H__

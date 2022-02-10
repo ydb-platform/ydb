@@ -99,10 +99,10 @@
 #  include "config-vxworks.h"
 #endif
 
-#ifdef __PLAN9__
-#  include "config-plan9.h"
-#endif
-
+#ifdef __PLAN9__ 
+#  include "config-plan9.h" 
+#endif 
+ 
 #endif /* HAVE_CONFIG_H */
 
 /* ================================================================ */
@@ -273,13 +273,13 @@
 #endif
 
 #ifdef __AMIGA__
-#  include <exec/types.h>
-#  include <exec/execbase.h>
-#  include <proto/exec.h>
-#  include <proto/dos.h>
+#  include <exec/types.h> 
+#  include <exec/execbase.h> 
+#  include <proto/exec.h> 
+#  include <proto/dos.h> 
 #  include <unistd.h>
-#  ifdef HAVE_PROTO_BSDSOCKET_H
-#    error #include <proto/bsdsocket.h> /* ensure bsdsocket.library use */
+#  ifdef HAVE_PROTO_BSDSOCKET_H 
+#    error #include <proto/bsdsocket.h> /* ensure bsdsocket.library use */ 
 #    define select(a,b,c,d,e) WaitSelect(a,b,c,d,e,0)
 #  endif
 /*
@@ -609,8 +609,8 @@ int netware_init(void);
 #define LIBIDN_REQUIRED_VERSION "0.4.1"
 
 #if defined(USE_GNUTLS) || defined(USE_OPENSSL) || defined(USE_NSS) || \
-    defined(USE_MBEDTLS) || \
-    defined(USE_WOLFSSL) || defined(USE_SCHANNEL) || \
+    defined(USE_MBEDTLS) || \ 
+    defined(USE_WOLFSSL) || defined(USE_SCHANNEL) || \ 
     defined(USE_SECTRANSP) || defined(USE_GSKIT) || defined(USE_MESALINK) || \
     defined(USE_BEARSSL)
 #define USE_SSL    /* SSL support has been enabled */
@@ -653,10 +653,10 @@ int netware_init(void);
 #error "No longer supported. Set CURLOPT_CAINFO at runtime instead."
 #endif
 
-#if defined(USE_LIBSSH2) || defined(USE_LIBSSH) || defined(USE_WOLFSSH)
-#define USE_SSH
-#endif
-
+#if defined(USE_LIBSSH2) || defined(USE_LIBSSH) || defined(USE_WOLFSSH) 
+#define USE_SSH 
+#endif 
+ 
 /*
  * Provide a mechanism to silence picky compilers, such as gcc 4.6+.
  * Parameters should of course normally not be unused, but for example when
@@ -788,14 +788,14 @@ int getpwuid_r(uid_t uid, struct passwd *pwd, char *buf,
                size_t buflen, struct passwd **result);
 #endif
 
-#ifdef DEBUGBUILD
-#define UNITTEST
-#else
-#define UNITTEST static
-#endif
-
-#if defined(USE_NGTCP2) || defined(USE_QUICHE)
-#define ENABLE_QUIC
-#endif
-
+#ifdef DEBUGBUILD 
+#define UNITTEST 
+#else 
+#define UNITTEST static 
+#endif 
+ 
+#if defined(USE_NGTCP2) || defined(USE_QUICHE) 
+#define ENABLE_QUIC 
+#endif 
+ 
 #endif /* HEADER_CURL_SETUP_H */

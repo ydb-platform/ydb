@@ -5,7 +5,7 @@
 
     Lexers for the Io language.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -49,7 +49,7 @@ class IoLexer(RegexLexer):
             # names
             (r'(Object|list|List|Map|args|Sequence|Coroutine|File)\b',
              Name.Builtin),
-            (r'[a-zA-Z_]\w*', Name),
+            (r'[a-zA-Z_]\w*', Name), 
             # numbers
             (r'(\d+\.?\d*|\d*\.\d+)([eE][+-]?[0-9]+)?', Number.Float),
             (r'\d+', Number.Integer)

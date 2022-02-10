@@ -65,10 +65,10 @@ struct MessageMapContainer : public MapContainer {
   CMessageClass* message_class;
 };
 
-bool InitMapContainers();
+bool InitMapContainers(); 
 
-extern PyTypeObject* MessageMapContainer_Type;
-extern PyTypeObject* ScalarMapContainer_Type;
+extern PyTypeObject* MessageMapContainer_Type; 
+extern PyTypeObject* ScalarMapContainer_Type; 
 extern PyTypeObject MapIterator_Type;  // Both map types use the same iterator.
 
 // Builds a MapContainer object, from a parent message and a

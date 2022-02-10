@@ -1,26 +1,26 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
 #ifndef GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_PARSER_H
 #define GRPC_CORE_EXT_TRANSPORT_CHTTP2_TRANSPORT_HPACK_PARSER_H
 
-#include <grpc/support/port_platform.h>
-
+#include <grpc/support/port_platform.h> 
+ 
 #include <stddef.h>
 
 #include "src/core/ext/transport/chttp2/transport/frame.h"
@@ -29,39 +29,39 @@
 
 typedef struct grpc_chttp2_hpack_parser grpc_chttp2_hpack_parser;
 
-typedef grpc_error* (*grpc_chttp2_hpack_parser_state)(
-    grpc_chttp2_hpack_parser* p, const uint8_t* beg, const uint8_t* end);
+typedef grpc_error* (*grpc_chttp2_hpack_parser_state)( 
+    grpc_chttp2_hpack_parser* p, const uint8_t* beg, const uint8_t* end); 
 
 struct grpc_chttp2_hpack_parser_string {
-  bool copied;
-  struct {
-    grpc_slice referenced;
-    struct {
-      char* str;
-      uint32_t length;
-      uint32_t capacity;
-    } copied;
-  } data;
+  bool copied; 
+  struct { 
+    grpc_slice referenced; 
+    struct { 
+      char* str; 
+      uint32_t length; 
+      uint32_t capacity; 
+    } copied; 
+  } data; 
 };
 struct grpc_chttp2_hpack_parser {
   /* user specified callback for each header output */
   grpc_error* (*on_header)(void* user_data, grpc_mdelem md);
-  void* on_header_user_data;
+  void* on_header_user_data; 
 
-  grpc_error* last_error;
+  grpc_error* last_error; 
 
   /* current parse state - or a function that implements it */
   grpc_chttp2_hpack_parser_state state;
   /* future states dependent on the opening op code */
-  const grpc_chttp2_hpack_parser_state* next_state;
+  const grpc_chttp2_hpack_parser_state* next_state; 
   /* what to do after skipping prioritization data */
   grpc_chttp2_hpack_parser_state after_prioritization;
-  /* the refcount of the slice that we're currently parsing */
-  grpc_slice_refcount* current_slice_refcount;
+  /* the refcount of the slice that we're currently parsing */ 
+  grpc_slice_refcount* current_slice_refcount; 
   /* the value we're currently parsing */
   union {
-    uint32_t* value;
-    grpc_chttp2_hpack_parser_string* str;
+    uint32_t* value; 
+    grpc_chttp2_hpack_parser_string* str; 
   } parsing;
   /* string parameters for each chunk */
   grpc_chttp2_hpack_parser_string key;
@@ -98,19 +98,19 @@ struct grpc_chttp2_hpack_parser {
   grpc_chttp2_hptbl table;
 };
 
-void grpc_chttp2_hpack_parser_init(grpc_chttp2_hpack_parser* p);
-void grpc_chttp2_hpack_parser_destroy(grpc_chttp2_hpack_parser* p);
+void grpc_chttp2_hpack_parser_init(grpc_chttp2_hpack_parser* p); 
+void grpc_chttp2_hpack_parser_destroy(grpc_chttp2_hpack_parser* p); 
 
-void grpc_chttp2_hpack_parser_set_has_priority(grpc_chttp2_hpack_parser* p);
+void grpc_chttp2_hpack_parser_set_has_priority(grpc_chttp2_hpack_parser* p); 
 
-grpc_error* grpc_chttp2_hpack_parser_parse(grpc_chttp2_hpack_parser* p,
+grpc_error* grpc_chttp2_hpack_parser_parse(grpc_chttp2_hpack_parser* p, 
                                            const grpc_slice& slice);
 
 /* wraps grpc_chttp2_hpack_parser_parse to provide a frame level parser for
    the transport */
-grpc_error* grpc_chttp2_header_parser_parse(void* hpack_parser,
-                                            grpc_chttp2_transport* t,
-                                            grpc_chttp2_stream* s,
+grpc_error* grpc_chttp2_header_parser_parse(void* hpack_parser, 
+                                            grpc_chttp2_transport* t, 
+                                            grpc_chttp2_stream* s, 
                                             const grpc_slice& slice,
                                             int is_last);
 

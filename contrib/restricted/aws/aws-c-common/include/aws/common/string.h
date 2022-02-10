@@ -1,8 +1,8 @@
 #ifndef AWS_COMMON_STRING_H
 #define AWS_COMMON_STRING_H
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 #include <aws/common/byte_buf.h>
 #include <aws/common/common.h>
@@ -41,91 +41,91 @@
 struct aws_string {
     struct aws_allocator *const allocator;
     const size_t len;
-    /* give this a storage specifier for C++ purposes. It will likely be larger after init. */
-    const uint8_t bytes[1];
+    /* give this a storage specifier for C++ purposes. It will likely be larger after init. */ 
+    const uint8_t bytes[1]; 
 };
 #ifdef _MSC_VER
 #    pragma warning(pop)
 #endif
 
-AWS_EXTERN_C_BEGIN
+AWS_EXTERN_C_BEGIN 
 
 /**
  * Returns true if bytes of string are the same, false otherwise.
  */
-AWS_COMMON_API
-bool aws_string_eq(const struct aws_string *a, const struct aws_string *b);
+AWS_COMMON_API 
+bool aws_string_eq(const struct aws_string *a, const struct aws_string *b); 
 
 /**
  * Returns true if bytes of string are equivalent, using a case-insensitive comparison.
  */
-AWS_COMMON_API
-bool aws_string_eq_ignore_case(const struct aws_string *a, const struct aws_string *b);
+AWS_COMMON_API 
+bool aws_string_eq_ignore_case(const struct aws_string *a, const struct aws_string *b); 
 
 /**
  * Returns true if bytes of string and cursor are the same, false otherwise.
  */
-AWS_COMMON_API
-bool aws_string_eq_byte_cursor(const struct aws_string *str, const struct aws_byte_cursor *cur);
+AWS_COMMON_API 
+bool aws_string_eq_byte_cursor(const struct aws_string *str, const struct aws_byte_cursor *cur); 
 
 /**
  * Returns true if bytes of string and cursor are equivalent, using a case-insensitive comparison.
  */
-AWS_COMMON_API
-bool aws_string_eq_byte_cursor_ignore_case(const struct aws_string *str, const struct aws_byte_cursor *cur);
+AWS_COMMON_API 
+bool aws_string_eq_byte_cursor_ignore_case(const struct aws_string *str, const struct aws_byte_cursor *cur); 
 
 /**
  * Returns true if bytes of string and buffer are the same, false otherwise.
  */
-AWS_COMMON_API
-bool aws_string_eq_byte_buf(const struct aws_string *str, const struct aws_byte_buf *buf);
+AWS_COMMON_API 
+bool aws_string_eq_byte_buf(const struct aws_string *str, const struct aws_byte_buf *buf); 
 
 /**
  * Returns true if bytes of string and buffer are equivalent, using a case-insensitive comparison.
  */
-AWS_COMMON_API
-bool aws_string_eq_byte_buf_ignore_case(const struct aws_string *str, const struct aws_byte_buf *buf);
+AWS_COMMON_API 
+bool aws_string_eq_byte_buf_ignore_case(const struct aws_string *str, const struct aws_byte_buf *buf); 
 
-AWS_COMMON_API
-bool aws_string_eq_c_str(const struct aws_string *str, const char *c_str);
+AWS_COMMON_API 
+bool aws_string_eq_c_str(const struct aws_string *str, const char *c_str); 
 
 /**
  * Returns true if bytes of strings are equivalent, using a case-insensitive comparison.
  */
-AWS_COMMON_API
-bool aws_string_eq_c_str_ignore_case(const struct aws_string *str, const char *c_str);
+AWS_COMMON_API 
+bool aws_string_eq_c_str_ignore_case(const struct aws_string *str, const char *c_str); 
 
 /**
  * Constructor functions which copy data from null-terminated C-string or array of bytes.
  */
 AWS_COMMON_API
 struct aws_string *aws_string_new_from_c_str(struct aws_allocator *allocator, const char *c_str);
-
-/**
- * Allocate a new string with the same contents as array.
- */
+ 
+/** 
+ * Allocate a new string with the same contents as array. 
+ */ 
 AWS_COMMON_API
 struct aws_string *aws_string_new_from_array(struct aws_allocator *allocator, const uint8_t *bytes, size_t len);
 
 /**
- * Allocate a new string with the same contents as another string.
+ * Allocate a new string with the same contents as another string. 
  */
 AWS_COMMON_API
 struct aws_string *aws_string_new_from_string(struct aws_allocator *allocator, const struct aws_string *str);
 
 /**
- * Allocate a new string with the same contents as cursor.
- */
-AWS_COMMON_API
-struct aws_string *aws_string_new_from_cursor(struct aws_allocator *allocator, const struct aws_byte_cursor *cursor);
-
-/**
- * Allocate a new string with the same contents as buf.
- */
-AWS_COMMON_API
-struct aws_string *aws_string_new_from_buf(struct aws_allocator *allocator, const struct aws_byte_buf *buf);
-
-/**
+ * Allocate a new string with the same contents as cursor. 
+ */ 
+AWS_COMMON_API 
+struct aws_string *aws_string_new_from_cursor(struct aws_allocator *allocator, const struct aws_byte_cursor *cursor); 
+ 
+/** 
+ * Allocate a new string with the same contents as buf. 
+ */ 
+AWS_COMMON_API 
+struct aws_string *aws_string_new_from_buf(struct aws_allocator *allocator, const struct aws_byte_buf *buf); 
+ 
+/** 
  * Deallocate string.
  */
 AWS_COMMON_API
@@ -194,65 +194,65 @@ int aws_array_list_comparator_string(const void *a, const void *b);
  * accordingly. If there is insufficient space in the buf, returns
  * false, leaving the buf unchanged.
  */
-AWS_COMMON_API
-bool aws_byte_buf_write_from_whole_string(
+AWS_COMMON_API 
+bool aws_byte_buf_write_from_whole_string( 
     struct aws_byte_buf *AWS_RESTRICT buf,
-    const struct aws_string *AWS_RESTRICT src);
+    const struct aws_string *AWS_RESTRICT src); 
 
 /**
  * Creates an aws_byte_cursor from an existing string.
  */
-AWS_COMMON_API
-struct aws_byte_cursor aws_byte_cursor_from_string(const struct aws_string *src);
+AWS_COMMON_API 
+struct aws_byte_cursor aws_byte_cursor_from_string(const struct aws_string *src); 
+
+/** 
+ * If the string was dynamically allocated, clones it. If the string was statically allocated (i.e. has no allocator), 
+ * returns the original string. 
+ */ 
+AWS_COMMON_API 
+struct aws_string *aws_string_clone_or_reuse(struct aws_allocator *allocator, const struct aws_string *str); 
+
+/* Computes the length of a c string in bytes assuming the character set is either ASCII or UTF-8. If no NULL character 
+ * is found within max_read_len of str, AWS_ERROR_C_STRING_BUFFER_NOT_NULL_TERMINATED is raised. Otherwise, str_len 
+ * will contain the string length minus the NULL character, and AWS_OP_SUCCESS will be returned. */ 
+AWS_COMMON_API 
+int aws_secure_strlen(const char *str, size_t max_read_len, size_t *str_len); 
+ 
+/**
+ * Equivalent to str->bytes. 
+ */
+AWS_STATIC_IMPL 
+const uint8_t *aws_string_bytes(const struct aws_string *str); 
 
 /**
- * If the string was dynamically allocated, clones it. If the string was statically allocated (i.e. has no allocator),
- * returns the original string.
+ * Equivalent to `(const char *)str->bytes`. 
  */
-AWS_COMMON_API
-struct aws_string *aws_string_clone_or_reuse(struct aws_allocator *allocator, const struct aws_string *str);
+AWS_STATIC_IMPL 
+const char *aws_string_c_str(const struct aws_string *str); 
 
-/* Computes the length of a c string in bytes assuming the character set is either ASCII or UTF-8. If no NULL character
- * is found within max_read_len of str, AWS_ERROR_C_STRING_BUFFER_NOT_NULL_TERMINATED is raised. Otherwise, str_len
- * will contain the string length minus the NULL character, and AWS_OP_SUCCESS will be returned. */
-AWS_COMMON_API
-int aws_secure_strlen(const char *str, size_t max_read_len, size_t *str_len);
-
-/**
- * Equivalent to str->bytes.
- */
-AWS_STATIC_IMPL
-const uint8_t *aws_string_bytes(const struct aws_string *str);
-
-/**
- * Equivalent to `(const char *)str->bytes`.
- */
-AWS_STATIC_IMPL
-const char *aws_string_c_str(const struct aws_string *str);
-
-/**
- * Evaluates the set of properties that define the shape of all valid aws_string structures.
- * It is also a cheap check, in the sense it run in constant time (i.e., no loops or recursion).
- */
-AWS_STATIC_IMPL
-bool aws_string_is_valid(const struct aws_string *str);
-
-/**
- * Best-effort checks aws_string invariants, when the str->len is unknown
- */
-AWS_STATIC_IMPL
-bool aws_c_string_is_valid(const char *str);
-
-/**
- * Evaluates if a char is a white character.
- */
-AWS_STATIC_IMPL
-bool aws_char_is_space(uint8_t c);
-
-#ifndef AWS_NO_STATIC_IMPL
-#    include <aws/common/string.inl>
-#endif /* AWS_NO_STATIC_IMPL */
-
-AWS_EXTERN_C_END
-
+/** 
+ * Evaluates the set of properties that define the shape of all valid aws_string structures. 
+ * It is also a cheap check, in the sense it run in constant time (i.e., no loops or recursion). 
+ */ 
+AWS_STATIC_IMPL 
+bool aws_string_is_valid(const struct aws_string *str); 
+ 
+/** 
+ * Best-effort checks aws_string invariants, when the str->len is unknown 
+ */ 
+AWS_STATIC_IMPL 
+bool aws_c_string_is_valid(const char *str); 
+ 
+/** 
+ * Evaluates if a char is a white character. 
+ */ 
+AWS_STATIC_IMPL 
+bool aws_char_is_space(uint8_t c); 
+ 
+#ifndef AWS_NO_STATIC_IMPL 
+#    include <aws/common/string.inl> 
+#endif /* AWS_NO_STATIC_IMPL */ 
+ 
+AWS_EXTERN_C_END 
+ 
 #endif /* AWS_COMMON_STRING_H */

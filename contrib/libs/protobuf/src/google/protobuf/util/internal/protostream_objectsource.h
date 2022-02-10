@@ -113,7 +113,7 @@ class PROTOBUF_EXPORT ProtoStreamObjectSource : public ObjectSource {
     bool preserve_proto_field_names = false;
 
   };
-
+ 
   ProtoStreamObjectSource(io::CodedInputStream* stream,
                           TypeResolver* type_resolver,
                           const google::protobuf::Type& type)
@@ -122,7 +122,7 @@ class PROTOBUF_EXPORT ProtoStreamObjectSource : public ObjectSource {
                           TypeResolver* type_resolver,
                           const google::protobuf::Type& type,
                           const RenderOptions& render_options);
-
+ 
   ~ProtoStreamObjectSource() override;
 
   util::Status NamedWriteTo(StringPiece name,
@@ -147,29 +147,29 @@ class PROTOBUF_EXPORT ProtoStreamObjectSource : public ObjectSource {
                                     bool include_start_and_end,
                                     ObjectWriter* ow) const;
 
-  // Renders a repeating field (packed or unpacked).  Returns the next tag after
-  // reading all sequential repeating elements. The caller should use this tag
-  // before reading more tags from the stream.
+  // Renders a repeating field (packed or unpacked).  Returns the next tag after 
+  // reading all sequential repeating elements. The caller should use this tag 
+  // before reading more tags from the stream. 
   virtual util::StatusOr<uint32_t> RenderList(
       const google::protobuf::Field* field, StringPiece name,
       uint32_t list_tag, ObjectWriter* ow) const;
-
-  // Looks up a field and verify its consistency with wire type in tag.
-  const google::protobuf::Field* FindAndVerifyField(
+ 
+  // Looks up a field and verify its consistency with wire type in tag. 
+  const google::protobuf::Field* FindAndVerifyField( 
       const google::protobuf::Type& type, uint32_t tag) const;
-
-  // Renders a field value to the ObjectWriter.
+ 
+  // Renders a field value to the ObjectWriter. 
   virtual util::Status RenderField(const google::protobuf::Field* field,
                                    StringPiece field_name,
                                    ObjectWriter* ow) const;
-
-  // Reads field value according to Field spec in 'field' and returns the read
-  // value as string. This only works for primitive datatypes (no message
-  // types).
+ 
+  // Reads field value according to Field spec in 'field' and returns the read 
+  // value as string. This only works for primitive datatypes (no message 
+  // types). 
   const TProtoStringType ReadFieldValueAsString(
-      const google::protobuf::Field& field) const;
-
-
+      const google::protobuf::Field& field) const; 
+ 
+ 
   // Returns the input stream.
   io::CodedInputStream* stream() const { return stream_; }
 
@@ -298,7 +298,7 @@ class PROTOBUF_EXPORT ProtoStreamObjectSource : public ObjectSource {
   // Type information for all the types used in the descriptor. Used to find
   // google::protobuf::Type of nested messages/enums.
   const TypeInfo* typeinfo_;
-
+ 
   // Whether this class owns the typeinfo_ object. If true the typeinfo_ object
   // should be deleted in the destructor.
   bool own_typeinfo_;

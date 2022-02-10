@@ -23,8 +23,8 @@
  ***************************************************************************/
 #include "curl_setup.h"
 
-#if defined(HAVE_SIGNAL_H) && defined(HAVE_SIGACTION) &&        \
-  (defined(USE_OPENSSL) || defined(USE_MBEDTLS))
+#if defined(HAVE_SIGNAL_H) && defined(HAVE_SIGACTION) &&        \ 
+  (defined(USE_OPENSSL) || defined(USE_MBEDTLS)) 
 #include <signal.h>
 
 struct sigpipe_ignore {

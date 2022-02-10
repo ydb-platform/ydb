@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #include <aws/s3/model/Stats.h>
 #include <aws/core/utils/xml/XmlSerializer.h>
@@ -50,19 +50,19 @@ Stats& Stats::operator =(const XmlNode& xmlNode)
     XmlNode bytesScannedNode = resultNode.FirstChild("BytesScanned");
     if(!bytesScannedNode.IsNull())
     {
-      m_bytesScanned = StringUtils::ConvertToInt64(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(bytesScannedNode.GetText()).c_str()).c_str());
+      m_bytesScanned = StringUtils::ConvertToInt64(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(bytesScannedNode.GetText()).c_str()).c_str()); 
       m_bytesScannedHasBeenSet = true;
     }
     XmlNode bytesProcessedNode = resultNode.FirstChild("BytesProcessed");
     if(!bytesProcessedNode.IsNull())
     {
-      m_bytesProcessed = StringUtils::ConvertToInt64(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(bytesProcessedNode.GetText()).c_str()).c_str());
+      m_bytesProcessed = StringUtils::ConvertToInt64(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(bytesProcessedNode.GetText()).c_str()).c_str()); 
       m_bytesProcessedHasBeenSet = true;
     }
     XmlNode bytesReturnedNode = resultNode.FirstChild("BytesReturned");
     if(!bytesReturnedNode.IsNull())
     {
-      m_bytesReturned = StringUtils::ConvertToInt64(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(bytesReturnedNode.GetText()).c_str()).c_str());
+      m_bytesReturned = StringUtils::ConvertToInt64(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(bytesReturnedNode.GetText()).c_str()).c_str()); 
       m_bytesReturnedHasBeenSet = true;
     }
   }

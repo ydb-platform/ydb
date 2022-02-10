@@ -30,7 +30,7 @@
 #include <memory>
 #include <utility>
 
-#include "y_absl/base/attributes.h"
+#include "y_absl/base/attributes.h" 
 #include "y_absl/base/internal/raw_logging.h"
 #include "y_absl/numeric/bits.h"
 #include "y_absl/strings/ascii.h"
@@ -41,7 +41,7 @@
 #include "y_absl/strings/str_cat.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 bool SimpleAtof(y_absl::string_view str, float* out) {
   *out = 0.0;
@@ -730,8 +730,8 @@ inline bool safe_parse_sign_and_base(y_absl::string_view* text /*inout*/,
 // commonly used bases.
 template <typename IntType>
 struct LookupTables {
-  ABSL_CONST_INIT static const IntType kVmaxOverBase[];
-  ABSL_CONST_INIT static const IntType kVminOverBase[];
+  ABSL_CONST_INIT static const IntType kVmaxOverBase[]; 
+  ABSL_CONST_INIT static const IntType kVminOverBase[]; 
 };
 
 // An array initializer macro for X/base where base in [0, 36].
@@ -755,49 +755,49 @@ struct LookupTables {
 //  }
 // See https://godbolt.org/z/aneYsb
 //
-// uint128& operator/=(uint128) is not constexpr, so hardcode the resulting
-// array to avoid a static initializer.
+// uint128& operator/=(uint128) is not constexpr, so hardcode the resulting 
+// array to avoid a static initializer. 
 template<>
-const uint128 LookupTables<uint128>::kVmaxOverBase[] = {
-    0,
-    0,
-    MakeUint128(9223372036854775807u, 18446744073709551615u),
-    MakeUint128(6148914691236517205u, 6148914691236517205u),
-    MakeUint128(4611686018427387903u, 18446744073709551615u),
-    MakeUint128(3689348814741910323u, 3689348814741910323u),
-    MakeUint128(3074457345618258602u, 12297829382473034410u),
-    MakeUint128(2635249153387078802u, 5270498306774157604u),
-    MakeUint128(2305843009213693951u, 18446744073709551615u),
-    MakeUint128(2049638230412172401u, 14347467612885206812u),
-    MakeUint128(1844674407370955161u, 11068046444225730969u),
-    MakeUint128(1676976733973595601u, 8384883669867978007u),
-    MakeUint128(1537228672809129301u, 6148914691236517205u),
-    MakeUint128(1418980313362273201u, 4256940940086819603u),
-    MakeUint128(1317624576693539401u, 2635249153387078802u),
-    MakeUint128(1229782938247303441u, 1229782938247303441u),
-    MakeUint128(1152921504606846975u, 18446744073709551615u),
-    MakeUint128(1085102592571150095u, 1085102592571150095u),
-    MakeUint128(1024819115206086200u, 16397105843297379214u),
-    MakeUint128(970881267037344821u, 16504981539634861972u),
-    MakeUint128(922337203685477580u, 14757395258967641292u),
-    MakeUint128(878416384462359600u, 14054662151397753612u),
-    MakeUint128(838488366986797800u, 13415813871788764811u),
-    MakeUint128(802032351030850070u, 4812194106185100421u),
-    MakeUint128(768614336404564650u, 12297829382473034410u),
-    MakeUint128(737869762948382064u, 11805916207174113034u),
-    MakeUint128(709490156681136600u, 11351842506898185609u),
-    MakeUint128(683212743470724133u, 17080318586768103348u),
-    MakeUint128(658812288346769700u, 10540996613548315209u),
-    MakeUint128(636094623231363848u, 15266270957552732371u),
-    MakeUint128(614891469123651720u, 9838263505978427528u),
-    MakeUint128(595056260442243600u, 9520900167075897608u),
-    MakeUint128(576460752303423487u, 18446744073709551615u),
-    MakeUint128(558992244657865200u, 8943875914525843207u),
-    MakeUint128(542551296285575047u, 9765923333140350855u),
-    MakeUint128(527049830677415760u, 8432797290838652167u),
-    MakeUint128(512409557603043100u, 8198552921648689607u),
-};
-
+const uint128 LookupTables<uint128>::kVmaxOverBase[] = { 
+    0, 
+    0, 
+    MakeUint128(9223372036854775807u, 18446744073709551615u), 
+    MakeUint128(6148914691236517205u, 6148914691236517205u), 
+    MakeUint128(4611686018427387903u, 18446744073709551615u), 
+    MakeUint128(3689348814741910323u, 3689348814741910323u), 
+    MakeUint128(3074457345618258602u, 12297829382473034410u), 
+    MakeUint128(2635249153387078802u, 5270498306774157604u), 
+    MakeUint128(2305843009213693951u, 18446744073709551615u), 
+    MakeUint128(2049638230412172401u, 14347467612885206812u), 
+    MakeUint128(1844674407370955161u, 11068046444225730969u), 
+    MakeUint128(1676976733973595601u, 8384883669867978007u), 
+    MakeUint128(1537228672809129301u, 6148914691236517205u), 
+    MakeUint128(1418980313362273201u, 4256940940086819603u), 
+    MakeUint128(1317624576693539401u, 2635249153387078802u), 
+    MakeUint128(1229782938247303441u, 1229782938247303441u), 
+    MakeUint128(1152921504606846975u, 18446744073709551615u), 
+    MakeUint128(1085102592571150095u, 1085102592571150095u), 
+    MakeUint128(1024819115206086200u, 16397105843297379214u), 
+    MakeUint128(970881267037344821u, 16504981539634861972u), 
+    MakeUint128(922337203685477580u, 14757395258967641292u), 
+    MakeUint128(878416384462359600u, 14054662151397753612u), 
+    MakeUint128(838488366986797800u, 13415813871788764811u), 
+    MakeUint128(802032351030850070u, 4812194106185100421u), 
+    MakeUint128(768614336404564650u, 12297829382473034410u), 
+    MakeUint128(737869762948382064u, 11805916207174113034u), 
+    MakeUint128(709490156681136600u, 11351842506898185609u), 
+    MakeUint128(683212743470724133u, 17080318586768103348u), 
+    MakeUint128(658812288346769700u, 10540996613548315209u), 
+    MakeUint128(636094623231363848u, 15266270957552732371u), 
+    MakeUint128(614891469123651720u, 9838263505978427528u), 
+    MakeUint128(595056260442243600u, 9520900167075897608u), 
+    MakeUint128(576460752303423487u, 18446744073709551615u), 
+    MakeUint128(558992244657865200u, 8943875914525843207u), 
+    MakeUint128(542551296285575047u, 9765923333140350855u), 
+    MakeUint128(527049830677415760u, 8432797290838652167u), 
+    MakeUint128(512409557603043100u, 8198552921648689607u), 
+}; 
+ 
 // This kVmaxOverBase generated with
 //   for (int base = 2; base < 37; ++base) {
 //    y_absl::int128 max = std::numeric_limits<y_absl::int128>::max();
@@ -922,8 +922,8 @@ inline bool safe_parse_positive_int(y_absl::string_view text, int base,
   assert(base >= 0);
   assert(vmax >= static_cast<IntType>(base));
   const IntType vmax_over_base = LookupTables<IntType>::kVmaxOverBase[base];
-  assert(base < 2 ||
-         std::numeric_limits<IntType>::max() / base == vmax_over_base);
+  assert(base < 2 || 
+         std::numeric_limits<IntType>::max() / base == vmax_over_base); 
   const char* start = text.data();
   const char* end = start + text.size();
   // loop over digits
@@ -957,8 +957,8 @@ inline bool safe_parse_negative_int(y_absl::string_view text, int base,
   assert(vmin < 0);
   assert(vmin <= 0 - base);
   IntType vmin_over_base = LookupTables<IntType>::kVminOverBase[base];
-  assert(base < 2 ||
-         std::numeric_limits<IntType>::min() / base == vmin_over_base);
+  assert(base < 2 || 
+         std::numeric_limits<IntType>::min() / base == vmin_over_base); 
   // 2003 c++ standard [expr.mul]
   // "... the sign of the remainder is implementation-defined."
   // Although (vmin/base)*base + vmin%base is always vmin.
@@ -1024,10 +1024,10 @@ inline bool safe_uint_internal(y_absl::string_view text, IntType* value_p,
 namespace numbers_internal {
 
 // Digit conversion.
-ABSL_CONST_INIT ABSL_DLL const char kHexChar[] =
-    "0123456789abcdef";
+ABSL_CONST_INIT ABSL_DLL const char kHexChar[] = 
+    "0123456789abcdef"; 
 
-ABSL_CONST_INIT ABSL_DLL const char kHexTable[513] =
+ABSL_CONST_INIT ABSL_DLL const char kHexTable[513] = 
     "000102030405060708090a0b0c0d0e0f"
     "101112131415161718191a1b1c1d1e1f"
     "202122232425262728292a2b2c2d2e2f"
@@ -1045,7 +1045,7 @@ ABSL_CONST_INIT ABSL_DLL const char kHexTable[513] =
     "e0e1e2e3e4e5e6e7e8e9eaebecedeeef"
     "f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff";
 
-ABSL_CONST_INIT ABSL_DLL const char two_ASCII_digits[100][2] = {
+ABSL_CONST_INIT ABSL_DLL const char two_ASCII_digits[100][2] = { 
     {'0', '0'}, {'0', '1'}, {'0', '2'}, {'0', '3'}, {'0', '4'}, {'0', '5'},
     {'0', '6'}, {'0', '7'}, {'0', '8'}, {'0', '9'}, {'1', '0'}, {'1', '1'},
     {'1', '2'}, {'1', '3'}, {'1', '4'}, {'1', '5'}, {'1', '6'}, {'1', '7'},
@@ -1089,5 +1089,5 @@ bool safe_strtou128_base(y_absl::string_view text, uint128* value, int base) {
 }
 
 }  // namespace numbers_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl

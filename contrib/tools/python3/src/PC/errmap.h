@@ -1,10 +1,10 @@
 int
 winerror_to_errno(int winerror)
-{
+{ 
     // Unwrap FACILITY_WIN32 HRESULT errors.
     if ((winerror & 0xFFFF0000) == 0x80070000) {
         winerror &= 0x0000FFFF;
-    }
+    } 
 
     // Winsock error codes (10000-11999) are errno values.
     if (winerror >= 10000 && winerror < 12000) {
@@ -137,4 +137,4 @@ winerror_to_errno(int winerror)
     default:
         return EINVAL;
     }
-}
+} 

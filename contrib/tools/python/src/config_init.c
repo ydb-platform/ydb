@@ -5,7 +5,7 @@
 extern void init_bisect(void);
 extern void init_collections(void);
 extern void init_csv(void);
-extern void init_elementtree(void);
+extern void init_elementtree(void); 
 extern void init_functools(void);
 extern void init_hashlib(void);
 extern void init_heapq(void);
@@ -54,7 +54,7 @@ extern void initspwd(void);
 #ifdef _DARWIN_
 #ifndef __IOS__
 extern void init_multiprocessing(void);
-extern void init_scproxy(void);
+extern void init_scproxy(void); 
 #endif
 #endif
 

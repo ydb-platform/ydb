@@ -15,31 +15,31 @@ except ImportError:
 
 from .spawnbase import SpawnBase, PY3
 from .exceptions import EOF
-from .utils import string_types
+from .utils import string_types 
 
 class PopenSpawn(SpawnBase):
     def __init__(self, cmd, timeout=30, maxread=2000, searchwindowsize=None,
-                 logfile=None, cwd=None, env=None, encoding=None,
-                 codec_errors='strict', preexec_fn=None):
+                 logfile=None, cwd=None, env=None, encoding=None, 
+                 codec_errors='strict', preexec_fn=None): 
         super(PopenSpawn, self).__init__(timeout=timeout, maxread=maxread,
                 searchwindowsize=searchwindowsize, logfile=logfile,
                 encoding=encoding, codec_errors=codec_errors)
 
-        # Note that `SpawnBase` initializes `self.crlf` to `\r\n`
-        # because the default behaviour for a PTY is to convert
-        # incoming LF to `\r\n` (see the `onlcr` flag and
-        # https://stackoverflow.com/a/35887657/5397009). Here we set
-        # it to `os.linesep` because that is what the spawned
-        # application outputs by default and `popen` doesn't translate
-        # anything.
-        if encoding is None:
-            self.crlf = os.linesep.encode ("ascii")
-        else:
-            self.crlf = self.string_type (os.linesep)
-
+        # Note that `SpawnBase` initializes `self.crlf` to `\r\n` 
+        # because the default behaviour for a PTY is to convert 
+        # incoming LF to `\r\n` (see the `onlcr` flag and 
+        # https://stackoverflow.com/a/35887657/5397009). Here we set 
+        # it to `os.linesep` because that is what the spawned 
+        # application outputs by default and `popen` doesn't translate 
+        # anything. 
+        if encoding is None: 
+            self.crlf = os.linesep.encode ("ascii") 
+        else: 
+            self.crlf = self.string_type (os.linesep) 
+ 
         kwargs = dict(bufsize=0, stdin=subprocess.PIPE,
                       stderr=subprocess.STDOUT, stdout=subprocess.PIPE,
-                      cwd=cwd, preexec_fn=preexec_fn, env=env)
+                      cwd=cwd, preexec_fn=preexec_fn, env=env) 
 
         if sys.platform == 'win32':
             startupinfo = subprocess.STARTUPINFO()
@@ -47,11 +47,11 @@ class PopenSpawn(SpawnBase):
             kwargs['startupinfo'] = startupinfo
             kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
 
-        if isinstance(cmd, string_types) and sys.platform != 'win32':
-            cmd = shlex.split(cmd, posix=os.name == 'posix')
+        if isinstance(cmd, string_types) and sys.platform != 'win32': 
+            cmd = shlex.split(cmd, posix=os.name == 'posix') 
 
         self.proc = subprocess.Popen(cmd, **kwargs)
-        self.pid = self.proc.pid
+        self.pid = self.proc.pid 
         self.closed = False
         self._buf = self.string_type()
 
@@ -131,7 +131,7 @@ class PopenSpawn(SpawnBase):
 
     def send(self, s):
         '''Send data to the subprocess' stdin.
-
+ 
         Returns the number of bytes written.
         '''
         s = self._coerce_send_string(s)
@@ -155,7 +155,7 @@ class PopenSpawn(SpawnBase):
 
     def wait(self):
         '''Wait for the subprocess to finish.
-
+ 
         Returns the exit code.
         '''
         status = self.proc.wait()
@@ -170,7 +170,7 @@ class PopenSpawn(SpawnBase):
 
     def kill(self, sig):
         '''Sends a Unix signal to the subprocess.
-
+ 
         Use constants from the :mod:`signal` module to specify which signal.
         '''
         if sys.platform == 'win32':

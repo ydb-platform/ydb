@@ -618,7 +618,7 @@ protected:
         UNIT_ASSERT(test.rfind(*Data.a(), 1) == 0);
         UNIT_ASSERT(test.rfind(*Data.a(), 0) == 0);
     }
-#endif
+#endif 
     void find_last_not_of() {
         // 21.3.6.6
         TStringType s(Data_.one_two_three_one_two_three());
@@ -641,7 +641,7 @@ protected:
         UNIT_ASSERT(test.find_last_not_of(*Data_.a(), 0) == TStringType::npos);
         UNIT_ASSERT(test.find_last_not_of(*Data_.b(), 0) == 0);
     }
-#if 0
+#if 0 
     void replace() {
         // This test case is for the non template basic_TString::replace method,
         // this is why we play with the const iterators and reference to guaranty
@@ -1135,7 +1135,7 @@ public:
         UNIT_TEST(rfind);
         UNIT_TEST(replace);
 #endif
-    UNIT_TEST(find_last_not_of);
+    UNIT_TEST(find_last_not_of); 
     UNIT_TEST_SUITE_END();
 };
 
@@ -1171,7 +1171,7 @@ public:
         UNIT_TEST(rfind);
         UNIT_TEST(replace);
 #endif
-    UNIT_TEST(find_last_not_of);
+    UNIT_TEST(find_last_not_of); 
     UNIT_TEST_SUITE_END();
 };
 

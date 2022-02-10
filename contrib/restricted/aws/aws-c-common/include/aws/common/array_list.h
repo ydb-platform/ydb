@@ -1,9 +1,9 @@
 #ifndef AWS_COMMON_ARRAY_LIST_H
 #define AWS_COMMON_ARRAY_LIST_H
 
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 #include <aws/common/common.h>
 #include <aws/common/math.h>
@@ -70,12 +70,12 @@ AWS_STATIC_IMPL
 void aws_array_list_clean_up(struct aws_array_list *AWS_RESTRICT list);
 
 /**
- * Erases and then deallocates any memory that was allocated for this list, and resets list for reuse or deletion.
- */
-AWS_STATIC_IMPL
-void aws_array_list_clean_up_secure(struct aws_array_list *AWS_RESTRICT list);
-
-/**
+ * Erases and then deallocates any memory that was allocated for this list, and resets list for reuse or deletion. 
+ */ 
+AWS_STATIC_IMPL 
+void aws_array_list_clean_up_secure(struct aws_array_list *AWS_RESTRICT list); 
+ 
+/** 
  * Pushes the memory pointed to by val onto the end of internal list
  */
 AWS_STATIC_IMPL
@@ -105,15 +105,15 @@ AWS_STATIC_IMPL
 void aws_array_list_pop_front_n(struct aws_array_list *AWS_RESTRICT list, size_t n);
 
 /**
- * Deletes the element this index in the list if it exists.
- * If element does not exist, AWS_ERROR_INVALID_INDEX will be raised.
- * This call results in shifting all remaining elements towards the front.
- * Avoid this call unless that is intended behavior.
- */
-AWS_STATIC_IMPL
-int aws_array_list_erase(struct aws_array_list *AWS_RESTRICT list, size_t index);
-
-/**
+ * Deletes the element this index in the list if it exists. 
+ * If element does not exist, AWS_ERROR_INVALID_INDEX will be raised. 
+ * This call results in shifting all remaining elements towards the front. 
+ * Avoid this call unless that is intended behavior. 
+ */ 
+AWS_STATIC_IMPL 
+int aws_array_list_erase(struct aws_array_list *AWS_RESTRICT list, size_t index); 
+ 
+/** 
  * Copies the element at the end of the list if it exists. If list is empty, AWS_ERROR_LIST_EMPTY will be raised.
  */
 AWS_STATIC_IMPL
@@ -206,9 +206,9 @@ void aws_array_list_swap(struct aws_array_list *AWS_RESTRICT list, size_t a, siz
 AWS_STATIC_IMPL
 void aws_array_list_sort(struct aws_array_list *AWS_RESTRICT list, aws_array_list_comparator_fn *compare_fn);
 
-#ifndef AWS_NO_STATIC_IMPL
-#    include <aws/common/array_list.inl>
-#endif /* AWS_NO_STATIC_IMPL */
+#ifndef AWS_NO_STATIC_IMPL 
+#    include <aws/common/array_list.inl> 
+#endif /* AWS_NO_STATIC_IMPL */ 
 
 AWS_EXTERN_C_END
 

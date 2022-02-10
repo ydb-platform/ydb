@@ -1,76 +1,76 @@
-/*
- *
- * Copyright 2017 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
+/* 
+ * 
+ * Copyright 2017 gRPC authors. 
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ * 
+ */ 
+ 
 #include <deque>
-#include <memory>
-#include <mutex>
-#include <numeric>
-#include <set>
-#include <sstream>
+#include <memory> 
+#include <mutex> 
+#include <numeric> 
+#include <set> 
+#include <sstream> 
 #include <util/generic/string.h>
-#include <thread>
+#include <thread> 
 #include <vector>
-
+ 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "y_absl/strings/str_cat.h"
 #include "y_absl/types/optional.h"
 
-#include <grpc/grpc.h>
-#include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
-#include <grpc/support/time.h>
-#include <grpcpp/channel.h>
-#include <grpcpp/client_context.h>
-#include <grpcpp/create_channel.h>
-#include <grpcpp/server.h>
-#include <grpcpp/server_builder.h>
-
-#include "src/core/ext/filters/client_channel/backup_poller.h"
-#include "src/core/ext/filters/client_channel/resolver/fake/fake_resolver.h"
-#include "src/core/ext/filters/client_channel/server_address.h"
+#include <grpc/grpc.h> 
+#include <grpc/support/alloc.h> 
+#include <grpc/support/log.h> 
+#include <grpc/support/time.h> 
+#include <grpcpp/channel.h> 
+#include <grpcpp/client_context.h> 
+#include <grpcpp/create_channel.h> 
+#include <grpcpp/server.h> 
+#include <grpcpp/server_builder.h> 
+ 
+#include "src/core/ext/filters/client_channel/backup_poller.h" 
+#include "src/core/ext/filters/client_channel/resolver/fake/fake_resolver.h" 
+#include "src/core/ext/filters/client_channel/server_address.h" 
 #include "src/core/ext/xds/xds_api.h"
 #include "src/core/ext/xds/xds_channel_args.h"
 #include "src/core/ext/xds/xds_client.h"
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/gpr/env.h"
-#include "src/core/lib/gpr/tmpfile.h"
-#include "src/core/lib/gprpp/map.h"
-#include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/gprpp/sync.h"
+#include "src/core/lib/gpr/env.h" 
+#include "src/core/lib/gpr/tmpfile.h" 
+#include "src/core/lib/gprpp/map.h" 
+#include "src/core/lib/gprpp/ref_counted_ptr.h" 
+#include "src/core/lib/gprpp/sync.h" 
 #include "src/core/lib/iomgr/parse_address.h"
-#include "src/core/lib/iomgr/sockaddr.h"
-#include "src/core/lib/security/credentials/fake/fake_credentials.h"
-#include "src/cpp/client/secure_credentials.h"
-#include "src/cpp/server/secure_server_credentials.h"
-
-#include "test/core/util/port.h"
-#include "test/core/util/test_config.h"
-#include "test/cpp/end2end/test_service_impl.h"
-
-#include "src/proto/grpc/testing/echo.grpc.pb.h"
-#include "src/proto/grpc/testing/xds/ads_for_test.grpc.pb.h"
+#include "src/core/lib/iomgr/sockaddr.h" 
+#include "src/core/lib/security/credentials/fake/fake_credentials.h" 
+#include "src/cpp/client/secure_credentials.h" 
+#include "src/cpp/server/secure_server_credentials.h" 
+ 
+#include "test/core/util/port.h" 
+#include "test/core/util/test_config.h" 
+#include "test/cpp/end2end/test_service_impl.h" 
+ 
+#include "src/proto/grpc/testing/echo.grpc.pb.h" 
+#include "src/proto/grpc/testing/xds/ads_for_test.grpc.pb.h" 
 #include "src/proto/grpc/testing/xds/cds_for_test.grpc.pb.h"
-#include "src/proto/grpc/testing/xds/eds_for_test.grpc.pb.h"
+#include "src/proto/grpc/testing/xds/eds_for_test.grpc.pb.h" 
 #include "src/proto/grpc/testing/xds/lds_rds_for_test.grpc.pb.h"
-#include "src/proto/grpc/testing/xds/lrs_for_test.grpc.pb.h"
-
+#include "src/proto/grpc/testing/xds/lrs_for_test.grpc.pb.h" 
+ 
 #include "src/proto/grpc/testing/xds/v3/ads.grpc.pb.h"
 #include "src/proto/grpc/testing/xds/v3/cluster.grpc.pb.h"
 #include "src/proto/grpc/testing/xds/v3/discovery.grpc.pb.h"
@@ -79,13 +79,13 @@
 #include "src/proto/grpc/testing/xds/v3/listener.grpc.pb.h"
 #include "src/proto/grpc/testing/xds/v3/lrs.grpc.pb.h"
 #include "src/proto/grpc/testing/xds/v3/route.grpc.pb.h"
-
-namespace grpc {
-namespace testing {
-namespace {
-
-using std::chrono::system_clock;
-
+ 
+namespace grpc { 
+namespace testing { 
+namespace { 
+ 
+using std::chrono::system_clock; 
+ 
 using ::envoy::config::cluster::v3::CircuitBreakers;
 using ::envoy::config::cluster::v3::Cluster;
 using ::envoy::config::cluster::v3::RoutingPriority;
@@ -96,7 +96,7 @@ using ::envoy::config::route::v3::RouteConfiguration;
 using ::envoy::extensions::filters::network::http_connection_manager::v3::
     HttpConnectionManager;
 using ::envoy::type::v3::FractionalPercent;
-
+ 
 constexpr char kLdsTypeUrl[] =
     "type.googleapis.com/envoy.config.listener.v3.Listener";
 constexpr char kRdsTypeUrl[] =
@@ -111,22 +111,22 @@ constexpr char kRdsV2TypeUrl[] =
     "type.googleapis.com/envoy.api.v2.RouteConfiguration";
 constexpr char kCdsV2TypeUrl[] = "type.googleapis.com/envoy.api.v2.Cluster";
 constexpr char kEdsV2TypeUrl[] =
-    "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment";
+    "type.googleapis.com/envoy.api.v2.ClusterLoadAssignment"; 
 
-constexpr char kDefaultLocalityRegion[] = "xds_default_locality_region";
-constexpr char kDefaultLocalityZone[] = "xds_default_locality_zone";
-constexpr char kLbDropType[] = "lb";
-constexpr char kThrottleDropType[] = "throttle";
+constexpr char kDefaultLocalityRegion[] = "xds_default_locality_region"; 
+constexpr char kDefaultLocalityZone[] = "xds_default_locality_zone"; 
+constexpr char kLbDropType[] = "lb"; 
+constexpr char kThrottleDropType[] = "throttle"; 
 constexpr char kServerName[] = "server.example.com";
 constexpr char kDefaultRouteConfigurationName[] = "route_config_name";
 constexpr char kDefaultClusterName[] = "cluster_name";
 constexpr char kDefaultEdsServiceName[] = "eds_service_name";
-constexpr int kDefaultLocalityWeight = 3;
-constexpr int kDefaultLocalityPriority = 0;
-
+constexpr int kDefaultLocalityWeight = 3; 
+constexpr int kDefaultLocalityPriority = 0; 
+ 
 constexpr char kRequestMessage[] = "Live long and prosper.";
 constexpr char kDefaultServiceConfig[] =
-    "{\n"
+    "{\n" 
     "  \"loadBalancingConfig\":[\n"
     "    { \"does_not_exist\":{} },\n"
     "    { \"eds_experimental\":{\n"
@@ -158,22 +158,22 @@ constexpr char kBootstrapFileV3[] =
     "      \"server_features\": [\"xds_v3\"]\n"
     "    }\n"
     "  ],\n"
-    "  \"node\": {\n"
-    "    \"id\": \"xds_end2end_test\",\n"
-    "    \"cluster\": \"test\",\n"
-    "    \"metadata\": {\n"
-    "      \"foo\": \"bar\"\n"
-    "    },\n"
-    "    \"locality\": {\n"
-    "      \"region\": \"corp\",\n"
-    "      \"zone\": \"svl\",\n"
-    "      \"subzone\": \"mp3\"\n"
-    "    }\n"
-    "  }\n"
-    "}\n";
-
+    "  \"node\": {\n" 
+    "    \"id\": \"xds_end2end_test\",\n" 
+    "    \"cluster\": \"test\",\n" 
+    "    \"metadata\": {\n" 
+    "      \"foo\": \"bar\"\n" 
+    "    },\n" 
+    "    \"locality\": {\n" 
+    "      \"region\": \"corp\",\n" 
+    "      \"zone\": \"svl\",\n" 
+    "      \"subzone\": \"mp3\"\n" 
+    "    }\n" 
+    "  }\n" 
+    "}\n"; 
+ 
 constexpr char kBootstrapFileV2[] =
-    "{\n"
+    "{\n" 
     "  \"xds_servers\": [\n"
     "    {\n"
     "      \"server_uri\": \"fake:///xds_server\",\n"
@@ -184,7 +184,7 @@ constexpr char kBootstrapFileV2[] =
     "      ]\n"
     "    }\n"
     "  ],\n"
-    "  \"node\": {\n"
+    "  \"node\": {\n" 
     "    \"id\": \"xds_end2end_test\",\n"
     "    \"cluster\": \"test\",\n"
     "    \"metadata\": {\n"
@@ -195,104 +195,104 @@ constexpr char kBootstrapFileV2[] =
     "      \"zone\": \"svl\",\n"
     "      \"subzone\": \"mp3\"\n"
     "    }\n"
-    "  }\n"
-    "}\n";
-
+    "  }\n" 
+    "}\n"; 
+ 
 char* g_bootstrap_file_v3;
 char* g_bootstrap_file_v2;
-
-void WriteBootstrapFiles() {
-  char* bootstrap_file;
+ 
+void WriteBootstrapFiles() { 
+  char* bootstrap_file; 
   FILE* out = gpr_tmpfile("xds_bootstrap_v3", &bootstrap_file);
   fputs(kBootstrapFileV3, out);
-  fclose(out);
+  fclose(out); 
   g_bootstrap_file_v3 = bootstrap_file;
   out = gpr_tmpfile("xds_bootstrap_v2", &bootstrap_file);
   fputs(kBootstrapFileV2, out);
-  fclose(out);
+  fclose(out); 
   g_bootstrap_file_v2 = bootstrap_file;
-}
-
-// Helper class to minimize the number of unique ports we use for this test.
-class PortSaver {
- public:
-  int GetPort() {
-    if (idx_ >= ports_.size()) {
-      ports_.push_back(grpc_pick_unused_port_or_die());
-    }
-    return ports_[idx_++];
-  }
-
-  void Reset() { idx_ = 0; }
-
+} 
+ 
+// Helper class to minimize the number of unique ports we use for this test. 
+class PortSaver { 
+ public: 
+  int GetPort() { 
+    if (idx_ >= ports_.size()) { 
+      ports_.push_back(grpc_pick_unused_port_or_die()); 
+    } 
+    return ports_[idx_++]; 
+  } 
+ 
+  void Reset() { idx_ = 0; } 
+ 
+ private: 
+  std::vector<int> ports_; 
+  size_t idx_ = 0; 
+}; 
+ 
+PortSaver* g_port_saver = nullptr; 
+ 
+template <typename ServiceType> 
+class CountedService : public ServiceType { 
+ public: 
+  size_t request_count() { 
+    grpc_core::MutexLock lock(&mu_); 
+    return request_count_; 
+  } 
+ 
+  size_t response_count() { 
+    grpc_core::MutexLock lock(&mu_); 
+    return response_count_; 
+  } 
+ 
+  void IncreaseResponseCount() { 
+    grpc_core::MutexLock lock(&mu_); 
+    ++response_count_; 
+  } 
+  void IncreaseRequestCount() { 
+    grpc_core::MutexLock lock(&mu_); 
+    ++request_count_; 
+  } 
+ 
+  void ResetCounters() { 
+    grpc_core::MutexLock lock(&mu_); 
+    request_count_ = 0; 
+    response_count_ = 0; 
+  } 
+ 
  private:
-  std::vector<int> ports_;
-  size_t idx_ = 0;
-};
-
-PortSaver* g_port_saver = nullptr;
-
-template <typename ServiceType>
-class CountedService : public ServiceType {
- public:
-  size_t request_count() {
-    grpc_core::MutexLock lock(&mu_);
-    return request_count_;
-  }
-
-  size_t response_count() {
-    grpc_core::MutexLock lock(&mu_);
-    return response_count_;
-  }
-
-  void IncreaseResponseCount() {
-    grpc_core::MutexLock lock(&mu_);
-    ++response_count_;
-  }
-  void IncreaseRequestCount() {
-    grpc_core::MutexLock lock(&mu_);
-    ++request_count_;
-  }
-
-  void ResetCounters() {
-    grpc_core::MutexLock lock(&mu_);
-    request_count_ = 0;
-    response_count_ = 0;
-  }
-
- private:
-  grpc_core::Mutex mu_;
-  size_t request_count_ = 0;
-  size_t response_count_ = 0;
-};
-
-const char g_kCallCredsMdKey[] = "Balancer should not ...";
-const char g_kCallCredsMdValue[] = "... receive me";
-
+  grpc_core::Mutex mu_; 
+  size_t request_count_ = 0; 
+  size_t response_count_ = 0; 
+}; 
+ 
+const char g_kCallCredsMdKey[] = "Balancer should not ..."; 
+const char g_kCallCredsMdValue[] = "... receive me"; 
+ 
 template <typename RpcService>
 class BackendServiceImpl
     : public CountedService<TestMultipleServiceImpl<RpcService>> {
- public:
-  BackendServiceImpl() {}
-
-  Status Echo(ServerContext* context, const EchoRequest* request,
-              EchoResponse* response) override {
-    // Backend should receive the call credentials metadata.
-    auto call_credentials_entry =
-        context->client_metadata().find(g_kCallCredsMdKey);
-    EXPECT_NE(call_credentials_entry, context->client_metadata().end());
-    if (call_credentials_entry != context->client_metadata().end()) {
-      EXPECT_EQ(call_credentials_entry->second, g_kCallCredsMdValue);
-    }
+ public: 
+  BackendServiceImpl() {} 
+ 
+  Status Echo(ServerContext* context, const EchoRequest* request, 
+              EchoResponse* response) override { 
+    // Backend should receive the call credentials metadata. 
+    auto call_credentials_entry = 
+        context->client_metadata().find(g_kCallCredsMdKey); 
+    EXPECT_NE(call_credentials_entry, context->client_metadata().end()); 
+    if (call_credentials_entry != context->client_metadata().end()) { 
+      EXPECT_EQ(call_credentials_entry->second, g_kCallCredsMdValue); 
+    } 
     CountedService<TestMultipleServiceImpl<RpcService>>::IncreaseRequestCount();
     const auto status =
         TestMultipleServiceImpl<RpcService>::Echo(context, request, response);
     CountedService<
         TestMultipleServiceImpl<RpcService>>::IncreaseResponseCount();
-    AddClient(context->peer());
-    return status;
-  }
-
+    AddClient(context->peer()); 
+    return status; 
+  } 
+ 
   Status Echo1(ServerContext* context, const EchoRequest* request,
                EchoResponse* response) override {
     return Echo(context, request, response);
@@ -303,40 +303,40 @@ class BackendServiceImpl
     return Echo(context, request, response);
   }
 
-  void Start() {}
-  void Shutdown() {}
-
+  void Start() {} 
+  void Shutdown() {} 
+ 
   std::set<TString> clients() {
-    grpc_core::MutexLock lock(&clients_mu_);
-    return clients_;
-  }
-
- private:
+    grpc_core::MutexLock lock(&clients_mu_); 
+    return clients_; 
+  } 
+ 
+ private: 
   void AddClient(const TString& client) {
-    grpc_core::MutexLock lock(&clients_mu_);
-    clients_.insert(client);
-  }
-
-  grpc_core::Mutex clients_mu_;
+    grpc_core::MutexLock lock(&clients_mu_); 
+    clients_.insert(client); 
+  } 
+ 
+  grpc_core::Mutex clients_mu_; 
   std::set<TString> clients_;
-};
-
-class ClientStats {
- public:
-  struct LocalityStats {
+}; 
+ 
+class ClientStats { 
+ public: 
+  struct LocalityStats { 
     LocalityStats() {}
 
-    // Converts from proto message class.
+    // Converts from proto message class. 
     template <class UpstreamLocalityStats>
-    LocalityStats(const UpstreamLocalityStats& upstream_locality_stats)
-        : total_successful_requests(
-              upstream_locality_stats.total_successful_requests()),
-          total_requests_in_progress(
-              upstream_locality_stats.total_requests_in_progress()),
-          total_error_requests(upstream_locality_stats.total_error_requests()),
-          total_issued_requests(
-              upstream_locality_stats.total_issued_requests()) {}
-
+    LocalityStats(const UpstreamLocalityStats& upstream_locality_stats) 
+        : total_successful_requests( 
+              upstream_locality_stats.total_successful_requests()), 
+          total_requests_in_progress( 
+              upstream_locality_stats.total_requests_in_progress()), 
+          total_error_requests(upstream_locality_stats.total_error_requests()), 
+          total_issued_requests( 
+              upstream_locality_stats.total_issued_requests()) {} 
+ 
     LocalityStats& operator+=(const LocalityStats& other) {
       total_successful_requests += other.total_successful_requests;
       total_requests_in_progress += other.total_requests_in_progress;
@@ -349,69 +349,69 @@ class ClientStats {
     uint64_t total_requests_in_progress = 0;
     uint64_t total_error_requests = 0;
     uint64_t total_issued_requests = 0;
-  };
-
+  }; 
+ 
   ClientStats() {}
 
-  // Converts from proto message class.
+  // Converts from proto message class. 
   template <class ClusterStats>
   explicit ClientStats(const ClusterStats& cluster_stats)
       : cluster_name_(cluster_stats.cluster_name()),
         total_dropped_requests_(cluster_stats.total_dropped_requests()) {
-    for (const auto& input_locality_stats :
-         cluster_stats.upstream_locality_stats()) {
-      locality_stats_.emplace(input_locality_stats.locality().sub_zone(),
-                              LocalityStats(input_locality_stats));
-    }
-    for (const auto& input_dropped_requests :
-         cluster_stats.dropped_requests()) {
-      dropped_requests_.emplace(input_dropped_requests.category(),
-                                input_dropped_requests.dropped_count());
-    }
-  }
-
+    for (const auto& input_locality_stats : 
+         cluster_stats.upstream_locality_stats()) { 
+      locality_stats_.emplace(input_locality_stats.locality().sub_zone(), 
+                              LocalityStats(input_locality_stats)); 
+    } 
+    for (const auto& input_dropped_requests : 
+         cluster_stats.dropped_requests()) { 
+      dropped_requests_.emplace(input_dropped_requests.category(), 
+                                input_dropped_requests.dropped_count()); 
+    } 
+  } 
+ 
   const TString& cluster_name() const { return cluster_name_; }
 
   const std::map<TString, LocalityStats>& locality_stats() const {
     return locality_stats_;
   }
-  uint64_t total_successful_requests() const {
-    uint64_t sum = 0;
-    for (auto& p : locality_stats_) {
-      sum += p.second.total_successful_requests;
-    }
-    return sum;
-  }
-  uint64_t total_requests_in_progress() const {
-    uint64_t sum = 0;
-    for (auto& p : locality_stats_) {
-      sum += p.second.total_requests_in_progress;
-    }
-    return sum;
-  }
-  uint64_t total_error_requests() const {
-    uint64_t sum = 0;
-    for (auto& p : locality_stats_) {
-      sum += p.second.total_error_requests;
-    }
-    return sum;
-  }
-  uint64_t total_issued_requests() const {
-    uint64_t sum = 0;
-    for (auto& p : locality_stats_) {
-      sum += p.second.total_issued_requests;
-    }
-    return sum;
-  }
+  uint64_t total_successful_requests() const { 
+    uint64_t sum = 0; 
+    for (auto& p : locality_stats_) { 
+      sum += p.second.total_successful_requests; 
+    } 
+    return sum; 
+  } 
+  uint64_t total_requests_in_progress() const { 
+    uint64_t sum = 0; 
+    for (auto& p : locality_stats_) { 
+      sum += p.second.total_requests_in_progress; 
+    } 
+    return sum; 
+  } 
+  uint64_t total_error_requests() const { 
+    uint64_t sum = 0; 
+    for (auto& p : locality_stats_) { 
+      sum += p.second.total_error_requests; 
+    } 
+    return sum; 
+  } 
+  uint64_t total_issued_requests() const { 
+    uint64_t sum = 0; 
+    for (auto& p : locality_stats_) { 
+      sum += p.second.total_issued_requests; 
+    } 
+    return sum; 
+  } 
 
-  uint64_t total_dropped_requests() const { return total_dropped_requests_; }
+  uint64_t total_dropped_requests() const { return total_dropped_requests_; } 
 
   uint64_t dropped_requests(const TString& category) const {
-    auto iter = dropped_requests_.find(category);
-    GPR_ASSERT(iter != dropped_requests_.end());
-    return iter->second;
-  }
-
+    auto iter = dropped_requests_.find(category); 
+    GPR_ASSERT(iter != dropped_requests_.end()); 
+    return iter->second; 
+  } 
+ 
   ClientStats& operator+=(const ClientStats& other) {
     for (const auto& p : other.locality_stats_) {
       locality_stats_[p.first] += p.second;
@@ -423,15 +423,15 @@ class ClientStats {
     return *this;
   }
 
- private:
+ private: 
   TString cluster_name_;
   std::map<TString, LocalityStats> locality_stats_;
   uint64_t total_dropped_requests_ = 0;
   std::map<TString, uint64_t> dropped_requests_;
-};
-
+}; 
+ 
 class AdsServiceImpl : public std::enable_shared_from_this<AdsServiceImpl> {
- public:
+ public: 
   struct ResponseState {
     enum State { NOT_SENT, SENT, ACKED, NACKED };
     State state = NOT_SENT;
@@ -439,34 +439,34 @@ class AdsServiceImpl : public std::enable_shared_from_this<AdsServiceImpl> {
   };
 
   struct EdsResourceArgs {
-    struct Locality {
+    struct Locality { 
       Locality(const TString& sub_zone, std::vector<int> ports,
-               int lb_weight = kDefaultLocalityWeight,
-               int priority = kDefaultLocalityPriority,
+               int lb_weight = kDefaultLocalityWeight, 
+               int priority = kDefaultLocalityPriority, 
                std::vector<HealthStatus> health_statuses = {})
-          : sub_zone(std::move(sub_zone)),
-            ports(std::move(ports)),
-            lb_weight(lb_weight),
-            priority(priority),
-            health_statuses(std::move(health_statuses)) {}
-
+          : sub_zone(std::move(sub_zone)), 
+            ports(std::move(ports)), 
+            lb_weight(lb_weight), 
+            priority(priority), 
+            health_statuses(std::move(health_statuses)) {} 
+ 
       const TString sub_zone;
-      std::vector<int> ports;
-      int lb_weight;
-      int priority;
+      std::vector<int> ports; 
+      int lb_weight; 
+      int priority; 
       std::vector<HealthStatus> health_statuses;
-    };
-
+    }; 
+ 
     EdsResourceArgs() = default;
     explicit EdsResourceArgs(std::vector<Locality> locality_list)
-        : locality_list(std::move(locality_list)) {}
-
-    std::vector<Locality> locality_list;
+        : locality_list(std::move(locality_list)) {} 
+ 
+    std::vector<Locality> locality_list; 
     std::map<TString, uint32_t> drop_categories;
-    FractionalPercent::DenominatorType drop_denominator =
-        FractionalPercent::MILLION;
-  };
-
+    FractionalPercent::DenominatorType drop_denominator = 
+        FractionalPercent::MILLION; 
+  }; 
+ 
   explicit AdsServiceImpl(bool enable_load_reporting)
       : v2_rpc_service_(this, /*is_v2=*/true),
         v3_rpc_service_(this, /*is_v2=*/false) {
@@ -500,8 +500,8 @@ class AdsServiceImpl : public std::enable_shared_from_this<AdsServiceImpl> {
   ::envoy::service::discovery::v2::AggregatedDiscoveryService::Service*
   v2_rpc_service() {
     return &v2_rpc_service_;
-  }
-
+  } 
+ 
   ::envoy::service::discovery::v3::AggregatedDiscoveryService::Service*
   v3_rpc_service() {
     return &v3_rpc_service_;
@@ -524,10 +524,10 @@ class AdsServiceImpl : public std::enable_shared_from_this<AdsServiceImpl> {
   }
 
   ResponseState cds_response_state() {
-    grpc_core::MutexLock lock(&ads_mu_);
+    grpc_core::MutexLock lock(&ads_mu_); 
     return resource_type_response_state_[kCdsTypeUrl];
-  }
-
+  } 
+ 
   ResponseState eds_response_state() {
     grpc_core::MutexLock lock(&ads_mu_);
     return resource_type_response_state_[kEdsTypeUrl];
@@ -611,44 +611,44 @@ class AdsServiceImpl : public std::enable_shared_from_this<AdsServiceImpl> {
   static ClusterLoadAssignment BuildEdsResource(
       const EdsResourceArgs& args,
       const char* eds_service_name = kDefaultEdsServiceName) {
-    ClusterLoadAssignment assignment;
+    ClusterLoadAssignment assignment; 
     assignment.set_cluster_name(eds_service_name);
-    for (const auto& locality : args.locality_list) {
-      auto* endpoints = assignment.add_endpoints();
-      endpoints->mutable_load_balancing_weight()->set_value(locality.lb_weight);
-      endpoints->set_priority(locality.priority);
-      endpoints->mutable_locality()->set_region(kDefaultLocalityRegion);
-      endpoints->mutable_locality()->set_zone(kDefaultLocalityZone);
-      endpoints->mutable_locality()->set_sub_zone(locality.sub_zone);
-      for (size_t i = 0; i < locality.ports.size(); ++i) {
-        const int& port = locality.ports[i];
-        auto* lb_endpoints = endpoints->add_lb_endpoints();
-        if (locality.health_statuses.size() > i &&
+    for (const auto& locality : args.locality_list) { 
+      auto* endpoints = assignment.add_endpoints(); 
+      endpoints->mutable_load_balancing_weight()->set_value(locality.lb_weight); 
+      endpoints->set_priority(locality.priority); 
+      endpoints->mutable_locality()->set_region(kDefaultLocalityRegion); 
+      endpoints->mutable_locality()->set_zone(kDefaultLocalityZone); 
+      endpoints->mutable_locality()->set_sub_zone(locality.sub_zone); 
+      for (size_t i = 0; i < locality.ports.size(); ++i) { 
+        const int& port = locality.ports[i]; 
+        auto* lb_endpoints = endpoints->add_lb_endpoints(); 
+        if (locality.health_statuses.size() > i && 
             locality.health_statuses[i] != HealthStatus::UNKNOWN) {
-          lb_endpoints->set_health_status(locality.health_statuses[i]);
-        }
-        auto* endpoint = lb_endpoints->mutable_endpoint();
-        auto* address = endpoint->mutable_address();
-        auto* socket_address = address->mutable_socket_address();
-        socket_address->set_address("127.0.0.1");
-        socket_address->set_port_value(port);
-      }
-    }
-    if (!args.drop_categories.empty()) {
-      auto* policy = assignment.mutable_policy();
-      for (const auto& p : args.drop_categories) {
+          lb_endpoints->set_health_status(locality.health_statuses[i]); 
+        } 
+        auto* endpoint = lb_endpoints->mutable_endpoint(); 
+        auto* address = endpoint->mutable_address(); 
+        auto* socket_address = address->mutable_socket_address(); 
+        socket_address->set_address("127.0.0.1"); 
+        socket_address->set_port_value(port); 
+      } 
+    } 
+    if (!args.drop_categories.empty()) { 
+      auto* policy = assignment.mutable_policy(); 
+      for (const auto& p : args.drop_categories) { 
         const TString& name = p.first;
-        const uint32_t parts_per_million = p.second;
-        auto* drop_overload = policy->add_drop_overloads();
-        drop_overload->set_category(name);
-        auto* drop_percentage = drop_overload->mutable_drop_percentage();
-        drop_percentage->set_numerator(parts_per_million);
-        drop_percentage->set_denominator(args.drop_denominator);
-      }
-    }
+        const uint32_t parts_per_million = p.second; 
+        auto* drop_overload = policy->add_drop_overloads(); 
+        drop_overload->set_category(name); 
+        auto* drop_percentage = drop_overload->mutable_drop_percentage(); 
+        drop_percentage->set_numerator(parts_per_million); 
+        drop_percentage->set_denominator(args.drop_denominator); 
+      } 
+    } 
     return assignment;
-  }
-
+  } 
+ 
   void Start() {
     grpc_core::MutexLock lock(&ads_mu_);
     ads_done_ = false;
@@ -663,24 +663,24 @@ class AdsServiceImpl : public std::enable_shared_from_this<AdsServiceImpl> {
     gpr_log(GPR_INFO, "ADS[%p]: shut down", this);
   }
 
-  void NotifyDoneWithAdsCall() {
-    grpc_core::MutexLock lock(&ads_mu_);
-    NotifyDoneWithAdsCallLocked();
-  }
-
-  void NotifyDoneWithAdsCallLocked() {
-    if (!ads_done_) {
-      ads_done_ = true;
-      ads_cond_.Broadcast();
-    }
-  }
-
+  void NotifyDoneWithAdsCall() { 
+    grpc_core::MutexLock lock(&ads_mu_); 
+    NotifyDoneWithAdsCallLocked(); 
+  } 
+ 
+  void NotifyDoneWithAdsCallLocked() { 
+    if (!ads_done_) { 
+      ads_done_ = true; 
+      ads_cond_.Broadcast(); 
+    } 
+  } 
+ 
   std::set<TString> clients() {
     grpc_core::MutexLock lock(&clients_mu_);
     return clients_;
   }
 
- private:
+ private: 
   // A queue of resource type/name pairs that have changed since the client
   // subscribed to them.
   using UpdateQueue = std::deque<
@@ -1119,10 +1119,10 @@ class AdsServiceImpl : public std::enable_shared_from_this<AdsServiceImpl> {
   std::atomic_bool seen_v2_client_{false};
   std::atomic_bool seen_v3_client_{false};
 
-  grpc_core::CondVar ads_cond_;
-  // Protect the members below.
-  grpc_core::Mutex ads_mu_;
-  bool ads_done_ = false;
+  grpc_core::CondVar ads_cond_; 
+  // Protect the members below. 
+  grpc_core::Mutex ads_mu_; 
+  bool ads_done_ = false; 
   Listener default_listener_;
   RouteConfiguration default_route_config_;
   Cluster default_cluster_;
@@ -1138,22 +1138,22 @@ class AdsServiceImpl : public std::enable_shared_from_this<AdsServiceImpl> {
 
   grpc_core::Mutex clients_mu_;
   std::set<TString> clients_;
-};
-
+}; 
+ 
 class LrsServiceImpl : public std::enable_shared_from_this<LrsServiceImpl> {
- public:
-  explicit LrsServiceImpl(int client_load_reporting_interval_seconds)
+ public: 
+  explicit LrsServiceImpl(int client_load_reporting_interval_seconds) 
       : v2_rpc_service_(this),
         v3_rpc_service_(this),
         client_load_reporting_interval_seconds_(
             client_load_reporting_interval_seconds),
         cluster_names_({kDefaultClusterName}) {}
-
+ 
   ::envoy::service::load_stats::v2::LoadReportingService::Service*
   v2_rpc_service() {
     return &v2_rpc_service_;
-  }
-
+  } 
+ 
   ::envoy::service::load_stats::v3::LoadReportingService::Service*
   v3_rpc_service() {
     return &v3_rpc_service_;
@@ -1175,21 +1175,21 @@ class LrsServiceImpl : public std::enable_shared_from_this<LrsServiceImpl> {
     cluster_names_ = cluster_names;
   }
 
-  void Start() {
+  void Start() { 
     lrs_done_ = false;
     result_queue_.clear();
-  }
-
-  void Shutdown() {
-    {
-      grpc_core::MutexLock lock(&lrs_mu_);
-      NotifyDoneWithLrsCallLocked();
-    }
-    gpr_log(GPR_INFO, "LRS[%p]: shut down", this);
-  }
-
+  } 
+ 
+  void Shutdown() { 
+    { 
+      grpc_core::MutexLock lock(&lrs_mu_); 
+      NotifyDoneWithLrsCallLocked(); 
+    } 
+    gpr_log(GPR_INFO, "LRS[%p]: shut down", this); 
+  } 
+ 
   std::vector<ClientStats> WaitForLoadReport() {
-    grpc_core::MutexLock lock(&load_report_mu_);
+    grpc_core::MutexLock lock(&load_report_mu_); 
     grpc_core::CondVar cv;
     if (result_queue_.empty()) {
       load_report_cond_ = &cv;
@@ -1200,13 +1200,13 @@ class LrsServiceImpl : public std::enable_shared_from_this<LrsServiceImpl> {
     std::vector<ClientStats> result = std::move(result_queue_.front());
     result_queue_.pop_front();
     return result;
-  }
-
-  void NotifyDoneWithLrsCall() {
-    grpc_core::MutexLock lock(&lrs_mu_);
-    NotifyDoneWithLrsCallLocked();
-  }
-
+  } 
+ 
+  void NotifyDoneWithLrsCall() { 
+    grpc_core::MutexLock lock(&lrs_mu_); 
+    NotifyDoneWithLrsCallLocked(); 
+  } 
+ 
  private:
   template <class RpcApi, class LoadStatsRequest, class LoadStatsResponse>
   class RpcService : public CountedService<typename RpcApi::Service> {
@@ -1272,13 +1272,13 @@ class LrsServiceImpl : public std::enable_shared_from_this<LrsServiceImpl> {
     LrsServiceImpl* parent_;
   };
 
-  void NotifyDoneWithLrsCallLocked() {
+  void NotifyDoneWithLrsCallLocked() { 
     if (!lrs_done_) {
       lrs_done_ = true;
-      lrs_cv_.Broadcast();
-    }
-  }
-
+      lrs_cv_.Broadcast(); 
+    } 
+  } 
+ 
   RpcService<::envoy::service::load_stats::v2::LoadReportingService,
              ::envoy::service::load_stats::v2::LoadStatsRequest,
              ::envoy::service::load_stats::v2::LoadStatsResponse>
@@ -1288,80 +1288,80 @@ class LrsServiceImpl : public std::enable_shared_from_this<LrsServiceImpl> {
              ::envoy::service::load_stats::v3::LoadStatsResponse>
       v3_rpc_service_;
 
-  const int client_load_reporting_interval_seconds_;
+  const int client_load_reporting_interval_seconds_; 
   bool send_all_clusters_ = false;
   std::set<TString> cluster_names_;
-
-  grpc_core::CondVar lrs_cv_;
+ 
+  grpc_core::CondVar lrs_cv_; 
   grpc_core::Mutex lrs_mu_;  // Protects lrs_done_.
   bool lrs_done_ = false;
-
+ 
   grpc_core::Mutex load_report_mu_;  // Protects the members below.
   grpc_core::CondVar* load_report_cond_ = nullptr;
   std::deque<std::vector<ClientStats>> result_queue_;
-};
-
-class TestType {
- public:
+}; 
+ 
+class TestType { 
+ public: 
   TestType(bool use_xds_resolver, bool enable_load_reporting,
            bool enable_rds_testing = false, bool use_v2 = false)
-      : use_xds_resolver_(use_xds_resolver),
+      : use_xds_resolver_(use_xds_resolver), 
         enable_load_reporting_(enable_load_reporting),
         enable_rds_testing_(enable_rds_testing),
         use_v2_(use_v2) {}
-
-  bool use_xds_resolver() const { return use_xds_resolver_; }
-  bool enable_load_reporting() const { return enable_load_reporting_; }
+ 
+  bool use_xds_resolver() const { return use_xds_resolver_; } 
+  bool enable_load_reporting() const { return enable_load_reporting_; } 
   bool enable_rds_testing() const { return enable_rds_testing_; }
   bool use_v2() const { return use_v2_; }
-
+ 
   TString AsString() const {
     TString retval = (use_xds_resolver_ ? "XdsResolver" : "FakeResolver");
     retval += (use_v2_ ? "V2" : "V3");
-    if (enable_load_reporting_) retval += "WithLoadReporting";
+    if (enable_load_reporting_) retval += "WithLoadReporting"; 
     if (enable_rds_testing_) retval += "Rds";
-    return retval;
-  }
-
- private:
-  const bool use_xds_resolver_;
-  const bool enable_load_reporting_;
+    return retval; 
+  } 
+ 
+ private: 
+  const bool use_xds_resolver_; 
+  const bool enable_load_reporting_; 
   const bool enable_rds_testing_;
   const bool use_v2_;
-};
-
-class XdsEnd2endTest : public ::testing::TestWithParam<TestType> {
- protected:
-  XdsEnd2endTest(size_t num_backends, size_t num_balancers,
+}; 
+ 
+class XdsEnd2endTest : public ::testing::TestWithParam<TestType> { 
+ protected: 
+  XdsEnd2endTest(size_t num_backends, size_t num_balancers, 
                  int client_load_reporting_interval_seconds = 100)
       : num_backends_(num_backends),
-        num_balancers_(num_balancers),
-        client_load_reporting_interval_seconds_(
-            client_load_reporting_interval_seconds) {}
-
-  static void SetUpTestCase() {
-    // Make the backup poller poll very frequently in order to pick up
-    // updates from all the subchannels's FDs.
-    GPR_GLOBAL_CONFIG_SET(grpc_client_channel_backup_poll_interval_ms, 1);
-#if TARGET_OS_IPHONE
-    // Workaround Apple CFStream bug
-    gpr_setenv("grpc_cfstream", "0");
-#endif
-    grpc_init();
-  }
-
-  static void TearDownTestCase() { grpc_shutdown(); }
-
-  void SetUp() override {
+        num_balancers_(num_balancers), 
+        client_load_reporting_interval_seconds_( 
+            client_load_reporting_interval_seconds) {} 
+ 
+  static void SetUpTestCase() { 
+    // Make the backup poller poll very frequently in order to pick up 
+    // updates from all the subchannels's FDs. 
+    GPR_GLOBAL_CONFIG_SET(grpc_client_channel_backup_poll_interval_ms, 1); 
+#if TARGET_OS_IPHONE 
+    // Workaround Apple CFStream bug 
+    gpr_setenv("grpc_cfstream", "0"); 
+#endif 
+    grpc_init(); 
+  } 
+ 
+  static void TearDownTestCase() { grpc_shutdown(); } 
+ 
+  void SetUp() override { 
     gpr_setenv("GRPC_XDS_EXPERIMENTAL_V3_SUPPORT", "true");
     gpr_setenv("GRPC_XDS_BOOTSTRAP",
                GetParam().use_v2() ? g_bootstrap_file_v2 : g_bootstrap_file_v3);
-    g_port_saver->Reset();
-    response_generator_ =
-        grpc_core::MakeRefCounted<grpc_core::FakeResolverResponseGenerator>();
+    g_port_saver->Reset(); 
+    response_generator_ = 
+        grpc_core::MakeRefCounted<grpc_core::FakeResolverResponseGenerator>(); 
     // Inject xDS channel response generator.
-    lb_channel_response_generator_ =
-        grpc_core::MakeRefCounted<grpc_core::FakeResolverResponseGenerator>();
+    lb_channel_response_generator_ = 
+        grpc_core::MakeRefCounted<grpc_core::FakeResolverResponseGenerator>(); 
     xds_channel_args_to_add_.emplace_back(
         grpc_core::FakeResolverResponseGenerator::MakeChannelArg(
             lb_channel_response_generator_.get()));
@@ -1381,14 +1381,14 @@ class XdsEnd2endTest : public ::testing::TestWithParam<TestType> {
     // ensures that each test can independently set the global channel
     // args for the xDS channel.
     grpc_core::internal::UnsetGlobalXdsClientForTest();
-    // Start the backends.
-    for (size_t i = 0; i < num_backends_; ++i) {
-      backends_.emplace_back(new BackendServerThread);
+    // Start the backends. 
+    for (size_t i = 0; i < num_backends_; ++i) { 
+      backends_.emplace_back(new BackendServerThread); 
       backends_.back()->Start();
-    }
-    // Start the load balancers.
-    for (size_t i = 0; i < num_balancers_; ++i) {
-      balancers_.emplace_back(
+    } 
+    // Start the load balancers. 
+    for (size_t i = 0; i < num_balancers_; ++i) { 
+      balancers_.emplace_back( 
           new BalancerServerThread(GetParam().enable_load_reporting()
                                        ? client_load_reporting_interval_seconds_
                                        : 0));
@@ -1396,34 +1396,34 @@ class XdsEnd2endTest : public ::testing::TestWithParam<TestType> {
       if (GetParam().enable_rds_testing()) {
         balancers_[i]->ads_service()->SetLdsToUseDynamicRds();
       }
-    }
-    ResetStub();
-  }
-
+    } 
+    ResetStub(); 
+  } 
+ 
   const char* DefaultEdsServiceName() const {
     return GetParam().use_xds_resolver() ? kDefaultEdsServiceName : kServerName;
   }
 
-  void TearDown() override {
-    ShutdownAllBackends();
-    for (auto& balancer : balancers_) balancer->Shutdown();
+  void TearDown() override { 
+    ShutdownAllBackends(); 
+    for (auto& balancer : balancers_) balancer->Shutdown(); 
     // Clear global xDS channel args, since they will go out of scope
     // when this test object is destroyed.
     grpc_core::internal::SetXdsChannelArgsForTest(nullptr);
-  }
-
-  void StartAllBackends() {
+  } 
+ 
+  void StartAllBackends() { 
     for (auto& backend : backends_) backend->Start();
-  }
-
+  } 
+ 
   void StartBackend(size_t index) { backends_[index]->Start(); }
-
-  void ShutdownAllBackends() {
-    for (auto& backend : backends_) backend->Shutdown();
-  }
-
-  void ShutdownBackend(size_t index) { backends_[index]->Shutdown(); }
-
+ 
+  void ShutdownAllBackends() { 
+    for (auto& backend : backends_) backend->Shutdown(); 
+  } 
+ 
+  void ShutdownBackend(size_t index) { backends_[index]->Shutdown(); } 
+ 
   void ResetStub(int failover_timeout = 0) {
     channel_ = CreateChannel(failover_timeout);
     stub_ = grpc::testing::EchoTestService::NewStub(channel_);
@@ -1433,32 +1433,32 @@ class XdsEnd2endTest : public ::testing::TestWithParam<TestType> {
 
   std::shared_ptr<Channel> CreateChannel(
       int failover_timeout = 0, const char* server_name = kServerName) {
-    ChannelArguments args;
-    if (failover_timeout > 0) {
+    ChannelArguments args; 
+    if (failover_timeout > 0) { 
       args.SetInt(GRPC_ARG_PRIORITY_FAILOVER_TIMEOUT_MS, failover_timeout);
-    }
-    // If the parent channel is using the fake resolver, we inject the
+    } 
+    // If the parent channel is using the fake resolver, we inject the 
     // response generator here.
     if (!GetParam().use_xds_resolver()) {
       args.SetPointer(GRPC_ARG_FAKE_RESOLVER_RESPONSE_GENERATOR,
                       response_generator_.get());
-    }
+    } 
     TString uri = y_absl::StrCat(
         GetParam().use_xds_resolver() ? "xds" : "fake", ":///", server_name);
-    // TODO(dgq): templatize tests to run everything using both secure and
-    // insecure channel credentials.
-    grpc_channel_credentials* channel_creds =
-        grpc_fake_transport_security_credentials_create();
-    grpc_call_credentials* call_creds = grpc_md_only_test_credentials_create(
-        g_kCallCredsMdKey, g_kCallCredsMdValue, false);
-    std::shared_ptr<ChannelCredentials> creds(
-        new SecureChannelCredentials(grpc_composite_channel_credentials_create(
-            channel_creds, call_creds, nullptr)));
-    call_creds->Unref();
-    channel_creds->Unref();
+    // TODO(dgq): templatize tests to run everything using both secure and 
+    // insecure channel credentials. 
+    grpc_channel_credentials* channel_creds = 
+        grpc_fake_transport_security_credentials_create(); 
+    grpc_call_credentials* call_creds = grpc_md_only_test_credentials_create( 
+        g_kCallCredsMdKey, g_kCallCredsMdValue, false); 
+    std::shared_ptr<ChannelCredentials> creds( 
+        new SecureChannelCredentials(grpc_composite_channel_credentials_create( 
+            channel_creds, call_creds, nullptr))); 
+    call_creds->Unref(); 
+    channel_creds->Unref(); 
     return ::grpc::CreateCustomChannel(uri, creds, args);
-  }
-
+  } 
+ 
   enum RpcService {
     SERVICE_ECHO,
     SERVICE_ECHO1,
@@ -1525,15 +1525,15 @@ class XdsEnd2endTest : public ::testing::TestWithParam<TestType> {
       case METHOD_ECHO2:
         return (*stub)->Echo2(context, request, response);
     }
-  }
-
+  } 
+ 
   void ResetBackendCounters(size_t start_index = 0, size_t stop_index = 0) {
-    if (stop_index == 0) stop_index = backends_.size();
-    for (size_t i = start_index; i < stop_index; ++i) {
+    if (stop_index == 0) stop_index = backends_.size(); 
+    for (size_t i = start_index; i < stop_index; ++i) { 
       backends_[i]->backend_service()->ResetCounters();
       backends_[i]->backend_service1()->ResetCounters();
       backends_[i]->backend_service2()->ResetCounters();
-    }
+    } 
   }
 
   bool SeenAllBackends(size_t start_index = 0, size_t stop_index = 0,
@@ -1555,149 +1555,149 @@ class XdsEnd2endTest : public ::testing::TestWithParam<TestType> {
           break;
       }
     }
-    return true;
-  }
-
-  void SendRpcAndCount(int* num_total, int* num_ok, int* num_failure,
+    return true; 
+  } 
+ 
+  void SendRpcAndCount(int* num_total, int* num_ok, int* num_failure, 
                        int* num_drops,
                        const RpcOptions& rpc_options = RpcOptions()) {
     const Status status = SendRpc(rpc_options);
-    if (status.ok()) {
-      ++*num_ok;
-    } else {
-      if (status.error_message() == "Call dropped by load balancing policy") {
-        ++*num_drops;
-      } else {
-        ++*num_failure;
-      }
-    }
-    ++*num_total;
-  }
-
+    if (status.ok()) { 
+      ++*num_ok; 
+    } else { 
+      if (status.error_message() == "Call dropped by load balancing policy") { 
+        ++*num_drops; 
+      } else { 
+        ++*num_failure; 
+      } 
+    } 
+    ++*num_total; 
+  } 
+ 
   std::tuple<int, int, int> WaitForAllBackends(
       size_t start_index = 0, size_t stop_index = 0, bool reset_counters = true,
       const RpcOptions& rpc_options = RpcOptions(),
       bool allow_failures = false) {
-    int num_ok = 0;
-    int num_failure = 0;
-    int num_drops = 0;
-    int num_total = 0;
+    int num_ok = 0; 
+    int num_failure = 0; 
+    int num_drops = 0; 
+    int num_total = 0; 
     while (!SeenAllBackends(start_index, stop_index, rpc_options)) {
       SendRpcAndCount(&num_total, &num_ok, &num_failure, &num_drops,
                       rpc_options);
-    }
+    } 
     if (reset_counters) ResetBackendCounters();
-    gpr_log(GPR_INFO,
-            "Performed %d warm up requests against the backends. "
-            "%d succeeded, %d failed, %d dropped.",
-            num_total, num_ok, num_failure, num_drops);
+    gpr_log(GPR_INFO, 
+            "Performed %d warm up requests against the backends. " 
+            "%d succeeded, %d failed, %d dropped.", 
+            num_total, num_ok, num_failure, num_drops); 
     if (!allow_failures) EXPECT_EQ(num_failure, 0);
-    return std::make_tuple(num_ok, num_failure, num_drops);
-  }
-
+    return std::make_tuple(num_ok, num_failure, num_drops); 
+  } 
+ 
   void WaitForBackend(size_t backend_idx, bool reset_counters = true,
                       bool require_success = false) {
-    gpr_log(GPR_INFO, "========= WAITING FOR BACKEND %lu ==========",
-            static_cast<unsigned long>(backend_idx));
-    do {
+    gpr_log(GPR_INFO, "========= WAITING FOR BACKEND %lu ==========", 
+            static_cast<unsigned long>(backend_idx)); 
+    do { 
       Status status = SendRpc();
       if (require_success) {
         EXPECT_TRUE(status.ok()) << "code=" << status.error_code()
                                  << " message=" << status.error_message();
       }
-    } while (backends_[backend_idx]->backend_service()->request_count() == 0);
-    if (reset_counters) ResetBackendCounters();
-    gpr_log(GPR_INFO, "========= BACKEND %lu READY ==========",
-            static_cast<unsigned long>(backend_idx));
-  }
-
-  grpc_core::ServerAddressList CreateAddressListFromPortList(
-      const std::vector<int>& ports) {
-    grpc_core::ServerAddressList addresses;
-    for (int port : ports) {
+    } while (backends_[backend_idx]->backend_service()->request_count() == 0); 
+    if (reset_counters) ResetBackendCounters(); 
+    gpr_log(GPR_INFO, "========= BACKEND %lu READY ==========", 
+            static_cast<unsigned long>(backend_idx)); 
+  } 
+ 
+  grpc_core::ServerAddressList CreateAddressListFromPortList( 
+      const std::vector<int>& ports) { 
+    grpc_core::ServerAddressList addresses; 
+    for (int port : ports) { 
       TString lb_uri_str = y_absl::StrCat("ipv4:127.0.0.1:", port);
       grpc_uri* lb_uri = grpc_uri_parse(lb_uri_str.c_str(), true);
-      GPR_ASSERT(lb_uri != nullptr);
-      grpc_resolved_address address;
-      GPR_ASSERT(grpc_parse_uri(lb_uri, &address));
-      addresses.emplace_back(address.addr, address.len, nullptr);
-      grpc_uri_destroy(lb_uri);
-    }
-    return addresses;
-  }
-
+      GPR_ASSERT(lb_uri != nullptr); 
+      grpc_resolved_address address; 
+      GPR_ASSERT(grpc_parse_uri(lb_uri, &address)); 
+      addresses.emplace_back(address.addr, address.len, nullptr); 
+      grpc_uri_destroy(lb_uri); 
+    } 
+    return addresses; 
+  } 
+ 
   void SetNextResolution(const std::vector<int>& ports) {
-    if (GetParam().use_xds_resolver()) return;  // Not used with xds resolver.
-    grpc_core::ExecCtx exec_ctx;
-    grpc_core::Resolver::Result result;
-    result.addresses = CreateAddressListFromPortList(ports);
-    grpc_error* error = GRPC_ERROR_NONE;
-    const char* service_config_json =
-        GetParam().enable_load_reporting()
+    if (GetParam().use_xds_resolver()) return;  // Not used with xds resolver. 
+    grpc_core::ExecCtx exec_ctx; 
+    grpc_core::Resolver::Result result; 
+    result.addresses = CreateAddressListFromPortList(ports); 
+    grpc_error* error = GRPC_ERROR_NONE; 
+    const char* service_config_json = 
+        GetParam().enable_load_reporting() 
             ? kDefaultServiceConfig
             : kDefaultServiceConfigWithoutLoadReporting;
-    result.service_config =
+    result.service_config = 
         grpc_core::ServiceConfig::Create(nullptr, service_config_json, &error);
     ASSERT_EQ(error, GRPC_ERROR_NONE) << grpc_error_string(error);
     ASSERT_NE(result.service_config.get(), nullptr);
-    response_generator_->SetResponse(std::move(result));
-  }
-
-  void SetNextResolutionForLbChannelAllBalancers(
-      const char* service_config_json = nullptr,
+    response_generator_->SetResponse(std::move(result)); 
+  } 
+ 
+  void SetNextResolutionForLbChannelAllBalancers( 
+      const char* service_config_json = nullptr, 
       const char* expected_targets = nullptr) {
-    std::vector<int> ports;
-    for (size_t i = 0; i < balancers_.size(); ++i) {
-      ports.emplace_back(balancers_[i]->port());
-    }
+    std::vector<int> ports; 
+    for (size_t i = 0; i < balancers_.size(); ++i) { 
+      ports.emplace_back(balancers_[i]->port()); 
+    } 
     SetNextResolutionForLbChannel(ports, service_config_json, expected_targets);
-  }
-
+  } 
+ 
   void SetNextResolutionForLbChannel(const std::vector<int>& ports,
                                      const char* service_config_json = nullptr,
                                      const char* expected_targets = nullptr) {
-    grpc_core::ExecCtx exec_ctx;
-    grpc_core::Resolver::Result result;
-    result.addresses = CreateAddressListFromPortList(ports);
-    if (service_config_json != nullptr) {
-      grpc_error* error = GRPC_ERROR_NONE;
+    grpc_core::ExecCtx exec_ctx; 
+    grpc_core::Resolver::Result result; 
+    result.addresses = CreateAddressListFromPortList(ports); 
+    if (service_config_json != nullptr) { 
+      grpc_error* error = GRPC_ERROR_NONE; 
       result.service_config = grpc_core::ServiceConfig::Create(
           nullptr, service_config_json, &error);
       ASSERT_NE(result.service_config.get(), nullptr);
       ASSERT_EQ(error, GRPC_ERROR_NONE) << grpc_error_string(error);
-    }
+    } 
     if (expected_targets != nullptr) {
       grpc_arg expected_targets_arg = grpc_channel_arg_string_create(
           const_cast<char*>(GRPC_ARG_FAKE_SECURITY_EXPECTED_TARGETS),
           const_cast<char*>(expected_targets));
       result.args =
           grpc_channel_args_copy_and_add(nullptr, &expected_targets_arg, 1);
-    }
+    } 
     lb_channel_response_generator_->SetResponse(std::move(result));
-  }
-
-  void SetNextReresolutionResponse(const std::vector<int>& ports) {
-    grpc_core::ExecCtx exec_ctx;
-    grpc_core::Resolver::Result result;
-    result.addresses = CreateAddressListFromPortList(ports);
-    response_generator_->SetReresolutionResponse(std::move(result));
-  }
-
-  const std::vector<int> GetBackendPorts(size_t start_index = 0,
-                                         size_t stop_index = 0) const {
-    if (stop_index == 0) stop_index = backends_.size();
-    std::vector<int> backend_ports;
-    for (size_t i = start_index; i < stop_index; ++i) {
-      backend_ports.push_back(backends_[i]->port());
-    }
-    return backend_ports;
-  }
-
+  } 
+ 
+  void SetNextReresolutionResponse(const std::vector<int>& ports) { 
+    grpc_core::ExecCtx exec_ctx; 
+    grpc_core::Resolver::Result result; 
+    result.addresses = CreateAddressListFromPortList(ports); 
+    response_generator_->SetReresolutionResponse(std::move(result)); 
+  } 
+ 
+  const std::vector<int> GetBackendPorts(size_t start_index = 0, 
+                                         size_t stop_index = 0) const { 
+    if (stop_index == 0) stop_index = backends_.size(); 
+    std::vector<int> backend_ports; 
+    for (size_t i = start_index; i < stop_index; ++i) { 
+      backend_ports.push_back(backends_[i]->port()); 
+    } 
+    return backend_ports; 
+  } 
+ 
   Status SendRpc(const RpcOptions& rpc_options = RpcOptions(),
                  EchoResponse* response = nullptr) {
-    const bool local_response = (response == nullptr);
-    if (local_response) response = new EchoResponse;
-    EchoRequest request;
+    const bool local_response = (response == nullptr); 
+    if (local_response) response = new EchoResponse; 
+    EchoRequest request; 
     ClientContext context;
     for (const auto& metadata : rpc_options.metadata) {
       context.AddMetadata(metadata.first, metadata.second);
@@ -1727,29 +1727,29 @@ class XdsEnd2endTest : public ::testing::TestWithParam<TestType> {
             SendRpcMethod(&stub2_, rpc_options, &context, request, response);
         break;
     }
-    if (local_response) delete response;
-    return status;
-  }
-
+    if (local_response) delete response; 
+    return status; 
+  } 
+ 
   void CheckRpcSendOk(const size_t times = 1,
                       const RpcOptions& rpc_options = RpcOptions()) {
-    for (size_t i = 0; i < times; ++i) {
-      EchoResponse response;
+    for (size_t i = 0; i < times; ++i) { 
+      EchoResponse response; 
       const Status status = SendRpc(rpc_options, &response);
-      EXPECT_TRUE(status.ok()) << "code=" << status.error_code()
-                               << " message=" << status.error_message();
+      EXPECT_TRUE(status.ok()) << "code=" << status.error_code() 
+                               << " message=" << status.error_message(); 
       EXPECT_EQ(response.message(), kRequestMessage);
-    }
-  }
-
+    } 
+  } 
+ 
   void CheckRpcSendFailure(const size_t times = 1,
                            const RpcOptions& rpc_options = RpcOptions()) {
     for (size_t i = 0; i < times; ++i) {
       const Status status = SendRpc(rpc_options);
       EXPECT_FALSE(status.ok());
     }
-  }
-
+  } 
+ 
   void SetRouteConfiguration(int idx, const RouteConfiguration& route_config) {
     if (GetParam().enable_rds_testing()) {
       balancers_[idx]->ads_service()->SetRdsResource(route_config);
@@ -1779,69 +1779,69 @@ class XdsEnd2endTest : public ::testing::TestWithParam<TestType> {
   }
 
  protected:
-  class ServerThread {
-   public:
-    ServerThread() : port_(g_port_saver->GetPort()) {}
-    virtual ~ServerThread(){};
-
+  class ServerThread { 
+   public: 
+    ServerThread() : port_(g_port_saver->GetPort()) {} 
+    virtual ~ServerThread(){}; 
+ 
     void Start() {
-      gpr_log(GPR_INFO, "starting %s server on port %d", Type(), port_);
-      GPR_ASSERT(!running_);
-      running_ = true;
-      StartAllServices();
-      grpc_core::Mutex mu;
-      // We need to acquire the lock here in order to prevent the notify_one
-      // by ServerThread::Serve from firing before the wait below is hit.
-      grpc_core::MutexLock lock(&mu);
-      grpc_core::CondVar cond;
+      gpr_log(GPR_INFO, "starting %s server on port %d", Type(), port_); 
+      GPR_ASSERT(!running_); 
+      running_ = true; 
+      StartAllServices(); 
+      grpc_core::Mutex mu; 
+      // We need to acquire the lock here in order to prevent the notify_one 
+      // by ServerThread::Serve from firing before the wait below is hit. 
+      grpc_core::MutexLock lock(&mu); 
+      grpc_core::CondVar cond; 
       thread_.reset(
           new std::thread(std::bind(&ServerThread::Serve, this, &mu, &cond)));
-      cond.Wait(&mu);
-      gpr_log(GPR_INFO, "%s server startup complete", Type());
-    }
-
+      cond.Wait(&mu); 
+      gpr_log(GPR_INFO, "%s server startup complete", Type()); 
+    } 
+ 
     void Serve(grpc_core::Mutex* mu, grpc_core::CondVar* cond) {
-      // We need to acquire the lock here in order to prevent the notify_one
-      // below from firing before its corresponding wait is executed.
-      grpc_core::MutexLock lock(mu);
-      std::ostringstream server_address;
+      // We need to acquire the lock here in order to prevent the notify_one 
+      // below from firing before its corresponding wait is executed. 
+      grpc_core::MutexLock lock(mu); 
+      std::ostringstream server_address; 
       server_address << "localhost:" << port_;
-      ServerBuilder builder;
-      std::shared_ptr<ServerCredentials> creds(new SecureServerCredentials(
-          grpc_fake_transport_security_server_credentials_create()));
-      builder.AddListeningPort(server_address.str(), creds);
-      RegisterAllServices(&builder);
-      server_ = builder.BuildAndStart();
-      cond->Signal();
-    }
-
-    void Shutdown() {
-      if (!running_) return;
-      gpr_log(GPR_INFO, "%s about to shutdown", Type());
-      ShutdownAllServices();
-      server_->Shutdown(grpc_timeout_milliseconds_to_deadline(0));
-      thread_->join();
-      gpr_log(GPR_INFO, "%s shutdown completed", Type());
-      running_ = false;
-    }
-
-    int port() const { return port_; }
-
-   private:
-    virtual void RegisterAllServices(ServerBuilder* builder) = 0;
-    virtual void StartAllServices() = 0;
-    virtual void ShutdownAllServices() = 0;
-
-    virtual const char* Type() = 0;
-
-    const int port_;
-    std::unique_ptr<Server> server_;
-    std::unique_ptr<std::thread> thread_;
-    bool running_ = false;
-  };
-
-  class BackendServerThread : public ServerThread {
-   public:
+      ServerBuilder builder; 
+      std::shared_ptr<ServerCredentials> creds(new SecureServerCredentials( 
+          grpc_fake_transport_security_server_credentials_create())); 
+      builder.AddListeningPort(server_address.str(), creds); 
+      RegisterAllServices(&builder); 
+      server_ = builder.BuildAndStart(); 
+      cond->Signal(); 
+    } 
+ 
+    void Shutdown() { 
+      if (!running_) return; 
+      gpr_log(GPR_INFO, "%s about to shutdown", Type()); 
+      ShutdownAllServices(); 
+      server_->Shutdown(grpc_timeout_milliseconds_to_deadline(0)); 
+      thread_->join(); 
+      gpr_log(GPR_INFO, "%s shutdown completed", Type()); 
+      running_ = false; 
+    } 
+ 
+    int port() const { return port_; } 
+ 
+   private: 
+    virtual void RegisterAllServices(ServerBuilder* builder) = 0; 
+    virtual void StartAllServices() = 0; 
+    virtual void ShutdownAllServices() = 0; 
+ 
+    virtual const char* Type() = 0; 
+ 
+    const int port_; 
+    std::unique_ptr<Server> server_; 
+    std::unique_ptr<std::thread> thread_; 
+    bool running_ = false; 
+  }; 
+ 
+  class BackendServerThread : public ServerThread { 
+   public: 
     BackendServiceImpl<::grpc::testing::EchoTestService::Service>*
     backend_service() {
       return &backend_service_;
@@ -1854,240 +1854,240 @@ class XdsEnd2endTest : public ::testing::TestWithParam<TestType> {
     backend_service2() {
       return &backend_service2_;
     }
-
-   private:
-    void RegisterAllServices(ServerBuilder* builder) override {
-      builder->RegisterService(&backend_service_);
+ 
+   private: 
+    void RegisterAllServices(ServerBuilder* builder) override { 
+      builder->RegisterService(&backend_service_); 
       builder->RegisterService(&backend_service1_);
       builder->RegisterService(&backend_service2_);
-    }
-
+    } 
+ 
     void StartAllServices() override {
       backend_service_.Start();
       backend_service1_.Start();
       backend_service2_.Start();
     }
-
+ 
     void ShutdownAllServices() override {
       backend_service_.Shutdown();
       backend_service1_.Shutdown();
       backend_service2_.Shutdown();
     }
-
-    const char* Type() override { return "Backend"; }
-
+ 
+    const char* Type() override { return "Backend"; } 
+ 
     BackendServiceImpl<::grpc::testing::EchoTestService::Service>
         backend_service_;
     BackendServiceImpl<::grpc::testing::EchoTest1Service::Service>
         backend_service1_;
     BackendServiceImpl<::grpc::testing::EchoTest2Service::Service>
         backend_service2_;
-  };
-
-  class BalancerServerThread : public ServerThread {
-   public:
-    explicit BalancerServerThread(int client_load_reporting_interval = 0)
+  }; 
+ 
+  class BalancerServerThread : public ServerThread { 
+   public: 
+    explicit BalancerServerThread(int client_load_reporting_interval = 0) 
         : ads_service_(new AdsServiceImpl(client_load_reporting_interval > 0)),
           lrs_service_(new LrsServiceImpl(client_load_reporting_interval)) {}
-
+ 
     AdsServiceImpl* ads_service() { return ads_service_.get(); }
     LrsServiceImpl* lrs_service() { return lrs_service_.get(); }
-
-   private:
-    void RegisterAllServices(ServerBuilder* builder) override {
+ 
+   private: 
+    void RegisterAllServices(ServerBuilder* builder) override { 
       builder->RegisterService(ads_service_->v2_rpc_service());
       builder->RegisterService(ads_service_->v3_rpc_service());
       builder->RegisterService(lrs_service_->v2_rpc_service());
       builder->RegisterService(lrs_service_->v3_rpc_service());
-    }
-
-    void StartAllServices() override {
+    } 
+ 
+    void StartAllServices() override { 
       ads_service_->Start();
       lrs_service_->Start();
-    }
-
-    void ShutdownAllServices() override {
+    } 
+ 
+    void ShutdownAllServices() override { 
       ads_service_->Shutdown();
       lrs_service_->Shutdown();
-    }
-
-    const char* Type() override { return "Balancer"; }
-
+    } 
+ 
+    const char* Type() override { return "Balancer"; } 
+ 
     std::shared_ptr<AdsServiceImpl> ads_service_;
     std::shared_ptr<LrsServiceImpl> lrs_service_;
-  };
-
-  const size_t num_backends_;
-  const size_t num_balancers_;
-  const int client_load_reporting_interval_seconds_;
-  std::shared_ptr<Channel> channel_;
-  std::unique_ptr<grpc::testing::EchoTestService::Stub> stub_;
+  }; 
+ 
+  const size_t num_backends_; 
+  const size_t num_balancers_; 
+  const int client_load_reporting_interval_seconds_; 
+  std::shared_ptr<Channel> channel_; 
+  std::unique_ptr<grpc::testing::EchoTestService::Stub> stub_; 
   std::unique_ptr<grpc::testing::EchoTest1Service::Stub> stub1_;
   std::unique_ptr<grpc::testing::EchoTest2Service::Stub> stub2_;
-  std::vector<std::unique_ptr<BackendServerThread>> backends_;
-  std::vector<std::unique_ptr<BalancerServerThread>> balancers_;
-  grpc_core::RefCountedPtr<grpc_core::FakeResolverResponseGenerator>
-      response_generator_;
-  grpc_core::RefCountedPtr<grpc_core::FakeResolverResponseGenerator>
-      lb_channel_response_generator_;
+  std::vector<std::unique_ptr<BackendServerThread>> backends_; 
+  std::vector<std::unique_ptr<BalancerServerThread>> balancers_; 
+  grpc_core::RefCountedPtr<grpc_core::FakeResolverResponseGenerator> 
+      response_generator_; 
+  grpc_core::RefCountedPtr<grpc_core::FakeResolverResponseGenerator> 
+      lb_channel_response_generator_; 
   int xds_resource_does_not_exist_timeout_ms_ = 0;
   y_absl::InlinedVector<grpc_arg, 2> xds_channel_args_to_add_;
   grpc_channel_args xds_channel_args_;
-};
-
-class BasicTest : public XdsEnd2endTest {
- public:
+}; 
+ 
+class BasicTest : public XdsEnd2endTest { 
+ public: 
   BasicTest() : XdsEnd2endTest(4, 1) {}
-};
-
-// Tests that the balancer sends the correct response to the client, and the
-// client sends RPCs to the backends using the default child policy.
-TEST_P(BasicTest, Vanilla) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const size_t kNumRpcsPerAddress = 100;
+}; 
+ 
+// Tests that the balancer sends the correct response to the client, and the 
+// client sends RPCs to the backends using the default child policy. 
+TEST_P(BasicTest, Vanilla) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const size_t kNumRpcsPerAddress = 100; 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts()},
-  });
+      {"locality0", GetBackendPorts()}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Make sure that trying to connect works without a call.
-  channel_->GetState(true /* try_to_connect */);
-  // We need to wait for all backends to come online.
-  WaitForAllBackends();
-  // Send kNumRpcsPerAddress RPCs per server.
-  CheckRpcSendOk(kNumRpcsPerAddress * num_backends_);
-  // Each backend should have gotten 100 requests.
-  for (size_t i = 0; i < backends_.size(); ++i) {
-    EXPECT_EQ(kNumRpcsPerAddress,
-              backends_[i]->backend_service()->request_count());
-  }
-  // Check LB policy name for the channel.
+  // Make sure that trying to connect works without a call. 
+  channel_->GetState(true /* try_to_connect */); 
+  // We need to wait for all backends to come online. 
+  WaitForAllBackends(); 
+  // Send kNumRpcsPerAddress RPCs per server. 
+  CheckRpcSendOk(kNumRpcsPerAddress * num_backends_); 
+  // Each backend should have gotten 100 requests. 
+  for (size_t i = 0; i < backends_.size(); ++i) { 
+    EXPECT_EQ(kNumRpcsPerAddress, 
+              backends_[i]->backend_service()->request_count()); 
+  } 
+  // Check LB policy name for the channel. 
   EXPECT_EQ((GetParam().use_xds_resolver() ? "xds_cluster_manager_experimental"
                                            : "eds_experimental"),
             channel_->GetLoadBalancingPolicyName());
-}
-
-TEST_P(BasicTest, IgnoresUnhealthyEndpoints) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const size_t kNumRpcsPerAddress = 100;
+} 
+ 
+TEST_P(BasicTest, IgnoresUnhealthyEndpoints) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const size_t kNumRpcsPerAddress = 100; 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0",
-       GetBackendPorts(),
-       kDefaultLocalityWeight,
-       kDefaultLocalityPriority,
+      {"locality0", 
+       GetBackendPorts(), 
+       kDefaultLocalityWeight, 
+       kDefaultLocalityPriority, 
        {HealthStatus::DRAINING}},
-  });
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Make sure that trying to connect works without a call.
-  channel_->GetState(true /* try_to_connect */);
-  // We need to wait for all backends to come online.
-  WaitForAllBackends(/*start_index=*/1);
-  // Send kNumRpcsPerAddress RPCs per server.
-  CheckRpcSendOk(kNumRpcsPerAddress * (num_backends_ - 1));
-  // Each backend should have gotten 100 requests.
-  for (size_t i = 1; i < backends_.size(); ++i) {
-    EXPECT_EQ(kNumRpcsPerAddress,
-              backends_[i]->backend_service()->request_count());
-  }
-}
-
-// Tests that subchannel sharing works when the same backend is listed multiple
-// times.
-TEST_P(BasicTest, SameBackendListedMultipleTimes) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  // Same backend listed twice.
-  std::vector<int> ports(2, backends_[0]->port());
+  // Make sure that trying to connect works without a call. 
+  channel_->GetState(true /* try_to_connect */); 
+  // We need to wait for all backends to come online. 
+  WaitForAllBackends(/*start_index=*/1); 
+  // Send kNumRpcsPerAddress RPCs per server. 
+  CheckRpcSendOk(kNumRpcsPerAddress * (num_backends_ - 1)); 
+  // Each backend should have gotten 100 requests. 
+  for (size_t i = 1; i < backends_.size(); ++i) { 
+    EXPECT_EQ(kNumRpcsPerAddress, 
+              backends_[i]->backend_service()->request_count()); 
+  } 
+} 
+ 
+// Tests that subchannel sharing works when the same backend is listed multiple 
+// times. 
+TEST_P(BasicTest, SameBackendListedMultipleTimes) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  // Same backend listed twice. 
+  std::vector<int> ports(2, backends_[0]->port()); 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", ports},
-  });
-  const size_t kNumRpcsPerAddress = 10;
+      {"locality0", ports}, 
+  }); 
+  const size_t kNumRpcsPerAddress = 10; 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // We need to wait for the backend to come online.
-  WaitForBackend(0);
-  // Send kNumRpcsPerAddress RPCs per server.
-  CheckRpcSendOk(kNumRpcsPerAddress * ports.size());
-  // Backend should have gotten 20 requests.
-  EXPECT_EQ(kNumRpcsPerAddress * ports.size(),
-            backends_[0]->backend_service()->request_count());
-  // And they should have come from a single client port, because of
-  // subchannel sharing.
-  EXPECT_EQ(1UL, backends_[0]->backend_service()->clients().size());
-}
-
-// Tests that RPCs will be blocked until a non-empty serverlist is received.
-TEST_P(BasicTest, InitiallyEmptyServerlist) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const int kServerlistDelayMs = 500 * grpc_test_slowdown_factor();
-  const int kCallDeadlineMs = kServerlistDelayMs * 2;
-  // First response is an empty serverlist, sent right away.
+  // We need to wait for the backend to come online. 
+  WaitForBackend(0); 
+  // Send kNumRpcsPerAddress RPCs per server. 
+  CheckRpcSendOk(kNumRpcsPerAddress * ports.size()); 
+  // Backend should have gotten 20 requests. 
+  EXPECT_EQ(kNumRpcsPerAddress * ports.size(), 
+            backends_[0]->backend_service()->request_count()); 
+  // And they should have come from a single client port, because of 
+  // subchannel sharing. 
+  EXPECT_EQ(1UL, backends_[0]->backend_service()->clients().size()); 
+} 
+ 
+// Tests that RPCs will be blocked until a non-empty serverlist is received. 
+TEST_P(BasicTest, InitiallyEmptyServerlist) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const int kServerlistDelayMs = 500 * grpc_test_slowdown_factor(); 
+  const int kCallDeadlineMs = kServerlistDelayMs * 2; 
+  // First response is an empty serverlist, sent right away. 
   AdsServiceImpl::EdsResourceArgs::Locality empty_locality("locality0", {});
   AdsServiceImpl::EdsResourceArgs args({
-      empty_locality,
-  });
+      empty_locality, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Send non-empty serverlist only after kServerlistDelayMs.
+  // Send non-empty serverlist only after kServerlistDelayMs. 
   args = AdsServiceImpl::EdsResourceArgs({
-      {"locality0", GetBackendPorts()},
-  });
+      {"locality0", GetBackendPorts()}, 
+  }); 
   std::thread delayed_resource_setter(
       std::bind(&BasicTest::SetEdsResourceWithDelay, this, 0,
                 AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()),
                 kServerlistDelayMs));
-  const auto t0 = system_clock::now();
-  // Client will block: LB will initially send empty serverlist.
+  const auto t0 = system_clock::now(); 
+  // Client will block: LB will initially send empty serverlist. 
   CheckRpcSendOk(
       1, RpcOptions().set_timeout_ms(kCallDeadlineMs).set_wait_for_ready(true));
-  const auto ellapsed_ms =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          system_clock::now() - t0);
-  // but eventually, the LB sends a serverlist update that allows the call to
-  // proceed. The call delay must be larger than the delay in sending the
-  // populated serverlist but under the call's deadline (which is enforced by
-  // the call's deadline).
-  EXPECT_GT(ellapsed_ms.count(), kServerlistDelayMs);
+  const auto ellapsed_ms = 
+      std::chrono::duration_cast<std::chrono::milliseconds>( 
+          system_clock::now() - t0); 
+  // but eventually, the LB sends a serverlist update that allows the call to 
+  // proceed. The call delay must be larger than the delay in sending the 
+  // populated serverlist but under the call's deadline (which is enforced by 
+  // the call's deadline). 
+  EXPECT_GT(ellapsed_ms.count(), kServerlistDelayMs); 
   delayed_resource_setter.join();
-}
-
-// Tests that RPCs will fail with UNAVAILABLE instead of DEADLINE_EXCEEDED if
-// all the servers are unreachable.
-TEST_P(BasicTest, AllServersUnreachableFailFast) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const size_t kNumUnreachableServers = 5;
-  std::vector<int> ports;
-  for (size_t i = 0; i < kNumUnreachableServers; ++i) {
-    ports.push_back(g_port_saver->GetPort());
-  }
+} 
+ 
+// Tests that RPCs will fail with UNAVAILABLE instead of DEADLINE_EXCEEDED if 
+// all the servers are unreachable. 
+TEST_P(BasicTest, AllServersUnreachableFailFast) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const size_t kNumUnreachableServers = 5; 
+  std::vector<int> ports; 
+  for (size_t i = 0; i < kNumUnreachableServers; ++i) { 
+    ports.push_back(g_port_saver->GetPort()); 
+  } 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", ports},
-  });
+      {"locality0", ports}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  const Status status = SendRpc();
-  // The error shouldn't be DEADLINE_EXCEEDED.
-  EXPECT_EQ(StatusCode::UNAVAILABLE, status.error_code());
-}
-
-// Tests that RPCs fail when the backends are down, and will succeed again after
-// the backends are restarted.
-TEST_P(BasicTest, BackendsRestart) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
+  const Status status = SendRpc(); 
+  // The error shouldn't be DEADLINE_EXCEEDED. 
+  EXPECT_EQ(StatusCode::UNAVAILABLE, status.error_code()); 
+} 
+ 
+// Tests that RPCs fail when the backends are down, and will succeed again after 
+// the backends are restarted. 
+TEST_P(BasicTest, BackendsRestart) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts()},
-  });
+      {"locality0", GetBackendPorts()}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  WaitForAllBackends();
-  // Stop backends.  RPCs should fail.
-  ShutdownAllBackends();
+  WaitForAllBackends(); 
+  // Stop backends.  RPCs should fail. 
+  ShutdownAllBackends(); 
   // Sending multiple failed requests instead of just one to ensure that the
   // client notices that all backends are down before we restart them. If we
   // didn't do this, then a single RPC could fail here due to the race condition
@@ -2098,11 +2098,11 @@ TEST_P(BasicTest, BackendsRestart) {
   // race condition could happen again due to the client not yet having noticed
   // that the backends were all down.
   CheckRpcSendFailure(num_backends_);
-  // Restart all backends.  RPCs should start succeeding again.
-  StartAllBackends();
+  // Restart all backends.  RPCs should start succeeding again. 
+  StartAllBackends(); 
   CheckRpcSendOk(1, RpcOptions().set_timeout_ms(2000).set_wait_for_ready(true));
-}
-
+} 
+ 
 TEST_P(BasicTest, IgnoresDuplicateUpdates) {
   const size_t kNumRpcsPerAddress = 100;
   SetNextResolution({});
@@ -2559,23 +2559,23 @@ TEST_P(XdsResolverLoadReportingOnlyTest, ChangeClusters) {
   EXPECT_EQ(1U, balancers_[0]->lrs_service()->response_count());
 }
 
-using SecureNamingTest = BasicTest;
-
-// Tests that secure naming check passes if target name is expected.
-TEST_P(SecureNamingTest, TargetNameIsExpected) {
-  SetNextResolution({});
+using SecureNamingTest = BasicTest; 
+ 
+// Tests that secure naming check passes if target name is expected. 
+TEST_P(SecureNamingTest, TargetNameIsExpected) { 
+  SetNextResolution({}); 
   SetNextResolutionForLbChannel({balancers_[0]->port()}, nullptr, "xds_server");
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts()},
-  });
+      {"locality0", GetBackendPorts()}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
   CheckRpcSendOk();
-}
-
-// Tests that secure naming check fails if target name is unexpected.
-TEST_P(SecureNamingTest, TargetNameIsUnexpected) {
-  ::testing::FLAGS_gtest_death_test_style = "threadsafe";
+} 
+ 
+// Tests that secure naming check fails if target name is unexpected. 
+TEST_P(SecureNamingTest, TargetNameIsUnexpected) { 
+  ::testing::FLAGS_gtest_death_test_style = "threadsafe"; 
   SetNextResolution({});
   SetNextResolutionForLbChannel({balancers_[0]->port()}, nullptr,
                                 "incorrect_server_name");
@@ -2584,11 +2584,11 @@ TEST_P(SecureNamingTest, TargetNameIsUnexpected) {
   });
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Make sure that we blow up (via abort() from the security connector) when
-  // the name from the balancer doesn't match expectations.
+  // Make sure that we blow up (via abort() from the security connector) when 
+  // the name from the balancer doesn't match expectations. 
   ASSERT_DEATH_IF_SUPPORTED({ CheckRpcSendOk(); }, "");
-}
-
+} 
+ 
 using LdsTest = BasicTest;
 
 // Tests that LDS client should send a NACK if there is no API listener in the
@@ -4500,50 +4500,50 @@ TEST_P(TimeoutTest, Eds) {
   CheckRpcSendFailure();
 }
 
-using LocalityMapTest = BasicTest;
-
-// Tests that the localities in a locality map are picked according to their
-// weights.
-TEST_P(LocalityMapTest, WeightedRoundRobin) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const size_t kNumRpcs = 5000;
-  const int kLocalityWeight0 = 2;
-  const int kLocalityWeight1 = 8;
-  const int kTotalLocalityWeight = kLocalityWeight0 + kLocalityWeight1;
-  const double kLocalityWeightRate0 =
-      static_cast<double>(kLocalityWeight0) / kTotalLocalityWeight;
-  const double kLocalityWeightRate1 =
-      static_cast<double>(kLocalityWeight1) / kTotalLocalityWeight;
-  // ADS response contains 2 localities, each of which contains 1 backend.
+using LocalityMapTest = BasicTest; 
+ 
+// Tests that the localities in a locality map are picked according to their 
+// weights. 
+TEST_P(LocalityMapTest, WeightedRoundRobin) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const size_t kNumRpcs = 5000; 
+  const int kLocalityWeight0 = 2; 
+  const int kLocalityWeight1 = 8; 
+  const int kTotalLocalityWeight = kLocalityWeight0 + kLocalityWeight1; 
+  const double kLocalityWeightRate0 = 
+      static_cast<double>(kLocalityWeight0) / kTotalLocalityWeight; 
+  const double kLocalityWeightRate1 = 
+      static_cast<double>(kLocalityWeight1) / kTotalLocalityWeight; 
+  // ADS response contains 2 localities, each of which contains 1 backend. 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts(0, 1), kLocalityWeight0},
-      {"locality1", GetBackendPorts(1, 2), kLocalityWeight1},
-  });
+      {"locality0", GetBackendPorts(0, 1), kLocalityWeight0}, 
+      {"locality1", GetBackendPorts(1, 2), kLocalityWeight1}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Wait for both backends to be ready.
-  WaitForAllBackends(0, 2);
-  // Send kNumRpcs RPCs.
-  CheckRpcSendOk(kNumRpcs);
-  // The locality picking rates should be roughly equal to the expectation.
-  const double locality_picked_rate_0 =
-      static_cast<double>(backends_[0]->backend_service()->request_count()) /
-      kNumRpcs;
-  const double locality_picked_rate_1 =
-      static_cast<double>(backends_[1]->backend_service()->request_count()) /
-      kNumRpcs;
-  const double kErrorTolerance = 0.2;
-  EXPECT_THAT(locality_picked_rate_0,
-              ::testing::AllOf(
-                  ::testing::Ge(kLocalityWeightRate0 * (1 - kErrorTolerance)),
-                  ::testing::Le(kLocalityWeightRate0 * (1 + kErrorTolerance))));
-  EXPECT_THAT(locality_picked_rate_1,
-              ::testing::AllOf(
-                  ::testing::Ge(kLocalityWeightRate1 * (1 - kErrorTolerance)),
-                  ::testing::Le(kLocalityWeightRate1 * (1 + kErrorTolerance))));
-}
-
+  // Wait for both backends to be ready. 
+  WaitForAllBackends(0, 2); 
+  // Send kNumRpcs RPCs. 
+  CheckRpcSendOk(kNumRpcs); 
+  // The locality picking rates should be roughly equal to the expectation. 
+  const double locality_picked_rate_0 = 
+      static_cast<double>(backends_[0]->backend_service()->request_count()) / 
+      kNumRpcs; 
+  const double locality_picked_rate_1 = 
+      static_cast<double>(backends_[1]->backend_service()->request_count()) / 
+      kNumRpcs; 
+  const double kErrorTolerance = 0.2; 
+  EXPECT_THAT(locality_picked_rate_0, 
+              ::testing::AllOf( 
+                  ::testing::Ge(kLocalityWeightRate0 * (1 - kErrorTolerance)), 
+                  ::testing::Le(kLocalityWeightRate0 * (1 + kErrorTolerance)))); 
+  EXPECT_THAT(locality_picked_rate_1, 
+              ::testing::AllOf( 
+                  ::testing::Ge(kLocalityWeightRate1 * (1 - kErrorTolerance)), 
+                  ::testing::Le(kLocalityWeightRate1 * (1 + kErrorTolerance)))); 
+} 
+ 
 // Tests that we correctly handle a locality containing no endpoints.
 TEST_P(LocalityMapTest, LocalityContainingNoEndpoints) {
   SetNextResolution({});
@@ -4582,96 +4582,96 @@ TEST_P(LocalityMapTest, NoLocalities) {
   EXPECT_EQ(status.error_code(), StatusCode::UNAVAILABLE);
 }
 
-// Tests that the locality map can work properly even when it contains a large
-// number of localities.
-TEST_P(LocalityMapTest, StressTest) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const size_t kNumLocalities = 100;
-  // The first ADS response contains kNumLocalities localities, each of which
-  // contains backend 0.
+// Tests that the locality map can work properly even when it contains a large 
+// number of localities. 
+TEST_P(LocalityMapTest, StressTest) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const size_t kNumLocalities = 100; 
+  // The first ADS response contains kNumLocalities localities, each of which 
+  // contains backend 0. 
   AdsServiceImpl::EdsResourceArgs args;
-  for (size_t i = 0; i < kNumLocalities; ++i) {
+  for (size_t i = 0; i < kNumLocalities; ++i) { 
     TString name = y_absl::StrCat("locality", i);
     AdsServiceImpl::EdsResourceArgs::Locality locality(name,
                                                        {backends_[0]->port()});
-    args.locality_list.emplace_back(std::move(locality));
-  }
+    args.locality_list.emplace_back(std::move(locality)); 
+  } 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // The second ADS response contains 1 locality, which contains backend 1.
+  // The second ADS response contains 1 locality, which contains backend 1. 
   args = AdsServiceImpl::EdsResourceArgs({
-      {"locality0", GetBackendPorts(1, 2)},
-  });
+      {"locality0", GetBackendPorts(1, 2)}, 
+  }); 
   std::thread delayed_resource_setter(
       std::bind(&BasicTest::SetEdsResourceWithDelay, this, 0,
                 AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()),
                 60 * 1000));
-  // Wait until backend 0 is ready, before which kNumLocalities localities are
-  // received and handled by the xds policy.
-  WaitForBackend(0, /*reset_counters=*/false);
-  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count());
-  // Wait until backend 1 is ready, before which kNumLocalities localities are
-  // removed by the xds policy.
-  WaitForBackend(1);
+  // Wait until backend 0 is ready, before which kNumLocalities localities are 
+  // received and handled by the xds policy. 
+  WaitForBackend(0, /*reset_counters=*/false); 
+  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count()); 
+  // Wait until backend 1 is ready, before which kNumLocalities localities are 
+  // removed by the xds policy. 
+  WaitForBackend(1); 
   delayed_resource_setter.join();
-}
-
-// Tests that the localities in a locality map are picked correctly after update
-// (addition, modification, deletion).
-TEST_P(LocalityMapTest, UpdateMap) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
+} 
+ 
+// Tests that the localities in a locality map are picked correctly after update 
+// (addition, modification, deletion). 
+TEST_P(LocalityMapTest, UpdateMap) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
   const size_t kNumRpcs = 3000;
-  // The locality weight for the first 3 localities.
-  const std::vector<int> kLocalityWeights0 = {2, 3, 4};
-  const double kTotalLocalityWeight0 =
-      std::accumulate(kLocalityWeights0.begin(), kLocalityWeights0.end(), 0);
-  std::vector<double> locality_weight_rate_0;
-  for (int weight : kLocalityWeights0) {
-    locality_weight_rate_0.push_back(weight / kTotalLocalityWeight0);
-  }
-  // Delete the first locality, keep the second locality, change the third
-  // locality's weight from 4 to 2, and add a new locality with weight 6.
-  const std::vector<int> kLocalityWeights1 = {3, 2, 6};
-  const double kTotalLocalityWeight1 =
-      std::accumulate(kLocalityWeights1.begin(), kLocalityWeights1.end(), 0);
-  std::vector<double> locality_weight_rate_1 = {
-      0 /* placeholder for locality 0 */};
-  for (int weight : kLocalityWeights1) {
-    locality_weight_rate_1.push_back(weight / kTotalLocalityWeight1);
-  }
+  // The locality weight for the first 3 localities. 
+  const std::vector<int> kLocalityWeights0 = {2, 3, 4}; 
+  const double kTotalLocalityWeight0 = 
+      std::accumulate(kLocalityWeights0.begin(), kLocalityWeights0.end(), 0); 
+  std::vector<double> locality_weight_rate_0; 
+  for (int weight : kLocalityWeights0) { 
+    locality_weight_rate_0.push_back(weight / kTotalLocalityWeight0); 
+  } 
+  // Delete the first locality, keep the second locality, change the third 
+  // locality's weight from 4 to 2, and add a new locality with weight 6. 
+  const std::vector<int> kLocalityWeights1 = {3, 2, 6}; 
+  const double kTotalLocalityWeight1 = 
+      std::accumulate(kLocalityWeights1.begin(), kLocalityWeights1.end(), 0); 
+  std::vector<double> locality_weight_rate_1 = { 
+      0 /* placeholder for locality 0 */}; 
+  for (int weight : kLocalityWeights1) { 
+    locality_weight_rate_1.push_back(weight / kTotalLocalityWeight1); 
+  } 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts(0, 1), 2},
-      {"locality1", GetBackendPorts(1, 2), 3},
-      {"locality2", GetBackendPorts(2, 3), 4},
-  });
+      {"locality0", GetBackendPorts(0, 1), 2}, 
+      {"locality1", GetBackendPorts(1, 2), 3}, 
+      {"locality2", GetBackendPorts(2, 3), 4}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Wait for the first 3 backends to be ready.
-  WaitForAllBackends(0, 3);
-  gpr_log(GPR_INFO, "========= BEFORE FIRST BATCH ==========");
-  // Send kNumRpcs RPCs.
-  CheckRpcSendOk(kNumRpcs);
-  gpr_log(GPR_INFO, "========= DONE WITH FIRST BATCH ==========");
-  // The picking rates of the first 3 backends should be roughly equal to the
-  // expectation.
-  std::vector<double> locality_picked_rates;
-  for (size_t i = 0; i < 3; ++i) {
-    locality_picked_rates.push_back(
-        static_cast<double>(backends_[i]->backend_service()->request_count()) /
-        kNumRpcs);
-  }
-  const double kErrorTolerance = 0.2;
-  for (size_t i = 0; i < 3; ++i) {
+  // Wait for the first 3 backends to be ready. 
+  WaitForAllBackends(0, 3); 
+  gpr_log(GPR_INFO, "========= BEFORE FIRST BATCH =========="); 
+  // Send kNumRpcs RPCs. 
+  CheckRpcSendOk(kNumRpcs); 
+  gpr_log(GPR_INFO, "========= DONE WITH FIRST BATCH =========="); 
+  // The picking rates of the first 3 backends should be roughly equal to the 
+  // expectation. 
+  std::vector<double> locality_picked_rates; 
+  for (size_t i = 0; i < 3; ++i) { 
+    locality_picked_rates.push_back( 
+        static_cast<double>(backends_[i]->backend_service()->request_count()) / 
+        kNumRpcs); 
+  } 
+  const double kErrorTolerance = 0.2; 
+  for (size_t i = 0; i < 3; ++i) { 
     gpr_log(GPR_INFO, "Locality %" PRIuPTR " rate %f", i,
             locality_picked_rates[i]);
-    EXPECT_THAT(
-        locality_picked_rates[i],
-        ::testing::AllOf(
-            ::testing::Ge(locality_weight_rate_0[i] * (1 - kErrorTolerance)),
-            ::testing::Le(locality_weight_rate_0[i] * (1 + kErrorTolerance))));
-  }
+    EXPECT_THAT( 
+        locality_picked_rates[i], 
+        ::testing::AllOf( 
+            ::testing::Ge(locality_weight_rate_0[i] * (1 - kErrorTolerance)), 
+            ::testing::Le(locality_weight_rate_0[i] * (1 + kErrorTolerance)))); 
+  } 
   args = AdsServiceImpl::EdsResourceArgs({
       {"locality1", GetBackendPorts(1, 2), 3},
       {"locality2", GetBackendPorts(2, 3), 2},
@@ -4679,36 +4679,36 @@ TEST_P(LocalityMapTest, UpdateMap) {
   });
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Backend 3 hasn't received any request.
-  EXPECT_EQ(0U, backends_[3]->backend_service()->request_count());
-  // Wait until the locality update has been processed, as signaled by backend 3
-  // receiving a request.
+  // Backend 3 hasn't received any request. 
+  EXPECT_EQ(0U, backends_[3]->backend_service()->request_count()); 
+  // Wait until the locality update has been processed, as signaled by backend 3 
+  // receiving a request. 
   WaitForAllBackends(3, 4);
-  gpr_log(GPR_INFO, "========= BEFORE SECOND BATCH ==========");
-  // Send kNumRpcs RPCs.
-  CheckRpcSendOk(kNumRpcs);
-  gpr_log(GPR_INFO, "========= DONE WITH SECOND BATCH ==========");
-  // Backend 0 no longer receives any request.
-  EXPECT_EQ(0U, backends_[0]->backend_service()->request_count());
-  // The picking rates of the last 3 backends should be roughly equal to the
-  // expectation.
-  locality_picked_rates = {0 /* placeholder for backend 0 */};
-  for (size_t i = 1; i < 4; ++i) {
-    locality_picked_rates.push_back(
-        static_cast<double>(backends_[i]->backend_service()->request_count()) /
-        kNumRpcs);
-  }
-  for (size_t i = 1; i < 4; ++i) {
+  gpr_log(GPR_INFO, "========= BEFORE SECOND BATCH =========="); 
+  // Send kNumRpcs RPCs. 
+  CheckRpcSendOk(kNumRpcs); 
+  gpr_log(GPR_INFO, "========= DONE WITH SECOND BATCH =========="); 
+  // Backend 0 no longer receives any request. 
+  EXPECT_EQ(0U, backends_[0]->backend_service()->request_count()); 
+  // The picking rates of the last 3 backends should be roughly equal to the 
+  // expectation. 
+  locality_picked_rates = {0 /* placeholder for backend 0 */}; 
+  for (size_t i = 1; i < 4; ++i) { 
+    locality_picked_rates.push_back( 
+        static_cast<double>(backends_[i]->backend_service()->request_count()) / 
+        kNumRpcs); 
+  } 
+  for (size_t i = 1; i < 4; ++i) { 
     gpr_log(GPR_INFO, "Locality %" PRIuPTR " rate %f", i,
             locality_picked_rates[i]);
-    EXPECT_THAT(
-        locality_picked_rates[i],
-        ::testing::AllOf(
-            ::testing::Ge(locality_weight_rate_1[i] * (1 - kErrorTolerance)),
-            ::testing::Le(locality_weight_rate_1[i] * (1 + kErrorTolerance))));
-  }
-}
-
+    EXPECT_THAT( 
+        locality_picked_rates[i], 
+        ::testing::AllOf( 
+            ::testing::Ge(locality_weight_rate_1[i] * (1 - kErrorTolerance)), 
+            ::testing::Le(locality_weight_rate_1[i] * (1 + kErrorTolerance)))); 
+  } 
+} 
+ 
 // Tests that we don't fail RPCs when replacing all of the localities in
 // a given priority.
 TEST_P(LocalityMapTest, ReplaceAllLocalitiesInPriority) {
@@ -4734,32 +4734,32 @@ TEST_P(LocalityMapTest, ReplaceAllLocalitiesInPriority) {
   delayed_resource_setter.join();
 }
 
-class FailoverTest : public BasicTest {
- public:
+class FailoverTest : public BasicTest { 
+ public: 
   void SetUp() override {
     BasicTest::SetUp();
     ResetStub(500);
   }
-};
-
-// Localities with the highest priority are used when multiple priority exist.
-TEST_P(FailoverTest, ChooseHighestPriority) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
+}; 
+ 
+// Localities with the highest priority are used when multiple priority exist. 
+TEST_P(FailoverTest, ChooseHighestPriority) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 1},
-      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 2},
-      {"locality2", GetBackendPorts(2, 3), kDefaultLocalityWeight, 3},
-      {"locality3", GetBackendPorts(3, 4), kDefaultLocalityWeight, 0},
-  });
+      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 1}, 
+      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 2}, 
+      {"locality2", GetBackendPorts(2, 3), kDefaultLocalityWeight, 3}, 
+      {"locality3", GetBackendPorts(3, 4), kDefaultLocalityWeight, 0}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  WaitForBackend(3, false);
-  for (size_t i = 0; i < 3; ++i) {
+  WaitForBackend(3, false); 
+  for (size_t i = 0; i < 3; ++i) { 
     EXPECT_EQ(0U, backends_[i]->backend_service()->request_count());
-  }
-}
-
+  } 
+} 
+ 
 // Does not choose priority with no endpoints.
 TEST_P(FailoverTest, DoesNotUsePriorityWithNoEndpoints) {
   SetNextResolution({});
@@ -4794,124 +4794,124 @@ TEST_P(FailoverTest, DoesNotUseLocalityWithNoEndpoints) {
   EXPECT_EQ(0, std::get<1>(counts));
 }
 
-// If the higher priority localities are not reachable, failover to the highest
-// priority among the rest.
-TEST_P(FailoverTest, Failover) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
+// If the higher priority localities are not reachable, failover to the highest 
+// priority among the rest. 
+TEST_P(FailoverTest, Failover) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 1},
-      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 2},
-      {"locality2", GetBackendPorts(2, 3), kDefaultLocalityWeight, 3},
-      {"locality3", GetBackendPorts(3, 4), kDefaultLocalityWeight, 0},
-  });
-  ShutdownBackend(3);
-  ShutdownBackend(0);
+      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 1}, 
+      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 2}, 
+      {"locality2", GetBackendPorts(2, 3), kDefaultLocalityWeight, 3}, 
+      {"locality3", GetBackendPorts(3, 4), kDefaultLocalityWeight, 0}, 
+  }); 
+  ShutdownBackend(3); 
+  ShutdownBackend(0); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  WaitForBackend(1, false);
-  for (size_t i = 0; i < 4; ++i) {
-    if (i == 1) continue;
+  WaitForBackend(1, false); 
+  for (size_t i = 0; i < 4; ++i) { 
+    if (i == 1) continue; 
     EXPECT_EQ(0U, backends_[i]->backend_service()->request_count());
-  }
-}
-
-// If a locality with higher priority than the current one becomes ready,
-// switch to it.
-TEST_P(FailoverTest, SwitchBackToHigherPriority) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const size_t kNumRpcs = 100;
+  } 
+} 
+ 
+// If a locality with higher priority than the current one becomes ready, 
+// switch to it. 
+TEST_P(FailoverTest, SwitchBackToHigherPriority) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const size_t kNumRpcs = 100; 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 1},
-      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 2},
-      {"locality2", GetBackendPorts(2, 3), kDefaultLocalityWeight, 3},
-      {"locality3", GetBackendPorts(3, 4), kDefaultLocalityWeight, 0},
-  });
-  ShutdownBackend(3);
-  ShutdownBackend(0);
+      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 1}, 
+      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 2}, 
+      {"locality2", GetBackendPorts(2, 3), kDefaultLocalityWeight, 3}, 
+      {"locality3", GetBackendPorts(3, 4), kDefaultLocalityWeight, 0}, 
+  }); 
+  ShutdownBackend(3); 
+  ShutdownBackend(0); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  WaitForBackend(1, false);
-  for (size_t i = 0; i < 4; ++i) {
-    if (i == 1) continue;
+  WaitForBackend(1, false); 
+  for (size_t i = 0; i < 4; ++i) { 
+    if (i == 1) continue; 
     EXPECT_EQ(0U, backends_[i]->backend_service()->request_count());
-  }
-  StartBackend(0);
-  WaitForBackend(0);
-  CheckRpcSendOk(kNumRpcs);
-  EXPECT_EQ(kNumRpcs, backends_[0]->backend_service()->request_count());
-}
-
-// The first update only contains unavailable priorities. The second update
-// contains available priorities.
-TEST_P(FailoverTest, UpdateInitialUnavailable) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
+  } 
+  StartBackend(0); 
+  WaitForBackend(0); 
+  CheckRpcSendOk(kNumRpcs); 
+  EXPECT_EQ(kNumRpcs, backends_[0]->backend_service()->request_count()); 
+} 
+ 
+// The first update only contains unavailable priorities. The second update 
+// contains available priorities. 
+TEST_P(FailoverTest, UpdateInitialUnavailable) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 0},
-      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 1},
-  });
-  balancers_[0]->ads_service()->SetEdsResource(
-      AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  args = AdsServiceImpl::EdsResourceArgs({
-      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 0},
-      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 1},
-      {"locality2", GetBackendPorts(2, 3), kDefaultLocalityWeight, 2},
-      {"locality3", GetBackendPorts(3, 4), kDefaultLocalityWeight, 3},
-  });
-  ShutdownBackend(0);
-  ShutdownBackend(1);
-  std::thread delayed_resource_setter(std::bind(
-      &BasicTest::SetEdsResourceWithDelay, this, 0,
-      AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()), 1000));
-  gpr_timespec deadline = gpr_time_add(gpr_now(GPR_CLOCK_REALTIME),
-                                       gpr_time_from_millis(500, GPR_TIMESPAN));
-  // Send 0.5 second worth of RPCs.
-  do {
-    CheckRpcSendFailure();
-  } while (gpr_time_cmp(gpr_now(GPR_CLOCK_REALTIME), deadline) < 0);
-  WaitForBackend(2, false);
-  for (size_t i = 0; i < 4; ++i) {
-    if (i == 2) continue;
-    EXPECT_EQ(0U, backends_[i]->backend_service()->request_count());
-  }
-  delayed_resource_setter.join();
-}
-
-// Tests that after the localities' priorities are updated, we still choose the
-// highest READY priority with the updated localities.
-TEST_P(FailoverTest, UpdatePriority) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const size_t kNumRpcs = 100;
-  AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 1},
-      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 2},
-      {"locality2", GetBackendPorts(2, 3), kDefaultLocalityWeight, 3},
-      {"locality3", GetBackendPorts(3, 4), kDefaultLocalityWeight, 0},
-  });
+      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 0}, 
+      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 1}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
   args = AdsServiceImpl::EdsResourceArgs({
-      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 2},
-      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 0},
-      {"locality2", GetBackendPorts(2, 3), kDefaultLocalityWeight, 1},
-      {"locality3", GetBackendPorts(3, 4), kDefaultLocalityWeight, 3},
-  });
+      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 0}, 
+      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 1}, 
+      {"locality2", GetBackendPorts(2, 3), kDefaultLocalityWeight, 2}, 
+      {"locality3", GetBackendPorts(3, 4), kDefaultLocalityWeight, 3}, 
+  }); 
+  ShutdownBackend(0); 
+  ShutdownBackend(1); 
   std::thread delayed_resource_setter(std::bind(
       &BasicTest::SetEdsResourceWithDelay, this, 0,
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()), 1000));
-  WaitForBackend(3, false);
-  for (size_t i = 0; i < 3; ++i) {
+  gpr_timespec deadline = gpr_time_add(gpr_now(GPR_CLOCK_REALTIME), 
+                                       gpr_time_from_millis(500, GPR_TIMESPAN)); 
+  // Send 0.5 second worth of RPCs. 
+  do { 
+    CheckRpcSendFailure(); 
+  } while (gpr_time_cmp(gpr_now(GPR_CLOCK_REALTIME), deadline) < 0); 
+  WaitForBackend(2, false); 
+  for (size_t i = 0; i < 4; ++i) { 
+    if (i == 2) continue; 
     EXPECT_EQ(0U, backends_[i]->backend_service()->request_count());
-  }
-  WaitForBackend(1);
-  CheckRpcSendOk(kNumRpcs);
-  EXPECT_EQ(kNumRpcs, backends_[1]->backend_service()->request_count());
+  } 
   delayed_resource_setter.join();
-}
-
+} 
+ 
+// Tests that after the localities' priorities are updated, we still choose the 
+// highest READY priority with the updated localities. 
+TEST_P(FailoverTest, UpdatePriority) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const size_t kNumRpcs = 100; 
+  AdsServiceImpl::EdsResourceArgs args({
+      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 1}, 
+      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 2}, 
+      {"locality2", GetBackendPorts(2, 3), kDefaultLocalityWeight, 3}, 
+      {"locality3", GetBackendPorts(3, 4), kDefaultLocalityWeight, 0}, 
+  }); 
+  balancers_[0]->ads_service()->SetEdsResource(
+      AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
+  args = AdsServiceImpl::EdsResourceArgs({
+      {"locality0", GetBackendPorts(0, 1), kDefaultLocalityWeight, 2}, 
+      {"locality1", GetBackendPorts(1, 2), kDefaultLocalityWeight, 0}, 
+      {"locality2", GetBackendPorts(2, 3), kDefaultLocalityWeight, 1}, 
+      {"locality3", GetBackendPorts(3, 4), kDefaultLocalityWeight, 3}, 
+  }); 
+  std::thread delayed_resource_setter(std::bind(
+      &BasicTest::SetEdsResourceWithDelay, this, 0,
+      AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()), 1000));
+  WaitForBackend(3, false); 
+  for (size_t i = 0; i < 3; ++i) { 
+    EXPECT_EQ(0U, backends_[i]->backend_service()->request_count());
+  } 
+  WaitForBackend(1); 
+  CheckRpcSendOk(kNumRpcs); 
+  EXPECT_EQ(kNumRpcs, backends_[1]->backend_service()->request_count()); 
+  delayed_resource_setter.join();
+} 
+ 
 // Moves all localities in the current priority to a higher priority.
 TEST_P(FailoverTest, MoveAllLocalitiesInCurrentPriorityToHigherPriority) {
   SetNextResolution({});
@@ -4951,274 +4951,274 @@ TEST_P(FailoverTest, MoveAllLocalitiesInCurrentPriorityToHigherPriority) {
   delayed_resource_setter.join();
 }
 
-using DropTest = BasicTest;
-
-// Tests that RPCs are dropped according to the drop config.
-TEST_P(DropTest, Vanilla) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const size_t kNumRpcs = 5000;
-  const uint32_t kDropPerMillionForLb = 100000;
-  const uint32_t kDropPerMillionForThrottle = 200000;
-  const double kDropRateForLb = kDropPerMillionForLb / 1000000.0;
-  const double kDropRateForThrottle = kDropPerMillionForThrottle / 1000000.0;
-  const double KDropRateForLbAndThrottle =
-      kDropRateForLb + (1 - kDropRateForLb) * kDropRateForThrottle;
-  // The ADS response contains two drop categories.
+using DropTest = BasicTest; 
+ 
+// Tests that RPCs are dropped according to the drop config. 
+TEST_P(DropTest, Vanilla) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const size_t kNumRpcs = 5000; 
+  const uint32_t kDropPerMillionForLb = 100000; 
+  const uint32_t kDropPerMillionForThrottle = 200000; 
+  const double kDropRateForLb = kDropPerMillionForLb / 1000000.0; 
+  const double kDropRateForThrottle = kDropPerMillionForThrottle / 1000000.0; 
+  const double KDropRateForLbAndThrottle = 
+      kDropRateForLb + (1 - kDropRateForLb) * kDropRateForThrottle; 
+  // The ADS response contains two drop categories. 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts()},
-  });
-  args.drop_categories = {{kLbDropType, kDropPerMillionForLb},
-                          {kThrottleDropType, kDropPerMillionForThrottle}};
+      {"locality0", GetBackendPorts()}, 
+  }); 
+  args.drop_categories = {{kLbDropType, kDropPerMillionForLb}, 
+                          {kThrottleDropType, kDropPerMillionForThrottle}}; 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  WaitForAllBackends();
-  // Send kNumRpcs RPCs and count the drops.
-  size_t num_drops = 0;
-  for (size_t i = 0; i < kNumRpcs; ++i) {
-    EchoResponse response;
+  WaitForAllBackends(); 
+  // Send kNumRpcs RPCs and count the drops. 
+  size_t num_drops = 0; 
+  for (size_t i = 0; i < kNumRpcs; ++i) { 
+    EchoResponse response; 
     const Status status = SendRpc(RpcOptions(), &response);
-    if (!status.ok() &&
-        status.error_message() == "Call dropped by load balancing policy") {
-      ++num_drops;
-    } else {
-      EXPECT_TRUE(status.ok()) << "code=" << status.error_code()
-                               << " message=" << status.error_message();
+    if (!status.ok() && 
+        status.error_message() == "Call dropped by load balancing policy") { 
+      ++num_drops; 
+    } else { 
+      EXPECT_TRUE(status.ok()) << "code=" << status.error_code() 
+                               << " message=" << status.error_message(); 
       EXPECT_EQ(response.message(), kRequestMessage);
-    }
-  }
-  // The drop rate should be roughly equal to the expectation.
-  const double seen_drop_rate = static_cast<double>(num_drops) / kNumRpcs;
-  const double kErrorTolerance = 0.2;
-  EXPECT_THAT(
-      seen_drop_rate,
-      ::testing::AllOf(
-          ::testing::Ge(KDropRateForLbAndThrottle * (1 - kErrorTolerance)),
-          ::testing::Le(KDropRateForLbAndThrottle * (1 + kErrorTolerance))));
-}
-
-// Tests that drop config is converted correctly from per hundred.
-TEST_P(DropTest, DropPerHundred) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const size_t kNumRpcs = 5000;
-  const uint32_t kDropPerHundredForLb = 10;
-  const double kDropRateForLb = kDropPerHundredForLb / 100.0;
-  // The ADS response contains one drop category.
+    } 
+  } 
+  // The drop rate should be roughly equal to the expectation. 
+  const double seen_drop_rate = static_cast<double>(num_drops) / kNumRpcs; 
+  const double kErrorTolerance = 0.2; 
+  EXPECT_THAT( 
+      seen_drop_rate, 
+      ::testing::AllOf( 
+          ::testing::Ge(KDropRateForLbAndThrottle * (1 - kErrorTolerance)), 
+          ::testing::Le(KDropRateForLbAndThrottle * (1 + kErrorTolerance)))); 
+} 
+ 
+// Tests that drop config is converted correctly from per hundred. 
+TEST_P(DropTest, DropPerHundred) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const size_t kNumRpcs = 5000; 
+  const uint32_t kDropPerHundredForLb = 10; 
+  const double kDropRateForLb = kDropPerHundredForLb / 100.0; 
+  // The ADS response contains one drop category. 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts()},
-  });
-  args.drop_categories = {{kLbDropType, kDropPerHundredForLb}};
-  args.drop_denominator = FractionalPercent::HUNDRED;
+      {"locality0", GetBackendPorts()}, 
+  }); 
+  args.drop_categories = {{kLbDropType, kDropPerHundredForLb}}; 
+  args.drop_denominator = FractionalPercent::HUNDRED; 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  WaitForAllBackends();
-  // Send kNumRpcs RPCs and count the drops.
-  size_t num_drops = 0;
-  for (size_t i = 0; i < kNumRpcs; ++i) {
-    EchoResponse response;
+  WaitForAllBackends(); 
+  // Send kNumRpcs RPCs and count the drops. 
+  size_t num_drops = 0; 
+  for (size_t i = 0; i < kNumRpcs; ++i) { 
+    EchoResponse response; 
     const Status status = SendRpc(RpcOptions(), &response);
-    if (!status.ok() &&
-        status.error_message() == "Call dropped by load balancing policy") {
-      ++num_drops;
-    } else {
-      EXPECT_TRUE(status.ok()) << "code=" << status.error_code()
-                               << " message=" << status.error_message();
+    if (!status.ok() && 
+        status.error_message() == "Call dropped by load balancing policy") { 
+      ++num_drops; 
+    } else { 
+      EXPECT_TRUE(status.ok()) << "code=" << status.error_code() 
+                               << " message=" << status.error_message(); 
       EXPECT_EQ(response.message(), kRequestMessage);
-    }
-  }
-  // The drop rate should be roughly equal to the expectation.
-  const double seen_drop_rate = static_cast<double>(num_drops) / kNumRpcs;
-  const double kErrorTolerance = 0.2;
-  EXPECT_THAT(
-      seen_drop_rate,
-      ::testing::AllOf(::testing::Ge(kDropRateForLb * (1 - kErrorTolerance)),
-                       ::testing::Le(kDropRateForLb * (1 + kErrorTolerance))));
-}
-
-// Tests that drop config is converted correctly from per ten thousand.
-TEST_P(DropTest, DropPerTenThousand) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const size_t kNumRpcs = 5000;
-  const uint32_t kDropPerTenThousandForLb = 1000;
-  const double kDropRateForLb = kDropPerTenThousandForLb / 10000.0;
-  // The ADS response contains one drop category.
+    } 
+  } 
+  // The drop rate should be roughly equal to the expectation. 
+  const double seen_drop_rate = static_cast<double>(num_drops) / kNumRpcs; 
+  const double kErrorTolerance = 0.2; 
+  EXPECT_THAT( 
+      seen_drop_rate, 
+      ::testing::AllOf(::testing::Ge(kDropRateForLb * (1 - kErrorTolerance)), 
+                       ::testing::Le(kDropRateForLb * (1 + kErrorTolerance)))); 
+} 
+ 
+// Tests that drop config is converted correctly from per ten thousand. 
+TEST_P(DropTest, DropPerTenThousand) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const size_t kNumRpcs = 5000; 
+  const uint32_t kDropPerTenThousandForLb = 1000; 
+  const double kDropRateForLb = kDropPerTenThousandForLb / 10000.0; 
+  // The ADS response contains one drop category. 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts()},
-  });
-  args.drop_categories = {{kLbDropType, kDropPerTenThousandForLb}};
-  args.drop_denominator = FractionalPercent::TEN_THOUSAND;
+      {"locality0", GetBackendPorts()}, 
+  }); 
+  args.drop_categories = {{kLbDropType, kDropPerTenThousandForLb}}; 
+  args.drop_denominator = FractionalPercent::TEN_THOUSAND; 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  WaitForAllBackends();
-  // Send kNumRpcs RPCs and count the drops.
-  size_t num_drops = 0;
-  for (size_t i = 0; i < kNumRpcs; ++i) {
-    EchoResponse response;
+  WaitForAllBackends(); 
+  // Send kNumRpcs RPCs and count the drops. 
+  size_t num_drops = 0; 
+  for (size_t i = 0; i < kNumRpcs; ++i) { 
+    EchoResponse response; 
     const Status status = SendRpc(RpcOptions(), &response);
-    if (!status.ok() &&
-        status.error_message() == "Call dropped by load balancing policy") {
-      ++num_drops;
-    } else {
-      EXPECT_TRUE(status.ok()) << "code=" << status.error_code()
-                               << " message=" << status.error_message();
+    if (!status.ok() && 
+        status.error_message() == "Call dropped by load balancing policy") { 
+      ++num_drops; 
+    } else { 
+      EXPECT_TRUE(status.ok()) << "code=" << status.error_code() 
+                               << " message=" << status.error_message(); 
       EXPECT_EQ(response.message(), kRequestMessage);
-    }
-  }
-  // The drop rate should be roughly equal to the expectation.
-  const double seen_drop_rate = static_cast<double>(num_drops) / kNumRpcs;
-  const double kErrorTolerance = 0.2;
-  EXPECT_THAT(
-      seen_drop_rate,
-      ::testing::AllOf(::testing::Ge(kDropRateForLb * (1 - kErrorTolerance)),
-                       ::testing::Le(kDropRateForLb * (1 + kErrorTolerance))));
-}
-
-// Tests that drop is working correctly after update.
-TEST_P(DropTest, Update) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
+    } 
+  } 
+  // The drop rate should be roughly equal to the expectation. 
+  const double seen_drop_rate = static_cast<double>(num_drops) / kNumRpcs; 
+  const double kErrorTolerance = 0.2; 
+  EXPECT_THAT( 
+      seen_drop_rate, 
+      ::testing::AllOf(::testing::Ge(kDropRateForLb * (1 - kErrorTolerance)), 
+                       ::testing::Le(kDropRateForLb * (1 + kErrorTolerance)))); 
+} 
+ 
+// Tests that drop is working correctly after update. 
+TEST_P(DropTest, Update) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
   const size_t kNumRpcs = 3000;
-  const uint32_t kDropPerMillionForLb = 100000;
-  const uint32_t kDropPerMillionForThrottle = 200000;
-  const double kDropRateForLb = kDropPerMillionForLb / 1000000.0;
-  const double kDropRateForThrottle = kDropPerMillionForThrottle / 1000000.0;
-  const double KDropRateForLbAndThrottle =
-      kDropRateForLb + (1 - kDropRateForLb) * kDropRateForThrottle;
-  // The first ADS response contains one drop category.
+  const uint32_t kDropPerMillionForLb = 100000; 
+  const uint32_t kDropPerMillionForThrottle = 200000; 
+  const double kDropRateForLb = kDropPerMillionForLb / 1000000.0; 
+  const double kDropRateForThrottle = kDropPerMillionForThrottle / 1000000.0; 
+  const double KDropRateForLbAndThrottle = 
+      kDropRateForLb + (1 - kDropRateForLb) * kDropRateForThrottle; 
+  // The first ADS response contains one drop category. 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts()},
-  });
-  args.drop_categories = {{kLbDropType, kDropPerMillionForLb}};
+      {"locality0", GetBackendPorts()}, 
+  }); 
+  args.drop_categories = {{kLbDropType, kDropPerMillionForLb}}; 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  WaitForAllBackends();
-  // Send kNumRpcs RPCs and count the drops.
-  size_t num_drops = 0;
-  gpr_log(GPR_INFO, "========= BEFORE FIRST BATCH ==========");
-  for (size_t i = 0; i < kNumRpcs; ++i) {
-    EchoResponse response;
+  WaitForAllBackends(); 
+  // Send kNumRpcs RPCs and count the drops. 
+  size_t num_drops = 0; 
+  gpr_log(GPR_INFO, "========= BEFORE FIRST BATCH =========="); 
+  for (size_t i = 0; i < kNumRpcs; ++i) { 
+    EchoResponse response; 
     const Status status = SendRpc(RpcOptions(), &response);
-    if (!status.ok() &&
-        status.error_message() == "Call dropped by load balancing policy") {
-      ++num_drops;
-    } else {
-      EXPECT_TRUE(status.ok()) << "code=" << status.error_code()
-                               << " message=" << status.error_message();
+    if (!status.ok() && 
+        status.error_message() == "Call dropped by load balancing policy") { 
+      ++num_drops; 
+    } else { 
+      EXPECT_TRUE(status.ok()) << "code=" << status.error_code() 
+                               << " message=" << status.error_message(); 
       EXPECT_EQ(response.message(), kRequestMessage);
-    }
-  }
-  gpr_log(GPR_INFO, "========= DONE WITH FIRST BATCH ==========");
-  // The drop rate should be roughly equal to the expectation.
-  double seen_drop_rate = static_cast<double>(num_drops) / kNumRpcs;
+    } 
+  } 
+  gpr_log(GPR_INFO, "========= DONE WITH FIRST BATCH =========="); 
+  // The drop rate should be roughly equal to the expectation. 
+  double seen_drop_rate = static_cast<double>(num_drops) / kNumRpcs; 
   gpr_log(GPR_INFO, "First batch drop rate %f", seen_drop_rate);
-  const double kErrorTolerance = 0.3;
-  EXPECT_THAT(
-      seen_drop_rate,
-      ::testing::AllOf(::testing::Ge(kDropRateForLb * (1 - kErrorTolerance)),
-                       ::testing::Le(kDropRateForLb * (1 + kErrorTolerance))));
+  const double kErrorTolerance = 0.3; 
+  EXPECT_THAT( 
+      seen_drop_rate, 
+      ::testing::AllOf(::testing::Ge(kDropRateForLb * (1 - kErrorTolerance)), 
+                       ::testing::Le(kDropRateForLb * (1 + kErrorTolerance)))); 
   // The second ADS response contains two drop categories, send an update EDS
   // response.
   args.drop_categories = {{kLbDropType, kDropPerMillionForLb},
                           {kThrottleDropType, kDropPerMillionForThrottle}};
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Wait until the drop rate increases to the middle of the two configs, which
-  // implies that the update has been in effect.
-  const double kDropRateThreshold =
-      (kDropRateForLb + KDropRateForLbAndThrottle) / 2;
-  size_t num_rpcs = kNumRpcs;
-  while (seen_drop_rate < kDropRateThreshold) {
-    EchoResponse response;
+  // Wait until the drop rate increases to the middle of the two configs, which 
+  // implies that the update has been in effect. 
+  const double kDropRateThreshold = 
+      (kDropRateForLb + KDropRateForLbAndThrottle) / 2; 
+  size_t num_rpcs = kNumRpcs; 
+  while (seen_drop_rate < kDropRateThreshold) { 
+    EchoResponse response; 
     const Status status = SendRpc(RpcOptions(), &response);
-    ++num_rpcs;
-    if (!status.ok() &&
-        status.error_message() == "Call dropped by load balancing policy") {
-      ++num_drops;
-    } else {
-      EXPECT_TRUE(status.ok()) << "code=" << status.error_code()
-                               << " message=" << status.error_message();
+    ++num_rpcs; 
+    if (!status.ok() && 
+        status.error_message() == "Call dropped by load balancing policy") { 
+      ++num_drops; 
+    } else { 
+      EXPECT_TRUE(status.ok()) << "code=" << status.error_code() 
+                               << " message=" << status.error_message(); 
       EXPECT_EQ(response.message(), kRequestMessage);
-    }
-    seen_drop_rate = static_cast<double>(num_drops) / num_rpcs;
-  }
-  // Send kNumRpcs RPCs and count the drops.
-  num_drops = 0;
-  gpr_log(GPR_INFO, "========= BEFORE SECOND BATCH ==========");
-  for (size_t i = 0; i < kNumRpcs; ++i) {
-    EchoResponse response;
+    } 
+    seen_drop_rate = static_cast<double>(num_drops) / num_rpcs; 
+  } 
+  // Send kNumRpcs RPCs and count the drops. 
+  num_drops = 0; 
+  gpr_log(GPR_INFO, "========= BEFORE SECOND BATCH =========="); 
+  for (size_t i = 0; i < kNumRpcs; ++i) { 
+    EchoResponse response; 
     const Status status = SendRpc(RpcOptions(), &response);
-    if (!status.ok() &&
-        status.error_message() == "Call dropped by load balancing policy") {
-      ++num_drops;
-    } else {
-      EXPECT_TRUE(status.ok()) << "code=" << status.error_code()
-                               << " message=" << status.error_message();
+    if (!status.ok() && 
+        status.error_message() == "Call dropped by load balancing policy") { 
+      ++num_drops; 
+    } else { 
+      EXPECT_TRUE(status.ok()) << "code=" << status.error_code() 
+                               << " message=" << status.error_message(); 
       EXPECT_EQ(response.message(), kRequestMessage);
-    }
-  }
-  gpr_log(GPR_INFO, "========= DONE WITH SECOND BATCH ==========");
-  // The new drop rate should be roughly equal to the expectation.
-  seen_drop_rate = static_cast<double>(num_drops) / kNumRpcs;
+    } 
+  } 
+  gpr_log(GPR_INFO, "========= DONE WITH SECOND BATCH =========="); 
+  // The new drop rate should be roughly equal to the expectation. 
+  seen_drop_rate = static_cast<double>(num_drops) / kNumRpcs; 
   gpr_log(GPR_INFO, "Second batch drop rate %f", seen_drop_rate);
-  EXPECT_THAT(
-      seen_drop_rate,
-      ::testing::AllOf(
-          ::testing::Ge(KDropRateForLbAndThrottle * (1 - kErrorTolerance)),
-          ::testing::Le(KDropRateForLbAndThrottle * (1 + kErrorTolerance))));
-}
-
-// Tests that all the RPCs are dropped if any drop category drops 100%.
-TEST_P(DropTest, DropAll) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const size_t kNumRpcs = 1000;
-  const uint32_t kDropPerMillionForLb = 100000;
-  const uint32_t kDropPerMillionForThrottle = 1000000;
-  // The ADS response contains two drop categories.
+  EXPECT_THAT( 
+      seen_drop_rate, 
+      ::testing::AllOf( 
+          ::testing::Ge(KDropRateForLbAndThrottle * (1 - kErrorTolerance)), 
+          ::testing::Le(KDropRateForLbAndThrottle * (1 + kErrorTolerance)))); 
+} 
+ 
+// Tests that all the RPCs are dropped if any drop category drops 100%. 
+TEST_P(DropTest, DropAll) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const size_t kNumRpcs = 1000; 
+  const uint32_t kDropPerMillionForLb = 100000; 
+  const uint32_t kDropPerMillionForThrottle = 1000000; 
+  // The ADS response contains two drop categories. 
   AdsServiceImpl::EdsResourceArgs args;
-  args.drop_categories = {{kLbDropType, kDropPerMillionForLb},
-                          {kThrottleDropType, kDropPerMillionForThrottle}};
+  args.drop_categories = {{kLbDropType, kDropPerMillionForLb}, 
+                          {kThrottleDropType, kDropPerMillionForThrottle}}; 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Send kNumRpcs RPCs and all of them are dropped.
-  for (size_t i = 0; i < kNumRpcs; ++i) {
-    EchoResponse response;
+  // Send kNumRpcs RPCs and all of them are dropped. 
+  for (size_t i = 0; i < kNumRpcs; ++i) { 
+    EchoResponse response; 
     const Status status = SendRpc(RpcOptions(), &response);
     EXPECT_EQ(status.error_code(), StatusCode::UNAVAILABLE);
     EXPECT_EQ(status.error_message(), "Call dropped by load balancing policy");
-  }
-}
-
-class BalancerUpdateTest : public XdsEnd2endTest {
- public:
+  } 
+} 
+ 
+class BalancerUpdateTest : public XdsEnd2endTest { 
+ public: 
   BalancerUpdateTest() : XdsEnd2endTest(4, 3) {}
-};
-
-// Tests that the old LB call is still used after the balancer address update as
-// long as that call is still alive.
-TEST_P(BalancerUpdateTest, UpdateBalancersButKeepUsingOriginalBalancer) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
+}; 
+ 
+// Tests that the old LB call is still used after the balancer address update as 
+// long as that call is still alive. 
+TEST_P(BalancerUpdateTest, UpdateBalancersButKeepUsingOriginalBalancer) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", {backends_[0]->port()}},
-  });
+      {"locality0", {backends_[0]->port()}}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
   args = AdsServiceImpl::EdsResourceArgs({
-      {"locality0", {backends_[1]->port()}},
-  });
+      {"locality0", {backends_[1]->port()}}, 
+  }); 
   balancers_[1]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Wait until the first backend is ready.
-  WaitForBackend(0);
-  // Send 10 requests.
-  gpr_log(GPR_INFO, "========= BEFORE FIRST BATCH ==========");
-  CheckRpcSendOk(10);
-  gpr_log(GPR_INFO, "========= DONE WITH FIRST BATCH ==========");
-  // All 10 requests should have gone to the first backend.
-  EXPECT_EQ(10U, backends_[0]->backend_service()->request_count());
+  // Wait until the first backend is ready. 
+  WaitForBackend(0); 
+  // Send 10 requests. 
+  gpr_log(GPR_INFO, "========= BEFORE FIRST BATCH =========="); 
+  CheckRpcSendOk(10); 
+  gpr_log(GPR_INFO, "========= DONE WITH FIRST BATCH =========="); 
+  // All 10 requests should have gone to the first backend. 
+  EXPECT_EQ(10U, backends_[0]->backend_service()->request_count()); 
   // The ADS service of balancer 0 sent at least 1 response.
   EXPECT_GT(balancers_[0]->ads_service()->eds_response_state().state,
             AdsServiceImpl::ResponseState::NOT_SENT);
@@ -5230,19 +5230,19 @@ TEST_P(BalancerUpdateTest, UpdateBalancersButKeepUsingOriginalBalancer) {
             AdsServiceImpl::ResponseState::NOT_SENT)
       << "Error Message:"
       << balancers_[2]->ads_service()->eds_response_state().error_message;
-  gpr_log(GPR_INFO, "========= ABOUT TO UPDATE 1 ==========");
-  SetNextResolutionForLbChannel({balancers_[1]->port()});
-  gpr_log(GPR_INFO, "========= UPDATE 1 DONE ==========");
-  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count());
-  gpr_timespec deadline = gpr_time_add(
-      gpr_now(GPR_CLOCK_REALTIME), gpr_time_from_millis(10000, GPR_TIMESPAN));
-  // Send 10 seconds worth of RPCs
-  do {
-    CheckRpcSendOk();
-  } while (gpr_time_cmp(gpr_now(GPR_CLOCK_REALTIME), deadline) < 0);
-  // The current LB call is still working, so xds continued using it to the
-  // first balancer, which doesn't assign the second backend.
-  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count());
+  gpr_log(GPR_INFO, "========= ABOUT TO UPDATE 1 =========="); 
+  SetNextResolutionForLbChannel({balancers_[1]->port()}); 
+  gpr_log(GPR_INFO, "========= UPDATE 1 DONE =========="); 
+  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count()); 
+  gpr_timespec deadline = gpr_time_add( 
+      gpr_now(GPR_CLOCK_REALTIME), gpr_time_from_millis(10000, GPR_TIMESPAN)); 
+  // Send 10 seconds worth of RPCs 
+  do { 
+    CheckRpcSendOk(); 
+  } while (gpr_time_cmp(gpr_now(GPR_CLOCK_REALTIME), deadline) < 0); 
+  // The current LB call is still working, so xds continued using it to the 
+  // first balancer, which doesn't assign the second backend. 
+  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count()); 
   // The ADS service of balancer 0 sent at least 1 response.
   EXPECT_GT(balancers_[0]->ads_service()->eds_response_state().state,
             AdsServiceImpl::ResponseState::NOT_SENT);
@@ -5254,34 +5254,34 @@ TEST_P(BalancerUpdateTest, UpdateBalancersButKeepUsingOriginalBalancer) {
             AdsServiceImpl::ResponseState::NOT_SENT)
       << "Error Message:"
       << balancers_[2]->ads_service()->eds_response_state().error_message;
-}
-
-// Tests that the old LB call is still used after multiple balancer address
-// updates as long as that call is still alive. Send an update with the same set
-// of LBs as the one in SetUp() in order to verify that the LB channel inside
-// xds keeps the initial connection (which by definition is also present in the
-// update).
-TEST_P(BalancerUpdateTest, Repeated) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
+} 
+ 
+// Tests that the old LB call is still used after multiple balancer address 
+// updates as long as that call is still alive. Send an update with the same set 
+// of LBs as the one in SetUp() in order to verify that the LB channel inside 
+// xds keeps the initial connection (which by definition is also present in the 
+// update). 
+TEST_P(BalancerUpdateTest, Repeated) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", {backends_[0]->port()}},
-  });
+      {"locality0", {backends_[0]->port()}}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
   args = AdsServiceImpl::EdsResourceArgs({
-      {"locality0", {backends_[1]->port()}},
-  });
+      {"locality0", {backends_[1]->port()}}, 
+  }); 
   balancers_[1]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Wait until the first backend is ready.
-  WaitForBackend(0);
-  // Send 10 requests.
-  gpr_log(GPR_INFO, "========= BEFORE FIRST BATCH ==========");
-  CheckRpcSendOk(10);
-  gpr_log(GPR_INFO, "========= DONE WITH FIRST BATCH ==========");
-  // All 10 requests should have gone to the first backend.
-  EXPECT_EQ(10U, backends_[0]->backend_service()->request_count());
+  // Wait until the first backend is ready. 
+  WaitForBackend(0); 
+  // Send 10 requests. 
+  gpr_log(GPR_INFO, "========= BEFORE FIRST BATCH =========="); 
+  CheckRpcSendOk(10); 
+  gpr_log(GPR_INFO, "========= DONE WITH FIRST BATCH =========="); 
+  // All 10 requests should have gone to the first backend. 
+  EXPECT_EQ(10U, backends_[0]->backend_service()->request_count()); 
   // The ADS service of balancer 0 sent at least 1 response.
   EXPECT_GT(balancers_[0]->ads_service()->eds_response_state().state,
             AdsServiceImpl::ResponseState::NOT_SENT);
@@ -5293,63 +5293,63 @@ TEST_P(BalancerUpdateTest, Repeated) {
             AdsServiceImpl::ResponseState::NOT_SENT)
       << "Error Message:"
       << balancers_[2]->ads_service()->eds_response_state().error_message;
-  std::vector<int> ports;
-  ports.emplace_back(balancers_[0]->port());
-  ports.emplace_back(balancers_[1]->port());
-  ports.emplace_back(balancers_[2]->port());
-  gpr_log(GPR_INFO, "========= ABOUT TO UPDATE 1 ==========");
-  SetNextResolutionForLbChannel(ports);
-  gpr_log(GPR_INFO, "========= UPDATE 1 DONE ==========");
-  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count());
-  gpr_timespec deadline = gpr_time_add(
-      gpr_now(GPR_CLOCK_REALTIME), gpr_time_from_millis(10000, GPR_TIMESPAN));
-  // Send 10 seconds worth of RPCs
-  do {
-    CheckRpcSendOk();
-  } while (gpr_time_cmp(gpr_now(GPR_CLOCK_REALTIME), deadline) < 0);
-  // xds continued using the original LB call to the first balancer, which
-  // doesn't assign the second backend.
-  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count());
-  ports.clear();
-  ports.emplace_back(balancers_[0]->port());
-  ports.emplace_back(balancers_[1]->port());
-  gpr_log(GPR_INFO, "========= ABOUT TO UPDATE 2 ==========");
-  SetNextResolutionForLbChannel(ports);
-  gpr_log(GPR_INFO, "========= UPDATE 2 DONE ==========");
-  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count());
-  deadline = gpr_time_add(gpr_now(GPR_CLOCK_REALTIME),
-                          gpr_time_from_millis(10000, GPR_TIMESPAN));
-  // Send 10 seconds worth of RPCs
-  do {
-    CheckRpcSendOk();
-  } while (gpr_time_cmp(gpr_now(GPR_CLOCK_REALTIME), deadline) < 0);
-  // xds continued using the original LB call to the first balancer, which
-  // doesn't assign the second backend.
-  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count());
-}
-
-// Tests that if the balancer is down, the RPCs will still be sent to the
-// backends according to the last balancer response, until a new balancer is
-// reachable.
-TEST_P(BalancerUpdateTest, DeadUpdate) {
-  SetNextResolution({});
-  SetNextResolutionForLbChannel({balancers_[0]->port()});
+  std::vector<int> ports; 
+  ports.emplace_back(balancers_[0]->port()); 
+  ports.emplace_back(balancers_[1]->port()); 
+  ports.emplace_back(balancers_[2]->port()); 
+  gpr_log(GPR_INFO, "========= ABOUT TO UPDATE 1 =========="); 
+  SetNextResolutionForLbChannel(ports); 
+  gpr_log(GPR_INFO, "========= UPDATE 1 DONE =========="); 
+  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count()); 
+  gpr_timespec deadline = gpr_time_add( 
+      gpr_now(GPR_CLOCK_REALTIME), gpr_time_from_millis(10000, GPR_TIMESPAN)); 
+  // Send 10 seconds worth of RPCs 
+  do { 
+    CheckRpcSendOk(); 
+  } while (gpr_time_cmp(gpr_now(GPR_CLOCK_REALTIME), deadline) < 0); 
+  // xds continued using the original LB call to the first balancer, which 
+  // doesn't assign the second backend. 
+  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count()); 
+  ports.clear(); 
+  ports.emplace_back(balancers_[0]->port()); 
+  ports.emplace_back(balancers_[1]->port()); 
+  gpr_log(GPR_INFO, "========= ABOUT TO UPDATE 2 =========="); 
+  SetNextResolutionForLbChannel(ports); 
+  gpr_log(GPR_INFO, "========= UPDATE 2 DONE =========="); 
+  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count()); 
+  deadline = gpr_time_add(gpr_now(GPR_CLOCK_REALTIME), 
+                          gpr_time_from_millis(10000, GPR_TIMESPAN)); 
+  // Send 10 seconds worth of RPCs 
+  do { 
+    CheckRpcSendOk(); 
+  } while (gpr_time_cmp(gpr_now(GPR_CLOCK_REALTIME), deadline) < 0); 
+  // xds continued using the original LB call to the first balancer, which 
+  // doesn't assign the second backend. 
+  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count()); 
+} 
+ 
+// Tests that if the balancer is down, the RPCs will still be sent to the 
+// backends according to the last balancer response, until a new balancer is 
+// reachable. 
+TEST_P(BalancerUpdateTest, DeadUpdate) { 
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannel({balancers_[0]->port()}); 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", {backends_[0]->port()}},
-  });
+      {"locality0", {backends_[0]->port()}}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
   args = AdsServiceImpl::EdsResourceArgs({
-      {"locality0", {backends_[1]->port()}},
-  });
+      {"locality0", {backends_[1]->port()}}, 
+  }); 
   balancers_[1]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Start servers and send 10 RPCs per server.
-  gpr_log(GPR_INFO, "========= BEFORE FIRST BATCH ==========");
-  CheckRpcSendOk(10);
-  gpr_log(GPR_INFO, "========= DONE WITH FIRST BATCH ==========");
-  // All 10 requests should have gone to the first backend.
-  EXPECT_EQ(10U, backends_[0]->backend_service()->request_count());
+  // Start servers and send 10 RPCs per server. 
+  gpr_log(GPR_INFO, "========= BEFORE FIRST BATCH =========="); 
+  CheckRpcSendOk(10); 
+  gpr_log(GPR_INFO, "========= DONE WITH FIRST BATCH =========="); 
+  // All 10 requests should have gone to the first backend. 
+  EXPECT_EQ(10U, backends_[0]->backend_service()->request_count()); 
   // The ADS service of balancer 0 sent at least 1 response.
   EXPECT_GT(balancers_[0]->ads_service()->eds_response_state().state,
             AdsServiceImpl::ResponseState::NOT_SENT);
@@ -5361,17 +5361,17 @@ TEST_P(BalancerUpdateTest, DeadUpdate) {
             AdsServiceImpl::ResponseState::NOT_SENT)
       << "Error Message:"
       << balancers_[2]->ads_service()->eds_response_state().error_message;
-  // Kill balancer 0
-  gpr_log(GPR_INFO, "********** ABOUT TO KILL BALANCER 0 *************");
-  balancers_[0]->Shutdown();
-  gpr_log(GPR_INFO, "********** KILLED BALANCER 0 *************");
-  // This is serviced by the existing child policy.
-  gpr_log(GPR_INFO, "========= BEFORE SECOND BATCH ==========");
-  CheckRpcSendOk(10);
-  gpr_log(GPR_INFO, "========= DONE WITH SECOND BATCH ==========");
-  // All 10 requests should again have gone to the first backend.
-  EXPECT_EQ(20U, backends_[0]->backend_service()->request_count());
-  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count());
+  // Kill balancer 0 
+  gpr_log(GPR_INFO, "********** ABOUT TO KILL BALANCER 0 *************"); 
+  balancers_[0]->Shutdown(); 
+  gpr_log(GPR_INFO, "********** KILLED BALANCER 0 *************"); 
+  // This is serviced by the existing child policy. 
+  gpr_log(GPR_INFO, "========= BEFORE SECOND BATCH =========="); 
+  CheckRpcSendOk(10); 
+  gpr_log(GPR_INFO, "========= DONE WITH SECOND BATCH =========="); 
+  // All 10 requests should again have gone to the first backend. 
+  EXPECT_EQ(20U, backends_[0]->backend_service()->request_count()); 
+  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count()); 
   // The ADS service of no balancers sent anything
   EXPECT_EQ(balancers_[0]->ads_service()->eds_response_state().state,
             AdsServiceImpl::ResponseState::NOT_SENT)
@@ -5385,21 +5385,21 @@ TEST_P(BalancerUpdateTest, DeadUpdate) {
             AdsServiceImpl::ResponseState::NOT_SENT)
       << "Error Message:"
       << balancers_[2]->ads_service()->eds_response_state().error_message;
-  gpr_log(GPR_INFO, "========= ABOUT TO UPDATE 1 ==========");
-  SetNextResolutionForLbChannel({balancers_[1]->port()});
-  gpr_log(GPR_INFO, "========= UPDATE 1 DONE ==========");
-  // Wait until update has been processed, as signaled by the second backend
-  // receiving a request. In the meantime, the client continues to be serviced
-  // (by the first backend) without interruption.
-  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count());
-  WaitForBackend(1);
-  // This is serviced by the updated RR policy
-  backends_[1]->backend_service()->ResetCounters();
-  gpr_log(GPR_INFO, "========= BEFORE THIRD BATCH ==========");
-  CheckRpcSendOk(10);
-  gpr_log(GPR_INFO, "========= DONE WITH THIRD BATCH ==========");
-  // All 10 requests should have gone to the second backend.
-  EXPECT_EQ(10U, backends_[1]->backend_service()->request_count());
+  gpr_log(GPR_INFO, "========= ABOUT TO UPDATE 1 =========="); 
+  SetNextResolutionForLbChannel({balancers_[1]->port()}); 
+  gpr_log(GPR_INFO, "========= UPDATE 1 DONE =========="); 
+  // Wait until update has been processed, as signaled by the second backend 
+  // receiving a request. In the meantime, the client continues to be serviced 
+  // (by the first backend) without interruption. 
+  EXPECT_EQ(0U, backends_[1]->backend_service()->request_count()); 
+  WaitForBackend(1); 
+  // This is serviced by the updated RR policy 
+  backends_[1]->backend_service()->ResetCounters(); 
+  gpr_log(GPR_INFO, "========= BEFORE THIRD BATCH =========="); 
+  CheckRpcSendOk(10); 
+  gpr_log(GPR_INFO, "========= DONE WITH THIRD BATCH =========="); 
+  // All 10 requests should have gone to the second backend. 
+  EXPECT_EQ(10U, backends_[1]->backend_service()->request_count()); 
   // The ADS service of balancer 1 sent at least 1 response.
   EXPECT_EQ(balancers_[0]->ads_service()->eds_response_state().state,
             AdsServiceImpl::ResponseState::NOT_SENT)
@@ -5411,44 +5411,44 @@ TEST_P(BalancerUpdateTest, DeadUpdate) {
             AdsServiceImpl::ResponseState::NOT_SENT)
       << "Error Message:"
       << balancers_[2]->ads_service()->eds_response_state().error_message;
-}
-
-// The re-resolution tests are deferred because they rely on the fallback mode,
-// which hasn't been supported.
-
-// TODO(juanlishen): Add TEST_P(BalancerUpdateTest, ReresolveDeadBackend).
-
-// TODO(juanlishen): Add TEST_P(UpdatesWithClientLoadReportingTest,
-// ReresolveDeadBalancer)
-
-class ClientLoadReportingTest : public XdsEnd2endTest {
- public:
-  ClientLoadReportingTest() : XdsEnd2endTest(4, 1, 3) {}
-};
-
-// Tests that the load report received at the balancer is correct.
-TEST_P(ClientLoadReportingTest, Vanilla) {
+} 
+ 
+// The re-resolution tests are deferred because they rely on the fallback mode, 
+// which hasn't been supported. 
+ 
+// TODO(juanlishen): Add TEST_P(BalancerUpdateTest, ReresolveDeadBackend). 
+ 
+// TODO(juanlishen): Add TEST_P(UpdatesWithClientLoadReportingTest, 
+// ReresolveDeadBalancer) 
+ 
+class ClientLoadReportingTest : public XdsEnd2endTest { 
+ public: 
+  ClientLoadReportingTest() : XdsEnd2endTest(4, 1, 3) {} 
+}; 
+ 
+// Tests that the load report received at the balancer is correct. 
+TEST_P(ClientLoadReportingTest, Vanilla) { 
   if (!GetParam().use_xds_resolver()) {
     balancers_[0]->lrs_service()->set_cluster_names({kServerName});
   }
-  SetNextResolution({});
-  SetNextResolutionForLbChannel({balancers_[0]->port()});
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannel({balancers_[0]->port()}); 
   const size_t kNumRpcsPerAddress = 10;
   const size_t kNumFailuresPerAddress = 3;
-  // TODO(juanlishen): Partition the backends after multiple localities is
-  // tested.
+  // TODO(juanlishen): Partition the backends after multiple localities is 
+  // tested. 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts()},
-  });
+      {"locality0", GetBackendPorts()}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Wait until all backends are ready.
-  int num_ok = 0;
-  int num_failure = 0;
-  int num_drops = 0;
-  std::tie(num_ok, num_failure, num_drops) = WaitForAllBackends();
-  // Send kNumRpcsPerAddress RPCs per server.
-  CheckRpcSendOk(kNumRpcsPerAddress * num_backends_);
+  // Wait until all backends are ready. 
+  int num_ok = 0; 
+  int num_failure = 0; 
+  int num_drops = 0; 
+  std::tie(num_ok, num_failure, num_drops) = WaitForAllBackends(); 
+  // Send kNumRpcsPerAddress RPCs per server. 
+  CheckRpcSendOk(kNumRpcsPerAddress * num_backends_); 
   CheckRpcSendFailure(kNumFailuresPerAddress * num_backends_,
                       RpcOptions().set_server_fail(true));
   // Check that each backend got the right number of requests.
@@ -5541,83 +5541,83 @@ TEST_P(ClientLoadReportingTest, HonorsClustersRequestedByLrsServer) {
   std::tie(num_ok, num_failure, num_drops) = WaitForAllBackends();
   // Send kNumRpcsPerAddress RPCs per server.
   CheckRpcSendOk(kNumRpcsPerAddress * num_backends_);
-  // Each backend should have gotten 100 requests.
-  for (size_t i = 0; i < backends_.size(); ++i) {
-    EXPECT_EQ(kNumRpcsPerAddress,
-              backends_[i]->backend_service()->request_count());
-  }
-  // The LRS service got a single request, and sent a single response.
-  EXPECT_EQ(1U, balancers_[0]->lrs_service()->request_count());
-  EXPECT_EQ(1U, balancers_[0]->lrs_service()->response_count());
-  // The load report received at the balancer should be correct.
+  // Each backend should have gotten 100 requests. 
+  for (size_t i = 0; i < backends_.size(); ++i) { 
+    EXPECT_EQ(kNumRpcsPerAddress, 
+              backends_[i]->backend_service()->request_count()); 
+  } 
+  // The LRS service got a single request, and sent a single response. 
+  EXPECT_EQ(1U, balancers_[0]->lrs_service()->request_count()); 
+  EXPECT_EQ(1U, balancers_[0]->lrs_service()->response_count()); 
+  // The load report received at the balancer should be correct. 
   std::vector<ClientStats> load_report =
       balancers_[0]->lrs_service()->WaitForLoadReport();
   ASSERT_EQ(load_report.size(), 0UL);
-}
-
-// Tests that if the balancer restarts, the client load report contains the
-// stats before and after the restart correctly.
-TEST_P(ClientLoadReportingTest, BalancerRestart) {
+} 
+ 
+// Tests that if the balancer restarts, the client load report contains the 
+// stats before and after the restart correctly. 
+TEST_P(ClientLoadReportingTest, BalancerRestart) { 
   if (!GetParam().use_xds_resolver()) {
     balancers_[0]->lrs_service()->set_cluster_names({kServerName});
   }
-  SetNextResolution({});
-  SetNextResolutionForLbChannel({balancers_[0]->port()});
-  const size_t kNumBackendsFirstPass = backends_.size() / 2;
-  const size_t kNumBackendsSecondPass =
-      backends_.size() - kNumBackendsFirstPass;
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannel({balancers_[0]->port()}); 
+  const size_t kNumBackendsFirstPass = backends_.size() / 2; 
+  const size_t kNumBackendsSecondPass = 
+      backends_.size() - kNumBackendsFirstPass; 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts(0, kNumBackendsFirstPass)},
-  });
+      {"locality0", GetBackendPorts(0, kNumBackendsFirstPass)}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Wait until all backends returned by the balancer are ready.
-  int num_ok = 0;
-  int num_failure = 0;
-  int num_drops = 0;
-  std::tie(num_ok, num_failure, num_drops) =
-      WaitForAllBackends(/* start_index */ 0,
-                         /* stop_index */ kNumBackendsFirstPass);
+  // Wait until all backends returned by the balancer are ready. 
+  int num_ok = 0; 
+  int num_failure = 0; 
+  int num_drops = 0; 
+  std::tie(num_ok, num_failure, num_drops) = 
+      WaitForAllBackends(/* start_index */ 0, 
+                         /* stop_index */ kNumBackendsFirstPass); 
   std::vector<ClientStats> load_report =
       balancers_[0]->lrs_service()->WaitForLoadReport();
   ASSERT_EQ(load_report.size(), 1UL);
   ClientStats client_stats = std::move(load_report.front());
-  EXPECT_EQ(static_cast<size_t>(num_ok),
+  EXPECT_EQ(static_cast<size_t>(num_ok), 
             client_stats.total_successful_requests());
   EXPECT_EQ(0U, client_stats.total_requests_in_progress());
   EXPECT_EQ(0U, client_stats.total_error_requests());
   EXPECT_EQ(0U, client_stats.total_dropped_requests());
-  // Shut down the balancer.
-  balancers_[0]->Shutdown();
-  // We should continue using the last EDS response we received from the
-  // balancer before it was shut down.
-  // Note: We need to use WaitForAllBackends() here instead of just
-  // CheckRpcSendOk(kNumBackendsFirstPass), because when the balancer
-  // shuts down, the XdsClient will generate an error to the
-  // ServiceConfigWatcher, which will cause the xds resolver to send a
-  // no-op update to the LB policy.  When this update gets down to the
-  // round_robin child policy for the locality, it will generate a new
-  // subchannel list, which resets the start index randomly.  So we need
-  // to be a little more permissive here to avoid spurious failures.
-  ResetBackendCounters();
-  int num_started = std::get<0>(WaitForAllBackends(
-      /* start_index */ 0, /* stop_index */ kNumBackendsFirstPass));
-  // Now restart the balancer, this time pointing to the new backends.
+  // Shut down the balancer. 
+  balancers_[0]->Shutdown(); 
+  // We should continue using the last EDS response we received from the 
+  // balancer before it was shut down. 
+  // Note: We need to use WaitForAllBackends() here instead of just 
+  // CheckRpcSendOk(kNumBackendsFirstPass), because when the balancer 
+  // shuts down, the XdsClient will generate an error to the 
+  // ServiceConfigWatcher, which will cause the xds resolver to send a 
+  // no-op update to the LB policy.  When this update gets down to the 
+  // round_robin child policy for the locality, it will generate a new 
+  // subchannel list, which resets the start index randomly.  So we need 
+  // to be a little more permissive here to avoid spurious failures. 
+  ResetBackendCounters(); 
+  int num_started = std::get<0>(WaitForAllBackends( 
+      /* start_index */ 0, /* stop_index */ kNumBackendsFirstPass)); 
+  // Now restart the balancer, this time pointing to the new backends. 
   balancers_[0]->Start();
   args = AdsServiceImpl::EdsResourceArgs({
-      {"locality0", GetBackendPorts(kNumBackendsFirstPass)},
-  });
+      {"locality0", GetBackendPorts(kNumBackendsFirstPass)}, 
+  }); 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  // Wait for queries to start going to one of the new backends.
-  // This tells us that we're now using the new serverlist.
-  std::tie(num_ok, num_failure, num_drops) =
-      WaitForAllBackends(/* start_index */ kNumBackendsFirstPass);
-  num_started += num_ok + num_failure + num_drops;
-  // Send one RPC per backend.
-  CheckRpcSendOk(kNumBackendsSecondPass);
-  num_started += kNumBackendsSecondPass;
-  // Check client stats.
+  // Wait for queries to start going to one of the new backends. 
+  // This tells us that we're now using the new serverlist. 
+  std::tie(num_ok, num_failure, num_drops) = 
+      WaitForAllBackends(/* start_index */ kNumBackendsFirstPass); 
+  num_started += num_ok + num_failure + num_drops; 
+  // Send one RPC per backend. 
+  CheckRpcSendOk(kNumBackendsSecondPass); 
+  num_started += kNumBackendsSecondPass; 
+  // Check client stats. 
   load_report = balancers_[0]->lrs_service()->WaitForLoadReport();
   ASSERT_EQ(load_report.size(), 1UL);
   client_stats = std::move(load_report.front());
@@ -5625,62 +5625,62 @@ TEST_P(ClientLoadReportingTest, BalancerRestart) {
   EXPECT_EQ(0U, client_stats.total_requests_in_progress());
   EXPECT_EQ(0U, client_stats.total_error_requests());
   EXPECT_EQ(0U, client_stats.total_dropped_requests());
-}
-
-class ClientLoadReportingWithDropTest : public XdsEnd2endTest {
- public:
-  ClientLoadReportingWithDropTest() : XdsEnd2endTest(4, 1, 20) {}
-};
-
-// Tests that the drop stats are correctly reported by client load reporting.
-TEST_P(ClientLoadReportingWithDropTest, Vanilla) {
+} 
+ 
+class ClientLoadReportingWithDropTest : public XdsEnd2endTest { 
+ public: 
+  ClientLoadReportingWithDropTest() : XdsEnd2endTest(4, 1, 20) {} 
+}; 
+ 
+// Tests that the drop stats are correctly reported by client load reporting. 
+TEST_P(ClientLoadReportingWithDropTest, Vanilla) { 
   if (!GetParam().use_xds_resolver()) {
     balancers_[0]->lrs_service()->set_cluster_names({kServerName});
   }
-  SetNextResolution({});
-  SetNextResolutionForLbChannelAllBalancers();
-  const size_t kNumRpcs = 3000;
-  const uint32_t kDropPerMillionForLb = 100000;
-  const uint32_t kDropPerMillionForThrottle = 200000;
-  const double kDropRateForLb = kDropPerMillionForLb / 1000000.0;
-  const double kDropRateForThrottle = kDropPerMillionForThrottle / 1000000.0;
-  const double KDropRateForLbAndThrottle =
-      kDropRateForLb + (1 - kDropRateForLb) * kDropRateForThrottle;
-  // The ADS response contains two drop categories.
+  SetNextResolution({}); 
+  SetNextResolutionForLbChannelAllBalancers(); 
+  const size_t kNumRpcs = 3000; 
+  const uint32_t kDropPerMillionForLb = 100000; 
+  const uint32_t kDropPerMillionForThrottle = 200000; 
+  const double kDropRateForLb = kDropPerMillionForLb / 1000000.0; 
+  const double kDropRateForThrottle = kDropPerMillionForThrottle / 1000000.0; 
+  const double KDropRateForLbAndThrottle = 
+      kDropRateForLb + (1 - kDropRateForLb) * kDropRateForThrottle; 
+  // The ADS response contains two drop categories. 
   AdsServiceImpl::EdsResourceArgs args({
-      {"locality0", GetBackendPorts()},
-  });
-  args.drop_categories = {{kLbDropType, kDropPerMillionForLb},
-                          {kThrottleDropType, kDropPerMillionForThrottle}};
+      {"locality0", GetBackendPorts()}, 
+  }); 
+  args.drop_categories = {{kLbDropType, kDropPerMillionForLb}, 
+                          {kThrottleDropType, kDropPerMillionForThrottle}}; 
   balancers_[0]->ads_service()->SetEdsResource(
       AdsServiceImpl::BuildEdsResource(args, DefaultEdsServiceName()));
-  int num_ok = 0;
-  int num_failure = 0;
-  int num_drops = 0;
-  std::tie(num_ok, num_failure, num_drops) = WaitForAllBackends();
-  const size_t num_warmup = num_ok + num_failure + num_drops;
-  // Send kNumRpcs RPCs and count the drops.
-  for (size_t i = 0; i < kNumRpcs; ++i) {
-    EchoResponse response;
+  int num_ok = 0; 
+  int num_failure = 0; 
+  int num_drops = 0; 
+  std::tie(num_ok, num_failure, num_drops) = WaitForAllBackends(); 
+  const size_t num_warmup = num_ok + num_failure + num_drops; 
+  // Send kNumRpcs RPCs and count the drops. 
+  for (size_t i = 0; i < kNumRpcs; ++i) { 
+    EchoResponse response; 
     const Status status = SendRpc(RpcOptions(), &response);
-    if (!status.ok() &&
-        status.error_message() == "Call dropped by load balancing policy") {
-      ++num_drops;
-    } else {
-      EXPECT_TRUE(status.ok()) << "code=" << status.error_code()
-                               << " message=" << status.error_message();
+    if (!status.ok() && 
+        status.error_message() == "Call dropped by load balancing policy") { 
+      ++num_drops; 
+    } else { 
+      EXPECT_TRUE(status.ok()) << "code=" << status.error_code() 
+                               << " message=" << status.error_message(); 
       EXPECT_EQ(response.message(), kRequestMessage);
-    }
-  }
-  // The drop rate should be roughly equal to the expectation.
-  const double seen_drop_rate = static_cast<double>(num_drops) / kNumRpcs;
-  const double kErrorTolerance = 0.2;
-  EXPECT_THAT(
-      seen_drop_rate,
-      ::testing::AllOf(
-          ::testing::Ge(KDropRateForLbAndThrottle * (1 - kErrorTolerance)),
-          ::testing::Le(KDropRateForLbAndThrottle * (1 + kErrorTolerance))));
-  // Check client stats.
+    } 
+  } 
+  // The drop rate should be roughly equal to the expectation. 
+  const double seen_drop_rate = static_cast<double>(num_drops) / kNumRpcs; 
+  const double kErrorTolerance = 0.2; 
+  EXPECT_THAT( 
+      seen_drop_rate, 
+      ::testing::AllOf( 
+          ::testing::Ge(KDropRateForLbAndThrottle * (1 - kErrorTolerance)), 
+          ::testing::Le(KDropRateForLbAndThrottle * (1 + kErrorTolerance)))); 
+  // Check client stats. 
   const size_t total_rpc = num_warmup + kNumRpcs;
   ClientStats client_stats;
   do {
@@ -5693,44 +5693,44 @@ TEST_P(ClientLoadReportingWithDropTest, Vanilla) {
                client_stats.total_dropped_requests() <
            total_rpc);
   EXPECT_EQ(num_drops, client_stats.total_dropped_requests());
-  EXPECT_THAT(
+  EXPECT_THAT( 
       client_stats.dropped_requests(kLbDropType),
-      ::testing::AllOf(
-          ::testing::Ge(total_rpc * kDropRateForLb * (1 - kErrorTolerance)),
-          ::testing::Le(total_rpc * kDropRateForLb * (1 + kErrorTolerance))));
+      ::testing::AllOf( 
+          ::testing::Ge(total_rpc * kDropRateForLb * (1 - kErrorTolerance)), 
+          ::testing::Le(total_rpc * kDropRateForLb * (1 + kErrorTolerance)))); 
   EXPECT_THAT(client_stats.dropped_requests(kThrottleDropType),
-              ::testing::AllOf(
-                  ::testing::Ge(total_rpc * (1 - kDropRateForLb) *
-                                kDropRateForThrottle * (1 - kErrorTolerance)),
-                  ::testing::Le(total_rpc * (1 - kDropRateForLb) *
-                                kDropRateForThrottle * (1 + kErrorTolerance))));
-}
-
+              ::testing::AllOf( 
+                  ::testing::Ge(total_rpc * (1 - kDropRateForLb) * 
+                                kDropRateForThrottle * (1 - kErrorTolerance)), 
+                  ::testing::Le(total_rpc * (1 - kDropRateForLb) * 
+                                kDropRateForThrottle * (1 + kErrorTolerance)))); 
+} 
+ 
 TString TestTypeName(const ::testing::TestParamInfo<TestType>& info) {
-  return info.param.AsString();
-}
-
+  return info.param.AsString(); 
+} 
+ 
 // TestType params:
 // - use_xds_resolver
 // - enable_load_reporting
 // - enable_rds_testing = false
 // - use_v2 = false
 
-INSTANTIATE_TEST_SUITE_P(XdsTest, BasicTest,
-                         ::testing::Values(TestType(false, true),
-                                           TestType(false, false),
+INSTANTIATE_TEST_SUITE_P(XdsTest, BasicTest, 
+                         ::testing::Values(TestType(false, true), 
+                                           TestType(false, false), 
                                            TestType(true, false),
-                                           TestType(true, true)),
-                         &TestTypeName);
-
+                                           TestType(true, true)), 
+                         &TestTypeName); 
+ 
 // Run with both fake resolver and xds resolver.
 // Don't run with load reporting or v2 or RDS, since they are irrelevant to
 // the tests.
-INSTANTIATE_TEST_SUITE_P(XdsTest, SecureNamingTest,
+INSTANTIATE_TEST_SUITE_P(XdsTest, SecureNamingTest, 
                          ::testing::Values(TestType(false, false),
                                            TestType(true, false)),
-                         &TestTypeName);
-
+                         &TestTypeName); 
+ 
 // LDS depends on XdsResolver.
 INSTANTIATE_TEST_SUITE_P(XdsTest, LdsTest,
                          ::testing::Values(TestType(true, false),
@@ -5779,54 +5779,54 @@ INSTANTIATE_TEST_SUITE_P(XdsTest, XdsResolverLoadReportingOnlyTest,
                          ::testing::Values(TestType(true, true)),
                          &TestTypeName);
 
-INSTANTIATE_TEST_SUITE_P(XdsTest, LocalityMapTest,
-                         ::testing::Values(TestType(false, true),
-                                           TestType(false, false),
+INSTANTIATE_TEST_SUITE_P(XdsTest, LocalityMapTest, 
+                         ::testing::Values(TestType(false, true), 
+                                           TestType(false, false), 
                                            TestType(true, false),
-                                           TestType(true, true)),
-                         &TestTypeName);
-
-INSTANTIATE_TEST_SUITE_P(XdsTest, FailoverTest,
-                         ::testing::Values(TestType(false, true),
-                                           TestType(false, false),
+                                           TestType(true, true)), 
+                         &TestTypeName); 
+ 
+INSTANTIATE_TEST_SUITE_P(XdsTest, FailoverTest, 
+                         ::testing::Values(TestType(false, true), 
+                                           TestType(false, false), 
                                            TestType(true, false),
-                                           TestType(true, true)),
-                         &TestTypeName);
-
-INSTANTIATE_TEST_SUITE_P(XdsTest, DropTest,
-                         ::testing::Values(TestType(false, true),
-                                           TestType(false, false),
+                                           TestType(true, true)), 
+                         &TestTypeName); 
+ 
+INSTANTIATE_TEST_SUITE_P(XdsTest, DropTest, 
+                         ::testing::Values(TestType(false, true), 
+                                           TestType(false, false), 
                                            TestType(true, false),
-                                           TestType(true, true)),
-                         &TestTypeName);
-
-INSTANTIATE_TEST_SUITE_P(XdsTest, BalancerUpdateTest,
-                         ::testing::Values(TestType(false, true),
-                                           TestType(false, false),
-                                           TestType(true, true)),
-                         &TestTypeName);
-
-// Load reporting tests are not run with load reporting disabled.
-INSTANTIATE_TEST_SUITE_P(XdsTest, ClientLoadReportingTest,
-                         ::testing::Values(TestType(false, true),
-                                           TestType(true, true)),
-                         &TestTypeName);
-
-// Load reporting tests are not run with load reporting disabled.
-INSTANTIATE_TEST_SUITE_P(XdsTest, ClientLoadReportingWithDropTest,
-                         ::testing::Values(TestType(false, true),
-                                           TestType(true, true)),
-                         &TestTypeName);
-
-}  // namespace
-}  // namespace testing
-}  // namespace grpc
-
-int main(int argc, char** argv) {
-  grpc::testing::TestEnvironment env(argc, argv);
-  ::testing::InitGoogleTest(&argc, argv);
-  grpc::testing::WriteBootstrapFiles();
-  grpc::testing::g_port_saver = new grpc::testing::PortSaver();
-  const auto result = RUN_ALL_TESTS();
-  return result;
-}
+                                           TestType(true, true)), 
+                         &TestTypeName); 
+ 
+INSTANTIATE_TEST_SUITE_P(XdsTest, BalancerUpdateTest, 
+                         ::testing::Values(TestType(false, true), 
+                                           TestType(false, false), 
+                                           TestType(true, true)), 
+                         &TestTypeName); 
+ 
+// Load reporting tests are not run with load reporting disabled. 
+INSTANTIATE_TEST_SUITE_P(XdsTest, ClientLoadReportingTest, 
+                         ::testing::Values(TestType(false, true), 
+                                           TestType(true, true)), 
+                         &TestTypeName); 
+ 
+// Load reporting tests are not run with load reporting disabled. 
+INSTANTIATE_TEST_SUITE_P(XdsTest, ClientLoadReportingWithDropTest, 
+                         ::testing::Values(TestType(false, true), 
+                                           TestType(true, true)), 
+                         &TestTypeName); 
+ 
+}  // namespace 
+}  // namespace testing 
+}  // namespace grpc 
+ 
+int main(int argc, char** argv) { 
+  grpc::testing::TestEnvironment env(argc, argv); 
+  ::testing::InitGoogleTest(&argc, argv); 
+  grpc::testing::WriteBootstrapFiles(); 
+  grpc::testing::g_port_saver = new grpc::testing::PortSaver(); 
+  const auto result = RUN_ALL_TESTS(); 
+  return result; 
+} 

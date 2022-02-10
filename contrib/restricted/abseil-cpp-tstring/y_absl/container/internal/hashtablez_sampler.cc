@@ -29,7 +29,7 @@
 #include "y_absl/synchronization/mutex.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace container_internal {
 constexpr int HashtablezInfo::kMaxStackDepth;
 
@@ -39,16 +39,16 @@ ABSL_CONST_INIT std::atomic<bool> g_hashtablez_enabled{
 };
 ABSL_CONST_INIT std::atomic<int32_t> g_hashtablez_sample_parameter{1 << 10};
 
-#if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
+#if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE) 
 ABSL_PER_THREAD_TLS_KEYWORD y_absl::profiling_internal::ExponentialBiased
     g_exponential_biased_generator;
 #endif
 
 }  // namespace
 
-#if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
+#if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE) 
 ABSL_PER_THREAD_TLS_KEYWORD int64_t global_next_sample = 0;
-#endif  // defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
+#endif  // defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE) 
 
 HashtablezSampler& GlobalHashtablezSampler() {
   static auto* sampler = new HashtablezSampler();
@@ -109,15 +109,15 @@ HashtablezInfo* SampleSlow(int64_t* next_sample, size_t inline_element_size) {
     return result;
   }
 
-#if !defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
+#if !defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE) 
   *next_sample = std::numeric_limits<int64_t>::max();
   return nullptr;
 #else
   bool first = *next_sample < 0;
-  *next_sample = g_exponential_biased_generator.GetStride(
+  *next_sample = g_exponential_biased_generator.GetStride( 
       g_hashtablez_sample_parameter.load(std::memory_order_relaxed));
   // Small values of interval are equivalent to just sampling next time.
-  ABSL_ASSERT(*next_sample >= 1);
+  ABSL_ASSERT(*next_sample >= 1); 
 
   // g_hashtablez_enabled can be dynamically flipped, we need to set a threshold
   // low enough that we will start sampling in a reasonable time, so we just use
@@ -186,5 +186,5 @@ void SetHashtablezMaxSamples(int32_t max) {
 }
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl

@@ -18,7 +18,7 @@
 #include "y_absl/base/internal/inline_variable.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace inline_variable_testing_internal {
 
 struct Foo {
@@ -40,7 +40,7 @@ const int& get_int_a();
 const int& get_int_b();
 
 }  // namespace inline_variable_testing_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_BASE_INLINE_VARIABLE_TESTING_H_

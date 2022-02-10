@@ -187,15 +187,15 @@ void generateMTFValues ( EState* s )
             zPend = 0;
          }
          {
-            register UChar  rtmp;
-            register UChar* ryy_j;
-            register UChar  rll_i;
+            register UChar  rtmp; 
+            register UChar* ryy_j; 
+            register UChar  rll_i; 
             rtmp  = yy[1];
             yy[1] = yy[0];
             ryy_j = &(yy[1]);
             rll_i = ll_i;
             while ( rll_i != rtmp ) {
-               register UChar rtmp2;
+               register UChar rtmp2; 
                ryy_j++;
                rtmp2  = rtmp;
                rtmp   = *ryy_j;
@@ -357,8 +357,8 @@ void sendMTFValues ( EState* s )
 
          if (nGroups == 6 && 50 == ge-gs+1) {
             /*--- fast track the common case ---*/
-            register UInt32 cost01, cost23, cost45;
-            register UInt16 icv;
+            register UInt32 cost01, cost23, cost45; 
+            register UInt16 icv; 
             cost01 = cost23 = cost45 = 0;
 
 #           define BZ_ITER(nn)                \

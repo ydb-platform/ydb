@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 
 #pragma once
@@ -15,35 +15,35 @@
 #include <aws/core/internal/AWSHttpResourceClient.h>
 #include <aws/core/auth/AWSCredentials.h>
 #include <aws/core/config/AWSProfileConfigLoader.h>
-#include <aws/core/client/RetryStrategy.h>
+#include <aws/core/client/RetryStrategy.h> 
 #include <memory>
 
 namespace Aws
 {
     namespace Auth
     {
-        constexpr int REFRESH_THRESHOLD = 1000 * 60 * 5;
+        constexpr int REFRESH_THRESHOLD = 1000 * 60 * 5; 
+
+        /** 
+         * Returns the full path of the config file. 
+         */ 
+        AWS_CORE_API Aws::String GetConfigProfileFilename(); //defaults to "config" 
 
         /**
-         * Returns the full path of the config file.
-         */
-        AWS_CORE_API Aws::String GetConfigProfileFilename(); //defaults to "config"
-
-        /**
-         * Returns the default profile name.
-         * The value is the first non-empty value of the following:
-         * 1. AWS_PROFILE environment variable
-         * 2. AWS_DEFAULT_PROFILE environment variable
-         * 3. The literal name "default"
-         */
-        AWS_CORE_API Aws::String GetConfigProfileName(); //defaults to "default"
-
-        /*
-         * Fetches credentials by executing the process in the parameter
-         */
-        AWS_CORE_API AWSCredentials GetCredentialsFromProcess(const Aws::String& process);
-
-        /**
+         * Returns the default profile name. 
+         * The value is the first non-empty value of the following: 
+         * 1. AWS_PROFILE environment variable 
+         * 2. AWS_DEFAULT_PROFILE environment variable 
+         * 3. The literal name "default" 
+         */ 
+        AWS_CORE_API Aws::String GetConfigProfileName(); //defaults to "default" 
+ 
+        /* 
+         * Fetches credentials by executing the process in the parameter 
+         */ 
+        AWS_CORE_API AWSCredentials GetCredentialsFromProcess(const Aws::String& process); 
+ 
+        /** 
           * Abstract class for retrieving AWS credentials. Create a derived class from this to allow
           * various methods of storing and retrieving credentials. Examples would be cognito-identity, some encrypted store etc...
           */
@@ -87,7 +87,7 @@ namespace Aws
             /**
              * Returns empty credentials object.
              */
-            inline AWSCredentials GetAWSCredentials() override { return AWSCredentials(); }
+            inline AWSCredentials GetAWSCredentials() override { return AWSCredentials(); } 
         };
 
         /**
@@ -102,14 +102,14 @@ namespace Aws
              * Initializes object from awsAccessKeyId, awsSecretAccessKey, and sessionToken parameters. sessionToken parameter is defaulted to empty.
              */
             inline SimpleAWSCredentialsProvider(const Aws::String& awsAccessKeyId, const Aws::String& awsSecretAccessKey, const Aws::String& sessionToken = "")
-                : m_credentials(awsAccessKeyId, awsSecretAccessKey, sessionToken)
+                : m_credentials(awsAccessKeyId, awsSecretAccessKey, sessionToken) 
             { }
 
             /**
             * Initializes object from credentials object. everything is copied.
             */
             inline SimpleAWSCredentialsProvider(const AWSCredentials& credentials)
-                : m_credentials(credentials)
+                : m_credentials(credentials) 
             { }
 
             /**
@@ -117,11 +117,11 @@ namespace Aws
              */
             inline AWSCredentials GetAWSCredentials() override
             {
-                return m_credentials;
+                return m_credentials; 
             }
 
         private:
-            AWSCredentials m_credentials;
+            AWSCredentials m_credentials; 
         };
 
         /**
@@ -141,7 +141,7 @@ namespace Aws
         /**
         * Reads credentials profile from the default Profile Config File. Refreshes at set interval for credential rotation.
         * Looks for environment variables AWS_SHARED_CREDENTIALS_FILE and AWS_PROFILE. If they aren't found, then it defaults
-        * to the default profile in ~/.aws/credentials.
+        * to the default profile in ~/.aws/credentials. 
         * Optionally a user can specify the profile and it will override the environment variable
         * and defaults. To alter the file this pulls from, then the user should alter the AWS_SHARED_CREDENTIALS_FILE variable.
         */
@@ -180,8 +180,8 @@ namespace Aws
         private:
 
             /**
-             * Checks to see if the refresh interval has expired and reparses the file if it has.
-             */
+             * Checks to see if the refresh interval has expired and reparses the file if it has. 
+             */ 
             void RefreshIfExpired();
 
             Aws::String m_profileToUse;
@@ -279,7 +279,7 @@ namespace Aws
          * The default profile name to look up this configuration is "default", same as normal aws credentials configuration and other configurations.
          * The expected valid output of the command is a Json doc output to stdout:
          * {"Version": 1, "AccessKeyId": "AccessKey123", "SecretAccessKey": "SecretKey321", "SessionToken": "Token123", "Expiration": "1970-01-01T00:00:01Z"}
-         * The Version key specifies the version of the JSON payload and must be set to 1 for now (as an integer type).
+         * The Version key specifies the version of the JSON payload and must be set to 1 for now (as an integer type). 
          * If the Version key is bumped to 2, SDKs would support both versions of the returned payload.
          * Value of Expiration field should be an valid ISO8601 formatted date string as above example.
          * The expected error message of the command is a string to output to stderr.

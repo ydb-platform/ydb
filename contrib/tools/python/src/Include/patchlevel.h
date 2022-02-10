@@ -6,7 +6,7 @@
    defined(PY_MAJOR_VERSION).
 
    When the major or minor version changes, the VERSION variable in
-   configure.ac must also be changed.
+   configure.ac must also be changed. 
 
    There is also (independent) API version information in modsupport.h.
 */
@@ -22,12 +22,12 @@
 /*--start constants--*/
 #define PY_MAJOR_VERSION	2
 #define PY_MINOR_VERSION	7
-#define PY_MICRO_VERSION	16
+#define PY_MICRO_VERSION	16 
 #define PY_RELEASE_LEVEL	PY_RELEASE_LEVEL_FINAL
 #define PY_RELEASE_SERIAL	0
 
 /* Version as a string */
-#define PY_VERSION      	"2.7.16"
+#define PY_VERSION      	"2.7.16" 
 /*--end constants--*/
 
 /* Subversion Revision number of this file (not of the repository). Empty

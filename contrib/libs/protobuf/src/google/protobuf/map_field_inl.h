@@ -162,15 +162,15 @@ void TypeDefinedMapFieldBase<Key, T>::CopyIterator(
 
 // ----------------------------------------------------------------------
 
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 int MapField<Derived, Key, T, kKeyFieldType, kValueFieldType>::size() const {
   MapFieldBase::SyncMapWithRepeatedField();
-  return static_cast<int>(impl_.GetMap().size());
+  return static_cast<int>(impl_.GetMap().size()); 
 }
 
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 void MapField<Derived, Key, T, kKeyFieldType, kValueFieldType>::Clear() {
@@ -181,20 +181,20 @@ void MapField<Derived, Key, T, kKeyFieldType, kValueFieldType>::Clear() {
     repeated_field->Clear();
   }
 
-  impl_.MutableMap()->clear();
+  impl_.MutableMap()->clear(); 
   // Data in map and repeated field are both empty, but we can't set status
   // CLEAN. Because clear is a generated API, we cannot invalidate previous
   // reference to map.
   MapFieldBase::SetMapDirty();
 }
 
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 void MapField<Derived, Key, T, kKeyFieldType,
               kValueFieldType>::SetMapIteratorValue(MapIterator* map_iter)
-    const {
-  const Map<Key, T>& map = impl_.GetMap();
+    const { 
+  const Map<Key, T>& map = impl_.GetMap(); 
   typename Map<Key, T>::const_iterator iter =
       TypeDefinedMapFieldBase<Key, T>::InternalGetIterator(map_iter);
   if (iter == map.end()) return;
@@ -202,18 +202,18 @@ void MapField<Derived, Key, T, kKeyFieldType,
   map_iter->value_.SetValue(&iter->second);
 }
 
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 bool MapField<Derived, Key, T, kKeyFieldType, kValueFieldType>::ContainsMapKey(
     const MapKey& map_key) const {
-  const Map<Key, T>& map = impl_.GetMap();
+  const Map<Key, T>& map = impl_.GetMap(); 
   const Key& key = UnwrapMapKey<Key>(map_key);
   typename Map<Key, T>::const_iterator iter = map.find(key);
   return iter != map.end();
 }
 
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 bool MapField<Derived, Key, T, kKeyFieldType,
@@ -234,7 +234,7 @@ bool MapField<Derived, Key, T, kKeyFieldType,
   return false;
 }
 
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 bool MapField<Derived, Key, T, kKeyFieldType, kValueFieldType>::LookupMapValue(
@@ -260,7 +260,7 @@ bool MapField<Derived, Key, T, kKeyFieldType, kValueFieldType>::DeleteMapValue(
   return MutableMap()->erase(key);
 }
 
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 void MapField<Derived, Key, T, kKeyFieldType, kValueFieldType>::MergeFrom(
@@ -272,7 +272,7 @@ void MapField<Derived, Key, T, kKeyFieldType, kValueFieldType>::MergeFrom(
   MapFieldBase::SetMapDirty();
 }
 
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 void MapField<Derived, Key, T, kKeyFieldType, kValueFieldType>::Swap(
@@ -282,7 +282,7 @@ void MapField<Derived, Key, T, kKeyFieldType, kValueFieldType>::Swap(
   impl_.Swap(&other_field->impl_);
 }
 
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 void MapField<Derived, Key, T, kKeyFieldType,
@@ -304,44 +304,44 @@ template <typename Derived, typename Key, typename T,
           WireFormatLite::FieldType kValueFieldType>
 void MapField<Derived, Key, T, kKeyFieldType,
               kValueFieldType>::SyncRepeatedFieldWithMapNoLock() const {
-  if (this->MapFieldBase::repeated_field_ == NULL) {
+  if (this->MapFieldBase::repeated_field_ == NULL) { 
     this->MapFieldBase::repeated_field_ =
         Arena::CreateMessage<RepeatedPtrField<Message> >(
             this->MapFieldBase::arena_);
   }
-  const Map<Key, T>& map = impl_.GetMap();
+  const Map<Key, T>& map = impl_.GetMap(); 
   RepeatedPtrField<EntryType>* repeated_field =
       reinterpret_cast<RepeatedPtrField<EntryType>*>(
-          this->MapFieldBase::repeated_field_);
+          this->MapFieldBase::repeated_field_); 
 
   repeated_field->Clear();
 
-  // The only way we can get at this point is through reflection and the
-  // only way we can get the reflection object is by having called GetReflection
-  // on the encompassing field. So that type must have existed and hence we
-  // know that this MapEntry default_type has also already been constructed.
-  // So it's safe to just call internal_default_instance().
-  const Message* default_entry = Derived::internal_default_instance();
+  // The only way we can get at this point is through reflection and the 
+  // only way we can get the reflection object is by having called GetReflection 
+  // on the encompassing field. So that type must have existed and hence we 
+  // know that this MapEntry default_type has also already been constructed. 
+  // So it's safe to just call internal_default_instance(). 
+  const Message* default_entry = Derived::internal_default_instance(); 
   for (typename Map<Key, T>::const_iterator it = map.begin(); it != map.end();
        ++it) {
     EntryType* new_entry =
-        down_cast<EntryType*>(default_entry->New(this->MapFieldBase::arena_));
+        down_cast<EntryType*>(default_entry->New(this->MapFieldBase::arena_)); 
     repeated_field->AddAllocated(new_entry);
     (*new_entry->mutable_key()) = it->first;
     (*new_entry->mutable_value()) = it->second;
   }
 }
 
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 void MapField<Derived, Key, T, kKeyFieldType,
               kValueFieldType>::SyncMapWithRepeatedFieldNoLock() const {
-  Map<Key, T>* map = const_cast<MapField*>(this)->impl_.MutableMap();
+  Map<Key, T>* map = const_cast<MapField*>(this)->impl_.MutableMap(); 
   RepeatedPtrField<EntryType>* repeated_field =
       reinterpret_cast<RepeatedPtrField<EntryType>*>(
-          this->MapFieldBase::repeated_field_);
-  GOOGLE_CHECK(this->MapFieldBase::repeated_field_ != NULL);
+          this->MapFieldBase::repeated_field_); 
+  GOOGLE_CHECK(this->MapFieldBase::repeated_field_ != NULL); 
   map->clear();
   for (typename RepeatedPtrField<EntryType>::iterator it =
            repeated_field->begin();
@@ -355,14 +355,14 @@ void MapField<Derived, Key, T, kKeyFieldType,
   }
 }
 
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 size_t MapField<Derived, Key, T, kKeyFieldType,
                 kValueFieldType>::SpaceUsedExcludingSelfNoLock() const {
-  size_t size = 0;
-  if (this->MapFieldBase::repeated_field_ != NULL) {
-    size += this->MapFieldBase::repeated_field_->SpaceUsedExcludingSelfLong();
+  size_t size = 0; 
+  if (this->MapFieldBase::repeated_field_ != NULL) { 
+    size += this->MapFieldBase::repeated_field_->SpaceUsedExcludingSelfLong(); 
   }
   size += impl_.GetMap().SpaceUsedExcludingSelfLong();
 

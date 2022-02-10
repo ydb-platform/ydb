@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #pragma once
 
@@ -55,11 +55,11 @@ namespace Aws
         }
 
         /**
-         * AmazonStreamingWebServiceRequest always returns true.
-         */
-        bool IsStreaming() const override { return true; }
-
-        /**
+         * AmazonStreamingWebServiceRequest always returns true. 
+         */ 
+        bool IsStreaming() const override { return true; } 
+ 
+        /** 
          * Get the user set contentType. Defaults to binary/octet-stream
          */
         const Aws::String& GetContentType() const { return m_contentType; }

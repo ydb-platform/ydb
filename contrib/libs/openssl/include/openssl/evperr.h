@@ -12,7 +12,7 @@
 # define HEADER_EVPERR_H
 
 # include <openssl/symhacks.h>
-
+ 
 # ifdef  __cplusplus
 extern "C"
 # endif
@@ -22,14 +22,14 @@ int ERR_load_EVP_strings(void);
  * EVP function codes.
  */
 # define EVP_F_AESNI_INIT_KEY                             165
-# define EVP_F_AESNI_XTS_INIT_KEY                         207
+# define EVP_F_AESNI_XTS_INIT_KEY                         207 
 # define EVP_F_AES_GCM_CTRL                               196
 # define EVP_F_AES_INIT_KEY                               133
 # define EVP_F_AES_OCB_CIPHER                             169
 # define EVP_F_AES_T4_INIT_KEY                            178
-# define EVP_F_AES_T4_XTS_INIT_KEY                        208
+# define EVP_F_AES_T4_XTS_INIT_KEY                        208 
 # define EVP_F_AES_WRAP_CIPHER                            170
-# define EVP_F_AES_XTS_INIT_KEY                           209
+# define EVP_F_AES_XTS_INIT_KEY                           209 
 # define EVP_F_ALG_MODULE_INIT                            177
 # define EVP_F_ARIA_CCM_INIT_KEY                          175
 # define EVP_F_ARIA_GCM_CTRL                              197
@@ -120,7 +120,7 @@ int ERR_load_EVP_strings(void);
 # define EVP_F_PKEY_SET_TYPE                              158
 # define EVP_F_RC2_MAGIC_TO_METH                          109
 # define EVP_F_RC5_CTRL                                   125
-# define EVP_F_R_32_12_16_INIT_KEY                        242
+# define EVP_F_R_32_12_16_INIT_KEY                        242 
 # define EVP_F_S390X_AES_GCM_CTRL                         201
 # define EVP_F_UPDATE                                     173
 
@@ -130,7 +130,7 @@ int ERR_load_EVP_strings(void);
 # define EVP_R_AES_KEY_SETUP_FAILED                       143
 # define EVP_R_ARIA_KEY_SETUP_FAILED                      176
 # define EVP_R_BAD_DECRYPT                                100
-# define EVP_R_BAD_KEY_LENGTH                             195
+# define EVP_R_BAD_KEY_LENGTH                             195 
 # define EVP_R_BUFFER_TOO_SMALL                           155
 # define EVP_R_CAMELLIA_KEY_SETUP_FAILED                  157
 # define EVP_R_CIPHER_PARAMETER_ERROR                     122
@@ -199,6 +199,6 @@ int ERR_load_EVP_strings(void);
 # define EVP_R_UNSUPPORTED_SALT_TYPE                      126
 # define EVP_R_WRAP_MODE_NOT_ALLOWED                      170
 # define EVP_R_WRONG_FINAL_BLOCK_LENGTH                   109
-# define EVP_R_XTS_DUPLICATED_KEYS                        183
+# define EVP_R_XTS_DUPLICATED_KEYS                        183 
 
 #endif

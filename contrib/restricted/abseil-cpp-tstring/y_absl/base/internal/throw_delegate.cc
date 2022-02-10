@@ -23,7 +23,7 @@
 #include "y_absl/base/internal/raw_logging.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace base_internal {
 
 // NOTE: The various STL exception throwing functions are placed within the
@@ -208,5 +208,5 @@ void ThrowStdBadAlloc() {
 }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl

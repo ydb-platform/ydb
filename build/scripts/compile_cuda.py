@@ -3,7 +3,7 @@ import subprocess
 import os
 import collections
 import re
-import tempfile
+import tempfile 
 
 
 def is_clang(command):
@@ -22,8 +22,8 @@ def main():
         skip_nocxxinc = False
 
     spl = sys.argv.index('--cflags')
-    mtime0 = sys.argv[1]
-    command = sys.argv[2: spl]
+    mtime0 = sys.argv[1] 
+    command = sys.argv[2: spl] 
     cflags = sys.argv[spl + 1:]
 
     dump_args = False
@@ -37,9 +37,9 @@ def main():
         sys.exit(1)
 
     if is_clang(command):
-        # nvcc concatenates the sources for clang, and clang reports unused
-        # things from .h files as if they they were defined in a .cpp file.
-        cflags += ['-Wno-unused-function', '-Wno-unused-parameter']
+        # nvcc concatenates the sources for clang, and clang reports unused 
+        # things from .h files as if they they were defined in a .cpp file. 
+        cflags += ['-Wno-unused-function', '-Wno-unused-parameter'] 
 
     if not is_clang(command) and '-fopenmp=libomp' in cflags:
         cflags.append('-fopenmp')
@@ -126,26 +126,26 @@ def main():
     if compiler_args:
         command += ['--compiler-options', ','.join(compiler_args)]
 
-    # --keep is necessary to prevent nvcc from embedding nvcc pid in generated
-    # symbols.  It makes nvcc use the original file name as the prefix in the
-    # generated files (otherwise it also prepends tmpxft_{pid}_00000000-5), and
-    # cicc derives the module name from its {input}.cpp1.ii file name.
-    command += ['--keep', '--keep-dir', tempfile.mkdtemp(prefix='compile_cuda.py.')]
-    # nvcc generates symbols like __fatbinwrap_{len}_{basename}_{hash} where
-    # {basename} is {input}.cpp1.ii with non-C chars translated to _, {len} is
-    # {basename} length, and {hash} is the hash of first exported symbol in
-    # {input}.cpp1.ii if there is one, otherwise it is based on its modification
-    # time (converted to string in the local timezone) and the current working
-    # directory.  To stabilize the names of these symbols we need to fix mtime,
-    # timezone, and cwd.
-    os.environ['LD_PRELOAD'] = mtime0
-    os.environ['TZ'] = 'UTC0'  # POSIX fixed offset format.
-    os.environ['TZDIR'] = '/var/empty'  # Against counterfeit /usr/share/zoneinfo/$TZ.
-
+    # --keep is necessary to prevent nvcc from embedding nvcc pid in generated 
+    # symbols.  It makes nvcc use the original file name as the prefix in the 
+    # generated files (otherwise it also prepends tmpxft_{pid}_00000000-5), and 
+    # cicc derives the module name from its {input}.cpp1.ii file name. 
+    command += ['--keep', '--keep-dir', tempfile.mkdtemp(prefix='compile_cuda.py.')] 
+    # nvcc generates symbols like __fatbinwrap_{len}_{basename}_{hash} where 
+    # {basename} is {input}.cpp1.ii with non-C chars translated to _, {len} is 
+    # {basename} length, and {hash} is the hash of first exported symbol in 
+    # {input}.cpp1.ii if there is one, otherwise it is based on its modification 
+    # time (converted to string in the local timezone) and the current working 
+    # directory.  To stabilize the names of these symbols we need to fix mtime, 
+    # timezone, and cwd. 
+    os.environ['LD_PRELOAD'] = mtime0 
+    os.environ['TZ'] = 'UTC0'  # POSIX fixed offset format. 
+    os.environ['TZDIR'] = '/var/empty'  # Against counterfeit /usr/share/zoneinfo/$TZ. 
+ 
     if dump_args:
         sys.stdout.write('\n'.join(command))
     else:
-        sys.exit(subprocess.Popen(command, stdout=sys.stderr, stderr=sys.stderr, cwd='/').wait())
+        sys.exit(subprocess.Popen(command, stdout=sys.stderr, stderr=sys.stderr, cwd='/').wait()) 
 
 
 if __name__ == '__main__':

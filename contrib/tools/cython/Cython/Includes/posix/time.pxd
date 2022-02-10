@@ -1,9 +1,9 @@
 # http://pubs.opengroup.org/onlinepubs/009695399/basedefs/sys/time.h.html
 
-from posix.types cimport suseconds_t, time_t, clockid_t, timer_t
+from posix.types cimport suseconds_t, time_t, clockid_t, timer_t 
 from posix.signal cimport sigevent
 
-cdef extern from "<sys/time.h>" nogil:
+cdef extern from "<sys/time.h>" nogil: 
     enum: CLOCK_REALTIME
     enum: TIMER_ABSTIME
     enum: CLOCK_MONOTONIC
@@ -32,18 +32,18 @@ cdef extern from "<sys/time.h>" nogil:
     enum: ITIMER_VIRTUAL
     enum: ITIMER_PROF
 
-    cdef struct timezone:
-        int tz_minuteswest
-        int dsttime
-
+    cdef struct timezone: 
+        int tz_minuteswest 
+        int dsttime 
+ 
     cdef struct timeval:
         time_t      tv_sec
         suseconds_t tv_usec
 
-    cdef struct timespec:
-        time_t tv_sec
-        long   tv_nsec
-
+    cdef struct timespec: 
+        time_t tv_sec 
+        long   tv_nsec 
+ 
     cdef struct itimerval:
         timeval it_interval
         timeval it_value
@@ -52,20 +52,20 @@ cdef extern from "<sys/time.h>" nogil:
         timespec it_interval
         timespec it_value
 
-    int nanosleep(const timespec *, timespec *)
+    int nanosleep(const timespec *, timespec *) 
 
-    int getitimer(int, itimerval *)
-    int gettimeofday(timeval *tp, timezone *tzp)
-    int setitimer(int, const itimerval *, itimerval *)
+    int getitimer(int, itimerval *) 
+    int gettimeofday(timeval *tp, timezone *tzp) 
+    int setitimer(int, const itimerval *, itimerval *) 
 
-    int clock_getcpuclockid(pid_t, clockid_t *)
-    int clock_getres(clockid_t, timespec *)
-    int clock_gettime(clockid_t, timespec *)
-    int clock_nanosleep(clockid_t, int, const timespec *, timespec *)
-    int clock_settime(clockid_t, const timespec *)
-
-    int timer_create(clockid_t, sigevent *, timer_t *)
-    int timer_delete(timer_t)
-    int timer_gettime(timer_t, itimerspec *)
-    int timer_getoverrun(timer_t)
-    int timer_settime(timer_t, int, const itimerspec *, itimerspec *)
+    int clock_getcpuclockid(pid_t, clockid_t *) 
+    int clock_getres(clockid_t, timespec *) 
+    int clock_gettime(clockid_t, timespec *) 
+    int clock_nanosleep(clockid_t, int, const timespec *, timespec *) 
+    int clock_settime(clockid_t, const timespec *) 
+ 
+    int timer_create(clockid_t, sigevent *, timer_t *) 
+    int timer_delete(timer_t) 
+    int timer_gettime(timer_t, itimerspec *) 
+    int timer_getoverrun(timer_t) 
+    int timer_settime(timer_t, int, const itimerspec *, itimerspec *) 

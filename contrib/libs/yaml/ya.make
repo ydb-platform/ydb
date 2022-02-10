@@ -9,8 +9,8 @@ OWNER(
 
 VERSION(0.2.5)
 
-ORIGINAL_SOURCE(https://github.com/yaml/libyaml/archive/0.2.5.tar.gz)
-
+ORIGINAL_SOURCE(https://github.com/yaml/libyaml/archive/0.2.5.tar.gz) 
+ 
 LICENSE(MIT)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)

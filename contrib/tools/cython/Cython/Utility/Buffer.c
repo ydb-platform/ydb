@@ -200,7 +200,7 @@ static int __Pyx__GetBufferAndValidate(
     __Pyx_BufFmt_Init(&ctx, stack, dtype);
     if (!__Pyx_BufFmt_CheckString(&ctx, buf->format)) goto fail;
   }
-  if (unlikely((size_t)buf->itemsize != dtype->size)) {
+  if (unlikely((size_t)buf->itemsize != dtype->size)) { 
     PyErr_Format(PyExc_ValueError,
       "Item size of buffer (%" CYTHON_FORMAT_SSIZE_T "d byte%s) does not match size of '%s' (%" CYTHON_FORMAT_SSIZE_T "d byte%s)",
       buf->itemsize, (buf->itemsize > 1) ? "s" : "",
@@ -229,9 +229,9 @@ fail:;
 //
 //  The alignment code is copied from _struct.c in Python.
 
-static const char* __Pyx_BufFmt_CheckString(__Pyx_BufFmt_Context* ctx, const char* ts);
-static void __Pyx_BufFmt_Init(__Pyx_BufFmt_Context* ctx,
-                              __Pyx_BufFmt_StackElem* stack,
+static const char* __Pyx_BufFmt_CheckString(__Pyx_BufFmt_Context* ctx, const char* ts); 
+static void __Pyx_BufFmt_Init(__Pyx_BufFmt_Context* ctx, 
+                              __Pyx_BufFmt_StackElem* stack, 
                               __Pyx_TypeInfo* type); /*proto*/
 
 /////////////// BufferFormatCheck ///////////////
@@ -273,7 +273,7 @@ static int __Pyx_BufFmt_ParseNumber(const char** ts) {
       return -1;
     } else {
         count = *t++ - '0';
-        while (*t >= '0' && *t <= '9') {
+        while (*t >= '0' && *t <= '9') { 
             count *= 10;
             count += *t++ - '0';
         }
@@ -886,13 +886,13 @@ static struct __pyx_typeinfo_string __Pyx_TypeInfoToFormat(__Pyx_TypeInfo *type)
         case 'I':
         case 'U':
             if (size == 1)
-                *buf = (type->is_unsigned) ? 'B' : 'b';
+                *buf = (type->is_unsigned) ? 'B' : 'b'; 
             else if (size == 2)
-                *buf = (type->is_unsigned) ? 'H' : 'h';
+                *buf = (type->is_unsigned) ? 'H' : 'h'; 
             else if (size == 4)
-                *buf = (type->is_unsigned) ? 'I' : 'i';
+                *buf = (type->is_unsigned) ? 'I' : 'i'; 
             else if (size == 8)
-                *buf = (type->is_unsigned) ? 'Q' : 'q';
+                *buf = (type->is_unsigned) ? 'Q' : 'q'; 
             break;
         case 'P':
             *buf = 'P';

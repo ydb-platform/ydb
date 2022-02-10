@@ -11,7 +11,7 @@
 
     Formatter version 1.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -27,8 +27,8 @@
 import sys
 
 from pygments.formatter import Formatter
-from pygments.console import codes
-from pygments.style import ansicolors
+from pygments.console import codes 
+from pygments.style import ansicolors 
 
 
 __all__ = ['Terminal256Formatter', 'TerminalTrueColorFormatter']
@@ -49,21 +49,21 @@ class EscapeSequence:
     def color_string(self):
         attrs = []
         if self.fg is not None:
-            if self.fg in ansicolors:
-                esc = codes[self.fg.replace('ansi','')]
-                if ';01m' in esc:
-                    self.bold = True
-                # extract fg color code.
-                attrs.append(esc[2:4])
-            else:
-                attrs.extend(("38", "5", "%i" % self.fg))
+            if self.fg in ansicolors: 
+                esc = codes[self.fg.replace('ansi','')] 
+                if ';01m' in esc: 
+                    self.bold = True 
+                # extract fg color code. 
+                attrs.append(esc[2:4]) 
+            else: 
+                attrs.extend(("38", "5", "%i" % self.fg)) 
         if self.bg is not None:
-            if self.bg in ansicolors:
-                esc = codes[self.bg.replace('ansi','')]
-                # extract fg color code, add 10 for bg.
-                attrs.append(str(int(esc[2:4])+10))
-            else:
-                attrs.extend(("48", "5", "%i" % self.bg))
+            if self.bg in ansicolors: 
+                esc = codes[self.bg.replace('ansi','')] 
+                # extract fg color code, add 10 for bg. 
+                attrs.append(str(int(esc[2:4])+10)) 
+            else: 
+                attrs.extend(("48", "5", "%i" % self.bg)) 
         if self.bold:
             attrs.append("01")
         if self.underline:
@@ -105,17 +105,17 @@ class Terminal256Formatter(Formatter):
 
     .. versionadded:: 0.9
 
-    .. versionchanged:: 2.2
-       If the used style defines foreground colors in the form ``#ansi*``, then
-       `Terminal256Formatter` will map these to non extended foreground color.
-       See :ref:`AnsiTerminalStyle` for more information.
-
-    .. versionchanged:: 2.4
-       The ANSI color names have been updated with names that are easier to
-       understand and align with colornames of other projects and terminals.
-       See :ref:`this table <new-ansi-color-names>` for more information.
-
-
+    .. versionchanged:: 2.2 
+       If the used style defines foreground colors in the form ``#ansi*``, then 
+       `Terminal256Formatter` will map these to non extended foreground color. 
+       See :ref:`AnsiTerminalStyle` for more information. 
+ 
+    .. versionchanged:: 2.4 
+       The ANSI color names have been updated with names that are easier to 
+       understand and align with colornames of other projects and terminals. 
+       See :ref:`this table <new-ansi-color-names>` for more information. 
+ 
+ 
     Options accepted:
 
     `style`
@@ -194,10 +194,10 @@ class Terminal256Formatter(Formatter):
 
     def _color_index(self, color):
         index = self.best_match.get(color, None)
-        if color in ansicolors:
-            # strip the `ansi/#ansi` part and look up code
-            index = color
-            self.best_match[color] = index
+        if color in ansicolors: 
+            # strip the `ansi/#ansi` part and look up code 
+            index = color 
+            self.best_match[color] = index 
         if index is None:
             try:
                 rgb = int(str(color), 16)
@@ -214,14 +214,14 @@ class Terminal256Formatter(Formatter):
     def _setup_styles(self):
         for ttype, ndef in self.style:
             escape = EscapeSequence()
-            # get foreground from ansicolor if set
-            if ndef['ansicolor']:
-                escape.fg = self._color_index(ndef['ansicolor'])
-            elif ndef['color']:
+            # get foreground from ansicolor if set 
+            if ndef['ansicolor']: 
+                escape.fg = self._color_index(ndef['ansicolor']) 
+            elif ndef['color']: 
                 escape.fg = self._color_index(ndef['color'])
-            if ndef['bgansicolor']:
-                escape.bg = self._color_index(ndef['bgansicolor'])
-            elif ndef['bgcolor']:
+            if ndef['bgansicolor']: 
+                escape.bg = self._color_index(ndef['bgansicolor']) 
+            elif ndef['bgcolor']: 
                 escape.bg = self._color_index(ndef['bgcolor'])
             if self.usebold and ndef['bold']:
                 escape.bold = True

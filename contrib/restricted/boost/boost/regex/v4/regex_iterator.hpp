@@ -78,7 +78,7 @@ public:
       return result;
    }
 private:
-   regex_iterator_implementation& operator=(const regex_iterator_implementation&) = default;
+   regex_iterator_implementation& operator=(const regex_iterator_implementation&) = default; 
 };
 
 template <class BidirectionalIterator, 

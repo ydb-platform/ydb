@@ -17,11 +17,11 @@
 #include <ostream>
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 std::ostream& operator<<(std::ostream& os, y_absl::LogSeverity s) {
   if (s == y_absl::NormalizeLogSeverity(s)) return os << y_absl::LogSeverityName(s);
   return os << "y_absl::LogSeverity(" << static_cast<int>(s) << ")";
 }
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl

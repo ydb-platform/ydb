@@ -4,7 +4,7 @@ LICENSE(MIT)
 
 VERSION(5.4.1)
 
-OWNER(g:python-contrib borman g:testenv)
+OWNER(g:python-contrib borman g:testenv) 
 
 PEERDIR(
     contrib/libs/yaml
@@ -13,7 +13,7 @@ PEERDIR(
 ADDINCL(
     contrib/python/PyYAML/py3/yaml
 )
-
+ 
 PY_SRCS(
     TOP_LEVEL
     _yaml/__init__.py

@@ -1,20 +1,20 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #include <aws/common/common.h>
-#include <aws/common/logging.h>
+#include <aws/common/logging.h> 
 #include <aws/common/math.h>
-#include <aws/common/private/dlloads.h>
+#include <aws/common/private/dlloads.h> 
 
 #include <stdarg.h>
 #include <stdlib.h>
 
 #ifdef _WIN32
 #    include <Windows.h>
-#else
-#    include <dlfcn.h>
+#else 
+#    include <dlfcn.h> 
 #endif
 
 #ifdef __MACH__
@@ -27,47 +27,47 @@
 #    pragma warning(disable : 4100)
 #endif
 
-long (*g_set_mempolicy_ptr)(int, const unsigned long *, unsigned long) = NULL;
-void *g_libnuma_handle = NULL;
+long (*g_set_mempolicy_ptr)(int, const unsigned long *, unsigned long) = NULL; 
+void *g_libnuma_handle = NULL; 
 
-void aws_secure_zero(void *pBuf, size_t bufsize) {
-#if defined(_WIN32)
-    SecureZeroMemory(pBuf, bufsize);
-#else
-    /* We cannot use memset_s, even on a C11 compiler, because that would require
-     * that __STDC_WANT_LIB_EXT1__ be defined before the _first_ inclusion of string.h.
-     *
-     * We'll try to work around this by using inline asm on GCC-like compilers,
-     * and by exposing the buffer pointer in a volatile local pointer elsewhere.
+void aws_secure_zero(void *pBuf, size_t bufsize) { 
+#if defined(_WIN32) 
+    SecureZeroMemory(pBuf, bufsize); 
+#else 
+    /* We cannot use memset_s, even on a C11 compiler, because that would require 
+     * that __STDC_WANT_LIB_EXT1__ be defined before the _first_ inclusion of string.h. 
+     * 
+     * We'll try to work around this by using inline asm on GCC-like compilers, 
+     * and by exposing the buffer pointer in a volatile local pointer elsewhere. 
      */
-#    if defined(__GNUC__) || defined(__clang__)
-    memset(pBuf, 0, bufsize);
-    /* This inline asm serves to convince the compiler that the buffer is (somehow) still
-     * used after the zero, and therefore that the optimizer can't eliminate the memset.
-     */
-    __asm__ __volatile__("" /* The asm doesn't actually do anything. */
-                         :  /* no outputs */
-                         /* Tell the compiler that the asm code has access to the pointer to the buffer,
-                          * and therefore it might be reading the (now-zeroed) buffer.
-                          * Without this. clang/LLVM 9.0.0 optimizes away a memset of a stack buffer.
-                          */
-                         : "r"(pBuf)
-                         /* Also clobber memory. While this seems like it might be unnecessary - after all,
-                          * it's enough that the asm might read the buffer, right? - in practice GCC 7.3.0
-                          * seems to optimize a zero of a stack buffer without it.
-                          */
-                         : "memory");
-#    else  // not GCC/clang
-    /* We don't have access to inline asm, since we're on a non-GCC platform. Move the pointer
-     * through a volatile pointer in an attempt to confuse the optimizer.
-     */
-    volatile void *pVolBuf = pBuf;
-    memset(pVolBuf, 0, bufsize);
-#    endif // #else not GCC/clang
-#endif     // #else not windows
+#    if defined(__GNUC__) || defined(__clang__) 
+    memset(pBuf, 0, bufsize); 
+    /* This inline asm serves to convince the compiler that the buffer is (somehow) still 
+     * used after the zero, and therefore that the optimizer can't eliminate the memset. 
+     */ 
+    __asm__ __volatile__("" /* The asm doesn't actually do anything. */ 
+                         :  /* no outputs */ 
+                         /* Tell the compiler that the asm code has access to the pointer to the buffer, 
+                          * and therefore it might be reading the (now-zeroed) buffer. 
+                          * Without this. clang/LLVM 9.0.0 optimizes away a memset of a stack buffer. 
+                          */ 
+                         : "r"(pBuf) 
+                         /* Also clobber memory. While this seems like it might be unnecessary - after all, 
+                          * it's enough that the asm might read the buffer, right? - in practice GCC 7.3.0 
+                          * seems to optimize a zero of a stack buffer without it. 
+                          */ 
+                         : "memory"); 
+#    else  // not GCC/clang 
+    /* We don't have access to inline asm, since we're on a non-GCC platform. Move the pointer 
+     * through a volatile pointer in an attempt to confuse the optimizer. 
+     */ 
+    volatile void *pVolBuf = pBuf; 
+    memset(pVolBuf, 0, bufsize); 
+#    endif // #else not GCC/clang 
+#endif     // #else not windows 
 }
 
-#define AWS_DEFINE_ERROR_INFO_COMMON(C, ES) [(C)-0x0000] = AWS_DEFINE_ERROR_INFO(C, ES, "aws-c-common")
+#define AWS_DEFINE_ERROR_INFO_COMMON(C, ES) [(C)-0x0000] = AWS_DEFINE_ERROR_INFO(C, ES, "aws-c-common") 
 /* clang-format off */
 static struct aws_error_info errors[] = {
     AWS_DEFINE_ERROR_INFO_COMMON(
@@ -202,30 +202,30 @@ static struct aws_error_info errors[] = {
         AWS_ERROR_ENVIRONMENT_UNSET,
         "System call failure when unsetting an environment variable."
     ),
-    AWS_DEFINE_ERROR_INFO_COMMON(
-        AWS_ERROR_SYS_CALL_FAILURE,
-        "System call failure"),
-    AWS_DEFINE_ERROR_INFO_COMMON(
-        AWS_ERROR_FILE_INVALID_PATH,
-        "Invalid file path."),
-    AWS_DEFINE_ERROR_INFO_COMMON(
-        AWS_ERROR_MAX_FDS_EXCEEDED,
-        "The maximum number of fds has been exceeded."),
-    AWS_DEFINE_ERROR_INFO_COMMON(
-        AWS_ERROR_NO_PERMISSION,
-        "User does not have permission to perform the requested action."),
-    AWS_DEFINE_ERROR_INFO_COMMON(
-        AWS_ERROR_STREAM_UNSEEKABLE,
-        "Stream does not support seek operations"),
-    AWS_DEFINE_ERROR_INFO_COMMON(
-        AWS_ERROR_C_STRING_BUFFER_NOT_NULL_TERMINATED,
-        "A c-string like buffer was passed but a null terminator was not found within the bounds of the buffer."),
-    AWS_DEFINE_ERROR_INFO_COMMON(
-        AWS_ERROR_STRING_MATCH_NOT_FOUND,
-      "The specified substring was not present in the input string."),
-    AWS_DEFINE_ERROR_INFO_COMMON(
-        AWS_ERROR_DIVIDE_BY_ZERO,
-        "Attempt to divide a number by zero."),
+    AWS_DEFINE_ERROR_INFO_COMMON( 
+        AWS_ERROR_SYS_CALL_FAILURE, 
+        "System call failure"), 
+    AWS_DEFINE_ERROR_INFO_COMMON( 
+        AWS_ERROR_FILE_INVALID_PATH, 
+        "Invalid file path."), 
+    AWS_DEFINE_ERROR_INFO_COMMON( 
+        AWS_ERROR_MAX_FDS_EXCEEDED, 
+        "The maximum number of fds has been exceeded."), 
+    AWS_DEFINE_ERROR_INFO_COMMON( 
+        AWS_ERROR_NO_PERMISSION, 
+        "User does not have permission to perform the requested action."), 
+    AWS_DEFINE_ERROR_INFO_COMMON( 
+        AWS_ERROR_STREAM_UNSEEKABLE, 
+        "Stream does not support seek operations"), 
+    AWS_DEFINE_ERROR_INFO_COMMON( 
+        AWS_ERROR_C_STRING_BUFFER_NOT_NULL_TERMINATED, 
+        "A c-string like buffer was passed but a null terminator was not found within the bounds of the buffer."), 
+    AWS_DEFINE_ERROR_INFO_COMMON( 
+        AWS_ERROR_STRING_MATCH_NOT_FOUND, 
+      "The specified substring was not present in the input string."), 
+    AWS_DEFINE_ERROR_INFO_COMMON( 
+        AWS_ERROR_DIVIDE_BY_ZERO, 
+        "Attempt to divide a number by zero."), 
 };
 /* clang-format on */
 
@@ -234,77 +234,77 @@ static struct aws_error_info_list s_list = {
     .count = AWS_ARRAY_SIZE(errors),
 };
 
-static struct aws_log_subject_info s_common_log_subject_infos[] = {
-    DEFINE_LOG_SUBJECT_INFO(
-        AWS_LS_COMMON_GENERAL,
-        "aws-c-common",
-        "Subject for aws-c-common logging that doesn't belong to any particular category"),
-    DEFINE_LOG_SUBJECT_INFO(
-        AWS_LS_COMMON_TASK_SCHEDULER,
-        "task-scheduler",
-        "Subject for task scheduler or task specific logging."),
-    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_THREAD, "thread", "Subject for logging thread related functions."),
-    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_XML_PARSER, "xml-parser", "Subject for xml parser specific logging."),
-    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_MEMTRACE, "memtrace", "Output from the aws_mem_trace_dump function"),
-};
-
-static struct aws_log_subject_info_list s_common_log_subject_list = {
-    .subject_list = s_common_log_subject_infos,
-    .count = AWS_ARRAY_SIZE(s_common_log_subject_infos),
-};
-
-static bool s_common_library_initialized = false;
-
-void aws_common_library_init(struct aws_allocator *allocator) {
-    (void)allocator;
-
-    if (!s_common_library_initialized) {
-        s_common_library_initialized = true;
+static struct aws_log_subject_info s_common_log_subject_infos[] = { 
+    DEFINE_LOG_SUBJECT_INFO( 
+        AWS_LS_COMMON_GENERAL, 
+        "aws-c-common", 
+        "Subject for aws-c-common logging that doesn't belong to any particular category"), 
+    DEFINE_LOG_SUBJECT_INFO( 
+        AWS_LS_COMMON_TASK_SCHEDULER, 
+        "task-scheduler", 
+        "Subject for task scheduler or task specific logging."), 
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_THREAD, "thread", "Subject for logging thread related functions."), 
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_XML_PARSER, "xml-parser", "Subject for xml parser specific logging."), 
+    DEFINE_LOG_SUBJECT_INFO(AWS_LS_COMMON_MEMTRACE, "memtrace", "Output from the aws_mem_trace_dump function"), 
+}; 
+ 
+static struct aws_log_subject_info_list s_common_log_subject_list = { 
+    .subject_list = s_common_log_subject_infos, 
+    .count = AWS_ARRAY_SIZE(s_common_log_subject_infos), 
+}; 
+ 
+static bool s_common_library_initialized = false; 
+ 
+void aws_common_library_init(struct aws_allocator *allocator) { 
+    (void)allocator; 
+ 
+    if (!s_common_library_initialized) { 
+        s_common_library_initialized = true; 
         aws_register_error_info(&s_list);
-        aws_register_log_subject_info_list(&s_common_log_subject_list);
-
-/* NUMA is funky and we can't rely on libnuma.so being available. We also don't want to take a hard dependency on it,
- * try and load it if we can. */
-#if !defined(_WIN32) && !defined(WIN32)
-        g_libnuma_handle = dlopen("libnuma.so", RTLD_NOW);
-
-        if (g_libnuma_handle) {
-            AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: libnuma.so loaded");
-            *(void **)(&g_set_mempolicy_ptr) = dlsym(g_libnuma_handle, "set_mempolicy");
-            if (g_set_mempolicy_ptr) {
-                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: set_mempolicy() loaded");
-            } else {
-                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: set_mempolicy() failed to load");
-            }
-        } else {
-            AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: libnuma.so failed to load");
-        }
-#endif
+        aws_register_log_subject_info_list(&s_common_log_subject_list); 
+ 
+/* NUMA is funky and we can't rely on libnuma.so being available. We also don't want to take a hard dependency on it, 
+ * try and load it if we can. */ 
+#if !defined(_WIN32) && !defined(WIN32) 
+        g_libnuma_handle = dlopen("libnuma.so", RTLD_NOW); 
+ 
+        if (g_libnuma_handle) { 
+            AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: libnuma.so loaded"); 
+            *(void **)(&g_set_mempolicy_ptr) = dlsym(g_libnuma_handle, "set_mempolicy"); 
+            if (g_set_mempolicy_ptr) { 
+                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: set_mempolicy() loaded"); 
+            } else { 
+                AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: set_mempolicy() failed to load"); 
+            } 
+        } else { 
+            AWS_LOGF_INFO(AWS_LS_COMMON_GENERAL, "static: libnuma.so failed to load"); 
+        } 
+#endif 
     }
 }
 
-void aws_common_library_clean_up(void) {
-    if (s_common_library_initialized) {
-        s_common_library_initialized = false;
-        aws_unregister_error_info(&s_list);
-        aws_unregister_log_subject_info_list(&s_common_log_subject_list);
-#if !defined(_WIN32) && !defined(WIN32)
-        if (g_libnuma_handle) {
-            dlclose(g_libnuma_handle);
-        }
-#endif
-    }
+void aws_common_library_clean_up(void) { 
+    if (s_common_library_initialized) { 
+        s_common_library_initialized = false; 
+        aws_unregister_error_info(&s_list); 
+        aws_unregister_log_subject_info_list(&s_common_log_subject_list); 
+#if !defined(_WIN32) && !defined(WIN32) 
+        if (g_libnuma_handle) { 
+            dlclose(g_libnuma_handle); 
+        } 
+#endif 
+    } 
 }
 
-void aws_common_fatal_assert_library_initialized(void) {
-    if (!s_common_library_initialized) {
-        fprintf(
-            stderr, "%s", "aws_common_library_init() must be called before using any functionality in aws-c-common.");
-
-        AWS_FATAL_ASSERT(s_common_library_initialized);
-    }
-}
-
+void aws_common_fatal_assert_library_initialized(void) { 
+    if (!s_common_library_initialized) { 
+        fprintf( 
+            stderr, "%s", "aws_common_library_init() must be called before using any functionality in aws-c-common."); 
+ 
+        AWS_FATAL_ASSERT(s_common_library_initialized); 
+    } 
+} 
+ 
 #ifdef _MSC_VER
 #    pragma warning(pop)
 #endif

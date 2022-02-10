@@ -29,24 +29,24 @@ except ImportError:
     pass
 
 code = u"""\
-def f(x):
+def f(x): 
     return 2*x
 """
 
 cython3_code = u"""\
-def f(int x):
-    return 2 / x
+def f(int x): 
+    return 2 / x 
 
-def call(x):
-    return f(*(x,))
+def call(x): 
+    return f(*(x,)) 
 """
-
+ 
 pgo_cython3_code = cython3_code + u"""\
 def main():
     for _ in range(100): call(5)
 main()
 """
-
+ 
 
 if sys.platform == 'win32':
     # not using IPython's decorators here because they depend on "nose"
@@ -114,34 +114,34 @@ class TestIPythonMagic(CythonTest):
         ip.ex('import mymodule; g = mymodule.f(10)')
         self.assertEqual(ip.user_ns['g'], 20.0)
 
-    def test_cython_language_level(self):
-        # The Cython cell defines the functions f() and call().
+    def test_cython_language_level(self): 
+        # The Cython cell defines the functions f() and call(). 
         ip = self._ip
-        ip.run_cell_magic('cython', '', cython3_code)
-        ip.ex('g = f(10); h = call(10)')
-        if sys.version_info[0] < 3:
-            self.assertEqual(ip.user_ns['g'], 2 // 10)
-            self.assertEqual(ip.user_ns['h'], 2 // 10)
-        else:
-            self.assertEqual(ip.user_ns['g'], 2.0 / 10.0)
-            self.assertEqual(ip.user_ns['h'], 2.0 / 10.0)
-
-    def test_cython3(self):
-        # The Cython cell defines the functions f() and call().
+        ip.run_cell_magic('cython', '', cython3_code) 
+        ip.ex('g = f(10); h = call(10)') 
+        if sys.version_info[0] < 3: 
+            self.assertEqual(ip.user_ns['g'], 2 // 10) 
+            self.assertEqual(ip.user_ns['h'], 2 // 10) 
+        else: 
+            self.assertEqual(ip.user_ns['g'], 2.0 / 10.0) 
+            self.assertEqual(ip.user_ns['h'], 2.0 / 10.0) 
+ 
+    def test_cython3(self): 
+        # The Cython cell defines the functions f() and call(). 
         ip = self._ip
-        ip.run_cell_magic('cython', '-3', cython3_code)
-        ip.ex('g = f(10); h = call(10)')
-        self.assertEqual(ip.user_ns['g'], 2.0 / 10.0)
-        self.assertEqual(ip.user_ns['h'], 2.0 / 10.0)
-
-    def test_cython2(self):
-        # The Cython cell defines the functions f() and call().
+        ip.run_cell_magic('cython', '-3', cython3_code) 
+        ip.ex('g = f(10); h = call(10)') 
+        self.assertEqual(ip.user_ns['g'], 2.0 / 10.0) 
+        self.assertEqual(ip.user_ns['h'], 2.0 / 10.0) 
+ 
+    def test_cython2(self): 
+        # The Cython cell defines the functions f() and call(). 
         ip = self._ip
-        ip.run_cell_magic('cython', '-2', cython3_code)
-        ip.ex('g = f(10); h = call(10)')
-        self.assertEqual(ip.user_ns['g'], 2 // 10)
-        self.assertEqual(ip.user_ns['h'], 2 // 10)
-
+        ip.run_cell_magic('cython', '-2', cython3_code) 
+        ip.ex('g = f(10); h = call(10)') 
+        self.assertEqual(ip.user_ns['g'], 2 // 10) 
+        self.assertEqual(ip.user_ns['h'], 2 // 10) 
+ 
     @skip_win32('Skip on Windows')
     def test_cython3_pgo(self):
         # The Cython cell defines the functions f() and call().

@@ -36,7 +36,7 @@
  * OpenLDAP library versions, USE_OPENLDAP shall not be defined.
  */
 
-#error #include <ldap.h>
+#error #include <ldap.h> 
 
 #include "urldata.h"
 #include <curl/curl.h>
@@ -153,7 +153,7 @@ static const char *url_errs[] = {
   "bad or missing extensions"
 };
 
-struct ldapconninfo {
+struct ldapconninfo { 
   LDAP *ld;
   Curl_recv *recv;  /* for stacking SSL handler */
   Curl_send *send;
@@ -162,7 +162,7 @@ struct ldapconninfo {
   bool ssldone;
   bool sslinst;
   bool didbind;
-};
+}; 
 
 struct ldapreqinfo {
   int msgid;
@@ -171,7 +171,7 @@ struct ldapreqinfo {
 
 static CURLcode ldap_setup_connection(struct connectdata *conn)
 {
-  struct ldapconninfo *li;
+  struct ldapconninfo *li; 
   LDAPURLDesc *lud;
   struct Curl_easy *data = conn->data;
   int rc, proto;
@@ -192,11 +192,11 @@ static CURLcode ldap_setup_connection(struct connectdata *conn)
   proto = ldap_pvt_url_scheme2proto(lud->lud_scheme);
   ldap_free_urldesc(lud);
 
-  li = calloc(1, sizeof(struct ldapconninfo));
+  li = calloc(1, sizeof(struct ldapconninfo)); 
   if(!li)
     return CURLE_OUT_OF_MEMORY;
   li->proto = proto;
-  conn->proto.ldapc = li;
+  conn->proto.ldapc = li; 
   connkeep(conn, "OpenLDAP default");
   return CURLE_OK;
 }
@@ -207,7 +207,7 @@ static Sockbuf_IO ldapsb_tls;
 
 static CURLcode ldap_connect(struct connectdata *conn, bool *done)
 {
-  struct ldapconninfo *li = conn->proto.ldapc;
+  struct ldapconninfo *li = conn->proto.ldapc; 
   struct Curl_easy *data = conn->data;
   int rc, proto = LDAP_VERSION3;
   char hosturl[1024];
@@ -254,7 +254,7 @@ static CURLcode ldap_connect(struct connectdata *conn, bool *done)
 
 static CURLcode ldap_connecting(struct connectdata *conn, bool *done)
 {
-  struct ldapconninfo *li = conn->proto.ldapc;
+  struct ldapconninfo *li = conn->proto.ldapc; 
   struct Curl_easy *data = conn->data;
   LDAPMessage *msg = NULL;
   struct timeval tv = {0, 1}, *tvp;
@@ -359,7 +359,7 @@ static CURLcode ldap_connecting(struct connectdata *conn, bool *done)
 
 static CURLcode ldap_disconnect(struct connectdata *conn, bool dead_connection)
 {
-  struct ldapconninfo *li = conn->proto.ldapc;
+  struct ldapconninfo *li = conn->proto.ldapc; 
   (void) dead_connection;
 
   if(li) {
@@ -367,7 +367,7 @@ static CURLcode ldap_disconnect(struct connectdata *conn, bool dead_connection)
       ldap_unbind_ext(li->ld, NULL, NULL);
       li->ld = NULL;
     }
-    conn->proto.ldapc = NULL;
+    conn->proto.ldapc = NULL; 
     free(li);
   }
   return CURLE_OK;
@@ -375,7 +375,7 @@ static CURLcode ldap_disconnect(struct connectdata *conn, bool dead_connection)
 
 static CURLcode ldap_do(struct connectdata *conn, bool *done)
 {
-  struct ldapconninfo *li = conn->proto.ldapc;
+  struct ldapconninfo *li = conn->proto.ldapc; 
   struct ldapreqinfo *lr;
   CURLcode status = CURLE_OK;
   int rc = 0;
@@ -413,7 +413,7 @@ static CURLcode ldap_do(struct connectdata *conn, bool *done)
     return CURLE_OUT_OF_MEMORY;
   lr->msgid = msgid;
   data->req.p.ldap = lr;
-  Curl_setup_transfer(data, FIRSTSOCKET, -1, FALSE, -1);
+  Curl_setup_transfer(data, FIRSTSOCKET, -1, FALSE, -1); 
   *done = TRUE;
   return CURLE_OK;
 }
@@ -429,7 +429,7 @@ static CURLcode ldap_done(struct connectdata *conn, CURLcode res,
   if(lr) {
     /* if there was a search in progress, abandon it */
     if(lr->msgid) {
-      struct ldapconninfo *li = conn->proto.ldapc;
+      struct ldapconninfo *li = conn->proto.ldapc; 
       ldap_abandon_ext(li->ld, lr->msgid, NULL, NULL);
       lr->msgid = 0;
     }
@@ -443,7 +443,7 @@ static CURLcode ldap_done(struct connectdata *conn, CURLcode res,
 static ssize_t ldap_recv(struct connectdata *conn, int sockindex, char *buf,
                          size_t len, CURLcode *err)
 {
-  struct ldapconninfo *li = conn->proto.ldapc;
+  struct ldapconninfo *li = conn->proto.ldapc; 
   struct Curl_easy *data = conn->data;
   struct ldapreqinfo *lr = data->req.p.ldap;
   int rc, ret;
@@ -720,7 +720,7 @@ static ber_slen_t
 ldapsb_tls_read(Sockbuf_IO_Desc *sbiod, void *buf, ber_len_t len)
 {
   struct connectdata *conn = sbiod->sbiod_pvt;
-  struct ldapconninfo *li = conn->proto.ldapc;
+  struct ldapconninfo *li = conn->proto.ldapc; 
   ber_slen_t ret;
   CURLcode err = CURLE_RECV_ERROR;
 
@@ -735,7 +735,7 @@ static ber_slen_t
 ldapsb_tls_write(Sockbuf_IO_Desc *sbiod, void *buf, ber_len_t len)
 {
   struct connectdata *conn = sbiod->sbiod_pvt;
-  struct ldapconninfo *li = conn->proto.ldapc;
+  struct ldapconninfo *li = conn->proto.ldapc; 
   ber_slen_t ret;
   CURLcode err = CURLE_SEND_ERROR;
 

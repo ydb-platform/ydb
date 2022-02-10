@@ -1,4 +1,4 @@
-GTEST()
+GTEST() 
 
 LICENSE(Apache-2.0)
 
@@ -10,26 +10,26 @@ OWNER(
 )
 
 PEERDIR(
-    contrib/libs/cctz
+    contrib/libs/cctz 
     contrib/libs/cctz/tzdata
 )
 
 ADDINCL(
     contrib/libs/cctz/include
 )
-
-IF (NOT AUTOCHECK)
-    # We do not set TZDIR to a stable data source, so
-    # LoadZone("libc:localtime") is inconsistent and makes
-    # LocalTimeLibC test fail on distbuild.
+ 
+IF (NOT AUTOCHECK) 
+    # We do not set TZDIR to a stable data source, so 
+    # LoadZone("libc:localtime") is inconsistent and makes 
+    # LocalTimeLibC test fail on distbuild. 
     CFLAGS(
         -DCCTZ_TEST_LIBC_LOCALTIME
     )
-ENDIF()
-
+ENDIF() 
+ 
 SRCS(
     civil_time_test.cc
-    time_zone_format_test.cc
+    time_zone_format_test.cc 
     time_zone_lookup_test.cc
 )
 

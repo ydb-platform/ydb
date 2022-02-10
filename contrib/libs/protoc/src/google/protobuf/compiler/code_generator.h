@@ -55,9 +55,9 @@ class FileDescriptor;
 class GeneratedCodeInfo;
 
 namespace compiler {
-class AccessInfoMap;
+class AccessInfoMap; 
 
-class Version;
+class Version; 
 
 // Defined in this file.
 class CodeGenerator;
@@ -74,11 +74,11 @@ class PROTOC_EXPORT CodeGenerator {
   // Generates code for the given proto file, generating one or more files in
   // the given output directory.
   //
-  // A parameter to be passed to the generator can be specified on the command
-  // line. This is intended to be used to pass generator specific parameters.
-  // It is empty if no parameter was given. ParseGeneratorParameter (below),
-  // can be used to accept multiple parameters within the single parameter
-  // command line flag.
+  // A parameter to be passed to the generator can be specified on the command 
+  // line. This is intended to be used to pass generator specific parameters. 
+  // It is empty if no parameter was given. ParseGeneratorParameter (below), 
+  // can be used to accept multiple parameters within the single parameter 
+  // command line flag. 
   //
   // Returns true if successful.  Otherwise, sets *error to a description of
   // the problem (e.g. "invalid parameter") and returns false.
@@ -87,20 +87,20 @@ class PROTOC_EXPORT CodeGenerator {
                         GeneratorContext* generator_context,
                         TProtoStringType* error) const = 0;
 
-  // Generates code for all given proto files.
+  // Generates code for all given proto files. 
   //
-  // WARNING: The canonical code generator design produces one or two output
-  // files per input .proto file, and we do not wish to encourage alternate
-  // designs.
+  // WARNING: The canonical code generator design produces one or two output 
+  // files per input .proto file, and we do not wish to encourage alternate 
+  // designs. 
   //
   // A parameter is given as passed on the command line, as in |Generate()|
   // above.
   //
   // Returns true if successful.  Otherwise, sets *error to a description of
   // the problem (e.g. "invalid parameter") and returns false.
-  virtual bool GenerateAll(const std::vector<const FileDescriptor*>& files,
+  virtual bool GenerateAll(const std::vector<const FileDescriptor*>& files, 
                            const TProtoStringType& parameter,
-                           GeneratorContext* generator_context,
+                           GeneratorContext* generator_context, 
                            TProtoStringType* error) const;
 
   // Sync with plugin.proto.
@@ -113,11 +113,11 @@ class PROTOC_EXPORT CodeGenerator {
   // plugin.proto.
   virtual uint64_t GetSupportedFeatures() const { return 0; }
 
-  // This is no longer used, but this class is part of the opensource protobuf
-  // library, so it has to remain to keep vtables the same for the current
-  // version of the library. When protobufs does a api breaking change, the
-  // method can be removed.
-  virtual bool HasGenerateAll() const { return true; }
+  // This is no longer used, but this class is part of the opensource protobuf 
+  // library, so it has to remain to keep vtables the same for the current 
+  // version of the library. When protobufs does a api breaking change, the 
+  // method can be removed. 
+  virtual bool HasGenerateAll() const { return true; } 
 
  private:
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(CodeGenerator);
@@ -129,8 +129,8 @@ class PROTOC_EXPORT CodeGenerator {
 // runs.
 class PROTOC_EXPORT GeneratorContext {
  public:
-  inline GeneratorContext() {
-  }
+  inline GeneratorContext() { 
+  } 
   virtual ~GeneratorContext();
 
   // Opens the given file, truncating it if it exists, and returns a
@@ -171,11 +171,11 @@ class PROTOC_EXPORT GeneratorContext {
   // differently when compiled as a set rather than individually.
   virtual void ListParsedFiles(std::vector<const FileDescriptor*>* output);
 
-  // Retrieves the version number of the protocol compiler associated with
-  // this GeneratorContext.
-  virtual void GetCompilerVersion(Version* version) const;
-
-
+  // Retrieves the version number of the protocol compiler associated with 
+  // this GeneratorContext. 
+  virtual void GetCompilerVersion(Version* version) const; 
+ 
+ 
  private:
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(GeneratorContext);
 };

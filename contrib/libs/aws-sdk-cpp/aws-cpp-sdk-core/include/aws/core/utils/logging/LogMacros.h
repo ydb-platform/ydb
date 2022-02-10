@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #pragma once
 
@@ -27,7 +27,7 @@
     #define AWS_LOG_INFO(tag, ...) 
     #define AWS_LOG_DEBUG(tag, ...) 
     #define AWS_LOG_TRACE(tag, ...) 
-    #define AWS_LOG_FLUSH()
+    #define AWS_LOG_FLUSH() 
 
     #define AWS_LOGSTREAM(level, tag, streamExpression) 
     #define AWS_LOGSTREAM_FATAL(tag, streamExpression)
@@ -36,19 +36,19 @@
     #define AWS_LOGSTREAM_INFO(tag, streamExpression)
     #define AWS_LOGSTREAM_DEBUG(tag, streamExpression)
     #define AWS_LOGSTREAM_TRACE(tag, streamExpression)
-    #define AWS_LOGSTREAM_FLUSH()
+    #define AWS_LOGSTREAM_FLUSH() 
 
 #else
 
-    #define AWS_LOG_FLUSH() \
-        { \
-            Aws::Utils::Logging::LogSystemInterface* logSystem = Aws::Utils::Logging::GetLogSystem(); \
-            if ( logSystem ) \
-            { \
-                logSystem->Flush(); \
-            } \
-        }
-
+    #define AWS_LOG_FLUSH() \ 
+        { \ 
+            Aws::Utils::Logging::LogSystemInterface* logSystem = Aws::Utils::Logging::GetLogSystem(); \ 
+            if ( logSystem ) \ 
+            { \ 
+                logSystem->Flush(); \ 
+            } \ 
+        } 
+ 
     #define AWS_LOG(level, tag, ...) \
         { \
             Aws::Utils::Logging::LogSystemInterface* logSystem = Aws::Utils::Logging::GetLogSystem(); \
@@ -189,6 +189,6 @@
             } \
         }
 
-    #define AWS_LOGSTREAM_FLUSH()  AWS_LOG_FLUSH()
-
+    #define AWS_LOGSTREAM_FLUSH()  AWS_LOG_FLUSH() 
+ 
 #endif // DISABLE_AWS_LOGGING

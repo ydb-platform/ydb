@@ -269,7 +269,7 @@ static cJSON_bool parse_number(cJSON * const item, parse_buffer * const input_bu
     unsigned char *after_end = NULL;
     unsigned char number_c_string[64];
     unsigned char decimal_point = get_decimal_point();
-    bool isInteger = true;
+    bool isInteger = true; 
     size_t i = 0;
 
     if ((input_buffer == NULL) || (input_buffer->content == NULL))
@@ -296,17 +296,17 @@ static cJSON_bool parse_number(cJSON * const item, parse_buffer * const input_bu
             case '9':
             case '+':
             case '-':
-                number_c_string[i] = buffer_at_offset(input_buffer)[i];
-                break;
+                number_c_string[i] = buffer_at_offset(input_buffer)[i]; 
+                break; 
             case 'e':
             case 'E':
                 number_c_string[i] = buffer_at_offset(input_buffer)[i];
-                isInteger = false;
+                isInteger = false; 
                 break;
 
             case '.':
                 number_c_string[i] = decimal_point;
-                isInteger = false;
+                isInteger = false; 
                 break;
 
             default:
@@ -323,12 +323,12 @@ loop_end:
     }
 
     item->valuedouble = number;
-    // For integer which is out of the range of [INT_MIN, INT_MAX], it may lose precision if we cast it to double.
-    // Instead, we keep the integer literal as a string.
-    if (isInteger && (number > INT_MAX || number < INT_MIN))
-    {
-        item->valuestring = (char*)cJSON_strdup(number_c_string, &global_hooks);
-    }
+    // For integer which is out of the range of [INT_MIN, INT_MAX], it may lose precision if we cast it to double. 
+    // Instead, we keep the integer literal as a string. 
+    if (isInteger && (number > INT_MAX || number < INT_MIN)) 
+    { 
+        item->valuestring = (char*)cJSON_strdup(number_c_string, &global_hooks); 
+    } 
 
     /* use saturation in case of overflow */
     if (number >= INT_MAX)
@@ -497,13 +497,13 @@ static cJSON_bool print_number(const cJSON * const item, printbuffer * const out
         return false;
     }
 
-    /* For integer which is out of the range of [INT_MIN, INT_MAX], valuestring is an integer literal. */
-    if (item->valuestring)
-    {
-        length = sprintf((char*)number_buffer, "%s", item->valuestring);
-    }
+    /* For integer which is out of the range of [INT_MIN, INT_MAX], valuestring is an integer literal. */ 
+    if (item->valuestring) 
+    { 
+        length = sprintf((char*)number_buffer, "%s", item->valuestring); 
+    } 
     /* This checks for NaN and Infinity */
-    else if ((d * 0) != 0)
+    else if ((d * 0) != 0) 
     {
         length = sprintf((char*)number_buffer, "null");
     }
@@ -520,7 +520,7 @@ static cJSON_bool print_number(const cJSON * const item, printbuffer * const out
         }
     }
 
-    /* sprintf failed or buffer overrun occurred */
+    /* sprintf failed or buffer overrun occurred */ 
     if ((length < 0) || (length > (int)(sizeof(number_buffer) - 1)))
     {
         return false;
@@ -1571,7 +1571,7 @@ static cJSON_bool parse_object(cJSON * const item, parse_buffer * const input_bu
         buffer_skip_whitespace(input_buffer);
         if (!parse_string(current_item, input_buffer))
         {
-            goto fail; /* failed to parse name */
+            goto fail; /* failed to parse name */ 
         }
         buffer_skip_whitespace(input_buffer);
 
@@ -2329,41 +2329,41 @@ CJSON_PUBLIC(cJSON *) cJSON_CreateNumber(double num)
     return item;
 }
 
-CJSON_PUBLIC(cJSON *) cJSON_CreateInt64(long long num)
-{
-    cJSON *item = cJSON_New_Item(&global_hooks);
-    if(item)
-    {
-        item->type = cJSON_Number;
-        item->valuedouble = static_cast<double>(num);
-
-        // For integer which is out of the range of [INT_MIN, INT_MAX], it may lose precision if we cast it to double.
-        // Instead, we keep the integer literal as a string.
-        if (num > INT_MAX || num < INT_MIN)
-        {
-            char buf[21];
-            sprintf(buf, "%lld", num);
-            item->valuestring = (char*)cJSON_strdup((const unsigned char*)buf, &global_hooks);
-        }
-
-        /* use saturation in case of overflow */
-        if (num >= INT_MAX)
-        {
-            item->valueint = INT_MAX;
-        }
-        else if (num <= INT_MIN)
-        {
-            item->valueint = INT_MIN;
-        }
-        else
-        {
-            item->valueint = (int)num;
-        }
-    }
-
-    return item;
-}
-
+CJSON_PUBLIC(cJSON *) cJSON_CreateInt64(long long num) 
+{ 
+    cJSON *item = cJSON_New_Item(&global_hooks); 
+    if(item) 
+    { 
+        item->type = cJSON_Number; 
+        item->valuedouble = static_cast<double>(num); 
+ 
+        // For integer which is out of the range of [INT_MIN, INT_MAX], it may lose precision if we cast it to double. 
+        // Instead, we keep the integer literal as a string. 
+        if (num > INT_MAX || num < INT_MIN) 
+        { 
+            char buf[21]; 
+            sprintf(buf, "%lld", num); 
+            item->valuestring = (char*)cJSON_strdup((const unsigned char*)buf, &global_hooks); 
+        } 
+ 
+        /* use saturation in case of overflow */ 
+        if (num >= INT_MAX) 
+        { 
+            item->valueint = INT_MAX; 
+        } 
+        else if (num <= INT_MIN) 
+        { 
+            item->valueint = INT_MIN; 
+        } 
+        else 
+        { 
+            item->valueint = (int)num; 
+        } 
+    } 
+ 
+    return item; 
+} 
+ 
 CJSON_PUBLIC(cJSON *) cJSON_CreateString(const char *string)
 {
     cJSON *item = cJSON_New_Item(&global_hooks);

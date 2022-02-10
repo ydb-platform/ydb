@@ -47,7 +47,7 @@ CURLcode Curl_readwrite(struct connectdata *conn,
                         struct Curl_easy *data, bool *done,
                         bool *comeback);
 int Curl_single_getsock(const struct connectdata *conn,
-                        curl_socket_t *socks);
+                        curl_socket_t *socks); 
 CURLcode Curl_readrewind(struct connectdata *conn);
 CURLcode Curl_fillreadbuffer(struct connectdata *conn, size_t bytes,
                              size_t *nreadp);
@@ -55,18 +55,18 @@ CURLcode Curl_retry_request(struct connectdata *conn, char **url);
 bool Curl_meets_timecondition(struct Curl_easy *data, time_t timeofdoc);
 CURLcode Curl_get_upload_buffer(struct Curl_easy *data);
 
-CURLcode Curl_done_sending(struct connectdata *conn,
-                           struct SingleRequest *k);
-
+CURLcode Curl_done_sending(struct connectdata *conn, 
+                           struct SingleRequest *k); 
+ 
 /* This sets up a forthcoming transfer */
 void
-Curl_setup_transfer (struct Curl_easy *data,
-                     int sockindex,     /* socket index to read from or -1 */
-                     curl_off_t size,   /* -1 if unknown at this point */
-                     bool getheader,    /* TRUE if header parsing is wanted */
-                     int writesockindex /* socket index to write to. May be
-                                           the same we read from. -1
-                                           disables */
-  );
+Curl_setup_transfer (struct Curl_easy *data, 
+                     int sockindex,     /* socket index to read from or -1 */ 
+                     curl_off_t size,   /* -1 if unknown at this point */ 
+                     bool getheader,    /* TRUE if header parsing is wanted */ 
+                     int writesockindex /* socket index to write to. May be 
+                                           the same we read from. -1 
+                                           disables */ 
+  ); 
 
 #endif /* HEADER_CURL_TRANSFER_H */

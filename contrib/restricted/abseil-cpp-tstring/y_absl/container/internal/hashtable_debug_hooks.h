@@ -23,10 +23,10 @@
 #include <type_traits>
 #include <vector>
 
-#include "y_absl/base/config.h"
-
+#include "y_absl/base/config.h" 
+ 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace container_internal {
 namespace hashtable_debug_internal {
 
@@ -79,7 +79,7 @@ struct HashtableDebugAccess {
 
 }  // namespace hashtable_debug_internal
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_HASHTABLE_DEBUG_HOOKS_H_

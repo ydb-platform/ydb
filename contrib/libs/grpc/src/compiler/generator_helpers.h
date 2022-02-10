@@ -1,18 +1,18 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
@@ -129,7 +129,7 @@ inline TString LowerUnderscoreToUpperCamel(TString str) {
 }
 
 inline TString FileNameInUpperCamel(
-    const grpc::protobuf::FileDescriptor* file, bool include_package_path) {
+    const grpc::protobuf::FileDescriptor* file, bool include_package_path) { 
   std::vector<TString> tokens = tokenize(StripProto(file->name()), "/");
   TString result = "";
   if (include_package_path) {
@@ -142,7 +142,7 @@ inline TString FileNameInUpperCamel(
 }
 
 inline TString FileNameInUpperCamel(
-    const grpc::protobuf::FileDescriptor* file) {
+    const grpc::protobuf::FileDescriptor* file) { 
   return FileNameInUpperCamel(file, true);
 }
 
@@ -154,7 +154,7 @@ enum MethodType {
 };
 
 inline MethodType GetMethodType(
-    const grpc::protobuf::MethodDescriptor* method) {
+    const grpc::protobuf::MethodDescriptor* method) { 
   if (method->client_streaming()) {
     if (method->server_streaming()) {
       return METHODTYPE_BIDI_STREAMING;
@@ -172,7 +172,7 @@ inline MethodType GetMethodType(
 
 template <typename TStringType>
 inline void Split(const TStringType& s, char /*delim*/,
-                  std::vector<TStringType>* append_to) {
+                  std::vector<TStringType>* append_to) { 
   std::istringstream iss(s);
   TStringType piece;
   while (std::getline(iss, piece)) {
@@ -198,7 +198,7 @@ enum CommentType {
 
 // Get all the raw comments and append each line without newline to out.
 template <typename DescriptorType>
-inline void GetComment(const DescriptorType* desc, CommentType type,
+inline void GetComment(const DescriptorType* desc, CommentType type, 
                        std::vector<TString>* out) {
   grpc::protobuf::SourceLocation location;
   if (!desc->GetSourceLocation(&location)) {
@@ -225,7 +225,7 @@ inline void GetComment(const DescriptorType* desc, CommentType type,
 // For file level leading and detached leading comments, we return comments
 // above syntax line. Return nothing for trailing comments.
 template <>
-inline void GetComment(const grpc::protobuf::FileDescriptor* desc,
+inline void GetComment(const grpc::protobuf::FileDescriptor* desc, 
                        CommentType type, std::vector<TString>* out) {
   if (type == COMMENTTYPE_TRAILING) {
     return;

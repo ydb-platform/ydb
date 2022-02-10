@@ -2,38 +2,38 @@ OWNER(g:contrib)
 
 LIBRARY()
 
-LICENSE(
-    BSD-3-Clause AND
-    GPL-3.0-or-later AND
-    LGPL-2.0-or-later
-)
-
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE( 
+    BSD-3-Clause AND 
+    GPL-3.0-or-later AND 
+    LGPL-2.0-or-later 
+) 
+ 
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 IF (NOT MUSL)
     NO_RUNTIME()
 ENDIF()
 
 NO_COMPILER_WARNINGS()
 
-ADDINCL(
-    GLOBAL contrib/tools/bison/gnulib/src
-)
+ADDINCL( 
+    GLOBAL contrib/tools/bison/gnulib/src 
+) 
 
 IF (OS_WINDOWS)
-    ADDINCL(
-        GLOBAL contrib/tools/bison/gnulib/platform/win64
-    )
-ELSE()
-    ADDINCL(
-        GLOBAL contrib/tools/bison/gnulib/platform/posix
-    )
-ENDIF()
+    ADDINCL( 
+        GLOBAL contrib/tools/bison/gnulib/platform/win64 
+    ) 
+ELSE() 
+    ADDINCL( 
+        GLOBAL contrib/tools/bison/gnulib/platform/posix 
+    ) 
+ENDIF() 
 
 IF (OS_DARWIN)
-    CFLAGS(
-        -D_XOPEN_SOURCE=600
-    )
+    CFLAGS( 
+        -D_XOPEN_SOURCE=600 
+    ) 
 ENDIF()
 
 IF (NOT OS_WINDOWS)
@@ -172,22 +172,22 @@ IF (NOT MUSL)
     SRCS(
         src/freadahead.c
         src/fseterr.c
-        #        src/fseek.c
+        #        src/fseek.c 
     )
-ENDIF()
+ENDIF() 
 
 IF (NOT OS_LINUX)
     SRCS(
         src/pipe2.c
         src/strverscmp.c
     )
-ENDIF()
+ENDIF() 
 
 IF (NOT OS_WINDOWS)
     SRCS(
         src/stdio-write.c
     )
-ENDIF()
+ENDIF() 
 
 IF (OS_WINDOWS)
     SRCS(
@@ -233,14 +233,14 @@ IF (NOT OS_LINUX OR MUSL)
         src/obstack.c
         src/obstack_printf.c
     )
-ENDIF()
+ENDIF() 
 
 IF (OS_CYGWIN OR OS_LINUX)
     #not need it
-ELSE()
+ELSE() 
     SRCS(
         src/fpending.c
     )
-ENDIF()
+ENDIF() 
 
 END()

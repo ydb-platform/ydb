@@ -1,9 +1,9 @@
 #ifndef AWS_COMMON_HASH_TABLE_H
 #define AWS_COMMON_HASH_TABLE_H
 
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #include <aws/common/common.h>
@@ -293,17 +293,17 @@ int aws_hash_table_remove(
     int *was_present);
 
 /**
- * Removes element already known (typically by find()).
- *
- * p_value should point to a valid element returned by create() or find().
- *
- * NOTE: DO NOT call this method from inside of a aws_hash_table_foreach callback, return
- * AWS_COMMON_HASH_TABLE_ITER_DELETE instead.
- */
-AWS_COMMON_API
-int aws_hash_table_remove_element(struct aws_hash_table *map, struct aws_hash_element *p_value);
-
-/**
+ * Removes element already known (typically by find()). 
+ * 
+ * p_value should point to a valid element returned by create() or find(). 
+ * 
+ * NOTE: DO NOT call this method from inside of a aws_hash_table_foreach callback, return 
+ * AWS_COMMON_HASH_TABLE_ITER_DELETE instead. 
+ */ 
+AWS_COMMON_API 
+int aws_hash_table_remove_element(struct aws_hash_table *map, struct aws_hash_element *p_value); 
+ 
+/** 
  * Iterates through every element in the map and invokes the callback on
  * that item. Iteration is performed in an arbitrary, implementation-defined
  * order, and is not guaranteed to be consistent across invocations.
@@ -384,9 +384,9 @@ uint64_t aws_hash_byte_cursor_ptr(const void *item);
 AWS_COMMON_API
 uint64_t aws_hash_ptr(const void *item);
 
-AWS_COMMON_API
-uint64_t aws_hash_combine(uint64_t item1, uint64_t item2);
-
+AWS_COMMON_API 
+uint64_t aws_hash_combine(uint64_t item1, uint64_t item2); 
+ 
 /**
  * Convenience eq callback for NULL-terminated C-strings
  */
@@ -411,18 +411,18 @@ void aws_hash_callback_string_destroy(void *a);
 AWS_COMMON_API
 bool aws_ptr_eq(const void *a, const void *b);
 
-/**
- * Best-effort check of hash_table_state data-structure invariants
- */
-AWS_COMMON_API
-bool aws_hash_table_is_valid(const struct aws_hash_table *map);
-
-/**
- * Given a pointer to a hash_iter, checks that it is well-formed, with all data-structure invariants.
- */
-AWS_COMMON_API
-bool aws_hash_iter_is_valid(const struct aws_hash_iter *iter);
-
+/** 
+ * Best-effort check of hash_table_state data-structure invariants 
+ */ 
+AWS_COMMON_API 
+bool aws_hash_table_is_valid(const struct aws_hash_table *map); 
+ 
+/** 
+ * Given a pointer to a hash_iter, checks that it is well-formed, with all data-structure invariants. 
+ */ 
+AWS_COMMON_API 
+bool aws_hash_iter_is_valid(const struct aws_hash_iter *iter); 
+ 
 AWS_EXTERN_C_END
 
 #endif /* AWS_COMMON_HASH_TABLE_H */

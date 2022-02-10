@@ -52,21 +52,21 @@
 #include <google/protobuf/stubs/strutil.h>
 #include <google/protobuf/io/io_win32.h>
 
-#ifdef _WIN32
-#include <ctype.h>
-#endif
-
+#ifdef _WIN32 
+#include <ctype.h> 
+#endif 
+ 
 namespace google {
 namespace protobuf {
 namespace compiler {
 
 #ifdef _WIN32
-// DO NOT include <io.h>, instead create functions in io_win32.{h,cc} and import
-// them like we do below.
+// DO NOT include <io.h>, instead create functions in io_win32.{h,cc} and import 
+// them like we do below. 
 using google::protobuf::io::win32::access;
 using google::protobuf::io::win32::open;
-#endif
-
+#endif 
+ 
 // Returns true if the text looks like a Windows-style absolute path, starting
 // with a drive letter.  Example:  "C:\foo".  TODO(kenton):  Share this with
 // copy in command_line_interface.cc?
@@ -240,7 +240,7 @@ void Importer::ClearUnusedImportTrackFiles() {
   pool_.ClearUnusedImportTrackFiles();
 }
 
-
+ 
 // ===================================================================
 
 SourceTree::~SourceTree() {}
@@ -311,7 +311,7 @@ static TProtoStringType CanonicalizePath(TProtoStringType path) {
 }
 
 static inline bool ContainsParentReference(const TProtoStringType& path) {
-  return path == ".." || HasPrefixString(path, "../") ||
+  return path == ".." || HasPrefixString(path, "../") || 
          HasSuffixString(path, "/..") || path.find("/../") != TProtoStringType::npos;
 }
 
@@ -341,7 +341,7 @@ static bool ApplyMapping(const TProtoStringType& filename,
       // We do not allow the file name to use "..".
       return false;
     }
-    if (HasPrefixString(filename, "/") || IsWindowsAbsolutePath(filename)) {
+    if (HasPrefixString(filename, "/") || IsWindowsAbsolutePath(filename)) { 
       // This is an absolute path, so it isn't matched by the empty string.
       return false;
     }

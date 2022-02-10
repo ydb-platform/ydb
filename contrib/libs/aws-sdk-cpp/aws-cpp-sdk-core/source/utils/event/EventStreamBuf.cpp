@@ -1,6 +1,6 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 #include <aws/core/utils/event/EventStreamBuf.h>
 #include <cassert>
@@ -11,8 +11,8 @@ namespace Aws
     {
         namespace Event
         {
-            const size_t DEFAULT_BUF_SIZE = 1024;
-
+            const size_t DEFAULT_BUF_SIZE = 1024; 
+ 
             EventStreamBuf::EventStreamBuf(EventStreamDecoder& decoder, size_t bufferLength) :
                 m_byteBuffer(bufferLength),
                 m_bufferLength(bufferLength),

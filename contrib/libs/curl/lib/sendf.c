@@ -371,9 +371,9 @@ ssize_t Curl_send_plain(struct connectdata *conn, int num,
       *code = CURLE_AGAIN;
     }
     else {
-      char buffer[STRERROR_LEN];
+      char buffer[STRERROR_LEN]; 
       failf(conn->data, "Send failure: %s",
-            Curl_strerror(err, buffer, sizeof(buffer)));
+            Curl_strerror(err, buffer, sizeof(buffer))); 
       conn->data->state.os_errno = err;
       *code = CURLE_SEND_ERROR;
     }
@@ -437,9 +437,9 @@ ssize_t Curl_recv_plain(struct connectdata *conn, int num, char *buf,
       *code = CURLE_AGAIN;
     }
     else {
-      char buffer[STRERROR_LEN];
+      char buffer[STRERROR_LEN]; 
       failf(conn->data, "Recv failure: %s",
-            Curl_strerror(err, buffer, sizeof(buffer)));
+            Curl_strerror(err, buffer, sizeof(buffer))); 
       conn->data->state.os_errno = err;
       *code = CURLE_RECV_ERROR;
     }
@@ -536,10 +536,10 @@ static CURLcode chop_write(struct connectdata *conn,
     size_t chunklen = len <= CURL_MAX_WRITE_SIZE? len: CURL_MAX_WRITE_SIZE;
 
     if(writebody) {
-      size_t wrote;
-      Curl_set_in_callback(data, true);
-      wrote = writebody(ptr, 1, chunklen, data->set.out);
-      Curl_set_in_callback(data, false);
+      size_t wrote; 
+      Curl_set_in_callback(data, true); 
+      wrote = writebody(ptr, 1, chunklen, data->set.out); 
+      Curl_set_in_callback(data, false); 
 
       if(CURL_WRITEFUNC_PAUSE == wrote) {
         if(conn->handler->flags & PROTOPT_NONETWORK) {
@@ -676,8 +676,8 @@ CURLcode Curl_read(struct connectdata *conn, /* connection data */
 
   *n = 0; /* reset amount to zero */
 
-  bytesfromsocket = CURLMIN(sizerequested, (size_t)data->set.buffer_size);
-  buffertofill = buf;
+  bytesfromsocket = CURLMIN(sizerequested, (size_t)data->set.buffer_size); 
+  buffertofill = buf; 
 
   nread = conn->recv[num](conn, num, buffertofill, bytesfromsocket, &result);
   if(nread < 0)

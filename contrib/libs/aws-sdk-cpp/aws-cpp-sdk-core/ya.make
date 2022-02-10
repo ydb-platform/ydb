@@ -7,7 +7,7 @@ OWNER(
     shindo
     g:cpp-contrib
 )
-
+ 
 LICENSE(
     Apache-2.0 AND
     MIT AND
@@ -19,8 +19,8 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 PEERDIR(
     contrib/libs/curl
     contrib/libs/openssl
-    contrib/restricted/aws/aws-c-common
-    contrib/restricted/aws/aws-c-event-stream
+    contrib/restricted/aws/aws-c-common 
+    contrib/restricted/aws/aws-c-event-stream 
 )
 
 ADDINCL(
@@ -32,26 +32,26 @@ NO_COMPILER_WARNINGS()
 NO_UTIL()
 
 CFLAGS(
-    -DAWS_CAL_USE_IMPORT_EXPORT
-    -DAWS_CHECKSUMS_USE_IMPORT_EXPORT
-    -DAWS_COMMON_USE_IMPORT_EXPORT
+    -DAWS_CAL_USE_IMPORT_EXPORT 
+    -DAWS_CHECKSUMS_USE_IMPORT_EXPORT 
+    -DAWS_COMMON_USE_IMPORT_EXPORT 
     -DAWS_EVENT_STREAM_USE_IMPORT_EXPORT
-    -DAWS_IO_USE_IMPORT_EXPORT
+    -DAWS_IO_USE_IMPORT_EXPORT 
     -DAWS_SDK_VERSION_MAJOR=1
-    -DAWS_SDK_VERSION_MINOR=8
-    -DAWS_SDK_VERSION_PATCH=113
-    -DAWS_USE_EPOLL
+    -DAWS_SDK_VERSION_MINOR=8 
+    -DAWS_SDK_VERSION_PATCH=113 
+    -DAWS_USE_EPOLL 
     -DCURL_HAS_H2
-    -DCURL_HAS_TLS_PROXY
+    -DCURL_HAS_TLS_PROXY 
     -DENABLE_CURL_CLIENT
-    -DENABLE_CURL_LOGGING
+    -DENABLE_CURL_LOGGING 
     -DENABLE_OPENSSL_ENCRYPTION
     -DHAS_PATHCONF
     -DHAS_UMASK
-    -DS2N_ADX
-    -DS2N_CPUID_AVAILABLE
-    -DS2N_HAVE_EXECINFO
-    -DS2N_SIKEP434R2_ASM
+    -DS2N_ADX 
+    -DS2N_CPUID_AVAILABLE 
+    -DS2N_HAVE_EXECINFO 
+    -DS2N_SIKEP434R2_ASM 
 )
 
 SRCS(
@@ -60,21 +60,21 @@ SRCS(
     source/AmazonWebServiceRequest.cpp
     source/Aws.cpp
     source/Globals.cpp
-    source/Region.cpp
+    source/Region.cpp 
     source/Version.cpp
     source/auth/AWSAuthSigner.cpp
     source/auth/AWSAuthSignerProvider.cpp
     source/auth/AWSCredentialsProvider.cpp
     source/auth/AWSCredentialsProviderChain.cpp
-    source/auth/STSCredentialsProvider.cpp
+    source/auth/STSCredentialsProvider.cpp 
     source/client/AWSClient.cpp
     source/client/AWSErrorMarshaller.cpp
     source/client/AsyncCallerContext.cpp
     source/client/ClientConfiguration.cpp
     source/client/CoreErrors.cpp
     source/client/DefaultRetryStrategy.cpp
-    source/client/RetryStrategy.cpp
-    source/client/SpecifiedRetryableErrorsRetryStrategy.cpp
+    source/client/RetryStrategy.cpp 
+    source/client/SpecifiedRetryableErrorsRetryStrategy.cpp 
     source/config/AWSProfileConfigLoader.cpp
     source/external/cjson/cJSON.cpp
     source/external/tinyxml2/tinyxml2.cpp
@@ -99,7 +99,7 @@ SRCS(
     source/platform/linux-shared/OSVersionInfo.cpp
     source/platform/linux-shared/Security.cpp
     source/platform/linux-shared/Time.cpp
-    source/utils/ARN.cpp
+    source/utils/ARN.cpp 
     source/utils/Array.cpp
     source/utils/DNS.cpp
     source/utils/DateTimeCommon.cpp
@@ -124,8 +124,8 @@ SRCS(
     source/utils/crypto/Sha256HMAC.cpp
     source/utils/crypto/factory/Factories.cpp
     source/utils/crypto/openssl/CryptoImpl.cpp
-    source/utils/event/EventDecoderStream.cpp
-    source/utils/event/EventEncoderStream.cpp
+    source/utils/event/EventDecoderStream.cpp 
+    source/utils/event/EventEncoderStream.cpp 
     source/utils/event/EventHeader.cpp
     source/utils/event/EventMessage.cpp
     source/utils/event/EventStreamBuf.cpp

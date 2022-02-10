@@ -1,51 +1,51 @@
-#pragma once
-
-#ifdef __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#endif
-
-/*===---------------- llvm-c/Orc.h - OrcV2 C bindings -----------*- C++ -*-===*\
-|*                                                                            *|
-|* Part of the LLVM Project, under the Apache License v2.0 with LLVM          *|
-|* Exceptions.                                                                *|
-|* See https://llvm.org/LICENSE.txt for license information.                  *|
-|* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception                    *|
-|*                                                                            *|
-|*===----------------------------------------------------------------------===*|
-|*                                                                            *|
-|* This header declares the C interface to libLLVMOrcJIT.a, which implements  *|
-|* JIT compilation of LLVM IR. Minimal documentation of C API specific issues *|
-|* (especially memory ownership rules) is provided. Core Orc concepts are     *|
-|* documented in llvm/docs/ORCv2.rst and APIs are documented in the C++       *|
-|* headers                                                                    *|
-|*                                                                            *|
-|* Many exotic languages can interoperate with C code but have a harder time  *|
-|* with C++ due to name mangling. So in addition to C, this interface enables *|
-|* tools written in such languages.                                           *|
-|*                                                                            *|
-|* Note: This interface is experimental. It is *NOT* stable, and may be       *|
-|*       changed without warning. Only C API usage documentation is           *|
-|*       provided. See the C++ documentation for all higher level ORC API     *|
-|*       details.                                                             *|
-|*                                                                            *|
-\*===----------------------------------------------------------------------===*/
-
-#ifndef LLVM_C_ORC_H
-#define LLVM_C_ORC_H
-
-#include "llvm-c/Error.h"
-#include "llvm-c/TargetMachine.h"
-#include "llvm-c/Types.h"
-
-LLVM_C_EXTERN_C_BEGIN
-
-/**
- * Represents an address in the target process.
- */
-typedef uint64_t LLVMOrcJITTargetAddress;
-
-/**
+#pragma once 
+ 
+#ifdef __GNUC__ 
+#pragma GCC diagnostic push 
+#pragma GCC diagnostic ignored "-Wunused-parameter" 
+#endif 
+ 
+/*===---------------- llvm-c/Orc.h - OrcV2 C bindings -----------*- C++ -*-===*\ 
+|*                                                                            *| 
+|* Part of the LLVM Project, under the Apache License v2.0 with LLVM          *| 
+|* Exceptions.                                                                *| 
+|* See https://llvm.org/LICENSE.txt for license information.                  *| 
+|* SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception                    *| 
+|*                                                                            *| 
+|*===----------------------------------------------------------------------===*| 
+|*                                                                            *| 
+|* This header declares the C interface to libLLVMOrcJIT.a, which implements  *| 
+|* JIT compilation of LLVM IR. Minimal documentation of C API specific issues *| 
+|* (especially memory ownership rules) is provided. Core Orc concepts are     *| 
+|* documented in llvm/docs/ORCv2.rst and APIs are documented in the C++       *| 
+|* headers                                                                    *| 
+|*                                                                            *| 
+|* Many exotic languages can interoperate with C code but have a harder time  *| 
+|* with C++ due to name mangling. So in addition to C, this interface enables *| 
+|* tools written in such languages.                                           *| 
+|*                                                                            *| 
+|* Note: This interface is experimental. It is *NOT* stable, and may be       *| 
+|*       changed without warning. Only C API usage documentation is           *| 
+|*       provided. See the C++ documentation for all higher level ORC API     *| 
+|*       details.                                                             *| 
+|*                                                                            *| 
+\*===----------------------------------------------------------------------===*/ 
+ 
+#ifndef LLVM_C_ORC_H 
+#define LLVM_C_ORC_H 
+ 
+#include "llvm-c/Error.h" 
+#include "llvm-c/TargetMachine.h" 
+#include "llvm-c/Types.h" 
+ 
+LLVM_C_EXTERN_C_BEGIN 
+ 
+/** 
+ * Represents an address in the target process. 
+ */ 
+typedef uint64_t LLVMOrcJITTargetAddress; 
+ 
+/** 
  * Represents generic linkage flags for a symbol definition.
  */
 typedef enum {
@@ -75,11 +75,11 @@ typedef struct {
 } LLVMJITEvaluatedSymbol;
 
 /**
- * A reference to an orc::ExecutionSession instance.
- */
-typedef struct LLVMOrcOpaqueExecutionSession *LLVMOrcExecutionSessionRef;
-
-/**
+ * A reference to an orc::ExecutionSession instance. 
+ */ 
+typedef struct LLVMOrcOpaqueExecutionSession *LLVMOrcExecutionSessionRef; 
+ 
+/** 
  * Error reporter function.
  */
 typedef void (*LLVMOrcErrorReporterFunction)(void *Ctx, LLVMErrorRef Err);
@@ -90,12 +90,12 @@ typedef void (*LLVMOrcErrorReporterFunction)(void *Ctx, LLVMErrorRef Err);
 typedef struct LLVMOrcOpaqueSymbolStringPool *LLVMOrcSymbolStringPoolRef;
 
 /**
- * A reference to an orc::SymbolStringPool table entry.
- */
+ * A reference to an orc::SymbolStringPool table entry. 
+ */ 
 typedef struct LLVMOrcOpaqueSymbolStringPoolEntry
-    *LLVMOrcSymbolStringPoolEntryRef;
-
-/**
+    *LLVMOrcSymbolStringPoolEntryRef; 
+ 
+/** 
  * Represents a pair of a symbol name and an evaluated symbol.
  */
 typedef struct {
@@ -167,16 +167,16 @@ typedef LLVMOrcCLookupSetElement *LLVMOrcCLookupSet;
 typedef struct LLVMOrcOpaqueMaterializationUnit *LLVMOrcMaterializationUnitRef;
 
 /**
- * A reference to an orc::JITDylib instance.
- */
-typedef struct LLVMOrcOpaqueJITDylib *LLVMOrcJITDylibRef;
-
-/**
+ * A reference to an orc::JITDylib instance. 
+ */ 
+typedef struct LLVMOrcOpaqueJITDylib *LLVMOrcJITDylibRef; 
+ 
+/** 
  * A reference to an orc::ResourceTracker instance.
- */
+ */ 
 typedef struct LLVMOrcOpaqueResourceTracker *LLVMOrcResourceTrackerRef;
-
-/**
+ 
+/** 
  * A reference to an orc::DefinitionGenerator.
  */
 typedef struct LLVMOrcOpaqueDefinitionGenerator
@@ -236,33 +236,33 @@ typedef LLVMErrorRef (*LLVMOrcCAPIDefinitionGeneratorTryToGenerateFunction)(
     LLVMOrcCLookupSet LookupSet, size_t LookupSetSize);
 
 /**
- * Predicate function for SymbolStringPoolEntries.
- */
+ * Predicate function for SymbolStringPoolEntries. 
+ */ 
 typedef int (*LLVMOrcSymbolPredicate)(void *Ctx,
                                       LLVMOrcSymbolStringPoolEntryRef Sym);
-
-/**
- * A reference to an orc::ThreadSafeContext instance.
- */
-typedef struct LLVMOrcOpaqueThreadSafeContext *LLVMOrcThreadSafeContextRef;
-
-/**
- * A reference to an orc::ThreadSafeModule instance.
- */
-typedef struct LLVMOrcOpaqueThreadSafeModule *LLVMOrcThreadSafeModuleRef;
-
-/**
- * A reference to an orc::JITTargetMachineBuilder instance.
- */
-typedef struct LLVMOrcOpaqueJITTargetMachineBuilder
-    *LLVMOrcJITTargetMachineBuilderRef;
-
-/**
+ 
+/** 
+ * A reference to an orc::ThreadSafeContext instance. 
+ */ 
+typedef struct LLVMOrcOpaqueThreadSafeContext *LLVMOrcThreadSafeContextRef; 
+ 
+/** 
+ * A reference to an orc::ThreadSafeModule instance. 
+ */ 
+typedef struct LLVMOrcOpaqueThreadSafeModule *LLVMOrcThreadSafeModuleRef; 
+ 
+/** 
+ * A reference to an orc::JITTargetMachineBuilder instance. 
+ */ 
+typedef struct LLVMOrcOpaqueJITTargetMachineBuilder 
+    *LLVMOrcJITTargetMachineBuilderRef; 
+ 
+/** 
  * A reference to an orc::ObjectLayer instance.
- */
+ */ 
 typedef struct LLVMOrcOpaqueObjectLayer *LLVMOrcObjectLayerRef;
-
-/**
+ 
+/** 
  * Attach a custom error reporter function to the ExecutionSession.
  *
  * The error reporter will be called to deliver failure notices that can not be
@@ -270,12 +270,12 @@ typedef struct LLVMOrcOpaqueObjectLayer *LLVMOrcObjectLayerRef;
  * the JIT linker is typically reported via the error reporter (callers
  * requesting definitions from the JIT will typically be delivered a
  * FailureToMaterialize error instead).
- */
+ */ 
 void LLVMOrcExecutionSessionSetErrorReporter(
     LLVMOrcExecutionSessionRef ES, LLVMOrcErrorReporterFunction ReportError,
     void *Ctx);
-
-/**
+ 
+/** 
  * Return a reference to the SymbolStringPool for an ExecutionSession.
  *
  * Ownership of the pool remains with the ExecutionSession: The caller is
@@ -297,33 +297,33 @@ LLVMOrcExecutionSessionGetSymbolStringPool(LLVMOrcExecutionSessionRef ES);
 void LLVMOrcSymbolStringPoolClearDeadEntries(LLVMOrcSymbolStringPoolRef SSP);
 
 /**
- * Intern a string in the ExecutionSession's SymbolStringPool and return a
- * reference to it. This increments the ref-count of the pool entry, and the
- * returned value should be released once the client is done with it by
- * calling LLVMOrReleaseSymbolStringPoolEntry.
- *
- * Since strings are uniqued within the SymbolStringPool
- * LLVMOrcSymbolStringPoolEntryRefs can be compared by value to test string
- * equality.
- *
- * Note that this function does not perform linker-mangling on the string.
- */
-LLVMOrcSymbolStringPoolEntryRef
-LLVMOrcExecutionSessionIntern(LLVMOrcExecutionSessionRef ES, const char *Name);
-
-/**
+ * Intern a string in the ExecutionSession's SymbolStringPool and return a 
+ * reference to it. This increments the ref-count of the pool entry, and the 
+ * returned value should be released once the client is done with it by 
+ * calling LLVMOrReleaseSymbolStringPoolEntry. 
+ * 
+ * Since strings are uniqued within the SymbolStringPool 
+ * LLVMOrcSymbolStringPoolEntryRefs can be compared by value to test string 
+ * equality. 
+ * 
+ * Note that this function does not perform linker-mangling on the string. 
+ */ 
+LLVMOrcSymbolStringPoolEntryRef 
+LLVMOrcExecutionSessionIntern(LLVMOrcExecutionSessionRef ES, const char *Name); 
+ 
+/** 
  * Increments the ref-count for a SymbolStringPool entry.
  */
 void LLVMOrcRetainSymbolStringPoolEntry(LLVMOrcSymbolStringPoolEntryRef S);
 
 /**
- * Reduces the ref-count for of a SymbolStringPool entry.
- */
-void LLVMOrcReleaseSymbolStringPoolEntry(LLVMOrcSymbolStringPoolEntryRef S);
-
+ * Reduces the ref-count for of a SymbolStringPool entry. 
+ */ 
+void LLVMOrcReleaseSymbolStringPoolEntry(LLVMOrcSymbolStringPoolEntryRef S); 
+ 
 const char *LLVMOrcSymbolStringPoolEntryStr(LLVMOrcSymbolStringPoolEntryRef S);
 
-/**
+/** 
  * Reduces the ref-count of a ResourceTracker.
  */
 void LLVMOrcReleaseResourceTracker(LLVMOrcResourceTrackerRef RT);
@@ -342,13 +342,13 @@ void LLVMOrcResourceTrackerTransferTo(LLVMOrcResourceTrackerRef SrcRT,
 LLVMErrorRef LLVMOrcResourceTrackerRemove(LLVMOrcResourceTrackerRef RT);
 
 /**
- * Dispose of a JITDylib::DefinitionGenerator. This should only be called if
- * ownership has not been passed to a JITDylib (e.g. because some error
- * prevented the client from calling LLVMOrcJITDylibAddGenerator).
- */
+ * Dispose of a JITDylib::DefinitionGenerator. This should only be called if 
+ * ownership has not been passed to a JITDylib (e.g. because some error 
+ * prevented the client from calling LLVMOrcJITDylibAddGenerator). 
+ */ 
 void LLVMOrcDisposeDefinitionGenerator(LLVMOrcDefinitionGeneratorRef DG);
-
-/**
+ 
+/** 
  * Dispose of a MaterializationUnit.
  */
 void LLVMOrcDisposeMaterializationUnit(LLVMOrcMaterializationUnitRef MU);
@@ -362,7 +362,7 @@ LLVMOrcAbsoluteSymbols(LLVMOrcCSymbolMapPairs Syms, size_t NumPairs);
 
 /**
  * Create a "bare" JITDylib.
- *
+ * 
  * The client is responsible for ensuring that the JITDylib's name is unique,
  * e.g. by calling LLVMOrcExecutionSessionGetJTIDylibByName first.
  *
@@ -433,118 +433,118 @@ LLVMErrorRef LLVMOrcJITDylibClear(LLVMOrcJITDylibRef JD);
 /**
  * Add a DefinitionGenerator to the given JITDylib.
  *
- * The JITDylib will take ownership of the given generator: The client is no
- * longer responsible for managing its memory.
- */
-void LLVMOrcJITDylibAddGenerator(LLVMOrcJITDylibRef JD,
+ * The JITDylib will take ownership of the given generator: The client is no 
+ * longer responsible for managing its memory. 
+ */ 
+void LLVMOrcJITDylibAddGenerator(LLVMOrcJITDylibRef JD, 
                                  LLVMOrcDefinitionGeneratorRef DG);
-
-/**
+ 
+/** 
  * Create a custom generator.
  */
 LLVMOrcDefinitionGeneratorRef LLVMOrcCreateCustomCAPIDefinitionGenerator(
     LLVMOrcCAPIDefinitionGeneratorTryToGenerateFunction F, void *Ctx);
 
 /**
- * Get a DynamicLibrarySearchGenerator that will reflect process symbols into
- * the JITDylib. On success the resulting generator is owned by the client.
- * Ownership is typically transferred by adding the instance to a JITDylib
- * using LLVMOrcJITDylibAddGenerator,
- *
- * The GlobalPrefix argument specifies the character that appears on the front
- * of linker-mangled symbols for the target platform (e.g. '_' on MachO).
- * If non-null, this character will be stripped from the start of all symbol
- * strings before passing the remaining substring to dlsym.
- *
- * The optional Filter and Ctx arguments can be used to supply a symbol name
- * filter: Only symbols for which the filter returns true will be visible to
- * JIT'd code. If the Filter argument is null then all process symbols will
- * be visible to JIT'd code. Note that the symbol name passed to the Filter
- * function is the full mangled symbol: The client is responsible for stripping
- * the global prefix if present.
- */
-LLVMErrorRef LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess(
+ * Get a DynamicLibrarySearchGenerator that will reflect process symbols into 
+ * the JITDylib. On success the resulting generator is owned by the client. 
+ * Ownership is typically transferred by adding the instance to a JITDylib 
+ * using LLVMOrcJITDylibAddGenerator, 
+ * 
+ * The GlobalPrefix argument specifies the character that appears on the front 
+ * of linker-mangled symbols for the target platform (e.g. '_' on MachO). 
+ * If non-null, this character will be stripped from the start of all symbol 
+ * strings before passing the remaining substring to dlsym. 
+ * 
+ * The optional Filter and Ctx arguments can be used to supply a symbol name 
+ * filter: Only symbols for which the filter returns true will be visible to 
+ * JIT'd code. If the Filter argument is null then all process symbols will 
+ * be visible to JIT'd code. Note that the symbol name passed to the Filter 
+ * function is the full mangled symbol: The client is responsible for stripping 
+ * the global prefix if present. 
+ */ 
+LLVMErrorRef LLVMOrcCreateDynamicLibrarySearchGeneratorForProcess( 
     LLVMOrcDefinitionGeneratorRef *Result, char GlobalPrefx,
-    LLVMOrcSymbolPredicate Filter, void *FilterCtx);
-
-/**
- * Create a ThreadSafeContext containing a new LLVMContext.
- *
- * Ownership of the underlying ThreadSafeContext data is shared: Clients
- * can and should dispose of their ThreadSafeContext as soon as they no longer
+    LLVMOrcSymbolPredicate Filter, void *FilterCtx); 
+ 
+/** 
+ * Create a ThreadSafeContext containing a new LLVMContext. 
+ * 
+ * Ownership of the underlying ThreadSafeContext data is shared: Clients 
+ * can and should dispose of their ThreadSafeContext as soon as they no longer 
  * need to refer to it directly. Other references (e.g. from ThreadSafeModules)
- * will keep the data alive as long as it is needed.
- */
-LLVMOrcThreadSafeContextRef LLVMOrcCreateNewThreadSafeContext(void);
-
-/**
- * Get a reference to the wrapped LLVMContext.
- */
-LLVMContextRef
-LLVMOrcThreadSafeContextGetContext(LLVMOrcThreadSafeContextRef TSCtx);
-
-/**
- * Dispose of a ThreadSafeContext.
- */
-void LLVMOrcDisposeThreadSafeContext(LLVMOrcThreadSafeContextRef TSCtx);
-
-/**
- * Create a ThreadSafeModule wrapper around the given LLVM module. This takes
- * ownership of the M argument which should not be disposed of or referenced
- * after this function returns.
- *
- * Ownership of the ThreadSafeModule is unique: If it is transferred to the JIT
+ * will keep the data alive as long as it is needed. 
+ */ 
+LLVMOrcThreadSafeContextRef LLVMOrcCreateNewThreadSafeContext(void); 
+ 
+/** 
+ * Get a reference to the wrapped LLVMContext. 
+ */ 
+LLVMContextRef 
+LLVMOrcThreadSafeContextGetContext(LLVMOrcThreadSafeContextRef TSCtx); 
+ 
+/** 
+ * Dispose of a ThreadSafeContext. 
+ */ 
+void LLVMOrcDisposeThreadSafeContext(LLVMOrcThreadSafeContextRef TSCtx); 
+ 
+/** 
+ * Create a ThreadSafeModule wrapper around the given LLVM module. This takes 
+ * ownership of the M argument which should not be disposed of or referenced 
+ * after this function returns. 
+ * 
+ * Ownership of the ThreadSafeModule is unique: If it is transferred to the JIT 
  * (e.g. by LLVMOrcLLJITAddLLVMIRModule) then the client is no longer
- * responsible for it. If it is not transferred to the JIT then the client
- * should call LLVMOrcDisposeThreadSafeModule to dispose of it.
- */
-LLVMOrcThreadSafeModuleRef
-LLVMOrcCreateNewThreadSafeModule(LLVMModuleRef M,
-                                 LLVMOrcThreadSafeContextRef TSCtx);
-
-/**
- * Dispose of a ThreadSafeModule. This should only be called if ownership has
- * not been passed to LLJIT (e.g. because some error prevented the client from
- * adding this to the JIT).
- */
-void LLVMOrcDisposeThreadSafeModule(LLVMOrcThreadSafeModuleRef TSM);
-
-/**
- * Create a JITTargetMachineBuilder by detecting the host.
- *
- * On success the client owns the resulting JITTargetMachineBuilder. It must be
- * passed to a consuming operation (e.g. LLVMOrcCreateLLJITBuilder) or disposed
- * of by calling LLVMOrcDisposeJITTargetMachineBuilder.
- */
-LLVMErrorRef LLVMOrcJITTargetMachineBuilderDetectHost(
-    LLVMOrcJITTargetMachineBuilderRef *Result);
-
-/**
- * Create a JITTargetMachineBuilder from the given TargetMachine template.
- *
- * This operation takes ownership of the given TargetMachine and destroys it
- * before returing. The resulting JITTargetMachineBuilder is owned by the client
- * and must be passed to a consuming operation (e.g. LLVMOrcCreateLLJITBuilder)
- * or disposed of by calling LLVMOrcDisposeJITTargetMachineBuilder.
- */
-LLVMOrcJITTargetMachineBuilderRef
-LLVMOrcJITTargetMachineBuilderCreateFromTargetMachine(LLVMTargetMachineRef TM);
-
-/**
- * Dispose of a JITTargetMachineBuilder.
- */
-void LLVMOrcDisposeJITTargetMachineBuilder(
-    LLVMOrcJITTargetMachineBuilderRef JTMB);
-
-/**
+ * responsible for it. If it is not transferred to the JIT then the client 
+ * should call LLVMOrcDisposeThreadSafeModule to dispose of it. 
+ */ 
+LLVMOrcThreadSafeModuleRef 
+LLVMOrcCreateNewThreadSafeModule(LLVMModuleRef M, 
+                                 LLVMOrcThreadSafeContextRef TSCtx); 
+ 
+/** 
+ * Dispose of a ThreadSafeModule. This should only be called if ownership has 
+ * not been passed to LLJIT (e.g. because some error prevented the client from 
+ * adding this to the JIT). 
+ */ 
+void LLVMOrcDisposeThreadSafeModule(LLVMOrcThreadSafeModuleRef TSM); 
+ 
+/** 
+ * Create a JITTargetMachineBuilder by detecting the host. 
+ * 
+ * On success the client owns the resulting JITTargetMachineBuilder. It must be 
+ * passed to a consuming operation (e.g. LLVMOrcCreateLLJITBuilder) or disposed 
+ * of by calling LLVMOrcDisposeJITTargetMachineBuilder. 
+ */ 
+LLVMErrorRef LLVMOrcJITTargetMachineBuilderDetectHost( 
+    LLVMOrcJITTargetMachineBuilderRef *Result); 
+ 
+/** 
+ * Create a JITTargetMachineBuilder from the given TargetMachine template. 
+ * 
+ * This operation takes ownership of the given TargetMachine and destroys it 
+ * before returing. The resulting JITTargetMachineBuilder is owned by the client 
+ * and must be passed to a consuming operation (e.g. LLVMOrcCreateLLJITBuilder) 
+ * or disposed of by calling LLVMOrcDisposeJITTargetMachineBuilder. 
+ */ 
+LLVMOrcJITTargetMachineBuilderRef 
+LLVMOrcJITTargetMachineBuilderCreateFromTargetMachine(LLVMTargetMachineRef TM); 
+ 
+/** 
+ * Dispose of a JITTargetMachineBuilder. 
+ */ 
+void LLVMOrcDisposeJITTargetMachineBuilder( 
+    LLVMOrcJITTargetMachineBuilderRef JTMB); 
+ 
+/** 
  * Dispose of an ObjectLayer.
- */
+ */ 
 void LLVMOrcDisposeObjectLayer(LLVMOrcObjectLayerRef ObjLayer);
-
-LLVM_C_EXTERN_C_END
-
-#endif /* LLVM_C_ORC_H */
-
-#ifdef __GNUC__
-#pragma GCC diagnostic pop
-#endif
+ 
+LLVM_C_EXTERN_C_END 
+ 
+#endif /* LLVM_C_ORC_H */ 
+ 
+#ifdef __GNUC__ 
+#pragma GCC diagnostic pop 
+#endif 

@@ -63,7 +63,7 @@
 #endif  // __APPLE__
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace base_internal {
 
 // A first-fit allocator with amortized logarithmic free() time.
@@ -223,14 +223,14 @@ namespace {
 // Static storage space for the lazily-constructed, default global arena
 // instances.  We require this space because the whole point of LowLevelAlloc
 // is to avoid relying on malloc/new.
-alignas(LowLevelAlloc::Arena) unsigned char default_arena_storage[sizeof(
-    LowLevelAlloc::Arena)];
-alignas(LowLevelAlloc::Arena) unsigned char unhooked_arena_storage[sizeof(
-    LowLevelAlloc::Arena)];
+alignas(LowLevelAlloc::Arena) unsigned char default_arena_storage[sizeof( 
+    LowLevelAlloc::Arena)]; 
+alignas(LowLevelAlloc::Arena) unsigned char unhooked_arena_storage[sizeof( 
+    LowLevelAlloc::Arena)]; 
 #ifndef ABSL_LOW_LEVEL_ALLOC_ASYNC_SIGNAL_SAFE_MISSING
-alignas(
-    LowLevelAlloc::Arena) unsigned char unhooked_async_sig_safe_arena_storage
-    [sizeof(LowLevelAlloc::Arena)];
+alignas( 
+    LowLevelAlloc::Arena) unsigned char unhooked_async_sig_safe_arena_storage 
+    [sizeof(LowLevelAlloc::Arena)]; 
 #endif
 
 // We must use LowLevelCallOnce here to construct the global arenas, rather than
@@ -614,7 +614,7 @@ void *LowLevelAlloc::AllocWithArena(size_t request, Arena *arena) {
 }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_LOW_LEVEL_ALLOC_MISSING

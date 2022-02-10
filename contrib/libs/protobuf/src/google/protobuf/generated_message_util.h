@@ -41,9 +41,9 @@
 #include <assert.h>
 
 #include <atomic>
-#include <climits>
+#include <climits> 
 #include <string>
-#include <vector>
+#include <vector> 
 
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/any.h>
@@ -68,7 +68,7 @@ namespace protobuf {
 
 class Arena;
 class Message;
-
+ 
 namespace io {
 class CodedInputStream;
 }
@@ -103,7 +103,7 @@ PROTOBUF_EXPORT inline const TProtoStringType& GetEmptyString() {
   return GetEmptyStringAlreadyInited();
 }
 
-
+ 
 // True if IsInitialized() is true for all elements of t.  Type is expected
 // to be a RepeatedPtrField<some message type>.  It's useful to have this
 // helper here to keep the protobuf compiler from ever having to emit loops in
@@ -132,21 +132,21 @@ bool AllAreInitializedWeak(const RepeatedPtrField<T>& t) {
   return true;
 }
 
-inline bool IsPresent(const void* base, uint32 hasbit) {
-  const uint32* has_bits_array = static_cast<const uint32*>(base);
+inline bool IsPresent(const void* base, uint32 hasbit) { 
+  const uint32* has_bits_array = static_cast<const uint32*>(base); 
   return (has_bits_array[hasbit / 32] & (1u << (hasbit & 31))) != 0;
-}
-
-inline bool IsOneofPresent(const void* base, uint32 offset, uint32 tag) {
-  const uint32* oneof =
-      reinterpret_cast<const uint32*>(static_cast<const uint8*>(base) + offset);
-  return *oneof == tag >> 3;
-}
-
-typedef void (*SpecialSerializer)(const uint8* base, uint32 offset, uint32 tag,
-                                  uint32 has_offset,
+} 
+ 
+inline bool IsOneofPresent(const void* base, uint32 offset, uint32 tag) { 
+  const uint32* oneof = 
+      reinterpret_cast<const uint32*>(static_cast<const uint8*>(base) + offset); 
+  return *oneof == tag >> 3; 
+} 
+ 
+typedef void (*SpecialSerializer)(const uint8* base, uint32 offset, uint32 tag, 
+                                  uint32 has_offset, 
                                   io::CodedOutputStream* output);
-
+ 
 PROTOBUF_EXPORT void ExtensionSerializer(const uint8* base, uint32 offset,
                                          uint32 tag, uint32 has_offset,
                                          io::CodedOutputStream* output);
@@ -154,7 +154,7 @@ PROTOBUF_EXPORT void UnknownFieldSerializerLite(const uint8* base,
                                                 uint32 offset, uint32 tag,
                                                 uint32 has_offset,
                                                 io::CodedOutputStream* output);
-
+ 
 PROTOBUF_EXPORT MessageLite* DuplicateIfNonNullInternal(MessageLite* message);
 PROTOBUF_EXPORT MessageLite* GetOwnedMessageInternal(Arena* message_arena,
                                                      MessageLite* submessage,
@@ -162,15 +162,15 @@ PROTOBUF_EXPORT MessageLite* GetOwnedMessageInternal(Arena* message_arena,
 PROTOBUF_EXPORT void GenericSwap(MessageLite* m1, MessageLite* m2);
 // We specialize GenericSwap for non-lite messages to benefit from reflection.
 PROTOBUF_EXPORT void GenericSwap(Message* m1, Message* m2);
-
+ 
 template <typename T>
 T* DuplicateIfNonNull(T* message) {
   // The casts must be reinterpret_cast<> because T might be a forward-declared
   // type that the compiler doesn't know is related to MessageLite.
   return reinterpret_cast<T*>(
       DuplicateIfNonNullInternal(reinterpret_cast<MessageLite*>(message)));
-}
-
+} 
+ 
 template <typename T>
 T* GetOwnedMessage(Arena* message_arena, T* submessage,
                    Arena* submessage_arena) {
@@ -179,30 +179,30 @@ T* GetOwnedMessage(Arena* message_arena, T* submessage,
   return reinterpret_cast<T*>(GetOwnedMessageInternal(
       message_arena, reinterpret_cast<MessageLite*>(submessage),
       submessage_arena));
-}
-
+} 
+ 
 // Hide atomic from the public header and allow easy change to regular int
 // on platforms where the atomic might have a perf impact.
 class PROTOBUF_EXPORT CachedSize {
  public:
   int Get() const { return size_.load(std::memory_order_relaxed); }
   void Set(int size) { size_.store(size, std::memory_order_relaxed); }
-
+ 
  private:
   std::atomic<int> size_{0};
-};
-
+}; 
+ 
 PROTOBUF_EXPORT void DestroyMessage(const void* message);
 PROTOBUF_EXPORT void DestroyString(const void* s);
 // Destroy (not delete) the message
 inline void OnShutdownDestroyMessage(const void* ptr) {
   OnShutdownRun(DestroyMessage, ptr);
-}
+} 
 // Destroy the string (call TProtoStringType destructor)
 inline void OnShutdownDestroyString(const TProtoStringType* ptr) {
   OnShutdownRun(DestroyString, ptr);
 }
-
+ 
 }  // namespace internal
 }  // namespace protobuf
 }  // namespace google

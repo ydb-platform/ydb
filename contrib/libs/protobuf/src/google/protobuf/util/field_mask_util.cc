@@ -136,12 +136,12 @@ bool FieldMaskUtil::FromJsonString(StringPiece str, FieldMask* out) {
   return true;
 }
 
-bool FieldMaskUtil::GetFieldDescriptors(
-    const Descriptor* descriptor, StringPiece path,
-    std::vector<const FieldDescriptor*>* field_descriptors) {
+bool FieldMaskUtil::GetFieldDescriptors( 
+    const Descriptor* descriptor, StringPiece path, 
+    std::vector<const FieldDescriptor*>* field_descriptors) { 
   if (field_descriptors != nullptr) {
-    field_descriptors->clear();
-  }
+    field_descriptors->clear(); 
+  } 
   std::vector<TProtoStringType> parts = Split(path, ".");
   for (int i = 0; i < parts.size(); ++i) {
     const TProtoStringType& field_name = parts[i];
@@ -153,8 +153,8 @@ bool FieldMaskUtil::GetFieldDescriptors(
       return false;
     }
     if (field_descriptors != nullptr) {
-      field_descriptors->push_back(field);
-    }
+      field_descriptors->push_back(field); 
+    } 
     if (!field->is_repeated() &&
         field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
       descriptor = field->message_type();
@@ -222,18 +222,18 @@ class FieldMaskTree {
     MergeMessage(&root_, source, options, destination);
   }
 
-  // Add required field path of the message to this tree based on current tree
-  // structure. If a message is present in the tree, add the path of its
-  // required field to the tree. This is to make sure that after trimming a
-  // message with required fields are set, check IsInitialized() will not fail.
-  void AddRequiredFieldPath(const Descriptor* descriptor) {
-    // Do nothing if the tree is empty.
-    if (root_.children.empty()) {
-      return;
-    }
-    AddRequiredFieldPath(&root_, descriptor);
-  }
-
+  // Add required field path of the message to this tree based on current tree 
+  // structure. If a message is present in the tree, add the path of its 
+  // required field to the tree. This is to make sure that after trimming a 
+  // message with required fields are set, check IsInitialized() will not fail. 
+  void AddRequiredFieldPath(const Descriptor* descriptor) { 
+    // Do nothing if the tree is empty. 
+    if (root_.children.empty()) { 
+      return; 
+    } 
+    AddRequiredFieldPath(&root_, descriptor); 
+  } 
+ 
   // Trims all fields not specified by this tree from the given message.
   // Returns true if the message is modified.
   bool TrimMessage(Message* message) {
@@ -278,12 +278,12 @@ class FieldMaskTree {
                     const FieldMaskUtil::MergeOptions& options,
                     Message* destination);
 
-  // Add required field path of the message to this tree based on current tree
-  // structure. If a message is present in the tree, add the path of its
-  // required field to the tree. This is to make sure that after trimming a
-  // message with required fields are set, check IsInitialized() will not fail.
-  void AddRequiredFieldPath(Node* node, const Descriptor* descriptor);
-
+  // Add required field path of the message to this tree based on current tree 
+  // structure. If a message is present in the tree, add the path of its 
+  // required field to the tree. This is to make sure that after trimming a 
+  // message with required fields are set, check IsInitialized() will not fail. 
+  void AddRequiredFieldPath(Node* node, const Descriptor* descriptor); 
+ 
   // Trims all fields not specified by this sub-tree from the given message.
   // Returns true if the message is actually modified
   bool TrimMessage(const Node* node, Message* message);
@@ -556,38 +556,38 @@ void FieldMaskTree::MergeMessage(const Node* node, const Message& source,
 void FieldMaskTree::AddRequiredFieldPath(Node* node,
                                          const Descriptor* descriptor) {
   const int32_t field_count = descriptor->field_count();
-  for (int index = 0; index < field_count; ++index) {
-    const FieldDescriptor* field = descriptor->field(index);
-    if (field->is_required()) {
+  for (int index = 0; index < field_count; ++index) { 
+    const FieldDescriptor* field = descriptor->field(index); 
+    if (field->is_required()) { 
       const TProtoStringType& node_name = field->name();
-      Node*& child = node->children[node_name];
+      Node*& child = node->children[node_name]; 
       if (child == nullptr) {
-        // Add required field path to the tree
-        child = new Node();
+        // Add required field path to the tree 
+        child = new Node(); 
       } else if (child->children.empty()) {
-        // If the required field is in the tree and does not have any children,
-        // do nothing.
-        continue;
-      }
-      // Add required field in the children to the tree if the field is message.
-      if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
-        AddRequiredFieldPath(child, field->message_type());
-      }
-    } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+        // If the required field is in the tree and does not have any children, 
+        // do nothing. 
+        continue; 
+      } 
+      // Add required field in the children to the tree if the field is message. 
+      if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) { 
+        AddRequiredFieldPath(child, field->message_type()); 
+      } 
+    } else if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) { 
       std::map<TProtoStringType, Node*>::const_iterator it =
-          node->children.find(field->name());
-      if (it != node->children.end()) {
-        // Add required fields in the children to the
-        // tree if the field is a message and present in the tree.
-        Node* child = it->second;
-        if (!child->children.empty()) {
-          AddRequiredFieldPath(child, field->message_type());
-        }
-      }
-    }
-  }
-}
-
+          node->children.find(field->name()); 
+      if (it != node->children.end()) { 
+        // Add required fields in the children to the 
+        // tree if the field is a message and present in the tree. 
+        Node* child = it->second; 
+        if (!child->children.empty()) { 
+          AddRequiredFieldPath(child, field->message_type()); 
+        } 
+      } 
+    } 
+  } 
+} 
+ 
 bool FieldMaskTree::TrimMessage(const Node* node, Message* message) {
   GOOGLE_DCHECK(!node->children.empty());
   const Reflection* reflection = message->GetReflection();
@@ -597,8 +597,8 @@ bool FieldMaskTree::TrimMessage(const Node* node, Message* message) {
   for (int index = 0; index < field_count; ++index) {
     const FieldDescriptor* field = descriptor->field(index);
     std::map<TProtoStringType, Node*>::const_iterator it =
-        node->children.find(field->name());
-    if (it == node->children.end()) {
+        node->children.find(field->name()); 
+    if (it == node->children.end()) { 
       if (field->is_repeated()) {
         if (reflection->FieldSize(*message, field) != 0) {
           modified = true;
@@ -611,8 +611,8 @@ bool FieldMaskTree::TrimMessage(const Node* node, Message* message) {
       reflection->ClearField(message, field);
     } else {
       if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
-        Node* child = it->second;
-        if (!child->children.empty() && reflection->HasField(*message, field)) {
+        Node* child = it->second; 
+        if (!child->children.empty() && reflection->HasField(*message, field)) { 
           bool nestedMessageChanged =
               TrimMessage(child, reflection->MutableMessage(message, field));
           modified = nestedMessageChanged || modified;
@@ -705,19 +705,19 @@ bool FieldMaskUtil::TrimMessage(const FieldMask& mask, Message* message) {
 }
 
 bool FieldMaskUtil::TrimMessage(const FieldMask& mask, Message* message,
-                                const TrimOptions& options) {
-  // Build a FieldMaskTree and walk through the tree to merge all specified
-  // fields.
-  FieldMaskTree tree;
-  tree.MergeFromFieldMask(mask);
+                                const TrimOptions& options) { 
+  // Build a FieldMaskTree and walk through the tree to merge all specified 
+  // fields. 
+  FieldMaskTree tree; 
+  tree.MergeFromFieldMask(mask); 
   // If keep_required_fields is true, implicitly add required fields of
-  // a message present in the tree to prevent from trimming.
-  if (options.keep_required_fields()) {
+  // a message present in the tree to prevent from trimming. 
+  if (options.keep_required_fields()) { 
     tree.AddRequiredFieldPath(GOOGLE_CHECK_NOTNULL(message->GetDescriptor()));
-  }
+  } 
   return tree.TrimMessage(GOOGLE_CHECK_NOTNULL(message));
-}
-
+} 
+ 
 }  // namespace util
 }  // namespace protobuf
 }  // namespace google

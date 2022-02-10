@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 #pragma once
 
 #include <aws/core/utils/crypto/CryptoBuf.h>
@@ -20,7 +20,7 @@ namespace Aws
              * A common use case is a file that is encrypted on disk being read via ifstream and then read decrypted into memory.
              * Or you could send a plain text file through an iostream and have it encrypted when the stream is read.
              *
-             * This stream is seekable, but it is very expensive to seek backwards since we have to reset the cipher and re-encrypt everything up to that point.
+             * This stream is seekable, but it is very expensive to seek backwards since we have to reset the cipher and re-encrypt everything up to that point. 
              * So seeking should be avoided if at all possible.
              *
              * Or it can be used in the opposite direction where the stream is a sink and all input to the stream will be encrypted or decrypted and then sent to the

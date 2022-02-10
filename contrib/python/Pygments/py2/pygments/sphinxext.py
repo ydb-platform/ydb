@@ -6,7 +6,7 @@
     Sphinx extension to generate automatic documentation of lexers,
     formatters and filters.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -16,7 +16,7 @@ import sys
 
 from docutils import nodes
 from docutils.statemachine import ViewList
-from docutils.parsers.rst import Directive
+from docutils.parsers.rst import Directive 
 from sphinx.util.nodes import nested_parse_with_titles
 
 
@@ -57,7 +57,7 @@ FILTERDOC = '''
 
 '''
 
-
+ 
 class PygmentsDoc(Directive):
     """
     A directive to collect all lexers/formatters/filters and generate

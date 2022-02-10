@@ -23,7 +23,7 @@
 #include "y_absl/profiling/internal/exponential_biased.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace profiling_internal {
 
 // PeriodicSamplerBase provides the basic period sampler implementation.
@@ -205,7 +205,7 @@ template <typename Tag, int default_period>
 std::atomic<int> PeriodicSampler<Tag, default_period>::period_(default_period);
 
 }  // namespace profiling_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_PROFILING_INTERNAL_PERIODIC_SAMPLER_H_

@@ -10,10 +10,10 @@ LICENSE(BSD-3-Clause)
 
 NO_LINT()
 
-NO_CHECK_IMPORTS(
-    pygments.sphinxext
-)
-
+NO_CHECK_IMPORTS( 
+    pygments.sphinxext 
+) 
+ 
 PY_SRCS(
     TOP_LEVEL
     pygments/__init__.py
@@ -56,17 +56,17 @@ PY_SRCS(
     pygments/lexers/_scilab_builtins.py
     pygments/lexers/_sourcemod_builtins.py
     pygments/lexers/_stan_builtins.py
-    pygments/lexers/_stata_builtins.py
-    pygments/lexers/_tsql_builtins.py
+    pygments/lexers/_stata_builtins.py 
+    pygments/lexers/_tsql_builtins.py 
     pygments/lexers/_usd_builtins.py
-    pygments/lexers/_vbscript_builtins.py
+    pygments/lexers/_vbscript_builtins.py 
     pygments/lexers/_vim_builtins.py
     pygments/lexers/actionscript.py
     pygments/lexers/agile.py
     pygments/lexers/algebra.py
     pygments/lexers/ambient.py
     pygments/lexers/amdgpu.py
-    pygments/lexers/ampl.py
+    pygments/lexers/ampl.py 
     pygments/lexers/apdlexer.py
     pygments/lexers/apl.py
     pygments/lexers/archetype.py
@@ -77,19 +77,19 @@ PY_SRCS(
     pygments/lexers/bare.py
     pygments/lexers/basic.py
     pygments/lexers/bdd.py
-    pygments/lexers/bibtex.py
-    pygments/lexers/boa.py
+    pygments/lexers/bibtex.py 
+    pygments/lexers/boa.py 
     pygments/lexers/business.py
     pygments/lexers/c_cpp.py
     pygments/lexers/c_like.py
-    pygments/lexers/capnproto.py
+    pygments/lexers/capnproto.py 
     pygments/lexers/cddl.py
     pygments/lexers/chapel.py
-    pygments/lexers/clean.py
+    pygments/lexers/clean.py 
     pygments/lexers/compiled.py
     pygments/lexers/configs.py
     pygments/lexers/console.py
-    pygments/lexers/crystal.py
+    pygments/lexers/crystal.py 
     pygments/lexers/csound.py
     pygments/lexers/css.py
     pygments/lexers/d.py
@@ -111,11 +111,11 @@ PY_SRCS(
     pygments/lexers/factor.py
     pygments/lexers/fantom.py
     pygments/lexers/felix.py
-    pygments/lexers/floscript.py
-    pygments/lexers/forth.py
+    pygments/lexers/floscript.py 
+    pygments/lexers/forth.py 
     pygments/lexers/fortran.py
     pygments/lexers/foxpro.py
-    pygments/lexers/freefem.py
+    pygments/lexers/freefem.py 
     pygments/lexers/functional.py
     pygments/lexers/futhark.py
     pygments/lexers/gcodelexer.py
@@ -155,9 +155,9 @@ PY_SRCS(
     pygments/lexers/ml.py
     pygments/lexers/modeling.py
     pygments/lexers/modula2.py
-    pygments/lexers/monte.py
+    pygments/lexers/monte.py 
     pygments/lexers/mosel.py
-    pygments/lexers/ncl.py
+    pygments/lexers/ncl.py 
     pygments/lexers/nimrod.py
     pygments/lexers/nit.py
     pygments/lexers/nix.py
@@ -172,7 +172,7 @@ PY_SRCS(
     pygments/lexers/perl.py
     pygments/lexers/php.py
     pygments/lexers/pointless.py
-    pygments/lexers/pony.py
+    pygments/lexers/pony.py 
     pygments/lexers/praat.py
     pygments/lexers/procfile.py
     pygments/lexers/prolog.py
@@ -185,22 +185,22 @@ PY_SRCS(
     pygments/lexers/resource.py
     pygments/lexers/ride.py
     pygments/lexers/rita.py
-    pygments/lexers/rnc.py
+    pygments/lexers/rnc.py 
     pygments/lexers/roboconf.py
     pygments/lexers/robotframework.py
     pygments/lexers/ruby.py
     pygments/lexers/rust.py
-    pygments/lexers/sas.py
+    pygments/lexers/sas.py 
     pygments/lexers/savi.py
     pygments/lexers/scdoc.py
     pygments/lexers/scripting.py
-    pygments/lexers/sgf.py
+    pygments/lexers/sgf.py 
     pygments/lexers/shell.py
     pygments/lexers/sieve.py
-    pygments/lexers/slash.py
+    pygments/lexers/slash.py 
     pygments/lexers/smalltalk.py
     pygments/lexers/smithy.py
-    pygments/lexers/smv.py
+    pygments/lexers/smv.py 
     pygments/lexers/snobol.py
     pygments/lexers/solidity.py
     pygments/lexers/sophia.py
@@ -208,12 +208,12 @@ PY_SRCS(
     pygments/lexers/spice.py
     pygments/lexers/sql.py
     pygments/lexers/srcinfo.py
-    pygments/lexers/stata.py
+    pygments/lexers/stata.py 
     pygments/lexers/supercollider.py
     pygments/lexers/tcl.py
     pygments/lexers/teal.py
     pygments/lexers/templates.py
-    pygments/lexers/teraterm.py
+    pygments/lexers/teraterm.py 
     pygments/lexers/testing.py
     pygments/lexers/text.py
     pygments/lexers/textedit.py
@@ -222,19 +222,19 @@ PY_SRCS(
     pygments/lexers/thingsdb.py
     pygments/lexers/tnt.py
     pygments/lexers/trafficscript.py
-    pygments/lexers/typoscript.py
-    pygments/lexers/unicon.py
+    pygments/lexers/typoscript.py 
+    pygments/lexers/unicon.py 
     pygments/lexers/urbi.py
     pygments/lexers/usd.py
-    pygments/lexers/varnish.py
-    pygments/lexers/verification.py
+    pygments/lexers/varnish.py 
+    pygments/lexers/verification.py 
     pygments/lexers/web.py
     pygments/lexers/webassembly.py
     pygments/lexers/webidl.py
     pygments/lexers/webmisc.py
-    pygments/lexers/whiley.py
+    pygments/lexers/whiley.py 
     pygments/lexers/x10.py
-    pygments/lexers/xorg.py
+    pygments/lexers/xorg.py 
     pygments/lexers/yang.py
     pygments/lexers/zig.py
     pygments/modeline.py
@@ -244,7 +244,7 @@ PY_SRCS(
     pygments/sphinxext.py
     pygments/style.py
     pygments/styles/__init__.py
-    pygments/styles/abap.py
+    pygments/styles/abap.py 
     pygments/styles/algol.py
     pygments/styles/algol_nu.py
     pygments/styles/arduino.py
@@ -273,12 +273,12 @@ PY_SRCS(
     pygments/styles/paraiso_light.py
     pygments/styles/pastie.py
     pygments/styles/perldoc.py
-    pygments/styles/rainbow_dash.py
+    pygments/styles/rainbow_dash.py 
     pygments/styles/rrt.py
-    pygments/styles/sas.py
-    pygments/styles/solarized.py
-    pygments/styles/stata_dark.py
-    pygments/styles/stata_light.py
+    pygments/styles/sas.py 
+    pygments/styles/solarized.py 
+    pygments/styles/stata_dark.py 
+    pygments/styles/stata_light.py 
     pygments/styles/tango.py
     pygments/styles/trac.py
     pygments/styles/vim.py
@@ -290,11 +290,11 @@ PY_SRCS(
     pygments/util.py
 )
 
-RESOURCE_FILES(
+RESOURCE_FILES( 
     PREFIX contrib/python/Pygments/py3/
-    .dist-info/METADATA
-    .dist-info/entry_points.txt
-    .dist-info/top_level.txt
-)
-
+    .dist-info/METADATA 
+    .dist-info/entry_points.txt 
+    .dist-info/top_level.txt 
+) 
+ 
 END()

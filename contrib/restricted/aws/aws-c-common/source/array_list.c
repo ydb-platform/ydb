@@ -1,29 +1,29 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #include <aws/common/array_list.h>
-#include <aws/common/private/array_list.h>
+#include <aws/common/private/array_list.h> 
 
 #include <stdlib.h> /* qsort */
 
-int aws_array_list_calc_necessary_size(struct aws_array_list *AWS_RESTRICT list, size_t index, size_t *necessary_size) {
-    AWS_PRECONDITION(aws_array_list_is_valid(list));
-    size_t index_inc;
-    if (aws_add_size_checked(index, 1, &index_inc)) {
-        AWS_POSTCONDITION(aws_array_list_is_valid(list));
-        return AWS_OP_ERR;
-    }
-
-    if (aws_mul_size_checked(index_inc, list->item_size, necessary_size)) {
-        AWS_POSTCONDITION(aws_array_list_is_valid(list));
-        return AWS_OP_ERR;
-    }
-    AWS_POSTCONDITION(aws_array_list_is_valid(list));
-    return AWS_OP_SUCCESS;
-}
-
+int aws_array_list_calc_necessary_size(struct aws_array_list *AWS_RESTRICT list, size_t index, size_t *necessary_size) { 
+    AWS_PRECONDITION(aws_array_list_is_valid(list)); 
+    size_t index_inc; 
+    if (aws_add_size_checked(index, 1, &index_inc)) { 
+        AWS_POSTCONDITION(aws_array_list_is_valid(list)); 
+        return AWS_OP_ERR; 
+    } 
+ 
+    if (aws_mul_size_checked(index_inc, list->item_size, necessary_size)) { 
+        AWS_POSTCONDITION(aws_array_list_is_valid(list)); 
+        return AWS_OP_ERR; 
+    } 
+    AWS_POSTCONDITION(aws_array_list_is_valid(list)); 
+    return AWS_OP_SUCCESS; 
+} 
+ 
 int aws_array_list_shrink_to_fit(struct aws_array_list *AWS_RESTRICT list) {
     AWS_PRECONDITION(aws_array_list_is_valid(list));
     if (list->alloc) {
@@ -58,8 +58,8 @@ int aws_array_list_shrink_to_fit(struct aws_array_list *AWS_RESTRICT list) {
 }
 
 int aws_array_list_copy(const struct aws_array_list *AWS_RESTRICT from, struct aws_array_list *AWS_RESTRICT to) {
-    AWS_FATAL_PRECONDITION(from->item_size == to->item_size);
-    AWS_FATAL_PRECONDITION(from->data);
+    AWS_FATAL_PRECONDITION(from->item_size == to->item_size); 
+    AWS_FATAL_PRECONDITION(from->data); 
     AWS_PRECONDITION(aws_array_list_is_valid(from));
     AWS_PRECONDITION(aws_array_list_is_valid(to));
 
@@ -169,8 +169,8 @@ int aws_array_list_ensure_capacity(struct aws_array_list *AWS_RESTRICT list, siz
 static void aws_array_list_mem_swap(void *AWS_RESTRICT item1, void *AWS_RESTRICT item2, size_t item_size) {
     enum { SLICE = 128 };
 
-    AWS_FATAL_PRECONDITION(item1);
-    AWS_FATAL_PRECONDITION(item2);
+    AWS_FATAL_PRECONDITION(item1); 
+    AWS_FATAL_PRECONDITION(item2); 
 
     /* copy SLICE sized bytes at a time */
     size_t slice_count = item_size / SLICE;
@@ -190,8 +190,8 @@ static void aws_array_list_mem_swap(void *AWS_RESTRICT item1, void *AWS_RESTRICT
 }
 
 void aws_array_list_swap(struct aws_array_list *AWS_RESTRICT list, size_t a, size_t b) {
-    AWS_FATAL_PRECONDITION(a < list->length);
-    AWS_FATAL_PRECONDITION(b < list->length);
+    AWS_FATAL_PRECONDITION(a < list->length); 
+    AWS_FATAL_PRECONDITION(b < list->length); 
     AWS_PRECONDITION(aws_array_list_is_valid(list));
 
     if (a == b) {

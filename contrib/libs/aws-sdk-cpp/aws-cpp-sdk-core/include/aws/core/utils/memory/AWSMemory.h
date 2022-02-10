@@ -1,6 +1,6 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #pragma once
@@ -14,8 +14,8 @@
 #include <algorithm>
 #include <type_traits>
 
-struct aws_allocator;
-
+struct aws_allocator; 
+ 
 namespace Aws
 {
     namespace Utils
@@ -52,8 +52,8 @@ namespace Aws
      */
     AWS_CORE_API void Free(void* memoryPtr);
 
-    AWS_CORE_API aws_allocator* get_aws_allocator();
-
+    AWS_CORE_API aws_allocator* get_aws_allocator(); 
+ 
     /**
      * ::new, ::delete, ::malloc, ::free, std::make_shared, and std::make_unique should not be used in SDK code
      *  use these functions instead or Aws::MakeShared

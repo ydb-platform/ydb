@@ -311,9 +311,9 @@ curl_easy_strerror(CURLcode error)
   case CURLE_RECURSIVE_API_CALL:
     return "API function called from within callback";
 
-  case CURLE_AUTH_ERROR:
-    return "An authentication function returned an error";
-
+  case CURLE_AUTH_ERROR: 
+    return "An authentication function returned an error"; 
+ 
   case CURLE_HTTP3:
     return "HTTP/3 error";
 
@@ -709,13 +709,13 @@ get_winapi_error(int err, char *buf, size_t buflen)
  * Call Curl_sspi_strerror if the error code is definitely Windows SSPI.
  * Call Curl_winapi_strerror if the error code is definitely Windows API.
  */
-const char *Curl_strerror(int err, char *buf, size_t buflen)
+const char *Curl_strerror(int err, char *buf, size_t buflen) 
 {
 #ifdef PRESERVE_WINDOWS_ERROR_CODE
   DWORD old_win_err = GetLastError();
 #endif
   int old_errno = errno;
-  char *p;
+  char *p; 
   size_t max;
 
   if(!buflen)
@@ -723,7 +723,7 @@ const char *Curl_strerror(int err, char *buf, size_t buflen)
 
   DEBUGASSERT(err >= 0);
 
-  max = buflen - 1;
+  max = buflen - 1; 
   *buf = '\0';
 
 #if defined(WIN32) || defined(_WIN32_WCE)
@@ -858,7 +858,7 @@ const char *Curl_winapi_strerror(DWORD err, char *buf, size_t buflen)
  * Curl_sspi_strerror:
  * Variant of Curl_strerror if the error code is definitely Windows SSPI.
  */
-const char *Curl_sspi_strerror(int err, char *buf, size_t buflen)
+const char *Curl_sspi_strerror(int err, char *buf, size_t buflen) 
 {
 #ifdef PRESERVE_WINDOWS_ERROR_CODE
   DWORD old_win_err = GetLastError();

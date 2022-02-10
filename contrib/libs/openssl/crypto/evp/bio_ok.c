@@ -38,9 +38,9 @@
         of memory.
 
         BIO_f_reliable splits data stream into blocks. Each block is prefixed
-        with its length and suffixed with its digest. So you need only
+        with its length and suffixed with its digest. So you need only 
         several Kbytes of memory to buffer single block before verifying
-        its digest.
+        its digest. 
 
         BIO_f_reliable goes further and adds several important capabilities:
 

@@ -1,5 +1,5 @@
-from _codecs import utf_8_decode, utf_8_encode
-
+from _codecs import utf_8_decode, utf_8_encode 
+ 
 from libcpp cimport bool
 
 from util.generic.string cimport TString, TStringBuf
@@ -24,13 +24,13 @@ def key_by_index(idx):
 def find(s):
     cdef TString res
 
-    if isinstance(s, str):
-        s = utf_8_encode(s)[0]
-
+    if isinstance(s, str): 
+        s = utf_8_encode(s)[0] 
+ 
     if FindExact(TStringBuf(s, len(s)), &res):
         return res.c_str()[:res.length()]
 
     return None
-
-
-include "importer.pxi"
+ 
+ 
+include "importer.pxi" 

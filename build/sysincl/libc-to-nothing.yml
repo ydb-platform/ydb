@@ -1,5 +1,5 @@
 # We want musl to resolve itself without these sysincls, but its test must have them
-- source_filter: "^(?!contrib/libs/musl).*|^contrib/libs/musl/tests"
+- source_filter: "^(?!contrib/libs/musl).*|^contrib/libs/musl/tests" 
   includes:
   - aio.h
   - alloca.h
@@ -43,7 +43,7 @@
   - netdb.h
   - net/ethernet.h
   - net/if_arp.h
-  - net/if_ppp.h
+  - net/if_ppp.h 
   - net/if.h
   - netinet/ether.h
   - netinet/icmp6.h
@@ -57,7 +57,7 @@
   - netinet/tcp.h
   - netinet/udp.h
   - netpacket/packet.h
-  - netrom/netrom.h
+  - netrom/netrom.h 
   - net/route.h
   - nl_types.h
   - paths.h
@@ -68,7 +68,7 @@
   - regex.h
   - resolv.h
   - sched.h
-  - scsi/scsi.h
+  - scsi/scsi.h 
   - search.h
   - semaphore.h
   - shadow.h
@@ -96,7 +96,7 @@
   - sys/ioctl.h
   - sys/io.h
   - sys/ipc.h
-  - sys/kd.h
+  - sys/kd.h 
   - syslog.h
   - sys/mman.h
   - sys/mount.h
@@ -141,7 +141,7 @@
   - sys/user.h
   - sys/utsname.h
   - sys/vfs.h
-  - sys/vt.h
+  - sys/vt.h 
   - sys/wait.h
   - sys/xattr.h
   - tar.h

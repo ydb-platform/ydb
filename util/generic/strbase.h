@@ -1,40 +1,40 @@
 #pragma once
 
-// Some of these includes are just a legacy from previous implementation.
-// We don't need them here, but removing them is tricky because it breaks all
-// kinds of builds downstream
-#include "mem_copy.h"
-#include "ptr.h"
-#include "utility.h"
-
-#include <util/charset/unidata.h>
-#include <util/system/platform.h>
+// Some of these includes are just a legacy from previous implementation. 
+// We don't need them here, but removing them is tricky because it breaks all 
+// kinds of builds downstream 
+#include "mem_copy.h" 
+#include "ptr.h" 
+#include "utility.h" 
+ 
+#include <util/charset/unidata.h> 
+#include <util/system/platform.h> 
 #include <util/system/yassert.h>
 
-#include <contrib/libs/libc_compat/string.h>
+#include <contrib/libs/libc_compat/string.h> 
 
-#include <cctype>
-#include <cstring>
-#include <string>
-#include <string_view>
-
-namespace NStringPrivate {
-    template <class TCharType>
-    size_t GetStringLengthWithLimit(const TCharType* s, size_t maxlen) {
-        Y_ASSERT(s);
-        size_t i = 0;
-        for (; i != maxlen && s[i]; ++i)
-            ;
-        return i;
-    }
-
-    inline size_t GetStringLengthWithLimit(const char* s, size_t maxlen) {
-        Y_ASSERT(s);
-        return strnlen(s, maxlen);
-    }
-}
-
-template <typename TDerived, typename TCharType, typename TTraitsType = std::char_traits<TCharType>>
+#include <cctype> 
+#include <cstring> 
+#include <string> 
+#include <string_view> 
+ 
+namespace NStringPrivate { 
+    template <class TCharType> 
+    size_t GetStringLengthWithLimit(const TCharType* s, size_t maxlen) { 
+        Y_ASSERT(s); 
+        size_t i = 0; 
+        for (; i != maxlen && s[i]; ++i) 
+            ; 
+        return i; 
+    } 
+ 
+    inline size_t GetStringLengthWithLimit(const char* s, size_t maxlen) { 
+        Y_ASSERT(s); 
+        return strnlen(s, maxlen); 
+    } 
+} 
+ 
+template <typename TDerived, typename TCharType, typename TTraitsType = std::char_traits<TCharType>> 
 class TStringBase {
     using TStringView = std::basic_string_view<TCharType>;
     using TStringViewWithTraits = std::basic_string_view<TCharType, TTraitsType>;
@@ -536,18 +536,18 @@ public:
         return AsStringView().find_last_of(set, pos, n);
     }
 
-    inline size_t find_last_not_of(TCharType c, size_t pos = npos) const noexcept {
+    inline size_t find_last_not_of(TCharType c, size_t pos = npos) const noexcept { 
         return AsStringView().find_last_not_of(c, pos);
-    }
-
+    } 
+ 
     inline size_t find_last_not_of(const TStringView set, size_t pos = npos) const noexcept {
         return find_last_not_of(set.data(), pos, set.length());
-    }
-
-    inline size_t find_last_not_of(const TCharType* set, size_t pos, size_t n) const noexcept {
+    } 
+ 
+    inline size_t find_last_not_of(const TCharType* set, size_t pos, size_t n) const noexcept { 
         return AsStringView().find_last_not_of(set, pos, n);
-    }
-
+    } 
+ 
     inline size_t copy(TCharType* pc, size_t n, size_t pos) const {
         if (pos > Len()) {
             throw std::out_of_range("TStringBase::copy");

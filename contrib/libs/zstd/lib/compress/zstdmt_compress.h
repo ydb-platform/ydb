@@ -28,7 +28,7 @@
 /* ===   Dependencies   === */
 #include "../common/zstd_deps.h"   /* size_t */
 #define ZSTD_STATIC_LINKING_ONLY   /* ZSTD_parameters */
-#include "../zstd.h"            /* ZSTD_inBuffer, ZSTD_outBuffer, ZSTDLIB_API */
+#include "../zstd.h"            /* ZSTD_inBuffer, ZSTD_outBuffer, ZSTDLIB_API */ 
 
 
 /* ===   Constants   === */
@@ -38,7 +38,7 @@
 #ifndef ZSTDMT_JOBSIZE_MIN   /* a different value can be selected at compile time */
 #  define ZSTDMT_JOBSIZE_MIN (512 KB)
 #endif
-#define ZSTDMT_JOBLOG_MAX   (MEM_32bits() ? 29 : 30)
+#define ZSTDMT_JOBLOG_MAX   (MEM_32bits() ? 29 : 30) 
 #define ZSTDMT_JOBSIZE_MAX  (MEM_32bits() ? (512 MB) : (1024 MB))
 
 

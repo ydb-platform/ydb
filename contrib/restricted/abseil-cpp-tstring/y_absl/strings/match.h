@@ -20,7 +20,7 @@
 // This file contains simple utilities for performing string matching checks.
 // All of these function parameters are specified as `y_absl::string_view`,
 // meaning that these functions can accept `TString`, `y_absl::string_view` or
-// NUL-terminated C-style strings.
+// NUL-terminated C-style strings. 
 //
 // Examples:
 //   TString s = "foo";
@@ -38,7 +38,7 @@
 #include "y_absl/strings/string_view.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 // StrContains()
 //
@@ -94,7 +94,7 @@ bool StartsWithIgnoreCase(y_absl::string_view text,
 bool EndsWithIgnoreCase(y_absl::string_view text,
                         y_absl::string_view suffix) noexcept;
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_MATCH_H_

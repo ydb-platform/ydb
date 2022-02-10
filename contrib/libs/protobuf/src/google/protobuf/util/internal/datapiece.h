@@ -79,27 +79,27 @@ class PROTOBUF_EXPORT DataPiece {
   explicit DataPiece(const int32_t value)
       : type_(TYPE_INT32), i32_(value), use_strict_base64_decoding_(false) {}
 #if defined(_32_) && (defined(_darwin_) || defined(_ios))
-  explicit DataPiece(const int32 value)
-      : type_(TYPE_INT32), i32_(value), use_strict_base64_decoding_(false) {}
+  explicit DataPiece(const int32 value) 
+      : type_(TYPE_INT32), i32_(value), use_strict_base64_decoding_(false) {} 
 #endif
   explicit DataPiece(const int64_t value)
       : type_(TYPE_INT64), i64_(value), use_strict_base64_decoding_(false) {}
 #if defined(_64_) && (defined(_darwin_) || defined(_ios_))
-  explicit DataPiece(const int64 value)
-      : type_(TYPE_INT64), i64_(value), use_strict_base64_decoding_(false) {}
+  explicit DataPiece(const int64 value) 
+      : type_(TYPE_INT64), i64_(value), use_strict_base64_decoding_(false) {} 
 #endif
   explicit DataPiece(const uint32_t value)
-      : type_(TYPE_UINT32), u32_(value), use_strict_base64_decoding_(false) {}
+      : type_(TYPE_UINT32), u32_(value), use_strict_base64_decoding_(false) {} 
   explicit DataPiece(const uint64_t value)
-      : type_(TYPE_UINT64), u64_(value), use_strict_base64_decoding_(false) {}
-  explicit DataPiece(const double value)
-      : type_(TYPE_DOUBLE),
-        double_(value),
-        use_strict_base64_decoding_(false) {}
-  explicit DataPiece(const float value)
-      : type_(TYPE_FLOAT), float_(value), use_strict_base64_decoding_(false) {}
-  explicit DataPiece(const bool value)
-      : type_(TYPE_BOOL), bool_(value), use_strict_base64_decoding_(false) {}
+      : type_(TYPE_UINT64), u64_(value), use_strict_base64_decoding_(false) {} 
+  explicit DataPiece(const double value) 
+      : type_(TYPE_DOUBLE), 
+        double_(value), 
+        use_strict_base64_decoding_(false) {} 
+  explicit DataPiece(const float value) 
+      : type_(TYPE_FLOAT), float_(value), use_strict_base64_decoding_(false) {} 
+  explicit DataPiece(const bool value) 
+      : type_(TYPE_BOOL), bool_(value), use_strict_base64_decoding_(false) {} 
   DataPiece(StringPiece value, bool use_strict_base64_decoding)
       : type_(TYPE_STRING),
         str_(value),
@@ -125,8 +125,8 @@ class PROTOBUF_EXPORT DataPiece {
   // Accessors
   Type type() const { return type_; }
 
-  bool use_strict_base64_decoding() { return use_strict_base64_decoding_; }
-
+  bool use_strict_base64_decoding() { return use_strict_base64_decoding_; } 
+ 
   StringPiece str() const {
     GOOGLE_LOG_IF(DFATAL, type_ != TYPE_STRING) << "Not a string type.";
     return str_;
@@ -171,7 +171,7 @@ class PROTOBUF_EXPORT DataPiece {
 
   // Helper to create NULL or ENUM types.
   DataPiece(Type type, int32_t val)
-      : type_(type), i32_(val), use_strict_base64_decoding_(false) {}
+      : type_(type), i32_(val), use_strict_base64_decoding_(false) {} 
 
   // Same as the ToEnum() method above but with additional flag to ignore
   // unknown enum values.

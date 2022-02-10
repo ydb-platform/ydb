@@ -1,9 +1,9 @@
 #ifndef AWS_COMMON_TASK_SCHEDULER_H
 #define AWS_COMMON_TASK_SCHEDULER_H
 
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #include <aws/common/common.h>
@@ -32,7 +32,7 @@ struct aws_task {
     uint64_t timestamp;
     struct aws_linked_list_node node;
     struct aws_priority_queue_node priority_queue_node;
-    const char *type_tag;
+    const char *type_tag; 
     size_t reserved;
 };
 
@@ -46,18 +46,18 @@ struct aws_task_scheduler {
 AWS_EXTERN_C_BEGIN
 
 /**
- * Init an aws_task
- */
-AWS_COMMON_API
-void aws_task_init(struct aws_task *task, aws_task_fn *fn, void *arg, const char *type_tag);
-
-/*
- * Runs or cancels a task
- */
-AWS_COMMON_API
-void aws_task_run(struct aws_task *task, enum aws_task_status status);
-
-/**
+ * Init an aws_task 
+ */ 
+AWS_COMMON_API 
+void aws_task_init(struct aws_task *task, aws_task_fn *fn, void *arg, const char *type_tag); 
+ 
+/* 
+ * Runs or cancels a task 
+ */ 
+AWS_COMMON_API 
+void aws_task_run(struct aws_task *task, enum aws_task_status status); 
+ 
+/** 
  * Initializes a task scheduler instance.
  */
 AWS_COMMON_API
@@ -70,9 +70,9 @@ int aws_task_scheduler_init(struct aws_task_scheduler *scheduler, struct aws_all
 AWS_COMMON_API
 void aws_task_scheduler_clean_up(struct aws_task_scheduler *scheduler);
 
-AWS_COMMON_API
-bool aws_task_scheduler_is_valid(const struct aws_task_scheduler *scheduler);
-
+AWS_COMMON_API 
+bool aws_task_scheduler_is_valid(const struct aws_task_scheduler *scheduler); 
+ 
 /**
  * Returns whether the scheduler has any scheduled tasks.
  * next_task_time (optional) will be set to time of the next task, note that 0 will be set if tasks were
@@ -113,12 +113,12 @@ void aws_task_scheduler_cancel_task(struct aws_task_scheduler *scheduler, struct
 AWS_COMMON_API
 void aws_task_scheduler_run_all(struct aws_task_scheduler *scheduler, uint64_t current_time);
 
-/**
- * Convert a status value to a c-string suitable for logging
- */
-AWS_COMMON_API
-const char *aws_task_status_to_c_str(enum aws_task_status status);
-
+/** 
+ * Convert a status value to a c-string suitable for logging 
+ */ 
+AWS_COMMON_API 
+const char *aws_task_status_to_c_str(enum aws_task_status status); 
+ 
 AWS_EXTERN_C_END
 
 #endif /* AWS_COMMON_TASK_SCHEDULER_H */

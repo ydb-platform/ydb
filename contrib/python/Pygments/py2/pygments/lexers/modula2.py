@@ -5,7 +5,7 @@
 
     Multi-Dialect Lexer for Modula-2.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -290,7 +290,7 @@ class Modula2Lexer(RegexLexer):
         ],
         'unigraph_punctuation': [
             # Common Punctuation
-            (r'[()\[\]{},.:;|]', Punctuation),
+            (r'[()\[\]{},.:;|]', Punctuation), 
             # Case Label Separator Synonym
             (r'!', Punctuation),  # ISO
             # Blueprint Punctuation

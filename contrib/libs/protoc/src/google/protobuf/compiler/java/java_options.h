@@ -59,10 +59,10 @@ struct Options {
   bool annotate_code;
   // Name of a file where we will write a list of generated .meta file names,
   // one per line.
-  TProtoStringType annotation_list_file;
+  TProtoStringType annotation_list_file; 
   // Name of a file where we will write a list of generated file names, one
   // per line.
-  TProtoStringType output_list_file;
+  TProtoStringType output_list_file; 
 };
 
 }  // namespace java

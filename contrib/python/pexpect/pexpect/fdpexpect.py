@@ -1,5 +1,5 @@
 '''This is like pexpect, but it will work with any file descriptor that you
-pass it. You are responsible for opening and close the file descriptor.
+pass it. You are responsible for opening and close the file descriptor. 
 This allows you to use Pexpect with sockets and named pipes (FIFOs).
 
 PEXPECT LICENSE
@@ -22,8 +22,8 @@ PEXPECT LICENSE
 '''
 
 from .spawnbase import SpawnBase
-from .exceptions import ExceptionPexpect, TIMEOUT
-from .utils import select_ignore_interrupts, poll_ignore_interrupts
+from .exceptions import ExceptionPexpect, TIMEOUT 
+from .utils import select_ignore_interrupts, poll_ignore_interrupts 
 import os
 
 __all__ = ['fdspawn']
@@ -34,7 +34,7 @@ class fdspawn(SpawnBase):
     for patterns, or to control a modem or serial device. '''
 
     def __init__ (self, fd, args=None, timeout=30, maxread=2000, searchwindowsize=None,
-                  logfile=None, encoding=None, codec_errors='strict', use_poll=False):
+                  logfile=None, encoding=None, codec_errors='strict', use_poll=False): 
         '''This takes a file descriptor (an int) or an object that support the
         fileno() method (returning an int). All Python file-like objects
         support fileno(). '''
@@ -58,7 +58,7 @@ class fdspawn(SpawnBase):
         self.own_fd = False
         self.closed = False
         self.name = '<file descriptor %d>' % fd
-        self.use_poll = use_poll
+        self.use_poll = use_poll 
 
     def close (self):
         """Close the file descriptor.
@@ -89,7 +89,7 @@ class fdspawn(SpawnBase):
     def terminate (self, force=False):  # pragma: no cover
         '''Deprecated and invalid. Just raises an exception.'''
         raise ExceptionPexpect('This method is not valid for file descriptors.')
-
+ 
     # These four methods are left around for backwards compatibility, but not
     # documented as part of fdpexpect. You're encouraged to use os.write
     # directly.
@@ -97,52 +97,52 @@ class fdspawn(SpawnBase):
         "Write to fd, return number of bytes written"
         s = self._coerce_send_string(s)
         self._log(s, 'send')
-
+ 
         b = self._encoder.encode(s, final=False)
         return os.write(self.child_fd, b)
-
+ 
     def sendline(self, s):
         "Write to fd with trailing newline, return number of bytes written"
         s = self._coerce_send_string(s)
         return self.send(s + self.linesep)
-
+ 
     def write(self, s):
         "Write to fd, return None"
         self.send(s)
-
+ 
     def writelines(self, sequence):
         "Call self.write() for each item in sequence"
         for s in sequence:
             self.write(s)
-
-    def read_nonblocking(self, size=1, timeout=-1):
-        """
-        Read from the file descriptor and return the result as a string.
-
-        The read_nonblocking method of :class:`SpawnBase` assumes that a call
-        to os.read will not block (timeout parameter is ignored). This is not
-        the case for POSIX file-like objects such as sockets and serial ports.
-
-        Use :func:`select.select`, timeout is implemented conditionally for
-        POSIX systems.
-
-        :param int size: Read at most *size* bytes.
-        :param int timeout: Wait timeout seconds for file descriptor to be
-            ready to read. When -1 (default), use self.timeout. When 0, poll.
-        :return: String containing the bytes read
-        """
-        if os.name == 'posix':
-            if timeout == -1:
-                timeout = self.timeout
-            rlist = [self.child_fd]
-            wlist = []
-            xlist = []
-            if self.use_poll:
-                rlist = poll_ignore_interrupts(rlist, timeout)
-            else:
-                rlist, wlist, xlist = select_ignore_interrupts(
-                    rlist, wlist, xlist, timeout
-                )
-            if self.child_fd not in rlist:
-                raise TIMEOUT('Timeout exceeded.')
-        return super(fdspawn, self).read_nonblocking(size)
+ 
+    def read_nonblocking(self, size=1, timeout=-1): 
+        """ 
+        Read from the file descriptor and return the result as a string. 
+ 
+        The read_nonblocking method of :class:`SpawnBase` assumes that a call 
+        to os.read will not block (timeout parameter is ignored). This is not 
+        the case for POSIX file-like objects such as sockets and serial ports. 
+ 
+        Use :func:`select.select`, timeout is implemented conditionally for 
+        POSIX systems. 
+ 
+        :param int size: Read at most *size* bytes. 
+        :param int timeout: Wait timeout seconds for file descriptor to be 
+            ready to read. When -1 (default), use self.timeout. When 0, poll. 
+        :return: String containing the bytes read 
+        """ 
+        if os.name == 'posix': 
+            if timeout == -1: 
+                timeout = self.timeout 
+            rlist = [self.child_fd] 
+            wlist = [] 
+            xlist = [] 
+            if self.use_poll: 
+                rlist = poll_ignore_interrupts(rlist, timeout) 
+            else: 
+                rlist, wlist, xlist = select_ignore_interrupts( 
+                    rlist, wlist, xlist, timeout 
+                ) 
+            if self.child_fd not in rlist: 
+                raise TIMEOUT('Timeout exceeded.') 
+        return super(fdspawn, self).read_nonblocking(size) 

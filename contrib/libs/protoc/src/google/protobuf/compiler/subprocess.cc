@@ -33,7 +33,7 @@
 #include <google/protobuf/compiler/subprocess.h>
 
 #include <algorithm>
-#include <cstring>
+#include <cstring> 
 #include <iostream>
 
 #ifndef _WIN32
@@ -52,16 +52,16 @@ namespace google {
 namespace protobuf {
 namespace compiler {
 
-namespace {
-char* portable_strdup(const char* s) {
+namespace { 
+char* portable_strdup(const char* s) { 
   char* ns = (char*)malloc(strlen(s) + 1);
-  if (ns != NULL) {
-    strcpy(ns, s);
-  }
-  return ns;
-}
-}  // namespace
-
+  if (ns != NULL) { 
+    strcpy(ns, s); 
+  } 
+  return ns; 
+} 
+}  // namespace 
+ 
 #ifdef _WIN32
 
 static void CloseHandleOrDie(HANDLE handle) {
@@ -271,11 +271,11 @@ TProtoStringType Subprocess::Win32ErrorMessage(DWORD error_code) {
   char* message;
 
   // WTF?
-  FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM |
-                     FORMAT_MESSAGE_IGNORE_INSERTS,
+  FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | 
+                     FORMAT_MESSAGE_IGNORE_INSERTS, 
                  NULL, error_code, MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US),
-                 (LPSTR)&message,  // NOT A BUG!
-                 0, NULL);
+                 (LPSTR)&message,  // NOT A BUG! 
+                 0, NULL); 
 
   TProtoStringType result = message;
   LocalFree(message);

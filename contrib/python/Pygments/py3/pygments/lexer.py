@@ -315,8 +315,8 @@ def bygroups(*args):
                 if data is not None:
                     if ctx:
                         ctx.pos = match.start(i + 1)
-                    for item in action(lexer,
-                                       _PseudoMatch(match.start(i + 1), data), ctx):
+                    for item in action(lexer, 
+                                       _PseudoMatch(match.start(i + 1), data), ctx): 
                         if item:
                             yield item
         if ctx:
@@ -639,20 +639,20 @@ class RegexLexer(Lexer, metaclass=RegexLexerMeta):
                         if isinstance(new_state, tuple):
                             for state in new_state:
                                 if state == '#pop':
-                                    if len(statestack) > 1:
-                                        statestack.pop()
+                                    if len(statestack) > 1: 
+                                        statestack.pop() 
                                 elif state == '#push':
                                     statestack.append(statestack[-1])
                                 else:
                                     statestack.append(state)
                         elif isinstance(new_state, int):
-                            # pop, but keep at least one state on the stack
-                            # (random code leading to unexpected pops should
-                            # not allow exceptions)
-                            if abs(new_state) >= len(statestack):
-                                del statestack[1:]
-                            else:
-                                del statestack[new_state:]
+                            # pop, but keep at least one state on the stack 
+                            # (random code leading to unexpected pops should 
+                            # not allow exceptions) 
+                            if abs(new_state) >= len(statestack): 
+                                del statestack[1:] 
+                            else: 
+                                del statestack[new_state:] 
                         elif new_state == '#push':
                             statestack.append(statestack[-1])
                         else:
@@ -729,18 +729,18 @@ class ExtendedRegexLexer(RegexLexer):
                         if isinstance(new_state, tuple):
                             for state in new_state:
                                 if state == '#pop':
-                                    if len(ctx.stack) > 1:
-                                        ctx.stack.pop()
+                                    if len(ctx.stack) > 1: 
+                                        ctx.stack.pop() 
                                 elif state == '#push':
                                     ctx.stack.append(ctx.stack[-1])
                                 else:
                                     ctx.stack.append(state)
                         elif isinstance(new_state, int):
-                            # see RegexLexer for why this check is made
-                            if abs(new_state) >= len(ctx.stack):
-                                del ctx.state[1:]
-                            else:
-                                del ctx.stack[new_state:]
+                            # see RegexLexer for why this check is made 
+                            if abs(new_state) >= len(ctx.stack): 
+                                del ctx.state[1:] 
+                            else: 
+                                del ctx.stack[new_state:] 
                         elif new_state == '#push':
                             ctx.stack.append(ctx.stack[-1])
                         else:

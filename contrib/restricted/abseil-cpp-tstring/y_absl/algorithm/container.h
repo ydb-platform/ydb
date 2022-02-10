@@ -55,7 +55,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace container_algorithm_internal {
 
 // NOTE: it is important to defer to ADL lookup for building with C++ modules,
@@ -269,8 +269,8 @@ container_algorithm_internal::ContainerIter<Sequence1> c_find_end(
 // c_find_first_of()
 //
 // Container-based version of the <algorithm> `std::find_first_of()` function to
-// find the first element within the container that is also within the options
-// container.
+// find the first element within the container that is also within the options 
+// container. 
 template <typename C1, typename C2>
 container_algorithm_internal::ContainerIter<C1> c_find_first_of(C1& container,
                                                                 C2& options) {
@@ -1768,7 +1768,7 @@ OutputIt c_partial_sum(const InputSequence& input, OutputIt output_first,
                           output_first, std::forward<BinaryOp>(op));
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_ALGORITHM_CONTAINER_H_

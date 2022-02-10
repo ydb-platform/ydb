@@ -23,13 +23,13 @@
 
 #include <cstdio>
 #include <ostream>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 #include "y_absl/base/port.h"
 #include "y_absl/strings/string_view.h"
 
-namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+namespace y_absl { 
+ABSL_NAMESPACE_BEGIN 
 namespace str_format_internal {
 
 // RawSink implementation that writes into a char* buffer.
@@ -90,7 +90,7 @@ auto InvokeFlush(T* out, string_view s) -> decltype(AbslFormatFlush(out, s)) {
 }
 
 }  // namespace str_format_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_FORMAT_OUTPUT_H_

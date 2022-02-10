@@ -1,26 +1,26 @@
 /*
  *
- * Copyright 2016 gRPC authors.
+ * Copyright 2016 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
 #ifndef GRPC_CORE_LIB_SECURITY_CREDENTIALS_OAUTH2_OAUTH2_CREDENTIALS_H
 #define GRPC_CORE_LIB_SECURITY_CREDENTIALS_OAUTH2_OAUTH2_CREDENTIALS_H
 
-#include <grpc/support/port_platform.h>
-
+#include <grpc/support/port_platform.h> 
+ 
 #include <util/generic/string.h>
 
 #include <grpc/grpc_security.h>
@@ -35,19 +35,19 @@
 
 // auth_refresh_token parsing.
 struct grpc_auth_refresh_token {
-  const char* type;
-  char* client_id;
-  char* client_secret;
-  char* refresh_token;
+  const char* type; 
+  char* client_id; 
+  char* client_secret; 
+  char* refresh_token; 
 };
 /// Returns 1 if the object is valid, 0 otherwise.
 int grpc_auth_refresh_token_is_valid(
-    const grpc_auth_refresh_token* refresh_token);
+    const grpc_auth_refresh_token* refresh_token); 
 
 /// Creates a refresh token object from string. Returns an invalid object if a
 /// parsing error has been encountered.
 grpc_auth_refresh_token grpc_auth_refresh_token_create_from_string(
-    const char* json_string);
+    const char* json_string); 
 
 /// Creates a refresh token object from parsed json. Returns an invalid object
 /// if a parsing error has been encountered.
@@ -55,7 +55,7 @@ grpc_auth_refresh_token grpc_auth_refresh_token_create_from_json(
     const grpc_core::Json& json);
 
 /// Destructs the object.
-void grpc_auth_refresh_token_destruct(grpc_auth_refresh_token* refresh_token);
+void grpc_auth_refresh_token_destruct(grpc_auth_refresh_token* refresh_token); 
 
 // -- Oauth2 Token Fetcher credentials --
 //
@@ -63,12 +63,12 @@ void grpc_auth_refresh_token_destruct(grpc_auth_refresh_token* refresh_token);
 //  from an http service.
 
 struct grpc_oauth2_pending_get_request_metadata {
-  grpc_credentials_mdelem_array* md_array;
-  grpc_closure* on_request_metadata;
-  grpc_polling_entity* pollent;
-  struct grpc_oauth2_pending_get_request_metadata* next;
+  grpc_credentials_mdelem_array* md_array; 
+  grpc_closure* on_request_metadata; 
+  grpc_polling_entity* pollent; 
+  struct grpc_oauth2_pending_get_request_metadata* next; 
 };
-
+ 
 class grpc_oauth2_token_fetcher_credentials : public grpc_call_credentials {
  public:
   grpc_oauth2_token_fetcher_credentials();
@@ -157,8 +157,8 @@ grpc_refresh_token_credentials_create_from_auth_refresh_token(
 // Exposed for testing only.
 grpc_credentials_status
 grpc_oauth2_token_fetcher_credentials_parse_server_response(
-    const struct grpc_http_response* response, grpc_mdelem* token_md,
-    grpc_millis* token_lifetime);
+    const struct grpc_http_response* response, grpc_mdelem* token_md, 
+    grpc_millis* token_lifetime); 
 
 namespace grpc_core {
 // Exposed for testing only. This function validates the options, ensuring that

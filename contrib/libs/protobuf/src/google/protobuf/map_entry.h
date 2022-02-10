@@ -49,7 +49,7 @@ namespace google {
 namespace protobuf {
 class Arena;
 namespace internal {
-template <typename Derived, typename Key, typename Value,
+template <typename Derived, typename Key, typename Value, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 class MapField;
@@ -87,7 +87,7 @@ namespace internal {
 // The in-memory types of primitive types can be inferred from its proto type,
 // while we need to explicitly specify the cpp type if proto type is
 // TYPE_MESSAGE to infer the in-memory type.
-template <typename Derived, typename Key, typename Value,
+template <typename Derived, typename Key, typename Value, 
           WireFormatLite::FieldType kKeyFieldType,
           WireFormatLite::FieldType kValueFieldType>
 class MapEntry : public MapEntryImpl<Derived, Message, Key, Value,
@@ -95,15 +95,15 @@ class MapEntry : public MapEntryImpl<Derived, Message, Key, Value,
  public:
   constexpr MapEntry() : _internal_metadata_() {}
   explicit MapEntry(Arena* arena)
-      : MapEntryImpl<Derived, Message, Key, Value, kKeyFieldType,
+      : MapEntryImpl<Derived, Message, Key, Value, kKeyFieldType, 
                      kValueFieldType>(arena),
-        _internal_metadata_(arena) {}
+        _internal_metadata_(arena) {} 
   ~MapEntry() {
     Message::_internal_metadata_.template Delete<UnknownFieldSet>();
     _internal_metadata_.Delete<UnknownFieldSet>();
   }
-  typedef void InternalArenaConstructable_;
-  typedef void DestructorSkippable_;
+  typedef void InternalArenaConstructable_; 
+  typedef void DestructorSkippable_; 
 
   typedef typename MapEntryImpl<Derived, Message, Key, Value, kKeyFieldType,
                                 kValueFieldType>::KeyTypeHandler KeyTypeHandler;
@@ -119,38 +119,38 @@ class MapEntry : public MapEntryImpl<Derived, Message, Key, Value,
 
   InternalMetadata _internal_metadata_;
 
- private:
+ private: 
   friend class ::PROTOBUF_NAMESPACE_ID::Arena;
-  template <typename C, typename K, typename V,
+  template <typename C, typename K, typename V, 
             WireFormatLite::FieldType k_wire_type, WireFormatLite::FieldType>
   friend class internal::MapField;
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(MapEntry);
 };
 
-// Specialization for the full runtime
-template <typename Derived, typename Key, typename Value,
-          WireFormatLite::FieldType kKeyFieldType,
+// Specialization for the full runtime 
+template <typename Derived, typename Key, typename Value, 
+          WireFormatLite::FieldType kKeyFieldType, 
           WireFormatLite::FieldType kValueFieldType>
 struct MapEntryHelper<
     MapEntry<Derived, Key, Value, kKeyFieldType, kValueFieldType> >
     : MapEntryHelper<
           MapEntryLite<Derived, Key, Value, kKeyFieldType, kValueFieldType> > {
-  explicit MapEntryHelper(const MapPair<Key, Value>& map_pair)
+  explicit MapEntryHelper(const MapPair<Key, Value>& map_pair) 
       : MapEntryHelper<
             MapEntryLite<Derived, Key, Value, kKeyFieldType, kValueFieldType> >(
             map_pair) {}
-};
-
-template <typename Derived, typename K, typename V,
+}; 
+ 
+template <typename Derived, typename K, typename V, 
           WireFormatLite::FieldType key, WireFormatLite::FieldType value>
 struct DeconstructMapEntry<MapEntry<Derived, K, V, key, value> > {
-  typedef K Key;
-  typedef V Value;
+  typedef K Key; 
+  typedef V Value; 
   static constexpr WireFormatLite::FieldType kKeyFieldType = key;
   static constexpr WireFormatLite::FieldType kValueFieldType = value;
-};
-
+}; 
+ 
 }  // namespace internal
 }  // namespace protobuf
 }  // namespace google

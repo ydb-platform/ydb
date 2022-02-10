@@ -5,7 +5,7 @@
 
     Lexers for HTML, XML and related markup.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -23,7 +23,7 @@ from pygments.lexers.css import CssLexer, _indentation, _starts_block
 from pygments.lexers.ruby import RubyLexer
 
 __all__ = ['HtmlLexer', 'DtdLexer', 'XmlLexer', 'XsltLexer', 'HamlLexer',
-           'ScamlLexer', 'PugLexer']
+           'ScamlLexer', 'PugLexer'] 
 
 
 class HtmlLexer(RegexLexer):
@@ -220,7 +220,7 @@ class XmlLexer(RegexLexer):
             (r'/?\s*>', Name.Tag, '#pop'),
         ],
         'attr': [
-            (r'\s+', Text),
+            (r'\s+', Text), 
             ('".*?"', String, '#pop'),
             ("'.*?'", String, '#pop'),
             (r'[^\s>]+', String, '#pop'),
@@ -313,7 +313,7 @@ class HamlLexer(ExtendedRegexLexer):
             include('css'),
             (r'%[\w:-]+', Name.Tag, 'tag'),
             (r'!!!' + _dot + r'*\n', Name.Namespace, '#pop'),
-            (r'(/)(\[' + _dot + r'*?\])(' + _dot + r'*\n)',
+            (r'(/)(\[' + _dot + r'*?\])(' + _dot + r'*\n)', 
              bygroups(Comment, Comment.Special, Comment),
              '#pop'),
             (r'/' + _dot + r'*\n', _starts_block(Comment, 'html-comment-block'),
@@ -330,8 +330,8 @@ class HamlLexer(ExtendedRegexLexer):
 
         'tag': [
             include('css'),
-            (r'\{(,\n|' + _dot + r')*?\}', using(RubyLexer)),
-            (r'\[' + _dot + r'*?\]', using(RubyLexer)),
+            (r'\{(,\n|' + _dot + r')*?\}', using(RubyLexer)), 
+            (r'\[' + _dot + r'*?\]', using(RubyLexer)), 
             (r'\(', Text, 'html-attributes'),
             (r'/[ \t]*\n', Punctuation, '#pop:2'),
             (r'[<>]{1,2}(?=[ \t=])', Punctuation),
@@ -340,7 +340,7 @@ class HamlLexer(ExtendedRegexLexer):
 
         'plain': [
             (r'([^#\n]|#[^{\n]|(\\\\)*\\#\{)+', Text),
-            (r'(#\{)(' + _dot + r'*?)(\})',
+            (r'(#\{)(' + _dot + r'*?)(\})', 
              bygroups(String.Interpol, using(RubyLexer), String.Interpol)),
             (r'\n', Text, 'root'),
         ],
@@ -373,7 +373,7 @@ class HamlLexer(ExtendedRegexLexer):
 
         'filter-block': [
             (r'([^#\n]|#[^{\n]|(\\\\)*\\#\{)+', Name.Decorator),
-            (r'(#\{)(' + _dot + r'*?)(\})',
+            (r'(#\{)(' + _dot + r'*?)(\})', 
              bygroups(String.Interpol, using(RubyLexer), String.Interpol)),
             (r'\n', Text, 'root'),
         ],
@@ -422,7 +422,7 @@ class ScamlLexer(ExtendedRegexLexer):
             include('css'),
             (r'%[\w:-]+', Name.Tag, 'tag'),
             (r'!!!' + _dot + r'*\n', Name.Namespace, '#pop'),
-            (r'(/)(\[' + _dot + r'*?\])(' + _dot + r'*\n)',
+            (r'(/)(\[' + _dot + r'*?\])(' + _dot + r'*\n)', 
              bygroups(Comment, Comment.Special, Comment),
              '#pop'),
             (r'/' + _dot + r'*\n', _starts_block(Comment, 'html-comment-block'),
@@ -442,8 +442,8 @@ class ScamlLexer(ExtendedRegexLexer):
 
         'tag': [
             include('css'),
-            (r'\{(,\n|' + _dot + r')*?\}', using(ScalaLexer)),
-            (r'\[' + _dot + r'*?\]', using(ScalaLexer)),
+            (r'\{(,\n|' + _dot + r')*?\}', using(ScalaLexer)), 
+            (r'\[' + _dot + r'*?\]', using(ScalaLexer)), 
             (r'\(', Text, 'html-attributes'),
             (r'/[ \t]*\n', Punctuation, '#pop:2'),
             (r'[<>]{1,2}(?=[ \t=])', Punctuation),
@@ -452,7 +452,7 @@ class ScamlLexer(ExtendedRegexLexer):
 
         'plain': [
             (r'([^#\n]|#[^{\n]|(\\\\)*\\#\{)+', Text),
-            (r'(#\{)(' + _dot + r'*?)(\})',
+            (r'(#\{)(' + _dot + r'*?)(\})', 
              bygroups(String.Interpol, using(ScalaLexer), String.Interpol)),
             (r'\n', Text, 'root'),
         ],
@@ -485,26 +485,26 @@ class ScamlLexer(ExtendedRegexLexer):
 
         'filter-block': [
             (r'([^#\n]|#[^{\n]|(\\\\)*\\#\{)+', Name.Decorator),
-            (r'(#\{)(' + _dot + r'*?)(\})',
+            (r'(#\{)(' + _dot + r'*?)(\})', 
              bygroups(String.Interpol, using(ScalaLexer), String.Interpol)),
             (r'\n', Text, 'root'),
         ],
     }
 
 
-class PugLexer(ExtendedRegexLexer):
+class PugLexer(ExtendedRegexLexer): 
     """
-    For Pug markup.
-    Pug is a variant of Scaml, see:
+    For Pug markup. 
+    Pug is a variant of Scaml, see: 
     http://scalate.fusesource.org/documentation/scaml-reference.html
 
     .. versionadded:: 1.4
     """
 
-    name = 'Pug'
-    aliases = ['pug', 'jade']
-    filenames = ['*.pug', '*.jade']
-    mimetypes = ['text/x-pug', 'text/x-jade']
+    name = 'Pug' 
+    aliases = ['pug', 'jade'] 
+    filenames = ['*.pug', '*.jade'] 
+    mimetypes = ['text/x-pug', 'text/x-jade'] 
 
     flags = re.IGNORECASE
     _dot = r'.'
@@ -530,7 +530,7 @@ class PugLexer(ExtendedRegexLexer):
         'content': [
             include('css'),
             (r'!!!' + _dot + r'*\n', Name.Namespace, '#pop'),
-            (r'(/)(\[' + _dot + r'*?\])(' + _dot + r'*\n)',
+            (r'(/)(\[' + _dot + r'*?\])(' + _dot + r'*\n)', 
              bygroups(Comment, Comment.Special, Comment),
              '#pop'),
             (r'/' + _dot + r'*\n', _starts_block(Comment, 'html-comment-block'),
@@ -551,8 +551,8 @@ class PugLexer(ExtendedRegexLexer):
 
         'tag': [
             include('css'),
-            (r'\{(,\n|' + _dot + r')*?\}', using(ScalaLexer)),
-            (r'\[' + _dot + r'*?\]', using(ScalaLexer)),
+            (r'\{(,\n|' + _dot + r')*?\}', using(ScalaLexer)), 
+            (r'\[' + _dot + r'*?\]', using(ScalaLexer)), 
             (r'\(', Text, 'html-attributes'),
             (r'/[ \t]*\n', Punctuation, '#pop:2'),
             (r'[<>]{1,2}(?=[ \t=])', Punctuation),
@@ -561,7 +561,7 @@ class PugLexer(ExtendedRegexLexer):
 
         'plain': [
             (r'([^#\n]|#[^{\n]|(\\\\)*\\#\{)+', Text),
-            (r'(#\{)(' + _dot + r'*?)(\})',
+            (r'(#\{)(' + _dot + r'*?)(\})', 
              bygroups(String.Interpol, using(ScalaLexer), String.Interpol)),
             (r'\n', Text, 'root'),
         ],
@@ -594,9 +594,9 @@ class PugLexer(ExtendedRegexLexer):
 
         'filter-block': [
             (r'([^#\n]|#[^{\n]|(\\\\)*\\#\{)+', Name.Decorator),
-            (r'(#\{)(' + _dot + r'*?)(\})',
+            (r'(#\{)(' + _dot + r'*?)(\})', 
              bygroups(String.Interpol, using(ScalaLexer), String.Interpol)),
             (r'\n', Text, 'root'),
         ],
     }
-JadeLexer = PugLexer  # compat
+JadeLexer = PugLexer  # compat 

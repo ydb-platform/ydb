@@ -1,16 +1,16 @@
-# Copyright 2016 gRPC authors.
+# Copyright 2016 gRPC authors. 
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#     http://www.apache.org/licenses/LICENSE-2.0 
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License. 
 """Reference implementation for reflection in gRPC Python."""
 
 import sys
@@ -29,7 +29,7 @@ class ReflectionServicer(BaseReflectionServicer):
     """Servicer handling RPCs for service statuses."""
 
     def ServerReflectionInfo(self, request_iterator, context):
-        # pylint: disable=unused-argument
+        # pylint: disable=unused-argument 
         for request in request_iterator:
             if request.HasField('file_by_filename'):
                 yield self._file_by_filename(request.file_by_filename)
@@ -41,7 +41,7 @@ class ReflectionServicer(BaseReflectionServicer):
                     request.file_containing_extension.containing_type,
                     request.file_containing_extension.extension_number)
             elif request.HasField('all_extension_numbers_of_type'):
-                yield self._all_extension_numbers_of_type(
+                yield self._all_extension_numbers_of_type( 
                     request.all_extension_numbers_of_type)
             elif request.HasField('list_services'):
                 yield self._list_services()
@@ -51,11 +51,11 @@ class ReflectionServicer(BaseReflectionServicer):
                         error_code=grpc.StatusCode.INVALID_ARGUMENT.value[0],
                         error_message=grpc.StatusCode.INVALID_ARGUMENT.value[1].
                         encode(),
-                    ))
-
-
+                    )) 
+ 
+ 
 _enable_server_reflection_doc = """Enables server reflection on a server.
-
+ 
 Args:
     service_names: Iterable of fully-qualified service names available.
     server: grpc.Server to which reflection service will be added.

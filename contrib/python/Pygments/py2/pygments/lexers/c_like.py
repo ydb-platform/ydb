@@ -5,7 +5,7 @@
 
     Lexers for other C-like languages.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -20,7 +20,7 @@ from pygments.lexers.c_cpp import CLexer, CppLexer
 from pygments.lexers import _mql_builtins
 
 __all__ = ['PikeLexer', 'NesCLexer', 'ClayLexer', 'ECLexer', 'ValaLexer',
-           'CudaLexer', 'SwigLexer', 'MqlLexer', 'ArduinoLexer', 'CharmciLexer']
+           'CudaLexer', 'SwigLexer', 'MqlLexer', 'ArduinoLexer', 'CharmciLexer'] 
 
 
 class PikeLexer(CppLexer):
@@ -105,7 +105,7 @@ class ClayLexer(RegexLexer):
     tokens = {
         'root': [
             (r'\s', Text),
-            (r'//.*?$', Comment.Single),
+            (r'//.*?$', Comment.Single), 
             (r'/(\\\n)?[*](.|\n)*?[*](\\\n)?/', Comment.Multiline),
             (r'\b(public|private|import|as|record|variant|instance'
              r'|define|overload|default|external|alias'
@@ -245,7 +245,7 @@ class ValaLexer(RegexLexer):
                 'ulong', 'unichar', 'ushort'), suffix=r'\b'),
              Keyword.Type),
             (r'(true|false|null)\b', Name.Builtin),
-            (r'[a-zA-Z_]\w*', Name),
+            (r'[a-zA-Z_]\w*', Name), 
         ],
         'root': [
             include('whitespace'),
@@ -344,7 +344,7 @@ class SwigLexer(CppLexer):
             # SWIG directives
             (r'(%[a-z_][a-z0-9_]*)', Name.Function),
             # Special variables
-            (r'\$\**\&?\w+', Name),
+            (r'\$\**\&?\w+', Name), 
             # Stringification / additional preprocessor directives
             (r'##*[a-zA-Z_]\w*', Comment.Preproc),
             inherit,
@@ -412,7 +412,7 @@ class MqlLexer(CppLexer):
         ],
     }
 
-
+ 
 class ArduinoLexer(CppLexer):
     """
     For `Arduino(tm) <https://arduino.cc/>`_ source.
@@ -431,141 +431,141 @@ class ArduinoLexer(CppLexer):
     # Language sketch main structure functions
     structure = {'setup', 'loop'}
 
-    # Language operators
+    # Language operators 
     operators = {'not', 'or', 'and', 'xor'}
 
-    # Language 'variables'
+    # Language 'variables' 
     variables = {
-        'DIGITAL_MESSAGE', 'FIRMATA_STRING', 'ANALOG_MESSAGE', 'REPORT_DIGITAL',
-        'REPORT_ANALOG', 'INPUT_PULLUP', 'SET_PIN_MODE', 'INTERNAL2V56', 'SYSTEM_RESET',
-        'LED_BUILTIN', 'INTERNAL1V1', 'SYSEX_START', 'INTERNAL', 'EXTERNAL', 'HIGH',
-        'LOW', 'INPUT', 'OUTPUT', 'INPUT_PULLUP', 'LED_BUILTIN', 'true', 'false',
-        'void', 'boolean', 'char', 'unsigned char', 'byte', 'int', 'unsigned int',
-        'word', 'long', 'unsigned long', 'short', 'float', 'double', 'string', 'String',
-        'array', 'static', 'volatile', 'const', 'boolean', 'byte', 'word', 'string',
-        'String', 'array', 'int', 'float', 'private', 'char', 'virtual', 'operator',
-        'sizeof', 'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t', 'int8_t', 'int16_t',
-        'int32_t', 'int64_t', 'dynamic_cast', 'typedef', 'const_cast', 'const',
-        'struct', 'static_cast', 'union', 'unsigned', 'long', 'volatile', 'static',
-        'protected', 'bool', 'public', 'friend', 'auto', 'void', 'enum', 'extern',
-        'class', 'short', 'reinterpret_cast', 'double', 'register', 'explicit',
-        'signed', 'inline', 'delete', '_Bool', 'complex', '_Complex', '_Imaginary',
-        'atomic_bool', 'atomic_char', 'atomic_schar', 'atomic_uchar', 'atomic_short',
-        'atomic_ushort', 'atomic_int', 'atomic_uint', 'atomic_long', 'atomic_ulong',
+        'DIGITAL_MESSAGE', 'FIRMATA_STRING', 'ANALOG_MESSAGE', 'REPORT_DIGITAL', 
+        'REPORT_ANALOG', 'INPUT_PULLUP', 'SET_PIN_MODE', 'INTERNAL2V56', 'SYSTEM_RESET', 
+        'LED_BUILTIN', 'INTERNAL1V1', 'SYSEX_START', 'INTERNAL', 'EXTERNAL', 'HIGH', 
+        'LOW', 'INPUT', 'OUTPUT', 'INPUT_PULLUP', 'LED_BUILTIN', 'true', 'false', 
+        'void', 'boolean', 'char', 'unsigned char', 'byte', 'int', 'unsigned int', 
+        'word', 'long', 'unsigned long', 'short', 'float', 'double', 'string', 'String', 
+        'array', 'static', 'volatile', 'const', 'boolean', 'byte', 'word', 'string', 
+        'String', 'array', 'int', 'float', 'private', 'char', 'virtual', 'operator', 
+        'sizeof', 'uint8_t', 'uint16_t', 'uint32_t', 'uint64_t', 'int8_t', 'int16_t', 
+        'int32_t', 'int64_t', 'dynamic_cast', 'typedef', 'const_cast', 'const', 
+        'struct', 'static_cast', 'union', 'unsigned', 'long', 'volatile', 'static', 
+        'protected', 'bool', 'public', 'friend', 'auto', 'void', 'enum', 'extern', 
+        'class', 'short', 'reinterpret_cast', 'double', 'register', 'explicit', 
+        'signed', 'inline', 'delete', '_Bool', 'complex', '_Complex', '_Imaginary', 
+        'atomic_bool', 'atomic_char', 'atomic_schar', 'atomic_uchar', 'atomic_short', 
+        'atomic_ushort', 'atomic_int', 'atomic_uint', 'atomic_long', 'atomic_ulong', 
         'atomic_llong', 'atomic_ullong', 'PROGMEM'}
-
+ 
     # Language shipped functions and class ( )
     functions = {
-        'KeyboardController', 'MouseController', 'SoftwareSerial', 'EthernetServer',
-        'EthernetClient', 'LiquidCrystal', 'RobotControl', 'GSMVoiceCall',
-        'EthernetUDP', 'EsploraTFT', 'HttpClient', 'RobotMotor', 'WiFiClient',
-        'GSMScanner', 'FileSystem', 'Scheduler', 'GSMServer', 'YunClient', 'YunServer',
-        'IPAddress', 'GSMClient', 'GSMModem', 'Keyboard', 'Ethernet', 'Console',
-        'GSMBand', 'Esplora', 'Stepper', 'Process', 'WiFiUDP', 'GSM_SMS', 'Mailbox',
-        'USBHost', 'Firmata', 'PImage', 'Client', 'Server', 'GSMPIN', 'FileIO',
-        'Bridge', 'Serial', 'EEPROM', 'Stream', 'Mouse', 'Audio', 'Servo', 'File',
-        'Task', 'GPRS', 'WiFi', 'Wire', 'TFT', 'GSM', 'SPI', 'SD',
-        'runShellCommandAsynchronously', 'analogWriteResolution',
-        'retrieveCallingNumber', 'printFirmwareVersion', 'analogReadResolution',
-        'sendDigitalPortPair', 'noListenOnLocalhost', 'readJoystickButton',
-        'setFirmwareVersion', 'readJoystickSwitch', 'scrollDisplayRight',
-        'getVoiceCallStatus', 'scrollDisplayLeft', 'writeMicroseconds',
-        'delayMicroseconds', 'beginTransmission', 'getSignalStrength',
-        'runAsynchronously', 'getAsynchronously', 'listenOnLocalhost',
-        'getCurrentCarrier', 'readAccelerometer', 'messageAvailable',
-        'sendDigitalPorts', 'lineFollowConfig', 'countryNameWrite', 'runShellCommand',
-        'readStringUntil', 'rewindDirectory', 'readTemperature', 'setClockDivider',
-        'readLightSensor', 'endTransmission', 'analogReference', 'detachInterrupt',
-        'countryNameRead', 'attachInterrupt', 'encryptionType', 'readBytesUntil',
-        'robotNameWrite', 'readMicrophone', 'robotNameRead', 'cityNameWrite',
-        'userNameWrite', 'readJoystickY', 'readJoystickX', 'mouseReleased',
-        'openNextFile', 'scanNetworks', 'noInterrupts', 'digitalWrite', 'beginSpeaker',
-        'mousePressed', 'isActionDone', 'mouseDragged', 'displayLogos', 'noAutoscroll',
-        'addParameter', 'remoteNumber', 'getModifiers', 'keyboardRead', 'userNameRead',
-        'waitContinue', 'processInput', 'parseCommand', 'printVersion', 'readNetworks',
-        'writeMessage', 'blinkVersion', 'cityNameRead', 'readMessage', 'setDataMode',
-        'parsePacket', 'isListening', 'setBitOrder', 'beginPacket', 'isDirectory',
-        'motorsWrite', 'drawCompass', 'digitalRead', 'clearScreen', 'serialEvent',
-        'rightToLeft', 'setTextSize', 'leftToRight', 'requestFrom', 'keyReleased',
-        'compassRead', 'analogWrite', 'interrupts', 'WiFiServer', 'disconnect',
-        'playMelody', 'parseFloat', 'autoscroll', 'getPINUsed', 'setPINUsed',
-        'setTimeout', 'sendAnalog', 'readSlider', 'analogRead', 'beginWrite',
-        'createChar', 'motorsStop', 'keyPressed', 'tempoWrite', 'readButton',
-        'subnetMask', 'debugPrint', 'macAddress', 'writeGreen', 'randomSeed',
-        'attachGPRS', 'readString', 'sendString', 'remotePort', 'releaseAll',
-        'mouseMoved', 'background', 'getXChange', 'getYChange', 'answerCall',
-        'getResult', 'voiceCall', 'endPacket', 'constrain', 'getSocket', 'writeJSON',
-        'getButton', 'available', 'connected', 'findUntil', 'readBytes', 'exitValue',
-        'readGreen', 'writeBlue', 'startLoop', 'IPAddress', 'isPressed', 'sendSysex',
-        'pauseMode', 'gatewayIP', 'setCursor', 'getOemKey', 'tuneWrite', 'noDisplay',
-        'loadImage', 'switchPIN', 'onRequest', 'onReceive', 'changePIN', 'playFile',
-        'noBuffer', 'parseInt', 'overflow', 'checkPIN', 'knobRead', 'beginTFT',
-        'bitClear', 'updateIR', 'bitWrite', 'position', 'writeRGB', 'highByte',
-        'writeRed', 'setSpeed', 'readBlue', 'noStroke', 'remoteIP', 'transfer',
-        'shutdown', 'hangCall', 'beginSMS', 'endWrite', 'attached', 'maintain',
-        'noCursor', 'checkReg', 'checkPUK', 'shiftOut', 'isValid', 'shiftIn', 'pulseIn',
-        'connect', 'println', 'localIP', 'pinMode', 'getIMEI', 'display', 'noBlink',
-        'process', 'getBand', 'running', 'beginSD', 'drawBMP', 'lowByte', 'setBand',
-        'release', 'bitRead', 'prepare', 'pointTo', 'readRed', 'setMode', 'noFill',
-        'remove', 'listen', 'stroke', 'detach', 'attach', 'noTone', 'exists', 'buffer',
-        'height', 'bitSet', 'circle', 'config', 'cursor', 'random', 'IRread', 'setDNS',
-        'endSMS', 'getKey', 'micros', 'millis', 'begin', 'print', 'write', 'ready',
-        'flush', 'width', 'isPIN', 'blink', 'clear', 'press', 'mkdir', 'rmdir', 'close',
-        'point', 'yield', 'image', 'BSSID', 'click', 'delay', 'read', 'text', 'move',
-        'peek', 'beep', 'rect', 'line', 'open', 'seek', 'fill', 'size', 'turn', 'stop',
-        'home', 'find', 'step', 'tone', 'sqrt', 'RSSI', 'SSID', 'end', 'bit', 'tan',
-        'cos', 'sin', 'pow', 'map', 'abs', 'max', 'min', 'get', 'run', 'put',
-        'isAlphaNumeric', 'isAlpha', 'isAscii', 'isWhitespace', 'isControl', 'isDigit',
-        'isGraph', 'isLowerCase', 'isPrintable', 'isPunct', 'isSpace', 'isUpperCase',
+        'KeyboardController', 'MouseController', 'SoftwareSerial', 'EthernetServer', 
+        'EthernetClient', 'LiquidCrystal', 'RobotControl', 'GSMVoiceCall', 
+        'EthernetUDP', 'EsploraTFT', 'HttpClient', 'RobotMotor', 'WiFiClient', 
+        'GSMScanner', 'FileSystem', 'Scheduler', 'GSMServer', 'YunClient', 'YunServer', 
+        'IPAddress', 'GSMClient', 'GSMModem', 'Keyboard', 'Ethernet', 'Console', 
+        'GSMBand', 'Esplora', 'Stepper', 'Process', 'WiFiUDP', 'GSM_SMS', 'Mailbox', 
+        'USBHost', 'Firmata', 'PImage', 'Client', 'Server', 'GSMPIN', 'FileIO', 
+        'Bridge', 'Serial', 'EEPROM', 'Stream', 'Mouse', 'Audio', 'Servo', 'File', 
+        'Task', 'GPRS', 'WiFi', 'Wire', 'TFT', 'GSM', 'SPI', 'SD', 
+        'runShellCommandAsynchronously', 'analogWriteResolution', 
+        'retrieveCallingNumber', 'printFirmwareVersion', 'analogReadResolution', 
+        'sendDigitalPortPair', 'noListenOnLocalhost', 'readJoystickButton', 
+        'setFirmwareVersion', 'readJoystickSwitch', 'scrollDisplayRight', 
+        'getVoiceCallStatus', 'scrollDisplayLeft', 'writeMicroseconds', 
+        'delayMicroseconds', 'beginTransmission', 'getSignalStrength', 
+        'runAsynchronously', 'getAsynchronously', 'listenOnLocalhost', 
+        'getCurrentCarrier', 'readAccelerometer', 'messageAvailable', 
+        'sendDigitalPorts', 'lineFollowConfig', 'countryNameWrite', 'runShellCommand', 
+        'readStringUntil', 'rewindDirectory', 'readTemperature', 'setClockDivider', 
+        'readLightSensor', 'endTransmission', 'analogReference', 'detachInterrupt', 
+        'countryNameRead', 'attachInterrupt', 'encryptionType', 'readBytesUntil', 
+        'robotNameWrite', 'readMicrophone', 'robotNameRead', 'cityNameWrite', 
+        'userNameWrite', 'readJoystickY', 'readJoystickX', 'mouseReleased', 
+        'openNextFile', 'scanNetworks', 'noInterrupts', 'digitalWrite', 'beginSpeaker', 
+        'mousePressed', 'isActionDone', 'mouseDragged', 'displayLogos', 'noAutoscroll', 
+        'addParameter', 'remoteNumber', 'getModifiers', 'keyboardRead', 'userNameRead', 
+        'waitContinue', 'processInput', 'parseCommand', 'printVersion', 'readNetworks', 
+        'writeMessage', 'blinkVersion', 'cityNameRead', 'readMessage', 'setDataMode', 
+        'parsePacket', 'isListening', 'setBitOrder', 'beginPacket', 'isDirectory', 
+        'motorsWrite', 'drawCompass', 'digitalRead', 'clearScreen', 'serialEvent', 
+        'rightToLeft', 'setTextSize', 'leftToRight', 'requestFrom', 'keyReleased', 
+        'compassRead', 'analogWrite', 'interrupts', 'WiFiServer', 'disconnect', 
+        'playMelody', 'parseFloat', 'autoscroll', 'getPINUsed', 'setPINUsed', 
+        'setTimeout', 'sendAnalog', 'readSlider', 'analogRead', 'beginWrite', 
+        'createChar', 'motorsStop', 'keyPressed', 'tempoWrite', 'readButton', 
+        'subnetMask', 'debugPrint', 'macAddress', 'writeGreen', 'randomSeed', 
+        'attachGPRS', 'readString', 'sendString', 'remotePort', 'releaseAll', 
+        'mouseMoved', 'background', 'getXChange', 'getYChange', 'answerCall', 
+        'getResult', 'voiceCall', 'endPacket', 'constrain', 'getSocket', 'writeJSON', 
+        'getButton', 'available', 'connected', 'findUntil', 'readBytes', 'exitValue', 
+        'readGreen', 'writeBlue', 'startLoop', 'IPAddress', 'isPressed', 'sendSysex', 
+        'pauseMode', 'gatewayIP', 'setCursor', 'getOemKey', 'tuneWrite', 'noDisplay', 
+        'loadImage', 'switchPIN', 'onRequest', 'onReceive', 'changePIN', 'playFile', 
+        'noBuffer', 'parseInt', 'overflow', 'checkPIN', 'knobRead', 'beginTFT', 
+        'bitClear', 'updateIR', 'bitWrite', 'position', 'writeRGB', 'highByte', 
+        'writeRed', 'setSpeed', 'readBlue', 'noStroke', 'remoteIP', 'transfer', 
+        'shutdown', 'hangCall', 'beginSMS', 'endWrite', 'attached', 'maintain', 
+        'noCursor', 'checkReg', 'checkPUK', 'shiftOut', 'isValid', 'shiftIn', 'pulseIn', 
+        'connect', 'println', 'localIP', 'pinMode', 'getIMEI', 'display', 'noBlink', 
+        'process', 'getBand', 'running', 'beginSD', 'drawBMP', 'lowByte', 'setBand', 
+        'release', 'bitRead', 'prepare', 'pointTo', 'readRed', 'setMode', 'noFill', 
+        'remove', 'listen', 'stroke', 'detach', 'attach', 'noTone', 'exists', 'buffer', 
+        'height', 'bitSet', 'circle', 'config', 'cursor', 'random', 'IRread', 'setDNS', 
+        'endSMS', 'getKey', 'micros', 'millis', 'begin', 'print', 'write', 'ready', 
+        'flush', 'width', 'isPIN', 'blink', 'clear', 'press', 'mkdir', 'rmdir', 'close', 
+        'point', 'yield', 'image', 'BSSID', 'click', 'delay', 'read', 'text', 'move', 
+        'peek', 'beep', 'rect', 'line', 'open', 'seek', 'fill', 'size', 'turn', 'stop', 
+        'home', 'find', 'step', 'tone', 'sqrt', 'RSSI', 'SSID', 'end', 'bit', 'tan', 
+        'cos', 'sin', 'pow', 'map', 'abs', 'max', 'min', 'get', 'run', 'put', 
+        'isAlphaNumeric', 'isAlpha', 'isAscii', 'isWhitespace', 'isControl', 'isDigit', 
+        'isGraph', 'isLowerCase', 'isPrintable', 'isPunct', 'isSpace', 'isUpperCase', 
         'isHexadecimalDigit'}
 
-    # do not highlight
+    # do not highlight 
     suppress_highlight = {
-        'namespace', 'template', 'mutable', 'using', 'asm', 'typeid',
-        'typename', 'this', 'alignof', 'constexpr', 'decltype', 'noexcept',
+        'namespace', 'template', 'mutable', 'using', 'asm', 'typeid', 
+        'typename', 'this', 'alignof', 'constexpr', 'decltype', 'noexcept', 
         'static_assert', 'thread_local', 'restrict'}
-
+ 
     def get_tokens_unprocessed(self, text):
         for index, token, value in CppLexer.get_tokens_unprocessed(self, text):
-            if value in self.structure:
-                yield index, Name.Builtin, value
-            elif value in self.operators:
-                yield index, Operator, value
-            elif value in self.variables:
-                yield index, Keyword.Reserved, value
-            elif value in self.suppress_highlight:
-                yield index, Name, value
-            elif value in self.functions:
-                yield index, Name.Function, value
+            if value in self.structure: 
+                yield index, Name.Builtin, value 
+            elif value in self.operators: 
+                yield index, Operator, value 
+            elif value in self.variables: 
+                yield index, Keyword.Reserved, value 
+            elif value in self.suppress_highlight: 
+                yield index, Name, value 
+            elif value in self.functions: 
+                yield index, Name.Function, value 
             else:
                 yield index, token, value
-
-
-class CharmciLexer(CppLexer):
-    """
-    For `Charm++ <https://charm.cs.illinois.edu>`_ interface files (.ci).
-
-    .. versionadded:: 2.4
-    """
-
-    name = 'Charmci'
-    aliases = ['charmci']
-    filenames = ['*.ci']
-
-    mimetypes = []
-
-    tokens = {
-        'statements': [
-            (r'(module)(\s+)', bygroups(Keyword, Text), 'classname'),
-            (words(('mainmodule', 'mainchare', 'chare', 'array', 'group',
-                    'nodegroup', 'message', 'conditional')), Keyword),
-            (words(('entry', 'aggregate', 'threaded', 'sync', 'exclusive',
-                    'nokeep', 'notrace', 'immediate', 'expedited', 'inline',
-                    'local', 'python', 'accel', 'readwrite', 'writeonly',
-                    'accelblock', 'memcritical', 'packed', 'varsize',
-                    'initproc', 'initnode', 'initcall', 'stacksize',
-                    'createhere', 'createhome', 'reductiontarget', 'iget',
-                    'nocopy', 'mutable', 'migratable', 'readonly')), Keyword),
-            inherit,
-        ],
-    }
+ 
+ 
+class CharmciLexer(CppLexer): 
+    """ 
+    For `Charm++ <https://charm.cs.illinois.edu>`_ interface files (.ci). 
+ 
+    .. versionadded:: 2.4 
+    """ 
+ 
+    name = 'Charmci' 
+    aliases = ['charmci'] 
+    filenames = ['*.ci'] 
+ 
+    mimetypes = [] 
+ 
+    tokens = { 
+        'statements': [ 
+            (r'(module)(\s+)', bygroups(Keyword, Text), 'classname'), 
+            (words(('mainmodule', 'mainchare', 'chare', 'array', 'group', 
+                    'nodegroup', 'message', 'conditional')), Keyword), 
+            (words(('entry', 'aggregate', 'threaded', 'sync', 'exclusive', 
+                    'nokeep', 'notrace', 'immediate', 'expedited', 'inline', 
+                    'local', 'python', 'accel', 'readwrite', 'writeonly', 
+                    'accelblock', 'memcritical', 'packed', 'varsize', 
+                    'initproc', 'initnode', 'initcall', 'stacksize', 
+                    'createhere', 'createhome', 'reductiontarget', 'iget', 
+                    'nocopy', 'mutable', 'migratable', 'readonly')), Keyword), 
+            inherit, 
+        ], 
+    } 

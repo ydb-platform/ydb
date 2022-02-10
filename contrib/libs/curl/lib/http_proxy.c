@@ -618,7 +618,7 @@ static CURLcode CONNECT(struct connectdata *conn,
   data->state.aptr.proxyuserpwd = NULL;
 
   data->state.authproxy.done = TRUE;
-  data->state.authproxy.multipass = FALSE;
+  data->state.authproxy.multipass = FALSE; 
 
   infof(data, "Proxy replied %d to CONNECT request\n",
         data->info.httpproxycode);
@@ -631,7 +631,7 @@ static CURLcode CONNECT(struct connectdata *conn,
 
 void Curl_connect_free(struct Curl_easy *data)
 {
-  struct connectdata *conn = data->conn;
+  struct connectdata *conn = data->conn; 
   struct http_connect_state *s = conn->connect_state;
   if(s) {
     free(s);

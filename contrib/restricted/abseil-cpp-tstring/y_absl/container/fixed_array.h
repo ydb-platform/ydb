@@ -51,7 +51,7 @@
 #include "y_absl/memory/memory.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 constexpr static auto kFixedArrayUseDefault = static_cast<size_t>(-1);
 
@@ -521,7 +521,7 @@ void FixedArray<T, N, A>::NonEmptyInlinedStorage::AnnotateDestruct(
 #endif  // ABSL_HAVE_ADDRESS_SANITIZER
   static_cast<void>(n);  // Mark used when not in asan mode
 }
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_FIXED_ARRAY_H_

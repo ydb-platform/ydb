@@ -47,7 +47,7 @@ struct Curl_ssl {
 
   size_t (*version)(char *buffer, size_t size);
   int (*check_cxn)(struct connectdata *cxn);
-  int (*shut_down)(struct connectdata *conn, int sockindex);
+  int (*shut_down)(struct connectdata *conn, int sockindex); 
   bool (*data_pending)(const struct connectdata *conn,
                        int connindex);
 
@@ -56,7 +56,7 @@ struct Curl_ssl {
                      size_t length);
   bool (*cert_status_request)(void);
 
-  CURLcode (*connect_blocking)(struct connectdata *conn, int sockindex);
+  CURLcode (*connect_blocking)(struct connectdata *conn, int sockindex); 
   CURLcode (*connect_nonblocking)(struct connectdata *conn, int sockindex,
                                   bool *done);
   void *(*get_internals)(struct ssl_connect_data *connssl, CURLINFO info);
@@ -102,9 +102,9 @@ CURLcode Curl_none_md5sum(unsigned char *input, size_t inputlen,
 #include "gtls.h"           /* GnuTLS versions */
 #include "nssg.h"           /* NSS versions */
 #include "gskit.h"          /* Global Secure ToolKit versions */
-#include "wolfssl.h"        /* wolfSSL versions */
+#include "wolfssl.h"        /* wolfSSL versions */ 
 #include "schannel.h"       /* Schannel SSPI version */
-#include "sectransp.h"      /* SecureTransport (Darwin) version */
+#include "sectransp.h"      /* SecureTransport (Darwin) version */ 
 #include "mbedtls.h"        /* mbedTLS versions */
 #include "mesalink.h"       /* MesaLink versions */
 #include "bearssl.h"        /* BearSSL versions */
@@ -158,7 +158,7 @@ bool Curl_ssl_config_matches(struct ssl_primary_config *data,
 bool Curl_clone_primary_ssl_config(struct ssl_primary_config *source,
                                    struct ssl_primary_config *dest);
 void Curl_free_primary_ssl_config(struct ssl_primary_config *sslc);
-int Curl_ssl_getsock(struct connectdata *conn, curl_socket_t *socks);
+int Curl_ssl_getsock(struct connectdata *conn, curl_socket_t *socks); 
 
 int Curl_ssl_backend(void);
 

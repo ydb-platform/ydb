@@ -5,13 +5,13 @@
 
     Command line interface.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
 from __future__ import print_function
 
-import os
+import os 
 import sys
 import getopt
 from textwrap import dedent
@@ -20,20 +20,20 @@ from pygments import __version__, highlight
 from pygments.util import ClassNotFound, OptionError, docstring_headline, \
     guess_decode, guess_decode_from_terminal, terminal_encoding
 from pygments.lexers import get_all_lexers, get_lexer_by_name, guess_lexer, \
-    load_lexer_from_file, get_lexer_for_filename, find_lexer_class_for_filename
+    load_lexer_from_file, get_lexer_for_filename, find_lexer_class_for_filename 
 from pygments.lexers.special import TextLexer
 from pygments.formatters.latex import LatexEmbeddedLexer, LatexFormatter
 from pygments.formatters import get_all_formatters, get_formatter_by_name, \
-    load_formatter_from_file, get_formatter_for_filename, find_formatter_class
+    load_formatter_from_file, get_formatter_for_filename, find_formatter_class 
 from pygments.formatters.terminal import TerminalFormatter
-from pygments.formatters.terminal256 import Terminal256Formatter
+from pygments.formatters.terminal256 import Terminal256Formatter 
 from pygments.filters import get_all_filters, find_filter_class
 from pygments.styles import get_all_styles, get_style_by_name
 
 
 USAGE = """\
 Usage: %s [-l <lexer> | -g] [-F <filter>[:<options>]] [-f <formatter>]
-          [-O <options>] [-P <option=value>] [-s] [-v] [-x] [-o <outfile>] [<infile>]
+          [-O <options>] [-P <option=value>] [-s] [-v] [-x] [-o <outfile>] [<infile>] 
 
        %s -S <style> -f <formatter> [-a <arg>] [-O <options>] [-P <option=value>]
        %s -L [<which> ...]
@@ -59,14 +59,14 @@ Likewise, <formatter> is a formatter name, and will be guessed from
 the extension of the output file name. If no output file is given,
 the terminal formatter will be used by default.
 
-The additional option -x allows custom lexers and formatters to be
-loaded from a .py file relative to the current working directory. For
-example, ``-l ./customlexer.py -x``. By default, this option expects a
-file with a class named CustomLexer or CustomFormatter; you can also
-specify your own class name with a colon (``-l ./lexer.py:MyLexer``).
-Users should be very careful not to use this option with untrusted files,
-because it will import and run them.
-
+The additional option -x allows custom lexers and formatters to be 
+loaded from a .py file relative to the current working directory. For 
+example, ``-l ./customlexer.py -x``. By default, this option expects a 
+file with a class named CustomLexer or CustomFormatter; you can also 
+specify your own class name with a colon (``-l ./lexer.py:MyLexer``). 
+Users should be very careful not to use this option with untrusted files, 
+because it will import and run them. 
+ 
 With the -O option, you can give the lexer and formatter a comma-
 separated list of options, e.g. ``-O bg=light,python=cool``.
 
@@ -233,7 +233,7 @@ def main_inner(popts, args, usage):
         return 0
 
     if opts.pop('-V', None) is not None:
-        print('Pygments version %s, (c) 2006-2019 by Georg Brandl.' % __version__)
+        print('Pygments version %s, (c) 2006-2019 by Georg Brandl.' % __version__) 
         return 0
 
     # handle ``pygmentize -L``
@@ -324,35 +324,35 @@ def main_inner(popts, args, usage):
     F_opts = _parse_filters(F_opts)
     opts.pop('-F', None)
 
-    allow_custom_lexer_formatter = False
-    # -x: allow custom (eXternal) lexers and formatters
-    if opts.pop('-x', None) is not None:
-        allow_custom_lexer_formatter = True
-
+    allow_custom_lexer_formatter = False 
+    # -x: allow custom (eXternal) lexers and formatters 
+    if opts.pop('-x', None) is not None: 
+        allow_custom_lexer_formatter = True 
+ 
     # select lexer
     lexer = None
 
     # given by name?
     lexername = opts.pop('-l', None)
     if lexername:
-        # custom lexer, located relative to user's cwd
-        if allow_custom_lexer_formatter and '.py' in lexername:
-            try:
-                if ':' in lexername:
-                    filename, name = lexername.rsplit(':', 1)
-                    lexer = load_lexer_from_file(filename, name,
-                                                 **parsed_opts)
-                else:
-                    lexer = load_lexer_from_file(lexername, **parsed_opts)
-            except ClassNotFound as err:
-                print('Error:', err, file=sys.stderr)
-                return 1
-        else:
-            try:
-                lexer = get_lexer_by_name(lexername, **parsed_opts)
-            except (OptionError, ClassNotFound) as err:
-                print('Error:', err, file=sys.stderr)
-                return 1
+        # custom lexer, located relative to user's cwd 
+        if allow_custom_lexer_formatter and '.py' in lexername: 
+            try: 
+                if ':' in lexername: 
+                    filename, name = lexername.rsplit(':', 1) 
+                    lexer = load_lexer_from_file(filename, name, 
+                                                 **parsed_opts) 
+                else: 
+                    lexer = load_lexer_from_file(lexername, **parsed_opts) 
+            except ClassNotFound as err: 
+                print('Error:', err, file=sys.stderr) 
+                return 1 
+        else: 
+            try: 
+                lexer = get_lexer_by_name(lexername, **parsed_opts) 
+            except (OptionError, ClassNotFound) as err: 
+                print('Error:', err, file=sys.stderr) 
+                return 1 
 
     # read input code
     code = None
@@ -429,24 +429,24 @@ def main_inner(popts, args, usage):
     outfn = opts.pop('-o', None)
     fmter = opts.pop('-f', None)
     if fmter:
-        # custom formatter, located relative to user's cwd
-        if allow_custom_lexer_formatter and '.py' in fmter:
-            try:
-                if ':' in fmter:
-                    file, fmtername = fmter.rsplit(':', 1)
-                    fmter = load_formatter_from_file(file, fmtername,
-                                                     **parsed_opts)
-                else:
-                    fmter = load_formatter_from_file(fmter, **parsed_opts)
-            except ClassNotFound as err:
-                print('Error:', err, file=sys.stderr)
-                return 1
-        else:
-            try:
-                fmter = get_formatter_by_name(fmter, **parsed_opts)
-            except (OptionError, ClassNotFound) as err:
-                print('Error:', err, file=sys.stderr)
-                return 1
+        # custom formatter, located relative to user's cwd 
+        if allow_custom_lexer_formatter and '.py' in fmter: 
+            try: 
+                if ':' in fmter: 
+                    file, fmtername = fmter.rsplit(':', 1) 
+                    fmter = load_formatter_from_file(file, fmtername, 
+                                                     **parsed_opts) 
+                else: 
+                    fmter = load_formatter_from_file(fmter, **parsed_opts) 
+            except ClassNotFound as err: 
+                print('Error:', err, file=sys.stderr) 
+                return 1 
+        else: 
+            try: 
+                fmter = get_formatter_by_name(fmter, **parsed_opts) 
+            except (OptionError, ClassNotFound) as err: 
+                print('Error:', err, file=sys.stderr) 
+                return 1 
 
     if outfn:
         if not fmter:
@@ -462,10 +462,10 @@ def main_inner(popts, args, usage):
             return 1
     else:
         if not fmter:
-            if '256' in os.environ.get('TERM', ''):
-                fmter = Terminal256Formatter(**parsed_opts)
-            else:
-                fmter = TerminalFormatter(**parsed_opts)
+            if '256' in os.environ.get('TERM', ''): 
+                fmter = Terminal256Formatter(**parsed_opts) 
+            else: 
+                fmter = TerminalFormatter(**parsed_opts) 
         if sys.version_info > (3,):
             # Python 3: we have to use .buffer to get a binary stream
             outfile = sys.stdout.buffer
@@ -539,7 +539,7 @@ def main(args=sys.argv):
     usage = USAGE % ((args[0],) * 6)
 
     try:
-        popts, args = getopt.getopt(args[1:], "l:f:F:o:O:P:LS:a:N:vhVHgsx")
+        popts, args = getopt.getopt(args[1:], "l:f:F:o:O:P:LS:a:N:vhVHgsx") 
     except getopt.GetoptError:
         print(usage, file=sys.stderr)
         return 2

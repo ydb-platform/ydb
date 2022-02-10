@@ -1,18 +1,18 @@
 /*
  *
- * Copyright 2016 gRPC authors.
+ * Copyright 2016 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
@@ -20,12 +20,12 @@
 
 #include "src/compiler/config.h"
 #include "src/compiler/generator_helpers.h"
-#include "src/compiler/node_generator.h"
+#include "src/compiler/node_generator.h" 
 #include "src/compiler/node_generator_helpers.h"
 
-using grpc::protobuf::Descriptor;
+using grpc::protobuf::Descriptor; 
 using grpc::protobuf::FileDescriptor;
-using grpc::protobuf::MethodDescriptor;
+using grpc::protobuf::MethodDescriptor; 
 using grpc::protobuf::ServiceDescriptor;
 using grpc::protobuf::io::Printer;
 using grpc::protobuf::io::StringOutputStream;
@@ -48,7 +48,7 @@ TString ModuleAlias(const TString filename) {
   TString basename = grpc_generator::StripProto(filename);
   basename = grpc_generator::StringReplace(basename, "-", "$");
   basename = grpc_generator::StringReplace(basename, "/", "_");
-  basename = grpc_generator::StringReplace(basename, ".", "_");
+  basename = grpc_generator::StringReplace(basename, ".", "_"); 
   return basename + "_pb";
 }
 
@@ -94,12 +94,12 @@ map<TString, const Descriptor*> GetAllMessages(const FileDescriptor* file) {
   map<TString, const Descriptor*> message_types;
   for (int service_num = 0; service_num < file->service_count();
        service_num++) {
-    const ServiceDescriptor* service = file->service(service_num);
+    const ServiceDescriptor* service = file->service(service_num); 
     for (int method_num = 0; method_num < service->method_count();
          method_num++) {
-      const MethodDescriptor* method = service->method(method_num);
-      const Descriptor* input_type = method->input_type();
-      const Descriptor* output_type = method->output_type();
+      const MethodDescriptor* method = service->method(method_num); 
+      const Descriptor* input_type = method->input_type(); 
+      const Descriptor* output_type = method->output_type(); 
       message_types[input_type->full_name()] = input_type;
       message_types[output_type->full_name()] = output_type;
     }
@@ -119,8 +119,8 @@ TString NodeObjectPath(const Descriptor* descriptor) {
 }
 
 // Prints out the message serializer and deserializer functions
-void PrintMessageTransformer(const Descriptor* descriptor, Printer* out,
-                             const Parameters& params) {
+void PrintMessageTransformer(const Descriptor* descriptor, Printer* out, 
+                             const Parameters& params) { 
   map<TString, TString> template_vars;
   TString full_name = descriptor->full_name();
   template_vars["identifier_name"] = MessageIdentifierName(full_name);
@@ -135,12 +135,12 @@ void PrintMessageTransformer(const Descriptor* descriptor, Printer* out,
              "throw new Error('Expected argument of type $name$');\n");
   out->Outdent();
   out->Print("}\n");
-  if (params.minimum_node_version > 5) {
-    // Node version is > 5, we should use Buffer.from
-    out->Print("return Buffer.from(arg.serializeBinary());\n");
-  } else {
-    out->Print("return new Buffer(arg.serializeBinary());\n");
-  }
+  if (params.minimum_node_version > 5) { 
+    // Node version is > 5, we should use Buffer.from 
+    out->Print("return Buffer.from(arg.serializeBinary());\n"); 
+  } else { 
+    out->Print("return new Buffer(arg.serializeBinary());\n"); 
+  } 
   out->Outdent();
   out->Print("}\n\n");
 
@@ -155,9 +155,9 @@ void PrintMessageTransformer(const Descriptor* descriptor, Printer* out,
   out->Print("}\n\n");
 }
 
-void PrintMethod(const MethodDescriptor* method, Printer* out) {
-  const Descriptor* input_type = method->input_type();
-  const Descriptor* output_type = method->output_type();
+void PrintMethod(const MethodDescriptor* method, Printer* out) { 
+  const Descriptor* input_type = method->input_type(); 
+  const Descriptor* output_type = method->output_type(); 
   map<TString, TString> vars;
   vars["service_name"] = method->service()->full_name();
   vars["name"] = method->name();
@@ -183,7 +183,7 @@ void PrintMethod(const MethodDescriptor* method, Printer* out) {
 }
 
 // Prints out the service descriptor object
-void PrintService(const ServiceDescriptor* service, Printer* out) {
+void PrintService(const ServiceDescriptor* service, Printer* out) { 
   map<TString, TString> template_vars;
   out->Print(GetNodeComments(service, true).c_str());
   template_vars["name"] = service->name();
@@ -206,7 +206,7 @@ void PrintService(const ServiceDescriptor* service, Printer* out) {
   out->Print(GetNodeComments(service, false).c_str());
 }
 
-void PrintImports(const FileDescriptor* file, Printer* out) {
+void PrintImports(const FileDescriptor* file, Printer* out) { 
   out->Print("var grpc = require('grpc');\n");
   if (file->message_type_count() > 0) {
     TString file_path =
@@ -225,22 +225,22 @@ void PrintImports(const FileDescriptor* file, Printer* out) {
   out->Print("\n");
 }
 
-void PrintTransformers(const FileDescriptor* file, Printer* out,
-                       const Parameters& params) {
+void PrintTransformers(const FileDescriptor* file, Printer* out, 
+                       const Parameters& params) { 
   map<TString, const Descriptor*> messages = GetAllMessages(file);
   for (std::map<TString, const Descriptor*>::iterator it = messages.begin();
        it != messages.end(); it++) {
-    PrintMessageTransformer(it->second, out, params);
+    PrintMessageTransformer(it->second, out, params); 
   }
   out->Print("\n");
 }
 
-void PrintServices(const FileDescriptor* file, Printer* out) {
+void PrintServices(const FileDescriptor* file, Printer* out) { 
   for (int i = 0; i < file->service_count(); i++) {
     PrintService(file->service(i), out);
   }
 }
-}  // namespace
+}  // namespace 
 
 TString GenerateFile(const FileDescriptor* file, const Parameters& params) {
   TString output;
@@ -256,14 +256,14 @@ TString GenerateFile(const FileDescriptor* file, const Parameters& params) {
     TString leading_comments = GetNodeComments(file, true);
     if (!leading_comments.empty()) {
       out.Print("// Original file comments:\n");
-      out.PrintRaw(leading_comments.c_str());
+      out.PrintRaw(leading_comments.c_str()); 
     }
 
     out.Print("'use strict';\n");
 
     PrintImports(file, &out);
 
-    PrintTransformers(file, &out, params);
+    PrintTransformers(file, &out, params); 
 
     PrintServices(file, &out);
 

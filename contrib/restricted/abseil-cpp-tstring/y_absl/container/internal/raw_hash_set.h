@@ -129,7 +129,7 @@
 #include "y_absl/utility/utility.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace container_internal {
 
 template <typename AllocType>
@@ -1220,7 +1220,7 @@ class raw_hash_set {
   template <class... Args, typename std::enable_if<
                                !IsDecomposable<Args...>::value, int>::type = 0>
   std::pair<iterator, bool> emplace(Args&&... args) {
-    alignas(slot_type) unsigned char raw[sizeof(slot_type)];
+    alignas(slot_type) unsigned char raw[sizeof(slot_type)]; 
     slot_type* slot = reinterpret_cast<slot_type*>(&raw);
 
     PolicyTraits::construct(&alloc_ref(), slot, std::forward<Args>(args)...);
@@ -1236,16 +1236,16 @@ class raw_hash_set {
   // Extension API: support for lazy emplace.
   //
   // Looks up key in the table. If found, returns the iterator to the element.
-  // Otherwise calls `f` with one argument of type `raw_hash_set::constructor`.
+  // Otherwise calls `f` with one argument of type `raw_hash_set::constructor`. 
   //
-  // `f` must abide by several restrictions:
-  //  - it MUST call `raw_hash_set::constructor` with arguments as if a
-  //    `raw_hash_set::value_type` is constructed,
-  //  - it MUST NOT access the container before the call to
-  //    `raw_hash_set::constructor`, and
-  //  - it MUST NOT erase the lazily emplaced element.
-  // Doing any of these is undefined behavior.
-  //
+  // `f` must abide by several restrictions: 
+  //  - it MUST call `raw_hash_set::constructor` with arguments as if a 
+  //    `raw_hash_set::value_type` is constructed, 
+  //  - it MUST NOT access the container before the call to 
+  //    `raw_hash_set::constructor`, and 
+  //  - it MUST NOT erase the lazily emplaced element. 
+  // Doing any of these is undefined behavior. 
+  // 
   // For example:
   //
   //   std::unordered_set<ArenaString> s;
@@ -1727,7 +1727,7 @@ class raw_hash_set {
     //       mark target as FULL
     //       repeat procedure for current slot with moved from element (target)
     ConvertDeletedToEmptyAndFullToDeleted(ctrl_, capacity_);
-    alignas(slot_type) unsigned char raw[sizeof(slot_type)];
+    alignas(slot_type) unsigned char raw[sizeof(slot_type)]; 
     size_t total_probe_length = 0;
     slot_type* slot = reinterpret_cast<slot_type*>(&raw);
     for (size_t i = 0; i != capacity_; ++i) {
@@ -1956,18 +1956,18 @@ class raw_hash_set {
                 allocator_type{}};
 };
 
-// Erases all elements that satisfy the predicate `pred` from the container `c`.
-template <typename P, typename H, typename E, typename A, typename Predicate>
+// Erases all elements that satisfy the predicate `pred` from the container `c`. 
+template <typename P, typename H, typename E, typename A, typename Predicate> 
 void EraseIf(Predicate& pred, raw_hash_set<P, H, E, A>* c) {
-  for (auto it = c->begin(), last = c->end(); it != last;) {
+  for (auto it = c->begin(), last = c->end(); it != last;) { 
     if (pred(*it)) {
       c->erase(it++);
     } else {
       ++it;
-    }
-  }
-}
-
+    } 
+  } 
+} 
+ 
 namespace hashtable_debug_internal {
 template <typename Set>
 struct HashtableDebugAccess<Set, y_absl::void_t<typename Set::raw_hash_set>> {
@@ -2028,7 +2028,7 @@ struct HashtableDebugAccess<Set, y_absl::void_t<typename Set::raw_hash_set>> {
 
 }  // namespace hashtable_debug_internal
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_RAW_HASH_SET_H_

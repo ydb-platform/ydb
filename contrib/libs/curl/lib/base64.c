@@ -23,14 +23,14 @@
 /* Base64 encoding/decoding */
 
 #include "curl_setup.h"
-
-#if !defined(CURL_DISABLE_HTTP_AUTH) || defined(USE_SSH) || \
-  !defined(CURL_DISABLE_LDAP) || \
+ 
+#if !defined(CURL_DISABLE_HTTP_AUTH) || defined(USE_SSH) || \ 
+  !defined(CURL_DISABLE_LDAP) || \ 
   !defined(CURL_DISABLE_SMTP) || \
   !defined(CURL_DISABLE_POP3) || \
   !defined(CURL_DISABLE_IMAP) || \
-  !defined(CURL_DISABLE_DOH) || defined(USE_SSL)
-
+  !defined(CURL_DISABLE_DOH) || defined(USE_SSL) 
+ 
 #include "urldata.h" /* for the Curl_easy definition */
 #include "warnless.h"
 #include "curl_base64.h"
@@ -325,5 +325,5 @@ CURLcode Curl_base64url_encode(struct Curl_easy *data,
 {
   return base64_encode(base64url, data, inputbuff, insize, outptr, outlen);
 }
-
-#endif /* no users so disabled */
+ 
+#endif /* no users so disabled */ 

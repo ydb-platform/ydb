@@ -69,7 +69,7 @@ class SharedCodeGenerator {
   SharedCodeGenerator(const FileDescriptor* file, const Options& options);
   ~SharedCodeGenerator();
 
-  void Generate(GeneratorContext* generator_context,
+  void Generate(GeneratorContext* generator_context, 
                 std::vector<TProtoStringType>* file_list,
                 std::vector<TProtoStringType>* annotation_file_list);
 

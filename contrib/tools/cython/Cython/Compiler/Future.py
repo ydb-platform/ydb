@@ -4,12 +4,12 @@ def _get_feature(name):
     return getattr(__future__, name, object())
 
 unicode_literals = _get_feature("unicode_literals")
-with_statement = _get_feature("with_statement")  # dummy
+with_statement = _get_feature("with_statement")  # dummy 
 division = _get_feature("division")
 print_function = _get_feature("print_function")
 absolute_import = _get_feature("absolute_import")
 nested_scopes = _get_feature("nested_scopes")  # dummy
 generators = _get_feature("generators")  # dummy
-generator_stop = _get_feature("generator_stop")
+generator_stop = _get_feature("generator_stop") 
 
 del _get_feature

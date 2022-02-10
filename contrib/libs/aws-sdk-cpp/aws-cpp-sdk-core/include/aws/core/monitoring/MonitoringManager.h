@@ -1,7 +1,7 @@
 
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
  */
 
 #pragma once
@@ -37,28 +37,28 @@ namespace Aws
         /**
          * Wrapper function of OnRequestRetry defined by all monitoring instances
          */
-        void OnRequestRetry(const Aws::String& serviceName, const Aws::String& requestName,
+        void OnRequestRetry(const Aws::String& serviceName, const Aws::String& requestName, 
             const std::shared_ptr<const Aws::Http::HttpRequest>& request, const Aws::Vector<void*>& contexts);
 
         /**
          * Wrapper function of OnFinish defined by all monitoring instances
          */
-        void OnFinish(const Aws::String& serviceName, const Aws::String& requestName,
+        void OnFinish(const Aws::String& serviceName, const Aws::String& requestName, 
             const std::shared_ptr<const Aws::Http::HttpRequest>& request, const Aws::Vector<void*>& contexts);
 
         typedef std::function<Aws::UniquePtr<MonitoringFactory>()> MonitoringFactoryCreateFunction;
 
         /**
-         * Init monitoring using supplied factories, monitoring can support multiple instances.
+         * Init monitoring using supplied factories, monitoring can support multiple instances. 
          * We will try to (based on config resolution result) create a default client side monitoring listener instance defined in AWS SDK Core module.
          * and create other instances from these factories.
          * This function will be called during Aws::InitAPI call, argument is acquired from Aws::SDKOptions->MonitoringOptions
          */
-        AWS_CORE_API void InitMonitoring(const std::vector<MonitoringFactoryCreateFunction>& monitoringFactoryCreateFunctions);
+        AWS_CORE_API void InitMonitoring(const std::vector<MonitoringFactoryCreateFunction>& monitoringFactoryCreateFunctions); 
 
         /**
          * Clean up monitoring related global variables
          */
-        AWS_CORE_API void CleanupMonitoring();
+        AWS_CORE_API void CleanupMonitoring(); 
     }
 }

@@ -28,8 +28,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Defines classes for field comparison.
-
+// Defines classes for field comparison. 
+ 
 #ifndef GOOGLE_PROTOBUF_UTIL_FIELD_COMPARATOR_H__
 #define GOOGLE_PROTOBUF_UTIL_FIELD_COMPARATOR_H__
 
@@ -243,7 +243,7 @@ class PROTOBUF_EXPORT SimpleFieldComparator : public FieldComparator {
 
   // True iff default_tolerance_ has been explicitly set.
   //
-  // If false, then the default tolerance for floats and doubles is that which
+  // If false, then the default tolerance for floats and doubles is that which 
   // is used by MathUtil::AlmostEquals().
   bool has_default_tolerance_;
 

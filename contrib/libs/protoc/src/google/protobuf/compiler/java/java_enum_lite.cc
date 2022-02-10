@@ -94,12 +94,12 @@ void EnumLiteGenerator::Generate(io::Printer* printer) {
       printer->Print("@java.lang.Deprecated\n");
     }
     printer->Print(vars, "$name$($number$),\n");
-    printer->Annotate("name", canonical_values_[i]);
+    printer->Annotate("name", canonical_values_[i]); 
   }
 
   if (SupportUnknownEnumValue(descriptor_->file())) {
-    printer->Print("${$UNRECOGNIZED$}$(-1),\n", "{", "", "}", "");
-    printer->Annotate("{", "}", descriptor_);
+    printer->Print("${$UNRECOGNIZED$}$(-1),\n", "{", "", "}", ""); 
+    printer->Annotate("{", "}", descriptor_); 
   }
 
   printer->Print(
@@ -116,15 +116,15 @@ void EnumLiteGenerator::Generate(io::Printer* printer) {
     WriteEnumValueDocComment(printer, aliases_[i].value);
     printer->Print(
         vars, "public static final $classname$ $name$ = $canonical_name$;\n");
-    printer->Annotate("name", aliases_[i].value);
+    printer->Annotate("name", aliases_[i].value); 
   }
 
   for (int i = 0; i < descriptor_->value_count(); i++) {
     std::map<TProtoStringType, TProtoStringType> vars;
     vars["name"] = descriptor_->value(i)->name();
     vars["number"] = StrCat(descriptor_->value(i)->number());
-    vars["{"] = "";
-    vars["}"] = "";
+    vars["{"] = ""; 
+    vars["}"] = ""; 
     vars["deprecation"] = descriptor_->value(i)->options().deprecated()
                               ? "@java.lang.Deprecated "
                               : "";
@@ -132,40 +132,40 @@ void EnumLiteGenerator::Generate(io::Printer* printer) {
     printer->Print(vars,
                    "$deprecation$public static final int ${$$name$_VALUE$}$ = "
                    "$number$;\n");
-    printer->Annotate("{", "}", descriptor_->value(i));
+    printer->Annotate("{", "}", descriptor_->value(i)); 
   }
   printer->Print("\n");
 
   // -----------------------------------------------------------------
 
   printer->Print(
-      "\n"
+      "\n" 
       "@java.lang.Override\n"
-      "public final int getNumber() {\n");
-  if (SupportUnknownEnumValue(descriptor_->file())) {
-    printer->Print(
-        "  if (this == UNRECOGNIZED) {\n"
-        "    throw new java.lang.IllegalArgumentException(\n"
-        "        \"Can't get the number of an unknown enum value.\");\n"
-        "  }\n");
-  }
-  printer->Print(
-      "  return value;\n"
-      "}\n"
-      "\n"
-      "/**\n"
+      "public final int getNumber() {\n"); 
+  if (SupportUnknownEnumValue(descriptor_->file())) { 
+    printer->Print( 
+        "  if (this == UNRECOGNIZED) {\n" 
+        "    throw new java.lang.IllegalArgumentException(\n" 
+        "        \"Can't get the number of an unknown enum value.\");\n" 
+        "  }\n"); 
+  } 
+  printer->Print( 
+      "  return value;\n" 
+      "}\n" 
+      "\n" 
+      "/**\n" 
       " * @param value The number of the enum to look for.\n"
       " * @return The enum associated with the given number.\n"
-      " * @deprecated Use {@link #forNumber(int)} instead.\n"
-      " */\n"
-      "@java.lang.Deprecated\n"
-      "public static $classname$ valueOf(int value) {\n"
-      "  return forNumber(value);\n"
-      "}\n"
-      "\n"
-      "public static $classname$ forNumber(int value) {\n"
-      "  switch (value) {\n",
-      "classname", descriptor_->name());
+      " * @deprecated Use {@link #forNumber(int)} instead.\n" 
+      " */\n" 
+      "@java.lang.Deprecated\n" 
+      "public static $classname$ valueOf(int value) {\n" 
+      "  return forNumber(value);\n" 
+      "}\n" 
+      "\n" 
+      "public static $classname$ forNumber(int value) {\n" 
+      "  switch (value) {\n", 
+      "classname", descriptor_->name()); 
   printer->Indent();
   printer->Indent();
 

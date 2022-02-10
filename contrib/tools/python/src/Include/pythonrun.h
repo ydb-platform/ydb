@@ -113,8 +113,8 @@ PyAPI_FUNC(const char *) Py_GetCompiler(void);
 PyAPI_FUNC(const char *) Py_GetBuildInfo(void);
 PyAPI_FUNC(const char *) Py_SubversionRevision(void);
 PyAPI_FUNC(const char *) Py_SubversionShortBranch(void);
-PyAPI_FUNC(const char *) _Py_gitidentifier(void);
-PyAPI_FUNC(const char *) _Py_gitversion(void);
+PyAPI_FUNC(const char *) _Py_gitidentifier(void); 
+PyAPI_FUNC(const char *) _Py_gitversion(void); 
 
 /* Internal -- various one-time initializations */
 PyAPI_FUNC(PyObject *) _PyBuiltin_Init(void);
@@ -144,7 +144,7 @@ PyAPI_FUNC(void) PyInt_Fini(void);
 PyAPI_FUNC(void) PyFloat_Fini(void);
 PyAPI_FUNC(void) PyOS_FiniInterrupts(void);
 PyAPI_FUNC(void) PyByteArray_Fini(void);
-PyAPI_FUNC(void) _PyRandom_Fini(void);
+PyAPI_FUNC(void) _PyRandom_Fini(void); 
 
 /* Stuff with no proper home (yet) */
 PyAPI_FUNC(char *) PyOS_Readline(FILE *, FILE *, char *);
@@ -154,7 +154,7 @@ PyAPI_DATA(PyThreadState*) _PyOS_ReadlineTState;
 
 /* Stack size, in "pointers" (so we get extra safety margins
    on 64-bit platforms).  On a 32-bit platform, this translates
-   to an 8k margin. */
+   to an 8k margin. */ 
 #define PYOS_STACK_MARGIN 2048
 
 #if defined(WIN32) && !defined(MS_WIN64) && defined(_MSC_VER) && _MSC_VER >= 1300

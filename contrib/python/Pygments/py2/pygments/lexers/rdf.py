@@ -5,7 +5,7 @@
 
     Lexers for semantic web and RDF query languages and markup.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -29,55 +29,55 @@ class SparqlLexer(RegexLexer):
     filenames = ['*.rq', '*.sparql']
     mimetypes = ['application/sparql-query']
 
-    # character group definitions ::
-
-    PN_CHARS_BASE_GRP = (u'a-zA-Z'
-                         u'\u00c0-\u00d6'
-                         u'\u00d8-\u00f6'
-                         u'\u00f8-\u02ff'
-                         u'\u0370-\u037d'
-                         u'\u037f-\u1fff'
-                         u'\u200c-\u200d'
-                         u'\u2070-\u218f'
-                         u'\u2c00-\u2fef'
-                         u'\u3001-\ud7ff'
-                         u'\uf900-\ufdcf'
-                         u'\ufdf0-\ufffd')
-
-    PN_CHARS_U_GRP = (PN_CHARS_BASE_GRP + '_')
-
-    PN_CHARS_GRP = (PN_CHARS_U_GRP +
-                    r'\-' +
-                    r'0-9' +
-                    u'\u00b7' +
-                    u'\u0300-\u036f' +
-                    u'\u203f-\u2040')
-
-    HEX_GRP = '0-9A-Fa-f'
-
-    PN_LOCAL_ESC_CHARS_GRP = r' _~.\-!$&"()*+,;=/?#@%'
-
+    # character group definitions :: 
+ 
+    PN_CHARS_BASE_GRP = (u'a-zA-Z' 
+                         u'\u00c0-\u00d6' 
+                         u'\u00d8-\u00f6' 
+                         u'\u00f8-\u02ff' 
+                         u'\u0370-\u037d' 
+                         u'\u037f-\u1fff' 
+                         u'\u200c-\u200d' 
+                         u'\u2070-\u218f' 
+                         u'\u2c00-\u2fef' 
+                         u'\u3001-\ud7ff' 
+                         u'\uf900-\ufdcf' 
+                         u'\ufdf0-\ufffd') 
+ 
+    PN_CHARS_U_GRP = (PN_CHARS_BASE_GRP + '_') 
+ 
+    PN_CHARS_GRP = (PN_CHARS_U_GRP + 
+                    r'\-' + 
+                    r'0-9' + 
+                    u'\u00b7' + 
+                    u'\u0300-\u036f' + 
+                    u'\u203f-\u2040') 
+ 
+    HEX_GRP = '0-9A-Fa-f' 
+ 
+    PN_LOCAL_ESC_CHARS_GRP = r' _~.\-!$&"()*+,;=/?#@%' 
+ 
     # terminal productions ::
 
-    PN_CHARS_BASE = '[' + PN_CHARS_BASE_GRP + ']'
+    PN_CHARS_BASE = '[' + PN_CHARS_BASE_GRP + ']' 
 
-    PN_CHARS_U = '[' + PN_CHARS_U_GRP + ']'
+    PN_CHARS_U = '[' + PN_CHARS_U_GRP + ']' 
 
-    PN_CHARS = '[' + PN_CHARS_GRP + ']'
+    PN_CHARS = '[' + PN_CHARS_GRP + ']' 
 
-    HEX = '[' + HEX_GRP + ']'
+    HEX = '[' + HEX_GRP + ']' 
 
-    PN_LOCAL_ESC_CHARS = '[' + PN_LOCAL_ESC_CHARS_GRP + ']'
+    PN_LOCAL_ESC_CHARS = '[' + PN_LOCAL_ESC_CHARS_GRP + ']' 
 
     IRIREF = r'<(?:[^<>"{}|^`\\\x00-\x20])*>'
 
-    BLANK_NODE_LABEL = '_:[0-9' + PN_CHARS_U_GRP + '](?:[' + PN_CHARS_GRP + \
-                       '.]*' + PN_CHARS + ')?'
+    BLANK_NODE_LABEL = '_:[0-9' + PN_CHARS_U_GRP + '](?:[' + PN_CHARS_GRP + \ 
+                       '.]*' + PN_CHARS + ')?' 
 
-    PN_PREFIX = PN_CHARS_BASE + '(?:[' + PN_CHARS_GRP + '.]*' + PN_CHARS + ')?'
+    PN_PREFIX = PN_CHARS_BASE + '(?:[' + PN_CHARS_GRP + '.]*' + PN_CHARS + ')?' 
 
-    VARNAME = u'[0-9' + PN_CHARS_U_GRP + '][' + PN_CHARS_U_GRP + \
-              u'0-9\u00b7\u0300-\u036f\u203f-\u2040]*'
+    VARNAME = u'[0-9' + PN_CHARS_U_GRP + '][' + PN_CHARS_U_GRP + \ 
+              u'0-9\u00b7\u0300-\u036f\u203f-\u2040]*' 
 
     PERCENT = '%' + HEX + HEX
 
@@ -85,9 +85,9 @@ class SparqlLexer(RegexLexer):
 
     PLX = '(?:' + PERCENT + ')|(?:' + PN_LOCAL_ESC + ')'
 
-    PN_LOCAL = ('(?:[' + PN_CHARS_U_GRP + ':0-9' + ']|' + PLX + ')' +
-                '(?:(?:[' + PN_CHARS_GRP + '.:]|' + PLX + ')*(?:[' +
-                PN_CHARS_GRP + ':]|' + PLX + '))?')
+    PN_LOCAL = ('(?:[' + PN_CHARS_U_GRP + ':0-9' + ']|' + PLX + ')' + 
+                '(?:(?:[' + PN_CHARS_GRP + '.:]|' + PLX + ')*(?:[' + 
+                PN_CHARS_GRP + ':]|' + PLX + '))?') 
 
     EXPONENT = r'[eE][+-]?\d+'
 
@@ -97,7 +97,7 @@ class SparqlLexer(RegexLexer):
         'root': [
             (r'\s+', Text),
             # keywords ::
-            (r'(?i)(select|construct|describe|ask|where|filter|group\s+by|minus|'
+            (r'(?i)(select|construct|describe|ask|where|filter|group\s+by|minus|' 
              r'distinct|reduced|from\s+named|from|order\s+by|desc|asc|limit|'
              r'offset|bindings|load|clear|drop|create|add|move|copy|'
              r'insert\s+data|delete\s+data|delete\s+where|delete|insert|'
@@ -111,10 +111,10 @@ class SparqlLexer(RegexLexer):
             #  # variables ::
             ('[?$]' + VARNAME, Name.Variable),
             # prefixed names ::
-            (r'(' + PN_PREFIX + r')?(\:)(' + PN_LOCAL + r')?',
+            (r'(' + PN_PREFIX + r')?(\:)(' + PN_LOCAL + r')?', 
              bygroups(Name.Namespace, Punctuation, Name.Tag)),
             # function names ::
-            (r'(?i)(str|lang|langmatches|datatype|bound|iri|uri|bnode|rand|abs|'
+            (r'(?i)(str|lang|langmatches|datatype|bound|iri|uri|bnode|rand|abs|' 
              r'ceil|floor|round|concat|strlen|ucase|lcase|encode_for_uri|'
              r'contains|strstarts|strends|strbefore|strafter|year|month|day|'
              r'hours|minutes|seconds|timezone|tz|now|md5|sha1|sha256|sha384|'
@@ -125,7 +125,7 @@ class SparqlLexer(RegexLexer):
             # boolean literals ::
             (r'(true|false)', Keyword.Constant),
             # double literals ::
-            (r'[+\-]?(\d+\.\d*' + EXPONENT + r'|\.?\d+' + EXPONENT + ')', Number.Float),
+            (r'[+\-]?(\d+\.\d*' + EXPONENT + r'|\.?\d+' + EXPONENT + ')', Number.Float), 
             # decimal literals ::
             (r'[+\-]?(\d+\.\d*|\.\d+)', Number.Float),
             # integer literals ::
@@ -190,7 +190,7 @@ class TurtleLexer(RegexLexer):
     flags = re.IGNORECASE
 
     patterns = {
-        'PNAME_NS': r'((?:[a-z][\w-]*)?\:)',  # Simplified character range
+        'PNAME_NS': r'((?:[a-z][\w-]*)?\:)',  # Simplified character range 
         'IRIREF': r'(<[^<>"{}|^`\\\x00-\x20]*>)'
     }
 
@@ -257,7 +257,7 @@ class TurtleLexer(RegexLexer):
             (r'.', String, '#pop'),
         ],
         'end-of-string': [
-            (r'(@)([a-z]+(:?-[a-z0-9]+)*)',
+            (r'(@)([a-z]+(:?-[a-z0-9]+)*)', 
              bygroups(Operator, Generic.Emph), '#pop:2'),
 
             (r'(\^\^)%(IRIREF)s' % patterns, bygroups(Operator, Generic.Emph), '#pop:2'),
@@ -268,13 +268,13 @@ class TurtleLexer(RegexLexer):
 
         ],
     }
-
-    # Turtle and Tera Term macro files share the same file extension
-    # but each has a recognizable and distinct syntax.
-    def analyse_text(text):
-        for t in ('@base ', 'BASE ', '@prefix ', 'PREFIX '):
-            if re.search(r'^\s*%s' % t, text):
-                return 0.80
+ 
+    # Turtle and Tera Term macro files share the same file extension 
+    # but each has a recognizable and distinct syntax. 
+    def analyse_text(text): 
+        for t in ('@base ', 'BASE ', '@prefix ', 'PREFIX '): 
+            if re.search(r'^\s*%s' % t, text): 
+                return 0.80 
 
 
 class ShExCLexer(RegexLexer):

@@ -198,13 +198,13 @@ class Message(object):
     self.Clear()
     return self.MergeFromString(serialized)
 
-  def SerializeToString(self, **kwargs):
+  def SerializeToString(self, **kwargs): 
     """Serializes the protocol message to a binary string.
 
     Keyword Args:
       deterministic (bool): If true, requests deterministic serialization
         of the protobuf, with predictable ordering of map keys.
-
+ 
     Returns:
       A binary string representation of the message if all of the required
       fields in the message are set (i.e. the message is initialized).
@@ -214,7 +214,7 @@ class Message(object):
     """
     raise NotImplementedError
 
-  def SerializePartialToString(self, **kwargs):
+  def SerializePartialToString(self, **kwargs): 
     """Serializes the protocol message to a binary string.
 
     This method is similar to SerializeToString but doesn't check if the
@@ -223,7 +223,7 @@ class Message(object):
     Keyword Args:
       deterministic (bool): If true, requests deterministic serialization
         of the protobuf, with predictable ordering of map keys.
-
+ 
     Returns:
       bytes: A serialized representation of the partial message.
     """

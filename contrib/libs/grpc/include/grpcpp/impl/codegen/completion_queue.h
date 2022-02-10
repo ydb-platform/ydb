@@ -1,21 +1,21 @@
-/*
- *
- * Copyright 2015-2016 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
+/* 
+ * 
+ * Copyright 2015-2016 gRPC authors. 
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ * 
+ */ 
+ 
 /// A completion queue implements a concurrent producer-consumer queue, with
 /// two main API-exposed methods: \a Next and \a AsyncNext. These
 /// methods are the essential component of the gRPC C++ asynchronous API.
@@ -29,11 +29,11 @@
 /// elsewhere.
 /// \remark{All other API calls on completion queue should be completed before
 /// a completion queue destructor is called.}
-#ifndef GRPCPP_IMPL_CODEGEN_COMPLETION_QUEUE_H
-#define GRPCPP_IMPL_CODEGEN_COMPLETION_QUEUE_H
-
+#ifndef GRPCPP_IMPL_CODEGEN_COMPLETION_QUEUE_H 
+#define GRPCPP_IMPL_CODEGEN_COMPLETION_QUEUE_H 
+ 
 #include <list>
-
+ 
 #include <grpc/impl/codegen/atm.h>
 #include <grpcpp/impl/codegen/completion_queue_tag.h>
 #include <grpcpp/impl/codegen/core_codegen_interface.h>
@@ -44,7 +44,7 @@
 
 struct grpc_completion_queue;
 
-namespace grpc {
+namespace grpc { 
 template <class R>
 class ClientReader;
 template <class W>
@@ -58,7 +58,7 @@ class ServerWriter;
 namespace internal {
 template <class W, class R>
 class ServerReaderWriterBody;
-
+ 
 template <class ServiceType, class RequestType, class ResponseType>
 class RpcMethodHandler;
 template <class ServiceType, class RequestType, class ResponseType>
@@ -70,7 +70,7 @@ class TemplatedBidiStreamingHandler;
 template <::grpc::StatusCode code>
 class ErrorMethodHandler;
 }  // namespace internal
-
+ 
 class Channel;
 class ChannelInterface;
 class Server;
@@ -443,6 +443,6 @@ class ServerCompletionQueue : public CompletionQueue {
   friend class ::grpc::Server;
 };
 
-}  // namespace grpc
-
-#endif  // GRPCPP_IMPL_CODEGEN_COMPLETION_QUEUE_H
+}  // namespace grpc 
+ 
+#endif  // GRPCPP_IMPL_CODEGEN_COMPLETION_QUEUE_H 

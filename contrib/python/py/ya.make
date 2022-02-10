@@ -10,11 +10,11 @@ LICENSE(MIT)
 
 NO_LINT()
 
-NO_CHECK_IMPORTS(
-    py._code._assertionnew
-    py._code._assertionold
-)
-
+NO_CHECK_IMPORTS( 
+    py._code._assertionnew 
+    py._code._assertionold 
+) 
+ 
 PY_SRCS(
     TOP_LEVEL
     py/__init__.py

@@ -46,7 +46,7 @@ void InputData::cdDefaultFileName( const char *inputFile )
 			switch ( hostLang->lang ) {
 				case HostLang::C: defExtension = ".c"; break;
 				case HostLang::D: defExtension = ".d"; break;
-				case HostLang::D2: defExtension = ".d"; break;
+				case HostLang::D2: defExtension = ".d"; break; 
 				default: break;
 			}
 			outputFileName = fileNameFromStem( inputFile, defExtension );
@@ -55,15 +55,15 @@ void InputData::cdDefaultFileName( const char *inputFile )
 }
 
 /* Invoked by the parser when the root element is opened. */
-void InputData::goDefaultFileName( const char *inputFile )
-{
-	/* If the output format is code and no output file name is given, then
-	 * make a default. */
-	if ( outputFileName == 0 )
-		outputFileName = fileNameFromStem( inputFile, ".go" );
-}
-
-/* Invoked by the parser when the root element is opened. */
+void InputData::goDefaultFileName( const char *inputFile ) 
+{ 
+	/* If the output format is code and no output file name is given, then 
+	 * make a default. */ 
+	if ( outputFileName == 0 ) 
+		outputFileName = fileNameFromStem( inputFile, ".go" ); 
+} 
+ 
+/* Invoked by the parser when the root element is opened. */ 
 void InputData::javaDefaultFileName( const char *inputFile )
 {
 	/* If the output format is code and no output file name is given, then
@@ -95,39 +95,39 @@ void InputData::csharpDefaultFileName( const char *inputFile )
 	}
 }
 
-/* Invoked by the parser when the root element is opened. */
-void InputData::ocamlDefaultFileName( const char *inputFile )
-{
-	/* If the output format is code and no output file name is given, then
-	 * make a default. */
-	if ( outputFileName == 0 )
-		outputFileName = fileNameFromStem( inputFile, ".ml" );
-}
-
+/* Invoked by the parser when the root element is opened. */ 
+void InputData::ocamlDefaultFileName( const char *inputFile ) 
+{ 
+	/* If the output format is code and no output file name is given, then 
+	 * make a default. */ 
+	if ( outputFileName == 0 ) 
+		outputFileName = fileNameFromStem( inputFile, ".ml" ); 
+} 
+ 
 void InputData::makeOutputStream()
 {
 	if ( ! generateDot && ! generateXML ) {
 		switch ( hostLang->lang ) {
 			case HostLang::C:
 			case HostLang::D:
-			case HostLang::D2:
+			case HostLang::D2: 
 				cdDefaultFileName( inputFileName );
 				break;
 			case HostLang::Java:
 				javaDefaultFileName( inputFileName );
 				break;
-			case HostLang::Go:
-				goDefaultFileName( inputFileName );
-				break;
+			case HostLang::Go: 
+				goDefaultFileName( inputFileName ); 
+				break; 
 			case HostLang::Ruby:
 				rubyDefaultFileName( inputFileName );
 				break;
 			case HostLang::CSharp:
 				csharpDefaultFileName( inputFileName );
 				break;
-			case HostLang::OCaml:
-				ocamlDefaultFileName( inputFileName );
-				break;
+			case HostLang::OCaml: 
+				ocamlDefaultFileName( inputFileName ); 
+				break; 
 		}
 	}
 
@@ -252,24 +252,24 @@ void InputData::writeOutput()
 	else if ( generateDot )
 		static_cast<GraphvizDotGen*>(dotGenParser->pd->cgd)->writeDotFile();
 	else {
-		bool hostLineDirective = true;
+		bool hostLineDirective = true; 
 		for ( InputItemList::Iter ii = inputItems; ii.lte(); ii++ ) {
 			if ( ii->type == InputItem::Write ) {
 				CodeGenData *cgd = ii->pd->cgd;
 				::keyOps = &cgd->thisKeyOps;
 
-				hostLineDirective = cgd->writeStatement( ii->loc,
-						ii->writeArgs.length()-1, ii->writeArgs.data );
+				hostLineDirective = cgd->writeStatement( ii->loc, 
+						ii->writeArgs.length()-1, ii->writeArgs.data ); 
 			}
 			else {
-				if ( hostLineDirective ) {
-					/* Write statements can turn off host line directives for
-					 * host sections that follow them. */
-					*outStream << '\n';
-					lineDirective( *outStream, inputFileName, ii->loc.line );
-				}
+				if ( hostLineDirective ) { 
+					/* Write statements can turn off host line directives for 
+					 * host sections that follow them. */ 
+					*outStream << '\n'; 
+					lineDirective( *outStream, inputFileName, ii->loc.line ); 
+				} 
 				*outStream << ii->data.str();
-				hostLineDirective = true;
+				hostLineDirective = true; 
 			}
 		}
 	}

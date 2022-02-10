@@ -23,7 +23,7 @@
 #include "curl_setup.h"
 
 #if defined(USE_GSKIT) || defined(USE_NSS) || defined(USE_GNUTLS) || \
-    defined(USE_WOLFSSL) || defined(USE_SCHANNEL)
+    defined(USE_WOLFSSL) || defined(USE_SCHANNEL) 
 
 #include <curl/curl.h>
 #include "urldata.h"
@@ -120,7 +120,7 @@ static const char *getASN1Element(struct Curl_asn1Element *elem,
      if an error occurs. */
   if(!beg || !end || beg >= end || !*beg ||
      (size_t)(end - beg) > CURL_ASN1_MAX)
-    return NULL;
+    return NULL; 
 
   /* Process header byte. */
   elem->header = beg;
@@ -129,12 +129,12 @@ static const char *getASN1Element(struct Curl_asn1Element *elem,
   elem->class = (b >> 6) & 3;
   b &= 0x1F;
   if(b == 0x1F)
-    return NULL; /* Long tag values not supported here. */
+    return NULL; /* Long tag values not supported here. */ 
   elem->tag = b;
 
   /* Process length. */
   if(beg >= end)
-    return NULL;
+    return NULL; 
   b = (unsigned char) *beg++;
   if(!(b & 0x80))
     len = b;
@@ -142,40 +142,40 @@ static const char *getASN1Element(struct Curl_asn1Element *elem,
     /* Unspecified length. Since we have all the data, we can determine the
        effective length by skipping element until an end element is found. */
     if(!elem->constructed)
-      return NULL;
+      return NULL; 
     elem->beg = beg;
     while(beg < end && *beg) {
       beg = getASN1Element(&lelem, beg, end);
       if(!beg)
-        return NULL;
+        return NULL; 
     }
     if(beg >= end)
-      return NULL;
+      return NULL; 
     elem->end = beg;
     return beg + 1;
   }
   else if((unsigned)b > (size_t)(end - beg))
-    return NULL; /* Does not fit in source. */
+    return NULL; /* Does not fit in source. */ 
   else {
     /* Get long length. */
     len = 0;
     do {
       if(len & 0xFF000000L)
-        return NULL;  /* Lengths > 32 bits are not supported. */
+        return NULL;  /* Lengths > 32 bits are not supported. */ 
       len = (len << 8) | (unsigned char) *beg++;
     } while(--b);
   }
   if(len > (size_t)(end - beg))
-    return NULL;  /* Element data does not fit in source. */
+    return NULL;  /* Element data does not fit in source. */ 
   elem->beg = beg;
   elem->end = beg + len;
   return elem->end;
 }
 
-/*
- * Search the null terminated OID or OID identifier in local table.
- * Return the table entry pointer or NULL if not found.
- */
+/* 
+ * Search the null terminated OID or OID identifier in local table. 
+ * Return the table entry pointer or NULL if not found. 
+ */ 
 static const struct Curl_OID *searchOID(const char *oid)
 {
   const struct Curl_OID *op;
@@ -183,26 +183,26 @@ static const struct Curl_OID *searchOID(const char *oid)
     if(!strcmp(op->numoid, oid) || strcasecompare(op->textoid, oid))
       return op;
 
-  return NULL;
+  return NULL; 
 }
 
-/*
- * Convert an ASN.1 Boolean value into its string representation.  Return the
- * dynamically allocated string, or NULL if source is not an ASN.1 Boolean
- * value.
- */
-
+/* 
+ * Convert an ASN.1 Boolean value into its string representation.  Return the 
+ * dynamically allocated string, or NULL if source is not an ASN.1 Boolean 
+ * value. 
+ */ 
+ 
 static const char *bool2str(const char *beg, const char *end)
 {
   if(end - beg != 1)
-    return NULL;
+    return NULL; 
   return strdup(*beg? "TRUE": "FALSE");
 }
 
-/*
- * Convert an ASN.1 octet string to a printable string.
- * Return the dynamically allocated string, or NULL if an error occurs.
- */
+/* 
+ * Convert an ASN.1 octet string to a printable string. 
+ * Return the dynamically allocated string, or NULL if an error occurs. 
+ */ 
 static const char *octet2str(const char *beg, const char *end)
 {
   size_t n = end - beg;
@@ -223,22 +223,22 @@ static const char *bit2str(const char *beg, const char *end)
      Return the dynamically allocated string, or NULL if an error occurs. */
 
   if(++beg > end)
-    return NULL;
+    return NULL; 
   return octet2str(beg, end);
 }
 
-/*
- * Convert an ASN.1 integer value into its string representation.
- * Return the dynamically allocated string, or NULL if source is not an
- * ASN.1 integer value.
- */
+/* 
+ * Convert an ASN.1 integer value into its string representation. 
+ * Return the dynamically allocated string, or NULL if source is not an 
+ * ASN.1 integer value. 
+ */ 
 static const char *int2str(const char *beg, const char *end)
 {
   unsigned long val = 0;
   size_t n = end - beg;
 
   if(!n)
-    return NULL;
+    return NULL; 
 
   if(n > 4)
     return octet2str(beg, end);
@@ -253,13 +253,13 @@ static const char *int2str(const char *beg, const char *end)
   return curl_maprintf("%s%lx", val >= 10? "0x": "", val);
 }
 
-/*
- * Perform a lazy conversion from an ASN.1 typed string to UTF8. Allocate the
- * destination buffer dynamically. The allocation size will normally be too
- * large: this is to avoid buffer overflows.
- * Terminate the string with a nul byte and return the converted
- * string length.
- */
+/* 
+ * Perform a lazy conversion from an ASN.1 typed string to UTF8. Allocate the 
+ * destination buffer dynamically. The allocation size will normally be too 
+ * large: this is to avoid buffer overflows. 
+ * Terminate the string with a nul byte and return the converted 
+ * string length. 
+ */ 
 static ssize_t
 utf8asn1str(char **to, int type, const char *from, const char *end)
 {
@@ -268,7 +268,7 @@ utf8asn1str(char **to, int type, const char *from, const char *end)
   size_t outlength;
   char *buf;
 
-  *to = NULL;
+  *to = NULL; 
   switch(type) {
   case CURL_ASN1_BMP_STRING:
     size = 2;
@@ -303,9 +303,9 @@ utf8asn1str(char **to, int type, const char *from, const char *end)
   }
   else {
     for(outlength = 0; from < end;) {
-      int charsize;
-      unsigned int wc;
-
+      int charsize; 
+      unsigned int wc; 
+ 
       wc = 0;
       switch(size) {
       case 4:
@@ -347,49 +347,49 @@ utf8asn1str(char **to, int type, const char *from, const char *end)
   return outlength;
 }
 
-/*
- * Convert an ASN.1 String into its UTF-8 string representation.
- * Return the dynamically allocated string, or NULL if an error occurs.
- */
+/* 
+ * Convert an ASN.1 String into its UTF-8 string representation. 
+ * Return the dynamically allocated string, or NULL if an error occurs. 
+ */ 
 static const char *string2str(int type, const char *beg, const char *end)
 {
   char *buf;
   if(utf8asn1str(&buf, type, beg, end) < 0)
-    return NULL;
+    return NULL; 
   return buf;
 }
 
-/*
- * Decimal ASCII encode unsigned integer `x' into the buflen sized buffer at
- * buf.  Return the total number of encoded digits, even if larger than
- * `buflen'.
- */
-static size_t encodeUint(char *buf, size_t buflen, unsigned int x)
+/* 
+ * Decimal ASCII encode unsigned integer `x' into the buflen sized buffer at 
+ * buf.  Return the total number of encoded digits, even if larger than 
+ * `buflen'. 
+ */ 
+static size_t encodeUint(char *buf, size_t buflen, unsigned int x) 
 {
-  size_t i = 0;
+  size_t i = 0; 
   unsigned int y = x / 10;
 
   if(y) {
-    i = encodeUint(buf, buflen, y);
+    i = encodeUint(buf, buflen, y); 
     x -= y * 10;
   }
-  if(i < buflen)
+  if(i < buflen) 
     buf[i] = (char) ('0' + x);
   i++;
-  if(i < buflen)
+  if(i < buflen) 
     buf[i] = '\0';      /* Store a terminator if possible. */
   return i;
 }
 
-/*
- * Convert an ASN.1 OID into its dotted string representation.
- * Store the result in th `n'-byte buffer at `buf'.
- * Return the converted string length, or 0 on errors.
- */
-static size_t encodeOID(char *buf, size_t buflen,
-                        const char *beg, const char *end)
+/* 
+ * Convert an ASN.1 OID into its dotted string representation. 
+ * Store the result in th `n'-byte buffer at `buf'. 
+ * Return the converted string length, or 0 on errors. 
+ */ 
+static size_t encodeOID(char *buf, size_t buflen, 
+                        const char *beg, const char *end) 
 {
-  size_t i;
+  size_t i; 
   unsigned int x;
   unsigned int y;
 
@@ -397,52 +397,52 @@ static size_t encodeOID(char *buf, size_t buflen,
   y = *(const unsigned char *) beg++;
   x = y / 40;
   y -= x * 40;
-  i = encodeUint(buf, buflen, x);
-  if(i < buflen)
+  i = encodeUint(buf, buflen, x); 
+  if(i < buflen) 
     buf[i] = '.';
   i++;
-  if(i >= buflen)
-    i += encodeUint(NULL, 0, y);
-  else
-    i += encodeUint(buf + i, buflen - i, y);
+  if(i >= buflen) 
+    i += encodeUint(NULL, 0, y); 
+  else 
+    i += encodeUint(buf + i, buflen - i, y); 
 
   /* Process the trailing numbers. */
   while(beg < end) {
-    if(i < buflen)
+    if(i < buflen) 
       buf[i] = '.';
     i++;
     x = 0;
     do {
       if(x & 0xFF000000)
-        return 0;
+        return 0; 
       y = *(const unsigned char *) beg++;
       x = (x << 7) | (y & 0x7F);
     } while(y & 0x80);
-    if(i >= buflen)
-      i += encodeUint(NULL, 0, x);
-    else
-      i += encodeUint(buf + i, buflen - i, x);
+    if(i >= buflen) 
+      i += encodeUint(NULL, 0, x); 
+    else 
+      i += encodeUint(buf + i, buflen - i, x); 
   }
-  if(i < buflen)
+  if(i < buflen) 
     buf[i] = '\0';
   return i;
 }
 
-/*
- * Convert an ASN.1 OID into its dotted or symbolic string representation.
- * Return the dynamically allocated string, or NULL if an error occurs.
- */
-
+/* 
+ * Convert an ASN.1 OID into its dotted or symbolic string representation. 
+ * Return the dynamically allocated string, or NULL if an error occurs. 
+ */ 
+ 
 static const char *OID2str(const char *beg, const char *end, bool symbolic)
 {
-  char *buf = NULL;
+  char *buf = NULL; 
   if(beg < end) {
-    size_t buflen = encodeOID(NULL, 0, beg, end);
-    if(buflen) {
-      buf = malloc(buflen + 1); /* one extra for the zero byte */
+    size_t buflen = encodeOID(NULL, 0, beg, end); 
+    if(buflen) { 
+      buf = malloc(buflen + 1); /* one extra for the zero byte */ 
       if(buf) {
-        encodeOID(buf, buflen, beg, end);
-        buf[buflen] = '\0';
+        encodeOID(buf, buflen, beg, end); 
+        buf[buflen] = '\0'; 
 
         if(symbolic) {
           const struct Curl_OID *op = searchOID(buf);
@@ -485,7 +485,7 @@ static const char *GTime2str(const char *beg, const char *end)
     sec2 = fracp[-1];
     break;
   default:
-    return NULL;
+    return NULL; 
   }
 
   /* Scan for timezone, measure fractional seconds. */
@@ -521,10 +521,10 @@ static const char *GTime2str(const char *beg, const char *end)
                        sep, tzl, tzp);
 }
 
-/*
- *  Convert an ASN.1 UTC time to a printable string.
- * Return the dynamically allocated string, or NULL if an error occurs.
- */
+/* 
+ *  Convert an ASN.1 UTC time to a printable string. 
+ * Return the dynamically allocated string, or NULL if an error occurs. 
+ */ 
 static const char *UTime2str(const char *beg, const char *end)
 {
   const char *tzp;
@@ -541,12 +541,12 @@ static const char *UTime2str(const char *beg, const char *end)
   case 2:
     break;
   default:
-    return NULL;
+    return NULL; 
   }
 
   /* Process timezone. */
   if(tzp >= end)
-    return NULL;
+    return NULL; 
   if(*tzp == 'Z') {
     tzp = "GMT";
     end = tzp + 3;
@@ -561,14 +561,14 @@ static const char *UTime2str(const char *beg, const char *end)
                        tzl, tzp);
 }
 
-/*
- * Convert an ASN.1 element to a printable string.
- * Return the dynamically allocated string, or NULL if an error occurs.
- */
+/* 
+ * Convert an ASN.1 element to a printable string. 
+ * Return the dynamically allocated string, or NULL if an error occurs. 
+ */ 
 static const char *ASN1tostr(struct Curl_asn1Element *elem, int type)
 {
   if(elem->constructed)
-    return NULL; /* No conversion of structured elements. */
+    return NULL; /* No conversion of structured elements. */ 
 
   if(!type)
     type = elem->tag;   /* Type not forced: use element tag as type. */
@@ -602,13 +602,13 @@ static const char *ASN1tostr(struct Curl_asn1Element *elem, int type)
     return string2str(type, elem->beg, elem->end);
   }
 
-  return NULL;   /* Unsupported. */
+  return NULL;   /* Unsupported. */ 
 }
 
-/*
- * ASCII encode distinguished name at `dn' into the `buflen'-sized buffer at
- * `buf'.  Return the total string length, even if larger than `buflen'.
- */
+/* 
+ * ASCII encode distinguished name at `dn' into the `buflen'-sized buffer at 
+ * `buf'.  Return the total string length, even if larger than `buflen'. 
+ */ 
 static ssize_t encodeDN(char *buf, size_t buflen, struct Curl_asn1Element *dn)
 {
   struct Curl_asn1Element rdn;
@@ -644,7 +644,7 @@ static ssize_t encodeDN(char *buf, size_t buflen, struct Curl_asn1Element *dn)
         for(p3 = str; isupper(*p3); p3++)
           ;
         for(p3 = (*p3 || p3 - str > 2)? "/": ", "; *p3; p3++) {
-          if(l < buflen)
+          if(l < buflen) 
             buf[l] = *p3;
           l++;
         }
@@ -652,14 +652,14 @@ static ssize_t encodeDN(char *buf, size_t buflen, struct Curl_asn1Element *dn)
 
       /* Encode attribute name. */
       for(p3 = str; *p3; p3++) {
-        if(l < buflen)
+        if(l < buflen) 
           buf[l] = *p3;
         l++;
       }
       free((char *) str);
 
       /* Generate equal sign. */
-      if(l < buflen)
+      if(l < buflen) 
         buf[l] = '=';
       l++;
 
@@ -668,7 +668,7 @@ static ssize_t encodeDN(char *buf, size_t buflen, struct Curl_asn1Element *dn)
       if(!str)
         return -1;
       for(p3 = str; *p3; p3++) {
-        if(l < buflen)
+        if(l < buflen) 
           buf[l] = *p3;
         l++;
       }
@@ -679,29 +679,29 @@ static ssize_t encodeDN(char *buf, size_t buflen, struct Curl_asn1Element *dn)
   return l;
 }
 
-/*
- * Convert an ASN.1 distinguished name into a printable string.
- * Return the dynamically allocated string, or NULL if an error occurs.
- */
+/* 
+ * Convert an ASN.1 distinguished name into a printable string. 
+ * Return the dynamically allocated string, or NULL if an error occurs. 
+ */ 
 static const char *DNtostr(struct Curl_asn1Element *dn)
 {
-  char *buf = NULL;
-  ssize_t buflen = encodeDN(NULL, 0, dn);
+  char *buf = NULL; 
+  ssize_t buflen = encodeDN(NULL, 0, dn); 
 
-  if(buflen >= 0) {
-    buf = malloc(buflen + 1);
+  if(buflen >= 0) { 
+    buf = malloc(buflen + 1); 
     if(buf) {
-      encodeDN(buf, buflen + 1, dn);
-      buf[buflen] = '\0';
+      encodeDN(buf, buflen + 1, dn); 
+      buf[buflen] = '\0'; 
     }
   }
-  return buf;
+  return buf; 
 }
 
 /*
- * ASN.1 parse an X509 certificate into structure subfields.
- * Syntax is assumed to have already been checked by the SSL backend.
- * See RFC 5280.
+ * ASN.1 parse an X509 certificate into structure subfields. 
+ * Syntax is assumed to have already been checked by the SSL backend. 
+ * See RFC 5280. 
  */
 int Curl_parseX509(struct Curl_X509certificate *cert,
                    const char *beg, const char *end)
@@ -817,11 +817,11 @@ int Curl_parseX509(struct Curl_X509certificate *cert,
   return 0;
 }
 
-
-/*
- * Copy at most 64-characters, terminate with a newline and returns the
- * effective number of stored characters.
- */
+ 
+/* 
+ * Copy at most 64-characters, terminate with a newline and returns the 
+ * effective number of stored characters. 
+ */ 
 static size_t copySubstring(char *to, const char *from)
 {
   size_t i;
@@ -886,9 +886,9 @@ static void do_pubkey(struct Curl_easy *data, int certnum,
     return;
 
   if(strcasecompare(algo, "rsaEncryption")) {
-    const char *q;
-    unsigned long len;
-
+    const char *q; 
+    unsigned long len; 
+ 
     p = getASN1Element(&elem, pk.beg, pk.end);
     if(!p)
       return;
@@ -897,11 +897,11 @@ static void do_pubkey(struct Curl_easy *data, int certnum,
     for(q = elem.beg; !*q && q < elem.end; q++)
       ;
     len = (unsigned long)((elem.end - q) * 8);
-    if(len) {
-      unsigned int i;
+    if(len) { 
+      unsigned int i; 
       for(i = *(unsigned char *) q; !(i & 0x80); i <<= 1)
         len--;
-    }
+    } 
     if(len > 32)
       elem.beg = q;     /* Strip leading zero bytes. */
     if(!certnum)
@@ -1104,7 +1104,7 @@ CURLcode Curl_extract_certinfo(struct connectdata *conn,
   return CURLE_OK;
 }
 
-#endif /* USE_GSKIT or USE_NSS or USE_GNUTLS or USE_WOLFSSL or USE_SCHANNEL */
+#endif /* USE_GSKIT or USE_NSS or USE_GNUTLS or USE_WOLFSSL or USE_SCHANNEL */ 
 
 #if defined(USE_GSKIT)
 
@@ -1121,15 +1121,15 @@ static const char *checkOID(const char *beg, const char *end,
 
   ccp = getASN1Element(&e, beg, end);
   if(!ccp || e.tag != CURL_ASN1_OBJECT_IDENTIFIER)
-    return NULL;
+    return NULL; 
 
   p = OID2str(e.beg, e.end, FALSE);
   if(!p)
-    return NULL;
+    return NULL; 
 
   matched = !strcmp(p, oid);
   free((char *) p);
-  return matched? ccp: NULL;
+  return matched? ccp: NULL; 
 }
 
 CURLcode Curl_verifyhost(struct connectdata *conn,

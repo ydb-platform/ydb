@@ -1,35 +1,35 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
 #ifndef GRPC_CORE_LIB_TRANSPORT_CONNECTIVITY_STATE_H
 #define GRPC_CORE_LIB_TRANSPORT_CONNECTIVITY_STATE_H
 
-#include <grpc/support/port_platform.h>
-
+#include <grpc/support/port_platform.h> 
+ 
 #include "y_absl/status/status.h"
 
 #include <grpc/grpc.h>
 
-#include "src/core/lib/debug/trace.h"
+#include "src/core/lib/debug/trace.h" 
 #include "src/core/lib/gprpp/atomic.h"
 #include "src/core/lib/gprpp/map.h"
 #include "src/core/lib/gprpp/orphanable.h"
-#include "src/core/lib/iomgr/closure.h"
+#include "src/core/lib/iomgr/closure.h" 
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/work_serializer.h"
 
@@ -72,7 +72,7 @@ class AsyncConnectivityStateWatcherInterface
 
  protected:
   class Notifier;
-
+ 
   // If \a work_serializer is nullptr, then the notification will be scheduled
   // on the ExecCtx.
   explicit AsyncConnectivityStateWatcherInterface(

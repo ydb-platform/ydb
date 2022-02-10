@@ -1,11 +1,11 @@
 cdef extern from "<vector>" namespace "std" nogil:
-    cdef cppclass vector[T,ALLOCATOR=*]:
-        ctypedef T value_type
-        ctypedef ALLOCATOR allocator_type
+    cdef cppclass vector[T,ALLOCATOR=*]: 
+        ctypedef T value_type 
+        ctypedef ALLOCATOR allocator_type 
 
         # these should really be allocator_type.size_type and
         # allocator_type.difference_type to be true to the C++ definition
-        # but cython doesn't support deferred access on template arguments
+        # but cython doesn't support deferred access on template arguments 
         ctypedef size_t size_type
         ctypedef ptrdiff_t difference_type
 
@@ -35,10 +35,10 @@ cdef extern from "<vector>" namespace "std" nogil:
             bint operator>(reverse_iterator)
             bint operator<=(reverse_iterator)
             bint operator>=(reverse_iterator)
-        cppclass const_iterator(iterator):
-            pass
-        cppclass const_reverse_iterator(reverse_iterator):
-            pass
+        cppclass const_iterator(iterator): 
+            pass 
+        cppclass const_reverse_iterator(reverse_iterator): 
+            pass 
         vector() except +
         vector(vector&) except +
         vector(size_type) except +
@@ -53,25 +53,25 @@ cdef extern from "<vector>" namespace "std" nogil:
         bint operator<=(vector&, vector&)
         bint operator>=(vector&, vector&)
         void assign(size_type, const T&)
-        void assign[input_iterator](input_iterator, input_iterator) except +
+        void assign[input_iterator](input_iterator, input_iterator) except + 
         T& at(size_type) except +
         T& back()
         iterator begin()
-        const_iterator const_begin "begin"()
+        const_iterator const_begin "begin"() 
         size_type capacity()
         void clear()
         bint empty()
         iterator end()
-        const_iterator const_end "end"()
+        const_iterator const_end "end"() 
         iterator erase(iterator)
         iterator erase(iterator, iterator)
         T& front()
-        iterator insert(iterator, const T&) except +
+        iterator insert(iterator, const T&) except + 
         iterator insert(iterator, size_type, const T&) except +
         iterator insert[Iter](iterator, Iter, Iter) except +
         size_type max_size()
         void pop_back()
-        void push_back(T&) except +
+        void push_back(T&) except + 
         reverse_iterator rbegin()
         const_reverse_iterator const_rbegin "crbegin"()
         reverse_iterator rend()
@@ -81,8 +81,8 @@ cdef extern from "<vector>" namespace "std" nogil:
         void resize(size_type, T&) except +
         size_type size()
         void swap(vector&)
-
-        # C++11 methods
+ 
+        # C++11 methods 
         T* data()
-        const T* const_data "data"()
+        const T* const_data "data"() 
         void shrink_to_fit()

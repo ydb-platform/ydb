@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-OWNER(g:cpp-contrib)
+OWNER(g:cpp-contrib) 
 
-VERSION(0.4.63)
+VERSION(0.4.63) 
 
 ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-common/archive/v0.4.63.tar.gz)
 
@@ -17,28 +17,28 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 ADDINCL(
-    GLOBAL contrib/restricted/aws/aws-c-common/generated/include
-    GLOBAL contrib/restricted/aws/aws-c-common/include
+    GLOBAL contrib/restricted/aws/aws-c-common/generated/include 
+    GLOBAL contrib/restricted/aws/aws-c-common/include 
 )
 
 NO_COMPILER_WARNINGS()
 
-NO_RUNTIME()
+NO_RUNTIME() 
 
-IF (OS_DARWIN)
-    LDFLAGS(
+IF (OS_DARWIN) 
+    LDFLAGS( 
         -framework
         CoreFoundation
-    )
-ENDIF()
-
+    ) 
+ENDIF() 
+ 
 SRCS(
-    source/allocator.c
-    source/allocator_sba.c
+    source/allocator.c 
+    source/allocator_sba.c 
     source/array_list.c
     source/assert.c
     source/byte_buf.c
-    source/cache.c
+    source/cache.c 
     source/codegen.c
     source/command_line_parser.c
     source/common.c
@@ -47,37 +47,37 @@ SRCS(
     source/device_random.c
     source/encoding.c
     source/error.c
-    source/fifo_cache.c
+    source/fifo_cache.c 
     source/hash_table.c
-    source/lifo_cache.c
-    source/linked_hash_table.c
-    source/log_channel.c
-    source/log_formatter.c
-    source/log_writer.c
-    source/logging.c
+    source/lifo_cache.c 
+    source/linked_hash_table.c 
+    source/log_channel.c 
+    source/log_formatter.c 
+    source/log_writer.c 
+    source/logging.c 
     source/lru_cache.c
-    source/math.c
-    source/memtrace.c
+    source/math.c 
+    source/memtrace.c 
     source/posix/clock.c
     source/posix/condition_variable.c
     source/posix/device_random.c
     source/posix/environment.c
     source/posix/mutex.c
-    source/posix/process.c
+    source/posix/process.c 
     source/posix/rw_lock.c
     source/posix/system_info.c
     source/posix/thread.c
     source/posix/time.c
     source/priority_queue.c
-    source/process_common.c
-    source/ref_count.c
-    source/resource_name.c
-    source/ring_buffer.c
-    source/statistics.c
+    source/process_common.c 
+    source/ref_count.c 
+    source/resource_name.c 
+    source/ring_buffer.c 
+    source/statistics.c 
     source/string.c
     source/task_scheduler.c
     source/uuid.c
-    source/xml_parser.c
+    source/xml_parser.c 
 )
 
 IF (ARCH_ARM)

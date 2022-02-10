@@ -71,7 +71,7 @@
 #define ABSL_STRINGS_STR_FORMAT_H_
 
 #include <cstdio>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 #include "y_absl/strings/internal/str_format/arg.h"  // IWYU pragma: export
 #include "y_absl/strings/internal/str_format/bind.h"  // IWYU pragma: export
@@ -80,7 +80,7 @@
 #include "y_absl/strings/internal/str_format/parser.h"  // IWYU pragma: export
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 // UntypedFormatSpec
 //
@@ -427,7 +427,7 @@ int FPrintF(std::FILE* output, const FormatSpec<Args...>& format,
 // type-safe); prefer `y_absl::SNPrintF()` over `std::snprintf()`.
 //
 // In particular, a successful call to `y_absl::SNPrintF()` writes at most `size`
-// bytes of the formatted output to `output`, including a NUL-terminator, and
+// bytes of the formatted output to `output`, including a NUL-terminator, and 
 // returns the number of bytes that would have been written if truncation did
 // not occur. In the event of an error, a negative value is returned and `errno`
 // is set.
@@ -806,7 +806,7 @@ struct FormatConvertResult {
   bool value;
 };
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_STR_FORMAT_H_

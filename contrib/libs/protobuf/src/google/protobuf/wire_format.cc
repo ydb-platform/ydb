@@ -57,16 +57,16 @@
 
 #include <google/protobuf/port_def.inc>
 
-const size_t kMapEntryTagByteSize = 2;
-
+const size_t kMapEntryTagByteSize = 2; 
+ 
 namespace google {
 namespace protobuf {
 namespace internal {
 
-// Forward declare static functions
-static size_t MapValueRefDataOnlyByteSize(const FieldDescriptor* field,
+// Forward declare static functions 
+static size_t MapValueRefDataOnlyByteSize(const FieldDescriptor* field, 
                                           const MapValueConstRef& value);
-
+ 
 // ===================================================================
 
 bool UnknownFieldSetFieldSkipper::SkipField(io::CodedInputStream* input,
@@ -85,8 +85,8 @@ void UnknownFieldSetFieldSkipper::SkipUnknownEnum(int field_number, int value) {
 bool WireFormat::SkipField(io::CodedInputStream* input, uint32 tag,
                            UnknownFieldSet* unknown_fields) {
   int number = WireFormatLite::GetTagFieldNumber(tag);
-  // Field number 0 is illegal.
-  if (number == 0) return false;
+  // Field number 0 is illegal. 
+  if (number == 0) return false; 
 
   switch (WireFormatLite::GetTagWireType(tag)) {
     case WireFormatLite::WIRETYPE_VARINT: {
@@ -263,9 +263,9 @@ uint8* WireFormat::InternalSerializeUnknownMessageSetItemsToArray(
   return target;
 }
 
-size_t WireFormat::ComputeUnknownFieldsSize(
+size_t WireFormat::ComputeUnknownFieldsSize( 
     const UnknownFieldSet& unknown_fields) {
-  size_t size = 0;
+  size_t size = 0; 
   for (int i = 0; i < unknown_fields.field_count(); i++) {
     const UnknownField& field = unknown_fields.field(i);
 
@@ -305,9 +305,9 @@ size_t WireFormat::ComputeUnknownFieldsSize(
   return size;
 }
 
-size_t WireFormat::ComputeUnknownMessageSetItemsSize(
+size_t WireFormat::ComputeUnknownMessageSetItemsSize( 
     const UnknownFieldSet& unknown_fields) {
-  size_t size = 0;
+  size_t size = 0; 
   for (int i = 0; i < unknown_fields.field_count(); i++) {
     const UnknownField& field = unknown_fields.field(i);
 
@@ -1036,16 +1036,16 @@ uint8* WireFormat::_InternalSerialize(const Message& message, uint8* target,
   const Reflection* message_reflection = message.GetReflection();
 
   std::vector<const FieldDescriptor*> fields;
-
-  // Fields of map entry should always be serialized.
-  if (descriptor->options().map_entry()) {
-    for (int i = 0; i < descriptor->field_count(); i++) {
-      fields.push_back(descriptor->field(i));
-    }
-  } else {
-    message_reflection->ListFields(message, &fields);
-  }
-
+ 
+  // Fields of map entry should always be serialized. 
+  if (descriptor->options().map_entry()) { 
+    for (int i = 0; i < descriptor->field_count(); i++) { 
+      fields.push_back(descriptor->field(i)); 
+    } 
+  } else { 
+    message_reflection->ListFields(message, &fields); 
+  } 
+ 
   for (auto field : fields) {
     target = InternalSerializeField(field, message, target, stream);
   }
@@ -1063,64 +1063,64 @@ uint8* SerializeMapKeyWithCachedSizes(const FieldDescriptor* field,
                                       const MapKey& value, uint8* target,
                                       io::EpsCopyOutputStream* stream) {
   target = stream->EnsureSpace(target);
-  switch (field->type()) {
-    case FieldDescriptor::TYPE_DOUBLE:
-    case FieldDescriptor::TYPE_FLOAT:
-    case FieldDescriptor::TYPE_GROUP:
-    case FieldDescriptor::TYPE_MESSAGE:
-    case FieldDescriptor::TYPE_BYTES:
-    case FieldDescriptor::TYPE_ENUM:
-      GOOGLE_LOG(FATAL) << "Unsupported";
-      break;
+  switch (field->type()) { 
+    case FieldDescriptor::TYPE_DOUBLE: 
+    case FieldDescriptor::TYPE_FLOAT: 
+    case FieldDescriptor::TYPE_GROUP: 
+    case FieldDescriptor::TYPE_MESSAGE: 
+    case FieldDescriptor::TYPE_BYTES: 
+    case FieldDescriptor::TYPE_ENUM: 
+      GOOGLE_LOG(FATAL) << "Unsupported"; 
+      break; 
 #define CASE_TYPE(FieldType, CamelFieldType, CamelCppType)   \
   case FieldDescriptor::TYPE_##FieldType:                    \
     target = WireFormatLite::Write##CamelFieldType##ToArray( \
         1, value.Get##CamelCppType##Value(), target);        \
-    break;
-      CASE_TYPE(INT64, Int64, Int64)
-      CASE_TYPE(UINT64, UInt64, UInt64)
-      CASE_TYPE(INT32, Int32, Int32)
-      CASE_TYPE(FIXED64, Fixed64, UInt64)
-      CASE_TYPE(FIXED32, Fixed32, UInt32)
-      CASE_TYPE(BOOL, Bool, Bool)
-      CASE_TYPE(UINT32, UInt32, UInt32)
-      CASE_TYPE(SFIXED32, SFixed32, Int32)
-      CASE_TYPE(SFIXED64, SFixed64, Int64)
-      CASE_TYPE(SINT32, SInt32, Int32)
-      CASE_TYPE(SINT64, SInt64, Int64)
-#undef CASE_TYPE
+    break; 
+      CASE_TYPE(INT64, Int64, Int64) 
+      CASE_TYPE(UINT64, UInt64, UInt64) 
+      CASE_TYPE(INT32, Int32, Int32) 
+      CASE_TYPE(FIXED64, Fixed64, UInt64) 
+      CASE_TYPE(FIXED32, Fixed32, UInt32) 
+      CASE_TYPE(BOOL, Bool, Bool) 
+      CASE_TYPE(UINT32, UInt32, UInt32) 
+      CASE_TYPE(SFIXED32, SFixed32, Int32) 
+      CASE_TYPE(SFIXED64, SFixed64, Int64) 
+      CASE_TYPE(SINT32, SInt32, Int32) 
+      CASE_TYPE(SINT64, SInt64, Int64) 
+#undef CASE_TYPE 
     case FieldDescriptor::TYPE_STRING:
       target = stream->WriteString(1, value.GetStringValue(), target);
       break;
-  }
+  } 
   return target;
-}
-
+} 
+ 
 static uint8* SerializeMapValueRefWithCachedSizes(
     const FieldDescriptor* field, const MapValueConstRef& value, uint8* target,
     io::EpsCopyOutputStream* stream) {
   target = stream->EnsureSpace(target);
-  switch (field->type()) {
+  switch (field->type()) { 
 #define CASE_TYPE(FieldType, CamelFieldType, CamelCppType)   \
   case FieldDescriptor::TYPE_##FieldType:                    \
     target = WireFormatLite::Write##CamelFieldType##ToArray( \
         2, value.Get##CamelCppType##Value(), target);        \
-    break;
-    CASE_TYPE(INT64, Int64, Int64)
-    CASE_TYPE(UINT64, UInt64, UInt64)
-    CASE_TYPE(INT32, Int32, Int32)
-    CASE_TYPE(FIXED64, Fixed64, UInt64)
-    CASE_TYPE(FIXED32, Fixed32, UInt32)
-    CASE_TYPE(BOOL, Bool, Bool)
-    CASE_TYPE(UINT32, UInt32, UInt32)
-    CASE_TYPE(SFIXED32, SFixed32, Int32)
-    CASE_TYPE(SFIXED64, SFixed64, Int64)
-    CASE_TYPE(SINT32, SInt32, Int32)
-    CASE_TYPE(SINT64, SInt64, Int64)
-    CASE_TYPE(ENUM, Enum, Enum)
-    CASE_TYPE(DOUBLE, Double, Double)
-    CASE_TYPE(FLOAT, Float, Float)
-#undef CASE_TYPE
+    break; 
+    CASE_TYPE(INT64, Int64, Int64) 
+    CASE_TYPE(UINT64, UInt64, UInt64) 
+    CASE_TYPE(INT32, Int32, Int32) 
+    CASE_TYPE(FIXED64, Fixed64, UInt64) 
+    CASE_TYPE(FIXED32, Fixed32, UInt32) 
+    CASE_TYPE(BOOL, Bool, Bool) 
+    CASE_TYPE(UINT32, UInt32, UInt32) 
+    CASE_TYPE(SFIXED32, SFixed32, Int32) 
+    CASE_TYPE(SFIXED64, SFixed64, Int64) 
+    CASE_TYPE(SINT32, SInt32, Int32) 
+    CASE_TYPE(SINT64, SInt64, Int64) 
+    CASE_TYPE(ENUM, Enum, Enum) 
+    CASE_TYPE(DOUBLE, Double, Double) 
+    CASE_TYPE(FLOAT, Float, Float) 
+#undef CASE_TYPE 
     case FieldDescriptor::TYPE_STRING:
     case FieldDescriptor::TYPE_BYTES:
       target = stream->WriteString(2, value.GetStringValue(), target);
@@ -1133,64 +1133,64 @@ static uint8* SerializeMapValueRefWithCachedSizes(
       target = WireFormatLite::InternalWriteGroup(2, value.GetMessageValue(),
                                                   target, stream);
       break;
-  }
+  } 
   return target;
-}
-
-class MapKeySorter {
- public:
-  static std::vector<MapKey> SortKey(const Message& message,
-                                     const Reflection* reflection,
-                                     const FieldDescriptor* field) {
-    std::vector<MapKey> sorted_key_list;
-    for (MapIterator it =
-             reflection->MapBegin(const_cast<Message*>(&message), field);
-         it != reflection->MapEnd(const_cast<Message*>(&message), field);
-         ++it) {
-      sorted_key_list.push_back(it.GetKey());
-    }
-    MapKeyComparator comparator;
-    std::sort(sorted_key_list.begin(), sorted_key_list.end(), comparator);
-    return sorted_key_list;
-  }
-
- private:
-  class MapKeyComparator {
-   public:
-    bool operator()(const MapKey& a, const MapKey& b) const {
-      GOOGLE_DCHECK(a.type() == b.type());
-      switch (a.type()) {
-#define CASE_TYPE(CppType, CamelCppType)                                \
-  case FieldDescriptor::CPPTYPE_##CppType: {                            \
-    return a.Get##CamelCppType##Value() < b.Get##CamelCppType##Value(); \
-  }
-        CASE_TYPE(STRING, String)
-        CASE_TYPE(INT64, Int64)
-        CASE_TYPE(INT32, Int32)
-        CASE_TYPE(UINT64, UInt64)
-        CASE_TYPE(UINT32, UInt32)
-        CASE_TYPE(BOOL, Bool)
-#undef CASE_TYPE
-
-        default:
-          GOOGLE_LOG(DFATAL) << "Invalid key for map field.";
-          return true;
-      }
-    }
-  };
-};
-
+} 
+ 
+class MapKeySorter { 
+ public: 
+  static std::vector<MapKey> SortKey(const Message& message, 
+                                     const Reflection* reflection, 
+                                     const FieldDescriptor* field) { 
+    std::vector<MapKey> sorted_key_list; 
+    for (MapIterator it = 
+             reflection->MapBegin(const_cast<Message*>(&message), field); 
+         it != reflection->MapEnd(const_cast<Message*>(&message), field); 
+         ++it) { 
+      sorted_key_list.push_back(it.GetKey()); 
+    } 
+    MapKeyComparator comparator; 
+    std::sort(sorted_key_list.begin(), sorted_key_list.end(), comparator); 
+    return sorted_key_list; 
+  } 
+ 
+ private: 
+  class MapKeyComparator { 
+   public: 
+    bool operator()(const MapKey& a, const MapKey& b) const { 
+      GOOGLE_DCHECK(a.type() == b.type()); 
+      switch (a.type()) { 
+#define CASE_TYPE(CppType, CamelCppType)                                \ 
+  case FieldDescriptor::CPPTYPE_##CppType: {                            \ 
+    return a.Get##CamelCppType##Value() < b.Get##CamelCppType##Value(); \ 
+  } 
+        CASE_TYPE(STRING, String) 
+        CASE_TYPE(INT64, Int64) 
+        CASE_TYPE(INT32, Int32) 
+        CASE_TYPE(UINT64, UInt64) 
+        CASE_TYPE(UINT32, UInt32) 
+        CASE_TYPE(BOOL, Bool) 
+#undef CASE_TYPE 
+ 
+        default: 
+          GOOGLE_LOG(DFATAL) << "Invalid key for map field."; 
+          return true; 
+      } 
+    } 
+  }; 
+}; 
+ 
 static uint8* InternalSerializeMapEntry(const FieldDescriptor* field,
                                         const MapKey& key,
                                         const MapValueConstRef& value,
                                         uint8* target,
                                         io::EpsCopyOutputStream* stream) {
-  const FieldDescriptor* key_field = field->message_type()->field(0);
-  const FieldDescriptor* value_field = field->message_type()->field(1);
-
-  size_t size = kMapEntryTagByteSize;
-  size += MapKeyDataOnlyByteSize(key_field, key);
-  size += MapValueRefDataOnlyByteSize(value_field, value);
+  const FieldDescriptor* key_field = field->message_type()->field(0); 
+  const FieldDescriptor* value_field = field->message_type()->field(1); 
+ 
+  size_t size = kMapEntryTagByteSize; 
+  size += MapKeyDataOnlyByteSize(key_field, key); 
+  size += MapValueRefDataOnlyByteSize(value_field, value); 
   target = stream->EnsureSpace(target);
   target = WireFormatLite::WriteTagToArray(
       field->number(), WireFormatLite::WIRETYPE_LENGTH_DELIMITED, target);
@@ -1199,8 +1199,8 @@ static uint8* InternalSerializeMapEntry(const FieldDescriptor* field,
   target =
       SerializeMapValueRefWithCachedSizes(value_field, value, target, stream);
   return target;
-}
-
+} 
+ 
 uint8* WireFormat::InternalSerializeField(const FieldDescriptor* field,
                                           const Message& message, uint8* target,
                                           io::EpsCopyOutputStream* stream) {
@@ -1213,66 +1213,66 @@ uint8* WireFormat::InternalSerializeField(const FieldDescriptor* field,
     return InternalSerializeMessageSetItem(field, message, target, stream);
   }
 
-  // For map fields, we can use either repeated field reflection or map
-  // reflection.  Our choice has some subtle effects.  If we use repeated field
-  // reflection here, then the repeated field representation becomes
-  // authoritative for this field: any existing references that came from map
-  // reflection remain valid for reading, but mutations to them are lost and
-  // will be overwritten next time we call map reflection!
-  //
-  // So far this mainly affects Python, which keeps long-term references to map
-  // values around, and always uses map reflection.  See: b/35918691
-  //
-  // Here we choose to use map reflection API as long as the internal
-  // map is valid. In this way, the serialization doesn't change map field's
-  // internal state and existing references that came from map reflection remain
-  // valid for both reading and writing.
-  if (field->is_map()) {
+  // For map fields, we can use either repeated field reflection or map 
+  // reflection.  Our choice has some subtle effects.  If we use repeated field 
+  // reflection here, then the repeated field representation becomes 
+  // authoritative for this field: any existing references that came from map 
+  // reflection remain valid for reading, but mutations to them are lost and 
+  // will be overwritten next time we call map reflection! 
+  // 
+  // So far this mainly affects Python, which keeps long-term references to map 
+  // values around, and always uses map reflection.  See: b/35918691 
+  // 
+  // Here we choose to use map reflection API as long as the internal 
+  // map is valid. In this way, the serialization doesn't change map field's 
+  // internal state and existing references that came from map reflection remain 
+  // valid for both reading and writing. 
+  if (field->is_map()) { 
     const MapFieldBase* map_field =
         message_reflection->GetMapData(message, field);
-    if (map_field->IsMapValid()) {
+    if (map_field->IsMapValid()) { 
       if (stream->IsSerializationDeterministic()) {
-        std::vector<MapKey> sorted_key_list =
-            MapKeySorter::SortKey(message, message_reflection, field);
-        for (std::vector<MapKey>::iterator it = sorted_key_list.begin();
-             it != sorted_key_list.end(); ++it) {
+        std::vector<MapKey> sorted_key_list = 
+            MapKeySorter::SortKey(message, message_reflection, field); 
+        for (std::vector<MapKey>::iterator it = sorted_key_list.begin(); 
+             it != sorted_key_list.end(); ++it) { 
           MapValueConstRef map_value;
           message_reflection->LookupMapValue(message, field, *it, &map_value);
           target =
               InternalSerializeMapEntry(field, *it, map_value, target, stream);
-        }
-      } else {
-        for (MapIterator it = message_reflection->MapBegin(
-                 const_cast<Message*>(&message), field);
-             it !=
-             message_reflection->MapEnd(const_cast<Message*>(&message), field);
-             ++it) {
+        } 
+      } else { 
+        for (MapIterator it = message_reflection->MapBegin( 
+                 const_cast<Message*>(&message), field); 
+             it != 
+             message_reflection->MapEnd(const_cast<Message*>(&message), field); 
+             ++it) { 
           target = InternalSerializeMapEntry(field, it.GetKey(),
                                              it.GetValueRef(), target, stream);
-        }
-      }
-
+        } 
+      } 
+ 
       return target;
-    }
-  }
+    } 
+  } 
   int count = 0;
 
   if (field->is_repeated()) {
     count = message_reflection->FieldSize(message, field);
-  } else if (field->containing_type()->options().map_entry()) {
-    // Map entry fields always need to be serialized.
-    count = 1;
+  } else if (field->containing_type()->options().map_entry()) { 
+    // Map entry fields always need to be serialized. 
+    count = 1; 
   } else if (message_reflection->HasField(message, field)) {
     count = 1;
   }
 
-  // map_entries is for maps that'll be deterministically serialized.
-  std::vector<const Message*> map_entries;
+  // map_entries is for maps that'll be deterministically serialized. 
+  std::vector<const Message*> map_entries; 
   if (count > 1 && field->is_map() && stream->IsSerializationDeterministic()) {
-    map_entries =
-        DynamicMapSorter::Sort(message, count, message_reflection, field);
-  }
-
+    map_entries = 
+        DynamicMapSorter::Sort(message, count, message_reflection, field); 
+  } 
+ 
   if (field->is_packed()) {
     if (count == 0) return target;
     target = stream->EnsureSpace(target);
@@ -1443,23 +1443,23 @@ uint8* WireFormat::InternalSerializeMessageSetItem(
 
 // ===================================================================
 
-size_t WireFormat::ByteSize(const Message& message) {
+size_t WireFormat::ByteSize(const Message& message) { 
   const Descriptor* descriptor = message.GetDescriptor();
   const Reflection* message_reflection = message.GetReflection();
 
-  size_t our_size = 0;
+  size_t our_size = 0; 
 
   std::vector<const FieldDescriptor*> fields;
-
-  // Fields of map entry should always be serialized.
-  if (descriptor->options().map_entry()) {
-    for (int i = 0; i < descriptor->field_count(); i++) {
-      fields.push_back(descriptor->field(i));
-    }
-  } else {
-    message_reflection->ListFields(message, &fields);
-  }
-
+ 
+  // Fields of map entry should always be serialized. 
+  if (descriptor->options().map_entry()) { 
+    for (int i = 0; i < descriptor->field_count(); i++) { 
+      fields.push_back(descriptor->field(i)); 
+    } 
+  } else { 
+    message_reflection->ListFields(message, &fields); 
+  } 
+ 
   for (const FieldDescriptor* field : fields) {
     our_size += FieldByteSize(field, message);
   }
@@ -1486,7 +1486,7 @@ size_t WireFormat::FieldByteSize(const FieldDescriptor* field,
     return MessageSetItemByteSize(field, message);
   }
 
-  size_t count = 0;
+  size_t count = 0; 
   if (field->is_repeated()) {
     if (field->is_map()) {
       const MapFieldBase* map_field =
@@ -1499,15 +1499,15 @@ size_t WireFormat::FieldByteSize(const FieldDescriptor* field,
     } else {
       count = FromIntSize(message_reflection->FieldSize(message, field));
     }
-  } else if (field->containing_type()->options().map_entry()) {
-    // Map entry fields always need to be serialized.
-    count = 1;
+  } else if (field->containing_type()->options().map_entry()) { 
+    // Map entry fields always need to be serialized. 
+    count = 1; 
   } else if (message_reflection->HasField(message, field)) {
     count = 1;
   }
 
-  const size_t data_size = FieldDataOnlyByteSize(field, message);
-  size_t our_size = data_size;
+  const size_t data_size = FieldDataOnlyByteSize(field, message); 
+  size_t our_size = data_size; 
   if (field->is_packed()) {
     if (data_size > 0) {
       // Packed fields get serialized like a string, not their native type.
@@ -1524,117 +1524,117 @@ size_t WireFormat::FieldByteSize(const FieldDescriptor* field,
 
 size_t MapKeyDataOnlyByteSize(const FieldDescriptor* field,
                               const MapKey& value) {
-  GOOGLE_DCHECK_EQ(FieldDescriptor::TypeToCppType(field->type()), value.type());
-  switch (field->type()) {
-    case FieldDescriptor::TYPE_DOUBLE:
-    case FieldDescriptor::TYPE_FLOAT:
-    case FieldDescriptor::TYPE_GROUP:
-    case FieldDescriptor::TYPE_MESSAGE:
-    case FieldDescriptor::TYPE_BYTES:
-    case FieldDescriptor::TYPE_ENUM:
-      GOOGLE_LOG(FATAL) << "Unsupported";
-      return 0;
-#define CASE_TYPE(FieldType, CamelFieldType, CamelCppType) \
-  case FieldDescriptor::TYPE_##FieldType:                  \
-    return WireFormatLite::CamelFieldType##Size(           \
-        value.Get##CamelCppType##Value());
-
-#define FIXED_CASE_TYPE(FieldType, CamelFieldType) \
-  case FieldDescriptor::TYPE_##FieldType:          \
-    return WireFormatLite::k##CamelFieldType##Size;
-
-      CASE_TYPE(INT32, Int32, Int32);
-      CASE_TYPE(INT64, Int64, Int64);
-      CASE_TYPE(UINT32, UInt32, UInt32);
-      CASE_TYPE(UINT64, UInt64, UInt64);
-      CASE_TYPE(SINT32, SInt32, Int32);
-      CASE_TYPE(SINT64, SInt64, Int64);
-      CASE_TYPE(STRING, String, String);
-      FIXED_CASE_TYPE(FIXED32, Fixed32);
-      FIXED_CASE_TYPE(FIXED64, Fixed64);
-      FIXED_CASE_TYPE(SFIXED32, SFixed32);
-      FIXED_CASE_TYPE(SFIXED64, SFixed64);
-      FIXED_CASE_TYPE(BOOL, Bool);
-
-#undef CASE_TYPE
-#undef FIXED_CASE_TYPE
-  }
-  GOOGLE_LOG(FATAL) << "Cannot get here";
-  return 0;
-}
-
-static size_t MapValueRefDataOnlyByteSize(const FieldDescriptor* field,
+  GOOGLE_DCHECK_EQ(FieldDescriptor::TypeToCppType(field->type()), value.type()); 
+  switch (field->type()) { 
+    case FieldDescriptor::TYPE_DOUBLE: 
+    case FieldDescriptor::TYPE_FLOAT: 
+    case FieldDescriptor::TYPE_GROUP: 
+    case FieldDescriptor::TYPE_MESSAGE: 
+    case FieldDescriptor::TYPE_BYTES: 
+    case FieldDescriptor::TYPE_ENUM: 
+      GOOGLE_LOG(FATAL) << "Unsupported"; 
+      return 0; 
+#define CASE_TYPE(FieldType, CamelFieldType, CamelCppType) \ 
+  case FieldDescriptor::TYPE_##FieldType:                  \ 
+    return WireFormatLite::CamelFieldType##Size(           \ 
+        value.Get##CamelCppType##Value()); 
+ 
+#define FIXED_CASE_TYPE(FieldType, CamelFieldType) \ 
+  case FieldDescriptor::TYPE_##FieldType:          \ 
+    return WireFormatLite::k##CamelFieldType##Size; 
+ 
+      CASE_TYPE(INT32, Int32, Int32); 
+      CASE_TYPE(INT64, Int64, Int64); 
+      CASE_TYPE(UINT32, UInt32, UInt32); 
+      CASE_TYPE(UINT64, UInt64, UInt64); 
+      CASE_TYPE(SINT32, SInt32, Int32); 
+      CASE_TYPE(SINT64, SInt64, Int64); 
+      CASE_TYPE(STRING, String, String); 
+      FIXED_CASE_TYPE(FIXED32, Fixed32); 
+      FIXED_CASE_TYPE(FIXED64, Fixed64); 
+      FIXED_CASE_TYPE(SFIXED32, SFixed32); 
+      FIXED_CASE_TYPE(SFIXED64, SFixed64); 
+      FIXED_CASE_TYPE(BOOL, Bool); 
+ 
+#undef CASE_TYPE 
+#undef FIXED_CASE_TYPE 
+  } 
+  GOOGLE_LOG(FATAL) << "Cannot get here"; 
+  return 0; 
+} 
+ 
+static size_t MapValueRefDataOnlyByteSize(const FieldDescriptor* field, 
                                           const MapValueConstRef& value) {
-  switch (field->type()) {
-    case FieldDescriptor::TYPE_GROUP:
-      GOOGLE_LOG(FATAL) << "Unsupported";
-      return 0;
-#define CASE_TYPE(FieldType, CamelFieldType, CamelCppType) \
-  case FieldDescriptor::TYPE_##FieldType:                  \
-    return WireFormatLite::CamelFieldType##Size(           \
-        value.Get##CamelCppType##Value());
-
-#define FIXED_CASE_TYPE(FieldType, CamelFieldType) \
-  case FieldDescriptor::TYPE_##FieldType:          \
-    return WireFormatLite::k##CamelFieldType##Size;
-
-      CASE_TYPE(INT32, Int32, Int32);
-      CASE_TYPE(INT64, Int64, Int64);
-      CASE_TYPE(UINT32, UInt32, UInt32);
-      CASE_TYPE(UINT64, UInt64, UInt64);
-      CASE_TYPE(SINT32, SInt32, Int32);
-      CASE_TYPE(SINT64, SInt64, Int64);
-      CASE_TYPE(STRING, String, String);
-      CASE_TYPE(BYTES, Bytes, String);
-      CASE_TYPE(ENUM, Enum, Enum);
-      CASE_TYPE(MESSAGE, Message, Message);
-      FIXED_CASE_TYPE(FIXED32, Fixed32);
-      FIXED_CASE_TYPE(FIXED64, Fixed64);
-      FIXED_CASE_TYPE(SFIXED32, SFixed32);
-      FIXED_CASE_TYPE(SFIXED64, SFixed64);
-      FIXED_CASE_TYPE(DOUBLE, Double);
-      FIXED_CASE_TYPE(FLOAT, Float);
-      FIXED_CASE_TYPE(BOOL, Bool);
-
-#undef CASE_TYPE
-#undef FIXED_CASE_TYPE
-  }
-  GOOGLE_LOG(FATAL) << "Cannot get here";
-  return 0;
-}
-
+  switch (field->type()) { 
+    case FieldDescriptor::TYPE_GROUP: 
+      GOOGLE_LOG(FATAL) << "Unsupported"; 
+      return 0; 
+#define CASE_TYPE(FieldType, CamelFieldType, CamelCppType) \ 
+  case FieldDescriptor::TYPE_##FieldType:                  \ 
+    return WireFormatLite::CamelFieldType##Size(           \ 
+        value.Get##CamelCppType##Value()); 
+ 
+#define FIXED_CASE_TYPE(FieldType, CamelFieldType) \ 
+  case FieldDescriptor::TYPE_##FieldType:          \ 
+    return WireFormatLite::k##CamelFieldType##Size; 
+ 
+      CASE_TYPE(INT32, Int32, Int32); 
+      CASE_TYPE(INT64, Int64, Int64); 
+      CASE_TYPE(UINT32, UInt32, UInt32); 
+      CASE_TYPE(UINT64, UInt64, UInt64); 
+      CASE_TYPE(SINT32, SInt32, Int32); 
+      CASE_TYPE(SINT64, SInt64, Int64); 
+      CASE_TYPE(STRING, String, String); 
+      CASE_TYPE(BYTES, Bytes, String); 
+      CASE_TYPE(ENUM, Enum, Enum); 
+      CASE_TYPE(MESSAGE, Message, Message); 
+      FIXED_CASE_TYPE(FIXED32, Fixed32); 
+      FIXED_CASE_TYPE(FIXED64, Fixed64); 
+      FIXED_CASE_TYPE(SFIXED32, SFixed32); 
+      FIXED_CASE_TYPE(SFIXED64, SFixed64); 
+      FIXED_CASE_TYPE(DOUBLE, Double); 
+      FIXED_CASE_TYPE(FLOAT, Float); 
+      FIXED_CASE_TYPE(BOOL, Bool); 
+ 
+#undef CASE_TYPE 
+#undef FIXED_CASE_TYPE 
+  } 
+  GOOGLE_LOG(FATAL) << "Cannot get here"; 
+  return 0; 
+} 
+ 
 size_t WireFormat::FieldDataOnlyByteSize(const FieldDescriptor* field,
                                          const Message& message) {
   const Reflection* message_reflection = message.GetReflection();
 
-  size_t data_size = 0;
-
-  if (field->is_map()) {
+  size_t data_size = 0; 
+ 
+  if (field->is_map()) { 
     const MapFieldBase* map_field =
         message_reflection->GetMapData(message, field);
-    if (map_field->IsMapValid()) {
-      MapIterator iter(const_cast<Message*>(&message), field);
-      MapIterator end(const_cast<Message*>(&message), field);
-      const FieldDescriptor* key_field = field->message_type()->field(0);
-      const FieldDescriptor* value_field = field->message_type()->field(1);
-      for (map_field->MapBegin(&iter), map_field->MapEnd(&end); iter != end;
-           ++iter) {
-        size_t size = kMapEntryTagByteSize;
-        size += MapKeyDataOnlyByteSize(key_field, iter.GetKey());
-        size += MapValueRefDataOnlyByteSize(value_field, iter.GetValueRef());
-        data_size += WireFormatLite::LengthDelimitedSize(size);
-      }
-      return data_size;
-    }
-  }
-
-  size_t count = 0;
+    if (map_field->IsMapValid()) { 
+      MapIterator iter(const_cast<Message*>(&message), field); 
+      MapIterator end(const_cast<Message*>(&message), field); 
+      const FieldDescriptor* key_field = field->message_type()->field(0); 
+      const FieldDescriptor* value_field = field->message_type()->field(1); 
+      for (map_field->MapBegin(&iter), map_field->MapEnd(&end); iter != end; 
+           ++iter) { 
+        size_t size = kMapEntryTagByteSize; 
+        size += MapKeyDataOnlyByteSize(key_field, iter.GetKey()); 
+        size += MapValueRefDataOnlyByteSize(value_field, iter.GetValueRef()); 
+        data_size += WireFormatLite::LengthDelimitedSize(size); 
+      } 
+      return data_size; 
+    } 
+  } 
+ 
+  size_t count = 0; 
   if (field->is_repeated()) {
-    count =
-        internal::FromIntSize(message_reflection->FieldSize(message, field));
-  } else if (field->containing_type()->options().map_entry()) {
-    // Map entry fields always need to be serialized.
-    count = 1;
+    count = 
+        internal::FromIntSize(message_reflection->FieldSize(message, field)); 
+  } else if (field->containing_type()->options().map_entry()) { 
+    // Map entry fields always need to be serialized. 
+    count = 1; 
   } else if (message_reflection->HasField(message, field)) {
     count = 1;
   }
@@ -1718,14 +1718,14 @@ size_t WireFormat::MessageSetItemByteSize(const FieldDescriptor* field,
                                           const Message& message) {
   const Reflection* message_reflection = message.GetReflection();
 
-  size_t our_size = WireFormatLite::kMessageSetItemTagsSize;
+  size_t our_size = WireFormatLite::kMessageSetItemTagsSize; 
 
   // type_id
   our_size += io::CodedOutputStream::VarintSize32(field->number());
 
   // message
   const Message& sub_message = message_reflection->GetMessage(message, field);
-  size_t message_size = sub_message.ByteSizeLong();
+  size_t message_size = sub_message.ByteSizeLong(); 
 
   our_size += io::CodedOutputStream::VarintSize32(message_size);
   our_size += message_size;

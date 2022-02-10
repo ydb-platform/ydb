@@ -16,9 +16,9 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/base/log_severity
 )
 
-ADDINCL(
-    GLOBAL contrib/restricted/abseil-cpp-tstring
-)
+ADDINCL( 
+    GLOBAL contrib/restricted/abseil-cpp-tstring 
+) 
 
 NO_COMPILER_WARNINGS()
 

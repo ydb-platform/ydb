@@ -37,7 +37,7 @@
 #endif
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace container_internal {
 
 template <size_t Alignment>
@@ -454,7 +454,7 @@ struct map_slot_policy {
 };
 
 }  // namespace container_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_CONTAINER_INTERNAL_CONTAINER_MEMORY_H_

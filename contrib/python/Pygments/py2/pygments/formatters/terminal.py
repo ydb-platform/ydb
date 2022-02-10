@@ -5,7 +5,7 @@
 
     Formatter for terminal output with ANSI sequences.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -26,33 +26,33 @@ __all__ = ['TerminalFormatter']
 TERMINAL_COLORS = {
     Token:              ('',            ''),
 
-    Whitespace:         ('gray',   'brightblack'),
-    Comment:            ('gray',   'brightblack'),
-    Comment.Preproc:    ('cyan',        'brightcyan'),
-    Keyword:            ('blue',    'brightblue'),
-    Keyword.Type:       ('cyan',        'brightcyan'),
-    Operator.Word:      ('magenta',      'brightmagenta'),
-    Name.Builtin:       ('cyan',        'brightcyan'),
-    Name.Function:      ('green',   'brightgreen'),
-    Name.Namespace:     ('_cyan_',      '_brightcyan_'),
-    Name.Class:         ('_green_', '_brightgreen_'),
-    Name.Exception:     ('cyan',        'brightcyan'),
-    Name.Decorator:     ('brightblack',    'gray'),
-    Name.Variable:      ('red',     'brightred'),
-    Name.Constant:      ('red',     'brightred'),
-    Name.Attribute:     ('cyan',        'brightcyan'),
-    Name.Tag:           ('brightblue',        'brightblue'),
-    String:             ('yellow',       'yellow'),
-    Number:             ('blue',    'brightblue'),
+    Whitespace:         ('gray',   'brightblack'), 
+    Comment:            ('gray',   'brightblack'), 
+    Comment.Preproc:    ('cyan',        'brightcyan'), 
+    Keyword:            ('blue',    'brightblue'), 
+    Keyword.Type:       ('cyan',        'brightcyan'), 
+    Operator.Word:      ('magenta',      'brightmagenta'), 
+    Name.Builtin:       ('cyan',        'brightcyan'), 
+    Name.Function:      ('green',   'brightgreen'), 
+    Name.Namespace:     ('_cyan_',      '_brightcyan_'), 
+    Name.Class:         ('_green_', '_brightgreen_'), 
+    Name.Exception:     ('cyan',        'brightcyan'), 
+    Name.Decorator:     ('brightblack',    'gray'), 
+    Name.Variable:      ('red',     'brightred'), 
+    Name.Constant:      ('red',     'brightred'), 
+    Name.Attribute:     ('cyan',        'brightcyan'), 
+    Name.Tag:           ('brightblue',        'brightblue'), 
+    String:             ('yellow',       'yellow'), 
+    Number:             ('blue',    'brightblue'), 
 
-    Generic.Deleted:    ('brightred',        'brightred'),
-    Generic.Inserted:   ('green',  'brightgreen'),
+    Generic.Deleted:    ('brightred',        'brightred'), 
+    Generic.Inserted:   ('green',  'brightgreen'), 
     Generic.Heading:    ('**',         '**'),
-    Generic.Subheading: ('*magenta*',   '*brightmagenta*'),
+    Generic.Subheading: ('*magenta*',   '*brightmagenta*'), 
     Generic.Prompt:     ('**',         '**'),
-    Generic.Error:      ('brightred',        'brightred'),
+    Generic.Error:      ('brightred',        'brightred'), 
 
-    Error:              ('_brightred_',      '_brightred_'),
+    Error:              ('_brightred_',      '_brightred_'), 
 }
 
 

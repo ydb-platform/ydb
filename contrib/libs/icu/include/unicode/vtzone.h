@@ -82,9 +82,9 @@ public:
      * semantically unequal.
      * @stable ICU 3.8
      */
-#if __cplusplus > 201703L
+#if __cplusplus > 201703L 
     virtual UBool operator!=(const TimeZone& that) const;
-#endif
+#endif 
 
     /**
      * Create a <code>VTimeZone</code> instance by the time zone ID.

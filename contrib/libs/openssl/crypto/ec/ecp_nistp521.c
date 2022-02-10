@@ -174,14 +174,14 @@ static void felem_to_bin66(u8 out[66], const felem in)
 static int BN_to_felem(felem out, const BIGNUM *bn)
 {
     felem_bytearray b_out;
-    int num_bytes;
+    int num_bytes; 
 
-    if (BN_is_negative(bn)) {
+    if (BN_is_negative(bn)) { 
         ECerr(EC_F_BN_TO_FELEM, EC_R_BIGNUM_OUT_OF_RANGE);
         return 0;
     }
-    num_bytes = BN_bn2lebinpad(bn, b_out, sizeof(b_out));
-    if (num_bytes < 0) {
+    num_bytes = BN_bn2lebinpad(bn, b_out, sizeof(b_out)); 
+    if (num_bytes < 0) { 
         ECerr(EC_F_BN_TO_FELEM, EC_R_BIGNUM_OUT_OF_RANGE);
         return 0;
     }
@@ -192,9 +192,9 @@ static int BN_to_felem(felem out, const BIGNUM *bn)
 /* felem_to_BN converts an felem into an OpenSSL BIGNUM */
 static BIGNUM *felem_to_BN(BIGNUM *out, const felem in)
 {
-    felem_bytearray b_out;
-    felem_to_bin66(b_out, in);
-    return BN_lebin2bn(b_out, sizeof(b_out), out);
+    felem_bytearray b_out; 
+    felem_to_bin66(b_out, in); 
+    return BN_lebin2bn(b_out, sizeof(b_out), out); 
 }
 
 /*-
@@ -344,15 +344,15 @@ static void felem_diff64(felem out, const felem in)
 static void felem_diff_128_64(largefelem out, const felem in)
 {
     /*
-     * In order to prevent underflow, we add 64p mod p (which is equivalent
-     * to 0 mod p) before subtracting. p is 2^521 - 1, i.e. in binary a 521
-     * digit number with all bits set to 1. See "The representation of field
-     * elements" comment above for a description of how limbs are used to
-     * represent a number. 64p is represented with 8 limbs containing a number
-     * with 58 bits set and one limb with a number with 57 bits set.
+     * In order to prevent underflow, we add 64p mod p (which is equivalent 
+     * to 0 mod p) before subtracting. p is 2^521 - 1, i.e. in binary a 521 
+     * digit number with all bits set to 1. See "The representation of field 
+     * elements" comment above for a description of how limbs are used to 
+     * represent a number. 64p is represented with 8 limbs containing a number 
+     * with 58 bits set and one limb with a number with 57 bits set. 
      */
-    static const limb two63m6 = (((limb) 1) << 63) - (((limb) 1) << 6);
-    static const limb two63m5 = (((limb) 1) << 63) - (((limb) 1) << 5);
+    static const limb two63m6 = (((limb) 1) << 63) - (((limb) 1) << 6); 
+    static const limb two63m5 = (((limb) 1) << 63) - (((limb) 1) << 5); 
 
     out[0] += two63m6 - in[0];
     out[1] += two63m5 - in[1];
@@ -1274,7 +1274,7 @@ static void point_add(felem x3, felem y3, felem z3,
          * ffffffa51868783bf2f966b7fcc0148f709a5d03bb5c9b8899c47aebb6fb
          * 71e913863f7, in that case the penultimate intermediate is -9G and
          * the final digit is also -9G. Since this only happens for a single
-         * scalar, the timing leak is irrelevant. (Any attacker who wanted to
+         * scalar, the timing leak is irrelevant. (Any attacker who wanted to 
          * check whether a secret scalar was that exact value, can already do
          * so.)
          */
@@ -1871,8 +1871,8 @@ int ec_GFp_nistp521_points_mul(const EC_GROUP *group, EC_POINT *r,
     felem_bytearray *secrets = NULL;
     felem (*pre_comp)[17][3] = NULL;
     felem *tmp_felems = NULL;
-    unsigned i;
-    int num_bytes;
+    unsigned i; 
+    int num_bytes; 
     int have_pre_comp = 0;
     size_t num_points = num;
     felem x_in, y_in, z_in, x_out, y_out, z_out;
@@ -1947,14 +1947,14 @@ int ec_GFp_nistp521_points_mul(const EC_GROUP *group, EC_POINT *r,
          * i.e., they contribute nothing to the linear combination
          */
         for (i = 0; i < num_points; ++i) {
-            if (i == num) {
+            if (i == num) { 
                 /*
                  * we didn't have a valid precomputation, so we pick the
                  * generator
                  */
                 p = EC_GROUP_get0_generator(group);
                 p_scalar = scalar;
-            } else {
+            } else { 
                 /* the i^th point */
                 p = points[i];
                 p_scalar = scalars[i];
@@ -1971,16 +1971,16 @@ int ec_GFp_nistp521_points_mul(const EC_GROUP *group, EC_POINT *r,
                         ECerr(EC_F_EC_GFP_NISTP521_POINTS_MUL, ERR_R_BN_LIB);
                         goto err;
                     }
-                    num_bytes = BN_bn2lebinpad(tmp_scalar,
-                                               secrets[i], sizeof(secrets[i]));
-                } else {
-                    num_bytes = BN_bn2lebinpad(p_scalar,
-                                               secrets[i], sizeof(secrets[i]));
-                }
-                if (num_bytes < 0) {
-                    ECerr(EC_F_EC_GFP_NISTP521_POINTS_MUL, ERR_R_BN_LIB);
-                    goto err;
-                }
+                    num_bytes = BN_bn2lebinpad(tmp_scalar, 
+                                               secrets[i], sizeof(secrets[i])); 
+                } else { 
+                    num_bytes = BN_bn2lebinpad(p_scalar, 
+                                               secrets[i], sizeof(secrets[i])); 
+                } 
+                if (num_bytes < 0) { 
+                    ECerr(EC_F_EC_GFP_NISTP521_POINTS_MUL, ERR_R_BN_LIB); 
+                    goto err; 
+                } 
                 /* precompute multiples */
                 if ((!BN_to_felem(x_out, p->X)) ||
                     (!BN_to_felem(y_out, p->Y)) ||
@@ -2023,22 +2023,22 @@ int ec_GFp_nistp521_points_mul(const EC_GROUP *group, EC_POINT *r,
                 ECerr(EC_F_EC_GFP_NISTP521_POINTS_MUL, ERR_R_BN_LIB);
                 goto err;
             }
-            num_bytes = BN_bn2lebinpad(tmp_scalar, g_secret, sizeof(g_secret));
-        } else {
-            num_bytes = BN_bn2lebinpad(scalar, g_secret, sizeof(g_secret));
-        }
+            num_bytes = BN_bn2lebinpad(tmp_scalar, g_secret, sizeof(g_secret)); 
+        } else { 
+            num_bytes = BN_bn2lebinpad(scalar, g_secret, sizeof(g_secret)); 
+        } 
         /* do the multiplication with generator precomputation */
         batch_mul(x_out, y_out, z_out,
                   (const felem_bytearray(*))secrets, num_points,
                   g_secret,
                   mixed, (const felem(*)[17][3])pre_comp,
                   (const felem(*)[3])g_pre_comp);
-    } else {
+    } else { 
         /* do the multiplication without generator precomputation */
         batch_mul(x_out, y_out, z_out,
                   (const felem_bytearray(*))secrets, num_points,
                   NULL, mixed, (const felem(*)[17][3])pre_comp, NULL);
-    }
+    } 
     /* reduce the output to its unique minimal representation */
     felem_contract(x_in, x_out);
     felem_contract(y_in, y_out);

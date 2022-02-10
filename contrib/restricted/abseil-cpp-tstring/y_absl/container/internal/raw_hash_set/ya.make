@@ -37,9 +37,9 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/types
 )
 
-ADDINCL(
-    GLOBAL contrib/restricted/abseil-cpp-tstring
-)
+ADDINCL( 
+    GLOBAL contrib/restricted/abseil-cpp-tstring 
+) 
 
 NO_COMPILER_WARNINGS()
 

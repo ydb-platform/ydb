@@ -14,7 +14,7 @@ from setuptools.extern.six.moves import map, filter, filterfalse
 try:
     from setuptools.lib2to3_ex import Mixin2to3
 except ImportError:
-
+ 
     class Mixin2to3:
         def run_2to3(self, files, doctests=True):
             "do nothing"
@@ -68,9 +68,9 @@ class build_py(orig.build_py, Mixin2to3):
         return orig.build_py.__getattr__(self, attr)
 
     def build_module(self, module, module_file, package):
-        if six.PY2 and isinstance(package, six.string_types):
-            # avoid errors on Python 2 when unicode is passed (#190)
-            package = package.split('.')
+        if six.PY2 and isinstance(package, six.string_types): 
+            # avoid errors on Python 2 when unicode is passed (#190) 
+            package = package.split('.') 
         outfile, copied = orig.build_py.build_module(self, module, module_file,
                                                      package)
         if copied:
@@ -98,19 +98,19 @@ class build_py(orig.build_py, Mixin2to3):
 
     def find_data_files(self, package, src_dir):
         """Return filenames for package's data files in 'src_dir'"""
-        patterns = self._get_platform_patterns(
-            self.package_data,
-            package,
-            src_dir,
-        )
-        globs_expanded = map(glob, patterns)
-        # flatten the expanded globs into an iterable of matches
-        globs_matches = itertools.chain.from_iterable(globs_expanded)
-        glob_files = filter(os.path.isfile, globs_matches)
-        files = itertools.chain(
-            self.manifest_files.get(package, []),
-            glob_files,
-        )
+        patterns = self._get_platform_patterns( 
+            self.package_data, 
+            package, 
+            src_dir, 
+        ) 
+        globs_expanded = map(glob, patterns) 
+        # flatten the expanded globs into an iterable of matches 
+        globs_matches = itertools.chain.from_iterable(globs_expanded) 
+        glob_files = filter(os.path.isfile, globs_matches) 
+        files = itertools.chain( 
+            self.manifest_files.get(package, []), 
+            glob_files, 
+        ) 
         return self.exclude_data_files(package, src_dir, files)
 
     def build_package_data(self):
@@ -195,65 +195,65 @@ class build_py(orig.build_py, Mixin2to3):
 
     def exclude_data_files(self, package, src_dir, files):
         """Filter filenames for package's data files in 'src_dir'"""
-        files = list(files)
-        patterns = self._get_platform_patterns(
-            self.exclude_package_data,
-            package,
-            src_dir,
+        files = list(files) 
+        patterns = self._get_platform_patterns( 
+            self.exclude_package_data, 
+            package, 
+            src_dir, 
         )
-        match_groups = (
-            fnmatch.filter(files, pattern)
-            for pattern in patterns
+        match_groups = ( 
+            fnmatch.filter(files, pattern) 
+            for pattern in patterns 
         )
-        # flatten the groups of matches into an iterable of matches
-        matches = itertools.chain.from_iterable(match_groups)
-        bad = set(matches)
-        keepers = (
+        # flatten the groups of matches into an iterable of matches 
+        matches = itertools.chain.from_iterable(match_groups) 
+        bad = set(matches) 
+        keepers = ( 
             fn
             for fn in files
             if fn not in bad
-        )
-        # ditch dupes
-        return list(_unique_everseen(keepers))
+        ) 
+        # ditch dupes 
+        return list(_unique_everseen(keepers)) 
 
-    @staticmethod
-    def _get_platform_patterns(spec, package, src_dir):
-        """
-        yield platform-specific path patterns (suitable for glob
-        or fn_match) from a glob-based spec (such as
-        self.package_data or self.exclude_package_data)
-        matching package in src_dir.
-        """
-        raw_patterns = itertools.chain(
-            spec.get('', []),
-            spec.get(package, []),
-        )
-        return (
-            # Each pattern has to be converted to a platform-specific path
-            os.path.join(src_dir, convert_path(pattern))
-            for pattern in raw_patterns
-        )
+    @staticmethod 
+    def _get_platform_patterns(spec, package, src_dir): 
+        """ 
+        yield platform-specific path patterns (suitable for glob 
+        or fn_match) from a glob-based spec (such as 
+        self.package_data or self.exclude_package_data) 
+        matching package in src_dir. 
+        """ 
+        raw_patterns = itertools.chain( 
+            spec.get('', []), 
+            spec.get(package, []), 
+        ) 
+        return ( 
+            # Each pattern has to be converted to a platform-specific path 
+            os.path.join(src_dir, convert_path(pattern)) 
+            for pattern in raw_patterns 
+        ) 
 
-
-# from Python docs
-def _unique_everseen(iterable, key=None):
-    "List unique elements, preserving order. Remember all elements ever seen."
-    # unique_everseen('AAAABBBCCDAABBB') --> A B C D
-    # unique_everseen('ABBCcAD', str.lower) --> A B C D
-    seen = set()
-    seen_add = seen.add
-    if key is None:
-        for element in filterfalse(seen.__contains__, iterable):
-            seen_add(element)
-            yield element
-    else:
-        for element in iterable:
-            k = key(element)
-            if k not in seen:
-                seen_add(k)
-                yield element
-
-
+ 
+# from Python docs 
+def _unique_everseen(iterable, key=None): 
+    "List unique elements, preserving order. Remember all elements ever seen." 
+    # unique_everseen('AAAABBBCCDAABBB') --> A B C D 
+    # unique_everseen('ABBCcAD', str.lower) --> A B C D 
+    seen = set() 
+    seen_add = seen.add 
+    if key is None: 
+        for element in filterfalse(seen.__contains__, iterable): 
+            seen_add(element) 
+            yield element 
+    else: 
+        for element in iterable: 
+            k = key(element) 
+            if k not in seen: 
+                seen_add(k) 
+                yield element 
+ 
+ 
 def assert_relative(path):
     if not os.path.isabs(path):
         return path

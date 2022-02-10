@@ -30,12 +30,12 @@
 #include <atomic>
 #include <cstdint>
 
-#include "y_absl/base/config.h"
+#include "y_absl/base/config.h" 
 #include "y_absl/base/internal/per_thread_tls.h"
 #include "y_absl/base/optimization.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 struct SynchLocksHeld;
 struct SynchWaitParams;
@@ -209,7 +209,7 @@ void ClearCurrentThreadIdentity();
 #error ABSL_THREAD_IDENTITY_MODE cannot be directly set
 #elif defined(ABSL_FORCE_THREAD_IDENTITY_MODE)
 #define ABSL_THREAD_IDENTITY_MODE ABSL_FORCE_THREAD_IDENTITY_MODE
-#elif defined(_WIN32) && !defined(__MINGW32__)
+#elif defined(_WIN32) && !defined(__MINGW32__) 
 #define ABSL_THREAD_IDENTITY_MODE ABSL_THREAD_IDENTITY_MODE_USE_CPP11
 #elif defined(__APPLE__) && defined(ABSL_HAVE_THREAD_LOCAL)
 #define ABSL_THREAD_IDENTITY_MODE ABSL_THREAD_IDENTITY_MODE_USE_CPP11
@@ -227,20 +227,20 @@ void ClearCurrentThreadIdentity();
 #if ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_TLS || \
     ABSL_THREAD_IDENTITY_MODE == ABSL_THREAD_IDENTITY_MODE_USE_CPP11
 
-#if ABSL_PER_THREAD_TLS
-ABSL_CONST_INIT extern ABSL_PER_THREAD_TLS_KEYWORD ThreadIdentity*
-    thread_identity_ptr;
-#elif defined(ABSL_HAVE_THREAD_LOCAL)
-ABSL_CONST_INIT extern thread_local ThreadIdentity* thread_identity_ptr;
-#else
-#error Thread-local storage not detected on this platform
-#endif
+#if ABSL_PER_THREAD_TLS 
+ABSL_CONST_INIT extern ABSL_PER_THREAD_TLS_KEYWORD ThreadIdentity* 
+    thread_identity_ptr; 
+#elif defined(ABSL_HAVE_THREAD_LOCAL) 
+ABSL_CONST_INIT extern thread_local ThreadIdentity* thread_identity_ptr; 
+#else 
+#error Thread-local storage not detected on this platform 
+#endif 
 
 // thread_local variables cannot be in headers exposed by DLLs or in certain
 // build configurations on Apple platforms. However, it is important for
 // performance reasons in general that `CurrentThreadIdentityIfPresent` be
 // inlined. In the other cases we opt to have the function not be inlined. Note
-// that `CurrentThreadIdentityIfPresent` is declared above so we can exclude
+// that `CurrentThreadIdentityIfPresent` is declared above so we can exclude 
 // this entire inline definition.
 #if !defined(__APPLE__) && !defined(ABSL_BUILD_DLL) && \
     !defined(ABSL_CONSUME_DLL)
@@ -251,7 +251,7 @@ ABSL_CONST_INIT extern thread_local ThreadIdentity* thread_identity_ptr;
 inline ThreadIdentity* CurrentThreadIdentityIfPresent() {
   return thread_identity_ptr;
 }
-#endif
+#endif 
 
 #elif ABSL_THREAD_IDENTITY_MODE != \
     ABSL_THREAD_IDENTITY_MODE_USE_POSIX_SETSPECIFIC
@@ -259,7 +259,7 @@ inline ThreadIdentity* CurrentThreadIdentityIfPresent() {
 #endif
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_THREAD_IDENTITY_H_

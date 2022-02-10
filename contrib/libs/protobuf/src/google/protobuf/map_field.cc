@@ -76,29 +76,29 @@ void MapFieldBase::InternalSwap(MapFieldBase* other) {
   state_.store(other_state, std::memory_order_relaxed);
 }
 
-size_t MapFieldBase::SpaceUsedExcludingSelfLong() const {
+size_t MapFieldBase::SpaceUsedExcludingSelfLong() const { 
   ConstAccess();
   mutex_.Lock();
-  size_t size = SpaceUsedExcludingSelfNoLock();
+  size_t size = SpaceUsedExcludingSelfNoLock(); 
   mutex_.Unlock();
   ConstAccess();
   return size;
 }
 
-size_t MapFieldBase::SpaceUsedExcludingSelfNoLock() const {
+size_t MapFieldBase::SpaceUsedExcludingSelfNoLock() const { 
   if (repeated_field_ != NULL) {
-    return repeated_field_->SpaceUsedExcludingSelfLong();
+    return repeated_field_->SpaceUsedExcludingSelfLong(); 
   } else {
     return 0;
   }
 }
 
-bool MapFieldBase::IsMapValid() const {
+bool MapFieldBase::IsMapValid() const { 
   ConstAccess();
-  // "Acquire" insures the operation after SyncRepeatedFieldWithMap won't get
-  // executed before state_ is checked.
+  // "Acquire" insures the operation after SyncRepeatedFieldWithMap won't get 
+  // executed before state_ is checked. 
   int state = state_.load(std::memory_order_acquire);
-  return state != STATE_MODIFIED_REPEATED;
+  return state != STATE_MODIFIED_REPEATED; 
 }
 
 bool MapFieldBase::IsRepeatedFieldValid() const {
@@ -524,15 +524,15 @@ void DynamicMapField::SyncMapWithRepeatedFieldNoLock() const {
         GOOGLE_LOG(FATAL) << "Can't get here.";
         break;
     }
-
+ 
     if (MapFieldBase::arena_ == nullptr) {
       // Remove existing map value with same key.
       Map<MapKey, MapValueRef>::iterator iter = map->find(map_key);
       if (iter != map->end()) {
         iter->second.DeleteData();
       }
-    }
-
+    } 
+ 
     MapValueRef& map_val = (*map)[map_key];
     map_val.SetType(val_des->cpp_type());
     switch (val_des->cpp_type()) {
@@ -564,13 +564,13 @@ void DynamicMapField::SyncMapWithRepeatedFieldNoLock() const {
   }
 }
 
-size_t DynamicMapField::SpaceUsedExcludingSelfNoLock() const {
-  size_t size = 0;
+size_t DynamicMapField::SpaceUsedExcludingSelfNoLock() const { 
+  size_t size = 0; 
   if (MapFieldBase::repeated_field_ != NULL) {
-    size += MapFieldBase::repeated_field_->SpaceUsedExcludingSelfLong();
+    size += MapFieldBase::repeated_field_->SpaceUsedExcludingSelfLong(); 
   }
   size += sizeof(map_);
-  size_t map_size = map_.size();
+  size_t map_size = map_.size(); 
   if (map_size) {
     Map<MapKey, MapValueRef>::const_iterator it = map_.begin();
     size += sizeof(it->first) * map_size;
@@ -599,7 +599,7 @@ size_t DynamicMapField::SpaceUsedExcludingSelfNoLock() const {
       case FieldDescriptor::CPPTYPE_MESSAGE: {
         while (it != map_.end()) {
           const Message& message = it->second.GetMessageValue();
-          size += message.GetReflection()->SpaceUsedLong(message);
+          size += message.GetReflection()->SpaceUsedLong(message); 
           ++it;
         }
         break;

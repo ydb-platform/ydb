@@ -47,7 +47,7 @@ CURLcode Curl_http2_request_upgrade(struct dynbuf *req,
 CURLcode Curl_http2_setup(struct connectdata *conn);
 CURLcode Curl_http2_switched(struct connectdata *conn,
                              const char *data, size_t nread);
-/* called from http_setup_conn */
+/* called from http_setup_conn */ 
 void Curl_http2_setup_conn(struct connectdata *conn);
 void Curl_http2_setup_req(struct Curl_easy *data);
 void Curl_http2_done(struct Curl_easy *data, bool premature);

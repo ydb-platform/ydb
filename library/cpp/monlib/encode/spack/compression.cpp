@@ -10,7 +10,7 @@
 #include <util/stream/walk.h>
 
 #include <contrib/libs/lz4/lz4.h>
-#include <contrib/libs/xxhash/xxhash.h>
+#include <contrib/libs/xxhash/xxhash.h> 
 #include <contrib/libs/zlib/zlib.h>
 #define ZSTD_STATIC_LINKING_ONLY
 #include <contrib/libs/zstd/include/zstd.h>
@@ -60,7 +60,7 @@ namespace NMonitoring {
         struct TXxHash32 {
             static TCheckSum Calc(TBlock in) {
                 static const ui32 SEED = 0x1337c0de;
-                return XXH32(in.data(), in.size(), SEED);
+                return XXH32(in.data(), in.size(), SEED); 
             }
 
             static bool Check(TBlock in, TCheckSum checksum) {

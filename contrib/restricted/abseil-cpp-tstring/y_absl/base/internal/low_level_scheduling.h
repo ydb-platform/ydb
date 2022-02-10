@@ -29,7 +29,7 @@ extern "C" bool __google_disable_rescheduling(void);
 extern "C" void __google_enable_rescheduling(bool disable_result);
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 class CondVar;
 class Mutex;
 
@@ -128,7 +128,7 @@ inline SchedulingGuard::ScopedEnable::~ScopedEnable() {
 }
 
 }  // namespace base_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_BASE_INTERNAL_LOW_LEVEL_SCHEDULING_H_

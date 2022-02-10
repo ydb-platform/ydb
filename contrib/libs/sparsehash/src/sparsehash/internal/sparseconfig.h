@@ -9,7 +9,7 @@
 /* the location of the header defining hash functions */
 #ifndef HASH_FUN_H
 #define HASH_FUN_H <util/generic/hash.h>
-#endif
+#endif 
 
 /* the namespace of the hash<> function */
 #define HASH_NAMESPACE 

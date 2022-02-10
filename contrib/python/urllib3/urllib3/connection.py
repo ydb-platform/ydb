@@ -349,7 +349,7 @@ class HTTPSConnection(HTTPConnection):
         self.key_password = key_password
         self.assert_hostname = assert_hostname
         self.assert_fingerprint = assert_fingerprint
-        self.ca_certs = os.path.expanduser(ca_certs) \
+        self.ca_certs = os.path.expanduser(ca_certs) \ 
             if isinstance(ca_certs, six.string_types) else ca_certs
         self.ca_cert_dir = ca_cert_dir and os.path.expanduser(ca_cert_dir)
         self.ca_cert_data = ca_cert_data

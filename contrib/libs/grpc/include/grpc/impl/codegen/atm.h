@@ -1,25 +1,25 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
 #ifndef GRPC_IMPL_CODEGEN_ATM_H
 #define GRPC_IMPL_CODEGEN_ATM_H
 
-/** This interface provides atomic operations and barriers.
+/** This interface provides atomic operations and barriers. 
    It is internal to gpr support code and should not be used outside it.
 
    If an operation with acquire semantics precedes another memory access by the
@@ -46,7 +46,7 @@
 
    // Atomically return *p, with acquire semantics.
    gpr_atm gpr_atm_acq_load(gpr_atm *p);
-   gpr_atm gpr_atm_no_barrier_load(gpr_atm *p);
+   gpr_atm gpr_atm_no_barrier_load(gpr_atm *p); 
 
    // Atomically set *p = value, with release semantics.
    void gpr_atm_rel_store(gpr_atm *p, gpr_atm value);
@@ -61,7 +61,7 @@
    int gpr_atm_no_barrier_cas(gpr_atm *p, gpr_atm o, gpr_atm n);
    int gpr_atm_acq_cas(gpr_atm *p, gpr_atm o, gpr_atm n);
    int gpr_atm_rel_cas(gpr_atm *p, gpr_atm o, gpr_atm n);
-   int gpr_atm_full_cas(gpr_atm *p, gpr_atm o, gpr_atm n);
+   int gpr_atm_full_cas(gpr_atm *p, gpr_atm o, gpr_atm n); 
 
    // Atomically, set *p=n and return the old value of *p
    gpr_atm gpr_atm_full_xchg(gpr_atm *p, gpr_atm n);
@@ -79,17 +79,17 @@
 #error could not determine platform for atm
 #endif
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/** Adds \a delta to \a *value, clamping the result to the range specified
-    by \a min and \a max.  Returns the new value. */
-gpr_atm gpr_atm_no_barrier_clamped_add(gpr_atm* value, gpr_atm delta,
-                                       gpr_atm min, gpr_atm max);
-
-#ifdef __cplusplus
-}
-#endif
-
+#ifdef __cplusplus 
+extern "C" { 
+#endif 
+ 
+/** Adds \a delta to \a *value, clamping the result to the range specified 
+    by \a min and \a max.  Returns the new value. */ 
+gpr_atm gpr_atm_no_barrier_clamped_add(gpr_atm* value, gpr_atm delta, 
+                                       gpr_atm min, gpr_atm max); 
+ 
+#ifdef __cplusplus 
+} 
+#endif 
+ 
 #endif /* GRPC_IMPL_CODEGEN_ATM_H */

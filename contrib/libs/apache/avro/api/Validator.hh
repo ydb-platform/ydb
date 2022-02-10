@@ -33,12 +33,12 @@ class AVRO_DECL NullValidator : private boost::noncopyable
 {
   public:
 
-    explicit NullValidator(const ValidSchema &) {}
+    explicit NullValidator(const ValidSchema &) {} 
     NullValidator() {}
 
-    void setCount(int64_t) {}
+    void setCount(int64_t) {} 
 
-    bool typeIsExpected(Type) const {
+    bool typeIsExpected(Type) const { 
         return true;
     }
 
@@ -50,16 +50,16 @@ class AVRO_DECL NullValidator : private boost::noncopyable
         return 0;
     }
 
-    bool getCurrentRecordName(std::string &) const {
+    bool getCurrentRecordName(std::string &) const { 
         return true;
     }
 
-    bool getNextFieldName(std::string &) const {
+    bool getNextFieldName(std::string &) const { 
         return true;
     }
 
-    void checkTypeExpected(Type) { }
-    void checkFixedSizeExpected(int) { }
+    void checkTypeExpected(Type) { } 
+    void checkFixedSizeExpected(int) { } 
 
 
 };

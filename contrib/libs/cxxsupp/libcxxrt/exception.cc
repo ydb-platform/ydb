@@ -1621,15 +1621,15 @@ namespace std
 		return info->globals.uncaughtExceptions != 0;
 	}
 	/**
-	 * Returns the number of exceptions currently being thrown that have not
-	 * been caught.  This can occur inside a nested catch statement.
-	 */
+	 * Returns the number of exceptions currently being thrown that have not 
+	 * been caught.  This can occur inside a nested catch statement. 
+	 */ 
 	int uncaught_exceptions() noexcept
-	{
-		__cxa_thread_info *info = thread_info();
-		return info->globals.uncaughtExceptions;
-	}
-	/**
+	{ 
+		__cxa_thread_info *info = thread_info(); 
+		return info->globals.uncaughtExceptions; 
+	} 
+	/** 
 	 * Returns the current unexpected handler.
 	 */
 	unexpected_handler get_unexpected() noexcept

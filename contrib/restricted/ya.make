@@ -8,7 +8,7 @@ RECURSE(
     abseil-cpp-tstring
     alsa-lib
     avahi
-    aws
+    aws 
     blis
     boost
     cityhash-1.0.2
@@ -22,7 +22,7 @@ RECURSE(
     glib
     glib-networking
     glibmm
-    google
+    google 
     googletest
     gst-plugins-bad
     gst-plugins-base
@@ -46,7 +46,7 @@ RECURSE(
     nfs_ganesha
     noc
     openal-soft
-    patched
+    patched 
     protobuf-c
     protoc-c
     protozero

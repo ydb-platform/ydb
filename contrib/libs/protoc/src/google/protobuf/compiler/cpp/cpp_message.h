@@ -71,11 +71,11 @@ class MessageGenerator {
                    MessageSCCAnalyzer* scc_analyzer);
   ~MessageGenerator();
 
-  // Append the two types of nested generators to the corresponding vector.
+  // Append the two types of nested generators to the corresponding vector. 
   void AddGenerators(
       std::vector<std::unique_ptr<EnumGenerator>>* enum_generators,
       std::vector<std::unique_ptr<ExtensionGenerator>>* extension_generators);
-
+ 
   // Generate definitions for this class and all its nested types.
   void GenerateClassDefinition(io::Printer* printer);
 
@@ -96,22 +96,22 @@ class MessageGenerator {
   void GenerateFieldAccessorDeclarations(io::Printer* printer);
   void GenerateFieldAccessorDefinitions(io::Printer* printer);
 
-  // Generate the table-driven parsing array.  Returns the number of entries
-  // generated.
-  size_t GenerateParseOffsets(io::Printer* printer);
-  size_t GenerateParseAuxTable(io::Printer* printer);
+  // Generate the table-driven parsing array.  Returns the number of entries 
+  // generated. 
+  size_t GenerateParseOffsets(io::Printer* printer); 
+  size_t GenerateParseAuxTable(io::Printer* printer); 
   // Generates a ParseTable entry.  Returns whether the proto uses
   // table-driven parsing.
-  bool GenerateParseTable(io::Printer* printer, size_t offset,
-                          size_t aux_offset);
-
+  bool GenerateParseTable(io::Printer* printer, size_t offset, 
+                          size_t aux_offset); 
+ 
   // Generate the field offsets array.  Returns the a pair of the total number
-  // of entries generated and the index of the first has_bit entry.
-  std::pair<size_t, size_t> GenerateOffsets(io::Printer* printer);
-  void GenerateSchema(io::Printer* printer, int offset, int has_offset);
-  // For each field generates a table entry describing the field for the
-  // table driven serializer.
-  int GenerateFieldMetadata(io::Printer* printer);
+  // of entries generated and the index of the first has_bit entry. 
+  std::pair<size_t, size_t> GenerateOffsets(io::Printer* printer); 
+  void GenerateSchema(io::Printer* printer, int offset, int has_offset); 
+  // For each field generates a table entry describing the field for the 
+  // table driven serializer. 
+  int GenerateFieldMetadata(io::Printer* printer); 
 
   // Generate constructors and destructor.
   void GenerateStructors(io::Printer* printer);
@@ -130,7 +130,7 @@ class MessageGenerator {
   // Generate the constexpr constructor for constant initialization of the
   // default instance.
   void GenerateConstexprConstructor(io::Printer* printer);
-
+ 
   // Generate standard Message methods.
   void GenerateClear(io::Printer* printer);
   void GenerateOneofClear(io::Printer* printer);
@@ -146,16 +146,16 @@ class MessageGenerator {
   void GenerateIsInitialized(io::Printer* printer);
 
   // Helpers for GenerateSerializeWithCachedSizes().
-  //
-  // cached_has_bit_index maintains that:
-  //   cached_has_bits = _has_bits_[cached_has_bit_index]
-  // for cached_has_bit_index >= 0
+  // 
+  // cached_has_bit_index maintains that: 
+  //   cached_has_bits = _has_bits_[cached_has_bit_index] 
+  // for cached_has_bit_index >= 0 
   void GenerateSerializeOneField(io::Printer* printer,
                                  const FieldDescriptor* field,
-                                 int cached_has_bits_index);
-  // Generate a switch statement to serialize 2+ fields from the same oneof.
-  // Or, if fields.size() == 1, just call GenerateSerializeOneField().
-  void GenerateSerializeOneofFields(
+                                 int cached_has_bits_index); 
+  // Generate a switch statement to serialize 2+ fields from the same oneof. 
+  // Or, if fields.size() == 1, just call GenerateSerializeOneField(). 
+  void GenerateSerializeOneofFields( 
       io::Printer* printer, const std::vector<const FieldDescriptor*>& fields);
   void GenerateSerializeOneExtensionRange(
       io::Printer* printer, const Descriptor::ExtensionRange* range);
@@ -172,17 +172,17 @@ class MessageGenerator {
   void GenerateFieldClear(const FieldDescriptor* field, bool is_inline,
                           Formatter format);
 
-  void GenerateConstructorBody(io::Printer* printer,
-                               std::vector<bool> already_processed,
-                               bool copy_constructor) const;
-
-  size_t HasBitsSize() const;
+  void GenerateConstructorBody(io::Printer* printer, 
+                               std::vector<bool> already_processed, 
+                               bool copy_constructor) const; 
+ 
+  size_t HasBitsSize() const; 
   int HasBitIndex(const FieldDescriptor* a) const;
   int HasByteIndex(const FieldDescriptor* a) const;
   int HasWordIndex(const FieldDescriptor* a) const;
   bool SameHasByte(const FieldDescriptor* a, const FieldDescriptor* b) const;
   std::vector<uint32_t> RequiredFieldsBitMask() const;
-
+ 
   const Descriptor* descriptor_;
   int index_in_file_messages_;
   TProtoStringType classname_;
@@ -191,26 +191,26 @@ class MessageGenerator {
   // optimized_order_ is the order we layout the message's fields in the
   // class. This is reused to initialize the fields in-order for cache
   // efficiency.
-  //
-  // optimized_order_ excludes oneof fields and weak fields.
+  // 
+  // optimized_order_ excludes oneof fields and weak fields. 
   std::vector<const FieldDescriptor*> optimized_order_;
-  std::vector<int> has_bit_indices_;
-  int max_has_bit_index_;
+  std::vector<int> has_bit_indices_; 
+  int max_has_bit_index_; 
   std::vector<const EnumGenerator*> enum_generators_;
   std::vector<const ExtensionGenerator*> extension_generators_;
   int num_required_fields_;
-  int num_weak_fields_;
-  // table_driven_ indicates the generated message uses table-driven parsing.
-  bool table_driven_;
+  int num_weak_fields_; 
+  // table_driven_ indicates the generated message uses table-driven parsing. 
+  bool table_driven_; 
 
   std::unique_ptr<MessageLayoutHelper> message_layout_helper_;
   std::unique_ptr<ParseFunctionGenerator> parse_function_generator_;
-
+ 
   MessageSCCAnalyzer* scc_analyzer_;
-
+ 
   std::map<TProtoStringType, TProtoStringType> variables_;
 
-  friend class FileGenerator;
+  friend class FileGenerator; 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(MessageGenerator);
 };
 

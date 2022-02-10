@@ -1,18 +1,18 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
@@ -25,19 +25,19 @@
 #include "src/compiler/csharp_generator.h"
 #include "src/compiler/csharp_generator_helpers.h"
 
-using google::protobuf::compiler::csharp::GetClassName;
+using google::protobuf::compiler::csharp::GetClassName; 
 using google::protobuf::compiler::csharp::GetFileNamespace;
 using google::protobuf::compiler::csharp::GetReflectionClassName;
-using grpc::protobuf::Descriptor;
+using grpc::protobuf::Descriptor; 
 using grpc::protobuf::FileDescriptor;
-using grpc::protobuf::MethodDescriptor;
+using grpc::protobuf::MethodDescriptor; 
 using grpc::protobuf::ServiceDescriptor;
 using grpc::protobuf::io::Printer;
 using grpc::protobuf::io::StringOutputStream;
 using grpc_generator::GetMethodType;
 using grpc_generator::MethodType;
-using grpc_generator::METHODTYPE_BIDI_STREAMING;
-using grpc_generator::METHODTYPE_CLIENT_STREAMING;
+using grpc_generator::METHODTYPE_BIDI_STREAMING; 
+using grpc_generator::METHODTYPE_CLIENT_STREAMING; 
 using grpc_generator::METHODTYPE_NO_STREAMING;
 using grpc_generator::METHODTYPE_SERVER_STREAMING;
 using grpc_generator::StringReplace;
@@ -52,7 +52,7 @@ namespace {
 // Currently, we cannot easily reuse the functionality as
 // google/protobuf/compiler/csharp/csharp_doc_comment.h is not a public header.
 // TODO(jtattermusch): reuse the functionality from google/protobuf.
-bool GenerateDocCommentBodyImpl(grpc::protobuf::io::Printer* printer,
+bool GenerateDocCommentBodyImpl(grpc::protobuf::io::Printer* printer, 
                                 grpc::protobuf::SourceLocation location) {
   TString comments = location.leading_comments.empty()
                              ? location.trailing_comments
@@ -99,8 +99,8 @@ bool GenerateDocCommentBodyImpl(grpc::protobuf::io::Printer* printer,
 }
 
 template <typename DescriptorType>
-bool GenerateDocCommentBody(grpc::protobuf::io::Printer* printer,
-                            const DescriptorType* descriptor) {
+bool GenerateDocCommentBody(grpc::protobuf::io::Printer* printer, 
+                            const DescriptorType* descriptor) { 
   grpc::protobuf::SourceLocation location;
   if (!descriptor->GetSourceLocation(&location)) {
     return false;
@@ -108,8 +108,8 @@ bool GenerateDocCommentBody(grpc::protobuf::io::Printer* printer,
   return GenerateDocCommentBodyImpl(printer, location);
 }
 
-void GenerateDocCommentServerMethod(grpc::protobuf::io::Printer* printer,
-                                    const MethodDescriptor* method) {
+void GenerateDocCommentServerMethod(grpc::protobuf::io::Printer* printer, 
+                                    const MethodDescriptor* method) { 
   if (GenerateDocCommentBody(printer, method)) {
     if (method->client_streaming()) {
       printer->Print(
@@ -140,8 +140,8 @@ void GenerateDocCommentServerMethod(grpc::protobuf::io::Printer* printer,
   }
 }
 
-void GenerateDocCommentClientMethod(grpc::protobuf::io::Printer* printer,
-                                    const MethodDescriptor* method,
+void GenerateDocCommentClientMethod(grpc::protobuf::io::Printer* printer, 
+                                    const MethodDescriptor* method, 
                                     bool is_sync, bool use_call_options) {
   if (GenerateDocCommentBody(printer, method)) {
     if (!method->client_streaming()) {
@@ -187,13 +187,13 @@ TString GetServerClassName(const ServiceDescriptor* service) {
 TString GetCSharpMethodType(MethodType method_type) {
   switch (method_type) {
     case METHODTYPE_NO_STREAMING:
-      return "grpc::MethodType.Unary";
+      return "grpc::MethodType.Unary"; 
     case METHODTYPE_CLIENT_STREAMING:
-      return "grpc::MethodType.ClientStreaming";
+      return "grpc::MethodType.ClientStreaming"; 
     case METHODTYPE_SERVER_STREAMING:
-      return "grpc::MethodType.ServerStreaming";
+      return "grpc::MethodType.ServerStreaming"; 
     case METHODTYPE_BIDI_STREAMING:
-      return "grpc::MethodType.DuplexStreaming";
+      return "grpc::MethodType.DuplexStreaming"; 
   }
   GOOGLE_LOG(FATAL) << "Can't get here.";
   return "";
@@ -243,19 +243,19 @@ TString GetAccessLevel(bool internal_access) {
 TString GetMethodReturnTypeClient(const MethodDescriptor* method) {
   switch (GetMethodType(method)) {
     case METHODTYPE_NO_STREAMING:
-      return "grpc::AsyncUnaryCall<" + GetClassName(method->output_type()) +
-             ">";
+      return "grpc::AsyncUnaryCall<" + GetClassName(method->output_type()) + 
+             ">"; 
     case METHODTYPE_CLIENT_STREAMING:
-      return "grpc::AsyncClientStreamingCall<" +
-             GetClassName(method->input_type()) + ", " +
-             GetClassName(method->output_type()) + ">";
+      return "grpc::AsyncClientStreamingCall<" + 
+             GetClassName(method->input_type()) + ", " + 
+             GetClassName(method->output_type()) + ">"; 
     case METHODTYPE_SERVER_STREAMING:
-      return "grpc::AsyncServerStreamingCall<" +
-             GetClassName(method->output_type()) + ">";
+      return "grpc::AsyncServerStreamingCall<" + 
+             GetClassName(method->output_type()) + ">"; 
     case METHODTYPE_BIDI_STREAMING:
-      return "grpc::AsyncDuplexStreamingCall<" +
-             GetClassName(method->input_type()) + ", " +
-             GetClassName(method->output_type()) + ">";
+      return "grpc::AsyncDuplexStreamingCall<" + 
+             GetClassName(method->input_type()) + ", " + 
+             GetClassName(method->output_type()) + ">"; 
   }
   GOOGLE_LOG(FATAL) << "Can't get here.";
   return "";
@@ -268,7 +268,7 @@ TString GetMethodRequestParamServer(const MethodDescriptor* method) {
       return GetClassName(method->input_type()) + " request";
     case METHODTYPE_CLIENT_STREAMING:
     case METHODTYPE_BIDI_STREAMING:
-      return "grpc::IAsyncStreamReader<" + GetClassName(method->input_type()) +
+      return "grpc::IAsyncStreamReader<" + GetClassName(method->input_type()) + 
              "> requestStream";
   }
   GOOGLE_LOG(FATAL) << "Can't get here.";
@@ -296,21 +296,21 @@ TString GetMethodResponseStreamMaybe(const MethodDescriptor* method) {
       return "";
     case METHODTYPE_SERVER_STREAMING:
     case METHODTYPE_BIDI_STREAMING:
-      return ", grpc::IServerStreamWriter<" +
-             GetClassName(method->output_type()) + "> responseStream";
+      return ", grpc::IServerStreamWriter<" + 
+             GetClassName(method->output_type()) + "> responseStream"; 
   }
   GOOGLE_LOG(FATAL) << "Can't get here.";
   return "";
 }
 
 // Gets vector of all messages used as input or output types.
-std::vector<const Descriptor*> GetUsedMessages(
-    const ServiceDescriptor* service) {
-  std::set<const Descriptor*> descriptor_set;
-  std::vector<const Descriptor*>
+std::vector<const Descriptor*> GetUsedMessages( 
+    const ServiceDescriptor* service) { 
+  std::set<const Descriptor*> descriptor_set; 
+  std::vector<const Descriptor*> 
       result;  // vector is to maintain stable ordering
   for (int i = 0; i < service->method_count(); i++) {
-    const MethodDescriptor* method = service->method(i);
+    const MethodDescriptor* method = service->method(i); 
     if (descriptor_set.find(method->input_type()) == descriptor_set.end()) {
       descriptor_set.insert(method->input_type());
       result.push_back(method->input_type());
@@ -323,8 +323,8 @@ std::vector<const Descriptor*> GetUsedMessages(
   return result;
 }
 
-void GenerateMarshallerFields(Printer* out, const ServiceDescriptor* service) {
-  std::vector<const Descriptor*> used_messages = GetUsedMessages(service);
+void GenerateMarshallerFields(Printer* out, const ServiceDescriptor* service) { 
+  std::vector<const Descriptor*> used_messages = GetUsedMessages(service); 
   if (used_messages.size() != 0) {
     // Generate static helper methods for serialization/deserialization
     out->Print(
@@ -390,9 +390,9 @@ void GenerateMarshallerFields(Printer* out, const ServiceDescriptor* service) {
   }
 
   for (size_t i = 0; i < used_messages.size(); i++) {
-    const Descriptor* message = used_messages[i];
+    const Descriptor* message = used_messages[i]; 
     out->Print(
-        "static readonly grpc::Marshaller<$type$> $fieldname$ = "
+        "static readonly grpc::Marshaller<$type$> $fieldname$ = " 
         "grpc::Marshallers.Create(__Helper_SerializeMessage, "
         "context => __Helper_DeserializeMessage(context, $type$.Parser));\n",
         "fieldname", GetMarshallerFieldName(message), "type",
@@ -401,10 +401,10 @@ void GenerateMarshallerFields(Printer* out, const ServiceDescriptor* service) {
   out->Print("\n");
 }
 
-void GenerateStaticMethodField(Printer* out, const MethodDescriptor* method) {
+void GenerateStaticMethodField(Printer* out, const MethodDescriptor* method) { 
   out->Print(
-      "static readonly grpc::Method<$request$, $response$> $fieldname$ = new "
-      "grpc::Method<$request$, $response$>(\n",
+      "static readonly grpc::Method<$request$, $response$> $fieldname$ = new " 
+      "grpc::Method<$request$, $response$>(\n", 
       "fieldname", GetMethodFieldName(method), "request",
       GetClassName(method->input_type()), "response",
       GetClassName(method->output_type()));
@@ -424,8 +424,8 @@ void GenerateStaticMethodField(Printer* out, const MethodDescriptor* method) {
   out->Outdent();
 }
 
-void GenerateServiceDescriptorProperty(Printer* out,
-                                       const ServiceDescriptor* service) {
+void GenerateServiceDescriptorProperty(Printer* out, 
+                                       const ServiceDescriptor* service) { 
   std::ostringstream index;
   index << service->index();
   out->Print("/// <summary>Service descriptor</summary>\n");
@@ -440,7 +440,7 @@ void GenerateServiceDescriptorProperty(Printer* out,
   out->Print("\n");
 }
 
-void GenerateServerClass(Printer* out, const ServiceDescriptor* service) {
+void GenerateServerClass(Printer* out, const ServiceDescriptor* service) { 
   out->Print(
       "/// <summary>Base class for server-side implementations of "
       "$servicename$</summary>\n",
@@ -454,12 +454,12 @@ void GenerateServerClass(Printer* out, const ServiceDescriptor* service) {
   out->Print("{\n");
   out->Indent();
   for (int i = 0; i < service->method_count(); i++) {
-    const MethodDescriptor* method = service->method(i);
+    const MethodDescriptor* method = service->method(i); 
     GenerateDocCommentServerMethod(out, method);
     out->Print(
         "public virtual $returntype$ "
         "$methodname$($request$$response_stream_maybe$, "
-        "grpc::ServerCallContext context)\n",
+        "grpc::ServerCallContext context)\n", 
         "methodname", method->name(), "returntype",
         GetMethodReturnTypeServer(method), "request",
         GetMethodRequestParamServer(method), "response_stream_maybe",
@@ -467,8 +467,8 @@ void GenerateServerClass(Printer* out, const ServiceDescriptor* service) {
     out->Print("{\n");
     out->Indent();
     out->Print(
-        "throw new grpc::RpcException("
-        "new grpc::Status(grpc::StatusCode.Unimplemented, \"\"));\n");
+        "throw new grpc::RpcException(" 
+        "new grpc::Status(grpc::StatusCode.Unimplemented, \"\"));\n"); 
     out->Outdent();
     out->Print("}\n\n");
   }
@@ -477,10 +477,10 @@ void GenerateServerClass(Printer* out, const ServiceDescriptor* service) {
   out->Print("\n");
 }
 
-void GenerateClientStub(Printer* out, const ServiceDescriptor* service) {
+void GenerateClientStub(Printer* out, const ServiceDescriptor* service) { 
   out->Print("/// <summary>Client for $servicename$</summary>\n", "servicename",
              GetServiceClassName(service));
-  out->Print("public partial class $name$ : grpc::ClientBase<$name$>\n", "name",
+  out->Print("public partial class $name$ : grpc::ClientBase<$name$>\n", "name", 
              GetClientClassName(service));
   out->Print("{\n");
   out->Indent();
@@ -501,9 +501,9 @@ void GenerateClientStub(Printer* out, const ServiceDescriptor* service) {
       "/// <param name=\"callInvoker\">The callInvoker to use to make remote "
       "calls.</param>\n",
       "servicename", GetServiceClassName(service));
-  out->Print(
-      "public $name$(grpc::CallInvoker callInvoker) : base(callInvoker)\n",
-      "name", GetClientClassName(service));
+  out->Print( 
+      "public $name$(grpc::CallInvoker callInvoker) : base(callInvoker)\n", 
+      "name", GetClientClassName(service)); 
   out->Print("{\n");
   out->Print("}\n");
   out->Print(
@@ -525,27 +525,27 @@ void GenerateClientStub(Printer* out, const ServiceDescriptor* service) {
   out->Print("}\n\n");
 
   for (int i = 0; i < service->method_count(); i++) {
-    const MethodDescriptor* method = service->method(i);
+    const MethodDescriptor* method = service->method(i); 
     MethodType method_type = GetMethodType(method);
 
     if (method_type == METHODTYPE_NO_STREAMING) {
       // unary calls have an extra synchronous stub method
       GenerateDocCommentClientMethod(out, method, true, false);
       out->Print(
-          "public virtual $response$ $methodname$($request$ request, "
-          "grpc::Metadata "
-          "headers = null, global::System.DateTime? deadline = null, "
-          "global::System.Threading.CancellationToken "
-          "cancellationToken = "
-          "default(global::System.Threading.CancellationToken))\n",
+          "public virtual $response$ $methodname$($request$ request, " 
+          "grpc::Metadata " 
+          "headers = null, global::System.DateTime? deadline = null, " 
+          "global::System.Threading.CancellationToken " 
+          "cancellationToken = " 
+          "default(global::System.Threading.CancellationToken))\n", 
           "methodname", method->name(), "request",
           GetClassName(method->input_type()), "response",
           GetClassName(method->output_type()));
       out->Print("{\n");
       out->Indent();
       out->Print(
-          "return $methodname$(request, new grpc::CallOptions(headers, "
-          "deadline, "
+          "return $methodname$(request, new grpc::CallOptions(headers, " 
+          "deadline, " 
           "cancellationToken));\n",
           "methodname", method->name());
       out->Outdent();
@@ -555,7 +555,7 @@ void GenerateClientStub(Printer* out, const ServiceDescriptor* service) {
       GenerateDocCommentClientMethod(out, method, true, true);
       out->Print(
           "public virtual $response$ $methodname$($request$ request, "
-          "grpc::CallOptions options)\n",
+          "grpc::CallOptions options)\n", 
           "methodname", method->name(), "request",
           GetClassName(method->input_type()), "response",
           GetClassName(method->output_type()));
@@ -575,12 +575,12 @@ void GenerateClientStub(Printer* out, const ServiceDescriptor* service) {
     }
     GenerateDocCommentClientMethod(out, method, false, false);
     out->Print(
-        "public virtual $returntype$ "
-        "$methodname$($request_maybe$grpc::Metadata "
-        "headers = null, global::System.DateTime? deadline = null, "
-        "global::System.Threading.CancellationToken "
-        "cancellationToken = "
-        "default(global::System.Threading.CancellationToken))\n",
+        "public virtual $returntype$ " 
+        "$methodname$($request_maybe$grpc::Metadata " 
+        "headers = null, global::System.DateTime? deadline = null, " 
+        "global::System.Threading.CancellationToken " 
+        "cancellationToken = " 
+        "default(global::System.Threading.CancellationToken))\n", 
         "methodname", method_name, "request_maybe",
         GetMethodRequestParamMaybe(method), "returntype",
         GetMethodReturnTypeClient(method));
@@ -588,8 +588,8 @@ void GenerateClientStub(Printer* out, const ServiceDescriptor* service) {
     out->Indent();
 
     out->Print(
-        "return $methodname$($request_maybe$new grpc::CallOptions(headers, "
-        "deadline, "
+        "return $methodname$($request_maybe$new grpc::CallOptions(headers, " 
+        "deadline, " 
         "cancellationToken));\n",
         "methodname", method_name, "request_maybe",
         GetMethodRequestParamMaybe(method, true));
@@ -599,8 +599,8 @@ void GenerateClientStub(Printer* out, const ServiceDescriptor* service) {
     // overload taking CallOptions as a param
     GenerateDocCommentClientMethod(out, method, false, true);
     out->Print(
-        "public virtual $returntype$ "
-        "$methodname$($request_maybe$grpc::CallOptions "
+        "public virtual $returntype$ " 
+        "$methodname$($request_maybe$grpc::CallOptions " 
         "options)\n",
         "methodname", method_name, "request_maybe",
         GetMethodRequestParamMaybe(method), "returntype",
@@ -659,7 +659,7 @@ void GenerateClientStub(Printer* out, const ServiceDescriptor* service) {
   out->Print("\n");
 }
 
-void GenerateBindServiceMethod(Printer* out, const ServiceDescriptor* service) {
+void GenerateBindServiceMethod(Printer* out, const ServiceDescriptor* service) { 
   out->Print(
       "/// <summary>Creates service definition that can be registered with a "
       "server</summary>\n");
@@ -667,7 +667,7 @@ void GenerateBindServiceMethod(Printer* out, const ServiceDescriptor* service) {
       "/// <param name=\"serviceImpl\">An object implementing the server-side"
       " handling logic.</param>\n");
   out->Print(
-      "public static grpc::ServerServiceDefinition BindService($implclass$ "
+      "public static grpc::ServerServiceDefinition BindService($implclass$ " 
       "serviceImpl)\n",
       "implclass", GetServerClassName(service));
   out->Print("{\n");
@@ -677,7 +677,7 @@ void GenerateBindServiceMethod(Printer* out, const ServiceDescriptor* service) {
   out->Indent();
   out->Indent();
   for (int i = 0; i < service->method_count(); i++) {
-    const MethodDescriptor* method = service->method(i);
+    const MethodDescriptor* method = service->method(i); 
     out->Print("\n.AddMethod($methodfield$, serviceImpl.$methodname$)",
                "methodfield", GetMethodFieldName(method), "methodname",
                method->name());
@@ -732,7 +732,7 @@ void GenerateBindServiceWithBinderMethod(Printer* out,
   out->Print("\n");
 }
 
-void GenerateService(Printer* out, const ServiceDescriptor* service,
+void GenerateService(Printer* out, const ServiceDescriptor* service, 
                      bool generate_client, bool generate_server,
                      bool internal_access) {
   GenerateDocCommentBody(out, service);
@@ -785,24 +785,24 @@ TString GetServices(const FileDescriptor* file, bool generate_client,
     }
 
     // Write out a file header.
-    out.Print("// <auto-generated>\n");
-    out.Print(
-        "//     Generated by the protocol buffer compiler.  DO NOT EDIT!\n");
-    out.Print("//     source: $filename$\n", "filename", file->name());
-    out.Print("// </auto-generated>\n");
+    out.Print("// <auto-generated>\n"); 
+    out.Print( 
+        "//     Generated by the protocol buffer compiler.  DO NOT EDIT!\n"); 
+    out.Print("//     source: $filename$\n", "filename", file->name()); 
+    out.Print("// </auto-generated>\n"); 
 
     // use C++ style as there are no file-level XML comments in .NET
     TString leading_comments = GetCsharpComments(file, true);
     if (!leading_comments.empty()) {
       out.Print("// Original file comments:\n");
-      out.PrintRaw(leading_comments.c_str());
+      out.PrintRaw(leading_comments.c_str()); 
     }
 
     out.Print("#pragma warning disable 0414, 1591\n");
 
     out.Print("#region Designer generated code\n");
     out.Print("\n");
-    out.Print("using grpc = global::Grpc.Core;\n");
+    out.Print("using grpc = global::Grpc.Core;\n"); 
     out.Print("\n");
 
     TString file_namespace = GetFileNamespace(file);

@@ -4016,50 +4016,50 @@ commit_upwards:
 				}
 switch ( lel->reduction ) {
 case 17: {
-Token *__ref0 = (Token*)&rhs[1]->user.token;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Token *__ref2 = (Token*)&rhs[1]->user.token;
+Token *__ref0 = (Token*)&rhs[1]->user.token; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Token *__ref2 = (Token*)&rhs[1]->user.token; 
 #line 61 "rlparse.kl"
 
-		LengthDef *lengthDef = new LengthDef( (__ref0)->data );
+		LengthDef *lengthDef = new LengthDef( (__ref0)->data ); 
 		pd->lengthDefList.append( lengthDef );
 
 		/* Generic creation of machine for instantiation and assignment. */
 		MachineDef *machineDef = new MachineDef( lengthDef );
-		tryMachineDef( (__ref1)->loc, (__ref2)->data, machineDef, false );
+		tryMachineDef( (__ref1)->loc, (__ref2)->data, machineDef, false ); 
 	
 
-#line 4031 "rlparse.cpp"
+#line 4031 "rlparse.cpp" 
 } break;
 case 18: {
-Token *__ref0 = (Token*)&rhs[1]->user.token;
-Parser_Lel_inline_list *__ref1 = (Parser_Lel_inline_list*)&rhs[2]->user.inline_list;
+Token *__ref0 = (Token*)&rhs[1]->user.token; 
+Parser_Lel_inline_list *__ref1 = (Parser_Lel_inline_list*)&rhs[2]->user.inline_list; 
 #line 72 "rlparse.kl"
 
 		if ( pd->prePushExpr != 0 ) {
 			/* Recover by just ignoring the duplicate. */
-			error((__ref0)->loc) << "pre_push code already defined" << endl;
+			error((__ref0)->loc) << "pre_push code already defined" << endl; 
 		}
 
-		pd->prePushExpr = (__ref1)->inlineList;
+		pd->prePushExpr = (__ref1)->inlineList; 
 	
 
-#line 4046 "rlparse.cpp"
+#line 4046 "rlparse.cpp" 
 } break;
 case 19: {
-Token *__ref0 = (Token*)&rhs[1]->user.token;
-Parser_Lel_inline_list *__ref1 = (Parser_Lel_inline_list*)&rhs[2]->user.inline_list;
+Token *__ref0 = (Token*)&rhs[1]->user.token; 
+Parser_Lel_inline_list *__ref1 = (Parser_Lel_inline_list*)&rhs[2]->user.inline_list; 
 #line 84 "rlparse.kl"
 
 		if ( pd->postPopExpr != 0 ) {
 			/* Recover by just ignoring the duplicate. */
-			error((__ref0)->loc) << "post_pop code already defined" << endl;
+			error((__ref0)->loc) << "post_pop code already defined" << endl; 
 		}
 
-		pd->postPopExpr = (__ref1)->inlineList;
+		pd->postPopExpr = (__ref1)->inlineList; 
 	
 
-#line 4061 "rlparse.cpp"
+#line 4061 "rlparse.cpp" 
 } break;
 case 20: {
 #line 95 "rlparse.kl"
@@ -4067,21 +4067,21 @@ case 20: {
 		exportContext.append( true );
 	
 
-#line 4069 "rlparse.cpp"
+#line 4069 "rlparse.cpp" 
 } break;
 case 21: {
-Parser_Lel_opt_export *__ref0 = (Parser_Lel_opt_export*)&redLel->user.opt_export;
+Parser_Lel_opt_export *__ref0 = (Parser_Lel_opt_export*)&redLel->user.opt_export; 
 #line 104 "rlparse.kl"
- (__ref0)->isSet = true; 
+ (__ref0)->isSet = true;  
 
-#line 4076 "rlparse.cpp"
+#line 4076 "rlparse.cpp" 
 } break;
 case 22: {
-Parser_Lel_opt_export *__ref0 = (Parser_Lel_opt_export*)&redLel->user.opt_export;
+Parser_Lel_opt_export *__ref0 = (Parser_Lel_opt_export*)&redLel->user.opt_export; 
 #line 105 "rlparse.kl"
- (__ref0)->isSet = false; 
+ (__ref0)->isSet = false;  
 
-#line 4083 "rlparse.cpp"
+#line 4083 "rlparse.cpp" 
 } break;
 case 23: {
 #line 108 "rlparse.kl"
@@ -4089,105 +4089,105 @@ case 23: {
 		exportContext.remove( exportContext.length()-1 );
 	
 
-#line 4091 "rlparse.cpp"
+#line 4091 "rlparse.cpp" 
 } break;
 case 24: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&rhs[1]->user.token_type;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[1]->user.token_type;
-Parser_Lel_join *__ref2 = (Parser_Lel_join*)&rhs[3]->user.join;
-Parser_Lel_token_type *__ref3 = (Parser_Lel_token_type*)&rhs[1]->user.token_type;
-Parser_Lel_token_type *__ref4 = (Parser_Lel_token_type*)&rhs[1]->user.token_type;
-Parser_Lel_opt_export *__ref5 = (Parser_Lel_opt_export*)&rhs[0]->user.opt_export;
-Parser_Lel_join *__ref6 = (Parser_Lel_join*)&rhs[3]->user.join;
-Token *__ref7 = (Token*)&rhs[2]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&rhs[1]->user.token_type; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[1]->user.token_type; 
+Parser_Lel_join *__ref2 = (Parser_Lel_join*)&rhs[3]->user.join; 
+Parser_Lel_token_type *__ref3 = (Parser_Lel_token_type*)&rhs[1]->user.token_type; 
+Parser_Lel_token_type *__ref4 = (Parser_Lel_token_type*)&rhs[1]->user.token_type; 
+Parser_Lel_opt_export *__ref5 = (Parser_Lel_opt_export*)&rhs[0]->user.opt_export; 
+Parser_Lel_join *__ref6 = (Parser_Lel_join*)&rhs[3]->user.join; 
+Token *__ref7 = (Token*)&rhs[2]->user.token; 
 #line 113 "rlparse.kl"
 
 		/* Main machine must be an instance. */
 		bool isInstance = false;
-		if ( strcmp((__ref0)->token.data, mainMachine) == 0 ) {
-			warning((__ref1)->token.loc) << 
+		if ( strcmp((__ref0)->token.data, mainMachine) == 0 ) { 
+			warning((__ref1)->token.loc) <<  
 					"main machine will be implicitly instantiated" << endl;
 			isInstance = true;
 		}
 
 		/* Generic creation of machine for instantiation and assignment. */
-		MachineDef *machineDef = new MachineDef( (__ref2)->join );
-		tryMachineDef( (__ref3)->token.loc, (__ref4)->token.data, machineDef, isInstance );
+		MachineDef *machineDef = new MachineDef( (__ref2)->join ); 
+		tryMachineDef( (__ref3)->token.loc, (__ref4)->token.data, machineDef, isInstance ); 
 
-		if ( (__ref5)->isSet )
+		if ( (__ref5)->isSet ) 
 			exportContext.remove( exportContext.length()-1 );
 
-		(__ref6)->join->loc = (__ref7)->loc;
+		(__ref6)->join->loc = (__ref7)->loc; 
 	
 
-#line 4122 "rlparse.cpp"
+#line 4122 "rlparse.cpp" 
 } break;
 case 25: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&rhs[1]->user.token_type;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[1]->user.token_type;
-Parser_Lel_join_or_lm *__ref2 = (Parser_Lel_join_or_lm*)&rhs[3]->user.join_or_lm;
-Parser_Lel_opt_export *__ref3 = (Parser_Lel_opt_export*)&rhs[0]->user.opt_export;
-Parser_Lel_join_or_lm *__ref4 = (Parser_Lel_join_or_lm*)&rhs[3]->user.join_or_lm;
-Parser_Lel_join_or_lm *__ref5 = (Parser_Lel_join_or_lm*)&rhs[3]->user.join_or_lm;
-Token *__ref6 = (Token*)&rhs[2]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&rhs[1]->user.token_type; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[1]->user.token_type; 
+Parser_Lel_join_or_lm *__ref2 = (Parser_Lel_join_or_lm*)&rhs[3]->user.join_or_lm; 
+Parser_Lel_opt_export *__ref3 = (Parser_Lel_opt_export*)&rhs[0]->user.opt_export; 
+Parser_Lel_join_or_lm *__ref4 = (Parser_Lel_join_or_lm*)&rhs[3]->user.join_or_lm; 
+Parser_Lel_join_or_lm *__ref5 = (Parser_Lel_join_or_lm*)&rhs[3]->user.join_or_lm; 
+Token *__ref6 = (Token*)&rhs[2]->user.token; 
 #line 133 "rlparse.kl"
 
 		/* Generic creation of machine for instantiation and assignment. */
-		tryMachineDef( (__ref0)->token.loc, (__ref1)->token.data, (__ref2)->machineDef, true );
+		tryMachineDef( (__ref0)->token.loc, (__ref1)->token.data, (__ref2)->machineDef, true ); 
 
-		if ( (__ref3)->isSet )
+		if ( (__ref3)->isSet ) 
 			exportContext.remove( exportContext.length()-1 );
 
 		/* Pass a location to join_or_lm */
-		if ( (__ref4)->machineDef->join != 0 )
-			(__ref5)->machineDef->join->loc = (__ref6)->loc;
+		if ( (__ref4)->machineDef->join != 0 ) 
+			(__ref5)->machineDef->join->loc = (__ref6)->loc; 
 	
 
-#line 4145 "rlparse.cpp"
+#line 4145 "rlparse.cpp" 
 } break;
 case 26: {
-Token *__ref0 = (Token*)&rhs[0]->user.token;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref3 = (Token*)&rhs[0]->user.token;
+Token *__ref0 = (Token*)&rhs[0]->user.token; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref3 = (Token*)&rhs[0]->user.token; 
 #line 153 "rlparse.kl"
 
 		/* Make/get the priority key. The name may have already been referenced
 		 * and therefore exist. */
 		PriorDictEl *priorDictEl;
-		if ( pd->priorDict.insert( (__ref0)->data, pd->nextPriorKey, &priorDictEl ) )
+		if ( pd->priorDict.insert( (__ref0)->data, pd->nextPriorKey, &priorDictEl ) ) 
 			pd->nextPriorKey += 1;
 		pd->curDefPriorKey = priorDictEl->value;
 
 		/* Make/get the local error key. */
 		LocalErrDictEl *localErrDictEl;
-		if ( pd->localErrDict.insert( (__ref1)->data, pd->nextLocalErrKey, &localErrDictEl ) )
+		if ( pd->localErrDict.insert( (__ref1)->data, pd->nextLocalErrKey, &localErrDictEl ) ) 
 			pd->nextLocalErrKey += 1;
 		pd->curDefLocalErrKey = localErrDictEl->value;
 
-		(__ref2)->token = *(__ref3);
+		(__ref2)->token = *(__ref3); 
 	
 
-#line 4170 "rlparse.cpp"
+#line 4170 "rlparse.cpp" 
 } break;
 case 27: {
-Token *__ref0 = (Token*)&rhs[1]->user.token;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Token *__ref2 = (Token*)&rhs[1]->user.token;
-Token *__ref3 = (Token*)&rhs[2]->user.token;
-Token *__ref4 = (Token*)&rhs[1]->user.token;
-Parser_Lel_inline_list *__ref5 = (Parser_Lel_inline_list*)&rhs[3]->user.inline_list;
+Token *__ref0 = (Token*)&rhs[1]->user.token; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Token *__ref2 = (Token*)&rhs[1]->user.token; 
+Token *__ref3 = (Token*)&rhs[2]->user.token; 
+Token *__ref4 = (Token*)&rhs[1]->user.token; 
+Parser_Lel_inline_list *__ref5 = (Parser_Lel_inline_list*)&rhs[3]->user.inline_list; 
 #line 171 "rlparse.kl"
 
-		if ( pd->actionDict.find( (__ref0)->data ) ) {
+		if ( pd->actionDict.find( (__ref0)->data ) ) { 
 			/* Recover by just ignoring the duplicate. */
-			error((__ref1)->loc) << "action \"" << (__ref2)->data << "\" already defined" << endl;
+			error((__ref1)->loc) << "action \"" << (__ref2)->data << "\" already defined" << endl; 
 		}
 		else {
 			//cerr << "NEW ACTION " << $2->data << " " << $4->inlineList << endl;
 			/* Add the action to the list of actions. */
-			Action *newAction = new Action( (__ref3)->loc, (__ref4)->data, 
-					(__ref5)->inlineList, pd->nextCondId++ );
+			Action *newAction = new Action( (__ref3)->loc, (__ref4)->data,  
+					(__ref5)->inlineList, pd->nextCondId++ ); 
 
 			/* Insert to list and dict. */
 			pd->actionList.append( newAction );
@@ -4195,2314 +4195,2314 @@ Parser_Lel_inline_list *__ref5 = (Parser_Lel_inline_list*)&rhs[3]->user.inline_l
 		}
 	
 
-#line 4197 "rlparse.cpp"
+#line 4197 "rlparse.cpp" 
 } break;
 case 28: {
-Token *__ref0 = (Token*)&rhs[0]->user.token;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Token *__ref2 = (Token*)&rhs[2]->user.token;
-Token *__ref3 = (Token*)&rhs[1]->user.token;
-Token *__ref4 = (Token*)&rhs[1]->user.token;
-Token *__ref5 = (Token*)&rhs[2]->user.token;
+Token *__ref0 = (Token*)&rhs[0]->user.token; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Token *__ref2 = (Token*)&rhs[2]->user.token; 
+Token *__ref3 = (Token*)&rhs[1]->user.token; 
+Token *__ref4 = (Token*)&rhs[1]->user.token; 
+Token *__ref5 = (Token*)&rhs[2]->user.token; 
 #line 191 "rlparse.kl"
 
-		if ( ! pd->setAlphType( (__ref0)->loc, (__ref1)->data, (__ref2)->data ) ) {
+		if ( ! pd->setAlphType( (__ref0)->loc, (__ref1)->data, (__ref2)->data ) ) { 
 			// Recover by ignoring the alphtype statement.
-			error((__ref3)->loc) << "\"" << (__ref4)->data << 
-					" " << (__ref5)->data << "\" is not a valid alphabet type" << endl;
+			error((__ref3)->loc) << "\"" << (__ref4)->data <<  
+					" " << (__ref5)->data << "\" is not a valid alphabet type" << endl; 
 		}
 	
 
-#line 4215 "rlparse.cpp"
+#line 4215 "rlparse.cpp" 
 } break;
 case 29: {
-Token *__ref0 = (Token*)&rhs[0]->user.token;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Token *__ref2 = (Token*)&rhs[1]->user.token;
-Token *__ref3 = (Token*)&rhs[1]->user.token;
+Token *__ref0 = (Token*)&rhs[0]->user.token; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Token *__ref2 = (Token*)&rhs[1]->user.token; 
+Token *__ref3 = (Token*)&rhs[1]->user.token; 
 #line 200 "rlparse.kl"
 
-		if ( ! pd->setAlphType( (__ref0)->loc, (__ref1)->data ) ) {
+		if ( ! pd->setAlphType( (__ref0)->loc, (__ref1)->data ) ) { 
 			// Recover by ignoring the alphtype statement.
-			error((__ref2)->loc) << "\"" << (__ref3)->data << 
+			error((__ref2)->loc) << "\"" << (__ref3)->data <<  
 					"\" is not a valid alphabet type" << endl;
 		}
 	
 
-#line 4231 "rlparse.cpp"
+#line 4231 "rlparse.cpp" 
 } break;
 case 30: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&rhs[1]->user.token_type;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[2]->user.token_type;
-Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&rhs[1]->user.token_type;
-Parser_Lel_token_type *__ref3 = (Parser_Lel_token_type*)&rhs[2]->user.token_type;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&rhs[1]->user.token_type; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[2]->user.token_type; 
+Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&rhs[1]->user.token_type; 
+Parser_Lel_token_type *__ref3 = (Parser_Lel_token_type*)&rhs[2]->user.token_type; 
 #line 210 "rlparse.kl"
 
 		// Save the upper and lower ends of the range and emit the line number.
-		pd->lowerNum = (__ref0)->token.data;
-		pd->upperNum = (__ref1)->token.data;
-		pd->rangeLowLoc = (__ref2)->token.loc;
-		pd->rangeHighLoc = (__ref3)->token.loc;
+		pd->lowerNum = (__ref0)->token.data; 
+		pd->upperNum = (__ref1)->token.data; 
+		pd->rangeLowLoc = (__ref2)->token.loc; 
+		pd->rangeHighLoc = (__ref3)->token.loc; 
 	
 
-#line 4247 "rlparse.cpp"
+#line 4247 "rlparse.cpp" 
 } break;
 case 31: {
-Parser_Lel_inline_list *__ref0 = (Parser_Lel_inline_list*)&rhs[1]->user.inline_list;
+Parser_Lel_inline_list *__ref0 = (Parser_Lel_inline_list*)&rhs[1]->user.inline_list; 
 #line 219 "rlparse.kl"
 
-		pd->getKeyExpr = (__ref0)->inlineList;
+		pd->getKeyExpr = (__ref0)->inlineList; 
 	
 
-#line 4256 "rlparse.cpp"
+#line 4256 "rlparse.cpp" 
 } break;
 case 32: {
-Parser_Lel_inline_list *__ref0 = (Parser_Lel_inline_list*)&rhs[1]->user.inline_list;
+Parser_Lel_inline_list *__ref0 = (Parser_Lel_inline_list*)&rhs[1]->user.inline_list; 
 #line 224 "rlparse.kl"
 
-		pd->accessExpr = (__ref0)->inlineList;
+		pd->accessExpr = (__ref0)->inlineList; 
 	
 
-#line 4265 "rlparse.cpp"
+#line 4265 "rlparse.cpp" 
 } break;
 case 33: {
-Token *__ref0 = (Token*)&rhs[2]->user.token;
-Parser_Lel_inline_list *__ref1 = (Parser_Lel_inline_list*)&rhs[3]->user.inline_list;
-Token *__ref2 = (Token*)&rhs[2]->user.token;
+Token *__ref0 = (Token*)&rhs[2]->user.token; 
+Parser_Lel_inline_list *__ref1 = (Parser_Lel_inline_list*)&rhs[3]->user.inline_list; 
+Token *__ref2 = (Token*)&rhs[2]->user.token; 
 #line 229 "rlparse.kl"
 
 		/* FIXME: Need to implement the rest of this. */
-		bool wasSet = pd->setVariable( (__ref0)->data, (__ref1)->inlineList );
+		bool wasSet = pd->setVariable( (__ref0)->data, (__ref1)->inlineList ); 
 		if ( !wasSet )
-			error((__ref2)->loc) << "bad variable name" << endl;
+			error((__ref2)->loc) << "bad variable name" << endl; 
 	
 
-#line 4279 "rlparse.cpp"
+#line 4279 "rlparse.cpp" 
 } break;
 case 36: {
-Parser_Lel_join_or_lm *__ref0 = (Parser_Lel_join_or_lm*)&redLel->user.join_or_lm;
-Parser_Lel_join *__ref1 = (Parser_Lel_join*)&rhs[0]->user.join;
+Parser_Lel_join_or_lm *__ref0 = (Parser_Lel_join_or_lm*)&redLel->user.join_or_lm; 
+Parser_Lel_join *__ref1 = (Parser_Lel_join*)&rhs[0]->user.join; 
 #line 249 "rlparse.kl"
 
-		(__ref0)->machineDef = new MachineDef( (__ref1)->join );
+		(__ref0)->machineDef = new MachineDef( (__ref1)->join ); 
 	
 
-#line 4289 "rlparse.cpp"
+#line 4289 "rlparse.cpp" 
 } break;
 case 37: {
-Token *__ref0 = (Token*)&rhs[0]->user.token;
-Parser_Lel_lm_part_list *__ref1 = (Parser_Lel_lm_part_list*)&rhs[1]->user.lm_part_list;
-Parser_Lel_lm_part_list *__ref2 = (Parser_Lel_lm_part_list*)&rhs[1]->user.lm_part_list;
-Parser_Lel_join_or_lm *__ref3 = (Parser_Lel_join_or_lm*)&redLel->user.join_or_lm;
+Token *__ref0 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_lm_part_list *__ref1 = (Parser_Lel_lm_part_list*)&rhs[1]->user.lm_part_list; 
+Parser_Lel_lm_part_list *__ref2 = (Parser_Lel_lm_part_list*)&rhs[1]->user.lm_part_list; 
+Parser_Lel_join_or_lm *__ref3 = (Parser_Lel_join_or_lm*)&redLel->user.join_or_lm; 
 #line 253 "rlparse.kl"
 
 		/* Create a new factor going to a longest match structure. Record
 		 * in the parse data that we have a longest match. */
-		LongestMatch *lm = new LongestMatch( (__ref0)->loc, (__ref1)->lmPartList );
+		LongestMatch *lm = new LongestMatch( (__ref0)->loc, (__ref1)->lmPartList ); 
 		pd->lmList.append( lm );
-		for ( LmPartList::Iter lmp = *((__ref2)->lmPartList); lmp.lte(); lmp++ )
+		for ( LmPartList::Iter lmp = *((__ref2)->lmPartList); lmp.lte(); lmp++ ) 
 			lmp->longestMatch = lm;
-		(__ref3)->machineDef = new MachineDef( lm );
+		(__ref3)->machineDef = new MachineDef( lm ); 
 	
 
-#line 4307 "rlparse.cpp"
+#line 4307 "rlparse.cpp" 
 } break;
 case 38: {
-Parser_Lel_longest_match_part *__ref0 = (Parser_Lel_longest_match_part*)&rhs[1]->user.longest_match_part;
-Parser_Lel_lm_part_list *__ref1 = (Parser_Lel_lm_part_list*)&rhs[0]->user.lm_part_list;
-Parser_Lel_longest_match_part *__ref2 = (Parser_Lel_longest_match_part*)&rhs[1]->user.longest_match_part;
-Parser_Lel_lm_part_list *__ref3 = (Parser_Lel_lm_part_list*)&redLel->user.lm_part_list;
-Parser_Lel_lm_part_list *__ref4 = (Parser_Lel_lm_part_list*)&rhs[0]->user.lm_part_list;
+Parser_Lel_longest_match_part *__ref0 = (Parser_Lel_longest_match_part*)&rhs[1]->user.longest_match_part; 
+Parser_Lel_lm_part_list *__ref1 = (Parser_Lel_lm_part_list*)&rhs[0]->user.lm_part_list; 
+Parser_Lel_longest_match_part *__ref2 = (Parser_Lel_longest_match_part*)&rhs[1]->user.longest_match_part; 
+Parser_Lel_lm_part_list *__ref3 = (Parser_Lel_lm_part_list*)&redLel->user.lm_part_list; 
+Parser_Lel_lm_part_list *__ref4 = (Parser_Lel_lm_part_list*)&rhs[0]->user.lm_part_list; 
 #line 270 "rlparse.kl"
 
-		if ( (__ref0)->lmPart != 0 ) 
-			(__ref1)->lmPartList->append( (__ref2)->lmPart );
-		(__ref3)->lmPartList = (__ref4)->lmPartList;
+		if ( (__ref0)->lmPart != 0 )  
+			(__ref1)->lmPartList->append( (__ref2)->lmPart ); 
+		(__ref3)->lmPartList = (__ref4)->lmPartList; 
 	
 
-#line 4322 "rlparse.cpp"
+#line 4322 "rlparse.cpp" 
 } break;
 case 39: {
-Parser_Lel_lm_part_list *__ref0 = (Parser_Lel_lm_part_list*)&redLel->user.lm_part_list;
-Parser_Lel_longest_match_part *__ref1 = (Parser_Lel_longest_match_part*)&rhs[0]->user.longest_match_part;
-Parser_Lel_lm_part_list *__ref2 = (Parser_Lel_lm_part_list*)&redLel->user.lm_part_list;
-Parser_Lel_longest_match_part *__ref3 = (Parser_Lel_longest_match_part*)&rhs[0]->user.longest_match_part;
+Parser_Lel_lm_part_list *__ref0 = (Parser_Lel_lm_part_list*)&redLel->user.lm_part_list; 
+Parser_Lel_longest_match_part *__ref1 = (Parser_Lel_longest_match_part*)&rhs[0]->user.longest_match_part; 
+Parser_Lel_lm_part_list *__ref2 = (Parser_Lel_lm_part_list*)&redLel->user.lm_part_list; 
+Parser_Lel_longest_match_part *__ref3 = (Parser_Lel_longest_match_part*)&rhs[0]->user.longest_match_part; 
 #line 277 "rlparse.kl"
 
 		/* Create a new list with the part. */
-		(__ref0)->lmPartList = new LmPartList;
-		if ( (__ref1)->lmPart != 0 )
-			(__ref2)->lmPartList->append( (__ref3)->lmPart );
+		(__ref0)->lmPartList = new LmPartList; 
+		if ( (__ref1)->lmPart != 0 ) 
+			(__ref2)->lmPartList->append( (__ref3)->lmPart ); 
 	
 
-#line 4337 "rlparse.cpp"
+#line 4337 "rlparse.cpp" 
 } break;
 case 40: {
-Parser_Lel_longest_match_part *__ref0 = (Parser_Lel_longest_match_part*)&redLel->user.longest_match_part;
+Parser_Lel_longest_match_part *__ref0 = (Parser_Lel_longest_match_part*)&redLel->user.longest_match_part; 
 #line 290 "rlparse.kl"
- (__ref0)->lmPart = 0; 
+ (__ref0)->lmPart = 0;  
 
-#line 4344 "rlparse.cpp"
+#line 4344 "rlparse.cpp" 
 } break;
 case 41: {
-Parser_Lel_longest_match_part *__ref0 = (Parser_Lel_longest_match_part*)&redLel->user.longest_match_part;
+Parser_Lel_longest_match_part *__ref0 = (Parser_Lel_longest_match_part*)&redLel->user.longest_match_part; 
 #line 292 "rlparse.kl"
- (__ref0)->lmPart = 0; 
+ (__ref0)->lmPart = 0;  
 
-#line 4351 "rlparse.cpp"
+#line 4351 "rlparse.cpp" 
 } break;
 case 42: {
-Parser_Lel_longest_match_part *__ref0 = (Parser_Lel_longest_match_part*)&redLel->user.longest_match_part;
-Parser_Lel_opt_lm_part_action *__ref1 = (Parser_Lel_opt_lm_part_action*)&rhs[1]->user.opt_lm_part_action;
-Parser_Lel_longest_match_part *__ref2 = (Parser_Lel_longest_match_part*)&redLel->user.longest_match_part;
-Parser_Lel_join *__ref3 = (Parser_Lel_join*)&rhs[0]->user.join;
-Token *__ref4 = (Token*)&rhs[2]->user.token;
-Parser_Lel_join *__ref5 = (Parser_Lel_join*)&rhs[0]->user.join;
-Token *__ref6 = (Token*)&rhs[2]->user.token;
+Parser_Lel_longest_match_part *__ref0 = (Parser_Lel_longest_match_part*)&redLel->user.longest_match_part; 
+Parser_Lel_opt_lm_part_action *__ref1 = (Parser_Lel_opt_lm_part_action*)&rhs[1]->user.opt_lm_part_action; 
+Parser_Lel_longest_match_part *__ref2 = (Parser_Lel_longest_match_part*)&redLel->user.longest_match_part; 
+Parser_Lel_join *__ref3 = (Parser_Lel_join*)&rhs[0]->user.join; 
+Token *__ref4 = (Token*)&rhs[2]->user.token; 
+Parser_Lel_join *__ref5 = (Parser_Lel_join*)&rhs[0]->user.join; 
+Token *__ref6 = (Token*)&rhs[2]->user.token; 
 #line 294 "rlparse.kl"
 
-		(__ref0)->lmPart = 0;
-		Action *action = (__ref1)->action;
+		(__ref0)->lmPart = 0; 
+		Action *action = (__ref1)->action; 
 		if ( action != 0 )
 			action->isLmAction = true;
-		(__ref2)->lmPart = new LongestMatchPart( (__ref3)->join, action, 
-				(__ref4)->loc, pd->nextLongestMatchId++ );
+		(__ref2)->lmPart = new LongestMatchPart( (__ref3)->join, action,  
+				(__ref4)->loc, pd->nextLongestMatchId++ ); 
 
 		/* Provide a location to join. Unfortunately We don't
 		 * have the start of the join as in other occurances. Use the end. */
-		(__ref5)->join->loc = (__ref6)->loc;
+		(__ref5)->join->loc = (__ref6)->loc; 
 	
 
-#line 4375 "rlparse.cpp"
+#line 4375 "rlparse.cpp" 
 } break;
 case 43: {
-Parser_Lel_opt_lm_part_action *__ref0 = (Parser_Lel_opt_lm_part_action*)&redLel->user.opt_lm_part_action;
-Parser_Lel_action_ref *__ref1 = (Parser_Lel_action_ref*)&rhs[1]->user.action_ref;
+Parser_Lel_opt_lm_part_action *__ref0 = (Parser_Lel_opt_lm_part_action*)&redLel->user.opt_lm_part_action; 
+Parser_Lel_action_ref *__ref1 = (Parser_Lel_action_ref*)&rhs[1]->user.action_ref; 
 #line 313 "rlparse.kl"
  
-		(__ref0)->action = (__ref1)->action;
+		(__ref0)->action = (__ref1)->action; 
 	
 
-#line 4385 "rlparse.cpp"
+#line 4385 "rlparse.cpp" 
 } break;
 case 44: {
-Parser_Lel_opt_lm_part_action *__ref0 = (Parser_Lel_opt_lm_part_action*)&redLel->user.opt_lm_part_action;
-Parser_Lel_action_ref *__ref1 = (Parser_Lel_action_ref*)&rhs[0]->user.action_ref;
+Parser_Lel_opt_lm_part_action *__ref0 = (Parser_Lel_opt_lm_part_action*)&redLel->user.opt_lm_part_action; 
+Parser_Lel_action_ref *__ref1 = (Parser_Lel_action_ref*)&rhs[0]->user.action_ref; 
 #line 317 "rlparse.kl"
 
-		(__ref0)->action = (__ref1)->action;
+		(__ref0)->action = (__ref1)->action; 
 	
 
-#line 4395 "rlparse.cpp"
+#line 4395 "rlparse.cpp" 
 } break;
 case 45: {
-Parser_Lel_opt_lm_part_action *__ref0 = (Parser_Lel_opt_lm_part_action*)&redLel->user.opt_lm_part_action;
+Parser_Lel_opt_lm_part_action *__ref0 = (Parser_Lel_opt_lm_part_action*)&redLel->user.opt_lm_part_action; 
 #line 321 "rlparse.kl"
 
-		(__ref0)->action = 0;
+		(__ref0)->action = 0; 
 	
 
-#line 4404 "rlparse.cpp"
+#line 4404 "rlparse.cpp" 
 } break;
 case 46: {
-Parser_Lel_join *__ref0 = (Parser_Lel_join*)&rhs[0]->user.join;
-Parser_Lel_expression *__ref1 = (Parser_Lel_expression*)&rhs[2]->user.expression;
-Parser_Lel_join *__ref2 = (Parser_Lel_join*)&redLel->user.join;
-Parser_Lel_join *__ref3 = (Parser_Lel_join*)&rhs[0]->user.join;
+Parser_Lel_join *__ref0 = (Parser_Lel_join*)&rhs[0]->user.join; 
+Parser_Lel_expression *__ref1 = (Parser_Lel_expression*)&rhs[2]->user.expression; 
+Parser_Lel_join *__ref2 = (Parser_Lel_join*)&redLel->user.join; 
+Parser_Lel_join *__ref3 = (Parser_Lel_join*)&rhs[0]->user.join; 
 #line 332 "rlparse.kl"
 
 		/* Append the expression to the list and return it. */
-		(__ref0)->join->exprList.append( (__ref1)->expression );
-		(__ref2)->join = (__ref3)->join;
+		(__ref0)->join->exprList.append( (__ref1)->expression ); 
+		(__ref2)->join = (__ref3)->join; 
 	
 
-#line 4418 "rlparse.cpp"
+#line 4418 "rlparse.cpp" 
 } break;
 case 47: {
-Parser_Lel_join *__ref0 = (Parser_Lel_join*)&redLel->user.join;
-Parser_Lel_expression *__ref1 = (Parser_Lel_expression*)&rhs[0]->user.expression;
+Parser_Lel_join *__ref0 = (Parser_Lel_join*)&redLel->user.join; 
+Parser_Lel_expression *__ref1 = (Parser_Lel_expression*)&rhs[0]->user.expression; 
 #line 338 "rlparse.kl"
 
-		(__ref0)->join = new Join( (__ref1)->expression );
+		(__ref0)->join = new Join( (__ref1)->expression ); 
 	
 
-#line 4428 "rlparse.cpp"
+#line 4428 "rlparse.cpp" 
 } break;
 case 48: {
-Parser_Lel_expression *__ref0 = (Parser_Lel_expression*)&redLel->user.expression;
-Parser_Lel_expression *__ref1 = (Parser_Lel_expression*)&rhs[0]->user.expression;
-Parser_Lel_term_short *__ref2 = (Parser_Lel_term_short*)&rhs[2]->user.term_short;
+Parser_Lel_expression *__ref0 = (Parser_Lel_expression*)&redLel->user.expression; 
+Parser_Lel_expression *__ref1 = (Parser_Lel_expression*)&rhs[0]->user.expression; 
+Parser_Lel_term_short *__ref2 = (Parser_Lel_term_short*)&rhs[2]->user.term_short; 
 #line 348 "rlparse.kl"
 
-		(__ref0)->expression = new Expression( (__ref1)->expression, 
-				(__ref2)->term, Expression::OrType );
+		(__ref0)->expression = new Expression( (__ref1)->expression,  
+				(__ref2)->term, Expression::OrType ); 
 	
 
-#line 4440 "rlparse.cpp"
+#line 4440 "rlparse.cpp" 
 } break;
 case 49: {
-Parser_Lel_expression *__ref0 = (Parser_Lel_expression*)&redLel->user.expression;
-Parser_Lel_expression *__ref1 = (Parser_Lel_expression*)&rhs[0]->user.expression;
-Parser_Lel_term_short *__ref2 = (Parser_Lel_term_short*)&rhs[2]->user.term_short;
+Parser_Lel_expression *__ref0 = (Parser_Lel_expression*)&redLel->user.expression; 
+Parser_Lel_expression *__ref1 = (Parser_Lel_expression*)&rhs[0]->user.expression; 
+Parser_Lel_term_short *__ref2 = (Parser_Lel_term_short*)&rhs[2]->user.term_short; 
 #line 353 "rlparse.kl"
 
-		(__ref0)->expression = new Expression( (__ref1)->expression, 
-				(__ref2)->term, Expression::IntersectType );
+		(__ref0)->expression = new Expression( (__ref1)->expression,  
+				(__ref2)->term, Expression::IntersectType ); 
 	
 
-#line 4452 "rlparse.cpp"
+#line 4452 "rlparse.cpp" 
 } break;
 case 50: {
-Parser_Lel_expression *__ref0 = (Parser_Lel_expression*)&redLel->user.expression;
-Parser_Lel_expression *__ref1 = (Parser_Lel_expression*)&rhs[0]->user.expression;
-Parser_Lel_term_short *__ref2 = (Parser_Lel_term_short*)&rhs[2]->user.term_short;
+Parser_Lel_expression *__ref0 = (Parser_Lel_expression*)&redLel->user.expression; 
+Parser_Lel_expression *__ref1 = (Parser_Lel_expression*)&rhs[0]->user.expression; 
+Parser_Lel_term_short *__ref2 = (Parser_Lel_term_short*)&rhs[2]->user.term_short; 
 #line 358 "rlparse.kl"
 
-		(__ref0)->expression = new Expression( (__ref1)->expression, 
-				(__ref2)->term, Expression::SubtractType );
+		(__ref0)->expression = new Expression( (__ref1)->expression,  
+				(__ref2)->term, Expression::SubtractType ); 
 	
 
-#line 4464 "rlparse.cpp"
+#line 4464 "rlparse.cpp" 
 } break;
 case 51: {
-Parser_Lel_expression *__ref0 = (Parser_Lel_expression*)&redLel->user.expression;
-Parser_Lel_expression *__ref1 = (Parser_Lel_expression*)&rhs[0]->user.expression;
-Parser_Lel_term_short *__ref2 = (Parser_Lel_term_short*)&rhs[2]->user.term_short;
+Parser_Lel_expression *__ref0 = (Parser_Lel_expression*)&redLel->user.expression; 
+Parser_Lel_expression *__ref1 = (Parser_Lel_expression*)&rhs[0]->user.expression; 
+Parser_Lel_term_short *__ref2 = (Parser_Lel_term_short*)&rhs[2]->user.term_short; 
 #line 363 "rlparse.kl"
 
-		(__ref0)->expression = new Expression( (__ref1)->expression, 
-				(__ref2)->term, Expression::StrongSubtractType );
+		(__ref0)->expression = new Expression( (__ref1)->expression,  
+				(__ref2)->term, Expression::StrongSubtractType ); 
 	
 
-#line 4476 "rlparse.cpp"
+#line 4476 "rlparse.cpp" 
 } break;
 case 52: {
-Parser_Lel_expression *__ref0 = (Parser_Lel_expression*)&redLel->user.expression;
-Parser_Lel_term_short *__ref1 = (Parser_Lel_term_short*)&rhs[0]->user.term_short;
+Parser_Lel_expression *__ref0 = (Parser_Lel_expression*)&redLel->user.expression; 
+Parser_Lel_term_short *__ref1 = (Parser_Lel_term_short*)&rhs[0]->user.term_short; 
 #line 368 "rlparse.kl"
 
-		(__ref0)->expression = new Expression( (__ref1)->term );
+		(__ref0)->expression = new Expression( (__ref1)->term ); 
 	
 
-#line 4486 "rlparse.cpp"
+#line 4486 "rlparse.cpp" 
 } break;
 case 53: {
-Parser_Lel_term_short *__ref0 = (Parser_Lel_term_short*)&redLel->user.term_short;
-Parser_Lel_term *__ref1 = (Parser_Lel_term*)&rhs[0]->user.term;
+Parser_Lel_term_short *__ref0 = (Parser_Lel_term_short*)&redLel->user.term_short; 
+Parser_Lel_term *__ref1 = (Parser_Lel_term*)&rhs[0]->user.term; 
 #line 389 "rlparse.kl"
 
-		(__ref0)->term = (__ref1)->term;
+		(__ref0)->term = (__ref1)->term; 
 	
 
-#line 4496 "rlparse.cpp"
+#line 4496 "rlparse.cpp" 
 } break;
 case 54: {
-Parser_Lel_term *__ref0 = (Parser_Lel_term*)&redLel->user.term;
-Parser_Lel_term *__ref1 = (Parser_Lel_term*)&rhs[0]->user.term;
-Parser_Lel_factor_with_label *__ref2 = (Parser_Lel_factor_with_label*)&rhs[1]->user.factor_with_label;
+Parser_Lel_term *__ref0 = (Parser_Lel_term*)&redLel->user.term; 
+Parser_Lel_term *__ref1 = (Parser_Lel_term*)&rhs[0]->user.term; 
+Parser_Lel_factor_with_label *__ref2 = (Parser_Lel_factor_with_label*)&rhs[1]->user.factor_with_label; 
 #line 399 "rlparse.kl"
 
-		(__ref0)->term = new Term( (__ref1)->term, (__ref2)->factorWithAug );
+		(__ref0)->term = new Term( (__ref1)->term, (__ref2)->factorWithAug ); 
 	
 
-#line 4507 "rlparse.cpp"
+#line 4507 "rlparse.cpp" 
 } break;
 case 55: {
-Parser_Lel_term *__ref0 = (Parser_Lel_term*)&redLel->user.term;
-Parser_Lel_term *__ref1 = (Parser_Lel_term*)&rhs[0]->user.term;
-Parser_Lel_factor_with_label *__ref2 = (Parser_Lel_factor_with_label*)&rhs[2]->user.factor_with_label;
+Parser_Lel_term *__ref0 = (Parser_Lel_term*)&redLel->user.term; 
+Parser_Lel_term *__ref1 = (Parser_Lel_term*)&rhs[0]->user.term; 
+Parser_Lel_factor_with_label *__ref2 = (Parser_Lel_factor_with_label*)&rhs[2]->user.factor_with_label; 
 #line 403 "rlparse.kl"
 
-		(__ref0)->term = new Term( (__ref1)->term, (__ref2)->factorWithAug );
+		(__ref0)->term = new Term( (__ref1)->term, (__ref2)->factorWithAug ); 
 	
 
-#line 4518 "rlparse.cpp"
+#line 4518 "rlparse.cpp" 
 } break;
 case 56: {
-Parser_Lel_term *__ref0 = (Parser_Lel_term*)&redLel->user.term;
-Parser_Lel_term *__ref1 = (Parser_Lel_term*)&rhs[0]->user.term;
-Parser_Lel_factor_with_label *__ref2 = (Parser_Lel_factor_with_label*)&rhs[2]->user.factor_with_label;
+Parser_Lel_term *__ref0 = (Parser_Lel_term*)&redLel->user.term; 
+Parser_Lel_term *__ref1 = (Parser_Lel_term*)&rhs[0]->user.term; 
+Parser_Lel_factor_with_label *__ref2 = (Parser_Lel_factor_with_label*)&rhs[2]->user.factor_with_label; 
 #line 407 "rlparse.kl"
 
-		(__ref0)->term = new Term( (__ref1)->term, (__ref2)->factorWithAug, Term::RightStartType );
+		(__ref0)->term = new Term( (__ref1)->term, (__ref2)->factorWithAug, Term::RightStartType ); 
 	
 
-#line 4529 "rlparse.cpp"
+#line 4529 "rlparse.cpp" 
 } break;
 case 57: {
-Parser_Lel_term *__ref0 = (Parser_Lel_term*)&redLel->user.term;
-Parser_Lel_term *__ref1 = (Parser_Lel_term*)&rhs[0]->user.term;
-Parser_Lel_factor_with_label *__ref2 = (Parser_Lel_factor_with_label*)&rhs[2]->user.factor_with_label;
+Parser_Lel_term *__ref0 = (Parser_Lel_term*)&redLel->user.term; 
+Parser_Lel_term *__ref1 = (Parser_Lel_term*)&rhs[0]->user.term; 
+Parser_Lel_factor_with_label *__ref2 = (Parser_Lel_factor_with_label*)&rhs[2]->user.factor_with_label; 
 #line 411 "rlparse.kl"
 
-		(__ref0)->term = new Term( (__ref1)->term, (__ref2)->factorWithAug, Term::RightFinishType );
+		(__ref0)->term = new Term( (__ref1)->term, (__ref2)->factorWithAug, Term::RightFinishType ); 
 	
 
-#line 4540 "rlparse.cpp"
+#line 4540 "rlparse.cpp" 
 } break;
 case 58: {
-Parser_Lel_term *__ref0 = (Parser_Lel_term*)&redLel->user.term;
-Parser_Lel_term *__ref1 = (Parser_Lel_term*)&rhs[0]->user.term;
-Parser_Lel_factor_with_label *__ref2 = (Parser_Lel_factor_with_label*)&rhs[2]->user.factor_with_label;
+Parser_Lel_term *__ref0 = (Parser_Lel_term*)&redLel->user.term; 
+Parser_Lel_term *__ref1 = (Parser_Lel_term*)&rhs[0]->user.term; 
+Parser_Lel_factor_with_label *__ref2 = (Parser_Lel_factor_with_label*)&rhs[2]->user.factor_with_label; 
 #line 415 "rlparse.kl"
 
-		(__ref0)->term = new Term( (__ref1)->term, 
-				(__ref2)->factorWithAug, Term::LeftType );
+		(__ref0)->term = new Term( (__ref1)->term,  
+				(__ref2)->factorWithAug, Term::LeftType ); 
 	
 
-#line 4552 "rlparse.cpp"
+#line 4552 "rlparse.cpp" 
 } break;
 case 59: {
-Parser_Lel_term *__ref0 = (Parser_Lel_term*)&redLel->user.term;
-Parser_Lel_factor_with_label *__ref1 = (Parser_Lel_factor_with_label*)&rhs[0]->user.factor_with_label;
+Parser_Lel_term *__ref0 = (Parser_Lel_term*)&redLel->user.term; 
+Parser_Lel_factor_with_label *__ref1 = (Parser_Lel_factor_with_label*)&rhs[0]->user.factor_with_label; 
 #line 420 "rlparse.kl"
 
-		(__ref0)->term = new Term( (__ref1)->factorWithAug );
+		(__ref0)->term = new Term( (__ref1)->factorWithAug ); 
 	
 
-#line 4562 "rlparse.cpp"
+#line 4562 "rlparse.cpp" 
 } break;
 case 60: {
-Parser_Lel_factor_with_label *__ref0 = (Parser_Lel_factor_with_label*)&rhs[2]->user.factor_with_label;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Token *__ref2 = (Token*)&rhs[0]->user.token;
-Parser_Lel_factor_with_label *__ref3 = (Parser_Lel_factor_with_label*)&redLel->user.factor_with_label;
-Parser_Lel_factor_with_label *__ref4 = (Parser_Lel_factor_with_label*)&rhs[2]->user.factor_with_label;
+Parser_Lel_factor_with_label *__ref0 = (Parser_Lel_factor_with_label*)&rhs[2]->user.factor_with_label; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Token *__ref2 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_factor_with_label *__ref3 = (Parser_Lel_factor_with_label*)&redLel->user.factor_with_label; 
+Parser_Lel_factor_with_label *__ref4 = (Parser_Lel_factor_with_label*)&rhs[2]->user.factor_with_label; 
 #line 430 "rlparse.kl"
  
 		/* Add the label to the list and pass the factor up. */
-		(__ref0)->factorWithAug->labels.prepend( Label((__ref1)->loc, (__ref2)->data) );
-		(__ref3)->factorWithAug = (__ref4)->factorWithAug; 
+		(__ref0)->factorWithAug->labels.prepend( Label((__ref1)->loc, (__ref2)->data) ); 
+		(__ref3)->factorWithAug = (__ref4)->factorWithAug;  
 	
 
-#line 4577 "rlparse.cpp"
+#line 4577 "rlparse.cpp" 
 } break;
 case 61: {
-Parser_Lel_factor_with_label *__ref0 = (Parser_Lel_factor_with_label*)&redLel->user.factor_with_label;
-Parser_Lel_factor_with_ep *__ref1 = (Parser_Lel_factor_with_ep*)&rhs[0]->user.factor_with_ep;
+Parser_Lel_factor_with_label *__ref0 = (Parser_Lel_factor_with_label*)&redLel->user.factor_with_label; 
+Parser_Lel_factor_with_ep *__ref1 = (Parser_Lel_factor_with_ep*)&rhs[0]->user.factor_with_ep; 
 #line 436 "rlparse.kl"
 
-		(__ref0)->factorWithAug = (__ref1)->factorWithAug;
+		(__ref0)->factorWithAug = (__ref1)->factorWithAug; 
 	
 
-#line 4587 "rlparse.cpp"
+#line 4587 "rlparse.cpp" 
 } break;
 case 62: {
-Parser_Lel_factor_with_ep *__ref0 = (Parser_Lel_factor_with_ep*)&rhs[0]->user.factor_with_ep;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Parser_Lel_factor_with_ep *__ref2 = (Parser_Lel_factor_with_ep*)&redLel->user.factor_with_ep;
-Parser_Lel_factor_with_ep *__ref3 = (Parser_Lel_factor_with_ep*)&rhs[0]->user.factor_with_ep;
+Parser_Lel_factor_with_ep *__ref0 = (Parser_Lel_factor_with_ep*)&rhs[0]->user.factor_with_ep; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Parser_Lel_factor_with_ep *__ref2 = (Parser_Lel_factor_with_ep*)&redLel->user.factor_with_ep; 
+Parser_Lel_factor_with_ep *__ref3 = (Parser_Lel_factor_with_ep*)&rhs[0]->user.factor_with_ep; 
 #line 446 "rlparse.kl"
  
 		/* Add the target to the list and return the factor object. */
-		(__ref0)->factorWithAug->epsilonLinks.append( EpsilonLink( (__ref1)->loc, nameRef ) );
-		(__ref2)->factorWithAug = (__ref3)->factorWithAug; 
+		(__ref0)->factorWithAug->epsilonLinks.append( EpsilonLink( (__ref1)->loc, nameRef ) ); 
+		(__ref2)->factorWithAug = (__ref3)->factorWithAug;  
 	
 
-#line 4601 "rlparse.cpp"
+#line 4601 "rlparse.cpp" 
 } break;
 case 63: {
-Parser_Lel_factor_with_ep *__ref0 = (Parser_Lel_factor_with_ep*)&redLel->user.factor_with_ep;
-Parser_Lel_factor_with_aug *__ref1 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
+Parser_Lel_factor_with_ep *__ref0 = (Parser_Lel_factor_with_ep*)&redLel->user.factor_with_ep; 
+Parser_Lel_factor_with_aug *__ref1 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
 #line 452 "rlparse.kl"
 
-		(__ref0)->factorWithAug = (__ref1)->factorWithAug;
+		(__ref0)->factorWithAug = (__ref1)->factorWithAug; 
 	
 
-#line 4611 "rlparse.cpp"
+#line 4611 "rlparse.cpp" 
 } break;
 case 64: {
-Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
-Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref;
-Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug;
-Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
+Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
+Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref; 
+Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug; 
+Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
 #line 462 "rlparse.kl"
 
 		/* Append the action to the factorWithAug, record the refernce from 
 		 * factorWithAug to the action and pass up the factorWithAug. */
-		(__ref0)->factorWithAug->actions.append( 
-				ParserAction( (__ref1)->loc, (__ref2)->augType, 0, (__ref3)->action ) );
-		(__ref4)->factorWithAug = (__ref5)->factorWithAug;
+		(__ref0)->factorWithAug->actions.append(  
+				ParserAction( (__ref1)->loc, (__ref2)->augType, 0, (__ref3)->action ) ); 
+		(__ref4)->factorWithAug = (__ref5)->factorWithAug; 
 	
 
-#line 4629 "rlparse.cpp"
+#line 4629 "rlparse.cpp" 
 } break;
 case 65: {
-Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
-Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_priority_aug *__ref2 = (Parser_Lel_priority_aug*)&rhs[2]->user.priority_aug;
-Parser_Lel_factor_with_aug *__ref3 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug;
-Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
+Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
+Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_priority_aug *__ref2 = (Parser_Lel_priority_aug*)&rhs[2]->user.priority_aug; 
+Parser_Lel_factor_with_aug *__ref3 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug; 
+Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
 #line 470 "rlparse.kl"
 
 		/* Append the named priority to the factorWithAug and pass it up. */
-		(__ref0)->factorWithAug->priorityAugs.append( 
-				PriorityAug( (__ref1)->augType, pd->curDefPriorKey, (__ref2)->priorityNum ) );
-		(__ref3)->factorWithAug = (__ref4)->factorWithAug;
+		(__ref0)->factorWithAug->priorityAugs.append(  
+				PriorityAug( (__ref1)->augType, pd->curDefPriorKey, (__ref2)->priorityNum ) ); 
+		(__ref3)->factorWithAug = (__ref4)->factorWithAug; 
 	
 
-#line 4645 "rlparse.cpp"
+#line 4645 "rlparse.cpp" 
 } break;
 case 66: {
-Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
-Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_priority_name *__ref2 = (Parser_Lel_priority_name*)&rhs[3]->user.priority_name;
-Parser_Lel_priority_aug *__ref3 = (Parser_Lel_priority_aug*)&rhs[5]->user.priority_aug;
-Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug;
-Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
+Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
+Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_priority_name *__ref2 = (Parser_Lel_priority_name*)&rhs[3]->user.priority_name; 
+Parser_Lel_priority_aug *__ref3 = (Parser_Lel_priority_aug*)&rhs[5]->user.priority_aug; 
+Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug; 
+Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
 #line 477 "rlparse.kl"
 
 		/* Append the priority using a default name. */
-		(__ref0)->factorWithAug->priorityAugs.append( 
-				PriorityAug( (__ref1)->augType, (__ref2)->priorityName, (__ref3)->priorityNum ) );
-		(__ref4)->factorWithAug = (__ref5)->factorWithAug;
+		(__ref0)->factorWithAug->priorityAugs.append(  
+				PriorityAug( (__ref1)->augType, (__ref2)->priorityName, (__ref3)->priorityNum ) ); 
+		(__ref4)->factorWithAug = (__ref5)->factorWithAug; 
 	
 
-#line 4662 "rlparse.cpp"
+#line 4662 "rlparse.cpp" 
 } break;
 case 67: {
-Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
-Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref;
-Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug;
-Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
+Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
+Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref; 
+Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug; 
+Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
 #line 484 "rlparse.kl"
 
-		(__ref0)->factorWithAug->conditions.append( ConditionTest( (__ref1)->loc, 
-				(__ref2)->augType, (__ref3)->action, true ) );
-		(__ref4)->factorWithAug = (__ref5)->factorWithAug;
+		(__ref0)->factorWithAug->conditions.append( ConditionTest( (__ref1)->loc,  
+				(__ref2)->augType, (__ref3)->action, true ) ); 
+		(__ref4)->factorWithAug = (__ref5)->factorWithAug; 
 	
 
-#line 4678 "rlparse.cpp"
+#line 4678 "rlparse.cpp" 
 } break;
 case 68: {
-Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
-Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[3]->user.action_ref;
-Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug;
-Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
+Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
+Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[3]->user.action_ref; 
+Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug; 
+Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
 #line 490 "rlparse.kl"
 
-		(__ref0)->factorWithAug->conditions.append( ConditionTest( (__ref1)->loc, 
-				(__ref2)->augType, (__ref3)->action, false ) );
-		(__ref4)->factorWithAug = (__ref5)->factorWithAug;
+		(__ref0)->factorWithAug->conditions.append( ConditionTest( (__ref1)->loc,  
+				(__ref2)->augType, (__ref3)->action, false ) ); 
+		(__ref4)->factorWithAug = (__ref5)->factorWithAug; 
 	
 
-#line 4694 "rlparse.cpp"
+#line 4694 "rlparse.cpp" 
 } break;
 case 69: {
-Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
-Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref;
-Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug;
-Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
+Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
+Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref; 
+Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug; 
+Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
 #line 496 "rlparse.kl"
 
 		/* Append the action, pass it up. */
-		(__ref0)->factorWithAug->actions.append( ParserAction( (__ref1)->loc, 
-				(__ref2)->augType, 0, (__ref3)->action ) );
-		(__ref4)->factorWithAug = (__ref5)->factorWithAug;
+		(__ref0)->factorWithAug->actions.append( ParserAction( (__ref1)->loc,  
+				(__ref2)->augType, 0, (__ref3)->action ) ); 
+		(__ref4)->factorWithAug = (__ref5)->factorWithAug; 
 	
 
-#line 4711 "rlparse.cpp"
+#line 4711 "rlparse.cpp" 
 } break;
 case 70: {
-Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
-Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref;
-Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug;
-Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
+Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
+Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref; 
+Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug; 
+Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
 #line 503 "rlparse.kl"
 
 		/* Append the action, pass it up. */
-		(__ref0)->factorWithAug->actions.append( ParserAction( (__ref1)->loc,
-				(__ref2)->augType, 0, (__ref3)->action ) );
-		(__ref4)->factorWithAug = (__ref5)->factorWithAug;
+		(__ref0)->factorWithAug->actions.append( ParserAction( (__ref1)->loc, 
+				(__ref2)->augType, 0, (__ref3)->action ) ); 
+		(__ref4)->factorWithAug = (__ref5)->factorWithAug; 
 	
 
-#line 4728 "rlparse.cpp"
+#line 4728 "rlparse.cpp" 
 } break;
 case 71: {
-Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
-Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref;
-Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug;
-Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
+Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
+Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref; 
+Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug; 
+Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
 #line 510 "rlparse.kl"
 
 		/* Append the action, pass it up. */
-		(__ref0)->factorWithAug->actions.append( ParserAction( (__ref1)->loc,
-				(__ref2)->augType, 0, (__ref3)->action ) );
-		(__ref4)->factorWithAug = (__ref5)->factorWithAug;
+		(__ref0)->factorWithAug->actions.append( ParserAction( (__ref1)->loc, 
+				(__ref2)->augType, 0, (__ref3)->action ) ); 
+		(__ref4)->factorWithAug = (__ref5)->factorWithAug; 
 	
 
-#line 4745 "rlparse.cpp"
+#line 4745 "rlparse.cpp" 
 } break;
 case 72: {
-Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
-Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref;
-Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug;
-Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
+Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
+Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref; 
+Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug; 
+Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
 #line 517 "rlparse.kl"
 
 		/* Append the action to the factorWithAug, record the refernce from 
 		 * factorWithAug to the action and pass up the factorWithAug. */
-		(__ref0)->factorWithAug->actions.append( ParserAction( (__ref1)->loc,
-				(__ref2)->augType, pd->curDefLocalErrKey, (__ref3)->action ) );
-		(__ref4)->factorWithAug = (__ref5)->factorWithAug;
+		(__ref0)->factorWithAug->actions.append( ParserAction( (__ref1)->loc, 
+				(__ref2)->augType, pd->curDefLocalErrKey, (__ref3)->action ) ); 
+		(__ref4)->factorWithAug = (__ref5)->factorWithAug; 
 	
 
-#line 4763 "rlparse.cpp"
+#line 4763 "rlparse.cpp" 
 } break;
 case 73: {
-Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
-Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref;
-Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug;
-Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
+Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
+Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_action_ref *__ref3 = (Parser_Lel_action_ref*)&rhs[2]->user.action_ref; 
+Parser_Lel_factor_with_aug *__ref4 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug; 
+Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
 #line 525 "rlparse.kl"
 
 		/* Append the action to the factorWithAug, record the refernce from 
 		 * factorWithAug to the action and pass up the factorWithAug. */
-		(__ref0)->factorWithAug->actions.append( ParserAction( (__ref1)->loc, 
-				(__ref2)->augType, pd->curDefLocalErrKey, (__ref3)->action ) );
-		(__ref4)->factorWithAug = (__ref5)->factorWithAug;
+		(__ref0)->factorWithAug->actions.append( ParserAction( (__ref1)->loc,  
+				(__ref2)->augType, pd->curDefLocalErrKey, (__ref3)->action ) ); 
+		(__ref4)->factorWithAug = (__ref5)->factorWithAug; 
 	
 
-#line 4781 "rlparse.cpp"
+#line 4781 "rlparse.cpp" 
 } break;
 case 74: {
-Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
-Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type;
-Parser_Lel_local_err_name *__ref3 = (Parser_Lel_local_err_name*)&rhs[3]->user.local_err_name;
-Parser_Lel_action_ref *__ref4 = (Parser_Lel_action_ref*)&rhs[5]->user.action_ref;
-Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug;
-Parser_Lel_factor_with_aug *__ref6 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug;
+Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
+Parser_Lel_aug_type *__ref1 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&rhs[1]->user.aug_type; 
+Parser_Lel_local_err_name *__ref3 = (Parser_Lel_local_err_name*)&rhs[3]->user.local_err_name; 
+Parser_Lel_action_ref *__ref4 = (Parser_Lel_action_ref*)&rhs[5]->user.action_ref; 
+Parser_Lel_factor_with_aug *__ref5 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug; 
+Parser_Lel_factor_with_aug *__ref6 = (Parser_Lel_factor_with_aug*)&rhs[0]->user.factor_with_aug; 
 #line 533 "rlparse.kl"
 
 		/* Append the action to the factorWithAug, record the refernce from
 		 * factorWithAug to the action and pass up the factorWithAug. */
-		(__ref0)->factorWithAug->actions.append( ParserAction( (__ref1)->loc,
-				(__ref2)->augType, (__ref3)->error_name, (__ref4)->action ) );
-		(__ref5)->factorWithAug = (__ref6)->factorWithAug;
+		(__ref0)->factorWithAug->actions.append( ParserAction( (__ref1)->loc, 
+				(__ref2)->augType, (__ref3)->error_name, (__ref4)->action ) ); 
+		(__ref5)->factorWithAug = (__ref6)->factorWithAug; 
 	
 
-#line 4800 "rlparse.cpp"
+#line 4800 "rlparse.cpp" 
 } break;
 case 75: {
-Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug;
-Parser_Lel_factor_with_rep *__ref1 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep;
+Parser_Lel_factor_with_aug *__ref0 = (Parser_Lel_factor_with_aug*)&redLel->user.factor_with_aug; 
+Parser_Lel_factor_with_rep *__ref1 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep; 
 #line 541 "rlparse.kl"
 
-		(__ref0)->factorWithAug = new FactorWithAug( (__ref1)->factorWithRep );
+		(__ref0)->factorWithAug = new FactorWithAug( (__ref1)->factorWithRep ); 
 	
 
-#line 4810 "rlparse.cpp"
+#line 4810 "rlparse.cpp" 
 } break;
 case 76: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 554 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_finish; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_finish;  
 
-#line 4819 "rlparse.cpp"
+#line 4819 "rlparse.cpp" 
 } break;
 case 77: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 555 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_leave; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_leave;  
 
-#line 4828 "rlparse.cpp"
+#line 4828 "rlparse.cpp" 
 } break;
 case 78: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 556 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all;  
 
-#line 4837 "rlparse.cpp"
+#line 4837 "rlparse.cpp" 
 } break;
 case 79: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 557 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start;  
 
-#line 4846 "rlparse.cpp"
+#line 4846 "rlparse.cpp" 
 } break;
 case 80: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 562 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start;  
 
-#line 4855 "rlparse.cpp"
+#line 4855 "rlparse.cpp" 
 } break;
 case 81: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 563 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start;  
 
-#line 4864 "rlparse.cpp"
+#line 4864 "rlparse.cpp" 
 } break;
 case 82: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 564 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all;  
 
-#line 4873 "rlparse.cpp"
+#line 4873 "rlparse.cpp" 
 } break;
 case 83: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 565 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all;  
 
-#line 4882 "rlparse.cpp"
+#line 4882 "rlparse.cpp" 
 } break;
 case 84: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 566 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_leave; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_leave;  
 
-#line 4891 "rlparse.cpp"
+#line 4891 "rlparse.cpp" 
 } break;
 case 85: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 567 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_leave; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_leave;  
 
-#line 4900 "rlparse.cpp"
+#line 4900 "rlparse.cpp" 
 } break;
 case 86: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 568 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all;  
 
-#line 4909 "rlparse.cpp"
+#line 4909 "rlparse.cpp" 
 } break;
 case 87: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 569 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start;  
 
-#line 4918 "rlparse.cpp"
+#line 4918 "rlparse.cpp" 
 } break;
 case 88: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 570 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_leave; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_leave;  
 
-#line 4927 "rlparse.cpp"
+#line 4927 "rlparse.cpp" 
 } break;
 case 89: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 579 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_to_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_to_state;  
 
-#line 4936 "rlparse.cpp"
+#line 4936 "rlparse.cpp" 
 } break;
 case 90: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 581 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_to_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_to_state;  
 
-#line 4945 "rlparse.cpp"
+#line 4945 "rlparse.cpp" 
 } break;
 case 91: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 584 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_to_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_to_state;  
 
-#line 4954 "rlparse.cpp"
+#line 4954 "rlparse.cpp" 
 } break;
 case 92: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 586 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_to_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_to_state;  
 
-#line 4963 "rlparse.cpp"
+#line 4963 "rlparse.cpp" 
 } break;
 case 93: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 589 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_to_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_to_state;  
 
-#line 4972 "rlparse.cpp"
+#line 4972 "rlparse.cpp" 
 } break;
 case 94: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 591 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_to_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_to_state;  
 
-#line 4981 "rlparse.cpp"
+#line 4981 "rlparse.cpp" 
 } break;
 case 95: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 594 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_to_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_to_state;  
 
-#line 4990 "rlparse.cpp"
+#line 4990 "rlparse.cpp" 
 } break;
 case 96: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 596 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_to_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_to_state;  
 
-#line 4999 "rlparse.cpp"
+#line 4999 "rlparse.cpp" 
 } break;
 case 97: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 599 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_to_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_to_state;  
 
-#line 5008 "rlparse.cpp"
+#line 5008 "rlparse.cpp" 
 } break;
 case 98: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 601 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_to_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_to_state;  
 
-#line 5017 "rlparse.cpp"
+#line 5017 "rlparse.cpp" 
 } break;
 case 99: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 604 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_to_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_to_state;  
 
-#line 5026 "rlparse.cpp"
+#line 5026 "rlparse.cpp" 
 } break;
 case 100: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 606 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_to_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_to_state;  
 
-#line 5035 "rlparse.cpp"
+#line 5035 "rlparse.cpp" 
 } break;
 case 101: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 615 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_from_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_from_state;  
 
-#line 5044 "rlparse.cpp"
+#line 5044 "rlparse.cpp" 
 } break;
 case 102: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 617 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_from_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_from_state;  
 
-#line 5053 "rlparse.cpp"
+#line 5053 "rlparse.cpp" 
 } break;
 case 103: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 620 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_from_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_from_state;  
 
-#line 5062 "rlparse.cpp"
+#line 5062 "rlparse.cpp" 
 } break;
 case 104: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 622 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_from_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_from_state;  
 
-#line 5071 "rlparse.cpp"
+#line 5071 "rlparse.cpp" 
 } break;
 case 105: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 625 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_from_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_from_state;  
 
-#line 5080 "rlparse.cpp"
+#line 5080 "rlparse.cpp" 
 } break;
 case 106: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 627 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_from_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_from_state;  
 
-#line 5089 "rlparse.cpp"
+#line 5089 "rlparse.cpp" 
 } break;
 case 107: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 630 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_from_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_from_state;  
 
-#line 5098 "rlparse.cpp"
+#line 5098 "rlparse.cpp" 
 } break;
 case 108: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 632 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_from_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_from_state;  
 
-#line 5107 "rlparse.cpp"
+#line 5107 "rlparse.cpp" 
 } break;
 case 109: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 635 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_from_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_from_state;  
 
-#line 5116 "rlparse.cpp"
+#line 5116 "rlparse.cpp" 
 } break;
 case 110: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 637 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_from_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_from_state;  
 
-#line 5125 "rlparse.cpp"
+#line 5125 "rlparse.cpp" 
 } break;
 case 111: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 640 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_from_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_from_state;  
 
-#line 5134 "rlparse.cpp"
+#line 5134 "rlparse.cpp" 
 } break;
 case 112: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 642 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_from_state; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_from_state;  
 
-#line 5143 "rlparse.cpp"
+#line 5143 "rlparse.cpp" 
 } break;
 case 113: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 651 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_eof; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_eof;  
 
-#line 5152 "rlparse.cpp"
+#line 5152 "rlparse.cpp" 
 } break;
 case 114: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 653 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_eof; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_eof;  
 
-#line 5161 "rlparse.cpp"
+#line 5161 "rlparse.cpp" 
 } break;
 case 115: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 656 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_eof; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_eof;  
 
-#line 5170 "rlparse.cpp"
+#line 5170 "rlparse.cpp" 
 } break;
 case 116: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 658 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_eof; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_eof;  
 
-#line 5179 "rlparse.cpp"
+#line 5179 "rlparse.cpp" 
 } break;
 case 117: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 661 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_eof; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_eof;  
 
-#line 5188 "rlparse.cpp"
+#line 5188 "rlparse.cpp" 
 } break;
 case 118: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 663 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_eof; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_eof;  
 
-#line 5197 "rlparse.cpp"
+#line 5197 "rlparse.cpp" 
 } break;
 case 119: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 666 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_eof; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_eof;  
 
-#line 5206 "rlparse.cpp"
+#line 5206 "rlparse.cpp" 
 } break;
 case 120: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 668 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_eof; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_eof;  
 
-#line 5215 "rlparse.cpp"
+#line 5215 "rlparse.cpp" 
 } break;
 case 121: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 671 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_eof; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_eof;  
 
-#line 5224 "rlparse.cpp"
+#line 5224 "rlparse.cpp" 
 } break;
 case 122: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 673 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_eof; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_eof;  
 
-#line 5233 "rlparse.cpp"
+#line 5233 "rlparse.cpp" 
 } break;
 case 123: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 676 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_eof; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_eof;  
 
-#line 5242 "rlparse.cpp"
+#line 5242 "rlparse.cpp" 
 } break;
 case 124: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 678 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_eof; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_eof;  
 
-#line 5251 "rlparse.cpp"
+#line 5251 "rlparse.cpp" 
 } break;
 case 125: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 687 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_gbl_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_gbl_error;  
 
-#line 5260 "rlparse.cpp"
+#line 5260 "rlparse.cpp" 
 } break;
 case 126: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 689 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_gbl_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_gbl_error;  
 
-#line 5269 "rlparse.cpp"
+#line 5269 "rlparse.cpp" 
 } break;
 case 127: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 692 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_gbl_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_gbl_error;  
 
-#line 5278 "rlparse.cpp"
+#line 5278 "rlparse.cpp" 
 } break;
 case 128: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 694 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_gbl_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_gbl_error;  
 
-#line 5287 "rlparse.cpp"
+#line 5287 "rlparse.cpp" 
 } break;
 case 129: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 697 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_gbl_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_gbl_error;  
 
-#line 5296 "rlparse.cpp"
+#line 5296 "rlparse.cpp" 
 } break;
 case 130: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 699 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_gbl_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_gbl_error;  
 
-#line 5305 "rlparse.cpp"
+#line 5305 "rlparse.cpp" 
 } break;
 case 131: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 702 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_gbl_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_gbl_error;  
 
-#line 5314 "rlparse.cpp"
+#line 5314 "rlparse.cpp" 
 } break;
 case 132: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 704 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_gbl_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_gbl_error;  
 
-#line 5323 "rlparse.cpp"
+#line 5323 "rlparse.cpp" 
 } break;
 case 133: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 707 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_gbl_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_gbl_error;  
 
-#line 5332 "rlparse.cpp"
+#line 5332 "rlparse.cpp" 
 } break;
 case 134: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 709 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_gbl_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_gbl_error;  
 
-#line 5341 "rlparse.cpp"
+#line 5341 "rlparse.cpp" 
 } break;
 case 135: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 712 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_gbl_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_gbl_error;  
 
-#line 5350 "rlparse.cpp"
+#line 5350 "rlparse.cpp" 
 } break;
 case 136: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 714 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_gbl_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_gbl_error;  
 
-#line 5359 "rlparse.cpp"
+#line 5359 "rlparse.cpp" 
 } break;
 case 137: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 724 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_local_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_local_error;  
 
-#line 5368 "rlparse.cpp"
+#line 5368 "rlparse.cpp" 
 } break;
 case 138: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 726 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_local_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_start_local_error;  
 
-#line 5377 "rlparse.cpp"
+#line 5377 "rlparse.cpp" 
 } break;
 case 139: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 729 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_local_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_local_error;  
 
-#line 5386 "rlparse.cpp"
+#line 5386 "rlparse.cpp" 
 } break;
 case 140: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 731 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_local_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_start_local_error;  
 
-#line 5395 "rlparse.cpp"
+#line 5395 "rlparse.cpp" 
 } break;
 case 141: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 734 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_local_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_local_error;  
 
-#line 5404 "rlparse.cpp"
+#line 5404 "rlparse.cpp" 
 } break;
 case 142: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 736 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_local_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_all_local_error;  
 
-#line 5413 "rlparse.cpp"
+#line 5413 "rlparse.cpp" 
 } break;
 case 143: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 739 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_local_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_local_error;  
 
-#line 5422 "rlparse.cpp"
+#line 5422 "rlparse.cpp" 
 } break;
 case 144: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 741 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_local_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_final_local_error;  
 
-#line 5431 "rlparse.cpp"
+#line 5431 "rlparse.cpp" 
 } break;
 case 145: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 744 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_local_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_local_error;  
 
-#line 5440 "rlparse.cpp"
+#line 5440 "rlparse.cpp" 
 } break;
 case 146: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 746 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_local_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_not_final_local_error;  
 
-#line 5449 "rlparse.cpp"
+#line 5449 "rlparse.cpp" 
 } break;
 case 147: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 749 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_local_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_local_error;  
 
-#line 5458 "rlparse.cpp"
+#line 5458 "rlparse.cpp" 
 } break;
 case 148: {
-Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type;
+Parser_Lel_aug_type *__ref0 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_aug_type *__ref2 = (Parser_Lel_aug_type*)&redLel->user.aug_type; 
 #line 751 "rlparse.kl"
- (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_local_error; 
+ (__ref0)->loc = (__ref1)->loc; (__ref2)->augType = at_middle_local_error;  
 
-#line 5467 "rlparse.cpp"
+#line 5467 "rlparse.cpp" 
 } break;
 case 149: {
-Parser_Lel_action_ref *__ref0 = (Parser_Lel_action_ref*)&redLel->user.action_ref;
-Parser_Lel_action_ref *__ref1 = (Parser_Lel_action_ref*)&rhs[0]->user.action_ref;
+Parser_Lel_action_ref *__ref0 = (Parser_Lel_action_ref*)&redLel->user.action_ref; 
+Parser_Lel_action_ref *__ref1 = (Parser_Lel_action_ref*)&rhs[0]->user.action_ref; 
 #line 764 "rlparse.kl"
- (__ref0)->action = (__ref1)->action; 
+ (__ref0)->action = (__ref1)->action;  
 
-#line 5475 "rlparse.cpp"
+#line 5475 "rlparse.cpp" 
 } break;
 case 150: {
-Parser_Lel_action_ref *__ref0 = (Parser_Lel_action_ref*)&redLel->user.action_ref;
-Parser_Lel_action_ref *__ref1 = (Parser_Lel_action_ref*)&rhs[1]->user.action_ref;
+Parser_Lel_action_ref *__ref0 = (Parser_Lel_action_ref*)&redLel->user.action_ref; 
+Parser_Lel_action_ref *__ref1 = (Parser_Lel_action_ref*)&rhs[1]->user.action_ref; 
 #line 765 "rlparse.kl"
- (__ref0)->action = (__ref1)->action; 
+ (__ref0)->action = (__ref1)->action;  
 
-#line 5483 "rlparse.cpp"
+#line 5483 "rlparse.cpp" 
 } break;
 case 151: {
-Parser_Lel_action_ref *__ref0 = (Parser_Lel_action_ref*)&redLel->user.action_ref;
-Parser_Lel_action_ref *__ref1 = (Parser_Lel_action_ref*)&rhs[0]->user.action_ref;
+Parser_Lel_action_ref *__ref0 = (Parser_Lel_action_ref*)&redLel->user.action_ref; 
+Parser_Lel_action_ref *__ref1 = (Parser_Lel_action_ref*)&rhs[0]->user.action_ref; 
 #line 766 "rlparse.kl"
- (__ref0)->action = (__ref1)->action; 
+ (__ref0)->action = (__ref1)->action;  
 
-#line 5491 "rlparse.cpp"
+#line 5491 "rlparse.cpp" 
 } break;
 case 152: {
-Token *__ref0 = (Token*)&rhs[0]->user.token;
-Parser_Lel_action_ref *__ref1 = (Parser_Lel_action_ref*)&redLel->user.action_ref;
-Token *__ref2 = (Token*)&rhs[0]->user.token;
-Token *__ref3 = (Token*)&rhs[0]->user.token;
-Parser_Lel_action_ref *__ref4 = (Parser_Lel_action_ref*)&redLel->user.action_ref;
+Token *__ref0 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_action_ref *__ref1 = (Parser_Lel_action_ref*)&redLel->user.action_ref; 
+Token *__ref2 = (Token*)&rhs[0]->user.token; 
+Token *__ref3 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_action_ref *__ref4 = (Parser_Lel_action_ref*)&redLel->user.action_ref; 
 #line 771 "rlparse.kl"
 
 		/* Set the name in the actionDict. */
-		Action *action = pd->actionDict.find( (__ref0)->data );
+		Action *action = pd->actionDict.find( (__ref0)->data ); 
 		if ( action != 0 ) {
 			/* Pass up the action element */
-			(__ref1)->action = action;
+			(__ref1)->action = action; 
 		}
 		else {
 			/* Will recover by returning null as the action. */
-			error((__ref2)->loc) << "action lookup of \"" << (__ref3)->data << "\" failed" << endl;
-			(__ref4)->action = 0;
+			error((__ref2)->loc) << "action lookup of \"" << (__ref3)->data << "\" failed" << endl; 
+			(__ref4)->action = 0; 
 		}
 	
 
-#line 5514 "rlparse.cpp"
+#line 5514 "rlparse.cpp" 
 } break;
 case 153: {
-Token *__ref0 = (Token*)&rhs[0]->user.token;
-Parser_Lel_inline_list *__ref1 = (Parser_Lel_inline_list*)&rhs[1]->user.inline_list;
-Parser_Lel_action_ref *__ref2 = (Parser_Lel_action_ref*)&redLel->user.action_ref;
+Token *__ref0 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_inline_list *__ref1 = (Parser_Lel_inline_list*)&rhs[1]->user.inline_list; 
+Parser_Lel_action_ref *__ref2 = (Parser_Lel_action_ref*)&redLel->user.action_ref; 
 #line 788 "rlparse.kl"
 
 		/* Create the action, add it to the list and pass up. */
-		Action *newAction = new Action( (__ref0)->loc, 0, (__ref1)->inlineList, pd->nextCondId++ );
+		Action *newAction = new Action( (__ref0)->loc, 0, (__ref1)->inlineList, pd->nextCondId++ ); 
 		pd->actionList.append( newAction );
-		(__ref2)->action = newAction;
+		(__ref2)->action = newAction; 
 	
 
-#line 5528 "rlparse.cpp"
+#line 5528 "rlparse.cpp" 
 } break;
 case 154: {
-Token *__ref0 = (Token*)&rhs[0]->user.token;
-Parser_Lel_priority_name *__ref1 = (Parser_Lel_priority_name*)&redLel->user.priority_name;
+Token *__ref0 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_priority_name *__ref1 = (Parser_Lel_priority_name*)&redLel->user.priority_name; 
 #line 803 "rlparse.kl"
 
 		// Lookup/create the priority key.
 		PriorDictEl *priorDictEl;
-		if ( pd->priorDict.insert( (__ref0)->data, pd->nextPriorKey, &priorDictEl ) )
+		if ( pd->priorDict.insert( (__ref0)->data, pd->nextPriorKey, &priorDictEl ) ) 
 			pd->nextPriorKey += 1;
 
 		// Use the inserted/found priority key.
-		(__ref1)->priorityName = priorDictEl->value;
+		(__ref1)->priorityName = priorDictEl->value; 
 	
 
-#line 5544 "rlparse.cpp"
+#line 5544 "rlparse.cpp" 
 } break;
 case 155: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
-Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
-Parser_Lel_priority_aug *__ref3 = (Parser_Lel_priority_aug*)&redLel->user.priority_aug;
-Parser_Lel_token_type *__ref4 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
-Parser_Lel_token_type *__ref5 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
-Parser_Lel_priority_aug *__ref6 = (Parser_Lel_priority_aug*)&redLel->user.priority_aug;
-Parser_Lel_priority_aug *__ref7 = (Parser_Lel_priority_aug*)&redLel->user.priority_aug;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
+Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
+Parser_Lel_priority_aug *__ref3 = (Parser_Lel_priority_aug*)&redLel->user.priority_aug; 
+Parser_Lel_token_type *__ref4 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
+Parser_Lel_token_type *__ref5 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
+Parser_Lel_priority_aug *__ref6 = (Parser_Lel_priority_aug*)&redLel->user.priority_aug; 
+Parser_Lel_priority_aug *__ref7 = (Parser_Lel_priority_aug*)&redLel->user.priority_aug; 
 #line 820 "rlparse.kl"
 
 		// Convert the priority number to a long. Check for overflow.
 		errno = 0;
 		//cerr << "PRIOR AUG: " << $1->token.data << endl;
-		long aug = strtol( (__ref0)->token.data, 0, 10 );
+		long aug = strtol( (__ref0)->token.data, 0, 10 ); 
 		if ( errno == ERANGE && aug == LONG_MAX ) {
 			/* Priority number too large. Recover by setting the priority to 0. */
-			error((__ref1)->token.loc) << "priority number " << (__ref2)->token.data << 
+			error((__ref1)->token.loc) << "priority number " << (__ref2)->token.data <<  
 					" overflows" << endl;
-			(__ref3)->priorityNum = 0;
+			(__ref3)->priorityNum = 0; 
 		}
 		else if ( errno == ERANGE && aug == LONG_MIN ) {
 			/* Priority number too large in the neg. Recover by using 0. */
-			error((__ref4)->token.loc) << "priority number " << (__ref5)->token.data << 
+			error((__ref4)->token.loc) << "priority number " << (__ref5)->token.data <<  
 					" underflows" << endl;
-			(__ref6)->priorityNum = 0;
+			(__ref6)->priorityNum = 0; 
 		}
 		else {
 			/* No overflow or underflow. */
-			(__ref7)->priorityNum = aug;
+			(__ref7)->priorityNum = aug; 
 		}
 	
 
-#line 5579 "rlparse.cpp"
+#line 5579 "rlparse.cpp" 
 } break;
 case 156: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 846 "rlparse.kl"
 
-		(__ref0)->token = *(__ref1);
+		(__ref0)->token = *(__ref1); 
 	
 
-#line 5589 "rlparse.cpp"
+#line 5589 "rlparse.cpp" 
 } break;
 case 157: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref2 = (Token*)&rhs[0]->user.token;
-Parser_Lel_token_type *__ref3 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref4 = (Token*)&rhs[1]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref2 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_token_type *__ref3 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref4 = (Token*)&rhs[1]->user.token; 
 #line 850 "rlparse.kl"
 
-		(__ref0)->token.set( "+", 1 );
-		(__ref1)->token.loc = (__ref2)->loc;
-		(__ref3)->token.append( *(__ref4) );
+		(__ref0)->token.set( "+", 1 ); 
+		(__ref1)->token.loc = (__ref2)->loc; 
+		(__ref3)->token.append( *(__ref4) ); 
 	
 
-#line 5604 "rlparse.cpp"
+#line 5604 "rlparse.cpp" 
 } break;
 case 158: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref2 = (Token*)&rhs[0]->user.token;
-Parser_Lel_token_type *__ref3 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref4 = (Token*)&rhs[1]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref2 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_token_type *__ref3 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref4 = (Token*)&rhs[1]->user.token; 
 #line 856 "rlparse.kl"
 
-		(__ref0)->token.set( "-", 1 );
-		(__ref1)->token.loc = (__ref2)->loc;
-		(__ref3)->token.append( *(__ref4) );
+		(__ref0)->token.set( "-", 1 ); 
+		(__ref1)->token.loc = (__ref2)->loc; 
+		(__ref3)->token.append( *(__ref4) ); 
 	
 
-#line 5619 "rlparse.cpp"
+#line 5619 "rlparse.cpp" 
 } break;
 case 159: {
-Token *__ref0 = (Token*)&rhs[0]->user.token;
-Parser_Lel_local_err_name *__ref1 = (Parser_Lel_local_err_name*)&redLel->user.local_err_name;
+Token *__ref0 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_local_err_name *__ref1 = (Parser_Lel_local_err_name*)&redLel->user.local_err_name; 
 #line 868 "rlparse.kl"
 
 		/* Lookup/create the priority key. */
 		LocalErrDictEl *localErrDictEl;
-		if ( pd->localErrDict.insert( (__ref0)->data, pd->nextLocalErrKey, &localErrDictEl ) )
+		if ( pd->localErrDict.insert( (__ref0)->data, pd->nextLocalErrKey, &localErrDictEl ) ) 
 			pd->nextLocalErrKey += 1;
 
 		/* Use the inserted/found priority key. */
-		(__ref1)->error_name = localErrDictEl->value;
+		(__ref1)->error_name = localErrDictEl->value; 
 	
 
-#line 5635 "rlparse.cpp"
+#line 5635 "rlparse.cpp" 
 } break;
 case 160: {
-Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep;
+Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep; 
 #line 889 "rlparse.kl"
 
-		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep, 
+		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep,  
 				0, 0, FactorWithRep::StarType );
 	
 
-#line 5647 "rlparse.cpp"
+#line 5647 "rlparse.cpp" 
 } break;
 case 161: {
-Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep;
+Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep; 
 #line 894 "rlparse.kl"
 
-		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep, 
+		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep,  
 				0, 0, FactorWithRep::StarStarType );
 	
 
-#line 5659 "rlparse.cpp"
+#line 5659 "rlparse.cpp" 
 } break;
 case 162: {
-Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep;
+Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep; 
 #line 899 "rlparse.kl"
 
-		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep, 
+		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep,  
 				0, 0, FactorWithRep::OptionalType );
 	
 
-#line 5671 "rlparse.cpp"
+#line 5671 "rlparse.cpp" 
 } break;
 case 163: {
-Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep;
+Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep; 
 #line 904 "rlparse.kl"
 
-		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep, 
+		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep,  
 				0, 0, FactorWithRep::PlusType );
 	
 
-#line 5683 "rlparse.cpp"
+#line 5683 "rlparse.cpp" 
 } break;
 case 164: {
-Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep;
-Parser_Lel_factor_rep_num *__ref3 = (Parser_Lel_factor_rep_num*)&rhs[2]->user.factor_rep_num;
+Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep; 
+Parser_Lel_factor_rep_num *__ref3 = (Parser_Lel_factor_rep_num*)&rhs[2]->user.factor_rep_num; 
 #line 909 "rlparse.kl"
 
-		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep, 
-				(__ref3)->rep, 0, FactorWithRep::ExactType );
+		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep,  
+				(__ref3)->rep, 0, FactorWithRep::ExactType ); 
 	
 
-#line 5696 "rlparse.cpp"
+#line 5696 "rlparse.cpp" 
 } break;
 case 165: {
-Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep;
-Parser_Lel_factor_rep_num *__ref3 = (Parser_Lel_factor_rep_num*)&rhs[3]->user.factor_rep_num;
+Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep; 
+Parser_Lel_factor_rep_num *__ref3 = (Parser_Lel_factor_rep_num*)&rhs[3]->user.factor_rep_num; 
 #line 914 "rlparse.kl"
 
-		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep, 
-				0, (__ref3)->rep, FactorWithRep::MaxType );
+		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep,  
+				0, (__ref3)->rep, FactorWithRep::MaxType ); 
 	
 
-#line 5709 "rlparse.cpp"
+#line 5709 "rlparse.cpp" 
 } break;
 case 166: {
-Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep;
-Parser_Lel_factor_rep_num *__ref3 = (Parser_Lel_factor_rep_num*)&rhs[2]->user.factor_rep_num;
+Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep; 
+Parser_Lel_factor_rep_num *__ref3 = (Parser_Lel_factor_rep_num*)&rhs[2]->user.factor_rep_num; 
 #line 919 "rlparse.kl"
 
-		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep,
-				(__ref3)->rep, 0, FactorWithRep::MinType );
+		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep, 
+				(__ref3)->rep, 0, FactorWithRep::MinType ); 
 	
 
-#line 5722 "rlparse.cpp"
+#line 5722 "rlparse.cpp" 
 } break;
 case 167: {
-Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep;
-Parser_Lel_factor_rep_num *__ref3 = (Parser_Lel_factor_rep_num*)&rhs[2]->user.factor_rep_num;
-Parser_Lel_factor_rep_num *__ref4 = (Parser_Lel_factor_rep_num*)&rhs[4]->user.factor_rep_num;
+Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Parser_Lel_factor_with_rep *__ref2 = (Parser_Lel_factor_with_rep*)&rhs[0]->user.factor_with_rep; 
+Parser_Lel_factor_rep_num *__ref3 = (Parser_Lel_factor_rep_num*)&rhs[2]->user.factor_rep_num; 
+Parser_Lel_factor_rep_num *__ref4 = (Parser_Lel_factor_rep_num*)&rhs[4]->user.factor_rep_num; 
 #line 924 "rlparse.kl"
 
-		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep, 
-				(__ref3)->rep, (__ref4)->rep, FactorWithRep::RangeType );
+		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->loc, (__ref2)->factorWithRep,  
+				(__ref3)->rep, (__ref4)->rep, FactorWithRep::RangeType ); 
 	
 
-#line 5736 "rlparse.cpp"
+#line 5736 "rlparse.cpp" 
 } break;
 case 168: {
-Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep;
-Parser_Lel_factor_with_neg *__ref1 = (Parser_Lel_factor_with_neg*)&rhs[0]->user.factor_with_neg;
+Parser_Lel_factor_with_rep *__ref0 = (Parser_Lel_factor_with_rep*)&redLel->user.factor_with_rep; 
+Parser_Lel_factor_with_neg *__ref1 = (Parser_Lel_factor_with_neg*)&rhs[0]->user.factor_with_neg; 
 #line 929 "rlparse.kl"
 
-		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->factorWithNeg );
+		(__ref0)->factorWithRep = new FactorWithRep( (__ref1)->factorWithNeg ); 
 	
 
-#line 5746 "rlparse.cpp"
+#line 5746 "rlparse.cpp" 
 } break;
 case 169: {
-Token *__ref0 = (Token*)&rhs[0]->user.token;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Token *__ref2 = (Token*)&rhs[0]->user.token;
-Parser_Lel_factor_rep_num *__ref3 = (Parser_Lel_factor_rep_num*)&redLel->user.factor_rep_num;
-Parser_Lel_factor_rep_num *__ref4 = (Parser_Lel_factor_rep_num*)&redLel->user.factor_rep_num;
+Token *__ref0 = (Token*)&rhs[0]->user.token; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Token *__ref2 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_factor_rep_num *__ref3 = (Parser_Lel_factor_rep_num*)&redLel->user.factor_rep_num; 
+Parser_Lel_factor_rep_num *__ref4 = (Parser_Lel_factor_rep_num*)&redLel->user.factor_rep_num; 
 #line 939 "rlparse.kl"
 
 		// Convert the priority number to a long. Check for overflow.
 		errno = 0;
-		long rep = strtol( (__ref0)->data, 0, 10 );
+		long rep = strtol( (__ref0)->data, 0, 10 ); 
 		if ( errno == ERANGE && rep == LONG_MAX ) {
 			// Repetition too large. Recover by returing repetition 1. */
-			error((__ref1)->loc) << "repetition number " << (__ref2)->data << " overflows" << endl;
-			(__ref3)->rep = 1;
+			error((__ref1)->loc) << "repetition number " << (__ref2)->data << " overflows" << endl; 
+			(__ref3)->rep = 1; 
 		}
 		else {
 			// Cannot be negative, so no overflow.
-			(__ref4)->rep = rep;
+			(__ref4)->rep = rep; 
  		}
 	
 
-#line 5770 "rlparse.cpp"
+#line 5770 "rlparse.cpp" 
 } break;
 case 170: {
-Parser_Lel_factor_with_neg *__ref0 = (Parser_Lel_factor_with_neg*)&redLel->user.factor_with_neg;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_factor_with_neg *__ref2 = (Parser_Lel_factor_with_neg*)&rhs[1]->user.factor_with_neg;
+Parser_Lel_factor_with_neg *__ref0 = (Parser_Lel_factor_with_neg*)&redLel->user.factor_with_neg; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_factor_with_neg *__ref2 = (Parser_Lel_factor_with_neg*)&rhs[1]->user.factor_with_neg; 
 #line 965 "rlparse.kl"
 
-		(__ref0)->factorWithNeg = new FactorWithNeg( (__ref1)->loc,
-				(__ref2)->factorWithNeg, FactorWithNeg::NegateType );
+		(__ref0)->factorWithNeg = new FactorWithNeg( (__ref1)->loc, 
+				(__ref2)->factorWithNeg, FactorWithNeg::NegateType ); 
 	
 
-#line 5782 "rlparse.cpp"
+#line 5782 "rlparse.cpp" 
 } break;
 case 171: {
-Parser_Lel_factor_with_neg *__ref0 = (Parser_Lel_factor_with_neg*)&redLel->user.factor_with_neg;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_factor_with_neg *__ref2 = (Parser_Lel_factor_with_neg*)&rhs[1]->user.factor_with_neg;
+Parser_Lel_factor_with_neg *__ref0 = (Parser_Lel_factor_with_neg*)&redLel->user.factor_with_neg; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_factor_with_neg *__ref2 = (Parser_Lel_factor_with_neg*)&rhs[1]->user.factor_with_neg; 
 #line 970 "rlparse.kl"
 
-		(__ref0)->factorWithNeg = new FactorWithNeg( (__ref1)->loc,
-				(__ref2)->factorWithNeg, FactorWithNeg::CharNegateType );
+		(__ref0)->factorWithNeg = new FactorWithNeg( (__ref1)->loc, 
+				(__ref2)->factorWithNeg, FactorWithNeg::CharNegateType ); 
 	
 
-#line 5794 "rlparse.cpp"
+#line 5794 "rlparse.cpp" 
 } break;
 case 172: {
-Parser_Lel_factor_with_neg *__ref0 = (Parser_Lel_factor_with_neg*)&redLel->user.factor_with_neg;
-Parser_Lel_factor *__ref1 = (Parser_Lel_factor*)&rhs[0]->user.factor;
+Parser_Lel_factor_with_neg *__ref0 = (Parser_Lel_factor_with_neg*)&redLel->user.factor_with_neg; 
+Parser_Lel_factor *__ref1 = (Parser_Lel_factor*)&rhs[0]->user.factor; 
 #line 975 "rlparse.kl"
 
-		(__ref0)->factorWithNeg = new FactorWithNeg( (__ref1)->factor );
+		(__ref0)->factorWithNeg = new FactorWithNeg( (__ref1)->factor ); 
 	
 
-#line 5804 "rlparse.cpp"
+#line 5804 "rlparse.cpp" 
 } break;
 case 173: {
-Parser_Lel_factor *__ref0 = (Parser_Lel_factor*)&redLel->user.factor;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_factor *__ref0 = (Parser_Lel_factor*)&redLel->user.factor; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 985 "rlparse.kl"
 
 		/* Create a new factor node going to a concat literal. */
-		(__ref0)->factor = new Factor( new Literal( *(__ref1), Literal::LitString ) );
+		(__ref0)->factor = new Factor( new Literal( *(__ref1), Literal::LitString ) ); 
 	
 
-#line 5815 "rlparse.cpp"
+#line 5815 "rlparse.cpp" 
 } break;
 case 174: {
-Parser_Lel_factor *__ref0 = (Parser_Lel_factor*)&redLel->user.factor;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
+Parser_Lel_factor *__ref0 = (Parser_Lel_factor*)&redLel->user.factor; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
 #line 990 "rlparse.kl"
 
 		/* Create a new factor node going to a literal number. */
-		(__ref0)->factor = new Factor( new Literal( (__ref1)->token, Literal::Number ) );
+		(__ref0)->factor = new Factor( new Literal( (__ref1)->token, Literal::Number ) ); 
 	
 
-#line 5826 "rlparse.cpp"
+#line 5826 "rlparse.cpp" 
 } break;
 case 175: {
-Token *__ref0 = (Token*)&rhs[0]->user.token;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Token *__ref2 = (Token*)&rhs[0]->user.token;
-Parser_Lel_factor *__ref3 = (Parser_Lel_factor*)&redLel->user.factor;
-Token *__ref4 = (Token*)&rhs[0]->user.token;
-Parser_Lel_factor *__ref5 = (Parser_Lel_factor*)&redLel->user.factor;
-Parser_Lel_factor *__ref6 = (Parser_Lel_factor*)&redLel->user.factor;
-Token *__ref7 = (Token*)&rhs[0]->user.token;
+Token *__ref0 = (Token*)&rhs[0]->user.token; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Token *__ref2 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_factor *__ref3 = (Parser_Lel_factor*)&redLel->user.factor; 
+Token *__ref4 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_factor *__ref5 = (Parser_Lel_factor*)&redLel->user.factor; 
+Parser_Lel_factor *__ref6 = (Parser_Lel_factor*)&redLel->user.factor; 
+Token *__ref7 = (Token*)&rhs[0]->user.token; 
 #line 995 "rlparse.kl"
 
 		/* Find the named graph. */
-		GraphDictEl *gdNode = pd->graphDict.find( (__ref0)->data );
+		GraphDictEl *gdNode = pd->graphDict.find( (__ref0)->data ); 
 		if ( gdNode == 0 ) {
 			/* Recover by returning null as the factor node. */
-			error((__ref1)->loc) << "graph lookup of \"" << (__ref2)->data << "\" failed" << endl;
-			(__ref3)->factor = 0;
+			error((__ref1)->loc) << "graph lookup of \"" << (__ref2)->data << "\" failed" << endl; 
+			(__ref3)->factor = 0; 
 		}
 		else if ( gdNode->isInstance ) {
 			/* Recover by retuning null as the factor node. */
-			error((__ref4)->loc) << "references to graph instantiations not allowed "
+			error((__ref4)->loc) << "references to graph instantiations not allowed " 
 					"in expressions" << endl;
-			(__ref5)->factor = 0;
+			(__ref5)->factor = 0; 
 		}
 		else {
 			/* Create a factor node that is a lookup of an expression. */
-			(__ref6)->factor = new Factor( (__ref7)->loc, gdNode->value );
+			(__ref6)->factor = new Factor( (__ref7)->loc, gdNode->value ); 
 		}
 	
 
-#line 5858 "rlparse.cpp"
+#line 5858 "rlparse.cpp" 
 } break;
 case 176: {
-Parser_Lel_factor *__ref0 = (Parser_Lel_factor*)&redLel->user.factor;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_regular_expr_or_data *__ref2 = (Parser_Lel_regular_expr_or_data*)&rhs[1]->user.regular_expr_or_data;
+Parser_Lel_factor *__ref0 = (Parser_Lel_factor*)&redLel->user.factor; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_regular_expr_or_data *__ref2 = (Parser_Lel_regular_expr_or_data*)&rhs[1]->user.regular_expr_or_data; 
 #line 1015 "rlparse.kl"
 
 		/* Create a new factor node going to an OR expression. */
-		(__ref0)->factor = new Factor( new ReItem( (__ref1)->loc, (__ref2)->reOrBlock, ReItem::OrBlock ) );
+		(__ref0)->factor = new Factor( new ReItem( (__ref1)->loc, (__ref2)->reOrBlock, ReItem::OrBlock ) ); 
 	
 
-#line 5870 "rlparse.cpp"
+#line 5870 "rlparse.cpp" 
 } break;
 case 177: {
-Parser_Lel_factor *__ref0 = (Parser_Lel_factor*)&redLel->user.factor;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_regular_expr_or_data *__ref2 = (Parser_Lel_regular_expr_or_data*)&rhs[1]->user.regular_expr_or_data;
+Parser_Lel_factor *__ref0 = (Parser_Lel_factor*)&redLel->user.factor; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_regular_expr_or_data *__ref2 = (Parser_Lel_regular_expr_or_data*)&rhs[1]->user.regular_expr_or_data; 
 #line 1020 "rlparse.kl"
 
 		/* Create a new factor node going to a negated OR expression. */
-		(__ref0)->factor = new Factor( new ReItem( (__ref1)->loc, (__ref2)->reOrBlock, ReItem::NegOrBlock ) );
+		(__ref0)->factor = new Factor( new ReItem( (__ref1)->loc, (__ref2)->reOrBlock, ReItem::NegOrBlock ) ); 
 	
 
-#line 5882 "rlparse.cpp"
+#line 5882 "rlparse.cpp" 
 } break;
 case 178: {
-Token *__ref0 = (Token*)&rhs[2]->user.token;
-Token *__ref1 = (Token*)&rhs[2]->user.token;
-Parser_Lel_regular_expr *__ref2 = (Parser_Lel_regular_expr*)&rhs[1]->user.regular_expr;
-Parser_Lel_factor *__ref3 = (Parser_Lel_factor*)&redLel->user.factor;
-Parser_Lel_regular_expr *__ref4 = (Parser_Lel_regular_expr*)&rhs[1]->user.regular_expr;
+Token *__ref0 = (Token*)&rhs[2]->user.token; 
+Token *__ref1 = (Token*)&rhs[2]->user.token; 
+Parser_Lel_regular_expr *__ref2 = (Parser_Lel_regular_expr*)&rhs[1]->user.regular_expr; 
+Parser_Lel_factor *__ref3 = (Parser_Lel_factor*)&redLel->user.factor; 
+Parser_Lel_regular_expr *__ref4 = (Parser_Lel_regular_expr*)&rhs[1]->user.regular_expr; 
 #line 1025 "rlparse.kl"
 
-		if ( (__ref0)->length > 1 ) {
-			for ( char *p = (__ref1)->data; *p != 0; p++ ) {
+		if ( (__ref0)->length > 1 ) { 
+			for ( char *p = (__ref1)->data; *p != 0; p++ ) { 
 				if ( *p == 'i' )
-					(__ref2)->regExpr->caseInsensitive = true;
+					(__ref2)->regExpr->caseInsensitive = true; 
 			}
 		}
 
 		/* Create a new factor node going to a regular exp. */
-		(__ref3)->factor = new Factor( (__ref4)->regExpr );
+		(__ref3)->factor = new Factor( (__ref4)->regExpr ); 
 	
 
-#line 5903 "rlparse.cpp"
+#line 5903 "rlparse.cpp" 
 } break;
 case 179: {
-Parser_Lel_factor *__ref0 = (Parser_Lel_factor*)&redLel->user.factor;
-Parser_Lel_range_lit *__ref1 = (Parser_Lel_range_lit*)&rhs[0]->user.range_lit;
-Parser_Lel_range_lit *__ref2 = (Parser_Lel_range_lit*)&rhs[2]->user.range_lit;
+Parser_Lel_factor *__ref0 = (Parser_Lel_factor*)&redLel->user.factor; 
+Parser_Lel_range_lit *__ref1 = (Parser_Lel_range_lit*)&rhs[0]->user.range_lit; 
+Parser_Lel_range_lit *__ref2 = (Parser_Lel_range_lit*)&rhs[2]->user.range_lit; 
 #line 1037 "rlparse.kl"
 
 		/* Create a new factor node going to a range. */
-		(__ref0)->factor = new Factor( new Range( (__ref1)->literal, (__ref2)->literal ) );
+		(__ref0)->factor = new Factor( new Range( (__ref1)->literal, (__ref2)->literal ) ); 
 	
 
-#line 5915 "rlparse.cpp"
+#line 5915 "rlparse.cpp" 
 } break;
 case 180: {
-Parser_Lel_factor *__ref0 = (Parser_Lel_factor*)&redLel->user.factor;
-Parser_Lel_join *__ref1 = (Parser_Lel_join*)&rhs[1]->user.join;
-Parser_Lel_join *__ref2 = (Parser_Lel_join*)&rhs[1]->user.join;
-Token *__ref3 = (Token*)&rhs[0]->user.token;
+Parser_Lel_factor *__ref0 = (Parser_Lel_factor*)&redLel->user.factor; 
+Parser_Lel_join *__ref1 = (Parser_Lel_join*)&rhs[1]->user.join; 
+Parser_Lel_join *__ref2 = (Parser_Lel_join*)&rhs[1]->user.join; 
+Token *__ref3 = (Token*)&rhs[0]->user.token; 
 #line 1042 "rlparse.kl"
 
 		/* Create a new factor going to a parenthesized join. */
-		(__ref0)->factor = new Factor( (__ref1)->join );
-		(__ref2)->join->loc = (__ref3)->loc;
+		(__ref0)->factor = new Factor( (__ref1)->join ); 
+		(__ref2)->join->loc = (__ref3)->loc; 
 	
 
-#line 5929 "rlparse.cpp"
+#line 5929 "rlparse.cpp" 
 } break;
 case 181: {
-Parser_Lel_range_lit *__ref0 = (Parser_Lel_range_lit*)&redLel->user.range_lit;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_range_lit *__ref0 = (Parser_Lel_range_lit*)&redLel->user.range_lit; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1055 "rlparse.kl"
 
 		/* Range literas must have only one char. We restrict this in the parse tree. */
-		(__ref0)->literal = new Literal( *(__ref1), Literal::LitString );
+		(__ref0)->literal = new Literal( *(__ref1), Literal::LitString ); 
 	
 
-#line 5940 "rlparse.cpp"
+#line 5940 "rlparse.cpp" 
 } break;
 case 182: {
-Parser_Lel_range_lit *__ref0 = (Parser_Lel_range_lit*)&redLel->user.range_lit;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
+Parser_Lel_range_lit *__ref0 = (Parser_Lel_range_lit*)&redLel->user.range_lit; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
 #line 1060 "rlparse.kl"
 
 		/* Create a new literal number. */
-		(__ref0)->literal = new Literal( (__ref1)->token, Literal::Number );
+		(__ref0)->literal = new Literal( (__ref1)->token, Literal::Number ); 
 	
 
-#line 5951 "rlparse.cpp"
+#line 5951 "rlparse.cpp" 
 } break;
 case 183: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1069 "rlparse.kl"
  
-		(__ref0)->token = *(__ref1);
+		(__ref0)->token = *(__ref1); 
 	
 
-#line 5961 "rlparse.cpp"
+#line 5961 "rlparse.cpp" 
 } break;
 case 184: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref2 = (Token*)&rhs[0]->user.token;
-Parser_Lel_token_type *__ref3 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref4 = (Token*)&rhs[1]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref2 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_token_type *__ref3 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref4 = (Token*)&rhs[1]->user.token; 
 #line 1073 "rlparse.kl"
  
-		(__ref0)->token.set( "-", 1 );
-		(__ref1)->token.loc = (__ref2)->loc;
-		(__ref3)->token.append( *(__ref4) );
+		(__ref0)->token.set( "-", 1 ); 
+		(__ref1)->token.loc = (__ref2)->loc; 
+		(__ref3)->token.append( *(__ref4) ); 
 	
 
-#line 5976 "rlparse.cpp"
+#line 5976 "rlparse.cpp" 
 } break;
 case 185: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1079 "rlparse.kl"
  
-		(__ref0)->token = *(__ref1);
+		(__ref0)->token = *(__ref1); 
 	
 
-#line 5986 "rlparse.cpp"
+#line 5986 "rlparse.cpp" 
 } break;
 case 186: {
-Parser_Lel_regular_expr_item *__ref0 = (Parser_Lel_regular_expr_item*)&rhs[1]->user.regular_expr_item;
-Parser_Lel_regular_expr_item *__ref1 = (Parser_Lel_regular_expr_item*)&rhs[1]->user.regular_expr_item;
-Parser_Lel_regular_expr *__ref2 = (Parser_Lel_regular_expr*)&rhs[0]->user.regular_expr;
-Parser_Lel_regular_expr *__ref3 = (Parser_Lel_regular_expr*)&rhs[0]->user.regular_expr;
-Parser_Lel_regular_expr *__ref4 = (Parser_Lel_regular_expr*)&rhs[0]->user.regular_expr;
-Parser_Lel_regular_expr *__ref5 = (Parser_Lel_regular_expr*)&rhs[0]->user.regular_expr;
-Parser_Lel_regular_expr_item *__ref6 = (Parser_Lel_regular_expr_item*)&rhs[1]->user.regular_expr_item;
-Parser_Lel_regular_expr_item *__ref7 = (Parser_Lel_regular_expr_item*)&rhs[1]->user.regular_expr_item;
-Parser_Lel_regular_expr *__ref8 = (Parser_Lel_regular_expr*)&redLel->user.regular_expr;
-Parser_Lel_regular_expr *__ref9 = (Parser_Lel_regular_expr*)&rhs[0]->user.regular_expr;
-Parser_Lel_regular_expr *__ref10 = (Parser_Lel_regular_expr*)&redLel->user.regular_expr;
-Parser_Lel_regular_expr *__ref11 = (Parser_Lel_regular_expr*)&rhs[0]->user.regular_expr;
-Parser_Lel_regular_expr_item *__ref12 = (Parser_Lel_regular_expr_item*)&rhs[1]->user.regular_expr_item;
+Parser_Lel_regular_expr_item *__ref0 = (Parser_Lel_regular_expr_item*)&rhs[1]->user.regular_expr_item; 
+Parser_Lel_regular_expr_item *__ref1 = (Parser_Lel_regular_expr_item*)&rhs[1]->user.regular_expr_item; 
+Parser_Lel_regular_expr *__ref2 = (Parser_Lel_regular_expr*)&rhs[0]->user.regular_expr; 
+Parser_Lel_regular_expr *__ref3 = (Parser_Lel_regular_expr*)&rhs[0]->user.regular_expr; 
+Parser_Lel_regular_expr *__ref4 = (Parser_Lel_regular_expr*)&rhs[0]->user.regular_expr; 
+Parser_Lel_regular_expr *__ref5 = (Parser_Lel_regular_expr*)&rhs[0]->user.regular_expr; 
+Parser_Lel_regular_expr_item *__ref6 = (Parser_Lel_regular_expr_item*)&rhs[1]->user.regular_expr_item; 
+Parser_Lel_regular_expr_item *__ref7 = (Parser_Lel_regular_expr_item*)&rhs[1]->user.regular_expr_item; 
+Parser_Lel_regular_expr *__ref8 = (Parser_Lel_regular_expr*)&redLel->user.regular_expr; 
+Parser_Lel_regular_expr *__ref9 = (Parser_Lel_regular_expr*)&rhs[0]->user.regular_expr; 
+Parser_Lel_regular_expr *__ref10 = (Parser_Lel_regular_expr*)&redLel->user.regular_expr; 
+Parser_Lel_regular_expr *__ref11 = (Parser_Lel_regular_expr*)&rhs[0]->user.regular_expr; 
+Parser_Lel_regular_expr_item *__ref12 = (Parser_Lel_regular_expr_item*)&rhs[1]->user.regular_expr_item; 
 #line 1094 "rlparse.kl"
 
 		/* An optimization to lessen the tree size. If a non-starred char is
 		 * directly under the left side on the right and the right side is
 		 * another non-starred char then paste them together and return the
 		 * left side. Otherwise just put the two under a new reg exp node. */
-		if ( (__ref0)->reItem->type == ReItem::Data && !(__ref1)->reItem->star &&
-			(__ref2)->regExpr->type == RegExpr::RecurseItem &&
-			(__ref3)->regExpr->item->type == ReItem::Data && !(__ref4)->regExpr->item->star )
+		if ( (__ref0)->reItem->type == ReItem::Data && !(__ref1)->reItem->star && 
+			(__ref2)->regExpr->type == RegExpr::RecurseItem && 
+			(__ref3)->regExpr->item->type == ReItem::Data && !(__ref4)->regExpr->item->star ) 
 		{
 			/* Append the right side to the right side of the left and toss the
 			 * right side. */
-			(__ref5)->regExpr->item->token.append( (__ref6)->reItem->token );
-			delete (__ref7)->reItem;
-			(__ref8)->regExpr = (__ref9)->regExpr;
+			(__ref5)->regExpr->item->token.append( (__ref6)->reItem->token ); 
+			delete (__ref7)->reItem; 
+			(__ref8)->regExpr = (__ref9)->regExpr; 
 		}
 		else {
-			(__ref10)->regExpr = new RegExpr( (__ref11)->regExpr, (__ref12)->reItem );
+			(__ref10)->regExpr = new RegExpr( (__ref11)->regExpr, (__ref12)->reItem ); 
 		}
 	
 
-#line 6023 "rlparse.cpp"
+#line 6023 "rlparse.cpp" 
 } break;
 case 187: {
-Parser_Lel_regular_expr *__ref0 = (Parser_Lel_regular_expr*)&redLel->user.regular_expr;
+Parser_Lel_regular_expr *__ref0 = (Parser_Lel_regular_expr*)&redLel->user.regular_expr; 
 #line 1114 "rlparse.kl"
 
 		/* Can't optimize the tree. */
-		(__ref0)->regExpr = new RegExpr();
+		(__ref0)->regExpr = new RegExpr(); 
 	
 
-#line 6033 "rlparse.cpp"
+#line 6033 "rlparse.cpp" 
 } break;
 case 188: {
-Parser_Lel_regular_expr_char *__ref0 = (Parser_Lel_regular_expr_char*)&rhs[0]->user.regular_expr_char;
-Parser_Lel_regular_expr_item *__ref1 = (Parser_Lel_regular_expr_item*)&redLel->user.regular_expr_item;
-Parser_Lel_regular_expr_char *__ref2 = (Parser_Lel_regular_expr_char*)&rhs[0]->user.regular_expr_char;
+Parser_Lel_regular_expr_char *__ref0 = (Parser_Lel_regular_expr_char*)&rhs[0]->user.regular_expr_char; 
+Parser_Lel_regular_expr_item *__ref1 = (Parser_Lel_regular_expr_item*)&redLel->user.regular_expr_item; 
+Parser_Lel_regular_expr_char *__ref2 = (Parser_Lel_regular_expr_char*)&rhs[0]->user.regular_expr_char; 
 #line 1126 "rlparse.kl"
 
-		(__ref0)->reItem->star = true;
-		(__ref1)->reItem = (__ref2)->reItem;
+		(__ref0)->reItem->star = true; 
+		(__ref1)->reItem = (__ref2)->reItem; 
 	
 
-#line 6045 "rlparse.cpp"
+#line 6045 "rlparse.cpp" 
 } break;
 case 189: {
-Parser_Lel_regular_expr_item *__ref0 = (Parser_Lel_regular_expr_item*)&redLel->user.regular_expr_item;
-Parser_Lel_regular_expr_char *__ref1 = (Parser_Lel_regular_expr_char*)&rhs[0]->user.regular_expr_char;
+Parser_Lel_regular_expr_item *__ref0 = (Parser_Lel_regular_expr_item*)&redLel->user.regular_expr_item; 
+Parser_Lel_regular_expr_char *__ref1 = (Parser_Lel_regular_expr_char*)&rhs[0]->user.regular_expr_char; 
 #line 1131 "rlparse.kl"
 
-		(__ref0)->reItem = (__ref1)->reItem;
+		(__ref0)->reItem = (__ref1)->reItem; 
 	
 
-#line 6055 "rlparse.cpp"
+#line 6055 "rlparse.cpp" 
 } break;
 case 190: {
-Parser_Lel_regular_expr_char *__ref0 = (Parser_Lel_regular_expr_char*)&redLel->user.regular_expr_char;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_regular_expr_or_data *__ref2 = (Parser_Lel_regular_expr_or_data*)&rhs[1]->user.regular_expr_or_data;
+Parser_Lel_regular_expr_char *__ref0 = (Parser_Lel_regular_expr_char*)&redLel->user.regular_expr_char; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_regular_expr_or_data *__ref2 = (Parser_Lel_regular_expr_or_data*)&rhs[1]->user.regular_expr_or_data; 
 #line 1143 "rlparse.kl"
 
-		(__ref0)->reItem = new ReItem( (__ref1)->loc, (__ref2)->reOrBlock, ReItem::OrBlock );
+		(__ref0)->reItem = new ReItem( (__ref1)->loc, (__ref2)->reOrBlock, ReItem::OrBlock ); 
 	
 
-#line 6066 "rlparse.cpp"
+#line 6066 "rlparse.cpp" 
 } break;
 case 191: {
-Parser_Lel_regular_expr_char *__ref0 = (Parser_Lel_regular_expr_char*)&redLel->user.regular_expr_char;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_regular_expr_or_data *__ref2 = (Parser_Lel_regular_expr_or_data*)&rhs[1]->user.regular_expr_or_data;
+Parser_Lel_regular_expr_char *__ref0 = (Parser_Lel_regular_expr_char*)&redLel->user.regular_expr_char; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_regular_expr_or_data *__ref2 = (Parser_Lel_regular_expr_or_data*)&rhs[1]->user.regular_expr_or_data; 
 #line 1147 "rlparse.kl"
 
-		(__ref0)->reItem = new ReItem( (__ref1)->loc, (__ref2)->reOrBlock, ReItem::NegOrBlock );
+		(__ref0)->reItem = new ReItem( (__ref1)->loc, (__ref2)->reOrBlock, ReItem::NegOrBlock ); 
 	
 
-#line 6077 "rlparse.cpp"
+#line 6077 "rlparse.cpp" 
 } break;
 case 192: {
-Parser_Lel_regular_expr_char *__ref0 = (Parser_Lel_regular_expr_char*)&redLel->user.regular_expr_char;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_regular_expr_char *__ref0 = (Parser_Lel_regular_expr_char*)&redLel->user.regular_expr_char; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1151 "rlparse.kl"
 
-		(__ref0)->reItem = new ReItem( (__ref1)->loc, ReItem::Dot );
+		(__ref0)->reItem = new ReItem( (__ref1)->loc, ReItem::Dot ); 
 	
 
-#line 6087 "rlparse.cpp"
+#line 6087 "rlparse.cpp" 
 } break;
 case 193: {
-Parser_Lel_regular_expr_char *__ref0 = (Parser_Lel_regular_expr_char*)&redLel->user.regular_expr_char;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Token *__ref2 = (Token*)&rhs[0]->user.token;
+Parser_Lel_regular_expr_char *__ref0 = (Parser_Lel_regular_expr_char*)&redLel->user.regular_expr_char; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Token *__ref2 = (Token*)&rhs[0]->user.token; 
 #line 1155 "rlparse.kl"
 
-		(__ref0)->reItem = new ReItem( (__ref1)->loc, *(__ref2) );
+		(__ref0)->reItem = new ReItem( (__ref1)->loc, *(__ref2) ); 
 	
 
-#line 6098 "rlparse.cpp"
+#line 6098 "rlparse.cpp" 
 } break;
 case 194: {
-Parser_Lel_regular_expr_or_char *__ref0 = (Parser_Lel_regular_expr_or_char*)&rhs[1]->user.regular_expr_or_char;
-Parser_Lel_regular_expr_or_data *__ref1 = (Parser_Lel_regular_expr_or_data*)&rhs[0]->user.regular_expr_or_data;
-Parser_Lel_regular_expr_or_data *__ref2 = (Parser_Lel_regular_expr_or_data*)&rhs[0]->user.regular_expr_or_data;
-Parser_Lel_regular_expr_or_data *__ref3 = (Parser_Lel_regular_expr_or_data*)&rhs[0]->user.regular_expr_or_data;
-Parser_Lel_regular_expr_or_char *__ref4 = (Parser_Lel_regular_expr_or_char*)&rhs[1]->user.regular_expr_or_char;
-Parser_Lel_regular_expr_or_char *__ref5 = (Parser_Lel_regular_expr_or_char*)&rhs[1]->user.regular_expr_or_char;
-Parser_Lel_regular_expr_or_data *__ref6 = (Parser_Lel_regular_expr_or_data*)&redLel->user.regular_expr_or_data;
-Parser_Lel_regular_expr_or_data *__ref7 = (Parser_Lel_regular_expr_or_data*)&rhs[0]->user.regular_expr_or_data;
-Parser_Lel_regular_expr_or_data *__ref8 = (Parser_Lel_regular_expr_or_data*)&redLel->user.regular_expr_or_data;
-Parser_Lel_regular_expr_or_data *__ref9 = (Parser_Lel_regular_expr_or_data*)&rhs[0]->user.regular_expr_or_data;
-Parser_Lel_regular_expr_or_char *__ref10 = (Parser_Lel_regular_expr_or_char*)&rhs[1]->user.regular_expr_or_char;
+Parser_Lel_regular_expr_or_char *__ref0 = (Parser_Lel_regular_expr_or_char*)&rhs[1]->user.regular_expr_or_char; 
+Parser_Lel_regular_expr_or_data *__ref1 = (Parser_Lel_regular_expr_or_data*)&rhs[0]->user.regular_expr_or_data; 
+Parser_Lel_regular_expr_or_data *__ref2 = (Parser_Lel_regular_expr_or_data*)&rhs[0]->user.regular_expr_or_data; 
+Parser_Lel_regular_expr_or_data *__ref3 = (Parser_Lel_regular_expr_or_data*)&rhs[0]->user.regular_expr_or_data; 
+Parser_Lel_regular_expr_or_char *__ref4 = (Parser_Lel_regular_expr_or_char*)&rhs[1]->user.regular_expr_or_char; 
+Parser_Lel_regular_expr_or_char *__ref5 = (Parser_Lel_regular_expr_or_char*)&rhs[1]->user.regular_expr_or_char; 
+Parser_Lel_regular_expr_or_data *__ref6 = (Parser_Lel_regular_expr_or_data*)&redLel->user.regular_expr_or_data; 
+Parser_Lel_regular_expr_or_data *__ref7 = (Parser_Lel_regular_expr_or_data*)&rhs[0]->user.regular_expr_or_data; 
+Parser_Lel_regular_expr_or_data *__ref8 = (Parser_Lel_regular_expr_or_data*)&redLel->user.regular_expr_or_data; 
+Parser_Lel_regular_expr_or_data *__ref9 = (Parser_Lel_regular_expr_or_data*)&rhs[0]->user.regular_expr_or_data; 
+Parser_Lel_regular_expr_or_char *__ref10 = (Parser_Lel_regular_expr_or_char*)&rhs[1]->user.regular_expr_or_char; 
 #line 1167 "rlparse.kl"
 
 		/* An optimization to lessen the tree size. If an or char is directly
 		 * under the left side on the right and the right side is another or
 		 * char then paste them together and return the left side. Otherwise
 		 * just put the two under a new or data node. */
-		if ( (__ref0)->reOrItem->type == ReOrItem::Data &&
-				(__ref1)->reOrBlock->type == ReOrBlock::RecurseItem &&
-				(__ref2)->reOrBlock->item->type == ReOrItem::Data )
+		if ( (__ref0)->reOrItem->type == ReOrItem::Data && 
+				(__ref1)->reOrBlock->type == ReOrBlock::RecurseItem && 
+				(__ref2)->reOrBlock->item->type == ReOrItem::Data ) 
 		{
 			/* Append the right side to right side of the left and toss the
 			 * right side. */
-			(__ref3)->reOrBlock->item->token.append( (__ref4)->reOrItem->token );
-			delete (__ref5)->reOrItem;
-			(__ref6)->reOrBlock = (__ref7)->reOrBlock;
+			(__ref3)->reOrBlock->item->token.append( (__ref4)->reOrItem->token ); 
+			delete (__ref5)->reOrItem; 
+			(__ref6)->reOrBlock = (__ref7)->reOrBlock; 
 		}
 		else {
 			/* Can't optimize, put the left and right under a new node. */
-			(__ref8)->reOrBlock = new ReOrBlock( (__ref9)->reOrBlock, (__ref10)->reOrItem );
+			(__ref8)->reOrBlock = new ReOrBlock( (__ref9)->reOrBlock, (__ref10)->reOrItem ); 
 		}
 	
 
-#line 6134 "rlparse.cpp"
+#line 6134 "rlparse.cpp" 
 } break;
 case 195: {
-Parser_Lel_regular_expr_or_data *__ref0 = (Parser_Lel_regular_expr_or_data*)&redLel->user.regular_expr_or_data;
+Parser_Lel_regular_expr_or_data *__ref0 = (Parser_Lel_regular_expr_or_data*)&redLel->user.regular_expr_or_data; 
 #line 1188 "rlparse.kl"
 
-		(__ref0)->reOrBlock = new ReOrBlock();
+		(__ref0)->reOrBlock = new ReOrBlock(); 
 	
 
-#line 6143 "rlparse.cpp"
+#line 6143 "rlparse.cpp" 
 } break;
 case 196: {
-Parser_Lel_regular_expr_or_char *__ref0 = (Parser_Lel_regular_expr_or_char*)&redLel->user.regular_expr_or_char;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Token *__ref2 = (Token*)&rhs[0]->user.token;
+Parser_Lel_regular_expr_or_char *__ref0 = (Parser_Lel_regular_expr_or_char*)&redLel->user.regular_expr_or_char; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Token *__ref2 = (Token*)&rhs[0]->user.token; 
 #line 1200 "rlparse.kl"
 
-		(__ref0)->reOrItem = new ReOrItem( (__ref1)->loc, *(__ref2) );
+		(__ref0)->reOrItem = new ReOrItem( (__ref1)->loc, *(__ref2) ); 
 	
 
-#line 6154 "rlparse.cpp"
+#line 6154 "rlparse.cpp" 
 } break;
 case 197: {
-Parser_Lel_regular_expr_or_char *__ref0 = (Parser_Lel_regular_expr_or_char*)&redLel->user.regular_expr_or_char;
-Token *__ref1 = (Token*)&rhs[1]->user.token;
-Token *__ref2 = (Token*)&rhs[0]->user.token;
-Token *__ref3 = (Token*)&rhs[2]->user.token;
+Parser_Lel_regular_expr_or_char *__ref0 = (Parser_Lel_regular_expr_or_char*)&redLel->user.regular_expr_or_char; 
+Token *__ref1 = (Token*)&rhs[1]->user.token; 
+Token *__ref2 = (Token*)&rhs[0]->user.token; 
+Token *__ref3 = (Token*)&rhs[2]->user.token; 
 #line 1204 "rlparse.kl"
 
-		(__ref0)->reOrItem = new ReOrItem( (__ref1)->loc, (__ref2)->data[0], (__ref3)->data[0] );
+		(__ref0)->reOrItem = new ReOrItem( (__ref1)->loc, (__ref2)->data[0], (__ref3)->data[0] ); 
 	
 
-#line 6166 "rlparse.cpp"
+#line 6166 "rlparse.cpp" 
 } break;
 case 198: {
-Parser_Lel_inline_list *__ref0 = (Parser_Lel_inline_list*)&redLel->user.inline_list;
-Parser_Lel_inline_list *__ref1 = (Parser_Lel_inline_list*)&rhs[0]->user.inline_list;
-Parser_Lel_inline_list *__ref2 = (Parser_Lel_inline_list*)&redLel->user.inline_list;
-Parser_Lel_inline_item *__ref3 = (Parser_Lel_inline_item*)&rhs[1]->user.inline_item;
+Parser_Lel_inline_list *__ref0 = (Parser_Lel_inline_list*)&redLel->user.inline_list; 
+Parser_Lel_inline_list *__ref1 = (Parser_Lel_inline_list*)&rhs[0]->user.inline_list; 
+Parser_Lel_inline_list *__ref2 = (Parser_Lel_inline_list*)&redLel->user.inline_list; 
+Parser_Lel_inline_item *__ref3 = (Parser_Lel_inline_item*)&rhs[1]->user.inline_item; 
 #line 1221 "rlparse.kl"
 
 		/* Append the item to the list, return the list. */
-		(__ref0)->inlineList = (__ref1)->inlineList;
-		(__ref2)->inlineList->append( (__ref3)->inlineItem );
+		(__ref0)->inlineList = (__ref1)->inlineList; 
+		(__ref2)->inlineList->append( (__ref3)->inlineItem ); 
 	
 
-#line 6180 "rlparse.cpp"
+#line 6180 "rlparse.cpp" 
 } break;
 case 199: {
-Parser_Lel_inline_list *__ref0 = (Parser_Lel_inline_list*)&redLel->user.inline_list;
+Parser_Lel_inline_list *__ref0 = (Parser_Lel_inline_list*)&redLel->user.inline_list; 
 #line 1228 "rlparse.kl"
 
 		/* Start with empty list. */
-		(__ref0)->inlineList = new InlineList;
+		(__ref0)->inlineList = new InlineList; 
 	
 
-#line 6190 "rlparse.cpp"
+#line 6190 "rlparse.cpp" 
 } break;
 case 200: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
-Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
+Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
 #line 1243 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->token.loc, (__ref2)->token.data, InlineItem::Text );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->token.loc, (__ref2)->token.data, InlineItem::Text ); 
 	
 
-#line 6201 "rlparse.cpp"
+#line 6201 "rlparse.cpp" 
 } break;
 case 201: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
-Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
+Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
 #line 1249 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->token.loc, (__ref2)->token.data, InlineItem::Text );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->token.loc, (__ref2)->token.data, InlineItem::Text ); 
 	
 
-#line 6212 "rlparse.cpp"
+#line 6212 "rlparse.cpp" 
 } break;
 case 202: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Parser_Lel_inline_item *__ref1 = (Parser_Lel_inline_item*)&rhs[0]->user.inline_item;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Parser_Lel_inline_item *__ref1 = (Parser_Lel_inline_item*)&rhs[0]->user.inline_item; 
 #line 1255 "rlparse.kl"
 
 		/* Pass the inline item up. */
-		(__ref0)->inlineItem = (__ref1)->inlineItem;
+		(__ref0)->inlineItem = (__ref1)->inlineItem; 
 	
 
-#line 6223 "rlparse.cpp"
+#line 6223 "rlparse.cpp" 
 } break;
 case 203: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1262 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6231 "rlparse.cpp"
+#line 6231 "rlparse.cpp" 
 } break;
 case 204: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1263 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6239 "rlparse.cpp"
+#line 6239 "rlparse.cpp" 
 } break;
 case 205: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1264 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6247 "rlparse.cpp"
+#line 6247 "rlparse.cpp" 
 } break;
 case 206: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1265 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6255 "rlparse.cpp"
+#line 6255 "rlparse.cpp" 
 } break;
 case 207: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1266 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6263 "rlparse.cpp"
+#line 6263 "rlparse.cpp" 
 } break;
 case 208: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1267 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6271 "rlparse.cpp"
+#line 6271 "rlparse.cpp" 
 } break;
 case 209: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Parser_Lel_inline_item *__ref1 = (Parser_Lel_inline_item*)&rhs[0]->user.inline_item;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Parser_Lel_inline_item *__ref1 = (Parser_Lel_inline_item*)&rhs[0]->user.inline_item; 
 #line 1271 "rlparse.kl"
 
 		/* Pass up interpreted items of inline expressions. */
-		(__ref0)->inlineItem = (__ref1)->inlineItem;
+		(__ref0)->inlineItem = (__ref1)->inlineItem; 
 	
 
-#line 6282 "rlparse.cpp"
+#line 6282 "rlparse.cpp" 
 } break;
 case 210: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1276 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Hold );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Hold ); 
 	
 
-#line 6292 "rlparse.cpp"
+#line 6292 "rlparse.cpp" 
 } break;
 case 211: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_inline_item *__ref2 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Parser_Lel_inline_list *__ref3 = (Parser_Lel_inline_list*)&rhs[1]->user.inline_list;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_inline_item *__ref2 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Parser_Lel_inline_list *__ref3 = (Parser_Lel_inline_list*)&rhs[1]->user.inline_list; 
 #line 1280 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Exec );
-		(__ref2)->inlineItem->children = (__ref3)->inlineList;
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Exec ); 
+		(__ref2)->inlineItem->children = (__ref3)->inlineList; 
 	
 
-#line 6305 "rlparse.cpp"
+#line 6305 "rlparse.cpp" 
 } break;
 case 212: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1285 "rlparse.kl"
  
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, 
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc,  
 				new NameRef(nameRef), InlineItem::Goto );
 	
 
-#line 6316 "rlparse.cpp"
+#line 6316 "rlparse.cpp" 
 } break;
 case 213: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_inline_item *__ref2 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Parser_Lel_inline_list *__ref3 = (Parser_Lel_inline_list*)&rhs[2]->user.inline_list;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_inline_item *__ref2 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Parser_Lel_inline_list *__ref3 = (Parser_Lel_inline_list*)&rhs[2]->user.inline_list; 
 #line 1290 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::GotoExpr );
-		(__ref2)->inlineItem->children = (__ref3)->inlineList;
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::GotoExpr ); 
+		(__ref2)->inlineItem->children = (__ref3)->inlineList; 
 	
 
-#line 6329 "rlparse.cpp"
+#line 6329 "rlparse.cpp" 
 } break;
 case 214: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1295 "rlparse.kl"
  
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, new NameRef(nameRef), InlineItem::Next );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, new NameRef(nameRef), InlineItem::Next ); 
 	
 
-#line 6339 "rlparse.cpp"
+#line 6339 "rlparse.cpp" 
 } break;
 case 215: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_inline_item *__ref2 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Parser_Lel_inline_list *__ref3 = (Parser_Lel_inline_list*)&rhs[2]->user.inline_list;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_inline_item *__ref2 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Parser_Lel_inline_list *__ref3 = (Parser_Lel_inline_list*)&rhs[2]->user.inline_list; 
 #line 1299 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::NextExpr );
-		(__ref2)->inlineItem->children = (__ref3)->inlineList;
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::NextExpr ); 
+		(__ref2)->inlineItem->children = (__ref3)->inlineList; 
 	
 
-#line 6352 "rlparse.cpp"
+#line 6352 "rlparse.cpp" 
 } break;
 case 216: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1304 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, new NameRef(nameRef), InlineItem::Call );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, new NameRef(nameRef), InlineItem::Call ); 
 	
 
-#line 6362 "rlparse.cpp"
+#line 6362 "rlparse.cpp" 
 } break;
 case 217: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
-Parser_Lel_inline_item *__ref2 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Parser_Lel_inline_list *__ref3 = (Parser_Lel_inline_list*)&rhs[2]->user.inline_list;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
+Parser_Lel_inline_item *__ref2 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Parser_Lel_inline_list *__ref3 = (Parser_Lel_inline_list*)&rhs[2]->user.inline_list; 
 #line 1308 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::CallExpr );
-		(__ref2)->inlineItem->children = (__ref3)->inlineList;
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::CallExpr ); 
+		(__ref2)->inlineItem->children = (__ref3)->inlineList; 
 	
 
-#line 6375 "rlparse.cpp"
+#line 6375 "rlparse.cpp" 
 } break;
 case 218: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1313 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Ret );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Ret ); 
 	
 
-#line 6385 "rlparse.cpp"
+#line 6385 "rlparse.cpp" 
 } break;
 case 219: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1317 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Break );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Break ); 
 	
 
-#line 6395 "rlparse.cpp"
+#line 6395 "rlparse.cpp" 
 } break;
 case 220: {
-Parser_Lel_inline_list *__ref0 = (Parser_Lel_inline_list*)&redLel->user.inline_list;
-Parser_Lel_inline_list *__ref1 = (Parser_Lel_inline_list*)&rhs[0]->user.inline_list;
-Parser_Lel_inline_list *__ref2 = (Parser_Lel_inline_list*)&redLel->user.inline_list;
-Parser_Lel_inline_item *__ref3 = (Parser_Lel_inline_item*)&rhs[1]->user.inline_item;
+Parser_Lel_inline_list *__ref0 = (Parser_Lel_inline_list*)&redLel->user.inline_list; 
+Parser_Lel_inline_list *__ref1 = (Parser_Lel_inline_list*)&rhs[0]->user.inline_list; 
+Parser_Lel_inline_list *__ref2 = (Parser_Lel_inline_list*)&redLel->user.inline_list; 
+Parser_Lel_inline_item *__ref3 = (Parser_Lel_inline_item*)&rhs[1]->user.inline_item; 
 #line 1325 "rlparse.kl"
 
-		(__ref0)->inlineList = (__ref1)->inlineList;
-		(__ref2)->inlineList->append( (__ref3)->inlineItem );
+		(__ref0)->inlineList = (__ref1)->inlineList; 
+		(__ref2)->inlineList->append( (__ref3)->inlineItem ); 
 	
 
-#line 6408 "rlparse.cpp"
+#line 6408 "rlparse.cpp" 
 } break;
 case 221: {
-Parser_Lel_inline_list *__ref0 = (Parser_Lel_inline_list*)&redLel->user.inline_list;
+Parser_Lel_inline_list *__ref0 = (Parser_Lel_inline_list*)&redLel->user.inline_list; 
 #line 1330 "rlparse.kl"
 
 		/* Init the list used for this expr. */
-		(__ref0)->inlineList = new InlineList;
+		(__ref0)->inlineList = new InlineList; 
 	
 
-#line 6418 "rlparse.cpp"
+#line 6418 "rlparse.cpp" 
 } break;
 case 222: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
-Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
+Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
 #line 1339 "rlparse.kl"
 
 		/* Return a text segment. */
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->token.loc, (__ref2)->token.data, InlineItem::Text );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->token.loc, (__ref2)->token.data, InlineItem::Text ); 
 	
 
-#line 6430 "rlparse.cpp"
+#line 6430 "rlparse.cpp" 
 } break;
 case 223: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
-Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&rhs[0]->user.token_type;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Parser_Lel_token_type *__ref1 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
+Parser_Lel_token_type *__ref2 = (Parser_Lel_token_type*)&rhs[0]->user.token_type; 
 #line 1345 "rlparse.kl"
 
 		/* Return a text segment, must heap alloc the text. */
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->token.loc, (__ref2)->token.data, InlineItem::Text );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->token.loc, (__ref2)->token.data, InlineItem::Text ); 
 	
 
-#line 6442 "rlparse.cpp"
+#line 6442 "rlparse.cpp" 
 } break;
 case 224: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Parser_Lel_inline_item *__ref1 = (Parser_Lel_inline_item*)&rhs[0]->user.inline_item;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Parser_Lel_inline_item *__ref1 = (Parser_Lel_inline_item*)&rhs[0]->user.inline_item; 
 #line 1351 "rlparse.kl"
 
 		/* Pass the inline item up. */
-		(__ref0)->inlineItem = (__ref1)->inlineItem;
+		(__ref0)->inlineItem = (__ref1)->inlineItem; 
 	
 
-#line 6453 "rlparse.cpp"
+#line 6453 "rlparse.cpp" 
 } break;
 case 237: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1381 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::PChar );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::PChar ); 
 	
 
-#line 6463 "rlparse.cpp"
+#line 6463 "rlparse.cpp" 
 } break;
 case 238: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1386 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Char );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Char ); 
 	
 
-#line 6473 "rlparse.cpp"
+#line 6473 "rlparse.cpp" 
 } break;
 case 239: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1391 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Curs );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Curs ); 
 	
 
-#line 6483 "rlparse.cpp"
+#line 6483 "rlparse.cpp" 
 } break;
 case 240: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1396 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Targs );
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, InlineItem::Targs ); 
 	
 
-#line 6493 "rlparse.cpp"
+#line 6493 "rlparse.cpp" 
 } break;
 case 241: {
-Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_inline_item *__ref0 = (Parser_Lel_inline_item*)&redLel->user.inline_item; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1401 "rlparse.kl"
 
-		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc, 
+		(__ref0)->inlineItem = new InlineItem( (__ref1)->loc,  
 			new NameRef(nameRef), InlineItem::Entry );
 	
 
-#line 6504 "rlparse.cpp"
+#line 6504 "rlparse.cpp" 
 } break;
 case 243: {
 #line 1412 "rlparse.kl"
@@ -6510,7 +6510,7 @@ case 243: {
 		nameRef.empty();
 	
 
-#line 6512 "rlparse.cpp"
+#line 6512 "rlparse.cpp" 
 } break;
 case 245: {
 #line 1422 "rlparse.kl"
@@ -6520,7 +6520,7 @@ case 245: {
 		nameRef.setAs( 0 );
 	
 
-#line 6522 "rlparse.cpp"
+#line 6522 "rlparse.cpp" 
 } break;
 case 246: {
 #line 1428 "rlparse.kl"
@@ -6528,25 +6528,25 @@ case 246: {
 		nameRef.empty();
 	
 
-#line 6530 "rlparse.cpp"
+#line 6530 "rlparse.cpp" 
 } break;
 case 247: {
-Token *__ref0 = (Token*)&rhs[2]->user.token;
+Token *__ref0 = (Token*)&rhs[2]->user.token; 
 #line 1435 "rlparse.kl"
 
-		nameRef.append( (__ref0)->data );
+		nameRef.append( (__ref0)->data ); 
 	
 
-#line 6539 "rlparse.cpp"
+#line 6539 "rlparse.cpp" 
 } break;
 case 248: {
-Token *__ref0 = (Token*)&rhs[0]->user.token;
+Token *__ref0 = (Token*)&rhs[0]->user.token; 
 #line 1440 "rlparse.kl"
 
-		nameRef.append( (__ref0)->data );
+		nameRef.append( (__ref0)->data ); 
 	
 
-#line 6548 "rlparse.cpp"
+#line 6548 "rlparse.cpp" 
 } break;
 }
 			}
@@ -6636,100 +6636,100 @@ commit_base:
 		}
 switch ( reduction ) {
 case 225: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1358 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6643 "rlparse.cpp"
+#line 6643 "rlparse.cpp" 
 } break;
 case 226: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1359 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6651 "rlparse.cpp"
+#line 6651 "rlparse.cpp" 
 } break;
 case 227: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1360 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6659 "rlparse.cpp"
+#line 6659 "rlparse.cpp" 
 } break;
 case 228: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1361 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6667 "rlparse.cpp"
+#line 6667 "rlparse.cpp" 
 } break;
 case 229: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1362 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6675 "rlparse.cpp"
+#line 6675 "rlparse.cpp" 
 } break;
 case 230: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1363 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6683 "rlparse.cpp"
+#line 6683 "rlparse.cpp" 
 } break;
 case 231: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1364 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6691 "rlparse.cpp"
+#line 6691 "rlparse.cpp" 
 } break;
 case 232: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1371 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6699 "rlparse.cpp"
+#line 6699 "rlparse.cpp" 
 } break;
 case 233: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1372 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6707 "rlparse.cpp"
+#line 6707 "rlparse.cpp" 
 } break;
 case 234: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1373 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6715 "rlparse.cpp"
+#line 6715 "rlparse.cpp" 
 } break;
 case 235: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1374 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6723 "rlparse.cpp"
+#line 6723 "rlparse.cpp" 
 } break;
 case 236: {
-Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type;
-Token *__ref1 = (Token*)&rhs[0]->user.token;
+Parser_Lel_token_type *__ref0 = (Parser_Lel_token_type*)&redLel->user.token_type; 
+Token *__ref1 = (Token*)&rhs[0]->user.token; 
 #line 1375 "rlparse.kl"
- (__ref0)->token = *(__ref1); 
+ (__ref0)->token = *(__ref1);  
 
-#line 6731 "rlparse.cpp"
+#line 6731 "rlparse.cpp" 
 } break;
 }
 		#ifdef KELBT_LOG_ACTIONS

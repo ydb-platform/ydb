@@ -1,21 +1,21 @@
 #pragma once
 
-#include <util/system/platform.h>
-
-#if defined(__ANDROID__) && defined(MAPSMOBI_BUILD)
-#   include "curl_config-android-maps-mobile.h"
-#elif defined(__ANDROID__)
-#   include "curl_config-android.h"
-#elif defined(__IOS__) && defined(MAPSMOBI_BUILD)
-#   include "curl_config-ios-maps-mobile.h"
-#elif defined(__IOS__)
-#   include "curl_config-ios.h"
-#elif defined(__APPLE__)
-#   include "curl_config-osx.h"
-#elif defined(_MSC_VER)
-#   include "curl_config-win.h"
-#else
-#   include "curl_config-linux.h"
+#include <util/system/platform.h> 
+ 
+#if defined(__ANDROID__) && defined(MAPSMOBI_BUILD) 
+#   include "curl_config-android-maps-mobile.h" 
+#elif defined(__ANDROID__) 
+#   include "curl_config-android.h" 
+#elif defined(__IOS__) && defined(MAPSMOBI_BUILD) 
+#   include "curl_config-ios-maps-mobile.h" 
+#elif defined(__IOS__) 
+#   include "curl_config-ios.h" 
+#elif defined(__APPLE__) 
+#   include "curl_config-osx.h" 
+#elif defined(_MSC_VER) 
+#   include "curl_config-win.h" 
+#else 
+#   include "curl_config-linux.h" 
 #endif
 
 #if defined(_musl_)
@@ -24,7 +24,7 @@
 
 // Do not misrepresent host on Android and iOS.
 #undef OS
-#define OS "arcadia"
+#define OS "arcadia" 
 
 // c-ares resolver is known to be buggy.
 //

@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #include <aws/s3/model/PolicyStatus.h>
 #include <aws/core/utils/xml/XmlSerializer.h>
@@ -42,7 +42,7 @@ PolicyStatus& PolicyStatus::operator =(const XmlNode& xmlNode)
     XmlNode isPublicNode = resultNode.FirstChild("IsPublic");
     if(!isPublicNode.IsNull())
     {
-      m_isPublic = StringUtils::ConvertToBool(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(isPublicNode.GetText()).c_str()).c_str());
+      m_isPublic = StringUtils::ConvertToBool(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(isPublicNode.GetText()).c_str()).c_str()); 
       m_isPublicHasBeenSet = true;
     }
   }

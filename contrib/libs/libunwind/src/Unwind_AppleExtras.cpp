@@ -1,8 +1,8 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //
 //===----------------------------------------------------------------------===//
@@ -27,7 +27,7 @@
           __attribute__((visibility("default"))) const char sym##_tmp42 = 0; \
        extern const char sym##_tmp43 __asm("$ld$hide$os4.3$_" #sym ); \
           __attribute__((visibility("default"))) const char sym##_tmp43 = 0;
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) 
   #define NOT_HERE_BEFORE_10_6(sym)
   #define NEVER_HERE(sym)
 #else
@@ -46,7 +46,7 @@
 #endif
 
 
-#if defined(_LIBUNWIND_BUILD_ZERO_COST_APIS)
+#if defined(_LIBUNWIND_BUILD_ZERO_COST_APIS) 
 
 //
 // symbols in libSystem.dylib in 10.6 and later, but are in libgcc_s.dylib in
@@ -85,12 +85,12 @@ NEVER_HERE(__register_frame_table)
 NEVER_HERE(__deregister_frame_info)
 NEVER_HERE(__deregister_frame_info_bases)
 
-#endif // defined(_LIBUNWIND_BUILD_ZERO_COST_APIS)
+#endif // defined(_LIBUNWIND_BUILD_ZERO_COST_APIS) 
 
 
 
 
-#if defined(_LIBUNWIND_BUILD_SJLJ_APIS)
+#if defined(_LIBUNWIND_BUILD_SJLJ_APIS) 
 //
 // symbols in libSystem.dylib in iOS 5.0 and later, but are in libgcc_s.dylib in
 // earlier versions
@@ -110,4 +110,4 @@ NOT_HERE_BEFORE_5_0(_Unwind_SjLj_RaiseException)
 NOT_HERE_BEFORE_5_0(_Unwind_SjLj_Resume_or_Rethrow)
 NOT_HERE_BEFORE_5_0(_Unwind_SjLj_Unregister)
 
-#endif // defined(_LIBUNWIND_BUILD_SJLJ_APIS)
+#endif // defined(_LIBUNWIND_BUILD_SJLJ_APIS) 

@@ -29,7 +29,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <google/protobuf/stubs/status.h>
 
-#include <ostream>
+#include <ostream> 
 #include <stdio.h>
 #include <string>
 #include <utility>

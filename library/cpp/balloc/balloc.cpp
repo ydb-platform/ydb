@@ -296,10 +296,10 @@ extern "C" void* memalign(size_t alignment, size_t size) {
     return res ? nullptr : ptr;
 }
 
-extern "C" void* valloc(size_t size) {
-    return memalign(NBalloc::PAGE_ELEM, size);
-}
-
+extern "C" void* valloc(size_t size) { 
+    return memalign(NBalloc::PAGE_ELEM, size); 
+} 
+ 
 #if !defined(_MSC_VER) && !defined(_freebsd_)
 // Workaround for pthread_create bug in linux.
 extern "C" void* __libc_memalign(size_t alignment, size_t size) {

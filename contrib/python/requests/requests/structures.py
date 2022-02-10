@@ -13,7 +13,7 @@ from .compat import Mapping, MutableMapping
 
 
 class CaseInsensitiveDict(MutableMapping):
-    """A case-insensitive ``dict``-like object.
+    """A case-insensitive ``dict``-like object. 
 
     Implements all methods and operations of
     ``MutableMapping`` as well as dict's ``copy``. Also
@@ -37,10 +37,10 @@ class CaseInsensitiveDict(MutableMapping):
     If the constructor, ``.update``, or equality comparison
     operations are given keys that have equal ``.lower()``s, the
     behavior is undefined.
-    """
+    """ 
 
     def __init__(self, data=None, **kwargs):
-        self._store = OrderedDict()
+        self._store = OrderedDict() 
         if data is None:
             data = {}
         self.update(data, **kwargs)
@@ -85,7 +85,7 @@ class CaseInsensitiveDict(MutableMapping):
     def __repr__(self):
         return str(dict(self.items()))
 
-
+ 
 class LookupDict(dict):
     """Dictionary lookup object."""
 

@@ -4,7 +4,7 @@ PY2_LIBRARY()
 
 PY_SRCS(
     code_generator.py
-    ssqls.py
+    ssqls.py 
     swig.py
 
     _common.py

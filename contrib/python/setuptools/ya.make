@@ -9,9 +9,9 @@ IF (PYTHON2)
 ELSE()
     PEERDIR(contrib/python/setuptools/py3)
 ENDIF()
-
-NO_LINT()
-
+ 
+NO_LINT() 
+ 
 END()
 
 RECURSE(

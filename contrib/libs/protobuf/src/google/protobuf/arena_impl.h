@@ -1,45 +1,45 @@
-// Protocol Buffers - Google's data interchange format
-// Copyright 2008 Google Inc.  All rights reserved.
-// https://developers.google.com/protocol-buffers/
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-// notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-// copyright notice, this list of conditions and the following disclaimer
-// in the documentation and/or other materials provided with the
-// distribution.
-//     * Neither the name of Google Inc. nor the names of its
-// contributors may be used to endorse or promote products derived from
-// this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-// This file defines an Arena allocator for better allocation performance.
-
-#ifndef GOOGLE_PROTOBUF_ARENA_IMPL_H__
-#define GOOGLE_PROTOBUF_ARENA_IMPL_H__
-
+// Protocol Buffers - Google's data interchange format 
+// Copyright 2008 Google Inc.  All rights reserved. 
+// https://developers.google.com/protocol-buffers/ 
+// 
+// Redistribution and use in source and binary forms, with or without 
+// modification, are permitted provided that the following conditions are 
+// met: 
+// 
+//     * Redistributions of source code must retain the above copyright 
+// notice, this list of conditions and the following disclaimer. 
+//     * Redistributions in binary form must reproduce the above 
+// copyright notice, this list of conditions and the following disclaimer 
+// in the documentation and/or other materials provided with the 
+// distribution. 
+//     * Neither the name of Google Inc. nor the names of its 
+// contributors may be used to endorse or promote products derived from 
+// this software without specific prior written permission. 
+// 
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
+// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR 
+// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT 
+// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, 
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, 
+// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY 
+// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT 
+// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
+ 
+// This file defines an Arena allocator for better allocation performance. 
+ 
+#ifndef GOOGLE_PROTOBUF_ARENA_IMPL_H__ 
+#define GOOGLE_PROTOBUF_ARENA_IMPL_H__ 
+ 
 #include <atomic>
-#include <limits>
+#include <limits> 
 #include <typeinfo>
-
+ 
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/stubs/logging.h>
-
+ 
 #ifdef ADDRESS_SANITIZER
 #include <sanitizer/asan_interface.h>
 #endif  // ADDRESS_SANITIZER
@@ -47,15 +47,15 @@
 #include <google/protobuf/port_def.inc>
 
 
-namespace google {
-namespace protobuf {
-namespace internal {
-
+namespace google { 
+namespace protobuf { 
+namespace internal { 
+ 
 inline constexpr size_t AlignUpTo8(size_t n) {
-  // Align n to next multiple of 8 (from Hacker's Delight, Chapter 3.)
+  // Align n to next multiple of 8 (from Hacker's Delight, Chapter 3.) 
   return (n + 7) & static_cast<size_t>(-8);
-}
-
+} 
+ 
 using LifecycleIdAtomic = uint64_t;
 
 // MetricsCollector collects stats for a particular arena.
@@ -245,18 +245,18 @@ class PROTOBUF_EXPORT SerialArena {
   static constexpr size_t kCleanupSize = AlignUpTo8(sizeof(CleanupNode));
 };
 
-// This class provides the core Arena memory allocation library. Different
-// implementations only need to implement the public interface below.
-// Arena is not a template type as that would only be useful if all protos
-// in turn would be templates, which will/cannot happen. However separating
-// the memory allocation part from the cruft of the API users expect we can
-// use #ifdef the select the best implementation based on hardware / OS.
+// This class provides the core Arena memory allocation library. Different 
+// implementations only need to implement the public interface below. 
+// Arena is not a template type as that would only be useful if all protos 
+// in turn would be templates, which will/cannot happen. However separating 
+// the memory allocation part from the cruft of the API users expect we can 
+// use #ifdef the select the best implementation based on hardware / OS. 
 class PROTOBUF_EXPORT ThreadSafeArena {
- public:
+ public: 
   ThreadSafeArena() { Init(false); }
-
+ 
   ThreadSafeArena(char* mem, size_t size) { InitializeFrom(mem, size); }
-
+ 
   explicit ThreadSafeArena(void* mem, size_t size,
                            const AllocationPolicy& policy) {
     if (policy.IsDefault()) {
@@ -269,19 +269,19 @@ class PROTOBUF_EXPORT ThreadSafeArena {
       bool record_allocs = collector && collector->RecordAllocs();
       InitializeWithPolicy(mem, size, record_allocs, policy);
     }
-  }
-
-  // Destructor deletes all owned heap allocated objects, and destructs objects
-  // that have non-trivial destructors, except for proto2 message objects whose
-  // destructors can be skipped. Also, frees all blocks except the initial block
-  // if it was passed in.
+  } 
+ 
+  // Destructor deletes all owned heap allocated objects, and destructs objects 
+  // that have non-trivial destructors, except for proto2 message objects whose 
+  // destructors can be skipped. Also, frees all blocks except the initial block 
+  // if it was passed in. 
   ~ThreadSafeArena();
-
-  uint64 Reset();
-
-  uint64 SpaceAllocated() const;
-  uint64 SpaceUsed() const;
-
+ 
+  uint64 Reset(); 
+ 
+  uint64 SpaceAllocated() const; 
+  uint64 SpaceUsed() const; 
+ 
   void* AllocateAligned(size_t n, const std::type_info* type) {
     SerialArena* arena;
     if (PROTOBUF_PREDICT_TRUE(GetSerialArenaFast(tag_and_id_, &arena))) {
@@ -290,7 +290,7 @@ class PROTOBUF_EXPORT ThreadSafeArena {
       return AllocateAlignedFallback(n, type);
     }
   }
-
+ 
   // This function allocates n bytes if the common happy case is true and
   // returns true. Otherwise does nothing and returns false. This strange
   // semantics is necessary to allow callers to program functions that only
@@ -303,19 +303,19 @@ class PROTOBUF_EXPORT ThreadSafeArena {
     }
     return false;
   }
-
+ 
   std::pair<void*, SerialArena::CleanupNode*> AllocateAlignedWithCleanup(
       size_t n, const std::type_info* type);
 
-  // Add object pointer and cleanup function pointer to the list.
-  void AddCleanup(void* elem, void (*cleanup)(void*));
-
- private:
+  // Add object pointer and cleanup function pointer to the list. 
+  void AddCleanup(void* elem, void (*cleanup)(void*)); 
+ 
+ private: 
   // Unique for each arena. Changes on Reset().
   uint64 tag_and_id_;
   // The LSB of tag_and_id_ indicates if allocs in this arena are recorded.
   enum { kRecordAllocs = 1 };
-
+ 
   intptr_t alloc_policy_ = 0;  // Tagged pointer to AllocPolicy.
   // The LSB of alloc_policy_ indicates if the user owns the initial block.
   enum { kUserOwnedInitialBlock = 1 };
@@ -374,10 +374,10 @@ class PROTOBUF_EXPORT ThreadSafeArena {
     if (PROTOBUF_PREDICT_TRUE(serial != NULL && serial->owner() == tc)) {
       *arena = serial;
       return true;
-    }
+    } 
     return false;
   }
-
+ 
   PROTOBUF_NDEBUG_INLINE bool GetSerialArenaFromThreadCache(
       uint64 lifecycle_id, SerialArena** arena) {
     // If this thread already owns a block in this arena then try to use that.
@@ -391,7 +391,7 @@ class PROTOBUF_EXPORT ThreadSafeArena {
     return false;
   }
   SerialArena* GetSerialArenaFallback(void* me);
-
+ 
   template <typename Functor>
   void PerSerialArena(Functor fn) {
     // By omitting an Acquire barrier we ensure that any user code that doesn't
@@ -428,42 +428,42 @@ class PROTOBUF_EXPORT ThreadSafeArena {
     // Next lifecycle ID available to this thread. We need to reserve a new
     // batch, if `next_lifecycle_id & (kPerThreadIds - 1) == 0`.
     uint64 next_lifecycle_id;
-    // The ThreadCache is considered valid as long as this matches the
-    // lifecycle_id of the arena being used.
+    // The ThreadCache is considered valid as long as this matches the 
+    // lifecycle_id of the arena being used. 
     uint64 last_lifecycle_id_seen;
     SerialArena* last_serial_arena;
-  };
-
+  }; 
+ 
   // Lifecycle_id can be highly contended variable in a situation of lots of
   // arena creation. Make sure that other global variables are not sharing the
   // cacheline.
 #ifdef _MSC_VER
 #pragma warning(disable : 4324)
-#endif
+#endif 
   struct alignas(64) CacheAlignedLifecycleIdGenerator {
     std::atomic<LifecycleIdAtomic> id;
   };
   static CacheAlignedLifecycleIdGenerator lifecycle_id_generator_;
-#if defined(GOOGLE_PROTOBUF_NO_THREADLOCAL)
+#if defined(GOOGLE_PROTOBUF_NO_THREADLOCAL) 
   // Android ndk does not support __thread keyword so we use a custom thread
-  // local storage class we implemented.
+  // local storage class we implemented. 
   // iOS also does not support the __thread keyword.
-  static ThreadCache& thread_cache();
-#elif defined(PROTOBUF_USE_DLLS)
-  // Thread local variables cannot be exposed through DLL interface but we can
-  // wrap them in static functions.
-  static ThreadCache& thread_cache();
-#else
+  static ThreadCache& thread_cache(); 
+#elif defined(PROTOBUF_USE_DLLS) 
+  // Thread local variables cannot be exposed through DLL interface but we can 
+  // wrap them in static functions. 
+  static ThreadCache& thread_cache(); 
+#else 
   static PROTOBUF_THREAD_LOCAL ThreadCache thread_cache_;
-  static ThreadCache& thread_cache() { return thread_cache_; }
-#endif
-
+  static ThreadCache& thread_cache() { return thread_cache_; } 
+#endif 
+ 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ThreadSafeArena);
   // All protos have pointers back to the arena hence Arena must have
   // pointer stability.
   ThreadSafeArena(ThreadSafeArena&&) = delete;
   ThreadSafeArena& operator=(ThreadSafeArena&&) = delete;
-
+ 
  public:
   // kBlockHeaderSize is sizeof(Block), aligned up to the nearest multiple of 8
   // to protect the invariant that pos is always at a multiple of 8.
@@ -474,12 +474,12 @@ class PROTOBUF_EXPORT ThreadSafeArena {
                 "kBlockHeaderSize must be a multiple of 8.");
   static_assert(kSerialArenaSize % 8 == 0,
                 "kSerialArenaSize must be a multiple of 8.");
-};
-
-}  // namespace internal
-}  // namespace protobuf
+}; 
+ 
+}  // namespace internal 
+}  // namespace protobuf 
 }  // namespace google
-
+ 
 #include <google/protobuf/port_undef.inc>
 
-#endif  // GOOGLE_PROTOBUF_ARENA_IMPL_H__
+#endif  // GOOGLE_PROTOBUF_ARENA_IMPL_H__ 

@@ -1,15 +1,15 @@
-"""
-Commonly useful validators.
-"""
-
-from __future__ import absolute_import, division, print_function
-
+""" 
+Commonly useful validators. 
+""" 
+ 
+from __future__ import absolute_import, division, print_function 
+ 
 import re
 
-from ._make import _AndValidator, and_, attrib, attrs
+from ._make import _AndValidator, and_, attrib, attrs 
 from .exceptions import NotCallableError
-
-
+ 
+ 
 __all__ = [
     "and_",
     "deep_iterable",
@@ -21,19 +21,19 @@ __all__ = [
     "optional",
     "provides",
 ]
-
-
-@attrs(repr=False, slots=True, hash=True)
-class _InstanceOfValidator(object):
-    type = attrib()
-
-    def __call__(self, inst, attr, value):
-        """
-        We use a callable class to be able to change the ``__repr__``.
-        """
-        if not isinstance(value, self.type):
-            raise TypeError(
-                "'{name}' must be {type!r} (got {value!r} that is a "
+ 
+ 
+@attrs(repr=False, slots=True, hash=True) 
+class _InstanceOfValidator(object): 
+    type = attrib() 
+ 
+    def __call__(self, inst, attr, value): 
+        """ 
+        We use a callable class to be able to change the ``__repr__``. 
+        """ 
+        if not isinstance(value, self.type): 
+            raise TypeError( 
+                "'{name}' must be {type!r} (got {value!r} that is a " 
                 "{actual!r}).".format(
                     name=attr.name,
                     type=self.type,
@@ -43,30 +43,30 @@ class _InstanceOfValidator(object):
                 attr,
                 self.type,
                 value,
-            )
-
-    def __repr__(self):
+            ) 
+ 
+    def __repr__(self): 
         return "<instance_of validator for type {type!r}>".format(
             type=self.type
-        )
-
-
-def instance_of(type):
-    """
+        ) 
+ 
+ 
+def instance_of(type): 
+    """ 
     A validator that raises a `TypeError` if the initializer is called
-    with a wrong type for this particular attribute (checks are performed using
+    with a wrong type for this particular attribute (checks are performed using 
     `isinstance` therefore it's also valid to pass a tuple of types).
-
-    :param type: The type to check for.
-    :type type: type or tuple of types
-
-    :raises TypeError: With a human readable error message, the attribute
+ 
+    :param type: The type to check for. 
+    :type type: type or tuple of types 
+ 
+    :raises TypeError: With a human readable error message, the attribute 
         (of type `attr.Attribute`), the expected type, and the value it
-        got.
-    """
-    return _InstanceOfValidator(type)
-
-
+        got. 
+    """ 
+    return _InstanceOfValidator(type) 
+ 
+ 
 @attrs(repr=False, frozen=True, slots=True)
 class _MatchesReValidator(object):
     regex = attrib()
@@ -139,121 +139,121 @@ def matches_re(regex, flags=0, func=None):
     return _MatchesReValidator(pattern, flags, match_func)
 
 
-@attrs(repr=False, slots=True, hash=True)
-class _ProvidesValidator(object):
-    interface = attrib()
-
-    def __call__(self, inst, attr, value):
-        """
-        We use a callable class to be able to change the ``__repr__``.
-        """
-        if not self.interface.providedBy(value):
-            raise TypeError(
-                "'{name}' must provide {interface!r} which {value!r} "
+@attrs(repr=False, slots=True, hash=True) 
+class _ProvidesValidator(object): 
+    interface = attrib() 
+ 
+    def __call__(self, inst, attr, value): 
+        """ 
+        We use a callable class to be able to change the ``__repr__``. 
+        """ 
+        if not self.interface.providedBy(value): 
+            raise TypeError( 
+                "'{name}' must provide {interface!r} which {value!r} " 
                 "doesn't.".format(
                     name=attr.name, interface=self.interface, value=value
                 ),
                 attr,
                 self.interface,
                 value,
-            )
-
-    def __repr__(self):
+            ) 
+ 
+    def __repr__(self): 
         return "<provides validator for interface {interface!r}>".format(
             interface=self.interface
-        )
-
-
-def provides(interface):
-    """
+        ) 
+ 
+ 
+def provides(interface): 
+    """ 
     A validator that raises a `TypeError` if the initializer is called
-    with an object that does not provide the requested *interface* (checks are
-    performed using ``interface.providedBy(value)`` (see `zope.interface
-    <https://zopeinterface.readthedocs.io/en/latest/>`_).
-
+    with an object that does not provide the requested *interface* (checks are 
+    performed using ``interface.providedBy(value)`` (see `zope.interface 
+    <https://zopeinterface.readthedocs.io/en/latest/>`_). 
+ 
     :param interface: The interface to check for.
     :type interface: ``zope.interface.Interface``
-
-    :raises TypeError: With a human readable error message, the attribute
+ 
+    :raises TypeError: With a human readable error message, the attribute 
         (of type `attr.Attribute`), the expected interface, and the
-        value it got.
-    """
-    return _ProvidesValidator(interface)
-
-
-@attrs(repr=False, slots=True, hash=True)
-class _OptionalValidator(object):
-    validator = attrib()
-
-    def __call__(self, inst, attr, value):
-        if value is None:
-            return
-
-        self.validator(inst, attr, value)
-
-    def __repr__(self):
+        value it got. 
+    """ 
+    return _ProvidesValidator(interface) 
+ 
+ 
+@attrs(repr=False, slots=True, hash=True) 
+class _OptionalValidator(object): 
+    validator = attrib() 
+ 
+    def __call__(self, inst, attr, value): 
+        if value is None: 
+            return 
+ 
+        self.validator(inst, attr, value) 
+ 
+    def __repr__(self): 
         return "<optional validator for {what} or None>".format(
             what=repr(self.validator)
-        )
-
-
-def optional(validator):
-    """
-    A validator that makes an attribute optional.  An optional attribute is one
-    which can be set to ``None`` in addition to satisfying the requirements of
-    the sub-validator.
-
-    :param validator: A validator (or a list of validators) that is used for
-        non-``None`` values.
+        ) 
+ 
+ 
+def optional(validator): 
+    """ 
+    A validator that makes an attribute optional.  An optional attribute is one 
+    which can be set to ``None`` in addition to satisfying the requirements of 
+    the sub-validator. 
+ 
+    :param validator: A validator (or a list of validators) that is used for 
+        non-``None`` values. 
     :type validator: callable or `list` of callables.
-
-    .. versionadded:: 15.1.0
-    .. versionchanged:: 17.1.0 *validator* can be a list of validators.
-    """
-    if isinstance(validator, list):
-        return _OptionalValidator(_AndValidator(validator))
-    return _OptionalValidator(validator)
-
-
-@attrs(repr=False, slots=True, hash=True)
-class _InValidator(object):
-    options = attrib()
-
-    def __call__(self, inst, attr, value):
+ 
+    .. versionadded:: 15.1.0 
+    .. versionchanged:: 17.1.0 *validator* can be a list of validators. 
+    """ 
+    if isinstance(validator, list): 
+        return _OptionalValidator(_AndValidator(validator)) 
+    return _OptionalValidator(validator) 
+ 
+ 
+@attrs(repr=False, slots=True, hash=True) 
+class _InValidator(object): 
+    options = attrib() 
+ 
+    def __call__(self, inst, attr, value): 
         try:
             in_options = value in self.options
         except TypeError:  # e.g. `1 in "abc"`
             in_options = False
 
         if not in_options:
-            raise ValueError(
+            raise ValueError( 
                 "'{name}' must be in {options!r} (got {value!r})".format(
                     name=attr.name, options=self.options, value=value
                 )
-            )
-
-    def __repr__(self):
+            ) 
+ 
+    def __repr__(self): 
         return "<in_ validator with options {options!r}>".format(
             options=self.options
-        )
-
-
-def in_(options):
-    """
+        ) 
+ 
+ 
+def in_(options): 
+    """ 
     A validator that raises a `ValueError` if the initializer is called
-    with a value that does not belong in the options provided.  The check is
-    performed using ``value in options``.
-
-    :param options: Allowed options.
+    with a value that does not belong in the options provided.  The check is 
+    performed using ``value in options``. 
+ 
+    :param options: Allowed options. 
     :type options: list, tuple, `enum.Enum`, ...
-
-    :raises ValueError: With a human readable error message, the attribute (of
+ 
+    :raises ValueError: With a human readable error message, the attribute (of 
        type `attr.Attribute`), the expected options, and the value it
-       got.
-
-    .. versionadded:: 17.1.0
-    """
-    return _InValidator(options)
+       got. 
+ 
+    .. versionadded:: 17.1.0 
+    """ 
+    return _InValidator(options) 
 
 
 @attrs(repr=False, slots=False, hash=True)

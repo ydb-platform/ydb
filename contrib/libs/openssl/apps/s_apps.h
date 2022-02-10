@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2019 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 1995-2019 The OpenSSL Project Authors. All Rights Reserved. 
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -9,7 +9,7 @@
 
 #include <openssl/opensslconf.h>
 
-#include <openssl/ssl.h>
+#include <openssl/ssl.h> 
 
 #define PORT            "4433"
 #define PROTOCOL        "tcp"
@@ -18,9 +18,9 @@ typedef int (*do_server_cb)(int s, int stype, int prot, unsigned char *context);
 int do_server(int *accept_sock, const char *host, const char *port,
               int family, int type, int protocol, do_server_cb cb,
               unsigned char *context, int naccept, BIO *bio_s_out);
-
+ 
 int verify_callback(int ok, X509_STORE_CTX *ctx);
-
+ 
 int set_cert_stuff(SSL_CTX *ctx, char *cert_file, char *key_file);
 int set_cert_key_stuff(SSL_CTX *ctx, X509 *cert, EVP_PKEY *key,
                        STACK_OF(X509) *chain, int build_chain);

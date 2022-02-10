@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #pragma once
 
@@ -67,18 +67,18 @@ namespace Aws
             */
             static Aws::String URLDecode(const char* safe);
 
-            enum class SplitOptions
-            {
-                /**
-                 * By default, removes all the empty entries in the vector returned by Split()
-                 */
-                NOT_SET,
-                /**
-                 * Includes empty entries in the vector returned by Split()
-                 */
-                INCLUDE_EMPTY_ENTRIES
-            };
-
+            enum class SplitOptions 
+            { 
+                /** 
+                 * By default, removes all the empty entries in the vector returned by Split() 
+                 */ 
+                NOT_SET, 
+                /** 
+                 * Includes empty entries in the vector returned by Split() 
+                 */ 
+                INCLUDE_EMPTY_ENTRIES 
+            }; 
+ 
             /**
              * @brief Splits a string on a delimiter (empty items are excluded).
              * @param toSplit, the original string to split
@@ -87,14 +87,14 @@ namespace Aws
             static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn);
 
             /**
-             * @brief Splits a string on a delimiter.
-             * @param toSplit, the original string to split
-             * @param splitOn, the delemiter you want to use.
-             * @param option, if INCLUDE_EMPTY_ENTRIES, includes empty entries in the result, otherwise removes empty entries.
-             */
-            static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn, SplitOptions option);
-
-            /**
+             * @brief Splits a string on a delimiter. 
+             * @param toSplit, the original string to split 
+             * @param splitOn, the delemiter you want to use. 
+             * @param option, if INCLUDE_EMPTY_ENTRIES, includes empty entries in the result, otherwise removes empty entries. 
+             */ 
+            static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn, SplitOptions option); 
+ 
+            /** 
              * @brief Splits a string on a delimiter (empty items are excluded).
              * @param toSplit, the original string to split
              * @param splitOn, the delemiter you want to use.
@@ -102,14 +102,14 @@ namespace Aws
              */
             static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn, size_t numOfTargetParts);
 
-            /**
-             * @brief Splits a string on a delimiter.
-             * @param toSplit, the original string to split
-             * @param splitOn, the delemiter you want to use.
-             * @param numOfTargetParts, how many target parts you want to get, if it is 0, as many as possible.
-             * @param option, if INCLUDE_EMPTY_ENTRIES, includes empty entries in the result, otherwise removes empty entries.
-             */
-            static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn, size_t numOfTargetParts, SplitOptions option);
+            /** 
+             * @brief Splits a string on a delimiter. 
+             * @param toSplit, the original string to split 
+             * @param splitOn, the delemiter you want to use. 
+             * @param numOfTargetParts, how many target parts you want to get, if it is 0, as many as possible. 
+             * @param option, if INCLUDE_EMPTY_ENTRIES, includes empty entries in the result, otherwise removes empty entries. 
+             */ 
+            static Aws::Vector<Aws::String> Split(const Aws::String& toSplit, char splitOn, size_t numOfTargetParts, SplitOptions option); 
 
             /**
             * Splits a string on new line characters.
@@ -146,7 +146,7 @@ namespace Aws
             static long ConvertToInt32(const char* source);
 
 
-            /**
+            /** 
              * convert to bool
              */
             static bool ConvertToBool(const char* source);
@@ -172,7 +172,7 @@ namespace Aws
 
             /**
              * not all platforms (Android) have std::to_string
-             */
+             */ 
             template< typename T >
             static Aws::String to_string(T value)
             {
@@ -188,32 +188,32 @@ namespace Aws
             {
                 return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
             }
-
-            /**
-             * Convert an unsigned integer to its hex string in upper case.
-             */
-            template<typename T, class = typename std::enable_if<std::is_unsigned<T>::value>::type>
-            static Aws::String ToHexString(T value)
-            {
-                if (value == 0)
-                {
-                    return "0";
-                }
-
-                Aws::String s;
-                s.reserve(sizeof(value) * 2);
-                T r = value;
-                while (r > 0)
-                {
-                    s += "0123456789ABCDEF"[r & 0xf];
-                    r >>= 4;
-                }
-
-                std::reverse(s.begin(), s.end());
-                return s;
-            }
+ 
+            /** 
+             * Convert an unsigned integer to its hex string in upper case. 
+             */ 
+            template<typename T, class = typename std::enable_if<std::is_unsigned<T>::value>::type> 
+            static Aws::String ToHexString(T value) 
+            { 
+                if (value == 0) 
+                { 
+                    return "0"; 
+                } 
+ 
+                Aws::String s; 
+                s.reserve(sizeof(value) * 2); 
+                T r = value; 
+                while (r > 0) 
+                { 
+                    s += "0123456789ABCDEF"[r & 0xf]; 
+                    r >>= 4; 
+                } 
+ 
+                std::reverse(s.begin(), s.end()); 
+                return s; 
+            } 
         };
 
 
     } // namespace Utils
-} // namespace Aws
+} // namespace Aws 

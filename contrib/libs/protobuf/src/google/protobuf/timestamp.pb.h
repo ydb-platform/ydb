@@ -51,7 +51,7 @@ struct PROTOBUF_EXPORT TableStruct_google_2fprotobuf_2ftimestamp_2eproto {
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
   static const ::PROTOBUF_NAMESPACE_ID::uint32 offsets[];
-};
+}; 
 PROTOBUF_EXPORT extern const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_google_2fprotobuf_2ftimestamp_2eproto;
 PROTOBUF_NAMESPACE_OPEN
 class Timestamp;
@@ -82,19 +82,19 @@ class PROTOBUF_EXPORT Timestamp final :
     CopyFrom(from);
     return *this;
   }
-  inline Timestamp& operator=(Timestamp&& from) noexcept {
+  inline Timestamp& operator=(Timestamp&& from) noexcept { 
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
+    } else { 
+      CopyFrom(from); 
+    } 
+    return *this; 
+  } 
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
-  }
+  } 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* GetDescriptor() {
     return default_instance().GetMetadata().descriptor;
   }
@@ -104,16 +104,16 @@ class PROTOBUF_EXPORT Timestamp final :
   static const Timestamp& default_instance() {
     return *internal_default_instance();
   }
-  static inline const Timestamp* internal_default_instance() {
-    return reinterpret_cast<const Timestamp*>(
-               &_Timestamp_default_instance_);
-  }
+  static inline const Timestamp* internal_default_instance() { 
+    return reinterpret_cast<const Timestamp*>( 
+               &_Timestamp_default_instance_); 
+  } 
   static constexpr int kIndexInFileMessages =
-    0;
-
-  friend void swap(Timestamp& a, Timestamp& b) {
-    a.Swap(&b);
-  }
+    0; 
+ 
+  friend void swap(Timestamp& a, Timestamp& b) { 
+    a.Swap(&b); 
+  } 
   inline void Swap(Timestamp* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -183,7 +183,7 @@ class PROTOBUF_EXPORT Timestamp final :
     kSecondsFieldNumber = 1,
     kNanosFieldNumber = 2,
   };
-  // int64 seconds = 1;
+  // int64 seconds = 1; 
   void clear_seconds();
   ::PROTOBUF_NAMESPACE_ID::int64 seconds() const;
   void set_seconds(::PROTOBUF_NAMESPACE_ID::int64 value);
@@ -192,7 +192,7 @@ class PROTOBUF_EXPORT Timestamp final :
   void _internal_set_seconds(::PROTOBUF_NAMESPACE_ID::int64 value);
   public:
 
-  // int32 nanos = 2;
+  // int32 nanos = 2; 
   void clear_nanos();
   ::PROTOBUF_NAMESPACE_ID::int32 nanos() const;
   void set_nanos(::PROTOBUF_NAMESPACE_ID::int32 value);
@@ -218,13 +218,13 @@ class PROTOBUF_EXPORT Timestamp final :
 
 // ===================================================================
 
-#ifdef __GNUC__
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
-#endif  // __GNUC__
+#ifdef __GNUC__ 
+  #pragma GCC diagnostic push 
+  #pragma GCC diagnostic ignored "-Wstrict-aliasing" 
+#endif  // __GNUC__ 
 // Timestamp
 
-// int64 seconds = 1;
+// int64 seconds = 1; 
 inline void Timestamp::clear_seconds() {
   seconds_ = int64_t{0};
 }
@@ -244,7 +244,7 @@ inline void Timestamp::set_seconds(::PROTOBUF_NAMESPACE_ID::int64 value) {
   // @@protoc_insertion_point(field_set:google.protobuf.Timestamp.seconds)
 }
 
-// int32 nanos = 2;
+// int32 nanos = 2; 
 inline void Timestamp::clear_nanos() {
   nanos_ = 0;
 }
@@ -264,14 +264,14 @@ inline void Timestamp::set_nanos(::PROTOBUF_NAMESPACE_ID::int32 value) {
   // @@protoc_insertion_point(field_set:google.protobuf.Timestamp.nanos)
 }
 
-#ifdef __GNUC__
-  #pragma GCC diagnostic pop
-#endif  // __GNUC__
+#ifdef __GNUC__ 
+  #pragma GCC diagnostic pop 
+#endif  // __GNUC__ 
 
 // @@protoc_insertion_point(namespace_scope)
 
 PROTOBUF_NAMESPACE_CLOSE
-
+ 
 // @@protoc_insertion_point(global_scope)
 
 #include <google/protobuf/port_undef.inc>

@@ -1,22 +1,22 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
-#include <grpcpp/channel.h>
+#include <grpcpp/channel.h> 
 
 #include <cstring>
 #include <memory>
@@ -25,20 +25,20 @@
 #include <grpc/slice.h>
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
-#include <grpc/support/sync.h>
-#include <grpc/support/time.h>
-#include <grpcpp/client_context.h>
-#include <grpcpp/completion_queue.h>
-#include <grpcpp/impl/call.h>
+#include <grpc/support/sync.h> 
+#include <grpc/support/time.h> 
+#include <grpcpp/client_context.h> 
+#include <grpcpp/completion_queue.h> 
+#include <grpcpp/impl/call.h> 
 #include <grpcpp/impl/codegen/call_op_set.h>
-#include <grpcpp/impl/codegen/completion_queue_tag.h>
-#include <grpcpp/impl/grpc_library.h>
-#include <grpcpp/impl/rpc_method.h>
-#include <grpcpp/security/credentials.h>
-#include <grpcpp/support/channel_arguments.h>
-#include <grpcpp/support/config.h>
-#include <grpcpp/support/status.h>
-#include "src/core/lib/gpr/string.h"
+#include <grpcpp/impl/codegen/completion_queue_tag.h> 
+#include <grpcpp/impl/grpc_library.h> 
+#include <grpcpp/impl/rpc_method.h> 
+#include <grpcpp/security/credentials.h> 
+#include <grpcpp/support/channel_arguments.h> 
+#include <grpcpp/support/config.h> 
+#include <grpcpp/support/status.h> 
+#include "src/core/lib/gpr/string.h" 
 #include "src/core/lib/surface/completion_queue.h"
 
 namespace grpc {
@@ -69,11 +69,11 @@ inline grpc_slice SliceFromArray(const char* arr, size_t len) {
 TString GetChannelInfoField(grpc_channel* channel,
                                 grpc_channel_info* channel_info,
                                 char*** channel_info_field) {
-  char* value = nullptr;
+  char* value = nullptr; 
   memset(channel_info, 0, sizeof(*channel_info));
   *channel_info_field = &value;
   grpc_channel_get_info(channel, channel_info);
-  if (value == nullptr) return "";
+  if (value == nullptr) return ""; 
   TString result = value;
   gpr_free(value);
   return result;
@@ -105,7 +105,7 @@ void ChannelResetConnectionBackoff(Channel* channel) {
     const ::grpc::internal::RpcMethod& method, ::grpc::ClientContext* context,
     ::grpc::CompletionQueue* cq, size_t interceptor_pos) {
   const bool kRegistered = method.channel_tag() && context->authority().empty();
-  grpc_call* c_call = nullptr;
+  grpc_call* c_call = nullptr; 
   if (kRegistered) {
     c_call = grpc_channel_create_registered_call(
         c_channel_, context->propagate_from_call_,
@@ -120,19 +120,19 @@ void ChannelResetConnectionBackoff(Channel* channel) {
     }
     grpc_slice method_slice =
         SliceFromArray(method.name(), strlen(method.name()));
-    grpc_slice host_slice;
-    if (host_str != nullptr) {
+    grpc_slice host_slice; 
+    if (host_str != nullptr) { 
       host_slice = ::grpc::SliceFromCopiedString(*host_str);
-    }
-    c_call = grpc_channel_create_call(
-        c_channel_, context->propagate_from_call_,
-        context->propagation_options_.c_bitmask(), cq->cq(), method_slice,
-        host_str == nullptr ? nullptr : &host_slice, context->raw_deadline(),
-        nullptr);
-    grpc_slice_unref(method_slice);
-    if (host_str != nullptr) {
-      grpc_slice_unref(host_slice);
-    }
+    } 
+    c_call = grpc_channel_create_call( 
+        c_channel_, context->propagate_from_call_, 
+        context->propagation_options_.c_bitmask(), cq->cq(), method_slice, 
+        host_str == nullptr ? nullptr : &host_slice, context->raw_deadline(), 
+        nullptr); 
+    grpc_slice_unref(method_slice); 
+    if (host_str != nullptr) { 
+      grpc_slice_unref(host_slice); 
+    } 
   }
   grpc_census_call_set_context(c_call, context->census_context());
 
@@ -161,7 +161,7 @@ void Channel::PerformOpsOnCall(::grpc::internal::CallOpSetInterface* ops,
 
 void* Channel::RegisterMethod(const char* method) {
   return grpc_channel_register_call(
-      c_channel_, method, host_.empty() ? nullptr : host_.c_str(), nullptr);
+      c_channel_, method, host_.empty() ? nullptr : host_.c_str(), nullptr); 
 }
 
 grpc_connectivity_state Channel::GetState(bool try_to_connect) {
@@ -169,7 +169,7 @@ grpc_connectivity_state Channel::GetState(bool try_to_connect) {
 }
 
 namespace {
-
+ 
 class TagSaver final : public ::grpc::internal::CompletionQueueTag {
  public:
   explicit TagSaver(void* tag) : tag_(tag) {}
@@ -198,10 +198,10 @@ bool Channel::WaitForStateChangeImpl(grpc_connectivity_state last_observed,
                                      gpr_timespec deadline) {
   ::grpc::CompletionQueue cq;
   bool ok = false;
-  void* tag = nullptr;
-  NotifyOnStateChangeImpl(last_observed, deadline, &cq, nullptr);
+  void* tag = nullptr; 
+  NotifyOnStateChangeImpl(last_observed, deadline, &cq, nullptr); 
   cq.Next(&tag, &ok);
-  GPR_ASSERT(tag == nullptr);
+  GPR_ASSERT(tag == nullptr); 
   return ok;
 }
 

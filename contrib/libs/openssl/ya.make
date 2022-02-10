@@ -11,7 +11,7 @@ LICENSE(
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+ 
 OWNER(
     somov
     g:cpp-contrib

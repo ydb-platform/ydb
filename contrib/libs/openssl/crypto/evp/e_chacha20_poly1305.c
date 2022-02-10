@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2019 The OpenSSL Project Authors. All Rights Reserved.
+ * Copyright 2015-2019 The OpenSSL Project Authors. All Rights Reserved. 
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -30,8 +30,8 @@ typedef struct {
 
 #define data(ctx)   ((EVP_CHACHA_KEY *)(ctx)->cipher_data)
 
-#define CHACHA20_POLY1305_MAX_IVLEN     12
-
+#define CHACHA20_POLY1305_MAX_IVLEN     12 
+ 
 static int chacha_init_key(EVP_CIPHER_CTX *ctx,
                            const unsigned char user_key[CHACHA_KEY_SIZE],
                            const unsigned char iv[CHACHA_CTR_SIZE], int enc)
@@ -534,12 +534,12 @@ static int chacha20_poly1305_ctrl(EVP_CIPHER_CTX *ctx, int type, int arg,
         }
         return 1;
 
-    case EVP_CTRL_GET_IVLEN:
-        *(int *)ptr = actx->nonce_len;
-        return 1;
-
+    case EVP_CTRL_GET_IVLEN: 
+        *(int *)ptr = actx->nonce_len; 
+        return 1; 
+ 
     case EVP_CTRL_AEAD_SET_IVLEN:
-        if (arg <= 0 || arg > CHACHA20_POLY1305_MAX_IVLEN)
+        if (arg <= 0 || arg > CHACHA20_POLY1305_MAX_IVLEN) 
             return 0;
         actx->nonce_len = arg;
         return 1;
@@ -617,8 +617,8 @@ static EVP_CIPHER chacha20_poly1305 = {
     12,                 /* iv_len, 96-bit nonce in the context */
     EVP_CIPH_FLAG_AEAD_CIPHER | EVP_CIPH_CUSTOM_IV |
     EVP_CIPH_ALWAYS_CALL_INIT | EVP_CIPH_CTRL_INIT |
-    EVP_CIPH_CUSTOM_COPY | EVP_CIPH_FLAG_CUSTOM_CIPHER |
-    EVP_CIPH_CUSTOM_IV_LENGTH,
+    EVP_CIPH_CUSTOM_COPY | EVP_CIPH_FLAG_CUSTOM_CIPHER | 
+    EVP_CIPH_CUSTOM_IV_LENGTH, 
     chacha20_poly1305_init_key,
     chacha20_poly1305_cipher,
     chacha20_poly1305_cleanup,

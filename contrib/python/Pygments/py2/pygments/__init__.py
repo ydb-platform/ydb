@@ -22,13 +22,13 @@
     .. _Pygments master branch:
        https://github.com/pygments/pygments/archive/master.zip#egg=Pygments-dev
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
-import sys
+import sys 
 
-from pygments.util import StringIO, BytesIO
-
+from pygments.util import StringIO, BytesIO 
+ 
 __version__ = '2.5.2'
 __docformat__ = 'restructuredtext'
 
@@ -42,9 +42,9 @@ def lex(code, lexer):
     try:
         return lexer.get_tokens(code)
     except TypeError as err:
-        if (isinstance(err.args[0], str) and
-            ('unbound method get_tokens' in err.args[0] or
-             'missing 1 required positional argument' in err.args[0])):
+        if (isinstance(err.args[0], str) and 
+            ('unbound method get_tokens' in err.args[0] or 
+             'missing 1 required positional argument' in err.args[0])): 
             raise TypeError('lex() argument must be a lexer instance, '
                             'not a class')
         raise
@@ -66,9 +66,9 @@ def format(tokens, formatter, outfile=None):  # pylint: disable=redefined-builti
         else:
             formatter.format(tokens, outfile)
     except TypeError as err:
-        if (isinstance(err.args[0], str) and
-            ('unbound method format' in err.args[0] or
-             'missing 1 required positional argument' in err.args[0])):
+        if (isinstance(err.args[0], str) and 
+            ('unbound method format' in err.args[0] or 
+             'missing 1 required positional argument' in err.args[0])): 
             raise TypeError('format() argument must be a formatter instance, '
                             'not a class')
         raise

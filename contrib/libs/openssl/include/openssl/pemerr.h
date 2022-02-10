@@ -11,10 +11,10 @@
 #ifndef HEADER_PEMERR_H
 # define HEADER_PEMERR_H
 
-# ifndef HEADER_SYMHACKS_H
-#  include <openssl/symhacks.h>
-# endif
-
+# ifndef HEADER_SYMHACKS_H 
+#  include <openssl/symhacks.h> 
+# endif 
+ 
 # ifdef  __cplusplus
 extern "C"
 # endif

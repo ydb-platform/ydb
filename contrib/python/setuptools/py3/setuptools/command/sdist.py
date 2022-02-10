@@ -3,15 +3,15 @@ import distutils.command.sdist as orig
 import os
 import sys
 import io
-import contextlib
+import contextlib 
 
-from .py36compat import sdist_add_defaults
+from .py36compat import sdist_add_defaults 
 
 import pkg_resources
 
 _default_revctrl = list
 
-
+ 
 def walk_revctrl(dirname=''):
     """Find all files under revision control"""
     for ep in pkg_resources.iter_entry_points('setuptools.file_finders'):
@@ -19,7 +19,7 @@ def walk_revctrl(dirname=''):
             yield item
 
 
-class sdist(sdist_add_defaults, orig.sdist):
+class sdist(sdist_add_defaults, orig.sdist): 
     """Smart sdist that finds anything supported by revision control"""
 
     user_options = [
@@ -41,7 +41,7 @@ class sdist(sdist_add_defaults, orig.sdist):
 
     README_EXTENSIONS = ['', '.rst', '.txt', '.md']
     READMES = tuple('README{0}'.format(ext) for ext in README_EXTENSIONS)
-
+ 
     def run(self):
         self.run_command('egg_info')
         ei_cmd = self.get_finalized_command('egg_info')
@@ -61,52 +61,52 @@ class sdist(sdist_add_defaults, orig.sdist):
             if data not in dist_files:
                 dist_files.append(data)
 
-    def initialize_options(self):
-        orig.sdist.initialize_options(self)
-
-        self._default_to_gztar()
-
-    def _default_to_gztar(self):
-        # only needed on Python prior to 3.6.
-        if sys.version_info >= (3, 6, 0, 'beta', 1):
-            return
-        self.formats = ['gztar']
-
-    def make_distribution(self):
-        """
-        Workaround for #516
-        """
-        with self._remove_os_link():
-            orig.sdist.make_distribution(self)
-
-    @staticmethod
-    @contextlib.contextmanager
-    def _remove_os_link():
-        """
-        In a context, remove and restore os.link if it exists
-        """
-
-        class NoValue:
-            pass
-
-        orig_val = getattr(os, 'link', NoValue)
-        try:
-            del os.link
-        except Exception:
-            pass
-        try:
-            yield
-        finally:
-            if orig_val is not NoValue:
-                setattr(os, 'link', orig_val)
-
+    def initialize_options(self): 
+        orig.sdist.initialize_options(self) 
+ 
+        self._default_to_gztar() 
+ 
+    def _default_to_gztar(self): 
+        # only needed on Python prior to 3.6. 
+        if sys.version_info >= (3, 6, 0, 'beta', 1): 
+            return 
+        self.formats = ['gztar'] 
+ 
+    def make_distribution(self): 
+        """ 
+        Workaround for #516 
+        """ 
+        with self._remove_os_link(): 
+            orig.sdist.make_distribution(self) 
+ 
+    @staticmethod 
+    @contextlib.contextmanager 
+    def _remove_os_link(): 
+        """ 
+        In a context, remove and restore os.link if it exists 
+        """ 
+ 
+        class NoValue: 
+            pass 
+ 
+        orig_val = getattr(os, 'link', NoValue) 
+        try: 
+            del os.link 
+        except Exception: 
+            pass 
+        try: 
+            yield 
+        finally: 
+            if orig_val is not NoValue: 
+                setattr(os, 'link', orig_val) 
+ 
     def _add_defaults_optional(self):
         super()._add_defaults_optional()
         if os.path.isfile('pyproject.toml'):
             self.filelist.append('pyproject.toml')
 
-    def _add_defaults_python(self):
-        """getting python files"""
+    def _add_defaults_python(self): 
+        """getting python files""" 
         if self.distribution.has_pure_modules():
             build_py = self.get_finalized_command('build_py')
             self.filelist.extend(build_py.get_source_files())
@@ -135,20 +135,20 @@ class sdist(sdist_add_defaults, orig.sdist):
             for name in filenames
         )
 
-    def _add_defaults_data_files(self):
-        try:
+    def _add_defaults_data_files(self): 
+        try: 
             super()._add_defaults_data_files()
-        except TypeError:
-            log.warn("data_files contains unexpected objects")
+        except TypeError: 
+            log.warn("data_files contains unexpected objects") 
 
     def check_readme(self):
-        for f in self.READMES:
+        for f in self.READMES: 
             if os.path.exists(f):
                 return
         else:
             self.warn(
                 "standard file not found: should have one of " +
-                ', '.join(self.READMES)
+                ', '.join(self.READMES) 
             )
 
     def make_release_tree(self, base_dir, files):
@@ -180,7 +180,7 @@ class sdist(sdist_add_defaults, orig.sdist):
         distribution.
         """
         log.info("reading manifest file '%s'", self.manifest)
-        manifest = open(self.manifest, 'rb')
+        manifest = open(self.manifest, 'rb') 
         for line in manifest:
             # The manifest must contain UTF-8. See #303.
             try:

@@ -1,16 +1,16 @@
-// Copyright 2019 The Abseil Authors.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//      https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Copyright 2019 The Abseil Authors. 
+// 
+// Licensed under the Apache License, Version 2.0 (the "License"); 
+// you may not use this file except in compliance with the License. 
+// You may obtain a copy of the License at 
+// 
+//      https://www.apache.org/licenses/LICENSE-2.0 
+// 
+// Unless required by applicable law or agreed to in writing, software 
+// distributed under the License is distributed on an "AS IS" BASIS, 
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+// See the License for the specific language governing permissions and 
+// limitations under the License. 
 //
 // -----------------------------------------------------------------------------
 // File: status.h
@@ -48,22 +48,22 @@
 // error codes (of type `y_absl::StatusCode`) enumerated in this header file.
 // These canonical codes are understood across the codebase and will be
 // accepted across all API and RPC boundaries.
-#ifndef ABSL_STATUS_STATUS_H_
-#define ABSL_STATUS_STATUS_H_
-
-#include <iostream>
-#include <util/generic/string.h>
-
-#include "y_absl/container/inlined_vector.h"
+#ifndef ABSL_STATUS_STATUS_H_ 
+#define ABSL_STATUS_STATUS_H_ 
+ 
+#include <iostream> 
+#include <util/generic/string.h> 
+ 
+#include "y_absl/container/inlined_vector.h" 
 #include "y_absl/functional/function_ref.h"
 #include "y_absl/status/internal/status_internal.h"
-#include "y_absl/strings/cord.h"
+#include "y_absl/strings/cord.h" 
 #include "y_absl/strings/string_view.h"
-#include "y_absl/types/optional.h"
-
-namespace y_absl {
-ABSL_NAMESPACE_BEGIN
-
+#include "y_absl/types/optional.h" 
+ 
+namespace y_absl { 
+ABSL_NAMESPACE_BEGIN 
+ 
 // y_absl::StatusCode
 //
 // An `y_absl::StatusCode` is an enumerated type indicating either no error ("OK")
@@ -89,20 +89,20 @@ ABSL_NAMESPACE_BEGIN
 // If your error handling code requires more context, you can attach payloads
 // to your status. See `y_absl::Status::SetPayload()` and
 // `y_absl::Status::GetPayload()` below.
-enum class StatusCode : int {
+enum class StatusCode : int { 
   // StatusCode::kOk
   //
   // kOK (gRPC code "OK") does not indicate an error; this value is returned on
   // success. It is typical to check for this value before proceeding on any
   // given call across an API or RPC boundary. To check this value, use the
   // `y_absl::Status::ok()` member function rather than inspecting the raw code.
-  kOk = 0,
+  kOk = 0, 
 
   // StatusCode::kCancelled
   //
   // kCancelled (gRPC code "CANCELLED") indicates the operation was cancelled,
   // typically by the caller.
-  kCancelled = 1,
+  kCancelled = 1, 
 
   // StatusCode::kUnknown
   //
@@ -110,7 +110,7 @@ enum class StatusCode : int {
   // general, more specific errors should be raised, if possible. Errors raised
   // by APIs that do not return enough error information may be converted to
   // this error.
-  kUnknown = 2,
+  kUnknown = 2, 
 
   // StatusCode::kInvalidArgument
   //
@@ -120,7 +120,7 @@ enum class StatusCode : int {
   // the arguments themselves. Errors with validly formed arguments that may
   // cause errors with the state of the receiving system should be denoted with
   // `kFailedPrecondition` instead.
-  kInvalidArgument = 3,
+  kInvalidArgument = 3, 
 
   // StatusCode::kDeadlineExceeded
   //
@@ -129,7 +129,7 @@ enum class StatusCode : int {
   // state within a system, this error may be returned even if the operation has
   // completed successfully. For example, a successful response from a server
   // could have been delayed long enough for the deadline to expire.
-  kDeadlineExceeded = 4,
+  kDeadlineExceeded = 4, 
 
   // StatusCode::kNotFound
   //
@@ -140,14 +140,14 @@ enum class StatusCode : int {
   // users, such as during a gradual feature rollout or undocumented allow list.
   // If a request should be denied for specific sets of users, such as through
   // user-based access control, use `kPermissionDenied` instead.
-  kNotFound = 5,
+  kNotFound = 5, 
 
   // StatusCode::kAlreadyExists
   //
   // kAlreadyExists (gRPC code "ALREADY_EXISTS") indicates that the entity a
   // caller attempted to create (such as a file or directory) is already
   // present.
-  kAlreadyExists = 6,
+  kAlreadyExists = 6, 
 
   // StatusCode::kPermissionDenied
   //
@@ -161,14 +161,14 @@ enum class StatusCode : int {
   // some resource. Instead, use `kResourceExhausted` for those errors.
   // `kPermissionDenied` must not be used if the caller cannot be identified.
   // Instead, use `kUnauthenticated` for those errors.
-  kPermissionDenied = 7,
+  kPermissionDenied = 7, 
 
   // StatusCode::kResourceExhausted
   //
   // kResourceExhausted (gRPC code "RESOURCE_EXHAUSTED") indicates some resource
   // has been exhausted, perhaps a per-user quota, or perhaps the entire file
   // system is out of space.
-  kResourceExhausted = 8,
+  kResourceExhausted = 8, 
 
   // StatusCode::kFailedPrecondition
   //
@@ -189,7 +189,7 @@ enum class StatusCode : int {
   //      fails because the directory is non-empty, `kFailedPrecondition`
   //      should be returned since the client should not retry unless
   //      the files are deleted from the directory.
-  kFailedPrecondition = 9,
+  kFailedPrecondition = 9, 
 
   // StatusCode::kAborted
   //
@@ -199,7 +199,7 @@ enum class StatusCode : int {
   //
   // See the guidelines above for deciding between `kFailedPrecondition`,
   // `kAborted`, and `kUnavailable`.
-  kAborted = 10,
+  kAborted = 10, 
 
   // StatusCode::kOutOfRange
   //
@@ -219,21 +219,21 @@ enum class StatusCode : int {
   // error) when it applies so that callers who are iterating through
   // a space can easily look for an `kOutOfRange` error to detect when
   // they are done.
-  kOutOfRange = 11,
+  kOutOfRange = 11, 
 
   // StatusCode::kUnimplemented
   //
   // kUnimplemented (gRPC code "UNIMPLEMENTED") indicates the operation is not
   // implemented or supported in this service. In this case, the operation
   // should not be re-attempted.
-  kUnimplemented = 12,
+  kUnimplemented = 12, 
 
   // StatusCode::kInternal
   //
   // kInternal (gRPC code "INTERNAL") indicates an internal error has occurred
   // and some invariants expected by the underlying system have not been
   // satisfied. This error code is reserved for serious errors.
-  kInternal = 13,
+  kInternal = 13, 
 
   // StatusCode::kUnavailable
   //
@@ -244,21 +244,21 @@ enum class StatusCode : int {
   //
   // See the guidelines above for deciding between `kFailedPrecondition`,
   // `kAborted`, and `kUnavailable`.
-  kUnavailable = 14,
+  kUnavailable = 14, 
 
   // StatusCode::kDataLoss
   //
   // kDataLoss (gRPC code "DATA_LOSS") indicates that unrecoverable data loss or
   // corruption has occurred. As this error is serious, proper alerting should
   // be attached to errors such as this.
-  kDataLoss = 15,
+  kDataLoss = 15, 
 
   // StatusCode::kUnauthenticated
   //
   // kUnauthenticated (gRPC code "UNAUTHENTICATED") indicates that the request
   // does not have valid authentication credentials for the operation. Correct
   // the authentication and try again.
-  kUnauthenticated = 16,
+  kUnauthenticated = 16, 
 
   // StatusCode::DoNotUseReservedForFutureExpansionUseDefaultInSwitchInstead_
   //
@@ -269,19 +269,19 @@ enum class StatusCode : int {
   // codes with `switch()` statements to *not* simply enumerate all possible
   // values, but instead provide a "default:" case. Providing such a default
   // case ensures that code will compile when new codes are added.
-  kDoNotUseReservedForFutureExpansionUseDefaultInSwitchInstead_ = 20
-};
-
+  kDoNotUseReservedForFutureExpansionUseDefaultInSwitchInstead_ = 20 
+}; 
+ 
 // StatusCodeToString()
 //
-// Returns the name for the status code, or "" if it is an unknown value.
-TString StatusCodeToString(StatusCode code);
-
+// Returns the name for the status code, or "" if it is an unknown value. 
+TString StatusCodeToString(StatusCode code); 
+ 
 // operator<<
 //
-// Streams StatusCodeToString(code) to `os`.
-std::ostream& operator<<(std::ostream& os, StatusCode code);
-
+// Streams StatusCodeToString(code) to `os`. 
+std::ostream& operator<<(std::ostream& os, StatusCode code); 
+ 
 // y_absl::StatusToStringMode
 //
 // An `y_absl::StatusToStringMode` is an enumerated type indicating how
@@ -297,8 +297,8 @@ enum class StatusToStringMode : int {
   kWithEverything = ~kWithNoExtraData,
   // Default mode used by ToString. Its exact value might change in the future.
   kDefault = kWithPayload,
-};
-
+}; 
+ 
 // y_absl::StatusToStringMode is specified as a bitmask type, which means the
 // following operations must be provided:
 inline constexpr StatusToStringMode operator&(StatusToStringMode lhs,
@@ -334,7 +334,7 @@ inline StatusToStringMode& operator^=(StatusToStringMode& lhs,
   lhs = lhs ^ rhs;
   return lhs;
 }
-
+ 
 // y_absl::Status
 //
 // The `y_absl::Status` class is generally used to gracefully handle errors
@@ -424,33 +424,33 @@ inline StatusToStringMode& operator^=(StatusToStringMode& lhs,
 class Status final {
  public:
   // Constructors
-
+ 
   // This default constructor creates an OK status with no message or payload.
   // Avoid this constructor and prefer explicit construction of an OK status
   // with `y_absl::OkStatus()`.
-  Status();
-
+  Status(); 
+ 
   // Creates a status in the canonical error space with the specified
   // `y_absl::StatusCode` and error message.  If `code == y_absl::StatusCode::kOk`,  // NOLINT
   // `msg` is ignored and an object identical to an OK status is constructed.
-  //
+  // 
   // The `msg` string must be in UTF-8. The implementation may complain (e.g.,  // NOLINT
-  // by printing a warning) if it is not.
-  Status(y_absl::StatusCode code, y_absl::string_view msg);
-
-  Status(const Status&);
-  Status& operator=(const Status& x);
-
+  // by printing a warning) if it is not. 
+  Status(y_absl::StatusCode code, y_absl::string_view msg); 
+ 
+  Status(const Status&); 
+  Status& operator=(const Status& x); 
+ 
   // Move operators
 
-  // The moved-from state is valid but unspecified.
-  Status(Status&&) noexcept;
-  Status& operator=(Status&&);
-
-  ~Status();
-
+  // The moved-from state is valid but unspecified. 
+  Status(Status&&) noexcept; 
+  Status& operator=(Status&&); 
+ 
+  ~Status(); 
+ 
   // Status::Update()
-  //
+  // 
   // Updates the existing status with `new_status` provided that `this->ok()`.
   // If the existing status already contains a non-OK error, this update has no
   // effect and preserves the current data. Note that this behavior may change
@@ -462,22 +462,22 @@ class Status final {
   //
   // Example:
   //   // Instead of "if (overall_status.ok()) overall_status = new_status"
-  //   overall_status.Update(new_status);
-  //
-  void Update(const Status& new_status);
-  void Update(Status&& new_status);
-
+  //   overall_status.Update(new_status); 
+  // 
+  void Update(const Status& new_status); 
+  void Update(Status&& new_status); 
+ 
   // Status::ok()
   //
   // Returns `true` if `this->ok()`. Prefer checking for an OK status using this
   // member function.
-  ABSL_MUST_USE_RESULT bool ok() const;
-
+  ABSL_MUST_USE_RESULT bool ok() const; 
+ 
   // Status::code()
   //
   // Returns the canonical error code of type `y_absl::StatusCode` of this status.
-  y_absl::StatusCode code() const;
-
+  y_absl::StatusCode code() const; 
+ 
   // Status::raw_code()
   //
   // Returns a raw (canonical) error code corresponding to the enum value of
@@ -488,19 +488,19 @@ class Status final {
   //
   // NOTE: This function should only be called when converting to an associated
   // wire format. Use `Status::code()` for error handling.
-  int raw_code() const;
-
+  int raw_code() const; 
+ 
   // Status::message()
   //
   // Returns the error message associated with this error code, if available.
   // Note that this message rarely describes the error code.  It is not unusual
   // for the error message to be the empty string. As a result, prefer
   // `operator<<` or `Status::ToString()` for debug logging.
-  y_absl::string_view message() const;
-
-  friend bool operator==(const Status&, const Status&);
-  friend bool operator!=(const Status&, const Status&);
-
+  y_absl::string_view message() const; 
+ 
+  friend bool operator==(const Status&, const Status&); 
+  friend bool operator!=(const Status&, const Status&); 
+ 
   // Status::ToString()
   //
   // Returns a string based on the `mode`. By default, it returns combination of
@@ -514,23 +514,23 @@ class Status final {
   // mechanism (which is internal).
   TString ToString(
       StatusToStringMode mode = StatusToStringMode::kDefault) const;
-
+ 
   // Status::IgnoreError()
   //
-  // Ignores any errors. This method does nothing except potentially suppress
-  // complaints from any tools that are checking that errors are not dropped on
-  // the floor.
-  void IgnoreError() const;
-
+  // Ignores any errors. This method does nothing except potentially suppress 
+  // complaints from any tools that are checking that errors are not dropped on 
+  // the floor. 
+  void IgnoreError() const; 
+ 
   // swap()
   //
   // Swap the contents of one status with another.
-  friend void swap(Status& a, Status& b);
-
+  friend void swap(Status& a, Status& b); 
+ 
   //----------------------------------------------------------------------------
   // Payload Management APIs
   //----------------------------------------------------------------------------
-
+ 
   // A payload may be attached to a status to provide additional context to an
   // error that may not be satisifed by an existing `y_absl::StatusCode`.
   // Typically, this payload serves one of several purposes:
@@ -552,7 +552,7 @@ class Status final {
   // should define the format of type URL in a similar practice so as to
   // minimize the chance of conflict between type URLs.
   // Users should ensure that the type URL can be mapped to a concrete
-  // C++ type if they want to deserialize the payload and read it effectively.
+  // C++ type if they want to deserialize the payload and read it effectively. 
   //
   // To attach a payload to a status object, call `Status::SetPayload()`,
   // passing it the type URL and an `y_absl::Cord` of associated data. Similarly,
@@ -560,114 +560,114 @@ class Status final {
   // may attach multiple payloads (with differing type URLs) to any given
   // status object, provided that the status is currently exhibiting an error
   // code (i.e. is not OK).
-
+ 
   // Status::GetPayload()
   //
   // Gets the payload of a status given its unique `type_url` key, if present.
-  y_absl::optional<y_absl::Cord> GetPayload(y_absl::string_view type_url) const;
-
+  y_absl::optional<y_absl::Cord> GetPayload(y_absl::string_view type_url) const; 
+ 
   // Status::SetPayload()
-  //
+  // 
   // Sets the payload for a non-ok status using a `type_url` key, overwriting
   // any existing payload for that `type_url`.
   //
   // NOTE: This function does nothing if the Status is ok.
-  void SetPayload(y_absl::string_view type_url, y_absl::Cord payload);
-
+  void SetPayload(y_absl::string_view type_url, y_absl::Cord payload); 
+ 
   // Status::ErasePayload()
   //
   // Erases the payload corresponding to the `type_url` key.  Returns `true` if
-  // the payload was present.
-  bool ErasePayload(y_absl::string_view type_url);
-
+  // the payload was present. 
+  bool ErasePayload(y_absl::string_view type_url); 
+ 
   // Status::ForEachPayload()
-  //
+  // 
   // Iterates over the stored payloads and calls the
   // `visitor(type_key, payload)` callable for each one.
   //
   // NOTE: The order of calls to `visitor()` is not specified and may change at
-  // any time.
-  //
+  // any time. 
+  // 
   // NOTE: Any mutation on the same 'y_absl::Status' object during visitation is
-  // forbidden and could result in undefined behavior.
-  void ForEachPayload(
+  // forbidden and could result in undefined behavior. 
+  void ForEachPayload( 
       y_absl::FunctionRef<void(y_absl::string_view, const y_absl::Cord&)> visitor)
-      const;
-
- private:
-  friend Status CancelledError();
-
-  // Creates a status in the canonical error space with the specified
-  // code, and an empty error message.
-  explicit Status(y_absl::StatusCode code);
-
-  static void UnrefNonInlined(uintptr_t rep);
-  static void Ref(uintptr_t rep);
-  static void Unref(uintptr_t rep);
-
-  // REQUIRES: !ok()
-  // Ensures rep_ is not shared with any other Status.
-  void PrepareToModify();
-
-  const status_internal::Payloads* GetPayloads() const;
-  status_internal::Payloads* GetPayloads();
-
-  // Takes ownership of payload.
+      const; 
+ 
+ private: 
+  friend Status CancelledError(); 
+ 
+  // Creates a status in the canonical error space with the specified 
+  // code, and an empty error message. 
+  explicit Status(y_absl::StatusCode code); 
+ 
+  static void UnrefNonInlined(uintptr_t rep); 
+  static void Ref(uintptr_t rep); 
+  static void Unref(uintptr_t rep); 
+ 
+  // REQUIRES: !ok() 
+  // Ensures rep_ is not shared with any other Status. 
+  void PrepareToModify(); 
+ 
+  const status_internal::Payloads* GetPayloads() const; 
+  status_internal::Payloads* GetPayloads(); 
+ 
+  // Takes ownership of payload. 
   static uintptr_t NewRep(
       y_absl::StatusCode code, y_absl::string_view msg,
       std::unique_ptr<status_internal::Payloads> payload);
-  static bool EqualsSlow(const y_absl::Status& a, const y_absl::Status& b);
-
-  // MSVC 14.0 limitation requires the const.
-  static constexpr const char kMovedFromString[] =
-      "Status accessed after move.";
-
-  static const TString* EmptyString();
-  static const TString* MovedFromString();
-
-  // Returns whether rep contains an inlined representation.
-  // See rep_ for details.
-  static bool IsInlined(uintptr_t rep);
-
-  // Indicates whether this Status was the rhs of a move operation. See rep_
-  // for details.
-  static bool IsMovedFrom(uintptr_t rep);
-  static uintptr_t MovedFromRep();
-
-  // Convert between error::Code and the inlined uintptr_t representation used
-  // by rep_. See rep_ for details.
-  static uintptr_t CodeToInlinedRep(y_absl::StatusCode code);
-  static y_absl::StatusCode InlinedRepToCode(uintptr_t rep);
-
-  // Converts between StatusRep* and the external uintptr_t representation used
-  // by rep_. See rep_ for details.
-  static uintptr_t PointerToRep(status_internal::StatusRep* r);
-  static status_internal::StatusRep* RepToPointer(uintptr_t r);
-
+  static bool EqualsSlow(const y_absl::Status& a, const y_absl::Status& b); 
+ 
+  // MSVC 14.0 limitation requires the const. 
+  static constexpr const char kMovedFromString[] = 
+      "Status accessed after move."; 
+ 
+  static const TString* EmptyString(); 
+  static const TString* MovedFromString(); 
+ 
+  // Returns whether rep contains an inlined representation. 
+  // See rep_ for details. 
+  static bool IsInlined(uintptr_t rep); 
+ 
+  // Indicates whether this Status was the rhs of a move operation. See rep_ 
+  // for details. 
+  static bool IsMovedFrom(uintptr_t rep); 
+  static uintptr_t MovedFromRep(); 
+ 
+  // Convert between error::Code and the inlined uintptr_t representation used 
+  // by rep_. See rep_ for details. 
+  static uintptr_t CodeToInlinedRep(y_absl::StatusCode code); 
+  static y_absl::StatusCode InlinedRepToCode(uintptr_t rep); 
+ 
+  // Converts between StatusRep* and the external uintptr_t representation used 
+  // by rep_. See rep_ for details. 
+  static uintptr_t PointerToRep(status_internal::StatusRep* r); 
+  static status_internal::StatusRep* RepToPointer(uintptr_t r); 
+ 
   TString ToStringSlow(StatusToStringMode mode) const;
-
-  // Status supports two different representations.
-  //  - When the low bit is off it is an inlined representation.
-  //    It uses the canonical error space, no message or payload.
-  //    The error code is (rep_ >> 2).
-  //    The (rep_ & 2) bit is the "moved from" indicator, used in IsMovedFrom().
-  //  - When the low bit is on it is an external representation.
-  //    In this case all the data comes from a heap allocated Rep object.
-  //    (rep_ - 1) is a status_internal::StatusRep* pointer to that structure.
-  uintptr_t rep_;
-};
-
+ 
+  // Status supports two different representations. 
+  //  - When the low bit is off it is an inlined representation. 
+  //    It uses the canonical error space, no message or payload. 
+  //    The error code is (rep_ >> 2). 
+  //    The (rep_ & 2) bit is the "moved from" indicator, used in IsMovedFrom(). 
+  //  - When the low bit is on it is an external representation. 
+  //    In this case all the data comes from a heap allocated Rep object. 
+  //    (rep_ - 1) is a status_internal::StatusRep* pointer to that structure. 
+  uintptr_t rep_; 
+}; 
+ 
 // OkStatus()
 //
 // Returns an OK status, equivalent to a default constructed instance. Prefer
 // usage of `y_absl::OkStatus()` when constructing such an OK status.
-Status OkStatus();
-
+Status OkStatus(); 
+ 
 // operator<<()
 //
-// Prints a human-readable representation of `x` to `os`.
-std::ostream& operator<<(std::ostream& os, const Status& x);
-
+// Prints a human-readable representation of `x` to `os`. 
+std::ostream& operator<<(std::ostream& os, const Status& x); 
+ 
 // IsAborted()
 // IsAlreadyExists()
 // IsCancelled()
@@ -742,141 +742,141 @@ Status UnimplementedError(y_absl::string_view message);
 Status UnknownError(y_absl::string_view message);
 
 //------------------------------------------------------------------------------
-// Implementation details follow
+// Implementation details follow 
 //------------------------------------------------------------------------------
-
-inline Status::Status() : rep_(CodeToInlinedRep(y_absl::StatusCode::kOk)) {}
-
-inline Status::Status(y_absl::StatusCode code) : rep_(CodeToInlinedRep(code)) {}
-
-inline Status::Status(const Status& x) : rep_(x.rep_) { Ref(rep_); }
-
-inline Status& Status::operator=(const Status& x) {
-  uintptr_t old_rep = rep_;
-  if (x.rep_ != old_rep) {
-    Ref(x.rep_);
-    rep_ = x.rep_;
-    Unref(old_rep);
-  }
-  return *this;
-}
-
-inline Status::Status(Status&& x) noexcept : rep_(x.rep_) {
-  x.rep_ = MovedFromRep();
-}
-
-inline Status& Status::operator=(Status&& x) {
-  uintptr_t old_rep = rep_;
+ 
+inline Status::Status() : rep_(CodeToInlinedRep(y_absl::StatusCode::kOk)) {} 
+ 
+inline Status::Status(y_absl::StatusCode code) : rep_(CodeToInlinedRep(code)) {} 
+ 
+inline Status::Status(const Status& x) : rep_(x.rep_) { Ref(rep_); } 
+ 
+inline Status& Status::operator=(const Status& x) { 
+  uintptr_t old_rep = rep_; 
+  if (x.rep_ != old_rep) { 
+    Ref(x.rep_); 
+    rep_ = x.rep_; 
+    Unref(old_rep); 
+  } 
+  return *this; 
+} 
+ 
+inline Status::Status(Status&& x) noexcept : rep_(x.rep_) { 
+  x.rep_ = MovedFromRep(); 
+} 
+ 
+inline Status& Status::operator=(Status&& x) { 
+  uintptr_t old_rep = rep_; 
   if (x.rep_ != old_rep) {
     rep_ = x.rep_;
     x.rep_ = MovedFromRep();
     Unref(old_rep);
   }
-  return *this;
-}
-
-inline void Status::Update(const Status& new_status) {
-  if (ok()) {
-    *this = new_status;
-  }
-}
-
-inline void Status::Update(Status&& new_status) {
-  if (ok()) {
-    *this = std::move(new_status);
-  }
-}
-
-inline Status::~Status() { Unref(rep_); }
-
-inline bool Status::ok() const {
-  return rep_ == CodeToInlinedRep(y_absl::StatusCode::kOk);
-}
-
-inline y_absl::string_view Status::message() const {
-  return !IsInlined(rep_)
-             ? RepToPointer(rep_)->message
-             : (IsMovedFrom(rep_) ? y_absl::string_view(kMovedFromString)
-                                  : y_absl::string_view());
-}
-
-inline bool operator==(const Status& lhs, const Status& rhs) {
-  return lhs.rep_ == rhs.rep_ || Status::EqualsSlow(lhs, rhs);
-}
-
-inline bool operator!=(const Status& lhs, const Status& rhs) {
-  return !(lhs == rhs);
-}
-
+  return *this; 
+} 
+ 
+inline void Status::Update(const Status& new_status) { 
+  if (ok()) { 
+    *this = new_status; 
+  } 
+} 
+ 
+inline void Status::Update(Status&& new_status) { 
+  if (ok()) { 
+    *this = std::move(new_status); 
+  } 
+} 
+ 
+inline Status::~Status() { Unref(rep_); } 
+ 
+inline bool Status::ok() const { 
+  return rep_ == CodeToInlinedRep(y_absl::StatusCode::kOk); 
+} 
+ 
+inline y_absl::string_view Status::message() const { 
+  return !IsInlined(rep_) 
+             ? RepToPointer(rep_)->message 
+             : (IsMovedFrom(rep_) ? y_absl::string_view(kMovedFromString) 
+                                  : y_absl::string_view()); 
+} 
+ 
+inline bool operator==(const Status& lhs, const Status& rhs) { 
+  return lhs.rep_ == rhs.rep_ || Status::EqualsSlow(lhs, rhs); 
+} 
+ 
+inline bool operator!=(const Status& lhs, const Status& rhs) { 
+  return !(lhs == rhs); 
+} 
+ 
 inline TString Status::ToString(StatusToStringMode mode) const {
   return ok() ? "OK" : ToStringSlow(mode);
-}
-
-inline void Status::IgnoreError() const {
-  // no-op
-}
-
-inline void swap(y_absl::Status& a, y_absl::Status& b) {
-  using std::swap;
-  swap(a.rep_, b.rep_);
-}
-
-inline const status_internal::Payloads* Status::GetPayloads() const {
-  return IsInlined(rep_) ? nullptr : RepToPointer(rep_)->payloads.get();
-}
-
-inline status_internal::Payloads* Status::GetPayloads() {
-  return IsInlined(rep_) ? nullptr : RepToPointer(rep_)->payloads.get();
-}
-
-inline bool Status::IsInlined(uintptr_t rep) { return (rep & 1) == 0; }
-
-inline bool Status::IsMovedFrom(uintptr_t rep) {
-  return IsInlined(rep) && (rep & 2) != 0;
-}
-
-inline uintptr_t Status::MovedFromRep() {
-  return CodeToInlinedRep(y_absl::StatusCode::kInternal) | 2;
-}
-
-inline uintptr_t Status::CodeToInlinedRep(y_absl::StatusCode code) {
-  return static_cast<uintptr_t>(code) << 2;
-}
-
-inline y_absl::StatusCode Status::InlinedRepToCode(uintptr_t rep) {
-  assert(IsInlined(rep));
-  return static_cast<y_absl::StatusCode>(rep >> 2);
-}
-
-inline status_internal::StatusRep* Status::RepToPointer(uintptr_t rep) {
-  assert(!IsInlined(rep));
-  return reinterpret_cast<status_internal::StatusRep*>(rep - 1);
-}
-
-inline uintptr_t Status::PointerToRep(status_internal::StatusRep* rep) {
-  return reinterpret_cast<uintptr_t>(rep) + 1;
-}
-
-inline void Status::Ref(uintptr_t rep) {
-  if (!IsInlined(rep)) {
-    RepToPointer(rep)->ref.fetch_add(1, std::memory_order_relaxed);
-  }
-}
-
-inline void Status::Unref(uintptr_t rep) {
-  if (!IsInlined(rep)) {
-    UnrefNonInlined(rep);
-  }
-}
-
-inline Status OkStatus() { return Status(); }
-
-// Creates a `Status` object with the `y_absl::StatusCode::kCancelled` error code
-// and an empty message. It is provided only for efficiency, given that
-// message-less kCancelled errors are common in the infrastructure.
-inline Status CancelledError() { return Status(y_absl::StatusCode::kCancelled); }
-
-ABSL_NAMESPACE_END
-}  // namespace y_absl
-
-#endif  // ABSL_STATUS_STATUS_H_
+} 
+ 
+inline void Status::IgnoreError() const { 
+  // no-op 
+} 
+ 
+inline void swap(y_absl::Status& a, y_absl::Status& b) { 
+  using std::swap; 
+  swap(a.rep_, b.rep_); 
+} 
+ 
+inline const status_internal::Payloads* Status::GetPayloads() const { 
+  return IsInlined(rep_) ? nullptr : RepToPointer(rep_)->payloads.get(); 
+} 
+ 
+inline status_internal::Payloads* Status::GetPayloads() { 
+  return IsInlined(rep_) ? nullptr : RepToPointer(rep_)->payloads.get(); 
+} 
+ 
+inline bool Status::IsInlined(uintptr_t rep) { return (rep & 1) == 0; } 
+ 
+inline bool Status::IsMovedFrom(uintptr_t rep) { 
+  return IsInlined(rep) && (rep & 2) != 0; 
+} 
+ 
+inline uintptr_t Status::MovedFromRep() { 
+  return CodeToInlinedRep(y_absl::StatusCode::kInternal) | 2; 
+} 
+ 
+inline uintptr_t Status::CodeToInlinedRep(y_absl::StatusCode code) { 
+  return static_cast<uintptr_t>(code) << 2; 
+} 
+ 
+inline y_absl::StatusCode Status::InlinedRepToCode(uintptr_t rep) { 
+  assert(IsInlined(rep)); 
+  return static_cast<y_absl::StatusCode>(rep >> 2); 
+} 
+ 
+inline status_internal::StatusRep* Status::RepToPointer(uintptr_t rep) { 
+  assert(!IsInlined(rep)); 
+  return reinterpret_cast<status_internal::StatusRep*>(rep - 1); 
+} 
+ 
+inline uintptr_t Status::PointerToRep(status_internal::StatusRep* rep) { 
+  return reinterpret_cast<uintptr_t>(rep) + 1; 
+} 
+ 
+inline void Status::Ref(uintptr_t rep) { 
+  if (!IsInlined(rep)) { 
+    RepToPointer(rep)->ref.fetch_add(1, std::memory_order_relaxed); 
+  } 
+} 
+ 
+inline void Status::Unref(uintptr_t rep) { 
+  if (!IsInlined(rep)) { 
+    UnrefNonInlined(rep); 
+  } 
+} 
+ 
+inline Status OkStatus() { return Status(); } 
+ 
+// Creates a `Status` object with the `y_absl::StatusCode::kCancelled` error code 
+// and an empty message. It is provided only for efficiency, given that 
+// message-less kCancelled errors are common in the infrastructure. 
+inline Status CancelledError() { return Status(y_absl::StatusCode::kCancelled); } 
+ 
+ABSL_NAMESPACE_END 
+}  // namespace y_absl 
+ 
+#endif  // ABSL_STATUS_STATUS_H_ 

@@ -282,19 +282,19 @@ StringPiece EscapeCodePoint(uint32_t cp, char* buffer,
     cp >>= 6;
     if (cp <= 0x1f) {
       buffer[4] = cp | 0xc0;
-      sp = StringPiece(buffer + 4, 2);
+      sp = StringPiece(buffer + 4, 2); 
       return sp;
     }
     buffer[4] = (cp & 0x3f) | 0x80;
     cp >>= 6;
     if (cp <= 0x0f) {
       buffer[3] = cp | 0xe0;
-      sp = StringPiece(buffer + 3, 3);
+      sp = StringPiece(buffer + 3, 3); 
       return sp;
     }
     buffer[3] = (cp & 0x3f) | 0x80;
     buffer[2] = ((cp >> 6) & 0x07) | 0xf0;
-    sp = StringPiece(buffer + 2, 4);
+    sp = StringPiece(buffer + 2, 4); 
   }
   return sp;
 }

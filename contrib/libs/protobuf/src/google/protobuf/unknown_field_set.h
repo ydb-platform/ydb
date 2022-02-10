@@ -101,29 +101,29 @@ class PROTOBUF_EXPORT UnknownFieldSet {
   // Similar to above, but this function will destroy the contents of other.
   void MergeFromAndDestroy(UnknownFieldSet* other);
 
-  // Merge the contents an UnknownFieldSet with the UnknownFieldSet in
-  // *metadata, if there is one.  If *metadata doesn't have an UnknownFieldSet
-  // then add one to it and make it be a copy of the first arg.
+  // Merge the contents an UnknownFieldSet with the UnknownFieldSet in 
+  // *metadata, if there is one.  If *metadata doesn't have an UnknownFieldSet 
+  // then add one to it and make it be a copy of the first arg. 
   static void MergeToInternalMetadata(const UnknownFieldSet& other,
                                       internal::InternalMetadata* metadata);
-
+ 
   // Swaps the contents of some other UnknownFieldSet with this one.
   inline void Swap(UnknownFieldSet* x);
 
   // Computes (an estimate of) the total number of bytes currently used for
   // storing the unknown fields in memory. Does NOT include
   // sizeof(*this) in the calculation.
-  size_t SpaceUsedExcludingSelfLong() const;
+  size_t SpaceUsedExcludingSelfLong() const; 
 
-  int SpaceUsedExcludingSelf() const {
-    return internal::ToIntSize(SpaceUsedExcludingSelfLong());
-  }
-
+  int SpaceUsedExcludingSelf() const { 
+    return internal::ToIntSize(SpaceUsedExcludingSelfLong()); 
+  } 
+ 
   // Version of SpaceUsed() including sizeof(*this).
-  size_t SpaceUsedLong() const;
+  size_t SpaceUsedLong() const; 
 
   int SpaceUsed() const { return internal::ToIntSize(SpaceUsedLong()); }
-
+ 
   // Returns the number of fields present in the UnknownFieldSet.
   inline int field_count() const;
   // Get a field in the set, where 0 <= index < field_count().  The fields
@@ -237,7 +237,7 @@ class PROTOBUF_EXPORT UnknownField {
     TYPE_GROUP
   };
 
-  // The field's field number, as seen on the wire.
+  // The field's field number, as seen on the wire. 
   inline int number() const;
 
   // The field type.
@@ -268,7 +268,7 @@ class PROTOBUF_EXPORT UnknownField {
                                                          output->EpsCopy()));
   }
 
-  inline size_t GetLengthDelimitedSize() const;
+  inline size_t GetLengthDelimitedSize() const; 
   uint8* InternalSerializeLengthDelimitedNoTag(
       uint8* target, io::EpsCopyOutputStream* stream) const;
 
@@ -295,7 +295,7 @@ class PROTOBUF_EXPORT UnknownField {
     uint64 fixed64_;
     mutable union LengthDelimited length_delimited_;
     UnknownFieldSet* group_;
-  } data_;
+  } data_; 
 };
 
 // ===================================================================
@@ -335,24 +335,24 @@ inline void UnknownFieldSet::AddLengthDelimited(int number,
 }
 
 
-
-
-inline int UnknownField::number() const { return static_cast<int>(number_); }
+ 
+ 
+inline int UnknownField::number() const { return static_cast<int>(number_); } 
 inline UnknownField::Type UnknownField::type() const {
   return static_cast<Type>(type_);
 }
 
 inline uint64 UnknownField::varint() const {
   assert(type() == TYPE_VARINT);
-  return data_.varint_;
+  return data_.varint_; 
 }
 inline uint32 UnknownField::fixed32() const {
   assert(type() == TYPE_FIXED32);
-  return data_.fixed32_;
+  return data_.fixed32_; 
 }
 inline uint64 UnknownField::fixed64() const {
   assert(type() == TYPE_FIXED64);
-  return data_.fixed64_;
+  return data_.fixed64_; 
 }
 inline const TProtoStringType& UnknownField::length_delimited() const {
   assert(type() == TYPE_LENGTH_DELIMITED);
@@ -360,20 +360,20 @@ inline const TProtoStringType& UnknownField::length_delimited() const {
 }
 inline const UnknownFieldSet& UnknownField::group() const {
   assert(type() == TYPE_GROUP);
-  return *data_.group_;
+  return *data_.group_; 
 }
 
 inline void UnknownField::set_varint(uint64 value) {
   assert(type() == TYPE_VARINT);
-  data_.varint_ = value;
+  data_.varint_ = value; 
 }
 inline void UnknownField::set_fixed32(uint32 value) {
   assert(type() == TYPE_FIXED32);
-  data_.fixed32_ = value;
+  data_.fixed32_ = value; 
 }
 inline void UnknownField::set_fixed64(uint64 value) {
   assert(type() == TYPE_FIXED64);
-  data_.fixed64_ = value;
+  data_.fixed64_ = value; 
 }
 inline void UnknownField::set_length_delimited(const TProtoStringType& value) {
   assert(type() == TYPE_LENGTH_DELIMITED);
@@ -385,7 +385,7 @@ inline TProtoStringType* UnknownField::mutable_length_delimited() {
 }
 inline UnknownFieldSet* UnknownField::mutable_group() {
   assert(type() == TYPE_GROUP);
-  return data_.group_;
+  return data_.group_; 
 }
 template <typename MessageType>
 bool UnknownFieldSet::MergeFromMessage(const MessageType& message) {
@@ -394,7 +394,7 @@ bool UnknownFieldSet::MergeFromMessage(const MessageType& message) {
 }
 
 
-inline size_t UnknownField::GetLengthDelimitedSize() const {
+inline size_t UnknownField::GetLengthDelimitedSize() const { 
   GOOGLE_DCHECK_EQ(TYPE_LENGTH_DELIMITED, type());
   return data_.length_delimited_.string_value->size();
 }

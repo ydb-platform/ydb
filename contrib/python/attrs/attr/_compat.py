@@ -1,33 +1,33 @@
-from __future__ import absolute_import, division, print_function
+from __future__ import absolute_import, division, print_function 
+ 
+import platform 
+import sys 
+import types 
+import warnings 
+ 
+ 
+PY2 = sys.version_info[0] == 2 
+PYPY = platform.python_implementation() == "PyPy" 
+ 
+ 
+if PYPY or sys.version_info[:2] >= (3, 6): 
+    ordered_dict = dict 
+else: 
+    from collections import OrderedDict 
 
-import platform
-import sys
-import types
-import warnings
-
-
-PY2 = sys.version_info[0] == 2
-PYPY = platform.python_implementation() == "PyPy"
-
-
-if PYPY or sys.version_info[:2] >= (3, 6):
-    ordered_dict = dict
-else:
-    from collections import OrderedDict
-
-    ordered_dict = OrderedDict
-
-
-if PY2:
+    ordered_dict = OrderedDict 
+ 
+ 
+if PY2: 
     from collections import Mapping, Sequence
-
+ 
     from UserDict import IterableUserDict
 
-    # We 'bundle' isclass instead of using inspect as importing inspect is
-    # fairly expensive (order of 10-15 ms for a modern machine in 2016)
-    def isclass(klass):
-        return isinstance(klass, (type, types.ClassType))
-
+    # We 'bundle' isclass instead of using inspect as importing inspect is 
+    # fairly expensive (order of 10-15 ms for a modern machine in 2016) 
+    def isclass(klass): 
+        return isinstance(klass, (type, types.ClassType)) 
+ 
     def new_class(name, bases, kwds, exec_body):
         """
         A minimal stub of types.new_class that we need for make_class.
@@ -37,69 +37,69 @@ if PY2:
 
         return type(name, bases, ns)
 
-    # TYPE is used in exceptions, repr(int) is different on Python 2 and 3.
-    TYPE = "type"
-
-    def iteritems(d):
-        return d.iteritems()
-
-    # Python 2 is bereft of a read-only dict proxy, so we make one!
-    class ReadOnlyDict(IterableUserDict):
-        """
-        Best-effort read-only dict wrapper.
-        """
-
-        def __setitem__(self, key, val):
-            # We gently pretend we're a Python 3 mappingproxy.
+    # TYPE is used in exceptions, repr(int) is different on Python 2 and 3. 
+    TYPE = "type" 
+ 
+    def iteritems(d): 
+        return d.iteritems() 
+ 
+    # Python 2 is bereft of a read-only dict proxy, so we make one! 
+    class ReadOnlyDict(IterableUserDict): 
+        """ 
+        Best-effort read-only dict wrapper. 
+        """ 
+ 
+        def __setitem__(self, key, val): 
+            # We gently pretend we're a Python 3 mappingproxy. 
             raise TypeError(
                 "'mappingproxy' object does not support item assignment"
             )
-
-        def update(self, _):
-            # We gently pretend we're a Python 3 mappingproxy.
+ 
+        def update(self, _): 
+            # We gently pretend we're a Python 3 mappingproxy. 
             raise AttributeError(
                 "'mappingproxy' object has no attribute 'update'"
             )
-
-        def __delitem__(self, _):
-            # We gently pretend we're a Python 3 mappingproxy.
+ 
+        def __delitem__(self, _): 
+            # We gently pretend we're a Python 3 mappingproxy. 
             raise TypeError(
                 "'mappingproxy' object does not support item deletion"
             )
-
-        def clear(self):
-            # We gently pretend we're a Python 3 mappingproxy.
+ 
+        def clear(self): 
+            # We gently pretend we're a Python 3 mappingproxy. 
             raise AttributeError(
                 "'mappingproxy' object has no attribute 'clear'"
             )
-
-        def pop(self, key, default=None):
-            # We gently pretend we're a Python 3 mappingproxy.
+ 
+        def pop(self, key, default=None): 
+            # We gently pretend we're a Python 3 mappingproxy. 
             raise AttributeError(
                 "'mappingproxy' object has no attribute 'pop'"
             )
-
-        def popitem(self):
-            # We gently pretend we're a Python 3 mappingproxy.
+ 
+        def popitem(self): 
+            # We gently pretend we're a Python 3 mappingproxy. 
             raise AttributeError(
                 "'mappingproxy' object has no attribute 'popitem'"
             )
-
-        def setdefault(self, key, default=None):
-            # We gently pretend we're a Python 3 mappingproxy.
+ 
+        def setdefault(self, key, default=None): 
+            # We gently pretend we're a Python 3 mappingproxy. 
             raise AttributeError(
                 "'mappingproxy' object has no attribute 'setdefault'"
             )
-
-        def __repr__(self):
-            # Override to be identical to the Python 3 version.
-            return "mappingproxy(" + repr(self.data) + ")"
-
-    def metadata_proxy(d):
-        res = ReadOnlyDict()
-        res.data.update(d)  # We blocked update, so we have to do it like this.
-        return res
-
+ 
+        def __repr__(self): 
+            # Override to be identical to the Python 3 version. 
+            return "mappingproxy(" + repr(self.data) + ")" 
+ 
+    def metadata_proxy(d): 
+        res = ReadOnlyDict() 
+        res.data.update(d)  # We blocked update, so we have to do it like this. 
+        return res 
+ 
     def just_warn(*args, **kw):  # pragma: no cover
         """
         We only warn on Python 3 because we are not aware of any concrete
@@ -123,30 +123,30 @@ else:  # Python 3 and later.
             stacklevel=2,
         )
 
-    def isclass(klass):
-        return isinstance(klass, type)
-
-    TYPE = "class"
-
-    def iteritems(d):
-        return d.items()
-
+    def isclass(klass): 
+        return isinstance(klass, type) 
+ 
+    TYPE = "class" 
+ 
+    def iteritems(d): 
+        return d.items() 
+ 
     new_class = types.new_class
 
-    def metadata_proxy(d):
-        return types.MappingProxyType(dict(d))
-
-
-def make_set_closure_cell():
+    def metadata_proxy(d): 
+        return types.MappingProxyType(dict(d)) 
+ 
+ 
+def make_set_closure_cell(): 
     """Return a function of two arguments (cell, value) which sets
     the value stored in the closure cell `cell` to `value`.
-    """
+    """ 
     # pypy makes this easy. (It also supports the logic below, but
     # why not do the easy/fast thing?)
     if PYPY:
 
-        def set_closure_cell(cell, value):
-            cell.__setstate__((value,))
+        def set_closure_cell(cell, value): 
+            cell.__setstate__((value,)) 
 
         return set_closure_cell
 
@@ -235,8 +235,8 @@ def make_set_closure_cell():
 
     except Exception:
         return just_warn
-    else:
+    else: 
         return set_closure_cell
-
-
-set_closure_cell = make_set_closure_cell()
+ 
+ 
+set_closure_cell = make_set_closure_cell() 

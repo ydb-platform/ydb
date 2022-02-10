@@ -5,7 +5,7 @@
 
     Base formatter class.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -65,7 +65,7 @@ class Formatter(object):
 
     def __init__(self, **options):
         self.style = _lookup_style(options.get('style', 'default'))
-        self.full = get_bool_opt(options, 'full', False)
+        self.full = get_bool_opt(options, 'full', False) 
         self.title = options.get('title', '')
         self.encoding = options.get('encoding', None) or None
         if self.encoding in ('guess', 'chardet'):

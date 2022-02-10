@@ -76,7 +76,7 @@ class ImmutablePrimitiveFieldLiteGenerator
   void GenerateKotlinDslMembers(io::Printer* printer) const override;
 
   TProtoStringType GetBoxedType() const override;
-
+ 
  protected:
   const FieldDescriptor* descriptor_;
   std::map<TProtoStringType, TProtoStringType> variables_;
@@ -100,7 +100,7 @@ class ImmutablePrimitiveOneofFieldLiteGenerator
 
   void GenerateFieldInfo(io::Printer* printer,
                          std::vector<uint16_t>* output) const;
-
+ 
  private:
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ImmutablePrimitiveOneofFieldLiteGenerator);
 };
@@ -123,7 +123,7 @@ class RepeatedImmutablePrimitiveFieldLiteGenerator
   void GenerateKotlinDslMembers(io::Printer* printer) const override;
 
   TProtoStringType GetBoxedType() const override;
-
+ 
  private:
   const FieldDescriptor* descriptor_;
   std::map<TProtoStringType, TProtoStringType> variables_;

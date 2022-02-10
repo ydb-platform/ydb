@@ -13,7 +13,7 @@ RECURSE(
     awssdk-extensions
     awssdk_async_extensions
     base64
-    base64/test
+    base64/test 
     bclclient
     blackbox
     blackbox/tests
@@ -25,13 +25,13 @@ RECURSE(
     build_info/ut
     capabilities
     celery_dashboard
-    certifi
+    certifi 
     cgroups
     charset
     charts_notes
     charts_notes/example
-    cityhash
-    cityhash/test
+    cityhash 
+    cityhash/test 
     clickhouse_client
     cmain
     codecs
@@ -44,7 +44,7 @@ RECURSE(
     cores
     coverage
     cpp_test
-    cppdemangle
+    cppdemangle 
     cqueue
     crowd-kit
     cyson
@@ -62,7 +62,7 @@ RECURSE(
     django_alive
     django_celery_monitoring
     django_russian
-    django_template_common
+    django_template_common 
     django_tools_log_context
     dssclient
     dump_dict
@@ -132,7 +132,7 @@ RECURSE(
     oauth
     oauth/example
     ok_client
-    openssl
+    openssl 
     par_apply
     par_apply/test
     path
@@ -157,15 +157,15 @@ RECURSE(
     retry
     retry/tests
     runtime
-    runtime/main
+    runtime/main 
     runtime/test
-    runtime_py3
-    runtime_py3/main
+    runtime_py3 
+    runtime_py3/main 
     runtime_py3/test
     runtime_test
     sanitizers
     sdms_api
-    sfx
+    sfx 
     selenium_ui_test
     sendmsg
     stubmaker
@@ -183,7 +183,7 @@ RECURSE(
     svn_ssh
     svn_version
     svn_version/ut
-    symbols
+    symbols 
     testing
     tmp
     toloka_client
@@ -215,8 +215,8 @@ RECURSE(
     zipatch
 )
 
-IF (NOT MUSL)
-    RECURSE(
+IF (NOT MUSL) 
+    RECURSE( 
         yt/example
     )
 ENDIF()

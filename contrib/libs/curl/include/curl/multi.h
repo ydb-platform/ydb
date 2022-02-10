@@ -1,5 +1,5 @@
-#ifndef CURLINC_MULTI_H
-#define CURLINC_MULTI_H
+#ifndef CURLINC_MULTI_H 
+#define CURLINC_MULTI_H 
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -175,20 +175,20 @@ CURL_EXTERN CURLMcode curl_multi_wait(CURLM *multi_handle,
                                       int timeout_ms,
                                       int *ret);
 
-/*
- * Name:     curl_multi_poll()
- *
- * Desc:     Poll on all fds within a CURLM set as well as any
- *           additional fds passed to the function.
- *
- * Returns:  CURLMcode type, general multi error code.
- */
-CURL_EXTERN CURLMcode curl_multi_poll(CURLM *multi_handle,
-                                      struct curl_waitfd extra_fds[],
-                                      unsigned int extra_nfds,
-                                      int timeout_ms,
-                                      int *ret);
-
+/* 
+ * Name:     curl_multi_poll() 
+ * 
+ * Desc:     Poll on all fds within a CURLM set as well as any 
+ *           additional fds passed to the function. 
+ * 
+ * Returns:  CURLMcode type, general multi error code. 
+ */ 
+CURL_EXTERN CURLMcode curl_multi_poll(CURLM *multi_handle, 
+                                      struct curl_waitfd extra_fds[], 
+                                      unsigned int extra_nfds, 
+                                      int timeout_ms, 
+                                      int *ret); 
+ 
 /*
  * Name:     curl_multi_wakeup()
  *

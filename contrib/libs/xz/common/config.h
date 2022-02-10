@@ -5,8 +5,8 @@
 #if defined(_android_)
 #   if defined(_i386_)
 #       include "config-android-i386.h"
-#   elif defined(_x86_64_)
-#       include "config-linux.h"
+#   elif defined(_x86_64_) 
+#       include "config-linux.h" 
 #   elif defined(_arm32_)
 #       include "config-android-arm32.h"
 #   elif defined(_arm64_)

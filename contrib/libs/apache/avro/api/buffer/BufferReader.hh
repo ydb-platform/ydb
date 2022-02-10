@@ -254,7 +254,7 @@ class AVRO_DECL BufferReader : private boost::noncopyable
 
     /// An uninstantiable function, that is if boost::is_fundamental check fails
     template<typename T>
-    bool read(T &, const std::false_type&)
+    bool read(T &, const std::false_type&) 
     {
         static_assert(sizeof(T) == 0, "Not a valid type to read");
         return false;

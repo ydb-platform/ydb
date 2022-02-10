@@ -51,7 +51,7 @@
 #include "y_absl/meta/type_traits.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 // integer_sequence
 //
@@ -344,7 +344,7 @@ constexpr T make_from_tuple(Tuple&& tup) {
           std::tuple_size<y_absl::decay_t<Tuple>>::value>{});
 }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_UTILITY_UTILITY_H_

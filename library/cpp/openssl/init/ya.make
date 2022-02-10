@@ -1,6 +1,6 @@
 LIBRARY()
 
-OWNER(pg g:zora)
+OWNER(pg g:zora) 
 
 PEERDIR(
     contrib/libs/openssl

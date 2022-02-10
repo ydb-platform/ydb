@@ -1,4 +1,4 @@
-from .object cimport PyObject
+from .object cimport PyObject 
 
 cdef extern from "Python.h":
 
@@ -50,7 +50,7 @@ cdef extern from "Python.h":
     # return value to a specific exception; use
     # PyErr_ExceptionMatches() instead, shown below. (The comparison
     # could easily fail since the exception may be an instance instead
-    # of a class, in the case of a class exception, or it may be a
+    # of a class, in the case of a class exception, or it may be a 
     # subclass of the expected exception.)
 
     bint PyErr_ExceptionMatches(object exc)
@@ -153,13 +153,13 @@ cdef extern from "Python.h":
     # PyErr_SetFromErrno(type);" when the system call returns an
     # error.
 
-    PyObject* PyErr_SetFromErrnoWithFilenameObject(object type, object filenameObject) except NULL
-    # Similar to PyErr_SetFromErrno(), with the additional behavior
-    # that if filenameObject is not NULL, it is passed to the
-    # constructor of type as a third parameter.
-    # In the case of OSError exception, this is used to define
-    # the filename attribute of the exception instance.
-
+    PyObject* PyErr_SetFromErrnoWithFilenameObject(object type, object filenameObject) except NULL 
+    # Similar to PyErr_SetFromErrno(), with the additional behavior 
+    # that if filenameObject is not NULL, it is passed to the 
+    # constructor of type as a third parameter. 
+    # In the case of OSError exception, this is used to define 
+    # the filename attribute of the exception instance. 
+ 
     PyObject* PyErr_SetFromErrnoWithFilename(object type, char *filename) except NULL
     # Return value: Always NULL.  Similar to PyErr_SetFromErrno(),
     # with the additional behavior that if filename is not NULL, it is

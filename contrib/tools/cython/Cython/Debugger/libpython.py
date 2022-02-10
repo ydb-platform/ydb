@@ -46,10 +46,10 @@ the type names are known to the debugger
 
 The module also extends gdb with some python-specific commands.
 '''
-
+ 
 # NOTE: some gdbs are linked with Python 3, so this file should be dual-syntax
 # compatible (2.6+ and 3.0+).  See #19308.
-
+ 
 from __future__ import print_function
 import gdb
 import os
@@ -2486,17 +2486,17 @@ class PyCont(ExecutionControlCommandBase):
 
 def _pointervalue(gdbval):
     """
-    Return the value of the pointer as a Python int.
+    Return the value of the pointer as a Python int. 
 
     gdbval.type must be a pointer type
     """
     # don't convert with int() as it will raise a RuntimeError
     if gdbval.address is not None:
-        return int(gdbval.address)
+        return int(gdbval.address) 
     else:
         # the address attribute is None sometimes, in which case we can
         # still convert the pointer to an int
-        return int(gdbval)
+        return int(gdbval) 
 
 
 def pointervalue(gdbval):
@@ -2688,7 +2688,7 @@ class FixGdbCommand(gdb.Command):
         warnings.filterwarnings('ignore', r'.*', RuntimeWarning,
                                 re.escape(__name__))
         try:
-            int(gdb.parse_and_eval("(void *) 0")) == 0
+            int(gdb.parse_and_eval("(void *) 0")) == 0 
         except RuntimeError:
             pass
         # warnings.resetwarnings()
@@ -2726,7 +2726,7 @@ class PyExec(gdb.Command):
             lines = []
             while True:
                 try:
-                    line = input('>')
+                    line = input('>') 
                 except EOFError:
                     break
                 else:

@@ -42,8 +42,8 @@ namespace boost { namespace proto
             callable_context_wrapper();
             typedef private_type_ fun_type(...);
             operator fun_type *() const;
-
-            BOOST_DELETED_FUNCTION(callable_context_wrapper &operator =(callable_context_wrapper const &))
+ 
+            BOOST_DELETED_FUNCTION(callable_context_wrapper &operator =(callable_context_wrapper const &)) 
         };
 
         template<typename T>

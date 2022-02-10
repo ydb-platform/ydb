@@ -5,7 +5,7 @@
 
     Formatter for IRC output
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -25,55 +25,55 @@ __all__ = ['IRCFormatter']
 IRC_COLORS = {
     Token:              ('',            ''),
 
-    Whitespace:         ('gray',   'brightblack'),
-    Comment:            ('gray',   'brightblack'),
-    Comment.Preproc:    ('cyan',        'brightcyan'),
-    Keyword:            ('blue',    'brightblue'),
-    Keyword.Type:       ('cyan',        'brightcyan'),
-    Operator.Word:      ('magenta',      'brightcyan'),
-    Name.Builtin:       ('cyan',        'brightcyan'),
-    Name.Function:      ('green',   'brightgreen'),
-    Name.Namespace:     ('_cyan_',      '_brightcyan_'),
-    Name.Class:         ('_green_', '_brightgreen_'),
-    Name.Exception:     ('cyan',        'brightcyan'),
-    Name.Decorator:     ('brightblack',    'gray'),
-    Name.Variable:      ('red',     'brightred'),
-    Name.Constant:      ('red',     'brightred'),
-    Name.Attribute:     ('cyan',        'brightcyan'),
-    Name.Tag:           ('brightblue',        'brightblue'),
-    String:             ('yellow',       'yellow'),
-    Number:             ('blue',    'brightblue'),
+    Whitespace:         ('gray',   'brightblack'), 
+    Comment:            ('gray',   'brightblack'), 
+    Comment.Preproc:    ('cyan',        'brightcyan'), 
+    Keyword:            ('blue',    'brightblue'), 
+    Keyword.Type:       ('cyan',        'brightcyan'), 
+    Operator.Word:      ('magenta',      'brightcyan'), 
+    Name.Builtin:       ('cyan',        'brightcyan'), 
+    Name.Function:      ('green',   'brightgreen'), 
+    Name.Namespace:     ('_cyan_',      '_brightcyan_'), 
+    Name.Class:         ('_green_', '_brightgreen_'), 
+    Name.Exception:     ('cyan',        'brightcyan'), 
+    Name.Decorator:     ('brightblack',    'gray'), 
+    Name.Variable:      ('red',     'brightred'), 
+    Name.Constant:      ('red',     'brightred'), 
+    Name.Attribute:     ('cyan',        'brightcyan'), 
+    Name.Tag:           ('brightblue',        'brightblue'), 
+    String:             ('yellow',       'yellow'), 
+    Number:             ('blue',    'brightblue'), 
 
-    Generic.Deleted:    ('brightred',        'brightred'),
-    Generic.Inserted:   ('green',  'brightgreen'),
+    Generic.Deleted:    ('brightred',        'brightred'), 
+    Generic.Inserted:   ('green',  'brightgreen'), 
     Generic.Heading:    ('**',         '**'),
-    Generic.Subheading: ('*magenta*',   '*brightmagenta*'),
-    Generic.Error:      ('brightred',        'brightred'),
+    Generic.Subheading: ('*magenta*',   '*brightmagenta*'), 
+    Generic.Error:      ('brightred',        'brightred'), 
 
-    Error:              ('_brightred_',      '_brightred_'),
+    Error:              ('_brightred_',      '_brightred_'), 
 }
 
 
 IRC_COLOR_MAP = {
     'white': 0,
     'black': 1,
-    'blue': 2,
-    'brightgreen': 3,
-    'brightred': 4,
-    'yellow': 5,
-    'magenta': 6,
+    'blue': 2, 
+    'brightgreen': 3, 
+    'brightred': 4, 
+    'yellow': 5, 
+    'magenta': 6, 
     'orange': 7,
-    'green': 7, #compat w/ ansi
-    'brightyellow': 8,
+    'green': 7, #compat w/ ansi 
+    'brightyellow': 8, 
     'lightgreen': 9,
-    'brightcyan': 9, # compat w/ ansi
-    'cyan': 10,
+    'brightcyan': 9, # compat w/ ansi 
+    'cyan': 10, 
     'lightblue': 11,
-    'red': 11, # compat w/ ansi
-    'brightblue': 12,
-    'brightmagenta': 13,
-    'brightblack': 14,
-    'gray': 15,
+    'red': 11, # compat w/ ansi 
+    'brightblue': 12, 
+    'brightmagenta': 13, 
+    'brightblack': 14, 
+    'gray': 15, 
 }
 
 def ircformat(color, text):

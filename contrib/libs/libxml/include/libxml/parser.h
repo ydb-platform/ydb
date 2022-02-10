@@ -260,7 +260,7 @@ struct _xmlParserCtxt {
     void              *catalogs;      /* document's own catalog */
     int                recovery;      /* run in recovery mode */
     int                progressive;   /* is this a progressive parsing */
-    xmlDictPtr         dict;          /* dictionary for the parser */
+    xmlDictPtr         dict;          /* dictionary for the parser */ 
     const xmlChar *   *atts;          /* array for the attributes callbacks */
     int                maxatts;       /* the size of the array */
     int                docdict;       /* use strings from dict to build tree */
@@ -283,11 +283,11 @@ struct _xmlParserCtxt {
     void *            *pushTab;       /* array of data for push */
     xmlHashTablePtr    attsDefault;   /* defaulted attributes if any */
     xmlHashTablePtr    attsSpecial;   /* non-CDATA attributes if any */
-    int                nsWellFormed;  /* is the document XML Namespace okay */
+    int                nsWellFormed;  /* is the document XML Namespace okay */ 
     int                options;       /* Extra options */
 
     /*
-     * Those fields are needed only for streaming parsing so far
+     * Those fields are needed only for streaming parsing so far 
      */
     int               dictNames;    /* Use dictionary names for the tree */
     int               freeElemsNr;  /* number of freed element nodes */
@@ -1097,9 +1097,9 @@ typedef enum {
     XML_PARSE_PEDANTIC	= 1<<7,	/* pedantic error reporting */
     XML_PARSE_NOBLANKS	= 1<<8,	/* remove blank nodes */
     XML_PARSE_SAX1	= 1<<9,	/* use the SAX1 interface internally */
-    XML_PARSE_XINCLUDE	= 1<<10,/* Implement XInclude substitution  */
+    XML_PARSE_XINCLUDE	= 1<<10,/* Implement XInclude substitution  */ 
     XML_PARSE_NONET	= 1<<11,/* Forbid network access */
-    XML_PARSE_NODICT	= 1<<12,/* Do not reuse the context dictionary */
+    XML_PARSE_NODICT	= 1<<12,/* Do not reuse the context dictionary */ 
     XML_PARSE_NSCLEAN	= 1<<13,/* remove redundant namespaces declarations */
     XML_PARSE_NOCDATA	= 1<<14,/* merge CDATA as text nodes */
     XML_PARSE_NOXINCNODE= 1<<15,/* do not generate XINCLUDE START/END nodes */
@@ -1191,7 +1191,7 @@ XMLPUBFUN xmlDocPtr XMLCALL
 /**
  * xmlFeature:
  *
- * Used to examine the existence of features that can be enabled
+ * Used to examine the existence of features that can be enabled 
  * or disabled at compile-time.
  * They used to be called XML_FEATURE_xxx but this clashed with Expat
  */

@@ -289,12 +289,12 @@ void SetCommonFieldVariables(const FieldDescriptor* descriptor,
 
   AddAccessorAnnotations(descriptor, options, variables);
 
-  // These variables are placeholders to pick out the beginning and ends of
-  // identifiers for annotations (when doing so with existing variables would
-  // be ambiguous or impossible). They should never be set to anything but the
-  // empty string.
-  (*variables)["{"] = "";
-  (*variables)["}"] = "";
+  // These variables are placeholders to pick out the beginning and ends of 
+  // identifiers for annotations (when doing so with existing variables would 
+  // be ambiguous or impossible). They should never be set to anything but the 
+  // empty string. 
+  (*variables)["{"] = ""; 
+  (*variables)["}"] = ""; 
 }
 
 void FieldGenerator::SetHasBitIndex(int32_t has_bit_index) {

@@ -5,7 +5,7 @@
 
     Lexers for computer algebra systems.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -104,9 +104,9 @@ class MathematicaLexer(RegexLexer):
             (r'#\d*', Name.Variable),
             (r'([a-zA-Z]+[a-zA-Z0-9]*)', Name),
 
-            (r'-?\d+\.\d*', Number.Float),
-            (r'-?\d*\.\d+', Number.Float),
-            (r'-?\d+', Number.Integer),
+            (r'-?\d+\.\d*', Number.Float), 
+            (r'-?\d*\.\d+', Number.Float), 
+            (r'-?\d+', Number.Integer), 
 
             (words(operators), Operator),
             (words(punctuation), Punctuation),

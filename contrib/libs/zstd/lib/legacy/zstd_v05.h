@@ -1,12 +1,12 @@
 /*
  * Copyright (c) Yann Collet, Facebook, Inc.
- * All rights reserved.
- *
+ * All rights reserved. 
+ * 
  * This source code is licensed under both the BSD-style license (found in the
  * LICENSE file in the root directory of this source tree) and the GPLv2 (found
  * in the COPYING file in the root directory of this source tree).
  * You may select, at your option, one of the above-listed licenses.
- */
+ */ 
 
 #ifndef ZSTDv05_H
 #define ZSTDv05_H
@@ -19,7 +19,7 @@ extern "C" {
 *  Dependencies
 ***************************************/
 #include <stddef.h>   /* size_t */
-#include "../common/mem.h"      /* U64, U32 */
+#include "../common/mem.h"      /* U64, U32 */ 
 
 
 /* *************************************

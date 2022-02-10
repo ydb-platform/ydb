@@ -51,7 +51,7 @@ struct PROTOBUF_EXPORT TableStruct_google_2fprotobuf_2fsource_5fcontext_2eproto 
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
   static const ::PROTOBUF_NAMESPACE_ID::uint32 offsets[];
-};
+}; 
 PROTOBUF_EXPORT extern const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_google_2fprotobuf_2fsource_5fcontext_2eproto;
 PROTOBUF_NAMESPACE_OPEN
 class SourceContext;
@@ -82,15 +82,15 @@ class PROTOBUF_EXPORT SourceContext final :
     CopyFrom(from);
     return *this;
   }
-  inline SourceContext& operator=(SourceContext&& from) noexcept {
+  inline SourceContext& operator=(SourceContext&& from) noexcept { 
     if (this == &from) return *this;
     if (GetOwningArena() == from.GetOwningArena()) {
       InternalSwap(&from);
-    } else {
-      CopyFrom(from);
-    }
-    return *this;
-  }
+    } else { 
+      CopyFrom(from); 
+    } 
+    return *this; 
+  } 
 
   static const ::PROTOBUF_NAMESPACE_ID::Descriptor* descriptor() {
     return GetDescriptor();
@@ -104,16 +104,16 @@ class PROTOBUF_EXPORT SourceContext final :
   static const SourceContext& default_instance() {
     return *internal_default_instance();
   }
-  static inline const SourceContext* internal_default_instance() {
-    return reinterpret_cast<const SourceContext*>(
-               &_SourceContext_default_instance_);
-  }
+  static inline const SourceContext* internal_default_instance() { 
+    return reinterpret_cast<const SourceContext*>( 
+               &_SourceContext_default_instance_); 
+  } 
   static constexpr int kIndexInFileMessages =
-    0;
-
-  friend void swap(SourceContext& a, SourceContext& b) {
-    a.Swap(&b);
-  }
+    0; 
+ 
+  friend void swap(SourceContext& a, SourceContext& b) { 
+    a.Swap(&b); 
+  } 
   inline void Swap(SourceContext* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -182,7 +182,7 @@ class PROTOBUF_EXPORT SourceContext final :
   enum : int {
     kFileNameFieldNumber = 1,
   };
-  // string file_name = 1;
+  // string file_name = 1; 
   void clear_file_name();
   const TProtoStringType& file_name() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
@@ -212,13 +212,13 @@ class PROTOBUF_EXPORT SourceContext final :
 
 // ===================================================================
 
-#ifdef __GNUC__
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
-#endif  // __GNUC__
+#ifdef __GNUC__ 
+  #pragma GCC diagnostic push 
+  #pragma GCC diagnostic ignored "-Wstrict-aliasing" 
+#endif  // __GNUC__ 
 // SourceContext
 
-// string file_name = 1;
+// string file_name = 1; 
 inline void SourceContext::clear_file_name() {
   file_name_.ClearToEmpty();
 }
@@ -264,14 +264,14 @@ inline void SourceContext::set_allocated_file_name(TProtoStringType* file_name) 
   // @@protoc_insertion_point(field_set_allocated:google.protobuf.SourceContext.file_name)
 }
 
-#ifdef __GNUC__
-  #pragma GCC diagnostic pop
-#endif  // __GNUC__
+#ifdef __GNUC__ 
+  #pragma GCC diagnostic pop 
+#endif  // __GNUC__ 
 
 // @@protoc_insertion_point(namespace_scope)
 
 PROTOBUF_NAMESPACE_CLOSE
-
+ 
 // @@protoc_insertion_point(global_scope)
 
 #include <google/protobuf/port_undef.inc>

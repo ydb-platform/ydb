@@ -1,10 +1,10 @@
-import os
-import sys
-import itertools
+import os 
+import sys 
+import itertools 
 from distutils.command.build_ext import build_ext as _du_build_ext
 from distutils.file_util import copy_file
 from distutils.ccompiler import new_compiler
-from distutils.sysconfig import customize_compiler, get_config_var
+from distutils.sysconfig import customize_compiler, get_config_var 
 from distutils.errors import DistutilsError
 from distutils import log
 
@@ -27,31 +27,31 @@ try:
 except ImportError:
     _build_ext = _du_build_ext
 
-# make sure _config_vars is initialized
-get_config_var("LDSHARED")
-from distutils.sysconfig import _config_vars as _CONFIG_VARS
+# make sure _config_vars is initialized 
+get_config_var("LDSHARED") 
+from distutils.sysconfig import _config_vars as _CONFIG_VARS 
 
 
-def _customize_compiler_for_shlib(compiler):
-    if sys.platform == "darwin":
-        # building .dylib requires additional compiler flags on OSX; here we
-        # temporarily substitute the pyconfig.h variables so that distutils'
-        # 'customize_compiler' uses them before we build the shared libraries.
-        tmp = _CONFIG_VARS.copy()
-        try:
-            # XXX Help!  I don't have any idea whether these are right...
-            _CONFIG_VARS['LDSHARED'] = (
-                "gcc -Wl,-x -dynamiclib -undefined dynamic_lookup")
-            _CONFIG_VARS['CCSHARED'] = " -dynamiclib"
-            _CONFIG_VARS['SO'] = ".dylib"
-            customize_compiler(compiler)
-        finally:
-            _CONFIG_VARS.clear()
-            _CONFIG_VARS.update(tmp)
-    else:
-        customize_compiler(compiler)
-
-
+def _customize_compiler_for_shlib(compiler): 
+    if sys.platform == "darwin": 
+        # building .dylib requires additional compiler flags on OSX; here we 
+        # temporarily substitute the pyconfig.h variables so that distutils' 
+        # 'customize_compiler' uses them before we build the shared libraries. 
+        tmp = _CONFIG_VARS.copy() 
+        try: 
+            # XXX Help!  I don't have any idea whether these are right... 
+            _CONFIG_VARS['LDSHARED'] = ( 
+                "gcc -Wl,-x -dynamiclib -undefined dynamic_lookup") 
+            _CONFIG_VARS['CCSHARED'] = " -dynamiclib" 
+            _CONFIG_VARS['SO'] = ".dylib" 
+            customize_compiler(compiler) 
+        finally: 
+            _CONFIG_VARS.clear() 
+            _CONFIG_VARS.update(tmp) 
+    else: 
+        customize_compiler(compiler) 
+ 
+ 
 have_rtld = False
 use_stubs = False
 libtype = 'shared'
@@ -67,16 +67,16 @@ elif os.name != 'nt':
 
 if_dl = lambda s: s if have_rtld else ''
 
-
-def get_abi3_suffix():
-    """Return the file extension for an abi3-compliant Extension()"""
+ 
+def get_abi3_suffix(): 
+    """Return the file extension for an abi3-compliant Extension()""" 
     for suffix in EXTENSION_SUFFIXES:
-        if '.abi3' in suffix:  # Unix
-            return suffix
-        elif suffix == '.pyd':  # Windows
-            return suffix
-
-
+        if '.abi3' in suffix:  # Unix 
+            return suffix 
+        elif suffix == '.pyd':  # Windows 
+            return suffix 
+ 
+ 
 class build_ext(_build_ext):
     def run(self):
         """Build extensions in build directory, then copy if --inplace"""
@@ -112,15 +112,15 @@ class build_ext(_build_ext):
         filename = _build_ext.get_ext_filename(self, fullname)
         if fullname in self.ext_map:
             ext = self.ext_map[fullname]
-            use_abi3 = (
+            use_abi3 = ( 
                 not six.PY2
-                and getattr(ext, 'py_limited_api')
-                and get_abi3_suffix()
-            )
-            if use_abi3:
+                and getattr(ext, 'py_limited_api') 
+                and get_abi3_suffix() 
+            ) 
+            if use_abi3: 
                 so_ext = get_config_var('EXT_SUFFIX')
-                filename = filename[:-len(so_ext)]
-                filename = filename + get_abi3_suffix()
+                filename = filename[:-len(so_ext)] 
+                filename = filename + get_abi3_suffix() 
             if isinstance(ext, Library):
                 fn, ext = os.path.splitext(filename)
                 return self.shlib_compiler.library_filename(fn, libtype)
@@ -168,7 +168,7 @@ class build_ext(_build_ext):
         compiler = self.shlib_compiler = new_compiler(
             compiler=self.compiler, dry_run=self.dry_run, force=self.force
         )
-        _customize_compiler_for_shlib(compiler)
+        _customize_compiler_for_shlib(compiler) 
 
         if self.include_dirs is not None:
             compiler.set_include_dirs(self.include_dirs)

@@ -1,25 +1,25 @@
-PY23_LIBRARY()
-
+PY23_LIBRARY() 
+ 
 LICENSE(BSD-3-Clause)
 
-OWNER(orivej g:python-contrib)
-
+OWNER(orivej g:python-contrib) 
+ 
 VERSION(0.13.9)
-
-PEERDIR(
+ 
+PEERDIR( 
     contrib/python/decorator
-    contrib/python/ipython
-)
-
-NO_LINT()
-
-PY_SRCS(
-    TOP_LEVEL
-    ipdb/__init__.py
-    ipdb/__main__.py
-    ipdb/stdout.py
-)
-
+    contrib/python/ipython 
+) 
+ 
+NO_LINT() 
+ 
+PY_SRCS( 
+    TOP_LEVEL 
+    ipdb/__init__.py 
+    ipdb/__main__.py 
+    ipdb/stdout.py 
+) 
+ 
 NO_CHECK_IMPORTS(
     # Modules presented below leads to initialization of pdb,
     # which try to create ~/.ipython/profile_default/history.sqlite-journal,
@@ -35,4 +35,4 @@ RESOURCE_FILES(
     .dist-info/top_level.txt
 )
 
-END()
+END() 

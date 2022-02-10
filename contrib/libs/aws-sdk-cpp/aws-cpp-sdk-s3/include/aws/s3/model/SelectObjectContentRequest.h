@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #pragma once
 #include <aws/s3/S3_EXPORTS.h>
@@ -13,7 +13,7 @@
 #include <aws/s3/model/RequestProgress.h>
 #include <aws/s3/model/InputSerialization.h>
 #include <aws/s3/model/OutputSerialization.h>
-#include <aws/s3/model/ScanRange.h>
+#include <aws/s3/model/ScanRange.h> 
 #include <aws/core/utils/memory/stl/AWSMap.h>
 #include <utility>
 
@@ -44,7 +44,7 @@ namespace Model
   {
   public:
     SelectObjectContentRequest();
-
+ 
     // Service request name is the Operation name which will send this request out,
     // each operation should has unique request name, so that we can get operation's name from this request.
     // Note: this is not true for response, multiple operations may have the same response name,
@@ -162,171 +162,171 @@ namespace Model
 
     /**
      * <p>The SSE Algorithm used to encrypt the object. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline const Aws::String& GetSSECustomerAlgorithm() const{ return m_sSECustomerAlgorithm; }
 
     /**
      * <p>The SSE Algorithm used to encrypt the object. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline bool SSECustomerAlgorithmHasBeenSet() const { return m_sSECustomerAlgorithmHasBeenSet; }
 
     /**
      * <p>The SSE Algorithm used to encrypt the object. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline void SetSSECustomerAlgorithm(const Aws::String& value) { m_sSECustomerAlgorithmHasBeenSet = true; m_sSECustomerAlgorithm = value; }
 
     /**
      * <p>The SSE Algorithm used to encrypt the object. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline void SetSSECustomerAlgorithm(Aws::String&& value) { m_sSECustomerAlgorithmHasBeenSet = true; m_sSECustomerAlgorithm = std::move(value); }
 
     /**
      * <p>The SSE Algorithm used to encrypt the object. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline void SetSSECustomerAlgorithm(const char* value) { m_sSECustomerAlgorithmHasBeenSet = true; m_sSECustomerAlgorithm.assign(value); }
 
     /**
      * <p>The SSE Algorithm used to encrypt the object. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline SelectObjectContentRequest& WithSSECustomerAlgorithm(const Aws::String& value) { SetSSECustomerAlgorithm(value); return *this;}
 
     /**
      * <p>The SSE Algorithm used to encrypt the object. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline SelectObjectContentRequest& WithSSECustomerAlgorithm(Aws::String&& value) { SetSSECustomerAlgorithm(std::move(value)); return *this;}
 
     /**
      * <p>The SSE Algorithm used to encrypt the object. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline SelectObjectContentRequest& WithSSECustomerAlgorithm(const char* value) { SetSSECustomerAlgorithm(value); return *this;}
 
 
     /**
      * <p>The SSE Customer Key. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline const Aws::String& GetSSECustomerKey() const{ return m_sSECustomerKey; }
 
     /**
      * <p>The SSE Customer Key. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline bool SSECustomerKeyHasBeenSet() const { return m_sSECustomerKeyHasBeenSet; }
 
     /**
      * <p>The SSE Customer Key. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline void SetSSECustomerKey(const Aws::String& value) { m_sSECustomerKeyHasBeenSet = true; m_sSECustomerKey = value; }
 
     /**
      * <p>The SSE Customer Key. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline void SetSSECustomerKey(Aws::String&& value) { m_sSECustomerKeyHasBeenSet = true; m_sSECustomerKey = std::move(value); }
 
     /**
      * <p>The SSE Customer Key. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline void SetSSECustomerKey(const char* value) { m_sSECustomerKeyHasBeenSet = true; m_sSECustomerKey.assign(value); }
 
     /**
      * <p>The SSE Customer Key. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline SelectObjectContentRequest& WithSSECustomerKey(const Aws::String& value) { SetSSECustomerKey(value); return *this;}
 
     /**
      * <p>The SSE Customer Key. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline SelectObjectContentRequest& WithSSECustomerKey(Aws::String&& value) { SetSSECustomerKey(std::move(value)); return *this;}
 
     /**
      * <p>The SSE Customer Key. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline SelectObjectContentRequest& WithSSECustomerKey(const char* value) { SetSSECustomerKey(value); return *this;}
 
 
     /**
      * <p>The SSE Customer Key MD5. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline const Aws::String& GetSSECustomerKeyMD5() const{ return m_sSECustomerKeyMD5; }
 
     /**
      * <p>The SSE Customer Key MD5. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline bool SSECustomerKeyMD5HasBeenSet() const { return m_sSECustomerKeyMD5HasBeenSet; }
 
     /**
      * <p>The SSE Customer Key MD5. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline void SetSSECustomerKeyMD5(const Aws::String& value) { m_sSECustomerKeyMD5HasBeenSet = true; m_sSECustomerKeyMD5 = value; }
 
     /**
      * <p>The SSE Customer Key MD5. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline void SetSSECustomerKeyMD5(Aws::String&& value) { m_sSECustomerKeyMD5HasBeenSet = true; m_sSECustomerKeyMD5 = std::move(value); }
 
     /**
      * <p>The SSE Customer Key MD5. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline void SetSSECustomerKeyMD5(const char* value) { m_sSECustomerKeyMD5HasBeenSet = true; m_sSECustomerKeyMD5.assign(value); }
 
     /**
      * <p>The SSE Customer Key MD5. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline SelectObjectContentRequest& WithSSECustomerKeyMD5(const Aws::String& value) { SetSSECustomerKeyMD5(value); return *this;}
 
     /**
      * <p>The SSE Customer Key MD5. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline SelectObjectContentRequest& WithSSECustomerKeyMD5(Aws::String&& value) { SetSSECustomerKeyMD5(std::move(value)); return *this;}
 
     /**
      * <p>The SSE Customer Key MD5. For more information, see <a
-     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side
-     * Encryption (Using Customer-Provided Encryption Keys</a>. </p>
+     * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html">Server-Side 
+     * Encryption (Using Customer-Provided Encryption Keys</a>. </p> 
      */
     inline SelectObjectContentRequest& WithSSECustomerKeyMD5(const char* value) { SetSSECustomerKeyMD5(value); return *this;}
 
@@ -373,32 +373,32 @@ namespace Model
 
 
     /**
-     * <p>The type of the provided expression (for example, SQL).</p>
+     * <p>The type of the provided expression (for example, SQL).</p> 
      */
     inline const ExpressionType& GetExpressionType() const{ return m_expressionType; }
 
     /**
-     * <p>The type of the provided expression (for example, SQL).</p>
+     * <p>The type of the provided expression (for example, SQL).</p> 
      */
     inline bool ExpressionTypeHasBeenSet() const { return m_expressionTypeHasBeenSet; }
 
     /**
-     * <p>The type of the provided expression (for example, SQL).</p>
+     * <p>The type of the provided expression (for example, SQL).</p> 
      */
     inline void SetExpressionType(const ExpressionType& value) { m_expressionTypeHasBeenSet = true; m_expressionType = value; }
 
     /**
-     * <p>The type of the provided expression (for example, SQL).</p>
+     * <p>The type of the provided expression (for example, SQL).</p> 
      */
     inline void SetExpressionType(ExpressionType&& value) { m_expressionTypeHasBeenSet = true; m_expressionType = std::move(value); }
 
     /**
-     * <p>The type of the provided expression (for example, SQL).</p>
+     * <p>The type of the provided expression (for example, SQL).</p> 
      */
     inline SelectObjectContentRequest& WithExpressionType(const ExpressionType& value) { SetExpressionType(value); return *this;}
 
     /**
-     * <p>The type of the provided expression (for example, SQL).</p>
+     * <p>The type of the provided expression (for example, SQL).</p> 
      */
     inline SelectObjectContentRequest& WithExpressionType(ExpressionType&& value) { SetExpressionType(std::move(value)); return *this;}
 
@@ -502,160 +502,160 @@ namespace Model
     inline SelectObjectContentRequest& WithOutputSerialization(OutputSerialization&& value) { SetOutputSerialization(std::move(value)); return *this;}
 
 
-    /**
-     * <p>Specifies the byte range of the object to get the records from. A record is
-     * processed when its first byte is contained by the range. This parameter is
-     * optional, but when specified, it must not be empty. See RFC 2616, Section
-     * 14.35.1 about how to specify the start and end of the range.</p> <p>
-     * <code>ScanRange</code>may be used in the following ways:</p> <ul> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;end&gt;100&lt;/end&gt;&lt;/scanrange&gt;</code>
-     * - process only the records starting between the bytes 50 and 100 (inclusive,
-     * counting from zero)</p> </li> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;/scanrange&gt;</code> -
-     * process only the records starting after the byte 50</p> </li> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;end&gt;50&lt;/end&gt;&lt;/scanrange&gt;</code> -
-     * process only the records within the last 50 bytes of the file.</p> </li> </ul>
-     */
-    inline const ScanRange& GetScanRange() const{ return m_scanRange; }
-
-    /**
-     * <p>Specifies the byte range of the object to get the records from. A record is
-     * processed when its first byte is contained by the range. This parameter is
-     * optional, but when specified, it must not be empty. See RFC 2616, Section
-     * 14.35.1 about how to specify the start and end of the range.</p> <p>
-     * <code>ScanRange</code>may be used in the following ways:</p> <ul> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;end&gt;100&lt;/end&gt;&lt;/scanrange&gt;</code>
-     * - process only the records starting between the bytes 50 and 100 (inclusive,
-     * counting from zero)</p> </li> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;/scanrange&gt;</code> -
-     * process only the records starting after the byte 50</p> </li> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;end&gt;50&lt;/end&gt;&lt;/scanrange&gt;</code> -
-     * process only the records within the last 50 bytes of the file.</p> </li> </ul>
-     */
-    inline bool ScanRangeHasBeenSet() const { return m_scanRangeHasBeenSet; }
-
-    /**
-     * <p>Specifies the byte range of the object to get the records from. A record is
-     * processed when its first byte is contained by the range. This parameter is
-     * optional, but when specified, it must not be empty. See RFC 2616, Section
-     * 14.35.1 about how to specify the start and end of the range.</p> <p>
-     * <code>ScanRange</code>may be used in the following ways:</p> <ul> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;end&gt;100&lt;/end&gt;&lt;/scanrange&gt;</code>
-     * - process only the records starting between the bytes 50 and 100 (inclusive,
-     * counting from zero)</p> </li> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;/scanrange&gt;</code> -
-     * process only the records starting after the byte 50</p> </li> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;end&gt;50&lt;/end&gt;&lt;/scanrange&gt;</code> -
-     * process only the records within the last 50 bytes of the file.</p> </li> </ul>
-     */
-    inline void SetScanRange(const ScanRange& value) { m_scanRangeHasBeenSet = true; m_scanRange = value; }
-
-    /**
-     * <p>Specifies the byte range of the object to get the records from. A record is
-     * processed when its first byte is contained by the range. This parameter is
-     * optional, but when specified, it must not be empty. See RFC 2616, Section
-     * 14.35.1 about how to specify the start and end of the range.</p> <p>
-     * <code>ScanRange</code>may be used in the following ways:</p> <ul> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;end&gt;100&lt;/end&gt;&lt;/scanrange&gt;</code>
-     * - process only the records starting between the bytes 50 and 100 (inclusive,
-     * counting from zero)</p> </li> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;/scanrange&gt;</code> -
-     * process only the records starting after the byte 50</p> </li> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;end&gt;50&lt;/end&gt;&lt;/scanrange&gt;</code> -
-     * process only the records within the last 50 bytes of the file.</p> </li> </ul>
-     */
-    inline void SetScanRange(ScanRange&& value) { m_scanRangeHasBeenSet = true; m_scanRange = std::move(value); }
-
-    /**
-     * <p>Specifies the byte range of the object to get the records from. A record is
-     * processed when its first byte is contained by the range. This parameter is
-     * optional, but when specified, it must not be empty. See RFC 2616, Section
-     * 14.35.1 about how to specify the start and end of the range.</p> <p>
-     * <code>ScanRange</code>may be used in the following ways:</p> <ul> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;end&gt;100&lt;/end&gt;&lt;/scanrange&gt;</code>
-     * - process only the records starting between the bytes 50 and 100 (inclusive,
-     * counting from zero)</p> </li> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;/scanrange&gt;</code> -
-     * process only the records starting after the byte 50</p> </li> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;end&gt;50&lt;/end&gt;&lt;/scanrange&gt;</code> -
-     * process only the records within the last 50 bytes of the file.</p> </li> </ul>
-     */
-    inline SelectObjectContentRequest& WithScanRange(const ScanRange& value) { SetScanRange(value); return *this;}
-
-    /**
-     * <p>Specifies the byte range of the object to get the records from. A record is
-     * processed when its first byte is contained by the range. This parameter is
-     * optional, but when specified, it must not be empty. See RFC 2616, Section
-     * 14.35.1 about how to specify the start and end of the range.</p> <p>
-     * <code>ScanRange</code>may be used in the following ways:</p> <ul> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;end&gt;100&lt;/end&gt;&lt;/scanrange&gt;</code>
-     * - process only the records starting between the bytes 50 and 100 (inclusive,
-     * counting from zero)</p> </li> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;/scanrange&gt;</code> -
-     * process only the records starting after the byte 50</p> </li> <li> <p>
-     * <code>&lt;scanrange&gt;&lt;end&gt;50&lt;/end&gt;&lt;/scanrange&gt;</code> -
-     * process only the records within the last 50 bytes of the file.</p> </li> </ul>
-     */
-    inline SelectObjectContentRequest& WithScanRange(ScanRange&& value) { SetScanRange(std::move(value)); return *this;}
-
-
-    /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
-     */
-    inline const Aws::String& GetExpectedBucketOwner() const{ return m_expectedBucketOwner; }
-
-    /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
-     */
-    inline bool ExpectedBucketOwnerHasBeenSet() const { return m_expectedBucketOwnerHasBeenSet; }
-
-    /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
-     */
-    inline void SetExpectedBucketOwner(const Aws::String& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = value; }
-
-    /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
-     */
-    inline void SetExpectedBucketOwner(Aws::String&& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = std::move(value); }
-
-    /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
-     */
-    inline void SetExpectedBucketOwner(const char* value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner.assign(value); }
-
-    /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
-     */
-    inline SelectObjectContentRequest& WithExpectedBucketOwner(const Aws::String& value) { SetExpectedBucketOwner(value); return *this;}
-
-    /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
-     */
-    inline SelectObjectContentRequest& WithExpectedBucketOwner(Aws::String&& value) { SetExpectedBucketOwner(std::move(value)); return *this;}
-
-    /**
-     * <p>The account id of the expected bucket owner. If the bucket is owned by a
-     * different account, the request will fail with an HTTP <code>403 (Access
-     * Denied)</code> error.</p>
-     */
-    inline SelectObjectContentRequest& WithExpectedBucketOwner(const char* value) { SetExpectedBucketOwner(value); return *this;}
-
-
+    /** 
+     * <p>Specifies the byte range of the object to get the records from. A record is 
+     * processed when its first byte is contained by the range. This parameter is 
+     * optional, but when specified, it must not be empty. See RFC 2616, Section 
+     * 14.35.1 about how to specify the start and end of the range.</p> <p> 
+     * <code>ScanRange</code>may be used in the following ways:</p> <ul> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;end&gt;100&lt;/end&gt;&lt;/scanrange&gt;</code> 
+     * - process only the records starting between the bytes 50 and 100 (inclusive, 
+     * counting from zero)</p> </li> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;/scanrange&gt;</code> - 
+     * process only the records starting after the byte 50</p> </li> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;end&gt;50&lt;/end&gt;&lt;/scanrange&gt;</code> - 
+     * process only the records within the last 50 bytes of the file.</p> </li> </ul> 
+     */ 
+    inline const ScanRange& GetScanRange() const{ return m_scanRange; } 
+ 
+    /** 
+     * <p>Specifies the byte range of the object to get the records from. A record is 
+     * processed when its first byte is contained by the range. This parameter is 
+     * optional, but when specified, it must not be empty. See RFC 2616, Section 
+     * 14.35.1 about how to specify the start and end of the range.</p> <p> 
+     * <code>ScanRange</code>may be used in the following ways:</p> <ul> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;end&gt;100&lt;/end&gt;&lt;/scanrange&gt;</code> 
+     * - process only the records starting between the bytes 50 and 100 (inclusive, 
+     * counting from zero)</p> </li> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;/scanrange&gt;</code> - 
+     * process only the records starting after the byte 50</p> </li> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;end&gt;50&lt;/end&gt;&lt;/scanrange&gt;</code> - 
+     * process only the records within the last 50 bytes of the file.</p> </li> </ul> 
+     */ 
+    inline bool ScanRangeHasBeenSet() const { return m_scanRangeHasBeenSet; } 
+ 
+    /** 
+     * <p>Specifies the byte range of the object to get the records from. A record is 
+     * processed when its first byte is contained by the range. This parameter is 
+     * optional, but when specified, it must not be empty. See RFC 2616, Section 
+     * 14.35.1 about how to specify the start and end of the range.</p> <p> 
+     * <code>ScanRange</code>may be used in the following ways:</p> <ul> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;end&gt;100&lt;/end&gt;&lt;/scanrange&gt;</code> 
+     * - process only the records starting between the bytes 50 and 100 (inclusive, 
+     * counting from zero)</p> </li> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;/scanrange&gt;</code> - 
+     * process only the records starting after the byte 50</p> </li> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;end&gt;50&lt;/end&gt;&lt;/scanrange&gt;</code> - 
+     * process only the records within the last 50 bytes of the file.</p> </li> </ul> 
+     */ 
+    inline void SetScanRange(const ScanRange& value) { m_scanRangeHasBeenSet = true; m_scanRange = value; } 
+ 
+    /** 
+     * <p>Specifies the byte range of the object to get the records from. A record is 
+     * processed when its first byte is contained by the range. This parameter is 
+     * optional, but when specified, it must not be empty. See RFC 2616, Section 
+     * 14.35.1 about how to specify the start and end of the range.</p> <p> 
+     * <code>ScanRange</code>may be used in the following ways:</p> <ul> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;end&gt;100&lt;/end&gt;&lt;/scanrange&gt;</code> 
+     * - process only the records starting between the bytes 50 and 100 (inclusive, 
+     * counting from zero)</p> </li> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;/scanrange&gt;</code> - 
+     * process only the records starting after the byte 50</p> </li> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;end&gt;50&lt;/end&gt;&lt;/scanrange&gt;</code> - 
+     * process only the records within the last 50 bytes of the file.</p> </li> </ul> 
+     */ 
+    inline void SetScanRange(ScanRange&& value) { m_scanRangeHasBeenSet = true; m_scanRange = std::move(value); } 
+ 
+    /** 
+     * <p>Specifies the byte range of the object to get the records from. A record is 
+     * processed when its first byte is contained by the range. This parameter is 
+     * optional, but when specified, it must not be empty. See RFC 2616, Section 
+     * 14.35.1 about how to specify the start and end of the range.</p> <p> 
+     * <code>ScanRange</code>may be used in the following ways:</p> <ul> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;end&gt;100&lt;/end&gt;&lt;/scanrange&gt;</code> 
+     * - process only the records starting between the bytes 50 and 100 (inclusive, 
+     * counting from zero)</p> </li> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;/scanrange&gt;</code> - 
+     * process only the records starting after the byte 50</p> </li> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;end&gt;50&lt;/end&gt;&lt;/scanrange&gt;</code> - 
+     * process only the records within the last 50 bytes of the file.</p> </li> </ul> 
+     */ 
+    inline SelectObjectContentRequest& WithScanRange(const ScanRange& value) { SetScanRange(value); return *this;} 
+ 
+    /** 
+     * <p>Specifies the byte range of the object to get the records from. A record is 
+     * processed when its first byte is contained by the range. This parameter is 
+     * optional, but when specified, it must not be empty. See RFC 2616, Section 
+     * 14.35.1 about how to specify the start and end of the range.</p> <p> 
+     * <code>ScanRange</code>may be used in the following ways:</p> <ul> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;end&gt;100&lt;/end&gt;&lt;/scanrange&gt;</code> 
+     * - process only the records starting between the bytes 50 and 100 (inclusive, 
+     * counting from zero)</p> </li> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;start&gt;50&lt;/start&gt;&lt;/scanrange&gt;</code> - 
+     * process only the records starting after the byte 50</p> </li> <li> <p> 
+     * <code>&lt;scanrange&gt;&lt;end&gt;50&lt;/end&gt;&lt;/scanrange&gt;</code> - 
+     * process only the records within the last 50 bytes of the file.</p> </li> </ul> 
+     */ 
+    inline SelectObjectContentRequest& WithScanRange(ScanRange&& value) { SetScanRange(std::move(value)); return *this;} 
+ 
+ 
+    /** 
+     * <p>The account id of the expected bucket owner. If the bucket is owned by a 
+     * different account, the request will fail with an HTTP <code>403 (Access 
+     * Denied)</code> error.</p> 
+     */ 
+    inline const Aws::String& GetExpectedBucketOwner() const{ return m_expectedBucketOwner; } 
+ 
+    /** 
+     * <p>The account id of the expected bucket owner. If the bucket is owned by a 
+     * different account, the request will fail with an HTTP <code>403 (Access 
+     * Denied)</code> error.</p> 
+     */ 
+    inline bool ExpectedBucketOwnerHasBeenSet() const { return m_expectedBucketOwnerHasBeenSet; } 
+ 
+    /** 
+     * <p>The account id of the expected bucket owner. If the bucket is owned by a 
+     * different account, the request will fail with an HTTP <code>403 (Access 
+     * Denied)</code> error.</p> 
+     */ 
+    inline void SetExpectedBucketOwner(const Aws::String& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = value; } 
+ 
+    /** 
+     * <p>The account id of the expected bucket owner. If the bucket is owned by a 
+     * different account, the request will fail with an HTTP <code>403 (Access 
+     * Denied)</code> error.</p> 
+     */ 
+    inline void SetExpectedBucketOwner(Aws::String&& value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner = std::move(value); } 
+ 
+    /** 
+     * <p>The account id of the expected bucket owner. If the bucket is owned by a 
+     * different account, the request will fail with an HTTP <code>403 (Access 
+     * Denied)</code> error.</p> 
+     */ 
+    inline void SetExpectedBucketOwner(const char* value) { m_expectedBucketOwnerHasBeenSet = true; m_expectedBucketOwner.assign(value); } 
+ 
+    /** 
+     * <p>The account id of the expected bucket owner. If the bucket is owned by a 
+     * different account, the request will fail with an HTTP <code>403 (Access 
+     * Denied)</code> error.</p> 
+     */ 
+    inline SelectObjectContentRequest& WithExpectedBucketOwner(const Aws::String& value) { SetExpectedBucketOwner(value); return *this;} 
+ 
+    /** 
+     * <p>The account id of the expected bucket owner. If the bucket is owned by a 
+     * different account, the request will fail with an HTTP <code>403 (Access 
+     * Denied)</code> error.</p> 
+     */ 
+    inline SelectObjectContentRequest& WithExpectedBucketOwner(Aws::String&& value) { SetExpectedBucketOwner(std::move(value)); return *this;} 
+ 
+    /** 
+     * <p>The account id of the expected bucket owner. If the bucket is owned by a 
+     * different account, the request will fail with an HTTP <code>403 (Access 
+     * Denied)</code> error.</p> 
+     */ 
+    inline SelectObjectContentRequest& WithExpectedBucketOwner(const char* value) { SetExpectedBucketOwner(value); return *this;} 
+ 
+ 
     
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
@@ -727,17 +727,17 @@ namespace Model
     OutputSerialization m_outputSerialization;
     bool m_outputSerializationHasBeenSet;
 
-    ScanRange m_scanRange;
-    bool m_scanRangeHasBeenSet;
-
-    Aws::String m_expectedBucketOwner;
-    bool m_expectedBucketOwnerHasBeenSet;
-
+    ScanRange m_scanRange; 
+    bool m_scanRangeHasBeenSet; 
+ 
+    Aws::String m_expectedBucketOwner; 
+    bool m_expectedBucketOwnerHasBeenSet; 
+ 
     Aws::Map<Aws::String, Aws::String> m_customizedAccessLogTag;
     bool m_customizedAccessLogTagHasBeenSet;
     Aws::Utils::Event::EventStreamDecoder m_decoder;
     SelectObjectContentHandler m_handler;
-
+ 
   };
 
 } // namespace Model

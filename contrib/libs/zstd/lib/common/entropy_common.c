@@ -1,16 +1,16 @@
-/* ******************************************************************
- * Common functions of New Generation Entropy library
+/* ****************************************************************** 
+ * Common functions of New Generation Entropy library 
  * Copyright (c) Yann Collet, Facebook, Inc.
- *
- *  You can contact the author at :
- *  - FSE+HUF source repository : https://github.com/Cyan4973/FiniteStateEntropy
- *  - Public forum : https://groups.google.com/forum/#!forum/lz4c
- *
- * This source code is licensed under both the BSD-style license (found in the
- * LICENSE file in the root directory of this source tree) and the GPLv2 (found
- * in the COPYING file in the root directory of this source tree).
- * You may select, at your option, one of the above-listed licenses.
-****************************************************************** */
+ * 
+ *  You can contact the author at : 
+ *  - FSE+HUF source repository : https://github.com/Cyan4973/FiniteStateEntropy 
+ *  - Public forum : https://groups.google.com/forum/#!forum/lz4c 
+ * 
+ * This source code is licensed under both the BSD-style license (found in the 
+ * LICENSE file in the root directory of this source tree) and the GPLv2 (found 
+ * in the COPYING file in the root directory of this source tree). 
+ * You may select, at your option, one of the above-listed licenses. 
+****************************************************************** */ 
 
 /* *************************************
 *  Dependencies
@@ -255,7 +255,7 @@ size_t FSE_readNCount(
 /*! HUF_readStats() :
     Read compact Huffman tree, saved by HUF_writeCTable().
     `huffWeight` is destination buffer.
-    `rankStats` is assumed to be a table of at least HUF_TABLELOG_MAX U32.
+    `rankStats` is assumed to be a table of at least HUF_TABLELOG_MAX U32. 
     @return : size read from `src` , or an error Code .
     Note : Needed by HUF_readCTable() and HUF_readDTableX?() .
 */
@@ -276,11 +276,11 @@ HUF_readStats_body(BYTE* huffWeight, size_t hwSize, U32* rankStats,
 {
     U32 weightTotal;
     const BYTE* ip = (const BYTE*) src;
-    size_t iSize;
+    size_t iSize; 
     size_t oSize;
 
-    if (!srcSize) return ERROR(srcSize_wrong);
-    iSize = ip[0];
+    if (!srcSize) return ERROR(srcSize_wrong); 
+    iSize = ip[0]; 
     /* ZSTD_memset(huffWeight, 0, hwSize);   *//* is not necessary, even though some analyzer complain ... */
 
     if (iSize >= 128) {  /* special header */
@@ -309,11 +309,11 @@ HUF_readStats_body(BYTE* huffWeight, size_t hwSize, U32* rankStats,
             rankStats[huffWeight[n]]++;
             weightTotal += (1 << huffWeight[n]) >> 1;
     }   }
-    if (weightTotal == 0) return ERROR(corruption_detected);
+    if (weightTotal == 0) return ERROR(corruption_detected); 
 
     /* get last non-null symbol weight (implied, total must be 2^n) */
     {   U32 const tableLog = BIT_highbit32(weightTotal) + 1;
-        if (tableLog > HUF_TABLELOG_MAX) return ERROR(corruption_detected);
+        if (tableLog > HUF_TABLELOG_MAX) return ERROR(corruption_detected); 
         *tableLogPtr = tableLog;
         /* determine last weight */
         {   U32 const total = 1 << tableLog;

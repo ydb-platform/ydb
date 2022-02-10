@@ -22,7 +22,7 @@
 #include "y_absl/base/internal/raw_logging.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 bad_optional_access::~bad_optional_access() = default;
 
@@ -42,7 +42,7 @@ void throw_bad_optional_access() {
 }
 
 }  // namespace optional_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_USES_STD_OPTIONAL

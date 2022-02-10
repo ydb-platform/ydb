@@ -3,7 +3,7 @@
 Create a distribution's .egg-info directory and contents"""
 
 from distutils.filelist import FileList as _FileList
-from distutils.errors import DistutilsInternalError
+from distutils.errors import DistutilsInternalError 
 from distutils.util import convert_path
 from distutils import log
 import distutils.errors
@@ -14,7 +14,7 @@ import sys
 import io
 import warnings
 import time
-import collections
+import collections 
 
 from setuptools.extern import six
 from setuptools.extern.six.moves import map
@@ -28,94 +28,94 @@ from pkg_resources import (
     parse_requirements, safe_name, parse_version,
     safe_version, yield_lines, EntryPoint, iter_entry_points, to_filename)
 import setuptools.unicode_utils as unicode_utils
-from setuptools.glob import glob
+from setuptools.glob import glob 
 
 from setuptools.extern import packaging
 from setuptools import SetuptoolsDeprecationWarning
 
-def translate_pattern(glob):
-    """
-    Translate a file path glob like '*.txt' in to a regular expression.
-    This differs from fnmatch.translate which allows wildcards to match
-    directory separators. It also knows about '**/' which matches any number of
-    directories.
-    """
-    pat = ''
+def translate_pattern(glob): 
+    """ 
+    Translate a file path glob like '*.txt' in to a regular expression. 
+    This differs from fnmatch.translate which allows wildcards to match 
+    directory separators. It also knows about '**/' which matches any number of 
+    directories. 
+    """ 
+    pat = '' 
 
-    # This will split on '/' within [character classes]. This is deliberate.
-    chunks = glob.split(os.path.sep)
-
-    sep = re.escape(os.sep)
-    valid_char = '[^%s]' % (sep,)
-
-    for c, chunk in enumerate(chunks):
-        last_chunk = c == len(chunks) - 1
-
-        # Chunks that are a literal ** are globstars. They match anything.
-        if chunk == '**':
-            if last_chunk:
-                # Match anything if this is the last component
-                pat += '.*'
-            else:
-                # Match '(name/)*'
-                pat += '(?:%s+%s)*' % (valid_char, sep)
-            continue  # Break here as the whole path component has been handled
-
-        # Find any special characters in the remainder
-        i = 0
-        chunk_len = len(chunk)
-        while i < chunk_len:
-            char = chunk[i]
-            if char == '*':
-                # Match any number of name characters
-                pat += valid_char + '*'
-            elif char == '?':
-                # Match a name character
-                pat += valid_char
-            elif char == '[':
-                # Character class
-                inner_i = i + 1
-                # Skip initial !/] chars
-                if inner_i < chunk_len and chunk[inner_i] == '!':
-                    inner_i = inner_i + 1
-                if inner_i < chunk_len and chunk[inner_i] == ']':
-                    inner_i = inner_i + 1
-
-                # Loop till the closing ] is found
-                while inner_i < chunk_len and chunk[inner_i] != ']':
-                    inner_i = inner_i + 1
-
-                if inner_i >= chunk_len:
-                    # Got to the end of the string without finding a closing ]
-                    # Do not treat this as a matching group, but as a literal [
-                    pat += re.escape(char)
-                else:
-                    # Grab the insides of the [brackets]
-                    inner = chunk[i + 1:inner_i]
-                    char_class = ''
-
-                    # Class negation
-                    if inner[0] == '!':
-                        char_class = '^'
-                        inner = inner[1:]
-
-                    char_class += re.escape(inner)
-                    pat += '[%s]' % (char_class,)
-
-                    # Skip to the end ]
-                    i = inner_i
-            else:
-                pat += re.escape(char)
-            i += 1
-
-        # Join each chunk with the dir separator
-        if not last_chunk:
-            pat += sep
-
+    # This will split on '/' within [character classes]. This is deliberate. 
+    chunks = glob.split(os.path.sep) 
+ 
+    sep = re.escape(os.sep) 
+    valid_char = '[^%s]' % (sep,) 
+ 
+    for c, chunk in enumerate(chunks): 
+        last_chunk = c == len(chunks) - 1 
+ 
+        # Chunks that are a literal ** are globstars. They match anything. 
+        if chunk == '**': 
+            if last_chunk: 
+                # Match anything if this is the last component 
+                pat += '.*' 
+            else: 
+                # Match '(name/)*' 
+                pat += '(?:%s+%s)*' % (valid_char, sep) 
+            continue  # Break here as the whole path component has been handled 
+ 
+        # Find any special characters in the remainder 
+        i = 0 
+        chunk_len = len(chunk) 
+        while i < chunk_len: 
+            char = chunk[i] 
+            if char == '*': 
+                # Match any number of name characters 
+                pat += valid_char + '*' 
+            elif char == '?': 
+                # Match a name character 
+                pat += valid_char 
+            elif char == '[': 
+                # Character class 
+                inner_i = i + 1 
+                # Skip initial !/] chars 
+                if inner_i < chunk_len and chunk[inner_i] == '!': 
+                    inner_i = inner_i + 1 
+                if inner_i < chunk_len and chunk[inner_i] == ']': 
+                    inner_i = inner_i + 1 
+ 
+                # Loop till the closing ] is found 
+                while inner_i < chunk_len and chunk[inner_i] != ']': 
+                    inner_i = inner_i + 1 
+ 
+                if inner_i >= chunk_len: 
+                    # Got to the end of the string without finding a closing ] 
+                    # Do not treat this as a matching group, but as a literal [ 
+                    pat += re.escape(char) 
+                else: 
+                    # Grab the insides of the [brackets] 
+                    inner = chunk[i + 1:inner_i] 
+                    char_class = '' 
+ 
+                    # Class negation 
+                    if inner[0] == '!': 
+                        char_class = '^' 
+                        inner = inner[1:] 
+ 
+                    char_class += re.escape(inner) 
+                    pat += '[%s]' % (char_class,) 
+ 
+                    # Skip to the end ] 
+                    i = inner_i 
+            else: 
+                pat += re.escape(char) 
+            i += 1 
+ 
+        # Join each chunk with the dir separator 
+        if not last_chunk: 
+            pat += sep 
+ 
     pat += r'\Z'
     return re.compile(pat, flags=re.MULTILINE|re.DOTALL)
-
-
+ 
+ 
 class InfoCommon:
     tag_build = None
     tag_date = None
@@ -153,10 +153,10 @@ class egg_info(InfoCommon, Command):
         ('no-date', 'D', "Don't include date stamp [default]"),
     ]
 
-    boolean_options = ['tag-date']
-    negative_opt = {
-        'no-date': 'tag-date',
-    }
+    boolean_options = ['tag-date'] 
+    negative_opt = { 
+        'no-date': 'tag-date', 
+    } 
 
     def initialize_options(self):
         self.egg_base = None
@@ -165,30 +165,30 @@ class egg_info(InfoCommon, Command):
         self.egg_version = None
         self.broken_egg_info = False
 
-    ####################################
-    # allow the 'tag_svn_revision' to be detected and
-    # set, supporting sdists built on older Setuptools.
-    @property
-    def tag_svn_revision(self):
-        pass
-
-    @tag_svn_revision.setter
-    def tag_svn_revision(self, value):
-        pass
-    ####################################
-
+    #################################### 
+    # allow the 'tag_svn_revision' to be detected and 
+    # set, supporting sdists built on older Setuptools. 
+    @property 
+    def tag_svn_revision(self): 
+        pass 
+ 
+    @tag_svn_revision.setter 
+    def tag_svn_revision(self, value): 
+        pass 
+    #################################### 
+ 
     def save_version_info(self, filename):
-        """
-        Materialize the value of date into the
-        build tag. Install build keys in a deterministic order
-        to avoid arbitrary reordering on subsequent builds.
-        """
+        """ 
+        Materialize the value of date into the 
+        build tag. Install build keys in a deterministic order 
+        to avoid arbitrary reordering on subsequent builds. 
+        """ 
         egg_info = collections.OrderedDict()
-        # follow the order these keys would have been added
-        # when PYTHONHASHSEED=0
-        egg_info['tag_build'] = self.tags()
-        egg_info['tag_date'] = 0
-        edit_config(filename, dict(egg_info=egg_info))
+        # follow the order these keys would have been added 
+        # when PYTHONHASHSEED=0 
+        egg_info['tag_build'] = self.tags() 
+        egg_info['tag_date'] = 0 
+        edit_config(filename, dict(egg_info=egg_info)) 
 
     def finalize_options(self):
         # Note: we need to capture the current value returned
@@ -320,156 +320,156 @@ class egg_info(InfoCommon, Command):
 
 
 class FileList(_FileList):
-    # Implementations of the various MANIFEST.in commands
+    # Implementations of the various MANIFEST.in commands 
 
-    def process_template_line(self, line):
-        # Parse the line: split it up, make sure the right number of words
-        # is there, and return the relevant words.  'action' is always
-        # defined: it's the first word of the line.  Which of the other
-        # three are defined depends on the action; it'll be either
-        # patterns, (dir and patterns), or (dir_pattern).
-        (action, patterns, dir, dir_pattern) = self._parse_template_line(line)
-
-        # OK, now we know that the action is valid and we have the
-        # right number of words on the line for that action -- so we
-        # can proceed with minimal error-checking.
-        if action == 'include':
-            self.debug_print("include " + ' '.join(patterns))
-            for pattern in patterns:
-                if not self.include(pattern):
-                    log.warn("warning: no files found matching '%s'", pattern)
-
-        elif action == 'exclude':
-            self.debug_print("exclude " + ' '.join(patterns))
-            for pattern in patterns:
-                if not self.exclude(pattern):
-                    log.warn(("warning: no previously-included files "
-                              "found matching '%s'"), pattern)
-
-        elif action == 'global-include':
-            self.debug_print("global-include " + ' '.join(patterns))
-            for pattern in patterns:
-                if not self.global_include(pattern):
-                    log.warn(("warning: no files found matching '%s' "
-                              "anywhere in distribution"), pattern)
-
-        elif action == 'global-exclude':
-            self.debug_print("global-exclude " + ' '.join(patterns))
-            for pattern in patterns:
-                if not self.global_exclude(pattern):
-                    log.warn(("warning: no previously-included files matching "
-                              "'%s' found anywhere in distribution"),
-                             pattern)
-
-        elif action == 'recursive-include':
-            self.debug_print("recursive-include %s %s" %
-                             (dir, ' '.join(patterns)))
-            for pattern in patterns:
-                if not self.recursive_include(dir, pattern):
-                    log.warn(("warning: no files found matching '%s' "
-                              "under directory '%s'"),
-                             pattern, dir)
-
-        elif action == 'recursive-exclude':
-            self.debug_print("recursive-exclude %s %s" %
-                             (dir, ' '.join(patterns)))
-            for pattern in patterns:
-                if not self.recursive_exclude(dir, pattern):
-                    log.warn(("warning: no previously-included files matching "
-                              "'%s' found under directory '%s'"),
-                             pattern, dir)
-
-        elif action == 'graft':
-            self.debug_print("graft " + dir_pattern)
-            if not self.graft(dir_pattern):
-                log.warn("warning: no directories found matching '%s'",
-                         dir_pattern)
-
-        elif action == 'prune':
-            self.debug_print("prune " + dir_pattern)
-            if not self.prune(dir_pattern):
-                log.warn(("no previously-included directories found "
-                          "matching '%s'"), dir_pattern)
-
-        else:
-            raise DistutilsInternalError(
-                "this cannot happen: invalid action '%s'" % action)
-
-    def _remove_files(self, predicate):
-        """
-        Remove all files from the file list that match the predicate.
-        Return True if any matching files were removed
-        """
-        found = False
-        for i in range(len(self.files) - 1, -1, -1):
-            if predicate(self.files[i]):
-                self.debug_print(" removing " + self.files[i])
-                del self.files[i]
-                found = True
-        return found
-
-    def include(self, pattern):
-        """Include files that match 'pattern'."""
-        found = [f for f in glob(pattern) if not os.path.isdir(f)]
-        self.extend(found)
-        return bool(found)
-
-    def exclude(self, pattern):
-        """Exclude files that match 'pattern'."""
-        match = translate_pattern(pattern)
-        return self._remove_files(match.match)
-
-    def recursive_include(self, dir, pattern):
-        """
-        Include all files anywhere in 'dir/' that match the pattern.
-        """
-        full_pattern = os.path.join(dir, '**', pattern)
-        found = [f for f in glob(full_pattern, recursive=True)
-                 if not os.path.isdir(f)]
-        self.extend(found)
-        return bool(found)
-
-    def recursive_exclude(self, dir, pattern):
-        """
-        Exclude any file anywhere in 'dir/' that match the pattern.
-        """
-        match = translate_pattern(os.path.join(dir, '**', pattern))
-        return self._remove_files(match.match)
-
-    def graft(self, dir):
-        """Include all files from 'dir/'."""
-        found = [
-            item
-            for match_dir in glob(dir)
-            for item in distutils.filelist.findall(match_dir)
-        ]
-        self.extend(found)
-        return bool(found)
-
-    def prune(self, dir):
-        """Filter out files from 'dir/'."""
-        match = translate_pattern(os.path.join(dir, '**'))
-        return self._remove_files(match.match)
-
-    def global_include(self, pattern):
-        """
-        Include all files anywhere in the current directory that match the
-        pattern. This is very inefficient on large file trees.
-        """
-        if self.allfiles is None:
-            self.findall()
-        match = translate_pattern(os.path.join('**', pattern))
-        found = [f for f in self.allfiles if match.match(f)]
-        self.extend(found)
-        return bool(found)
-
-    def global_exclude(self, pattern):
-        """
-        Exclude all files anywhere that match the pattern.
-        """
-        match = translate_pattern(os.path.join('**', pattern))
-        return self._remove_files(match.match)
-
+    def process_template_line(self, line): 
+        # Parse the line: split it up, make sure the right number of words 
+        # is there, and return the relevant words.  'action' is always 
+        # defined: it's the first word of the line.  Which of the other 
+        # three are defined depends on the action; it'll be either 
+        # patterns, (dir and patterns), or (dir_pattern). 
+        (action, patterns, dir, dir_pattern) = self._parse_template_line(line) 
+ 
+        # OK, now we know that the action is valid and we have the 
+        # right number of words on the line for that action -- so we 
+        # can proceed with minimal error-checking. 
+        if action == 'include': 
+            self.debug_print("include " + ' '.join(patterns)) 
+            for pattern in patterns: 
+                if not self.include(pattern): 
+                    log.warn("warning: no files found matching '%s'", pattern) 
+ 
+        elif action == 'exclude': 
+            self.debug_print("exclude " + ' '.join(patterns)) 
+            for pattern in patterns: 
+                if not self.exclude(pattern): 
+                    log.warn(("warning: no previously-included files " 
+                              "found matching '%s'"), pattern) 
+ 
+        elif action == 'global-include': 
+            self.debug_print("global-include " + ' '.join(patterns)) 
+            for pattern in patterns: 
+                if not self.global_include(pattern): 
+                    log.warn(("warning: no files found matching '%s' " 
+                              "anywhere in distribution"), pattern) 
+ 
+        elif action == 'global-exclude': 
+            self.debug_print("global-exclude " + ' '.join(patterns)) 
+            for pattern in patterns: 
+                if not self.global_exclude(pattern): 
+                    log.warn(("warning: no previously-included files matching " 
+                              "'%s' found anywhere in distribution"), 
+                             pattern) 
+ 
+        elif action == 'recursive-include': 
+            self.debug_print("recursive-include %s %s" % 
+                             (dir, ' '.join(patterns))) 
+            for pattern in patterns: 
+                if not self.recursive_include(dir, pattern): 
+                    log.warn(("warning: no files found matching '%s' " 
+                              "under directory '%s'"), 
+                             pattern, dir) 
+ 
+        elif action == 'recursive-exclude': 
+            self.debug_print("recursive-exclude %s %s" % 
+                             (dir, ' '.join(patterns))) 
+            for pattern in patterns: 
+                if not self.recursive_exclude(dir, pattern): 
+                    log.warn(("warning: no previously-included files matching " 
+                              "'%s' found under directory '%s'"), 
+                             pattern, dir) 
+ 
+        elif action == 'graft': 
+            self.debug_print("graft " + dir_pattern) 
+            if not self.graft(dir_pattern): 
+                log.warn("warning: no directories found matching '%s'", 
+                         dir_pattern) 
+ 
+        elif action == 'prune': 
+            self.debug_print("prune " + dir_pattern) 
+            if not self.prune(dir_pattern): 
+                log.warn(("no previously-included directories found " 
+                          "matching '%s'"), dir_pattern) 
+ 
+        else: 
+            raise DistutilsInternalError( 
+                "this cannot happen: invalid action '%s'" % action) 
+ 
+    def _remove_files(self, predicate): 
+        """ 
+        Remove all files from the file list that match the predicate. 
+        Return True if any matching files were removed 
+        """ 
+        found = False 
+        for i in range(len(self.files) - 1, -1, -1): 
+            if predicate(self.files[i]): 
+                self.debug_print(" removing " + self.files[i]) 
+                del self.files[i] 
+                found = True 
+        return found 
+ 
+    def include(self, pattern): 
+        """Include files that match 'pattern'.""" 
+        found = [f for f in glob(pattern) if not os.path.isdir(f)] 
+        self.extend(found) 
+        return bool(found) 
+ 
+    def exclude(self, pattern): 
+        """Exclude files that match 'pattern'.""" 
+        match = translate_pattern(pattern) 
+        return self._remove_files(match.match) 
+ 
+    def recursive_include(self, dir, pattern): 
+        """ 
+        Include all files anywhere in 'dir/' that match the pattern. 
+        """ 
+        full_pattern = os.path.join(dir, '**', pattern) 
+        found = [f for f in glob(full_pattern, recursive=True) 
+                 if not os.path.isdir(f)] 
+        self.extend(found) 
+        return bool(found) 
+ 
+    def recursive_exclude(self, dir, pattern): 
+        """ 
+        Exclude any file anywhere in 'dir/' that match the pattern. 
+        """ 
+        match = translate_pattern(os.path.join(dir, '**', pattern)) 
+        return self._remove_files(match.match) 
+ 
+    def graft(self, dir): 
+        """Include all files from 'dir/'.""" 
+        found = [ 
+            item 
+            for match_dir in glob(dir) 
+            for item in distutils.filelist.findall(match_dir) 
+        ] 
+        self.extend(found) 
+        return bool(found) 
+ 
+    def prune(self, dir): 
+        """Filter out files from 'dir/'.""" 
+        match = translate_pattern(os.path.join(dir, '**')) 
+        return self._remove_files(match.match) 
+ 
+    def global_include(self, pattern): 
+        """ 
+        Include all files anywhere in the current directory that match the 
+        pattern. This is very inefficient on large file trees. 
+        """ 
+        if self.allfiles is None: 
+            self.findall() 
+        match = translate_pattern(os.path.join('**', pattern)) 
+        found = [f for f in self.allfiles if match.match(f)] 
+        self.extend(found) 
+        return bool(found) 
+ 
+    def global_exclude(self, pattern): 
+        """ 
+        Exclude all files anywhere that match the pattern. 
+        """ 
+        match = translate_pattern(os.path.join('**', pattern)) 
+        return self._remove_files(match.match) 
+ 
     def append(self, item):
         if item.endswith('\r'):  # Fix older sdists built on Windows
             item = item[:-1]
@@ -555,17 +555,17 @@ class manifest_maker(sdist):
         msg = "writing manifest file '%s'" % self.manifest
         self.execute(write_file, (self.manifest, files), msg)
 
-    def warn(self, msg):
-        if not self._should_suppress_warning(msg):
+    def warn(self, msg): 
+        if not self._should_suppress_warning(msg): 
             sdist.warn(self, msg)
 
-    @staticmethod
-    def _should_suppress_warning(msg):
-        """
-        suppress missing-file warnings from sdist
-        """
-        return re.match(r"standard file .*not found", msg)
-
+    @staticmethod 
+    def _should_suppress_warning(msg): 
+        """ 
+        suppress missing-file warnings from sdist 
+        """ 
+        return re.match(r"standard file .*not found", msg) 
+ 
     def add_defaults(self):
         sdist.add_defaults(self)
         self.check_license()
@@ -583,13 +583,13 @@ class manifest_maker(sdist):
             self.filelist.append("setup.py")
 
         ei_cmd = self.get_finalized_command('egg_info')
-        self.filelist.graft(ei_cmd.egg_info)
+        self.filelist.graft(ei_cmd.egg_info) 
 
     def prune_file_list(self):
         build = self.get_finalized_command('build')
         base_dir = self.distribution.get_fullname()
-        self.filelist.prune(build.build_base)
-        self.filelist.prune(base_dir)
+        self.filelist.prune(build.build_base) 
+        self.filelist.prune(base_dir) 
         sep = re.escape(os.sep)
         self.filelist.exclude_pattern(r'(^|' + sep + r')(RCS|CVS|\.svn)' + sep,
                                       is_regex=1)

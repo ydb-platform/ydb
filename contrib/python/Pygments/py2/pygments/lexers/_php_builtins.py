@@ -12,7 +12,7 @@
              internet connection. don't run that at home, use
              a server ;-)
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -4688,7 +4688,7 @@ if __name__ == '__main__':  # pragma: no cover
     PHP_MANUAL_URL     = 'http://us3.php.net/distributions/manual/php_manual_en.tar.gz'
     PHP_MANUAL_DIR     = './php-chunked-xhtml/'
     PHP_REFERENCE_GLOB = 'ref.*'
-    PHP_FUNCTION_RE    = r'<a href="function\..*?\.html">(.*?)</a>'
+    PHP_FUNCTION_RE    = r'<a href="function\..*?\.html">(.*?)</a>' 
     PHP_MODULE_RE      = '<title>(.*?) Functions</title>'
 
     def get_php_functions():
@@ -4698,19 +4698,19 @@ if __name__ == '__main__':  # pragma: no cover
 
         for file in get_php_references():
             module = ''
-            with open(file) as f:
-                for line in f:
-                    if not module:
-                        search = module_re.search(line)
-                        if search:
-                            module = search.group(1)
-                            modules[module] = []
+            with open(file) as f: 
+                for line in f: 
+                    if not module: 
+                        search = module_re.search(line) 
+                        if search: 
+                            module = search.group(1) 
+                            modules[module] = [] 
 
-                    elif 'href="function.' in line:
-                        for match in function_re.finditer(line):
-                            fn = match.group(1)
-                            if '-&gt;' not in fn and '::' not in fn and fn not in modules[module]:
-                                modules[module].append(fn)
+                    elif 'href="function.' in line: 
+                        for match in function_re.finditer(line): 
+                            fn = match.group(1) 
+                            if '-&gt;' not in fn and '::' not in fn and fn not in modules[module]: 
+                                modules[module].append(fn) 
 
             if module:
                 # These are dummy manual pages, not actual functions
@@ -4727,8 +4727,8 @@ if __name__ == '__main__':  # pragma: no cover
 
     def get_php_references():
         download = urlretrieve(PHP_MANUAL_URL)
-        with tarfile.open(download[0]) as tar:
-            tar.extractall()
+        with tarfile.open(download[0]) as tar: 
+            tar.extractall() 
         for file in glob.glob("%s%s" % (PHP_MANUAL_DIR, PHP_REFERENCE_GLOB)):
             yield file
         os.remove(download[0])

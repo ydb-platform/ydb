@@ -14,22 +14,22 @@
  * limitations under the License.
  */
 
-#ifndef FLATBUFFERS_FLATC_H_
-#define FLATBUFFERS_FLATC_H_
-
+#ifndef FLATBUFFERS_FLATC_H_ 
+#define FLATBUFFERS_FLATC_H_ 
+ 
 #include <functional>
 #include <limits>
 #include <string>
-
-#include "flatbuffers.h"
-#include "idl.h"
-#include "util.h"
+ 
+#include "flatbuffers.h" 
+#include "idl.h" 
+#include "util.h" 
 
 namespace flatbuffers {
 
-extern void LogCompilerWarn(const std::string &warn);
-extern void LogCompilerError(const std::string &err);
-
+extern void LogCompilerWarn(const std::string &warn); 
+extern void LogCompilerError(const std::string &err); 
+ 
 class FlatCompiler {
  public:
   // Output generator for the various programming languages and formats we
@@ -84,9 +84,9 @@ class FlatCompiler {
                  const std::string &contents,
                  std::vector<const char *> &include_directories) const;
 
-  void LoadBinarySchema(Parser &parser, const std::string &filename,
-                        const std::string &contents);
-
+  void LoadBinarySchema(Parser &parser, const std::string &filename, 
+                        const std::string &contents); 
+ 
   void Warn(const std::string &warn, bool show_exe_name = true) const;
 
   void Error(const std::string &err, bool usage = true,
@@ -97,4 +97,4 @@ class FlatCompiler {
 
 }  // namespace flatbuffers
 
-#endif  // FLATBUFFERS_FLATC_H_
+#endif  // FLATBUFFERS_FLATC_H_ 

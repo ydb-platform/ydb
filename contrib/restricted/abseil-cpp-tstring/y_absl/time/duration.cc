@@ -64,7 +64,7 @@
 #include <ctime>
 #include <functional>
 #include <limits>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 
 #include "y_absl/base/casts.h"
 #include "y_absl/base/macros.h"
@@ -74,7 +74,7 @@
 #include "y_absl/time/time.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 
 namespace {
 
@@ -950,5 +950,5 @@ bool ParseFlag(const TString& text, Duration* dst, TString* ) {
 
 TString UnparseFlag(Duration d) { return FormatDuration(d); }
 
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl

@@ -1,7 +1,7 @@
-/*[clinic input]
-preserve
-[clinic start generated code]*/
-
+/*[clinic input] 
+preserve 
+[clinic start generated code]*/ 
+ 
 PyDoc_STRVAR(EVP_copy__doc__,
 "copy($self, /)\n"
 "--\n"
@@ -965,43 +965,43 @@ exit:
     return return_value;
 }
 
-#if (OPENSSL_VERSION_NUMBER > 0x10100000L && !defined(OPENSSL_NO_SCRYPT) && !defined(LIBRESSL_VERSION_NUMBER))
-
-PyDoc_STRVAR(_hashlib_scrypt__doc__,
-"scrypt($module, /, password, *, salt=None, n=None, r=None, p=None,\n"
-"       maxmem=0, dklen=64)\n"
-"--\n"
-"\n"
-"scrypt password-based key derivation function.");
-
-#define _HASHLIB_SCRYPT_METHODDEF    \
+#if (OPENSSL_VERSION_NUMBER > 0x10100000L && !defined(OPENSSL_NO_SCRYPT) && !defined(LIBRESSL_VERSION_NUMBER)) 
+ 
+PyDoc_STRVAR(_hashlib_scrypt__doc__, 
+"scrypt($module, /, password, *, salt=None, n=None, r=None, p=None,\n" 
+"       maxmem=0, dklen=64)\n" 
+"--\n" 
+"\n" 
+"scrypt password-based key derivation function."); 
+ 
+#define _HASHLIB_SCRYPT_METHODDEF    \ 
     {"scrypt", (PyCFunction)(void(*)(void))_hashlib_scrypt, METH_FASTCALL|METH_KEYWORDS, _hashlib_scrypt__doc__},
-
-static PyObject *
-_hashlib_scrypt_impl(PyObject *module, Py_buffer *password, Py_buffer *salt,
-                     PyObject *n_obj, PyObject *r_obj, PyObject *p_obj,
-                     long maxmem, long dklen);
-
-static PyObject *
-_hashlib_scrypt(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
-{
-    PyObject *return_value = NULL;
-    static const char * const _keywords[] = {"password", "salt", "n", "r", "p", "maxmem", "dklen", NULL};
+ 
+static PyObject * 
+_hashlib_scrypt_impl(PyObject *module, Py_buffer *password, Py_buffer *salt, 
+                     PyObject *n_obj, PyObject *r_obj, PyObject *p_obj, 
+                     long maxmem, long dklen); 
+ 
+static PyObject * 
+_hashlib_scrypt(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames) 
+{ 
+    PyObject *return_value = NULL; 
+    static const char * const _keywords[] = {"password", "salt", "n", "r", "p", "maxmem", "dklen", NULL}; 
     static _PyArg_Parser _parser = {NULL, _keywords, "scrypt", 0};
     PyObject *argsbuf[7];
     Py_ssize_t noptargs = nargs + (kwnames ? PyTuple_GET_SIZE(kwnames) : 0) - 1;
-    Py_buffer password = {NULL, NULL};
-    Py_buffer salt = {NULL, NULL};
-    PyObject *n_obj = Py_None;
-    PyObject *r_obj = Py_None;
-    PyObject *p_obj = Py_None;
-    long maxmem = 0;
-    long dklen = 64;
-
+    Py_buffer password = {NULL, NULL}; 
+    Py_buffer salt = {NULL, NULL}; 
+    PyObject *n_obj = Py_None; 
+    PyObject *r_obj = Py_None; 
+    PyObject *p_obj = Py_None; 
+    long maxmem = 0; 
+    long dklen = 64; 
+ 
     args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 1, 1, 0, argsbuf);
     if (!args) {
-        goto exit;
-    }
+        goto exit; 
+    } 
     if (PyObject_GetBuffer(args[0], &password, PyBUF_SIMPLE) != 0) {
         goto exit;
     }
@@ -1078,51 +1078,51 @@ _hashlib_scrypt(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObj
         goto exit;
     }
 skip_optional_kwonly:
-    return_value = _hashlib_scrypt_impl(module, &password, &salt, n_obj, r_obj, p_obj, maxmem, dklen);
-
-exit:
-    /* Cleanup for password */
-    if (password.obj) {
-       PyBuffer_Release(&password);
-    }
-    /* Cleanup for salt */
-    if (salt.obj) {
-       PyBuffer_Release(&salt);
-    }
-
-    return return_value;
-}
-
-#endif /* (OPENSSL_VERSION_NUMBER > 0x10100000L && !defined(OPENSSL_NO_SCRYPT) && !defined(LIBRESSL_VERSION_NUMBER)) */
-
+    return_value = _hashlib_scrypt_impl(module, &password, &salt, n_obj, r_obj, p_obj, maxmem, dklen); 
+ 
+exit: 
+    /* Cleanup for password */ 
+    if (password.obj) { 
+       PyBuffer_Release(&password); 
+    } 
+    /* Cleanup for salt */ 
+    if (salt.obj) { 
+       PyBuffer_Release(&salt); 
+    } 
+ 
+    return return_value; 
+} 
+ 
+#endif /* (OPENSSL_VERSION_NUMBER > 0x10100000L && !defined(OPENSSL_NO_SCRYPT) && !defined(LIBRESSL_VERSION_NUMBER)) */ 
+ 
 PyDoc_STRVAR(_hashlib_hmac_singleshot__doc__,
-"hmac_digest($module, /, key, msg, digest)\n"
-"--\n"
-"\n"
-"Single-shot HMAC.");
-
+"hmac_digest($module, /, key, msg, digest)\n" 
+"--\n" 
+"\n" 
+"Single-shot HMAC."); 
+ 
 #define _HASHLIB_HMAC_SINGLESHOT_METHODDEF    \
     {"hmac_digest", (PyCFunction)(void(*)(void))_hashlib_hmac_singleshot, METH_FASTCALL|METH_KEYWORDS, _hashlib_hmac_singleshot__doc__},
-
-static PyObject *
+ 
+static PyObject * 
 _hashlib_hmac_singleshot_impl(PyObject *module, Py_buffer *key,
                               Py_buffer *msg, const char *digest);
-
-static PyObject *
+ 
+static PyObject * 
 _hashlib_hmac_singleshot(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
-{
-    PyObject *return_value = NULL;
-    static const char * const _keywords[] = {"key", "msg", "digest", NULL};
+{ 
+    PyObject *return_value = NULL; 
+    static const char * const _keywords[] = {"key", "msg", "digest", NULL}; 
     static _PyArg_Parser _parser = {NULL, _keywords, "hmac_digest", 0};
     PyObject *argsbuf[3];
-    Py_buffer key = {NULL, NULL};
-    Py_buffer msg = {NULL, NULL};
-    const char *digest;
-
+    Py_buffer key = {NULL, NULL}; 
+    Py_buffer msg = {NULL, NULL}; 
+    const char *digest; 
+ 
     args = _PyArg_UnpackKeywords(args, nargs, NULL, kwnames, &_parser, 3, 3, 0, argsbuf);
     if (!args) {
-        goto exit;
-    }
+        goto exit; 
+    } 
     if (PyObject_GetBuffer(args[0], &key, PyBUF_SIMPLE) != 0) {
         goto exit;
     }
@@ -1151,20 +1151,20 @@ _hashlib_hmac_singleshot(PyObject *module, PyObject *const *args, Py_ssize_t nar
         goto exit;
     }
     return_value = _hashlib_hmac_singleshot_impl(module, &key, &msg, digest);
-
-exit:
-    /* Cleanup for key */
-    if (key.obj) {
-       PyBuffer_Release(&key);
-    }
-    /* Cleanup for msg */
-    if (msg.obj) {
-       PyBuffer_Release(&msg);
-    }
-
-    return return_value;
-}
-
+ 
+exit: 
+    /* Cleanup for key */ 
+    if (key.obj) { 
+       PyBuffer_Release(&key); 
+    } 
+    /* Cleanup for msg */ 
+    if (msg.obj) { 
+       PyBuffer_Release(&msg); 
+    } 
+ 
+    return return_value; 
+} 
+ 
 PyDoc_STRVAR(_hashlib_hmac_new__doc__,
 "hmac_new($module, /, key, msg=b\'\', digestmod=None)\n"
 "--\n"
@@ -1435,9 +1435,9 @@ exit:
     #define _HASHLIB_OPENSSL_SHAKE_256_METHODDEF
 #endif /* !defined(_HASHLIB_OPENSSL_SHAKE_256_METHODDEF) */
 
-#ifndef _HASHLIB_SCRYPT_METHODDEF
-    #define _HASHLIB_SCRYPT_METHODDEF
-#endif /* !defined(_HASHLIB_SCRYPT_METHODDEF) */
+#ifndef _HASHLIB_SCRYPT_METHODDEF 
+    #define _HASHLIB_SCRYPT_METHODDEF 
+#endif /* !defined(_HASHLIB_SCRYPT_METHODDEF) */ 
 
 #ifndef _HASHLIB_GET_FIPS_MODE_METHODDEF
     #define _HASHLIB_GET_FIPS_MODE_METHODDEF

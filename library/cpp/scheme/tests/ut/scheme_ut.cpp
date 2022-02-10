@@ -756,7 +756,7 @@ Y_UNIT_TEST_SUITE(TSchemeTest) {
             TValue v = TValue::FromJson("{foo:bar}");
             TValue w(std::move(v));
             UNIT_ASSERT(v.IsNull());
-            v = static_cast<TValue&>(v);
+            v = static_cast<TValue&>(v); 
             UNIT_ASSERT(v.IsNull());
             UNIT_ASSERT_VALUES_EQUAL(w.Get("foo").GetString(), "bar");
             v = std::move(w);

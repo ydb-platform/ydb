@@ -1,26 +1,26 @@
 /*
  *
- * Copyright 2016 gRPC authors.
+ * Copyright 2016 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
 
 #ifndef GRPC_CORE_LIB_SURFACE_CHANNEL_INIT_H
 #define GRPC_CORE_LIB_SURFACE_CHANNEL_INIT_H
 
-#include <grpc/support/port_platform.h>
-
+#include <grpc/support/port_platform.h> 
+ 
 #include "src/core/lib/channel/channel_stack_builder.h"
 #include "src/core/lib/surface/channel_stack_type.h"
 #include "src/core/lib/transport/transport.h"
@@ -34,8 +34,8 @@
 
 /// One stage of mutation: call functions against \a builder to influence the
 /// finally constructed channel stack
-typedef bool (*grpc_channel_init_stage)(grpc_channel_stack_builder* builder,
-                                        void* arg);
+typedef bool (*grpc_channel_init_stage)(grpc_channel_stack_builder* builder, 
+                                        void* arg); 
 
 /// Global initialization of the system
 void grpc_channel_init_init(void);
@@ -53,7 +53,7 @@ void grpc_channel_init_init(void);
 void grpc_channel_init_register_stage(grpc_channel_stack_type type,
                                       int priority,
                                       grpc_channel_init_stage stage_fn,
-                                      void* stage_arg);
+                                      void* stage_arg); 
 
 /// Finalize registration. No more calls to grpc_channel_init_register_stage are
 /// allowed.
@@ -72,7 +72,7 @@ void grpc_channel_init_shutdown(void);
 /// \a optional_transport is either NULL or a constructed transport object
 /// Returns a pointer to the base of the memory allocated (the actual channel
 /// stack object will be prefix_bytes past that pointer)
-bool grpc_channel_init_create_stack(grpc_channel_stack_builder* builder,
+bool grpc_channel_init_create_stack(grpc_channel_stack_builder* builder, 
                                     grpc_channel_stack_type type);
 
 #endif /* GRPC_CORE_LIB_SURFACE_CHANNEL_INIT_H */

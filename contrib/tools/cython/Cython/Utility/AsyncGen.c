@@ -103,7 +103,7 @@ static int __Pyx_async_gen_init_hooks(__pyx_PyAsyncGenObject *o) {
 //@requires: AsyncGeneratorInitFinalizer
 //@requires: Coroutine.c::Coroutine
 //@requires: Coroutine.c::ReturnWithStopIteration
-//@requires: ObjectHandling.c::PyObjectCall2Args
+//@requires: ObjectHandling.c::PyObjectCall2Args 
 //@requires: ObjectHandling.c::PyObject_GenericGetAttrNoDict
 
 PyDoc_STRVAR(__Pyx_async_gen_send_doc,
@@ -223,20 +223,20 @@ __Pyx_async_gen_init_hooks(__pyx_PyAsyncGenObject *o)
     firstiter = tstate->async_gen_firstiter;
     if (firstiter) {
         PyObject *res;
-#if CYTHON_UNPACK_METHODS
-        PyObject *self;
-#endif
+#if CYTHON_UNPACK_METHODS 
+        PyObject *self; 
+#endif 
 
         Py_INCREF(firstiter);
         // at least asyncio stores methods here => optimise the call
-#if CYTHON_UNPACK_METHODS
-        if (likely(PyMethod_Check(firstiter)) && likely((self = PyMethod_GET_SELF(firstiter)) != NULL)) {
-            PyObject *function = PyMethod_GET_FUNCTION(firstiter);
-            res = __Pyx_PyObject_Call2Args(function, self, (PyObject*)o);
-        } else
-#endif
-        res = __Pyx_PyObject_CallOneArg(firstiter, (PyObject*)o);
-
+#if CYTHON_UNPACK_METHODS 
+        if (likely(PyMethod_Check(firstiter)) && likely((self = PyMethod_GET_SELF(firstiter)) != NULL)) { 
+            PyObject *function = PyMethod_GET_FUNCTION(firstiter); 
+            res = __Pyx_PyObject_Call2Args(function, self, (PyObject*)o); 
+        } else 
+#endif 
+        res = __Pyx_PyObject_CallOneArg(firstiter, (PyObject*)o); 
+ 
         Py_DECREF(firstiter);
         if (unlikely(res == NULL)) {
             return 1;
@@ -259,12 +259,12 @@ __Pyx_async_gen_anext(PyObject *g)
     return __Pyx_async_gen_asend_new(o, NULL);
 }
 
-static PyObject *
-__Pyx_async_gen_anext_method(PyObject *g, CYTHON_UNUSED PyObject *arg) {
-    return __Pyx_async_gen_anext(g);
-}
+static PyObject * 
+__Pyx_async_gen_anext_method(PyObject *g, CYTHON_UNUSED PyObject *arg) { 
+    return __Pyx_async_gen_anext(g); 
+} 
 
-
+ 
 static PyObject *
 __Pyx_async_gen_asend(__pyx_PyAsyncGenObject *o, PyObject *arg)
 {
@@ -284,7 +284,7 @@ __Pyx_async_gen_aclose(__pyx_PyAsyncGenObject *o, CYTHON_UNUSED PyObject *arg)
     return __Pyx_async_gen_athrow_new(o, NULL);
 }
 
-
+ 
 static PyObject *
 __Pyx_async_gen_athrow(__pyx_PyAsyncGenObject *o, PyObject *args)
 {
@@ -295,12 +295,12 @@ __Pyx_async_gen_athrow(__pyx_PyAsyncGenObject *o, PyObject *args)
 }
 
 
-static PyObject *
-__Pyx_async_gen_self_method(PyObject *g, CYTHON_UNUSED PyObject *arg) {
-    return __Pyx_NewRef(g);
-}
-
-
+static PyObject * 
+__Pyx_async_gen_self_method(PyObject *g, CYTHON_UNUSED PyObject *arg) { 
+    return __Pyx_NewRef(g); 
+} 
+ 
+ 
 static PyGetSetDef __Pyx_async_gen_getsetlist[] = {
     {(char*) "__name__", (getter)__Pyx_Coroutine_get_name, (setter)__Pyx_Coroutine_set_name,
      (char*) PyDoc_STR("name of the async generator"), 0},
@@ -340,8 +340,8 @@ static PyMethodDef __Pyx_async_gen_methods[] = {
     {"asend", (PyCFunction)__Pyx_async_gen_asend, METH_O, __Pyx_async_asend_doc},
     {"athrow",(PyCFunction)__Pyx_async_gen_athrow, METH_VARARGS, __Pyx_async_athrow_doc},
     {"aclose", (PyCFunction)__Pyx_async_gen_aclose, METH_NOARGS, __Pyx_async_aclose_doc},
-    {"__aiter__", (PyCFunction)__Pyx_async_gen_self_method, METH_NOARGS, __Pyx_async_aiter_doc},
-    {"__anext__", (PyCFunction)__Pyx_async_gen_anext_method, METH_NOARGS, __Pyx_async_anext_doc},
+    {"__aiter__", (PyCFunction)__Pyx_async_gen_self_method, METH_NOARGS, __Pyx_async_aiter_doc}, 
+    {"__anext__", (PyCFunction)__Pyx_async_gen_anext_method, METH_NOARGS, __Pyx_async_anext_doc}, 
     {0, 0, 0, 0}        /* Sentinel */
 };
 
@@ -425,11 +425,11 @@ static PyTypeObject __pyx_AsyncGenType_type = {
     0,                                          /* tp_finalize */
 #endif
 #if PY_VERSION_HEX >= 0x030800b1 && (!CYTHON_COMPILING_IN_PYPY || PYPY_VERSION_NUM >= 0x07030800)
-    0,                                          /*tp_vectorcall*/
-#endif
+    0,                                          /*tp_vectorcall*/ 
+#endif 
 #if PY_VERSION_HEX >= 0x030800b4 && PY_VERSION_HEX < 0x03090000
     0,                                          /*tp_print*/
-#endif
+#endif 
 #if CYTHON_COMPILING_IN_PYPY && PY_VERSION_HEX >= 0x03090000
     0,                                          /*tp_pypy_flags*/
 #endif
@@ -587,7 +587,7 @@ static PyMethodDef __Pyx_async_gen_asend_methods[] = {
     {"send", (PyCFunction)__Pyx_async_gen_asend_send, METH_O, __Pyx_async_gen_send_doc},
     {"throw", (PyCFunction)__Pyx_async_gen_asend_throw, METH_VARARGS, __Pyx_async_gen_throw_doc},
     {"close", (PyCFunction)__Pyx_async_gen_asend_close, METH_NOARGS, __Pyx_async_gen_close_doc},
-    {"__await__", (PyCFunction)__Pyx_async_gen_self_method, METH_NOARGS, __Pyx_async_gen_await_doc},
+    {"__await__", (PyCFunction)__Pyx_async_gen_self_method, METH_NOARGS, __Pyx_async_gen_await_doc}, 
     {0, 0, 0, 0}        /* Sentinel */
 };
 
@@ -666,11 +666,11 @@ static PyTypeObject __pyx__PyAsyncGenASendType_type = {
     0,                                          /* tp_finalize */
 #endif
 #if PY_VERSION_HEX >= 0x030800b1 && (!CYTHON_COMPILING_IN_PYPY || PYPY_VERSION_NUM >= 0x07030800)
-    0,                                          /*tp_vectorcall*/
-#endif
+    0,                                          /*tp_vectorcall*/ 
+#endif 
 #if PY_VERSION_HEX >= 0x030800b4 && PY_VERSION_HEX < 0x03090000
     0,                                          /*tp_print*/
-#endif
+#endif 
 #if CYTHON_COMPILING_IN_PYPY && PY_VERSION_HEX >= 0x03090000
     0,                                          /*tp_pypy_flags*/
 #endif
@@ -784,11 +784,11 @@ static PyTypeObject __pyx__PyAsyncGenWrappedValueType_type = {
     0,                                          /* tp_finalize */
 #endif
 #if PY_VERSION_HEX >= 0x030800b1 && (!CYTHON_COMPILING_IN_PYPY || PYPY_VERSION_NUM >= 0x07030800)
-    0,                                          /*tp_vectorcall*/
-#endif
+    0,                                          /*tp_vectorcall*/ 
+#endif 
 #if PY_VERSION_HEX >= 0x030800b4 && PY_VERSION_HEX < 0x03090000
     0,                                          /*tp_print*/
-#endif
+#endif 
 #if CYTHON_COMPILING_IN_PYPY && PY_VERSION_HEX >= 0x03090000
     0,                                          /*tp_pypy_flags*/
 #endif
@@ -997,7 +997,7 @@ static PyMethodDef __Pyx_async_gen_athrow_methods[] = {
     {"send", (PyCFunction)__Pyx_async_gen_athrow_send, METH_O, __Pyx_async_gen_send_doc},
     {"throw", (PyCFunction)__Pyx_async_gen_athrow_throw, METH_VARARGS, __Pyx_async_gen_throw_doc},
     {"close", (PyCFunction)__Pyx_async_gen_athrow_close, METH_NOARGS, __Pyx_async_gen_close_doc},
-    {"__await__", (PyCFunction)__Pyx_async_gen_self_method, METH_NOARGS, __Pyx_async_gen_await_doc},
+    {"__await__", (PyCFunction)__Pyx_async_gen_self_method, METH_NOARGS, __Pyx_async_gen_await_doc}, 
     {0, 0, 0, 0}        /* Sentinel */
 };
 
@@ -1075,11 +1075,11 @@ static PyTypeObject __pyx__PyAsyncGenAThrowType_type = {
     0,                                          /* tp_finalize */
 #endif
 #if PY_VERSION_HEX >= 0x030800b1 && (!CYTHON_COMPILING_IN_PYPY || PYPY_VERSION_NUM >= 0x07030800)
-    0,                                          /*tp_vectorcall*/
-#endif
+    0,                                          /*tp_vectorcall*/ 
+#endif 
 #if PY_VERSION_HEX >= 0x030800b4 && PY_VERSION_HEX < 0x03090000
     0,                                          /*tp_print*/
-#endif
+#endif 
 #if CYTHON_COMPILING_IN_PYPY && PY_VERSION_HEX >= 0x03090000
     0,                                          /*tp_pypy_flags*/
 #endif

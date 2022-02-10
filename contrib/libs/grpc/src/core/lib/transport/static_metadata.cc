@@ -1,54 +1,54 @@
-/*
- * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-/*
- * WARNING: Auto-generated code.
- *
- * To make changes to this file, change
- * tools/codegen/core/gen_static_metadata.py, and then re-run it.
- *
- * See metadata.h for an explanation of the interface here, and metadata.cc for
- * an explanation of what's going on.
- */
-
-#include <grpc/support/port_platform.h>
-
-#include "src/core/lib/transport/static_metadata.h"
-
-#include "src/core/lib/slice/slice_internal.h"
-
+/* 
+ * Copyright 2015 gRPC authors. 
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ */ 
+ 
+/* 
+ * WARNING: Auto-generated code. 
+ * 
+ * To make changes to this file, change 
+ * tools/codegen/core/gen_static_metadata.py, and then re-run it. 
+ * 
+ * See metadata.h for an explanation of the interface here, and metadata.cc for 
+ * an explanation of what's going on. 
+ */ 
+ 
+#include <grpc/support/port_platform.h> 
+ 
+#include "src/core/lib/transport/static_metadata.h" 
+ 
+#include "src/core/lib/slice/slice_internal.h" 
+ 
 static constexpr uint8_t g_bytes[] = {
-    58,  112, 97,  116, 104, 58,  109, 101, 116, 104, 111, 100, 58,  115, 116,
-    97,  116, 117, 115, 58,  97,  117, 116, 104, 111, 114, 105, 116, 121, 58,
-    115, 99,  104, 101, 109, 101, 116, 101, 103, 114, 112, 99,  45,  109, 101,
-    115, 115, 97,  103, 101, 103, 114, 112, 99,  45,  115, 116, 97,  116, 117,
-    115, 103, 114, 112, 99,  45,  112, 97,  121, 108, 111, 97,  100, 45,  98,
-    105, 110, 103, 114, 112, 99,  45,  101, 110, 99,  111, 100, 105, 110, 103,
-    103, 114, 112, 99,  45,  97,  99,  99,  101, 112, 116, 45,  101, 110, 99,
-    111, 100, 105, 110, 103, 103, 114, 112, 99,  45,  115, 101, 114, 118, 101,
-    114, 45,  115, 116, 97,  116, 115, 45,  98,  105, 110, 103, 114, 112, 99,
-    45,  116, 97,  103, 115, 45,  98,  105, 110, 103, 114, 112, 99,  45,  116,
-    114, 97,  99,  101, 45,  98,  105, 110, 99,  111, 110, 116, 101, 110, 116,
-    45,  116, 121, 112, 101, 99,  111, 110, 116, 101, 110, 116, 45,  101, 110,
-    99,  111, 100, 105, 110, 103, 97,  99,  99,  101, 112, 116, 45,  101, 110,
-    99,  111, 100, 105, 110, 103, 103, 114, 112, 99,  45,  105, 110, 116, 101,
-    114, 110, 97,  108, 45,  101, 110, 99,  111, 100, 105, 110, 103, 45,  114,
-    101, 113, 117, 101, 115, 116, 103, 114, 112, 99,  45,  105, 110, 116, 101,
-    114, 110, 97,  108, 45,  115, 116, 114, 101, 97,  109, 45,  101, 110, 99,
-    111, 100, 105, 110, 103, 45,  114, 101, 113, 117, 101, 115, 116, 117, 115,
+    58,  112, 97,  116, 104, 58,  109, 101, 116, 104, 111, 100, 58,  115, 116, 
+    97,  116, 117, 115, 58,  97,  117, 116, 104, 111, 114, 105, 116, 121, 58, 
+    115, 99,  104, 101, 109, 101, 116, 101, 103, 114, 112, 99,  45,  109, 101, 
+    115, 115, 97,  103, 101, 103, 114, 112, 99,  45,  115, 116, 97,  116, 117, 
+    115, 103, 114, 112, 99,  45,  112, 97,  121, 108, 111, 97,  100, 45,  98, 
+    105, 110, 103, 114, 112, 99,  45,  101, 110, 99,  111, 100, 105, 110, 103, 
+    103, 114, 112, 99,  45,  97,  99,  99,  101, 112, 116, 45,  101, 110, 99, 
+    111, 100, 105, 110, 103, 103, 114, 112, 99,  45,  115, 101, 114, 118, 101, 
+    114, 45,  115, 116, 97,  116, 115, 45,  98,  105, 110, 103, 114, 112, 99, 
+    45,  116, 97,  103, 115, 45,  98,  105, 110, 103, 114, 112, 99,  45,  116, 
+    114, 97,  99,  101, 45,  98,  105, 110, 99,  111, 110, 116, 101, 110, 116, 
+    45,  116, 121, 112, 101, 99,  111, 110, 116, 101, 110, 116, 45,  101, 110, 
+    99,  111, 100, 105, 110, 103, 97,  99,  99,  101, 112, 116, 45,  101, 110, 
+    99,  111, 100, 105, 110, 103, 103, 114, 112, 99,  45,  105, 110, 116, 101, 
+    114, 110, 97,  108, 45,  101, 110, 99,  111, 100, 105, 110, 103, 45,  114, 
+    101, 113, 117, 101, 115, 116, 103, 114, 112, 99,  45,  105, 110, 116, 101, 
+    114, 110, 97,  108, 45,  115, 116, 114, 101, 97,  109, 45,  101, 110, 99, 
+    111, 100, 105, 110, 103, 45,  114, 101, 113, 117, 101, 115, 116, 117, 115, 
     101, 114, 45,  97,  103, 101, 110, 116, 104, 111, 115, 116, 103, 114, 112,
     99,  45,  112, 114, 101, 118, 105, 111, 117, 115, 45,  114, 112, 99,  45,
     97,  116, 116, 101, 109, 112, 116, 115, 103, 114, 112, 99,  45,  114, 101,
@@ -130,9 +130,9 @@ static constexpr uint8_t g_bytes[] = {
     101, 110, 116, 105, 116, 121, 44,  103, 122, 105, 112, 100, 101, 102, 108,
     97,  116, 101, 44,  103, 122, 105, 112, 105, 100, 101, 110, 116, 105, 116,
     121, 44,  100, 101, 102, 108, 97,  116, 101, 44,  103, 122, 105, 112};
-
+ 
 grpc_slice_refcount grpc_core::StaticSliceRefcount::kStaticSubRefcount;
-
+ 
 namespace grpc_core {
 struct StaticMetadataCtx {
 #ifndef NDEBUG
@@ -1151,9 +1151,9 @@ struct StaticMetadataCtx {
         GRPC_MDELEM_STORAGE_STATIC)
       // clang-format on
   };
-};
+}; 
 }  // namespace grpc_core
-
+ 
 namespace grpc_core {
 static StaticMetadataCtx* g_static_metadata_slice_ctx = nullptr;
 const StaticMetadataSlice* g_static_metadata_slice_table = nullptr;
@@ -1188,32 +1188,32 @@ void grpc_destroy_static_metadata_ctx(void) {
   grpc_core::g_static_mdelem_manifested = nullptr;
 }
 
-uintptr_t grpc_static_mdelem_user_data[GRPC_STATIC_MDELEM_COUNT] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+uintptr_t grpc_static_mdelem_user_data[GRPC_STATIC_MDELEM_COUNT] = { 
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
     0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 4, 6, 6, 8, 8, 2, 4, 4};
-
-static const int8_t elems_r[] = {
+ 
+static const int8_t elems_r[] = { 
     15, 10, -8,  0,  2,   -43, -83, -44, 0,  4,  -8, 0,  0,  0,  10, 0,  -7, 0,
     0,  3,  3,   0,  0,   0,   0,   0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
     0,  0,  0,   0,  0,   0,   0,   0,   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
     0,  0,  -68, 0,  -53, -56, -53, -77, 0,  30, 29, 28, 27, 26, 25, 24, 35, 22,
     21, 20, 19,  18, 17,  16,  15,  16,  16, 16, 15, 14, 13, 12, 11, 10, 9,  8,
     7,  6,  5,   4,  3,   2,   3,   2,   2,  6,  0,  0,  0,  0,  0,  0,  -7, 0};
-static uint32_t elems_phash(uint32_t i) {
+static uint32_t elems_phash(uint32_t i) { 
   i -= 45;
   uint32_t x = i % 108;
   uint32_t y = i / 108;
-  uint32_t h = x;
-  if (y < GPR_ARRAY_SIZE(elems_r)) {
-    uint32_t delta = (uint32_t)elems_r[y];
-    h += delta;
-  }
-  return h;
-}
-
-static const uint16_t elem_keys[] = {
+  uint32_t h = x; 
+  if (y < GPR_ARRAY_SIZE(elems_r)) { 
+    uint32_t delta = (uint32_t)elems_r[y]; 
+    h += delta; 
+  } 
+  return h; 
+} 
+ 
+static const uint16_t elem_keys[] = { 
     269,   270,   271,   272,   273,   274,  275,   1140, 1141,  1789,  153,
     154,   487,   488,   1679,  45,    46,   1030,  1031, 795,   796,   1801,
     1569,  651,   869,   2119,  1691,  2229, 6189,  6739, 6849,  6959,  7069,
@@ -1223,27 +1223,27 @@ static const uint16_t elem_keys[] = {
     10369, 1200,  543,   10479, 10589, 214,  10699, 1206, 1207,  1208,  1209,
     1090,  10809, 11579, 1860,  0,     0,    0,     0,    1750,  0,     1867,
     0,     0,     359,   0,     0,     0,    0,     1642};
-static const uint8_t elem_idxs[] = {
+static const uint8_t elem_idxs[] = { 
     7,  8,   9,   10,  11,  12, 13,  76, 78,  71,  1,  2,   5,   6,   25,  3,
     4,  66,  65,  62,  63,  83, 30,  67, 61,  57,  73, 37,  14,  19,  20,  21,
     22, 23,  24,  26,  27,  15, 29,  31, 32,  33,  34, 35,  36,  38,  17,  16,
     39, 28,  40,  18,  41,  42, 43,  44, 45,  46,  47, 48,  49,  50,  51,  52,
     53, 54,  55,  75,  69,  56, 58,  70, 59,  77,  79, 80,  81,  64,  60,  74,
     82, 255, 255, 255, 255, 72, 255, 84, 255, 255, 0,  255, 255, 255, 255, 68};
-
+ 
 grpc_mdelem grpc_static_mdelem_for_static_strings(intptr_t a, intptr_t b) {
-  if (a == -1 || b == -1) return GRPC_MDNULL;
+  if (a == -1 || b == -1) return GRPC_MDNULL; 
   uint32_t k = static_cast<uint32_t>(a * 110 + b);
-  uint32_t h = elems_phash(k);
-  return h < GPR_ARRAY_SIZE(elem_keys) && elem_keys[h] == k &&
-                 elem_idxs[h] != 255
+  uint32_t h = elems_phash(k); 
+  return h < GPR_ARRAY_SIZE(elem_keys) && elem_keys[h] == k && 
+                 elem_idxs[h] != 255 
              ? GRPC_MAKE_MDELEM(
                    &grpc_static_mdelem_table()[elem_idxs[h]].data(),
                    GRPC_MDELEM_STORAGE_STATIC)
-             : GRPC_MDNULL;
-}
-
+             : GRPC_MDNULL; 
+} 
+ 
 const uint8_t grpc_static_accept_encoding_metadata[8] = {0,  75, 76, 77,
                                                          78, 79, 80, 81};
-
+ 
 const uint8_t grpc_static_accept_stream_encoding_metadata[4] = {0, 82, 83, 84};

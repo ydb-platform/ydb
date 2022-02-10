@@ -108,16 +108,16 @@ void EnumGenerator::Generate(io::Printer* printer) {
     } else {
       printer->Print(vars, "$name$($index$, $number$),\n");
     }
-    printer->Annotate("name", canonical_values_[i]);
+    printer->Annotate("name", canonical_values_[i]); 
   }
 
   if (SupportUnknownEnumValue(descriptor_->file())) {
     if (ordinal_is_index) {
-      printer->Print("${$UNRECOGNIZED$}$(-1),\n", "{", "", "}", "");
+      printer->Print("${$UNRECOGNIZED$}$(-1),\n", "{", "", "}", ""); 
     } else {
-      printer->Print("${$UNRECOGNIZED$}$(-1, -1),\n", "{", "", "}", "");
+      printer->Print("${$UNRECOGNIZED$}$(-1, -1),\n", "{", "", "}", ""); 
     }
-    printer->Annotate("{", "}", descriptor_);
+    printer->Annotate("{", "}", descriptor_); 
   }
 
   printer->Print(
@@ -134,15 +134,15 @@ void EnumGenerator::Generate(io::Printer* printer) {
     WriteEnumValueDocComment(printer, aliases_[i].value);
     printer->Print(
         vars, "public static final $classname$ $name$ = $canonical_name$;\n");
-    printer->Annotate("name", aliases_[i].value);
+    printer->Annotate("name", aliases_[i].value); 
   }
 
   for (int i = 0; i < descriptor_->value_count(); i++) {
     std::map<TProtoStringType, TProtoStringType> vars;
     vars["name"] = descriptor_->value(i)->name();
     vars["number"] = StrCat(descriptor_->value(i)->number());
-    vars["{"] = "";
-    vars["}"] = "";
+    vars["{"] = ""; 
+    vars["}"] = ""; 
     vars["deprecation"] = descriptor_->value(i)->options().deprecated()
                               ? "@java.lang.Deprecated "
                               : "";
@@ -150,7 +150,7 @@ void EnumGenerator::Generate(io::Printer* printer) {
     printer->Print(vars,
                    "$deprecation$public static final int ${$$name$_VALUE$}$ = "
                    "$number$;\n");
-    printer->Annotate("{", "}", descriptor_->value(i));
+    printer->Annotate("{", "}", descriptor_->value(i)); 
   }
   printer->Print("\n");
 
@@ -266,10 +266,10 @@ void EnumGenerator::Generate(io::Printer* printer) {
     //   at module init time because it wouldn't work with descriptor.proto, but
     //   we can cache the value the first time getDescriptor() is called.
     if (descriptor_->containing_type() == NULL) {
-      // The class generated for the File fully populates the descriptor with
-      // extensions in both the mutable and immutable cases. (In the mutable api
-      // this is accomplished by attempting to load the immutable outer class).
-      printer->Print(
+      // The class generated for the File fully populates the descriptor with 
+      // extensions in both the mutable and immutable cases. (In the mutable api 
+      // this is accomplished by attempting to load the immutable outer class). 
+      printer->Print( 
           "  return $file$.getDescriptor().getEnumTypes().get($index$);\n",
           "file",
           name_resolver_->GetClassName(descriptor_->file(), immutable_api_),

@@ -12,7 +12,7 @@ PEERDIR(
     contrib/libs/grpc/grpc
     contrib/libs/grpc/src/core/lib
     contrib/libs/grpc/third_party/address_sorting
-    contrib/libs/grpc/third_party/upb
+    contrib/libs/grpc/third_party/upb 
 )
 
 ADDINCL(

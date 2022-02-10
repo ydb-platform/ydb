@@ -5,13 +5,13 @@
 
     Lexer for SuperCollider
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
 import re
 
-from pygments.lexer import RegexLexer, include, words, default
+from pygments.lexer import RegexLexer, include, words, default 
 from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
     Number, Punctuation
 
@@ -43,7 +43,7 @@ class SuperColliderLexer(RegexLexer):
             (r'/(\\.|[^[/\\\n]|\[(\\.|[^\]\\\n])*])+/'
              r'([gim]+\b|\B)', String.Regex, '#pop'),
             (r'(?=/)', Text, ('#pop', 'badregex')),
-            default('#pop'),
+            default('#pop'), 
         ],
         'badregex': [
             (r'\n', Text, '#pop')
@@ -74,13 +74,13 @@ class SuperColliderLexer(RegexLexer):
             (words(('true', 'false', 'nil', 'inf'), suffix=r'\b'), Keyword.Constant),
             (words((
                 'Array', 'Boolean', 'Date', 'Error', 'Function', 'Number',
-                'Object', 'Packages', 'RegExp', 'String',
+                'Object', 'Packages', 'RegExp', 'String', 
                 'isFinite', 'isNaN', 'parseFloat', 'parseInt', 'super',
                 'thisFunctionDef', 'thisFunction', 'thisMethod', 'thisProcess',
                 'thisThread', 'this'), suffix=r'\b'),
              Name.Builtin),
-            (r'[$a-zA-Z_]\w*', Name.Other),
-            (r'\\?[$a-zA-Z_]\w*', String.Symbol),
+            (r'[$a-zA-Z_]\w*', Name.Other), 
+            (r'\\?[$a-zA-Z_]\w*', String.Symbol), 
             (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
             (r'0x[0-9a-fA-F]+', Number.Hex),
             (r'[0-9]+', Number.Integer),

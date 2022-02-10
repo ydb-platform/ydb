@@ -1,43 +1,43 @@
-/*
- *
+/* 
+ * 
  * Copyright 2019 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-#ifndef GRPCPP_IMPL_CODEGEN_ASYNC_STREAM_H
-#define GRPCPP_IMPL_CODEGEN_ASYNC_STREAM_H
-
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ */ 
+ 
+#ifndef GRPCPP_IMPL_CODEGEN_ASYNC_STREAM_H 
+#define GRPCPP_IMPL_CODEGEN_ASYNC_STREAM_H 
+ 
 #include <grpcpp/impl/codegen/call.h>
 #include <grpcpp/impl/codegen/channel_interface.h>
 #include <grpcpp/impl/codegen/core_codegen_interface.h>
 #include <grpcpp/impl/codegen/server_context.h>
 #include <grpcpp/impl/codegen/service_type.h>
 #include <grpcpp/impl/codegen/status.h>
-
-namespace grpc {
-
-namespace internal {
+ 
+namespace grpc { 
+ 
+namespace internal { 
 /// Common interface for all client side asynchronous streaming.
 class ClientAsyncStreamingInterface {
  public:
   virtual ~ClientAsyncStreamingInterface() {}
-
+ 
   /// Start the call that was set up by the constructor, but only if the
   /// constructor was invoked through the "Prepare" API which doesn't actually
   /// start the call
   virtual void StartCall(void* tag) = 0;
-
+ 
   /// Request notification of the reading of the initial metadata. Completion
   /// will be notified by \a tag on the associated completion queue.
   /// This call is optional, but if it is used, it cannot be used concurrently
@@ -77,11 +77,11 @@ class ClientAsyncStreamingInterface {
 };
 
 /// An interface that yields a sequence of messages of type \a R.
-template <class R>
+template <class R> 
 class AsyncReaderInterface {
  public:
   virtual ~AsyncReaderInterface() {}
-
+ 
   /// Read a message of type \a R into \a msg. Completion will be notified by \a
   /// tag on the associated completion queue.
   /// This is thread-safe with respect to \a Write or \a WritesDone methods. It
@@ -99,11 +99,11 @@ class AsyncReaderInterface {
 };
 
 /// An interface that can be fed a sequence of messages of type \a W.
-template <class W>
+template <class W> 
 class AsyncWriterInterface {
  public:
   virtual ~AsyncWriterInterface() {}
-
+ 
   /// Request the writing of \a msg with identifying tag \a tag.
   ///
   /// Only one write may be outstanding at any given time. This means that
@@ -158,15 +158,15 @@ class AsyncWriterInterface {
   }
 };
 
-}  // namespace internal
-
-template <class R>
+}  // namespace internal 
+ 
+template <class R> 
 class ClientAsyncReaderInterface
     : public internal::ClientAsyncStreamingInterface,
       public internal::AsyncReaderInterface<R> {};
-
+ 
 namespace internal {
-template <class R>
+template <class R> 
 class ClientAsyncReaderFactory {
  public:
   /// Create a stream object.
@@ -189,7 +189,7 @@ class ClientAsyncReaderFactory {
   }
 };
 }  // namespace internal
-
+ 
 /// Async client-side API for doing server-streaming RPCs,
 /// where the incoming message stream coming from the server has
 /// messages of type \a R.
@@ -297,7 +297,7 @@ class ClientAsyncReader final : public ClientAsyncReaderInterface<R> {
 };
 
 /// Common interface for client side asynchronous writing.
-template <class W>
+template <class W> 
 class ClientAsyncWriterInterface
     : public internal::ClientAsyncStreamingInterface,
       public internal::AsyncWriterInterface<W> {
@@ -308,9 +308,9 @@ class ClientAsyncWriterInterface
   /// \param[in] tag The tag identifying the operation.
   virtual void WritesDone(void* tag) = 0;
 };
-
+ 
 namespace internal {
-template <class W>
+template <class W> 
 class ClientAsyncWriterFactory {
  public:
   /// Create a stream object.
@@ -337,7 +337,7 @@ class ClientAsyncWriterFactory {
   }
 };
 }  // namespace internal
-
+ 
 /// Async API on the client side for doing client-streaming RPCs,
 /// where the outgoing message stream going to the server contains
 /// messages of type \a W.
@@ -466,7 +466,7 @@ class ClientAsyncWriter final : public ClientAsyncWriterInterface<W> {
 /// Async client-side interface for bi-directional streaming,
 /// where the client-to-server message stream has messages of type \a W,
 /// and the server-to-client message stream has messages of type \a R.
-template <class W, class R>
+template <class W, class R> 
 class ClientAsyncReaderWriterInterface
     : public internal::ClientAsyncStreamingInterface,
       public internal::AsyncWriterInterface<W>,
@@ -478,9 +478,9 @@ class ClientAsyncReaderWriterInterface
   /// \param[in] tag The tag identifying the operation.
   virtual void WritesDone(void* tag) = 0;
 };
-
+ 
 namespace internal {
-template <class W, class R>
+template <class W, class R> 
 class ClientAsyncReaderWriterFactory {
  public:
   /// Create a stream object.
@@ -495,7 +495,7 @@ class ClientAsyncReaderWriterFactory {
       const ::grpc::internal::RpcMethod& method, ::grpc::ClientContext* context,
       bool start, void* tag) {
     ::grpc::internal::Call call = channel->CreateCall(method, context, cq);
-
+ 
     return new (::grpc::g_core_codegen_interface->grpc_call_arena_alloc(
         call.call(), sizeof(ClientAsyncReaderWriter<W, R>)))
         ClientAsyncReaderWriter<W, R>(call, context, start, tag);
@@ -507,7 +507,7 @@ class ClientAsyncReaderWriterFactory {
 /// where the outgoing message stream going to the server
 /// has messages of type \a W,  and the incoming message stream coming
 /// from the server has messages of type \a R.
-template <class W, class R>
+template <class W, class R> 
 class ClientAsyncReaderWriter final
     : public ClientAsyncReaderWriterInterface<W, R> {
  public:
@@ -515,7 +515,7 @@ class ClientAsyncReaderWriter final
   static void operator delete(void* /*ptr*/, std::size_t size) {
     GPR_CODEGEN_ASSERT(size == sizeof(ClientAsyncReaderWriter));
   }
-
+ 
   // This operator should never be called as the memory should be freed as part
   // of the arena destruction. It only exists to provide a matching operator
   // delete to the operator new so that some compilers will not complain (see
@@ -636,7 +636,7 @@ class ClientAsyncReaderWriter final
       finish_ops_;
 };
 
-template <class W, class R>
+template <class W, class R> 
 class ServerAsyncReaderInterface
     : public ::grpc::internal::ServerAsyncStreamingInterface,
       public internal::AsyncReaderInterface<R> {
@@ -665,7 +665,7 @@ class ServerAsyncReaderInterface
   /// \param[in] msg To be sent to the client as the response for this call.
   virtual void Finish(const W& msg, const ::grpc::Status& status,
                       void* tag) = 0;
-
+ 
   /// Indicate that the stream is to be finished with a certain
   /// non-OK status code.
   /// Request notification for when the server has sent the appropriate
@@ -792,7 +792,7 @@ class ServerAsyncReader final : public ServerAsyncReaderInterface<W, R> {
       finish_ops_;
 };
 
-template <class W>
+template <class W> 
 class ServerAsyncWriterInterface
     : public ::grpc::internal::ServerAsyncStreamingInterface,
       public internal::AsyncWriterInterface<W> {
@@ -819,7 +819,7 @@ class ServerAsyncWriterInterface
   /// \param[in] tag Tag identifying this request.
   /// \param[in] status To be sent to the client as the result of this call.
   virtual void Finish(const ::grpc::Status& status, void* tag) = 0;
-
+ 
   /// Request the writing of \a msg and coalesce it with trailing metadata which
   /// contains \a status, using WriteOptions options with
   /// identifying tag \a tag.
@@ -840,12 +840,12 @@ class ServerAsyncWriterInterface
 
 /// Async server-side API for doing server streaming RPCs,
 /// where the outgoing message stream from the server has messages of type \a W.
-template <class W>
+template <class W> 
 class ServerAsyncWriter final : public ServerAsyncWriterInterface<W> {
  public:
   explicit ServerAsyncWriter(::grpc::ServerContext* ctx)
       : call_(nullptr, nullptr, nullptr), ctx_(ctx) {}
-
+ 
   /// See \a ServerAsyncStreamingInterface::SendInitialMetadata for semantics.
   ///
   /// Implicit input parameter:
@@ -953,7 +953,7 @@ class ServerAsyncWriter final : public ServerAsyncWriterInterface<W> {
 };
 
 /// Server-side interface for asynchronous bi-directional streaming.
-template <class W, class R>
+template <class W, class R> 
 class ServerAsyncReaderWriterInterface
     : public ::grpc::internal::ServerAsyncStreamingInterface,
       public internal::AsyncWriterInterface<W>,
@@ -982,7 +982,7 @@ class ServerAsyncReaderWriterInterface
   /// \param[in] tag Tag identifying this request.
   /// \param[in] status To be sent to the client as the result of this call.
   virtual void Finish(const ::grpc::Status& status, void* tag) = 0;
-
+ 
   /// Request the writing of \a msg and coalesce it with trailing metadata which
   /// contains \a status, using WriteOptions options with
   /// identifying tag \a tag.
@@ -1005,13 +1005,13 @@ class ServerAsyncReaderWriterInterface
 /// where the incoming message stream coming from the client has messages of
 /// type \a R, and the outgoing message stream coming from the server has
 /// messages of type \a W.
-template <class W, class R>
+template <class W, class R> 
 class ServerAsyncReaderWriter final
     : public ServerAsyncReaderWriterInterface<W, R> {
  public:
   explicit ServerAsyncReaderWriter(::grpc::ServerContext* ctx)
       : call_(nullptr, nullptr, nullptr), ctx_(ctx) {}
-
+ 
   /// See \a ServerAsyncStreamingInterface::SendInitialMetadata for semantics.
   ///
   /// Implicit input parameter:
@@ -1021,7 +1021,7 @@ class ServerAsyncReaderWriter final
   /// \param[in] tag Tag identifying this request.
   void SendInitialMetadata(void* tag) override {
     GPR_CODEGEN_ASSERT(!ctx_->sent_initial_metadata_);
-
+ 
     meta_ops_.set_output_tag(tag);
     meta_ops_.SendInitialMetadata(&ctx_->initial_metadata_,
                                   ctx_->initial_metadata_flags());
@@ -1031,13 +1031,13 @@ class ServerAsyncReaderWriter final
     ctx_->sent_initial_metadata_ = true;
     call_.PerformOps(&meta_ops_);
   }
-
+ 
   void Read(R* msg, void* tag) override {
     read_ops_.set_output_tag(tag);
     read_ops_.RecvMessage(msg);
     call_.PerformOps(&read_ops_);
   }
-
+ 
   void Write(const W& msg, void* tag) override {
     write_ops_.set_output_tag(tag);
     EnsureInitialMetadataSent(&write_ops_);
@@ -1045,7 +1045,7 @@ class ServerAsyncReaderWriter final
     GPR_CODEGEN_ASSERT(write_ops_.SendMessage(msg).ok());
     call_.PerformOps(&write_ops_);
   }
-
+ 
   void Write(const W& msg, ::grpc::WriteOptions options, void* tag) override {
     write_ops_.set_output_tag(tag);
     if (options.is_last_message()) {
@@ -1127,5 +1127,5 @@ class ServerAsyncReaderWriter final
       finish_ops_;
 };
 
-}  // namespace grpc
-#endif  // GRPCPP_IMPL_CODEGEN_ASYNC_STREAM_H
+}  // namespace grpc 
+#endif  // GRPCPP_IMPL_CODEGEN_ASYNC_STREAM_H 

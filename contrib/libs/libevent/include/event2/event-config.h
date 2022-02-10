@@ -8,6 +8,6 @@
 #   include "event-config-linux.h"
 #endif
 
-#if defined(_musl_)
+#if defined(_musl_) 
 #   include "event-config-musl.h"
 #endif

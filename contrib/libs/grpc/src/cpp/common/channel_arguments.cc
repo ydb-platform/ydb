@@ -1,32 +1,32 @@
 /*
  *
- * Copyright 2015 gRPC authors.
+ * Copyright 2015 gRPC authors. 
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0 
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
  *
  */
-#include <grpcpp/support/channel_arguments.h>
+#include <grpcpp/support/channel_arguments.h> 
 
 #include <sstream>
 
 #include <grpc/impl/codegen/grpc_types.h>
 #include <grpc/support/log.h>
-#include <grpcpp/grpcpp.h>
-#include <grpcpp/resource_quota.h>
+#include <grpcpp/grpcpp.h> 
+#include <grpcpp/resource_quota.h> 
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/iomgr/socket_mutator.h"
-
+ 
 namespace grpc {
 
 ChannelArguments::ChannelArguments() {
@@ -66,7 +66,7 @@ ChannelArguments::ChannelArguments(const ChannelArguments& other)
 }
 
 ChannelArguments::~ChannelArguments() {
-  grpc_core::ExecCtx exec_ctx;
+  grpc_core::ExecCtx exec_ctx; 
   for (auto& arg : args_) {
     if (arg.type == GRPC_ARG_POINTER) {
       arg.value.pointer.vtable->destroy(arg.value.pointer.p);
@@ -84,27 +84,27 @@ void ChannelArguments::SetCompressionAlgorithm(
   SetInt(GRPC_COMPRESSION_CHANNEL_DEFAULT_ALGORITHM, algorithm);
 }
 
-void ChannelArguments::SetGrpclbFallbackTimeout(int fallback_timeout) {
-  SetInt(GRPC_ARG_GRPCLB_FALLBACK_TIMEOUT_MS, fallback_timeout);
-}
-
+void ChannelArguments::SetGrpclbFallbackTimeout(int fallback_timeout) { 
+  SetInt(GRPC_ARG_GRPCLB_FALLBACK_TIMEOUT_MS, fallback_timeout); 
+} 
+ 
 void ChannelArguments::SetSocketMutator(grpc_socket_mutator* mutator) {
   if (!mutator) {
     return;
   }
   grpc_arg mutator_arg = grpc_socket_mutator_to_arg(mutator);
   bool replaced = false;
-  grpc_core::ExecCtx exec_ctx;
+  grpc_core::ExecCtx exec_ctx; 
   for (auto& arg : args_) {
     if (arg.type == mutator_arg.type &&
         TString(arg.key) == TString(mutator_arg.key)) {
-      GPR_ASSERT(!replaced);
+      GPR_ASSERT(!replaced); 
       arg.value.pointer.vtable->destroy(arg.value.pointer.p);
       arg.value.pointer = mutator_arg.value.pointer;
       replaced = true;
     }
   }
-
+ 
   if (!replaced) {
     strings_.push_back(TString(mutator_arg.key));
     args_.push_back(mutator_arg);
@@ -122,18 +122,18 @@ void ChannelArguments::SetUserAgentPrefix(
     return;
   }
   bool replaced = false;
-  auto strings_it = strings_.begin();
+  auto strings_it = strings_.begin(); 
   for (auto& arg : args_) {
-    ++strings_it;
-    if (arg.type == GRPC_ARG_STRING) {
+    ++strings_it; 
+    if (arg.type == GRPC_ARG_STRING) { 
       if (TString(arg.key) == GRPC_ARG_PRIMARY_USER_AGENT_STRING) {
-        GPR_ASSERT(arg.value.string == strings_it->c_str());
-        *(strings_it) = user_agent_prefix + " " + arg.value.string;
+        GPR_ASSERT(arg.value.string == strings_it->c_str()); 
+        *(strings_it) = user_agent_prefix + " " + arg.value.string; 
         arg.value.string = const_cast<char*>(strings_it->c_str());
-        replaced = true;
-        break;
-      }
-      ++strings_it;
+        replaced = true; 
+        break; 
+      } 
+      ++strings_it; 
     }
   }
   if (!replaced) {

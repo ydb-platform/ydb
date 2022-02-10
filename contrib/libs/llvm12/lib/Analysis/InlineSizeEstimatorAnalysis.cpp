@@ -1,93 +1,93 @@
-//===- InlineSizeEstimatorAnalysis.cpp - IR to native size from ML model --===//
-//
-//                     The LLVM Compiler Infrastructure
-//
-// This file is distributed under the University of Illinois Open Source
-// License. See LICENSE.TXT for details.
-//
-//===----------------------------------------------------------------------===//
-//
-// This implements feature and label extraction for offline supervised learning
-// of a IR to native size model.
-//
-//===----------------------------------------------------------------------===//
-#include "llvm/Analysis/InlineSizeEstimatorAnalysis.h"
-
-#ifdef LLVM_HAVE_TF_API
-#include "llvm/Analysis/Utils/TFUtils.h"
-#endif
-#include "llvm/Analysis/LoopInfo.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
-#include "llvm/Analysis/TargetTransformInfo.h"
-#include "llvm/IR/BasicBlock.h"
-#include "llvm/IR/Dominators.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/PassManager.h"
-#include "llvm/MC/MCAsmLayout.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/raw_ostream.h"
-
-#include <algorithm>
-#include <deque>
-
-using namespace llvm;
-
-AnalysisKey InlineSizeEstimatorAnalysis::Key;
-
-#define DEBUG_TYPE "inline-size-estimator"
-
-#ifdef LLVM_HAVE_TF_API
-cl::opt<std::string> TFIR2NativeModelPath(
-    "ml-inliner-ir2native-model", cl::Hidden,
-    cl::desc("Path to saved model evaluating native size from IR."));
-
-namespace {
-unsigned getMaxInstructionID() {
-#define LAST_OTHER_INST(NR) return NR;
-#include "llvm/IR/Instruction.def"
-}
-
-class IRToNativeSizeLearning {
-public:
-  enum class NamedFeatureIndex : size_t {
-    InitialSize,
-    Blocks,
-    Calls,
-    IsLocal,
-    IsLinkOnceODR,
-    IsLinkOnce,
-    Loops,
-    MaxLoopDepth,
-    MaxDomTreeLevel,
-
-    NumNamedFeatures
-  };
-  static const size_t NumNamedFeatures =
-      static_cast<size_t>(NamedFeatureIndex::NumNamedFeatures);
-  struct FunctionFeatures {
-    static const size_t FeatureCount;
-
-    std::array<int32_t, NumNamedFeatures> NamedFeatures = {0};
-    std::vector<int32_t> InstructionHistogram;
-    std::vector<int32_t> InstructionPairHistogram;
-
-    void fillTensor(int32_t *Ptr) const;
-    int32_t &operator[](NamedFeatureIndex Pos) {
-      return NamedFeatures[static_cast<size_t>(Pos)];
-    }
-  };
-  IRToNativeSizeLearning() = default;
-
-  static FunctionFeatures getFunctionFeatures(Function &F,
-                                              FunctionAnalysisManager &FAM);
-};
-
-// This is a point in time - we determined including these pairs of
-// consecutive instructions (in the IR layout available at inline time) as
-// features improves the model performance. We want to move away from manual
-// feature selection.
+//===- InlineSizeEstimatorAnalysis.cpp - IR to native size from ML model --===// 
+// 
+//                     The LLVM Compiler Infrastructure 
+// 
+// This file is distributed under the University of Illinois Open Source 
+// License. See LICENSE.TXT for details. 
+// 
+//===----------------------------------------------------------------------===// 
+// 
+// This implements feature and label extraction for offline supervised learning 
+// of a IR to native size model. 
+// 
+//===----------------------------------------------------------------------===// 
+#include "llvm/Analysis/InlineSizeEstimatorAnalysis.h" 
+ 
+#ifdef LLVM_HAVE_TF_API 
+#include "llvm/Analysis/Utils/TFUtils.h" 
+#endif 
+#include "llvm/Analysis/LoopInfo.h" 
+#include "llvm/Analysis/TargetLibraryInfo.h" 
+#include "llvm/Analysis/TargetTransformInfo.h" 
+#include "llvm/IR/BasicBlock.h" 
+#include "llvm/IR/Dominators.h" 
+#include "llvm/IR/Function.h" 
+#include "llvm/IR/Instructions.h" 
+#include "llvm/IR/PassManager.h" 
+#include "llvm/MC/MCAsmLayout.h" 
+#include "llvm/Support/Casting.h" 
+#include "llvm/Support/CommandLine.h" 
+#include "llvm/Support/raw_ostream.h" 
+ 
+#include <algorithm> 
+#include <deque> 
+ 
+using namespace llvm; 
+ 
+AnalysisKey InlineSizeEstimatorAnalysis::Key; 
+ 
+#define DEBUG_TYPE "inline-size-estimator" 
+ 
+#ifdef LLVM_HAVE_TF_API 
+cl::opt<std::string> TFIR2NativeModelPath( 
+    "ml-inliner-ir2native-model", cl::Hidden, 
+    cl::desc("Path to saved model evaluating native size from IR.")); 
+ 
+namespace { 
+unsigned getMaxInstructionID() { 
+#define LAST_OTHER_INST(NR) return NR; 
+#include "llvm/IR/Instruction.def" 
+} 
+ 
+class IRToNativeSizeLearning { 
+public: 
+  enum class NamedFeatureIndex : size_t { 
+    InitialSize, 
+    Blocks, 
+    Calls, 
+    IsLocal, 
+    IsLinkOnceODR, 
+    IsLinkOnce, 
+    Loops, 
+    MaxLoopDepth, 
+    MaxDomTreeLevel, 
+ 
+    NumNamedFeatures 
+  }; 
+  static const size_t NumNamedFeatures = 
+      static_cast<size_t>(NamedFeatureIndex::NumNamedFeatures); 
+  struct FunctionFeatures { 
+    static const size_t FeatureCount; 
+ 
+    std::array<int32_t, NumNamedFeatures> NamedFeatures = {0}; 
+    std::vector<int32_t> InstructionHistogram; 
+    std::vector<int32_t> InstructionPairHistogram; 
+ 
+    void fillTensor(int32_t *Ptr) const; 
+    int32_t &operator[](NamedFeatureIndex Pos) { 
+      return NamedFeatures[static_cast<size_t>(Pos)]; 
+    } 
+  }; 
+  IRToNativeSizeLearning() = default; 
+ 
+  static FunctionFeatures getFunctionFeatures(Function &F, 
+                                              FunctionAnalysisManager &FAM); 
+}; 
+ 
+// This is a point in time - we determined including these pairs of 
+// consecutive instructions (in the IR layout available at inline time) as 
+// features improves the model performance. We want to move away from manual 
+// feature selection. 
 // The array is given in opcode pairs rather than labels because 1) labels
 // weren't readily available, and 2) the successions were hand - extracted.
 //
@@ -114,164 +114,164 @@ static const std::array<std::pair<size_t, size_t>, 137>
          {56, 1},  {56, 2},  {56, 7},  {56, 13}, {56, 32}, {56, 33}, {56, 34},
          {56, 49}, {56, 53}, {56, 56}, {56, 64}, {57, 34}, {57, 56}, {57, 57},
          {64, 1},  {64, 64}, {65, 1},  {65, 65}}};
-
-// We have: 9 calculated features (the features here); 1 feature for each
-// instruction opcode; and 1 feature for each manually-identified sequence.
-// For the latter 2, we build a histogram: we count the number of
-// occurrences of each instruction opcode or succession of instructions,
-// respectively.
-// Note that instruction opcodes start from 1. For convenience, we also have an
-// always 0 feature for the '0' opcode, hence the extra 1.
-const size_t IRToNativeSizeLearning::FunctionFeatures::FeatureCount =
+ 
+// We have: 9 calculated features (the features here); 1 feature for each 
+// instruction opcode; and 1 feature for each manually-identified sequence. 
+// For the latter 2, we build a histogram: we count the number of 
+// occurrences of each instruction opcode or succession of instructions, 
+// respectively. 
+// Note that instruction opcodes start from 1. For convenience, we also have an 
+// always 0 feature for the '0' opcode, hence the extra 1. 
+const size_t IRToNativeSizeLearning::FunctionFeatures::FeatureCount = 
     ImportantInstructionSuccessions.size() + getMaxInstructionID() + 1 +
     IRToNativeSizeLearning::NumNamedFeatures;
-
-size_t getSize(Function &F, TargetTransformInfo &TTI) {
-  size_t Ret = 0;
+ 
+size_t getSize(Function &F, TargetTransformInfo &TTI) { 
+  size_t Ret = 0; 
   for (const auto &BB : F)
     for (const auto &I : BB)
       Ret += *(TTI.getInstructionCost(
           &I, TargetTransformInfo::TargetCostKind::TCK_CodeSize).getValue());
-  return Ret;
-}
-
-size_t getSize(Function &F, FunctionAnalysisManager &FAM) {
-  auto &TTI = FAM.getResult<TargetIRAnalysis>(F);
-  return getSize(F, TTI);
-}
-
-unsigned getMaxDominatorTreeDepth(const Function &F,
-                                  const DominatorTree &Tree) {
-  unsigned Ret = 0;
+  return Ret; 
+} 
+ 
+size_t getSize(Function &F, FunctionAnalysisManager &FAM) { 
+  auto &TTI = FAM.getResult<TargetIRAnalysis>(F); 
+  return getSize(F, TTI); 
+} 
+ 
+unsigned getMaxDominatorTreeDepth(const Function &F, 
+                                  const DominatorTree &Tree) { 
+  unsigned Ret = 0; 
   for (const auto &BB : F)
     if (const auto *TN = Tree.getNode(&BB))
-      Ret = std::max(Ret, TN->getLevel());
-  return Ret;
-}
-} // namespace
-
-IRToNativeSizeLearning::FunctionFeatures
-IRToNativeSizeLearning::getFunctionFeatures(Function &F,
-                                            FunctionAnalysisManager &FAM) {
+      Ret = std::max(Ret, TN->getLevel()); 
+  return Ret; 
+} 
+} // namespace 
+ 
+IRToNativeSizeLearning::FunctionFeatures 
+IRToNativeSizeLearning::getFunctionFeatures(Function &F, 
+                                            FunctionAnalysisManager &FAM) { 
   assert(llvm::is_sorted(ImportantInstructionSuccessions) &&
          "expected function features are sorted");
-
-  auto &DomTree = FAM.getResult<DominatorTreeAnalysis>(F);
-  FunctionFeatures FF;
-  size_t InstrCount = getMaxInstructionID() + 1;
-  FF.InstructionHistogram.resize(InstrCount);
-
+ 
+  auto &DomTree = FAM.getResult<DominatorTreeAnalysis>(F); 
+  FunctionFeatures FF; 
+  size_t InstrCount = getMaxInstructionID() + 1; 
+  FF.InstructionHistogram.resize(InstrCount); 
+ 
   FF.InstructionPairHistogram.resize(ImportantInstructionSuccessions.size());
-
+ 
   int StartID = 0;
   int LastID = StartID;
-  auto getPairIndex = [](size_t a, size_t b) {
+  auto getPairIndex = [](size_t a, size_t b) { 
     auto I = llvm::find(ImportantInstructionSuccessions, std::make_pair(a, b));
     if (I == ImportantInstructionSuccessions.end())
-      return -1;
+      return -1; 
     return static_cast<int>(
         std::distance(ImportantInstructionSuccessions.begin(), I));
-  };
-
-  // We don't want debug calls, because they'd just add noise.
+  }; 
+ 
+  // We don't want debug calls, because they'd just add noise. 
   for (const auto &BB : F) {
     for (const auto &I : BB.instructionsWithoutDebug()) {
       auto ID = I.getOpcode();
-
-      ++FF.InstructionHistogram[ID];
-      int PairIndex = getPairIndex(LastID, ID);
-      if (PairIndex >= 0)
-        ++FF.InstructionPairHistogram[PairIndex];
-      LastID = ID;
+ 
+      ++FF.InstructionHistogram[ID]; 
+      int PairIndex = getPairIndex(LastID, ID); 
+      if (PairIndex >= 0) 
+        ++FF.InstructionPairHistogram[PairIndex]; 
+      LastID = ID; 
       if (isa<CallBase>(I))
-        ++FF[NamedFeatureIndex::Calls];
-    }
-  }
-
-  FF[NamedFeatureIndex::InitialSize] = getSize(F, FAM);
-  FF[NamedFeatureIndex::IsLocal] = F.hasLocalLinkage();
-  FF[NamedFeatureIndex::IsLinkOnceODR] = F.hasLinkOnceODRLinkage();
-  FF[NamedFeatureIndex::IsLinkOnce] = F.hasLinkOnceLinkage();
-  FF[NamedFeatureIndex::Blocks] =
-      std::distance(F.getBasicBlockList().begin(), F.getBasicBlockList().end());
-  auto &LI = FAM.getResult<LoopAnalysis>(F);
-  FF[NamedFeatureIndex::Loops] = std::distance(LI.begin(), LI.end());
-  for (auto &L : LI)
-    FF[NamedFeatureIndex::MaxLoopDepth] =
-        std::max(FF[NamedFeatureIndex::MaxLoopDepth],
-                 static_cast<int32_t>(L->getLoopDepth()));
-  FF[NamedFeatureIndex::MaxDomTreeLevel] = getMaxDominatorTreeDepth(F, DomTree);
-  return FF;
-}
-
-void IRToNativeSizeLearning::FunctionFeatures::fillTensor(int32_t *Ptr) const {
-  std::copy(NamedFeatures.begin(), NamedFeatures.end(), Ptr);
-  Ptr += NamedFeatures.size();
-  std::copy(InstructionHistogram.begin(), InstructionHistogram.end(), Ptr);
-  Ptr += InstructionHistogram.size();
-  std::copy(InstructionPairHistogram.begin(), InstructionPairHistogram.end(),
-            Ptr);
-}
-
-bool InlineSizeEstimatorAnalysis::isEvaluatorRequested() {
-  return !TFIR2NativeModelPath.empty();
-}
-
-InlineSizeEstimatorAnalysis::InlineSizeEstimatorAnalysis() {
-  if (!isEvaluatorRequested()) {
-    return;
-  }
+        ++FF[NamedFeatureIndex::Calls]; 
+    } 
+  } 
+ 
+  FF[NamedFeatureIndex::InitialSize] = getSize(F, FAM); 
+  FF[NamedFeatureIndex::IsLocal] = F.hasLocalLinkage(); 
+  FF[NamedFeatureIndex::IsLinkOnceODR] = F.hasLinkOnceODRLinkage(); 
+  FF[NamedFeatureIndex::IsLinkOnce] = F.hasLinkOnceLinkage(); 
+  FF[NamedFeatureIndex::Blocks] = 
+      std::distance(F.getBasicBlockList().begin(), F.getBasicBlockList().end()); 
+  auto &LI = FAM.getResult<LoopAnalysis>(F); 
+  FF[NamedFeatureIndex::Loops] = std::distance(LI.begin(), LI.end()); 
+  for (auto &L : LI) 
+    FF[NamedFeatureIndex::MaxLoopDepth] = 
+        std::max(FF[NamedFeatureIndex::MaxLoopDepth], 
+                 static_cast<int32_t>(L->getLoopDepth())); 
+  FF[NamedFeatureIndex::MaxDomTreeLevel] = getMaxDominatorTreeDepth(F, DomTree); 
+  return FF; 
+} 
+ 
+void IRToNativeSizeLearning::FunctionFeatures::fillTensor(int32_t *Ptr) const { 
+  std::copy(NamedFeatures.begin(), NamedFeatures.end(), Ptr); 
+  Ptr += NamedFeatures.size(); 
+  std::copy(InstructionHistogram.begin(), InstructionHistogram.end(), Ptr); 
+  Ptr += InstructionHistogram.size(); 
+  std::copy(InstructionPairHistogram.begin(), InstructionPairHistogram.end(), 
+            Ptr); 
+} 
+ 
+bool InlineSizeEstimatorAnalysis::isEvaluatorRequested() { 
+  return !TFIR2NativeModelPath.empty(); 
+} 
+ 
+InlineSizeEstimatorAnalysis::InlineSizeEstimatorAnalysis() { 
+  if (!isEvaluatorRequested()) { 
+    return; 
+  } 
   std::vector<TensorSpec> InputSpecs{TensorSpec::createSpec<int32_t>(
       "serving_default_input_1",
       {1, static_cast<int64_t>(
               IRToNativeSizeLearning::FunctionFeatures::FeatureCount)})};
   std::vector<TensorSpec> OutputSpecs{
       TensorSpec::createSpec<float>("StatefulPartitionedCall", {1})};
-  Evaluator = std::make_unique<TFModelEvaluator>(
+  Evaluator = std::make_unique<TFModelEvaluator>( 
       TFIR2NativeModelPath.getValue().c_str(), InputSpecs, OutputSpecs);
-  if (!Evaluator || !Evaluator->isValid()) {
-    Evaluator.reset();
-    return;
-  }
-}
-
-InlineSizeEstimatorAnalysis::Result
-InlineSizeEstimatorAnalysis::run(const Function &F,
-                                 FunctionAnalysisManager &FAM) {
-  if (!Evaluator)
-    return None;
-  auto Features = IRToNativeSizeLearning::getFunctionFeatures(
-      const_cast<Function &>(F), FAM);
-  int32_t *V = Evaluator->getInput<int32_t>(0);
-  Features.fillTensor(V);
-  auto ER = Evaluator->evaluate();
-  if (!ER)
-    return None;
-  float Ret = *ER->getTensorValue<float>(0);
-  if (Ret < 0.0)
-    Ret = 0.0;
-  return static_cast<size_t>(Ret);
-}
-
-InlineSizeEstimatorAnalysis::~InlineSizeEstimatorAnalysis() {}
-InlineSizeEstimatorAnalysis::InlineSizeEstimatorAnalysis(
-    InlineSizeEstimatorAnalysis &&Other)
-    : Evaluator(std::move(Other.Evaluator)) {}
-
-#else
-namespace llvm {
-class TFModelEvaluator {};
-} // namespace llvm
-InlineSizeEstimatorAnalysis::InlineSizeEstimatorAnalysis() {}
-InlineSizeEstimatorAnalysis ::InlineSizeEstimatorAnalysis(
-    InlineSizeEstimatorAnalysis &&) {}
-InlineSizeEstimatorAnalysis::~InlineSizeEstimatorAnalysis() {}
-InlineSizeEstimatorAnalysis::Result
-InlineSizeEstimatorAnalysis::run(const Function &F,
-                                 FunctionAnalysisManager &FAM) {
-  return None;
-}
-bool InlineSizeEstimatorAnalysis::isEvaluatorRequested() { return false; }
+  if (!Evaluator || !Evaluator->isValid()) { 
+    Evaluator.reset(); 
+    return; 
+  } 
+} 
+ 
+InlineSizeEstimatorAnalysis::Result 
+InlineSizeEstimatorAnalysis::run(const Function &F, 
+                                 FunctionAnalysisManager &FAM) { 
+  if (!Evaluator) 
+    return None; 
+  auto Features = IRToNativeSizeLearning::getFunctionFeatures( 
+      const_cast<Function &>(F), FAM); 
+  int32_t *V = Evaluator->getInput<int32_t>(0); 
+  Features.fillTensor(V); 
+  auto ER = Evaluator->evaluate(); 
+  if (!ER) 
+    return None; 
+  float Ret = *ER->getTensorValue<float>(0); 
+  if (Ret < 0.0) 
+    Ret = 0.0; 
+  return static_cast<size_t>(Ret); 
+} 
+ 
+InlineSizeEstimatorAnalysis::~InlineSizeEstimatorAnalysis() {} 
+InlineSizeEstimatorAnalysis::InlineSizeEstimatorAnalysis( 
+    InlineSizeEstimatorAnalysis &&Other) 
+    : Evaluator(std::move(Other.Evaluator)) {} 
+ 
+#else 
+namespace llvm { 
+class TFModelEvaluator {}; 
+} // namespace llvm 
+InlineSizeEstimatorAnalysis::InlineSizeEstimatorAnalysis() {} 
+InlineSizeEstimatorAnalysis ::InlineSizeEstimatorAnalysis( 
+    InlineSizeEstimatorAnalysis &&) {} 
+InlineSizeEstimatorAnalysis::~InlineSizeEstimatorAnalysis() {} 
+InlineSizeEstimatorAnalysis::Result 
+InlineSizeEstimatorAnalysis::run(const Function &F, 
+                                 FunctionAnalysisManager &FAM) { 
+  return None; 
+} 
+bool InlineSizeEstimatorAnalysis::isEvaluatorRequested() { return false; } 
 #endif
 
 PreservedAnalyses

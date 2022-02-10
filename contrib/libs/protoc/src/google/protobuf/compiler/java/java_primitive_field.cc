@@ -113,7 +113,7 @@ void SetPrimitiveVariables(const FieldDescriptor* descriptor,
           : ("= " + ImmutableDefaultValue(descriptor, name_resolver));
   (*variables)["capitalized_type"] =
       GetCapitalizedType(descriptor, /* immutable = */ true);
-  (*variables)["tag"] =
+  (*variables)["tag"] = 
       StrCat(static_cast<int32_t>(WireFormat::MakeTag(descriptor)));
   (*variables)["tag_size"] = StrCat(
       WireFormat::TagSize(descriptor->number(), GetType(descriptor)));
@@ -232,7 +232,7 @@ void ImmutablePrimitiveFieldGenerator::GenerateMembers(
         "$deprecation$public boolean ${$has$capitalized_name$$}$() {\n"
         "  return $get_has_field_bit_message$;\n"
         "}\n");
-    printer->Annotate("{", "}", descriptor_);
+    printer->Annotate("{", "}", descriptor_); 
   }
 
   WriteFieldAccessorDocComment(printer, descriptor_, GETTER);
@@ -241,7 +241,7 @@ void ImmutablePrimitiveFieldGenerator::GenerateMembers(
                  "$deprecation$public $type$ ${$get$capitalized_name$$}$() {\n"
                  "  return $name$_;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 }
 
 void ImmutablePrimitiveFieldGenerator::GenerateBuilderMembers(
@@ -256,7 +256,7 @@ void ImmutablePrimitiveFieldGenerator::GenerateBuilderMembers(
         "$deprecation$public boolean ${$has$capitalized_name$$}$() {\n"
         "  return $get_has_field_bit_builder$;\n"
         "}\n");
-    printer->Annotate("{", "}", descriptor_);
+    printer->Annotate("{", "}", descriptor_); 
   }
 
   WriteFieldAccessorDocComment(printer, descriptor_, GETTER);
@@ -265,7 +265,7 @@ void ImmutablePrimitiveFieldGenerator::GenerateBuilderMembers(
                  "$deprecation$public $type$ ${$get$capitalized_name$$}$() {\n"
                  "  return $name$_;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   WriteFieldAccessorDocComment(printer, descriptor_, SETTER,
                                /* builder */ true);
@@ -278,7 +278,7 @@ void ImmutablePrimitiveFieldGenerator::GenerateBuilderMembers(
                  "  $on_changed$\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   WriteFieldAccessorDocComment(printer, descriptor_, CLEARER,
                                /* builder */ true);
@@ -286,7 +286,7 @@ void ImmutablePrimitiveFieldGenerator::GenerateBuilderMembers(
       variables_,
       "$deprecation$public Builder ${$clear$capitalized_name$$}$() {\n"
       "  $clear_has_field_bit_builder$\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   JavaType type = GetJavaType(descriptor_);
   if (type == JAVATYPE_STRING || type == JAVATYPE_BYTES) {
     // The default value is not a simple literal so we want to avoid executing
@@ -549,7 +549,7 @@ void ImmutablePrimitiveOneofFieldGenerator::GenerateMembers(
                  "  }\n"
                  "  return $default$;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 }
 
 void ImmutablePrimitiveOneofFieldGenerator::GenerateBuilderMembers(
@@ -560,7 +560,7 @@ void ImmutablePrimitiveOneofFieldGenerator::GenerateBuilderMembers(
                  "$deprecation$public boolean ${$has$capitalized_name$$}$() {\n"
                  "  return $has_oneof_case_message$;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   WriteFieldAccessorDocComment(printer, descriptor_, GETTER);
   printer->Print(variables_,
@@ -570,7 +570,7 @@ void ImmutablePrimitiveOneofFieldGenerator::GenerateBuilderMembers(
                  "  }\n"
                  "  return $default$;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   WriteFieldAccessorDocComment(printer, descriptor_, SETTER,
                                /* builder */ true);
@@ -583,7 +583,7 @@ void ImmutablePrimitiveOneofFieldGenerator::GenerateBuilderMembers(
                  "  $on_changed$\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   WriteFieldAccessorDocComment(printer, descriptor_, CLEARER,
                                /* builder */ true);
@@ -626,15 +626,15 @@ void ImmutablePrimitiveOneofFieldGenerator::GenerateSerializationCode(
   printer->Print(variables_,
                  "if ($has_oneof_case_message$) {\n"
                  "  output.write$capitalized_type$(\n");
-  // $type$ and $boxed_type$ is the same for bytes fields so we don't need to
-  // do redundant casts.
-  if (GetJavaType(descriptor_) == JAVATYPE_BYTES) {
+  // $type$ and $boxed_type$ is the same for bytes fields so we don't need to 
+  // do redundant casts. 
+  if (GetJavaType(descriptor_) == JAVATYPE_BYTES) { 
     printer->Print(variables_, "      $number$, ($type$) $oneof_name$_);\n");
-  } else {
+  } else { 
     printer->Print(
         variables_,
         "      $number$, ($type$)(($boxed_type$) $oneof_name$_));\n");
-  }
+  } 
   printer->Print("}\n");
 }
 
@@ -644,15 +644,15 @@ void ImmutablePrimitiveOneofFieldGenerator::GenerateSerializedSizeCode(
                  "if ($has_oneof_case_message$) {\n"
                  "  size += com.google.protobuf.CodedOutputStream\n"
                  "    .compute$capitalized_type$Size(\n");
-  // $type$ and $boxed_type$ is the same for bytes fields so we don't need to
-  // do redundant casts.
-  if (GetJavaType(descriptor_) == JAVATYPE_BYTES) {
+  // $type$ and $boxed_type$ is the same for bytes fields so we don't need to 
+  // do redundant casts. 
+  if (GetJavaType(descriptor_) == JAVATYPE_BYTES) { 
     printer->Print(variables_, "        $number$, ($type$) $oneof_name$_);\n");
-  } else {
+  } else { 
     printer->Print(
         variables_,
         "        $number$, ($type$)(($boxed_type$) $oneof_name$_));\n");
-  }
+  } 
   printer->Print("}\n");
 }
 
@@ -705,21 +705,21 @@ void RepeatedImmutablePrimitiveFieldGenerator::GenerateMembers(
                  "    ${$get$capitalized_name$List$}$() {\n"
                  "  return $name$_;\n"  // note:  unmodifiable list
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_COUNT);
   printer->Print(
       variables_,
       "$deprecation$public int ${$get$capitalized_name$Count$}$() {\n"
       "  return $name$_.size();\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_INDEXED_GETTER);
   printer->Print(
       variables_,
       "$deprecation$public $type$ ${$get$capitalized_name$$}$(int index) {\n"
       "  return $repeated_get$(index);\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 
   if (descriptor_->is_packed()) {
     printer->Print(variables_,
@@ -761,21 +761,21 @@ void RepeatedImmutablePrimitiveFieldGenerator::GenerateBuilderMembers(
       "  return $get_mutable_bit_builder$ ?\n"
       "           java.util.Collections.unmodifiableList($name$_) : $name$_;\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_COUNT);
   printer->Print(
       variables_,
       "$deprecation$public int ${$get$capitalized_name$Count$}$() {\n"
       "  return $name$_.size();\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_INDEXED_GETTER);
   printer->Print(
       variables_,
       "$deprecation$public $type$ ${$get$capitalized_name$$}$(int index) {\n"
       "  return $repeated_get$(index);\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_INDEXED_SETTER,
                                /* builder */ true);
   printer->Print(variables_,
@@ -787,7 +787,7 @@ void RepeatedImmutablePrimitiveFieldGenerator::GenerateBuilderMembers(
                  "  $on_changed$\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_ADDER,
                                /* builder */ true);
   printer->Print(variables_,
@@ -799,7 +799,7 @@ void RepeatedImmutablePrimitiveFieldGenerator::GenerateBuilderMembers(
                  "  $on_changed$\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, LIST_MULTI_ADDER,
                                /* builder */ true);
   printer->Print(variables_,
@@ -811,7 +811,7 @@ void RepeatedImmutablePrimitiveFieldGenerator::GenerateBuilderMembers(
                  "  $on_changed$\n"
                  "  return this;\n"
                  "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
   WriteFieldAccessorDocComment(printer, descriptor_, CLEARER,
                                /* builder */ true);
   printer->Print(
@@ -822,7 +822,7 @@ void RepeatedImmutablePrimitiveFieldGenerator::GenerateBuilderMembers(
       "  $on_changed$\n"
       "  return this;\n"
       "}\n");
-  printer->Annotate("{", "}", descriptor_);
+  printer->Annotate("{", "}", descriptor_); 
 }
 
 void RepeatedImmutablePrimitiveFieldGenerator::GenerateKotlinDslMembers(

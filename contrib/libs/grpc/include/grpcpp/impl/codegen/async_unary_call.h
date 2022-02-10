@@ -1,45 +1,45 @@
-/*
- *
- * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
-#ifndef GRPCPP_IMPL_CODEGEN_ASYNC_UNARY_CALL_H
-#define GRPCPP_IMPL_CODEGEN_ASYNC_UNARY_CALL_H
-
+/* 
+ * 
+ * Copyright 2015 gRPC authors. 
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ * 
+ */ 
+ 
+#ifndef GRPCPP_IMPL_CODEGEN_ASYNC_UNARY_CALL_H 
+#define GRPCPP_IMPL_CODEGEN_ASYNC_UNARY_CALL_H 
+ 
 #include <grpcpp/impl/codegen/call.h>
 #include <grpcpp/impl/codegen/channel_interface.h>
 #include <grpcpp/impl/codegen/client_context.h>
 #include <grpcpp/impl/codegen/server_context.h>
 #include <grpcpp/impl/codegen/service_type.h>
 #include <grpcpp/impl/codegen/status.h>
-
-namespace grpc {
-
+ 
+namespace grpc { 
+ 
 /// An interface relevant for async client side unary RPCs (which send
 /// one request message to a server and receive one response message).
 template <class R>
 class ClientAsyncResponseReaderInterface {
  public:
   virtual ~ClientAsyncResponseReaderInterface() {}
-
+ 
   /// Start the call that was set up by the constructor, but only if the
   /// constructor was invoked through the "Prepare" API which doesn't actually
   /// start the call
   virtual void StartCall() = 0;
-
+ 
   /// Request notification of the reading of initial metadata. Completion
   /// will be notified by \a tag on the associated completion queue.
   /// This call is optional, but if it is used, it cannot be used concurrently
@@ -47,7 +47,7 @@ class ClientAsyncResponseReaderInterface {
   ///
   /// \param[in] tag Tag identifying this request.
   virtual void ReadInitialMetadata(void* tag) = 0;
-
+ 
   /// Request to receive the server's response \a msg and final \a status for
   /// the call, and to notify \a tag on this call's completion queue when
   /// finished.
@@ -65,7 +65,7 @@ class ClientAsyncResponseReaderInterface {
   virtual void Finish(R* msg, ::grpc::Status* status, void* tag) = 0;
 };
 
-namespace internal {
+namespace internal { 
 template <class R>
 class ClientAsyncResponseReaderFactory {
  public:
@@ -87,10 +87,10 @@ class ClientAsyncResponseReaderFactory {
   }
 };
 }  // namespace internal
-
+ 
 /// Async API for client-side unary RPCs, where the message response
 /// received from the server is of type \a R.
-template <class R>
+template <class R> 
 class ClientAsyncResponseReader final
     : public ClientAsyncResponseReaderInterface<R> {
  public:
@@ -98,14 +98,14 @@ class ClientAsyncResponseReader final
   static void operator delete(void* /*ptr*/, std::size_t size) {
     GPR_CODEGEN_ASSERT(size == sizeof(ClientAsyncResponseReader));
   }
-
+ 
   // This operator should never be called as the memory should be freed as part
   // of the arena destruction. It only exists to provide a matching operator
   // delete to the operator new so that some compilers will not complain (see
   // https://github.com/grpc/grpc/issues/11301) Note at the time of adding this
   // there are no tests catching the compiler warning.
   static void operator delete(void*, void*) { GPR_CODEGEN_ASSERT(false); }
-
+ 
   void StartCall() override {
     GPR_CODEGEN_ASSERT(!started_);
     started_ = true;
@@ -296,8 +296,8 @@ class ServerAsyncResponseWriter final
       finish_buf_;
 };
 
-}  // namespace grpc
-
+}  // namespace grpc 
+ 
 namespace std {
 template <class R>
 class default_delete<::grpc::ClientAsyncResponseReader<R>> {
@@ -311,4 +311,4 @@ class default_delete<::grpc::ClientAsyncResponseReaderInterface<R>> {
 };
 }  // namespace std
 
-#endif  // GRPCPP_IMPL_CODEGEN_ASYNC_UNARY_CALL_H
+#endif  // GRPCPP_IMPL_CODEGEN_ASYNC_UNARY_CALL_H 

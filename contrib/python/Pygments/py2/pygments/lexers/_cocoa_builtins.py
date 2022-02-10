@@ -8,7 +8,7 @@
 
     File may be also used as standalone generator for aboves.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -40,25 +40,25 @@ if __name__ == '__main__':  # pragma: no cover
                 continue
 
             headerFilePath = frameworkHeadersDir + f
-            with open(headerFilePath) as f:
-                content = f.read()
-            res = re.findall(r'(?<=@interface )\w+', content)
+            with open(headerFilePath) as f: 
+                content = f.read() 
+            res = re.findall(r'(?<=@interface )\w+', content) 
             for r in res:
                 all_interfaces.add(r)
 
-            res = re.findall(r'(?<=@protocol )\w+', content)
+            res = re.findall(r'(?<=@protocol )\w+', content) 
             for r in res:
                 all_protocols.add(r)
 
-            res = re.findall(r'(?<=typedef enum )\w+', content)
+            res = re.findall(r'(?<=typedef enum )\w+', content) 
             for r in res:
                 all_primitives.add(r)
 
-            res = re.findall(r'(?<=typedef struct )\w+', content)
+            res = re.findall(r'(?<=typedef struct )\w+', content) 
             for r in res:
                 all_primitives.add(r)
 
-            res = re.findall(r'(?<=typedef const struct )\w+', content)
+            res = re.findall(r'(?<=typedef const struct )\w+', content) 
             for r in res:
                 all_primitives.add(r)
 

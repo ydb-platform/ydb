@@ -13,7 +13,7 @@ from io import TextIOWrapper
 
 
 split_path_re = re.compile(r'[/\\ ]')
-doctype_lookup_re = re.compile(r'''
+doctype_lookup_re = re.compile(r''' 
     <!DOCTYPE\s+(
      [a-zA-Z_][a-zA-Z0-9]*
      (?: \s+      # optional in HTML5
@@ -21,9 +21,9 @@ doctype_lookup_re = re.compile(r'''
      "[^"]*")?
      )
      [^>]*>
-''', re.DOTALL | re.MULTILINE | re.VERBOSE)
-tag_re = re.compile(r'<(.+?)(\s.*?)?>.*?</.+?>',
-                    re.UNICODE | re.IGNORECASE | re.DOTALL | re.MULTILINE)
+''', re.DOTALL | re.MULTILINE | re.VERBOSE) 
+tag_re = re.compile(r'<(.+?)(\s.*?)?>.*?</.+?>', 
+                    re.UNICODE | re.IGNORECASE | re.DOTALL | re.MULTILINE) 
 xml_decl_re = re.compile(r'\s*<\?xml[^>]*\?>', re.I)
 
 

@@ -34,7 +34,7 @@
 #include <cstring>
 #include <iterator>
 #include <memory>
-#include <util/generic/string.h>
+#include <util/generic/string.h> 
 #include <type_traits>
 #include <utility>
 
@@ -43,7 +43,7 @@
 #include "y_absl/strings/str_cat.h"
 
 namespace y_absl {
-ABSL_NAMESPACE_BEGIN
+ABSL_NAMESPACE_BEGIN 
 namespace strings_internal {
 
 //
@@ -308,7 +308,7 @@ TString JoinRange(const Range& range, y_absl::string_view separator) {
 }
 
 }  // namespace strings_internal
-ABSL_NAMESPACE_END
+ABSL_NAMESPACE_END 
 }  // namespace y_absl
 
 #endif  // ABSL_STRINGS_INTERNAL_STR_JOIN_INTERNAL_H_

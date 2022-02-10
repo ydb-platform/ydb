@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #include <aws/s3/model/ObjectLockConfiguration.h>
 #include <aws/core/utils/xml/XmlSerializer.h>
@@ -44,7 +44,7 @@ ObjectLockConfiguration& ObjectLockConfiguration::operator =(const XmlNode& xmlN
     XmlNode objectLockEnabledNode = resultNode.FirstChild("ObjectLockEnabled");
     if(!objectLockEnabledNode.IsNull())
     {
-      m_objectLockEnabled = ObjectLockEnabledMapper::GetObjectLockEnabledForName(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(objectLockEnabledNode.GetText()).c_str()).c_str());
+      m_objectLockEnabled = ObjectLockEnabledMapper::GetObjectLockEnabledForName(StringUtils::Trim(Aws::Utils::Xml::DecodeEscapedXmlText(objectLockEnabledNode.GetText()).c_str()).c_str()); 
       m_objectLockEnabledHasBeenSet = true;
     }
     XmlNode ruleNode = resultNode.FirstChild("Rule");

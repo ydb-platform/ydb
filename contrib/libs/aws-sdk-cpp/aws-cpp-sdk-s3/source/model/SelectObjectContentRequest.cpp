@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #include <aws/s3/model/SelectObjectContentRequest.h>
 #include <aws/core/utils/xml/XmlSerializer.h>
@@ -28,8 +28,8 @@ SelectObjectContentRequest::SelectObjectContentRequest() :
     m_requestProgressHasBeenSet(false),
     m_inputSerializationHasBeenSet(false),
     m_outputSerializationHasBeenSet(false),
-    m_scanRangeHasBeenSet(false),
-    m_expectedBucketOwnerHasBeenSet(false),
+    m_scanRangeHasBeenSet(false), 
+    m_expectedBucketOwnerHasBeenSet(false), 
     m_customizedAccessLogTagHasBeenSet(false),
     m_decoder(Aws::Utils::Event::EventStreamDecoder(&m_handler))
 {
@@ -73,12 +73,12 @@ Aws::String SelectObjectContentRequest::SerializePayload() const
    m_outputSerialization.AddToNode(outputSerializationNode);
   }
 
-  if(m_scanRangeHasBeenSet)
-  {
-   XmlNode scanRangeNode = parentNode.CreateChildElement("ScanRange");
-   m_scanRange.AddToNode(scanRangeNode);
-  }
-
+  if(m_scanRangeHasBeenSet) 
+  { 
+   XmlNode scanRangeNode = parentNode.CreateChildElement("ScanRange"); 
+   m_scanRange.AddToNode(scanRangeNode); 
+  } 
+ 
   return payloadDoc.ConvertToString();
 }
 
@@ -129,12 +129,12 @@ Aws::Http::HeaderValueCollection SelectObjectContentRequest::GetRequestSpecificH
     ss.str("");
   }
 
-  if(m_expectedBucketOwnerHasBeenSet)
-  {
-    ss << m_expectedBucketOwner;
-    headers.emplace("x-amz-expected-bucket-owner",  ss.str());
-    ss.str("");
-  }
-
+  if(m_expectedBucketOwnerHasBeenSet) 
+  { 
+    ss << m_expectedBucketOwner; 
+    headers.emplace("x-amz-expected-bucket-owner",  ss.str()); 
+    ss.str(""); 
+  } 
+ 
   return headers;
 }

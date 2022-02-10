@@ -368,8 +368,8 @@ static int afalg_create_sk(afalg_ctx *actx, const char *ciphertype,
 
     memset(&sa, 0, sizeof(sa));
     sa.salg_family = AF_ALG;
-    OPENSSL_strlcpy((char *) sa.salg_type, ciphertype, sizeof(sa.salg_type));
-    OPENSSL_strlcpy((char *) sa.salg_name, ciphername, sizeof(sa.salg_name));
+    OPENSSL_strlcpy((char *) sa.salg_type, ciphertype, sizeof(sa.salg_type)); 
+    OPENSSL_strlcpy((char *) sa.salg_name, ciphername, sizeof(sa.salg_name)); 
 
     actx->bfd = socket(AF_ALG, SOCK_SEQPACKET, 0);
     if (actx->bfd == -1) {
@@ -497,7 +497,7 @@ static int afalg_cipher_init(EVP_CIPHER_CTX *ctx, const unsigned char *key,
     int ciphertype;
     int ret;
     afalg_ctx *actx;
-    const char *ciphername;
+    const char *ciphername; 
 
     if (ctx == NULL || key == NULL) {
         ALG_WARN("%s(%d): Null Parameter\n", __FILE__, __LINE__);
@@ -520,7 +520,7 @@ static int afalg_cipher_init(EVP_CIPHER_CTX *ctx, const unsigned char *key,
     case NID_aes_128_cbc:
     case NID_aes_192_cbc:
     case NID_aes_256_cbc:
-        ciphername = "cbc(aes)";
+        ciphername = "cbc(aes)"; 
         break;
     default:
         ALG_WARN("%s(%d): Unsupported Cipher type %d\n", __FILE__, __LINE__,

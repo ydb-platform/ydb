@@ -5,18 +5,18 @@ LIBRARY()
 WITHOUT_LICENSE_TEXTS()
 
 OWNER(g:cpp-contrib)
-
+ 
 LICENSE(Apache-2.0)
 
 PEERDIR(
-    certs
-    contrib/libs/c-ares
-    contrib/libs/grpc/src/core/lib
-    contrib/libs/grpc/third_party/address_sorting
-    contrib/libs/grpc/third_party/upb
-    contrib/libs/openssl
+    certs 
+    contrib/libs/c-ares 
+    contrib/libs/grpc/src/core/lib 
+    contrib/libs/grpc/third_party/address_sorting 
+    contrib/libs/grpc/third_party/upb 
+    contrib/libs/openssl 
     contrib/libs/re2
-    contrib/libs/zlib
+    contrib/libs/zlib 
     contrib/restricted/abseil-cpp-tstring/y_absl/hash
     contrib/restricted/abseil-cpp-tstring/y_absl/meta
     contrib/restricted/abseil-cpp-tstring/y_absl/status
@@ -24,137 +24,137 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/strings/cord
     contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format
     contrib/restricted/abseil-cpp-tstring/y_absl/time
-    library/cpp/resource
+    library/cpp/resource 
 )
 
-ADDINCL(
-    GLOBAL contrib/libs/grpc/include
-    contrib/libs/c-ares
+ADDINCL( 
+    GLOBAL contrib/libs/grpc/include 
+    contrib/libs/c-ares 
     ${ARCADIA_BUILD_ROOT}/contrib/libs/grpc
-    contrib/libs/grpc
-    contrib/libs/grpc/src/core/ext/upb-generated
-    contrib/libs/grpc/third_party/address_sorting/include
-    contrib/libs/grpc/third_party/upb
+    contrib/libs/grpc 
+    contrib/libs/grpc/src/core/ext/upb-generated 
+    contrib/libs/grpc/third_party/address_sorting/include 
+    contrib/libs/grpc/third_party/upb 
     contrib/libs/re2
-)
-
-NO_COMPILER_WARNINGS()
-
-SRCDIR(contrib/libs/grpc/src/core)
-
-IF (OS_LINUX OR OS_DARWIN)
+) 
+ 
+NO_COMPILER_WARNINGS() 
+ 
+SRCDIR(contrib/libs/grpc/src/core) 
+ 
+IF (OS_LINUX OR OS_DARWIN) 
     CFLAGS(
         -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1
     )
-ENDIF()
-
-SRCS(
-    ext/filters/census/grpc_context.cc
-    ext/filters/client_channel/backend_metric.cc
-    ext/filters/client_channel/backup_poller.cc
-    ext/filters/client_channel/channel_connectivity.cc
-    ext/filters/client_channel/client_channel.cc
-    ext/filters/client_channel/client_channel_channelz.cc
-    ext/filters/client_channel/client_channel_factory.cc
-    ext/filters/client_channel/client_channel_plugin.cc
+ENDIF() 
+ 
+SRCS( 
+    ext/filters/census/grpc_context.cc 
+    ext/filters/client_channel/backend_metric.cc 
+    ext/filters/client_channel/backup_poller.cc 
+    ext/filters/client_channel/channel_connectivity.cc 
+    ext/filters/client_channel/client_channel.cc 
+    ext/filters/client_channel/client_channel_channelz.cc 
+    ext/filters/client_channel/client_channel_factory.cc 
+    ext/filters/client_channel/client_channel_plugin.cc 
     ext/filters/client_channel/config_selector.cc
-    ext/filters/client_channel/global_subchannel_pool.cc
-    ext/filters/client_channel/health/health_check_client.cc
-    ext/filters/client_channel/http_connect_handshaker.cc
-    ext/filters/client_channel/http_proxy.cc
-    ext/filters/client_channel/lb_policy.cc
+    ext/filters/client_channel/global_subchannel_pool.cc 
+    ext/filters/client_channel/health/health_check_client.cc 
+    ext/filters/client_channel/http_connect_handshaker.cc 
+    ext/filters/client_channel/http_proxy.cc 
+    ext/filters/client_channel/lb_policy.cc 
     ext/filters/client_channel/lb_policy/address_filtering.cc
     ext/filters/client_channel/lb_policy/child_policy_handler.cc
-    ext/filters/client_channel/lb_policy/grpclb/client_load_reporting_filter.cc
-    ext/filters/client_channel/lb_policy/grpclb/grpclb.cc
+    ext/filters/client_channel/lb_policy/grpclb/client_load_reporting_filter.cc 
+    ext/filters/client_channel/lb_policy/grpclb/grpclb.cc 
     ext/filters/client_channel/lb_policy/grpclb/grpclb_balancer_addresses.cc
-    ext/filters/client_channel/lb_policy/grpclb/grpclb_channel_secure.cc
-    ext/filters/client_channel/lb_policy/grpclb/grpclb_client_stats.cc
-    ext/filters/client_channel/lb_policy/grpclb/load_balancer_api.cc
-    ext/filters/client_channel/lb_policy/pick_first/pick_first.cc
+    ext/filters/client_channel/lb_policy/grpclb/grpclb_channel_secure.cc 
+    ext/filters/client_channel/lb_policy/grpclb/grpclb_client_stats.cc 
+    ext/filters/client_channel/lb_policy/grpclb/load_balancer_api.cc 
+    ext/filters/client_channel/lb_policy/pick_first/pick_first.cc 
     ext/filters/client_channel/lb_policy/priority/priority.cc
-    ext/filters/client_channel/lb_policy/round_robin/round_robin.cc
+    ext/filters/client_channel/lb_policy/round_robin/round_robin.cc 
     ext/filters/client_channel/lb_policy/weighted_target/weighted_target.cc
-    ext/filters/client_channel/lb_policy/xds/cds.cc
+    ext/filters/client_channel/lb_policy/xds/cds.cc 
     ext/filters/client_channel/lb_policy/xds/eds.cc
     ext/filters/client_channel/lb_policy/xds/eds_drop.cc
     ext/filters/client_channel/lb_policy/xds/xds_cluster_manager.cc
-    ext/filters/client_channel/lb_policy_registry.cc
-    ext/filters/client_channel/local_subchannel_pool.cc
-    ext/filters/client_channel/proxy_mapper_registry.cc
-    ext/filters/client_channel/resolver.cc
-    ext/filters/client_channel/resolver/dns/c_ares/dns_resolver_ares.cc
-    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver.cc
-    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_libuv.cc
-    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_posix.cc
-    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_windows.cc
-    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.cc
-    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_fallback.cc
-    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_libuv.cc
-    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_posix.cc
-    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_windows.cc
-    ext/filters/client_channel/resolver/dns/dns_resolver_selection.cc
-    ext/filters/client_channel/resolver/dns/native/dns_resolver.cc
-    ext/filters/client_channel/resolver/fake/fake_resolver.cc
-    ext/filters/client_channel/resolver/sockaddr/sockaddr_resolver.cc
-    ext/filters/client_channel/resolver/xds/xds_resolver.cc
-    ext/filters/client_channel/resolver_registry.cc
-    ext/filters/client_channel/resolver_result_parsing.cc
-    ext/filters/client_channel/resolving_lb_policy.cc
-    ext/filters/client_channel/retry_throttle.cc
-    ext/filters/client_channel/server_address.cc
-    ext/filters/client_channel/service_config.cc
+    ext/filters/client_channel/lb_policy_registry.cc 
+    ext/filters/client_channel/local_subchannel_pool.cc 
+    ext/filters/client_channel/proxy_mapper_registry.cc 
+    ext/filters/client_channel/resolver.cc 
+    ext/filters/client_channel/resolver/dns/c_ares/dns_resolver_ares.cc 
+    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver.cc 
+    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_libuv.cc 
+    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_posix.cc 
+    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_ev_driver_windows.cc 
+    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.cc 
+    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_fallback.cc 
+    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_libuv.cc 
+    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_posix.cc 
+    ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper_windows.cc 
+    ext/filters/client_channel/resolver/dns/dns_resolver_selection.cc 
+    ext/filters/client_channel/resolver/dns/native/dns_resolver.cc 
+    ext/filters/client_channel/resolver/fake/fake_resolver.cc 
+    ext/filters/client_channel/resolver/sockaddr/sockaddr_resolver.cc 
+    ext/filters/client_channel/resolver/xds/xds_resolver.cc 
+    ext/filters/client_channel/resolver_registry.cc 
+    ext/filters/client_channel/resolver_result_parsing.cc 
+    ext/filters/client_channel/resolving_lb_policy.cc 
+    ext/filters/client_channel/retry_throttle.cc 
+    ext/filters/client_channel/server_address.cc 
+    ext/filters/client_channel/service_config.cc 
     ext/filters/client_channel/service_config_channel_arg_filter.cc
     ext/filters/client_channel/service_config_parser.cc
-    ext/filters/client_channel/subchannel.cc
-    ext/filters/client_channel/subchannel_pool_interface.cc
-    ext/filters/client_idle/client_idle_filter.cc
-    ext/filters/deadline/deadline_filter.cc
-    ext/filters/http/client/http_client_filter.cc
-    ext/filters/http/client_authority_filter.cc
-    ext/filters/http/http_filters_plugin.cc
-    ext/filters/http/message_compress/message_compress_filter.cc
+    ext/filters/client_channel/subchannel.cc 
+    ext/filters/client_channel/subchannel_pool_interface.cc 
+    ext/filters/client_idle/client_idle_filter.cc 
+    ext/filters/deadline/deadline_filter.cc 
+    ext/filters/http/client/http_client_filter.cc 
+    ext/filters/http/client_authority_filter.cc 
+    ext/filters/http/http_filters_plugin.cc 
+    ext/filters/http/message_compress/message_compress_filter.cc 
     ext/filters/http/message_compress/message_decompress_filter.cc
-    ext/filters/http/server/http_server_filter.cc
-    ext/filters/max_age/max_age_filter.cc
-    ext/filters/message_size/message_size_filter.cc
-    ext/filters/workarounds/workaround_cronet_compression_filter.cc
-    ext/filters/workarounds/workaround_utils.cc
-    ext/transport/chttp2/alpn/alpn.cc
-    ext/transport/chttp2/client/authority.cc
-    ext/transport/chttp2/client/chttp2_connector.cc
-    ext/transport/chttp2/client/insecure/channel_create.cc
-    ext/transport/chttp2/client/insecure/channel_create_posix.cc
-    ext/transport/chttp2/client/secure/secure_channel_create.cc
-    ext/transport/chttp2/server/chttp2_server.cc
-    ext/transport/chttp2/server/insecure/server_chttp2.cc
-    ext/transport/chttp2/server/insecure/server_chttp2_posix.cc
-    ext/transport/chttp2/server/secure/server_secure_chttp2.cc
-    ext/transport/chttp2/transport/bin_decoder.cc
-    ext/transport/chttp2/transport/bin_encoder.cc
-    ext/transport/chttp2/transport/chttp2_plugin.cc
-    ext/transport/chttp2/transport/chttp2_transport.cc
-    ext/transport/chttp2/transport/context_list.cc
-    ext/transport/chttp2/transport/flow_control.cc
-    ext/transport/chttp2/transport/frame_data.cc
-    ext/transport/chttp2/transport/frame_goaway.cc
-    ext/transport/chttp2/transport/frame_ping.cc
-    ext/transport/chttp2/transport/frame_rst_stream.cc
-    ext/transport/chttp2/transport/frame_settings.cc
-    ext/transport/chttp2/transport/frame_window_update.cc
-    ext/transport/chttp2/transport/hpack_encoder.cc
-    ext/transport/chttp2/transport/hpack_parser.cc
-    ext/transport/chttp2/transport/hpack_table.cc
-    ext/transport/chttp2/transport/http2_settings.cc
-    ext/transport/chttp2/transport/huffsyms.cc
-    ext/transport/chttp2/transport/incoming_metadata.cc
-    ext/transport/chttp2/transport/parsing.cc
-    ext/transport/chttp2/transport/stream_lists.cc
-    ext/transport/chttp2/transport/stream_map.cc
-    ext/transport/chttp2/transport/varint.cc
-    ext/transport/chttp2/transport/writing.cc
-    ext/transport/inproc/inproc_plugin.cc
-    ext/transport/inproc/inproc_transport.cc
+    ext/filters/http/server/http_server_filter.cc 
+    ext/filters/max_age/max_age_filter.cc 
+    ext/filters/message_size/message_size_filter.cc 
+    ext/filters/workarounds/workaround_cronet_compression_filter.cc 
+    ext/filters/workarounds/workaround_utils.cc 
+    ext/transport/chttp2/alpn/alpn.cc 
+    ext/transport/chttp2/client/authority.cc 
+    ext/transport/chttp2/client/chttp2_connector.cc 
+    ext/transport/chttp2/client/insecure/channel_create.cc 
+    ext/transport/chttp2/client/insecure/channel_create_posix.cc 
+    ext/transport/chttp2/client/secure/secure_channel_create.cc 
+    ext/transport/chttp2/server/chttp2_server.cc 
+    ext/transport/chttp2/server/insecure/server_chttp2.cc 
+    ext/transport/chttp2/server/insecure/server_chttp2_posix.cc 
+    ext/transport/chttp2/server/secure/server_secure_chttp2.cc 
+    ext/transport/chttp2/transport/bin_decoder.cc 
+    ext/transport/chttp2/transport/bin_encoder.cc 
+    ext/transport/chttp2/transport/chttp2_plugin.cc 
+    ext/transport/chttp2/transport/chttp2_transport.cc 
+    ext/transport/chttp2/transport/context_list.cc 
+    ext/transport/chttp2/transport/flow_control.cc 
+    ext/transport/chttp2/transport/frame_data.cc 
+    ext/transport/chttp2/transport/frame_goaway.cc 
+    ext/transport/chttp2/transport/frame_ping.cc 
+    ext/transport/chttp2/transport/frame_rst_stream.cc 
+    ext/transport/chttp2/transport/frame_settings.cc 
+    ext/transport/chttp2/transport/frame_window_update.cc 
+    ext/transport/chttp2/transport/hpack_encoder.cc 
+    ext/transport/chttp2/transport/hpack_parser.cc 
+    ext/transport/chttp2/transport/hpack_table.cc 
+    ext/transport/chttp2/transport/http2_settings.cc 
+    ext/transport/chttp2/transport/huffsyms.cc 
+    ext/transport/chttp2/transport/incoming_metadata.cc 
+    ext/transport/chttp2/transport/parsing.cc 
+    ext/transport/chttp2/transport/stream_lists.cc 
+    ext/transport/chttp2/transport/stream_map.cc 
+    ext/transport/chttp2/transport/varint.cc 
+    ext/transport/chttp2/transport/writing.cc 
+    ext/transport/inproc/inproc_plugin.cc 
+    ext/transport/inproc/inproc_transport.cc 
     ext/upb-generated/envoy/annotations/deprecation.upb.c
     ext/upb-generated/envoy/annotations/resource.upb.c
     ext/upb-generated/envoy/config/accesslog/v3/accesslog.upb.c
@@ -212,23 +212,23 @@ SRCS(
     ext/upb-generated/envoy/type/v3/percent.upb.c
     ext/upb-generated/envoy/type/v3/range.upb.c
     ext/upb-generated/envoy/type/v3/semantic_version.upb.c
-    ext/upb-generated/google/api/annotations.upb.c
+    ext/upb-generated/google/api/annotations.upb.c 
     ext/upb-generated/google/api/expr/v1alpha1/checked.upb.c
     ext/upb-generated/google/api/expr/v1alpha1/syntax.upb.c
-    ext/upb-generated/google/api/http.upb.c
-    ext/upb-generated/google/protobuf/any.upb.c
-    ext/upb-generated/google/protobuf/descriptor.upb.c
-    ext/upb-generated/google/protobuf/duration.upb.c
-    ext/upb-generated/google/protobuf/empty.upb.c
-    ext/upb-generated/google/protobuf/struct.upb.c
-    ext/upb-generated/google/protobuf/timestamp.upb.c
-    ext/upb-generated/google/protobuf/wrappers.upb.c
-    ext/upb-generated/google/rpc/status.upb.c
-    ext/upb-generated/src/proto/grpc/gcp/altscontext.upb.c
-    ext/upb-generated/src/proto/grpc/gcp/handshaker.upb.c
-    ext/upb-generated/src/proto/grpc/gcp/transport_security_common.upb.c
-    ext/upb-generated/src/proto/grpc/health/v1/health.upb.c
-    ext/upb-generated/src/proto/grpc/lb/v1/load_balancer.upb.c
+    ext/upb-generated/google/api/http.upb.c 
+    ext/upb-generated/google/protobuf/any.upb.c 
+    ext/upb-generated/google/protobuf/descriptor.upb.c 
+    ext/upb-generated/google/protobuf/duration.upb.c 
+    ext/upb-generated/google/protobuf/empty.upb.c 
+    ext/upb-generated/google/protobuf/struct.upb.c 
+    ext/upb-generated/google/protobuf/timestamp.upb.c 
+    ext/upb-generated/google/protobuf/wrappers.upb.c 
+    ext/upb-generated/google/rpc/status.upb.c 
+    ext/upb-generated/src/proto/grpc/gcp/altscontext.upb.c 
+    ext/upb-generated/src/proto/grpc/gcp/handshaker.upb.c 
+    ext/upb-generated/src/proto/grpc/gcp/transport_security_common.upb.c 
+    ext/upb-generated/src/proto/grpc/health/v1/health.upb.c 
+    ext/upb-generated/src/proto/grpc/lb/v1/load_balancer.upb.c 
     ext/upb-generated/udpa/annotations/migrate.upb.c
     ext/upb-generated/udpa/annotations/security.upb.c
     ext/upb-generated/udpa/annotations/sensitive.upb.c
@@ -240,8 +240,8 @@ SRCS(
     ext/upb-generated/udpa/core/v1/resource.upb.c
     ext/upb-generated/udpa/core/v1/resource_locator.upb.c
     ext/upb-generated/udpa/core/v1/resource_name.upb.c
-    ext/upb-generated/udpa/data/orca/v1/orca_load_report.upb.c
-    ext/upb-generated/validate/validate.upb.c
+    ext/upb-generated/udpa/data/orca/v1/orca_load_report.upb.c 
+    ext/upb-generated/validate/validate.upb.c 
     ext/xds/certificate_provider_registry.cc
     ext/xds/google_mesh_ca_certificate_provider_factory.cc
     ext/xds/xds_api.cc
@@ -460,34 +460,34 @@ SRCS(
     lib/transport/transport.cc
     lib/transport/transport_op_string.cc
     lib/uri/uri_parser.cc
-    plugin_registry/grpc_plugin_registry.cc
-    tsi/alts/crypt/aes_gcm.cc
-    tsi/alts/crypt/gsec.cc
-    tsi/alts/frame_protector/alts_counter.cc
-    tsi/alts/frame_protector/alts_crypter.cc
-    tsi/alts/frame_protector/alts_frame_protector.cc
-    tsi/alts/frame_protector/alts_record_protocol_crypter_common.cc
-    tsi/alts/frame_protector/alts_seal_privacy_integrity_crypter.cc
-    tsi/alts/frame_protector/alts_unseal_privacy_integrity_crypter.cc
-    tsi/alts/frame_protector/frame_handler.cc
-    tsi/alts/handshaker/alts_handshaker_client.cc
-    tsi/alts/handshaker/alts_shared_resource.cc
-    tsi/alts/handshaker/alts_tsi_handshaker.cc
-    tsi/alts/handshaker/alts_tsi_utils.cc
-    tsi/alts/handshaker/transport_security_common_api.cc
-    tsi/alts/zero_copy_frame_protector/alts_grpc_integrity_only_record_protocol.cc
-    tsi/alts/zero_copy_frame_protector/alts_grpc_privacy_integrity_record_protocol.cc
-    tsi/alts/zero_copy_frame_protector/alts_grpc_record_protocol_common.cc
-    tsi/alts/zero_copy_frame_protector/alts_iovec_record_protocol.cc
-    tsi/alts/zero_copy_frame_protector/alts_zero_copy_grpc_protector.cc
-    tsi/fake_transport_security.cc
-    tsi/local_transport_security.cc
-    tsi/ssl/session_cache/ssl_session_boringssl.cc
-    tsi/ssl/session_cache/ssl_session_cache.cc
-    tsi/ssl/session_cache/ssl_session_openssl.cc
-    tsi/ssl_transport_security.cc
-    tsi/transport_security.cc
-    tsi/transport_security_grpc.cc
-)
-
+    plugin_registry/grpc_plugin_registry.cc 
+    tsi/alts/crypt/aes_gcm.cc 
+    tsi/alts/crypt/gsec.cc 
+    tsi/alts/frame_protector/alts_counter.cc 
+    tsi/alts/frame_protector/alts_crypter.cc 
+    tsi/alts/frame_protector/alts_frame_protector.cc 
+    tsi/alts/frame_protector/alts_record_protocol_crypter_common.cc 
+    tsi/alts/frame_protector/alts_seal_privacy_integrity_crypter.cc 
+    tsi/alts/frame_protector/alts_unseal_privacy_integrity_crypter.cc 
+    tsi/alts/frame_protector/frame_handler.cc 
+    tsi/alts/handshaker/alts_handshaker_client.cc 
+    tsi/alts/handshaker/alts_shared_resource.cc 
+    tsi/alts/handshaker/alts_tsi_handshaker.cc 
+    tsi/alts/handshaker/alts_tsi_utils.cc 
+    tsi/alts/handshaker/transport_security_common_api.cc 
+    tsi/alts/zero_copy_frame_protector/alts_grpc_integrity_only_record_protocol.cc 
+    tsi/alts/zero_copy_frame_protector/alts_grpc_privacy_integrity_record_protocol.cc 
+    tsi/alts/zero_copy_frame_protector/alts_grpc_record_protocol_common.cc 
+    tsi/alts/zero_copy_frame_protector/alts_iovec_record_protocol.cc 
+    tsi/alts/zero_copy_frame_protector/alts_zero_copy_grpc_protector.cc 
+    tsi/fake_transport_security.cc 
+    tsi/local_transport_security.cc 
+    tsi/ssl/session_cache/ssl_session_boringssl.cc 
+    tsi/ssl/session_cache/ssl_session_cache.cc 
+    tsi/ssl/session_cache/ssl_session_openssl.cc 
+    tsi/ssl_transport_security.cc 
+    tsi/transport_security.cc 
+    tsi/transport_security_grpc.cc 
+) 
+ 
 END()

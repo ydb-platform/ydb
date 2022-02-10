@@ -5,7 +5,7 @@
 
     Lexers for Prolog and Prolog-like languages.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -56,15 +56,15 @@ class PrologLexer(RegexLexer):
             (r'_', Keyword),  # The don't-care variable
             (r'([a-z]+)(:)', bygroups(Name.Namespace, Punctuation)),
             (u'([a-z\u00c0-\u1fff\u3040-\ud7ff\ue000-\uffef]'
-             u'[\\w$\u00c0-\u1fff\u3040-\ud7ff\ue000-\uffef]*)'
+             u'[\\w$\u00c0-\u1fff\u3040-\ud7ff\ue000-\uffef]*)' 
              u'(\\s*)(:-|-->)',
              bygroups(Name.Function, Text, Operator)),  # function defn
             (u'([a-z\u00c0-\u1fff\u3040-\ud7ff\ue000-\uffef]'
-             u'[\\w$\u00c0-\u1fff\u3040-\ud7ff\ue000-\uffef]*)'
+             u'[\\w$\u00c0-\u1fff\u3040-\ud7ff\ue000-\uffef]*)' 
              u'(\\s*)(\\()',
              bygroups(Name.Function, Text, Punctuation)),
             (u'[a-z\u00c0-\u1fff\u3040-\ud7ff\ue000-\uffef]'
-             u'[\\w$\u00c0-\u1fff\u3040-\ud7ff\ue000-\uffef]*',
+             u'[\\w$\u00c0-\u1fff\u3040-\ud7ff\ue000-\uffef]*', 
              String.Atom),  # atom, characters
             # This one includes !
             (u'[#&*+\\-./:<=>?@\\\\^~\u00a1-\u00bf\u2010-\u303f]+',
@@ -300,7 +300,7 @@ class LogtalkLexer(RegexLexer):
             return 1.0
         elif ':- category(' in text:
             return 1.0
-        elif re.search(r'^:-\s[a-z]', text, re.M):
+        elif re.search(r'^:-\s[a-z]', text, re.M): 
             return 0.9
         else:
             return 0.0

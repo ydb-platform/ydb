@@ -11,10 +11,10 @@
 #ifndef HEADER_X509V3ERR_H
 # define HEADER_X509V3ERR_H
 
-# ifndef HEADER_SYMHACKS_H
-#  include <openssl/symhacks.h>
-# endif
-
+# ifndef HEADER_SYMHACKS_H 
+#  include <openssl/symhacks.h> 
+# endif 
+ 
 # ifdef  __cplusplus
 extern "C"
 # endif

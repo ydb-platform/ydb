@@ -2,7 +2,7 @@ from distutils.util import convert_path
 from distutils import log
 from distutils.errors import DistutilsOptionError
 import os
-import shutil
+import shutil 
 
 from setuptools.extern import six
 
@@ -60,7 +60,7 @@ class rotate(Command):
             for (t, f) in files:
                 log.info("Deleting %s", f)
                 if not self.dry_run:
-                    if os.path.isdir(f):
-                        shutil.rmtree(f)
-                    else:
-                        os.unlink(f)
+                    if os.path.isdir(f): 
+                        shutil.rmtree(f) 
+                    else: 
+                        os.unlink(f) 

@@ -52,52 +52,52 @@ namespace internal {
 // This class provides access to map field using generated api. It is used for
 // internal generated message implementation only. Users should never use this
 // directly.
-template <typename Derived, typename Key, typename T,
+template <typename Derived, typename Key, typename T, 
           WireFormatLite::FieldType key_wire_type,
           WireFormatLite::FieldType value_wire_type>
 class MapFieldLite {
   // Define message type for internal repeated field.
-  typedef Derived EntryType;
+  typedef Derived EntryType; 
 
  public:
-  typedef Map<Key, T> MapType;
-  typedef EntryType EntryTypeTrait;
-
+  typedef Map<Key, T> MapType; 
+  typedef EntryType EntryTypeTrait; 
+ 
   constexpr MapFieldLite() {}
 
   explicit MapFieldLite(Arena* arena) : map_(arena) {}
-
+ 
   // Accessors
-  const Map<Key, T>& GetMap() const { return map_; }
-  Map<Key, T>* MutableMap() { return &map_; }
+  const Map<Key, T>& GetMap() const { return map_; } 
+  Map<Key, T>* MutableMap() { return &map_; } 
 
   // Convenient methods for generated message implementation.
-  int size() const { return static_cast<int>(map_.size()); }
-  void Clear() { return map_.clear(); }
-  void MergeFrom(const MapFieldLite& other) {
-    for (typename Map<Key, T>::const_iterator it = other.map_.begin();
-         it != other.map_.end(); ++it) {
-      map_[it->first] = it->second;
-    }
-  }
-  void Swap(MapFieldLite* other) { map_.swap(other->map_); }
+  int size() const { return static_cast<int>(map_.size()); } 
+  void Clear() { return map_.clear(); } 
+  void MergeFrom(const MapFieldLite& other) { 
+    for (typename Map<Key, T>::const_iterator it = other.map_.begin(); 
+         it != other.map_.end(); ++it) { 
+      map_[it->first] = it->second; 
+    } 
+  } 
+  void Swap(MapFieldLite* other) { map_.swap(other->map_); } 
   void InternalSwap(MapFieldLite* other) { map_.InternalSwap(other->map_); }
 
-  // Used in the implementation of parsing. Caller should take the ownership iff
-  // arena_ is NULL.
-  EntryType* NewEntry() const {
+  // Used in the implementation of parsing. Caller should take the ownership iff 
+  // arena_ is NULL. 
+  EntryType* NewEntry() const { 
     return Arena::CreateMessage<EntryType>(map_.arena());
-  }
+  } 
   // Used in the implementation of serializing enum value type. Caller should
-  // take the ownership iff arena_ is NULL.
-  EntryType* NewEnumEntryWrapper(const Key& key, const T t) const {
+  // take the ownership iff arena_ is NULL. 
+  EntryType* NewEnumEntryWrapper(const Key& key, const T t) const { 
     return EntryType::EnumWrap(key, t, map_.arena_);
-  }
+  } 
   // Used in the implementation of serializing other value types. Caller should
-  // take the ownership iff arena_ is NULL.
-  EntryType* NewEntryWrapper(const Key& key, const T& t) const {
+  // take the ownership iff arena_ is NULL. 
+  EntryType* NewEntryWrapper(const Key& key, const T& t) const { 
     return EntryType::Wrap(key, t, map_.arena_);
-  }
+  } 
 
   const char* _InternalParse(const char* ptr, ParseContext* ctx) {
     typename Derived::template Parser<MapFieldLite, Map<Key, T>> parser(this);
@@ -116,7 +116,7 @@ class MapFieldLite {
  private:
   typedef void DestructorSkippable_;
 
-  Map<Key, T> map_;
+  Map<Key, T> map_; 
 
   friend class ::PROTOBUF_NAMESPACE_ID::Arena;
 };

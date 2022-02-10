@@ -119,7 +119,7 @@ namespace boost { namespace xpressive { namespace detail
         }
 
     private:
-        alternate_matcher &operator =(alternate_matcher const &) = delete;
+        alternate_matcher &operator =(alternate_matcher const &) = delete; 
 
         bool can_match_(char_type ch, Traits const &tr) const
         {

@@ -28,13 +28,13 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-NO_RUNTIME()
+NO_RUNTIME() 
 
-CFLAGS(
-    -DURI_LIBRARY_BUILD
-    -DURI_VISIBILITY
-)
-
+CFLAGS( 
+    -DURI_LIBRARY_BUILD 
+    -DURI_VISIBILITY 
+) 
+ 
 SRCS(
     src/UriCommon.c
     src/UriCompare.c
@@ -56,6 +56,6 @@ SRCS(
 END()
 
 RECURSE(
-    test
+    test 
     tool
 )

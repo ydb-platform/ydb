@@ -93,7 +93,7 @@ void Curl_http2_init_userset(struct UserDefined *set)
 }
 
 static int http2_perform_getsock(const struct connectdata *conn,
-                                 curl_socket_t *sock)
+                                 curl_socket_t *sock) 
 {
   const struct http_conn *c = &conn->proto.httpc;
   struct SingleRequest *k = &conn->data->req;
@@ -114,9 +114,9 @@ static int http2_perform_getsock(const struct connectdata *conn,
 }
 
 static int http2_getsock(struct connectdata *conn,
-                         curl_socket_t *socks)
+                         curl_socket_t *socks) 
 {
-  return http2_perform_getsock(conn, socks);
+  return http2_perform_getsock(conn, socks); 
 }
 
 /*
@@ -225,7 +225,7 @@ static unsigned int http2_conncheck(struct connectdata *check,
 
   if(checks_to_perform & CONNCHECK_KEEPALIVE) {
     struct curltime now = Curl_now();
-    timediff_t elapsed = Curl_timediff(now, check->keepalive);
+    timediff_t elapsed = Curl_timediff(now, check->keepalive); 
 
     if(elapsed > check->upkeep_interval_ms) {
       /* Perform an HTTP/2 PING */
@@ -254,7 +254,7 @@ static unsigned int http2_conncheck(struct connectdata *check,
   return ret_val;
 }
 
-/* called from http_setup_conn */
+/* called from http_setup_conn */ 
 void Curl_http2_setup_req(struct Curl_easy *data)
 {
   struct HTTP *http = data->req.p.http;
@@ -269,7 +269,7 @@ void Curl_http2_setup_req(struct Curl_easy *data)
   http->memlen = 0;
 }
 
-/* called from http_setup_conn */
+/* called from http_setup_conn */ 
 void Curl_http2_setup_conn(struct connectdata *conn)
 {
   conn->proto.httpc.settings.max_concurrent_streams =
@@ -612,18 +612,18 @@ static int push_promise(struct Curl_easy *data,
   return rv;
 }
 
-/*
- * multi_connchanged() is called to tell that there is a connection in
- * this multi handle that has changed state (multiplexing become possible, the
- * number of allowed streams changed or similar), and a subsequent use of this
- * multi handle should move CONNECT_PEND handles back to CONNECT to have them
- * retry.
- */
-static void multi_connchanged(struct Curl_multi *multi)
-{
-  multi->recheckstate = TRUE;
-}
-
+/* 
+ * multi_connchanged() is called to tell that there is a connection in 
+ * this multi handle that has changed state (multiplexing become possible, the 
+ * number of allowed streams changed or similar), and a subsequent use of this 
+ * multi handle should move CONNECT_PEND handles back to CONNECT to have them 
+ * retry. 
+ */ 
+static void multi_connchanged(struct Curl_multi *multi) 
+{ 
+  multi->recheckstate = TRUE; 
+} 
+ 
 static int on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
                          void *userp)
 {
@@ -656,7 +656,7 @@ static int on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
         infof(conn->data,
               "Connection state changed (MAX_CONCURRENT_STREAMS == %u)!\n",
               httpc->settings.max_concurrent_streams);
-        multi_connchanged(conn->data->multi);
+        multi_connchanged(conn->data->multi); 
       }
     }
     return 0;
@@ -813,7 +813,7 @@ static int on_data_chunk_recv(nghttp2_session *session, uint8_t flags,
     H2BUGF(infof(data_s, "NGHTTP2_ERR_PAUSE - %zu bytes out of buffer"
                  ", stream %u\n",
                  len - nread, stream_id));
-    data_s->conn->proto.httpc.pause_stream_id = stream_id;
+    data_s->conn->proto.httpc.pause_stream_id = stream_id; 
 
     return NGHTTP2_ERR_PAUSE;
   }
@@ -821,7 +821,7 @@ static int on_data_chunk_recv(nghttp2_session *session, uint8_t flags,
   /* pause execution of nghttp2 if we received data for another handle
      in order to process them first. */
   if(conn->data != data_s) {
-    data_s->conn->proto.httpc.pause_stream_id = stream_id;
+    data_s->conn->proto.httpc.pause_stream_id = stream_id; 
 
     return NGHTTP2_ERR_PAUSE;
   }
@@ -868,10 +868,10 @@ static int on_stream_close(nghttp2_session *session, int32_t stream_id,
             stream_id);
       DEBUGASSERT(0);
     }
-    if(stream_id == httpc->pause_stream_id) {
-      H2BUGF(infof(data_s, "Stopped the pause stream!\n"));
-      httpc->pause_stream_id = 0;
-    }
+    if(stream_id == httpc->pause_stream_id) { 
+      H2BUGF(infof(data_s, "Stopped the pause stream!\n")); 
+      httpc->pause_stream_id = 0; 
+    } 
     H2BUGF(infof(data_s, "Removed stream %u hash!\n", stream_id));
     stream->stream_id = 0; /* cleared */
   }
@@ -965,30 +965,30 @@ static int on_header(nghttp2_session *session, const nghttp2_frame *frame,
   if(frame->hd.type == NGHTTP2_PUSH_PROMISE) {
     char *h;
 
-    if(!strcmp(":authority", (const char *)name)) {
-      /* pseudo headers are lower case */
-      int rc = 0;
-      char *check = aprintf("%s:%d", conn->host.name, conn->remote_port);
-      if(!check)
-        /* no memory */
-        return NGHTTP2_ERR_CALLBACK_FAILURE;
+    if(!strcmp(":authority", (const char *)name)) { 
+      /* pseudo headers are lower case */ 
+      int rc = 0; 
+      char *check = aprintf("%s:%d", conn->host.name, conn->remote_port); 
+      if(!check) 
+        /* no memory */ 
+        return NGHTTP2_ERR_CALLBACK_FAILURE; 
       if(!Curl_strcasecompare(check, (const char *)value) &&
          ((conn->remote_port != conn->given->defport) ||
           !Curl_strcasecompare(conn->host.name, (const char *)value))) {
-        /* This is push is not for the same authority that was asked for in
-         * the URL. RFC 7540 section 8.2 says: "A client MUST treat a
-         * PUSH_PROMISE for which the server is not authoritative as a stream
-         * error of type PROTOCOL_ERROR."
-         */
-        (void)nghttp2_submit_rst_stream(session, NGHTTP2_FLAG_NONE,
-                                        stream_id, NGHTTP2_PROTOCOL_ERROR);
-        rc = NGHTTP2_ERR_CALLBACK_FAILURE;
-      }
-      free(check);
-      if(rc)
-        return rc;
-    }
-
+        /* This is push is not for the same authority that was asked for in 
+         * the URL. RFC 7540 section 8.2 says: "A client MUST treat a 
+         * PUSH_PROMISE for which the server is not authoritative as a stream 
+         * error of type PROTOCOL_ERROR." 
+         */ 
+        (void)nghttp2_submit_rst_stream(session, NGHTTP2_FLAG_NONE, 
+                                        stream_id, NGHTTP2_PROTOCOL_ERROR); 
+        rc = NGHTTP2_ERR_CALLBACK_FAILURE; 
+      } 
+      free(check); 
+      if(rc) 
+        return rc; 
+    } 
+ 
     if(!stream->push_headers) {
       stream->push_headers_alloc = 10;
       stream->push_headers = malloc(stream->push_headers_alloc *
@@ -1194,10 +1194,10 @@ void Curl_http2_done(struct Curl_easy *data, bool premature)
       httpc->pause_stream_id = 0;
     }
   }
-
-  if(data->state.drain)
-    drained_transfer(data, httpc);
-
+ 
+  if(data->state.drain) 
+    drained_transfer(data, httpc); 
+ 
   /* -1 means unassigned and 0 means cleared */
   if(http->stream_id > 0) {
     int rv = nghttp2_session_set_stream_user_data(httpc->h2,
@@ -1214,7 +1214,7 @@ void Curl_http2_done(struct Curl_easy *data, bool premature)
 /*
  * Initialize nghttp2 for a Curl connection
  */
-static CURLcode http2_init(struct connectdata *conn)
+static CURLcode http2_init(struct connectdata *conn) 
 {
   if(!conn->proto.httpc.h2) {
     int rc;
@@ -1575,11 +1575,11 @@ static ssize_t http2_recv(struct connectdata *conn, int sockindex,
   if(should_close_session(httpc)) {
     H2BUGF(infof(data,
                  "http2_recv: nothing to do in this session\n"));
-    if(conn->bits.close) {
-      /* already marked for closure, return OK and we're done */
-      *err = CURLE_OK;
-      return 0;
-    }
+    if(conn->bits.close) { 
+      /* already marked for closure, return OK and we're done */ 
+      *err = CURLE_OK; 
+      return 0; 
+    } 
     *err = CURLE_HTTP2;
     return -1;
   }
@@ -1742,14 +1742,14 @@ static ssize_t http2_recv(struct connectdata *conn, int sockindex,
     else if(!stream->closed) {
       drained_transfer(data, httpc);
     }
-    else
-      /* this stream is closed, trigger a another read ASAP to detect that */
-      Curl_expire(data, 0, EXPIRE_RUN_NOW);
+    else 
+      /* this stream is closed, trigger a another read ASAP to detect that */ 
+      Curl_expire(data, 0, EXPIRE_RUN_NOW); 
 
     return retlen;
   }
-  if(stream->closed)
-    return 0;
+  if(stream->closed) 
+    return 0; 
   *err = CURLE_AGAIN;
   H2BUGF(infof(data, "http2_recv returns AGAIN for stream %u\n",
                stream->stream_id));
@@ -1834,9 +1834,9 @@ static ssize_t http2_send(struct connectdata *conn, int sockindex,
                           const void *mem, size_t len, CURLcode *err)
 {
   /*
-   * Currently, we send request in this function, but this function is also
-   * used to send request body. It would be nice to add dedicated function for
-   * request.
+   * Currently, we send request in this function, but this function is also 
+   * used to send request body. It would be nice to add dedicated function for 
+   * request. 
    */
   int rv;
   struct http_conn *httpc = &conn->proto.httpc;
@@ -1869,11 +1869,11 @@ static ssize_t http2_send(struct connectdata *conn, int sockindex,
        are going to send or sending request body in DATA frame */
     stream->upload_mem = mem;
     stream->upload_len = len;
-    rv = nghttp2_session_resume_data(h2, stream->stream_id);
-    if(nghttp2_is_fatal(rv)) {
-      *err = CURLE_SEND_ERROR;
-      return -1;
-    }
+    rv = nghttp2_session_resume_data(h2, stream->stream_id); 
+    if(nghttp2_is_fatal(rv)) { 
+      *err = CURLE_SEND_ERROR; 
+      return -1; 
+    } 
     rv = h2_session_send(conn->data, h2);
     if(nghttp2_is_fatal(rv)) {
       *err = CURLE_SEND_ERROR;
@@ -2172,7 +2172,7 @@ CURLcode Curl_http2_setup(struct connectdata *conn)
   else
     conn->handler = &Curl_handler_http2;
 
-  result = http2_init(conn);
+  result = http2_init(conn); 
   if(result) {
     Curl_dyn_free(&stream->header_recvbuf);
     return result;
@@ -2196,7 +2196,7 @@ CURLcode Curl_http2_setup(struct connectdata *conn)
   conn->bundle->multiuse = BUNDLE_MULTIPLEX;
 
   infof(conn->data, "Connection state changed (HTTP/2 confirmed)\n");
-  multi_connchanged(conn->data->multi);
+  multi_connchanged(conn->data->multi); 
 
   return CURLE_OK;
 }

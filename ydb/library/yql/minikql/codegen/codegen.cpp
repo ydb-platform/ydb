@@ -11,7 +11,7 @@
 #include <llvm/IRReader/IRReader.h>
 #include <llvm/Linker/Linker.h>
 #include <llvm-c/Disassembler.h>
-#include <llvm/Support/Host.h>
+#include <llvm/Support/Host.h> 
 #include <llvm/Support/ManagedStatic.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/TargetSelect.h>
@@ -238,7 +238,7 @@ namespace {
             llvm::InitializeNativeTarget();
             llvm::InitializeNativeTargetAsmPrinter();
             llvm::InitializeNativeTargetAsmParser();
-            llvm::InitializeNativeTargetDisassembler();
+            llvm::InitializeNativeTargetDisassembler(); 
             llvm::install_fatal_error_handler(&FatalErrorHandler, nullptr);
         }
     };
@@ -264,7 +264,7 @@ public:
         , EffectiveTarget_(Target_), EffectiveSanitize_(Sanitize_)
     {
         Singleton<TCodegenInit>();
-        Context_.setDiagnosticHandlerCallBack(&DiagnosticHandler, this);
+        Context_.setDiagnosticHandlerCallBack(&DiagnosticHandler, this); 
 
         std::unique_ptr<llvm::Module> module(new llvm::Module("yql", Context_));
         Module_ = module.get();

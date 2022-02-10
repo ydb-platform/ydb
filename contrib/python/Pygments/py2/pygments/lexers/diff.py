@@ -5,17 +5,17 @@
 
     Lexers for diff/patch formats.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
-import re
-
+import re 
+ 
 from pygments.lexer import RegexLexer, include, bygroups
 from pygments.token import Text, Comment, Operator, Keyword, Name, Generic, \
     Literal
 
-__all__ = ['DiffLexer', 'DarcsPatchLexer', 'WDiffLexer']
+__all__ = ['DiffLexer', 'DarcsPatchLexer', 'WDiffLexer'] 
 
 
 class DiffLexer(RegexLexer):
@@ -106,60 +106,60 @@ class DarcsPatchLexer(RegexLexer):
             (r'[^\n\[]+', Generic.Deleted),
         ],
     }
-
-
-class WDiffLexer(RegexLexer):
-    """
-    A `wdiff <https://www.gnu.org/software/wdiff/>`_ lexer.
-
-    Note that:
-
-    * only to normal output (without option like -l).
-    * if target files of wdiff contain "[-", "-]", "{+", "+}",
-      especially they are unbalanced, this lexer will get confusing.
-
-    .. versionadded:: 2.2
-    """
-
-    name = 'WDiff'
-    aliases = ['wdiff']
-    filenames = ['*.wdiff']
-    mimetypes = []
-
-    flags = re.MULTILINE | re.DOTALL
-
-    # We can only assume "[-" after "[-" before "-]" is `nested`,
-    # for instance wdiff to wdiff outputs. We have no way to
-    # distinct these marker is of wdiff output from original text.
-
-    ins_op = r"\{\+"
-    ins_cl = r"\+\}"
-    del_op = r"\[\-"
-    del_cl = r"\-\]"
-    normal = r'[^{}[\]+-]+'  # for performance
-    tokens = {
-        'root': [
-            (ins_op, Generic.Inserted, 'inserted'),
-            (del_op, Generic.Deleted, 'deleted'),
-            (normal, Text),
-            (r'.', Text),
-        ],
-        'inserted': [
-            (ins_op, Generic.Inserted, '#push'),
-            (del_op, Generic.Inserted, '#push'),
-            (del_cl, Generic.Inserted, '#pop'),
-
-            (ins_cl, Generic.Inserted, '#pop'),
-            (normal, Generic.Inserted),
-            (r'.', Generic.Inserted),
-        ],
-        'deleted': [
-            (del_op, Generic.Deleted, '#push'),
-            (ins_op, Generic.Deleted, '#push'),
-            (ins_cl, Generic.Deleted, '#pop'),
-
-            (del_cl, Generic.Deleted, '#pop'),
-            (normal, Generic.Deleted),
-            (r'.', Generic.Deleted),
-        ],
-    }
+ 
+ 
+class WDiffLexer(RegexLexer): 
+    """ 
+    A `wdiff <https://www.gnu.org/software/wdiff/>`_ lexer. 
+ 
+    Note that: 
+ 
+    * only to normal output (without option like -l). 
+    * if target files of wdiff contain "[-", "-]", "{+", "+}", 
+      especially they are unbalanced, this lexer will get confusing. 
+ 
+    .. versionadded:: 2.2 
+    """ 
+ 
+    name = 'WDiff' 
+    aliases = ['wdiff'] 
+    filenames = ['*.wdiff'] 
+    mimetypes = [] 
+ 
+    flags = re.MULTILINE | re.DOTALL 
+ 
+    # We can only assume "[-" after "[-" before "-]" is `nested`, 
+    # for instance wdiff to wdiff outputs. We have no way to 
+    # distinct these marker is of wdiff output from original text. 
+ 
+    ins_op = r"\{\+" 
+    ins_cl = r"\+\}" 
+    del_op = r"\[\-" 
+    del_cl = r"\-\]" 
+    normal = r'[^{}[\]+-]+'  # for performance 
+    tokens = { 
+        'root': [ 
+            (ins_op, Generic.Inserted, 'inserted'), 
+            (del_op, Generic.Deleted, 'deleted'), 
+            (normal, Text), 
+            (r'.', Text), 
+        ], 
+        'inserted': [ 
+            (ins_op, Generic.Inserted, '#push'), 
+            (del_op, Generic.Inserted, '#push'), 
+            (del_cl, Generic.Inserted, '#pop'), 
+ 
+            (ins_cl, Generic.Inserted, '#pop'), 
+            (normal, Generic.Inserted), 
+            (r'.', Generic.Inserted), 
+        ], 
+        'deleted': [ 
+            (del_op, Generic.Deleted, '#push'), 
+            (ins_op, Generic.Deleted, '#push'), 
+            (ins_cl, Generic.Deleted, '#pop'), 
+ 
+            (del_cl, Generic.Deleted, '#pop'), 
+            (normal, Generic.Deleted), 
+            (r'.', Generic.Deleted), 
+        ], 
+    } 

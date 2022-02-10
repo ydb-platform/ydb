@@ -56,14 +56,14 @@ struct NoAttribute
         return 0;
     }
 
-    void add( const Attribute &) {
+    void add( const Attribute &) { 
         // There must be an add function for the generic NodeImpl, but the
         // Node APIs ensure that it is never called, the throw here is
         // just in case
         throw Exception("This type does not have attribute");
     }
 
-    const Attribute &get(size_t = 0) const {
+    const Attribute &get(size_t = 0) const { 
         // There must be an get function for the generic NodeImpl, but the
         // Node APIs ensure that it is never called, the throw here is
         // just in case
@@ -73,7 +73,7 @@ struct NoAttribute
         return empty;
     }
 
-    Attribute &get(size_t = 0) {
+    Attribute &get(size_t = 0) { 
         // There must be an get function for the generic NodeImpl, but the
         // Node APIs ensure that it is never called, the throw here is
         // just in case
@@ -97,7 +97,7 @@ struct SingleAttribute
     { }
 
     // copy constructing from a no attribute is allowed
-    SingleAttribute(const NoAttribute<Attribute> &) :
+    SingleAttribute(const NoAttribute<Attribute> &) : 
         attr_()
     { }
 
@@ -150,7 +150,7 @@ struct MultiAttribute
         attrs_(rhs.attrs_)
     { }
 
-    MultiAttribute(const NoAttribute<Attribute> &)
+    MultiAttribute(const NoAttribute<Attribute> &) 
     {}
 
     size_t size() const {
@@ -178,12 +178,12 @@ struct MultiAttribute
 template<typename T>
 struct NameIndexConcept {
 
-    bool lookup(const std::string &, size_t &) const {
+    bool lookup(const std::string &, size_t &) const { 
         throw Exception("Name index does not exist");
         return 0;
     }
 
-    bool add(const::std::string &, size_t) {
+    bool add(const::std::string &, size_t) { 
         throw Exception("Name index does not exist");
         return false;
     }

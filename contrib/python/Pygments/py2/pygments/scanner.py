@@ -12,7 +12,7 @@
     Have a look at the `DelphiLexer` to get an idea of how to use
     this scanner.
 
-    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2019 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 import re
@@ -66,8 +66,8 @@ class Scanner(object):
 
     def test(self, pattern):
         """Apply a pattern on the current position and check
-        if it patches. Doesn't touch pos.
-        """
+        if it patches. Doesn't touch pos. 
+        """ 
         return self.check(pattern) is not None
 
     def scan(self, pattern):

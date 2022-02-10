@@ -1,12 +1,12 @@
-- includes:
-  # Valgrind PEERDIR and ADDINCL are added only in --valgrind builds,
-  # but we should resolve headers anyway.
-  - valgrind/callgrind.h
-  - valgrind/memcheck.h
-  - valgrind/valgrind.h
-  # DB2_ODBC_CLI
-  - sqlcli1.h
-
+- includes: 
+  # Valgrind PEERDIR and ADDINCL are added only in --valgrind builds, 
+  # but we should resolve headers anyway. 
+  - valgrind/callgrind.h 
+  - valgrind/memcheck.h 
+  - valgrind/valgrind.h 
+  # DB2_ODBC_CLI 
+  - sqlcli1.h 
+ 
 
 - includes:
   - gelf.h: contrib/restricted/libelf/include/libelf/gelf.h
@@ -32,21 +32,21 @@
 - includes:
   - _cgo_export.h
 
-# Resolve jni.h from swig/Lib/java/javahead.swg when building non-java .swg
-# since they do not peerdir contrib/libs/jdk.
+# Resolve jni.h from swig/Lib/java/javahead.swg when building non-java .swg 
+# since they do not peerdir contrib/libs/jdk. 
 # Resolve Python.h from swig/Lib/python/pyruntime.swg when building non-python .swg
 # since they do not peerdir contrib/libs/python.
 - source_filter: "[.]swg([.](h|c(c|pp|xx)?))?$"
-  includes:
-  - jni.h:           contrib/libs/jdk/include/jni.h
+  includes: 
+  - jni.h:           contrib/libs/jdk/include/jni.h 
   - Python.h:        contrib/libs/python/Include/Python.h
-- source_filter: "^contrib/libs/jdk/include/jni[.]h$"
-  includes:
-  - jni_md.h:
-    - contrib/libs/jdk/include/darwin/jni_md.h
-    - contrib/libs/jdk/include/linux/jni_md.h
-    - contrib/libs/jdk/include/win32/jni_md.h
-
+- source_filter: "^contrib/libs/jdk/include/jni[.]h$" 
+  includes: 
+  - jni_md.h: 
+    - contrib/libs/jdk/include/darwin/jni_md.h 
+    - contrib/libs/jdk/include/linux/jni_md.h 
+    - contrib/libs/jdk/include/win32/jni_md.h 
+ 
 # libunistring has its own libc header wrappers that are added to ADDINCL and
 # need to be added here for consistensy between ADDINCL and sysincl resolving.
 # Btw: we don't parse include_next, so we might lose real dependency to musl,
@@ -65,11 +65,11 @@
     - wchar.h:       contrib/libs/libunistring/wchar.h
     - wctype.h:      contrib/libs/libunistring/wctype.h
 
-- source_filter: "^contrib/libs/libidn2/"
-  includes:
-    - error.h:  contrib/libs/libidn2/gl/error.h
-    - unistd.h: contrib/libs/libunistring/include/unistd.h
-
+- source_filter: "^contrib/libs/libidn2/" 
+  includes: 
+    - error.h:  contrib/libs/libidn2/gl/error.h 
+    - unistd.h: contrib/libs/libunistring/include/unistd.h 
+ 
 # Same as libunistring - lftp has own libc header wrappers/replacements.
 # However here we have GLOBAL ADDINCL to contrib/libs/lftp{,/trio,/lib}
 # that can poison resolving in PEERDIRing projects.
@@ -115,22 +115,22 @@
   includes:
     - error.h:       contrib/libs/cppkafka/include/cppkafka/error.h
 
-- source_filter: "^contrib/libs/clang11-rt"
-  includes:
-    - xray/xray_interface.h: contrib/libs/clang11-rt/include/xray/xray_interface.h
-
+- source_filter: "^contrib/libs/clang11-rt" 
+  includes: 
+    - xray/xray_interface.h: contrib/libs/clang11-rt/include/xray/xray_interface.h 
+ 
 - source_filter: "^contrib/libs/clang12-rt"
   includes:
     - xray/xray_interface.h: contrib/libs/clang12-rt/include/xray/xray_interface.h
 
-- source_filter: "^contrib/libs/llvm"
+- source_filter: "^contrib/libs/llvm" 
+  includes: 
+    - plugin-api.h # GNU linker plugin API. 
+ 
+- source_filter: "^contrib/libs/musl" 
   includes:
-    - plugin-api.h # GNU linker plugin API.
-
-- source_filter: "^contrib/libs/musl"
-  includes:
-    - atomic.h:      contrib/libs/musl/src/internal/atomic.h
-    - bits/fenv.h:   contrib/libs/musl/arch/x86_64/bits/fenv.h
+    - atomic.h:      contrib/libs/musl/src/internal/atomic.h 
+    - bits/fenv.h:   contrib/libs/musl/arch/x86_64/bits/fenv.h 
 
 - source_filter: "^contrib/libs/zbar"
   includes:
@@ -138,8 +138,8 @@
 
 - source_filter: "^contrib/libs/curl"
   includes:
-    - http.h:        contrib/libs/curl/lib/http.h
-    - inet_ntop.h:   contrib/libs/curl/lib/inet_ntop.h
+    - http.h:        contrib/libs/curl/lib/http.h 
+    - inet_ntop.h:   contrib/libs/curl/lib/inet_ntop.h 
     - share.h:       contrib/libs/curl/lib/share.h
 
 - source_filter: "^contrib/libs/zeromq"
@@ -162,12 +162,12 @@
     - port.h:        contrib/libs/glog/missing_includes/port.h
 
 - source_filter: "^contrib/(deprecated/onednn|libs/intel/onednn)"
-  includes:
-    - mkl_cblas.h: contrib/libs/intel/mkl/include/mkl_cblas.h
-    - mkl_version.h: contrib/libs/intel/mkl/include/mkl_version.h
-    - mkl_vml_defines.h: contrib/libs/intel/mkl/include/mkl_vml_defines.h
-    - mkl_vml_functions.h: contrib/libs/intel/mkl/include/mkl_vml_functions.h
-
+  includes: 
+    - mkl_cblas.h: contrib/libs/intel/mkl/include/mkl_cblas.h 
+    - mkl_version.h: contrib/libs/intel/mkl/include/mkl_version.h 
+    - mkl_vml_defines.h: contrib/libs/intel/mkl/include/mkl_vml_defines.h 
+    - mkl_vml_functions.h: contrib/libs/intel/mkl/include/mkl_vml_functions.h 
+ 
 - source_filter: "^contrib/libs/nsync"
   includes:
     - atomic.h:      contrib/libs/nsync/platform/c++11/atomic.h
@@ -216,14 +216,14 @@
   includes:
     - util.h:        contrib/libs/numa/internal/util.h
 
-- source_filter: "^contrib/libs/systemd"
-  includes:
-    - util.h:        contrib/libs/systemd/src/basic/util.h
-
-- source_filter: "^contrib/libs/nvidia/nccl"
-  includes:
-    - socket.h:      contrib/libs/nvidia/nccl/src/include/socket.h
-
+- source_filter: "^contrib/libs/systemd" 
+  includes: 
+    - util.h:        contrib/libs/systemd/src/basic/util.h 
+ 
+- source_filter: "^contrib/libs/nvidia/nccl" 
+  includes: 
+    - socket.h:      contrib/libs/nvidia/nccl/src/include/socket.h 
+ 
 - source_filter: "^contrib/libs/tf/tensorflow"
   includes:
     - cuda.h:        contrib/libs/tf/tensorflow/core/platform/cuda.h
@@ -357,7 +357,7 @@
     - hwloc.h
     - hwloc/cudart.h
 
-- source_filter: "^contrib/libs/(deprecated|tf)"
+- source_filter: "^contrib/libs/(deprecated|tf)" 
   includes:
     - cblas.h
 
@@ -365,7 +365,7 @@
   includes:
     - jni.h
 
-- source_filter: "^contrib/(libs/(ffmpeg-3|kenlm|kyotocabinet)|tools/ag)"
+- source_filter: "^contrib/(libs/(ffmpeg-3|kenlm|kyotocabinet)|tools/ag)" 
   includes:
     - lzma.h
 
@@ -381,11 +381,11 @@
   includes:
     - patchlevel.h
 
-- source_filter: "^contrib/tools/watchman"
+- source_filter: "^contrib/tools/watchman" 
   includes:
     - pcre.h
 
-- source_filter: "^contrib/libs/(freetype|leptonica-1.70|libtheora|zbar)"
+- source_filter: "^contrib/libs/(freetype|leptonica-1.70|libtheora|zbar)" 
   includes:
     - png.h
 
@@ -418,8 +418,8 @@
     - sys_elf.h: contrib/restricted/libelf/lib/sys_elf.h
 
 - source_filter: "^contrib/libs/dpdk/"
-  includes:
-    - process.h: contrib/libs/dpdk/drivers/bus/dpaa/include/process.h
+  includes: 
+    - process.h: contrib/libs/dpdk/drivers/bus/dpaa/include/process.h 
 
 - source_filter: "^contrib/libs/dpdk_arm64/"
   includes:

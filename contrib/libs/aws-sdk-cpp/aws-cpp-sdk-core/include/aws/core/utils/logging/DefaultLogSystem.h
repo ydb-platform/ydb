@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #pragma once
 
@@ -43,16 +43,16 @@ namespace Aws
                  * on construction.
                  */
                 DefaultLogSystem(LogLevel logLevel, const Aws::String& filenamePrefix);
-
+ 
                 virtual ~DefaultLogSystem();
 
                 /**
-                 * Flushes buffered messages to the file system.
-                 * This method is thread-safe.
-                 */
-                void Flush() override;
-
-                /**
+                 * Flushes buffered messages to the file system. 
+                 * This method is thread-safe. 
+                 */ 
+                void Flush() override; 
+ 
+                /** 
                  * Structure containing semaphores, queue etc... 
                  */
                 struct LogSynchronizationData
@@ -63,7 +63,7 @@ namespace Aws
                     std::mutex m_logQueueMutex;
                     std::condition_variable m_queueSignal;
                     Aws::Vector<Aws::String> m_queuedLogMessages;
-                    bool m_stopLogging;
+                    bool m_stopLogging; 
 
                 private:
                     LogSynchronizationData(const LogSynchronizationData& rhs) = delete;

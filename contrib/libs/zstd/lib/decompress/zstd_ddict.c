@@ -15,17 +15,17 @@
 *  Dependencies
 *********************************************************/
 #include "../common/zstd_deps.h"   /* ZSTD_memcpy, ZSTD_memmove, ZSTD_memset */
-#include "../common/cpu.h"         /* bmi2 */
-#include "../common/mem.h"         /* low level memory routines */
+#include "../common/cpu.h"         /* bmi2 */ 
+#include "../common/mem.h"         /* low level memory routines */ 
 #define FSE_STATIC_LINKING_ONLY
-#include "../common/fse.h"
+#include "../common/fse.h" 
 #define HUF_STATIC_LINKING_ONLY
-#include "../common/huf.h"
+#include "../common/huf.h" 
 #include "zstd_decompress_internal.h"
 #include "zstd_ddict.h"
 
 #if defined(ZSTD_LEGACY_SUPPORT) && (ZSTD_LEGACY_SUPPORT>=1)
-#  include "../legacy/zstd_legacy.h"
+#  include "../legacy/zstd_legacy.h" 
 #endif
 
 
@@ -65,10 +65,10 @@ void ZSTD_copyDDictParameters(ZSTD_DCtx* dctx, const ZSTD_DDict* ddict)
     dctx->virtualStart = ddict->dictContent;
     dctx->dictEnd = (const BYTE*)ddict->dictContent + ddict->dictSize;
     dctx->previousDstEnd = dctx->dictEnd;
-#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
-    dctx->dictContentBeginForFuzzing = dctx->prefixStart;
-    dctx->dictContentEndForFuzzing = dctx->previousDstEnd;
-#endif
+#ifdef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION 
+    dctx->dictContentBeginForFuzzing = dctx->prefixStart; 
+    dctx->dictContentEndForFuzzing = dctx->previousDstEnd; 
+#endif 
     if (ddict->entropyPresent) {
         dctx->litEntropy = 1;
         dctx->fseEntropy = 1;
@@ -111,7 +111,7 @@ ZSTD_loadEntropy_intoDDict(ZSTD_DDict* ddict,
     /* load entropy tables */
     RETURN_ERROR_IF(ZSTD_isError(ZSTD_loadDEntropy(
             &ddict->entropy, ddict->dictContent, ddict->dictSize)),
-        dictionary_corrupted, "");
+        dictionary_corrupted, ""); 
     ddict->entropyPresent = 1;
     return 0;
 }
@@ -137,7 +137,7 @@ static size_t ZSTD_initDDict_internal(ZSTD_DDict* ddict,
     ddict->entropy.hufTable[0] = (HUF_DTable)((HufLog)*0x1000001);  /* cover both little and big endian */
 
     /* parse dictionary content */
-    FORWARD_IF_ERROR( ZSTD_loadEntropy_intoDDict(ddict, dictContentType) , "");
+    FORWARD_IF_ERROR( ZSTD_loadEntropy_intoDDict(ddict, dictContentType) , ""); 
 
     return 0;
 }

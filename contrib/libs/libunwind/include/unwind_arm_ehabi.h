@@ -1,8 +1,8 @@
 //===----------------------------------------------------------------------===//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //
 // C++ ABI Level 1 ABI documented at:
@@ -18,7 +18,7 @@ typedef uint32_t _Unwind_State;
 static const _Unwind_State _US_VIRTUAL_UNWIND_FRAME   = 0;
 static const _Unwind_State _US_UNWIND_FRAME_STARTING  = 1;
 static const _Unwind_State _US_UNWIND_FRAME_RESUME    = 2;
-static const _Unwind_State _US_ACTION_MASK            = 3;
+static const _Unwind_State _US_ACTION_MASK            = 3; 
 /* Undocumented flag for force unwinding. */
 static const _Unwind_State _US_FORCE_UNWIND           = 8;
 
@@ -62,11 +62,11 @@ struct _Unwind_Control_Block {
   } pr_cache;
 
   long long int :0; /* Enforce the 8-byte alignment */
-} __attribute__((__aligned__(8)));
+} __attribute__((__aligned__(8))); 
 
-typedef _Unwind_Reason_Code (*_Unwind_Personality_Fn)(
-    _Unwind_State state, _Unwind_Exception *exceptionObject,
-    struct _Unwind_Context *context);
+typedef _Unwind_Reason_Code (*_Unwind_Personality_Fn)( 
+    _Unwind_State state, _Unwind_Exception *exceptionObject, 
+    struct _Unwind_Context *context); 
 
 #ifdef __cplusplus
 extern "C" {

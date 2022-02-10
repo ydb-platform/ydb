@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 
 #include <aws/core/utils/logging/FormattedLogSystem.h>
@@ -52,7 +52,7 @@ static Aws::String CreateLogPrefixLine(LogLevel logLevel, const char* tag)
             break;
     }
 
-    ss << DateTime::Now().CalculateGmtTimeWithMsPrecision() << " " << tag << " [" << std::this_thread::get_id() << "] ";
+    ss << DateTime::Now().CalculateGmtTimeWithMsPrecision() << " " << tag << " [" << std::this_thread::get_id() << "] "; 
 
     return ss.str();
 }
@@ -95,5 +95,5 @@ void FormattedLogSystem::Log(LogLevel logLevel, const char* tag, const char* for
 
 void FormattedLogSystem::LogStream(LogLevel logLevel, const char* tag, const Aws::OStringStream &message_stream)
 {
-    ProcessFormattedStatement(CreateLogPrefixLine(logLevel, tag) + message_stream.str() + "\n");
+    ProcessFormattedStatement(CreateLogPrefixLine(logLevel, tag) + message_stream.str() + "\n"); 
 }

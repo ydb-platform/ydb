@@ -349,29 +349,29 @@ struct InternalConstRef {
   typedef const base_type& type;
 };
 
-template<typename R, typename T>
-class MethodResultCallback_0_0 : public ResultCallback<R> {
- public:
-  typedef R (T::*MethodType)();
-  MethodResultCallback_0_0(T* object, MethodType method, bool self_deleting)
-      : object_(object),
-        method_(method),
-        self_deleting_(self_deleting) {}
-  ~MethodResultCallback_0_0() {}
-
-  R Run() {
-    bool needs_delete = self_deleting_;
-    R result = (object_->*method_)();
-    if (needs_delete) delete this;
-    return result;
-  }
-
- private:
-  T* object_;
-  MethodType method_;
-  bool self_deleting_;
-};
-
+template<typename R, typename T> 
+class MethodResultCallback_0_0 : public ResultCallback<R> { 
+ public: 
+  typedef R (T::*MethodType)(); 
+  MethodResultCallback_0_0(T* object, MethodType method, bool self_deleting) 
+      : object_(object), 
+        method_(method), 
+        self_deleting_(self_deleting) {} 
+  ~MethodResultCallback_0_0() {} 
+ 
+  R Run() { 
+    bool needs_delete = self_deleting_; 
+    R result = (object_->*method_)(); 
+    if (needs_delete) delete this; 
+    return result; 
+  } 
+ 
+ private: 
+  T* object_; 
+  MethodType method_; 
+  bool self_deleting_; 
+}; 
+ 
 template <typename R, typename T, typename P1, typename P2, typename P3,
           typename P4, typename P5, typename P6, typename A1, typename A2>
 class MethodResultCallback_6_2 : public ResultCallback2<R, A1, A2> {
@@ -409,8 +409,8 @@ class MethodResultCallback_6_2 : public ResultCallback2<R, A1, A2> {
   typename std::remove_reference<P6>::type p6_;
 };
 
-}  // namespace internal
-
+}  // namespace internal 
+ 
 // See Closure.
 inline Closure* NewCallback(void (*function)()) {
   return new internal::FunctionClosure0(function, true);
@@ -548,13 +548,13 @@ inline ResultCallback1<R, A1>* NewPermanentCallback(
       function, false, p1);
 }
 
-// See MethodResultCallback_0_0
-template <typename R, typename T1, typename T2>
-inline ResultCallback<R>* NewPermanentCallback(
-    T1* object, R (T2::*function)()) {
-  return new internal::MethodResultCallback_0_0<R, T1>(object, function, false);
-}
-
+// See MethodResultCallback_0_0 
+template <typename R, typename T1, typename T2> 
+inline ResultCallback<R>* NewPermanentCallback( 
+    T1* object, R (T2::*function)()) { 
+  return new internal::MethodResultCallback_0_0<R, T1>(object, function, false); 
+} 
+ 
 // See MethodResultCallback_6_2
 template <typename R, typename T, typename P1, typename P2, typename P3,
           typename P4, typename P5, typename P6, typename A1, typename A2>

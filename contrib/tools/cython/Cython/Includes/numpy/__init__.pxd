@@ -3,7 +3,7 @@
 # If any of the PyArray_* functions are called, import_array must be
 # called first.
 #
-# This also defines backwards-compatibility buffer acquisition
+# This also defines backwards-compatibility buffer acquisition 
 # code for use in Python 2.x (or Python <= 2.5 when NumPy starts
 # implementing PEP-3118 directly).
 #
@@ -17,9 +17,9 @@
 DEF _buffer_format_string_len = 255
 
 cimport cpython.buffer as pybuf
-from cpython.ref cimport Py_INCREF
+from cpython.ref cimport Py_INCREF 
 from cpython.mem cimport PyObject_Malloc, PyObject_Free
-from cpython.object cimport PyObject, PyTypeObject
+from cpython.object cimport PyObject, PyTypeObject 
 from cpython.type cimport type
 cimport libc.stdio as stdio
 
@@ -92,13 +92,13 @@ cdef extern from "numpy/arrayobject.h":
         NPY_FORTRANORDER
         NPY_KEEPORDER
 
-    ctypedef enum NPY_CASTING:
-        NPY_NO_CASTING
-        NPY_EQUIV_CASTING
-        NPY_SAFE_CASTING
-        NPY_SAME_KIND_CASTING
-        NPY_UNSAFE_CASTING
-
+    ctypedef enum NPY_CASTING: 
+        NPY_NO_CASTING 
+        NPY_EQUIV_CASTING 
+        NPY_SAFE_CASTING 
+        NPY_SAME_KIND_CASTING 
+        NPY_UNSAFE_CASTING 
+ 
     ctypedef enum NPY_CLIPMODE:
         NPY_CLIP
         NPY_WRAP
@@ -123,7 +123,7 @@ cdef extern from "numpy/arrayobject.h":
         NPY_SEARCHRIGHT
 
     enum:
-        # DEPRECATED since NumPy 1.7 ! Do not use in new code!
+        # DEPRECATED since NumPy 1.7 ! Do not use in new code! 
         NPY_C_CONTIGUOUS
         NPY_F_CONTIGUOUS
         NPY_CONTIGUOUS
@@ -156,37 +156,37 @@ cdef extern from "numpy/arrayobject.h":
 
         NPY_UPDATE_ALL
 
-    enum:
-        # Added in NumPy 1.7 to replace the deprecated enums above.
-        NPY_ARRAY_C_CONTIGUOUS
-        NPY_ARRAY_F_CONTIGUOUS
-        NPY_ARRAY_OWNDATA
-        NPY_ARRAY_FORCECAST
-        NPY_ARRAY_ENSURECOPY
-        NPY_ARRAY_ENSUREARRAY
-        NPY_ARRAY_ELEMENTSTRIDES
-        NPY_ARRAY_ALIGNED
-        NPY_ARRAY_NOTSWAPPED
-        NPY_ARRAY_WRITEABLE
-        NPY_ARRAY_UPDATEIFCOPY
-
-        NPY_ARRAY_BEHAVED
-        NPY_ARRAY_BEHAVED_NS
-        NPY_ARRAY_CARRAY
-        NPY_ARRAY_CARRAY_RO
-        NPY_ARRAY_FARRAY
-        NPY_ARRAY_FARRAY_RO
-        NPY_ARRAY_DEFAULT
-
-        NPY_ARRAY_IN_ARRAY
-        NPY_ARRAY_OUT_ARRAY
-        NPY_ARRAY_INOUT_ARRAY
-        NPY_ARRAY_IN_FARRAY
-        NPY_ARRAY_OUT_FARRAY
-        NPY_ARRAY_INOUT_FARRAY
-
-        NPY_ARRAY_UPDATE_ALL
-
+    enum: 
+        # Added in NumPy 1.7 to replace the deprecated enums above. 
+        NPY_ARRAY_C_CONTIGUOUS 
+        NPY_ARRAY_F_CONTIGUOUS 
+        NPY_ARRAY_OWNDATA 
+        NPY_ARRAY_FORCECAST 
+        NPY_ARRAY_ENSURECOPY 
+        NPY_ARRAY_ENSUREARRAY 
+        NPY_ARRAY_ELEMENTSTRIDES 
+        NPY_ARRAY_ALIGNED 
+        NPY_ARRAY_NOTSWAPPED 
+        NPY_ARRAY_WRITEABLE 
+        NPY_ARRAY_UPDATEIFCOPY 
+ 
+        NPY_ARRAY_BEHAVED 
+        NPY_ARRAY_BEHAVED_NS 
+        NPY_ARRAY_CARRAY 
+        NPY_ARRAY_CARRAY_RO 
+        NPY_ARRAY_FARRAY 
+        NPY_ARRAY_FARRAY_RO 
+        NPY_ARRAY_DEFAULT 
+ 
+        NPY_ARRAY_IN_ARRAY 
+        NPY_ARRAY_OUT_ARRAY 
+        NPY_ARRAY_INOUT_ARRAY 
+        NPY_ARRAY_IN_FARRAY 
+        NPY_ARRAY_OUT_FARRAY 
+        NPY_ARRAY_INOUT_FARRAY 
+ 
+        NPY_ARRAY_UPDATE_ALL 
+ 
     cdef enum:
         NPY_MAXDIMS
 
@@ -200,26 +200,26 @@ cdef extern from "numpy/arrayobject.h":
         # as just a PyObject*.
         PyObject* shape
 
-    ctypedef struct PyArray_Descr:
-        pass
-
-    ctypedef class numpy.dtype [object PyArray_Descr, check_size ignore]:
+    ctypedef struct PyArray_Descr: 
+        pass 
+ 
+    ctypedef class numpy.dtype [object PyArray_Descr, check_size ignore]: 
         # Use PyDataType_* macros when possible, however there are no macros
-        # for accessing some of the fields, so some are defined.
-        cdef PyTypeObject* typeobj
-        cdef char kind
-        cdef char type
+        # for accessing some of the fields, so some are defined. 
+        cdef PyTypeObject* typeobj 
+        cdef char kind 
+        cdef char type 
         # Numpy sometimes mutates this without warning (e.g. it'll
         # sometimes change "|" to "<" in shared dtype objects on
         # little-endian machines). If this matters to you, use
         # PyArray_IsNativeByteOrder(dtype.byteorder) instead of
         # directly accessing this field.
-        cdef char byteorder
-        cdef char flags
+        cdef char byteorder 
+        cdef char flags 
         cdef int type_num
         cdef int itemsize "elsize"
-        cdef int alignment
-        cdef dict fields
+        cdef int alignment 
+        cdef dict fields 
         cdef tuple names
         # Use PyDataType_HASSUBARRAY to test whether this field is
         # valid (the pointer can be NULL). Most users should access
@@ -239,7 +239,7 @@ cdef extern from "numpy/arrayobject.h":
         # like PyArrayObject**.
         pass
 
-    ctypedef class numpy.ndarray [object PyArrayObject, check_size ignore]:
+    ctypedef class numpy.ndarray [object PyArrayObject, check_size ignore]: 
         cdef __cythonbufferdefaults__ = {"mode": "strided"}
 
         cdef:
@@ -249,7 +249,7 @@ cdef extern from "numpy/arrayobject.h":
             int ndim "nd"
             npy_intp *shape "dimensions"
             npy_intp *strides
-            dtype descr  # deprecated since NumPy 1.7 !
+            dtype descr  # deprecated since NumPy 1.7 ! 
             PyObject* base
 
         # Note: This syntax (function definition in pxd files) is an
@@ -268,11 +268,11 @@ cdef extern from "numpy/arrayobject.h":
             ndim = PyArray_NDIM(self)
 
             if ((flags & pybuf.PyBUF_C_CONTIGUOUS == pybuf.PyBUF_C_CONTIGUOUS)
-                and not PyArray_CHKFLAGS(self, NPY_ARRAY_C_CONTIGUOUS)):
+                and not PyArray_CHKFLAGS(self, NPY_ARRAY_C_CONTIGUOUS)): 
                 raise ValueError(u"ndarray is not C contiguous")
 
             if ((flags & pybuf.PyBUF_F_CONTIGUOUS == pybuf.PyBUF_F_CONTIGUOUS)
-                and not PyArray_CHKFLAGS(self, NPY_ARRAY_F_CONTIGUOUS)):
+                and not PyArray_CHKFLAGS(self, NPY_ARRAY_F_CONTIGUOUS)): 
                 raise ValueError(u"ndarray is not Fortran contiguous")
 
             info.buf = PyArray_DATA(self)
@@ -294,7 +294,7 @@ cdef extern from "numpy/arrayobject.h":
 
             cdef int t
             cdef char* f = NULL
-            cdef dtype descr = <dtype>PyArray_DESCR(self)
+            cdef dtype descr = <dtype>PyArray_DESCR(self) 
             cdef int offset
 
             info.obj = self
@@ -415,14 +415,14 @@ cdef extern from "numpy/arrayobject.h":
         npy_intp *ptr
         int len
 
-    int _import_array() except -1
+    int _import_array() except -1 
 
     #
     # Macros from ndarrayobject.h
     #
     bint PyArray_CHKFLAGS(ndarray m, int flags)
-    bint PyArray_IS_C_CONTIGUOUS(ndarray arr)
-    bint PyArray_IS_F_CONTIGUOUS(ndarray arr)
+    bint PyArray_IS_C_CONTIGUOUS(ndarray arr) 
+    bint PyArray_IS_F_CONTIGUOUS(ndarray arr) 
     bint PyArray_ISCONTIGUOUS(ndarray m)
     bint PyArray_ISWRITEABLE(ndarray m)
     bint PyArray_ISALIGNED(ndarray m)
@@ -439,8 +439,8 @@ cdef extern from "numpy/arrayobject.h":
     npy_intp PyArray_DIM(ndarray, size_t)
     npy_intp PyArray_STRIDE(ndarray, size_t)
 
-    PyObject *PyArray_BASE(ndarray)  # returns borrowed reference!
-    PyArray_Descr *PyArray_DESCR(ndarray) # returns borrowed reference to dtype!
+    PyObject *PyArray_BASE(ndarray)  # returns borrowed reference! 
+    PyArray_Descr *PyArray_DESCR(ndarray) # returns borrowed reference to dtype! 
     int PyArray_FLAGS(ndarray)
     npy_intp PyArray_ITEMSIZE(ndarray)
     int PyArray_TYPE(ndarray arr)
@@ -763,7 +763,7 @@ cdef extern from "numpy/arrayobject.h":
     object PyArray_CheckAxis (ndarray, int *, int)
     npy_intp PyArray_OverflowMultiplyList (npy_intp *, int)
     int PyArray_CompareString (char *, char *, size_t)
-    int PyArray_SetBaseObject(ndarray, base)  # NOTE: steals a reference to base! Use "set_array_base()" instead.
+    int PyArray_SetBaseObject(ndarray, base)  # NOTE: steals a reference to base! Use "set_array_base()" instead. 
 
 
 # Typedefs that matches the runtime dtype objects in
@@ -1016,34 +1016,34 @@ cdef extern from "numpy/ufuncobject.h":
              (PyUFuncGenericFunction *, void **, char *, int, int, int,
               int, char *, char *, int, char *)
 
-    int _import_umath() except -1
+    int _import_umath() except -1 
 
 cdef inline void set_array_base(ndarray arr, object base):
-    Py_INCREF(base) # important to do this before stealing the reference below!
-    PyArray_SetBaseObject(arr, base)
+    Py_INCREF(base) # important to do this before stealing the reference below! 
+    PyArray_SetBaseObject(arr, base) 
 
 cdef inline object get_array_base(ndarray arr):
-    base = PyArray_BASE(arr)
-    if base is NULL:
+    base = PyArray_BASE(arr) 
+    if base is NULL: 
         return None
-    return <object>base
-
-# Versions of the import_* functions which are more suitable for
-# Cython code.
-cdef inline int import_array() except -1:
-    try:
-        _import_array()
-    except Exception:
-        raise ImportError("numpy.core.multiarray failed to import")
-
-cdef inline int import_umath() except -1:
-    try:
-        _import_umath()
-    except Exception:
-        raise ImportError("numpy.core.umath failed to import")
-
-cdef inline int import_ufunc() except -1:
-    try:
-        _import_umath()
-    except Exception:
-        raise ImportError("numpy.core.umath failed to import")
+    return <object>base 
+ 
+# Versions of the import_* functions which are more suitable for 
+# Cython code. 
+cdef inline int import_array() except -1: 
+    try: 
+        _import_array() 
+    except Exception: 
+        raise ImportError("numpy.core.multiarray failed to import") 
+ 
+cdef inline int import_umath() except -1: 
+    try: 
+        _import_umath() 
+    except Exception: 
+        raise ImportError("numpy.core.umath failed to import") 
+ 
+cdef inline int import_ufunc() except -1: 
+    try: 
+        _import_umath() 
+    except Exception: 
+        raise ImportError("numpy.core.umath failed to import") 

@@ -27,7 +27,7 @@
 #include "vtls/vtls.h"
 #include "http2.h"
 #include "vssh/ssh.h"
-#include "quic.h"
+#include "quic.h" 
 #include "curl_printf.h"
 
 #ifdef USE_ARES
@@ -200,15 +200,15 @@ char *curl_version(void)
 #endif /* _LIBICONV_VERSION */
   src[i++] = iconv_version;
 #endif
-#ifdef USE_SSH
+#ifdef USE_SSH 
   Curl_ssh_version(ssh_version, sizeof(ssh_version));
   src[i++] = ssh_version;
 #endif
-#ifdef USE_NGHTTP2
+#ifdef USE_NGHTTP2 
   Curl_http2_ver(h2_version, sizeof(h2_version));
   src[i++] = h2_version;
 #endif
-#ifdef ENABLE_QUIC
+#ifdef ENABLE_QUIC 
   Curl_quic_ver(h3_version, sizeof(h3_version));
   src[i++] = h3_version;
 #endif
@@ -397,9 +397,9 @@ static curl_version_info_data version_info = {
 #if defined(USE_NGHTTP2)
   | CURL_VERSION_HTTP2
 #endif
-#if defined(ENABLE_QUIC)
-  | CURL_VERSION_HTTP3
-#endif
+#if defined(ENABLE_QUIC) 
+  | CURL_VERSION_HTTP3 
+#endif 
 #if defined(USE_UNIX_SOCKETS)
   | CURL_VERSION_UNIX_SOCKETS
 #endif
@@ -416,8 +416,8 @@ static curl_version_info_data version_info = {
   | CURL_VERSION_ZSTD
 #endif
 #ifndef CURL_DISABLE_ALTSVC
-  | CURL_VERSION_ALTSVC
-#endif
+  | CURL_VERSION_ALTSVC 
+#endif 
 #if defined(USE_HSTS)
   | CURL_VERSION_HSTS
 #endif
@@ -433,8 +433,8 @@ static curl_version_info_data version_info = {
   NULL, /* ssh lib version */
   0,    /* brotli_ver_num */
   NULL, /* brotli version */
-  0,    /* nghttp2 version number */
-  NULL, /* nghttp2 version string */
+  0,    /* nghttp2 version number */ 
+  NULL, /* nghttp2 version string */ 
   NULL, /* quic library string */
 #ifdef CURL_CA_BUNDLE
   CURL_CA_BUNDLE, /* cainfo */
@@ -452,16 +452,16 @@ static curl_version_info_data version_info = {
 
 curl_version_info_data *curl_version_info(CURLversion stamp)
 {
-#if defined(USE_SSH)
+#if defined(USE_SSH) 
   static char ssh_buffer[80];
 #endif
 #ifdef USE_SSL
-#ifdef CURL_WITH_MULTI_SSL
-  static char ssl_buffer[200];
-#else
+#ifdef CURL_WITH_MULTI_SSL 
+  static char ssl_buffer[200]; 
+#else 
   static char ssl_buffer[80];
 #endif
-#endif
+#endif 
 #ifdef HAVE_BROTLI
   static char brotli_buffer[80];
 #endif
@@ -511,8 +511,8 @@ curl_version_info_data *curl_version_info(CURLversion stamp)
 #endif /* _LIBICONV_VERSION */
 #endif
 
-#if defined(USE_SSH)
-  Curl_ssh_version(ssh_buffer, sizeof(ssh_buffer));
+#if defined(USE_SSH) 
+  Curl_ssh_version(ssh_buffer, sizeof(ssh_buffer)); 
   version_info.libssh_version = ssh_buffer;
 #endif
 
@@ -528,22 +528,22 @@ curl_version_info_data *curl_version_info(CURLversion stamp)
   version_info.zstd_version = zstd_buffer;
 #endif
 
-#ifdef USE_NGHTTP2
-  {
-    nghttp2_info *h2 = nghttp2_version(0);
-    version_info.nghttp2_ver_num = h2->version_num;
-    version_info.nghttp2_version = h2->version_str;
-  }
-#endif
-
-#ifdef ENABLE_QUIC
-  {
-    static char quicbuffer[80];
-    Curl_quic_ver(quicbuffer, sizeof(quicbuffer));
-    version_info.quic_version = quicbuffer;
-  }
-#endif
-
+#ifdef USE_NGHTTP2 
+  { 
+    nghttp2_info *h2 = nghttp2_version(0); 
+    version_info.nghttp2_ver_num = h2->version_num; 
+    version_info.nghttp2_version = h2->version_str; 
+  } 
+#endif 
+ 
+#ifdef ENABLE_QUIC 
+  { 
+    static char quicbuffer[80]; 
+    Curl_quic_ver(quicbuffer, sizeof(quicbuffer)); 
+    version_info.quic_version = quicbuffer; 
+  } 
+#endif 
+ 
   (void)stamp; /* avoid compiler warnings, we don't use this */
   return &version_info;
 }

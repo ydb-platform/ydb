@@ -172,10 +172,10 @@ message TComplexMapType {
 };
 
 message TWithJsonName {
-    optional int32 my_upper = 1 [json_name = "My-Upper"];
-    optional int32 My_lower = 2 [json_name = "my-lower"];
-    optional int32 Def_upper = 3; // json_name = "DefUpper"
-    optional int32 def_lower = 4; // json_name = "defLower"
+    optional int32 my_upper = 1 [json_name = "My-Upper"]; 
+    optional int32 My_lower = 2 [json_name = "my-lower"]; 
+    optional int32 Def_upper = 3; // json_name = "DefUpper" 
+    optional int32 def_lower = 4; // json_name = "defLower" 
 }
 
 message TSingleRequiredString {

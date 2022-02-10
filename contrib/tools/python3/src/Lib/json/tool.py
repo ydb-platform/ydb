@@ -1,26 +1,26 @@
-r"""Command-line tool to validate and pretty-print JSON
-
-Usage::
-
-    $ echo '{"json":"obj"}' | python -m json.tool
-    {
-        "json": "obj"
-    }
-    $ echo '{ 1.2:3.4}' | python -m json.tool
-    Expecting property name enclosed in double quotes: line 1 column 3 (char 2)
-
-"""
-import argparse
-import json
-import sys
+r"""Command-line tool to validate and pretty-print JSON 
+ 
+Usage:: 
+ 
+    $ echo '{"json":"obj"}' | python -m json.tool 
+    { 
+        "json": "obj" 
+    } 
+    $ echo '{ 1.2:3.4}' | python -m json.tool 
+    Expecting property name enclosed in double quotes: line 1 column 3 (char 2) 
+ 
+""" 
+import argparse 
+import json 
+import sys 
 from pathlib import Path
-
-
-def main():
-    prog = 'python -m json.tool'
-    description = ('A simple command line interface for json module '
-                   'to validate and pretty-print JSON objects.')
-    parser = argparse.ArgumentParser(prog=prog, description=description)
+ 
+ 
+def main(): 
+    prog = 'python -m json.tool' 
+    description = ('A simple command line interface for json module ' 
+                   'to validate and pretty-print JSON objects.') 
+    parser = argparse.ArgumentParser(prog=prog, description=description) 
     parser.add_argument('infile', nargs='?',
                         type=argparse.FileType(encoding="utf-8"),
                         help='a JSON file to be validated or pretty-printed',
@@ -29,8 +29,8 @@ def main():
                         type=Path,
                         help='write the output of infile to outfile',
                         default=None)
-    parser.add_argument('--sort-keys', action='store_true', default=False,
-                        help='sort the output of dictionaries alphabetically by key')
+    parser.add_argument('--sort-keys', action='store_true', default=False, 
+                        help='sort the output of dictionaries alphabetically by key') 
     parser.add_argument('--no-ensure-ascii', dest='ensure_ascii', action='store_false',
                         help='disable escaping of non-ASCII characters')
     parser.add_argument('--json-lines', action='store_true', default=False,
@@ -48,8 +48,8 @@ def main():
                        help='separate items with spaces rather than newlines')
     group.add_argument('--compact', action='store_true',
                        help='suppress all whitespace separation (most compact)')
-    options = parser.parse_args()
-
+    options = parser.parse_args() 
+ 
     dump_args = {
         'sort_keys': options.sort_keys,
         'indent': options.indent,
@@ -60,7 +60,7 @@ def main():
         dump_args['separators'] = ',', ':'
 
     with options.infile as infile:
-        try:
+        try: 
             if options.json_lines:
                 objs = (json.loads(line) for line in infile)
             else:
@@ -74,11 +74,11 @@ def main():
                 for obj in objs:
                     json.dump(obj, outfile, **dump_args)
                     outfile.write('\n')
-        except ValueError as e:
-            raise SystemExit(e)
-
-
-if __name__ == '__main__':
+        except ValueError as e: 
+            raise SystemExit(e) 
+ 
+ 
+if __name__ == '__main__': 
     try:
         main()
     except BrokenPipeError as exc:

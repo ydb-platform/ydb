@@ -15,7 +15,7 @@ Python >= 3.5
 Installation
 ------------
 
-gRPC Python is available for Linux, macOS, and Windows.
+gRPC Python is available for Linux, macOS, and Windows. 
 
 Installing From PyPI
 ~~~~~~~~~~~~~~~~~~~~

@@ -44,7 +44,7 @@
 #include <google/protobuf/util/internal/object_writer.h>
 #include <google/protobuf/util/internal/json_escaping.h>
 
-
+ 
 namespace google {
 namespace protobuf {
 namespace util {
@@ -143,9 +143,9 @@ JsonStreamParser::JsonStreamParser(ObjectWriter* ow)
       parsed_storage_(),
       string_open_(0),
       chunk_storage_(),
-      coerce_to_utf8_(false),
+      coerce_to_utf8_(false), 
       utf8_replacement_character_(" "),
-      allow_empty_null_(false),
+      allow_empty_null_(false), 
       allow_permissive_key_naming_(false),
       loose_float_number_conversion_(false),
       recursion_depth_(0),
@@ -167,7 +167,7 @@ util::Status JsonStreamParser::Parse(StringPiece json) {
     // Don't point chunk to leftover_ because leftover_ will be updated in
     // ParseChunk(chunk).
     chunk_storage_.swap(leftover_);
-    StrAppend(&chunk_storage_, json);
+    StrAppend(&chunk_storage_, json); 
     chunk = StringPiece(chunk_storage_);
   }
 
@@ -178,11 +178,11 @@ util::Status JsonStreamParser::Parse(StringPiece json) {
 
     // Any leftover characters are stashed in leftover_ for later parsing when
     // there is more data available.
-    StrAppend(&leftover_, chunk.substr(n));
+    StrAppend(&leftover_, chunk.substr(n)); 
     return status;
   } else {
-    leftover_.assign(chunk.data(), chunk.size());
-    return util::Status();
+    leftover_.assign(chunk.data(), chunk.size()); 
+    return util::Status(); 
   }
 }
 
@@ -190,7 +190,7 @@ util::Status JsonStreamParser::FinishParse() {
   // If we do not expect anything and there is nothing left to parse we're all
   // done.
   if (stack_.empty() && leftover_.empty()) {
-    return util::Status();
+    return util::Status(); 
   }
 
   // Lifetime needs to last until RunParser returns, so keep this variable
@@ -229,7 +229,7 @@ util::Status JsonStreamParser::FinishParse() {
 
 util::Status JsonStreamParser::ParseChunk(StringPiece chunk) {
   // Do not do any work if the chunk is empty.
-  if (chunk.empty()) return util::Status();
+  if (chunk.empty()) return util::Status(); 
 
   p_ = json_ = chunk;
 
@@ -253,7 +253,7 @@ util::Status JsonStreamParser::ParseChunk(StringPiece chunk) {
     // unparsed data left, we save it for later parse.
     leftover_ = TProtoStringType(p_);
   }
-  return util::Status();
+  return util::Status(); 
 }
 
 bool JsonStreamParser::IsInputAllWhiteSpaces(TokenType type) {
@@ -313,15 +313,15 @@ util::Status JsonStreamParser::RunParser() {
         // If we have a key we still need to render, make sure to save off the
         // contents in our own storage.
         if (!key_.empty() && key_storage_.empty()) {
-          StrAppend(&key_storage_, key_);
+          StrAppend(&key_storage_, key_); 
           key_ = StringPiece(key_storage_);
         }
-        result = util::Status();
+        result = util::Status(); 
       }
       return result;
     }
   }
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status JsonStreamParser::ParseValue(TokenType type) {
@@ -343,10 +343,10 @@ util::Status JsonStreamParser::ParseValue(TokenType type) {
     case UNKNOWN:
       return ReportUnknown("Expected a value.", ParseErrorType::EXPECTED_VALUE);
     default: {
-      if (allow_empty_null_ && IsEmptyNullAllowed(type)) {
-        return ParseEmptyNull();
-      }
-
+      if (allow_empty_null_ && IsEmptyNullAllowed(type)) { 
+        return ParseEmptyNull(); 
+      } 
+ 
       // Special case for having been cut off while parsing, wait for more data.
       // This handles things like 'fals' being at the end of the string, we
       // don't know if the next char would be e, completing it, or something
@@ -364,8 +364,8 @@ util::Status JsonStreamParser::ParseString() {
   util::Status result = ParseStringHelper();
   if (result.ok()) {
     ow_->RenderString(key_, parsed_);
-    key_ = StringPiece();
-    parsed_ = StringPiece();
+    key_ = StringPiece(); 
+    parsed_ = StringPiece(); 
     parsed_storage_.clear();
   }
   return result;
@@ -449,7 +449,7 @@ util::Status JsonStreamParser::ParseStringHelper() {
       // start fresh.
       string_open_ = 0;
       Advance();
-      return util::Status();
+      return util::Status(); 
     }
     // Normal character, just advance past it.
     Advance();
@@ -539,7 +539,7 @@ util::Status JsonStreamParser::ParseUnicodeEscape() {
   // Advance past the [final] code unit escape.
   p_.remove_prefix(kUnicodeEscapedLength);
   parsed_storage_.append(buf, len);
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status JsonStreamParser::ParseNumber() {
@@ -549,17 +549,17 @@ util::Status JsonStreamParser::ParseNumber() {
     switch (number.type) {
       case NumberResult::DOUBLE:
         ow_->RenderDouble(key_, number.double_val);
-        key_ = StringPiece();
+        key_ = StringPiece(); 
         break;
 
       case NumberResult::INT:
         ow_->RenderInt64(key_, number.int_val);
-        key_ = StringPiece();
+        key_ = StringPiece(); 
         break;
 
       case NumberResult::UINT:
         ow_->RenderUint64(key_, number.uint_val);
-        key_ = StringPiece();
+        key_ = StringPiece(); 
         break;
 
       default:
@@ -677,9 +677,9 @@ util::Status JsonStreamParser::HandleBeginObject() {
   if (!status.ok()) {
     return status;
   }
-  key_ = StringPiece();
+  key_ = StringPiece(); 
   stack_.push(ENTRY);
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status JsonStreamParser::ParseObjectMid(TokenType type) {
@@ -693,13 +693,13 @@ util::Status JsonStreamParser::ParseObjectMid(TokenType type) {
     Advance();
     ow_->EndObject();
     --recursion_depth_;
-    return util::Status();
+    return util::Status(); 
   }
   // Found a comma, advance past it and get ready for an entry.
   if (type == VALUE_SEPARATOR) {
     Advance();
     stack_.push(ENTRY);
-    return util::Status();
+    return util::Status(); 
   }
   // Illegal token after key:value pair.
   return ReportFailure("Expected , or } after key:value pair.",
@@ -717,7 +717,7 @@ util::Status JsonStreamParser::ParseEntry(TokenType type) {
     ow_->EndObject();
     Advance();
     --recursion_depth_;
-    return util::Status();
+    return util::Status(); 
   }
 
   util::Status result;
@@ -732,7 +732,7 @@ util::Status JsonStreamParser::ParseEntry(TokenType type) {
       } else {
         key_ = parsed_;
       }
-      parsed_ = StringPiece();
+      parsed_ = StringPiece(); 
     }
   } else if (type == BEGIN_KEY) {
     // Key is a bare key (back compat), create a StringPiece pointing to it.
@@ -766,7 +766,7 @@ util::Status JsonStreamParser::ParseEntryMid(TokenType type) {
   if (type == ENTRY_SEPARATOR) {
     Advance();
     stack_.push(VALUE);
-    return util::Status();
+    return util::Status(); 
   }
   return ReportFailure("Expected : between key:value pair.",
                        ParseErrorType::EXPECTED_COLON);
@@ -776,9 +776,9 @@ util::Status JsonStreamParser::HandleBeginArray() {
   GOOGLE_DCHECK_EQ('[', *p_.data());
   Advance();
   ow_->StartList(key_);
-  key_ = StringPiece();
+  key_ = StringPiece(); 
   stack_.push(ARRAY_VALUE);
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status JsonStreamParser::ParseArrayValue(TokenType type) {
@@ -790,12 +790,12 @@ util::Status JsonStreamParser::ParseArrayValue(TokenType type) {
   if (type == END_ARRAY) {
     ow_->EndList();
     Advance();
-    return util::Status();
+    return util::Status(); 
   }
 
   // The ParseValue call may push something onto the stack so we need to make
-  // sure an ARRAY_MID is after it, so we push it on now. Also, the parsing of
-  // empty-null array value is relying on this ARRAY_MID token.
+  // sure an ARRAY_MID is after it, so we push it on now. Also, the parsing of 
+  // empty-null array value is relying on this ARRAY_MID token. 
   stack_.push(ARRAY_MID);
   util::Status result = ParseValue(type);
   if (util::IsCancelled(result)) {
@@ -815,14 +815,14 @@ util::Status JsonStreamParser::ParseArrayMid(TokenType type) {
   if (type == END_ARRAY) {
     ow_->EndList();
     Advance();
-    return util::Status();
+    return util::Status(); 
   }
 
   // Found a comma, advance past it and expect an array value next.
   if (type == VALUE_SEPARATOR) {
     Advance();
     stack_.push(ARRAY_VALUE);
-    return util::Status();
+    return util::Status(); 
   }
   // Illegal token after array value.
   return ReportFailure("Expected , or ] after array value.",
@@ -831,37 +831,37 @@ util::Status JsonStreamParser::ParseArrayMid(TokenType type) {
 
 util::Status JsonStreamParser::ParseTrue() {
   ow_->RenderBool(key_, true);
-  key_ = StringPiece();
+  key_ = StringPiece(); 
   p_.remove_prefix(kKeywordTrue.length());
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status JsonStreamParser::ParseFalse() {
   ow_->RenderBool(key_, false);
-  key_ = StringPiece();
+  key_ = StringPiece(); 
   p_.remove_prefix(kKeywordFalse.length());
-  return util::Status();
+  return util::Status(); 
 }
 
 util::Status JsonStreamParser::ParseNull() {
   ow_->RenderNull(key_);
-  key_ = StringPiece();
+  key_ = StringPiece(); 
   p_.remove_prefix(kKeywordNull.length());
-  return util::Status();
+  return util::Status(); 
 }
 
-util::Status JsonStreamParser::ParseEmptyNull() {
-  ow_->RenderNull(key_);
-  key_ = StringPiece();
-  return util::Status();
-}
-
-bool JsonStreamParser::IsEmptyNullAllowed(TokenType type) {
-  if (stack_.empty()) return false;
-  return (stack_.top() == ARRAY_MID && type == VALUE_SEPARATOR) ||
-         stack_.top() == OBJ_MID;
-}
-
+util::Status JsonStreamParser::ParseEmptyNull() { 
+  ow_->RenderNull(key_); 
+  key_ = StringPiece(); 
+  return util::Status(); 
+} 
+ 
+bool JsonStreamParser::IsEmptyNullAllowed(TokenType type) { 
+  if (stack_.empty()) return false; 
+  return (stack_.top() == ARRAY_MID && type == VALUE_SEPARATOR) || 
+         stack_.top() == OBJ_MID; 
+} 
+ 
 util::Status JsonStreamParser::ReportFailure(StringPiece message,
                                              ParseErrorType parse_code) {
   static const int kContextLength = 20;
@@ -939,7 +939,7 @@ util::Status JsonStreamParser::ParseKey() {
   }
   // Since we aren't using the key storage, clear it out.
   key_storage_.clear();
-  return util::Status();
+  return util::Status(); 
 }
 
 JsonStreamParser::TokenType JsonStreamParser::GetNextTokenType() {

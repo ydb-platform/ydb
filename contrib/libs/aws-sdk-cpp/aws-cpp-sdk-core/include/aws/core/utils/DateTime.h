@@ -1,7 +1,7 @@
-/**
- * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
- * SPDX-License-Identifier: Apache-2.0.
- */
+/** 
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+ * SPDX-License-Identifier: Apache-2.0. 
+ */ 
 
 #pragma once
 
@@ -17,7 +17,7 @@ namespace Aws
         {
             RFC822, //for http headers
             ISO_8601, //for query and xml payloads
-            ISO_8601_BASIC, // for retry headers and signers
+            ISO_8601_BASIC, // for retry headers and signers 
             AutoDetect
         };
 
@@ -49,7 +49,7 @@ namespace Aws
         };
 
         /**
-         * Wrapper for all the weird crap we need to do with timestamps.
+         * Wrapper for all the weird crap we need to do with timestamps. 
          */
         class AWS_CORE_API DateTime
         {
@@ -60,12 +60,12 @@ namespace Aws
             DateTime();
 
             /**
-            *  Initializes time point to any other arbitrary timepoint
+            *  Initializes time point to any other arbitrary timepoint 
             */
             DateTime(const std::chrono::system_clock::time_point& timepointToAssign);
 
             /**
-             * Initializes time point to millis Since epoch
+             * Initializes time point to millis Since epoch 
              */
             DateTime(int64_t millisSinceEpoch);
 
@@ -93,7 +93,7 @@ namespace Aws
 
             DateTime operator+(const std::chrono::milliseconds& a) const;
             DateTime operator-(const std::chrono::milliseconds& a) const;
-
+ 
             /**
              * Assign from seconds.millis since epoch.
              */
@@ -225,17 +225,17 @@ namespace Aws
             static double ComputeCurrentTimestampInAmazonFormat();
 
             /**
-             * Calculates the current time in GMT with millisecond precision using the format
-             * "Year-month-day hours:minutes:seconds.milliseconds"
-             */
-            static Aws::String CalculateGmtTimeWithMsPrecision();
-
-            /**
+             * Calculates the current time in GMT with millisecond precision using the format 
+             * "Year-month-day hours:minutes:seconds.milliseconds" 
+             */ 
+            static Aws::String CalculateGmtTimeWithMsPrecision(); 
+ 
+            /** 
              * Compute the difference between two timestamps.
              */
             static std::chrono::milliseconds Diff(const DateTime& a, const DateTime& b);
 
-            std::chrono::milliseconds operator - (const DateTime& other) const;
+            std::chrono::milliseconds operator - (const DateTime& other) const; 
         private:
             std::chrono::system_clock::time_point m_time;
             bool m_valid;
@@ -243,7 +243,7 @@ namespace Aws
             void ConvertTimestampStringToTimePoint(const char* timestamp, DateFormat format);
             tm GetTimeStruct(bool localTime) const;
             tm ConvertTimestampToLocalTimeStruct() const;
-            tm ConvertTimestampToGmtStruct() const;
+            tm ConvertTimestampToGmtStruct() const; 
         };
 
     } // namespace Utils

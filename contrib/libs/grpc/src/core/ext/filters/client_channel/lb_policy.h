@@ -1,26 +1,26 @@
-/*
- *
- * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
-#ifndef GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_LB_POLICY_H
-#define GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_LB_POLICY_H
-
-#include <grpc/support/port_platform.h>
-
+/* 
+ * 
+ * Copyright 2015 gRPC authors. 
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ * 
+ */ 
+ 
+#ifndef GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_LB_POLICY_H 
+#define GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_LB_POLICY_H 
+ 
+#include <grpc/support/port_platform.h> 
+ 
 #include <functional>
 #include <iterator>
 
@@ -31,18 +31,18 @@
 #include "src/core/ext/filters/client_channel/service_config.h"
 #include "src/core/ext/filters/client_channel/subchannel_interface.h"
 #include "src/core/lib/gprpp/map.h"
-#include "src/core/lib/gprpp/orphanable.h"
-#include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/iomgr/polling_entity.h"
+#include "src/core/lib/gprpp/orphanable.h" 
+#include "src/core/lib/gprpp/ref_counted_ptr.h" 
+#include "src/core/lib/iomgr/polling_entity.h" 
 #include "src/core/lib/iomgr/work_serializer.h"
-#include "src/core/lib/transport/connectivity_state.h"
-
-namespace grpc_core {
-
+#include "src/core/lib/transport/connectivity_state.h" 
+ 
+namespace grpc_core { 
+ 
 extern DebugOnlyTraceFlag grpc_trace_lb_policy_refcount;
 
-/// Interface for load balancing policies.
-///
+/// Interface for load balancing policies. 
+/// 
 /// The following concepts are used here:
 ///
 /// Channel: An abstraction that manages connections to backend servers
@@ -73,15 +73,15 @@ extern DebugOnlyTraceFlag grpc_trace_lb_policy_refcount;
 
 /// LoadBalacingPolicy API.
 ///
-/// Note: All methods with a "Locked" suffix must be called from the
+/// Note: All methods with a "Locked" suffix must be called from the 
 /// work_serializer passed to the constructor.
-///
-/// Any I/O done by the LB policy should be done under the pollset_set
-/// returned by \a interested_parties().
+/// 
+/// Any I/O done by the LB policy should be done under the pollset_set 
+/// returned by \a interested_parties(). 
 // TODO(roth): Once we move to EventManager-based polling, remove the
 // interested_parties() hooks from the API.
 class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
- public:
+ public: 
   // Represents backend metrics reported by the backend to the client.
   struct BackendMetricData {
     /// CPU utilization expressed as a fraction of available CPU resources.
@@ -325,7 +325,7 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   };
 
   /// Args used to instantiate an LB policy.
-  struct Args {
+  struct Args { 
     /// The work_serializer under which all LB policy calls will be run.
     std::shared_ptr<WorkSerializer> work_serializer;
     /// Channel control helper.
@@ -338,18 +338,18 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
     // does not take ownership of args, which is the opposite of how we
     // handle them in UpdateArgs.
     const grpc_channel_args* args = nullptr;
-  };
-
+  }; 
+ 
   explicit LoadBalancingPolicy(Args args, intptr_t initial_refcount = 1);
   virtual ~LoadBalancingPolicy();
-
-  // Not copyable nor movable.
-  LoadBalancingPolicy(const LoadBalancingPolicy&) = delete;
-  LoadBalancingPolicy& operator=(const LoadBalancingPolicy&) = delete;
-
+ 
+  // Not copyable nor movable. 
+  LoadBalancingPolicy(const LoadBalancingPolicy&) = delete; 
+  LoadBalancingPolicy& operator=(const LoadBalancingPolicy&) = delete; 
+ 
   /// Returns the name of the LB policy.
   virtual const char* name() const = 0;
-
+ 
   /// Updates the policy with new data from the resolver.  Will be invoked
   /// immediately after LB policy is constructed, and then again whenever
   /// the resolver returns a new result.
@@ -359,15 +359,15 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
   /// This is a no-op by default, since most LB policies never go into
   /// IDLE state.
   virtual void ExitIdleLocked() {}
-
+ 
   /// Resets connection backoff.
   virtual void ResetBackoffLocked() = 0;
-
+ 
   grpc_pollset_set* interested_parties() const { return interested_parties_; }
-
+ 
   // Note: This must be invoked while holding the work_serializer.
   void Orphan() override;
-
+ 
   // A picker that returns PICK_QUEUE for all picks.
   // Also calls the parent LB policy's ExitIdleLocked() method when the
   // first pick is seen.
@@ -375,11 +375,11 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
    public:
     explicit QueuePicker(RefCountedPtr<LoadBalancingPolicy> parent)
         : parent_(std::move(parent)) {}
-
+ 
     ~QueuePicker() { parent_.reset(DEBUG_LOCATION, "QueuePicker"); }
-
+ 
     PickResult Pick(PickArgs args) override;
-
+ 
    private:
     RefCountedPtr<LoadBalancingPolicy> parent_;
     bool exit_idle_called_ = false;
@@ -390,36 +390,36 @@ class LoadBalancingPolicy : public InternallyRefCounted<LoadBalancingPolicy> {
    public:
     explicit TransientFailurePicker(grpc_error* error) : error_(error) {}
     ~TransientFailurePicker() override { GRPC_ERROR_UNREF(error_); }
-
+ 
     PickResult Pick(PickArgs args) override;
 
    private:
     grpc_error* error_;
   };
-
- protected:
+ 
+ protected: 
   std::shared_ptr<WorkSerializer> work_serializer() const {
     return work_serializer_;
   }
-
+ 
   // Note: LB policies MUST NOT call any method on the helper from their
   // constructor.
   ChannelControlHelper* channel_control_helper() const {
     return channel_control_helper_.get();
-  }
-
+  } 
+ 
   /// Shuts down the policy.
   virtual void ShutdownLocked() = 0;
-
- private:
+ 
+ private: 
   /// Work Serializer under which LB policy actions take place.
   std::shared_ptr<WorkSerializer> work_serializer_;
-  /// Owned pointer to interested parties in load balancing decisions.
-  grpc_pollset_set* interested_parties_;
+  /// Owned pointer to interested parties in load balancing decisions. 
+  grpc_pollset_set* interested_parties_; 
   /// Channel control helper.
   std::unique_ptr<ChannelControlHelper> channel_control_helper_;
-};
-
-}  // namespace grpc_core
-
-#endif /* GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_LB_POLICY_H */
+}; 
+ 
+}  // namespace grpc_core 
+ 
+#endif /* GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_LB_POLICY_H */ 

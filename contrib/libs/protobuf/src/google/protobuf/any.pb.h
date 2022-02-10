@@ -51,7 +51,7 @@ struct PROTOBUF_EXPORT TableStruct_google_2fprotobuf_2fany_2eproto {
   static const ::PROTOBUF_NAMESPACE_ID::internal::FieldMetadata field_metadata[];
   static const ::PROTOBUF_NAMESPACE_ID::internal::SerializationTable serialization_table[];
   static const ::PROTOBUF_NAMESPACE_ID::uint32 offsets[];
-};
+}; 
 PROTOBUF_EXPORT extern const ::PROTOBUF_NAMESPACE_ID::internal::DescriptorTable descriptor_table_google_2fprotobuf_2fany_2eproto;
 PROTOBUF_NAMESPACE_OPEN
 class Any;
@@ -104,13 +104,13 @@ class PROTOBUF_EXPORT Any final :
   static const Any& default_instance() {
     return *internal_default_instance();
   }
-  static inline const Any* internal_default_instance() {
-    return reinterpret_cast<const Any*>(
-               &_Any_default_instance_);
-  }
+  static inline const Any* internal_default_instance() { 
+    return reinterpret_cast<const Any*>( 
+               &_Any_default_instance_); 
+  } 
   static constexpr int kIndexInFileMessages =
-    0;
-
+    0; 
+ 
   // implements Any -----------------------------------------------
 
   bool PackFrom(const ::PROTOBUF_NAMESPACE_ID::Message& message) {
@@ -144,9 +144,9 @@ class PROTOBUF_EXPORT Any final :
   }
   static bool ParseAnyTypeUrl(::PROTOBUF_NAMESPACE_ID::ConstStringParam type_url,
                               TProtoStringType* full_type_name);
-  friend void swap(Any& a, Any& b) {
-    a.Swap(&b);
-  }
+  friend void swap(Any& a, Any& b) { 
+    a.Swap(&b); 
+  } 
   inline void Swap(Any* other) {
     if (other == this) return;
     if (GetOwningArena() == other->GetOwningArena()) {
@@ -216,7 +216,7 @@ class PROTOBUF_EXPORT Any final :
     kTypeUrlFieldNumber = 1,
     kValueFieldNumber = 2,
   };
-  // string type_url = 1;
+  // string type_url = 1; 
   void clear_type_url();
   const TProtoStringType& type_url() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
@@ -230,7 +230,7 @@ class PROTOBUF_EXPORT Any final :
   TProtoStringType* _internal_mutable_type_url();
   public:
 
-  // bytes value = 2;
+  // bytes value = 2; 
   void clear_value();
   const TProtoStringType& value() const;
   template <typename ArgT0 = const TProtoStringType&, typename... ArgT>
@@ -262,13 +262,13 @@ class PROTOBUF_EXPORT Any final :
 
 // ===================================================================
 
-#ifdef __GNUC__
-  #pragma GCC diagnostic push
-  #pragma GCC diagnostic ignored "-Wstrict-aliasing"
-#endif  // __GNUC__
+#ifdef __GNUC__ 
+  #pragma GCC diagnostic push 
+  #pragma GCC diagnostic ignored "-Wstrict-aliasing" 
+#endif  // __GNUC__ 
 // Any
 
-// string type_url = 1;
+// string type_url = 1; 
 inline void Any::clear_type_url() {
   type_url_.ClearToEmpty();
 }
@@ -314,7 +314,7 @@ inline void Any::set_allocated_type_url(TProtoStringType* type_url) {
   // @@protoc_insertion_point(field_set_allocated:google.protobuf.Any.type_url)
 }
 
-// bytes value = 2;
+// bytes value = 2; 
 inline void Any::clear_value() {
   value_.ClearToEmpty();
 }
@@ -360,14 +360,14 @@ inline void Any::set_allocated_value(TProtoStringType* value) {
   // @@protoc_insertion_point(field_set_allocated:google.protobuf.Any.value)
 }
 
-#ifdef __GNUC__
-  #pragma GCC diagnostic pop
-#endif  // __GNUC__
+#ifdef __GNUC__ 
+  #pragma GCC diagnostic pop 
+#endif  // __GNUC__ 
 
 // @@protoc_insertion_point(namespace_scope)
 
 PROTOBUF_NAMESPACE_CLOSE
-
+ 
 // @@protoc_insertion_point(global_scope)
 
 #include <google/protobuf/port_undef.inc>

@@ -183,7 +183,7 @@ RECURSE(
     croniter
     crontab
     cryptography
-    cssselect 
+    cssselect
     cssutils
     curlify
     cx-Oracle

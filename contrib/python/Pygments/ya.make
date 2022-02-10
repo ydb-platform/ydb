@@ -3,7 +3,7 @@ PY23_LIBRARY()
 LICENSE(Service-Py23-Proxy)
 
 OWNER(g:python-contrib)
- 
+
 IF (PYTHON2)
     PEERDIR(contrib/python/Pygments/py2)
 ELSE()

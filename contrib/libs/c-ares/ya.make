@@ -6,7 +6,7 @@ OWNER(
     max42
     g:cpp-contrib
 )
- 
+
 VERSION(1.16.1)
 
 ORIGINAL_SOURCE(https://c-ares.haxx.se/download/c-ares-1.16.1.tar.gz)

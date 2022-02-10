@@ -8,7 +8,7 @@ OWNER(
     g:cpp-committee
     g:cpp-contrib
 )
- 
+
 VERSION(3.17.3)
 
 ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v3.17.3.tar.gz)

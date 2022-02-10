@@ -1,7 +1,7 @@
 PY2_LIBRARY()
 
 LICENSE(MIT)
- 
+
 OWNER(g:python-contrib borman orivej)
 
 VERSION(44.1.1)

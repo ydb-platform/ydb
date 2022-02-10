@@ -1,7 +1,7 @@
 PY3_LIBRARY()
 
 OWNER(borman orivej g:python-contrib)
- 
+
 VERSION(59.7.0)
 
 LICENSE(MIT)

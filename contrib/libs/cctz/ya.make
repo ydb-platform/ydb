@@ -6,7 +6,7 @@ OWNER(
     dfyz
     petrk
 )
- 
+
 VERSION(2020-11-11)
 
 ORIGINAL_SOURCE(https://github.com/google/cctz/archive/98fb541c6f0f35cf0dffcbc3777d8385bbd5b4c1.tar.gz)

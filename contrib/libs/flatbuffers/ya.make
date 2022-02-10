@@ -7,7 +7,7 @@ OWNER(
     kirillovs
     g:cpp-contrib
 )
- 
+
 VERSION(2.0.0)
 
 ORIGINAL_SOURCE(https://github.com/google/flatbuffers/archive/v2.0.0.tar.gz)

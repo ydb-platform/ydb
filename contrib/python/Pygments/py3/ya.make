@@ -5,7 +5,7 @@ PY3_LIBRARY()
 OWNER(blinkov g:python-contrib)
 
 VERSION(2.11.2)
- 
+
 LICENSE(BSD-3-Clause)
 
 NO_LINT()

@@ -5,7 +5,7 @@ PY23_LIBRARY()
 PROVIDES(pyparsing)
 
 OWNER(borman orivej g:python-contrib)
- 
+
 VERSION(2.4.7)
 
 LICENSE(MIT)

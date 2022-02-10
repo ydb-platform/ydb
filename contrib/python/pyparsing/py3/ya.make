@@ -5,7 +5,7 @@ PY3_LIBRARY()
 PROVIDES(pyparsing)
 
 OWNER(borman orivej g:python-contrib)
- 
+
 VERSION(3.0.7)
 
 LICENSE(MIT)

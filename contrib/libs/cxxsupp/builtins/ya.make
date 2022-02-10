@@ -1,7 +1,7 @@
 LIBRARY()
 
 # Part of compiler-rt LLVM subproject
- 
+
 # git repository: https://github.com/llvm/llvm-project.git
 # directory: compiler-rt/lib/builtins
 # revision: 08f0372c351a57b01afee6c64066961203da28c5

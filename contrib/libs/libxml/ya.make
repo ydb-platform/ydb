@@ -15,7 +15,7 @@ LICENSE(
     MIT AND
     Mit-Veillard-Variant
 )
- 
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(

@@ -7,11 +7,11 @@
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/generic/ylimits.h>
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 
-#include <cmath>
+#include <cmath> 
 #include <variant>
-
+ 
 class IInputStream;
 class IOutputStream;
 
@@ -160,16 +160,16 @@ public:
     TMapType& UncheckedAsMap() noexcept;
 
     // integer types cast
-    // makes overflow checks
+    // makes overflow checks 
     template<typename T>
-    T IntCast() const;
-
+    T IntCast() const; 
+ 
     // integers <-> double <-> string
-    // makes overflow checks
-    template<typename T>
-    T ConvertTo() const;
-
-    template<typename T>
+    // makes overflow checks 
+    template<typename T> 
+    T ConvertTo() const; 
+ 
+    template<typename T> 
     T& As();
 
     template<typename T>
@@ -183,8 +183,8 @@ public:
 
     const TNode& operator[](size_t index) const;
     TNode& operator[](size_t index);
-    const TNode& At(size_t index) const;
-    TNode& At(size_t index);
+    const TNode& At(size_t index) const; 
+    TNode& At(size_t index); 
 
     TNode& Add() &;
     TNode Add() &&;
@@ -203,53 +203,53 @@ public:
     const TNode& operator[](const TStringBuf key) const;
     TNode& operator[](const TStringBuf key);
     const TNode& At(const TStringBuf key) const;
-    TNode& At(const TStringBuf key);
+    TNode& At(const TStringBuf key); 
 
-    // map getters
-    // works the same way like simple getters
-    const TString& ChildAsString(const TStringBuf key) const;
-    i64 ChildAsInt64(const TStringBuf key) const;
-    ui64 ChildAsUint64(const TStringBuf key) const;
-    double ChildAsDouble(const TStringBuf key) const;
-    bool ChildAsBool(const TStringBuf key) const;
-    const TListType& ChildAsList(const TStringBuf key) const;
-    const TMapType& ChildAsMap(const TStringBuf key) const;
-    TListType& ChildAsList(const TStringBuf key);
-    TMapType& ChildAsMap(const TStringBuf key);
-
-    template<typename T>
-    T ChildIntCast(const TStringBuf key) const;
-
-    template<typename T>
-    T ChildConvertTo(const TStringBuf key) const;
-
+    // map getters 
+    // works the same way like simple getters 
+    const TString& ChildAsString(const TStringBuf key) const; 
+    i64 ChildAsInt64(const TStringBuf key) const; 
+    ui64 ChildAsUint64(const TStringBuf key) const; 
+    double ChildAsDouble(const TStringBuf key) const; 
+    bool ChildAsBool(const TStringBuf key) const; 
+    const TListType& ChildAsList(const TStringBuf key) const; 
+    const TMapType& ChildAsMap(const TStringBuf key) const; 
+    TListType& ChildAsList(const TStringBuf key); 
+    TMapType& ChildAsMap(const TStringBuf key); 
+ 
+    template<typename T> 
+    T ChildIntCast(const TStringBuf key) const; 
+ 
+    template<typename T> 
+    T ChildConvertTo(const TStringBuf key) const; 
+ 
     template<typename T>
     const T& ChildAs(const TStringBuf key) const;
 
     template<typename T>
     T& ChildAs(const TStringBuf key);
 
-    // list getters
-    // works the same way like simple getters
-    const TString& ChildAsString(size_t index) const;
-    i64 ChildAsInt64(size_t index) const;
-    ui64 ChildAsUint64(size_t index) const;
-    double ChildAsDouble(size_t index) const;
-    bool ChildAsBool(size_t index) const;
-    const TListType& ChildAsList(size_t index) const;
-    const TMapType& ChildAsMap(size_t index) const;
-    TListType& ChildAsList(size_t index);
-    TMapType& ChildAsMap(size_t index);
-
-    template<typename T>
-    T ChildIntCast(size_t index) const;
-
-    template<typename T>
-    T ChildConvertTo(size_t index) const;
-
+    // list getters 
+    // works the same way like simple getters 
+    const TString& ChildAsString(size_t index) const; 
+    i64 ChildAsInt64(size_t index) const; 
+    ui64 ChildAsUint64(size_t index) const; 
+    double ChildAsDouble(size_t index) const; 
+    bool ChildAsBool(size_t index) const; 
+    const TListType& ChildAsList(size_t index) const; 
+    const TMapType& ChildAsMap(size_t index) const; 
+    TListType& ChildAsList(size_t index); 
+    TMapType& ChildAsMap(size_t index); 
+ 
+    template<typename T> 
+    T ChildIntCast(size_t index) const; 
+ 
+    template<typename T> 
+    T ChildConvertTo(size_t index) const; 
+ 
     template<typename T>
     const T& ChildAs(size_t index) const;
-
+ 
     template<typename T>
     T& ChildAs(size_t index);
 
@@ -295,7 +295,7 @@ inline bool TNode::IsArithmetic() const {
 }
 
 template<typename T>
-inline T TNode::IntCast() const {
+inline T TNode::IntCast() const { 
     if constexpr (std::is_integral<T>::value) {
         try {
             switch (GetType()) {
@@ -305,17 +305,17 @@ inline T TNode::IntCast() const {
                     return SafeIntegerCast<T>(AsInt64());
                 default:
                     ythrow TTypeError() << "IntCast() called for type " << GetType();
-            }
+            } 
         } catch(TBadCastException& exc) {
             ythrow TTypeError() << "TBadCastException during IntCast(): " << exc.what();
         }
     } else {
         static_assert(sizeof(T) != sizeof(T), "implemented only for std::is_integral types");
-    }
-}
-
-template<typename T>
-inline T TNode::ConvertTo() const {
+    } 
+} 
+ 
+template<typename T> 
+inline T TNode::ConvertTo() const { 
     if constexpr (std::is_integral<T>::value) {
         switch (GetType()) {
             case NYT::TNode::String:
@@ -339,125 +339,125 @@ inline T TNode::ConvertTo() const {
     } else {
         static_assert(sizeof(T) != sizeof(T), "should have template specialization");
     }
-}
-
-template<>
-inline TString TNode::ConvertTo<TString>() const {
-    switch (GetType()) {
+} 
+ 
+template<> 
+inline TString TNode::ConvertTo<TString>() const { 
+    switch (GetType()) { 
         case NYT::TNode::String:
-            return AsString();
+            return AsString(); 
         case NYT::TNode::Int64:
-            return ::ToString(AsInt64());
+            return ::ToString(AsInt64()); 
         case NYT::TNode::Uint64:
-            return ::ToString(AsUint64());
+            return ::ToString(AsUint64()); 
         case NYT::TNode::Double:
-            return ::ToString(AsDouble());
+            return ::ToString(AsDouble()); 
         case NYT::TNode::Bool:
-            return ::ToString(AsBool());
+            return ::ToString(AsBool()); 
         case NYT::TNode::List:
         case NYT::TNode::Map:
         case NYT::TNode::Null:
         case NYT::TNode::Undefined:
             ythrow TTypeError() << "ConvertTo<TString>() called for type " << GetType();
-    }
+    } 
     Y_UNREACHABLE();
-}
-
-template<>
-inline double TNode::ConvertTo<double>() const {
-    switch (GetType()) {
+} 
+ 
+template<> 
+inline double TNode::ConvertTo<double>() const { 
+    switch (GetType()) { 
         case NYT::TNode::String:
-            return ::FromString(AsString());
+            return ::FromString(AsString()); 
         case NYT::TNode::Int64:
-            return AsInt64();
+            return AsInt64(); 
         case NYT::TNode::Uint64:
-            return AsUint64();
+            return AsUint64(); 
         case NYT::TNode::Double:
-            return AsDouble();
+            return AsDouble(); 
         case NYT::TNode::Bool:
-            return AsBool();
+            return AsBool(); 
         case NYT::TNode::List:
         case NYT::TNode::Map:
         case NYT::TNode::Null:
         case NYT::TNode::Undefined:
             ythrow TTypeError() << "ConvertTo<double>() called for type " << GetType();
-    }
-}
-
-template<>
-inline bool TNode::ConvertTo<bool>() const {
-    switch (GetType()) {
+    } 
+} 
+ 
+template<> 
+inline bool TNode::ConvertTo<bool>() const { 
+    switch (GetType()) { 
         case NYT::TNode::String:
-            return ::FromString(AsString());
+            return ::FromString(AsString()); 
         case NYT::TNode::Int64:
-            return AsInt64();
+            return AsInt64(); 
         case NYT::TNode::Uint64:
-            return AsUint64();
+            return AsUint64(); 
         case NYT::TNode::Double:
-            return AsDouble();
+            return AsDouble(); 
         case NYT::TNode::Bool:
-            return AsBool();
+            return AsBool(); 
         case NYT::TNode::List:
         case NYT::TNode::Map:
         case NYT::TNode::Null:
         case NYT::TNode::Undefined:
             ythrow TTypeError() << "ConvertTo<bool>() called for type " << GetType();
-    }
-}
-
-template<typename T>
-inline T TNode::ChildIntCast(const TStringBuf key) const {
-    const auto& node = At(key);
-    try {
-        return node.IntCast<T>();
-    } catch (TTypeError& e) {
-        e << ", during getting key=" << key;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key;
-    }
-}
-
-template<typename T>
-inline T TNode::ChildIntCast(size_t index) const {
-    const auto& node = At(index);
-    try {
-        return node.IntCast<T>();
-    } catch (TTypeError& e) {
-        e << ", during getting index=" << index;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index;
-    }
-}
-
-template<typename T>
-inline T TNode::ChildConvertTo(const TStringBuf key) const {
-    const auto& node = At(key);
-    try {
-        return node.ConvertTo<T>();
-    } catch (TTypeError& e) {
-        e << ", during getting key=" << key;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key;
-    }
-}
-
-template<typename T>
-inline T TNode::ChildConvertTo(size_t index) const {
-    const auto& node = At(index);
-    try {
-        return node.ConvertTo<T>();
-    } catch (TTypeError& e) {
-        e << ", during getting index=" << index;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index;
-    }
-}
-
-template<typename T>
+    } 
+} 
+ 
+template<typename T> 
+inline T TNode::ChildIntCast(const TStringBuf key) const { 
+    const auto& node = At(key); 
+    try { 
+        return node.IntCast<T>(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting key=" << key; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key; 
+    } 
+} 
+ 
+template<typename T> 
+inline T TNode::ChildIntCast(size_t index) const { 
+    const auto& node = At(index); 
+    try { 
+        return node.IntCast<T>(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting index=" << index; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index; 
+    } 
+} 
+ 
+template<typename T> 
+inline T TNode::ChildConvertTo(const TStringBuf key) const { 
+    const auto& node = At(key); 
+    try { 
+        return node.ConvertTo<T>(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting key=" << key; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key; 
+    } 
+} 
+ 
+template<typename T> 
+inline T TNode::ChildConvertTo(size_t index) const { 
+    const auto& node = At(index); 
+    try { 
+        return node.ConvertTo<T>(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting index=" << index; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index; 
+    } 
+} 
+ 
+template<typename T> 
 inline const T& TNode::ChildAs(const TStringBuf key) const {
     const auto& node = At(key);
     try {

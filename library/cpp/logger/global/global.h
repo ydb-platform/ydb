@@ -23,11 +23,11 @@ public:
         : TLog(logType, priority)
     {
     }
-
+ 
     TGlobalLog(THolder<TLogBackend> backend)
         : TLog(std::move(backend))
-    {
-    }
+    { 
+    } 
 };
 
 template <>
@@ -39,11 +39,11 @@ public:
         : TLog(logType, priority)
     {
     }
-
+ 
     TNullLog(THolder<TLogBackend> backend)
         : TLog(std::move(backend))
-    {
-    }
+    { 
+    } 
 };
 
 template <>

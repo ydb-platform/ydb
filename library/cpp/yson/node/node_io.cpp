@@ -14,7 +14,7 @@
 #include <util/stream/input.h>
 #include <util/stream/output.h>
 #include <util/stream/str.h>
-#include <util/stream/mem.h>
+#include <util/stream/mem.h> 
 
 namespace NYT {
 
@@ -84,7 +84,7 @@ static TNode CreateEmptyNodeByType(::NYson::EYsonType type)
 
 TNode NodeFromYsonString(const TStringBuf input, ::NYson::EYsonType type)
 {
-    TMemoryInput stream(input);
+    TMemoryInput stream(input); 
     return NodeFromYsonStream(&stream, type);
 }
 
@@ -126,9 +126,9 @@ void NodeToCanonicalYsonStream(const TNode& node, IOutputStream* output, NYson::
     visitor.Visit(node);
 }
 
-TNode NodeFromJsonString(const TStringBuf input)
+TNode NodeFromJsonString(const TStringBuf input) 
 {
-    TMemoryInput stream(input);
+    TMemoryInput stream(input); 
 
     TNode result;
 

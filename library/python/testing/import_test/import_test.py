@@ -90,7 +90,7 @@ def check_imports(no_check=(), extra=(), skip_func=None, py_main=None):
     for m, t in sorted(import_times.items(), key=lambda x: x[1], reverse=True)[:30]:
         print('  ', '{:.3f}s'.format(t), m)
 
-    if failed:
+    if failed: 
         raise ImportError('modules not imported:\n' + '\n'.join(failed))
 
 

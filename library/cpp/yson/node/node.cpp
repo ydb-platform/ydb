@@ -438,24 +438,24 @@ TNode& TNode::operator[](size_t index)
     return std::get<TListType>(Value_)[index];
 }
 
-const TNode& TNode::At(size_t index) const {
-    CheckType(List);
+const TNode& TNode::At(size_t index) const { 
+    CheckType(List); 
     const auto& list = std::get<TListType>(Value_);
-    if (index >= list.size()) {
+    if (index >= list.size()) { 
         ythrow TLookupError() << "List out-of-range: requested index=" << index << ", but size=" << list.size();
-    }
-    return list[index];
-}
-
-TNode& TNode::At(size_t index) {
-    CheckType(List);
+    } 
+    return list[index]; 
+} 
+ 
+TNode& TNode::At(size_t index) { 
+    CheckType(List); 
     auto& list = std::get<TListType>(Value_);
-    if (index >= list.size()) {
+    if (index >= list.size()) { 
         ythrow TLookupError() << "List out-of-range: requested index=" << index << ", but size=" << list.size();
-    }
-    return list[index];
-}
-
+    } 
+    return list[index]; 
+} 
+ 
 TNode& TNode::Add() &
 {
     AssureList();
@@ -551,233 +551,233 @@ const TNode& TNode::At(const TStringBuf key) const {
     }
 }
 
-TNode& TNode::At(const TStringBuf key) {
-    CheckType(Map);
+TNode& TNode::At(const TStringBuf key) { 
+    CheckType(Map); 
     auto& map = std::get<TMapType>(Value_);
-    TMapType::iterator i = map.find(key);
-    if (i == map.end()) {
+    TMapType::iterator i = map.find(key); 
+    if (i == map.end()) { 
         ythrow TLookupError() << "Cannot find key " << key;
-    } else {
-        return i->second;
-    }
-}
-
-const TString& TNode::ChildAsString(const TStringBuf key) const {
-    const auto& node = At(key);
-    try {
-        return node.AsString();
-    } catch (TTypeError& e) {
-        e << ", during getting key=" << key;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key;
-    }
-}
-
-i64 TNode::ChildAsInt64(const TStringBuf key) const {
-    const auto& node = At(key);
-    try {
-        return node.AsInt64();
-    } catch (TTypeError& e) {
-        e << ", during getting key=" << key;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key;
-    }
-}
-
-ui64 TNode::ChildAsUint64(const TStringBuf key) const {
-    const auto& node = At(key);
-    try {
-        return node.AsUint64();
-    } catch (TTypeError& e) {
-        e << ", during getting key=" << key;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key;
-    }
-}
-
-double TNode::ChildAsDouble(const TStringBuf key) const {
-    const auto& node = At(key);
-    try {
-        return node.AsDouble();
-    } catch (TTypeError& e) {
-        e << ", during getting key=" << key;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key;
-    }
-}
-
-bool TNode::ChildAsBool(const TStringBuf key) const {
-    const auto& node = At(key);
-    try {
-        return node.AsBool();
-    } catch (TTypeError& e) {
-        e << ", during getting key=" << key;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key;
-    }
-}
-
-const TNode::TListType& TNode::ChildAsList(const TStringBuf key) const {
-    const auto& node = At(key);
-    try {
-        return node.AsList();
-    } catch (TTypeError& e) {
-        e << ", during getting key=" << key;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key;
-    }
-}
-
-const TNode::TMapType& TNode::ChildAsMap(const TStringBuf key) const {
-    const auto& node = At(key);
-    try {
-        return node.AsMap();
-    } catch (TTypeError& e) {
-        e << ", during getting key=" << key;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key;
-    }
-}
-
-TNode::TListType& TNode::ChildAsList(const TStringBuf key) {
-    auto& node = At(key);
-    try {
-        return node.AsList();
-    } catch (TTypeError& e) {
-        e << ", during getting key=" << key;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key;
-    }
-}
-
-TNode::TMapType& TNode::ChildAsMap(const TStringBuf key) {
-    auto& node = At(key);
-    try {
-        return node.AsMap();
-    } catch (TTypeError& e) {
-        e << ", during getting key=" << key;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key;
-    }
-}
-
-const TString& TNode::ChildAsString(size_t index) const {
-    const auto& node = At(index);
-    try {
-        return node.AsString();
-    } catch (TTypeError& e) {
-        e << ", during getting index=" << index;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index;
-    }
-}
-
-i64 TNode::ChildAsInt64(size_t index) const {
-    const auto& node = At(index);
-    try {
-        return node.AsInt64();
-    } catch (TTypeError& e) {
-        e << ", during getting index=" << index;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index;
-    }
-}
-
-ui64 TNode::ChildAsUint64(size_t index) const {
-    const auto& node = At(index);
-    try {
-        return node.AsUint64();
-    } catch (TTypeError& e) {
-        e << ", during getting index=" << index;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index;
-    }
-}
-
-double TNode::ChildAsDouble(size_t index) const {
-    const auto& node = At(index);
-    try {
-        return node.AsDouble();
-    } catch (TTypeError& e) {
-        e << ", during getting index=" << index;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index;
-    }
-}
-
-bool TNode::ChildAsBool(size_t index) const {
-    const auto& node = At(index);
-    try {
-        return node.AsBool();
-    } catch (TTypeError& e) {
-        e << ", during getting index=" << index;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index;
-    }
-}
-
-const TNode::TListType& TNode::ChildAsList(size_t index) const {
-    const auto& node = At(index);
-    try {
-        return node.AsList();
-    } catch (TTypeError& e) {
-        e << ", during getting index=" << index;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index;
-    }
-}
-
-const TNode::TMapType& TNode::ChildAsMap(size_t index) const {
-    const auto& node = At(index);
-    try {
-        return node.AsMap();
-    } catch (TTypeError& e) {
-        e << ", during getting index=" << index;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index;
-    }
-}
-
-TNode::TListType& TNode::ChildAsList(size_t index) {
-    auto& node = At(index);
-    try {
-        return node.AsList();
-    } catch (TTypeError& e) {
-        e << ", during getting index=" << index;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index;
-    }
-}
-
-TNode::TMapType& TNode::ChildAsMap(size_t index) {
-    auto& node = At(index);
-    try {
-        return node.AsMap();
-    } catch (TTypeError& e) {
-        e << ", during getting index=" << index;
-        throw e;
-    } catch (...) {
-        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index;
-    }
-}
-
+    } else { 
+        return i->second; 
+    } 
+} 
+ 
+const TString& TNode::ChildAsString(const TStringBuf key) const { 
+    const auto& node = At(key); 
+    try { 
+        return node.AsString(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting key=" << key; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key; 
+    } 
+} 
+ 
+i64 TNode::ChildAsInt64(const TStringBuf key) const { 
+    const auto& node = At(key); 
+    try { 
+        return node.AsInt64(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting key=" << key; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key; 
+    } 
+} 
+ 
+ui64 TNode::ChildAsUint64(const TStringBuf key) const { 
+    const auto& node = At(key); 
+    try { 
+        return node.AsUint64(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting key=" << key; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key; 
+    } 
+} 
+ 
+double TNode::ChildAsDouble(const TStringBuf key) const { 
+    const auto& node = At(key); 
+    try { 
+        return node.AsDouble(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting key=" << key; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key; 
+    } 
+} 
+ 
+bool TNode::ChildAsBool(const TStringBuf key) const { 
+    const auto& node = At(key); 
+    try { 
+        return node.AsBool(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting key=" << key; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key; 
+    } 
+} 
+ 
+const TNode::TListType& TNode::ChildAsList(const TStringBuf key) const { 
+    const auto& node = At(key); 
+    try { 
+        return node.AsList(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting key=" << key; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key; 
+    } 
+} 
+ 
+const TNode::TMapType& TNode::ChildAsMap(const TStringBuf key) const { 
+    const auto& node = At(key); 
+    try { 
+        return node.AsMap(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting key=" << key; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key; 
+    } 
+} 
+ 
+TNode::TListType& TNode::ChildAsList(const TStringBuf key) { 
+    auto& node = At(key); 
+    try { 
+        return node.AsList(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting key=" << key; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key; 
+    } 
+} 
+ 
+TNode::TMapType& TNode::ChildAsMap(const TStringBuf key) { 
+    auto& node = At(key); 
+    try { 
+        return node.AsMap(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting key=" << key; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting key=" << key; 
+    } 
+} 
+ 
+const TString& TNode::ChildAsString(size_t index) const { 
+    const auto& node = At(index); 
+    try { 
+        return node.AsString(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting index=" << index; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index; 
+    } 
+} 
+ 
+i64 TNode::ChildAsInt64(size_t index) const { 
+    const auto& node = At(index); 
+    try { 
+        return node.AsInt64(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting index=" << index; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index; 
+    } 
+} 
+ 
+ui64 TNode::ChildAsUint64(size_t index) const { 
+    const auto& node = At(index); 
+    try { 
+        return node.AsUint64(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting index=" << index; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index; 
+    } 
+} 
+ 
+double TNode::ChildAsDouble(size_t index) const { 
+    const auto& node = At(index); 
+    try { 
+        return node.AsDouble(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting index=" << index; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index; 
+    } 
+} 
+ 
+bool TNode::ChildAsBool(size_t index) const { 
+    const auto& node = At(index); 
+    try { 
+        return node.AsBool(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting index=" << index; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index; 
+    } 
+} 
+ 
+const TNode::TListType& TNode::ChildAsList(size_t index) const { 
+    const auto& node = At(index); 
+    try { 
+        return node.AsList(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting index=" << index; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index; 
+    } 
+} 
+ 
+const TNode::TMapType& TNode::ChildAsMap(size_t index) const { 
+    const auto& node = At(index); 
+    try { 
+        return node.AsMap(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting index=" << index; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index; 
+    } 
+} 
+ 
+TNode::TListType& TNode::ChildAsList(size_t index) { 
+    auto& node = At(index); 
+    try { 
+        return node.AsList(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting index=" << index; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index; 
+    } 
+} 
+ 
+TNode::TMapType& TNode::ChildAsMap(size_t index) { 
+    auto& node = At(index); 
+    try { 
+        return node.AsMap(); 
+    } catch (TTypeError& e) { 
+        e << ", during getting index=" << index; 
+        throw e; 
+    } catch (...) { 
+        ythrow TTypeError() << CurrentExceptionMessage() << ", during getting index=" << index; 
+    } 
+} 
+ 
 bool TNode::HasAttributes() const
 {
     return Attributes_ && !Attributes_->Empty();

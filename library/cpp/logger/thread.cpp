@@ -144,22 +144,22 @@ void TThreadedLogBackend::ReopenLogNoFlush() {
 void TThreadedLogBackend::WriteEmergencyData(const TLogRecord& rec) {
     Impl_->WriteEmergencyData(rec);
 }
-
+ 
 size_t TThreadedLogBackend::QueueSize() const {
     return Impl_->QueueSize();
 }
 
-TOwningThreadedLogBackend::TOwningThreadedLogBackend(TLogBackend* slave)
+TOwningThreadedLogBackend::TOwningThreadedLogBackend(TLogBackend* slave) 
     : THolder<TLogBackend>(slave)
     , TThreadedLogBackend(Get())
-{
-}
-
+{ 
+} 
+ 
 TOwningThreadedLogBackend::TOwningThreadedLogBackend(TLogBackend* slave, size_t queuelen, std::function<void()> queueOverflowCallback)
     : THolder<TLogBackend>(slave)
     , TThreadedLogBackend(Get(), queuelen, std::move(queueOverflowCallback))
-{
-}
-
-TOwningThreadedLogBackend::~TOwningThreadedLogBackend() {
-}
+{ 
+} 
+ 
+TOwningThreadedLogBackend::~TOwningThreadedLogBackend() { 
+} 

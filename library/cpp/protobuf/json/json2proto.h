@@ -82,7 +82,7 @@ namespace NProtobufJson {
             NameGenerator = callback;
             return *this;
         }
-
+ 
         TSelf& SetEnumValueMode(EnumValueMode enumValueMode) {
             EnumValueMode = enumValueMode;
             return *this;

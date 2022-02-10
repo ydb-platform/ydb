@@ -43,8 +43,8 @@ class TRedBlackTreeTest: public TTestBase {
     UNIT_TEST(TestFind)
     UNIT_TEST(TestStress)
     UNIT_TEST(TestGettingIndexWithDifferentValues)
-    UNIT_TEST(TestCheckChildrenAfterErase)
-    UNIT_TEST(TestGettingIndexWithDifferentValuesAfterErase)
+    UNIT_TEST(TestCheckChildrenAfterErase) 
+    UNIT_TEST(TestGettingIndexWithDifferentValuesAfterErase) 
     UNIT_TEST(TestGettingIndexWithEqualValues)
     UNIT_TEST(TestLessCountOnEmptyTree)
     UNIT_TEST_SUITE_END();
@@ -104,77 +104,77 @@ private:
         }
     }
 
-    inline void TestCheckChildrenAfterErase() {
+    inline void TestCheckChildrenAfterErase() { 
         TVector<TSimpleSharedPtr<TNode>> nodes;
-        size_t N = 1000;
-
-        for (size_t i = 0; i < N; ++i) {
-            nodes.push_back(new TNode(int(i)));
-        }
-
-        TTree tree;
-        Shuffle(nodes.begin(), nodes.end());
-
-        for (size_t i = 0; i < N; ++i) {
-            tree.Insert(nodes[i].Get());
-        }
-        auto checker = [](const TTree& tree) {
-            for (auto node = tree.Begin(); node != tree.End(); ++node) {
-                size_t childrens = 1;
-                if (node->Left_) {
-                    childrens += node->Left_->Children_;
-                }
-                if (node->Right_) {
-                    childrens += node->Right_->Children_;
-                }
-                UNIT_ASSERT_VALUES_EQUAL(childrens, node->Children_);
-            }
-        };
-
-        for (auto node : nodes) {
-            tree.Erase(node.Get());
-            checker(tree);
-        }
-    }
-
-    inline void TestGettingIndexWithDifferentValuesAfterErase() {
+        size_t N = 1000; 
+ 
+        for (size_t i = 0; i < N; ++i) { 
+            nodes.push_back(new TNode(int(i))); 
+        } 
+ 
+        TTree tree; 
+        Shuffle(nodes.begin(), nodes.end()); 
+ 
+        for (size_t i = 0; i < N; ++i) { 
+            tree.Insert(nodes[i].Get()); 
+        } 
+        auto checker = [](const TTree& tree) { 
+            for (auto node = tree.Begin(); node != tree.End(); ++node) { 
+                size_t childrens = 1; 
+                if (node->Left_) { 
+                    childrens += node->Left_->Children_; 
+                } 
+                if (node->Right_) { 
+                    childrens += node->Right_->Children_; 
+                } 
+                UNIT_ASSERT_VALUES_EQUAL(childrens, node->Children_); 
+            } 
+        }; 
+ 
+        for (auto node : nodes) { 
+            tree.Erase(node.Get()); 
+            checker(tree); 
+        } 
+    } 
+ 
+    inline void TestGettingIndexWithDifferentValuesAfterErase() { 
         TVector<TSimpleSharedPtr<TNode>> nodes;
-        size_t N = 1000;
-
-        for (size_t i = 0; i < N; ++i) {
-            nodes.push_back(new TNode(int(i)));
-        }
-
-        TTree tree;
-        Shuffle(nodes.begin(), nodes.end());
-
-        for (size_t i = 0; i < N; ++i) {
-            tree.Insert(nodes[i].Get());
-        }
-        {
-            size_t index = 0;
-            for (auto node = tree.Begin(); node != tree.End(); ++node, ++index) {
-                UNIT_ASSERT_VALUES_EQUAL(tree.GetIndex(&*node), index);
-                UNIT_ASSERT_VALUES_EQUAL(tree.ByIndex(index)->N, node->N);
-                UNIT_ASSERT_VALUES_EQUAL(node->N, index);
-            }
-        }
-
-        for (size_t i = 1; i < N; i += 2) {
-            auto* node = tree.Find(i);
-            UNIT_ASSERT_VALUES_EQUAL(node->N, i);
-            tree.Erase(node);
-        }
-        {
-            size_t index = 0;
-            for (auto node = tree.Begin(); node != tree.End(); ++node, ++index) {
-                UNIT_ASSERT_VALUES_EQUAL(tree.GetIndex(&*node), index);
-                UNIT_ASSERT_VALUES_EQUAL(tree.ByIndex(index)->N, node->N);
-                UNIT_ASSERT_VALUES_EQUAL(node->N, 2 * index);
-            }
-        }
-    }
-
+        size_t N = 1000; 
+ 
+        for (size_t i = 0; i < N; ++i) { 
+            nodes.push_back(new TNode(int(i))); 
+        } 
+ 
+        TTree tree; 
+        Shuffle(nodes.begin(), nodes.end()); 
+ 
+        for (size_t i = 0; i < N; ++i) { 
+            tree.Insert(nodes[i].Get()); 
+        } 
+        { 
+            size_t index = 0; 
+            for (auto node = tree.Begin(); node != tree.End(); ++node, ++index) { 
+                UNIT_ASSERT_VALUES_EQUAL(tree.GetIndex(&*node), index); 
+                UNIT_ASSERT_VALUES_EQUAL(tree.ByIndex(index)->N, node->N); 
+                UNIT_ASSERT_VALUES_EQUAL(node->N, index); 
+            } 
+        } 
+ 
+        for (size_t i = 1; i < N; i += 2) { 
+            auto* node = tree.Find(i); 
+            UNIT_ASSERT_VALUES_EQUAL(node->N, i); 
+            tree.Erase(node); 
+        } 
+        { 
+            size_t index = 0; 
+            for (auto node = tree.Begin(); node != tree.End(); ++node, ++index) { 
+                UNIT_ASSERT_VALUES_EQUAL(tree.GetIndex(&*node), index); 
+                UNIT_ASSERT_VALUES_EQUAL(tree.ByIndex(index)->N, node->N); 
+                UNIT_ASSERT_VALUES_EQUAL(node->N, 2 * index); 
+            } 
+        } 
+    } 
+ 
     inline void TestGettingIndexWithEqualValues() {
         TVector<TSimpleSharedPtr<TNode>> nodes;
         size_t N = 1000;

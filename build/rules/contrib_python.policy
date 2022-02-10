@@ -258,7 +258,7 @@ DENY .* -> contrib/java/patched
 ALLOW travel/avia -> contrib/python/pymqi
 DENY .* -> contrib/python/pymqi
 
-# https://st.yandex-team.ru/CONTRIB-1839 
+# https://st.yandex-team.ru/CONTRIB-1839
 ALLOW datalens/backend/app/dls -> contrib/python/quart
 DENY .* -> contrib/python/quart
 

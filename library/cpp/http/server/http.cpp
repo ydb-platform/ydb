@@ -268,8 +268,8 @@ public:
                 Y_UNUSED(req.Release());
             } else {
                 Cb_->OnFailRequest(-1);
-            } 
-        } 
+            }
+        }
     }
 
     size_t GetRequestQueueSize() const {

@@ -114,7 +114,7 @@ extern "C" void* realloc(void* old_ptr, size_t new_size) {
     LFFree(old_ptr);
     return new_ptr;
 }
- 
+
 extern "C" size_t malloc_usable_size(void* ptr) {
     if (ptr == nullptr) {
         return 0;

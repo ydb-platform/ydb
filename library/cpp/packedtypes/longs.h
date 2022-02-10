@@ -8,25 +8,25 @@
 #define GET_8_OR(x, buf, type, shift) (x) |= (type) * (buf)++ << (shift)
 
 #if defined(_big_endian_)
-#define LO_SHIFT 1 
-#define HI_SHIFT 0 
+#define LO_SHIFT 1
+#define HI_SHIFT 0
 #elif defined(_little_endian_)
-#define LO_SHIFT 0 
-#define HI_SHIFT 1 
+#define LO_SHIFT 0
+#define HI_SHIFT 1
 #endif
 
 #if !defined(_must_align2_)
 #define PUT_16(x, buf, shift) WriteUnaligned<ui16>(buf, (x) >> (shift)), (buf) += 2
 #define GET_16_OR(x, buf, type, shift) (x) |= (type)ReadUnaligned<ui16>(buf) << (shift), (buf) += 2
-#else 
+#else
 #define PUT_16(x, buf, shift) PUT_8(x, buf, shift + 8 * LO_SHIFT), PUT_8(x, buf, shift + 8 * HI_SHIFT)
 #define GET_16_OR(x, buf, type, shift) GET_8_OR(x, buf, type, shift + 8 * LO_SHIFT), GET_8_OR(x, buf, type, shift + 8 * HI_SHIFT)
-#endif 
- 
+#endif
+
 #if !defined(_must_align4_)
 #define PUT_32(x, buf, shift) WriteUnaligned<ui32>(buf, (x) >> (shift)), (buf) += 4
 #define GET_32_OR(x, buf, type, shift) (x) |= (type)ReadUnaligned<ui32>(buf) << (shift), (buf) += 4
-#else 
+#else
 #define PUT_32(x, buf, shift) PUT_16(x, buf, shift + 16 * LO_SHIFT), PUT_16(x, buf, shift + 16 * HI_SHIFT)
 #define GET_32_OR(x, buf, type, shift) GET_16_OR(x, buf, type, shift + 16 * LO_SHIFT), GET_16_OR(x, buf, type, shift + 16 * HI_SHIFT)
 #endif
@@ -34,39 +34,39 @@
 #if !defined(_must_align8_)
 #define PUT_64(x, buf, shift) WriteUnaligned<ui64>(buf, (x) >> (shift)), (buf) += 8
 #define GET_64_OR(x, buf, type, shift) (x) |= (type)ReadUnaligned<ui64>(buf) << (shift), (buf) += 8
-#else 
+#else
 #define PUT_64(x, buf, shift) PUT_32(x, buf, shift + 32 * LO_SHIFT), PUT_32(x, buf, shift + 32 * HI_SHIFT)
 #define GET_64_OR(x, buf, type, shift) GET_32_OR(x, buf, type, shift + 32 * LO_SHIFT), GET_32_OR(x, buf, type, shift + 32 * HI_SHIFT)
 #endif
 
 struct mem_traits {
-    static ui8 get_8(const char*& mem) { 
-        ui8 x = 0; 
-        GET_8_OR(x, mem, ui8, 0); 
-        return x; 
-    } 
-    static ui16 get_16(const char*& mem) { 
-        ui16 x = 0; 
-        GET_16_OR(x, mem, ui16, 0); 
-        return x; 
-    } 
-    static ui32 get_32(const char*& mem) { 
-        ui32 x = 0; 
-        GET_32_OR(x, mem, ui32, 0); 
-        return x; 
-    } 
-    static void put_8(ui8 x, char*& mem) { 
-        PUT_8(x, mem, 0); 
-    } 
-    static void put_16(ui16 x, char*& mem) { 
-        PUT_16(x, mem, 0); 
-    } 
-    static void put_32(ui32 x, char*& mem) { 
-        PUT_32(x, mem, 0); 
-    } 
+    static ui8 get_8(const char*& mem) {
+        ui8 x = 0;
+        GET_8_OR(x, mem, ui8, 0);
+        return x;
+    }
+    static ui16 get_16(const char*& mem) {
+        ui16 x = 0;
+        GET_16_OR(x, mem, ui16, 0);
+        return x;
+    }
+    static ui32 get_32(const char*& mem) {
+        ui32 x = 0;
+        GET_32_OR(x, mem, ui32, 0);
+        return x;
+    }
+    static void put_8(ui8 x, char*& mem) {
+        PUT_8(x, mem, 0);
+    }
+    static void put_16(ui16 x, char*& mem) {
+        PUT_16(x, mem, 0);
+    }
+    static void put_32(ui32 x, char*& mem) {
+        PUT_32(x, mem, 0);
+    }
     static int is_good(char*&) {
-        return 1; 
-    } 
+        return 1;
+    }
 };
 
 /*
@@ -80,21 +80,21 @@ struct mem_traits {
 |iiii|iii1|****|****|****|****|****|****|****|****|****|****|****|****|****|****
 */
 
-#define PACK1LIM 0x80u 
-#define PACK2LIM 0x4000u 
-#define PACK3LIM 0x200000u 
-#define PACK4LIM 0x10000000u 
-#define PACK5LIM 0x800000000ull 
-#define PACK6LIM 0x40000000000ull 
-#define PACK7LIM 0x2000000000000ull 
-#define PACK8LIM 0x100000000000000ull 
+#define PACK1LIM 0x80u
+#define PACK2LIM 0x4000u
+#define PACK3LIM 0x200000u
+#define PACK4LIM 0x10000000u
+#define PACK5LIM 0x800000000ull
+#define PACK6LIM 0x40000000000ull
+#define PACK7LIM 0x2000000000000ull
+#define PACK8LIM 0x100000000000000ull
 
-#define MY_14(x) ((ui16)(x) < PACK1LIM ? 1 : 2) 
-#define MY_28(x) ((ui32)(x) < PACK2LIM ? MY_14(x) : ((ui32)(x) < PACK3LIM ? 3 : 4)) 
+#define MY_14(x) ((ui16)(x) < PACK1LIM ? 1 : 2)
+#define MY_28(x) ((ui32)(x) < PACK2LIM ? MY_14(x) : ((ui32)(x) < PACK3LIM ? 3 : 4))
 
-#define MY_32(x) ((ui32)(x) < PACK4LIM ? MY_28(x) : 5) 
+#define MY_32(x) ((ui32)(x) < PACK4LIM ? MY_28(x) : 5)
 #define MY_64(x) ((ui64)(x) < PACK4LIM ? MY_28(x) : ((ui64)(x) < PACK6LIM ? ((ui64)(x) < PACK5LIM ? 5 : 6) : ((ui64)(x) < PACK7LIM ? 7 : ((ui64)(x) < PACK8LIM ? 8 : 9))))
- 
+
 #if !defined(MACRO_BEGIN)
 #define MACRO_BEGIN do {
 #define MACRO_END \

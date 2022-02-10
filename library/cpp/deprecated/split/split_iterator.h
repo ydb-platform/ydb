@@ -61,7 +61,7 @@ private:
     bool Delims[256];
 
 public:
-    explicit TSplitDelimiters(const char* s); 
+    explicit TSplitDelimiters(const char* s);
 
     Y_FORCE_INLINE bool IsDelimiter(ui8 ch) const {
         return Delims[ch];
@@ -87,9 +87,9 @@ public:
     Y_FORCE_INLINE size_t GetLength() const {
         return Len;
     }
- 
-private: 
-    // we don't own Str, make sure that no one calls us with temporary object 
+
+private:
+    // we don't own Str, make sure that no one calls us with temporary object
     TSplitBase(TString&&) = delete;
 };
 
@@ -111,10 +111,10 @@ public:
     TIterator Iterator() const;
     TSizeTRegion Next(size_t& pos) const;
     size_t Begin() const;
- 
-private: 
-    // we don't own Delimiters, make sure that no one calls us with temporary object 
-    TDelimitersSplit(const char*, size_t, TSplitDelimiters&&) = delete; 
+
+private:
+    // we don't own Delimiters, make sure that no one calls us with temporary object
+    TDelimitersSplit(const char*, size_t, TSplitDelimiters&&) = delete;
     TDelimitersSplit(const TString&, TSplitDelimiters&&) = delete;
     TDelimitersSplit(TString&&, const TSplitDelimiters&) = delete;
 };
@@ -132,10 +132,10 @@ public:
     TIterator Iterator() const;
     TSizeTRegion Next(size_t& pos) const;
     size_t Begin() const;
- 
-private: 
-    // we don't own Delimiters, make sure that no one calls us with temporary object 
-    TDelimitersStrictSplit(const char*, size_t, TSplitDelimiters&&) = delete; 
+
+private:
+    // we don't own Delimiters, make sure that no one calls us with temporary object
+    TDelimitersStrictSplit(const char*, size_t, TSplitDelimiters&&) = delete;
     TDelimitersStrictSplit(const TString&, TSplitDelimiters&&) = delete;
     TDelimitersStrictSplit(TString&&, const TSplitDelimiters&) = delete;
 };
@@ -154,9 +154,9 @@ public:
     TIterator Iterator() const;
     TSizeTRegion Next(size_t& pos) const;
     size_t Begin() const;
- 
-private: 
-    // we don't own Delimiters and Screens, make sure that no one calls us with temporary object 
+
+private:
+    // we don't own Delimiters and Screens, make sure that no one calls us with temporary object
     TScreenedDelimitersSplit(TString&&, const TSplitDelimiters&, const TSplitDelimiters&) = delete;
     TScreenedDelimitersSplit(const TString&, TSplitDelimiters&&, const TSplitDelimiters&) = delete;
     TScreenedDelimitersSplit(const TString&, const TSplitDelimiters&, TSplitDelimiters&&) = delete;
@@ -177,10 +177,10 @@ public:
     TIterator Iterator() const;
     TSizeTRegion Next(size_t& pos) const;
     size_t Begin() const;
- 
-private: 
-    // we don't own Delimiters, make sure that no one calls us with temporary object 
-    TDelimitersSplitWithoutTags(const char*, size_t, TSplitDelimiters&&) = delete; 
+
+private:
+    // we don't own Delimiters, make sure that no one calls us with temporary object
+    TDelimitersSplitWithoutTags(const char*, size_t, TSplitDelimiters&&) = delete;
     TDelimitersSplitWithoutTags(const TString&, TSplitDelimiters&&) = delete;
     TDelimitersSplitWithoutTags(TString&&, const TSplitDelimiters&) = delete;
 };
@@ -195,9 +195,9 @@ public:
     TIterator Iterator() const;
     TSizeTRegion Next(size_t& pos) const;
     size_t Begin() const;
- 
-private: 
-    // we don't own Str, make sure that no one calls us with temporary object 
+
+private:
+    // we don't own Str, make sure that no one calls us with temporary object
     TCharSplit(TString&&) = delete;
 };
 
@@ -219,9 +219,9 @@ public:
     TIterator Iterator() const;
     TSizeTRegion Next(size_t& pos) const;
     size_t Begin() const;
- 
-private: 
-    // we don't own Str, make sure that no one calls us with temporary object 
+
+private:
+    // we don't own Str, make sure that no one calls us with temporary object
     TCharSplitWithoutTags(TString&&) = delete;
 };
 
@@ -246,9 +246,9 @@ public:
     TIterator Iterator() const;
     TSizeTRegion Next(size_t& pos) const;
     size_t Begin() const;
- 
-private: 
-    // we don't own Delimiters, make sure that no one calls us with temporary object 
+
+private:
+    // we don't own Delimiters, make sure that no one calls us with temporary object
     TSubstringSplit(TString&&, const TSubstringSplitDelimiter&) = delete;
     TSubstringSplit(const TString&, TSubstringSplitDelimiter&&) = delete;
 };

@@ -30,21 +30,21 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
         ss << "[" << Time << "] "
            << "qwqw" << TimeHumanReadable << Endl;
     }
- 
+
     Y_UNIT_TEST(TestHexReference) {
-        /* 
-            One possible implementation of Hex() stores a reference to the given object. 
-            This can lead to wrong results if the given object is a temporary 
-            which is valid only during constructor call. The following code tries to 
-            demonstrate this. If the implementation stores a reference, 
-            the test fails if compiled with g++44 in debug build 
-            (without optimizations), but performs correctly in release build. 
-        */ 
-        THolder<TStringStream> ss(new TStringStream); 
-        THolder<int> ii(new int(0x1234567)); 
-        (*ss) << Hex(*ii); 
-        UNIT_ASSERT_VALUES_EQUAL("0x01234567", ss->Str()); 
-    } 
+        /*
+            One possible implementation of Hex() stores a reference to the given object.
+            This can lead to wrong results if the given object is a temporary
+            which is valid only during constructor call. The following code tries to
+            demonstrate this. If the implementation stores a reference,
+            the test fails if compiled with g++44 in debug build
+            (without optimizations), but performs correctly in release build.
+        */
+        THolder<TStringStream> ss(new TStringStream);
+        THolder<int> ii(new int(0x1234567));
+        (*ss) << Hex(*ii);
+        UNIT_ASSERT_VALUES_EQUAL("0x01234567", ss->Str());
+    }
 
     Y_UNIT_TEST(TestHexText) {
         {
@@ -59,7 +59,7 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
             UNIT_ASSERT_VALUES_EQUAL("0061 0062 0063 0438", ss.Str());
         }
     }
- 
+
     Y_UNIT_TEST(TestBin) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(Bin(static_cast<ui32>(2), nullptr)), "10");
         UNIT_ASSERT_VALUES_EQUAL(ToString(SBin(static_cast<i32>(-2), nullptr)), "-10");
@@ -82,18 +82,18 @@ Y_UNIT_TEST_SUITE(TOutputStreamFormattingTest) {
     }
 
     Y_UNIT_TEST(TestPrec) {
-        TStringStream ss; 
-        ss << Prec(1.2345678901234567, PREC_AUTO); 
-        UNIT_ASSERT_VALUES_EQUAL("1.2345678901234567", ss.Str()); 
- 
-        ss.Clear(); 
-        ss << Prec(1.2345678901234567, 3); 
-        UNIT_ASSERT_VALUES_EQUAL("1.23", ss.Str()); 
- 
-        ss.Clear(); 
-        ss << Prec(1.2345678901234567, PREC_POINT_DIGITS, 3); 
-        UNIT_ASSERT_VALUES_EQUAL("1.235", ss.Str()); 
-    } 
+        TStringStream ss;
+        ss << Prec(1.2345678901234567, PREC_AUTO);
+        UNIT_ASSERT_VALUES_EQUAL("1.2345678901234567", ss.Str());
+
+        ss.Clear();
+        ss << Prec(1.2345678901234567, 3);
+        UNIT_ASSERT_VALUES_EQUAL("1.23", ss.Str());
+
+        ss.Clear();
+        ss << Prec(1.2345678901234567, PREC_POINT_DIGITS, 3);
+        UNIT_ASSERT_VALUES_EQUAL("1.235", ss.Str());
+    }
 
     Y_UNIT_TEST(TestHumanReadableSize1000) {
         UNIT_ASSERT_VALUES_EQUAL(ToString(HumanReadableSize(0, SF_QUANTITY)), "0");

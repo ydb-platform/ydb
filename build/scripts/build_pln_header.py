@@ -23,10 +23,10 @@ def BuildPlnHeader():
         tmpFile.write('void {0}SSE(const float* const* factors, float* result);\n'.format(name))
     tmpFile.close()
     try:
-        os.remove(outPath) 
-    except: 
-        pass 
-    try: 
+        os.remove(outPath)
+    except:
+        pass
+    try:
         os.rename(tmpPath, outPath)
     except:
         print >>sys.stdout, 'Error: Failed to rename ' + tmpPath + ' to ' + outPath

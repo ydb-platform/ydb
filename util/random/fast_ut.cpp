@@ -42,34 +42,34 @@ Y_UNIT_TEST_SUITE(TTestFastRng) {
             UNIT_ASSERT_VALUES_EQUAL(rng.Uniform(100u), i);
         }
     }
- 
+
     Y_UNIT_TEST(TestAdvance) {
-        TReallyFastRng32 rng1(17); 
-        TReallyFastRng32 rng2(17); 
+        TReallyFastRng32 rng1(17);
+        TReallyFastRng32 rng2(17);
         for (size_t i = 0; i < 100; i++) {
-            rng1.GenRand(); 
+            rng1.GenRand();
         }
-        rng2.Advance(100); 
-        UNIT_ASSERT_VALUES_EQUAL(rng1.GenRand(), rng2.GenRand()); 
- 
-        TFastRng64 rng3(0, 1, 2, 3); 
-        TFastRng64 rng4(0, 1, 2, 3); 
+        rng2.Advance(100);
+        UNIT_ASSERT_VALUES_EQUAL(rng1.GenRand(), rng2.GenRand());
+
+        TFastRng64 rng3(0, 1, 2, 3);
+        TFastRng64 rng4(0, 1, 2, 3);
         for (size_t i = 0; i < 100; i++) {
-            rng3.GenRand(); 
+            rng3.GenRand();
         }
-        rng4.Advance(100); 
-        UNIT_ASSERT_VALUES_EQUAL(rng3.GenRand(), rng4.GenRand()); 
-    } 
- 
+        rng4.Advance(100);
+        UNIT_ASSERT_VALUES_EQUAL(rng3.GenRand(), rng4.GenRand());
+    }
+
     Y_UNIT_TEST(TestAdvanceBoundaries) {
-        TReallyFastRng32 rng1(17); 
-        TReallyFastRng32 rng2(17); 
-        TReallyFastRng32 rng3(17); 
-        rng2.Advance(0); 
-        rng3.Advance(1); 
-        UNIT_ASSERT_VALUES_EQUAL(rng1.GenRand(), rng2.GenRand()); 
-        UNIT_ASSERT_VALUES_EQUAL(rng1.GenRand(), rng3.GenRand()); 
-    } 
+        TReallyFastRng32 rng1(17);
+        TReallyFastRng32 rng2(17);
+        TReallyFastRng32 rng3(17);
+        rng2.Advance(0);
+        rng3.Advance(1);
+        UNIT_ASSERT_VALUES_EQUAL(rng1.GenRand(), rng2.GenRand());
+        UNIT_ASSERT_VALUES_EQUAL(rng1.GenRand(), rng3.GenRand());
+    }
 
     Y_UNIT_TEST(TestCopy) {
         TReallyFastRng32 r1(1);

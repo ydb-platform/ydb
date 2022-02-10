@@ -29,7 +29,7 @@ inline size_t ToString(const T& t, char* buf, size_t len) {
 /**
  * Floating point to string conversion mode, values are enforced by `dtoa_impl.cpp`.
  */
-enum EFloatToStringMode { 
+enum EFloatToStringMode {
     /** 0.1f -> "0.1", 0.12345678f -> "0.12345678", ignores ndigits. */
     PREC_AUTO = 0,
 
@@ -44,18 +44,18 @@ enum EFloatToStringMode {
     /** same as PREC_POINT_DIGITS, but stripping trailing zeroes:
      * 0.1f for ndgigits=6 -> "0.1" */
     PREC_POINT_DIGITS_STRIP_ZEROES = 4
-}; 
- 
-size_t FloatToString(float t, char* buf, size_t len, EFloatToStringMode mode = PREC_AUTO, int ndigits = 0); 
-size_t FloatToString(double t, char* buf, size_t len, EFloatToStringMode mode = PREC_AUTO, int ndigits = 0); 
- 
+};
+
+size_t FloatToString(float t, char* buf, size_t len, EFloatToStringMode mode = PREC_AUTO, int ndigits = 0);
+size_t FloatToString(double t, char* buf, size_t len, EFloatToStringMode mode = PREC_AUTO, int ndigits = 0);
+
 template <typename T>
 inline TString FloatToString(const T& t, EFloatToStringMode mode = PREC_AUTO, int ndigits = 0) {
-    char buf[512]; // Max<double>() with mode = PREC_POINT_DIGITS has 309 digits before the decimal point 
-    size_t count = FloatToString(t, buf, sizeof(buf), mode, ndigits); 
+    char buf[512]; // Max<double>() with mode = PREC_POINT_DIGITS has 309 digits before the decimal point
+    size_t count = FloatToString(t, buf, sizeof(buf), mode, ndigits);
     return TString(buf, count);
-} 
- 
+}
+
 namespace NPrivate {
     template <class T, bool isSimple>
     struct TToString {

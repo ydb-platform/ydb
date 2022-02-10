@@ -34,8 +34,8 @@ void TSplitIteratorTest::TestDelimiters() {
 void TSplitIteratorTest::TestDelimitersSplit() {
     {
         TString s = "1a3b45cd";
-        TSplitDelimiters delims("abcd"); 
-        TDelimitersSplit split(s, delims); 
+        TSplitDelimiters delims("abcd");
+        TDelimitersSplit split(s, delims);
         TSplitTokens tokens;
         Split(split, &tokens);
         TSplitTokens pattern = {"1", "3", "45"};
@@ -43,8 +43,8 @@ void TSplitIteratorTest::TestDelimitersSplit() {
     }
     {
         TString s = "aaaaaa";
-        TSplitDelimiters delims("abcd"); 
-        TDelimitersSplit split(s, delims); 
+        TSplitDelimiters delims("abcd");
+        TDelimitersSplit split(s, delims);
         TSplitTokens tokens;
         Split(split, &tokens);
         TSplitTokens pattern = {};
@@ -55,8 +55,8 @@ void TSplitIteratorTest::TestDelimitersSplit() {
 void TSplitIteratorTest::TestDelimitersStrictSplit() {
     {
         TString s = "grp@2";
-        TSplitDelimiters delims("@"); 
-        TDelimitersStrictSplit split(s, delims); 
+        TSplitDelimiters delims("@");
+        TDelimitersStrictSplit split(s, delims);
         TSplitTokens tokens;
         Split(split, &tokens);
         TSplitTokens pattern = {"grp", "2"};
@@ -65,8 +65,8 @@ void TSplitIteratorTest::TestDelimitersStrictSplit() {
 
     {
         TString s = "@grp@2@@";
-        TSplitDelimiters delims("@"); 
-        TDelimitersStrictSplit split(s, delims); 
+        TSplitDelimiters delims("@");
+        TDelimitersStrictSplit split(s, delims);
         TSplitTokens tokens;
         Split(split, &tokens);
         TSplitTokens pattern = {"", "grp", "2", ""};
@@ -76,8 +76,8 @@ void TSplitIteratorTest::TestDelimitersStrictSplit() {
 
 void TSplitIteratorTest::TestTail() {
     TString s = "grp@2@4";
-    TSplitDelimiters delims("@"); 
-    TDelimitersSplit split(s, delims); 
+    TSplitDelimiters delims("@");
+    TDelimitersSplit split(s, delims);
     TDelimitersSplit::TIterator it = split.Iterator();
     UNIT_ASSERT_EQUAL(it.GetTail(), "grp@2@4");
     it.Next();

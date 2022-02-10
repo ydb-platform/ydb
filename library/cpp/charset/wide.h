@@ -210,16 +210,16 @@ namespace NDetail {
 template <bool robust>
 inline TWtringBuf CharToWide(const TStringBuf src, TUtf16String& dst, ECharset encoding) {
     if (robust && CODES_UTF8 == encoding)
-        return ::NDetail::RecodeUTF8Robust(src, dst); 
-    return ::NDetail::Recode<char>(src, dst, encoding); 
+        return ::NDetail::RecodeUTF8Robust(src, dst);
+    return ::NDetail::Recode<char>(src, dst, encoding);
 }
 
 inline TWtringBuf CharToWide(const TStringBuf src, TUtf16String& dst, ECharset encoding) {
-    return ::NDetail::Recode<char>(src, dst, encoding); 
+    return ::NDetail::Recode<char>(src, dst, encoding);
 }
 
 inline TStringBuf WideToChar(const TWtringBuf src, TString& dst, ECharset encoding) {
-    return ::NDetail::Recode<wchar16>(src, dst, encoding); 
+    return ::NDetail::Recode<wchar16>(src, dst, encoding);
 }
 
 //! calls either to @c WideToUTF8 or @c WideToChar depending on the encoding type

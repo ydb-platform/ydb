@@ -253,11 +253,11 @@ Y_UNIT_TEST_SUITE(TCastTest) {
     }
 
     Y_UNIT_TEST(TestFloats) {
-        // "%g" mode 
+        // "%g" mode
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(0.1f, PREC_NDIGITS, 6), "0.1"); // drop trailing zeroes
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(0.12345678f, PREC_NDIGITS, 6), "0.123457");
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(1e-20f, PREC_NDIGITS, 6), "1e-20");
-        // "%f" mode 
+        // "%f" mode
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(0.1f, PREC_POINT_DIGITS, 6), "0.100000");
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(0.12345678f, PREC_POINT_DIGITS, 6), "0.123457");
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(1e-20f, PREC_POINT_DIGITS, 6), "0.000000");
@@ -268,13 +268,13 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(1e-20f, PREC_POINT_DIGITS_STRIP_ZEROES, 6), "0");
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(12.34f, PREC_POINT_DIGITS_STRIP_ZEROES, 0), "12"); // rounding to integers drops '.'
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(10000.0f, PREC_POINT_DIGITS_STRIP_ZEROES, 0), "10000");
-        // automatic selection of ndigits 
+        // automatic selection of ndigits
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(0.1f), "0.1");               // drop trailing zeroes
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(0.12345678f), "0.12345678"); // 8 valid digits
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(1000.00006f), "1000.00006"); // 9 valid digits
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(1e-45f), "1e-45");           // denormalized: 1 valid digit
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(-0.0f), "-0");               // sign must be preserved
-        // version for double 
+        // version for double
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(1.0 / 10000), "0.0001");                    // trailing zeroes
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(1.2345678901234567), "1.2345678901234567"); // no truncation
         UNIT_ASSERT_VALUES_EQUAL(FloatToString(5e-324), "5e-324");                         // denormalized

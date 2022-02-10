@@ -158,17 +158,17 @@ namespace NMemInfo {
         result.RSS = taskInfo.pti_resident_size;
     #elif defined(__MACH__) && defined(__APPLE__)
         Y_UNUSED(pid);
-        struct mach_task_basic_info taskInfo; 
-        mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT; 
- 
-        const int r = task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&taskInfo, &infoCount); 
-        if (r != KERN_SUCCESS) { 
-            int err = errno; 
-            TString errtxt = LastSystemErrorText(err); 
-            ythrow yexception() << "task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &infoCount) returned" << r << ", errno: " << err << " (" << errtxt << ")" << Endl; 
-        } 
-        result.VMS = taskInfo.virtual_size; 
-        result.RSS = taskInfo.resident_size; 
+        struct mach_task_basic_info taskInfo;
+        mach_msg_type_number_t infoCount = MACH_TASK_BASIC_INFO_COUNT;
+
+        const int r = task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&taskInfo, &infoCount);
+        if (r != KERN_SUCCESS) {
+            int err = errno;
+            TString errtxt = LastSystemErrorText(err);
+            ythrow yexception() << "task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &infoCount) returned" << r << ", errno: " << err << " (" << errtxt << ")" << Endl;
+        }
+        result.VMS = taskInfo.virtual_size;
+        result.RSS = taskInfo.resident_size;
     #elif defined(_arm_)
         Y_UNUSED(pid);
         ythrow yexception() << "arm is not supported";

@@ -48,7 +48,7 @@ RECURSE(
     aniso8601
     annoy
     antlr4
-    ansiwrap
+    ansiwrap 
     anyconfig
     anyio
     anytree
@@ -74,7 +74,7 @@ RECURSE(
     async-generator
     async-lru
     async-timeout
-    asyncio-pool
+    asyncio-pool 
     asyncmc
     asyncpg
     asyncssh
@@ -531,8 +531,8 @@ RECURSE(
     ipykernel
     ipython
     ipython-genutils
-    ipython-sql
-    ipywidgets
+    ipython-sql 
+    ipywidgets 
     iso3166
     iso8601
     isodate
@@ -568,7 +568,7 @@ RECURSE(
     jupyter-telemetry
     jupyterhub
     jupyterhub-traefik-proxy
-    jupytext
+    jupytext 
     kaitaistruct
     kazoo
     Keras-Preprocessing
@@ -655,7 +655,7 @@ RECURSE(
     mysqlclient-python
     namedlist
     natsort
-    nbclient
+    nbclient 
     nbconvert
     nbformat
     ncclient
@@ -705,7 +705,7 @@ RECURSE(
     panamap_proto
     pandas
     pandocfilters
-    papermill
+    papermill 
     parameterized
     paramiko
     paramz
@@ -962,7 +962,7 @@ RECURSE(
     s3-tests
     s3transfer
     sacrebleu
-    salt-pepper
+    salt-pepper 
     saneyaml
     sanic
     sanic-routing
@@ -1061,7 +1061,7 @@ RECURSE(
     text-unidecode
     textdata
     texttable
-    textwrap3
+    textwrap3 
     thinc
     threadloop
     thrift

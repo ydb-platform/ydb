@@ -5,18 +5,18 @@
 #include <util/system/file.h>
 
 enum class EFileLockType {
-    Exclusive, 
-    Shared 
-}; 
+    Exclusive,
+    Shared
+};
 
-class TFileLock: public TFile { 
-public: 
-    TFileLock(const TString& filename, const EFileLockType type = EFileLockType::Exclusive); 
- 
+class TFileLock: public TFile {
+public:
+    TFileLock(const TString& filename, const EFileLockType type = EFileLockType::Exclusive);
+
     void Acquire();
     bool TryAcquire();
     void Release();
- 
+
     inline void lock() {
         Acquire();
     }
@@ -29,6 +29,6 @@ public:
         Release();
     }
 
-private: 
-    EFileLockType Type; 
+private:
+    EFileLockType Type;
 };

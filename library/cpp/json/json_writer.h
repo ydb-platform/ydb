@@ -183,12 +183,12 @@ namespace NJson {
         void Reset(const NJsonWriter::TBufState& from) {
             return Buf.Reset(from);
         }
-
+ 
         void Reset(NJsonWriter::TBufState&& from) {
             return Buf.Reset(std::move(from));
         }
     };
-
+ 
     void WriteJson(IOutputStream*, const TJsonValue*, bool formatOutput = false, bool sortkeys = false, bool validateUtf8 = true);
     TString WriteJson(const TJsonValue*, bool formatOutput = true, bool sortkeys = false, bool validateUtf8 = false);
     TString WriteJson(const TJsonValue&, bool formatOutput = true, bool sortkeys = false, bool validateUtf8 = false);

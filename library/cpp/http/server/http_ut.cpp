@@ -481,29 +481,29 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
             ExceptionMessage = CurrentExceptionMessage();
         }
 
-        TString ExceptionMessage;
-    };
-
-    class TResetConnectionServer: public THttpServer::ICallBack {
-        class TRequest: public TClientRequest {
-        public:
-            bool Reply(void* /*tsr*/) override {
-                Output() << "HTTP/1.1";
-                ResetConnection();
-
-                return true;
-            }
-        };
-
+        TString ExceptionMessage; 
+    }; 
+ 
+    class TResetConnectionServer: public THttpServer::ICallBack { 
+        class TRequest: public TClientRequest { 
+        public: 
+            bool Reply(void* /*tsr*/) override { 
+                Output() << "HTTP/1.1"; 
+                ResetConnection(); 
+ 
+                return true; 
+            } 
+        }; 
+ 
     public:
-        TClientRequest* CreateClient() override {
-            return new TRequest();
-        }
-
-        void OnException() override {
-            ExceptionMessage = CurrentExceptionMessage();
-        }
-
+        TClientRequest* CreateClient() override { 
+            return new TRequest(); 
+        } 
+ 
+        void OnException() override { 
+            ExceptionMessage = CurrentExceptionMessage(); 
+        } 
+ 
         TString ExceptionMessage;
     };
 
@@ -526,21 +526,21 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         }
     };
 
-    Y_UNIT_TEST(TTestResetConnection) {
-        TPortManager pm;
-        const ui16 port = pm.GetPort();
-
-        TResetConnectionServer serverImpl;
-        THttpServer server(&serverImpl, THttpServer::TOptions(port));
-        UNIT_ASSERT(server.Start());
-
-        TTestRequest r(port, "request");
-
-        UNIT_ASSERT_EXCEPTION_CONTAINS(r.Execute(), TSystemError, "Connection reset by peer");
-
-        server.Stop();
-    };
-
+    Y_UNIT_TEST(TTestResetConnection) { 
+        TPortManager pm; 
+        const ui16 port = pm.GetPort(); 
+ 
+        TResetConnectionServer serverImpl; 
+        THttpServer server(&serverImpl, THttpServer::TOptions(port)); 
+        UNIT_ASSERT(server.Start()); 
+ 
+        TTestRequest r(port, "request"); 
+ 
+        UNIT_ASSERT_EXCEPTION_CONTAINS(r.Execute(), TSystemError, "Connection reset by peer"); 
+ 
+        server.Stop(); 
+    }; 
+ 
     Y_UNIT_TEST(TTestReleaseConnection) {
         TPortManager pm;
         const ui16 port = pm.GetPort();

@@ -367,8 +367,8 @@ public:
         ::ShutDown(Fd(), mode);
     }
 
-    void Close();
-
+    void Close(); 
+ 
     ssize_t Send(const void* data, size_t len);
     ssize_t Recv(void* buf, size_t len);
 

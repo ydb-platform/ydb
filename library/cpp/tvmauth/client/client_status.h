@@ -10,7 +10,7 @@ namespace NTvmAuth {
             Ok,
             Warning,
             Error,
-            IncompleteTicketsSet,
+            IncompleteTicketsSet, 
         };
 
         TClientStatus(ECode state, TString&& lastError)
@@ -35,23 +35,23 @@ namespace NTvmAuth {
         }
 
         TString CreateJugglerMessage() const {
-            return TStringBuilder() << GetJugglerCode() << ";TvmClient: " << LastError_ << "\n";
+            return TStringBuilder() << GetJugglerCode() << ";TvmClient: " << LastError_ << "\n"; 
         }
 
     private:
-        int32_t GetJugglerCode() const {
-            switch (Code_) {
-                case ECode::Ok:
+        int32_t GetJugglerCode() const { 
+            switch (Code_) { 
+                case ECode::Ok: 
                     return 0; // OK juggler check state
-                case ECode::Warning:
-                case ECode::IncompleteTicketsSet:
+                case ECode::Warning: 
+                case ECode::IncompleteTicketsSet: 
                     return 1; // WARN juggler check state
-                case ECode::Error:
+                case ECode::Error: 
                     return 2; // CRIT juggler check state
-            }
-            return 2; // This should not happen, so set check state as CRIT.
-        }
-
+            } 
+            return 2; // This should not happen, so set check state as CRIT. 
+        } 
+ 
         ECode Code_ = Ok;
         TString LastError_;
     };

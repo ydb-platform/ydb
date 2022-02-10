@@ -128,8 +128,8 @@ public:
 
     void ReleaseConnection();
 
-    void ResetConnection();
-
+    void ResetConnection(); 
+ 
 private:
     /*
      * Processes the request after 'connection' been created and 'Headers' been read

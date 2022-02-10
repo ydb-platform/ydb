@@ -49,8 +49,8 @@ namespace NTvmAuth {
     }
 
     bool TAsyncUpdaterBase::AreServiceTicketsInvalid(TInstant now) const {
-        TServiceTicketsPtr c = GetCachedServiceTickets();
-        // Empty set of tickets is allways valid.
+        TServiceTicketsPtr c = GetCachedServiceTickets(); 
+        // Empty set of tickets is allways valid. 
         return c && !c->TicketsById.empty() && IsInvalid(GetInvalidationTimeOfServiceTickets(), now);
     }
 

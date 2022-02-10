@@ -29,8 +29,8 @@ public:
         return Output()->CanBeKeepAlive();
     }
 
-    void Reset();
-
+    void Reset(); 
+ 
 private:
     class TImpl;
     THolder<TImpl> Impl_;

@@ -30,7 +30,7 @@ namespace NTvmAuth::NDynamicClient {
     class TTvmClient: public NTvmApi::TThreadedUpdater {
     public:
         static TAsyncUpdaterPtr Create(const NTvmApi::TClientSettings& settings, TLoggerPtr logger);
-        virtual ~TTvmClient();
+        virtual ~TTvmClient(); 
 
         NThreading::TFuture<TAddResponse> Add(TDsts&& dsts);
         std::optional<TString> GetOptionalServiceTicketFor(const TTvmId dst);

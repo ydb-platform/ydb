@@ -668,14 +668,14 @@ void TClientRequest::ReleaseConnection() {
     }
 }
 
-void TClientRequest::ResetConnection() {
-    if (HttpConn_) {
-        // send RST packet to client
-        HttpConn_->Reset();
-        HttpConn_.Destroy();
-    }
-}
-
+void TClientRequest::ResetConnection() { 
+    if (HttpConn_) { 
+        // send RST packet to client 
+        HttpConn_->Reset(); 
+        HttpConn_.Destroy(); 
+    } 
+} 
+ 
 void TClientRequest::Process(void* ThreadSpecificResource) {
     THolder<TClientRequest> this_(this);
 

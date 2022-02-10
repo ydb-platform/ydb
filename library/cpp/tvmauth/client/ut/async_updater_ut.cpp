@@ -83,9 +83,9 @@ Y_UNIT_TEST_SUITE(AsyncUpdater) {
 
     Y_UNIT_TEST(ServiceTickets_Aliases) {
         using TId = TServiceTickets::TMapIdStr;
-        using TUnfetchedId = TServiceTickets::TIdSet;
+        using TUnfetchedId = TServiceTickets::TIdSet; 
         using TStr = TServiceTickets::TMapAliasStr;
-        using TUnfetchedAlias = TServiceTickets::TAliasSet;
+        using TUnfetchedAlias = TServiceTickets::TAliasSet; 
         using TAls = TServiceTickets::TMapAliasId;
         TServiceTickets t(TId{}, TId{}, TAls{});
 
@@ -106,14 +106,14 @@ Y_UNIT_TEST_SUITE(AsyncUpdater) {
         UNIT_ASSERT_EQUAL(TStr({{"1", "t1"}, {"2", "t2"}}), t.TicketsByAlias);
         UNIT_ASSERT_EQUAL(TStr({{"3", "e1"}}), t.ErrorsByAlias);
         UNIT_ASSERT_EQUAL(TUnfetchedAlias({}), t.UnfetchedAliases);
-    }
+    } 
 
-    Y_UNIT_TEST(ServiceTickets_UnfetchedIds) {
-        using TId = TServiceTickets::TMapIdStr;
-        using TUnfetchedId = TServiceTickets::TIdSet;
-        using TStr = TServiceTickets::TMapAliasStr;
-        using TUnfetchedAlias = TServiceTickets::TAliasSet;
-        using TAls = TServiceTickets::TMapAliasId;
+    Y_UNIT_TEST(ServiceTickets_UnfetchedIds) { 
+        using TId = TServiceTickets::TMapIdStr; 
+        using TUnfetchedId = TServiceTickets::TIdSet; 
+        using TStr = TServiceTickets::TMapAliasStr; 
+        using TUnfetchedAlias = TServiceTickets::TAliasSet; 
+        using TAls = TServiceTickets::TMapAliasId; 
         TServiceTickets t(TId({{1, "t1"}, {2, "t2"}}),
                           TId(),
                           TAls({{"1", 1}, {"2", 2}, {"3", 3}}));

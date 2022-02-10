@@ -50,7 +50,7 @@ namespace NTvmAuth::NTvmApi {
 
     TClientStatus TThreadedUpdater::GetStatus() const {
         const TClientStatus::ECode state = GetState();
-        return TClientStatus(state, GetLastError(state == TClientStatus::Ok || state == TClientStatus::IncompleteTicketsSet));
+        return TClientStatus(state, GetLastError(state == TClientStatus::Ok || state == TClientStatus::IncompleteTicketsSet)); 
     }
 
     NRoles::TRolesPtr TThreadedUpdater::GetRoles() const {
@@ -72,10 +72,10 @@ namespace NTvmAuth::NTvmApi {
             }
             if (tickets->TicketsById.size() < Destinations_.size()) {
                 if (Settings_.IsIncompleteTicketsSetAnError) {
-                    return TClientStatus::Error;
-                } else {
-                    return TClientStatus::IncompleteTicketsSet;
-                }
+                    return TClientStatus::Error; 
+                } else { 
+                    return TClientStatus::IncompleteTicketsSet; 
+                } 
             }
         }
         if ((Settings_.IsServiceTicketCheckingRequired() || Settings_.IsUserTicketCheckingRequired()) && ArePublicKeysInvalid(now)) {
@@ -375,9 +375,9 @@ namespace NTvmAuth::NTvmApi {
 
         SetUpdateTimeOfServiceTickets(time);
 
-        if (count > 0) {
-            LogInfo(TStringBuilder() << "Cache was updated with " << count << " service ticket(s): " << time);
-        }
+        if (count > 0) { 
+            LogInfo(TStringBuilder() << "Cache was updated with " << count << " service ticket(s): " << time); 
+        } 
     }
 
     void TThreadedUpdater::UpdatePublicKeysCache(const TString& publicKeys, TInstant time) {

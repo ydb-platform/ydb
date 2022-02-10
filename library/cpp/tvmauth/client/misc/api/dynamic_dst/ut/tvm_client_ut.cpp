@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(DynamicClient) {
         mutable std::vector<TString> Tickets;
     };
 
-    Y_UNIT_TEST(StartWithIncompleteTicketsSet) {
+    Y_UNIT_TEST(StartWithIncompleteTicketsSet) { 
         TInstant now = TInstant::Now();
         CleanCache();
         WriteFile("./service_tickets",
@@ -96,12 +96,12 @@ Y_UNIT_TEST_SUITE(DynamicClient) {
 
         NTvmApi::TClientSettings s;
         s.SetSelfTvmId(100500);
-        s.EnableServiceTicketsFetchOptions("qwerty", {{"blackbox", 19}, {"kolmo", 213}}, false);
-        s.SetDiskCacheDir(CACHE_DIR);
-
-        auto l = MakeIntrusive<TLogger>();
-
-        {
+        s.EnableServiceTicketsFetchOptions("qwerty", {{"blackbox", 19}, {"kolmo", 213}}, false); 
+        s.SetDiskCacheDir(CACHE_DIR); 
+ 
+        auto l = MakeIntrusive<TLogger>(); 
+ 
+        { 
             TOfflineUpdater client(s,
                                    l,
                                    false,
@@ -109,51 +109,51 @@ Y_UNIT_TEST_SUITE(DynamicClient) {
                                        R"({"213"  : { "error" : "some error"}})",
                                        R"({"123"  : { "ticket" : "service_ticket_3"}})",
                                    });
-            UNIT_ASSERT_VALUES_EQUAL(TClientStatus::IncompleteTicketsSet, client.GetStatus());
+            UNIT_ASSERT_VALUES_EQUAL(TClientStatus::IncompleteTicketsSet, client.GetStatus()); 
             UNIT_ASSERT(client.GetCachedServiceTickets()->TicketsById.contains(19));
             UNIT_ASSERT(!client.GetCachedServiceTickets()->TicketsById.contains(213));
             UNIT_ASSERT(!client.GetCachedServiceTickets()->ErrorsById.contains(19));
             UNIT_ASSERT(client.GetCachedServiceTickets()->ErrorsById.contains(213));
-
-            NThreading::TFuture<TAddResponse> fut = client.Add({123});
-            UNIT_ASSERT_VALUES_EQUAL(TClientStatus::IncompleteTicketsSet, client.GetStatus());
-
-            client.Worker();
-            UNIT_ASSERT_VALUES_EQUAL(TClientStatus::IncompleteTicketsSet, client.GetStatus());
-
+ 
+            NThreading::TFuture<TAddResponse> fut = client.Add({123}); 
+            UNIT_ASSERT_VALUES_EQUAL(TClientStatus::IncompleteTicketsSet, client.GetStatus()); 
+ 
+            client.Worker(); 
+            UNIT_ASSERT_VALUES_EQUAL(TClientStatus::IncompleteTicketsSet, client.GetStatus()); 
+ 
             UNIT_ASSERT(client.GetCachedServiceTickets()->TicketsById.contains(19));
             UNIT_ASSERT(!client.GetCachedServiceTickets()->TicketsById.contains(213));
             UNIT_ASSERT(client.GetCachedServiceTickets()->TicketsById.contains(123));
             UNIT_ASSERT(!client.GetCachedServiceTickets()->ErrorsById.contains(19));
             UNIT_ASSERT(client.GetCachedServiceTickets()->ErrorsById.contains(213));
             UNIT_ASSERT(!client.GetCachedServiceTickets()->ErrorsById.contains(123));
-
-            UNIT_ASSERT(fut.HasValue());
-            TAddResponse resp{
-                {123, {EDstStatus::Success, ""}},
-            };
-            UNIT_ASSERT_VALUES_EQUAL(resp, fut.GetValue());
-
+ 
+            UNIT_ASSERT(fut.HasValue()); 
+            TAddResponse resp{ 
+                {123, {EDstStatus::Success, ""}}, 
+            }; 
+            UNIT_ASSERT_VALUES_EQUAL(resp, fut.GetValue()); 
+ 
             UNIT_ASSERT(client.Tickets.empty());
-
-            TDsts dsts{19, 123, 213};
-            UNIT_ASSERT_VALUES_EQUAL(dsts, client.GetDsts());
-
-            UNIT_ASSERT_EXCEPTION_CONTAINS(client.GetOptionalServiceTicketFor(213), TMissingServiceTicket, "some error");
-        }
-    }
-
-    Y_UNIT_TEST(StartWithEmptyTicketsSet) {
+ 
+            TDsts dsts{19, 123, 213}; 
+            UNIT_ASSERT_VALUES_EQUAL(dsts, client.GetDsts()); 
+ 
+            UNIT_ASSERT_EXCEPTION_CONTAINS(client.GetOptionalServiceTicketFor(213), TMissingServiceTicket, "some error"); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(StartWithEmptyTicketsSet) { 
         CleanCache();
-
-        NTvmApi::TClientSettings s;
-        s.SetSelfTvmId(100500);
-        s.EnableServiceTicketsFetchOptions("qwerty", {{"kolmo", 213}}, false);
-        s.SetDiskCacheDir(CACHE_DIR);
-
-        auto l = MakeIntrusive<TLogger>();
-
-        {
+ 
+        NTvmApi::TClientSettings s; 
+        s.SetSelfTvmId(100500); 
+        s.EnableServiceTicketsFetchOptions("qwerty", {{"kolmo", 213}}, false); 
+        s.SetDiskCacheDir(CACHE_DIR); 
+ 
+        auto l = MakeIntrusive<TLogger>(); 
+ 
+        { 
             TOfflineUpdater client(s,
                                    l,
                                    false,
@@ -161,46 +161,46 @@ Y_UNIT_TEST_SUITE(DynamicClient) {
                                        R"({"213"  : { "error" : "some error"}})",
                                        R"({"123"  : { "ticket" : "3:serv:CBAQ__________9_IgYIlJEGEHs:CcafYQH-FF5XaXMuJrgLZj98bIC54cs1ZkcFS9VV_9YM9iOM_0PXCtMkdg85rFjxE_BMpg7bE8ZuoqNfdw0FPt0BAKNeISwlydj4o0IjY82--LZBpP8CRn-EpAnkRaDShdlfrcF2pk1SSmEX8xdyZVQEnkUPY0cHGlFnu231vnE"}})",
                                    });
-            UNIT_ASSERT_VALUES_EQUAL(TClientStatus::IncompleteTicketsSet, client.GetStatus());
+            UNIT_ASSERT_VALUES_EQUAL(TClientStatus::IncompleteTicketsSet, client.GetStatus()); 
             UNIT_ASSERT(!client.GetCachedServiceTickets()->TicketsById.contains(213));
             UNIT_ASSERT(client.GetCachedServiceTickets()->ErrorsById.contains(213));
-            UNIT_ASSERT_EXCEPTION_CONTAINS(client.GetOptionalServiceTicketFor(213), TMissingServiceTicket, "some error");
-
-            NThreading::TFuture<TAddResponse> fut = client.Add({123});
-            UNIT_ASSERT_VALUES_EQUAL(TClientStatus::IncompleteTicketsSet, client.GetStatus());
-
-            client.Worker();
-            UNIT_ASSERT_VALUES_EQUAL(TClientStatus::IncompleteTicketsSet, client.GetStatus());
-
+            UNIT_ASSERT_EXCEPTION_CONTAINS(client.GetOptionalServiceTicketFor(213), TMissingServiceTicket, "some error"); 
+ 
+            NThreading::TFuture<TAddResponse> fut = client.Add({123}); 
+            UNIT_ASSERT_VALUES_EQUAL(TClientStatus::IncompleteTicketsSet, client.GetStatus()); 
+ 
+            client.Worker(); 
+            UNIT_ASSERT_VALUES_EQUAL(TClientStatus::IncompleteTicketsSet, client.GetStatus()); 
+ 
             UNIT_ASSERT(!client.GetCachedServiceTickets()->TicketsById.contains(213));
             UNIT_ASSERT(client.GetCachedServiceTickets()->TicketsById.contains(123));
             UNIT_ASSERT(client.GetCachedServiceTickets()->ErrorsById.contains(213));
             UNIT_ASSERT(!client.GetCachedServiceTickets()->ErrorsById.contains(123));
-
-            UNIT_ASSERT(fut.HasValue());
-            TAddResponse resp{
-                {123, {EDstStatus::Success, ""}},
-            };
-            UNIT_ASSERT_VALUES_EQUAL(resp, fut.GetValue());
-
+ 
+            UNIT_ASSERT(fut.HasValue()); 
+            TAddResponse resp{ 
+                {123, {EDstStatus::Success, ""}}, 
+            }; 
+            UNIT_ASSERT_VALUES_EQUAL(resp, fut.GetValue()); 
+ 
             UNIT_ASSERT(client.Tickets.empty());
-
-            TDsts dsts{123, 213};
-            UNIT_ASSERT_VALUES_EQUAL(dsts, client.GetDsts());
-
-            UNIT_ASSERT_EXCEPTION_CONTAINS(client.GetOptionalServiceTicketFor(213), TMissingServiceTicket, "some error");
-        }
-    };
-    Y_UNIT_TEST(StartWithIncompleteCacheAndAdd) {
-        TInstant now = TInstant::Now();
+ 
+            TDsts dsts{123, 213}; 
+            UNIT_ASSERT_VALUES_EQUAL(dsts, client.GetDsts()); 
+ 
+            UNIT_ASSERT_EXCEPTION_CONTAINS(client.GetOptionalServiceTicketFor(213), TMissingServiceTicket, "some error"); 
+        } 
+    }; 
+    Y_UNIT_TEST(StartWithIncompleteCacheAndAdd) { 
+        TInstant now = TInstant::Now(); 
         CleanCache();
         WriteFile("./service_tickets",
-                  R"({"19"  : { "ticket" : "3:serv:CBAQ__________9_IgYIKhCUkQY:CX"}})"
-                  "\t100500",
-                  now);
-
-        NTvmApi::TClientSettings s;
-        s.SetSelfTvmId(100500);
+                  R"({"19"  : { "ticket" : "3:serv:CBAQ__________9_IgYIKhCUkQY:CX"}})" 
+                  "\t100500", 
+                  now); 
+ 
+        NTvmApi::TClientSettings s; 
+        s.SetSelfTvmId(100500); 
         s.EnableServiceTicketsFetchOptions("qwerty", {{"blackbox", 19}, {"kolmo", 213}});
         s.SetDiskCacheDir(CACHE_DIR);
 

@@ -29,15 +29,15 @@ namespace NTvmAuth {
     public:
         using TMapAliasStr = THashMap<TClientSettings::TAlias, TString>;
         using TMapIdStr = THashMap<TTvmId, TString>;
-        using TIdSet = THashSet<TTvmId>;
-        using TAliasSet = THashSet<TClientSettings::TAlias>;
+        using TIdSet = THashSet<TTvmId>; 
+        using TAliasSet = THashSet<TClientSettings::TAlias>; 
         using TMapAliasId = THashMap<TClientSettings::TAlias, TTvmId>;
 
         TServiceTickets(TMapIdStr&& tickets, TMapIdStr&& errors, const TMapAliasId& dstMap)
             : TicketsById(std::move(tickets))
             , ErrorsById(std::move(errors))
         {
-            InitAliasesAndUnfetchedIds(dstMap);
+            InitAliasesAndUnfetchedIds(dstMap); 
             InitInvalidationTime();
         }
 
@@ -66,7 +66,7 @@ namespace NTvmAuth {
         TAliasSet UnfetchedAliases;
 
     private:
-        void InitAliasesAndUnfetchedIds(const TMapAliasId& dstMap) {
+        void InitAliasesAndUnfetchedIds(const TMapAliasId& dstMap) { 
             for (const auto& pair : dstMap) {
                 auto it = TicketsById.find(pair.second);
                 auto errIt = ErrorsById.find(pair.second);
@@ -74,11 +74,11 @@ namespace NTvmAuth {
                 if (it == TicketsById.end()) {
                     if (errIt != ErrorsById.end()) {
                         Y_ENSURE(ErrorsByAlias.insert({pair.first, errIt->second}).second,
-                                 "failed to add: " << pair.first);
-                    } else {
+                                 "failed to add: " << pair.first); 
+                    } else { 
                         UnfetchedAliases.insert(pair.first);
                         UnfetchedIds.insert(pair.second);
-                    }
+                    } 
                 } else {
                     Y_ENSURE(TicketsByAlias.insert({pair.first, it->second}).second,
                              "failed to add: " << pair.first);

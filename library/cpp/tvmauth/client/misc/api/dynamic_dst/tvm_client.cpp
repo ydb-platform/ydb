@@ -53,10 +53,10 @@ namespace NTvmAuth::NDynamicClient {
     {
     }
 
-    TTvmClient::~TTvmClient() {
-        TBase::StopWorker();
-    }
-
+    TTvmClient::~TTvmClient() { 
+        TBase::StopWorker(); 
+    } 
+ 
     void TTvmClient::Worker() {
         TBase::Worker();
         ProcessTasks();

@@ -293,9 +293,9 @@
         "appteka": {
             "description": "Run local appteka instance"
         },
-        "news": { 
-            "description": "Run news team tools" 
-        }, 
+        "news": {
+            "description": "Run news team tools"
+        },
         "go": {
             "description": "Run go tool (1.17.6)"
         },
@@ -4756,28 +4756,28 @@
                 }
             ]
         },
-        "news": { 
-            "tools": { 
-                "news": { 
-                    "bottle": "news", 
-                    "executable": "news_launcher" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                }, 
-                { 
-                    "host": { 
-                        "os": "DARWIN" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "news": {
+            "tools": {
+                "news": {
+                    "bottle": "news",
+                    "executable": "news_launcher"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "golang_1_17_6": {
             "tools": {
                 "golang": {
@@ -7365,17 +7365,17 @@
                 ]
             }
         },
-        "news": { 
-            "formula": { 
+        "news": {
+            "formula": {
                 "sandbox_id": 1088628929,
-                "match": "news_launcher" 
-            }, 
-            "executable": { 
-                "news_launcher": [ 
-                    "news_launcher" 
-                ] 
-            } 
-        }, 
+                "match": "news_launcher"
+            },
+            "executable": {
+                "news_launcher": [
+                    "news_launcher"
+                ]
+            }
+        },
         "golang_1.17.6": {
             "formula": {
                 "sandbox_id": [

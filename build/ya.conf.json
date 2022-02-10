@@ -213,12 +213,12 @@
         "rsync": {
             "description": "Run RSync"
         },
-        "yf": {
-            "description": "Run YF client"
-        },
-        "rtmr-deploy": {
-            "description": "Run RTMR deploy"
-        },
+        "yf": { 
+            "description": "Run YF client" 
+        }, 
+        "rtmr-deploy": { 
+            "description": "Run RTMR deploy" 
+        }, 
         "yt": {
             "description": "Run YT client"
         },
@@ -3524,44 +3524,44 @@
                 }
             ]
         },
-        "yf": {
-            "tools": {
-                "yf": {
-                    "bottle": "yf",
-                    "executable": "yf"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "rtmr-deploy": {
-            "tools": {
-                "rtmr-deploy": {
-                    "bottle": "rtmr-deploy",
-                    "executable": "rtmr-deploy"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
+        "yf": { 
+            "tools": { 
+                "yf": { 
+                    "bottle": "yf", 
+                    "executable": "yf" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "rtmr-deploy": { 
+            "tools": { 
+                "rtmr-deploy": { 
+                    "bottle": "rtmr-deploy", 
+                    "executable": "rtmr-deploy" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
                 },
                 {
                     "host": {
                         "os": "DARWIN"
                     },
                     "default": true
-                }
-            ]
-        },
+                } 
+            ] 
+        }, 
         "yp-util": {
             "tools": {
                 "yp-util": {
@@ -6805,25 +6805,25 @@
                 ]
             }
         },
-        "yf": {
-            "formula": {
-                "sandbox_id": [
-                    1044416355
-                ],
-                "match": "yf-client"
-            },
-            "executable": "yf-client"
-        },
-        "rtmr-deploy": {
-            "formula": {
-                "sandbox_id": [
+        "yf": { 
+            "formula": { 
+                "sandbox_id": [ 
+                    1044416355 
+                ], 
+                "match": "yf-client" 
+            }, 
+            "executable": "yf-client" 
+        }, 
+        "rtmr-deploy": { 
+            "formula": { 
+                "sandbox_id": [ 
                     1210829227,
                     1210811623
-                ],
-                "match": "rtmr-deploy"
-            },
-            "executable": "rtmr-deploy"
-        },
+                ], 
+                "match": "rtmr-deploy" 
+            }, 
+            "executable": "rtmr-deploy" 
+        }, 
         "yp-util": {
             "formula": {
                 "sandbox_id": [

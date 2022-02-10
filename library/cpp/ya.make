@@ -382,7 +382,7 @@ RECURSE(
     tvmknife
     type_info
     type_info/bench
-    ucompress
+    ucompress 
     udp
     uilangdetect
     uilangdetect/ut

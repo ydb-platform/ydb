@@ -24,12 +24,12 @@
 #define ABSL_STRINGS_NUMBERS_H_
 
 #ifdef __SSE4_2__
-#ifdef _MSC_VER
-#include <intrin.h>
-#else
+#ifdef _MSC_VER 
+#include <intrin.h> 
+#else 
 #include <x86intrin.h>
 #endif
-#endif
+#endif 
 
 #include <cstddef>
 #include <cstdlib>

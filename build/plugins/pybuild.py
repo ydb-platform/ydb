@@ -53,7 +53,7 @@ def ev_cc_arg(path, unit):
     return '{}.ev.pb.cc'.format(stripext(to_build_root(path, unit)))
 
 def ev_arg(path, mod, unit):
-    return '{}__int___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), mod)
+    return '{}__int___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), mod) 
 
 def mangle(name):
     if '.' not in name:

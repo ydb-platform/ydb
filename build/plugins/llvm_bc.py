@@ -7,14 +7,14 @@ def onllvm_bc(unit, *args):
     free_args, kwds = sort_by_keywords({'SYMBOLS': -1, 'NAME': 1, 'NO_COMPILE': 0}, args)
     name = kwds['NAME'][0]
     symbols = kwds.get('SYMBOLS')
-    obj_suf = unit.get('OBJ_SUF')
+    obj_suf = unit.get('OBJ_SUF') 
     skip_compile_step = 'NO_COMPILE' in kwds 
-    merged_bc = name + '_merged' + obj_suf + '.bc'
-    out_bc = name + '_optimized' + obj_suf + '.bc'
+    merged_bc = name + '_merged' + obj_suf + '.bc' 
+    out_bc = name + '_optimized' + obj_suf + '.bc' 
     bcs = []
     for x in free_args:
         rel_path = rootrel_arc_src(x, unit)
-        bc_path = '${ARCADIA_BUILD_ROOT}/' + skip_build_root(rel_path) + obj_suf + '.bc'
+        bc_path = '${ARCADIA_BUILD_ROOT}/' + skip_build_root(rel_path) + obj_suf + '.bc' 
         if not skip_compile_step:
             if x.endswith('.c'):
                 llvm_compile = unit.onllvm_compile_c

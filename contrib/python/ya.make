@@ -724,7 +724,7 @@ RECURSE(
     pathspec
     pathtools
     pathy
-    patsy 
+    patsy
     paypalrestsdk
     pdbpp
     pdfminer.six

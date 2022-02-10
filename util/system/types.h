@@ -14,13 +14,13 @@ typedef uint16_t ui16;
 typedef int yssize_t;
 #define PRIYSZT "d"
 
-#if defined(_darwin_) && defined(_32_) 
-typedef unsigned long ui32; 
+#if defined(_darwin_) && defined(_32_)
+typedef unsigned long ui32;
 typedef long i32;
-#else 
+#else
 typedef uint32_t ui32;
 typedef int32_t i32;
-#endif 
+#endif
 
 #if defined(_darwin_) && defined(_64_)
 typedef unsigned long ui64;

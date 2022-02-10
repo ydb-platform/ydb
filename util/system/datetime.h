@@ -10,8 +10,8 @@
 
 #if defined(_darwin_) && !defined(_x86_)
     #include <mach/mach_time.h>
-#endif 
- 
+#endif
+
 /// util/system/datetime.h contains only system time providers
 /// for handy datetime utilities include util/datetime/base.h
 

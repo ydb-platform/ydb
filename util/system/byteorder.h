@@ -12,9 +12,9 @@
     #else
         #include <machine/byte_order.h>
     #endif
-#else 
+#else
     #include <util/generic/utility.h>
-#endif 
+#endif
 
 #if defined(_linux_) && !defined(USE_GENERIC_ENDIAN_CVT)
     #define SwapBytes16 bswap_16

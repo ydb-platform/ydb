@@ -524,11 +524,11 @@ I MaxElementBy(I begin, I end, F&& func) {
 }
 
 template <class C, class F>
-auto MaxElementBy(C& c, F&& func) { 
-    return MaxElementBy(std::begin(c), std::end(c), std::forward<F>(func)); 
-} 
- 
-template <class C, class F> 
+auto MaxElementBy(C& c, F&& func) {
+    return MaxElementBy(std::begin(c), std::end(c), std::forward<F>(func));
+}
+
+template <class C, class F>
 auto MaxElementBy(const C& c, F&& func) {
     return MaxElementBy(std::begin(c), std::end(c), std::forward<F>(func));
 }
@@ -540,11 +540,11 @@ I MinElementBy(I begin, I end, F&& func) {
 }
 
 template <class C, class F>
-auto MinElementBy(C& c, F&& func) { 
-    return MinElementBy(std::begin(c), std::end(c), std::forward<F>(func)); 
-} 
- 
-template <class C, class F> 
+auto MinElementBy(C& c, F&& func) {
+    return MinElementBy(std::begin(c), std::end(c), std::forward<F>(func));
+}
+
+template <class C, class F>
 auto MinElementBy(const C& c, F&& func) {
     return MinElementBy(std::begin(c), std::end(c), std::forward<F>(func));
 }

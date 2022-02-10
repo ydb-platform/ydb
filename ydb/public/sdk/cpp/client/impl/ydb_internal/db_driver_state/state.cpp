@@ -16,8 +16,8 @@ constexpr TDuration ENDPOINT_UPDATE_PERIOD = TDuration::Minutes(1); // period to
 constexpr TDuration DISCOVERY_RECHECK_PERIOD = TDuration::Seconds(5); // period to run periodic discovery task
 
 TDbDriverState::TDbDriverState(
-    const TStringType& database,
-    const TStringType& discoveryEndpoint,
+    const TStringType& database, 
+    const TStringType& discoveryEndpoint, 
     EDiscoveryMode discoveryMode,
     bool enableSsl,
     IInternalClient* client
@@ -49,8 +49,8 @@ void TDbDriverState::SetCredentialsProvider(std::shared_ptr<ICredentialsProvider
 }
 
 void TDbDriverState::AddCb(TCb&& cb, ENotifyType type) {
-    std::lock_guard lock(NotifyCbsLock);
-    NotifyCbs[static_cast<size_t>(type)].emplace_back(std::move(cb));
+    std::lock_guard lock(NotifyCbsLock); 
+    NotifyCbs[static_cast<size_t>(type)].emplace_back(std::move(cb)); 
 }
 
 void TDbDriverState::ForEachEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const {
@@ -69,7 +69,7 @@ EBalancingPolicy TDbDriverState::GetBalancingPolicy() const {
     return EndpointPool.GetBalancingPolicy();
 }
 
-TStringType TDbDriverState::GetEndpoint() const {
+TStringType TDbDriverState::GetEndpoint() const { 
     return EndpointPool.GetEndpoint(TStringType()).Endpoint;
 }
 
@@ -105,7 +105,7 @@ TPeriodicCb CreatePeriodicDiscoveryTask(TDbDriverState::TPtr driverState) {
                         strong->Client->DeleteChannels(updateResult.Removed);
 #endif
                         if (strong->DiscoveryMode == EDiscoveryMode::Sync) {
-                            std::unique_lock guard(strong->LastDiscoveryStatusRWLock);
+                            std::unique_lock guard(strong->LastDiscoveryStatusRWLock); 
                             strong->LastDiscoveryStatus = updateResult.DiscoveryStatus;
                         }
                     };
@@ -122,20 +122,20 @@ TDbDriverStateTracker::TDbDriverStateTracker(IInternalClient* client)
 {}
 
 TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
-    TStringType database,
-    TStringType discoveryEndpoint,
+    TStringType database, 
+    TStringType discoveryEndpoint, 
     EDiscoveryMode discoveryMode,
     bool enableSsl,
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
 ) {
-    TStringType clientIdentity;
+    TStringType clientIdentity; 
     if (credentialsProviderFactory) {
         clientIdentity = credentialsProviderFactory->GetClientIdentity();
     }
     Quote(database);
     const TStateKey key{database, discoveryEndpoint, clientIdentity, discoveryMode, enableSsl};
     {
-        std::shared_lock lock(Lock_);
+        std::shared_lock lock(Lock_); 
         auto state = States_.find(key);
         if (state != States_.end()) {
             auto strong = state->second.lock();
@@ -147,7 +147,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
     }
     TDbDriverStatePtr strongState;
     for (;;) {
-        std::unique_lock lock(Lock_);
+        std::unique_lock lock(Lock_); 
         {
             auto state = States_.find(key);
             if (state != States_.end()) {
@@ -160,7 +160,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                     // called yet. Likely other thread now is waiting on mutex to
                     // remove expired record from hashmap. So give him chance
                     // to do it after that we will be able to create new state
-                    lock.unlock();
+                    lock.unlock(); 
                     std::this_thread::yield();
                     continue;
                 }
@@ -169,7 +169,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
         {
             auto deleter = [this, key](TDbDriverState* p) {
                 {
-                    std::unique_lock lock(Lock_);
+                    std::unique_lock lock(Lock_); 
                     States_.erase(key);
                 }
                 delete p;
@@ -201,7 +201,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
         // preempted just before UpdateAsync call and other one get
         // state from cache and call UpdateAsync before us.
         if (Y_LIKELY(updateResult.second)) {
-            std::unique_lock guard(strongState->LastDiscoveryStatusRWLock);
+            std::unique_lock guard(strongState->LastDiscoveryStatusRWLock); 
             strongState->LastDiscoveryStatus = discoveryStatus;
         }
     }
@@ -218,7 +218,7 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
 ) {
     std::vector<std::weak_ptr<TDbDriverState>> states;
     {
-        std::shared_lock lock(Lock_);
+        std::shared_lock lock(Lock_); 
         states.reserve(States_.size());
         for (auto& weak : States_) {
             states.push_back(weak.second);
@@ -228,14 +228,14 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
     for (auto& state : states) {
         auto strong = state.lock();
         if (strong) {
-            std::lock_guard lock(strong->NotifyCbsLock);
-            for (auto& cb : strong->NotifyCbs[static_cast<size_t>(type)]) {
-                if (cb) {
-                    auto future = cb();
-                    if (!future.HasException()) {
-                        results.push_back(future);
+            std::lock_guard lock(strong->NotifyCbsLock); 
+            for (auto& cb : strong->NotifyCbs[static_cast<size_t>(type)]) { 
+                if (cb) { 
+                    auto future = cb(); 
+                    if (!future.HasException()) { 
+                        results.push_back(future); 
                     }
-                    //TODO: Add loger
+                    //TODO: Add loger 
                 }
             }
         }
@@ -246,7 +246,7 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
 void TDbDriverStateTracker::SetMetricRegistry(NMonitoring::TMetricRegistry *sensorsRegistry) {
     std::vector<std::weak_ptr<TDbDriverState>> states;
     {
-        std::shared_lock lock(Lock_);
+        std::shared_lock lock(Lock_); 
         states.reserve(States_.size());
         for (auto& weak : States_) {
             states.push_back(weak.second);

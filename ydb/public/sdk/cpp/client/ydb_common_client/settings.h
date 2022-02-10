@@ -20,11 +20,11 @@ struct TCommonClientSettings {
     //! always better to keep instance of client.
 
     //! Allows to override current database for client
-    FLUENT_SETTING_OPTIONAL(TStringType, Database);
+    FLUENT_SETTING_OPTIONAL(TStringType, Database); 
     //! Allows to override current discovery endpoint
-    FLUENT_SETTING_OPTIONAL(TStringType, DiscoveryEndpoint);
+    FLUENT_SETTING_OPTIONAL(TStringType, DiscoveryEndpoint); 
     //! Allows to override current token for client
-    TSelf& AuthToken(const TMaybe<TStringType>& token);
+    TSelf& AuthToken(const TMaybe<TStringType>& token); 
     //! Allows to override current credentials provider
     FLUENT_SETTING_OPTIONAL(std::shared_ptr<ICredentialsProviderFactory>, CredentialsProviderFactory);
     //! Allows to override discovery mode
@@ -42,9 +42,9 @@ struct TCommonClientSettingsBase : public TCommonClientSettings {
         return static_cast<TDerived&>(*this); \
     }
 
-    COMMON_CLIENT_SETTINGS_TO_DERIVED(TStringType, Database);
-    COMMON_CLIENT_SETTINGS_TO_DERIVED(TStringType, DiscoveryEndpoint);
-    COMMON_CLIENT_SETTINGS_TO_DERIVED(TMaybe<TStringType>, AuthToken);
+    COMMON_CLIENT_SETTINGS_TO_DERIVED(TStringType, Database); 
+    COMMON_CLIENT_SETTINGS_TO_DERIVED(TStringType, DiscoveryEndpoint); 
+    COMMON_CLIENT_SETTINGS_TO_DERIVED(TMaybe<TStringType>, AuthToken); 
     COMMON_CLIENT_SETTINGS_TO_DERIVED(std::shared_ptr<ICredentialsProviderFactory>, CredentialsProviderFactory);
     COMMON_CLIENT_SETTINGS_TO_DERIVED(EDiscoveryMode, DiscoveryMode);
     COMMON_CLIENT_SETTINGS_TO_DERIVED(bool, EnableSsl);
@@ -53,6 +53,6 @@ struct TCommonClientSettingsBase : public TCommonClientSettings {
 
 };
 
-TCommonClientSettings GetClientSettingsFromConnectionString(const TStringType& connectionString);
-
+TCommonClientSettings GetClientSettingsFromConnectionString(const TStringType& connectionString); 
+ 
 } // namespace NYdb

@@ -23,13 +23,13 @@ class TDriverConfig {
     friend class TDriver;
 
 public:
-    //! Connection string format: "<protocol>://<hostname:port>/?database=<database-path>",
-    //! where "<protocol>://" can be "grpc://" or "grpcs://" or be absent, "<hostname:port>" is endpoint,
-    //! "/?database=<database-path>" is optional
-    TDriverConfig(const TStringType& connectionString = "");
+    //! Connection string format: "<protocol>://<hostname:port>/?database=<database-path>", 
+    //! where "<protocol>://" can be "grpc://" or "grpcs://" or be absent, "<hostname:port>" is endpoint, 
+    //! "/?database=<database-path>" is optional 
+    TDriverConfig(const TStringType& connectionString = ""); 
     //! Endpoint to initiate connections with Ydb cluster,
     //! client will connect to others nodes according to client loadbalancing
-    TDriverConfig& SetEndpoint(const TStringType& endpoint);
+    TDriverConfig& SetEndpoint(const TStringType& endpoint); 
     //! Set number of network threads, default: 2
     TDriverConfig& SetNetworkThreadsNum(size_t sz);
     //! Set number of client pool threads, if 0 adaptive thread pool will be used.
@@ -50,11 +50,11 @@ public:
     //! Enable Ssl.
     //! caCerts  - The buffer containing the PEM encoding of the server root certificates.
     //!            If this parameter is empty, the default roots will be used.
-    TDriverConfig& UseSecureConnection(const TStringType& caCerts = TStringType());
+    TDriverConfig& UseSecureConnection(const TStringType& caCerts = TStringType()); 
     //! Set token, this option can be overridden for client by ClientSettings
-    TDriverConfig& SetAuthToken(const TStringType& token);
+    TDriverConfig& SetAuthToken(const TStringType& token); 
     //! Set database, this option can be overridden for client by ClientSettings
-    TDriverConfig& SetDatabase(const TStringType& database);
+    TDriverConfig& SetDatabase(const TStringType& database); 
     //! Set credentials data, this option can be overridden for client by ClientSettings
     TDriverConfig& SetCredentialsProviderFactory(std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory);
     //! Set behaviour of discovery routine
@@ -87,7 +87,7 @@ public:
     //! Set policy for balancing
     //! Params is a optionally field to set policy settings
     //! default: EBalancingPolicy::UsePreferableLocation
-    TDriverConfig& SetBalancingPolicy(EBalancingPolicy policy, const TStringType& params = TStringType());
+    TDriverConfig& SetBalancingPolicy(EBalancingPolicy policy, const TStringType& params = TStringType()); 
     //! !!! EXPERIMENTAL !!!
     //! Set grpc level keep alive. If keepalive ping was delayed more than given timeout
     //! internal grpc routine fails request with TRANSIENT_FAILURE or TRANSPORT_UNAVAILABLE error
@@ -97,12 +97,12 @@ public:
     //! default: disabled
     TDriverConfig& SetGRpcKeepAliveTimeout(TDuration timeout);
     TDriverConfig& SetGRpcKeepAlivePermitWithoutCalls(bool permitWithoutCalls);
-    //! Set inactive socket timeout.
-    //! Used to close connections, that were inactive for given time.
-    //! Closes unused connections every 1/10 of timeout, so deletion time is approximate.
-    //! Use TDuration::Max() to disable.
-    //! default: 6 minutes
-    TDriverConfig& SetSocketIdleTimeout(TDuration timeout);
+    //! Set inactive socket timeout. 
+    //! Used to close connections, that were inactive for given time. 
+    //! Closes unused connections every 1/10 of timeout, so deletion time is approximate. 
+    //! Use TDuration::Max() to disable. 
+    //! default: 6 minutes 
+    TDriverConfig& SetSocketIdleTimeout(TDuration timeout); 
 
     //! Log backend.
     TDriverConfig& SetLog(THolder<TLogBackend> log);

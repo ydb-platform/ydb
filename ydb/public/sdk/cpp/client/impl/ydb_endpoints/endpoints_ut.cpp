@@ -48,7 +48,7 @@ public:
         , Elector_(elector)
         , MaxEvents_(maxEvents)
     {
-        Finished_.store(false);
+        Finished_.store(false); 
     }
 
     static void* ThreadProc(void* _this) {
@@ -73,7 +73,7 @@ public:
                 Sleep(TDuration::MilliSeconds(10));
             }
         }
-        Finished_.store(true);
+        Finished_.store(true); 
     }
 
     const TVector<TEndpointRecord>& GetPool() const {
@@ -81,13 +81,13 @@ public:
     }
 
     bool Finished() const {
-        return Finished_.load();
+        return Finished_.load(); 
     }
 
 private:
     TEndpointElectorSafe& Elector_;
     ui64 MaxEvents_;
-    std::atomic_bool Finished_;
+    std::atomic_bool Finished_; 
 
     static const TVector<TEndpointRecord> Pool_;
 };

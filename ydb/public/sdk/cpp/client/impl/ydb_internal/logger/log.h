@@ -8,6 +8,6 @@
 namespace NYdb {
 
 TLogFormatter GetPrefixLogFormatter(const TString& prefix);
-TStringType GetDatabaseLogPrefix(const TStringType& database);
+TStringType GetDatabaseLogPrefix(const TStringType& database); 
 
 } // namespace NYdb

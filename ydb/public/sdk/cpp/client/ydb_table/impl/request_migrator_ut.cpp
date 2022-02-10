@@ -35,7 +35,7 @@ public:
         , Hostname_(hostname)
         , Cb_(cb)
     {
-        Cont_.store(true);
+        Cont_.store(true); 
     }
 
     static void* ThreadProc(void* _this) {
@@ -45,7 +45,7 @@ public:
     }
 
     void Exec() {
-       while (Cont_.load()) {
+       while (Cont_.load()) { 
            auto rowSession = new TSession::TImpl("someSessionId", Hostname_, true, 100);
            if (Cb_(rowSession)) {
                Processed_++;
@@ -55,7 +55,7 @@ public:
     }
 
     void Stop() {
-        Cont_.store(false);
+        Cont_.store(false); 
     }
 
     ui64 GetProcessed() const {
@@ -67,7 +67,7 @@ public:
     }
 
 private:
-    std::atomic_bool Cont_;
+    std::atomic_bool Cont_; 
     const TString Hostname_;
     std::function<bool(TSession::TImpl*)> Cb_;
     ui64 Processed_ = 0;
@@ -78,7 +78,7 @@ public:
     TMigratorClient()
         : Pool_(new TThreadPool(TThreadPool::TParams().SetBlocking(true).SetCatching(false)))
     {
-        Scheduled_.store(0);
+        Scheduled_.store(0); 
     }
 
     void Stop() {
@@ -100,16 +100,16 @@ public:
 
     void ScheduleTaskUnsafe(std::function<void()>&& fn, TDuration timeout) override {
         Y_VERIFY(!timeout);
-        ++Scheduled_;
+        ++Scheduled_; 
         Y_VERIFY(Pool_->AddFunc(std::move(fn)));
     }
 
     size_t GetScheduledCount() const {
-        return Scheduled_.load();
+        return Scheduled_.load(); 
     }
 private:
     std::unique_ptr<IThreadPool> Pool_;
-    std::atomic_int Scheduled_;
+    std::atomic_int Scheduled_; 
 };
 
 

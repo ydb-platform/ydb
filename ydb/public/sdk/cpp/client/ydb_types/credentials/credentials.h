@@ -9,7 +9,7 @@ namespace NYdb {
 class ICredentialsProvider {
 public:
     virtual ~ICredentialsProvider() = default;
-    virtual TStringType GetAuthInfo() const = 0;
+    virtual TStringType GetAuthInfo() const = 0; 
     virtual bool IsValid() const = 0;
 };
 
@@ -25,13 +25,13 @@ public:
         Y_UNUSED(facility);
         return CreateProvider();
     }
-    virtual TStringType GetClientIdentity() const = 0;
+    virtual TStringType GetClientIdentity() const = 0; 
 };
 
 using TCredentialsProviderFactoryPtr = std::shared_ptr<ICredentialsProviderFactory>;
 
 std::shared_ptr<ICredentialsProviderFactory> CreateInsecureCredentialsProviderFactory();
-std::shared_ptr<ICredentialsProviderFactory> CreateOAuthCredentialsProviderFactory(const TStringType& token);
+std::shared_ptr<ICredentialsProviderFactory> CreateOAuthCredentialsProviderFactory(const TStringType& token); 
 
 struct TLoginCredentialsParams {
     TString User;

@@ -12,42 +12,42 @@ namespace NYdb {
 
 class TEndpointElectorSafe::TObjRegistry : public IObjRegistryHandle {
 public:
-    TObjRegistry(const TStringType& endpoint)
+    TObjRegistry(const TStringType& endpoint) 
         : Endpoint_(endpoint)
     {}
 
     bool Add(TEndpointObj* obj) {
-        std::unique_lock lock(Mutex_);
+        std::unique_lock lock(Mutex_); 
         return Objs_.insert(obj).second;
     }
 
     void Remove(TEndpointObj* obj) {
-        std::unique_lock lock(Mutex_);
+        std::unique_lock lock(Mutex_); 
         Y_VERIFY(Objs_.find(obj) != Objs_.end());
         Objs_.erase(obj);
     }
 
     void NotifyEndpointRemoved() {
-        std::shared_lock lock(Mutex_);
+        std::shared_lock lock(Mutex_); 
         for (auto obj : Objs_) {
             obj->OnEndpointRemoved();
         }
     }
 
     size_t Size() const override {
-        std::shared_lock lock(Mutex_);
+        std::shared_lock lock(Mutex_); 
         return Objs_.size();
     }
 
-    const TStringType& GetEndpointName() const {
+    const TStringType& GetEndpointName() const { 
         return Endpoint_;
     }
 
 private:
     std::set<TEndpointObj*> Objs_;
-    const TStringType Endpoint_;
+    const TStringType Endpoint_; 
 
-    mutable std::shared_mutex Mutex_;
+    mutable std::shared_mutex Mutex_; 
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -70,8 +70,8 @@ static i32 GetBestK(const std::vector<TEndpointRecord>& records) {
     return pos - 1;
 }
 
-std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpointRecord>&& records) {
-    std::unordered_set<TStringType> index;
+std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpointRecord>&& records) { 
+    std::unordered_set<TStringType> index; 
     std::vector<TEndpointRecord> uniqRec;
 
     for (auto&& record : records) {
@@ -84,11 +84,11 @@ std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
 
     auto bestK = GetBestK(uniqRec);
 
-    std::vector<TStringType> removed;
+    std::vector<TStringType> removed; 
     std::vector<std::shared_ptr<TObjRegistry>> notifyRemoved;
 
     {
-        std::unique_lock guard(Mutex_);
+        std::unique_lock guard(Mutex_); 
         // Find endpoins which were removed
         for (const auto& record : Records_) {
             if (index.find(record.Endpoint) == index.end()) {
@@ -111,7 +111,7 @@ std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
         EndpointCountGauge_.SetValue(Records_.size());
         EndpointActiveGauge_.SetValue(Records_.size());
         BestK_ = bestK;
-        PessimizationRatio_.store(0);
+        PessimizationRatio_.store(0); 
         PessimizationRatioGauge_.SetValue(0);
     }
 
@@ -123,7 +123,7 @@ std::vector<TStringType> TEndpointElectorSafe::SetNewState(std::vector<TEndpoint
 }
 
 TEndpointRecord TEndpointElectorSafe::GetEndpoint(const TStringType& preferredEndpoint) const {
-    std::shared_lock guard(Mutex_);
+    std::shared_lock guard(Mutex_); 
     if (!preferredEndpoint.empty()) {
         auto it = KnownEndpoints_.find(preferredEndpoint);
         if (it != KnownEndpoints_.end()) {
@@ -141,13 +141,13 @@ TEndpointRecord TEndpointElectorSafe::GetEndpoint(const TStringType& preferredEn
 }
 
 // TODO: Suboptimal, but should not be used often
-void TEndpointElectorSafe::PessimizeEndpoint(const TStringType& endpoint) {
-    std::unique_lock guard(Mutex_);
+void TEndpointElectorSafe::PessimizeEndpoint(const TStringType& endpoint) { 
+    std::unique_lock guard(Mutex_); 
     for (auto& r : Records_) {
         if (r.Endpoint == endpoint && r.Priority != Max<i32>()) {
-            int pessimizationRatio = PessimizationRatio_.load();
+            int pessimizationRatio = PessimizationRatio_.load(); 
             auto newRatio = (pessimizationRatio * Records_.size() + 100) / Records_.size();
-            PessimizationRatio_.store(newRatio);
+            PessimizationRatio_.store(newRatio); 
             PessimizationRatioGauge_.SetValue(newRatio);
             EndpointActiveGauge_.Dec();
             r.Priority = Max<i32>();
@@ -164,7 +164,7 @@ void TEndpointElectorSafe::PessimizeEndpoint(const TStringType& endpoint) {
 
 // % of endpoints which was pessimized
 int TEndpointElectorSafe::GetPessimizationRatio() const {
-    return PessimizationRatio_.load();
+    return PessimizationRatio_.load(); 
 }
 
 void TEndpointElectorSafe::SetStatCollector(const NSdkStats::TStatCollector::TEndpointElectorStatCollector& endpointStatCollector) {
@@ -173,9 +173,9 @@ void TEndpointElectorSafe::SetStatCollector(const NSdkStats::TStatCollector::TEn
     EndpointActiveGauge_.Set(endpointStatCollector.EndpointActive);
 }
 
-bool TEndpointElectorSafe::LinkObjToEndpoint(const TStringType& endpoint, TEndpointObj* obj, const void* tag) {
+bool TEndpointElectorSafe::LinkObjToEndpoint(const TStringType& endpoint, TEndpointObj* obj, const void* tag) { 
     {
-        std::unique_lock guard(Mutex_);
+        std::unique_lock guard(Mutex_); 
         // Find obj registry for given endpoint
         // No endpoint - no registry, return false
         auto objIt = KnownEndpoints_.find(endpoint);
@@ -201,7 +201,7 @@ bool TEndpointElectorSafe::LinkObjToEndpoint(const TStringType& endpoint, TEndpo
 }
 
 void TEndpointElectorSafe::ForEachEndpoint(const THandleCb& cb, i32 minPriority, i32 maxPriority, const void* tag) const {
-    std::shared_lock guard(Mutex_);
+    std::shared_lock guard(Mutex_); 
 
     auto it = std::lower_bound(Records_.begin(), Records_.end(), minPriority, [](const TEndpointRecord& l, i32 r) {
         return l.Priority < r;

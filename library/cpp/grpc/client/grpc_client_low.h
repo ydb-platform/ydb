@@ -486,16 +486,16 @@ public:
             }
         }
     }
-
-    const TInstant& GetLastUseTime() const {
-        return LastUsed_;
-    }
-
-    void SetLastUseTime(const TInstant& time) {
-        LastUsed_ = time;
-    }
+ 
+    const TInstant& GetLastUseTime() const { 
+        return LastUsed_; 
+    } 
+ 
+    void SetLastUseTime(const TInstant& time) { 
+        LastUsed_ = time; 
+    } 
 private:
-    TInstant LastUsed_ = Now();
+    TInstant LastUsed_ = Now(); 
     std::shared_mutex RWMutex_;
     std::unordered_map<TypeInfoRef, std::shared_ptr<void>, THasher, TEqualTo> Stubs_;
     std::shared_ptr<grpc::ChannelInterface> ChannelInterface_;
@@ -503,20 +503,20 @@ private:
 
 class TChannelPool {
 public:
-    TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime = TDuration::Minutes(6));
+    TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime = TDuration::Minutes(6)); 
     //Allows to CreateStub from TStubsHolder under lock
     //The callback will be called just during GetStubsHolderLocked call
     void GetStubsHolderLocked(const TString& channelId, const TGRpcClientConfig& config, std::function<void(TStubsHolder&)> cb);
     void DeleteChannel(const TString& channelId);
-    void DeleteExpiredStubsHolders();
+    void DeleteExpiredStubsHolders(); 
 private:
     std::shared_mutex RWMutex_;
     std::unordered_map<TString, TStubsHolder> Pool_;
-    std::multimap<TInstant, TString> LastUsedQueue_;
+    std::multimap<TInstant, TString> LastUsedQueue_; 
     TTcpKeepAliveSettings TcpKeepAliveSettings_;
-    TDuration ExpireTime_;
-    TDuration UpdateReUseTime_;
-    void EraseFromQueueByTime(const TInstant& lastUseTime, const TString& channelId);
+    TDuration ExpireTime_; 
+    TDuration UpdateReUseTime_; 
+    void EraseFromQueueByTime(const TInstant& lastUseTime, const TString& channelId); 
 };
 
 template<class TResponse>

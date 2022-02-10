@@ -27,8 +27,8 @@ public:
     using TPtr = std::shared_ptr<TDbDriverState>;
 
     TDbDriverState(
-        const TStringType& database,
-        const TStringType& discoveryEndpoint,
+        const TStringType& database, 
+        const TStringType& discoveryEndpoint, 
         EDiscoveryMode discoveryMode,
         bool enableSsl,
         IInternalClient* client
@@ -41,24 +41,24 @@ public:
     void ForEachLocalEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     void ForEachForeignEndpoint(const TEndpointElectorSafe::THandleCb& cb, const void* tag) const;
     EBalancingPolicy GetBalancingPolicy() const;
-    TStringType GetEndpoint() const;
+    TStringType GetEndpoint() const; 
     void SetCredentialsProvider(std::shared_ptr<ICredentialsProvider> credentialsProvider);
 
-    const TStringType Database;
-    const TStringType DiscoveryEndpoint;
+    const TStringType Database; 
+    const TStringType DiscoveryEndpoint; 
     const EDiscoveryMode DiscoveryMode;
     const bool EnableSsl;
     std::shared_ptr<ICredentialsProvider> CredentialsProvider;
     IInternalClient* Client;
     TEndpointPool EndpointPool;
     // StopCb allow client to subscribe for notifications from lower layer
-    std::mutex NotifyCbsLock;
+    std::mutex NotifyCbsLock; 
     std::array<std::vector<TCb>, static_cast<size_t>(ENotifyType::COUNT)> NotifyCbs;
 #ifndef YDB_GRPC_UNSECURE_AUTH
     std::shared_ptr<grpc::CallCredentials> CallCredentials;
 #endif
     // Status of last discovery call, used in sync mode, coresponding mutex
-    std::shared_mutex LastDiscoveryStatusRWLock;
+    std::shared_mutex LastDiscoveryStatusRWLock; 
     TPlainStatus LastDiscoveryStatus;
     NSdkStats::TStatCollector StatCollector;
     TLog Log;
@@ -69,7 +69,7 @@ class TDbDriverStateTracker {
     using TStateKey = std::tuple<TStringType, TStringType, TStringType, EDiscoveryMode, bool>;
     struct TStateKeyHash {
         size_t operator()(const TStateKey& k) const noexcept {
-            THash<TStringType> strHash;
+            THash<TStringType> strHash; 
             const size_t h0 = strHash(std::get<0>(k));
             const size_t h1 = strHash(std::get<1>(k));
             const size_t h2 = strHash(std::get<2>(k));
@@ -80,8 +80,8 @@ class TDbDriverStateTracker {
 public:
     TDbDriverStateTracker(IInternalClient* client);
     TDbDriverState::TPtr GetDriverState(
-        TStringType database,
-        TStringType DiscoveryEndpoint,
+        TStringType database, 
+        TStringType DiscoveryEndpoint, 
         EDiscoveryMode discoveryMode,
         bool enableSsl,
         std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
@@ -92,7 +92,7 @@ public:
 private:
     IInternalClient* DiscoveryClient_;
     std::unordered_map<TStateKey, std::weak_ptr<TDbDriverState>, TStateKeyHash> States_;
-    std::shared_mutex Lock_;
+    std::shared_mutex Lock_; 
 };
 
 using TDbDriverStatePtr = TDbDriverState::TPtr;

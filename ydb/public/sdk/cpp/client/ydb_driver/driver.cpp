@@ -9,7 +9,7 @@
 #include <library/cpp/logger/log.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/parser.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/common/getenv.h>
-#include <util/stream/file.h>
+#include <util/stream/file.h> 
 #include <ydb/public/sdk/cpp/client/resources/ydb_ca.h>
 
 namespace NYdb {
@@ -28,13 +28,13 @@ using namespace NThreading;
 
 class TDriverConfig::TImpl : public IConnectionsParams {
 public:
-    TStringType GetEndpoint() const override { return Endpoint; }
+    TStringType GetEndpoint() const override { return Endpoint; } 
     size_t GetNetworkThreadsNum() const override { return NetworkThreadsNum; }
     size_t GetClientThreadsNum() const override { return ClientThreadsNum; }
     size_t GetMaxQueuedResponses() const override { return MaxQueuedResponses; }
     bool IsSslEnabled() const override { return EnableSsl; }
-    TStringType GetCaCert() const override { return CaCert; }
-    TStringType GetDatabase() const override { return Database; }
+    TStringType GetCaCert() const override { return CaCert; } 
+    TStringType GetDatabase() const override { return Database; } 
     std::shared_ptr<ICredentialsProviderFactory> GetCredentialsProviderFactory() const override { return CredentialsProviderFactory; }
     EDiscoveryMode GetDiscoveryMode() const override { return DiscoveryMode; }
     size_t GetMaxQueuedRequests() const override { return MaxQueuedRequests; }
@@ -43,17 +43,17 @@ public:
     TBalancingSettings GetBalancingSettings() const override { return BalancingSettings; }
     TDuration GetGRpcKeepAliveTimeout() const override { return GRpcKeepAliveTimeout; }
     bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; }
-    TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
+    TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; } 
     ui64 GetMemoryQuota() const override { return MemoryQuota; }
     const TLog& GetLog() const override { return Log; }
 
-    TStringType Endpoint;
+    TStringType Endpoint; 
     size_t NetworkThreadsNum = 2;
     size_t ClientThreadsNum = 0;
     size_t MaxQueuedResponses = 0;
     bool EnableSsl = false;
-    TStringType CaCert;
-    TStringType Database;
+    TStringType CaCert; 
+    TStringType Database; 
     std::shared_ptr<ICredentialsProviderFactory> CredentialsProviderFactory = CreateInsecureCredentialsProviderFactory();
     EDiscoveryMode DiscoveryMode = EDiscoveryMode::Sync;
     size_t MaxQueuedRequests = 100;
@@ -65,25 +65,25 @@ public:
             TCP_KEEPALIVE_INTERVAL
         };
     bool DrainOnDtors = true;
-    TBalancingSettings BalancingSettings = TBalancingSettings{EBalancingPolicy::UsePreferableLocation, TStringType()};
+    TBalancingSettings BalancingSettings = TBalancingSettings{EBalancingPolicy::UsePreferableLocation, TStringType()}; 
     TDuration GRpcKeepAliveTimeout;
     bool GRpcKeepAlivePermitWithoutCalls = false;
-    TDuration SocketIdleTimeout = TDuration::Minutes(6);
+    TDuration SocketIdleTimeout = TDuration::Minutes(6); 
     ui64 MemoryQuota = 0;
     TLog Log; // Null by default.
 };
 
-TDriverConfig::TDriverConfig(const TStringType& connectionString)
-    : Impl_(new TImpl) {
-        if (connectionString != ""){
-            auto connectionInfo = ParseConnectionString(connectionString);
-            SetEndpoint(connectionInfo.Endpoint);
-            SetDatabase(connectionInfo.Database);
-            Impl_->EnableSsl = connectionInfo.EnableSsl;
-        }
-}
-
-TDriverConfig& TDriverConfig::SetEndpoint(const TStringType& endpoint) {
+TDriverConfig::TDriverConfig(const TStringType& connectionString) 
+    : Impl_(new TImpl) { 
+        if (connectionString != ""){ 
+            auto connectionInfo = ParseConnectionString(connectionString); 
+            SetEndpoint(connectionInfo.Endpoint); 
+            SetDatabase(connectionInfo.Database); 
+            Impl_->EnableSsl = connectionInfo.EnableSsl; 
+        } 
+} 
+ 
+TDriverConfig& TDriverConfig::SetEndpoint(const TStringType& endpoint) { 
     Impl_->Endpoint = endpoint;
     return *this;
 }
@@ -103,17 +103,17 @@ TDriverConfig& TDriverConfig::SetMaxClientQueueSize(size_t sz) {
     return *this;
 }
 
-TDriverConfig& TDriverConfig::UseSecureConnection(const TStringType& cert) {
+TDriverConfig& TDriverConfig::UseSecureConnection(const TStringType& cert) { 
     Impl_->EnableSsl = true;
     Impl_->CaCert = cert;
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetAuthToken(const TStringType& token) {
+TDriverConfig& TDriverConfig::SetAuthToken(const TStringType& token) { 
     return SetCredentialsProviderFactory(CreateOAuthCredentialsProviderFactory(token));
 }
 
-TDriverConfig& TDriverConfig::SetDatabase(const TStringType& database) {
+TDriverConfig& TDriverConfig::SetDatabase(const TStringType& database) { 
     Impl_->Database = database;
     Impl_->Log.SetFormatter(GetPrefixLogFormatter(GetDatabaseLogPrefix(Impl_->Database)));
     return *this;
@@ -152,7 +152,7 @@ TDriverConfig& TDriverConfig::SetDrainOnDtors(bool allowed) {
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetBalancingPolicy(EBalancingPolicy policy, const TStringType& params) {
+TDriverConfig& TDriverConfig::SetBalancingPolicy(EBalancingPolicy policy, const TStringType& params) { 
     Impl_->BalancingSettings = TBalancingSettings{policy, params};
     return *this;
 }
@@ -167,11 +167,11 @@ TDriverConfig& TDriverConfig::SetGRpcKeepAlivePermitWithoutCalls(bool permitWith
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetSocketIdleTimeout(TDuration timeout) {
-    Impl_->SocketIdleTimeout = timeout;
-    return *this;
-}
-
+TDriverConfig& TDriverConfig::SetSocketIdleTimeout(TDuration timeout) { 
+    Impl_->SocketIdleTimeout = timeout; 
+    return *this; 
+} 
+ 
 TDriverConfig& TDriverConfig::SetLog(THolder<TLogBackend> log) {
     Impl_->Log.ResetBackend(std::move(log));
     return *this;

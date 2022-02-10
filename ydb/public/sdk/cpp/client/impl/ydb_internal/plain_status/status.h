@@ -15,8 +15,8 @@ namespace NYdb {
 struct TPlainStatus {
     EStatus Status;
     NYql::TIssues Issues;
-    TStringType Endpoint;
-    std::multimap<TStringType, TStringType> Metadata;
+    TStringType Endpoint; 
+    std::multimap<TStringType, TStringType> Metadata; 
     Ydb::CostInfo ConstInfo;
 
     TPlainStatus()
@@ -28,25 +28,25 @@ struct TPlainStatus {
         , Issues(std::move(issues))
     { }
 
-    TPlainStatus(EStatus status, NYql::TIssues&& issues, const TStringType& endpoint,
-        std::multimap<TStringType, TStringType>&& metadata)
+    TPlainStatus(EStatus status, NYql::TIssues&& issues, const TStringType& endpoint, 
+        std::multimap<TStringType, TStringType>&& metadata) 
         : Status(status)
         , Issues(std::move(issues))
         , Endpoint(endpoint)
         , Metadata(std::move(metadata))
     { }
 
-    TPlainStatus(EStatus status, const TStringType& message)
+    TPlainStatus(EStatus status, const TStringType& message) 
         : Status(status)
     {
-        if (!message.empty()) {
+        if (!message.empty()) { 
             Issues.AddIssue(NYql::TIssue(message));
         }
     }
 
     TPlainStatus(
-        const NGrpc::TGrpcStatus& grpcStatus, const TStringType& endpoint = TStringType(),
-        std::multimap<TStringType, TStringType>&& metadata = {});
+        const NGrpc::TGrpcStatus& grpcStatus, const TStringType& endpoint = TStringType(), 
+        std::multimap<TStringType, TStringType>&& metadata = {}); 
 
     template<class T>
     void SetCostInfo(T&& costInfo) {
@@ -57,7 +57,7 @@ struct TPlainStatus {
         return Status == EStatus::SUCCESS;
     }
 
-    static TPlainStatus Internal(const TStringType& message);
+    static TPlainStatus Internal(const TStringType& message); 
 
     bool IsTransportError() const {
         auto status = static_cast<size_t>(Status);

@@ -9,17 +9,17 @@
 
 #include <util/string/builder.h>
 
-#include <atomic>
-#include <memory>
-
+#include <atomic> 
+#include <memory> 
+ 
 namespace NYdb {
 
 namespace NSdkStats {
 
 // works only for case normal (foo_bar) underscore
 
-inline TStringType UnderscoreToUpperCamel(const TStringType& in) {
-    TStringType result;
+inline TStringType UnderscoreToUpperCamel(const TStringType& in) { 
+    TStringType result; 
     result.reserve(in.size());
 
     if (in.empty())
@@ -51,25 +51,25 @@ public:
         Set(pointer);
     }
 
-    TAtomicPointer(const TAtomicPointer& other) {
-        Set(other.Get());
+    TAtomicPointer(const TAtomicPointer& other) { 
+        Set(other.Get()); 
     }
 
-    TAtomicPointer& operator=(const TAtomicPointer& other) {
-        Set(other.Get());
-        return *this;
-    }
-
-    TPointer* Get() const {
-        return Pointer_.load();
-    }
-
+    TAtomicPointer& operator=(const TAtomicPointer& other) { 
+        Set(other.Get()); 
+        return *this; 
+    } 
+ 
+    TPointer* Get() const { 
+        return Pointer_.load(); 
+    } 
+ 
     void Set(TPointer* pointer) {
-        Pointer_.store(pointer);
+        Pointer_.store(pointer); 
     }
 
 private:
-    std::atomic<TPointer*> Pointer_;
+    std::atomic<TPointer*> Pointer_; 
 };
 
 template<typename TPointer>
@@ -202,7 +202,7 @@ public:
 
         TClientRetryOperationStatCollector() : MetricRegistry_(), Database_() {}
 
-        TClientRetryOperationStatCollector(NMonitoring::TMetricRegistry* registry, const TStringType& database)
+        TClientRetryOperationStatCollector(NMonitoring::TMetricRegistry* registry, const TStringType& database) 
         : MetricRegistry_(registry), Database_(database)
         { }
 
@@ -224,7 +224,7 @@ public:
 
     private:
         TAtomicPointer<NMonitoring::TMetricRegistry> MetricRegistry_;
-        TStringType Database_;
+        TStringType Database_; 
     };
 
     struct TClientStatCollector {
@@ -251,7 +251,7 @@ public:
         TClientRetryOperationStatCollector RetryOperationStatCollector;
     };
 
-    TStatCollector(const TStringType& database, TMetricRegistry* sensorsRegistry)
+    TStatCollector(const TStringType& database, TMetricRegistry* sensorsRegistry) 
         : Database_(database)
         , DatabaseLabel_({"database", database})
     {
@@ -321,7 +321,7 @@ public:
         ResultSize_.Record(size);
     }
 
-    void IncCounter(const TStringType& sensor) {
+    void IncCounter(const TStringType& sensor) { 
         if (auto registry = MetricRegistryPtr_.Get()) {
             registry->Counter({ {"database", Database_}, {"sensor", sensor} })->Inc();
         }
@@ -380,17 +380,17 @@ public:
         return MetricRegistryPtr_.Get() != nullptr;
     }
 
-    void IncSessionsOnHost(const TStringType& host);
-    void DecSessionsOnHost(const TStringType& host);
+    void IncSessionsOnHost(const TStringType& host); 
+    void DecSessionsOnHost(const TStringType& host); 
 
-    void IncTransportErrorsByHost(const TStringType& host);
+    void IncTransportErrorsByHost(const TStringType& host); 
 
-    void IncGRpcInFlightByHost(const TStringType& host);
-    void DecGRpcInFlightByHost(const TStringType& host);
+    void IncGRpcInFlightByHost(const TStringType& host); 
+    void DecGRpcInFlightByHost(const TStringType& host); 
 
-    void DeleteHost(const TStringType& host);
+    void DeleteHost(const TStringType& host); 
 private:
-    const TStringType Database_;
+    const TStringType Database_; 
     const NMonitoring::TLabel DatabaseLabel_;
     TAtomicPointer<TMetricRegistry> MetricRegistryPtr_;
     TAtomicCounter<NMonitoring::TRate> DiscoveryDuePessimization_;

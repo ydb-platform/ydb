@@ -27,8 +27,8 @@ TEndpointPool::~TEndpointPool() {
 
 std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::UpdateAsync() {
     NThreading::TFuture<TEndpointUpdateResult> future;
-    {
-        std::lock_guard guard(Mutex_);
+    { 
+        std::lock_guard guard(Mutex_); 
         if (DiscoveryPromise_.Initialized()) {
             return {DiscoveryPromise_.GetFuture(), false};
         } else {
@@ -38,7 +38,7 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
     }
     auto handler = [this](const TAsyncListEndpointsResult& future) {
         TListEndpointsResult result = future.GetValue();
-        std::vector<TStringType> removed;
+        std::vector<TStringType> removed; 
         if (result.DiscoveryStatus.Status == EStatus::SUCCESS) {
             std::vector<TEndpointRecord> records;
             // Is used to convert float to integer load factor
@@ -110,8 +110,8 @@ std::pair<NThreading::TFuture<TEndpointUpdateResult>, bool> TEndpointPool::Updat
             removed = Elector_.SetNewState(std::move(records));
         }
         NThreading::TPromise<TEndpointUpdateResult> promise;
-        {
-            std::lock_guard guard(Mutex_);
+        { 
+            std::lock_guard guard(Mutex_); 
             DiscoveryPromise_.Swap(promise);
         }
         promise.SetValue({std::move(removed), result.DiscoveryStatus});
@@ -127,10 +127,10 @@ TEndpointRecord TEndpointPool::GetEndpoint(const TStringType& preferredEndpoint)
 
 TDuration TEndpointPool::TimeSinceLastUpdate() const {
     auto now = TInstant::Now().MicroSeconds();
-    return TDuration::MicroSeconds(now - LastUpdateTime_.load());
+    return TDuration::MicroSeconds(now - LastUpdateTime_.load()); 
 }
 
-void TEndpointPool::BanEndpoint(const TStringType& endpoint) {
+void TEndpointPool::BanEndpoint(const TStringType& endpoint) { 
     Elector_.PessimizeEndpoint(endpoint);
 }
 
@@ -138,7 +138,7 @@ int TEndpointPool::GetPessimizationRatio() {
     return Elector_.GetPessimizationRatio();
 }
 
-bool TEndpointPool::LinkObjToEndpoint(const TStringType& endpoint, TEndpointObj* obj, const void* tag) {
+bool TEndpointPool::LinkObjToEndpoint(const TStringType& endpoint, TEndpointObj* obj, const void* tag) { 
     return Elector_.LinkObjToEndpoint(endpoint, obj, tag);
 }
 
@@ -169,7 +169,7 @@ constexpr i32 TEndpointPool::GetLocalityShift() {
     return LoadMax * Multiplicator;
 }
 
-TStringType TEndpointPool::GetPreferedLocation(const TStringType& selfLocation) {
+TStringType TEndpointPool::GetPreferedLocation(const TStringType& selfLocation) { 
     switch (BalancingSettings_.Policy) {
         case EBalancingPolicy::UseAllNodes:
             return {};

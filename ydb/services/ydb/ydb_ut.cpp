@@ -808,57 +808,57 @@ static TString CreateSession(std::shared_ptr<grpc::Channel> channel) {
     return result.session_id();
 }
 
-void IncorrectConnectionStringPending(const TString& incorrectLocation) {
-    auto connection = NYdb::TDriver(incorrectLocation);
-    auto client = NYdb::NTable::TTableClient(connection);
-    auto session = client.CreateSession().ExtractValueSync().GetSession();
-}
-
-Y_UNIT_TEST_SUITE(GrpcConnectionStringParserTest) {
-    Y_UNIT_TEST(NoDatabaseFlag) {
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
-        ui16 grpc = server.GetPort();
-
-        bool done = false;
-
-        {
-            TString location = TStringBuilder() << "localhost:" << grpc;
-
-            // by default, location won't have database path
-            auto connection = NYdb::TDriver(location);
-            auto client = NYdb::NTable::TTableClient(connection);
-            auto session = client.CreateSession().ExtractValueSync().GetSession();
-
-            done = true;
-        }
-
-        UNIT_ASSERT(done);
-    }
-
-    Y_UNIT_TEST(IncorrectConnectionString) {
-        TString incorrectLocation = "thisIsNotURL::::";
-        UNIT_CHECK_GENERATED_EXCEPTION(IncorrectConnectionStringPending(incorrectLocation), std::exception);
-    }
-
-    Y_UNIT_TEST(CommonClientSettingsFromConnectionString) {
-        TKikimrWithGrpcAndRootSchemaNoSystemViews server;
-        ui16 grpc = server.GetPort();
-
-        bool done = false;
-
-        {
-            TString location = TStringBuilder() << "localhost:" << grpc;
-
-            // by default, location won't have database path
-            auto settings = GetClientSettingsFromConnectionString(location);
-
-            done = true;
-        }
-
-        UNIT_ASSERT(done);
-    }
-}
-
+void IncorrectConnectionStringPending(const TString& incorrectLocation) { 
+    auto connection = NYdb::TDriver(incorrectLocation); 
+    auto client = NYdb::NTable::TTableClient(connection); 
+    auto session = client.CreateSession().ExtractValueSync().GetSession(); 
+} 
+ 
+Y_UNIT_TEST_SUITE(GrpcConnectionStringParserTest) { 
+    Y_UNIT_TEST(NoDatabaseFlag) { 
+        TKikimrWithGrpcAndRootSchemaNoSystemViews server; 
+        ui16 grpc = server.GetPort(); 
+ 
+        bool done = false; 
+ 
+        { 
+            TString location = TStringBuilder() << "localhost:" << grpc; 
+ 
+            // by default, location won't have database path 
+            auto connection = NYdb::TDriver(location); 
+            auto client = NYdb::NTable::TTableClient(connection); 
+            auto session = client.CreateSession().ExtractValueSync().GetSession(); 
+ 
+            done = true; 
+        } 
+ 
+        UNIT_ASSERT(done); 
+    } 
+ 
+    Y_UNIT_TEST(IncorrectConnectionString) { 
+        TString incorrectLocation = "thisIsNotURL::::"; 
+        UNIT_CHECK_GENERATED_EXCEPTION(IncorrectConnectionStringPending(incorrectLocation), std::exception); 
+    } 
+ 
+    Y_UNIT_TEST(CommonClientSettingsFromConnectionString) { 
+        TKikimrWithGrpcAndRootSchemaNoSystemViews server; 
+        ui16 grpc = server.GetPort(); 
+ 
+        bool done = false; 
+ 
+        { 
+            TString location = TStringBuilder() << "localhost:" << grpc; 
+ 
+            // by default, location won't have database path 
+            auto settings = GetClientSettingsFromConnectionString(location); 
+ 
+            done = true; 
+        } 
+ 
+        UNIT_ASSERT(done); 
+    } 
+} 
+ 
 Y_UNIT_TEST_SUITE(TGRpcYdbTest) {
     Y_UNIT_TEST(RemoveNotExistedDirecroty) {
         TKikimrWithGrpcAndRootSchema server;

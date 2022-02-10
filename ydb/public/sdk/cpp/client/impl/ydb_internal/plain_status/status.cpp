@@ -7,12 +7,12 @@ namespace NYdb {
 
 TPlainStatus::TPlainStatus(
     const NGrpc::TGrpcStatus& grpcStatus,
-    const TStringType& endpoint,
-    std::multimap<TStringType, TStringType>&& metadata)
+    const TStringType& endpoint, 
+    std::multimap<TStringType, TStringType>&& metadata) 
     : Endpoint(endpoint)
     , Metadata(std::move(metadata))
 {
-    TStringType msg;
+    TStringType msg; 
     if (grpcStatus.InternalError) {
         Status = EStatus::CLIENT_INTERNAL_ERROR;
         if (grpcStatus.Msg) {
@@ -56,8 +56,8 @@ TPlainStatus::TPlainStatus(
     }
 }
 
-TPlainStatus TPlainStatus::Internal(const TStringType& message) {
-    return { EStatus::CLIENT_INTERNAL_ERROR, "Internal client error: " + message };
+TPlainStatus TPlainStatus::Internal(const TStringType& message) { 
+    return { EStatus::CLIENT_INTERNAL_ERROR, "Internal client error: " + message }; 
 }
 
 } // namespace NYdb

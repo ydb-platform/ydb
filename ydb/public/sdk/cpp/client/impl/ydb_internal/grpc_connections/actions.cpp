@@ -20,13 +20,13 @@ void TSimpleCbResult::Process(void*) {
     delete this;
 }
 
-TDeferredAction::TDeferredAction(const TStringType& operationId,
+TDeferredAction::TDeferredAction(const TStringType& operationId, 
         TDeferredOperationCb&& userCb,
         TGRpcConnectionsImpl* connection,
         std::shared_ptr<IQueueClientContext> context,
         TDuration delay,
         TDbDriverStatePtr dbState,
-        const TStringType& endpoint)
+        const TStringType& endpoint) 
     : TAlarmActionBase(std::move(userCb), connection, std::move(context))
     , NextDelay_(Min(delay * 2, MAX_DEFERRED_CALL_DELAY))
     , DbDriverState_(dbState)

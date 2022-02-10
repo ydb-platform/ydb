@@ -7,7 +7,7 @@ OWNER(
 
 SRCS(
     ydb_resources.cpp
-    ydb_ca.cpp
+    ydb_ca.cpp 
 )
 
 RESOURCE(

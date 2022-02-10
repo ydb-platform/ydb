@@ -33,26 +33,26 @@ namespace grpc_core {
 namespace channelz {
 
 SubchannelNode::SubchannelNode(TString target_address,
-                               size_t channel_tracer_max_nodes)
-    : BaseNode(EntityType::kSubchannel, target_address),
-      target_(std::move(target_address)),
-      trace_(channel_tracer_max_nodes) {}
+                               size_t channel_tracer_max_nodes) 
+    : BaseNode(EntityType::kSubchannel, target_address), 
+      target_(std::move(target_address)), 
+      trace_(channel_tracer_max_nodes) {} 
 
-SubchannelNode::~SubchannelNode() {}
+SubchannelNode::~SubchannelNode() {} 
 
-void SubchannelNode::UpdateConnectivityState(grpc_connectivity_state state) {
-  connectivity_state_.Store(state, MemoryOrder::RELAXED);
+void SubchannelNode::UpdateConnectivityState(grpc_connectivity_state state) { 
+  connectivity_state_.Store(state, MemoryOrder::RELAXED); 
 }
 
-void SubchannelNode::SetChildSocket(RefCountedPtr<SocketNode> socket) {
-  MutexLock lock(&socket_mu_);
-  child_socket_ = std::move(socket);
+void SubchannelNode::SetChildSocket(RefCountedPtr<SocketNode> socket) { 
+  MutexLock lock(&socket_mu_); 
+  child_socket_ = std::move(socket); 
 }
 
 Json SubchannelNode::RenderJson() {
   // Create and fill the data child.
-  grpc_connectivity_state state =
-      connectivity_state_.Load(MemoryOrder::RELAXED);
+  grpc_connectivity_state state = 
+      connectivity_state_.Load(MemoryOrder::RELAXED); 
   Json::Object data = {
       {"state",
        Json::Object{
@@ -77,12 +77,12 @@ Json SubchannelNode::RenderJson() {
       {"data", std::move(data)},
   };
   // Populate the child socket.
-  RefCountedPtr<SocketNode> child_socket;
-  {
-    MutexLock lock(&socket_mu_);
-    child_socket = child_socket_;
-  }
-  if (child_socket != nullptr && child_socket->uuid() != 0) {
+  RefCountedPtr<SocketNode> child_socket; 
+  { 
+    MutexLock lock(&socket_mu_); 
+    child_socket = child_socket_; 
+  } 
+  if (child_socket != nullptr && child_socket->uuid() != 0) { 
     object["socketRef"] = Json::Array{
         Json::Object{
             {"socketId", ToString(child_socket->uuid())},

@@ -26,12 +26,12 @@ NO_LINT()
 
 NO_COMPILER_WARNINGS()
 
-RESOURCE_FILES(
+RESOURCE_FILES( 
     PREFIX contrib/python/MarkupSafe/py2/
-    .dist-info/METADATA
-    .dist-info/top_level.txt
-)
-
+    .dist-info/METADATA 
+    .dist-info/top_level.txt 
+) 
+ 
 END()
 
 RECURSE_FOR_TESTS(

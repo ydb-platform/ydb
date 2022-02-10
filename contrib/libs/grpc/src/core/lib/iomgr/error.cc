@@ -73,8 +73,8 @@ static const char* error_int_name(grpc_error_ints key) {
       return "limit";
     case GRPC_ERROR_INT_OCCURRED_DURING_WRITE:
       return "occurred_during_write";
-    case GRPC_ERROR_INT_CHANNEL_CONNECTIVITY_STATE:
-      return "channel_connectivity_state";
+    case GRPC_ERROR_INT_CHANNEL_CONNECTIVITY_STATE: 
+      return "channel_connectivity_state"; 
     case GRPC_ERROR_INT_MAX:
       GPR_UNREACHABLE_CODE(return "unknown");
   }
@@ -156,8 +156,8 @@ static void unref_strs(grpc_error* err) {
   for (size_t which = 0; which < GRPC_ERROR_STR_MAX; ++which) {
     uint8_t slot = err->strs[which];
     if (slot != UINT8_MAX) {
-      grpc_slice_unref_internal(
-          *reinterpret_cast<grpc_slice*>(err->arena + slot));
+      grpc_slice_unref_internal( 
+          *reinterpret_cast<grpc_slice*>(err->arena + slot)); 
     }
   }
 }
@@ -232,7 +232,7 @@ static void internal_set_int(grpc_error** err, grpc_error_ints which,
 }
 
 static void internal_set_str(grpc_error** err, grpc_error_strs which,
-                             const grpc_slice& value) {
+                             const grpc_slice& value) { 
   uint8_t slot = (*err)->strs[which];
   if (slot == UINT8_MAX) {
     slot = get_placement(err, sizeof(value));
@@ -244,8 +244,8 @@ static void internal_set_str(grpc_error** err, grpc_error_strs which,
       return;
     }
   } else {
-    grpc_slice_unref_internal(
-        *reinterpret_cast<grpc_slice*>((*err)->arena + slot));
+    grpc_slice_unref_internal( 
+        *reinterpret_cast<grpc_slice*>((*err)->arena + slot)); 
   }
   (*err)->strs[which] = slot;
   memcpy((*err)->arena + slot, &value, sizeof(value));
@@ -315,8 +315,8 @@ void grpc_enable_error_creation() {
   gpr_atm_no_barrier_store(&g_error_creation_allowed, true);
 }
 
-grpc_error* grpc_error_create(const char* file, int line,
-                              const grpc_slice& desc, grpc_error** referencing,
+grpc_error* grpc_error_create(const char* file, int line, 
+                              const grpc_slice& desc, grpc_error** referencing, 
                               size_t num_referencing) {
   GPR_TIMER_SCOPE("grpc_error_create", 0);
   uint8_t initial_arena_capacity = static_cast<uint8_t>(
@@ -449,16 +449,16 @@ grpc_error* grpc_error_set_int(grpc_error* src, grpc_error_ints which,
 struct special_error_status_map {
   grpc_status_code code;
   const char* msg;
-  size_t len;
+  size_t len; 
 };
-const special_error_status_map error_status_map[] = {
-    {GRPC_STATUS_OK, "", 0},                // GRPC_ERROR_NONE
-    {GRPC_STATUS_INVALID_ARGUMENT, "", 0},  // GRPC_ERROR_RESERVED_1
-    {GRPC_STATUS_RESOURCE_EXHAUSTED, "Out of memory",
-     strlen("Out of memory")},              // GRPC_ERROR_OOM
-    {GRPC_STATUS_INVALID_ARGUMENT, "", 0},  // GRPC_ERROR_RESERVED_2
-    {GRPC_STATUS_CANCELLED, "Cancelled",
-     strlen("Cancelled")},  // GRPC_ERROR_CANCELLED
+const special_error_status_map error_status_map[] = { 
+    {GRPC_STATUS_OK, "", 0},                // GRPC_ERROR_NONE 
+    {GRPC_STATUS_INVALID_ARGUMENT, "", 0},  // GRPC_ERROR_RESERVED_1 
+    {GRPC_STATUS_RESOURCE_EXHAUSTED, "Out of memory", 
+     strlen("Out of memory")},              // GRPC_ERROR_OOM 
+    {GRPC_STATUS_INVALID_ARGUMENT, "", 0},  // GRPC_ERROR_RESERVED_2 
+    {GRPC_STATUS_CANCELLED, "Cancelled", 
+     strlen("Cancelled")},  // GRPC_ERROR_CANCELLED 
 };
 
 bool grpc_error_get_int(grpc_error* err, grpc_error_ints which, intptr_t* p) {
@@ -477,7 +477,7 @@ bool grpc_error_get_int(grpc_error* err, grpc_error_ints which, intptr_t* p) {
 }
 
 grpc_error* grpc_error_set_str(grpc_error* src, grpc_error_strs which,
-                               const grpc_slice& str) {
+                               const grpc_slice& str) { 
   GPR_TIMER_SCOPE("grpc_error_set_str", 0);
   grpc_error* new_err = copy_error_and_unref(src);
   internal_set_str(&new_err, which, str);
@@ -488,12 +488,12 @@ bool grpc_error_get_str(grpc_error* err, grpc_error_strs which,
                         grpc_slice* str) {
   if (grpc_error_is_special(err)) {
     if (which != GRPC_ERROR_STR_GRPC_MESSAGE) return false;
-    const special_error_status_map& msg =
-        error_status_map[reinterpret_cast<size_t>(err)];
-    str->refcount = &grpc_core::kNoopRefcount;
-    str->data.refcounted.bytes =
-        reinterpret_cast<uint8_t*>(const_cast<char*>(msg.msg));
-    str->data.refcounted.length = msg.len;
+    const special_error_status_map& msg = 
+        error_status_map[reinterpret_cast<size_t>(err)]; 
+    str->refcount = &grpc_core::kNoopRefcount; 
+    str->data.refcounted.bytes = 
+        reinterpret_cast<uint8_t*>(const_cast<char*>(msg.msg)); 
+    str->data.refcounted.length = msg.len; 
     return true;
   }
   uint8_t slot = err->strs[which];
@@ -627,7 +627,7 @@ static char* key_str(grpc_error_strs which) {
   return gpr_strdup(error_str_name(which));
 }
 
-static char* fmt_str(const grpc_slice& slice) {
+static char* fmt_str(const grpc_slice& slice) { 
   char* s = nullptr;
   size_t sz = 0;
   size_t cap = 0;
@@ -805,9 +805,9 @@ grpc_error* grpc_wsa_error(const char* file, int line, int err,
 }
 #endif
 
-bool grpc_log_error(const char* what, grpc_error* error, const char* file,
-                    int line) {
-  GPR_DEBUG_ASSERT(error != GRPC_ERROR_NONE);
+bool grpc_log_error(const char* what, grpc_error* error, const char* file, 
+                    int line) { 
+  GPR_DEBUG_ASSERT(error != GRPC_ERROR_NONE); 
   const char* msg = grpc_error_string(error);
   gpr_log(file, line, GPR_LOG_SEVERITY_ERROR, "%s: %s", what, msg);
   GRPC_ERROR_UNREF(error);

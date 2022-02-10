@@ -9,7 +9,7 @@ Changes:
  o Allow TXT records on CHAOS qclass.  Used for retriving things like
    version.bind, version.server, authoris.bind, hostname.bind, and id.server.
    [3]
-
+ 
 Bug fixes:
  o Fix Windows Unicode incompatibilities with ares_getaddrinfo() [1]
  o Silence false cast-align compiler warnings due to valid casts of

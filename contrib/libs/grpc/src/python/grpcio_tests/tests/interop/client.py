@@ -1,32 +1,32 @@
-# Copyright 2015 gRPC authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""The Python implementation of the GRPC interoperability test client."""
-
-import argparse
-import os
-
-from google import auth as google_auth
-from google.auth import jwt as google_auth_jwt
-import grpc
-from src.proto.grpc.testing import test_pb2_grpc
-
-from tests.interop import methods
-from tests.interop import resources
-
-
+# Copyright 2015 gRPC authors. 
+# 
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0 
+# 
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License. 
+"""The Python implementation of the GRPC interoperability test client.""" 
+ 
+import argparse 
+import os 
+ 
+from google import auth as google_auth 
+from google.auth import jwt as google_auth_jwt 
+import grpc 
+from src.proto.grpc.testing import test_pb2_grpc 
+ 
+from tests.interop import methods 
+from tests.interop import resources 
+ 
+ 
 def parse_interop_client_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser() 
     parser.add_argument('--server_host',
                         default="localhost",
                         type=str,
@@ -72,29 +72,29 @@ def parse_interop_client_args():
             + "grpc::CreateTestChannel, that configures the grpclb LB policy " +
             "with a child policy being the value of this flag (e.g. round_robin "
             + "or pick_first)."))
-    return parser.parse_args()
-
-
+    return parser.parse_args() 
+ 
+ 
 def _create_call_credentials(args):
-    if args.test_case == 'oauth2_auth_token':
-        google_credentials, unused_project_id = google_auth.default(
-            scopes=[args.oauth_scope])
-        google_credentials.refresh(google_auth.transport.requests.Request())
+    if args.test_case == 'oauth2_auth_token': 
+        google_credentials, unused_project_id = google_auth.default( 
+            scopes=[args.oauth_scope]) 
+        google_credentials.refresh(google_auth.transport.requests.Request()) 
         return grpc.access_token_call_credentials(google_credentials.token)
-    elif args.test_case == 'compute_engine_creds':
-        google_credentials, unused_project_id = google_auth.default(
-            scopes=[args.oauth_scope])
+    elif args.test_case == 'compute_engine_creds': 
+        google_credentials, unused_project_id = google_auth.default( 
+            scopes=[args.oauth_scope]) 
         return grpc.metadata_call_credentials(
-            google_auth.transport.grpc.AuthMetadataPlugin(
-                credentials=google_credentials,
-                request=google_auth.transport.requests.Request()))
-    elif args.test_case == 'jwt_token_creds':
-        google_credentials = google_auth_jwt.OnDemandCredentials.from_service_account_file(
-            os.environ[google_auth.environment_vars.CREDENTIALS])
+            google_auth.transport.grpc.AuthMetadataPlugin( 
+                credentials=google_credentials, 
+                request=google_auth.transport.requests.Request())) 
+    elif args.test_case == 'jwt_token_creds': 
+        google_credentials = google_auth_jwt.OnDemandCredentials.from_service_account_file( 
+            os.environ[google_auth.environment_vars.CREDENTIALS]) 
         return grpc.metadata_call_credentials(
-            google_auth.transport.grpc.AuthMetadataPlugin(
-                credentials=google_credentials, request=None))
-    else:
+            google_auth.transport.grpc.AuthMetadataPlugin( 
+                credentials=google_credentials, request=None)) 
+    else: 
         return None
 
 
@@ -151,30 +151,30 @@ def _create_channel(args):
         return grpc.secure_channel(target, channel_credentials, options)
     else:
         return grpc.insecure_channel(target)
-
-
+ 
+ 
 def create_stub(channel, args):
-    if args.test_case == "unimplemented_service":
-        return test_pb2_grpc.UnimplementedServiceStub(channel)
-    else:
-        return test_pb2_grpc.TestServiceStub(channel)
-
-
-def _test_case_from_arg(test_case_arg):
-    for test_case in methods.TestCase:
-        if test_case_arg == test_case.value:
-            return test_case
-    else:
-        raise ValueError('No test case "%s"!' % test_case_arg)
-
-
-def test_interoperability():
+    if args.test_case == "unimplemented_service": 
+        return test_pb2_grpc.UnimplementedServiceStub(channel) 
+    else: 
+        return test_pb2_grpc.TestServiceStub(channel) 
+ 
+ 
+def _test_case_from_arg(test_case_arg): 
+    for test_case in methods.TestCase: 
+        if test_case_arg == test_case.value: 
+            return test_case 
+    else: 
+        raise ValueError('No test case "%s"!' % test_case_arg) 
+ 
+ 
+def test_interoperability(): 
     args = parse_interop_client_args()
     channel = _create_channel(args)
     stub = create_stub(channel, args)
-    test_case = _test_case_from_arg(args.test_case)
-    test_case.test_interoperability(stub, args)
-
-
-if __name__ == '__main__':
-    test_interoperability()
+    test_case = _test_case_from_arg(args.test_case) 
+    test_case.test_interoperability(stub, args) 
+ 
+ 
+if __name__ == '__main__': 
+    test_interoperability() 

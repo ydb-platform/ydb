@@ -15,30 +15,30 @@
 
 These APIs are subject to be removed during any minor version release.
 """
-
+ 
 import copy
 import functools
 import sys
 import warnings
-
+ 
 import grpc
 
 _EXPERIMENTAL_APIS_USED = set()
 
 
-class ChannelOptions(object):
-    """Indicates a channel option unique to gRPC Python.
-
-     This enumeration is part of an EXPERIMENTAL API.
-
-     Attributes:
-       SingleThreadedUnaryStream: Perform unary-stream RPCs on a single thread.
-    """
-    SingleThreadedUnaryStream = "SingleThreadedUnaryStream"
-
-
-class UsageError(Exception):
-    """Raised by the gRPC library to indicate usage not allowed by the API."""
+class ChannelOptions(object): 
+    """Indicates a channel option unique to gRPC Python. 
+ 
+     This enumeration is part of an EXPERIMENTAL API. 
+ 
+     Attributes: 
+       SingleThreadedUnaryStream: Perform unary-stream RPCs on a single thread. 
+    """ 
+    SingleThreadedUnaryStream = "SingleThreadedUnaryStream" 
+ 
+ 
+class UsageError(Exception): 
+    """Raised by the gRPC library to indicate usage not allowed by the API.""" 
 
 
 _insecure_channel_credentials_sentinel = object()

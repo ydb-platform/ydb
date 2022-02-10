@@ -22,7 +22,7 @@ END()
 RECURSE(
     conf_fatal_error
     config
-    docs/empty
+    docs/empty 
     external_resources
     platform/java
     platform/local_so

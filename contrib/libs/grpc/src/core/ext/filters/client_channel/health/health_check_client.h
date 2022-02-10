@@ -27,11 +27,11 @@
 #include "src/core/ext/filters/client_channel/client_channel_channelz.h"
 #include "src/core/ext/filters/client_channel/subchannel.h"
 #include "src/core/lib/backoff/backoff.h"
-#include "src/core/lib/gprpp/arena.h"
-#include "src/core/lib/gprpp/atomic.h"
+#include "src/core/lib/gprpp/arena.h" 
+#include "src/core/lib/gprpp/atomic.h" 
 #include "src/core/lib/gprpp/orphanable.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
-#include "src/core/lib/gprpp/sync.h"
+#include "src/core/lib/gprpp/sync.h" 
 #include "src/core/lib/iomgr/call_combiner.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/polling_entity.h"
@@ -47,8 +47,8 @@ class HealthCheckClient : public InternallyRefCounted<HealthCheckClient> {
   HealthCheckClient(const char* service_name,
                     RefCountedPtr<ConnectedSubchannel> connected_subchannel,
                     grpc_pollset_set* interested_parties,
-                    RefCountedPtr<channelz::SubchannelNode> channelz_node,
-                    RefCountedPtr<ConnectivityStateWatcherInterface> watcher);
+                    RefCountedPtr<channelz::SubchannelNode> channelz_node, 
+                    RefCountedPtr<ConnectivityStateWatcherInterface> watcher); 
 
   ~HealthCheckClient();
 
@@ -56,7 +56,7 @@ class HealthCheckClient : public InternallyRefCounted<HealthCheckClient> {
 
  private:
   // Contains a call to the backend and all the data related to the call.
-  class CallState : public Orphanable {
+  class CallState : public Orphanable { 
    public:
     CallState(RefCountedPtr<HealthCheckClient> health_check_client,
               grpc_pollset_set* interested_parties_);
@@ -87,19 +87,19 @@ class HealthCheckClient : public InternallyRefCounted<HealthCheckClient> {
     grpc_error* PullSliceFromRecvMessage();
     void DoneReadingRecvMessage(grpc_error* error);
 
-    static void AfterCallStackDestruction(void* arg, grpc_error* error);
-
+    static void AfterCallStackDestruction(void* arg, grpc_error* error); 
+ 
     RefCountedPtr<HealthCheckClient> health_check_client_;
     grpc_polling_entity pollent_;
 
-    Arena* arena_;
-    grpc_core::CallCombiner call_combiner_;
+    Arena* arena_; 
+    grpc_core::CallCombiner call_combiner_; 
     grpc_call_context_element context_[GRPC_CONTEXT_COUNT] = {};
 
-    // The streaming call to the backend. Always non-null.
-    // Refs are tracked manually; when the last ref is released, the
-    // CallState object will be automatically destroyed.
-    SubchannelCall* call_;
+    // The streaming call to the backend. Always non-null. 
+    // Refs are tracked manually; when the last ref is released, the 
+    // CallState object will be automatically destroyed. 
+    SubchannelCall* call_; 
 
     grpc_transport_stream_op_batch_payload payload_;
     grpc_transport_stream_op_batch batch_;
@@ -126,18 +126,18 @@ class HealthCheckClient : public InternallyRefCounted<HealthCheckClient> {
     OrphanablePtr<ByteStream> recv_message_;
     grpc_closure recv_message_ready_;
     grpc_slice_buffer recv_message_buffer_;
-    Atomic<bool> seen_response_{false};
+    Atomic<bool> seen_response_{false}; 
 
     // recv_trailing_metadata
     grpc_metadata_batch recv_trailing_metadata_;
     grpc_transport_stream_stats collect_stats_;
     grpc_closure recv_trailing_metadata_ready_;
-
-    // True if the cancel_stream batch has been started.
-    Atomic<bool> cancelled_{false};
-
-    // Closure for call stack destruction.
-    grpc_closure after_call_stack_destruction_;
+ 
+    // True if the cancel_stream batch has been started. 
+    Atomic<bool> cancelled_{false}; 
+ 
+    // Closure for call stack destruction. 
+    grpc_closure after_call_stack_destruction_; 
   };
 
   void StartCall();
@@ -146,17 +146,17 @@ class HealthCheckClient : public InternallyRefCounted<HealthCheckClient> {
   void StartRetryTimerLocked();  // Requires holding mu_.
   static void OnRetryTimer(void* arg, grpc_error* error);
 
-  void SetHealthStatus(grpc_connectivity_state state, const char* reason);
+  void SetHealthStatus(grpc_connectivity_state state, const char* reason); 
   void SetHealthStatusLocked(grpc_connectivity_state state,
-                             const char* reason);  // Requires holding mu_.
+                             const char* reason);  // Requires holding mu_. 
 
   const char* service_name_;  // Do not own.
   RefCountedPtr<ConnectedSubchannel> connected_subchannel_;
   grpc_pollset_set* interested_parties_;  // Do not own.
   RefCountedPtr<channelz::SubchannelNode> channelz_node_;
 
-  Mutex mu_;
-  RefCountedPtr<ConnectivityStateWatcherInterface> watcher_;
+  Mutex mu_; 
+  RefCountedPtr<ConnectivityStateWatcherInterface> watcher_; 
   bool shutting_down_ = false;
 
   // The data associated with the current health check call.  It holds a ref

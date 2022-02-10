@@ -47,7 +47,7 @@ typedef struct grpc_slice grpc_slice;
 #define GRPC_SLICE_INLINED_SIZE \
   (sizeof(size_t) + sizeof(uint8_t*) - 1 + GRPC_SLICE_INLINE_EXTRA_SIZE)
 
-struct grpc_slice_refcount;
+struct grpc_slice_refcount; 
 /** A grpc_slice s, if initialized, represents the byte range
    s.bytes[0..s.length-1].
 

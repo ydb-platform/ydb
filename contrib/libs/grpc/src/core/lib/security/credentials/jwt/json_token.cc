@@ -18,7 +18,7 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "src/core/lib/iomgr/error.h"
+#include "src/core/lib/iomgr/error.h" 
 #include "src/core/lib/security/credentials/jwt/json_token.h"
 
 #include <string.h>
@@ -72,7 +72,7 @@ grpc_auth_json_key grpc_auth_json_key_create_from_json(const Json& json) {
   BIO* bio = nullptr;
   const char* prop_value;
   int success = 0;
-  grpc_error* error = GRPC_ERROR_NONE;
+  grpc_error* error = GRPC_ERROR_NONE; 
 
   memset(&result, 0, sizeof(grpc_auth_json_key));
   result.type = GRPC_AUTH_JSON_TYPE_INVALID;
@@ -81,8 +81,8 @@ grpc_auth_json_key grpc_auth_json_key_create_from_json(const Json& json) {
     goto end;
   }
 
-  prop_value = grpc_json_get_string_property(json, "type", &error);
-  GRPC_LOG_IF_ERROR("JSON key parsing", error);
+  prop_value = grpc_json_get_string_property(json, "type", &error); 
+  GRPC_LOG_IF_ERROR("JSON key parsing", error); 
   if (prop_value == nullptr ||
       strcmp(prop_value, GRPC_AUTH_JSON_TYPE_SERVICE_ACCOUNT)) {
     goto end;
@@ -97,8 +97,8 @@ grpc_auth_json_key grpc_auth_json_key_create_from_json(const Json& json) {
     goto end;
   }
 
-  prop_value = grpc_json_get_string_property(json, "private_key", &error);
-  GRPC_LOG_IF_ERROR("JSON key parsing", error);
+  prop_value = grpc_json_get_string_property(json, "private_key", &error); 
+  GRPC_LOG_IF_ERROR("JSON key parsing", error); 
   if (prop_value == nullptr) {
     goto end;
   }

@@ -24,14 +24,14 @@
 #include <grpc/grpc.h>
 #include <grpc/support/alloc.h>
 
-#include "src/core/lib/gprpp/memory.h"
+#include "src/core/lib/gprpp/memory.h" 
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/slice/slice_internal.h"
 #include "src/core/lib/slice/slice_string_helpers.h"
 #include "src/core/lib/surface/validate_metadata.h"
 
-static grpc_error* conforms_to(const grpc_slice& slice,
-                               const uint8_t* legal_bits,
+static grpc_error* conforms_to(const grpc_slice& slice, 
+                               const uint8_t* legal_bits, 
                                const char* err_desc) {
   const uint8_t* p = GRPC_SLICE_START_PTR(slice);
   const uint8_t* e = GRPC_SLICE_END_PTR(slice);
@@ -44,8 +44,8 @@ static grpc_error* conforms_to(const grpc_slice& slice,
           grpc_error_set_int(GRPC_ERROR_CREATE_FROM_COPIED_STRING(err_desc),
                              GRPC_ERROR_INT_OFFSET,
                              p - GRPC_SLICE_START_PTR(slice)),
-          GRPC_ERROR_STR_RAW_BYTES,
-          grpc_dump_slice_to_slice(slice, GPR_DUMP_HEX | GPR_DUMP_ASCII));
+          GRPC_ERROR_STR_RAW_BYTES, 
+          grpc_dump_slice_to_slice(slice, GPR_DUMP_HEX | GPR_DUMP_ASCII)); 
       return error;
     }
   }
@@ -58,7 +58,7 @@ static int error2int(grpc_error* error) {
   return r;
 }
 
-grpc_error* grpc_validate_header_key_is_legal(const grpc_slice& slice) {
+grpc_error* grpc_validate_header_key_is_legal(const grpc_slice& slice) { 
   static const uint8_t legal_header_bits[256 / 8] = {
       0x00, 0x00, 0x00, 0x00, 0x00, 0x60, 0xff, 0x03, 0x00, 0x00, 0x00,
       0x80, 0xfe, 0xff, 0xff, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -67,10 +67,10 @@ grpc_error* grpc_validate_header_key_is_legal(const grpc_slice& slice) {
     return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
         "Metadata keys cannot be zero length");
   }
-  if (GRPC_SLICE_LENGTH(slice) > UINT32_MAX) {
-    return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
-        "Metadata keys cannot be larger than UINT32_MAX");
-  }
+  if (GRPC_SLICE_LENGTH(slice) > UINT32_MAX) { 
+    return GRPC_ERROR_CREATE_FROM_STATIC_STRING( 
+        "Metadata keys cannot be larger than UINT32_MAX"); 
+  } 
   if (GRPC_SLICE_START_PTR(slice)[0] == ':') {
     return GRPC_ERROR_CREATE_FROM_STATIC_STRING(
         "Metadata keys cannot start with :");
@@ -82,8 +82,8 @@ int grpc_header_key_is_legal(grpc_slice slice) {
   return error2int(grpc_validate_header_key_is_legal(slice));
 }
 
-grpc_error* grpc_validate_header_nonbin_value_is_legal(
-    const grpc_slice& slice) {
+grpc_error* grpc_validate_header_nonbin_value_is_legal( 
+    const grpc_slice& slice) { 
   static const uint8_t legal_header_bits[256 / 8] = {
       0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
       0xff, 0xff, 0xff, 0xff, 0x7f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -95,11 +95,11 @@ int grpc_header_nonbin_value_is_legal(grpc_slice slice) {
   return error2int(grpc_validate_header_nonbin_value_is_legal(slice));
 }
 
-int grpc_is_binary_header_internal(const grpc_slice& slice) {
-  return grpc_key_is_binary_header(GRPC_SLICE_START_PTR(slice),
-                                   GRPC_SLICE_LENGTH(slice));
-}
-
+int grpc_is_binary_header_internal(const grpc_slice& slice) { 
+  return grpc_key_is_binary_header(GRPC_SLICE_START_PTR(slice), 
+                                   GRPC_SLICE_LENGTH(slice)); 
+} 
+ 
 int grpc_is_binary_header(grpc_slice slice) {
-  return grpc_is_binary_header_internal(slice);
+  return grpc_is_binary_header_internal(slice); 
 }

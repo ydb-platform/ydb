@@ -28,7 +28,7 @@
 
 namespace grpc {
 
-class Channel;
+class Channel; 
 class ClientContext;
 
 namespace internal {
@@ -76,7 +76,7 @@ class ClientRpcInfo {
     UNKNOWN  // UNKNOWN is not API and will be removed later
   };
 
-  ~ClientRpcInfo() {}
+  ~ClientRpcInfo() {} 
 
   // Delete copy constructor but allow default move constructor
   ClientRpcInfo(const ClientRpcInfo&) = delete;
@@ -141,8 +141,8 @@ class ClientRpcInfo {
       // No interceptors to register
       return;
     }
-    // NOTE: The following is not a range-based for loop because it will only
-    //       iterate over a portion of the creators vector.
+    // NOTE: The following is not a range-based for loop because it will only 
+    //       iterate over a portion of the creators vector. 
     for (auto it = creators.begin() + interceptor_pos; it != creators.end();
          ++it) {
       auto* interceptor = (*it)->CreateClientInterceptor(this);
@@ -174,16 +174,16 @@ class ClientRpcInfo {
 // PLEASE DO NOT USE THIS. ALWAYS PREFER PER CHANNEL INTERCEPTORS OVER A GLOBAL
 // INTERCEPTOR. IF USAGE IS ABSOLUTELY NECESSARY, PLEASE READ THE SAFETY NOTES.
 // Registers a global client interceptor factory object, which is used for all
-// RPCs made in this process. The application is responsible for maintaining the
-// life of the object while gRPC operations are in progress. The global
-// interceptor factory should only be registered once at the start of the
-// process before any gRPC operations have begun.
+// RPCs made in this process. The application is responsible for maintaining the 
+// life of the object while gRPC operations are in progress. The global 
+// interceptor factory should only be registered once at the start of the 
+// process before any gRPC operations have begun. 
 void RegisterGlobalClientInterceptorFactory(
     ClientInterceptorFactoryInterface* factory);
 
-// For testing purposes only
-void TestOnlyResetGlobalClientInterceptorFactory();
-
+// For testing purposes only 
+void TestOnlyResetGlobalClientInterceptorFactory(); 
+ 
 }  // namespace experimental
 }  // namespace grpc
 

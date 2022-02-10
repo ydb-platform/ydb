@@ -27,7 +27,7 @@
  *  - some syscalls to be made directly
  */
 
-/*
+/* 
  * Defines GPR_ABSEIL_SYNC to use synchronization features from Abseil
  */
 #ifndef GPR_ABSEIL_SYNC
@@ -132,7 +132,7 @@
 #define GPR_POSIX_SUBPROCESS 1
 #define GPR_POSIX_SYNC 1
 #define GPR_POSIX_TIME 1
-#define GPR_HAS_PTHREAD_H 1
+#define GPR_HAS_PTHREAD_H 1 
 #define GPR_GETPID_IN_UNISTD_H 1
 #define GPR_SUPPORT_CHANNELS_FROM_FD 1
 #elif defined(__linux__)
@@ -159,7 +159,7 @@
 #define GPR_POSIX_SUBPROCESS 1
 #define GPR_POSIX_SYNC 1
 #define GPR_POSIX_TIME 1
-#define GPR_HAS_PTHREAD_H 1
+#define GPR_HAS_PTHREAD_H 1 
 #define GPR_GETPID_IN_UNISTD_H 1
 #ifdef _LP64
 #define GPR_ARCH_64 1
@@ -173,26 +173,26 @@
 #else /* musl libc */
 #define GPR_MUSL_LIBC_COMPAT 1
 #endif
-#elif defined(__ASYLO__)
-#define GPR_ARCH_64 1
-#define GPR_CPU_POSIX 1
-#define GPR_GCC_TLS 1
-#define GPR_PLATFORM_STRING "asylo"
-#define GPR_GCC_SYNC 1
-#define GPR_POSIX_SYNC 1
-#define GPR_POSIX_STRING 1
-#define GPR_POSIX_LOG 1
-#define GPR_POSIX_TIME 1
-#define GPR_POSIX_ENV 1
-#define GPR_ASYLO 1
-#define GRPC_POSIX_SOCKET 1
-#define GRPC_POSIX_SOCKETADDR
-#define GRPC_POSIX_SOCKETUTILS 1
-#define GRPC_TIMER_USE_GENERIC 1
-#define GRPC_POSIX_NO_SPECIAL_WAKEUP_FD 1
-#define GRPC_POSIX_WAKEUP_FD 1
-#define GRPC_ARES 0
-#define GPR_NO_AUTODETECT_PLATFORM 1
+#elif defined(__ASYLO__) 
+#define GPR_ARCH_64 1 
+#define GPR_CPU_POSIX 1 
+#define GPR_GCC_TLS 1 
+#define GPR_PLATFORM_STRING "asylo" 
+#define GPR_GCC_SYNC 1 
+#define GPR_POSIX_SYNC 1 
+#define GPR_POSIX_STRING 1 
+#define GPR_POSIX_LOG 1 
+#define GPR_POSIX_TIME 1 
+#define GPR_POSIX_ENV 1 
+#define GPR_ASYLO 1 
+#define GRPC_POSIX_SOCKET 1 
+#define GRPC_POSIX_SOCKETADDR 
+#define GRPC_POSIX_SOCKETUTILS 1 
+#define GRPC_TIMER_USE_GENERIC 1 
+#define GRPC_POSIX_NO_SPECIAL_WAKEUP_FD 1 
+#define GRPC_POSIX_WAKEUP_FD 1 
+#define GRPC_ARES 0 
+#define GPR_NO_AUTODETECT_PLATFORM 1 
 #elif defined(__APPLE__)
 #include <Availability.h>
 #include <TargetConditionals.h>
@@ -203,8 +203,8 @@
 #define GPR_PLATFORM_STRING "ios"
 #define GPR_CPU_IPHONE 1
 #define GPR_PTHREAD_TLS 1
-#define GRPC_CFSTREAM 1
-/* the c-ares resolver isn't safe to enable on iOS */
+#define GRPC_CFSTREAM 1 
+/* the c-ares resolver isn't safe to enable on iOS */ 
 #define GRPC_ARES 0
 #else /* TARGET_OS_IPHONE */
 #define GPR_PLATFORM_STRING "osx"
@@ -245,7 +245,7 @@
 #define GPR_POSIX_SUBPROCESS 1
 #define GPR_POSIX_SYNC 1
 #define GPR_POSIX_TIME 1
-#define GPR_HAS_PTHREAD_H 1
+#define GPR_HAS_PTHREAD_H 1 
 #define GPR_GETPID_IN_UNISTD_H 1
 #ifndef GRPC_CFSTREAM
 #define GPR_SUPPORT_CHANNELS_FROM_FD 1
@@ -271,7 +271,7 @@
 #define GPR_POSIX_SUBPROCESS 1
 #define GPR_POSIX_SYNC 1
 #define GPR_POSIX_TIME 1
-#define GPR_HAS_PTHREAD_H 1
+#define GPR_HAS_PTHREAD_H 1 
 #define GPR_GETPID_IN_UNISTD_H 1
 #define GPR_SUPPORT_CHANNELS_FROM_FD 1
 #ifdef _LP64
@@ -295,7 +295,7 @@
 #define GPR_POSIX_SUBPROCESS 1
 #define GPR_POSIX_SYNC 1
 #define GPR_POSIX_TIME 1
-#define GPR_HAS_PTHREAD_H 1
+#define GPR_HAS_PTHREAD_H 1 
 #define GPR_GETPID_IN_UNISTD_H 1
 #define GPR_SUPPORT_CHANNELS_FROM_FD 1
 #ifdef _LP64
@@ -316,7 +316,7 @@
 #define GPR_POSIX_SUBPROCESS 1
 #define GPR_POSIX_SYNC 1
 #define GPR_POSIX_TIME 1
-#define GPR_HAS_PTHREAD_H 1
+#define GPR_HAS_PTHREAD_H 1 
 #define GPR_GETPID_IN_UNISTD_H 1
 #ifdef _LP64
 #define GPR_ARCH_64 1
@@ -339,7 +339,7 @@
 #define GPR_POSIX_SUBPROCESS 1
 #define GPR_POSIX_SYNC 1
 #define GPR_POSIX_TIME 1
-#define GPR_HAS_PTHREAD_H 1
+#define GPR_HAS_PTHREAD_H 1 
 #define GPR_GETPID_IN_UNISTD_H 1
 #ifdef _LP64
 #define GPR_ARCH_64 1
@@ -368,52 +368,52 @@
 #define GPR_POSIX_SUBPROCESS 1
 #define GPR_POSIX_SYNC 1
 #define GPR_POSIX_TIME 1
-#define GPR_HAS_PTHREAD_H 1
+#define GPR_HAS_PTHREAD_H 1 
 #define GPR_GETPID_IN_UNISTD_H 1
 #ifdef _LP64
 #define GPR_ARCH_64 1
 #else /* _LP64 */
 #define GPR_ARCH_32 1
 #endif /* _LP64 */
-#elif defined(__Fuchsia__)
-#define GPR_FUCHSIA 1
-#define GPR_ARCH_64 1
-#define GPR_PLATFORM_STRING "fuchsia"
-#include <features.h>
-// Specifying musl libc affects wrap_memcpy.c. It causes memmove() to be
-// invoked.
-#define GPR_MUSL_LIBC_COMPAT 1
-#define GPR_CPU_POSIX 1
-#define GPR_GCC_ATOMIC 1
-#define GPR_PTHREAD_TLS 1
-#define GPR_POSIX_LOG 1
-#define GPR_POSIX_SYNC 1
-#define GPR_POSIX_ENV 1
-#define GPR_POSIX_TMPFILE 1
-#define GPR_POSIX_SUBPROCESS 1
-#define GPR_POSIX_SYNC 1
-#define GPR_POSIX_STRING 1
-#define GPR_POSIX_TIME 1
-#define GPR_HAS_PTHREAD_H 1
-#define GPR_GETPID_IN_UNISTD_H 1
+#elif defined(__Fuchsia__) 
+#define GPR_FUCHSIA 1 
+#define GPR_ARCH_64 1 
+#define GPR_PLATFORM_STRING "fuchsia" 
+#include <features.h> 
+// Specifying musl libc affects wrap_memcpy.c. It causes memmove() to be 
+// invoked. 
+#define GPR_MUSL_LIBC_COMPAT 1 
+#define GPR_CPU_POSIX 1 
+#define GPR_GCC_ATOMIC 1 
+#define GPR_PTHREAD_TLS 1 
+#define GPR_POSIX_LOG 1 
+#define GPR_POSIX_SYNC 1 
+#define GPR_POSIX_ENV 1 
+#define GPR_POSIX_TMPFILE 1 
+#define GPR_POSIX_SUBPROCESS 1 
+#define GPR_POSIX_SYNC 1 
+#define GPR_POSIX_STRING 1 
+#define GPR_POSIX_TIME 1 
+#define GPR_HAS_PTHREAD_H 1 
+#define GPR_GETPID_IN_UNISTD_H 1 
 #else
 #error "Could not auto-detect platform"
 #endif
 #endif /* GPR_NO_AUTODETECT_PLATFORM */
 
-#if defined(GPR_BACKWARDS_COMPATIBILITY_MODE)
+#if defined(GPR_BACKWARDS_COMPATIBILITY_MODE) 
 /*
- * For backward compatibility mode, reset _FORTIFY_SOURCE to prevent
- * a library from having non-standard symbols such as __asprintf_chk.
- * This helps non-glibc systems such as alpine using musl to find symbols.
- */
-#if defined(_FORTIFY_SOURCE) && _FORTIFY_SOURCE > 0
-#undef _FORTIFY_SOURCE
-#define _FORTIFY_SOURCE 0
-#endif
-#endif
-
-/*
+ * For backward compatibility mode, reset _FORTIFY_SOURCE to prevent 
+ * a library from having non-standard symbols such as __asprintf_chk. 
+ * This helps non-glibc systems such as alpine using musl to find symbols. 
+ */ 
+#if defined(_FORTIFY_SOURCE) && _FORTIFY_SOURCE > 0 
+#undef _FORTIFY_SOURCE 
+#define _FORTIFY_SOURCE 0 
+#endif 
+#endif 
+ 
+/* 
  *  There are platforms for which TLS should not be used even though the
  * compiler makes it seem like it's supported (Android NDK < r12b for example).
  * This is primarily because of linker problems and toolchain misconfiguration:
@@ -470,23 +470,23 @@ typedef unsigned __int64 uint64_t;
 #include <stdint.h>
 #endif /* _MSC_VER */
 
-/* Type of cycle clock implementation */
-#ifdef GPR_LINUX
-/* Disable cycle clock by default.
-   TODO(soheil): enable when we support fallback for unstable cycle clocks.
-#if defined(__i386__)
-#define GPR_CYCLE_COUNTER_RDTSC_32 1
-#elif defined(__x86_64__) || defined(__amd64__)
-#define GPR_CYCLE_COUNTER_RDTSC_64 1
-#else
-#define GPR_CYCLE_COUNTER_FALLBACK 1
-#endif
-*/
-#define GPR_CYCLE_COUNTER_FALLBACK 1
-#else
-#define GPR_CYCLE_COUNTER_FALLBACK 1
-#endif /* GPR_LINUX */
-
+/* Type of cycle clock implementation */ 
+#ifdef GPR_LINUX 
+/* Disable cycle clock by default. 
+   TODO(soheil): enable when we support fallback for unstable cycle clocks. 
+#if defined(__i386__) 
+#define GPR_CYCLE_COUNTER_RDTSC_32 1 
+#elif defined(__x86_64__) || defined(__amd64__) 
+#define GPR_CYCLE_COUNTER_RDTSC_64 1 
+#else 
+#define GPR_CYCLE_COUNTER_FALLBACK 1 
+#endif 
+*/ 
+#define GPR_CYCLE_COUNTER_FALLBACK 1 
+#else 
+#define GPR_CYCLE_COUNTER_FALLBACK 1 
+#endif /* GPR_LINUX */ 
+ 
 /* Cache line alignment */
 #ifndef GPR_CACHELINE_SIZE_LOG
 #if defined(__i386__) || defined(__x86_64__)
@@ -600,14 +600,14 @@ typedef unsigned __int64 uint64_t;
 #endif
 #endif /* GPR_HAS_ATTRIBUTE */
 
-#ifndef GPR_HAS_FEATURE
-#ifdef __has_feature
-#define GPR_HAS_FEATURE(a) __has_feature(a)
-#else
-#define GPR_HAS_FEATURE(a) 0
-#endif
-#endif /* GPR_HAS_FEATURE */
-
+#ifndef GPR_HAS_FEATURE 
+#ifdef __has_feature 
+#define GPR_HAS_FEATURE(a) __has_feature(a) 
+#else 
+#define GPR_HAS_FEATURE(a) 0 
+#endif 
+#endif /* GPR_HAS_FEATURE */ 
+ 
 #ifndef GPR_ATTRIBUTE_NOINLINE
 #if GPR_HAS_ATTRIBUTE(noinline) || (defined(__GNUC__) && !defined(__clang__))
 #define GPR_ATTRIBUTE_NOINLINE __attribute__((noinline))
@@ -630,9 +630,9 @@ typedef unsigned __int64 uint64_t;
 #endif /* GPR_ATTRIBUTE_WEAK */
 
 #ifndef GPR_ATTRIBUTE_NO_TSAN /* (1) */
-#if GPR_HAS_FEATURE(thread_sanitizer)
+#if GPR_HAS_FEATURE(thread_sanitizer) 
 #define GPR_ATTRIBUTE_NO_TSAN __attribute__((no_sanitize("thread")))
-#endif                        /* GPR_HAS_FEATURE */
+#endif                        /* GPR_HAS_FEATURE */ 
 #ifndef GPR_ATTRIBUTE_NO_TSAN /* (2) */
 #define GPR_ATTRIBUTE_NO_TSAN
 #endif /* GPR_ATTRIBUTE_NO_TSAN (2) */
@@ -642,30 +642,30 @@ typedef unsigned __int64 uint64_t;
 #ifndef GRPC_TSAN_SUPPRESSED
 #if defined(__SANITIZE_THREAD__)
 #define GRPC_TSAN_ENABLED
-#elif GPR_HAS_FEATURE(thread_sanitizer)
+#elif GPR_HAS_FEATURE(thread_sanitizer) 
 #define GRPC_TSAN_ENABLED
 #endif
 #endif
-
-/* GRPC_ASAN_ENABLED will be defined, when compiled with address sanitizer. */
+ 
+/* GRPC_ASAN_ENABLED will be defined, when compiled with address sanitizer. */ 
 #ifndef GRPC_ASAN_SUPPRESSED
-#if defined(__SANITIZE_ADDRESS__)
-#define GRPC_ASAN_ENABLED
-#elif GPR_HAS_FEATURE(address_sanitizer)
-#define GRPC_ASAN_ENABLED
+#if defined(__SANITIZE_ADDRESS__) 
+#define GRPC_ASAN_ENABLED 
+#elif GPR_HAS_FEATURE(address_sanitizer) 
+#define GRPC_ASAN_ENABLED 
 #endif
 #endif
 
 /* GRPC_ALLOW_EXCEPTIONS should be 0 or 1 if exceptions are allowed or not */
 #ifndef GRPC_ALLOW_EXCEPTIONS
 #ifdef GPR_WINDOWS
-#if defined(_MSC_VER) && defined(_CPPUNWIND)
+#if defined(_MSC_VER) && defined(_CPPUNWIND) 
 #define GRPC_ALLOW_EXCEPTIONS 1
-#elif defined(__EXCEPTIONS)
-#define GRPC_ALLOW_EXCEPTIONS 1
-#else
-#define GRPC_ALLOW_EXCEPTIONS 0
-#endif
+#elif defined(__EXCEPTIONS) 
+#define GRPC_ALLOW_EXCEPTIONS 1 
+#else 
+#define GRPC_ALLOW_EXCEPTIONS 0 
+#endif 
 #else /* GPR_WINDOWS */
 #ifdef __EXCEPTIONS
 #define GRPC_ALLOW_EXCEPTIONS 1

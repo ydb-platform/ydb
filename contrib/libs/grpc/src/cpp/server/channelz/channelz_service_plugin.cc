@@ -39,7 +39,7 @@ class ChannelzServicePlugin : public ::grpc::ServerBuilderPlugin {
     si->RegisterService(channelz_service_);
   }
 
-  void Finish(grpc::ServerInitializer* /*si*/) override {}
+  void Finish(grpc::ServerInitializer* /*si*/) override {} 
 
   void ChangeArguments(const TString& /*name*/, void* /*value*/) override {}
 
@@ -67,13 +67,13 @@ CreateChannelzServicePlugin() {
       new ChannelzServicePlugin());
 }
 
-}  // namespace experimental
-}  // namespace channelz
-}  // namespace grpc
-namespace grpc_impl {
-namespace channelz {
-namespace experimental {
-
+}  // namespace experimental 
+}  // namespace channelz 
+}  // namespace grpc 
+namespace grpc_impl { 
+namespace channelz { 
+namespace experimental { 
+ 
 void InitChannelzService() {
   static struct Initializer {
     Initializer() {
@@ -85,4 +85,4 @@ void InitChannelzService() {
 
 }  // namespace experimental
 }  // namespace channelz
-}  // namespace grpc_impl
+}  // namespace grpc_impl 

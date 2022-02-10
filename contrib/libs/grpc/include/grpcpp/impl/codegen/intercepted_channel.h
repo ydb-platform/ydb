@@ -22,8 +22,8 @@
 #include <grpcpp/impl/codegen/channel_interface.h>
 
 namespace grpc {
-class CompletionQueue;
-
+class CompletionQueue; 
+ 
 namespace internal {
 
 class InterceptorBatchMethodsImpl;
@@ -59,7 +59,7 @@ class InterceptedChannel : public ChannelInterface {
   }
 
   void NotifyOnStateChangeImpl(grpc_connectivity_state last_observed,
-                               gpr_timespec deadline,
+                               gpr_timespec deadline, 
                                ::grpc::CompletionQueue* cq,
                                void* tag) override {
     return channel_->NotifyOnStateChangeImpl(last_observed, deadline, cq, tag);
@@ -70,8 +70,8 @@ class InterceptedChannel : public ChannelInterface {
   }
 
   ::grpc::CompletionQueue* CallbackCQ() override {
-    return channel_->CallbackCQ();
-  }
+    return channel_->CallbackCQ(); 
+  } 
 
   ChannelInterface* channel_;
   size_t interceptor_pos_;

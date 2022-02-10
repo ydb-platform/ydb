@@ -76,8 +76,8 @@
 #endif  // GTEST_OS_AIX
 
 #if GTEST_OS_FUCHSIA
-# error #include <zircon/process.h>
-# error #include <zircon/syscalls.h>
+# error #include <zircon/process.h> 
+# error #include <zircon/syscalls.h> 
 #endif  // GTEST_OS_FUCHSIA
 
 #include "gtest/gtest-spi.h"

@@ -52,15 +52,15 @@ typedef vector<TString> StringVector;
 static TString StripModulePrefixes(
     const TString& raw_module_name,
     const std::vector<TString>& prefixes_to_filter) {
-  for (const auto& prefix : prefixes_to_filter) {
-    if (raw_module_name.rfind(prefix, 0) == 0) {
-      return raw_module_name.substr(prefix.size(),
-                                    raw_module_name.size() - prefix.size());
-    }
-  }
-  return raw_module_name;
-}
-
+  for (const auto& prefix : prefixes_to_filter) { 
+    if (raw_module_name.rfind(prefix, 0) == 0) { 
+      return raw_module_name.substr(prefix.size(), 
+                                    raw_module_name.size() - prefix.size()); 
+    } 
+  } 
+  return raw_module_name; 
+} 
+ 
 // TODO(https://github.com/google/protobuf/issues/888):
 // Export `ModuleName` from protobuf's
 // `src/google/protobuf/compiler/python/python_generator.cc` file.
@@ -70,8 +70,8 @@ TString ModuleName(const TString& filename,
   TString basename = StripProto(filename);
   basename = StringReplace(basename, "-", "_");
   basename = StringReplace(basename, "/", ".");
-  return StripModulePrefixes(import_prefix + basename + "_pb2",
-                             prefixes_to_filter);
+  return StripModulePrefixes(import_prefix + basename + "_pb2", 
+                             prefixes_to_filter); 
 }
 
 // TODO(https://github.com/google/protobuf/issues/888):
@@ -90,7 +90,7 @@ TString ModuleAlias(const TString& filename,
   return module_name;
 }
 
-bool GetModuleAndMessagePath(
+bool GetModuleAndMessagePath( 
     const Descriptor* type, TString* out, TString generator_file_name,
     bool generate_in_pb2_grpc, TString& import_prefix,
     const std::vector<TString>& prefixes_to_filter) {
@@ -138,14 +138,14 @@ StringVector get_all_comments(const DescriptorType* descriptor) {
 
 inline void Split(const TString& s, char delim,
                   std::vector<TString>* append_to) {
-  auto current = s.begin();
-  while (current <= s.end()) {
-    auto next = std::find(current, s.end(), delim);
-    append_to->emplace_back(current, next);
-    current = next + 1;
-  }
-}
-
+  auto current = s.begin(); 
+  while (current <= s.end()) { 
+    auto next = std::find(current, s.end(), delim); 
+    append_to->emplace_back(current, next); 
+    current = next + 1; 
+  } 
+} 
+ 
 }  // namespace
 
 }  // namespace grpc_python_generator

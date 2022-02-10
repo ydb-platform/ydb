@@ -173,7 +173,7 @@ RECURSE(
     constantly
     contextdecorator
     contextlib2
-    convertdate
+    convertdate 
     cookies
     cov-core
     coverage
@@ -197,7 +197,7 @@ RECURSE(
     databases
     dataclasses-json
     datadiff
-    dateparser
+    dateparser 
     dateutil
     DAWG-Python
     dbf_light
@@ -340,7 +340,7 @@ RECURSE(
     environ-config
     environs
     envoy
-    ephem
+    ephem 
     escapism
     etcd3
     excel-formulas-calculator
@@ -620,7 +620,7 @@ RECURSE(
     meld3
     memory-profiler
     mercurial
-    mistune
+    mistune 
     mitmproxy
     mkdocs
     mkdocs-material
@@ -641,14 +641,14 @@ RECURSE(
     mpmath
     msal
     msgpack
-    mujson
+    mujson 
     multidict
     multitasking
     munch
     murmurhash
     mutablerecords
-    mypy
-    mypy-extensions
+    mypy 
+    mypy-extensions 
     mypy-protobuf
     mypy-zope
     MySQL-python
@@ -656,8 +656,8 @@ RECURSE(
     namedlist
     natsort
     nbclient
-    nbconvert
-    nbformat
+    nbconvert 
+    nbformat 
     ncclient
     ndg-httpsclient
     nest-asyncio
@@ -668,7 +668,7 @@ RECURSE(
     nltk
     normality
     nose
-    notebook
+    notebook 
     num2words
     numpy
     oauth2client
@@ -704,7 +704,7 @@ RECURSE(
     panamap
     panamap_proto
     pandas
-    pandocfilters
+    pandocfilters 
     papermill
     parameterized
     paramiko
@@ -728,7 +728,7 @@ RECURSE(
     paypalrestsdk
     pdbpp
     pdfminer.six
-    pecan
+    pecan 
     peewee
     peewee/playhouse
     pefile
@@ -752,7 +752,7 @@ RECURSE(
     ply
     plyvel
     polib
-    portalocker
+    portalocker 
     portpicker
     ppdeep
     pq
@@ -787,7 +787,7 @@ RECURSE(
     py-radix
     py3c
     py4j
-    pyaes
+    pyaes 
     pyahocorasick
     pyaml
     pyasn1
@@ -895,7 +895,7 @@ RECURSE(
     python-decouple
     python-docx
     python-dotenv
-    python-editor
+    python-editor 
     python-geohash
     python-gnupg
     python-hglib
@@ -910,7 +910,7 @@ RECURSE(
     python-multipart
     python-pptx
     python-prctl
-    python-rapidjson
+    python-rapidjson 
     python-saml
     python-slugify
     python-telegram-bot
@@ -954,7 +954,7 @@ RECURSE(
     rfc3986-validator
     RPi.GPIO
     RPI-ST7789
-    rsa
+    rsa 
     rstr
     ruamel.std.pathlib
     ruamel.yaml
@@ -985,7 +985,7 @@ RECURSE(
     selenium
     semantic-version
     semver
-    Send2Trash
+    Send2Trash 
     sentinels
     sentry-sdk
     service-identity
@@ -1051,13 +1051,13 @@ RECURSE(
     tablib
     tabulate
     tblib
-    Telethon
+    Telethon 
     tenacity
     tensorflow-estimator
     termcolor
-    terminado
+    terminado 
     terminaltables
-    testpath
+    testpath 
     text-unidecode
     textdata
     texttable
@@ -1094,11 +1094,11 @@ RECURSE(
     txredisapi
     typecode
     typed-argument-parser
-    typed-ast
+    typed-ast 
     typeguard
     typer
     typing
-    typing-extensions
+    typing-extensions 
     typing-inspect
     tzlocal
     ua-parser
@@ -1106,7 +1106,7 @@ RECURSE(
     uhashring
     ujson
     ulid2
-    umalqurra
+    umalqurra 
     umongo
     unicodecsv
     Unidecode

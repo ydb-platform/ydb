@@ -36,9 +36,9 @@ static bool errqueue_supported = false;
 bool kernel_supports_errqueue() { return errqueue_supported; }
 
 void grpc_errqueue_init() {
-/* Both-compile time and run-time linux kernel versions should be at least 4.0.0
+/* Both-compile time and run-time linux kernel versions should be at least 4.0.0 
  */
-#ifdef GRPC_LINUX_ERRQUEUE
+#ifdef GRPC_LINUX_ERRQUEUE 
   struct utsname buffer;
   if (uname(&buffer) != 0) {
     gpr_log(GPR_ERROR, "uname: %s", strerror(errno));
@@ -54,7 +54,7 @@ void grpc_errqueue_init() {
   } else {
     gpr_log(GPR_DEBUG, "ERRQUEUE support not enabled");
   }
-#endif /* GRPC_LINUX_ERRQUEUE */
+#endif /* GRPC_LINUX_ERRQUEUE */ 
 }
 } /* namespace grpc_core */
 

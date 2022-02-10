@@ -28,7 +28,7 @@ PEERDIR(
     contrib/python/six
     library/python/cores
     library/python/filelock
-    library/python/fs
+    library/python/fs 
 )
 
 IF (NOT CATBOOST_OPENSOURCE)

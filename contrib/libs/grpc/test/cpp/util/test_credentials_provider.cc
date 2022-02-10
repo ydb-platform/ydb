@@ -19,50 +19,50 @@
 
 #include "test/cpp/util/test_credentials_provider.h"
 
-#include <cstdio>
-#include <fstream>
-#include <iostream>
-
+#include <cstdio> 
+#include <fstream> 
+#include <iostream> 
+ 
 #include <mutex>
 #include <unordered_map>
 
-#include <gflags/gflags.h>
+#include <gflags/gflags.h> 
 #include <grpc/support/log.h>
 #include <grpc/support/sync.h>
-#include <grpcpp/security/server_credentials.h>
+#include <grpcpp/security/server_credentials.h> 
 
 #include "test/core/end2end/data/ssl_test_data.h"
 
-DEFINE_string(tls_cert_file, "", "The TLS cert file used when --use_tls=true");
-DEFINE_string(tls_key_file, "", "The TLS key file used when --use_tls=true");
-
+DEFINE_string(tls_cert_file, "", "The TLS cert file used when --use_tls=true"); 
+DEFINE_string(tls_key_file, "", "The TLS key file used when --use_tls=true"); 
+ 
 namespace grpc {
 namespace testing {
 namespace {
 
 TString ReadFile(const TString& src_path) {
-  std::ifstream src;
-  src.open(src_path, std::ifstream::in | std::ifstream::binary);
-
+  std::ifstream src; 
+  src.open(src_path, std::ifstream::in | std::ifstream::binary); 
+ 
   TString contents;
-  src.seekg(0, std::ios::end);
-  contents.reserve(src.tellg());
-  src.seekg(0, std::ios::beg);
-  contents.assign((std::istreambuf_iterator<char>(src)),
-                  (std::istreambuf_iterator<char>()));
-  return contents;
-}
-
+  src.seekg(0, std::ios::end); 
+  contents.reserve(src.tellg()); 
+  src.seekg(0, std::ios::beg); 
+  contents.assign((std::istreambuf_iterator<char>(src)), 
+                  (std::istreambuf_iterator<char>())); 
+  return contents; 
+} 
+ 
 class DefaultCredentialsProvider : public CredentialsProvider {
  public:
-  DefaultCredentialsProvider() {
-    if (!FLAGS_tls_key_file.empty()) {
-      custom_server_key_ = ReadFile(FLAGS_tls_key_file);
-    }
-    if (!FLAGS_tls_cert_file.empty()) {
-      custom_server_cert_ = ReadFile(FLAGS_tls_cert_file);
-    }
-  }
+  DefaultCredentialsProvider() { 
+    if (!FLAGS_tls_key_file.empty()) { 
+      custom_server_key_ = ReadFile(FLAGS_tls_key_file); 
+    } 
+    if (!FLAGS_tls_cert_file.empty()) { 
+      custom_server_cert_ = ReadFile(FLAGS_tls_cert_file); 
+    } 
+  } 
   ~DefaultCredentialsProvider() override {}
 
   void AddSecureType(
@@ -92,7 +92,7 @@ class DefaultCredentialsProvider : public CredentialsProvider {
     } else if (type == grpc::testing::kTlsCredentialsType) {
       SslCredentialsOptions ssl_opts = {test_root_cert, "", ""};
       args->SetSslTargetNameOverride("foo.test.google.fr");
-      return grpc::SslCredentials(ssl_opts);
+      return grpc::SslCredentials(ssl_opts); 
     } else if (type == grpc::testing::kGoogleDefaultCredentialsType) {
       return grpc::GoogleDefaultCredentials();
     } else {
@@ -118,15 +118,15 @@ class DefaultCredentialsProvider : public CredentialsProvider {
     } else if (type == grpc::testing::kTlsCredentialsType) {
       SslServerCredentialsOptions ssl_opts;
       ssl_opts.pem_root_certs = "";
-      if (!custom_server_key_.empty() && !custom_server_cert_.empty()) {
-        SslServerCredentialsOptions::PemKeyCertPair pkcp = {
-            custom_server_key_, custom_server_cert_};
-        ssl_opts.pem_key_cert_pairs.push_back(pkcp);
-      } else {
-        SslServerCredentialsOptions::PemKeyCertPair pkcp = {test_server1_key,
-                                                            test_server1_cert};
-        ssl_opts.pem_key_cert_pairs.push_back(pkcp);
-      }
+      if (!custom_server_key_.empty() && !custom_server_cert_.empty()) { 
+        SslServerCredentialsOptions::PemKeyCertPair pkcp = { 
+            custom_server_key_, custom_server_cert_}; 
+        ssl_opts.pem_key_cert_pairs.push_back(pkcp); 
+      } else { 
+        SslServerCredentialsOptions::PemKeyCertPair pkcp = {test_server1_key, 
+                                                            test_server1_cert}; 
+        ssl_opts.pem_key_cert_pairs.push_back(pkcp); 
+      } 
       return SslServerCredentials(ssl_opts);
     } else {
       std::unique_lock<std::mutex> lock(mu_);

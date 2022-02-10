@@ -19,7 +19,7 @@
 #include "src/cpp/server/dynamic_thread_pool.h"
 
 #include <grpc/support/log.h>
-#include <grpcpp/impl/codegen/sync.h>
+#include <grpcpp/impl/codegen/sync.h> 
 
 #include "src/core/lib/gprpp/thd.h"
 
@@ -39,27 +39,27 @@ DynamicThreadPool::DynamicThread::~DynamicThread() { thd_.Join(); }
 void DynamicThreadPool::DynamicThread::ThreadFunc() {
   pool_->ThreadFunc();
   // Now that we have killed ourselves, we should reduce the thread count
-  grpc_core::MutexLock lock(&pool_->mu_);
+  grpc_core::MutexLock lock(&pool_->mu_); 
   pool_->nthreads_--;
   // Move ourselves to dead list
   pool_->dead_threads_.push_back(this);
 
   if ((pool_->shutdown_) && (pool_->nthreads_ == 0)) {
-    pool_->shutdown_cv_.Signal();
+    pool_->shutdown_cv_.Signal(); 
   }
 }
 
 void DynamicThreadPool::ThreadFunc() {
   for (;;) {
     // Wait until work is available or we are shutting down.
-    grpc_core::ReleasableMutexLock lock(&mu_);
+    grpc_core::ReleasableMutexLock lock(&mu_); 
     if (!shutdown_ && callbacks_.empty()) {
       // If there are too many threads waiting, then quit this thread
       if (threads_waiting_ >= reserve_threads_) {
         break;
       }
       threads_waiting_++;
-      cv_.Wait(&mu_);
+      cv_.Wait(&mu_); 
       threads_waiting_--;
     }
     // Drain callbacks before considering shutdown to ensure all work
@@ -67,7 +67,7 @@ void DynamicThreadPool::ThreadFunc() {
     if (!callbacks_.empty()) {
       auto cb = callbacks_.front();
       callbacks_.pop();
-      lock.Unlock();
+      lock.Unlock(); 
       cb();
     } else if (shutdown_) {
       break;
@@ -81,7 +81,7 @@ DynamicThreadPool::DynamicThreadPool(int reserve_threads)
       nthreads_(0),
       threads_waiting_(0) {
   for (int i = 0; i < reserve_threads_; i++) {
-    grpc_core::MutexLock lock(&mu_);
+    grpc_core::MutexLock lock(&mu_); 
     nthreads_++;
     new DynamicThread(this);
   }
@@ -94,17 +94,17 @@ void DynamicThreadPool::ReapThreads(std::list<DynamicThread*>* tlist) {
 }
 
 DynamicThreadPool::~DynamicThreadPool() {
-  grpc_core::MutexLock lock(&mu_);
+  grpc_core::MutexLock lock(&mu_); 
   shutdown_ = true;
-  cv_.Broadcast();
+  cv_.Broadcast(); 
   while (nthreads_ != 0) {
-    shutdown_cv_.Wait(&mu_);
+    shutdown_cv_.Wait(&mu_); 
   }
   ReapThreads(&dead_threads_);
 }
 
 void DynamicThreadPool::Add(const std::function<void()>& callback) {
-  grpc_core::MutexLock lock(&mu_);
+  grpc_core::MutexLock lock(&mu_); 
   // Add works to the callbacks list
   callbacks_.push(callback);
   // Increase pool size or notify as needed
@@ -113,7 +113,7 @@ void DynamicThreadPool::Add(const std::function<void()>& callback) {
     nthreads_++;
     new DynamicThread(this);
   } else {
-    cv_.Signal();
+    cv_.Signal(); 
   }
   // Also use this chance to harvest dead threads
   if (!dead_threads_.empty()) {

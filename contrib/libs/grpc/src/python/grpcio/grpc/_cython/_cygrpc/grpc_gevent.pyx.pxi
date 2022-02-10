@@ -31,16 +31,16 @@ def _spawn_greenlet(*args):
 
 cdef class SocketWrapper:
   def __cinit__(self):
-    fork_handlers_and_grpc_init()
+    fork_handlers_and_grpc_init() 
     self.sockopts = []
     self.socket = None
     self.c_socket = NULL
     self.c_buffer = NULL
     self.len = 0
 
-  def __dealloc__(self):
-    grpc_shutdown_blocking()
-
+  def __dealloc__(self): 
+    grpc_shutdown_blocking() 
+ 
 cdef grpc_error* socket_init(grpc_custom_socket* socket, int domain) with gil:
   sw = SocketWrapper()
   sw.c_socket = socket
@@ -261,14 +261,14 @@ cdef void socket_accept(grpc_custom_socket* socket, grpc_custom_socket* client,
 
 cdef class ResolveWrapper:
   def __cinit__(self):
-    fork_handlers_and_grpc_init()
+    fork_handlers_and_grpc_init() 
     self.c_resolver = NULL
     self.c_host = NULL
     self.c_port = NULL
 
-  def __dealloc__(self):
-    grpc_shutdown_blocking()
-
+  def __dealloc__(self): 
+    grpc_shutdown_blocking() 
+ 
 cdef socket_resolve_async_cython(ResolveWrapper resolve_wrapper):
   try:
     res = gevent_socket.getaddrinfo(resolve_wrapper.c_host, resolve_wrapper.c_port)
@@ -305,7 +305,7 @@ cdef grpc_error* socket_resolve(const char* host, const char* port,
 
 cdef class TimerWrapper:
   def __cinit__(self, deadline):
-    fork_handlers_and_grpc_init()
+    fork_handlers_and_grpc_init() 
     self.timer = gevent_hub.get_hub().loop.timer(deadline)
     self.event = None
 
@@ -322,9 +322,9 @@ cdef class TimerWrapper:
     self.event.set()
     self.timer.stop()
 
-  def __dealloc__(self):
-    grpc_shutdown_blocking()
-
+  def __dealloc__(self): 
+    grpc_shutdown_blocking() 
+ 
 cdef void timer_start(grpc_custom_timer* t) with gil:
   timer = TimerWrapper(t.timeout_ms / 1000.0)
   timer.c_timer = t

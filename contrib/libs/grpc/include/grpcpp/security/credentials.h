@@ -58,7 +58,7 @@ std::shared_ptr<grpc::Channel> CreateCustomChannelWithInterceptors(
     std::vector<
         std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>>
         interceptor_creators);
-}
+} 
 
 /// A channel credentials object encapsulates all the state needed by a client
 /// to authenticate with a server for a given channel.
@@ -265,7 +265,7 @@ class MetadataCredentialsPlugin {
 std::shared_ptr<CallCredentials> MetadataCredentialsFromPlugin(
     std::unique_ptr<MetadataCredentialsPlugin> plugin);
 
-namespace experimental {
+namespace experimental { 
 
 /// Options for creating STS Oauth Token Exchange credentials following the IETF
 /// draft https://tools.ietf.org/html/draft-ietf-oauth-token-exchange-16.
@@ -314,7 +314,7 @@ std::shared_ptr<ChannelCredentials> AltsCredentials(
 /// Builds Local Credentials.
 std::shared_ptr<ChannelCredentials> LocalCredentials(
     grpc_local_connect_type type);
-
+ 
 /// Builds TLS Credentials given TLS options.
 std::shared_ptr<ChannelCredentials> TlsCredentials(
     const TlsCredentialsOptions& options);

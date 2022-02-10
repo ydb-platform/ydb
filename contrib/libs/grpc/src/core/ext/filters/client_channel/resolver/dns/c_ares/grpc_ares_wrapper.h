@@ -27,18 +27,18 @@
 #include "src/core/lib/iomgr/resolve_address.h"
 #include "src/core/lib/iomgr/work_serializer.h"
 
-#define GRPC_DNS_ARES_DEFAULT_QUERY_TIMEOUT_MS 120000
+#define GRPC_DNS_ARES_DEFAULT_QUERY_TIMEOUT_MS 120000 
 
 extern grpc_core::TraceFlag grpc_trace_cares_address_sorting;
 
 extern grpc_core::TraceFlag grpc_trace_cares_resolver;
 
-#define GRPC_CARES_TRACE_LOG(format, ...)                           \
-  do {                                                              \
-    if (GRPC_TRACE_FLAG_ENABLED(grpc_trace_cares_resolver)) {       \
-      gpr_log(GPR_DEBUG, "(c-ares resolver) " format, __VA_ARGS__); \
-    }                                                               \
-  } while (0)
+#define GRPC_CARES_TRACE_LOG(format, ...)                           \ 
+  do {                                                              \ 
+    if (GRPC_TRACE_FLAG_ENABLED(grpc_trace_cares_resolver)) {       \ 
+      gpr_log(GPR_DEBUG, "(c-ares resolver) " format, __VA_ARGS__); \ 
+    }                                                               \ 
+  } while (0) 
 
 typedef struct grpc_ares_request grpc_ares_request;
 
@@ -66,7 +66,7 @@ extern grpc_ares_request* (*grpc_dns_lookup_ares_locked)(
     grpc_pollset_set* interested_parties, grpc_closure* on_done,
     std::unique_ptr<grpc_core::ServerAddressList>* addresses,
     std::unique_ptr<grpc_core::ServerAddressList>* balancer_addresses,
-    char** service_config_json, int query_timeout_ms,
+    char** service_config_json, int query_timeout_ms, 
     std::shared_ptr<grpc_core::WorkSerializer> work_serializer);
 
 /* Cancel the pending grpc_ares_request \a request */

@@ -41,7 +41,7 @@
 namespace grpc_core {
 namespace channelz {
 
-ChannelTrace::TraceEvent::TraceEvent(Severity severity, const grpc_slice& data,
+ChannelTrace::TraceEvent::TraceEvent(Severity severity, const grpc_slice& data, 
                                      RefCountedPtr<BaseNode> referenced_entity)
     : severity_(severity),
       data_(data),
@@ -51,7 +51,7 @@ ChannelTrace::TraceEvent::TraceEvent(Severity severity, const grpc_slice& data,
       referenced_entity_(std::move(referenced_entity)),
       memory_usage_(sizeof(TraceEvent) + grpc_slice_memory_usage(data)) {}
 
-ChannelTrace::TraceEvent::TraceEvent(Severity severity, const grpc_slice& data)
+ChannelTrace::TraceEvent::TraceEvent(Severity severity, const grpc_slice& data) 
     : severity_(severity),
       data_(data),
       timestamp_(grpc_millis_to_timespec(grpc_core::ExecCtx::Get()->Now(),
@@ -81,7 +81,7 @@ ChannelTrace::~ChannelTrace() {
   while (it != nullptr) {
     TraceEvent* to_free = it;
     it = it->next();
-    delete to_free;
+    delete to_free; 
   }
   gpr_mu_destroy(&tracer_mu_);
 }
@@ -103,20 +103,20 @@ void ChannelTrace::AddTraceEventHelper(TraceEvent* new_trace_event) {
     TraceEvent* to_free = head_trace_;
     event_list_memory_usage_ -= to_free->memory_usage();
     head_trace_ = head_trace_->next();
-    delete to_free;
+    delete to_free; 
   }
 }
 
-void ChannelTrace::AddTraceEvent(Severity severity, const grpc_slice& data) {
+void ChannelTrace::AddTraceEvent(Severity severity, const grpc_slice& data) { 
   if (max_event_memory_ == 0) {
     grpc_slice_unref_internal(data);
     return;  // tracing is disabled if max_event_memory_ == 0
   }
-  AddTraceEventHelper(new TraceEvent(severity, data));
+  AddTraceEventHelper(new TraceEvent(severity, data)); 
 }
 
 void ChannelTrace::AddTraceEventWithReference(
-    Severity severity, const grpc_slice& data,
+    Severity severity, const grpc_slice& data, 
     RefCountedPtr<BaseNode> referenced_entity) {
   if (max_event_memory_ == 0) {
     grpc_slice_unref_internal(data);
@@ -124,7 +124,7 @@ void ChannelTrace::AddTraceEventWithReference(
   }
   // create and fill up the new event
   AddTraceEventHelper(
-      new TraceEvent(severity, data, std::move(referenced_entity)));
+      new TraceEvent(severity, data, std::move(referenced_entity))); 
 }
 
 namespace {

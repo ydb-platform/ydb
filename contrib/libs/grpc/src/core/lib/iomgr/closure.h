@@ -22,14 +22,14 @@
 #include <grpc/support/port_platform.h>
 
 #include <assert.h>
-#include <stdbool.h>
-
+#include <stdbool.h> 
+ 
 #include <grpc/support/alloc.h>
 #include <grpc/support/log.h>
-
-#include "src/core/lib/gprpp/debug_location.h"
-#include "src/core/lib/gprpp/manual_constructor.h"
-#include "src/core/lib/gprpp/mpscq.h"
+ 
+#include "src/core/lib/gprpp/debug_location.h" 
+#include "src/core/lib/gprpp/manual_constructor.h" 
+#include "src/core/lib/gprpp/mpscq.h" 
 #include "src/core/lib/iomgr/error.h"
 #include "src/core/lib/profiling/timers.h"
 
@@ -58,9 +58,9 @@ struct grpc_closure {
    *  space */
   union {
     grpc_closure* next;
-    grpc_core::ManualConstructor<
-        grpc_core::MultiProducerSingleConsumerQueue::Node>
-        mpscq_node;
+    grpc_core::ManualConstructor< 
+        grpc_core::MultiProducerSingleConsumerQueue::Node> 
+        mpscq_node; 
     uintptr_t scratch;
   } next_data;
 
@@ -91,10 +91,10 @@ struct grpc_closure {
 #ifndef NDEBUG
 inline grpc_closure* grpc_closure_init(const char* file, int line,
                                        grpc_closure* closure,
-                                       grpc_iomgr_cb_func cb, void* cb_arg) {
+                                       grpc_iomgr_cb_func cb, void* cb_arg) { 
 #else
 inline grpc_closure* grpc_closure_init(grpc_closure* closure,
-                                       grpc_iomgr_cb_func cb, void* cb_arg) {
+                                       grpc_iomgr_cb_func cb, void* cb_arg) { 
 #endif
   closure->cb = cb;
   closure->cb_arg = cb_arg;
@@ -113,10 +113,10 @@ inline grpc_closure* grpc_closure_init(grpc_closure* closure,
 /** Initializes \a closure with \a cb and \a cb_arg. Returns \a closure. */
 #ifndef NDEBUG
 #define GRPC_CLOSURE_INIT(closure, cb, cb_arg, scheduler) \
-  grpc_closure_init(__FILE__, __LINE__, closure, cb, cb_arg)
+  grpc_closure_init(__FILE__, __LINE__, closure, cb, cb_arg) 
 #else
 #define GRPC_CLOSURE_INIT(closure, cb, cb_arg, scheduler) \
-  grpc_closure_init(closure, cb, cb_arg)
+  grpc_closure_init(closure, cb, cb_arg) 
 #endif
 
 namespace closure_impl {
@@ -138,19 +138,19 @@ inline void closure_wrapper(void* arg, grpc_error* error) {
 
 #ifndef NDEBUG
 inline grpc_closure* grpc_closure_create(const char* file, int line,
-                                         grpc_iomgr_cb_func cb, void* cb_arg) {
+                                         grpc_iomgr_cb_func cb, void* cb_arg) { 
 #else
-inline grpc_closure* grpc_closure_create(grpc_iomgr_cb_func cb, void* cb_arg) {
+inline grpc_closure* grpc_closure_create(grpc_iomgr_cb_func cb, void* cb_arg) { 
 #endif
   closure_impl::wrapped_closure* wc =
       static_cast<closure_impl::wrapped_closure*>(gpr_malloc(sizeof(*wc)));
   wc->cb = cb;
   wc->cb_arg = cb_arg;
 #ifndef NDEBUG
-  grpc_closure_init(file, line, &wc->wrapper, closure_impl::closure_wrapper,
-                    wc);
+  grpc_closure_init(file, line, &wc->wrapper, closure_impl::closure_wrapper, 
+                    wc); 
 #else
-  grpc_closure_init(&wc->wrapper, closure_impl::closure_wrapper, wc);
+  grpc_closure_init(&wc->wrapper, closure_impl::closure_wrapper, wc); 
 #endif
   return &wc->wrapper;
 }
@@ -158,10 +158,10 @@ inline grpc_closure* grpc_closure_create(grpc_iomgr_cb_func cb, void* cb_arg) {
 /* Create a heap allocated closure: try to avoid except for very rare events */
 #ifndef NDEBUG
 #define GRPC_CLOSURE_CREATE(cb, cb_arg, scheduler) \
-  grpc_closure_create(__FILE__, __LINE__, cb, cb_arg)
+  grpc_closure_create(__FILE__, __LINE__, cb, cb_arg) 
 #else
 #define GRPC_CLOSURE_CREATE(cb, cb_arg, scheduler) \
-  grpc_closure_create(cb, cb_arg)
+  grpc_closure_create(cb, cb_arg) 
 #endif
 
 #define GRPC_CLOSURE_LIST_INIT \
@@ -223,33 +223,33 @@ inline bool grpc_closure_list_empty(grpc_closure_list closure_list) {
   return closure_list.head == nullptr;
 }
 
-namespace grpc_core {
-class Closure {
- public:
-  static void Run(const DebugLocation& location, grpc_closure* closure,
-                  grpc_error* error) {
-    (void)location;
-    if (closure == nullptr) {
-      GRPC_ERROR_UNREF(error);
-      return;
-    }
+namespace grpc_core { 
+class Closure { 
+ public: 
+  static void Run(const DebugLocation& location, grpc_closure* closure, 
+                  grpc_error* error) { 
+    (void)location; 
+    if (closure == nullptr) { 
+      GRPC_ERROR_UNREF(error); 
+      return; 
+    } 
 #ifndef NDEBUG
-    if (grpc_trace_closure.enabled()) {
-      gpr_log(GPR_DEBUG, "running closure %p: created [%s:%d]: run [%s:%d]",
-              closure, closure->file_created, closure->line_created,
-              location.file(), location.line());
-    }
-    GPR_ASSERT(closure->cb != nullptr);
+    if (grpc_trace_closure.enabled()) { 
+      gpr_log(GPR_DEBUG, "running closure %p: created [%s:%d]: run [%s:%d]", 
+              closure, closure->file_created, closure->line_created, 
+              location.file(), location.line()); 
+    } 
+    GPR_ASSERT(closure->cb != nullptr); 
 #endif
-    closure->cb(closure->cb_arg, error);
+    closure->cb(closure->cb_arg, error); 
 #ifndef NDEBUG
-    if (grpc_trace_closure.enabled()) {
-      gpr_log(GPR_DEBUG, "closure %p finished", closure);
+    if (grpc_trace_closure.enabled()) { 
+      gpr_log(GPR_DEBUG, "closure %p finished", closure); 
     }
 #endif
     GRPC_ERROR_UNREF(error);
   }
-};
-}  // namespace grpc_core
+}; 
+}  // namespace grpc_core 
 
 #endif /* GRPC_CORE_LIB_IOMGR_CLOSURE_H */

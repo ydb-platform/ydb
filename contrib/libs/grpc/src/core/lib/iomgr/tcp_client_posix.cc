@@ -85,10 +85,10 @@ static grpc_error* prepare_socket(const grpc_resolved_address* addr, int fd,
   }
   err = grpc_set_socket_no_sigpipe_if_possible(fd);
   if (err != GRPC_ERROR_NONE) goto error;
-
-  err = grpc_apply_socket_mutator_in_args(fd, channel_args);
-  if (err != GRPC_ERROR_NONE) goto error;
-
+ 
+  err = grpc_apply_socket_mutator_in_args(fd, channel_args); 
+  if (err != GRPC_ERROR_NONE) goto error; 
+ 
   goto done;
 
 error:
@@ -102,7 +102,7 @@ done:
 static void tc_on_alarm(void* acp, grpc_error* error) {
   int done;
   async_connect* ac = static_cast<async_connect*>(acp);
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) { 
     const char* str = grpc_error_string(error);
     gpr_log(GPR_INFO, "CLIENT_CONNECT: %s: on_alarm: error=%s",
             ac->addr_str.c_str(), str);
@@ -138,7 +138,7 @@ static void on_writable(void* acp, grpc_error* error) {
 
   GRPC_ERROR_REF(error);
 
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) { 
     const char* str = grpc_error_string(error);
     gpr_log(GPR_INFO, "CLIENT_CONNECT: %s: on_writable: error=%s",
             ac->addr_str.c_str(), str);
@@ -239,7 +239,7 @@ finish:
     grpc_channel_args_destroy(ac->channel_args);
     delete ac;
   }
-  grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, error);
+  grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, error); 
 }
 
 grpc_error* grpc_tcp_client_prepare_fd(const grpc_channel_args* channel_args,
@@ -289,7 +289,7 @@ void grpc_tcp_client_create_from_prepared_fd(
   if (err >= 0) {
     *ep = grpc_tcp_client_create_from_fd(fdobj, channel_args,
                                          grpc_sockaddr_to_uri(addr).c_str());
-    grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, GRPC_ERROR_NONE);
+    grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, GRPC_ERROR_NONE); 
     return;
   }
   if (errno != EWOULDBLOCK && errno != EINPROGRESS) {
@@ -316,7 +316,7 @@ void grpc_tcp_client_create_from_prepared_fd(
                     grpc_schedule_on_exec_ctx);
   ac->channel_args = grpc_channel_args_copy(channel_args);
 
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) { 
     gpr_log(GPR_INFO, "CLIENT_CONNECT: %s: asynchronously connecting fd %p",
             ac->addr_str.c_str(), fdobj);
   }
@@ -339,7 +339,7 @@ static void tcp_connect(grpc_closure* closure, grpc_endpoint** ep,
   *ep = nullptr;
   if ((error = grpc_tcp_client_prepare_fd(channel_args, addr, &mapped_addr,
                                           &fd)) != GRPC_ERROR_NONE) {
-    grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, error);
+    grpc_core::ExecCtx::Run(DEBUG_LOCATION, closure, error); 
     return;
   }
   grpc_tcp_client_create_from_prepared_fd(interested_parties, closure, fd,

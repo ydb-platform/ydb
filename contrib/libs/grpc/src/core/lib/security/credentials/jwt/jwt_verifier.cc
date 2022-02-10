@@ -349,7 +349,7 @@ struct verifier_cb_ctx {
 /* Takes ownership of the header, claims and signature. */
 static verifier_cb_ctx* verifier_cb_ctx_create(
     grpc_jwt_verifier* verifier, grpc_pollset* pollset, jose_header* header,
-    grpc_jwt_claims* claims, const char* audience, const grpc_slice& signature,
+    grpc_jwt_claims* claims, const char* audience, const grpc_slice& signature, 
     const char* signed_jwt, size_t signed_jwt_len, void* user_data,
     grpc_jwt_verification_done_cb cb) {
   grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
@@ -594,8 +594,8 @@ static EVP_PKEY* find_verification_key(const Json& json, const char* header_alg,
 }
 
 static int verify_jwt_signature(EVP_PKEY* key, const char* alg,
-                                const grpc_slice& signature,
-                                const grpc_slice& signed_data) {
+                                const grpc_slice& signature, 
+                                const grpc_slice& signed_data) { 
   EVP_MD_CTX* md_ctx = EVP_MD_CTX_create();
   const EVP_MD* md = evp_md_from_alg(alg);
   int result = 0;
@@ -626,7 +626,7 @@ end:
   return result;
 }
 
-static void on_keys_retrieved(void* user_data, grpc_error* /*error*/) {
+static void on_keys_retrieved(void* user_data, grpc_error* /*error*/) { 
   verifier_cb_ctx* ctx = static_cast<verifier_cb_ctx*>(user_data);
   Json json = json_from_http(&ctx->responses[HTTP_RESPONSE_KEYS]);
   EVP_PKEY* verification_key = nullptr;
@@ -665,7 +665,7 @@ end:
   verifier_cb_ctx_destroy(ctx);
 }
 
-static void on_openid_config_retrieved(void* user_data, grpc_error* /*error*/) {
+static void on_openid_config_retrieved(void* user_data, grpc_error* /*error*/) { 
   verifier_cb_ctx* ctx = static_cast<verifier_cb_ctx*>(user_data);
   const grpc_http_response* response = &ctx->responses[HTTP_RESPONSE_OPENID];
   Json json = json_from_http(response);

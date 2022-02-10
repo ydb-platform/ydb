@@ -42,7 +42,7 @@
 
 #if defined(_linux_)
 #include <sys/inotify.h>
-#include <sys/mman.h>
+#include <sys/mman.h> 
 #endif
 
 namespace {
@@ -137,7 +137,7 @@ SYM(sem_timedwait)
 SYM(inotify_init)
 SYM(inotify_add_watch)
 SYM(inotify_rm_watch)
-SYM(mlockall)
+SYM(mlockall) 
 #endif
 
 #if defined(_darwin_)

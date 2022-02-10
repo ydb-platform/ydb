@@ -1,78 +1,78 @@
-/*
- *
- * Copyright 2019 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
-#include <grpc/support/port_platform.h>
-
+/* 
+ * 
+ * Copyright 2019 gRPC authors. 
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ * 
+ */ 
+ 
+#include <grpc/support/port_platform.h> 
+ 
 #include "y_absl/strings/match.h"
 #include "y_absl/strings/str_join.h"
 #include "y_absl/strings/str_split.h"
 #include "re2/re2.h"
 
 #include "src/core/ext/filters/client_channel/config_selector.h"
-#include "src/core/ext/filters/client_channel/resolver_registry.h"
+#include "src/core/ext/filters/client_channel/resolver_registry.h" 
 #include "src/core/ext/xds/xds_client.h"
 #include "src/core/lib/channel/channel_args.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/exec_ctx.h"
 #include "src/core/lib/transport/timeout_encoding.h"
-
-namespace grpc_core {
-
+ 
+namespace grpc_core { 
+ 
 TraceFlag grpc_xds_resolver_trace(false, "xds_resolver");
 
 const char* kXdsClusterAttribute = "xds_cluster_name";
 
-namespace {
-
-//
-// XdsResolver
-//
-
-class XdsResolver : public Resolver {
- public:
-  explicit XdsResolver(ResolverArgs args)
+namespace { 
+ 
+// 
+// XdsResolver 
+// 
+ 
+class XdsResolver : public Resolver { 
+ public: 
+  explicit XdsResolver(ResolverArgs args) 
       : Resolver(std::move(args.work_serializer),
                  std::move(args.result_handler)),
-        args_(grpc_channel_args_copy(args.args)),
-        interested_parties_(args.pollset_set) {
-    char* path = args.uri->path;
-    if (path[0] == '/') ++path;
+        args_(grpc_channel_args_copy(args.args)), 
+        interested_parties_(args.pollset_set) { 
+    char* path = args.uri->path; 
+    if (path[0] == '/') ++path; 
     server_name_ = path;
     if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_resolver_trace)) {
       gpr_log(GPR_INFO, "[xds_resolver %p] created for server name %s", this,
               server_name_.c_str());
     }
-  }
-
+  } 
+ 
   ~XdsResolver() override {
     grpc_channel_args_destroy(args_);
     if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_resolver_trace)) {
       gpr_log(GPR_INFO, "[xds_resolver %p] destroyed", this);
     }
   }
-
-  void StartLocked() override;
-
+ 
+  void StartLocked() override; 
+ 
   void ShutdownLocked() override;
-
- private:
+ 
+ private: 
   class Notifier {
-   public:
+   public: 
     Notifier(RefCountedPtr<XdsResolver> resolver, XdsApi::LdsUpdate update);
     Notifier(RefCountedPtr<XdsResolver> resolver, XdsApi::RdsUpdate update);
     Notifier(RefCountedPtr<XdsResolver> resolver, grpc_error* error);
@@ -93,17 +93,17 @@ class XdsResolver : public Resolver {
   class ListenerWatcher : public XdsClient::ListenerWatcherInterface {
    public:
     explicit ListenerWatcher(RefCountedPtr<XdsResolver> resolver)
-        : resolver_(std::move(resolver)) {}
+        : resolver_(std::move(resolver)) {} 
     void OnListenerChanged(XdsApi::LdsUpdate listener) override {
       new Notifier(resolver_, std::move(listener));
     }
     void OnError(grpc_error* error) override { new Notifier(resolver_, error); }
     void OnResourceDoesNotExist() override { new Notifier(resolver_); }
-
-   private:
-    RefCountedPtr<XdsResolver> resolver_;
-  };
-
+ 
+   private: 
+    RefCountedPtr<XdsResolver> resolver_; 
+  }; 
+ 
   class RouteConfigWatcher : public XdsClient::RouteConfigWatcherInterface {
    public:
     explicit RouteConfigWatcher(RefCountedPtr<XdsResolver> resolver)
@@ -181,16 +181,16 @@ class XdsResolver : public Resolver {
   void MaybeRemoveUnusedClusters();
 
   TString server_name_;
-  const grpc_channel_args* args_;
-  grpc_pollset_set* interested_parties_;
+  const grpc_channel_args* args_; 
+  grpc_pollset_set* interested_parties_; 
   RefCountedPtr<XdsClient> xds_client_;
   XdsClient::ListenerWatcherInterface* listener_watcher_ = nullptr;
   TString route_config_name_;
   XdsClient::RouteConfigWatcherInterface* route_config_watcher_ = nullptr;
   ClusterState::ClusterStateMap cluster_state_map_;
   std::vector<XdsApi::Route> current_update_;
-};
-
+}; 
+ 
 //
 // XdsResolver::Notifier
 //
@@ -297,8 +297,8 @@ XdsResolver::XdsConfigSelector::XdsConfigSelector(
       }
     }
   }
-}
-
+} 
+ 
 XdsResolver::XdsConfigSelector::~XdsConfigSelector() {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_resolver_trace)) {
     gpr_log(GPR_INFO, "[xds_resolver %p] destroying XdsConfigSelector %p",
@@ -306,8 +306,8 @@ XdsResolver::XdsConfigSelector::~XdsConfigSelector() {
   }
   clusters_.clear();
   resolver_->MaybeRemoveUnusedClusters();
-}
-
+} 
+ 
 void XdsResolver::XdsConfigSelector::MaybeAddCluster(const TString& name) {
   if (clusters_.find(name) == clusters_.end()) {
     auto it = resolver_->cluster_state_map_.find(name);
@@ -511,17 +511,17 @@ ConfigSelector::CallConfig XdsResolver::XdsConfigSelector::GetCallConfig(
 // XdsResolver
 //
 
-void XdsResolver::StartLocked() {
-  grpc_error* error = GRPC_ERROR_NONE;
+void XdsResolver::StartLocked() { 
+  grpc_error* error = GRPC_ERROR_NONE; 
   xds_client_ = XdsClient::GetOrCreate(&error);
-  if (error != GRPC_ERROR_NONE) {
-    gpr_log(GPR_ERROR,
-            "Failed to create xds client -- channel will remain in "
-            "TRANSIENT_FAILURE: %s",
-            grpc_error_string(error));
-    result_handler()->ReturnError(error);
+  if (error != GRPC_ERROR_NONE) { 
+    gpr_log(GPR_ERROR, 
+            "Failed to create xds client -- channel will remain in " 
+            "TRANSIENT_FAILURE: %s", 
+            grpc_error_string(error)); 
+    result_handler()->ReturnError(error); 
     return;
-  }
+  } 
   grpc_pollset_set_add_pollset_set(xds_client_->interested_parties(),
                                    interested_parties_);
   channelz::ChannelNode* parent_channelz_node =
@@ -533,8 +533,8 @@ void XdsResolver::StartLocked() {
   auto watcher = y_absl::make_unique<ListenerWatcher>(Ref());
   listener_watcher_ = watcher.get();
   xds_client_->WatchListenerData(server_name_, std::move(watcher));
-}
-
+} 
+ 
 void XdsResolver::ShutdownLocked() {
   if (GRPC_TRACE_FLAG_ENABLED(grpc_xds_resolver_trace)) {
     gpr_log(GPR_INFO, "[xds_resolver %p] shutting down", this);
@@ -697,35 +697,35 @@ void XdsResolver::MaybeRemoveUnusedClusters() {
   }
 }
 
-//
-// Factory
-//
-
-class XdsResolverFactory : public ResolverFactory {
- public:
-  bool IsValidUri(const grpc_uri* uri) const override {
-    if (GPR_UNLIKELY(0 != strcmp(uri->authority, ""))) {
-      gpr_log(GPR_ERROR, "URI authority not supported");
-      return false;
-    }
-    return true;
-  }
-
-  OrphanablePtr<Resolver> CreateResolver(ResolverArgs args) const override {
-    if (!IsValidUri(args.uri)) return nullptr;
-    return MakeOrphanable<XdsResolver>(std::move(args));
-  }
-
+// 
+// Factory 
+// 
+ 
+class XdsResolverFactory : public ResolverFactory { 
+ public: 
+  bool IsValidUri(const grpc_uri* uri) const override { 
+    if (GPR_UNLIKELY(0 != strcmp(uri->authority, ""))) { 
+      gpr_log(GPR_ERROR, "URI authority not supported"); 
+      return false; 
+    } 
+    return true; 
+  } 
+ 
+  OrphanablePtr<Resolver> CreateResolver(ResolverArgs args) const override { 
+    if (!IsValidUri(args.uri)) return nullptr; 
+    return MakeOrphanable<XdsResolver>(std::move(args)); 
+  } 
+ 
   const char* scheme() const override { return "xds"; }
-};
-
-}  // namespace
-
-}  // namespace grpc_core
-
-void grpc_resolver_xds_init() {
-  grpc_core::ResolverRegistry::Builder::RegisterResolverFactory(
+}; 
+ 
+}  // namespace 
+ 
+}  // namespace grpc_core 
+ 
+void grpc_resolver_xds_init() { 
+  grpc_core::ResolverRegistry::Builder::RegisterResolverFactory( 
       y_absl::make_unique<grpc_core::XdsResolverFactory>());
-}
-
-void grpc_resolver_xds_shutdown() {}
+} 
+ 
+void grpc_resolver_xds_shutdown() {} 

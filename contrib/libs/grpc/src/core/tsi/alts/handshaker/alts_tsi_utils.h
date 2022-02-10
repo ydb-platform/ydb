@@ -25,7 +25,7 @@
 #include <grpc/grpc.h>
 
 #include "src/core/tsi/transport_security_interface.h"
-#include "src/proto/grpc/gcp/handshaker.upb.h"
+#include "src/proto/grpc/gcp/handshaker.upb.h" 
 
 /**
  * This method converts grpc_status_code code to the corresponding tsi_result
@@ -42,12 +42,12 @@ tsi_result alts_tsi_utils_convert_to_tsi_result(grpc_status_code code);
  * service.
  *
  * - bytes_received: data returned from ALTS handshaker service.
- * - arena: upb arena.
+ * - arena: upb arena. 
  *
  * It returns a deserialized handshaker response on success and nullptr on
  * failure.
  */
-grpc_gcp_HandshakerResp* alts_tsi_utils_deserialize_response(
-    grpc_byte_buffer* resp_buffer, upb_arena* arena);
+grpc_gcp_HandshakerResp* alts_tsi_utils_deserialize_response( 
+    grpc_byte_buffer* resp_buffer, upb_arena* arena); 
 
 #endif /* GRPC_CORE_TSI_ALTS_HANDSHAKER_ALTS_TSI_UTILS_H */

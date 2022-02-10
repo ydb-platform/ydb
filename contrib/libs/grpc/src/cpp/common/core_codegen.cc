@@ -81,7 +81,7 @@ void CoreCodegen::gpr_free(void* p) { return ::gpr_free(p); }
 void CoreCodegen::grpc_init() { ::grpc_init(); }
 void CoreCodegen::grpc_shutdown() { ::grpc_shutdown(); }
 
-void CoreCodegen::gpr_mu_init(gpr_mu* mu) { ::gpr_mu_init(mu); }
+void CoreCodegen::gpr_mu_init(gpr_mu* mu) { ::gpr_mu_init(mu); } 
 void CoreCodegen::gpr_mu_destroy(gpr_mu* mu) { ::gpr_mu_destroy(mu); }
 void CoreCodegen::gpr_mu_lock(gpr_mu* mu) { ::gpr_mu_lock(mu); }
 void CoreCodegen::gpr_mu_unlock(gpr_mu* mu) { ::gpr_mu_unlock(mu); }
@@ -123,9 +123,9 @@ void CoreCodegen::grpc_call_unref(grpc_call* call) { ::grpc_call_unref(call); }
 void* CoreCodegen::grpc_call_arena_alloc(grpc_call* call, size_t length) {
   return ::grpc_call_arena_alloc(call, length);
 }
-const char* CoreCodegen::grpc_call_error_to_string(grpc_call_error error) {
-  return ::grpc_call_error_to_string(error);
-}
+const char* CoreCodegen::grpc_call_error_to_string(grpc_call_error error) { 
+  return ::grpc_call_error_to_string(error); 
+} 
 
 int CoreCodegen::grpc_byte_buffer_reader_init(grpc_byte_buffer_reader* reader,
                                               grpc_byte_buffer* buffer) {
@@ -142,11 +142,11 @@ int CoreCodegen::grpc_byte_buffer_reader_next(grpc_byte_buffer_reader* reader,
   return ::grpc_byte_buffer_reader_next(reader, slice);
 }
 
-int CoreCodegen::grpc_byte_buffer_reader_peek(grpc_byte_buffer_reader* reader,
-                                              grpc_slice** slice) {
-  return ::grpc_byte_buffer_reader_peek(reader, slice);
-}
-
+int CoreCodegen::grpc_byte_buffer_reader_peek(grpc_byte_buffer_reader* reader, 
+                                              grpc_slice** slice) { 
+  return ::grpc_byte_buffer_reader_peek(reader, slice); 
+} 
+ 
 grpc_byte_buffer* CoreCodegen::grpc_raw_byte_buffer_create(grpc_slice* slice,
                                                            size_t nslices) {
   return ::grpc_raw_byte_buffer_create(slice, nslices);

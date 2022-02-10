@@ -26,20 +26,20 @@ cdef grpc_event _next(grpc_completion_queue *c_completion_queue, deadline) excep
   else:
     c_deadline = _timespec_from_time(deadline)
 
-  while True:
-    with nogil:
+  while True: 
+    with nogil: 
       c_timeout = gpr_time_add(gpr_now(GPR_CLOCK_REALTIME), c_increment)
       if gpr_time_cmp(c_timeout, c_deadline) > 0:
         c_timeout = c_deadline
-  
+   
       c_event = grpc_completion_queue_next(c_completion_queue, c_timeout, NULL)
-  
+   
       if (c_event.type != GRPC_QUEUE_TIMEOUT or
           gpr_time_cmp(c_timeout, c_deadline) == 0):
         break
 
-    # Handle any signals
-    cpython.PyErr_CheckSignals()
+    # Handle any signals 
+    cpython.PyErr_CheckSignals() 
   return c_event
 
 
@@ -115,4 +115,4 @@ cdef class CompletionQueue:
             self.c_completion_queue, c_deadline, NULL)
         self._interpret_event(event)
       grpc_completion_queue_destroy(self.c_completion_queue)
-    grpc_shutdown_blocking()
+    grpc_shutdown_blocking() 

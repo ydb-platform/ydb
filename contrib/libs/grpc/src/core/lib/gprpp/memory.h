@@ -22,7 +22,7 @@
 #include <grpc/support/port_platform.h>
 
 #include <grpc/support/alloc.h>
-#include <grpc/support/log.h>
+#include <grpc/support/log.h> 
 
 #include <limits>
 #include <memory>
@@ -32,19 +32,19 @@
 
 namespace grpc_core {
 
-class DefaultDeleteChar {
+class DefaultDeleteChar { 
  public:
-  void operator()(char* p) {
-    if (p == nullptr) return;
-    gpr_free(p);
-  }
+  void operator()(char* p) { 
+    if (p == nullptr) return; 
+    gpr_free(p); 
+  } 
 };
 
-// UniquePtr<T> is only allowed for char and UniquePtr<char> is deprecated
+// UniquePtr<T> is only allowed for char and UniquePtr<char> is deprecated 
 // in favor of TString. UniquePtr<char> is equivalent std::unique_ptr
-// except that it uses gpr_free for deleter.
-template <typename T>
-using UniquePtr = std::unique_ptr<T, DefaultDeleteChar>;
+// except that it uses gpr_free for deleter. 
+template <typename T> 
+using UniquePtr = std::unique_ptr<T, DefaultDeleteChar>; 
 
 }  // namespace grpc_core
 

@@ -30,8 +30,8 @@ namespace grpc {
 
 class CompletionQueue;
 class ServerContext;
-class ServerInterface;
-
+class ServerInterface; 
+ 
 namespace internal {
 class Call;
 class ServerAsyncStreamingInterface {
@@ -59,8 +59,8 @@ class Service {
   virtual ~Service() {}
 
   bool has_async_methods() const {
-    for (const auto& method : methods_) {
-      if (method && method->handler() == nullptr) {
+    for (const auto& method : methods_) { 
+      if (method && method->handler() == nullptr) { 
         return true;
       }
     }
@@ -68,9 +68,9 @@ class Service {
   }
 
   bool has_synchronous_methods() const {
-    for (const auto& method : methods_) {
-      if (method &&
-          method->api_type() == internal::RpcServiceMethod::ApiType::SYNC) {
+    for (const auto& method : methods_) { 
+      if (method && 
+          method->api_type() == internal::RpcServiceMethod::ApiType::SYNC) { 
         return true;
       }
     }
@@ -78,11 +78,11 @@ class Service {
   }
 
   bool has_callback_methods() const {
-    for (const auto& method : methods_) {
-      if (method && (method->api_type() ==
-                         internal::RpcServiceMethod::ApiType::CALL_BACK ||
-                     method->api_type() ==
-                         internal::RpcServiceMethod::ApiType::RAW_CALL_BACK)) {
+    for (const auto& method : methods_) { 
+      if (method && (method->api_type() == 
+                         internal::RpcServiceMethod::ApiType::CALL_BACK || 
+                     method->api_type() == 
+                         internal::RpcServiceMethod::ApiType::RAW_CALL_BACK)) { 
         return true;
       }
     }
@@ -90,8 +90,8 @@ class Service {
   }
 
   bool has_generic_methods() const {
-    for (const auto& method : methods_) {
-      if (method.get() == nullptr) {
+    for (const auto& method : methods_) { 
+      if (method.get() == nullptr) { 
         return true;
       }
     }
@@ -112,10 +112,10 @@ class Service {
       service_->MarkMethodRawCallbackInternal(index, handler);
     }
 
-    internal::MethodHandler* GetHandler(int index) {
+    internal::MethodHandler* GetHandler(int index) { 
       return service_->GetHandlerInternal(index);
-    }
-
+    } 
+ 
    private:
     Service* service_;
   };
@@ -124,11 +124,11 @@ class Service {
 
   template <class Message>
   void RequestAsyncUnary(int index, ::grpc::ServerContext* context,
-                         Message* request,
+                         Message* request, 
                          internal::ServerAsyncStreamingInterface* stream,
                          ::grpc::CompletionQueue* call_cq,
                          ::grpc::ServerCompletionQueue* notification_cq,
-                         void* tag) {
+                         void* tag) { 
     // Typecast the index to size_t for indexing into a vector
     // while preserving the API that existed before a compiler
     // warning was first seen (grpc/grpc#11664)
@@ -138,7 +138,7 @@ class Service {
   }
   void RequestAsyncClientStreaming(
       int index, ::grpc::ServerContext* context,
-      internal::ServerAsyncStreamingInterface* stream,
+      internal::ServerAsyncStreamingInterface* stream, 
       ::grpc::CompletionQueue* call_cq,
       ::grpc::ServerCompletionQueue* notification_cq, void* tag) {
     size_t idx = static_cast<size_t>(index);
@@ -148,7 +148,7 @@ class Service {
   template <class Message>
   void RequestAsyncServerStreaming(
       int index, ::grpc::ServerContext* context, Message* request,
-      internal::ServerAsyncStreamingInterface* stream,
+      internal::ServerAsyncStreamingInterface* stream, 
       ::grpc::CompletionQueue* call_cq,
       ::grpc::ServerCompletionQueue* notification_cq, void* tag) {
     size_t idx = static_cast<size_t>(index);
@@ -157,7 +157,7 @@ class Service {
   }
   void RequestAsyncBidiStreaming(
       int index, ::grpc::ServerContext* context,
-      internal::ServerAsyncStreamingInterface* stream,
+      internal::ServerAsyncStreamingInterface* stream, 
       ::grpc::CompletionQueue* call_cq,
       ::grpc::ServerCompletionQueue* notification_cq, void* tag) {
     size_t idx = static_cast<size_t>(index);

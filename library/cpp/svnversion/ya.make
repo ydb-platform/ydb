@@ -4,9 +4,9 @@ LIBRARY()
 
 SRCS(
     svnversion.cpp
-    svn_interface.c
+    svn_interface.c 
 )
 END()
-RECURSE(
-    test
-)
+RECURSE( 
+    test 
+) 

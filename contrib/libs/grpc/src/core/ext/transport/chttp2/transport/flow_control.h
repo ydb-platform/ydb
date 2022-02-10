@@ -126,7 +126,7 @@ class FlowControlTrace {
             StreamFlowControl* sfc);
   void Finish();
 
-  const bool enabled_ = GRPC_TRACE_FLAG_ENABLED(grpc_flowctl_trace);
+  const bool enabled_ = GRPC_TRACE_FLAG_ENABLED(grpc_flowctl_trace); 
 
   TransportFlowControl* tfc_;
   StreamFlowControl* sfc_;
@@ -206,14 +206,14 @@ class TransportFlowControlDisabled final : public TransportFlowControlBase {
   bool flow_control_enabled() const override { return false; }
 
   // Never do anything.
-  uint32_t MaybeSendUpdate(bool /* writing_anyway */) override { return 0; }
+  uint32_t MaybeSendUpdate(bool /* writing_anyway */) override { return 0; } 
   FlowControlAction MakeAction() override { return FlowControlAction(); }
   FlowControlAction PeriodicUpdate() override { return FlowControlAction(); }
-  void StreamSentData(int64_t /* size */) override {}
-  grpc_error* RecvData(int64_t /* incoming_frame_size */) override {
+  void StreamSentData(int64_t /* size */) override {} 
+  grpc_error* RecvData(int64_t /* incoming_frame_size */) override { 
     return GRPC_ERROR_NONE;
   }
-  void RecvUpdate(uint32_t /* size */) override {}
+  void RecvUpdate(uint32_t /* size */) override {} 
 };
 
 // Implementation of flow control that abides to HTTP/2 spec and attempts
@@ -340,9 +340,9 @@ class StreamFlowControlBase {
   virtual ~StreamFlowControlBase() {}
 
   // Updates an action using the protected members.
-  virtual FlowControlAction UpdateAction(FlowControlAction /* action */) {
-    abort();
-  }
+  virtual FlowControlAction UpdateAction(FlowControlAction /* action */) { 
+    abort(); 
+  } 
 
   // Using the protected members, returns an Action for this stream to be
   // taken by the tranport.
@@ -363,8 +363,8 @@ class StreamFlowControlBase {
   // Bookkeeping for when a call pulls bytes out of the transport. At this
   // point we consider the data 'used' and can thus let out peer know we are
   // ready for more data.
-  virtual void IncomingByteStreamUpdate(size_t /* max_size_hint */,
-                                        size_t /* have_already */) {
+  virtual void IncomingByteStreamUpdate(size_t /* max_size_hint */, 
+                                        size_t /* have_already */) { 
     abort();
   }
 
@@ -394,14 +394,14 @@ class StreamFlowControlDisabled : public StreamFlowControlBase {
     return action;
   }
   FlowControlAction MakeAction() override { return FlowControlAction(); }
-  void SentData(int64_t /* outgoing_frame_size */) override {}
-  grpc_error* RecvData(int64_t /* incoming_frame_size */) override {
+  void SentData(int64_t /* outgoing_frame_size */) override {} 
+  grpc_error* RecvData(int64_t /* incoming_frame_size */) override { 
     return GRPC_ERROR_NONE;
   }
   uint32_t MaybeSendUpdate() override { return 0; }
-  void RecvUpdate(uint32_t /* size */) override {}
-  void IncomingByteStreamUpdate(size_t /* max_size_hint */,
-                                size_t /* have_already */) override {}
+  void RecvUpdate(uint32_t /* size */) override {} 
+  void IncomingByteStreamUpdate(size_t /* max_size_hint */, 
+                                size_t /* have_already */) override {} 
 };
 
 // Implementation of flow control that abides to HTTP/2 spec and attempts

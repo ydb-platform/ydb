@@ -18,7 +18,7 @@
 
 // Generates cpp gRPC service interface out of Protobuf IDL.
 //
-#include "src/compiler/cpp_plugin.h"
+#include "src/compiler/cpp_plugin.h" 
 
 int main(int argc, char* argv[]) {
   CppGrpcGenerator generator;

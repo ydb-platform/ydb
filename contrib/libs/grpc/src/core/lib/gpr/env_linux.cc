@@ -38,20 +38,20 @@
 #include "src/core/lib/gpr/string.h"
 #include "src/core/lib/gpr/useful.h"
 
-char* gpr_getenv(const char* name) {
+char* gpr_getenv(const char* name) { 
   char* result = nullptr;
 #if defined(GPR_BACKWARDS_COMPATIBILITY_MODE)
   typedef char* (*getenv_type)(const char*);
-  static getenv_type getenv_func = nullptr;
+  static getenv_type getenv_func = nullptr; 
   /* Check to see which getenv variant is supported (go from most
    * to least secure) */
-  if (getenv_func == nullptr) {
-    const char* names[] = {"secure_getenv", "__secure_getenv", "getenv"};
-    for (size_t i = 0; i < GPR_ARRAY_SIZE(names); i++) {
-      getenv_func = (getenv_type)dlsym(RTLD_DEFAULT, names[i]);
-      if (getenv_func != nullptr) {
-        break;
-      }
+  if (getenv_func == nullptr) { 
+    const char* names[] = {"secure_getenv", "__secure_getenv", "getenv"}; 
+    for (size_t i = 0; i < GPR_ARRAY_SIZE(names); i++) { 
+      getenv_func = (getenv_type)dlsym(RTLD_DEFAULT, names[i]); 
+      if (getenv_func != nullptr) { 
+        break; 
+      } 
     }
   }
   result = getenv_func(name);
@@ -60,7 +60,7 @@ char* gpr_getenv(const char* name) {
 #else
   result = getenv(name);
 #endif
-  return result == nullptr ? result : gpr_strdup(result);
+  return result == nullptr ? result : gpr_strdup(result); 
 }
 
 void gpr_setenv(const char* name, const char* value) {
@@ -68,9 +68,9 @@ void gpr_setenv(const char* name, const char* value) {
   GPR_ASSERT(res == 0);
 }
 
-void gpr_unsetenv(const char* name) {
-  int res = unsetenv(name);
-  GPR_ASSERT(res == 0);
-}
-
+void gpr_unsetenv(const char* name) { 
+  int res = unsetenv(name); 
+  GPR_ASSERT(res == 0); 
+} 
+ 
 #endif /* GPR_LINUX_ENV */

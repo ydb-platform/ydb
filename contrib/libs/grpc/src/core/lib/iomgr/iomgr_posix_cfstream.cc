@@ -105,18 +105,18 @@ static bool iomgr_platform_is_any_background_poller_thread(void) {
   return grpc_is_any_background_poller_thread();
 }
 
-static bool iomgr_platform_add_closure_to_background_poller(
-    grpc_closure* closure, grpc_error* error) {
-  return grpc_add_closure_to_background_poller(closure, error);
-}
-
+static bool iomgr_platform_add_closure_to_background_poller( 
+    grpc_closure* closure, grpc_error* error) { 
+  return grpc_add_closure_to_background_poller(closure, error); 
+} 
+ 
 static grpc_iomgr_platform_vtable vtable = {
-    iomgr_platform_init,
-    iomgr_platform_flush,
-    iomgr_platform_shutdown,
+    iomgr_platform_init, 
+    iomgr_platform_flush, 
+    iomgr_platform_shutdown, 
     iomgr_platform_shutdown_background_closure,
-    iomgr_platform_is_any_background_poller_thread,
-    iomgr_platform_add_closure_to_background_poller};
+    iomgr_platform_is_any_background_poller_thread, 
+    iomgr_platform_add_closure_to_background_poller}; 
 
 void grpc_set_default_iomgr_platform() {
   char* enable_cfstream_str = getenv(grpc_cfstream_env_var);
@@ -147,12 +147,12 @@ void grpc_set_default_iomgr_platform() {
     grpc_set_pollset_vtable(&grpc_apple_pollset_vtable);
     grpc_set_pollset_set_vtable(&grpc_apple_pollset_set_vtable);
     grpc_set_iomgr_platform_vtable(&apple_vtable);
-  }
+  } 
   grpc_set_timer_impl(&grpc_generic_timer_vtable);
   grpc_set_resolver_impl(&grpc_posix_resolver_vtable);
 }
 
-bool grpc_iomgr_run_in_background() {
+bool grpc_iomgr_run_in_background() { 
   char* enable_cfstream_str = getenv(grpc_cfstream_env_var);
   bool enable_cfstream =
       enable_cfstream_str == nullptr || enable_cfstream_str[0] != '0';
@@ -166,6 +166,6 @@ bool grpc_iomgr_run_in_background() {
   } else {
     return grpc_event_engine_run_in_background();
   }
-}
-
+} 
+ 
 #endif /* GRPC_CFSTREAM_IOMGR */

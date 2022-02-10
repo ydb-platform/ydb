@@ -25,11 +25,11 @@
 #ifdef GRPC_USE_PROTO_LITE
 #include <google/protobuf/message_lite.h>
 #define GRPC_CUSTOM_MESSAGE ::google::protobuf::MessageLite
-#define GRPC_CUSTOM_MESSAGELITE ::google::protobuf::MessageLite
+#define GRPC_CUSTOM_MESSAGELITE ::google::protobuf::MessageLite 
 #else
 #include <google/protobuf/message.h>
 #define GRPC_CUSTOM_MESSAGE ::google::protobuf::Message
-#define GRPC_CUSTOM_MESSAGELITE ::google::protobuf::MessageLite
+#define GRPC_CUSTOM_MESSAGELITE ::google::protobuf::MessageLite 
 #endif
 #endif
 
@@ -73,7 +73,7 @@ namespace grpc {
 namespace protobuf {
 
 typedef GRPC_CUSTOM_MESSAGE Message;
-typedef GRPC_CUSTOM_MESSAGELITE MessageLite;
+typedef GRPC_CUSTOM_MESSAGELITE MessageLite; 
 
 typedef GRPC_CUSTOM_DESCRIPTOR Descriptor;
 typedef GRPC_CUSTOM_DESCRIPTORPOOL DescriptorPool;

@@ -56,19 +56,19 @@ cdef class _BatchOperationTag:
     self._retained_call = call
 
   cdef void prepare(self) except *:
-    cdef Operation operation
+    cdef Operation operation 
     self.c_nops = 0 if self._operations is None else len(self._operations)
     if 0 < self.c_nops:
       self.c_ops = <grpc_op *>gpr_malloc(sizeof(grpc_op) * self.c_nops)
       for index, operation in enumerate(self._operations):
-        operation.c()
-        self.c_ops[index] = operation.c_op
+        operation.c() 
+        self.c_ops[index] = operation.c_op 
 
   cdef BatchOperationEvent event(self, grpc_event c_event):
-    cdef Operation operation
+    cdef Operation operation 
     if 0 < self.c_nops:
-      for operation in self._operations:
-        operation.un_c()
+      for operation in self._operations: 
+        operation.un_c() 
       gpr_free(self.c_ops)
       return BatchOperationEvent(
           c_event.type, c_event.success, self._user_tag, self._operations)
@@ -85,4 +85,4 @@ cdef class _ServerShutdownTag(_Tag):
 
   cdef ServerShutdownEvent event(self, grpc_event c_event):
     self._shutting_down_server.notify_shutdown_complete()
-    return ServerShutdownEvent(c_event.type, c_event.success, self._user_tag)
+    return ServerShutdownEvent(c_event.type, c_event.success, self._user_tag) 

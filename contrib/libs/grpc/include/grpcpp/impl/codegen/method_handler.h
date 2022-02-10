@@ -1,33 +1,33 @@
-/*
- *
+/* 
+ * 
  * Copyright 2015 gRPC authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- */
-
-#ifndef GRPCPP_IMPL_CODEGEN_METHOD_HANDLER_H
-#define GRPCPP_IMPL_CODEGEN_METHOD_HANDLER_H
-
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License"); 
+ * you may not use this file except in compliance with the License. 
+ * You may obtain a copy of the License at 
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0 
+ * 
+ * Unless required by applicable law or agreed to in writing, software 
+ * distributed under the License is distributed on an "AS IS" BASIS, 
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+ * See the License for the specific language governing permissions and 
+ * limitations under the License. 
+ * 
+ */ 
+ 
+#ifndef GRPCPP_IMPL_CODEGEN_METHOD_HANDLER_H 
+#define GRPCPP_IMPL_CODEGEN_METHOD_HANDLER_H 
+ 
 #include <grpcpp/impl/codegen/byte_buffer.h>
 #include <grpcpp/impl/codegen/core_codegen_interface.h>
 #include <grpcpp/impl/codegen/rpc_service_method.h>
 #include <grpcpp/impl/codegen/sync_stream.h>
-
-namespace grpc {
-
-namespace internal {
-
+ 
+namespace grpc { 
+ 
+namespace internal { 
+ 
 // Invoke the method handler, fill in the status, and
 // return whether or not we finished safely (without an exception).
 // Note that exception handling is 0-cost in most compiler/library
@@ -48,9 +48,9 @@ template <class Callable>
   return handler();
 #endif  // GRPC_ALLOW_EXCEPTIONS
 }
-
+ 
 /// A wrapper class of an application provided rpc method handler.
-template <class ServiceType, class RequestType, class ResponseType>
+template <class ServiceType, class RequestType, class ResponseType> 
 class RpcMethodHandler : public ::grpc::internal::MethodHandler {
  public:
   RpcMethodHandler(
@@ -59,7 +59,7 @@ class RpcMethodHandler : public ::grpc::internal::MethodHandler {
           func,
       ServiceType* service)
       : func_(func), service_(service) {}
-
+ 
   void RunHandler(const HandlerParameter& param) final {
     ResponseType rsp;
     ::grpc::Status status = param.status;
@@ -117,7 +117,7 @@ class RpcMethodHandler : public ::grpc::internal::MethodHandler {
 };
 
 /// A wrapper class of an application provided client streaming handler.
-template <class ServiceType, class RequestType, class ResponseType>
+template <class ServiceType, class RequestType, class ResponseType> 
 class ClientStreamingHandler : public ::grpc::internal::MethodHandler {
  public:
   ClientStreamingHandler(
@@ -126,7 +126,7 @@ class ClientStreamingHandler : public ::grpc::internal::MethodHandler {
           func,
       ServiceType* service)
       : func_(func), service_(service) {}
-
+ 
   void RunHandler(const HandlerParameter& param) final {
     ServerReader<RequestType> reader(
         param.call, static_cast<::grpc::ServerContext*>(param.server_context));
@@ -165,7 +165,7 @@ class ClientStreamingHandler : public ::grpc::internal::MethodHandler {
 };
 
 /// A wrapper class of an application provided server streaming handler.
-template <class ServiceType, class RequestType, class ResponseType>
+template <class ServiceType, class RequestType, class ResponseType> 
 class ServerStreamingHandler : public ::grpc::internal::MethodHandler {
  public:
   ServerStreamingHandler(std::function<::grpc::Status(
@@ -174,7 +174,7 @@ class ServerStreamingHandler : public ::grpc::internal::MethodHandler {
                              func,
                          ServiceType* service)
       : func_(func), service_(service) {}
-
+ 
   void RunHandler(const HandlerParameter& param) final {
     ::grpc::Status status = param.status;
     if (status.ok()) {
@@ -238,13 +238,13 @@ class ServerStreamingHandler : public ::grpc::internal::MethodHandler {
 /// Since this is used by more than 1 class, the service is not passed in.
 /// Instead, it is expected to be an implicitly-captured argument of func
 /// (through bind or something along those lines)
-template <class Streamer, bool WriteNeeded>
+template <class Streamer, bool WriteNeeded> 
 class TemplatedBidiStreamingHandler : public ::grpc::internal::MethodHandler {
  public:
   TemplatedBidiStreamingHandler(
       std::function<::grpc::Status(::grpc::ServerContext*, Streamer*)> func)
       : func_(func), write_needed_(WriteNeeded) {}
-
+ 
   void RunHandler(const HandlerParameter& param) final {
     Streamer stream(param.call,
                     static_cast<::grpc::ServerContext*>(param.server_context));
@@ -302,7 +302,7 @@ class BidiStreamingHandler
             }) {}
 };
 
-template <class RequestType, class ResponseType>
+template <class RequestType, class ResponseType> 
 class StreamedUnaryHandler
     : public TemplatedBidiStreamingHandler<
           ServerUnaryStreamer<RequestType, ResponseType>, true> {
@@ -316,8 +316,8 @@ class StreamedUnaryHandler
             ServerUnaryStreamer<RequestType, ResponseType>, true>(
             std::move(func)) {}
 };
-
-template <class RequestType, class ResponseType>
+ 
+template <class RequestType, class ResponseType> 
 class SplitServerStreamingHandler
     : public TemplatedBidiStreamingHandler<
           ServerSplitStreamer<RequestType, ResponseType>, false> {
@@ -331,7 +331,7 @@ class SplitServerStreamingHandler
             ServerSplitStreamer<RequestType, ResponseType>, false>(
             std::move(func)) {}
 };
-
+ 
 /// General method handler class for errors that prevent real method use
 /// e.g., handle unknown method by returning UNIMPLEMENTED error.
 template <::grpc::StatusCode code>
@@ -350,7 +350,7 @@ class ErrorMethodHandler : public ::grpc::internal::MethodHandler {
     }
     ops->ServerSendStatus(&context->trailing_metadata_, status);
   }
-
+ 
   void RunHandler(const HandlerParameter& param) final {
     ::grpc::internal::CallOpSet<::grpc::internal::CallOpSendInitialMetadata,
                                 ::grpc::internal::CallOpServerSendStatus>
@@ -359,7 +359,7 @@ class ErrorMethodHandler : public ::grpc::internal::MethodHandler {
     param.call->PerformOps(&ops);
     param.call->cq()->Pluck(&ops);
   }
-
+ 
   void* Deserialize(grpc_call* /*call*/, grpc_byte_buffer* req,
                     ::grpc::Status* /*status*/, void** /*handler_data*/) final {
     // We have to destroy any request payload
@@ -369,13 +369,13 @@ class ErrorMethodHandler : public ::grpc::internal::MethodHandler {
     return nullptr;
   }
 };
-
+ 
 typedef ErrorMethodHandler<::grpc::StatusCode::UNIMPLEMENTED>
     UnknownMethodHandler;
 typedef ErrorMethodHandler<::grpc::StatusCode::RESOURCE_EXHAUSTED>
     ResourceExhaustedHandler;
 
-}  // namespace internal
-}  // namespace grpc
-
-#endif  // GRPCPP_IMPL_CODEGEN_METHOD_HANDLER_H
+}  // namespace internal 
+}  // namespace grpc 
+ 
+#endif  // GRPCPP_IMPL_CODEGEN_METHOD_HANDLER_H 

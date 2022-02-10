@@ -1,19 +1,19 @@
-gRPC C++ - Building from source
-===========================
-
+gRPC C++ - Building from source 
+=========================== 
+ 
 This document has detailed instructions on how to build gRPC C++ from source. Note that it only covers the build of gRPC itself and is mostly meant for gRPC C++ contributors and/or power users.
 Other should follow the user instructions. See the [How to use](https://github.com/grpc/grpc/tree/master/src/cpp#to-start-using-grpc-c) instructions for guidance on how to add gRPC as a dependency to a C++ application (there are several ways and system wide installation is often not the best choice).
 
-# Pre-requisites
-
-## Linux
-
-```sh
- $ [sudo] apt-get install build-essential autoconf libtool pkg-config
-```
-
+# Pre-requisites 
+ 
+## Linux 
+ 
+```sh 
+ $ [sudo] apt-get install build-essential autoconf libtool pkg-config 
+``` 
+ 
 If you plan to build using CMake
-```sh
+```sh 
  $ [sudo] apt-get install cmake
 ```
 
@@ -22,151 +22,151 @@ If you are a contributor and plan to build and run tests, install the following 
  $ # libgflags-dev is only required if building with make (deprecated)
  $ [sudo] apt-get install libgflags-dev
  $ # clang and LLVM C++ lib is only required for sanitizer builds
- $ [sudo] apt-get install clang-5.0 libc++-dev
-```
-
-## MacOS
-
-On a Mac, you will first need to
-install Xcode or
-[Command Line Tools for Xcode](https://developer.apple.com/download/more/)
-and then run the following command from a terminal:
-
-```sh
- $ [sudo] xcode-select --install
-```
-
-To build gRPC from source, you may need to install the following
-packages from [Homebrew](https://brew.sh):
-
-```sh
- $ brew install autoconf automake libtool shtool
-```
-
+ $ [sudo] apt-get install clang-5.0 libc++-dev 
+``` 
+ 
+## MacOS 
+ 
+On a Mac, you will first need to 
+install Xcode or 
+[Command Line Tools for Xcode](https://developer.apple.com/download/more/) 
+and then run the following command from a terminal: 
+ 
+```sh 
+ $ [sudo] xcode-select --install 
+``` 
+ 
+To build gRPC from source, you may need to install the following 
+packages from [Homebrew](https://brew.sh): 
+ 
+```sh 
+ $ brew install autoconf automake libtool shtool 
+``` 
+ 
 If you plan to build using CMake, follow the instructions from https://cmake.org/download/
 
 If you are a contributor and plan to build and run tests, install the following as well:
-```sh
+```sh 
  $ # gflags is only required if building with make (deprecated) 
- $ brew install gflags
-```
-
+ $ brew install gflags 
+``` 
+ 
 *Tip*: when building,
-you *may* want to explicitly set the `LIBTOOL` and `LIBTOOLIZE`
-environment variables when running `make` to ensure the version
-installed by `brew` is being used:
-
-```sh
- $ LIBTOOL=glibtool LIBTOOLIZE=glibtoolize make
-```
-
-## Windows
-
-To prepare for cmake + Microsoft Visual C++ compiler build
-- Install Visual Studio 2015 or 2017 (Visual C++ compiler will be used).
-- Install [Git](https://git-scm.com/).
-- Install [CMake](https://cmake.org/download/).
+you *may* want to explicitly set the `LIBTOOL` and `LIBTOOLIZE` 
+environment variables when running `make` to ensure the version 
+installed by `brew` is being used: 
+ 
+```sh 
+ $ LIBTOOL=glibtool LIBTOOLIZE=glibtoolize make 
+``` 
+ 
+## Windows 
+ 
+To prepare for cmake + Microsoft Visual C++ compiler build 
+- Install Visual Studio 2015 or 2017 (Visual C++ compiler will be used). 
+- Install [Git](https://git-scm.com/). 
+- Install [CMake](https://cmake.org/download/). 
 - Install [nasm](https://www.nasm.us/) and add it to `PATH` (`choco install nasm`) - *required by boringssl*
-- (Optional) Install [Ninja](https://ninja-build.org/) (`choco install ninja`)
-
-# Clone the repository (including submodules)
-
+- (Optional) Install [Ninja](https://ninja-build.org/) (`choco install ninja`) 
+ 
+# Clone the repository (including submodules) 
+ 
 Before building, you need to clone the gRPC github repository and download submodules containing source code
 for gRPC's dependencies (that's done by the `submodule` command or `--recursive` flag). Use following commands
 to clone the gRPC repository at the [latest stable release tag](https://github.com/grpc/grpc/releases)
-
-## Unix
-
-```sh
+ 
+## Unix 
+ 
+```sh 
  $ git clone -b RELEASE_TAG_HERE https://github.com/grpc/grpc
- $ cd grpc
- $ git submodule update --init
- ```
-
-## Windows
-
-```
+ $ cd grpc 
+ $ git submodule update --init 
+ ``` 
+ 
+## Windows 
+ 
+``` 
 > git clone -b RELEASE_TAG_HERE https://github.com/grpc/grpc
-> cd grpc
+> cd grpc 
 > git submodule update --init
-```
-
+``` 
+ 
 NOTE: The `bazel` build tool uses a different model for dependencies. You only need to worry about downloading submodules if you're building
 with something else than `bazel` (e.g. `cmake`).
 
-# Build from source
-
-In the C++ world, there's no "standard" build system that would work for in all supported use cases and on all supported platforms.
+# Build from source 
+ 
+In the C++ world, there's no "standard" build system that would work for in all supported use cases and on all supported platforms. 
 Therefore, gRPC supports several major build systems, which should satisfy most users. Depending on your needs
 we recommend building using `bazel` or `cmake`.
-
+ 
 ## Building with bazel (recommended)
-
+ 
 Bazel is the primary build system for gRPC C++ and if you're comfortable with using bazel, we can certainly recommend it.
 Using bazel will give you the best developer experience as well as faster and cleaner builds.
-
+ 
 You'll need `bazel` version `1.0.0` or higher to build gRPC.
 See [Installing Bazel](https://docs.bazel.build/versions/master/install.html) for instructions how to install bazel on your system.
 We support building with `bazel` on Linux, MacOS and Windows.
 
-From the grpc repository root
-```
+From the grpc repository root 
+``` 
 # Build gRPC C++
 $ bazel build :all
-```
-
+``` 
+ 
 ```
 # Run all the C/C++ tests
 $ bazel test --config=dbg //test/...
 ```
-
+ 
 NOTE: If you are gRPC maintainer and you have access to our test cluster, you should use the our [gRPC's Remote Execution environment](tools/remote_build/README.md)
 to get significant improvement to the build and test speed (and a bunch of other very useful features).
-
+ 
 ## Building with CMake
 
 ### Linux/Unix, Using Make
 
 Run from grpc directory after cloning the repo with --recursive or updating submodules.
-```
+``` 
 $ mkdir -p cmake/build
 $ cd cmake/build
 $ cmake ../..
 $ make
-```
-
+``` 
+ 
 If you want to build shared libraries (`.so` files), run `cmake` with `-DBUILD_SHARED_LIBS=ON`.
 
 ### Windows, Using Visual Studio 2015 or 2017
 
-When using the "Visual Studio" generator,
+When using the "Visual Studio" generator, 
 cmake will generate a solution (`grpc.sln`) that contains a VS project for
-every target defined in `CMakeLists.txt` (+ few extra convenience projects
+every target defined in `CMakeLists.txt` (+ few extra convenience projects 
 added automatically by cmake). After opening the solution with Visual Studio
-you will be able to browse and build the code.
-```
-> @rem Run from grpc directory after cloning the repo with --recursive or updating submodules.
-> md .build
-> cd .build
-> cmake .. -G "Visual Studio 14 2015"
-> cmake --build . --config Release
-```
-
+you will be able to browse and build the code. 
+``` 
+> @rem Run from grpc directory after cloning the repo with --recursive or updating submodules. 
+> md .build 
+> cd .build 
+> cmake .. -G "Visual Studio 14 2015" 
+> cmake --build . --config Release 
+``` 
+ 
 If you want to build DLLs, run `cmake` with `-DBUILD_SHARED_LIBS=ON`.
 
 ### Windows, Using Ninja (faster build).
 
-Please note that when using Ninja, you will still need Visual C++ (part of Visual Studio)
-installed to be able to compile the C/C++ sources.
-```
-> @rem Run from grpc directory after cloning the repo with --recursive or updating submodules.
+Please note that when using Ninja, you will still need Visual C++ (part of Visual Studio) 
+installed to be able to compile the C/C++ sources. 
+``` 
+> @rem Run from grpc directory after cloning the repo with --recursive or updating submodules. 
 > cd cmake
 > md build
 > cd build
-> call "%VS140COMNTOOLS%..\..\VC\vcvarsall.bat" x64
+> call "%VS140COMNTOOLS%..\..\VC\vcvarsall.bat" x64 
 > cmake ..\.. -GNinja -DCMAKE_BUILD_TYPE=Release
-> cmake --build .
-```
+> cmake --build . 
+``` 
 
 If you want to build DLLs, run `cmake` with `-DBUILD_SHARED_LIBS=ON`.
 

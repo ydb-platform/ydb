@@ -35,7 +35,7 @@ SRCS(
     system/condvar_ut.cpp
     system/cpu_id_ut.cpp
     system/datetime_ut.cpp
-    system/daemon_ut.cpp
+    system/daemon_ut.cpp 
     system/direct_io_ut.cpp
     system/env_ut.cpp
     system/error_ut.cpp

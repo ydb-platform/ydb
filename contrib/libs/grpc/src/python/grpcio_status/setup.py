@@ -17,9 +17,9 @@ import os
 
 import setuptools
 
-_PACKAGE_PATH = os.path.realpath(os.path.dirname(__file__))
-_README_PATH = os.path.join(_PACKAGE_PATH, 'README.rst')
-
+_PACKAGE_PATH = os.path.realpath(os.path.dirname(__file__)) 
+_README_PATH = os.path.join(_PACKAGE_PATH, 'README.rst') 
+ 
 # Ensure we're in the proper directory whether or not we're being used by pip.
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -53,7 +53,7 @@ CLASSIFIERS = [
     'Programming Language :: Python :: 3.5',
     'Programming Language :: Python :: 3.6',
     'Programming Language :: Python :: 3.7',
-    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.8', 
     'Programming Language :: Python :: 3.9',
     'License :: OSI Approved :: Apache Software License',
 ]

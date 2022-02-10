@@ -19,15 +19,15 @@
 #ifndef GRPCPP_EXT_CHANNELZ_SERVICE_PLUGIN_H
 #define GRPCPP_EXT_CHANNELZ_SERVICE_PLUGIN_H
 
-#include <grpcpp/ext/channelz_service_plugin_impl.h>
+#include <grpcpp/ext/channelz_service_plugin_impl.h> 
 
 namespace grpc {
 namespace channelz {
 namespace experimental {
 
-static inline void InitChannelzService() {
-  ::grpc_impl::channelz::experimental::InitChannelzService();
-}
+static inline void InitChannelzService() { 
+  ::grpc_impl::channelz::experimental::InitChannelzService(); 
+} 
 
 }  // namespace experimental
 }  // namespace channelz

@@ -19,10 +19,10 @@
 #ifndef GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_HTTP_PROXY_H
 #define GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_HTTP_PROXY_H
 
-namespace grpc_core {
+namespace grpc_core { 
 
-void RegisterHttpProxyMapper();
-
-}  // namespace grpc_core
-
+void RegisterHttpProxyMapper(); 
+ 
+}  // namespace grpc_core 
+ 
 #endif /* GRPC_CORE_EXT_FILTERS_CLIENT_CHANNEL_HTTP_PROXY_H */

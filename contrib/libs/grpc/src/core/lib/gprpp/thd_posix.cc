@@ -32,7 +32,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
+#include <unistd.h> 
 
 #include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/fork.h"
@@ -46,34 +46,34 @@ struct thd_arg {
   void (*body)(void* arg); /* body of a thread */
   void* arg;               /* argument to a thread */
   const char* name;        /* name of thread. Can be nullptr. */
-  bool joinable;
-  bool tracked;
+  bool joinable; 
+  bool tracked; 
 };
 
-size_t RoundUpToPageSize(size_t size) {
-  // TODO(yunjiaw): Change this variable (page_size) to a function-level static
-  // when possible
-  size_t page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE));
-  return (size + page_size - 1) & ~(page_size - 1);
-}
-
-// Returns the minimum valid stack size that can be passed to
-// pthread_attr_setstacksize.
-size_t MinValidStackSize(size_t request_size) {
-  size_t min_stacksize = sysconf(_SC_THREAD_STACK_MIN);
-  if (request_size < min_stacksize) {
-    request_size = min_stacksize;
-  }
-
-  // On some systems, pthread_attr_setstacksize() can fail if stacksize is
-  // not a multiple of the system page size.
-  return RoundUpToPageSize(request_size);
-}
-
-class ThreadInternalsPosix : public internal::ThreadInternalsInterface {
+size_t RoundUpToPageSize(size_t size) { 
+  // TODO(yunjiaw): Change this variable (page_size) to a function-level static 
+  // when possible 
+  size_t page_size = static_cast<size_t>(sysconf(_SC_PAGESIZE)); 
+  return (size + page_size - 1) & ~(page_size - 1); 
+} 
+ 
+// Returns the minimum valid stack size that can be passed to 
+// pthread_attr_setstacksize. 
+size_t MinValidStackSize(size_t request_size) { 
+  size_t min_stacksize = sysconf(_SC_THREAD_STACK_MIN); 
+  if (request_size < min_stacksize) { 
+    request_size = min_stacksize; 
+  } 
+ 
+  // On some systems, pthread_attr_setstacksize() can fail if stacksize is 
+  // not a multiple of the system page size. 
+  return RoundUpToPageSize(request_size); 
+} 
+ 
+class ThreadInternalsPosix : public internal::ThreadInternalsInterface { 
  public:
   ThreadInternalsPosix(const char* thd_name, void (*thd_body)(void* arg),
-                       void* arg, bool* success, const Thread::Options& options)
+                       void* arg, bool* success, const Thread::Options& options) 
       : started_(false) {
     gpr_mu_init(&mu_);
     gpr_cv_init(&ready_);
@@ -86,26 +86,26 @@ class ThreadInternalsPosix : public internal::ThreadInternalsInterface {
     info->body = thd_body;
     info->arg = arg;
     info->name = thd_name;
-    info->joinable = options.joinable();
-    info->tracked = options.tracked();
-    if (options.tracked()) {
-      Fork::IncThreadCount();
-    }
+    info->joinable = options.joinable(); 
+    info->tracked = options.tracked(); 
+    if (options.tracked()) { 
+      Fork::IncThreadCount(); 
+    } 
 
     GPR_ASSERT(pthread_attr_init(&attr) == 0);
-    if (options.joinable()) {
-      GPR_ASSERT(pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE) ==
-                 0);
-    } else {
-      GPR_ASSERT(pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED) ==
-                 0);
-    }
+    if (options.joinable()) { 
+      GPR_ASSERT(pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE) == 
+                 0); 
+    } else { 
+      GPR_ASSERT(pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED) == 
+                 0); 
+    } 
 
-    if (options.stack_size() != 0) {
-      size_t stack_size = MinValidStackSize(options.stack_size());
-      GPR_ASSERT(pthread_attr_setstacksize(&attr, stack_size) == 0);
-    }
-
+    if (options.stack_size() != 0) { 
+      size_t stack_size = MinValidStackSize(options.stack_size()); 
+      GPR_ASSERT(pthread_attr_setstacksize(&attr, stack_size) == 0); 
+    } 
+ 
     *success =
         (pthread_create(&pthread_id_, &attr,
                         [](void* v) -> void* {
@@ -122,14 +122,14 @@ class ThreadInternalsPosix : public internal::ThreadInternalsInterface {
                           }
                           gpr_mu_unlock(&arg.thread->mu_);
 
-                          if (!arg.joinable) {
-                            delete arg.thread;
-                          }
-
+                          if (!arg.joinable) { 
+                            delete arg.thread; 
+                          } 
+ 
                           (*arg.body)(arg.arg);
-                          if (arg.tracked) {
-                            Fork::DecThreadCount();
-                          }
+                          if (arg.tracked) { 
+                            Fork::DecThreadCount(); 
+                          } 
                           return nullptr;
                         },
                         info) == 0);
@@ -139,11 +139,11 @@ class ThreadInternalsPosix : public internal::ThreadInternalsInterface {
     if (!(*success)) {
       /* don't use gpr_free, as this was allocated using malloc (see above) */
       free(info);
-      if (options.tracked()) {
-        Fork::DecThreadCount();
-      }
+      if (options.tracked()) { 
+        Fork::DecThreadCount(); 
+      } 
     }
-  }
+  } 
 
   ~ThreadInternalsPosix() override {
     gpr_mu_destroy(&mu_);
@@ -169,15 +169,15 @@ class ThreadInternalsPosix : public internal::ThreadInternalsInterface {
 }  // namespace
 
 Thread::Thread(const char* thd_name, void (*thd_body)(void* arg), void* arg,
-               bool* success, const Options& options)
-    : options_(options) {
+               bool* success, const Options& options) 
+    : options_(options) { 
   bool outcome = false;
-  impl_ = new ThreadInternalsPosix(thd_name, thd_body, arg, &outcome, options);
+  impl_ = new ThreadInternalsPosix(thd_name, thd_body, arg, &outcome, options); 
   if (outcome) {
     state_ = ALIVE;
   } else {
     state_ = FAILED;
-    delete impl_;
+    delete impl_; 
     impl_ = nullptr;
   }
 

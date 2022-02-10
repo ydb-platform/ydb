@@ -3283,16 +3283,16 @@ class ResProvider(EmptyProvider):
         path = os.path.normpath(path)
         return self._resource_fs.get(path)
 
-    def _listdir(self, path):
+    def _listdir(self, path): 
         result = self.__lookup(path)
         if result is None:
             return []
         return list(result)
 
-    def _isdir(self, path):
+    def _isdir(self, path): 
         return bool(self.__lookup(path))
-
-
+ 
+ 
 class ResDistribution(DistInfoDistribution):
     def __init__(self, prefix):
         super(ResDistribution, self).__init__(

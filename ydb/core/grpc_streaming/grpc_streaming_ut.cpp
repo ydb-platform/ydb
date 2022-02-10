@@ -307,7 +307,7 @@ public:
         ReadFinished.Signal();
 
         // It should be possible to reply with an OK status here
-        Context->Finish(grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, "Everything is A-OK"));
+        Context->Finish(grpc::Status(grpc::StatusCode::FAILED_PRECONDITION, "Everything is A-OK")); 
     }
 
     void Handle(IContext::TEvNotifiedWhenDone::TPtr& ev, const TActorContext& ctx) {
@@ -455,7 +455,7 @@ Y_UNIT_TEST_SUITE(TGRpcStreamingTest) {
 
         // Read failed on the server, but it's OK reply should reach us
         auto status = stream->Finish();
-        UNIT_ASSERT(status.error_code() == grpc::StatusCode::FAILED_PRECONDITION);
+        UNIT_ASSERT(status.error_code() == grpc::StatusCode::FAILED_PRECONDITION); 
         UNIT_ASSERT_VALUES_EQUAL(status.error_message(), "Everything is A-OK");
     }
 

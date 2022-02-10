@@ -27,12 +27,12 @@
 
 #include <grpc/support/atm.h>
 
-#include "src/core/lib/gprpp/mpscq.h"
+#include "src/core/lib/gprpp/mpscq.h" 
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/iomgr/closure.h"
 #include "src/core/lib/iomgr/dynamic_annotations.h"
-#include "src/core/lib/iomgr/exec_ctx.h"
+#include "src/core/lib/iomgr/exec_ctx.h" 
 
 // A simple, lock-free mechanism for serializing activity related to a
 // single call.  This is similar to a combiner but is more lightweight.
@@ -43,78 +43,78 @@
 // when it is done with the action that was kicked off by the original
 // callback.
 
-namespace grpc_core {
+namespace grpc_core { 
 
-extern DebugOnlyTraceFlag grpc_call_combiner_trace;
-
-class CallCombiner {
- public:
-  CallCombiner();
-  ~CallCombiner();
-
-#ifndef NDEBUG
-#define GRPC_CALL_COMBINER_START(call_combiner, closure, error, reason) \
-  (call_combiner)->Start((closure), (error), __FILE__, __LINE__, (reason))
-#define GRPC_CALL_COMBINER_STOP(call_combiner, reason) \
-  (call_combiner)->Stop(__FILE__, __LINE__, (reason))
-  /// Starts processing \a closure.
-  void Start(grpc_closure* closure, grpc_error* error, const char* file,
-             int line, const char* reason);
-  /// Yields the call combiner to the next closure in the queue, if any.
-  void Stop(const char* file, int line, const char* reason);
-#else
-#define GRPC_CALL_COMBINER_START(call_combiner, closure, error, reason) \
-  (call_combiner)->Start((closure), (error), (reason))
-#define GRPC_CALL_COMBINER_STOP(call_combiner, reason) \
-  (call_combiner)->Stop((reason))
-  /// Starts processing \a closure.
-  void Start(grpc_closure* closure, grpc_error* error, const char* reason);
-  /// Yields the call combiner to the next closure in the queue, if any.
-  void Stop(const char* reason);
-#endif
-
-  /// Registers \a closure to be invoked when Cancel() is called.
-  ///
-  /// Once a closure is registered, it will always be scheduled exactly
-  /// once; this allows the closure to hold references that will be freed
-  /// regardless of whether or not the call was cancelled.  If a cancellation
-  /// does occur, the closure will be scheduled with the cancellation error;
-  /// otherwise, it will be scheduled with GRPC_ERROR_NONE.
-  ///
-  /// The closure will be scheduled in the following cases:
-  /// - If Cancel() was called prior to registering the closure, it will be
-  ///   scheduled immediately with the cancelation error.
-  /// - If Cancel() is called after registering the closure, the closure will
-  ///   be scheduled with the cancellation error.
-  /// - If SetNotifyOnCancel() is called again to register a new cancellation
-  ///   closure, the previous cancellation closure will be scheduled with
-  ///   GRPC_ERROR_NONE.
-  ///
-  /// If \a closure is NULL, then no closure will be invoked on
-  /// cancellation; this effectively unregisters the previously set closure.
-  /// However, most filters will not need to explicitly unregister their
-  /// callbacks, as this is done automatically when the call is destroyed.
-  /// Filters that schedule the cancellation closure on ExecCtx do not need
-  /// to take a ref on the call stack to guarantee closure liveness. This is
-  /// done by explicitly flushing ExecCtx after the unregistration during
-  /// call destruction.
-  void SetNotifyOnCancel(grpc_closure* closure);
-
-  /// Indicates that the call has been cancelled.
-  void Cancel(grpc_error* error);
-
- private:
-  void ScheduleClosure(grpc_closure* closure, grpc_error* error);
-#ifdef GRPC_TSAN_ENABLED
-  static void TsanClosure(void* arg, grpc_error* error);
-#endif
-
-  gpr_atm size_ = 0;  // size_t, num closures in queue or currently executing
-  MultiProducerSingleConsumerQueue queue_;
+extern DebugOnlyTraceFlag grpc_call_combiner_trace; 
+ 
+class CallCombiner { 
+ public: 
+  CallCombiner(); 
+  ~CallCombiner(); 
+ 
+#ifndef NDEBUG 
+#define GRPC_CALL_COMBINER_START(call_combiner, closure, error, reason) \ 
+  (call_combiner)->Start((closure), (error), __FILE__, __LINE__, (reason)) 
+#define GRPC_CALL_COMBINER_STOP(call_combiner, reason) \ 
+  (call_combiner)->Stop(__FILE__, __LINE__, (reason)) 
+  /// Starts processing \a closure. 
+  void Start(grpc_closure* closure, grpc_error* error, const char* file, 
+             int line, const char* reason); 
+  /// Yields the call combiner to the next closure in the queue, if any. 
+  void Stop(const char* file, int line, const char* reason); 
+#else 
+#define GRPC_CALL_COMBINER_START(call_combiner, closure, error, reason) \ 
+  (call_combiner)->Start((closure), (error), (reason)) 
+#define GRPC_CALL_COMBINER_STOP(call_combiner, reason) \ 
+  (call_combiner)->Stop((reason)) 
+  /// Starts processing \a closure. 
+  void Start(grpc_closure* closure, grpc_error* error, const char* reason); 
+  /// Yields the call combiner to the next closure in the queue, if any. 
+  void Stop(const char* reason); 
+#endif 
+ 
+  /// Registers \a closure to be invoked when Cancel() is called. 
+  /// 
+  /// Once a closure is registered, it will always be scheduled exactly 
+  /// once; this allows the closure to hold references that will be freed 
+  /// regardless of whether or not the call was cancelled.  If a cancellation 
+  /// does occur, the closure will be scheduled with the cancellation error; 
+  /// otherwise, it will be scheduled with GRPC_ERROR_NONE. 
+  /// 
+  /// The closure will be scheduled in the following cases: 
+  /// - If Cancel() was called prior to registering the closure, it will be 
+  ///   scheduled immediately with the cancelation error. 
+  /// - If Cancel() is called after registering the closure, the closure will 
+  ///   be scheduled with the cancellation error. 
+  /// - If SetNotifyOnCancel() is called again to register a new cancellation 
+  ///   closure, the previous cancellation closure will be scheduled with 
+  ///   GRPC_ERROR_NONE. 
+  /// 
+  /// If \a closure is NULL, then no closure will be invoked on 
+  /// cancellation; this effectively unregisters the previously set closure. 
+  /// However, most filters will not need to explicitly unregister their 
+  /// callbacks, as this is done automatically when the call is destroyed. 
+  /// Filters that schedule the cancellation closure on ExecCtx do not need 
+  /// to take a ref on the call stack to guarantee closure liveness. This is 
+  /// done by explicitly flushing ExecCtx after the unregistration during 
+  /// call destruction. 
+  void SetNotifyOnCancel(grpc_closure* closure); 
+ 
+  /// Indicates that the call has been cancelled. 
+  void Cancel(grpc_error* error); 
+ 
+ private: 
+  void ScheduleClosure(grpc_closure* closure, grpc_error* error); 
+#ifdef GRPC_TSAN_ENABLED 
+  static void TsanClosure(void* arg, grpc_error* error); 
+#endif 
+ 
+  gpr_atm size_ = 0;  // size_t, num closures in queue or currently executing 
+  MultiProducerSingleConsumerQueue queue_; 
   // Either 0 (if not cancelled and no cancellation closure set),
   // a grpc_closure* (if the lowest bit is 0),
   // or a grpc_error* (if the lowest bit is 1).
-  gpr_atm cancel_state_ = 0;
+  gpr_atm cancel_state_ = 0; 
 #ifdef GRPC_TSAN_ENABLED
   // A fake ref-counted lock that is kept alive after the destruction of
   // grpc_call_combiner, when we are running the original closure.
@@ -123,7 +123,7 @@ class CallCombiner {
   // callback is called. However, original_closure is free to trigger
   // anything on the call combiner (including destruction of grpc_call).
   // Thus, we need a ref-counted structure that can outlive the call combiner.
-  struct TsanLock : public RefCounted<TsanLock, NonPolymorphicRefCount> {
+  struct TsanLock : public RefCounted<TsanLock, NonPolymorphicRefCount> { 
     TsanLock() { TSAN_ANNOTATE_RWLOCK_CREATE(&taken); }
     ~TsanLock() { TSAN_ANNOTATE_RWLOCK_DESTROY(&taken); }
     // To avoid double-locking by the same thread, we should acquire/release
@@ -131,9 +131,9 @@ class CallCombiner {
     // true.
     std::atomic<bool> taken{false};
   };
-  RefCountedPtr<TsanLock> tsan_lock_ = MakeRefCounted<TsanLock>();
-  grpc_closure tsan_closure_;
-  grpc_closure* original_closure_;
+  RefCountedPtr<TsanLock> tsan_lock_ = MakeRefCounted<TsanLock>(); 
+  grpc_closure tsan_closure_; 
+  grpc_closure* original_closure_; 
 #endif
 };
 
@@ -158,10 +158,10 @@ class CallCombinerClosureList {
   //
   // All but one of the closures in the list will be scheduled via
   // GRPC_CALL_COMBINER_START(), and the remaining closure will be
-  // scheduled via ExecCtx::Run(), which will eventually result
-  // in yielding the call combiner.  If the list is empty, then the call
+  // scheduled via ExecCtx::Run(), which will eventually result 
+  // in yielding the call combiner.  If the list is empty, then the call 
   // combiner will be yielded immediately.
-  void RunClosures(CallCombiner* call_combiner) {
+  void RunClosures(CallCombiner* call_combiner) { 
     if (closures_.empty()) {
       GRPC_CALL_COMBINER_STOP(call_combiner, "no closures to schedule");
       return;
@@ -171,7 +171,7 @@ class CallCombinerClosureList {
       GRPC_CALL_COMBINER_START(call_combiner, closure.closure, closure.error,
                                closure.reason);
     }
-    if (GRPC_TRACE_FLAG_ENABLED(grpc_call_combiner_trace)) {
+    if (GRPC_TRACE_FLAG_ENABLED(grpc_call_combiner_trace)) { 
       gpr_log(GPR_INFO,
               "CallCombinerClosureList executing closure while already "
               "holding call_combiner %p: closure=%p error=%s reason=%s",
@@ -179,13 +179,13 @@ class CallCombinerClosureList {
               grpc_error_string(closures_[0].error), closures_[0].reason);
     }
     // This will release the call combiner.
-    ExecCtx::Run(DEBUG_LOCATION, closures_[0].closure, closures_[0].error);
+    ExecCtx::Run(DEBUG_LOCATION, closures_[0].closure, closures_[0].error); 
     closures_.clear();
   }
 
   // Runs all closures in the call combiner, but does NOT yield the call
   // combiner.  All closures will be scheduled via GRPC_CALL_COMBINER_START().
-  void RunClosuresWithoutYielding(CallCombiner* call_combiner) {
+  void RunClosuresWithoutYielding(CallCombiner* call_combiner) { 
     for (size_t i = 0; i < closures_.size(); ++i) {
       auto& closure = closures_[i];
       GRPC_CALL_COMBINER_START(call_combiner, closure.closure, closure.error,

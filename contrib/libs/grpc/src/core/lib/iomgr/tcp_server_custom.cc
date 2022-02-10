@@ -133,8 +133,8 @@ static void tcp_server_shutdown_starting_add(grpc_tcp_server* s,
 static void finish_shutdown(grpc_tcp_server* s) {
   GPR_ASSERT(s->shutdown);
   if (s->shutdown_complete != nullptr) {
-    grpc_core::ExecCtx::Run(DEBUG_LOCATION, s->shutdown_complete,
-                            GRPC_ERROR_NONE);
+    grpc_core::ExecCtx::Run(DEBUG_LOCATION, s->shutdown_complete, 
+                            GRPC_ERROR_NONE); 
   }
 
   while (s->head) {
@@ -205,7 +205,7 @@ static void tcp_server_unref(grpc_tcp_server* s) {
   if (gpr_unref(&s->refs)) {
     /* Complete shutdown_starting work before destroying. */
     grpc_core::ExecCtx exec_ctx;
-    grpc_core::ExecCtx::RunList(DEBUG_LOCATION, &s->shutdown_starting);
+    grpc_core::ExecCtx::RunList(DEBUG_LOCATION, &s->shutdown_starting); 
     grpc_core::ExecCtx::Get()->Flush();
     tcp_server_destroy(s);
   }
@@ -229,7 +229,7 @@ static void finish_accept(grpc_tcp_listener* sp, grpc_custom_socket* socket) {
     GRPC_LOG_IF_ERROR("getpeername error", err);
     GRPC_ERROR_UNREF(err);
   }
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) { 
     gpr_log(GPR_INFO, "SERVER_CONNECT: %p accepted connection: %s", sp->server,
             peer_name_string.c_str());
   }
@@ -238,7 +238,7 @@ static void finish_accept(grpc_tcp_listener* sp, grpc_custom_socket* socket) {
   acceptor->from_server = sp->server;
   acceptor->port_index = sp->port_index;
   acceptor->fd_index = 0;
-  acceptor->external_connection = false;
+  acceptor->external_connection = false; 
   sp->server->on_accept_cb(sp->server->on_accept_cb_arg, ep, nullptr, acceptor);
 }
 
@@ -249,7 +249,7 @@ static void custom_accept_callback(grpc_custom_socket* socket,
 static void custom_accept_callback(grpc_custom_socket* socket,
                                    grpc_custom_socket* client,
                                    grpc_error* error) {
-  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx;
+  grpc_core::ApplicationCallbackExecCtx callback_exec_ctx; 
   grpc_core::ExecCtx exec_ctx;
   grpc_tcp_listener* sp = socket->listener;
   if (error != GRPC_ERROR_NONE) {
@@ -384,7 +384,7 @@ static grpc_error* tcp_server_add_port(grpc_tcp_server* s,
     addr = &wildcard;
   }
 
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) { 
     gpr_log(GPR_INFO, "SERVER %p add_port %s error=%s", s,
             grpc_sockaddr_to_string(addr, false).c_str(),
             grpc_error_string(error));
@@ -396,7 +396,7 @@ static grpc_error* tcp_server_add_port(grpc_tcp_server* s,
   socket->endpoint = nullptr;
   socket->listener = nullptr;
   socket->connector = nullptr;
-  error = grpc_custom_socket_vtable->init(socket, family);
+  error = grpc_custom_socket_vtable->init(socket, family); 
 
   if (error == GRPC_ERROR_NONE) {
     error = add_socket_to_server(s, socket, addr, port_index, &sp);
@@ -422,7 +422,7 @@ static void tcp_server_start(grpc_tcp_server* server,
                              grpc_tcp_server_cb on_accept_cb, void* cb_arg) {
   grpc_tcp_listener* sp;
   GRPC_CUSTOM_IOMGR_ASSERT_SAME_THREAD();
-  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) {
+  if (GRPC_TRACE_FLAG_ENABLED(grpc_tcp_trace)) { 
     gpr_log(GPR_INFO, "SERVER_START %p", server);
   }
   GPR_ASSERT(on_accept_cb);
@@ -441,13 +441,13 @@ static void tcp_server_start(grpc_tcp_server* server,
   }
 }
 
-static unsigned tcp_server_port_fd_count(grpc_tcp_server* /*s*/,
-                                         unsigned /*port_index*/) {
+static unsigned tcp_server_port_fd_count(grpc_tcp_server* /*s*/, 
+                                         unsigned /*port_index*/) { 
   return 0;
 }
 
-static int tcp_server_port_fd(grpc_tcp_server* /*s*/, unsigned /*port_index*/,
-                              unsigned /*fd_index*/) {
+static int tcp_server_port_fd(grpc_tcp_server* /*s*/, unsigned /*port_index*/, 
+                              unsigned /*fd_index*/) { 
   return -1;
 }
 
@@ -460,17 +460,17 @@ static void tcp_server_shutdown_listeners(grpc_tcp_server* s) {
   }
 }
 
-static grpc_core::TcpServerFdHandler* tcp_server_create_fd_handler(
-    grpc_tcp_server* /*s*/) {
-  return nullptr;
-}
-
+static grpc_core::TcpServerFdHandler* tcp_server_create_fd_handler( 
+    grpc_tcp_server* /*s*/) { 
+  return nullptr; 
+} 
+ 
 grpc_tcp_server_vtable custom_tcp_server_vtable = {
-    tcp_server_create,        tcp_server_start,
-    tcp_server_add_port,      tcp_server_create_fd_handler,
-    tcp_server_port_fd_count, tcp_server_port_fd,
-    tcp_server_ref,           tcp_server_shutdown_starting_add,
-    tcp_server_unref,         tcp_server_shutdown_listeners};
+    tcp_server_create,        tcp_server_start, 
+    tcp_server_add_port,      tcp_server_create_fd_handler, 
+    tcp_server_port_fd_count, tcp_server_port_fd, 
+    tcp_server_ref,           tcp_server_shutdown_starting_add, 
+    tcp_server_unref,         tcp_server_shutdown_listeners}; 
 
 #ifdef GRPC_UV_TEST
 grpc_tcp_server_vtable* default_tcp_server_vtable = &custom_tcp_server_vtable;

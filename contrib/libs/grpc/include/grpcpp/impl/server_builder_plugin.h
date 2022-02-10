@@ -25,7 +25,7 @@
 
 #include <memory>
 
-#include <grpcpp/support/channel_arguments.h>
+#include <grpcpp/support/channel_arguments.h> 
 #include <grpcpp/support/config.h>
 
 namespace grpc {
@@ -59,7 +59,7 @@ class ServerBuilderPlugin {
 
   /// UpdateChannelArguments will be called in ServerBuilder::BuildAndStart(),
   /// before the Server instance is created.
-  virtual void UpdateChannelArguments(ChannelArguments* /*args*/) {}
+  virtual void UpdateChannelArguments(ChannelArguments* /*args*/) {} 
 
   virtual bool has_sync_methods() const { return false; }
   virtual bool has_async_methods() const { return false; }

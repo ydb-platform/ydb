@@ -21,7 +21,7 @@
 
 #include <memory>
 
-#include <grpcpp/channel.h>
+#include <grpcpp/channel.h> 
 #include <grpcpp/impl/codegen/client_interceptor.h>
 #include <grpcpp/support/config.h>
 
@@ -31,8 +31,8 @@ namespace grpc {
 
 std::shared_ptr<Channel> CreateChannelInternal(
     const TString& host, grpc_channel* c_channel,
-    std::vector<std::unique_ptr<
-        ::grpc::experimental::ClientInterceptorFactoryInterface>>
+    std::vector<std::unique_ptr< 
+        ::grpc::experimental::ClientInterceptorFactoryInterface>> 
         interceptor_creators);
 
 }  // namespace grpc

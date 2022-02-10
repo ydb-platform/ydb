@@ -11,7 +11,7 @@ OWNER(
 )
 
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
-
+ 
 CFLAGS(
     GLOBAL -DBOOST_PYTHON_STATIC_LIB
 )

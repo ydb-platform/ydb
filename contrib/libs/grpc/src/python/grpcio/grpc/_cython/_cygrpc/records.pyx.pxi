@@ -108,12 +108,12 @@ class OperationType:
   receive_status_on_client = GRPC_OP_RECV_STATUS_ON_CLIENT
   receive_close_on_server = GRPC_OP_RECV_CLOSE_ON_SERVER
 
-GRPC_COMPRESSION_CHANNEL_DEFAULT_ALGORITHM= (
-  _GRPC_COMPRESSION_CHANNEL_DEFAULT_ALGORITHM)
+GRPC_COMPRESSION_CHANNEL_DEFAULT_ALGORITHM= ( 
+  _GRPC_COMPRESSION_CHANNEL_DEFAULT_ALGORITHM) 
 
-GRPC_COMPRESSION_REQUEST_ALGORITHM_MD_KEY = (
-  _GRPC_COMPRESSION_REQUEST_ALGORITHM_MD_KEY)
-
+GRPC_COMPRESSION_REQUEST_ALGORITHM_MD_KEY = ( 
+  _GRPC_COMPRESSION_REQUEST_ALGORITHM_MD_KEY) 
+ 
 class CompressionAlgorithm:
   none = GRPC_COMPRESS_NONE
   deflate = GRPC_COMPRESS_DEFLATE
@@ -137,7 +137,7 @@ cdef class CallDetails:
   def __dealloc__(self):
     with nogil:
       grpc_call_details_destroy(&self.c_details)
-    grpc_shutdown_blocking()
+    grpc_shutdown_blocking() 
 
   @property
   def method(self):

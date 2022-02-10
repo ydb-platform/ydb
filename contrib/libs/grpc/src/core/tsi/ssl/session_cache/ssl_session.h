@@ -55,12 +55,12 @@ class SslCachedSession {
   SslCachedSession& operator=(const SslCachedSession&) = delete;
 
   /// Create single cached instance of \a session.
-  static std::unique_ptr<SslCachedSession> Create(SslSessionPtr session);
+  static std::unique_ptr<SslCachedSession> Create(SslSessionPtr session); 
 
   virtual ~SslCachedSession() = default;
 
   /// Returns a copy of previously cached session.
-  virtual SslSessionPtr CopySession() const = 0;
+  virtual SslSessionPtr CopySession() const = 0; 
 
  protected:
   SslCachedSession() = default;

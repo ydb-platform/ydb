@@ -6,7 +6,7 @@
 #endif
 
 #include "defaults.h"
-#include "file.h"
+#include "file.h" 
 #include <util/generic/ptr.h>
 #include <util/network/pair.h>
 #include <util/generic/noncopyable.h>
@@ -54,8 +54,8 @@ public:
     ssize_t Read(void* buffer, size_t byteCount) const noexcept;
     ssize_t Write(const void* buffer, size_t byteCount) const noexcept;
 
-    // Only CloseOnExec is supported
-    static void Pipe(TPipeHandle& reader, TPipeHandle& writer, EOpenMode mode = 0);
+    // Only CloseOnExec is supported 
+    static void Pipe(TPipeHandle& reader, TPipeHandle& writer, EOpenMode mode = 0); 
 
 private:
     PIPEHANDLE Fd_;
@@ -76,8 +76,8 @@ public:
     size_t Read(void* buf, size_t len) const;
     size_t Write(const void* buf, size_t len) const;
 
-    // Only CloseOnExec is supported
-    static void Pipe(TPipe& reader, TPipe& writer, EOpenMode mode = 0);
+    // Only CloseOnExec is supported 
+    static void Pipe(TPipe& reader, TPipe& writer, EOpenMode mode = 0); 
 
 private:
     class TImpl;

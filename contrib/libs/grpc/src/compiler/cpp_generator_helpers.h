@@ -52,7 +52,7 @@ inline TString ClassName(const grpc::protobuf::Descriptor* descriptor,
 }
 
 // Get leading or trailing comments in a string. Comment lines start with "// ".
-// Leading detached comments are put in front of leading comments.
+// Leading detached comments are put in front of leading comments. 
 template <typename DescriptorType>
 inline TString GetCppComments(const DescriptorType* desc, bool leading) {
   return grpc_generator::GetPrefixedComments(desc, leading, "//");

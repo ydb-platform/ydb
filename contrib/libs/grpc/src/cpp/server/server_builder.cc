@@ -27,9 +27,9 @@
 #include <utility>
 
 #include "src/core/lib/channel/channel_args.h"
-#include "src/core/lib/gpr/string.h"
+#include "src/core/lib/gpr/string.h" 
 #include "src/core/lib/gpr/useful.h"
-#include "src/cpp/server/external_connection_acceptor_impl.h"
+#include "src/cpp/server/external_connection_acceptor_impl.h" 
 #include "src/cpp/server/thread_pool_interface.h"
 
 namespace grpc {
@@ -47,10 +47,10 @@ ServerBuilder::ServerBuilder()
     : max_receive_message_size_(INT_MIN),
       max_send_message_size_(INT_MIN),
       sync_server_settings_(SyncServerSettings()),
-      resource_quota_(nullptr) {
+      resource_quota_(nullptr) { 
   gpr_once_init(&once_init_plugin_list, do_plugin_list_init);
-  for (const auto& value : *g_plugin_factory_list) {
-    plugins_.emplace_back(value());
+  for (const auto& value : *g_plugin_factory_list) { 
+    plugins_.emplace_back(value()); 
   }
 
   // all compression algorithms enabled by default.
@@ -91,9 +91,9 @@ ServerBuilder& ServerBuilder::RegisterService(const TString& addr,
 
 ServerBuilder& ServerBuilder::RegisterAsyncGenericService(
     AsyncGenericService* service) {
-  if (generic_service_ || callback_generic_service_) {
+  if (generic_service_ || callback_generic_service_) { 
     gpr_log(GPR_ERROR,
-            "Adding multiple generic services is unsupported for now. "
+            "Adding multiple generic services is unsupported for now. " 
             "Dropping the service %p",
             (void*)service);
   } else {
@@ -116,33 +116,33 @@ ServerBuilder& ServerBuilder::RegisterCallbackGenericService(
   return *this;
 }
 #else
-ServerBuilder& ServerBuilder::experimental_type::RegisterCallbackGenericService(
+ServerBuilder& ServerBuilder::experimental_type::RegisterCallbackGenericService( 
     experimental::CallbackGenericService* service) {
-  if (builder_->generic_service_ || builder_->callback_generic_service_) {
-    gpr_log(GPR_ERROR,
-            "Adding multiple generic services is unsupported for now. "
-            "Dropping the service %p",
-            (void*)service);
-  } else {
-    builder_->callback_generic_service_ = service;
-  }
-  return *builder_;
-}
+  if (builder_->generic_service_ || builder_->callback_generic_service_) { 
+    gpr_log(GPR_ERROR, 
+            "Adding multiple generic services is unsupported for now. " 
+            "Dropping the service %p", 
+            (void*)service); 
+  } else { 
+    builder_->callback_generic_service_ = service; 
+  } 
+  return *builder_; 
+} 
 #endif
-
-std::unique_ptr<grpc::experimental::ExternalConnectionAcceptor>
-ServerBuilder::experimental_type::AddExternalConnectionAcceptor(
-    experimental_type::ExternalConnectionType type,
-    std::shared_ptr<ServerCredentials> creds) {
+ 
+std::unique_ptr<grpc::experimental::ExternalConnectionAcceptor> 
+ServerBuilder::experimental_type::AddExternalConnectionAcceptor( 
+    experimental_type::ExternalConnectionType type, 
+    std::shared_ptr<ServerCredentials> creds) { 
   TString name_prefix("external:");
-  char count_str[GPR_LTOA_MIN_BUFSIZE];
-  gpr_ltoa(static_cast<long>(builder_->acceptors_.size()), count_str);
-  builder_->acceptors_.emplace_back(
-      std::make_shared<grpc::internal::ExternalConnectionAcceptorImpl>(
-          name_prefix.append(count_str), type, creds));
-  return builder_->acceptors_.back()->GetAcceptor();
-}
-
+  char count_str[GPR_LTOA_MIN_BUFSIZE]; 
+  gpr_ltoa(static_cast<long>(builder_->acceptors_.size()), count_str); 
+  builder_->acceptors_.emplace_back( 
+      std::make_shared<grpc::internal::ExternalConnectionAcceptorImpl>( 
+          name_prefix.append(count_str), type, creds)); 
+  return builder_->acceptors_.back()->GetAcceptor(); 
+} 
+ 
 ServerBuilder& ServerBuilder::SetOption(
     std::unique_ptr<ServerBuilderOption> option) {
   options_.push_back(std::move(option));
@@ -217,8 +217,8 @@ ServerBuilder& ServerBuilder::AddListeningPort(
   return *this;
 }
 
-std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
-  grpc::ChannelArguments args;
+std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() { 
+  grpc::ChannelArguments args; 
   if (max_receive_message_size_ >= -1) {
     args.SetInt(GRPC_ARG_MAX_RECEIVE_MESSAGE_LENGTH, max_receive_message_size_);
   }
@@ -252,16 +252,16 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
 
   // == Determine if the server has any syncrhonous methods ==
   bool has_sync_methods = false;
-  for (const auto& value : services_) {
-    if (value->service->has_synchronous_methods()) {
+  for (const auto& value : services_) { 
+    if (value->service->has_synchronous_methods()) { 
       has_sync_methods = true;
       break;
     }
   }
 
   if (!has_sync_methods) {
-    for (const auto& value : plugins_) {
-      if (value->has_sync_methods()) {
+    for (const auto& value : plugins_) { 
+      if (value->has_sync_methods()) { 
         has_sync_methods = true;
         break;
       }
@@ -280,26 +280,26 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
           std::make_shared<
               std::vector<std::unique_ptr<grpc::ServerCompletionQueue>>>());
 
-  bool has_frequently_polled_cqs = false;
-  for (const auto& cq : cqs_) {
-    if (cq->IsFrequentlyPolled()) {
-      has_frequently_polled_cqs = true;
-      break;
+  bool has_frequently_polled_cqs = false; 
+  for (const auto& cq : cqs_) { 
+    if (cq->IsFrequentlyPolled()) { 
+      has_frequently_polled_cqs = true; 
+      break; 
     }
   }
 
-  // == Determine if the server has any callback methods ==
-  bool has_callback_methods = false;
-  for (const auto& service : services_) {
-    if (service->service->has_callback_methods()) {
-      has_callback_methods = true;
-      has_frequently_polled_cqs = true;
-      break;
-    }
-  }
+  // == Determine if the server has any callback methods == 
+  bool has_callback_methods = false; 
+  for (const auto& service : services_) { 
+    if (service->service->has_callback_methods()) { 
+      has_callback_methods = true; 
+      has_frequently_polled_cqs = true; 
+      break; 
+    } 
+  } 
 
-  const bool is_hybrid_server = has_sync_methods && has_frequently_polled_cqs;
-
+  const bool is_hybrid_server = has_sync_methods && has_frequently_polled_cqs; 
+ 
   if (has_sync_methods) {
     grpc_cq_polling_type polling_type =
         is_hybrid_server ? GRPC_CQ_NON_POLLING : GRPC_CQ_DEFAULT_POLLING;
@@ -328,7 +328,7 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
     gpr_log(GPR_INFO, "Callback server.");
   }
 
-  std::unique_ptr<grpc::Server> server(new grpc::Server(
+  std::unique_ptr<grpc::Server> server(new grpc::Server( 
       &args, sync_server_cqs, sync_server_settings_.min_pollers,
       sync_server_settings_.max_pollers, sync_server_settings_.cq_timeout_msec,
       std::move(acceptors_), resource_quota_,
@@ -343,10 +343,10 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
 
   for (const auto& cq : *sync_server_cqs) {
     grpc_server_register_completion_queue(server->server_, cq->cq(), nullptr);
-    has_frequently_polled_cqs = true;
+    has_frequently_polled_cqs = true; 
   }
 
-  if (has_callback_methods || callback_generic_service_ != nullptr) {
+  if (has_callback_methods || callback_generic_service_ != nullptr) { 
     auto* cq = server->CallbackCQ();
     grpc_server_register_completion_queue(server->server_, cq->cq(), nullptr);
   }
@@ -363,29 +363,29 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
     cq->RegisterServer(server.get());
   }
 
-  if (!has_frequently_polled_cqs) {
+  if (!has_frequently_polled_cqs) { 
     gpr_log(GPR_ERROR,
             "At least one of the completion queues must be frequently polled");
     return nullptr;
   }
 
-  for (const auto& value : services_) {
-    if (!server->RegisterService(value->host.get(), value->service)) {
+  for (const auto& value : services_) { 
+    if (!server->RegisterService(value->host.get(), value->service)) { 
       return nullptr;
     }
   }
 
-  for (const auto& value : plugins_) {
-    value->InitServer(initializer);
+  for (const auto& value : plugins_) { 
+    value->InitServer(initializer); 
   }
 
   if (generic_service_) {
     server->RegisterAsyncGenericService(generic_service_);
-  } else if (callback_generic_service_) {
-    server->RegisterCallbackGenericService(callback_generic_service_);
+  } else if (callback_generic_service_) { 
+    server->RegisterCallbackGenericService(callback_generic_service_); 
   } else {
-    for (const auto& value : services_) {
-      if (value->service->has_generic_methods()) {
+    for (const auto& value : services_) { 
+      if (value->service->has_generic_methods()) { 
         gpr_log(GPR_ERROR,
                 "Some methods were marked generic but there is no "
                 "generic service registered.");
@@ -394,22 +394,22 @@ std::unique_ptr<grpc::Server> ServerBuilder::BuildAndStart() {
     }
   }
 
-  for (auto& port : ports_) {
-    int r = server->AddListeningPort(port.addr, port.creds.get());
+  for (auto& port : ports_) { 
+    int r = server->AddListeningPort(port.addr, port.creds.get()); 
     if (!r) {
       server->Shutdown();
       return nullptr;
     }
-    if (port.selected_port != nullptr) {
-      *port.selected_port = r;
+    if (port.selected_port != nullptr) { 
+      *port.selected_port = r; 
     }
   }
 
   auto cqs_data = cqs_.empty() ? nullptr : &cqs_[0];
   server->Start(cqs_data, cqs_.size());
 
-  for (const auto& value : plugins_) {
-    value->Finish(initializer);
+  for (const auto& value : plugins_) { 
+    value->Finish(initializer); 
   }
 
   return server;

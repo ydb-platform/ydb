@@ -25,7 +25,7 @@
 #include <grpc/support/string_util.h>
 
 #include <grpcpp/impl/codegen/interceptor_common.h>
-#include <grpcpp/impl/codegen/sync.h>
+#include <grpcpp/impl/codegen/sync.h> 
 #include <grpcpp/impl/grpc_library.h>
 #include <grpcpp/security/credentials.h>
 #include <grpcpp/server_context.h>
@@ -33,14 +33,14 @@
 
 namespace grpc {
 
-class Channel;
-
+class Channel; 
+ 
 class DefaultGlobalClientCallbacks final
     : public ClientContext::GlobalCallbacks {
  public:
   ~DefaultGlobalClientCallbacks() override {}
-  void DefaultConstructor(ClientContext* /*context*/) override {}
-  void Destructor(ClientContext* /*context*/) override {}
+  void DefaultConstructor(ClientContext* /*context*/) override {} 
+  void Destructor(ClientContext* /*context*/) override {} 
 };
 
 static internal::GrpcLibraryInitializer g_gli_initializer;
@@ -72,23 +72,23 @@ ClientContext::~ClientContext() {
   g_client_callbacks->Destructor(this);
 }
 
-void ClientContext::set_credentials(
+void ClientContext::set_credentials( 
     const std::shared_ptr<CallCredentials>& creds) {
-  creds_ = creds;
-  // If call_ is set, we have already created the call, and set the call
-  // credentials. This should only be done before we have started the batch
-  // for sending initial metadata.
-  if (creds_ != nullptr && call_ != nullptr) {
-    if (!creds_->ApplyToCall(call_)) {
-      SendCancelToInterceptors();
-      grpc_call_cancel_with_status(call_, GRPC_STATUS_CANCELLED,
-                                   "Failed to set credentials to rpc.",
-                                   nullptr);
-    }
-  }
-}
-
-std::unique_ptr<ClientContext> ClientContext::FromInternalServerContext(
+  creds_ = creds; 
+  // If call_ is set, we have already created the call, and set the call 
+  // credentials. This should only be done before we have started the batch 
+  // for sending initial metadata. 
+  if (creds_ != nullptr && call_ != nullptr) { 
+    if (!creds_->ApplyToCall(call_)) { 
+      SendCancelToInterceptors(); 
+      grpc_call_cancel_with_status(call_, GRPC_STATUS_CANCELLED, 
+                                   "Failed to set credentials to rpc.", 
+                                   nullptr); 
+    } 
+  } 
+} 
+ 
+std::unique_ptr<ClientContext> ClientContext::FromInternalServerContext( 
     const grpc::ServerContextBase& context, PropagationOptions options) {
   std::unique_ptr<ClientContext> ctx(new ClientContext);
   ctx->propagate_from_call_ = context.call_.call;
@@ -96,17 +96,17 @@ std::unique_ptr<ClientContext> ClientContext::FromInternalServerContext(
   return ctx;
 }
 
-std::unique_ptr<ClientContext> ClientContext::FromServerContext(
+std::unique_ptr<ClientContext> ClientContext::FromServerContext( 
     const grpc::ServerContext& server_context, PropagationOptions options) {
-  return FromInternalServerContext(server_context, options);
-}
-
-std::unique_ptr<ClientContext> ClientContext::FromCallbackServerContext(
+  return FromInternalServerContext(server_context, options); 
+} 
+ 
+std::unique_ptr<ClientContext> ClientContext::FromCallbackServerContext( 
     const grpc::CallbackServerContext& server_context,
-    PropagationOptions options) {
-  return FromInternalServerContext(server_context, options);
-}
-
+    PropagationOptions options) { 
+  return FromInternalServerContext(server_context, options); 
+} 
+ 
 void ClientContext::AddMetadata(const TString& meta_key,
                                 const TString& meta_value) {
   send_initial_metadata_.insert(std::make_pair(meta_key, meta_value));

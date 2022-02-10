@@ -6,7 +6,7 @@ import logging
 import os
 import random
 import shutil
-import six
+import six 
 import stat
 import sys
 
@@ -128,7 +128,7 @@ def remove_dir(path):
 
 
 def fix_path_encoding(path):
-    return library.python.strings.to_str(path, library.python.strings.fs_encoding())
+    return library.python.strings.to_str(path, library.python.strings.fs_encoding()) 
 
 
 # File/directory remove
@@ -201,7 +201,7 @@ def hardlink_or_copy(src, lnk):
     def should_fallback_to_copy(exc):
         if WindowsError is not None and isinstance(exc, WindowsError) and exc.winerror == 1142:  # too many hardlinks
             return True
-        # cross-device hardlink or too many hardlinks, or some known WSL error
+        # cross-device hardlink or too many hardlinks, or some known WSL error 
         if isinstance(exc, OSError) and exc.errno in (
             errno.EXDEV,
             errno.EMLINK,
@@ -217,7 +217,7 @@ def hardlink_or_copy(src, lnk):
     except Exception as e:
         logger.debug('Failed to hardlink %s to %s with error %s, will copy it', src, lnk, repr(e))
         if should_fallback_to_copy(e):
-            copy2(src, lnk, follow_symlinks=False)
+            copy2(src, lnk, follow_symlinks=False) 
         else:
             raise
 
@@ -234,19 +234,19 @@ def symlink(src, lnk):
         os.symlink(src, lnk)
 
 
-# shutil.copy2 with follow_symlinks=False parameter (Unix only)
-def copy2(src, lnk, follow_symlinks=True):
-    if six.PY3:
-        shutil.copy2(src, lnk, follow_symlinks=follow_symlinks)
-        return
-
-    if follow_symlinks or not os.path.islink(src):
-        shutil.copy2(src, lnk)
-        return
-
-    symlink(os.readlink(src), lnk)
-
-
+# shutil.copy2 with follow_symlinks=False parameter (Unix only) 
+def copy2(src, lnk, follow_symlinks=True): 
+    if six.PY3: 
+        shutil.copy2(src, lnk, follow_symlinks=follow_symlinks) 
+        return 
+ 
+    if follow_symlinks or not os.path.islink(src): 
+        shutil.copy2(src, lnk) 
+        return 
+ 
+    symlink(os.readlink(src), lnk) 
+ 
+ 
 # Recursively hardlink directory
 # Uses plain hardlink for files
 # Dst must not exist
@@ -299,12 +299,12 @@ def read_file(path, binary=True):
 @errorfix_win
 def read_file_unicode(path, binary=True, enc='utf-8'):
     if not binary:
-        if six.PY2:
-            with open(path, 'r') as f:
-                return library.python.strings.to_unicode(f.read(), enc)
-        else:
-            with open(path, 'r', encoding=enc) as f:
-                return f.read()
+        if six.PY2: 
+            with open(path, 'r') as f: 
+                return library.python.strings.to_unicode(f.read(), enc) 
+        else: 
+            with open(path, 'r', encoding=enc) as f: 
+                return f.read() 
     # codecs.open is always binary
     with codecs.open(path, 'r', encoding=enc, errors=library.python.strings.ENCODING_ERRORS_POLICY) as f:
         return f.read()
@@ -417,9 +417,9 @@ def copytree3(
     else:
         ignored_names = set()
 
-    if not (dirs_exist_ok and os.path.isdir(dst)):
-        os.makedirs(dst)
-
+    if not (dirs_exist_ok and os.path.isdir(dst)): 
+        os.makedirs(dst) 
+ 
     errors = []
     for name in names:
         if name in ignored_names:
@@ -441,7 +441,7 @@ def copytree3(
                     # otherwise let the copy occurs. copy2 will raise an error
                     copy_function(srcname, dstname)
             elif os.path.isdir(srcname):
-                copytree3(srcname, dstname, symlinks, ignore, copy_function, dirs_exist_ok=dirs_exist_ok)
+                copytree3(srcname, dstname, symlinks, ignore, copy_function, dirs_exist_ok=dirs_exist_ok) 
             else:
                 # Will raise a SpecialFileError for unsupported file types
                 copy_function(srcname, dstname)

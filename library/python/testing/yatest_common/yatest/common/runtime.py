@@ -2,14 +2,14 @@ import errno
 import functools
 import json
 import os
-import threading
+import threading 
 
 import six
 
 
-_lock = threading.Lock()
-
-
+_lock = threading.Lock() 
+ 
+ 
 def _get_ya_config():
     try:
         import library.python.pytest.plugins.ya as ya_plugin
@@ -263,13 +263,13 @@ def global_resources():
 
 def _register_core(name, binary_path, core_path, bt_path, pbt_path):
     config = _get_ya_config()
-
-    with _lock:
+ 
+    with _lock: 
         if not hasattr(config, 'test_cores_count'):
             config.test_cores_count = 0
-        config.test_cores_count += 1
-        count_str = '' if config.test_cores_count == 1 else str(config.test_cores_count)
-
+        config.test_cores_count += 1 
+        count_str = '' if config.test_cores_count == 1 else str(config.test_cores_count) 
+ 
     log_entry = config.test_logs[config.current_item_nodeid]
     if binary_path:
         log_entry['{} binary{}'.format(name, count_str)] = binary_path

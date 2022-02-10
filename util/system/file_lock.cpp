@@ -15,7 +15,7 @@ namespace {
             default:
                 Y_UNREACHABLE();
         }
-        Y_UNREACHABLE();
+        Y_UNREACHABLE(); 
     }
 }
 

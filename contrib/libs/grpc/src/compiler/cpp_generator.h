@@ -59,10 +59,10 @@ struct Parameters {
   TString gmock_search_path;
   // *EXPERIMENTAL* Additional include files in grpc.pb.h
   std::vector<TString> additional_header_includes;
-  // By default, use "pb.h"
+  // By default, use "pb.h" 
   TString message_header_extension;
-  // Whether to include headers corresponding to imports in source file.
-  bool include_import_headers;
+  // Whether to include headers corresponding to imports in source file. 
+  bool include_import_headers; 
 };
 
 // Return the prologue of the generated header file.

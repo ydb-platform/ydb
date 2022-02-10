@@ -18,7 +18,7 @@
 
 #include <grpc/support/port_platform.h>
 
-#if GRPC_ARES != 1
+#if GRPC_ARES != 1 
 
 #include "src/core/ext/filters/client_channel/resolver/dns/c_ares/grpc_ares_wrapper.h"
 
@@ -31,7 +31,7 @@ static grpc_ares_request* grpc_dns_lookup_ares_locked_impl(
     grpc_pollset_set* interested_parties, grpc_closure* on_done,
     std::unique_ptr<grpc_core::ServerAddressList>* addrs,
     std::unique_ptr<grpc_core::ServerAddressList>* balancer_addrs,
-    char** service_config_json, int query_timeout_ms,
+    char** service_config_json, int query_timeout_ms, 
     std::shared_ptr<grpc_core::WorkSerializer> work_serializer) {
   return NULL;
 }
@@ -41,7 +41,7 @@ grpc_ares_request* (*grpc_dns_lookup_ares_locked)(
     grpc_pollset_set* interested_parties, grpc_closure* on_done,
     std::unique_ptr<grpc_core::ServerAddressList>* addrs,
     std::unique_ptr<grpc_core::ServerAddressList>* balancer_addrs,
-    char** service_config_json, int query_timeout_ms,
+    char** service_config_json, int query_timeout_ms, 
     std::shared_ptr<grpc_core::WorkSerializer> work_serializer) =
     grpc_dns_lookup_ares_locked_impl;
 
@@ -65,4 +65,4 @@ void (*grpc_resolve_address_ares)(
     grpc_pollset_set* interested_parties, grpc_closure* on_done,
     grpc_resolved_addresses** addrs) = grpc_resolve_address_ares_impl;
 
-#endif /* GRPC_ARES != 1 */
+#endif /* GRPC_ARES != 1 */ 

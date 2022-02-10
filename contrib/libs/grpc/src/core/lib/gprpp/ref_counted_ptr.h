@@ -103,8 +103,8 @@ class RefCountedPtr {
     if (value_ != nullptr) value_->Unref();
   }
 
-  void swap(RefCountedPtr& other) { std::swap(value_, other.value_); }
-
+  void swap(RefCountedPtr& other) { std::swap(value_, other.value_); } 
+ 
   // If value is non-null, we take ownership of a ref to it.
   void reset(T* value = nullptr) {
     if (value_ != nullptr) value_->Unref();
@@ -327,7 +327,7 @@ class WeakRefCountedPtr {
 
 template <typename T, typename... Args>
 inline RefCountedPtr<T> MakeRefCounted(Args&&... args) {
-  return RefCountedPtr<T>(new T(std::forward<Args>(args)...));
+  return RefCountedPtr<T>(new T(std::forward<Args>(args)...)); 
 }
 
 template <typename T>

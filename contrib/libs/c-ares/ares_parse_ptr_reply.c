@@ -57,7 +57,7 @@ int ares_parse_ptr_reply(const unsigned char *abuf, int alen, const void *addr,
   int aliascnt = 0;
   int alias_alloc = 8;
   char ** aliases;
-  size_t rr_data_len;
+  size_t rr_data_len; 
 
   /* Set *host to NULL for all failure cases. */
   *host = NULL;
@@ -133,15 +133,15 @@ int ares_parse_ptr_reply(const unsigned char *abuf, int alen, const void *addr,
           if (hostname)
             ares_free(hostname);
           hostname = rr_data;
-          rr_data_len = strlen(rr_data)+1;
-          aliases[aliascnt] = ares_malloc(rr_data_len * sizeof(char));
+          rr_data_len = strlen(rr_data)+1; 
+          aliases[aliascnt] = ares_malloc(rr_data_len * sizeof(char)); 
           if (!aliases[aliascnt])
             {
               ares_free(rr_name);
               status = ARES_ENOMEM;
               break;
             }
-          strncpy(aliases[aliascnt], rr_data, rr_data_len);
+          strncpy(aliases[aliascnt], rr_data, rr_data_len); 
           aliascnt++;
           if (aliascnt >= alias_alloc) {
             char **ptr;

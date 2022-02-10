@@ -1,26 +1,26 @@
-# Copyright 2019 The gRPC Authors
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
+# Copyright 2019 The gRPC Authors 
+# 
+# Licensed under the Apache License, Version 2.0 (the "License"); 
+# you may not use this file except in compliance with the License. 
+# You may obtain a copy of the License at 
+# 
+#     http://www.apache.org/licenses/LICENSE-2.0 
+# 
+# Unless required by applicable law or agreed to in writing, software 
+# distributed under the License is distributed on an "AS IS" BASIS, 
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. 
+# See the License for the specific language governing permissions and 
+# limitations under the License. 
+ 
 import logging
 import functools
-import asyncio
+import asyncio 
 from typing import Callable
-import unittest
-from grpc.experimental import aio
-
+import unittest 
+from grpc.experimental import aio 
+ 
 __all__ = 'AioTestBase'
-
+ 
 _COROUTINE_FUNCTION_ALLOWLIST = ['setUp', 'tearDown']
 
 
@@ -45,13 +45,13 @@ def _get_default_loop(debug=True):
 
 
 # NOTE(gnossen) this test class can also be implemented with metaclass.
-class AioTestBase(unittest.TestCase):
+class AioTestBase(unittest.TestCase): 
     # NOTE(lidi) We need to pick a loop for entire testing phase, otherwise it
     # will trigger create new loops in new threads, leads to deadlock.
     _TEST_LOOP = _get_default_loop()
-
-    @property
-    def loop(self):
+ 
+    @property 
+    def loop(self): 
         return self._TEST_LOOP
 
     def __getattribute__(self, name):

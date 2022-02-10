@@ -27,7 +27,7 @@
 #include <grpcpp/impl/codegen/string_ref.h>
 
 namespace grpc {
-class ServerContextBase;
+class ServerContextBase; 
 namespace internal {
 class InterceptorBatchMethodsImpl;
 }
@@ -58,7 +58,7 @@ class ServerRpcInfo {
   /// Type categorizes RPCs by unary or streaming type
   enum class Type { UNARY, CLIENT_STREAMING, SERVER_STREAMING, BIDI_STREAMING };
 
-  ~ServerRpcInfo() {}
+  ~ServerRpcInfo() {} 
 
   // Delete all copy and move constructors and assignments
   ServerRpcInfo(const ServerRpcInfo&) = delete;
@@ -94,7 +94,7 @@ class ServerRpcInfo {
 
   ServerRpcInfo(ServerContextBase* ctx, const char* method,
                 internal::RpcMethod::RpcType type)
-      : ctx_(ctx), method_(method), type_(static_cast<Type>(type)) {}
+      : ctx_(ctx), method_(method), type_(static_cast<Type>(type)) {} 
 
   // Runs interceptor at pos \a pos.
   void RunInterceptor(
@@ -116,9 +116,9 @@ class ServerRpcInfo {
     }
   }
 
-  void Ref() { ref_.fetch_add(1, std::memory_order_relaxed); }
+  void Ref() { ref_.fetch_add(1, std::memory_order_relaxed); } 
   void Unref() {
-    if (GPR_UNLIKELY(ref_.fetch_sub(1, std::memory_order_acq_rel) == 1)) {
+    if (GPR_UNLIKELY(ref_.fetch_sub(1, std::memory_order_acq_rel) == 1)) { 
       delete this;
     }
   }
@@ -126,7 +126,7 @@ class ServerRpcInfo {
   ServerContextBase* ctx_ = nullptr;
   const char* method_ = nullptr;
   const Type type_;
-  std::atomic<intptr_t> ref_{1};
+  std::atomic<intptr_t> ref_{1}; 
   std::vector<std::unique_ptr<experimental::Interceptor>> interceptors_;
 
   friend class internal::InterceptorBatchMethodsImpl;

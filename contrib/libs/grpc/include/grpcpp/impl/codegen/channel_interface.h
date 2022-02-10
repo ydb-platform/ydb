@@ -52,24 +52,24 @@ template <class R>
 class ClientCallbackReaderFactory;
 template <class W>
 class ClientCallbackWriterFactory;
-class ClientCallbackUnaryFactory;
-}  // namespace internal
-
-class ChannelInterface;
+class ClientCallbackUnaryFactory; 
+}  // namespace internal 
+ 
+class ChannelInterface; 
 class ClientContext;
 class CompletionQueue;
-
-namespace experimental {
-class DelegatingChannel;
-}
-
-namespace internal {
-class Call;
-class CallOpSetInterface;
-class RpcMethod;
+ 
+namespace experimental { 
+class DelegatingChannel; 
+} 
+ 
+namespace internal { 
+class Call; 
+class CallOpSetInterface; 
+class RpcMethod; 
 class InterceptedChannel;
-template <class InputMessage, class OutputMessage>
-class BlockingUnaryCallImpl;
+template <class InputMessage, class OutputMessage> 
+class BlockingUnaryCallImpl; 
 }  // namespace internal
 
 /// Codegen interface for \a grpc::Channel.
@@ -134,7 +134,7 @@ class ChannelInterface {
   template <class InputMessage, class OutputMessage>
   friend class ::grpc::internal::CallbackUnaryCallImpl;
   friend class ::grpc::internal::RpcMethod;
-  friend class ::grpc::experimental::DelegatingChannel;
+  friend class ::grpc::experimental::DelegatingChannel; 
   friend class ::grpc::internal::InterceptedChannel;
   virtual internal::Call CreateCall(const internal::RpcMethod& method,
                                     ::grpc::ClientContext* context,
@@ -145,7 +145,7 @@ class ChannelInterface {
   virtual void NotifyOnStateChangeImpl(grpc_connectivity_state last_observed,
                                        gpr_timespec deadline,
                                        ::grpc::CompletionQueue* cq,
-                                       void* tag) = 0;
+                                       void* tag) = 0; 
   virtual bool WaitForStateChangeImpl(grpc_connectivity_state last_observed,
                                       gpr_timespec deadline) = 0;
 
@@ -156,7 +156,7 @@ class ChannelInterface {
   // Returns an empty Call object (rather than being pure) since this is a new
   // method and adding a new pure method to an interface would be a breaking
   // change (even though this is private and non-API)
-  virtual internal::Call CreateCallInternal(
+  virtual internal::Call CreateCallInternal( 
       const internal::RpcMethod& /*method*/, ::grpc::ClientContext* /*context*/,
       ::grpc::CompletionQueue* /*cq*/, size_t /*interceptor_pos*/) {
     return internal::Call();

@@ -32,7 +32,7 @@
 #include <util/generic/string.h>
 #include "y_absl/strings/str_format.h"
 
-static intptr_t sys_gettid(void) { return (intptr_t)pthread_self(); }
+static intptr_t sys_gettid(void) { return (intptr_t)pthread_self(); } 
 
 void gpr_log(const char* file, int line, gpr_log_severity severity,
              const char* format, ...) {

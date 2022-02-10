@@ -32,12 +32,12 @@ bool TPipeHandle::Close() noexcept {
     return ok;
 }
 
-void TPipeHandle::Pipe(TPipeHandle& reader, TPipeHandle& writer, EOpenMode mode) {
+void TPipeHandle::Pipe(TPipeHandle& reader, TPipeHandle& writer, EOpenMode mode) { 
     PIPEHANDLE fds[2];
 #ifdef _win_
-    int r = SocketPair(fds, false /* non-overlapped */, mode & CloseOnExec /* cloexec */);
-#elif defined(_linux_)
-    int r = pipe2(fds, mode & CloseOnExec ? O_CLOEXEC : 0);
+    int r = SocketPair(fds, false /* non-overlapped */, mode & CloseOnExec /* cloexec */); 
+#elif defined(_linux_) 
+    int r = pipe2(fds, mode & CloseOnExec ? O_CLOEXEC : 0); 
 #else
     int r = pipe(fds);
 #endif
@@ -45,22 +45,22 @@ void TPipeHandle::Pipe(TPipeHandle& reader, TPipeHandle& writer, EOpenMode mode)
         ythrow TFileError() << "failed to create a pipe";
     }
 
-#if !defined(_win_) && !defined(_linux_)
-    // Non-atomic wrt exec
-    if (mode & CloseOnExec) {
-        for (int i = 0; i < 2; ++i) {
-            int flags = fcntl(fds[i], F_GETFD, 0);
-            if (flags < 0) {
-                ythrow TFileError() << "failed to get flags";
-            }
-            int r = fcntl(fds[i], F_SETFD, flags | FD_CLOEXEC);
-            if (r < 0) {
-                ythrow TFileError() << "failed to set flags";
-            }
-        }
-    }
-#endif
-
+#if !defined(_win_) && !defined(_linux_) 
+    // Non-atomic wrt exec 
+    if (mode & CloseOnExec) { 
+        for (int i = 0; i < 2; ++i) { 
+            int flags = fcntl(fds[i], F_GETFD, 0); 
+            if (flags < 0) { 
+                ythrow TFileError() << "failed to get flags"; 
+            } 
+            int r = fcntl(fds[i], F_SETFD, flags | FD_CLOEXEC); 
+            if (r < 0) { 
+                ythrow TFileError() << "failed to set flags"; 
+            } 
+        } 
+    } 
+#endif 
+ 
     TPipeHandle(fds[0]).Swap(reader);
     TPipeHandle(fds[1]).Swap(writer);
 }
@@ -150,11 +150,11 @@ size_t TPipe::Write(const void* buf, size_t len) const {
     return Impl_->Write(buf, len);
 }
 
-void TPipe::Pipe(TPipe& reader, TPipe& writer, EOpenMode mode) {
+void TPipe::Pipe(TPipe& reader, TPipe& writer, EOpenMode mode) { 
     TImplRef r(new TImpl());
     TImplRef w(new TImpl());
 
-    TPipeHandle::Pipe(r->GetHandle(), w->GetHandle(), mode);
+    TPipeHandle::Pipe(r->GetHandle(), w->GetHandle(), mode); 
 
     r.Swap(reader.Impl_);
     w.Swap(writer.Impl_);

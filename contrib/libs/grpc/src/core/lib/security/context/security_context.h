@@ -21,7 +21,7 @@
 
 #include <grpc/support/port_platform.h>
 
-#include "src/core/lib/gprpp/arena.h"
+#include "src/core/lib/gprpp/arena.h" 
 #include "src/core/lib/gprpp/ref_counted.h"
 #include "src/core/lib/gprpp/ref_counted_ptr.h"
 #include "src/core/lib/iomgr/pollset.h"
@@ -120,7 +120,7 @@ struct grpc_client_security_context {
 };
 
 grpc_client_security_context* grpc_client_security_context_create(
-    grpc_core::Arena* arena, grpc_call_credentials* creds);
+    grpc_core::Arena* arena, grpc_call_credentials* creds); 
 void grpc_client_security_context_destroy(void* ctx);
 
 /* --- grpc_server_security_context ---
@@ -136,7 +136,7 @@ struct grpc_server_security_context {
 };
 
 grpc_server_security_context* grpc_server_security_context_create(
-    grpc_core::Arena* arena);
+    grpc_core::Arena* arena); 
 void grpc_server_security_context_destroy(void* ctx);
 
 /* --- Channel args for auth context --- */

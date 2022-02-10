@@ -20,19 +20,19 @@
 #include <grpc/grpc_posix.h>
 #include <grpcpp/channel.h>
 #include <grpcpp/impl/grpc_library.h>
-#include <grpcpp/support/channel_arguments.h>
+#include <grpcpp/support/channel_arguments.h> 
 
 #include "src/cpp/client/create_channel_internal.h"
 
 namespace grpc {
 
-class ChannelArguments;
-
+class ChannelArguments; 
+ 
 #ifdef GPR_SUPPORT_CHANNELS_FROM_FD
 
 std::shared_ptr<Channel> CreateInsecureChannelFromFd(const TString& target,
                                                      int fd) {
-  grpc::internal::GrpcLibrary init_lib;
+  grpc::internal::GrpcLibrary init_lib; 
   init_lib.init();
   return CreateChannelInternal(
       "", grpc_insecure_channel_create_from_fd(target.c_str(), fd, nullptr),
@@ -58,9 +58,9 @@ namespace experimental {
 std::shared_ptr<Channel> CreateCustomInsecureChannelWithInterceptorsFromFd(
     const TString& target, int fd, const ChannelArguments& args,
     std::vector<
-        std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>>
+        std::unique_ptr<grpc::experimental::ClientInterceptorFactoryInterface>> 
         interceptor_creators) {
-  grpc::internal::GrpcLibrary init_lib;
+  grpc::internal::GrpcLibrary init_lib; 
   init_lib.init();
   grpc_channel_args channel_args;
   args.SetChannelArgs(&channel_args);

@@ -27,18 +27,18 @@
 #include <grpcpp/impl/codegen/call_hook.h>
 #include <grpcpp/impl/codegen/completion_queue_tag.h>
 #include <grpcpp/impl/codegen/core_codegen_interface.h>
-#include <grpcpp/impl/codegen/interceptor_common.h>
+#include <grpcpp/impl/codegen/interceptor_common.h> 
 #include <grpcpp/impl/codegen/rpc_service_method.h>
 #include <grpcpp/impl/codegen/server_context.h>
 
 namespace grpc {
-
+ 
 class AsyncGenericService;
-class Channel;
-class CompletionQueue;
+class Channel; 
+class CompletionQueue; 
 class GenericServerContext;
-class ServerCompletionQueue;
-class ServerCredentials;
+class ServerCompletionQueue; 
+class ServerCredentials; 
 class Service;
 
 extern CoreCodegenInterface* g_core_codegen_interface;
@@ -51,17 +51,17 @@ class ServerAsyncStreamingInterface;
 }  // namespace internal
 
 #ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
-namespace experimental {
+namespace experimental { 
 #endif
-class CallbackGenericService;
+class CallbackGenericService; 
 #ifndef GRPC_CALLBACK_API_NONEXPERIMENTAL
 }  // namespace experimental
 #endif
 
 namespace experimental {
-class ServerInterceptorFactoryInterface;
-}  // namespace experimental
-
+class ServerInterceptorFactoryInterface; 
+}  // namespace experimental 
+ 
 class ServerInterface : public internal::CallHook {
  public:
   virtual ~ServerInterface() {}
@@ -138,26 +138,26 @@ class ServerInterface : public internal::CallHook {
   virtual void RegisterCallbackGenericService(CallbackGenericService*
                                               /*service*/) {}
 #else
-  /// NOTE: class experimental_registration_interface is not part of the public
-  /// API of this class
-  /// TODO(vjpai): Move these contents to public API when no longer experimental
-  class experimental_registration_interface {
-   public:
-    virtual ~experimental_registration_interface() {}
-    /// May not be abstract since this is a post-1.0 API addition
-    virtual void RegisterCallbackGenericService(
-        experimental::CallbackGenericService* /*service*/) {}
-  };
-
-  /// NOTE: The function experimental_registration() is not stable public API.
-  /// It is a view to the experimental components of this class. It may be
-  /// changed or removed at any time. May not be abstract since this is a
-  /// post-1.0 API addition
-  virtual experimental_registration_interface* experimental_registration() {
-    return nullptr;
-  }
+  /// NOTE: class experimental_registration_interface is not part of the public 
+  /// API of this class 
+  /// TODO(vjpai): Move these contents to public API when no longer experimental 
+  class experimental_registration_interface { 
+   public: 
+    virtual ~experimental_registration_interface() {} 
+    /// May not be abstract since this is a post-1.0 API addition 
+    virtual void RegisterCallbackGenericService( 
+        experimental::CallbackGenericService* /*service*/) {} 
+  }; 
+ 
+  /// NOTE: The function experimental_registration() is not stable public API. 
+  /// It is a view to the experimental components of this class. It may be 
+  /// changed or removed at any time. May not be abstract since this is a 
+  /// post-1.0 API addition 
+  virtual experimental_registration_interface* experimental_registration() { 
+    return nullptr; 
+  } 
 #endif
-
+ 
   /// Tries to bind \a server to the given \a addr.
   ///
   /// It can be invoked multiple times.
@@ -166,7 +166,7 @@ class ServerInterface : public internal::CallHook {
   /// 192.168.1.1:31416, [::1]:27182, etc.).
   /// \params creds The credentials associated with the server.
   ///
-  /// \return bound port number on success, 0 on failure.
+  /// \return bound port number on success, 0 on failure. 
   ///
   /// \warning It's an error to call this method on an already started server.
   virtual int AddListeningPort(const TString& addr,
@@ -220,20 +220,20 @@ class ServerInterface : public internal::CallHook {
   /// RegisteredAsyncRequest is not part of the C++ API
   class RegisteredAsyncRequest : public BaseAsyncRequest {
    public:
-    RegisteredAsyncRequest(ServerInterface* server,
+    RegisteredAsyncRequest(ServerInterface* server, 
                            ::grpc::ServerContext* context,
                            internal::ServerAsyncStreamingInterface* stream,
                            ::grpc::CompletionQueue* call_cq,
                            ::grpc::ServerCompletionQueue* notification_cq,
-                           void* tag, const char* name,
-                           internal::RpcMethod::RpcType type);
+                           void* tag, const char* name, 
+                           internal::RpcMethod::RpcType type); 
 
     virtual bool FinalizeResult(void** tag, bool* status) override {
       /* If we are done intercepting, then there is nothing more for us to do */
       if (done_intercepting_) {
         return BaseAsyncRequest::FinalizeResult(tag, status);
       }
-      call_wrapper_ = ::grpc::internal::Call(
+      call_wrapper_ = ::grpc::internal::Call( 
           call_, server_, call_cq_, server_->max_receive_message_size(),
           context_->set_server_rpc_info(name_, type_,
                                         *server_->interceptor_creators()));
@@ -250,12 +250,12 @@ class ServerInterface : public internal::CallHook {
   class NoPayloadAsyncRequest final : public RegisteredAsyncRequest {
    public:
     NoPayloadAsyncRequest(internal::RpcServiceMethod* registered_method,
-                          ServerInterface* server,
+                          ServerInterface* server, 
                           ::grpc::ServerContext* context,
                           internal::ServerAsyncStreamingInterface* stream,
                           ::grpc::CompletionQueue* call_cq,
                           ::grpc::ServerCompletionQueue* notification_cq,
-                          void* tag)
+                          void* tag) 
         : RegisteredAsyncRequest(
               server, context, stream, call_cq, notification_cq, tag,
               registered_method->name(), registered_method->method_type()) {
@@ -273,7 +273,7 @@ class ServerInterface : public internal::CallHook {
                         internal::ServerAsyncStreamingInterface* stream,
                         ::grpc::CompletionQueue* call_cq,
                         ::grpc::ServerCompletionQueue* notification_cq,
-                        void* tag, Message* request)
+                        void* tag, Message* request) 
         : RegisteredAsyncRequest(
               server, context, stream, call_cq, notification_cq, tag,
               registered_method->name(), registered_method->method_type()),
@@ -329,7 +329,7 @@ class ServerInterface : public internal::CallHook {
                         internal::ServerAsyncStreamingInterface* stream,
                         ::grpc::CompletionQueue* call_cq,
                         ::grpc::ServerCompletionQueue* notification_cq,
-                        void* tag, bool delete_on_finalize);
+                        void* tag, bool delete_on_finalize); 
 
     bool FinalizeResult(void** tag, bool* status) override;
 
@@ -343,7 +343,7 @@ class ServerInterface : public internal::CallHook {
                         internal::ServerAsyncStreamingInterface* stream,
                         ::grpc::CompletionQueue* call_cq,
                         ::grpc::ServerCompletionQueue* notification_cq,
-                        void* tag, Message* message) {
+                        void* tag, Message* message) { 
     GPR_CODEGEN_ASSERT(method);
     new PayloadAsyncRequest<Message>(method, this, context, stream, call_cq,
                                      notification_cq, tag, message);
@@ -354,7 +354,7 @@ class ServerInterface : public internal::CallHook {
                         internal::ServerAsyncStreamingInterface* stream,
                         ::grpc::CompletionQueue* call_cq,
                         ::grpc::ServerCompletionQueue* notification_cq,
-                        void* tag) {
+                        void* tag) { 
     GPR_CODEGEN_ASSERT(method);
     new NoPayloadAsyncRequest(method, this, context, stream, call_cq,
                               notification_cq, tag);

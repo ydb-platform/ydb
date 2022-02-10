@@ -212,43 +212,43 @@ class BuildExt(build_ext.build_ext):
     LINK_OPTIONS = {}
 
     def build_extensions(self):
-
-        def compiler_ok_with_extra_std():
-            """Test if default compiler is okay with specifying c++ version
-            when invoked in C mode. GCC is okay with this, while clang is not.
-            """
+ 
+        def compiler_ok_with_extra_std(): 
+            """Test if default compiler is okay with specifying c++ version 
+            when invoked in C mode. GCC is okay with this, while clang is not. 
+            """ 
             if platform.system() != 'Windows':
                 return False
-            # TODO(lidiz) Remove the generated a.out for success tests.
+            # TODO(lidiz) Remove the generated a.out for success tests. 
             cc_test = subprocess.Popen(['cc', '-x', 'c', '-std=c++11', '-'],
                                        stdin=subprocess.PIPE,
                                        stdout=subprocess.PIPE,
                                        stderr=subprocess.PIPE)
-            _, cc_err = cc_test.communicate(input=b'int main(){return 0;}')
-            return not 'invalid argument' in str(cc_err)
-
+            _, cc_err = cc_test.communicate(input=b'int main(){return 0;}') 
+            return not 'invalid argument' in str(cc_err) 
+ 
         # This special conditioning is here due to difference of compiler
         #   behavior in gcc and clang. The clang doesn't take --stdc++11
         #   flags but gcc does. Since the setuptools of Python only support
         #   all C or all C++ compilation, the mix of C and C++ will crash.
-        #   *By default*, macOS and FreBSD use clang and Linux use gcc
-        #
-        #   If we are not using a permissive compiler that's OK with being
-        #   passed wrong std flags, swap out compile function by adding a filter
-        #   for it.
-        if not compiler_ok_with_extra_std():
-            old_compile = self.compiler._compile
+        #   *By default*, macOS and FreBSD use clang and Linux use gcc 
+        # 
+        #   If we are not using a permissive compiler that's OK with being 
+        #   passed wrong std flags, swap out compile function by adding a filter 
+        #   for it. 
+        if not compiler_ok_with_extra_std(): 
+            old_compile = self.compiler._compile 
 
-            def new_compile(obj, src, ext, cc_args, extra_postargs, pp_opts):
-                if src[-2:] == '.c':
-                    extra_postargs = [
-                        arg for arg in extra_postargs if not '-std=c++' in arg
-                    ]
-                return old_compile(obj, src, ext, cc_args, extra_postargs,
-                                   pp_opts)
-
-            self.compiler._compile = new_compile
-
+            def new_compile(obj, src, ext, cc_args, extra_postargs, pp_opts): 
+                if src[-2:] == '.c': 
+                    extra_postargs = [ 
+                        arg for arg in extra_postargs if not '-std=c++' in arg 
+                    ] 
+                return old_compile(obj, src, ext, cc_args, extra_postargs, 
+                                   pp_opts) 
+ 
+            self.compiler._compile = new_compile 
+ 
         compiler = self.compiler.compiler_type
         if compiler in BuildExt.C_OPTIONS:
             for extension in self.extensions:

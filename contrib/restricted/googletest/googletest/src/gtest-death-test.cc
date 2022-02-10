@@ -66,17 +66,17 @@
 # endif  // GTEST_OS_QNX
 
 # if GTEST_OS_FUCHSIA
-#  error #include <lib/fdio/fd.h>
-#  error #include <lib/fdio/io.h>
-#  error #include <lib/fdio/spawn.h>
-#  error #include <lib/zx/channel.h>
-#  error #include <lib/zx/port.h>
-#  error #include <lib/zx/process.h>
-#  error #include <lib/zx/socket.h>
-#  error #include <zircon/processargs.h>
-#  error #include <zircon/syscalls.h>
-#  error #include <zircon/syscalls/policy.h>
-#  error #include <zircon/syscalls/port.h>
+#  error #include <lib/fdio/fd.h> 
+#  error #include <lib/fdio/io.h> 
+#  error #include <lib/fdio/spawn.h> 
+#  error #include <lib/zx/channel.h> 
+#  error #include <lib/zx/port.h> 
+#  error #include <lib/zx/process.h> 
+#  error #include <lib/zx/socket.h> 
+#  error #include <zircon/processargs.h> 
+#  error #include <zircon/syscalls.h> 
+#  error #include <zircon/syscalls/policy.h> 
+#  error #include <zircon/syscalls/port.h> 
 # endif  // GTEST_OS_FUCHSIA
 
 #endif  // GTEST_HAS_DEATH_TEST

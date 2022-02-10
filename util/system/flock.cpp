@@ -55,7 +55,7 @@ extern "C" {
                 break;
             default:
                 break;
-        }
+        } 
         errno = EINVAL;
         return -1;
     }

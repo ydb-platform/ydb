@@ -26,8 +26,8 @@ static constexpr const T& Max(const T& a, const T& b, const Args&... args) {
 
 // replace with http://en.cppreference.com/w/cpp/algorithm/clamp in c++17
 template <class T>
-constexpr const T& ClampVal(const T& val, const T& min, const T& max) { 
-    return val < min ? min : (max < val ? max : val); 
+constexpr const T& ClampVal(const T& val, const T& min, const T& max) {
+    return val < min ? min : (max < val ? max : val);
 }
 
 template <typename T = double, typename... Args>

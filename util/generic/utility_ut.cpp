@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TUtilityTest) {
             UNIT_ASSERT_EQUAL(byte, byte);
         }
     }
- 
+
     Y_UNIT_TEST(TestClampValNoClamp) {
         double val = 2;
         double lo = 1;
@@ -127,7 +127,7 @@ Y_UNIT_TEST_SUITE(TUtilityTest) {
         UNIT_ASSERT_EQUAL(clamped, val);
         UNIT_ASSERT_EQUAL(&clamped, &val);
     }
- 
+
     Y_UNIT_TEST(TestClampValLo) {
         double val = 2;
         double lo = 3;
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TUtilityTest) {
         UNIT_ASSERT_EQUAL(clamped, lo);
         UNIT_ASSERT_EQUAL(&clamped, &lo);
     }
- 
+
     Y_UNIT_TEST(TestClampValHi) {
         double val = 4;
         double lo = 3;

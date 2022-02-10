@@ -164,7 +164,7 @@ DENY .* -> maps_adv/
 
 ALLOW sdg/library/python/revision_manager -> maps/wikimap/mapspro/libs/common
 ALLOW sdg/library/python/revision_manager -> maps/wikimap/mapspro/libs/revision
- 
+
 # Ydo libs can use some maps stuff
 ALLOW ydo/libs/dispatch -> maps/libs/pbstream
 ALLOW ydo/libs/dispatch -> maps/libs/kdtree

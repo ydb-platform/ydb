@@ -55,7 +55,7 @@ RECURSE(
     hostdump
     hostpire
     html2cpp
-    html2text
+    html2text 
     idl
     idx_relemmatizer
     inflector

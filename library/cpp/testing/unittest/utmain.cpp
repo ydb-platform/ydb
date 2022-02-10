@@ -537,8 +537,8 @@ private:
 
 const char* const TColoredProcessor::ForkCorrectExitMsg = "--END--";
 
-class TEnumeratingProcessor: public ITestSuiteProcessor {
-public:
+class TEnumeratingProcessor: public ITestSuiteProcessor { 
+public: 
     TEnumeratingProcessor(bool verbose, IOutputStream& stream) noexcept
         : Verbose_(verbose)
         , Stream_(stream)
@@ -546,8 +546,8 @@ public:
     }
 
     ~TEnumeratingProcessor() override {
-    }
-
+    } 
+ 
     bool CheckAccess(TString name, size_t /*num*/) override {
         if (Verbose_) {
             return true;
@@ -559,14 +559,14 @@ public:
 
     bool CheckAccessTest(TString suite, const char* name) override {
         Stream_ << suite << "::" << name << "\n";
-        return false;
-    }
+        return false; 
+    } 
 
 private:
     bool Verbose_;
     IOutputStream& Stream_;
-};
-
+}; 
+ 
 #ifdef _win_
 class TWinEnvironment {
 public:
@@ -602,29 +602,29 @@ static const TWinEnvironment Instance;
 
 static int DoList(bool verbose, IOutputStream& stream) {
     TEnumeratingProcessor eproc(verbose, stream);
-    TTestFactory::Instance().SetProcessor(&eproc);
-    TTestFactory::Instance().Execute();
-    return 0;
-}
-
-static int DoUsage(const char* progname) {
-    Cout << "Usage: " << progname << " [options] [[+|-]test]...\n\n"
-         << "Options:\n"
-         << "  -h, --help            print this help message\n"
-         << "  -l, --list            print a list of available tests\n"
+    TTestFactory::Instance().SetProcessor(&eproc); 
+    TTestFactory::Instance().Execute(); 
+    return 0; 
+} 
+ 
+static int DoUsage(const char* progname) { 
+    Cout << "Usage: " << progname << " [options] [[+|-]test]...\n\n" 
+         << "Options:\n" 
+         << "  -h, --help            print this help message\n" 
+         << "  -l, --list            print a list of available tests\n" 
          << "  -A --list-verbose        print a list of available subtests\n"
          << "  --print-before-test   print each test name before running it\n"
          << "  --print-before-suite  print each test suite name before running it\n"
-         << "  --show-fails          print a list of all failed tests at the end\n"
+         << "  --show-fails          print a list of all failed tests at the end\n" 
          << "  --dont-show-fails     do not print a list of all failed tests at the end\n"
          << "  --continue-on-fail    print a message and continue running test suite instead of break\n"
          << "  --print-times         print wall clock duration of each test\n"
          << "  --fork-tests          run each test in a separate process\n"
          << "  --trace-path          path to the trace file to be generated\n"
          << "  --trace-path-append   path to the trace file to be appended\n";
-    return 0;
-}
-
+    return 0; 
+} 
+ 
 #if defined(_linux_) && defined(CLANG_COVERAGE)
 extern "C" int __llvm_profile_write_file(void);
 
@@ -679,9 +679,9 @@ int NUnitTest::RunMain(int argc, char** argv) {
             const char* name = argv[i];
 
             if (name && *name) {
-                if (strcmp(name, "--help") == 0 || strcmp(name, "-h") == 0) {
-                    return DoUsage(argv[0]);
-                } else if (strcmp(name, "--list") == 0 || strcmp(name, "-l") == 0) {
+                if (strcmp(name, "--help") == 0 || strcmp(name, "-h") == 0) { 
+                    return DoUsage(argv[0]); 
+                } else if (strcmp(name, "--list") == 0 || strcmp(name, "-l") == 0) { 
                     listTests = LIST;
                 } else if (strcmp(name, "--list-verbose") == 0 || strcmp(name, "-A") == 0) {
                     listTests = LIST_VERBOSE;

@@ -1,5 +1,5 @@
-#ifndef NO_CITYHASH
-
+#ifndef NO_CITYHASH 
+ 
 // Copyright (c) 2011 Google, Inc.
 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -309,7 +309,7 @@ uint128 CityHash128(const char* s, size_t len) noexcept {
         return CityHash128WithSeed(s, len, uint128(k0, k1));
     }
 }
-
+ 
 // TODO(yazevnul): move this function to unittests
 void TestCompilationOfCityHashTemplates() {
     TStringBuf s;
@@ -320,4 +320,4 @@ void TestCompilationOfCityHashTemplates() {
     CityHash128WithSeed(s, uint128(1, 2));
 }
 
-#endif
+#endif 

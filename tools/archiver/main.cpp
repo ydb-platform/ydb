@@ -326,8 +326,8 @@ static inline TString Fix(TString f) {
     return f;
 }
 
-static bool Quiet = false;
-
+static bool Quiet = false; 
+ 
 static inline void Append(IOutputStream& w, const TString& fname, const TString& rname) {
     TMappedFileInput in(fname);
 

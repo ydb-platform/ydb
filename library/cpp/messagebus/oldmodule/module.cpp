@@ -402,7 +402,7 @@ namespace NBus {
                 DoCallReplyHandler(call);
                 Pending.erase(Pending.begin() + it);
             }
-        }
+        } 
         return Pending.size() > 0;
     }
 
@@ -603,8 +603,8 @@ namespace NBus {
             strReturn += call.GetStatus(flags);
         }
         return strReturn;
-    }
-
+    } 
+ 
     TString TJobState::GetStatus(unsigned flags) {
         Y_UNUSED(flags);
         TString strReturn;
@@ -616,7 +616,7 @@ namespace NBus {
                              ToString(Status).data());
         return strReturn;
     }
-
+ 
     //////////////////////////////////////////////////////////////////////
 
     void TBusModuleImpl::CancelJob(TBusJob* job, EMessageStatus status) {
@@ -857,7 +857,7 @@ void TModuleClientHandler::OnReply(TAutoPtr<TBusMessage> req, TAutoPtr<TBusMessa
     Y_ASSERT(job->Job->Message != req.Get());
     job->EnqueueAndSchedule(TJobResponseMessage(req.Release(), resp.Release(), MESSAGE_OK));
     job->UnRef();
-}
+} 
 
 void TModuleClientHandler::OnMessageSentOneWay(TAutoPtr<TBusMessage> req) {
     TJobRunner* job = GetJob(req.Get());

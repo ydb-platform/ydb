@@ -44,7 +44,7 @@ namespace NBus {
         GetConnectSyscallsNumBulkForTest({addr}, MakeArrayRef(&r, 1));
         return r;
     }
-
+ 
     // Split 'host' into name and port taking into account that host can be specified
     // as ipv6 address ('[<ipv6 address]:port' notion).
     bool SplitHost(const TString& host, TString* hostName, TString* portNum) {

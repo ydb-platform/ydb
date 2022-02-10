@@ -80,7 +80,7 @@ namespace NBus {
 
             void SendMessages(size_t count, const TNetAddr* addr = nullptr);
             void SendMessages(size_t count, const TNetAddr& addr);
-
+ 
             void ResetCounters();
             void WaitReplies();
             EMessageStatus WaitForError();
@@ -113,7 +113,7 @@ namespace NBus {
                 const TBusServerSessionConfig& sessionConfig = TBusServerSessionConfig());
 
             TExampleServer(unsigned port, const char* name = "TExampleServer");
-
+ 
             ~TExampleServer() override;
 
         public:

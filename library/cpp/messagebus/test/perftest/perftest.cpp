@@ -514,7 +514,7 @@ TSimpleSharedPtr<TPerftestUsingModule> ServerUsingModule;
 TVector<TSimpleSharedPtr<TPerftestClient>> Clients;
 TMutex ClientsLock;
 
-void stopsignal(int /*sig*/) {
+void stopsignal(int /*sig*/) { 
     fprintf(stderr, "\n-------------------- exiting ------------------\n");
     TheExit = true;
     StopEvent.Signal();

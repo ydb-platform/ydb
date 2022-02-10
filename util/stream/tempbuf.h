@@ -16,6 +16,6 @@ public:
     TTempBufOutput(TTempBufOutput&&) noexcept = default;
     TTempBufOutput& operator=(TTempBufOutput&&) noexcept = default;
 
-protected: 
+protected:
     void DoWrite(const void* data, size_t len) override;
 };

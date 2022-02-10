@@ -337,7 +337,7 @@ RECURSE(
     emoji
     entrypoints
     enum34
-    environ-config 
+    environ-config
     environs
     envoy
     ephem

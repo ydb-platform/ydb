@@ -34,8 +34,8 @@ class FakeProtobuf(object):
     def __init__(self, **kwargs):
         self.__dict__['_data'] = dict()
         for k, v in iteritems(kwargs):
-            if v is not None: 
-                setattr(self, k, v) 
+            if v is not None:
+                setattr(self, k, v)
 
     def __getattr__(self, name):
         ret = self._data.get(name, None)
@@ -53,9 +53,9 @@ class FakeProtobuf(object):
     def __getitem__(self, name):
         return self._data.get(name, None)
 
-    def __len__(self): 
+    def __len__(self):
         return len(self._data)
- 
+
     def __str__(self):
         return str(map(lambda x: (x[0], str(x[1])), iter(self)))
 
@@ -107,7 +107,7 @@ class AbstractProtobufMatcher(BaseMatcher):
 
     def __match(self, matcher, actual_protobuf):
         if isinstance(matcher, BaseMatcher):
-            return matcher.matches(actual_protobuf) 
+            return matcher.matches(actual_protobuf)
         elif isinstance(matcher, list):
             return len(actual_protobuf) == len(matcher) and \
                 all(
@@ -115,22 +115,22 @@ class AbstractProtobufMatcher(BaseMatcher):
                     for i, item in enumerate(matcher)
                 )
         else:
-            return all( 
-                self.__match(value, getattr(actual_protobuf, name)) 
+            return all(
+                self.__match(value, getattr(actual_protobuf, name))
                 for name, value in matcher
-            ) 
+            )
 
 
-class ProtobufWithStatusMatcher(AbstractProtobufMatcher): 
-    def __init__(self, status=MessageBusStatus.MSTATUS_OK, error_code=None, error_reason=None): 
-        super(ProtobufWithStatusMatcher, self).__init__() 
-        self.expected_protobuf.Status = status 
-        if error_code is not None: 
-            self.expected_protobuf.ErrorCode = error_code 
-        if error_reason is not None: 
-            self.expected_protobuf.ErrorReason = error_reason 
+class ProtobufWithStatusMatcher(AbstractProtobufMatcher):
+    def __init__(self, status=MessageBusStatus.MSTATUS_OK, error_code=None, error_reason=None):
+        super(ProtobufWithStatusMatcher, self).__init__()
+        self.expected_protobuf.Status = status
+        if error_code is not None:
+            self.expected_protobuf.ErrorCode = error_code
+        if error_reason is not None:
+            self.expected_protobuf.ErrorReason = error_reason
 
- 
+
 class DynamicFieldsProtobufMatcher(AbstractProtobufMatcher):
     """
     Highly dynamic matcher for Protobuf objects

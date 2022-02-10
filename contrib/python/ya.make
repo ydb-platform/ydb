@@ -1171,7 +1171,7 @@ RECURSE(
     xmlsec
     xmltodict
     xxhash
-    yandex-pgmigrate
+    yandex-pgmigrate 
     yappi
     yarl
     yfinance

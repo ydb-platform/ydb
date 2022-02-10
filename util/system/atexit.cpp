@@ -45,15 +45,15 @@ namespace {
                 Y_ASSERT(c);
 
                 Items_.pop();
-
+ 
                 {
                     auto unguard = Unguard(guard);
-
+ 
                     try {
-                        c->Func(c->Ctx);
+                        c->Func(c->Ctx); 
                     } catch (...) {
                         // ¯\_(ツ)_/¯
-                    }
+                    } 
                 }
             }
         }

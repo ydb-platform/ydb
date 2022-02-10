@@ -384,7 +384,7 @@ private:
 
     bool HasContentLength_;
     ui64 ContentLength_;
-
+ 
     bool ContentEncoded_;
     bool Expect100Continue_;
 };
@@ -445,9 +445,9 @@ bool THttpInput::GetContentLength(ui64& value) const noexcept {
 }
 
 bool THttpInput::ContentEncoded() const noexcept {
-    return Impl_->ContentEncoded();
-}
-
+    return Impl_->ContentEncoded(); 
+} 
+ 
 bool THttpInput::HasContent() const noexcept {
     return Impl_->HasContent();
 }

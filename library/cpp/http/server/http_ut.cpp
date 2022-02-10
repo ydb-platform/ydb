@@ -6,13 +6,13 @@
 
 #include <util/generic/cast.h>
 #include <util/stream/output.h>
-#include <util/stream/zlib.h>
+#include <util/stream/zlib.h> 
 #include <util/system/datetime.h>
 #include <util/system/sem.h>
 
 Y_UNIT_TEST_SUITE(THttpServerTest) {
     class TEchoServer: public THttpServer::ICallBack {
-        class TRequest: public THttpClientRequestEx {
+        class TRequest: public THttpClientRequestEx { 
         public:
             inline TRequest(TEchoServer* parent)
                 : Parent_(parent)
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                     Output() << Parent_->Res_;
                 }
                 Output().Finish();
-
+ 
                 return true;
             }
 
@@ -138,13 +138,13 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
 
     static const TString CrLf = "\r\n";
 
-    struct TTestRequest {
+    struct TTestRequest { 
         TTestRequest(ui16 port, TString content = TString())
-            : Port(port)
+            : Port(port) 
             , Content(std::move(content))
-        {
-        }
-
+        { 
+        } 
+ 
         void CheckContinue(TSocketInput& si) {
             if (Expect100Continue) {
                 TStringStream ss;
@@ -164,43 +164,43 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
 
         TString Execute() {
             TSocket* s = nullptr;
-            THolder<TSocket> singleReqSocket;
-            if (KeepAliveConnection) {
+            THolder<TSocket> singleReqSocket; 
+            if (KeepAliveConnection) { 
                 if (!KeepAlivedSocket) {
                     KeepAlivedSocket = MakeHolder<TSocket>(TNetworkAddress("localhost", Port), TDuration::Seconds(10));
                 }
                 s = KeepAlivedSocket.Get();
-            } else {
-                TNetworkAddress addr("localhost", Port);
-                singleReqSocket.Reset(new TSocket(addr, TDuration::Seconds(10)));
-                s = singleReqSocket.Get();
-            }
-            bool isPost = Type == "POST";
+            } else { 
+                TNetworkAddress addr("localhost", Port); 
+                singleReqSocket.Reset(new TSocket(addr, TDuration::Seconds(10))); 
+                s = singleReqSocket.Get(); 
+            } 
+            bool isPost = Type == "POST"; 
             TSocketInput si(*s);
-
-            if (UseHttpOutput) {
-                TSocketOutput so(*s);
-                THttpOutput output(&so);
-
-                output.EnableKeepAlive(KeepAliveConnection);
-                output.EnableCompression(EnableResponseEncoding);
-
-                TStringStream r;
-                r << Type << " / HTTP/1.1" << CrLf;
-                r << "Host: localhost:" + ToString(Port) << CrLf;
-                if (isPost) {
+ 
+            if (UseHttpOutput) { 
+                TSocketOutput so(*s); 
+                THttpOutput output(&so); 
+ 
+                output.EnableKeepAlive(KeepAliveConnection); 
+                output.EnableCompression(EnableResponseEncoding); 
+ 
+                TStringStream r; 
+                r << Type << " / HTTP/1.1" << CrLf; 
+                r << "Host: localhost:" + ToString(Port) << CrLf; 
+                if (isPost) { 
                     if (ContentEncoding.size()) {
-                        r << "Content-Encoding: " << ContentEncoding << CrLf;
-                    } else {
-                        r << "Transfer-Encoding: chunked" << CrLf;
-                    }
+                        r << "Content-Encoding: " << ContentEncoding << CrLf; 
+                    } else { 
+                        r << "Transfer-Encoding: chunked" << CrLf; 
+                    } 
                     if (Expect100Continue) {
                         r << "Expect: 100-continue" << CrLf;
                     }
-                }
-
-                r << CrLf;
-                if (isPost) {
+                } 
+ 
+                r << CrLf; 
+                if (isPost) { 
                     output.Write(r.Str());
                     output.Flush();
                     CheckContinue(si);
@@ -209,74 +209,74 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
                 } else {
                     output.Write(r.Str());
                     output.Finish();
-                }
-            } else {
-                TStringStream r;
-                r << Type << " / HTTP/1.1" << CrLf;
-                r << "Host: localhost:" + ToString(Port) << CrLf;
-                if (KeepAliveConnection) {
-                    r << "Connection: Keep-Alive" << CrLf;
-                } else {
-                    r << "Connection: Close" << CrLf;
-                }
-                if (EnableResponseEncoding) {
-                    r << "Accept-Encoding: gzip, deflate, x-gzip, x-deflate, y-lzo, y-lzf, y-lzq, y-bzip2, y-lzma" << CrLf;
-                }
+                } 
+            } else { 
+                TStringStream r; 
+                r << Type << " / HTTP/1.1" << CrLf; 
+                r << "Host: localhost:" + ToString(Port) << CrLf; 
+                if (KeepAliveConnection) { 
+                    r << "Connection: Keep-Alive" << CrLf; 
+                } else { 
+                    r << "Connection: Close" << CrLf; 
+                } 
+                if (EnableResponseEncoding) { 
+                    r << "Accept-Encoding: gzip, deflate, x-gzip, x-deflate, y-lzo, y-lzf, y-lzq, y-bzip2, y-lzma" << CrLf; 
+                } 
                 if (isPost && Expect100Continue) {
                     r << "Expect: 100-continue" << CrLf;
                 }
                 if (isPost && ContentEncoding.size() && Content.size()) {
-                    r << "Content-Encoding: " << ContentEncoding << CrLf;
-                    TStringStream compressedContent;
-                    {
-                        TZLibCompress zlib(&compressedContent);
+                    r << "Content-Encoding: " << ContentEncoding << CrLf; 
+                    TStringStream compressedContent; 
+                    { 
+                        TZLibCompress zlib(&compressedContent); 
                         zlib.Write(Content.data(), Content.size());
-                        zlib.Flush();
-                        zlib.Finish();
-                    }
+                        zlib.Flush(); 
+                        zlib.Finish(); 
+                    } 
                     r << "Content-Length: " << compressedContent.Size() << CrLf;
-                    r << CrLf;
+                    r << CrLf; 
                     s->Send(r.Data(), r.Size());
                     CheckContinue(si);
                     Hdr = r.Str();
                     TString tosend = compressedContent.Str();
                     s->Send(tosend.data(), tosend.size());
-                } else {
-                    if (isPost) {
+                } else { 
+                    if (isPost) { 
                         r << "Content-Length: " << Content.size() << CrLf;
-                        r << CrLf;
+                        r << CrLf; 
                         s->Send(r.Data(), r.Size());
                         CheckContinue(si);
                         Hdr = r.Str();
                         s->Send(Content.data(), Content.size());
-                    } else {
-                        r << CrLf;
+                    } else { 
+                        r << CrLf; 
                         Hdr = r.Str();
                         s->Send(r.Data(), r.Size());
-                    }
-                }
-            }
-
-            THttpInput input(&si);
-            TStringStream ss;
-            TransferData(&input, &ss);
-
+                    } 
+                } 
+            } 
+ 
+            THttpInput input(&si); 
+            TStringStream ss; 
+            TransferData(&input, &ss); 
+ 
             return ss.Str();
-        }
-
+        } 
+ 
         TString GetDescription() const {
-            if (UseHttpOutput) {
-                TStringStream ss;
-                ss << (KeepAliveConnection ? "keep-alive " : "") << Type;
+            if (UseHttpOutput) { 
+                TStringStream ss; 
+                ss << (KeepAliveConnection ? "keep-alive " : "") << Type; 
                 if (ContentEncoding.size()) {
                     ss << " with encoding=" << ContentEncoding;
-                }
+                } 
                 return ss.Str();
-            } else {
-                return Hdr;
-            }
-        }
-
+            } else { 
+                return Hdr; 
+            } 
+        } 
+ 
         ui16 Port = 0;
         bool UseHttpOutput = true;
         TString Type = "GET";
@@ -287,8 +287,8 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         bool EnableResponseEncoding = false;
         TString Hdr;
         bool Expect100Continue = false;
-    };
-
+    }; 
+ 
     class TFailingMtpQueue: public TSimpleThreadPool {
     private:
         bool FailOnAdd_ = false;
@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         TString res = TestData();
         TPortManager pm;
         const ui16 port = pm.GetPort();
-        const bool trueFalse[] = {true, false};
+        const bool trueFalse[] = {true, false}; 
 
         TEchoServer serverImpl(res);
         THttpServer server(&serverImpl, THttpServer::TOptions(port).EnableKeepAlive(true).EnableCompression(true));
@@ -332,36 +332,36 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
         for (int i = 0; i < 2; ++i) {
             UNIT_ASSERT(server.Start());
 
-            TTestRequest r(port);
-            r.Content = res;
+            TTestRequest r(port); 
+            r.Content = res; 
 
             for (bool keepAlive : trueFalse) {
-                r.KeepAliveConnection = keepAlive;
+                r.KeepAliveConnection = keepAlive; 
 
                 // THttpOutput use chunked stream, else use Content-Length
                 for (bool useHttpOutput : trueFalse) {
-                    r.UseHttpOutput = useHttpOutput;
+                    r.UseHttpOutput = useHttpOutput; 
 
                     for (bool enableResponseEncoding : trueFalse) {
-                        r.EnableResponseEncoding = enableResponseEncoding;
+                        r.EnableResponseEncoding = enableResponseEncoding; 
 
                         const TString reqTypes[] = {"GET", "POST"};
                         for (const TString& reqType : reqTypes) {
-                            r.Type = reqType;
+                            r.Type = reqType; 
 
                             const TString encoders[] = {"", "deflate"};
                             for (const TString& encoder : encoders) {
-                                r.ContentEncoding = encoder;
+                                r.ContentEncoding = encoder; 
 
                                 for (bool expect100Continue : trueFalse) {
                                     r.Expect100Continue = expect100Continue;
                                     TString resp = r.Execute();
                                     UNIT_ASSERT_C(resp == res, "diff echo response for request:\n" + r.GetDescription());
                                 }
-                            }
-                        }
-                    }
-                }
+                            } 
+                        } 
+                    } 
+                } 
             }
 
             server.Stop();

@@ -2,7 +2,7 @@
 
 #include <util/generic/yexception.h>
 
-using namespace NDns;
+using namespace NDns; 
 
 namespace {
     namespace NX {
@@ -21,7 +21,7 @@ namespace {
     }
 }
 
-IErrorRef NDns::SaveError() {
+IErrorRef NDns::SaveError() { 
     using namespace NX;
 
     return new NX::TError();

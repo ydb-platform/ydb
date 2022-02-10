@@ -457,8 +457,8 @@ template <typename It, typename Val>
 Val Accumulate(It begin, It end, Val val) {
     // std::move since C++20
     return std::accumulate(begin, end, std::move(val));
-} 
- 
+}
+
 template <typename It, typename Val, typename BinOp>
 Val Accumulate(It begin, It end, Val val, BinOp binOp) {
     // std::move since C++20

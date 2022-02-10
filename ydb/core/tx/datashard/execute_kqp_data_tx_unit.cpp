@@ -226,7 +226,6 @@ EExecutionStatus TExecuteKqpDataTxUnit::OnTabletNotReady(TActiveTransaction& tx,
 {
     LOG_T("Tablet " << DataShard.TabletID() << " is not ready for " << tx << " execution");
 
-    dataTx.GetKqpComputeCtx().ResetTabletNotReady();
     DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 
     ui64 pageFaultCount = tx.IncrementPageFaultCount();

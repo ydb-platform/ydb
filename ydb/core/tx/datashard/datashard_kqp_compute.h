@@ -55,8 +55,7 @@ public:
     TEngineHostCounters& GetTaskCounters(ui64 taskId) { return TaskCounters[taskId]; }
     TEngineHostCounters& GetDatashardCounters() { return DatashardCounters; }
 
-    void SetTabletNotReady() { TabletNotReady = true; };
-    void ResetTabletNotReady() { TabletNotReady = false; }
+    void SetTabletNotReady() { Y_VERIFY_DEBUG(!TabletNotReady); TabletNotReady = true; };
     bool IsTabletNotReady() const { return TabletNotReady; }
 
 public:

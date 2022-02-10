@@ -201,8 +201,8 @@ namespace NTesting {
             return Singleton<TPortManager>()->GetFreePortsRange(count);
         }
     }
- 
-    IOutputStream& operator<<(IOutputStream& out, const TPortHolder& port) { 
-        return out << static_cast<ui16>(port); 
-    } 
+
+    IOutputStream& operator<<(IOutputStream& out, const TPortHolder& port) {
+        return out << static_cast<ui16>(port);
+    }
 }

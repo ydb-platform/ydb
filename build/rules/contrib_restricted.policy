@@ -95,7 +95,7 @@ ALLOW ads/yacontext -> contrib/restricted/cmph
 # http-parser is a low-level parser for http bytestream.
 # Consider using high-level alternatives.
 ALLOW mds -> contrib/restricted/http-parser
-ALLOW taxi/uservices -> contrib/restricted/http-parser 
+ALLOW taxi/uservices -> contrib/restricted/http-parser
 ALLOW yt/yt/core/http -> contrib/restricted/http-parser
 ALLOW yweb/robot/fetcher/fetcher/user/http -> contrib/restricted/http-parser
 
@@ -145,7 +145,7 @@ ALLOW rem/python/geobase30 -> contrib/restricted/boost
 ALLOW drive/contrib/cpp/telemetry -> contrib/restricted/boost
 ALLOW smart_devices -> contrib/restricted/boost
 ALLOW statbox/libstatbox -> contrib/restricted/boost
-ALLOW taxi/uservices -> contrib/restricted/boost 
+ALLOW taxi/uservices -> contrib/restricted/boost
 ALLOW tools/idl -> contrib/restricted/boost
 ALLOW voicetech/tools -> contrib/restricted/boost
 ALLOW weather/archive/grid_api/lib -> contrib/restricted/boost

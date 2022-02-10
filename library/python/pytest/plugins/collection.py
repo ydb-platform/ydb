@@ -7,8 +7,8 @@ import py
 import pytest  # noqa
 import _pytest.python
 import _pytest.doctest
-import json 
-import library.python.testing.filter.filter as test_filter 
+import json
+import library.python.testing.filter.filter as test_filter
 
 
 class LoadedModule(_pytest.python.Module):
@@ -78,13 +78,13 @@ class DoctestModule(LoadedModule):
 
 
 # NOTE: Since we are overriding collect method of pytest session, pytest hooks are not invoked during collection.
-def pytest_ignore_collect(module, session, filenames_from_full_filters, accept_filename_predicate): 
-    if session.config.option.mode == 'list': 
-        return not accept_filename_predicate(module.name) 
- 
-    if filenames_from_full_filters is not None and module.name not in filenames_from_full_filters: 
-        return True 
- 
+def pytest_ignore_collect(module, session, filenames_from_full_filters, accept_filename_predicate):
+    if session.config.option.mode == 'list':
+        return not accept_filename_predicate(module.name)
+
+    if filenames_from_full_filters is not None and module.name not in filenames_from_full_filters:
+        return True
+
     test_file_filter = getattr(session.config.option, 'test_file_filter', None)
     if test_file_filter is None:
         return False
@@ -101,21 +101,21 @@ class CollectionPlugin(object):
     def pytest_sessionstart(self, session):
 
         def collect(*args, **kwargs):
-            accept_filename_predicate = test_filter.make_py_file_filter(session.config.option.test_filter) 
-            full_test_names_file_path = session.config.option.test_list_path 
-            filenames_filter = None 
- 
-            if full_test_names_file_path and os.path.exists(full_test_names_file_path): 
-                with open(full_test_names_file_path, 'r') as afile: 
-                    # in afile stored 2 dimensional array such that array[modulo_index] contains tests which should be run in this test suite 
-                    full_names_filter = set(json.load(afile)[int(session.config.option.modulo_index)]) 
-                    filenames_filter = set(map(lambda x: x.split('::')[0], full_names_filter)) 
- 
+            accept_filename_predicate = test_filter.make_py_file_filter(session.config.option.test_filter)
+            full_test_names_file_path = session.config.option.test_list_path
+            filenames_filter = None
+
+            if full_test_names_file_path and os.path.exists(full_test_names_file_path):
+                with open(full_test_names_file_path, 'r') as afile:
+                    # in afile stored 2 dimensional array such that array[modulo_index] contains tests which should be run in this test suite
+                    full_names_filter = set(json.load(afile)[int(session.config.option.modulo_index)])
+                    filenames_filter = set(map(lambda x: x.split('::')[0], full_names_filter))
+
             for test_module in self._test_modules:
                 module = LoadedModule.from_parent(name=test_module, parent=session)
-                if not pytest_ignore_collect(module, session, filenames_filter, accept_filename_predicate): 
+                if not pytest_ignore_collect(module, session, filenames_filter, accept_filename_predicate):
                     yield module
- 
+
                 if os.environ.get('YA_PYTEST_DISABLE_DOCTEST', 'no') == 'no':
                     module = DoctestModule.from_parent(name=test_module, parent=session)
                     if not pytest_ignore_collect(module, session, filenames_filter, accept_filename_predicate):

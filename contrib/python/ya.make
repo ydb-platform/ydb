@@ -185,7 +185,7 @@ RECURSE(
     cryptography
     cssselect
     cssutils
-    curlify 
+    curlify
     cx-Oracle
     cycler
     cymem
@@ -350,7 +350,7 @@ RECURSE(
     extractcode
     fabric
     face
-    facebook-business 
+    facebook-business
     factory-boy
     Faker
     fakeredis
@@ -401,7 +401,7 @@ RECURSE(
     Flask-OpenTracing
     Flask-Principal
     Flask-Pydantic
-    Flask-PyMongo 
+    Flask-PyMongo
     Flask-RESTful
     flask-restplus
     flask-restx

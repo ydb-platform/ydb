@@ -6,7 +6,7 @@ PY_SRCS(
     NAMESPACE
     yatest_lib
     external.py
-    test_splitter.py 
+    test_splitter.py
     tools.py
     ya.py
 )
@@ -22,5 +22,5 @@ IF(PYTHON2)
 ENDIF()
 
 END()
- 
-RECURSE_FOR_TESTS(tests) 
+
+RECURSE_FOR_TESTS(tests)

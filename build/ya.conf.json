@@ -71,9 +71,9 @@
         "pprof": {
             "description": "Run pprof"
         },
-        "ytexec": { 
-            "description": "Run ytexec" 
-        }, 
+        "ytexec": {
+            "description": "Run ytexec"
+        },
         "gdb": {
             "description": "Run gdb"
         },
@@ -2690,22 +2690,22 @@
                 }
             ]
         },
-        "ytexec": { 
-            "tools": { 
-                "ytexec": { 
-                    "bottle": "ytexec", 
-                    "executable": "ytexec" 
-                } 
-            }, 
-            "platforms": [ 
-                { 
-                    "host": { 
-                        "os": "LINUX" 
-                    }, 
-                    "default": true 
-                } 
-            ] 
-        }, 
+        "ytexec": {
+            "tools": {
+                "ytexec": {
+                    "bottle": "ytexec",
+                    "executable": "ytexec"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                }
+            ]
+        },
         "gdb": {
             "tools": {
                 "gdb": {
@@ -6756,18 +6756,18 @@
                 ]
             }
         },
-        "ytexec": { 
-            "formula": { 
+        "ytexec": {
+            "formula": {
                 "sandbox_id": 1101655914,
-                "match": "ytexec" 
-            }, 
-            "executable": { 
-                "ytexec": [ 
-                    "ytexec", 
-                    "ytexec" 
-                ] 
-            } 
-        }, 
+                "match": "ytexec"
+            },
+            "executable": {
+                "ytexec": [
+                    "ytexec",
+                    "ytexec"
+                ]
+            }
+        },
         "ag": {
             "formula": {
                 "sandbox_id": 75851513,

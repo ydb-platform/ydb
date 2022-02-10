@@ -11,27 +11,27 @@
 Y_UNIT_TEST_SUITE(TLockFreeStackTests) {
     class TCountDownLatch {
     private:
-        TAtomic Current_; 
-        TSystemEvent EventObject_; 
+        TAtomic Current_;
+        TSystemEvent EventObject_;
 
     public:
         TCountDownLatch(unsigned initial)
-            : Current_(initial) 
+            : Current_(initial)
         {
         }
 
         void CountDown() {
-            if (AtomicDecrement(Current_) == 0) { 
-                EventObject_.Signal(); 
+            if (AtomicDecrement(Current_) == 0) {
+                EventObject_.Signal();
             }
         }
 
         void Await() {
-            EventObject_.Wait(); 
+            EventObject_.Wait();
         }
 
         bool Await(TDuration timeout) {
-            return EventObject_.WaitT(timeout); 
+            return EventObject_.WaitT(timeout);
         }
     };
 

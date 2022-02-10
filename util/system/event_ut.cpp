@@ -50,16 +50,16 @@ namespace {
 
     class TSignalTask: public IObjectInQueue {
     private:
-        TManualEvent& Ev_; 
+        TManualEvent& Ev_;
 
     public:
-        TSignalTask(TManualEvent& ev) 
-            : Ev_(ev) 
+        TSignalTask(TManualEvent& ev)
+            : Ev_(ev)
         {
         }
 
         void Process(void*) override {
-            Ev_.Signal(); 
+            Ev_.Signal();
         }
     };
 
@@ -103,7 +103,7 @@ Y_UNIT_TEST_SUITE(EventTest) {
         queue.Start(limit);
         TVector<THolder<IObjectInQueue>> tasks;
         for (size_t i = 0; i < limit; ++i) {
-            tasks.emplace_back(MakeHolder<TSignalTask>(event[i])); 
+            tasks.emplace_back(MakeHolder<TSignalTask>(event[i]));
             UNIT_ASSERT(queue.Add(tasks.back().Get()));
         }
         for (size_t i = limit; i != 0; --i) {
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(EventTest) {
         TVector<THolder<IObjectInQueue>> tasks;
         for (size_t i = 0; i < 1000; ++i) {
             auto owner = MakeHolder<TOwnerTask>();
-            tasks.emplace_back(MakeHolder<TSignalTask>(*owner->Ev)); 
+            tasks.emplace_back(MakeHolder<TSignalTask>(*owner->Ev));
             tasks.emplace_back(std::move(owner));
         }
 

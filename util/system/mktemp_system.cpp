@@ -165,7 +165,7 @@ GetTemp(char* path, int* doopen, int domkdir, int slen)
 extern "C" int mkstemps(char* path, int slen) {
     int fd;
 
-    return (GetTemp(path, &fd, 0, slen) ? fd : -1); 
+    return (GetTemp(path, &fd, 0, slen) ? fd : -1);
 }
 
 #if defined(_win_)

@@ -1,9 +1,9 @@
-OWNER( 
-    g:contrib 
-    g:cpp-contrib 
-) 
- 
-RECURSE( 
+OWNER(
+    g:contrib
+    g:cpp-contrib
+)
+
+RECURSE(
     abseil-cpp
     abseil-cpp-tstring
     alsa-lib
@@ -58,7 +58,7 @@ RECURSE(
     thrift/compiler
     turbo_base64
     uriparser
-) 
+)
 
 IF(OS_LINUX OR OS_DARWIN)
     RECURSE(

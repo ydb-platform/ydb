@@ -15,10 +15,10 @@ public:
     /**
       @param slave stream to write compressed data to
       @param quality, higher quality - slower but better compression.
-             0 is default compression (see constant ZSTD_CLEVEL_DEFAULT(3)) 
+             0 is default compression (see constant ZSTD_CLEVEL_DEFAULT(3))
              max compression is  ZSTD_MAX_CLEVEL (22)
     */
-    explicit TZstdCompress(IOutputStream* slave, int quality = 0); 
+    explicit TZstdCompress(IOutputStream* slave, int quality = 0);
     ~TZstdCompress() override;
 private:
     void DoWrite(const void* buffer, size_t size) override;

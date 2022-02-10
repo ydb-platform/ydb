@@ -46,7 +46,7 @@ namespace NPire {
     using Pire::Matches;
     using Pire::MmappedScanner;
     using Pire::Run;
-    using Pire::Runner; 
+    using Pire::Runner;
     using Pire::ShortestPrefix;
     using Pire::ShortestSuffix;
     using Pire::Step;

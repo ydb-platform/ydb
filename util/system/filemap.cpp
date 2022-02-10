@@ -293,7 +293,7 @@ public:
         }
 #endif
     }
- 
+
     void Evict(void* ptr, size_t len) {
         MadviseEvict(ptr, len);
     }
@@ -407,10 +407,10 @@ TMemoryMap::TMapResult TMemoryMap::ResizeAndRemap(i64 offset, size_t size) {
     return Map(offset, size);
 }
 
-void TMemoryMap::SetSequential() { 
+void TMemoryMap::SetSequential() {
     Impl_->SetSequential();
-} 
- 
+}
+
 void TMemoryMap::Evict(void* ptr, size_t len) {
     Impl_->Evict(ptr, len);
 }

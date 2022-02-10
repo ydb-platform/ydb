@@ -466,7 +466,7 @@ namespace NUri {
 
 bool TParser::doParse(const char* str_beg, size_t length)
 {
-    const char* p = str_beg; 
+    const char* p = str_beg;
     const char* pe = str_beg + length;
     const char* eof = pe;
     int cs;
@@ -487,7 +487,7 @@ bool TParser::doParse(const char* str_beg, size_t length)
         cs = TParser_en_URI_ref_no_relpath;
     }
 
-    %% write exec; 
+    %% write exec;
 
 #undef BEG
 #undef END

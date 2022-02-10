@@ -34,10 +34,10 @@ void UnTrspChars(const char* s, char* d) {
 }
 
 void InvertDomain(char* begin, char* end) {
-    // skip schema if it is present 
+    // skip schema if it is present
     const auto dotPos = TStringBuf{begin, end}.find('.');
     if (dotPos == TStringBuf::npos)
-        return; // no need to invert anything 
+        return; // no need to invert anything
     const auto schemaendPos = TStringBuf{begin, end}.find("://", 3);
     if (schemaendPos < dotPos)
         begin += schemaendPos + 3;

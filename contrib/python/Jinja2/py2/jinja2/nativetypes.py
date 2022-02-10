@@ -91,4 +91,4 @@ class NativeTemplate(Template):
             return self.environment.handle_exception()
 
 
-NativeEnvironment.template_class = NativeTemplate  # type: ignore
+NativeEnvironment.template_class = NativeTemplate  # type: ignore 

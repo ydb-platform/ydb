@@ -672,7 +672,7 @@ RECURSE(
     num2words
     numpy
     oauth2client
-    oauthlib
+    oauthlib 
     objgraph
     observable
     odfpy
@@ -936,7 +936,7 @@ RECURSE(
     readabilipy
     redis
     redis-cache-lock
-    regex
+    regex 
     reportlab
     repoze.lru
     repr
@@ -972,7 +972,7 @@ RECURSE(
     scandir
     schedule
     schema
-    schematics
+    schematics 
     schwifty
     scikit-image
     scikit-learn

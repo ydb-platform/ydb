@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import abc
-from six import iteritems 
+from six import iteritems
 
 from hamcrest.core.base_matcher import BaseMatcher
 from hamcrest.core.helpers.wrap_matcher import wrap_matcher
@@ -33,7 +33,7 @@ class FakeProtobuf(object):
 
     def __init__(self, **kwargs):
         self.__dict__['_data'] = dict()
-        for k, v in iteritems(kwargs): 
+        for k, v in iteritems(kwargs):
             if v is not None:
                 setattr(self, k, v)
 

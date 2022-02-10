@@ -380,12 +380,12 @@ void TFsPath::MkDir(const int mode) const {
 
 void TFsPath::MkDirs(const int mode) const {
     CheckDefined();
-    if (!Exists()) {
+    if (!Exists()) { 
         Parent().MkDirs(mode);
         MkDir(mode);
-    }
-}
-
+    } 
+} 
+ 
 void TFsPath::ForceDelete() const {
     if (!IsDefined()) {
         return;

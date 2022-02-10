@@ -4,7 +4,7 @@
 
 #include <util/stream/input.h>
 #include <util/stream/file.h>
-#include <util/string/hex.h>
+#include <util/string/hex.h> 
 
 #include <contrib/libs/nayuki_md5/md5.h>
 
@@ -230,7 +230,7 @@ TString MD5::CalcRaw(const TArrayRef<const ui8>& data) {
     MD5().Update(data).Final(reinterpret_cast<ui8*>(result.begin()));
     return result;
 }
-
+ 
 ui64 MD5::CalcHalfMix(const char* data, size_t len) {
     return CalcHalfMix(MakeUnsignedArrayRef(data, len));
 }
@@ -249,12 +249,12 @@ bool MD5::IsMD5(TStringBuf data) {
 
 bool MD5::IsMD5(const TArrayRef<const ui8>& data) {
     if (data.size() != 32) {
-        return false;
-    }
+        return false; 
+    } 
     for (const ui8 *p = data.data(), *e = data.data() + data.size(); p != e; ++p) {
         if (Char2DigitTable[*p] == '\xff') {
-            return false;
-        }
-    }
-    return true;
-}
+            return false; 
+        } 
+    } 
+    return true; 
+} 

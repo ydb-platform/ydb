@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(TMD5Test) {
         fileHash = MD5::File(tmpFile);
         UNIT_ASSERT_EQUAL(fileHash.size(), 0);
     }
-
+ 
     Y_UNIT_TEST(TestIsMD5) {
         UNIT_ASSERT_EQUAL(false, MD5::IsMD5(TStringBuf()));
         UNIT_ASSERT_EQUAL(false, MD5::IsMD5(TStringBuf("4136ebb0e4c45d21e2b09294c75cfa0")));   // length 31
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TMD5Test) {
         UNIT_ASSERT_EQUAL(true, MD5::IsMD5(TStringBuf("4136EBB0E4C45D21E2B09294C75CFA08")));
         UNIT_ASSERT_EQUAL(true, MD5::IsMD5(TStringBuf("4136ebb0E4C45D21e2b09294C75CfA08")));
         UNIT_ASSERT_EQUAL(true, MD5::IsMD5(TStringBuf("4136ebb0e4c45d21e2b09294c75cfa08")));
-    }
+    } 
 
     Y_UNIT_TEST(TestMd5HalfMix) {
         UNIT_ASSERT_EQUAL(MD5::CalcHalfMix(""), 7203772011789518145ul);

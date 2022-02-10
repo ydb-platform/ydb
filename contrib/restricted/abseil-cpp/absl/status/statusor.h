@@ -145,7 +145,7 @@ class ABSL_MUST_USE_RESULT StatusOr;
 //
 // NOTE: using `absl::StatusOr<T>::value()` when no valid value is present will
 // throw an exception if exceptions are enabled or terminate the process when
-// exceptions are not enabled.
+// exceptions are not enabled. 
 //
 // Example:
 //
@@ -550,7 +550,7 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
 
   // StatusOr<T>::value_or()
   //
-  // Returns the current value if `this->ok() == true`. Otherwise constructs a
+  // Returns the current value if `this->ok() == true`. Otherwise constructs a 
   // value using the provided `default_value`.
   //
   // Unlike `value`, this function returns by value, copying the current value

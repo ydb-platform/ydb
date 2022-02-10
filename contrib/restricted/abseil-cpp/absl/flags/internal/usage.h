@@ -66,37 +66,37 @@ void FlagsHelp(std::ostream& out, absl::string_view filter,
 int HandleUsageFlags(std::ostream& out,
                      absl::string_view program_usage_message);
 
-// --------------------------------------------------------------------
-// Globals representing usage reporting flags
-
-enum class HelpMode {
-  kNone,
-  kImportant,
-  kShort,
-  kFull,
-  kPackage,
-  kMatch,
-  kVersion,
-  kOnlyCheckArgs
-};
-
-// Returns substring to filter help output (--help=substr argument)
-std::string GetFlagsHelpMatchSubstr();
-// Returns the requested help mode.
-HelpMode GetFlagsHelpMode();
-// Returns the requested help format.
-HelpFormat GetFlagsHelpFormat();
-
-// These are corresponding setters to the attributes above.
-void SetFlagsHelpMatchSubstr(absl::string_view);
-void SetFlagsHelpMode(HelpMode);
-void SetFlagsHelpFormat(HelpFormat);
-
-// Deduces usage flags from the input argument in a form --name=value or
-// --name. argument is already split into name and value before we call this
-// function.
-bool DeduceUsageFlags(absl::string_view name, absl::string_view value);
-
+// -------------------------------------------------------------------- 
+// Globals representing usage reporting flags 
+ 
+enum class HelpMode { 
+  kNone, 
+  kImportant, 
+  kShort, 
+  kFull, 
+  kPackage, 
+  kMatch, 
+  kVersion, 
+  kOnlyCheckArgs 
+}; 
+ 
+// Returns substring to filter help output (--help=substr argument) 
+std::string GetFlagsHelpMatchSubstr(); 
+// Returns the requested help mode. 
+HelpMode GetFlagsHelpMode(); 
+// Returns the requested help format. 
+HelpFormat GetFlagsHelpFormat(); 
+ 
+// These are corresponding setters to the attributes above. 
+void SetFlagsHelpMatchSubstr(absl::string_view); 
+void SetFlagsHelpMode(HelpMode); 
+void SetFlagsHelpFormat(HelpFormat); 
+ 
+// Deduces usage flags from the input argument in a form --name=value or 
+// --name. argument is already split into name and value before we call this 
+// function. 
+bool DeduceUsageFlags(absl::string_view name, absl::string_view value); 
+ 
 }  // namespace flags_internal
 ABSL_NAMESPACE_END
 }  // namespace absl

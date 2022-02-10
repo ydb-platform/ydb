@@ -70,7 +70,7 @@ void HashtablezInfo::PrepareForSampling() {
   total_probe_length.store(0, std::memory_order_relaxed);
   hashes_bitwise_or.store(0, std::memory_order_relaxed);
   hashes_bitwise_and.store(~size_t{}, std::memory_order_relaxed);
-  hashes_bitwise_xor.store(0, std::memory_order_relaxed);
+  hashes_bitwise_xor.store(0, std::memory_order_relaxed); 
   max_reserve.store(0, std::memory_order_relaxed);
 
   create_time = absl::Now();
@@ -93,9 +93,9 @@ static bool ShouldForceSampling() {
   if (ABSL_PREDICT_TRUE(state == kDontForce)) return false;
 
   if (state == kUninitialized) {
-    state = ABSL_INTERNAL_C_SYMBOL(AbslContainerInternalSampleEverything)()
-                ? kForce
-                : kDontForce;
+    state = ABSL_INTERNAL_C_SYMBOL(AbslContainerInternalSampleEverything)() 
+                ? kForce 
+                : kDontForce; 
     global_state.store(state, std::memory_order_relaxed);
   }
   return state == kForce;
@@ -154,7 +154,7 @@ void RecordInsertSlow(HashtablezInfo* info, size_t hash,
 
   info->hashes_bitwise_and.fetch_and(hash, std::memory_order_relaxed);
   info->hashes_bitwise_or.fetch_or(hash, std::memory_order_relaxed);
-  info->hashes_bitwise_xor.fetch_xor(hash, std::memory_order_relaxed);
+  info->hashes_bitwise_xor.fetch_xor(hash, std::memory_order_relaxed); 
   info->max_probe_length.store(
       std::max(info->max_probe_length.load(std::memory_order_relaxed),
                probe_length),

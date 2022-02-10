@@ -19,10 +19,10 @@
 #include "absl/strings/string_view.h"
 #include "tcmalloc/size_class_info.h"
 
-GOOGLE_MALLOC_SECTION_BEGIN
+GOOGLE_MALLOC_SECTION_BEGIN 
 namespace tcmalloc {
-namespace tcmalloc_internal {
-namespace runtime_size_classes_internal {
+namespace tcmalloc_internal { 
+namespace runtime_size_classes_internal { 
 
 // Set size classes from a string.
 // Format: "size,pages,num_to_move;"
@@ -33,7 +33,7 @@ namespace runtime_size_classes_internal {
 int ParseSizeClasses(absl::string_view env, int max_size, int max_classes,
                      SizeClassInfo* parsed);
 
-}  // namespace runtime_size_classes_internal
+}  // namespace runtime_size_classes_internal 
 
 // If the environment variable TCMALLOC_SIZE_CLASSES is defined, its value is
 // parsed using ParseSizeClasses and ApplySizeClassDefaults into parsed. The
@@ -42,8 +42,8 @@ int ParseSizeClasses(absl::string_view env, int max_size, int max_classes,
 int MaybeSizeClassesFromEnv(int max_size, int max_classes,
                             SizeClassInfo* parsed);
 
-}  // namespace tcmalloc_internal
+}  // namespace tcmalloc_internal 
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END
+GOOGLE_MALLOC_SECTION_END 
 
 #endif  // TCMALLOC_RUNTIME_SIZE_CLASSES_H_

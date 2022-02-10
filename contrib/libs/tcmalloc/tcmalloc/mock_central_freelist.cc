@@ -18,19 +18,19 @@
 #include "tcmalloc/internal/logging.h"
 
 namespace tcmalloc {
-namespace tcmalloc_internal {
+namespace tcmalloc_internal { 
 
 void MinimalFakeCentralFreeList::AllocateBatch(void** batch, int n) {
   for (int i = 0; i < n; ++i) batch[i] = &batch[i];
 }
 
-void MinimalFakeCentralFreeList::FreeBatch(absl::Span<void*> batch) {
-  for (void* x : batch) CHECK_CONDITION(x != nullptr);
+void MinimalFakeCentralFreeList::FreeBatch(absl::Span<void*> batch) { 
+  for (void* x : batch) CHECK_CONDITION(x != nullptr); 
 }
 
-void MinimalFakeCentralFreeList::InsertRange(absl::Span<void*> batch) {
+void MinimalFakeCentralFreeList::InsertRange(absl::Span<void*> batch) { 
   absl::base_internal::SpinLockHolder h(&lock_);
-  FreeBatch(batch);
+  FreeBatch(batch); 
 }
 
 int MinimalFakeCentralFreeList::RemoveRange(void** batch, int n) {
@@ -45,14 +45,14 @@ void FakeCentralFreeList::AllocateBatch(void** batch, int n) {
   }
 }
 
-void FakeCentralFreeList::FreeBatch(absl::Span<void*> batch) {
-  for (void* x : batch) {
-    ::operator delete(x);
+void FakeCentralFreeList::FreeBatch(absl::Span<void*> batch) { 
+  for (void* x : batch) { 
+    ::operator delete(x); 
   }
 }
 
-void FakeCentralFreeList::InsertRange(absl::Span<void*> batch) {
-  FreeBatch(batch);
+void FakeCentralFreeList::InsertRange(absl::Span<void*> batch) { 
+  FreeBatch(batch); 
 }
 
 int FakeCentralFreeList::RemoveRange(void** batch, int n) {
@@ -60,5 +60,5 @@ int FakeCentralFreeList::RemoveRange(void** batch, int n) {
   return n;
 }
 
-}  // namespace tcmalloc_internal
+}  // namespace tcmalloc_internal 
 }  // namespace tcmalloc

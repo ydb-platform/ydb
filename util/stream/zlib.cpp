@@ -233,10 +233,10 @@ public:
         const Bytef* b = (const Bytef*)buf;
         const Bytef* e = b + size;
 
-        Y_DEFER {
-            Z()->next_in = nullptr;
-            Z()->avail_in = 0;
-        };
+        Y_DEFER { 
+            Z()->next_in = nullptr; 
+            Z()->avail_in = 0; 
+        }; 
         do {
             b = WritePart(b, e);
         } while (b < e);

@@ -21,8 +21,8 @@
 #ifndef ABSL_DEBUGGING_INTERNAL_STACKTRACE_CONFIG_H_
 #define ABSL_DEBUGGING_INTERNAL_STACKTRACE_CONFIG_H_
 
-#include "absl/base/config.h"
-
+#include "absl/base/config.h" 
+ 
 #if defined(ABSL_STACKTRACE_INL_HEADER)
 #error ABSL_STACKTRACE_INL_HEADER cannot be directly set
 
@@ -31,7 +31,7 @@
     "absl/debugging/internal/stacktrace_win32-inl.inc"
 
 #elif defined(__APPLE__)
-#ifdef ABSL_HAVE_THREAD_LOCAL
+#ifdef ABSL_HAVE_THREAD_LOCAL 
 // Thread local support required for UnwindImpl.
 #define ABSL_STACKTRACE_INL_HEADER \
   "absl/debugging/internal/stacktrace_generic-inl.inc"

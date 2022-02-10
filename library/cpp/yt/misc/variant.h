@@ -31,9 +31,9 @@ class TStringBuilderBase;
 template <class... Ts>
 void FormatValue(TStringBuilderBase* builder, const std::variant<Ts...>& variant, TStringBuf spec);
 
-template <class... Ts>
+template <class... Ts> 
 TString ToString(const std::variant<Ts...>& variant);
-
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 //! A concise way of creating a functor with an overloaded operator().

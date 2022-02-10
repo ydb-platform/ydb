@@ -15,9 +15,9 @@
 #ifndef TCMALLOC_INTERNAL_ENVIRONMENT_H_
 #define TCMALLOC_INTERNAL_ENVIRONMENT_H_
 
-#include "tcmalloc/internal/config.h"
-
-GOOGLE_MALLOC_SECTION_BEGIN
+#include "tcmalloc/internal/config.h" 
+ 
+GOOGLE_MALLOC_SECTION_BEGIN 
 namespace tcmalloc {
 namespace tcmalloc_internal {
 
@@ -37,6 +37,6 @@ const char* thread_safe_getenv(const char* env_var);
 
 }  // namespace tcmalloc_internal
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END
+GOOGLE_MALLOC_SECTION_END 
 
 #endif  // TCMALLOC_INTERNAL_ENVIRONMENT_H_

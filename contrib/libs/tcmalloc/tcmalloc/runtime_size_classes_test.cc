@@ -19,11 +19,11 @@
 #include "gtest/gtest.h"
 
 namespace tcmalloc {
-namespace tcmalloc_internal {
+namespace tcmalloc_internal { 
 namespace {
 
-using runtime_size_classes_internal::ParseSizeClasses;
-
+using runtime_size_classes_internal::ParseSizeClasses; 
+ 
 constexpr int kNumClasses = 4;
 constexpr int kMaxSize = 1024 * 1024;
 
@@ -110,5 +110,5 @@ TEST(RuntimeSizeClassesTest, EnvVariableExamined) {
 }
 
 }  // namespace
-}  // namespace tcmalloc_internal
+}  // namespace tcmalloc_internal 
 }  // namespace tcmalloc

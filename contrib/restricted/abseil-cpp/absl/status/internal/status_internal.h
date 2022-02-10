@@ -19,20 +19,20 @@
 #include "absl/container/inlined_vector.h"
 #include "absl/strings/cord.h"
 
-#ifndef SWIG
-// Disabled for SWIG as it doesn't parse attributes correctly.
+#ifndef SWIG 
+// Disabled for SWIG as it doesn't parse attributes correctly. 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
-// Returned Status objects may not be ignored. Codesearch doesn't handle ifdefs
-// as part of a class definitions (b/6995610), so we use a forward declaration.
-class ABSL_MUST_USE_RESULT Status;
-ABSL_NAMESPACE_END
-}  // namespace absl
-#endif  // !SWIG
+// Returned Status objects may not be ignored. Codesearch doesn't handle ifdefs 
+// as part of a class definitions (b/6995610), so we use a forward declaration. 
+class ABSL_MUST_USE_RESULT Status; 
+ABSL_NAMESPACE_END 
+}  // namespace absl 
+#endif  // !SWIG 
 
-namespace absl {
-ABSL_NAMESPACE_BEGIN
-
+namespace absl { 
+ABSL_NAMESPACE_BEGIN 
+ 
 enum class StatusCode : int;
 
 namespace status_internal {
@@ -49,11 +49,11 @@ using Payloads = absl::InlinedVector<Payload, 1>;
 struct StatusRep {
   StatusRep(absl::StatusCode code_arg, absl::string_view message_arg,
             std::unique_ptr<status_internal::Payloads> payloads_arg)
-      : ref(int32_t{1}),
+      : ref(int32_t{1}), 
         code(code_arg),
         message(message_arg),
         payloads(std::move(payloads_arg)) {}
-
+ 
   std::atomic<int32_t> ref;
   absl::StatusCode code;
   std::string message;

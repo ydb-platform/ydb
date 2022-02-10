@@ -210,11 +210,11 @@ static uint64_t HashLen16(uint64_t u, uint64_t v, uint64_t mul) {
   return b;
 }
 
-static uint64_t HashLen16(uint64_t u, uint64_t v) {
-  const uint64_t kMul = 0x9ddfea08eb382d69ULL;
-  return HashLen16(u, v, kMul);
-}
-
+static uint64_t HashLen16(uint64_t u, uint64_t v) { 
+  const uint64_t kMul = 0x9ddfea08eb382d69ULL; 
+  return HashLen16(u, v, kMul); 
+} 
+ 
 static uint64_t HashLen0to16(const char *s, size_t len) {
   if (len >= 8) {
     uint64_t mul = k2 + len * 2;

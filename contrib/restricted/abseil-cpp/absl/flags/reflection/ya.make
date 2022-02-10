@@ -10,7 +10,7 @@ LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/restricted/abseil-cpp/absl/base
-    contrib/restricted/abseil-cpp/absl/base/internal/low_level_alloc
+    contrib/restricted/abseil-cpp/absl/base/internal/low_level_alloc 
     contrib/restricted/abseil-cpp/absl/base/internal/raw_logging
     contrib/restricted/abseil-cpp/absl/base/internal/spinlock_wait
     contrib/restricted/abseil-cpp/absl/base/internal/throw_delegate
@@ -18,10 +18,10 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/city
     contrib/restricted/abseil-cpp/absl/container/internal/absl_hashtablez_sampler
     contrib/restricted/abseil-cpp/absl/container/internal/raw_hash_set
-    contrib/restricted/abseil-cpp/absl/debugging
-    contrib/restricted/abseil-cpp/absl/debugging/stacktrace
-    contrib/restricted/abseil-cpp/absl/debugging/symbolize
-    contrib/restricted/abseil-cpp/absl/demangle
+    contrib/restricted/abseil-cpp/absl/debugging 
+    contrib/restricted/abseil-cpp/absl/debugging/stacktrace 
+    contrib/restricted/abseil-cpp/absl/debugging/symbolize 
+    contrib/restricted/abseil-cpp/absl/demangle 
     contrib/restricted/abseil-cpp/absl/flags/commandlineflag
     contrib/restricted/abseil-cpp/absl/flags/internal/commandlineflag
     contrib/restricted/abseil-cpp/absl/flags/internal/private_handle_accessor
@@ -43,7 +43,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/time
     contrib/restricted/abseil-cpp/absl/time/civil_time
     contrib/restricted/abseil-cpp/absl/time/time_zone
-    contrib/restricted/abseil-cpp/absl/types/bad_optional_access
+    contrib/restricted/abseil-cpp/absl/types/bad_optional_access 
     contrib/restricted/abseil-cpp/absl/types/bad_variant_access
 )
 

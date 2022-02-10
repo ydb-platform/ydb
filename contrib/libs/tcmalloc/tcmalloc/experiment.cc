@@ -22,9 +22,9 @@
 #include "tcmalloc/internal/environment.h"
 #include "tcmalloc/internal/logging.h"
 
-GOOGLE_MALLOC_SECTION_BEGIN
+GOOGLE_MALLOC_SECTION_BEGIN 
 namespace tcmalloc {
-namespace tcmalloc_internal {
+namespace tcmalloc_internal { 
 namespace {
 
 const char kDelimiter = ',';
@@ -50,9 +50,9 @@ const bool* GetSelectedExperiments() {
   static const bool* status = [&]() {
     const char* active_experiments = thread_safe_getenv(kExperiments);
     const char* disabled_experiments = thread_safe_getenv(kDisableExperiments);
-    return SelectExperiments(by_id,
-                             active_experiments ? active_experiments : "",
-                             disabled_experiments ? disabled_experiments : "");
+    return SelectExperiments(by_id, 
+                             active_experiments ? active_experiments : "", 
+                             disabled_experiments ? disabled_experiments : ""); 
   }();
   return status;
 }
@@ -106,7 +106,7 @@ const bool* SelectExperiments(bool* buffer, absl::string_view active,
   return buffer;
 }
 
-void PrintExperiments(Printer* printer) {
+void PrintExperiments(Printer* printer) { 
   // Index experiments by their positions in the experiments array, rather than
   // by experiment ID.
   static bool active[ABSL_ARRAYSIZE(experiments)];
@@ -131,32 +131,32 @@ void PrintExperiments(Printer* printer) {
   printer->printf("\n");
 }
 
-void FillExperimentProperties(
-    std::map<std::string, MallocExtension::Property>* result) {
-  for (const auto& config : experiments) {
-    (*result)[absl::StrCat("tcmalloc.experiment.", config.name)].value =
-        IsExperimentActive(config.id) ? 1 : 0;
-  }
-}
-
-}  // namespace tcmalloc_internal
-
-bool IsExperimentActive(Experiment exp) {
-  ASSERT(static_cast<int>(exp) >= 0);
-  ASSERT(exp < Experiment::kMaxExperimentID);
-
-  return tcmalloc_internal::GetSelectedExperiments()[static_cast<int>(exp)];
-}
-
-absl::optional<Experiment> FindExperimentByName(absl::string_view name) {
-  for (const auto& config : experiments) {
-    if (name == config.name) {
-      return config.id;
-    }
-  }
-
-  return absl::nullopt;
-}
-
+void FillExperimentProperties( 
+    std::map<std::string, MallocExtension::Property>* result) { 
+  for (const auto& config : experiments) { 
+    (*result)[absl::StrCat("tcmalloc.experiment.", config.name)].value = 
+        IsExperimentActive(config.id) ? 1 : 0; 
+  } 
+} 
+ 
+}  // namespace tcmalloc_internal 
+ 
+bool IsExperimentActive(Experiment exp) { 
+  ASSERT(static_cast<int>(exp) >= 0); 
+  ASSERT(exp < Experiment::kMaxExperimentID); 
+ 
+  return tcmalloc_internal::GetSelectedExperiments()[static_cast<int>(exp)]; 
+} 
+ 
+absl::optional<Experiment> FindExperimentByName(absl::string_view name) { 
+  for (const auto& config : experiments) { 
+    if (name == config.name) { 
+      return config.id; 
+    } 
+  } 
+ 
+  return absl::nullopt; 
+} 
+ 
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END
+GOOGLE_MALLOC_SECTION_END 

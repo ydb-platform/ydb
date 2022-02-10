@@ -150,16 +150,16 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #if ABSL_OPTION_USE_INLINE_NAMESPACE == 0
 #define ABSL_NAMESPACE_BEGIN
 #define ABSL_NAMESPACE_END
-#define ABSL_INTERNAL_C_SYMBOL(x) x
+#define ABSL_INTERNAL_C_SYMBOL(x) x 
 #elif ABSL_OPTION_USE_INLINE_NAMESPACE == 1
 #define ABSL_NAMESPACE_BEGIN \
   inline namespace ABSL_OPTION_INLINE_NAMESPACE_NAME {
 #define ABSL_NAMESPACE_END }
-#define ABSL_INTERNAL_C_SYMBOL_HELPER_2(x, v) x##_##v
-#define ABSL_INTERNAL_C_SYMBOL_HELPER_1(x, v) \
-  ABSL_INTERNAL_C_SYMBOL_HELPER_2(x, v)
-#define ABSL_INTERNAL_C_SYMBOL(x) \
-  ABSL_INTERNAL_C_SYMBOL_HELPER_1(x, ABSL_OPTION_INLINE_NAMESPACE_NAME)
+#define ABSL_INTERNAL_C_SYMBOL_HELPER_2(x, v) x##_##v 
+#define ABSL_INTERNAL_C_SYMBOL_HELPER_1(x, v) \ 
+  ABSL_INTERNAL_C_SYMBOL_HELPER_2(x, v) 
+#define ABSL_INTERNAL_C_SYMBOL(x) \ 
+  ABSL_INTERNAL_C_SYMBOL_HELPER_1(x, ABSL_OPTION_INLINE_NAMESPACE_NAME) 
 #else
 #error options.h is misconfigured.
 #endif
@@ -268,7 +268,7 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
     ABSL_INTERNAL_HAS_KEYWORD(__builtin_FILE)
 #define ABSL_HAVE_SOURCE_LOCATION_CURRENT 1
 #elif ABSL_INTERNAL_HAVE_MIN_GNUC_VERSION(5, 0)
-#define ABSL_HAVE_SOURCE_LOCATION_CURRENT 1
+#define ABSL_HAVE_SOURCE_LOCATION_CURRENT 1 
 #endif
 #endif
 
@@ -429,15 +429,15 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #define ABSL_HAVE_PTHREAD_GETSCHEDPARAM 1
 #endif
 
-// ABSL_HAVE_SCHED_GETCPU
-//
-// Checks whether sched_getcpu is available.
-#ifdef ABSL_HAVE_SCHED_GETCPU
-#error ABSL_HAVE_SCHED_GETCPU cannot be directly set
-#elif defined(__linux__)
-#define ABSL_HAVE_SCHED_GETCPU 1
-#endif
-
+// ABSL_HAVE_SCHED_GETCPU 
+// 
+// Checks whether sched_getcpu is available. 
+#ifdef ABSL_HAVE_SCHED_GETCPU 
+#error ABSL_HAVE_SCHED_GETCPU cannot be directly set 
+#elif defined(__linux__) 
+#define ABSL_HAVE_SCHED_GETCPU 1 
+#endif 
+ 
 // ABSL_HAVE_SCHED_YIELD
 //
 // Checks whether the platform implements sched_yield(2) as defined in
@@ -549,7 +549,7 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #endif
 
 #ifdef __has_include
-#if __has_include(<any>) && defined(__cplusplus) && __cplusplus >= 201703L && \
+#if __has_include(<any>) && defined(__cplusplus) && __cplusplus >= 201703L && \ 
     !ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE
 #define ABSL_HAVE_STD_ANY 1
 #endif
@@ -563,8 +563,8 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #endif
 
 #ifdef __has_include
-#if __has_include(<optional>) && defined(__cplusplus) && \
-    __cplusplus >= 201703L && !ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE
+#if __has_include(<optional>) && defined(__cplusplus) && \ 
+    __cplusplus >= 201703L && !ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE 
 #define ABSL_HAVE_STD_OPTIONAL 1
 #endif
 #endif
@@ -577,8 +577,8 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #endif
 
 #ifdef __has_include
-#if __has_include(<variant>) && defined(__cplusplus) && \
-    __cplusplus >= 201703L && !ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE
+#if __has_include(<variant>) && defined(__cplusplus) && \ 
+    __cplusplus >= 201703L && !ABSL_INTERNAL_APPLE_CXX17_TYPES_UNAVAILABLE 
 #define ABSL_HAVE_STD_VARIANT 1
 #endif
 #endif
@@ -599,9 +599,9 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 // not correctly set by MSVC, so we use `_MSVC_LANG` to check the language
 // version.
 // TODO(zhangxy): fix tests before enabling aliasing for `std::any`.
-#if defined(_MSC_VER) && _MSC_VER >= 1910 &&         \
-    ((defined(_MSVC_LANG) && _MSVC_LANG > 201402) || \
-     (defined(__cplusplus) && __cplusplus > 201402))
+#if defined(_MSC_VER) && _MSC_VER >= 1910 &&         \ 
+    ((defined(_MSVC_LANG) && _MSVC_LANG > 201402) || \ 
+     (defined(__cplusplus) && __cplusplus > 201402)) 
 // #define ABSL_HAVE_STD_ANY 1
 #define ABSL_HAVE_STD_OPTIONAL 1
 #define ABSL_HAVE_STD_VARIANT 1
@@ -755,13 +755,13 @@ static_assert(ABSL_INTERNAL_INLINE_NAMESPACE_STR[0] != 'h' ||
 #define ABSL_HAVE_ADDRESS_SANITIZER 1
 #endif
 
-// ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION
-//
-// Class template argument deduction is a language feature added in C++17.
-#ifdef ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION
-#error "ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION cannot be directly set."
-#elif defined(__cpp_deduction_guides)
-#define ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION 1
-#endif
-
+// ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION 
+// 
+// Class template argument deduction is a language feature added in C++17. 
+#ifdef ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION 
+#error "ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION cannot be directly set." 
+#elif defined(__cpp_deduction_guides) 
+#define ABSL_HAVE_CLASS_TEMPLATE_ARGUMENT_DEDUCTION 1 
+#endif 
+ 
 #endif  // ABSL_BASE_CONFIG_H_

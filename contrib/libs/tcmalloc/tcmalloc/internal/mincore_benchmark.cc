@@ -25,7 +25,7 @@
 #include "tcmalloc/internal/logging.h"
 #include "tcmalloc/internal/mincore.h"
 
-GOOGLE_MALLOC_SECTION_BEGIN
+GOOGLE_MALLOC_SECTION_BEGIN 
 namespace tcmalloc {
 namespace {
 
@@ -58,4 +58,4 @@ BENCHMARK(BM_mincore)->Range(1, 16 * 1024);
 
 }  // namespace
 }  // namespace tcmalloc
-GOOGLE_MALLOC_SECTION_END
+GOOGLE_MALLOC_SECTION_END 

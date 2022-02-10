@@ -77,7 +77,7 @@ class DoctestModule(LoadedModule):
             reraise(etype, type(exc)('{}\n{}'.format(exc, msg)), tb)
 
 
-# NOTE: Since we are overriding collect method of pytest session, pytest hooks are not invoked during collection.
+# NOTE: Since we are overriding collect method of pytest session, pytest hooks are not invoked during collection. 
 def pytest_ignore_collect(module, session, filenames_from_full_filters, accept_filename_predicate):
     if session.config.option.mode == 'list':
         return not accept_filename_predicate(module.name)
@@ -87,12 +87,12 @@ def pytest_ignore_collect(module, session, filenames_from_full_filters, accept_f
 
     test_file_filter = getattr(session.config.option, 'test_file_filter', None)
     if test_file_filter is None:
-        return False
+        return False 
     if module.name != test_file_filter.replace('/', '.'):
         return True
-    return False
-
-
+    return False 
+ 
+ 
 class CollectionPlugin(object):
     def __init__(self, test_modules, doctest_modules):
         self._test_modules = test_modules
@@ -114,7 +114,7 @@ class CollectionPlugin(object):
             for test_module in self._test_modules:
                 module = LoadedModule.from_parent(name=test_module, parent=session)
                 if not pytest_ignore_collect(module, session, filenames_filter, accept_filename_predicate):
-                    yield module
+                    yield module 
 
                 if os.environ.get('YA_PYTEST_DISABLE_DOCTEST', 'no') == 'no':
                     module = DoctestModule.from_parent(name=test_module, parent=session)

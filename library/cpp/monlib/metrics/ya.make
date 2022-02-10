@@ -17,7 +17,7 @@ SRCS(
     log_histogram_snapshot.cpp
     labels.cpp
     metric_registry.cpp
-    metric_consumer.cpp
+    metric_consumer.cpp 
     metric_type.cpp
     metric_value.cpp
     summary_snapshot.cpp

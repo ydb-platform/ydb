@@ -36,7 +36,7 @@ void ForEachFlag(std::function<void(CommandLineFlag&)> visitor);
 
 //-----------------------------------------------------------------------------
 
-bool RegisterCommandLineFlag(CommandLineFlag&, const char* filename);
+bool RegisterCommandLineFlag(CommandLineFlag&, const char* filename); 
 
 void FinalizeRegistry();
 

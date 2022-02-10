@@ -3,17 +3,17 @@
 
 #include <library/cpp/ytalloc/api/ytalloc.h>
 
-namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
+namespace NYT { 
+ 
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 static constexpr size_t InitialBlobCapacity = 16;
 static constexpr double BlobCapacityMultiplier = 1.5;
 
-TBlob::TBlob(
-    TRefCountedTypeCookie tagCookie,
-    size_t size,
-    bool initiailizeStorage,
+TBlob::TBlob( 
+    TRefCountedTypeCookie tagCookie, 
+    size_t size, 
+    bool initiailizeStorage, 
     bool pageAligned)
     : PageAligned_(pageAligned)
 {
@@ -29,8 +29,8 @@ TBlob::TBlob(
     }
 }
 
-TBlob::TBlob(
-    TRefCountedTypeCookie tagCookie,
+TBlob::TBlob( 
+    TRefCountedTypeCookie tagCookie, 
     TRef data,
     bool pageAligned)
     : PageAligned_(pageAligned)
@@ -97,8 +97,8 @@ void TBlob::Resize(size_t newSize, bool initializeStorage /*= true*/)
 TBlob& TBlob::operator = (const TBlob& rhs)
 {
     if (this != &rhs) {
-        this->~TBlob();
-        new(this) TBlob(rhs);
+        this->~TBlob(); 
+        new(this) TBlob(rhs); 
     }
     return *this;
 }
@@ -106,8 +106,8 @@ TBlob& TBlob::operator = (const TBlob& rhs)
 TBlob& TBlob::operator = (TBlob&& rhs) noexcept
 {
     if (this != &rhs) {
-        this->~TBlob();
-        new(this) TBlob(std::move(rhs));
+        this->~TBlob(); 
+        new(this) TBlob(std::move(rhs)); 
     }
     return *this;
 }

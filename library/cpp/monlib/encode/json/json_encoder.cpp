@@ -440,11 +440,11 @@ namespace NMonitoring {
                 EmptyLabels_ = false;
             }
 
-            void OnLabel(ui32 name, ui32 value) override {
-                TBufferedEncoderBase::OnLabel(name, value);
-                EmptyLabels_ = false;
-            }
-
+            void OnLabel(ui32 name, ui32 value) override { 
+                TBufferedEncoderBase::OnLabel(name, value); 
+                EmptyLabels_ = false; 
+            } 
+ 
             void OnLabelsEnd() override {
                 TBufferedEncoderBase::OnLabelsEnd();
                 Y_ENSURE(!EmptyLabels_, "Labels cannot be empty");

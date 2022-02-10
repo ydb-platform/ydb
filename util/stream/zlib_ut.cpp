@@ -4,53 +4,53 @@
 
 #include "file.h"
 #include <util/system/tempfile.h>
-#include <util/random/entropy.h>
-#include <util/random/random.h>
+#include <util/random/entropy.h> 
+#include <util/random/random.h> 
 
 #define ZDATA "./zdata"
 
-class TThrowingStream: public IOutputStream {
-public:
-    TThrowingStream(int limit)
-        : Limit_(limit)
-    {
-    }
-
-    void DoWrite(const void*, size_t size) override {
-        if (Ignore) {
-            return;
-        }
-
-        Limit_ -= size;
-        if (Limit_ < 0) {
-            throw yexception() << "catch this";
-        }
-    }
-
-    void DoFinish() override {
-        if (Ignore) {
-            return;
-        }
-        if (Limit_ < 0) {
-            throw yexception() << "catch this";
-        }
-    }
-
-    void DoFlush() override {
-        if (Ignore) {
-            return;
-        }
-        if (Limit_ < 0) {
-            throw yexception() << "catch this";
-        }
-    }
-
-    bool Ignore = false;
-
-private:
-    int Limit_;
-};
-
+class TThrowingStream: public IOutputStream { 
+public: 
+    TThrowingStream(int limit) 
+        : Limit_(limit) 
+    { 
+    } 
+ 
+    void DoWrite(const void*, size_t size) override { 
+        if (Ignore) { 
+            return; 
+        } 
+ 
+        Limit_ -= size; 
+        if (Limit_ < 0) { 
+            throw yexception() << "catch this"; 
+        } 
+    } 
+ 
+    void DoFinish() override { 
+        if (Ignore) { 
+            return; 
+        } 
+        if (Limit_ < 0) { 
+            throw yexception() << "catch this"; 
+        } 
+    } 
+ 
+    void DoFlush() override { 
+        if (Ignore) { 
+            return; 
+        } 
+        if (Limit_ < 0) { 
+            throw yexception() << "catch this"; 
+        } 
+    } 
+ 
+    bool Ignore = false; 
+ 
+private: 
+    int Limit_; 
+}; 
+ 
 Y_UNIT_TEST_SUITE(TZLibTest) {
     static const TString DATA = "8s7d5vc6s5vc67sa4c65ascx6asd4xcv76adsfxv76s";
     static const TString DATA2 = "cn8wk2bd9vb3vdfif83g1ks94bfiovtwv";
@@ -111,21 +111,21 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
         }
     }
 
-    Y_UNIT_TEST(CompressionExceptionSegfault) {
-        TVector<char> buf(512 * 1024);
-        EntropyPool().Load(buf.data(), buf.size());
-
-        TThrowingStream o(128 * 1024);
-        TZLibCompress c(&o, ZLib::GZip, 4, 1 << 15);
-        try {
-            c.Write(buf.data(), buf.size());
-        } catch (...) {
-        }
-
-        o.Ignore = true;
-        TVector<char>().swap(buf);
-    }
-
+    Y_UNIT_TEST(CompressionExceptionSegfault) { 
+        TVector<char> buf(512 * 1024); 
+        EntropyPool().Load(buf.data(), buf.size()); 
+ 
+        TThrowingStream o(128 * 1024); 
+        TZLibCompress c(&o, ZLib::GZip, 4, 1 << 15); 
+        try { 
+            c.Write(buf.data(), buf.size()); 
+        } catch (...) { 
+        } 
+ 
+        o.Ignore = true; 
+        TVector<char>().swap(buf); 
+    } 
+ 
     Y_UNIT_TEST(DecompressFirstOfTwoStreams) {
         // Check that Decompress(Compress(X) + Compress(Y)) == X when single stream is allowed
         TTempFile tmpFile(ZDATA);

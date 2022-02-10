@@ -18,7 +18,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "absl/time/time.h"
+#include "absl/time/time.h" 
 
 namespace tcmalloc {
 namespace {
@@ -39,17 +39,17 @@ TEST(MallocExtension, BackgroundReleaseRate) {
             0);
 }
 
-TEST(MallocExtension, SkipSubreleaseInterval) {
-
-  // Mutate via MallocExtension.
-  MallocExtension::SetSkipSubreleaseInterval(absl::Seconds(10));
-  EXPECT_EQ(MallocExtension::GetSkipSubreleaseInterval(), absl::Seconds(10));
-
-  // Disable skip subrelease
-  MallocExtension::SetSkipSubreleaseInterval(absl::ZeroDuration());
-  EXPECT_EQ(MallocExtension::GetSkipSubreleaseInterval(), absl::ZeroDuration());
-}
-
+TEST(MallocExtension, SkipSubreleaseInterval) { 
+ 
+  // Mutate via MallocExtension. 
+  MallocExtension::SetSkipSubreleaseInterval(absl::Seconds(10)); 
+  EXPECT_EQ(MallocExtension::GetSkipSubreleaseInterval(), absl::Seconds(10)); 
+ 
+  // Disable skip subrelease 
+  MallocExtension::SetSkipSubreleaseInterval(absl::ZeroDuration()); 
+  EXPECT_EQ(MallocExtension::GetSkipSubreleaseInterval(), absl::ZeroDuration()); 
+} 
+ 
 TEST(MallocExtension, Properties) {
   // Verify that every property under GetProperties also works with
   // GetNumericProperty.

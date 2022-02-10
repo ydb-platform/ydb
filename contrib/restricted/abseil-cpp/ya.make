@@ -46,7 +46,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/flags/usage_config
     contrib/restricted/abseil-cpp/absl/functional
     contrib/restricted/abseil-cpp/absl/hash
-    contrib/restricted/abseil-cpp/absl/hash/internal
+    contrib/restricted/abseil-cpp/absl/hash/internal 
     contrib/restricted/abseil-cpp/absl/memory
     contrib/restricted/abseil-cpp/absl/meta
     contrib/restricted/abseil-cpp/absl/numeric
@@ -127,7 +127,7 @@ RECURSE(
     absl/flags/usage_config
     absl/functional
     absl/hash
-    absl/hash/internal
+    absl/hash/internal 
     absl/memory
     absl/meta
     absl/numeric

@@ -115,28 +115,28 @@ bool TGuid::FromStringHex32(TStringBuf str, TGuid* result)
         return false;
     }
 
-    bool ok = true;
-    int i = 0;
-    auto parseChar = [&] {
-        const char c = str[i++];
-        ui32 digit = 0;
-        if ('0' <= c && c <= '9') {
-            digit = c - '0';
-        } else if ('a' <= c && c <= 'f') {
-            digit = c - 'a' + 10;
-        } else if ('A' <= c && c <= 'F') {
-            digit = c - 'A' + 10;
-        } else {
-            ok = false;
-        }
-        return digit;
-    };
+    bool ok = true; 
+    int i = 0; 
+    auto parseChar = [&] { 
+        const char c = str[i++]; 
+        ui32 digit = 0; 
+        if ('0' <= c && c <= '9') { 
+            digit = c - '0'; 
+        } else if ('a' <= c && c <= 'f') { 
+            digit = c - 'a' + 10; 
+        } else if ('A' <= c && c <= 'F') { 
+            digit = c - 'A' + 10; 
+        } else { 
+            ok = false; 
+        } 
+        return digit; 
+    }; 
 
-    for (size_t j = 0; j < 16; ++j) {
-        result->ReversedParts8[15 - j] = parseChar() * 16 + parseChar();
+    for (size_t j = 0; j < 16; ++j) { 
+        result->ReversedParts8[15 - j] = parseChar() * 16 + parseChar(); 
     }
 
-    return ok;
+    return ok; 
 }
 
 char* WriteGuidToBuffer(char* ptr, TGuid value)

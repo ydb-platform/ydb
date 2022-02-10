@@ -22,7 +22,7 @@
 #include <cmath>
 #include <cstdint>
 
-#include "absl/numeric/bits.h"
+#include "absl/numeric/bits.h" 
 
 namespace absl {
 ABSL_NAMESPACE_BEGIN
@@ -34,10 +34,10 @@ namespace random_internal {
 // for instance--std::log2 rounds up rather than down, which introduces
 // definite skew in the results.
 inline int IntLog2Floor(uint64_t n) {
-  return (n <= 1) ? 0 : (63 - countl_zero(n));
+  return (n <= 1) ? 0 : (63 - countl_zero(n)); 
 }
 inline int IntLog2Ceil(uint64_t n) {
-  return (n <= 1) ? 0 : (64 - countl_zero(n - 1));
+  return (n <= 1) ? 0 : (64 - countl_zero(n - 1)); 
 }
 
 inline double StirlingLogFactorial(double n) {

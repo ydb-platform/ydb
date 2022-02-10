@@ -190,7 +190,7 @@ void SetBacktraceFormatter(TBacktraceFormatter provider);
 //! Typically invoked on application startup to lock all binaries in memory
 //! and prevent executable code and static data to be paged out
 //! causing latency spikes.
-void MlockFileMappings(bool populate = true);
+void MlockFileMappings(bool populate = true); 
 
 ////////////////////////////////////////////////////////////////////////////////
 // Configuration API
@@ -349,7 +349,7 @@ DEFINE_ENUM(ETimingEventType,
     (MadviseDontNeed)
     (Locking)
     (Prefault)
-    (FilePrefault)
+    (FilePrefault) 
 );
 
 struct TTimingEventCounters

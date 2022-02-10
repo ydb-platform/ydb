@@ -32,7 +32,7 @@
 #include "tcmalloc/internal/logging.h"
 
 namespace tcmalloc {
-namespace tcmalloc_internal {
+namespace tcmalloc_internal { 
 namespace {
 
 class HugeAllocatorTest : public testing::TestWithParam<bool> {
@@ -445,5 +445,5 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 }  // namespace
-}  // namespace tcmalloc_internal
+}  // namespace tcmalloc_internal 
 }  // namespace tcmalloc

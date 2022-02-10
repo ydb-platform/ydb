@@ -22,7 +22,7 @@ namespace NMonitoring {
 
     public:
         const TValue* PutIfAbsent(TStringBuf str);
-        const TValue* GetByIndex(ui32 index) const;
+        const TValue* GetByIndex(ui32 index) const; 
 
         /// Determines whether pool must be sorted by value frequencies
         TStringPoolBuilder& SetSorted(bool sorted) {

@@ -51,17 +51,17 @@ public:
     TZLibDecompress(IInputStream* input, ZLib::StreamType type = ZLib::Auto, size_t buflen = ZLib::ZLIB_BUF_LEN,
                     TStringBuf dict = {});
 
-    /**
-     * Allows/disallows multiple sequential compressed streams. Allowed by default.
-     *
-     * If multiple streams are allowed, their decompressed content will be concatenated.
-     * If multiple streams are disabled, then only first stream is decompressed. After that end
+    /** 
+     * Allows/disallows multiple sequential compressed streams. Allowed by default. 
+     * 
+     * If multiple streams are allowed, their decompressed content will be concatenated. 
+     * If multiple streams are disabled, then only first stream is decompressed. After that end 
      * of IInputStream will have happen, i.e. method Read() will return 0.
-     *
-     * @param allowMultipleStreams - flag to allow (true) or disable (false) multiple streams.
-     */
-    void SetAllowMultipleStreams(bool allowMultipleStreams);
-
+     * 
+     * @param allowMultipleStreams - flag to allow (true) or disable (false) multiple streams. 
+     */ 
+    void SetAllowMultipleStreams(bool allowMultipleStreams); 
+ 
     ~TZLibDecompress() override;
 
 protected:

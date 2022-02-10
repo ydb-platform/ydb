@@ -1,8 +1,8 @@
 #pragma once
 
-#include "string_transform.h"
+#include "string_transform.h" 
 #include "name_generator.h"
-
+ 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 
@@ -29,25 +29,25 @@ namespace NProtobufJson {
             FieldNameSnakeCase,     // ABC -> a_b_c,    UserID -> user_i_d
             FieldNameSnakeCaseDense // ABC -> abc,      UserID -> user_id
         };
-
+ 
         enum EnumValueMode {
             EnumCaseSensetive = 0, // default
             EnumCaseInsensetive,
             EnumSnakeCaseInsensitive
         };
-
+ 
         TSelf& SetFieldNameMode(FldNameMode mode) {
             Y_ENSURE(mode == FieldNameOriginalCase || !UseJsonName, "FieldNameMode and UseJsonName are mutually exclusive");
             FieldNameMode = mode;
             return *this;
         }
-
+ 
         TSelf& SetUseJsonName(bool jsonName) {
             Y_ENSURE(!jsonName || FieldNameMode == FieldNameOriginalCase, "FieldNameMode and UseJsonName are mutually exclusive");
             UseJsonName = jsonName;
             return *this;
         }
-
+ 
         TSelf& AddStringTransform(TStringTransformPtr transform) {
             StringTransforms.push_back(transform);
             return *this;
@@ -57,7 +57,7 @@ namespace NProtobufJson {
             CastFromString = cast;
             return *this;
         }
-
+ 
         TSelf& SetDoNotCastEmptyStrings(bool cast) {
             DoNotCastEmptyStrings = cast;
             return *this;
@@ -109,7 +109,7 @@ namespace NProtobufJson {
         /// Use 'json_name' protobuf option for field name, mutually exclusive
         /// with FieldNameMode.
         bool UseJsonName = false;
-
+ 
         /// Transforms will be applied only to string values (== protobuf fields of string / bytes type).
         TVector<TStringTransformPtr> StringTransforms;
 
@@ -163,7 +163,7 @@ namespace NProtobufJson {
     /// @throw yexception
     void Json2Proto(const NJson::TJsonValue& json, google::protobuf::Message& proto,
                     const TJson2ProtoConfig& config = TJson2ProtoConfig());
-
+ 
     /// @throw yexception
     void Json2Proto(const TStringBuf& json, google::protobuf::Message& proto,
                     const TJson2ProtoConfig& config = TJson2ProtoConfig());

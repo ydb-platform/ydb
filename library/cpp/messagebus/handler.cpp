@@ -30,7 +30,7 @@ void TOnMessageContext::ForgetRequest() {
 TNetAddr TOnMessageContext::GetPeerAddrNetAddr() const {
     return Ident.GetNetAddr();
 }
-
-bool TOnMessageContext::IsConnectionAlive() const {
+ 
+bool TOnMessageContext::IsConnectionAlive() const { 
     return !!Ident.Connection && Ident.Connection->IsAlive();
-}
+} 

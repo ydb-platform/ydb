@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
             UNIT_ASSERT_EQUAL(d.ReadAll(), DATA);
         }
     }
-
+ 
     Y_UNIT_TEST(Dictionary) {
         static constexpr TStringBuf data = "<html><body></body></html>";
         static constexpr TStringBuf dict = "</<html><body>";
@@ -91,26 +91,26 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
     }
 
     Y_UNIT_TEST(DecompressTwoStreams) {
-        // Check that Decompress(Compress(X) + Compress(Y)) == X + Y
-        TTempFile tmpFile(ZDATA);
-        {
+        // Check that Decompress(Compress(X) + Compress(Y)) == X + Y 
+        TTempFile tmpFile(ZDATA); 
+        { 
             TUnbufferedFileOutput o(ZDATA);
-            TZLibCompress c1(&o, ZLib::ZLib);
+            TZLibCompress c1(&o, ZLib::ZLib); 
             c1.Write(DATA.data(), DATA.size());
-            c1.Finish();
-            TZLibCompress c2(&o, ZLib::ZLib);
+            c1.Finish(); 
+            TZLibCompress c2(&o, ZLib::ZLib); 
             c2.Write(DATA2.data(), DATA2.size());
-            c2.Finish();
-            o.Finish();
-        }
-        {
+            c2.Finish(); 
+            o.Finish(); 
+        } 
+        { 
             TUnbufferedFileInput i(ZDATA);
-            TZLibDecompress d(&i);
-
+            TZLibDecompress d(&i); 
+ 
             UNIT_ASSERT_EQUAL(d.ReadAll(), DATA + DATA2);
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST(CompressionExceptionSegfault) {
         TVector<char> buf(512 * 1024);
         EntropyPool().Load(buf.data(), buf.size());
@@ -127,26 +127,26 @@ Y_UNIT_TEST_SUITE(TZLibTest) {
     }
 
     Y_UNIT_TEST(DecompressFirstOfTwoStreams) {
-        // Check that Decompress(Compress(X) + Compress(Y)) == X when single stream is allowed
-        TTempFile tmpFile(ZDATA);
-        {
+        // Check that Decompress(Compress(X) + Compress(Y)) == X when single stream is allowed 
+        TTempFile tmpFile(ZDATA); 
+        { 
             TUnbufferedFileOutput o(ZDATA);
-            TZLibCompress c1(&o, ZLib::ZLib);
+            TZLibCompress c1(&o, ZLib::ZLib); 
             c1.Write(DATA.data(), DATA.size());
-            c1.Finish();
-            TZLibCompress c2(&o, ZLib::ZLib);
+            c1.Finish(); 
+            TZLibCompress c2(&o, ZLib::ZLib); 
             c2.Write(DATA2.data(), DATA2.size());
-            c2.Finish();
-            o.Finish();
-        }
-        {
+            c2.Finish(); 
+            o.Finish(); 
+        } 
+        { 
             TUnbufferedFileInput i(ZDATA);
-            TZLibDecompress d(&i);
-            d.SetAllowMultipleStreams(false);
-
+            TZLibDecompress d(&i); 
+            d.SetAllowMultipleStreams(false); 
+ 
             UNIT_ASSERT_EQUAL(d.ReadAll(), DATA);
-        }
-    }
+        } 
+    } 
 
     Y_UNIT_TEST(CompressFlush) {
         TString data = "";

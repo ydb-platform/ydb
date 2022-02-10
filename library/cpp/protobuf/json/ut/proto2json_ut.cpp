@@ -631,37 +631,37 @@ public:
         str = "bytes";
     }
 };
-
+ 
 Y_UNIT_TEST(TestBytesTransform) {
     // Test that string field is not changed
     {
         TString modelStr(R"_({"String":"value"})_");
-
+ 
         TFlatOptional proto;
         proto.SetString(R"_(value)_");
         TProto2JsonConfig config;
         config.StringTransforms.push_back(new TBytesTransform());
         TStringStream jsonStr;
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
     }
-
+ 
     // Test that bytes field is changed
     {
         TString modelStr(R"_({"Bytes":"bytes"})_");
-
+ 
         TFlatOptional proto;
         proto.SetBytes(R"_(value)_");
         TProto2JsonConfig config;
         config.StringTransforms.push_back(new TBytesTransform());
         TStringStream jsonStr;
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(Proto2Json(proto, jsonStr, config));
         UNIT_ASSERT_JSON_STRINGS_EQUAL(jsonStr.Str(), modelStr);
-    }
+    } 
 }
-
+ 
 Y_UNIT_TEST(TestFieldNameMode) {
     // Original case 1
     {

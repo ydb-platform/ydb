@@ -27,7 +27,7 @@ namespace NProtobufJson {
             return Transform(str);
         }
     };
-
+ 
     using TStringTransformPtr = TIntrusivePtr<IStringTransform>;
 
     template <bool quote, bool tounicode>

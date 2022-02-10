@@ -317,55 +317,55 @@ Y_UNIT_TEST(TestInvalidEnum) {
         UNIT_ASSERT_EXCEPTION(Json2Proto(json, proto), yexception);
     }
 }
-
+ 
 Y_UNIT_TEST(TestFieldNameMode) {
     // Original case 1
     {
         TString modelStr(R"_({"String":"value"})_");
-
+ 
         TFlatOptional proto;
         TJson2ProtoConfig config;
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config));
         UNIT_ASSERT(proto.GetString() == "value");
     }
-
+ 
     // Original case 2
     {
         TString modelStr(R"_({"String":"value"})_");
-
+ 
         TFlatOptional proto;
         TJson2ProtoConfig config;
         config.FieldNameMode = TJson2ProtoConfig::FieldNameOriginalCase;
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config));
         UNIT_ASSERT(proto.GetString() == "value");
     }
-
+ 
     // Lowercase
     {
         TString modelStr(R"_({"string":"value"})_");
-
+ 
         TFlatOptional proto;
         TJson2ProtoConfig config;
         config.FieldNameMode = TJson2ProtoConfig::FieldNameLowerCase;
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config));
         UNIT_ASSERT(proto.GetString() == "value");
     }
-
+ 
     // Uppercase
     {
         TString modelStr(R"_({"STRING":"value"})_");
-
+ 
         TFlatOptional proto;
         TJson2ProtoConfig config;
         config.FieldNameMode = TJson2ProtoConfig::FieldNameUpperCase;
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config));
         UNIT_ASSERT(proto.GetString() == "value");
     }
-
+ 
     // Camelcase
     {
         TString modelStr(R"_({"string":"value"})_");
@@ -433,25 +433,25 @@ Y_UNIT_TEST(TestFieldNameMode) {
     // Original case, repeated
     {
         TString modelStr(R"_({"I32":[1,2]})_");
-
+ 
         TFlatRepeated proto;
         TJson2ProtoConfig config;
         config.FieldNameMode = TJson2ProtoConfig::FieldNameOriginalCase;
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatRepeated>(modelStr, config));
         UNIT_ASSERT(proto.I32Size() == 2);
         UNIT_ASSERT(proto.GetI32(0) == 1);
         UNIT_ASSERT(proto.GetI32(1) == 2);
     }
-
+ 
     // Lower case, repeated
     {
         TString modelStr(R"_({"i32":[1,2]})_");
-
+ 
         TFlatRepeated proto;
         TJson2ProtoConfig config;
         config.FieldNameMode = TJson2ProtoConfig::FieldNameLowerCase;
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatRepeated>(modelStr, config));
         UNIT_ASSERT(proto.I32Size() == 2);
         UNIT_ASSERT(proto.GetI32(0) == 1);
@@ -491,7 +491,7 @@ Y_UNIT_TEST(TestFieldNameMode) {
             config.SetFieldNameMode(TJson2ProtoConfig::FieldNameLowerCase), yexception, "mutually exclusive");
     }
 } // TestFieldNameMode
-
+ 
 class TStringTransform: public IStringTransform {
 public:
     int GetType() const override {
@@ -501,7 +501,7 @@ public:
         str = "transformed_any";
     }
 };
-
+ 
 class TBytesTransform: public IStringTransform {
 public:
     int GetType() const override {
@@ -519,7 +519,7 @@ Y_UNIT_TEST(TestInvalidJson) {
     TFlatOptional proto;
     UNIT_ASSERT_EXCEPTION(Json2Proto(val, proto), yexception);
 }
-
+ 
 Y_UNIT_TEST(TestInvalidRepeatedFieldWithMapAsObject) {
     TCompositeRepeated proto;
     TJson2ProtoConfig config;
@@ -531,37 +531,37 @@ Y_UNIT_TEST(TestStringTransforms) {
     // Check that strings and bytes are transformed
     {
         TString modelStr(R"_({"String":"value_str", "Bytes": "value_bytes"})_");
-
+ 
         TFlatOptional proto;
         TJson2ProtoConfig config;
         config.AddStringTransform(new TStringTransform);
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config));
         UNIT_ASSERT(proto.GetString() == "transformed_any");
         UNIT_ASSERT(proto.GetBytes() == "transformed_any");
     }
-
+ 
     // Check that bytes are transformed, strings are left intact
     {
         TString modelStr(R"_({"String":"value_str", "Bytes": "value_bytes"})_");
-
+ 
         TFlatOptional proto;
         TJson2ProtoConfig config;
         config.AddStringTransform(new TBytesTransform);
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatOptional>(modelStr, config));
         UNIT_ASSERT(proto.GetString() == "value_str");
         UNIT_ASSERT(proto.GetBytes() == "transformed_bytes");
     }
-
+ 
     // Check that repeated bytes are transformed, repeated strings are left intact
     {
         TString modelStr(R"_({"String":["value_str", "str2"], "Bytes": ["value_bytes", "bytes2"]})_");
-
+ 
         TFlatRepeated proto;
         TJson2ProtoConfig config;
         config.AddStringTransform(new TBytesTransform);
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TFlatRepeated>(modelStr, config));
         UNIT_ASSERT(proto.StringSize() == 2);
         UNIT_ASSERT(proto.GetString(0) == "value_str");
@@ -570,15 +570,15 @@ Y_UNIT_TEST(TestStringTransforms) {
         UNIT_ASSERT(proto.GetBytes(0) == "transformed_bytes");
         UNIT_ASSERT(proto.GetBytes(1) == "transformed_bytes");
     }
-
+ 
     // Check that bytes are transformed, strings are left intact in composed messages
     {
         TString modelStr(R"_({"Part": {"String":"value_str", "Bytes": "value_bytes"}})_");
-
+ 
         TCompositeOptional proto;
         TJson2ProtoConfig config;
         config.AddStringTransform(new TBytesTransform);
-
+ 
         UNIT_ASSERT_NO_EXCEPTION(proto = Json2Proto<TCompositeOptional>(modelStr, config));
         UNIT_ASSERT(proto.GetPart().GetString() == "value_str");
         UNIT_ASSERT(proto.GetPart().GetBytes() == "transformed_bytes");

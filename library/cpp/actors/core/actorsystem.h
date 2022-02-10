@@ -135,7 +135,7 @@ namespace NActors {
     public:
         virtual ~ISchedulerThread() {
         }
- 
+
         virtual void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) = 0;
         virtual void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) = 0;
         virtual void PrepareStart() { /* empty */ }

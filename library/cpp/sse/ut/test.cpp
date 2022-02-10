@@ -6,12 +6,12 @@
 /* Author: Vitaliy Manushkin <agri@yandex-team.ru */
 
 #include <library/cpp/testing/unittest/registar.h>
- 
-#include <util/generic/typetraits.h> 
-#include <util/string/hex.h> 
+
+#include <util/generic/typetraits.h>
+#include <util/string/hex.h>
 #include <util/random/fast.h>
 #include <util/stream/output.h>
- 
+
 #include <algorithm>
 #include <array>
 #include <limits>
@@ -43,23 +43,23 @@ struct T_mm_CallWrapper {
 #include <xmmintrin.h>
 #include <emmintrin.h>
 #include <smmintrin.h>
-#elif defined(_ppc64_) 
+#elif defined(_ppc64_)
 #include "library/cpp/sse/powerpc.h"
-#else 
-#error "Unsupported platform" 
-#endif 
- 
-#if defined(_arm64_) 
-#define Wrap(T_mm_func) T_mm_func 
-#define WrapF(T_mm_func) T_mm_func 
-#define WrapD(T_mm_func) T_mm_func 
-#elif defined(_ppc64_) || defined(_i386_) || defined(_x86_64_) 
+#else
+#error "Unsupported platform"
+#endif
+
+#if defined(_arm64_)
+#define Wrap(T_mm_func) T_mm_func
+#define WrapF(T_mm_func) T_mm_func
+#define WrapD(T_mm_func) T_mm_func
+#elif defined(_ppc64_) || defined(_i386_) || defined(_x86_64_)
 #define Wrap(_mm_func) \
     T_mm_CallWrapper<__m128i, decltype(_mm_func), _mm_func>
 #define WrapF(_mm_func) \
     T_mm_CallWrapper<__m128, decltype(_mm_func), _mm_func>
-#define WrapD(_mm_func) \ 
-    T_mm_CallWrapper<__m128d, decltype(_mm_func), _mm_func> 
+#define WrapD(_mm_func) \
+    T_mm_CallWrapper<__m128d, decltype(_mm_func), _mm_func>
 using int8x16_t = std::array<i8, 16>;
 using int16x8_t = std::array<i16, 8>;
 using int32x4_t = std::array<i32, 4>;
@@ -69,7 +69,7 @@ using uint16x8_t = std::array<ui16, 8>;
 using uint32x4_t = std::array<ui32, 4>;
 using uint64x2_t = std::array<ui64, 2>;
 using float32x4_t = std::array<float, 4>;
-using float64x2_t = std::array<double, 2>; 
+using float64x2_t = std::array<double, 2>;
 
 template <typename TVectorType>
 struct TQType {
@@ -85,9 +85,9 @@ struct TQType {
     }
     static TVectorType As(__m128d param) {
         TVectorType value;
-        _mm_storeu_pd((double*)&value, param); 
-        return value; 
-    } 
+        _mm_storeu_pd((double*)&value, param);
+        return value;
+    }
 };
 #endif
 
@@ -133,24 +133,24 @@ struct TFuncLoad<__m128> {
 };
 
 template <>
-struct TFuncLoad<__m128d> { 
-    __m128d Value; 
- 
-    template <typename TPointer> 
-    TFuncLoad(TPointer* ptr) { 
-        Value = _mm_loadu_pd((double*)ptr); 
-    } 
- 
-    operator __m128d&() { 
-        return Value; 
-    } 
- 
-    operator const __m128d&() const { 
-        return Value; 
-    } 
-}; 
- 
-template <> 
+struct TFuncLoad<__m128d> {
+    __m128d Value;
+
+    template <typename TPointer>
+    TFuncLoad(TPointer* ptr) {
+        Value = _mm_loadu_pd((double*)ptr);
+    }
+
+    operator __m128d&() {
+        return Value;
+    }
+
+    operator const __m128d&() const {
+        return Value;
+    }
+};
+
+template <>
 struct TFuncStore<__m128i> {
     template <typename TPointer>
     TFuncStore(TPointer* ptr, __m128i Value) {
@@ -171,50 +171,50 @@ private:
     UNIT_TEST_SUITE(TSSEEmulTest);
     UNIT_TEST(Test_mm_load_si128);
     UNIT_TEST(Test_mm_loadu_si128);
-    UNIT_TEST(Test_mm_storeu_si128); 
-    UNIT_TEST(Test_mm_loadu_si128_2); 
-    UNIT_TEST(Test_mm_loadu_ps); 
-    UNIT_TEST(Test_mm_storeu_ps); 
+    UNIT_TEST(Test_mm_storeu_si128);
+    UNIT_TEST(Test_mm_loadu_si128_2);
+    UNIT_TEST(Test_mm_loadu_ps);
+    UNIT_TEST(Test_mm_storeu_ps);
 
-    UNIT_TEST(Test_mm_slli_epi16); 
-    UNIT_TEST(Test_mm_slli_epi32); 
-    UNIT_TEST(Test_mm_slli_epi64); 
-    UNIT_TEST(Test_mm_slli_si128); 
- 
+    UNIT_TEST(Test_mm_slli_epi16);
+    UNIT_TEST(Test_mm_slli_epi32);
+    UNIT_TEST(Test_mm_slli_epi64);
+    UNIT_TEST(Test_mm_slli_si128);
+
     UNIT_TEST(Test_mm_srli_epi16);
     UNIT_TEST(Test_mm_srli_epi32);
     UNIT_TEST(Test_mm_srli_epi64);
-    UNIT_TEST(Test_mm_srli_si128); 
+    UNIT_TEST(Test_mm_srli_si128);
 
-    UNIT_TEST(Test_mm_srai_epi16); 
-    UNIT_TEST(Test_mm_srai_epi32); 
- 
-    UNIT_TEST(Test_mm_sll_epi16); 
-    UNIT_TEST(Test_mm_sll_epi32); 
-    UNIT_TEST(Test_mm_sll_epi64); 
+    UNIT_TEST(Test_mm_srai_epi16);
+    UNIT_TEST(Test_mm_srai_epi32);
 
-    UNIT_TEST(Test_mm_srl_epi16); 
-    UNIT_TEST(Test_mm_srl_epi32); 
-    UNIT_TEST(Test_mm_srl_epi64); 
- 
+    UNIT_TEST(Test_mm_sll_epi16);
+    UNIT_TEST(Test_mm_sll_epi32);
+    UNIT_TEST(Test_mm_sll_epi64);
+
+    UNIT_TEST(Test_mm_srl_epi16);
+    UNIT_TEST(Test_mm_srl_epi32);
+    UNIT_TEST(Test_mm_srl_epi64);
+
     UNIT_TEST(Test_mm_add_epi16);
     UNIT_TEST(Test_mm_add_epi32);
     UNIT_TEST(Test_mm_add_epi64);
     UNIT_TEST(Test_mm_add_ps);
-    UNIT_TEST(Test_mm_add_pd); 
+    UNIT_TEST(Test_mm_add_pd);
 
-    UNIT_TEST(Test_mm_madd_epi16); 
- 
+    UNIT_TEST(Test_mm_madd_epi16);
+
     UNIT_TEST(Test_mm_sub_epi16);
     UNIT_TEST(Test_mm_sub_epi32);
     UNIT_TEST(Test_mm_sub_epi64);
     UNIT_TEST(Test_mm_sub_ps);
-    UNIT_TEST(Test_mm_sub_pd); 
+    UNIT_TEST(Test_mm_sub_pd);
 
     UNIT_TEST(Test_mm_mul_ps);
-    UNIT_TEST(Test_mm_mul_pd); 
+    UNIT_TEST(Test_mm_mul_pd);
     UNIT_TEST(Test_mm_div_ps);
-    UNIT_TEST(Test_mm_div_pd); 
+    UNIT_TEST(Test_mm_div_pd);
     UNIT_TEST(Test_mm_max_ps);
     UNIT_TEST(Test_mm_min_ps);
     UNIT_TEST(Test_mm_and_ps);
@@ -250,11 +250,11 @@ private:
     UNIT_TEST(Test_mm_set1_epi16);
     UNIT_TEST(Test_mm_set1_epi32);
     UNIT_TEST(Test_mm_set1_ps);
-    UNIT_TEST(Test_mm_set_ps1); 
+    UNIT_TEST(Test_mm_set_ps1);
 
     UNIT_TEST(Test_mm_setzero_si128);
     UNIT_TEST(Test_mm_setzero_ps);
-    UNIT_TEST(Test_mm_setzero_pd); 
+    UNIT_TEST(Test_mm_setzero_pd);
 
     UNIT_TEST(Test_mm_storel_epi64);
     UNIT_TEST(Test_mm_loadl_epi64);
@@ -266,15 +266,15 @@ private:
     UNIT_TEST(Test_mm_shuffle_epi32);
     UNIT_TEST(Test_mm_movemask_epi8);
     UNIT_TEST(Test_mm_cvtsi128_si32);
-    UNIT_TEST(Test_mm_cvtsi128_si64); 
+    UNIT_TEST(Test_mm_cvtsi128_si64);
 
     UNIT_TEST(Test_mm_set_epi16);
     UNIT_TEST(Test_mm_set_epi32);
     UNIT_TEST(Test_mm_set_ps);
-    UNIT_TEST(Test_mm_set_pd); 
+    UNIT_TEST(Test_mm_set_pd);
 
     UNIT_TEST(Test_mm_cvtsi32_si128);
-    UNIT_TEST(Test_mm_cvtsi64_si128); 
+    UNIT_TEST(Test_mm_cvtsi64_si128);
 
     UNIT_TEST(Test_mm_packs_epi16);
     UNIT_TEST(Test_mm_packs_epi32);
@@ -287,7 +287,7 @@ private:
 
     UNIT_TEST(Test_MM_TRANSPOSE4_PS);
     UNIT_TEST(Test_mm_movemask_ps);
-    UNIT_TEST(Test_mm_movemask_ps_2); 
+    UNIT_TEST(Test_mm_movemask_ps_2);
 
     UNIT_TEST(Test_mm_cvtepi32_ps);
     UNIT_TEST(Test_mm_cvtps_epi32);
@@ -298,84 +298,84 @@ private:
 
     UNIT_TEST(Test_mm_mul_epu32);
 
-    UNIT_TEST(Test_mm_cmpunord_ps); 
-    UNIT_TEST(Test_mm_andnot_ps); 
-    UNIT_TEST(Test_mm_shuffle_ps); 
+    UNIT_TEST(Test_mm_cmpunord_ps);
+    UNIT_TEST(Test_mm_andnot_ps);
+    UNIT_TEST(Test_mm_shuffle_ps);
     UNIT_TEST(Test_mm_shuffle_pd);
-    UNIT_TEST(Test_mm_or_ps); 
-    UNIT_TEST(Test_mm_store_ss); 
-    UNIT_TEST(Test_mm_store_ps); 
-    UNIT_TEST(Test_mm_storeu_pd); 
+    UNIT_TEST(Test_mm_or_ps);
+    UNIT_TEST(Test_mm_store_ss);
+    UNIT_TEST(Test_mm_store_ps);
+    UNIT_TEST(Test_mm_storeu_pd);
     UNIT_TEST(Test_mm_loadu_pd);
     UNIT_TEST(Test_mm_rsqrt_ps);
     UNIT_TEST(Test_matrixnet_powerpc);
- 
+
     UNIT_TEST_SUITE_END();
 
 public:
     void Test_mm_load_si128();
     void Test_mm_loadu_si128();
-    void Test_mm_storeu_si128(); 
-    void Test_mm_loadu_si128_2(); 
-    void Test_mm_loadu_ps(); 
-    void Test_mm_storeu_ps(); 
+    void Test_mm_storeu_si128();
+    void Test_mm_loadu_si128_2();
+    void Test_mm_loadu_ps();
+    void Test_mm_storeu_ps();
 
     template <typename TElem, int bits, int elemCount,
-              typename TFunc, typename TShifter, typename TOp, typename TElemFunc> 
+              typename TFunc, typename TShifter, typename TOp, typename TElemFunc>
     void Test_mm_shifter_epiXX();
 
-    enum class EDirection { 
-        Left, 
-        Right 
-    }; 
+    enum class EDirection {
+        Left,
+        Right
+    };
 
-    struct TShiftRes { 
-        __m128i Value[17]; 
-    }; 
- 
+    struct TShiftRes {
+        __m128i Value[17];
+    };
+
     void Test_mm_byte_shifter(EDirection direction, std::function<TShiftRes (__m128i)> foo);
- 
+
     void Test_mm_slli_epi16();
     void Test_mm_slli_epi32();
     void Test_mm_slli_epi64();
-    void Test_mm_slli_si128(); 
+    void Test_mm_slli_si128();
 
-    void Test_mm_srli_epi16(); 
-    void Test_mm_srli_epi32(); 
-    void Test_mm_srli_epi64(); 
-    void Test_mm_srli_si128(); 
- 
-    void Test_mm_srai_epi16(); 
-    void Test_mm_srai_epi32(); 
- 
-    void Test_mm_sll_epi16(); 
-    void Test_mm_sll_epi32(); 
-    void Test_mm_sll_epi64(); 
- 
-    void Test_mm_srl_epi16(); 
-    void Test_mm_srl_epi32(); 
-    void Test_mm_srl_epi64(); 
- 
+    void Test_mm_srli_epi16();
+    void Test_mm_srli_epi32();
+    void Test_mm_srli_epi64();
+    void Test_mm_srli_si128();
+
+    void Test_mm_srai_epi16();
+    void Test_mm_srai_epi32();
+
+    void Test_mm_sll_epi16();
+    void Test_mm_sll_epi32();
+    void Test_mm_sll_epi64();
+
+    void Test_mm_srl_epi16();
+    void Test_mm_srl_epi32();
+    void Test_mm_srl_epi64();
+
     void Test_mm_add_epi8();
     void Test_mm_add_epi16();
     void Test_mm_add_epi32();
     void Test_mm_add_epi64();
     void Test_mm_add_ps();
-    void Test_mm_add_pd(); 
+    void Test_mm_add_pd();
 
-    void Test_mm_madd_epi16(); 
- 
+    void Test_mm_madd_epi16();
+
     void Test_mm_sub_epi8();
     void Test_mm_sub_epi16();
     void Test_mm_sub_epi32();
     void Test_mm_sub_epi64();
     void Test_mm_sub_ps();
-    void Test_mm_sub_pd(); 
+    void Test_mm_sub_pd();
 
     void Test_mm_mul_ps();
-    void Test_mm_mul_pd(); 
+    void Test_mm_mul_pd();
     void Test_mm_div_ps();
-    void Test_mm_div_pd(); 
+    void Test_mm_div_pd();
     void Test_mm_max_ps();
     void Test_mm_min_ps();
     void Test_mm_and_ps();
@@ -427,11 +427,11 @@ public:
     void Test_mm_set1_epi16();
     void Test_mm_set1_epi32();
     void Test_mm_set1_ps();
-    void Test_mm_set_ps1(); 
+    void Test_mm_set_ps1();
 
     void Test_mm_setzero_si128();
     void Test_mm_setzero_ps();
-    void Test_mm_setzero_pd(); 
+    void Test_mm_setzero_pd();
 
     void Test_mm_loadl_epi64();
     void Test_mm_storel_epi64();
@@ -443,15 +443,15 @@ public:
     void Test_mm_shuffle_epi32();
     void Test_mm_movemask_epi8();
     void Test_mm_cvtsi128_si32();
-    void Test_mm_cvtsi128_si64(); 
+    void Test_mm_cvtsi128_si64();
 
     void Test_mm_set_epi16();
     void Test_mm_set_epi32();
     void Test_mm_set_ps();
-    void Test_mm_set_pd(); 
+    void Test_mm_set_pd();
 
     void Test_mm_cvtsi32_si128();
-    void Test_mm_cvtsi64_si128(); 
+    void Test_mm_cvtsi64_si128();
 
     template <typename TElem, typename TNarrow, unsigned elemCount,
               typename TFunc>
@@ -467,7 +467,7 @@ public:
 
     void Test_MM_TRANSPOSE4_PS();
     void Test_mm_movemask_ps();
-    void Test_mm_movemask_ps_2(); 
+    void Test_mm_movemask_ps_2();
 
     template <typename TFrom, typename TTo, unsigned elemCount,
               typename TLoadVector, typename TResultVector,
@@ -484,15 +484,15 @@ public:
     void Test_mm_castps_si128();
 
     void Test_mm_mul_epu32();
- 
-    void Test_mm_cmpunord_ps(); 
-    void Test_mm_store_ss(); 
-    void Test_mm_store_ps(); 
-    void Test_mm_storeu_pd(); 
-    void Test_mm_andnot_ps(); 
-    void Test_mm_shuffle_ps(); 
+
+    void Test_mm_cmpunord_ps();
+    void Test_mm_store_ss();
+    void Test_mm_store_ps();
+    void Test_mm_storeu_pd();
+    void Test_mm_andnot_ps();
+    void Test_mm_shuffle_ps();
     void Test_mm_shuffle_pd();
-    void Test_mm_or_ps(); 
+    void Test_mm_or_ps();
     void Test_mm_loadu_pd();
     void Test_mm_rsqrt_ps();
     void Test_mm_rsqrt_ss();
@@ -502,7 +502,7 @@ public:
 UNIT_TEST_SUITE_REGISTRATION(TSSEEmulTest);
 
 void TSSEEmulTest::Test_mm_load_si128() {
-    alignas(16) char data[16] = { 
+    alignas(16) char data[16] = {
         '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
         '\x33', '\x99', '\x44', '\x88', '\x55', '\x77', '\x66', '\x1C'};
     __m128i value = _mm_load_si128((__m128i*)&data);
@@ -511,7 +511,7 @@ void TSSEEmulTest::Test_mm_load_si128() {
 }
 
 void TSSEEmulTest::Test_mm_loadu_si128() {
-    alignas(16) char data[17] = { 
+    alignas(16) char data[17] = {
         '\x66',
         '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
         '\x33', '\x99', '\x44', '\x88', '\x55', '\x77', '\x66', '\x1C'};
@@ -521,127 +521,127 @@ void TSSEEmulTest::Test_mm_loadu_si128() {
     UNIT_ASSERT(TQType<uint64x2_t>::As(value)[1] == 0x1C66775588449933UL);
 }
 
-void TSSEEmulTest::Test_mm_storeu_si128() { 
-    alignas(16) unsigned char stub[32] = { 
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07 
-    }; 
- 
-    alignas(16) unsigned char value[16] = { 
-        0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 
-        0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf 
-    }; 
- 
-    const __m128i val = _mm_loadu_si128((__m128i*)&value[0]); 
- 
-    for (size_t shift = 0; shift != 17; ++shift) { 
-        alignas(16) unsigned char res[sizeof(stub)]; 
-        memcpy(res, stub, sizeof(res)); 
- 
-        _mm_storeu_si128((__m128i*)&res[shift], val); 
- 
- 
-        alignas(16) unsigned char etalon[sizeof(stub)]; 
-        memcpy(etalon, stub, sizeof(etalon)); 
-        for (size_t i = 0; i != sizeof(value); ++i) { 
-            etalon[shift + i] = value[i]; 
-        } 
- 
-        for (size_t i = 0; i != sizeof(etalon) / sizeof(etalon[0]); ++i) { 
-            UNIT_ASSERT_EQUAL_C(res[i], etalon[i], "res: " << HexEncode(res, 32) << " vs etalon: " << HexEncode(etalon, 32)); 
-        } 
-    } 
- 
-} 
- 
- 
-void TSSEEmulTest::Test_mm_loadu_si128_2() { 
-    alignas(16) unsigned char stub[32] = { 
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 
-        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 
-        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 
-        0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f 
-    }; 
- 
-    for (size_t shift = 0; shift != 17; ++shift) { 
-        const __m128i val = _mm_loadu_si128((const __m128i*)&stub[shift]); 
-        alignas(16) unsigned char res[16]; 
-        _mm_store_si128((__m128i*)res, val); 
- 
-        for (size_t i = 0; i != 16; ++i) { 
-            UNIT_ASSERT_EQUAL_C(res[i], stub[i + shift], "res: " << HexEncode(res, 16) << " vs etalon: " << HexEncode(&stub[shift], 16)); 
-        } 
-    } 
-} 
- 
- 
-void TSSEEmulTest::Test_mm_loadu_ps() { 
-    alignas(16) float stub[8] = { 
-        0.f, 1.f, 2.f, 3.f, 
-        4.f, 5.f, 6.f, 7.f 
-    }; 
- 
-    for (size_t shift = 0; shift != 5; ++shift) { 
-        const __m128 val = _mm_loadu_ps(&stub[shift]); 
-        alignas(16) float res[4]; 
-        _mm_store_ps(res, val); 
- 
-        for (size_t i = 0; i != 4; ++i) { 
-            UNIT_ASSERT_EQUAL_C(res[i], stub[shift + i], "res: " << HexEncode(res, 16) << " vs etalon: " << HexEncode(&stub[shift], 16)); 
-        } 
-    } 
-} 
- 
- 
-void TSSEEmulTest::Test_mm_storeu_ps() { 
-    alignas(16) float stub[8] = { 
-        0.f, 1.f, 2.f, 3.f, 
-        4.f, 5.f, 6.f, 7.f 
-    }; 
- 
-    alignas(16) float value[4] = { 
-        100.f, 101.f, 102.f, 103.f 
-    }; 
-    const __m128 val = _mm_load_ps(value); 
- 
-    for (size_t shift = 0; shift != 5; ++shift) { 
-        alignas(16) float res[sizeof(stub) / sizeof(stub[0])]; 
-        memcpy(res, stub, sizeof(stub)); 
- 
-        _mm_storeu_ps(&res[shift], val); 
- 
-        float etalon[sizeof(stub) / sizeof(stub[0])]; 
-        memcpy(etalon, stub, sizeof(stub)); 
-        for (size_t i = 0; i != 4; ++i) { 
-            etalon[i + shift] = value[i]; 
-        } 
- 
-        for (size_t i = 0; i != sizeof(stub) / sizeof(stub[0]); ++i) { 
-            UNIT_ASSERT_EQUAL_C(res[i], etalon[i], "res: " << HexEncode(res, sizeof(res)) << " vs etalon: " << HexEncode(etalon, sizeof(etalon))); 
-        } 
-    } 
-} 
- 
+void TSSEEmulTest::Test_mm_storeu_si128() {
+    alignas(16) unsigned char stub[32] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07
+    };
+
+    alignas(16) unsigned char value[16] = {
+        0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7,
+        0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf
+    };
+
+    const __m128i val = _mm_loadu_si128((__m128i*)&value[0]);
+
+    for (size_t shift = 0; shift != 17; ++shift) {
+        alignas(16) unsigned char res[sizeof(stub)];
+        memcpy(res, stub, sizeof(res));
+
+        _mm_storeu_si128((__m128i*)&res[shift], val);
+
+
+        alignas(16) unsigned char etalon[sizeof(stub)];
+        memcpy(etalon, stub, sizeof(etalon));
+        for (size_t i = 0; i != sizeof(value); ++i) {
+            etalon[shift + i] = value[i];
+        }
+
+        for (size_t i = 0; i != sizeof(etalon) / sizeof(etalon[0]); ++i) {
+            UNIT_ASSERT_EQUAL_C(res[i], etalon[i], "res: " << HexEncode(res, 32) << " vs etalon: " << HexEncode(etalon, 32));
+        }
+    }
+
+}
+
+
+void TSSEEmulTest::Test_mm_loadu_si128_2() {
+    alignas(16) unsigned char stub[32] = {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+        0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+        0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+        0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
+    };
+
+    for (size_t shift = 0; shift != 17; ++shift) {
+        const __m128i val = _mm_loadu_si128((const __m128i*)&stub[shift]);
+        alignas(16) unsigned char res[16];
+        _mm_store_si128((__m128i*)res, val);
+
+        for (size_t i = 0; i != 16; ++i) {
+            UNIT_ASSERT_EQUAL_C(res[i], stub[i + shift], "res: " << HexEncode(res, 16) << " vs etalon: " << HexEncode(&stub[shift], 16));
+        }
+    }
+}
+
+
+void TSSEEmulTest::Test_mm_loadu_ps() {
+    alignas(16) float stub[8] = {
+        0.f, 1.f, 2.f, 3.f,
+        4.f, 5.f, 6.f, 7.f
+    };
+
+    for (size_t shift = 0; shift != 5; ++shift) {
+        const __m128 val = _mm_loadu_ps(&stub[shift]);
+        alignas(16) float res[4];
+        _mm_store_ps(res, val);
+
+        for (size_t i = 0; i != 4; ++i) {
+            UNIT_ASSERT_EQUAL_C(res[i], stub[shift + i], "res: " << HexEncode(res, 16) << " vs etalon: " << HexEncode(&stub[shift], 16));
+        }
+    }
+}
+
+
+void TSSEEmulTest::Test_mm_storeu_ps() {
+    alignas(16) float stub[8] = {
+        0.f, 1.f, 2.f, 3.f,
+        4.f, 5.f, 6.f, 7.f
+    };
+
+    alignas(16) float value[4] = {
+        100.f, 101.f, 102.f, 103.f
+    };
+    const __m128 val = _mm_load_ps(value);
+
+    for (size_t shift = 0; shift != 5; ++shift) {
+        alignas(16) float res[sizeof(stub) / sizeof(stub[0])];
+        memcpy(res, stub, sizeof(stub));
+
+        _mm_storeu_ps(&res[shift], val);
+
+        float etalon[sizeof(stub) / sizeof(stub[0])];
+        memcpy(etalon, stub, sizeof(stub));
+        for (size_t i = 0; i != 4; ++i) {
+            etalon[i + shift] = value[i];
+        }
+
+        for (size_t i = 0; i != sizeof(stub) / sizeof(stub[0]); ++i) {
+            UNIT_ASSERT_EQUAL_C(res[i], etalon[i], "res: " << HexEncode(res, sizeof(res)) << " vs etalon: " << HexEncode(etalon, sizeof(etalon)));
+        }
+    }
+}
+
 template<typename C>
-C MakeNumber(unsigned number); 
- 
+C MakeNumber(unsigned number);
+
 template<>
-__m128i MakeNumber<__m128i>(unsigned number) { 
-    char data[16] = {0}; 
-    memcpy(data, &number, sizeof(number)); 
- 
-    return _mm_loadu_si128((__m128i*)data); 
-} 
- 
+__m128i MakeNumber<__m128i>(unsigned number) {
+    char data[16] = {0};
+    memcpy(data, &number, sizeof(number));
+
+    return _mm_loadu_si128((__m128i*)data);
+}
+
 template<>
-unsigned MakeNumber<unsigned>(unsigned number) { 
-    return number; 
-} 
- 
+unsigned MakeNumber<unsigned>(unsigned number) {
+    return number;
+}
+
 template <typename TElem, int bits, int elemCount,
-          typename TFunc, typename TShifter, typename TOp, typename TElemFunc> 
+          typename TFunc, typename TShifter, typename TOp, typename TElemFunc>
 void TSSEEmulTest::Test_mm_shifter_epiXX() {
     char data[16] = {
         '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
@@ -650,205 +650,205 @@ void TSSEEmulTest::Test_mm_shifter_epiXX() {
 
     __m128i value = _mm_loadu_si128((__m128i*)&data);
 
-    for (unsigned shifter = 0; shifter <= bits; ++shifter) { 
+    for (unsigned shifter = 0; shifter <= bits; ++shifter) {
         TElem shiftedData[elemCount];
-        for (unsigned i = 0; i < elemCount; ++i) { 
+        for (unsigned i = 0; i < elemCount; ++i) {
             shiftedData[i] = TElemFunc::Call(dataw[i], shifter);
-        } 
+        }
 
-        const TShifter adhoc_shifter = MakeNumber<TShifter>(shifter); 
- 
-        __m128i result = TFunc(value, adhoc_shifter); 
- 
-        for (unsigned i = 0; i < elemCount; ++i) { 
+        const TShifter adhoc_shifter = MakeNumber<TShifter>(shifter);
+
+        __m128i result = TFunc(value, adhoc_shifter);
+
+        for (unsigned i = 0; i < elemCount; ++i) {
             UNIT_ASSERT_EQUAL(shiftedData[i], TQType<TOp>::As(result)[i]);
-        } 
+        }
     }
 }
 
 
 void TSSEEmulTest::Test_mm_byte_shifter(EDirection direction, std::function<TShiftRes (__m128i)> foo) {
-    const char data[48] = { 
-        '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', 
-        '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', 
-        '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA', 
-        '\x33', '\x99', '\x44', '\x88', '\x55', '\x77', '\x66', '\x1C', 
-        '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', 
+    const char data[48] = {
+        '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00',
+        '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00',
+        '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
+        '\x33', '\x99', '\x44', '\x88', '\x55', '\x77', '\x66', '\x1C',
+        '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00',
         '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00'
     };
- 
-    const __m128i a = _mm_loadu_si128((__m128i*)(data + 16)); 
-    const TShiftRes res = foo(a); 
-    for (int shift = 0; shift <= 16; ++shift) { 
-        const int etalon_offset = 16 + (direction == EDirection::Left ? -shift : shift); //!< specific to little endian byte order. 
-        const char* etalon = data + etalon_offset; 
-        const char* res_bytes = (const char*)&res.Value[shift]; 
- 
-        for (size_t byte = 0; byte != 16; ++byte) { 
-            UNIT_ASSERT_EQUAL(etalon[byte], res_bytes[byte]); 
-        } 
-    } 
-} 
- 
-template <typename TElem> 
-struct THelperASHR { 
-    static TElem Call(const TElem op, const int shift) { 
-        constexpr int nBitsInOp = sizeof(op) * CHAR_BIT; 
-        if (op < 0) { 
-            // Arithmetic shift propagates sign bit to the right 
-            // while operator>> is implementation defined for negative values, 
-            // so we can't use it as a reference implementation 
-            // and we need to write some standard consistent code. 
-            typedef TFixedWidthUnsignedInt<TElem> TUnsignedElem; 
-            TUnsignedElem uOp(op); 
-            const TUnsignedElem signBit = TUnsignedElem(1) << (nBitsInOp - 1); 
-            Y_ENSURE(shift >= 0); 
-            for (int i = 0; i != shift; ++i) { 
-                uOp = signBit | (uOp >> 1); 
-            } 
-            // unsigned -> signed conversion is also implementation defined, so we need to use some other method. 
-            return reinterpret_cast<TElem&>(uOp); 
-        } 
-        return shift < nBitsInOp ? op >> shift : 0; 
-    } 
-}; 
- 
+
+    const __m128i a = _mm_loadu_si128((__m128i*)(data + 16));
+    const TShiftRes res = foo(a);
+    for (int shift = 0; shift <= 16; ++shift) {
+        const int etalon_offset = 16 + (direction == EDirection::Left ? -shift : shift); //!< specific to little endian byte order.
+        const char* etalon = data + etalon_offset;
+        const char* res_bytes = (const char*)&res.Value[shift];
+
+        for (size_t byte = 0; byte != 16; ++byte) {
+            UNIT_ASSERT_EQUAL(etalon[byte], res_bytes[byte]);
+        }
+    }
+}
+
+template <typename TElem>
+struct THelperASHR {
+    static TElem Call(const TElem op, const int shift) {
+        constexpr int nBitsInOp = sizeof(op) * CHAR_BIT;
+        if (op < 0) {
+            // Arithmetic shift propagates sign bit to the right
+            // while operator>> is implementation defined for negative values,
+            // so we can't use it as a reference implementation
+            // and we need to write some standard consistent code.
+            typedef TFixedWidthUnsignedInt<TElem> TUnsignedElem;
+            TUnsignedElem uOp(op);
+            const TUnsignedElem signBit = TUnsignedElem(1) << (nBitsInOp - 1);
+            Y_ENSURE(shift >= 0);
+            for (int i = 0; i != shift; ++i) {
+                uOp = signBit | (uOp >> 1);
+            }
+            // unsigned -> signed conversion is also implementation defined, so we need to use some other method.
+            return reinterpret_cast<TElem&>(uOp);
+        }
+        return shift < nBitsInOp ? op >> shift : 0;
+    }
+};
+
 template <typename TElem>
 struct THelperSHR {
     static TElem Call(const TElem op, const int shift) {
-        constexpr int nBitsInOp = sizeof(op) * CHAR_BIT; 
-        return shift < nBitsInOp ? op >> shift : 0; 
+        constexpr int nBitsInOp = sizeof(op) * CHAR_BIT;
+        return shift < nBitsInOp ? op >> shift : 0;
     }
 };
 
 void TSSEEmulTest::Test_mm_srli_epi16() {
-    Test_mm_shifter_epiXX<ui16, 16, 8, Wrap(_mm_srli_epi16), unsigned, uint16x8_t, 
+    Test_mm_shifter_epiXX<ui16, 16, 8, Wrap(_mm_srli_epi16), unsigned, uint16x8_t,
                           THelperSHR<ui16>>();
 }
 
 void TSSEEmulTest::Test_mm_srli_epi32() {
-    Test_mm_shifter_epiXX<ui32, 32, 4, Wrap(_mm_srli_epi32), unsigned, uint32x4_t, 
+    Test_mm_shifter_epiXX<ui32, 32, 4, Wrap(_mm_srli_epi32), unsigned, uint32x4_t,
                           THelperSHR<ui32>>();
 }
 
 void TSSEEmulTest::Test_mm_srli_epi64() {
-    Test_mm_shifter_epiXX<ui64, 64, 2, Wrap(_mm_srli_epi64), unsigned, uint64x2_t, 
+    Test_mm_shifter_epiXX<ui64, 64, 2, Wrap(_mm_srli_epi64), unsigned, uint64x2_t,
                           THelperSHR<ui64>>();
 }
 
 template <typename TElem>
 struct THelperSHL {
     static TElem Call(const TElem op, const int shift) {
-        constexpr int nBitsInOp = sizeof(op) * CHAR_BIT; 
-        return shift < nBitsInOp ? op << shift : 0; 
+        constexpr int nBitsInOp = sizeof(op) * CHAR_BIT;
+        return shift < nBitsInOp ? op << shift : 0;
     }
 };
 
 void TSSEEmulTest::Test_mm_slli_epi16() {
-    Test_mm_shifter_epiXX<ui16, 16, 8, Wrap(_mm_slli_epi16), unsigned, uint16x8_t, 
+    Test_mm_shifter_epiXX<ui16, 16, 8, Wrap(_mm_slli_epi16), unsigned, uint16x8_t,
                           THelperSHL<ui16>>();
 }
 
 void TSSEEmulTest::Test_mm_slli_epi32() {
-    Test_mm_shifter_epiXX<ui32, 32, 4, Wrap(_mm_slli_epi32), unsigned, uint32x4_t, 
+    Test_mm_shifter_epiXX<ui32, 32, 4, Wrap(_mm_slli_epi32), unsigned, uint32x4_t,
                           THelperSHL<ui32>>();
 }
 
 void TSSEEmulTest::Test_mm_slli_epi64() {
-    Test_mm_shifter_epiXX<ui64, 64, 2, Wrap(_mm_slli_epi64), unsigned, uint64x2_t, 
+    Test_mm_shifter_epiXX<ui64, 64, 2, Wrap(_mm_slli_epi64), unsigned, uint64x2_t,
                           THelperSHL<ui64>>();
 }
 
-void TSSEEmulTest::Test_mm_slli_si128() { 
+void TSSEEmulTest::Test_mm_slli_si128() {
     Test_mm_byte_shifter(EDirection::Left, [] (__m128i a) -> TShiftRes {
-        TShiftRes res; 
-        res.Value[0] = _mm_slli_si128(a, 0); 
-        res.Value[1] = _mm_slli_si128(a, 1); 
-        res.Value[2] = _mm_slli_si128(a, 2); 
-        res.Value[3] = _mm_slli_si128(a, 3); 
-        res.Value[4] = _mm_slli_si128(a, 4); 
-        res.Value[5] = _mm_slli_si128(a, 5); 
-        res.Value[6] = _mm_slli_si128(a, 6); 
-        res.Value[7] = _mm_slli_si128(a, 7); 
-        res.Value[8] = _mm_slli_si128(a, 8); 
-        res.Value[9] = _mm_slli_si128(a, 9); 
-        res.Value[10] = _mm_slli_si128(a, 10); 
-        res.Value[11] = _mm_slli_si128(a, 11); 
-        res.Value[12] = _mm_slli_si128(a, 12); 
-        res.Value[13] = _mm_slli_si128(a, 13); 
-        res.Value[14] = _mm_slli_si128(a, 14); 
-        res.Value[15] = _mm_slli_si128(a, 15); 
-        res.Value[16] = _mm_slli_si128(a, 16); 
- 
-        return res; 
-    }); 
-} 
- 
-void TSSEEmulTest::Test_mm_srl_epi16() { 
-    Test_mm_shifter_epiXX<ui16, 16, 8, T_mm_CallWrapper<__m128i, decltype(_mm_srl_epi16), _mm_srl_epi16>, __m128i, uint16x8_t, 
-                          THelperSHR<ui16>>(); 
-} 
- 
-void TSSEEmulTest::Test_mm_srl_epi32() { 
-    Test_mm_shifter_epiXX<ui32, 32, 4, T_mm_CallWrapper<__m128i, decltype(_mm_srl_epi32), _mm_srl_epi32>, __m128i, uint32x4_t, 
-                          THelperSHR<ui32>>(); 
-} 
- 
-void TSSEEmulTest::Test_mm_srl_epi64() { 
-    Test_mm_shifter_epiXX<ui64, 64, 2, T_mm_CallWrapper<__m128i, decltype(_mm_srl_epi64), _mm_srl_epi64>, __m128i, uint64x2_t, 
-                          THelperSHR<ui64>>(); 
-} 
- 
-void TSSEEmulTest::Test_mm_srai_epi16() { 
-    Test_mm_shifter_epiXX<i16, 16, 8, T_mm_CallWrapper<__m128i, decltype(_mm_srai_epi16), _mm_srai_epi16>, unsigned, int16x8_t, 
-                          THelperASHR<i16>>(); 
-} 
- 
-void TSSEEmulTest::Test_mm_srai_epi32() { 
-    Test_mm_shifter_epiXX<i32, 32, 4, T_mm_CallWrapper<__m128i, decltype(_mm_srai_epi32), _mm_srai_epi32>, unsigned, int32x4_t, 
-                          THelperASHR<i32>>(); 
-} 
- 
-void TSSEEmulTest::Test_mm_srli_si128() { 
-    Test_mm_byte_shifter(EDirection::Right, [](__m128i a) -> TShiftRes { 
-        TShiftRes res; 
-        res.Value[0] = _mm_srli_si128(a, 0); 
-        res.Value[1] = _mm_srli_si128(a, 1); 
-        res.Value[2] = _mm_srli_si128(a, 2); 
-        res.Value[3] = _mm_srli_si128(a, 3); 
-        res.Value[4] = _mm_srli_si128(a, 4); 
-        res.Value[5] = _mm_srli_si128(a, 5); 
-        res.Value[6] = _mm_srli_si128(a, 6); 
-        res.Value[7] = _mm_srli_si128(a, 7); 
-        res.Value[8] = _mm_srli_si128(a, 8); 
-        res.Value[9] = _mm_srli_si128(a, 9); 
-        res.Value[10] = _mm_srli_si128(a, 10); 
-        res.Value[11] = _mm_srli_si128(a, 11); 
-        res.Value[12] = _mm_srli_si128(a, 12); 
-        res.Value[13] = _mm_srli_si128(a, 13); 
-        res.Value[14] = _mm_srli_si128(a, 14); 
-        res.Value[15] = _mm_srli_si128(a, 15); 
-        res.Value[16] = _mm_srli_si128(a, 16); 
- 
-        return res; 
-    }); 
-} 
- 
-void TSSEEmulTest::Test_mm_sll_epi16() { 
-    Test_mm_shifter_epiXX<ui16, 16, 8, T_mm_CallWrapper<__m128i, decltype(_mm_sll_epi16), _mm_sll_epi16>, __m128i, uint16x8_t, 
-                          THelperSHL<ui16>>(); 
-} 
- 
-void TSSEEmulTest::Test_mm_sll_epi32() { 
-    Test_mm_shifter_epiXX<ui32, 32, 4, T_mm_CallWrapper<__m128i, decltype(_mm_sll_epi32), _mm_sll_epi32>, __m128i, uint32x4_t, 
-                          THelperSHL<ui32>>(); 
-} 
- 
-void TSSEEmulTest::Test_mm_sll_epi64() { 
-    Test_mm_shifter_epiXX<ui64, 64, 2, T_mm_CallWrapper<__m128i, decltype(_mm_sll_epi64), _mm_sll_epi64>, __m128i, uint64x2_t, 
-                          THelperSHL<ui64>>(); 
-} 
- 
+        TShiftRes res;
+        res.Value[0] = _mm_slli_si128(a, 0);
+        res.Value[1] = _mm_slli_si128(a, 1);
+        res.Value[2] = _mm_slli_si128(a, 2);
+        res.Value[3] = _mm_slli_si128(a, 3);
+        res.Value[4] = _mm_slli_si128(a, 4);
+        res.Value[5] = _mm_slli_si128(a, 5);
+        res.Value[6] = _mm_slli_si128(a, 6);
+        res.Value[7] = _mm_slli_si128(a, 7);
+        res.Value[8] = _mm_slli_si128(a, 8);
+        res.Value[9] = _mm_slli_si128(a, 9);
+        res.Value[10] = _mm_slli_si128(a, 10);
+        res.Value[11] = _mm_slli_si128(a, 11);
+        res.Value[12] = _mm_slli_si128(a, 12);
+        res.Value[13] = _mm_slli_si128(a, 13);
+        res.Value[14] = _mm_slli_si128(a, 14);
+        res.Value[15] = _mm_slli_si128(a, 15);
+        res.Value[16] = _mm_slli_si128(a, 16);
+
+        return res;
+    });
+}
+
+void TSSEEmulTest::Test_mm_srl_epi16() {
+    Test_mm_shifter_epiXX<ui16, 16, 8, T_mm_CallWrapper<__m128i, decltype(_mm_srl_epi16), _mm_srl_epi16>, __m128i, uint16x8_t,
+                          THelperSHR<ui16>>();
+}
+
+void TSSEEmulTest::Test_mm_srl_epi32() {
+    Test_mm_shifter_epiXX<ui32, 32, 4, T_mm_CallWrapper<__m128i, decltype(_mm_srl_epi32), _mm_srl_epi32>, __m128i, uint32x4_t,
+                          THelperSHR<ui32>>();
+}
+
+void TSSEEmulTest::Test_mm_srl_epi64() {
+    Test_mm_shifter_epiXX<ui64, 64, 2, T_mm_CallWrapper<__m128i, decltype(_mm_srl_epi64), _mm_srl_epi64>, __m128i, uint64x2_t,
+                          THelperSHR<ui64>>();
+}
+
+void TSSEEmulTest::Test_mm_srai_epi16() {
+    Test_mm_shifter_epiXX<i16, 16, 8, T_mm_CallWrapper<__m128i, decltype(_mm_srai_epi16), _mm_srai_epi16>, unsigned, int16x8_t,
+                          THelperASHR<i16>>();
+}
+
+void TSSEEmulTest::Test_mm_srai_epi32() {
+    Test_mm_shifter_epiXX<i32, 32, 4, T_mm_CallWrapper<__m128i, decltype(_mm_srai_epi32), _mm_srai_epi32>, unsigned, int32x4_t,
+                          THelperASHR<i32>>();
+}
+
+void TSSEEmulTest::Test_mm_srli_si128() {
+    Test_mm_byte_shifter(EDirection::Right, [](__m128i a) -> TShiftRes {
+        TShiftRes res;
+        res.Value[0] = _mm_srli_si128(a, 0);
+        res.Value[1] = _mm_srli_si128(a, 1);
+        res.Value[2] = _mm_srli_si128(a, 2);
+        res.Value[3] = _mm_srli_si128(a, 3);
+        res.Value[4] = _mm_srli_si128(a, 4);
+        res.Value[5] = _mm_srli_si128(a, 5);
+        res.Value[6] = _mm_srli_si128(a, 6);
+        res.Value[7] = _mm_srli_si128(a, 7);
+        res.Value[8] = _mm_srli_si128(a, 8);
+        res.Value[9] = _mm_srli_si128(a, 9);
+        res.Value[10] = _mm_srli_si128(a, 10);
+        res.Value[11] = _mm_srli_si128(a, 11);
+        res.Value[12] = _mm_srli_si128(a, 12);
+        res.Value[13] = _mm_srli_si128(a, 13);
+        res.Value[14] = _mm_srli_si128(a, 14);
+        res.Value[15] = _mm_srli_si128(a, 15);
+        res.Value[16] = _mm_srli_si128(a, 16);
+
+        return res;
+    });
+}
+
+void TSSEEmulTest::Test_mm_sll_epi16() {
+    Test_mm_shifter_epiXX<ui16, 16, 8, T_mm_CallWrapper<__m128i, decltype(_mm_sll_epi16), _mm_sll_epi16>, __m128i, uint16x8_t,
+                          THelperSHL<ui16>>();
+}
+
+void TSSEEmulTest::Test_mm_sll_epi32() {
+    Test_mm_shifter_epiXX<ui32, 32, 4, T_mm_CallWrapper<__m128i, decltype(_mm_sll_epi32), _mm_sll_epi32>, __m128i, uint32x4_t,
+                          THelperSHL<ui32>>();
+}
+
+void TSSEEmulTest::Test_mm_sll_epi64() {
+    Test_mm_shifter_epiXX<ui64, 64, 2, T_mm_CallWrapper<__m128i, decltype(_mm_sll_epi64), _mm_sll_epi64>, __m128i, uint64x2_t,
+                          THelperSHL<ui64>>();
+}
+
 template <typename TElem>
 struct THelperAdd {
     static TElem Call(const TElem op1, const TElem op2) {
@@ -873,36 +873,36 @@ void TSSEEmulTest::Test_mm_add_ps() {
                    THelperAdd<float>, float32x4_t, __m128>();
 }
 
-void TSSEEmulTest::Test_mm_add_pd() { 
-    Test_mm_dualop<double, 2, WrapD(_mm_add_pd), 
-                   THelperAdd<double>, float64x2_t, __m128d>(); 
-} 
- 
-void TSSEEmulTest::Test_mm_madd_epi16() { 
-    alignas(16) const char data1[16] = { 
-        '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA', 
+void TSSEEmulTest::Test_mm_add_pd() {
+    Test_mm_dualop<double, 2, WrapD(_mm_add_pd),
+                   THelperAdd<double>, float64x2_t, __m128d>();
+}
+
+void TSSEEmulTest::Test_mm_madd_epi16() {
+    alignas(16) const char data1[16] = {
+        '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
         '\x33', '\x99', '\x44', '\x88', '\x55', '\x77', '\x66', '\x1C'
     };
-    alignas(16) const char data2[16] = { 
-        '\x99', '\x33', '\x1C', '\x55', '\x88', '\x66', '\x77', '\x44', 
+    alignas(16) const char data2[16] = {
+        '\x99', '\x33', '\x1C', '\x55', '\x88', '\x66', '\x77', '\x44',
         '\x00', '\xAA', '\xAA', '\x11', '\xCC', '\xBB', '\x22', '\xFF'
     };
- 
-    const __m128i value1 = TFuncLoad<__m128i>(&data1); 
-    const __m128i value2 = TFuncLoad<__m128i>(&data2); 
-    const __m128i res = _mm_madd_epi16(value1, value2); 
- 
-    const i16* dataw1 = reinterpret_cast<const i16*>(&data1); 
-    const i16* dataw2 = reinterpret_cast<const i16*>(&data2); 
- 
-    for (size_t i = 0; i != 4; ++i) { 
-        const size_t dataIdx = i * 2; 
+
+    const __m128i value1 = TFuncLoad<__m128i>(&data1);
+    const __m128i value2 = TFuncLoad<__m128i>(&data2);
+    const __m128i res = _mm_madd_epi16(value1, value2);
+
+    const i16* dataw1 = reinterpret_cast<const i16*>(&data1);
+    const i16* dataw2 = reinterpret_cast<const i16*>(&data2);
+
+    for (size_t i = 0; i != 4; ++i) {
+        const size_t dataIdx = i * 2;
         const i32 etalonResult = (i32) dataw1[dataIdx] * (i32) dataw2[dataIdx] + (i32) dataw1[dataIdx + 1] * (i32) dataw2[dataIdx + 1];
-        const i32 value = TQType<int32x4_t>::As(res)[i]; 
-        UNIT_ASSERT_EQUAL(value, etalonResult); 
-    } 
-} 
- 
+        const i32 value = TQType<int32x4_t>::As(res)[i];
+        UNIT_ASSERT_EQUAL(value, etalonResult);
+    }
+}
+
 
 template <typename TElem>
 struct THelperSub {
@@ -928,11 +928,11 @@ void TSSEEmulTest::Test_mm_sub_ps() {
                    float32x4_t, __m128>();
 }
 
-void TSSEEmulTest::Test_mm_sub_pd() { 
-    Test_mm_dualop<double, 2, WrapD(_mm_sub_pd), THelperSub<double>, 
-                   float64x2_t, __m128d>(); 
-} 
- 
+void TSSEEmulTest::Test_mm_sub_pd() {
+    Test_mm_dualop<double, 2, WrapD(_mm_sub_pd), THelperSub<double>,
+                   float64x2_t, __m128d>();
+}
+
 void TSSEEmulTest::Test_mm_mul_ps() {
     struct THelper {
         static float Call(const float op1, const float op2) {
@@ -942,15 +942,15 @@ void TSSEEmulTest::Test_mm_mul_ps() {
     Test_mm_dualop<float, 4, WrapF(_mm_mul_ps), THelper, float32x4_t, __m128>();
 }
 
-void TSSEEmulTest::Test_mm_mul_pd() { 
-    struct THelper { 
-        static double Call(const double op1, const double op2) { 
-            return op1 * op2; 
-        } 
-    }; 
-    Test_mm_dualop<double, 2, WrapD(_mm_mul_pd), THelper, float64x2_t, __m128d>(); 
-} 
- 
+void TSSEEmulTest::Test_mm_mul_pd() {
+    struct THelper {
+        static double Call(const double op1, const double op2) {
+            return op1 * op2;
+        }
+    };
+    Test_mm_dualop<double, 2, WrapD(_mm_mul_pd), THelper, float64x2_t, __m128d>();
+}
+
 void TSSEEmulTest::Test_mm_div_ps() {
     struct THelper {
         static float Call(const float op1, const float op2) {
@@ -960,15 +960,15 @@ void TSSEEmulTest::Test_mm_div_ps() {
     Test_mm_dualop<float, 4, WrapF(_mm_div_ps), THelper, float32x4_t, __m128>();
 }
 
-void TSSEEmulTest::Test_mm_div_pd() { 
-    struct THelper { 
-        static double Call(const double op1, const double op2) { 
-            return op1 / op2; 
-        } 
-    }; 
-    Test_mm_dualop<double, 2, WrapD(_mm_div_pd), THelper, float64x2_t, __m128d>(); 
-} 
- 
+void TSSEEmulTest::Test_mm_div_pd() {
+    struct THelper {
+        static double Call(const double op1, const double op2) {
+            return op1 / op2;
+        }
+    };
+    Test_mm_dualop<double, 2, WrapD(_mm_div_pd), THelper, float64x2_t, __m128d>();
+}
+
 void TSSEEmulTest::Test_mm_max_ps() {
     struct THelper {
         static float Call(const float op1, const float op2) {
@@ -1119,8 +1119,8 @@ void TSSEEmulTest::Test_mm_dualcmp() {
 
     for (unsigned i = 0; i < elemCount; ++i) {
         /* memcmp is for compare to invalid floats in results */
-        const TElem value = TQType<TOp>::As(result)[i]; 
-        UNIT_ASSERT(memcmp(&(procData[i]), &value, sizeof(TElem)) == 0); 
+        const TElem value = TQType<TOp>::As(result)[i];
+        UNIT_ASSERT(memcmp(&(procData[i]), &value, sizeof(TElem)) == 0);
     }
 }
 
@@ -1289,10 +1289,10 @@ void TSSEEmulTest::Test_mm_set1_ps() {
     Test_mm_setter_epiXX<float, 4, WrapF(_mm_set1_ps), float32x4_t, __m128>();
 }
 
-void TSSEEmulTest::Test_mm_set_ps1() { 
-    Test_mm_setter_epiXX<float, 4, WrapF(_mm_set_ps1), float32x4_t, __m128>(); 
-} 
- 
+void TSSEEmulTest::Test_mm_set_ps1() {
+    Test_mm_setter_epiXX<float, 4, WrapF(_mm_set_ps1), float32x4_t, __m128>();
+}
+
 void TSSEEmulTest::Test_mm_setzero_si128() {
     __m128i value = _mm_setzero_si128();
     for (unsigned i = 0; i < 4; ++i)
@@ -1305,12 +1305,12 @@ void TSSEEmulTest::Test_mm_setzero_ps() {
         UNIT_ASSERT_EQUAL(0.0, TQType<float32x4_t>::As(value)[i]);
 }
 
-void TSSEEmulTest::Test_mm_setzero_pd() { 
-    __m128d value = _mm_setzero_pd(); 
-    for (unsigned i = 0; i < 2; ++i) 
-        UNIT_ASSERT_EQUAL(0.0, TQType<float64x2_t>::As(value)[i]); 
-} 
- 
+void TSSEEmulTest::Test_mm_setzero_pd() {
+    __m128d value = _mm_setzero_pd();
+    for (unsigned i = 0; i < 2; ++i)
+        UNIT_ASSERT_EQUAL(0.0, TQType<float64x2_t>::As(value)[i]);
+}
+
 void TSSEEmulTest::Test_mm_loadl_epi64() {
     char data[64] = {
         '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
@@ -1404,16 +1404,16 @@ void TSSEEmulTest::Test_mm_movemask_ps() {
     UNIT_ASSERT_EQUAL(result, verify);
 }
 
-void TSSEEmulTest::Test_mm_movemask_ps_2() { 
-    char data[16] = { 
-        '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', 
-        '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', '\xFF'}; 
-    __m128 value = _mm_loadu_ps((float*)&data); 
- 
-    int result = _mm_movemask_ps(value); 
-    UNIT_ASSERT_EQUAL(result, 0xf); 
-} 
- 
+void TSSEEmulTest::Test_mm_movemask_ps_2() {
+    char data[16] = {
+        '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', '\xFF',
+        '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', '\xFF', '\xFF'};
+    __m128 value = _mm_loadu_ps((float*)&data);
+
+    int result = _mm_movemask_ps(value);
+    UNIT_ASSERT_EQUAL(result, 0xf);
+}
+
 void TSSEEmulTest::Test_mm_cvtsi128_si32() {
     char data[16] = {
         '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
@@ -1427,19 +1427,19 @@ void TSSEEmulTest::Test_mm_cvtsi128_si32() {
     UNIT_ASSERT_EQUAL(result, verify);
 }
 
-void TSSEEmulTest::Test_mm_cvtsi128_si64() { 
-    char data[16] = { 
-        '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA', 
-        '\x33', '\x99', '\x44', '\x88', '\x55', '\x77', '\x66', '\x1C'}; 
-    __m128i value = _mm_loadu_si128((__m128i*)&data); 
- 
-    i64 result = _mm_cvtsi128_si64(value); 
-    i64* datap = reinterpret_cast<i64*>(&data); 
-    i64 verify = datap[0]; 
- 
-    UNIT_ASSERT_EQUAL(result, verify); 
-} 
- 
+void TSSEEmulTest::Test_mm_cvtsi128_si64() {
+    char data[16] = {
+        '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
+        '\x33', '\x99', '\x44', '\x88', '\x55', '\x77', '\x66', '\x1C'};
+    __m128i value = _mm_loadu_si128((__m128i*)&data);
+
+    i64 result = _mm_cvtsi128_si64(value);
+    i64* datap = reinterpret_cast<i64*>(&data);
+    i64 verify = datap[0];
+
+    UNIT_ASSERT_EQUAL(result, verify);
+}
+
 void TSSEEmulTest::Test_mm_set_epi16() {
     char data[16] = {
         '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
@@ -1486,21 +1486,21 @@ void TSSEEmulTest::Test_mm_set_ps() {
     UNIT_ASSERT_EQUAL(buf[1], dataq[1]);
 }
 
-void TSSEEmulTest::Test_mm_set_pd() { 
-    char data[16] = { 
-        '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA', 
-        '\x33', '\x99', '\x44', '\x88', '\x55', '\x77', '\x66', '\x1C'}; 
-    double* dataw = reinterpret_cast<double*>(&data); 
-    ui64* dataq = reinterpret_cast<ui64*>(&data); 
- 
-    __m128d result = _mm_set_pd(dataw[1], dataw[0]); 
-    ui64 buf[2] = {53, 81}; 
-    _mm_storeu_pd((double*)&buf, result); 
- 
-    UNIT_ASSERT_EQUAL(buf[0], dataq[0]); 
-    UNIT_ASSERT_EQUAL(buf[1], dataq[1]); 
-} 
- 
+void TSSEEmulTest::Test_mm_set_pd() {
+    char data[16] = {
+        '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
+        '\x33', '\x99', '\x44', '\x88', '\x55', '\x77', '\x66', '\x1C'};
+    double* dataw = reinterpret_cast<double*>(&data);
+    ui64* dataq = reinterpret_cast<ui64*>(&data);
+
+    __m128d result = _mm_set_pd(dataw[1], dataw[0]);
+    ui64 buf[2] = {53, 81};
+    _mm_storeu_pd((double*)&buf, result);
+
+    UNIT_ASSERT_EQUAL(buf[0], dataq[0]);
+    UNIT_ASSERT_EQUAL(buf[1], dataq[1]);
+}
+
 void TSSEEmulTest::Test_mm_cvtsi32_si128() {
     char data[16] = {
         '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
@@ -1517,20 +1517,20 @@ void TSSEEmulTest::Test_mm_cvtsi32_si128() {
     UNIT_ASSERT_EQUAL(buf[3], 0);
 }
 
-void TSSEEmulTest::Test_mm_cvtsi64_si128() { 
-    char data[16] = { 
-        '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA', 
-        '\x33', '\x99', '\x44', '\x88', '\x55', '\x77', '\x66', '\x1C'}; 
-    i64* dataw = reinterpret_cast<i64*>(&data); 
- 
-    __m128i result = _mm_cvtsi64_si128(dataw[0]); 
-    i64 buf[2] = {7, 8}; 
-    _mm_storeu_si128((__m128i*)&buf, result); 
- 
-    UNIT_ASSERT_EQUAL(buf[0], dataw[0]); 
-    UNIT_ASSERT_EQUAL(buf[1], 0); 
-} 
- 
+void TSSEEmulTest::Test_mm_cvtsi64_si128() {
+    char data[16] = {
+        '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
+        '\x33', '\x99', '\x44', '\x88', '\x55', '\x77', '\x66', '\x1C'};
+    i64* dataw = reinterpret_cast<i64*>(&data);
+
+    __m128i result = _mm_cvtsi64_si128(dataw[0]);
+    i64 buf[2] = {7, 8};
+    _mm_storeu_si128((__m128i*)&buf, result);
+
+    UNIT_ASSERT_EQUAL(buf[0], dataw[0]);
+    UNIT_ASSERT_EQUAL(buf[1], 0);
+}
+
 template <typename TElem, typename TNarrow, unsigned elemCount, typename TFunc>
 void TSSEEmulTest::Test_mm_packs_epiXX() {
     char data[32] = {
@@ -1598,8 +1598,8 @@ void TSSEEmulTest::Test_mm_extract_epi16() {
     alignas(16) char data[16] = {
         '\xAA', '\x00', '\xFF', '\xCC', '\x11', '\x22', '\xBB', '\xAA',
         '\x33', '\x99', '\x44', '\x88', '\x55', '\x77', '\x66', '\x1C'};
-    const ui16* dataw = reinterpret_cast<const ui16*>(&data); 
-    const __m128i value = _mm_loadu_si128((__m128i*)&data); 
+    const ui16* dataw = reinterpret_cast<const ui16*>(&data);
+    const __m128i value = _mm_loadu_si128((__m128i*)&data);
 
     UNIT_ASSERT_EQUAL((_mm_extract_epi16(value, 0)), int(dataw[0]));
     UNIT_ASSERT_EQUAL((_mm_extract_epi16(value, 1)), int(dataw[1]));
@@ -1725,7 +1725,7 @@ void TSSEEmulTest::Test_mm_cvtps_epi32() {
         }
     };
     Test_mm_convertop<float, i32, 4, __m128, __m128i,
-                      THelper, T_mm_CallWrapper<__m128i, decltype(_mm_cvtps_epi32), _mm_cvtps_epi32>, int32x4_t>(); 
+                      THelper, T_mm_CallWrapper<__m128i, decltype(_mm_cvtps_epi32), _mm_cvtps_epi32>, int32x4_t>();
 };
 
 void TSSEEmulTest::Test_mm_cvttps_epi32() {
@@ -1789,68 +1789,68 @@ void TSSEEmulTest::Test_mm_mul_epu32() {
     UNIT_ASSERT_EQUAL(mul0, TQType<uint64x2_t>::As(result)[0]);
     UNIT_ASSERT_EQUAL(mul1, TQType<uint64x2_t>::As(result)[1]);
 }
- 
-void TSSEEmulTest::Test_mm_cmpunord_ps() { 
-    alignas(16) float valuesBits[4] = {1.f, 2.f, 3.f, 4.f}; 
-    alignas(16) float values2Bits[4] = {5.f, 6.f, 7.f, 8.f}; 
- 
-    alignas(16) char allfs[16] = { 
-        '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', 
+
+void TSSEEmulTest::Test_mm_cmpunord_ps() {
+    alignas(16) float valuesBits[4] = {1.f, 2.f, 3.f, 4.f};
+    alignas(16) float values2Bits[4] = {5.f, 6.f, 7.f, 8.f};
+
+    alignas(16) char allfs[16] = {
+        '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff',
         '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff', '\xff'
     };
- 
-    alignas(16) char allzeroes[16] = { 
-        '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', 
+
+    alignas(16) char allzeroes[16] = {
+        '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00',
         '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00', '\x00'
     };
- 
-    const __m128 qnan = _mm_set_ps1(std::numeric_limits<float>::quiet_NaN()); 
-    const __m128 snan = _mm_set_ps1(std::numeric_limits<float>::signaling_NaN()); 
+
+    const __m128 qnan = _mm_set_ps1(std::numeric_limits<float>::quiet_NaN());
+    const __m128 snan = _mm_set_ps1(std::numeric_limits<float>::signaling_NaN());
     const __m128 values = _mm_loadu_ps((const float*) valuesBits);
     const __m128 values2 = _mm_loadu_ps((const float*) values2Bits);
- 
-    const __m128 mask1 = _mm_cmpunord_ps(qnan, qnan); 
-    UNIT_ASSERT_EQUAL(::memcmp(&mask1, &allfs, sizeof(allfs)), 0); 
- 
-    const __m128 mask2 = _mm_cmpunord_ps(values, values); 
-    UNIT_ASSERT_EQUAL(::memcmp(&mask2, &allzeroes, sizeof(allzeroes)), 0); 
- 
-    const __m128 mask3 = _mm_cmpunord_ps(snan, snan); 
-    UNIT_ASSERT_EQUAL(::memcmp(&mask3, &allfs, sizeof(allfs)), 0); 
- 
-    const __m128 mask4 = _mm_cmpunord_ps(qnan, values); 
-    UNIT_ASSERT_EQUAL(::memcmp(&mask4, &allfs, sizeof(allfs)), 0); 
- 
-    const __m128 mask5 = _mm_cmpunord_ps(snan, values); 
-    UNIT_ASSERT_EQUAL(::memcmp(&mask5, &allfs, sizeof(allfs)), 0); 
- 
-    const __m128 mask6 = _mm_cmpunord_ps(qnan, snan); 
-    UNIT_ASSERT_EQUAL(::memcmp(&mask6, &allfs, sizeof(allfs)), 0); 
- 
-    const __m128 mask7 = _mm_cmpunord_ps(values, values2); 
-    UNIT_ASSERT_EQUAL(::memcmp(&mask7, &allzeroes, sizeof(allzeroes)), 0); 
-} 
- 
-void TSSEEmulTest::Test_mm_store_ss() { 
-    alignas(16) const float valueBits[4] = {1.f, 2.f, 3.f, 4.f}; 
-    const __m128 value = _mm_loadu_ps(valueBits); 
-    float res = std::numeric_limits<float>::signaling_NaN(); 
-    _mm_store_ss(&res, value); 
-    UNIT_ASSERT_EQUAL(res, 1.f); 
-} 
- 
-void TSSEEmulTest::Test_mm_store_ps() { 
-    alignas(16) const float valueBits[4] = {1.f, 2.f, 3.f, 4.f}; 
-    const __m128 value = _mm_loadu_ps(valueBits); 
-    float res[4] = {0.f}; 
-    _mm_storeu_ps(res, value); 
-    UNIT_ASSERT_EQUAL(res[0], 1.f); 
-    UNIT_ASSERT_EQUAL(res[1], 2.f); 
-    UNIT_ASSERT_EQUAL(res[2], 3.f); 
-    UNIT_ASSERT_EQUAL(res[3], 4.f); 
-} 
- 
-void TSSEEmulTest::Test_mm_storeu_pd() { 
+
+    const __m128 mask1 = _mm_cmpunord_ps(qnan, qnan);
+    UNIT_ASSERT_EQUAL(::memcmp(&mask1, &allfs, sizeof(allfs)), 0);
+
+    const __m128 mask2 = _mm_cmpunord_ps(values, values);
+    UNIT_ASSERT_EQUAL(::memcmp(&mask2, &allzeroes, sizeof(allzeroes)), 0);
+
+    const __m128 mask3 = _mm_cmpunord_ps(snan, snan);
+    UNIT_ASSERT_EQUAL(::memcmp(&mask3, &allfs, sizeof(allfs)), 0);
+
+    const __m128 mask4 = _mm_cmpunord_ps(qnan, values);
+    UNIT_ASSERT_EQUAL(::memcmp(&mask4, &allfs, sizeof(allfs)), 0);
+
+    const __m128 mask5 = _mm_cmpunord_ps(snan, values);
+    UNIT_ASSERT_EQUAL(::memcmp(&mask5, &allfs, sizeof(allfs)), 0);
+
+    const __m128 mask6 = _mm_cmpunord_ps(qnan, snan);
+    UNIT_ASSERT_EQUAL(::memcmp(&mask6, &allfs, sizeof(allfs)), 0);
+
+    const __m128 mask7 = _mm_cmpunord_ps(values, values2);
+    UNIT_ASSERT_EQUAL(::memcmp(&mask7, &allzeroes, sizeof(allzeroes)), 0);
+}
+
+void TSSEEmulTest::Test_mm_store_ss() {
+    alignas(16) const float valueBits[4] = {1.f, 2.f, 3.f, 4.f};
+    const __m128 value = _mm_loadu_ps(valueBits);
+    float res = std::numeric_limits<float>::signaling_NaN();
+    _mm_store_ss(&res, value);
+    UNIT_ASSERT_EQUAL(res, 1.f);
+}
+
+void TSSEEmulTest::Test_mm_store_ps() {
+    alignas(16) const float valueBits[4] = {1.f, 2.f, 3.f, 4.f};
+    const __m128 value = _mm_loadu_ps(valueBits);
+    float res[4] = {0.f};
+    _mm_storeu_ps(res, value);
+    UNIT_ASSERT_EQUAL(res[0], 1.f);
+    UNIT_ASSERT_EQUAL(res[1], 2.f);
+    UNIT_ASSERT_EQUAL(res[2], 3.f);
+    UNIT_ASSERT_EQUAL(res[3], 4.f);
+}
+
+void TSSEEmulTest::Test_mm_storeu_pd() {
     alignas(16) const double valueBits[4] = {1., 2., 3., 4.};
     for (size_t i = 0; i != 3; ++i) {
         const __m128d value = _mm_loadu_pd(&valueBits[i]);
@@ -1862,43 +1862,43 @@ void TSSEEmulTest::Test_mm_storeu_pd() {
             }
         }
     }
-} 
- 
-void TSSEEmulTest::Test_mm_andnot_ps() { 
-    alignas(16) const char firstBits[16] = { 
-        '\x00', '\x00', '\xff', '\xff', '\x00', '\x00', '\xff', '\xff', 
+}
+
+void TSSEEmulTest::Test_mm_andnot_ps() {
+    alignas(16) const char firstBits[16] = {
+        '\x00', '\x00', '\xff', '\xff', '\x00', '\x00', '\xff', '\xff',
         '\x00', '\x00', '\xff', '\xff', '\x00', '\x00', '\xff', '\xff'
     };
- 
-    alignas(16) const char secondBits[16] = { 
-        '\x00', '\xff', '\x00', '\xff', '\x00', '\xff', '\x00', '\xff', 
+
+    alignas(16) const char secondBits[16] = {
+        '\x00', '\xff', '\x00', '\xff', '\x00', '\xff', '\x00', '\xff',
         '\x00', '\xff', '\x00', '\xff', '\x00', '\xff', '\x00', '\xff'
     };
- 
-    alignas(16) const char resBits[16] = { 
-        '\x00', '\xff', '\x00', '\x00', '\x00', '\xff', '\x00', '\x00', 
+
+    alignas(16) const char resBits[16] = {
+        '\x00', '\xff', '\x00', '\x00', '\x00', '\xff', '\x00', '\x00',
         '\x00', '\xff', '\x00', '\x00', '\x00', '\xff', '\x00', '\x00'
     };
- 
+
     const __m128 value1 = _mm_loadu_ps((const float*) firstBits);
     const __m128 value2 = _mm_loadu_ps((const float*) secondBits);
-    const __m128 res = _mm_andnot_ps(value1, value2); 
- 
-    UNIT_ASSERT_EQUAL(::memcmp(&res, resBits, sizeof(resBits)), 0); 
-} 
- 
-void TSSEEmulTest::Test_mm_shuffle_ps() { 
-    alignas(16) const float first[4] = {1.f, 2.f, 3.f, 4.f}; 
-    alignas(16) const float second[4] = {5.f, 6.f, 7.f, 8.f}; 
-    alignas(16) const float etalon[4] = {3.f, 4.f, 5.f, 6.f}; 
- 
-    const __m128 value1 = _mm_loadu_ps(first); 
-    const __m128 value2 = _mm_loadu_ps(second); 
-    const __m128 res = _mm_shuffle_ps(value1, value2, _MM_SHUFFLE(1, 0, 3, 2)); 
- 
-    UNIT_ASSERT_EQUAL(::memcmp(&res, etalon, sizeof(etalon)), 0); 
-} 
- 
+    const __m128 res = _mm_andnot_ps(value1, value2);
+
+    UNIT_ASSERT_EQUAL(::memcmp(&res, resBits, sizeof(resBits)), 0);
+}
+
+void TSSEEmulTest::Test_mm_shuffle_ps() {
+    alignas(16) const float first[4] = {1.f, 2.f, 3.f, 4.f};
+    alignas(16) const float second[4] = {5.f, 6.f, 7.f, 8.f};
+    alignas(16) const float etalon[4] = {3.f, 4.f, 5.f, 6.f};
+
+    const __m128 value1 = _mm_loadu_ps(first);
+    const __m128 value2 = _mm_loadu_ps(second);
+    const __m128 res = _mm_shuffle_ps(value1, value2, _MM_SHUFFLE(1, 0, 3, 2));
+
+    UNIT_ASSERT_EQUAL(::memcmp(&res, etalon, sizeof(etalon)), 0);
+}
+
 void TSSEEmulTest::Test_mm_shuffle_pd() {
     const double first[2] = {1.3, 2.3};
     const double second[2] = {5.3, 6.3};
@@ -1968,28 +1968,28 @@ void TSSEEmulTest::Test_mm_loadh_pd() {
     UNIT_ASSERT_EQUAL(::memcmp(&value2, secondEtalon, sizeof(secondEtalon)), 0);
 }
 
-void TSSEEmulTest::Test_mm_or_ps() { 
-    alignas(16) const char bytes1[16] = { 
-        '\x00', '\x00', '\xff', '\xff', '\x00', '\x00', '\xff', '\xff', 
+void TSSEEmulTest::Test_mm_or_ps() {
+    alignas(16) const char bytes1[16] = {
+        '\x00', '\x00', '\xff', '\xff', '\x00', '\x00', '\xff', '\xff',
         '\x00', '\x00', '\xff', '\xff', '\x00', '\x00', '\xff', '\xff'
     };
- 
-    alignas(16) const char bytes2[16] = { 
-        '\x00', '\xff', '\x00', '\xff', '\x00', '\xff', '\x00', '\xff', 
+
+    alignas(16) const char bytes2[16] = {
+        '\x00', '\xff', '\x00', '\xff', '\x00', '\xff', '\x00', '\xff',
         '\x00', '\xff', '\x00', '\xff', '\x00', '\xff', '\x00', '\xff'
     };
- 
-    alignas(16) const char etalon[16] = { 
-        '\x00', '\xff', '\xff', '\xff', '\x00', '\xff', '\xff', '\xff', 
+
+    alignas(16) const char etalon[16] = {
+        '\x00', '\xff', '\xff', '\xff', '\x00', '\xff', '\xff', '\xff',
         '\x00', '\xff', '\xff', '\xff', '\x00', '\xff', '\xff', '\xff'
     };
- 
+
     const __m128 value1 = _mm_loadu_ps((const float*) bytes1);
     const __m128 value2 = _mm_loadu_ps((const float*) bytes2);
-    const __m128 res = _mm_or_ps(value1, value2); 
- 
-    UNIT_ASSERT_EQUAL(::memcmp(&res, etalon, sizeof(etalon)), 0); 
-} 
+    const __m128 res = _mm_or_ps(value1, value2);
+
+    UNIT_ASSERT_EQUAL(::memcmp(&res, etalon, sizeof(etalon)), 0);
+}
 
 void TSSEEmulTest::Test_mm_loadu_pd() {
     alignas(16) double stub[4] = {

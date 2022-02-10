@@ -1619,7 +1619,7 @@ namespace NActors {
             setup->Executors[2].Reset(new TIOExecutorPool(2, 1));
             setup->Executors[3].Reset(new TBasicExecutorPool(3, 2, 20));
             setup->Executors[4].Reset(new TBasicExecutorPool(4, 1, 20));
-            setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 100))); 
+            setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 100)));
         } else {
             setup->ExecutorsCount = 1;
             setup->Scheduler.Reset(new TSchedulerThreadStub(this, node));

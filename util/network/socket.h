@@ -77,13 +77,13 @@ static inline void CheckedSetSockOpt(SOCKET s, int level, int optname, T opt, co
     }
 }
 
-template <class T>
-static inline void CheckedGetSockOpt(SOCKET s, int level, int optname, T& opt, const char* err) {
-    if (GetSockOpt<T>(s, level, optname, opt)) {
-        ythrow TSystemError() << "getsockopt() failed for " << err;
-    }
-}
-
+template <class T> 
+static inline void CheckedGetSockOpt(SOCKET s, int level, int optname, T& opt, const char* err) { 
+    if (GetSockOpt<T>(s, level, optname, opt)) { 
+        ythrow TSystemError() << "getsockopt() failed for " << err; 
+    } 
+} 
+ 
 static inline void FixIPv6ListenSocket(SOCKET s) {
 #if defined(IPV6_V6ONLY)
     SetSockOpt(s, IPPROTO_IPV6, IPV6_V6ONLY, 1);

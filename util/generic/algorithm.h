@@ -387,51 +387,51 @@ template <class TI, class TO, class TP>
 static inline TO RemoveCopyIf(TI f, TI l, TO t, TP p) {
     return std::remove_copy_if(f, l, t, p);
 }
-
+ 
 template <class TI, class TO>
 static inline TO ReverseCopy(TI f, TI l, TO t) {
     return std::reverse_copy(f, l, t);
 }
 
-template <class TI1, class TI2, class TO>
-static inline TO SetUnion(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p) {
+template <class TI1, class TI2, class TO> 
+static inline TO SetUnion(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p) { 
     return std::set_union(f1, l1, f2, l2, p);
-}
-
-template <class TI1, class TI2, class TO, class TC>
-static inline TO SetUnion(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p, TC c) {
+} 
+ 
+template <class TI1, class TI2, class TO, class TC> 
+static inline TO SetUnion(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p, TC c) { 
     return std::set_union(f1, l1, f2, l2, p, c);
-}
-
-template <class TI1, class TI2, class TO>
-static inline TO SetDifference(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p) {
+} 
+ 
+template <class TI1, class TI2, class TO> 
+static inline TO SetDifference(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p) { 
     return std::set_difference(f1, l1, f2, l2, p);
-}
-
-template <class TI1, class TI2, class TO, class TC>
-static inline TO SetDifference(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p, TC c) {
+} 
+ 
+template <class TI1, class TI2, class TO, class TC> 
+static inline TO SetDifference(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p, TC c) { 
     return std::set_difference(f1, l1, f2, l2, p, c);
-}
-
-template <class TI1, class TI2, class TO>
-static inline TO SetSymmetricDifference(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p) {
+} 
+ 
+template <class TI1, class TI2, class TO> 
+static inline TO SetSymmetricDifference(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p) { 
     return std::set_symmetric_difference(f1, l1, f2, l2, p);
-}
-
-template <class TI1, class TI2, class TO, class TC>
-static inline TO SetSymmetricDifference(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p, TC c) {
+} 
+ 
+template <class TI1, class TI2, class TO, class TC> 
+static inline TO SetSymmetricDifference(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p, TC c) { 
     return std::set_symmetric_difference(f1, l1, f2, l2, p, c);
-}
-
-template <class TI1, class TI2, class TO>
-static inline TO SetIntersection(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p) {
+} 
+ 
+template <class TI1, class TI2, class TO> 
+static inline TO SetIntersection(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p) { 
     return std::set_intersection(f1, l1, f2, l2, p);
-}
-
-template <class TI1, class TI2, class TO, class TC>
-static inline TO SetIntersection(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p, TC c) {
+} 
+ 
+template <class TI1, class TI2, class TO, class TC> 
+static inline TO SetIntersection(TI1 f1, TI1 l1, TI2 f2, TI2 l2, TO p, TC c) { 
     return std::set_intersection(f1, l1, f2, l2, p, c);
-}
+} 
 
 template <class I, class T>
 static inline void Fill(I f, I l, const T& v) {

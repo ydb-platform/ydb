@@ -13,7 +13,7 @@ package Ydb.Operations;
 
 option java_package = "com.yandex.ydb";
 option java_outer_classname = "OperationProtos";
-
+ 
 message OperationParams {
     enum OperationMode {
         OPERATION_MODE_UNSPECIFIED = 0;
